@@ -7,6 +7,7 @@ import {
 import { AudioWaveform } from './AudioWaveform';
 import type { Song, YueCot, YueOutputFormat, YueRequest, YueSampling } from '../types';
 import { useI18n } from '../context/I18nContext';
+import { saveFile } from '../services/saveFile';
 import { useBridgeCommand } from '../services/mcpBridge';
 import { EXAMPLES, randomExample } from '../services/examples';
 import { ScoreView } from './ScoreView';
@@ -557,14 +558,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
     return request;
   };
 
-  const download = (filename: string, text: string, type: string) => {
-    const blob = new Blob([text], { type });
-    const link = document.createElement('a');
-    link.href = URL.createObjectURL(blob);
-    link.download = filename;
-    link.click();
-    URL.revokeObjectURL(link.href);
-  };
+  const download = (filename: string, text: string, type: string) => void saveFile(filename, { blob: new Blob([text], { type }) });
 
   const safeName = () => (name.trim() || 'request').replace(/[\\/:*?"<>|]/g, '');
 
@@ -652,6 +646,10 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
       setComposing(false);
     }
   };
+
+  // Without an assistant the wands open its settings: hidden, they left no
+  // sign that the studio can write a style or lyrics at all.
+  const openAssistantSetup = () => window.dispatchEvent(new CustomEvent('yue:open-settings', { detail: 'models' }));
 
   const assistRun = useRef<AbortController | null>(null);
   const stopAssistant = () => {
@@ -1075,11 +1073,9 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
             icon={<Music2 size={13} />}
             actions={
               <>
-                {assistantReady && (
-                  <button type="button" onClick={() => void askAssistant('style')} disabled={assisting !== null} className={ICON} title={tt('writeStyle')}>
-                    {assisting === 'style' ? <Loader2 size={14} className="animate-spin" /> : <Wand2 size={14} className="text-pink-500" />}
-                  </button>
-                )}
+                <button type="button" onClick={() => (assistantReady ? void askAssistant('style') : openAssistantSetup())} disabled={assistantReady && (assisting !== null)} className={ICON} title={assistantReady ? tt('writeStyle') : t('setUpAssistant')}>
+                  {assisting === 'style' ? <Loader2 size={14} className="animate-spin" /> : <Wand2 size={14} className="text-pink-500" />}
+                </button>
                 <button type="button" onClick={() => setExamplesOpen(open => !open)} className={ICON} title={t('examplePrompt')} aria-expanded={examplesOpen}><Dices size={14} /></button>
                 <button type="button" onClick={() => promptFile.current?.click()} className={ICON} title={t('openPrompt')}><FolderOpen size={14} /></button>
                 <span className="relative">
@@ -1148,16 +1144,12 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
             title={t('lyrics')}
             actions={
               <>
-                {assistantReady && (
-                  <button type="button" onClick={() => void layOutLyrics()} disabled={assisting !== null || !lyrics.trim()} className={ICON} title={t('formatLyrics')}>
-                    {assisting === 'sections' ? <Loader2 size={14} className="animate-spin" /> : <Tags size={14} />}
-                  </button>
-                )}
-                {assistantReady && (
-                  <button type="button" onClick={() => void askAssistant('lyrics')} disabled={assisting !== null} className={ICON} title={t('writeLyrics')}>
-                    {assisting === 'lyrics' ? <Loader2 size={14} className="animate-spin" /> : <Wand2 size={14} className="text-pink-500" />}
-                  </button>
-                )}
+                <button type="button" onClick={() => (assistantReady ? void layOutLyrics() : openAssistantSetup())} disabled={assistantReady && (assisting !== null || !lyrics.trim())} className={ICON} title={assistantReady ? t('formatLyrics') : t('setUpAssistant')}>
+                  {assisting === 'sections' ? <Loader2 size={14} className="animate-spin" /> : <Tags size={14} />}
+                </button>
+                <button type="button" onClick={() => (assistantReady ? void askAssistant('lyrics') : openAssistantSetup())} disabled={assistantReady && (assisting !== null)} className={ICON} title={assistantReady ? t('writeLyrics') : t('setUpAssistant')}>
+                  {assisting === 'lyrics' ? <Loader2 size={14} className="animate-spin" /> : <Wand2 size={14} className="text-pink-500" />}
+                </button>
                 <button type="button" onClick={() => setLyrics('')} className={ICON} title={t('resetPrompt')}><RotateCcw size={14} /></button>
               </>
             }
