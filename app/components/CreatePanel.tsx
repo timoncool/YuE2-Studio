@@ -649,7 +649,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
 
   // Without an assistant the wands open its settings: hidden, they left no
   // sign that the studio can write a style or lyrics at all.
-  const openAssistantSetup = () => window.dispatchEvent(new CustomEvent('yue:open-settings', { detail: 'models' }));
+  const openAssistantSetup = () => window.dispatchEvent(new CustomEvent('yue:open-settings', { detail: 'models:assistant' }));
 
   const assistRun = useRef<AbortController | null>(null);
   const stopAssistant = () => {
@@ -910,7 +910,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
               <p className="mt-2 text-[11px] leading-4 text-zinc-500">{t('assistantHint')}</p>
               <button
                 type="button"
-                onClick={() => window.dispatchEvent(new CustomEvent('yue:open-settings', { detail: 'models' }))}
+                onClick={() => window.dispatchEvent(new CustomEvent('yue:open-settings', { detail: 'models:assistant' }))}
                 className="mt-3 inline-flex items-center gap-1 rounded-lg border border-zinc-300 px-3 py-1.5 text-xs font-medium text-zinc-600 hover:border-pink-400 hover:text-pink-600 dark:border-white/15 dark:text-zinc-300"
               >
                 <Settings2 size={13} />
