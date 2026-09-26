@@ -128,6 +128,8 @@ pub fn write_wav_f32(path: &Path, audio: &audio_post::Stereo) -> Result<()> {
 pub struct FileTags {
     pub title: String,
     pub artist: String,
+    /// Unsynchronised lyrics: ID3 USLT, Vorbis LYRICS.
+    pub lyrics: String,
 }
 
 pub fn tags(path: &Path) -> FileTags {
@@ -148,6 +150,7 @@ pub fn tags(path: &Path) -> FileTags {
                 Some(StandardTagKey::TrackTitle) if found.title.is_empty() => found.title = value,
                 Some(StandardTagKey::Artist) if found.artist.is_empty() => found.artist = value,
                 Some(StandardTagKey::AlbumArtist) if found.artist.is_empty() => found.artist = value,
+                Some(StandardTagKey::Lyrics) if found.lyrics.is_empty() => found.lyrics = value,
                 _ => {}
             }
         }

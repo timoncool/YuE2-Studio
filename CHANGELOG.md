@@ -3,6 +3,25 @@
 What changed, newest first. Dates are release dates; the studio is versioned by its
 Windows build.
 
+## 2026-09-26 — 2.1.3
+
+### Fixed
+
+- **Covers keep the song's key and chords.** SheetSage2 spells keys and chords its own way
+  (A#:minor, Db:maj in the key of C# minor), and the ABC score YuE2 is given took those names
+  as written, so a cover could come out in the wrong key or with the wrong harmony. The score
+  is now written as ComfyUI writes it since its fix of the same thing: the key named by its
+  usual tonic and each chord spelled for the key it sits in. Checked against ComfyUI on every
+  key and chord SheetSage2 can decode.
+- **The writing assistant stops.** With Ollama the magic wand could not be stopped: the
+  studio named no length, Ollama generates without end when none is named, and a small model
+  that never closed the style string listed words until the app was restarted. Stop also left
+  the model writing, because the service went on reading an answer nobody waited for. A local
+  server is now told how long each answer may be, a run that reaches it ends with a message
+  instead of a wait, and Stop closes the connection, which is what makes the model stop.
+- **A song added to a dataset brings its lyrics** from its own tags (ID3 USLT, Vorbis
+  LYRICS) when no text file lies beside it.
+
 ## 2026-09-26 — 2.1.2
 
 ### Fixed

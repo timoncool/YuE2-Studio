@@ -2233,7 +2233,12 @@ async fn upload_training_files(State(state): State<AppState>, Path(id): Path<Str
                 dataset = training.add_album(&id, &path, tracks, &album_artist, &format!("file:{relative}"))?;
                 continue;
             }
-            let lyrics = texts.get(&stem).map(|text| training::plain_lyrics(text)).unwrap_or_default();
+            // a text beside the file, else the lyrics the file carries in its own tags
+            let lyrics = texts
+                .get(&stem)
+                .map(|text| training::plain_lyrics(text))
+                .filter(|text| !text.trim().is_empty())
+                .unwrap_or_else(|| training::plain_lyrics(&audio_pcm::tags(&path).lyrics));
             let (artist, title) = training::identify(&path, &relative);
             dataset = training.add_item(&id, &path, &title, &artist, "", &lyrics, false, &format!("file:{relative}"))?;
         }
@@ -4530,7 +4535,8 @@ async fn assistant_write_stream(
     }
     let (system, required) = assistant::instructions(&request);
     let user = assistant::user_message(&request);
-    let target = assist_target_name(request.target);
+    let task = request.target;
+    let target = assist_target_name(task);
 
     let (sender, receiver) = tokio::sync::mpsc::channel::<Result<axum::body::Bytes, std::io::Error>>(64);
     let emit = |sender: tokio::sync::mpsc::Sender<Result<axum::body::Bytes, std::io::Error>>, event: Value| async move {
@@ -4625,7 +4631,15 @@ async fn assistant_write_stream(
             (_, AssistantProvider::OpenRouter) => None,
             _ => config.reasoning_effort.clone(),
         };
-        let mut body = assistant::chat_body_constrained(&model, &system, &user, effort.as_deref(), published.as_ref(), schema);
+        let fit = if matches!(config.provider, AssistantProvider::Managed | AssistantProvider::Local) {
+            assistant::fit_to_local_task
+        } else {
+            assistant::fit_to_task
+        };
+        let mut body = fit(
+            assistant::chat_body_constrained(&model, &system, &user, effort.as_deref(), published.as_ref(), schema),
+            task,
+        );
         body["stream"] = Value::Bool(true);
 
         emit(sender.clone(), serde_json::json!({ "stage": "sent", "model": model })).await;
@@ -4644,7 +4658,17 @@ async fn assistant_write_stream(
                 .header("X-Title", "YuE2 Studio");
         }
 
-        let response = match outgoing.send().await {
+        // Until the first byte the window can be closed as well: a model
+        // still loading or reading a long prompt sends nothing for minutes.
+        let sent = tokio::select! {
+            _ = sender.closed() => {
+                request_log::failed("assistant", &model, "stopped by the user");
+                release_assistant_unless_kept(&state).await;
+                return;
+            }
+            sent = outgoing.send() => sent,
+        };
+        let response = match sent {
             Ok(response) => response,
             Err(error) => {
                 request_log::failed("assistant", &model, &error.to_string());
@@ -4667,8 +4691,20 @@ async fn assistant_write_stream(
         let mut buffer = String::new();
         let mut first = true;
         let mut whole = String::new();
-        while let Some(chunk) = stream.next().await {
-            let Ok(chunk) = chunk else { break };
+        let mut cut_short = false;
+        let mut window_gone = false;
+        loop {
+            // The window stopped the run or was closed. Dropping the stream
+            // closes the connection, which is what makes the provider stop
+            // generating; reading on keeps the model busy for nobody.
+            let chunk = tokio::select! {
+                _ = sender.closed() => {
+                    window_gone = true;
+                    break;
+                }
+                chunk = stream.next() => chunk,
+            };
+            let Some(Ok(chunk)) = chunk else { break };
             buffer.push_str(&String::from_utf8_lossy(&chunk));
             while let Some(line_end) = buffer.find('\n') {
                 let line = buffer[..line_end].trim().to_string();
@@ -4679,9 +4715,11 @@ async fn assistant_write_stream(
                     continue;
                 }
                 let Ok(event): Result<Value, _> = serde_json::from_str(payload) else { continue };
-                let delta = event
-                    .get("choices")
-                    .and_then(|choices| choices.get(0))
+                let choice = event.get("choices").and_then(|choices| choices.get(0));
+                if choice.and_then(|choice| choice.get("finish_reason")).and_then(Value::as_str) == Some("length") {
+                    cut_short = true;
+                }
+                let delta = choice
                     .and_then(|choice| choice.get("delta"))
                     .and_then(|delta| delta.get("content"))
                     .and_then(Value::as_str)
@@ -4701,8 +4739,27 @@ async fn assistant_write_stream(
                 emit(sender.clone(), serde_json::json!({ "delta": delta })).await;
             }
         }
+        drop(stream);
 
         request_log::answered("assistant", &model, 200, started.elapsed().as_secs_f64(), whole.chars().count());
+        if window_gone {
+            request_log::failed("assistant", &model, "stopped by the user");
+            release_assistant_unless_kept(&state).await;
+            return;
+        }
+        if cut_short {
+            request_log::unusable("assistant", &model, "the answer reached the length limit", &whole);
+            emit(
+                sender.clone(),
+                serde_json::json!({ "error": format!(
+                    "the model wrote {} tokens without finishing the answer and was stopped - try again or pick another model",
+                    assistant::max_tokens_for(task)
+                ) }),
+            )
+            .await;
+            release_assistant_unless_kept(&state).await;
+            return;
+        }
         // The answer is kept whenever it cannot be turned into a draft. That is
         // the case this log exists for: the window shows one red line, and
         // without this the text behind it is gone the moment it is closed.
@@ -4833,7 +4890,7 @@ async fn assistant_ask(
             };
             let sent = reqwest::Client::new()
                 .post(format!("{}/chat/completions", base.trim_end_matches('/')))
-                .json(&assistant::fit_to_task(assistant::chat_body_constrained(
+                .json(&assistant::fit_to_local_task(assistant::chat_body_constrained(
                     &model,
                     system,
                     user,
