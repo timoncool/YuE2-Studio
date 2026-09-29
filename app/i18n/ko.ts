@@ -1650,6 +1650,7 @@ export const ko = {
     stepModels: '모델 파일',
     stepEngine: '모델을 메모리에 로드하는 중',
     stepEngineLibraries: '엔진 라이브러리를 내려받는 중',
+    stepEnginePreparing: '엔진을 준비하는 중',
     engineLibrariesHint: '엔진은 NVIDIA cuBLAS와 링크되어 있습니다. 한 번만 내려받아 스튜디오 옆에 보관합니다.',
     engineStartingBadge: '거의 다 됐어요',
     engineForeignService: '이 포트에는 스튜디오의 다른 사본이 응답하고 있으며, 그 사본에는 엔진이 없습니다. 그것을 닫고 이 프로그램을 다시 실행하세요.',

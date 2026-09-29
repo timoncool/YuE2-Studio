@@ -1650,6 +1650,7 @@ export const zh = {
     stepModels: '模型文件',
     stepEngine: '正在将模型载入内存',
     stepEngineLibraries: '正在下载引擎库',
+    stepEnginePreparing: '正在准备引擎',
     engineLibrariesHint: '引擎链接了 NVIDIA cuBLAS，只需下载一次，之后保存在工作室目录中。',
     engineStartingBadge: '即将就绪',
     engineForeignService: '这个端口上响应的是工作室的另一个副本，它自身没有引擎。请关闭它，然后重新启动本程序。',

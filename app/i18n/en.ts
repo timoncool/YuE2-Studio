@@ -1655,6 +1655,7 @@ export const en = {
     stepModels: 'Model files',
     stepEngine: 'Loading the models into memory',
     stepEngineLibraries: 'Downloading the engine libraries',
+    stepEnginePreparing: 'Preparing the engine',
     engineLibrariesHint: 'The engine is linked against NVIDIA cuBLAS, which is downloaded once and kept beside the studio.',
     engineStartingBadge: 'Almost there',
     engineForeignService: 'Another copy of the studio is answering on this port, and it has no engine of its own. Close it and start this one again.',

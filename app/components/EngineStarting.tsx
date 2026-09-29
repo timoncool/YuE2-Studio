@@ -79,9 +79,16 @@ export const EngineStarting: React.FC<{ onReady?: () => void }> = ({ onReady }) 
   }, [seconds, t, runtime]);
 
   const percent = runtime && runtime.total > 0 ? Math.min(100, Math.round((runtime.downloaded / runtime.total) * 100)) : 0;
+  // The runtime status is published whether or not anything is being fetched,
+  // and its presence alone used to select the download step - so a machine that
+  // downloads nothing (Vulkan, where cuBLAS is never needed) sat on
+  // "Downloading the engine libraries - 0%" while the engine was starting.
+  const downloadingLibraries = runtime?.downloading === true && runtime.total > 0;
   const steps = runtime
     ? [
-        { label: `${t('stepEngineLibraries')} — ${percent}%`, done: false, active: true },
+        downloadingLibraries
+          ? { label: `${t('stepEngineLibraries')} — ${percent}%`, done: false, active: true }
+          : { label: t('stepEnginePreparing'), done: false, active: true },
         { label: t('stepEngine'), done: false, active: false },
         { label: t('stepReady'), done: false, active: false },
       ]

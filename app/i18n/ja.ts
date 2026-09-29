@@ -1650,6 +1650,7 @@ export const ja = {
     stepModels: 'モデルファイル',
     stepEngine: 'モデルをメモリに読み込み中',
     stepEngineLibraries: 'エンジンのライブラリをダウンロード中',
+    stepEnginePreparing: 'エンジンを準備中',
     engineLibrariesHint: 'エンジンは NVIDIA cuBLAS とリンクしています。一度だけダウンロードし、スタジオの隣に保存します。',
     engineStartingBadge: 'もうすぐです',
     engineForeignService: 'このポートに応答しているのはスタジオの別のコピーで、自前のエンジンを持っていません。それを閉じてから、こちらを起動し直してください。',

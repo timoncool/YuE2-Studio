@@ -1654,6 +1654,7 @@ export const ru = {
     stepModels: 'Файлы моделей',
     stepEngine: 'Загрузка моделей в память',
     stepEngineLibraries: 'Скачиваю библиотеки движка',
+    stepEnginePreparing: 'Готовлю движок',
     engineLibrariesHint: 'Движок собран с NVIDIA cuBLAS: библиотека скачивается один раз и остаётся рядом со студией.',
     engineStartingBadge: 'Почти готово',
     engineForeignService: 'На этом порту отвечает другая копия студии, и движка у неё нет. Закройте её и запустите эту заново.',
