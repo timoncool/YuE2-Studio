@@ -1,7 +1,7 @@
 import { apiUrl } from './apiBase';
 import { Song } from '../types';
 
-interface NativeLibrarySong {
+export interface NativeLibrarySong {
   id: string;
   title: string;
   audio_path?: string | null;
@@ -77,6 +77,10 @@ export const LOCAL_USER_ID = 'local-studio';
 export function mapNativeLibrarySong(song: NativeLibrarySong): Song {
   const metadata = song.metadata ?? {};
   const tags = Array.isArray(metadata.tags) ? metadata.tags.filter((tag): tag is string => typeof tag === 'string') : [];
+  // The thumbs-up is kept with the song itself, so every window shows it - and with it
+  // the moment of the last reaction, which only a like moves.
+  const liked = metadata.liked === true;
+  const likedAt = typeof metadata.liked_at === 'string' && metadata.liked_at ? nativeDate(metadata.liked_at) : undefined;
 
   return {
     id: song.id,
@@ -94,7 +98,10 @@ export function mapNativeLibrarySong(song: NativeLibrarySong): Song {
       return seconds && seconds > 0 ? `${Math.floor(seconds / 60)}:${String(Math.floor(seconds % 60)).padStart(2, '0')}` : '0:00';
     })(),
     createdAt: nativeDate(song.created_at),
+    updatedAt: song.updated_at ? nativeDate(song.updated_at) : undefined,
     tags,
+    liked,
+    likedAt,
     derived: (() => {
       const derived = metadata.derived as { from?: unknown; from_title?: unknown; tool?: unknown; settings?: unknown } | null | undefined;
       if (!derived || typeof derived.from !== 'string' || typeof derived.tool !== 'string') return null;
@@ -177,6 +184,26 @@ export async function updateNativePlaylist(id: string, playlist: import('../type
 export async function deleteNativePlaylist(id: string): Promise<void> {
   const response = await fetch(`/v1/library/playlists/${encodeURIComponent(id)}`, { method: 'DELETE' });
   if (!response.ok) throw new Error(`Native playlist deletion failed (${response.status})`);
+}
+
+/**
+ * The thumbs-up of the library, kept with each song instead of in one
+ * window's local storage: the ids of the songs marked as the best ones.
+ */
+export async function loadLikedSongIds(): Promise<string[]> {
+  const response = await fetch('/v1/library/liked');
+  if (!response.ok) throw new Error(`Studio service answered ${response.status} for the liked songs`);
+  const ids: unknown = await response.json();
+  return Array.isArray(ids) ? ids.filter((id): id is string => typeof id === 'string') : [];
+}
+
+/** Mark a song as one of the best, or take the mark back: the thumbs-up. */
+export async function setNativeSongLiked(songId: string, liked: boolean): Promise<void> {
+  const response = await fetch(`/v1/library/songs/${encodeURIComponent(songId)}/liked`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ liked }),
+  });
+  if (!response.ok) throw new Error(`Studio service answered ${response.status} for the like`);
 }
 
 export async function updateNativeSong(existing: Song, update: Partial<NativeSongUpdate>): Promise<Song> {

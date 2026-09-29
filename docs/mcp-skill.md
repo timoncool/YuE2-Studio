@@ -52,8 +52,79 @@ connected and the address to paste.
 - **Covers are drawn only with an image model set up** (`settings_get`, covers; an
   OpenRouter key). Without one a `cover_prompt` is kept but no cover appears;
   `cover_set_from_file` still works.
+- **The studio speaks five languages** (English, Russian, Chinese, Japanese, Korean) and the
+  window follows the user's - so anything a person reads comes from `app/i18n/yue2.ts`, all five
+  of them, never a literal in the code: a session name you choose for them, a hint, a warning.
+  A session the studio keeps for itself is not named at all (see below).
+- **Every track is made inside a session, and you say which one.** The makers that make or hold
+  a track - `song_create`, `song_replay`, `stems_split`, `processing_start`, `karaoke_make`,
+  `midi_transcribe`, `library_import_audio` - take a `session` word: `each` (a session of its own
+  for every track, named after the track), `current` (the session open now), or `new:<name>` (one
+  new session for the whole pack). Say it whenever the person has told you where the work goes;
+  leave it out and the window asks them once for the pack. `score_compose` and `score_transcribe`
+  do not take it: a score is not a track yet.
+  `workspace_list` shows the sessions and which one is open; `workspace_create` makes one
+  (it is made closed and waits for the person - only the window opens a session, so their work
+  never switches behind their back), `workspace_open` brings an old one back, `workspace_close`
+  files one away. A maker refuses to run while nothing is open and nobody has chosen: ask the
+  person to open or make one in the window, then work.
+- **Check where a track really landed.** A track goes into the session you named - not into
+  whatever the window happens to have open - but a person moves things: after the job,
+  `workspace_get` says which session holds the track. A `completed` job is not proof that the
+  track is where you meant it, so look before you tell anyone it is done.
+- **One session is the studio's own, not the person's.** Tracks that belong to no session at all
+  are gathered into it once, and `workspace_list` shows it as `"kind": "import"` with an empty
+  name: the words a person reads for it are drawn by the window in their language, so never look
+  it up, or call it, by a name - not "Import", not "Импорт". Leave that session alone: do not
+  delete it, do not rename it, and treat its tracks as unclaimed work rather than as someone's
+  project. Renaming it is not yours to do - a person naming it turns it into an ordinary session
+  of theirs, and the mark goes with the name they typed.
+- **Tidy up your own empty sessions.** `workspace_delete` removes a session for good - the tracks it
+  held stay in the library, only the session and its mark on them go. Remove the sessions you made
+  and left empty; a session the person made is theirs to remove, so ask instead of tidying it away.
+  Deleting cannot be undone, so the leash puts the question to them first - and about a deletion
+  the question is one plain thing: do it, or do not. Nothing about it is remembered for later.
+- **Ask before what cannot be undone.** The user keeps the agent on a leash, set in
+  Settings, Agent (MCP): `free` (no questions), `risky` (the default: a deletion, an
+  overwrite, closing a session, splitting a track are put to the user first) or `all`
+  (everything that changes anything). Answers are kept where they belong, never in your
+  hands: "in this session" is kept with the session itself, "always" is the studio's one
+  switch for tracks, and "never" joins a list of forbidden tools in the settings - after
+  that the tool does not run at all, whatever you ask. `agent_settings` shows the leash,
+  the switch, what is forbidden and which sessions let you work, and `agent_leash` says
+  how close you are kept. Never widen the leash yourself - only the window answers, and
+  only the person in front of it sets the rule. A refusal is a fact, not a hint to retry.
 - **Look ids up, never guess them**: `library_songs_list`, `training_status`,
-  `dataset_get`, `lora_list`, `models_status`.
+  `dataset_get`, `lora_list`, `models_status`, `workspace_list`.
+- **A stem is not a song, and the difference lives in the data**: a track made by
+  `stems_split` carries `metadata.derived` (`tool: "stems"`, `from: <the song it came from>`,
+  `settings.stem: drums | bass | vocals | guitar | piano | other`); a full song has no `derived`.
+  Tell them apart by that marker only - never by the title, the file name or the file type:
+  a stem is a normal library row with its own audio, and its file may be `.wav` while a song's
+  is `.mp3`, which says nothing about what it is.
+  **A stem is never counted as a song either.** It is shown inside the song it came from, so a
+  session holding 18 tracks honestly reads as "12 songs + 6 parts" (the window counts the roots -
+  `splitByParent` in `app/components/songParts.tsx`). When you report how much work a session holds,
+  count songs, and say the parts beside them rather than adding them in.
+  **An earlier set is kept, not thrown away.** Splitting a song again puts its six current stems
+  into the archive with the moment the set was made, and a new set is made at once - so a person
+  never loses a separation they may still want. `stems_archive_list` names the sets that were put
+  away, each keeping the song it was separated from (`song_id` for one song, left out for every
+  song); `stems_get` speaks only about the current set, and an archived stem is history, not a
+  library row.
+- **A date is not an opinion.** Two different moments live on a song: `updated_at` moves when the
+  song itself is edited (title, cover, words, karaoke, the version chosen), while `metadata.liked_at`
+  moves only when the person gives a thumbs-up - `library_song_like` and nothing else. A session's
+  `updated_at` moves with any change to what it holds: a track added, removed or edited inside it.
+- **What you do is written down where the person can read it.** Every tool that changes the
+  studio - a track made, edited, deleted, a session opened, closed or removed, a split, a
+  thumbs-up, an import, a job started - leaves a line in the studio's own message log, the bell
+  in the top panel. It is written quietly: no toast interrupts the person's work. Reads
+  (`*_list`, `*_get`, `*_status`) and `ui_*` change nothing and are not written down. A line
+  names what was done, the kind of thing it was done to and that thing's own name, and the window
+  draws the words in the person's language - so a tool's own name never reaches the log, and you
+  should not speak in those names either. A deletion reads in the log exactly as it is put to the
+  person: the same name, out of the same data.
 - **Files on this computer are passed by path**: `dataset_add_folder`,
   `library_import_audio`, `score_transcribe`, `cover_set_from_file`, `video_set`.
   `library_song_files` and `dataset_song_files` give the paths of the studio's own files.
@@ -86,6 +157,24 @@ connected and the address to paste.
 2. Write the style and lyrics yourself.
 3. `song_create` (with `title` and `cover_prompt`), then `studio_wait` with its `job_id`.
 4. `player_play` with the new song's id to let the user hear it; `ui_screenshot` shows it.
+
+**Working inside a session**
+
+1. `workspace_list` - what sessions exist and which one is open (`workspace_get` for one, and
+   for the tracks it holds).
+2. Where do these tracks go? Three words, said on the call itself (`song_create` and the rest):
+   - `session: "each"` - the person wants a session per song: every track gets its own, named
+     after the track.
+   - `session: "current"` - into the session open right now.
+   - `session: "new:<name>"` - all of them into one new session with that name.
+   Say nothing and the window asks the person once for the pack of work at hand; their answer
+   stands while you keep working, and `agent_settings` says whether they settled it for good.
+3. Nothing is open and the person did not say? `workspace_create` makes a session (closed -
+   only the window opens one) and `workspace_open` brings an old one back: the window does it,
+   or the person does.
+4. Make songs as usual. After each job, `workspace_get` confirms which session holds the track -
+   and if the person moved it, say so instead of assuming. `workspace_close` files a session
+   away; do it only when the user is done with it.
 
 **A cover of a recording**
 
@@ -186,8 +275,14 @@ move around. Check the result with `ui_screenshot`.
 - **library**: songs list (since/until), liked, song like, song get/update/delete/files,
   import audio, versions, describe style (by ear, for a cover of a recording without one);
   **playlist**: list/create/update/delete.
+- **workspace** (sessions): list, get, create, open, close, delete - where every track is made; the
+  makers take `session: each | current | new:<name>`. `kind: "import"` marks the studio's own
+  session (the one that gathers unclaimed tracks): it has no name of its own.
+- **agent**: settings (the leash, the one switch for making tracks, what is forbidden),
+  leash (how close it is kept).
 - **cover**: draw, set from file, templates, prompt render; **karaoke**: make, delete,
-  settings; **recogniser**: install/remove; **stems**: split, get; **separator**: status,
+  settings; **recogniser**: install/remove; **stems**: split, get, archive list (the sets put
+  away when a song is split again, each keeping the song it came from); **separator**: status,
   install, settings; **midi**: status, transcribe, get, delete, install, remove, cancel; **processing**: start, get, keep, discard, reference; **vst**.
 - **lora**: list, install from the catalogue or Hugging Face, import files, update,
   delete, export for ComfyUI (a trained LoRA as one file for ComfyUI's native YuE2).

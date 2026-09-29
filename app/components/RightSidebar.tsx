@@ -4,11 +4,13 @@ import { TRACK_ARTIST } from '../services/studio';
 import { Song } from '../types';
 import { Heart, Share2, Play, Pause, MoreHorizontal, X, Copy, Wand2, MoreVertical, Download, Repeat, Video, Music, Link as LinkIcon, Sparkles, Globe, Lock, Trash2, Edit3, Layers, ChevronDown, ClipboardCopy, ImagePlus, Loader2, Mic2, FileMusic, Clapperboard } from 'lucide-react';
 import { mapNativeLibrarySong, updateNativeSong } from '../services/nativeLibrary';
+import { stampOf } from '../services/dates';
 import { useAuth } from '../context/AuthContext';
 import { useI18n } from '../context/I18nContext';
 import { openExternal } from '../services/externalLinks';
 import { apiUrl } from '../services/apiBase';
 import { SongDropdownMenu } from './SongDropdownMenu';
+import { isPart } from './songParts';
 import { AlbumCover } from './AlbumCover';
 import { ScoreView } from './ScoreView';
 import { localized, useAdapterLibrary, usesFromSettings } from '../services/adapters';
@@ -155,6 +157,10 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({ song, onClose, onOpe
     const [titleDraft, setTitleDraft] = useState('');
     const [titleError, setTitleError] = useState<string | null>(null);
     const [isSavingTitle, setIsSavingTitle] = useState(false);
+    // A part is the result of a separation, not of a prompt: repeating its
+    // prompt, re-rendering it or separating it once more are all meaningless,
+    // and every entry to them is hidden for a part.
+    const songIsPart = Boolean(song && isPart(song));
 
     useEffect(() => {
         if (song) {
@@ -385,7 +391,10 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({ song, onClose, onOpe
                                 <span className="text-sm font-semibold text-zinc-900 dark:text-white">
                                     {song.creator || TRACK_ARTIST}
                                 </span>
-                                <p className="text-xs text-zinc-500">{t('created')} {new Date(song.createdAt).toLocaleDateString()}</p>
+                                <p className="text-xs text-zinc-500">
+                                    {t('madeLabel')} {stampOf(song.createdAt, language)}
+                                    {song.likedAt ? ` · ${t('reactedLabel')} ${stampOf(song.likedAt, language)}` : ''}
+                                </p>
                             </div>
                         </div>
                     </div>
@@ -422,20 +431,32 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({ song, onClose, onOpe
                         >
                             <Edit3 size={18} strokeWidth={1.5} />
                         </button>
-                        <button
-                            onClick={() => onReuse && onReuse(song)}
-                            title={t('reusePrompt')}
-                            className="p-3 text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white hover:bg-zinc-300/50 dark:hover:bg-white/10 rounded-xl transition-all duration-200"
-                        >
-                            <Repeat size={18} strokeWidth={1.5} />
-                        </button>
-                        <button
-                            onClick={() => { if (song?.audioUrl) openStems(song); }}
-                            title={t('extractStems')}
-                            className="p-3 text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white hover:bg-zinc-300/50 dark:hover:bg-white/10 rounded-xl transition-all duration-200"
-                        >
-                            <Layers size={18} strokeWidth={1.5} />
-                        </button>
+                        {/* A part is the result of a separation, not of a prompt:
+                            it has no prompt to repeat and no stems to take, so
+                            both buttons would offer work that cannot come out
+                            right. Hidden, not disabled - the app hides what does
+                            not apply instead of promising it. */}
+                        {!songIsPart && (
+                            <>
+                                <button
+                                    onClick={() => onReuse && onReuse(song)}
+                                    title={t('reusePrompt')}
+                                    className="p-3 text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white hover:bg-zinc-300/50 dark:hover:bg-white/10 rounded-xl transition-all duration-200"
+                                >
+                                    <Repeat size={18} strokeWidth={1.5} />
+                                </button>
+                                <button
+                                    onClick={() => {
+                                        if (!song?.audioUrl) return;
+                                        if (song?.audioUrl) openStems(song);
+                                    }}
+                                    title={t('extractStems')}
+                                    className="p-3 text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white hover:bg-zinc-300/50 dark:hover:bg-white/10 rounded-xl transition-all duration-200"
+                                >
+                                    <Layers size={18} strokeWidth={1.5} />
+                                </button>
+                            </>
+                        )}
                     </div>
 
                     {/* Icon Actions Row */}

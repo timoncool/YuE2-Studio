@@ -7,8 +7,9 @@ import { transcribeWithNativeOpenRouter } from '../services/nativeOpenRouter';
 import { apiUrl } from '../services/apiBase';
 import { openExternal } from '../services/externalLinks';
 import { StemPlayer } from './StemPlayer';
-import { mapNativeLibrarySong } from '../services/nativeLibrary';
+import { mapNativeLibrarySong, type NativeLibrarySong } from '../services/nativeLibrary';
 import { MidiTool } from './midi/MidiTool';
+import { isPart } from './songParts';
 
 /**
  * Studio tools.
@@ -22,12 +23,6 @@ import { MidiTool } from './midi/MidiTool';
  * The page used to be diagnostics. Those moved to Settings, next to the flags
  * that produce them, which left this page for the tools it is named after.
  */
-
-interface LibrarySong {
-  id: string;
-  title: string;
-  audio_path?: string | null;
-}
 
 interface SeparationStatus {
   model: { label: string; bytes: number; installed: boolean; note: string };
@@ -63,7 +58,7 @@ const megabytes = (bytes: number) => `${(bytes / 1024 / 1024).toFixed(0)} MB`;
 export function StudioToolsPanel({ initialSongId }: { initialSongId?: string | null } = {}): React.ReactElement {
   const { t } = useI18n();
 
-  const [songs, setSongs] = useState<LibrarySong[]>([]);
+  const [songs, setSongs] = useState<NativeLibrarySong[]>([]);
   const [songId, setSongId] = useState('');
   const [status, setStatus] = useState<SeparationStatus | null>(null);
   const [stems, setStems] = useState<string[]>([]);
@@ -82,7 +77,7 @@ export function StudioToolsPanel({ initialSongId }: { initialSongId?: string | n
 
   const loadSongs = useCallback(async () => {
     const body = await fetch('/v1/library/songs').then(response => response.json());
-    const list: LibrarySong[] = Array.isArray(body) ? body : body.songs ?? [];
+    const list: NativeLibrarySong[] = Array.isArray(body) ? body : body.songs ?? [];
     const playable = list.filter(song => song.audio_path);
     setSongs(playable);
     setSongId(current => current || playable[0]?.id || '');
@@ -185,6 +180,12 @@ export function StudioToolsPanel({ initialSongId }: { initialSongId?: string | n
   const running = Boolean(run && !run.done);
   const percent = Math.round((run?.progress ?? 0) * 100);
   const download = status?.download;
+  const selectedSong = songs.find(song => song.id === songId);
+  // This list comes from the service as it is stored there, so the "is a part"
+  // mark is read through the app's one mapper instead of a field that the raw
+  // record does not carry. A part is itself a separation result: the tool says
+  // so rather than offering to separate it again and make copies of copies.
+  const selectedIsPart = Boolean(selectedSong && isPart(mapNativeLibrarySong(selectedSong)));
 
   return (
     <div className="flex-1 overflow-y-auto bg-white px-5 py-6 dark:bg-suno md:px-8">
@@ -319,15 +320,27 @@ export function StudioToolsPanel({ initialSongId }: { initialSongId?: string | n
               <p className="mt-2 text-xs leading-5 text-zinc-500 dark:text-zinc-400">{t('separationQualityHint')}</p>
             </div>
 
-            <button
-              type="button"
-              onClick={() => void separate()}
-              disabled={!status?.ready || !songId || settings.stems.length === 0 || running || busy}
-              className="mt-3 inline-flex items-center justify-center gap-2 rounded-lg bg-linear-to-r from-orange-500 to-pink-600 px-4 py-2 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {running ? <Loader2 size={14} className="animate-spin" /> : <Play size={14} />}
-              {stems.length > 0 ? t('stemsAgain') : t('stemsStart')}
-            </button>
+            {/* A part has no stems inside it (a drum track cannot be split into
+                drums, bass and vocals), so for one the button gives way to the
+                reason. Not greyed out and not empty: this track list is shared
+                with the MIDI, editor, processing and transcription tools, where
+                a part is a perfectly good choice, and a dead button here would
+                read as the tool being broken. */}
+            {selectedIsPart ? (
+              <p className="mt-3 rounded-lg border border-zinc-200 px-3 py-2 text-xs leading-5 text-zinc-500 dark:border-white/10 dark:text-zinc-400">
+                {t('stemsPartCannot')}
+              </p>
+            ) : (
+              <button
+                type="button"
+                onClick={() => void separate()}
+                disabled={!status?.ready || !songId || settings.stems.length === 0 || running || busy}
+                className="mt-3 inline-flex items-center justify-center gap-2 rounded-lg bg-linear-to-r from-orange-500 to-pink-600 px-4 py-2 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {running ? <Loader2 size={14} className="animate-spin" /> : <Play size={14} />}
+                {stems.length > 0 ? t('stemsAgain') : t('stemsStart')}
+              </button>
+            )}
           </div>
 
           {status && !status.model.installed && (

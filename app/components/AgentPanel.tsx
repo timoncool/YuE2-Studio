@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import { Check, Copy } from 'lucide-react';
+import { Check, Copy, Trash2 } from 'lucide-react';
 import { useI18n } from '../context/I18nContext';
+import type { TranslationKey } from '../i18n/translations';
 import { apiUrl } from '../services/apiBase';
 
 /**
@@ -18,6 +19,14 @@ interface McpStatus {
   agent_seconds_ago: number | null;
   requests_waiting: number;
 }
+
+
+/** free, risky or all - how close the agent is kept. */
+const LEASHES: Array<{ value: string; label: TranslationKey }> = [
+  { value: 'risky', label: 'agentLeashRisky' },
+  { value: 'free', label: 'agentLeashFree' },
+  { value: 'all', label: 'agentLeashAll' },
+];
 
 function endpoint(): string {
   const url = apiUrl('/mcp');
@@ -77,6 +86,69 @@ export const AgentPanel: React.FC = () => {
     };
   }, []);
 
+  const [leash, setLeash] = useState<string>('risky');
+  const [trackAllow, setTrackAllow] = useState(false);
+  const [forbidden, setForbidden] = useState<string[]>([]);
+
+  // What the person decided about the agent: read when the page opens, so the panel
+  // always tells the truth about what the agent may do without asking.
+  useEffect(() => {
+    let alive = true;
+    const load = () =>
+      Promise.all([
+        fetch(apiUrl('/v1/agent/leash')),
+        fetch(apiUrl('/v1/agent/allowance')),
+        fetch(apiUrl('/v1/agent/forbidden')),
+      ])
+        .then(async ([leashResponse, allowanceResponse, forbiddenResponse]) => {
+          if (!leashResponse.ok || !allowanceResponse.ok || !forbiddenResponse.ok) return;
+          const leashBody = (await leashResponse.json()) as { leash?: string };
+          const allowanceBody = (await allowanceResponse.json()) as { allow?: boolean };
+          const forbiddenBody = (await forbiddenResponse.json()) as { forbidden?: string[] };
+          if (!alive) return;
+          setLeash(leashBody.leash ?? 'risky');
+          setTrackAllow(Boolean(allowanceBody.allow));
+          setForbidden(Array.isArray(forbiddenBody.forbidden) ? forbiddenBody.forbidden : []);
+        })
+        .catch((error: Error) => console.error('[ERROR] agent settings failed:', error));
+    void load();
+    const timer = window.setInterval(() => void load(), 3000);
+    return () => {
+      alive = false;
+      window.clearInterval(timer);
+    };
+  }, []);
+
+  // The leash is the user's, not the agent's: only this panel sets it.
+  const chooseLeash = (value: string) => {
+    setLeash(value);
+    void fetch(apiUrl('/v1/agent/leash'), {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ leash: value }),
+    }).catch((error: Error) => console.error('[ERROR] leash failed:', error));
+  };
+
+  // The one switch for tracks, and the list nothing may talk the studio out of.
+  const allowTracks = (allow: boolean) => {
+    setTrackAllow(allow);
+    void fetch(apiUrl('/v1/agent/allowance'), {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ allow }),
+    }).catch((error: Error) => console.error('[ERROR] allowance failed:', error));
+  };
+
+  const forgetForbidden = (name: string) => {
+    const left = forbidden.filter((tool) => tool !== name);
+    setForbidden(left);
+    void fetch(apiUrl('/v1/agent/forbidden'), {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ forbidden: left }),
+    }).catch((error: Error) => console.error('[ERROR] forgetting failed:', error));
+  };
+
   const url = endpoint();
   const config = JSON.stringify({ mcpServers: { [SERVER_NAME]: { type: 'streamable-http', url } } }, null, 2);
   const dot = (on: boolean) => <span className={`h-2 w-2 shrink-0 rounded-full ${on ? 'bg-emerald-500' : 'bg-zinc-400'}`} />;
@@ -109,6 +181,58 @@ export const AgentPanel: React.FC = () => {
       <CopyField label="Claude Code" value={`claude mcp add --transport http ${SERVER_NAME} ${url}`} />
       <CopyField label={t('agentConfig')} value={config} multiline />
       <p className="text-xs leading-5 text-zinc-500 dark:text-zinc-400">{t('agentAssistantHint')}</p>
+
+      {/* How close the agent is kept: the person decides, and the agent asks. */}
+      <div className="space-y-2 rounded-xl border border-zinc-200 p-3 dark:border-white/10">
+        <div className="text-xs font-medium text-zinc-500 dark:text-zinc-400">{t('agentLeashTitle')}</div>
+        <div className="flex flex-wrap gap-1">
+          {LEASHES.map((option) => (
+            <button
+              key={option.value}
+              type="button"
+              onClick={() => chooseLeash(option.value)}
+              className={`rounded-md border px-2 py-1 text-[11px] font-medium transition-colors ${leash === option.value ? 'border-pink-400 text-pink-600 dark:text-pink-300' : 'border-zinc-200 text-zinc-600 hover:border-pink-400 dark:border-white/10 dark:text-zinc-300'}`}
+            >
+              {t(option.label)}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* The one switch for tracks: on, the agent makes them without asking. */}
+      <div className="space-y-2 rounded-xl border border-zinc-200 p-3 dark:border-white/10">
+        <div className="flex items-center gap-2">
+          <input
+            id="agent-track-allow"
+            type="checkbox"
+            checked={trackAllow}
+            onChange={(event) => allowTracks(event.target.checked)}
+            className="h-3.5 w-3.5 shrink-0 accent-pink-500"
+          />
+          <label htmlFor="agent-track-allow" className="text-xs text-zinc-700 dark:text-zinc-200">{t('agentAllowanceTitle')}</label>
+        </div>
+      </div>
+
+      {/* Nothing here may be talked out of, whatever the agent asks. */}
+      <div className="space-y-1.5 rounded-xl border border-zinc-200 p-3 dark:border-white/10">
+        <div className="text-xs font-medium text-zinc-500 dark:text-zinc-400">{t('agentForbiddenTitle')}</div>
+        {forbidden.length === 0 && (
+          <p className="text-xs leading-5 text-zinc-500 dark:text-zinc-400">{t('agentForbiddenEmpty')}</p>
+        )}
+        {forbidden.map((tool) => (
+          <div key={tool} className="flex items-center gap-2 text-xs text-zinc-700 dark:text-zinc-200">
+            <span className="min-w-0 truncate font-mono">{tool}</span>
+            <button
+              type="button"
+              onClick={() => forgetForbidden(tool)}
+              title={t('agentPermissionsForget')}
+              className="ml-auto shrink-0 rounded-md p-1 text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-rose-600 dark:hover:bg-white/10 dark:hover:text-rose-400"
+            >
+              <Trash2 size={13} />
+            </button>
+          </div>
+        ))}
+      </div>
     </div>
   );
 };

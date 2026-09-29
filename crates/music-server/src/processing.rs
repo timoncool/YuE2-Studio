@@ -28,6 +28,9 @@ pub struct ProcessRequest {
     pub vst: Option<Vec<crate::vst::VstSlot>>,
     #[serde(default)]
     pub master: Option<MasterSource>,
+    /// The session the work belongs to; absent means the one open at the time.
+    #[serde(default)]
+    pub workspace_id: Option<String>,
 }
 
 /// The reference a track is mastered to: another song of the library, or a

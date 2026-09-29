@@ -6,6 +6,7 @@ import { openExternal } from '../services/externalLinks';
 import { apiUrl } from '../services/apiBase';
 import { downloadSongAudio } from '../services/songDownload';
 import { openMidi, openStems } from '../services/openStems';
+import { isPart } from './songParts';
 import { useAuth } from '../context/AuthContext';
 import { ownsSong, useSongActions } from '../context/SongActionsContext';
 import {
@@ -119,6 +120,10 @@ export const SongDropdownMenu: React.FC<SongDropdownMenuProps> = ({
     const { user } = useAuth();
     const actions = useSongActions();
     const isOwner = ownsSong(user, song);
+    // A part came out of a separation, not out of a prompt: everything that only
+    // makes sense for a song of one's own is hidden for a part, so copies of
+    // copies cannot be made by accident.
+    const songIsPart = isPart(song);
     const menuRef = useRef<HTMLDivElement>(null);
     // Near the bottom of its panel the menu opens upward; when it fits neither
     // way, the panel scrolls it into view instead of hiding it under the edge.
@@ -240,12 +245,21 @@ export const SongDropdownMenu: React.FC<SongDropdownMenuProps> = ({
                     disabled={!song.audioUrl}
                 />
             )}
-            <MenuItem
-                icon={<Scissors size={14} />}
-                label={t('stemsTitle')}
-                onClick={() => handleAction(() => openStems(song))}
-                disabled={!song.audioUrl}
-            />
+            {/* A part is already the result of a separation, and it never had a
+                prompt of its own: splitting it again, repeating its prompt or
+                re-rendering it only ever make copies of copies - junk in the
+                library, extra files on disk, minutes of GPU time. The items are
+                hidden rather than disabled: that is how this app treats an
+                action that does not apply (see the karaoke item), so the menu
+                never offers work that cannot mean anything. */}
+            {!songIsPart && (
+                <MenuItem
+                    icon={<Scissors size={14} />}
+                    label={t('stemsTitle')}
+                    onClick={() => handleAction(() => openStems(song))}
+                    disabled={!song.audioUrl}
+                />
+            )}
             {song.audioUrl && (
                 <>
                     <MenuItem
@@ -270,14 +284,18 @@ export const SongDropdownMenu: React.FC<SongDropdownMenuProps> = ({
                     />
                 </>
             )}
-            {actions.reusePrompt && (
+            {/* A part came out of a separation, not out of a prompt, so reusing
+                its prompt or re-rendering it would either borrow the base
+                song's prompt or rebuild something else entirely - misleading
+                rather than merely useless. */}
+            {!songIsPart && actions.reusePrompt && (
                 <MenuItem
                     icon={<Repeat size={14} />}
                     label={t('reusePrompt')}
                     onClick={() => handleAction(() => actions.reusePrompt?.(song))}
                 />
             )}
-            {actions.replay && song.nativeReplayAvailable && (
+            {!songIsPart && actions.replay && song.nativeReplayAvailable && (
                 <MenuItem
                     icon={<Repeat size={14} />}
                     label={t('replayTitle')}

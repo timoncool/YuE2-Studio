@@ -8,6 +8,10 @@ export interface Song {
   coverUrl: string;
   duration: string;
   createdAt: Date;
+  /** When it was last touched: renamed, liked, re-covered. Falls back to createdAt. */
+  updatedAt?: Date;
+  /** When the person last gave it a thumbs-up: only a like moves this, nothing else. */
+  likedAt?: Date;
   isGenerating?: boolean;
   jobId?: string; // Active generation job ID for cancel
   queuePosition?: number; // Position in queue (undefined = actively generating, number = waiting in queue)
@@ -16,6 +20,8 @@ export interface Song {
   generationParams?: any;
   tags: string[];
   audioUrl?: string;
+  /** The user's thumbs-up: it lives with the song in the studio's library. */
+  liked?: boolean;
   isPublic?: boolean;
   likeCount?: number;
   viewCount?: number;

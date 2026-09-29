@@ -384,16 +384,50 @@ struct Bridge {
     /// The open windows, oldest first; a command goes to the newest only, so
     /// a second window never runs it again.
     windows: Mutex<Vec<u64>>,
+    /// The windows the person has looked at, oldest first: a question belongs
+    /// to the one they look at now, not to the one that happened to subscribe last.
+    focused: Mutex<Vec<u64>>,
     sequence: AtomicU64,
 }
 
 fn bridge() -> &'static Bridge {
     static BRIDGE: OnceLock<Bridge> = OnceLock::new();
-    BRIDGE.get_or_init(|| Bridge { commands: tokio::sync::broadcast::channel(64).0, pending: Mutex::new(HashMap::new()), windows: Mutex::new(Vec::new()), sequence: AtomicU64::new(0) })
+    BRIDGE.get_or_init(|| Bridge { commands: tokio::sync::broadcast::channel(64).0, pending: Mutex::new(HashMap::new()), windows: Mutex::new(Vec::new()), focused: Mutex::new(Vec::new()), sequence: AtomicU64::new(0) })
 }
 
 fn open_windows() -> std::sync::MutexGuard<'static, Vec<u64>> {
     bridge().windows.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
+}
+
+fn focused_windows() -> std::sync::MutexGuard<'static, Vec<u64>> {
+    bridge().focused.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
+}
+
+/// The window a question belongs to: where the person works, or - while no
+/// window has told the studio it holds their attention - the newest one.
+fn window_to_ask() -> Option<u64> {
+    let open = open_windows();
+    if let Some(window) = focused_windows().iter().rev().find(|window| open.contains(window)) {
+        return Some(*window);
+    }
+    open.last().copied()
+}
+
+/// The page says it is the one being looked at, so questions reach its screen.
+pub async fn window_focus(headers: HeaderMap, Json(body): Json<Value>) -> StatusCode {
+    if !local_origin(&headers) {
+        return foreign_origin().status();
+    }
+    let Some(window) = body.get("window").and_then(Value::as_u64) else {
+        return StatusCode::BAD_REQUEST;
+    };
+    if !open_windows().contains(&window) {
+        return StatusCode::NOT_FOUND;
+    }
+    let mut focused = focused_windows();
+    focused.retain(|seen| *seen != window);
+    focused.push(window);
+    StatusCode::NO_CONTENT
 }
 
 /// Keeps the window on the list while its stream is open.
@@ -402,6 +436,7 @@ struct Listening(u64);
 impl Drop for Listening {
     fn drop(&mut self) {
         open_windows().retain(|window| *window != self.0);
+        focused_windows().retain(|window| *window != self.0);
     }
 }
 
@@ -482,6 +517,107 @@ pub fn tell_windows(event: Value) {
     let _ = bridge().commands.send(event.to_string());
 }
 
+/// A tool whose work belongs in the user's message log: it makes something,
+/// changes something, removes it or starts it. Reading the library, looking at
+/// statuses and moving the window's mouse do not go there - the log is what the
+/// agent did TO the studio, not how it found its way around.
+fn is_noteworthy(name: &str) -> bool {
+    const ACTIONS: [&str; 24] = [
+        "_create", "_update", "_delete", "_set", "_like", "_add", "_remove", "_import", "_install",
+        "_download", "_adopt", "_start", "_cancel", "_split", "_make", "_transcribe", "_render",
+        "_replay", "_open", "_close", "_prepare", "_keep", "_discard", "_rename",
+    ];
+    if name.starts_with("ui_") || name.starts_with("agent_") {
+        return false;
+    }
+    ACTIONS.iter().any(|action| name.contains(action))
+}
+
+/// What a tool acted on, in a person's words: the title or name it was given, or
+/// the one the studio answered with. Only the name of a thing travels to the log -
+/// never an id, and never anything a tool was told in confidence.
+fn acted_on(args: &Value, reply: &str) -> String {
+    let shorten = |text: &str| text.trim().chars().take(80).collect::<String>();
+    for field in ["title", "name"] {
+        if let Some(value) = args.get(field).and_then(Value::as_str) {
+            if !value.trim().is_empty() {
+                return shorten(value);
+            }
+        }
+    }
+    serde_json::from_str::<Value>(reply)
+        .ok()
+        .and_then(|value| {
+            value
+                .get("title")
+                .or_else(|| value.get("name"))
+                .and_then(Value::as_str)
+                .map(shorten)
+        })
+        .unwrap_or_default()
+}
+
+/// What the log says the agent did, in facts rather than in a tool's name: the action, and
+/// the kind of thing it was done to. The window turns both into a sentence of its own
+/// language - "workspace_delete" tells a person nothing about what was deleted.
+fn journal_facts(name: &str, args: &Value) -> (&'static str, &'static str) {
+    let verb = if name.contains("_delete") {
+        "deleted"
+    } else if name.contains("_create") {
+        "created"
+    } else if name.contains("_update") || name.contains("_rename") {
+        "updated"
+    } else if name.contains("_open") {
+        "opened"
+    } else if name.contains("_close") {
+        "closed"
+    } else if name.contains("_like") {
+        if args.get("liked").and_then(Value::as_bool) == Some(false) { "unliked" } else { "liked" }
+    } else if name.contains("_split") {
+        "split"
+    } else if name.contains("_import") {
+        "imported"
+    } else {
+        "ran"
+    };
+    let kind = if name.contains("workspace") {
+        "session"
+    } else if name.contains("playlist") {
+        "playlist"
+    } else if name.contains("stems") {
+        "stems"
+    } else if name.contains("song") || name.contains("library") {
+        "song"
+    } else {
+        "other"
+    };
+    (verb, kind)
+}
+
+/// What a removal is about, in the person's words: a question about deleting
+/// something has to say what that something is, not only the tool's own name.
+async fn removal_target(name: &str, args: &Value) -> String {
+    let argument = |field: &str| args.get(field).and_then(Value::as_str).map(str::to_string);
+    let lookup = if name.contains("workspace") {
+        argument("workspace_id").map(|id| ("/v1/workspaces".to_string(), id))
+    } else if name.contains("playlist") {
+        argument("playlist_id").map(|id| ("/v1/playlists".to_string(), id))
+    } else {
+        argument("song_id").map(|id| (format!("/v1/library/songs/{id}"), id))
+    };
+    let Some((path, wanted)) = lookup else {
+        return acted_on(args, "");
+    };
+    let found = fetch(&path).await;
+    let item = match found {
+        Value::Array(items) => items.into_iter().find(|item| item.get("id").and_then(Value::as_str) == Some(wanted.as_str())),
+        Value::Object(_) => Some(found),
+        _ => None,
+    };
+    item.and_then(|item| item.get("title").or_else(|| item.get("name")).and_then(Value::as_str).map(|name| name.trim().chars().take(80).collect::<String>()))
+        .unwrap_or_default()
+}
+
 /// An agent's call that changes something reaches the windows. The window
 /// never calls the MCP server itself, so each such notice is an agent's doing.
 fn announce_change(tool: &str) {
@@ -491,7 +627,7 @@ fn announce_change(tool: &str) {
 }
 
 async fn ask_window(command: &str, args: Value, seconds: u64) -> Result<Value, String> {
-    let Some(window) = open_windows().last().copied() else {
+    let Some(window) = window_to_ask() else {
         return Err("The studio's window is not open. Open YuE2 Studio and call the tool again; everything else works without it.".into());
     };
     let id = format!("w{}", bridge().sequence.fetch_add(1, Ordering::Relaxed));
@@ -693,6 +829,362 @@ fn file_name(path: &Path) -> String {
     path.file_name().map(|name| name.to_string_lossy().into_owned()).unwrap_or_else(|| "audio".into())
 }
 
+/// The tools that put a new track in the library: a track always belongs to the
+/// session it was made in, so these need one open - `song_create`, a replay, a
+/// stem split and audio processing. Reading (karaoke words, MIDI notes, a score
+/// for a later song) does not make a track and needs no session.
+fn makes_a_track(name: &str) -> bool {
+    matches!(name, "song_create" | "song_replay" | "stems_split" | "processing_start")
+}
+
+/// The makers whose work belongs to a session: every one of them can be told where its tracks
+/// go, and without a word the studio asks the person - once for the whole pack of work.
+/// `score_compose` and `score_transcribe` are not here: a score is not a track, and a session
+/// of its own for every score would only leave empty sessions behind.
+fn takes_a_session(name: &str) -> bool {
+    matches!(
+        name,
+        "song_create" | "song_replay" | "stems_split" | "processing_start" | "karaoke_make" | "midi_transcribe" | "library_import_audio"
+    )
+}
+
+/// What the agent may say about where its tracks go, offered on every maker.
+fn session_field() -> Value {
+    json!({
+        "type": "string",
+        "description": "Where the tracks go: each (a session of its own for every track, named after the track), current (the session open now), or new:<name> (one new session for them all). Leave it out and the studio asks the person once for the whole pack of work."
+    })
+}
+
+/// The schema the agent sees for a tool: only the makers carry the extra word about sessions,
+/// so one place adds it instead of ten schemas repeating it.
+fn schema_of(tool: &Tool) -> Value {
+    let mut schema = (tool.schema)();
+    if takes_a_session(tool.name) {
+        if let Some(fields) = schema.get_mut("properties").and_then(Value::as_object_mut) {
+            fields.insert("session".into(), session_field());
+        }
+    }
+    schema
+}
+
+/// Tools whose work cannot be undone: deleting, overwriting, closing a session,
+/// splitting a track. On the `risky` leash (the default) these are the ones the
+/// user is asked about before anything happens.
+fn is_destructive(name: &str) -> bool {
+    matches!(name, "song_delete" | "library_song_delete" | "playlist_delete" | "library_song_update" | "workspace_close" | "workspace_delete" | "stems_split" | "processing_discard" | "library_version_delete" | "song_job_cancel" | "processing_cancel")
+}
+
+/// Is this a removal - something gone for good? The person is asked one plain question about
+/// those: do it, or do not. Remembering a session-wide "yes" for a deletion, or a tool that
+/// keeps asking after they already answered, are answers nobody offered.
+fn is_removal(name: &str) -> bool {
+    name.contains("delete")
+}
+
+/// Tools that only read or only look: on the `all` leash everything else is put
+/// to the user, so a question about reading the library would be pure noise.
+fn is_read_only(name: &str) -> bool {
+    (name.starts_with("library_") && !name.contains("delete") && !name.contains("update") && !name.contains("like"))
+        || (name.starts_with("workspace_") && name != "workspace_close" && name != "workspace_create")
+        || matches!(name, "studio_status" | "studio_wait" | "studio_system" | "player_state" | "player_get" | "equalizer_get" | "visualizer_get" | "winamp_get" | "create_form_get" | "agent_settings" | "agent_leash" | "ui_screenshot" | "ui_read_page" | "ui_console" | "writing_guide" | "writing_examples")
+}
+
+/// The person's "never allow": tools the agent may not run at all, whatever it asks.
+async fn forbidden_tools() -> Vec<String> {
+    fetch("/v1/agent/forbidden")
+        .await
+        .get("forbidden")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(Value::as_str)
+        .map(str::to_string)
+        .collect()
+}
+
+/// Forbidden outright? Nothing else about the request matters then.
+async fn is_forbidden(name: &str) -> bool {
+    forbidden_tools().await.iter().any(|tool| tool == name)
+}
+
+/// May the agent work inside this session without being asked? The person answered
+/// "in this session" once and the answer is kept with the session itself.
+async fn session_allows(session: Option<&str>) -> bool {
+    let Some(id) = session else {
+        return false;
+    };
+    fetch(&format!("/v1/workspaces/{id}"))
+        .await
+        .get("agent_allow")
+        .and_then(Value::as_bool)
+        .unwrap_or(false)
+}
+
+/// The one switch for the whole studio: the agent makes tracks without asking.
+async fn tracks_without_asking() -> bool {
+    fetch("/v1/agent/allowance")
+        .await
+        .get("allow")
+        .and_then(Value::as_bool)
+        .unwrap_or(false)
+}
+
+/// The active session, if one is open.
+async fn open_session() -> Option<String> {
+    fetch("/v1/workspaces/active").await.get("id").and_then(Value::as_str).map(str::to_string)
+}
+
+/// Answer "in this session": the session keeps it, not a table of its own.
+async fn allow_in_session(session: &str) {
+    if let Ok(call) = send(Method::PUT, format!("/v1/workspaces/{session}/agent"), json!({ "allow": true })) {
+        let _ = call_route(call).await;
+    }
+}
+
+/// Answer "always": the studio's one switch for tracks.
+async fn allow_tracks_always() {
+    if let Ok(call) = send(Method::PUT, "/v1/agent/allowance".into(), json!({ "allow": true })) {
+        let _ = call_route(call).await;
+    }
+}
+
+/// Answer "ask every time": take back both answers, so the question returns.
+async fn ask_every_time_again(session: Option<&str>) {
+    if let Ok(call) = send(Method::PUT, "/v1/agent/allowance".into(), json!({ "allow": false })) {
+        let _ = call_route(call).await;
+    }
+    if let Some(id) = session {
+        if let Ok(call) = send(Method::PUT, format!("/v1/workspaces/{id}/agent"), json!({ "allow": false })) {
+            let _ = call_route(call).await;
+        }
+    }
+}
+
+/// Answer "never allow": the tool joins the list the studio keeps for good.
+async fn forbid_for_good(name: &str) {
+    let mut tools = forbidden_tools().await;
+    if !tools.iter().any(|tool| tool == name) {
+        tools.push(name.to_string());
+    }
+    if let Ok(call) = send(Method::PUT, "/v1/agent/forbidden".into(), json!({ "forbidden": tools })) {
+        let _ = call_route(call).await;
+    }
+}
+/// The leash, in front of every tool that changes something: `free` lets it pass, a
+/// remembered answer is taken as it is, and anything else is put to the user in the
+/// window - once, for the session, always, ask or never. The studio asks BEFORE it
+/// acts, so nothing happens behind the user's back and the agent never widens its
+/// own leash: only the user answers, and only the window records the answer.
+async fn agent_may(name: &str, args: &Value) -> Result<(), String> {
+    if is_forbidden(name).await {
+        return Err(format!("The user forbade {name}; agent_settings lists what is forbidden."));
+    }
+    let settings = fetch("/v1/agent/leash").await;
+    let leash = settings.get("leash").and_then(Value::as_str).unwrap_or("risky");
+    if leash == "free" {
+        return Ok(());
+    }
+    let guarded = if leash == "all" { !is_read_only(name) } else { is_destructive(name) };
+    if !guarded {
+        return Ok(());
+    }
+    let session = open_session().await;
+    if session_allows(session.as_deref()).await {
+        return Ok(());
+    }
+    let removal = is_removal(name);
+    let target = if removal { removal_target(name, &args).await } else { String::new() };
+    let question = json!({ "action": name, "scope": session.clone().map(|id| format!("session:{id}")).unwrap_or_else(|| "always".into()), "leash": leash, "removal": removal, "target": target, "details": args });
+    let answer = ask_window("agent_confirm", question, 300).await?;
+    let decision = answer.get("decision").and_then(Value::as_str).unwrap_or("deny");
+    match decision {
+        "once" => Ok(()),
+        "session" => match session {
+            Some(id) => {
+                allow_in_session(&id).await;
+                Ok(())
+            }
+            None => Err("There is no open session to allow this in; open one first.".into()),
+        },
+        "deny_always" => {
+            forbid_for_good(name).await;
+            Err(format!("The user forbade {name}; agent_settings lists what is forbidden."))
+        }
+        "ask" => {
+            ask_every_time_again(session.as_deref()).await;
+            Err(format!("The user asked to be asked every time about {name}; nothing was done."))
+        }
+        _ => Err(format!("The user did not answer {name} with a yes; nothing was done.")),
+    }
+}
+
+/// The person's answer to "where do these tracks go", remembered for the pack of work at hand:
+/// while calls keep coming the answer stands, and after a quiet spell the next pack is asked
+/// about again. Saying "always" writes it among the agent settings instead.
+struct PackChoice {
+    word: String,
+    /// The session `new:<name>` made for this pack, so it is not made again for every track.
+    workspace: Option<String>,
+    at: std::time::Instant,
+}
+
+static PACK: std::sync::OnceLock<std::sync::Mutex<Option<PackChoice>>> = std::sync::OnceLock::new();
+
+/// How long a quiet stretch has to be before the studio asks about the session again.
+const PACK_QUIET_SECONDS: u64 = 15 * 60;
+
+fn pack_store() -> &'static std::sync::Mutex<Option<PackChoice>> {
+    PACK.get_or_init(|| std::sync::Mutex::new(None))
+}
+
+/// The word the pack of work is running under, if that pack is still going; reading it also
+/// keeps the pack alive, so a run that never stops asking never gets asked twice.
+fn pack_word() -> Option<String> {
+    let mut held = pack_store().lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+    let going = held.as_ref().is_some_and(|choice| choice.at.elapsed().as_secs() < PACK_QUIET_SECONDS);
+    if !going {
+        *held = None;
+        return None;
+    }
+    let word = held.as_ref().map(|choice| choice.word.clone());
+    if let Some(choice) = held.as_mut() {
+        choice.at = std::time::Instant::now();
+    }
+    word
+}
+
+fn hold_pack(word: &str, workspace: Option<String>) {
+    *pack_store().lock().unwrap_or_else(|poisoned| poisoned.into_inner()) =
+        Some(PackChoice { word: word.to_string(), workspace, at: std::time::Instant::now() });
+}
+
+/// The session `new:<name>` already made for the pack at hand.
+fn pack_new_workspace(name: &str) -> Option<String> {
+    let wanted = format!("new:{name}");
+    let held = pack_store().lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+    held.as_ref().filter(|choice| choice.word == wanted).and_then(|choice| choice.workspace.clone())
+}
+
+/// The person's standing answer, when they said "always" instead of "for this pack".
+async fn session_choice_for_good() -> Option<String> {
+    let word = fetch("/v1/agent/session-choice").await.get("choice").and_then(Value::as_str).unwrap_or_default().to_string();
+    (!word.is_empty()).then_some(word)
+}
+
+async fn remember_session_choice_for_good(word: &str) {
+    if let Ok(call) = send(Method::PUT, "/v1/agent/session-choice".into(), json!({ "choice": word })) {
+        let _ = call_route(call).await;
+    }
+}
+
+/// A session made on the spot, by its name. It is made closed, exactly as when the agent asks
+/// for one by hand: only the person opens a session.
+async fn make_session(name: &str) -> Result<String, String> {
+    let call = Call { method: Method::POST, path: "/v1/workspaces".into(), payload: Payload::Json(json!({ "name": name, "song_ids": [] })) };
+    match call_route(call).await {
+        Ok((status, text)) if status.is_success() => serde_json::from_str::<Value>(&text)
+            .ok()
+            .and_then(|created| created.get("id").and_then(Value::as_str).map(str::to_string))
+            .ok_or_else(|| format!("the studio made a session but answered: {text}")),
+        Ok((status, text)) => Err(format!("the studio refused a session named {name}: {status} {text}")),
+        Err(problem) => Err(problem),
+    }
+}
+
+/// The name a session gets when it is made for one track: the track's own name.
+fn track_name(args: &Value) -> String {
+    let title = args.get("title").and_then(Value::as_str).map(str::trim).filter(|title| !title.is_empty());
+    let style = args.get("style").and_then(Value::as_str).map(str::trim).filter(|style| !style.is_empty());
+    title.or(style).unwrap_or("Track").chars().take(48).collect()
+}
+
+/// The session this call's tracks go into. The agent may name it on the call; saying nothing
+/// means the person decides - once for the pack of work at hand, and for good if they say so.
+async fn session_for_call(name: &str, args: &Value) -> Result<Option<String>, String> {
+    if let Some(word) = args.get("session").and_then(Value::as_str).map(str::trim).filter(|word| !word.is_empty()).map(str::to_string) {
+        return session_by_word(&word, args).await;
+    }
+    if let Some(word) = pack_word() {
+        return session_by_word(&word, args).await;
+    }
+    if let Some(word) = session_choice_for_good().await {
+        return session_by_word(&word, args).await;
+    }
+    // Nobody has said where the work goes: the person is asked, the way the leash asks.
+    let active = fetch("/v1/workspaces/active").await;
+    let asked = ask_window(
+        "session_choice",
+        json!({
+            "tool": name,
+            "title": acted_on(args, "{}"),
+            "has_session": active.get("id").and_then(Value::as_str).is_some(),
+            "session_name": active.get("name").and_then(Value::as_str).unwrap_or_default(),
+        }),
+        300,
+    )
+    .await;
+    let Ok(answer) = asked else {
+        // Nobody to ask - the window is away: the open session is the only place work can go.
+        return Ok(open_session().await);
+    };
+    let word = answer.get("choice").and_then(Value::as_str).unwrap_or_default().trim().to_string();
+    if word.is_empty() || word == "deny" {
+        return Err("The person did not say where the track goes; nothing was made.".into());
+    }
+    if answer.get("always").and_then(Value::as_bool).unwrap_or(false) && !word.starts_with("new:") {
+        remember_session_choice_for_good(&word).await;
+    }
+    if answer.get("remember").and_then(Value::as_bool).unwrap_or(true) {
+        let made = session_by_word(&word, args).await?;
+        if !word.starts_with("new:") {
+            hold_pack(&word, made.clone());
+        }
+        return Ok(made);
+    }
+    session_by_word(&word, args).await
+}
+
+/// One of the three words carried out: a session per track, the open one, or a new one.
+async fn session_by_word(word: &str, args: &Value) -> Result<Option<String>, String> {
+    match word {
+        "current" => match open_session().await {
+            Some(id) => Ok(Some(id)),
+            None => Err("No session is open and the person has not said where the track goes: open a session, or name one - session: current, each, or new:<name>.".into()),
+        },
+        "each" => Ok(Some(make_session(&track_name(args)).await?)),
+        other if other.starts_with("new:") => {
+            let name = other.trim_start_matches("new:").trim().to_string();
+            if name.is_empty() {
+                return Err("new: needs a name for the session, like new:Rain.".into());
+            }
+            if let Some(made) = pack_new_workspace(&name) {
+                return Ok(Some(made));
+            }
+            let made = make_session(&name).await?;
+            hold_pack(&format!("new:{name}"), Some(made.clone()));
+            Ok(Some(made))
+        }
+        other => Err(format!("session is \"each\", \"current\" or \"new:<name>\", not \"{other}\".")),
+    }
+}
+
+/// Hands the chosen session to the route the tool is about to call: a field of the JSON body,
+/// a field of the form, or the only body a POST without one can carry.
+fn give_the_session(call: &mut Call, workspace: &str) {
+    match &mut call.payload {
+        Payload::Json(body) => {
+            if let Some(fields) = body.as_object_mut() {
+                fields.insert("workspace_id".into(), Value::String(workspace.to_string()));
+            } else {
+                call.payload = Payload::Json(json!({ "workspace_id": workspace }));
+            }
+        }
+        Payload::Form { fields, .. } => fields.push(("workspace_id".into(), workspace.to_string())),
+        Payload::None if call.method == Method::POST => call.payload = Payload::Json(json!({ "workspace_id": workspace })),
+        _ => {}
+    }
+}
 fn tools() -> &'static [Tool] {
     static TOOLS: OnceLock<Vec<Tool>> = OnceLock::new();
     TOOLS.get_or_init(|| {
@@ -1269,15 +1761,15 @@ fn tools() -> &'static [Tool] {
             },
             Tool {
                 name: "library_liked",
-                description: "The songs the user liked (the thumbs-up in the library): the ones they count as the best. With library_songs_list since today it gives today's best.",
+                description: "The ids of the songs the user liked (the thumbs-up in the library): the ones they count as the best. With library_songs_list since today it gives today's best. The mark lives with the song, so it survives a profile change.",
                 schema: nothing,
-                call: |args| window("library_liked", args, 15),
+                call: |_| get("/v1/library/liked".into()),
             },
             Tool {
                 name: "library_song_like",
-                description: "Like a library song (liked true, the default) or take the like back (liked false), as the thumbs-up in the library does.",
+                description: "Like a library song (liked true, the default) or take the like back (liked false), as the thumbs-up in the library does. Kept in the song itself, not in one window.",
                 schema: || object(json!({ "song_id": { "type": "string" }, "liked": { "type": "boolean" } }), &["song_id"]),
-                call: |args| window("library_song_like", args, 15),
+                call: |args| post(format!("/v1/library/songs/{}/liked", segment(&text(args, "song_id")?)), json!({ "liked": args.get("liked").and_then(Value::as_bool).unwrap_or(true) })),
             },
             Tool {
                 name: "library_song_get",
@@ -1332,6 +1824,56 @@ fn tools() -> &'static [Tool] {
                 schema: || id_only("playlist_id", "playlist id"),
                 call: |args| send(Method::DELETE, format!("/v1/library/playlists/{}", segment(&text(args, "playlist_id")?)), json!({})),
             },
+            // ---------------------------------------------------------------- sessions (workspaces)
+            Tool {
+                name: "workspace_list",
+                description: "The work sessions of the studio, newest first: id, name, the songs each holds, when it was made and whether it is open. A session is where every track is made, and one session is open at a time - a track that appears joins the open one.",
+                schema: nothing,
+                call: |_| get("/v1/workspaces".into()),
+            },
+            Tool {
+                name: "workspace_get",
+                description: "One session by id: its name, the ids of the songs it holds, and whether it is open.",
+                schema: || id_only("workspace_id", "session id from workspace_list"),
+                call: |args| get(format!("/v1/workspaces/{}", segment(&text(args, "workspace_id")?))),
+            },
+            Tool {
+                name: "workspace_create",
+                description: "Make a session and hand it to the person: it is made closed and waits in the list, because opening a session is theirs to do in the window - the studio never switches their work behind their back. Names are unique: the studio does not rename on its own, so add \"(2)\" when a session already carries the name.",
+                schema: || object(json!({ "name": { "type": "string", "description": "what the session is called" }, "song_ids": { "type": "array", "items": { "type": "string" }, "description": "library songs to put in it; a new session usually starts empty" } }), &["name"]),
+                call: |args| post("/v1/workspaces".into(), json!({ "name": text(args, "name")?, "song_ids": args.get("song_ids").cloned().unwrap_or_else(|| json!([])) })),
+            },
+            Tool {
+                name: "workspace_open",
+                description: "Open a session: it becomes the current one, and whichever session was open is closed - the service keeps one open at a time.",
+                schema: || id_only("workspace_id", "session id from workspace_list"),
+                call: |args| post(format!("/v1/workspaces/{}/open", segment(&text(args, "workspace_id")?)), json!({})),
+            },
+            Tool {
+                name: "workspace_close",
+                description: "Close a session: it is filed away with its songs and no session is open afterwards, so open or make another before making tracks.",
+                schema: || id_only("workspace_id", "session id from workspace_list"),
+                call: |args| post(format!("/v1/workspaces/{}/close", segment(&text(args, "workspace_id")?)), json!({})),
+            },
+            Tool {
+                name: "workspace_delete",
+                description: "Remove a session for good; the tracks it holds stay in the library, only the session and its mark on them go. Tidy up the sessions you made and left empty - a session the person made is theirs to remove.",
+                schema: || id_only("workspace_id", "session id from workspace_list"),
+                call: |args| send(Method::DELETE, format!("/v1/workspaces/{}", segment(&text(args, "workspace_id")?)), json!({})),
+            },
+            // ---------------------------------------------------------------- the agent's leash
+            Tool {
+                name: "agent_settings",
+                description: "What the person decided about the agent, all of it: the leash (free, risky or all), `tracks_without_asking` (the studio's one switch for making tracks), `forbidden` (tools the agent may never run) and `sessions_that_allow_the_agent` (sessions where the person answered \"in this session\").",
+                schema: nothing,
+                call: |_| composite("agent_settings"),
+            },
+            Tool {
+                name: "agent_leash",
+                description: "How close the agent is kept: free (no questions), risky (ask before what cannot be undone) or all (ask before everything that changes anything). The user sets it in Settings, Agent (MCP).",
+                schema: nothing,
+                call: |_| get("/v1/agent/leash".into()),
+            },
             // ---------------------------------------------------------------- covers, karaoke, stems, processing
             Tool {
                 name: "cover_draw",
@@ -1362,6 +1904,15 @@ fn tools() -> &'static [Tool] {
                 description: "Split a library song into six stems (drums, bass, other, vocals, guitar, piano) with HT-Demucs. Each stem becomes a track of the library made from the song (made_from, made_by stems), replacing the stems of an earlier split; stems_get names them. Wait with studio_wait until stems.",
                 schema: || id_only("song_id", "library song id"),
                 call: |args| post(format!("/v1/library/songs/{}/stems", segment(&text(args, "song_id")?)), json!({})),
+            },
+            Tool {
+                name: "stems_archive_list",
+                description: "The stems that were put away when a new set took their place: each keeps the song it was separated from (song_id names one song; leave it out for every song). stems_split makes a set, stems_get shows the current one.",
+                schema: || object(json!({ "song_id": { "type": "string", "description": "library song id (every song when left out)" } }), &[]),
+                call: |args| match args.get("song_id").and_then(Value::as_str) {
+                    Some(id) => get(format!("/v1/library/stems-archive?song_id={}", segment(id))),
+                    None => get("/v1/library/stems-archive".to_string()),
+                },
             },
             Tool {
                 name: "stems_get",
@@ -2260,7 +2811,7 @@ pub async fn handle(headers: HeaderMap, body: axum::body::Bytes) -> Response {
             }
         }
         "tools/list" => {
-            let list: Vec<Value> = tools().iter().map(|tool| json!({ "name": tool.name, "title": tool_title(tool.name), "description": tool.description, "inputSchema": (tool.schema)(), "annotations": annotations(tool.name) })).collect();
+            let list: Vec<Value> = tools().iter().map(|tool| json!({ "name": tool.name, "title": tool_title(tool.name), "description": tool.description, "inputSchema": schema_of(tool), "annotations": annotations(tool.name) })).collect();
             rpc(id, cacheable(json!({ "tools": list })))
         }
         "tools/call" => {
@@ -2277,6 +2828,87 @@ pub async fn handle(headers: HeaderMap, body: axum::body::Bytes) -> Response {
                 let args = args.clone();
                 tokio::task::spawn_blocking(move || prepare(&args)).await.unwrap_or_else(|error| Err(format!("{name} failed: {error}")))
             };
+            // A track is always made inside the session it belongs to, so the makers
+            // ask the service first: the agent hears the studio's own rule instead of
+            // making a song that no session would hold.
+            if makes_a_track(name) {
+                // Where a track may be made, and how far the answer reaches, is the person's
+                // call - never the agent's. A forbidden tool never runs; a session where the
+                // person answered "in this session", or the studio's one switch for tracks,
+                // lets the work go on; otherwise the window asks, and the answer is the same
+                // five decisions the leash knows: once, this session, always, ask, never.
+                if is_forbidden(name).await {
+                    return answer(format!("The user forbade {name}; agent_settings lists what is forbidden."), true);
+                }
+                let session = open_session().await;
+                if !session_allows(session.as_deref()).await && !tracks_without_asking().await {
+                    let active = fetch("/v1/workspaces/active").await;
+                    let asked = ask_window(
+                        "session_confirm",
+                        json!({
+                            "tool": name,
+                            "title": acted_on(&args, "{}"),
+                            "session_id": session.clone().unwrap_or_default(),
+                            "session_name": active.get("name").and_then(Value::as_str).unwrap_or_default(),
+                            "allow_always": true,
+                        }),
+                        300,
+                    )
+                    .await;
+                    let decided = asked
+                        .as_ref()
+                        .ok()
+                        .and_then(|value| value.get("decision").and_then(Value::as_str))
+                        .unwrap_or_default()
+                        .to_string();
+                    match decided.as_str() {
+                        "once" | "opened" => {}
+                        "session" => match session.as_deref() {
+                            Some(id) => allow_in_session(id).await,
+                            None => {
+                                return answer("There is no open session to allow this in; open one first.".into(), true);
+                            }
+                        },
+                        "always" => allow_tracks_always().await,
+                        "deny_always" => {
+                            forbid_for_good(name).await;
+                            return answer(format!("The user forbade {name}; agent_settings lists what is forbidden."), true);
+                        }
+                        "ask" => {
+                            ask_every_time_again(session.as_deref()).await;
+                            return answer(format!("The user asked to be asked every time about {name}; nothing was made."), true);
+                        }
+                        _ => {
+                            let why = match asked {
+                                Ok(_) => "the person did not allow it".to_string(),
+                                Err(problem) => problem,
+                            };
+                            let tail = if why.ends_with('.') { " Nothing was made." } else { "; nothing was made." };
+                    return answer(format!("{why}{tail}"), true);
+                        }
+                    }
+                }
+            }
+            // The user is asked before anything that cannot be undone (or before
+            // everything, on the strict leash): the leash decides, not the agent.
+            if let Err(refusal) = agent_may(name, &args).await {
+                return answer(refusal, true);
+            }
+            // Where a track goes is the person's call, never the agent's guess: the call may name
+            // the session (each, current, new:<name>), and otherwise the studio asks - once for
+            // the pack of work at hand, the way the leash asks.
+            let mut prepared = prepared;
+            if takes_a_session(name) {
+                match session_for_call(name, &args).await {
+                    Ok(Some(id)) => {
+                        if let Ok(call) = prepared.as_mut() {
+                            give_the_session(call, &id);
+                        }
+                    }
+                    Ok(None) => {}
+                    Err(refusal) => return answer(refusal, true),
+                }
+            }
             match prepared {
                 Err(problem) => answer(problem, true),
                 Ok(Call { payload: Payload::Window { command, args, seconds }, .. }) => match ask_window(command, args, seconds).await {
@@ -2304,6 +2936,28 @@ pub async fn handle(headers: HeaderMap, body: axum::body::Bytes) -> Response {
                     Ok(text) => answer(text, false),
                     Err(problem) => answer(problem, true),
                 },
+                Ok(call) if call.path == "composite:agent_settings" => {
+                    let leash = fetch("/v1/agent/leash").await;
+                    let tracks = fetch("/v1/agent/allowance").await;
+                    let forbidden = fetch("/v1/agent/forbidden").await;
+                    let sessions = fetch("/v1/workspaces").await;
+                    let allowed: Vec<Value> = sessions
+                        .as_array()
+                        .into_iter()
+                        .flatten()
+                        .filter(|session| session.get("agent_allow").and_then(Value::as_bool) == Some(true))
+                        .map(|session| json!({ "id": session.get("id"), "name": session.get("name") }))
+                        .collect();
+                    tool_json(
+                        id,
+                        json!({
+                            "leash": leash.get("leash"),
+                            "tracks_without_asking": tracks.get("allow"),
+                            "forbidden": forbidden.get("forbidden"),
+                            "sessions_that_allow_the_agent": allowed,
+                        }),
+                    )
+                }
                 Ok(call) if call.path == "composite:status" => tool_json(id, status_summary().await),
                 Ok(call) if call.path == "composite:wait" => match wait_for(&args).await {
                     Ok(state) => tool_json(id, state),
@@ -2314,9 +2968,29 @@ pub async fn handle(headers: HeaderMap, body: axum::body::Bytes) -> Response {
                     Ok(text) => answer(text, false),
                     Err(problem) => answer(problem, true),
                 },
-                Ok(call) => match call_route(call).await {
+                Ok(call) => {
+                    // A removal is named BEFORE it happens: afterwards there is nothing left to
+                    // read the name from, and the log would say only "deleted · session".
+                    let named_before = if is_noteworthy(name) && is_removal(name) {
+                        removal_target(name, &args).await
+                    } else {
+                        String::new()
+                    };
+                    match call_route(call).await {
                     Ok((status, text)) if status.is_success() => {
                         announce_change(name);
+                        if is_noteworthy(name) {
+                            // The log keeps what the agent did to the studio - quietly, so the
+                            // work never flashes a toast at the person. What travels is the act,
+                            // the kind of thing it touched and that thing's own name - never the
+                            // tool's name, which says nothing at all to the person reading it.
+                            let (verb, kind) = journal_facts(name, &args);
+                            let mut target = if named_before.is_empty() { acted_on(&args, &text) } else { named_before };
+                            if target.is_empty() {
+                                target = removal_target(name, &args).await;
+                            }
+                            let _ = ask_window("journal_note", json!({ "verb": verb, "kind": kind, "target": target }), 3).await;
+                        }
                         match serde_json::from_str::<Value>(&text) {
                             Ok(value) => tool_json(id, shape(name, &args, value)),
                             Err(_) => answer(text, false),
@@ -2324,6 +2998,7 @@ pub async fn handle(headers: HeaderMap, body: axum::body::Bytes) -> Response {
                     }
                     Ok((_, text)) => answer(text, true),
                     Err(problem) => answer(problem, true),
+                    }
                 },
             }
         }
@@ -2379,11 +3054,29 @@ fn moment(text: &str, end: bool) -> Result<i64, String> {
 }
 
 /// What an agent is told when it connects.
-const INSTRUCTIONS: &str = "You drive YuE2 Studio on this computer. Every tool runs the same code as a button of the studio, and the user sees what you do in its window. Start with studio_status. Long work (songs, stems, karaoke, dataset preparation, training) is a job: start it, then studio_wait instead of polling. The graphics card runs one heavy job at a time; while a LoRA trains no song is made. Look ids up instead of guessing them: library_songs_list, training_status, dataset_get, lora_list, models_status. Before writing for the model yourself read writing_guide and writing_examples. When the user has made you the studio's writing assistant, answer its requests: assistant_requests_wait, then assistant_request_answer. The whole guide is the resource studio://skill (prompt 'studio').";
+const INSTRUCTIONS: &str = "You drive YuE2 Studio on this computer. Every tool runs the same code as a button of the studio, and the user sees what you do in its window: every change you make is written into the studio's own message log, the bell in the top panel - what was done, to what kind of thing, and that thing's own name - while reads and ui_* leave no line. Start with studio_status. Every track is made inside a session, and you say where it goes: the makers take a `session` word (each | current | new:<name>); one session of the studio's own - marked kind: import - gathers tracks nobody claimed, and is not yours to rename or delete. Long work (songs, stems, karaoke, dataset preparation, training) is a job: start it, then studio_wait instead of polling. The graphics card runs one heavy job at a time; while a LoRA trains no song is made. Look ids up instead of guessing them: library_songs_list, training_status, dataset_get, lora_list, models_status. Before writing for the model yourself read writing_guide and writing_examples. When the user has made you the studio's writing assistant, answer its requests: assistant_requests_wait, then assistant_request_answer. The whole guide is the resource studio://skill (prompt 'studio').";
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The log is written for a person, not for a log reader: it says what was done and to
+    /// what kind of thing - and it never carries the tool's own name, which explains nothing.
+    #[test]
+    fn the_log_says_what_was_done_and_to_what() {
+        let silent = json!({});
+        assert_eq!(journal_facts("workspace_delete", &silent), ("deleted", "session"));
+        assert_eq!(journal_facts("song_create", &silent), ("created", "song"));
+        assert_eq!(journal_facts("playlist_update", &silent), ("updated", "playlist"));
+        assert_eq!(journal_facts("stems_split", &silent), ("split", "stems"));
+        assert_eq!(journal_facts("library_import_audio", &silent), ("imported", "song"));
+        assert_eq!(journal_facts("library_song_like", &json!({ "liked": true })), ("liked", "song"));
+        assert_eq!(journal_facts("library_song_like", &json!({ "liked": false })), ("unliked", "song"));
+        // An action nobody taught us the words for is still work, not a tool name.
+        assert_eq!(journal_facts("karaoke_make", &silent), ("ran", "other"));
+        assert!(is_noteworthy("workspace_delete"));
+        assert!(!is_noteworthy("library_songs_list"));
+    }
 
     #[test]
     fn a_change_reaches_the_windows_and_a_read_does_not() {
@@ -2501,6 +3194,115 @@ mod tests {
         let names: Vec<&str> = files.iter().map(|(_, _, name)| name.as_str()).collect();
         assert_eq!(names, ["set/audio/a.WAV", "set/dataset.json"]);
         assert!(folder_files(&folder.join("audio"), |_| false, "x").is_err(), "an empty pick is refused");
+    }
+
+    #[test]
+    fn only_the_makers_carry_the_word_about_sessions() {
+        let schema = |name: &str| schema_of(tools().iter().find(|tool| tool.name == name).expect("the tool is in the catalogue"));
+        let about = schema("song_create")["properties"]["session"]["description"].as_str().unwrap_or_default().to_string();
+        assert!(about.contains("each") && about.contains("current") && about.contains("new:"), "the makers say where the tracks go");
+        assert!(schema("stems_split")["properties"].get("session").is_some(), "separating makes parts, so it takes a session");
+        assert!(schema("library_import_audio")["properties"].get("session").is_some(), "an import lands in a session too");
+        assert!(schema("library_songs_list")["properties"].get("session").is_none(), "a reader is never asked where tracks go");
+        assert!(takes_a_session("song_create") && !takes_a_session("studio_status"), "the list names the makers only");
+    }
+
+    /// What a route would receive, whoever built the call.
+    fn body_of(call: &Call) -> Value {
+        match &call.payload {
+            Payload::Json(body) => body.clone(),
+            Payload::Form { fields, .. } => Value::Object(fields.iter().map(|(name, value)| (name.clone(), Value::String(value.clone()))).collect()),
+            Payload::None | Payload::Window { .. } => Value::Null,
+        }
+    }
+
+    #[test]
+    fn the_chosen_session_reaches_the_route_that_makes_the_track() {
+        let mut with_body = post("/v1/music/jobs".into(), json!({ "style": "pop" })).unwrap();
+        give_the_session(&mut with_body, "session-1");
+        assert_eq!(body_of(&with_body)["workspace_id"], "session-1", "the session joins the request");
+        assert_eq!(body_of(&with_body)["style"], "pop", "and nothing else about it changes");
+
+        let mut without_body = post("/v1/library/songs/s1/stems".into(), Value::Null).unwrap();
+        give_the_session(&mut without_body, "session-2");
+        assert_eq!(body_of(&without_body)["workspace_id"], "session-2", "a POST without its own body carries the session");
+
+        let mut form = Call {
+            method: Method::POST,
+            path: "/v1/library/import".into(),
+            payload: Payload::Form { fields: vec![("title".into(), "T".into())], files: vec![] },
+        };
+        give_the_session(&mut form, "session-3");
+        assert_eq!(body_of(&form)["workspace_id"], "session-3", "an upload carries it as a form field");
+        assert_eq!(body_of(&form)["title"], "T");
+
+        let mut reading = get("/v1/library/songs".into()).unwrap();
+        give_the_session(&mut reading, "session-4");
+        assert_eq!(body_of(&reading), Value::Null, "a reader sends no body and gets none");
+
+        let mut windowed = window("ui_screenshot", &json!({}), 5).unwrap();
+        give_the_session(&mut windowed, "session-5");
+        assert!(matches!(windowed.payload, Payload::Window { .. }), "a window command is left alone");
+    }
+
+    #[test]
+    fn a_session_made_for_one_track_is_named_after_that_track() {
+        assert_eq!(track_name(&json!({ "title": "Night shift" })), "Night shift");
+        assert_eq!(track_name(&json!({ "title": "   ", "style": "pop, sad" })), "pop, sad", "a nameless track falls back to its style");
+        assert_eq!(track_name(&json!({})), "Track", "and a bare request still gets a name");
+        assert_eq!(track_name(&json!({ "title": "x".repeat(90) })).chars().count(), 48, "a session name stays readable");
+    }
+
+    #[test]
+    fn the_answer_stands_for_the_pack_and_is_forgotten_after_a_quiet_spell() {
+        hold_pack("each", None);
+        assert_eq!(pack_word().as_deref(), Some("each"), "while the pack goes on, its answer stands");
+        assert_eq!(pack_new_workspace("Rain"), None, "a pack running under another word has made no session");
+
+        hold_pack("new:Rain", Some("session-9".to_string()));
+        assert_eq!(pack_new_workspace("Rain").as_deref(), Some("session-9"), "the session made for the pack is reused, not made twice");
+
+        *pack_store().lock().unwrap() = Some(PackChoice {
+            word: "current".into(),
+            workspace: None,
+            at: std::time::Instant::now() - std::time::Duration::from_secs(PACK_QUIET_SECONDS + 1),
+        });
+        assert_eq!(pack_word(), None, "after a quiet spell the next pack is asked about again");
+
+        hold_pack("current", None);
+        assert_eq!(pack_word().as_deref(), Some("current"), "and the answer that follows is kept");
+        *pack_store().lock().unwrap() = None;
+    }
+
+    #[test]
+    fn a_question_goes_to_the_window_the_person_works_in() {
+        open_windows().clear();
+        focused_windows().clear();
+        open_windows().extend([1u64, 2u64]);
+        assert_eq!(window_to_ask(), Some(2), "with nobody saying anything, the newest window is asked");
+        focused_windows().push(1);
+        assert_eq!(window_to_ask(), Some(1), "the window the person looked at is the one asked");
+        focused_windows().push(2);
+        assert_eq!(window_to_ask(), Some(2), "and the last one looked at wins");
+        open_windows().retain(|window| *window != 2);
+        assert_eq!(window_to_ask(), Some(1), "a window that is gone is not asked again");
+        open_windows().clear();
+        focused_windows().clear();
+    }
+
+    #[test]
+    fn a_removal_is_one_plain_question() {
+        assert!(is_removal("workspace_delete") && is_removal("library_song_delete") && is_removal("dataset_song_delete"), "every deletion is a removal");
+        assert!(!is_removal("workspace_close") && !is_removal("stems_split") && !is_removal("library_song_update"), "closing, splitting and rewriting are other questions");
+        assert!(is_destructive("workspace_delete") && is_destructive("library_song_delete"), "and a removal is still asked about on the risky leash");
+    }
+
+    #[test]
+    fn deleting_a_session_is_a_question_the_person_answers() {
+        let tool = tools().iter().find(|tool| tool.name == "workspace_delete").expect("workspace_delete is in the catalogue");
+        assert!(tool.description.contains("stay in the library"), "the tracks outlive their session");
+        assert!(is_destructive("workspace_delete"), "removing a session cannot be undone, so the leash asks first");
+        assert!(!takes_a_session("workspace_delete"), "tidying a session is not making a track");
     }
 
     #[test]

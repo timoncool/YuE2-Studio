@@ -1,35 +1,144 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Song, Playlist } from '../types';
-import { Heart, Plus, Music, Play, MoreHorizontal, Trash2, Upload, Loader2 } from 'lucide-react';
+import { Heart, Plus, Music, Play, Pause, MoreHorizontal, Trash2, Upload, Loader2 } from 'lucide-react';
 import { SongDropdownMenu } from './SongDropdownMenu';
 import { AlbumCover } from './AlbumCover';
 import { useI18n } from '../context/I18nContext';
 import { captionSummary } from '../services/examples';
+import { partIcon, partLabelKey, PartsToggle, splitByParent } from './songParts';
+import { Pager } from './Pager';
 
 interface LibraryViewProps {
   allSongs: Song[];
   likedSongs: Song[];
   playlists: Playlist[];
   onPlaySong: (song: Song, list?: Song[]) => void;
+  /** What the player is on right now, so a row can say "this one is playing". */
+  currentSong: Song | null;
+  /** How many items one page holds (Settings - Appearance). */
+  itemsPerPage: number;
+  isPlaying: boolean;
   onCreatePlaylist: () => void;
   onSelectPlaylist: (playlist: Playlist) => void;
   onImported?: () => void;
+  /** The session browser, shown as the fifth tab - it is a list, not a modal. */
+  sessionsContent?: React.ReactNode;
 }
 
 export const LibraryView: React.FC<LibraryViewProps> = ({ 
     allSongs,
     likedSongs, 
     playlists, 
-    onPlaySong, 
+    onPlaySong,
+    currentSong,
+    isPlaying,
+    itemsPerPage,
     onCreatePlaylist,
     onSelectPlaylist,
     onImported,
+    sessionsContent,
 }) => {
     const { t, songCount } = useI18n();
     const [openMenuSong, setOpenMenuSong] = useState<Song | null>(null);
-    const [activeTab, setActiveTab] = useState<'all' | 'playlists' | 'liked' | 'import'>('all');
+    const [activeTab, setActiveTab] = useState<'all' | 'playlists' | 'liked' | 'import' | 'sessions'>('all');
+    /* Long lists are read a page at a time, the page size coming from the settings. */
+    const [page, setPage] = useState(0);
+    useEffect(() => { setPage(0); }, [activeTab, itemsPerPage]);
     const [importing, setImporting] = useState(false);
     const [importError, setImportError] = useState<string | null>(null);
+    const [expandedParts, setExpandedParts] = useState<Set<string>>(new Set());
+    // Base songs and their parts, split the same way the session list splits them.
+    const { roots, childrenOf } = useMemo(() => splitByParent(allSongs), [allSongs]);
+    /* A part is part of its song, not a song of its own: a page, a counter and a queue count
+       the songs a person made, and the parts ride along with the one they belong to. */
+    const likedRoots = useMemo(() => splitByParent(likedSongs).roots, [likedSongs]);
+    const toggleParts = (songId: string) => {
+        setExpandedParts(prev => {
+            const next = new Set(prev);
+            if (next.has(songId)) next.delete(songId);
+            else next.add(songId);
+            return next;
+        });
+    };
+
+    // One row for a track. A part reuses it, indented, with its own icon where
+    // the number would be, so it reads as part of the song it came from.
+    const renderRow = (song: Song, index: number | null, asPart = false) => {
+        const row = (
+            <div
+                data-mcp-context={`song ${song.id}: ${song.title}`}
+                className="group flex min-w-0 items-center gap-2 rounded p-2 transition-colors hover:bg-zinc-100 dark:hover:bg-white/10 sm:gap-4"
+                /* Playing from the library is a one-track affair: the queue is
+                   exactly this song, never the library and never a queue left
+                   over from another page - hence [song] and not just song. */
+                onClick={() => onPlaySong(song, [song])}
+            >
+                {index === null ? (
+                    <span
+                        className="flex w-6 shrink-0 justify-center text-zinc-400 dark:text-zinc-500"
+                        title={currentSong?.id === song.id && isPlaying ? t('pause') : t('play')}
+                    >
+                        {currentSong?.id === song.id && isPlaying
+                            ? <Pause size={14} fill="currentColor" />
+                            : <Play size={14} fill="currentColor" />}
+                    </span>
+                ) : (
+                    <>
+                        <span className={`w-6 text-center text-zinc-400 dark:text-zinc-500 ${currentSong?.id === song.id && isPlaying ? 'hidden' : 'group-hover:hidden'}`}>{index + 1}</span>
+                        <span className={`w-6 text-center text-zinc-900 dark:text-white ${currentSong?.id === song.id && isPlaying ? 'block' : 'hidden group-hover:block'}`}>
+                            {currentSong?.id === song.id && isPlaying
+                                ? <Pause size={14} fill="currentColor" />
+                                : <Play size={14} fill="currentColor" />}
+                        </span>
+                    </>
+                )}
+
+                {song.coverUrl ? (
+                    <img src={song.coverUrl} className="w-10 h-10 rounded object-cover shadow-sm" alt="" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
+                ) : (
+                    <AlbumCover seed={song.id || song.title} size="sm" className="w-10 h-10" />
+                )}
+
+                <div className="flex-1 min-w-0">
+                    <div className="text-zinc-900 dark:text-white font-medium truncate">{asPart && partLabelKey(song) ? t(partLabelKey(song)!) : song.title}</div>
+                    <div className="truncate text-xs text-zinc-500 dark:text-zinc-400">
+                        {asPart && partLabelKey(song) ? `${t(partLabelKey(song)!)} · ` : ''}{captionSummary(song.style)}
+                    </div>
+                </div>
+
+                <div className="hidden text-xs font-mono text-zinc-500 dark:text-zinc-400 sm:block">{song.duration}</div>
+                <div className="relative ml-0 sm:ml-2">
+                    <button
+                        className="p-2 rounded-full hover:bg-zinc-200 dark:hover:bg-white/5 text-zinc-400 hover:text-black dark:hover:text-white transition-colors"
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            setOpenMenuSong(prev => prev?.id === song.id ? null : song);
+                        }}
+                    >
+                        <MoreHorizontal size={16} />
+                    </button>
+                    <SongDropdownMenu
+                        song={song}
+                        isOpen={openMenuSong?.id === song.id}
+                        onClose={() => setOpenMenuSong(null)}
+                    />
+                </div>
+            </div>
+        );
+
+        if (!asPart) return row;
+        return (
+            <div key={song.id} className="relative pl-10">
+                <span
+                    className="absolute left-3 top-4 text-zinc-400 dark:text-zinc-500"
+                    title={partLabelKey(song) ? t(partLabelKey(song)!) : undefined}
+                >
+                    {partIcon(song)}
+                </span>
+                {row}
+            </div>
+        );
+    };
     const importInput = useRef<HTMLInputElement | null>(null);
 
     /// Imports an existing MP3 or WAV into the local library. The service
@@ -106,6 +215,13 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
                     {t('playlists')}
                     {activeTab === 'playlists' && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-green-500 rounded-full"></div>}
                  </button>
+                 <button
+                    onClick={() => setActiveTab('sessions')}
+                    className={`pb-3 text-sm font-bold transition-colors relative ${activeTab === 'sessions' ? 'text-zinc-900 dark:text-white' : 'text-zinc-500 hover:text-zinc-900 dark:hover:text-white'}`}
+                 >
+                    {t('controlPanelSessions')}
+                    {activeTab === 'sessions' && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-green-500 rounded-full"></div>}
+                 </button>
                  <button 
                     onClick={() => setActiveTab('import')}
                     className={`pb-3 text-sm font-bold transition-colors relative ${activeTab === 'import' ? 'text-zinc-900 dark:text-white' : 'text-zinc-500 hover:text-zinc-900 dark:hover:text-white'}`}
@@ -116,52 +232,53 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
              </div>
 
              {/* Content */}
+             {/* The pager sits ABOVE the list: the buttons are read before the rows, and
+                 reaching for them below a long list is a walk. One pager for every tab that
+                 holds a list; sessions keep their own (it lives above its rows too). */}
+             {(activeTab === 'all' || activeTab === 'liked' || activeTab === 'playlists') && (
+                 <Pager
+                     page={page}
+                     pageCount={Math.max(1, Math.ceil((activeTab === 'liked' ? likedRoots : activeTab === 'playlists' ? playlists : roots).length / itemsPerPage))}
+                     onPage={setPage}
+                 />
+             )}
+
+             {activeTab === 'sessions' && sessionsContent && (
+                 /* The session browser carries its own padding for the column it usually lives
+                    in, where it fills the whole side; inside the page that padding would be a
+                    second margin, so it is taken back here and the rows line up like the rest. */
+                 <div className="-m-4 sm:-m-6">{sessionsContent}</div>
+             )}
              {activeTab === 'all' && (
                  <div className="space-y-1">
                     {allSongs.length === 0 ? (
                         <div className="text-sm text-zinc-500 dark:text-zinc-400">{t('noSongsYet')}</div>
                     ) : (
-                        allSongs.map((song, idx) => (
-                            <div key={song.id} data-mcp-context={`song ${song.id}: ${song.title}`} className="group flex min-w-0 items-center gap-2 rounded-sm p-2 transition-colors hover:bg-zinc-100 dark:hover:bg-white/10 sm:gap-4" onClick={() => onPlaySong(song, allSongs)}>
-                                <span className="text-zinc-400 dark:text-zinc-500 w-6 text-center group-hover:hidden">{idx + 1}</span>
-                                <span className="text-zinc-900 dark:text-white w-6 text-center hidden group-hover:block"><Play size={14} fill="currentColor" /></span>
-                                
-                                {song.coverUrl ? (
-                                    <img src={song.coverUrl} className="w-10 h-10 rounded-sm object-cover shadow-xs" alt="" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
-                                ) : (
-                                    <AlbumCover seed={song.id || song.title} size="sm" className="w-10 h-10" />
-                                )}
-                                
-                                <div className="flex-1 min-w-0">
-                                    <div className="text-zinc-900 dark:text-white font-medium truncate">{song.title}</div>
-                                    <div className="truncate text-xs text-zinc-500 dark:text-zinc-400">{captionSummary(song.style)}</div>
-                                </div>
-                                
-                                <div className="hidden text-sm font-mono text-zinc-500 dark:text-zinc-400 sm:block">{song.duration}</div>
-                                <div className="relative ml-0 sm:ml-2">
-                                    <button
-                                        className="p-2 rounded-full hover:bg-zinc-200 dark:hover:bg-white/5 text-zinc-400 hover:text-black dark:hover:text-white transition-colors"
-                                        onClick={(e) => {
-                                            e.stopPropagation();
-                                            setOpenMenuSong(prev => prev?.id === song.id ? null : song);
-                                        }}
-                                    >
-                                        <MoreHorizontal size={16} />
-                                    </button>
-                                    <SongDropdownMenu
-                                        song={song}
-                                        isOpen={openMenuSong?.id === song.id}
-                                        onClose={() => setOpenMenuSong(null)}
-                                    />
-                                </div>
-                            </div>
-                        ))
+                        roots.slice(page * itemsPerPage, (page + 1) * itemsPerPage).map((song, idx) => {
+                            const parts = childrenOf.get(song.id) ?? [];
+                            const open = expandedParts.has(song.id);
+                            return (
+                                <React.Fragment key={song.id}>
+                                    {renderRow(song, idx)}
+                                    {parts.length > 0 && (
+                                        <div className="pl-1">
+                                            <PartsToggle
+                                                parts={parts}
+                                                open={open}
+                                                onToggle={() => toggleParts(song.id)}
+                                            />
+                                            {open && parts.map(part => renderRow(part, null, true))}
+                                        </div>
+                                    )}
+                                </React.Fragment>
+                            );
+                        })
                     )}
                  </div>
              )}
              {activeTab === 'liked' && (
                  <div>
-                    <div className="group mb-8 flex cursor-pointer flex-col items-start gap-4 rounded-xl border border-zinc-200 bg-linear-to-b from-indigo-500/10 to-zinc-50 p-4 transition-colors hover:bg-zinc-100 dark:border-white/5 dark:from-indigo-800/50 dark:to-zinc-900/50 dark:hover:bg-white/5 sm:flex-row sm:items-end sm:gap-6 sm:p-6" onClick={() => likedSongs.length > 0 && onPlaySong(likedSongs[0], likedSongs)}>
+                    <div className="group mb-8 flex cursor-pointer flex-col items-start gap-4 rounded-xl border border-zinc-200 bg-linear-to-b from-indigo-500/10 to-zinc-50 p-4 transition-colors hover:bg-zinc-100 dark:border-white/5 dark:from-indigo-800/50 dark:to-zinc-900/50 dark:hover:bg-white/5 sm:flex-row sm:items-end sm:gap-6 sm:p-6" onClick={() => likedRoots.length > 0 && onPlaySong(likedRoots[0], likedRoots)}>
                          <div className="flex h-28 w-28 shrink-0 items-center justify-center rounded-sm bg-linear-to-br from-indigo-500 to-purple-400 shadow-2xl sm:h-40 sm:w-40">
                             <Heart fill="white" size={64} className="text-white" />
                          </div>
@@ -169,7 +286,7 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
                              <h2 className="text-sm font-bold uppercase text-zinc-500 dark:text-white mb-2">{t('playlist')}</h2>
                              <h1 className="mb-4 text-3xl font-extrabold text-zinc-900 dark:text-white sm:text-5xl">{t('likedSongs')}</h1>
                              <div className="text-sm text-zinc-500 dark:text-zinc-300 font-medium">
-                                 {songCount(likedSongs.length)}
+                                 {songCount(likedRoots.length)}
                              </div>
                          </div>
                          <div className="ml-auto mb-2 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -180,7 +297,7 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
                     </div>
 
                     <div className="space-y-1">
-                        {likedSongs.map((song, idx) => (
+                        {likedRoots.slice(page * itemsPerPage, (page + 1) * itemsPerPage).map((song, idx) => (
                             <div key={song.id} data-mcp-context={`song ${song.id}: ${song.title}`} className="group flex min-w-0 items-center gap-2 rounded-sm p-2 transition-colors hover:bg-zinc-100 dark:hover:bg-white/10 sm:gap-4" onClick={() => onPlaySong(song, likedSongs)}>
                                 <span className="text-zinc-400 dark:text-zinc-500 w-6 text-center group-hover:hidden">{idx + 1}</span>
                                 <span className="text-zinc-900 dark:text-white w-6 text-center hidden group-hover:block"><Play size={14} fill="currentColor" /></span>
@@ -196,7 +313,7 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
                                     <div className="truncate text-xs text-zinc-500 dark:text-zinc-400">{captionSummary(song.style)}</div>
                                 </div>
                                 
-                                <div className="hidden text-sm font-mono text-zinc-500 dark:text-zinc-400 sm:block">{song.duration}</div>
+                                <div className="hidden text-xs font-mono text-zinc-500 dark:text-zinc-400 sm:block">{song.duration}</div>
                                 <div className="hidden text-green-500 sm:block"><Heart fill="#22c55e" size={16} /></div>
                                 <div className="relative ml-0 sm:ml-2">
                                     <button
@@ -221,7 +338,7 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
              )}
              {activeTab === 'playlists' && (
                  <div className="grid grid-cols-1 gap-4 min-[440px]:grid-cols-2 sm:gap-6 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
-                     {playlists.map((playlist) => (
+                     {playlists.slice(page * itemsPerPage, (page + 1) * itemsPerPage).map((playlist) => (
                          <div key={playlist.id} className="bg-white dark:bg-zinc-900/40 p-4 rounded-lg border border-zinc-200 dark:border-white/5 hover:border-zinc-300 dark:hover:border-white/10 hover:shadow-lg dark:hover:bg-zinc-900 transition-all group cursor-pointer" onClick={() => onSelectPlaylist(playlist)}>
                              <div className="relative aspect-square mb-4 rounded-md overflow-hidden bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center">
                                  {playlist.coverUrl ? (

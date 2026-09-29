@@ -195,6 +195,7 @@ export const Player: React.FC<PlayerProps> = ({
                                 </p>
                             </div>
                             <button
+                                title={isLiked ? t('removeFromFavourites') : t('addToFavourites')}
                                 onClick={onToggleLike}
                                 className={`p-2 tap-highlight-none ${isLiked ? 'text-pink-600 dark:text-pink-500' : 'text-zinc-400 dark:text-white/50'}`}
                             >
@@ -227,24 +228,30 @@ export const Player: React.FC<PlayerProps> = ({
                     <div className="flex items-center justify-center gap-8 py-4">
                         <button
                             onClick={onToggleShuffle}
+                            /* Hints live here and nowhere else in the UI: the player is the one
+                               row of controls whose state is not obvious from the icon alone. */
+                            title={isShuffle ? t('playerShuffleOn') : t('playerShuffleOff')}
                             className={`p-2 tap-highlight-none ${isShuffle ? 'text-pink-600 dark:text-pink-500' : 'text-zinc-400 dark:text-white/50'}`}
                         >
                             <Shuffle size={22} />
                         </button>
                         <button
                             onClick={onPrevious}
+                            title={t('previous')}
                             className="p-2 text-zinc-800 dark:text-white tap-highlight-none"
                         >
                             <SkipBack size={32} fill="currentColor" />
                         </button>
                         <button
                             onClick={onTogglePlay}
+                            title={isPlaying ? t('pause') : t('play')}
                             className="w-16 h-16 rounded-full bg-zinc-900 dark:bg-white text-white dark:text-black flex items-center justify-center shadow-lg tap-highlight-none"
                         >
                             {isPlaying ? <Pause size={32} fill="currentColor" /> : <Play size={32} fill="currentColor" className="ml-1" />}
                         </button>
                         <button
                             onClick={onNext}
+                            title={t('next')}
                             className="p-2 text-zinc-800 dark:text-white tap-highlight-none"
                         >
                             <SkipForward size={32} fill="currentColor" />
@@ -358,6 +365,7 @@ export const Player: React.FC<PlayerProps> = ({
                     {/* Mobile Controls - compact */}
                     <div className="flex items-center gap-1 shrink-0">
                         <button
+                            title={isLiked ? t('removeFromFavourites') : t('addToFavourites')}
                             onClick={onToggleLike}
                             className={`p-2 tap-highlight-none ${isLiked ? 'text-pink-600 dark:text-pink-500' : 'text-zinc-400'}`}
                         >
@@ -463,24 +471,28 @@ export const Player: React.FC<PlayerProps> = ({
                             <div className="flex items-center justify-center gap-8 py-2 w-full">
                                 <button
                                     onClick={onToggleShuffle}
+                                    title={isShuffle ? t('playerShuffleOn') : t('playerShuffleOff')}
                                     className={`p-2 transition-colors ${isShuffle ? 'text-pink-600 dark:text-pink-500' : 'text-zinc-400 hover:text-zinc-900 dark:hover:text-white'}`}
                                 >
                                     <Shuffle size={22} />
                                 </button>
                                 <button
                                     onClick={onPrevious}
+                                    title={t('previous')}
                                     className="p-2 text-zinc-800 dark:text-white hover:scale-110 transition-transform"
                                 >
                                     <SkipBack size={36} fill="currentColor" />
                                 </button>
                                 <button
                                     onClick={onTogglePlay}
+                                    title={isPlaying ? t('pause') : t('play')}
                                     className="w-18 h-18 p-5 rounded-full bg-zinc-900 dark:bg-white text-white dark:text-black flex items-center justify-center shadow-lg hover:scale-105 transition-transform"
                                 >
                                     {isPlaying ? <Pause size={36} fill="currentColor" /> : <Play size={36} fill="currentColor" className="ml-1" />}
                                 </button>
                                 <button
                                     onClick={onNext}
+                                    title={t('next')}
                                     className="p-2 text-zinc-800 dark:text-white hover:scale-110 transition-transform"
                                 >
                                     <SkipForward size={36} fill="currentColor" />
@@ -557,6 +569,7 @@ export const Player: React.FC<PlayerProps> = ({
                             {/* Extra Actions */}
                             <div className="flex items-center justify-center gap-4 text-zinc-400 dark:text-white/50">
                                 <button
+                                    title={isLiked ? t('removeFromFavourites') : t('addToFavourites')}
                                     onClick={onToggleLike}
                                     className={`p-3 rounded-full hover:bg-zinc-200 dark:hover:bg-white/10 transition-colors ${isLiked ? 'text-pink-600 dark:text-pink-500' : ''}`}
                                 >
@@ -632,6 +645,7 @@ export const Player: React.FC<PlayerProps> = ({
                         </p>
                     </div>
                     <button
+                        title={isLiked ? t('removeFromFavourites') : t('addToFavourites')}
                         onClick={onToggleLike}
                         className={`ml-1 sm:ml-2 transition-colors shrink-0 hidden sm:block ${isLiked ? 'text-pink-600 dark:text-pink-500' : 'text-zinc-400 hover:text-zinc-900 dark:hover:text-white'}`}
                     >
@@ -644,24 +658,28 @@ export const Player: React.FC<PlayerProps> = ({
                     <div className="flex items-center gap-2 sm:gap-4 lg:gap-6">
                         <button
                             onClick={onToggleShuffle}
+                            title={isShuffle ? t('playerShuffleOn') : t('playerShuffleOff')}
                             className={`transition-colors hidden sm:block ${isShuffle ? 'text-pink-600 dark:text-pink-500' : 'text-zinc-400 hover:text-zinc-900 dark:hover:text-white'}`}
                         >
                             <Shuffle size={16} />
                         </button>
                         <button
                             onClick={onPrevious}
+                            title={t('previous')}
                             className="text-zinc-700 dark:text-zinc-300 hover:text-black dark:hover:text-white transition-colors"
                         >
                             <SkipBack size={18} className="sm:w-[22px] sm:h-[22px]" fill="currentColor" />
                         </button>
                         <button
                             onClick={onTogglePlay}
+                            title={isPlaying ? t('pause') : t('play')}
                             className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-zinc-900 dark:bg-white text-white dark:text-black flex items-center justify-center hover:scale-105 transition-transform shadow-lg"
                         >
                             {isPlaying ? <Pause size={18} className="sm:w-5 sm:h-5" fill="currentColor" /> : <Play size={18} className="sm:w-5 sm:h-5 ml-0.5" fill="currentColor" />}
                         </button>
                         <button
                             onClick={onNext}
+                            title={t('next')}
                             className="text-zinc-700 dark:text-zinc-300 hover:text-black dark:hover:text-white transition-colors"
                         >
                             <SkipForward size={18} className="sm:w-[22px] sm:h-[22px]" fill="currentColor" />

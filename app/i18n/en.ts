@@ -1193,6 +1193,7 @@ export const en = {
     stemsInstallModel: 'Download the model',
     stemsStart: 'Separate',
     stemsAgain: 'Separate again',
+    stemsPartCannot: 'This is a part: it is itself the result of a separation. Separating it again would only make copies of copies - pick the original track above.',
     stemsRunning: 'Separating',
     stem_drums: 'Drums',
     stem_bass: 'Bass',

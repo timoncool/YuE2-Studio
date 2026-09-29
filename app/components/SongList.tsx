@@ -1,22 +1,30 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
+import { Pager } from './Pager';
+import type { SortOrder } from '../services/workspaces';
 import { Song } from '../types';
-import { Play, MoreHorizontal, Heart, ListPlus, Pause, Search, Filter, Check, Globe, Lock, Loader2, ThumbsUp, Share2, Video, Info, Clock, Timer, ImagePlus, Pencil, Clapperboard } from 'lucide-react';
+import { Play, MoreHorizontal, Heart, ListPlus, Pause, Search, Filter, Check, Globe, Lock, Loader2, ThumbsUp, Share2, Video, Info, Clock, Timer, ImagePlus, Pencil, Clapperboard, AudioLines, ChevronRight, Drum, Guitar, MicVocal, Music, Piano } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useI18n } from '../context/I18nContext';
 import type { TranslationKey } from '../i18n/translations';
 import { SongDropdownMenu } from './SongDropdownMenu';
 import { AlbumCover } from './AlbumCover';
 import { updateNativeSong } from '../services/nativeLibrary';
+import { stampOf } from '../services/dates';
 import { ownsSong, SongActionsProvider, useSongActions } from '../context/SongActionsContext';
 import { captionSummary } from '../services/examples';
+import { partIcon, partLabelKey, PartsToggle, splitByParent } from './songParts';
 
 interface SongListProps {
+    /** How many items one page holds (Settings - Appearance). */
+    itemsPerPage: number;
+    /** What the list is ordered by, and which way - set in the alpha panel above it. */
+    order: SortOrder;
     songs: Song[];
     currentSong: Song | null;
     selectedSong: Song | null;
     likedSongIds: Set<string>;
     isPlaying: boolean;
-    referenceTracks?: { id: string; filename: string; audio_url: string; duration?: number | null; created_at?: string }[];
+    referenceTracks?: { id: string; filename: string; audio_url: string; duration?: number | null; created_at?: string; updated_at?: string | null }[];
     onPlay: (song: Song) => void;
     onSelect: (song: Song) => void;
     onToggleLike: (songId: string) => void;
@@ -31,6 +39,10 @@ interface SongListProps {
     onCancelAll?: () => void;
     onResetAll?: () => void;
     activeJobCount?: number;
+    /** What the header calls the list: the open session's name, or the library. */
+    headerLabel?: string;
+    /** The empty state's wording, when it is not "no songs match the filters". */
+    emptyLabel?: string;
 }
 
 // ... existing code ...
@@ -54,6 +66,9 @@ const getProfileBadge = (song: Song): string => {
     if (song.ditModel === 'imported-audio') return 'Import';
     return song.lmModel ? PROFILE_BADGE[song.lmModel] ?? song.lmModel : 'YuE2';
 };
+
+/// The part a track is and its icons live in ./songParts, shared with the
+/// library's list, so a stem looks the same wherever it is shown.
 
 const createDragPreview = (element: HTMLElement) => {
     const clone = element.cloneNode(true) as HTMLElement;
@@ -88,6 +103,8 @@ const createDragPreview = (element: HTMLElement) => {
 };
 
 export const SongList: React.FC<SongListProps> = ({
+    itemsPerPage,
+    order,
     songs,
     currentSong,
     selectedSong,
@@ -108,6 +125,8 @@ export const SongList: React.FC<SongListProps> = ({
     onResetJob,
     onResetAll,
     activeJobCount = 0,
+    headerLabel,
+    emptyLabel,
 }) => {
     const { user } = useAuth();
     const { t, songCount } = useI18n();
@@ -197,21 +216,56 @@ export const SongList: React.FC<SongListProps> = ({
         });
     }, [referenceTracks, searchQuery, activeFilters]);
 
+    // ---------------------------------------------------------------- parts
+    // A track made from another one (a stem, a take) folds under the song it came
+    // from: the list shows songs, and a song shows its parts on request, so a
+    // session stays readable however many parts it holds.
+    const { roots: rootSongs, childrenOf } = useMemo(() => splitByParent(filteredSongs), [filteredSongs]);
+
+    const [expandedParts, setExpandedParts] = useState<Set<string>>(new Set());
+    const toggleParts = (songId: string) => {
+        setExpandedParts(prev => {
+            const next = new Set(prev);
+            if (next.has(songId)) next.delete(songId);
+            else next.add(songId);
+            return next;
+        });
+    };
+
+    /* A long list is read a page at a time; the size of the page is the person's choice,
+       and a new search or another session starts from the first page again. */
+    const [page, setPage] = useState(0);
+    useEffect(() => { setPage(0); }, [searchQuery, songs.length, itemsPerPage, order]);
+
     const listItems = useMemo(() => {
-        const songItems = filteredSongs.map(song => ({
+        const songItems = rootSongs.map(song => ({
             type: 'song' as const,
             id: song.id,
             createdAt: song.createdAt,
-            song
+            updatedAt: song.updatedAt ?? song.createdAt,
+            name: song.title,
+            song,
+            parts: childrenOf.get(song.id) ?? [],
         }));
         const uploadItems = filteredUploads.map(track => ({
             type: 'upload' as const,
             id: track.id,
             createdAt: new Date(track.created_at || Date.now()),
+            /* A file brought in is not edited here: it was last touched when it arrived. */
+            updatedAt: new Date(track.updated_at || track.created_at || Date.now()),
+            name: track.filename.replace(/\.[^/.]+$/, ''),
             track
         }));
-        return [...songItems, ...uploadItems].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
-    }, [filteredSongs, filteredUploads]);
+        /* Read by the day it was made, the day it was last touched, or its name. */
+        return [...songItems, ...uploadItems].sort((a, b) => {
+            const compared = order.by === 'name'
+                ? a.name.localeCompare(b.name, 'ru')
+                : order.by === 'updated'
+                    ? a.updatedAt.getTime() - b.updatedAt.getTime()
+                    : a.createdAt.getTime() - b.createdAt.getTime();
+            return order.descending ? -compared : compared;
+        });
+    }, [rootSongs, filteredUploads, childrenOf, order]);
 
     const selectableSongs = useMemo(
         () => filteredSongs.filter(song => !song.isGenerating),
@@ -221,9 +275,91 @@ export const SongList: React.FC<SongListProps> = ({
     const allSelected = selectableSongs.length > 0 && selectableSongs.every(song => selectedIds.has(song.id));
     const selectedSongs = selectableSongs.filter(song => selectedIds.has(song.id));
 
+    // One row for a track; parts reuse it, so a part behaves exactly like a song.
+    const renderSongRow = (song: Song) => (
+        <SongItem
+            key={song.id}
+            song={song}
+            isCurrent={currentSong?.id === song.id}
+            isSelected={selectedSong?.id === song.id}
+            isSelectionMode={isSelecting}
+            isChecked={selectedIds.has(song.id)}
+            isLiked={likedSongIds.has(song.id)}
+            isPlaying={isPlaying}
+            isOwner={ownsSong(user, song)}
+            onPlay={() => onPlay(song)}
+            onSelect={() => onSelect(song)}
+            onOpenOriginal={(() => {
+                const original = song.derived ? songsById.get(song.derived.from) : undefined;
+                return original ? () => onSelect(original) : undefined;
+            })()}
+            onToggleSelect={() => {
+                if (song.isGenerating) return;
+                setSelectedIds(prev => {
+                    const next = new Set(prev);
+                    if (next.has(song.id)) next.delete(song.id);
+                    else next.add(song.id);
+                    return next;
+                });
+            }}
+            onToggleLike={() => onToggleLike(song.id)}
+            onAddToPlaylist={() => onAddToPlaylist(song)}
+            onOpenCoverRegen={() => onOpenCoverRegen && onOpenCoverRegen(song)}
+            onShowDetails={() => onShowDetails && onShowDetails(song)}
+            onNavigateToProfile={onNavigateToProfile}
+            onSongUpdate={onSongUpdate}
+            // Cancel button is also available during pre-flight (placeholder card
+            // with no jobId yet) - pass `song.id` (= tempId) and the App.tsx
+            // handler routes to the registered AbortController.
+            onCancelJob={
+              song.isGenerating
+                ? () => onCancelJob?.(song.jobId || song.id)
+                : undefined
+            }
+            // Reset works for both real-job and pre-flight cancelled cards
+            // (pre-flight cancel sets stage='cancelled' too, no jobId needed
+            // - Reset just removes the placeholder).
+            onResetJob={
+              song.stage === 'cancelled'
+                ? () => onResetJob?.(song.jobId || song.id)
+                : undefined
+            }
+        />
+    );
+
+    // A song's parts, folded away until asked for: the row keeps its icons, so
+    // what is inside is readable at a glance, and opening it shifts them right.
+    const renderParts = (song: Song, parts: Song[]) => {
+        const open = expandedParts.has(song.id);
+        return (
+            <div className="pt-0.5">
+                <PartsToggle parts={parts} open={open} onToggle={() => toggleParts(song.id)} />
+                {open && (
+                    <div className="mt-1 space-y-2">
+                        {parts.map(part => (
+                            <div key={part.id} className="relative pl-10">
+                                <span
+                                    className="absolute left-3 top-5 text-zinc-400 dark:text-zinc-500"
+                                    title={partLabelKey(part) ? t(partLabelKey(part)!) : undefined}
+                                >
+                                    {partIcon(part)}
+                                </span>
+                                {renderSongRow(part)}
+                            </div>
+                        ))}
+                    </div>
+                )}
+            </div>
+        );
+    };
+
     return (
         <div className="h-full min-w-0 flex-1 overflow-y-auto bg-white p-4 pb-32 transition-colors duration-300 dark:bg-black sm:p-6">
-            <div className="mx-auto w-full min-w-0 max-w-5xl"> {/* Container constraint */}
+            {/* A capped reading column, flush left: the width keeps a track's text
+                readable on a 4K screen, and sitting against the left edge means the
+                list starts where the strip above it does instead of drifting to the
+                middle of a wide window. */}
+            <div className="w-full min-w-0 max-w-5xl">
 
                 {/* Header */}
                 <div className="flex flex-col gap-6 mb-8">
@@ -231,9 +367,13 @@ export const SongList: React.FC<SongListProps> = ({
                         is in it rather than naming a workspace concept that this
                         single-user desktop build does not have. */}
                     <div className="flex items-center gap-2 text-sm text-zinc-500 dark:text-zinc-400">
-                        <span className="font-medium text-zinc-900 dark:text-white">{t('library')}</span>
+                        {/* The session's own name is blue, the plain library heading stays
+                            neutral: the colour is what says "you are working in here". */}
+                        <span className={`font-medium ${headerLabel ? 'text-blue-600 dark:text-blue-400' : 'text-zinc-900 dark:text-white'}`}>
+                            {headerLabel || t('songListTitle')}
+                        </span>
                         <span className="text-zinc-400 dark:text-zinc-600">·</span>
-                        <span>{songCount(songs.length)}</span>
+                        <span>{songCount(rootSongs.length)}</span>
                     </div>
 
                     <div className="flex items-center gap-3">
@@ -377,65 +517,27 @@ export const SongList: React.FC<SongListProps> = ({
                             <div className="w-16 h-16 rounded-full bg-zinc-100 dark:bg-white/5 flex items-center justify-center">
                                 <Filter size={32} />
                             </div>
-                            <p className="font-medium">{t('noSongsMatchFilters')}</p>
-                            <button
-                                onClick={() => { setActiveFilters(new Set()); setSearchQuery(''); }}
-                                className="text-pink-600 dark:text-pink-500 text-sm font-bold hover:underline"
-                            >
-                                {t('clearFilters')}
-                            </button>
+                            <p className="font-medium">{emptyLabel || t('noSongsMatchFilters')}</p>
+                            {!emptyLabel && (
+                                <button
+                                    onClick={() => { setActiveFilters(new Set()); setSearchQuery(''); }}
+                                    className="text-pink-600 dark:text-pink-500 text-sm font-bold hover:underline"
+                                >
+                                    {t('clearFilters')}
+                                </button>
+                            )}
                         </div>
                     ) : (
-                        listItems.map((item) => (
+                        listItems.slice(page * itemsPerPage, (page + 1) * itemsPerPage).map((item) => (
                             item.type === 'song' ? (
-                                <SongItem
-                                    key={item.id}
-                                    song={item.song}
-                                    isCurrent={currentSong?.id === item.song.id}
-                                    isSelected={selectedSong?.id === item.song.id}
-                                    isSelectionMode={isSelecting}
-                                    isChecked={selectedIds.has(item.song.id)}
-                                    isLiked={likedSongIds.has(item.song.id)}
-                                    isPlaying={isPlaying}
-                                    isOwner={ownsSong(user, item.song)}
-                                    onPlay={() => onPlay(item.song)}
-                                    onSelect={() => onSelect(item.song)}
-                                    onOpenOriginal={(() => {
-                                        const original = item.song.derived ? songsById.get(item.song.derived.from) : undefined;
-                                        return original ? () => onSelect(original) : undefined;
-                                    })()}
-                                    onToggleSelect={() => {
-                                        if (item.song.isGenerating) return;
-                                        setSelectedIds(prev => {
-                                            const next = new Set(prev);
-                                            if (next.has(item.song.id)) next.delete(item.song.id);
-                                            else next.add(item.song.id);
-                                            return next;
-                                        });
-                                    }}
-                                    onToggleLike={() => onToggleLike(item.song.id)}
-                                    onAddToPlaylist={() => onAddToPlaylist(item.song)}
-                                    onOpenCoverRegen={() => onOpenCoverRegen && onOpenCoverRegen(item.song)}
-                                    onShowDetails={() => onShowDetails && onShowDetails(item.song)}
-                                    onNavigateToProfile={onNavigateToProfile}
-                                    onSongUpdate={onSongUpdate}
-                                    // Cancel button is also available during pre-flight (placeholder
-                                    // card with no jobId yet) — pass `song.id` (= tempId) and the
-                                    // App.tsx handler routes to the registered AbortController.
-                                    onCancelJob={
-                                      item.song.isGenerating
-                                        ? () => onCancelJob?.(item.song.jobId || item.song.id)
-                                        : undefined
-                                    }
-                                    // Reset works for both real-job and pre-flight cancelled cards
-                                    // (pre-flight cancel sets stage='cancelled' too, no jobId needed
-                                    // — Reset just removes the placeholder).
-                                    onResetJob={
-                                      item.song.stage === 'cancelled'
-                                        ? () => onResetJob?.(item.song.jobId || item.song.id)
-                                        : undefined
-                                    }
-                                />
+                                // A fragment, not a wrapper: the song's card stays a
+                                // direct child of the list, so it keeps the full width
+                                // it had before parts existed. Only the parts inside
+                                // shift right.
+                                <React.Fragment key={item.id}>
+                                    {renderSongRow(item.song)}
+                                    {item.parts.length > 0 && renderParts(item.song, item.parts)}
+                                </React.Fragment>
                             ) : (
                                 <UploadItem
                                     key={`upload_${item.id}`}
@@ -458,6 +560,11 @@ export const SongList: React.FC<SongListProps> = ({
                             )
                         ))
                     )}
+                    <Pager
+                        page={page}
+                        pageCount={Math.max(1, Math.ceil(listItems.length / itemsPerPage))}
+                        onPage={setPage}
+                    />
                 </div>
             </div> {/* End container */}
         </div>
@@ -510,7 +617,7 @@ const SongItem: React.FC<SongItemProps> = ({
     onResetJob,
     onOpenOriginal,
 }) => {
-    const { t } = useI18n();
+    const { t, language } = useI18n();
     const [showDropdown, setShowDropdown] = useState(false);
     const [imageError, setImageError] = useState(false);
     const [isEditingTitle, setIsEditingTitle] = useState(false);
@@ -579,7 +686,7 @@ const SongItem: React.FC<SongItemProps> = ({
                     }
                 }, 0);
             }}
-            className={`group flex min-w-0 items-center gap-2 rounded-lg border p-2 transition-all hover:bg-zinc-100 dark:hover:bg-suno-card sm:gap-4 ${isSelected ? 'bg-zinc-100 dark:bg-suno-card border-zinc-200 dark:border-white/10' : 'border-transparent bg-transparent'} ${song.audioUrl && !song.isGenerating ? 'cursor-grab active:cursor-grabbing' : ''}`}
+            className={`group flex flex-wrap min-w-0 items-center gap-2 rounded-lg border p-2 transition-all hover:bg-zinc-100 dark:hover:bg-suno-card sm:gap-4 ${isSelected ? 'bg-zinc-100 dark:bg-suno-card border-zinc-200 dark:border-white/10' : 'border-transparent bg-transparent'} ${song.audioUrl && !song.isGenerating ? 'cursor-grab active:cursor-grabbing' : ''}`}
         >
             {isSelectionMode && (
                 <button
@@ -700,7 +807,7 @@ const SongItem: React.FC<SongItemProps> = ({
                                 className="inline-flex max-w-full items-center gap-1 truncate rounded-xs border border-zinc-300 px-1.5 py-0.5 text-[10px] text-zinc-600 hover:border-pink-400 hover:text-pink-600 disabled:cursor-default disabled:hover:border-zinc-300 disabled:hover:text-zinc-600 dark:border-white/15 dark:text-zinc-300"
                             >
                                 {t('madeFrom')} «{song.derived.fromTitle}» · {t(`derivedTool_${song.derived.tool}` as TranslationKey)}
-                                {song.derived.tool === 'stems' && typeof song.derived.settings?.stem === 'string' ? `: ${song.derived.settings.stem}` : ''}
+                                {song.derived.tool === 'stems' && partLabelKey(song) ? `: ${t(partLabelKey(song)!)}` : ''}
                             </button>
                         )}
                         <span
@@ -751,82 +858,10 @@ const SongItem: React.FC<SongItemProps> = ({
                         </div>
                     )}
                 </div>
-
-                {/* Actions Row - Hidden while generating */}
-                {!song.isGenerating && (
-                    <div className="flex items-center gap-1 pt-2">
-                        <button
-                            className={`flex items-center gap-1 px-3 py-1.5 rounded-full hover:bg-white/5 transition-colors ${isLiked ? 'text-pink-600 dark:text-pink-500 bg-pink-100 dark:bg-pink-500/10' : 'text-zinc-400 hover:text-black dark:hover:text-white'}`}
-                            onClick={(e) => { e.stopPropagation(); onToggleLike(); }}
-                        >
-                            <ThumbsUp size={16} fill={isLiked ? "currentColor" : "none"} />
-                            {(song.likeCount || 0) > 0 && (
-                                <span className="text-xs font-bold">{song.likeCount}</span>
-                            )}
-                        </button>
-
-                        {/* Manual cover regeneration — opens CoverRegenModal where the user can
-                            pick a model + prompt and either generate via Pollinations or
-                            upload a custom image from disk. Only shown for owned songs. */}
-                        {isOwner && (
-                            <button
-                                className="p-2 rounded-full hover:bg-zinc-200 dark:hover:bg-white/5 text-zinc-400 hover:text-black dark:hover:text-white transition-colors"
-                                onClick={(e) => { e.stopPropagation(); if (onOpenCoverRegen) onOpenCoverRegen(); }}
-                                title={t('coverRegen.openTooltip') || 'Regenerate cover'}
-                            >
-                                <ImagePlus size={16} />
-                            </button>
-                        )}
-
-                        {songActions.exportVideo && song.audioUrl && !song.isGenerating && (
-                            <button
-                                className="p-2 rounded-full hover:bg-zinc-200 dark:hover:bg-white/5 text-zinc-400 hover:text-black dark:hover:text-white transition-colors"
-                                onClick={(e) => { e.stopPropagation(); songActions.exportVideo?.(song); }}
-                                title={t('videoExport')}
-                            >
-                                <Clapperboard size={16} />
-                            </button>
-                        )}
-
-                        <button
-                            className="p-2 rounded-full hover:bg-zinc-200 dark:hover:bg-white/5 text-zinc-400 hover:text-black dark:hover:text-white transition-colors ml-auto"
-                            onClick={(e) => { e.stopPropagation(); onAddToPlaylist(); }}
-                            title={t('addToPlaylist')}
-                        >
-                            <ListPlus size={16} />
-                        </button>
-
-                        {/* Info Button - Visible only on small/medium screens where sidebar is hidden */}
-                        <button
-                            className="p-2 rounded-full hover:bg-zinc-200 dark:hover:bg-white/5 text-zinc-400 hover:text-black dark:hover:text-white transition-colors xl:hidden"
-                            onClick={(e) => { e.stopPropagation(); if (onShowDetails) onShowDetails(); }}
-                            title={t('songDetails')}
-                        >
-                            <Info size={16} />
-                        </button>
-
-                        <div className="relative">
-                            <button
-                                className="p-2 rounded-full hover:bg-zinc-200 dark:hover:bg-white/5 text-zinc-400 hover:text-black dark:hover:text-white transition-colors"
-                                onClick={(e) => {
-                                    e.stopPropagation();
-                                    setShowDropdown(!showDropdown);
-                                }}
-                            >
-                                <MoreHorizontal size={16} />
-                            </button>
-                            <SongDropdownMenu
-                                song={song}
-                                isOpen={showDropdown}
-                                onClose={() => setShowDropdown(false)}
-                            />
-                        </div>
-                    </div>
-                )}
             </div>
 
             {/* Timestamp / Status */}
-            <div className="text-xs font-mono text-zinc-500 dark:text-zinc-600 self-start pt-1 text-right">
+            <div className="text-xs font-mono text-zinc-500 dark:text-zinc-600 self-start flex flex-col items-end pt-1 text-right">
                 {song.isGenerating ? (
                     <div className="flex flex-col items-end gap-0.5">
                         <span className={song.queuePosition ? 'text-amber-500' : 'text-pink-500'}>
@@ -851,8 +886,110 @@ const SongItem: React.FC<SongItemProps> = ({
                             {t('resetGeneration')}
                         </button>
                     </div>
-                ) : song.duration}
+                ) : (
+                    /* The card's icons stand at its top right and the track's own time and
+                       date at its bottom right: what the person reaches for is up, what they
+                       only read is down. */
+                    <>
+                        <div className="flex items-center gap-1">
+                            <button
+                                className="p-2 rounded-full hover:bg-zinc-200 dark:hover:bg-white/5 text-zinc-400 hover:text-black dark:hover:text-white transition-colors"
+                                onClick={(e) => { e.stopPropagation(); onAddToPlaylist(); }}
+                                title={t('addToPlaylist')}
+                            >
+                                <ListPlus size={16} />
+                            </button>
+
+                            <div className="relative">
+                                <button
+                                    className="p-2 rounded-full hover:bg-zinc-200 dark:hover:bg-white/5 text-zinc-400 hover:text-black dark:hover:text-white transition-colors"
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        setShowDropdown(!showDropdown);
+                                    }}
+                                >
+                                    <MoreHorizontal size={16} />
+                                </button>
+                                <SongDropdownMenu
+                                    song={song}
+                                    isOpen={showDropdown}
+                                    onClose={() => setShowDropdown(false)}
+                                />
+                            </div>
+                        </div>
+
+                        <div className="-mt-2 flex flex-col items-end gap-0.5">
+                            <span className="text-lg font-bold text-zinc-400 dark:text-zinc-500">{song.duration}</span>
+                            {/* When it was made - right under the playing time, on the first
+                                line of the description: the card reads what it is, how long,
+                                and when, before the words about the sound. */}
+                            <span className="mt-2 text-[10px] font-bold text-blue-600 dark:text-blue-400">
+                                {stampOf(song.createdAt, language)}
+                            </span>
+                            {/* Only a thumbs-up moves this: an edit of the words or the cover
+                                is not a reaction. */}
+                            {song.likedAt && (
+                                <span className="text-[10px] text-zinc-500 dark:text-zinc-600">
+                                    <span className="font-bold">{t('reactedLabel')}</span>{' '}
+                                    <span className="font-bold text-blue-600 dark:text-blue-400">
+                                        {stampOf(song.likedAt, language)}
+                                    </span>
+                                </span>
+                            )}
+                        </div>
+                    </>
+                )}
             </div>
+
+            {/* Actions Row - the track's own actions, under its words: the like, a fresh
+                cover, a video, and the details on narrow screens. It spans the card so it
+                stays on its own line. */}
+            {!song.isGenerating && (
+                <div className="w-full flex items-center gap-1">
+                    <button
+                        className={`flex items-center gap-1 px-3 py-1.5 rounded-full hover:bg-white/5 transition-colors ${isLiked ? 'text-pink-600 dark:text-pink-500 bg-pink-100 dark:bg-pink-500/10' : 'text-zinc-400 hover:text-black dark:hover:text-white'}`}
+                        onClick={(e) => { e.stopPropagation(); onToggleLike(); }}
+                        title={isLiked ? t('removeFromFavourites') : t('addToFavourites')}
+                    >
+                        <ThumbsUp size={16} fill={isLiked ? "currentColor" : "none"} />
+                        {(song.likeCount || 0) > 0 && (
+                            <span className="text-xs font-bold">{song.likeCount}</span>
+                        )}
+                    </button>
+
+                    {/* Manual cover regeneration — opens CoverRegenModal where the user can
+                        pick a model + prompt and either generate via Pollinations or
+                        upload a custom image from disk. Only shown for owned songs. */}
+                    {isOwner && (
+                        <button
+                            className="p-2 rounded-full hover:bg-zinc-200 dark:hover:bg-white/5 text-zinc-400 hover:text-black dark:hover:text-white transition-colors"
+                            onClick={(e) => { e.stopPropagation(); if (onOpenCoverRegen) onOpenCoverRegen(); }}
+                            title={t('coverRegen.openTooltip') || 'Regenerate cover'}
+                        >
+                            <ImagePlus size={16} />
+                        </button>
+                    )}
+
+                    {songActions.exportVideo && song.audioUrl && (
+                        <button
+                            className="p-2 rounded-full hover:bg-zinc-200 dark:hover:bg-white/5 text-zinc-400 hover:text-black dark:hover:text-white transition-colors"
+                            onClick={(e) => { e.stopPropagation(); songActions.exportVideo?.(song); }}
+                            title={t('videoExport')}
+                        >
+                            <Clapperboard size={16} />
+                        </button>
+                    )}
+
+                    {/* Info Button - Visible only on small/medium screens where sidebar is hidden */}
+                    <button
+                        className="p-2 rounded-full hover:bg-zinc-200 dark:hover:bg-white/5 text-zinc-400 hover:text-black dark:hover:text-white transition-colors xl:hidden"
+                        onClick={(e) => { e.stopPropagation(); if (onShowDetails) onShowDetails(); }}
+                        title={t('songDetails')}
+                    >
+                        <Info size={16} />
+                    </button>
+                </div>
+            )}
         </div>
         </>
     );
@@ -861,7 +998,7 @@ const SongItem: React.FC<SongItemProps> = ({
 const NO_SONG_ACTIONS = {};
 
 const UploadItem: React.FC<{
-    track: { id: string; filename: string; audio_url: string; duration?: number | null };
+    track: { id: string; filename: string; audio_url: string; duration?: number | null; created_at?: string | null; updated_at?: string | null };
     onPlay: (audioUrl: string, title: string) => void;
 }> = ({ track, onPlay }) => {
     const title = track.filename.replace(/\.[^/.]+$/, '');
@@ -879,7 +1016,8 @@ const UploadItem: React.FC<{
                 style: 'Upload',
                 coverUrl: '',
                 duration,
-                createdAt: new Date(),
+                createdAt: new Date(track.created_at || Date.now()),
+                updatedAt: new Date(track.updated_at || track.created_at || Date.now()),
                 tags: [],
                 audioUrl: track.audio_url,
                 isPublic: false,

@@ -304,6 +304,30 @@ function changed(what: string): void {
 
 let started = false;
 
+/// The window the person is looking at is the one the studio asks: this says
+/// which window that is - on the way up, and every time the attention returns.
+let attention: number | null = null;
+let attentionWatched = false;
+
+function reportAttention(): void {
+  if (attention === null || document.visibilityState !== 'visible' || !document.hasFocus()) return;
+  void fetch(apiUrl('/mcp/window/focus'), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ window: attention }) })
+    // Coming back to a window catches it up on what an agent changed while it was away:
+    // a window that slept through "something changed" would keep showing stale lists.
+    .then(() => changed('all'))
+    .catch((problem) => console.error('[ERROR] the studio did not learn which window is being looked at:', problem));
+}
+
+function announceAttention(number: number): void {
+  attention = number;
+  if (!attentionWatched) {
+    attentionWatched = true;
+    window.addEventListener('focus', reportAttention);
+    document.addEventListener('visibilitychange', reportAttention);
+  }
+  reportAttention();
+}
+
 export function startBridge(): void {
   if (started || typeof window === 'undefined' || typeof EventSource === 'undefined') return;
   started = true;
@@ -325,6 +349,7 @@ export function startBridge(): void {
       }
       if (data.id === undefined) {
         ours = data.window ?? null;
+        if (ours !== null) announceAttention(ours);
         // what an agent changed while the stream was down is read now
         if (reconnecting) changed('everything');
         return;

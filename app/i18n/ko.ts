@@ -1188,6 +1188,7 @@ export const ko = {
     stemsInstallModel: '모델 내려받기',
     stemsStart: '분리하기',
     stemsAgain: '다시 분리',
+    stemsPartCannot: '이것은 파트이며 그 자체가 분리의 결과입니다. 다시 분리하면 복사의 복사만 생깁니다 - 위에서 원본 곡을 선택하세요.',
     stemsRunning: '분리 중',
     stem_drums: '드럼',
     stem_bass: '베이스',

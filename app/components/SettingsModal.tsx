@@ -37,10 +37,13 @@ interface SettingsModalProps {
   initialSection?: string | null;
   onClose: () => void;
   theme: 'light' | 'dark';
+  /** How many items one page of a list holds - a person reads long lists at their own pace. */
+  itemsPerPage: number;
+  onItemsPerPage: (value: number) => void;
   onToggleTheme: () => void;
 }
 
-export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, initialSection, onClose, theme, onToggleTheme }) => {
+export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, initialSection, onClose, theme, onToggleTheme, itemsPerPage, onItemsPerPage }) => {
   const { user, setDisplayName } = useAuth();
   const { t, language, setLanguage } = useI18n();
   const [section, setSection] = useState<SectionId>('account');
@@ -185,6 +188,19 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, initialSec
                     <option value="zh">{t('chinese')}</option>
                     <option value="ja">{t('japaneseLanguage')}</option>
                     <option value="ko">{t('koreanLanguage')}</option>
+                  </select>
+                </div>
+
+                <div className="space-y-3">
+                  <span className="text-sm font-semibold text-zinc-900 dark:text-white">{t('itemsPerPage')}</span>
+                  <select
+                    value={itemsPerPage}
+                    onChange={(event) => onItemsPerPage(Number(event.target.value))}
+                    className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-white"
+                  >
+                    {[10, 25, 50].map((value) => (
+                      <option key={value} value={value}>{value}</option>
+                    ))}
                   </select>
                 </div>
 

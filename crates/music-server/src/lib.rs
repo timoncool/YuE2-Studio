@@ -229,6 +229,11 @@ struct CreateMusicJobRequest {
     /// names it as the track it was made from.
     #[serde(default)]
     cover_of: Option<String>,
+    /// The session the tracks belong to. An agent names it (a session per track, the open
+    /// one, or one made for the pack); left out, the session open when the tracks arrive
+    /// takes them. A named session must exist.
+    #[serde(default)]
+    workspace_id: Option<String>,
 }
 
 /// One adapter of a request: its folder and a strength per engine slot. A slot
@@ -310,6 +315,9 @@ struct MusicJob {
     song: Option<CompletedSong>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     songs: Vec<CompletedSong>,
+    /// The session this job's tracks belong to. Absent means the one open when they arrive.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    workspace_id: Option<String>,
     message: String,
     /// The playlist the made songs go into, a project the user works in.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -387,6 +395,9 @@ struct ReplayMusicJobRequest {
     title: Option<String>,
     /// The window's own mark, as on a new song.
     client_ref: Option<String>,
+    /// The session the re-rendered track belongs to; absent means the one open.
+    #[serde(default)]
+    workspace_id: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -835,6 +846,21 @@ pub async fn serve() -> anyhow::Result<()> {
         .route("/v1/library/songs/{id}/cover", get(library_cover).put(store_library_cover))
         .route("/v1/library/playlists", get(library_playlists).post(create_library_playlist))
         .route("/v1/library/playlists/{id}", get(library_playlist).put(update_library_playlist).delete(delete_library_playlist))
+        .route("/v1/agent/leash", get(read_agent_leash).put(write_agent_leash))
+        .route("/v1/agent/allowance", get(read_agent_allowance).put(write_agent_allowance))
+        .route("/v1/agent/forbidden", get(read_agent_forbidden).put(write_agent_forbidden))
+        .route("/v1/agent/session-choice", get(read_agent_session_choice).put(write_agent_session_choice))
+        .route("/v1/workspaces/{id}/agent", axum::routing::put(write_session_agent))
+        .route("/v1/library/liked", get(library_liked))
+        .route("/v1/library/stems-archive", get(library_stems_archive))
+        .route("/v1/library/songs/{id}/liked", post(library_song_like))
+        .route("/v1/workspaces", get(library_workspaces).post(create_library_workspace))
+        .route("/v1/workspaces/active", get(active_library_workspace))
+        .route("/v1/workspaces/import", post(adopt_library_import_workspace))
+        .route("/v1/workspaces/{id}", get(library_workspace).put(update_library_workspace).delete(delete_library_workspace))
+        .route("/v1/workspaces/{id}/open", post(open_library_workspace))
+        .route("/v1/workspaces/{id}/close", post(close_library_workspace))
+        .route("/v1/playback-modes/{context}", get(read_playback_mode).put(write_playback_mode))
         .route("/setup/status", get(setup_status))
         .route("/setup/catalog", get(setup_catalog))
         .route("/setup/download", post(setup_download))
@@ -867,6 +893,7 @@ pub async fn serve() -> anyhow::Result<()> {
         .route("/mcp/status", get(mcp::status))
         .route("/mcp/window", get(mcp::window_events))
         .route("/mcp/window/result", post(mcp::window_result))
+        .route("/mcp/window/focus", post(mcp::window_focus))
         .fallback(remote::interface)
         .layer(axum::middleware::from_fn(remote::guard))
         .layer(CorsLayer::permissive())
@@ -1126,7 +1153,7 @@ fn cover_like(state: &AppState, from: &library::Song, to: &str) -> anyhow::Resul
 /// wears the original's cover. Separating the song again replaces its stems
 /// in the library instead of adding more: the new ones are in before the old
 /// ones go, so a stem file held open by a player costs nothing but itself.
-fn stems_into_library(state: &AppState, song_id: &str, stems: &[String], overlap: f64) -> anyhow::Result<(Vec<String>, Option<String>)> {
+fn stems_into_library(state: &AppState, song_id: &str, stems: &[String], overlap: f64, workspace_id: Option<&str>) -> anyhow::Result<(Vec<String>, Option<String>)> {
     let original = state.library.get_song(song_id)?.ok_or_else(|| anyhow::anyhow!("the song {song_id} is gone"))?;
     let replaced: Vec<library::Song> = state
         .library
@@ -1158,6 +1185,17 @@ fn stems_into_library(state: &AppState, song_id: &str, stems: &[String], overlap
             audio,
         })?.song;
         cover_like(state, &original, &song.id)?;
+        // A part never shows up without its song: the song joins the session too, so the part
+        // reads nested under it instead of floating as a track of its own. The session is the
+        // one the caller named, or the one open while the work ran.
+        let target = match workspace_id {
+            Some(id) => Some(id.to_string()),
+            None => state.library.active_workspace()?.map(|session| session.id),
+        };
+        if let Some(id) = target {
+            let _ = state.library.add_song_to_workspace(&id, &original.id);
+            let _ = state.library.add_song_to_workspace(&id, &song.id);
+        }
         added.push(song.id);
     }
     let mut kept = Vec::new();
@@ -1172,6 +1210,115 @@ fn stems_into_library(state: &AppState, song_id: &str, stems: &[String], overlap
     }
     let problem = (!kept.is_empty()).then(|| format!("the new stems are in the library, but files of the old ones could not be removed: {}", kept.join("; ")));
     Ok((added, problem))
+}
+
+/// Where a set of archived stems lives: a folder of its own for the song and the set,
+/// so nothing a new separation writes can step on it.
+fn stem_archive_dir(state: &AppState, song_id: &str, batch_slug: &str) -> PathBuf {
+    state.library.media_dir().join("stems-archive").join(song_id).join(batch_slug)
+}
+
+/// When a set of stems was made, as a person reads time: 2026-09-27 11:34:49, in their own
+/// timezone. The library keeps time, not words: the words around it belong to the window,
+/// which draws them from i18n, so no language leaks into the database.
+fn stem_batch_stamp(created_at: &str) -> String {
+    let seconds: i64 = created_at.parse().unwrap_or_default();
+    match chrono::DateTime::from_timestamp(seconds, 0) {
+        Some(stamp) => chrono::DateTime::<chrono::Local>::from(stamp).format("%Y-%m-%d %H:%M:%S").to_string(),
+        None => created_at.to_string(),
+    }
+}
+
+/// The same set, written for a path: latin, no spaces, no colons.
+fn stem_batch_slug(created_at: &str) -> String {
+    let seconds: i64 = created_at.parse().unwrap_or_default();
+    match chrono::DateTime::from_timestamp(seconds, 0) {
+        Some(stamp) => format!("STEM-{}", chrono::DateTime::<chrono::Local>::from(stamp).format("%Y-%m-%d_%H-%M-%S")),
+        None => format!("STEM-{created_at}"),
+    }
+}
+
+/// The stems a song has right now go to the archive before a new set is written over them:
+/// every one keeps the link to the song it came from, and its files move to a folder of the
+/// set. The old stems leave the library, so a song never shows two sets at once - and what a
+/// person already made is never deleted behind their back.
+fn archive_stems_of(state: &AppState, song_id: &str) -> anyhow::Result<Vec<String>> {
+    let original = state.library.get_song(song_id)?.ok_or_else(|| anyhow::anyhow!("the song {song_id} is gone"))?;
+    let old: Vec<library::Song> = state
+        .library
+        .list_songs()?
+        .into_iter()
+        .filter(|song| derived_from(song) == Some((song_id, "stems")))
+        .collect();
+    if old.is_empty() {
+        return Ok(Vec::new());
+    }
+    // the set was made in one go: its birth is the oldest stamp among its stems
+    let created = old.iter().map(|song| song.created_at.clone()).min().unwrap_or_default();
+    let stamp = stem_batch_stamp(&created);
+    let slug = stem_batch_slug(&created);
+    let dir = stem_archive_dir(state, song_id, &slug);
+    std::fs::create_dir_all(&dir).with_context(|| format!("make the archive folder {}", dir.display()))?;
+    let archived_at = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|since| since.as_secs().to_string())
+        .unwrap_or_default();
+    let mut put_away = Vec::new();
+    let mut problems = Vec::new();
+    for old_song in old {
+        let stem = old_song
+            .metadata
+            .pointer("/derived/settings/stem")
+            .and_then(Value::as_str)
+            .unwrap_or("other")
+            .to_string();
+        let mut stored = String::new();
+        for path in song_files(state, &old_song) {
+            // The audio of a stem may be named after the stem, after its track or after nothing
+            // at all: what makes it the sound is that it is an audio file, not its name.
+            let is_audio = path
+                .extension()
+                .and_then(|extension| extension.to_str())
+                .map(|extension| matches!(extension.to_ascii_lowercase().as_str(), "wav" | "mp3" | "flac" | "m4a" | "ogg"))
+                .unwrap_or(false);
+            let Some(name) = path.file_name().map(|name| name.to_owned()) else { continue };
+            let target = dir.join(&name);
+            let moved = std::fs::rename(&path, &target).or_else(|_| {
+                // a player may hold the file open: copy it, then let the original go
+                std::fs::copy(&path, &target).map(|_| {
+                    let _ = std::fs::remove_file(&path);
+                })
+            });
+            match moved {
+                Ok(()) => {
+                    if is_audio && stored.is_empty() {
+                        stored = target.to_string_lossy().to_string();
+                    }
+                }
+                Err(error) => problems.push(format!("{}: {error}", path.display())),
+            }
+        }
+        let duration = old_song.metadata.get("duration_seconds").and_then(Value::as_f64);
+        state.library.archive_stem(&library::ArchivedStem {
+            id: format!("{}-{archived_at}", old_song.id),
+            song_id: song_id.to_string(),
+            song_title: original.title.clone(),
+            batch: stamp.clone(),
+            batch_slug: slug.clone(),
+            stem: stem.clone(),
+            title: old_song.title.clone(),
+            audio_path: stored,
+            duration_secs: duration,
+            created_at: old_song.created_at.clone(),
+            archived_at: archived_at.clone(),
+        })?;
+        state.library.delete_song(&old_song.id)?;
+        put_away.push(old_song.id);
+    }
+    if !problems.is_empty() {
+        anyhow::bail!("the old stems are in the archive, but some files stayed behind: {}", problems.join("; "));
+    }
+    Ok(put_away)
 }
 
 /// Where a song's stems live: beside the track, named after it.
@@ -1620,6 +1767,7 @@ async fn start_processing(
     Path(id): Path<String>,
     Json(request): Json<processing::ProcessRequest>,
 ) -> Result<Json<Value>, (StatusCode, Json<ApiError>)> {
+    session_open_for(&state, request.workspace_id.as_deref(), "processing a track")?;
     if request.stages().is_empty() {
         return Err(api_error(StatusCode::BAD_REQUEST, "choose at least one kind of processing".into()));
     }
@@ -2389,6 +2537,40 @@ async fn card_free_for_training(state: &AppState) -> Result<(), String> {
     no_song_rendering(state).await
 }
 
+/// Where a piece of work goes: the session the caller named, or the one open right now. The
+/// agent says where its tracks go - a session of its own, one per track, one for the pack -
+/// and that is where they land, whatever the window happens to have open. A named session
+/// must exist: work never lands in a session nobody can see.
+fn session_target(state: &AppState, named: Option<&str>, what: &str) -> Result<(), String> {
+    if let Some(id) = named {
+        return match state.library.get_workspace(id) {
+            Ok(Some(_)) => Ok(()),
+            Ok(None) => Err(format!("no session {id}: {what} - create or open one first")),
+            Err(error) => Err(error.to_string()),
+        };
+    }
+    match state.library.active_workspace() {
+        Ok(Some(_)) => Ok(()),
+        Ok(None) => Err(format!("no session is open: {what} - create or open one first")),
+        Err(error) => Err(error.to_string()),
+    }
+}
+
+/// A session named on a request body: where the work goes. Absent means the one open.
+#[derive(Debug, Default, Deserialize)]
+struct SessionTarget {
+    #[serde(default)]
+    workspace_id: Option<String>,
+}
+
+/// The same rule as `session_target`, in the shape a route answers with.
+fn session_open_for(state: &AppState, named: Option<&str>, what: &str) -> Result<(), (StatusCode, Json<ApiError>)> {
+    session_target(state, named, what).map_err(|error| api_error(StatusCode::CONFLICT, error))
+}
+
+/// Every generator works inside a session - the same rule the agent lives by. A track or a
+/// part born outside one lands in the library behind the open session, and the person never
+/// sees what they just made. This is the gate the window and the agent both answer to.
 async fn card_free_of_training(state: &AppState, what: &str) -> Result<(), (StatusCode, Json<ApiError>)> {
     if state.training.active_run().await.is_some() {
         return Err(api_error(StatusCode::CONFLICT, format!("a LoRA is training on the card; {what} once it finishes")));
@@ -2510,7 +2692,10 @@ async fn read_stem_audio(
 async fn start_separation(
     State(state): State<AppState>,
     Path(id): Path<String>,
+    body: Option<Json<SessionTarget>>,
 ) -> Result<Json<Value>, (StatusCode, Json<ApiError>)> {
+    let target = body.and_then(|Json(body)| body.workspace_id);
+    session_open_for(&state, target.as_deref(), "separating a track")?;
     card_free_of_training(&state, "separate tracks").await?;
     if state.separation_run.read().await.as_ref().is_some_and(|run| !run.done) {
         return Err(api_error(StatusCode::CONFLICT, "a track is already being separated".into()));
@@ -2570,6 +2755,9 @@ async fn start_separation(
                     }
                 });
             })?;
+            // the old set is safe in the archive before anything is written over it:
+            // stems live at a path made from the song, so a new run would overwrite them
+            archive_stems_of(&background, &song_id)?;
             let mut written = Vec::new();
             let ran_on_gpu = separated.used_gpu;
             for stem in separated.stems {
@@ -2583,7 +2771,7 @@ async fn start_separation(
             Ok((written, ran_on_gpu))
         })();
         // still on this thread: the stems are hundreds of megabytes to copy
-        let library = outcome.as_ref().ok().map(|(stems, _)| stems_into_library(&background, &song_id, stems, overlap));
+        let library = outcome.as_ref().ok().map(|(stems, _)| stems_into_library(&background, &song_id, stems, overlap, target.as_deref()));
 
         let handle = tokio::runtime::Handle::current();
         handle.spawn(async move {
@@ -3036,18 +3224,28 @@ async fn store_library_cover(
 
 async fn create_library_song(State(state):State<AppState>,Json(input):Json<library::SongInput>)->Result<(StatusCode,Json<library::Song>),(StatusCode,Json<ApiError>)>{state.library.create_song(input).map(|s|(StatusCode::CREATED,Json(s))).map_err(|e|api_error(StatusCode::BAD_REQUEST,e.to_string()))}
 async fn import_library_audio(State(state): State<AppState>, mut multipart: Multipart) -> Result<(StatusCode, Json<library::Song>), (StatusCode, Json<ApiError>)> {
-    let mut title = None; let mut caption = String::new(); let mut lyrics = String::new(); let mut audio = None; let mut filename = None;
+    let mut title = None; let mut caption = String::new(); let mut lyrics = String::new(); let mut audio = None; let mut filename = None; let mut workspace_id = None;
     while let Some(field) = multipart.next_field().await.map_err(|e| api_error(StatusCode::BAD_REQUEST, format!("read import form: {e}")))? {
         let name = field.name().unwrap_or_default().to_owned();
         if name == "audio" { filename = field.file_name().map(str::to_owned); audio = Some(field.bytes().await.map_err(|e| api_error(StatusCode::BAD_REQUEST, format!("read audio upload: {e}")))?.to_vec()); }
-        else { let value = field.text().await.map_err(|e| api_error(StatusCode::BAD_REQUEST, format!("read import field: {e}")))?; match name.as_str() { "title" => title = Some(value), "caption" => caption = value, "lyrics" => lyrics = value, _ => {} } }
+        else { let value = field.text().await.map_err(|e| api_error(StatusCode::BAD_REQUEST, format!("read import field: {e}")))?; match name.as_str() { "title" => title = Some(value), "caption" => caption = value, "lyrics" => lyrics = value, "workspace_id" => workspace_id = Some(value), _ => {} } }
     }
+    // The audio belongs to the session the caller named, or the one open right now.
+    session_open_for(&state, workspace_id.as_deref(), "importing audio")?;
     let filename = filename.ok_or_else(|| api_error(StatusCode::BAD_REQUEST, "audio file is required".into()))?;
     let extension = std::path::Path::new(&filename).extension().and_then(|value| value.to_str()).unwrap_or_default().to_owned();
     let title = title.filter(|value| !value.trim().is_empty()).unwrap_or_else(|| std::path::Path::new(&filename).file_stem().and_then(|value| value.to_str()).unwrap_or("Imported audio").to_owned());
     let audio = audio.ok_or_else(|| api_error(StatusCode::BAD_REQUEST, "audio file is required".into()))?;
     let duration = library::audio_duration_seconds(&audio, &extension.to_ascii_lowercase(), None);
     let song = state.library.import_audio_song(library::AudioImportInput { title, caption, lyrics, metadata: serde_json::json!({"imported_filename": filename, "duration_seconds": duration}), generation_settings: Value::Null, engine_id: "imported-audio".into(), profile_id: None, source: "audio_import".into(), audio_extension: extension, audio }).map_err(|e| api_error(StatusCode::BAD_REQUEST, e.to_string()))?.song;
+    // What a person imported belongs to the session the caller named, or the one open now.
+    let target = match workspace_id {
+        Some(id) => Some(id),
+        None => state.library.active_workspace().map_err(|e| api_error(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?.map(|session| session.id),
+    };
+    if let Some(id) = target {
+        let _ = state.library.add_song_to_workspace(&id, &song.id);
+    }
     Ok((StatusCode::CREATED, Json(song)))
 }
 async fn update_library_song(State(state):State<AppState>,Path(id):Path<String>,Json(input):Json<library::SongInput>)->Result<Json<library::Song>,(StatusCode,Json<ApiError>)>{
@@ -3117,6 +3315,73 @@ async fn create_library_playlist(State(state):State<AppState>,Json(input):Json<l
 async fn library_playlist(State(state):State<AppState>,Path(id):Path<String>)->Result<Json<library::Playlist>,(StatusCode,Json<ApiError>)>{state.library.get_playlist(&id).map_err(|e|api_error(StatusCode::INTERNAL_SERVER_ERROR,e.to_string()))?.map(Json).ok_or_else(||api_error(StatusCode::NOT_FOUND,"Playlist not found".into()))}
 async fn update_library_playlist(State(state):State<AppState>,Path(id):Path<String>,Json(input):Json<library::PlaylistInput>)->Result<Json<library::Playlist>,(StatusCode,Json<ApiError>)>{state.library.update_playlist(&id,input).map_err(|e|api_error(StatusCode::BAD_REQUEST,e.to_string()))?.map(Json).ok_or_else(||api_error(StatusCode::NOT_FOUND,"Playlist not found".into()))}
 async fn delete_library_playlist(State(state):State<AppState>,Path(id):Path<String>)->Result<StatusCode,(StatusCode,Json<ApiError>)>{if state.library.delete_playlist(&id).map_err(|e|api_error(StatusCode::INTERNAL_SERVER_ERROR,e.to_string()))?{Ok(StatusCode::NO_CONTENT)}else{Err(api_error(StatusCode::NOT_FOUND,"Playlist not found".into()))}}
+/// A workspace is the studio's session of work: the songs made in it, and which
+/// one is open right now. Opening one closes the previous, so `active` answers
+/// the session on screen - or nothing when the studio is between sessions.
+#[derive(Debug, Clone, Deserialize)] struct LeashInput { leash: String }
+#[derive(Debug, Clone, Deserialize)] struct AllowanceInput { #[serde(default)] allow: bool }
+#[derive(Debug, Clone, Deserialize)] struct ForbiddenInput { #[serde(default)] forbidden: Vec<String> }
+/// The one switch for tracks: with it on, the agent makes tracks without asking.
+async fn read_agent_allowance(State(state):State<AppState>)->Result<Json<serde_json::Value>,(StatusCode,Json<ApiError>)>{state.library.agent_tracks().map(|allow|Json(serde_json::json!({"allow":allow}))).map_err(|e|api_error(StatusCode::INTERNAL_SERVER_ERROR,e.to_string()))}
+async fn write_agent_allowance(State(state):State<AppState>,Json(input):Json<AllowanceInput>)->Result<Json<serde_json::Value>,(StatusCode,Json<ApiError>)>{state.library.set_agent_tracks(input.allow).map(|allow|Json(serde_json::json!({"allow":allow}))).map_err(|e|api_error(StatusCode::INTERNAL_SERVER_ERROR,e.to_string()))}
+/// Tools the agent may never run, whatever it asks.
+async fn read_agent_forbidden(State(state):State<AppState>)->Result<Json<serde_json::Value>,(StatusCode,Json<ApiError>)>{state.library.agent_forbidden().map(|tools|Json(serde_json::json!({"forbidden":tools}))).map_err(|e|api_error(StatusCode::INTERNAL_SERVER_ERROR,e.to_string()))}
+async fn write_agent_forbidden(State(state):State<AppState>,Json(input):Json<ForbiddenInput>)->Result<Json<serde_json::Value>,(StatusCode,Json<ApiError>)>{state.library.set_agent_forbidden(&input.forbidden).map(|tools|Json(serde_json::json!({"forbidden":tools}))).map_err(|e|api_error(StatusCode::INTERNAL_SERVER_ERROR,e.to_string()))}
+/// "In this session" answered once: the flag lives with the session itself.
+async fn write_session_agent(State(state):State<AppState>,Path(id):Path<String>,Json(input):Json<AllowanceInput>)->Result<Json<serde_json::Value>,(StatusCode,Json<ApiError>)>{state.library.set_session_agent_allow(&id,input.allow).map(|allow|Json(serde_json::json!({"allow":allow}))).map_err(|e|api_error(StatusCode::INTERNAL_SERVER_ERROR,e.to_string()))}
+/// The leash: free (no questions), risky (ask about what cannot be undone) or all.
+async fn read_agent_leash(State(state):State<AppState>)->Result<Json<serde_json::Value>,(StatusCode,Json<ApiError>)>{state.library.agent_leash().map(|leash|Json(serde_json::json!({"leash":leash}))).map_err(|e|api_error(StatusCode::INTERNAL_SERVER_ERROR,e.to_string()))}
+async fn write_agent_leash(State(state):State<AppState>,Json(input):Json<LeashInput>)->Result<Json<serde_json::Value>,(StatusCode,Json<ApiError>)>{if !["free","risky","all"].contains(&input.leash.as_str()){return Err(api_error(StatusCode::BAD_REQUEST,String::from("the leash is free, risky or all")))}state.library.set_agent_leash(&input.leash).map(|leash|Json(serde_json::json!({"leash":leash}))).map_err(|e|api_error(StatusCode::INTERNAL_SERVER_ERROR,e.to_string()))}
+/// Where the agent puts the tracks it makes, once the person has answered for good.
+#[derive(Debug, Clone, Deserialize)] struct SessionChoiceInput { #[serde(default)] choice: String }
+async fn read_agent_session_choice(State(state):State<AppState>)->Result<Json<serde_json::Value>,(StatusCode,Json<ApiError>)>{state.library.agent_session_choice().map(|choice|Json(serde_json::json!({"choice":choice}))).map_err(|e|api_error(StatusCode::INTERNAL_SERVER_ERROR,e.to_string()))}
+async fn write_agent_session_choice(State(state):State<AppState>,Json(input):Json<SessionChoiceInput>)->Result<Json<serde_json::Value>,(StatusCode,Json<ApiError>)>{if !["","current","each"].contains(&input.choice.as_str()){return Err(api_error(StatusCode::BAD_REQUEST,String::from("the choice is current, each, or empty to be asked for every pack")))}state.library.set_agent_session_choice(&input.choice).map(|choice|Json(serde_json::json!({"choice":choice}))).map_err(|e|api_error(StatusCode::INTERNAL_SERVER_ERROR,e.to_string()))}
+#[derive(Debug, Clone, Deserialize)] struct LikedInput { #[serde(default)] liked: Option<bool> }
+/// The thumbs-up of the library: the ids of the songs marked as the best ones.
+async fn library_liked(State(state):State<AppState>)->Result<Json<Vec<String>>,(StatusCode,Json<ApiError>)>{state.library.liked_song_ids().map(Json).map_err(|e|api_error(StatusCode::INTERNAL_SERVER_ERROR,e.to_string()))}
+
+/// Which song the archive is asked about: one song, or the whole library.
+#[derive(Deserialize)]
+struct StemsArchiveQuery { song_id: Option<String> }
+
+/// The stems a song used to have: when a new set took their place the old one is not thrown
+/// away but kept here, each still knowing the song it was separated from.
+async fn library_stems_archive(State(state):State<AppState>,Query(query):Query<StemsArchiveQuery>)->Result<Json<Vec<library::ArchivedStem>>,(StatusCode,Json<ApiError>)>{
+    state.library.list_archived_stems(query.song_id.as_deref()).map(Json).map_err(|e|api_error(StatusCode::INTERNAL_SERVER_ERROR,e.to_string()))
+}
+/// Mark a song as one of the best, or take the mark back: the same thumbs-up the
+/// window has, kept with the song so every window and the agent see one truth.
+async fn library_song_like(State(state):State<AppState>,Path(id):Path<String>,Json(input):Json<LikedInput>)->Result<Json<library::Song>,(StatusCode,Json<ApiError>)>{
+    match state.library.set_song_liked(&id,input.liked.unwrap_or(true)){
+        Ok(Some(song))=>Ok(Json(song)),
+        Ok(None)=>Err(api_error(StatusCode::NOT_FOUND,String::from("song not found"))),
+        Err(e)=>Err(api_error(StatusCode::INTERNAL_SERVER_ERROR,e.to_string())),
+    }
+}
+async fn library_workspaces(State(state):State<AppState>)->Result<Json<Vec<library::Workspace>>,(StatusCode,Json<ApiError>)>{state.library.list_workspaces().map(Json).map_err(|e|api_error(StatusCode::INTERNAL_SERVER_ERROR,e.to_string()))}
+async fn active_library_workspace(State(state):State<AppState>)->Result<Json<Option<library::Workspace>>,(StatusCode,Json<ApiError>)>{state.library.active_workspace().map(Json).map_err(|e|api_error(StatusCode::INTERNAL_SERVER_ERROR,e.to_string()))}
+async fn library_workspace(State(state):State<AppState>,Path(id):Path<String>)->Result<Json<library::Workspace>,(StatusCode,Json<ApiError>)>{state.library.get_workspace(&id).map_err(|e|api_error(StatusCode::INTERNAL_SERVER_ERROR,e.to_string()))?.map(Json).ok_or_else(||api_error(StatusCode::NOT_FOUND,"Workspace not found".into()))}
+/// What the window has called the studio's own session over time. The session itself is
+/// marked in the service, so this is only for a library that predates the mark.
+#[derive(Debug, Clone, Deserialize, Default)]
+struct ImportNames {
+    #[serde(default)]
+    known: Vec<String>,
+}
+/// Gather the tracks that belong to no session into the studio's own one, and answer with
+/// it. Asking twice adopts the same session: a session is one thing, however many windows
+/// are open, and its name is never what identifies it.
+async fn adopt_library_import_workspace(State(state):State<AppState>,body:Option<Json<ImportNames>>)->Result<Json<library::Workspace>,(StatusCode,Json<ApiError>)>{let known=body.map(|Json(input)|input.known).unwrap_or_default();state.library.adopt_import_workspace(&known).map(Json).map_err(|e|api_error(StatusCode::INTERNAL_SERVER_ERROR,e.to_string()))}
+async fn create_library_workspace(State(state):State<AppState>,Json(input):Json<library::WorkspaceInput>)->Result<(StatusCode,Json<library::Workspace>),(StatusCode,Json<ApiError>)>{state.library.create_workspace(input).map(|w|(StatusCode::CREATED,Json(w))).map_err(|e|api_error(StatusCode::BAD_REQUEST,e.to_string()))}
+async fn update_library_workspace(State(state):State<AppState>,Path(id):Path<String>,Json(input):Json<library::WorkspaceInput>)->Result<Json<library::Workspace>,(StatusCode,Json<ApiError>)>{state.library.update_workspace(&id,input).map_err(|e|api_error(StatusCode::BAD_REQUEST,e.to_string()))?.map(Json).ok_or_else(||api_error(StatusCode::NOT_FOUND,"Workspace not found".into()))}
+async fn delete_library_workspace(State(state):State<AppState>,Path(id):Path<String>)->Result<StatusCode,(StatusCode,Json<ApiError>)>{if state.library.delete_workspace(&id).map_err(|e|api_error(StatusCode::INTERNAL_SERVER_ERROR,e.to_string()))?{Ok(StatusCode::NO_CONTENT)}else{Err(api_error(StatusCode::NOT_FOUND,"Workspace not found".into()))}}
+async fn open_library_workspace(State(state):State<AppState>,Path(id):Path<String>)->Result<Json<library::Workspace>,(StatusCode,Json<ApiError>)>{state.library.open_workspace(&id).map_err(|e|api_error(StatusCode::INTERNAL_SERVER_ERROR,e.to_string()))?.map(Json).ok_or_else(||api_error(StatusCode::NOT_FOUND,"Workspace not found".into()))}
+async fn close_library_workspace(State(state):State<AppState>,Path(id):Path<String>)->Result<Json<library::Workspace>,(StatusCode,Json<ApiError>)>{state.library.close_workspace(&id).map_err(|e|api_error(StatusCode::INTERNAL_SERVER_ERROR,e.to_string()))?.map(Json).ok_or_else(||api_error(StatusCode::NOT_FOUND,"Workspace not found".into()))}
+/// How a context plays back. `context` is the queue's own name: `session:<id>`,
+/// `playlist:<id>`, `library:all`, `library:liked`, `search`, `single`. Nothing
+/// stored means the context was never touched - the UI decides its default.
+async fn read_playback_mode(State(state):State<AppState>,Path(context):Path<String>)->Result<Json<Option<library::PlaybackMode>>,(StatusCode,Json<ApiError>)>{state.library.playback_mode(&context).map(Json).map_err(|e|api_error(StatusCode::INTERNAL_SERVER_ERROR,e.to_string()))}
+async fn write_playback_mode(State(state):State<AppState>,Path(context):Path<String>,Json(input):Json<library::PlaybackModeInput>)->Result<Json<library::PlaybackMode>,(StatusCode,Json<ApiError>)>{state.library.set_playback_mode(&context,input).map(Json).map_err(|e|api_error(StatusCode::BAD_REQUEST,e.to_string()))}
 
 /// The proxy settings, and why the saved address cannot be used when it cannot:
 /// requests then go straight out, and Settings says so.
@@ -4340,6 +4605,9 @@ struct KaraokeRequest {
     /// Overrides the language guess for this one track.
     #[serde(default)]
     language: Option<String>,
+    /// The session the work belongs to; absent means the one open at the time.
+    #[serde(default)]
+    workspace_id: Option<String>,
 }
 
 /// What the chosen engine would install: its files, their weight, and how much
@@ -4546,6 +4814,7 @@ async fn create_song_karaoke(
     Path(id): Path<String>,
     Json(request): Json<KaraokeRequest>,
 ) -> Result<Json<Value>, (StatusCode, Json<ApiError>)> {
+    session_open_for(&state, request.workspace_id.as_deref(), "making karaoke")?;
     let config = state.lyrics_sync_config.read().await.clone();
     if matches!(config.provider, lyrics_sync::AsrProvider::Whisper | lyrics_sync::AsrProvider::Parakeet) {
         card_free_of_training(&state, "make karaoke").await?;
@@ -5276,11 +5545,15 @@ struct MidiRequest {
     path: Option<String>,
     #[serde(default)]
     size: Option<String>,
+    /// The session the work belongs to; absent means the one open at the time.
+    #[serde(default)]
+    workspace_id: Option<String>,
 }
 
 /// Turns a track, a stem or any audio file into MIDI. What the transcriber
 /// needs is downloaded first if it is not here yet.
 async fn start_midi(State(state): State<AppState>, Json(input): Json<MidiRequest>) -> Result<Json<Value>, (StatusCode, Json<ApiError>)> {
+    session_open_for(&state, input.workspace_id.as_deref(), "MIDI transcription")?;
     card_free_of_training(&state, "turn tracks into MIDI").await?;
     if state.midi_run.read().await.as_ref().is_some_and(|run| !run.done) {
         return Err(api_error(StatusCode::CONFLICT, "a track is already being turned into MIDI".into()));
@@ -6002,6 +6275,13 @@ async fn create_music_job(
 ) -> (StatusCode, Json<MusicJob>) {
     let engine_id = selected_local_music_engine(&*state.configuration.read().await)
         .unwrap_or_else(|| "unconfigured".into());
+    // Songs are made inside a session: the one the caller named - an agent says where its
+    // tracks go, a session of its own, one per track, one for the pack, whatever the window
+    // has open - or the one open right now. Without a session the track is saved in the
+    // library behind it and never shows up in the list on the create page.
+    if let Err(error) = session_target(&state, request.workspace_id.as_deref(), "songs are made inside a session") {
+        return (StatusCode::CONFLICT, Json(failed_request_job(request, engine_id, error)));
+    }
     if engine_id != PRIMARY_MUSIC_ENGINE_ID {
         let job = queued_not_configured_job(request, engine_id);
         state.jobs.write().await.insert(job.id.clone(), job.clone());
@@ -6052,6 +6332,7 @@ async fn create_music_job(
                 generation_settings: body,
                 song: None,
                 songs: vec![],
+                workspace_id: request.workspace_id.clone(),
                 message: "Submitted to yue-server.".into(),
                 playlist_id: request.playlist_id.clone(),
             };
@@ -6117,6 +6398,7 @@ async fn replay_music_job(
         generation_settings: body,
         song: None,
         songs: vec![],
+        workspace_id: request.workspace_id.clone(),
         message: "Submitted a re-render: the semantic stream is present, so the autoregressive stage is skipped.".into(),
         playlist_id: None,
     };
@@ -6479,6 +6761,16 @@ async fn import_completed_result(state: &AppState, job: &MusicJob, job_id: &str)
         let audio_url = format!("/v1/library/media/{}", imported_song.song.id);
         tag_stored_song(state, &imported_song.song.id).await;
         after_import(state, &imported_song.song.id);
+        // The track belongs to the session it was made in: the one the caller named (an agent
+        // says where its tracks go), or the one open as it arrives. Without this it is saved in
+        // the library behind the open session and the person cannot find what they made.
+        let target = match job.workspace_id.clone() {
+            Some(named) => Some(named),
+            None => state.library.active_workspace()?.map(|session| session.id),
+        };
+        if let Some(id) = target {
+            let _ = state.library.add_song_to_workspace(&id, &imported_song.song.id);
+        }
         imported.push(CompletedSong { id: imported_song.song.id.clone(), song: imported_song.song, audio_url });
     }
     Ok(imported)
@@ -7084,6 +7376,7 @@ fn queued_not_configured_job(request: CreateMusicJobRequest, engine_id: String) 
         generation_settings: Value::Null,
         song: None,
         songs: vec![],
+        workspace_id: request.workspace_id.clone(),
         message: "The selected local music engine is not configured; this job remains queued and no inference has started.".into(),
         playlist_id: None,
     }
@@ -7106,6 +7399,7 @@ fn failed_request_job(request: CreateMusicJobRequest, engine_id: String, error: 
         generation_settings: Value::Null,
         song: None,
         songs: vec![],
+        workspace_id: request.workspace_id.clone(),
         message: error,
         playlist_id: None,
     }
@@ -7507,7 +7801,7 @@ mod tests {
     }
 
     fn replay_overrides() -> ReplayMusicJobRequest {
-        ReplayMusicJobRequest { client_ref: None, song_id: None, replay_request: None, steps: None, seed: None, synth_batch_size: None, output_format: None, peak_clip: None, mp3_bitrate: None, title: None }
+        ReplayMusicJobRequest { client_ref: None, song_id: None, replay_request: None, steps: None, seed: None, synth_batch_size: None, output_format: None, peak_clip: None, mp3_bitrate: None, title: None, workspace_id: None }
     }
 
     #[test]

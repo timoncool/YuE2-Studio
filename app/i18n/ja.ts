@@ -1188,6 +1188,7 @@ export const ja = {
     stemsInstallModel: 'モデルをダウンロード',
     stemsStart: '分離する',
     stemsAgain: 'もう一度分離',
+    stemsPartCannot: 'これはパートで、それ自体が分離の結果です。もう一度分離するとコピーのコピーができるだけです - 上の一覧から元の曲を選んでください。',
     stemsRunning: '分離中',
     stem_drums: 'ドラム',
     stem_bass: 'ベース',

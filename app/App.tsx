@@ -1,7 +1,31 @@
 import React, { Activity, useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import type { TranslationKey } from './i18n/translations';
 import { Sidebar } from './components/Sidebar';
 import { CreatePanel, type CreateRequest } from './components/CreatePanel';
 import { SongList } from './components/SongList';
+import { TopControlPanel, type SessionView } from './components/TopControlPanel';
+import {
+  loadWorkspaces,
+  activeWorkspace,
+  adoptImportSession,
+  sessionTitle,
+  createWorkspace,
+  updateWorkspace,
+  openWorkspace,
+  closeWorkspace,
+  readPlaybackMode,
+  writePlaybackMode,
+  type Workspace,
+  type RepeatMode,
+  type SortOrder,
+} from './services/workspaces';
+import { SessionList, type WorkspaceSession } from './components/SessionList';
+import { SessionCreateModal } from './components/SessionCreateModal';
+import { SessionConfirmModal } from './components/SessionConfirmModal';
+import { EditModeModal } from './components/EditModeModal';
+import { AgentConfirmModal, type AgentPermissionDecision, type AgentPermissionRequest } from './components/AgentConfirmModal';
+import { SessionChoiceModal, type SessionChoiceAnswer, type SessionChoiceRequest } from './components/SessionChoiceModal';
+import { AgentJournalPanel, type AgentNotice } from './components/AgentJournalPanel';
 import { RightSidebar } from './components/RightSidebar';
 import { Player } from './components/Player';
 import { LibraryView } from './components/LibraryView';
@@ -100,6 +124,8 @@ import { getAudioUrl } from './services/api';
 import { useAuth } from './context/AuthContext';
 import { useResponsive } from './context/ResponsiveContext';
 import { I18nProvider, useI18n } from './context/I18nContext';
+import { splitByParent } from './components/songParts';
+import { yue2 } from './i18n/yue2';
 import { List } from 'lucide-react';
 import { PlaylistDetail } from './components/PlaylistDetail';
 import { Toast, ToastType } from './components/Toast';
@@ -116,7 +142,7 @@ import { PlayerExtras } from './components/player/PlayerExtras';
 import { audioGraph, registerPlayer, resumeAudioGraph } from './services/audioGraph';
 import { serveVisualizerFeed } from './services/visualizerFeed';
 import { winampControl, winampOn } from './services/winamp';
-import { createNativePlaylist, deleteNativeSong, loadNativeLibrarySongs, loadNativePlaylists, updateNativePlaylist } from './services/nativeLibrary';
+import { createNativePlaylist, deleteNativeSong, loadNativeLibrarySongs, loadNativePlaylists, setNativeSongLiked, updateNativePlaylist } from './services/nativeLibrary';
 
 const NATIVE_LIKED_SONG_IDS_KEY = 'yue2-studio-liked-song-ids';
 
@@ -129,8 +155,46 @@ function loadNativeLikedSongIds(): Set<string> {
   }
 }
 
-function saveNativeLikedSongIds(ids: Set<string>): void {
-  localStorage.setItem(NATIVE_LIKED_SONG_IDS_KEY, JSON.stringify([...ids]));
+/** The kind of thing a tool works on, said the way the log says it (mirrors journal_facts in the
+ * service): the person reads "session: Night shift" and knows what is at stake, while the tool's own
+ * name - "workspace_delete" - tells them nothing. */
+const kindOf = (tool: string): TranslationKey => tool.includes('workspace') ? 'journalKindSession'
+  : tool.includes('playlist') ? 'journalKindPlaylist'
+    : tool.includes('stems') ? 'journalKindStems'
+      : tool.includes('song') || tool.includes('library') ? 'journalKindSong'
+        : 'journalKindOther';
+
+/**
+ * The words the log is written in. The service reports what was done and to what kind of
+ * thing; a language only exists in the window, so the sentence is built here - never from
+ * the tool's own name, which tells a person nothing about what was deleted or made.
+ */
+const JOURNAL_SAID: Record<string, TranslationKey> = {
+  deleted: 'journalVerbDeleted',
+  created: 'journalVerbCreated',
+  updated: 'journalVerbUpdated',
+  opened: 'journalVerbOpened',
+  closed: 'journalVerbClosed',
+  liked: 'journalVerbLiked',
+  unliked: 'journalVerbUnliked',
+  split: 'journalVerbSplit',
+  imported: 'journalVerbImported',
+  ran: 'journalVerbRan',
+  session: 'journalKindSession',
+  song: 'journalKindSong',
+  playlist: 'journalKindPlaylist',
+  stems: 'journalKindStems',
+  other: 'journalKindOther',
+};
+
+/// "Rock (3)". A session name is unique, as a file name is: two sessions
+/// that read the same would be painful to tell apart.
+function uniqueSessionName(name: string, sessions: WorkspaceSession[]): string {
+  const taken = new Set(sessions.map((session) => session.name));
+  if (!taken.has(name)) return name;
+  let index = 2;
+  while (taken.has(`${name} (${index})`)) index += 1;
+  return `${name} (${index})`;
 }
 
 function NativeUnavailableView({ title, detail }: { title: string; detail: string }): React.ReactElement {
@@ -320,7 +384,12 @@ function AppContent() {
   // Content State
   const [songs, setSongs] = useState<Song[]>([]);
   const [playlists, setPlaylists] = useState<Playlist[]>([]);
-  const [likedSongIds, setLikedSongIds] = useState<Set<string>>(new Set());
+  // The thumbs-up lives with the song itself (metadata.liked), so the library
+  // carries it and every window - and the agent - sees the same marks.
+  const likedSongIds = useMemo(
+    () => new Set(songs.filter((song) => song.liked).map((song) => song.id)),
+    [songs],
+  );
   const [playQueue, setPlayQueue] = useState<Song[]>([]);
   const [queueIndex, setQueueIndex] = useState(-1);
 
@@ -407,13 +476,332 @@ function AppContent() {
   const [confirmDialog, setConfirmDialog] = useState<{
     title: string;
     message: string;
+    /** The word on the button that goes through; the author's own when left out. */
+    confirmLabel?: string;
     onConfirm: () => void;
   } | null>(null);
 
 
-  const showToast = (message: string, type: ToastType = 'success') => {
+  // Every message the studio or an agent reports, newest last. The control
+  // strip's bell reads them back once the toast itself has gone.
+  // The log outlives a reload: what the window reported is kept in local storage,
+  // the way the theme and the language are. Only the newest 200 are kept.
+  const [agentNotices, setAgentNotices] = useState<AgentNotice[]>(() => {
+    try {
+      const saved: unknown = JSON.parse(localStorage.getItem('messages') ?? '[]');
+      return Array.isArray(saved) ? (saved as AgentNotice[]).slice(-200) : [];
+    } catch {
+      return [];
+    }
+  });
+  // Ids continue after the restored ones, so the list keys stay unique.
+  const nextNoticeId = useRef(agentNotices.reduce((top, notice) => Math.max(top, notice.id), 0));
+
+  // Everything the window reports goes through here: the studio's own messages
+  // and, over the MCP bridge below, the ones an agent sends. Each is also kept
+  // for the message log, which tells the two apart by their source.
+  const showToast = (message: string, type: ToastType = 'success', source: AgentNotice['source'] = 'studio') => {
     setToast({ message, type, isVisible: true });
+    nextNoticeId.current += 1;
+    setAgentNotices(prev => [...prev.slice(-199), {
+      id: nextNoticeId.current,
+      text: message,
+      tone: type,
+      source,
+      at: Date.now(),
+    }]);
   };
+
+  // Not every report deserves a toast: the message log keeps the record while the
+  // window stays quiet. The agent's questions and the answers they get go there.
+  const noteJournal = (message: string, source: AgentNotice['source'] = 'studio') => {
+    nextNoticeId.current += 1;
+    setAgentNotices(prev => [...prev.slice(-199), {
+      id: nextNoticeId.current,
+      text: message,
+      tone: 'info',
+      source,
+      at: Date.now(),
+    }]);
+  };
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('messages', JSON.stringify(agentNotices));
+    } catch {
+      // Storage can be full or unavailable; the log simply stops outliving a reload.
+    }
+  }, [agentNotices]);
+
+  // Each entry carries its own cross: this drops that one from the log.
+  const removeNotice = (id: number) => {
+    setAgentNotices(prev => prev.filter(notice => notice.id !== id));
+  };
+
+  /** A clean log, the past included: the person asked for it, and the history is theirs. */
+  const clearJournal = () => {
+    setAgentNotices([]);
+  };
+
+  /** A clean log is asked for, not taken: the past cannot be brought back, so the window puts
+   * the question first and the person decides. */
+  const askClearJournal = () => {
+    setConfirmDialog({
+      title: t('journalClearTitle'),
+      message: t('journalClearMessage'),
+      confirmLabel: t('journalClearConfirm'),
+      onConfirm: () => {
+        setConfirmDialog(null);
+        clearJournal();
+      },
+    });
+  };
+
+  // ---------------------------------------------------------------- sessions
+  // Sessions live in the service: one set for the window and for the agent, so
+  // both see the same sessions and a track knows which one it was made in.
+  // A session that was closed stays closed, because the closed time is stored.
+  const [sessions, setSessions] = useState<Workspace[]>([]);
+  const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
+  /* The request a person made before there was any session to make it in: it waits here
+     until the session exists, then runs - nothing is generated into the void. */
+  const pendingGenerateRef = useRef<(YueRequest & { _tempId?: string }) | null>(null);
+  /* How many items one page of a list holds: a habit of the person, kept like the theme
+     and the volume, so a long list is read at their own pace. */
+  const [itemsPerPage, setItemsPerPage] = useState<number>(() => {
+    const stored = Number(localStorage.getItem('itemsPerPage'));
+    return [10, 25, 50].includes(stored) ? stored : 25;
+  });
+  useEffect(() => { localStorage.setItem('itemsPerPage', String(itemsPerPage)); }, [itemsPerPage]);
+  /* What the lists are read by - the day something was made, or its name - and which
+     way round. A habit of the person, kept like the theme and the page size. */
+  const [listOrder, setListOrder] = useState<SortOrder>(() => {
+    try {
+      const stored = JSON.parse(localStorage.getItem('listOrder') ?? 'null') as SortOrder | null;
+      if (stored && ['created', 'updated', 'name'].includes(stored.by) && typeof stored.descending === 'boolean') return stored;
+    } catch {
+      // a value we cannot read is simply forgotten
+    }
+    return { by: 'created', descending: true };
+  });
+  useEffect(() => { localStorage.setItem('listOrder', JSON.stringify(listOrder)); }, [listOrder]);
+  const [sessionsReady, setSessionsReady] = useState(false);
+  const [sessionView, setSessionView] = useState<SessionView>('session');
+  // The list column shows either the tracks or the session browser.
+  const [centerView, setCenterView] = useState<'tracks' | 'sessions'>('tracks');
+  // Creating a session is the one modal: it asks for the name and gets out.
+  const [isSessionCreateOpen, setIsSessionCreateOpen] = useState(false);
+  /** A session just opened from the library page: offer to step over to where it is worked on. */
+  const [editModeOffer, setEditModeOffer] = useState<{ sessionName: string } | null>(null);
+  // The agent's request to make a track waits here until the user answers it.
+  const [agentRequest, setAgentRequest] = useState<{
+    sessionId: string;
+    sessionName: string;
+    title?: string;
+    /** The answer the server is waiting for. */
+    answer: (decision: string) => void;
+  } | null>(null);
+
+  // The agent's request to do something that cannot be undone waits here until
+  // the user answers it: the window is the only place that may say yes.
+  const [agentPermission, setAgentPermission] = useState<AgentPermissionRequest | null>(null);
+  const [sessionChoice, setSessionChoice] = useState<SessionChoiceRequest | null>(null);
+  /** Read the sessions from the service: the one source both sides look at. */
+  const readSessions = useCallback(async () => {
+    try {
+      const [list, active] = await Promise.all([loadWorkspaces(), activeWorkspace()]);
+      setSessions(list);
+      setActiveSessionId(active?.id ?? null);
+    } catch {
+      // The service is not answering: the list simply stays empty, with the
+      // studio's own "open or create a session" line in it. No alarm is raised:
+      // a build older than these routes looks exactly the same as a silence.
+    } finally {
+      setSessionsReady(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    void readSessions();
+  }, [readSessions]);
+
+  /**
+   * The tracks the library already had when the window first looked at it.
+   * Only a track that appears AFTER that moment belongs to the session that is
+   * open then: opening a session must not swallow the shelf it was opened next
+   * to. Everything older is not lost - it simply is not this session's.
+   */
+  const knownTrackIds = useRef<Set<string> | null>(null);
+
+  /**
+   * Tracks from before sessions existed have no session to belong to. The SERVICE gathers
+   * them into the session it keeps for exactly this, and marks that session, so two windows
+   * asking at once get one session between them. The window used to search for a session by
+   * its own word for "Import" and make one when it did not find it - and with two windows
+   * open, each reading a different list, that is how two sessions of the same kind appeared.
+   * `importNames` is every word the window may have written into an older library, so the
+   * service adopts the session that is already there instead of making another.
+   */
+  const importNames = useMemo(
+    () => [...new Set(Object.values(yue2).map((words) => words.sessionImportName))],
+    [],
+  );
+  const importedOnce = useRef(false);
+
+  useEffect(() => {
+    if (importedOnce.current || !sessionsReady || songs.length === 0) return;
+    const known = new Set(sessions.flatMap((session) => session.songIds));
+    const orphans = songs.filter((song) => !known.has(song.id));
+    if (orphans.length === 0) {
+      importedOnce.current = true;
+      return;
+    }
+    importedOnce.current = true;
+    void adoptImportSession(importNames)
+      .then(() => readSessions())
+      .catch(() => undefined);
+  }, [sessionsReady, sessions, songs, readSessions, importNames]);
+
+  /**
+   * A track that appeared belongs to the session that was open: it is written
+   * into that session, so the pair survives a reload and the agent sees it too.
+   */
+  useEffect(() => {
+    if (knownTrackIds.current === null) {
+      // The first look at the library is not an arrival: what is there stays put.
+      if (songs.length > 0) knownTrackIds.current = new Set(songs.map((song) => song.id));
+      return;
+    }
+    const fresh = songs
+      .filter((song) => !knownTrackIds.current!.has(song.id))
+      .map((song) => song.id);
+    if (fresh.length === 0) return;
+    for (const id of fresh) knownTrackIds.current.add(id);
+    if (!sessionsReady || !activeSessionId) return;
+    const session = sessions.find((item) => item.id === activeSessionId);
+    if (!session) return;
+    const missing = fresh.filter((id) => !session.songIds.includes(id));
+    if (missing.length === 0) return;
+    void updateWorkspace(session.id, session.name, [...session.songIds, ...missing])
+      .then(() => readSessions())
+      .catch(() => undefined);
+  }, [songs, sessions, activeSessionId, sessionsReady, readSessions]);
+
+  /**
+   * How the queue in front of you plays back is remembered per context - the
+   * session, the library, a playlist - so a choice made in one place does not
+   * follow you into another. The service keeps it; the window follows.
+   */
+  const playbackContext = sessionView === 'library'
+    ? 'library:all'
+    : (activeSessionId ? `session:${activeSessionId}` : 'single');
+
+  useEffect(() => {
+    let alive = true;
+    void (async () => {
+      try {
+        const mode = await readPlaybackMode(playbackContext);
+        if (!alive) return;
+        // A context nobody has chosen for yet plays the way the studio starts -
+        // repeat all, no shuffle. Keeping the previous context's choice instead
+        // was the "my setting followed me into the library" bug the modes exist
+        // to prevent.
+        setRepeatMode(mode ? mode.repeatMode : 'all');
+        setIsShuffle(mode ? mode.shuffle : false);
+      } catch {
+        // The service is away: the window keeps the settings it already has.
+      }
+    })();
+    return () => { alive = false; };
+  }, [playbackContext]);
+
+  /** The buttons in the player write the choice back for this context. */
+  const rememberPlaybackMode = (next: { repeatMode?: RepeatMode; shuffle?: boolean }) => {
+    void writePlaybackMode(playbackContext, {
+      repeatMode: next.repeatMode ?? repeatMode,
+      shuffle: next.shuffle ?? isShuffle,
+    }).catch(() => undefined);
+  };
+
+  const openSession = sessions.find((session) => session.id === activeSessionId) ?? null;
+  /**
+   * How many of a session's tracks are here, counted by the session itself.
+   * A shared map of "which session a track is in" was the wrong shape: a track
+   * that sits in two sessions was counted for one of them and lost to the other.
+   */
+  const tracksInSession = (sessionId: string) => {
+    const session = sessions.find((item) => item.id === sessionId);
+    if (!session) return 0;
+    // A part (a stem) is not a song: it is shown inside the song it came from, so it is not
+    // counted - the same rule the song list follows, so the two lists agree on the number.
+    return splitByParent(songs.filter((song) => session.songIds.includes(song.id))).roots.length;
+  };
+  // What the list shows: the open session's own tracks, or every track there is.
+  const visibleSongs = sessionView === 'library'
+    ? songs
+    : songs.filter((song) => (openSession?.songIds ?? []).includes(song.id));
+
+  // One browser, two places: the list column (opened by the ☰ button) and the
+  // library's "Sessions" tab. Both must behave the same, so they share one element.
+  const sessionBrowser = (
+    <SessionList
+      sessions={sessions}
+      activeSessionId={activeSessionId}
+      trackCount={tracksInSession}
+      itemsPerPage={itemsPerPage}
+      order={listOrder}
+      onOpenSession={(id) => {
+        setSessionView('session');
+        setCenterView('tracks');
+        // The service decides: opening one session closes the one before it.
+        void openWorkspace(id)
+          .then(() => readSessions())
+          .catch(() => undefined);
+        // On the library page the result of that click is a list of sessions, not the
+        // session itself, so the window offers to walk over to the page with the alpha
+        // panel - the one where a session is actually worked on.
+        if (currentView === 'library') {
+          const target = sessions.find((session) => session.id === id);
+          setEditModeOffer({ sessionName: target ? sessionTitle(target, t('sessionImportName')) : '' });
+        }
+      }}
+      onCloseSession={(id) => {
+        void closeWorkspace(id)
+          .then(() => readSessions())
+          .catch(() => undefined);
+      }}
+      onRenameSession={(id, name) => {
+        const session = sessions.find((item) => item.id === id);
+        if (!session) return;
+        void updateWorkspace(id, name, session.songIds)
+          .then(() => readSessions())
+          .catch(() => undefined);
+      }}
+      onCreateRequest={() => setIsSessionCreateOpen(true)}
+    />
+  );
+
+  // Where an agent's track may be made: the studio asks the person, because a track
+  // belongs in one session and only they open sessions. "Always" inside a session
+  // answers it silently from then on; otherwise the answer goes back to the server,
+  // which lets the call go on or refuses it.
+  useBridgeCommand('session_confirm', (args) => new Promise<{ decision: string }>((resolve) => {
+    const tool = String(args.tool ?? '');
+    const title = String(args.title ?? '');
+    const sessionId = String(args.session_id ?? '');
+    const sessionName = String(args.session_name ?? '');
+    const answer = (decision: string) => {
+      setAgentRequest(null);
+      resolve({ decision });
+    };
+    // The log names the track the question is about: the tool's own name says nothing
+    // to the person reading it.
+    noteJournal((title ? t('agentJournalAskNamed') : t('agentJournalAsk'))
+      .replace('{kind}', t('journalKindSong'))
+      .replace('{name}', title), 'agent');
+
+    setAgentRequest({ sessionId, sessionName, title, answer });
+  }));
 
   const closeToast = () => {
     setToast(prev => ({ ...prev, isVisible: false }));
@@ -427,7 +815,6 @@ function AppContent() {
         return [...generatingSongs, ...nativeSongs];
       });
       setPlaylists(nativePlaylists);
-      setLikedSongIds(loadNativeLikedSongIds());
       // A fresh native library is still the authoritative store. Falling back
       // to the retired ACE service when it is empty made ordinary first-run
       // actions issue requests to a server that is not part of this desktop app.
@@ -436,6 +823,33 @@ function AppContent() {
       return false;
     }
   }, []);
+  /**
+   * Likes used to be this window's private list in local storage. They are
+   * moved into the songs themselves once (the service keeps them there now),
+   * so a like stops being one window's opinion and survives a reload.
+   */
+  useEffect(() => {
+    const stored = loadNativeLikedSongIds();
+    if (stored.size === 0) return;
+    let cancelled = false;
+    void (async () => {
+      const moved: string[] = [];
+      for (const id of stored) {
+        try {
+          await setNativeSongLiked(id, true);
+          moved.push(id);
+        } catch {
+          // the song is gone: its like went with it
+        }
+      }
+      if (cancelled) return;
+      localStorage.removeItem(NATIVE_LIKED_SONG_IDS_KEY);
+      localStorage.setItem(NATIVE_LIKED_SONG_IDS_KEY + '-moved', JSON.stringify(moved.length));
+      await refreshNativeLibrary();
+    })();
+    return () => { cancelled = true; };
+  }, [refreshNativeLibrary]);
+
 
   // The library asked for while the service was still starting came back
   // empty; once the service answers again it is read afresh.
@@ -551,10 +965,13 @@ function AppContent() {
 
 
   // Player Logic
+  /// The queue the user actually built: a playlist, or the one track they
+  /// clicked. The whole library is NOT a queue - treating it as one turned
+  /// "play this track" into a shadow playlist that ran on through every stem
+  /// of the same song, and it went on even when the player was stopped.
   const getActiveQueue = (song?: Song) => {
     if (playQueue.length > 0) return playQueue;
-    if (song && songs.some(s => s.id === song.id)) return songs;
-    return songs;
+    return song ? [song] : [];
   };
 
   const playNext = useCallback(() => {
@@ -1071,7 +1488,24 @@ function AppContent() {
     return () => { cancelled = true; window.clearInterval(timer); };
   }, [activeJobCount]);
 
+  /* A generation needs an open session, otherwise its track never shows up in the list:
+     ask the service (not the window state) and, when there is none, ask for one first. */
+  const ensureSessionForGeneration = async (): Promise<boolean> => {
+    const active = await activeWorkspace().catch(() => null);
+    if (active) {
+      setActiveSessionId(active.id);
+      return true;
+    }
+    setIsSessionCreateOpen(true);
+    return false;
+  };
+
   const handleGenerate = async (params: YueRequest & { _tempId?: string }) => {
+    if (!(await ensureSessionForGeneration())) {
+      pendingGenerateRef.current = params;
+      showToast(t('sessionNeededForGeneration'), 'info');
+      return;
+    }
     const tempId = params._tempId || `temp_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`;
     if (!params._tempId) {
       setSongs(prev => [{
@@ -1143,11 +1577,14 @@ function AppContent() {
   };
 
   const playSong = (song: Song, list?: Song[]) => {
+    // A list is a queue only when it is one the user built - a playlist, or a
+    // selection they chose. Falling back to the whole library made "play this
+    // track" behave like a playlist of every song (and every stem) there is.
     const nextQueue = list && list.length > 0
       ? list
       : (playQueue.length > 0 && playQueue.some(s => s.id === song.id))
           ? playQueue
-          : (songs.some(s => s.id === song.id) ? songs : [song]);
+          : [song];
     const nextIndex = nextQueue.findIndex(s => s.id === song.id);
     setPlayQueue(nextQueue);
     setQueueIndex(nextIndex);
@@ -1181,7 +1618,7 @@ function AppContent() {
   });
   useBridgeCommand('notify', ({ text, tone }) => {
     const kind: ToastType = tone === 'error' || tone === 'success' ? tone : 'info';
-    showToast(String(text ?? ''), kind);
+    showToast(String(text ?? ''), kind, 'agent');
     return { text: 'Shown.' };
   });
   useBridgeCommand('open_settings', ({ section }) => {
@@ -1204,6 +1641,87 @@ function AppContent() {
   useBridgeCommand('library_liked', () => ({
     songs: songs.filter((song) => likedSongIds.has(song.id)).map((song) => ({ id: song.id, title: song.title, made: song.createdAt })),
   }));
+  // The MCP server puts a question to the window and waits for the answer: the
+  // agent never widens its own leash, only the person in front of the window.
+  useBridgeCommand('agent_confirm', (args) => new Promise<{ decision: AgentPermissionDecision }>((resolve) => {
+    const action = String(args.action ?? '');
+    const scope = String(args.scope ?? 'always');
+    // A removal is answered with one word: delete it, or do not - nothing is remembered.
+    const removal = args.removal === true;
+    const said: Record<string, TranslationKey> = removal
+      ? { once: 'agentConfirmRemove', deny: 'agentConfirmCancel' }
+      : {
+        once: 'agentConfirmOnce',
+        session: 'agentConfirmSession',
+        always: 'agentConfirmAlways',
+        ask: 'agentConfirmAsk',
+        deny_always: 'agentConfirmDenyAlways',
+      };
+    // The log says what is about to happen, and to what: the tool's own name answered
+    // nothing a person asked ("what is being removed, and whose?").
+    const aboutName = String(args.target ?? '').trim();
+    const aboutKind = t(kindOf(action));
+    noteJournal((aboutName ? t('agentJournalAskNamed') : t('agentJournalAsk'))
+      .replace('{kind}', aboutKind)
+      .replace('{name}', aboutName), 'agent');
+    setAgentPermission({
+      action,
+      scope,
+      removal,
+      target: removal ? String(args.target ?? '') : undefined,
+      details: args.details as Record<string, unknown> | undefined,
+      answer: (decision) => {
+        noteJournal(t('agentJournalAnswer').replace('{answer}', t(said[decision] ?? 'agentConfirmCancel')));
+        setAgentPermission(null);
+        resolve({ decision });
+      },
+    });
+  }));
+  // The agent is about to make a track and nobody has said where the tracks go: the window
+  // asks - the open session, a session per song, or one new session - and the answer, for
+  // this work or for good, goes back to the server, which hands it on to the call.
+  useBridgeCommand('session_choice', (args) => new Promise<SessionChoiceAnswer>((resolve) => {
+    const tool = String(args.tool ?? '');
+    const title = String(args.title ?? '');
+    // Already the words themselves, not keys: the answer is written into the log as the
+    // person would read it.
+    const said: Record<string, string> = {
+      current: t('sessionChoiceCurrent'),
+      each: t('sessionChoiceEach'),
+      deny: t('sessionChoiceDeny'),
+    };
+    // Same here: the question is about a track, and the log says so with the track's name.
+    noteJournal((title ? t('agentJournalAskNamed') : t('agentJournalAsk'))
+      .replace('{kind}', t('journalKindSong'))
+      .replace('{name}', title), 'agent');
+    setSessionChoice({
+      tool,
+      title,
+      hasSession: args.has_session === true,
+      sessionName: String(args.session_name ?? ''),
+      answer: (answer) => {
+        const word: string = answer.choice.startsWith('new:') ? answer.choice : (said[answer.choice] ?? answer.choice);
+        noteJournal(t('agentJournalAnswer').replace('{answer}', word));
+        setSessionChoice(null);
+        resolve(answer);
+      },
+    });
+  }));
+  // The agent's own work lands in the message log quietly: no toast in the middle of the
+  // screen, just a record a person can read - the act, the kind of thing it touched and that
+  // thing's own name. The tool's name never reaches the log: "workspace_delete" tells nobody
+  // what was deleted, which is exactly what the person needs to know.
+  useBridgeCommand('journal_note', ({ verb, kind, target }) => {
+    const did = String(verb ?? 'ran');
+    const what = String(kind ?? 'other');
+    const name = String(target ?? '').trim();
+    const said = (word: string, fallback: TranslationKey) => t(JOURNAL_SAID[word] ?? fallback);
+    noteJournal((name ? t('agentActionRanOn') : t('agentActionRan'))
+      .replace('{verb}', said(did, 'journalVerbRan'))
+      .replace('{kind}', said(what, 'journalKindOther'))
+      .replace('{name}', name), 'agent');
+    return 'Noted.';
+  });
   useBridgeCommand('library_song_like', ({ song_id, liked }) => {
     const song = songById(song_id);
     if (likedSongIds.has(song.id) !== (liked !== false)) toggleLike(song.id);
@@ -1293,15 +1811,17 @@ function AppContent() {
   /// Favourites are a local library flag: the desktop studio has no social
   /// service, so the star is persisted next to the library instead of being
   /// posted to a server that does not exist.
+  /**
+   * The thumbs-up goes to the studio's library, where the song keeps it: the
+   * window shows the change at once and puts the mark back if the service
+   * refuses, so the two never drift apart.
+   */
   const toggleLike = (songId: string) => {
     const isLiked = likedSongIds.has(songId);
-    setLikedSongIds(prev => {
-      const next = new Set(prev);
-      if (isLiked) next.delete(songId);
-      else next.add(songId);
-      saveNativeLikedSongIds(next as Set<string>);
-      return next;
-    });
+    const mark = (value: boolean) =>
+      setSongs(prev => prev.map((song) => (song.id === songId ? { ...song, liked: value } : song)));
+    mark(!isLiked);
+    void setNativeSongLiked(songId, !isLiked).catch(() => mark(isLiked));
   };
 
   const handleDeleteSong = (song: Song) => {
@@ -1339,12 +1859,6 @@ function AppContent() {
 
         if (succeeded.length > 0) {
           setSongs(prev => prev.filter(s => !idsToDelete.has(s.id) || failed.includes(s.id)));
-
-          setLikedSongIds(prev => {
-            const next = new Set(prev);
-            succeeded.forEach(id => next.delete(id));
-            return next;
-          });
 
           if (selectedSong?.id && succeeded.includes(selectedSong.id)) {
             setSelectedSong(null);
@@ -1502,16 +2016,20 @@ function AppContent() {
         const allSongs = songs;
         return (
           <LibraryView
+            itemsPerPage={itemsPerPage}
             allSongs={allSongs}
             likedSongs={songs.filter(s => likedSongIds.has(s.id))}
             playlists={playlists}
             onPlaySong={playSong}
+            currentSong={currentSong}
+            isPlaying={isPlaying}
             onCreatePlaylist={() => {
               setSongToAddToPlaylist(null);
               setIsCreatePlaylistModalOpen(true);
             }}
             onSelectPlaylist={(p) => handleNavigateToPlaylist(p.id)}
             onImported={() => { void refreshNativeLibrary(); }}
+            sessionsContent={sessionBrowser}
           />
         );
       }
@@ -1583,15 +2101,46 @@ function AppContent() {
             {/* Song List */}
             <div className={`
               ${!mobileShowList ? 'hidden md:flex' : 'flex'}
-              min-h-0 min-w-0 flex-1 flex-col h-full overflow-hidden bg-white dark:bg-suno transition-colors duration-300
+              relative min-h-0 min-w-0 flex-1 flex-col h-full overflow-hidden bg-white dark:bg-suno transition-colors duration-300
             `}>
+              {/* The control strip sits flush with the top of the list column */}
+              <TopControlPanel
+                view={sessionView}
+                onViewChange={(next) => { setSessionView(next); setCenterView('tracks'); }}
+                sessionsOpen={centerView === 'sessions'}
+                onToggleSessions={() => setCenterView((prev) => (prev === 'sessions' ? 'tracks' : 'sessions'))}
+                onRefresh={() => {
+                  // Reading again by hand: the library, its playlists and the sessions.
+                  void refreshNativeLibrary();
+                  void readSessions();
+                }}
+                order={listOrder}
+                onOrder={setListOrder}
+                what={centerView === 'sessions' ? 'sessions' : 'songs'}
+              />
+
+              {centerView === 'sessions' ? (
+                /* The session browser: a list, not a modal, so it can grow */
+                sessionBrowser
+              ) : (
               <SongList
-                songs={songs}
+                songs={visibleSongs}
+                itemsPerPage={itemsPerPage}
+                order={listOrder}
+                headerLabel={sessionView === 'library'
+                  ? undefined
+                  : (openSession ? sessionTitle(openSession, t('sessionImportName')) : t('sessionNoneOpen'))}
+                emptyLabel={sessionView === 'library'
+                  ? undefined
+                  : (activeSessionId ? t('sessionEmpty') : t('sessionNoneOpen'))}
                 currentSong={currentSong}
                 selectedSong={selectedSong}
                 likedSongIds={likedSongIds}
                 isPlaying={isPlaying}
-                onPlay={playSong}
+                /* The list on this page is a queue: the next track follows the
+                   previous one, as it always did here. The library's "All songs"
+                   tab is not - there "play" means this one track only. */
+                onPlay={(song) => playSong(song, visibleSongs)}
                 onSelect={(s) => {
                   setSelectedSong(s);
                   setShowRightSidebar(true);
@@ -1608,6 +2157,13 @@ function AppContent() {
                 onResetAll={resetGeneration}
                 activeJobCount={activeJobCount}
               />
+              )}
+
+              {/* The agent's message log, opened by the strip's bell */}
+              <AgentJournalPanel entries={agentNotices} onRemove={removeNotice} onClearRequest={askClearJournal} />
+              {/* The session modals sit at the window's top level (see the
+                  end of this file): inside this page they would live in the
+                  subtree React hides, and Libraries would never see them. */}
             </div>
 
             {/* Right Sidebar */}
@@ -1720,9 +2276,17 @@ function AppContent() {
         onPlaybackRateChange={setPlaybackRate}
         audioRef={audioRef}
         isShuffle={isShuffle}
-        onToggleShuffle={() => setIsShuffle(!isShuffle)}
+        onToggleShuffle={() => {
+          const next = !isShuffle;
+          setIsShuffle(next);
+          rememberPlaybackMode({ shuffle: next });
+        }}
         repeatMode={repeatMode}
-        onToggleRepeat={() => setRepeatMode(prev => prev === 'none' ? 'all' : prev === 'all' ? 'one' : prev === 'one' ? 'stop' : 'none')}
+        onToggleRepeat={() => setRepeatMode(prev => {
+          const next: RepeatMode = prev === 'none' ? 'all' : prev === 'all' ? 'one' : prev === 'one' ? 'stop' : 'none';
+          rememberPlaybackMode({ repeatMode: next });
+          return next;
+        })}
         isLiked={currentSong ? likedSongIds.has(currentSong.id) : false}
         onToggleLike={() => currentSong && toggleLike(currentSong.id)}
         onPlayFirst={playFirst}
@@ -1830,6 +2394,8 @@ function AppContent() {
         />
       )}
       <SettingsModal
+        onItemsPerPage={setItemsPerPage}
+        itemsPerPage={itemsPerPage}
         isOpen={showSettingsModal}
         initialSection={settingsSection}
         onClose={() => { setShowSettingsModal(false); setSettingsSection(null); }}
@@ -1861,10 +2427,78 @@ function AppContent() {
         </div>
       )}
 
+      {/* Creating a session: the service names and keeps it, the new one opens at once */}
+      <SessionCreateModal
+        isOpen={isSessionCreateOpen}
+        onCreate={(rawName) => {
+          void createWorkspace(uniqueSessionName(rawName, sessions))
+            .then(async (created) => {
+              await openWorkspace(created.id);
+              await readSessions();
+              setActiveSessionId(created.id);
+              setSessionView('session');
+              setCenterView('tracks');
+              // Whatever the person asked for before the session existed now has a home.
+              const pending = pendingGenerateRef.current;
+              pendingGenerateRef.current = null;
+              if (pending) void handleGenerate(pending);
+            })
+            .catch(() => undefined);
+          setIsSessionCreateOpen(false);
+        }}
+        onDismiss={() => setIsSessionCreateOpen(false)}
+      />
+
+      {/* A session opened from the library page: ask whether to walk over to it */}
+      <EditModeModal
+        offer={editModeOffer}
+        onAccept={() => {
+          setEditModeOffer(null);
+          setSessionView('session');
+          setCenterView('tracks');
+          setCurrentView('create');
+        }}
+        onDecline={() => setEditModeOffer(null)}
+      />
+
+      {/* The agent asking to do something that cannot be undone */}
+      <AgentConfirmModal request={agentPermission} />
+      <SessionChoiceModal request={sessionChoice} />
+
+      {/* The agent's request: answered once, always, elsewhere, or not at all.
+          A modal belongs here with the author's own modals - only the window's
+          top level is on screen whatever page is - the pages come and go. */}
+      <SessionConfirmModal
+        request={agentRequest}
+        sessions={sessions}
+        onAllowOnce={() => agentRequest?.answer('once')}
+        onAllowSession={() => agentRequest?.answer('session')}
+        onAllowAlways={() => agentRequest?.answer('always')}
+        onAskEveryTime={() => agentRequest?.answer('ask')}
+        onDenyAlways={() => agentRequest?.answer('deny_always')}
+        onOpenExisting={(sessionId) => {
+          setSessionView('session');
+          setCenterView('tracks');
+          void openWorkspace(sessionId)
+            .then(() => readSessions())
+            .then(() => agentRequest?.answer('once'))
+            .catch(() => agentRequest?.answer('denied'));
+        }}
+        onCreate={(name) => {
+          void createWorkspace(name)
+            .then((created) => openWorkspace(created.id))
+            .then(() => readSessions())
+            .then(() => agentRequest?.answer('once'))
+            .catch(() => agentRequest?.answer('denied'));
+        }}
+        onDecline={() => agentRequest?.answer('denied')}
+      />
+
       <ConfirmDialog
         isOpen={confirmDialog !== null}
         title={confirmDialog?.title ?? ''}
         message={confirmDialog?.message ?? ''}
+        confirmLabel={confirmDialog?.confirmLabel}
         onConfirm={() => confirmDialog?.onConfirm()}
         onCancel={() => setConfirmDialog(null)}
       />

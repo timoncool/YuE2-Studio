@@ -1188,6 +1188,7 @@ export const zh = {
     stemsInstallModel: '下载模型',
     stemsStart: '开始分轨',
     stemsAgain: '重新分轨',
+    stemsPartCannot: '这是一条分轨，本身就是分离的结果。再次分离只会产生副本的副本--请在上方选择原始曲目。',
     stemsRunning: '正在分轨',
     stem_drums: '鼓',
     stem_bass: '贝斯',
