@@ -2,7 +2,7 @@ import { useCallback, useEffect, useEffectEvent, useMemo, useRef, useState } fro
 import { useQuery } from '@tanstack/react-query';
 import { useI18n } from '../context/I18nContext';
 import type { Song, YueJob, YueProgress, YueRequest } from '../types';
-import { followEngineProgress } from './engineProgress';
+import { followEngineProgress, stageDetail, type StageClock } from './engineProgress';
 import { mapNativeLibrarySong } from './nativeLibrary';
 import { playlistsChanged, queryClient, readJson, updateLibraryPlaylists, updateLibrarySongs, useLibrarySongs } from './studioQueries';
 
@@ -26,6 +26,7 @@ const STAGE_LABEL: Record<YueProgress['stage'], string> = {
 };
 
 type Notify = (message: string, type: 'success' | 'error' | 'info') => void;
+
 
 interface GenerationOptions {
   /** The engine is up; before that there are no jobs to follow. */
@@ -202,11 +203,13 @@ export function useGenerations({ enabled, notify, onFinished }: GenerationOption
   // The engine renders one job at a time in the order they came, so the
   // oldest running card is the one its progress belongs to.
   const making = following > 0;
+  const stageClock = useRef<StageClock | null>(null);
   useEffect(() => {
     if (!making) return;
     return followEngineProgress(progress => {
       if (!progress || progress.stage === 'transcribe') return;
       const stage = STAGE_LABEL[progress.stage];
+      const detail = stageDetail(progress.detail, progress.stage, stageClock);
       setCards(prev => {
         const running = prev.filter(entry => entry.isGenerating && entry.jobId);
         if (running.length === 0) return prev;
@@ -214,9 +217,9 @@ export function useGenerations({ enabled, notify, onFinished }: GenerationOption
         return prev.map(entry => {
           if (!entry.isGenerating || !entry.jobId) return entry;
           if (entry.id === active.id) {
-            return entry.progress === progress.fraction && entry.stage === stage ? entry : { ...entry, progress: progress.fraction, stage };
+            return entry.progress === progress.fraction && entry.stage === stage && entry.stageDetail === detail ? entry : { ...entry, progress: progress.fraction, stage, stageDetail: detail };
           }
-          return !entry.progress && entry.stage === 'stageWaitingInQueue' ? entry : { ...entry, progress: 0, stage: 'stageWaitingInQueue' };
+          return !entry.progress && entry.stage === 'stageWaitingInQueue' ? entry : { ...entry, progress: 0, stage: 'stageWaitingInQueue', stageDetail: undefined };
         });
       });
     });
