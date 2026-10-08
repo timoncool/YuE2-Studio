@@ -9,7 +9,7 @@ use base64::Engine;
 use serde::Deserialize;
 use serde_json::{json, Value};
 
-use super::{edits, export, import, notation, phrasing, smf};
+use super::{edits, export, import, instrumental, notation, phrasing, smf};
 
 type Answer = Result<Json<Value>, (StatusCode, Json<Value>)>;
 
@@ -121,6 +121,16 @@ pub async fn midi(Json(request): Json<MidiRequest>) -> Answer {
     let whole = notation::whole_groups(&score).unwrap_or(score);
     match export::midi_of(&whole) {
         Ok(data) => Ok(Json(json!({ "ok": true, "data": base64::engine::general_purpose::STANDARD.encode(data) }))),
+        Err(reason) => problem(reason),
+    }
+}
+
+/// The score made instrumental: the voice's notes on the instrument, Vocal left with its rests and chords.
+pub async fn instrumental(Json(request): Json<MidiRequest>) -> Answer {
+    too_long(&request.abc)?;
+    let score = edits::read(&request.abc).score;
+    match instrumental::transfer(&score) {
+        Ok(made) => Ok(Json(json!({ "ok": true, "abc": made.abc, "moved": made.moved, "trimmed": made.trimmed, "dropped": made.dropped }))),
         Err(reason) => problem(reason),
     }
 }

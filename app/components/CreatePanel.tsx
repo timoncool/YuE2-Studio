@@ -1324,7 +1324,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
               <>
                 {showNotation && abc.trim() && (
                   <div className="mt-3 max-h-80 overflow-auto rounded-lg border border-zinc-200 bg-white p-2 dark:border-white/10 custom-scrollbar">
-                    <ScoreView abc={abc} />
+                    <ScoreView abc={abc} onChange={setAbc} />
                   </div>
                 )}
                 <AutoTextarea

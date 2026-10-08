@@ -7,6 +7,7 @@ pub mod api;
 pub mod edits;
 pub mod export;
 pub mod import;
+pub mod instrumental;
 pub mod notation;
 pub mod phrasing;
 pub mod rebuild;

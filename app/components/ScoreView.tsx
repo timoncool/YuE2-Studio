@@ -1,9 +1,10 @@
 import React, { useEffect, useRef, useState } from 'react';
 import abcjs from 'abcjs';
-import { Download, FileText, Play, Square } from 'lucide-react';
+import { Download, FileText, Guitar, Play, Square } from 'lucide-react';
 import { useI18n } from '../context/I18nContext';
 import { MidiSynth, type PlayNote } from './midi/midiSynth';
 import { saveFile } from '../services/saveFile';
+import { failed as refusedScore, instrumentalScore } from '../services/scoreApi';
 
 /**
  * Engraves an ABC score as notation.
@@ -15,13 +16,14 @@ import { saveFile } from '../services/saveFile';
  * It can be heard and saved as MIDI too: the notes abcjs reads from the score
  * play on the studio's own MIDI voices, so no sound font is downloaded.
  */
-export const ScoreView: React.FC<{ abc: string; className?: string; title?: string }> = ({ abc, className, title }) => {
+export const ScoreView: React.FC<{ abc: string; className?: string; title?: string; onChange?: (abc: string) => void }> = ({ abc, className, title, onChange }) => {
   const { t } = useI18n();
   const host = useRef<HTMLDivElement | null>(null);
   const tune = useRef<abcjs.TuneObject | null>(null);
   const synth = useRef<MidiSynth | null>(null);
   const [failed, setFailed] = useState(false);
   const [playing, setPlaying] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
 
   useEffect(() => {
     const element = host.current;
@@ -91,6 +93,17 @@ export const ScoreView: React.FC<{ abc: string; className?: string; title?: stri
     await saveFile(`${fileStem(title)}.mid`, { blob: new Blob([bytes as Uint8Array<ArrayBuffer>], { type: 'audio/midi' }) });
   };
 
+  const makeInstrumental = async () => {
+    if (!onChange) return;
+    const answer = await instrumentalScore(abc);
+    if (refusedScore(answer)) {
+      setNotice(answer.error);
+      return;
+    }
+    onChange(answer.abc);
+    setNotice(t('scoreInstrumentalDone').replace('{moved}', String(answer.moved)).replace('{trimmed}', String(answer.trimmed + answer.dropped)));
+  };
+
   const button = 'inline-flex items-center gap-1 rounded-md border border-zinc-200 px-2 py-1 text-[11px] font-medium text-zinc-600 transition-colors hover:border-pink-400 hover:text-pink-600 dark:border-white/10 dark:text-zinc-300';
   return (
     <div className={className}>
@@ -105,8 +118,14 @@ export const ScoreView: React.FC<{ abc: string; className?: string; title?: stri
           <button type="button" onClick={() => void savePdf()} className={button} title={t('scorePdfHint')}>
             <FileText size={12} />PDF
           </button>
+          {onChange && (
+            <button type="button" onClick={() => void makeInstrumental()} className={button} title={t('scoreInstrumentalHint')}>
+              <Guitar size={12} />{t('scoreInstrumental')}
+            </button>
+          )}
         </div>
       )}
+      {notice && <p className="mb-1 rounded-md bg-zinc-100 px-2 py-1 text-[11px] leading-4 text-zinc-600">{notice}</p>}
       <div ref={host} className="score-view text-zinc-900" />
       {failed && <p className="p-2 text-[11px] text-zinc-500">ABC</p>}
     </div>
