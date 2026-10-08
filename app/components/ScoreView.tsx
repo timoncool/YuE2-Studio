@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import abcjs from 'abcjs';
-import { Download, Play, Square } from 'lucide-react';
+import { Download, FileText, Play, Square } from 'lucide-react';
 import { useI18n } from '../context/I18nContext';
 import { MidiSynth, type PlayNote } from './midi/midiSynth';
 import { saveFile } from '../services/saveFile';
@@ -75,6 +75,12 @@ export const ScoreView: React.FC<{ abc: string; className?: string; title?: stri
     setPlaying(true);
   };
 
+  const savePdf = async () => {
+    if (!tune.current) return;
+    const bytes = await scorePdf(abc);
+    await saveFile(`${fileStem(title)}.pdf`, { blob: new Blob([bytes], { type: 'application/pdf' }) });
+  };
+
   const saveMidi = async () => {
     const score = tune.current;
     if (!score) return;
@@ -82,7 +88,7 @@ export const ScoreView: React.FC<{ abc: string; className?: string; title?: stri
     const made = abcjs.synth.getMidiFile(score, { midiOutputType: 'binary' }) as Uint8Array | Uint8Array[];
     const bytes = made instanceof Uint8Array ? made : made[0];
     if (!bytes?.length) return;
-    await saveFile(`${(title || 'score').replace(/[\\/:*?"<>|]+/g, ' ').trim() || 'score'}.mid`, { blob: new Blob([bytes as Uint8Array<ArrayBuffer>], { type: 'audio/midi' }) });
+    await saveFile(`${fileStem(title)}.mid`, { blob: new Blob([bytes as Uint8Array<ArrayBuffer>], { type: 'audio/midi' }) });
   };
 
   const button = 'inline-flex items-center gap-1 rounded-md border border-zinc-200 px-2 py-1 text-[11px] font-medium text-zinc-600 transition-colors hover:border-pink-400 hover:text-pink-600 dark:border-white/10 dark:text-zinc-300';
@@ -95,6 +101,9 @@ export const ScoreView: React.FC<{ abc: string; className?: string; title?: stri
           </button>
           <button type="button" onClick={() => void saveMidi()} className={button}>
             <Download size={12} />MIDI
+          </button>
+          <button type="button" onClick={() => void savePdf()} className={button} title={t('scorePdfHint')}>
+            <FileText size={12} />PDF
           </button>
         </div>
       )}
@@ -122,4 +131,52 @@ export function scoreNotes(score: abcjs.TuneObject): PlayNote[] {
         family: index === 0 ? 'flute' : 'piano',
       })),
   );
+}
+
+function fileStem(title?: string): string {
+  return (title || 'score').replace(/[\\/:*?"<>|]+/g, ' ').trim() || 'score';
+}
+
+/**
+ * The score as an A4 PDF in vector form. Each system of staves is engraved as
+ * its own SVG, so a page break never falls inside a staff.
+ */
+export async function scorePdf(abc: string): Promise<ArrayBuffer> {
+  const [{ jsPDF }] = await Promise.all([import('jspdf'), import('svg2pdf.js')]);
+  const host = document.createElement('div');
+  host.style.cssText = 'position:fixed;left:-10000px;top:0;width:800px';
+  document.body.appendChild(host);
+  try {
+    abcjs.renderAbc(host, abc, {
+      oneSvgPerLine: true,
+      staffwidth: 700,
+      paddingtop: 0,
+      paddingbottom: 8,
+      paddingleft: 0,
+      paddingright: 0,
+      wrap: { minSpacing: 1.6, maxSpacing: 2.8, preferredMeasuresPerLine: 4 },
+      foregroundColor: '#000000',
+    });
+    const doc = new jsPDF({ orientation: 'p', unit: 'pt', format: 'a4' });
+    const margin = 36;
+    const pageWidth = doc.internal.pageSize.getWidth() - margin * 2;
+    const pageBottom = doc.internal.pageSize.getHeight() - margin;
+    let y = margin;
+    for (const svg of Array.from(host.querySelectorAll('svg'))) {
+      const box = svg.viewBox.baseVal;
+      const width = box?.width || svg.getBoundingClientRect().width;
+      const height = box?.height || svg.getBoundingClientRect().height;
+      if (!width || !height) continue;
+      const scale = Math.min(1, pageWidth / width);
+      if (y > margin && y + height * scale > pageBottom) {
+        doc.addPage();
+        y = margin;
+      }
+      await doc.svg(svg, { x: margin, y, width: width * scale, height: height * scale });
+      y += height * scale;
+    }
+    return doc.output('arraybuffer');
+  } finally {
+    host.remove();
+  }
 }

@@ -1619,6 +1619,7 @@ export const en = {
     scoreListen: 'Listen',
     scoreStop: 'Stop',
     scoreListenHint: 'Hear the notes of the score, played by simple voices',
+    scorePdfHint: 'Save the notation as an A4 PDF to print',
     sidebarExtras: 'Buttons in the left panel',
     sidebarExtrasHint: 'The player bar always has all three; here you choose which of them the left panel keeps too.',
     repeatMode_none: 'Repeat off: play on to the end of the list',

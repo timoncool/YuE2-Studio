@@ -1614,6 +1614,7 @@ export const zh = {
     scoreListen: '试听',
     scoreStop: '停止',
     scoreListenHint: '用简单音色播放乐谱中的音符',
+    scorePdfHint: '将乐谱保存为可打印的 A4 PDF',
     sidebarExtras: '左侧面板中的按钮',
     sidebarExtrasHint: '播放器栏始终有这三个按钮；这里选择左侧面板也保留哪些。',
     repeatMode_none: '不重复：播放到列表末尾',

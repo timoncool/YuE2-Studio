@@ -1614,6 +1614,7 @@ export const ja = {
     scoreListen: '聴く',
     scoreStop: '停止',
     scoreListenHint: '楽譜の音符をシンプルな音色で再生します',
+    scorePdfHint: '楽譜を印刷用の A4 PDF として保存',
     sidebarExtras: '左パネルのボタン',
     sidebarExtrasHint: 'プレーヤーバーには常に3つとも表示されます。ここでは左パネルにも残すものを選びます。',
     repeatMode_none: 'リピートなし：リストの最後まで再生',

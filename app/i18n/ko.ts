@@ -1614,6 +1614,7 @@ export const ko = {
     scoreListen: '듣기',
     scoreStop: '정지',
     scoreListenHint: '악보의 음표를 간단한 음색으로 재생합니다',
+    scorePdfHint: '악보를 인쇄용 A4 PDF로 저장',
     sidebarExtras: '왼쪽 패널의 버튼',
     sidebarExtrasHint: '플레이어 바에는 세 가지가 항상 있습니다. 여기서는 왼쪽 패널에도 둘 버튼을 고릅니다.',
     repeatMode_none: '반복 없음: 목록 끝까지 재생',
