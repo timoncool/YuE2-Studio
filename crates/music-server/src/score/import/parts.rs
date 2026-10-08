@@ -147,7 +147,6 @@ pub fn decode(data: &[u8]) -> String {
 #[derive(Clone, Debug)]
 pub struct Part {
     pub number: usize,
-    pub track: usize,
     pub channel: u8,
     pub notes: Vec<smf::Note>,
     pub program: u8,
@@ -156,12 +155,12 @@ pub struct Part {
 }
 
 impl Part {
-    fn new(number: usize, track: usize, channel: u8, notes: Vec<smf::Note>, program: u8, name: String) -> Part {
+    fn new(number: usize, channel: u8, notes: Vec<smf::Note>, program: u8, name: String) -> Part {
         let mut pitches: Vec<u8> = notes.iter().map(|note| note.pitch).collect();
         pitches.sort_unstable();
         let middle = pitches.len() / 2;
         let median = if pitches.len() % 2 == 1 { pitches[middle] as f64 } else { (pitches[middle - 1] as f64 + pitches[middle] as f64) / 2.0 };
-        Part { number, track, channel, notes, program, name, median }
+        Part { number, channel, notes, program, name, median }
     }
 
     pub fn drums(&self) -> bool {
@@ -228,7 +227,7 @@ pub fn parts(song: &smf::Song) -> Vec<Part> {
                 name.clone()
             };
             let program = track.programs.get(channel).or_else(|| programs.get(channel)).copied().unwrap_or(0);
-            found.push(Part::new(found.len() + 1, track.index, *channel, notes, program, label));
+            found.push(Part::new(found.len() + 1, *channel, notes, program, label));
         }
     }
     found
@@ -457,16 +456,15 @@ mod tests {
     fn song(tracks: Vec<(&str, Vec<smf::Note>, u8)>) -> smf::Song {
         let tracks = tracks
             .into_iter()
-            .enumerate()
-            .map(|(index, (name, notes, program))| {
-                let mut track = smf::Track { index, name: name.as_bytes().to_vec(), notes, ..smf::Track::default() };
+            .map(|(name, notes, program)| {
+                let mut track = smf::Track { name: name.as_bytes().to_vec(), notes, ..smf::Track::default() };
                 if let Some(channel) = track.notes.first().map(|note| note.channel) {
                     track.programs.insert(channel, program);
                 }
                 track
             })
             .collect();
-        smf::Song { format: 1, division: 480, tracks, ..smf::Song::default() }
+        smf::Song { division: 480, tracks, ..smf::Song::default() }
     }
 
     #[test]

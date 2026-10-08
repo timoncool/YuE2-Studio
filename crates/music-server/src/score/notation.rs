@@ -27,10 +27,6 @@ pub const TEMPO_LOW: i64 = 40;
 pub const TEMPO_HIGH: i64 = 200;
 pub const SECTION_LONGEST: usize = 40;
 pub const FINEST: i64 = 32;
-pub const GROUP_BARS: usize = 4;
-pub const BLANK_BARS: i64 = 16;
-pub const BLANK_BPM: i64 = 120;
-pub const MOST_BARS: i64 = 2000;
 
 const MARKS: [(i32, &str); 5] = [(-2, "__"), (-1, "_"), (0, "="), (1, "^"), (2, "^^")];
 
@@ -438,54 +434,6 @@ fn wanted_sections(sheet: &Value, bars: usize) -> Result<Option<Vec<(usize, Stri
     }
     wanted.sort();
     Ok(Some(wanted))
-}
-
-fn rest_groups(bars: usize, ending: &str) -> Vec<String> {
-    let mut out = Vec::new();
-    let mut left = bars;
-    while left > 0 {
-        let count = GROUP_BARS.min(left);
-        let music = rest_text(count) + "|";
-        for name in VOICES {
-            out.push(format!("V: {name}{ending}"));
-            out.push(format!("{music}{ending}"));
-        }
-        left -= count;
-    }
-    out
-}
-
-fn asked(bars: i64) -> Result<(), String> {
-    if !(1..=MOST_BARS).contains(&bars) {
-        return Err(format!("A score can be at most {MOST_BARS} bars long, and {bars} were asked for."));
-    }
-    Ok(())
-}
-
-/// A score of `bars` empty bars in four four, for writing one from nothing.
-pub fn blank(bars: i64, bpm: i64) -> Result<String, String> {
-    asked(bars)?;
-    if !(TEMPO_LOW..=TEMPO_HIGH).contains(&bpm) {
-        return Err(tempo_range(bpm, TEMPO_LOW, TEMPO_HIGH));
-    }
-    let head = ["X:1".to_string(), "T:".into(), "M:4/4".into(), "L:1/16".into(), format!("Q:1/4={bpm}"), abc::VOICE_LINES[0].into(), abc::VOICE_LINES[1].into(), "K:C".into(), "% verse".into()];
-    Ok(head.iter().map(|line| format!("{line}\n")).collect::<String>() + &rest_groups(bars as usize, "\n").concat())
-}
-
-/// `text` with empty bars added at the end until the song is `bars` long.
-pub fn lengthened(text: &str, bars: i64) -> Result<String, String> {
-    asked(bars)?;
-    let parsed = parsed(text)?;
-    let have = parsed.score.voices[VOCAL].bars.len() as i64;
-    if bars <= have {
-        return Err(format!("This score is {have} bars long and {bars} were asked for. The editor only makes a song longer: bars are removed by deleting them, so that nothing is thrown away by a number typed in the wrong box."));
-    }
-    let lines = abc::split_keep(&parsed.source);
-    let first = lines[0];
-    let ending = { let tail = &first[first.trim_end_matches(['\r', '\n']).len()..]; if tail.is_empty() { "\n" } else { tail } };
-    let mut out: Vec<String> = lines.iter().map(|line| if ends_line(line) { line.to_string() } else { format!("{line}{ending}") }).collect();
-    out.extend(rest_groups((bars - have) as usize, ending));
-    Ok(out.concat())
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
@@ -997,13 +945,4 @@ pub fn whole_groups(text: &str) -> Option<String> {
     let kept = lines[..used].join("\n");
     parsed(&kept).ok()?;
     Some(kept)
-}
-
-/// The score the editor works on, and whether it is `text` with an unfinished
-/// end left out.
-pub fn editable(text: &str) -> (String, bool) {
-    match whole_groups(text) {
-        Some(kept) => (kept, true),
-        None => (text.to_string(), false),
-    }
 }

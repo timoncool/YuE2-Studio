@@ -71,7 +71,7 @@ pub fn move_score(text: &str, step: i32) -> Result<String, String> {
 mod tests {
     use super::*;
     fn tune() -> String {
-        notation::blank(4, 120).unwrap().replace("V: Vocal\nZ4|", "V: Vocal\n\"Am7/C\"C4D4E4F4|G4A4B4c4|Z2|")
+        "X:1\nT:\nM:4/4\nL:1/16\nQ:1/4=120\nV: Vocal clef=treble name=\"Vocal Melody\" snm=\"Vocal\"\nV: Ins clef=treble name=\"Ins Melody\" snm=\"Inst.\"\nK:C\n% verse\nV: Vocal\n\"Am7/C\"C4D4E4F4|G4A4B4c4|Z2|\nV: Ins\nZ4|\n".to_string()
     }
     #[test]
     fn every_semitone_moves_notes_chords_and_key_without_moving_time() {

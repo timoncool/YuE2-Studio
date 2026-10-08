@@ -8404,7 +8404,7 @@ mod tests {
 
     #[test]
     fn score_transposition_reaches_the_engine_once_and_rejects_existing_performances() {
-        let abc = score::notation::blank(4, 120).unwrap().replace("V: Vocal\nZ4|", "V: Vocal\nC4D4E4F4|Z3|");
+        let abc = "X:1\nT:\nM:4/4\nL:1/16\nQ:1/4=120\nV: Vocal clef=treble name=\"Vocal Melody\" snm=\"Vocal\"\nV: Ins clef=treble name=\"Ins Melody\" snm=\"Inst.\"\nK:C\n% verse\nV: Vocal\nC4D4E4F4|Z3|\nV: Ins\nZ4|\n".to_string();
         let request = CreateMusicJobRequest { abc: Some(abc.clone()), transpose: Some(2), ..sample_request() };
         let body = yue_request_from(&request, 1).unwrap();
         assert!(body.get("transpose").is_none());

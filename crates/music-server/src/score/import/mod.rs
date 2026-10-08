@@ -409,11 +409,6 @@ fn section_starts(song: &smf::Song, words: Option<&karaoke::Words>, bars: &[(Q, 
     starts
 }
 
-/// The score and lyrics a MIDI file makes for one mode and one choice of parts, or why it makes none.
-pub fn convert(song: &smf::Song, mode: Mode, vocal: parts::Pick, instrument: parts::Pick) -> Result<Converted, String> {
-    convert_with(song, mode, vocal, instrument, Options::default())
-}
-
 pub fn convert_with(song: &smf::Song, mode: Mode, vocal: parts::Pick, instrument: parts::Pick, options: Options) -> Result<Converted, String> {
     if options.grid.is_some_and(|grid| !matches!(grid, 16 | 32)) { return Err("The MIDI grid must be 16 or 32".into()); }
     if !(-3..=3).contains(&options.vocal_octaves) || !(-3..=3).contains(&options.instrument_octaves) { return Err("Additional octave shifts must be between -3 and 3".into()); }

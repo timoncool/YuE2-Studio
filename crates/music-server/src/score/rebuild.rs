@@ -18,7 +18,6 @@ use regex::Regex;
 
 use super::abc;
 
-pub const SUBBEATS: usize = 4;
 const NO_CHORDS: [&str; 3] = ["N", "X", "?"];
 
 /// Each chord quality label and the symbol the score writes for it.
@@ -765,7 +764,7 @@ mod tests {
             structures: vec![(0.0, 6.0, "verse".into())],
             notes: vec![(0.0, 0.5, 60, 0), (0.5, 1.75, 64, 0), (2.0, 4.0, 67, 0), (0.0, 2.0, 48, 1)],
         };
-        let text = build(&rows, false, SUBBEATS).unwrap();
+        let text = build(&rows, false, 4).unwrap();
         assert_eq!(
             text,
             "X:1\nT:\nM:4/4\nL:1/16\nQ:1/4=120\nV: Vocal clef=treble name=\"Vocal Melody\" snm=\"Vocal\"\nV: Ins clef=treble name=\"Ins Melody\" snm=\"Inst.\"\nK:C\n% verse\nV: Vocal\n\"C\"C4E8-E2z2|\"G7\"G16|Z|\nV: Ins\nC,16|Z2|\n"
