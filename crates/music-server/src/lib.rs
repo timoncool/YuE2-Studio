@@ -3358,7 +3358,7 @@ async fn tag_stored_song(state: &AppState, song_id: &str) {
     // `audio_path` is a full path, not a filename: resolve it the way playback
     // does, or tagging silently skips every track.
     let Some(audio_path) = state.library.media_path_for_song(&song) else { return };
-    if audio_path.extension().and_then(|value| value.to_str()).map(str::to_lowercase).as_deref() != Some("mp3") {
+    if !tagging::taggable(&audio_path) {
         return;
     }
     let cover_file = state.library.cover_path_for_song(&song).map(|(path, media_type)| (path, media_type.to_string()));
@@ -3376,7 +3376,7 @@ async fn tag_stored_song(state: &AppState, song_id: &str) {
     // reading the cover and rewriting the file are blocking file work
     let written = tokio::task::spawn_blocking(move || {
         let cover = cover_file.and_then(|(path, media_type)| std::fs::read(path).ok().map(|bytes| (media_type, bytes)));
-        tagging::write_mp3_tags(&audio_path, &tagging::TrackTags { cover, ..tags })
+        tagging::write_tags(&audio_path, &tagging::TrackTags { cover, ..tags })
     })
     .await;
     match written {
@@ -3386,11 +3386,10 @@ async fn tag_stored_song(state: &AppState, song_id: &str) {
     }
 }
 
-/// Tracks stored before the studio tagged anything carry no ID3, and a download
+/// Tracks stored before the studio tagged anything carry no tag, and a download
 /// of one lands in a player as an untitled file: each is tagged once, in the
 /// background, when the service starts. Serving a track never writes to it.
 async fn tag_untagged_songs(state: AppState) {
-    use tokio::io::AsyncReadExt;
     let songs = match state.library.list_songs() {
         Ok(songs) => songs,
         Err(error) => {
@@ -3400,15 +3399,11 @@ async fn tag_untagged_songs(state: AppState) {
     };
     for song in songs {
         let Some(path) = state.library.media_path_for_song(&song) else { continue };
-        if !path.extension().is_some_and(|extension| extension.eq_ignore_ascii_case("mp3")) {
+        if !tagging::taggable(&path) {
             continue;
         }
-        // the check is the first three bytes, not the whole file
-        let mut head = [0u8; 3];
-        let untagged = match tokio::fs::File::open(&path).await {
-            Ok(mut file) => file.read_exact(&mut head).await.is_ok() && &head != b"ID3",
-            Err(_) => false,
-        };
+        // reads the tag, not the audio
+        let untagged = matches!(tokio::task::spawn_blocking(move || tagging::is_tagged(&path)).await, Ok(Ok(false)));
         if untagged {
             tag_stored_song(&state, &song.id).await;
         }
@@ -7944,15 +7939,9 @@ fn validate_semantic_tokens(tokens: &str) -> Result<(), String> {
     }
 }
 
-/// Builds the yue-server request. Only what the user set travels: an absent
-/// field is the engine's protocol default, and the replay request the engine
-/// returns records the values it actually used.
 /// The bitrate a track is encoded at when the request names none.
 const DEFAULT_MP3_KBPS: u32 = 320;
-/// Samples per million allowed to clip when the level is set, as the engines do.
 
-/// Whether the studio makes this track's MP3 itself; the engine's own default
-/// output is MP3, so a request naming no format counts.
 /// The format a track is kept in: what was asked for, else lossless FLAC.
 fn output_format(settings: &Value) -> &str {
     settings.get("output_format").and_then(Value::as_str).unwrap_or("flac")
@@ -8008,6 +7997,9 @@ const CHECKPOINT_SONG_SECONDS: f64 = 360.0;
 const LONGEST_SONG_SECONDS: f64 = 600.0;
 const SEMANTIC_FRAMES_PER_SECOND: f64 = 25.0;
 
+/// Builds the yue-server request. Only what the user set travels: an absent
+/// field is the engine's protocol default, and the replay request the engine
+/// returns records the values it actually used.
 fn yue_request_from(request: &CreateMusicJobRequest, max_batch: u32) -> Result<Value, String> {
     let semantic_tokens = request.semantic_tokens.as_deref().map(str::trim).filter(|value| !value.is_empty());
     if request.style.trim().is_empty() && request.lyrics.trim().is_empty() && semantic_tokens.is_none() {

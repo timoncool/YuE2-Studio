@@ -2,7 +2,7 @@
 //!
 //! Engines hand over their audio unencoded, at the rate and precision the model
 //! produced, and it is kept at the level it came: lossless FLAC by default
-//! (flac-codec, modelled on the reference encoder), MP3 by LAME, the reference
+//! (libFLAC, the reference encoder), MP3 by LAME, the reference
 //! MP3 encoder, when one is asked for. One encoder per format for every
 //! engine, never one engine's own.
 
@@ -33,24 +33,38 @@ pub fn normalize_peak(audio: &mut Stereo, peak_clip: u32) {
     }
 }
 
-/// Lossless FLAC at 24 bits: the model's float output with nothing taken away
-/// but the rounding below the 24th bit, about -144 dB.
+/// Lossless FLAC at 24 bits, written by libFLAC, the reference encoder: the
+/// model's float output with nothing taken away but the rounding below the
+/// 24th bit, about -144 dB. Verify mode decodes every frame as it is written
+/// and compares it with the input, and the file gets its sample count and MD5.
 pub fn flac(audio: &Stereo) -> Result<Vec<u8>> {
-    use flac_codec::encode::{FlacSampleWriter, Options};
+    use flac_bound::FlacEncoder;
+    use std::sync::atomic::{AtomicU64, Ordering};
+    static NEXT: AtomicU64 = AtomicU64::new(0);
     const FULL: f32 = 8_388_607.0;
-    let mut file = std::io::Cursor::new(Vec::new());
-    let mut writer = FlacSampleWriter::new(&mut file, Options::default(), audio.rate, 24, 2, None).map_err(|error| anyhow!("start the FLAC encoder: {error}"))?;
+    let frames = audio.frames();
     let samples: Vec<i32> = audio.left.iter().zip(&audio.right).flat_map(|(left, right)| [*left, *right]).map(|sample| (sample.clamp(-1.0, 1.0) * FULL).round() as i32).collect();
-    writer.write(&samples).map_err(|error| anyhow!("encode FLAC: {error}"))?;
-    writer.finalize().map_err(|error| anyhow!("finish the FLAC file: {error}"))?;
-    Ok(file.into_inner())
-}
-
-/// How long a FLAC file plays, from its STREAMINFO block.
-pub fn flac_seconds(file: &[u8]) -> Option<f64> {
-    let info = flac_codec::metadata::read_info(std::io::Cursor::new(file)).ok()?;
-    let samples = info.total_samples?.get() as f64;
-    (info.sample_rate > 0).then(|| samples / f64::from(info.sample_rate))
+    // libFLAC writes the header last, so it needs a file it can seek in
+    let path = std::env::temp_dir().join(format!("audio-post-{}-{}.flac", std::process::id(), NEXT.fetch_add(1, Ordering::Relaxed)));
+    let written = (|| -> Result<Vec<u8>> {
+        let mut encoder = FlacEncoder::new()
+            .ok_or_else(|| anyhow!("libFLAC could not make an encoder"))?
+            .channels(2)
+            .bits_per_sample(24)
+            .sample_rate(audio.rate)
+            .compression_level(8)
+            .verify(true)
+            .total_samples_estimate(frames as u64)
+            .init_file(&path)
+            .map_err(|error| anyhow!("start the FLAC encoder: {error:?}"))?;
+        if encoder.process_interleaved(&samples, frames as u32).is_err() {
+            bail!("encode FLAC: {:?}", encoder.state());
+        }
+        encoder.finish().map_err(|encoder| anyhow!("finish the FLAC file: {:?}", encoder.state()))?;
+        Ok(std::fs::read(&path)?)
+    })();
+    let _ = std::fs::remove_file(&path);
+    written
 }
 
 /// The MPEG-1 Layer III rates LAME encodes at, the highest first.
@@ -115,25 +129,6 @@ mod tests {
         Stereo::new(left.clone(), left, rate)
     }
 
-    #[test]
-    fn flac_keeps_every_sample_at_24_bits() {
-        let audio = tone(0.5, 48_000, 0.5);
-        let encoded = flac(&audio).unwrap();
-        let mut reader = flac_codec::decode::FlacSampleReader::new(std::io::Cursor::new(encoded)).unwrap();
-        let mut decoded = vec![0i32; audio.frames() * 2];
-        let mut read = 0;
-        while read < decoded.len() {
-            let got = reader.read(&mut decoded[read..]).unwrap();
-            if got == 0 { break; }
-            read += got;
-        }
-        assert_eq!(read, decoded.len());
-        for (frame, sample) in audio.left.iter().enumerate() {
-            assert_eq!(decoded[frame * 2], (sample * 8_388_607.0).round() as i32);
-        }
-        let seconds = flac_seconds(&flac(&audio).unwrap()).unwrap();
-        assert!((seconds - 0.5).abs() < 1e-6, "{seconds}");
-    }
 
     #[test]
     fn normalizing_brings_the_peak_to_full_scale() {

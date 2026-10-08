@@ -1367,7 +1367,7 @@ fn tools() -> &'static [Tool] {
                     "lm_seed": { "type": "integer" },
                     "steps": { "type": "integer" },
                     "cfg_scale": { "type": "number" },
-                    "companion_scale": { "type": "number", "minimum": 0, "maximum": 1, "description": "strength of the realaudio decoder adapter under the song, 1 by default; 0 is the sound of the YuE2 checkpoint alone, as audio.cpp and ComfyUI render it" },
+                    "companion_scale": { "type": "number", "minimum": 0, "maximum": 1, "description": "strength of the realaudio decoder adapter under the song; left out, 0 (the YuE2 checkpoint alone, as audio.cpp and ComfyUI render it), or 1 under a LoRA trained in the studio" },
                     "lm_batch_size": { "type": "integer", "description": "compositions written from the request (1 by default)" },
                     "synth_batch_size": { "type": "integer", "description": "performances rendered of each composition (1 by default)" },
                     "semantic_tokens": { "type": "string", "description": "audio codes of a song already sung (library_song_get audio_codes): renders that take again" },
@@ -1402,7 +1402,7 @@ fn tools() -> &'static [Tool] {
             Tool {
                 name: "song_replay",
                 description: "Render a library song again from its saved audio codes, bit for bit or with other steps, a new sound seed, a batch of variations, or another format - without composing again.",
-                schema: || object(json!({ "song_id": { "type": "string" }, "steps": { "type": "integer" }, "seed": { "type": "integer" }, "synth_batch_size": { "type": "integer" }, "output_format": { "type": "string" }, "title": { "type": "string" } }), &["song_id"]),
+                schema: || object(json!({ "song_id": { "type": "string" }, "steps": { "type": "integer" }, "seed": { "type": "integer" }, "synth_batch_size": { "type": "integer" }, "output_format": { "type": "string", "enum": ["flac", "mp3"] }, "title": { "type": "string" } }), &["song_id"]),
                 call: |args| post("/v1/music/replay".into(), args.clone()),
             },
             Tool {

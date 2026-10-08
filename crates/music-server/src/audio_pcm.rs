@@ -265,6 +265,23 @@ mod tests {
     use super::*;
 
     #[test]
+    fn a_flac_decodes_to_the_samples_it_was_made_from() {
+        let n = 24_000;
+        let left: Vec<f32> = (0..n).map(|i| 0.5 * (i as f32 * 0.031).sin()).collect();
+        let right: Vec<f32> = (0..n).map(|i| 0.25 * (i as f32 * 0.017).cos()).collect();
+        let audio = audio_post::Stereo { left: left.clone(), right: right.clone(), rate: 48_000 };
+        let encoded = audio_post::encode::flac(&audio).unwrap();
+        assert_eq!(&encoded[..4], b"fLaC");
+        assert!((crate::library::audio_duration_seconds(&encoded, "flac", None).unwrap() - 0.5).abs() < 1e-9);
+        let decoded = decode_stereo_bytes(encoded, "flac").unwrap();
+        assert_eq!(decoded.rate, 48_000);
+        assert_eq!(decoded.left.len(), n);
+        for (original, back) in left.iter().chain(&right).zip(decoded.left.iter().chain(&decoded.right)) {
+            assert!((original - back).abs() < 2.0 / 8_388_607.0, "{original} {back}");
+        }
+    }
+
+    #[test]
     fn resampling_keeps_the_band_and_drops_what_lies_above_it() {
         let tone = |hz: f32| -> Vec<f32> { (0..44_100).map(|index| (2.0 * std::f32::consts::PI * hz * index as f32 / 44_100.0).sin() * 0.5).collect() };
         let rms = |samples: &[f32]| (samples.iter().map(|sample| sample * sample).sum::<f32>() / samples.len() as f32).sqrt();
