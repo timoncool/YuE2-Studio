@@ -1,8 +1,10 @@
 //! Turning a finished track into the file the library keeps.
 //!
 //! Engines hand over their audio unencoded, at the rate and precision the model
-//! produced. The level is set here, and MP3 is made by LAME, the reference MP3
-//! encoder: one encoder for every engine, never one engine's own.
+//! produced, and it is kept at the level it came: lossless FLAC by default
+//! (flac-codec, modelled on the reference encoder), MP3 by LAME, the reference
+//! MP3 encoder, when one is asked for. One encoder per format for every
+//! engine, never one engine's own.
 
 use anyhow::{anyhow, bail, Result};
 use mp3lame_encoder::{Bitrate, Builder, DualPcm, FlushNoGap, Quality};
@@ -11,7 +13,8 @@ use crate::Stereo;
 
 /// Scales the track so its loudest part reaches full scale: the level that
 /// all but `peak_clip` samples per million stay under becomes 1.0, and those
-/// few are clipped. The rule the engines apply to their own encoded output.
+/// few are clipped. A processing stage the person chooses, never part of
+/// keeping a song.
 pub fn normalize_peak(audio: &mut Stereo, peak_clip: u32) {
     let peak_clip = peak_clip.min(999) as f64;
     let mut magnitudes: Vec<f32> = audio.left.iter().chain(&audio.right).map(|sample| sample.abs()).collect();
@@ -28,6 +31,26 @@ pub fn normalize_peak(audio: &mut Stereo, peak_clip: u32) {
     for sample in audio.left.iter_mut().chain(audio.right.iter_mut()) {
         *sample = (*sample * gain).clamp(-1.0, 1.0);
     }
+}
+
+/// Lossless FLAC at 24 bits: the model's float output with nothing taken away
+/// but the rounding below the 24th bit, about -144 dB.
+pub fn flac(audio: &Stereo) -> Result<Vec<u8>> {
+    use flac_codec::encode::{FlacSampleWriter, Options};
+    const FULL: f32 = 8_388_607.0;
+    let mut file = std::io::Cursor::new(Vec::new());
+    let mut writer = FlacSampleWriter::new(&mut file, Options::default(), audio.rate, 24, 2, None).map_err(|error| anyhow!("start the FLAC encoder: {error}"))?;
+    let samples: Vec<i32> = audio.left.iter().zip(&audio.right).flat_map(|(left, right)| [*left, *right]).map(|sample| (sample.clamp(-1.0, 1.0) * FULL).round() as i32).collect();
+    writer.write(&samples).map_err(|error| anyhow!("encode FLAC: {error}"))?;
+    writer.finalize().map_err(|error| anyhow!("finish the FLAC file: {error}"))?;
+    Ok(file.into_inner())
+}
+
+/// How long a FLAC file plays, from its STREAMINFO block.
+pub fn flac_seconds(file: &[u8]) -> Option<f64> {
+    let info = flac_codec::metadata::read_info(std::io::Cursor::new(file)).ok()?;
+    let samples = info.total_samples?.get() as f64;
+    (info.sample_rate > 0).then(|| samples / f64::from(info.sample_rate))
 }
 
 /// The MPEG-1 Layer III rates LAME encodes at, the highest first.
@@ -90,6 +113,26 @@ mod tests {
         let n = (seconds * rate as f32) as usize;
         let left: Vec<f32> = (0..n).map(|i| amplitude * (2.0 * std::f32::consts::PI * 440.0 * i as f32 / rate as f32).sin()).collect();
         Stereo::new(left.clone(), left, rate)
+    }
+
+    #[test]
+    fn flac_keeps_every_sample_at_24_bits() {
+        let audio = tone(0.5, 48_000, 0.5);
+        let encoded = flac(&audio).unwrap();
+        let mut reader = flac_codec::decode::FlacSampleReader::new(std::io::Cursor::new(encoded)).unwrap();
+        let mut decoded = vec![0i32; audio.frames() * 2];
+        let mut read = 0;
+        while read < decoded.len() {
+            let got = reader.read(&mut decoded[read..]).unwrap();
+            if got == 0 { break; }
+            read += got;
+        }
+        assert_eq!(read, decoded.len());
+        for (frame, sample) in audio.left.iter().enumerate() {
+            assert_eq!(decoded[frame * 2], (sample * 8_388_607.0).round() as i32);
+        }
+        let seconds = flac_seconds(&flac(&audio).unwrap()).unwrap();
+        assert!((seconds - 0.5).abs() < 1e-6, "{seconds}");
     }
 
     #[test]

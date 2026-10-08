@@ -5,7 +5,6 @@
 //! the local runtime needs no Python and no ffmpeg on the user's machine.
 
 use std::fs::File;
-use std::io::{BufWriter, Write};
 use std::path::Path;
 
 use anyhow::{bail, Context, Result};
@@ -67,58 +66,29 @@ pub fn decode_stereo(input: &Path) -> Result<audio_post::Stereo> {
     Ok(audio_post::Stereo::new(left, right, rate))
 }
 
-/// Writes stereo as 24-bit PCM WAV, the studio's lossless format.
+/// Writes stereo as 24-bit PCM WAV, samples past full scale clipped there.
 pub fn write_wav24(path: &Path, audio: &audio_post::Stereo) -> Result<()> {
-    let file = File::create(path).with_context(|| format!("create {}", path.display()))?;
-    let mut out = BufWriter::new(file);
-    let frames = audio.frames();
-    let data_bytes = (frames * 2 * 3) as u32;
-    out.write_all(b"RIFF")?;
-    out.write_all(&(36 + data_bytes).to_le_bytes())?;
-    out.write_all(b"WAVEfmt ")?;
-    out.write_all(&16u32.to_le_bytes())?;
-    out.write_all(&1u16.to_le_bytes())?; // PCM
-    out.write_all(&2u16.to_le_bytes())?; // stereo
-    out.write_all(&audio.rate.to_le_bytes())?;
-    out.write_all(&(audio.rate * 2 * 3).to_le_bytes())?; // byte rate
-    out.write_all(&6u16.to_le_bytes())?; // block align
-    out.write_all(&24u16.to_le_bytes())?; // bits per sample
-    out.write_all(b"data")?;
-    out.write_all(&data_bytes.to_le_bytes())?;
     const FULL: f32 = 8_388_607.0;
-    for frame in 0..frames {
+    let spec = hound::WavSpec { channels: 2, sample_rate: audio.rate, bits_per_sample: 24, sample_format: hound::SampleFormat::Int };
+    let mut out = hound::WavWriter::create(path, spec).with_context(|| format!("create {}", path.display()))?;
+    for frame in 0..audio.frames() {
         for sample in [audio.left[frame], audio.right[frame]] {
-            let value = (sample.clamp(-1.0, 1.0) * FULL).round() as i32;
-            out.write_all(&value.to_le_bytes()[..3])?;
+            out.write_sample((sample.clamp(-1.0, 1.0) * FULL).round() as i32)?;
         }
     }
-    out.flush().context("finish writing the WAV")?;
+    out.finalize().context("finish writing the WAV")?;
     Ok(())
 }
 
 /// Writes stereo as 32-bit IEEE float WAV, at its own rate and unclipped.
 pub fn write_wav_f32(path: &Path, audio: &audio_post::Stereo) -> Result<()> {
-    let file = File::create(path).with_context(|| format!("create {}", path.display()))?;
-    let mut out = BufWriter::new(file);
-    let frames = audio.frames();
-    let data_bytes = (frames * 2 * 4) as u32;
-    out.write_all(b"RIFF")?;
-    out.write_all(&(36 + data_bytes).to_le_bytes())?;
-    out.write_all(b"WAVEfmt ")?;
-    out.write_all(&16u32.to_le_bytes())?;
-    out.write_all(&3u16.to_le_bytes())?; // IEEE float
-    out.write_all(&2u16.to_le_bytes())?; // stereo
-    out.write_all(&audio.rate.to_le_bytes())?;
-    out.write_all(&(audio.rate * 2 * 4).to_le_bytes())?; // byte rate
-    out.write_all(&8u16.to_le_bytes())?; // block align
-    out.write_all(&32u16.to_le_bytes())?; // bits per sample
-    out.write_all(b"data")?;
-    out.write_all(&data_bytes.to_le_bytes())?;
-    for frame in 0..frames {
-        out.write_all(&audio.left[frame].to_le_bytes())?;
-        out.write_all(&audio.right[frame].to_le_bytes())?;
+    let spec = hound::WavSpec { channels: 2, sample_rate: audio.rate, bits_per_sample: 32, sample_format: hound::SampleFormat::Float };
+    let mut out = hound::WavWriter::create(path, spec).with_context(|| format!("create {}", path.display()))?;
+    for frame in 0..audio.frames() {
+        out.write_sample(audio.left[frame])?;
+        out.write_sample(audio.right[frame])?;
     }
-    out.flush().context("finish writing the WAV")?;
+    out.finalize().context("finish writing the WAV")?;
     Ok(())
 }
 
@@ -281,27 +251,12 @@ fn resample(samples: &[f32], from: u32, to: u32) -> Result<Vec<f32>> {
 }
 
 fn write_wav(path: &Path, samples: &[f32]) -> Result<()> {
-    let file = File::create(path).with_context(|| format!("create {}", path.display()))?;
-    let mut out = BufWriter::new(file);
-    let data_bytes = (samples.len() * 2) as u32;
-
-    out.write_all(b"RIFF")?;
-    out.write_all(&(36 + data_bytes).to_le_bytes())?;
-    out.write_all(b"WAVEfmt ")?;
-    out.write_all(&16u32.to_le_bytes())?;
-    out.write_all(&1u16.to_le_bytes())?; // PCM
-    out.write_all(&1u16.to_le_bytes())?; // mono
-    out.write_all(&TARGET_RATE.to_le_bytes())?;
-    out.write_all(&(TARGET_RATE * 2).to_le_bytes())?; // byte rate
-    out.write_all(&2u16.to_le_bytes())?; // block align
-    out.write_all(&16u16.to_le_bytes())?; // bits per sample
-    out.write_all(b"data")?;
-    out.write_all(&data_bytes.to_le_bytes())?;
+    let spec = hound::WavSpec { channels: 1, sample_rate: TARGET_RATE, bits_per_sample: 16, sample_format: hound::SampleFormat::Int };
+    let mut out = hound::WavWriter::create(path, spec).with_context(|| format!("create {}", path.display()))?;
     for sample in samples {
-        let clamped = (sample.clamp(-1.0, 1.0) * i16::MAX as f32) as i16;
-        out.write_all(&clamped.to_le_bytes())?;
+        out.write_sample((sample.clamp(-1.0, 1.0) * i16::MAX as f32) as i16)?;
     }
-    out.flush().context("finish writing the decoded WAV")?;
+    out.finalize().context("finish writing the decoded WAV")?;
     Ok(())
 }
 
@@ -352,3 +307,4 @@ mod live {
         eprintln!("wav: {} bytes at {}", size, output.display());
     }
 }
+

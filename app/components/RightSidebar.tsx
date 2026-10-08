@@ -621,7 +621,6 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({ song, onClose, onOpe
                             [t('noiseSeed'), p.seed],
                             [t('outputFormat'), typeof p.output_format === 'string' ? p.output_format.toUpperCase() : undefined],
                             [t('mp3Bitrate'), p.output_format === 'mp3' && p.mp3_bitrate ? `${p.mp3_bitrate} kbps` : undefined],
-                            [t('peakClipLabel'), p.peak_clip],
                         ];
                         const tr = t as unknown as (key: string) => string;
                         // A stage's sampling is recorded only when it was changed from the checkpoint's.

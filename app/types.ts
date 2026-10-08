@@ -102,7 +102,7 @@ export interface YueSampling {
 }
 
 export type YueCot = 'full' | 'melody' | 'off';
-export type YueOutputFormat = 'mp3' | 'wav16' | 'wav24' | 'wav32';
+export type YueOutputFormat = 'flac' | 'mp3';
 
 /**
  * A YuE2 request as `/v1/music/jobs` accepts it. Field names are the engine's
@@ -136,7 +136,6 @@ export interface YueRequest {
   semantic_tokens?: string;
   abc_sampling?: YueSampling;
   semantic_sampling?: YueSampling;
-  peak_clip?: number;
   output_format?: YueOutputFormat;
   mp3_bitrate?: number;
   /** Library title only, never sent to the engine. */

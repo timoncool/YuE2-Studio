@@ -247,7 +247,6 @@ struct CreateMusicJobRequest {
     semantic_tokens: Option<String>,
     abc_sampling: Option<SamplingPreset>,
     semantic_sampling: Option<SamplingPreset>,
-    peak_clip: Option<i32>,
     output_format: Option<String>,
     mp3_bitrate: Option<u32>,
     /// Library title only, never sent to the engine.
@@ -558,7 +557,6 @@ struct ReplayMusicJobRequest {
     seed: Option<i64>,
     synth_batch_size: Option<u32>,
     output_format: Option<String>,
-    peak_clip: Option<i32>,
     mp3_bitrate: Option<u32>,
     /// A title for the re-render; the source track's own name otherwise.
     title: Option<String>,
@@ -1955,8 +1953,8 @@ async fn start_processing(
             })?;
             let folder = processing::workspace(&media);
             std::fs::create_dir_all(&folder)?;
-            let path = folder.join(format!("{id}-{}.wav", &run_id[run_id.len() - 8..]));
-            audio_pcm::write_wav24(&path, &audio)?;
+            let path = folder.join(format!("{id}-{}.flac", &run_id[run_id.len() - 8..]));
+            std::fs::write(&path, audio_post::encode::flac(&audio)?).with_context(|| format!("write {}", path.display()))?;
             Ok(path)
         })();
         handle.block_on(async {
@@ -2048,7 +2046,8 @@ async fn keep_processing(
         .as_deref()
         .and_then(|name| processing::workspace_file(&media, name))
         .ok_or_else(|| api_error(StatusCode::NOT_FOUND, "the preview file is gone".into()))?;
-    let filename = format!("{}-v{}-{}.wav", run.song_id, &uuid::Uuid::now_v7().simple().to_string()[..8], run.stages.join("-"));
+    let extension = preview.extension().and_then(|extension| extension.to_str()).unwrap_or("flac").to_owned();
+    let filename = format!("{}-v{}-{}.{extension}", run.song_id, &uuid::Uuid::now_v7().simple().to_string()[..8], run.stages.join("-"));
     let stored = media.join(&filename);
     std::fs::rename(&preview, &stored).map_err(|error| api_error(StatusCode::INTERNAL_SERVER_ERROR, format!("store the version: {error}")))?;
     let reference_title = match &run.request.master {
@@ -2070,7 +2069,7 @@ async fn keep_processing(
             lyrics: original.lyrics.clone(),
             metadata: serde_json::json!({
                 "derived": derivation(&original, "processing", settings),
-                "duration_seconds": library::audio_duration_seconds(&audio, "wav", None),
+                "duration_seconds": library::audio_duration_seconds(&audio, &extension, None),
             }),
             generation_settings: Value::Null,
             engine_id: "processing".into(),
@@ -6853,6 +6852,9 @@ async fn submit_music_job(state: AppState, mut request: CreateMusicJobRequest, a
     if let Some(style) = trained_style(&state.adapters, &request) {
         body["style"] = Value::String(style);
     }
+    if request.companion_scale.is_none() {
+        body["companion_scale"] = Value::from(companion_default(&state.adapters, &request));
+    }
     let laid = laid_out(&mut body, request.duration_seconds.is_none());
     if request.lyric_timing != Some(false) {
         lyric_schedule(&mut body);
@@ -6976,7 +6978,7 @@ async fn submit_replay_job(state: AppState, request: ReplayMusicJobRequest, atte
     };
     if let Some(song_id) = &request.song_id {
         if let Some(original) = state.library.get_song(song_id).map_err(|error| api_error(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))? {
-            job.derived = Some(derivation(&original, "replay", serde_json::json!({ "steps": request.steps, "seed": request.seed, "synth_batch_size": request.synth_batch_size, "output_format": request.output_format, "peak_clip": request.peak_clip, "mp3_bitrate": request.mp3_bitrate, "extend_seconds": request.extend_seconds })));
+            job.derived = Some(derivation(&original, "replay", serde_json::json!({ "steps": request.steps, "seed": request.seed, "synth_batch_size": request.synth_batch_size, "output_format": request.output_format, "mp3_bitrate": request.mp3_bitrate, "extend_seconds": request.extend_seconds })));
         }
     }
     state.jobs.write().await.insert(job.id.clone(), job.clone());
@@ -7008,10 +7010,6 @@ fn prepare_replay_synthesis(mut replay: Value, overrides: &ReplayMusicJobRequest
     if let Some(format) = &overrides.output_format {
         validate_output_format(format)?;
         object.insert("output_format".into(), Value::String(format.clone()));
-    }
-    if let Some(peak_clip) = overrides.peak_clip {
-        if peak_clip < 0 { return Err("peak_clip cannot be negative".into()); }
-        object.insert("peak_clip".into(), Value::from(peak_clip));
     }
     if let Some(bitrate) = overrides.mp3_bitrate {
         validate_mp3_bitrate(bitrate)?;
@@ -7410,27 +7408,28 @@ async fn import_completed_result(state: &AppState, job: &MusicJob, job_id: &str)
             extension = "wav";
             replay["vocals_only"] = Value::Bool(true);
         }
-        if studio_encodes_mp3(&job.generation_settings) && extension == "wav" {
+        // the engine's float output is kept at the level it came: lossless FLAC unless MP3 was asked for
+        if extension == "wav" {
+            let format = output_format(&job.generation_settings).to_string();
             let kbps = job.generation_settings.get("mp3_bitrate").and_then(Value::as_u64).map_or(DEFAULT_MP3_KBPS, |value| value as u32);
-            let peak_clip = job.generation_settings.get("peak_clip").and_then(Value::as_u64).map_or(DEFAULT_PEAK_CLIP, |value| value as u32);
-            audio = tokio::task::spawn_blocking(move || -> anyhow::Result<Vec<u8>> {
-                let mut stereo = audio_pcm::decode_stereo_bytes(audio, "wav")?;
-                // a NaN would become the peak and turn the whole track into silence
-                let broken = stereo.left.iter().chain(&stereo.right).filter(|sample| !sample.is_finite()).count();
-                if broken > 0 {
-                    anyhow::bail!("the engine returned {broken} broken samples (NaN or infinity); make the song again");
-                }
-                audio_post::encode::normalize_peak(&mut stereo, peak_clip);
-                audio_post::encode::mp3(&stereo, kbps)
-            })
-            .await
-            .context("the MP3 encoder stopped")??;
-            extension = "mp3";
-            // the track says what it is: an MP3 at the rate LAME wrote
-            let written = Value::from(audio_post::encode::mp3_bitrate(kbps));
+            if format != "wav32" {
+                let target = format.clone();
+                audio = tokio::task::spawn_blocking(move || -> anyhow::Result<Vec<u8>> {
+                    let stereo = audio_pcm::decode_stereo_bytes(audio, "wav")?;
+                    if target == "mp3" { audio_post::encode::mp3(&stereo, kbps) } else { audio_post::encode::flac(&stereo) }
+                })
+                .await
+                .context("the encoder stopped")??;
+                extension = if format == "mp3" { "mp3" } else { "flac" };
+            }
             for record in [&mut *settings, replay.as_object_mut().context("the replay request is not a JSON object")?] {
-                record.insert("output_format".into(), Value::from("mp3"));
-                record.insert("mp3_bitrate".into(), written.clone());
+                record.insert("output_format".into(), Value::from(if format == "mp3" { "mp3" } else if format == "wav32" { "wav32" } else { "flac" }));
+                if format == "mp3" {
+                    // the track says what it is: an MP3 at the rate LAME wrote
+                    record.insert("mp3_bitrate".into(), Value::from(audio_post::encode::mp3_bitrate(kbps)));
+                } else {
+                    record.remove("mp3_bitrate");
+                }
             }
         }
         let metadata = serde_json::json!({
@@ -7918,10 +7917,10 @@ fn selected_local_music_engine(configuration: &StudioConfiguration) -> Option<St
 }
 
 fn validate_output_format(format: &str) -> Result<(), String> {
-    if matches!(format, "mp3" | "wav16" | "wav24" | "wav32") {
+    if matches!(format, "flac" | "mp3" | "wav32") {
         Ok(())
     } else {
-        Err("output_format must be one of: mp3, wav16, wav24, wav32".into())
+        Err("output_format must be one of: flac, mp3, wav32".into())
     }
 }
 
@@ -7951,17 +7950,14 @@ fn validate_semantic_tokens(tokens: &str) -> Result<(), String> {
 /// The bitrate a track is encoded at when the request names none.
 const DEFAULT_MP3_KBPS: u32 = 320;
 /// Samples per million allowed to clip when the level is set, as the engines do.
-const DEFAULT_PEAK_CLIP: u32 = 10;
 
 /// Whether the studio makes this track's MP3 itself; the engine's own default
 /// output is MP3, so a request naming no format counts.
-fn studio_encodes_mp3(settings: &Value) -> bool {
-    settings.get("output_format").and_then(Value::as_str).is_none_or(|format| format == "mp3")
+/// The format a track is kept in: what was asked for, else lossless FLAC.
+fn output_format(settings: &Value) -> &str {
+    settings.get("output_format").and_then(Value::as_str).unwrap_or("flac")
 }
 
-/// What the engine is asked for. An MP3 is made by the studio with LAME from
-/// the engine's unencoded 32-bit float output - the model's own rate and
-/// precision - so no track is ever encoded twice or by an engine's own encoder.
 /// A seed for a request that leaves it to chance, drawn here as a 32-bit
 /// number: the engine's own draw is 64-bit, more than the page's JavaScript
 /// numbers hold exactly, so a song made from it could not be made again.
@@ -7969,16 +7965,27 @@ fn drawn_seed() -> i64 {
     i64::from(uuid::Uuid::now_v7().as_u128() as u32)
 }
 
+/// What the engine is asked for: always its unencoded 32-bit float output, the
+/// model's own rate, precision and level, so a track is encoded once, here, and
+/// nothing changes its loudness on the way.
 fn engine_submission(body: &Value) -> Value {
     let mut engine = body.clone();
     if let Some(fields) = engine.as_object_mut() { fields.remove("vocals_only"); fields.remove("score_edit"); }
-    if studio_encodes_mp3(body) {
-        if let Some(fields) = engine.as_object_mut() {
-            fields.insert("output_format".into(), Value::from("wav32"));
-            fields.remove("mp3_bitrate");
-        }
+    if let Some(fields) = engine.as_object_mut() {
+        fields.insert("output_format".into(), Value::from("wav32"));
+        fields.remove("mp3_bitrate");
+        fields.remove("peak_clip");
     }
     engine
+}
+
+/// The decoder companion's strength when the request leaves it unsaid: the
+/// checkpoint alone, as the model's authors and every other frontend render
+/// it, except under a LoRA of the studio's own trainer, which was trained over
+/// the companion and sounds as trained only with it.
+fn companion_default(adapters: &adapters::AdapterLibrary, request: &CreateMusicJobRequest) -> f64 {
+    let over_companion = request.adapters.iter().any(|adapter| adapter.scales.values().any(|scale| *scale != 0.0) && adapters.trained_over_companion(&adapter.id));
+    if over_companion { 1.0 } else { 0.0 }
 }
 
 /// The style a request's LoRA was trained to hear: an adapter whose weights say
@@ -8031,9 +8038,6 @@ fn yue_request_from(request: &CreateMusicJobRequest, max_batch: u32) -> Result<V
     if request.companion_scale.is_some_and(|value| !(0.0..=1.0).contains(&value)) {
         return Err("companion_scale must be between 0 and 1".into());
     }
-    if request.peak_clip.is_some_and(|value| value < 0) {
-        return Err("peak_clip cannot be negative".into());
-    }
     if let Some(format) = request.output_format.as_deref() {
         validate_output_format(format)?;
     }
@@ -8048,9 +8052,6 @@ fn yue_request_from(request: &CreateMusicJobRequest, max_batch: u32) -> Result<V
         "lyrics": request.lyrics.replace("\r\n", "\n"),
     });
     if request.vocals_only {
-        if request.output_format.as_deref().is_some_and(|format| !matches!(format, "mp3" | "wav32")) {
-            return Err("vocals_only output_format must be mp3 or wav32".into());
-        }
         body["vocals_only"] = Value::Bool(true);
     }
     let step = request.transpose.unwrap_or(0);
@@ -8081,7 +8082,6 @@ fn yue_request_from(request: &CreateMusicJobRequest, max_batch: u32) -> Result<V
     insert_optional(&mut body, "cfg_scale", request.cfg_scale.filter(|value| *value >= 0.0));
     insert_optional(&mut body, "companion_scale", request.companion_scale);
     insert_optional(&mut body, "semantic_tokens", semantic_tokens);
-    insert_optional(&mut body, "peak_clip", request.peak_clip);
     insert_optional(&mut body, "output_format", request.output_format.clone());
     insert_optional(&mut body, "mp3_bitrate", request.mp3_bitrate);
     for (key, preset) in [("abc_sampling", &request.abc_sampling), ("semantic_sampling", &request.semantic_sampling)] {
@@ -8424,12 +8424,10 @@ mod tests {
 
     #[test]
     fn vocals_only_is_studio_processing_and_never_an_engine_flag() {
-        let request = CreateMusicJobRequest { vocals_only: true, output_format: Some("wav32".into()), ..sample_request() };
+        let request = CreateMusicJobRequest { vocals_only: true, output_format: Some("flac".into()), ..sample_request() };
         let body = yue_request_from(&request, 1).unwrap();
         assert_eq!(body["vocals_only"], true);
         assert!(engine_submission(&body).get("vocals_only").is_none());
-        let unsupported = CreateMusicJobRequest { output_format: Some("wav24".into()), ..request };
-        assert!(yue_request_from(&unsupported, 1).unwrap_err().contains("vocals_only"));
     }
 
     #[test]
@@ -8461,14 +8459,13 @@ mod tests {
     }
 
     #[test]
-    fn the_engine_is_asked_for_float_when_the_studio_makes_the_mp3() {
+    fn the_engine_is_always_asked_for_its_float_output() {
         let mp3 = serde_json::json!({ "style": "x", "output_format": "mp3", "mp3_bitrate": 320 });
         let sent = engine_submission(&mp3);
         assert_eq!(sent["output_format"], "wav32");
         assert!(sent.get("mp3_bitrate").is_none());
         assert_eq!(engine_submission(&serde_json::json!({ "style": "x" }))["output_format"], "wav32");
-        let wav = serde_json::json!({ "style": "x", "output_format": "wav24" });
-        assert_eq!(engine_submission(&wav), wav);
+        assert_eq!(engine_submission(&serde_json::json!({ "style": "x", "output_format": "wav24", "peak_clip": 10 })), serde_json::json!({ "style": "x", "output_format": "wav32" }));
     }
 
     #[test]
@@ -8519,9 +8516,8 @@ mod tests {
             synth_batch_size: Some(3),
             cfg_scale: Some(1.2),
             companion_scale: Some(0.0),
-            output_format: Some("wav24".into()),
+            output_format: Some("flac".into()),
             mp3_bitrate: Some(320),
-            peak_clip: Some(0),
             abc_sampling: Some(SamplingPreset { temperature: Some(0.8), ..SamplingPreset::default() }),
             semantic_sampling: Some(SamplingPreset::default()),
             ..sample_request()
@@ -8538,8 +8534,7 @@ mod tests {
         assert_eq!(body["synth_batch_size"], 3);
         assert_eq!(body["cfg_scale"], 1.2);
         assert_eq!(body["companion_scale"], 0.0);
-        assert_eq!(body["output_format"], "wav24");
-        assert_eq!(body["peak_clip"], 0);
+        assert_eq!(body["output_format"], "flac");
         assert_eq!(body["abc_sampling"], serde_json::json!({ "temperature": 0.8 }));
         assert!(body.get("semantic_sampling").is_none(), "an empty preset is the checkpoint preset");
     }
@@ -8596,7 +8591,7 @@ mod tests {
             (CreateMusicJobRequest { client_ref: None, cot: Some("half".into()), ..sample_request() }, "cot"),
             (CreateMusicJobRequest { client_ref: None, lm_batch_size: Some(2), ..sample_request() }, "lm_batch_size"),
             (CreateMusicJobRequest { client_ref: None, synth_batch_size: Some(10), ..sample_request() }, "synth_batch_size"),
-            (CreateMusicJobRequest { client_ref: None, output_format: Some("flac".into()), ..sample_request() }, "output_format"),
+            (CreateMusicJobRequest { client_ref: None, output_format: Some("ogg".into()), ..sample_request() }, "output_format"),
             (CreateMusicJobRequest { client_ref: None, duration_seconds: Some(700.0), ..sample_request() }, "duration"),
             (CreateMusicJobRequest { client_ref: None, semantic_tokens: Some("1,2,x".into()), ..sample_request() }, "semantic_tokens"),
             (CreateMusicJobRequest { client_ref: None, semantic_tokens: Some("1,40000".into()), ..sample_request() }, "semantic_tokens"),
@@ -8747,12 +8742,12 @@ mod tests {
     }
 
     fn replay_overrides() -> ReplayMusicJobRequest {
-        ReplayMusicJobRequest { client_ref: None, song_id: None, replay_request: None, steps: None, seed: None, synth_batch_size: None, output_format: None, peak_clip: None, mp3_bitrate: None, title: None, extend_seconds: None }
+        ReplayMusicJobRequest { client_ref: None, song_id: None, replay_request: None, steps: None, seed: None, synth_batch_size: None, output_format: None, mp3_bitrate: None, title: None, extend_seconds: None }
     }
 
     #[test]
     fn a_rerender_keeps_the_music_and_changes_only_the_acoustic_side() {
-        let request = ReplayMusicJobRequest { client_ref: None, steps: Some(48), seed: Some(9), synth_batch_size: Some(2), output_format: Some("wav24".into()), mp3_bitrate: Some(192), ..replay_overrides() };
+        let request = ReplayMusicJobRequest { client_ref: None, steps: Some(48), seed: Some(9), synth_batch_size: Some(2), output_format: Some("flac".into()), mp3_bitrate: Some(192), ..replay_overrides() };
         let replay = serde_json::json!({"style":"piano pop","lyrics":"[Verse] hi","abc":"X:1\nK:C\n","semantic_tokens":"1,2,3","lm_seed":123,"seed":1,"steps":32,"cot":"full"});
         let prepared = prepare_replay_synthesis(replay, &request).unwrap();
         assert_eq!(prepared["semantic_tokens"], "1,2,3");
@@ -8761,7 +8756,7 @@ mod tests {
         assert_eq!(prepared["steps"], 48);
         assert_eq!(prepared["seed"], 9);
         assert_eq!(prepared["synth_batch_size"], 2);
-        assert_eq!(prepared["output_format"], "wav24");
+        assert_eq!(prepared["output_format"], "flac");
         assert_eq!(prepared["mp3_bitrate"], 192);
         assert_eq!(prepared["lm_batch_size"], 1);
     }

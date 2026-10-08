@@ -310,14 +310,14 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
   const [takeChoiceOpen, setTakeChoiceOpen] = useState(false);
   const [abcSampling, setAbcSampling] = useState<SamplingText>(emptySampling);
   const [semanticSampling, setSemanticSampling] = useState<SamplingText>(emptySampling);
-  const [peakClip, setPeakClip] = useState('');
   const [transpose, setTranspose] = useState('0');
   const [vocalsOnly, setVocalsOnly] = useState(false);
   const [lyricTiming, setLyricTiming] = useState(true);
-  const [realaudio, setRealaudio] = useState(true);
+  // the decoder companion: auto leaves it to the service (on only under a LoRA trained in the studio)
+  const [realaudio, setRealaudio] = useState<'auto' | 'on' | 'off'>('auto');
   // The engine default of 128 kbps throws away what the VAE produced.
   const [mp3Bitrate, setMp3Bitrate] = useState('320');
-  const [format, setFormat] = useState<YueOutputFormat>('mp3');
+  const [format, setFormat] = useState<YueOutputFormat>('flac');
 
   const setupQuery = useSetupStatus<SetupStatus>();
   const setup = setupQuery.isError ? null : setupQuery.data ?? null;
@@ -458,13 +458,12 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
     setSemanticTokens(typeof request.semantic_tokens === 'string' ? request.semantic_tokens : '');
     setAbcSampling(samplingText(request.abc_sampling));
     setSemanticSampling(samplingText(request.semantic_sampling));
-    setPeakClip(asText(request.peak_clip));
     setTranspose(asText(request.transpose) || '0');
     setVocalsOnly(request.vocals_only === true);
     setLyricTiming(request.lyric_timing !== false);
-    setRealaudio(request.companion_scale !== 0);
+    setRealaudio(request.companion_scale === undefined ? 'auto' : request.companion_scale === 0 ? 'off' : 'on');
     if (request.mp3_bitrate !== undefined) setMp3Bitrate(asText(request.mp3_bitrate));
-    if (typeof request.output_format === 'string') setFormat(request.output_format as YueOutputFormat);
+    if (request.output_format === 'mp3' || request.output_format === 'flac') setFormat(request.output_format);
     if (Array.isArray(request.adapters)) setAdapters(usesFromSettings(request));
     setError(null);
   }, []);
@@ -541,8 +540,8 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
     chooseDuration(String(DEFAULT_DURATION_SECONDS)); setLmBatch(''); setSynthBatch(''); setSteps(''); setCfgScale('');
     setRandomizeSeed(true); setLmSeed(''); setSeed(''); setSemanticTokens('');
     setAbcSampling(emptySampling()); setSemanticSampling(emptySampling());
-    setPeakClip(''); setMp3Bitrate('320'); setFormat('mp3');
-    setTranspose('0'); setVocalsOnly(false); setLyricTiming(true); setRealaudio(true);
+    setMp3Bitrate('320'); setFormat('flac');
+    setTranspose('0'); setVocalsOnly(false); setLyricTiming(true); setRealaudio('auto');
   };
 
   const loadExample = (id?: string) => {
@@ -562,11 +561,8 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
     if (abc.trim() && effectiveCot !== 'off') request.abc = abc.trim();
     if (abc.trim() && effectiveCot !== 'off' && !semanticTokens.trim() && Number(transpose) !== 0) request.transpose = Number(transpose);
     if (abc.trim() && effectiveCot !== 'off' && !lyricTiming) request.lyric_timing = false;
-    if (!realaudio) request.companion_scale = 0;
-    if (vocalsOnly) {
-      request.vocals_only = true;
-      if (format !== 'mp3') request.output_format = 'wav32';
-    }
+    if (realaudio !== 'auto') request.companion_scale = realaudio === 'on' ? 1 : 0;
+    if (vocalsOnly) request.vocals_only = true;
     if (cot) request.cot = cot;
     const durationValue = numberOrUndefined(duration);
     if (durationValue !== undefined) request.duration_seconds = Math.min(Math.max(durationValue, 1), MAX_DURATION_SECONDS);
@@ -593,8 +589,6 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
     if (abcPreset) request.abc_sampling = abcPreset;
     const semanticPreset = samplingFrom(semanticSampling);
     if (semanticPreset) request.semantic_sampling = semanticPreset;
-    const peakValue = numberOrUndefined(peakClip);
-    if (peakValue !== undefined) request.peak_clip = peakValue;
     const bitrate = numberOrUndefined(mp3Bitrate);
     if (bitrate !== undefined && format === 'mp3') request.mp3_bitrate = bitrate;
     if (name.trim()) request.title = name.trim();
@@ -915,11 +909,10 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
     cover_prompt: [coverPrompt, setCoverPrompt],
     output_format: [format, (value) => setFormat(value as YueOutputFormat)],
     mp3_bitrate: [mp3Bitrate, setMp3Bitrate],
-    peak_clip: [peakClip, setPeakClip],
     transpose: [transpose, setTranspose],
     vocals_only: [vocalsOnly, value => setVocalsOnly(value === 'true')],
     lyric_timing: [lyricTiming, value => setLyricTiming(value !== 'false')],
-    companion_scale: [realaudio ? '1' : '0', value => setRealaudio(Number(value) !== 0)],
+    companion_scale: [realaudio === 'auto' ? '' : realaudio === 'on' ? '1' : '0', value => setRealaudio(value === '' ? 'auto' : Number(value) !== 0 ? 'on' : 'off')],
   };
   useBridgeCommand('create_get', () => ({
     mode,
@@ -932,7 +925,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
   useBridgeCommand('create_set', (args) => {
     const fields = (args.fields && typeof args.fields === 'object' ? args.fields : args) as Record<string, unknown>;
     // every field is checked before any changes, so a refused call leaves the form as it was
-    const choices: Record<string, string[]> = { mode: ['studio', 'simple', 'cover'], cot: ['full', 'melody', 'off', ''], output_format: ['mp3', 'wav16', 'wav24', 'wav32'] };
+    const choices: Record<string, string[]> = { mode: ['studio', 'simple', 'cover'], cot: ['full', 'melody', 'off', ''], output_format: ['flac', 'mp3'] };
     const unknown = Object.keys(fields).filter(key => !formFields[key] && !['mode', 'randomize_seed', 'adapters'].includes(key));
     if (unknown.length) throw new Error(`Unknown fields: ${unknown.join(', ')}. The form has: ${[...Object.keys(formFields), 'mode', 'randomize_seed', 'adapters'].join(', ')}.`);
     for (const [key, allowed] of Object.entries(choices)) {
@@ -1541,17 +1534,16 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
 
                 <div className="border-t border-zinc-100 pt-4 dark:border-white/5">
                   <Stage title={t('stageOutput')} hint={t('stageOutputHint')}>
-                    <div className="mb-3"><Switch checked={realaudio} onChange={setRealaudio} label={engineParityLabels[language].realaudio} hint={engineParityLabels[language].realaudioHint} /></div>
-                    <div className="mb-3"><Switch checked={vocalsOnly} onChange={enabled => { setVocalsOnly(enabled); if (enabled && format !== 'mp3') setFormat('wav32'); }} label={engineParityLabels[language].vocals} hint={engineParityLabels[language].vocalsHint} /></div>
-                    <SliderRow
-                      label={t('peakClipLabel')}
-                      value={peakClip}
-                      fallback={Number(defaults.peak_clip ?? 10)}
-                      min={0}
-                      max={30}
-                      step={1}
-                      onChange={setPeakClip}
-                    />
+                    <div className="mb-3">
+                      <Field label={engineParityLabels[language].realaudio} hint={engineParityLabels[language].realaudioHint}>
+                        <select value={realaudio} onChange={event => setRealaudio(event.target.value as 'auto' | 'on' | 'off')} className={CONTROL}>
+                          <option value="auto">{engineParityLabels[language].realaudioAuto}</option>
+                          <option value="on">{engineParityLabels[language].realaudioOn}</option>
+                          <option value="off">{engineParityLabels[language].realaudioOff}</option>
+                        </select>
+                      </Field>
+                    </div>
+                    <div className="mb-3"><Switch checked={vocalsOnly} onChange={setVocalsOnly} label={engineParityLabels[language].vocals} hint={engineParityLabels[language].vocalsHint} /></div>
                     <div className="mt-3 grid grid-cols-2 gap-2">
                       <Field label={t('mp3Bitrate')}>
                         <select value={mp3Bitrate || String(defaults.mp3_bitrate ?? 128)} onChange={event => setMp3Bitrate(event.target.value)} disabled={format !== 'mp3'} className={CONTROL}>
@@ -1560,14 +1552,12 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
                       </Field>
                       <Field label={t('outputFormat')}>
                         <select value={format} onChange={event => setFormat(event.target.value as YueOutputFormat)} className={CONTROL}>
+                          <option value="flac">FLAC</option>
                           <option value="mp3">MP3</option>
-                          <option value="wav16" disabled={vocalsOnly}>WAV 16-bit</option>
-                          <option value="wav24" disabled={vocalsOnly}>WAV 24-bit</option>
-                          <option value="wav32">WAV 32-bit float</option>
                         </select>
                       </Field>
                     </div>
-                    <p className="mt-2 text-[11px] leading-4 text-zinc-500">{t('peakClipHint')}</p>
+                    <p className="mt-2 text-[11px] leading-4 text-zinc-500">{t('outputRawHint')}</p>
                   </Stage>
                 </div>
               </div>

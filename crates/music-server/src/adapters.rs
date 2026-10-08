@@ -538,6 +538,13 @@ impl AdapterLibrary {
         self.read_meta(id).and_then(|meta| meta.trigger).filter(|trigger| !trigger.trim().is_empty())
     }
 
+    /// Whether the adapter came out of the studio's own trainer, which keeps
+    /// the decoder companion frozen under every LoRA it trains: such a LoRA
+    /// sounds as trained only over the companion.
+    pub fn trained_over_companion(&self, id: &str) -> bool {
+        self.read_meta(id).is_some_and(|meta| matches!(meta.origin, Origin::Trained { .. }))
+    }
+
     /// Whether the adapter was trained with its trigger inside HOT-Step's style
     /// sentence, as its weights record (`style_template: upstream`).
     pub fn trained_in_sentence(&self, id: &str) -> bool {
