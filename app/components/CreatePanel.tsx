@@ -314,6 +314,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
   const [transpose, setTranspose] = useState('0');
   const [vocalsOnly, setVocalsOnly] = useState(false);
   const [lyricTiming, setLyricTiming] = useState(true);
+  const [realaudio, setRealaudio] = useState(true);
   // The engine default of 128 kbps throws away what the VAE produced.
   const [mp3Bitrate, setMp3Bitrate] = useState('320');
   const [format, setFormat] = useState<YueOutputFormat>('mp3');
@@ -461,6 +462,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
     setTranspose(asText(request.transpose) || '0');
     setVocalsOnly(request.vocals_only === true);
     setLyricTiming(request.lyric_timing !== false);
+    setRealaudio(request.companion_scale !== 0);
     if (request.mp3_bitrate !== undefined) setMp3Bitrate(asText(request.mp3_bitrate));
     if (typeof request.output_format === 'string') setFormat(request.output_format as YueOutputFormat);
     if (Array.isArray(request.adapters)) setAdapters(usesFromSettings(request));
@@ -540,7 +542,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
     setRandomizeSeed(true); setLmSeed(''); setSeed(''); setSemanticTokens('');
     setAbcSampling(emptySampling()); setSemanticSampling(emptySampling());
     setPeakClip(''); setMp3Bitrate('320'); setFormat('mp3');
-    setTranspose('0'); setVocalsOnly(false); setLyricTiming(true);
+    setTranspose('0'); setVocalsOnly(false); setLyricTiming(true); setRealaudio(true);
   };
 
   const loadExample = (id?: string) => {
@@ -560,6 +562,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
     if (abc.trim() && effectiveCot !== 'off') request.abc = abc.trim();
     if (abc.trim() && effectiveCot !== 'off' && !semanticTokens.trim() && Number(transpose) !== 0) request.transpose = Number(transpose);
     if (abc.trim() && effectiveCot !== 'off' && !lyricTiming) request.lyric_timing = false;
+    if (!realaudio) request.companion_scale = 0;
     if (vocalsOnly) {
       request.vocals_only = true;
       if (format !== 'mp3') request.output_format = 'wav32';
@@ -916,6 +919,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
     transpose: [transpose, setTranspose],
     vocals_only: [vocalsOnly, value => setVocalsOnly(value === 'true')],
     lyric_timing: [lyricTiming, value => setLyricTiming(value !== 'false')],
+    companion_scale: [realaudio ? '1' : '0', value => setRealaudio(Number(value) !== 0)],
   };
   useBridgeCommand('create_get', () => ({
     mode,
@@ -1537,6 +1541,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
 
                 <div className="border-t border-zinc-100 pt-4 dark:border-white/5">
                   <Stage title={t('stageOutput')} hint={t('stageOutputHint')}>
+                    <div className="mb-3"><Switch checked={realaudio} onChange={setRealaudio} label={engineParityLabels[language].realaudio} hint={engineParityLabels[language].realaudioHint} /></div>
                     <div className="mb-3"><Switch checked={vocalsOnly} onChange={enabled => { setVocalsOnly(enabled); if (enabled && format !== 'mp3') setFormat('wav32'); }} label={engineParityLabels[language].vocals} hint={engineParityLabels[language].vocalsHint} /></div>
                     <SliderRow
                       label={t('peakClipLabel')}

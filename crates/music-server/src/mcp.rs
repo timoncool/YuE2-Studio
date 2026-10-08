@@ -1078,7 +1078,7 @@ fn tools() -> &'static [Tool] {
             },
             Tool {
                 name: "create_form_set",
-                description: "Fill the create page's form in the window, as if typed - the user sees every field change; fields not given stay. fields: title, style, lyrics, abc, cot (full|melody|off), duration_seconds, lm_batch_size, synth_batch_size, steps, cfg_scale, lm_seed, seed, randomize_seed, cover_prompt, output_format, mp3_bitrate, peak_clip, adapters, mode (studio|simple|cover). Use it when the user wants to see and adjust the song before it is made; song_create makes one directly.",
+                description: "Fill the create page's form in the window, as if typed - the user sees every field change; fields not given stay. fields: title, style, lyrics, abc, cot (full|melody|off), duration_seconds, lm_batch_size, synth_batch_size, steps, cfg_scale, companion_scale, lm_seed, seed, randomize_seed, cover_prompt, output_format, mp3_bitrate, peak_clip, adapters, mode (studio|simple|cover). Use it when the user wants to see and adjust the song before it is made; song_create makes one directly.",
                 schema: || object(json!({ "fields": { "type": "object", "description": "field -> value" } }), &["fields"]),
                 call: |args| window("create_set", args, 15),
             },
@@ -1367,6 +1367,7 @@ fn tools() -> &'static [Tool] {
                     "lm_seed": { "type": "integer" },
                     "steps": { "type": "integer" },
                     "cfg_scale": { "type": "number" },
+                    "companion_scale": { "type": "number", "minimum": 0, "maximum": 1, "description": "strength of the realaudio decoder adapter under the song, 1 by default; 0 is the sound of the YuE2 checkpoint alone, as audio.cpp and ComfyUI render it" },
                     "lm_batch_size": { "type": "integer", "description": "compositions written from the request (1 by default)" },
                     "synth_batch_size": { "type": "integer", "description": "performances rendered of each composition (1 by default)" },
                     "semantic_tokens": { "type": "string", "description": "audio codes of a song already sung (library_song_get audio_codes): renders that take again" },

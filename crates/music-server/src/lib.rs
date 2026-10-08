@@ -241,6 +241,8 @@ struct CreateMusicJobRequest {
     lm_batch_size: Option<u32>,
     synth_batch_size: Option<u32>,
     cfg_scale: Option<f64>,
+    /// Strength of the engine's realaudio decoder companion; 0 decodes with the checkpoint alone.
+    companion_scale: Option<f64>,
     /// Comma-separated semantic codes; present means the AR stage is skipped.
     semantic_tokens: Option<String>,
     abc_sampling: Option<SamplingPreset>,
@@ -7996,6 +7998,9 @@ fn yue_request_from(request: &CreateMusicJobRequest, max_batch: u32) -> Result<V
     if request.cfg_scale.is_some_and(|value| !value.is_finite() || value > 10.0) {
         return Err("cfg_scale must be a finite number up to 10".into());
     }
+    if request.companion_scale.is_some_and(|value| !(0.0..=1.0).contains(&value)) {
+        return Err("companion_scale must be between 0 and 1".into());
+    }
     if request.peak_clip.is_some_and(|value| value < 0) {
         return Err("peak_clip cannot be negative".into());
     }
@@ -8044,6 +8049,7 @@ fn yue_request_from(request: &CreateMusicJobRequest, max_batch: u32) -> Result<V
     insert_optional(&mut body, "lm_batch_size", request.lm_batch_size);
     insert_optional(&mut body, "synth_batch_size", request.synth_batch_size);
     insert_optional(&mut body, "cfg_scale", request.cfg_scale.filter(|value| *value >= 0.0));
+    insert_optional(&mut body, "companion_scale", request.companion_scale);
     insert_optional(&mut body, "semantic_tokens", semantic_tokens);
     insert_optional(&mut body, "peak_clip", request.peak_clip);
     insert_optional(&mut body, "output_format", request.output_format.clone());
@@ -8482,6 +8488,7 @@ mod tests {
             lm_batch_size: Some(2),
             synth_batch_size: Some(3),
             cfg_scale: Some(1.2),
+            companion_scale: Some(0.0),
             output_format: Some("wav24".into()),
             mp3_bitrate: Some(320),
             peak_clip: Some(0),
@@ -8500,6 +8507,7 @@ mod tests {
         assert_eq!(body["lm_batch_size"], 2);
         assert_eq!(body["synth_batch_size"], 3);
         assert_eq!(body["cfg_scale"], 1.2);
+        assert_eq!(body["companion_scale"], 0.0);
         assert_eq!(body["output_format"], "wav24");
         assert_eq!(body["peak_clip"], 0);
         assert_eq!(body["abc_sampling"], serde_json::json!({ "temperature": 0.8 }));

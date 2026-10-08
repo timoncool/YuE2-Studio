@@ -131,6 +131,8 @@ export interface YueRequest {
   lm_batch_size?: number;
   synth_batch_size?: number;
   cfg_scale?: number;
+  /** Strength of the realaudio decoder companion; 0 decodes with the checkpoint alone. */
+  companion_scale?: number;
   semantic_tokens?: string;
   abc_sampling?: YueSampling;
   semantic_sampling?: YueSampling;
