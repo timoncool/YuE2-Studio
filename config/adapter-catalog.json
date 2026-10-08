@@ -412,6 +412,105 @@
       ]
     },
     {
+      "id": "yue2-raspy-rock-soul",
+      "engine": "yue2-cpp",
+      "kind": "style",
+      "author": "becausereasons",
+      "page": "https://huggingface.co/becausereasons/yue2-grvl-raspy-rock-soul",
+      "trigger": "grvl",
+      "name": {
+        "en": "Raspy rock-soul",
+        "ru": "Хриплый рок-соул",
+        "zh": "沙哑摇滚灵魂乐",
+        "ja": "ハスキー・ロックソウル",
+        "ko": "허스키 록 소울"
+      },
+      "description": {
+        "en": "A raspy, gravelly female powerhouse: cool half-spoken verses that climb into belted choruses, from 1960s rhythm and blues to arena soul-rock. English lyrics. Start the style with grvl; score mode full.",
+        "ru": "Хриплый мощный женский голос: прохладные полуговорные куплеты, переходящие в припевы на крике, от ритм-энд-блюза 1960-х до стадионного соул-рока. Английский текст. Начните стиль с grvl; партитура — полная.",
+        "zh": "沙哑有力的女声：冷静的半念白主歌攀升到高亢的副歌，从 1960 年代节奏布鲁斯到体育场灵魂摇滚。英文歌词。风格以 grvl 开头；乐谱模式 full。",
+        "ja": "ハスキーで力強い女性ボーカル：クールな語りに近いヴァースからベルトで歌うサビへ、1960年代R&Bからアリーナ・ソウルロックまで。英語の歌詞。スタイルは grvl で始め、スコアは full。",
+        "ko": "허스키하고 힘 있는 여성 보컬: 차분한 반쯤 말하는 벌스에서 벨팅 후렴으로, 1960년대 리듬 앤 블루스부터 아레나 소울 록까지. 영어 가사. 스타일을 grvl로 시작하고 악보 모드는 full."
+      },
+      "scales": {
+        "ar": 1,
+        "nar": 1
+      },
+      "files": [
+        {
+          "url": "https://huggingface.co/becausereasons/yue2-grvl-raspy-rock-soul/resolve/4fec3b8491bf217d9320b509c3933d5963dae5a3/grvl_thunder.safetensors",
+          "file": "grvl_thunder.safetensors",
+          "bytes": 117500808
+        }
+      ]
+    },
+    {
+      "id": "yue2-quiet-storm",
+      "engine": "yue2-cpp",
+      "kind": "style",
+      "author": "becausereasons",
+      "page": "https://huggingface.co/becausereasons/yue2-qtstrm-quiet-storm",
+      "trigger": "qtstrm",
+      "name": {
+        "en": "Quiet storm R&B",
+        "ru": "Квайет-сторм R&B",
+        "zh": "Quiet storm R&B",
+        "ja": "クワイエット・ストーム R&B",
+        "ko": "콰이어트 스톰 R&B"
+      },
+      "description": {
+        "en": "Late-night 1980s and 1990s quiet storm: a sweet, sultry female lead over deep bass, electric piano, pads and slow drum machines, with tenor sax on the sophisti-pop side. Start the style with qtstrm and name the voice: smoky contralto, breathy soprano, husky contralto or soulful mezzo.",
+        "ru": "Ночной квайет-сторм 1980–1990-х: нежный чувственный женский голос, глубокий бас, электропиано, пэды и медленная драм-машина, на софисти-поп стороне — тенор-саксофон. Начните стиль с qtstrm и назовите голос: smoky contralto, breathy soprano, husky contralto или soulful mezzo.",
+        "zh": "1980–1990 年代的深夜 quiet storm：甜美性感的女主唱，深沉贝斯、电钢琴、铺底合成器和慢速鼓机，sophisti-pop 一侧有次中音萨克斯。风格以 qtstrm 开头并写明嗓音：smoky contralto、breathy soprano、husky contralto 或 soulful mezzo。",
+        "ja": "1980〜90年代の深夜のクワイエット・ストーム：甘く官能的な女性リードに深いベース、エレピ、パッド、スローなドラムマシン、ソフィスティ・ポップ寄りではテナーサックス。スタイルは qtstrm で始め、声を指定します：smoky contralto、breathy soprano、husky contralto、soulful mezzo。",
+        "ko": "1980~90년대 심야 콰이어트 스톰: 달콤하고 관능적인 여성 리드에 깊은 베이스, 일렉트릭 피아노, 패드, 느린 드럼 머신, 소피스티 팝 쪽은 테너 색소폰. 스타일을 qtstrm으로 시작하고 목소리를 지정하세요: smoky contralto, breathy soprano, husky contralto, soulful mezzo."
+      },
+      "scales": {
+        "ar": 1,
+        "nar": 1
+      },
+      "files": [
+        {
+          "url": "https://huggingface.co/becausereasons/yue2-qtstrm-quiet-storm/resolve/7f8ac94880f5942e358956eb270cb925638685da/qtstrm_midnight.safetensors",
+          "file": "qtstrm_midnight.safetensors",
+          "bytes": 117500808
+        }
+      ]
+    },
+    {
+      "id": "yue2-dark-sufi",
+      "engine": "yue2-cpp",
+      "kind": "style",
+      "author": "becausereasons",
+      "page": "https://huggingface.co/becausereasons/yue2-qwwl-qawwali-sufi-tabla",
+      "trigger": "drksf",
+      "name": {
+        "en": "Dark Sufi fusion",
+        "ru": "Тёмный суфийский фьюжн",
+        "zh": "暗黑苏菲融合",
+        "ja": "ダーク・スーフィー・フュージョン",
+        "ko": "다크 수피 퓨전"
+      },
+      "description": {
+        "en": "A qawwali voice in dark studio production: long aching held notes and sargam runs over ambient guitar, synth textures, deep bass and slow heavy beats. Start the style with drksf; works best with the score off and syllable lyrics (Aaa, Sa re ga ma).",
+        "ru": "Голос каввали в тёмной студийной обработке: долгие тянущиеся ноты и пассажи саргам поверх эмбиент-гитары, синтезаторных текстур, глубокого баса и медленного тяжёлого бита. Начните стиль с drksf; лучше всего без партитуры и со слоговым текстом (Aaa, Sa re ga ma).",
+        "zh": "暗黑录音室制作中的卡瓦利嗓音：悠长的延音和 sargam 快速音阶，配以氛围吉他、合成器质感、深沉贝斯和缓慢厚重的节拍。风格以 drksf 开头；关闭乐谱并使用音节歌词（Aaa、Sa re ga ma）效果最好。",
+        "ja": "ダークなスタジオ制作のカッワーリーの声：アンビエント・ギター、シンセのテクスチャ、深いベース、遅く重いビートの上で長く伸ばす音とサルガムの連なり。スタイルは drksf で始め、スコアはオフ、音節の歌詞（Aaa、Sa re ga ma）で最も良く鳴ります。",
+        "ko": "다크한 스튜디오 프로덕션의 카왈리 보컬: 앰비언트 기타, 신스 텍스처, 깊은 베이스, 느리고 무거운 비트 위로 길게 끄는 음과 사르감 패시지. 스타일을 drksf로 시작하고, 악보 끄기와 음절 가사(Aaa, Sa re ga ma)가 가장 잘 어울립니다."
+      },
+      "scales": {
+        "ar": 1,
+        "nar": 1
+      },
+      "files": [
+        {
+          "url": "https://huggingface.co/becausereasons/yue2-qwwl-qawwali-sufi-tabla/resolve/2f91d3ebff149b3661535c823e978d815097ca84/drksf_midnight.safetensors",
+          "file": "drksf_midnight.safetensors",
+          "bytes": 177279760
+        }
+      ]
+    },
+    {
       "id": "yue2-melodic-death-metal",
       "engine": "yue2-cpp",
       "kind": "style",
