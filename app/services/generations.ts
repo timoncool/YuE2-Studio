@@ -73,8 +73,13 @@ async function stopJob(jobId: string): Promise<void> {
 
 /** Removes a stopped or failed job for good; a job still running is left (409). */
 async function removeEnded(jobId: string): Promise<void> {
-  await fetch(`/v1/music/jobs/${encodeURIComponent(jobId)}`, { method: 'DELETE' }).catch(() => undefined);
-  void queryClient.invalidateQueries({ queryKey: endedJobsKey });
+  try {
+    const response = await fetch(`/v1/music/jobs/${encodeURIComponent(jobId)}`, { method: 'DELETE' });
+    // 404: the service no longer has it, which is what removing asked for
+    if (!response.ok && response.status !== 404) throw new Error(`The song could not be removed: HTTP ${response.status}`);
+  } finally {
+    void queryClient.invalidateQueries({ queryKey: endedJobsKey });
+  }
 }
 
 export function useGenerations({ enabled, notify, onFinished }: GenerationOptions) {
@@ -305,7 +310,7 @@ export function useGenerations({ enabled, notify, onFinished }: GenerationOption
   /** Drops a cancelled card, stopping its job if it still runs. */
   const reset = useCallback(async (key: string) => {
     if (key.startsWith(ENDED_PREFIX)) {
-      await removeEnded(key.slice(ENDED_PREFIX.length));
+      await removeEnded(key.slice(ENDED_PREFIX.length)).catch(error => notify(error instanceof Error ? error.message : String(error), 'error'));
       return;
     }
     const target = cardsNow.current.find(entry => entry.jobId === key || entry.id === key);
@@ -319,7 +324,7 @@ export function useGenerations({ enabled, notify, onFinished }: GenerationOption
         notify(error instanceof Error ? error.message : String(error), 'error');
       }
     }
-    if (target.jobId) await removeEnded(target.jobId);
+    if (target.jobId) await removeEnded(target.jobId).catch(error => notify(error instanceof Error ? error.message : String(error), 'error'));
   }, [remove, notify]);
 
   /**

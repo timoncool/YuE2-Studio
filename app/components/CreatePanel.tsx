@@ -1509,7 +1509,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
                       disabled={!abc.trim() || effectiveCot === 'off' || Boolean(semanticTokens.trim())} onChange={setTranspose} />
                     <p className="mt-1 text-[11px] leading-4 text-zinc-500">{engineParityLabels[language].transposeHint}</p>
                   </div>
-                  <div className="mb-3"><Switch checked={lyricTiming} disabled={!abc.trim() || effectiveCot === 'off' || Boolean(semanticTokens.trim())} onChange={setLyricTiming} label={engineParityLabels[language].lyricTiming} hint={engineParityLabels[language].lyricTimingHint} /></div>
+                  <div className="mb-3"><Switch checked={lyricTiming} disabled={!abc.trim() || effectiveCot === 'off' || Boolean(semanticTokens.trim()) || (cfgScale.trim() !== '' && Number(cfgScale) !== 1)} onChange={setLyricTiming} label={engineParityLabels[language].lyricTiming} hint={engineParityLabels[language].lyricTimingHint} /></div>
                   <SamplingGrid value={abcSampling} defaults={defaults.abc_sampling} onChange={setAbcSampling} t={t as never} />
                 </Stage>
 

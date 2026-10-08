@@ -153,6 +153,7 @@ impl ModelManager {
         if recover_interrupted_download(&mut state) {
             persist_state_file(&state_path, &state)?;
         }
+        remove_retired_files(&root);
         Ok(Self {
             root,
             state_path,
@@ -201,9 +202,18 @@ impl ModelManager {
             bail!("a model download is running; cancel it before removing files");
         }
         let catalog = components();
+        let mut ids: Vec<String> = component_ids.to_vec();
+        // a transcriber head goes with the MERT file of its precision, which the set lists for it
+        for head in catalog.iter().filter(|component| component.kind == "transcriber" && component_ids.iter().any(|id| id == component.id)) {
+            if let Some(base) = catalog.iter().find(|base| base.kind == "transcriber-base" && precision(base.filename) == precision(head.filename)) {
+                if !ids.iter().any(|id| id == base.id) {
+                    ids.push(base.id.to_string());
+                }
+            }
+        }
         let mut removed = Vec::new();
         let mut freed_bytes = 0u64;
-        for id in component_ids {
+        for id in &ids {
             let component = catalog
                 .iter()
                 .find(|component| component.id == *id)
@@ -348,14 +358,6 @@ impl ModelManager {
                 // from an earlier attempt, would otherwise leave the bar short
                 // of 100% on a successful install.
                 self.set_published_progress(&selection).await?;
-            }
-            if selection.components.iter().any(|component| component.kind == "transcriber") {
-                for name in RETIRED_FILES {
-                    match fs::remove_file(self.root.join(name)) {
-                        Err(error) if error.kind() != std::io::ErrorKind::NotFound => eprintln!("[ERROR] could not remove the retired transcriber {name}: {error}"),
-                        _ => {}
-                    }
-                }
             }
             Ok(())
         }
@@ -773,8 +775,27 @@ fn optional_kind(kind: &str) -> bool {
 /// Transcribers of the single-file release, read as the nearest one published now.
 const RETIRED_TRANSCRIBERS: [(&str, &str); 2] = [("transcriber-q6", "transcriber-q8"), ("transcriber-q5", "transcriber-q8")];
 
-/// Files of the single-file SheetSage2 release no transcriber reads any more.
-pub const RETIRED_FILES: [&str; 2] = ["SheetSage2-Q6_K.gguf", "SheetSage2-Q5_K_M.gguf"];
+/// Files of the single-file SheetSage2 release no transcriber reads any more,
+/// with their size where the name lives on in the current release.
+const RETIRED_FILES: [(&str, Option<u64>); 4] = [
+    ("SheetSage2-Q6_K.gguf", None),
+    ("SheetSage2-Q5_K_M.gguf", None),
+    ("SheetSage2-F32.gguf", Some(2708176640)),
+    ("SheetSage2-Q8_0.gguf", Some(957571488)),
+];
+
+/// Deletes what is left of the single-file transcriber: the engine reads none of it.
+fn remove_retired_files(root: &Path) {
+    for (name, size) in RETIRED_FILES {
+        let path = root.join(name);
+        let retired = fs::metadata(&path).is_ok_and(|meta| meta.is_file() && size.is_none_or(|bytes| meta.len() == bytes));
+        if retired {
+            if let Err(error) = fs::remove_file(&path) {
+                eprintln!("[ERROR] could not remove the retired transcriber {}: {error}", path.display());
+            }
+        }
+    }
+}
 
 /// The ggml type a GGUF file name ends in: `-Q8_0` of `MERT-v2-FullSong-Q8_0.gguf`.
 fn precision(filename: &str) -> &str {
@@ -861,6 +882,19 @@ mod tests {
         assert!(files.transcriber.is_none());
         let status = status_snapshot(root.clone(), None, Some(InstallRequest { profile_id: Some("quality-q8".into()), component_ids: vec![] }));
         assert!(status.ready && status.download_pending > 0);
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn the_single_file_transcriber_is_cleared_and_a_head_goes_with_its_mert() {
+        let root = std::env::temp_dir().join(format!("yue2-retired-{}", uuid::Uuid::now_v7()));
+        fs::create_dir_all(&root).unwrap();
+        fs::File::create(root.join("SheetSage2-Q8_0.gguf")).unwrap().set_len(957571488).unwrap();
+        fs::write(root.join("SheetSage2-Q6_K.gguf"), b"old").unwrap();
+        fs::File::create(root.join("SheetSage2-F32.gguf")).unwrap().set_len(228738176).unwrap();
+        remove_retired_files(&root);
+        assert!(!root.join("SheetSage2-Q8_0.gguf").exists() && !root.join("SheetSage2-Q6_K.gguf").exists());
+        assert!(root.join("SheetSage2-F32.gguf").exists(), "the current head keeps its name and size");
         let _ = fs::remove_dir_all(root);
     }
 
