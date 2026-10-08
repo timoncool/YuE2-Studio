@@ -4172,8 +4172,12 @@ fn engine_bundle_root() -> PathBuf {
             // In a macOS app bundle the executable is Contents/MacOS/<name> and
             // bundled resources are in Contents/Resources.
             let in_bundle = beside.ancestors().nth(3).map(|contents| contents.join("Resources").join("resources").join("yue2-cpp"));
-            match in_bundle {
-                Some(path) if cfg!(target_os = "macos") && path.is_dir() => path,
+            // A Linux package puts the executable in usr/bin and the resources
+            // in usr/lib/<product name>, the AppImage under its own usr.
+            let in_package = beside.ancestors().nth(3).map(|usr| usr.join("lib").join("YuE2 Studio").join("resources").join("yue2-cpp"));
+            match (in_bundle, in_package) {
+                (Some(path), _) if cfg!(target_os = "macos") && path.is_dir() => path,
+                (_, Some(path)) if cfg!(target_os = "linux") && !beside.is_dir() && path.is_dir() => path,
                 _ => beside,
             }
         }))
