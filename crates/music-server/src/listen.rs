@@ -115,12 +115,11 @@ pub fn hear_batch(
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::piped());
     if let Some(libraries) = libraries {
-        let mut path = std::ffi::OsString::from(libraries.as_os_str());
-        if let Some(existing) = std::env::var_os("PATH") {
-            path.push(";");
-            path.push(existing);
+        let mut paths = vec![std::path::PathBuf::from(libraries.as_os_str())];
+        paths.extend(std::env::var_os("PATH").iter().flat_map(std::env::split_paths));
+        if let Ok(path) = std::env::join_paths(paths) {
+            command.env("PATH", path);
         }
-        command.env("PATH", path);
     }
     quiet(&mut command);
     let mut child = command.spawn().with_context(|| format!("start {}", exe.display()))?;

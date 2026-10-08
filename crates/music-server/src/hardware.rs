@@ -221,7 +221,34 @@ fn display_adapter() -> Option<(String, f64)> {
     best_adapter(&query("DriverDesc")?, &query("HardwareInformation.qwMemorySize")?)
 }
 
-#[cfg(not(windows))]
+#[cfg(target_os = "macos")]
+fn display_adapter() -> Option<(String, f64)> {
+    // Apple Silicon has one GPU per machine and no separate VRAM: its memory
+    // is the system's (unified), so the whole RAM is what a model set has to
+    // share with the rest of the machine. The chip name is the only identity
+    // macOS reports for it.
+    let output = quiet("system_profiler").args(["-json", "SPDisplaysDataType"]).output().ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let text = String::from_utf8_lossy(&output.stdout).into_owned();
+    let chip = apple_chip(&text)?;
+    let ram = quiet("sysctl").args(["-n", "hw.memsize"]).output().ok().and_then(|output| {
+        std::str::from_utf8(&output.stdout).ok().and_then(|value| value.trim().parse::<u64>().ok())
+    })?;
+    Some((chip, ram as f64 / 1_000_000_000.0))
+}
+
+/// The chip name from `system_profiler -json SPDisplaysDataType`: the value of
+/// `"sppci_model" : "Apple M2 Max"`.
+#[cfg(any(target_os = "macos", test))]
+fn apple_chip(profile: &str) -> Option<String> {
+    let after_key = profile.split("\"sppci_model\"").nth(1)?;
+    let name = after_key.split('"').nth(1)?;
+    name.starts_with("Apple ").then(|| name.to_string())
+}
+
+#[cfg(not(any(windows, target_os = "macos")))]
 fn display_adapter() -> Option<(String, f64)> {
     None
 }
@@ -256,6 +283,14 @@ fn best_adapter(names: &str, sizes: &str) -> Option<(String, f64)> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn the_apple_chip_is_read_from_the_system_profiler_json() {
+        let profile = r#"{ "SPDisplaysDataType" : [ { "_name" : "Apple M2 Max", "sppci_cores" : "30", "sppci_model" : "Apple M2 Max" } ] }"#;
+        assert_eq!(super::apple_chip(profile).as_deref(), Some("Apple M2 Max"));
+        assert_eq!(super::apple_chip(r#"{ "sppci_model" : "AMD Radeon Pro" }"#), None);
+        assert_eq!(super::apple_chip("{}"), None);
+    }
+
     use super::*;
 
     #[test]

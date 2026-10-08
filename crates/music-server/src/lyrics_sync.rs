@@ -2108,7 +2108,7 @@ mod live_recognition {
 }
 
 
-#[cfg(test)]
+#[cfg(all(test, windows))]
 mod directml_live {
     use super::*;
     use std::time::Instant;

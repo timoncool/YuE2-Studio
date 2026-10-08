@@ -54,6 +54,15 @@ pub struct Asset {
     pub note: &'static str,
 }
 
+impl Asset {
+    /// A runtime that is a Windows build, by what it is downloaded from and
+    /// what marks it installed.
+    pub fn is_windows_runtime(&self) -> bool {
+        let windows_file = |name: &str| name.ends_with(".exe") || name.ends_with(".dll");
+        self.kind == AssetKind::Runtime && (self.url.to_ascii_lowercase().contains("windows") || self.url.contains("-win-") || windows_file(self.marker) || self.pick.iter().any(|name| windows_file(name)))
+    }
+}
+
 #[derive(Debug, Clone, Serialize)]
 pub struct AssetStatus {
     pub id: &'static str,
@@ -263,6 +272,7 @@ impl Downloader {
         if pending.is_empty() {
             return Ok(());
         }
+        pending.iter().try_for_each(|asset| refuse_foreign_runtime(asset))?;
 
         let total: u64 = pending.iter().map(|asset| asset.bytes).sum();
         let mut progress = self.progress.lock().await;
@@ -384,6 +394,7 @@ impl Downloader {
     /// Starts one download in the background. Only one runs at a time, and an
     /// interrupted file resumes from what is already on disk.
     pub async fn install(&self, asset: &'static Asset) -> Result<()> {
+        refuse_foreign_runtime(asset)?;
         {
             let mut progress = self.progress.lock().await;
             if progress.as_ref().is_some_and(|active| !active.done && active.error.is_none()) {
@@ -601,6 +612,15 @@ pub fn extract_zip(archive: &Path, destination: &Path) -> Result<()> {
     Ok(())
 }
 
+/// Runtimes are delivered as Windows builds (.exe, .dll, CUDA); anywhere else
+/// they cannot run, so downloading one would only end in "Permission denied".
+fn refuse_foreign_runtime(asset: &Asset) -> Result<()> {
+    if cfg!(windows) || !asset.is_windows_runtime() {
+        return Ok(());
+    }
+    bail!("{} is a Windows build and is not available on this platform yet", asset.label)
+}
+
 /// The first executable named `name` in the given flavour directories, in
 /// preference order - a GPU build before a CPU one.
 pub fn locate_binary(root: &Path, flavours: &[&str], name: &str) -> Option<PathBuf> {
@@ -649,6 +669,14 @@ mod tests {
         fs::write(downloader.path_of(&entry), vec![0u8; 64]).unwrap();
         assert!(downloader.is_installed(&entry));
         fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn windows_runtimes_are_recognised_and_models_never_are() {
+        let runtime = Asset { kind: AssetKind::Runtime, url: "https://example.com/tool-windows-x64.zip", marker: "tool.exe", ..asset() };
+        assert!(runtime.is_windows_runtime());
+        let model = Asset { kind: AssetKind::Model, url: "https://example.com/windows-model.gguf", marker: "", ..asset() };
+        assert!(!model.is_windows_runtime());
     }
 
     #[test]

@@ -1233,12 +1233,11 @@ impl Training {
                 .stderr(std::process::Stdio::piped())
                 .kill_on_drop(true);
             if let Some(libraries) = libraries {
-                let mut path = std::ffi::OsString::from(libraries.as_os_str());
-                if let Some(existing) = std::env::var_os("PATH") {
-                    path.push(";");
-                    path.push(existing);
+                let mut paths = vec![std::path::PathBuf::from(libraries.as_os_str())];
+                paths.extend(std::env::var_os("PATH").iter().flat_map(std::env::split_paths));
+                if let Ok(path) = std::env::join_paths(paths) {
+                    command.env("PATH", path);
                 }
-                command.env("PATH", path);
             }
             // The pack carries ggml's processor builds beside CUDA; without this
             // a card whose CUDA does not load would train on the processor.

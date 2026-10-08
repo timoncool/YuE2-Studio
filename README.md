@@ -493,6 +493,20 @@ never part of a release.
 yue2.cpp also builds for Linux and macOS (Metal); the studio's release pipeline ships the
 Windows build with CUDA, Vulkan and CPU backends for now.
 
+On macOS there is no packaged engine, so build it once from source (needs Xcode command line
+tools and CMake) and again whenever `engines/yue2-cpp-source.json` moves to a new commit:
+
+```bash
+scripts/build-yue-runtime.sh ~/yue2-engine          # builds the pinned commit with Metal
+YUE_ENGINE_ROOT=~/yue2-engine cargo run -p music-server
+```
+
+Audio to MIDI is Windows-only as a download; on macOS `scripts/build-midi-runtime.sh <dir>` builds HOT-Step's `ace-midi` with Metal (point `YUE_MIDI_BIN` at the resulting `music-midi`; the dmg bundles it).
+
+`YUE_ENGINE_ROOT` (or `YUE_ENGINE_BIN`, the path of `yue-server` itself) tells the studio where
+the engine is; for the desktop app set it in the environment before launching it. `Auto` then
+lets the engine choose Metal and falls back to the CPU.
+
 ## Other Projects by [@timoncool](https://github.com/timoncool)
 
 | Project | Description |

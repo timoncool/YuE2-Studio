@@ -33,6 +33,19 @@ fn source() -> &'static Source {
 /// The folder the transcriber's archive unpacks into.
 const TOOL_FOLDER: &str = "music-midi";
 
+/// The transcriber that ships inside the macOS app bundle
+/// (`Contents/Resources/resources/music-midi/music-midi`); the downloadable
+/// archive is a Windows build.
+fn bundled_tool() -> Option<PathBuf> {
+    if !cfg!(target_os = "macos") {
+        return None;
+    }
+    let executable = std::env::current_exe().ok()?;
+    let contents = executable.parent()?.parent()?;
+    let tool = contents.join("Resources").join("resources").join(TOOL_FOLDER).join(TOOL_FOLDER);
+    tool.is_file().then_some(tool)
+}
+
 /// One size of the model.
 #[derive(Debug, Clone, Copy, Serialize)]
 pub struct Size {
@@ -128,7 +141,10 @@ impl Transcriber {
 
     /// `YUE_MIDI_BIN` in a developer build, else the one the archive unpacked.
     pub fn tool(&self) -> PathBuf {
-        std::env::var_os("YUE_MIDI_BIN").map(PathBuf::from).unwrap_or_else(|| self.downloader.runtime_dir(TOOL_FOLDER).join(&source().shipped_as))
+        std::env::var_os("YUE_MIDI_BIN")
+            .map(PathBuf::from)
+            .or_else(bundled_tool)
+            .unwrap_or_else(|| self.downloader.runtime_dir(TOOL_FOLDER).join(&source().shipped_as))
     }
 
     pub fn tool_installed(&self) -> bool {
@@ -146,7 +162,8 @@ impl Transcriber {
     /// What is still missing before a size can transcribe.
     pub fn missing(&self, size: &'static Size) -> Vec<&'static Asset> {
         let mut assets = Vec::new();
-        if !self.tool_installed() {
+        // The archive is a Windows build; elsewhere the tool ships with the app.
+        if cfg!(windows) && !self.tool_installed() {
             assets.push(tool_asset());
         }
         assets.extend(weight_assets(size).iter().filter(|asset| !self.downloader.is_installed(asset)));

@@ -208,7 +208,7 @@ impl SamplingPreset {
 
 /// A YuE2 generation request, in the engine's own vocabulary. Fields left
 /// out are the engine's protocol defaults.
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
 struct CreateMusicJobRequest {
     /// The window's own mark for this request, handed back on the job so the
     /// window knows the job as its own before the response reaches it.
@@ -263,7 +263,7 @@ struct CreateMusicJobRequest {
 
 /// One adapter of a request: its folder and a strength per engine slot. A slot
 /// left out is not changed.
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
 struct AdapterUse {
     id: String,
     #[serde(default)]
@@ -351,6 +351,129 @@ struct MusicJob {
     /// How the lyrics were laid along a score that came without sections.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     laid: Option<Value>,
+}
+
+fn job_status_name(status: &MusicJobStatus) -> &'static str {
+    match status {
+        MusicJobStatus::Queued => "queued",
+        MusicJobStatus::Running => "running",
+        MusicJobStatus::Completed => "completed",
+        MusicJobStatus::Failed => "failed",
+        MusicJobStatus::Cancelled => "cancelled",
+    }
+}
+
+fn stored_job(job: &MusicJob, request: Value, attempt: u32) -> library::StoredJob {
+    library::StoredJob {
+        id: job.id.clone(),
+        submitted_at: job.submitted_at,
+        engine_id: job.engine_id.clone(),
+        title: job.title.clone(),
+        style: job.style.clone(),
+        lyrics: job.lyrics.clone(),
+        duration_seconds: job.duration_seconds,
+        playlist_id: job.playlist_id.clone(),
+        generation_settings: job.generation_settings.clone(),
+        request,
+        status: job_status_name(&job.status).into(),
+        message: job.message.clone(),
+        attempt,
+        resumed_as: None,
+    }
+}
+
+/// A job as the library kept it, for a job that ended without a result.
+fn job_from_stored(stored: library::StoredJob, status: MusicJobStatus, message: String) -> MusicJob {
+    let (dispatch, phase) = match status {
+        MusicJobStatus::Failed => (MusicJobDispatch::Local, MusicJobPhase::Failed),
+        _ => (MusicJobDispatch::Cancelled, MusicJobPhase::Cancelled),
+    };
+    MusicJob {
+        derived: None,
+        id: stored.id,
+        client_ref: None,
+        submitted_at: stored.submitted_at,
+        engine_id: stored.engine_id,
+        cover_prompt: None,
+        title: stored.title,
+        status,
+        dispatch,
+        phase,
+        style: stored.style,
+        lyrics: stored.lyrics,
+        duration_seconds: stored.duration_seconds,
+        generation_settings: stored.generation_settings,
+        song: None,
+        songs: vec![],
+        message,
+        playlist_id: stored.playlist_id,
+        laid: None,
+    }
+}
+
+/// How many times a song is started again after the studio closed on it; a
+/// request that takes the engine down every time must not start for ever.
+const MAX_RESUMES: u32 = 3;
+
+/// Songs the studio was closed on are started again, oldest first. The old
+/// job stays as `cancelled`, its message naming the job that took its place.
+async fn resume_unfinished_jobs(state: AppState) {
+    // what ended without a result stays asked about, as it was left
+    match state.library.ended_music_jobs(200) {
+        Ok(ended) => {
+            let mut jobs = state.jobs.write().await;
+            for stored in ended {
+                let status = if stored.status == "failed" { MusicJobStatus::Failed } else { MusicJobStatus::Cancelled };
+                let message = stored.message.clone();
+                jobs.entry(stored.id.clone()).or_insert_with(|| job_from_stored(stored, status, message));
+            }
+        }
+        Err(error) => eprintln!("[ERROR] the songs that ended without a result could not be read: {error:#}"),
+    }
+    let cut_off = match state.library.unfinished_music_jobs() {
+        Ok(jobs) if !jobs.is_empty() => jobs,
+        Ok(_) => return,
+        Err(error) => {
+            eprintln!("[ERROR] the songs cut off by the last run could not be read: {error:#}");
+            return;
+        }
+    };
+    // the engine is started with the service and takes a while to answer; if
+    // it never does, the songs stay as they are for the next start
+    let mut ready = false;
+    for _ in 0..90 {
+        if state.music_server.props().await.is_ok() {
+            ready = true;
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+    }
+    if !ready {
+        eprintln!("[ERROR] the engine did not answer; {} cut-off song(s) were not started again", cut_off.len());
+        return;
+    }
+    for old in cut_off {
+        let (resumed_as, message) = if old.attempt >= MAX_RESUMES {
+            (None, format!("Cut off when the studio closed, and already started again {MAX_RESUMES} times; make it again by hand."))
+        } else {
+            match serde_json::from_value::<CreateMusicJobRequest>(old.request.clone()) {
+                Err(error) => (None, format!("Cut off when the studio closed; its request could not be read to start it again: {error}")),
+                Ok(mut request) => {
+                    request.client_ref = None;
+                    let (status, Json(job)) = submit_music_job(state.clone(), request, old.attempt + 1).await;
+                    if status == StatusCode::ACCEPTED {
+                        (Some(job.id.clone()), format!("Cut off when the studio closed; started again as {}.", job.id))
+                    } else {
+                        (None, format!("Cut off when the studio closed; it could not be started again: {}", job.message))
+                    }
+                }
+            }
+        };
+        if let Err(error) = state.library.cancel_cut_off_music_job(&old.id, resumed_as.as_deref(), &message) {
+            eprintln!("[ERROR] a cut-off song could not be marked: {error:#}");
+        }
+        state.jobs.write().await.insert(old.id.clone(), job_from_stored(old, MusicJobStatus::Cancelled, message));
+    }
 }
 
 fn unix_millis() -> u64 {
@@ -512,6 +635,11 @@ impl EngineOptions {
         match self.backend {
             ComputeBackend::Vulkan => true,
             ComputeBackend::Auto => {
+                if cfg!(target_os = "macos") {
+                    // The macOS engine build has no Vulkan backend; Auto there
+                    // means the engine's own best device, which is Metal.
+                    return false;
+                }
                 let hardware = hardware::hardware();
                 hardware.cuda.is_none() && hardware.gpu_name.is_some()
             }
@@ -532,17 +660,31 @@ impl EngineOptions {
         if self.backend != ComputeBackend::Auto {
             return vec![self.backend];
         }
-        let hardware = hardware::hardware();
-        let mut chain = Vec::new();
-        if hardware.cuda.is_some() {
-            chain.push(ComputeBackend::Cuda);
+        // Off Windows the engine is a single native build whose ggml loads its
+        // own best device - Metal on Apple Silicon - so Auto asks the engine
+        // to choose (no GGML_BACKEND is set) and only falls back to the
+        // processor if that start fails.
+        #[cfg(not(windows))]
+        {
+            let mut chain = vec![ComputeBackend::Auto];
+            chain.retain(|device| !failed.contains(device));
+            chain.push(ComputeBackend::Cpu);
+            return chain;
         }
-        if hardware.gpu_name.is_some() {
-            chain.push(ComputeBackend::Vulkan);
+        #[cfg(windows)]
+        {
+            let hardware = hardware::hardware();
+            let mut chain = Vec::new();
+            if hardware.cuda.is_some() {
+                chain.push(ComputeBackend::Cuda);
+            }
+            if hardware.gpu_name.is_some() {
+                chain.push(ComputeBackend::Vulkan);
+            }
+            chain.retain(|device| !failed.contains(device));
+            chain.push(ComputeBackend::Cpu);
+            chain
         }
-        chain.retain(|device| !failed.contains(device));
-        chain.push(ComputeBackend::Cpu);
-        chain
     }
 
     fn to_engine(self) -> music_engine::yue_server::YueServerOptions {
@@ -764,6 +906,7 @@ pub async fn serve() -> anyhow::Result<()> {
     processing::clear_workspace(state.library.media_dir());
     state.training.recover();
     prepare::resume(&state);
+    tokio::spawn(resume_unfinished_jobs(state.clone()));
     {
         let state = state.clone();
         // both rewrite the tags of stored tracks, so one after the other
@@ -929,9 +1072,10 @@ pub async fn serve() -> anyhow::Result<()> {
         .route("/v1/transcriptions/{job_id}", get(score_job_status).post(cancel_score_job))
         .route("/v1/scores", post(compose_score))
         .route("/v1/scores/{job_id}", get(score_job_status).post(cancel_score_job))
+        .route("/v1/music/jobs/ended", get(list_ended_music_jobs))
         .route(
             "/v1/music/jobs/{job_id}",
-            get(music_job_status).post(cancel_music_job),
+            get(music_job_status).post(cancel_music_job).delete(dismiss_music_job),
         )
         .with_state(state.clone())
         // Covers and imported audio are megabytes, not kilobytes. The default
@@ -4010,7 +4154,15 @@ fn engine_bundle_root() -> PathBuf {
     env::var_os("YUE_ENGINE_ROOT")
         .map(PathBuf::from)
         .or_else(|| env::var_os("YUE_ENGINE_BIN").map(PathBuf::from).and_then(|path| path.parent().map(std::path::Path::to_path_buf)))
-        .or_else(|| std::env::current_exe().ok().and_then(|path| path.parent().map(|parent| parent.join("resources").join("yue2-cpp"))))
+        .or_else(|| std::env::current_exe().ok().and_then(|path| path.parent().map(|parent| parent.join("resources").join("yue2-cpp"))).map(|beside| {
+            // In a macOS app bundle the executable is Contents/MacOS/<name> and
+            // bundled resources are in Contents/Resources.
+            let in_bundle = beside.ancestors().nth(3).map(|contents| contents.join("Resources").join("resources").join("yue2-cpp"));
+            match in_bundle {
+                Some(path) if cfg!(target_os = "macos") && path.is_dir() => path,
+                _ => beside,
+            }
+        }))
         .unwrap_or_else(|| PathBuf::from("resources/yue2-cpp"))
 }
 
@@ -5989,12 +6141,11 @@ async fn transcribe_to_midi(state: &AppState, size: &'static midi::Size, audio: 
         .stderr(std::process::Stdio::piped())
         .kill_on_drop(true);
     // the CUDA runtime it imports lives beside the engine, as for the trainer
-    let mut path = std::ffi::OsString::from(engine_bundle_root().as_os_str());
-    if let Some(existing) = std::env::var_os("PATH") {
-        path.push(";");
-        path.push(existing);
+    let mut paths = vec![engine_bundle_root()];
+    paths.extend(std::env::var_os("PATH").iter().flat_map(std::env::split_paths));
+    if let Ok(path) = std::env::join_paths(paths) {
+        command.env("PATH", path);
     }
-    command.env("PATH", path);
     #[cfg(windows)]
     command.creation_flags(0x0800_0000);
     let mut child = command.spawn().with_context(|| format!("start {}", tool.display()))?;
@@ -6632,8 +6783,14 @@ fn describes_exhausted_memory(log: &str) -> bool {
 
 async fn create_music_job(
     State(state): State<AppState>,
-    Json(mut request): Json<CreateMusicJobRequest>,
+    Json(request): Json<CreateMusicJobRequest>,
 ) -> (StatusCode, Json<MusicJob>) {
+    submit_music_job(state, request, 0).await
+}
+
+/// Sends a request to the engine and keeps it; `attempt` counts the times it
+/// was started again after the studio closed on it.
+async fn submit_music_job(state: AppState, mut request: CreateMusicJobRequest, attempt: u32) -> (StatusCode, Json<MusicJob>) {
     let engine_id = selected_local_music_engine(&*state.configuration.read().await)
         .unwrap_or_else(|| "unconfigured".into());
     if engine_id != PRIMARY_MUSIC_ENGINE_ID {
@@ -6684,6 +6841,7 @@ async fn create_music_job(
         },
         None => None,
     };
+    let stored_request = serde_json::to_value(&request).unwrap_or(Value::Null);
     match state.music_server.submit(engine_submission(&body)).await {
         Ok(remote) => {
             let job = MusicJob {
@@ -6708,6 +6866,10 @@ async fn create_music_job(
                 laid,
             };
             state.jobs.write().await.insert(job.id.clone(), job.clone());
+            // kept at once, so a song the studio is closed on is not lost
+            if let Err(error) = state.library.save_music_job(&stored_job(&job, stored_request, attempt)) {
+                eprintln!("[ERROR] the song's request could not be kept: {error:#}");
+            }
             spawn_job_watcher(state.clone(), job.id.clone());
             (StatusCode::ACCEPTED, Json(job))
         }
@@ -6833,6 +6995,40 @@ fn after_import(state: &AppState, song_id: &str) {
 }
 
 /// The jobs still in flight, oldest first, so a reloaded window can show them.
+/// Jobs that ended without a song, stopped or failed, newest first. They stay
+/// in the window, across restarts, until the person removes them.
+async fn list_ended_music_jobs(State(state): State<AppState>) -> Json<Vec<MusicJob>> {
+    let mut ended: Vec<MusicJob> = state
+        .jobs
+        .read()
+        .await
+        .values()
+        .filter(|job| matches!(job.status, MusicJobStatus::Failed | MusicJobStatus::Cancelled))
+        .cloned()
+        .collect();
+    ended.sort_by(|a, b| b.submitted_at.cmp(&a.submitted_at));
+    Json(ended)
+}
+
+/// Removes a stopped or failed job for good; a running one is stopped first.
+async fn dismiss_music_job(State(state): State<AppState>, Path(job_id): Path<String>) -> Result<StatusCode, (StatusCode, Json<ApiError>)> {
+    {
+        let mut jobs = state.jobs.write().await;
+        match jobs.get(&job_id).map(|job| matches!(job.status, MusicJobStatus::Failed | MusicJobStatus::Cancelled)) {
+            None => return Err(api_error(StatusCode::NOT_FOUND, "Music job was not found.".into())),
+            Some(false) => return Err(api_error(StatusCode::CONFLICT, "The job is still running; stop it first.".into())),
+            Some(true) => {
+                jobs.remove(&job_id);
+            }
+        }
+    }
+    if let Err(error) = state.library.forget_music_job(&job_id) {
+        eprintln!("[ERROR] the job could not be removed from the library: {error:#}");
+    }
+    mcp::announce("jobs");
+    Ok(StatusCode::NO_CONTENT)
+}
+
 async fn list_active_music_jobs(State(state): State<AppState>) -> Json<Vec<MusicJob>> {
     let mut active: Vec<MusicJob> = state
         .jobs
@@ -6975,6 +7171,20 @@ fn add_to_playlist(library: &library::Library, playlist_id: &str, songs: impl It
 /// library, and only one task ever imports a result.
 fn spawn_job_watcher(state: AppState, job_id: String) {
     tokio::spawn(async move {
+        follow_job(&state, &job_id).await;
+        // however it ended, it is no longer one the studio's closing could cut off
+        let ended = state.jobs.read().await.get(&job_id).map(|job| (job_status_name(&job.status), job.message.clone()));
+        if let Some((status, message)) = ended {
+            if let Err(error) = state.library.set_music_job_status(&job_id, status, &message) {
+                eprintln!("[ERROR] the song's state could not be kept: {error:#}");
+            }
+        }
+    });
+}
+
+async fn follow_job(state: &AppState, job_id: &str) {
+    let (state, job_id) = (state.clone(), job_id.to_string());
+    {
         let mut unreachable = 0u32;
         loop {
             tokio::time::sleep(std::time::Duration::from_millis(1000)).await;
@@ -7036,7 +7246,7 @@ fn spawn_job_watcher(state: AppState, job_id: String) {
                 apply_remote_status(job, &remote.status);
             }
         }
-    });
+    }
 }
 
 async fn import_completed_result(state: &AppState, job: &MusicJob, job_id: &str) -> anyhow::Result<Vec<CompletedSong>> {
@@ -7237,7 +7447,22 @@ async fn cancel_music_job(
         .get_mut(&job_id)
         .ok_or_else(|| api_error(StatusCode::NOT_FOUND, "Music job was not found.".into()))?;
     apply_remote_status(job, &remote.status);
+    stop_on_request(job);
     Ok(Json(job.clone()))
+}
+
+/// The engine ends a cancelled job at its next checkpoint, and a job that has
+/// not started yet only when its turn comes; until then it still reports
+/// "running". The person asked for the stop, so the job stops being shown as
+/// running now - the windows drop it - instead of an answer that looks as if
+/// nothing happened. The watcher ends with the job, so nothing is imported.
+fn stop_on_request(job: &mut MusicJob) {
+    if matches!(job.status, MusicJobStatus::Queued | MusicJobStatus::Running) {
+        job.status = MusicJobStatus::Cancelled;
+        job.dispatch = MusicJobDispatch::Cancelled;
+        job.phase = MusicJobPhase::Cancelled;
+        job.message = "Stopped; the engine ends it at its next checkpoint.".into();
+    }
 }
 
 /// The engine's own defaults, version and the weights it serves: the source
@@ -8041,9 +8266,16 @@ mod tests {
             assert_eq!(options.device_chain(&[device]), vec![device]);
         }
         // Auto always ends on the processor and never retries a failed device.
+        // Off Windows the chain starts from Auto itself - the engine's own
+        // best device, Metal on macOS - so only the CUDA/Vulkan failures of a
+        // Windows chain remove entries before it.
         let auto = EngineOptions::default();
         let chain = auto.device_chain(&[ComputeBackend::Cuda, ComputeBackend::Vulkan]);
-        assert_eq!(chain, vec![ComputeBackend::Cpu]);
+        if cfg!(windows) {
+            assert_eq!(chain, vec![ComputeBackend::Cpu]);
+        } else {
+            assert_eq!(chain, vec![ComputeBackend::Auto, ComputeBackend::Cpu]);
+        }
         assert_eq!(auto.device_chain(&[]).last(), Some(&ComputeBackend::Cpu));
     }
 
@@ -8373,6 +8605,18 @@ mod tests {
         let mut job = queued_not_configured_job(sample_request(), PRIMARY_MUSIC_ENGINE_ID.into());
         apply_remote_status(&mut job, "not-a-real-status");
         assert!(matches!(job.status, MusicJobStatus::Failed));
+    }
+
+    #[test]
+    fn a_stop_is_shown_at_once_but_never_undoes_a_finished_job() {
+        let mut running = queued_not_configured_job(sample_request(), PRIMARY_MUSIC_ENGINE_ID.into());
+        apply_remote_status(&mut running, "running");
+        stop_on_request(&mut running);
+        assert!(matches!(running.status, MusicJobStatus::Cancelled));
+        let mut finished = queued_not_configured_job(sample_request(), PRIMARY_MUSIC_ENGINE_ID.into());
+        apply_remote_status(&mut finished, "done");
+        stop_on_request(&mut finished);
+        assert!(matches!(finished.status, MusicJobStatus::Completed));
     }
 
     #[test]

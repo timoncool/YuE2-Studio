@@ -4,6 +4,7 @@
   "license": "MIT",
   "build": {
     "windows": "buildcuda.cmd",
+    "macos": "scripts/build-yue-runtime.sh",
     "output": "build/Release/yue-server.exe"
   }
 }
