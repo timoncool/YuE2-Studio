@@ -223,27 +223,47 @@ fn start_service() -> Result<(), String> {
     }
 }
 
-/// True while a song is queued or rendering: the only time quitting loses work.
-fn song_in_progress() -> bool {
+/// One request to the studio's own service: its body; `Err(true)` when it took
+/// the request and gave nothing readable back, `Err(false)` when nothing listens.
+fn service_call(method: &str, path: &str) -> Result<String, bool> {
     use std::io::{Read, Write};
     let address = SocketAddrV4::new(Ipv4Addr::LOCALHOST, SERVER_PORT);
     let Ok(mut stream) = TcpStream::connect_timeout(&address.into(), Duration::from_millis(500)) else {
-        return false;
+        return Err(false);
     };
     let _ = stream.set_read_timeout(Some(Duration::from_secs(2)));
-    let request = format!("GET /v1/music/jobs HTTP/1.0\r\nHost: 127.0.0.1:{SERVER_PORT}\r\n\r\n");
+    let request = format!("{method} {path} HTTP/1.0\r\nHost: 127.0.0.1:{SERVER_PORT}\r\nContent-Length: 0\r\n\r\n");
     let mut response = String::new();
     if stream.write_all(request.as_bytes()).is_err() || stream.read_to_string(&mut response).is_err() {
-        // cannot tell: ask rather than lose a song
-        return true;
+        return Err(true);
     }
-    response.split("\r\n\r\n").nth(1).is_some_and(|body| body.trim() != "[]")
+    response.split("\r\n\r\n").nth(1).map(str::to_owned).ok_or(true)
 }
 
-/// Quit, asking first only when a song is being generated.
+/// The songs queued or being made, by job id; `None` when the service could not say.
+fn songs_in_progress() -> Option<Vec<String>> {
+    match service_call("GET", "/v1/music/jobs") {
+        Ok(body) => serde_json::from_str::<Vec<serde_json::Value>>(&body)
+            .ok()
+            .map(|jobs| jobs.iter().filter_map(|job| job.get("id").and_then(serde_json::Value::as_str).map(str::to_owned)).collect()),
+        Err(false) => Some(Vec::new()),
+        Err(true) => None,
+    }
+}
+
+/// True while a song is queued or rendering: the only time quitting loses work.
+fn song_in_progress() -> bool {
+    // cannot tell: ask rather than lose a song
+    songs_in_progress().is_none_or(|songs| !songs.is_empty())
+}
+
+/// Quit, asking first only when a song is being generated. A song the person
+/// agreed to stop is stopped before the studio goes, so the next start does
+/// not make it again as one the studio was cut off on.
 fn confirm_quit(app: &tauri::AppHandle) {
     use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
-    let quit = !song_in_progress()
+    let running = songs_in_progress();
+    let quit = running.as_ref().is_some_and(Vec::is_empty)
         || app
             .dialog()
             .message("A song is being generated. Quit YuE2 Studio and stop it?")
@@ -252,6 +272,9 @@ fn confirm_quit(app: &tauri::AppHandle) {
             .buttons(MessageDialogButtons::OkCancelCustom("Quit".into(), "Cancel".into()))
             .blocking_show();
     if quit {
+        for id in running.unwrap_or_default() {
+            let _ = service_call("POST", &format!("/v1/music/jobs/{id}"));
+        }
         app.exit(0);
     }
 }

@@ -6075,6 +6075,10 @@ fn midi_stopped(state: &AppState) -> bool {
 /// code and AMD and Intel no CUDA - and the processor without one.
 fn midi_device(options: &EngineOptions) -> &'static str {
     use music_engine::yue_server::ComputeBackend;
+    // the macOS build carries Metal alone, which its own choice finds
+    if cfg!(target_os = "macos") {
+        return if options.backend == ComputeBackend::Cpu { "cpu" } else { "auto" };
+    }
     match options.backend {
         ComputeBackend::Cpu => "cpu",
         _ if options.cuda_build() == Some(hardware::CudaBuild::Cuda13) => "auto",
@@ -7448,6 +7452,10 @@ async fn cancel_music_job(
         .ok_or_else(|| api_error(StatusCode::NOT_FOUND, "Music job was not found.".into()))?;
     apply_remote_status(job, &remote.status);
     stop_on_request(job);
+    // kept at once: a studio closed right after the stop must not start the song again
+    if let Err(error) = state.library.set_music_job_status(&job_id, job_status_name(&job.status), &job.message) {
+        eprintln!("[ERROR] the stopped song's state could not be kept: {error:#}");
+    }
     Ok(Json(job.clone()))
 }
 
