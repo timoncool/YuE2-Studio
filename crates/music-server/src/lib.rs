@@ -6538,20 +6538,20 @@ async fn setup_adopt(State(state): State<AppState>, body: axum::body::Bytes) -> 
 
     for component in &catalog.components {
         let target = models_root.join(component.filename);
-        if target.is_file() {
+        let published = |path: &std::path::Path| std::fs::metadata(path).map(|meta| meta.is_file() && meta.len() == component.bytes).unwrap_or(false);
+        if published(&target) {
             continue;
         }
-        // The name first, because that is unambiguous; then the exact size,
-        // because other builds rename the same file.
+        // The size always, since an earlier release keeps the same name; the
+        // name first among those, then any file of that size, because other
+        // builds rename the same file.
         let source = entries
             .iter()
-            .find(|path| path.file_name().is_some_and(|name| name == component.filename))
-            .or_else(|| {
-                entries.iter().find(|path| {
-                    std::fs::metadata(path).map(|meta| meta.len() == component.bytes).unwrap_or(false)
-                })
-            });
+            .find(|path| path.file_name().is_some_and(|name| name == component.filename) && published(path))
+            .or_else(|| entries.iter().find(|path| published(path)));
         let Some(source) = source else { continue };
+        // a file of the earlier release under this name gives way to the one found
+        let _ = std::fs::remove_file(&target);
         // A hard link costs nothing and keeps one copy on disk; a folder on
         // another drive cannot have one, so that falls back to a copy.
         if std::fs::hard_link(source, &target).is_err() {
