@@ -71,7 +71,7 @@ pub struct Facts {
     pub key: String,
     pub key_source: &'static str,
     pub grid: u32,
-    pub voice: usize,
+    pub voice: Option<usize>,
     pub instrument: Option<usize>,
     pub voice_shift: i32,
     pub instrument_shift: i32,
@@ -424,13 +424,20 @@ pub fn convert_with(song: &smf::Song, mode: Mode, vocal: parts::Pick, instrument
     let words = karaoke::read(song);
     let syllables = words.as_ref().map(|words| words.syllables.clone()).unwrap_or_default();
     let chosen = parts::choose(&found, vocal, instrument, &syllables, song.division)?;
+    if chosen.voice.is_none() && chosen.instrument.is_none() {
+        return Err("the file has no melody to write: no part for the voice or the instrument".into());
+    }
     let last_note = found.iter().flat_map(|part| part.notes.iter().map(|note| note.end)).max().unwrap_or(0);
     let rows = beats(song, song.end().max(last_note))?;
-    let mut lines: Vec<(usize, (f64, f64), &str)> = vec![(chosen.voice, VOICE_WINDOW, "voice")];
-    if let Some(instrument) = chosen.instrument {
-        lines.push((instrument, INSTRUMENT_WINDOW, "instrument"));
+    // the line of each part: 0 the voice, 1 the instrument
+    let mut lines: Vec<(usize, (f64, f64), &str, usize)> = Vec::new();
+    if let Some(voice) = chosen.voice {
+        lines.push((voice, VOICE_WINDOW, "voice", 0));
     }
-    let line_notes: Vec<smf::Note> = lines.iter().flat_map(|(index, _, _)| found[*index].notes.iter().copied()).collect();
+    if let Some(instrument) = chosen.instrument {
+        lines.push((instrument, INSTRUMENT_WINDOW, "instrument", 1));
+    }
+    let line_notes: Vec<smf::Note> = lines.iter().flat_map(|(index, _, _, _)| found[*index].notes.iter().copied()).collect();
     let grid = options.grid.unwrap_or_else(|| grid_of(&line_notes, song.division));
     let subbeats = (grid as i64 / rows.iter().map(|row| row.3).min().expect("a song has beats")).max(1);
     let points = points_of(&rows, subbeats);
@@ -455,9 +462,9 @@ pub fn convert_with(song: &smf::Song, mode: Mode, vocal: parts::Pick, instrument
     }
     let mut notes: Vec<(f64, f64, i32, usize)> = Vec::new();
     let (mut voice_shift, mut instrument_shift) = (0, 0);
-    for (voice, (index, window, name)) in lines.iter().enumerate() {
-        let part = &found[*index];
-        let (mut kept, mut shift, struck) = line(part, &points, *window);
+    for &(index, window, name, voice) in &lines {
+        let part = &found[index];
+        let (mut kept, mut shift, struck) = line(part, &points, window);
         let additional = 12 * if voice == 0 { options.vocal_octaves } else { options.instrument_octaves };
         shift += additional;
         for note in &mut kept {
@@ -509,7 +516,7 @@ pub fn convert_with(song: &smf::Song, mode: Mode, vocal: parts::Pick, instrument
                 .enumerate()
                 .filter(|(_, part)| !part.drums())
                 .flat_map(|(index, part)| {
-                    let weight = if index == chosen.voice { harmony::VOICE_WEIGHT } else { 1.0 };
+                    let weight = if Some(index) == chosen.voice { harmony::VOICE_WEIGHT } else { 1.0 };
                     part.notes.iter().map(move |note| (Q::int(note.start as i64), Q::int(note.end as i64), note.pitch as i32, weight))
                 })
                 .collect();
@@ -540,7 +547,7 @@ pub fn convert_with(song: &smf::Song, mode: Mode, vocal: parts::Pick, instrument
         key: key_starts[0].1.clone(),
         key_source,
         grid,
-        voice: found[chosen.voice].number,
+        voice: chosen.voice.map(|index| found[index].number),
         instrument: chosen.instrument.map(|index| found[index].number),
         voice_shift,
         instrument_shift,
