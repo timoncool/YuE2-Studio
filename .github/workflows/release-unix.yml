@@ -1,8 +1,8 @@
 name: macOS and Linux builds
 
 # The studio for Apple Silicon (Metal) and Linux x86-64 (Vulkan), built from
-# the pinned engines. With a tag the builds are attached to that release; a
-# pull request that touches the build only checks that it still builds.
+# the pinned engines, started by hand. With a tag the builds are attached to
+# that release.
 
 on:
   workflow_dispatch:
@@ -10,16 +10,6 @@ on:
       tag:
         description: "Release tag to attach the builds to; empty builds only"
         required: false
-  pull_request:
-    paths:
-      - ".github/workflows/release-unix.yml"
-      - "scripts/build-release-macos.sh"
-      - "scripts/build-release-linux.sh"
-      - "scripts/build-yue-runtime.sh"
-      - "scripts/build-yue-runtime-linux.sh"
-      - "scripts/build-midi-runtime.sh"
-      - "desktop/src-tauri/tauri.macos-release.conf.json"
-      - "desktop/src-tauri/tauri.linux-release.conf.json"
 
 concurrency:
   group: unix-builds-${{ github.ref }}-${{ inputs.tag }}
