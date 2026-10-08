@@ -7666,6 +7666,12 @@ fn trained_style(adapters: &adapters::AdapterLibrary, request: &CreateMusicJobRe
     Some(adapters::upstream_style(&request.style, trigger))
 }
 
+/// The checkpoint's own semantic budget, 9000 frames at 25 a second.
+const CHECKPOINT_SONG_SECONDS: f64 = 360.0;
+/// What the model's 24576-token context holds with a prompt and a score beside the song.
+const LONGEST_SONG_SECONDS: f64 = 600.0;
+const SEMANTIC_FRAMES_PER_SECOND: f64 = 25.0;
+
 fn yue_request_from(request: &CreateMusicJobRequest, max_batch: u32) -> Result<Value, String> {
     let semantic_tokens = request.semantic_tokens.as_deref().map(str::trim).filter(|value| !value.is_empty());
     if request.style.trim().is_empty() && request.lyrics.trim().is_empty() && semantic_tokens.is_none() {
@@ -7677,8 +7683,8 @@ fn yue_request_from(request: &CreateMusicJobRequest, max_batch: u32) -> Result<V
         }
     }
     if let Some(duration) = request.duration_seconds {
-        if !duration.is_finite() || !(1.0..=360.0).contains(&duration) {
-            return Err("duration_seconds must be between 1 and 360".into());
+        if !duration.is_finite() || !(1.0..=LONGEST_SONG_SECONDS).contains(&duration) {
+            return Err(format!("duration_seconds must be between 1 and {LONGEST_SONG_SECONDS}"));
         }
     }
     if request.steps.is_some_and(|steps| !(1..=200).contains(&steps)) {
@@ -7751,6 +7757,15 @@ fn yue_request_from(request: &CreateMusicJobRequest, max_batch: u32) -> Result<V
             body[key] = serde_json::to_value(preset).map_err(|error| error.to_string())?;
         }
     }
+    // the checkpoint's semantic budget stops a song at 6 minutes; a longer one asked for gets its budget
+    if let Some(duration) = request.duration_seconds.filter(|duration| *duration > CHECKPOINT_SONG_SECONDS) {
+        if request.semantic_sampling.as_ref().and_then(|preset| preset.max_tokens).is_none() {
+            if !body["semantic_sampling"].is_object() {
+                body["semantic_sampling"] = serde_json::json!({});
+            }
+            body["semantic_sampling"]["max_tokens"] = Value::from((duration * SEMANTIC_FRAMES_PER_SECOND).ceil() as u64);
+        }
+    }
     if !request.adapters.is_empty() {
         body["adapters"] = Value::Array(adapter_fields(&request.adapters)?);
     }
@@ -7783,7 +7798,7 @@ fn laid_out(body: &mut Value, automatic_length: bool) -> Option<Value> {
     }
     let lyrics = body.get("lyrics").and_then(Value::as_str).unwrap_or_default();
     let laid = score::phrasing::lay(body.get("abc")?.as_str()?, lyrics)?;
-    let ceiling = score::phrasing::ceiling(laid.seconds).min(360.0);
+    let ceiling = score::phrasing::ceiling(laid.seconds).min(LONGEST_SONG_SECONDS);
     body["abc"] = Value::String(laid.score);
     if automatic_length {
         body["duration"] = Value::from(ceiling);
@@ -8240,7 +8255,7 @@ mod tests {
             (CreateMusicJobRequest { client_ref: None, lm_batch_size: Some(2), ..sample_request() }, "lm_batch_size"),
             (CreateMusicJobRequest { client_ref: None, synth_batch_size: Some(10), ..sample_request() }, "synth_batch_size"),
             (CreateMusicJobRequest { client_ref: None, output_format: Some("flac".into()), ..sample_request() }, "output_format"),
-            (CreateMusicJobRequest { client_ref: None, duration_seconds: Some(400.0), ..sample_request() }, "duration"),
+            (CreateMusicJobRequest { client_ref: None, duration_seconds: Some(700.0), ..sample_request() }, "duration"),
             (CreateMusicJobRequest { client_ref: None, semantic_tokens: Some("1,2,x".into()), ..sample_request() }, "semantic_tokens"),
             (CreateMusicJobRequest { client_ref: None, semantic_tokens: Some("1,40000".into()), ..sample_request() }, "semantic_tokens"),
             (CreateMusicJobRequest { client_ref: None, abc_sampling: Some(SamplingPreset { top_p: Some(1.5), ..SamplingPreset::default() }), ..sample_request() }, "top_p"),
@@ -8250,6 +8265,16 @@ mod tests {
             let error = yue_request_from(&request, 1).expect_err(expected);
             assert!(error.contains(expected), "{expected}: {error}");
         }
+    }
+
+    #[test]
+    fn a_song_longer_than_the_checkpoint_budget_brings_its_own() {
+        let long = yue_request_from(&CreateMusicJobRequest { client_ref: None, duration_seconds: Some(480.0), ..sample_request() }, 1).unwrap();
+        assert_eq!(long["semantic_sampling"]["max_tokens"], 12000);
+        let short = yue_request_from(&CreateMusicJobRequest { client_ref: None, duration_seconds: Some(200.0), ..sample_request() }, 1).unwrap();
+        assert!(short.get("semantic_sampling").is_none());
+        let chosen = CreateMusicJobRequest { client_ref: None, duration_seconds: Some(480.0), semantic_sampling: Some(SamplingPreset { max_tokens: Some(9500), ..SamplingPreset::default() }), ..sample_request() };
+        assert_eq!(yue_request_from(&chosen, 1).unwrap()["semantic_sampling"]["max_tokens"], 9500);
     }
 
     #[test]

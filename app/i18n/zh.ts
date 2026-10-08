@@ -1446,7 +1446,7 @@ export const zh = {
     arrangementPlaceholder: 'Instrument Lifecycle Description … Groove & Foundation Progression: …',
     randomizeSeed: '随机种子',
     maxDuration: '时长（秒）',
-    maxDurationHint: '这是上限而非目标：模型可能提前结束。最长 360 秒。',
+    maxDurationHint: '这是上限而非目标：模型可能提前结束。最长 600 秒；超过 360 秒后模型超出训练长度，长歌可能跑偏。',
     lyricsHint: '段落标签独占一行：[intro] [verse] [pre-chorus] [chorus] [post-chorus] [bridge] [instrumental] [solo] [outro]。',
     lmConfiguration: 'LM 配置',
     advancedLm: 'LM 高级',

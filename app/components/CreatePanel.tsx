@@ -93,7 +93,7 @@ const NEW_PLAYLIST = '__new__';
 const finishedStyle = (text: string) => text.trim().replace(/,$/, '').trimEnd();
 const SEMANTIC_CODES_PER_SECOND = 25;
 /** 9000 semantic frames at 25 per second, the stage's own budget. */
-const MAX_DURATION_SECONDS = 360;
+const MAX_DURATION_SECONDS = 600;
 /** A new prompt's ceiling: 2:10. Examples and prompt files keep their own. */
 const DEFAULT_DURATION_SECONDS = 130;
 const SAMPLING_KEYS: (keyof YueSampling)[] = ['temperature', 'top_p', 'top_k', 'repetition_penalty', 'penalty_window', 'min_tokens', 'max_tokens'];

@@ -1446,7 +1446,7 @@ export const ko = {
     arrangementPlaceholder: 'Instrument Lifecycle Description … Groove & Foundation Progression: …',
     randomizeSeed: '시드 무작위화',
     maxDuration: '길이(초)',
-    maxDurationHint: '목표가 아니라 상한입니다. 모델이 더 일찍 끝낼 수 있습니다. 최대 360초.',
+    maxDurationHint: '목표가 아니라 상한입니다. 모델이 더 일찍 끝낼 수 있습니다. 최대 600초. 360초를 넘으면 학습한 길이를 넘어서므로 긴 곡이 흐트러질 수 있습니다.',
     lyricsHint: '섹션 태그는 각 줄에 단독으로: [intro] [verse] [pre-chorus] [chorus] [post-chorus] [bridge] [instrumental] [solo] [outro].',
     lmConfiguration: 'LM 설정',
     advancedLm: 'LM 고급',

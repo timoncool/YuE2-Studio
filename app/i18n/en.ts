@@ -1451,7 +1451,7 @@ export const en = {
     arrangementPlaceholder: 'Instrument Lifecycle Description (Primary/Secondary Layering): Primary: … Secondary: … Groove & Foundation Progression: … Embellishments, Textures & Spatial FX: …',
     randomizeSeed: 'Randomize seed',
     maxDuration: 'Max duration, s',
-    maxDurationHint: 'A maximum, not a target: the model may end the song earlier. Up to 360 seconds.',
+    maxDurationHint: 'A maximum, not a target: the model may end the song earlier. Up to 600 seconds; past 360 the model sings beyond the length it was trained for, so a long song may wander.',
     lyricsHint: 'Section tags on their own line: [intro] [verse] [pre-chorus] [chorus] [post-chorus] [bridge] [instrumental] [solo] [outro].',
     lmConfiguration: 'LM configuration',
     advancedLm: 'Advanced LM',

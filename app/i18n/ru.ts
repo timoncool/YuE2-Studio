@@ -1450,7 +1450,7 @@ export const ru = {
     arrangementPlaceholder: 'Instrument Lifecycle Description (Primary/Secondary Layering): Primary: … Secondary: … Groove & Foundation Progression: … Embellishments, Textures & Spatial FX: …',
     randomizeSeed: 'Случайный seed',
     maxDuration: 'Длительность, с',
-    maxDurationHint: 'Это максимум, а не цель: модель может закончить песню раньше. До 360 секунд.',
+    maxDurationHint: 'Это максимум, а не цель: модель может закончить песню раньше. До 600 секунд; дальше 360 модель поёт длиннее, чем её учили, и длинная песня может «поплыть».',
     lyricsHint: 'Теги секций на отдельной строке: [intro] [verse] [pre-chorus] [chorus] [post-chorus] [bridge] [instrumental] [solo] [outro].',
     lmConfiguration: 'Настройки LM',
     advancedLm: 'LM: дополнительно',
