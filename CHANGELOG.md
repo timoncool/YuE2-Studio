@@ -3,6 +3,45 @@
 What changed, newest first. Dates are release dates; the studio is versioned by its
 Windows build.
 
+## 2026-10-08 — 3.5.0
+
+### Added
+
+- **Extend a song.** Re-render takes an extension of 15 seconds to 2 minutes: the track keeps
+  its own semantic tokens to the last frame and the model composes on from there.
+- **Words follow the score** (HOT-Step's lyric schedule): with a supplied score each section's
+  words stay out of the composer's sight until the score reaches them, so covers and long songs
+  keep the voice with the band. On by default; a switch under Advanced.
+- **Realaudio decoder switch.** Off decodes with the YuE2 checkpoint alone, the sound of
+  audio.cpp and ComfyUI; on (default) merges Mothersuperior's decoder adapter as before.
+- **Score as PDF.** The score view saves the notation as an A4 PDF, each system whole.
+- **Engine progress on the card**: the stage, its step counter and the time left.
+- **Video export settings**: frame size from 1080p to 240p and AAC from 128 to 320 kbps.
+- Songs up to 10 minutes. The window keeps its size, place and maximised state; the player its
+  repeat and shuffle. Quitting while a song is made asks first and stops it; a song the studio
+  was closed on starts again. From [pull request #51](https://github.com/timoncool/YuE2-Studio/pull/51) by
+  stalexxx, which also runs the service on macOS with Metal.
+- Catalog: raspy rock-soul, quiet storm R&B and dark Sufi fusion LoRAs by becausereasons.
+
+### Fixed
+
+- A LoRA trained in the studio gets the style phrase it was trained on ("T, in the style of T.").
+- Audio to MIDI no longer needs CUDA 13: it runs on CUDA where the engine does and on the
+  processor elsewhere (Pascal, AMD, Intel); the new package is fetched once.
+- The MIDI editor kept notes in place after an unknown meta event (files from Reaper); a file of
+  instrument parts no longer turns one into the voice; Save MIDI of the score wrote a broken file.
+- The exported video's visualizer moves as in the player; its background no longer freezes on
+  zoom and pan.
+- Models from a folder: the window says what was taken, copied and still missing, and the start
+  screen shows why the engine did not start.
+
+### Changed
+
+- **Engine: yue2.cpp of 8 October.** SheetSage2 reads MERT-v2 from a file of its own (F32 or
+  Q8_0); the new transcriber is downloaded once in Settings - Models, and the studio runs without
+  it until then. Covers transcribe exactly as before.
+- **Trainer: HOT-Step of 7 October**, about 14% faster per step with identical weights.
+
 ## 2026-10-01 — 3.4.0
 
 ### Added
