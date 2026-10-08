@@ -306,19 +306,30 @@ impl ModelManager {
             selection
                 .components
                 .iter()
-                .filter(|component| component.id != COMPANION)
+                .filter(|component| component.id != COMPANION && !optional_kind(component.kind))
                 .all(|component| published_component(&self.root.join(component.filename), component))
         })
     }
 
+    /// The files of a set to start the engine on. A transcriber not on disk
+    /// yet leaves the set without one rather than keeping the engine down.
     fn installed_files_from_selection(&self, selection: ResolvedInstall, label: &str) -> Result<ProfileModelFiles> {
+        let mut transcriber_complete = true;
         for component in &selection.components {
             let path = self.root.join(component.filename);
             if !published_component(&path, component) {
+                if optional_kind(component.kind) {
+                    transcriber_complete = false;
+                    continue;
+                }
                 bail!("{label} is incomplete: missing or truncated {}", component.filename);
             }
         }
-        Ok(profile_files_from_components(&selection.components))
+        let mut files = profile_files_from_components(&selection.components);
+        if !transcriber_complete {
+            files.transcriber = None;
+        }
+        Ok(files)
     }
 
     async fn download_selection(&self, selection: ResolvedInstall) {
@@ -630,7 +641,7 @@ fn status_snapshot(root: PathBuf, active: Option<DownloadJob>, target: Option<In
         .and_then(|request| resolve_install(request).ok())
         .or_else(|| resolve_install(InstallRequest { profile_id: Some(recommended_profile().into()), component_ids: vec![] }).ok());
     let installed = |id: &str| component_statuses.iter().find(|component| component.id == id).is_some_and(|component| component.installed);
-    let ready = target.as_ref().is_some_and(|selection| selection.components.iter().all(|component| installed(component.id)));
+    let ready = target.as_ref().is_some_and(|selection| selection.components.iter().filter(|component| !optional_kind(component.kind)).all(|component| installed(component.id)));
     let download_pending = target.as_ref().map(|selection| selection.components.iter()
         .filter(|component| !installed(component.id)).map(|component| component.bytes).sum()).unwrap_or_default();
     let profile_files = target
@@ -754,6 +765,11 @@ fn components() -> Vec<Component> {
     ]
 }
 
+/// The parts of a set the studio runs without: SheetSage2 and the MERT it reads.
+fn optional_kind(kind: &str) -> bool {
+    matches!(kind, "transcriber" | "transcriber-base")
+}
+
 /// Transcribers of the single-file release, read as the nearest one published now.
 const RETIRED_TRANSCRIBERS: [(&str, &str); 2] = [("transcriber-q6", "transcriber-q8"), ("transcriber-q5", "transcriber-q8")];
 
@@ -824,6 +840,28 @@ mod tests {
         assert!(old.contains(&"transcriber-q8") && old.contains(&"mert-q8"));
         assert!(validate_complete_set(&components().into_iter().filter(|component| ["backbone-q8", "vae-f32", COMPANION, "transcriber-q8", "mert-f32"].contains(&component.id)).collect::<Vec<_>>()).is_err());
         assert_eq!(precision("MERT-v2-FullSong-Q8_0.gguf"), precision("SheetSage2-Q8_0.gguf"));
+    }
+
+    #[test]
+    fn a_missing_transcriber_leaves_the_set_runnable_without_one() {
+        let root = std::env::temp_dir().join(format!("yue2-optional-{}", uuid::Uuid::now_v7()));
+        fs::create_dir_all(&root).unwrap();
+        let manager = ModelManager {
+            root: root.clone(),
+            state_path: root.join("state.json"),
+            http: reqwest::Client::new(),
+            state: Arc::new(RwLock::new(PersistentState::default())),
+            cancelled: Arc::new(AtomicBool::new(false)),
+        };
+        for component in components().iter().filter(|component| ["backbone-q8", "vae-f32", COMPANION].contains(&component.id)) {
+            fs::File::create(root.join(component.filename)).unwrap().set_len(component.bytes).unwrap();
+        }
+        fs::write(root.join("SheetSage2-Q8_0.gguf"), b"the single-file release").unwrap();
+        let files = manager.installed_profile_files("quality-q8").unwrap();
+        assert!(files.transcriber.is_none());
+        let status = status_snapshot(root.clone(), None, Some(InstallRequest { profile_id: Some("quality-q8".into()), component_ids: vec![] }));
+        assert!(status.ready && status.download_pending > 0);
+        let _ = fs::remove_dir_all(root);
     }
 
     #[test]

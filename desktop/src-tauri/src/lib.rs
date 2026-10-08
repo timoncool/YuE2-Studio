@@ -251,12 +251,6 @@ fn songs_in_progress() -> Option<Vec<String>> {
     }
 }
 
-/// True while a song is queued or rendering: the only time quitting loses work.
-fn song_in_progress() -> bool {
-    // cannot tell: ask rather than lose a song
-    songs_in_progress().is_none_or(|songs| !songs.is_empty())
-}
-
 /// Quit, asking first only when a song is being generated. A song the person
 /// agreed to stop is stopped before the studio goes, so the next start does
 /// not make it again as one the studio was cut off on.
@@ -683,7 +677,8 @@ pub fn run() {
             // code. An exit the app requests itself carries a code and goes
             // through.
             match &event {
-                tauri::RunEvent::WindowEvent { label, event: tauri::WindowEvent::CloseRequested { api, .. }, .. } if label == "main" && song_in_progress() => {
+                // the service is asked off the event loop: it can take seconds to answer
+                tauri::RunEvent::WindowEvent { label, event: tauri::WindowEvent::CloseRequested { api, .. }, .. } if label == "main" => {
                     api.prevent_close();
                     let app = app.clone();
                     std::thread::spawn(move || confirm_quit(&app));

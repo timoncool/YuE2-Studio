@@ -457,6 +457,17 @@ async fn resume_unfinished_jobs(state: AppState) {
     for old in cut_off {
         let (resumed_as, message) = if old.attempt >= MAX_RESUMES {
             (None, format!("Cut off when the studio closed, and already started again {MAX_RESUMES} times; make it again by hand."))
+        } else if let Some(replay) = old.request.get("replay") {
+            match serde_json::from_value::<ReplayMusicJobRequest>(replay.clone()) {
+                Err(error) => (None, format!("Cut off when the studio closed; its request could not be read to start it again: {error}")),
+                Ok(mut request) => {
+                    request.client_ref = None;
+                    match submit_replay_job(state.clone(), request, old.attempt + 1).await {
+                        Ok((_, Json(job))) => (Some(job.id.clone()), format!("Cut off when the studio closed; started again as {}.", job.id)),
+                        Err((_, Json(error))) => (None, format!("Cut off when the studio closed; it could not be started again: {}", error.error)),
+                    }
+                }
+            }
         } else {
             match serde_json::from_value::<CreateMusicJobRequest>(old.request.clone()) {
                 Err(error) => (None, format!("Cut off when the studio closed; its request could not be read to start it again: {error}")),
@@ -539,7 +550,7 @@ struct SetupDownloadRequest {
     profile_id: Option<String>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 struct ReplayMusicJobRequest {
     song_id: Option<String>,
     replay_request: Option<Value>,
@@ -2443,7 +2454,6 @@ async fn install_listen_pack(State(state): State<AppState>) -> Json<Value> {
 
 async fn cancel_training_pack(State(state): State<AppState>) -> Json<Value> {
     state.training.downloader().cancel();
-    state.engine_runtime.downloader().cancel();
     state.separator.downloader().cancel();
     state.lyrics_sync.downloader().cancel();
     Json(serde_json::json!({ "cancelled": true }))
@@ -5981,8 +5991,10 @@ async fn install_midi(State(state): State<AppState>, Json(input): Json<MidiSizeR
     }
     let transcriber = state.midi.clone();
     tokio::spawn(async move {
-        if let Err(error) = transcriber.downloader().install_all("midi", &missing).await {
-            eprintln!("[ERROR] midi: download failed: {error:#}");
+        match transcriber.downloader().install_all("midi", &missing).await {
+            Ok(_) if transcriber.tool_installed() => transcriber.remove_older_tools(),
+            Ok(_) => {}
+            Err(error) => eprintln!("[ERROR] midi: download failed: {error:#}"),
         }
     });
     Ok(Json(serde_json::json!({ "started": true, "size": size.id })))
@@ -6102,8 +6114,6 @@ async fn transcribe_to_midi(state: &AppState, size: &'static midi::Size, audio: 
         if midi_stopped(state) || !state.midi.missing(size).is_empty() {
             anyhow::bail!("stopped before everything the transcriber needs had arrived");
         }
-    }
-    if state.midi.tool_installed() {
         state.midi.remove_older_tools();
     }
 
@@ -6898,6 +6908,11 @@ async fn replay_music_job(
     State(state): State<AppState>,
     Json(request): Json<ReplayMusicJobRequest>,
 ) -> Result<(StatusCode, Json<MusicJob>), (StatusCode, Json<ApiError>)> {
+    submit_replay_job(state, request, 0).await
+}
+
+/// Sends a re-render to the engine and keeps it, as a new song is kept.
+async fn submit_replay_job(state: AppState, request: ReplayMusicJobRequest, attempt: u32) -> Result<(StatusCode, Json<MusicJob>), (StatusCode, Json<ApiError>)> {
     if selected_local_music_engine(&*state.configuration.read().await).as_deref() != Some(PRIMARY_MUSIC_ENGINE_ID) {
         return Err(api_error(StatusCode::CONFLICT, "Re-rendering requires the local YuE2 engine.".into()));
     }
@@ -6961,6 +6976,10 @@ async fn replay_music_job(
         }
     }
     state.jobs.write().await.insert(job.id.clone(), job.clone());
+    let stored_request = serde_json::json!({ "replay": serde_json::to_value(&request).unwrap_or(Value::Null) });
+    if let Err(error) = state.library.save_music_job(&stored_job(&job, stored_request, attempt)) {
+        eprintln!("[ERROR] the re-render's request could not be kept: {error:#}");
+    }
     spawn_job_watcher(state.clone(), job.id.clone());
     Ok((StatusCode::ACCEPTED, Json(job)))
 }
@@ -7215,7 +7234,9 @@ fn spawn_job_watcher(state: AppState, job_id: String) {
         // however it ended, it is no longer one the studio's closing could cut off
         let ended = state.jobs.read().await.get(&job_id).map(|job| (job_status_name(&job.status), job.message.clone()));
         if let Some((status, message)) = ended {
-            if let Err(error) = state.library.set_music_job_status(&job_id, status, &message) {
+            // a song that reached the library needs no record of its request any more
+            let kept = if status == "completed" { state.library.forget_music_job(&job_id) } else { state.library.set_music_job_status(&job_id, status, &message) };
+            if let Err(error) = kept {
                 eprintln!("[ERROR] the song's state could not be kept: {error:#}");
             }
         }
@@ -7282,7 +7303,8 @@ async fn follow_job(state: &AppState, job_id: &str) {
                 }
                 return;
             }
-            if let Some(job) = state.jobs.write().await.get_mut(&job_id) {
+            // a stop asked for while the engine was being polled stays a stop
+            if let Some(job) = state.jobs.write().await.get_mut(&job_id).filter(|job| !matches!(job.status, MusicJobStatus::Cancelled)) {
                 apply_remote_status(job, &remote.status);
             }
         }
@@ -7477,6 +7499,10 @@ async fn cancel_music_job(
         job.status = MusicJobStatus::Cancelled;
         job.phase = MusicJobPhase::Cancelled;
         job.message = "Vocals extraction cancelled.".into();
+        // kept at once, as an engine stop is
+        if let Err(error) = state.library.set_music_job_status(&job_id, job_status_name(&job.status), &job.message) {
+            eprintln!("[ERROR] the stopped song's state could not be kept: {error:#}");
+        }
         return Ok(Json(job.clone()));
     }
     let remote = state.music_server.cancel(&job_id).await.map_err(|error| {
