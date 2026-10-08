@@ -89,7 +89,7 @@ export const ScoreView: React.FC<{ abc: string; className?: string; title?: stri
   return (
     <div className={className}>
       {!failed && (
-        <div className="mb-1 flex justify-end gap-1.5">
+        <div className="sticky top-0 z-10 mb-1 flex justify-end gap-1.5 bg-white py-0.5">
           <button type="button" onClick={() => void listen()} className={button} title={t('scoreListenHint')}>
             {playing ? <Square size={12} /> : <Play size={12} />}{playing ? t('scoreStop') : t('scoreListen')}
           </button>
