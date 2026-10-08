@@ -6799,10 +6799,19 @@ async fn free_the_card_for_the_engine(state: &AppState) {
 /// A card that ran out of memory says so in the log and then the process is
 /// gone; the studio saw only a refused connection, and told the user to
 /// download models that were already on disk.
-fn engine_failure_reason() -> Option<String> {
+fn engine_failure_reason(state: &AppState) -> Option<String> {
     let tail = music_engine::yue_server::startup_log_tail(80).join("\n").to_lowercase();
-    describes_exhausted_memory(&tail)
-        .then(|| "The graphics card ran out of memory while the engine was loading the models. Choose a smaller quantisation in the model manager, or close whatever else is using the card - the writing assistant holds several gigabytes of its own.".to_string())
+    if describes_exhausted_memory(&tail) {
+        return Some("The graphics card ran out of memory while the engine was loading the models. Choose a smaller quantisation in the model manager, or close whatever else is using the card - the writing assistant holds several gigabytes of its own.".to_string());
+    }
+    let lines = state.engine_log.lines()?;
+    last_fatal(&lines)
+}
+
+/// What the engine said when it gave a job up: its last FATAL line among the
+/// latest ones, without the stage tag.
+fn last_fatal(lines: &[String]) -> Option<String> {
+    lines.iter().rev().take(40).find_map(|line| line.split_once("FATAL:").map(|(_, why)| why.trim().to_string())).filter(|why| !why.is_empty())
 }
 
 /// Whether a lowercased log says the card ran out of room.
@@ -7321,8 +7330,9 @@ async fn follow_job(state: &AppState, job_id: &str) {
                 return;
             }
             // a stop asked for while the engine was being polled stays a stop
+            let failure = (remote.status == "failed").then(|| engine_failure_reason(&state)).flatten();
             if let Some(job) = state.jobs.write().await.get_mut(&job_id).filter(|job| !matches!(job.status, MusicJobStatus::Cancelled)) {
-                apply_remote_status(job, &remote.status);
+                apply_remote_status(job, &remote.status, failure);
             }
         }
     }
@@ -7526,11 +7536,12 @@ async fn cancel_music_job(
     let remote = state.music_server.cancel(&job_id).await.map_err(|error| {
         api_error(StatusCode::SERVICE_UNAVAILABLE, format!("the engine did not accept the cancel: {error}"))
     })?;
+    let failure = (remote.status == "failed").then(|| engine_failure_reason(&state)).flatten();
     let mut jobs = state.jobs.write().await;
     let job = jobs
         .get_mut(&job_id)
         .ok_or_else(|| api_error(StatusCode::NOT_FOUND, "Music job was not found.".into()))?;
-    apply_remote_status(job, &remote.status);
+    apply_remote_status(job, &remote.status, failure);
     stop_on_request(job);
     // kept at once: a studio closed right after the stop must not start the song again
     if let Err(error) = state.library.set_music_job_status(&job_id, job_status_name(&job.status), &job.message) {
@@ -7762,7 +7773,7 @@ async fn score_job_status(
             job.lm_seed = lm_seed;
             job.plans = plans_from_result(&result.content_type, &result.body).map_err(|error| api_error(StatusCode::BAD_GATEWAY, error))?;
         }
-        "failed" => job.error = Some(engine_failure_reason().unwrap_or_else(|| "The engine could not write this score.".into())),
+        "failed" => job.error = Some(engine_failure_reason(&state).unwrap_or_else(|| "The engine could not write this score.".into())),
         _ => {}
     }
     Ok(Json(job))
@@ -7782,7 +7793,10 @@ impl EngineClient {
             .unwrap_or_else(|_| format!("http://127.0.0.1:{}", music_engine::yue_server::DEFAULT_PORT))
             .trim_end_matches('/')
             .to_owned();
-        Self { base_url, http: net::client(), health_cache: Arc::new(std::sync::Mutex::new(None)) }
+        // the engine's server drops a connection idle for 5 s; a pooled one can be
+        // taken as it closes and the request is lost, so every request opens its own
+        let http = net::builder().pool_max_idle_per_host(0).build().expect("an HTTP client with a proxy callback builds");
+        Self { base_url, http, health_cache: Arc::new(std::sync::Mutex::new(None)) }
     }
 
     async fn health(&self) -> bool {
@@ -8016,6 +8030,10 @@ const CHECKPOINT_SONG_SECONDS: f64 = 360.0;
 /// What the model's 24576-token context holds with a prompt and a score beside the song.
 const LONGEST_SONG_SECONDS: f64 = 600.0;
 const SEMANTIC_FRAMES_PER_SECOND: f64 = 25.0;
+/// The checkpoint's own score budget.
+const CHECKPOINT_SCORE_TOKENS: u64 = 4096;
+/// What a written score takes a second: 3951 tokens for 271 s of song.
+const SCORE_TOKENS_PER_SECOND: f64 = 15.0;
 
 /// Builds the yue-server request. Only what the user set travels: an absent
 /// field is the engine's protocol default, and the replay request the engine
@@ -8109,6 +8127,17 @@ fn yue_request_from(request: &CreateMusicJobRequest, max_batch: u32) -> Result<V
                 body["semantic_sampling"] = serde_json::json!({});
             }
             body["semantic_sampling"]["max_tokens"] = Value::from((duration * SEMANTIC_FRAMES_PER_SECOND).ceil() as u64);
+        }
+    }
+    // a score the model writes for a long song outgrows the checkpoint's score budget
+    let writes_score = request.cot.as_deref() != Some("off") && body.get("abc").is_none() && semantic_tokens.is_none();
+    if let Some(duration) = request.duration_seconds.filter(|_| writes_score) {
+        let tokens = (duration * SCORE_TOKENS_PER_SECOND).ceil() as u64;
+        if tokens > CHECKPOINT_SCORE_TOKENS && request.abc_sampling.as_ref().and_then(|preset| preset.max_tokens).is_none() {
+            if !body["abc_sampling"].is_object() {
+                body["abc_sampling"] = serde_json::json!({});
+            }
+            body["abc_sampling"]["max_tokens"] = Value::from(tokens);
         }
     }
     if !request.adapters.is_empty() {
@@ -8245,7 +8274,7 @@ fn uuid_suffix() -> String {
 
 /// yue-server has no queued state: a job is `running` from the moment it is
 /// accepted, whether the worker has reached it or not.
-fn apply_remote_status(job: &mut MusicJob, remote_status: &str) {
+fn apply_remote_status(job: &mut MusicJob, remote_status: &str, failure: Option<String>) {
     match remote_status {
         "running" => {
             job.status = MusicJobStatus::Running;
@@ -8260,7 +8289,7 @@ fn apply_remote_status(job: &mut MusicJob, remote_status: &str) {
         "failed" => {
             job.status = MusicJobStatus::Failed;
             job.phase = MusicJobPhase::Failed;
-            job.message = engine_failure_reason().unwrap_or_else(|| "The engine reported a failed job; its log has the reason.".into());
+            job.message = failure.unwrap_or_else(|| "The engine reported a failed job; its log has the reason.".into());
         }
         "cancelled" => {
             job.status = MusicJobStatus::Cancelled;
@@ -8617,6 +8646,23 @@ mod tests {
     }
 
     #[test]
+    fn a_long_song_the_model_scores_gets_room_for_its_score() {
+        let long = yue_request_from(&CreateMusicJobRequest { client_ref: None, duration_seconds: Some(480.0), ..sample_request() }, 1).unwrap();
+        assert_eq!(long["abc_sampling"]["max_tokens"], 7200);
+        let short = yue_request_from(&CreateMusicJobRequest { client_ref: None, duration_seconds: Some(240.0), ..sample_request() }, 1).unwrap();
+        assert!(short.get("abc_sampling").is_none());
+        let unscored = yue_request_from(&CreateMusicJobRequest { client_ref: None, duration_seconds: Some(480.0), cot: Some("off".into()), ..sample_request() }, 1).unwrap();
+        assert!(unscored.get("abc_sampling").is_none());
+    }
+
+    #[test]
+    fn a_failed_job_names_the_engines_reason() {
+        let lines: Vec<String> = ["[AR] Semantic 10/9000", "[Pipeline] FATAL: the prompt and the score take 9700 of the model's 24576 tokens, so a song can last 595 s and 600 s were asked for", "[Server] job failed"].iter().map(|line| line.to_string()).collect();
+        assert_eq!(last_fatal(&lines).unwrap(), "the prompt and the score take 9700 of the model's 24576 tokens, so a song can last 595 s and 600 s were asked for");
+        assert!(last_fatal(&["[AR] Semantic 10/9000".to_string()]).is_none());
+    }
+
+    #[test]
     fn a_song_longer_than_the_checkpoint_budget_brings_its_own() {
         let long = yue_request_from(&CreateMusicJobRequest { client_ref: None, duration_seconds: Some(480.0), ..sample_request() }, 1).unwrap();
         assert_eq!(long["semantic_sampling"]["max_tokens"], 12000);
@@ -8690,18 +8736,18 @@ mod tests {
     #[test]
     fn remote_statuses_never_claim_success_for_an_unknown_value() {
         let mut job = queued_not_configured_job(sample_request(), PRIMARY_MUSIC_ENGINE_ID.into());
-        apply_remote_status(&mut job, "not-a-real-status");
+        apply_remote_status(&mut job, "not-a-real-status", None);
         assert!(matches!(job.status, MusicJobStatus::Failed));
     }
 
     #[test]
     fn a_stop_is_shown_at_once_but_never_undoes_a_finished_job() {
         let mut running = queued_not_configured_job(sample_request(), PRIMARY_MUSIC_ENGINE_ID.into());
-        apply_remote_status(&mut running, "running");
+        apply_remote_status(&mut running, "running", None);
         stop_on_request(&mut running);
         assert!(matches!(running.status, MusicJobStatus::Cancelled));
         let mut finished = queued_not_configured_job(sample_request(), PRIMARY_MUSIC_ENGINE_ID.into());
-        apply_remote_status(&mut finished, "done");
+        apply_remote_status(&mut finished, "done", None);
         stop_on_request(&mut finished);
         assert!(matches!(finished.status, MusicJobStatus::Completed));
     }
