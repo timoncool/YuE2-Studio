@@ -538,6 +538,21 @@ impl AdapterLibrary {
         self.read_meta(id).and_then(|meta| meta.trigger).filter(|trigger| !trigger.trim().is_empty())
     }
 
+    /// Whether the adapter was trained with its trigger inside HOT-Step's style
+    /// sentence, as its weights record (`style_template: upstream`).
+    pub fn trained_in_sentence(&self, id: &str) -> bool {
+        let Ok(entries) = self.folder(id).and_then(|folder| Ok(fs::read_dir(folder)?)) else {
+            return false;
+        };
+        entries
+            .flatten()
+            .map(|entry| entry.path())
+            .filter(|path| path.extension().is_some_and(|extension| extension.eq_ignore_ascii_case("safetensors")))
+            .any(|path| {
+                local_header(&path).is_ok_and(|header| header.get("__metadata__").and_then(|meta| meta.get("style_template")).and_then(Value::as_str) == Some("upstream"))
+            })
+    }
+
     pub fn exists(&self, id: &str) -> bool {
         self.read_meta(id).is_some_and(|meta| meta.engine == self.engine)
     }
@@ -666,6 +681,57 @@ fn header_in(start: &[u8]) -> Result<HeaderRead> {
         Some(header) => HeaderRead::Whole(serde_json::from_slice(header)?),
         None => HeaderRead::Longer(length),
     })
+}
+
+/// The header of a safetensors file on disk.
+fn local_header(path: &Path) -> Result<serde_json::Map<String, Value>> {
+    use std::io::Read;
+    let mut file = fs::File::open(path)?;
+    let mut length = [0u8; 8];
+    file.read_exact(&mut length)?;
+    let length = u64::from_le_bytes(length);
+    if length > 64 << 20 {
+        bail!("a safetensors header of {length} bytes");
+    }
+    let mut header = vec![0u8; length as usize];
+    file.read_exact(&mut header)?;
+    Ok(serde_json::from_slice(&header)?)
+}
+
+/// Spaces, tabs and line breaks run together as the trainer's squash does; other
+/// whitespace is the caption's own.
+fn squash(text: &str) -> String {
+    text.split([' ', '\t', '\r', '\n']).filter(|word| !word.is_empty()).collect::<Vec<_>>().join(" ")
+}
+
+fn strip_opener<'a>(style: &'a str, trigger: &str) -> Option<&'a str> {
+    [format!("{trigger}, in the style of {trigger}."), format!("{trigger},")]
+        .iter()
+        .find_map(|opener| style.get(..opener.len()).filter(|head| head.eq_ignore_ascii_case(opener)).map(|_| &style[opener.len()..]))
+        .or_else(|| style.eq_ignore_ascii_case(trigger).then_some(""))
+}
+
+/// Whether the style already opens with the trigger, as `<trigger>, ` or in the trained sentence.
+pub fn opens_with(style: &str, trigger: &str) -> bool {
+    let trigger = trigger.trim();
+    !trigger.is_empty() && strip_opener(&squash(style), trigger).is_some()
+}
+
+/// The style as HOT-Step's trainers write it into every training row of an adapter
+/// with a trigger: `<trigger>, in the style of <trigger>. <style>`, the trigger alone
+/// for an empty style. A style that already opens with the trigger is not wrapped twice.
+pub fn upstream_style(style: &str, trigger: &str) -> String {
+    let trigger = trigger.trim();
+    let style = squash(style);
+    if trigger.is_empty() {
+        return style;
+    }
+    let rest = squash(strip_opener(&style, trigger).unwrap_or(&style));
+    if rest.is_empty() {
+        trigger.to_string()
+    } else {
+        format!("{trigger}, in the style of {trigger}. {rest}")
+    }
 }
 
 /// A repository's adapter files at one commit.
@@ -1049,5 +1115,32 @@ mod tests {
         assert_eq!(views["a"].slots, vec!["ar".to_string()]);
         assert_eq!(views["a"].trigger.as_deref(), Some("t"));
         assert_eq!(views["b"].error.as_deref(), Some("no key"));
+    }
+
+    #[test]
+    fn a_trained_trigger_is_sent_inside_the_trained_sentence_once() {
+        let sentence = "nrmn, in the style of nrmn. synth pop, male vocal";
+        assert_eq!(upstream_style("nrmn, synth pop, male vocal", "nrmn"), sentence);
+        assert_eq!(upstream_style("synth pop,  male\nvocal", "nrmn"), sentence);
+        assert_eq!(upstream_style(sentence, "nrmn"), sentence);
+        assert_eq!(upstream_style("NRMN, In The Style Of NRMN. synth pop, male vocal", "nrmn"), sentence);
+        assert_eq!(upstream_style("nrmn, ", "nrmn"), "nrmn");
+        assert_eq!(upstream_style("", "nrmn"), "nrmn");
+        assert_eq!(upstream_style("synth pop", " "), "synth pop");
+        assert_eq!(upstream_style("феофан, рок", "феофан"), "феофан, in the style of феофан. рок");
+        assert!(opens_with("nrmn, synth pop", "nrmn") && opens_with(sentence, "nrmn") && !opens_with("synth pop, nrmn", "nrmn"));
+    }
+
+    #[test]
+    fn the_trained_sentence_is_read_from_the_weights() {
+        let library = library("sentence");
+        let folder = library.root.join("trained");
+        fs::create_dir_all(&folder).unwrap();
+        let header = br#"{"__metadata__":{"trigger":"nrmn","style_template":"upstream"}}"#;
+        let mut bytes = (header.len() as u64).to_le_bytes().to_vec();
+        bytes.extend_from_slice(header);
+        fs::write(folder.join("native-nar.safetensors"), bytes).unwrap();
+        assert!(library.trained_in_sentence("trained"));
+        assert!(!library.trained_in_sentence("missing"));
     }
 }

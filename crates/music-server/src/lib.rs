@@ -6636,6 +6636,9 @@ async fn create_music_job(
         Ok(value) => value,
         Err(error) => return (StatusCode::BAD_REQUEST, Json(failed_request_job(request, engine_id, error))),
     };
+    if let Some(style) = trained_style(&state.adapters, &request) {
+        body["style"] = Value::String(style);
+    }
     let laid = laid_out(&mut body, request.duration_seconds.is_none());
     let derived = match request.cover_of.clone() {
         Some(id) => match state.library.get_song(&id) {
@@ -7641,6 +7644,20 @@ fn engine_submission(body: &Value) -> Value {
         }
     }
     engine
+}
+
+/// The style a request's LoRA was trained to hear: an adapter whose weights say
+/// its trigger lived inside the style sentence is sent that sentence, not the
+/// style as typed. One sentence carries one trigger, the one the style opens with.
+fn trained_style(adapters: &adapters::AdapterLibrary, request: &CreateMusicJobRequest) -> Option<String> {
+    let triggers: Vec<String> = request
+        .adapters
+        .iter()
+        .filter(|adapter| adapter.scales.values().any(|scale| *scale != 0.0) && adapters.trained_in_sentence(&adapter.id))
+        .filter_map(|adapter| adapters.trigger_of(&adapter.id))
+        .collect();
+    let trigger = triggers.iter().find(|trigger| adapters::opens_with(&request.style, trigger)).or(triggers.first())?;
+    Some(adapters::upstream_style(&request.style, trigger))
 }
 
 fn yue_request_from(request: &CreateMusicJobRequest, max_batch: u32) -> Result<Value, String> {
