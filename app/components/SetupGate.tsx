@@ -671,6 +671,8 @@ export const SetupGate: React.FC<{ onReady?: () => void; mode?: 'first-run' | 's
   const [choice, setChoice] = useState<Record<string, string>>({});
   const chosenValues = useMemo(() => Object.values(choice).filter((id): id is string => typeof id === 'string' && id.length > 0), [choice]);
   const [error, setError] = useState<string | null>(null);
+  // what taking the user's own model folder did: files taken, copies made, what is still missing
+  const [adoptNote, setAdoptNote] = useState<string | null>(null);
   // the training page's packs are listed here too, with everything else the studio downloads
   const [trainingInfo, setTrainingInfo] = useState<{ min_vram_gb: number; card_trains: boolean } | null>(null);
   useEffect(() => {
@@ -989,17 +991,27 @@ export const SetupGate: React.FC<{ onReady?: () => void; mode?: 'first-run' | 's
                   type="button"
                   onClick={() => {
                     void fetch('/setup/adopt', { method: 'POST' })
-                      .then((response) => (response.ok ? response.json() : null))
-                      .then((body: { picked?: boolean; adopted?: string[] } | null) => {
-                        if (body?.picked) void refresh();
+                      .then(async (response) => (response.ok ? response.json() : Promise.reject(new Error(await errorMessage(response)))))
+                      .then(async (body: { picked?: boolean; adopted?: string[]; copied?: { id: string; bytes: number }[] } | null) => {
+                        if (!body?.picked) return;
+                        const next = await refresh();
+                        const wanted = chosenIds ?? chosenValues;
+                        const missing = (catalog?.components ?? []).filter((component) => wanted.includes(component.id) && !next.installed_components.includes(component.id));
+                        const copiedBytes = (body.copied ?? []).reduce((sum, file) => sum + file.bytes, 0);
+                        setAdoptNote([
+                          t('adoptTaken').replace('{count}', String(body.adopted?.length ?? 0)),
+                          copiedBytes > 0 ? t('adoptCopied').replace('{size}', bytes(copiedBytes)) : '',
+                          missing.length > 0 ? t('adoptMissing').replace('{files}', missing.map((component) => `${component.filename} (${bytes(component.bytes)})`).join(', ')) : '',
+                        ].filter(Boolean).join(' '));
                       })
-                      .catch(() => undefined);
+                      .catch((reason) => setError(reason instanceof Error ? reason.message : String(reason)));
                   }}
                   className="ml-2 mt-2 inline-flex items-center gap-1 rounded-lg border border-zinc-300 px-2 py-1 text-[11px] font-medium text-zinc-600 hover:border-pink-400 hover:text-pink-600 dark:border-white/15 dark:text-zinc-300"
                 >
                   <FolderDown size={13} />
                   {t('useExistingModels')}
                 </button>
+                {adoptNote && <p className="mt-2 text-[11px] leading-4 text-zinc-600 dark:text-zinc-300">{adoptNote}</p>}
               </div>
             )}
           </div>

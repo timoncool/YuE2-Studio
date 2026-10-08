@@ -92,6 +92,8 @@ struct AppState {
     /// running engine computes on. Auto walks CUDA, Vulkan, the processor and
     /// skips the failed; a restart of the studio tries them all again.
     failed_devices: Arc<RwLock<Vec<music_engine::yue_server::ComputeBackend>>>,
+    /// Why the engine last failed to come up with a complete set on disk, for the setup page.
+    engine_start_error: Arc<RwLock<Option<String>>>,
     active_device: Arc<RwLock<Option<music_engine::yue_server::ComputeBackend>>>,
     /// The CUDA libraries the engine binary imports. They are downloaded, not
     /// installed, so the engine cannot start until they are on disk.
@@ -746,6 +748,7 @@ pub async fn serve() -> anyhow::Result<()> {
         engine_options: Arc::new(RwLock::new(persisted.as_ref().map(|settings| settings.engine_options).unwrap_or_default())),
         engine_runtime: Arc::new(engine_runtime::EngineRuntime::new(&engine_bundle_root())),
         failed_devices: Arc::new(RwLock::new(Vec::new())),
+        engine_start_error: Arc::new(RwLock::new(None)),
         active_device: Arc::new(RwLock::new(None)),
         assistant: Arc::new(RwLock::new(persisted.as_ref().map(|settings| settings.assistant.clone()).unwrap_or_default())),
         assistant_runtime: Arc::new(assistant_runtime::AssistantRuntime::new(
@@ -1001,8 +1004,12 @@ pub async fn serve() -> anyhow::Result<()> {
                         }
                     }
                     match restart_engine(&state).await {
-                        Ok(()) => complained = false,
+                        Ok(()) => {
+                            complained = false;
+                            *state.engine_start_error.write().await = None;
+                        }
                         Err(error) => {
+                            *state.engine_start_error.write().await = Some(error.clone());
                             // Say it once per failure, not once every few
                             // seconds: a card with too little memory would
                             // otherwise fill the log with the same line.
@@ -4477,6 +4484,7 @@ async fn compose_setup_status(state: &AppState, manager_status: model_manager::M
             "engine_ready".into(),
             Value::Bool(state.music_server.health().await),
         );
+        fields.insert("engine_error".into(), serde_json::to_value(state.engine_start_error.read().await.clone()).unwrap_or(Value::Null));
         fields.insert("engine_id".into(), Value::String(PRIMARY_MUSIC_ENGINE_ID.into()));
         fields.insert("selected_profile_id".into(), serde_json::to_value(selected_profile_id).unwrap_or(Value::Null));
         fields.insert("selected_component_ids".into(), serde_json::to_value(selected_component_ids).unwrap_or(Value::Null));
@@ -6341,6 +6349,8 @@ async fn setup_adopt(State(state): State<AppState>, body: axum::body::Bytes) -> 
 
     let _ = std::fs::create_dir_all(&models_root);
     let mut adopted: Vec<String> = Vec::new();
+    // a copy is a second set of gigabytes on disk; the window says which files took one
+    let mut copied: Vec<Value> = Vec::new();
     std::fs::read_dir(&folder).map_err(|error| api_error(StatusCode::BAD_REQUEST, error.to_string()))?;
     // Model sets are often kept one component per folder, so the picked
     // folder is searched with its subfolders.
@@ -6367,8 +6377,11 @@ async fn setup_adopt(State(state): State<AppState>, body: axum::body::Bytes) -> 
         let Some(source) = source else { continue };
         // A hard link costs nothing and keeps one copy on disk; a folder on
         // another drive cannot have one, so that falls back to a copy.
-        if std::fs::hard_link(source, &target).is_err() && std::fs::copy(source, &target).is_err() {
-            continue;
+        if std::fs::hard_link(source, &target).is_err() {
+            match std::fs::copy(source, &target) {
+                Ok(bytes) => copied.push(serde_json::json!({ "id": component.id, "bytes": bytes })),
+                Err(_) => continue,
+            }
         }
         adopted.push(component.id.to_string());
     }
@@ -6379,6 +6392,7 @@ async fn setup_adopt(State(state): State<AppState>, body: axum::body::Bytes) -> 
         "picked": true,
         "folder": folder.display().to_string(),
         "adopted": adopted,
+        "copied": copied,
         "status": compose_setup_status(&state, status).await,
     })))
 }

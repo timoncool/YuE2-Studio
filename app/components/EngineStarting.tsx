@@ -18,6 +18,8 @@ export const EngineStarting: React.FC<{ onReady?: () => void }> = ({ onReady }) 
   const [seconds, setSeconds] = useState(0);
   const [failed, setFailed] = useState<string | null>(null);
   const [foreign, setForeign] = useState<string | null>(null);
+  // why the service's last attempt to start the engine failed, in its own words
+  const [startError, setStartError] = useState<string | null>(null);
   // The engine binary is linked against CUDA libraries that are downloaded
   // rather than shipped - half a gigabyte of them. While they arrive the
   // engine cannot start, and this screen has to say so with a number.
@@ -47,7 +49,8 @@ export const EngineStarting: React.FC<{ onReady?: () => void }> = ({ onReady }) 
         .catch(() => undefined);
       await fetch('/setup/status')
         .then((response) => (response.ok ? response.json() : Promise.reject(new Error())))
-        .then((body: { engine_runtime?: { ready?: boolean; downloading?: boolean; downloaded_bytes?: number; total_bytes?: number; error?: string | null } }) => {
+        .then((body: { engine_error?: string | null; engine_runtime?: { ready?: boolean; downloading?: boolean; downloaded_bytes?: number; total_bytes?: number; error?: string | null } }) => {
+          setStartError(body.engine_error || null);
           const state = body.engine_runtime;
           setRuntime(
             state && state.ready === false
@@ -135,7 +138,13 @@ export const EngineStarting: React.FC<{ onReady?: () => void }> = ({ onReady }) 
             {foreign && <div className="mt-1 break-all font-mono text-[11px] opacity-80">{foreign}</div>}
           </div>
         )}
-        {failed && foreign === null && <p className="mt-3 text-xs leading-5 text-amber-600 dark:text-amber-300">{failed}</p>}
+        {startError && foreign === null && !runtime && (
+          <div role="alert" className="mt-3 rounded-lg border border-rose-400/40 bg-rose-500/10 px-3 py-2 text-xs leading-5 text-rose-700 dark:text-rose-200">
+            {t('engineStartFailed')}
+            <div className="mt-1 break-words font-mono text-[11px] opacity-80">{startError}</div>
+          </div>
+        )}
+        {failed && foreign === null && !startError && <p className="mt-3 text-xs leading-5 text-amber-600 dark:text-amber-300">{failed}</p>}
 
         <button
           type="button"
