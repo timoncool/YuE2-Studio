@@ -393,10 +393,10 @@ impl ModelManager {
     async fn download_component(&self, component: &Component) -> Result<()> {
         let target = self.root.join(component.filename);
         let part = part_path(&target);
-        let url = format!(
+        let url = crate::net::model_url(&format!(
             "https://huggingface.co/{}/resolve/{}/{}?download=true",
             component.repository, component.revision, component.filename
-        );
+        ));
 
         let plan = crate::chunked::probe(&self.http, &url).await?;
         let written = std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0));
