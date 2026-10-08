@@ -549,6 +549,8 @@ struct ReplayMusicJobRequest {
     mp3_bitrate: Option<u32>,
     /// A title for the re-render; the source track's own name otherwise.
     title: Option<String>,
+    /// Seconds to compose on after the track's last frame; its start stays as it is.
+    extend_seconds: Option<f64>,
     /// The window's own mark, as on a new song.
     client_ref: Option<String>,
 }
@@ -6071,8 +6073,8 @@ fn midi_stopped(state: &AppState) -> bool {
 }
 
 /// The device the transcriber computes on, as its `--device` names it: left to it (CUDA) where
-/// the engine runs the CUDA 13 build, Vulkan on any other card - Pascal and Maxwell have no CUDA 13
-/// code and AMD and Intel no CUDA - and the processor without one.
+/// the engine runs the CUDA 13 build, else the processor - Pascal and Maxwell have no CUDA 13 code,
+/// AMD and Intel no CUDA, and its Vulkan path writes wrong notes.
 fn midi_device(options: &EngineOptions) -> &'static str {
     use music_engine::yue_server::ComputeBackend;
     // the macOS build carries Metal alone, which its own choice finds
@@ -6082,7 +6084,6 @@ fn midi_device(options: &EngineOptions) -> &'static str {
     match options.backend {
         ComputeBackend::Cpu => "cpu",
         _ if options.cuda_build() == Some(hardware::CudaBuild::Cuda13) => "auto",
-        _ if hardware::hardware().gpu_name.is_some() => "Vulkan0",
         _ => "cpu",
     }
 }
@@ -6099,6 +6100,9 @@ async fn transcribe_to_midi(state: &AppState, size: &'static midi::Size, audio: 
         if midi_stopped(state) || !state.midi.missing(size).is_empty() {
             anyhow::bail!("stopped before everything the transcriber needs had arrived");
         }
+    }
+    if state.midi.tool_installed() {
+        state.midi.remove_older_tools();
     }
 
     // WAV and MP3 go to the transcriber as they are: its own decoder is the
@@ -6910,7 +6914,11 @@ async fn replay_music_job(
     if state.training.active_run().await.is_some() {
         return Err(api_error(StatusCode::CONFLICT, "a training run has the card; re-render once it finishes or is stopped".into()));
     }
-    let body = prepare_replay_synthesis(replay, &request).map_err(|error| api_error(StatusCode::BAD_REQUEST, error))?;
+    let mut body = prepare_replay_synthesis(replay, &request).map_err(|error| api_error(StatusCode::BAD_REQUEST, error))?;
+    // the part composed on keeps to the score the way a new song does
+    if body.get("continue_semantic_tokens").and_then(Value::as_bool) == Some(true) {
+        lyric_schedule(&mut body);
+    }
     let style = body.get("style").and_then(Value::as_str).unwrap_or_default().to_owned();
     let lyrics = body.get("lyrics").and_then(Value::as_str).unwrap_or_default().to_owned();
     let remote = state
@@ -6952,7 +6960,8 @@ async fn replay_music_job(
 
 fn prepare_replay_synthesis(mut replay: Value, overrides: &ReplayMusicJobRequest) -> Result<Value, String> {
     let object = replay.as_object_mut().ok_or("replay_request must be a JSON object")?;
-    let tokens = object.get("semantic_tokens").and_then(Value::as_str).unwrap_or_default();
+    let tokens = object.get("semantic_tokens").and_then(Value::as_str).unwrap_or_default().to_owned();
+    let tokens = tokens.as_str();
     validate_semantic_tokens(tokens)?;
     if tokens.trim().is_empty() {
         return Err("replay_request has no semantic_tokens; it cannot skip the autoregressive stage".into());
@@ -6977,6 +6986,26 @@ fn prepare_replay_synthesis(mut replay: Value, overrides: &ReplayMusicJobRequest
     if let Some(bitrate) = overrides.mp3_bitrate {
         validate_mp3_bitrate(bitrate)?;
         object.insert("mp3_bitrate".into(), Value::from(bitrate));
+    }
+    if let Some(extra) = overrides.extend_seconds {
+        if !extra.is_finite() || extra <= 0.0 {
+            return Err("extend_seconds must be a positive number of seconds".into());
+        }
+        let frames = tokens.split(',').filter(|token| !token.trim().is_empty()).count();
+        let total = frames as f64 / SEMANTIC_FRAMES_PER_SECOND + extra;
+        if total > LONGEST_SONG_SECONDS {
+            return Err(format!("the song would last {total:.0} seconds; songs go up to {LONGEST_SONG_SECONDS:.0}"));
+        }
+        object.insert("continue_semantic_tokens".into(), Value::Bool(true));
+        object.insert("duration".into(), Value::from(total));
+        let budget = (total * SEMANTIC_FRAMES_PER_SECOND).ceil() as u64;
+        if total > CHECKPOINT_SONG_SECONDS {
+            let sampling = object.entry("semantic_sampling").or_insert_with(|| serde_json::json!({}));
+            if !sampling.is_object() {
+                *sampling = serde_json::json!({});
+            }
+            sampling["max_tokens"] = Value::from(budget);
+        }
     }
     // A replay is one song by construction; the engine ignores the counter
     // but the stored provenance should not claim a batch.
@@ -8039,7 +8068,7 @@ fn yue_request_from(request: &CreateMusicJobRequest, max_batch: u32) -> Result<V
 /// sung section's words wait until the score reaches it, so the voice keeps to the band.
 fn lyric_schedule(body: &mut Value) {
     if body.get("cot").and_then(Value::as_str) == Some("off")
-        || body.get("semantic_tokens").is_some()
+        || (body.get("semantic_tokens").is_some() && body.get("continue_semantic_tokens").and_then(Value::as_bool) != Some(true))
         || body.get("cfg_scale").and_then(Value::as_f64).is_some_and(|scale| scale != 1.0)
     {
         return;
@@ -8675,7 +8704,7 @@ mod tests {
     }
 
     fn replay_overrides() -> ReplayMusicJobRequest {
-        ReplayMusicJobRequest { client_ref: None, song_id: None, replay_request: None, steps: None, seed: None, synth_batch_size: None, output_format: None, peak_clip: None, mp3_bitrate: None, title: None }
+        ReplayMusicJobRequest { client_ref: None, song_id: None, replay_request: None, steps: None, seed: None, synth_batch_size: None, output_format: None, peak_clip: None, mp3_bitrate: None, title: None, extend_seconds: None }
     }
 
     #[test]
@@ -8692,6 +8721,20 @@ mod tests {
         assert_eq!(prepared["output_format"], "wav24");
         assert_eq!(prepared["mp3_bitrate"], 192);
         assert_eq!(prepared["lm_batch_size"], 1);
+    }
+
+    #[test]
+    fn a_longer_rerender_composes_on_from_the_tracks_last_frame() {
+        let codes = vec!["7"; 250].join(",");
+        let replay = serde_json::json!({"style":"pop","lyrics":"[Verse] hi","abc":"X:1\nK:C\n","semantic_tokens":codes,"lm_seed":5,"seed":1,"cot":"full"});
+        let longer = prepare_replay_synthesis(replay.clone(), &ReplayMusicJobRequest { extend_seconds: Some(30.0), ..replay_overrides() }).unwrap();
+        assert_eq!(longer["continue_semantic_tokens"], true);
+        assert_eq!(longer["duration"], 40.0);
+        assert!(longer.get("semantic_sampling").is_none());
+        let past = serde_json::json!({"semantic_tokens":vec!["7"; 8750].join(","),"cot":"off"});
+        let long = prepare_replay_synthesis(past, &ReplayMusicJobRequest { extend_seconds: Some(60.0), ..replay_overrides() }).unwrap();
+        assert_eq!(long["semantic_sampling"]["max_tokens"], 10250);
+        assert!(prepare_replay_synthesis(replay, &ReplayMusicJobRequest { extend_seconds: Some(700.0), ..replay_overrides() }).is_err());
     }
 
     #[test]

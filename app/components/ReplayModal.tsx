@@ -40,6 +40,8 @@ export const ReplayModal: React.FC<ReplayModalProps> = ({ song, clientRef, onClo
   const [format, setFormat] = useState<'mp3' | 'wav16' | 'wav24' | 'wav32'>(
     typeof settings.output_format === 'string' ? (settings.output_format as 'mp3') : 'mp3',
   );
+  // seconds composed on after the last frame; 0 renders the track as it is
+  const [extend, setExtend] = useState(0);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -62,6 +64,7 @@ export const ReplayModal: React.FC<ReplayModalProps> = ({ song, clientRef, onClo
           synth_batch_size: variations,
           output_format: format,
           mp3_bitrate: format === 'mp3' ? bitrate : undefined,
+          extend_seconds: extend > 0 ? extend : undefined,
         }),
       });
       const body = await response.json().catch(() => null);
@@ -112,6 +115,13 @@ export const ReplayModal: React.FC<ReplayModalProps> = ({ song, clientRef, onClo
                 <option value="wav24">WAV 24-bit</option>
                 <option value="wav32">WAV 32-bit float</option>
               </select>
+            </label>
+            <label className="col-span-2 block text-xs font-medium text-zinc-600 dark:text-zinc-300">
+              <span className="mb-1.5 block">{t('replayExtend')}</span>
+              <select value={extend} onChange={event => setExtend(Number(event.target.value))} className={CONTROL}>
+                {[0, 15, 30, 60, 90, 120].map(seconds => <option key={seconds} value={seconds}>{seconds === 0 ? t('replayExtendNone') : `+${seconds} s`}</option>)}
+              </select>
+              {extend > 0 && <span className="mt-1 block text-[11px] leading-4 text-zinc-500">{t('replayExtendHint')}</span>}
             </label>
             {format === 'mp3' && (
               <label className="block text-xs font-medium text-zinc-600 dark:text-zinc-300">
