@@ -395,6 +395,9 @@ impl AdapterLibrary {
             // an adapter whose files all arrived is kept even when another failed
             for plan in &planned {
                 if plan.assets.iter().all(|asset| library.downloader.is_installed(asset)) {
+                    if let Err(error) = library.drop_replaced_weights(plan) {
+                        eprintln!("[ERROR] adapter {} kept the weights of its earlier version: {error:#}", plan.meta.id);
+                    }
                     let meta = AdapterMeta { created_at: now(), ..plan.meta.clone() };
                     if let Err(error) = library.write_meta(&meta) {
                         eprintln!("[ERROR] adapter {} did not record: {error:#}", meta.id);
@@ -407,6 +410,22 @@ impl AdapterLibrary {
             library.installing_now().clear();
             crate::mcp::announce("lora_installed");
         });
+        Ok(())
+    }
+
+    /// The engine reads every weight file in an adapter's folder, and two of
+    /// them on one tensor refuse the load; an entry whose files changed leaves
+    /// only its own.
+    fn drop_replaced_weights(&self, plan: &Planned) -> Result<()> {
+        let folder = self.folder(&plan.meta.id)?;
+        let own: Vec<&str> = plan.assets.iter().filter_map(|asset| asset.relative_path.rsplit('/').next()).collect();
+        for entry in std::fs::read_dir(&folder).with_context(|| format!("read {}", folder.display()))? {
+            let path = entry?.path();
+            let name = path.file_name().and_then(|name| name.to_str()).unwrap_or_default();
+            if name.ends_with(".safetensors") && !own.contains(&name) {
+                std::fs::remove_file(&path).with_context(|| format!("remove {}", path.display()))?;
+            }
+        }
         Ok(())
     }
 
@@ -1102,6 +1121,26 @@ mod tests {
 
         library.remove(&meta.id).unwrap();
         assert!(library.installed(None).is_empty());
+        let _ = fs::remove_dir_all(library.root().parent().unwrap());
+    }
+
+    #[test]
+    fn a_catalogue_update_leaves_only_the_new_weights() {
+        let library = library("update");
+        let item = catalog().iter().find(|item| item.entry.id == "yue2-slider-metal").expect("the metal slider is catalogued");
+        let plan = Planned { meta: library.catalog_meta(&item.entry), assets: item.assets.clone() };
+        let folder = library.root().join("yue2-slider-metal");
+        fs::create_dir_all(&folder).unwrap();
+        let new_file = item.assets[0].relative_path.rsplit('/').next().unwrap();
+        fs::write(folder.join("metal_distilled_refined_rank8.safetensors"), b"old").unwrap();
+        fs::write(folder.join(new_file), b"new").unwrap();
+        fs::write(folder.join("adapter.json"), b"{}").unwrap();
+
+        library.drop_replaced_weights(&plan).unwrap();
+
+        assert!(!folder.join("metal_distilled_refined_rank8.safetensors").exists());
+        assert!(folder.join(new_file).is_file());
+        assert!(folder.join("adapter.json").is_file());
         let _ = fs::remove_dir_all(library.root().parent().unwrap());
     }
 

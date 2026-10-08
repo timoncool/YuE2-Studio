@@ -1633,7 +1633,7 @@ export const ko = {
     stageLm: '1단계 · 언어 모델',
     stageLmHint: '곡을 오디오 코드로 씁니다. CFG 는 설명 충실도, top-k 는 선택 폭, 시드는 같은 테이크의 재현성을 정합니다.',
     stageOutput: '3단계 · 출력',
-    stageOutputHint: '보코더 이후 디스크에 기록되는 것: 음량 상한, 컨테이너, 비트레이트.',
+    stageOutputHint: '보코더 이후 디스크에 기록되는 것: 형식과 MP3의 비트레이트. 소리 자체는 모델이 만든 그대로 유지됩니다.',
     assistantWriting: '도우미가 작성 중',
     activityCover: '커버 생성 중',
     activityKaraoke: '가사 타이밍 생성 중',

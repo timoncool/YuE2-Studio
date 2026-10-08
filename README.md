@@ -80,8 +80,7 @@ Code, save [docs/mcp-skill.md](docs/mcp-skill.md) as `~/.claude/skills/yue2-stud
   included, one click to load.
 - **Every engine setting** — all seven sampling knobs (temperature, top-p, top-k,
   repetition penalty and its window, minimum and maximum tokens) for the score and for the
-  audio codes, flow-matching steps, guidance, both seeds, peak normalisation, MP3 or
-  16/24/32-bit WAV. Prompts open and save as JSON or YAML in the engine's own request
+  audio codes, flow-matching steps, guidance, both seeds, lossless FLAC or MP3. Prompts open and save as JSON or YAML in the engine's own request
   format, so they move freely between the studio, the yue2.cpp WebUI and `yue-synth`.
 - **Structured song writing** — build a style from its musical fields and arrange lyrics in editable sections, while keeping the plain text editable. Give the writing assistant a language, a target of 8–32 lines and additional instructions.
 - **Song and render controls** — voice and tempo fields; section, line/stanza and text-case tools; Keep/Words lyric preservation and exact checkpoint tokens; batch score-plan selection and chord mirroring in repeated sections. Edit scores with MIDI grid and octave controls. Transpose generation by −24 to +24 semitones, render vocals only through native HT-Demucs as MP3 or 32-bit WAV, and switch each LoRA on or off with weights from −10 to +10.
@@ -135,15 +134,18 @@ Code, save [docs/mcp-skill.md](docs/mcp-skill.md) as `~/.claude/skills/yue2-stud
 - **Audio processing** — noise reduction, the Spectral Lifter, a vocal naturaliser, your
   own VST3 plugins in a chain, and mastering to a reference track. Compare before and
   after while it plays, then keep the result as a version of the track or throw it away.
-- **MP3 made by the studio** — the engine renders 32-bit float and the studio encodes the
-  MP3 with LAME, so nothing is lost before the encoder.
-- **A library of plain files** — search, playlists, cover art from prompt templates, MP3s
-  exported with title, lyrics and cover in their ID3 tags. Interface in English, Russian,
+- **The sound as the model made it** — the engine renders 32-bit float and the studio encodes
+  it once, changing nothing on the way: lossless 24-bit FLAC by default (libFLAC, the reference
+  encoder), MP3 with LAME when you choose it. Normalisation is a stage under Process, after
+  mastering, never part of generation.
+- **A library of plain files** — search, playlists, cover art from prompt templates, tracks
+  exported with title, lyrics and cover in their own tags (Vorbis comments in a FLAC, ID3 in an
+  MP3). Interface in English, Russian,
   Chinese, Japanese and Korean.
 - **A cover for every track** — a track without one wears a free (CC0) Wikimedia Commons
   photograph that fits the genres, moods and instruments of its style, a pattern in one of 21
   DiceBear styles, or a cover OpenRouter generates for every new track. It is chosen by the
-  track's seed, so it stays the same, a stem wears its song's, and it is written into the MP3,
+  track's seed, so it stays the same, a stem wears its song's, and it is written into the file,
   so players show it after the download.
 - **One picture window** — for a cover, and for the background and centre of a music video:
   Commons photographs by search starting from the scenes a style calls up, clips free of
@@ -313,8 +315,10 @@ without it the studio generates, but cannot transcribe recordings for covers.
 
 Every set also carries the **decoder companion**, 134 MB: Mothersuperior's decoder adapter,
 published as the pair of the tokenizer head the LoRA trainer turns songs into codes with. The
-engine merges it under every render and the trainer keeps it frozen under every LoRA, so a LoRA
-is trained on the decoder it is heard through. In HOT-Step's round trip of six real songs the
+trainer keeps it frozen under every LoRA, so a LoRA is trained on the decoder it is heard
+through. A render merges it on **Auto** (Advanced - output) only under a LoRA trained in the
+studio; otherwise the song is decoded by the YuE2 checkpoint alone, as its authors, audio.cpp and
+ComfyUI render it. On and Off force it either way. In HOT-Step's round trip of six real songs the
 decoder without it narrowed the stereo (left/right correlation 0.78–0.92 against the
 originals' ~0.65), with it 0.57–0.72.
 
@@ -532,7 +536,7 @@ lets the engine choose Metal and falls back to the CPU.
 - [scragnog](https://github.com/scragnog) for [HOT-Step-CPP](https://github.com/scragnog/HOT-Step-CPP): the LoRA trainer the studio runs (its native joint AR/NAR training for YuE2), the training weights in [scragnog/YuE2-GGUF](https://huggingface.co/scragnog/YuE2-GGUF), the VST3 host, and the noise reduction, Spectral Lifter and mastering designs the studio's audio processing is ported from.
 - [sergree](https://github.com/sergree) for [matchering](https://github.com/sergree/matchering), the reference mastering algorithm, and [jeankassio](https://github.com/jeankassio) for the vocal naturalizer in [ComfyUI_MusicTools](https://github.com/jeankassio/ComfyUI_MusicTools).
 - The authors of the LoRA in the catalogue, each credited and linked on its card: [Mothersuperior](https://huggingface.co/Mothersuperior), [monsterovich](https://huggingface.co/monsterovich), [atomtanstudio](https://huggingface.co/atomtanstudio), [HaileyStorm](https://huggingface.co/HaileyStorm) and [ntc-ai](https://huggingface.co/ntc-ai).
-- The [LAME](https://lame.sourceforge.io) project for the MP3 encoder.
+- The [LAME](https://lame.sourceforge.io) project for the MP3 encoder, [Xiph.Org](https://xiph.org/flac/) for libFLAC, the FLAC encoder, and [Serial-ATA](https://github.com/Serial-ATA/lofty-rs) for lofty, which writes the tags.
 - [crmne](https://github.com/crmne) for [Spotifast](https://github.com/crmne/spotifast) (MIT): the equalizer solves its band gains as its `eq.rs` does.
 - [Jordan Eldredge](https://github.com/captbaritone) and the Webamp team for [Webamp](https://github.com/captbaritone/webamp) (MIT), which the Winamp mode runs, and for the [Winamp Skin Museum](https://skins.webamp.org). Winamp and its base skin are Nullsoft's.
 - [Jordan Berg](https://github.com/jberg) for [Butterchurn](https://github.com/jberg/butterchurn) and [butterchurn-presets](https://github.com/jberg/butterchurn-presets) (MIT), MilkDrop in the browser. MilkDrop itself is Ryan Geiss's, and each preset is its author's, named in its title.
@@ -542,6 +546,7 @@ lets the engine choose Metal and falls back to the CPU.
 - [Wikimedia Commons](https://commons.wikimedia.org) and the photographers and filmmakers who give their work to it under CC0 or into the public domain, many of them through [Unsplash](https://unsplash.com): the pictures and clips a track and its video can wear. A chosen picture keeps a link to its page.
 - [Florian Körner](https://github.com/FlorianKoerner) for [DiceBear](https://www.dicebear.com) (MIT) and the authors of its CC0 styles, the patterns a track without a cover wears, and the [resvg](https://github.com/linebender/resvg) authors, whose renderer writes them into the track as PNG.
 - [MRafStudio](https://github.com/MRafStudio) for the ideas of [pull request #34](https://github.com/timoncool/YuE2-Studio/pull/34): the Activity log, sorting, likes kept in the library and stems under their song.
+- [wangsoft](https://github.com/wangsoft) for the Hugging Face mirror setting from wangsoft's fork, and [SkySlider](https://github.com/SkySlider) for the Linux pieces from SkySlider's fork: adapter detection and the parent-death signal.
 - [stalexxx](https://github.com/stalexxx) for [pull request #51](https://github.com/timoncool/YuE2-Studio/pull/51): the service on macOS with Metal, a question before quitting during a song, and a stop that is kept at once.
 - [pytraveler](https://github.com/pytraveler) for [YuE2-ComfyUI](https://github.com/pytraveler/YuE2-ComfyUI) (Apache-2.0): the reader and writer of YuE2's score, the score as a MIDI file and a MIDI file read back into a score are ported from it.
 - [ryohey](https://github.com/ryohey) for [signal](https://github.com/ryohey/signal) (MIT), the MIDI editor, and Milton Paredes for the A320U SoundFonts it plays (GPL-2.0).

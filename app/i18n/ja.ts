@@ -1633,7 +1633,7 @@ export const ja = {
     stageLm: '段階 1 · 言語モデル',
     stageLmHint: '曲をオーディオコードとして書きます。CFG は説明への忠実さ、top-k は選択の幅、シードは同じテイクの再現性を決めます。',
     stageOutput: '段階 3 · 出力',
-    stageOutputHint: 'ボコーダー後にディスクへ書き出す内容: ラウドネス上限、コンテナ、ビットレート。',
+    stageOutputHint: 'ボコーダーの後にディスクへ書き出す内容：形式と、MP3 の場合はビットレート。音そのものはモデルが作ったまま残ります。',
     assistantWriting: 'アシスタントが執筆中',
     activityCover: 'ジャケットを作成中',
     activityKaraoke: '歌詞のタイミングを作成中',

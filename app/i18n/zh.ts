@@ -1633,7 +1633,7 @@ export const zh = {
     stageLm: '阶段 1 · 语言模型',
     stageLmHint: '以音频码写出歌曲。CFG 让它更贴近描述，top-k 调整取样范围，种子让同一次演绎可复现。',
     stageOutput: '阶段 3 · 输出',
-    stageOutputHint: '经声码器后写入磁盘的内容：响度上限、容器与码率。',
+    stageOutputHint: '声码器之后写入磁盘的内容：格式，以及 MP3 的码率。声音本身保持模型生成的原样。',
     assistantWriting: '助手正在写作',
     activityCover: '正在生成封面',
     activityKaraoke: '正在对齐歌词时间',

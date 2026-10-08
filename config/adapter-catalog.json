@@ -571,8 +571,8 @@
       ],
       "files": [
         {
-          "url": "https://huggingface.co/ntc-ai/yue2-particle-sliders/resolve/33cf42fb0a54f60d8264d64cf6c20f038c4d172b/distilled-rank8-v1/native/female_distilled_refined_rank8.safetensors",
-          "file": "female_distilled_refined_rank8.safetensors",
+          "url": "https://huggingface.co/ntc-ai/yue2-particle-sliders/resolve/31649319eee53e6da999cc4aff3e081d213f7911/distilled-rank8-v2/native/female_v2_distilled_rank8.safetensors",
+          "file": "female_v2_distilled_rank8.safetensors",
           "bytes": 12891944
         }
       ]
@@ -606,8 +606,8 @@
       ],
       "files": [
         {
-          "url": "https://huggingface.co/ntc-ai/yue2-particle-sliders/resolve/33cf42fb0a54f60d8264d64cf6c20f038c4d172b/distilled-rank8-v1/native/male_distilled_refined_rank8.safetensors",
-          "file": "male_distilled_refined_rank8.safetensors",
+          "url": "https://huggingface.co/ntc-ai/yue2-particle-sliders/resolve/31649319eee53e6da999cc4aff3e081d213f7911/distilled-rank8-v2/native/male_v2_distilled_rank8.safetensors",
+          "file": "male_v2_distilled_rank8.safetensors",
           "bytes": 12891944
         }
       ]
@@ -641,8 +641,8 @@
       ],
       "files": [
         {
-          "url": "https://huggingface.co/ntc-ai/yue2-particle-sliders/resolve/33cf42fb0a54f60d8264d64cf6c20f038c4d172b/distilled-rank8-v1/native/pop_distilled_refined_rank8.safetensors",
-          "file": "pop_distilled_refined_rank8.safetensors",
+          "url": "https://huggingface.co/ntc-ai/yue2-particle-sliders/resolve/31649319eee53e6da999cc4aff3e081d213f7911/distilled-rank8-v2/native/pop_v2_distilled_rank8.safetensors",
+          "file": "pop_v2_distilled_rank8.safetensors",
           "bytes": 12891944
         }
       ]
@@ -676,8 +676,8 @@
       ],
       "files": [
         {
-          "url": "https://huggingface.co/ntc-ai/yue2-particle-sliders/resolve/33cf42fb0a54f60d8264d64cf6c20f038c4d172b/distilled-rank8-v1/native/hiphop_distilled_refined_rank8.safetensors",
-          "file": "hiphop_distilled_refined_rank8.safetensors",
+          "url": "https://huggingface.co/ntc-ai/yue2-particle-sliders/resolve/31649319eee53e6da999cc4aff3e081d213f7911/distilled-rank8-v2/native/hiphop_v2_distilled_rank8.safetensors",
+          "file": "hiphop_v2_distilled_rank8.safetensors",
           "bytes": 12891944
         }
       ]
@@ -711,8 +711,8 @@
       ],
       "files": [
         {
-          "url": "https://huggingface.co/ntc-ai/yue2-particle-sliders/resolve/33cf42fb0a54f60d8264d64cf6c20f038c4d172b/distilled-rank8-v1/native/rnb_distilled_refined_rank8.safetensors",
-          "file": "rnb_distilled_refined_rank8.safetensors",
+          "url": "https://huggingface.co/ntc-ai/yue2-particle-sliders/resolve/31649319eee53e6da999cc4aff3e081d213f7911/distilled-rank8-v2/native/rnb_v2_distilled_rank8.safetensors",
+          "file": "rnb_v2_distilled_rank8.safetensors",
           "bytes": 12891944
         }
       ]
@@ -746,8 +746,8 @@
       ],
       "files": [
         {
-          "url": "https://huggingface.co/ntc-ai/yue2-particle-sliders/resolve/33cf42fb0a54f60d8264d64cf6c20f038c4d172b/distilled-rank8-v1/native/indie-rock_distilled_refined_rank8.safetensors",
-          "file": "indie-rock_distilled_refined_rank8.safetensors",
+          "url": "https://huggingface.co/ntc-ai/yue2-particle-sliders/resolve/31649319eee53e6da999cc4aff3e081d213f7911/distilled-rank8-v2/native/indie-rock_v2_distilled_rank8.safetensors",
+          "file": "indie-rock_v2_distilled_rank8.safetensors",
           "bytes": 12891952
         }
       ]
@@ -781,8 +781,8 @@
       ],
       "files": [
         {
-          "url": "https://huggingface.co/ntc-ai/yue2-particle-sliders/resolve/33cf42fb0a54f60d8264d64cf6c20f038c4d172b/distilled-rank8-v1/native/pop-punk_distilled_refined_rank8.safetensors",
-          "file": "pop-punk_distilled_refined_rank8.safetensors",
+          "url": "https://huggingface.co/ntc-ai/yue2-particle-sliders/resolve/31649319eee53e6da999cc4aff3e081d213f7911/distilled-rank8-v2/native/pop-punk_v2_distilled_rank8.safetensors",
+          "file": "pop-punk_v2_distilled_rank8.safetensors",
           "bytes": 12891944
         }
       ]
@@ -816,8 +816,8 @@
       ],
       "files": [
         {
-          "url": "https://huggingface.co/ntc-ai/yue2-particle-sliders/resolve/33cf42fb0a54f60d8264d64cf6c20f038c4d172b/distilled-rank8-v1/native/metal_distilled_refined_rank8.safetensors",
-          "file": "metal_distilled_refined_rank8.safetensors",
+          "url": "https://huggingface.co/ntc-ai/yue2-particle-sliders/resolve/31649319eee53e6da999cc4aff3e081d213f7911/distilled-rank8-v2/native/metal_v2_distilled_rank8.safetensors",
+          "file": "metal_v2_distilled_rank8.safetensors",
           "bytes": 12891944
         }
       ]
@@ -851,8 +851,8 @@
       ],
       "files": [
         {
-          "url": "https://huggingface.co/ntc-ai/yue2-particle-sliders/resolve/33cf42fb0a54f60d8264d64cf6c20f038c4d172b/distilled-rank8-v1/native/country_distilled_refined_rank8.safetensors",
-          "file": "country_distilled_refined_rank8.safetensors",
+          "url": "https://huggingface.co/ntc-ai/yue2-particle-sliders/resolve/31649319eee53e6da999cc4aff3e081d213f7911/distilled-rank8-v2/native/country_v2_distilled_rank8.safetensors",
+          "file": "country_v2_distilled_rank8.safetensors",
           "bytes": 12891944
         }
       ]
@@ -886,8 +886,8 @@
       ],
       "files": [
         {
-          "url": "https://huggingface.co/ntc-ai/yue2-particle-sliders/resolve/33cf42fb0a54f60d8264d64cf6c20f038c4d172b/distilled-rank8-v1/native/acoustic-folk_distilled_refined_rank8.safetensors",
-          "file": "acoustic-folk_distilled_refined_rank8.safetensors",
+          "url": "https://huggingface.co/ntc-ai/yue2-particle-sliders/resolve/31649319eee53e6da999cc4aff3e081d213f7911/distilled-rank8-v2/native/acoustic-folk_v2_distilled_rank8.safetensors",
+          "file": "acoustic-folk_v2_distilled_rank8.safetensors",
           "bytes": 12891952
         }
       ]
@@ -921,8 +921,8 @@
       ],
       "files": [
         {
-          "url": "https://huggingface.co/ntc-ai/yue2-particle-sliders/resolve/33cf42fb0a54f60d8264d64cf6c20f038c4d172b/distilled-rank8-v1/native/house_distilled_refined_rank8.safetensors",
-          "file": "house_distilled_refined_rank8.safetensors",
+          "url": "https://huggingface.co/ntc-ai/yue2-particle-sliders/resolve/31649319eee53e6da999cc4aff3e081d213f7911/distilled-rank8-v2/native/house_v2_distilled_rank8.safetensors",
+          "file": "house_v2_distilled_rank8.safetensors",
           "bytes": 12891944
         }
       ]
@@ -956,9 +956,9 @@
       ],
       "files": [
         {
-          "url": "https://huggingface.co/ntc-ai/yue2-particle-sliders/resolve/33cf42fb0a54f60d8264d64cf6c20f038c4d172b/distilled-rank8-v1/native/disco-funk_distilled_refined_rank8.safetensors",
-          "file": "disco-funk_distilled_refined_rank8.safetensors",
-          "bytes": 12891944
+          "url": "https://huggingface.co/ntc-ai/yue2-particle-sliders/resolve/31649319eee53e6da999cc4aff3e081d213f7911/distilled-rank8-v2/native/disco-funk_v2_distilled_rank8.safetensors",
+          "file": "disco-funk_v2_distilled_rank8.safetensors",
+          "bytes": 12891952
         }
       ]
     },
@@ -991,8 +991,8 @@
       ],
       "files": [
         {
-          "url": "https://huggingface.co/ntc-ai/yue2-particle-sliders/resolve/33cf42fb0a54f60d8264d64cf6c20f038c4d172b/distilled-rank8-v1/native/kpop_distilled_refined_rank8.safetensors",
-          "file": "kpop_distilled_refined_rank8.safetensors",
+          "url": "https://huggingface.co/ntc-ai/yue2-particle-sliders/resolve/31649319eee53e6da999cc4aff3e081d213f7911/distilled-rank8-v2/native/kpop_v2_distilled_rank8.safetensors",
+          "file": "kpop_v2_distilled_rank8.safetensors",
           "bytes": 12891944
         }
       ]
@@ -1026,9 +1026,9 @@
       ],
       "files": [
         {
-          "url": "https://huggingface.co/ntc-ai/yue2-particle-sliders/resolve/33cf42fb0a54f60d8264d64cf6c20f038c4d172b/distilled-rank8-v1/native/reggaeton_distilled_refined_rank8.safetensors",
-          "file": "reggaeton_distilled_refined_rank8.safetensors",
-          "bytes": 12891952
+          "url": "https://huggingface.co/ntc-ai/yue2-particle-sliders/resolve/31649319eee53e6da999cc4aff3e081d213f7911/distilled-rank8-v2/native/reggaeton_v2_distilled_rank8.safetensors",
+          "file": "reggaeton_v2_distilled_rank8.safetensors",
+          "bytes": 12891944
         }
       ]
     },
@@ -1061,9 +1061,9 @@
       ],
       "files": [
         {
-          "url": "https://huggingface.co/ntc-ai/yue2-particle-sliders/resolve/33cf42fb0a54f60d8264d64cf6c20f038c4d172b/distilled-rank8-v1/native/afrobeats_distilled_refined_rank8.safetensors",
-          "file": "afrobeats_distilled_refined_rank8.safetensors",
-          "bytes": 12891952
+          "url": "https://huggingface.co/ntc-ai/yue2-particle-sliders/resolve/31649319eee53e6da999cc4aff3e081d213f7911/distilled-rank8-v2/native/afrobeats_v2_distilled_rank8.safetensors",
+          "file": "afrobeats_v2_distilled_rank8.safetensors",
+          "bytes": 12891944
         }
       ]
     },
@@ -1096,8 +1096,8 @@
       ],
       "files": [
         {
-          "url": "https://huggingface.co/ntc-ai/yue2-particle-sliders/resolve/33cf42fb0a54f60d8264d64cf6c20f038c4d172b/distilled-rank8-v1/native/lofi_distilled_refined_rank8.safetensors",
-          "file": "lofi_distilled_refined_rank8.safetensors",
+          "url": "https://huggingface.co/ntc-ai/yue2-particle-sliders/resolve/31649319eee53e6da999cc4aff3e081d213f7911/distilled-rank8-v2/native/lofi_v2_distilled_rank8.safetensors",
+          "file": "lofi_v2_distilled_rank8.safetensors",
           "bytes": 12891944
         }
       ]

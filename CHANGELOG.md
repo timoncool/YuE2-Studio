@@ -12,8 +12,11 @@ Windows build.
 - **Words follow the score** (HOT-Step's lyric schedule): with a supplied score each section's
   words stay out of the composer's sight until the score reaches them, so covers and long songs
   keep the voice with the band. On by default; a switch under Advanced.
-- **Realaudio decoder switch.** Off decodes with the YuE2 checkpoint alone, the sound of
-  audio.cpp and ComfyUI; on (default) merges Mothersuperior's decoder adapter as before.
+- **Realaudio decoder: Auto, On, Off.** Auto decodes with the YuE2 checkpoint alone, as its
+  authors, audio.cpp and ComfyUI render it, and merges Mothersuperior's decoder adapter only
+  under a LoRA trained in the studio, which was trained over it. On and Off force it.
+- **Hugging Face mirror** in Settings - Network (hf-mirror.com) for downloads where
+  huggingface.co is slow or blocked, after wangsoft's fork.
 - **Score as PDF.** The score view saves the notation as an A4 PDF, each system whole.
 - **Engine progress on the card**: the stage, its step counter and the time left.
 - **Video export settings**: frame size from 1080p to 240p and AAC from 128 to 320 kbps.
@@ -37,6 +40,12 @@ Windows build.
 
 ### Changed
 
+- **A song is kept as the model made it.** The engine hands over its float output and the
+  studio encodes it once, changing nothing on the way: lossless 24-bit FLAC by default, written
+  by libFLAC 1.5.0, the reference encoder; MP3 by LAME when chosen. Generation no longer
+  normalises the peak: Normalise is a stage under Process, after mastering.
+- **Tags in every kept format** (lofty): title, artist, genre, tempo, lyrics and cover go into
+  a FLAC's Vorbis comments and picture block as into an MP3's ID3v2.4.
 - **Engine: yue2.cpp of 8 October.** SheetSage2 reads MERT-v2 from a file of its own (F32 or
   Q8_0); the new transcriber is downloaded once in Settings - Models, and the studio runs without
   it until then. Covers transcribe exactly as before.

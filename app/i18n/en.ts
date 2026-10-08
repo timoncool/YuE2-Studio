@@ -1638,7 +1638,7 @@ export const en = {
     stageLm: 'Stage 1 · language model',
     stageLmHint: 'Writes the song as audio codes. CFG holds it to the description, top-k widens or narrows its choices, and the seed makes the same take repeatable.',
     stageOutput: 'Stage 3 · output',
-    stageOutputHint: 'What is written to disk after the vocoder: loudness ceiling, container and bitrate.',
+    stageOutputHint: 'What is written to disk after the vocoder: the format and, for MP3, the bitrate. The sound itself is kept as the model made it.',
     assistantWriting: 'The assistant is writing',
     activityCover: 'Generating the cover',
     activityKaraoke: 'Timing the lyrics',
