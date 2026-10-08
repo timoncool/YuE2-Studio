@@ -58,7 +58,29 @@ $cudaArch = switch ($CudaArchitecture) {
 $buildDirectory = "build-$($source.target)-$CudaArchitecture"
 $symbols = '-DCMAKE_MSVC_DEBUG_INFORMATION_FORMAT=ProgramDatabase -DCMAKE_EXE_LINKER_FLAGS=/DEBUG -DCMAKE_SHARED_LINKER_FLAGS=/DEBUG'
 $parallelism = [Math]::Max(1, [Environment]::ProcessorCount)
-$command = "call `"$(Get-VcVars64)`" >nul && cmake -S . -B `"$buildDirectory`" -G Ninja -DCMAKE_BUILD_TYPE=Release -DGGML_NATIVE=OFF -DGGML_CUDA=ON -DGGML_CCACHE=OFF $symbols $cudaArch && cmake --build `"$buildDirectory`" --target $($source.target) --parallel $parallelism"
+# The transcriber runs wherever there is a card: its ggml loads each backend as a
+# library, so a machine without the CUDA 13 runtime, or a card CUDA 13 has no
+# code for (Pascal, Maxwell), uses Vulkan or the processor instead of failing to
+# start. The trainer stays CUDA only.
+$backends = '-DGGML_CUDA=ON'
+$targets = $source.target
+if ($Tool -eq 'music-midi') {
+    if (-not $env:VULKAN_SDK) { throw 'The transcriber carries a Vulkan backend: the Vulkan SDK is required (VULKAN_SDK).' }
+    $backends = '-DGGML_CUDA=ON -DGGML_VULKAN=ON -DGGML_BACKEND_DL=ON -DGGML_CPU_ALL_VARIANTS=ON'
+    $targets = "$($source.target) ggml-cuda ggml-vulkan ggml-cpu"
+}
+$configure = "call `"$(Get-VcVars64)`" >nul && set `"VSLANG=1033`" && cmake -S . -B `"$buildDirectory`" -G Ninja -DCMAKE_BUILD_TYPE=Release -DGGML_NATIVE=OFF -DGGML_CCACHE=OFF $backends $symbols $cudaArch"
+Push-Location (Join-Path $worktree $source.source_dir)
+try { & cmd.exe /d /s /c $configure | Out-Host } finally { Pop-Location }
+if ($LASTEXITCODE -ne 0) { throw "Configuring $($source.target) failed." }
+if ($Tool -eq 'music-midi') {
+    # every processor variant is a target of its own: ggml-cpu-haswell, ggml-cpu-alderlake...
+    $ninja = Get-Content -Raw (Join-Path $worktree "$($source.source_dir)\$buildDirectory\build.ninja")
+    $variants = [regex]::Matches($ninja, '(?m)^build (ggml-cpu-[a-z0-9_]+): phony') | ForEach-Object { $_.Groups[1].Value } | Sort-Object -Unique
+    if ($variants.Count -eq 0) { throw 'The configured build has no processor variants of ggml-cpu.' }
+    $targets = "$($source.target) ggml-cuda ggml-vulkan $($variants -join ' ')"
+}
+$command = "call `"$(Get-VcVars64)`" >nul && set `"VSLANG=1033`" && cmake --build `"$buildDirectory`" --target $targets --parallel $parallelism"
 Push-Location (Join-Path $worktree $source.source_dir)
 try { & cmd.exe /d /s /c $command | Out-Host } finally { Pop-Location }
 if ($LASTEXITCODE -ne 0) { throw "The $($source.target) build failed." }
