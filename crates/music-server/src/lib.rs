@@ -6915,8 +6915,9 @@ async fn replay_music_job(
         return Err(api_error(StatusCode::CONFLICT, "a training run has the card; re-render once it finishes or is stopped".into()));
     }
     let mut body = prepare_replay_synthesis(replay, &request).map_err(|error| api_error(StatusCode::BAD_REQUEST, error))?;
+    let continuing = body.get("continue_semantic_tokens").and_then(Value::as_bool) == Some(true);
     // the part composed on keeps to the score the way a new song does
-    if body.get("continue_semantic_tokens").and_then(Value::as_bool) == Some(true) {
+    if continuing {
         lyric_schedule(&mut body);
     }
     let style = body.get("style").and_then(Value::as_str).unwrap_or_default().to_owned();
@@ -6944,13 +6945,17 @@ async fn replay_music_job(
         generation_settings: body,
         song: None,
         songs: vec![],
-        message: "Submitted a re-render: the semantic stream is present, so the autoregressive stage is skipped.".into(),
+        message: if continuing {
+            "Submitted a re-render that composes on from the track's last frame.".into()
+        } else {
+            "Submitted a re-render: the semantic stream is present, so the autoregressive stage is skipped.".into()
+        },
         playlist_id: None,
         laid: None,
     };
     if let Some(song_id) = &request.song_id {
         if let Some(original) = state.library.get_song(song_id).map_err(|error| api_error(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))? {
-            job.derived = Some(derivation(&original, "replay", serde_json::json!({ "steps": request.steps, "seed": request.seed, "synth_batch_size": request.synth_batch_size, "output_format": request.output_format, "peak_clip": request.peak_clip, "mp3_bitrate": request.mp3_bitrate })));
+            job.derived = Some(derivation(&original, "replay", serde_json::json!({ "steps": request.steps, "seed": request.seed, "synth_batch_size": request.synth_batch_size, "output_format": request.output_format, "peak_clip": request.peak_clip, "mp3_bitrate": request.mp3_bitrate, "extend_seconds": request.extend_seconds })));
         }
     }
     state.jobs.write().await.insert(job.id.clone(), job.clone());
