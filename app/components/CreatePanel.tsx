@@ -153,8 +153,8 @@ const Field: React.FC<{ label: string; hint?: string; children: React.ReactNode 
   </label>
 );
 
-const Switch: React.FC<{ checked: boolean; onChange: (value: boolean) => void; label: string; hint?: string }> = ({ checked, onChange, label, hint }) => (
-  <div className="flex items-center justify-between gap-3">
+const Switch: React.FC<{ checked: boolean; onChange: (value: boolean) => void; label: string; hint?: string; disabled?: boolean }> = ({ checked, onChange, label, hint, disabled }) => (
+  <div className={`flex items-center justify-between gap-3 ${disabled ? 'opacity-50' : ''}`}>
     <div className="min-w-0">
       <span className="text-[11px] font-bold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">{label}</span>
       {hint && <p className="mt-0.5 text-[11px] leading-4 text-zinc-500">{hint}</p>}
@@ -164,8 +164,9 @@ const Switch: React.FC<{ checked: boolean; onChange: (value: boolean) => void; l
       role="switch"
       aria-checked={checked}
       aria-label={label}
+      disabled={disabled}
       onClick={() => onChange(!checked)}
-      className={`relative h-5 w-10 shrink-0 rounded-full transition-colors ${checked ? 'bg-pink-500' : 'bg-zinc-300 dark:bg-zinc-600'}`}
+      className={`relative h-5 w-10 shrink-0 rounded-full transition-colors disabled:cursor-not-allowed ${checked ? 'bg-pink-500' : 'bg-zinc-300 dark:bg-zinc-600'}`}
     >
       <span className={`absolute top-[2px] h-4 w-4 rounded-full bg-white shadow-xs transition-all ${checked ? 'left-[22px]' : 'left-[2px]'}`} />
     </button>
@@ -312,6 +313,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
   const [peakClip, setPeakClip] = useState('');
   const [transpose, setTranspose] = useState('0');
   const [vocalsOnly, setVocalsOnly] = useState(false);
+  const [lyricTiming, setLyricTiming] = useState(true);
   // The engine default of 128 kbps throws away what the VAE produced.
   const [mp3Bitrate, setMp3Bitrate] = useState('320');
   const [format, setFormat] = useState<YueOutputFormat>('mp3');
@@ -458,6 +460,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
     setPeakClip(asText(request.peak_clip));
     setTranspose(asText(request.transpose) || '0');
     setVocalsOnly(request.vocals_only === true);
+    setLyricTiming(request.lyric_timing !== false);
     if (request.mp3_bitrate !== undefined) setMp3Bitrate(asText(request.mp3_bitrate));
     if (typeof request.output_format === 'string') setFormat(request.output_format as YueOutputFormat);
     if (Array.isArray(request.adapters)) setAdapters(usesFromSettings(request));
@@ -537,7 +540,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
     setRandomizeSeed(true); setLmSeed(''); setSeed(''); setSemanticTokens('');
     setAbcSampling(emptySampling()); setSemanticSampling(emptySampling());
     setPeakClip(''); setMp3Bitrate('320'); setFormat('mp3');
-    setTranspose('0'); setVocalsOnly(false);
+    setTranspose('0'); setVocalsOnly(false); setLyricTiming(true);
   };
 
   const loadExample = (id?: string) => {
@@ -556,6 +559,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
     };
     if (abc.trim() && effectiveCot !== 'off') request.abc = abc.trim();
     if (abc.trim() && effectiveCot !== 'off' && !semanticTokens.trim() && Number(transpose) !== 0) request.transpose = Number(transpose);
+    if (abc.trim() && effectiveCot !== 'off' && !lyricTiming) request.lyric_timing = false;
     if (vocalsOnly) {
       request.vocals_only = true;
       if (format !== 'mp3') request.output_format = 'wav32';
@@ -911,6 +915,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
     peak_clip: [peakClip, setPeakClip],
     transpose: [transpose, setTranspose],
     vocals_only: [vocalsOnly, value => setVocalsOnly(value === 'true')],
+    lyric_timing: [lyricTiming, value => setLyricTiming(value !== 'false')],
   };
   useBridgeCommand('create_get', () => ({
     mode,
@@ -1500,6 +1505,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
                       disabled={!abc.trim() || effectiveCot === 'off' || Boolean(semanticTokens.trim())} onChange={setTranspose} />
                     <p className="mt-1 text-[11px] leading-4 text-zinc-500">{engineParityLabels[language].transposeHint}</p>
                   </div>
+                  <div className="mb-3"><Switch checked={lyricTiming} disabled={!abc.trim() || effectiveCot === 'off' || Boolean(semanticTokens.trim())} onChange={setLyricTiming} label={engineParityLabels[language].lyricTiming} hint={engineParityLabels[language].lyricTimingHint} /></div>
                   <SamplingGrid value={abcSampling} defaults={defaults.abc_sampling} onChange={setAbcSampling} t={t as never} />
                 </Stage>
 

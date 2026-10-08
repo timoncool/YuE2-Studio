@@ -221,6 +221,9 @@ struct CreateMusicJobRequest {
     abc: Option<String>,
     /// Move a supplied score before singing; zero keeps its pitches.
     transpose: Option<i32>,
+    /// Reveal each section's words as a supplied score reaches it; on unless false.
+    #[serde(default)]
+    lyric_timing: Option<bool>,
     #[serde(default)]
     vocals_only: bool,
     /// The playlist the made songs are added to.
@@ -6640,6 +6643,9 @@ async fn create_music_job(
         body["style"] = Value::String(style);
     }
     let laid = laid_out(&mut body, request.duration_seconds.is_none());
+    if request.lyric_timing != Some(false) {
+        lyric_schedule(&mut body);
+    }
     let derived = match request.cover_of.clone() {
         Some(id) => match state.library.get_song(&id) {
             Ok(Some(original)) => Some(derivation(&original, "cover", serde_json::json!({ "cot": request.cot, "style": request.style }))),
@@ -7749,6 +7755,24 @@ fn yue_request_from(request: &CreateMusicJobRequest, max_batch: u32) -> Result<V
         body["adapters"] = Value::Array(adapter_fields(&request.adapters)?);
     }
     Ok(body)
+}
+
+/// The engine's lyric schedule for a supplied score sung under the protocol's own guidance: each
+/// sung section's words wait until the score reaches it, so the voice keeps to the band.
+fn lyric_schedule(body: &mut Value) {
+    if body.get("cot").and_then(Value::as_str) == Some("off")
+        || body.get("semantic_tokens").is_some()
+        || body.get("cfg_scale").and_then(Value::as_f64).is_some_and(|scale| scale != 1.0)
+    {
+        return;
+    }
+    let (Some(score), Some(lyrics)) = (body.get("abc").and_then(Value::as_str), body.get("lyrics").and_then(Value::as_str)) else {
+        return;
+    };
+    if let Some(timed) = score::schedule::schedule(score, lyrics) {
+        let sections: Vec<Value> = timed.iter().map(|section| serde_json::json!({ "start_sec": section.start_sec, "lyric": [section.lyric.0, section.lyric.1] })).collect();
+        body["lyric_schedule"] = serde_json::json!({ "mode": "bias", "bias": score::schedule::BIAS, "sections": sections });
+    }
 }
 
 /// A score that names no section, as a tune from a MIDI file comes, is laid out for the lyrics

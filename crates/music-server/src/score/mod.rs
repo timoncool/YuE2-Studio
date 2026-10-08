@@ -10,6 +10,7 @@ pub mod import;
 pub mod notation;
 pub mod phrasing;
 pub mod rebuild;
+pub mod schedule;
 pub mod sections;
 pub mod smf;
 pub mod spelling;

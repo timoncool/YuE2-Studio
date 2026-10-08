@@ -113,6 +113,8 @@ export interface YueRequest {
   abc?: string;
   /** Move a supplied score before singing, in semitones. */
   transpose?: number;
+  /** With a supplied score, each section's words wait until the score reaches it; on unless false. */
+  lyric_timing?: boolean;
   vocals_only?: boolean;
   cot?: YueCot;
   /** Target length; the model may end the song earlier. */
