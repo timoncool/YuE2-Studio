@@ -1,7 +1,7 @@
 //! The machine the studio runs on: its GPU, how much memory it has, and the
 //! model set that fits in it.
 
-#[cfg(not(windows))]
+#[cfg(not(any(windows, target_os = "macos")))]
 use std::path::PathBuf;
 use std::{process::Command, sync::OnceLock};
 

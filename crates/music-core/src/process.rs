@@ -46,10 +46,10 @@ pub fn adopt(_child: &Child) {}
 /// holding the graphics card and the engine port - which then blocks the next
 /// start with a bind failure that looks like a completely different problem.
 ///
-/// A no-op on Windows, where `adopt` below covers the same ground with a job
-/// object after the child exists.
+/// A no-op elsewhere: on Windows `adopt` below covers the same ground with a
+/// job object after the child exists; macOS has no parent-death signal.
 pub fn ensure_dies_with_parent(command: &mut std::process::Command) {
-    #[cfg(not(windows))]
+    #[cfg(target_os = "linux")]
     {
         use std::os::unix::process::CommandExt;
 
@@ -76,7 +76,7 @@ pub fn ensure_dies_with_parent(command: &mut std::process::Command) {
             });
         }
     }
-    #[cfg(windows)]
+    #[cfg(not(target_os = "linux"))]
     {
         let _ = command;
     }
