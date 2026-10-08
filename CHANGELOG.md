@@ -24,7 +24,15 @@ Windows build.
   repeat and shuffle. Quitting while a song is made asks first and stops it; a song the studio
   was closed on starts again. From [pull request #51](https://github.com/timoncool/YuE2-Studio/pull/51) by
   stalexxx, which also runs the service on macOS with Metal.
+- **Instrumental from a score.** A button in the score view moves every Vocal note to the
+  instrument part with its pitch and length, as m-a-p's yue2-instrumental skill does, and keeps
+  the chords; the instrument keeps what it played where the voice was silent.
+- **A note on every song, and its parameters** sent to the form, shown as JSON and saved to a
+  file, as in ACE-Step Studio.
+- **Parakeet Ultra int8** for karaoke: Moondream's fine-tune of Parakeet, quantized, a recogniser
+  of its own beside v3, which stays as it was.
 - Catalog: raspy rock-soul, quiet storm R&B and dark Sufi fusion LoRAs by becausereasons.
+- The particle slider LoRAs of ntc-ai at their v2 release.
 
 ### Fixed
 
@@ -37,6 +45,10 @@ Windows build.
   zoom and pan.
 - Models from a folder: the window says what was taken, copied and still missing, and the start
   screen shows why the engine did not start.
+- Updating a LoRA from the catalogue left its old weights beside the new ones, and the engine
+  refused the pair.
+- Linux groundwork from SkySlider's fork: the graphics card is named on Linux, child processes
+  end with the studio, and setup no longer claims a download that is not happening.
 
 ### Changed
 
