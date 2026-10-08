@@ -78,9 +78,10 @@ export const ScoreView: React.FC<{ abc: string; className?: string; title?: stri
   const saveMidi = async () => {
     const score = tune.current;
     if (!score) return;
-    const files = abcjs.synth.getMidiFile(score, { midiOutputType: 'binary' }) as Uint8Array[];
-    const bytes = files[0];
-    if (!bytes) return;
+    // abcjs 6 answers one tune with its bytes, several with a list of them
+    const made = abcjs.synth.getMidiFile(score, { midiOutputType: 'binary' }) as Uint8Array | Uint8Array[];
+    const bytes = made instanceof Uint8Array ? made : made[0];
+    if (!bytes?.length) return;
     await saveFile(`${(title || 'score').replace(/[\\/:*?"<>|]+/g, ' ').trim() || 'score'}.mid`, { blob: new Blob([bytes as Uint8Array<ArrayBuffer>], { type: 'audio/midi' }) });
   };
 
