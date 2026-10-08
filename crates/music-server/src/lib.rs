@@ -3064,7 +3064,7 @@ async fn read_activity(State(state): State<AppState>) -> Json<Value> {
 /// carries on.
 async fn ensure_local_recogniser(state: &AppState, config: &lyrics_sync::LyricsSyncConfig, song_id: &str) -> bool {
     let ready = |state: &AppState| match config.provider {
-        lyrics_sync::AsrProvider::Parakeet => state.lyrics_sync.parakeet_ready(),
+        lyrics_sync::AsrProvider::Parakeet => state.lyrics_sync.parakeet_ready(config.whisper_model.as_deref()),
         lyrics_sync::AsrProvider::Whisper => {
             state.lyrics_sync.whisper_binary().is_some() && state.lyrics_sync.whisper_model_ready(config)
         }
@@ -3075,7 +3075,8 @@ async fn ensure_local_recogniser(state: &AppState, config: &lyrics_sync::LyricsS
     }
 
     let missing: Vec<&'static lyrics_sync::Asset> = match config.provider {
-        lyrics_sync::AsrProvider::Parakeet => lyrics_sync::PARAKEET_ASSET_IDS
+        lyrics_sync::AsrProvider::Parakeet => lyrics_sync::parakeet_variant(config.whisper_model.as_deref())
+            .0
             .iter()
             .filter_map(|id| lyrics_sync::asset(id))
             .filter(|asset| !state.lyrics_sync.downloader().is_installed(asset))
@@ -3154,7 +3155,7 @@ async fn time_lyrics_for(state: AppState, song_id: String) {
         lyrics_sync::AsrProvider::Parakeet => {
             let sync = state.lyrics_sync.clone();
             let path = std::path::PathBuf::from(&audio);
-            match tokio::task::spawn_blocking(move || sync.parakeet_words(config.runtime, &path)).await {
+            match tokio::task::spawn_blocking(move || sync.parakeet_words(config.runtime, config.whisper_model.as_deref(), &path)).await {
                 Ok(result) => result,
                 Err(error) => {
                     eprintln!("no karaoke for {song_id}: {error}");
@@ -3931,7 +3932,7 @@ async fn update_configuration(
                     ExecutionMode::Local => match selection.local_engine.as_deref() {
                         Some("whisper") => lyrics_sync::AsrProvider::Whisper,
                         Some("parakeet") => lyrics_sync::AsrProvider::Parakeet,
-                        _ if state.lyrics_sync.parakeet_ready() => lyrics_sync::AsrProvider::Parakeet,
+                        _ if state.lyrics_sync.parakeet_any_ready() => lyrics_sync::AsrProvider::Parakeet,
                         _ if state.lyrics_sync.whisper_binary().is_some() => lyrics_sync::AsrProvider::Whisper,
                         _ => sync.provider,
                     },
@@ -5210,8 +5211,10 @@ fn karaoke_set(name: &str, device: lyrics_sync::OnnxFlavour, whisper_model: Opti
             wanted.push("onnxruntime".into());
             wanted.extend(card_assets(device).iter().map(|id| id.to_string()));
             // The precision is chosen the same way a Whisper model is: through
-            // the dropdown, which names one of the two encoders.
-            if whisper_model.is_some_and(|id| id.contains("fp32")) {
+            // the dropdown, which names one of the encoders.
+            if whisper_model == Some(lyrics_sync::PARAKEET_ULTRA) {
+                wanted.extend(lyrics_sync::PARAKEET_ULTRA_ASSET_IDS.map(String::from));
+            } else if whisper_model.is_some_and(|id| id.contains("fp32")) {
                 wanted.extend(lyrics_sync::PARAKEET_FP32_ASSET_IDS.map(String::from));
             } else {
                 wanted.extend(lyrics_sync::PARAKEET_ASSET_IDS.map(String::from));
@@ -5340,7 +5343,7 @@ async fn create_song_karaoke(
         lyrics_sync::AsrProvider::Parakeet => {
             let sync = state.lyrics_sync.clone();
             let path = std::path::PathBuf::from(&audio);
-            tokio::task::spawn_blocking(move || sync.parakeet_words(config.runtime, &path))
+            tokio::task::spawn_blocking(move || sync.parakeet_words(config.runtime, config.whisper_model.as_deref(), &path))
                 .await
                 .map_err(|error| api_error(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?
         }
@@ -6711,7 +6714,7 @@ async fn setup_cancel(State(state): State<AppState>) -> Result<Json<Value>, (Sta
 
 async fn capabilities(State(state): State<AppState>) -> Json<CapabilitiesResponse> {
     let primary_installed = state.music_server.health().await;
-    let parakeet_installed = state.lyrics_sync.parakeet_ready();
+    let parakeet_installed = state.lyrics_sync.parakeet_any_ready();
     let whisper_installed = state.lyrics_sync.whisper_binary().is_some();
     let assistant = state.assistant.read().await.clone();
     let assistant_installed = assistant.available();
