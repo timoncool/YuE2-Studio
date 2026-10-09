@@ -14,6 +14,7 @@ import { EXAMPLES, randomExample } from '../services/examples';
 import { ScoreView } from './ScoreView';
 import { MidiEditor } from './midi/MidiEditor';
 import { MidiImportDialog } from './MidiImportDialog';
+import { isMidiFile } from '../services/midiFiles';
 import { trackMidiBase64 } from '../services/midiEditor';
 import { composePlans, composeScore, transcribe, type ScorePlan } from '../services/transcription';
 import { profileLabel as setLabel } from '../services/modelCatalog';
@@ -1079,7 +1080,14 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
                 onChange={event => {
                   const file = event.target.files?.[0];
                   event.target.value = '';
-                  if (file) {
+                  if (file && isMidiFile(file.name)) {
+                    void file.arrayBuffer().then(buffer => {
+                      const bytes = new Uint8Array(buffer);
+                      let raw = '';
+                      for (let index = 0; index < bytes.length; index += 0x8000) raw += String.fromCharCode(...bytes.subarray(index, index + 0x8000));
+                      setMidiCover({ name: file.name, data: btoa(raw) });
+                    });
+                  } else if (file) {
                     setCoverSource(file.name);
                     setCoverSongId(null);
                     setCoverAudio(URL.createObjectURL(file));
