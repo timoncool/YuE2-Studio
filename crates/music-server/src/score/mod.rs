@@ -4,12 +4,17 @@
 
 pub mod abc;
 pub mod api;
+pub mod chord_bed;
 pub mod edits;
 pub mod export;
 pub mod import;
+pub mod instrumental;
 pub mod notation;
+pub mod opening;
 pub mod phrasing;
 pub mod rebuild;
+pub mod schedule;
+pub mod section_match;
 pub mod sections;
 pub mod smf;
 pub mod spelling;

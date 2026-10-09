@@ -174,7 +174,6 @@ impl Voice {
 
 #[derive(Clone, Debug)]
 pub struct Score {
-    pub text: String,
     pub unit: Q,
     pub bpm: u32,
     pub voices: [Voice; 2],
@@ -371,7 +370,7 @@ pub fn parse(text: &str) -> Result<Score, String> {
     fail(!voices[INS].chords.is_empty(), || "Native chord symbols belong in Vocal, not Ins".into())?;
     fail(voices[VOCAL].bars != voices[INS].bars, || "Voice meter/time grids differ".into())?;
     fail(voices[VOCAL].keys != voices[INS].keys, || "Voice key-change timelines differ".into())?;
-    Ok(Score { text: text.to_string(), unit, bpm, voices, music_lines })
+    Ok(Score { unit, bpm, voices, music_lines })
 }
 
 /// How many bars a whole-bar rest `Z` to `Z4` stands for, or None for a bar

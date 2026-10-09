@@ -1,12 +1,12 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { libraryChanged, useActivity, useAssistantStatus, useSetupStatus, type ActivityEntry } from '../services/studioQueries';
-import { karaokeReason } from '../services/karaoke';
+import { hasSungLines, karaokeReason } from '../services/karaoke';
 import {
   AlertTriangle, AudioLines, ChevronDown, CircleAlert, Dices, Ear, Eye, EyeOff, FileMusic, FolderOpen, Loader2,
-  Music2, Pause, Piano, Play, RotateCcw, Save, Sparkles, Square, Tags, Upload, Wand2, Settings2, X,
+  Grid2x2, ListChecks, Music2, Pause, Piano, Play, RotateCcw, Save, Sparkles, Square, Tags, Upload, Wand2, Settings2, X,
 } from 'lucide-react';
 import { AudioWaveform } from './AudioWaveform';
-import type { Playlist, Song, YueCot, YueOutputFormat, YueRequest, YueSampling } from '../types';
+import type { Playlist, Song, YueCot, YueHarmony, YueOutputFormat, YueRequest, YueSampling } from '../types';
 import { useI18n } from '../context/I18nContext';
 import { saveFile } from '../services/saveFile';
 import { useBridgeCommand } from '../services/mcpBridge';
@@ -14,8 +14,10 @@ import { EXAMPLES, randomExample } from '../services/examples';
 import { ScoreView } from './ScoreView';
 import { MidiEditor } from './midi/MidiEditor';
 import { MidiImportDialog } from './MidiImportDialog';
+import { isMidiFile } from '../services/midiFiles';
 import { trackMidiBase64 } from '../services/midiEditor';
 import { composePlans, composeScore, transcribe, type ScorePlan } from '../services/transcription';
+import { chordBed, failed, matchSections, type SectionProposal } from '../services/scoreApi';
 import { profileLabel as setLabel } from '../services/modelCatalog';
 import { REQUEST_FILE_ACCEPT, parseRequestFile, requestFileTitle, serializeRequest, type RequestFileFormat } from '../services/requestFile';
 import { AdapterPicker } from './AdapterPicker';
@@ -93,13 +95,15 @@ const NEW_PLAYLIST = '__new__';
 const finishedStyle = (text: string) => text.trim().replace(/,$/, '').trimEnd();
 const SEMANTIC_CODES_PER_SECOND = 25;
 /** 9000 semantic frames at 25 per second, the stage's own budget. */
-const MAX_DURATION_SECONDS = 360;
+const MAX_DURATION_SECONDS = 600;
 /** A new prompt's ceiling: 2:10. Examples and prompt files keep their own. */
 const DEFAULT_DURATION_SECONDS = 130;
 const SAMPLING_KEYS: (keyof YueSampling)[] = ['temperature', 'top_p', 'top_k', 'repetition_penalty', 'penalty_window', 'min_tokens', 'max_tokens'];
 /** A quoted chord symbol in ABC: "Am", "F/C", "G7". */
 const CHORD_SYMBOL = /"[^"\n]+"/;
 const CHORD_SYMBOLS = /"[^"\n]+"/g;
+const BED_KEYS = ['C', 'G', 'D', 'A', 'E', 'B', 'F#', 'Db', 'Ab', 'Eb', 'Bb', 'F', 'Am', 'Em', 'Bm', 'F#m', 'C#m', 'G#m', 'Ebm', 'Bbm', 'Fm', 'Cm', 'Gm', 'Dm'];
+const BED_METERS = ['4/4', '3/4', '6/8', '2/4'];
 const SECTION_TAGS = ['[Intro]', '[Verse 1]', '[Pre-Chorus]', '[Chorus]', '[Verse 2]', '[Bridge]', '[Instrumental Break]', '[Outro]'];
 
 const PROFILE_LABEL: Record<string, string> = {
@@ -145,6 +149,33 @@ const samplingText = (value: unknown): SamplingText => {
   return text;
 };
 
+type HarmonyText = { identity: '' | 'root' | 'spelling'; strength: string; window: string; hold_limit: string; outside_bonus: string; section_strength: string; follow_lyrics: boolean };
+const HARMONY_NUMBERS = ['strength', 'window', 'hold_limit', 'outside_bonus', 'section_strength'] as const;
+const emptyHarmony = (): HarmonyText => ({ identity: '', strength: '', window: '', hold_limit: '', outside_bonus: '', section_strength: '', follow_lyrics: false });
+
+/** The engine's harmony field, or nothing when every control is at rest. */
+const harmonyFrom = (text: HarmonyText): YueHarmony | undefined => {
+  const harmony: YueHarmony = {};
+  for (const key of HARMONY_NUMBERS) {
+    const value = numberOrUndefined(text[key]);
+    if (value !== undefined) harmony[key] = value;
+  }
+  if (text.identity) harmony.identity = text.identity;
+  if (text.follow_lyrics) harmony.follow_lyrics = true;
+  const active = (harmony.strength ?? 0) > 0 || (harmony.outside_bonus ?? 0) > 0 || (harmony.section_strength ?? 0) > 0 || harmony.follow_lyrics === true;
+  return active ? harmony : undefined;
+};
+
+const harmonyText = (value: unknown): HarmonyText => {
+  const text = emptyHarmony();
+  if (!value || typeof value !== 'object') return text;
+  const stored = value as Record<string, unknown>;
+  for (const key of HARMONY_NUMBERS) text[key] = asText(stored[key]);
+  if (stored.identity === 'root' || stored.identity === 'spelling') text.identity = stored.identity;
+  text.follow_lyrics = stored.follow_lyrics === true;
+  return text;
+};
+
 const Field: React.FC<{ label: string; hint?: string; children: React.ReactNode }> = ({ label, hint, children }) => (
   <label className="block">
     <span className={LABEL}>{label}</span>
@@ -153,8 +184,8 @@ const Field: React.FC<{ label: string; hint?: string; children: React.ReactNode 
   </label>
 );
 
-const Switch: React.FC<{ checked: boolean; onChange: (value: boolean) => void; label: string; hint?: string }> = ({ checked, onChange, label, hint }) => (
-  <div className="flex items-center justify-between gap-3">
+const Switch: React.FC<{ checked: boolean; onChange: (value: boolean) => void; label: string; hint?: string; disabled?: boolean }> = ({ checked, onChange, label, hint, disabled }) => (
+  <div className={`flex items-center justify-between gap-3 ${disabled ? 'opacity-50' : ''}`}>
     <div className="min-w-0">
       <span className="text-[11px] font-bold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">{label}</span>
       {hint && <p className="mt-0.5 text-[11px] leading-4 text-zinc-500">{hint}</p>}
@@ -164,8 +195,9 @@ const Switch: React.FC<{ checked: boolean; onChange: (value: boolean) => void; l
       role="switch"
       aria-checked={checked}
       aria-label={label}
+      disabled={disabled}
       onClick={() => onChange(!checked)}
-      className={`relative h-5 w-10 shrink-0 rounded-full transition-colors ${checked ? 'bg-pink-500' : 'bg-zinc-300 dark:bg-zinc-600'}`}
+      className={`relative h-5 w-10 shrink-0 rounded-full transition-colors disabled:cursor-not-allowed ${checked ? 'bg-pink-500' : 'bg-zinc-300 dark:bg-zinc-600'}`}
     >
       <span className={`absolute top-[2px] h-4 w-4 rounded-full bg-white shadow-xs transition-all ${checked ? 'left-[22px]' : 'left-[2px]'}`} />
     </button>
@@ -300,6 +332,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
   const [lmBatch, setLmBatch] = useState('');
   const [synthBatch, setSynthBatch] = useState('');
   const [steps, setSteps] = useState('');
+  const [solver, setSolver] = useState<'' | 'midpoint' | 'ab2'>('');
   const [cfgScale, setCfgScale] = useState('');
   const [randomizeSeed, setRandomizeSeed] = useState(true);
   const [lmSeed, setLmSeed] = useState('');
@@ -309,12 +342,16 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
   const [takeChoiceOpen, setTakeChoiceOpen] = useState(false);
   const [abcSampling, setAbcSampling] = useState<SamplingText>(emptySampling);
   const [semanticSampling, setSemanticSampling] = useState<SamplingText>(emptySampling);
-  const [peakClip, setPeakClip] = useState('');
+  const [harmony, setHarmony] = useState<HarmonyText>(emptyHarmony);
+  const harmonyField = (key: keyof HarmonyText) => (value: string) => setHarmony(current => ({ ...current, [key]: key === 'follow_lyrics' ? value === 'true' : value }));
   const [transpose, setTranspose] = useState('0');
   const [vocalsOnly, setVocalsOnly] = useState(false);
+  const [lyricTiming, setLyricTiming] = useState(true);
+  // the decoder companion: auto leaves it to the service (on only under a LoRA trained in the studio)
+  const [realaudio, setRealaudio] = useState<'auto' | 'on' | 'off'>('auto');
   // The engine default of 128 kbps throws away what the VAE produced.
   const [mp3Bitrate, setMp3Bitrate] = useState('320');
-  const [format, setFormat] = useState<YueOutputFormat>('mp3');
+  const [format, setFormat] = useState<YueOutputFormat>('flac');
 
   const setupQuery = useSetupStatus<SetupStatus>();
   const setup = setupQuery.isError ? null : setupQuery.data ?? null;
@@ -358,11 +395,24 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
   const [selectedPlan, setSelectedPlan] = useState(0);
   const composeRun = useRef<AbortController | null>(null);
   const [editorOpen, setEditorOpen] = useState(false);
+  const [continueScore, setContinueScore] = useState(false);
+  const [bedOpen, setBedOpen] = useState(false);
+  const [bedBpm, setBedBpm] = useState('100');
+  const [bedKey, setBedKey] = useState('C');
+  const [bedMeter, setBedMeter] = useState('4/4');
+  const [bedBusy, setBedBusy] = useState(false);
+  const [bedWritten, setBedWritten] = useState<string[][] | null>(null);
   const [coverSource, setCoverSource] = useState<string>('');
   // the library song a cover's melody was taken from, which the new song names
   const [coverSongId, setCoverSongId] = useState<string | null>(null);
   // The recording being covered, so it can be listened to next to its score.
   const [coverAudio, setCoverAudio] = useState<string | null>(null);
+  const [coverFile, setCoverFile] = useState<File | null>(null);
+  const [sectionProposal, setSectionProposal] = useState<SectionProposal | null>(null);
+  const [matchingSections, setMatchingSections] = useState(false);
+  // A proposal is for the lyrics, score and recording it was made from; any change makes it stale, a run still going too.
+  const sectionRun = useRef(0);
+  useEffect(() => { sectionRun.current += 1; setSectionProposal(null); }, [abc, lyrics, coverSongId, coverFile]);
   const coverPlayer = useRef<HTMLAudioElement | null>(null);
   const [coverPlaying, setCoverPlaying] = useState(false);
   const [coverTime, setCoverTime] = useState(0);
@@ -445,6 +495,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
     setLmBatch('');
     setSynthBatch('');
     setSteps(asText(request.steps));
+    setSolver(request.solver === 'ab2' || request.solver === 'midpoint' ? request.solver : '');
     setCfgScale(typeof request.cfg_scale === 'number' && request.cfg_scale >= 0 ? String(request.cfg_scale) : '');
     const safeSeed = (value: unknown) => (typeof value === 'number' && Number.isSafeInteger(value) ? String(value) : '');
     const storedLmSeed = safeSeed(request.lm_seed);
@@ -455,11 +506,14 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
     setSemanticTokens(typeof request.semantic_tokens === 'string' ? request.semantic_tokens : '');
     setAbcSampling(samplingText(request.abc_sampling));
     setSemanticSampling(samplingText(request.semantic_sampling));
-    setPeakClip(asText(request.peak_clip));
+    setHarmony(harmonyText(request.harmony));
+    setContinueScore(request.abc_continue === true);
     setTranspose(asText(request.transpose) || '0');
     setVocalsOnly(request.vocals_only === true);
+    setLyricTiming(request.lyric_timing !== false);
+    setRealaudio(request.companion_scale === undefined ? 'auto' : request.companion_scale === 0 ? 'off' : 'on');
     if (request.mp3_bitrate !== undefined) setMp3Bitrate(asText(request.mp3_bitrate));
-    if (typeof request.output_format === 'string') setFormat(request.output_format as YueOutputFormat);
+    if (request.output_format === 'mp3' || request.output_format === 'flac') setFormat(request.output_format);
     if (Array.isArray(request.adapters)) setAdapters(usesFromSettings(request));
     setError(null);
   }, []);
@@ -493,6 +547,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
       const { song, melodyOnly } = request;
       setCoverSource(song.title);
       setCoverSongId(song.id);
+      setCoverFile(null);
       setCoverAudio(song.audioUrl ?? null);
       if (song.lyrics?.trim()) setLyrics(current => (current.trim() ? current : song.lyrics));
       setMode('cover');
@@ -503,6 +558,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
       const { song } = request;
       setCoverSource(song.title);
       setCoverSongId(song.id);
+      setCoverFile(null);
       setCoverAudio(song.audioUrl ?? null);
       if (song.lyrics?.trim()) setLyrics(current => (current.trim() ? current : song.lyrics));
       setMode('cover');
@@ -524,7 +580,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
   }, [request]);
 
   const reset = () => {
-    setName(''); setStyle(''); setLyrics(''); setAbc(''); setCot('');
+    setName(''); setStyle(''); setLyrics(''); setAbc(''); setCot(''); setContinueScore(false);
     setPlans([]); setSelectedPlan(0);
     resetParameters();
     setCoverPrompt('');
@@ -533,11 +589,11 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
   };
 
   const resetParameters = () => {
-    chooseDuration(String(DEFAULT_DURATION_SECONDS)); setLmBatch(''); setSynthBatch(''); setSteps(''); setCfgScale('');
+    chooseDuration(String(DEFAULT_DURATION_SECONDS)); setLmBatch(''); setSynthBatch(''); setSteps(''); setSolver(''); setCfgScale('');
     setRandomizeSeed(true); setLmSeed(''); setSeed(''); setSemanticTokens('');
-    setAbcSampling(emptySampling()); setSemanticSampling(emptySampling());
-    setPeakClip(''); setMp3Bitrate('320'); setFormat('mp3');
-    setTranspose('0'); setVocalsOnly(false);
+    setAbcSampling(emptySampling()); setSemanticSampling(emptySampling()); setHarmony(emptyHarmony());
+    setMp3Bitrate('320'); setFormat('flac');
+    setTranspose('0'); setVocalsOnly(false); setLyricTiming(true); setRealaudio('auto');
   };
 
   const loadExample = (id?: string) => {
@@ -556,10 +612,9 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
     };
     if (abc.trim() && effectiveCot !== 'off') request.abc = abc.trim();
     if (abc.trim() && effectiveCot !== 'off' && !semanticTokens.trim() && Number(transpose) !== 0) request.transpose = Number(transpose);
-    if (vocalsOnly) {
-      request.vocals_only = true;
-      if (format !== 'mp3') request.output_format = 'wav32';
-    }
+    if (abc.trim() && effectiveCot !== 'off' && !lyricTiming) request.lyric_timing = false;
+    if (realaudio !== 'auto') request.companion_scale = realaudio === 'on' ? 1 : 0;
+    if (vocalsOnly) request.vocals_only = true;
     if (cot) request.cot = cot;
     const durationValue = numberOrUndefined(duration);
     if (durationValue !== undefined) request.duration_seconds = Math.min(Math.max(durationValue, 1), MAX_DURATION_SECONDS);
@@ -569,6 +624,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
     if (synthBatchValue !== undefined) request.synth_batch_size = synthBatchValue;
     const stepsValue = numberOrUndefined(steps);
     if (stepsValue !== undefined) request.steps = stepsValue;
+    if (solver) request.solver = solver;
     const cfgValue = numberOrUndefined(cfgScale);
     if (cfgValue !== undefined) request.cfg_scale = cfgValue;
     // Seeds are drawn here, within 32 bits, so the stored request replays the
@@ -586,8 +642,9 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
     if (abcPreset) request.abc_sampling = abcPreset;
     const semanticPreset = samplingFrom(semanticSampling);
     if (semanticPreset) request.semantic_sampling = semanticPreset;
-    const peakValue = numberOrUndefined(peakClip);
-    if (peakValue !== undefined) request.peak_clip = peakValue;
+    const harmonyValue = harmonyFrom(harmony);
+    if (harmonyValue) request.harmony = harmonyValue;
+    if (continueScore && request.abc) request.abc_continue = true;
     const bitrate = numberOrUndefined(mp3Bitrate);
     if (bitrate !== undefined && format === 'mp3') request.mp3_bitrate = bitrate;
     if (name.trim()) request.title = name.trim();
@@ -667,6 +724,8 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
       cot: effectiveCot,
       lmSeed: pinned !== undefined && pinned >= 0 ? pinned : undefined,
       abcSampling: samplingFrom(abcSampling),
+      harmony: harmonyFrom(harmony),
+      opening: continueScore && abc.trim() ? abc : undefined,
     }, signal);
   };
 
@@ -680,9 +739,10 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
     composeRun.current = controller;
     try {
       const pinned = randomizeSeed ? undefined : numberOrUndefined(lmSeed);
-      const choices = await composePlans({ style: finishedStyle(style), lyrics: lyrics.replace(/\r\n?/g, '\n').trim(), cot: effectiveCot, lmSeed: pinned, abcSampling: samplingFrom(abcSampling), count: Math.max(1, Math.min(Number(planCount), maxBatch, 9)) }, controller.signal);
+      const choices = await composePlans({ style: finishedStyle(style), lyrics: lyrics.replace(/\r\n?/g, '\n').trim(), cot: effectiveCot, lmSeed: pinned, abcSampling: samplingFrom(abcSampling), harmony: harmonyFrom(harmony), opening: continueScore && abc.trim() ? abc : undefined, count: Math.max(1, Math.min(Number(planCount), maxBatch, 9)) }, controller.signal);
       setPlans(choices); setSelectedPlan(0);
       setAbc(choices[0].abc);
+      setContinueScore(false);
       setSemanticTokens('');
       setShowNotation(true);
     } catch (reason) {
@@ -902,15 +962,25 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
     lm_batch_size: [lmBatch, setLmBatch],
     synth_batch_size: [synthBatch, setSynthBatch],
     steps: [steps, setSteps],
+    solver: [solver, value => setSolver(value === 'ab2' || value === 'midpoint' ? value : '')],
     cfg_scale: [cfgScale, setCfgScale],
     lm_seed: [lmSeed, setLmSeed],
     seed: [seed, setSeed],
     cover_prompt: [coverPrompt, setCoverPrompt],
     output_format: [format, (value) => setFormat(value as YueOutputFormat)],
     mp3_bitrate: [mp3Bitrate, setMp3Bitrate],
-    peak_clip: [peakClip, setPeakClip],
     transpose: [transpose, setTranspose],
     vocals_only: [vocalsOnly, value => setVocalsOnly(value === 'true')],
+    lyric_timing: [lyricTiming, value => setLyricTiming(value !== 'false')],
+    chord_strength: [harmony.strength, harmonyField('strength')],
+    chord_identity: [harmony.identity, harmonyField('identity')],
+    chord_window: [harmony.window, harmonyField('window')],
+    chord_hold_limit: [harmony.hold_limit, harmonyField('hold_limit')],
+    outside_bonus: [harmony.outside_bonus, harmonyField('outside_bonus')],
+    section_strength: [harmony.section_strength, harmonyField('section_strength')],
+    follow_sections: [harmony.follow_lyrics, harmonyField('follow_lyrics')],
+    continue_score: [continueScore, value => setContinueScore(value === 'true')],
+    companion_scale: [realaudio === 'auto' ? '' : realaudio === 'on' ? '1' : '0', value => setRealaudio(value === '' ? 'auto' : Number(value) !== 0 ? 'on' : 'off')],
   };
   useBridgeCommand('create_get', () => ({
     mode,
@@ -923,7 +993,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
   useBridgeCommand('create_set', (args) => {
     const fields = (args.fields && typeof args.fields === 'object' ? args.fields : args) as Record<string, unknown>;
     // every field is checked before any changes, so a refused call leaves the form as it was
-    const choices: Record<string, string[]> = { mode: ['studio', 'simple', 'cover'], cot: ['full', 'melody', 'off', ''], output_format: ['mp3', 'wav16', 'wav24', 'wav32'] };
+    const choices: Record<string, string[]> = { mode: ['studio', 'simple', 'cover'], cot: ['full', 'melody', 'off', ''], output_format: ['flac', 'mp3'] };
     const unknown = Object.keys(fields).filter(key => !formFields[key] && !['mode', 'randomize_seed', 'adapters'].includes(key));
     if (unknown.length) throw new Error(`Unknown fields: ${unknown.join(', ')}. The form has: ${[...Object.keys(formFields), 'mode', 'randomize_seed', 'adapters'].join(', ')}.`);
     for (const [key, allowed] of Object.entries(choices)) {
@@ -1077,9 +1147,17 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
                 onChange={event => {
                   const file = event.target.files?.[0];
                   event.target.value = '';
-                  if (file) {
+                  if (file && isMidiFile(file.name)) {
+                    void file.arrayBuffer().then(buffer => {
+                      const bytes = new Uint8Array(buffer);
+                      let raw = '';
+                      for (let index = 0; index < bytes.length; index += 0x8000) raw += String.fromCharCode(...bytes.subarray(index, index + 0x8000));
+                      setMidiCover({ name: file.name, data: btoa(raw) });
+                    });
+                  } else if (file) {
                     setCoverSource(file.name);
                     setCoverSongId(null);
+                    setCoverFile(file);
                     setCoverAudio(URL.createObjectURL(file));
                     void runTranscription({ file }, coverMelodyOnly);
                   }
@@ -1132,6 +1210,72 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
               )}
               {coverSource && !transcribing && abc && (
                 <p className="mt-2 text-[11px] text-emerald-600 dark:text-emerald-300">{tt('coverScoreReady')} · {coverSource}</p>
+              )}
+              {abc && (coverSongId || coverFile) && (
+                <div className="mt-3 border-t border-zinc-100 pt-3 dark:border-white/5">
+                  <button
+                    type="button"
+                    disabled={matchingSections || !hasSungLines(lyrics)}
+                    onClick={() => {
+                      setError(null);
+                      setMatchingSections(true);
+                      const run = sectionRun.current;
+                      void matchSections({ abc, lyrics: lyrics.replace(/\r\n?/g, '\n'), songId: coverSongId, file: coverFile })
+                        .then(answer => {
+                          if (run !== sectionRun.current) return;
+                          if (failed(answer)) setError(karaokeReason(tt, answer.error) ?? answer.error);
+                          else setSectionProposal(answer.proposal);
+                        })
+                        .finally(() => setMatchingSections(false));
+                    }}
+                    title={tt('coverMatchSectionsHint')}
+                    className="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-zinc-200 py-2 text-xs font-semibold text-zinc-700 transition hover:border-pink-300 disabled:opacity-50 dark:border-white/10 dark:text-zinc-200"
+                  >
+                    {matchingSections ? <Loader2 size={13} className="animate-spin" /> : <ListChecks size={13} />}
+                    {matchingSections ? tt('coverMatchingSections') : tt('coverMatchSections')}
+                  </button>
+                  <p className="mt-1.5 text-[11px] leading-4 text-zinc-500">{tt('coverMatchSectionsHint')}</p>
+                  {sectionProposal && (
+                    <div className="mt-3 rounded-lg border border-pink-300/40 bg-pink-50/60 p-3 dark:border-pink-500/20 dark:bg-pink-500/5">
+                      {sectionProposal.unchanged ? (
+                        <p className="text-[11px] text-zinc-600 dark:text-zinc-300">{tt('coverSectionsUnchanged')}</p>
+                      ) : (
+                        <>
+                          <p className="text-[11px] leading-4 text-zinc-700 dark:text-zinc-200">
+                            {tt('coverSectionsSummary')
+                              .replace('{renamed}', String(sectionProposal.blocks.filter(block => block.status === 'renamed').length))
+                              .replace('{copied}', String(sectionProposal.filled.filter(fill => fill.copied_from !== null).length))
+                              .replace('{unsure}', String(sectionProposal.blocks.filter(block => block.status === 'unsure').length))}
+                          </p>
+                          {sectionProposal.blocks.some(block => block.status === 'unsure') && (
+                            <p className="mt-1 flex gap-1.5 text-[11px] leading-4 text-amber-700 dark:text-amber-300">
+                              <AlertTriangle size={12} className="mt-0.5 shrink-0" />
+                              {tt('coverSectionsUnsure').replace('{blocks}', sectionProposal.blocks.filter(block => block.status === 'unsure').map(block => block.tag ?? `#${block.index}`).join(', '))}
+                            </p>
+                          )}
+                          <div className="mt-2 grid grid-cols-2 gap-2">
+                            <pre className="max-h-48 overflow-auto rounded-md bg-white/70 p-2 text-[10px] leading-4 text-zinc-500 dark:bg-black/20">{lyrics}</pre>
+                            <pre className="max-h-48 overflow-auto rounded-md bg-white/70 p-2 text-[10px] leading-4 text-zinc-800 dark:bg-black/20 dark:text-zinc-100">{sectionProposal.lyrics}</pre>
+                          </div>
+                        </>
+                      )}
+                      <div className="mt-2 flex justify-end gap-2">
+                        <button type="button" onClick={() => setSectionProposal(null)} className="rounded-md px-3 py-1.5 text-[11px] font-semibold text-zinc-600 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-white/5">
+                          {tt('cancel')}
+                        </button>
+                        {!sectionProposal.unchanged && (
+                          <button
+                            type="button"
+                            onClick={() => { setLyrics(sectionProposal.lyrics); setSectionProposal(null); }}
+                            className="rounded-md bg-pink-600 px-3 py-1.5 text-[11px] font-bold text-white hover:brightness-110"
+                          >
+                            {tt('coverSectionsApply')}
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
               )}
             </Card>
           )}
@@ -1290,7 +1434,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
                 </button>
                 <button type="button" onClick={() => scoreFile.current?.click()} className={ICON} title={tt('openScore')}><FolderOpen size={14} /></button>
                 <button type="button" onClick={() => abc.trim() && download(`${safeName()}.abc`, `${abc.trim()}\n`, 'text/vnd.abc')} disabled={!abc.trim()} className={ICON} title={tt('saveScore')}><Save size={14} /></button>
-                <button type="button" onClick={() => setAbc('')} disabled={!abc} className={ICON} title={tt('clearScore')}><X size={14} /></button>
+                <button type="button" onClick={() => { setAbc(''); setContinueScore(false); }} disabled={!abc} className={ICON} title={tt('clearScore')}><X size={14} /></button>
                 <input
                   ref={scoreFile}
                   type="file"
@@ -1322,7 +1466,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
               <>
                 {showNotation && abc.trim() && (
                   <div className="mt-3 max-h-80 overflow-auto rounded-lg border border-zinc-200 bg-white p-2 dark:border-white/10 custom-scrollbar">
-                    <ScoreView abc={abc} />
+                    <ScoreView abc={abc} onChange={setAbc} />
                   </div>
                 )}
                 <AutoTextarea
@@ -1340,6 +1484,11 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
                   <input type="checkbox" className="mt-0.5 accent-pink-500" checked={/%yue2-words [a-f0-9]{16} keep/.test(abc)} onChange={event => setAbc(current => current.replace(/(%yue2-words [a-f0-9]{16})(?: keep)?/g, `$1${event.target.checked ? ' keep' : ''}`))} />
                   {midiImportOptions[language].keep}
                 </label>}
+                {abc.trim() && (
+                  <div className="mt-2">
+                    <Switch checked={continueScore} onChange={setContinueScore} label={tt('continueScore')} hint={tt('continueScoreHint')} disabled={Boolean(semanticTokens.trim())} />
+                  </div>
+                )}
                 <div className="mt-2 flex flex-wrap items-center gap-2">
                   <select className={CONTROL + ' max-w-24'} value={planCount} aria-label={planLabels[language]} onChange={event => setPlanCount(event.target.value)} disabled={composing}>
                     {Array.from({ length: Math.min(maxBatch, 9) }, (_, index) => index + 1).map(count => <option key={count} value={count}>{count}</option>)}
@@ -1351,7 +1500,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
                     className="inline-flex items-center gap-1.5 rounded-lg border border-pink-500/40 px-3 py-1.5 text-xs font-semibold text-pink-600 transition hover:bg-pink-500/10 disabled:opacity-50 dark:text-pink-300"
                   >
                     {composing ? <Loader2 size={13} className="animate-spin" /> : <FileMusic size={13} />}
-                    {composing ? tt('composingScore') : abc.trim() ? tt('composeScoreAgain') : tt('composeScore')}
+                    {composing ? tt('composingScore') : continueScore && abc.trim() ? tt('composeContinue') : abc.trim() ? tt('composeScoreAgain') : tt('composeScore')}
                   </button>
                   <button
                     type="button"
@@ -1363,8 +1512,64 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
                     <Piano size={13} />
                     {tt('scoreEditor')}
                   </button>
+                  <button
+                    type="button"
+                    onClick={() => setBedOpen(open => !open)}
+                    disabled={composing}
+                    aria-expanded={bedOpen}
+                    title={tt('chordBedHint')}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-pink-500/40 px-3 py-1.5 text-xs font-semibold text-pink-600 transition hover:bg-pink-500/10 disabled:opacity-50 dark:text-pink-300"
+                  >
+                    <Grid2x2 size={13} />
+                    {tt('chordBed')}
+                  </button>
                   <span className="text-[11px] leading-4 text-zinc-500">{composing ? tt('composeScoreCancel') : tt('composeScoreHint')}</span>
                 </div>
+                {bedOpen && (
+                  <div className="mt-2 rounded-lg border border-zinc-100 p-2 dark:border-white/5">
+                    <p className="mb-2 text-[11px] leading-4 text-zinc-500">{tt('chordBedHint')}</p>
+                    <div className="grid grid-cols-3 gap-2">
+                      <Field label={tt('chordBedTempo')}>
+                        <input value={bedBpm} onChange={event => setBedBpm(event.target.value)} inputMode="numeric" className={CONTROL} />
+                      </Field>
+                      <Field label={tt('chordBedKey')}>
+                        <select value={bedKey} onChange={event => setBedKey(event.target.value)} className={CONTROL}>
+                          {BED_KEYS.map(key => <option key={key} value={key}>{key}</option>)}
+                        </select>
+                      </Field>
+                      <Field label={tt('chordBedMeter')}>
+                        <select value={bedMeter} onChange={event => setBedMeter(event.target.value)} className={CONTROL}>
+                          {BED_METERS.map(meter => <option key={meter} value={meter}>{meter}</option>)}
+                        </select>
+                      </Field>
+                    </div>
+                    <button
+                      type="button"
+                      disabled={bedBusy}
+                      onClick={() => {
+                        setError(null);
+                        setBedBusy(true);
+                        void chordBed({ bpm: Math.max(0, Math.round(Number(bedBpm))) || 0, key: bedKey, meter: bedMeter, lyrics: lyrics.replace(/\r\n?/g, '\n') })
+                          .then(answer => {
+                            if (failed(answer)) { setError(answer.error); return; }
+                            setAbc(answer.abc.trimEnd());
+                            setPlans([]); setSelectedPlan(0); setSemanticTokens(''); setContinueScore(false);
+                            setBedWritten(answer.progressions);
+                          })
+                          .finally(() => setBedBusy(false));
+                      }}
+                      className="mt-2 inline-flex items-center gap-1.5 rounded-lg bg-linear-to-r from-orange-500 to-pink-600 px-3 py-1.5 text-xs font-bold text-white transition hover:brightness-110 disabled:opacity-50"
+                    >
+                      {bedBusy ? <Loader2 size={13} className="animate-spin" /> : <Grid2x2 size={13} />}
+                      {abc.trim() ? tt('chordBedWriteAgain') : tt('chordBedWrite')}
+                    </button>
+                    {bedWritten && (
+                      <p className="mt-2 text-[11px] leading-4 text-zinc-500">
+                        {tt('chordBedWritten').replace('{verse}', bedWritten[0].join(' ')).replace('{chorus}', bedWritten[1].join(' ')).replace('{bridge}', bedWritten[2].join(' '))}
+                      </p>
+                    )}
+                  </div>
+                )}
                 {plans.length > 1 && <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
                   <span className="text-zinc-500">{planLabels[language]}</span>
                   {plans.map((plan, index) => <button key={index} type="button" aria-pressed={index === selectedPlan} className={`${CHIP} ${index === selectedPlan ? 'border-pink-500 text-pink-500' : ''}`} onClick={() => { setSelectedPlan(index); setAbc(plan.abc); setSemanticTokens(''); }}>
@@ -1442,6 +1647,12 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
                 step={1}
                 onChange={setSteps}
               />
+              <Field label={tt('solver')} hint={tt(solver === 'ab2' ? 'solverAb2Hint' : 'solverMidpointHint')}>
+                <select value={solver || 'midpoint'} onChange={event => setSolver(event.target.value as 'midpoint' | 'ab2')} className={CONTROL}>
+                  <option value="midpoint">{tt('solverMidpoint')}</option>
+                  <option value="ab2">{tt('solverAb2')}</option>
+                </select>
+              </Field>
             </div>
             <div className="mt-4 space-y-3 border-t border-zinc-100 pt-4 dark:border-white/5">
               <SliderRow
@@ -1500,7 +1711,38 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
                       disabled={!abc.trim() || effectiveCot === 'off' || Boolean(semanticTokens.trim())} onChange={setTranspose} />
                     <p className="mt-1 text-[11px] leading-4 text-zinc-500">{engineParityLabels[language].transposeHint}</p>
                   </div>
+                  <div className="mb-3"><Switch checked={lyricTiming} disabled={!abc.trim() || effectiveCot === 'off' || Boolean(semanticTokens.trim()) || (cfgScale.trim() !== '' && Number(cfgScale) !== 1)} onChange={setLyricTiming} label={engineParityLabels[language].lyricTiming} hint={engineParityLabels[language].lyricTimingHint} /></div>
                   <SamplingGrid value={abcSampling} defaults={defaults.abc_sampling} onChange={setAbcSampling} t={t as never} />
+                  <div className={`mt-4 space-y-3 border-t border-zinc-100 pt-3 dark:border-white/5 ${effectiveCot === 'off' ? 'opacity-50' : ''}`}>
+                    <div>
+                      <span className="text-[11px] font-bold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">{tt('harmonyTitle')}</span>
+                      <p className="mt-0.5 text-[11px] leading-4 text-zinc-500">{tt('harmonyHint')}</p>
+                    </div>
+                    <SliderRow label={tt('chordVariety')} value={harmony.strength} fallback={0} min={0} max={16} step={0.5} disabled={effectiveCot === 'off'} onChange={harmonyField('strength')} />
+                    {(numberOrUndefined(harmony.strength) ?? 0) > 0 && (
+                      <>
+                        <Field label={tt('chordIdentity')} hint={tt(harmony.identity === 'spelling' ? 'chordIdentitySpellingHint' : 'chordIdentityRootHint')}>
+                          <select value={harmony.identity || 'root'} onChange={event => harmonyField('identity')(event.target.value)} className={CONTROL}>
+                            <option value="root">{tt('chordIdentityRoot')}</option>
+                            <option value="spelling">{tt('chordIdentitySpelling')}</option>
+                          </select>
+                        </Field>
+                        <div className="grid grid-cols-2 gap-2">
+                          <SliderRow label={tt('chordWindow')} value={harmony.window} fallback={16} min={4} max={64} step={1} onChange={harmonyField('window')} />
+                          <SliderRow label={tt('chordHold')} value={harmony.hold_limit} fallback={8} min={0} max={16} step={1} format={value => (value === 0 ? '∞' : String(value))} onChange={harmonyField('hold_limit')} />
+                        </div>
+                      </>
+                    )}
+                    <div>
+                      <SliderRow label={tt('outsideKey')} value={harmony.outside_bonus} fallback={0} min={0} max={8} step={0.5} disabled={effectiveCot === 'off' || harmony.identity === 'spelling'} onChange={harmonyField('outside_bonus')} />
+                      <p className="mt-1 text-[11px] leading-4 text-zinc-500">{tt('outsideKeyHint')}</p>
+                    </div>
+                    <div>
+                      <SliderRow label={tt('sectionVariety')} value={harmony.section_strength} fallback={0} min={0} max={16} step={0.5} disabled={effectiveCot === 'off'} onChange={harmonyField('section_strength')} />
+                      <p className="mt-1 text-[11px] leading-4 text-zinc-500">{tt('sectionVarietyHint')}</p>
+                    </div>
+                    <Switch checked={harmony.follow_lyrics} disabled={effectiveCot === 'off'} onChange={value => harmonyField('follow_lyrics')(String(value))} label={tt('followSections')} hint={tt('followSectionsHint')} />
+                  </div>
                 </Stage>
 
                 <div className="border-t border-zinc-100 pt-4 dark:border-white/5">
@@ -1531,16 +1773,16 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
 
                 <div className="border-t border-zinc-100 pt-4 dark:border-white/5">
                   <Stage title={t('stageOutput')} hint={t('stageOutputHint')}>
-                    <div className="mb-3"><Switch checked={vocalsOnly} onChange={enabled => { setVocalsOnly(enabled); if (enabled && format !== 'mp3') setFormat('wav32'); }} label={engineParityLabels[language].vocals} hint={engineParityLabels[language].vocalsHint} /></div>
-                    <SliderRow
-                      label={t('peakClipLabel')}
-                      value={peakClip}
-                      fallback={Number(defaults.peak_clip ?? 10)}
-                      min={0}
-                      max={30}
-                      step={1}
-                      onChange={setPeakClip}
-                    />
+                    <div className="mb-3">
+                      <Field label={engineParityLabels[language].realaudio} hint={engineParityLabels[language].realaudioHint}>
+                        <select value={realaudio} onChange={event => setRealaudio(event.target.value as 'auto' | 'on' | 'off')} className={CONTROL}>
+                          <option value="auto">{engineParityLabels[language].realaudioAuto}</option>
+                          <option value="on">{engineParityLabels[language].realaudioOn}</option>
+                          <option value="off">{engineParityLabels[language].realaudioOff}</option>
+                        </select>
+                      </Field>
+                    </div>
+                    <div className="mb-3"><Switch checked={vocalsOnly} onChange={setVocalsOnly} label={engineParityLabels[language].vocals} hint={engineParityLabels[language].vocalsHint} /></div>
                     <div className="mt-3 grid grid-cols-2 gap-2">
                       <Field label={t('mp3Bitrate')}>
                         <select value={mp3Bitrate || String(defaults.mp3_bitrate ?? 128)} onChange={event => setMp3Bitrate(event.target.value)} disabled={format !== 'mp3'} className={CONTROL}>
@@ -1549,14 +1791,12 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
                       </Field>
                       <Field label={t('outputFormat')}>
                         <select value={format} onChange={event => setFormat(event.target.value as YueOutputFormat)} className={CONTROL}>
+                          <option value="flac">FLAC</option>
                           <option value="mp3">MP3</option>
-                          <option value="wav16" disabled={vocalsOnly}>WAV 16-bit</option>
-                          <option value="wav24" disabled={vocalsOnly}>WAV 24-bit</option>
-                          <option value="wav32">WAV 32-bit float</option>
                         </select>
                       </Field>
                     </div>
-                    <p className="mt-2 text-[11px] leading-4 text-zinc-500">{t('peakClipHint')}</p>
+                    <p className="mt-2 text-[11px] leading-4 text-zinc-500">{t('outputRawHint')}</p>
                   </Stage>
                 </div>
               </div>

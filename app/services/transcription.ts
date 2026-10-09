@@ -4,7 +4,7 @@
  * one from a style and lyrics without singing it.
  */
 
-import type { YueCot, YueSampling } from '../types';
+import type { YueCot, YueHarmony, YueSampling } from '../types';
 import { failed, markScore } from './scoreApi';
 
 interface ScoreJob {
@@ -50,22 +50,22 @@ export async function transcribe(source: { file?: File; songId?: string }, melod
 
 /** The planning stage alone: the score YuE2 would sing this prompt from. */
 export async function composeScore(
-  prompt: { style: string; lyrics: string; cot: YueCot; lmSeed?: number; abcSampling?: YueSampling },
+  prompt: { style: string; lyrics: string; cot: YueCot; lmSeed?: number; abcSampling?: YueSampling; harmony?: YueHarmony; opening?: string },
   signal?: AbortSignal,
 ): Promise<string> {
   const submitted = await fetch('/v1/scores', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ style: prompt.style, lyrics: prompt.lyrics, cot: prompt.cot, lm_seed: prompt.lmSeed, abc_sampling: prompt.abcSampling }),
+    body: JSON.stringify({ style: prompt.style, lyrics: prompt.lyrics, cot: prompt.cot, lm_seed: prompt.lmSeed, abc_sampling: prompt.abcSampling, harmony: prompt.harmony, abc: prompt.opening }),
     signal,
   });
   return (await awaitScore('/v1/scores', submitted, signal)).abc!;
 }
 
-export async function composePlans(prompt: { style: string; lyrics: string; cot: YueCot; lmSeed?: number; abcSampling?: YueSampling; count: number }, signal?: AbortSignal): Promise<ScorePlan[]> {
+export async function composePlans(prompt: { style: string; lyrics: string; cot: YueCot; lmSeed?: number; abcSampling?: YueSampling; harmony?: YueHarmony; opening?: string; count: number }, signal?: AbortSignal): Promise<ScorePlan[]> {
   // Keep the submitted words even if the form changes while the engine plans.
   const words = { style: prompt.style, lyrics: prompt.lyrics, cot: prompt.cot };
-  const submitted = await fetch('/v1/scores', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ style: prompt.style, lyrics: prompt.lyrics, cot: prompt.cot, lm_seed: prompt.lmSeed, abc_sampling: prompt.abcSampling, lm_batch_size: prompt.count }), signal });
+  const submitted = await fetch('/v1/scores', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ style: prompt.style, lyrics: prompt.lyrics, cot: prompt.cot, lm_seed: prompt.lmSeed, abc_sampling: prompt.abcSampling, harmony: prompt.harmony, abc: prompt.opening, lm_batch_size: prompt.count }), signal });
   const answer = await awaitScore('/v1/scores', submitted, signal);
   if (!answer.plans?.length) throw new Error('The composition returned no plans');
   const marked = await Promise.all(answer.plans.map(async plan => {

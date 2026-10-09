@@ -395,6 +395,9 @@ impl AdapterLibrary {
             // an adapter whose files all arrived is kept even when another failed
             for plan in &planned {
                 if plan.assets.iter().all(|asset| library.downloader.is_installed(asset)) {
+                    if let Err(error) = library.drop_replaced_weights(plan) {
+                        eprintln!("[ERROR] adapter {} kept the weights of its earlier version: {error:#}", plan.meta.id);
+                    }
                     let meta = AdapterMeta { created_at: now(), ..plan.meta.clone() };
                     if let Err(error) = library.write_meta(&meta) {
                         eprintln!("[ERROR] adapter {} did not record: {error:#}", meta.id);
@@ -407,6 +410,22 @@ impl AdapterLibrary {
             library.installing_now().clear();
             crate::mcp::announce("lora_installed");
         });
+        Ok(())
+    }
+
+    /// The engine reads every weight file in an adapter's folder, and two of
+    /// them on one tensor refuse the load; an entry whose files changed leaves
+    /// only its own.
+    fn drop_replaced_weights(&self, plan: &Planned) -> Result<()> {
+        let folder = self.folder(&plan.meta.id)?;
+        let own: Vec<&str> = plan.assets.iter().filter_map(|asset| asset.relative_path.rsplit('/').next()).collect();
+        for entry in std::fs::read_dir(&folder).with_context(|| format!("read {}", folder.display()))? {
+            let path = entry?.path();
+            let name = path.file_name().and_then(|name| name.to_str()).unwrap_or_default();
+            if name.ends_with(".safetensors") && !own.contains(&name) {
+                std::fs::remove_file(&path).with_context(|| format!("remove {}", path.display()))?;
+            }
+        }
         Ok(())
     }
 
@@ -538,6 +557,28 @@ impl AdapterLibrary {
         self.read_meta(id).and_then(|meta| meta.trigger).filter(|trigger| !trigger.trim().is_empty())
     }
 
+    /// Whether the adapter came out of the studio's own trainer, which keeps
+    /// the decoder companion frozen under every LoRA it trains: such a LoRA
+    /// sounds as trained only over the companion.
+    pub fn trained_over_companion(&self, id: &str) -> bool {
+        self.read_meta(id).is_some_and(|meta| matches!(meta.origin, Origin::Trained { .. }))
+    }
+
+    /// Whether the adapter was trained with its trigger inside HOT-Step's style
+    /// sentence, as its weights record (`style_template: upstream`).
+    pub fn trained_in_sentence(&self, id: &str) -> bool {
+        let Ok(entries) = self.folder(id).and_then(|folder| Ok(fs::read_dir(folder)?)) else {
+            return false;
+        };
+        entries
+            .flatten()
+            .map(|entry| entry.path())
+            .filter(|path| path.extension().is_some_and(|extension| extension.eq_ignore_ascii_case("safetensors")))
+            .any(|path| {
+                local_header(&path).is_ok_and(|header| header.get("__metadata__").and_then(|meta| meta.get("style_template")).and_then(Value::as_str) == Some("upstream"))
+            })
+    }
+
     pub fn exists(&self, id: &str) -> bool {
         self.read_meta(id).is_some_and(|meta| meta.engine == self.engine)
     }
@@ -632,6 +673,8 @@ pub struct HubFile {
 /// an adapter's header; a longer one takes a second.
 async fn hub_header(http: &reqwest::Client, url: &str) -> Result<serde_json::Map<String, Value>> {
     const FIRST: u64 = 256 << 10;
+    let url = crate::net::model_url(url);
+    let url = url.as_str();
     let answer = http.get(url).header(reqwest::header::RANGE, format!("bytes=0-{}", FIRST - 1)).send().await?.error_for_status()?;
     // a server that ignores the range would send the whole weight file; a whole
     // file no longer than the range is the same bytes
@@ -666,6 +709,57 @@ fn header_in(start: &[u8]) -> Result<HeaderRead> {
         Some(header) => HeaderRead::Whole(serde_json::from_slice(header)?),
         None => HeaderRead::Longer(length),
     })
+}
+
+/// The header of a safetensors file on disk.
+fn local_header(path: &Path) -> Result<serde_json::Map<String, Value>> {
+    use std::io::Read;
+    let mut file = fs::File::open(path)?;
+    let mut length = [0u8; 8];
+    file.read_exact(&mut length)?;
+    let length = u64::from_le_bytes(length);
+    if length > 64 << 20 {
+        bail!("a safetensors header of {length} bytes");
+    }
+    let mut header = vec![0u8; length as usize];
+    file.read_exact(&mut header)?;
+    Ok(serde_json::from_slice(&header)?)
+}
+
+/// Spaces, tabs and line breaks run together as the trainer's squash does; other
+/// whitespace is the caption's own.
+fn squash(text: &str) -> String {
+    text.split([' ', '\t', '\r', '\n']).filter(|word| !word.is_empty()).collect::<Vec<_>>().join(" ")
+}
+
+fn strip_opener<'a>(style: &'a str, trigger: &str) -> Option<&'a str> {
+    [format!("{trigger}, in the style of {trigger}."), format!("{trigger},")]
+        .iter()
+        .find_map(|opener| style.get(..opener.len()).filter(|head| head.eq_ignore_ascii_case(opener)).map(|_| &style[opener.len()..]))
+        .or_else(|| style.eq_ignore_ascii_case(trigger).then_some(""))
+}
+
+/// Whether the style already opens with the trigger, as `<trigger>, ` or in the trained sentence.
+pub fn opens_with(style: &str, trigger: &str) -> bool {
+    let trigger = trigger.trim();
+    !trigger.is_empty() && strip_opener(&squash(style), trigger).is_some()
+}
+
+/// The style as HOT-Step's trainers write it into every training row of an adapter
+/// with a trigger: `<trigger>, in the style of <trigger>. <style>`, the trigger alone
+/// for an empty style. A style that already opens with the trigger is not wrapped twice.
+pub fn upstream_style(style: &str, trigger: &str) -> String {
+    let trigger = trigger.trim();
+    let style = squash(style);
+    if trigger.is_empty() {
+        return style;
+    }
+    let rest = squash(strip_opener(&style, trigger).unwrap_or(&style));
+    if rest.is_empty() {
+        trigger.to_string()
+    } else {
+        format!("{trigger}, in the style of {trigger}. {rest}")
+    }
 }
 
 /// A repository's adapter files at one commit.
@@ -725,7 +819,7 @@ impl AdapterLibrary {
         let query = query.trim();
         let words: Vec<String> = query.to_lowercase().split_whitespace().map(str::to_owned).collect();
         let url = |tags: &[String], search: &str| -> Result<reqwest::Url> {
-            let mut url = reqwest::Url::parse(&format!("{HUB}/api/models"))?;
+            let mut url = reqwest::Url::parse(&crate::net::model_url(&format!("{HUB}/api/models")))?;
             {
                 let mut pairs = url.query_pairs_mut();
                 for tag in tags {
@@ -783,10 +877,10 @@ impl AdapterLibrary {
     /// The weight files of a repository at its current commit.
     pub async fn hub_files(&self, http: &reqwest::Client, repo: &str) -> Result<HubListing> {
         let (repo, _) = hub_reference(repo).with_context(|| format!("not a Hugging Face repository: {repo}"))?;
-        let info: Value = http.get(format!("{HUB}/api/models/{repo}")).send().await?.error_for_status()?.json().await?;
+        let info: Value = http.get(crate::net::model_url(&format!("{HUB}/api/models/{repo}"))).send().await?.error_for_status()?.json().await?;
         let revision = info.get("sha").and_then(Value::as_str).context("the repository names no commit")?.to_string();
         let tree: Vec<Value> = http
-            .get(format!("{HUB}/api/models/{repo}/tree/{revision}?recursive=true"))
+            .get(crate::net::model_url(&format!("{HUB}/api/models/{repo}/tree/{revision}?recursive=true")))
             .send()
             .await?
             .error_for_status()?
@@ -1031,6 +1125,26 @@ mod tests {
     }
 
     #[test]
+    fn a_catalogue_update_leaves_only_the_new_weights() {
+        let library = library("update");
+        let item = catalog().iter().find(|item| item.entry.id == "yue2-slider-metal").expect("the metal slider is catalogued");
+        let plan = Planned { meta: library.catalog_meta(&item.entry), assets: item.assets.clone() };
+        let folder = library.root().join("yue2-slider-metal");
+        fs::create_dir_all(&folder).unwrap();
+        let new_file = item.assets[0].relative_path.rsplit('/').next().unwrap();
+        fs::write(folder.join("metal_distilled_refined_rank8.safetensors"), b"old").unwrap();
+        fs::write(folder.join(new_file), b"new").unwrap();
+        fs::write(folder.join("adapter.json"), b"{}").unwrap();
+
+        library.drop_replaced_weights(&plan).unwrap();
+
+        assert!(!folder.join("metal_distilled_refined_rank8.safetensors").exists());
+        assert!(folder.join(new_file).is_file());
+        assert!(folder.join("adapter.json").is_file());
+        let _ = fs::remove_dir_all(library.root().parent().unwrap());
+    }
+
+    #[test]
     fn an_import_without_weights_is_refused_and_ids_cannot_escape() {
         let library = library("refuse");
         assert!(library.import("x", vec![("a.txt".into(), vec![1])], Origin::Imported).is_err());
@@ -1049,5 +1163,32 @@ mod tests {
         assert_eq!(views["a"].slots, vec!["ar".to_string()]);
         assert_eq!(views["a"].trigger.as_deref(), Some("t"));
         assert_eq!(views["b"].error.as_deref(), Some("no key"));
+    }
+
+    #[test]
+    fn a_trained_trigger_is_sent_inside_the_trained_sentence_once() {
+        let sentence = "nrmn, in the style of nrmn. synth pop, male vocal";
+        assert_eq!(upstream_style("nrmn, synth pop, male vocal", "nrmn"), sentence);
+        assert_eq!(upstream_style("synth pop,  male\nvocal", "nrmn"), sentence);
+        assert_eq!(upstream_style(sentence, "nrmn"), sentence);
+        assert_eq!(upstream_style("NRMN, In The Style Of NRMN. synth pop, male vocal", "nrmn"), sentence);
+        assert_eq!(upstream_style("nrmn, ", "nrmn"), "nrmn");
+        assert_eq!(upstream_style("", "nrmn"), "nrmn");
+        assert_eq!(upstream_style("synth pop", " "), "synth pop");
+        assert_eq!(upstream_style("феофан, рок", "феофан"), "феофан, in the style of феофан. рок");
+        assert!(opens_with("nrmn, synth pop", "nrmn") && opens_with(sentence, "nrmn") && !opens_with("synth pop, nrmn", "nrmn"));
+    }
+
+    #[test]
+    fn the_trained_sentence_is_read_from_the_weights() {
+        let library = library("sentence");
+        let folder = library.root.join("trained");
+        fs::create_dir_all(&folder).unwrap();
+        let header = br#"{"__metadata__":{"trigger":"nrmn","style_template":"upstream"}}"#;
+        let mut bytes = (header.len() as u64).to_le_bytes().to_vec();
+        bytes.extend_from_slice(header);
+        fs::write(folder.join("native-nar.safetensors"), bytes).unwrap();
+        assert!(library.trained_in_sentence("trained"));
+        assert!(!library.trained_in_sentence("missing"));
     }
 }

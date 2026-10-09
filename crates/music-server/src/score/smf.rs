@@ -49,7 +49,6 @@ pub struct Note {
 /// tell which encoding a file was written in.
 #[derive(Clone, Debug, Default)]
 pub struct Track {
-    pub index: usize,
     pub name: Vec<u8>,
     pub notes: Vec<Note>,
     pub programs: BTreeMap<u8, u8>,
@@ -61,7 +60,6 @@ pub struct Track {
 /// since files disagree about which track carries it.
 #[derive(Clone, Debug, Default)]
 pub struct Song {
-    pub format: u16,
     pub division: u32,
     pub tracks: Vec<Track>,
     pub tempos: Vec<(u64, u32)>,
@@ -157,7 +155,7 @@ fn meta_event(song: &mut Song, track: &mut Track, tick: u64, kind: u8, payload: 
 }
 
 fn read_track(body: &[u8], index: usize, song: &mut Song) -> Result<Track, String> {
-    let mut track = Track { index, ..Track::default() };
+    let mut track = Track::default();
     let mut cursor = Cursor { data: body, at: 0, context: format!("track {}", index + 1) };
     let mut tick = 0u64;
     let mut status: Option<u8> = None;
@@ -241,7 +239,6 @@ pub fn read(data: &[u8]) -> Result<Song, String> {
     if size < 6 {
         return Err(format!("the MIDI header is {size} bytes long, shorter than the format allows"));
     }
-    let format = u16::from_be_bytes([data[8], data[9]]);
     let count = u16::from_be_bytes([data[10], data[11]]) as usize;
     let division = u16::from_be_bytes([data[12], data[13]]);
     if division & 0x8000 != 0 {
@@ -250,7 +247,7 @@ pub fn read(data: &[u8]) -> Result<Song, String> {
     if division == 0 {
         return Err("the file gives a quarter note no ticks".into());
     }
-    let mut song = Song { format, division: u32::from(division), ..Song::default() };
+    let mut song = Song { division: u32::from(division), ..Song::default() };
     let mut at = 8 + size;
     while at + 8 <= data.len() && song.tracks.len() < count {
         let kind = &data[at..at + 4];
@@ -377,7 +374,7 @@ mod tests {
         let voice = vec![(0, text(NAME, "Vocal")), (0, program(0, 53)), (0, note_on(0, 60, 100)), (480, note_off(0, 60)), (480, note_on(0, 60, 100)), (960, note_off(0, 60))];
         let data = write(&[conductor, voice], DIVISION, 1440).unwrap();
         let song = read(&data).unwrap();
-        assert_eq!((song.format, song.division, song.tracks.len()), (1, 480, 2));
+        assert_eq!((song.division, song.tracks.len()), (480, 2));
         assert_eq!(song.tempos, vec![(0, 500_000)]);
         assert_eq!(song.meters, vec![(0, 3, 4)]);
         assert_eq!(song.keys, vec![(0, -3, true)]);

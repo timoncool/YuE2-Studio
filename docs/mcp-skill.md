@@ -85,9 +85,20 @@ connected and the address to paste.
   instrumental says `instrumental` where the language goes.
 - **lyrics**: sections tagged `[Intro]`, `[Verse 1]`, `[Pre-Chorus]`, `[Chorus]`,
   `[Bridge]`, `[Outro]`, one tag per line, a blank line between sections, about 2-3 sung
-  words per second. Russian `ё` stays `ё`.
+  words per second. Russian `ё` stays `ё`; a combining acute (U+0301) right after a vowel
+  puts the sung stress on it where the model would stress the word otherwise.
 - **abc**: the score the model sings from, in YuE2's dialect (`writing_guide` topic
   `score`). `score_compose` writes one to start from.
+- **abc_continue** (song_create; `abc` on score_compose): the abc is only an opening - a hum
+  from score_transcribe, a melody from the MIDI editor - and the model writes the rest of the
+  song on from it.
+- **score_chord_bed**: a score at once in a tempo, key and meter - chords over rests, one
+  section per lyrics tag - for a song that keeps that tempo and key and skips the planning;
+  pass its `abc` to song_create.
+- **harmony** (song_create, score_compose): when the model writes the score and loops one
+  progression, `strength` about 6-10 breaks the loop, `follow_lyrics: true` holds the score to
+  the lyrics' sections in order, `section_strength` gives each section its own opening and
+  `outside_bonus` brings in chords outside the key. Ignored with a given `abc`.
 - `writing_examples` returns the official M-A-P requests closest to your idea - match
   their shape and density.
 
@@ -103,7 +114,10 @@ connected and the address to paste.
 **A cover of a recording**
 
 1. `score_transcribe` with `song_id` or `path`; `studio_wait` with its `job_id`.
-2. `song_create` with the new style, the original lyrics and that score as `abc`.
+2. `score_match_sections` with that `abc`, the original lyrics and the same `song_id` or `path`:
+   it retags the lyric blocks with the sections they are sung in. Check the blocks it reports
+   as `unsure`, then use its `lyrics`.
+3. `song_create` with the new style, those lyrics and that score as `abc`.
 
 **A LoRA from a folder of songs, written by you**
 

@@ -123,6 +123,8 @@ import { createNativePlaylist, deleteNativeSong, moveStoredLikes, setNativeSongL
 import { foldStems } from './services/songStems';
 import { noteStudioMessage } from './services/journal';
 import { JournalPanel } from './components/JournalPanel';
+import { hubStateChanged, useHubState } from './services/studioQueries';
+import { setTelemetry } from './services/studioHub';
 
 /** Where versions before 3.3 kept the likes, in the window's own storage. */
 const STORED_LIKES_KEY = 'yue2-studio-liked-song-ids';
@@ -154,7 +156,7 @@ function NativeUnavailableView({ title, detail }: { title: string; detail: strin
 
 function AppContent() {
   // i18n
-  const { t } = useI18n();
+  const { t, language } = useI18n();
 
   // Responsive
   const { isMobile, isDesktop } = useResponsive();
@@ -280,10 +282,23 @@ function AppContent() {
     return stored ? parseFloat(stored) : 0.8;
   });
   const [playbackRate, setPlaybackRate] = useState(1.0);
-  const [isShuffle, setIsShuffle] = useState(false);
+  const [isShuffle, setIsShuffle] = useState(() => {
+    try { return localStorage.getItem('player.shuffle') === '1'; } catch { return false; }
+  });
   // stop: play this track to its end and stay there, as Winamp's and
   // foobar's "stop after current"; next and previous still move by hand
-  const [repeatMode, setRepeatMode] = useState<'none' | 'all' | 'one' | 'stop'>('all');
+  const [repeatMode, setRepeatMode] = useState<'none' | 'all' | 'one' | 'stop'>(() => {
+    try {
+      const stored = localStorage.getItem('player.repeat');
+      return stored === 'none' || stored === 'one' || stored === 'stop' ? stored : 'all';
+    } catch { return 'all'; }
+  });
+  useEffect(() => {
+    try {
+      localStorage.setItem('player.repeat', repeatMode);
+      localStorage.setItem('player.shuffle', isShuffle ? '1' : '0');
+    } catch { /* kept until a reload */ }
+  }, [repeatMode, isShuffle]);
   const repeatModeRef = useRef(repeatMode);
   repeatModeRef.current = repeatMode;
 
@@ -375,13 +390,36 @@ function AppContent() {
       if (window.innerWidth < 768) setMobileShowList(true);
     },
   });
+  // Anonymous statistics are on by default: the start screen's checkbox decides on a first run, and an install that
+  // updated past that screen keeps the default until it is unchecked in Settings.
+  const hub = useHubState(language);
+  useEffect(() => {
+    const telemetry = hub.data?.telemetry;
+    if (!nativeSetupReady || !telemetry || telemetry.acknowledged || telemetry.disabledByEnv) return;
+    setTelemetry(telemetry.enabled, true).catch((error: Error) => console.warn('[hub] the statistics default was not saved:', error.message)).finally(hubStateChanged);
+  }, [nativeSetupReady, hub.data?.telemetry.acknowledged]);
+
+  // The button's second press: every job of the service, not only this
+  // window's, so it says how many and asks.
+  const stopEverything = async () => {
+    const response = await fetch('/v1/music/jobs').catch(() => null);
+    const running = response?.ok ? ((await response.json().catch(() => [])) as unknown[]).length : 0;
+    setConfirmDialog({
+      title: t('stopEverythingTitle'),
+      message: t('stopEverythingConfirm').replace('{count}', String(running)),
+      onConfirm: () => {
+        setConfirmDialog(null);
+        void generations.cancelAll(true);
+      },
+    });
+  };
   // The list beside the form shows the playlist the songs go into, and the
   // songs being made for it; with none chosen it is the whole library.
   const createScope = playlists.find(entry => entry.id === createPlaylistId) ?? null;
   const createSongs = useMemo(() => {
     if (!createScope) return generations.songs;
     const inside = new Set(createScope.songIds ?? []);
-    return generations.songs.filter(song => (song.isGenerating || song.stage === 'cancelled'
+    return generations.songs.filter(song => (song.isGenerating || song.stage === 'cancelled' || song.stage === 'failed'
       ? song.playlistId === createScope.id
       : inside.has(song.id)));
   }, [generations.songs, createScope]);
@@ -1214,8 +1252,8 @@ function AppContent() {
                 onSongUpdate={handleSongUpdate}
                 onCancelJob={generations.cancel}
                 onResetJob={generations.reset}
-                onCancelAll={generations.cancelAll}
-                onResetAll={generations.cancelAll}
+                onCancelAll={() => void generations.cancelAll()}
+                onResetAll={stopEverything}
                 activeJobCount={generations.activeJobCount}
               />
             </div>

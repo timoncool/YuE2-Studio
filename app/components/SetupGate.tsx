@@ -5,6 +5,8 @@ import { useI18n } from '../context/I18nContext';
 import { DevicePicker, type Device } from './DevicePicker';
 import { AssistantExtras } from './AssistantSettings';
 import { KaraokeExtras } from './KaraokeSettings';
+import { HubTelemetryPreview } from './HubTelemetryPreview';
+import { setTelemetry } from '../services/studioHub';
 import type { TranslationKey } from '../i18n/translations';
 import {
   componentKindLabel,
@@ -41,7 +43,7 @@ type SetupStatus = {
   ready: boolean;
   selected_profile_id?: string | null;
   selected_component_ids?: string[] | null;
-  hardware?: { gpuName?: string; totalVramGb?: number; recommended?: string; reason?: string };
+  hardware?: { gpuName?: string; totalVramGb?: number; totalRamGb?: number; recommended?: string; reason?: string };
   engine_ready: boolean;
   engine_id: string;
   first_run: boolean;
@@ -61,12 +63,15 @@ type Profile = {
   recommended: boolean;
   components: string[];
   total_bytes: number;
+  ram_needed_gb: number;
 };
 
 type Catalog = { engine_id: string; recommended_profile_id: string; profiles: Profile[]; components: ModelComponent[] };
 
-type OptionalAsset = { id: string; label: string; bytes: number; note: string; installed: boolean; kind: 'model' | 'runtime'; vram_gb?: number | null };
-type SetProgress = { bytes: number; installed_bytes: number; ready: boolean; files: number };
+// variant_bytes: what choosing this model downloads with it (a Parakeet encoder's decoder and weights, a Whisper folder).
+type OptionalAsset = { id: string; label: string; bytes: number; note: string; installed: boolean; kind: 'model' | 'runtime'; vram_gb?: number | null; variant_bytes?: number };
+// with_model: the chosen model's files are already in bytes, as the karaoke set counts them.
+type SetProgress = { bytes: number; installed_bytes: number; ready: boolean; files: number; with_model?: boolean };
 type OptionalStatus = {
   assets: OptionalAsset[];
   /// What the chosen engine is made of, as the server counts it: the panel
@@ -250,9 +255,9 @@ export const OptionalGroup: React.FC<{
     // vocabulary - and only the weights are a choice. The rest carry no VRAM
     // figure, which is how they are told apart here.
     if (engine === 'whisper') return asset.id.startsWith('whisper-') && asset.vram_gb != null;
-    // Parakeet comes in two precisions; the rest of its files are shared, so
+    // Parakeet comes in several variants; the rest of their files come with them, so
     // only the encoders are a choice.
-    if (engine === 'parakeet') return asset.id === 'parakeet-tdt-int8' || asset.id === 'parakeet-tdt-fp32';
+    if (engine === 'parakeet') return asset.id === 'parakeet-tdt-int8' || asset.id === 'parakeet-ultra-int8' || asset.id === 'parakeet-tdt-fp32';
     if (engine === 'open_router') return false;
     return true;
   });
@@ -366,10 +371,10 @@ export const OptionalGroup: React.FC<{
               }
               const running = status?.active_download && !status.active_download.done ? status.active_download : null;
               const busy = Boolean(running) || starting;
-              const modelBytes = models.find((asset) => asset.id === chosenModel)?.bytes ?? 0;
+              const chosenAsset = models.find((asset) => asset.id === chosenModel);
+              const modelBytes = status?.set?.with_model ? 0 : chosenAsset?.variant_bytes ?? chosenAsset?.bytes ?? 0;
               const setBytes = (status?.set?.bytes ?? 0) + modelBytes;
-              const haveBytes = (status?.set?.installed_bytes ?? 0)
-                + (models.find((asset) => asset.id === chosenModel)?.installed ? modelBytes : 0);
+              const haveBytes = (status?.set?.installed_bytes ?? 0) + (chosenAsset?.installed ? modelBytes : 0);
               // While a download runs, progress is that download - the server
               // reports a whole set as one figure. Between downloads it is what
               // is on disk out of what this engine needs. Reading only the
@@ -425,7 +430,7 @@ export const OptionalGroup: React.FC<{
                       >
                         {models.map((asset) => (
                           <option key={asset.id} value={asset.id}>
-                            {asset.label}{asset.installed ? ' ✓' : ''} · {bytes(asset.bytes)}
+                            {asset.label}{asset.installed ? ' ✓' : ''} · {bytes(asset.variant_bytes ?? asset.bytes)}
                           </option>
                         ))}
                       </select>
@@ -671,6 +676,8 @@ export const SetupGate: React.FC<{ onReady?: () => void; mode?: 'first-run' | 's
   const [choice, setChoice] = useState<Record<string, string>>({});
   const chosenValues = useMemo(() => Object.values(choice).filter((id): id is string => typeof id === 'string' && id.length > 0), [choice]);
   const [error, setError] = useState<string | null>(null);
+  // what taking the user's own model folder did: files taken, copies made, what is still missing
+  const [adoptNote, setAdoptNote] = useState<string | null>(null);
   // the training page's packs are listed here too, with everything else the studio downloads
   const [trainingInfo, setTrainingInfo] = useState<{ min_vram_gb: number; card_trains: boolean } | null>(null);
   useEffect(() => {
@@ -769,6 +776,9 @@ export const SetupGate: React.FC<{ onReady?: () => void; mode?: 'first-run' | 's
   // looked untouched: people pressed it again and could not tell which press
   // counted.
   const [starting, setStarting] = useState(false);
+  // The start screen's statistics checkbox: checked, and sent with the first download (it counts as seen).
+  const [telemetryOn, setTelemetryOn] = useState(true);
+  const [telemetryPreview, setTelemetryPreview] = useState(false);
   const download = async () => {
     if (!chosenIds || starting) return;
     setError(null);
@@ -899,6 +909,11 @@ export const SetupGate: React.FC<{ onReady?: () => void; mode?: 'first-run' | 's
                           <span className="ml-auto shrink-0 text-xs tabular-nums text-zinc-500">{bytes(profile.total_bytes)}</span>
                         </div>
                         <p className="mt-1 text-[11px] leading-5 text-zinc-500 dark:text-zinc-400">{parts.join(' · ')}</p>
+                        {status?.hardware?.totalRamGb !== undefined && profile.ram_needed_gb > status.hardware.totalRamGb && (
+                          <p className="mt-1 text-[11px] font-medium text-amber-600 dark:text-amber-300">
+                            {t('ramShort').replace('{have}', status.hardware.totalRamGb.toFixed(0)).replace('{need}', String(Math.ceil(profile.ram_needed_gb)))}
+                          </p>
+                        )}
                         <div className="mt-1 flex items-center justify-between gap-2">
                           <p className={`text-[11px] font-medium ${missingHere.length === 0 ? 'text-emerald-600 dark:text-emerald-300' : 'text-zinc-500'}`}>
                             {missingHere.length === 0
@@ -989,17 +1004,27 @@ export const SetupGate: React.FC<{ onReady?: () => void; mode?: 'first-run' | 's
                   type="button"
                   onClick={() => {
                     void fetch('/setup/adopt', { method: 'POST' })
-                      .then((response) => (response.ok ? response.json() : null))
-                      .then((body: { picked?: boolean; adopted?: string[] } | null) => {
-                        if (body?.picked) void refresh();
+                      .then(async (response) => (response.ok ? response.json() : Promise.reject(new Error(await errorMessage(response)))))
+                      .then(async (body: { picked?: boolean; adopted?: string[]; copied?: { id: string; bytes: number }[] } | null) => {
+                        if (!body?.picked) return;
+                        const next = await refresh();
+                        const wanted = chosenIds ?? chosenValues;
+                        const missing = (catalog?.components ?? []).filter((component) => wanted.includes(component.id) && !next.installed_components.includes(component.id));
+                        const copiedBytes = (body.copied ?? []).reduce((sum, file) => sum + file.bytes, 0);
+                        setAdoptNote([
+                          t('adoptTaken').replace('{count}', String(body.adopted?.length ?? 0)),
+                          copiedBytes > 0 ? t('adoptCopied').replace('{size}', bytes(copiedBytes)) : '',
+                          missing.length > 0 ? t('adoptMissing').replace('{files}', missing.map((component) => `${component.filename} (${bytes(component.bytes)})`).join(', ')) : '',
+                        ].filter(Boolean).join(' '));
                       })
-                      .catch(() => undefined);
+                      .catch((reason) => setError(reason instanceof Error ? reason.message : String(reason)));
                   }}
                   className="ml-2 mt-2 inline-flex items-center gap-1 rounded-lg border border-zinc-300 px-2 py-1 text-[11px] font-medium text-zinc-600 hover:border-pink-400 hover:text-pink-600 dark:border-white/15 dark:text-zinc-300"
                 >
                   <FolderDown size={13} />
                   {t('useExistingModels')}
                 </button>
+                {adoptNote && <p className="mt-2 text-[11px] leading-4 text-zinc-600 dark:text-zinc-300">{adoptNote}</p>}
               </div>
             )}
           </div>
@@ -1028,7 +1053,12 @@ export const SetupGate: React.FC<{ onReady?: () => void; mode?: 'first-run' | 's
           ) : (
             <button
               type="button"
-              onClick={() => void download()}
+              onClick={() => {
+                if (mode === 'first-run') {
+                  setTelemetry(telemetryOn, true).catch((failure: Error) => console.warn('[hub] the statistics choice was not saved:', failure.message));
+                }
+                void download();
+              }}
               disabled={starting || !chosenIds || missing.length === 0}
               className="inline-flex items-center gap-2 rounded-xl bg-linear-to-r from-orange-500 to-pink-600 px-5 py-2.5 text-sm font-bold text-white shadow-lg transition-all hover:brightness-110 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
             >
@@ -1051,6 +1081,19 @@ export const SetupGate: React.FC<{ onReady?: () => void; mode?: 'first-run' | 's
             </span>
           )}
         </div>
+
+        {mode === 'first-run' && (
+          <div className="mt-4 text-sm text-zinc-600 dark:text-zinc-400">
+            <label className="inline-flex cursor-pointer items-center gap-2">
+              <input type="checkbox" className="h-4 w-4 accent-pink-500" checked={telemetryOn} onChange={(event) => { setTelemetryOn(event.target.checked); setTelemetry(event.target.checked, true).catch((failure: Error) => console.warn('[hub] the statistics choice was not saved:', failure.message)); }} />
+              {t('hubTelemetryCheckbox')}
+            </label>
+            <button type="button" onClick={() => setTelemetryPreview(true)} className="ml-2 underline underline-offset-2 hover:text-zinc-900 dark:hover:text-white">
+              {t('hubTelemetryWhat')}
+            </button>
+            {telemetryPreview && <HubTelemetryPreview onClose={() => setTelemetryPreview(false)} />}
+          </div>
+        )}
 
         {/* Everything below is optional, and stays that way. */}
         <div className="mt-8">

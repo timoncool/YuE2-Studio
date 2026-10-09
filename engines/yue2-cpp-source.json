@@ -1,9 +1,10 @@
 {
   "repository": "https://github.com/timoncool/yue2.cpp.git",
-  "commit": "1141479c725b803a3649c900fd3e6fcb27f6f595",
+  "commit": "c8516dbf44d660cca40d3f420c67063e37ec8258",
   "license": "MIT",
   "build": {
     "windows": "buildcuda.cmd",
+    "macos": "scripts/build-yue-runtime.sh",
     "output": "build/Release/yue-server.exe"
   }
 }

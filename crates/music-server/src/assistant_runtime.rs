@@ -806,10 +806,17 @@ fn hide_console(command: &mut Command) {
     use std::os::windows::process::CommandExt;
     const CREATE_NO_WINDOW: u32 = 0x0800_0000;
     command.creation_flags(CREATE_NO_WINDOW);
+    // The assistant is a second multi-gigabyte process holding VRAM; the job
+    // object `adopt` assigns is what kills it with the studio on Windows.
 }
 
+/// Off Windows the sidecar needs the same lifetime binding the engine gets,
+/// or a studio that is killed rather than closed leaves a `llama-server`
+/// holding the card.
 #[cfg(not(windows))]
-fn hide_console(_command: &mut Command) {}
+fn hide_console(command: &mut Command) {
+    music_core::process::ensure_dies_with_parent(command);
+}
 
 #[cfg(test)]
 mod tests {

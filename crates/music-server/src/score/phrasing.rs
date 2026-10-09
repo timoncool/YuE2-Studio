@@ -285,6 +285,16 @@ fn lyric_sections(lyrics: &str) -> Vec<LyricSection> {
     found
 }
 
+/// The section comments a score of these lyrics names, in order: each tag's label, words before any tag a verse.
+pub fn section_labels(lyrics: &str) -> Vec<String> {
+    lyric_sections(lyrics).into_iter().map(|section| section.label).collect()
+}
+
+/// The lyrics' sections in order as (label, sung lines).
+pub fn section_lines(lyrics: &str) -> Vec<(String, usize)> {
+    lyric_sections(lyrics).into_iter().map(|section| (section.label, section.lines.len())).collect()
+}
+
 fn phrases(notes: &[abc::Note]) -> Vec<Vec<abc::Note>> {
     let mut ordered = notes.to_vec();
     ordered.sort_by(|a, b| a.start.cmp(&b.start).then(a.pitch.cmp(&b.pitch)).then(a.duration.cmp(&b.duration)));

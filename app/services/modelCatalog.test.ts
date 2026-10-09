@@ -17,6 +17,17 @@ describe('YuE2 model catalog helpers', () => {
     expect(completeCustomComponentIds(components, { backbone: 'vae-f32', vae: 'vae-f32' })).toBeNull();
   });
 
+  it('brings the MERT encoder of the transcriber precision along', () => {
+    const catalog: ModelComponent[] = [
+      ...components,
+      { id: 'mert-f32', kind: 'transcriber-base', filename: 'MERT-v2-FullSong-F32.gguf', bytes: 1, sha256: 'f' },
+      { id: 'mert-q8', kind: 'transcriber-base', filename: 'MERT-v2-FullSong-Q8_0.gguf', bytes: 1, sha256: 'g' },
+    ];
+    expect(completeCustomComponentIds(catalog, { backbone: 'backbone-q8', vae: 'vae-f32', transcriber: 'transcriber-q8' }))
+      .toEqual(['backbone-q8', 'vae-f32', 'transcriber-q8', 'mert-q8']);
+    expect(componentsByKind(catalog).map((group) => group.kind)).toEqual(['backbone', 'vae', 'transcriber']);
+  });
+
   it('groups by role and marks the optional one', () => {
     const groups = componentsByKind(components);
     expect(groups.map((group) => group.kind)).toEqual(['backbone', 'vae', 'transcriber']);

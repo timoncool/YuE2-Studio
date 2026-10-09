@@ -98,35 +98,6 @@ pub fn mismatch(edit: &Edit, style: &str, lyrics: &str, cot: &str) -> Option<&'s
     }
 }
 
-/// Whether an edit kept for new words is sung under words it was not made for.
-pub fn carried(edit: &Edit, style: &str, lyrics: &str, cot: &str) -> bool {
-    !edit.score.is_empty() && cot != "off" && edit.keep && edit.words.as_deref() != Some(mark(style, lyrics, cot).as_str())
-}
-
-fn music_lines(score: &str) -> impl Iterator<Item = &str> {
-    score.split('\n').filter(|line| {
-        let body = line.trim_start();
-        !line.trim().is_empty()
-            && !body.starts_with('%')
-            && !(body.len() > 1 && body.as_bytes()[0].is_ascii_alphabetic() && body.as_bytes()[1] == b':')
-    })
-}
-
-fn names_chord(line: &str) -> bool {
-    line.matches('"').count() >= 2
-}
-
-/// Whether a score names a chord over any of its music.
-pub fn chorded(score: &str) -> bool {
-    music_lines(score).any(names_chord)
-}
-
-/// Whether a score has music in it but not one chord symbol.
-pub fn chordless(score: &str) -> bool {
-    let mut music = music_lines(score).peekable();
-    music.peek().is_some() && !music.any(names_chord)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -148,21 +119,8 @@ mod tests {
         let edit = read(&text);
         assert_eq!(edit, Edit { score: "X:1\nK:C".into(), words: Some(words.clone()), keep: true });
         assert_eq!(mismatch(&edit, "s", "l", "full"), None);
-        assert!(!carried(&edit, "s", "l", "full"));
-        assert!(carried(&edit, "s", "other", "full"));
         let strict = Edit { keep: false, ..edit };
         assert_eq!(mismatch(&strict, "s", "other", "full"), Some("other_words"));
         assert_eq!(mismatch(&strict, "s", "l", "off"), Some("cot_off"));
-    }
-
-    #[test]
-    fn chords_are_found_only_over_music() {
-        let score = "X:1\nV:Vocal name=\"Vocal\"\nK:C\n\"C\" C D E F |\n";
-        assert!(chorded(score));
-        assert!(!chordless(score));
-        let bare = "X:1\nV:Vocal name=\"Vocal\"\nK:C\nC D E F |\n";
-        assert!(!chorded(bare));
-        assert!(chordless(bare));
-        assert!(!chordless("X:1\nK:C\n"));
     }
 }

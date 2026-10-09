@@ -9,7 +9,7 @@ use base64::Engine;
 use serde::Deserialize;
 use serde_json::{json, Value};
 
-use super::{edits, export, import, notation, phrasing, smf};
+use super::{chord_bed, edits, export, import, instrumental, notation, phrasing, smf, transpose};
 
 type Answer = Result<Json<Value>, (StatusCode, Json<Value>)>;
 
@@ -123,4 +123,61 @@ pub async fn midi(Json(request): Json<MidiRequest>) -> Answer {
         Ok(data) => Ok(Json(json!({ "ok": true, "data": base64::engine::general_purpose::STANDARD.encode(data) }))),
         Err(reason) => problem(reason),
     }
+}
+
+/// The score made instrumental: the voice's notes on the instrument, Vocal left with its rests and chords.
+pub async fn instrumental(Json(request): Json<MidiRequest>) -> Answer {
+    too_long(&request.abc)?;
+    let edit = edits::read(&request.abc);
+    match instrumental::transfer(&edit.score) {
+        Ok(made) => Ok(Json(json!({ "ok": true, "abc": edits::attach(&made.abc, edit.words.as_deref(), edit.keep), "moved": made.moved, "trimmed": made.trimmed, "dropped": made.dropped }))),
+        Err(reason) => problem(reason),
+    }
+}
+
+#[derive(Deserialize)]
+pub struct ChordBedRequest {
+    bpm: u32,
+    key: String,
+    meter: String,
+    #[serde(default)]
+    lyrics: String,
+    #[serde(default)]
+    seed: Option<u64>,
+}
+
+/// A score of chords over rests for the lyrics' sections, written at once in the tempo, key and
+/// meter asked for, so a song is sung without the planning stage.
+pub async fn chord_bed(Json(request): Json<ChordBedRequest>) -> Answer {
+    too_long(&request.lyrics)?;
+    let seed = request.seed.unwrap_or_else(|| uuid::Uuid::now_v7().as_u128() as u64);
+    match chord_bed::write(&chord_bed::BedRequest { bpm: request.bpm, key: request.key, meter: request.meter, lyrics: request.lyrics, seed }) {
+        Ok(bed) => Ok(Json(json!({ "ok": true, "abc": bed.abc, "bars": bed.bars, "progressions": bed.progressions, "seed": seed }))),
+        Err(reason) => problem(reason),
+    }
+}
+
+#[derive(serde::Deserialize)]
+pub struct VocalOctaveRequest {
+    abc: String,
+    #[serde(default)]
+    octaves: i32,
+}
+
+/// The vocal line moved by whole octaves (none: only measured), with where its middle now sits
+/// against the range YuE2's own scores keep the voice in.
+pub async fn vocal_octave(Json(request): Json<VocalOctaveRequest>) -> Answer {
+    too_long(&request.abc)?;
+    let edit = edits::read(&request.abc);
+    let moved = match transpose::move_vocal_octaves(&edit.score, request.octaves) {
+        Ok(moved) => moved,
+        Err(reason) => return problem(reason),
+    };
+    let middle = match transpose::vocal_middle(&moved) {
+        Ok(middle) => middle,
+        Err(reason) => return problem(reason),
+    };
+    let (low, high) = transpose::VOCAL_RANGE;
+    let abc = if request.octaves == 0 { request.abc.clone() } else { edits::attach(&moved, edit.words.as_deref(), edit.keep) };
+    Ok(Json(json!({ "ok": true, "abc": abc, "middle": middle, "in_range": middle.is_none_or(|pitch| (low..=high).contains(&pitch)), "range": [low, high] })))
 }

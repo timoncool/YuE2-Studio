@@ -7,8 +7,7 @@
 use serde_json::Value;
 
 use super::super::smf;
-use super::{convert, parts::Pick, Mode};
-use super::{convert_with, Options};
+use super::{convert_with, parts::Pick, Mode, Options};
 
 #[test]
 fn manual_grid_and_octaves_keep_the_parts_and_move_every_note() {
@@ -51,7 +50,7 @@ fn every_file_makes_the_score_the_reference_makes() {
         let song = smf::read(data).unwrap_or_else(|error| panic!("{name}: {error}"));
         for (mode, key) in [(Mode::Melody, "melody"), (Mode::Full, "full")] {
             let wanted = &expected[name][key];
-            let made = convert(&song, mode, Pick::Auto, Pick::Auto).unwrap_or_else(|error| panic!("{name} {key}: {error}"));
+            let made = convert_with(&song, mode, Pick::Auto, Pick::Auto, Options::default()).unwrap_or_else(|error| panic!("{name} {key}: {error}"));
             assert_eq!(made.abc, wanted["abc"].as_str().unwrap(), "{name} {key}: the score");
             assert_eq!(made.lyrics, wanted["lyrics"].as_str().unwrap(), "{name} {key}: the lyrics");
             let texts: Vec<String> = made.notices.iter().map(|notice| notice.text()).collect();
@@ -73,8 +72,9 @@ fn a_track_the_file_does_not_have_or_drums_is_refused_with_the_list() {
     let expected = expected();
     for (name, data) in FILES {
         let song = smf::read(data).unwrap();
-        let error = convert(&song, Mode::Melody, Pick::Number(4), Pick::Number(4)).unwrap_err();
+        let error = convert_with(&song, Mode::Melody, Pick::Number(4), Pick::Number(4), Options::default()).unwrap_err();
         let listing = expected[name]["same_track"].as_str().unwrap().split(": ").last().unwrap().to_string();
         assert!(error.ends_with(&listing), "{name}: {error}");
     }
 }
+

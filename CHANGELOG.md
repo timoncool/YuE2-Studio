@@ -3,6 +3,110 @@
 What changed, newest first. Dates are release dates; the studio is versioned by its
 Windows build.
 
+## 2026-10-08 — 3.5.0
+
+### Added
+
+- **Anonymous statistics and news from the hub.** The start screen and Settings - Anonymous statistics have
+  a checkbox, on by default, with which the studio sends once a day how many songs were made, failed or
+  were cancelled, the model set used, its version, the OS and the class of the graphics card - never lyrics,
+  prompts, audio or file names; What is sent shows the report, and DO_NOT_TRACK=1 or STUDIO_TELEMETRY=0
+  turns it off entirely. News from the author arrive without an update, on top of the bundled ones.
+- **AB2 solver** under Advanced (Riff's idea): one network evaluation a step instead of two, so the
+  sound stage takes about half the time at the same steps; in our comparison it sounded the same
+  as midpoint, which stays the default. Agents set `solver`.
+- **A song from a seed** (Mothersuperior's hum-to-song, its first part): with "Continue the song from
+  this score" the score is only an opening - hummed and transcribed, played on the keyboard or
+  written - and the model writes the rest of the song on from it in its key and meter, the opening
+  coming back as a hook; silent bars at its end are dropped. Agents set `abc_continue`.
+- **Chord bed** beside Compose the score (gary4juce's idea): a score of chords over rests written at
+  once in the tempo, key and meter you set, one section per lyrics tag, verses, choruses and a bridge
+  each on a common progression of their own; the model writes the melody and the arrangement over
+  it and the planning step is skipped. Agents use `score_chord_bed`.
+- **Chords and sections** under Advanced, for the score the model writes (Yeufonic's idea): chord
+  variety lowers the chords heard among the recent changes so the song stops looping one
+  progression, a section can be kept from opening the way the one before did, chords outside
+  the key can be favoured, and the score can be held to the lyrics' sections in their order.
+  Off by default; agents set it with `harmony` on song_create and score_compose.
+- **Extend a song.** Re-render takes an extension of 15 seconds to 2 minutes: the track keeps
+  its own semantic tokens to the last frame and the model composes on from there.
+- **Words follow the score** (HOT-Step's lyric schedule): with a supplied score each section's
+  words stay out of the composer's sight until the score reaches them, so covers and long songs
+  keep the voice with the band. On by default; a switch under Advanced.
+- **Realaudio decoder: Auto, On, Off.** Auto decodes with the YuE2 checkpoint alone, as its
+  authors, audio.cpp and ComfyUI render it, and merges Mothersuperior's decoder adapter only
+  under a LoRA trained in the studio, which was trained over it. On and Off force it.
+- **Hugging Face mirror** in Settings - Network (hf-mirror.com) for downloads where
+  huggingface.co is slow or blocked, after wangsoft's fork.
+- **Score as PDF.** The score view saves the notation as an A4 PDF, each system whole.
+- **The model set fits the computer's memory, not only the card's.** On integrated graphics or the
+  processor the weights live in RAM, so a laptop is now offered the set its memory holds, and every
+  set that needs more memory than the computer has says so on the start screen instead of stalling
+  half loaded. The studio no longer recommends the unquantised BF16 set: Q8_0 is near lossless at
+  half the memory, and the BF16 set stays in the list.
+- **Match sections to the score** for a cover (after HOT-Step's Cover Studio): the source recording is
+  heard by the karaoke recogniser and each lyric block is tagged with the score section it is sung in.
+  Words never change; a chorus written once is copied into later chorus sections, sections without
+  voice get an empty tag, blocks not heard clearly keep their place and are listed. The proposal is
+  shown before and after and applied only on Apply. Also an MCP tool, `score_match_sections`.
+- **Voice an octave down or up**: the score view moves only the vocal line by an octave, the band,
+  chords and key stay. The written register decides who sings, so an octave down brings in a man; and
+  a vocal line whose middle leaves C4–A#5, where the model writes the voice itself, is flagged.
+- **Russian stress**: a stress mark (U+0301, Alt+0769) after a vowel puts the sung stress on it; the
+  lyrics hint says so.
+- **Engine progress on the card**: the stage, its step counter and the time left.
+- **Video export settings**: frame size from 1080p to 240p and AAC from 128 to 320 kbps.
+- Songs up to 10 minutes. The window keeps its size, place and maximised state; the player its
+  repeat and shuffle. Quitting while a song is made asks first and stops it; a song the studio
+  was closed on starts again. From [pull request #51](https://github.com/timoncool/YuE2-Studio/pull/51) by
+  stalexxx, which also runs the service on macOS with Metal.
+- **Instrumental from a score.** A button in the score view moves every Vocal note to the
+  instrument part with its pitch and length, as m-a-p's yue2-instrumental skill does, and keeps
+  the chords; the instrument keeps what it played where the voice was silent.
+- **A note on every song, and its parameters** sent to the form, shown as JSON and saved to a
+  file, as in ACE-Step Studio.
+- **Parakeet Ultra int8** for karaoke: Moondream's fine-tune of Parakeet, quantized, a recogniser
+  of its own beside v3, which stays as it was.
+- Catalog: raspy rock-soul, quiet storm R&B and dark Sufi fusion LoRAs by becausereasons.
+- The particle slider LoRAs of ntc-ai at their v2 release.
+
+### Fixed
+
+- Long songs no longer fail now and then at the sound stage with a CUDA illegal memory access: the
+  engine's attention keys are padded to the flash attention kernels' tile (the sound is unchanged,
+  and that stage got faster).
+- A cover's melody score no longer shrinks to a quarter of its size in the score view and its PDF:
+  the voice's multi-bar rests are drawn bar by bar.
+- A score the model wrote as garbage (no key, no meter, colons in the notes; LoRA strengths far past
+  their limits do this) stops the song in seconds with the reason, instead of minutes of singing
+  from it.
+- A LoRA trained in the studio gets the style phrase it was trained on ("T, in the style of T.").
+- Audio to MIDI no longer needs CUDA 13: it runs on CUDA where the engine does and on the
+  processor elsewhere (Pascal, AMD, Intel); the new package is fetched once.
+- The MIDI editor kept notes in place after an unknown meta event (files from Reaper); a file of
+  instrument parts no longer turns one into the voice; Save MIDI of the score wrote a broken file.
+- The exported video's visualizer moves as in the player; its background no longer freezes on
+  zoom and pan.
+- Models from a folder: the window says what was taken, copied and still missing, and the start
+  screen shows why the engine did not start.
+- Updating a LoRA from the catalogue left its old weights beside the new ones, and the engine
+  refused the pair.
+- Linux groundwork from SkySlider's fork: the graphics card is named on Linux, child processes
+  end with the studio, and setup no longer claims a download that is not happening.
+
+### Changed
+
+- **A song is kept as the model made it.** The engine hands over its float output and the
+  studio encodes it once, changing nothing on the way: lossless 24-bit FLAC by default, written
+  by libFLAC 1.5.0, the reference encoder; MP3 by LAME when chosen. Generation no longer
+  normalises the peak: Normalise is a stage under Process, after mastering.
+- **Tags in every kept format** (lofty): title, artist, genre, tempo, lyrics and cover go into
+  a FLAC's Vorbis comments and picture block as into an MP3's ID3v2.4.
+- **Engine: yue2.cpp of 8 October.** SheetSage2 reads MERT-v2 from a file of its own (F32 or
+  Q8_0); the new transcriber is downloaded once in Settings - Models, and the studio runs without
+  it until then. Covers transcribe exactly as before.
+- **Trainer: HOT-Step of 7 October**, about 14% faster per step with identical weights.
+
 ## 2026-10-01 — 3.4.0
 
 ### Added

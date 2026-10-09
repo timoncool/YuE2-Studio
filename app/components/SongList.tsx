@@ -101,7 +101,7 @@ const createDragPreview = (element: HTMLElement) => {
 };
 
 /** A generation's card rather than a song: being made, or stopped and waiting to be cleared. */
-const isCard = (song: Song) => Boolean(song.isGenerating) || song.stage === 'cancelled';
+const isCard = (song: Song) => Boolean(song.isGenerating) || song.stage === 'cancelled' || song.stage === 'failed';
 
 export const SongList: React.FC<SongListProps> = ({
     songs,
@@ -317,7 +317,7 @@ export const SongList: React.FC<SongListProps> = ({
               return jobId ? () => onCancelJob?.(jobId) : undefined;
             })()}
             onResetJob={
-              song.stage === 'cancelled'
+              song.stage === 'cancelled' || song.stage === 'failed'
                 ? () => onResetJob?.(song.jobId || song.id)
                 : undefined
             }
@@ -439,7 +439,7 @@ export const SongList: React.FC<SongListProps> = ({
                                 }`}
                             >
                                 <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
-                                {cancelStage === 'reset' ? t('resetGeneration') : t('cancelAll')} ({activeJobCount})
+                                {cancelStage === 'reset' ? t('stopEverything') : t('cancelAll')} ({activeJobCount})
                             </button>
                         )}
                     </div>
@@ -930,6 +930,7 @@ const SongItem: React.FC<SongItemProps> = ({
                         <span className={song.queuePosition ? 'text-amber-500' : 'text-pink-500'}>
                             {song.queuePosition ? `#${song.queuePosition}` : (t(song.stage as TranslationKey) || song.stage || t('creating') || 'Creating...')}
                         </span>
+                        {!song.queuePosition && song.stageDetail && <span className="text-[10px] text-zinc-500">{song.stageDetail}</span>}
                         {onCancelJob && (
                             <button
                                 onClick={(e) => { e.stopPropagation(); onCancelJob(); }}
@@ -939,14 +940,24 @@ const SongItem: React.FC<SongItemProps> = ({
                             </button>
                         )}
                     </div>
-                ) : song.stage === 'cancelled' && onResetJob ? (
+                ) : song.stage === 'failed' && onResetJob ? (
                     <div className="flex flex-col items-end gap-0.5">
-                        <span className="text-red-400 text-[10px] font-sans">{t('cancelGeneration')}</span>
+                        <span className="text-red-400 text-[10px] font-sans" title={song.failure}>{t('generationFailed')}</span>
                         <button
                             onClick={(e) => { e.stopPropagation(); onResetJob(); }}
-                            className="text-[10px] text-red-400 hover:text-red-300 transition-colors font-sans animate-pulse font-bold"
+                            className="text-[10px] text-zinc-500 hover:text-red-400 transition-colors font-sans"
                         >
-                            {t('resetGeneration')}
+                            {t('removeGeneration')}
+                        </button>
+                    </div>
+                ) : song.stage === 'cancelled' && onResetJob ? (
+                    <div className="flex flex-col items-end gap-0.5">
+                        <span className="text-red-400 text-[10px] font-sans" title={song.failure}>{t('generationStopped')}</span>
+                        <button
+                            onClick={(e) => { e.stopPropagation(); onResetJob(); }}
+                            className="text-[10px] text-red-400 hover:text-red-300 transition-colors font-sans font-bold"
+                        >
+                            {t('removeGeneration')}
                         </button>
                     </div>
                 ) : (

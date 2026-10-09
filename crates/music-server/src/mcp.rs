@@ -367,7 +367,7 @@ fn annotations(name: &str) -> Value {
     // a verb that changes something outweighs a noun that reads
     const CHANGES: &[&str] = &["install", "import", "remove", "delete", "refresh", "create", "update", "start", "cancel", "select", "download", "apply", "restart"];
     // reads whose names the rules above miss: create_form names the create page
-    const READ_NAMES: &[&str] = &["lyrics_find", "cover_prompt_render", "studio_wait", "engine_presets_get", "assistant_requests_wait", "ui_console", "song_defaults", "create_form_get", "library_liked", "song_tokenize"];
+    const READ_NAMES: &[&str] = &["lyrics_find", "cover_prompt_render", "studio_wait", "engine_presets_get", "assistant_requests_wait", "ui_console", "song_defaults", "create_form_get", "library_liked", "score_chord_bed", "song_tokenize", "score_match_sections"];
     // writes over what was stored, so the earlier content is gone: a client asks first
     const OVERWRITES: &[&str] = &["library_song_update", "playlist_update", "dataset_update", "dataset_song_update", "dataset_prepare", "lora_update", "stems_split", "karaoke_make", "midi_transcribe", "cover_draw", "cover_set_from_file", "openrouter_set_key"];
     let changes = CHANGES.iter().any(|verb| name.split('_').any(|word| word == *verb));
@@ -1078,7 +1078,7 @@ fn tools() -> &'static [Tool] {
             },
             Tool {
                 name: "create_form_set",
-                description: "Fill the create page's form in the window, as if typed - the user sees every field change; fields not given stay. fields: title, style, lyrics, abc, cot (full|melody|off), duration_seconds, lm_batch_size, synth_batch_size, steps, cfg_scale, lm_seed, seed, randomize_seed, cover_prompt, output_format, mp3_bitrate, peak_clip, adapters, mode (studio|simple|cover). Use it when the user wants to see and adjust the song before it is made; song_create makes one directly.",
+                description: "Fill the create page's form in the window, as if typed - the user sees every field change; fields not given stay. fields: title, style, lyrics, abc, cot (full|melody|off), duration_seconds, lm_batch_size, synth_batch_size, steps, cfg_scale, companion_scale, lm_seed, seed, randomize_seed, chord_strength, chord_identity (root|spelling), chord_window, chord_hold_limit, outside_bonus, section_strength, follow_sections, cover_prompt, output_format, mp3_bitrate, adapters, mode (studio|simple|cover). Use it when the user wants to see and adjust the song before it is made; song_create makes one directly.",
                 schema: || object(json!({ "fields": { "type": "object", "description": "field -> value" } }), &["fields"]),
                 call: |args| window("create_set", args, 15),
             },
@@ -1357,7 +1357,10 @@ fn tools() -> &'static [Tool] {
                     "lyrics": { "type": "string" },
                     "title": { "type": "string" },
                     "abc": { "type": "string" },
+                    "solver": { "type": "string", "enum": ["midpoint", "ab2"], "description": "acoustic ODE solver: midpoint is the reference; ab2 spends one network evaluation a step instead of two, about twice as fast at the same steps, and sounds the same" },
+                    "abc_continue": { "type": "boolean", "description": "abc is only the opening (a hummed or played seed, from score_transcribe or the MIDI editor): the model writes the rest of the song on from it in its key and meter, and the opening comes back as a hook" },
                     "transpose": { "type": "integer", "minimum": -24, "maximum": 24, "description": "move a supplied abc score before singing; requires full or melody cot and no semantic_tokens" },
+                    "lyric_timing": { "type": "boolean", "description": "with a supplied abc score, each section's words wait until the score reaches it, so the voice keeps to the band; on unless false" },
                     "vocals_only": { "type": "boolean", "description": "extract vocals after synthesis using the installed separator; output_format must be mp3 or wav32" },
                     "playlist_id": { "type": "string", "description": "a playlist (see playlist_list) the made songs are added to" },
                     "cot": { "type": "string", "enum": ["full", "melody", "off"] },
@@ -1366,14 +1369,15 @@ fn tools() -> &'static [Tool] {
                     "lm_seed": { "type": "integer" },
                     "steps": { "type": "integer" },
                     "cfg_scale": { "type": "number" },
+                    "companion_scale": { "type": "number", "minimum": 0, "maximum": 1, "description": "strength of the realaudio decoder adapter under the song; left out, 0 (the YuE2 checkpoint alone, as audio.cpp and ComfyUI render it), or 1 under a LoRA trained in the studio" },
                     "lm_batch_size": { "type": "integer", "description": "compositions written from the request (1 by default)" },
                     "synth_batch_size": { "type": "integer", "description": "performances rendered of each composition (1 by default)" },
                     "semantic_tokens": { "type": "string", "description": "audio codes of a song already sung (library_song_get audio_codes): renders that take again" },
+                    "harmony": { "type": "object", "description": "chord variety and section order of the score the model plans (also after an abc opening with abc_continue; ignored with a whole abc score): strength 0-64 lowers chords heard among the recent changes (about 6-10 breaks a looping progression), identity root (C, Cmaj7, C/E one chord) or spelling, window 1-512 recent changes, hold_limit 0-64 symbols one root holds for free, outside_bonus 0-20 favours roots outside the key (root identity) while fewer than outside_limit 0-1 of the changes are outside, section_strength 0-64 keeps a section from opening like the one before, section_open 1-16 chords compared, follow_lyrics true holds the plan to the lyrics' sections in order", "properties": { "identity": { "type": "string", "enum": ["root", "spelling"] }, "strength": { "type": "number" }, "window": { "type": "integer" }, "hold_limit": { "type": "integer" }, "outside_bonus": { "type": "number" }, "outside_limit": { "type": "number" }, "section_strength": { "type": "number" }, "section_open": { "type": "integer" }, "follow_lyrics": { "type": "boolean" } } },
                     "abc_sampling": { "type": "object", "description": "temperature, top_p, top_k, repetition_penalty, penalty_window, min_tokens, max_tokens", "properties": { "temperature": { "type": "number" }, "top_p": { "type": "number" }, "top_k": { "type": "integer" }, "repetition_penalty": { "type": "number" }, "penalty_window": { "type": "integer" }, "min_tokens": { "type": "integer" }, "max_tokens": { "type": "integer" } } },
                     "semantic_sampling": { "type": "object", "description": "temperature, top_p, top_k, repetition_penalty, penalty_window, min_tokens, max_tokens", "properties": { "temperature": { "type": "number" }, "top_p": { "type": "number" }, "top_k": { "type": "integer" }, "repetition_penalty": { "type": "number" }, "penalty_window": { "type": "integer" }, "min_tokens": { "type": "integer" }, "max_tokens": { "type": "integer" } } },
-                    "peak_clip": { "type": "integer", "description": "peak limiter, dB below full scale" },
                     "mp3_bitrate": { "type": "integer" },
-                    "output_format": { "type": "string", "enum": ["mp3", "wav16", "wav24", "wav32"] },
+                    "output_format": { "type": "string", "enum": ["flac", "mp3"], "description": "how the song is kept: lossless FLAC (default), or MP3 at mp3_bitrate" },
                     "cover_prompt": { "type": "string", "description": "what the cover should show; it is drawn only when an image model is set up (settings_get, covers), else the song has no cover" },
                     "cover_of": { "type": "string", "description": "for a cover: the library song whose melody abc came from (score_transcribe of it); the new song names it as the track it was made from" },
                     "adapters": { "type": "array", "items": { "type": "object", "properties": { "id": { "type": "string" }, "scales": { "type": "object", "description": "slot -> strength, e.g. {\"ar\": 1, \"nar\": 1}; left out, the LoRA's own strengths, else 1 on each slot it touches" } }, "required": ["id"] } }
@@ -1401,7 +1405,7 @@ fn tools() -> &'static [Tool] {
             Tool {
                 name: "song_replay",
                 description: "Render a library song again from its saved audio codes, bit for bit or with other steps, a new sound seed, a batch of variations, or another format - without composing again.",
-                schema: || object(json!({ "song_id": { "type": "string" }, "steps": { "type": "integer" }, "seed": { "type": "integer" }, "synth_batch_size": { "type": "integer" }, "output_format": { "type": "string" }, "title": { "type": "string" } }), &["song_id"]),
+                schema: || object(json!({ "song_id": { "type": "string" }, "steps": { "type": "integer" }, "solver": { "type": "string", "enum": ["midpoint", "ab2"] }, "seed": { "type": "integer" }, "synth_batch_size": { "type": "integer" }, "output_format": { "type": "string", "enum": ["flac", "mp3"] }, "title": { "type": "string" } }), &["song_id"]),
                 call: |args| post("/v1/music/replay".into(), args.clone()),
             },
             Tool {
@@ -1413,8 +1417,14 @@ fn tools() -> &'static [Tool] {
             Tool {
                 name: "score_compose",
                 description: "Write score plans (ABC notation) for a style and lyrics. lm_batch_size chooses the number up to the configured engine song limit. Returns a job; poll score_job_get for plans, each with its abc and lm_seed. Read and choose a plan, then pass its abc to song_create.",
-                schema: || object(json!({ "style": { "type": "string" }, "lyrics": { "type": "string" }, "cot": { "type": "string", "enum": ["full", "melody"] }, "lm_seed": { "type": "integer" }, "lm_batch_size": { "type": "integer", "minimum": 1, "maximum": 8 } }), &["style"]),
+                schema: || object(json!({ "style": { "type": "string" }, "lyrics": { "type": "string" }, "cot": { "type": "string", "enum": ["full", "melody"] }, "lm_seed": { "type": "integer" }, "lm_batch_size": { "type": "integer", "minimum": 1, "maximum": 8 }, "abc": { "type": "string", "description": "an opening the plan goes on from; the plans begin with it" }, "harmony": { "type": "object", "description": "chord variety and section order of the score the model plans (with an abc opening, of the rest it writes): strength 0-64 lowers chords heard among the recent changes (about 6-10 breaks a looping progression), identity root (C, Cmaj7, C/E one chord) or spelling, window 1-512 recent changes, hold_limit 0-64 symbols one root holds for free, outside_bonus 0-20 favours roots outside the key (root identity) while fewer than outside_limit 0-1 of the changes are outside, section_strength 0-64 keeps a section from opening like the one before, section_open 1-16 chords compared, follow_lyrics true holds the plan to the lyrics' sections in order", "properties": { "identity": { "type": "string", "enum": ["root", "spelling"] }, "strength": { "type": "number" }, "window": { "type": "integer" }, "hold_limit": { "type": "integer" }, "outside_bonus": { "type": "number" }, "outside_limit": { "type": "number" }, "section_strength": { "type": "number" }, "section_open": { "type": "integer" }, "follow_lyrics": { "type": "boolean" } } } }), &["style"]),
                 call: |args| post("/v1/scores".into(), args.clone()),
+            },
+            Tool {
+                name: "score_chord_bed",
+                description: "Write a chord bed at once, without the model planning: chords over rests in the Vocal voice and an empty Ins voice, one section per lyrics tag (bars from its lines), in the tempo, key and meter given; verses, choruses and a bridge each get a common progression, no chord repeats its neighbour. Pass its abc to song_create (cot full) and the model writes the melody and arrangement over that harmony. The same seed writes the same bed.",
+                schema: || object(json!({ "bpm": { "type": "integer", "minimum": 40, "maximum": 240 }, "key": { "type": "string", "description": "tonic and m for minor: Em, F#m, Bb" }, "meter": { "type": "string", "enum": ["4/4", "3/4", "6/8", "2/4"] }, "lyrics": { "type": "string" }, "seed": { "type": "integer" } }), &["bpm", "key", "meter"]),
+                call: |args| post("/v1/score/chord-bed".into(), args.clone()),
             },
             Tool {
                 name: "score_job_get",
@@ -1445,6 +1455,25 @@ fn tools() -> &'static [Tool] {
                         fields.push(("melody_only".into(), "1".into()));
                     }
                     Ok(Call { method: Method::POST, path: "/v1/transcriptions".into(), payload: Payload::Form { fields, files } })
+                },
+            },
+            Tool {
+                name: "score_match_sections",
+                description: "For a cover: retag the lyric blocks with the score sections they are sung in, found by recognising the source recording (the karaoke recogniser). Words never change; a chorus written once is copied into later chorus sections, sections without voice get an empty tag, blocks not heard keep their place and come back as unsure. Pass the cover's abc, its lyrics and the source as song_id or path. Returns the proposed lyrics and a per-block report; nothing is applied.",
+                schema: || object(json!({ "abc": { "type": "string" }, "lyrics": { "type": "string" }, "song_id": { "type": "string" }, "path": { "type": "string" }, "language": { "type": "string" } }), &["abc", "lyrics"]),
+                call: |args| {
+                    let mut fields = vec![("abc".to_string(), text(args, "abc")?), ("lyrics".to_string(), text(args, "lyrics")?)];
+                    let mut files = Vec::new();
+                    if let Some(path) = args.get("path").and_then(Value::as_str).filter(|path| !path.trim().is_empty()) {
+                        let path = PathBuf::from(path.trim());
+                        files.push(("audio".to_string(), path.clone(), file_name(&path)));
+                    } else {
+                        fields.push(("song_id".to_string(), text(args, "song_id").map_err(|_| "song_id or path is required".to_string())?));
+                    }
+                    if let Some(language) = args.get("language").and_then(Value::as_str).filter(|value| !value.trim().is_empty()) {
+                        fields.push(("language".into(), language.trim().to_string()));
+                    }
+                    Ok(Call { method: Method::POST, path: "/v1/score/sections".into(), payload: Payload::Form { fields, files } })
                 },
             },
             // ---------------------------------------------------------------- how to write for the model

@@ -147,7 +147,6 @@ pub fn decode(data: &[u8]) -> String {
 #[derive(Clone, Debug)]
 pub struct Part {
     pub number: usize,
-    pub track: usize,
     pub channel: u8,
     pub notes: Vec<smf::Note>,
     pub program: u8,
@@ -156,12 +155,12 @@ pub struct Part {
 }
 
 impl Part {
-    fn new(number: usize, track: usize, channel: u8, notes: Vec<smf::Note>, program: u8, name: String) -> Part {
+    fn new(number: usize, channel: u8, notes: Vec<smf::Note>, program: u8, name: String) -> Part {
         let mut pitches: Vec<u8> = notes.iter().map(|note| note.pitch).collect();
         pitches.sort_unstable();
         let middle = pitches.len() / 2;
         let median = if pitches.len() % 2 == 1 { pitches[middle] as f64 } else { (pitches[middle - 1] as f64 + pitches[middle] as f64) / 2.0 };
-        Part { number, track, channel, notes, program, name, median }
+        Part { number, channel, notes, program, name, median }
     }
 
     pub fn drums(&self) -> bool {
@@ -228,7 +227,7 @@ pub fn parts(song: &smf::Song) -> Vec<Part> {
                 name.clone()
             };
             let program = track.programs.get(channel).or_else(|| programs.get(channel)).copied().unwrap_or(0);
-            found.push(Part::new(found.len() + 1, track.index, *channel, notes, program, label));
+            found.push(Part::new(found.len() + 1, *channel, notes, program, label));
         }
     }
     found
@@ -296,24 +295,28 @@ fn first_max(candidates: &[usize], value: impl Fn(usize) -> f64) -> usize {
     best
 }
 
-fn auto_voice(found: &[Part], pitched: &[usize], syllables: &[u64], division: u32) -> (usize, &'static str) {
+/// None when every part left is named an instrument: the score then keeps its voice silent.
+fn auto_voice(found: &[Part], pitched: &[usize], syllables: &[u64], division: u32) -> Option<(usize, &'static str)> {
     let named_chords: Vec<usize> = pitched.iter().copied().filter(|index| !found[*index].is_chords()).collect();
     let usable = if named_chords.is_empty() { pitched.to_vec() } else { named_chords };
     if !syllables.is_empty() {
         let tolerance = (division as u64 / 8).max(1);
         let best = first_max(&usable, |index| onset_share(&found[index], syllables, tolerance));
         if onset_share(&found[best], syllables, tolerance) >= KARAOKE_SHARE {
-            return (best, "karaoke");
+            return Some((best, "karaoke"));
         }
     }
     let named: Vec<usize> = usable.iter().copied().filter(|index| voice_name().is_match(&found[*index].name) && !found[*index].bass()).collect();
     if !named.is_empty() {
-        return (first_max(&named, |index| found[index].notes.len() as f64), "name");
+        return Some((first_max(&named, |index| found[index].notes.len() as f64), "name"));
+    }
+    if usable.iter().all(|index| instrument_name().is_match(&found[*index].name)) {
+        return None;
     }
     let busiest = usable.iter().map(|index| found[*index].notes.len()).max().unwrap_or(0);
     let melodic: Vec<usize> = usable.iter().copied().filter(|index| !found[*index].bass() && found[*index].notes.len() as f64 >= BUSY_SHARE * busiest as f64).collect();
     let pool = if melodic.is_empty() { usable } else { melodic };
-    (first_max(&pool, |index| found[index].median - CHORD_PENALTY * found[index].chord_share()), "highest")
+    Some((first_max(&pool, |index| found[index].median - CHORD_PENALTY * found[index].chord_share()), "highest"))
 }
 
 fn auto_instrument(found: &[Part], rest: &[usize]) -> Option<(usize, &'static str)> {
@@ -340,7 +343,7 @@ fn auto_instrument(found: &[Part], rest: &[usize]) -> Option<(usize, &'static st
 /// The parts the voice and the instrument take, as indices into the parts, and how each was chosen.
 #[derive(Clone, Debug)]
 pub struct Chosen {
-    pub voice: usize,
+    pub voice: Option<usize>,
     pub instrument: Option<usize>,
     pub voice_why: &'static str,
     pub instrument_why: &'static str,
@@ -354,19 +357,19 @@ pub fn choose(found: &[Part], vocal: Pick, instrument: Pick, syllables: &[u64], 
         return Err(format!("the file has no part with pitched notes{}", if found.is_empty() { String::new() } else { format!(", only drums: {}", listing(found)) }));
     }
     let (voice, voice_why) = match numbered(found, vocal, "voice track")? {
-        Some(index) => (index, "chosen"),
-        None => auto_voice(found, &pitched, syllables, division),
+        Some(index) => (Some(index), "chosen"),
+        None => auto_voice(found, &pitched, syllables, division).map_or((None, ""), |(index, why)| (Some(index), why)),
     };
     let (instrument, instrument_why) = if instrument == Pick::None {
         (None, "")
     } else {
         match numbered(found, instrument, "instrument track")? {
-            Some(index) if index == voice => {
-                return Err(format!("The voice and the instrument are both track {}; one part cannot be both lines of the score", found[voice].number));
+            Some(index) if Some(index) == voice => {
+                return Err(format!("The voice and the instrument are both track {}; one part cannot be both lines of the score", found[index].number));
             }
             Some(index) => (Some(index), "chosen"),
             None => {
-                let rest: Vec<usize> = pitched.iter().copied().filter(|index| *index != voice).collect();
+                let rest: Vec<usize> = pitched.iter().copied().filter(|index| Some(*index) != voice).collect();
                 match auto_instrument(found, &rest) {
                     Some((index, why)) => (Some(index), why),
                     None => (None, ""),
@@ -403,7 +406,7 @@ pub fn describe(found: &[Part], chosen: Option<&Chosen>) -> Vec<Row> {
         .enumerate()
         .map(|(index, part)| {
             let (role, why) = match chosen {
-                Some(chosen) if chosen.voice == index => ("voice", chosen.voice_why),
+                Some(chosen) if chosen.voice == Some(index) => ("voice", chosen.voice_why),
                 Some(chosen) if chosen.instrument == Some(index) => ("instrument", chosen.instrument_why),
                 _ => ("", ""),
             };
@@ -453,16 +456,15 @@ mod tests {
     fn song(tracks: Vec<(&str, Vec<smf::Note>, u8)>) -> smf::Song {
         let tracks = tracks
             .into_iter()
-            .enumerate()
-            .map(|(index, (name, notes, program))| {
-                let mut track = smf::Track { index, name: name.as_bytes().to_vec(), notes, ..smf::Track::default() };
+            .map(|(name, notes, program)| {
+                let mut track = smf::Track { name: name.as_bytes().to_vec(), notes, ..smf::Track::default() };
                 if let Some(channel) = track.notes.first().map(|note| note.channel) {
                     track.programs.insert(channel, program);
                 }
                 track
             })
             .collect();
-        smf::Song { format: 1, division: 480, tracks, ..smf::Song::default() }
+        smf::Song { division: 480, tracks, ..smf::Song::default() }
     }
 
     #[test]
@@ -475,10 +477,23 @@ mod tests {
         let song = song(vec![("Melody", melody, 0), ("Pad", pad, 88), ("Guitar", lead, 25), ("Bass", bass, 33), ("Drums", drums, 0)]);
         let found = parts(&song);
         let chosen = choose(&found, Pick::Auto, Pick::Auto, &[], 480).unwrap();
-        assert_eq!((found[chosen.voice].number, chosen.voice_why), (1, "name"));
+        assert_eq!((found[chosen.voice.unwrap()].number, chosen.voice_why), (1, "name"));
         assert_eq!(chosen.instrument.map(|index| (found[index].number, chosen.instrument_why)), Some((3, "busiest")));
         assert!(choose(&found, Pick::Number(5), Pick::Auto, &[], 480).unwrap_err().contains("drums"));
         assert!(choose(&found, Pick::Number(2), Pick::Number(2), &[], 480).unwrap_err().contains("both track 2"));
         assert!(choose(&found, Pick::Number(9), Pick::Auto, &[], 480).unwrap_err().contains("5 tracks with notes"));
+    }
+
+    #[test]
+    fn a_file_of_instrument_lines_keeps_the_voice_silent() {
+        let line: Vec<smf::Note> = (0..8).map(|index| note(index * 480, index * 480 + 480, 72 + (index % 3) as u8, 0)).collect();
+        let chords: Vec<smf::Note> = (0..2).flat_map(|index| [note(index * 1920, index * 1920 + 1920, 60, 2), note(index * 1920, index * 1920 + 1920, 64, 2), note(index * 1920, index * 1920 + 1920, 67, 2)]).collect();
+        let file = song(vec![("Ins", line.clone(), 0), ("Chords", chords, 48)]);
+        let found = parts(&file);
+        let chosen = choose(&found, Pick::Auto, Pick::Auto, &[], 480).unwrap();
+        assert_eq!(chosen.voice, None);
+        assert_eq!(chosen.instrument.map(|index| found[index].number), Some(1));
+        let named = song(vec![("Vocal", line, 0)]);
+        assert!(choose(&parts(&named), Pick::Auto, Pick::Auto, &[], 480).unwrap().voice.is_some());
     }
 }

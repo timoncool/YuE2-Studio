@@ -86,10 +86,23 @@ pub fn snapshot() -> ResourceSnapshot {
         cpu_percent: system.global_cpu_usage(),
         ram_used_mb: system.used_memory() / 1_048_576,
         ram_total_mb: system.total_memory() / 1_048_576,
-        gpus: nvidia_gpus().unwrap_or_default(),
+        gpus: nvidia_gpus().unwrap_or_else(|| unified_memory_gpu(system.used_memory() / 1_048_576, system.total_memory() / 1_048_576)),
         engine_process,
         studio_process_mb,
     }
+}
+
+/// Apple Silicon has one GPU that shares the machine's memory, so its memory
+/// figures are the system's; it reports no load, temperature or power.
+fn unified_memory_gpu(used_mb: u64, total_mb: u64) -> Vec<GpuSnapshot> {
+    if !cfg!(target_os = "macos") {
+        return Vec::new();
+    }
+    crate::hardware::hardware()
+        .gpu_name
+        .map(|name| GpuSnapshot { name, vram_used_mb: used_mb, vram_total_mb: total_mb, utilization_percent: None, temperature_c: None, power_draw_w: None, power_limit_w: None })
+        .into_iter()
+        .collect()
 }
 
 fn nvidia_gpus() -> Option<Vec<GpuSnapshot>> {

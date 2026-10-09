@@ -1,8 +1,10 @@
 //! Turning a finished track into the file the library keeps.
 //!
 //! Engines hand over their audio unencoded, at the rate and precision the model
-//! produced. The level is set here, and MP3 is made by LAME, the reference MP3
-//! encoder: one encoder for every engine, never one engine's own.
+//! produced, and it is kept at the level it came: lossless FLAC by default
+//! (libFLAC, the reference encoder), MP3 by LAME, the reference
+//! MP3 encoder, when one is asked for. One encoder per format for every
+//! engine, never one engine's own.
 
 use anyhow::{anyhow, bail, Result};
 use mp3lame_encoder::{Bitrate, Builder, DualPcm, FlushNoGap, Quality};
@@ -11,7 +13,8 @@ use crate::Stereo;
 
 /// Scales the track so its loudest part reaches full scale: the level that
 /// all but `peak_clip` samples per million stay under becomes 1.0, and those
-/// few are clipped. The rule the engines apply to their own encoded output.
+/// few are clipped. A processing stage the person chooses, never part of
+/// keeping a song.
 pub fn normalize_peak(audio: &mut Stereo, peak_clip: u32) {
     let peak_clip = peak_clip.min(999) as f64;
     let mut magnitudes: Vec<f32> = audio.left.iter().chain(&audio.right).map(|sample| sample.abs()).collect();
@@ -28,6 +31,49 @@ pub fn normalize_peak(audio: &mut Stereo, peak_clip: u32) {
     for sample in audio.left.iter_mut().chain(audio.right.iter_mut()) {
         *sample = (*sample * gain).clamp(-1.0, 1.0);
     }
+}
+
+/// The gain that fits a float signal into an integer format: 1 when its peak
+/// is within full scale, else exactly enough to bring the peak to it. An
+/// integer sample cannot hold more, and cutting the overs would distort.
+pub fn fitting_gain(audio: &Stereo) -> f32 {
+    let peak = audio.left.iter().chain(&audio.right).filter(|sample| sample.is_finite()).fold(0.0f32, |peak, sample| peak.max(sample.abs()));
+    if peak > 1.0 { 1.0 / peak } else { 1.0 }
+}
+
+/// Lossless FLAC at 24 bits, written by libFLAC, the reference encoder: the
+/// model's float output with nothing taken away but the rounding below the
+/// 24th bit, about -144 dB. Verify mode decodes every frame as it is written
+/// and compares it with the input, and the file gets its sample count and MD5.
+pub fn flac(audio: &Stereo) -> Result<Vec<u8>> {
+    use flac_bound::FlacEncoder;
+    use std::sync::atomic::{AtomicU64, Ordering};
+    static NEXT: AtomicU64 = AtomicU64::new(0);
+    const FULL: f32 = 8_388_607.0;
+    let frames = audio.frames();
+    let gain = fitting_gain(audio);
+    let samples: Vec<i32> = audio.left.iter().zip(&audio.right).flat_map(|(left, right)| [*left, *right]).map(|sample| ((sample * gain).clamp(-1.0, 1.0) * FULL).round() as i32).collect();
+    // libFLAC writes the header last, so it needs a file it can seek in
+    let path = std::env::temp_dir().join(format!("audio-post-{}-{}.flac", std::process::id(), NEXT.fetch_add(1, Ordering::Relaxed)));
+    let written = (|| -> Result<Vec<u8>> {
+        let mut encoder = FlacEncoder::new()
+            .ok_or_else(|| anyhow!("libFLAC could not make an encoder"))?
+            .channels(2)
+            .bits_per_sample(24)
+            .sample_rate(audio.rate)
+            .compression_level(8)
+            .verify(true)
+            .total_samples_estimate(frames as u64)
+            .init_file(&path)
+            .map_err(|error| anyhow!("start the FLAC encoder: {error:?}"))?;
+        if encoder.process_interleaved(&samples, frames as u32).is_err() {
+            bail!("encode FLAC: {:?}", encoder.state());
+        }
+        encoder.finish().map_err(|encoder| anyhow!("finish the FLAC file: {:?}", encoder.state()))?;
+        Ok(std::fs::read(&path)?)
+    })();
+    let _ = std::fs::remove_file(&path);
+    written
 }
 
 /// The MPEG-1 Layer III rates LAME encodes at, the highest first.
@@ -67,6 +113,14 @@ pub fn mp3(audio: &Stereo, kbps: u32) -> Result<Vec<u8>> {
     builder.set_quality(Quality::Best).map_err(|error| anyhow!("LAME quality: {error}"))?;
     builder.set_to_write_vbr_tag(false).map_err(|error| anyhow!("LAME tag: {error}"))?;
     let mut encoder = builder.build().map_err(|error| anyhow!("LAME: {error}"))?;
+    let gain = fitting_gain(audio);
+    let fitted;
+    let audio = if gain < 1.0 {
+        fitted = Stereo { left: audio.left.iter().map(|sample| sample * gain).collect(), right: audio.right.iter().map(|sample| sample * gain).collect(), rate: audio.rate };
+        &fitted
+    } else {
+        audio
+    };
 
     const PIECE: usize = 1 << 16;
     let mut out = Vec::with_capacity(audio.frames() * kbps as usize / 8 / audio.rate as usize * 1000 + 8192);
@@ -91,6 +145,7 @@ mod tests {
         let left: Vec<f32> = (0..n).map(|i| amplitude * (2.0 * std::f32::consts::PI * 440.0 * i as f32 / rate as f32).sin()).collect();
         Stereo::new(left.clone(), left, rate)
     }
+
 
     #[test]
     fn normalizing_brings_the_peak_to_full_scale() {

@@ -472,10 +472,16 @@ fn configure_child_process(command: &mut Command) {
     // The child shares the studio's hidden console, which is what lets
     // CTRL_BREAK reach it for a graceful stop.
     command.creation_flags(CREATE_NEW_PROCESS_GROUP);
+    // The job object `adopt` assigns is what kills it with us on Windows.
 }
 
+/// Beyond the platform group flags, the engine is bound to the studio's
+/// lifetime: Windows does that with a job object in `adopt`, Linux with
+/// `PR_SET_PDEATHSIG` set here, before the exec.
 #[cfg(not(windows))]
-fn configure_child_process(_command: &mut Command) {}
+fn configure_child_process(command: &mut Command) {
+    music_core::process::ensure_dies_with_parent(command);
+}
 
 #[cfg(windows)]
 fn request_graceful_shutdown(child: &Child) -> Result<()> {

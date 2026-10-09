@@ -14,7 +14,7 @@ use tokio::sync::RwLock;
 
 pub const ENGINE_ID: &str = "yue2-cpp";
 const REPOSITORY: &str = "Serveurperso/YuE2-GGUF";
-const REVISION: &str = "64b030e3deb6e8150d2b7c0db641ef5a17eca8a3";
+const REVISION: &str = "e630f2b8f6aedf8254c3186438633c1b5eeaf80a";
 /// Part of every set, picked or not: the engine merges it under every render
 /// and the trainer keeps it under every LoRA.
 const COMPANION: &str = "companion-v9";
@@ -59,6 +59,8 @@ pub struct Profile {
     pub recommended: bool,
     pub components: Vec<&'static str>,
     pub total_bytes: u64,
+    /// Memory this machine needs for the set: less when its card holds the weights.
+    pub ram_needed_gb: f64,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -153,6 +155,7 @@ impl ModelManager {
         if recover_interrupted_download(&mut state) {
             persist_state_file(&state_path, &state)?;
         }
+        remove_retired_files(&root);
         Ok(Self {
             root,
             state_path,
@@ -201,9 +204,18 @@ impl ModelManager {
             bail!("a model download is running; cancel it before removing files");
         }
         let catalog = components();
+        let mut ids: Vec<String> = component_ids.to_vec();
+        // a transcriber head goes with the MERT file of its precision, which the set lists for it
+        for head in catalog.iter().filter(|component| component.kind == "transcriber" && component_ids.iter().any(|id| id == component.id)) {
+            if let Some(base) = catalog.iter().find(|base| base.kind == "transcriber-base" && precision(base.filename) == precision(head.filename)) {
+                if !ids.iter().any(|id| id == base.id) {
+                    ids.push(base.id.to_string());
+                }
+            }
+        }
         let mut removed = Vec::new();
         let mut freed_bytes = 0u64;
-        for id in component_ids {
+        for id in &ids {
             let component = catalog
                 .iter()
                 .find(|component| component.id == *id)
@@ -306,19 +318,30 @@ impl ModelManager {
             selection
                 .components
                 .iter()
-                .filter(|component| component_ids.iter().any(|id| id == component.id))
+                .filter(|component| component.id != COMPANION && !optional_kind(component.kind))
                 .all(|component| published_component(&self.root.join(component.filename), component))
         })
     }
 
+    /// The files of a set to start the engine on. A transcriber not on disk
+    /// yet leaves the set without one rather than keeping the engine down.
     fn installed_files_from_selection(&self, selection: ResolvedInstall, label: &str) -> Result<ProfileModelFiles> {
+        let mut transcriber_complete = true;
         for component in &selection.components {
             let path = self.root.join(component.filename);
             if !published_component(&path, component) {
+                if optional_kind(component.kind) {
+                    transcriber_complete = false;
+                    continue;
+                }
                 bail!("{label} is incomplete: missing or truncated {}", component.filename);
             }
         }
-        Ok(profile_files_from_components(&selection.components))
+        let mut files = profile_files_from_components(&selection.components);
+        if !transcriber_complete {
+            files.transcriber = None;
+        }
+        Ok(files)
     }
 
     async fn download_selection(&self, selection: ResolvedInstall) {
@@ -372,10 +395,10 @@ impl ModelManager {
     async fn download_component(&self, component: &Component) -> Result<()> {
         let target = self.root.join(component.filename);
         let part = part_path(&target);
-        let url = format!(
+        let url = crate::net::model_url(&format!(
             "https://huggingface.co/{}/resolve/{}/{}?download=true",
             component.repository, component.revision, component.filename
-        );
+        ));
 
         let plan = crate::chunked::probe(&self.http, &url).await?;
         let written = std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0));
@@ -535,10 +558,27 @@ fn resolve_install(request: InstallRequest) -> Result<ResolvedInstall> {
     } else {
         (None, request.component_ids.iter().map(String::as_str).collect::<Vec<_>>())
     };
+    for id in ids.iter_mut() {
+        if let Some((_, now)) = RETIRED_TRANSCRIBERS.iter().find(|(old, _)| old == id) {
+            *id = now;
+        }
+    }
     if !ids.contains(&COMPANION) {
         ids.push(COMPANION);
     }
     let catalog = components();
+    // the transcriber head reads MERT from the file of its own precision beside it
+    let bases: Vec<&'static str> = ids
+        .iter()
+        .filter_map(|id| catalog.iter().find(|candidate| candidate.id == *id && candidate.kind == "transcriber"))
+        .filter_map(|head| catalog.iter().find(|base| base.kind == "transcriber-base" && precision(base.filename) == precision(head.filename)))
+        .map(|base| base.id)
+        .collect();
+    for base in bases {
+        if !ids.contains(&base) {
+            ids.push(base);
+        }
+    }
     let selected: Vec<Component> = ids
         .iter()
         .map(|id| catalog.iter().find(|candidate| candidate.id == *id).cloned().with_context(|| format!("unknown component '{id}'")))
@@ -554,8 +594,13 @@ fn validate_complete_set(selected: &[Component]) -> Result<()> {
             bail!("a runnable YuE2 installation requires exactly one {kind} component");
         }
     }
-    if selected.iter().filter(|component| component.kind == "transcriber").count() > 1 {
+    let heads: Vec<&Component> = selected.iter().filter(|component| component.kind == "transcriber").collect();
+    if heads.len() > 1 {
         bail!("a YuE2 installation takes at most one transcriber");
+    }
+    let bases: Vec<&Component> = selected.iter().filter(|component| component.kind == "transcriber-base").collect();
+    if bases.len() != heads.len() || heads.iter().zip(&bases).any(|(head, base)| precision(head.filename) != precision(base.filename)) {
+        bail!("the transcriber needs MERT in its own precision beside it");
     }
     Ok(())
 }
@@ -600,7 +645,7 @@ fn status_snapshot(root: PathBuf, active: Option<DownloadJob>, target: Option<In
         .and_then(|request| resolve_install(request).ok())
         .or_else(|| resolve_install(InstallRequest { profile_id: Some(recommended_profile().into()), component_ids: vec![] }).ok());
     let installed = |id: &str| component_statuses.iter().find(|component| component.id == id).is_some_and(|component| component.installed);
-    let ready = target.as_ref().is_some_and(|selection| selection.components.iter().all(|component| installed(component.id)));
+    let ready = target.as_ref().is_some_and(|selection| selection.components.iter().filter(|component| !optional_kind(component.kind)).all(|component| installed(component.id)));
     let download_pending = target.as_ref().map(|selection| selection.components.iter()
         .filter(|component| !installed(component.id)).map(|component| component.bytes).sum()).unwrap_or_default();
     let profile_files = target
@@ -621,8 +666,9 @@ fn status_snapshot(root: PathBuf, active: Option<DownloadJob>, target: Option<In
 /// pinned Hugging Face LFS oid, and only then renamed. So presence is the
 /// proof, and the alternative - re-hashing eleven gigabytes on every status
 /// poll - is not one.
-fn published_component(path: &Path, _component: &Component) -> bool {
-    fs::metadata(path).map(|metadata| metadata.is_file() && metadata.len() > 0).unwrap_or(false)
+fn published_component(path: &Path, component: &Component) -> bool {
+    // a file of another size is another release under the same name
+    fs::metadata(path).map(|metadata| metadata.is_file() && metadata.len() == component.bytes).unwrap_or(false)
 }
 
 async fn verified_file_async(path: PathBuf, component: Component) -> Result<bool> {
@@ -676,13 +722,31 @@ pub fn profile_matching(component_ids: &[String]) -> Option<&'static str> {
     })
 }
 
+const PROFILE_SETS: [(&str, &str, [&str; 5]); 4] = [
+    ("light", "Light - Q5_K_M backbone (6 GB cards)", ["backbone-q5", "vae-f32", "transcriber-q8", "mert-q8", COMPANION]),
+    ("balanced", "Balanced - Q6_K backbone", ["backbone-q6", "vae-f32", "transcriber-q8", "mert-q8", COMPANION]),
+    ("quality-q8", "Quality - Q8_0 backbone, near lossless", ["backbone-q8", "vae-f32", "transcriber-q8", "mert-q8", COMPANION]),
+    ("native", "Full native - BF16 backbone, original weights", ["backbone-bf16", "vae-f32", "transcriber-f32", "mert-f32", COMPANION]),
+];
+
 fn profiles() -> Vec<Profile> {
-    vec![
-        profile("light", "Light - Q5_K_M backbone (6 GB cards)", &["backbone-q5", "vae-f32", "transcriber-q5", COMPANION]),
-        profile("balanced", "Balanced - Q6_K backbone", &["backbone-q6", "vae-f32", "transcriber-q6", COMPANION]),
-        profile("quality-q8", "Quality - Q8_0 backbone, near lossless", &["backbone-q8", "vae-f32", "transcriber-q8", COMPANION]),
-        profile("native", "Full native - BF16 backbone, original weights", &["backbone-bf16", "vae-f32", "transcriber-f32", COMPANION]),
-    ]
+    PROFILE_SETS.iter().map(|(id, label, ids)| profile(id, label, ids)).collect()
+}
+
+/// The bytes of a set's backbone and VAE, the weights that sit in memory while a song is made.
+pub fn profile_weights_bytes(id: &str) -> u64 {
+    let all = components();
+    PROFILE_SETS
+        .iter()
+        .find(|(profile, _, _)| *profile == id)
+        .map(|(_, _, ids)| {
+            ids.iter()
+                .filter_map(|id| all.iter().find(|component| component.id == *id))
+                .filter(|component| matches!(component.kind, "backbone" | "vae"))
+                .map(|component| component.bytes)
+                .sum()
+        })
+        .unwrap_or(0)
 }
 
 #[cfg(test)]
@@ -694,7 +758,8 @@ fn profile(id: &'static str, label: &'static str, ids: &[&'static str]) -> Profi
     let all = components();
     // The badge follows the machine, the same answer the first-run banner gives.
     let recommended = id == recommended_profile();
-    Profile { id, label, backend: ENGINE_ID, installable: true, recommended, components: ids.to_vec(), total_bytes: ids.iter().filter_map(|id| all.iter().find(|component| component.id == *id)).map(|component| component.bytes).sum() }
+    let ram_needed_gb = crate::hardware::ram_needed_gb(id, profile_weights_bytes(id), crate::hardware::hardware().total_vram_gb);
+    Profile { id, label, backend: ENGINE_ID, installable: true, recommended, components: ids.to_vec(), total_bytes: ids.iter().filter_map(|id| all.iter().find(|component| component.id == *id)).map(|component| component.bytes).sum(), ram_needed_gb }
 }
 
 fn components() -> Vec<Component> {
@@ -705,10 +770,11 @@ fn components() -> Vec<Component> {
         c("backbone-q5", "backbone", "YuE2-3B-Q5_K_M.gguf", 2622936832, "cd3efd250b734a229172800f08f33a893ad1f66b521666e176cdae4a0729b281"),
         // The VAE ships in F32 only: its weights are the audio.
         c("vae-f32", "vae", "YuE2-Vae-F32.gguf", 530497344, "93e49dfb1970e89ad64cacb17cf13b5d05f6bb30ef7ed3adae3050bcb728638a"),
-        c("transcriber-f32", "transcriber", "SheetSage2-F32.gguf", 2708176640, "f324d213e78a1522bbc56ebb819584af11a34336ab55084b1d8145f1bcf15e58"),
-        c("transcriber-q8", "transcriber", "SheetSage2-Q8_0.gguf", 957571488, "4507d8c1d9245f312c0894ea610ab18fbcbf31443764b5bd6a60e4b6df59e973"),
-        c("transcriber-q6", "transcriber", "SheetSage2-Q6_K.gguf", 813864856, "9e9d7868bd96dbf016fcc4e484db38385c8863a94bbc0f6ed37455b4e410c7e0"),
-        c("transcriber-q5", "transcriber", "SheetSage2-Q5_K_M.gguf", 737104280, "165e7b5f4d8c7954473b44481cf2d1ecc96f73e3690d9561390614dd3a7bcc03"),
+        // SheetSage2's head; the MERT encoder it reads is a file of its own
+        c("transcriber-f32", "transcriber", "SheetSage2-F32.gguf", 228738176, "4988c01b64c2812dd71eb89a9ab1937a3385ff2ba869bf495ccb69af4ec744cd"),
+        c("transcriber-q8", "transcriber", "SheetSage2-Q8_0.gguf", 105629856, "95d8fa8761753b4833782a52b68d5c0afa3bd3cfbc03d3dcbbf8ded0c13f611e"),
+        c("mert-f32", "transcriber-base", "MERT-v2-FullSong-F32.gguf", 2529780448, "695b247660405474fffa7bab4d019227325b8d169f96aaa96bad488033fec637"),
+        c("mert-q8", "transcriber-base", "MERT-v2-FullSong-Q8_0.gguf", 902283712, "35a6032ec7e8123c02becdefc7bfe10a3adb33faa8a1951dc0af864b4494b8ef"),
         // Mothersuperior's pair of the v9 tokenizer head, CC BY-NC 4.0
         Component {
             id: COMPANION,
@@ -722,6 +788,42 @@ fn components() -> Vec<Component> {
     ]
 }
 
+/// The parts of a set the studio runs without: SheetSage2 and the MERT it reads.
+fn optional_kind(kind: &str) -> bool {
+    matches!(kind, "transcriber" | "transcriber-base")
+}
+
+/// Transcribers of the single-file release, read as the nearest one published now.
+const RETIRED_TRANSCRIBERS: [(&str, &str); 2] = [("transcriber-q6", "transcriber-q8"), ("transcriber-q5", "transcriber-q8")];
+
+/// Files of the single-file SheetSage2 release no transcriber reads any more,
+/// with their size where the name lives on in the current release.
+const RETIRED_FILES: [(&str, Option<u64>); 4] = [
+    ("SheetSage2-Q6_K.gguf", None),
+    ("SheetSage2-Q5_K_M.gguf", None),
+    ("SheetSage2-F32.gguf", Some(2708176640)),
+    ("SheetSage2-Q8_0.gguf", Some(957571488)),
+];
+
+/// Deletes what is left of the single-file transcriber: the engine reads none of it.
+fn remove_retired_files(root: &Path) {
+    for (name, size) in RETIRED_FILES {
+        let path = root.join(name);
+        let retired = fs::metadata(&path).is_ok_and(|meta| meta.is_file() && size.is_none_or(|bytes| meta.len() == bytes));
+        if retired {
+            if let Err(error) = fs::remove_file(&path) {
+                eprintln!("[ERROR] could not remove the retired transcriber {}: {error}", path.display());
+            }
+        }
+    }
+}
+
+/// The ggml type a GGUF file name ends in: `-Q8_0` of `MERT-v2-FullSong-Q8_0.gguf`.
+fn precision(filename: &str) -> &str {
+    let stem = filename.strip_suffix(".gguf").unwrap_or(filename);
+    stem.rsplit_once('-').map_or(stem, |(_, tail)| tail)
+}
+
 fn c(id: &'static str, kind: &'static str, filename: &'static str, bytes: u64, sha256: &'static str) -> Component {
     Component { id, kind, filename, bytes, sha256, repository: REPOSITORY, revision: REVISION }
 }
@@ -733,9 +835,9 @@ mod tests {
     #[test]
     fn a_hand_picked_set_equal_to_a_declared_one_is_that_set() {
         let ids = |list: &[&str]| list.iter().map(|id| id.to_string()).collect::<Vec<_>>();
-        assert_eq!(profile_matching(&ids(&["transcriber-f32", "backbone-bf16", "vae-f32"])), Some("native"));
-        assert_eq!(profile_matching(&ids(&["transcriber-f32", "backbone-bf16", "vae-f32", COMPANION])), Some("native"));
-        assert_eq!(profile_matching(&ids(&["backbone-q8", "vae-f32", "transcriber-q8"])), Some("quality-q8"));
+        assert_eq!(profile_matching(&ids(&["transcriber-f32", "mert-f32", "backbone-bf16", "vae-f32"])), Some("native"));
+        assert_eq!(profile_matching(&ids(&["transcriber-f32", "mert-f32", "backbone-bf16", "vae-f32", COMPANION])), Some("native"));
+        assert_eq!(profile_matching(&ids(&["backbone-q8", "vae-f32", "transcriber-q8", "mert-q8"])), Some("quality-q8"));
         assert_eq!(profile_matching(&ids(&["backbone-q8", "vae-f32"])), None);
         assert_eq!(profile_matching(&ids(&["backbone-q8", "vae-f32", "transcriber-f32"])), None);
     }
@@ -758,7 +860,7 @@ mod tests {
         let ids = |list: &[&str]| InstallRequest { profile_id: None, component_ids: list.iter().map(|id| id.to_string()).collect() };
         assert!(resolve_install(ids(&["backbone-q8"])).is_err());
         assert!(resolve_install(ids(&["backbone-q8", "backbone-q6", "vae-f32"])).is_err());
-        assert!(resolve_install(ids(&["backbone-q8", "vae-f32", "transcriber-q8", "transcriber-q6"])).is_err());
+        assert!(resolve_install(ids(&["backbone-q8", "vae-f32", "transcriber-q8", "transcriber-f32"])).is_err());
     }
 
     #[test]
@@ -769,6 +871,52 @@ mod tests {
         assert_eq!(files.vae, "YuE2-Vae-F32.gguf");
         assert!(files.transcriber.is_none());
         assert_eq!(files.companion, "nar_lora_joint_v9.safetensors");
+    }
+
+    #[test]
+    fn the_transcriber_brings_mert_of_its_precision_and_old_picks_land_on_q8() {
+        let picked = |list: &[&str]| resolve_install(InstallRequest { profile_id: None, component_ids: list.iter().map(|id| id.to_string()).collect() }).unwrap();
+        let ids = |selection: ResolvedInstall| selection.components.iter().map(|component| component.id).collect::<Vec<_>>();
+        assert!(ids(picked(&["backbone-q8", "vae-f32", "transcriber-f32"])).contains(&"mert-f32"));
+        let old = ids(picked(&["backbone-q5", "vae-f32", "transcriber-q5"]));
+        assert!(old.contains(&"transcriber-q8") && old.contains(&"mert-q8"));
+        assert!(validate_complete_set(&components().into_iter().filter(|component| ["backbone-q8", "vae-f32", COMPANION, "transcriber-q8", "mert-f32"].contains(&component.id)).collect::<Vec<_>>()).is_err());
+        assert_eq!(precision("MERT-v2-FullSong-Q8_0.gguf"), precision("SheetSage2-Q8_0.gguf"));
+    }
+
+    #[test]
+    fn a_missing_transcriber_leaves_the_set_runnable_without_one() {
+        let root = std::env::temp_dir().join(format!("yue2-optional-{}", uuid::Uuid::now_v7()));
+        fs::create_dir_all(&root).unwrap();
+        let manager = ModelManager {
+            root: root.clone(),
+            state_path: root.join("state.json"),
+            http: reqwest::Client::new(),
+            state: Arc::new(RwLock::new(PersistentState::default())),
+            cancelled: Arc::new(AtomicBool::new(false)),
+        };
+        for component in components().iter().filter(|component| ["backbone-q8", "vae-f32", COMPANION].contains(&component.id)) {
+            fs::File::create(root.join(component.filename)).unwrap().set_len(component.bytes).unwrap();
+        }
+        fs::write(root.join("SheetSage2-Q8_0.gguf"), b"the single-file release").unwrap();
+        let files = manager.installed_profile_files("quality-q8").unwrap();
+        assert!(files.transcriber.is_none());
+        let status = status_snapshot(root.clone(), None, Some(InstallRequest { profile_id: Some("quality-q8".into()), component_ids: vec![] }));
+        assert!(status.ready && status.download_pending > 0);
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn the_single_file_transcriber_is_cleared_and_a_head_goes_with_its_mert() {
+        let root = std::env::temp_dir().join(format!("yue2-retired-{}", uuid::Uuid::now_v7()));
+        fs::create_dir_all(&root).unwrap();
+        fs::File::create(root.join("SheetSage2-Q8_0.gguf")).unwrap().set_len(957571488).unwrap();
+        fs::write(root.join("SheetSage2-Q6_K.gguf"), b"old").unwrap();
+        fs::File::create(root.join("SheetSage2-F32.gguf")).unwrap().set_len(228738176).unwrap();
+        remove_retired_files(&root);
+        assert!(!root.join("SheetSage2-Q8_0.gguf").exists() && !root.join("SheetSage2-Q6_K.gguf").exists());
+        assert!(root.join("SheetSage2-F32.gguf").exists(), "the current head keeps its name and size");
+        let _ = fs::remove_dir_all(root);
     }
 
     #[test]
@@ -793,8 +941,12 @@ mod tests {
         };
         let picked = vec!["backbone-q6".to_string(), "vae-f32".to_string()];
         assert!(!manager.picked_components_installed(&picked));
+        let catalog = components();
+        let size = |id: &str| catalog.iter().find(|component| component.id == id).unwrap().bytes;
         fs::write(root.join("YuE2-3B-Q6_K.gguf"), b"weights").unwrap();
-        fs::write(root.join("YuE2-Vae-F32.gguf"), b"weights").unwrap();
+        assert!(!manager.picked_components_installed(&picked), "a file of another size is not the published one");
+        fs::File::create(root.join("YuE2-3B-Q6_K.gguf")).unwrap().set_len(size("backbone-q6")).unwrap();
+        fs::File::create(root.join("YuE2-Vae-F32.gguf")).unwrap().set_len(size("vae-f32")).unwrap();
         assert!(manager.picked_components_installed(&picked));
         assert!(manager.installed_component_files(&picked).is_err());
         let _ = fs::remove_dir_all(root);

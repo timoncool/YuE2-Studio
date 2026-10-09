@@ -13,6 +13,8 @@ export interface Song {
   duration: string;
   createdAt: Date;
   isGenerating?: boolean;
+  /** Why a generation ended without a song; the card stays until it is removed. */
+  failure?: string;
   /** The engine job a generation's row follows. */
   jobId?: string;
   /** The playlist the song being made goes into. */
@@ -24,11 +26,15 @@ export interface Song {
   queuePosition?: number; // Position in queue (undefined = actively generating, number = waiting in queue)
   progress?: number;
   stage?: string;
+  /** The running stage's counter, e.g. `57/64 · ~2:50`. */
+  stageDetail?: string;
   generationParams?: any;
   tags: string[];
   audioUrl?: string;
   /** The thumbs-up, kept with the song in the library. */
   liked?: boolean;
+  /** The person's own note on the song, kept in the library. */
+  note?: string;
   /** When it was liked: the liked list is read from the latest. */
   likedAt?: Date;
   isPublic?: boolean;
@@ -97,8 +103,22 @@ export interface YueSampling {
   max_tokens?: number;
 }
 
+/** Chord variety and section order of the score the model plans; every control is off at zero. */
+export interface YueHarmony {
+  identity?: 'root' | 'spelling';
+  strength?: number;
+  window?: number;
+  hold_limit?: number;
+  outside_bonus?: number;
+  outside_limit?: number;
+  section_strength?: number;
+  section_open?: number;
+  /** Hold the plan to the lyrics' sections, in order. */
+  follow_lyrics?: boolean;
+}
+
 export type YueCot = 'full' | 'melody' | 'off';
-export type YueOutputFormat = 'mp3' | 'wav16' | 'wav24' | 'wav32';
+export type YueOutputFormat = 'flac' | 'mp3';
 
 /**
  * A YuE2 request as `/v1/music/jobs` accepts it. Field names are the engine's
@@ -113,6 +133,8 @@ export interface YueRequest {
   abc?: string;
   /** Move a supplied score before singing, in semitones. */
   transpose?: number;
+  /** With a supplied score, each section's words wait until the score reaches it; on unless false. */
+  lyric_timing?: boolean;
   vocals_only?: boolean;
   cot?: YueCot;
   /** Target length; the model may end the song earlier. */
@@ -125,10 +147,16 @@ export interface YueRequest {
   lm_batch_size?: number;
   synth_batch_size?: number;
   cfg_scale?: number;
+  /** Strength of the realaudio decoder companion; 0 decodes with the checkpoint alone. */
+  companion_scale?: number;
   semantic_tokens?: string;
   abc_sampling?: YueSampling;
   semantic_sampling?: YueSampling;
-  peak_clip?: number;
+  harmony?: YueHarmony;
+  /** The acoustic ODE solver: midpoint is the reference, ab2 about twice as fast. */
+  solver?: 'midpoint' | 'ab2';
+  /** abc is only the opening: the model writes the rest of the song on from it. */
+  abc_continue?: boolean;
   output_format?: YueOutputFormat;
   mp3_bitrate?: number;
   /** Library title only, never sent to the engine. */

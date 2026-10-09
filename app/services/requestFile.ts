@@ -12,8 +12,8 @@ export type RequestFileFormat = 'json' | 'yaml';
 const ENGINE_FIELDS = [
   'style', 'lyrics', 'abc', 'cot', 'duration', 'lm_seed', 'seed', 'steps',
   'lm_batch_size', 'synth_batch_size', 'cfg_scale', 'semantic_tokens',
-  'abc_sampling', 'semantic_sampling', 'output_format', 'peak_clip', 'mp3_bitrate',
-  'adapters', 'transpose', 'vocals_only',
+  'abc_sampling', 'semantic_sampling', 'output_format', 'mp3_bitrate',
+  'adapters', 'transpose', 'vocals_only', 'companion_scale',
 ] as const;
 
 export function toEngineRequest(request: YueRequest): Record<string, unknown> {

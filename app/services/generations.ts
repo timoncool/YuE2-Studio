@@ -2,7 +2,7 @@ import { useCallback, useEffect, useEffectEvent, useMemo, useRef, useState } fro
 import { useQuery } from '@tanstack/react-query';
 import { useI18n } from '../context/I18nContext';
 import type { Song, YueJob, YueProgress, YueRequest } from '../types';
-import { followEngineProgress } from './engineProgress';
+import { followEngineProgress, stageDetail, type StageClock } from './engineProgress';
 import { mapNativeLibrarySong } from './nativeLibrary';
 import { playlistsChanged, queryClient, readJson, updateLibraryPlaylists, updateLibrarySongs, useLibrarySongs } from './studioQueries';
 
@@ -14,6 +14,8 @@ import { playlistsChanged, queryClient, readJson, updateLibraryPlaylists, update
  */
 
 const activeJobsKey = ['music', 'jobs'] as const;
+const endedJobsKey = ['music', 'jobs', 'ended'] as const;
+const ENDED_PREFIX = 'ended_';
 const POLL_MS = 1_500;
 const NO_SONGS: Song[] = [];
 
@@ -26,6 +28,7 @@ const STAGE_LABEL: Record<YueProgress['stage'], string> = {
 };
 
 type Notify = (message: string, type: 'success' | 'error' | 'info') => void;
+
 
 interface GenerationOptions {
   /** The engine is up; before that there are no jobs to follow. */
@@ -66,6 +69,17 @@ function card(id: string, fields: CardFields): Song {
 async function stopJob(jobId: string): Promise<void> {
   const response = await fetch(`/v1/music/jobs/${encodeURIComponent(jobId)}`, { method: 'POST' });
   if (!response.ok) throw new Error(`The engine did not stop the job (${response.status})`);
+}
+
+/** Removes a stopped or failed job for good; a job still running is left (409). */
+async function removeEnded(jobId: string): Promise<void> {
+  try {
+    const response = await fetch(`/v1/music/jobs/${encodeURIComponent(jobId)}`, { method: 'DELETE' });
+    // 404: the service no longer has it, which is what removing asked for
+    if (!response.ok && response.status !== 404) throw new Error(`The song could not be removed: HTTP ${response.status}`);
+  } finally {
+    void queryClient.invalidateQueries({ queryKey: endedJobsKey });
+  }
 }
 
 export function useGenerations({ enabled, notify, onFinished }: GenerationOptions) {
@@ -122,6 +136,29 @@ export function useGenerations({ enabled, notify, onFinished }: GenerationOption
     refetchIntervalInBackground: true,
   });
 
+  // Jobs that ended without a song stay as cards, across restarts, until removed.
+  const ended = useQuery({
+    queryKey: endedJobsKey,
+    queryFn: () => readJson<YueJob[]>('/v1/music/jobs/ended'),
+    enabled,
+    staleTime: Infinity,
+  });
+  const endedCards = useMemo(() => {
+    const shown = new Set(cards.flatMap(entry => (entry.jobId ? [entry.jobId] : [])));
+    return (ended.data ?? []).filter(job => !shown.has(job.id)).map(job => ({
+      ...card(`${ENDED_PREFIX}${job.id}`, {
+        title: job.title || t('generating'),
+        style: job.style,
+        lyrics: job.lyrics,
+        createdAt: new Date(job.submitted_at),
+        playlistId: job.playlist_id,
+      }),
+      isGenerating: false,
+      stage: job.status === 'failed' ? 'failed' : 'cancelled',
+      failure: job.message,
+    }));
+  }, [ended.data, cards, t]);
+
   const finish = useEffectEvent((finished: Song, job: YueJob) => {
     // newest first, as the library lists them, so the first takes the row
     const made = (job.songs?.length ? job.songs : job.song ? [job.song] : [])
@@ -154,7 +191,9 @@ export function useGenerations({ enabled, notify, onFinished }: GenerationOption
       if (job.status === 'completed') {
         finish(running, job);
       } else if (job.status === 'failed' || job.status === 'cancelled') {
+        // the card leaves with the running jobs and comes back from the ended ones
         remove(running.id);
+        void queryClient.invalidateQueries({ queryKey: endedJobsKey });
         notify(job.message || t('generationFailed'), job.status === 'failed' ? 'error' : 'info');
       }
       // still queued or running: the list was read before this job was sent
@@ -202,11 +241,13 @@ export function useGenerations({ enabled, notify, onFinished }: GenerationOption
   // The engine renders one job at a time in the order they came, so the
   // oldest running card is the one its progress belongs to.
   const making = following > 0;
+  const stageClock = useRef<StageClock | null>(null);
   useEffect(() => {
     if (!making) return;
     return followEngineProgress(progress => {
       if (!progress || progress.stage === 'transcribe') return;
       const stage = STAGE_LABEL[progress.stage];
+      const detail = stageDetail(progress.detail, progress.stage, stageClock);
       setCards(prev => {
         const running = prev.filter(entry => entry.isGenerating && entry.jobId);
         if (running.length === 0) return prev;
@@ -214,9 +255,9 @@ export function useGenerations({ enabled, notify, onFinished }: GenerationOption
         return prev.map(entry => {
           if (!entry.isGenerating || !entry.jobId) return entry;
           if (entry.id === active.id) {
-            return entry.progress === progress.fraction && entry.stage === stage ? entry : { ...entry, progress: progress.fraction, stage };
+            return entry.progress === progress.fraction && entry.stage === stage && entry.stageDetail === detail ? entry : { ...entry, progress: progress.fraction, stage, stageDetail: detail };
           }
-          return !entry.progress && entry.stage === 'stageWaitingInQueue' ? entry : { ...entry, progress: 0, stage: 'stageWaitingInQueue' };
+          return !entry.progress && entry.stage === 'stageWaitingInQueue' ? entry : { ...entry, progress: 0, stage: 'stageWaitingInQueue', stageDetail: undefined };
         });
       });
     });
@@ -268,6 +309,10 @@ export function useGenerations({ enabled, notify, onFinished }: GenerationOption
 
   /** Drops a cancelled card, stopping its job if it still runs. */
   const reset = useCallback(async (key: string) => {
+    if (key.startsWith(ENDED_PREFIX)) {
+      await removeEnded(key.slice(ENDED_PREFIX.length)).catch(error => notify(error instanceof Error ? error.message : String(error), 'error'));
+      return;
+    }
     const target = cardsNow.current.find(entry => entry.jobId === key || entry.id === key);
     if (!target) return;
     if (target.jobId) stopped.current.add(target.jobId);
@@ -279,23 +324,32 @@ export function useGenerations({ enabled, notify, onFinished }: GenerationOption
         notify(error instanceof Error ? error.message : String(error), 'error');
       }
     }
+    if (target.jobId) await removeEnded(target.jobId).catch(error => notify(error instanceof Error ? error.message : String(error), 'error'));
   }, [remove, notify]);
 
-  const cancelAll = useCallback(async () => {
+  /**
+   * Stops the songs this window is making. With `everything` it stops every
+   * job of the service: another window's, an agent's, ones sent before this
+   * window was opened.
+   */
+  const cancelAll = useCallback(async (everything = false) => {
     // "without stopping" would send the form again the moment the queue empties
     window.dispatchEvent(new CustomEvent('yue:cancel-all'));
-    const mine = cardsNow.current.flatMap(entry => (entry.jobId && entry.isGenerating ? [entry.jobId] : []));
+    const making = cardsNow.current.filter(entry => entry.isGenerating);
+    const mine = making.flatMap(entry => (entry.jobId ? [entry.jobId] : []));
+    const marks = new Set(making.map(entry => entry.id));
     mine.forEach(id => stopped.current.add(id));
     setCards(prev => prev.filter(entry => !entry.isGenerating));
-    // The service's list, not only this window's: a request whose answer is
-    // still on its way back is on neither list here, and would run to the end.
+    // The service's list: a request whose answer is still on its way back has
+    // no job id here, but the service knows it by this window's mark.
     let listed: YueJob[] = [];
     try {
       listed = await readJson<YueJob[]>('/v1/music/jobs');
     } catch (error) {
       notify(error instanceof Error ? error.message : String(error), 'error');
     }
-    const ids = [...new Set([...mine, ...listed.map(job => job.id)])];
+    const ours = listed.filter(job => everything || (job.client_ref && marks.has(job.client_ref)));
+    const ids = [...new Set([...mine, ...ours.map(job => job.id)])];
     ids.forEach(id => stopped.current.add(id));
     const results = await Promise.allSettled(ids.map(stopJob));
     const refused = results.find((result): result is PromiseRejectedResult => result.status === 'rejected');
@@ -309,7 +363,7 @@ export function useGenerations({ enabled, notify, onFinished }: GenerationOption
     const row = song.madeByJob && madeBy.get(song.madeByJob) === song ? rowOfJob.get(song.madeByJob) : undefined;
     return row ? { ...song, viewKey: row } : song;
   }), [library, madeBy, rowOfJob]);
-  const songs = useMemo(() => (waiting.length ? [...waiting, ...keyed] : keyed), [waiting, keyed]);
+  const songs = useMemo(() => (waiting.length || endedCards.length ? [...waiting, ...endedCards, ...keyed] : keyed), [waiting, endedCards, keyed]);
 
   return {
     songs,
@@ -327,5 +381,6 @@ if (typeof window !== 'undefined') {
   // an agent's job, or one sent before a reload, is read at once
   window.addEventListener('studio:jobs-changed', () => {
     void queryClient.invalidateQueries({ queryKey: activeJobsKey });
+    void queryClient.invalidateQueries({ queryKey: endedJobsKey });
   });
 }

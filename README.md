@@ -60,8 +60,9 @@ Code, save [docs/mcp-skill.md](docs/mcp-skill.md) as `~/.claude/skills/yue2-stud
   saved where you say, in Windows' own Save dialog, and the Files panel shows each save.
 - **A proxy for the whole studio** — HTTP, HTTPS, SOCKS5 or SOCKS4, with a login: model
   downloads, Hugging Face, OpenRouter and updates go through it.
-- **Full songs from a style and lyrics** — up to six minutes, in the languages the model
-  sings. On an RTX 4090 with the Q8_0 set a 3:38 song renders in about 46 seconds.
+- **Full songs from a style and lyrics** — up to ten minutes, in the languages the model
+  sings. In Russian a stress mark (the combining acute U+0301, Alt+0769 on Windows) after a
+  vowel moves the sung stress to it, as Ruach Studio documents. On an RTX 4090 with the Q8_0 set a 3:38 song renders in about 46 seconds.
 - **Read and edit the score** — the model writes its composition in ABC notation first; the
   studio engraves it as sheet music. Edit the notes, tempo or key and create again: the
   composition stays, the performance changes. Or switch to melody-only, or no score at all.
@@ -80,8 +81,7 @@ Code, save [docs/mcp-skill.md](docs/mcp-skill.md) as `~/.claude/skills/yue2-stud
   included, one click to load.
 - **Every engine setting** — all seven sampling knobs (temperature, top-p, top-k,
   repetition penalty and its window, minimum and maximum tokens) for the score and for the
-  audio codes, flow-matching steps, guidance, both seeds, peak normalisation, MP3 or
-  16/24/32-bit WAV. Prompts open and save as JSON or YAML in the engine's own request
+  audio codes, flow-matching steps, guidance, both seeds, lossless FLAC or MP3. Prompts open and save as JSON or YAML in the engine's own request
   format, so they move freely between the studio, the yue2.cpp WebUI and `yue-synth`.
 - **Structured song writing** — build a style from its musical fields and arrange lyrics in editable sections, while keeping the plain text editable. Give the writing assistant a language, a target of 8–32 lines and additional instructions.
 - **Song and render controls** — voice and tempo fields; section, line/stanza and text-case tools; Keep/Words lyric preservation and exact checkpoint tokens; batch score-plan selection and chord mirroring in repeated sections. Edit scores with MIDI grid and octave controls. Transpose generation by −24 to +24 semitones, render vocals only through native HT-Demucs as MP3 or 32-bit WAV, and switch each LoRA on or off with weights from −10 to +10.
@@ -135,15 +135,18 @@ Code, save [docs/mcp-skill.md](docs/mcp-skill.md) as `~/.claude/skills/yue2-stud
 - **Audio processing** — noise reduction, the Spectral Lifter, a vocal naturaliser, your
   own VST3 plugins in a chain, and mastering to a reference track. Compare before and
   after while it plays, then keep the result as a version of the track or throw it away.
-- **MP3 made by the studio** — the engine renders 32-bit float and the studio encodes the
-  MP3 with LAME, so nothing is lost before the encoder.
-- **A library of plain files** — search, playlists, cover art from prompt templates, MP3s
-  exported with title, lyrics and cover in their ID3 tags. Interface in English, Russian,
+- **The sound as the model made it** — the engine renders 32-bit float and the studio encodes
+  it once, changing nothing on the way: lossless 24-bit FLAC by default (libFLAC, the reference
+  encoder), MP3 with LAME when you choose it. Normalisation is a stage under Process, after
+  mastering, never part of generation.
+- **A library of plain files** — search, playlists, cover art from prompt templates, tracks
+  exported with title, lyrics and cover in their own tags (Vorbis comments in a FLAC, ID3 in an
+  MP3). Interface in English, Russian,
   Chinese, Japanese and Korean.
 - **A cover for every track** — a track without one wears a free (CC0) Wikimedia Commons
   photograph that fits the genres, moods and instruments of its style, a pattern in one of 21
   DiceBear styles, or a cover OpenRouter generates for every new track. It is chosen by the
-  track's seed, so it stays the same, a stem wears its song's, and it is written into the MP3,
+  track's seed, so it stays the same, a stem wears its song's, and it is written into the file,
   so players show it after the download.
 - **One picture window** — for a cover, and for the background and centre of a music video:
   Commons photographs by search starting from the scenes a style calls up, clips free of
@@ -155,6 +158,27 @@ Code, save [docs/mcp-skill.md](docs/mcp-skill.md) as `~/.claude/skills/yue2-stud
   message the studio shows.
 - **Likes, sorting and stems in order** — a like is kept with the song for every window and
   agent, every list sorts by date, title or length, and a song's stems fold under it.
+- **A song from a seed** — hum, play or write an opening, turn on "Continue the song from this
+  score", and the model writes the rest of the song on from it in its key and meter, the opening
+  coming back as a hook.
+- **Chord bed** — a score of chords over rests written at once in the tempo, key and meter you set,
+  one section per lyrics tag; the model writes the melody and the arrangement over it and the
+  planning step is skipped.
+- **Chords and sections** — chord variety so the song stops looping one progression, sections that
+  do not open the way the one before did, chords outside the key, and the score held to the
+  lyrics' sections in their order.
+- **Covers that line up** — Match sections to the score retags the lyric blocks by where the source
+  recording sings them; the score view moves the voice an octave down or up, apart from the band,
+  and Instrumental hands the voice's notes to the instrument and keeps the chords.
+- **Extend a song** — Re-render composes on from the track's last frame by 15 seconds to 2 minutes;
+  with a score, each section's words wait until the score reaches it.
+- **AB2 solver** — one network evaluation a step instead of two, about twice as fast at the same
+  steps; midpoint stays the default.
+- **Around every song** — a note of your own on each song, its parameters sent back to the form,
+  shown as JSON or saved to a file; the engine's stage, step and time left on the card while it
+  renders; video export from 1080p to 240p with AAC from 128 to 320 kbps; quitting while a song is
+  made asks first, and a song the studio was closed on starts again; karaoke can recognise words
+  with Parakeet Ultra int8, Moondream's fine-tune of Parakeet.
 
 ## Compose and edit MIDI
 
@@ -165,6 +189,8 @@ In YuE2, the same editor opens ABC scores and applies notes, chords and sections
 ## Screenshots
 
 ![The MIDI editor: chords, sections and notes](docs/screenshots/en-16-midi-editor.png)
+
+![The chord bed: chords over rests in your tempo, key and meter](docs/screenshots/en-17-chord-bed.png)
 
 | | |
 |---|---|
@@ -260,6 +286,26 @@ The main, tested path is an NVIDIA card.
 - "Auto" in a device choice takes the card when its runtime is installed, and the processor
   otherwise. The same table is in the studio, under Settings → Models.
 
+## Anonymous statistics and news
+
+The studio asks the author's server for news at start and every six hours. The request carries no id, so news
+arrive whatever you choose below: new items appear on top of the News page, and with no connection the studio shows
+the news of its release.
+
+The setup screen of the first start has a checkbox **Send anonymous usage statistics**, checked by default. The same
+switch is in Settings → Anonymous statistics, next to **What is sent** (the exact report of today) and **New install
+id**. While it is checked, the studio sends once a day:
+
+- a random install id made on this computer, not tied to the hardware or an account; unchecking the box deletes it;
+- the studio and its version, the OS name and version, the window language;
+- the graphics card as vendor, a video memory bucket (up to 8, 12, 16, 24+ GB) and the backend (CUDA, Vulkan or
+  processor);
+- how many songs were made, failed or were cancelled that day, and which model set made them.
+
+Never: lyrics, prompts, audio, file names or paths, anything personal. The server keeps the country Cloudflare
+reports for the connection, not the IP address. `DO_NOT_TRACK=1` or `STUDIO_TELEMETRY=0` in the environment turns
+statistics off entirely: no id exists and nothing is counted.
+
 ## Quick start
 
 1. **Install** — run `YuE2.Studio_x.y.z_x64-setup.exe` from the
@@ -313,25 +359,28 @@ without it the studio generates, but cannot transcribe recordings for covers.
 
 Every set also carries the **decoder companion**, 134 MB: Mothersuperior's decoder adapter,
 published as the pair of the tokenizer head the LoRA trainer turns songs into codes with. The
-engine merges it under every render and the trainer keeps it frozen under every LoRA, so a LoRA
-is trained on the decoder it is heard through. In HOT-Step's round trip of six real songs the
+trainer keeps it frozen under every LoRA, so a LoRA is trained on the decoder it is heard
+through. A render merges it on **Auto** (Advanced - output) only under a LoRA trained in the
+studio; otherwise the song is decoded by the YuE2 checkpoint alone, as its authors, audio.cpp and
+ComfyUI render it. On and Off force it either way. In HOT-Step's round trip of six real songs the
 decoder without it narrowed the stereo (left/right correlation 0.78–0.92 against the
 originals' ~0.65), with it 0.57–0.72.
 
 | Your GPU | Set | Download |
 | --- | --- | --- |
-| 12 GB VRAM and above | Full native — BF16 backbone, original weights | 9.8 GB |
+| 12 GB VRAM and above | Full native — BF16 backbone, original weights | 9.9 GB |
 | 8 GB and above | Quality — Q8_0 backbone, near lossless | 5.1 GB |
-| 7 GB and above | Balanced — Q6_K backbone | 4.1 GB |
-| 5.5 GB and above | Light — Q5_K_M backbone | 3.8 GB |
+| 7 GB and above | Balanced — Q6_K backbone | 4.3 GB |
+| 5.5 GB and above | Light — Q5_K_M backbone | 4.0 GB |
 
-Sizes include SheetSage2 at the matching quantisation and the decoder companion. The studio
+Sizes include SheetSage2 with the MERT-v2 encoder it reads (Q8_0, F32 in the native set) and the
+decoder companion. The studio
 detects your card and preselects the set, but the download is always your decision; the model
 manager also builds a custom mix role by role. Q5_K_M is the lightest quantisation published
 for YuE2.
 
 The GGUF files come from [Serveurperso/YuE2-GGUF](https://huggingface.co/Serveurperso/YuE2-GGUF),
-pinned to revision `64b030e`, the decoder companion from
+pinned to revision `e630f2b`, the decoder companion from
 [Mothersuperior/yue2-mothersuperior-realaudio-tokenizer-v4](https://huggingface.co/Mothersuperior/yue2-mothersuperior-realaudio-tokenizer-v4),
 pinned to revision `e2e63d8`; all are checked by size and SHA-256. They are written to, and
 can be dropped into by hand at:
@@ -348,15 +397,15 @@ A file placed by hand with the exact catalogue name is recognised and never down
 
 | File | Role | Size |
 | --- | --- | --- |
-| [`YuE2-3B-BF16.gguf`](https://huggingface.co/Serveurperso/YuE2-GGUF/resolve/64b030e3deb6e8150d2b7c0db641ef5a17eca8a3/YuE2-3B-BF16.gguf) | backbone | 6.67 GB |
-| [`YuE2-3B-Q8_0.gguf`](https://huggingface.co/Serveurperso/YuE2-GGUF/resolve/64b030e3deb6e8150d2b7c0db641ef5a17eca8a3/YuE2-3B-Q8_0.gguf) | backbone | 3.55 GB |
-| [`YuE2-3B-Q6_K.gguf`](https://huggingface.co/Serveurperso/YuE2-GGUF/resolve/64b030e3deb6e8150d2b7c0db641ef5a17eca8a3/YuE2-3B-Q6_K.gguf) | backbone | 2.74 GB |
-| [`YuE2-3B-Q5_K_M.gguf`](https://huggingface.co/Serveurperso/YuE2-GGUF/resolve/64b030e3deb6e8150d2b7c0db641ef5a17eca8a3/YuE2-3B-Q5_K_M.gguf) | backbone | 2.44 GB |
-| [`YuE2-Vae-F32.gguf`](https://huggingface.co/Serveurperso/YuE2-GGUF/resolve/64b030e3deb6e8150d2b7c0db641ef5a17eca8a3/YuE2-Vae-F32.gguf) | VAE, every set | 506 MB |
-| [`SheetSage2-F32.gguf`](https://huggingface.co/Serveurperso/YuE2-GGUF/resolve/64b030e3deb6e8150d2b7c0db641ef5a17eca8a3/SheetSage2-F32.gguf) | transcriber | 2.52 GB |
-| [`SheetSage2-Q8_0.gguf`](https://huggingface.co/Serveurperso/YuE2-GGUF/resolve/64b030e3deb6e8150d2b7c0db641ef5a17eca8a3/SheetSage2-Q8_0.gguf) | transcriber | 913 MB |
-| [`SheetSage2-Q6_K.gguf`](https://huggingface.co/Serveurperso/YuE2-GGUF/resolve/64b030e3deb6e8150d2b7c0db641ef5a17eca8a3/SheetSage2-Q6_K.gguf) | transcriber | 776 MB |
-| [`SheetSage2-Q5_K_M.gguf`](https://huggingface.co/Serveurperso/YuE2-GGUF/resolve/64b030e3deb6e8150d2b7c0db641ef5a17eca8a3/SheetSage2-Q5_K_M.gguf) | transcriber | 703 MB |
+| [`YuE2-3B-BF16.gguf`](https://huggingface.co/Serveurperso/YuE2-GGUF/resolve/e630f2b8f6aedf8254c3186438633c1b5eeaf80a/YuE2-3B-BF16.gguf) | backbone | 6.67 GB |
+| [`YuE2-3B-Q8_0.gguf`](https://huggingface.co/Serveurperso/YuE2-GGUF/resolve/e630f2b8f6aedf8254c3186438633c1b5eeaf80a/YuE2-3B-Q8_0.gguf) | backbone | 3.55 GB |
+| [`YuE2-3B-Q6_K.gguf`](https://huggingface.co/Serveurperso/YuE2-GGUF/resolve/e630f2b8f6aedf8254c3186438633c1b5eeaf80a/YuE2-3B-Q6_K.gguf) | backbone | 2.74 GB |
+| [`YuE2-3B-Q5_K_M.gguf`](https://huggingface.co/Serveurperso/YuE2-GGUF/resolve/e630f2b8f6aedf8254c3186438633c1b5eeaf80a/YuE2-3B-Q5_K_M.gguf) | backbone | 2.44 GB |
+| [`YuE2-Vae-F32.gguf`](https://huggingface.co/Serveurperso/YuE2-GGUF/resolve/e630f2b8f6aedf8254c3186438633c1b5eeaf80a/YuE2-Vae-F32.gguf) | VAE, every set | 506 MB |
+| [`SheetSage2-F32.gguf`](https://huggingface.co/Serveurperso/YuE2-GGUF/resolve/e630f2b8f6aedf8254c3186438633c1b5eeaf80a/SheetSage2-F32.gguf) | transcriber | 218 MB |
+| [`SheetSage2-Q8_0.gguf`](https://huggingface.co/Serveurperso/YuE2-GGUF/resolve/e630f2b8f6aedf8254c3186438633c1b5eeaf80a/SheetSage2-Q8_0.gguf) | transcriber | 101 MB |
+| [`MERT-v2-FullSong-F32.gguf`](https://huggingface.co/Serveurperso/YuE2-GGUF/resolve/e630f2b8f6aedf8254c3186438633c1b5eeaf80a/MERT-v2-FullSong-F32.gguf) | the transcriber's encoder, beside SheetSage2-F32 | 2.36 GB |
+| [`MERT-v2-FullSong-Q8_0.gguf`](https://huggingface.co/Serveurperso/YuE2-GGUF/resolve/e630f2b8f6aedf8254c3186438633c1b5eeaf80a/MERT-v2-FullSong-Q8_0.gguf) | the transcriber's encoder, beside SheetSage2-Q8_0 | 860 MB |
 | [`nar_lora_joint_v9.safetensors`](https://huggingface.co/Mothersuperior/yue2-mothersuperior-realaudio-tokenizer-v4/resolve/e2e63d859f3af879baf1b4d4e9f22d1eeda6fde5/nar_lora_joint_v9.safetensors) | decoder companion, every set | 134 MB |
 
 </details>
@@ -493,6 +542,20 @@ never part of a release.
 yue2.cpp also builds for Linux and macOS (Metal); the studio's release pipeline ships the
 Windows build with CUDA, Vulkan and CPU backends for now.
 
+On macOS there is no packaged engine, so build it once from source (needs Xcode command line
+tools and CMake) and again whenever `engines/yue2-cpp-source.json` moves to a new commit:
+
+```bash
+scripts/build-yue-runtime.sh ~/yue2-engine          # builds the pinned commit with Metal
+YUE_ENGINE_ROOT=~/yue2-engine cargo run -p music-server
+```
+
+Audio to MIDI is Windows-only as a download; on macOS `scripts/build-midi-runtime.sh <dir>` builds HOT-Step's `ace-midi` with Metal (point `YUE_MIDI_BIN` at the resulting `music-midi`; the dmg bundles it).
+
+`YUE_ENGINE_ROOT` (or `YUE_ENGINE_BIN`, the path of `yue-server` itself) tells the studio where
+the engine is; for the desktop app set it in the environment before launching it. `Auto` then
+lets the engine choose Metal and falls back to the CPU.
+
 ## Other Projects by [@timoncool](https://github.com/timoncool)
 
 | Project | Description |
@@ -517,7 +580,7 @@ Windows build with CUDA, Vulkan and CPU backends for now.
 - [scragnog](https://github.com/scragnog) for [HOT-Step-CPP](https://github.com/scragnog/HOT-Step-CPP): the LoRA trainer the studio runs (its native joint AR/NAR training for YuE2), the training weights in [scragnog/YuE2-GGUF](https://huggingface.co/scragnog/YuE2-GGUF), the VST3 host, and the noise reduction, Spectral Lifter and mastering designs the studio's audio processing is ported from.
 - [sergree](https://github.com/sergree) for [matchering](https://github.com/sergree/matchering), the reference mastering algorithm, and [jeankassio](https://github.com/jeankassio) for the vocal naturalizer in [ComfyUI_MusicTools](https://github.com/jeankassio/ComfyUI_MusicTools).
 - The authors of the LoRA in the catalogue, each credited and linked on its card: [Mothersuperior](https://huggingface.co/Mothersuperior), [monsterovich](https://huggingface.co/monsterovich), [atomtanstudio](https://huggingface.co/atomtanstudio), [HaileyStorm](https://huggingface.co/HaileyStorm) and [ntc-ai](https://huggingface.co/ntc-ai).
-- The [LAME](https://lame.sourceforge.io) project for the MP3 encoder.
+- The [LAME](https://lame.sourceforge.io) project for the MP3 encoder, [Xiph.Org](https://xiph.org/flac/) for libFLAC, the FLAC encoder, and [Serial-ATA](https://github.com/Serial-ATA/lofty-rs) for lofty, which writes the tags.
 - [crmne](https://github.com/crmne) for [Spotifast](https://github.com/crmne/spotifast) (MIT): the equalizer solves its band gains as its `eq.rs` does.
 - [Jordan Eldredge](https://github.com/captbaritone) and the Webamp team for [Webamp](https://github.com/captbaritone/webamp) (MIT), which the Winamp mode runs, and for the [Winamp Skin Museum](https://skins.webamp.org). Winamp and its base skin are Nullsoft's.
 - [Jordan Berg](https://github.com/jberg) for [Butterchurn](https://github.com/jberg/butterchurn) and [butterchurn-presets](https://github.com/jberg/butterchurn-presets) (MIT), MilkDrop in the browser. MilkDrop itself is Ryan Geiss's, and each preset is its author's, named in its title.
@@ -527,6 +590,8 @@ Windows build with CUDA, Vulkan and CPU backends for now.
 - [Wikimedia Commons](https://commons.wikimedia.org) and the photographers and filmmakers who give their work to it under CC0 or into the public domain, many of them through [Unsplash](https://unsplash.com): the pictures and clips a track and its video can wear. A chosen picture keeps a link to its page.
 - [Florian Körner](https://github.com/FlorianKoerner) for [DiceBear](https://www.dicebear.com) (MIT) and the authors of its CC0 styles, the patterns a track without a cover wears, and the [resvg](https://github.com/linebender/resvg) authors, whose renderer writes them into the track as PNG.
 - [MRafStudio](https://github.com/MRafStudio) for the ideas of [pull request #34](https://github.com/timoncool/YuE2-Studio/pull/34): the Activity log, sorting, likes kept in the library and stems under their song.
+- [wangsoft](https://github.com/wangsoft) for the Hugging Face mirror setting from wangsoft's fork, and [SkySlider](https://github.com/SkySlider) for the Linux pieces from SkySlider's fork: adapter detection and the parent-death signal.
+- [stalexxx](https://github.com/stalexxx) for [pull request #51](https://github.com/timoncool/YuE2-Studio/pull/51): the service on macOS with Metal, a question before quitting during a song, and a stop that is kept at once.
 - [pytraveler](https://github.com/pytraveler) for [YuE2-ComfyUI](https://github.com/pytraveler/YuE2-ComfyUI) (Apache-2.0): the reader and writer of YuE2's score, the score as a MIDI file and a MIDI file read back into a score are ported from it.
 - [ryohey](https://github.com/ryohey) for [signal](https://github.com/ryohey/signal) (MIT), the MIDI editor, and Milton Paredes for the A320U SoundFonts it plays (GPL-2.0).
 

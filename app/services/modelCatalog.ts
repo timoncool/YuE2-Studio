@@ -16,10 +16,11 @@ export const COMPONENT_KINDS = [...REQUIRED_KINDS, ...OPTIONAL_KINDS] as const;
 /** In every set and never a choice: the decoder companion every render merges. */
 export const ALWAYS_KINDS = ['companion'] as const;
 
-const labels: Record<(typeof COMPONENT_KINDS)[number] | (typeof ALWAYS_KINDS)[number], string> = {
+const labels: Record<(typeof COMPONENT_KINDS)[number] | (typeof ALWAYS_KINDS)[number] | 'transcriber-base', string> = {
   backbone: 'Backbone',
   vae: 'VAE',
   transcriber: 'SheetSage2',
+  'transcriber-base': 'MERT-v2',
   companion: 'Decoder companion',
 };
 
@@ -50,6 +51,10 @@ export const completeCustomComponentIds = (components: ModelComponent[], selecte
     if (!component || component.kind !== kind) return null;
     ids.push(id);
   }
+  const head = components.find((component) => component.id === selectedByKind.transcriber);
+  // the transcriber head reads MERT from the file of its own precision beside it
+  const base = head && components.find((component) => component.kind === 'transcriber-base' && componentPrecision(component) === componentPrecision(head));
+  if (base) ids.push(base.id);
   for (const component of components) {
     if ((ALWAYS_KINDS as readonly string[]).includes(component.kind)) ids.push(component.id);
   }
