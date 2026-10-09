@@ -103,6 +103,20 @@ export interface YueSampling {
   max_tokens?: number;
 }
 
+/** Chord variety and section order of the score the model plans; every control is off at zero. */
+export interface YueHarmony {
+  identity?: 'root' | 'spelling';
+  strength?: number;
+  window?: number;
+  hold_limit?: number;
+  outside_bonus?: number;
+  outside_limit?: number;
+  section_strength?: number;
+  section_open?: number;
+  /** Hold the plan to the lyrics' sections, in order. */
+  follow_lyrics?: boolean;
+}
+
 export type YueCot = 'full' | 'melody' | 'off';
 export type YueOutputFormat = 'flac' | 'mp3';
 
@@ -138,6 +152,7 @@ export interface YueRequest {
   semantic_tokens?: string;
   abc_sampling?: YueSampling;
   semantic_sampling?: YueSampling;
+  harmony?: YueHarmony;
   output_format?: YueOutputFormat;
   mp3_bitrate?: number;
   /** Library title only, never sent to the engine. */

@@ -7,6 +7,11 @@ Windows build.
 
 ### Added
 
+- **Chords and sections** under Advanced, for the score the model writes (Yeufonic's idea): chord
+  variety lowers the chords heard among the recent changes so the song stops looping one
+  progression, a section can be kept from opening the way the one before did, chords outside
+  the key can be favoured, and the score can be held to the lyrics' sections in their order.
+  Off by default; agents set it with `harmony` on song_create and score_compose.
 - **Extend a song.** Re-render takes an extension of 15 seconds to 2 minutes: the track keeps
   its own semantic tokens to the last frame and the model composes on from there.
 - **Words follow the score** (HOT-Step's lyric schedule): with a supplied score each section's

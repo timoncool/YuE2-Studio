@@ -89,6 +89,10 @@ connected and the address to paste.
   puts the sung stress on it where the model would stress the word otherwise.
 - **abc**: the score the model sings from, in YuE2's dialect (`writing_guide` topic
   `score`). `score_compose` writes one to start from.
+- **harmony** (song_create, score_compose): when the model writes the score and loops one
+  progression, `strength` about 6-10 breaks the loop, `follow_lyrics: true` holds the score to
+  the lyrics' sections in order, `section_strength` gives each section its own opening and
+  `outside_bonus` brings in chords outside the key. Ignored with a given `abc`.
 - `writing_examples` returns the official M-A-P requests closest to your idea - match
   their shape and density.
 

@@ -6,7 +6,7 @@ import {
   ListChecks, Music2, Pause, Piano, Play, RotateCcw, Save, Sparkles, Square, Tags, Upload, Wand2, Settings2, X,
 } from 'lucide-react';
 import { AudioWaveform } from './AudioWaveform';
-import type { Playlist, Song, YueCot, YueOutputFormat, YueRequest, YueSampling } from '../types';
+import type { Playlist, Song, YueCot, YueHarmony, YueOutputFormat, YueRequest, YueSampling } from '../types';
 import { useI18n } from '../context/I18nContext';
 import { saveFile } from '../services/saveFile';
 import { useBridgeCommand } from '../services/mcpBridge';
@@ -144,6 +144,33 @@ const samplingText = (value: unknown): SamplingText => {
   if (value && typeof value === 'object') {
     for (const key of SAMPLING_KEYS) text[key] = asText((value as Record<string, unknown>)[key]);
   }
+  return text;
+};
+
+type HarmonyText = { identity: '' | 'root' | 'spelling'; strength: string; window: string; hold_limit: string; outside_bonus: string; section_strength: string; follow_lyrics: boolean };
+const HARMONY_NUMBERS = ['strength', 'window', 'hold_limit', 'outside_bonus', 'section_strength'] as const;
+const emptyHarmony = (): HarmonyText => ({ identity: '', strength: '', window: '', hold_limit: '', outside_bonus: '', section_strength: '', follow_lyrics: false });
+
+/** The engine's harmony field, or nothing when every control is at rest. */
+const harmonyFrom = (text: HarmonyText): YueHarmony | undefined => {
+  const harmony: YueHarmony = {};
+  for (const key of HARMONY_NUMBERS) {
+    const value = numberOrUndefined(text[key]);
+    if (value !== undefined) harmony[key] = value;
+  }
+  if (text.identity) harmony.identity = text.identity;
+  if (text.follow_lyrics) harmony.follow_lyrics = true;
+  const active = (harmony.strength ?? 0) > 0 || (harmony.outside_bonus ?? 0) > 0 || (harmony.section_strength ?? 0) > 0 || harmony.follow_lyrics === true;
+  return active ? harmony : undefined;
+};
+
+const harmonyText = (value: unknown): HarmonyText => {
+  const text = emptyHarmony();
+  if (!value || typeof value !== 'object') return text;
+  const stored = value as Record<string, unknown>;
+  for (const key of HARMONY_NUMBERS) text[key] = asText(stored[key]);
+  if (stored.identity === 'root' || stored.identity === 'spelling') text.identity = stored.identity;
+  text.follow_lyrics = stored.follow_lyrics === true;
   return text;
 };
 
@@ -312,6 +339,8 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
   const [takeChoiceOpen, setTakeChoiceOpen] = useState(false);
   const [abcSampling, setAbcSampling] = useState<SamplingText>(emptySampling);
   const [semanticSampling, setSemanticSampling] = useState<SamplingText>(emptySampling);
+  const [harmony, setHarmony] = useState<HarmonyText>(emptyHarmony);
+  const harmonyField = (key: keyof HarmonyText) => (value: string) => setHarmony(current => ({ ...current, [key]: key === 'follow_lyrics' ? value === 'true' : value }));
   const [transpose, setTranspose] = useState('0');
   const [vocalsOnly, setVocalsOnly] = useState(false);
   const [lyricTiming, setLyricTiming] = useState(true);
@@ -465,6 +494,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
     setSemanticTokens(typeof request.semantic_tokens === 'string' ? request.semantic_tokens : '');
     setAbcSampling(samplingText(request.abc_sampling));
     setSemanticSampling(samplingText(request.semantic_sampling));
+    setHarmony(harmonyText(request.harmony));
     setTranspose(asText(request.transpose) || '0');
     setVocalsOnly(request.vocals_only === true);
     setLyricTiming(request.lyric_timing !== false);
@@ -548,7 +578,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
   const resetParameters = () => {
     chooseDuration(String(DEFAULT_DURATION_SECONDS)); setLmBatch(''); setSynthBatch(''); setSteps(''); setCfgScale('');
     setRandomizeSeed(true); setLmSeed(''); setSeed(''); setSemanticTokens('');
-    setAbcSampling(emptySampling()); setSemanticSampling(emptySampling());
+    setAbcSampling(emptySampling()); setSemanticSampling(emptySampling()); setHarmony(emptyHarmony());
     setMp3Bitrate('320'); setFormat('flac');
     setTranspose('0'); setVocalsOnly(false); setLyricTiming(true); setRealaudio('auto');
   };
@@ -598,6 +628,8 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
     if (abcPreset) request.abc_sampling = abcPreset;
     const semanticPreset = samplingFrom(semanticSampling);
     if (semanticPreset) request.semantic_sampling = semanticPreset;
+    const harmonyValue = harmonyFrom(harmony);
+    if (harmonyValue) request.harmony = harmonyValue;
     const bitrate = numberOrUndefined(mp3Bitrate);
     if (bitrate !== undefined && format === 'mp3') request.mp3_bitrate = bitrate;
     if (name.trim()) request.title = name.trim();
@@ -677,6 +709,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
       cot: effectiveCot,
       lmSeed: pinned !== undefined && pinned >= 0 ? pinned : undefined,
       abcSampling: samplingFrom(abcSampling),
+      harmony: harmonyFrom(harmony),
     }, signal);
   };
 
@@ -690,7 +723,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
     composeRun.current = controller;
     try {
       const pinned = randomizeSeed ? undefined : numberOrUndefined(lmSeed);
-      const choices = await composePlans({ style: finishedStyle(style), lyrics: lyrics.replace(/\r\n?/g, '\n').trim(), cot: effectiveCot, lmSeed: pinned, abcSampling: samplingFrom(abcSampling), count: Math.max(1, Math.min(Number(planCount), maxBatch, 9)) }, controller.signal);
+      const choices = await composePlans({ style: finishedStyle(style), lyrics: lyrics.replace(/\r\n?/g, '\n').trim(), cot: effectiveCot, lmSeed: pinned, abcSampling: samplingFrom(abcSampling), harmony: harmonyFrom(harmony), count: Math.max(1, Math.min(Number(planCount), maxBatch, 9)) }, controller.signal);
       setPlans(choices); setSelectedPlan(0);
       setAbc(choices[0].abc);
       setSemanticTokens('');
@@ -921,6 +954,13 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
     transpose: [transpose, setTranspose],
     vocals_only: [vocalsOnly, value => setVocalsOnly(value === 'true')],
     lyric_timing: [lyricTiming, value => setLyricTiming(value !== 'false')],
+    chord_strength: [harmony.strength, harmonyField('strength')],
+    chord_identity: [harmony.identity, harmonyField('identity')],
+    chord_window: [harmony.window, harmonyField('window')],
+    chord_hold_limit: [harmony.hold_limit, harmonyField('hold_limit')],
+    outside_bonus: [harmony.outside_bonus, harmonyField('outside_bonus')],
+    section_strength: [harmony.section_strength, harmonyField('section_strength')],
+    follow_sections: [harmony.follow_lyrics, harmonyField('follow_lyrics')],
     companion_scale: [realaudio === 'auto' ? '' : realaudio === 'on' ? '1' : '0', value => setRealaudio(value === '' ? 'auto' : Number(value) !== 0 ? 'on' : 'off')],
   };
   useBridgeCommand('create_get', () => ({
@@ -1585,6 +1625,36 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
                   </div>
                   <div className="mb-3"><Switch checked={lyricTiming} disabled={!abc.trim() || effectiveCot === 'off' || Boolean(semanticTokens.trim()) || (cfgScale.trim() !== '' && Number(cfgScale) !== 1)} onChange={setLyricTiming} label={engineParityLabels[language].lyricTiming} hint={engineParityLabels[language].lyricTimingHint} /></div>
                   <SamplingGrid value={abcSampling} defaults={defaults.abc_sampling} onChange={setAbcSampling} t={t as never} />
+                  <div className={`mt-4 space-y-3 border-t border-zinc-100 pt-3 dark:border-white/5 ${effectiveCot === 'off' ? 'opacity-50' : ''}`}>
+                    <div>
+                      <span className="text-[11px] font-bold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">{tt('harmonyTitle')}</span>
+                      <p className="mt-0.5 text-[11px] leading-4 text-zinc-500">{tt('harmonyHint')}</p>
+                    </div>
+                    <SliderRow label={tt('chordVariety')} value={harmony.strength} fallback={0} min={0} max={16} step={0.5} disabled={effectiveCot === 'off'} onChange={harmonyField('strength')} />
+                    {(numberOrUndefined(harmony.strength) ?? 0) > 0 && (
+                      <>
+                        <Field label={tt('chordIdentity')} hint={tt(harmony.identity === 'spelling' ? 'chordIdentitySpellingHint' : 'chordIdentityRootHint')}>
+                          <select value={harmony.identity || 'root'} onChange={event => harmonyField('identity')(event.target.value)} className={CONTROL}>
+                            <option value="root">{tt('chordIdentityRoot')}</option>
+                            <option value="spelling">{tt('chordIdentitySpelling')}</option>
+                          </select>
+                        </Field>
+                        <div className="grid grid-cols-2 gap-2">
+                          <SliderRow label={tt('chordWindow')} value={harmony.window} fallback={16} min={4} max={64} step={1} onChange={harmonyField('window')} />
+                          <SliderRow label={tt('chordHold')} value={harmony.hold_limit} fallback={8} min={0} max={16} step={1} format={value => (value === 0 ? '∞' : String(value))} onChange={harmonyField('hold_limit')} />
+                        </div>
+                      </>
+                    )}
+                    <div>
+                      <SliderRow label={tt('outsideKey')} value={harmony.outside_bonus} fallback={0} min={0} max={8} step={0.5} disabled={effectiveCot === 'off' || harmony.identity === 'spelling'} onChange={harmonyField('outside_bonus')} />
+                      <p className="mt-1 text-[11px] leading-4 text-zinc-500">{tt('outsideKeyHint')}</p>
+                    </div>
+                    <div>
+                      <SliderRow label={tt('sectionVariety')} value={harmony.section_strength} fallback={0} min={0} max={16} step={0.5} disabled={effectiveCot === 'off'} onChange={harmonyField('section_strength')} />
+                      <p className="mt-1 text-[11px] leading-4 text-zinc-500">{tt('sectionVarietyHint')}</p>
+                    </div>
+                    <Switch checked={harmony.follow_lyrics} disabled={effectiveCot === 'off'} onChange={value => harmonyField('follow_lyrics')(String(value))} label={tt('followSections')} hint={tt('followSectionsHint')} />
+                  </div>
                 </Stage>
 
                 <div className="border-t border-zinc-100 pt-4 dark:border-white/5">

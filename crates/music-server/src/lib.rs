@@ -44,6 +44,7 @@ mod library;
 mod engine_result;
 mod progress;
 mod engine_log;
+mod harmony;
 
 use std::{collections::HashMap, env, fs, net::SocketAddr, path::PathBuf, sync::Arc};
 use anyhow::Context;
@@ -247,6 +248,9 @@ struct CreateMusicJobRequest {
     semantic_tokens: Option<String>,
     abc_sampling: Option<SamplingPreset>,
     semantic_sampling: Option<SamplingPreset>,
+    /// Chord variety and section order of the score the model plans.
+    #[serde(default)]
+    harmony: Option<harmony::Harmony>,
     output_format: Option<String>,
     mp3_bitrate: Option<u32>,
     /// Library title only, never sent to the engine.
@@ -7717,6 +7721,8 @@ struct ComposeScoreRequest {
     #[serde(default)]
     abc_sampling: Option<SamplingPreset>,
     #[serde(default)]
+    harmony: Option<harmony::Harmony>,
+    #[serde(default)]
     lm_batch_size: Option<u32>,
 }
 
@@ -7750,6 +7756,9 @@ fn compose_request_from(request: &ComposeScoreRequest) -> Result<Value, String> 
     if let Some(sampling) = &request.abc_sampling {
         sampling.validate("abc_sampling")?;
         body["abc_sampling"] = serde_json::to_value(sampling).map_err(|error| error.to_string())?;
+    }
+    if let Some(harmony) = request.harmony.as_ref().filter(|harmony| harmony.active()) {
+        body["harmony"] = harmony.engine_field(&request.lyrics)?;
     }
     Ok(body)
 }
@@ -8227,6 +8236,12 @@ fn yue_request_from(request: &CreateMusicJobRequest, max_batch: u32) -> Result<V
                 body["abc_sampling"] = serde_json::json!({});
             }
             body["abc_sampling"]["max_tokens"] = Value::from(tokens);
+        }
+    }
+    if let Some(harmony) = request.harmony.as_ref().filter(|harmony| harmony.active()) {
+        harmony.validate()?;
+        if writes_score {
+            body["harmony"] = harmony.engine_field(&request.lyrics)?;
         }
     }
     if !request.adapters.is_empty() {
@@ -8853,7 +8868,7 @@ mod tests {
 
     #[test]
     fn a_composition_runs_the_planning_stage_and_next_to_nothing_else() {
-        let request = ComposeScoreRequest { style: "folk rock".into(), lyrics: "[Verse]\r\nline".into(), cot: Some("melody".into()), lm_seed: Some(7), abc_sampling: None, lm_batch_size: None };
+        let request = ComposeScoreRequest { style: "folk rock".into(), lyrics: "[Verse]\r\nline".into(), cot: Some("melody".into()), lm_seed: Some(7), abc_sampling: None, harmony: None, lm_batch_size: None };
         let body = compose_request_from(&request).unwrap();
         assert_eq!(body["cot"], "melody");
         assert_eq!(body["duration"], 1.0);
@@ -8866,9 +8881,9 @@ mod tests {
 
     #[test]
     fn a_composition_needs_a_mode_that_writes_a_score_and_a_prompt() {
-        let off = ComposeScoreRequest { style: "pop".into(), lyrics: String::new(), cot: Some("off".into()), lm_seed: None, abc_sampling: None, lm_batch_size: None };
+        let off = ComposeScoreRequest { style: "pop".into(), lyrics: String::new(), cot: Some("off".into()), lm_seed: None, abc_sampling: None, harmony: None, lm_batch_size: None };
         assert!(compose_request_from(&off).is_err());
-        let empty = ComposeScoreRequest { style: " ".into(), lyrics: String::new(), cot: None, lm_seed: None, abc_sampling: None, lm_batch_size: None };
+        let empty = ComposeScoreRequest { style: " ".into(), lyrics: String::new(), cot: None, lm_seed: None, abc_sampling: None, harmony: None, lm_batch_size: None };
         assert!(compose_request_from(&empty).is_err());
     }
 
