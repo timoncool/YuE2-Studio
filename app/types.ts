@@ -153,6 +153,8 @@ export interface YueRequest {
   abc_sampling?: YueSampling;
   semantic_sampling?: YueSampling;
   harmony?: YueHarmony;
+  /** abc is only the opening: the model writes the rest of the song on from it. */
+  abc_continue?: boolean;
   output_format?: YueOutputFormat;
   mp3_bitrate?: number;
   /** Library title only, never sent to the engine. */

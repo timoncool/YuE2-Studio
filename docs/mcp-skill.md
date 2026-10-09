@@ -89,6 +89,9 @@ connected and the address to paste.
   puts the sung stress on it where the model would stress the word otherwise.
 - **abc**: the score the model sings from, in YuE2's dialect (`writing_guide` topic
   `score`). `score_compose` writes one to start from.
+- **abc_continue** (song_create; `abc` on score_compose): the abc is only an opening - a hum
+  from score_transcribe, a melody from the MIDI editor - and the model writes the rest of the
+  song on from it.
 - **score_chord_bed**: a score at once in a tempo, key and meter - chords over rests, one
   section per lyrics tag - for a song that keeps that tempo and key and skips the planning;
   pass its `abc` to song_create.

@@ -7,6 +7,10 @@ Windows build.
 
 ### Added
 
+- **A song from a seed** (Mothersuperior's hum-to-song, its first part): with "Continue the song from
+  this score" the score is only an opening - hummed and transcribed, played on the keyboard or
+  written - and the model writes the rest of the song on from it in its key and meter, the opening
+  coming back as a hook; silent bars at its end are dropped. Agents set `abc_continue`.
 - **Chord bed** beside Compose the score (gary4juce's idea): a score of chords over rests written at
   once in the tempo, key and meter you set, one section per lyrics tag, verses, choruses and a bridge
   each on a common progression of their own; the model writes the melody and the arrangement over

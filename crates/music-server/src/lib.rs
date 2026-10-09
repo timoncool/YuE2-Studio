@@ -251,6 +251,9 @@ struct CreateMusicJobRequest {
     /// Chord variety and section order of the score the model plans.
     #[serde(default)]
     harmony: Option<harmony::Harmony>,
+    /// `abc` is the opening of a score, and the model writes the rest of the song on from it.
+    #[serde(default)]
+    abc_continue: bool,
     output_format: Option<String>,
     mp3_bitrate: Option<u32>,
     /// Library title only, never sent to the engine.
@@ -6957,8 +6960,9 @@ async fn submit_music_job(state: AppState, mut request: CreateMusicJobRequest, a
     if request.companion_scale.is_none() {
         body["companion_scale"] = Value::from(companion_default(&state.adapters, &request));
     }
-    let laid = laid_out(&mut body, request.duration_seconds.is_none());
-    if request.lyric_timing != Some(false) {
+    // an opening is not the song: its words are laid and timed by the plan written on from it
+    let laid = if request.abc_continue { None } else { laid_out(&mut body, request.duration_seconds.is_none()) };
+    if request.lyric_timing != Some(false) && !request.abc_continue {
         lyric_schedule(&mut body);
     }
     let derived = match request.cover_of.clone() {
@@ -7723,6 +7727,9 @@ struct ComposeScoreRequest {
     abc_sampling: Option<SamplingPreset>,
     #[serde(default)]
     harmony: Option<harmony::Harmony>,
+    /// The opening of a score the plan goes on from.
+    #[serde(default)]
+    abc: Option<String>,
     #[serde(default)]
     lm_batch_size: Option<u32>,
 }
@@ -7760,6 +7767,10 @@ fn compose_request_from(request: &ComposeScoreRequest) -> Result<Value, String> 
     }
     if let Some(harmony) = request.harmony.as_ref().filter(|harmony| harmony.active()) {
         body["harmony"] = harmony.engine_field(&request.lyrics)?;
+    }
+    if let Some(opening) = request.abc.as_deref().map(|text| score::edits::read(text).score).filter(|text| !text.trim().is_empty()) {
+        body["abc"] = Value::String(score::opening::trimmed(&opening));
+        body["abc_continue"] = Value::Bool(true);
     }
     Ok(body)
 }
@@ -8195,9 +8206,17 @@ fn yue_request_from(request: &CreateMusicJobRequest, max_batch: u32) -> Result<V
     if step != 0 && (semantic_tokens.is_some() || request.cot.as_deref() == Some("off")) {
         return Err("transpose needs a score sung with full or melody mode, without an existing semantic performance".into());
     }
+    if request.abc_continue && (request.abc.as_deref().is_none_or(|text| text.trim().is_empty()) || request.cot.as_deref() == Some("off") || semantic_tokens.is_some()) {
+        return Err("continuing a score needs its opening, in full or melody mode, without an existing semantic performance".into());
+    }
     if let Some(abc) = request.abc.as_deref().map(|text| score::edits::read(text).score).filter(|value| !value.is_empty()) {
         let moved = score::transpose::move_score(&abc, step)?;
-        body["abc"] = Value::String(format!("{moved}\n"));
+        if request.abc_continue {
+            body["abc"] = Value::String(score::opening::trimmed(&moved));
+            body["abc_continue"] = Value::Bool(true);
+        } else {
+            body["abc"] = Value::String(format!("{moved}\n"));
+        }
     } else if step != 0 {
         return Err("compose or load a score before transposing it".into());
     }
@@ -8229,7 +8248,7 @@ fn yue_request_from(request: &CreateMusicJobRequest, max_batch: u32) -> Result<V
         }
     }
     // a score the model writes for a long song outgrows the checkpoint's score budget
-    let writes_score = request.cot.as_deref() != Some("off") && body.get("abc").is_none() && semantic_tokens.is_none();
+    let writes_score = request.cot.as_deref() != Some("off") && (body.get("abc").is_none() || request.abc_continue) && semantic_tokens.is_none();
     if let Some(duration) = request.duration_seconds.filter(|_| writes_score) {
         let tokens = (duration * SCORE_TOKENS_PER_SECOND).ceil() as u64;
         if tokens > CHECKPOINT_SCORE_TOKENS && request.abc_sampling.as_ref().and_then(|preset| preset.max_tokens).is_none() {
@@ -8869,7 +8888,7 @@ mod tests {
 
     #[test]
     fn a_composition_runs_the_planning_stage_and_next_to_nothing_else() {
-        let request = ComposeScoreRequest { style: "folk rock".into(), lyrics: "[Verse]\r\nline".into(), cot: Some("melody".into()), lm_seed: Some(7), abc_sampling: None, harmony: None, lm_batch_size: None };
+        let request = ComposeScoreRequest { style: "folk rock".into(), lyrics: "[Verse]\r\nline".into(), cot: Some("melody".into()), lm_seed: Some(7), abc_sampling: None, harmony: None, abc: None, lm_batch_size: None };
         let body = compose_request_from(&request).unwrap();
         assert_eq!(body["cot"], "melody");
         assert_eq!(body["duration"], 1.0);
@@ -8882,9 +8901,9 @@ mod tests {
 
     #[test]
     fn a_composition_needs_a_mode_that_writes_a_score_and_a_prompt() {
-        let off = ComposeScoreRequest { style: "pop".into(), lyrics: String::new(), cot: Some("off".into()), lm_seed: None, abc_sampling: None, harmony: None, lm_batch_size: None };
+        let off = ComposeScoreRequest { style: "pop".into(), lyrics: String::new(), cot: Some("off".into()), lm_seed: None, abc_sampling: None, harmony: None, abc: None, lm_batch_size: None };
         assert!(compose_request_from(&off).is_err());
-        let empty = ComposeScoreRequest { style: " ".into(), lyrics: String::new(), cot: None, lm_seed: None, abc_sampling: None, harmony: None, lm_batch_size: None };
+        let empty = ComposeScoreRequest { style: " ".into(), lyrics: String::new(), cot: None, lm_seed: None, abc_sampling: None, harmony: None, abc: None, lm_batch_size: None };
         assert!(compose_request_from(&empty).is_err());
     }
 

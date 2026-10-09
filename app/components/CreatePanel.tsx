@@ -394,6 +394,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
   const [selectedPlan, setSelectedPlan] = useState(0);
   const composeRun = useRef<AbortController | null>(null);
   const [editorOpen, setEditorOpen] = useState(false);
+  const [continueScore, setContinueScore] = useState(false);
   const [bedOpen, setBedOpen] = useState(false);
   const [bedBpm, setBedBpm] = useState('100');
   const [bedKey, setBedKey] = useState('C');
@@ -503,6 +504,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
     setAbcSampling(samplingText(request.abc_sampling));
     setSemanticSampling(samplingText(request.semantic_sampling));
     setHarmony(harmonyText(request.harmony));
+    setContinueScore(request.abc_continue === true);
     setTranspose(asText(request.transpose) || '0');
     setVocalsOnly(request.vocals_only === true);
     setLyricTiming(request.lyric_timing !== false);
@@ -575,7 +577,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
   }, [request]);
 
   const reset = () => {
-    setName(''); setStyle(''); setLyrics(''); setAbc(''); setCot('');
+    setName(''); setStyle(''); setLyrics(''); setAbc(''); setCot(''); setContinueScore(false);
     setPlans([]); setSelectedPlan(0);
     resetParameters();
     setCoverPrompt('');
@@ -638,6 +640,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
     if (semanticPreset) request.semantic_sampling = semanticPreset;
     const harmonyValue = harmonyFrom(harmony);
     if (harmonyValue) request.harmony = harmonyValue;
+    if (continueScore && request.abc) request.abc_continue = true;
     const bitrate = numberOrUndefined(mp3Bitrate);
     if (bitrate !== undefined && format === 'mp3') request.mp3_bitrate = bitrate;
     if (name.trim()) request.title = name.trim();
@@ -718,6 +721,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
       lmSeed: pinned !== undefined && pinned >= 0 ? pinned : undefined,
       abcSampling: samplingFrom(abcSampling),
       harmony: harmonyFrom(harmony),
+      opening: continueScore && abc.trim() ? abc : undefined,
     }, signal);
   };
 
@@ -731,9 +735,10 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
     composeRun.current = controller;
     try {
       const pinned = randomizeSeed ? undefined : numberOrUndefined(lmSeed);
-      const choices = await composePlans({ style: finishedStyle(style), lyrics: lyrics.replace(/\r\n?/g, '\n').trim(), cot: effectiveCot, lmSeed: pinned, abcSampling: samplingFrom(abcSampling), harmony: harmonyFrom(harmony), count: Math.max(1, Math.min(Number(planCount), maxBatch, 9)) }, controller.signal);
+      const choices = await composePlans({ style: finishedStyle(style), lyrics: lyrics.replace(/\r\n?/g, '\n').trim(), cot: effectiveCot, lmSeed: pinned, abcSampling: samplingFrom(abcSampling), harmony: harmonyFrom(harmony), opening: continueScore && abc.trim() ? abc : undefined, count: Math.max(1, Math.min(Number(planCount), maxBatch, 9)) }, controller.signal);
       setPlans(choices); setSelectedPlan(0);
       setAbc(choices[0].abc);
+      setContinueScore(false);
       setSemanticTokens('');
       setShowNotation(true);
     } catch (reason) {
@@ -969,6 +974,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
     outside_bonus: [harmony.outside_bonus, harmonyField('outside_bonus')],
     section_strength: [harmony.section_strength, harmonyField('section_strength')],
     follow_sections: [harmony.follow_lyrics, harmonyField('follow_lyrics')],
+    continue_score: [continueScore, value => setContinueScore(value === 'true')],
     companion_scale: [realaudio === 'auto' ? '' : realaudio === 'on' ? '1' : '0', value => setRealaudio(value === '' ? 'auto' : Number(value) !== 0 ? 'on' : 'off')],
   };
   useBridgeCommand('create_get', () => ({
@@ -1421,7 +1427,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
                 </button>
                 <button type="button" onClick={() => scoreFile.current?.click()} className={ICON} title={tt('openScore')}><FolderOpen size={14} /></button>
                 <button type="button" onClick={() => abc.trim() && download(`${safeName()}.abc`, `${abc.trim()}\n`, 'text/vnd.abc')} disabled={!abc.trim()} className={ICON} title={tt('saveScore')}><Save size={14} /></button>
-                <button type="button" onClick={() => setAbc('')} disabled={!abc} className={ICON} title={tt('clearScore')}><X size={14} /></button>
+                <button type="button" onClick={() => { setAbc(''); setContinueScore(false); }} disabled={!abc} className={ICON} title={tt('clearScore')}><X size={14} /></button>
                 <input
                   ref={scoreFile}
                   type="file"
@@ -1471,6 +1477,11 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
                   <input type="checkbox" className="mt-0.5 accent-pink-500" checked={/%yue2-words [a-f0-9]{16} keep/.test(abc)} onChange={event => setAbc(current => current.replace(/(%yue2-words [a-f0-9]{16})(?: keep)?/g, `$1${event.target.checked ? ' keep' : ''}`))} />
                   {midiImportOptions[language].keep}
                 </label>}
+                {abc.trim() && (
+                  <div className="mt-2">
+                    <Switch checked={continueScore} onChange={setContinueScore} label={tt('continueScore')} hint={tt('continueScoreHint')} disabled={Boolean(semanticTokens.trim())} />
+                  </div>
+                )}
                 <div className="mt-2 flex flex-wrap items-center gap-2">
                   <select className={CONTROL + ' max-w-24'} value={planCount} aria-label={planLabels[language]} onChange={event => setPlanCount(event.target.value)} disabled={composing}>
                     {Array.from({ length: Math.min(maxBatch, 9) }, (_, index) => index + 1).map(count => <option key={count} value={count}>{count}</option>)}
@@ -1482,7 +1493,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
                     className="inline-flex items-center gap-1.5 rounded-lg border border-pink-500/40 px-3 py-1.5 text-xs font-semibold text-pink-600 transition hover:bg-pink-500/10 disabled:opacity-50 dark:text-pink-300"
                   >
                     {composing ? <Loader2 size={13} className="animate-spin" /> : <FileMusic size={13} />}
-                    {composing ? tt('composingScore') : abc.trim() ? tt('composeScoreAgain') : tt('composeScore')}
+                    {composing ? tt('composingScore') : continueScore && abc.trim() ? tt('composeContinue') : abc.trim() ? tt('composeScoreAgain') : tt('composeScore')}
                   </button>
                   <button
                     type="button"
