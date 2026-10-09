@@ -37,6 +37,16 @@ pub fn trimmed(abc: &str) -> String {
     out
 }
 
+/// The opening to continue from, refused when trimming leaves no sung block (a chord bed or a score of rests).
+pub fn sung(abc: &str) -> Result<String, String> {
+    let opening = trimmed(abc);
+    if opening.lines().any(|line| line.trim_start().starts_with("V:") && line.contains("Vocal") && !line.contains("clef")) {
+        Ok(opening)
+    } else {
+        Err("the opening has no sung notes to continue from: hum, play or write a melody first".into())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -56,5 +66,13 @@ mod tests {
         let sung = format!("{HEAD}% verse\nV: Vocal\nz8e4e4|A16|\nV: Ins\nZ2|\n");
         assert_eq!(trimmed(&sung), sung);
         assert_eq!(trimmed(HEAD), HEAD, "nothing to trim without a block");
+    }
+
+    #[test]
+    fn an_opening_without_sung_notes_is_refused() {
+        let sung_opening = format!("{HEAD}% verse\nV: Vocal\ne4e2d2c4A4|B4c4d8|\nV: Ins\nZ2|\n");
+        assert_eq!(sung(&sung_opening).unwrap(), sung_opening);
+        let bed = format!("{HEAD}% verse\nV: Vocal\n\"Am\"z16|\"F\"z16|\nV: Ins\nZ2|\n");
+        assert!(sung(&bed).unwrap_err().contains("no sung notes"));
     }
 }

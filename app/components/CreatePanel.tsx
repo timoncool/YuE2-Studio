@@ -410,8 +410,9 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
   const [coverFile, setCoverFile] = useState<File | null>(null);
   const [sectionProposal, setSectionProposal] = useState<SectionProposal | null>(null);
   const [matchingSections, setMatchingSections] = useState(false);
-  // A proposal is for the lyrics, score and recording it was made from; any change makes it stale.
-  useEffect(() => { setSectionProposal(null); }, [abc, lyrics, coverSongId, coverFile]);
+  // A proposal is for the lyrics, score and recording it was made from; any change makes it stale, a run still going too.
+  const sectionRun = useRef(0);
+  useEffect(() => { sectionRun.current += 1; setSectionProposal(null); }, [abc, lyrics, coverSongId, coverFile]);
   const coverPlayer = useRef<HTMLAudioElement | null>(null);
   const [coverPlaying, setCoverPlaying] = useState(false);
   const [coverTime, setCoverTime] = useState(0);
@@ -1218,8 +1219,10 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
                     onClick={() => {
                       setError(null);
                       setMatchingSections(true);
+                      const run = sectionRun.current;
                       void matchSections({ abc, lyrics: lyrics.replace(/\r\n?/g, '\n'), songId: coverSongId, file: coverFile })
                         .then(answer => {
+                          if (run !== sectionRun.current) return;
                           if (failed(answer)) setError(karaokeReason(tt, answer.error) ?? answer.error);
                           else setSectionProposal(answer.proposal);
                         })
@@ -1546,11 +1549,11 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
                       onClick={() => {
                         setError(null);
                         setBedBusy(true);
-                        void chordBed({ bpm: Number(bedBpm), key: bedKey, meter: bedMeter, lyrics: lyrics.replace(/\r\n?/g, '\n') })
+                        void chordBed({ bpm: Math.max(0, Math.round(Number(bedBpm))) || 0, key: bedKey, meter: bedMeter, lyrics: lyrics.replace(/\r\n?/g, '\n') })
                           .then(answer => {
                             if (failed(answer)) { setError(answer.error); return; }
                             setAbc(answer.abc.trimEnd());
-                            setPlans([]); setSelectedPlan(0); setSemanticTokens('');
+                            setPlans([]); setSelectedPlan(0); setSemanticTokens(''); setContinueScore(false);
                             setBedWritten(answer.progressions);
                           })
                           .finally(() => setBedBusy(false));

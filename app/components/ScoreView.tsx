@@ -33,11 +33,13 @@ export const ScoreView: React.FC<{ abc: string; className?: string; title?: stri
 
   useEffect(() => {
     let current = true;
-    void vocalOctave(abc, 0).then(answer => {
-      if (!current) return;
-      setVoice(refusedScore(answer) || answer.middle === null ? null : { middle: answer.middle, inRange: answer.in_range });
-    });
-    return () => { current = false; };
+    const timer = window.setTimeout(() => {
+      void vocalOctave(abc, 0).then(answer => {
+        if (!current) return;
+        setVoice(refusedScore(answer) || answer.middle === null ? null : { middle: answer.middle, inRange: answer.in_range });
+      });
+    }, 400);
+    return () => { current = false; window.clearTimeout(timer); };
   }, [abc]);
 
   useEffect(() => {

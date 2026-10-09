@@ -7413,21 +7413,24 @@ fn spawn_job_watcher(state: AppState, job_id: String) {
     tokio::spawn(async move {
         follow_job(&state, &job_id).await;
         // however it ended, it is no longer one the studio's closing could cut off
-        let ended = state.jobs.read().await.get(&job_id).map(|job| (job_status_name(&job.status), job.message.clone(), job.songs.len()));
+        let ended = state.jobs.read().await.get(&job_id).map(|job| {
+            let profiles: Vec<String> = job.songs.iter().filter_map(|made| made.song.profile_id.clone()).collect();
+            (job_status_name(&job.status), job.message.clone(), job.songs.len(), profiles)
+        });
         if let Some(hub) = &state.hub {
-            match ended.as_ref().map(|(status, _, songs)| (*status, *songs)) {
-                Some(("completed", songs)) => {
-                    hub.count("songs", songs.max(1) as u64);
-                    if let Some(profile) = state.selected_profile_id.read().await.as_deref() {
+            match ended.as_ref().map(|(status, _, songs, profiles)| (*status, *songs, profiles)) {
+                Some(("completed", songs, profiles)) if songs > 0 => {
+                    hub.count("songs", songs as u64);
+                    for profile in profiles {
                         hub.used_model(profile);
                     }
                 }
-                Some(("failed", _)) => hub.count("song_failed", 1),
-                Some(("cancelled", _)) => hub.count("song_cancelled", 1),
+                Some(("failed", _, _)) => hub.count("song_failed", 1),
+                Some(("cancelled", _, _)) => hub.count("song_cancelled", 1),
                 _ => {}
             }
         }
-        if let Some((status, message, _)) = ended {
+        if let Some((status, message, _, _)) = ended {
             // a song that reached the library needs no record of its request any more
             let kept = if status == "completed" { state.library.forget_music_job(&job_id) } else { state.library.set_music_job_status(&job_id, status, &message) };
             if let Err(error) = kept {
@@ -7855,7 +7858,7 @@ fn compose_request_from(request: &ComposeScoreRequest) -> Result<Value, String> 
         body["harmony"] = harmony.engine_field(&request.lyrics)?;
     }
     if let Some(opening) = request.abc.as_deref().map(|text| score::edits::read(text).score).filter(|text| !text.trim().is_empty()) {
-        body["abc"] = Value::String(score::opening::trimmed(&opening));
+        body["abc"] = Value::String(score::opening::sung(&opening)?);
         body["abc_continue"] = Value::Bool(true);
     }
     Ok(body)
@@ -8177,13 +8180,13 @@ fn output_format(settings: &Value) -> &str {
     settings.get("output_format").and_then(Value::as_str).unwrap_or("flac")
 }
 
-/// A seed for a request that leaves it to chance, drawn here as a 32-bit
-/// number: the engine's own draw is 64-bit, more than the page's JavaScript
-/// numbers hold exactly, so a song made from it could not be made again.
 fn validate_solver(solver: &str) -> Result<(), String> {
     if matches!(solver, "midpoint" | "ab2") { Ok(()) } else { Err("solver must be midpoint or ab2".into()) }
 }
 
+/// A seed for a request that leaves it to chance, drawn here as a 32-bit
+/// number: the engine's own draw is 64-bit, more than the page's JavaScript
+/// numbers hold exactly, so a song made from it could not be made again.
 fn drawn_seed() -> i64 {
     i64::from(uuid::Uuid::now_v7().as_u128() as u32)
 }
@@ -8302,7 +8305,7 @@ fn yue_request_from(request: &CreateMusicJobRequest, max_batch: u32) -> Result<V
     if let Some(abc) = request.abc.as_deref().map(|text| score::edits::read(text).score).filter(|value| !value.is_empty()) {
         let moved = score::transpose::move_score(&abc, step)?;
         if request.abc_continue {
-            body["abc"] = Value::String(score::opening::trimmed(&moved));
+            body["abc"] = Value::String(score::opening::sung(&moved)?);
             body["abc_continue"] = Value::Bool(true);
         } else {
             body["abc"] = Value::String(format!("{moved}\n"));
