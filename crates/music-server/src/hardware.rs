@@ -141,7 +141,8 @@ const WORK_RAM_GB: f64 = 2.0;
 /// weights live in video memory; on integrated graphics, which share the
 /// computer's memory, or on the processor they live in RAM with the buffers.
 pub fn ram_needed_gb(profile: &str, weights_bytes: u64, total_vram_gb: f64) -> f64 {
-    let on_card = VRAM_TIERS.iter().any(|(id, tier)| *id == profile && total_vram_gb >= *tier);
+    // Apple Silicon's video memory is the system's own, so weights "on the card" still take the RAM
+    let on_card = !cfg!(target_os = "macos") && VRAM_TIERS.iter().any(|(id, tier)| *id == profile && total_vram_gb >= *tier);
     if on_card {
         SYSTEM_RAM_GB + LOADING_RAM_GB
     } else {
