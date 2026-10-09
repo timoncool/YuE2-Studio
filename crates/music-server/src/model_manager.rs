@@ -59,6 +59,8 @@ pub struct Profile {
     pub recommended: bool,
     pub components: Vec<&'static str>,
     pub total_bytes: u64,
+    /// Memory this machine needs for the set: less when its card holds the weights.
+    pub ram_needed_gb: f64,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -720,13 +722,31 @@ pub fn profile_matching(component_ids: &[String]) -> Option<&'static str> {
     })
 }
 
+const PROFILE_SETS: [(&str, &str, [&str; 5]); 4] = [
+    ("light", "Light - Q5_K_M backbone (6 GB cards)", ["backbone-q5", "vae-f32", "transcriber-q8", "mert-q8", COMPANION]),
+    ("balanced", "Balanced - Q6_K backbone", ["backbone-q6", "vae-f32", "transcriber-q8", "mert-q8", COMPANION]),
+    ("quality-q8", "Quality - Q8_0 backbone, near lossless", ["backbone-q8", "vae-f32", "transcriber-q8", "mert-q8", COMPANION]),
+    ("native", "Full native - BF16 backbone, original weights", ["backbone-bf16", "vae-f32", "transcriber-f32", "mert-f32", COMPANION]),
+];
+
 fn profiles() -> Vec<Profile> {
-    vec![
-        profile("light", "Light - Q5_K_M backbone (6 GB cards)", &["backbone-q5", "vae-f32", "transcriber-q8", "mert-q8", COMPANION]),
-        profile("balanced", "Balanced - Q6_K backbone", &["backbone-q6", "vae-f32", "transcriber-q8", "mert-q8", COMPANION]),
-        profile("quality-q8", "Quality - Q8_0 backbone, near lossless", &["backbone-q8", "vae-f32", "transcriber-q8", "mert-q8", COMPANION]),
-        profile("native", "Full native - BF16 backbone, original weights", &["backbone-bf16", "vae-f32", "transcriber-f32", "mert-f32", COMPANION]),
-    ]
+    PROFILE_SETS.iter().map(|(id, label, ids)| profile(id, label, ids)).collect()
+}
+
+/// The bytes of a set's backbone and VAE, the weights that sit in memory while a song is made.
+pub fn profile_weights_bytes(id: &str) -> u64 {
+    let all = components();
+    PROFILE_SETS
+        .iter()
+        .find(|(profile, _, _)| *profile == id)
+        .map(|(_, _, ids)| {
+            ids.iter()
+                .filter_map(|id| all.iter().find(|component| component.id == *id))
+                .filter(|component| matches!(component.kind, "backbone" | "vae"))
+                .map(|component| component.bytes)
+                .sum()
+        })
+        .unwrap_or(0)
 }
 
 #[cfg(test)]
@@ -738,7 +758,8 @@ fn profile(id: &'static str, label: &'static str, ids: &[&'static str]) -> Profi
     let all = components();
     // The badge follows the machine, the same answer the first-run banner gives.
     let recommended = id == recommended_profile();
-    Profile { id, label, backend: ENGINE_ID, installable: true, recommended, components: ids.to_vec(), total_bytes: ids.iter().filter_map(|id| all.iter().find(|component| component.id == *id)).map(|component| component.bytes).sum() }
+    let ram_needed_gb = crate::hardware::ram_needed_gb(id, profile_weights_bytes(id), crate::hardware::hardware().total_vram_gb);
+    Profile { id, label, backend: ENGINE_ID, installable: true, recommended, components: ids.to_vec(), total_bytes: ids.iter().filter_map(|id| all.iter().find(|component| component.id == *id)).map(|component| component.bytes).sum(), ram_needed_gb }
 }
 
 fn components() -> Vec<Component> {

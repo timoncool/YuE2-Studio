@@ -109,7 +109,7 @@ fn probe() -> &'static Hardware {
             nvidia,
             cuda,
             compute_capability,
-            recommended: profile_for_vram(total_vram_gb),
+            recommended: profile_for_machine(total_vram_gb, total_ram_gb, crate::model_manager::profile_weights_bytes),
         }
     })
 }
@@ -122,18 +122,41 @@ pub fn hardware() -> Hardware {
 /// half plus the KV cache and the compute buffers. The cache is sized to the
 /// song, about 1.5 GB for 130 s under guidance, so the tiers keep headroom for
 /// the longest songs.
-fn profile_for_vram(total_vram_gb: f64) -> Option<&'static str> {
-    if total_vram_gb >= 12.0 {
-        Some("native")
-    } else if total_vram_gb >= 8.0 {
-        Some("quality-q8")
-    } else if total_vram_gb >= 7.0 {
-        Some("balanced")
-    } else if total_vram_gb >= 5.5 {
-        Some("light")
+const VRAM_TIERS: [(&str, f64); 4] = [("native", 12.0), ("quality-q8", 8.0), ("balanced", 7.0), ("light", 5.5)];
+
+/// The unquantised set stays in the list for whoever picks it; the studio never recommends full weights,
+/// Q8_0 is near lossless at half the memory.
+const FULL_WEIGHTS_PROFILE: &str = "native";
+
+/// What the system, the window and the service hold beside the models.
+const SYSTEM_RAM_GB: f64 = 4.0;
+/// A set read from disk passes through memory even when its weights end on the card.
+const LOADING_RAM_GB: f64 = 2.0;
+/// The KV cache and compute buffers of the longest songs, when they live in RAM.
+const WORK_RAM_GB: f64 = 2.0;
+
+/// Memory a set needs on this machine. On a card the set's tier fits, the
+/// weights live in video memory; on integrated graphics, which share the
+/// computer's memory, or on the processor they live in RAM with the buffers.
+pub fn ram_needed_gb(profile: &str, weights_bytes: u64, total_vram_gb: f64) -> f64 {
+    let on_card = VRAM_TIERS.iter().any(|(id, tier)| *id == profile && total_vram_gb >= *tier);
+    if on_card {
+        SYSTEM_RAM_GB + LOADING_RAM_GB
     } else {
-        None
+        weights_bytes as f64 / 1_000_000_000.0 + WORK_RAM_GB + SYSTEM_RAM_GB
     }
+}
+
+/// The largest set the card and the memory both hold; without a card for any
+/// set, the lightest one when the memory holds it in RAM.
+fn profile_for_machine(total_vram_gb: f64, total_ram_gb: f64, weights_bytes: impl Fn(&str) -> u64) -> Option<&'static str> {
+    let fits = |id: &str| total_ram_gb >= ram_needed_gb(id, weights_bytes(id), total_vram_gb);
+    VRAM_TIERS
+        .iter()
+        .filter(|(id, _)| *id != FULL_WEIGHTS_PROFILE)
+        .find(|(id, tier)| total_vram_gb >= *tier && fits(id))
+        .map(|(id, _)| *id)
+        .or_else(|| Some(FALLBACK_PROFILE).filter(|id| fits(id)))
 }
 
 /// Chooses the complete local set on a clean install. This only records a
@@ -384,21 +407,39 @@ mod tests {
 
     use super::*;
 
+    fn weights(id: &str) -> u64 {
+        crate::model_manager::profile_weights_bytes(id)
+    }
+
     #[test]
-    fn recommendation_follows_yue2_vram_tiers() {
-        assert_eq!(profile_for_vram(24.0), Some("native"));
-        assert_eq!(profile_for_vram(11.9), Some("quality-q8"));
-        assert_eq!(profile_for_vram(8.0), Some("quality-q8"));
-        assert_eq!(profile_for_vram(7.6), Some("balanced"));
-        assert_eq!(profile_for_vram(6.0), Some("light"));
-        assert_eq!(profile_for_vram(4.0), None);
-        assert_eq!(profile_for_vram(0.0), None);
+    fn with_enough_memory_the_card_picks_the_set() {
+        assert_eq!(profile_for_machine(24.0, 64.0, weights), Some("quality-q8"));
+        assert_eq!(profile_for_machine(11.9, 32.0, weights), Some("quality-q8"));
+        assert_eq!(profile_for_machine(8.0, 16.0, weights), Some("quality-q8"));
+        assert_eq!(profile_for_machine(7.6, 16.0, weights), Some("balanced"));
+        assert_eq!(profile_for_machine(6.0, 16.0, weights), Some("light"));
+    }
+
+    #[test]
+    fn without_a_card_for_any_set_the_light_one_runs_from_memory_that_holds_it() {
+        assert_eq!(profile_for_machine(4.0, 16.0, weights), Some("light"));
+        assert_eq!(profile_for_machine(0.0, 16.0, weights), Some("light"));
+        assert_eq!(profile_for_machine(0.0, 8.0, weights), None);
+        assert_eq!(profile_for_machine(2.0, 8.0, weights), None);
+    }
+
+    #[test]
+    fn a_set_the_card_holds_needs_the_system_and_loading_memory_only() {
+        assert_eq!(ram_needed_gb("quality-q8", weights("quality-q8"), 12.0), 6.0);
+        let light_in_memory = ram_needed_gb("light", weights("light"), 0.0);
+        assert!((9.0..9.5).contains(&light_in_memory), "{light_in_memory}");
+        assert!(profile_for_machine(8.0, 5.0, weights).is_none());
     }
 
     #[test]
     fn every_recommendation_is_a_declared_profile() {
         for vram in [6.0, 7.5, 10.0, 16.0, 24.0] {
-            assert!(crate::model_manager::profile_exists(profile_for_vram(vram).unwrap()));
+            assert!(crate::model_manager::profile_exists(profile_for_machine(vram, 64.0, weights).unwrap()));
         }
         assert!(crate::model_manager::profile_exists(FALLBACK_PROFILE));
     }

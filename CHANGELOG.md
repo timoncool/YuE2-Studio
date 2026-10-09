@@ -18,6 +18,13 @@ Windows build.
 - **Hugging Face mirror** in Settings - Network (hf-mirror.com) for downloads where
   huggingface.co is slow or blocked, after wangsoft's fork.
 - **Score as PDF.** The score view saves the notation as an A4 PDF, each system whole.
+- **The model set fits the computer's memory, not only the card's.** On integrated graphics or the
+  processor the weights live in RAM, so a laptop is now offered the set its memory holds, and every
+  set that needs more memory than the computer has says so on the start screen instead of stalling
+  half loaded. The studio no longer recommends the unquantised BF16 set: Q8_0 is near lossless at
+  half the memory, and the BF16 set stays in the list.
+- **Russian stress**: a stress mark (U+0301, Alt+0769) after a vowel puts the sung stress on it; the
+  lyrics hint says so.
 - **Engine progress on the card**: the stage, its step counter and the time left.
 - **Video export settings**: frame size from 1080p to 240p and AAC from 128 to 320 kbps.
 - Songs up to 10 minutes. The window keeps its size, place and maximised state; the player its

@@ -1383,6 +1383,7 @@ export const ko = {
     recommendedForMachine: '이 컴퓨터 권장:',
     recommendedFallback: '감지된 GPU 에 맞는 프로필이 미리 선택되었습니다',
     setupResumable: '다운로드는 이어받을 수 있으며 각 구성 요소는 생성 활성화 전에 체크섬으로 검증됩니다.',
+    ramShort: '이 컴퓨터의 메모리는 {have} GB이고 이 세트에는 여기서 약 {need} GB가 필요합니다. 불러오기가 멈출 수 있으니 더 가벼운 세트를 고르세요.',
     hardwarePreset: '하드웨어 프리셋',
     hardwarePresetHint: '이 컴퓨터에 맞는 네이티브 서버 프리셋을 적용합니다.',
     recommendedBadge: '권장',

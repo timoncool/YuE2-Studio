@@ -1383,6 +1383,7 @@ export const zh = {
     recommendedForMachine: '针对本机推荐：',
     recommendedFallback: '已预选与检测到的 GPU 匹配的配置',
     setupResumable: '下载可续传，每个组件在启用生成前都会校验哈希。',
+    ramShort: '这台电脑内存 {have} GB，此套模型在这里约需 {need} GB：加载可能卡住。请选择更轻的套装。',
     hardwarePreset: '硬件预设',
     hardwarePresetHint: '为本机应用原生服务预设。',
     recommendedBadge: '推荐',

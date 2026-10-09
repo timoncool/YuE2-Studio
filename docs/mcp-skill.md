@@ -85,7 +85,8 @@ connected and the address to paste.
   instrumental says `instrumental` where the language goes.
 - **lyrics**: sections tagged `[Intro]`, `[Verse 1]`, `[Pre-Chorus]`, `[Chorus]`,
   `[Bridge]`, `[Outro]`, one tag per line, a blank line between sections, about 2-3 sung
-  words per second. Russian `ё` stays `ё`.
+  words per second. Russian `ё` stays `ё`; a combining acute (U+0301) right after a vowel
+  puts the sung stress on it where the model would stress the word otherwise.
 - **abc**: the score the model sings from, in YuE2's dialect (`writing_guide` topic
   `score`). `score_compose` writes one to start from.
 - `writing_examples` returns the official M-A-P requests closest to your idea - match

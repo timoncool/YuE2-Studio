@@ -1383,6 +1383,7 @@ export const ja = {
     recommendedForMachine: 'このマシンの推奨:',
     recommendedFallback: '検出された GPU に合うプロファイルを事前選択しました',
     setupResumable: 'ダウンロードは再開可能で、各コンポーネントは生成を有効にする前にチェックサム検証されます。',
+    ramShort: 'このコンピューターのメモリは {have} GB、このセットにはここで約 {need} GB 必要です。読み込みが止まる場合があります。軽いセットを選んでください。',
     hardwarePreset: 'ハードウェアプリセット',
     hardwarePresetHint: 'このマシン向けのネイティブサーバープリセットを適用します。',
     recommendedBadge: '推奨',

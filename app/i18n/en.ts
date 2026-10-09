@@ -1388,6 +1388,7 @@ export const en = {
     recommendedForMachine: 'Recommended for this machine:',
     recommendedFallback: 'the profile matching the detected GPU is preselected',
     setupResumable: 'Downloads are resumable and every component is checksum-verified before generation is enabled.',
+    ramShort: 'This computer has {have} GB of memory and this set needs about {need} GB here: loading may stall. Pick a lighter set.',
     hardwarePreset: 'Hardware preset',
     hardwarePresetHint: 'Applies the native server preset for this machine.',
     recommendedBadge: 'Recommended',

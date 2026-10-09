@@ -60,8 +60,9 @@ Code, save [docs/mcp-skill.md](docs/mcp-skill.md) as `~/.claude/skills/yue2-stud
   saved where you say, in Windows' own Save dialog, and the Files panel shows each save.
 - **A proxy for the whole studio** — HTTP, HTTPS, SOCKS5 or SOCKS4, with a login: model
   downloads, Hugging Face, OpenRouter and updates go through it.
-- **Full songs from a style and lyrics** — up to six minutes, in the languages the model
-  sings. On an RTX 4090 with the Q8_0 set a 3:38 song renders in about 46 seconds.
+- **Full songs from a style and lyrics** — up to ten minutes, in the languages the model
+  sings. In Russian a stress mark (the combining acute U+0301, Alt+0769 on Windows) after a
+  vowel moves the sung stress to it, as Ruach Studio documents. On an RTX 4090 with the Q8_0 set a 3:38 song renders in about 46 seconds.
 - **Read and edit the score** — the model writes its composition in ABC notation first; the
   studio engraves it as sheet music. Edit the notes, tempo or key and create again: the
   composition stays, the performance changes. Or switch to melody-only, or no score at all.
