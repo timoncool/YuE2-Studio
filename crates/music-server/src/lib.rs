@@ -1041,6 +1041,7 @@ pub async fn serve() -> anyhow::Result<()> {
         .route("/v1/score/midi", post(score::api::midi))
         .route("/v1/score/instrumental", post(score::api::instrumental))
         .route("/v1/score/vocal-octave", post(score::api::vocal_octave))
+        .route("/v1/score/chord-bed", post(score::api::chord_bed))
         .route("/v1/score/sections", post(match_score_sections))
         .route("/v1/score/from-midi", post(score::api::from_midi))
         .route("/v1/song/tokenize", post(song_tokenizer::tokenize))

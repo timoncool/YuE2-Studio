@@ -62,6 +62,11 @@ export async function matchSections(input: { abc: string; lyrics: string; songId
   return { ok: true, proposal: payload };
 }
 
+/** A score of chords over rests for the lyrics' sections in a tempo, key and meter, written at once instead of planned. */
+export async function chordBed(input: { bpm: number; key: string; meter: string; lyrics: string; seed?: number }): Promise<Answer<{ abc: string; bars: number; progressions: string[][]; seed: number }>> {
+  return post('/v1/score/chord-bed', input);
+}
+
 /** The vocal line moved by whole octaves (0 only measures it), with its middle against the range the model's own scores keep. */
 export async function vocalOctave(abc: string, octaves: number): Promise<Answer<{ abc: string; middle: number | null; in_range: boolean; range: [number, number] }>> {
   return post('/v1/score/vocal-octave', { abc, octaves });

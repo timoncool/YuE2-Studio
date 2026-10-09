@@ -7,6 +7,10 @@ Windows build.
 
 ### Added
 
+- **Chord bed** beside Compose the score (gary4juce's idea): a score of chords over rests written at
+  once in the tempo, key and meter you set, one section per lyrics tag, verses, choruses and a bridge
+  each on a common progression of their own; the model writes the melody and the arrangement over
+  it and the planning step is skipped. Agents use `score_chord_bed`.
 - **Chords and sections** under Advanced, for the score the model writes (Yeufonic's idea): chord
   variety lowers the chords heard among the recent changes so the song stops looping one
   progression, a section can be kept from opening the way the one before did, chords outside

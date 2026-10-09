@@ -9,7 +9,7 @@ use base64::Engine;
 use serde::Deserialize;
 use serde_json::{json, Value};
 
-use super::{edits, export, import, instrumental, notation, phrasing, smf, transpose};
+use super::{chord_bed, edits, export, import, instrumental, notation, phrasing, smf, transpose};
 
 type Answer = Result<Json<Value>, (StatusCode, Json<Value>)>;
 
@@ -131,6 +131,28 @@ pub async fn instrumental(Json(request): Json<MidiRequest>) -> Answer {
     let edit = edits::read(&request.abc);
     match instrumental::transfer(&edit.score) {
         Ok(made) => Ok(Json(json!({ "ok": true, "abc": edits::attach(&made.abc, edit.words.as_deref(), edit.keep), "moved": made.moved, "trimmed": made.trimmed, "dropped": made.dropped }))),
+        Err(reason) => problem(reason),
+    }
+}
+
+#[derive(Deserialize)]
+pub struct ChordBedRequest {
+    bpm: u32,
+    key: String,
+    meter: String,
+    #[serde(default)]
+    lyrics: String,
+    #[serde(default)]
+    seed: Option<u64>,
+}
+
+/// A score of chords over rests for the lyrics' sections, written at once in the tempo, key and
+/// meter asked for, so a song is sung without the planning stage.
+pub async fn chord_bed(Json(request): Json<ChordBedRequest>) -> Answer {
+    too_long(&request.lyrics)?;
+    let seed = request.seed.unwrap_or_else(|| uuid::Uuid::now_v7().as_u128() as u64);
+    match chord_bed::write(&chord_bed::BedRequest { bpm: request.bpm, key: request.key, meter: request.meter, lyrics: request.lyrics, seed }) {
+        Ok(bed) => Ok(Json(json!({ "ok": true, "abc": bed.abc, "bars": bed.bars, "progressions": bed.progressions, "seed": seed }))),
         Err(reason) => problem(reason),
     }
 }

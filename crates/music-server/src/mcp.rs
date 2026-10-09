@@ -367,7 +367,7 @@ fn annotations(name: &str) -> Value {
     // a verb that changes something outweighs a noun that reads
     const CHANGES: &[&str] = &["install", "import", "remove", "delete", "refresh", "create", "update", "start", "cancel", "select", "download", "apply", "restart"];
     // reads whose names the rules above miss: create_form names the create page
-    const READ_NAMES: &[&str] = &["lyrics_find", "cover_prompt_render", "studio_wait", "engine_presets_get", "assistant_requests_wait", "ui_console", "song_defaults", "create_form_get", "library_liked", "song_tokenize", "score_match_sections"];
+    const READ_NAMES: &[&str] = &["lyrics_find", "cover_prompt_render", "studio_wait", "engine_presets_get", "assistant_requests_wait", "ui_console", "song_defaults", "create_form_get", "library_liked", "score_chord_bed", "song_tokenize", "score_match_sections"];
     // writes over what was stored, so the earlier content is gone: a client asks first
     const OVERWRITES: &[&str] = &["library_song_update", "playlist_update", "dataset_update", "dataset_song_update", "dataset_prepare", "lora_update", "stems_split", "karaoke_make", "midi_transcribe", "cover_draw", "cover_set_from_file", "openrouter_set_key"];
     let changes = CHANGES.iter().any(|verb| name.split('_').any(|word| word == *verb));
@@ -1417,6 +1417,12 @@ fn tools() -> &'static [Tool] {
                 description: "Write score plans (ABC notation) for a style and lyrics. lm_batch_size chooses the number up to the configured engine song limit. Returns a job; poll score_job_get for plans, each with its abc and lm_seed. Read and choose a plan, then pass its abc to song_create.",
                 schema: || object(json!({ "style": { "type": "string" }, "lyrics": { "type": "string" }, "cot": { "type": "string", "enum": ["full", "melody"] }, "lm_seed": { "type": "integer" }, "lm_batch_size": { "type": "integer", "minimum": 1, "maximum": 8 }, "harmony": { "type": "object", "description": "chord variety and section order of the score the model plans (ignored with a given abc): strength 0-64 lowers chords heard among the recent changes (about 6-10 breaks a looping progression), identity root (C, Cmaj7, C/E one chord) or spelling, window 1-512 recent changes, hold_limit 0-64 symbols one root holds for free, outside_bonus 0-20 favours roots outside the key (root identity) while fewer than outside_limit 0-1 of the changes are outside, section_strength 0-64 keeps a section from opening like the one before, section_open 1-16 chords compared, follow_lyrics true holds the plan to the lyrics' sections in order", "properties": { "identity": { "type": "string", "enum": ["root", "spelling"] }, "strength": { "type": "number" }, "window": { "type": "integer" }, "hold_limit": { "type": "integer" }, "outside_bonus": { "type": "number" }, "outside_limit": { "type": "number" }, "section_strength": { "type": "number" }, "section_open": { "type": "integer" }, "follow_lyrics": { "type": "boolean" } } } }), &["style"]),
                 call: |args| post("/v1/scores".into(), args.clone()),
+            },
+            Tool {
+                name: "score_chord_bed",
+                description: "Write a chord bed at once, without the model planning: chords over rests in the Vocal voice and an empty Ins voice, one section per lyrics tag (bars from its lines), in the tempo, key and meter given; verses, choruses and a bridge each get a common progression, no chord repeats its neighbour. Pass its abc to song_create (cot full) and the model writes the melody and arrangement over that harmony. The same seed writes the same bed.",
+                schema: || object(json!({ "bpm": { "type": "integer", "minimum": 40, "maximum": 240 }, "key": { "type": "string", "description": "tonic and m for minor: Em, F#m, Bb" }, "meter": { "type": "string", "enum": ["4/4", "3/4", "6/8", "2/4"] }, "lyrics": { "type": "string" }, "seed": { "type": "integer" } }), &["bpm", "key", "meter"]),
+                call: |args| post("/v1/score/chord-bed".into(), args.clone()),
             },
             Tool {
                 name: "score_job_get",

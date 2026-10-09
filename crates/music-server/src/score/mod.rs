@@ -4,6 +4,7 @@
 
 pub mod abc;
 pub mod api;
+pub mod chord_bed;
 pub mod edits;
 pub mod export;
 pub mod import;

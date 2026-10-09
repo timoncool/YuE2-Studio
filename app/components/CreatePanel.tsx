@@ -3,7 +3,7 @@ import { libraryChanged, useActivity, useAssistantStatus, useSetupStatus, type A
 import { hasSungLines, karaokeReason } from '../services/karaoke';
 import {
   AlertTriangle, AudioLines, ChevronDown, CircleAlert, Dices, Ear, Eye, EyeOff, FileMusic, FolderOpen, Loader2,
-  ListChecks, Music2, Pause, Piano, Play, RotateCcw, Save, Sparkles, Square, Tags, Upload, Wand2, Settings2, X,
+  Grid2x2, ListChecks, Music2, Pause, Piano, Play, RotateCcw, Save, Sparkles, Square, Tags, Upload, Wand2, Settings2, X,
 } from 'lucide-react';
 import { AudioWaveform } from './AudioWaveform';
 import type { Playlist, Song, YueCot, YueHarmony, YueOutputFormat, YueRequest, YueSampling } from '../types';
@@ -17,7 +17,7 @@ import { MidiImportDialog } from './MidiImportDialog';
 import { isMidiFile } from '../services/midiFiles';
 import { trackMidiBase64 } from '../services/midiEditor';
 import { composePlans, composeScore, transcribe, type ScorePlan } from '../services/transcription';
-import { failed, matchSections, type SectionProposal } from '../services/scoreApi';
+import { chordBed, failed, matchSections, type SectionProposal } from '../services/scoreApi';
 import { profileLabel as setLabel } from '../services/modelCatalog';
 import { REQUEST_FILE_ACCEPT, parseRequestFile, requestFileTitle, serializeRequest, type RequestFileFormat } from '../services/requestFile';
 import { AdapterPicker } from './AdapterPicker';
@@ -102,6 +102,8 @@ const SAMPLING_KEYS: (keyof YueSampling)[] = ['temperature', 'top_p', 'top_k', '
 /** A quoted chord symbol in ABC: "Am", "F/C", "G7". */
 const CHORD_SYMBOL = /"[^"\n]+"/;
 const CHORD_SYMBOLS = /"[^"\n]+"/g;
+const BED_KEYS = ['C', 'G', 'D', 'A', 'E', 'B', 'F#', 'Db', 'Ab', 'Eb', 'Bb', 'F', 'Am', 'Em', 'Bm', 'F#m', 'C#m', 'G#m', 'Ebm', 'Bbm', 'Fm', 'Cm', 'Gm', 'Dm'];
+const BED_METERS = ['4/4', '3/4', '6/8', '2/4'];
 const SECTION_TAGS = ['[Intro]', '[Verse 1]', '[Pre-Chorus]', '[Chorus]', '[Verse 2]', '[Bridge]', '[Instrumental Break]', '[Outro]'];
 
 const PROFILE_LABEL: Record<string, string> = {
@@ -392,6 +394,12 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
   const [selectedPlan, setSelectedPlan] = useState(0);
   const composeRun = useRef<AbortController | null>(null);
   const [editorOpen, setEditorOpen] = useState(false);
+  const [bedOpen, setBedOpen] = useState(false);
+  const [bedBpm, setBedBpm] = useState('100');
+  const [bedKey, setBedKey] = useState('C');
+  const [bedMeter, setBedMeter] = useState('4/4');
+  const [bedBusy, setBedBusy] = useState(false);
+  const [bedWritten, setBedWritten] = useState<string[][] | null>(null);
   const [coverSource, setCoverSource] = useState<string>('');
   // the library song a cover's melody was taken from, which the new song names
   const [coverSongId, setCoverSongId] = useState<string | null>(null);
@@ -1486,8 +1494,64 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
                     <Piano size={13} />
                     {tt('scoreEditor')}
                   </button>
+                  <button
+                    type="button"
+                    onClick={() => setBedOpen(open => !open)}
+                    disabled={composing}
+                    aria-expanded={bedOpen}
+                    title={tt('chordBedHint')}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-pink-500/40 px-3 py-1.5 text-xs font-semibold text-pink-600 transition hover:bg-pink-500/10 disabled:opacity-50 dark:text-pink-300"
+                  >
+                    <Grid2x2 size={13} />
+                    {tt('chordBed')}
+                  </button>
                   <span className="text-[11px] leading-4 text-zinc-500">{composing ? tt('composeScoreCancel') : tt('composeScoreHint')}</span>
                 </div>
+                {bedOpen && (
+                  <div className="mt-2 rounded-lg border border-zinc-100 p-2 dark:border-white/5">
+                    <p className="mb-2 text-[11px] leading-4 text-zinc-500">{tt('chordBedHint')}</p>
+                    <div className="grid grid-cols-3 gap-2">
+                      <Field label={tt('chordBedTempo')}>
+                        <input value={bedBpm} onChange={event => setBedBpm(event.target.value)} inputMode="numeric" className={CONTROL} />
+                      </Field>
+                      <Field label={tt('chordBedKey')}>
+                        <select value={bedKey} onChange={event => setBedKey(event.target.value)} className={CONTROL}>
+                          {BED_KEYS.map(key => <option key={key} value={key}>{key}</option>)}
+                        </select>
+                      </Field>
+                      <Field label={tt('chordBedMeter')}>
+                        <select value={bedMeter} onChange={event => setBedMeter(event.target.value)} className={CONTROL}>
+                          {BED_METERS.map(meter => <option key={meter} value={meter}>{meter}</option>)}
+                        </select>
+                      </Field>
+                    </div>
+                    <button
+                      type="button"
+                      disabled={bedBusy}
+                      onClick={() => {
+                        setError(null);
+                        setBedBusy(true);
+                        void chordBed({ bpm: Number(bedBpm), key: bedKey, meter: bedMeter, lyrics: lyrics.replace(/\r\n?/g, '\n') })
+                          .then(answer => {
+                            if (failed(answer)) { setError(answer.error); return; }
+                            setAbc(answer.abc.trimEnd());
+                            setPlans([]); setSelectedPlan(0); setSemanticTokens('');
+                            setBedWritten(answer.progressions);
+                          })
+                          .finally(() => setBedBusy(false));
+                      }}
+                      className="mt-2 inline-flex items-center gap-1.5 rounded-lg bg-linear-to-r from-orange-500 to-pink-600 px-3 py-1.5 text-xs font-bold text-white transition hover:brightness-110 disabled:opacity-50"
+                    >
+                      {bedBusy ? <Loader2 size={13} className="animate-spin" /> : <Grid2x2 size={13} />}
+                      {abc.trim() ? tt('chordBedWriteAgain') : tt('chordBedWrite')}
+                    </button>
+                    {bedWritten && (
+                      <p className="mt-2 text-[11px] leading-4 text-zinc-500">
+                        {tt('chordBedWritten').replace('{verse}', bedWritten[0].join(' ')).replace('{chorus}', bedWritten[1].join(' ')).replace('{bridge}', bedWritten[2].join(' '))}
+                      </p>
+                    )}
+                  </div>
+                )}
                 {plans.length > 1 && <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
                   <span className="text-zinc-500">{planLabels[language]}</span>
                   {plans.map((plan, index) => <button key={index} type="button" aria-pressed={index === selectedPlan} className={`${CHIP} ${index === selectedPlan ? 'border-pink-500 text-pink-500' : ''}`} onClick={() => { setSelectedPlan(index); setAbc(plan.abc); setSemanticTokens(''); }}>
