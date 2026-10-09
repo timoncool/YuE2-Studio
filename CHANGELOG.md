@@ -56,6 +56,8 @@ Windows build.
 
 ### Fixed
 
+- A cover's melody score no longer shrinks to a quarter of its size in the score view and its PDF:
+  the voice's multi-bar rests are drawn bar by bar.
 - A score the model wrote as garbage (no key, no meter, colons in the notes; LoRA strengths far past
   their limits do this) stops the song in seconds with the reason, instead of minutes of singing
   from it.

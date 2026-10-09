@@ -5,6 +5,7 @@ import { useI18n } from '../context/I18nContext';
 import { MidiSynth, type PlayNote } from './midi/midiSynth';
 import { saveFile } from '../services/saveFile';
 import { failed as refusedScore, instrumentalScore, vocalOctave } from '../services/scoreApi';
+import { engravedScore } from '../services/scoreEngraving';
 
 const NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 /** A MIDI pitch as a note name with its octave: 60 is C4. */
@@ -46,7 +47,7 @@ export const ScoreView: React.FC<{ abc: string; className?: string; title?: stri
     // pause keeps that from stuttering on a long song.
     const timer = window.setTimeout(() => {
       try {
-        const rendered = abcjs.renderAbc(element, abc, {
+        const rendered = abcjs.renderAbc(element, engravedScore(abc), {
           responsive: 'resize',
           add_classes: true,
           paddingtop: 4,
@@ -204,7 +205,7 @@ export async function scorePdf(abc: string): Promise<ArrayBuffer> {
   host.style.cssText = 'position:fixed;left:-10000px;top:0;width:800px';
   document.body.appendChild(host);
   try {
-    abcjs.renderAbc(host, abc, {
+    abcjs.renderAbc(host, engravedScore(abc), {
       oneSvgPerLine: true,
       staffwidth: 700,
       paddingtop: 0,
