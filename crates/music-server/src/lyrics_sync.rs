@@ -1706,13 +1706,32 @@ pub fn align_lyrics_words(words: &[(f64, String)], lyrics: &str) -> Vec<TimedLin
 /// that was not heard clearly is left out and filled in between its
 /// neighbours instead. A repeated chorus consumes its occurrences in order.
 pub fn align_lyrics(words: &[(f64, String)], lyrics: &str) -> Vec<(f64, String)> {
+    if words.is_empty() {
+        return Vec::new();
+    }
+    let heard_lines = heard_line_starts(words, lyrics);
+    let lines: Vec<&str> = heard_lines.iter().map(|(line, _)| line.as_str()).collect();
+    let mut placed: Vec<Option<f64>> = heard_lines.iter().map(|(_, at)| *at).collect();
+    let first = words.first().map(|(at, _)| *at).unwrap_or(0.0);
+    let last = words.last().map(|(at, _)| *at).unwrap_or(0.0);
+    interpolate(&lines, &mut placed, first, last);
+    lines
+        .iter()
+        .zip(placed)
+        .filter_map(|(line, at)| at.map(|at| (at, (*line).to_string())))
+        .collect()
+}
+
+/// Every sung line of the lyrics with the moment the recogniser heard it start,
+/// or None for a line it did not hear clearly enough to place.
+pub fn heard_line_starts(words: &[(f64, String)], lyrics: &str) -> Vec<(String, Option<f64>)> {
     let lines: Vec<&str> = lyrics
         .lines()
         .map(str::trim)
         .filter(|line| !line.is_empty() && !(line.starts_with('[') && line.ends_with(']')))
         .collect();
     if lines.is_empty() || words.is_empty() {
-        return Vec::new();
+        return lines.iter().map(|line| ((*line).to_string(), None)).collect();
     }
 
     let heard: Vec<(f64, String)> = words.iter().map(|(at, word)| (*at, normalise(word))).collect();
@@ -1813,14 +1832,7 @@ pub fn align_lyrics(words: &[(f64, String)], lyrics: &str) -> Vec<(f64, String)>
         let settled = (low..=high).fold(start, |kept, candidate| if scores[index][candidate] > scores[index][kept] { candidate } else { kept });
         starts[index] = Some(settled);
     }
-    let mut placed: Vec<Option<f64>> = starts.iter().map(|start| start.map(|start| heard[start].0)).collect();
-
-    interpolate(&lines, &mut placed, heard.first().map(|(at, _)| *at).unwrap_or(0.0), heard.last().map(|(at, _)| *at).unwrap_or(0.0));
-    lines
-        .iter()
-        .zip(placed)
-        .filter_map(|(line, at)| at.map(|at| (at, (*line).to_string())))
-        .collect()
+    lines.iter().zip(starts).map(|(line, start)| ((*line).to_string(), start.map(|start| heard[start].0))).collect()
 }
 
 /// Lines the recogniser could not place are spread evenly between the ones it

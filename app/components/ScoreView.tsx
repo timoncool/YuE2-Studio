@@ -1,10 +1,14 @@
 import React, { useEffect, useRef, useState } from 'react';
 import abcjs from 'abcjs';
-import { Download, FileText, Guitar, Play, Square } from 'lucide-react';
+import { ArrowDown, ArrowUp, Download, FileText, Guitar, Play, Square } from 'lucide-react';
 import { useI18n } from '../context/I18nContext';
 import { MidiSynth, type PlayNote } from './midi/midiSynth';
 import { saveFile } from '../services/saveFile';
-import { failed as refusedScore, instrumentalScore } from '../services/scoreApi';
+import { failed as refusedScore, instrumentalScore, vocalOctave } from '../services/scoreApi';
+
+const NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+/** A MIDI pitch as a note name with its octave: 60 is C4. */
+const noteName = (pitch: number) => `${NOTE_NAMES[((pitch % 12) + 12) % 12]}${Math.floor(pitch / 12) - 1}`;
 
 /**
  * Engraves an ABC score as notation.
@@ -24,6 +28,16 @@ export const ScoreView: React.FC<{ abc: string; className?: string; title?: stri
   const [failed, setFailed] = useState(false);
   const [playing, setPlaying] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  const [voice, setVoice] = useState<{ middle: number; inRange: boolean } | null>(null);
+
+  useEffect(() => {
+    let current = true;
+    void vocalOctave(abc, 0).then(answer => {
+      if (!current) return;
+      setVoice(refusedScore(answer) || answer.middle === null ? null : { middle: answer.middle, inRange: answer.in_range });
+    });
+    return () => { current = false; };
+  }, [abc]);
 
   useEffect(() => {
     const element = host.current;
@@ -104,6 +118,17 @@ export const ScoreView: React.FC<{ abc: string; className?: string; title?: stri
     setNotice(t('scoreInstrumentalDone').replace('{moved}', String(answer.moved)).replace('{trimmed}', String(answer.trimmed + answer.dropped)));
   };
 
+  const moveVoice = async (octaves: number) => {
+    if (!onChange) return;
+    const answer = await vocalOctave(abc, octaves);
+    if (refusedScore(answer)) {
+      setNotice(answer.error);
+      return;
+    }
+    onChange(answer.abc);
+    setNotice(t(octaves < 0 ? 'scoreVoiceDownDone' : 'scoreVoiceUpDone').replace('{note}', answer.middle === null ? '' : noteName(answer.middle)));
+  };
+
   const button = 'inline-flex items-center gap-1 rounded-md border border-zinc-200 px-2 py-1 text-[11px] font-medium text-zinc-600 transition-colors hover:border-pink-400 hover:text-pink-600 dark:border-white/10 dark:text-zinc-300';
   return (
     <div className={className}>
@@ -123,9 +148,22 @@ export const ScoreView: React.FC<{ abc: string; className?: string; title?: stri
               <Guitar size={12} />{t('scoreInstrumental')}
             </button>
           )}
+          {onChange && (
+            <>
+              <button type="button" onClick={() => void moveVoice(-1)} className={button} title={t('scoreVoiceDownHint')}>
+                <ArrowDown size={12} />{t('scoreVoiceDown')}
+              </button>
+              <button type="button" onClick={() => void moveVoice(1)} className={button} title={t('scoreVoiceUpHint')}>
+                <ArrowUp size={12} />{t('scoreVoiceUp')}
+              </button>
+            </>
+          )}
         </div>
       )}
       {notice && <p className="mb-1 rounded-md bg-zinc-100 px-2 py-1 text-[11px] leading-4 text-zinc-600">{notice}</p>}
+      {voice && !voice.inRange && (
+        <p className="mb-1 rounded-md bg-amber-50 px-2 py-1 text-[11px] leading-4 text-amber-700">{t('scoreVoiceOutside').replace('{note}', noteName(voice.middle))}</p>
+      )}
       <div ref={host} className="score-view text-zinc-900" />
       {failed && <p className="p-2 text-[11px] text-zinc-500">ABC</p>}
     </div>

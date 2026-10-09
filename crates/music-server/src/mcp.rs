@@ -367,7 +367,7 @@ fn annotations(name: &str) -> Value {
     // a verb that changes something outweighs a noun that reads
     const CHANGES: &[&str] = &["install", "import", "remove", "delete", "refresh", "create", "update", "start", "cancel", "select", "download", "apply", "restart"];
     // reads whose names the rules above miss: create_form names the create page
-    const READ_NAMES: &[&str] = &["lyrics_find", "cover_prompt_render", "studio_wait", "engine_presets_get", "assistant_requests_wait", "ui_console", "song_defaults", "create_form_get", "library_liked", "song_tokenize"];
+    const READ_NAMES: &[&str] = &["lyrics_find", "cover_prompt_render", "studio_wait", "engine_presets_get", "assistant_requests_wait", "ui_console", "song_defaults", "create_form_get", "library_liked", "song_tokenize", "score_match_sections"];
     // writes over what was stored, so the earlier content is gone: a client asks first
     const OVERWRITES: &[&str] = &["library_song_update", "playlist_update", "dataset_update", "dataset_song_update", "dataset_prepare", "lora_update", "stems_split", "karaoke_make", "midi_transcribe", "cover_draw", "cover_set_from_file", "openrouter_set_key"];
     let changes = CHANGES.iter().any(|verb| name.split('_').any(|word| word == *verb));
@@ -1446,6 +1446,25 @@ fn tools() -> &'static [Tool] {
                         fields.push(("melody_only".into(), "1".into()));
                     }
                     Ok(Call { method: Method::POST, path: "/v1/transcriptions".into(), payload: Payload::Form { fields, files } })
+                },
+            },
+            Tool {
+                name: "score_match_sections",
+                description: "For a cover: retag the lyric blocks with the score sections they are sung in, found by recognising the source recording (the karaoke recogniser). Words never change; a chorus written once is copied into later chorus sections, sections without voice get an empty tag, blocks not heard keep their place and come back as unsure. Pass the cover's abc, its lyrics and the source as song_id or path. Returns the proposed lyrics and a per-block report; nothing is applied.",
+                schema: || object(json!({ "abc": { "type": "string" }, "lyrics": { "type": "string" }, "song_id": { "type": "string" }, "path": { "type": "string" }, "language": { "type": "string" } }), &["abc", "lyrics"]),
+                call: |args| {
+                    let mut fields = vec![("abc".to_string(), text(args, "abc")?), ("lyrics".to_string(), text(args, "lyrics")?)];
+                    let mut files = Vec::new();
+                    if let Some(path) = args.get("path").and_then(Value::as_str).filter(|path| !path.trim().is_empty()) {
+                        let path = PathBuf::from(path.trim());
+                        files.push(("audio".to_string(), path.clone(), file_name(&path)));
+                    } else {
+                        fields.push(("song_id".to_string(), text(args, "song_id").map_err(|_| "song_id or path is required".to_string())?));
+                    }
+                    if let Some(language) = args.get("language").and_then(Value::as_str).filter(|value| !value.trim().is_empty()) {
+                        fields.push(("language".into(), language.trim().to_string()));
+                    }
+                    Ok(Call { method: Method::POST, path: "/v1/score/sections".into(), payload: Payload::Form { fields, files } })
                 },
             },
             // ---------------------------------------------------------------- how to write for the model

@@ -1,9 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { libraryChanged, useActivity, useAssistantStatus, useSetupStatus, type ActivityEntry } from '../services/studioQueries';
-import { karaokeReason } from '../services/karaoke';
+import { hasSungLines, karaokeReason } from '../services/karaoke';
 import {
   AlertTriangle, AudioLines, ChevronDown, CircleAlert, Dices, Ear, Eye, EyeOff, FileMusic, FolderOpen, Loader2,
-  Music2, Pause, Piano, Play, RotateCcw, Save, Sparkles, Square, Tags, Upload, Wand2, Settings2, X,
+  ListChecks, Music2, Pause, Piano, Play, RotateCcw, Save, Sparkles, Square, Tags, Upload, Wand2, Settings2, X,
 } from 'lucide-react';
 import { AudioWaveform } from './AudioWaveform';
 import type { Playlist, Song, YueCot, YueOutputFormat, YueRequest, YueSampling } from '../types';
@@ -17,6 +17,7 @@ import { MidiImportDialog } from './MidiImportDialog';
 import { isMidiFile } from '../services/midiFiles';
 import { trackMidiBase64 } from '../services/midiEditor';
 import { composePlans, composeScore, transcribe, type ScorePlan } from '../services/transcription';
+import { failed, matchSections, type SectionProposal } from '../services/scoreApi';
 import { profileLabel as setLabel } from '../services/modelCatalog';
 import { REQUEST_FILE_ACCEPT, parseRequestFile, requestFileTitle, serializeRequest, type RequestFileFormat } from '../services/requestFile';
 import { AdapterPicker } from './AdapterPicker';
@@ -367,6 +368,11 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
   const [coverSongId, setCoverSongId] = useState<string | null>(null);
   // The recording being covered, so it can be listened to next to its score.
   const [coverAudio, setCoverAudio] = useState<string | null>(null);
+  const [coverFile, setCoverFile] = useState<File | null>(null);
+  const [sectionProposal, setSectionProposal] = useState<SectionProposal | null>(null);
+  const [matchingSections, setMatchingSections] = useState(false);
+  // A proposal is for the lyrics, score and recording it was made from; any change makes it stale.
+  useEffect(() => { setSectionProposal(null); }, [abc, lyrics, coverSongId, coverFile]);
   const coverPlayer = useRef<HTMLAudioElement | null>(null);
   const [coverPlaying, setCoverPlaying] = useState(false);
   const [coverTime, setCoverTime] = useState(0);
@@ -498,6 +504,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
       const { song, melodyOnly } = request;
       setCoverSource(song.title);
       setCoverSongId(song.id);
+      setCoverFile(null);
       setCoverAudio(song.audioUrl ?? null);
       if (song.lyrics?.trim()) setLyrics(current => (current.trim() ? current : song.lyrics));
       setMode('cover');
@@ -508,6 +515,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
       const { song } = request;
       setCoverSource(song.title);
       setCoverSongId(song.id);
+      setCoverFile(null);
       setCoverAudio(song.audioUrl ?? null);
       if (song.lyrics?.trim()) setLyrics(current => (current.trim() ? current : song.lyrics));
       setMode('cover');
@@ -1090,6 +1098,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
                   } else if (file) {
                     setCoverSource(file.name);
                     setCoverSongId(null);
+                    setCoverFile(file);
                     setCoverAudio(URL.createObjectURL(file));
                     void runTranscription({ file }, coverMelodyOnly);
                   }
@@ -1142,6 +1151,70 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
               )}
               {coverSource && !transcribing && abc && (
                 <p className="mt-2 text-[11px] text-emerald-600 dark:text-emerald-300">{tt('coverScoreReady')} · {coverSource}</p>
+              )}
+              {abc && (coverSongId || coverFile) && (
+                <div className="mt-3 border-t border-zinc-100 pt-3 dark:border-white/5">
+                  <button
+                    type="button"
+                    disabled={matchingSections || !hasSungLines(lyrics)}
+                    onClick={() => {
+                      setError(null);
+                      setMatchingSections(true);
+                      void matchSections({ abc, lyrics: lyrics.replace(/\r\n?/g, '\n'), songId: coverSongId, file: coverFile })
+                        .then(answer => {
+                          if (failed(answer)) setError(karaokeReason(tt, answer.error) ?? answer.error);
+                          else setSectionProposal(answer.proposal);
+                        })
+                        .finally(() => setMatchingSections(false));
+                    }}
+                    title={tt('coverMatchSectionsHint')}
+                    className="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-zinc-200 py-2 text-xs font-semibold text-zinc-700 transition hover:border-pink-300 disabled:opacity-50 dark:border-white/10 dark:text-zinc-200"
+                  >
+                    {matchingSections ? <Loader2 size={13} className="animate-spin" /> : <ListChecks size={13} />}
+                    {matchingSections ? tt('coverMatchingSections') : tt('coverMatchSections')}
+                  </button>
+                  <p className="mt-1.5 text-[11px] leading-4 text-zinc-500">{tt('coverMatchSectionsHint')}</p>
+                  {sectionProposal && (
+                    <div className="mt-3 rounded-lg border border-pink-300/40 bg-pink-50/60 p-3 dark:border-pink-500/20 dark:bg-pink-500/5">
+                      {sectionProposal.unchanged ? (
+                        <p className="text-[11px] text-zinc-600 dark:text-zinc-300">{tt('coverSectionsUnchanged')}</p>
+                      ) : (
+                        <>
+                          <p className="text-[11px] leading-4 text-zinc-700 dark:text-zinc-200">
+                            {tt('coverSectionsSummary')
+                              .replace('{renamed}', String(sectionProposal.blocks.filter(block => block.status === 'renamed').length))
+                              .replace('{copied}', String(sectionProposal.filled.filter(fill => fill.copied_from !== null).length))
+                              .replace('{unsure}', String(sectionProposal.blocks.filter(block => block.status === 'unsure').length))}
+                          </p>
+                          {sectionProposal.blocks.some(block => block.status === 'unsure') && (
+                            <p className="mt-1 flex gap-1.5 text-[11px] leading-4 text-amber-700 dark:text-amber-300">
+                              <AlertTriangle size={12} className="mt-0.5 shrink-0" />
+                              {tt('coverSectionsUnsure').replace('{blocks}', sectionProposal.blocks.filter(block => block.status === 'unsure').map(block => block.tag ?? `#${block.index}`).join(', '))}
+                            </p>
+                          )}
+                          <div className="mt-2 grid grid-cols-2 gap-2">
+                            <pre className="max-h-48 overflow-auto rounded-md bg-white/70 p-2 text-[10px] leading-4 text-zinc-500 dark:bg-black/20">{lyrics}</pre>
+                            <pre className="max-h-48 overflow-auto rounded-md bg-white/70 p-2 text-[10px] leading-4 text-zinc-800 dark:bg-black/20 dark:text-zinc-100">{sectionProposal.lyrics}</pre>
+                          </div>
+                        </>
+                      )}
+                      <div className="mt-2 flex justify-end gap-2">
+                        <button type="button" onClick={() => setSectionProposal(null)} className="rounded-md px-3 py-1.5 text-[11px] font-semibold text-zinc-600 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-white/5">
+                          {tt('cancel')}
+                        </button>
+                        {!sectionProposal.unchanged && (
+                          <button
+                            type="button"
+                            onClick={() => { setLyrics(sectionProposal.lyrics); setSectionProposal(null); }}
+                            className="rounded-md bg-pink-600 px-3 py-1.5 text-[11px] font-bold text-white hover:brightness-110"
+                          >
+                            {tt('coverSectionsApply')}
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
               )}
             </Card>
           )}

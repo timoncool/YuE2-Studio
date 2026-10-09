@@ -32,3 +32,37 @@ export async function instrumentalScore(abc: string): Promise<Answer<{ abc: stri
 export async function markScore(abc: string, style: string, lyrics: string, cot: string, keep: boolean): Promise<Answer<{ abc: string }>> {
   return post('/v1/score/mark', { abc, style, lyrics, cot, keep });
 }
+
+export type SectionBlock = {
+  index: number;
+  tag: string | null;
+  new_tag: string | null;
+  section: number | null;
+  first_line_seconds: number | null;
+  status: 'kept' | 'renamed' | 'merged' | 'unsure' | 'dropped';
+};
+
+export type SectionProposal = {
+  lyrics: string;
+  blocks: SectionBlock[];
+  filled: { section: number; tag: string; copied_from: number | null }[];
+  unchanged: boolean;
+};
+
+/** The cover's lyrics retagged with the score sections they are sung in, heard in the source recording. Nothing is applied. */
+export async function matchSections(input: { abc: string; lyrics: string; songId?: string | null; file?: File | null }): Promise<Answer<{ proposal: SectionProposal }>> {
+  const form = new FormData();
+  form.append('abc', input.abc);
+  form.append('lyrics', input.lyrics);
+  if (input.file) form.append('audio', input.file, input.file.name);
+  else if (input.songId) form.append('song_id', input.songId);
+  const response = await fetch('/v1/score/sections', { method: 'POST', body: form });
+  const payload = (await response.json().catch(() => null)) as (SectionProposal & { error?: string }) | null;
+  if (!response.ok || !payload) return { ok: false, error: payload?.error ?? `HTTP ${response.status}` };
+  return { ok: true, proposal: payload };
+}
+
+/** The vocal line moved by whole octaves (0 only measures it), with its middle against the range the model's own scores keep. */
+export async function vocalOctave(abc: string, octaves: number): Promise<Answer<{ abc: string; middle: number | null; in_range: boolean; range: [number, number] }>> {
+  return post('/v1/score/vocal-octave', { abc, octaves });
+}

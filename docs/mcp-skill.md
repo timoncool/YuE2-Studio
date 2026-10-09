@@ -104,7 +104,10 @@ connected and the address to paste.
 **A cover of a recording**
 
 1. `score_transcribe` with `song_id` or `path`; `studio_wait` with its `job_id`.
-2. `song_create` with the new style, the original lyrics and that score as `abc`.
+2. `score_match_sections` with that `abc`, the original lyrics and the same `song_id` or `path`:
+   it retags the lyric blocks with the sections they are sung in. Check the blocks it reports
+   as `unsure`, then use its `lyrics`.
+3. `song_create` with the new style, those lyrics and that score as `abc`.
 
 **A LoRA from a folder of songs, written by you**
 

@@ -1036,6 +1036,8 @@ pub async fn serve() -> anyhow::Result<()> {
         .route("/v1/adapters/{id}/comfyui", get(export_adapter_comfyui).post(save_adapter_comfyui))
         .route("/v1/score/midi", post(score::api::midi))
         .route("/v1/score/instrumental", post(score::api::instrumental))
+        .route("/v1/score/vocal-octave", post(score::api::vocal_octave))
+        .route("/v1/score/sections", post(match_score_sections))
         .route("/v1/score/from-midi", post(score::api::from_midi))
         .route("/v1/song/tokenize", post(song_tokenizer::tokenize))
         .route("/v1/score/mark", post(score::api::mark))
@@ -5299,6 +5301,101 @@ async fn karaoke_install(
     Ok(Json(state.lyrics_sync.status(&config).await))
 }
 
+/// The words the chosen recogniser hears in a recording, each with its moment: the clock karaoke
+/// and the cover's section matching put the lyrics on.
+async fn recognised_words(
+    state: &AppState,
+    config: &lyrics_sync::LyricsSyncConfig,
+    path: std::path::PathBuf,
+    language: Option<String>,
+    lyrics: String,
+) -> Result<Vec<(f64, String)>, (StatusCode, Json<ApiError>)> {
+    match config.provider {
+        lyrics_sync::AsrProvider::None => Err(api_error(StatusCode::CONFLICT, "karaoke.no-recogniser".into())),
+        lyrics_sync::AsrProvider::Parakeet => {
+            let sync = state.lyrics_sync.clone();
+            let (runtime, variant) = (config.runtime, config.whisper_model.clone());
+            tokio::task::spawn_blocking(move || sync.parakeet_words(runtime, variant.as_deref(), &path))
+                .await
+                .map_err(|error| api_error(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?
+                .map_err(|error| api_error(StatusCode::BAD_GATEWAY, error.to_string()))
+        }
+        lyrics_sync::AsrProvider::Whisper => {
+            let sync = state.lyrics_sync.clone();
+            let config = config.clone();
+            tokio::task::spawn_blocking(move || sync.whisper_words(&config, &path, language.as_deref(), &lyrics))
+                .await
+                .map_err(|error| api_error(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?
+                .map_err(|error| api_error(StatusCode::BAD_GATEWAY, error.to_string()))
+        }
+        lyrics_sync::AsrProvider::OpenRouter => karaoke_words_from_openrouter(state, config, &path.to_string_lossy(), language.as_deref())
+            .await
+            .map_err(|error| api_error(StatusCode::BAD_GATEWAY, error.to_string())),
+    }
+}
+
+/// HOT-Step's "match sections to score" for a cover: the source recording (an uploaded file or a
+/// library song) is recognised as karaoke is, and each lyric block is retagged with the score
+/// section it is sung in. Nothing is changed here; the window shows the proposal before applying it.
+async fn match_score_sections(
+    State(state): State<AppState>,
+    mut multipart: axum::extract::Multipart,
+) -> Result<Json<Value>, (StatusCode, Json<ApiError>)> {
+    let bad = |message: String| api_error(StatusCode::BAD_REQUEST, message);
+    let (mut abc, mut lyrics, mut language, mut song_id, mut upload) = (String::new(), String::new(), None::<String>, None::<String>, None::<(Vec<u8>, String)>);
+    while let Some(field) = multipart.next_field().await.map_err(|error| bad(error.to_string()))? {
+        match field.name().unwrap_or_default() {
+            "abc" => abc = field.text().await.map_err(|error| bad(error.to_string()))?,
+            "lyrics" => lyrics = field.text().await.map_err(|error| bad(error.to_string()))?,
+            "language" => language = Some(field.text().await.map_err(|error| bad(error.to_string()))?).filter(|value| !value.trim().is_empty()),
+            "song_id" => song_id = Some(field.text().await.map_err(|error| bad(error.to_string()))?.trim().to_string()),
+            "audio" => {
+                let name = field.file_name().unwrap_or("source.audio").to_string();
+                upload = Some((field.bytes().await.map_err(|error| bad(error.to_string()))?.to_vec(), name));
+            }
+            _ => {}
+        }
+    }
+    if abc.trim().is_empty() {
+        return Err(bad("Send the cover's score as abc.".into()));
+    }
+    if !auto_title::has_sung_lines(&lyrics) {
+        return Err(bad("karaoke.instrumental".into()));
+    }
+    let config = state.lyrics_sync_config.read().await.clone();
+    if matches!(config.provider, lyrics_sync::AsrProvider::Whisper | lyrics_sync::AsrProvider::Parakeet) {
+        card_free_of_training(&state, "match sections").await?;
+    }
+    if !config.available() {
+        return Err(api_error(StatusCode::CONFLICT, "karaoke.off".into()));
+    }
+    if !ensure_local_recogniser(&state, &config, song_id.as_deref().unwrap_or_default()).await {
+        return Err(api_error(StatusCode::CONFLICT, "karaoke.model-missing".into()));
+    }
+    let work = tempfile::tempdir().map_err(|error| api_error(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?;
+    let path = match (song_id.as_deref(), upload) {
+        (_, Some((bytes, name))) => {
+            if bytes.is_empty() {
+                return Err(bad("The recording is empty.".into()));
+            }
+            let extension = std::path::Path::new(&name).extension().and_then(|value| value.to_str()).unwrap_or("audio").to_string();
+            let path = work.path().join(format!("source.{extension}"));
+            tokio::fs::write(&path, bytes).await.map_err(|error| api_error(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?;
+            path
+        }
+        (Some(id), None) => {
+            let song = state.library.get_song(id).map_err(|error| api_error(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?
+                .ok_or_else(|| api_error(StatusCode::NOT_FOUND, "Song not found.".into()))?;
+            state.library.media_path_for_song(&song).ok_or_else(|| api_error(StatusCode::NOT_FOUND, "The track's audio is not in the library.".into()))?
+        }
+        (None, None) => return Err(bad("Send the source recording as audio or a song_id.".into())),
+    };
+    let words = recognised_words(&state, &config, path, language, lyrics.clone()).await?;
+    let lines = lyrics_sync::heard_line_starts(&words, &lyrics);
+    let proposal = score::section_match::match_sections(&abc, &lyrics, &lines).map_err(bad)?;
+    Ok(Json(serde_json::to_value(proposal).map_err(|error| api_error(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?))
+}
+
 /// Times one track's own lyrics and stores the result with it.
 ///
 /// Recognition is CPU or GPU bound and takes tens of seconds, so it runs on a
@@ -5335,32 +5432,7 @@ async fn create_song_karaoke(
         return Err(api_error(StatusCode::BAD_REQUEST, "karaoke.instrumental".into()));
     }
 
-    let words = match config.provider {
-        lyrics_sync::AsrProvider::None => {
-            return Err(api_error(StatusCode::CONFLICT, "karaoke.no-recogniser".into()))
-        }
-        lyrics_sync::AsrProvider::Parakeet => {
-            let sync = state.lyrics_sync.clone();
-            let path = std::path::PathBuf::from(&audio);
-            tokio::task::spawn_blocking(move || sync.parakeet_words(config.runtime, config.whisper_model.as_deref(), &path))
-                .await
-                .map_err(|error| api_error(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?
-        }
-        lyrics_sync::AsrProvider::Whisper => {
-            let sync = state.lyrics_sync.clone();
-            let config = config.clone();
-            let path = std::path::PathBuf::from(&audio);
-            let language = request.language.clone();
-            let lyrics = song.lyrics.clone();
-            tokio::task::spawn_blocking(move || sync.whisper_words(&config, &path, language.as_deref(), &lyrics))
-                .await
-                .map_err(|error| api_error(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?
-        }
-        lyrics_sync::AsrProvider::OpenRouter => {
-            karaoke_words_from_openrouter(&state, &config, &audio, request.language.as_deref()).await
-        }
-    }
-    .map_err(|error| api_error(StatusCode::BAD_GATEWAY, error.to_string()))?;
+    let words = recognised_words(&state, &config, std::path::PathBuf::from(&audio), request.language.clone(), song.lyrics.clone()).await?;
 
     // Word by word, because that is what karaoke means: a line time alone
     // leaves a player sweeping the highlight linearly through the line, which

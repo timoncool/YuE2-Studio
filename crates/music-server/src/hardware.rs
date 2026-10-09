@@ -100,7 +100,9 @@ fn probe() -> &'static Hardware {
             },
         };
         let device = if nvidia { nvidia_cuda_device() } else { None };
-        let cuda = device.and_then(|(compute, driver)| cuda_build(compute, driver));
+        // The CUDA builds of the engine and their cuBLAS ship for Windows only; the Linux package
+        // carries the Vulkan engine and the macOS one Metal, whatever the card.
+        let cuda = if cfg!(windows) { device.and_then(|(compute, driver)| cuda_build(compute, driver)) } else { None };
         let compute_capability = device.map(|(compute, _)| compute);
         Hardware {
             gpu_name,

@@ -9,7 +9,7 @@ use base64::Engine;
 use serde::Deserialize;
 use serde_json::{json, Value};
 
-use super::{edits, export, import, instrumental, notation, phrasing, smf};
+use super::{edits, export, import, instrumental, notation, phrasing, smf, transpose};
 
 type Answer = Result<Json<Value>, (StatusCode, Json<Value>)>;
 
@@ -133,4 +133,29 @@ pub async fn instrumental(Json(request): Json<MidiRequest>) -> Answer {
         Ok(made) => Ok(Json(json!({ "ok": true, "abc": edits::attach(&made.abc, edit.words.as_deref(), edit.keep), "moved": made.moved, "trimmed": made.trimmed, "dropped": made.dropped }))),
         Err(reason) => problem(reason),
     }
+}
+
+#[derive(serde::Deserialize)]
+pub struct VocalOctaveRequest {
+    abc: String,
+    #[serde(default)]
+    octaves: i32,
+}
+
+/// The vocal line moved by whole octaves (none: only measured), with where its middle now sits
+/// against the range YuE2's own scores keep the voice in.
+pub async fn vocal_octave(Json(request): Json<VocalOctaveRequest>) -> Answer {
+    too_long(&request.abc)?;
+    let edit = edits::read(&request.abc);
+    let moved = match transpose::move_vocal_octaves(&edit.score, request.octaves) {
+        Ok(moved) => moved,
+        Err(reason) => return problem(reason),
+    };
+    let middle = match transpose::vocal_middle(&moved) {
+        Ok(middle) => middle,
+        Err(reason) => return problem(reason),
+    };
+    let (low, high) = transpose::VOCAL_RANGE;
+    let abc = if request.octaves == 0 { request.abc.clone() } else { edits::attach(&moved, edit.words.as_deref(), edit.keep) };
+    Ok(Json(json!({ "ok": true, "abc": abc, "middle": middle, "in_range": middle.is_none_or(|pitch| (low..=high).contains(&pitch)), "range": [low, high] })))
 }

@@ -23,6 +23,14 @@ Windows build.
   set that needs more memory than the computer has says so on the start screen instead of stalling
   half loaded. The studio no longer recommends the unquantised BF16 set: Q8_0 is near lossless at
   half the memory, and the BF16 set stays in the list.
+- **Match sections to the score** for a cover (after HOT-Step's Cover Studio): the source recording is
+  heard by the karaoke recogniser and each lyric block is tagged with the score section it is sung in.
+  Words never change; a chorus written once is copied into later chorus sections, sections without
+  voice get an empty tag, blocks not heard clearly keep their place and are listed. The proposal is
+  shown before and after and applied only on Apply. Also an MCP tool, `score_match_sections`.
+- **Voice an octave down or up**: the score view moves only the vocal line by an octave, the band,
+  chords and key stay. The written register decides who sings, so an octave down brings in a man; and
+  a vocal line whose middle leaves C4–A#5, where the model writes the voice itself, is flagged.
 - **Russian stress**: a stress mark (U+0301, Alt+0769) after a vowel puts the sung stress on it; the
   lyrics hint says so.
 - **Engine progress on the card**: the stage, its step counter and the time left.

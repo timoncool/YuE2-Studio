@@ -30,7 +30,7 @@ struct Block {
     sung: bool,
 }
 
-fn kind(label: &str) -> String {
+pub(crate) fn kind(label: &str) -> String {
     let normalized: String = label.to_lowercase().chars().map(|character| if matches!(character, '_' | '–' | '—') { '-' } else { character }).collect();
     static PRE: OnceLock<Regex> = OnceLock::new();
     static KIND: OnceLock<Regex> = OnceLock::new();
