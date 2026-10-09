@@ -158,6 +158,27 @@ Code, save [docs/mcp-skill.md](docs/mcp-skill.md) as `~/.claude/skills/yue2-stud
   message the studio shows.
 - **Likes, sorting and stems in order** — a like is kept with the song for every window and
   agent, every list sorts by date, title or length, and a song's stems fold under it.
+- **A song from a seed** — hum, play or write an opening, turn on "Continue the song from this
+  score", and the model writes the rest of the song on from it in its key and meter, the opening
+  coming back as a hook.
+- **Chord bed** — a score of chords over rests written at once in the tempo, key and meter you set,
+  one section per lyrics tag; the model writes the melody and the arrangement over it and the
+  planning step is skipped.
+- **Chords and sections** — chord variety so the song stops looping one progression, sections that
+  do not open the way the one before did, chords outside the key, and the score held to the
+  lyrics' sections in their order.
+- **Covers that line up** — Match sections to the score retags the lyric blocks by where the source
+  recording sings them; the score view moves the voice an octave down or up, apart from the band,
+  and Instrumental hands the voice's notes to the instrument and keeps the chords.
+- **Extend a song** — Re-render composes on from the track's last frame by 15 seconds to 2 minutes;
+  with a score, each section's words wait until the score reaches it.
+- **AB2 solver** — one network evaluation a step instead of two, about twice as fast at the same
+  steps; midpoint stays the default.
+- **Around every song** — a note of your own on each song, its parameters sent back to the form,
+  shown as JSON or saved to a file; the engine's stage, step and time left on the card while it
+  renders; video export from 1080p to 240p with AAC from 128 to 320 kbps; quitting while a song is
+  made asks first, and a song the studio was closed on starts again; karaoke can recognise words
+  with Parakeet Ultra int8, Moondream's fine-tune of Parakeet.
 
 ## Compose and edit MIDI
 
