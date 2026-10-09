@@ -332,6 +332,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
   const [lmBatch, setLmBatch] = useState('');
   const [synthBatch, setSynthBatch] = useState('');
   const [steps, setSteps] = useState('');
+  const [solver, setSolver] = useState<'' | 'midpoint' | 'ab2'>('');
   const [cfgScale, setCfgScale] = useState('');
   const [randomizeSeed, setRandomizeSeed] = useState(true);
   const [lmSeed, setLmSeed] = useState('');
@@ -493,6 +494,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
     setLmBatch('');
     setSynthBatch('');
     setSteps(asText(request.steps));
+    setSolver(request.solver === 'ab2' || request.solver === 'midpoint' ? request.solver : '');
     setCfgScale(typeof request.cfg_scale === 'number' && request.cfg_scale >= 0 ? String(request.cfg_scale) : '');
     const safeSeed = (value: unknown) => (typeof value === 'number' && Number.isSafeInteger(value) ? String(value) : '');
     const storedLmSeed = safeSeed(request.lm_seed);
@@ -586,7 +588,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
   };
 
   const resetParameters = () => {
-    chooseDuration(String(DEFAULT_DURATION_SECONDS)); setLmBatch(''); setSynthBatch(''); setSteps(''); setCfgScale('');
+    chooseDuration(String(DEFAULT_DURATION_SECONDS)); setLmBatch(''); setSynthBatch(''); setSteps(''); setSolver(''); setCfgScale('');
     setRandomizeSeed(true); setLmSeed(''); setSeed(''); setSemanticTokens('');
     setAbcSampling(emptySampling()); setSemanticSampling(emptySampling()); setHarmony(emptyHarmony());
     setMp3Bitrate('320'); setFormat('flac');
@@ -621,6 +623,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
     if (synthBatchValue !== undefined) request.synth_batch_size = synthBatchValue;
     const stepsValue = numberOrUndefined(steps);
     if (stepsValue !== undefined) request.steps = stepsValue;
+    if (solver) request.solver = solver;
     const cfgValue = numberOrUndefined(cfgScale);
     if (cfgValue !== undefined) request.cfg_scale = cfgValue;
     // Seeds are drawn here, within 32 bits, so the stored request replays the
@@ -958,6 +961,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
     lm_batch_size: [lmBatch, setLmBatch],
     synth_batch_size: [synthBatch, setSynthBatch],
     steps: [steps, setSteps],
+    solver: [solver, value => setSolver(value === 'ab2' || value === 'midpoint' ? value : '')],
     cfg_scale: [cfgScale, setCfgScale],
     lm_seed: [lmSeed, setLmSeed],
     seed: [seed, setSeed],
@@ -1640,6 +1644,12 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
                 step={1}
                 onChange={setSteps}
               />
+              <Field label={tt('solver')} hint={tt(solver === 'ab2' ? 'solverAb2Hint' : 'solverMidpointHint')}>
+                <select value={solver || 'midpoint'} onChange={event => setSolver(event.target.value as 'midpoint' | 'ab2')} className={CONTROL}>
+                  <option value="midpoint">{tt('solverMidpoint')}</option>
+                  <option value="ab2">{tt('solverAb2')}</option>
+                </select>
+              </Field>
             </div>
             <div className="mt-4 space-y-3 border-t border-zinc-100 pt-4 dark:border-white/5">
               <SliderRow

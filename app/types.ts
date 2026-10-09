@@ -153,6 +153,8 @@ export interface YueRequest {
   abc_sampling?: YueSampling;
   semantic_sampling?: YueSampling;
   harmony?: YueHarmony;
+  /** The acoustic ODE solver: midpoint is the reference, ab2 about twice as fast. */
+  solver?: 'midpoint' | 'ab2';
   /** abc is only the opening: the model writes the rest of the song on from it. */
   abc_continue?: boolean;
   output_format?: YueOutputFormat;

@@ -7,6 +7,9 @@ Windows build.
 
 ### Added
 
+- **AB2 solver** under Advanced (Riff's idea): one network evaluation a step instead of two, so the
+  sound stage takes about half the time at the same steps; in our comparison it sounded the same
+  as midpoint, which stays the default. Agents set `solver`.
 - **A song from a seed** (Mothersuperior's hum-to-song, its first part): with "Continue the song from
   this score" the score is only an opening - hummed and transcribed, played on the keyboard or
   written - and the model writes the rest of the song on from it in its key and meter, the opening
@@ -64,6 +67,9 @@ Windows build.
 
 ### Fixed
 
+- Long songs no longer fail now and then at the sound stage with a CUDA illegal memory access: the
+  engine's attention keys are padded to the flash attention kernels' tile (the sound is unchanged,
+  and that stage got faster).
 - A cover's melody score no longer shrinks to a quarter of its size in the score view and its PDF:
   the voice's multi-bar rests are drawn bar by bar.
 - A score the model wrote as garbage (no key, no meter, colons in the notes; LoRA strengths far past

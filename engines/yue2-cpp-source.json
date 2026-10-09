@@ -1,6 +1,6 @@
 {
   "repository": "https://github.com/timoncool/yue2.cpp.git",
-  "commit": "78107494094e4dbf837063fb5ee27f69fbc77d34",
+  "commit": "c8516dbf44d660cca40d3f420c67063e37ec8258",
   "license": "MIT",
   "build": {
     "windows": "buildcuda.cmd",

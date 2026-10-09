@@ -254,6 +254,9 @@ struct CreateMusicJobRequest {
     /// `abc` is the opening of a score, and the model writes the rest of the song on from it.
     #[serde(default)]
     abc_continue: bool,
+    /// The acoustic ODE solver: `midpoint` (the reference) or `ab2` (about half the evaluations).
+    #[serde(default)]
+    solver: Option<String>,
     output_format: Option<String>,
     mp3_bitrate: Option<u32>,
     /// Library title only, never sent to the engine.
@@ -561,6 +564,9 @@ struct ReplayMusicJobRequest {
     song_id: Option<String>,
     replay_request: Option<Value>,
     steps: Option<u32>,
+    /// The acoustic ODE solver: `midpoint` or `ab2`.
+    #[serde(default)]
+    solver: Option<String>,
     seed: Option<i64>,
     synth_batch_size: Option<u32>,
     output_format: Option<String>,
@@ -7109,6 +7115,10 @@ fn prepare_replay_synthesis(mut replay: Value, overrides: &ReplayMusicJobRequest
         object.insert("steps".into(), Value::from(steps));
     }
     if let Some(seed) = overrides.seed { object.insert("seed".into(), Value::from(seed)); }
+    if let Some(solver) = &overrides.solver {
+        validate_solver(solver)?;
+        object.insert("solver".into(), Value::from(solver.as_str()));
+    }
     if let Some(variations) = overrides.synth_batch_size {
         if !(1..=9).contains(&variations) { return Err("synth_batch_size must be between 1 and 9".into()); }
         object.insert("synth_batch_size".into(), Value::from(variations));
@@ -8094,6 +8104,10 @@ fn output_format(settings: &Value) -> &str {
 /// A seed for a request that leaves it to chance, drawn here as a 32-bit
 /// number: the engine's own draw is 64-bit, more than the page's JavaScript
 /// numbers hold exactly, so a song made from it could not be made again.
+fn validate_solver(solver: &str) -> Result<(), String> {
+    if matches!(solver, "midpoint" | "ab2") { Ok(()) } else { Err("solver must be midpoint or ab2".into()) }
+}
+
 fn drawn_seed() -> i64 {
     i64::from(uuid::Uuid::now_v7().as_u128() as u32)
 }
@@ -8225,6 +8239,10 @@ fn yue_request_from(request: &CreateMusicJobRequest, max_batch: u32) -> Result<V
     body["lm_seed"] = Value::from(request.lm_seed.filter(|seed| *seed >= 0).unwrap_or_else(drawn_seed));
     body["seed"] = Value::from(request.seed.filter(|seed| *seed >= 0).unwrap_or_else(drawn_seed));
     insert_optional(&mut body, "steps", request.steps);
+    if let Some(solver) = request.solver.as_deref() {
+        validate_solver(solver)?;
+        body["solver"] = Value::from(solver);
+    }
     insert_optional(&mut body, "lm_batch_size", request.lm_batch_size);
     insert_optional(&mut body, "synth_batch_size", request.synth_batch_size);
     insert_optional(&mut body, "cfg_scale", request.cfg_scale.filter(|value| *value >= 0.0));
@@ -8925,7 +8943,7 @@ mod tests {
     }
 
     fn replay_overrides() -> ReplayMusicJobRequest {
-        ReplayMusicJobRequest { client_ref: None, song_id: None, replay_request: None, steps: None, seed: None, synth_batch_size: None, output_format: None, mp3_bitrate: None, title: None, extend_seconds: None }
+        ReplayMusicJobRequest { client_ref: None, song_id: None, replay_request: None, steps: None, solver: None, seed: None, synth_batch_size: None, output_format: None, mp3_bitrate: None, title: None, extend_seconds: None }
     }
 
     #[test]

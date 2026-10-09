@@ -1357,6 +1357,7 @@ fn tools() -> &'static [Tool] {
                     "lyrics": { "type": "string" },
                     "title": { "type": "string" },
                     "abc": { "type": "string" },
+                    "solver": { "type": "string", "enum": ["midpoint", "ab2"], "description": "acoustic ODE solver: midpoint is the reference; ab2 spends one network evaluation a step instead of two, about twice as fast at the same steps, and sounds the same" },
                     "abc_continue": { "type": "boolean", "description": "abc is only the opening (a hummed or played seed, from score_transcribe or the MIDI editor): the model writes the rest of the song on from it in its key and meter, and the opening comes back as a hook" },
                     "transpose": { "type": "integer", "minimum": -24, "maximum": 24, "description": "move a supplied abc score before singing; requires full or melody cot and no semantic_tokens" },
                     "lyric_timing": { "type": "boolean", "description": "with a supplied abc score, each section's words wait until the score reaches it, so the voice keeps to the band; on unless false" },
@@ -1404,7 +1405,7 @@ fn tools() -> &'static [Tool] {
             Tool {
                 name: "song_replay",
                 description: "Render a library song again from its saved audio codes, bit for bit or with other steps, a new sound seed, a batch of variations, or another format - without composing again.",
-                schema: || object(json!({ "song_id": { "type": "string" }, "steps": { "type": "integer" }, "seed": { "type": "integer" }, "synth_batch_size": { "type": "integer" }, "output_format": { "type": "string", "enum": ["flac", "mp3"] }, "title": { "type": "string" } }), &["song_id"]),
+                schema: || object(json!({ "song_id": { "type": "string" }, "steps": { "type": "integer" }, "solver": { "type": "string", "enum": ["midpoint", "ab2"] }, "seed": { "type": "integer" }, "synth_batch_size": { "type": "integer" }, "output_format": { "type": "string", "enum": ["flac", "mp3"] }, "title": { "type": "string" } }), &["song_id"]),
                 call: |args| post("/v1/music/replay".into(), args.clone()),
             },
             Tool {
