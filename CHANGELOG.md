@@ -7,6 +7,11 @@ Windows build.
 
 ### Added
 
+- **Anonymous statistics and news from the hub.** The start screen and Settings - Anonymous statistics have
+  a checkbox, on by default, with which the studio sends once a day how many songs were made, failed or
+  were cancelled, the model set used, its version, the OS and the class of the graphics card - never lyrics,
+  prompts, audio or file names; What is sent shows the report, and DO_NOT_TRACK=1 or STUDIO_TELEMETRY=0
+  turns it off entirely. News from the author arrive without an update, on top of the bundled ones.
 - **AB2 solver** under Advanced (Riff's idea): one network evaluation a step instead of two, so the
   sound stage takes about half the time at the same steps; in our comparison it sounded the same
   as midpoint, which stays the default. Agents set `solver`.
