@@ -128,9 +128,9 @@ pub async fn midi(Json(request): Json<MidiRequest>) -> Answer {
 /// The score made instrumental: the voice's notes on the instrument, Vocal left with its rests and chords.
 pub async fn instrumental(Json(request): Json<MidiRequest>) -> Answer {
     too_long(&request.abc)?;
-    let score = edits::read(&request.abc).score;
-    match instrumental::transfer(&score) {
-        Ok(made) => Ok(Json(json!({ "ok": true, "abc": made.abc, "moved": made.moved, "trimmed": made.trimmed, "dropped": made.dropped }))),
+    let edit = edits::read(&request.abc);
+    match instrumental::transfer(&edit.score) {
+        Ok(made) => Ok(Json(json!({ "ok": true, "abc": edits::attach(&made.abc, edit.words.as_deref(), edit.keep), "moved": made.moved, "trimmed": made.trimmed, "dropped": made.dropped }))),
         Err(reason) => problem(reason),
     }
 }

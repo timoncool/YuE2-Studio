@@ -3927,16 +3927,21 @@ async fn update_configuration(
         match selection.capability {
             Capability::SpeechToText => {
                 let mut sync = state.lyrics_sync_config.write().await;
+                let installed_parakeet = state.lyrics_sync.installed_parakeet();
                 sync.provider = match selection.mode {
                     ExecutionMode::OpenRouter => lyrics_sync::AsrProvider::OpenRouter,
                     ExecutionMode::Local => match selection.local_engine.as_deref() {
                         Some("whisper") => lyrics_sync::AsrProvider::Whisper,
                         Some("parakeet") => lyrics_sync::AsrProvider::Parakeet,
-                        _ if state.lyrics_sync.parakeet_any_ready() => lyrics_sync::AsrProvider::Parakeet,
+                        _ if installed_parakeet.is_some() => lyrics_sync::AsrProvider::Parakeet,
                         _ if state.lyrics_sync.whisper_binary().is_some() => lyrics_sync::AsrProvider::Whisper,
                         _ => sync.provider,
                     },
                 };
+                // picked because some Parakeet is there: the one named must be that one
+                if sync.provider == lyrics_sync::AsrProvider::Parakeet && selection.local_engine.is_none() && !state.lyrics_sync.parakeet_ready(sync.whisper_model.as_deref()) {
+                    sync.whisper_model = installed_parakeet.map(String::from);
+                }
                 if selection.mode == ExecutionMode::OpenRouter {
                     sync.openrouter_model = selection.cloud_model.clone();
                 }
@@ -5212,13 +5217,7 @@ fn karaoke_set(name: &str, device: lyrics_sync::OnnxFlavour, whisper_model: Opti
             wanted.extend(card_assets(device).iter().map(|id| id.to_string()));
             // The precision is chosen the same way a Whisper model is: through
             // the dropdown, which names one of the encoders.
-            if whisper_model == Some(lyrics_sync::PARAKEET_ULTRA) {
-                wanted.extend(lyrics_sync::PARAKEET_ULTRA_ASSET_IDS.map(String::from));
-            } else if whisper_model.is_some_and(|id| id.contains("fp32")) {
-                wanted.extend(lyrics_sync::PARAKEET_FP32_ASSET_IDS.map(String::from));
-            } else {
-                wanted.extend(lyrics_sync::PARAKEET_ASSET_IDS.map(String::from));
-            }
+            wanted.extend(lyrics_sync::parakeet_variant(whisper_model).0.iter().map(|id| id.to_string()));
         }
         "whisper" => {
             // One binary whichever device is chosen; the card needs CUDA 11's
@@ -6799,19 +6798,21 @@ async fn free_the_card_for_the_engine(state: &AppState) {
 /// A card that ran out of memory says so in the log and then the process is
 /// gone; the studio saw only a refused connection, and told the user to
 /// download models that were already on disk.
-fn engine_failure_reason(state: &AppState) -> Option<String> {
+fn engine_failure_reason(state: &AppState, job_id: &str) -> Option<String> {
     let tail = music_engine::yue_server::startup_log_tail(80).join("\n").to_lowercase();
     if describes_exhausted_memory(&tail) {
         return Some("The graphics card ran out of memory while the engine was loading the models. Choose a smaller quantisation in the model manager, or close whatever else is using the card - the writing assistant holds several gigabytes of its own.".to_string());
     }
     let lines = state.engine_log.lines()?;
-    last_fatal(&lines)
+    last_fatal(&lines, job_id)
 }
 
-/// What the engine said when it gave a job up: its last FATAL line among the
-/// latest ones, without the stage tag.
-fn last_fatal(lines: &[String]) -> Option<String> {
-    lines.iter().rev().take(40).find_map(|line| line.split_once("FATAL:").map(|(_, why)| why.trim().to_string())).filter(|why| !why.is_empty())
+/// What the engine said when it gave this job up: the last FATAL line after the
+/// job's own start, without the stage tag.
+fn last_fatal(lines: &[String], job_id: &str) -> Option<String> {
+    let start = format!("Job {job_id}");
+    let from = lines.iter().rposition(|line| line.contains(&start))?;
+    lines[from..].iter().rev().find_map(|line| line.split_once("FATAL:").map(|(_, why)| why.trim().to_string())).filter(|why| !why.is_empty())
 }
 
 /// Whether a lowercased log says the card ran out of room.
@@ -7330,7 +7331,7 @@ async fn follow_job(state: &AppState, job_id: &str) {
                 return;
             }
             // a stop asked for while the engine was being polled stays a stop
-            let failure = (remote.status == "failed").then(|| engine_failure_reason(&state)).flatten();
+            let failure = (remote.status == "failed").then(|| engine_failure_reason(&state, &job_id)).flatten();
             if let Some(job) = state.jobs.write().await.get_mut(&job_id).filter(|job| !matches!(job.status, MusicJobStatus::Cancelled)) {
                 apply_remote_status(job, &remote.status, failure);
             }
@@ -7387,7 +7388,10 @@ async fn import_completed_result(state: &AppState, job: &MusicJob, job_id: &str)
         settings.insert("synth_batch_size".into(), Value::from(1));
         let mut extension = engine_result::audio_extension(&track.audio_content_type)?;
         let mut audio = track.audio;
-        if extension == "wav" {
+        let vocals_only = job.generation_settings.get("vocals_only").and_then(Value::as_bool) == Some(true);
+        let format = output_format(&job.generation_settings).to_string();
+        // a track that is not encoded below is checked on its own pass; vocals are checked on the mix
+        if extension == "wav" && (vocals_only || format == "wav32") {
             let shared = std::sync::Arc::new(audio);
             let probe = shared.clone();
             let problem = tokio::task::spawn_blocking(move || audio_pcm::output_problem(probe, "wav")).await.context("the output check stopped")??;
@@ -7397,7 +7401,7 @@ async fn import_completed_result(state: &AppState, job: &MusicJob, job_id: &str)
             audio = std::sync::Arc::try_unwrap(shared).map_err(|_| anyhow::anyhow!("the engine's track is still held by its check"))?;
         }
         let mut vocals_used_gpu = None;
-        if job.generation_settings.get("vocals_only").and_then(Value::as_bool) == Some(true) {
+        if vocals_only {
             let model = state.separator.model_path();
             let config = state.separation_config.read().await.clone();
             let card = state.lyrics_sync.onnx_card(config.runtime)?.filter(|card| separates_on(*card));
@@ -7444,12 +7448,16 @@ async fn import_completed_result(state: &AppState, job: &MusicJob, job_id: &str)
         }
         // the engine's float output is kept at the level it came: lossless FLAC unless MP3 was asked for
         if extension == "wav" {
-            let format = output_format(&job.generation_settings).to_string();
             let kbps = job.generation_settings.get("mp3_bitrate").and_then(Value::as_u64).map_or(DEFAULT_MP3_KBPS, |value| value as u32);
             if format != "wav32" {
                 let target = format.clone();
                 audio = tokio::task::spawn_blocking(move || -> anyhow::Result<Vec<u8>> {
                     let stereo = audio_pcm::decode_stereo_bytes(audio, "wav")?;
+                    if !vocals_only {
+                        if let Some(problem) = audio_pcm::stereo_problem(&stereo) {
+                            anyhow::bail!("The engine returned {problem} instead of a song, so nothing was kept. Make it again; if it repeats, the engine log has the cause.");
+                        }
+                    }
                     if target == "mp3" { audio_post::encode::mp3(&stereo, kbps) } else { audio_post::encode::flac(&stereo) }
                 })
                 .await
@@ -7545,7 +7553,7 @@ async fn cancel_music_job(
     let remote = state.music_server.cancel(&job_id).await.map_err(|error| {
         api_error(StatusCode::SERVICE_UNAVAILABLE, format!("the engine did not accept the cancel: {error}"))
     })?;
-    let failure = (remote.status == "failed").then(|| engine_failure_reason(&state)).flatten();
+    let failure = (remote.status == "failed").then(|| engine_failure_reason(&state, &job_id)).flatten();
     let mut jobs = state.jobs.write().await;
     let job = jobs
         .get_mut(&job_id)
@@ -7782,7 +7790,7 @@ async fn score_job_status(
             job.lm_seed = lm_seed;
             job.plans = plans_from_result(&result.content_type, &result.body).map_err(|error| api_error(StatusCode::BAD_GATEWAY, error))?;
         }
-        "failed" => job.error = Some(engine_failure_reason(&state).unwrap_or_else(|| "The engine could not write this score.".into())),
+        "failed" => job.error = Some(engine_failure_reason(&state, &job_id).unwrap_or_else(|| "The engine could not write this score.".into())),
         _ => {}
     }
     Ok(Json(job))
@@ -8666,9 +8674,10 @@ mod tests {
 
     #[test]
     fn a_failed_job_names_the_engines_reason() {
-        let lines: Vec<String> = ["[AR] Semantic 10/9000", "[Pipeline] FATAL: the prompt and the score take 9700 of the model's 24576 tokens, so a song can last 595 s and 600 s were asked for", "[Server] job failed"].iter().map(|line| line.to_string()).collect();
-        assert_eq!(last_fatal(&lines).unwrap(), "the prompt and the score take 9700 of the model's 24576 tokens, so a song can last 595 s and 600 s were asked for");
-        assert!(last_fatal(&["[AR] Semantic 10/9000".to_string()]).is_none());
+        let lines: Vec<String> = ["[Pipeline] FATAL: an earlier job's reason", "[Server] Job abc: {", "[AR] Semantic 10/9000", "[Pipeline] FATAL: the prompt and the score take 9700 of the model's 24576 tokens, so a song can last 595 s and 600 s were asked for", "[Server] job failed"].iter().map(|line| line.to_string()).collect();
+        assert_eq!(last_fatal(&lines, "abc").unwrap(), "the prompt and the score take 9700 of the model's 24576 tokens, so a song can last 595 s and 600 s were asked for");
+        assert!(last_fatal(&lines[..2], "abc").is_none());
+        assert!(last_fatal(&lines, "other").is_none());
     }
 
     #[test]

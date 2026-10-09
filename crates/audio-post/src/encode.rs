@@ -33,10 +33,6 @@ pub fn normalize_peak(audio: &mut Stereo, peak_clip: u32) {
     }
 }
 
-/// Lossless FLAC at 24 bits, written by libFLAC, the reference encoder: the
-/// model's float output with nothing taken away but the rounding below the
-/// 24th bit, about -144 dB. Verify mode decodes every frame as it is written
-/// and compares it with the input, and the file gets its sample count and MD5.
 /// The gain that fits a float signal into an integer format: 1 when its peak
 /// is within full scale, else exactly enough to bring the peak to it. An
 /// integer sample cannot hold more, and cutting the overs would distort.
@@ -45,6 +41,10 @@ pub fn fitting_gain(audio: &Stereo) -> f32 {
     if peak > 1.0 { 1.0 / peak } else { 1.0 }
 }
 
+/// Lossless FLAC at 24 bits, written by libFLAC, the reference encoder: the
+/// model's float output with nothing taken away but the rounding below the
+/// 24th bit, about -144 dB. Verify mode decodes every frame as it is written
+/// and compares it with the input, and the file gets its sample count and MD5.
 pub fn flac(audio: &Stereo) -> Result<Vec<u8>> {
     use flac_bound::FlacEncoder;
     use std::sync::atomic::{AtomicU64, Ordering};

@@ -193,7 +193,25 @@ pub fn output_problem(bytes: std::sync::Arc<Vec<u8>>, extension: &str) -> Result
             }
         }
     })?;
-    Ok(if !numbers {
+    Ok(verdict(numbers, low, high))
+}
+
+/// The same judgement on a track already decoded.
+pub fn stereo_problem(audio: &audio_post::Stereo) -> Option<&'static str> {
+    let (mut numbers, mut low, mut high) = (true, f32::INFINITY, f32::NEG_INFINITY);
+    for sample in audio.left.iter().chain(&audio.right) {
+        if sample.is_finite() {
+            low = low.min(*sample);
+            high = high.max(*sample);
+        } else {
+            numbers = false;
+        }
+    }
+    verdict(numbers, low, high)
+}
+
+fn verdict(numbers: bool, low: f32, high: f32) -> Option<&'static str> {
+    if !numbers {
         Some("samples that are not numbers")
     } else if low > high || low.abs().max(high.abs()) < 1e-5 {
         Some("silence")
@@ -201,7 +219,7 @@ pub fn output_problem(bytes: std::sync::Arc<Vec<u8>>, extension: &str) -> Result
         Some("one level held from start to end")
     } else {
         None
-    })
+    }
 }
 
 fn decode_source(source: Box<dyn symphonia::core::io::MediaSource>, extension: Option<&str>) -> Result<(Vec<Vec<f32>>, u32)> {
@@ -351,7 +369,9 @@ mod tests {
         assert_eq!(check(vec![-1.0; 4_800]), Some("one level held from start to end"));
         let mut broken: Vec<f32> = (0..4_800).map(|i| 0.3 * (i as f32 * 0.05).sin()).collect();
         broken[100] = f32::NAN;
-        assert_eq!(check(broken), Some("samples that are not numbers"));
+        assert_eq!(check(broken.clone()), Some("samples that are not numbers"));
+        assert_eq!(stereo_problem(&audio_post::Stereo { right: broken.clone(), left: broken, rate: 48_000 }), Some("samples that are not numbers"));
+        assert_eq!(stereo_problem(&audio_post::Stereo { right: vec![0.0; 10], left: vec![0.0; 10], rate: 48_000 }), Some("silence"));
     }
 
     #[test]
