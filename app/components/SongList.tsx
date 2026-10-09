@@ -952,7 +952,7 @@ const SongItem: React.FC<SongItemProps> = ({
                     </div>
                 ) : song.stage === 'cancelled' && onResetJob ? (
                     <div className="flex flex-col items-end gap-0.5">
-                        <span className="text-red-400 text-[10px] font-sans" title={song.failure}>{t('cancelGeneration')}</span>
+                        <span className="text-red-400 text-[10px] font-sans" title={song.failure}>{t('generationStopped')}</span>
                         <button
                             onClick={(e) => { e.stopPropagation(); onResetJob(); }}
                             className="text-[10px] text-red-400 hover:text-red-300 transition-colors font-sans font-bold"
