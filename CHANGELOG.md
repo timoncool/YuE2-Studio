@@ -56,6 +56,9 @@ Windows build.
 
 ### Fixed
 
+- A score the model wrote as garbage (no key, no meter, colons in the notes; LoRA strengths far past
+  their limits do this) stops the song in seconds with the reason, instead of minutes of singing
+  from it.
 - A LoRA trained in the studio gets the style phrase it was trained on ("T, in the style of T.").
 - Audio to MIDI no longer needs CUDA 13: it runs on CUDA where the engine does and on the
   processor elsewhere (Pascal, AMD, Intel); the new package is fetched once.
