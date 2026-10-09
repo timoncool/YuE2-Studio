@@ -53,7 +53,7 @@ export const STRINGS = {
     featuresTitle: 'What it does',
     featuresSub: 'Everything below runs on your machine unless you connect a cloud key yourself.',
     features: [
-      ['Full songs', 'Up to six minutes from a style and lyrics. On an RTX 4090 with the Q8_0 set a 3:38 song renders in about 46 seconds.'],
+      ['Full songs', 'Up to ten minutes from a style and lyrics. On an RTX 4090 with the Q8_0 set a 3:38 song renders in about 46 seconds.'],
       ['An editable score', 'The composition comes back as ABC notation, engraved as sheet music. Edit it and create again: the composition stays, the performance changes.'],
       ['Compose the score first', 'Only the score, in seconds, before anything is sung: read it, fix it, then create. The studio’s take on yue2.cpp’s yue-plan.'],
       ['Covers', 'SheetSage2 writes a recording’s melody down as a score, and YuE2 sings it in your style. The words must fit that melody: the original lyrics, or new ones with the same syllables line by line and the stresses on the same notes, otherwise the singing drifts off the tune.'],
@@ -78,6 +78,11 @@ export const STRINGS = {
       ["Compose and edit MIDI", "The embedded Signal editor has multiple tracks, instruments, drums, MIDI keyboard recording, tempo changes, editable chord symbols and section markers. Save a new composition as MIDI and rendered audio in the library, or update an existing track’s MIDI. SoundFonts are bundled locally; the editor sends no analytics. In YuE2, the same editor opens ABC scores and applies notes, chords and sections back to the create form."],
       ["Structured song writing", "Build the style from musical fields and arrange the lyrics in editable sections. Give the writing assistant a language, a target of 8–32 lines and additional instructions; plain text stays editable."],
 
+      ["A song from a seed", "Hum, play or write an opening and the model writes the rest of the song on from it in its key and meter, the opening coming back as a hook."],
+      ["Your harmony, or better chords", "A chord bed: chords over rests in the tempo, key and meter you set, and the model writes the melody over them. Or let it plan with chord variety, sections that open differently and chords outside the key."],
+      ["Covers that line up", "Match sections to the score retags the lyrics by where the source recording sings them; the voice moves an octave down or up apart from the band; Instrumental hands the voice's notes to the instrument."],
+      ["Extend a song", "Re-render composes on from the last frame by 15 seconds to 2 minutes. The AB2 solver makes the sound in about half the time."],
+      ["Statistics only if you agree", "A checkbox on the start screen and in Settings sends counts, never lyrics, prompts or audio; What is sent shows the report. News from the author arrive without an update."],
     ],
     samplesTitle: 'Songs made with it',
     samplesSub: 'Rendered on a clean install with the recommended set, as the studio saved them. In English, Spanish, Mandarin, Japanese and Russian.',
@@ -99,7 +104,8 @@ export const STRINGS = {
       ['13-listen', 'The equalizer with its curve and MilkDrop over the studio, as the song plays.'],
       ['14-winamp', 'The whole window as Winamp 2: equalizer, playlist and MilkDrop, skinned.'],
       ['15-covers', 'A cover for every track: Commons photos for the style, patterns, generation or your own file.'],
-      ["16-midi-editor", "The MIDI editor: tracks and notes with editable chords and section markers."]
+      ["16-midi-editor", "The MIDI editor: tracks and notes with editable chords and section markers."],
+      ["17-chord-bed", "The chord bed: chords over rests in your tempo, key and meter, one section per lyrics tag, and the progressions it chose."]
     ],
     modelsTitle: 'Models',
     modelsSub: 'A runnable set is the YuE2-3B backbone and the VAE; SheetSage2 is optional and only needed for covers.',
@@ -164,7 +170,7 @@ export const STRINGS = {
     featuresTitle: 'Что умеет',
     featuresSub: 'Всё ниже работает на вашем компьютере, пока вы сами не подключите облачный ключ.',
     features: [
-      ['Целые песни', 'До шести минут по стилю и тексту. На RTX 4090 с набором Q8_0 песня в 3:38 рендерится примерно за 46 секунд.'],
+      ['Целые песни', 'До десяти минут по стилю и тексту. На RTX 4090 с набором Q8_0 песня в 3:38 рендерится примерно за 46 секунд.'],
       ['Партитура, которую можно править', 'Композиция возвращается в нотации ABC и отрисовывается нотами. Поправьте и создайте снова: композиция остаётся, меняется исполнение.'],
       ['Сначала партитура', 'Только партитура за секунды, ещё до пения: прочитайте, поправьте, потом создавайте. Аналог yue-plan из yue2.cpp.'],
       ['Каверы', 'SheetSage2 записывает мелодию записи в партитуру, YuE2 поёт её в вашем стиле. Слова должны ложиться на эту мелодию: оригинальный текст или новый с тем же числом слогов в каждой строке и ударениями на тех же нотах, иначе пение съезжает с мелодии.'],
@@ -189,6 +195,11 @@ export const STRINGS = {
       ["Создание и редактирование MIDI", "Встроенный Signal: несколько дорожек, инструменты, ударные, запись с MIDI-клавиатуры, изменение темпа, редактируемые аккорды и секции. Сохраните новую композицию в библиотеку со звуком и MIDI или обновите MIDI существующего трека. SoundFont входят в установку; редактор не отправляет аналитику. В YuE2 этот же редактор открывает партитуру ABC и возвращает ноты, аккорды и секции в форму создания."],
       ["Создание песни по секциям", "Собирайте стиль из музыкальных полей и редактируйте текст по секциям. Задайте помощнику язык, объём 8–32 строки и дополнительные указания; обычный текст остаётся доступным для редактирования."],
 
+      ["Песня из фрагмента", "Напойте, сыграйте или напишите начало, и модель допишет песню от него в той же тональности и размере, а начало вернётся как хук."],
+      ["Ваша гармония или аккорды получше", "Аккордовая подложка: аккорды на паузах в заданном темпе, тональности и размере, а модель пишет мелодию поверх. Или пусть планирует сама, с разнообразием аккордов, разными началами секций и аккордами вне тональности."],
+      ["Каверы, которые совпадают", "«Сопоставить секции с партитурой» перетегирует текст по тому, где его поёт исходная запись; голос сдвигается на октаву вниз или вверх отдельно от музыки; «Инструментал» отдаёт ноты голоса инструменту."],
+      ["Продление песни", "«Перерендер» дописывает трек от последнего кадра на 15 секунд — 2 минуты. Солвер AB2 делает звук примерно вдвое быстрее."],
+      ["Статистика только с согласия", "Галочка на стартовом экране и в Настройках отправляет только счётчики, никаких текстов, промптов и звука; «Что отправляется» показывает отчёт. Новости от автора приходят без обновления."],
     ],
     samplesTitle: 'Примеры',
     samplesSub: 'Сделаны на чистой установке с рекомендованным набором, как их сохранила студия. На английском, испанском, китайском, японском и русском.',
@@ -210,7 +221,8 @@ export const STRINGS = {
       ['13-listen', 'Эквалайзер с кривой и MilkDrop поверх студии, пока играет песня.'],
       ['14-winamp', 'Всё окно как Winamp 2: эквалайзер, плейлист и MilkDrop в скине.'],
       ['15-covers', 'Обложка для любого трека: фото с Commons под стиль, узоры, генерация или свой файл.'],
-      ["16-midi-editor", "MIDI-СЂРµРґР°РєС‚РѕСЂ: РґРѕСЂРѕР¶РєРё Рё РЅРѕС‚С‹ СЃ СЂРµРґР°РєС‚РёСЂСѓРµРјС‹РјРё Р°РєРєРѕСЂРґР°РјРё Рё СЃРµРєС†РёСЏРјРё."]
+      ["16-midi-editor", "MIDI-СЂРµРґР°РєС‚РѕСЂ: РґРѕСЂРѕР¶РєРё Рё РЅРѕС‚С‹ СЃ СЂРµРґР°РєС‚РёСЂСѓРµРјС‹РјРё Р°РєРєРѕСЂРґР°РјРё Рё СЃРµРєС†РёСЏРјРё."],
+      ["17-chord-bed", "Аккордовая подложка: аккорды на паузах в вашем темпе, тональности и размере, по секции на каждый тег текста, и выбранные прогрессии."]
     ],
     modelsTitle: 'Модели',
     modelsSub: 'Рабочий набор — бэкбон YuE2-3B и VAE; SheetSage2 необязателен и нужен только для каверов.',
@@ -275,7 +287,7 @@ export const STRINGS = {
     featuresTitle: '功能',
     featuresSub: '除非你自己接入云端密钥，以下一切都在你的电脑上运行。',
     features: [
-      ['完整歌曲', '根据风格和歌词生成最长六分钟的歌曲。在 RTX 4090 上使用 Q8_0 模型组，3:38 的歌曲约 46 秒完成。'],
+      ['完整歌曲', '根据风格和歌词生成最长十分钟的歌曲。在 RTX 4090 上使用 Q8_0 模型组，3:38 的歌曲约 46 秒完成。'],
       ['可编辑的乐谱', '作品以 ABC 记谱法返回并排版为五线谱。修改后再次创作：作品保持不变，演绎随之改变。'],
       ['先写乐谱', '在演唱之前几秒内只写出乐谱：阅读、修改，再创作。相当于 yue2.cpp 的 yue-plan。'],
       ['翻唱', 'SheetSage2 把录音的旋律记成乐谱，YuE2 用你的风格演唱。歌词必须贴合这段旋律：用原词，或每行音节数相同、重音落在同样音符上的新词，否则演唱会偏离旋律。'],
@@ -300,6 +312,11 @@ export const STRINGS = {
       ["创作和编辑 MIDI", "内置 Signal 编辑器支持多轨、乐器、鼓、MIDI 键盘录音、速度变化、可编辑和弦符号和段落标记。可将新作品的 MIDI 和渲染音频保存到曲库，或更新已有音轨的 MIDI。SoundFont 随应用本地提供，编辑器不发送分析数据。 在 YuE2 中，同一编辑器可打开 ABC 乐谱，并将音符、和弦和段落应用回创作界面。"],
       ["按段落创作歌曲", "使用音乐字段构建风格，按段落编辑歌词。可为写作助手指定语言、8–32 行目标和额外说明，也可编辑纯文本。"],
 
+      ["从片段写成歌曲", "哼唱、弹奏或写下开头，模型会以同样的调和拍号把歌写完，开头作为副歌钩子再次出现。"],
+      ["你的和声，或更好的和弦", "和弦铺底：按你设定的速度、调和拍号写成休止符上的和弦，模型在其上写旋律。或者让模型自己规划，带有和弦变化、不同的段落开头和调外和弦。"],
+      ["对得上的翻唱", "“将段落与乐谱匹配”按原录音演唱的位置重新标注歌词；人声可单独上下移动一个八度；“器乐”把人声音符交给乐器。"],
+      ["延长歌曲", "“重新渲染”从最后一帧起续写 15 秒到 2 分钟。AB2 求解器约快一倍生成声音。"],
+      ["统计只在你同意时", "开始界面和设置中的复选框只发送计数，绝不发送歌词、提示词或音频；“发送的内容”显示报告。作者的新闻无需更新即可送达。"],
     ],
     samplesTitle: '示例',
     samplesSub: '在全新安装、推荐模型组下生成，按工作室保存的原样呈现，包括英语、西班牙语、中文、日语和俄语。',
@@ -321,7 +338,8 @@ export const STRINGS = {
       ['13-listen', '播放时悬浮在工作室上方的均衡器曲线与 MilkDrop。'],
       ['14-winamp', '整个窗口化身 Winamp 2：均衡器、播放列表和 MilkDrop，带皮肤。'],
       ['15-covers', '为每首曲目选封面：符合风格的 Commons 照片、图案、生成或自己的文件。'],
-      ["16-midi-editor", "MIDI зј–иѕ‘е™Ёпјље¤љиЅЁйџіз¬¦гЂЃеЏЇзј–иѕ‘зљ„е’Њеј¦е’Њж®µиђЅж ‡и®°гЂ‚"]
+      ["16-midi-editor", "MIDI зј–иѕ‘е™Ёпјље¤љиЅЁйџіз¬¦гЂЃеЏЇзј–иѕ‘зљ„е’Њеј¦е’Њж®µиђЅж ‡и®°гЂ‚"],
+      ["17-chord-bed", "和弦铺底：按你的速度、调和拍号在休止符上写和弦，每个歌词标签一段，并显示所选的和弦进行。"]
     ],
     modelsTitle: '模型',
     modelsSub: '可运行的模型组由 YuE2-3B 主干和 VAE 组成；SheetSage2 可选，仅翻唱需要。',
@@ -386,7 +404,7 @@ export const STRINGS = {
     featuresTitle: 'できること',
     featuresSub: 'クラウドキーを自分で接続しない限り、以下はすべてあなたのマシンで動きます。',
     features: [
-      ['フルソング', 'スタイルと歌詞から最長 6 分。RTX 4090 と Q8_0 セットで 3:38 の曲が約 46 秒でレンダリングされます。'],
+      ['フルソング', 'スタイルと歌詞から最長 10 分。RTX 4090 と Q8_0 セットで 3:38 の曲が約 46 秒でレンダリングされます。'],
       ['編集できる楽譜', '曲は ABC 記譜で返され、楽譜として表示されます。編集してもう一度作成すると、曲はそのままに演奏が変わります。'],
       ['まず楽譜だけ', '歌う前に数秒で楽譜だけを作成。読んで直してから作成します。yue2.cpp の yue-plan に相当。'],
       ['カバー', 'SheetSage2 が録音のメロディを楽譜に書き起こし、YuE2 があなたのスタイルで歌います。歌詞はそのメロディに合っている必要があります。元の歌詞か、各行の音節数とアクセントの位置が同じ新しい歌詞でないと、歌がメロディからずれていきます。'],
@@ -411,6 +429,11 @@ export const STRINGS = {
       ["MIDI の作成と編集", "内蔵 Signal エディターで複数トラック、楽器、ドラム、MIDI キーボード録音、テンポ変更、コード記号とセクションの編集ができます。新しい曲を MIDI とレンダリングした音声でライブラリへ保存し、既存の曲の MIDI を更新できます。SoundFont は同梱され、エディターは解析データを送信しません。 YuE2 では同じエディターで ABC 楽譜を開き、音符・コード・セクションを作成画面へ反映できます。"],
       ["セクションごとの曲作り", "音楽の項目からスタイルを組み立て、セクションごとに歌詞を編集します。文章作成アシスタントに言語、8～32 行の目標、追加の指示を指定でき、テキストも直接編集できます。"],
 
+      ["フレーズから一曲に", "冒頭を口ずさむ・弾く・書くと、モデルが同じキーと拍子で残りを書き、冒頭はフックとして戻ってきます。"],
+      ["あなたのハーモニー、またはより良いコード", "コードベッド：指定したテンポ・キー・拍子で休符の上にコードを書き、モデルがその上にメロディを書きます。あるいはコードの変化、セクションごとに違う始まり、キー外のコードでモデルに計画させます。"],
+      ["ぴったり合うカバー", "「セクションを楽譜に合わせる」は元の録音で歌われる位置に合わせて歌詞のタグを付け直します。ボーカルだけを1オクターブ上下に移せ、「インスト」はボーカルの音符を楽器に渡します。"],
+      ["曲の延長", "「再レンダリング」が最後のフレームから15秒〜2分続きを作ります。AB2ソルバーで音声生成は約半分の時間です。"],
+      ["統計は同意したときだけ", "開始画面と設定のチェックボックスはカウントだけを送り、歌詞・プロンプト・音声は送りません。「送信される内容」でレポートを確認できます。作者のニュースはアップデートなしで届きます。"],
     ],
     samplesTitle: 'サンプル',
     samplesSub: 'クリーンインストールと推奨セットで作成し、スタジオが保存したままの音です。英語、スペイン語、中国語、日本語、ロシア語。',
@@ -432,7 +455,8 @@ export const STRINGS = {
       ['13-listen', '再生中、スタジオの上に浮かぶカーブ付きイコライザーと MilkDrop。'],
       ['14-winamp', 'ウィンドウ全体が Winamp 2 に：イコライザー、プレイリスト、MilkDrop をスキン付きで。'],
       ['15-covers', 'どの曲にもジャケット：スタイルに合う Commons の写真、模様、生成、手持ちのファイル。'],
-      ["16-midi-editor", "MIDI г‚Ёгѓ‡г‚Јг‚їгѓјпјљгѓ€гѓ©гѓѓг‚ЇгЃЁйџіз¬¦гЂЃз·Ёй›†гЃ§гЃЌг‚‹г‚ігѓјгѓ‰гЃЁг‚»г‚Їг‚·гѓ§гѓігЂ‚"]
+      ["16-midi-editor", "MIDI г‚Ёгѓ‡г‚Јг‚їгѓјпјљгѓ€гѓ©гѓѓг‚ЇгЃЁйџіз¬¦гЂЃз·Ёй›†гЃ§гЃЌг‚‹г‚ігѓјгѓ‰гЃЁг‚»г‚Їг‚·гѓ§гѓігЂ‚"],
+      ["17-chord-bed", "コード下地：指定したテンポ・キー・拍子で休符の上にコードを置き、歌詞のタグごとに1セクション。選ばれた進行も表示します。"]
     ],
     modelsTitle: 'モデル',
     modelsSub: '動作するセットは YuE2-3B バックボーンと VAE。SheetSage2 は任意で、カバーにのみ必要です。',
@@ -497,7 +521,7 @@ export const STRINGS = {
     featuresTitle: '기능',
     featuresSub: '직접 클라우드 키를 연결하지 않는 한, 아래 모든 것은 내 컴퓨터에서 실행됩니다.',
     features: [
-      ['완성곡', '스타일과 가사로 최대 6분. RTX 4090과 Q8_0 세트에서 3:38 길이의 곡이 약 46초 만에 렌더링됩니다.'],
+      ['완성곡', '스타일과 가사로 최대 10분. RTX 4090과 Q8_0 세트에서 3:38 길이의 곡이 약 46초 만에 렌더링됩니다.'],
       ['편집 가능한 악보', '곡은 ABC 표기로 돌아와 악보로 그려집니다. 고친 뒤 다시 만들면 곡은 그대로, 연주가 바뀝니다.'],
       ['악보 먼저', '노래하기 전에 몇 초 만에 악보만 씁니다. 읽고 고친 뒤 만드세요. yue2.cpp의 yue-plan에 해당합니다.'],
       ['커버', 'SheetSage2가 녹음의 멜로디를 악보로 받아 적고, YuE2가 내 스타일로 부릅니다. 가사는 그 멜로디에 맞아야 합니다. 원래 가사나 줄마다 음절 수와 강세 위치가 같은 새 가사가 아니면 노래가 멜로디에서 벗어납니다.'],
@@ -522,6 +546,11 @@ export const STRINGS = {
       ["MIDI 작곡과 편집", "내장 Signal 편집기는 여러 트랙, 악기, 드럼, MIDI 키보드 녹음, 템포 변경, 코드 기호와 구간 표시 편집을 지원합니다. 새 곡을 MIDI와 렌더링된 오디오로 라이브러리에 저장하거나 기존 곡의 MIDI를 갱신하세요. SoundFont는 로컬에 포함되며 편집기는 분석 데이터를 보내지 않습니다. YuE2에서는 같은 편집기로 ABC 악보를 열고 음표·코드·구간을 생성 화면에 적용합니다."],
       ["구간별 곡 작성", "음악 항목으로 스타일을 만들고 구간별 가사를 편집하세요. 글쓰기 도우미에 언어, 8–32줄 목표와 추가 지시를 지정하고 일반 텍스트도 편집할 수 있습니다."],
 
+      ["한 소절에서 한 곡으로", "시작 부분을 흥얼거리거나 연주하거나 적으면 모델이 같은 키와 박자로 나머지를 쓰고, 시작 부분은 훅으로 돌아옵니다."],
+      ["당신의 화성, 또는 더 나은 코드", "코드 베드: 정한 템포·키·박자로 쉼표 위에 코드를 쓰고 모델이 그 위에 멜로디를 씁니다. 또는 코드 다양성, 섹션마다 다른 시작, 키 밖의 코드로 모델이 계획하게 합니다."],
+      ["딱 맞는 커버", "'섹션을 악보에 맞추기'는 원곡 녹음에서 불리는 위치에 따라 가사 태그를 다시 붙입니다. 보컬만 한 옥타브 위아래로 옮길 수 있고, '인스트'는 보컬 음표를 악기에 넘깁니다."],
+      ["곡 늘리기", "'다시 렌더링'이 마지막 프레임부터 15초~2분을 이어 씁니다. AB2 솔버로 소리 생성이 약 절반의 시간에 끝납니다."],
+      ["동의할 때만 통계", "시작 화면과 설정의 체크박스는 개수만 보내고 가사·프롬프트·오디오는 보내지 않습니다. '보내는 내용'에서 보고서를 볼 수 있습니다. 작가의 소식은 업데이트 없이 도착합니다."],
     ],
     samplesTitle: '샘플',
     samplesSub: '새로 설치한 스튜디오와 권장 세트로 만들었고, 스튜디오가 저장한 그대로입니다. 영어, 스페인어, 중국어, 일본어, 러시아어.',
@@ -543,7 +572,8 @@ export const STRINGS = {
       ['13-listen', '재생 중 스튜디오 위에 뜬 곡선 이퀄라이저와 MilkDrop.'],
       ['14-winamp', '창 전체가 Winamp 2로: 스킨을 입힌 이퀄라이저, 재생 목록, MilkDrop.'],
       ['15-covers', '모든 트랙에 커버: 스타일에 맞는 Commons 사진, 무늬, 생성 또는 내 파일.'],
-      ["16-midi-editor", "MIDI нЋём§‘кё°: нЉёлћ™кіј мќЊн‘њ, нЋём§‘ к°ЂлЉҐн•њ мЅ”л“њм™Ђ кµ¬к°„ н‘њм‹њ."]
+      ["16-midi-editor", "MIDI нЋём§‘кё°: нЉёлћ™кіј мќЊн‘њ, нЋём§‘ к°ЂлЉҐн•њ мЅ”л“њм™Ђ кµ¬к°„ н‘њм‹њ."],
+      ["17-chord-bed", "코드 바탕: 정한 템포·조성·박자로 쉼표 위에 코드를 놓고, 가사 태그마다 한 섹션. 고른 진행도 보여 줍니다."]
     ],
     modelsTitle: '모델',
     modelsSub: '실행 가능한 세트는 YuE2-3B 백본과 VAE입니다. SheetSage2는 선택 사항이며 커버에만 필요합니다.',

@@ -190,6 +190,8 @@ In YuE2, the same editor opens ABC scores and applies notes, chords and sections
 
 ![The MIDI editor: chords, sections and notes](docs/screenshots/en-16-midi-editor.png)
 
+![The chord bed: chords over rests in your tempo, key and meter](docs/screenshots/en-17-chord-bed.png)
+
 | | |
 |---|---|
 | ![The equalizer and MilkDrop](docs/screenshots/en-13-listen.png) | ![The Winamp mode](docs/screenshots/en-14-winamp.png) |
