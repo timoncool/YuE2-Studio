@@ -502,7 +502,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
     const storedSeed = safeSeed(request.seed);
     setLmSeed(storedLmSeed === '-1' ? '' : storedLmSeed);
     setSeed(storedSeed === '-1' ? '' : storedSeed);
-    setRandomizeSeed(!(storedLmSeed && storedLmSeed !== '-1'));
+    setRandomizeSeed(!((storedLmSeed && storedLmSeed !== '-1') || (storedSeed && storedSeed !== '-1')));
     setSemanticTokens(typeof request.semantic_tokens === 'string' ? request.semantic_tokens : '');
     setAbcSampling(samplingText(request.abc_sampling));
     setSemanticSampling(samplingText(request.semantic_sampling));
@@ -513,7 +513,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
     setLyricTiming(request.lyric_timing !== false);
     setRealaudio(request.companion_scale === undefined ? 'auto' : request.companion_scale === 0 ? 'off' : 'on');
     if (request.mp3_bitrate !== undefined) setMp3Bitrate(asText(request.mp3_bitrate));
-    if (request.output_format === 'mp3' || request.output_format === 'flac') setFormat(request.output_format);
+    if (request.output_format === 'mp3' || request.output_format === 'flac' || request.output_format === 'wav32') setFormat(request.output_format);
     if (Array.isArray(request.adapters)) setAdapters(usesFromSettings(request));
     setError(null);
   }, []);
@@ -997,7 +997,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
   useBridgeCommand('create_set', (args) => {
     const fields = (args.fields && typeof args.fields === 'object' ? args.fields : args) as Record<string, unknown>;
     // every field is checked before any changes, so a refused call leaves the form as it was
-    const choices: Record<string, string[]> = { mode: ['studio', 'simple', 'cover'], cot: ['full', 'melody', 'off', ''], output_format: ['flac', 'mp3'] };
+    const choices: Record<string, string[]> = { mode: ['studio', 'simple', 'cover'], cot: ['full', 'melody', 'off', ''], output_format: ['flac', 'mp3', 'wav32'] };
     const unknown = Object.keys(fields).filter(key => !formFields[key] && !['mode', 'randomize_seed', 'adapters'].includes(key));
     if (unknown.length) throw new Error(`Unknown fields: ${unknown.join(', ')}. The form has: ${[...Object.keys(formFields), 'mode', 'randomize_seed', 'adapters'].join(', ')}.`);
     for (const [key, allowed] of Object.entries(choices)) {
@@ -1797,6 +1797,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
                         <select value={format} onChange={event => setFormat(event.target.value as YueOutputFormat)} className={CONTROL}>
                           <option value="flac">FLAC</option>
                           <option value="mp3">MP3</option>
+                          <option value="wav32">WAV (32-bit float)</option>
                         </select>
                       </Field>
                     </div>

@@ -38,7 +38,7 @@ export const ReplayModal: React.FC<ReplayModalProps> = ({ song, clientRef, onClo
   const [seed, setSeed] = useState<string>('');
   const originalSeed = settings.seed === undefined || settings.seed === null ? '' : String(settings.seed);
   const [bitrate, setBitrate] = useState<number>(numberOr('mp3_bitrate', 320));
-  const [format, setFormat] = useState<'flac' | 'mp3'>(settings.output_format === 'mp3' ? 'mp3' : 'flac');
+  const [format, setFormat] = useState<'flac' | 'mp3' | 'wav32'>(settings.output_format === 'mp3' || settings.output_format === 'wav32' ? settings.output_format : 'flac');
   // seconds composed on after the last frame; 0 renders the track as it is
   const [extend, setExtend] = useState(0);
   // the service makes songs up to ten minutes long
@@ -113,6 +113,7 @@ export const ReplayModal: React.FC<ReplayModalProps> = ({ song, clientRef, onClo
               <select value={format} onChange={event => setFormat(event.target.value as typeof format)} className={CONTROL}>
                 <option value="flac">FLAC</option>
                 <option value="mp3">MP3</option>
+                <option value="wav32">WAV (32-bit float)</option>
               </select>
             </label>
             <label className="col-span-2 block text-xs font-medium text-zinc-600 dark:text-zinc-300">

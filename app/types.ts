@@ -118,7 +118,7 @@ export interface YueHarmony {
 }
 
 export type YueCot = 'full' | 'melody' | 'off';
-export type YueOutputFormat = 'flac' | 'mp3';
+export type YueOutputFormat = 'flac' | 'mp3' | 'wav32';
 
 /**
  * A YuE2 request as `/v1/music/jobs` accepts it. Field names are the engine's
