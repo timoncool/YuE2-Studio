@@ -37,8 +37,8 @@ export const HubPopup: React.FC<Props> = ({ item, onClose, onOpen }) => {
 
   if (!content) return null;
 
-  const press = (button: HubButton) => {
-    reportNotice(item.id, button.action === 'dismiss' ? 'dismissed' : 'clicked').catch(() => undefined);
+  const press = (button: HubButton, index: number) => {
+    reportNotice(item.id, button.action === 'dismiss' ? 'dismissed' : 'clicked', button.action === 'dismiss' ? undefined : `b${index}`).catch(() => undefined);
     if (button.action === 'url' && button.url) void openExternal(button.url);
     if (button.action === 'open' && button.target) onOpen(button.target);
     onClose();
@@ -63,7 +63,7 @@ export const HubPopup: React.FC<Props> = ({ item, onClose, onOpen }) => {
         {content.buttons.length > 0 && (
           <div className="flex justify-end gap-2 px-5 pb-5">
             {content.buttons.map((button, index) => (
-              <button key={index} type="button" onClick={() => press(button)}
+              <button key={index} type="button" onClick={() => press(button, index)}
                       className={button.style === 'primary'
                         ? 'rounded-xl px-4 py-2 text-sm font-semibold shadow-sm transition-opacity hover:opacity-90'
                         : 'rounded-xl bg-zinc-100 px-4 py-2 text-sm font-medium text-zinc-700 transition-colors hover:bg-zinc-200 dark:bg-white/10 dark:text-zinc-200 dark:hover:bg-white/15'}

@@ -62,7 +62,7 @@ export const HubBars: React.FC<Props> = ({ items, elapsed, view, closed, local, 
                className="flex items-start justify-between gap-3 px-6 py-2.5 text-sm leading-6 max-md:px-3 max-md:py-1.5 max-md:text-xs"
                style={{ background: HUB_GRADIENTS[theme], color: HUB_TEXT[theme] }}
                onClick={(event) => {
-                 if ((event.target as HTMLElement).closest('a')) reportNotice(item.id, 'clicked').catch(() => undefined);
+                 if ((event.target as HTMLElement).closest('a')) reportNotice(item.id, 'clicked', 'link').catch(() => undefined);
                }}>
             <div className="w-full text-center">
               {hubInline((content?.body || content?.title || '').replace(/\s*\n\s*/g, ' '), item.id)}
