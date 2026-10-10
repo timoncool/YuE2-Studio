@@ -7439,6 +7439,8 @@ fn add_to_playlist(library: &library::Library, playlist_id: &str, songs: impl It
 /// library, and only one task ever imports a result.
 fn spawn_job_watcher(state: AppState, job_id: String) {
     tokio::spawn(async move {
+        // the parts as they were when the song started: the person may switch sets while it is made
+        let parts_at_start = state.selected_component_ids.read().await.clone().unwrap_or_default();
         follow_job(&state, &job_id).await;
         // however it ended, it is no longer one the studio's closing could cut off
         let ended = state.jobs.read().await.get(&job_id).map(|job| {
@@ -7449,6 +7451,7 @@ fn spawn_job_watcher(state: AppState, job_id: String) {
             match ended.as_ref() {
                 Some(("completed", _, songs, profiles)) if *songs > 0 => {
                     hub.count("songs", *songs as u64);
+                    hub.count("song_done", 1);
                     for profile in profiles {
                         hub.used_model(profile);
                     }
@@ -7456,7 +7459,7 @@ fn spawn_job_watcher(state: AppState, job_id: String) {
                     let set = profiles.first().cloned();
                     let parts = match &set {
                         Some(id) => model_manager::profile_components(id),
-                        None => state.selected_component_ids.read().await.clone().unwrap_or_default(),
+                        None => parts_at_start.clone(),
                     };
                     hub.used_models(set.as_deref(), &parts, *songs as u64);
                 }

@@ -126,6 +126,7 @@ import { JournalPanel } from './components/JournalPanel';
 import { hubStateChanged, useHubState } from './services/studioQueries';
 import { setTelemetry, showsNow, type HubButton } from './services/studioHub';
 import { HubBars } from './components/HubBars';
+import { ShellPrompts } from './components/ShellPrompts';
 import { HubPopup } from './components/HubPopup';
 
 /** Where versions before 3.3 kept the likes, in the window's own storage. */
@@ -395,8 +396,8 @@ function AppContent() {
   // Anonymous statistics are on by default: the start screen's checkbox decides on a first run, and an install that
   // updated past that screen keeps the default until it is unchecked in Settings.
   const hub = useHubState(language);
-  // Strips and popups from the hub are drawn in its test channel (STUDIO_HUB_TEST=1) only, until they are released.
-  const hubItems = nativeSetupReady && hub.data?.test ? hub.data.items : [];
+  // Strips from the hub show to everyone; popups stay in its test channel (STUDIO_HUB_TEST=1) until they are released.
+  const hubItems = nativeSetupReady && hub.data ? hub.data.items.filter(item => item.kind === 'bar' || hub.data?.test) : [];
   const [hubClosed, setHubClosed] = useState<Set<string>>(() => new Set());
   const hubStart = useRef(Date.now());
   const [hubElapsed, setHubElapsed] = useState(0);
@@ -1363,6 +1364,7 @@ function AppContent() {
     <div className="flex h-dvh min-h-0 min-w-0 flex-col overflow-hidden bg-white dark:bg-suno text-zinc-900 dark:text-white font-sans antialiased selection:bg-pink-500/30 transition-colors duration-300">
       <HubBars items={hubItems} elapsed={hubElapsed} view={currentView} closed={hubClosed} onClosed={closeHubNotice} />
       {hubPopup && <HubPopup item={hubPopup} onClose={() => closeHubNotice(hubPopup.id)} onOpen={openHubTarget} />}
+      <ShellPrompts />
       <div className="flex min-h-0 min-w-0 flex-1 overflow-hidden">
         <Sidebar
           currentView={currentView}
