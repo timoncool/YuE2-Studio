@@ -69,7 +69,7 @@ export const ScoreView: React.FC<{ abc: string; className?: string; title?: stri
           staffwidth: 740,
           wrap: { minSpacing: 1.6, maxSpacing: 2.8, preferredMeasuresPerLine: 4 },
           foregroundColor: 'currentColor',
-          selectionColor: '#db2777',
+          selectionColor: 'currentColor',
           clickListener: element => seekToElement.current(element),
         });
         const empty = !rendered?.length || rendered[0].lines.length === 0;
