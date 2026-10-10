@@ -845,7 +845,13 @@ const SongScore: React.FC<{ song: Song }> = ({ song }) => {
             </div>
             {open && (
                 <div className="max-h-[420px] overflow-auto bg-white p-2 custom-scrollbar">
-                    <ScoreView abc={abc} title={song.title} />
+                    <ScoreView
+                        abc={abc}
+                        title={song.title}
+                        onEdit={() => window.dispatchEvent(new CustomEvent('yue:use-score', {
+                            detail: { abc, cot: cot === 'melody' || cot === 'full' ? cot : 'full', lyrics: song.lyrics, title: song.title, edit: true },
+                        }))}
+                    />
                 </div>
             )}
         </div>

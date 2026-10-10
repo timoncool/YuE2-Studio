@@ -3,6 +3,32 @@
 What changed, newest first. Dates are release dates; the studio is versioned by its
 Windows build.
 
+## 2026-10-10 — 3.5.1
+
+### Added
+
+- **The score plays with a cursor.** Listen marks the notes sounding and moves a cursor along the
+  staves, scrolling to each new line; clicking a note plays from it (during playback it jumps there),
+  the slider beside Listen moves through the score with its time shown, and Pause keeps the place.
+- **Edit beside Listen** opens the score in the note editor (piano roll, tracks, chords): in the
+  create form the form's score, on a song its score, sent to the form first.
+
+### Fixed
+
+- **Statistics name the model set in full.** A set put together by hand is reported by its parts, and a day
+  on several sets reports each with its number of songs; a failed song reports its reason, with paths, names,
+  links and quoted text cut out on this computer before it leaves.
+- An agent's Play no longer takes over the player while you listen: a song you are playing is neither
+  switched nor paused, and the agent is told you are listening.
+- Quitting while the service is slow to answer stops the songs being made as asked, instead of letting
+  them start again at the next launch.
+- A like is a heart everywhere: the song list and its Liked filter showed a thumbs-up while the
+  player and the side panel showed a heart.
+- On the start screen the statistics checkbox, its label and What is sent stand on one line in one
+  colour; the link sat lower than the label and in another colour.
+- The notes of 3.4.0 and 3.5.0 in News are laid out like the earlier ones: a summary line, then each
+  change as a point with its name in bold.
+
 ## 2026-10-08 — 3.5.0
 
 ### Added

@@ -58,6 +58,41 @@ export interface HubState {
   items: HubItem[];
 }
 
+/** The strip gradients and text colours, the hub's own (studio-hub src/shared/themes.ts), copied by value. */
+export const HUB_GRADIENTS: Record<HubTheme, string> = {
+  sunset: 'linear-gradient(90deg, #f97316 0%, #db2777 100%)',
+  orchid: 'linear-gradient(90deg, #ec4899 0%, #9333ea 100%)',
+  lime: 'linear-gradient(90deg, #c6f24e 0%, #5be0c8 100%)',
+  graphite: 'linear-gradient(90deg, #27272a 0%, #3f3f46 100%)',
+};
+
+export const HUB_TEXT: Record<HubTheme, string> = {
+  sunset: '#ffffff',
+  orchid: '#ffffff',
+  lime: '#0b0c0e',
+  graphite: '#ffffff',
+};
+
+/** At most this many strips at once; the rest move up as the top ones are closed. */
+export const MAX_VISIBLE_BARS = 3;
+
+const THEMES: HubTheme[] = ['sunset', 'orchid', 'lime', 'graphite'];
+
+/** A strip's colour: its own theme, or the next one by its place in the stack. */
+export function stackTheme(theme: HubTheme | null, index: number): HubTheme {
+  return theme ?? THEMES[index % THEMES.length];
+}
+
+/** The service decided the notice may show in this launch; its delay and sections are the window's to apply. */
+export function showsNow(item: HubItem, elapsed: number, view: string): boolean {
+  return item.eligible && elapsed >= item.rules.delay_s && (!item.rules.views || item.rules.views.includes(view));
+}
+
+/** A notice's picture, through the service, which keeps a copy for offline launches. */
+export function hubMediaUrl(image: string): string {
+  return /^https?:\/\//.test(image) ? image : apiUrl(`/v1/hub/media/${encodeURIComponent(image)}`);
+}
+
 export function hubText(item: HubItem, lang: string): HubContent | undefined {
   return item.content[lang] ?? item.content.en ?? Object.values(item.content)[0];
 }
@@ -70,8 +105,9 @@ async function call<T>(path: string, init?: RequestInit): Promise<T> {
 
 export const fetchHubState = (lang: string) => call<HubState>(`/v1/hub/state?lang=${encodeURIComponent(lang)}`);
 
-export const reportNotice = (id: string, event: 'shown' | 'clicked' | 'dismissed') =>
-  call<{ ok: true }>(`/v1/hub/notices/${encodeURIComponent(id)}/${event}`, { method: 'POST' });
+/** `button` names a click: `b0`, `b1`... the notice's buttons in order, `link` a link in its text. */
+export const reportNotice = (id: string, event: 'shown' | 'clicked' | 'dismissed', button?: string) =>
+  call<{ ok: true }>(`/v1/hub/notices/${encodeURIComponent(id)}/${event}${button ? `?button=${encodeURIComponent(button)}` : ''}`, { method: 'POST' });
 
 export const setTelemetry = (enabled: boolean, acknowledge = false) =>
   call<HubState['telemetry']>('/v1/hub/telemetry', {
