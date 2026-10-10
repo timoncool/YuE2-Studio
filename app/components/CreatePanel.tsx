@@ -502,7 +502,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
     const storedSeed = safeSeed(request.seed);
     setLmSeed(storedLmSeed === '-1' ? '' : storedLmSeed);
     setSeed(storedSeed === '-1' ? '' : storedSeed);
-    setRandomizeSeed(!(storedLmSeed && storedLmSeed !== '-1'));
+    setRandomizeSeed(!((storedLmSeed && storedLmSeed !== '-1') || (storedSeed && storedSeed !== '-1')));
     setSemanticTokens(typeof request.semantic_tokens === 'string' ? request.semantic_tokens : '');
     setAbcSampling(samplingText(request.abc_sampling));
     setSemanticSampling(samplingText(request.semantic_sampling));

@@ -16,6 +16,8 @@ Windows build.
 - **Audio to MIDI keeps the size you pick.** The models page put the choice back to medium while a download ran,
   so small and large looked impossible to get; the largest size downloaded is now the one offered first, on the
   models page and on the tools page.
+- **Send to the form keeps the sound seed.** A song with only the sound seed fixed came to the form with the random
+  switch on, which threw that seed away; the switch is now off whenever the song has a seed.
 - **Linux packages run on Ubuntu 22.04** and other systems with glibc 2.35 or newer; they needed 2.38.
 
 ## 2026-10-10 — 3.5.2
