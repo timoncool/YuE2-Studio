@@ -256,6 +256,14 @@ or download the MP3s from [docs/samples](docs/samples).
   training. Describing songs by ear needs about 12 GB of VRAM and 10 GB more disk for
   MOSS-Music; without it the styles are written by hand.
 
+### Linux (experimental)
+
+The .deb and the AppImage for Linux x86-64 are **experimental**. They come from the same code with the
+Linux build of the same engine (Vulkan, and the processor), but the author works on Windows and has not
+run them on a real Linux desktop. **If you live on Linux, it would be great if you polished them and sent
+the fixes back as a pull request.** The studio keeps its data in `~/.local/share/yue2-studio`
+(`$XDG_DATA_HOME`).
+
 ## What runs where
 
 | Part | NVIDIA | AMD, Intel | No graphics card |
@@ -543,8 +551,11 @@ portable archive and the signed `latest.json` for the updater; it reads the sign
 `TAURI_SIGNING_PRIVATE_KEY` or `%USERPROFILE%\.tauri\yue2-studio.key`. Model weights are
 never part of a release.
 
-yue2.cpp also builds for Linux and macOS (Metal); the studio's release pipeline ships the
-Windows build with CUDA, Vulkan and CPU backends for now.
+Linux packages are built on the release machine in an Ubuntu 24.04 container (Docker, under WSL on
+Windows): `scripts/build-linux-docker.sh <output folder>` builds the committed HEAD with
+`scripts/build-release-linux.sh` and checks that the engine starts. Only the .dmg is built on GitHub, by
+the `macOS build` workflow (`.github/workflows/release-unix.yml`, started by hand, optionally with a
+release tag to attach it to): there is no Mac on the release machine.
 
 On macOS there is no packaged engine, so build it once from source (needs Xcode command line
 tools and CMake) and again whenever `engines/yue2-cpp-source.json` moves to a new commit:
