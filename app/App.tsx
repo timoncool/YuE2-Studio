@@ -126,6 +126,7 @@ import { JournalPanel } from './components/JournalPanel';
 import { hubStateChanged, useHubState } from './services/studioQueries';
 import { setTelemetry, showsNow, type HubButton } from './services/studioHub';
 import { HubBars } from './components/HubBars';
+import { ShellPrompts } from './components/ShellPrompts';
 import { HubPopup } from './components/HubPopup';
 
 /** Where versions before 3.3 kept the likes, in the window's own storage. */
@@ -1363,6 +1364,7 @@ function AppContent() {
     <div className="flex h-dvh min-h-0 min-w-0 flex-col overflow-hidden bg-white dark:bg-suno text-zinc-900 dark:text-white font-sans antialiased selection:bg-pink-500/30 transition-colors duration-300">
       <HubBars items={hubItems} elapsed={hubElapsed} view={currentView} closed={hubClosed} onClosed={closeHubNotice} />
       {hubPopup && <HubPopup item={hubPopup} onClose={() => closeHubNotice(hubPopup.id)} onOpen={openHubTarget} />}
+      <ShellPrompts />
       <div className="flex min-h-0 min-w-0 flex-1 overflow-hidden">
         <Sidebar
           currentView={currentView}
