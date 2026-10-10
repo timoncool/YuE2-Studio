@@ -1101,7 +1101,7 @@ function AppContent() {
       if (event.type === 'yue:transcribe-song' && detail?.song) {
         setCreateRequest({ id: Date.now(), kind: 'transcribe', song: detail.song, melodyOnly: Boolean(detail.melodyOnly) });
       } else if (event.type === 'yue:use-score' && detail?.abc) {
-        setCreateRequest({ id: Date.now(), kind: 'score', abc: detail.abc, cot: detail.cot, lyrics: detail.lyrics, title: detail.title });
+        setCreateRequest({ id: Date.now(), kind: 'score', abc: detail.abc, cot: detail.cot, lyrics: detail.lyrics, title: detail.title, edit: Boolean(detail.edit) });
       } else if (event.type === 'yue:cover-midi' && detail?.song) {
         setCreateRequest({ id: Date.now(), kind: 'midi', song: detail.song });
       }

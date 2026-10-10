@@ -5,6 +5,14 @@ Windows build.
 
 ## 2026-10-10 — 3.5.1
 
+### Added
+
+- **The score plays with a cursor.** Listen marks the notes sounding and moves a cursor along the
+  staves, scrolling to each new line; clicking a note plays from it (during playback it jumps there),
+  the slider beside Listen moves through the score with its time shown, and Pause keeps the place.
+- **Edit beside Listen** opens the score in the note editor (piano roll, tracks, chords): in the
+  create form the form's score, on a song its score, sent to the form first.
+
 ### Fixed
 
 - A like is a heart everywhere: the song list and its Liked filter showed a thumbs-up while the

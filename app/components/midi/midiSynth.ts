@@ -142,14 +142,15 @@ export class MidiSynth {
   }
   get playing(): boolean { return this.aloneFrom !== null || (!!this.audioEl && !this.audioEl.paused); }
 
-  /** Plays the notes on their own - a score heard without a recording. */
-  async playAlone(notes: PlayNote[]): Promise<void> {
+  /** Plays the notes on their own - a score heard without a recording - from `from` seconds on. */
+  async playAlone(notes: PlayNote[], from = 0): Promise<void> {
     this.pause();
     await this.ctx.resume();
     this.setCrossfade(1);
     this.notes = [...notes].sort((a, b) => a.start - b.start);
     this.schedIdx = 0;
-    this.aloneFrom = this.ctx.currentTime + 0.1;
+    while (this.schedIdx < this.notes.length && this.notes[this.schedIdx].start < from) this.schedIdx++;
+    this.aloneFrom = this.ctx.currentTime + 0.1 - from;
     this.timer = window.setInterval(() => this.tick(), TICK_MS);
   }
 

@@ -284,3 +284,8 @@ select option {
   background-color: #ffffff;
   color: #18181b;
 }
+
+.score-view .score-sounding {
+  fill: #ec4899;
+  stroke: #ec4899;
+}

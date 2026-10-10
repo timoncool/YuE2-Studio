@@ -1,8 +1,9 @@
 import React, { useEffect, useRef, useState } from 'react';
 import abcjs from 'abcjs';
-import { ArrowDown, ArrowUp, Download, FileText, Guitar, Play, Square } from 'lucide-react';
+import { ArrowDown, ArrowUp, Download, FileText, Guitar, Pause, Pencil, Play } from 'lucide-react';
 import { useI18n } from '../context/I18nContext';
 import { MidiSynth, type PlayNote } from './midi/midiSynth';
+import { cueIndex, scoreCues, scoreNotes, type Cue } from '../services/scorePlayback';
 import { saveFile } from '../services/saveFile';
 import { failed as refusedScore, instrumentalScore, vocalOctave } from '../services/scoreApi';
 import { engravedScore } from '../services/scoreEngraving';
@@ -21,7 +22,7 @@ const noteName = (pitch: number) => `${NOTE_NAMES[((pitch % 12) + 12) % 12]}${Ma
  * It can be heard and saved as MIDI too: the notes abcjs reads from the score
  * play on the studio's own MIDI voices, so no sound font is downloaded.
  */
-export const ScoreView: React.FC<{ abc: string; className?: string; title?: string; onChange?: (abc: string) => void }> = ({ abc, className, title, onChange }) => {
+export const ScoreView: React.FC<{ abc: string; className?: string; title?: string; onChange?: (abc: string) => void; onEdit?: () => void }> = ({ abc, className, title, onChange, onEdit }) => {
   const { t } = useI18n();
   const host = useRef<HTMLDivElement | null>(null);
   const tune = useRef<abcjs.TuneObject | null>(null);
@@ -30,6 +31,15 @@ export const ScoreView: React.FC<{ abc: string; className?: string; title?: stri
   const [playing, setPlaying] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [voice, setVoice] = useState<{ middle: number; inRange: boolean } | null>(null);
+  // the playback cursor follows the synth's own clock, so what is marked is what sounds
+  const notes = useRef<PlayNote[]>([]);
+  const cues = useRef<Cue[]>([]);
+  const cursor = useRef<SVGLineElement | null>(null);
+  const shown = useRef(-1);
+  const frame = useRef<number | null>(null);
+  const shownSecond = useRef(-1);
+  const [position, setPosition] = useState(0);
+  const [length, setLength] = useState(0);
 
   useEffect(() => {
     let current = true;
@@ -59,39 +69,130 @@ export const ScoreView: React.FC<{ abc: string; className?: string; title?: stri
           staffwidth: 740,
           wrap: { minSpacing: 1.6, maxSpacing: 2.8, preferredMeasuresPerLine: 4 },
           foregroundColor: 'currentColor',
+          selectionColor: '#db2777',
+          clickListener: element => seekToElement.current(element),
         });
         const empty = !rendered?.length || rendered[0].lines.length === 0;
         tune.current = empty ? null : rendered[0];
+        notes.current = empty ? [] : scoreNotes(rendered[0]);
+        cues.current = empty ? [] : scoreCues(rendered[0]);
+        cursor.current = null;
+        shown.current = -1;
+        setLength(notes.current.reduce((end, note) => Math.max(end, note.start + note.duration), 0));
         setFailed(empty);
       } catch {
         tune.current = null;
+        notes.current = [];
+        cues.current = [];
         setFailed(true);
       }
     }, 250);
     return () => window.clearTimeout(timer);
   }, [abc]);
 
-  useEffect(() => () => synth.current?.dispose(), []);
-  // a new score stops the old one
-  useEffect(() => {
-    synth.current?.pause();
-    setPlaying(false);
-  }, [abc]);
+  const stopFollowing = () => {
+    if (frame.current !== null) cancelAnimationFrame(frame.current);
+    frame.current = null;
+  };
 
-  const listen = async () => {
-    if (playing) {
-      synth.current?.pause();
-      setPlaying(false);
+  /** Marks the notes sounding at `seconds` and puts the cursor before them; nothing before the first note. */
+  const showAt = (seconds: number) => {
+    const index = cueIndex(cues.current, seconds);
+    if (index === shown.current) return;
+    const before = cues.current[shown.current];
+    for (const element of before?.elements ?? []) element.classList.remove('score-sounding');
+    shown.current = index;
+    const cue = cues.current[index];
+    if (!cue) {
+      cursor.current?.setAttribute('visibility', 'hidden');
       return;
     }
-    const score = tune.current;
-    if (!score) return;
-    const notes = scoreNotes(score);
-    if (!notes.length) return;
+    for (const element of cue.elements) element.classList.add('score-sounding');
+    const line = cursorLine(host.current, cursor);
+    if (!line) return;
+    line.setAttribute('x1', String(cue.left - 2));
+    line.setAttribute('x2', String(cue.left - 2));
+    line.setAttribute('y1', String(cue.top));
+    line.setAttribute('y2', String(cue.top + cue.height));
+    line.setAttribute('visibility', 'visible');
+    // a new line of music scrolls into view; notes on the same line do not move the page
+    if (!before || before.top !== cue.top) cue.elements[0]?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  };
+
+  const showSecond = (seconds: number) => {
+    const rounded = Math.round(seconds * 10) / 10;
+    if (rounded === shownSecond.current) return;
+    shownSecond.current = rounded;
+    setPosition(rounded);
+  };
+
+  const follow = () => {
+    const now = synth.current?.currentTime ?? 0;
+    showAt(now);
+    showSecond(now);
+    frame.current = requestAnimationFrame(follow);
+  };
+
+  const finished = () => {
+    stopFollowing();
+    setPlaying(false);
+    showAt(-1);
+    showSecond(0);
+  };
+
+  const play = async (from: number) => {
+    if (!notes.current.length) return;
     synth.current ??= new MidiSynth();
-    synth.current.onEnded = () => setPlaying(false);
-    await synth.current.playAlone(notes);
+    synth.current.onEnded = finished;
+    await synth.current.playAlone(notes.current, from);
     setPlaying(true);
+    stopFollowing();
+    frame.current = requestAnimationFrame(follow);
+  };
+
+  const pause = () => {
+    const at = synth.current?.currentTime ?? position;
+    synth.current?.pause();
+    stopFollowing();
+    setPlaying(false);
+    showAt(at);
+    showSecond(at);
+  };
+
+  /** Moves playback to `seconds`: playing goes on from there, paused waits there. */
+  const seek = (seconds: number) => {
+    const at = Math.max(0, Math.min(length, seconds));
+    showAt(at);
+    showSecond(at);
+    if (playing) void play(at);
+  };
+
+  const seekToElement = useRef<(element: abcjs.AbcElem) => void>(() => {});
+  seekToElement.current = element => {
+    const drawn = new Set<Element>((element.abselem as { elemset?: Element[] } | undefined)?.elemset ?? []);
+    const cue = cues.current.find(candidate => candidate.elements.some(part => drawn.has(part)));
+    if (cue) seek(cue.at);
+  };
+
+  useEffect(() => () => {
+    stopFollowing();
+    synth.current?.dispose();
+  }, []);
+  // a new score stops the old one and starts from its beginning
+  useEffect(() => {
+    synth.current?.pause();
+    stopFollowing();
+    setPlaying(false);
+    shownSecond.current = -1;
+    setPosition(0);
+  }, [abc]);
+
+  const listen = () => {
+    if (playing) {
+      pause();
+      return;
+    }
+    void play(position >= length - 0.05 ? 0 : position);
   };
 
   const savePdf = async () => {
@@ -136,10 +237,27 @@ export const ScoreView: React.FC<{ abc: string; className?: string; title?: stri
   return (
     <div className={className}>
       {!failed && (
-        <div className="sticky top-0 z-10 mb-1 flex justify-end gap-1.5 bg-white py-0.5">
-          <button type="button" onClick={() => void listen()} className={button} title={t('scoreListenHint')}>
-            {playing ? <Square size={12} /> : <Play size={12} />}{playing ? t('scoreStop') : t('scoreListen')}
+        <div className="sticky top-0 z-10 mb-1 flex flex-wrap items-center gap-1.5 bg-white py-0.5">
+          <button type="button" onClick={listen} className={button} title={t('scoreListenHint')}>
+            {playing ? <Pause size={12} /> : <Play size={12} />}{playing ? t('scorePause') : t('scoreListen')}
           </button>
+          <input
+            type="range"
+            min={0}
+            max={Math.max(length, 0.1)}
+            step={0.1}
+            value={Math.min(position, length)}
+            onChange={event => seek(Number(event.target.value))}
+            title={t('scoreSeekHint')}
+            aria-label={t('scoreSeekHint')}
+            className="h-1 min-w-24 flex-1 cursor-pointer accent-pink-500"
+          />
+          <span className="font-mono text-[10px] tabular-nums text-zinc-500">{clock(position)} / {clock(length)}</span>
+          {onEdit && (
+            <button type="button" onClick={onEdit} className={button} title={t('scoreEditHint')}>
+              <Pencil size={12} />{t('scoreEdit')}
+            </button>
+          )}
           <button type="button" onClick={() => void saveMidi()} className={button}>
             <Download size={12} />MIDI
           </button>
@@ -173,24 +291,24 @@ export const ScoreView: React.FC<{ abc: string; className?: string; title?: stri
   );
 };
 
-/**
- * The notes of an engraved score in seconds. abcjs counts time in whole notes
- * at the score's tempo in quarter notes per minute; the first voice - the
- * melody that is sung - gets a soft sustained voice, the others a piano.
- */
-export function scoreNotes(score: abcjs.TuneObject): PlayNote[] {
-  const audio = score.setUpAudio({});
-  const wholeSeconds = 240 / (audio.tempo || 120);
-  return audio.tracks.flatMap((track, index) =>
-    track
-      .filter((item): item is abcjs.AudioTrackNoteItem => item.cmd === 'note')
-      .map(note => ({
-        pitch: note.pitch,
-        start: note.start * wholeSeconds,
-        duration: Math.max(0.05, (note.duration - (note.gap || 0)) * wholeSeconds),
-        family: index === 0 ? 'flute' : 'piano',
-      })),
-  );
+/** The cursor line in the engraved score, made on first use; the engraving replaces it on a new score. */
+function cursorLine(host: HTMLDivElement | null, kept: React.MutableRefObject<SVGLineElement | null>): SVGLineElement | null {
+  if (kept.current?.isConnected) return kept.current;
+  const svg = host?.querySelector('svg');
+  if (!svg) return null;
+  const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+  line.setAttribute('class', 'score-cursor');
+  line.setAttribute('stroke', '#ec4899');
+  line.setAttribute('stroke-width', '2');
+  line.setAttribute('pointer-events', 'none');
+  svg.appendChild(line);
+  kept.current = line;
+  return line;
+}
+
+function clock(seconds: number): string {
+  const whole = Math.max(0, Math.floor(seconds));
+  return `${Math.floor(whole / 60)}:${String(whole % 60).padStart(2, '0')}`;
 }
 
 function fileStem(title?: string): string {

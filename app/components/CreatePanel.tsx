@@ -47,7 +47,7 @@ import { songWritingStrings } from '../i18n/songWriting';
 export type CreateRequest =
   | { id: number; kind: 'transcribe'; song: Song; melodyOnly: boolean }
   | { id: number; kind: 'midi'; song: Song }
-  | { id: number; kind: 'score'; abc: string; cot?: YueCot; lyrics?: string; title?: string };
+  | { id: number; kind: 'score'; abc: string; cot?: YueCot; lyrics?: string; title?: string; edit?: boolean };
 
 interface CreatePanelProps {
   onGenerate: (request: YueRequest) => void;
@@ -574,6 +574,10 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
       if (request.title) setName(current => (current.trim() ? current : request.title ?? ''));
       setSemanticTokens('');
       setMode('studio');
+      if (request.edit) {
+        setShowNotation(true);
+        setEditorOpen(true);
+      }
     }
     // runTranscription is the one from the render that received the request
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1466,7 +1470,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
               <>
                 {showNotation && abc.trim() && (
                   <div className="mt-3 max-h-80 overflow-auto rounded-lg border border-zinc-200 bg-white p-2 dark:border-white/10 custom-scrollbar">
-                    <ScoreView abc={abc} onChange={setAbc} />
+                    <ScoreView abc={abc} onChange={setAbc} onEdit={composing ? undefined : () => setEditorOpen(true)} />
                   </div>
                 )}
                 <AutoTextarea
