@@ -401,6 +401,12 @@ function AppContent() {
   const hubStart = useRef(Date.now());
   const [hubElapsed, setHubElapsed] = useState(0);
   const hubNextDelay = hubItems.reduce<number | null>((next, item) => (item.rules.delay_s > hubElapsed && (next === null || item.rules.delay_s < next) ? item.rules.delay_s : next), null);
+  // the delays count from the window being ready, not from a first run's downloads
+  useEffect(() => {
+    if (!nativeSetupReady) return;
+    hubStart.current = Date.now();
+    setHubElapsed(0);
+  }, [nativeSetupReady]);
   useEffect(() => {
     if (hubNextDelay === null) return;
     const timer = window.setTimeout(() => setHubElapsed(Math.floor((Date.now() - hubStart.current) / 1000)), Math.max(0, hubStart.current + hubNextDelay * 1000 - Date.now()) + 50);

@@ -4,13 +4,6 @@ import { useI18n } from '../context/I18nContext';
 import { HUB_GRADIENTS, HUB_TEXT, MAX_VISIBLE_BARS, hubText, reportNotice, showsNow, stackTheme, type HubItem } from '../services/studioHub';
 import { hubInline } from './HubMarkdown';
 
-/** A strip the window adds itself (the telemetry choice for an install that never saw the start screen). */
-export interface LocalBar {
-  id: string;
-  body: React.ReactNode;
-  actions?: React.ReactNode;
-}
-
 interface Props {
   items: HubItem[];
   /** Seconds since the window became ready, for the notices' delays. */
@@ -19,7 +12,6 @@ interface Props {
   view: string;
   /** Closed in this launch: hidden at once, before the service's state catches up. */
   closed: Set<string>;
-  local?: LocalBar | null;
   onClosed: (id: string) => void;
 }
 
@@ -27,11 +19,11 @@ interface Props {
  * The strip stack across the top of the window, as on ArtGen: full width, no gaps, centred text with links, a close
  * button on the right; at most three, the colour by place in the stack unless the notice names one.
  */
-export const HubBars: React.FC<Props> = ({ items, elapsed, view, closed, local, onClosed }) => {
+export const HubBars: React.FC<Props> = ({ items, elapsed, view, closed, onClosed }) => {
   const { language, t } = useI18n();
   const visible = items
     .filter((item) => item.kind === 'bar' && !closed.has(item.id) && showsNow(item, elapsed, view))
-    .slice(0, MAX_VISIBLE_BARS - (local ? 1 : 0));
+    .slice(0, MAX_VISIBLE_BARS);
 
   useEffect(() => {
     for (const item of visible) {
@@ -39,7 +31,7 @@ export const HubBars: React.FC<Props> = ({ items, elapsed, view, closed, local, 
     }
   }, [visible.map((item) => item.id).join(',')]);
 
-  if (!visible.length && !local) return null;
+  if (!visible.length) return null;
 
   const close = (id: string) => {
     reportNotice(id, 'dismissed').catch((error) => console.warn('[hub] close not recorded:', error));
@@ -48,14 +40,8 @@ export const HubBars: React.FC<Props> = ({ items, elapsed, view, closed, local, 
 
   return (
     <div role="region" aria-label={t('hubNoticesRegion')} className="shrink-0">
-      {local && (
-        <div className="flex items-start justify-between gap-3 px-6 py-2.5 text-sm leading-6 max-md:px-3 max-md:py-1.5 max-md:text-xs"
-             style={{ background: HUB_GRADIENTS.graphite, color: HUB_TEXT.graphite }}>
-          <div className="w-full text-center">{local.body}{local.actions}</div>
-        </div>
-      )}
       {visible.map((item, index) => {
-        const theme = stackTheme(item.theme, index + (local ? 1 : 0));
+        const theme = stackTheme(item.theme, index);
         const content = hubText(item, language);
         return (
           <div key={item.id}

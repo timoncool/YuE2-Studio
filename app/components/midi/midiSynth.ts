@@ -151,6 +151,8 @@ export class MidiSynth {
     this.schedIdx = 0;
     while (this.schedIdx < this.notes.length && this.notes[this.schedIdx].start < from) this.schedIdx++;
     this.aloneFrom = this.ctx.currentTime + 0.1 - from;
+    // a second call made while this one awaited the context has started its own clock
+    if (this.timer !== null) window.clearInterval(this.timer);
     this.timer = window.setInterval(() => this.tick(), TICK_MS);
   }
 
