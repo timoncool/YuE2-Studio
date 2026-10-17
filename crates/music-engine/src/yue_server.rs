@@ -342,6 +342,27 @@ impl YueServerSupervisor {
 
         let mut command = Command::new(&self.config.executable);
         command.args(self.config.arguments());
+
+        // Prefer the engine bundled libraries over older versions in the
+        // AppImage global LD_LIBRARY_PATH, preserving inherited search paths.
+        #[cfg(target_os = "linux")]
+        {
+            let engine_dir = self
+                .config
+                .executable
+                .parent()
+                .context("the engine executable has no folder")?;
+            let mut library_paths = vec![engine_dir.to_path_buf()];
+            if let Some(existing) = std::env::var_os("LD_LIBRARY_PATH") {
+                library_paths.extend(std::env::split_paths(&existing));
+            }
+            command.env(
+                "LD_LIBRARY_PATH",
+                std::env::join_paths(library_paths)
+                    .context("construct engine LD_LIBRARY_PATH")?,
+            );
+        }
+
         match self.config.cuda_backend()? {
             Some(backend) => {
                 command.env("YUE_CUDA_BACKEND", backend);
