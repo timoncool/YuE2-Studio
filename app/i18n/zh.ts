@@ -1449,6 +1449,7 @@ export const zh = {
     generateCoverPreview: '生成封面预览',
     noSongsYet: '还没有曲目。',
     noLyrics: '无歌词',
+    noLyricsSaved: '尚未保存歌词',
     closeNotification: '关闭通知',
     displayNameHint: '该名称仅保存在本机，用于标识工作室。',
     reportIssues: '在 GitHub 反馈问题或提出需求',

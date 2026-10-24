@@ -1449,6 +1449,7 @@ export const ja = {
     generateCoverPreview: 'カバーのプレビューを生成',
     noSongsYet: 'まだ曲がありません。',
     noLyrics: '歌詞なし',
+    noLyricsSaved: '歌詞が保存されていません',
     closeNotification: '通知を閉じる',
     displayNameHint: 'この名前はこのマシンにのみ保存され、スタジオの表示に使われます。',
     reportIssues: 'GitHub で問題報告や機能要望',

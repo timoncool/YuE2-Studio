@@ -1453,6 +1453,7 @@ export const ru = {
     generateCoverPreview: 'Сгенерировать превью обложки',
     noSongsYet: 'Пока нет треков.',
     noLyrics: 'Без текста',
+    noLyricsSaved: 'Текст песни не сохранён',
     closeNotification: 'Закрыть уведомление',
     displayNameHint: 'Имя хранится на этой машине и используется только для подписи студии.',
     reportIssues: 'Сообщить о проблеме или предложить функцию на GitHub',

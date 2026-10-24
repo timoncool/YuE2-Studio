@@ -1449,6 +1449,7 @@ export const ko = {
     generateCoverPreview: '커버 미리보기 생성',
     noSongsYet: '아직 트랙이 없습니다.',
     noLyrics: '가사 없음',
+    noLyricsSaved: '저장된 가사 없음',
     closeNotification: '알림 닫기',
     displayNameHint: '이 이름은 이 컴퓨터에만 저장되며 스튜디오 표시에만 사용됩니다.',
     reportIssues: 'GitHub 에서 문제 신고 또는 기능 제안',

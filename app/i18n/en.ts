@@ -1454,6 +1454,7 @@ export const en = {
     generateCoverPreview: 'Generate cover preview',
     noSongsYet: 'No songs yet.',
     noLyrics: 'No lyrics',
+    noLyricsSaved: 'No lyrics saved',
     closeNotification: 'Close notification',
     displayNameHint: 'This name is stored on this machine and is only used to label the studio.',
     reportIssues: 'Report issues or request features on GitHub',

@@ -728,7 +728,7 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({ song, onClose, onOpe
                                 onClick={async (e) => {
                                     e.stopPropagation();
                                     try {
-                                        if (song.lyrics) {
+                                        if (song.lyrics?.trim()) {
                                             await navigator.clipboard.writeText(song.lyrics);
                                             setCopiedLyrics(true);
                                             setTimeout(() => setCopiedLyrics(false), 2000);
@@ -737,14 +737,15 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({ song, onClose, onOpe
                                         console.error('Failed to copy lyrics:', error);
                                     }
                                 }}
-                                className={`flex items-center gap-1 text-[10px] font-medium transition-colors cursor-pointer ${copiedLyrics ? 'text-green-500' : 'text-zinc-500 hover:text-black dark:hover:text-white'}`}
+                                disabled={!song.lyrics?.trim()}
+                                className={`flex items-center gap-1 text-[10px] font-medium transition-colors cursor-pointer disabled:cursor-default disabled:opacity-40 ${copiedLyrics ? 'text-green-500' : 'text-zinc-500 hover:text-black dark:hover:text-white'}`}
                             >
                                 <Copy size={12} /> {copiedLyrics ? t('copied') : t('copy')}
                             </button>
                         </div>
                         <div className="p-4 max-h-[300px] overflow-y-auto custom-scrollbar">
                             <div className="text-sm text-zinc-700 dark:text-zinc-300 font-mono whitespace-pre-wrap leading-relaxed opacity-90">
-                                {song.lyrics || <div className="text-zinc-400 dark:text-zinc-600 italic text-center py-8">{t('instrumental')}<br /><span className="text-xs not-italic">{t('noLyrics')}</span></div>}
+                                {song.lyrics?.trim() ? song.lyrics : <div className="text-zinc-500 dark:text-zinc-400 italic text-center py-8">{t('noLyricsSaved')}</div>}
                             </div>
                         </div>
                     </div>
