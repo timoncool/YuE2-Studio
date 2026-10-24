@@ -48,7 +48,8 @@ pub struct Asset {
     /// the CPU fallback stay apart, and the CUDA libraries land next to the
     /// binary that links against them.
     pub unzip_into: Option<&'static str>,
-    /// A file name prefix that proves this asset is unpacked. Without it the
+    /// A file name prefix that proves this asset is unpacked. Server runtimes
+    /// require the exact native executable name instead. Without a marker the
     /// CUDA libraries would look installed as soon as the CUDA binaries were,
     /// because both land in the same directory.
     pub marker: &'static str,
@@ -428,7 +429,7 @@ impl AssistantRuntime {
     /// choice is the setting, not a guess made after the fact.
     pub fn server_binary_for(&self, device: Option<&str>) -> Option<PathBuf> {
         let runtime = self.root.join("runtime");
-        let name = if cfg!(windows) { "llama-server.exe" } else { "llama-server" };
+        let name = native_server_name();
         let card = card_flavour();
         let order: Vec<&str> = match device {
             Some("cuda") => card.into_iter().collect(),
@@ -454,14 +455,18 @@ impl AssistantRuntime {
 
     fn is_installed(&self, asset: &Asset) -> bool {
         if let Some(flavour) = asset.unzip_into {
-            // A runtime counts as installed once its own directory has content:
-            // the CUDA libraries carry no llama-server of their own.
+            // A Windows executable left in portable data does not install a
+            // Linux runtime (or vice versa). Library companions still use a
+            // prefix because their filenames include a version number.
             let directory = self.root.join("runtime").join(flavour);
             let marker = asset.marker;
+            if marker == "llama-server" {
+                return directory.join(native_server_name()).is_file();
+            }
             return fs::read_dir(&directory)
                 .map(|entries| {
                     entries.flatten().any(|entry| {
-                        entry.file_name().to_string_lossy().to_ascii_lowercase().starts_with(marker)
+                        entry.path().is_file() && entry.file_name().to_string_lossy().to_ascii_lowercase().starts_with(marker)
                     })
                 })
                 .unwrap_or(false);
@@ -899,6 +904,10 @@ fn hide_console(command: &mut Command) {
     music_core::process::ensure_dies_with_parent(command);
 }
 
+fn native_server_name() -> &'static str {
+    if cfg!(windows) { "llama-server.exe" } else { "llama-server" }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -938,5 +947,37 @@ mod tests {
         assert!(!runtime.is_installed(model));
         assert_eq!(runtime.partial_bytes(model), 19);
         fs::remove_dir_all(&temp).ok();
+    }
+
+    #[test]
+    fn runtime_installation_requires_the_native_server_file() {
+        let temp = std::env::temp_dir().join(format!("assistant-runtime-{}", uuid::Uuid::now_v7()));
+        let runtime = AssistantRuntime::new(&temp);
+        let server = asset("llama-cpu").expect("native runtime catalog entry");
+        let directory = runtime.root.join("runtime").join(server.unzip_into.unwrap());
+        fs::create_dir_all(&directory).unwrap();
+        let foreign = if cfg!(windows) { "llama-server" } else { "llama-server.exe" };
+        fs::write(directory.join(foreign), b"wrong platform").unwrap();
+        fs::write(directory.join("llama-server-backup"), b"not the server").unwrap();
+        assert!(!runtime.is_installed(server));
+        fs::create_dir(directory.join(native_server_name())).unwrap();
+        assert!(!runtime.is_installed(server), "a directory is not an executable");
+        fs::remove_dir(directory.join(native_server_name())).unwrap();
+        fs::write(directory.join(native_server_name()), b"native server").unwrap();
+        assert!(runtime.is_installed(server));
+        fs::remove_dir_all(temp).unwrap();
+    }
+
+    #[cfg(any(windows, target_os = "linux"))]
+    #[test]
+    fn companion_library_markers_keep_their_version_prefix() {
+        let temp = std::env::temp_dir().join(format!("assistant-runtime-{}", uuid::Uuid::now_v7()));
+        let runtime = AssistantRuntime::new(&temp);
+        let companion = asset("llama-cuda-runtime").expect("library catalog entry");
+        let directory = runtime.root.join("runtime").join(companion.unzip_into.unwrap());
+        fs::create_dir_all(&directory).unwrap();
+        fs::write(directory.join(format!("{}-versioned-library", companion.marker)), b"library").unwrap();
+        assert!(runtime.is_installed(companion));
+        fs::remove_dir_all(temp).unwrap();
     }
 }
