@@ -1682,7 +1682,10 @@ async fn separation_assets(State(state): State<AppState>) -> Json<Value> {
         },
         // Only this panel's own download. The recogniser shares this
         // downloader, and its gigabytes are not the separator's business.
-        "active_download": state.separator.downloader().active_for("separation").await.or(state.lyrics_sync.downloader().active_for("separation").await),
+        "active_download": separation_download_progress(
+            state.separator.downloader().active_for("separation").await,
+            state.lyrics_sync.downloader().active_for("separation").await,
+        ),
         // Not an error and not a stall: the file server is asking us to wait.
         "waiting_for_server": crate::chunked::waiting_for_server(),
     }))
@@ -1691,6 +1694,33 @@ async fn separation_assets(State(state): State<AppState>) -> Json<Value> {
 #[derive(Debug, Deserialize)]
 struct InstallSeparationAssetRequest {
     asset_id: String,
+}
+
+/// Engine names install that engine with the saved device choice. Older
+/// clients send a device instead, applying it to the currently chosen engine.
+fn separation_install_choice(asset_id: &str, config: &separation::SeparationConfig) -> Option<(separation::Engine, lyrics_sync::OnnxFlavour)> {
+    use lyrics_sync::OnnxFlavour;
+    use separation::Engine;
+    match asset_id {
+        "htdemucs" => Some((Engine::Htdemucs, config.runtime)),
+        "roformer" => Some((Engine::Roformer, config.runtime)),
+        "auto" | "cuda" => Some((config.engine, OnnxFlavour::Auto)),
+        "cpu" => Some((config.engine, OnnxFlavour::Cpu)),
+        _ => None,
+    }
+}
+
+/// The model finishes before the shared runtime starts. Its completed cell
+/// must not hide the runtime's progress or the reason that installation failed.
+fn separation_download_progress(
+    model: Option<downloads::DownloadProgress>,
+    runtime: Option<downloads::DownloadProgress>,
+) -> Option<downloads::DownloadProgress> {
+    if model.as_ref().is_some_and(|active| !active.done) { return model; }
+    if runtime.as_ref().is_some_and(|active| !active.done) { return runtime; }
+    if model.as_ref().is_some_and(|active| active.error.is_some()) { return model; }
+    if runtime.as_ref().is_some_and(|active| active.error.is_some()) { return runtime; }
+    runtime.or(model)
 }
 
 /// Whether separation runs on this card: CUDA only. HT-Demucs's ONNX export
@@ -1766,8 +1796,9 @@ async fn install_separation_asset(
     // The separator as one thing: its model, the runtime that loads it, and -
     // for the card - the CUDA provider. Six rows of file names asked the user
     // to work out which of them belong together.
-    if matches!(request.asset_id.as_str(), "auto" | "cuda" | "cpu") && state.separation_config.read().await.engine == separation::Engine::Roformer {
-        let wanted = if request.asset_id == "cpu" { lyrics_sync::OnnxFlavour::Cpu } else { lyrics_sync::OnnxFlavour::Auto };
+    let config = state.separation_config.read().await.clone();
+    let choice = separation_install_choice(&request.asset_id, &config);
+    if let Some((separation::Engine::Roformer, wanted)) = choice {
         let gpu = roformer_on_card(&state, wanted);
         let set = roformer_set(gpu);
         if set.len() < 2 {
@@ -1789,8 +1820,7 @@ async fn install_separation_asset(
         });
         return Ok(Json(serde_json::json!({ "started": true })));
     }
-    if matches!(request.asset_id.as_str(), "auto" | "cuda" | "cpu") {
-        let wanted = if request.asset_id == "cpu" { lyrics_sync::OnnxFlavour::Cpu } else { lyrics_sync::OnnxFlavour::Auto };
+    if let Some((separation::Engine::Htdemucs, wanted)) = choice {
         let separator = state.separator.clone();
         let sync = state.lyrics_sync.clone();
         let mut runtime: Vec<&'static lyrics_sync::Asset> = Vec::new();
@@ -1910,13 +1940,10 @@ async fn separation_status(State(state): State<AppState>) -> Json<Value> {
         // Either downloader may be the busy one: the model has its own, the
         // card libraries come through karaoke's. Reporting only the first is
         // what made a running download look like a dead button.
-        "download": match state.separator.downloader().active().await {
-            Some(active) if !active.done => Some(active),
-            other => match state.lyrics_sync.downloader().active().await {
-                Some(active) if !active.done => Some(active),
-                fallback => fallback.or(other),
-            },
-        },
+        "download": separation_download_progress(
+            state.separator.downloader().active().await,
+            state.lyrics_sync.downloader().active().await,
+        ),
         "settings": state.separation_config.read().await.clone(),
         "run": state.separation_run.read().await.clone(),
     }))
@@ -2606,10 +2633,10 @@ async fn training_pack_files(state: &AppState) -> (Vec<Value>, bool) {
 /// The training pack's download in progress: its own, the trainer's cuBLAS,
 /// or the separator's, whose files come through their own downloaders.
 async fn training_pack_download(state: &AppState) -> Option<downloads::DownloadProgress> {
-    let separator_download = match state.separator.downloader().active_for("separation").await {
-        Some(active) if !active.done => Some(active),
-        other => state.lyrics_sync.downloader().active_for("separation").await.filter(|active| !active.done).or(other),
-    };
+    let separator_download = separation_download_progress(
+        state.separator.downloader().active_for("separation").await,
+        state.lyrics_sync.downloader().active_for("separation").await,
+    );
     let cublas_download = state.engine_runtime.downloader().active_for("engine").await;
     match state.training.downloader().active_for(training::SCOPE).await {
         Some(active) if !active.done => Some(active),
@@ -9392,6 +9419,69 @@ fn api_error(status: StatusCode, error: String) -> (StatusCode, Json<ApiError>) 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn separation_named_install_keeps_the_device_and_overrides_a_stale_engine_selection() {
+        use lyrics_sync::OnnxFlavour::{Auto, Cpu, Cuda};
+        use separation::Engine::{Htdemucs, Roformer};
+        for runtime in [Auto, Cpu, Cuda] {
+            let mut config = separation::SeparationConfig { runtime, engine: Roformer, ..Default::default() };
+            assert_eq!(separation_install_choice("htdemucs", &config), Some((Htdemucs, runtime)));
+            config.engine = Htdemucs;
+            assert_eq!(separation_install_choice("roformer", &config), Some((Roformer, runtime)));
+        }
+    }
+
+    #[test]
+    fn separation_legacy_device_installs_keep_the_selected_engine_and_individual_assets() {
+        use lyrics_sync::OnnxFlavour::{Auto, Cpu};
+        use separation::Engine::{Htdemucs, Roformer};
+        for engine in [Htdemucs, Roformer] {
+            let config = separation::SeparationConfig { runtime: Cpu, engine, ..Default::default() };
+            for id in ["auto", "cuda"] {
+                assert_eq!(separation_install_choice(id, &config), Some((engine, Auto)));
+            }
+            assert_eq!(separation_install_choice("cpu", &config), Some((engine, Cpu)));
+            for id in ["htdemucs-6s", "onnxruntime", "card", "unknown"] {
+                assert_eq!(separation_install_choice(id, &config), None);
+            }
+        }
+    }
+
+    fn separation_test_download(id: &str, done: bool, error: Option<&str>) -> downloads::DownloadProgress {
+        downloads::DownloadProgress {
+            asset_id: id.into(), scope: Some("separation".into()), downloaded_bytes: 42, total_bytes: 100,
+            done, error: error.map(str::to_owned),
+        }
+    }
+
+    #[test]
+    fn separation_finished_model_does_not_hide_a_running_or_failed_runtime() {
+        let model = || Some(separation_test_download("htdemucs-6s", true, None));
+        let running = separation_download_progress(model(), Some(separation_test_download("onnxruntime", false, None))).unwrap();
+        assert_eq!(running.asset_id, "onnxruntime");
+        assert!(!running.done);
+        assert_eq!(running.downloaded_bytes, 42);
+        let failed = separation_download_progress(model(), Some(separation_test_download("onnxruntime", true, Some("connection interrupted")))).unwrap();
+        assert_eq!(failed.asset_id, "onnxruntime");
+        assert!(failed.done);
+        assert_eq!(failed.error.as_deref(), Some("connection interrupted"));
+    }
+
+    #[test]
+    fn separation_progress_keeps_model_work_and_errors_visible_with_old_runtime_progress() {
+        for (done, error) in [(false, None), (true, Some("model download failed"))] {
+            let progress = separation_download_progress(
+                Some(separation_test_download("htdemucs-6s", done, error)),
+                Some(separation_test_download("onnxruntime", true, None)),
+            ).unwrap();
+            assert_eq!(progress.asset_id, "htdemucs-6s");
+            assert_eq!(progress.error.as_deref(), error);
+        }
+        assert!(separation_download_progress(None, None).is_none());
+        let runtime = separation_download_progress(None, Some(separation_test_download("onnxruntime", true, None))).unwrap();
+        assert_eq!(runtime.asset_id, "onnxruntime");
+    }
 
     #[test]
     fn a_lost_song_is_told_why_from_the_run_that_ended() {
