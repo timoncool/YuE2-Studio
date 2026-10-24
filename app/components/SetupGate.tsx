@@ -159,6 +159,7 @@ export const OptionalGroup: React.FC<{
   const [engine, setEngine] = useState<string>(engines?.[0]?.id ?? '');
   const [device, setDevice] = useState<Device>('cuda');
   const [model, setModel] = useState('');
+  const [savingModel, setSavingModel] = useState(false);
   const [apiKey, setApiKey] = useState('');
   const [keyStored, setKeyStored] = useState(false);
 
@@ -166,10 +167,13 @@ export const OptionalGroup: React.FC<{
   // taking its provider again undid a choice the user had just made.
   const choiceRead = useRef(false);
   const modelRead = useRef(false);
+  const statusGeneration = useRef(0);
   const load = useCallback(async () => {
+    const generation = statusGeneration.current;
     const response = await fetch(statusUrl);
     if (response.ok) {
       const body = await response.json();
+      if (generation !== statusGeneration.current) return;
       setStatus(body);
       const savedEngine = body.provider ?? body.settings?.engine;
       if (!choiceRead.current && savedEngine && engines?.some((choice) => choice.id === savedEngine)) {
@@ -184,7 +188,9 @@ export const OptionalGroup: React.FC<{
         setModel(body.chosen_model);
       }
       if (body.settings?.runtime) setDevice(body.settings.runtime);
+      return body;
     }
+    throw new Error(await errorMessage(response));
   }, [statusUrl, engines]);
 
   /// The engine and the device are a setting before they are a download: they
@@ -239,13 +245,13 @@ export const OptionalGroup: React.FC<{
   // at nought for ever.
   useEffect(() => {
     if (!starting) return;
-    if (status?.active_download && !status.active_download.done) {
-      setStarting(false);
-      return;
-    }
     const timer = window.setTimeout(() => setStarting(false), 8000);
     return () => window.clearTimeout(timer);
-  }, [status, starting]);
+  }, [starting]);
+
+  useEffect(() => {
+    if (status?.set?.ready || (status?.active_download && !status.active_download.done)) setStarting(false);
+  }, [status]);
 
   const assets = status?.assets ?? [];
   if (assets.length === 0) return null;
@@ -253,7 +259,7 @@ export const OptionalGroup: React.FC<{
   // Ready means what the server says the chosen engine needs is on disk. A
   // runtime shared with another role (the karaoke's ONNX and CUDA libraries
   // serve the stem separator too) is not the role being installed.
-  const roleReady = status?.set ? status.set.ready : assets.some((asset) => asset.kind === 'model' && asset.installed);
+  const roleReady = !savingModel && (status?.set ? status.set.ready : assets.some((asset) => asset.kind === 'model' && asset.installed));
   // The models the chosen engine can run. A recogniser or an assistant is a
   // runtime plus one of these; the runtime is the studio's business, the model
   // is the user's choice.
@@ -391,7 +397,9 @@ export const OptionalGroup: React.FC<{
               const percent = running && running.total_bytes > 0
                 ? Math.min(100, Math.round((running.downloaded_bytes / running.total_bytes) * 100))
                 : setBytes > 0 ? Math.min(100, Math.round((haveBytes / setBytes) * 100)) : 0;
-              const ready = setBytes > 0 && haveBytes >= setBytes;
+              // The server includes the runtime and custom model paths in
+              // readiness; catalog bytes alone cannot establish either.
+              const ready = !savingModel && (status?.set?.ready ?? (setBytes > 0 && haveBytes >= setBytes));
               return (
                 // One row, the way Dub Studio states it: what this is, what it
                 // weighs, whether it is here, which variant, and the two
@@ -410,6 +418,7 @@ export const OptionalGroup: React.FC<{
                     {models.length > 1 && (
                       <select
                         value={chosenModel}
+                        disabled={savingModel}
                         onChange={(event) => {
                           setModel(event.target.value);
                           // Which model was picked is a setting, not a detail of
@@ -427,11 +436,43 @@ export const OptionalGroup: React.FC<{
                                 ? 'managed_model'
                                 : null;
                           if (settingsUrl && field) {
-                            void fetch(settingsUrl, {
-                              method: 'PUT',
-                              headers: { 'Content-Type': 'application/json' },
-                              body: JSON.stringify({ [field]: event.target.value }),
-                            }).catch(() => undefined);
+                            const nextModel = event.target.value;
+                            setFailed(null);
+                            setSavingModel(true);
+                            // A poll for the old selection may still be pending.
+                            statusGeneration.current++;
+                            void (async () => {
+                              try {
+                                const response = await fetch(settingsUrl, {
+                                  method: 'PUT',
+                                  headers: { 'Content-Type': 'application/json' },
+                                  body: JSON.stringify({ [field]: nextModel }),
+                                });
+                                if (!response.ok) throw new Error(await errorMessage(response));
+                              } catch (error) {
+                                setFailed((error as Error).message);
+                                setModel(chosenModel);
+                              }
+                              // Invalidate polls started while the write was
+                              // pending too, before loading the saved choice.
+                              statusGeneration.current++;
+                              try {
+                                const refreshed = await load();
+                                // A rejected write may leave a different saved
+                                // model; align the picker with the server too.
+                                if (refreshed?.chosen_model) setModel(refreshed.chosen_model);
+                              } catch (error) {
+                                setFailed((error as Error).message);
+                                // The previous status describes the old choice.
+                                // A failed refresh cannot certify the new one.
+                                setStatus((current) => current && {
+                                  ...current,
+                                  set: { bytes: 0, installed_bytes: 0, files: 0, ...current.set, ready: false },
+                                });
+                              } finally {
+                                setSavingModel(false);
+                              }
+                            })();
                           }
                         }}
                         className="shrink-0 rounded-md border border-zinc-200 bg-white px-2 py-1 text-[11px] tabular-nums text-zinc-800 outline-hidden focus:border-pink-400 dark:border-white/10 dark:bg-black/20 dark:text-zinc-100"
@@ -476,12 +517,13 @@ export const OptionalGroup: React.FC<{
                               body: JSON.stringify({ asset_id: localEngines.length === 1 ? device : engine, model_id: chosenModel || undefined }),
                             })
                               .then(async (response) => {
-                                if (!response.ok) setFailed(await errorMessage(response));
+                                if (!response.ok) { setStarting(false); setFailed(await errorMessage(response)); }
                                 return load();
                               })
-                              .catch((error: Error) => setFailed(error.message));
+                              .catch((error: Error) => { setStarting(false); setFailed(error.message); });
                           }}
                           title={t('download')}
+                          disabled={savingModel}
                           className="shrink-0 rounded-md border border-zinc-300 p-1.5 text-zinc-600 transition-colors hover:border-pink-400 hover:bg-pink-500/10 hover:text-pink-600 dark:border-white/15 dark:text-zinc-300"
                         >
                           <Download size={13} />
