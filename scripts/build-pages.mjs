@@ -249,6 +249,7 @@ ${faq.map(({ q, html }) => `    <details><summary>${escape(q)}</summary><div cla
       <a class="pill" href="https://t.me/nerual_dreming">Telegram · @nerual_dreming</a>
       <a class="pill" href="https://t.me/neuroport">Telegram · @neuroport</a>
       <a class="pill" href="https://artgeneration.me">ArtGeneration.me</a>
+      <a class="pill" href="stats.html?lang=${lang}">${escape(s.ctaStats)}</a>
       <a class="pill" href="donate.html?lang=${lang}">${escape(s.ctaDonate)}</a>
     </div>
   </section>
