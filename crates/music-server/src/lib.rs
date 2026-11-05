@@ -6490,7 +6490,10 @@ async fn karaoke_words_from_openrouter(
     let response = execute_openrouter_json(request).await?;
     let segments = lyrics_sync::segments_from_verbose_json(&response.body);
     if segments.is_empty() {
-        anyhow::bail!("{model} answered without timings; pick a model that returns them");
+        // The model is chosen from the timings-capable family, so no segments means nothing was
+        // heard, not a bad model. Report it like the other recognisers (NO_WORDS) so the caller's
+        // buried-vocal pass fires for OpenRouter too.
+        anyhow::bail!("{}", lyrics_sync::NO_WORDS);
     }
     Ok(segments)
 }

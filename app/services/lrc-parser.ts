@@ -95,7 +95,7 @@ export function lrcToSrt(lrcContent: string): string {
     .map((line, index) => {
       const next = sung.slice(index + 1).find((later) => later.time > line.time);
       const ceiling = next ? next.time : line.time + LAST_SRT_LINE_SECONDS;
-      const end = Math.max(line.time + 0.3, Math.min(lineEndSeconds(line), ceiling));
+      const end = Math.min(ceiling, Math.max(line.time + 0.3, Math.min(lineEndSeconds(line), ceiling)));
       return `${index + 1}\n${srtTime(line.time)} --> ${srtTime(end)}\n${line.text}\n`;
     })
     .join('\n');
