@@ -339,7 +339,7 @@ export const zh = {
     textContent: '文本内容',
     downloadLrc: '下载 LRC（歌词）',
     downloadSrt: '下载 SRT（字幕）',
-    downloadSrtHint: '同样的时间轴，以字幕形式导出，供只能导入 SRT、不支持 LRC 的视频剪辑软件使用（剪映、CapCut、Premiere）：每行显示到下一行开始。',
+    downloadSrtHint: '同样的时间轴，以字幕形式导出，供只能导入 SRT、不支持 LRC 的视频剪辑软件使用（剪映、CapCut、Premiere）：每行在演唱时显示，没有歌词的纯音乐段落留空。',
     videoStudio: '视频工作室',
     createProfessionalVisualizers: '创建专业可视化效果。',
     tabPresets: '预设',

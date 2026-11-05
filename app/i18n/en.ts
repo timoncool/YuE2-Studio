@@ -340,7 +340,7 @@ export const en = {
     textContent: 'Text content',
     downloadLrc: 'Download LRC (Lyrics)',
     downloadSrt: 'Download SRT (subtitles)',
-    downloadSrtHint: 'The same timings as subtitles, for video editors that import SRT and not LRC (CapCut, Jianying, Premiere): each line runs until the next one starts.',
+    downloadSrtHint: 'The same timings as subtitles, for video editors that import SRT and not LRC (CapCut, Jianying, Premiere): each line shows while it is sung, with gaps where the song plays without words.',
 
     // Video Studio
     videoStudio: 'Video Studio',
