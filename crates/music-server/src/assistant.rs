@@ -108,6 +108,11 @@ pub struct AssistRequest {
     pub abc: String,
     #[serde(default = "default_duration")]
     pub duration_seconds: f64,
+    /// The language the lyrics fall back to when the request does not settle
+    /// one: the text language the user chose, or the studio's UI locale under
+    /// "Automatic". Without it a small model defaults to Russian (#198).
+    #[serde(default)]
+    pub locale: String,
 }
 
 fn default_duration() -> f64 {
@@ -193,11 +198,31 @@ fn craft_notes(request: &AssistRequest) -> String {
     let mut notes = String::new();
     if matches!(request.target, AssistTarget::All | AssistTarget::Lyrics) {
         notes.push_str(DICTION_RULE);
+        if let Some(language) = locale_language(&request.locale) {
+            notes.push_str(&format!(
+                "\nDefault language: when the request does not make clear which language the lyrics should be sung in, write them in {language}."
+            ));
+        }
     }
     if wants_two_voices(request) {
         notes.push_str(DUET_RULE);
     }
     notes
+}
+
+/// The lyrics language a locale names, for the fallback note. The frontend
+/// sends the studio's UI locale ("en", "ru", "zh", "ja", "ko") or the text
+/// language the user chose; a region suffix ("zh-CN") is ignored.
+fn locale_language(locale: &str) -> Option<&'static str> {
+    let code = locale.split(['-', '_']).next().unwrap_or("").trim().to_lowercase();
+    Some(match code.as_str() {
+        "en" => "English",
+        "ru" => "Russian",
+        "zh" => "Mandarin Chinese",
+        "ja" => "Japanese",
+        "ko" => "Korean",
+        _ => return None,
+    })
 }
 
 fn wants_two_voices(request: &AssistRequest) -> bool {
@@ -837,6 +862,7 @@ mod tests {
             style: "synth pop, female vocal, 110 BPM".into(),
             abc: "X:1\nM:4/4\nL:1/16\nK:C\nV: Vocal\nc4d4e4f4|".into(),
             duration_seconds: 90.0,
+            locale: String::new(),
         }
     }
 
@@ -917,6 +943,35 @@ mod tests {
         assert!(system.contains("language the user wrote their request in"));
         assert!(system.contains("write ё as ё"));
         assert!(!system.contains("combining acute"), "YuE2 has no pronunciation channel");
+    }
+
+    #[test]
+    fn a_locale_sets_the_fallback_language_of_the_lyrics() {
+        assert_eq!(locale_language("zh"), Some("Mandarin Chinese"));
+        assert_eq!(locale_language("zh-CN"), Some("Mandarin Chinese"));
+        assert_eq!(locale_language("en"), Some("English"));
+        assert_eq!(locale_language(""), None);
+        assert_eq!(locale_language("xx"), None);
+
+        // a Chinese studio's autogen falls back to Chinese, not Russian (#198)
+        let mut chinese = request(AssistTarget::All);
+        chinese.locale = "zh".into();
+        let (system, _) = instructions(&chinese);
+        assert!(system.contains("Mandarin Chinese"));
+        assert!(system.contains("does not make clear which language"));
+
+        // the lyrics-only wand gets the same fallback
+        let lyrics_only = AssistRequest { target: AssistTarget::Lyrics, ..chinese.clone() };
+        assert!(instructions(&lyrics_only).0.contains("Mandarin Chinese"));
+
+        // no locale, no fallback note
+        assert!(!instructions(&request(AssistTarget::All)).0.contains("does not make clear which language"));
+
+        // the style and score targets write no fresh lyrics, so no fallback
+        let style = AssistRequest { target: AssistTarget::Style, ..chinese.clone() };
+        assert!(!instructions(&style).0.contains("does not make clear which language"));
+        let score = AssistRequest { target: AssistTarget::Score, ..chinese };
+        assert!(!instructions(&score).0.contains("does not make clear which language"));
     }
 
     #[test]

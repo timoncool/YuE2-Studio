@@ -360,6 +360,17 @@ const SamplingGrid: React.FC<{ value: SamplingText; defaults?: YueSampling; onCh
 
 const NO_ACTIVITY: ActivityEntry[] = [];
 
+// The languages the writing assistant can be told to sing in, each shown in
+// its own script. `name` is the English name the model reads; empty value is
+// "Automatic", which falls back to the studio's UI locale (#198).
+const LYRIC_LANGUAGES: { code: string; native: string; name: string }[] = [
+  { code: 'en', native: 'English', name: 'English' },
+  { code: 'zh', native: '中文', name: 'Mandarin' },
+  { code: 'ru', native: 'Русский', name: 'Russian' },
+  { code: 'ja', native: '日本語', name: 'Japanese' },
+  { code: 'ko', native: '한국어', name: 'Korean' },
+];
+
 export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerating, activeJobCount = 0, initialData, request, playlists, onCreatePlaylist, playlistId, onChoosePlaylist }) => {
   const { t, language } = useI18n();
   const writingText = songWritingStrings[language];
@@ -885,14 +896,17 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
       setSemanticTokens('');
     }
     try {
+      const lyricsLangName = LYRIC_LANGUAGES.find(lang => lang.code === writerLanguage)?.name ?? '';
       const payload = JSON.stringify({
         target,
         description: freshSong ? '' : name.trim(),
-        instruction: target === 'score' ? scoreInstruction.trim() : freshSong ? writerInstruction(assistInstruction, writerLanguage, writerLines, writerExtra) : assistInstruction.trim(),
+        instruction: target === 'score' ? scoreInstruction.trim() : freshSong ? writerInstruction(assistInstruction, lyricsLangName, writerLines, writerExtra) : assistInstruction.trim(),
         lyrics: freshSong ? '' : lyrics.trim(),
         style: freshSong ? '' : finishedStyle(style),
         abc: freshSong ? '' : abc.trim(),
         duration_seconds: numberOrUndefined(duration) ?? 120,
+        // the chosen text language, or the UI locale as the fallback (#198)
+        locale: writerLanguage || language,
       });
       setAssistStage('preparing');
       setAssistDraft('');
@@ -1314,7 +1328,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
               />
               <p className="mt-2 text-[11px] leading-4 text-zinc-500">{t('songIdeaHint')}</p>
               <div className="mt-3 grid grid-cols-2 gap-2">
-                <Field label={writingText.language}><input className={CONTROL} value={writerLanguage} onChange={event => setWriterLanguage(event.target.value)} placeholder={writingText.auto} /></Field>
+                <Field label={writingText.language}><select className={CONTROL} value={writerLanguage} onChange={event => setWriterLanguage(event.target.value)}><option value="">{writingText.auto}</option>{LYRIC_LANGUAGES.map(lang => <option key={lang.code} value={lang.code}>{lang.native}</option>)}</select></Field>
                 <Field label={writingText.lines}><select className={CONTROL} value={writerLines} onChange={event => setWriterLines(event.target.value)}><option value="">{writingText.auto}</option>{[8, 16, 24, 32].map(lines => <option key={lines} value={lines}>{lines}</option>)}</select></Field>
               </div>
               <div className="mt-3"><Field label={writingText.instructions}><AutoTextarea className={`${CONTROL} resize-none`} minRows={2} value={writerExtra} onChange={event => setWriterExtra(event.target.value)} /></Field></div>
