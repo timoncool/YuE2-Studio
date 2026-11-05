@@ -33,11 +33,13 @@ struct Change {
 }
 
 /// The table of changes of this release against 3.7.0. A release that changes what the studio downloads writes its
-/// own rows here.
+/// own rows here. More specific rows come first: `reason_of` takes the first that matches.
 const CHANGES: &[Change] = &[
     Change { what: "htdemucs-6s", reason: "demucs-audiocpp" },
-    Change { what: "audiocpp-*", reason: "demucs-audiocpp" },
-    Change { what: "htdemucs-onnx", reason: "demucs-audiocpp" },
+    Change { what: "htdemucs-onnx", reason: "htdemucs-onnx-gone" },
+    Change { what: "audiocpp-cufft*", reason: "audiocpp-cuda" },
+    Change { what: "audiocpp-lib*", reason: "audiocpp-cuda" },
+    Change { what: "audiocpp-*", reason: "audiocpp-server" },
     Change { what: "midi-hotstep", reason: "midi-audiocpp" },
     Change { what: "transcribe-engine*", reason: "transcribe-avx2" },
     Change { what: "llama-*", reason: "llama" },
@@ -59,6 +61,9 @@ pub const REASONS: &[(&str, &str)] = &[
     ("ort-cpu", "Tempo, key and the listening pack run on ONNX Runtime on the processor"),
     ("ort-gpu-gone", "ONNX Runtime no longer runs on the card; its CUDA, cuDNN and DirectML files are not read"),
     ("demucs-audiocpp", "Stems are split by HT-Demucs in the audio.cpp server"),
+    ("audiocpp-server", "The audio.cpp engine behind stem separation, karaoke and audio-to-MIDI"),
+    ("audiocpp-cuda", "A CUDA library the audio.cpp engine needs on an NVIDIA card"),
+    ("htdemucs-onnx-gone", "No longer needed — HT-Demucs now runs in the audio.cpp engine"),
     ("midi-audiocpp", "Audio to MIDI runs MuScriptor in the audio.cpp server"),
     ("newer", "This release uses another build of it"),
     ("unused", "No longer used"),
@@ -356,7 +361,7 @@ mod tests {
         let p = plan(Vec::new(), Vec::new(), leftovers(), root.path(), "9.9.9");
         assert!(p.show);
         assert_eq!(p.retired.len(), 1, "a leftover not on disk is no row");
-        assert_eq!((p.retired[0].paths.clone(), p.retired[0].size, p.retired[0].reason_code), (vec!["separation/models/htdemucs/htdemucs_6s_fp16.onnx".to_string()], 500, "demucs-audiocpp"));
+        assert_eq!((p.retired[0].paths.clone(), p.retired[0].size, p.retired[0].reason_code), (vec!["separation/models/htdemucs/htdemucs_6s_fp16.onnx".to_string()], 500, "htdemucs-onnx-gone"));
         assert_eq!(p.freed, 500);
         assert!(onnx.is_file(), "the plan itself removes nothing");
 
