@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { libraryChanged, SELF_READ, useActivity, useAssistantStatus, useSetupStatus, type ActivityEntry } from '../services/studioQueries';
 import { hasSungLines, karaokeReason } from '../services/karaoke';
+import { clampDurationToKept } from '../services/createDuration';
 import {
   AlertTriangle, AudioLines, ChevronDown, CircleAlert, Dices, Ear, Eye, EyeOff, FileMusic, FolderOpen, Loader2,
   Grid2x2, Guitar, ListChecks, Music2, Pause, Piano, Play, RotateCcw, Save, Sparkles, Square, Tags, Upload, Wand2, Settings2, X,
@@ -104,6 +105,16 @@ const SEMANTIC_CODES_PER_SECOND = 25;
 const MAX_DURATION_SECONDS = 600;
 /** A new prompt's ceiling: 2:10. Examples and prompt files keep their own. */
 const DEFAULT_DURATION_SECONDS = 130;
+/** The max-duration the user keeps for every new song (studio.createDuration),
+ *  or the default when none is saved yet. */
+function keptCreateDuration(): number {
+  try {
+    const kept = Number(window.localStorage.getItem('studio.createDuration'));
+    if (kept >= 10 && kept <= MAX_DURATION_SECONDS) return kept;
+  } catch { /* fall through to the default */ }
+  return DEFAULT_DURATION_SECONDS;
+}
+
 /** The file format last chosen by hand, kept between sessions like the duration. */
 /** The words of the form (name, style, lyrics), kept across restarts until Reset clears them. */
 const DRAFT_KEY = 'studio.createDraft';
@@ -367,12 +378,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
   // Strings, so an empty field can mean "engine default".
   // The ceiling last set by hand, kept between sessions like the playlist:
   // a song made longer once is not cut at 2:10 after the next start.
-  const [duration, setDuration] = useState(() => {
-    try {
-      const kept = Number(window.localStorage.getItem('studio.createDuration'));
-      return kept >= 10 && kept <= MAX_DURATION_SECONDS ? String(kept) : String(DEFAULT_DURATION_SECONDS);
-    } catch { return String(DEFAULT_DURATION_SECONDS); }
-  });
+  const [duration, setDuration] = useState(() => String(keptCreateDuration()));
   const chooseDuration = (value: string) => {
     setDuration(value);
     try { window.localStorage.setItem('studio.createDuration', value); } catch { /* kept until a reload */ }
@@ -563,7 +569,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
     setAbc(typeof request.abc === 'string' ? request.abc.trimEnd() : '');
     setPlans([]); setSelectedPlan(0);
     setCot(request.cot === 'full' || request.cot === 'melody' || request.cot === 'off' ? request.cot : '');
-    setDuration(asText(request.duration ?? request.duration_seconds));
+    setDuration(String(clampDurationToKept(Number(request.duration ?? request.duration_seconds), keptCreateDuration())));
     setLmBatch('');
     setSynthBatch('');
     setSteps(asText(request.steps));
@@ -940,7 +946,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
       if (typeof body?.title === 'string' && body.title.trim() && target !== 'score') setName(body.title.trim());
       if (typeof body?.cover_prompt === 'string' && body.cover_prompt.trim()) setCoverPrompt(body.cover_prompt.trim());
       if (typeof body?.duration_seconds === 'number' && body.duration_seconds >= 10 && target === 'all') {
-        setDuration(String(Math.min(MAX_DURATION_SECONDS, Math.round(body.duration_seconds))));
+        setDuration(String(Math.min(MAX_DURATION_SECONDS, clampDurationToKept(body.duration_seconds, keptCreateDuration()))));
       }
     } catch (reason) {
       const cancelled = reason instanceof DOMException && reason.name === 'AbortError';
