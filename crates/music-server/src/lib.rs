@@ -794,6 +794,21 @@ impl EngineOptions {
             && hardware.gpu_name.as_deref().is_some_and(|name| name.contains("Radeon") || name.contains("AMD"))
     }
 
+    /// Blackwell and newer (sm_100 = cc 10.0, sm_120 = cc 12.0): the compute
+    /// capabilities ggml 0.27's flash-attention kernels sing gibberish on, later
+    /// sections turning to meaningless syllables (#194). Ada (8.9) and Hopper
+    /// (9.0) are unaffected. A threshold, not a card list, so a newer card stays
+    /// on the safe path until its kernels are known good.
+    fn fa_regressed_cc(cc: Option<(u32, u32)>) -> bool {
+        cc.is_some_and(|cc| cc >= (10, 0))
+    }
+
+    /// The engine would run flash attention on a card ggml 0.27's kernels get
+    /// wrong (#194): a CUDA build on a Blackwell-or-newer compute capability.
+    fn new_cuda_fa_regression(&self) -> bool {
+        self.cuda_build().is_some() && Self::fa_regressed_cc(hardware::hardware().compute_capability)
+    }
+
     fn to_engine(self) -> music_engine::yue_server::YueServerOptions {
         let small_radeon = self.small_radeon();
         music_engine::yue_server::YueServerOptions {
@@ -803,7 +818,7 @@ impl EngineOptions {
             max_seq: self.max_seq.or(small_radeon.then_some(RADEON_SMALL_MAX_SEQ)).map(|value| value.max(MIN_MAX_SEQ)),
             vae_core: self.vae_core,
             vae_halo: self.vae_halo,
-            disable_flash_attention: self.disable_flash_attention || small_radeon,
+            disable_flash_attention: self.disable_flash_attention || small_radeon || self.new_cuda_fa_regression(),
             // On an AMD Radeon through Vulkan the hidden states leave the FP16
             // range and the song comes out as pure silence, which the engine's
             // MP3 path then crashes on; the engine's own clamp fixes it.
@@ -4901,6 +4916,11 @@ fn put_the_engine_folder_on_path() {
 }
 
 fn engine_location(options: EngineOptions) -> music_engine::yue_server::YueServerLocation {
+    if options.new_cuda_fa_regression() {
+        music_engine::yue_server::note_in_log(
+            "flash-attention off: new CUDA compute capability, ggml 0.27 FA regression (#194)",
+        );
+    }
     music_engine::yue_server::YueServerLocation {
         bundle_root: engine_bundle_root(),
         // The environment still wins, so a developer build needs no settings: a
@@ -10199,6 +10219,16 @@ mod tests {
             assert_eq!(chain, vec![ComputeBackend::Auto, ComputeBackend::Cpu]);
         }
         assert_eq!(auto.device_chain(&[]).last(), Some(&ComputeBackend::Cpu));
+    }
+
+    #[test]
+    fn flash_attention_off_from_blackwell_on() {
+        // ggml 0.27's flash attention sings gibberish on Blackwell-or-newer cards (#194)
+        assert!(!EngineOptions::fa_regressed_cc(None));
+        assert!(!EngineOptions::fa_regressed_cc(Some((8, 9))), "Ada (RTX 4090) is unaffected");
+        assert!(!EngineOptions::fa_regressed_cc(Some((9, 0))), "Hopper is unaffected");
+        assert!(EngineOptions::fa_regressed_cc(Some((10, 0))), "Blackwell sm_100");
+        assert!(EngineOptions::fa_regressed_cc(Some((12, 0))), "Blackwell sm_120 (RTX 5060 Ti, #194)");
     }
 
     /// Every file the editor page loads has to be embedded; a missing
