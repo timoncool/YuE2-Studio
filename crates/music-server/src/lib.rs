@@ -478,9 +478,9 @@ const MAX_RESUMES: u32 = 3;
 /// The score stage draws up to 4096 tokens after its prompt in the same context,
 /// so a smaller context fails every song before it starts.
 const MIN_MAX_SEQ: u32 = 8192;
-/// The engine's cache on a Radeon of 8 GB or less (`EngineOptions::small_radeon`): the largest that runs there
-/// without flash attention.
-const RADEON_SMALL_MAX_SEQ: u32 = 9216;
+/// The engine's KV cache on a card of 8 GB or less (`EngineOptions::small_vram`): the largest that fits there, so
+/// the model's full 24576-token context does not overrun the card partway through a song.
+const SMALL_VRAM_MAX_SEQ: u32 = 9216;
 
 /// Songs the studio was closed on are started again, oldest first. The old
 /// job stays as `cancelled`, its message naming the job that took its place.
@@ -782,9 +782,9 @@ impl EngineOptions {
         }
     }
 
-    /// A Radeon card of 4 to 8 GB on Vulkan (an integrated Radeon reports less): its flash attention is several times slower than without it, and a step
-    /// that long and a whole song's cache are where its driver gives the device up; without flash attention and with
-    /// the cache of `RADEON_SMALL_MAX_SEQ` it renders in chunks that the engine fades into each other.
+    /// A Radeon card of 4 to 8 GB on Vulkan (an integrated Radeon reports less): its flash attention is several times
+    /// slower than without it, and a step that long and a whole song's cache are where its driver gives the device up.
+    /// `small_vram` holds its cache so it renders a long song in chunks the engine fades into each other.
     fn small_radeon(&self) -> bool {
         let hardware = hardware::hardware();
         self.uses_vulkan()
@@ -792,6 +792,27 @@ impl EngineOptions {
             && hardware.total_vram_gb >= 3.5
             && hardware.total_vram_gb <= 8.5
             && hardware.gpu_name.as_deref().is_some_and(|name| name.contains("Radeon") || name.contains("AMD"))
+    }
+
+    /// A discrete card of 3.5 to 8.5 GB that holds the whole model and its KV cache in its own memory: the model's
+    /// full 24576-token context overruns it partway through a song and the driver faults with a CUDA illegal memory
+    /// access (telemetry 3.8.3 - most on 8 GB and smaller NVIDIA cards, which, unlike a small Radeon, were never
+    /// capped). Held to `SMALL_VRAM_MAX_SEQ` the engine renders a long song in chunks it fades together. An integrated
+    /// GPU (under 3.5 GB reported) and the processor, which draw on host RAM, are left at the full context.
+    fn small_vram(&self) -> bool {
+        Self::small_vram_card(self.cuda_build().is_some() || self.uses_vulkan(), hardware::hardware().total_vram_gb)
+    }
+
+    /// Whether a card that keeps the KV cache in its own memory (`on_card`) is small enough that the full context
+    /// overruns it. The floor keeps the processor and tiny integrated GPUs on the full context.
+    fn small_vram_card(on_card: bool, total_vram_gb: f64) -> bool {
+        on_card && (3.5..=8.5).contains(&total_vram_gb)
+    }
+
+    /// The KV cache the engine starts with: the user's own value when set (floored at `MIN_MAX_SEQ`), otherwise the
+    /// model's full context, except a small-VRAM card is held to `SMALL_VRAM_MAX_SEQ` so it does not overrun.
+    fn capped_max_seq(user: Option<u32>, small_vram: bool) -> Option<u32> {
+        user.or(small_vram.then_some(SMALL_VRAM_MAX_SEQ)).map(|value| value.max(MIN_MAX_SEQ))
     }
 
     /// Blackwell and newer (sm_100 = cc 10.0, sm_120 = cc 12.0): the compute
@@ -815,7 +836,7 @@ impl EngineOptions {
             backend: self.backend,
             keep_loaded: self.keep_loaded,
             max_batch: Some(self.effective_max_batch()),
-            max_seq: self.max_seq.or(small_radeon.then_some(RADEON_SMALL_MAX_SEQ)).map(|value| value.max(MIN_MAX_SEQ)),
+            max_seq: Self::capped_max_seq(self.max_seq, self.small_vram()),
             vae_core: self.vae_core,
             vae_halo: self.vae_halo,
             disable_flash_attention: self.disable_flash_attention || small_radeon || self.new_cuda_fa_regression(),
@@ -10669,6 +10690,18 @@ mod tests {
         assert!(vulkan.clamp_fp16, "Vulkan runs clamp hidden states to FP16");
         let cuda = EngineOptions { backend: music_engine::yue_server::ComputeBackend::Cuda, ..EngineOptions::default() }.to_engine();
         assert!(!cuda.clamp_fp16);
+        // A small card - 8 GB or less, NVIDIA or Radeon - that holds the KV cache in its own memory is held to a
+        // cache the full context does not overrun; a big card and the processor run the model's whole context (#194
+        // aside). The share of CUDA illegal-memory faults on 8 GB cards was the full 24576 context never being capped.
+        assert!(EngineOptions::small_vram_card(true, 8.0), "an 8 GB card on the GPU is capped");
+        assert!(EngineOptions::small_vram_card(true, 4.0));
+        assert!(!EngineOptions::small_vram_card(true, 12.0), "a 12 GB card runs the full context");
+        assert!(!EngineOptions::small_vram_card(true, 3.0), "an integrated GPU under 3.5 GB is left alone");
+        assert!(!EngineOptions::small_vram_card(false, 6.0), "the processor draws on host RAM, not the card");
+        assert_eq!(EngineOptions::capped_max_seq(None, true), Some(SMALL_VRAM_MAX_SEQ), "a small card is held to the cap");
+        assert_eq!(EngineOptions::capped_max_seq(None, false), None, "a big card runs the model's full context");
+        assert_eq!(EngineOptions::capped_max_seq(Some(24576), true), Some(24576), "the user's own value is kept");
+        assert_eq!(EngineOptions::capped_max_seq(Some(4096), true), Some(MIN_MAX_SEQ), "never below the engine's floor");
         // The assistant is optional: it must survive a restart when configured,
         // and stay unavailable when it is not.
         assert!(restored.assistant.available());
