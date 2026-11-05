@@ -481,6 +481,10 @@ const MIN_MAX_SEQ: u32 = 8192;
 /// The engine's KV cache on a card of 8 GB or less (`EngineOptions::small_vram`): the largest that fits there, so
 /// the model's full 24576-token context does not overrun the card partway through a song.
 const SMALL_VRAM_MAX_SEQ: u32 = 9216;
+/// A card up to this much memory that runs with flash attention forced off (#194) is held to `SMALL_VRAM_MAX_SEQ`
+/// as well: without flash attention the KV cache is about twice as large, so a 12 GB RTX 5070 that fit the full
+/// context on 3.8.3 overran its memory on 3.8.4 (#201). Cards larger than this hold the doubled cache unaided.
+const FA_OFF_KV_CAP_MAX_VRAM_GB: f64 = 16.5;
 
 /// Songs the studio was closed on are started again, oldest first. The old
 /// job stays as `cancelled`, its message naming the job that took its place.
@@ -830,13 +834,27 @@ impl EngineOptions {
         self.cuda_build().is_some() && Self::fa_regressed_cc(hardware::hardware().compute_capability)
     }
 
+    /// With flash attention forced off for the Blackwell regression (#194) the KV cache is about twice as large as the
+    /// studio sizes a card for, so the full context overruns a mid-sized card that holds it on-device - a 12 GB RTX
+    /// 5070 faulted out of memory on 3.8.4 where 3.8.3 (flash attention on) fit (#201). Such a card is held to
+    /// `SMALL_VRAM_MAX_SEQ`, the small-card cap, up to the memory where the doubled cache fits unaided.
+    fn fa_off_overruns_vram(&self) -> bool {
+        Self::fa_off_overruns_card(self.new_cuda_fa_regression(), hardware::hardware().total_vram_gb)
+    }
+
+    /// Flash attention off (#194) roughly doubles the KV cache, so a card that held the full context with it on can
+    /// overrun without it. Capped up to `FA_OFF_KV_CAP_MAX_VRAM_GB`; a larger card is left at the full context.
+    fn fa_off_overruns_card(fa_off: bool, total_vram_gb: f64) -> bool {
+        fa_off && total_vram_gb <= FA_OFF_KV_CAP_MAX_VRAM_GB
+    }
+
     fn to_engine(self) -> music_engine::yue_server::YueServerOptions {
         let small_radeon = self.small_radeon();
         music_engine::yue_server::YueServerOptions {
             backend: self.backend,
             keep_loaded: self.keep_loaded,
             max_batch: Some(self.effective_max_batch()),
-            max_seq: Self::capped_max_seq(self.max_seq, self.small_vram()),
+            max_seq: Self::capped_max_seq(self.max_seq, self.small_vram() || self.fa_off_overruns_vram()),
             vae_core: self.vae_core,
             vae_halo: self.vae_halo,
             disable_flash_attention: self.disable_flash_attention || small_radeon || self.new_cuda_fa_regression(),
@@ -10705,6 +10723,15 @@ mod tests {
         assert_eq!(EngineOptions::capped_max_seq(None, false), None, "a big card runs the model's full context");
         assert_eq!(EngineOptions::capped_max_seq(Some(24576), true), Some(24576), "the user's own value is kept");
         assert_eq!(EngineOptions::capped_max_seq(Some(4096), true), Some(MIN_MAX_SEQ), "never below the engine's floor");
+        // Flash attention off (#194) roughly doubles the KV cache, so a mid-sized Blackwell card the full context fit
+        // with FA on overruns without it - a 12 GB RTX 5070 faulted out of memory on 3.8.4 (#201). It is held to the
+        // small-card cap up to FA_OFF_KV_CAP_MAX_VRAM_GB; a 24 GB card and FA-on cards keep the full context.
+        assert!(EngineOptions::fa_off_overruns_card(true, 12.0), "12 GB Blackwell with FA off is capped (#201)");
+        assert!(EngineOptions::fa_off_overruns_card(true, 16.0), "16 GB with FA off is capped");
+        assert!(!EngineOptions::fa_off_overruns_card(true, 24.0), "a 24 GB card holds the doubled cache");
+        assert!(!EngineOptions::fa_off_overruns_card(false, 12.0), "with FA on the cache is not doubled");
+        assert!(EngineOptions::fa_off_overruns_card(true, FA_OFF_KV_CAP_MAX_VRAM_GB), "a card exactly at the cap is still held");
+        assert!(!EngineOptions::fa_off_overruns_card(true, FA_OFF_KV_CAP_MAX_VRAM_GB + 0.5), "just above the cap keeps the full context");
         // The assistant is optional: it must survive a restart when configured,
         // and stay unavailable when it is not.
         assert!(restored.assistant.available());
