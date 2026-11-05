@@ -543,6 +543,38 @@
       ]
     },
     {
+      "id": "yue2-1980s-eurodisco",
+      "engine": "yue2-cpp",
+      "kind": "style",
+      "author": "James E. Petts",
+      "page": "https://huggingface.co/jamespetts/yue2-1980s-eurodisco-lora",
+      "trigger": "eurodisco",
+      "name": {
+        "en": "1980s Eurodisco",
+        "ru": "Евродиско 1980-х",
+        "zh": "1980年代欧陆迪斯科",
+        "ja": "1980年代ユーロディスコ",
+        "ko": "1980년대 유로디스코"
+      },
+      "description": {
+        "en": "1980s Eurodisco production: wall-of-sound synths, chorused bass, four-on-the-floor drums and 80s studio gloss. Start the style with eurodisco. Changes the sound, not the composition.",
+        "ru": "Продакшн евродиско 1980-х: стена синтезаторов, хорусный бас, ровная бочка и студийный лоск 80-х. Начните стиль со слова eurodisco. Меняет звук, не композицию.",
+        "zh": "1980 年代欧陆迪斯科制作：铺满的合成器、合唱贝斯、四四拍鼓点与 80 年代录音室光泽。风格以 eurodisco 开头。改变音色，不改变作曲。",
+        "ja": "1980年代ユーロディスコのプロダクション：壁のようなシンセ、コーラスの効いたベース、四つ打ちドラム、80年代のスタジオの艶。スタイルの先頭に eurodisco と書きます。作曲ではなく音色を変えます。",
+        "ko": "1980년대 유로디스코 프로덕션: 벽처럼 쌓은 신스, 코러스 베이스, 4/4 드럼, 80년대 스튜디오 광택. 스타일 맨 앞에 eurodisco를 넣으세요. 작곡이 아니라 음색을 바꿉니다."
+      },
+      "scales": {
+        "nar": 1
+      },
+      "files": [
+        {
+          "url": "https://huggingface.co/jamespetts/yue2-1980s-eurodisco-lora/resolve/cf5b6ba39f1aaf1b5855d0cace2547c4d216fcb1/yue2_1980s_eurodisco_unfused.safetensors",
+          "file": "yue2_1980s_eurodisco_unfused.safetensors",
+          "bytes": 69772300
+        }
+      ]
+    },
+    {
       "id": "yue2-slider-female",
       "engine": "yue2-cpp",
       "kind": "slider",

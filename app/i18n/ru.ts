@@ -341,7 +341,7 @@ export const ru = {
     textContent: 'Текстовое содержимое',
     downloadLrc: 'Скачать LRC (текст песни)',
     downloadSrt: 'Скачать SRT (субтитры)',
-    downloadSrtHint: 'Те же тайминги субтитрами — для видеоредакторов, которые берут SRT, а не LRC (CapCut, Jianying, Premiere): каждая строка идёт до начала следующей.',
+    downloadSrtHint: 'Те же тайминги субтитрами — для видеоредакторов, которые берут SRT, а не LRC (CapCut, Jianying, Premiere): каждая строка показывается, пока её поют, с паузами там, где музыка звучит без слов.',
 
     // Video Studio
     videoStudio: 'Видео Студия',
@@ -1859,6 +1859,9 @@ export const ru = {
     updateWhyOrtCpu: "Темп, тональность и пакет прослушивания работают на ONNX Runtime на процессоре",
     updateWhyOrtGpuGone: "ONNX Runtime больше не работает на видеокарте: его файлы CUDA, cuDNN и DirectML не читаются",
     updateWhyDemucsAudiocpp: "Стемы делит HT-Demucs в сервере audio.cpp",
+    updateWhyAudiocppServer: "Движок audio.cpp: на нём разделение на дорожки, караоке и ноты из звука",
+    updateWhyAudiocppCuda: "Библиотека CUDA, нужная движку audio.cpp на видеокартах NVIDIA",
+    updateWhyHtdemucsOnnxGone: "Больше не нужно — HT-Demucs теперь работает в движке audio.cpp",
     updateWhyMidiAudiocpp: "Звук в MIDI переводит MuScriptor в сервере audio.cpp",
     updateWhyNewer: "В этом релизе другая сборка",
     updateWhyUnused: "Больше не используется",

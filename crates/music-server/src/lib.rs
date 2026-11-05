@@ -478,9 +478,9 @@ const MAX_RESUMES: u32 = 3;
 /// The score stage draws up to 4096 tokens after its prompt in the same context,
 /// so a smaller context fails every song before it starts.
 const MIN_MAX_SEQ: u32 = 8192;
-/// The engine's cache on a Radeon of 8 GB or less (`EngineOptions::small_radeon`): the largest that runs there
-/// without flash attention.
-const RADEON_SMALL_MAX_SEQ: u32 = 9216;
+/// The engine's KV cache on a card of 8 GB or less (`EngineOptions::small_vram`): the largest that fits there, so
+/// the model's full 24576-token context does not overrun the card partway through a song.
+const SMALL_VRAM_MAX_SEQ: u32 = 9216;
 
 /// Songs the studio was closed on are started again, oldest first. The old
 /// job stays as `cancelled`, its message naming the job that took its place.
@@ -782,9 +782,9 @@ impl EngineOptions {
         }
     }
 
-    /// A Radeon card of 4 to 8 GB on Vulkan (an integrated Radeon reports less): its flash attention is several times slower than without it, and a step
-    /// that long and a whole song's cache are where its driver gives the device up; without flash attention and with
-    /// the cache of `RADEON_SMALL_MAX_SEQ` it renders in chunks that the engine fades into each other.
+    /// A Radeon card of 4 to 8 GB on Vulkan (an integrated Radeon reports less): its flash attention is several times
+    /// slower than without it, and a step that long and a whole song's cache are where its driver gives the device up.
+    /// `small_vram` holds its cache so it renders a long song in chunks the engine fades into each other.
     fn small_radeon(&self) -> bool {
         let hardware = hardware::hardware();
         self.uses_vulkan()
@@ -794,16 +794,52 @@ impl EngineOptions {
             && hardware.gpu_name.as_deref().is_some_and(|name| name.contains("Radeon") || name.contains("AMD"))
     }
 
+    /// A discrete card of 3.5 to 8.5 GB that holds the whole model and its KV cache in its own memory: the model's
+    /// full 24576-token context overruns it partway through a song and the driver faults with a CUDA illegal memory
+    /// access (telemetry 3.8.3 - most on 8 GB and smaller NVIDIA cards, which, unlike a small Radeon, were never
+    /// capped). Held to `SMALL_VRAM_MAX_SEQ` the engine renders a long song in chunks it fades together. An integrated
+    /// GPU (under 3.5 GB reported) and the processor, which draw on host RAM, are left at the full context.
+    fn small_vram(&self) -> bool {
+        Self::small_vram_card(self.cuda_build().is_some() || self.uses_vulkan(), hardware::hardware().total_vram_gb)
+    }
+
+    /// Whether a card that keeps the KV cache in its own memory (`on_card`) is small enough that the full context
+    /// overruns it. The floor keeps the processor and tiny integrated GPUs on the full context.
+    fn small_vram_card(on_card: bool, total_vram_gb: f64) -> bool {
+        on_card && (3.5..=8.5).contains(&total_vram_gb)
+    }
+
+    /// The KV cache the engine starts with: the user's own value when set (floored at `MIN_MAX_SEQ`), otherwise the
+    /// model's full context, except a small-VRAM card is held to `SMALL_VRAM_MAX_SEQ` so it does not overrun.
+    fn capped_max_seq(user: Option<u32>, small_vram: bool) -> Option<u32> {
+        user.or(small_vram.then_some(SMALL_VRAM_MAX_SEQ)).map(|value| value.max(MIN_MAX_SEQ))
+    }
+
+    /// Blackwell and newer (sm_100 = cc 10.0, sm_120 = cc 12.0): the compute
+    /// capabilities ggml 0.27's flash-attention kernels sing gibberish on, later
+    /// sections turning to meaningless syllables (#194). Ada (8.9) and Hopper
+    /// (9.0) are unaffected. A threshold, not a card list, so a newer card stays
+    /// on the safe path until its kernels are known good.
+    fn fa_regressed_cc(cc: Option<(u32, u32)>) -> bool {
+        cc.is_some_and(|cc| cc >= (10, 0))
+    }
+
+    /// The engine would run flash attention on a card ggml 0.27's kernels get
+    /// wrong (#194): a CUDA build on a Blackwell-or-newer compute capability.
+    fn new_cuda_fa_regression(&self) -> bool {
+        self.cuda_build().is_some() && Self::fa_regressed_cc(hardware::hardware().compute_capability)
+    }
+
     fn to_engine(self) -> music_engine::yue_server::YueServerOptions {
         let small_radeon = self.small_radeon();
         music_engine::yue_server::YueServerOptions {
             backend: self.backend,
             keep_loaded: self.keep_loaded,
             max_batch: Some(self.effective_max_batch()),
-            max_seq: self.max_seq.or(small_radeon.then_some(RADEON_SMALL_MAX_SEQ)).map(|value| value.max(MIN_MAX_SEQ)),
+            max_seq: Self::capped_max_seq(self.max_seq, self.small_vram()),
             vae_core: self.vae_core,
             vae_halo: self.vae_halo,
-            disable_flash_attention: self.disable_flash_attention || small_radeon,
+            disable_flash_attention: self.disable_flash_attention || small_radeon || self.new_cuda_fa_regression(),
             // On an AMD Radeon through Vulkan the hidden states leave the FP16
             // range and the song comes out as pure silence, which the engine's
             // MP3 path then crashes on; the engine's own clamp fixes it.
@@ -3557,30 +3593,7 @@ async fn time_lyrics_for(state: AppState, song_id: String) {
     let audio = audio.display().to_string();
 
     note_activity(&state, &song_id, &song.title, "karaoke", "running", None).await;
-    let words = match config.provider {
-        lyrics_sync::AsrProvider::None => return,
-        lyrics_sync::AsrProvider::Parakeet => {
-            let sync = state.lyrics_sync.clone();
-            let path = std::path::PathBuf::from(&audio);
-            match tokio::task::spawn_blocking(move || sync.parakeet_words(config.runtime, config.whisper_model.as_deref(), &path, None)).await {
-                Ok(result) => result,
-                Err(error) => Err(anyhow::anyhow!("the recogniser stopped: {error}")),
-            }
-        }
-        lyrics_sync::AsrProvider::Whisper => {
-            let sync = state.lyrics_sync.clone();
-            let config = config.clone();
-            let path = std::path::PathBuf::from(&audio);
-            let lyrics = song.lyrics.clone();
-            match tokio::task::spawn_blocking(move || sync.whisper_words(&config, &path, None, &lyrics)).await {
-                Ok(result) => result,
-                Err(error) => Err(anyhow::anyhow!("the recogniser stopped: {error}")),
-            }
-        }
-        lyrics_sync::AsrProvider::OpenRouter => {
-            karaoke_words_from_openrouter(&state, &config, &audio, None).await
-        }
-    };
+    let words = karaoke_words(&state, &config, std::path::PathBuf::from(&audio), None, song.lyrics.clone()).await;
     let words = match words {
         Ok(words) => words,
         Err(error) => {
@@ -4901,6 +4914,11 @@ fn put_the_engine_folder_on_path() {
 }
 
 fn engine_location(options: EngineOptions) -> music_engine::yue_server::YueServerLocation {
+    if options.new_cuda_fa_regression() {
+        music_engine::yue_server::note_in_log(
+            "flash-attention off: new CUDA compute capability, ggml 0.27 FA regression (#194)",
+        );
+    }
     music_engine::yue_server::YueServerLocation {
         bundle_root: engine_bundle_root(),
         // The environment still wins, so a developer build needs no settings: a
@@ -6214,8 +6232,92 @@ async fn karaoke_install(
     Ok(Json(state.lyrics_sync.status(&config).await))
 }
 
+/// The words one recogniser hears in one recording, each with its moment. The
+/// provider is dispatched in one place so the button and the automatic pass
+/// after a song is made hear a track the same way.
+async fn recognise_track(
+    state: &AppState,
+    config: &lyrics_sync::LyricsSyncConfig,
+    path: std::path::PathBuf,
+    language: Option<String>,
+    lyrics: String,
+) -> anyhow::Result<Vec<(f64, String)>> {
+    match config.provider {
+        lyrics_sync::AsrProvider::None => anyhow::bail!("karaoke.no-recogniser"),
+        lyrics_sync::AsrProvider::Parakeet => {
+            let sync = state.lyrics_sync.clone();
+            let (runtime, variant) = (config.runtime, config.whisper_model.clone());
+            tokio::task::spawn_blocking(move || sync.parakeet_words(runtime, variant.as_deref(), &path, language.as_deref()))
+                .await
+                .map_err(|error| anyhow::anyhow!("the recogniser stopped: {error}"))?
+        }
+        lyrics_sync::AsrProvider::Whisper => {
+            let sync = state.lyrics_sync.clone();
+            let config = config.clone();
+            tokio::task::spawn_blocking(move || sync.whisper_words(&config, &path, language.as_deref(), &lyrics))
+                .await
+                .map_err(|error| anyhow::anyhow!("the recogniser stopped: {error}"))?
+        }
+        lyrics_sync::AsrProvider::OpenRouter => karaoke_words_from_openrouter(state, config, &path.to_string_lossy(), language.as_deref()).await,
+    }
+}
+
+/// Lifts the vocal out of a mix for recognition, when Mel-Band RoFormer is
+/// installed; the returned file is the caller's to delete. None means there is
+/// no separator to do it with, so the mix is all there is to hear.
+async fn separate_vocal_for_recognition(state: &AppState, mix: &std::path::Path) -> anyhow::Result<Option<std::path::PathBuf>> {
+    let runtime = state.separation_config.read().await.runtime;
+    let gpu = roformer_on_card(state, runtime);
+    if !state.separator.roformer_installed(gpu) {
+        return Ok(None);
+    }
+    let separator = state.separator.clone();
+    let mix = mix.to_path_buf();
+    let out = std::env::temp_dir().join(format!("yue2-karaoke-vocal-{}.wav", uuid::Uuid::now_v7()));
+    let target = out.clone();
+    tokio::task::spawn_blocking(move || -> anyhow::Result<()> {
+        let audio = audio_pcm::decode_stereo_44k(&mix)?;
+        let (vocals, _instrumental) = separator.separate_roformer(&audio, gpu)?;
+        separation::write_wav_stereo(&target, &vocals)
+    })
+    .await
+    .map_err(|error| anyhow::anyhow!("the vocal separator stopped: {error}"))??;
+    Ok(Some(out))
+}
+
+/// The words to time a track by. The mix is heard first - a cover sung forward
+/// off a score is timed straight away. When nothing sung is heard and Mel-Band
+/// RoFormer is installed, the vocal is lifted out and heard on its own, so a
+/// vocal buried under the accompaniment (as freely generated originals often
+/// are) is timed where the mix alone would report nothing.
+async fn karaoke_words(
+    state: &AppState,
+    config: &lyrics_sync::LyricsSyncConfig,
+    mix: std::path::PathBuf,
+    language: Option<String>,
+    lyrics: String,
+) -> anyhow::Result<Vec<(f64, String)>> {
+    let heard = recognise_track(state, config, mix.clone(), language.clone(), lyrics.clone()).await;
+    let nothing_heard = heard.as_ref().err().is_some_and(|error| format!("{error:#}").contains(lyrics_sync::NO_WORDS));
+    if !nothing_heard {
+        return heard;
+    }
+    let Some(vocal) = separate_vocal_for_recognition(state, &mix).await? else {
+        return heard;
+    };
+    let retry = recognise_track(state, config, vocal.clone(), language, lyrics).await;
+    std::fs::remove_file(&vocal).ok();
+    // The buried-vocal pass only ever adds a result; if the isolated vocal is
+    // silent too, the track really has nothing sung and that answer stands.
+    match retry {
+        Ok(words) => Ok(words),
+        Err(_) => heard,
+    }
+}
+
 /// The words the chosen recogniser hears in a recording, each with its moment: the clock karaoke
-/// and the cover's section matching put the lyrics on.
+/// and the cover's section matching put the lyrics on. A buried vocal is lifted out and heard on
+/// its own before the track is called wordless.
 async fn recognised_words(
     state: &AppState,
     config: &lyrics_sync::LyricsSyncConfig,
@@ -6223,28 +6325,12 @@ async fn recognised_words(
     language: Option<String>,
     lyrics: String,
 ) -> Result<Vec<(f64, String)>, (StatusCode, Json<ApiError>)> {
-    match config.provider {
-        lyrics_sync::AsrProvider::None => Err(api_error(StatusCode::CONFLICT, "karaoke.no-recogniser".into())),
-        lyrics_sync::AsrProvider::Parakeet => {
-            let sync = state.lyrics_sync.clone();
-            let (runtime, variant) = (config.runtime, config.whisper_model.clone());
-            tokio::task::spawn_blocking(move || sync.parakeet_words(runtime, variant.as_deref(), &path, language.as_deref()))
-                .await
-                .map_err(|error| api_error(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?
-                .map_err(|error| api_error(StatusCode::BAD_GATEWAY, error.to_string()))
-        }
-        lyrics_sync::AsrProvider::Whisper => {
-            let sync = state.lyrics_sync.clone();
-            let config = config.clone();
-            tokio::task::spawn_blocking(move || sync.whisper_words(&config, &path, language.as_deref(), &lyrics))
-                .await
-                .map_err(|error| api_error(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?
-                .map_err(|error| api_error(StatusCode::BAD_GATEWAY, error.to_string()))
-        }
-        lyrics_sync::AsrProvider::OpenRouter => karaoke_words_from_openrouter(state, config, &path.to_string_lossy(), language.as_deref())
-            .await
-            .map_err(|error| api_error(StatusCode::BAD_GATEWAY, error.to_string())),
+    if config.provider == lyrics_sync::AsrProvider::None {
+        return Err(api_error(StatusCode::CONFLICT, "karaoke.no-recogniser".into()));
     }
+    karaoke_words(state, config, path, language, lyrics)
+        .await
+        .map_err(|error| api_error(StatusCode::BAD_GATEWAY, error.to_string()))
 }
 
 /// HOT-Step's "match sections to score" for a cover: the source recording (an uploaded file or a
@@ -6404,7 +6490,10 @@ async fn karaoke_words_from_openrouter(
     let response = execute_openrouter_json(request).await?;
     let segments = lyrics_sync::segments_from_verbose_json(&response.body);
     if segments.is_empty() {
-        anyhow::bail!("{model} answered without timings; pick a model that returns them");
+        // The model is chosen from the timings-capable family, so no segments means nothing was
+        // heard, not a bad model. Report it like the other recognisers (NO_WORDS) so the caller's
+        // buried-vocal pass fires for OpenRouter too.
+        anyhow::bail!("{}", lyrics_sync::NO_WORDS);
     }
     Ok(segments)
 }
@@ -10201,6 +10290,16 @@ mod tests {
         assert_eq!(auto.device_chain(&[]).last(), Some(&ComputeBackend::Cpu));
     }
 
+    #[test]
+    fn flash_attention_off_from_blackwell_on() {
+        // ggml 0.27's flash attention sings gibberish on Blackwell-or-newer cards (#194)
+        assert!(!EngineOptions::fa_regressed_cc(None));
+        assert!(!EngineOptions::fa_regressed_cc(Some((8, 9))), "Ada (RTX 4090) is unaffected");
+        assert!(!EngineOptions::fa_regressed_cc(Some((9, 0))), "Hopper is unaffected");
+        assert!(EngineOptions::fa_regressed_cc(Some((10, 0))), "Blackwell sm_100");
+        assert!(EngineOptions::fa_regressed_cc(Some((12, 0))), "Blackwell sm_120 (RTX 5060 Ti, #194)");
+    }
+
     /// Every file the editor page loads has to be embedded; a missing
     /// WaveSurfer bundle left the editor blank in 1.0.0 to 1.0.3.
     #[test]
@@ -10594,6 +10693,18 @@ mod tests {
         assert!(vulkan.clamp_fp16, "Vulkan runs clamp hidden states to FP16");
         let cuda = EngineOptions { backend: music_engine::yue_server::ComputeBackend::Cuda, ..EngineOptions::default() }.to_engine();
         assert!(!cuda.clamp_fp16);
+        // A small card - 8 GB or less, NVIDIA or Radeon - that holds the KV cache in its own memory is held to a
+        // cache the full context does not overrun; a big card and the processor run the model's whole context (#194
+        // aside). The share of CUDA illegal-memory faults on 8 GB cards was the full 24576 context never being capped.
+        assert!(EngineOptions::small_vram_card(true, 8.0), "an 8 GB card on the GPU is capped");
+        assert!(EngineOptions::small_vram_card(true, 4.0));
+        assert!(!EngineOptions::small_vram_card(true, 12.0), "a 12 GB card runs the full context");
+        assert!(!EngineOptions::small_vram_card(true, 3.0), "an integrated GPU under 3.5 GB is left alone");
+        assert!(!EngineOptions::small_vram_card(false, 6.0), "the processor draws on host RAM, not the card");
+        assert_eq!(EngineOptions::capped_max_seq(None, true), Some(SMALL_VRAM_MAX_SEQ), "a small card is held to the cap");
+        assert_eq!(EngineOptions::capped_max_seq(None, false), None, "a big card runs the model's full context");
+        assert_eq!(EngineOptions::capped_max_seq(Some(24576), true), Some(24576), "the user's own value is kept");
+        assert_eq!(EngineOptions::capped_max_seq(Some(4096), true), Some(MIN_MAX_SEQ), "never below the engine's floor");
         // The assistant is optional: it must survive a restart when configured,
         // and stay unavailable when it is not.
         assert!(restored.assistant.available());

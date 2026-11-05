@@ -586,14 +586,38 @@ pub struct TrainingCheckpoint {
     pub files: Vec<PathBuf>,
 }
 
+/// The native AR or NAR export of a checkpoint folder (`half` is "ar" or
+/// "nar"), by whichever name the trainer wrote it under. Older runs wrote
+/// `native-ar.safetensors` / `native-nar.safetensors`; newer ones write
+/// `<trigger>_yue2_joint_{ar,nar}_step<N>.safetensors` (#177). The engine
+/// reads a checkpoint's tensor keys to place each half, so the file name
+/// only has to be found here.
+fn native_export(dir: &Path, half: &str) -> Option<PathBuf> {
+    let native = dir.join(format!("native-{half}.safetensors"));
+    if native.is_file() {
+        return Some(native);
+    }
+    let needle = format!("_joint_{half}_step");
+    std::fs::read_dir(dir)
+        .ok()?
+        .flatten()
+        .filter(|entry| {
+            entry.file_name().to_str().is_some_and(|name| name.ends_with(".safetensors") && name.contains(&needle))
+        })
+        .map(|entry| entry.path())
+        .max_by_key(|path| newest(path))
+}
+
 /// The checkpoints a run has written so far, the latest first. A folder
-/// counts once both native exports are in it.
+/// counts once both native exports are in it, under either the older
+/// `native-{ar,nar}` names or the newer `*_yue2_joint_{ar,nar}_step<N>` ones.
 pub fn checkpoints(run: &Path) -> Vec<TrainingCheckpoint> {
     let mut found: Vec<TrainingCheckpoint> = checkpoint_dirs(run)
         .into_iter()
         .filter_map(|(step, dir)| {
-            let files: Vec<PathBuf> = ["native-ar.safetensors", "native-nar.safetensors"].iter().map(|name| dir.join(name)).collect();
-            files.iter().all(|file| file.is_file()).then_some(TrainingCheckpoint { step, files })
+            let ar = native_export(&dir, "ar")?;
+            let nar = native_export(&dir, "nar")?;
+            Some(TrainingCheckpoint { step, files: vec![ar, nar] })
         })
         .collect();
     // a continuation that retrains steps a stopped run had passed writes them again: the newer one counts
@@ -634,6 +658,24 @@ mod tests {
         assert_eq!(step, 900);
         assert!(state.ends_with("output-2/checkpoint-step900/optimizer.resume"));
         assert_eq!(checkpoints(&run).iter().map(|checkpoint| checkpoint.step).collect::<Vec<_>>(), [900, 750, 500]);
+        let _ = std::fs::remove_dir_all(&run);
+    }
+
+    #[test]
+    fn a_checkpoint_with_the_newer_joint_export_names_is_found() {
+        // the trainer now writes <trigger>_yue2_joint_{ar,nar}_step<N>.safetensors (#177)
+        let run = scratch("joint-names");
+        let dir = run.join("output").join("checkpoint-step200");
+        std::fs::create_dir_all(&dir).unwrap();
+        for name in ["adapter.safetensors", "anm_yue2_joint_ar_step200.safetensors", "anm_yue2_joint_nar_step200.safetensors", "optimizer.resume"] {
+            std::fs::write(dir.join(name), name.as_bytes()).unwrap();
+        }
+        let found = checkpoints(&run);
+        assert_eq!(found.iter().map(|checkpoint| checkpoint.step).collect::<Vec<_>>(), [200]);
+        assert_eq!(found[0].files.len(), 2);
+        assert!(found[0].files[0].file_name().unwrap().to_str().unwrap().contains("_joint_ar_step"));
+        assert!(found[0].files[1].file_name().unwrap().to_str().unwrap().contains("_joint_nar_step"));
+        assert_eq!(resume_point(&run).map(|(step, _)| step), Some(200));
         let _ = std::fs::remove_dir_all(&run);
     }
 
