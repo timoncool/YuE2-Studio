@@ -260,7 +260,7 @@ const ru: Yue2Strings = {
   melodyScoreHasChords: 'Режим «Мелодия» сам не убирает аккорды из партитуры.',
   stripChords: 'Убрать аккорды',
   scoreEditTitle: 'Править партитуру с ассистентом',
-  scoreEditPlaceholder: 'Переармонизуй припев джазовыми аккордами, мелодию оставь',
+  scoreEditPlaceholder: 'Перегармонизуй припев джазовыми аккордами, мелодию оставь',
   scoreEditApply: 'Применить',
   maxDurationHintYue: 'Потолок, а не цель: модель заканчивает песню, когда песня закончилась.',
   flowSteps: 'Шаги flow matching',
