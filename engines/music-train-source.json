@@ -1,6 +1,6 @@
 {
   "repository": "https://github.com/timoncool/HOT-Step-CPP.git",
-  "commit": "5ae17a666df7a6129c316f98b754fe0f17fe415f",
+  "commit": "2ef93a1c2714f2f6584c1ccb4dbebb5d3c698a58",
   "license": "MIT",
   "source_dir": "engine",
   "target": "ace-train",
