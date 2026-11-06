@@ -233,6 +233,27 @@ or download the MP3s from [docs/samples](docs/samples).
 | [Кот-программист](docs/samples/kot-programmist.mp3) | Synthwave pop, the second take | synthwave pop, analog synths, drum machine, 112 BPM |
 | [Ночной вор Барсик](docs/samples/barsik.mp3) | Style and lyrics written by the built-in assistant from a one-line idea | pop-punk, distorted guitars, 185 BPM |
 
+## Community reviews
+
+Video reviews and tutorials from the community (the description links this repo):
+
+- [AI Controversy — Ditch Suno: This FREE AI Makes Full Songs on Your PC](https://www.youtube.com/watch?v=6OnV_80f6ko) · EN
+- [ArtSonica — Music AI GRATIS OFFLINE / NO INTERNET](https://www.youtube.com/watch?v=JrNTvpoh318) · ID
+- [AI VINCI — The Suno Killer is Here: it's called YuE2 Studio](https://www.youtube.com/watch?v=XxkGZU89FII) · EN
+- [Mamedov Info — YuE2-Studio: лучшая локальная замена Suno](https://www.youtube.com/watch?v=kpaV_1jyO3E) · RU
+- [ЮЛАВИ Studio — Забудь про Suno? Тестируем YuE2 Studio локально](https://www.youtube.com/watch?v=JPUU9zB7yio) · RU
+- [Wizzdome-Music — YuE2 Studio On Your Own PC](https://www.youtube.com/watch?v=-TjHGgxKwBU) · EN
+- [Dream Travel — YuE2 Studio для генерации музыки прямо на компе](https://www.youtube.com/watch?v=GmrstqfzC9k) · RU
+- [Luki AI Lab — NEW YuE2: a FREE alternative for your PC](https://www.youtube.com/watch?v=c5kwPNpkAO8) · EN
+- [Skillo Labs — Você já pode criar músicas com IA sem internet](https://www.youtube.com/watch?v=8AIaqTRrdPc) · PT
+- [아빠너구리 TV — $0/Month AI Music with YuE2 Studio](https://www.youtube.com/watch?v=08yKZTgMK_k) · KO
+- [Frihandhika — Tutorial YuE2 Studio di Windows](https://www.youtube.com/watch?v=dBetNSxbo-A) · ID
+- [Run It Local — YuE2 Studio: FREE AI Songs on AMD (Beats ComfyUI)](https://www.youtube.com/watch?v=BtlPRhbLNoM) · EN
+- [Franck D Digital AI — YuE2 Studio Portable (tutoriel français)](https://www.youtube.com/watch?v=Br6ABTJflPg) · FR
+- [EZTV — YUE2 Studio 教學](https://www.youtube.com/watch?v=EFv_zOXyn5E) · ZH
+
+**Made a review or tutorial?** Put a link to the project in the description — we feature the best ones on the [site](https://timoncool.github.io/YuE2-Studio/) and here. Send yours through [Issues](https://github.com/timoncool/YuE2-Studio/issues).
+
 ## What it needs
 
 - Windows 10/11 x64.
