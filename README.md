@@ -237,12 +237,45 @@ or download the MP3s from [docs/samples](docs/samples).
 
 Video reviews and tutorials from the community (the description links this repo):
 
-- [AI Controversy — Ditch Suno: This FREE AI Makes Full Songs on Your PC](https://www.youtube.com/watch?v=6OnV_80f6ko) · EN
-- [ArtSonica — Music AI GRATIS OFFLINE / NO INTERNET](https://www.youtube.com/watch?v=JrNTvpoh318) · ID
-- [AI VINCI — The Suno Killer is Here: it's called YuE2 Studio](https://www.youtube.com/watch?v=XxkGZU89FII) · EN
-- [Mamedov Info — YuE2-Studio: лучшая локальная замена Suno](https://www.youtube.com/watch?v=kpaV_1jyO3E) · RU
-- [ЮЛАВИ Studio — Забудь про Suno? Тестируем YuE2 Studio локально](https://www.youtube.com/watch?v=JPUU9zB7yio) · RU
-- [Wizzdome-Music — YuE2 Studio On Your Own PC](https://www.youtube.com/watch?v=-TjHGgxKwBU) · EN
+<table>
+  <tr>
+    <td width="33%" align="center" valign="top">
+      <a href="https://www.youtube.com/watch?v=6OnV_80f6ko"><img src="docs/reviews/r1.jpg" width="100%"></a><br/>
+      <a href="https://www.youtube.com/watch?v=6OnV_80f6ko"><b>AI Controversy</b></a> · EN<br/>
+      <sub>Ditch Suno: This FREE AI Makes Full Songs on Your PC</sub>
+    </td>
+    <td width="33%" align="center" valign="top">
+      <a href="https://www.youtube.com/watch?v=JrNTvpoh318"><img src="docs/reviews/r2.jpg" width="100%"></a><br/>
+      <a href="https://www.youtube.com/watch?v=JrNTvpoh318"><b>ArtSonica</b></a> · ID<br/>
+      <sub>Music AI GRATIS OFFLINE / NO INTERNET</sub>
+    </td>
+    <td width="33%" align="center" valign="top">
+      <a href="https://www.youtube.com/watch?v=XxkGZU89FII"><img src="docs/reviews/r3.jpg" width="100%"></a><br/>
+      <a href="https://www.youtube.com/watch?v=XxkGZU89FII"><b>AI VINCI</b></a> · EN<br/>
+      <sub>The Suno Killer is Here: it's called YuE2 Studio</sub>
+    </td>
+  </tr>
+  <tr>
+    <td width="33%" align="center" valign="top">
+      <a href="https://www.youtube.com/watch?v=kpaV_1jyO3E"><img src="docs/reviews/r4.jpg" width="100%"></a><br/>
+      <a href="https://www.youtube.com/watch?v=kpaV_1jyO3E"><b>Mamedov Info</b></a> · RU<br/>
+      <sub>YuE2-Studio: лучшая локальная замена Suno</sub>
+    </td>
+    <td width="33%" align="center" valign="top">
+      <a href="https://www.youtube.com/watch?v=JPUU9zB7yio"><img src="docs/reviews/r5.jpg" width="100%"></a><br/>
+      <a href="https://www.youtube.com/watch?v=JPUU9zB7yio"><b>ЮЛАВИ Studio</b></a> · RU<br/>
+      <sub>Забудь про Suno? Тестируем YuE2 Studio локально</sub>
+    </td>
+    <td width="33%" align="center" valign="top">
+      <a href="https://www.youtube.com/watch?v=-TjHGgxKwBU"><img src="docs/reviews/r6.jpg" width="100%"></a><br/>
+      <a href="https://www.youtube.com/watch?v=-TjHGgxKwBU"><b>Wizzdome-Music</b></a> · EN<br/>
+      <sub>YuE2 Studio On Your Own PC</sub>
+    </td>
+  </tr>
+</table>
+
+More tutorials and reviews:
+
 - [Dream Travel — YuE2 Studio для генерации музыки прямо на компе](https://www.youtube.com/watch?v=GmrstqfzC9k) · RU
 - [Luki AI Lab — NEW YuE2: a FREE alternative for your PC](https://www.youtube.com/watch?v=c5kwPNpkAO8) · EN
 - [Skillo Labs — Você já pode criar músicas com IA sem internet](https://www.youtube.com/watch?v=8AIaqTRrdPc) · PT
