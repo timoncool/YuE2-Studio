@@ -117,11 +117,12 @@ fn mono_fit(samples: &[f32], rate: u32, out_rate: u32) -> Result<(f32, usize)> {
 /// takes the memory of a piece, not of the track twice over. The track is read
 /// twice, once for its peak.
 pub fn flac_dual_mono<W: std::io::Read + std::io::Write + std::io::Seek>(samples: &[f32], rate: u32, out_rate: u32, sink: &mut W) -> Result<()> {
-    use std::io::SeekFrom;
+    use std::io::{SeekFrom, Write};
     let (gain, frames) = mono_fit(samples, rate, out_rate)?;
     let start = sink.stream_position()?;
     let mut both: Vec<i32> = Vec::new();
-    flac_frames(out_rate, frames, sink, |encoder| {
+    let mut buffered = std::io::BufWriter::with_capacity(1 << 20, &mut *sink);
+    flac_frames(out_rate, frames, &mut buffered, |encoder| {
         mono_pieces(samples, rate, out_rate, |piece| {
             both.clear();
             both.extend(piece.iter().flat_map(|sample| {
@@ -134,6 +135,8 @@ pub fn flac_dual_mono<W: std::io::Read + std::io::Write + std::io::Seek>(samples
             Ok(())
         })
     })?;
+    buffered.flush()?;
+    drop(buffered);
     let end = sink.stream_position()?;
     let mut head = [0u8; 26];
     sink.seek(SeekFrom::Start(start))?;
