@@ -51,31 +51,98 @@ pub fn fitting_gain(audio: &Stereo) -> f32 {
 /// a write sink, so it leaves STREAMINFO's sample count zero; the real count is
 /// written in afterwards, because players and the library read the length there.
 pub fn flac(audio: &Stereo) -> Result<Vec<u8>> {
-    use flac_bound::{FlacEncoder, WriteWrapper};
-    const FULL: f32 = 8_388_607.0;
     let frames = audio.frames();
     let gain = fitting_gain(audio);
-    let samples: Vec<i32> = audio.left.iter().zip(&audio.right).flat_map(|(left, right)| [*left, *right]).map(|sample| ((sample * gain).clamp(-1.0, 1.0) * FULL).round() as i32).collect();
+    let samples: Vec<i32> = audio.left.iter().zip(&audio.right).flat_map(|(left, right)| [*left, *right]).map(|sample| flac_sample(sample, gain)).collect();
     let mut buffer: Vec<u8> = Vec::new();
-    {
-        let mut sink = WriteWrapper(&mut buffer);
-        let mut encoder = FlacEncoder::new()
-            .ok_or_else(|| anyhow!("libFLAC could not make an encoder"))?
-            .channels(2)
-            .bits_per_sample(24)
-            .sample_rate(audio.rate)
-            .compression_level(8)
-            .verify(true)
-            .total_samples_estimate(frames as u64)
-            .init_write(&mut sink)
-            .map_err(|error| anyhow!("start the FLAC encoder: {error:?}"))?;
+    flac_frames(audio.rate, frames, &mut buffer, |encoder| {
         if encoder.process_interleaved(&samples, frames as u32).is_err() {
             bail!("encode FLAC: {:?}", encoder.state());
         }
-        encoder.finish().map_err(|encoder| anyhow!("finish the FLAC file: {:?}", encoder.state()))?;
-    }
+        Ok(())
+    })?;
     set_flac_total_samples(&mut buffer, frames as u64);
     Ok(buffer)
+}
+
+const FLAC_FULL: f32 = 8_388_607.0;
+
+fn flac_sample(sample: f32, gain: f32) -> i32 {
+    ((sample * gain).clamp(-1.0, 1.0) * FLAC_FULL).round() as i32
+}
+
+/// The 24-bit stereo libFLAC encoder `flac` writes with, its frames fed by `feed`.
+fn flac_frames(rate: u32, frames: usize, sink: &mut dyn std::io::Write, feed: impl FnOnce(&mut flac_bound::FlacEncoder) -> Result<()>) -> Result<()> {
+    use flac_bound::{FlacEncoder, WriteWrapper};
+    let mut sink = WriteWrapper(sink);
+    let mut encoder = FlacEncoder::new()
+        .ok_or_else(|| anyhow!("libFLAC could not make an encoder"))?
+        .channels(2)
+        .bits_per_sample(24)
+        .sample_rate(rate)
+        .compression_level(8)
+        .verify(true)
+        .total_samples_estimate(frames as u64)
+        .init_write(&mut sink)
+        .map_err(|error| anyhow!("start the FLAC encoder: {error:?}"))?;
+    feed(&mut encoder)?;
+    encoder.finish().map_err(|encoder| anyhow!("finish the FLAC file: {:?}", encoder.state()))?;
+    Ok(())
+}
+
+/// The pieces of a mono track at `out_rate`, as `Stereo::resampled` makes each
+/// of its channels, one piece at a time.
+fn mono_pieces(samples: &[f32], rate: u32, out_rate: u32, each: impl FnMut(&[f32]) -> Result<()>) -> Result<()> {
+    if rate == out_rate {
+        return samples.chunks(1 << 16).try_for_each(each);
+    }
+    crate::resample::mono_pieces(samples, rate, out_rate, each)
+}
+
+/// `fitting_gain` and the frame count of a mono track at `out_rate`, read
+/// piece by piece.
+fn mono_fit(samples: &[f32], rate: u32, out_rate: u32) -> Result<(f32, usize)> {
+    let (mut peak, mut frames) = (0.0f32, 0usize);
+    mono_pieces(samples, rate, out_rate, |piece| {
+        peak = piece.iter().filter(|sample| sample.is_finite()).fold(peak, |peak, sample| peak.max(sample.abs()));
+        frames += piece.len();
+        Ok(())
+    })?;
+    Ok((if peak > 1.0 { 1.0 / peak } else { 1.0 }, frames))
+}
+
+/// `flac` of a mono track on both channels at `out_rate` - the file
+/// `flac(&Stereo::new(x.clone(), x, rate).resampled(out_rate)?)` makes - written
+/// into `sink` from where it stands, piece by piece: an audiobook of many hours
+/// takes the memory of a piece, not of the track twice over. The track is read
+/// twice, once for its peak.
+pub fn flac_dual_mono<W: std::io::Read + std::io::Write + std::io::Seek>(samples: &[f32], rate: u32, out_rate: u32, sink: &mut W) -> Result<()> {
+    use std::io::SeekFrom;
+    let (gain, frames) = mono_fit(samples, rate, out_rate)?;
+    let start = sink.stream_position()?;
+    let mut both: Vec<i32> = Vec::new();
+    flac_frames(out_rate, frames, sink, |encoder| {
+        mono_pieces(samples, rate, out_rate, |piece| {
+            both.clear();
+            both.extend(piece.iter().flat_map(|sample| {
+                let sample = flac_sample(*sample, gain);
+                [sample, sample]
+            }));
+            if encoder.process_interleaved(&both, piece.len() as u32).is_err() {
+                bail!("encode FLAC: {:?}", encoder.state());
+            }
+            Ok(())
+        })
+    })?;
+    let end = sink.stream_position()?;
+    let mut head = [0u8; 26];
+    sink.seek(SeekFrom::Start(start))?;
+    sink.read_exact(&mut head)?;
+    set_flac_total_samples(&mut head, frames as u64);
+    sink.seek(SeekFrom::Start(start))?;
+    sink.write_all(&head)?;
+    sink.seek(SeekFrom::Start(end))?;
+    Ok(())
 }
 
 /// Writes the frame count into STREAMINFO's 36-bit total-samples field, which a
@@ -138,17 +205,7 @@ pub fn mp3_bitrate(kbps: u32) -> u32 {
 /// which must be one MPEG-1 carries (32, 44.1 or 48 kHz): nothing is
 /// resampled on the way.
 pub fn mp3(audio: &Stereo, kbps: u32) -> Result<Vec<u8>> {
-    if !matches!(audio.rate, 32_000 | 44_100 | 48_000) {
-        bail!("MP3 carries 32, 44.1 or 48 kHz; this track is {} Hz", audio.rate);
-    }
-    let bitrate = BITRATES.iter().find(|(rate, _)| *rate == mp3_bitrate(kbps)).map(|(_, bitrate)| *bitrate).expect("listed");
-    let mut builder = Builder::new().ok_or_else(|| anyhow!("LAME could not start"))?;
-    builder.set_num_channels(2).map_err(|error| anyhow!("LAME channels: {error}"))?;
-    builder.set_sample_rate(audio.rate).map_err(|error| anyhow!("LAME sample rate: {error}"))?;
-    builder.set_brate(bitrate).map_err(|error| anyhow!("LAME bitrate: {error}"))?;
-    builder.set_quality(Quality::Best).map_err(|error| anyhow!("LAME quality: {error}"))?;
-    builder.set_to_write_vbr_tag(false).map_err(|error| anyhow!("LAME tag: {error}"))?;
-    let mut encoder = builder.build().map_err(|error| anyhow!("LAME: {error}"))?;
+    let mut encoder = lame(audio.rate, kbps)?;
     let gain = fitting_gain(audio);
     let fitted;
     let audio = if gain < 1.0 {
@@ -170,6 +227,52 @@ pub fn mp3(audio: &Stereo, kbps: u32) -> Result<Vec<u8>> {
     out.reserve(8192);
     encoder.flush_to_vec::<FlushNoGap>(&mut out).map_err(|error| anyhow!("LAME flush: {error}"))?;
     Ok(out)
+}
+
+/// The constant-bitrate stereo LAME encoder `mp3` writes with.
+fn lame(rate: u32, kbps: u32) -> Result<mp3lame_encoder::Encoder> {
+    if !matches!(rate, 32_000 | 44_100 | 48_000) {
+        bail!("MP3 carries 32, 44.1 or 48 kHz; this track is {rate} Hz");
+    }
+    let bitrate = BITRATES.iter().find(|(standard, _)| *standard == mp3_bitrate(kbps)).map(|(_, bitrate)| *bitrate).expect("listed");
+    let mut builder = Builder::new().ok_or_else(|| anyhow!("LAME could not start"))?;
+    builder.set_num_channels(2).map_err(|error| anyhow!("LAME channels: {error}"))?;
+    builder.set_sample_rate(rate).map_err(|error| anyhow!("LAME sample rate: {error}"))?;
+    builder.set_brate(bitrate).map_err(|error| anyhow!("LAME bitrate: {error}"))?;
+    builder.set_quality(Quality::Best).map_err(|error| anyhow!("LAME quality: {error}"))?;
+    builder.set_to_write_vbr_tag(false).map_err(|error| anyhow!("LAME tag: {error}"))?;
+    builder.build().map_err(|error| anyhow!("LAME: {error}"))
+}
+
+/// `mp3` of a mono track on both channels at `out_rate` - the stream
+/// `mp3(&Stereo::new(x.clone(), x, rate).resampled(out_rate)?, kbps)` makes -
+/// written into `sink` piece by piece: an audiobook of many hours takes the
+/// memory of a piece, not of the track several times over. The track is read
+/// twice, once for its peak.
+pub fn mp3_dual_mono(samples: &[f32], rate: u32, out_rate: u32, kbps: u32, sink: &mut dyn std::io::Write) -> Result<()> {
+    let mut encoder = lame(out_rate, kbps)?;
+    let (gain, _) = mono_fit(samples, rate, out_rate)?;
+    let mut fitted: Vec<f32> = Vec::new();
+    let mut out: Vec<u8> = Vec::new();
+    mono_pieces(samples, rate, out_rate, |piece| {
+        let piece = if gain < 1.0 {
+            fitted.clear();
+            fitted.extend(piece.iter().map(|sample| sample * gain));
+            &fitted[..]
+        } else {
+            piece
+        };
+        out.clear();
+        out.reserve(mp3lame_encoder::max_required_buffer_size(piece.len()));
+        encoder.encode_to_vec(DualPcm { left: piece, right: piece }, &mut out).map_err(|error| anyhow!("LAME encode: {error}"))?;
+        sink.write_all(&out)?;
+        Ok(())
+    })?;
+    out.clear();
+    out.reserve(8192);
+    encoder.flush_to_vec::<FlushNoGap>(&mut out).map_err(|error| anyhow!("LAME flush: {error}"))?;
+    sink.write_all(&out)?;
+    Ok(())
 }
 
 #[cfg(test)]
@@ -208,5 +311,47 @@ mod tests {
         assert!(bytes.len() > expected * 9 / 10 && bytes.len() < expected * 12 / 10, "{} bytes", bytes.len());
         assert_eq!(&bytes[..2], &[0xFF, 0xFB], "an MPEG-1 Layer III frame header");
         assert!(mp3(&tone(1.0, 22_050, 0.5), 128).is_err());
+    }
+
+    /// A mono voice track, louder than full scale in places so the fitting gain
+    /// is at work, and not a whole number of the resampler's chunks long.
+    fn voice(seconds: f32, rate: u32) -> Vec<f32> {
+        let n = (seconds * rate as f32) as usize + 77;
+        (0..n).map(|i| 1.3 * (2.0 * std::f32::consts::PI * 210.0 * i as f32 / rate as f32).sin() * (i as f32 / 997.0).sin()).collect()
+    }
+
+    #[test]
+    fn the_dual_mono_writers_make_the_files_the_whole_track_encoders_make() {
+        let x = voice(2.5, 24_000);
+        for out_rate in [24_000, 48_000] {
+            let whole = flac(&Stereo::new(x.clone(), x.clone(), 24_000).resampled(out_rate).unwrap()).unwrap();
+            let mut streamed = std::io::Cursor::new(Vec::new());
+            flac_dual_mono(&x, 24_000, out_rate, &mut streamed).unwrap();
+            assert!(streamed.into_inner() == whole, "FLAC at {out_rate} Hz differs");
+        }
+        for out_rate in [44_100, 48_000] {
+            let whole = mp3(&Stereo::new(x.clone(), x.clone(), 24_000).resampled(out_rate).unwrap(), 192).unwrap();
+            let mut streamed = Vec::new();
+            mp3_dual_mono(&x, 24_000, out_rate, 192, &mut streamed).unwrap();
+            assert!(streamed == whole, "MP3 at {out_rate} Hz differs");
+        }
+        let quiet: Vec<f32> = x.iter().map(|s| s * 0.5).collect();
+        let whole = mp3(&Stereo::new(quiet.clone(), quiet.clone(), 48_000), 128).unwrap();
+        let mut streamed = Vec::new();
+        mp3_dual_mono(&quiet, 48_000, 48_000, 128, &mut streamed).unwrap();
+        assert!(streamed == whole, "MP3 without resampling or gain differs");
+        assert!(mp3_dual_mono(&quiet, 24_000, 22_050, 128, &mut Vec::new()).is_err());
+    }
+
+    #[test]
+    fn a_flac_written_after_other_bytes_gets_its_length_in_its_own_header() {
+        let x = voice(1.0, 24_000);
+        let whole = flac(&Stereo::new(x.clone(), x.clone(), 24_000)).unwrap();
+        let mut sink = std::io::Cursor::new(b"ID3 head".to_vec());
+        sink.set_position(8);
+        flac_dual_mono(&x, 24_000, 24_000, &mut sink).unwrap();
+        let bytes = sink.into_inner();
+        assert_eq!(&bytes[..8], b"ID3 head");
+        assert!(bytes[8..] == whole[..]);
     }
 }
