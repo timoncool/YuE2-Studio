@@ -7,6 +7,7 @@ Windows build.
 
 ### Added
 
+- **The KV cache can be kept in Q8**: Settings - Local engine has KV cache in Q8 beside flash attention, off by default. It takes half the memory of the cache, with slightly different results, and works only with flash attention on a graphics card; with flash attention off or on the processor the switch is unavailable and says why. The memory a song needs is reckoned with the smaller cache.
 - **Three more LoRA in the catalog**: 1980s Italo Disco (trigger `italodisco`) and 1980s Two-Tone Ska (trigger `twotone`) by James E. Petts, both CC0 sound adapters, and Keygen Music by monsterovich, a composition and sound pair at AR 0.3 and NAR 0.5 trained on instrumentals.
 - **The style's parts explain their fields** ([#211](https://github.com/timoncool/YuE2-Studio/issues/211)): under the singing language, the tempo, the voice and the sound of Edit style parts a short line in the window's language says what the field sets, what Automatic leaves to the model and what words to type there.
 - **Training shows the part of the step it is working on** ([#166](https://github.com/timoncool/YuE2-Studio/issues/166)): under the bar of a run, "Step N of M · part k of K" names what the trainer does now, from the composition's passes to updating the adapter, and the bar moves between whole steps as the parts go by; a slow step no longer looks stuck. Agents read the same in the training status as `step_stage`.
@@ -45,6 +46,7 @@ Windows build.
 
 ### Fixed
 
+- **A song no longer comes out silent when the card computes something other than sound**: the engine computes such a step again up to three times, and a song still left with numbers that are not sound fails with that reason and a Make again button instead of being saved as silence. How often a step had to be computed again is noted in the studio's log and counted in the anonymous statistics. Agents have `song_job_again`.
 - **A training run the studio closed on goes on to where it was meant to end** ([#221](https://github.com/timoncool/YuE2-Studio/issues/221)): Train further on such a run now offers the steps it was started for, not four checkpoints more, and says "The studio closed at step N. Training goes on from checkpoint M up to K."
 - **Training on an RTX 20xx card says why it is slow** ([#199](https://github.com/timoncool/YuE2-Studio/issues/199)): when the trainer computes the layers that card has no BF16 for in F32, the run's card says training goes several times slower there and still finishes.
 - **A scaled studio in a browser tab fits the window**, as in ACE-Step Studio ([#165](https://github.com/timoncool/YuE2-Studio/issues/165)): at an interface scale other than 100 % the studio and its dialogs fit the tab, with the player at the bottom and no scrolling of the page, and the "slide to turn on" knob and a click on the MIDI player's notes follow the pointer.

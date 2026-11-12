@@ -56,8 +56,9 @@ interface SongListProps {
     defaultOrder?: SongOrder;
     onCancelJob?: (jobId: string) => void;
     onResetJob?: (jobId: string) => void;
-    /** Makes a song whose score could not be written again with its LoRA at 1.0 on Composition. */
-    onScoreAgain?: (jobId: string) => void;
+    /** Makes a failed song again: its LoRA at 1.0 on Composition when its score could not be written, as it was when
+     *  the card computed something other than sound. */
+    onScoreAgain?: (jobId: string, how: 'score-strength' | 'again') => void;
     onCancelAll?: () => void;
     onResetAll?: () => void;
     activeJobCount?: number;
@@ -437,7 +438,9 @@ export const SongList: React.FC<SongListProps> = ({
                 ? () => onResetJob?.(song.jobId || song.id)
                 : undefined
             }
-            onScoreAgain={song.stage === 'failed' && song.failureCode === 'score_unsingable_strength' && onScoreAgain ? () => onScoreAgain(song.jobId || song.id) : undefined}
+            onScoreAgain={song.stage === 'failed' && (song.failureCode === 'score_unsingable_strength' || song.failureCode === 'not_audio') && onScoreAgain
+                ? () => onScoreAgain(song.jobId || song.id, song.failureCode === 'not_audio' ? 'again' : 'score-strength')
+                : undefined}
         />
     );
 
@@ -1213,7 +1216,7 @@ const SongItem: React.FC<SongItemProps> = ({
                                 onClick={(e) => { e.stopPropagation(); onScoreAgain(); }}
                                 className="rounded-sm bg-amber-100 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-amber-800 hover:bg-amber-200 dark:bg-amber-400/15 dark:text-amber-200"
                             >
-                                {t('scoreAgainAtOne')}
+                                {song.failureCode === 'not_audio' ? t('songAgain') : t('scoreAgainAtOne')}
                             </button>
                         )}
                         <button

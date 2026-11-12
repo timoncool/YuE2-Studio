@@ -1511,7 +1511,7 @@ function AppContent() {
                 onSongUpdate={handleSongUpdate}
                 onCancelJob={generations.cancel}
                 onResetJob={generations.reset}
-                onScoreAgain={id => void generations.scoreAgain(id)}
+                onScoreAgain={(id, how) => void generations.scoreAgain(id, how)}
                 onCancelAll={() => void generations.cancelAll()}
                 onResetAll={stopEverything}
                 activeJobCount={generations.activeJobCount}

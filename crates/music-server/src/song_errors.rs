@@ -55,6 +55,9 @@ pub enum SongError {
     /// The engine's FATAL line: the score the model wrote cannot be sung;
     /// `adapters` when LoRAs were on, which the engine blames first.
     ScoreUnsingable { line: String, song: u64, problem: String, adapters: bool },
+    /// The engine's FATAL line: the card gave numbers that are not sound (a velocity not finite after its retries,
+    /// latents or audio that are not audio); the same request made again usually comes out right.
+    NotAudio(String),
 }
 
 /// The Windows status of a process that ran an instruction the processor does not have.
@@ -90,6 +93,9 @@ impl SongError {
         if let Some(unsingable) = score_unsingable(&line) {
             return unsingable;
         }
+        if NOT_AUDIO.iter().any(|mark| line.contains(mark)) {
+            return SongError::NotAudio(line);
+        }
         SongError::EngineFatal(line)
     }
 
@@ -122,6 +128,7 @@ impl SongError {
             SongError::ContextShort { .. } => "context_short",
             SongError::ScoreUnsingable { adapters: false, .. } => "score_unsingable",
             SongError::ScoreUnsingable { adapters: true, .. } => "score_unsingable_adapters",
+            SongError::NotAudio(_) => "not_audio",
         })
     }
 
@@ -137,7 +144,7 @@ impl SongError {
             | SongError::ImportFailed(detail)
             | SongError::SeparatorUnavailable(detail)
             | SongError::EngineRefused(detail) => put("detail", json!(detail)),
-            SongError::LostAtLine(line) | SongError::EngineFatal(line) => put("line", json!(line)),
+            SongError::LostAtLine(line) | SongError::EngineFatal(line) | SongError::NotAudio(line) => put("line", json!(line)),
             SongError::AdapterMissing(name) => put("name", json!(name)),
             SongError::LostExited { exit, .. } => put("exit", json!(exit)),
             SongError::LostPort { port, .. } => put("port", json!(port)),
@@ -157,6 +164,9 @@ impl SongError {
         params
     }
 }
+
+/// The engine's FATAL lines of a run whose numbers are not sound (`nar.h`, `vae.h`).
+const NOT_AUDIO: &[&str] = &["the velocity is not finite", "the solved latents are not audio", "the latents decoded to no audio"];
 
 fn context_short(line: &str) -> Option<SongError> {
     let (start, of, tokens_so, s_and, asked_for) = CONTEXT_SHORT;
@@ -237,6 +247,7 @@ impl fmt::Display for SongError {
             SongError::LoadVram => f.write_str("The graphics card ran out of memory while the engine was loading the models. Choose a smaller quantisation in the model manager, or close whatever else is using the card - the writing assistant holds several gigabytes of its own."),
             SongError::LoadRam => f.write_str("The computer ran out of memory (RAM) while the engine was loading the models. Close other programs that take memory, or choose a smaller quantisation in the model manager."),
             SongError::EngineFatal(line) | SongError::ContextShort { line, .. } | SongError::ScoreUnsingable { line, .. } => f.write_str(line),
+            SongError::NotAudio(line) => write!(f, "The graphics card computed something that is not sound on this song ({line}), so the engine stopped it instead of writing silence. Make the song again: a new run usually comes out right."),
             SongError::EngineFailed => f.write_str("The engine reported a failed job; its log has the reason."),
             SongError::EngineUnreachable(detail) => write!(f, "The engine stopped answering about this job: {detail}"),
             SongError::ImportFailed(detail) => write!(f, "The engine finished the job, but the studio could not import its result: {detail}"),
@@ -293,6 +304,7 @@ mod tests {
             SongError::ContextShort { line: "x".into(), tokens: 9700, context: 24576, can_last: 595, asked: 600 },
             SongError::ScoreUnsingable { line: "x".into(), song: 1, problem: "x".into(), adapters: false },
             SongError::ScoreUnsingable { line: "x".into(), song: 1, problem: "x".into(), adapters: true },
+            SongError::NotAudio("x".into()),
         ];
         for error in &all {
             match error {
@@ -317,7 +329,8 @@ mod tests {
                 | SongError::SeparatorUnavailable(_)
                 | SongError::EngineRefused(_)
                 | SongError::ContextShort { .. }
-                | SongError::ScoreUnsingable { .. } => {}
+                | SongError::ScoreUnsingable { .. }
+                | SongError::NotAudio(_) => {}
             }
         }
         all
@@ -374,6 +387,16 @@ mod tests {
 
         let line = "the score the model wrote for song 1 cannot be sung: x. Adapters past their limits on the score half do this: lower their strengths or draw another seed.";
         assert_eq!(SongError::from_fatal(line.into()).code(), Some("score_unsingable_adapters"));
+
+        for line in [
+            "the velocity is not finite at step 10 after 3 evaluations",
+            "the solved latents are not audio (0 NaN, 0 Inf, 96000 zeros of 96000) for T_lat=1500",
+            "the latents decoded to no audio (T=1500)",
+        ] {
+            let not_audio = SongError::from_fatal(line.into());
+            assert_eq!(not_audio.code(), Some("not_audio"), "{line}");
+            assert_eq!(not_audio.params()["line"], line);
+        }
 
         let other = SongError::from_fatal("lyric_schedule needs cfg_scale 1".into());
         assert_eq!(other.code(), Some("engine_fatal"));

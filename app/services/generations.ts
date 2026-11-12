@@ -376,10 +376,10 @@ export function useGenerations({ enabled, notify, onFinished }: GenerationOption
 
   /** A song whose score could not be written made again with its LoRA at 1.0 on Composition (the service keeps the
    * request); the failed card goes once the new song is on its way. */
-  const scoreAgain = useCallback(async (key: string) => {
+  const scoreAgain = useCallback(async (key: string, how: 'score-strength' | 'again' = 'score-strength') => {
     const jobId = key.startsWith(ENDED_PREFIX) ? key.slice(ENDED_PREFIX.length) : key;
     try {
-      const response = await fetch(`/v1/music/jobs/${encodeURIComponent(jobId)}/score-strength`, { method: 'POST' });
+      const response = await fetch(`/v1/music/jobs/${encodeURIComponent(jobId)}/${how}`, { method: 'POST' });
       const body = (await response.json().catch(() => null)) as (YueJob & { error?: string }) | null;
       if (!response.ok || body?.status === 'failed') throw new Error((body && (body.error || songErrorText(body, language))) || `HTTP ${response.status}`);
       await removeEnded(jobId);

@@ -398,6 +398,7 @@ const JOURNAL: &[(&str, &str, &str)] = &[
     ("song_cover_pattern_set", "updated", "cover"),
     ("song_job_dismiss", "discarded", "generation"),
     ("song_job_score_again", "started", "generation"),
+    ("song_job_again", "started", "generation"),
     ("song_create", "started", "generation"),
     ("song_replay", "started", "generation"),
     ("song_job_cancel", "cancelled", "generation"),
@@ -1028,7 +1029,7 @@ fn tools() -> &'static [Tool] {
             },
             Tool {
                 name: "engine_options_get",
-                description: "The engine's launch options: backend (auto, cuda, vulkan, cpu), keep models loaded, and the rest - including extra_args, any other command-line flag the engine takes, and engine_bin, a hand-built engine executable to run instead of the bundled one.",
+                description: "The engine's launch options: backend (auto, cuda, vulkan, cpu), keep models loaded, kv_q8 (the KV cache in Q8, half the memory, only with flash attention on a card: kv_q8_off_reason says why not), and the rest - including extra_args, any other command-line flag the engine takes, and engine_bin, a hand-built engine executable to run instead of the bundled one.",
                 schema: nothing,
                 call: |_| get("/engine/options".into()),
             },
@@ -2576,6 +2577,12 @@ fn tools() -> &'static [Tool] {
                 description: "Make a failed song again with its LoRA brought to 1.0 on the score half (two LoRA share it, 0.5 each), as the button of the error 'score_unsingable_strength' does; only this request changes, the sound half keeps its strengths. Returns the new job.",
                 schema: || id_only("job_id", "the failed song job's id"),
                 call: |args| send(Method::POST, format!("/v1/music/jobs/{}/score-strength", segment(&text(args, "job_id")?)), json!({})),
+            },
+            Tool {
+                name: "song_job_again",
+                description: "Make a failed song again with the same request, as the button of the error 'not_audio' does (the card computed something other than sound). Returns the new job.",
+                schema: || id_only("job_id", "the failed song job's id"),
+                call: |args| send(Method::POST, format!("/v1/music/jobs/{}/again", segment(&text(args, "job_id")?)), json!({})),
             },
         ]
     })

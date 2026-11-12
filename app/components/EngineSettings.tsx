@@ -13,6 +13,7 @@ import { useI18n } from '../context/I18nContext';
 
 type ComputeBackend = 'auto' | 'cuda' | 'vulkan' | 'cpu';
 type FlashAttention = 'auto' | 'on' | 'off';
+type KvQ8Off = 'processor' | 'flash_attention_off' | null;
 
 /** What the running engine was started with, as the service read it from the launch. */
 interface InEffect {
@@ -35,6 +36,7 @@ interface EngineOptions {
   /** Seconds a later chunk of the sound hears the song again before its fade; null: 30. */
   chunk_overlap_seconds: number | null;
   flash_attention: FlashAttention;
+  kv_q8: boolean;
   clamp_fp16: boolean;
   /** The NVIDIA card by nvidia-smi index; null: the first. Taken at the studio's start. */
   gpu?: number | null;
@@ -53,6 +55,7 @@ const DEFAULTS: EngineOptions = {
   vae_halo: null,
   chunk_overlap_seconds: null,
   flash_attention: 'auto',
+  kv_q8: false,
   clamp_fp16: false,
   gpu: null,
   extra_args: '',
@@ -64,12 +67,13 @@ type NumberKey = 'max_batch' | 'max_seq' | 'vae_core' | 'vae_halo' | 'chunk_over
 const CONTROL =
   'w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 outline-hidden focus:border-pink-500 dark:border-white/10 dark:bg-black/20 dark:text-white';
 
-const Toggle: React.FC<{ label: string; hint: string; checked: boolean; onChange: (value: boolean) => void }> = ({ label, hint, checked, onChange }) => (
-  <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-zinc-200 p-3 dark:border-white/10">
-    <input type="checkbox" checked={checked} onChange={event => onChange(event.target.checked)} className="mt-0.5 h-4 w-4 accent-pink-500" />
+const Toggle: React.FC<{ label: string; hint: string; checked: boolean; onChange: (value: boolean) => void; disabled?: boolean; note?: string | null }> = ({ label, hint, checked, onChange, disabled, note }) => (
+  <label className={`flex items-start gap-3 rounded-xl border border-zinc-200 p-3 dark:border-white/10 ${disabled ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'}`}>
+    <input type="checkbox" checked={checked} disabled={disabled} onChange={event => onChange(event.target.checked)} className="mt-0.5 h-4 w-4 accent-pink-500" />
     <span className="min-w-0">
       <span className="block text-sm font-medium text-zinc-800 dark:text-zinc-100">{label}</span>
       <span className="mt-0.5 block text-xs leading-5 text-zinc-500 dark:text-zinc-400">{hint}</span>
+      {note && <span className="mt-0.5 block text-xs leading-5 text-amber-600 dark:text-amber-300">{note}</span>}
     </span>
   </label>
 );
@@ -84,6 +88,10 @@ export const EngineSettings: React.FC = () => {
   const [runtime, setRuntime] = useState<{ executable: string | null; executable_source: string; running_executable: string | null; engine_starting: boolean } | null>(null);
   // The KV cache and flash attention of the running engine, and the cache the saved settings start the next one with.
   const [inEffect, setInEffect] = useState<InEffect | null>(null);
+  // why a KV cache in Q8 cannot apply here, as the service reads the machine (an Auto it resolves to the processor)
+  const [serverKvQ8Off, setServerKvQ8Off] = useState<KvQ8Off>(null);
+  const kvQ8Off: KvQ8Off = options.backend === 'cpu' ? 'processor' : options.flash_attention === 'off' ? 'flash_attention_off'
+    : options.backend === saved.backend && options.flash_attention === saved.flash_attention ? serverKvQ8Off : null;
   const [savedMaxSeq, setSavedMaxSeq] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
   const [picking, setPicking] = useState(false);
@@ -114,8 +122,9 @@ export const EngineSettings: React.FC = () => {
     try {
       const response = await fetch('/engine/options');
       if (!response.ok) throw new Error(`Engine options are unavailable (${response.status})`);
-      const body: { options: EngineOptions; in_effect?: InEffect | null; saved_max_seq?: number; executable?: string | null; executable_source?: string; running_executable?: string | null; engine_starting?: boolean } = await response.json();
+      const body: { options: EngineOptions; in_effect?: InEffect | null; saved_max_seq?: number; kv_q8_off_reason?: KvQ8Off; executable?: string | null; executable_source?: string; running_executable?: string | null; engine_starting?: boolean } = await response.json();
       setInEffect(body.in_effect ?? null);
+      setServerKvQ8Off(body.kv_q8_off_reason ?? null);
       setSavedMaxSeq(typeof body.saved_max_seq === 'number' ? body.saved_max_seq : null);
       // A settings file written before a flag existed arrives without it;
       // the default keeps the comparison below honest.
@@ -379,6 +388,15 @@ export const EngineSettings: React.FC = () => {
         </select>
         <span className="mt-2 block text-xs leading-5 text-zinc-500 dark:text-zinc-400">{tt('flashAttentionHint')}</span>
       </label>
+
+      <Toggle
+        label={tt('kvQ8Label')}
+        hint={tt('kvQ8Hint')}
+        checked={options.kv_q8}
+        disabled={kvQ8Off !== null}
+        note={kvQ8Off === 'processor' ? tt('kvQ8OffProcessor') : kvQ8Off === 'flash_attention_off' ? tt('kvQ8OffFlashAttention') : null}
+        onChange={value => setOptions(current => ({ ...current, kv_q8: value }))}
+      />
 
       <details className="rounded-xl border border-zinc-200 p-3 dark:border-white/10">
         <summary className="cursor-pointer text-xs font-semibold uppercase tracking-wide text-zinc-500">{t('diagnostics')}</summary>

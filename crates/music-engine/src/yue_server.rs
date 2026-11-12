@@ -292,6 +292,8 @@ pub struct YueServerOptions {
     pub disable_flash_attention: bool,
     /// `--clamp-fp16`: clamp hidden states to the FP16 range.
     pub clamp_fp16: bool,
+    /// `--kv-q8`: the KV cache in Q8_0, about half the F16 one; the engine reads it through flash attention on a card.
+    pub kv_q8: bool,
     /// The folder beside the executable whose `ggml-cuda.dll` the engine
     /// loads, passed as `YUE_CUDA_BACKEND`; none off CUDA. A release keeps
     /// one CUDA backend per toolkit in folders of their own.
@@ -326,6 +328,9 @@ impl YueServerOptions {
         }
         if self.clamp_fp16 {
             arguments.push("--clamp-fp16".into());
+        }
+        if self.kv_q8 {
+            arguments.push("--kv-q8".into());
         }
         // Last, so a line of extra arguments can also override one of the
         // flags the studio set itself - the engine keeps the value it read
@@ -922,6 +927,7 @@ mod tests {
             nar_halo: Some(750),
             disable_flash_attention: true,
             clamp_fp16: true,
+            kv_q8: true,
             cuda_folder: None,
             extra_args: String::new(),
         }
@@ -930,7 +936,7 @@ mod tests {
             arguments,
             vec![
                 "--keep-loaded", "--max-batch", "2", "--max-seq", "8192", "--vae-core", "256", "--vae-halo", "16", "--nar-chunk", "2560",
-                "--nar-halo", "750", "--no-fa", "--clamp-fp16"
+                "--nar-halo", "750", "--no-fa", "--clamp-fp16", "--kv-q8"
             ]
         );
         assert!(YueServerOptions::default().arguments().is_empty());

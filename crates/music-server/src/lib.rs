@@ -744,6 +744,9 @@ struct EngineOptions {
     /// `CHUNK_OVERLAP_SECONDS`.
     chunk_overlap_seconds: Option<u32>,
     flash_attention: FlashAttention,
+    /// The KV cache in Q8_0, about half the memory of F16: read through flash attention on a card, so it applies only
+    /// there (`kv_q8_off_reason`).
+    kv_q8: bool,
     /// The switch of settings saved before `flash_attention`: read once and turned into `Off`, never written.
     #[serde(skip_serializing)]
     disable_flash_attention: bool,
@@ -954,7 +957,8 @@ impl EngineOptions {
         const GIB: f64 = 1024.0 * 1024.0 * 1024.0;
         let name = backbone.file_name()?.to_string_lossy().to_ascii_uppercase();
         let resident = SET_RESIDENT_GIB.iter().find(|(set, kept, _)| name.contains(set) && *kept == self.keep_loaded).map(|(_, _, gib)| *gib)?;
-        let kv = f64::from(self.effective_max_seq(Some(backbone)).unwrap_or(MODEL_CONTEXT)) * KV_BYTES_PER_TOKEN / GIB;
+        // a Q8 cache is about half the F16 one
+        let kv = f64::from(self.effective_max_seq(Some(backbone)).unwrap_or(MODEL_CONTEXT)) * KV_BYTES_PER_TOKEN / GIB * if self.kv_q8_now() { 0.5 } else { 1.0 };
         let wanted = self.effective_max_batch();
         let fits = Self::tracks_that_fit(free_gib, resident, kv, wanted);
         (fits < wanted).then_some(fits)
@@ -997,6 +1001,20 @@ impl EngineOptions {
         Self::nar_chunk_for(hardware::hardware().total_vram_gb, backbone_bytes, self.keep_loaded, self.effective_max_seq(backbone).unwrap_or(MODEL_CONTEXT), sets)
     }
 
+    /// Why a KV cache in Q8 does not apply to this start, `None` when it can: the engine reads it only through flash
+    /// attention on a card.
+    fn kv_q8_off_reason(&self) -> Option<&'static str> {
+        if self.cuda_build().is_none() && !self.uses_vulkan() {
+            return Some("processor");
+        }
+        self.flash_attention_off_reason().map(|_| "flash_attention_off")
+    }
+
+    /// The KV cache in Q8 for this start: chosen, and on a card with flash attention.
+    fn kv_q8_now(&self) -> bool {
+        self.kv_q8 && self.kv_q8_off_reason().is_none()
+    }
+
     fn to_engine(self, backbone: Option<&std::path::Path>) -> music_engine::yue_server::YueServerOptions {
         let nar_chunk = self.nar_chunk(backbone);
         let fa_off = self.flash_attention_off_reason().is_some();
@@ -1014,6 +1032,7 @@ impl EngineOptions {
             // range and the song comes out as pure silence, which the engine's
             // MP3 path then crashes on; the engine's own clamp fixes it.
             clamp_fp16: self.clamp_fp16 || self.uses_vulkan() || (self.cuda_build().is_some() && hardware::accumulates_in_fp16()),
+            kv_q8: self.kv_q8_now(),
             cuda_folder: self.cuda_build().map(hardware::CudaBuild::folder),
             extra_args: self.extra_args,
         }
@@ -1516,6 +1535,7 @@ pub async fn serve() -> anyhow::Result<()> {
         .route("/v1/scores/{job_id}", get(score_job_status).post(cancel_score_job))
         .route("/v1/music/jobs/ended", get(list_ended_music_jobs))
         .route("/v1/music/jobs/{job_id}/score-strength", post(make_again_at_score_strength))
+        .route("/v1/music/jobs/{job_id}/again", post(make_again))
         .route(
             "/v1/music/jobs/{job_id}",
             get(music_job_status).post(cancel_music_job).delete(dismiss_music_job),
@@ -4980,6 +5000,7 @@ async fn engine_options(State(state): State<AppState>) -> Json<Value> {
             "nar_chunk_seconds": launched.nar_chunk.map(|frames| (f64::from(frames) / SEMANTIC_FRAMES_PER_SECOND).round() as u64),
             // fewer tracks than Settings asks: that many fit the card's memory when the engine started
             "max_batch_for_card": launched.max_batch.filter(|tracks| *tracks < options.effective_max_batch()),
+            "kv_q8": launched.kv_q8,
         })
     });
     Json(serde_json::json!({
@@ -4987,6 +5008,8 @@ async fn engine_options(State(state): State<AppState>) -> Json<Value> {
         "in_effect": in_effect,
         "saved_max_seq": saved_max_seq,
         "effective_max_batch": options.effective_max_batch(),
+        // why a KV cache in Q8 does not apply on this machine: "processor" or "flash_attention_off"
+        "kv_q8_off_reason": options.kv_q8_off_reason(),
         "restart_required_to_apply": true,
         "executable": executable,
         "executable_source": executable_source,
@@ -9123,6 +9146,19 @@ fn first_fatal(lines: &[String], job_id: &str) -> Option<String> {
     lines[from..].iter().find_map(|line| line.split_once("FATAL:").map(|(_, why)| why.trim().to_string())).filter(|why| !why.is_empty())
 }
 
+/// How many times the engine computed a velocity of the acoustic stage again on this job, after one came out with
+/// values that are not numbers: its `[NAR] Check FAILED velocity …` lines after the job's own start.
+fn velocity_retries(lines: &[String], job_id: &str) -> usize {
+    let start = format!("Job {job_id}");
+    let Some(from) = lines.iter().rposition(|line| line.contains(&start)) else { return 0 };
+    // up to the next job's start: a song queued behind this one may already be at work
+    lines[from + 1..]
+        .iter()
+        .take_while(|line| !(line.contains("Job ") && !line.contains(&start)))
+        .filter(|line| line.contains("[NAR] Check FAILED velocity"))
+        .count()
+}
+
 /// Whether a lowercased log says the card ran out of room.
 fn describes_exhausted_memory(log: &str) -> bool {
     [
@@ -9528,6 +9564,20 @@ async fn make_again_at_score_strength(State(state): State<AppState>, Path(job_id
     Ok(submit_music_job(state, request, 0).await)
 }
 
+/// POST /v1/music/jobs/{job_id}/again - a song the card computed something other than sound on, made again with the
+/// same request, as the error's button offers.
+async fn make_again(State(state): State<AppState>, Path(job_id): Path<String>) -> Result<(StatusCode, Json<MusicJob>), (StatusCode, Json<ApiError>)> {
+    let stored = state
+        .library
+        .music_job(&job_id)
+        .map_err(|error| api_error(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?
+        .ok_or_else(|| api_error(StatusCode::NOT_FOUND, "Music job was not found.".into()))?;
+    let mut request: CreateMusicJobRequest = serde_json::from_value(stored.request)
+        .map_err(|error| api_error(StatusCode::CONFLICT, format!("this job's request cannot be made again: {error}")))?;
+    request.client_ref = None;
+    Ok(submit_music_job(state, request, 0).await)
+}
+
 async fn list_active_music_jobs(State(state): State<AppState>) -> Json<Vec<MusicJob>> {
     let mut active: Vec<MusicJob> = state
         .jobs
@@ -9713,6 +9763,14 @@ fn spawn_job_watcher(state: AppState, job_id: String) {
         memory.abort();
         if let Some(hub) = &state.hub {
             hub.task_running(false);
+        }
+        // a velocity that came out not a number is computed again by the engine: how often, to see it after release
+        let retries = velocity_retries(&music_engine::yue_server::startup_log_tail(JOB_LOG_LINES), &job_id);
+        if retries > 0 {
+            eprintln!("[studio] song {job_id}: the acoustic stage computed a velocity again {retries} times after values that were not numbers");
+            if let Some(hub) = &state.hub {
+                hub.count("nar_velocity_retry", retries as u64);
+            }
         }
         // a song made again after the card ran out of memory that runs out again says both times
         if let Some(step) = state.memory_retries.read().await.get(&job_id).copied() {
@@ -11369,6 +11427,21 @@ mod tests {
         assert!(!off.to_engine(None).arguments().iter().any(|argument| argument == "--nar-halo"));
     }
 
+    /// A KV cache in Q8 is off until chosen, and reaches the engine only on a card with flash attention.
+    #[test]
+    fn a_q8_kv_cache_is_chosen_and_needs_flash_attention_on_a_card() {
+        assert!(!EngineOptions::default().kv_q8, "off until chosen");
+        let on_cpu = EngineOptions { kv_q8: true, backend: music_engine::yue_server::ComputeBackend::Cpu, ..EngineOptions::default() };
+        assert_eq!(on_cpu.kv_q8_off_reason(), Some("processor"));
+        assert!(!on_cpu.to_engine(None).arguments().iter().any(|argument| argument == "--kv-q8"));
+        let fa_off = EngineOptions { kv_q8: true, backend: music_engine::yue_server::ComputeBackend::Vulkan, flash_attention: FlashAttention::Off, ..EngineOptions::default() };
+        assert_eq!(fa_off.kv_q8_off_reason(), Some("flash_attention_off"));
+        assert!(!fa_off.kv_q8_now());
+        let on_card = EngineOptions { kv_q8: true, backend: music_engine::yue_server::ComputeBackend::Vulkan, flash_attention: FlashAttention::On, ..EngineOptions::default() };
+        assert!(on_card.kv_q8_now());
+        assert!(on_card.to_engine(None).arguments().iter().any(|argument| argument == "--kv-q8"));
+    }
+
     /// A request takes as many tracks as the card holds beside the set: a full-context cache of 2.625 GiB a track
     /// on a 24 GB card with 2.2 GB of the desktop leaves room for fewer than 8 BF16 tracks, and 8 GB still makes one.
     #[test]
@@ -11784,6 +11857,25 @@ mod tests {
         assert_eq!(first_fatal(&lines, "abc").unwrap(), "the prompt and the score take 9700 of the model's 24576 tokens, so a song can last 595 s and 600 s were asked for");
         assert!(first_fatal(&lines[..2], "abc").is_none());
         assert!(first_fatal(&lines, "other").is_none());
+    }
+
+    /// The velocities computed again are counted from the job's own start, so an earlier song's are not.
+    #[test]
+    fn the_velocities_computed_again_are_counted_for_their_own_job() {
+        let lines: Vec<String> = [
+            "Job a started",
+            "[NAR] Check FAILED velocity at step 3, evaluation 5, attempt 1: 96000 values, 96000 NaN, 0 Inf, 0.0% zeros, sum|x| 0",
+            "Job b started",
+            "[NAR] Check FAILED velocity at step 10, evaluation 21, attempt 1: 96000 values, 96000 NaN, 0 Inf, 0.0% zeros, sum|x| 0",
+            "[NAR] Check FAILED velocity at step 10, evaluation 21, attempt 2: 96000 values, 96000 NaN, 0 Inf, 0.0% zeros, sum|x| 0",
+            "[NAR] Check solved latents: 96000 values, 0 NaN, 0 Inf, 0.0% zeros, sum|x| 75770.3",
+        ]
+        .into_iter()
+        .map(String::from)
+        .collect();
+        assert_eq!(velocity_retries(&lines, "b"), 2);
+        assert_eq!(velocity_retries(&lines, "a"), 1, "the next job's lines are its own");
+        assert_eq!(velocity_retries(&lines, "c"), 0, "a job the log does not hold");
     }
 
     #[test]

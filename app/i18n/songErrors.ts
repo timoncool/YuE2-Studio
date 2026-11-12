@@ -35,6 +35,7 @@ const EN: ErrorTexts = {
   score_unsingable: 'The score the model wrote for song {song} cannot be sung ({problem}). Draw another seed.',
   score_unsingable_adapters: 'The score the model wrote for song {song} cannot be sung ({problem}). LoRAs past their limits on the score half do this: lower their strengths or draw another seed.',
   score_unsingable_strength: 'The score could not be written: the LoRA strength on Composition is {strength}. Try 1.0.',
+  not_audio: 'The graphics card computed something that is not sound on this song ({line}), so the engine stopped it instead of writing silence. Make the song again: a new run usually comes out right.',
 };
 
 const RU: ErrorTexts = {
@@ -64,6 +65,7 @@ const RU: ErrorTexts = {
   score_unsingable: 'Партитуру, которую модель написала для песни {song}, нельзя спеть ({problem}). Попробуйте другое зерно.',
   score_unsingable_adapters: 'Партитуру, которую модель написала для песни {song}, нельзя спеть ({problem}). Так бывает, когда LoRA выкручены сверх своих пределов на партитуре: уменьшите их силу или попробуйте другое зерно.',
   score_unsingable_strength: 'Партитура не написалась: сила LoRA на «Композиции» — {strength}. Попробуйте 1,0.',
+  not_audio: 'Видеокарта насчитала на этой песне не звук ({line}), и движок остановил её, а не записал тишину. Сделайте песню ещё раз: новый прогон обычно выходит правильно.',
 };
 
 const ZH: ErrorTexts = {
@@ -93,6 +95,7 @@ const ZH: ErrorTexts = {
   score_unsingable: '模型为第 {song} 首歌写的乐谱无法演唱（{problem}）。请换一个种子。',
   score_unsingable_adapters: '模型为第 {song} 首歌写的乐谱无法演唱（{problem}）。LoRA 在乐谱部分超出其限度时会这样：请降低它们的强度或换一个种子。',
   score_unsingable_strength: '乐谱未能写成：LoRA 在「作曲」上的强度为 {strength}。请试试 1.0。',
+  not_audio: '显卡在这首歌上算出了不是声音的数值（{line}），引擎因此停止了它，而没有写出静音。请再生成一次：重新运行通常就正常了。',
 };
 
 const JA: ErrorTexts = {
@@ -122,6 +125,7 @@ const JA: ErrorTexts = {
   score_unsingable: 'モデルが曲 {song} のために書いた楽譜は歌えません（{problem}）。別のシードを試してください。',
   score_unsingable_adapters: 'モデルが曲 {song} のために書いた楽譜は歌えません（{problem}）。楽譜側で LoRA を限度を超えて強くするとこうなります。強さを下げるか、別のシードを試してください。',
   score_unsingable_strength: 'スコアを書けませんでした：「作曲」の LoRA の強さが {strength} です。1.0 を試してください。',
+  not_audio: 'この曲でグラフィックカードが音ではない値を計算したため（{line}）、エンジンは無音を書き出さずに止めました。もう一度作ってください。新しい実行はたいてい正しく出ます。',
 };
 
 const KO: ErrorTexts = {
@@ -151,6 +155,7 @@ const KO: ErrorTexts = {
   score_unsingable: '모델이 곡 {song}을(를) 위해 쓴 악보는 부를 수 없습니다({problem}). 다른 시드를 써 보세요.',
   score_unsingable_adapters: '모델이 곡 {song}을(를) 위해 쓴 악보는 부를 수 없습니다({problem}). 악보 쪽에서 LoRA를 한도 넘게 세게 걸면 이렇게 됩니다. 강도를 낮추거나 다른 시드를 써 보세요.',
   score_unsingable_strength: '악보를 쓰지 못했습니다: ‘작곡’의 LoRA 강도가 {strength}입니다. 1.0으로 해 보세요.',
+  not_audio: '그래픽카드가 이 곡에서 소리가 아닌 값을 계산해({line}) 엔진이 무음을 쓰지 않고 곡을 멈췄습니다. 곡을 다시 만드세요. 새로 실행하면 대개 제대로 나옵니다.',
 };
 
 const BY_LANGUAGE: Record<Language, ErrorTexts> = { en: EN, ru: RU, zh: ZH, ja: JA, ko: KO };
