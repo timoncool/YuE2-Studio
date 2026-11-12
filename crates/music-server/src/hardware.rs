@@ -123,6 +123,12 @@ pub fn accumulates_in_fp16() -> bool {
     probe().compute_capability.is_some_and(|compute| compute < (8, 0))
 }
 
+/// The CUDA build of the engine a card and driver that run `card` compute on: either build on Windows and Linux, the
+/// same table on both; none on a Mac, which has Metal.
+fn engine_cuda(card: Option<CudaBuild>) -> Option<CudaBuild> {
+    if cfg!(target_os = "macos") { None } else { card }
+}
+
 /// `nvidia-smi` costs tens of milliseconds and the setup screen polls status
 /// once per second while a download runs. The machine's GPU does not change
 /// inside one process lifetime, so probe it once.
@@ -140,10 +146,8 @@ fn probe() -> &'static Hardware {
             },
         };
         let device = if nvidia { nvidia_cuda_device() } else { None };
-        // The CUDA builds of the engine and their cuBLAS ship for Windows only; the Linux package
-        // carries the Vulkan engine and the macOS one Metal, whatever the card.
         let runs_cuda = device.and_then(|(compute, driver)| cuda_build(compute, driver)).is_some();
-        let cuda = if cfg!(windows) { device.and_then(|(compute, driver)| cuda_build(compute, driver)) } else { None };
+        let cuda = engine_cuda(device.and_then(|(compute, driver)| cuda_build(compute, driver)));
         let card_cuda = device.and_then(|(compute, driver)| cuda_build(compute, driver));
         let compute_capability = device.map(|(compute, _)| compute);
         let driver_major = device.map(|(_, driver)| driver);
@@ -490,6 +494,18 @@ mod tests {
         assert!(super::computes_on_processor(false, 0.125), "Intel UHD with 128 MB");
         assert!(!super::computes_on_processor(true, 3.0), "an NVIDIA card of 3 GB computes on CUDA");
         assert!(!super::computes_on_processor(false, 16.0), "an AMD card of 16 GB");
+    }
+
+    #[test]
+    fn the_engine_computes_on_the_cuda_build_this_platform_ships() {
+        use super::{engine_cuda, CudaBuild};
+        assert_eq!(engine_cuda(None), None, "no NVIDIA card, or a driver that runs neither build: Vulkan");
+        if cfg!(target_os = "macos") {
+            assert_eq!(engine_cuda(Some(CudaBuild::Cuda13)), None, "a Mac computes on Metal");
+        } else {
+            assert_eq!(engine_cuda(Some(CudaBuild::Cuda13)), Some(CudaBuild::Cuda13), "Turing and newer, driver 580 or newer");
+            assert_eq!(engine_cuda(Some(CudaBuild::Cuda12)), Some(CudaBuild::Cuda12), "Maxwell to Volta and GTX 16, driver 525 or newer");
+        }
     }
 
     #[test]

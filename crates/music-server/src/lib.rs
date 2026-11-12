@@ -6275,7 +6275,7 @@ async fn compose_setup_status(state: &AppState, manager_status: model_manager::M
         // minutes. A spinner that says nothing for ten minutes is the same
         // screen as a spinner that is stuck.
         let runtime_cuda = state.engine_options.read().await.cuda_build();
-        let runtime_total = runtime_cuda.map(|build| engine_runtime::cublas_asset(build).bytes).unwrap_or(0);
+        let runtime_total = runtime_cuda.map(|build| engine_runtime::cuda_assets(build).iter().map(|asset| asset.bytes).sum::<u64>()).unwrap_or(0);
         let runtime_active = state.engine_runtime.downloader().active().await;
         fields.insert(
             "engine_runtime".into(),
