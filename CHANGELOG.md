@@ -3,7 +3,7 @@
 What changed, newest first. Dates are release dates; the studio is versioned by its
 Windows build.
 
-## Unreleased — 3.9.0
+## Unreleased — 4.0.0
 
 ### Added
 
