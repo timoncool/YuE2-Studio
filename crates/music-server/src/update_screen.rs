@@ -373,4 +373,16 @@ mod tests {
         assert!(plan(Vec::new(), Vec::new(), leftovers(), root.path(), "10.0.0").show, "the next release shows its own");
         assert!(!plan(Vec::new(), Vec::new(), Vec::new(), root.path(), "10.0.0").show, "an empty plan shows nothing");
     }
+
+    #[test]
+    fn faster_whisper_of_an_earlier_release_is_a_row_and_stays_until_its_replacement_is_in_place() {
+        let root = tempfile::tempdir().unwrap();
+        let models = root.path().join("karaoke/models/whisper/faster-whisper-large-v3-turbo");
+        std::fs::create_dir_all(&models).unwrap();
+        std::fs::write(models.join("model.bin"), vec![0u8; 700]).unwrap();
+        let p = plan(Vec::new(), Vec::new(), crate::retired::leftovers(root.path()), root.path(), "9.9.9");
+        let row = p.retired.iter().find(|row| row.reason_code == "faster-whisper-gone").expect("Faster-Whisper is a row of the screen");
+        assert_eq!((row.paths.clone(), row.size), (vec!["karaoke/models/whisper".to_string()], 700));
+        assert!(models.is_dir(), "the plan itself removes nothing: karaoke keeps it until CrisperWhisper is downloaded");
+    }
 }
