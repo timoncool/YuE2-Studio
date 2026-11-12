@@ -17,6 +17,7 @@ use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::sync::RwLock;
 
 use crate::downloads::{Asset, AssetKind, Downloader};
+use crate::unix_millis;
 
 /// The downloader scope the training page reads its progress under.
 pub const SCOPE: &str = "training";
