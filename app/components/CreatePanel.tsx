@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { libraryChanged, SELF_READ, useActivity, useAssistantStatus, useSetupStatus, type ActivityEntry } from '../services/studioQueries';
-import { hasSungLines, karaokeReason } from '../services/karaoke';
+import { hasSungLines, karaokeReason, recogniseLyrics } from '../services/karaoke';
+import { ConfirmDialog } from './ConfirmDialog';
 import { clampDurationToKept } from '../services/createDuration';
 import { minTokensCutsTheSongOff } from '../services/samplingLimits';
 import { foldedAfter, keepFolded, keptFolded } from '../services/createFold';
@@ -1033,6 +1034,23 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
 
   // A cover of a recording that came without a style: MOSS-Music hears the
   // source and the style is written from that.
+  const [hearingLyrics, setHearingLyrics] = useState(false);
+  const [confirmHearLyrics, setConfirmHearLyrics] = useState(false);
+  /** The karaoke recogniser hears what the cover's source sings; the lyrics take it, to be edited. */
+  const hearLyrics = async () => {
+    if ((!coverSongId && !coverFile) || hearingLyrics) return;
+    setHearingLyrics(true);
+    setError(null);
+    try {
+      setLyrics(await recogniseLyrics(coverSongId ? { songId: coverSongId } : { file: coverFile! }));
+    } catch (reason) {
+      const message = reason instanceof Error ? reason.message : String(reason);
+      setError(karaokeReason(t, message) ?? message);
+    } finally {
+      setHearingLyrics(false);
+    }
+  };
+
   const [describing, setDescribing] = useState(false);
   const describeByEar = async () => {
     if (!coverSongId && !coverFile) return;
@@ -1675,6 +1693,18 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
                 <button type="button" onClick={() => (assistantReady ? void askAssistant('lyrics') : openAssistantSetup())} disabled={assistantReady && (assisting !== null)} className={ICON} title={assistantReady ? t('writeLyrics') : t('setUpAssistant')}>
                   {assisting === 'lyrics' ? <Loader2 size={14} className="animate-spin" /> : <Wand2 size={14} className="text-pink-500" />}
                 </button>
+                {mode === 'cover' && (coverSongId || coverFile) && (
+                  <button
+                    type="button"
+                    onClick={() => (lyrics.trim() ? setConfirmHearLyrics(true) : void hearLyrics())}
+                    disabled={hearingLyrics}
+                    className={ICON}
+                    aria-label={t('recogniseFromSource')}
+                    title={t('recogniseFromSourceHint')}
+                  >
+                    {hearingLyrics ? <Loader2 size={14} className="animate-spin" /> : <Ear size={14} />}
+                  </button>
+                )}
                 <button type="button" onClick={() => setLyrics('')} className={ICON} title={t('resetPrompt')}><RotateCcw size={14} /></button>
               </>
             }
@@ -1693,6 +1723,14 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
               placeholder={'[Verse 1]\n…\n\n[Chorus]\n…'}
               aria-label={t('lyrics')}
               className={`${CONTROL} resize-none overflow-y-auto font-mono text-xs leading-5 custom-scrollbar`}
+            />
+            <ConfirmDialog
+              isOpen={confirmHearLyrics}
+              title={t('recogniseFromSource')}
+              message={t('recogniseFromSourceReplace')}
+              confirmLabel={t('recogniseFromSource')}
+              onConfirm={() => { setConfirmHearLyrics(false); void hearLyrics(); }}
+              onCancel={() => setConfirmHearLyrics(false)}
             />
             {resingFrom && (
               <div className="mt-2 rounded-lg border border-pink-500/25 bg-pink-500/5 p-2 text-[11px] leading-5 text-zinc-600 dark:text-zinc-300">
