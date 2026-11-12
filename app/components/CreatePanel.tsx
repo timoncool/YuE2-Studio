@@ -22,7 +22,7 @@ import { MidiImportDialog } from './MidiImportDialog';
 import { isMidiFile } from '../services/midiFiles';
 import { trackMidiBase64 } from '../services/midiEditor';
 import { composePlans, composeScore, transcribe, type ScorePlan } from '../services/transcription';
-import { chordBed, failed, instrumentalScore, matchSections, type SectionProposal } from '../services/scoreApi';
+import { bedLine, chordBed, failed, instrumentalScore, matchSections, type BedSection, type SectionProposal } from '../services/scoreApi';
 import { sectionTagsOnly } from '../services/instrumental';
 import { lyricSyllables, syllableChangesOf, type SyllableChange } from '../services/syllables';
 import { profileLabel as setLabel, setupLabel, type SetupChoice } from '../services/modelCatalog';
@@ -514,7 +514,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
   const [bedKey, setBedKey] = useState('C');
   const [bedMeter, setBedMeter] = useState('4/4');
   const [bedBusy, setBedBusy] = useState(false);
-  const [bedWritten, setBedWritten] = useState<string[][] | null>(null);
+  const [bedWritten, setBedWritten] = useState<BedSection[] | null>(null);
   const [coverSource, setCoverSource] = useState<string>('');
   // the library song a cover's melody was taken from, which the new song names
   const [coverSongId, setCoverSongId] = useState<string | null>(null);
@@ -1880,7 +1880,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
                             if (failed(answer)) { setError(answer.error); return; }
                             setAbc(answer.abc.trimEnd());
                             setPlans([]); setSelectedPlan(0); setSemanticTokens(''); setContinueScore(false);
-                            setBedWritten(answer.progressions);
+                            setBedWritten(answer.sections);
                           })
                           .finally(() => setBedBusy(false));
                       }}
@@ -1891,7 +1891,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
                     </button>
                     {bedWritten && (
                       <p className="mt-2 text-[11px] leading-4 text-zinc-500">
-                        {tt('chordBedWritten').replace('{verse}', bedWritten[0].join(' ')).replace('{chorus}', bedWritten[1].join(' ')).replace('{bridge}', bedWritten[2].join(' '))}
+                        {tt('chordBedWritten').replace('{sections}', () => bedLine(bedWritten))}
                       </p>
                     )}
                   </div>

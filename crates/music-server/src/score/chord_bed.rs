@@ -231,6 +231,18 @@ impl BedPlan {
         }
         by_name
     }
+
+    /// Each section name once, in the order the song first reaches it, with the chords the bed plays there: what
+    /// `chords` hands the engine, in order.
+    pub fn sections_once(&self) -> Vec<(&str, &[String])> {
+        let mut seen: Vec<(&str, &[String])> = Vec::new();
+        for (label, chords) in &self.sections {
+            if !seen.iter().any(|(name, _)| name == label) {
+                seen.push((label.as_str(), chords.as_slice()));
+            }
+        }
+        seen
+    }
 }
 
 /// The chord of a bar that holds nothing but a chord symbol over a rest, `"Am"z16`.
@@ -344,6 +356,21 @@ mod tests {
         let chords = plan.chords();
         assert_eq!(chords.len(), 2, "one list a section name");
         assert_eq!(chords["verse"], serde_json::json!(plan.sections[0].1));
+    }
+
+    /// A section plays as many bars as its lines take, so a two-line chorus plays four chords of a longer
+    /// progression; what the bed names for each section is what it plays and what the engine is given, once a name.
+    #[test]
+    fn each_section_is_named_once_with_the_chords_the_bed_plays_there() {
+        let bed = write(&request("C", "4/4", "[Verse]\na\nb\n[Chorus]\nc\nd\n[Verse]\ne\nf")).unwrap();
+        let plan = read(&bed.abc).unwrap();
+        let sections = plan.sections_once();
+        assert_eq!(sections.iter().map(|(label, _)| *label).collect::<Vec<_>>(), vec!["verse", "chorus"]);
+        let given = plan.chords();
+        for (label, chords) in &sections {
+            assert_eq!(chords.len(), 4, "{label}: two lines, four bars");
+            assert_eq!(serde_json::json!(chords), given[*label]);
+        }
     }
 
     #[test]

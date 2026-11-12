@@ -62,8 +62,16 @@ export async function matchSections(input: { abc: string; lyrics: string; songId
   return { ok: true, proposal: payload };
 }
 
+/** A section of a chord bed, once a name, with the chords the bed plays there. */
+export interface BedSection { label: string; chords: string[] }
+
+/** What a chord bed plays, section by section, as one line. */
+export function bedLine(sections: BedSection[]): string {
+  return sections.map((section) => `${section.label}: ${section.chords.join(' ')}`).join(' · ');
+}
+
 /** A score of chords over rests for the lyrics' sections in a tempo, key and meter, written at once instead of planned. */
-export async function chordBed(input: { bpm: number; key: string; meter: string; lyrics: string; seed?: number }): Promise<Answer<{ abc: string; bars: number; progressions: string[][]; seed: number }>> {
+export async function chordBed(input: { bpm: number; key: string; meter: string; lyrics: string; seed?: number }): Promise<Answer<{ abc: string; bars: number; progressions: string[][]; sections: BedSection[]; seed: number }>> {
   return post('/v1/score/chord-bed', input);
 }
 
