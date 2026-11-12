@@ -386,6 +386,10 @@ pub async fn send_cloud(request: impl Fn() -> reqwest::RequestBuilder) -> Result
     }
 }
 
+/// Whether Hugging Face, where the models come from, and OpenRouter answer
+/// through `settings`, before they are kept. An answer of any status counts;
+/// a connection that fails does not. Without the mirror chosen, HF-Mirror is
+/// asked too, so a window can offer it when Hugging Face does not answer.
 pub async fn test(settings: ProxySettings) -> Result<serde_json::Value> {
     let settings = settings.validated()?;
     let hub_url = model_url_with(&settings, "https://huggingface.co/api/models?limit=1");
@@ -410,7 +414,7 @@ pub async fn test(settings: ProxySettings) -> Result<serde_json::Value> {
     let mirror = async {
         if mirror_chosen { None } else { Some(reach(mirror_url("https://huggingface.co/api/models?limit=1"), false).await) }
     };
-    let (hub, openrouter, mirror) = tokio::join!(reach(hub_url, false), reach("https://openrouter.ai/api/v1/models".into(), true), mirror);
+    let (hub, openrouter, mirror) = tokio::join!(reach(hub_url, !mirror_chosen), reach("https://openrouter.ai/api/v1/models".into(), true), mirror);
     // a proxy whose address takes no connection is named, and the mirror behind it is no way out
     let proxy_down = match hub_route.filter(|_| hub.as_ref().is_err_and(|(_, connect)| *connect)) {
         Some(route) if !route.takes_connections().await => Some(route),
@@ -520,6 +524,18 @@ mod tests {
         assert_eq!((through.scheme(), through.username(), through.password()), ("socks5h", "user", Some("pass")));
         let off = ProxySettings { mode: ProxyMode::Off, ..ProxySettings::default() };
         assert_eq!(proxy_for(&off, &system, &url("https://huggingface.co/x")), None);
+    }
+
+    /// Under the system's settings a host its NO_PROXY names goes straight out,
+    /// and the rest through the system's proxy.
+    #[test]
+    fn a_host_the_system_excludes_goes_straight_out() {
+        let system = Matcher::builder().https("http://127.0.0.1:9").http("http://127.0.0.1:9").no("hf-mirror.com, .example.org").build();
+        let settings = ProxySettings::default();
+        assert_eq!(settings.mode, ProxyMode::System);
+        assert_eq!(proxy_for(&settings, &system, &url("https://hf-mirror.com/api/models?limit=1")), None);
+        assert_eq!(proxy_for(&settings, &system, &url("https://cdn.example.org/x")), None);
+        assert!(proxy_for(&settings, &system, &url("https://huggingface.co/api/models?limit=1")).is_some());
     }
 
     /// A proxy that refuses the connection is named in the check, by its address without the login, and as the

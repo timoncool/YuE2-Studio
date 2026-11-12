@@ -127,6 +127,9 @@ pub struct Plan {
     pub ranged: bool,
 }
 
+/// Asks for one byte, which answers both questions at once: how big the file
+/// is, and whether ranges work at all. A HEAD answers the first only, and some
+/// CDNs answer it differently from the GET that follows.
 pub async fn probe(http: &reqwest::Client, url: &str) -> Result<(Plan, String)> {
     let mut last = String::new();
     let mut unreachable = 0;
