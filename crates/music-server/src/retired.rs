@@ -144,10 +144,11 @@ mod tests {
             fs::write(file, b"x").unwrap();
         }
         let found: Vec<(&str, usize)> = leftovers(root.path()).iter().map(|leftover| (leftover.what, leftover.paths.len())).collect();
-        assert_eq!(found, vec![("parakeet-onnx", 3), ("htdemucs-onnx", 1), ("midi-hotstep", 1), ("ort-gpu", 28)]);
+        assert_eq!(found, vec![("parakeet-onnx", 3), ("faster-whisper", 17), ("htdemucs-onnx", 1), ("midi-hotstep", 1), ("ort-gpu", 28)]);
         remove_leftovers(root.path(), &["parakeet-onnx"]);
         assert!(root.path().join("separation/models/htdemucs/htdemucs_6s_fp16.onnx").is_file(), "the others wait for their turn");
-        remove_leftovers(root.path(), &["parakeet-onnx", "htdemucs-onnx", "midi-hotstep", "ort-gpu"]);
+        assert!(root.path().join("karaoke/models/whisper").is_dir(), "Faster-Whisper waits for CrisperWhisper");
+        remove_leftovers(root.path(), &["parakeet-onnx", "faster-whisper", "htdemucs-onnx", "midi-hotstep", "ort-gpu"]);
         assert!(leftovers(root.path()).iter().all(|leftover| leftover.paths.is_empty()));
         assert!(kept.iter().all(|file| file.is_file()));
     }
