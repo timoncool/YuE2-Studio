@@ -5,7 +5,7 @@ import { songErrorText } from '../i18n/songErrors';
 import type { Song, YueJob, YueProgress, YueRequest } from '../types';
 import { followEngineProgress, stageDetail, type StageClock } from './engineProgress';
 import { mapNativeLibrarySong, setNativeSongNote } from './nativeLibrary';
-import { playlistsChanged, queryClient, readJson, updateLibraryPlaylists, updateLibrarySongs, useLibrarySongs } from './studioQueries';
+import { hubStateChanged, playlistsChanged, queryClient, readJson, updateLibraryPlaylists, updateLibrarySongs, useLibrarySongs } from './studioQueries';
 
 /**
  * The songs being made, as cards in the list. A card follows its engine job
@@ -234,6 +234,8 @@ export function useGenerations({ enabled, notify, onFinished }: GenerationOption
         notify(songErrorText(job, language) || t('generationFailed'), job.status === 'failed' ? 'error' : 'info');
       }
       // still queued or running: the list was read before this job was sent
+      // an ended song can bring the hub's next step, and the hub's asks wait for no song to run
+      if (job.status === 'completed' || job.status === 'failed' || job.status === 'cancelled') hubStateChanged();
     } catch (error) {
       leftEarly.current.delete(jobId);
       remove(running.id);

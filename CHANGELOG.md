@@ -17,6 +17,9 @@ Windows build.
 
 - **The tempo of a song is measured on the processor**, in 5 to 7 seconds a song, for Describe by ear and dataset preparation alike. ONNX Runtime no longer runs on the graphics card, and the update screen removes the CUDA, cuDNN and DirectML files of earlier versions: about 3.1 GB on Windows with an NVIDIA card, about 36 MB with DirectML.
 
+- **The writing assistant lets llama.cpp place its layers**: the studio no longer asks for every layer on the graphics card, which on a card of 8 GB or less could stop Gemma from loading, as it did in Dub Studio.
+- **Studio Hub notices follow what you do at once**: a notice closed or clicked, and a song that ends, bring the next notice without waiting for the minute's refresh; a link in a notice is counted by its address, and the hub's requests wait while a song is made.
+
 ### Fixed
 
 - **A song is no longer refused because its style, lyrics and score leave too little room for the length asked** ([#203](https://github.com/timoncool/YuE2-Studio/issues/203), [#205](https://github.com/timoncool/YuE2-Studio/issues/205), [#206](https://github.com/timoncool/YuE2-Studio/issues/206), [#213](https://github.com/timoncool/YuE2-Studio/issues/213), [#182](https://github.com/timoncool/YuE2-Studio/issues/182)): 3.8.4 and 3.8.5 held cards of 8 GB or less, and RTX 50 cards of up to 16 GB, to a 9216-token context and stopped a song whose prompt and score left less room than its maximum duration. Every card starts on the model's full 24576-token context again, as in 3.8.3, and when a smaller context is set the engine sings the song as far as the room goes instead of refusing it.
