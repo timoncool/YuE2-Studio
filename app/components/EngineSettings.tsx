@@ -17,7 +17,8 @@ type FlashAttention = 'auto' | 'on' | 'off';
 /** What the running engine was started with, as the service read it from the launch. */
 interface InEffect {
   max_seq: number;
-  max_seq_reason: 'full' | 'set' | 'fitted';
+  /** `fitted_before`: fitted when this engine started and reset since; the next start takes the saved value. */
+  max_seq_reason: 'full' | 'set' | 'fitted' | 'fitted_before';
   flash_attention: boolean;
   nar_chunk_seconds: number | null;
 }
@@ -328,7 +329,7 @@ export const EngineSettings: React.FC = () => {
         <div className="-mt-1 space-y-0.5 text-xs leading-5 text-zinc-500 dark:text-zinc-400">
           <span className="flex flex-wrap items-center gap-2">
             {tt('maxSeqNow').replace('{n}', String(inEffect.max_seq)).replace('{reason}', tt(
-              inEffect.max_seq_reason === 'set' ? 'maxSeqReasonSet' : inEffect.max_seq_reason === 'fitted' ? 'maxSeqReasonFitted' : 'maxSeqReasonFull',
+              inEffect.max_seq_reason === 'set' ? 'maxSeqReasonSet' : inEffect.max_seq_reason === 'full' ? 'maxSeqReasonFull' : 'maxSeqReasonFitted',
             ))}
             {inEffect.max_seq_reason === 'fitted' && (
               <button

@@ -146,6 +146,12 @@ struct AppState {
     separation_run: Arc<RwLock<Option<SeparationRun>>>,
     /// Songs made again after the card ran out of memory, by job, with the KV cache they were made again with.
     memory_retries: Arc<RwLock<HashMap<String, u32>>>,
+    /// The KV cache the running engine was started with, and the one each job was sent to: a song lost to the card's
+    /// memory steps down from the cache it was made with, not from one another lost song already stepped to.
+    running_max_seq: Arc<RwLock<u32>>,
+    job_max_seq: Arc<RwLock<HashMap<String, u32>>>,
+    /// Songs lost together decide their step one at a time.
+    memory_retry_lock: Arc<tokio::sync::Mutex<()>>,
     /// Audio to MIDI: the transcriber and its weights, the run at work or the
     /// last one, the notes it has heard so far, and the stop signal.
     midi: Arc<midi::Transcriber>,
@@ -903,6 +909,13 @@ impl EngineOptions {
         [16384, 12288, MIN_MAX_SEQ].into_iter().find(|step| *step < current)
     }
 
+    /// Options saved from a request: the fitted cache is the studio's own and no request sets it - it is carried
+    /// over from what is saved, and only a cache entered by hand (or the reset) clears it.
+    fn keeping_fitted(mut self, saved: &EngineOptions) -> Self {
+        self.fitted_max_seq = if self.max_seq.is_some() { Default::default() } else { saved.fitted_max_seq.clone() };
+        self
+    }
+
     /// The `--nar-chunk` of this start: only without flash attention, on a card that keeps the work in its own memory.
     fn nar_chunk(&self, backbone: Option<&std::path::Path>) -> Option<u32> {
         self.flash_attention_off_reason()?;
@@ -1150,6 +1163,9 @@ pub async fn serve() -> anyhow::Result<()> {
         acpp: acpp.clone(),
         separation_run: Arc::new(RwLock::new(None)),
         memory_retries: Arc::new(RwLock::new(HashMap::new())),
+        running_max_seq: Arc::new(RwLock::new(MODEL_CONTEXT)),
+        job_max_seq: Arc::new(RwLock::new(HashMap::new())),
+        memory_retry_lock: Arc::new(tokio::sync::Mutex::new(())),
         midi: Arc::new(midi::Transcriber::new(&studio_data_root().unwrap_or_else(|| std::path::PathBuf::from(".")), acpp.clone())),
         midi_run: Arc::new(RwLock::new(None)),
         midi_notes: Arc::new(RwLock::new(Vec::new())),
@@ -4636,15 +4652,19 @@ async fn engine_options(State(state): State<AppState>) -> Json<Value> {
         Err(_) => (None, true, None),
     };
     // A cache fitted after running out of memory is what an empty field stands for, so it is never "pending".
-    let saved_max_seq = EngineOptions::capped_max_seq(options.max_seq).or(launched.as_ref().and_then(|launched| launched.max_seq)).unwrap_or(MODEL_CONTEXT);
+    let backbone = selected_engine_models(&state).await.ok().map(|models| models.backbone);
+    let fitted = backbone.as_deref().and_then(|backbone| options.fitted_max_seq.get(&EngineOptions::fitted_key(backbone)).copied());
+    let saved_max_seq = options.effective_max_seq(backbone.as_deref()).unwrap_or(MODEL_CONTEXT);
     // What the running engine was started with, so the page says what is in effect, not only what is saved.
     let in_effect = launched.map(|launched| {
         serde_json::json!({
             "max_seq": launched.max_seq.unwrap_or(MODEL_CONTEXT),
             "max_seq_reason": match (options.max_seq, launched.max_seq) {
                 (Some(_), _) => "set",
-                (None, Some(_)) => "fitted",
                 (None, None) => "full",
+                (None, running) if running == fitted => "fitted",
+                // fitted when this engine started and reset since: the next start takes the saved value
+                (None, Some(_)) => "fitted_before",
             },
             "flash_attention": !launched.disable_flash_attention,
             "nar_chunk_seconds": launched.nar_chunk.map(|frames| (f64::from(frames) / SEMANTIC_FRAMES_PER_SECOND).round() as u64),
@@ -4696,6 +4716,7 @@ async fn update_engine_options(
     request.engine_bin = validated_engine_bin(request.engine_bin.clone()).map_err(|reason| api_error(StatusCode::BAD_REQUEST, reason))?;
     let changed = {
         let mut options = state.engine_options.write().await;
+        request = request.keeping_fitted(&options);
         let changed = *options != request;
         *options = request.clone();
         changed
@@ -4721,7 +4742,7 @@ async fn reset_fitted_max_seq(State(state): State<AppState>) -> Result<Json<Valu
     let models = selected_engine_models(&state).await.map_err(|error| api_error(StatusCode::CONFLICT, error))?;
     let key = EngineOptions::fitted_key(&models.backbone);
     let removed = state.engine_options.write().await.fitted_max_seq.remove(&key).is_some();
-    let _ = persist_studio_settings(&state).await;
+    persist_studio_settings(&state).await.map_err(|error| api_error(StatusCode::INTERNAL_SERVER_ERROR, format!("the settings could not be saved: {error}")))?;
     let mut restarted = false;
     if removed && state.music_server.health().await {
         let _restart = state.engine_use.write().await;
@@ -4845,6 +4866,7 @@ async fn restart_engine(state: &AppState) -> Result<(), String> {
         let mut engine = music_engine::yue_server::YueServerSupervisor::new(config).map_err(|error| error.to_string())?;
         match tokio::task::block_in_place(|| engine.ensure_started(std::time::Duration::from_secs(60))) {
             Ok(_) => {
+                *state.running_max_seq.write().await = engine.config().options.max_seq.unwrap_or(MODEL_CONTEXT);
                 *supervisor = Some(engine);
                 *state.active_device.write().await = Some(device);
                 if options.backend == music_engine::yue_server::ComputeBackend::Auto {
@@ -8583,6 +8605,8 @@ async fn submit_music_job(state: AppState, mut request: CreateMusicJobRequest, a
                 laid,
             };
             state.jobs.write().await.insert(job.id.clone(), job.clone());
+            let running = *state.running_max_seq.read().await;
+            state.job_max_seq.write().await.insert(job.id.clone(), running);
             // kept at once, so a song the studio is closed on is not lost
             if let Err(error) = state.library.save_music_job(&stored_job(&job, stored_request, attempt)) {
                 eprintln!("[ERROR] the song's request could not be kept: {error:#}");
@@ -8676,6 +8700,8 @@ async fn submit_replay_job(state: AppState, request: ReplayMusicJobRequest, atte
         }
     }
     state.jobs.write().await.insert(job.id.clone(), job.clone());
+    let running = *state.running_max_seq.read().await;
+    state.job_max_seq.write().await.insert(job.id.clone(), running);
     let stored_request = serde_json::json!({ "replay": serde_json::to_value(&request).unwrap_or(Value::Null) });
     if let Err(error) = state.library.save_music_job(&stored_job(&job, stored_request, attempt)) {
         eprintln!("[ERROR] the re-render's request could not be kept: {error:#}");
@@ -9002,29 +9028,45 @@ fn spawn_job_watcher(state: AppState, job_id: String) {
             }
         }
         retry_after_memory(&state, &job_id).await;
+        state.job_max_seq.write().await.remove(&job_id);
     });
 }
 
-/// Whether a failed song is made again after the card ran out of memory on it: once, for a song that failed by
-/// itself rather than being stopped, with no other work of the studio on the card, while Settings leaves the KV
-/// cache empty and a smaller step is left.
-fn memory_retry_step(lost_vram: bool, already_retried: bool, card_busy: bool, set_by_hand: bool, current: u32) -> Option<u32> {
+fn memory_retry_step(lost_vram: bool, already_retried: bool, card_busy: bool, set_by_hand: bool, ran_with: u32, fitted_now: u32) -> Option<MemoryRetry> {
     if !lost_vram || already_retried || card_busy || set_by_hand {
         return None;
     }
-    EngineOptions::memory_step_below(current)
+    let step = EngineOptions::memory_step_below(ran_with)?;
+    Some(if fitted_now <= step { MemoryRetry { max_seq: fitted_now, lower: false } } else { MemoryRetry { max_seq: step, lower: true } })
 }
 
-/// Makes a song again with the next smaller KV cache after the card ran out of memory on it, keeps that step for
-/// this card and model set, says so in the journal, and lets the new job take the lost one's place.
+/// How a lost song is made again: with this KV cache, and whether the engine has to step down to it first (a song
+/// lost together with another finds the cache already stepped).
+#[derive(Debug, PartialEq, Eq)]
+struct MemoryRetry {
+    max_seq: u32,
+    lower: bool,
+}
+
 async fn retry_after_memory(state: &AppState, job_id: &str) {
     let lost_vram = state.jobs.read().await.get(job_id).is_some_and(|job| matches!(job.status, MusicJobStatus::Failed) && job.code == Some("lost_vram"));
+    if !lost_vram {
+        return;
+    }
+    // songs lost together with this one decide after it, against the cache it fitted
+    let decided = state.memory_retry_lock.lock().await;
     let already_retried = state.memory_retries.read().await.contains_key(job_id);
-    let card_busy = state.training.active_run().await.is_some() || state.separation_run.read().await.as_ref().is_some_and(|run| !run.done);
+    let karaoke_running = state.activity.read().await.iter().any(|activity| activity.kind == "karaoke" && activity.state == "running");
+    let midi_running = state.midi_run.read().await.as_ref().is_some_and(|run| !run.done);
+    let card_busy = state.training.active_run().await.is_some()
+        || state.separation_run.read().await.as_ref().is_some_and(|run| !run.done)
+        || midi_running
+        || karaoke_running;
     let options = state.engine_options.read().await.clone();
     let Ok(models) = selected_engine_models(state).await else { return };
-    let current = options.effective_max_seq(Some(&models.backbone)).unwrap_or(MODEL_CONTEXT);
-    let Some(step) = memory_retry_step(lost_vram, already_retried, card_busy, options.max_seq.is_some(), current) else { return };
+    let ran_with = state.job_max_seq.read().await.get(job_id).copied().unwrap_or(MODEL_CONTEXT);
+    let fitted_now = options.effective_max_seq(Some(&models.backbone)).unwrap_or(MODEL_CONTEXT);
+    let Some(retry) = memory_retry_step(lost_vram, already_retried, card_busy, options.max_seq.is_some(), ran_with, fitted_now) else { return };
     let stored = match state.library.music_job(job_id) {
         Ok(Some(stored)) => stored,
         Ok(None) => return,
@@ -9033,17 +9075,18 @@ async fn retry_after_memory(state: &AppState, job_id: &str) {
             return;
         }
     };
-    state.engine_options.write().await.fitted_max_seq.insert(EngineOptions::fitted_key(&models.backbone), step);
-    if let Err(error) = persist_studio_settings(state).await {
-        eprintln!("[ERROR] the KV cache fitted to this card could not be kept: {error}");
-    }
-    {
+    if retry.lower {
+        state.engine_options.write().await.fitted_max_seq.insert(EngineOptions::fitted_key(&models.backbone), retry.max_seq);
+        if let Err(error) = persist_studio_settings(state).await {
+            eprintln!("[ERROR] the KV cache fitted to this card could not be kept: {error}");
+        }
         let _restart = state.engine_use.write().await;
         if let Err(error) = restart_engine(state).await {
-            eprintln!("[ERROR] the engine did not start again with a {step} KV cache: {error}");
+            eprintln!("[ERROR] the engine did not start again with a {} KV cache: {error}", retry.max_seq);
             return;
         }
     }
+    drop(decided);
     let again = if let Some(replay) = stored.request.get("replay") {
         match serde_json::from_value::<ReplayMusicJobRequest>(replay.clone()) {
             Ok(request) => submit_replay_job(state.clone(), request, stored.attempt).await.ok().map(|(_, Json(job))| job.id),
@@ -9065,7 +9108,10 @@ async fn retry_after_memory(state: &AppState, job_id: &str) {
         }
     };
     let Some(again) = again else { return };
-    state.memory_retries.write().await.insert(again.clone(), step);
+    state.memory_retries.write().await.insert(again.clone(), retry.max_seq);
+    if let Some(hub) = &state.hub {
+        hub.count("song_memory_retry", 1);
+    }
     let line = library::JournalEntry {
         id: 0,
         at: String::new(),
@@ -9074,13 +9120,14 @@ async fn retry_after_memory(state: &AppState, job_id: &str) {
         verb: "memory_retry".into(),
         kind: String::new(),
         target: stored.title.clone().unwrap_or_default(),
-        text: step.to_string(),
+        text: retry.max_seq.to_string(),
     };
     if let Err(error) = state.library.note_journal(&line) {
         eprintln!("[ERROR] the journal did not take the retry: {error:#}");
     }
     // the lost attempt gives way to the one made again
     state.jobs.write().await.remove(job_id);
+    state.job_max_seq.write().await.remove(job_id);
     if let Err(error) = state.library.forget_music_job(job_id) {
         eprintln!("[ERROR] the lost attempt could not be forgotten: {error:#}");
     }
@@ -10629,14 +10676,35 @@ mod tests {
 
     #[test]
     fn a_song_lost_to_the_card_s_memory_is_made_again_once_with_a_smaller_cache() {
-        assert_eq!(memory_retry_step(true, false, false, false, MODEL_CONTEXT), Some(16384), "the full context steps to 16384");
-        assert_eq!(memory_retry_step(true, false, false, false, 16384), Some(12288));
-        assert_eq!(memory_retry_step(true, false, false, false, 12288), Some(MIN_MAX_SEQ));
-        assert_eq!(memory_retry_step(true, false, false, false, MIN_MAX_SEQ), None, "nothing below the floor");
-        assert_eq!(memory_retry_step(false, false, false, false, MODEL_CONTEXT), None, "only a song the card ran out of memory on");
-        assert_eq!(memory_retry_step(true, true, false, false, MODEL_CONTEXT), None, "a song made again is not made a third time");
-        assert_eq!(memory_retry_step(true, false, true, false, MODEL_CONTEXT), None, "not while training or stems share the card");
-        assert_eq!(memory_retry_step(true, false, false, true, MODEL_CONTEXT), None, "a cache set by hand is left as it is");
+        let lower = |max_seq| Some(MemoryRetry { max_seq, lower: true });
+        assert_eq!(memory_retry_step(true, false, false, false, MODEL_CONTEXT, MODEL_CONTEXT), lower(16384), "the full context steps to 16384");
+        assert_eq!(memory_retry_step(true, false, false, false, 16384, 16384), lower(12288));
+        assert_eq!(memory_retry_step(true, false, false, false, 12288, 12288), lower(MIN_MAX_SEQ));
+        assert_eq!(memory_retry_step(true, false, false, false, MIN_MAX_SEQ, MIN_MAX_SEQ), None, "nothing below the floor");
+        assert_eq!(memory_retry_step(false, false, false, false, MODEL_CONTEXT, MODEL_CONTEXT), None, "only a song the card ran out of memory on");
+        assert_eq!(memory_retry_step(true, true, false, false, MODEL_CONTEXT, MODEL_CONTEXT), None, "a song made again is not made a third time");
+        assert_eq!(memory_retry_step(true, false, true, false, MODEL_CONTEXT, MODEL_CONTEXT), None, "not while other work of the studio shares the card");
+        assert_eq!(memory_retry_step(true, false, false, true, MODEL_CONTEXT, MODEL_CONTEXT), None, "a cache set by hand is left as it is");
+        // three songs lost at once, all made with the full context: the first steps the cache down, the other two
+        // find it stepped and are sent again with it, without a step of their own or a restart
+        let mut fitted = MODEL_CONTEXT;
+        let mut steps = Vec::new();
+        for _ in 0..3 {
+            let retry = memory_retry_step(true, false, false, false, MODEL_CONTEXT, fitted).unwrap();
+            if retry.lower {
+                fitted = retry.max_seq;
+            }
+            steps.push(retry);
+        }
+        assert_eq!(steps, vec![MemoryRetry { max_seq: 16384, lower: true }, MemoryRetry { max_seq: 16384, lower: false }, MemoryRetry { max_seq: 16384, lower: false }]);
+        // a request never sets the fitted cache: saving the form keeps it, a cache entered by hand clears it
+        let mut saved = EngineOptions::default();
+        saved.fitted_max_seq.insert("card".into(), 16384);
+        assert_eq!(EngineOptions::default().keeping_fitted(&saved).fitted_max_seq, saved.fitted_max_seq, "a form opened before the step does not erase it");
+        let mut sent = EngineOptions::default();
+        sent.fitted_max_seq.insert("card".into(), 8192);
+        assert_eq!(sent.keeping_fitted(&saved).fitted_max_seq, saved.fitted_max_seq, "a request cannot write its own");
+        assert!(EngineOptions { max_seq: Some(20480), ..EngineOptions::default() }.keeping_fitted(&saved).fitted_max_seq.is_empty(), "a cache set by hand replaces it");
         // the fitted step belongs to this card and backbone, and a value set by hand wins over it
         let backbone = std::path::Path::new("models/YuE2-3B-Q8_0.gguf");
         let mut options = EngineOptions::default();
