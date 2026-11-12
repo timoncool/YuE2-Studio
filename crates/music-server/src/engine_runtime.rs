@@ -432,22 +432,17 @@ mod tests {
     use super::*;
 
     #[test]
+    #[cfg(not(target_os = "linux"))]
     fn libraries_go_to_the_data_folder_when_the_engine_folder_cannot_be_written() {
         let data = std::env::temp_dir().join(format!("engine-runtime-{}", uuid::Uuid::now_v7()));
         std::fs::create_dir_all(&data).unwrap();
         std::fs::write(data.join("a-file"), b"").unwrap();
         // a folder inside a file can be neither made nor written, as Program Files cannot without elevation
         let runtime = EngineRuntime::new(&data.join("a-file").join("engine"), &data);
+        assert_eq!(runtime.library_dir(), data.join("engine-runtime"));
         let writable = data.join("install");
         std::fs::create_dir_all(&writable).unwrap();
-        if cfg!(target_os = "linux") {
-            // the package's folder is read-only on Linux: the libraries always live in the data folder
-            assert_eq!(runtime.library_dir(), data.join("engine-runtime").join("cuda"));
-            assert_eq!(EngineRuntime::new(&writable, &data).library_dir(), data.join("engine-runtime").join("cuda"));
-        } else {
-            assert_eq!(runtime.library_dir(), data.join("engine-runtime"));
-            assert_eq!(EngineRuntime::new(&writable, &data).library_dir(), writable);
-        }
+        assert_eq!(EngineRuntime::new(&writable, &data).library_dir(), writable);
         std::fs::remove_dir_all(&data).ok();
     }
 
@@ -590,6 +585,28 @@ mod tests {
         );
     }
 
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn on_linux_the_libraries_go_to_one_folder_of_the_data_on_the_library_path() {
+        let data = std::env::temp_dir().join(format!("engine-runtime-{}", uuid::Uuid::now_v7()));
+        let runtime = EngineRuntime::new(&data.join("engine"), &data);
+        let folder = data.join("engine-runtime").join("cuda");
+        assert_eq!(runtime.library_dir(), folder);
+        let path = std::env::var_os("LD_LIBRARY_PATH").expect("LD_LIBRARY_PATH is set");
+        assert!(std::env::split_paths(&path).any(|dir| dir == folder), "{} is on LD_LIBRARY_PATH", folder.display());
+        let asset = &LINUX_CUDA13[1];
+        assert!(!runtime.downloader().is_installed(asset));
+        std::fs::create_dir_all(&folder).unwrap();
+        let unpacked: Vec<_> = asset.pick.iter().map(|library| folder.join(library)).collect();
+        for library in &unpacked {
+            std::fs::write(library, b"x").unwrap();
+        }
+        crate::install_record::write(&runtime.downloader().record_of(asset), asset.url, "", &unpacked, runtime.downloader().root()).unwrap();
+        assert!(runtime.downloader().is_installed(asset));
+        assert!(!runtime.missing(Some(CudaBuild::Cuda13)).iter().any(|missing| missing.id == asset.id));
+        std::fs::remove_dir_all(&data).ok();
+    }
+
     /// The libraries count as installed only once they are beside the engine.
     ///
     /// This asserts on the downloader rather than on `is_ready`, because a
@@ -597,13 +614,13 @@ mod tests {
     /// which is the point of the PATH check, and would make the test lie about
     /// what it proved.
     #[test]
+    #[cfg(not(target_os = "linux"))]
     fn the_libraries_count_as_installed_only_beside_the_engine() {
         let root = std::env::temp_dir().join(format!("engine-runtime-{}", uuid::Uuid::now_v7()));
         let runtime = EngineRuntime::new(&root, &root);
         let asset = cublas_asset(CudaBuild::Cuda13);
         assert!(!runtime.downloader().is_installed(asset));
-        let beside = if cfg!(target_os = "linux") { root.join("engine-runtime").join("cuda") } else { root.clone() };
-        assert_eq!(runtime.library_dir(), beside);
+        assert_eq!(runtime.library_dir(), root);
         // Off CUDA the engine never loads cuBLAS, so nothing is missing.
         assert!(runtime.missing(None).is_empty());
 
@@ -615,9 +632,9 @@ mod tests {
         let unpacked: Vec<_> = CUDA13_LIBRARIES.iter().map(|library| runtime.library_dir().join(library)).collect();
         crate::install_record::write(&runtime.downloader().record_of(asset), asset.url, "", &unpacked, runtime.downloader().root()).unwrap();
         assert!(runtime.downloader().is_installed(asset));
-        // The other build asks for its own downloads (cuBLAS; on Linux its CUDA runtime too), unless PATH has them.
+        // The other build asks for its own cuBLAS, unless PATH has it.
         if !CUDA12_LIBRARIES.iter().all(|library| is_on_the_search_path(library)) {
-            assert_eq!(runtime.missing(Some(CudaBuild::Cuda12)).len(), cuda_assets(CudaBuild::Cuda12).len());
+            assert_eq!(runtime.missing(Some(CudaBuild::Cuda12)).len(), 1);
         }
         std::fs::remove_dir_all(&root).ok();
     }
