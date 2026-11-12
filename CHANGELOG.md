@@ -7,6 +7,7 @@ Windows build.
 
 ### Added
 
+- **Three more LoRA in the catalog**: 1980s Italo Disco (trigger `italodisco`) and 1980s Two-Tone Ska (trigger `twotone`) by James E. Petts, both CC0 sound adapters, and Keygen Music by monsterovich, a composition and sound pair at AR 0.3 and NAR 0.5 trained on instrumentals.
 - **The style's parts explain their fields** ([#211](https://github.com/timoncool/YuE2-Studio/issues/211)): under the singing language, the tempo, the voice and the sound of Edit style parts a short line in the window's language says what the field sets, what Automatic leaves to the model and what words to type there.
 - **Training shows the part of the step it is working on** ([#166](https://github.com/timoncool/YuE2-Studio/issues/166)): under the bar of a run, "Step N of M · part k of K" names what the trainer does now, from the composition's passes to updating the adapter, and the bar moves between whole steps as the parts go by; a slow step no longer looks stuck. Agents read the same in the training status as `step_stage`.
 - **A song that ran out of video memory says so**: on Windows with an NVIDIA card a song whose card memory is full does not fail - the driver lends it the computer's memory and it goes on tens of times slower, which looked like a song hanging for hours. The song's card now says "Out of video memory" with what to lower, and the engine log notes it once, while the song goes on.
