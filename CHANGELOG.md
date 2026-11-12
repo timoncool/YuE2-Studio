@@ -13,7 +13,7 @@ Windows build.
 
 ### Changed
 
-- **Engines and tools up to date**: the assistant on llama.cpp b12248 (b11900 before; CUDA 13.5 on Windows and Linux, the same Ubuntu 22.04 limit for its CUDA build), tempo, key and the listening pack on ONNX Runtime 1.31.1 (1.30.0 before) with its Rust binding ort 2.0.0-rc.15, Parakeet on transcribe.cpp engine-0.2.1 and stem separation, karaoke and audio-to-MIDI on the audio.cpp server server-31cb1a4a. The update screen offers them as a components update.
+- **Engines and tools up to date**: the assistant on llama.cpp b12248 (b11900 before; CUDA 13.5 on Windows and Linux, the same Ubuntu 22.04 limit for its CUDA build), tempo, key and the listening pack on ONNX Runtime 1.31.1 (1.30.0 before) with its Rust binding ort 2.0.0-rc.15, Parakeet on transcribe.cpp engine-0.2.1 and stem separation, karaoke and audio-to-MIDI on the audio.cpp server server-31cb1a4a. The update screen offers them as a components update. On Windows the assistant's CUDA 13 build now comes with the CUDA 13.5 libraries of the same llama.cpp release, so a computer that runs the assistant on CUDA 13 downloads 426 MB of them again.
 
 ### Fixed
 
