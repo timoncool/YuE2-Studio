@@ -63,11 +63,16 @@ export const OwnModelPanel: React.FC = () => {
   }, []);
 
   useEffect(() => { void load(); }, [load]);
+  // a download the choice started: the service answers before it is under way, so the panel asks until it shows
+  const [started, setStarted] = useState<string | null>(null);
   const downloading = Boolean(status?.download && !status.download.done);
   useEffect(() => {
-    if (!downloading) return;
+    if (started && (status?.download?.asset_id === started || status?.selected === started)) setStarted(null);
+  }, [started, status]);
+  useEffect(() => {
+    if (!downloading && !started) return;
     return poll(load, 1000);
-  }, [downloading, load]);
+  }, [downloading, started, load]);
 
   const send = async (url: string, method: string, body?: unknown) => {
     setBusy(true);
@@ -88,6 +93,8 @@ export const OwnModelPanel: React.FC = () => {
   const choose = (value: string) => {
     if (value.startsWith(COMMUNITY)) {
       const [id, quant] = value.slice(COMMUNITY.length).split(':');
+      const file = status?.community.find((model) => model.id === id)?.files.find((entry) => entry.quant === quant);
+      if (file && !file.installed) setStarted(file.file);
       return send('/setup/own-model', 'PUT', { community: id, quant });
     }
     return send('/setup/own-model', 'PUT', { file: value });
