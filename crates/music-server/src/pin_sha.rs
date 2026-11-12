@@ -30,7 +30,7 @@ const PINNED: &[(&str, &str)] = &[
     ("https://github.com/timoncool/BSRoformer.cpp/releases/download/studio-0.1.1/BSRoformer-windows-cuda13-x64.zip", "c89128404d29c52ac0efed1a1072a76b277ccf13a33247611032746932e8d032"),
     ("https://github.com/timoncool/BSRoformer.cpp/releases/download/studio-0.1.1/BSRoformer-windows-cpu-x64.zip", "0b212654ea598503992119328daec051bbce5f14b73808c5cc588f278817f908"),
     ("https://github.com/ggml-org/llama.cpp/releases/download/b11236/cudart-llama-bin-win-cuda-12.4-x64.zip", "8c79a9b226de4b3cacfd1f83d24f962d0773be79f1e7b75c6af4ded7e32ae1d6"),
-    ("https://github.com/ggml-org/llama.cpp/releases/download/b11236/cudart-llama-bin-win-cuda-13.4-x64.zip", "738f8c251ac22b70c3ae6f83a10cf222725df0395246a2cf58f32bdb85fbe668"),
+    ("https://github.com/ggml-org/llama.cpp/releases/download/b12248/cudart-llama-bin-win-cuda-13.5-x64.zip", "c2bf4cc202bfbaaa7a0b75f5082457c3811326947bb216059b72839d844e9cba"),
     ("https://github.com/ggml-org/llama.cpp/releases/download/b12248/cudart-llama-b12248-bin-ubuntu-cuda-12.8-x64.tar.gz", "ad244917cc8701d0fa517d6500dafd55bb74e29f26fb3a051ef31c8eed1cb90d"),
     ("https://github.com/ggml-org/llama.cpp/releases/download/b12248/cudart-llama-b12248-bin-ubuntu-cuda-13.5-x64.tar.gz", "4b4dab68e9bf809b96fc77c900d22aea5639ade7eedf4b558d5382d2191bdcf8"),
     ("https://github.com/ggml-org/llama.cpp/releases/download/b12248/llama-b12248-bin-macos-arm64.tar.gz", "7f643b4d35803ccc69270302f3368d9e8a40f56f74ef5a266e6f686d9dc7d3c6"),

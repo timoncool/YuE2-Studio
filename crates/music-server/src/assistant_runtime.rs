@@ -136,9 +136,9 @@ pub const ASSETS: &[Asset] = &[
         id: "llama-cuda-runtime",
         label: "CUDA runtime for llama.cpp",
         kind: AssetKind::Runtime,
-        url: "https://github.com/ggml-org/llama.cpp/releases/download/b11236/cudart-llama-bin-win-cuda-13.4-x64.zip",
+        url: "https://github.com/ggml-org/llama.cpp/releases/download/b12248/cudart-llama-bin-win-cuda-13.5-x64.zip",
         relative_path: "runtime/cudart.zip",
-        bytes: 423_535_356,
+        bytes: 426_314_199,
         unzip_into: Some("cuda"),
         marker: "cudart64",
         vram_gb: None,
@@ -1050,11 +1050,11 @@ mod tests {
 
     /// llama.cpp is pinned to one build so a working setup keeps working.
     const LLAMA_BUILD: &str = "b12248";
-    /// The Windows CUDA runtimes carry no build number in their names and are the
-    /// same bytes in every build since: they stay at the build that first shipped
-    /// them, so an update of llama.cpp does not fetch 800 MB of the same files.
+    /// The Windows CUDA 12.4 runtime carries no build number in its name and is the
+    /// same bytes in every build since: it stays at the build that first shipped
+    /// it, so an update of llama.cpp does not fetch 390 MB of the same files.
     #[cfg(windows)]
-    const CUDART_BUILD: &str = "b11236";
+    const CUDART12_BUILD: &str = "b11236";
 
     #[test]
     fn every_asset_has_a_size_and_a_distinct_id() {
@@ -1101,7 +1101,7 @@ mod tests {
     fn the_runtime_is_pinned_to_one_llama_cpp_build() {
         for entry in ASSETS.iter().filter(|entry| entry.kind == AssetKind::Runtime) {
             #[cfg(windows)]
-            let build = if entry.url.contains("/cudart-llama-bin-win-") { CUDART_BUILD } else { LLAMA_BUILD };
+            let build = if entry.url.contains("/cudart-llama-bin-win-cuda-12.4-") { CUDART12_BUILD } else { LLAMA_BUILD };
             #[cfg(not(windows))]
             let build = LLAMA_BUILD;
             assert!(entry.url.contains(&format!("/download/{build}/")), "{} is not pinned", entry.id);

@@ -333,7 +333,7 @@ mod tests {
     #[test]
     fn a_models_files_are_one_row_and_a_runtime_its_own() {
         let p = plan(
-            vec![candidate("transcribe-engine", false, "runtime/transcribe_engine.dll", Some("https://github.com/timoncool/transcribe.cpp/releases/download/engine-0.1.1/transcribe_engine.dll"))],
+            vec![candidate("transcribe-engine", false, "runtime/transcribe_engine.dll", Some("https://github.com/timoncool/transcribe.cpp/releases/download/engine-0.2.0/transcribe-windows-cpu-x64.zip"))],
             vec![candidate("htdemucs-6s", true, "models/htdemucs/htdemucs-6stems-f16.gguf", None), candidate("htdemucs-6s-config", true, "models/htdemucs/config.json", None)],
             Vec::new(),
             Path::new("/nowhere"),
@@ -341,7 +341,7 @@ mod tests {
         );
         assert_eq!(p.updated.len(), 1);
         let engine = &p.updated[0];
-        assert_eq!((engine.from.as_deref(), engine.reason_code), (Some("engine-0.1.1"), "transcribe-avx2"));
+        assert_eq!((engine.from.as_deref(), engine.reason_code), (Some("engine-0.2.0"), "transcribe-avx2"));
         assert_eq!(p.added.len(), 1, "a model's files are one row");
         let model = &p.added[0];
         assert_eq!((model.id.as_str(), model.ids.len(), model.bytes, model.download), ("models/htdemucs", 2, 200, 120));
