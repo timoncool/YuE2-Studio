@@ -297,7 +297,7 @@ async fn status_summary() -> Value {
         "preparation": compact_preparation(&training["prepare"]),
         "training": active_run,
         "processing": processing["run"],
-        // what the running engine started with: its KV cache, and fewer tracks a request when that many fit the card
+        // what the running engine started with: its KV cache and flash attention
         "engine": engine["in_effect"],
     })
 }
