@@ -12,6 +12,12 @@ const PINNED: &[(&str, &str)] = &[
     ("https://developer.download.nvidia.com/compute/cuda/redist/libcublas/windows-x86_64/libcublas-windows-x86_64-13.5.1.27-archive.zip", "c946e1c825e05895747a95ed4fee18030b08052c09783b9b7b19818fd2e31f58"),
     ("https://developer.download.nvidia.com/compute/cuda/redist/libcufft/windows-x86_64/libcufft-windows-x86_64-12.4.0.43-archive.zip", "69d0ad8dc3a1be66f01a748a8206d0ceaafa56939474663fbe790dc3e91d2009"),
     ("https://files.pythonhosted.org/packages/20/e2/fc9a0e985249d873150276d5afb02e39a66817fedbf1a385724393e505ed/nvidia_cublas_cu12-12.9.2.10-py3-none-win_amd64.whl", "623f43027d40d44ceadf0043f002bd25cf353e8f13ce90b9a87057019f560661"),
+    ("https://files.pythonhosted.org/packages/7a/38/bdd540bf511d2c9b6f9efc71a81c60cb88e295be0b9312b61d19bbed2212/nvidia_cublas-13.8.0.4-py3-none-manylinux_2_27_x86_64.whl", "9f17797dfcc048694461f4e47de17d2e3c25adf172ef723d2db0a07cd8744b89"),
+    ("https://files.pythonhosted.org/packages/76/bf/3fea3d1c6262bded26ae00e3106432d63235954965d7785f5051ac146651/nvidia_cufft-12.4.0.43-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl", "0e8385013596b112d29c9ce8c63dc575b308d77636c7169104e18714f03961a8"),
+    ("https://files.pythonhosted.org/packages/95/f4/61e6996dd20481ee834f57a8e9dca28b1869366a135e0d42e2aa8493bdd4/nvidia_cufft_cu12-11.4.1.4-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl", "c67884f2a7d276b4b80eb56a79322a95df592ae5e765cf1243693365ccab4e28"),
+    ("https://files.pythonhosted.org/packages/98/8a/3431271f6344874b8f1ac03f16b3d679c91493f8da63f716160403e6d0a0/nvidia_cuda_runtime-13.4.92-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl", "9641f797da20ce1dd8e779b6e96d08cf9ba564cec8e8225458811ee26423f3a5"),
+    ("https://files.pythonhosted.org/packages/bc/46/a92db19b8309581092a3add7e6fceb4c301a3fd233969856a8cbf042cd3c/nvidia_cuda_runtime_cu12-12.9.79-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl", "25bba2dfb01d48a9b59ca474a1ac43c6ebf7011f1b0b8cc44f54eb6ac48a96c3"),
+    ("https://files.pythonhosted.org/packages/cb/c0/0a517bfe63ccd3b92eb254d264e28fca3c7cab75d07daea315250fb1bf73/nvidia_cublas_cu12-12.9.2.10-py3-none-manylinux_2_27_x86_64.whl", "e4f53a8ca8c5d6e8c492d0d0a3d565ecb59a751b19cfdaa4f6da0ab2104c1702"),
     ("https://github.com/timoncool/BSRoformer.cpp/releases/download/studio-0.1.1/BSRoformer-linux-cuda13-x64.tar.gz", "807f59113f17eb706bc7289155bdf507d05ae01650a5c2ccd9685f5574e9cd04"),
     ("https://github.com/timoncool/BSRoformer.cpp/releases/download/studio-0.1.1/BSRoformer-linux-cpu-x64.tar.gz", "65eb3cf26dfed0a23f01906a9f179ae7ab503f2bdac4f411e49ec902a5addafd"),
     ("https://github.com/chenmozhijin/BSRoformer.cpp/releases/download/v0.1.0/BSRoformer-macos-arm64.tar.xz", "d0fc45181d31dcceea99c3828378f4a7376e52e7fdbc43e29a07e806785b4c9a"),
@@ -116,6 +122,8 @@ pub fn accepts(url: &str, staged: &Path) -> bool {
 const PICKED: &[(&str, &str, &str)] = &[
     ("https://files.pythonhosted.org/packages/20/e2/fc9a0e985249d873150276d5afb02e39a66817fedbf1a385724393e505ed/nvidia_cublas_cu12-12.9.2.10-py3-none-win_amd64.whl", "cublas64_12.dll", "52ce5ba0ec5327d39be6021f0f9362d2ed4d64d7206f9b5afc06398d827b8e82"),
     ("https://files.pythonhosted.org/packages/20/e2/fc9a0e985249d873150276d5afb02e39a66817fedbf1a385724393e505ed/nvidia_cublas_cu12-12.9.2.10-py3-none-win_amd64.whl", "cublasLt64_12.dll", "71705a7cf0923f4ab034d0d2620bbfc989ff669ac3d79f868b7a7c597ca559c5"),
+    ("https://files.pythonhosted.org/packages/cb/c0/0a517bfe63ccd3b92eb254d264e28fca3c7cab75d07daea315250fb1bf73/nvidia_cublas_cu12-12.9.2.10-py3-none-manylinux_2_27_x86_64.whl", "libcublas.so.12", "5757ab5839fb4f203ca47ecb336110d10f4a5606b1e097f195fbca89774569e2"),
+    ("https://files.pythonhosted.org/packages/cb/c0/0a517bfe63ccd3b92eb254d264e28fca3c7cab75d07daea315250fb1bf73/nvidia_cublas_cu12-12.9.2.10-py3-none-manylinux_2_27_x86_64.whl", "libcublasLt.so.12", "2c9006a75c74b3bea2dc7ae2ec38ab038b0e45ea02cb4b717a915e8a5796acb1"),
 ];
 
 /// The SHA-256 of the file `name` a pick takes out of the package at `url`, when the package lists it.

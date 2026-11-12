@@ -144,6 +144,90 @@ fn cuda12_assets() -> &'static [Asset] {
     })
 }
 
+/// Linux: the CUDA libraries of each CUDA build from NVIDIA's manylinux wheels, as ACE-Step Studio, Dub Studio and
+/// Speech Studio take them, unpacked beside the server, where `LD_LIBRARY_PATH` names its folder.
+#[cfg(target_os = "linux")]
+static LINUX_CUDA: [(Build, Asset); 6] = [
+    (Build::Cuda13, Asset {
+        id: "audiocpp-libcudart13",
+        label: "NVIDIA CUDA runtime 13.4 (for the audio.cpp server)",
+        kind: AssetKind::Runtime,
+        url: "https://files.pythonhosted.org/packages/98/8a/3431271f6344874b8f1ac03f16b3d679c91493f8da63f716160403e6d0a0/nvidia_cuda_runtime-13.4.92-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl",
+        relative_path: "runtime/audiocpp-cuda13-cudart.whl",
+        bytes: 2_494_438,
+        unzip_into: Some(Build::Cuda13.folder()),
+        marker: "libcudart.so.13",
+        pick: &["libcudart.so.13"],
+        vram_gb: None,
+        note: "Part of the CUDA 13 server.",
+    }),
+    (Build::Cuda13, Asset {
+        id: "audiocpp-libcublas13",
+        label: "NVIDIA cuBLAS 13.8 (for the audio.cpp server)",
+        kind: AssetKind::Runtime,
+        url: "https://files.pythonhosted.org/packages/7a/38/bdd540bf511d2c9b6f9efc71a81c60cb88e295be0b9312b61d19bbed2212/nvidia_cublas-13.8.0.4-py3-none-manylinux_2_27_x86_64.whl",
+        relative_path: "runtime/audiocpp-cuda13-cublas.whl",
+        bytes: 439_317_144,
+        unzip_into: Some(Build::Cuda13.folder()),
+        marker: "libcublasLt.so.13",
+        pick: &["libcublas.so.13", "libcublasLt.so.13"],
+        vram_gb: None,
+        note: "Part of the CUDA 13 server.",
+    }),
+    (Build::Cuda13, Asset {
+        id: "audiocpp-libcufft12",
+        label: "NVIDIA cuFFT 12.4 (for the audio.cpp server)",
+        kind: AssetKind::Runtime,
+        url: "https://files.pythonhosted.org/packages/76/bf/3fea3d1c6262bded26ae00e3106432d63235954965d7785f5051ac146651/nvidia_cufft-12.4.0.43-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl",
+        relative_path: "runtime/audiocpp-cuda13-cufft.whl",
+        bytes: 161_750_089,
+        unzip_into: Some(Build::Cuda13.folder()),
+        marker: "libcufft.so.12",
+        pick: &["libcufft.so.12"],
+        vram_gb: None,
+        note: "Part of the CUDA 13 server.",
+    }),
+    (Build::Cuda12, Asset {
+        id: "audiocpp-libcudart12",
+        label: "NVIDIA CUDA runtime 12.9 (for the audio.cpp server)",
+        kind: AssetKind::Runtime,
+        url: "https://files.pythonhosted.org/packages/bc/46/a92db19b8309581092a3add7e6fceb4c301a3fd233969856a8cbf042cd3c/nvidia_cuda_runtime_cu12-12.9.79-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl",
+        relative_path: "runtime/audiocpp-cuda12-cudart.whl",
+        bytes: 3_493_179,
+        unzip_into: Some(Build::Cuda12.folder()),
+        marker: "libcudart.so.12",
+        pick: &["libcudart.so.12"],
+        vram_gb: None,
+        note: "Part of the CUDA 12 server.",
+    }),
+    (Build::Cuda12, Asset {
+        id: "audiocpp-libcublas12",
+        label: "NVIDIA cuBLAS 12.9 (for the audio.cpp server)",
+        kind: AssetKind::Runtime,
+        url: "https://files.pythonhosted.org/packages/cb/c0/0a517bfe63ccd3b92eb254d264e28fca3c7cab75d07daea315250fb1bf73/nvidia_cublas_cu12-12.9.2.10-py3-none-manylinux_2_27_x86_64.whl",
+        relative_path: "runtime/audiocpp-cuda12-cublas.whl",
+        bytes: 581_240_110,
+        unzip_into: Some(Build::Cuda12.folder()),
+        marker: "libcublasLt.so.12",
+        pick: &["libcublas.so.12", "libcublasLt.so.12"],
+        vram_gb: None,
+        note: "Part of the CUDA 12 server.",
+    }),
+    (Build::Cuda12, Asset {
+        id: "audiocpp-libcufft11",
+        label: "NVIDIA cuFFT 11.4 (for the audio.cpp server)",
+        kind: AssetKind::Runtime,
+        url: "https://files.pythonhosted.org/packages/95/f4/61e6996dd20481ee834f57a8e9dca28b1869366a135e0d42e2aa8493bdd4/nvidia_cufft_cu12-11.4.1.4-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl",
+        relative_path: "runtime/audiocpp-cuda12-cufft.whl",
+        bytes: 200_877_592,
+        unzip_into: Some(Build::Cuda12.folder()),
+        marker: "libcufft.so.11",
+        pick: &["libcufft.so.11"],
+        vram_gb: None,
+        note: "Part of the CUDA 12 server.",
+    }),
+];
+
 /// Every download a build of the server needs, the program first.
 pub fn assets(build: Build) -> Vec<&'static Asset> {
     let mut assets: Vec<&'static Asset> = server_asset(build).into_iter().collect();
@@ -153,6 +237,8 @@ pub fn assets(build: Build) -> Vec<&'static Asset> {
         Build::Cuda12 => assets.extend(cuda12_assets().iter()),
         Build::Vulkan | Build::Cpu | Build::Metal => {}
     }
+    #[cfg(target_os = "linux")]
+    assets.extend(LINUX_CUDA.iter().filter(|(of, _)| *of == build).map(|(_, asset)| asset));
     assets
 }
 
@@ -277,8 +363,16 @@ impl Acpp {
             }
         }
         let cuda13 = self.cuda13_libraries.get().cloned();
+        let beside = self.folder(build);
         let server = acpp_server::SERVERS
             .get(&config, READY_WITHIN, &|command| {
+                // a Linux loader does not look beside the program: the CUDA libraries lie in its folder
+                if cfg!(target_os = "linux") {
+                    let inherited = std::env::var_os("LD_LIBRARY_PATH").unwrap_or_default();
+                    if let Ok(path) = std::env::join_paths(std::iter::once(beside.clone()).chain(std::env::split_paths(&inherited))) {
+                        command.env("LD_LIBRARY_PATH", path);
+                    }
+                }
                 // cuBLAS 13 lies beside the music engine, which the studio's PATH already names first
                 if let Some(folder) = &cuda13 {
                     let existing = std::env::var_os("PATH").unwrap_or_default();
@@ -481,6 +575,24 @@ mod tests {
                 let picked = downloads.iter().any(|asset| asset.pick.contains(library));
                 let from_engine = build == Build::Cuda13 && crate::engine_runtime::CUDA13_LIBRARIES.contains(library);
                 assert!(picked || from_engine, "{build:?} imports {library}, which nothing downloads");
+            }
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn a_linux_cuda_build_lays_every_library_its_server_loads_beside_it() {
+        for (build, libraries) in [
+            (Build::Cuda13, ["libcudart.so.13", "libcublas.so.13", "libcublasLt.so.13", "libcufft.so.12"]),
+            (Build::Cuda12, ["libcudart.so.12", "libcublas.so.12", "libcublasLt.so.12", "libcufft.so.11"]),
+        ] {
+            let downloads = assets(build);
+            for library in libraries {
+                assert!(downloads.iter().any(|asset| asset.pick.contains(&library)), "{build:?} loads {library}, which nothing downloads");
+            }
+            for download in &downloads {
+                assert_eq!(download.unzip_into, Some(build.folder()), "{} lands beside the {build:?} server", download.id);
+                assert!(crate::pin_sha::sha256(download.url).is_some(), "{} names the SHA-256 of its pin", download.id);
             }
         }
     }
