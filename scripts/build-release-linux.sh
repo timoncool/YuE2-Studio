@@ -1,6 +1,6 @@
 #!/bin/bash
 # Builds YuE2 Studio for Linux x86-64: a .deb and an AppImage with the pinned
-# yue2.cpp engine on Vulkan and the audio-to-MIDI transcriber bundled. Model weights are downloaded in the app.
+# yue2.cpp engine on Vulkan and CUDA 13 and the audio-to-MIDI transcriber bundled. Model weights are downloaded in the app.
 set -euo pipefail
 
 root="$(cd "$(dirname "$0")/.." && pwd)"
@@ -23,6 +23,8 @@ cd "$root"
 npm --prefix app ci --no-audit --no-fund
 npm --prefix desktop ci --no-audit --no-fund
 cd desktop
+# the display driver's libcuda and the CUDA libraries the studio downloads are never packed
+export LINUXDEPLOY_EXCLUDED_LIBRARIES="libcuda.so*;libcudart.so*;libcublas.so*;libcublasLt.so*"
 npm exec tauri build -- --config src-tauri/tauri.linux-release.conf.json --bundles deb,appimage
 
 find src-tauri/target/release/bundle -name '*.deb' -o -name '*.AppImage'
