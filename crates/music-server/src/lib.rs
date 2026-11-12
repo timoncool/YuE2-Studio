@@ -5273,13 +5273,6 @@ async fn start_engine_again(state: &AppState) -> Result<(), String> {
         free_the_card_for_the_engine(state).await;
         let models = selected_engine_models(state).await?;
         let backbone = models.backbone.clone();
-        if let Some(reason) = attempt.flash_attention_off_reason() {
-            let chunk = match attempt.nar_chunk(Some(&backbone)) {
-                Some(frames) => format!("; acoustic chunks of {frames} frames for the card's memory"),
-                None => String::new(),
-            };
-            music_engine::yue_server::note_in_log(&format!("flash-attention off on {}: {reason}{chunk}", device_name(device)));
-        }
         if attempt.max_seq.is_none() {
             if let Some(fitted) = attempt.effective_max_seq(Some(&backbone)) {
                 music_engine::yue_server::note_in_log(&format!("KV cache {fitted}, fitted after the card ran out of memory on a song"));
@@ -5289,6 +5282,14 @@ async fn start_engine_again(state: &AppState) -> Result<(), String> {
         if let Some(tracks) = tracks {
             music_engine::yue_server::note_in_log(&format!("{tracks} tracks a request instead of {}: that many fit the card's free memory", attempt.effective_max_batch()));
             attempt.max_batch = Some(tracks);
+        }
+        // the chunk is sized for the tracks the engine starts with, after they were fitted to the card
+        if let Some(reason) = attempt.flash_attention_off_reason() {
+            let chunk = match attempt.nar_chunk(Some(&backbone)) {
+                Some(frames) => format!("; acoustic chunks of {frames} frames for the card's memory"),
+                None => String::new(),
+            };
+            music_engine::yue_server::note_in_log(&format!("flash-attention off on {}: {reason}{chunk}", device_name(device)));
         }
         let config = engine_location(attempt, Some(&backbone))
             .resolve(models)
