@@ -10,18 +10,19 @@ import { named } from '../services/accessibleName';
 import { ConfirmDialog } from './ConfirmDialog';
 import { PlaylistCover, PlaylistEditModal, PlaylistMenu, playlistSongs } from './PlaylistEditor';
 import { SongList } from './SongList';
+import { LibraryTrash } from './LibraryTrash';
 import { SONG_ORDERS, type SongOrder } from '../services/songOrder';
 
 /** The liked songs are read from the latest like first. */
 const LIKED_ORDERS: SongOrder[] = ['likedNewest', ...SONG_ORDERS];
 
-type LibraryTab = 'all' | 'playlists' | 'liked' | 'import';
+type LibraryTab = 'all' | 'playlists' | 'liked' | 'import' | 'trash';
 const TAB_KEY = 'studio.library.tab';
 /** The tab last open: coming back from a playlist lands on the playlists. */
 function readTab(): LibraryTab {
   try {
     const kept = window.sessionStorage.getItem(TAB_KEY);
-    return kept === 'playlists' || kept === 'liked' || kept === 'import' ? kept : 'all';
+    return kept === 'playlists' || kept === 'liked' || kept === 'import' || kept === 'trash' ? kept : 'all';
   } catch {
     return 'all';
   }
@@ -50,6 +51,8 @@ interface LibraryViewProps {
   onPlayPlaylist: (playlist: Playlist, songs: Song[]) => void;
   /** Says why a change did not go through. */
   onError: (message: string) => void;
+  /** Says what a change in the bin did, or why it did not go through. */
+  onToast: (message: string, type?: 'success' | 'error' | 'info') => void;
   onImported?: (count: number) => void;
   likedSongIds: Set<string>;
   onToggleLike: (songId: string) => void;
@@ -76,6 +79,7 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
     onSelectPlaylist,
     onPlayPlaylist,
     onError,
+    onToast,
     onImported,
     likedSongIds,
     onToggleLike,
@@ -198,7 +202,9 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
                  {tabButton('liked', t('likedTab'), likedSongs.length)}
                  {tabButton('playlists', t('playlists'), playlists.length)}
                  {tabButton('import', t('importAudioTab'))}
+                 {tabButton('trash', t('trashTab'))}
              </div>
+             {activeTab === 'trash' && <LibraryTrash onToast={onToast} />}
 
              {/* Content */}
              {activeTab === 'all' && (allSongs.length === 0

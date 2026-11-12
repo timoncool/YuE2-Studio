@@ -121,7 +121,7 @@ import { registerPlayer } from './services/audioGraph';
 import { serveVisualizerFeed } from './services/visualizerFeed';
 import { winampControl, winampOn } from './services/winamp';
 import { notePlayed } from './services/playHistory';
-import { createNativePlaylist, deleteNativeSong, moveStoredLikes, setNativeSongLiked, updateNativePlaylist } from './services/nativeLibrary';
+import { createNativePlaylist, deleteNativeSong, moveStoredLikes, restoreTrashedSong, setNativeSongLiked, updateNativePlaylist } from './services/nativeLibrary';
 import { foldStems } from './services/songStems';
 import { noteStudioMessage } from './services/journal';
 import { JournalPanel } from './components/JournalPanel';
@@ -1085,7 +1085,12 @@ function AppContent() {
     if (repeat === 'none' || repeat === 'all' || repeat === 'one' || repeat === 'stop') setRepeatMode(repeat);
     return { text: 'Set.' };
   });
-  useBridgeCommand('video_open', ({ song_id }) => {
+  useBridgeCommand('video_open', async ({ song_id }) => {
+    if (!librarySongs.some(entry => entry.id === song_id)) {
+      const response = await fetch(`/v1/library/songs/${encodeURIComponent(String(song_id))}`);
+      const binned = response.ok ? await response.json() as { title?: string; metadata?: { deleted_at?: unknown } } : null;
+      if (binned?.metadata?.deleted_at) throw new Error(`"${binned.title ?? ''}" is in the bin. Restore it in Library - Bin to use it again.`);
+    }
     const song = songById(song_id);
     setSongForVideo(song);
     return { text: `The video editor is open for ${song.title}.` };
@@ -1176,12 +1181,21 @@ function AppContent() {
           setPlayQueue(prev => prev.filter(s => !idsToDelete.has(s.id) || failed.includes(s.id)));
         }
 
+        // what went to the bin comes back from the message, with its stems
+        const undo = {
+          label: t('undo'),
+          onClick: () => {
+            void Promise.all(succeeded.map(id => restoreTrashedSong(id)))
+              .then(() => { libraryChanged(); showToast(t('songsRestored')); })
+              .catch((error: unknown) => showToast(error instanceof Error ? error.message : String(error), 'error'));
+          },
+        };
         if (failed.length > 0) {
           showToast(t('songsDeletedPartial').replace('{succeeded}', String(succeeded.length)).replace('{total}', String(songsToDelete.length)), 'error');
         } else if (isSingle) {
-          showToast(t('songDeleted'));
+          showToast(t('songDeleted'), 'success', undo);
         } else {
-          showToast(t('songsDeletedSuccess'));
+          showToast(t('songsDeletedSuccess'), 'success', undo);
         }
       },
     });
@@ -1374,6 +1388,7 @@ function AppContent() {
             onSelectPlaylist={(p) => handleNavigateToPlaylist(p.id)}
             onPlayPlaylist={(p, songs) => playFromPlaylist(p.id)(songs[0], songs)}
             onError={message => showToast(message, 'error')}
+            onToast={(message, type) => showToast(message, type)}
             onImported={count => { libraryChanged(); showToast(t('importedToLibrary').replace('{count}', String(count))); }}
             likedSongIds={likedSongIds}
             onToggleLike={toggleLike}

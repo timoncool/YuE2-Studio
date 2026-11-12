@@ -192,6 +192,47 @@ pub fn instructions(request: &AssistRequest) -> (String, &'static [&'static str]
     }
 }
 
+/// The person's own rules for the assistant, one text per task it is asked.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct OwnRules {
+    /// The whole song: the idea, the style and the lyrics together.
+    pub song: Option<String>,
+    /// The style.
+    pub style: Option<String>,
+    /// The lyrics.
+    pub lyrics: Option<String>,
+}
+
+/// The system prompt with the person's own rules for this task and the words
+/// they keep out after the studio's guide, which they come before. Editing a
+/// score and laying out a transcript or a lyric sheet keep their words as they
+/// are, so take neither.
+pub fn with_own_rules(system: String, target: AssistTarget, rules: &OwnRules, avoid_words: Option<&str>) -> String {
+    let own = match target {
+        AssistTarget::All => rules.song.as_deref(),
+        AssistTarget::Style => rules.style.as_deref(),
+        AssistTarget::Lyrics => rules.lyrics.as_deref(),
+        AssistTarget::Score | AssistTarget::Transcript | AssistTarget::Sheet => return system,
+    }
+    .map(str::trim)
+    .filter(|own| !own.is_empty());
+    let avoid: Vec<&str> = avoid_words
+        .unwrap_or_default()
+        .split(['\n', ',', ';'])
+        .map(str::trim)
+        .filter(|word| !word.is_empty())
+        .collect();
+    let mut prompt = system;
+    if let Some(own) = own {
+        prompt.push_str(&format!("\n\nTHE USER'S OWN RULES (they come before the guide above where the two differ):\n{own}"));
+    }
+    if !avoid.is_empty() {
+        prompt.push_str(&format!("\n\nNEVER WRITE THESE WORDS OR PHRASES, nor their forms: {}.", avoid.join(", ")));
+    }
+    prompt
+}
+
 /// Rules that only apply to some songs arrive only for them: a duet rule told
 /// to a solo song would invite a second voice.
 fn craft_notes(request: &AssistRequest) -> String {
@@ -943,6 +984,18 @@ mod tests {
         assert!(system.contains("language the user wrote their request in"));
         assert!(system.contains("write ё as ё"));
         assert!(!system.contains("combining acute"), "YuE2 has no pronunciation channel");
+    }
+
+    #[test]
+    fn the_users_rules_for_the_task_and_the_words_to_avoid_come_last() {
+        let rules = OwnRules { song: Some("Write about the sea.".into()), style: None, lyrics: Some("  First person, past tense.  ".into()) };
+        let (system, _) = instructions(&request(AssistTarget::Lyrics));
+        let prompt = with_own_rules(system.clone(), AssistTarget::Lyrics, &rules, Some("neon\ncity lights, echo"));
+        assert!(prompt.starts_with(&system));
+        assert!(prompt.contains("THE USER'S OWN RULES") && prompt.contains("First person, past tense.") && !prompt.contains("Write about the sea."));
+        assert!(prompt.ends_with("NEVER WRITE THESE WORDS OR PHRASES, nor their forms: neon, city lights, echo."));
+        assert_eq!(with_own_rules(system.clone(), AssistTarget::Style, &rules, None), system, "no rules for the style, no words: the prompt as it was");
+        assert_eq!(with_own_rules(system.clone(), AssistTarget::Sheet, &rules, Some("neon")), system, "laying out keeps the words");
     }
 
     #[test]

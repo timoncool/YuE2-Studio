@@ -23,6 +23,7 @@ mod engine_runtime;
 mod lyrics_db;
 mod mcp;
 mod lyrics_sync;
+mod subimport;
 mod comfy_export;
 mod remote;
 pub use remote::{set_asset_source, AssetSource};
@@ -490,6 +491,12 @@ const MAX_RESUMES: u32 = 3;
 /// The score stage draws up to 4096 tokens after its prompt in the same context,
 /// so a smaller context fails every song before it starts.
 const MIN_MAX_SEQ: u32 = 8192;
+
+/// The seconds a later chunk of the sound hears the song again before its fade: measured at 30, the level after
+/// the seam keeps within half a decibel of a song made in one piece.
+const CHUNK_OVERLAP_SECONDS: u32 = 30;
+/// The longest overlap the settings take; the engine itself keeps it within half a chunk.
+const CHUNK_OVERLAP_MAX_SECONDS: u32 = 45;
 /// The model's context in tokens, what the engine's KV cache holds when nothing sets it smaller.
 const MODEL_CONTEXT: u32 = 24576;
 /// One token of the KV cache in one set: 28 layers, keys and values, 8 heads of 128, two bytes each.
@@ -715,6 +722,9 @@ struct EngineOptions {
     max_seq: Option<u32>,
     vae_core: Option<u32>,
     vae_halo: Option<u32>,
+    /// How many seconds a later chunk of the sound hears the song again before it is faded in; none is
+    /// `CHUNK_OVERLAP_SECONDS`.
+    chunk_overlap_seconds: Option<u32>,
     flash_attention: FlashAttention,
     /// The switch of settings saved before `flash_attention`: read once and turned into `Off`, never written.
     #[serde(skip_serializing)]
@@ -942,6 +952,7 @@ impl EngineOptions {
             vae_core: self.vae_core,
             vae_halo: self.vae_halo,
             nar_chunk,
+            nar_halo: Some(self.chunk_overlap_seconds.unwrap_or(CHUNK_OVERLAP_SECONDS) * SEMANTIC_FRAMES_PER_SECOND as u32).filter(|frames| *frames > 0),
             disable_flash_attention: fa_off,
             // On an AMD Radeon through Vulkan the hidden states leave the FP16
             // range and the song comes out as pure silence, which the engine's
@@ -1019,6 +1030,10 @@ struct AssistantConfig {
     cli_model: Option<String>,
     /// Explicit executable for that CLI; empty means PATH.
     cli_path: Option<String>,
+    /// The person's own rules for each task, put after the studio's guide.
+    own_rules: assistant::OwnRules,
+    /// Words and phrases the assistant must not write, one a line or comma-separated.
+    avoid_words: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -1235,6 +1250,19 @@ pub async fn serve() -> anyhow::Result<()> {
     tokio::spawn(resume_unfinished_jobs(state.clone()));
     {
         let state = state.clone();
+        tokio::spawn(async move {
+            let mut every = tokio::time::interval(std::time::Duration::from_secs(6 * 3600));
+            loop {
+                every.tick().await;
+                let state = state.clone();
+                if let Err(error) = tokio::task::spawn_blocking(move || purge_old_trash(&state)).await {
+                    eprintln!("[ERROR] the bin was not emptied of its old songs: {error}");
+                }
+            }
+        });
+    }
+    {
+        let state = state.clone();
         // all three read or rewrite the stored tracks in place, so one after the other
         tokio::spawn(async move {
             let library = state.library.clone();
@@ -1290,7 +1318,7 @@ pub async fn serve() -> anyhow::Result<()> {
         .route("/v1/karaoke/install", post(karaoke_install))
         .route("/v1/karaoke/cancel", post(cancel_karaoke_download))
         .route("/v1/karaoke/remove", post(karaoke_remove))
-        .route("/v1/library/songs/{id}/karaoke", post(create_song_karaoke).delete(delete_song_karaoke))
+        .route("/v1/library/songs/{id}/karaoke", post(create_song_karaoke).put(set_song_karaoke).delete(delete_song_karaoke))
         .route("/v1/openrouter/catalog", get(openrouter_catalog))
         .route("/v1/openrouter/catalog/refresh", post(refresh_openrouter_catalog))
         .route("/v1/openrouter/transcriptions", post(create_openrouter_transcription))
@@ -1390,6 +1418,9 @@ pub async fn serve() -> anyhow::Result<()> {
         .route("/v1/library/songs", get(library_songs).post(create_library_song))
         .route("/v1/library/import", post(import_library_audio))
         .route("/v1/library/songs/{id}", get(library_song).put(update_library_song).delete(delete_library_song))
+        .route("/v1/library/trash", get(library_trash).delete(empty_library_trash))
+        .route("/v1/library/trash/{id}", axum::routing::delete(delete_trashed_song))
+        .route("/v1/library/trash/{id}/restore", post(restore_library_song))
         .route("/v1/library/songs/{id}/liked", axum::routing::put(set_library_song_liked))
         .route("/v1/library/songs/{id}/note", axum::routing::put(set_library_song_note))
         .route("/v1/library/liked", get(library_liked))
@@ -1645,6 +1676,18 @@ async fn remove_journal_entry(State(state): State<AppState>, Path(id): Path<i64>
     }
 }
 async fn library_song(State(state): State<AppState>,Path(id):Path<String>)->Result<Json<library::Song>,(StatusCode,Json<ApiError>)>{state.library.get_song(&id).map_err(|e|api_error(StatusCode::INTERNAL_SERVER_ERROR,e.to_string()))?.map(Json).ok_or_else(||api_error(StatusCode::NOT_FOUND,"Song not found".into()))}
+/// Refuses new work on a song that is in the bin, by its name, until it is restored.
+fn refuse_trashed(song: &library::Song) -> Result<(), (StatusCode, Json<ApiError>)> {
+    if library::is_trashed(song) {
+        return Err(api_error(StatusCode::CONFLICT, trashed_song_message(song)));
+    }
+    Ok(())
+}
+
+fn trashed_song_message(song: &library::Song) -> String {
+    format!("\"{}\" is in the bin. Restore it in Library - Bin to use it again.", song.title)
+}
+
 async fn library_media(State(state): State<AppState>, Path(song_id): Path<String>, request: Request) -> Result<axum::response::Response, (StatusCode, Json<ApiError>)> {
     let song = state.library.get_song(&song_id).map_err(|error| api_error(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?.ok_or_else(|| api_error(StatusCode::NOT_FOUND, "Song not found".into()))?;
     let path = state.library.media_path_for_song(&song).ok_or_else(|| api_error(StatusCode::NOT_FOUND, "Song audio is not available in the studio media library".into()))?;
@@ -2413,6 +2456,7 @@ async fn start_processing(
         .get_song(&id)
         .map_err(|error| api_error(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?
         .ok_or_else(|| api_error(StatusCode::NOT_FOUND, "Song not found".into()))?;
+    refuse_trashed(&song)?;
     let source = state
         .library
         .media_path_for_song(&song)
@@ -2426,6 +2470,7 @@ async fn start_processing(
                 .get_song(song_id)
                 .map_err(|error| api_error(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?
                 .ok_or_else(|| api_error(StatusCode::NOT_FOUND, "the reference track is not in the library".into()))?;
+            refuse_trashed(&reference_song)?;
             Some(
                 state
                     .library
@@ -3140,6 +3185,7 @@ async fn add_training_songs(State(state): State<AppState>, Path(id): Path<String
             .get_song(song_id)
             .map_err(|error| api_error(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?
             .ok_or_else(|| api_error(StatusCode::NOT_FOUND, format!("song {song_id} is not in the library")))?;
+        refuse_trashed(&song)?;
         let audio = state.library.media_path_for_song(&song).ok_or_else(|| api_error(StatusCode::BAD_REQUEST, format!("{} has no stored audio", song.title)))?;
         sources.push((audio, song.title, song.caption, song.lyrics, song.id));
     }
@@ -3466,6 +3512,7 @@ async fn start_separation(
         .get_song(&id)
         .map_err(|error| api_error(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?
         .ok_or_else(|| api_error(StatusCode::NOT_FOUND, "Song not found".into()))?;
+    refuse_trashed(&song)?;
     // a stem is a part of a song already: the song it came from is what is separated
     if song.metadata["derived"]["tool"].as_str() == Some("stems") {
         return Err(api_error(StatusCode::CONFLICT, "this track is a stem, a part of a song already; separate the song it came from".into()));
@@ -4467,23 +4514,168 @@ async fn update_library_song(State(state):State<AppState>,Path(id):Path<String>,
     }
     Ok(Json(song))
 }
-/// Removes a song and its files; a file that cannot go (a player holds it)
-/// is named in the answer instead of only in the log.
+/// Puts a song in the bin with the songs made from it (its stems and the
+/// like); the bin keeps them for `TRASH_DAYS` days, Restore brings them back.
 async fn delete_library_song(State(state): State<AppState>, Path(id): Path<String>) -> Result<Json<Value>, (StatusCode, Json<ApiError>)> {
-    let song = state.library.get_song(&id).map_err(|e| api_error(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
-    if !state.library.delete_song(&id).map_err(|e| api_error(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))? {
-        return Err(api_error(StatusCode::NOT_FOUND, "Song not found".into()));
+    let internal = |e: anyhow::Error| api_error(StatusCode::INTERNAL_SERVER_ERROR, e.to_string());
+    let song = state.library.get_song(&id).map_err(internal)?.ok_or_else(|| api_error(StatusCode::NOT_FOUND, "Song not found".into()))?;
+    if library::is_trashed(&song) {
+        return Ok(Json(serde_json::json!({ "deleted": true, "trashed": true, "with": 0 })));
     }
-    let mut left = Vec::new();
-    if let Some(song) = song {
-        for path in song_files(&state, &song) {
-            if let Err(error) = std::fs::remove_file(&path) {
-                eprintln!("[ERROR] delete song {id}: could not remove {}: {error}", path.display());
-                left.push(format!("{}: {error}", plain_path(&path)));
+    let made_from: Vec<String> = state
+        .library
+        .list_songs()
+        .map_err(internal)?
+        .into_iter()
+        .filter(|other| derived_from(other).is_some_and(|(from, _)| from == id))
+        .map(|other| other.id)
+        .collect();
+    state.library.set_song_trashed(&id, true, None).map_err(internal)?;
+    for other in &made_from {
+        state.library.set_song_trashed(other, true, Some(&id)).map_err(internal)?;
+    }
+    Ok(Json(serde_json::json!({ "deleted": true, "trashed": true, "with": made_from.len() })))
+}
+
+/// How long the bin keeps a song before it goes for good.
+const TRASH_DAYS: u64 = 30;
+
+/// The songs in the bin, each with the songs that went there with it.
+async fn library_trash(State(state): State<AppState>) -> Result<Json<Value>, (StatusCode, Json<ApiError>)> {
+    let internal = |e: anyhow::Error| api_error(StatusCode::INTERNAL_SERVER_ERROR, e.to_string());
+    let trashed = state.library.trashed_songs().map_err(internal)?;
+    let mut songs = Vec::new();
+    for song in trashed.iter().filter(|song| library::trashed_with(song).is_none()) {
+        let mut listed = listed_song(song).map_err(|e| api_error(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+        let with = trashed.iter().filter(|other| library::trashed_with(other) == Some(song.id.as_str())).count();
+        listed["trashed_at"] = Value::from(library::trashed_at(song));
+        listed["gone_at"] = Value::from(library::trashed_at(song) + TRASH_DAYS * 86_400);
+        listed["with"] = Value::from(with);
+        songs.push(listed);
+    }
+    Ok(Json(serde_json::json!({ "songs": songs, "days": TRASH_DAYS })))
+}
+
+/// Takes a song out of the bin with the songs that went there with it.
+async fn restore_library_song(State(state): State<AppState>, Path(id): Path<String>) -> Result<Json<Value>, (StatusCode, Json<ApiError>)> {
+    let internal = |e: anyhow::Error| api_error(StatusCode::INTERNAL_SERVER_ERROR, e.to_string());
+    let song = state.library.get_song(&id).map_err(internal)?.ok_or_else(|| api_error(StatusCode::NOT_FOUND, "Song not found".into()))?;
+    if !library::is_trashed(&song) {
+        return Err(api_error(StatusCode::CONFLICT, "the song is not in the bin".into()));
+    }
+    let with: Vec<String> = state
+        .library
+        .trashed_songs()
+        .map_err(internal)?
+        .into_iter()
+        .filter(|other| library::trashed_with(other) == Some(id.as_str()))
+        .map(|other| other.id)
+        .collect();
+    state.library.set_song_trashed(&id, false, None).map_err(internal)?;
+    for other in &with {
+        state.library.set_song_trashed(other, false, None).map_err(internal)?;
+    }
+    Ok(Json(serde_json::json!({ "restored": true, "with": with.len() })))
+}
+
+/// Deletes a song of the bin for good, with the songs that went there with it.
+async fn delete_trashed_song(State(state): State<AppState>, Path(id): Path<String>) -> Result<Json<Value>, (StatusCode, Json<ApiError>)> {
+    let song = state
+        .library
+        .get_song(&id)
+        .map_err(|e| api_error(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+        .ok_or_else(|| api_error(StatusCode::NOT_FOUND, "Song not found".into()))?;
+    if !library::is_trashed(&song) {
+        return Err(api_error(StatusCode::CONFLICT, "only a song in the bin is deleted for good".into()));
+    }
+    delete_for_good(&state, &id).map_err(|e| api_error(StatusCode::CONFLICT, format!("{e:#}")))?;
+    Ok(Json(serde_json::json!({ "deleted": true })))
+}
+
+/// Empties the bin; a song whose files the system's recycle bin does not take stays, and is named.
+async fn empty_library_trash(State(state): State<AppState>) -> Result<Json<Value>, (StatusCode, Json<ApiError>)> {
+    let ids: Vec<String> = state
+        .library
+        .trashed_songs()
+        .map_err(|e| api_error(StatusCode::INTERNAL_SERVER_ERROR, format!("{e:#}")))?
+        .into_iter()
+        .filter(|song| library::trashed_with(song).is_none())
+        .map(|song| song.id)
+        .collect();
+    let mut deleted = 0;
+    let mut stayed = Vec::new();
+    for id in &ids {
+        match delete_for_good(&state, id) {
+            Ok(()) => deleted += 1,
+            Err(error) => stayed.push(format!("{error:#}")),
+        }
+    }
+    if !stayed.is_empty() {
+        return Err(api_error(StatusCode::CONFLICT, stayed.join("\n")));
+    }
+    Ok(Json(serde_json::json!({ "deleted": deleted })))
+}
+
+/// Deletes the songs of the bin older than `TRASH_DAYS` for good.
+fn purge_old_trash(state: &AppState) {
+    // a song the recycle bin keeps refusing is reported once, not every six hours
+    static REPORTED: std::sync::Mutex<Vec<String>> = std::sync::Mutex::new(Vec::new());
+    let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |since| since.as_secs());
+    let songs = match state.library.trashed_songs() {
+        Ok(songs) => songs,
+        Err(error) => {
+            eprintln!("[ERROR] the bin could not be read to empty its old songs: {error:#}");
+            return;
+        }
+    };
+    for song in songs.iter().filter(|song| library::trashed_with(song).is_none() && library::trashed_at(song) + TRASH_DAYS * 86_400 <= now) {
+        match delete_for_good(state, &song.id) {
+            Ok(()) => eprintln!("{} left the bin after {TRASH_DAYS} days", song.id),
+            Err(error) => {
+                let mut reported = REPORTED.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+                if !reported.contains(&song.id) {
+                    reported.push(song.id.clone());
+                    eprintln!("[ERROR] {} could not leave the bin: {error:#}", song.id);
+                }
             }
         }
     }
-    Ok(Json(serde_json::json!({ "deleted": true, "files_left": left })))
+}
+
+/// Removes a song of the bin and the songs that went there with it from the
+/// library, their files sent to the system's recycle bin first.
+fn delete_for_good(state: &AppState, id: &str) -> anyhow::Result<()> {
+    delete_songs_for_good(&state.library, id, |song| song_files(state, song), |path| trash::delete(path).map_err(|error| error.to_string()))
+}
+
+/// A file the recycle bin does not take (a Linux desktop without one, a
+/// network drive) keeps the songs in the studio's bin and is named; nothing is
+/// deleted past it.
+fn delete_songs_for_good(
+    library: &library::Library,
+    id: &str,
+    files: impl Fn(&library::Song) -> Vec<std::path::PathBuf>,
+    recycle: impl Fn(&std::path::Path) -> Result<(), String>,
+) -> anyhow::Result<()> {
+    let mut songs: Vec<library::Song> = library.trashed_songs()?.into_iter().filter(|song| library::trashed_with(song) == Some(id)).collect();
+    if let Some(song) = library.get_song(id)? {
+        songs.push(song);
+    }
+    let mut refused = Vec::new();
+    for song in &songs {
+        for path in files(song).into_iter().filter(|path| path.exists()) {
+            if let Err(error) = recycle(&path) {
+                refused.push(format!("{}: {error}", plain_path(&path)));
+            }
+        }
+    }
+    if !refused.is_empty() {
+        anyhow::bail!("the system's recycle bin did not take these files, so the song stays in the studio's bin: {}", refused.join("; "));
+    }
+    for song in &songs {
+        library.delete_song(&song.id)?;
+    }
+    Ok(())
 }
 
 /// The files in the media folder that belong to one song: its audio, its
@@ -4749,6 +4941,9 @@ async fn update_engine_options(
     }
     if request.vae_halo.is_some_and(|value| value > 256) {
         return Err(api_error(StatusCode::BAD_REQUEST, "vae_halo must be at most 256".into()));
+    }
+    if request.chunk_overlap_seconds.is_some_and(|value| value > CHUNK_OVERLAP_MAX_SECONDS) {
+        return Err(api_error(StatusCode::BAD_REQUEST, format!("chunk_overlap_seconds must be at most {CHUNK_OVERLAP_MAX_SECONDS}")));
     }
     // A line the engine could not be started with is refused here, while the
     // form can still say so, rather than at the restart that would fail.
@@ -5995,6 +6190,8 @@ async fn assistant_status(State(state): State<AppState>) -> Json<Value> {
         "cli_agent": config.cli_agent,
         "cli_model": config.cli_model,
         "cli_path": config.cli_path,
+        "own_rules": config.own_rules,
+        "avoid_words": config.avoid_words,
     }))
 }
 
@@ -6055,6 +6252,8 @@ struct AssistantSettingsRequest {
     cli_agent: Option<Option<String>>,
     cli_model: Option<Option<String>>,
     cli_path: Option<Option<String>>,
+    own_rules: Option<assistant::OwnRules>,
+    avoid_words: Option<Option<String>>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -6164,6 +6363,8 @@ async fn update_assistant_settings(
             cli_agent: incoming.cli_agent.unwrap_or(current.cli_agent).map(|id| id.trim().to_string()).filter(|id| !id.is_empty()),
             cli_model: incoming.cli_model.unwrap_or(current.cli_model),
             cli_path: incoming.cli_path.unwrap_or(current.cli_path),
+            own_rules: incoming.own_rules.unwrap_or(current.own_rules),
+            avoid_words: incoming.avoid_words.unwrap_or(current.avoid_words).filter(|words| !words.trim().is_empty()),
         }
     };
     if let Some(id) = request.cli_agent.as_deref() {
@@ -6705,6 +6906,7 @@ async fn match_score_sections(
         (Some(id), None) => {
             let song = state.library.get_song(id).map_err(|error| api_error(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?
                 .ok_or_else(|| api_error(StatusCode::NOT_FOUND, "Song not found.".into()))?;
+            refuse_trashed(&song)?;
             state.library.media_path_for_song(&song).ok_or_else(|| api_error(StatusCode::NOT_FOUND, "The track's audio is not in the library.".into()))?
         }
         (None, None) => return Err(bad("Send the source recording as audio or a song_id.".into())),
@@ -6736,6 +6938,7 @@ async fn create_song_karaoke(
         .get_song(&id)
         .map_err(|error| api_error(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?
         .ok_or_else(|| api_error(StatusCode::NOT_FOUND, "no such song".into()))?;
+    refuse_trashed(&song)?;
     let audio = state
         .library
         .media_path_for_song(&song)
@@ -6816,6 +7019,7 @@ async fn recognise_lyrics(
                 .get_song(id)
                 .map_err(|error| api_error(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?
                 .ok_or_else(|| api_error(StatusCode::NOT_FOUND, "no such song".into()))?;
+            refuse_trashed(&song)?;
             let path = state
                 .library
                 .media_path_for_song(&song)
@@ -6866,6 +7070,54 @@ async fn delete_song_karaoke(
         .set_song_lrc(&id, "")
         .map_err(|error| api_error(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?;
     Ok(Json(serde_json::json!({ "lrc": Value::Null })))
+}
+
+#[derive(Debug, Deserialize)]
+struct KaraokeSetRequest {
+    /// The karaoke as LRC, edited line by line in the window.
+    #[serde(default)]
+    lrc: Option<String>,
+    /// A subtitle file's text (SRT, ASS or LRC) and its name, which says its format.
+    #[serde(default)]
+    content: Option<String>,
+    #[serde(default)]
+    file_name: Option<String>,
+}
+
+/// Sets a song's karaoke from the person's own subtitles or from its lines
+/// edited in the window, in place of the recognised timings.
+async fn set_song_karaoke(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    Json(request): Json<KaraokeSetRequest>,
+) -> Result<Json<Value>, (StatusCode, Json<ApiError>)> {
+    let cues = match (&request.content, &request.lrc) {
+        (Some(content), _) => {
+            let extension = request
+                .file_name
+                .as_deref()
+                .and_then(|name| std::path::Path::new(name).extension())
+                .and_then(|extension| extension.to_str())
+                .unwrap_or("srt");
+            subimport::parse(content, extension)
+        }
+        (None, Some(lrc)) => subimport::parse(lrc, "lrc"),
+        (None, None) => return Err(api_error(StatusCode::BAD_REQUEST, "send lrc, or content with file_name".into())),
+    };
+    if cues.is_empty() {
+        return Err(api_error(StatusCode::BAD_REQUEST, "karaoke.no-lines".into()));
+    }
+    // edited lines are kept as written, so a line left alone keeps the times of its words
+    let lrc = match (&request.content, &request.lrc) {
+        (None, Some(lrc)) => format!("{}\n", lrc.trim_end()),
+        _ => subimport::to_lrc(&cues),
+    };
+    state
+        .library
+        .set_song_lrc(&id, &lrc)
+        .map_err(|error| api_error(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?
+        .ok_or_else(|| api_error(StatusCode::NOT_FOUND, "no such song".into()))?;
+    Ok(Json(serde_json::json!({ "lrc": lrc, "lines": cues.len() })))
 }
 
 /// The cloud path: base64 the audio, ask for verbose output, read the times.
@@ -6962,6 +7214,7 @@ async fn assistant_write_stream(
         ));
     }
     let (system, required) = assistant::instructions(&request);
+    let system = assistant::with_own_rules(system, request.target, &config.own_rules, config.avoid_words.as_deref());
     let user = assistant::user_message(&request);
     let task = request.target;
     let target = assist_target_name(task);
@@ -7338,6 +7591,8 @@ async fn assistant_sections(
 /// asks it many times and releases it once at the end.
 async fn assistant_draft(state: &AppState, request: &assistant::AssistRequest) -> Result<Value, (StatusCode, Json<ApiError>)> {
     let (system, required) = assistant::instructions(request);
+    let config = state.assistant.read().await.clone();
+    let system = assistant::with_own_rules(system, request.target, &config.own_rules, config.avoid_words.as_deref());
     let user = assistant::user_message(request);
     let content = assistant_ask(state, &system, &user, Some(assistant::draft_schema(&required)), request.target).await?;
     let draft = assistant::parse_draft(&content, required).map_err(|error| {
@@ -7693,6 +7948,7 @@ fn midi_source(state: &AppState, id: &str) -> Result<(String, PathBuf), (StatusC
         .get_song(id)
         .map_err(|error| api_error(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?
         .ok_or_else(|| api_error(StatusCode::NOT_FOUND, format!("Song {id} not found")))?;
+    refuse_trashed(&song)?;
     let audio = state.library.media_path_for_song(&song).ok_or_else(|| api_error(StatusCode::BAD_REQUEST, format!("{} has no stored audio", song.title)))?;
     Ok((song.title, audio))
 }
@@ -8796,6 +9052,17 @@ async fn create_music_job(
     submit_music_job(state, request, 0).await
 }
 
+/// The song a cover is made of. A new request refuses a source in the bin; a cover resumed after a restart was
+/// started before its source went there and keeps it.
+fn cover_source(library: &library::Library, id: &str, resumed: bool) -> Result<library::Song, (StatusCode, String)> {
+    match library.get_song(id) {
+        Ok(Some(original)) if !resumed && library::is_trashed(&original) => Err((StatusCode::CONFLICT, trashed_song_message(&original))),
+        Ok(Some(original)) => Ok(original),
+        Ok(None) => Err((StatusCode::BAD_REQUEST, format!("cover_of names no library song: {id}"))),
+        Err(error) => Err((StatusCode::INTERNAL_SERVER_ERROR, error.to_string())),
+    }
+}
+
 /// Sends a request to the engine and keeps it; `attempt` counts the times it
 /// was started again after the studio closed on it.
 async fn submit_music_job(state: AppState, mut request: CreateMusicJobRequest, attempt: u32) -> (StatusCode, Json<MusicJob>) {
@@ -8850,10 +9117,9 @@ async fn submit_music_job(state: AppState, mut request: CreateMusicJobRequest, a
         lyric_schedule(&mut body);
     }
     let derived = match request.cover_of.clone() {
-        Some(id) => match state.library.get_song(&id) {
-            Ok(Some(original)) => Some(derivation(&original, "cover", serde_json::json!({ "cot": request.cot, "style": request.style }))),
-            Ok(None) => return (StatusCode::BAD_REQUEST, Json(failed_request_job(request, engine_id, format!("cover_of names no library song: {id}")))),
-            Err(error) => return (StatusCode::INTERNAL_SERVER_ERROR, Json(failed_request_job(request, engine_id, error.to_string()))),
+        Some(id) => match cover_source(&state.library, &id, attempt > 0) {
+            Ok(original) => Some(derivation(&original, "cover", serde_json::json!({ "cot": request.cot, "style": request.style }))),
+            Err((status, reason)) => return (status, Json(failed_request_job(request, engine_id, reason))),
         },
         None => None,
     };
@@ -8923,6 +9189,9 @@ async fn submit_replay_job(state: AppState, request: ReplayMusicJobRequest, atte
         (Some(song_id), None) => {
             let song = state.library.get_song(song_id).map_err(|error| api_error(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?
                 .ok_or_else(|| api_error(StatusCode::NOT_FOUND, "Song not found.".into()))?;
+            if attempt == 0 {
+                refuse_trashed(&song)?;
+            }
             source_title = Some(song.title.clone());
             song.replay_request.ok_or_else(|| api_error(StatusCode::BAD_REQUEST, "This track has no replay request: it was not generated by YuE2.".into()))?
         }
@@ -9964,6 +10233,7 @@ async fn create_transcription(
                 let song_id = field.text().await.map_err(|error| api_error(StatusCode::BAD_REQUEST, error.to_string()))?;
                 let song = state.library.get_song(song_id.trim()).map_err(|error| api_error(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?
                     .ok_or_else(|| api_error(StatusCode::NOT_FOUND, "Song not found.".into()))?;
+                refuse_trashed(&song)?;
                 let path = state.library.media_path_for_song(&song).ok_or_else(|| api_error(StatusCode::NOT_FOUND, "The track's audio is not in the library.".into()))?;
                 let bytes = tokio::fs::read(&path).await.map_err(|error| api_error(StatusCode::INTERNAL_SERVER_ERROR, format!("read {}: {error}", path.display())))?;
                 let name = path.file_name().map(|name| name.to_string_lossy().into_owned()).unwrap_or_else(|| "input.audio".into());
@@ -10936,6 +11206,16 @@ mod tests {
         assert!(!EngineOptions::default().to_engine(None).keep_loaded);
     }
 
+    /// An empty overlap field hears 30 seconds again before each later chunk's fade; 0 leaves the flag out, so
+    /// the engine stitches the chunks as it did before the overlap.
+    #[test]
+    fn the_overlap_of_the_sound_chunks_reaches_the_engine_as_frames() {
+        let arguments = EngineOptions::default().to_engine(None).arguments();
+        assert!(arguments.windows(2).any(|pair| pair == ["--nar-halo", "750"]), "{arguments:?}");
+        let off = EngineOptions { chunk_overlap_seconds: Some(0), ..EngineOptions::default() };
+        assert!(!off.to_engine(None).arguments().iter().any(|argument| argument == "--nar-halo"));
+    }
+
     /// Extra launch arguments are kept as typed and reach the engine last,
     /// and the flags the studio passes itself are refused at the form rather
     /// than at a restart that would never find the engine again. A settings
@@ -11358,10 +11638,54 @@ mod tests {
     }
 
     #[test]
+    fn a_song_whose_files_the_recycle_bin_refuses_stays_in_the_studios_bin() {
+        let root = std::env::temp_dir().join(format!("yue2-bin-refused-{}", uuid::Uuid::now_v7().simple()));
+        let library = library::Library::open_at(root.join("library.sqlite"), root.join("media")).unwrap();
+        let new_song = |title: &str| library.create_song(library::SongInput { title: title.into(), audio_path: None, caption: String::new(), lyrics: String::new(), metadata: Value::Null, generation_settings: Value::Null, engine_id: "manual".into(), profile_id: None, replay_request: None, audio_codes: None, source: "manual".into() }).unwrap().id;
+        let (song, stem) = (new_song("Harbour"), new_song("Harbour · vocals"));
+        library.set_song_trashed(&song, true, None).unwrap();
+        library.set_song_trashed(&stem, true, Some(&song)).unwrap();
+        std::fs::create_dir_all(&root).unwrap();
+        let file = root.join("harbour.flac");
+        std::fs::write(&file, b"fLaC").unwrap();
+        let files = |_: &library::Song| vec![file.clone()];
+
+        let refused = delete_songs_for_good(&library, &song, files, |_| Err("no recycle bin on this desktop".into())).unwrap_err();
+        assert!(format!("{refused:#}").contains("no recycle bin on this desktop"), "{refused:#}");
+        assert!(file.exists(), "a file the recycle bin refused is not deleted past it");
+        assert_eq!(library.trashed_songs().unwrap().len(), 2, "the song and its stem stay in the studio's bin");
+
+        let recycled = std::cell::RefCell::new(Vec::new());
+        delete_songs_for_good(&library, &song, files, |path| { recycled.borrow_mut().push(path.to_path_buf()); Ok(()) }).unwrap();
+        assert!(library.get_song(&song).unwrap().is_none() && library.get_song(&stem).unwrap().is_none());
+        assert!(!recycled.borrow().is_empty());
+        drop(library);
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// A cover of a song in the bin is refused by the song's name until it is restored; a cover resumed after a
+    /// restart keeps its source.
+    #[test]
+    fn a_cover_of_a_song_in_the_bin_asks_to_restore_it_first() {
+        let root = std::env::temp_dir().join(format!("yue2-bin-cover-{}", uuid::Uuid::now_v7().simple()));
+        let library = library::Library::open_at(root.join("library.sqlite"), root.join("media")).unwrap();
+        let song = library.create_song(library::SongInput { title: "Harbour".into(), audio_path: None, caption: String::new(), lyrics: String::new(), metadata: Value::Null, generation_settings: Value::Null, engine_id: "manual".into(), profile_id: None, replay_request: None, audio_codes: None, source: "manual".into() }).unwrap().id;
+        assert!(cover_source(&library, &song, false).is_ok());
+        library.set_song_trashed(&song, true, None).unwrap();
+        let (status, reason) = cover_source(&library, &song, false).unwrap_err();
+        assert_eq!(status, StatusCode::CONFLICT);
+        assert!(reason.contains("\"Harbour\" is in the bin") && reason.contains("Library - Bin"), "{reason}");
+        assert!(cover_source(&library, &song, true).is_ok());
+        assert_eq!(cover_source(&library, "gone", false).unwrap_err().0, StatusCode::BAD_REQUEST);
+        drop(library);
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
     fn persisted_settings_round_trip_a_complete_custom_component_selection() {
         let settings = PersistedStudioSettings {
             engine_options: EngineOptions { keep_loaded: true, max_batch: Some(2), ..EngineOptions::default() },
-            assistant: AssistantConfig { provider: AssistantProvider::Local, local_base_url: Some("http://127.0.0.1:8080/v1".into()), local_model: Some("gemma".into()), openrouter_model: None, managed_model: None, managed_path: None, reasoning_effort: None, cli_agent: None, cli_model: None, cli_path: None },
+            assistant: AssistantConfig { provider: AssistantProvider::Local, local_base_url: Some("http://127.0.0.1:8080/v1".into()), local_model: Some("gemma".into()), openrouter_model: None, managed_model: None, managed_path: None, reasoning_effort: None, cli_agent: None, cli_model: None, cli_path: None, ..Default::default() },
             configuration: initial_configuration(),
             // Karaoke is off by default and has to survive a restart the same
             // way the assistant does.

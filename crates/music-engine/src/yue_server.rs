@@ -285,6 +285,9 @@ pub struct YueServerOptions {
     /// `--nar-chunk`: the longest acoustic chunk in frames; none is what the
     /// context holds.
     pub nar_chunk: Option<u32>,
+    /// `--nar-halo`: frames a later acoustic chunk solves again before its fade, so the sound does not drop after
+    /// the seam; none is the fade alone.
+    pub nar_halo: Option<u32>,
     /// `--no-fa`: disable flash attention.
     pub disable_flash_attention: bool,
     /// `--clamp-fp16`: clamp hidden states to the FP16 range.
@@ -311,6 +314,7 @@ impl YueServerOptions {
             ("--vae-core", self.vae_core),
             ("--vae-halo", self.vae_halo),
             ("--nar-chunk", self.nar_chunk),
+            ("--nar-halo", self.nar_halo),
         ] {
             if let Some(value) = value {
                 arguments.push(flag.into());
@@ -910,6 +914,7 @@ mod tests {
             vae_core: Some(256),
             vae_halo: Some(16),
             nar_chunk: Some(2560),
+            nar_halo: Some(750),
             disable_flash_attention: true,
             clamp_fp16: true,
             cuda_folder: None,
@@ -919,8 +924,8 @@ mod tests {
         assert_eq!(
             arguments,
             vec![
-                "--keep-loaded", "--max-batch", "2", "--max-seq", "8192", "--vae-core", "256", "--vae-halo", "16", "--nar-chunk", "2560", "--no-fa",
-                "--clamp-fp16"
+                "--keep-loaded", "--max-batch", "2", "--max-seq", "8192", "--vae-core", "256", "--vae-halo", "16", "--nar-chunk", "2560",
+                "--nar-halo", "750", "--no-fa", "--clamp-fp16"
             ]
         );
         assert!(YueServerOptions::default().arguments().is_empty());

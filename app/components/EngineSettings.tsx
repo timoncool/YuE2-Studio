@@ -30,6 +30,8 @@ interface EngineOptions {
   max_seq: number | null;
   vae_core: number | null;
   vae_halo: number | null;
+  /** Seconds a later chunk of the sound hears the song again before its fade; null: 30. */
+  chunk_overlap_seconds: number | null;
   flash_attention: FlashAttention;
   clamp_fp16: boolean;
   /** The NVIDIA card by nvidia-smi index; null: the first. Taken at the studio's start. */
@@ -47,6 +49,7 @@ const DEFAULTS: EngineOptions = {
   max_seq: null,
   vae_core: null,
   vae_halo: null,
+  chunk_overlap_seconds: null,
   flash_attention: 'auto',
   clamp_fp16: false,
   gpu: null,
@@ -54,7 +57,7 @@ const DEFAULTS: EngineOptions = {
   engine_bin: null,
 };
 
-type NumberKey = 'max_batch' | 'max_seq' | 'vae_core' | 'vae_halo';
+type NumberKey = 'max_batch' | 'max_seq' | 'vae_core' | 'vae_halo' | 'chunk_overlap_seconds';
 
 const CONTROL =
   'w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 outline-hidden focus:border-pink-500 dark:border-white/10 dark:bg-black/20 dark:text-white';
@@ -329,6 +332,7 @@ export const EngineSettings: React.FC = () => {
       <div className="grid gap-3 sm:grid-cols-2">
         {numberField('max_batch', t('maxBatchLabel'), '1', t('maxBatchHint'), 1, 8, 1)}
         {numberField('max_seq', t('maxSeqLabel'), tt('maxSeqAuto'), t('maxSeqHintYue'), 8192, 24576, 1024)}
+        {numberField('chunk_overlap_seconds', t('chunkOverlapLabel'), '30', t('chunkOverlapHint'), 0, 45, 1)}
       </div>
       {inEffect && (
         <div className="-mt-1 space-y-0.5 text-xs leading-5 text-zinc-500 dark:text-zinc-400">

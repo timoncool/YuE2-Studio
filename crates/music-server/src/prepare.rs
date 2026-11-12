@@ -301,6 +301,7 @@ pub async fn set_train_after(State(state): State<AppState>, Json(request): Json<
 pub async fn describe_song_style(State(state): State<AppState>, Path(song_id): Path<String>) -> Result<Json<serde_json::Value>, (StatusCode, Json<ApiError>)> {
     let song = state.library.get_song(&song_id).map_err(|error| api_error(StatusCode::INTERNAL_SERVER_ERROR, format!("{error:#}")))?
         .ok_or_else(|| api_error(StatusCode::NOT_FOUND, format!("no library song {song_id}")))?;
+    crate::refuse_trashed(&song)?;
     let audio = state.library.media_path_for_song(&song).ok_or_else(|| api_error(StatusCode::BAD_REQUEST, format!("{} has no audio", song.title)))?;
     describe_style_of(&state, audio, &song.lyrics).await
 }

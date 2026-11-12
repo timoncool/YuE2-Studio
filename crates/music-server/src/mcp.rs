@@ -399,6 +399,9 @@ const JOURNAL: &[(&str, &str, &str)] = &[
     ("song_job_cancel", "cancelled", "generation"),
     ("library_song_update", "updated", "song"),
     ("library_song_delete", "deleted", "song"),
+    ("library_trash_restore", "restored", "song"),
+    ("library_trash_delete", "deleted", "song"),
+    ("library_trash_empty", "deleted", "song"),
     ("library_import_audio", "imported", "song"),
     ("library_version_select", "updated", "song"),
     ("library_version_delete", "deleted", "version"),
@@ -408,6 +411,7 @@ const JOURNAL: &[(&str, &str, &str)] = &[
     ("stems_split", "started", "stems"),
     ("karaoke_make", "started", "karaoke"),
     ("karaoke_delete", "deleted", "karaoke"),
+    ("karaoke_set", "updated", "karaoke"),
     ("midi_transcribe", "started", "midi"),
     ("midi_cancel", "cancelled", "midi"),
     ("midi_delete", "deleted", "midi"),
@@ -1610,9 +1614,33 @@ fn tools() -> &'static [Tool] {
             },
             Tool {
                 name: "library_song_delete",
-                description: "Remove a song from the library.",
+                description: "Put a song in the library's bin, with the songs made from it (its stems). The bin keeps them 30 days; library_trash_restore brings them back.",
                 schema: || id_only("song_id", "library song id"),
                 call: |args| send(Method::DELETE, format!("/v1/library/songs/{}", segment(&text(args, "song_id")?)), json!({})),
+            },
+            Tool {
+                name: "library_trash_list",
+                description: "The songs in the library's bin: when each went there, when it goes for good, how many songs went with it.",
+                schema: nothing,
+                call: |_| get("/v1/library/trash".into()),
+            },
+            Tool {
+                name: "library_trash_restore",
+                description: "Bring a song back from the library's bin, with the songs that went there with it.",
+                schema: || id_only("song_id", "song id in the bin"),
+                call: |args| post(format!("/v1/library/trash/{}/restore", segment(&text(args, "song_id")?)), json!({})),
+            },
+            Tool {
+                name: "library_trash_delete",
+                description: "Delete a song of the bin for good, with the songs that went there with it; its files go to the system's recycle bin.",
+                schema: || id_only("song_id", "song id in the bin"),
+                call: |args| send(Method::DELETE, format!("/v1/library/trash/{}", segment(&text(args, "song_id")?)), json!({})),
+            },
+            Tool {
+                name: "library_trash_empty",
+                description: "Delete every song of the library's bin for good; their files go to the system's recycle bin.",
+                schema: nothing,
+                call: |_| send(Method::DELETE, "/v1/library/trash".into(), json!({})),
             },
             Tool {
                 name: "library_import_audio",
@@ -1853,8 +1881,8 @@ fn tools() -> &'static [Tool] {
             },
             Tool {
                 name: "assistant_set",
-                description: "Choose the writing assistant: provider none, local (an OpenAI-compatible server at local_base_url with local_model), managed (a model the studio runs: managed_model, or a GGUF at managed_path), openrouter (openrouter_model), agent (the connected MCP agent) or cli (an agent CLI on this machine: cli_agent, cli_model, cli_path); reasoning_effort off, minimal, low, medium or high.",
-                schema: || object(json!({ "provider": { "type": "string", "enum": ["none", "local", "managed", "openrouter", "agent", "cli"] }, "local_base_url": { "type": "string" }, "local_model": { "type": "string" }, "managed_model": { "type": "string" }, "managed_path": { "type": "string" }, "openrouter_model": { "type": "string" }, "cli_agent": { "type": "string" }, "cli_model": { "type": "string" }, "cli_path": { "type": "string" }, "reasoning_effort": { "type": "string" } }), &[]),
+                description: "Choose the writing assistant: provider none, local (an OpenAI-compatible server at local_base_url with local_model), managed (a model the studio runs: managed_model, or a GGUF at managed_path), openrouter (openrouter_model), agent (the connected MCP agent) or cli (an agent CLI on this machine: cli_agent, cli_model, cli_path); reasoning_effort off, minimal, low, medium or high. own_rules {song, style, lyrics}: the person's own rules for each task, after the studio's guide; avoid_words: words the assistant must not write, one a line or comma-separated.",
+                schema: || object(json!({ "provider": { "type": "string", "enum": ["none", "local", "managed", "openrouter", "agent", "cli"] }, "local_base_url": { "type": "string" }, "local_model": { "type": "string" }, "managed_model": { "type": "string" }, "managed_path": { "type": "string" }, "openrouter_model": { "type": "string" }, "cli_agent": { "type": "string" }, "cli_model": { "type": "string" }, "cli_path": { "type": "string" }, "reasoning_effort": { "type": "string" }, "own_rules": { "type": "object", "properties": { "song": { "type": "string" }, "style": { "type": "string" }, "lyrics": { "type": "string" } } }, "avoid_words": { "type": "string" } }), &[]),
                 call: |args| send(Method::PUT, "/v1/assistant/status".into(), args.clone()),
             },
             Tool {
@@ -1940,6 +1968,20 @@ fn tools() -> &'static [Tool] {
                 description: "Remove a library song's karaoke timings.",
                 schema: || id_only("song_id", "library song id"),
                 call: |args| send(Method::DELETE, format!("/v1/library/songs/{}/karaoke", segment(&text(args, "song_id")?)), json!({})),
+            },
+            Tool {
+                name: "karaoke_set",
+                description: "Set a library song's karaoke from a subtitle file on this computer (path: .srt, .ass, .ssa or .lrc) or from LRC text (lrc: one [mm:ss.cc] line each), in place of the recognised timings.",
+                schema: || object(json!({ "song_id": { "type": "string" }, "path": { "type": "string" }, "lrc": { "type": "string" } }), &["song_id"]),
+                call: |args| {
+                    let path = format!("/v1/library/songs/{}/karaoke", segment(&text(args, "song_id")?));
+                    if let Some(lrc) = args.get("lrc").and_then(Value::as_str) {
+                        return send(Method::PUT, path, json!({ "lrc": lrc }));
+                    }
+                    let file = PathBuf::from(text(args, "path")?);
+                    let content = std::fs::read_to_string(&file).map_err(|error| format!("read {}: {error}", file.display()))?;
+                    send(Method::PUT, path, json!({ "content": content, "file_name": file_name(&file) }))
+                },
             },
             Tool {
                 name: "separator_status",
