@@ -3,6 +3,15 @@
 What changed, newest first. Dates are release dates; the studio is versioned by its
 Windows build.
 
+## 2026-11-06 — 3.8.5
+
+### Fixed
+
+- **A song no longer runs out of memory on a 12 GB Blackwell card** ([#201](https://github.com/timoncool/YuE2-Studio/issues/201)): 3.8.4 turned flash attention off automatically on Blackwell cards (#194), which raised memory use enough to crash a 12 GB RTX 5070 that had worked in 3.8.3. The key-value-cache cap that already protected 8 GB cards now also applies whenever flash attention is forced off, on any card up to about 16 GB, so the song fits. A cache size set in Settings - Engine still wins.
+- **LoRA training runs on Turing cards again** ([#199](https://github.com/timoncool/YuE2-Studio/issues/199)): on RTX 20-series cards (compute 7.5) the trainer stopped with "backend does not support" when a ConvRot8 step needed an F32 result; it now falls back to the F32 path on those cards instead of failing.
+- **A long song no longer has an audible seam where its chunks meet** ([#183](https://github.com/timoncool/YuE2-Studio/issues/183)): the acoustic chunks now overlap and crossfade, so two chunks join without a click or a jump; this also smooths the problem behind [#145](https://github.com/timoncool/YuE2-Studio/issues/145).
+- **The Hugging Face mirror is used automatically when Hugging Face cannot be reached**: on a network that cannot open huggingface.co — the most common setup failure in the telemetry, networks behind the Great Firewall among them — the studio now falls back to hf-mirror.com on its own, so the models and tools download instead of the setup stalling.
+
 ## 2026-11-05 — 3.8.4
 
 ### Fixed
