@@ -1397,6 +1397,7 @@ export const zh = {
     setupTitle: '设置本地音乐生成',
     setupIntro: '下载一个完整且经过校验的五组件 minimaxmusic.cpp 配置。高级构建需要各一个兼容的 LM、深度解码器、条件编码器、DiT 和声码器；引擎会拒绝不完整的组合。',
     recommendedForMachine: '针对本机推荐：',
+    recommendedOnVulkan: '引擎通过 Vulkan 在其上运算',
     recommendedFallback: '已预选与检测到的 GPU 匹配的配置',
     setupResumable: '下载可续传，每个组件在启用生成前都会校验哈希。',
     ramShort: '这台电脑内存 {have} GB，此套模型在这里约需 {need} GB：加载可能卡住。请选择更轻的套装。',

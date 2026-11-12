@@ -1402,6 +1402,7 @@ export const en = {
     setupTitle: 'Set up local music generation',
     setupIntro: 'Download one complete, verified five-component minimaxmusic.cpp profile. The advanced builder requires exactly one compatible LM, depth decoder, condition encoder, DiT, and vocoder; the native backend rejects partial sets.',
     recommendedForMachine: 'Recommended for this machine:',
+    recommendedOnVulkan: 'the engine computes on it through Vulkan',
     recommendedFallback: 'the profile matching the detected GPU is preselected',
     setupResumable: 'Downloads are resumable and every component is checksum-verified before generation is enabled.',
     ramShort: 'This computer has {have} GB of memory and this set needs about {need} GB here: loading may stall. Pick a lighter set.',

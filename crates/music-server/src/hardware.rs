@@ -39,6 +39,9 @@ pub struct Hardware {
     pub driver_major: Option<u32>,
     /// The model set id that fits this card, none when no set does.
     pub recommended: Option<&'static str>,
+    /// The engine computes on the card through Vulkan: a card with no CUDA build of the engine for it (every card on
+    /// Linux, an AMD or Intel one on Windows), not Apple's Metal.
+    pub vulkan: bool,
 }
 
 /// The engine ships one CUDA backend per toolkit. CUDA 13 targets Turing and
@@ -142,7 +145,9 @@ fn probe() -> &'static Hardware {
         let card_cuda = device.and_then(|(compute, driver)| cuda_build(compute, driver));
         let compute_capability = device.map(|(compute, _)| compute);
         let driver_major = device.map(|(_, driver)| driver);
+        let vulkan = gpu_name.is_some() && cuda.is_none() && !cfg!(target_os = "macos");
         Hardware {
+            vulkan,
             gpu_name,
             total_vram_gb,
             total_ram_gb,

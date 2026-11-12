@@ -1397,6 +1397,7 @@ export const ko = {
     setupTitle: '로컬 음악 생성 설정',
     setupIntro: '검증된 5개 구성 요소의 minimaxmusic.cpp 프로필 하나를 내려받습니다. 고급 빌더는 호환되는 LM, 깊이 디코더, 조건 인코더, DiT, 보코더를 각각 하나씩 요구하며 엔진은 불완전한 세트를 거부합니다.',
     recommendedForMachine: '이 컴퓨터 권장:',
+    recommendedOnVulkan: '엔진은 Vulkan으로 이 카드에서 계산합니다',
     recommendedFallback: '감지된 GPU 에 맞는 프로필이 미리 선택되었습니다',
     setupResumable: '다운로드는 이어받을 수 있으며 각 구성 요소는 생성 활성화 전에 체크섬으로 검증됩니다.',
     ramShort: '이 컴퓨터의 메모리는 {have} GB이고 이 세트에는 여기서 약 {need} GB가 필요합니다. 불러오기가 멈출 수 있으니 더 가벼운 세트를 고르세요.',
