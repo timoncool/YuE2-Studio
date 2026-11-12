@@ -13,6 +13,7 @@ Windows build.
 
 ### Changed
 
+- **The MIDI editor is updated to the latest signal**, as in ACE-Step Studio: rewind after recording, the direction of curves and lines, the shortest note length and the rest of upstream's work since our last update, with the studio's own mode, chord and section lanes kept.
 - **The library search finds a song by any of its words**, as in ACE-Step Studio: the words of a search may come in any order, and it reads the lyrics, your note on the song and the settings it was made with - the seed, the model and the LoRA - besides the title, the style and the tags.
 - **The form's and the song panel's blocks fold and stay folded**, as in ACE-Step Studio ([ACE-Step Studio #63](https://github.com/timoncool/ACE-Step-Studio/issues/63)): in the form the style, the lyrics, the score, LoRA and quality fold by their title, and in the song panel Style, Note, Parameters and Lyrics do too; the choice is kept across restarts, and Parameters opens folded until you open it.
 - **Tools opens on the song that stems or MIDI are working on**, as in ACE-Step Studio, so the progress is in view at once, and the chosen song always stays in the Tools list, first when it would be past the twelve songs the list shows.
