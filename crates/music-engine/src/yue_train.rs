@@ -579,6 +579,82 @@ pub fn parse_training_step(line: &str) -> Option<TrainingStep> {
     })
 }
 
+/// The parts of a training step, by the names the trainer prints when each starts. A step runs the ones its
+/// recipe needs, and `--grad-accum` repeats them once a song.
+pub const STEP_STAGES: &[&str] = &[
+    "AR adapted forward",
+    "AR frozen teacher forward",
+    "AR CE and KL backward",
+    "AR transformer backward",
+    "Refresh detached AR conditioning",
+    "NAR forward",
+    "NAR flow backward",
+    "Joint clipping and optimizer update",
+];
+
+/// Reads the start of a part of a step: its name, one of [`STEP_STAGES`], and the step it belongs to.
+pub fn parse_step_stage(line: &str) -> Option<(u32, &'static str)> {
+    let value: serde_json::Value = serde_json::from_str(line.trim()).ok()?;
+    let name = value.get("stage")?.as_str()?;
+    let stage = STEP_STAGES.iter().find(|known| **known == name)?;
+    Some((value.get("step")?.as_u64()? as u32, stage))
+}
+
+/// The part of a step working now: `index` of `of` parts, `of` known once a whole step has been seen.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct StepStageNow {
+    pub step: u32,
+    pub stage: &'static str,
+    pub index: u32,
+    pub of: Option<u32>,
+    /// Milliseconds since the step began.
+    pub step_elapsed_ms: u64,
+}
+
+/// Follows the parts of the steps of one run as the trainer starts them.
+#[derive(Debug, Default)]
+pub struct StepStages {
+    step: Option<u32>,
+    seen: Vec<&'static str>,
+    of: Option<u32>,
+    step_started_ms: u64,
+    now: Option<(&'static str, u32)>,
+}
+
+impl StepStages {
+    /// A part of `step` started at `now_ms`. A part seen again in the same step (the next song of `--grad-accum`)
+    /// keeps its place.
+    pub fn started(&mut self, step: u32, stage: &'static str, now_ms: u64) {
+        if self.step != Some(step) {
+            if self.step.is_some() && self.of.is_none() && !self.seen.is_empty() {
+                self.of = Some(self.seen.len() as u32);
+            }
+            self.step = Some(step);
+            self.seen.clear();
+            self.step_started_ms = now_ms;
+        }
+        let index = match self.seen.iter().position(|seen| *seen == stage) {
+            Some(at) => at,
+            None => {
+                self.seen.push(stage);
+                self.seen.len() - 1
+            }
+        };
+        self.now = Some((stage, index as u32 + 1));
+    }
+
+    pub fn now(&self, now_ms: u64) -> Option<StepStageNow> {
+        let (stage, index) = self.now?;
+        Some(StepStageNow {
+            step: self.step?,
+            stage,
+            index,
+            of: self.of.map(|of| of.max(index)),
+            step_elapsed_ms: now_ms.saturating_sub(self.step_started_ms),
+        })
+    }
+}
+
 /// A finished checkpoint: its step and the adapter files generation uses.
 #[derive(Debug, Clone, Serialize)]
 pub struct TrainingCheckpoint {
@@ -737,6 +813,23 @@ mod tests {
         assert_eq!(step.step_ms, Some(800.0));
         assert!(parse_training_step(r#"{"stage":"AR transformer backward","step":3}"#).is_none());
         assert!(parse_training_step("[YuE2] Unloaded").is_none());
+    }
+
+    #[test]
+    fn the_parts_of_a_step_are_counted_from_the_first_whole_step() {
+        assert_eq!(parse_step_stage(r#"{"stage":"NAR forward","step":3}"#), Some((3, "NAR forward")));
+        assert_eq!(parse_step_stage(r#"{"stage":"checkpoint","step":3}"#), None);
+        assert_eq!(parse_step_stage(r#"{"stage":"joint","step":3,"ar_ce":1.0}"#), None);
+        let mut stages = StepStages::default();
+        for (at, stage) in ["AR adapted forward", "AR CE and KL backward", "NAR forward", "AR adapted forward"].into_iter().enumerate() {
+            stages.started(1, stage, at as u64 * 100);
+        }
+        let first = stages.now(500).unwrap();
+        assert_eq!((first.step, first.stage, first.index, first.of, first.step_elapsed_ms), (1, "AR adapted forward", 1, None, 500));
+        stages.started(2, "AR adapted forward", 1000);
+        stages.started(2, "AR CE and KL backward", 1200);
+        let second = stages.now(1300).unwrap();
+        assert_eq!((second.step, second.index, second.of, second.step_elapsed_ms), (2, 2, Some(3), 300));
     }
 
     #[test]

@@ -85,6 +85,14 @@ export interface TrainingRun {
   continuations?: { from: number; to: number; at: string }[];
   /** What the trainer computes on while it runs: "CUDA0", "Vulkan0", "CPU". */
   device?: string | null;
+  /** The part of a step the trainer is working on: `index` of `of`, `of` known after the first whole step. */
+  step_stage?: { step: number; stage: string; index: number; of: number | null; step_elapsed_ms: number } | null;
+}
+
+/** Where the bar of a run stands, in steps: whole steps done, and within the step going the parts started of all. */
+export function stepsDone(lastStep: number | undefined, part: TrainingRun['step_stage']): number {
+  if (part && part.of) return Math.max(lastStep ?? 0, part.step - 1 + part.index / part.of);
+  return lastStep ?? 0;
 }
 
 export interface TrainingState {

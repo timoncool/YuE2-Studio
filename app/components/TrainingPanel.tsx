@@ -42,6 +42,7 @@ import {
   revealDataset,
   setTrainAfter,
   startRun,
+  stepsDone,
   takeAsIs,
   updateDataset,
   updateItem,
@@ -930,7 +931,9 @@ const RunCard: React.FC<{ run: TrainingRun; onChanged: () => void; onError: (mes
   const recent = run.steps.slice(-10).map(step => step.step_ms).filter((ms): ms is number => typeof ms === 'number');
   const perStep = recent.length ? recent.reduce((a, b) => a + b, 0) / recent.length / 1000 : 0;
   const left = last && perStep && target <= 0 ? (cap - last.step) * perStep : 0;
-  const percent = last ? Math.min(100, 100 * Math.max(last.step / cap, target > 0 && kl !== null ? kl / target : 0)) : 0;
+  const part = running ? run.step_stage ?? null : null;
+  const done = stepsDone(last?.step, part);
+  const percent = last || part ? Math.min(100, 100 * Math.max(done / cap, target > 0 && kl !== null ? kl / target : 0)) : 0;
   const stageIndex = run.stage ? run.stages.indexOf(run.stage) : run.status === 'done' ? run.stages.length : -1;
   // A card whose own memory is full borrows system memory through the
   // driver, and a run that took an hour takes a day; the log does not say so.
@@ -970,16 +973,28 @@ const RunCard: React.FC<{ run: TrainingRun; onChanged: () => void; onError: (mes
         ))}
       </div>
 
-      {last && (
+      {(last || part) && (
         <>
-          <div className="mt-3 flex items-baseline justify-between text-[11px] tabular-nums text-zinc-600 dark:text-zinc-300">
-            <span>{t('trainingStep')} {last.step} · {t('trainingLoss')} {last.loss.toFixed(3)}{kl !== null ? ` · KL ${kl.toFixed(2)}${target > 0 ? ` / ${target}` : ''}` : ''}</span>
-            {running && left > 0 && <span>{clock(left)} {t('trainingLeft')}</span>}
-          </div>
+          {last && (
+            <div className="mt-3 flex items-baseline justify-between text-[11px] tabular-nums text-zinc-600 dark:text-zinc-300">
+              <span>{t('trainingStep')} {last.step} · {t('trainingLoss')} {last.loss.toFixed(3)}{kl !== null ? ` · KL ${kl.toFixed(2)}${target > 0 ? ` / ${target}` : ''}` : ''}</span>
+              {running && left > 0 && <span>{clock(left)} {t('trainingLeft')}</span>}
+            </div>
+          )}
           <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-zinc-200 dark:bg-white/10">
             <div className="h-full bg-linear-to-r from-orange-500 to-pink-600 transition-[width]" style={{ width: `${percent}%` }} />
           </div>
-          <LossLine steps={run.steps} />
+          {part && (
+            <p className="mt-1 text-[11px] tabular-nums text-zinc-500">
+              {(part.of ? t('trainingStepPartOf') : t('trainingStepPart'))
+                .replace('{step}', String(part.step))
+                .replace('{steps}', String(cap))
+                .replace('{index}', String(part.index))
+                .replace('{of}', String(part.of ?? ''))
+                .replace('{part}', tt(`trainingPart_${part.stage.replace(/ /g, '_')}`))}
+            </p>
+          )}
+          {last && <LossLine steps={run.steps} />}
         </>
       )}
       {running && run.device && !onCpu && <p className="mt-1.5 text-[11px] text-zinc-500">{t('trainingOnDevice').replace('{device}', run.device)}</p>}

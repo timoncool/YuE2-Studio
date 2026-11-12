@@ -308,6 +308,8 @@ pub struct Training {
     edits: std::sync::Mutex<()>,
     /// Told how each run ended: done, or the failure's reason and whether it was stopped.
     ended: std::sync::OnceLock<RunEnded>,
+    /// The parts of the steps of the training stage going now.
+    step_stages: std::sync::Mutex<yue_train::StepStages>,
 }
 
 /// How a training run ended, for whoever counts finished work: `Ok` done, `Err` the reason, and whether it was stopped.
@@ -593,6 +595,7 @@ impl Training {
             active: RwLock::new(None),
             edits: std::sync::Mutex::new(()),
             ended: std::sync::OnceLock::new(),
+            step_stages: std::sync::Mutex::new(yue_train::StepStages::default()),
         }
     }
 
@@ -1116,6 +1119,11 @@ impl Training {
         self.active.read().await.as_ref().map(|active| active.run_id.clone())
     }
 
+    /// The part of a step the training stage is working on now.
+    pub fn step_stage(&self) -> Option<yue_train::StepStageNow> {
+        self.step_stages.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).now(unix_millis())
+    }
+
     pub fn checkpoints(&self, run_id: &str) -> Vec<yue_train::TrainingCheckpoint> {
         self.run_dir(run_id).map(|dir| yue_train::checkpoints(&dir)).unwrap_or_default()
     }
@@ -1409,6 +1417,7 @@ impl Training {
                 });
             }
             drop(lines_out);
+            *self.step_stages.lock().unwrap_or_else(|poisoned| poisoned.into_inner()) = yue_train::StepStages::default();
             let pid = child.id();
             let mut last_error = String::new();
             let status = loop {
@@ -1425,6 +1434,8 @@ impl Training {
                                 if let Err(error) = recorded {
                                     log.write_all(format!("[studio] the step was not recorded: {error:#}\n").as_bytes()).await?;
                                 }
+                            } else if let Some((step, stage)) = yue_train::parse_step_stage(&line) {
+                                self.step_stages.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).started(step, stage, unix_millis());
                             } else if line.contains("FATAL") || line.to_ascii_lowercase().contains("error") {
                                 last_error = line;
                             }
