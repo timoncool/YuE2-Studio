@@ -3,6 +3,7 @@ pub mod studio_log;
 mod adapters;
 mod community;
 mod diagnostics;
+mod problem;
 mod processing;
 mod vst;
 mod training;
@@ -1550,6 +1551,8 @@ pub async fn serve() -> anyhow::Result<()> {
         .route("/v1/engine/logs", get(engine_logs))
         .route("/v1/diagnostics", get(diagnostics::get))
         .route("/v1/diagnostics/report", post(diagnostics::make_report))
+        .route("/v1/problem/preview", post(problem::preview))
+        .route("/v1/problem/report", post(problem::report))
         .route("/v1/diagnostics/report/reveal", post(diagnostics::reveal_report))
         .route("/v1/diagnostics/logs/reveal", post(diagnostics::reveal_logs))
         .route("/v1/engine/progress", get(engine_progress))

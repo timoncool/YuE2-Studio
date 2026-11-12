@@ -5167,7 +5167,7 @@ checksum = "7da8b5736845d9f2fcb837ea5d9e2628564b3b043a70948a3f0b778838c5fb4f"
 [[package]]
 name = "studio-hub-client"
 version = "0.1.0"
-source = "git+https://github.com/timoncool/studio-hub-client?rev=770d61fa05aa133a09b191b488497f5e1c40309c#770d61fa05aa133a09b191b488497f5e1c40309c"
+source = "git+https://github.com/timoncool/studio-hub-client?rev=073d1b553b3cd50a47d863fd560e1bd1a9ce3afa#073d1b553b3cd50a47d863fd560e1bd1a9ce3afa"
 dependencies = [
  "axum",
  "chrono",
