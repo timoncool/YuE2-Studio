@@ -1090,7 +1090,7 @@ function AppContent() {
     if (!librarySongs.some(entry => entry.id === song_id)) {
       const response = await fetch(`/v1/library/songs/${encodeURIComponent(String(song_id))}`);
       const binned = response.ok ? await response.json() as { title?: string; metadata?: { deleted_at?: unknown } } : null;
-      if (binned?.metadata?.deleted_at) throw new Error(`"${binned.title ?? ''}" is in the bin. Restore it in Library - Bin to use it again.`);
+      if (binned?.metadata?.deleted_at) throw new Error(`"${binned.title ?? ''}" is in the library's bin; restore it in Library - Bin to work with it`);
     }
     const song = songById(song_id);
     setSongForVideo(song);

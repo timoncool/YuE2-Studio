@@ -1777,7 +1777,7 @@ fn refuse_trashed(song: &library::Song) -> Result<(), (StatusCode, Json<ApiError
 }
 
 fn trashed_song_message(song: &library::Song) -> String {
-    format!("\"{}\" is in the bin. Restore it in Library - Bin to use it again.", song.title)
+    format!("\"{}\" is in the library's bin; restore it in Library - Bin to work with it", song.title)
 }
 
 async fn library_media(State(state): State<AppState>, Path(song_id): Path<String>, request: Request) -> Result<axum::response::Response, (StatusCode, Json<ApiError>)> {
@@ -3716,6 +3716,9 @@ async fn draw_cover_now(
     State(state): State<AppState>,
     Path(id): Path<String>,
 ) -> Result<Json<Value>, (StatusCode, Json<ApiError>)> {
+    if let Some(song) = state.library.get_song(&id).map_err(|error| api_error(StatusCode::INTERNAL_SERVER_ERROR, format!("{error:#}")))? {
+        refuse_trashed(&song)?;
+    }
     match draw_cover(&state, &id).await {
         Ok(()) => {
             work_ended(&state, "cover", Ok(()), false);
@@ -12157,7 +12160,7 @@ mod tests {
         library.set_song_trashed(&song, true, None).unwrap();
         let (status, reason) = cover_source(&library, &song, false).unwrap_err();
         assert_eq!(status, StatusCode::CONFLICT);
-        assert!(reason.contains("\"Harbour\" is in the bin") && reason.contains("Library - Bin"), "{reason}");
+        assert!(reason.contains("\"Harbour\" is in the library's bin") && reason.contains("Library - Bin"), "{reason}");
         assert!(cover_source(&library, &song, true).is_ok());
         assert_eq!(cover_source(&library, "gone", false).unwrap_err().0, StatusCode::BAD_REQUEST);
         drop(library);
