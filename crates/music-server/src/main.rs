@@ -10,5 +10,7 @@ fn main() -> anyhow::Result<()> {
     music_server::apply_saved_gpu();
     // the port is decided before the async workers start: deciding it can wait on netsh
     music_engine::yue_server::engine_port();
-    tokio::runtime::Builder::new_multi_thread().enable_all().build()?.block_on(music_server::serve())
+    let served = tokio::runtime::Builder::new_multi_thread().enable_all().build()?.block_on(music_server::serve());
+    music_engine::process_group::terminate_group_members();
+    served
 }
