@@ -1074,6 +1074,14 @@ export const TrainingPanel: React.FC = () => {
   const [importing, setImporting] = useState(false);
   const [deleting, setDeleting] = useState<{ kind: 'dataset' | 'run'; id: string } | null>(null);
   const [guideOpen, setGuideOpen] = useState(false);
+  // a LoRA trains on the set's backbone even while songs are made on the person's own model
+  const [ownModel, setOwnModel] = useState<string | null>(null);
+  useEffect(() => {
+    void fetch('/setup/own-model')
+      .then(response => (response.ok ? response.json() : null))
+      .then((body: { selected?: string | null } | null) => setOwnModel(body?.selected ?? null))
+      .catch((problem: unknown) => console.warn('[training] the own model was not read:', errorText(problem)));
+  }, []);
 
   // the service being away is its own message, gone as soon as it answers again
   const [offline, setOffline] = useState<string | null>(null);
@@ -1220,7 +1228,10 @@ export const TrainingPanel: React.FC = () => {
           </>
         ) : (
           <>
-            <p className="min-w-0 flex-1 text-sm text-zinc-600 dark:text-zinc-400">{t('trainingIntro')}</p>
+            <p className="min-w-0 flex-1 text-sm text-zinc-600 dark:text-zinc-400">
+              {t('trainingIntro')}
+              {ownModel && <span className="mt-1 block text-xs text-amber-700 dark:text-amber-300">{(t as unknown as (key: string) => string)('trainingOnSetModel').replace('{file}', ownModel)}</span>}
+            </p>
             <button type="button" onClick={() => setGuideOpen(value => !value)} className={OUTLINE} aria-pressed={guideOpen}><BookOpen size={13} />{t('trainingGuideOpen')}</button>
           </>
         )}

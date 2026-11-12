@@ -616,6 +616,7 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({ song, onClose, onOpe
                         const cotLabel: Record<string, string> = { full: t('cotFull'), melody: t('cotMelody'), off: t('cotOff') };
                         const paramRows: [string, string | number | undefined][] = [
                             [t('profile'), song.lmModel || undefined],
+                            [(t as unknown as (key: string) => string)('ownModelRow'), typeof p.own_model === 'string' ? p.own_model : undefined],
                             [t('cotMode'), p.cot ? cotLabel[p.cot] ?? p.cot : undefined],
                             [t('maxDuration'), song.duration && song.duration !== '0:00' ? song.duration : undefined],
                             [t('flowSteps'), p.steps],
