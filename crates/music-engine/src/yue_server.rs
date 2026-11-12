@@ -633,7 +633,7 @@ impl YueServerSupervisor {
             if let Some(child) = self.child.as_mut() {
                 if let Some(status) = child.try_wait().context("inspect starting yue-server")? {
                     // a crash says nothing of where: Windows' record of it names the module
-                    let fault = (!status.success()).then(|| music_core::process::fault_of(child.id(), Duration::from_secs(5))).flatten();
+                    let fault = music_core::process::exited_on_exception(status.code()).then(|| music_core::process::fault_of(child.id(), Duration::from_secs(5))).flatten();
                     match fault {
                         Some(fault) => {
                             note_in_log(&format!("the engine crashed during startup: {fault}"));

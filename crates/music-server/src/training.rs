@@ -1417,12 +1417,12 @@ impl Training {
                 if last_error.contains("GGML_BACKEND=CUDA0 not found") {
                     bail!("{} stopped: the trainer's CUDA did not load on the graphics card, and training does not run on the processor; it needs NVIDIA driver {} or newer", stage.id, crate::hardware::CUDA13_DRIVER);
                 }
-                // a crash that wrote nothing says where it happened only in Windows' record of it
-                if last_error.is_empty() {
+                // a crash says where it happened only in Windows' record of it
+                if last_error.is_empty() || music_core::process::exited_on_exception(status.code()) {
                     if let Some(pid) = pid {
                         let fault = tokio::task::spawn_blocking(move || music_core::process::fault_of(pid, std::time::Duration::from_secs(5))).await.ok().flatten();
                         if let Some(fault) = fault {
-                            last_error = fault.to_string();
+                            last_error = if last_error.is_empty() { fault.to_string() } else { format!("{last_error} | {fault}") };
                         }
                     }
                 }

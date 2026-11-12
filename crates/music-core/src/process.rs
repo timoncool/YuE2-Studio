@@ -122,6 +122,13 @@ pub struct Fault {
     pub offset: String,
 }
 
+/// Whether a Windows exit code is an exception (0xC0000000 and up: an access violation, an illegal instruction, a
+/// failed library load) - the exits Windows keeps a record of. A program that returns an error code of its own has
+/// none, and waiting for one would only slow its error down.
+pub fn exited_on_exception(code: Option<i32>) -> bool {
+    code.is_some_and(|code| (code as u32) >= 0xC000_0000)
+}
+
 impl std::fmt::Display for Fault {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "faulting module {}, exception 0x{}, offset 0x{}", self.module, self.exception, self.offset)
@@ -256,6 +263,10 @@ mod tests {
         assert_eq!(fault.to_string(), "faulting module ggml-cpu-haswell.dll, exception 0xc000001d, offset 0x0000000000001000");
         assert!(!fault.to_string().contains("someone"), "no path, so no user name");
         assert_eq!(fault_in_event(xml, 42), None, "another process's record is not this one's");
+        assert!(exited_on_exception(Some(0xC000_0005u32 as i32)), "an access violation");
+        assert!(exited_on_exception(Some(0xC000_001Du32 as i32)), "an illegal instruction");
+        assert!(!exited_on_exception(Some(1)), "an error code of the program's own");
+        assert!(!exited_on_exception(None), "killed by a signal, no code");
     }
 
     /// Run with `MUSIC_CORE_CRASHER` naming a program that crashes on start (a null write): Windows' record of it

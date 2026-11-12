@@ -235,9 +235,9 @@ pub fn hear_batch(
     let status = child.wait().context("wait for the captioner")?;
     let mut tail = log.iter().rev().take(8).rev().cloned().collect::<Vec<_>>().join(" | ");
     // a crash that wrote nothing says where it happened only in Windows' record of it
-    if !status.success() && tail.is_empty() {
+    if !status.success() && (tail.is_empty() || music_core::process::exited_on_exception(status.code())) {
         if let Some(fault) = music_core::process::fault_of(pid, std::time::Duration::from_secs(5)) {
-            tail = fault.to_string();
+            tail = if tail.is_empty() { fault.to_string() } else { format!("{tail} | {fault}") };
         }
     }
     for (index, seen) in reported.iter().enumerate() {
