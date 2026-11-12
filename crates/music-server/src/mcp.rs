@@ -475,6 +475,7 @@ const JOURNAL: &[(&str, &str, &str)] = &[
     ("recogniser_remove", "deleted", "model"),
     ("midi_remove", "deleted", "model"),
     ("models_select", "updated", "settings"),
+    ("models_own_select", "updated", "settings"),
     ("settings_set", "updated", "settings"),
     ("engine_options_set", "updated", "settings"),
     ("engine_fitted_cache_reset", "updated", "settings"),
@@ -1026,6 +1027,24 @@ fn tools() -> &'static [Tool] {
                 description: "Use an installed model set (profile_id) or a custom mix of components (component_ids) for generation.",
                 schema: || object(json!({ "profile_id": { "type": "string" }, "component_ids": { "type": "array", "items": { "type": "string" } } }), &[]),
                 call: |args| post("/setup/select".into(), args.clone()),
+            },
+            Tool {
+                name: "models_own_list",
+                description: "Your own YuE2 models: the GGUF files in models/yue2-cpp/own (folder), each by name and size, the one the engine runs in place of the set's backbone (selected, none for the set's own), and missing when that file is gone. The studio neither downloads nor checks these files; the VAE and the rest come from the chosen set.",
+                schema: nothing,
+                call: |_| get("/setup/own-model".into()),
+            },
+            Tool {
+                name: "models_own_select",
+                description: "Run the engine on one of your own YuE2 files (file, a name from models_own_list) in place of the set's backbone, or on the set's again (file empty or left out). The engine starts again. With your own model the decoder companion is off unless a song asks for it, and LoRA training still runs on the set's backbone.",
+                schema: || object(json!({ "file": { "type": "string" } }), &[]),
+                call: |args| send(Method::PUT, "/setup/own-model".into(), args.clone()),
+            },
+            Tool {
+                name: "models_own_reveal",
+                description: "Open the folder of your own YuE2 models (models/yue2-cpp/own) in the file manager, making it first when it is not there.",
+                schema: nothing,
+                call: |_| post("/setup/own-model/reveal".into(), json!({})),
             },
             Tool {
                 name: "engine_options_get",
@@ -3175,6 +3194,7 @@ mod tests {
             "create_form_set",
             "create_form_submit",
             "dataset_reveal",
+            "models_own_reveal",
             "studio_open_data_folder",
             "vst_open_editor",
             // answers that store nothing

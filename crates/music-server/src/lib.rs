@@ -97,6 +97,8 @@ struct AppState {
     model_manager: ModelManager,
     selected_profile_id: Arc<RwLock<Option<String>>>,
     selected_component_ids: Arc<RwLock<Option<Vec<String>>>>,
+    /// The file in `models/yue2-cpp/own` that the engine runs in place of the set's backbone; none runs the set's.
+    own_backbone: Arc<RwLock<Option<String>>>,
     settings_path: PathBuf,
     openrouter_catalog: Arc<RwLock<OpenRouterCatalogState>>,
     library: library::Library,
@@ -698,6 +700,8 @@ struct PersistedStudioSettings {
     #[serde(default)]
     selected_component_ids: Option<Vec<String>>,
     #[serde(default)]
+    own_backbone: Option<String>,
+    #[serde(default)]
     cover_templates: Option<Vec<cover_prompt::CoverTemplate>>,
     #[serde(default)]
     cover_template_default: Option<String>,
@@ -1289,6 +1293,7 @@ pub async fn serve() -> anyhow::Result<()> {
         )),
         selected_profile_id: Arc::new(RwLock::new(selected_profile_id)),
         selected_component_ids: Arc::new(RwLock::new(selected_component_ids)),
+        own_backbone: Arc::new(RwLock::new(persisted.as_ref().and_then(|settings| settings.own_backbone.clone()))),
         settings_path,
         openrouter_catalog: Arc::new(RwLock::new(OpenRouterCatalogState::default())),
         library: library::Library::open_default()?,
@@ -1528,6 +1533,8 @@ pub async fn serve() -> anyhow::Result<()> {
         .route("/setup/adopt", post(setup_adopt))
         .route("/v1/open-data-directory", post(open_data_directory))
         .route("/setup/select", post(setup_select))
+        .route("/setup/own-model", get(own_model_status).put(own_model_select))
+        .route("/setup/own-model/reveal", post(own_model_reveal))
         .route("/setup/cancel", post(setup_cancel))
         .route("/setup/update", get(setup_update))
         .route("/setup/update/apply", post(setup_update_apply))
@@ -3380,7 +3387,7 @@ async fn start_training(State(state): State<AppState>, Json(input): Json<StartTr
 async fn start_training_run(state: &AppState, dataset: &str, name: &str, recipe: training::Recipe) -> Result<training::Run, String> {
     trainer_ready(state)?;
     no_song_rendering(state).await?;
-    let models = selected_engine_models(state).await?;
+    let models = set_engine_models(state).await?;
     state
         .training
         .start(Some(engine_bundle_root()), models.backbone, models.companion, vocal_separator(state).await, dataset, name, recipe, card_hooks(state).await)
@@ -3504,7 +3511,7 @@ struct ContinueTraining {
 /// Trains a finished or stopped run further from its latest checkpoint.
 async fn continue_training(State(state): State<AppState>, Path(id): Path<String>, Json(input): Json<ContinueTraining>) -> Result<Json<training::Run>, (StatusCode, Json<ApiError>)> {
     card_free_for_training(&state).await.map_err(|reason| api_error(StatusCode::CONFLICT, reason))?;
-    let companion = selected_engine_models(&state).await.map_err(|reason| api_error(StatusCode::CONFLICT, reason))?.companion;
+    let companion = set_engine_models(&state).await.map_err(|reason| api_error(StatusCode::CONFLICT, reason))?.companion;
     state
         .training
         .continue_run(Some(engine_bundle_root()), companion, &id, input.steps, card_hooks(&state).await)
@@ -5550,8 +5557,27 @@ pub(crate) async fn processor_chosen(state: &AppState) -> bool {
     state.engine_options.read().await.backend == music_engine::yue_server::ComputeBackend::Cpu
 }
 
-/// The weights the selected set resolves to, as paths the engine can open.
+/// The weights the engine runs, as paths it can open: the selected set's, with the person's own backbone in place of
+/// the set's when one is chosen. A chosen file that is gone stops the start by its name.
 async fn selected_engine_models(state: &AppState) -> Result<music_engine::yue_server::YueModelFiles, String> {
+    let mut models = set_engine_models(state).await?;
+    if let Some(name) = state.own_backbone.read().await.clone() {
+        let folder = own_models_folder(state);
+        let file = folder.join(&name);
+        if !file.is_file() {
+            return Err(format!(
+                "your own model {name} is not in {}: put it back, or choose Do not use under Your own YuE2 model in Settings - Models",
+                folder.display()
+            ));
+        }
+        models.backbone = file;
+    }
+    Ok(models)
+}
+
+/// The weights the selected set resolves to, as paths the engine can open. Training and dataset preparation run on
+/// these, whatever own model the songs use.
+async fn set_engine_models(state: &AppState) -> Result<music_engine::yue_server::YueModelFiles, String> {
     let selected_component_ids = state.selected_component_ids.read().await.clone();
     let selected_profile_id = state.selected_profile_id.read().await.clone();
     let files = match (selected_component_ids, selected_profile_id) {
@@ -5570,6 +5596,31 @@ async fn selected_engine_models(state: &AppState) -> Result<music_engine::yue_se
         adapters: Some(adapters),
         companion: root.join(&files.companion),
     })
+}
+
+/// The folder of the person's own YuE2 weights, `models/yue2-cpp/own`: any GGUF there can stand in for the set's
+/// backbone. The studio neither downloads nor checks these files.
+fn own_models_folder(state: &AppState) -> PathBuf {
+    state.model_manager.models_directory().join("own")
+}
+
+/// The GGUF files of `folder` by name with their sizes, in name order; none when the folder is not there.
+fn own_model_files(folder: &std::path::Path) -> Vec<(String, u64)> {
+    let mut files: Vec<(String, u64)> = fs::read_dir(folder)
+        .map(|entries| {
+            entries
+                .flatten()
+                .filter(|entry| entry.file_type().is_ok_and(|kind| kind.is_file() || kind.is_symlink()))
+                .filter_map(|entry| {
+                    let name = entry.file_name().to_string_lossy().into_owned();
+                    let gguf = std::path::Path::new(&name).extension().is_some_and(|extension| extension.eq_ignore_ascii_case("gguf"));
+                    gguf.then(|| (name, entry.metadata().map(|meta| meta.len()).unwrap_or(0)))
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    files.sort();
+    files
 }
 
 /// yue-server takes its weights at launch, so a different selection only takes
@@ -6080,6 +6131,7 @@ async fn persist_studio_settings(state: &AppState) -> anyhow::Result<()> {
         configuration: state.configuration.read().await.clone(),
         selected_profile_id: state.selected_profile_id.read().await.clone(),
         selected_component_ids: state.selected_component_ids.read().await.clone(),
+        own_backbone: state.own_backbone.read().await.clone(),
         cover_templates: Some(state.cover_templates.read().await.clone()),
         cover_template_default: state.cover_template_default.read().await.clone(),
         separation: Some(state.separation_config.read().await.clone()),
@@ -8760,6 +8812,62 @@ async fn setup_select(
     Ok(Json(serde_json::to_value(compose_setup_status(&state, manager_status).await).unwrap_or(Value::Null)))
 }
 
+/// The person's own YuE2 files in `models/yue2-cpp/own`, the one chosen, and whether that one is still there.
+async fn own_model_status(State(state): State<AppState>) -> Json<Value> {
+    let folder = own_models_folder(&state);
+    let files = own_model_files(&folder);
+    let selected = state.own_backbone.read().await.clone();
+    let missing = selected.as_ref().is_some_and(|name| !files.iter().any(|(file, _)| file == name));
+    Json(serde_json::json!({
+        "folder": folder.display().to_string(),
+        "files": files.iter().map(|(name, bytes)| serde_json::json!({ "name": name, "bytes": bytes })).collect::<Vec<_>>(),
+        "selected": selected,
+        "missing": missing,
+    }))
+}
+
+#[derive(Debug, Deserialize)]
+struct OwnModelRequest {
+    /// A file name in `models/yue2-cpp/own`; none or empty runs the set's own backbone again.
+    #[serde(default)]
+    file: Option<String>,
+}
+
+/// Runs the engine on one of the person's own files in place of the set's backbone, or on the set's again; the engine
+/// starts again on the change, as it does when the set changes.
+async fn own_model_select(State(state): State<AppState>, Json(request): Json<OwnModelRequest>) -> Result<Json<Value>, (StatusCode, Json<ApiError>)> {
+    let chosen = request.file.map(|name| name.trim().to_string()).filter(|name| !name.is_empty());
+    if let Some(name) = &chosen {
+        let folder = own_models_folder(&state);
+        if !own_model_files(&folder).iter().any(|(file, _)| file == name) {
+            return Err(api_error(StatusCode::BAD_REQUEST, format!("{name} is not a GGUF file in {}", folder.display())));
+        }
+    }
+    *state.own_backbone.write().await = chosen;
+    persist_studio_settings(&state)
+        .await
+        .map_err(|error| api_error(StatusCode::INTERNAL_SERVER_ERROR, format!("the choice was not saved: {error:#}")))?;
+    {
+        let state = state.clone();
+        tokio::spawn(async move { reload_engine_if_models_changed(&state).await });
+    }
+    Ok(own_model_status(State(state)).await)
+}
+
+/// Opens the own-models folder in the file manager, made first when it is not there yet.
+async fn own_model_reveal(State(state): State<AppState>) -> Result<Json<Value>, (StatusCode, Json<ApiError>)> {
+    let folder = own_models_folder(&state);
+    fs::create_dir_all(&folder).map_err(|error| api_error(StatusCode::INTERNAL_SERVER_ERROR, format!("create {}: {error}", folder.display())))?;
+    #[cfg(windows)]
+    let opened = music_engine::process_group::detach_from_group(&mut std::process::Command::new("explorer.exe")).arg(&folder).spawn();
+    #[cfg(target_os = "macos")]
+    let opened = std::process::Command::new("open").arg(&folder).spawn();
+    #[cfg(all(not(windows), not(target_os = "macos")))]
+    let opened = music_engine::process_group::detach_from_group(&mut dub_core::proc::host_command("xdg-open")).arg(&folder).spawn();
+    opened.map_err(|error| api_error(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?;
+    Ok(Json(serde_json::json!({ "opened": folder.display().to_string() })))
+}
+
 async fn setup_cancel(State(state): State<AppState>) -> Result<Json<Value>, (StatusCode, Json<ApiError>)> {
     let target = effective_install_target(&state).await;
     let manager_status = state
@@ -9292,7 +9400,9 @@ async fn submit_music_job(state: AppState, mut request: CreateMusicJobRequest, a
         body["style"] = Value::String(style);
     }
     if request.companion_scale.is_none() {
-        body["companion_scale"] = Value::from(companion_default(&state.adapters, &request));
+        // a merged fine-tune sings worse through the companion (HOT-Step 01ab3607), so Auto leaves it off there
+        let own_model = state.own_backbone.read().await.is_some();
+        body["companion_scale"] = Value::from(if own_model { 0.0 } else { companion_default(&state.adapters, &request) });
     }
     // an opening is not the song: its words are laid and timed by the plan written on from it
     let opening = body.get("abc_continue").and_then(Value::as_bool) == Some(true);
@@ -10043,7 +10153,9 @@ fn songs_seconds(songs: &[CompletedSong]) -> f64 {
 async fn import_completed_result(state: &AppState, job: &MusicJob, job_id: &str) -> anyhow::Result<Vec<CompletedSong>> {
     let result = state.music_server.result(job_id).await?;
     let tracks = engine_result::parse_multipart_result(&result.content_type, &result.body)?;
-    let profile_id = state.selected_profile_id.read().await.clone();
+    // a song of the person's own model counts as the set `own`, its file named on the song only
+    let own_model = state.own_backbone.read().await.clone();
+    let profile_id = if own_model.is_some() { Some("own".to_string()) } else { state.selected_profile_id.read().await.clone() };
     // The engine's defaults fill whatever the request left out, so a stored
     // track records every value it was made with, not only the ones typed.
     let engine_defaults = state.music_server.props().await.ok().and_then(|props| props.get("defaults").cloned());
@@ -10094,6 +10206,9 @@ async fn import_completed_result(state: &AppState, job: &MusicJob, job_id: &str)
         }
         settings.insert("lm_batch_size".into(), Value::from(1));
         settings.insert("synth_batch_size".into(), Value::from(1));
+        if let Some(name) = &own_model {
+            settings.insert("own_model".into(), Value::String(name.clone()));
+        }
         let mut extension = engine_result::audio_extension(&track.audio_content_type)?;
         let mut audio = track.audio;
         let vocals_only = job.generation_settings.get("vocals_only").and_then(Value::as_bool) == Some(true);
@@ -12066,6 +12181,7 @@ mod tests {
             },
             selected_profile_id: None,
             selected_component_ids: Some(vec!["backbone-q8".into(), "vae-f32".into()]),
+            own_backbone: Some("YuE2-3B-RS-TW-2.0x0.75-Q8_0.gguf".into()),
             cover_templates: Some(cover_prompt::default_templates()),
             cover_auto: Some(true),
             cover_look: None,
@@ -12080,6 +12196,7 @@ mod tests {
         assert_eq!(restored.lyrics_sync.provider, lyrics_sync::AsrProvider::Parakeet);
         assert!(restored.selected_profile_id.is_none());
         assert_eq!(restored.selected_component_ids.unwrap(), vec!["backbone-q8", "vae-f32"]);
+        assert_eq!(restored.own_backbone.as_deref(), Some("YuE2-3B-RS-TW-2.0x0.75-Q8_0.gguf"));
         // Engine flags survive a restart, and the songs-per-request ceiling is
         // derived from them rather than assumed.
         assert!(restored.engine_options.keep_loaded);
