@@ -191,7 +191,6 @@ export const ru = {
     dismiss: 'Закрыть',
     cancelGeneration: 'Отменить генерацию',
     cancelAll: 'Отменить всё',
-    resetGeneration: 'Сбросить GPU',
     removeGeneration: 'Убрать',
     stopEverything: 'Остановить все на сервере',
     stopEverythingTitle: 'Остановить все песни?',

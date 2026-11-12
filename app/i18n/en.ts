@@ -190,7 +190,6 @@ export const en = {
     dismiss: 'Dismiss',
     cancelGeneration: 'Cancel generation',
     cancelAll: 'Cancel All',
-    resetGeneration: 'Reset GPU',
     removeGeneration: 'Remove',
     stopEverything: 'Stop all on the server',
     stopEverythingTitle: 'Stop every song?',

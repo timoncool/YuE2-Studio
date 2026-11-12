@@ -193,7 +193,6 @@ export const ja = {
   stopEverything: 'サーバーの全てを停止',
   stopEverythingTitle: 'すべての曲を停止しますか？',
   stopEverythingConfirm: 'スタジオが作成中の {count} 曲をすべて停止します。別のウィンドウやエージェントが開始したものも含みます。',
-  resetGeneration: 'GPU リセット',
   schedulerType: 'スケジューラ',
   dcwEnabledLabel: 'DCW 品質補正',
   dcwHint: 'CVPR 2026, 無料',
