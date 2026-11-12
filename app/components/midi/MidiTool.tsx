@@ -30,6 +30,8 @@ interface MidiRun {
   chunks_total: number;
   notes: number;
   started_ms: number;
+  /** How long the run has been going by the service's clock. */
+  elapsed_ms?: number;
   done: boolean;
   error: string | null;
   file: string | null;
@@ -259,7 +261,7 @@ export const MidiTool: React.FC<{ songId: string; songTitle: string; card: strin
         )}
       </div>
 
-      {running && run && <WorkProgress label={tt(`midiStage_${run.stage}`)} percent={percent} startedMs={run.started_ms} />}
+      {running && run && <WorkProgress label={tt(`midiStage_${run.stage}`)} percent={percent} elapsedMs={run.elapsed_ms} />}
 
       {running && run?.stage === 'transcribing' && (
         <MidiPlayer key={`live-${songId}`} notes={liveNotes} sourceAudioUrl={audioUrl} live chunks={{ done: run.chunks_done, total: run.chunks_total }} />

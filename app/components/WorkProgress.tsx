@@ -14,10 +14,17 @@ export const elapsedClock = (seconds: number) => {
  * A running job's line and bar. With a percent the bar fills to it; without one (the server does not report how far
  * the work is) the bar runs without a figure and the line shows how long the job has been going.
  */
-export const WorkProgress: React.FC<{ label: string; percent: number | null; startedMs?: number }> = ({ label, percent, startedMs }) => {
+export const WorkProgress: React.FC<{ label: string; percent: number | null; elapsedMs?: number }> = ({ label, percent, elapsedMs }) => {
   const { t } = useI18n();
+  // the service's figure, counted on from the moment it arrived: the window's clock may be another device's
+  const [answeredAt, setAnsweredAt] = useState(() => Date.now());
   const [now, setNow] = useState(() => Date.now());
-  const counting = percent === null && !!startedMs;
+  useEffect(() => {
+    const at = Date.now();
+    setAnsweredAt(at);
+    setNow(at);
+  }, [elapsedMs]);
+  const counting = percent === null && elapsedMs !== undefined;
   useEffect(() => {
     if (!counting) return;
     const timer = window.setInterval(() => setNow(Date.now()), 1000);
@@ -31,7 +38,7 @@ export const WorkProgress: React.FC<{ label: string; percent: number | null; sta
         {percent !== null ? (
           <span className="tabular-nums text-zinc-500">{percent}%</span>
         ) : (
-          counting && <span className="tabular-nums text-zinc-500">{t('workElapsed').replace('{time}', elapsedClock((now - startedMs!) / 1000))}</span>
+          counting && <span className="tabular-nums text-zinc-500">{t('workElapsed').replace('{time}', elapsedClock((elapsedMs! + now - answeredAt) / 1000))}</span>
         )}
       </div>
       <div

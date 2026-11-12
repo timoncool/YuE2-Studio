@@ -616,6 +616,15 @@ fn unix_millis() -> u64 {
     std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |since| since.as_millis() as u64)
 }
 
+/// A running job's record for the window with `elapsed_ms`, how long it has been going by the service's clock: the
+/// window may run on another device, whose clock differs.
+fn with_elapsed(mut run: Value) -> Value {
+    if let Some(started) = run.get("started_ms").and_then(Value::as_u64) {
+        run["elapsed_ms"] = Value::from(unix_millis().saturating_sub(started));
+    }
+    run
+}
+
 #[derive(Debug, Clone, Serialize)]
 struct CompletedSong {
     id: String,
@@ -2399,7 +2408,7 @@ async fn separation_status(State(state): State<AppState>) -> Json<Value> {
             state.acpp.downloader().active().await,
         ),
         "settings": state.separation_config.read().await.clone(),
-        "run": state.separation_run.read().await.clone(),
+        "run": with_elapsed(serde_json::to_value(state.separation_run.read().await.clone()).unwrap_or(Value::Null)),
     }))
 }
 
@@ -3639,7 +3648,7 @@ async fn read_stems(State(state): State<AppState>, Path(id): Path<String>) -> Re
         "song_id": id,
         "stems": stems_on_disk(&state, &id),
         "library_songs": in_library,
-        "run": state.separation_run.read().await.clone(),
+        "run": with_elapsed(serde_json::to_value(state.separation_run.read().await.clone()).unwrap_or(Value::Null)),
     })))
 }
 
@@ -8079,7 +8088,7 @@ async fn midi_status(State(state): State<AppState>) -> Json<Value> {
         let progress = run.progress();
         let mut value = serde_json::to_value(run).unwrap_or(Value::Null);
         value["progress"] = progress.into();
-        value
+        with_elapsed(value)
     });
     Json(serde_json::json!({
         "tool_installed": build.as_ref().is_ok_and(|build| state.midi.server_installed(*build)),

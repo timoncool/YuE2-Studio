@@ -24,16 +24,17 @@ afterEach(() => {
 
 describe('WorkProgress', () => {
   it('shows the percent and a bar filled to it when the server reports one', () => {
-    mount(<WorkProgress label="Splitting" percent={40} startedMs={Date.now()} />);
+    mount(<WorkProgress label="Splitting" percent={40} elapsedMs={0} />);
     expect(host.textContent).toContain('40%');
     expect(host.textContent).not.toContain('running');
     expect(host.querySelector('[role="progressbar"]')?.getAttribute('aria-valuenow')).toBe('40');
   });
 
-  it('shows how long the job has run and no figure when the server reports none', () => {
+  it('shows how long the job has run by the service and no figure when the server reports none', () => {
     vi.useFakeTimers();
-    vi.setSystemTime(new Date('2026-11-12T12:00:00Z'));
-    mount(<WorkProgress label="Transcribing" percent={null} startedMs={Date.now() - 65_000} />);
+    // a window whose clock is an hour off: the time comes from the service's figure, not from the clocks
+    vi.setSystemTime(new Date('2026-11-12T13:00:00Z'));
+    mount(<WorkProgress label="Transcribing" percent={null} elapsedMs={65_000} />);
     expect(host.textContent).toContain('running 1:05');
     expect(host.textContent).not.toContain('%');
     expect(host.querySelector('[role="progressbar"]')?.hasAttribute('aria-valuenow')).toBe(false);

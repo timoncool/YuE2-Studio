@@ -48,7 +48,7 @@ interface SeparationStatus {
   /** The separator: HT-Demucs for six stems, Mel-Band RoFormer for the vocals and the instrumental. */
   engine?: 'htdemucs' | 'roformer';
   settings: { stems: string[]; runtime: 'auto' | 'cuda' | 'cpu'; engine?: 'htdemucs' | 'roformer' };
-  run: { song_id: string; progress: number; started_ms: number; done: boolean; error: string | null; stems: string[] } | null;
+  run: { song_id: string; progress: number; started_ms: number; elapsed_ms?: number; done: boolean; error: string | null; stems: string[] } | null;
 }
 
 interface CatalogModel {
@@ -392,7 +392,7 @@ export function StudioToolsPanel({ initialSongId }: { initialSongId?: string | n
             </div>
           )}
 
-          {running && <WorkProgress label={t('stemsRunning')} percent={percent} startedMs={run?.started_ms} />}
+          {running && <WorkProgress label={t('stemsRunning')} percent={percent} elapsedMs={run?.elapsed_ms} />}
 
           {stems.length > 0 && (
             <div className="mt-3 space-y-2">
