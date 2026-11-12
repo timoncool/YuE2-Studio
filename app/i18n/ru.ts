@@ -1551,7 +1551,7 @@ export const ru = {
     midiSize_medium: 'Сбалансированная',
     midiSize_large: 'Лучшая',
     midiInstalled: 'установлена',
-    midiFirstUse: 'При первом запуске скачаются транскрибер и эта модель ({size}).',
+    midiFirstUse: 'При первом запуске скачается эта модель и, если его ещё нет, общий звуковой движок ({size}).',
     midiInstallNow: 'Скачать сейчас',
     midiDownloading: 'Скачивается',
     midiStart: 'Сделать MIDI',

@@ -1547,7 +1547,7 @@ export const ja = {
     midiSize_medium: 'バランス',
     midiSize_large: '最高',
     midiInstalled: 'インストール済み',
-    midiFirstUse: '初回の実行で変換ツールとこのモデル（{size}）をダウンロードします。',
+    midiFirstUse: '初回の実行でこのモデルと、まだなければ共通のオーディオエンジンをダウンロードします（{size}）。',
     midiInstallNow: '今すぐダウンロード',
     midiDownloading: 'ダウンロード中',
     midiStart: 'MIDIを作成',

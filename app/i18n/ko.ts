@@ -1547,7 +1547,7 @@ export const ko = {
     midiSize_medium: '균형',
     midiSize_large: '최고',
     midiInstalled: '설치됨',
-    midiFirstUse: '처음 실행할 때 변환기와 이 모델({size})을 내려받습니다.',
+    midiFirstUse: '처음 실행할 때 이 모델과, 아직 없다면 공용 오디오 엔진을 내려받습니다({size}).',
     midiInstallNow: '지금 내려받기',
     midiDownloading: '내려받는 중',
     midiStart: 'MIDI 만들기',
