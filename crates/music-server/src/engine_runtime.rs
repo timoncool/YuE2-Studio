@@ -162,7 +162,8 @@ pub fn cuda_assets(build: CudaBuild) -> Vec<&'static Asset> {
 /// The engine's downloadable runtime.
 pub struct EngineRuntime {
     downloader: Downloader,
-    /// Where the engine and the Visual C++ runtime shipped with it live.
+    /// Where the engine and the Visual C++ runtime shipped with it live; read for the runtime on Windows alone.
+    #[cfg_attr(not(windows), allow(dead_code))]
     bundle_root: std::path::PathBuf,
 }
 
@@ -437,10 +438,16 @@ mod tests {
         std::fs::write(data.join("a-file"), b"").unwrap();
         // a folder inside a file can be neither made nor written, as Program Files cannot without elevation
         let runtime = EngineRuntime::new(&data.join("a-file").join("engine"), &data);
-        assert_eq!(runtime.library_dir(), data.join("engine-runtime"));
         let writable = data.join("install");
         std::fs::create_dir_all(&writable).unwrap();
-        assert_eq!(EngineRuntime::new(&writable, &data).library_dir(), writable);
+        if cfg!(target_os = "linux") {
+            // the package's folder is read-only on Linux: the libraries always live in the data folder
+            assert_eq!(runtime.library_dir(), data.join("engine-runtime").join("cuda"));
+            assert_eq!(EngineRuntime::new(&writable, &data).library_dir(), data.join("engine-runtime").join("cuda"));
+        } else {
+            assert_eq!(runtime.library_dir(), data.join("engine-runtime"));
+            assert_eq!(EngineRuntime::new(&writable, &data).library_dir(), writable);
+        }
         std::fs::remove_dir_all(&data).ok();
     }
 
@@ -595,7 +602,8 @@ mod tests {
         let runtime = EngineRuntime::new(&root, &root);
         let asset = cublas_asset(CudaBuild::Cuda13);
         assert!(!runtime.downloader().is_installed(asset));
-        assert_eq!(runtime.library_dir(), root);
+        let beside = if cfg!(target_os = "linux") { root.join("engine-runtime").join("cuda") } else { root.clone() };
+        assert_eq!(runtime.library_dir(), beside);
         // Off CUDA the engine never loads cuBLAS, so nothing is missing.
         assert!(runtime.missing(None).is_empty());
 
