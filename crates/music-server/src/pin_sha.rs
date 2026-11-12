@@ -201,6 +201,22 @@ mod tests {
     }
 
     #[test]
+    fn no_download_follows_a_branch() {
+        let mut urls: Vec<&str> = Vec::new();
+        urls.extend(crate::lyrics_sync::ASSETS.iter().map(|asset| asset.url));
+        urls.extend(crate::acpp::BUILDS.into_iter().flat_map(crate::acpp::assets).map(|asset| asset.url));
+        urls.extend(crate::engine_runtime::ASSETS.iter().map(|asset| asset.url));
+        urls.extend(crate::assistant_runtime::ASSETS.iter().map(|asset| asset.url));
+        urls.extend([crate::separation::MODEL.url, crate::separation::ROFORMER_MODEL.url]);
+        urls.extend([true, false].into_iter().filter_map(crate::separation::Separator::roformer_engine).map(|asset| asset.url));
+        urls.extend(crate::training::pack().iter().map(|asset| asset.url));
+        urls.extend(crate::training::listen_pack().iter().map(|asset| asset.url));
+        urls.extend(crate::midi::SIZES.iter().flat_map(crate::midi::weight_assets).map(|asset| asset.url));
+        let branches: Vec<&str> = urls.into_iter().filter(|url| url.contains("/resolve/main/") || url.contains("/raw/main/")).collect();
+        assert!(branches.is_empty(), "downloads that follow a branch instead of a pinned revision: {branches:#?}");
+    }
+
+    #[test]
     fn a_file_that_is_not_the_pins_is_removed() {
         let dir = std::env::temp_dir().join(format!("pin-sha-{}", uuid::Uuid::now_v7()));
         std::fs::create_dir_all(&dir).unwrap();
