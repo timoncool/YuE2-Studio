@@ -2166,8 +2166,9 @@ fn engine_stems(engine: separation::Engine) -> &'static [&'static str] {
     }
 }
 
-/// Whether Mel-Band RoFormer runs on the card: an NVIDIA card, a runtime choice other than the
-/// processor, and a cuBLAS 13 the CUDA build's loader finds - the engine's, or one on PATH.
+/// Whether Mel-Band RoFormer runs on the card: an NVIDIA card the CUDA 13 build runs on (its card and driver; a card or
+/// driver only CUDA 12 runs takes the processor build), a runtime choice other than the processor, and a cuBLAS 13
+/// the CUDA build's loader finds - the engine's, or one on PATH.
 fn roformer_on_card(state: &AppState, runtime: lyrics_sync::OnnxFlavour) -> bool {
     let found = |name: &str| {
         state.engine_runtime.library_dir().join(name).is_file()
@@ -2175,6 +2176,7 @@ fn roformer_on_card(state: &AppState, runtime: lyrics_sync::OnnxFlavour) -> bool
     };
     runtime != lyrics_sync::OnnxFlavour::Cpu
         && lyrics_sync::OnnxFlavour::Auto.uses_cuda()
+        && hardware::hardware().card_cuda == Some(hardware::CudaBuild::Cuda13)
         && (!cfg!(windows) || engine_runtime::CUDA13_LIBRARIES.iter().all(|name| found(name)))
 }
 
