@@ -770,6 +770,8 @@ export const ko = {
 
     // RightSidebar - Song Details
     songDetails: '곡 상세정보',
+    songStyleBlock: '스타일',
+    songParamsBlock: '매개변수',
     created: '생성일',
     styleTags: '스타일 및 태그',
     lyricsSection: '가사',

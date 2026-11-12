@@ -770,6 +770,8 @@ export const zh = {
 
     // RightSidebar - Song Details
     songDetails: '歌曲详情',
+    songStyleBlock: '样式',
+    songParamsBlock: '参数',
     created: '创建于',
     styleTags: '风格与标签',
     lyricsSection: '歌词',

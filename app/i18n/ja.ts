@@ -768,6 +768,8 @@ export const ja = {
 
   // RightSidebar - Song Details
   songDetails: '曲の詳細',
+  songStyleBlock: 'スタイル',
+  songParamsBlock: 'パラメーター',
   created: '作成日',
   styleTags: 'スタイルとタグ',
   lyricsSection: '歌詞',

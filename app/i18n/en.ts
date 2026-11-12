@@ -773,6 +773,8 @@ export const en = {
 
     // RightSidebar - Song Details
     songDetails: 'Song Details',
+    songStyleBlock: 'Style',
+    songParamsBlock: 'Parameters',
     created: 'Created',
     styleTags: 'STYLE & TAGS',
     lyricsSection: 'LYRICS',

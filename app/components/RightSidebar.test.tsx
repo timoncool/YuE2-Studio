@@ -29,7 +29,11 @@ function mount(lyrics: string) {
 }
 
 function lyricsSection(): HTMLElement {
-  return Array.from(host.querySelectorAll('h3')).find(node => node.textContent === 'LYRICS')!.parentElement!.parentElement!;
+  return Array.from(host.querySelectorAll('button[aria-expanded]')).find(node => node.textContent === 'LYRICS')!.parentElement!.parentElement!;
+}
+
+function copyButton(section: HTMLElement): HTMLButtonElement {
+  return Array.from(section.querySelectorAll<HTMLButtonElement>('button')).find(node => node.textContent?.includes('Copy'))!;
 }
 
 afterEach(() => {
@@ -44,7 +48,7 @@ describe('song details lyrics', () => {
     const section = lyricsSection();
     expect(section.textContent).toContain('No lyrics saved');
     expect(section.textContent).not.toContain('Instrumental');
-    expect(section.querySelector('button')!.disabled).toBe(true);
+    expect(copyButton(section).disabled).toBe(true);
   });
 
   it('shows and copies supplied multiline lyrics unchanged', async () => {
@@ -53,8 +57,8 @@ describe('song details lyrics', () => {
     const section = lyricsSection();
     expect(section.textContent).toContain(lyrics);
     expect(section.textContent).not.toContain('No lyrics saved');
-    expect(section.querySelector('button')!.disabled).toBe(false);
-    await act(async () => section.querySelector<HTMLButtonElement>('button')!.click());
+    expect(copyButton(section).disabled).toBe(false);
+    await act(async () => copyButton(section).click());
     expect(writeText).toHaveBeenCalledWith(lyrics);
   });
 });

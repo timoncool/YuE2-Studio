@@ -3,6 +3,7 @@ import { libraryChanged, SELF_READ, useActivity, useAssistantStatus, useSetupSta
 import { hasSungLines, karaokeReason } from '../services/karaoke';
 import { clampDurationToKept } from '../services/createDuration';
 import { minTokensCutsTheSongOff } from '../services/samplingLimits';
+import { foldedAfter, keepFolded, keptFolded } from '../services/createFold';
 import {
   AlertTriangle, AudioLines, ChevronDown, CircleAlert, Dices, Ear, Eye, EyeOff, FileMusic, FolderOpen, Loader2,
   Grid2x2, Guitar, ListChecks, Music2, Pause, Piano, Play, RotateCcw, Save, Sparkles, Square, Tags, Upload, Wand2, Settings2, X,
@@ -301,15 +302,40 @@ const SliderRow: React.FC<{
   );
 };
 
-const Card: React.FC<{ title: string; icon?: React.ReactNode; actions?: React.ReactNode; children: React.ReactNode }> = ({ title, icon, actions, children }) => (
-  <div className="overflow-hidden rounded-xl border border-zinc-200 bg-white dark:border-white/5 dark:bg-suno-card">
-    <div className="flex items-center justify-between gap-2 border-b border-zinc-100 bg-zinc-50 px-3 py-2 dark:border-white/5 dark:bg-white/5">
-      <span className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">{icon}{title}</span>
-      {actions && <div className="flex items-center gap-1">{actions}</div>}
+/** A block of the form; with `fold` its title folds and opens it, and the choice is kept across restarts. */
+const Card: React.FC<{ title: string; icon?: React.ReactNode; actions?: React.ReactNode; fold?: string; children: React.ReactNode }> = ({ title, icon, actions, fold, children }) => {
+  const [folded, setFolded] = useState(() => (fold ? keptFolded().includes(fold) : false));
+  // React keeps a block's state when the simple mode's block in the same place turns into a studio one
+  useEffect(() => setFolded(fold ? keptFolded().includes(fold) : false), [fold]);
+  const toggle = () => {
+    if (!fold) return;
+    setFolded(current => {
+      keepFolded(foldedAfter(keptFolded(), fold, !current));
+      return !current;
+    });
+  };
+  return (
+    <div className="overflow-hidden rounded-xl border border-zinc-200 bg-white dark:border-white/5 dark:bg-suno-card">
+      <div className={`flex items-center justify-between gap-2 bg-zinc-50 px-3 py-2 dark:bg-white/5 ${folded ? '' : 'border-b border-zinc-100 dark:border-white/5'}`}>
+        {fold ? (
+          <button
+            type="button"
+            onClick={toggle}
+            aria-expanded={!folded}
+            className="flex min-w-0 flex-1 items-center gap-1.5 text-left text-[11px] font-bold uppercase tracking-wide text-zinc-500 transition-colors hover:text-black dark:text-zinc-400 dark:hover:text-white"
+          >
+            <ChevronDown size={14} className={folded ? '-rotate-90 transition-transform' : 'transition-transform'} />
+            {icon}{title}
+          </button>
+        ) : (
+          <span className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">{icon}{title}</span>
+        )}
+        {actions && <div className="flex items-center gap-1">{actions}</div>}
+      </div>
+      {!folded && <div className="p-3">{children}</div>}
     </div>
-    <div className="p-3">{children}</div>
-  </div>
-);
+  );
+};
 
 const Stage: React.FC<{ title: string; hint: string; children: React.ReactNode }> = ({ title, hint, children }) => (
   <section>
@@ -1561,6 +1587,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
 
           <Card
             title={tt('styleCardTitle')}
+            fold="style"
             icon={<Music2 size={13} />}
             actions={
               <>
@@ -1639,6 +1666,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
 
           <Card
             title={t('lyrics')}
+            fold="lyrics"
             actions={
               <>
                 <button type="button" onClick={() => (assistantReady ? void layOutLyrics() : openAssistantSetup())} disabled={assistantReady && (assisting !== null || !lyrics.trim())} className={ICON} title={assistantReady ? t('formatLyrics') : t('setUpAssistant')}>
@@ -1691,6 +1719,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
 
           <Card
             title={tt('scoreCardTitle')}
+            fold="score"
             icon={<FileMusic size={13} />}
             actions={
               <>
@@ -1880,11 +1909,12 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
             onChange={setAdapters}
             onTrigger={applyTrigger}
             iconClass={ICON}
-            frame={(title, icon, actions, body) => <Card title={title} icon={icon} actions={actions}>{body}</Card>}
+            frame={(title, icon, actions, body) => <Card title={title} icon={icon} actions={actions} fold="lora">{body}</Card>}
           />
 
           <Card
             title={t('quality')}
+            fold="quality"
             actions={
               <button type="button" onClick={() => resetParameters()} className="rounded-md px-2 py-1 text-[10px] font-semibold text-zinc-500 transition-colors hover:bg-zinc-200 hover:text-black dark:hover:bg-white/10 dark:hover:text-white">
                 {t('resetToDefaults')}

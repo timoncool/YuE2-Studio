@@ -774,6 +774,8 @@ export const ru = {
 
     // RightSidebar - Song Details
     songDetails: 'Детали песни',
+    songStyleBlock: 'Стиль',
+    songParamsBlock: 'Параметры',
     created: 'Создано',
     styleTags: 'СТИЛЬ И ТЕГИ',
     lyricsSection: 'ТЕКСТ',
