@@ -6266,6 +6266,7 @@ async fn compose_setup_status(state: &AppState, manager_status: model_manager::M
         );
         fields.insert("engine_error".into(), serde_json::to_value(state.engine_start_error.read().await.clone()).unwrap_or(Value::Null));
         fields.insert("engine_id".into(), Value::String(PRIMARY_MUSIC_ENGINE_ID.into()));
+        fields.insert("trash_days".into(), Value::from(TRASH_DAYS));
         // whether the files a person downloads by hand are better taken from the mirror, as the studio's are
         fields.insert("huggingface_mirror".into(), Value::Bool(net::current().huggingface_mirror));
         fields.insert("selected_profile_id".into(), serde_json::to_value(selected_profile_id).unwrap_or(Value::Null));
