@@ -233,6 +233,20 @@ pub const ASSETS: &[Asset] = &[
     },
     #[cfg(any(windows, target_os = "linux"))]
     Asset {
+        id: "transcribe-engine-cuda12",
+        label: "transcribe.cpp (CUDA 12)",
+        kind: AssetKind::Runtime,
+        url: dub_tcpp::Build::Cuda12.download().url,
+        relative_path: TCPP_CUDA12,
+        bytes: dub_tcpp::Build::Cuda12.download().size,
+        unzip_into: Some("transcribe-engine-cuda12"),
+        marker: dub_tcpp::LIBRARY,
+        pick: &[],
+        vram_gb: None,
+        note: "Runs Parakeet on an NVIDIA card CUDA 13 does not run - Maxwell to Volta, or a driver older than 580.",
+    },
+    #[cfg(any(windows, target_os = "linux"))]
+    Asset {
         id: "transcribe-engine-vulkan",
         label: "transcribe.cpp (Vulkan)",
         kind: AssetKind::Runtime,
@@ -384,11 +398,15 @@ pub const PARAKEET_FP32: &str = "parakeet-tdt-fp32";
 #[cfg(windows)]
 const TCPP_CUDA: &str = "runtime/transcribe-cuda.zip";
 #[cfg(windows)]
+const TCPP_CUDA12: &str = "runtime/transcribe-cuda12.zip";
+#[cfg(windows)]
 const TCPP_VULKAN: &str = "runtime/transcribe-vulkan.zip";
 #[cfg(windows)]
 const TCPP_CPU: &str = "runtime/transcribe-cpu.zip";
 #[cfg(target_os = "linux")]
 const TCPP_CUDA: &str = "runtime/transcribe-cuda.tar.gz";
+#[cfg(target_os = "linux")]
+const TCPP_CUDA12: &str = "runtime/transcribe-cuda12.tar.gz";
 #[cfg(target_os = "linux")]
 const TCPP_VULKAN: &str = "runtime/transcribe-vulkan.tar.gz";
 #[cfg(target_os = "linux")]
@@ -413,8 +431,8 @@ pub fn parakeet_model_asset(variant: Option<&str>) -> &'static str {
     if variant == Some(PARAKEET_ULTRA) { PARAKEET_ULTRA } else { PARAKEET_V3 }
 }
 
-/// The engine build this machine runs Parakeet on: the processor when chosen, CUDA on a card and driver CUDA 13
-/// runs on (the build is CUDA 13; on Linux only when the system has its cuBLAS), Vulkan on any other card, the
+/// The engine build this machine runs Parakeet on: the processor when chosen, the CUDA build of the card and driver -
+/// CUDA 13 or CUDA 12 (on Linux only when the loader finds that CUDA's cuBLAS) - Vulkan on any other card, the
 /// processor without one. A Mac has one build, in the processor's place: Metal and the processor on Apple silicon,
 /// the processor on Intel.
 pub fn parakeet_build(runtime: OnnxFlavour) -> Option<dub_tcpp::Build> {
@@ -425,13 +443,20 @@ pub fn parakeet_build(runtime: OnnxFlavour) -> Option<dub_tcpp::Build> {
         return None;
     }
     let hardware = crate::hardware::hardware();
-    Some(if matches!(runtime, OnnxFlavour::Cpu) || hardware.gpu_name.is_none() {
-        dub_tcpp::Build::Cpu
-    } else if hardware.card_cuda == Some(crate::hardware::CudaBuild::Cuda13) {
-        if cfg!(target_os = "linux") && !system_library("libcublas.so.13") { dub_tcpp::Build::Vulkan } else { dub_tcpp::Build::Cuda }
-    } else {
-        dub_tcpp::Build::Vulkan
-    })
+    Some(parakeet_build_for(runtime, hardware.gpu_name.is_some(), hardware.card_cuda, |name| !cfg!(target_os = "linux") || system_library(name)))
+}
+
+/// [`parakeet_build`] of a machine: a card or none, the CUDA build its card and driver run, and whether the loader
+/// finds a library.
+fn parakeet_build_for(runtime: OnnxFlavour, card: bool, cuda: Option<crate::hardware::CudaBuild>, finds: impl Fn(&str) -> bool) -> dub_tcpp::Build {
+    if matches!(runtime, OnnxFlavour::Cpu) || !card {
+        return dub_tcpp::Build::Cpu;
+    }
+    match cuda {
+        Some(crate::hardware::CudaBuild::Cuda13) if finds("libcublas.so.13") => dub_tcpp::Build::Cuda,
+        Some(crate::hardware::CudaBuild::Cuda12) if finds("libcublas.so.12") => dub_tcpp::Build::Cuda12,
+        _ => dub_tcpp::Build::Vulkan,
+    }
 }
 
 /// Whether Linux's loader finds `name` without help: the CUDA build of transcribe.cpp looks for cuBLAS beside itself,
@@ -489,8 +514,9 @@ pub struct SyncStatus {
 
 pub struct LyricsSync {
     downloader: Downloader,
-    /// Where the music engine's cuBLAS 13 is, which transcribe.cpp's CUDA build imports.
-    cuda_libraries: std::sync::OnceLock<PathBuf>,
+    /// Where the music engine's CUDA libraries are, which transcribe.cpp's CUDA builds import: its cuBLAS folder, and
+    /// its own folder with CUDA 12's runtime.
+    cuda_libraries: std::sync::OnceLock<Vec<PathBuf>>,
     /// audio.cpp's server of the studio, which CrisperWhisper runs in beside the tools' models.
     acpp: std::sync::OnceLock<std::sync::Arc<crate::acpp::Acpp>>,
 }
@@ -500,26 +526,31 @@ impl LyricsSync {
         Self { downloader: Downloader::new(data_root.join("karaoke")), cuda_libraries: std::sync::OnceLock::new(), acpp: std::sync::OnceLock::new() }
     }
 
-    /// The folder of the cuBLAS 13 the music engine runs on: transcribe.cpp's CUDA build takes links to it.
-    pub fn set_cuda_libraries(&self, folder: PathBuf) {
-        self.cuda_libraries.set(folder).ok();
+    /// The folders of the CUDA libraries the music engine runs on: transcribe.cpp's CUDA builds take links to them.
+    pub fn set_cuda_libraries(&self, folders: Vec<PathBuf>) {
+        self.cuda_libraries.set(folders).ok();
     }
 
-    /// Windows looks for a library's imports beside it: the CUDA build gets links to the engine's cuBLAS 13, no
-    /// copies, unless the files are on PATH already.
-    fn link_tcpp_cuda(&self, engine_dir: &Path) -> Result<()> {
+    /// Windows looks for a library's imports beside it: a CUDA build gets links to the engine's libraries of its CUDA
+    /// - cuBLAS 13, or cuBLAS 12 and CUDA 12's runtime - no copies, unless the files are on PATH already.
+    fn link_tcpp_cuda(&self, engine_dir: &Path, build: dub_tcpp::Build) -> Result<()> {
         if !cfg!(windows) {
             return Ok(());
         }
+        let (libraries, cuda): (&[&str], u32) = match build {
+            dub_tcpp::Build::Cuda => (&crate::engine_runtime::CUDA13_LIBRARIES, 13),
+            dub_tcpp::Build::Cuda12 => (&[crate::engine_runtime::CUDA12_LIBRARIES[0], crate::engine_runtime::CUDA12_LIBRARIES[1], "cudart64_12.dll"], 12),
+            dub_tcpp::Build::Vulkan | dub_tcpp::Build::Cpu => return Ok(()),
+        };
         let on_path = |name: &str| std::env::var_os("PATH").is_some_and(|path| std::env::split_paths(&path).any(|dir| dir.join(name).is_file()));
-        for name in crate::engine_runtime::CUDA13_LIBRARIES {
+        for name in libraries {
             let target = engine_dir.join(name);
             if target.is_file() || on_path(name) {
                 continue;
             }
-            let source = self.cuda_libraries.get().map(|folder| folder.join(name)).filter(|source| source.is_file());
+            let source = self.cuda_libraries.get().into_iter().flatten().map(|folder| folder.join(name)).find(|source| source.is_file());
             let Some(source) = source else {
-                bail!("transcribe.cpp on the card needs {name}, which comes with the music engine's CUDA 13 runtime: download it in Settings - Local engine, or choose the processor");
+                bail!("transcribe.cpp on the card needs {name}, which comes with the music engine's CUDA {cuda} runtime: download it in Settings - Local engine, or choose the processor");
             };
             if fs::hard_link(&source, &target).is_err() {
                 fs::copy(&source, &target).with_context(|| format!("copy {} beside transcribe.cpp", source.display()))?;
@@ -642,9 +673,7 @@ impl LyricsSync {
         let root = self.downloader.root().join("models");
         let model = parakeet_model(variant);
         let engine = self.downloader.runtime_dir(build.dir());
-        if build == dub_tcpp::Build::Cuda {
-            self.link_tcpp_cuda(&engine)?;
-        }
+        self.link_tcpp_cuda(&engine, build)?;
         let asr = dub_tcpp::shared(&engine, &dub_tcpp::model_path(&root, model)).map_err(|error| anyhow!("load Parakeet: {error}"))?;
         // the library stays in the process until it ends: an install over it is used from the next start
         if let Some(record) = self.engine_record(build).and_then(|record| crate::install_record::read(&record)) {
@@ -1714,6 +1743,23 @@ Third");
         fs::remove_dir_all(&folder).ok();
     }
 
+
+    /// Parakeet takes the CUDA build of the card and driver - 13 or 12 - Vulkan on a card without one, or on Linux
+    /// without that CUDA's cuBLAS, and the processor without a card or when it is chosen.
+    #[test]
+    fn parakeet_takes_the_cuda_build_of_the_card() {
+        use crate::hardware::CudaBuild;
+        let all = |_: &str| true;
+        assert_eq!(parakeet_build_for(OnnxFlavour::Auto, true, Some(CudaBuild::Cuda13), all), dub_tcpp::Build::Cuda);
+        assert_eq!(parakeet_build_for(OnnxFlavour::Auto, true, Some(CudaBuild::Cuda12), all), dub_tcpp::Build::Cuda12);
+        assert_eq!(parakeet_build_for(OnnxFlavour::Auto, true, None, all), dub_tcpp::Build::Vulkan, "an AMD or Intel card");
+        assert_eq!(parakeet_build_for(OnnxFlavour::Auto, false, None, all), dub_tcpp::Build::Cpu, "no card");
+        assert_eq!(parakeet_build_for(OnnxFlavour::Cpu, true, Some(CudaBuild::Cuda12), all), dub_tcpp::Build::Cpu);
+        let no_cublas12 = |name: &str| name != "libcublas.so.12";
+        assert_eq!(parakeet_build_for(OnnxFlavour::Auto, true, Some(CudaBuild::Cuda12), no_cublas12), dub_tcpp::Build::Vulkan, "Linux without cuBLAS 12");
+        assert_eq!(parakeet_build_for(OnnxFlavour::Auto, true, Some(CudaBuild::Cuda13), no_cublas12), dub_tcpp::Build::Cuda);
+    }
+
     #[test]
     fn a_retired_choice_of_model_becomes_the_one_offered() {
         let with = |model: Option<&str>| LyricsSyncConfig { whisper_model: model.map(String::from), ..LyricsSyncConfig::default() }.migrated().whisper_model;
@@ -1796,7 +1842,7 @@ mod live_recognition {
         // Windows and Linux fetch the engine-0.2.0 archive and unpack it into the build's folder under runtime/, where the
         // loader (runtime_dir(build.dir())) opens LIBRARY; the studio ships the CUDA 13, Vulkan and processor builds.
         #[cfg(any(windows, target_os = "linux"))]
-        for build in [dub_tcpp::Build::Cuda, dub_tcpp::Build::Vulkan, dub_tcpp::Build::Cpu] {
+        for build in dub_tcpp::Build::ALL {
             let asset = asset(build.dir()).unwrap();
             assert_eq!(asset.unzip_into, Some(build.dir()));
             assert_eq!(asset.marker, dub_tcpp::LIBRARY);

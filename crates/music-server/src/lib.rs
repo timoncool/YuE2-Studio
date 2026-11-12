@@ -1497,7 +1497,7 @@ pub async fn serve() -> anyhow::Result<()> {
             eprintln!("[ERROR] the key made for access from the network was not saved and changes at the next start: {error:#}");
         }
     }
-    state.lyrics_sync.set_cuda_libraries(state.engine_runtime.library_dir());
+    state.lyrics_sync.set_cuda_libraries(vec![state.engine_runtime.library_dir(), engine_bundle_root()]);
     state.acpp.set_cuda13_libraries(state.engine_runtime.library_dir());
     state.lyrics_sync.set_acpp(state.acpp.clone());
     state.lyrics_sync.register_crisper();
