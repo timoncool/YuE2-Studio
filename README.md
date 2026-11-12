@@ -490,19 +490,22 @@ the exact name in the listed folder is recognised and not downloaded again.
 | [faster-whisper-large-v3](https://huggingface.co/Systran/faster-whisper-large-v3/tree/main): `config.json`, `model.bin`, `preprocessor_config.json`, `tokenizer.json`, `vocabulary.json` | Whisper large-v3 | 2.9 GB | `karaoke\models\whisper\faster-whisper-large-v3\` |
 | [`parakeet-tdt-0.6b-v3-Q8_0.gguf`](https://huggingface.co/handy-computer/parakeet-tdt-0.6b-v3-gguf/resolve/d8d8c32cb2017c57e5307767343e97870f8a7f53/parakeet-tdt-0.6b-v3-Q8_0.gguf) | Parakeet TDT v3, European languages | 0.7 GB | `karaoke\models\asr-gguf-parakeet-v3\` |
 | [`parakeet-ultra-Q8_0.gguf`](https://huggingface.co/handy-computer/parakeet-ultra-gguf/resolve/a1539be1b849ea7463b88343e5277b373d0c4ea9/parakeet-ultra-Q8_0.gguf) | Parakeet Ultra, fewer wrong words in Russian and in noise | 0.7 GB | `karaoke\models\asr-gguf-parakeet-ultra\` |
-| [`transcribe_engine.dll`](https://github.com/timoncool/transcribe.cpp/releases/download/engine-0.1.1/transcribe_engine.dll) (CUDA), [`transcribe_engine-vulkan.dll`](https://github.com/timoncool/transcribe.cpp/releases/download/engine-0.1.1/transcribe_engine-vulkan.dll), [`transcribe_engine-cpu.dll`](https://github.com/timoncool/transcribe.cpp/releases/download/engine-0.1.1/transcribe_engine-cpu.dll) | transcribe.cpp, the engine Parakeet runs on: one build, the one for your card | 3.7-145 MB | `karaoke\models\transcribe-engine\`, `transcribe-engine-vulkan\`, `transcribe-engine-cpu\`, each as `transcribe_engine.dll` |
+| [`transcribe-windows-cuda13-x64.zip`](https://github.com/timoncool/transcribe.cpp/releases/download/engine-0.2.1/transcribe-windows-cuda13-x64.zip), [`transcribe-windows-vulkan-x64.zip`](https://github.com/timoncool/transcribe.cpp/releases/download/engine-0.2.1/transcribe-windows-vulkan-x64.zip), [`transcribe-windows-cpu-x64.zip`](https://github.com/timoncool/transcribe.cpp/releases/download/engine-0.2.1/transcribe-windows-cpu-x64.zip) | transcribe.cpp, the engine Parakeet runs on: one build, the one for your card, unpacked | 5-131 MB | `karaoke\runtime\transcribe-engine\` (CUDA), `transcribe-engine-vulkan\`, `transcribe-engine-cpu\` |
+
+**The audio.cpp server** — HT-Demucs and MuScriptor run in it; one build, the one for your card, unpacked
+
+| File | What for | Size | Put in `data\` |
+| --- | --- | --- | --- |
+| [`audiocpp-server-win-cuda13-x64.zip`](https://github.com/timoncool/audio.cpp/releases/download/server-31cb1a4a/audiocpp-server-win-cuda13-x64.zip), [`audiocpp-server-win-cuda12-x64.zip`](https://github.com/timoncool/audio.cpp/releases/download/server-31cb1a4a/audiocpp-server-win-cuda12-x64.zip), [`audiocpp-server-win-vulkan-x64.zip`](https://github.com/timoncool/audio.cpp/releases/download/server-31cb1a4a/audiocpp-server-win-vulkan-x64.zip), [`audiocpp-server-win-cpu-x64.zip`](https://github.com/timoncool/audio.cpp/releases/download/server-31cb1a4a/audiocpp-server-win-cpu-x64.zip) | audio.cpp's server: CUDA 13, CUDA 12, Vulkan or the processor | 20-185 MB | `audiocpp\runtime\audiocpp\` (CUDA 13), `audiocpp-cuda12\`, `audiocpp-vulkan\`, `audiocpp-cpu\` |
+| [`libcufft-windows-x86_64-12.4.0.43-archive.zip`](https://developer.download.nvidia.com/compute/cuda/redist/libcufft/windows-x86_64/libcufft-windows-x86_64-12.4.0.43-archive.zip) | `cufft64_12.dll` out of it, for the CUDA 13 build | 160 MB | `audiocpp\runtime\audiocpp\` |
 
 **Stems and vocals for recognition**
 
 | File | What for | Size | Put in `data\` |
 | --- | --- | --- | --- |
-| [`htdemucs_6s_fp16weights.onnx`](https://huggingface.co/StemSplitio/htdemucs-6s-onnx/resolve/49df9b6989cf2150840ea65b0bef77a2e471b678/htdemucs_6s_fp16weights.onnx) | HT-Demucs, six stems | 130 MB | `separation\models\htdemucs\htdemucs_6s_fp16.onnx` (this name) |
+| [`htdemucs-6stems-f16.gguf`](https://huggingface.co/audio-cpp/audio.cpp-gguf/resolve/462b4cec041e06ffb3d8fcf0d8c655051b1cd9f5/HTDemucs-6stems-GGUF/htdemucs-6stems-f16.gguf) | HT-Demucs, six stems, audio.cpp's own GGUF | 55 MB | `separation\models\htdemucs\` |
 
-**MIDI from audio** — the transcriber and one of the models
-
-| File | What for | Size | Put in `data\` |
-| --- | --- | --- | --- |
-| [`music-midi-cuda-windows-x64.zip`](https://github.com/timoncool/YuE2-Studio/releases/download/music-midi-8a5e42c4/music-midi-cuda-windows-x64.zip) | HOT-Step's `ace-midi`, unpacked | 126 MB | `midi\runtime\music-midi\` |
+**MIDI from audio** — one of the models, in the audio.cpp server above
 | [muscriptor-small](https://huggingface.co/cocktailpeanut/muscriptor-small/tree/31a8f75d6a8b5383fd71ad1371dc1620389ab722): `config.json`, `model.safetensors` | fast, 103M | 0.4 GB | `midi\models\muscriptor-small\` |
 | [muscriptor-medium](https://huggingface.co/cocktailpeanut/muscriptor-medium/tree/27246ba68bd4d8f98bdec10a6edf8d7cf42a8826): `config.json`, `model.safetensors` | balanced, 307M | 1.2 GB | `midi\models\muscriptor-medium\` |
 | [muscriptor-large](https://huggingface.co/cocktailpeanut/muscriptor-large/tree/87f4bf981f56f90fb5043153b3f54af3c3053da9): `config.json`, `model.safetensors` | best, 1.4B | 5.5 GB | `midi\models\muscriptor-large\` |
