@@ -58,8 +58,12 @@ export const OwnModelPanel: React.FC = () => {
   };
 
   const reveal = async () => {
-    const response = await fetch('/setup/own-model/reveal', { method: 'POST' });
-    if (!response.ok) setError((await response.json().catch(() => null) as { error?: string } | null)?.error || `${response.status}`);
+    try {
+      const response = await fetch('/setup/own-model/reveal', { method: 'POST' });
+      if (!response.ok) setError((await response.json().catch(() => null) as { error?: string } | null)?.error || `${response.status} ${response.statusText}`);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : String(reason));
+    }
   };
 
   return (
