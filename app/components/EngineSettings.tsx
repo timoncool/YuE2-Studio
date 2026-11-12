@@ -15,6 +15,27 @@ import { poll } from '../services/poll';
 type ComputeBackend = 'auto' | 'cuda' | 'vulkan' | 'cpu';
 type FlashAttention = 'auto' | 'on' | 'off';
 type KvQ8Off = 'processor' | 'vulkan' | 'flash_attention_off' | null;
+type KvCache = 'auto' | 'f16' | 'q8';
+
+/** The KV cache the running engine took, and why (`KvChoice` of the service). */
+export interface KvCacheNow {
+  q8: boolean;
+  reason: 'set' | 'fits' | 'does_not_fit' | 'unmeasured' | 'processor' | 'vulkan' | 'flash_attention_off';
+  need_gib: number | null;
+  free_gib: number | null;
+}
+
+const gb = (gib: number | null) => (gib == null ? '?' : gib.toFixed(1));
+
+/** The "Now" line under the KV cache choice. */
+export function kvCacheNowLine(tt: (key: string) => string, now: KvCacheNow): string {
+  const key = now.reason === 'set' ? (now.q8 ? 'kvCacheNowQ8Set' : 'kvCacheNowF16Set')
+    : now.reason === 'fits' ? 'kvCacheNowFits'
+      : now.reason === 'does_not_fit' ? 'kvCacheNowDoesNotFit'
+        : now.reason === 'unmeasured' ? 'kvCacheNowUnmeasured'
+          : 'kvCacheNowNoQ8';
+  return tt(key).replace('{need}', gb(now.need_gib)).replace('{free}', gb(now.free_gib));
+}
 
 /** What the running engine was started with, as the service read it from the launch. */
 interface InEffect {
@@ -35,7 +56,7 @@ interface EngineOptions {
   /** Seconds a later chunk of the sound hears the song again before its fade; null: 30. */
   chunk_overlap_seconds: number | null;
   flash_attention: FlashAttention;
-  kv_q8: boolean;
+  kv_cache: KvCache;
   clamp_fp16: boolean;
   /** The NVIDIA card by nvidia-smi index; null: the first. Taken at the studio's start. */
   gpu?: number | null;
@@ -54,7 +75,7 @@ const DEFAULTS: EngineOptions = {
   vae_halo: null,
   chunk_overlap_seconds: null,
   flash_attention: 'auto',
-  kv_q8: false,
+  kv_cache: 'auto',
   clamp_fp16: false,
   gpu: null,
   extra_args: '',
@@ -90,6 +111,7 @@ export const EngineSettings: React.FC = () => {
   const [inEffect, setInEffect] = useState<InEffect | null>(null);
   // why a KV cache in Q8 cannot apply here, as the service reads the machine (an Auto it resolves to the processor)
   const [serverKvQ8Off, setServerKvQ8Off] = useState<KvQ8Off>(null);
+  const [kvCacheNow, setKvCacheNow] = useState<KvCacheNow | null>(null);
   const kvQ8Off: KvQ8Off = options.backend === 'cpu' ? 'processor' : options.backend === 'vulkan' ? 'vulkan' : options.flash_attention === 'off' ? 'flash_attention_off'
     : options.backend === saved.backend && options.flash_attention === saved.flash_attention ? serverKvQ8Off : null;
   const [savedMaxSeq, setSavedMaxSeq] = useState<number | null>(null);
@@ -122,9 +144,10 @@ export const EngineSettings: React.FC = () => {
     try {
       const response = await fetch('/engine/options');
       if (!response.ok) throw new Error(`Engine options are unavailable (${response.status})`);
-      const body: { options: EngineOptions; in_effect?: InEffect | null; saved_max_seq?: number; kv_q8_off_reason?: KvQ8Off; executable?: string | null; executable_source?: string; running_executable?: string | null; engine_starting?: boolean } = await response.json();
+      const body: { options: EngineOptions; in_effect?: InEffect | null; saved_max_seq?: number; kv_q8_off_reason?: KvQ8Off; kv_cache_now?: KvCacheNow | null; executable?: string | null; executable_source?: string; running_executable?: string | null; engine_starting?: boolean } = await response.json();
       setInEffect(body.in_effect ?? null);
       setServerKvQ8Off(body.kv_q8_off_reason ?? null);
+      setKvCacheNow(body.kv_cache_now ?? null);
       setSavedMaxSeq(typeof body.saved_max_seq === 'number' ? body.saved_max_seq : null);
       // A settings file written before a flag existed arrives without it;
       // the default keeps the comparison below honest.
@@ -385,14 +408,25 @@ export const EngineSettings: React.FC = () => {
         <span className="mt-2 block text-xs leading-5 text-zinc-500 dark:text-zinc-400">{tt('flashAttentionHint')}</span>
       </label>
 
-      <Toggle
-        label={tt('kvQ8Label')}
-        hint={tt('kvQ8Hint')}
-        checked={options.kv_q8}
-        disabled={kvQ8Off !== null}
-        note={kvQ8Off === 'processor' ? tt('kvQ8OffProcessor') : kvQ8Off === 'vulkan' ? tt('kvQ8OffVulkan') : kvQ8Off === 'flash_attention_off' ? tt('kvQ8OffFlashAttention') : null}
-        onChange={value => setOptions(current => ({ ...current, kv_q8: value }))}
-      />
+      <label className="block rounded-xl border border-zinc-200 p-3 dark:border-white/10">
+        <span className="block text-sm font-medium text-zinc-800 dark:text-zinc-100">{tt('kvCacheLabel')}</span>
+        <select
+          value={options.kv_cache}
+          onChange={event => setOptions(current => ({ ...current, kv_cache: event.target.value as KvCache }))}
+          className={`${CONTROL} mt-2`}
+        >
+          <option value="auto">{tt('kvCacheAuto')}</option>
+          <option value="f16">F16</option>
+          <option value="q8" disabled={kvQ8Off !== null}>Q8</option>
+        </select>
+        <span className="mt-2 block text-xs leading-5 text-zinc-500 dark:text-zinc-400">{tt('kvCacheHint')}</span>
+        {kvQ8Off !== null && (
+          <span className="mt-1 block text-xs leading-5 text-amber-600 dark:text-amber-300">
+            {kvQ8Off === 'processor' ? tt('kvQ8OffProcessor') : kvQ8Off === 'vulkan' ? tt('kvQ8OffVulkan') : tt('kvQ8OffFlashAttention')}
+          </span>
+        )}
+        {kvCacheNow && <span className="mt-1 block text-xs leading-5 text-zinc-500 dark:text-zinc-400">{kvCacheNowLine(tt, kvCacheNow)}</span>}
+      </label>
 
       <details className="rounded-xl border border-zinc-200 p-3 dark:border-white/10">
         <summary className="cursor-pointer text-xs font-semibold uppercase tracking-wide text-zinc-500">{t('diagnostics')}</summary>

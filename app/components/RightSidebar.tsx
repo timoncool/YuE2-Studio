@@ -617,6 +617,7 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({ song, onClose, onOpe
                         const paramRows: [string, string | number | undefined][] = [
                             [t('profile'), song.lmModel || undefined],
                             [(t as unknown as (key: string) => string)('ownModelRow'), typeof p.own_model === 'string' ? p.own_model : undefined],
+                            [(t as unknown as (key: string) => string)('kvCacheRow'), typeof p.kv_cache === 'string' ? p.kv_cache.toUpperCase() : undefined],
                             [t('cotMode'), p.cot ? cotLabel[p.cot] ?? p.cot : undefined],
                             [t('maxDuration'), song.duration && song.duration !== '0:00' ? song.duration : undefined],
                             [t('flowSteps'), p.steps],

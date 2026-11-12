@@ -1048,7 +1048,7 @@ fn tools() -> &'static [Tool] {
             },
             Tool {
                 name: "engine_options_get",
-                description: "The engine's launch options: backend (auto, cuda, vulkan, cpu), keep models loaded, kv_q8 (the KV cache in Q8, half the memory, only with flash attention on an NVIDIA card through CUDA: kv_q8_off_reason says why not - processor, vulkan or flash_attention_off), and the rest - including extra_args, any other command-line flag the engine takes, and engine_bin, a hand-built engine executable to run instead of the bundled one.",
+                description: "The engine's launch options: backend (auto, cuda, vulkan, cpu), keep models loaded, kv_cache (auto, f16 or q8: Auto keeps F16 while the set and a full-context cache for each track fit the card's free memory and takes Q8, half the memory, when they do not; Q8 only with flash attention on an NVIDIA card through CUDA, kv_q8_off_reason says why not - processor, vulkan or flash_attention_off; the same seed gives another song on another type of cache), kv_cache_now (the running engine's cache: q8, reason - set, fits, does_not_fit, unmeasured or why Q8 does not apply - need_gib and free_gib), and the rest - including extra_args, any other command-line flag the engine takes, and engine_bin, a hand-built engine executable to run instead of the bundled one.",
                 schema: nothing,
                 call: |_| get("/engine/options".into()),
             },
@@ -3301,6 +3301,7 @@ mod tests {
     const NOT_TOOLS: &[(&str, &str, &str)] = &[
         ("GET", "/health", "the service's identity for the desktop shell: initialize names the server and its version"),
         ("POST", "/engine/pick-executable", "a file dialog for the person: engine_options_set takes the executable's path"),
+        ("POST", "/setup/kv-cache-notice/seen", "the window's note that it told the person: engine_options_get says the cache and why"),
         ("GET", "/v1/engine/progress", "the starting page's progress stream: studio_status and engine_logs"),
         ("GET", "/v1/proxy/image", "pictures from the internet relayed for the page"),
         ("POST", "/v1/files/save", "a save dialog for the person: the tools write to the path the agent names"),

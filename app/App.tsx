@@ -197,7 +197,7 @@ function AppContent() {
   // page for a second on every launch is how a ready studio was made to look
   // like a bill.
   const [nativeModels, setNativeModels] = useState<'unknown' | 'missing' | 'installed' | 'offline'>('unknown');
-  const setupQuery = useSetupStatus<{ ready?: boolean; engine_ready?: boolean }>();
+  const setupQuery = useSetupStatus<{ ready?: boolean; engine_ready?: boolean; kv_cache_notice?: { need_gib: number | null; free_gib: number | null } | null }>();
   useEffect(() => {
     // A service that does not answer is not an engine that is still coming
     // up: the application has been closed, and saying "starting" at a dead
@@ -404,6 +404,19 @@ function AppContent() {
   const closeToast = () => {
     setToast(prev => ({ ...prev, isVisible: false }));
   };
+
+  // Auto took the KV cache to Q8 at the engine's start: said once in a run of the studio, then marked as told
+  const kvCacheNotice = setupQuery.data?.kv_cache_notice ?? null;
+  const kvCacheTold = useRef(false);
+  useEffect(() => {
+    if (!kvCacheNotice || kvCacheTold.current) return;
+    kvCacheTold.current = true;
+    const gb = (gib: number | null) => (gib == null ? '?' : gib.toFixed(1));
+    showToast((t as unknown as (key: string) => string)('kvCacheSwitched').replace('{need}', gb(kvCacheNotice.need_gib)).replace('{free}', gb(kvCacheNotice.free_gib)), 'info');
+    void fetch('/setup/kv-cache-notice/seen', { method: 'POST' })
+      .catch((problem: unknown) => console.error('[ERROR] the studio did not learn the KV cache notice was shown:', problem));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [kvCacheNotice]);
 
   // The songs being made: their cards, the jobs they follow, and the row each
   // hands to the song it becomes.

@@ -157,9 +157,13 @@ struct AppState {
     /// memory steps down from the cache it was made with, not from one another lost song already stepped to.
     running_max_seq: Arc<RwLock<u32>>,
     job_max_seq: Arc<RwLock<HashMap<String, u32>>>,
-    /// The card's free memory, in GiB, measured as the running engine started and before its weights loaded; none on
-    /// the processor or when it was not read.
-    card_free_at_start: Arc<RwLock<Option<f64>>>,
+    /// The KV cache the running engine started with, and the card's memory free before its weights loaded, which each
+    /// request's tracks are fitted to (`tracks_for_card`).
+    kv_cache_running: Arc<RwLock<Option<KvChoice>>>,
+    /// Auto's switch to Q8 for the window to tell once in a run of the studio: pending until the window has shown it,
+    /// and `kv_q8_told` keeps a later start of the engine from asking again.
+    kv_q8_notice: Arc<RwLock<Option<KvChoice>>>,
+    kv_q8_told: Arc<std::sync::atomic::AtomicBool>,
     /// Songs lost together decide their step one at a time.
     memory_retry_lock: Arc<tokio::sync::Mutex<()>>,
     /// Audio to MIDI: the transcriber and its weights, the run at work or the
@@ -751,9 +755,15 @@ struct EngineOptions {
     /// `CHUNK_OVERLAP_SECONDS`.
     chunk_overlap_seconds: Option<u32>,
     flash_attention: FlashAttention,
-    /// The KV cache in Q8_0, about half the memory of F16: read through flash attention on a card, so it applies only
-    /// there (`kv_q8_off_reason`).
+    /// The KV cache's type: Auto keeps F16 while the card holds it and takes Q8_0, half the memory, when it does not
+    /// (`kv_cache_choice`). Q8 is read through flash attention on a card, so it applies only there (`kv_q8_off_reason`).
+    kv_cache: KvCache,
+    /// The switch of settings saved before `kv_cache`: read once and turned into `Q8`, never written.
+    #[serde(skip_serializing)]
     kv_q8: bool,
+    /// The card's memory free as a start begins, in MiB, which Auto weighs the cache against; never saved.
+    #[serde(skip)]
+    card_free_mib: Option<u64>,
     /// The switch of settings saved before `flash_attention`: read once and turned into `Off`, never written.
     #[serde(skip_serializing)]
     disable_flash_attention: bool,
@@ -774,6 +784,27 @@ struct EngineOptions {
     /// The KV cache the studio stepped down to after the card ran out of memory on a song, by card and backbone
     /// (`fitted_key`). Used only while `max_seq` is empty; a value set by hand always wins.
     fitted_max_seq: std::collections::BTreeMap<String, u32>,
+}
+
+/// The KV cache's type as Settings chooses it.
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+enum KvCache {
+    #[default]
+    Auto,
+    F16,
+    Q8,
+}
+
+/// The KV cache a start runs with, and why: `set` (chosen in Settings), `fits` and `does_not_fit` (Auto against the
+/// card's free memory, with the GiB F16 needs and the GiB free), `unmeasured` (Auto on a set or a card not measured),
+/// or the reason Q8 cannot apply (`kv_q8_off_reason`).
+#[derive(Debug, Clone, Copy, PartialEq, Serialize)]
+struct KvChoice {
+    q8: bool,
+    reason: &'static str,
+    need_gib: Option<f64>,
+    free_gib: Option<f64>,
 }
 
 /// Flash attention as Settings chooses it: `Auto` leaves it off only where it is known to go wrong.
@@ -893,11 +924,14 @@ impl EngineOptions {
         self.cuda_build().is_some() && Self::fa_regressed_cc(hardware::hardware().compute_capability)
     }
 
-    /// Settings saved before the three-way choice said "off" with a switch.
     fn migrated(mut self) -> Self {
         if self.disable_flash_attention {
             self.flash_attention = FlashAttention::Off;
             self.disable_flash_attention = false;
+        }
+        if self.kv_q8 {
+            self.kv_cache = KvCache::Q8;
+            self.kv_q8 = false;
         }
         self
     }
@@ -963,7 +997,7 @@ impl EngineOptions {
     /// sound's codes, an upper bound of the runs at 120, 240 and 600 seconds) within the engine's `context`; a guided
     /// song (CFG above 1) keeps an unconditional cache beside it. `None` when as many as asked fit, or the set was not
     /// measured.
-    fn tracks_for_request(&self, backbone: &std::path::Path, free_gib: f64, context: u32, seconds: f64, guided: bool, asked: u32) -> Option<u32> {
+    fn tracks_for_request(&self, backbone: &std::path::Path, free_gib: f64, context: u32, seconds: f64, guided: bool, q8: bool, asked: u32) -> Option<u32> {
         const GIB: f64 = 1024.0 * 1024.0 * 1024.0;
         let name = backbone.file_name()?.to_string_lossy().to_ascii_uppercase();
         let resident = SET_RESIDENT_GIB.iter().find(|(set, kept, _)| name.contains(set) && *kept == self.keep_loaded).map(|(_, _, gib)| *gib)?;
@@ -971,7 +1005,7 @@ impl EngineOptions {
         let tokens = (2.0 * frames + 3500.0).min(f64::from(context));
         let sets = if guided { 2.0 } else { 1.0 };
         // a Q8 cache is about half the F16 one
-        let kv = tokens * KV_BYTES_PER_TOKEN / GIB * sets * if self.kv_q8_now() { 0.5 } else { 1.0 };
+        let kv = tokens * KV_BYTES_PER_TOKEN / GIB * sets * if q8 { 0.5 } else { 1.0 };
         let asked = asked.max(1);
         let fits = Self::tracks_that_fit(free_gib, resident, kv, asked);
         (fits < asked).then_some(fits)
@@ -1024,13 +1058,37 @@ impl EngineOptions {
         self.flash_attention_off_reason().map(|_| "flash_attention_off")
     }
 
-    /// The KV cache in Q8 for this start: chosen, and on a card with flash attention.
-    fn kv_q8_now(&self) -> bool {
-        self.kv_q8 && self.kv_q8_off_reason().is_none()
+    /// The KV cache of a start: Q8 or F16 as chosen, Q8 only on a card with flash attention; Auto, F16 while the set, a
+    /// full-context cache for each track from Settings and the reserve fit `free_gib`, the card's memory free before
+    /// the weights load, and Q8 when they do not. Auto stays F16 on a set or a card not measured.
+    fn kv_cache_choice(&self, backbone: Option<&std::path::Path>, free_gib: Option<f64>) -> KvChoice {
+        const GIB: f64 = 1024.0 * 1024.0 * 1024.0;
+        let choice = |q8: bool, reason: &'static str, need_gib: Option<f64>| KvChoice { q8, reason, need_gib, free_gib };
+        if let Some(reason) = self.kv_q8_off_reason() {
+            return choice(false, reason, None);
+        }
+        match self.kv_cache {
+            KvCache::Q8 => choice(true, "set", None),
+            KvCache::F16 => choice(false, "set", None),
+            KvCache::Auto => {
+                let name = backbone.and_then(|backbone| backbone.file_name()).map(|name| name.to_string_lossy().to_ascii_uppercase()).unwrap_or_default();
+                let resident = SET_RESIDENT_GIB.iter().find(|(set, kept, _)| name.contains(set) && *kept == self.keep_loaded).map(|(_, _, gib)| *gib);
+                let (Some(resident), Some(free)) = (resident, free_gib) else { return choice(false, "unmeasured", None) };
+                let kv = f64::from(self.effective_max_seq(backbone).unwrap_or(MODEL_CONTEXT)) * KV_BYTES_PER_TOKEN / GIB;
+                let need = resident + kv * f64::from(self.effective_max_batch()) + TRACKS_RESERVE_GIB;
+                if need <= free { choice(false, "fits", Some(need)) } else { choice(true, "does_not_fit", Some(need)) }
+            }
+        }
+    }
+
+    /// The card's free memory a start weighs the cache against, in GiB.
+    fn card_free_at_start(&self) -> Option<f64> {
+        self.card_free_mib.map(|mib| mib as f64 / 1024.0)
     }
 
     fn to_engine(self, backbone: Option<&std::path::Path>) -> music_engine::yue_server::YueServerOptions {
         let nar_chunk = self.nar_chunk(backbone);
+        let kv_q8 = self.kv_cache_choice(backbone, self.card_free_at_start()).q8;
         let fa_off = self.flash_attention_off_reason().is_some();
         music_engine::yue_server::YueServerOptions {
             backend: self.backend,
@@ -1046,7 +1104,7 @@ impl EngineOptions {
             // range and the song comes out as pure silence, which the engine's
             // MP3 path then crashes on; the engine's own clamp fixes it.
             clamp_fp16: self.clamp_fp16 || self.uses_vulkan() || (self.cuda_build().is_some() && hardware::accumulates_in_fp16()),
-            kv_q8: self.kv_q8_now(),
+            kv_q8,
             cuda_folder: self.cuda_build().map(hardware::CudaBuild::folder),
             extra_args: self.extra_args,
         }
@@ -1280,7 +1338,9 @@ pub async fn serve() -> anyhow::Result<()> {
         memory_retries: Arc::new(RwLock::new(HashMap::new())),
         running_max_seq: Arc::new(RwLock::new(MODEL_CONTEXT)),
         job_max_seq: Arc::new(RwLock::new(HashMap::new())),
-        card_free_at_start: Arc::new(RwLock::new(None)),
+        kv_cache_running: Arc::new(RwLock::new(None)),
+        kv_q8_notice: Arc::new(RwLock::new(None)),
+        kv_q8_told: Arc::new(std::sync::atomic::AtomicBool::new(false)),
         memory_retry_lock: Arc::new(tokio::sync::Mutex::new(())),
         midi: Arc::new(midi::Transcriber::new(&studio_data_root().unwrap_or_else(|| std::path::PathBuf::from(".")), acpp.clone())),
         midi_run: Arc::new(RwLock::new(None)),
@@ -1543,6 +1603,7 @@ pub async fn serve() -> anyhow::Result<()> {
         .route("/setup/select", post(setup_select))
         .route("/setup/own-model", get(own_model_status).put(own_model_select))
         .route("/setup/own-model/reveal", post(own_model_reveal))
+        .route("/setup/kv-cache-notice/seen", post(kv_cache_notice_seen))
         .route("/setup/cancel", post(setup_cancel))
         .route("/setup/update", get(setup_update))
         .route("/setup/update/apply", post(setup_update_apply))
@@ -5025,6 +5086,8 @@ async fn engine_options(State(state): State<AppState>) -> Json<Value> {
             "kv_q8": launched.kv_q8,
         })
     });
+    // the type of KV cache the running engine took, and why: Auto's choice comes with the GiB it weighed
+    let kv_cache_now = *state.kv_cache_running.read().await;
     Json(serde_json::json!({
         "options": options,
         "in_effect": in_effect,
@@ -5032,6 +5095,7 @@ async fn engine_options(State(state): State<AppState>) -> Json<Value> {
         "effective_max_batch": options.effective_max_batch(),
         // why a KV cache in Q8 does not apply on this machine: "processor" or "flash_attention_off"
         "kv_q8_off_reason": options.kv_q8_off_reason(),
+        "kv_cache_now": kv_cache_now,
         "restart_required_to_apply": true,
         "executable": executable,
         "executable_source": executable_source,
@@ -5284,8 +5348,12 @@ async fn start_engine_again(state: &AppState) -> Result<(), String> {
                 music_engine::yue_server::note_in_log(&format!("KV cache {fitted}, fitted after the card ran out of memory on a song"));
             }
         }
-        // what the card has free before the weights load: each request's tracks are fitted to it (`tracks_for_request`)
-        *state.card_free_at_start.write().await = attempt.card_free_gib();
+        // what the card has free before the weights load: Auto weighs the cache against it, and each request's tracks
+        // are fitted to it (`tracks_for_request`)
+        let mut attempt = attempt;
+        attempt.card_free_mib = attempt.card_free_gib().map(|gib| (gib * 1024.0) as u64);
+        let kv = attempt.kv_cache_choice(Some(&backbone), attempt.card_free_at_start());
+        music_engine::yue_server::note_in_log(&kv_cache_line(&kv, attempt.effective_max_batch(), attempt.effective_max_seq(Some(&backbone)).unwrap_or(MODEL_CONTEXT)));
         if let Some(reason) = attempt.flash_attention_off_reason() {
             let chunk = match attempt.nar_chunk(Some(&backbone)) {
                 Some(frames) => format!("; acoustic chunks of {frames} frames for the card's memory"),
@@ -5300,6 +5368,10 @@ async fn start_engine_again(state: &AppState) -> Result<(), String> {
         match tokio::task::block_in_place(|| engine.ensure_started(std::time::Duration::from_secs(60))) {
             Ok(_) => {
                 *state.running_max_seq.write().await = engine.config().options.max_seq.unwrap_or(MODEL_CONTEXT);
+                *state.kv_cache_running.write().await = Some(kv);
+                if kv.q8 && kv.reason == "does_not_fit" && !state.kv_q8_told.swap(true, std::sync::atomic::Ordering::Relaxed) {
+                    *state.kv_q8_notice.write().await = Some(kv);
+                }
                 *supervisor = Some(engine);
                 *state.active_device.write().await = Some(device);
                 if options.backend == music_engine::yue_server::ComputeBackend::Auto {
@@ -6192,6 +6264,8 @@ async fn compose_setup_status(state: &AppState, manager_status: model_manager::M
         fields.insert("hardware".into(), serde_json::to_value(hardware::hardware()).unwrap_or(Value::Null));
         fields.insert("engine_options".into(), serde_json::to_value(state.engine_options.read().await.clone()).unwrap_or(Value::Null));
         fields.insert("effective_max_batch".into(), Value::from(state.engine_options.read().await.effective_max_batch()));
+        // Auto's switch of the KV cache to Q8, until the window has told it once
+        fields.insert("kv_cache_notice".into(), serde_json::to_value(*state.kv_q8_notice.read().await).unwrap_or(Value::Null));
         // Where everything the studio owns actually lives. People complained
         // they could not find the ten gigabytes afterwards, let alone delete
         // them; the model root is already reported, this is the folder that
@@ -8873,6 +8947,12 @@ async fn own_model_reveal(State(state): State<AppState>) -> Result<Json<Value>, 
     Ok(Json(serde_json::json!({ "opened": folder.display().to_string() })))
 }
 
+/// The window told the person that Auto took the KV cache to Q8: it is not told again in this run of the studio.
+async fn kv_cache_notice_seen(State(state): State<AppState>) -> Json<Value> {
+    *state.kv_q8_notice.write().await = None;
+    Json(serde_json::json!({ "seen": true }))
+}
+
 async fn setup_cancel(State(state): State<AppState>) -> Result<Json<Value>, (StatusCode, Json<ApiError>)> {
     let target = effective_install_target(&state).await;
     let manager_status = state
@@ -9335,21 +9415,37 @@ async fn create_music_job(
     submit_music_job(state, request, 0).await
 }
 
+/// The engine log's line of the KV cache a start runs with, and why, in numbers where Auto weighed them.
+fn kv_cache_line(kv: &KvChoice, tracks: u32, context: u32) -> String {
+    let kind = if kv.q8 { "Q8" } else { "F16" };
+    let tracks = if tracks == 1 { "1 track".to_string() } else { format!("{tracks} tracks") };
+    match (kv.reason, kv.need_gib, kv.free_gib) {
+        ("does_not_fit", Some(need), Some(free)) => {
+            format!("KV cache Q8, chosen automatically: F16 needs {need:.1} GiB for the set and {tracks} at {context} tokens, {free:.1} GiB free")
+        }
+        ("fits", Some(need), Some(free)) => format!("KV cache F16 (Auto): {need:.1} GiB of {free:.1} GiB free for the set and {tracks} at {context} tokens"),
+        ("set", _, _) => format!("KV cache {kind}, set in Settings"),
+        ("unmeasured", _, _) => "KV cache F16 (Auto): the set or the card's free memory is not measured".to_string(),
+        (reason, _, _) => format!("KV cache {kind}: Q8 does not apply here ({reason})"),
+    }
+}
+
 /// The tracks one request may ask for: the number from Settings, which the engine starts with.
 async fn track_limit(state: &AppState) -> u32 {
     state.engine_options.read().await.effective_max_batch()
 }
 
 /// The tracks of `request` the card holds, out of those it asks for: the card's memory free when the engine started,
-/// less the set and a cache for each track sized to this song (`EngineOptions::tracks_for_request`). As many as asked
-/// when the card or the set was not measured.
+/// less the set and a cache for each track sized to this song (`EngineOptions::tracks_for_request`) in the type the
+/// engine runs. As many as asked when the card or the set was not measured.
 async fn tracks_for_card(state: &AppState, request: &CreateMusicJobRequest, asked: u32) -> u32 {
-    let Some(free) = *state.card_free_at_start.read().await else { return asked };
+    let Some(running) = *state.kv_cache_running.read().await else { return asked };
+    let Some(free) = running.free_gib else { return asked };
     let Ok(models) = selected_engine_models(state).await else { return asked };
     let context = *state.running_max_seq.read().await;
     let guided = request.cfg_scale.is_some_and(|scale| scale > 1.0);
     let seconds = request.duration_seconds.unwrap_or(f64::from(context) / 25.0);
-    state.engine_options.read().await.tracks_for_request(&models.backbone, free, context, seconds, guided, asked).unwrap_or(asked)
+    state.engine_options.read().await.tracks_for_request(&models.backbone, free, context, seconds, guided, running.q8, asked).unwrap_or(asked)
 }
 
 /// The song a cover is made of. A new request refuses a source in the bin; a cover resumed after a restart was
@@ -10171,6 +10267,7 @@ async fn import_completed_result(state: &AppState, job: &MusicJob, job_id: &str)
     let tracks = engine_result::parse_multipart_result(&result.content_type, &result.body)?;
     // a song of the person's own model counts as the set `own`, its file named on the song only
     let own_model = state.own_backbone.read().await.clone();
+    let kv_cache = *state.kv_cache_running.read().await;
     let profile_id = if own_model.is_some() { Some("own".to_string()) } else { state.selected_profile_id.read().await.clone() };
     // The engine's defaults fill whatever the request left out, so a stored
     // track records every value it was made with, not only the ones typed.
@@ -10224,6 +10321,10 @@ async fn import_completed_result(state: &AppState, job: &MusicJob, job_id: &str)
         settings.insert("synth_batch_size".into(), Value::from(1));
         if let Some(name) = &own_model {
             settings.insert("own_model".into(), Value::String(name.clone()));
+        }
+        // the same seed on another type of cache is another song
+        if let Some(kv) = kv_cache {
+            settings.insert("kv_cache".into(), Value::String(if kv.q8 { "q8" } else { "f16" }.into()));
         }
         let mut extension = engine_result::audio_extension(&track.audio_content_type)?;
         let mut audio = track.audio;
@@ -11613,24 +11714,41 @@ mod tests {
         assert!(!off.to_engine(None).arguments().iter().any(|argument| argument == "--nar-halo"));
     }
 
-    /// A KV cache in Q8 is off until chosen, and reaches the engine only on a CUDA card with flash attention.
+    /// Auto keeps the KV cache in F16 while the set and a full-context cache for each track fit the card's free memory
+    /// and takes Q8 when they do not, before any track is given up; Q8 applies only on a CUDA card with flash attention,
+    /// so the processor and Vulkan stay on F16 with their reason; a saved Q8 switch reads as Q8.
     #[test]
-    fn a_q8_kv_cache_is_chosen_and_needs_flash_attention_on_a_card() {
+    fn the_kv_cache_is_f16_while_it_fits_and_q8_when_it_does_not() {
         use music_engine::yue_server::ComputeBackend;
-        assert!(!EngineOptions::default().kv_q8, "off until chosen");
-        let on_cpu = EngineOptions { kv_q8: true, backend: ComputeBackend::Cpu, ..EngineOptions::default() };
-        assert_eq!(on_cpu.kv_q8_off_reason(), Some("processor"));
+        let q8_set = std::path::Path::new("YuE2-3B-Q8_0.gguf");
+        assert_eq!(EngineOptions::default().kv_cache, KvCache::Auto);
+        let old: EngineOptions = serde_json::from_value(serde_json::json!({ "kv_q8": true })).unwrap();
+        assert_eq!(old.migrated().kv_cache, KvCache::Q8);
+        let on_cpu = EngineOptions { kv_cache: KvCache::Q8, backend: ComputeBackend::Cpu, ..EngineOptions::default() };
+        assert_eq!(on_cpu.kv_cache_choice(Some(q8_set), Some(20.0)), KvChoice { q8: false, reason: "processor", need_gib: None, free_gib: Some(20.0) });
         assert!(!on_cpu.to_engine(None).arguments().iter().any(|argument| argument == "--kv-q8"));
-        let vulkan = EngineOptions { kv_q8: true, backend: ComputeBackend::Vulkan, flash_attention: FlashAttention::On, ..EngineOptions::default() };
-        assert_eq!(vulkan.kv_q8_off_reason(), Some("vulkan"), "measured on CUDA only");
-        assert!(!vulkan.to_engine(None).arguments().iter().any(|argument| argument == "--kv-q8"));
+        let vulkan = EngineOptions { kv_cache: KvCache::Auto, backend: ComputeBackend::Vulkan, flash_attention: FlashAttention::On, ..EngineOptions::default() };
+        assert_eq!(vulkan.kv_cache_choice(Some(q8_set), Some(4.0)).reason, "vulkan", "measured on CUDA only");
         // the CUDA cases need a card that runs a CUDA build
         if hardware::hardware().cuda.is_some() {
-            let fa_off = EngineOptions { kv_q8: true, backend: ComputeBackend::Cuda, flash_attention: FlashAttention::Off, ..EngineOptions::default() };
-            assert_eq!(fa_off.kv_q8_off_reason(), Some("flash_attention_off"));
-            let on_card = EngineOptions { kv_q8: true, backend: ComputeBackend::Cuda, flash_attention: FlashAttention::On, ..EngineOptions::default() };
-            assert!(on_card.kv_q8_now());
-            assert!(on_card.to_engine(None).arguments().iter().any(|argument| argument == "--kv-q8"));
+            let fa_off = EngineOptions { kv_cache: KvCache::Q8, backend: ComputeBackend::Cuda, flash_attention: FlashAttention::Off, ..EngineOptions::default() };
+            assert_eq!(fa_off.kv_cache_choice(Some(q8_set), Some(20.0)).reason, "flash_attention_off");
+            let auto = EngineOptions { backend: ComputeBackend::Cuda, flash_attention: FlashAttention::On, max_batch: Some(4), ..EngineOptions::default() };
+            // the Q8 set, four full-context F16 caches and the reserve: 2.8 + 4 x 2.625 + 1.0 = 14.3 GiB
+            let roomy = auto.kv_cache_choice(Some(q8_set), Some(20.0));
+            assert_eq!((roomy.q8, roomy.reason), (false, "fits"));
+            let tight = auto.kv_cache_choice(Some(q8_set), Some(10.0));
+            assert_eq!((tight.q8, tight.reason), (true, "does_not_fit"));
+            assert!((tight.need_gib.unwrap() - 14.3).abs() < 0.01, "{tight:?}");
+            assert_eq!(auto.kv_cache_choice(Some(std::path::Path::new("YuE2-3B-Q4_K_M.gguf")), Some(10.0)).reason, "unmeasured");
+            // Q8 comes before giving up tracks: half the cache keeps more of them
+            let ten_minutes = |q8: bool| auto.tracks_for_request(q8_set, 10.0, MODEL_CONTEXT, 600.0, false, q8, 4).unwrap_or(4);
+            assert!(ten_minutes(true) > ten_minutes(false), "{} against {}", ten_minutes(true), ten_minutes(false));
+            let mut started = EngineOptions { kv_cache: KvCache::Auto, ..auto.clone() };
+            started.card_free_mib = Some(10 * 1024);
+            assert!(started.clone().to_engine(Some(q8_set)).arguments().iter().any(|argument| argument == "--kv-q8"));
+            let set = EngineOptions { kv_cache: KvCache::F16, ..started };
+            assert!(!set.to_engine(Some(q8_set)).arguments().iter().any(|argument| argument == "--kv-q8"), "F16 set by hand stays");
         }
     }
 
@@ -11650,21 +11768,23 @@ mod tests {
     #[test]
     fn a_request_takes_the_tracks_the_card_holds_for_its_length() {
         use music_engine::yue_server::ComputeBackend;
-        let options = EngineOptions { backend: ComputeBackend::Cpu, kv_q8: false, max_batch: Some(4), ..EngineOptions::default() };
+        let options = EngineOptions { backend: ComputeBackend::Cpu, max_batch: Some(4), ..EngineOptions::default() };
         let q8 = std::path::Path::new("YuE2-3B-Q8_0.gguf");
         let bf16 = std::path::Path::new("YuE2-3B-BF16.gguf");
-        // an 8 GB card with half a gigabyte taken by the desktop, the Q8 set, four tracks asked
-        let eight = |seconds: f64| options.tracks_for_request(q8, 7.5, MODEL_CONTEXT, seconds, false, 4).unwrap_or(4);
+        // an 8 GB card with half a gigabyte taken by the desktop, the Q8 set, four tracks asked, an F16 cache
+        let eight = |seconds: f64| options.tracks_for_request(q8, 7.5, MODEL_CONTEXT, seconds, false, false, 4).unwrap_or(4);
         assert_eq!(eight(60.0), 4, "a minute's caches fit four tracks");
         assert_eq!(eight(240.0), 2);
         assert_eq!(eight(600.0), 1, "the full context fits one");
         // a guided song keeps a second cache for each track
-        assert_eq!(options.tracks_for_request(q8, 7.5, MODEL_CONTEXT, 60.0, true, 4), Some(2));
+        assert_eq!(options.tracks_for_request(q8, 7.5, MODEL_CONTEXT, 60.0, true, false, 4), Some(2));
+        // a Q8 cache is half: two tracks of ten minutes on the same card
+        assert_eq!(options.tracks_for_request(q8, 7.5, MODEL_CONTEXT, 600.0, false, true, 4), Some(2));
         // the BF16 set on a 24 GB card with 1.4 GB of the desktop: four tracks of 600 seconds fit
-        assert_eq!(options.tracks_for_request(bf16, 22.6, MODEL_CONTEXT, 600.0, false, 4), None);
+        assert_eq!(options.tracks_for_request(bf16, 22.6, MODEL_CONTEXT, 600.0, false, false, 4), None);
         // a smaller context caps every cache
-        assert_eq!(options.tracks_for_request(q8, 7.5, 9216, 600.0, false, 4), Some(3));
-        assert_eq!(options.tracks_for_request(std::path::Path::new("YuE2-3B-Q4_K_M.gguf"), 7.5, MODEL_CONTEXT, 600.0, false, 4), None, "an unmeasured set");
+        assert_eq!(options.tracks_for_request(q8, 7.5, 9216, 600.0, false, false, 4), Some(3));
+        assert_eq!(options.tracks_for_request(std::path::Path::new("YuE2-3B-Q4_K_M.gguf"), 7.5, MODEL_CONTEXT, 600.0, false, false, 4), None, "an unmeasured set");
     }
 
     /// Extra launch arguments are kept as typed and reach the engine last,
