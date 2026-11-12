@@ -22,6 +22,7 @@ Windows build.
 
 ### Changed
 
+- **Karaoke and the dataset lyrics hear with CrisperWhisper**, as in ACE-Step Studio and MiniMax Music3 Studio: the Whisper choice is now CrisperWhisper 2.0 turbo, a Whisper large-v3 turbo trained for the time of every word, run in the audio.cpp server the stems and Audio to MIDI already use - on the card's CUDA, Vulkan on another card, the processor or Metal - in place of Faster-Whisper and its CUDA 11 libraries. Segments the model fills a gap with are left out. The update screen downloads CrisperWhisper and then removes Faster-Whisper; a Whisper size left in the settings no longer names a model.
 - **Audio to MIDI shows its notes as it hears them** ([#185](https://github.com/timoncool/YuE2-Studio/issues/185)): the player draws the notes while MuScriptor works and says which chunk it is on, instead of staying empty until the end; the finished MIDI is the same as before.
 - **The where-it-runs table says what the studio picks on AMD and Intel cards**: HT-Demucs separates the stems through Vulkan there, Mel-Band RoFormer and MuScriptor run on the processor; the table under Settings - Models and the README said the stems were separated on the processor.
 - **The README's tables of files to download by hand name what the studio downloads**: transcribe.cpp 0.2.1 archives, audio.cpp's server for HT-Demucs and MuScriptor, and HT-Demucs as audio.cpp's GGUF, where they still named the ONNX HT-Demucs and HOT-Step's MIDI transcriber.

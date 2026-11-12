@@ -1299,6 +1299,8 @@ pub async fn serve() -> anyhow::Result<()> {
     }
     state.lyrics_sync.set_cuda_libraries(state.engine_runtime.library_dir());
     state.acpp.set_cuda13_libraries(state.engine_runtime.library_dir());
+    state.lyrics_sync.set_acpp(state.acpp.clone());
+    state.lyrics_sync.register_crisper();
     state.acpp.register(acpp_server::ModelEntry::htdemucs(acpp::HTDEMUCS, &state.separator.model_path()));
     for size in &midi::SIZES {
         state.acpp.register(acpp_server::ModelEntry::muscriptor(&acpp::muscriptor_id(size.id), &state.midi.model_dir(size)));
@@ -2071,11 +2073,7 @@ fn separation_download_progress(
 /// The audio.cpp build HT-Demucs separates on for the separation settings' device: the processor, the card (CUDA, or
 /// Vulkan on a card of another make) or Auto.
 fn separation_build(runtime: lyrics_sync::OnnxFlavour) -> anyhow::Result<acpp_server::asset::Build> {
-    acpp::build_for(match runtime {
-        lyrics_sync::OnnxFlavour::Cpu => "cpu",
-        lyrics_sync::OnnxFlavour::Cuda => "gpu",
-        lyrics_sync::OnnxFlavour::Auto => "auto",
-    })
+    acpp::build_for_runtime(runtime)
 }
 
 /// Downloads what audio.cpp's server of `build` still lacks: the program and its libraries, and for the CUDA 13 build
@@ -3779,12 +3777,25 @@ async fn ensure_local_recogniser_named(state: &AppState, config: &lyrics_sync::L
     let ready = |state: &AppState| match config.provider {
         lyrics_sync::AsrProvider::Parakeet => state.lyrics_sync.parakeet_ready(config.runtime, config.whisper_model.as_deref()),
         lyrics_sync::AsrProvider::Whisper => {
-            state.lyrics_sync.whisper_binary().is_some() && state.lyrics_sync.whisper_model_ready(config)
+            state.lyrics_sync.crisper_ready(config.runtime)
         }
         _ => true,
     };
     if ready(state) {
         return true;
+    }
+    // CrisperWhisper runs in audio.cpp's server, which the tools share and download into their own folder
+    if config.provider == lyrics_sync::AsrProvider::Whisper {
+        if let Ok(build) = acpp::build_for_runtime(config.runtime) {
+            if !state.acpp.installed(build) {
+                note_activity(state, song_id, title, "karaoke", "running", Some("karaoke.downloading".into())).await;
+                if let Err(error) = install_acpp(state, build, "karaoke").await {
+                    eprintln!("could not fetch audio.cpp's server for CrisperWhisper: {error:#}");
+                    note_activity(state, song_id, title, "karaoke", "failed", Some(format!("{error:#}"))).await;
+                    return false;
+                }
+            }
+        }
     }
 
     let missing: Vec<&'static lyrics_sync::Asset> = match config.provider {
@@ -3864,7 +3875,7 @@ async fn time_lyrics_for(state: AppState, song_id: String) {
     let audio = audio.display().to_string();
 
     note_activity(&state, &song_id, &song.title, "karaoke", "running", None).await;
-    let words = karaoke_words(&state, &config, std::path::PathBuf::from(&audio), None, song.lyrics.clone()).await;
+    let words = karaoke_words(&state, &config, std::path::PathBuf::from(&audio), None).await;
     let words = match words {
         Ok(words) => words,
         Err(error) => {
@@ -4881,7 +4892,7 @@ async fn update_configuration(
                         Some("whisper") => lyrics_sync::AsrProvider::Whisper,
                         Some("parakeet") => lyrics_sync::AsrProvider::Parakeet,
                         _ if installed_parakeet.is_some() => lyrics_sync::AsrProvider::Parakeet,
-                        _ if state.lyrics_sync.whisper_binary().is_some() => lyrics_sync::AsrProvider::Whisper,
+                        _ if state.lyrics_sync.crisper_model_ready() => lyrics_sync::AsrProvider::Whisper,
                         _ => sync.provider,
                     },
                 };
@@ -6644,13 +6655,12 @@ async fn karaoke_status(State(state): State<AppState>) -> Json<Value> {
     Json(value)
 }
 
-/// What choosing this recogniser model downloads: a Parakeet's one file, a Whisper model's folder.
+/// What choosing this recogniser model downloads: a Parakeet's one file, CrisperWhisper's folder.
 fn karaoke_variant_bytes(id: &str) -> Option<u64> {
     let files: Vec<&'static lyrics_sync::Asset> = if [lyrics_sync::PARAKEET_V3, lyrics_sync::PARAKEET_ULTRA].contains(&id) {
         lyrics_sync::asset(id).into_iter().collect()
-    } else if let Some(size) = id.strip_prefix("whisper-").filter(|_| lyrics_sync::asset(id).is_some_and(|asset| asset.vram_gb.is_some())) {
-        let prefix = format!("models/whisper/faster-whisper-{size}/");
-        lyrics_sync::ASSETS.iter().filter(|asset| asset.relative_path.starts_with(&prefix)).collect()
+    } else if id == lyrics_sync::CRISPERWHISPER_MODEL {
+        lyrics_sync::crisper_assets().into_iter().filter_map(lyrics_sync::asset).collect()
     } else {
         return None;
     };
@@ -6740,28 +6750,8 @@ fn karaoke_set(name: &str, device: lyrics_sync::OnnxFlavour, whisper_model: Opti
             // the transcribe.cpp build this machine runs and the model the dropdown names
             wanted.extend(lyrics_sync::parakeet_assets(device, whisper_model).into_iter().map(String::from));
         }
-        "whisper" => {
-            // One binary whichever device is chosen; the card needs CUDA 11's
-            // libraries beside it, and without them CTranslate2 silently uses
-            // the processor instead of saying so.
-            wanted.push("whisper-engine".into());
-            if device.uses_cuda() {
-                wanted.push("whisper-cublas".into());
-                wanted.push("whisper-cudnn".into());
-            }
-            // A model is a directory of files, and it is useless one file
-            // short, so the whole set goes together.
-            let chosen = whisper_model.unwrap_or("whisper-large-v3-turbo");
-            if let Some(size) = chosen.strip_prefix("whisper-") {
-                let prefix = format!("models/whisper/faster-whisper-{size}/");
-                wanted.extend(
-                    lyrics_sync::ASSETS
-                        .iter()
-                        .filter(|asset| asset.relative_path.starts_with(&prefix))
-                        .map(|asset| asset.id.to_string()),
-                );
-            }
-        }
+        // CrisperWhisper is a folder of files, useless one file short, so they go together; its server is the tools'
+        "whisper" => wanted.extend(lyrics_sync::crisper_assets().into_iter().map(String::from)),
         _ => {}
     }
     wanted.iter().filter_map(|id| lyrics_sync::asset(id)).collect()
@@ -6787,7 +6777,15 @@ async fn karaoke_install(
             "whisper" => Some(lyrics_sync::AsrProvider::Whisper),
             _ => None,
         };
+        // CrisperWhisper runs in audio.cpp's server, which the tools share and download into their own folder
+        let server = (recogniser == Some(lyrics_sync::AsrProvider::Whisper)).then(|| acpp::build_for_runtime(config.runtime).ok()).flatten();
         tokio::spawn(async move {
+            if let Some(build) = server {
+                if let Err(error) = install_acpp(&installed_state, build, "karaoke").await {
+                    eprintln!("audio.cpp's server for CrisperWhisper could not be installed: {error:#}");
+                    return;
+                }
+            }
             match sync.downloader().install_all("karaoke", &set).await {
                 Err(error) => eprintln!("the karaoke recogniser could not be installed: {error}"),
                 // Installing a recogniser is choosing it: the timings button
@@ -6828,7 +6826,6 @@ async fn recognise_track(
     config: &lyrics_sync::LyricsSyncConfig,
     path: std::path::PathBuf,
     language: Option<String>,
-    lyrics: String,
 ) -> anyhow::Result<Vec<(f64, String)>> {
     match config.provider {
         lyrics_sync::AsrProvider::None => anyhow::bail!("karaoke.no-recogniser"),
@@ -6841,8 +6838,8 @@ async fn recognise_track(
         }
         lyrics_sync::AsrProvider::Whisper => {
             let sync = state.lyrics_sync.clone();
-            let config = config.clone();
-            tokio::task::spawn_blocking(move || sync.whisper_words(&config, &path, language.as_deref(), &lyrics))
+            let runtime = config.runtime;
+            tokio::task::spawn_blocking(move || sync.crisper_words(runtime, &path, language.as_deref()))
                 .await
                 .map_err(|error| anyhow::anyhow!("the recogniser stopped: {error}"))?
         }
@@ -6883,9 +6880,8 @@ async fn karaoke_words(
     config: &lyrics_sync::LyricsSyncConfig,
     mix: std::path::PathBuf,
     language: Option<String>,
-    lyrics: String,
 ) -> anyhow::Result<Vec<(f64, String)>> {
-    let heard = recognise_track(state, config, mix.clone(), language.clone(), lyrics.clone()).await;
+    let heard = recognise_track(state, config, mix.clone(), language.clone()).await;
     let nothing_heard = heard.as_ref().err().is_some_and(|error| format!("{error:#}").contains(lyrics_sync::NO_WORDS));
     if !nothing_heard {
         return heard;
@@ -6893,7 +6889,7 @@ async fn karaoke_words(
     let Some(vocal) = separate_vocal_for_recognition(state, &mix).await? else {
         return heard;
     };
-    let retry = recognise_track(state, config, vocal.clone(), language, lyrics).await;
+    let retry = recognise_track(state, config, vocal.clone(), language).await;
     std::fs::remove_file(&vocal).ok();
     // The buried-vocal pass only ever adds a result; if the isolated vocal is
     // silent too, the track really has nothing sung and that answer stands.
@@ -6911,12 +6907,11 @@ async fn recognised_words(
     config: &lyrics_sync::LyricsSyncConfig,
     path: std::path::PathBuf,
     language: Option<String>,
-    lyrics: String,
 ) -> Result<Vec<(f64, String)>, (StatusCode, Json<ApiError>)> {
     if config.provider == lyrics_sync::AsrProvider::None {
         return Err(api_error(StatusCode::CONFLICT, "karaoke.no-recogniser".into()));
     }
-    karaoke_words(state, config, path, language, lyrics)
+    karaoke_words(state, config, path, language)
         .await
         .map_err(|error| api_error(StatusCode::BAD_GATEWAY, error.to_string()))
 }
@@ -6978,7 +6973,7 @@ async fn match_score_sections(
         }
         (None, None) => return Err(bad("Send the source recording as audio or a song_id.".into())),
     };
-    let words = recognised_words(&state, &config, path, language, lyrics.clone()).await?;
+    let words = recognised_words(&state, &config, path, language).await?;
     let lines = lyrics_sync::heard_line_starts(&words, &lyrics);
     let proposal = score::section_match::match_sections(&abc, &lyrics, &lines).map_err(bad)?;
     Ok(Json(serde_json::to_value(proposal).map_err(|error| api_error(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?))
@@ -7021,7 +7016,7 @@ async fn create_song_karaoke(
         return Err(api_error(StatusCode::CONFLICT, "karaoke.model-missing".into()));
     }
 
-    let words = match recognised_words(&state, &config, std::path::PathBuf::from(&audio), request.language.clone(), song.lyrics.clone()).await {
+    let words = match recognised_words(&state, &config, std::path::PathBuf::from(&audio), request.language.clone()).await {
         Ok(words) => words,
         Err(error) => {
             work_ended(&state, "karaoke", Err(&error.1.error), false);
@@ -7118,7 +7113,7 @@ async fn recognise_lyrics(
         }
         return Err(api_error(StatusCode::CONFLICT, "karaoke.model-missing".into()));
     }
-    let heard = recognised_words(&state, &config, audio.clone(), request.language.clone(), String::new()).await;
+    let heard = recognised_words(&state, &config, audio.clone(), request.language.clone()).await;
     if sent {
         if let Err(error) = std::fs::remove_file(&audio) {
             eprintln!("[ERROR] could not remove the recording {}: {error}", audio.display());
@@ -8755,11 +8750,27 @@ fn update_data_root(state: &AppState) -> &std::path::Path {
     state.settings_path.parent().expect("the settings file lies in the data folder")
 }
 
+/// Karaoke hears with Whisper, CrisperWhisper since this release.
+fn karaoke_on_whisper(karaoke: &lyrics_sync::LyricsSyncConfig) -> bool {
+    karaoke.enabled && karaoke.provider == lyrics_sync::AsrProvider::Whisper
+}
+
 /// The builds of audio.cpp's server that take the place of what the person used: the stems' when the ONNX
 /// HT-Demucs lies there, Audio to MIDI's when HOT-Step's transcriber does and a MuScriptor size is on disk.
-fn update_acpp_builds(state: &AppState, leftovers: &[update_screen::Leftover], separation: lyrics_sync::OnnxFlavour, options: &EngineOptions) -> Vec<(acpp_server::asset::Build, &'static str)> {
+fn update_acpp_builds(
+    state: &AppState,
+    leftovers: &[update_screen::Leftover],
+    separation: lyrics_sync::OnnxFlavour,
+    options: &EngineOptions,
+    karaoke: &lyrics_sync::LyricsSyncConfig,
+) -> Vec<(acpp_server::asset::Build, &'static str)> {
     let left = |what: &str| leftovers.iter().any(|leftover| leftover.what == what && !leftover.paths.is_empty());
     let mut builds = Vec::new();
+    if left("faster-whisper") && karaoke_on_whisper(karaoke) {
+        if let Ok(build) = acpp::build_for_runtime(karaoke.runtime) {
+            builds.push((build, "karaoke"));
+        }
+    }
     if left("htdemucs-onnx") {
         if let Ok(build) = separation_build(separation) {
             builds.push((build, "separation"));
@@ -8775,7 +8786,7 @@ fn update_acpp_builds(state: &AppState, leftovers: &[update_screen::Leftover], s
 
 /// This release's plan against the disk. It downloads and removes nothing; a file already today's pin byte for byte
 /// gets its install record on the way, as every status read writes it.
-fn update_plan_now(state: &AppState, separation: lyrics_sync::OnnxFlavour, options: &EngineOptions) -> update_screen::Plan {
+fn update_plan_now(state: &AppState, separation: lyrics_sync::OnnxFlavour, options: &EngineOptions, karaoke: &lyrics_sync::LyricsSyncConfig) -> update_screen::Plan {
     use update_screen::{Candidate, Part};
     let of = |part: Part, asset: &'static downloads::Asset, downloader: &downloads::Downloader, earlier: Option<String>| Candidate {
         part,
@@ -8830,7 +8841,13 @@ fn update_plan_now(state: &AppState, separation: lyrics_sync::OnnxFlavour, optio
             take(Part::Karaoke, runtime, state.lyrics_sync.downloader());
         }
     }
-    for (build, _) in update_acpp_builds(state, &leftovers, separation, options) {
+    // Faster-Whisper of former releases: CrisperWhisper takes its place when karaoke hears with Whisper
+    if leftovers.iter().any(|leftover| leftover.what == "faster-whisper" && !leftover.paths.is_empty()) && karaoke_on_whisper(karaoke) {
+        for asset in lyrics_sync::crisper_assets().into_iter().filter_map(lyrics_sync::asset) {
+            take(Part::Karaoke, asset, state.lyrics_sync.downloader());
+        }
+    }
+    for (build, _) in update_acpp_builds(state, &leftovers, separation, options, karaoke) {
         for asset in state.acpp.missing(build) {
             take(Part::Audiocpp, asset, state.acpp.downloader());
         }
@@ -8841,8 +8858,9 @@ fn update_plan_now(state: &AppState, separation: lyrics_sync::OnnxFlavour, optio
 async fn update_plan(state: &AppState) -> Result<update_screen::Plan, (StatusCode, Json<ApiError>)> {
     let separation = state.separation_config.read().await.runtime;
     let options = state.engine_options.read().await.clone();
+    let karaoke = state.lyrics_sync_config.read().await.clone();
     let state = state.clone();
-    tokio::task::spawn_blocking(move || update_plan_now(&state, separation, &options))
+    tokio::task::spawn_blocking(move || update_plan_now(&state, separation, &options, &karaoke))
         .await
         .map_err(|error| api_error(StatusCode::INTERNAL_SERVER_ERROR, format!("the update plan was not read: {error}")))
 }
@@ -8926,6 +8944,7 @@ async fn setup_update_apply(State(state): State<AppState>) -> Result<Json<Value>
 async fn run_update(state: &AppState, rows: &[update_screen::Row]) -> anyhow::Result<()> {
     let separation = state.separation_config.read().await.runtime;
     let options = state.engine_options.read().await.clone();
+    let karaoke = state.lyrics_sync_config.read().await.clone();
     let data_root = update_data_root(state).to_path_buf();
     let mut parts: Vec<update_screen::Part> = Vec::new();
     for row in rows {
@@ -8940,7 +8959,7 @@ async fn run_update(state: &AppState, rows: &[update_screen::Row]) -> anyhow::Re
                 let assets: Vec<&'static downloads::Asset> = update_catalogue(part).into_iter().filter(|asset| ids.contains(&asset.id)).collect();
                 state.acpp.downloader().install_all("audiocpp", &assets).await?;
                 // the CUDA 13 build runs on the engine's cuBLAS 13, which the engine's downloader keeps
-                for (build, scope) in update_acpp_builds(state, &retired::leftovers(&data_root), separation, &options) {
+                for (build, scope) in update_acpp_builds(state, &retired::leftovers(&data_root), separation, &options, &karaoke) {
                     install_acpp(state, build, scope).await?;
                 }
             }
@@ -8954,8 +8973,12 @@ async fn run_update(state: &AppState, rows: &[update_screen::Row]) -> anyhow::Re
     let demucs_ready = htdemucs_installed(state, separation);
     let midi_ready = !midi::SIZES.iter().any(|size| state.midi.model_installed(size)) || midi_build(&options).is_ok_and(|build| state.acpp.installed(build));
     let tempo_ready = !state.training.listen_ready() || state.lyrics_sync.onnxruntime_library().is_some();
+    let whisper_ready = !karaoke_on_whisper(&karaoke) || state.lyrics_sync.crisper_ready(karaoke.runtime);
     tokio::task::spawn_blocking(move || {
         let mut gone = vec!["parakeet-onnx"];
+        if whisper_ready {
+            gone.push("faster-whisper");
+        }
         if tempo_ready {
             gone.push("ort-gpu");
         }
@@ -8980,7 +9003,7 @@ async fn setup_update_seen(State(state): State<AppState>) -> Result<Json<Value>,
 async fn capabilities(State(state): State<AppState>) -> Json<CapabilitiesResponse> {
     let primary_installed = state.music_server.health().await;
     let parakeet_installed = state.lyrics_sync.parakeet_any_ready();
-    let whisper_installed = state.lyrics_sync.whisper_binary().is_some();
+    let whisper_installed = state.lyrics_sync.crisper_model_ready();
     let assistant = state.assistant.read().await.clone();
     let assistant_installed = assistant.available();
     let cli_agents = tokio::task::spawn_blocking(providers::cli_agent::detect).await.unwrap_or_default();

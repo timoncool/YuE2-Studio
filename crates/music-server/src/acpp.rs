@@ -45,6 +45,15 @@ pub fn build_for(choice: &str) -> Result<Build> {
     }
 }
 
+/// [`build_for`] of a device setting: the processor, the card (CUDA, or Vulkan on a card of another make) or Auto.
+pub fn build_for_runtime(runtime: crate::lyrics_sync::OnnxFlavour) -> Result<Build> {
+    build_for(match runtime {
+        crate::lyrics_sync::OnnxFlavour::Cpu => "cpu",
+        crate::lyrics_sync::OnnxFlavour::Cuda => "gpu",
+        crate::lyrics_sync::OnnxFlavour::Auto => "auto",
+    })
+}
+
 /// Whether a build computes on the graphics card.
 pub fn on_card(build: Build) -> bool {
     !matches!(build, Build::Cpu)
@@ -205,7 +214,8 @@ impl Acpp {
         self.downloader.runtime_dir(build.folder())
     }
 
-    fn exe(&self, build: Build) -> PathBuf {
+    /// The server program of a build, where it is or will be once downloaded.
+    pub fn exe(&self, build: Build) -> PathBuf {
         std::env::var_os("YUE_AUDIOCPP_SERVER").map(PathBuf::from).unwrap_or_else(|| self.folder(build).join(exe_name()))
     }
 
@@ -281,6 +291,26 @@ impl Acpp {
         Ok(server)
     }
 
+    /// `work` on the server of `build` carrying `model`: the one at work when it carries the model, else a new one once
+    /// the runs on it have ended; a server under work is never replaced. The run counts from the moment its server is
+    /// chosen; `stop`, asked while it waits for the server, ends it with "stopped" first.
+    pub fn with_server<T>(&self, build: Build, model: ModelEntry, stop: &(dyn Fn() -> bool + Sync), work: impl FnOnce(&Server) -> Result<T>) -> Result<T> {
+        let id = model.id.clone();
+        self.register(model);
+        let backend = build.backend();
+        let server = self.claim(build, stop, |busy| {
+            let running = acpp_server::SERVERS.running(backend);
+            let seen = running.as_ref().map(|server| Seen { alive: server.alive(), carries: server.config().models.iter().any(|entry| entry.id == id) });
+            match take(seen, busy) {
+                Take::Running => Ok(Some(running.expect("a running server was seen"))),
+                Take::Wait => Ok(None),
+                Take::Start => self.server(build, &id).map(Some),
+            }
+        })?;
+        let _work = Work { acpp: self, build };
+        work(&server)
+    }
+
     /// The server `choose` gives for a run of `build`, counted as at work on it. `choose` is asked, with whether a run is
     /// at work on the backend, under the count's lock: `None` waits for a run to end and asks again. `stop`, asked while
     /// the run waits, ends it with "stopped" before it counts or touches a server.
@@ -328,7 +358,6 @@ pub fn run_stream(
     run_with(acpp, build, model, stop, |server, id, cancel| server.run_task_stream(id, request, cancel, on_event))
 }
 
-/// A task on `model` in the server of `build` as [`run`] chooses it, with `stop` turned into the task's cancel.
 fn run_with(
     acpp: &Acpp,
     build: Build,
@@ -337,40 +366,30 @@ fn run_with(
     task: impl FnOnce(&Server, &str, &AtomicBool) -> std::result::Result<Value, AcppError>,
 ) -> Result<Value> {
     let id = model.id.clone();
-    acpp.register(model);
-    let backend = build.backend();
-    let server = acpp.claim(build, stop, |busy| {
-        let running = acpp_server::SERVERS.running(backend);
-        let seen = running.as_ref().map(|server| Seen { alive: server.alive(), carries: server.config().models.iter().any(|entry| entry.id == id) });
-        match take(seen, busy) {
-            Take::Running => Ok(Some(running.expect("a running server was seen"))),
-            Take::Wait => Ok(None),
-            Take::Start => acpp.server(build, &id).map(Some),
-        }
-    })?;
-    let _work = Work { acpp, build };
-    let id = id.as_str();
-    let cancel = AtomicBool::new(false);
-    let finished = AtomicBool::new(false);
-    let answer = std::thread::scope(|scope| {
-        scope.spawn(|| {
-            while !finished.load(Ordering::SeqCst) {
-                if stop() {
-                    cancel.store(true, Ordering::SeqCst);
-                    return;
+    acpp.with_server(build, model, stop, |server| {
+        let id = id.as_str();
+        let cancel = AtomicBool::new(false);
+        let finished = AtomicBool::new(false);
+        let answer = std::thread::scope(|scope| {
+            scope.spawn(|| {
+                while !finished.load(Ordering::SeqCst) {
+                    if stop() {
+                        cancel.store(true, Ordering::SeqCst);
+                        return;
+                    }
+                    std::thread::sleep(Duration::from_millis(100));
                 }
-                std::thread::sleep(Duration::from_millis(100));
-            }
+            });
+            let answer = task(server, id, &cancel);
+            finished.store(true, Ordering::SeqCst);
+            answer
         });
-        let answer = task(&server, id, &cancel);
-        finished.store(true, Ordering::SeqCst);
-        answer
-    });
-    match answer {
-        Ok(result) => Ok(result),
-        Err(AcppError::Cancelled) => bail!("stopped"),
-        Err(error) => Err(anyhow!("audio.cpp's {id}: {}", describe(&error))),
-    }
+        match answer {
+            Ok(result) => Ok(result),
+            Err(AcppError::Cancelled) => bail!("stopped"),
+            Err(error) => Err(anyhow!("audio.cpp's {id}: {}", describe(&error))),
+        }
+    })
 }
 
 /// The server running on a backend, as a run about to start sees it.

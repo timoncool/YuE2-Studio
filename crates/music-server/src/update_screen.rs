@@ -45,6 +45,8 @@ const CHANGES: &[Change] = &[
     Change { what: "llama-*", reason: "llama" },
     Change { what: "music-train", reason: "hotstep" },
     Change { what: "ace-caption", reason: "hotstep" },
+    Change { what: "crisperwhisper-*", reason: "crisperwhisper" },
+    Change { what: "faster-whisper", reason: "faster-whisper-gone" },
     Change { what: "parakeet-onnx", reason: "parakeet-onnx-gone" },
     Change { what: "ort-gpu", reason: "ort-gpu-gone" },
     Change { what: "onnxruntime", reason: "ort-cpu" },

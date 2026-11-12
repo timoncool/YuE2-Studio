@@ -1168,20 +1168,6 @@ fn refuse_foreign_runtime(asset: &Asset) -> Result<()> {
     bail!("{} is a Windows build and is not available on this platform yet", asset.label)
 }
 
-/// The first executable named `name` in the given flavour directories, in
-/// preference order - a GPU build before a CPU one.
-pub fn locate_binary(root: &Path, flavours: &[&str], name: &str) -> Option<PathBuf> {
-    let file = if cfg!(windows) { format!("{name}.exe") } else { name.to_string() };
-    for flavour in flavours {
-        let candidate = root.join("runtime").join(flavour).join(&file);
-        if candidate.is_file() {
-            return Some(candidate);
-        }
-    }
-    let direct = root.join("runtime").join(&file);
-    direct.is_file().then_some(direct)
-}
-
 /// The cause of a failed download as one code for the hub's counters (CONTRACT, Counters: one cause, one row):
 /// disk_space, io, hash_mismatch, size_mismatch, rate_limited, http_status, network, proxy, extract or other. The
 /// detail stays in the window and the log; it names hosts and sizes and would split one cause into many rows.

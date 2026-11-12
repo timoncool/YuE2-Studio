@@ -12,6 +12,31 @@ use crate::update_screen::Leftover;
 const RETIRED: &[(&str, &str, &[&str])] = &[
     // the ONNX Parakeet of 3.6 and earlier; karaoke recognises on transcribe.cpp
     ("parakeet-onnx", "Parakeet (ONNX)", &["karaoke/models/parakeet", "karaoke/models/parakeet-fp32", "karaoke/models/parakeet-ultra"]),
+    // Faster-Whisper (CTranslate2) of 3.8 and earlier with its CUDA 11 cuBLAS and cuDNN 8 and its models; karaoke
+    // hears with CrisperWhisper on audio.cpp's server
+    (
+        "faster-whisper",
+        "Faster-Whisper",
+        &[
+            "karaoke/runtime/whisper",
+            "karaoke/models/whisper",
+            "karaoke/runtime/whisper-faster.zip",
+            "karaoke/runtime/whisper-faster.zip.json",
+            "karaoke/runtime/whisper-faster.part",
+            "karaoke/runtime/whisper-cublas.zip",
+            "karaoke/runtime/whisper-cublas.zip.json",
+            "karaoke/runtime/whisper-cublas.part",
+            "karaoke/runtime/whisper-cublas.tar.xz",
+            "karaoke/runtime/whisper-cublas.tar.xz.json",
+            "karaoke/runtime/whisper-cublas.tar.part",
+            "karaoke/runtime/whisper-cudnn.zip",
+            "karaoke/runtime/whisper-cudnn.zip.json",
+            "karaoke/runtime/whisper-cudnn.part",
+            "karaoke/runtime/whisper-cudnn.tar.xz",
+            "karaoke/runtime/whisper-cudnn.tar.xz.json",
+            "karaoke/runtime/whisper-cudnn.tar.part",
+        ],
+    ),
     // the ONNX HT-Demucs of 3.7 and earlier; stems separate on audio.cpp's server
     ("htdemucs-onnx", "HT-Demucs (ONNX)", &["separation/models/htdemucs/htdemucs_6s_fp16.onnx"]),
     // HOT-Step's MIDI transcriber of 3.6 and earlier; MuScriptor runs on audio.cpp's server
