@@ -1041,6 +1041,20 @@ const SongItem: React.FC<SongItemProps> = ({
                     <div className={`flex items-center gap-2 text-xs text-zinc-500 dark:text-zinc-400 ${compact ? 'hidden' : 'h-5'}`}>
                         <span>{song.ditModel === 'imported-audio' ? t('importedAudio') : 'YuE2'}</span>
                         {song.nativeReplayAvailable && <span title={t('replayAvailable')} className="rounded-sm bg-zinc-200/70 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide dark:bg-white/10">replay</span>}
+                        {song.cutShort && (song.cutShort === 'length' && song.nativeReplayAvailable && songActions.replay ? (
+                            <button
+                                type="button"
+                                title={t('cutShortLength')}
+                                onClick={event => { event.stopPropagation(); songActions.replay?.(song); }}
+                                className="rounded-sm bg-amber-100 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-amber-800 hover:bg-amber-200 dark:bg-amber-400/15 dark:text-amber-200"
+                            >
+                                {t('cutShort')}
+                            </button>
+                        ) : (
+                            <span title={t(song.cutShort === 'length' ? 'cutShortLength' : 'cutShortMemory')} className="rounded-sm bg-amber-100 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-amber-800 dark:bg-amber-400/15 dark:text-amber-200">
+                                {t('cutShort')}
+                            </span>
+                        ))}
                     </div>
                     <p className={`text-xs text-zinc-500 dark:text-zinc-500 font-medium max-w-2xl ${compact ? 'truncate' : 'line-clamp-2 pt-1'}`}>
                         {captionSummary(song.style)}

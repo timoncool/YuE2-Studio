@@ -54,6 +54,8 @@ export interface Song {
   timeSignature?: string;
   /** The track carries its semantic stream, so POST /v1/music/replay can re-render it. */
   nativeReplayAvailable?: boolean;
+  /** The engine stopped the song before its end: at its length limit, or where the model's memory ran out. */
+  cutShort?: 'length' | 'memory';
   /** Processed versions kept beside the original; the active one plays. */
   audioVersions?: SongVersion[];
   /** `original`, a version id, or absent for a track never processed. */
@@ -188,6 +190,8 @@ export interface NativeLibrarySong {
   audio_codes?: unknown | null;
   /** The library's list leaves the replay request and the semantic stream out and says only whether both are kept. */
   replay_available?: boolean;
+  /** The engine stopped the song before its end: at its length limit, or where the model's memory ran out. */
+  cut_short?: 'length' | 'memory';
   created_at: string;
   updated_at?: string;
 }

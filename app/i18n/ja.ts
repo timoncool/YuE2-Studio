@@ -1345,8 +1345,6 @@ export const ja = {
     maxSeqLabel: 'LM KV キャッシュ (--max-seq)',
     maxSeqHint: '空欄ならモデル本来のコンテキスト長を使います。',
     diagnostics: '診断',
-    noFlashAttentionLabel: 'flash attention を無効化',
-    noFlashAttentionHint: '--no-fa。低速ですが、ドライバやカードが flash attention で不安定な場合に使います。',
     splitCfgLabel: 'CFG を 2 回のフォワードに分割',
     splitCfgHint: '--no-batch-cfg。ガイダンス時の VRAM ピークは下がりますが 1 ステップは遅くなります。',
     clampFp16Label: '隠れ状態を FP16 範囲にクランプ',

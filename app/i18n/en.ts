@@ -1352,8 +1352,6 @@ export const en = {
     maxSeqLabel: 'LM KV cache (--max-seq)',
     maxSeqHint: "Empty uses the model's own context length.",
     diagnostics: 'Diagnostics',
-    noFlashAttentionLabel: 'Disable flash attention',
-    noFlashAttentionHint: '--no-fa. Slower; use it when a driver or card misbehaves with flash attention.',
     splitCfgLabel: 'Split CFG into two forwards',
     splitCfgHint: '--no-batch-cfg. Lower peak VRAM during guidance, slower per step.',
     clampFp16Label: 'Clamp hidden states to FP16 range',

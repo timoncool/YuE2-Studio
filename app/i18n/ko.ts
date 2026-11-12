@@ -1347,8 +1347,6 @@ export const ko = {
     maxSeqLabel: 'LM KV 캐시 (--max-seq)',
     maxSeqHint: '비워두면 모델 자체 컨텍스트 길이를 사용합니다.',
     diagnostics: '진단',
-    noFlashAttentionLabel: 'flash attention 비활성화',
-    noFlashAttentionHint: '--no-fa. 더 느리지만 드라이버나 그래픽카드가 flash attention 에서 문제를 일으킬 때 사용합니다.',
     splitCfgLabel: 'CFG 를 두 번의 순전파로 분리',
     splitCfgHint: '--no-batch-cfg. 가이던스 중 VRAM 최대치는 낮아지지만 스텝당 속도는 느려집니다.',
     clampFp16Label: '은닉 상태를 FP16 범위로 제한',

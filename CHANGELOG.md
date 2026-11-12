@@ -3,6 +3,19 @@
 What changed, newest first. Dates are release dates; the studio is versioned by its
 Windows build.
 
+## Unreleased — 3.9.0
+
+### Added
+
+- **Flash attention can be switched on by hand** ([#228](https://github.com/timoncool/YuE2-Studio/issues/228)): Settings - Local engine has Auto, On and Off in place of the switch that could only turn it off. Auto still leaves it off on RTX 50 cards, where singing comes out garbled with it; On runs it there too.
+- **Settings - Local engine says which KV cache the engine runs with and why** ([#203](https://github.com/timoncool/YuE2-Studio/issues/203), [#228](https://github.com/timoncool/YuE2-Studio/issues/228)): an empty field read 24576 while a smaller cache was in use. The field now reads Auto, a line under it names the cache of the running engine (the model's full context, or set by you), and a saved value that has not reached the engine yet says it applies at the next start.
+
+### Fixed
+
+- **A song is no longer refused because its style, lyrics and score leave too little room for the length asked** ([#203](https://github.com/timoncool/YuE2-Studio/issues/203), [#205](https://github.com/timoncool/YuE2-Studio/issues/205), [#206](https://github.com/timoncool/YuE2-Studio/issues/206), [#213](https://github.com/timoncool/YuE2-Studio/issues/213), [#182](https://github.com/timoncool/YuE2-Studio/issues/182)): 3.8.4 and 3.8.5 held cards of 8 GB or less, and RTX 50 cards of up to 16 GB, to a 9216-token context and stopped a song whose prompt and score left less room than its maximum duration. Every card starts on the model's full 24576-token context again, as in 3.8.3, and when a smaller context is set the engine sings the song as far as the room goes instead of refusing it.
+- **A song that stopped at its limit is marked, not mistaken for a finished one**: the library shows "Cut short" on it, with the reason - the length limit (with a click to make it longer) or the style, lyrics and score taking too much of the model's memory.
+- **RTX 50 cards keep long songs without running out of memory** ([#201](https://github.com/timoncool/YuE2-Studio/issues/201), [#228](https://github.com/timoncool/YuE2-Studio/issues/228)): without flash attention the sound is now rendered in pieces sized to the card's memory (on a 16 GB card about three minutes each) instead of shrinking the whole context, so the song keeps its full length; a 240-second song rendered in 120-second pieces peaked at 8.2 GB of card memory instead of 14.3 GB in one piece.
+
 ## 2026-11-06 — 3.8.5
 
 ### Fixed

@@ -1351,8 +1351,6 @@ export const ru = {
     maxSeqLabel: 'KV-кеш LM (--max-seq)',
     maxSeqHint: 'Пусто — используется собственный контекст модели.',
     diagnostics: 'Диагностика',
-    noFlashAttentionLabel: 'Отключить flash attention',
-    noFlashAttentionHint: '--no-fa. Медленнее; нужно, если драйвер или карта некорректно работают с flash attention.',
     splitCfgLabel: 'Разделить CFG на два прохода',
     splitCfgHint: '--no-batch-cfg. Ниже пик VRAM при guidance, но медленнее на шаг.',
     clampFp16Label: 'Ограничить скрытые состояния диапазоном FP16',

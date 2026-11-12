@@ -478,13 +478,21 @@ const MAX_RESUMES: u32 = 3;
 /// The score stage draws up to 4096 tokens after its prompt in the same context,
 /// so a smaller context fails every song before it starts.
 const MIN_MAX_SEQ: u32 = 8192;
-/// The engine's KV cache on a card of 8 GB or less (`EngineOptions::small_vram`): the largest that fits there, so
-/// the model's full 24576-token context does not overrun the card partway through a song.
-const SMALL_VRAM_MAX_SEQ: u32 = 9216;
-/// A card up to this much memory that runs with flash attention forced off (#194) is held to `SMALL_VRAM_MAX_SEQ`
-/// as well: without flash attention the KV cache is about twice as large, so a 12 GB RTX 5070 that fit the full
-/// context on 3.8.3 overran its memory on 3.8.4 (#201). Cards larger than this hold the doubled cache unaided.
-const FA_OFF_KV_CAP_MAX_VRAM_GB: f64 = 16.5;
+/// The model's context in tokens, what the engine's KV cache holds when nothing sets it smaller.
+const MODEL_CONTEXT: u32 = 24576;
+/// One token of the KV cache in one set: 28 layers, keys and values, 8 heads of 128, two bytes each.
+const KV_BYTES_PER_TOKEN: f64 = 114_688.0;
+/// Without flash attention the acoustic stage holds a chunk's attention scores whole: the card took this many GiB
+/// per chunk frame times the frames it attends to (the prompt and twice the chunk), measured on an RTX 4090 from
+/// 1767 to 6000-frame chunks in Q8_0.
+const NAR_SCORES_GIB_PER_CELL: f64 = 1.0e-7;
+/// The prompt a chunk is sized for: a full score of 4096 tokens with its style and lyrics.
+const NAR_PROMPT_TOKENS: f64 = 4608.0;
+/// What the system and other programs keep on the card beside the engine.
+const CARD_RESERVE_GIB: f64 = 1.5;
+/// The shortest acoustic chunk the studio asks for, and the step it is sized in.
+const NAR_CHUNK_MIN: u32 = 1024;
+const NAR_CHUNK_STEP: u32 = 256;
 
 /// Songs the studio was closed on are started again, oldest first. The old
 /// job stays as `cancelled`, its message naming the job that took its place.
@@ -695,6 +703,9 @@ struct EngineOptions {
     max_seq: Option<u32>,
     vae_core: Option<u32>,
     vae_halo: Option<u32>,
+    flash_attention: FlashAttention,
+    /// The switch of settings saved before `flash_attention`: read once and turned into `Off`, never written.
+    #[serde(skip_serializing)]
     disable_flash_attention: bool,
     clamp_fp16: bool,
     /// The NVIDIA card, by its nvidia-smi index, that every CUDA process of
@@ -710,6 +721,16 @@ struct EngineOptions {
     /// `YUE_ENGINE_BIN` still wins over whatever is saved here, so a developer
     /// build needs no settings at all.
     engine_bin: Option<String>,
+}
+
+/// Flash attention as Settings chooses it: `Auto` leaves it off only where it is known to go wrong.
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+enum FlashAttention {
+    #[default]
+    Auto,
+    On,
+    Off,
 }
 
 impl EngineOptions {
@@ -788,7 +809,7 @@ impl EngineOptions {
 
     /// A Radeon card of 4 to 8 GB on Vulkan (an integrated Radeon reports less): its flash attention is several times
     /// slower than without it, and a step that long and a whole song's cache are where its driver gives the device up.
-    /// `small_vram` holds its cache so it renders a long song in chunks the engine fades into each other.
+    /// Its flash attention stays off under Auto, and `nar_chunk` sizes the acoustic chunks to its memory.
     fn small_radeon(&self) -> bool {
         let hardware = hardware::hardware();
         self.uses_vulkan()
@@ -798,25 +819,10 @@ impl EngineOptions {
             && hardware.gpu_name.as_deref().is_some_and(|name| name.contains("Radeon") || name.contains("AMD"))
     }
 
-    /// A discrete card of 3.5 to 8.5 GB that holds the whole model and its KV cache in its own memory: the model's
-    /// full 24576-token context overruns it partway through a song and the driver faults with a CUDA illegal memory
-    /// access (telemetry 3.8.3 - most on 8 GB and smaller NVIDIA cards, which, unlike a small Radeon, were never
-    /// capped). Held to `SMALL_VRAM_MAX_SEQ` the engine renders a long song in chunks it fades together. An integrated
-    /// GPU (under 3.5 GB reported) and the processor, which draw on host RAM, are left at the full context.
-    fn small_vram(&self) -> bool {
-        Self::small_vram_card(self.cuda_build().is_some() || self.uses_vulkan(), hardware::hardware().total_vram_gb)
-    }
-
-    /// Whether a card that keeps the KV cache in its own memory (`on_card`) is small enough that the full context
-    /// overruns it. The floor keeps the processor and tiny integrated GPUs on the full context.
-    fn small_vram_card(on_card: bool, total_vram_gb: f64) -> bool {
-        on_card && (3.5..=8.5).contains(&total_vram_gb)
-    }
-
-    /// The KV cache the engine starts with: the user's own value when set (floored at `MIN_MAX_SEQ`), otherwise the
-    /// model's full context, except a small-VRAM card is held to `SMALL_VRAM_MAX_SEQ` so it does not overrun.
-    fn capped_max_seq(user: Option<u32>, small_vram: bool) -> Option<u32> {
-        user.or(small_vram.then_some(SMALL_VRAM_MAX_SEQ)).map(|value| value.max(MIN_MAX_SEQ))
+    /// The KV cache the engine starts with: the user's own value when set, floored at `MIN_MAX_SEQ`; otherwise the
+    /// model's full context, which the engine allocates only as far as each song needs.
+    fn capped_max_seq(user: Option<u32>) -> Option<u32> {
+        user.map(|value| value.max(MIN_MAX_SEQ))
     }
 
     /// Blackwell and newer (sm_100 = cc 10.0, sm_120 = cc 12.0): the compute
@@ -834,30 +840,67 @@ impl EngineOptions {
         self.cuda_build().is_some() && Self::fa_regressed_cc(hardware::hardware().compute_capability)
     }
 
-    /// With flash attention forced off for the Blackwell regression (#194) the KV cache is about twice as large as the
-    /// studio sizes a card for, so the full context overruns a mid-sized card that holds it on-device - a 12 GB RTX
-    /// 5070 faulted out of memory on 3.8.4 where 3.8.3 (flash attention on) fit (#201). Such a card is held to
-    /// `SMALL_VRAM_MAX_SEQ`, the small-card cap, up to the memory where the doubled cache fits unaided.
-    fn fa_off_overruns_vram(&self) -> bool {
-        Self::fa_off_overruns_card(self.new_cuda_fa_regression(), hardware::hardware().total_vram_gb)
+    /// Settings saved before the three-way choice said "off" with a switch.
+    fn migrated(mut self) -> Self {
+        if self.disable_flash_attention {
+            self.flash_attention = FlashAttention::Off;
+            self.disable_flash_attention = false;
+        }
+        self
     }
 
-    /// Flash attention off (#194) roughly doubles the KV cache, so a card that held the full context with it on can
-    /// overrun without it. Capped up to `FA_OFF_KV_CAP_MAX_VRAM_GB`; a larger card is left at the full context.
-    fn fa_off_overruns_card(fa_off: bool, total_vram_gb: f64) -> bool {
-        fa_off && total_vram_gb <= FA_OFF_KV_CAP_MAX_VRAM_GB
+    /// Why flash attention is off for this start, `None` when it is on.
+    fn flash_attention_off_reason(&self) -> Option<&'static str> {
+        match self.flash_attention {
+            FlashAttention::On => None,
+            FlashAttention::Off => Some("chosen in Settings"),
+            FlashAttention::Auto if self.small_radeon() => Some("a Radeon of 8 GB or less on Vulkan"),
+            FlashAttention::Auto if self.new_cuda_fa_regression() => Some("new CUDA compute capability, the flash-attention kernels sing gibberish there (#194)"),
+            FlashAttention::Auto => None,
+        }
     }
 
-    fn to_engine(self) -> music_engine::yue_server::YueServerOptions {
-        let small_radeon = self.small_radeon();
+    /// The longest acoustic chunk, in frames, that keeps a song inside a card of `card_gib` without flash attention:
+    /// the acoustic half of the weights (all of them when kept loaded), the KV cache of `sets` at `max_seq` tokens and
+    /// a reserve leave the room the chunk's attention scores grow into, `NAR_SCORES_GIB_PER_CELL` per frame and frame
+    /// it attends to. `None` when the card holds every chunk the context makes.
+    fn nar_chunk_for(card_gib: f64, backbone_bytes: u64, keep_loaded: bool, max_seq: u32, sets: u32) -> Option<u32> {
+        const GIB: f64 = 1024.0 * 1024.0 * 1024.0;
+        let weights = backbone_bytes as f64 / GIB * if keep_loaded { 1.0 } else { 0.5 };
+        let cache = f64::from(sets) * f64::from(max_seq) * KV_BYTES_PER_TOKEN / GIB;
+        let room = card_gib - weights - cache - CARD_RESERVE_GIB;
+        let prompt = NAR_PROMPT_TOKENS;
+        let holds = ((f64::from(max_seq) - prompt - 3.0) / 2.0).max(0.0);
+        let fits = if room > 0.0 { (-prompt + (prompt * prompt + 8.0 * room / NAR_SCORES_GIB_PER_CELL).sqrt()) / 4.0 } else { 0.0 };
+        if fits >= holds {
+            return None;
+        }
+        let stepped = (fits as u32 / NAR_CHUNK_STEP) * NAR_CHUNK_STEP;
+        Some(stepped.max(NAR_CHUNK_MIN))
+    }
+
+    /// The `--nar-chunk` of this start: only without flash attention, on a card that keeps the work in its own memory.
+    fn nar_chunk(&self, backbone_bytes: Option<u64>) -> Option<u32> {
+        self.flash_attention_off_reason()?;
+        if self.cuda_build().is_none() && !self.uses_vulkan() {
+            return None;
+        }
+        let sets = 2 * self.effective_max_batch();
+        Self::nar_chunk_for(hardware::hardware().total_vram_gb, backbone_bytes?, self.keep_loaded, Self::capped_max_seq(self.max_seq).unwrap_or(MODEL_CONTEXT), sets)
+    }
+
+    fn to_engine(self, backbone_bytes: Option<u64>) -> music_engine::yue_server::YueServerOptions {
+        let nar_chunk = self.nar_chunk(backbone_bytes);
+        let fa_off = self.flash_attention_off_reason().is_some();
         music_engine::yue_server::YueServerOptions {
             backend: self.backend,
             keep_loaded: self.keep_loaded,
             max_batch: Some(self.effective_max_batch()),
-            max_seq: Self::capped_max_seq(self.max_seq, self.small_vram() || self.fa_off_overruns_vram()),
+            max_seq: Self::capped_max_seq(self.max_seq),
             vae_core: self.vae_core,
             vae_halo: self.vae_halo,
-            disable_flash_attention: self.disable_flash_attention || small_radeon || self.new_cuda_fa_regression(),
+            nar_chunk,
+            disable_flash_attention: fa_off,
             // On an AMD Radeon through Vulkan the hidden states leave the FP16
             // range and the song comes out as pure silence, which the engine's
             // MP3 path then crashes on; the engine's own clamp fixes it.
@@ -1105,7 +1148,7 @@ pub async fn serve() -> anyhow::Result<()> {
         library: library::Library::open_default()?,
         engine: Arc::new(tokio::sync::Mutex::new(None)),
         engine_use: Arc::new(tokio::sync::RwLock::new(())),
-        engine_options: Arc::new(RwLock::new(persisted.as_ref().map(|settings| settings.engine_options.clone()).unwrap_or_default())),
+        engine_options: Arc::new(RwLock::new(persisted.as_ref().map(|settings| settings.engine_options.clone().migrated()).unwrap_or_default())),
         engine_runtime: Arc::new(engine_runtime::EngineRuntime::new(&engine_bundle_root(), &studio_data_root().unwrap_or_else(|| std::path::PathBuf::from(".")))),
         failed_devices: Arc::new(RwLock::new(Vec::new())),
         engine_start_error: Arc::new(RwLock::new(None)),
@@ -1459,8 +1502,25 @@ fn listed_song(song: &library::Song) -> serde_json::Result<Value> {
         fields.remove("replay_request");
         fields.remove("audio_codes");
         fields.insert("replay_available".into(), Value::Bool(kept(&song.replay_request) && kept(&song.audio_codes)));
+        if let Some(why) = song.replay_request.as_ref().and_then(cut_short) {
+            fields.insert("cut_short".into(), Value::from(why));
+        }
     }
     Ok(value)
+}
+
+/// Why a song the engine marked `truncated` stopped before its end: `length` when its frames reached the budget the
+/// duration (or the request's own maximum) set, `memory` when the prompt and the score left the stream less room
+/// than that. Songs from engines before the mark carry none.
+fn cut_short(replay: &Value) -> Option<&'static str> {
+    if replay.get("truncated").and_then(Value::as_bool) != Some(true) {
+        return None;
+    }
+    let frames = replay.get("semantic_tokens").and_then(Value::as_str).map(|tokens| tokens.split(',').filter(|token| !token.trim().is_empty()).count() as u64)?;
+    let duration = replay.get("duration").and_then(Value::as_f64).unwrap_or(CHECKPOINT_SONG_SECONDS);
+    let ceiling = replay.get("semantic_sampling").and_then(|sampling| sampling.get("max_tokens")).and_then(Value::as_u64).unwrap_or((CHECKPOINT_SONG_SECONDS * SEMANTIC_FRAMES_PER_SECOND) as u64);
+    let budget = ((duration * SEMANTIC_FRAMES_PER_SECOND).floor() as u64).min(ceiling);
+    Some(if frames >= budget { "length" } else { "memory" })
 }
 
 fn kept(value: &Option<Value>) -> bool {
@@ -4417,7 +4477,7 @@ async fn health(State(state): State<AppState>) -> Json<Value> {
     // copy has no bundle for. Saying whose service this is turns a hang into
     // a sentence.
     let executable = std::env::current_exe().ok().map(|path| path.display().to_string());
-    let location = engine_location(state.engine_options.read().await.clone());
+    let location = engine_location(state.engine_options.read().await.clone(), None);
     let engine_available = location.configured_executable.is_some() || location.bundle_root.is_dir();
     Json(serde_json::json!({
         "status": "ok",
@@ -4539,13 +4599,28 @@ async fn engine_options(State(state): State<AppState>) -> Json<Value> {
         "bundled"
     };
     // a start holds the engine for as long as it takes (a download, the weights): the page is answered now
-    let (running, starting) = match state.engine.try_lock() {
-        // canonicalised paths carry the \\?\ prefix, which the saved path and the environment do not
-        Ok(engine) => (engine.as_ref().map(|engine| music_engine::yue_server::strip_verbatim(&engine.config().executable).display().to_string()), false),
-        Err(_) => (None, true),
+    let (running, starting, launched) = match state.engine.try_lock() {
+        // canonicalised paths carry the verbatim prefix, which the saved path and the environment do not
+        Ok(engine) => (
+            engine.as_ref().map(|engine| music_engine::yue_server::strip_verbatim(&engine.config().executable).display().to_string()),
+            false,
+            engine.as_ref().map(|engine| engine.config().options.clone()),
+        ),
+        Err(_) => (None, true, None),
     };
+    // What the running engine was started with, so the page says what is in effect, not only what is saved.
+    let in_effect = launched.map(|launched| {
+        serde_json::json!({
+            "max_seq": launched.max_seq.unwrap_or(MODEL_CONTEXT),
+            "max_seq_reason": if launched.max_seq.is_some() { "set" } else { "full" },
+            "flash_attention": !launched.disable_flash_attention,
+            "nar_chunk_seconds": launched.nar_chunk.map(|frames| (f64::from(frames) / SEMANTIC_FRAMES_PER_SECOND).round() as u64),
+        })
+    });
     Json(serde_json::json!({
         "options": options,
+        "in_effect": in_effect,
+        "saved_max_seq": EngineOptions::capped_max_seq(options.max_seq).unwrap_or(MODEL_CONTEXT),
         "effective_max_batch": options.effective_max_batch(),
         "restart_required_to_apply": true,
         "executable": executable,
@@ -4561,6 +4636,7 @@ async fn update_engine_options(
     State(state): State<AppState>,
     Json(mut request): Json<EngineOptions>,
 ) -> Result<Json<Value>, (StatusCode, Json<ApiError>)> {
+    request = request.migrated();
     if request.max_batch.is_some_and(|value| value == 0 || value > 8) {
         return Err(api_error(StatusCode::BAD_REQUEST, "max_batch must be between 1 and 8".into()));
     }
@@ -4701,7 +4777,15 @@ async fn restart_engine(state: &AppState) -> Result<(), String> {
         // If the writing assistant is still holding the card, it does not finish.
         free_the_card_for_the_engine(state).await;
         let models = selected_engine_models(state).await?;
-        let config = engine_location(attempt)
+        let backbone_bytes = fs::metadata(&models.backbone).map(|meta| meta.len()).ok();
+        if let Some(reason) = attempt.flash_attention_off_reason() {
+            let chunk = match attempt.nar_chunk(backbone_bytes) {
+                Some(frames) => format!("; acoustic chunks of {frames} frames for the card's memory"),
+                None => String::new(),
+            };
+            music_engine::yue_server::note_in_log(&format!("flash-attention off on {}: {reason}{chunk}", device_name(device)));
+        }
+        let config = engine_location(attempt, backbone_bytes)
             .resolve(models)
             .map_err(|error| format!("the local engine runtime was not found: {error}"))?;
         let mut engine = music_engine::yue_server::YueServerSupervisor::new(config).map_err(|error| error.to_string())?;
@@ -4931,12 +5015,7 @@ fn put_the_engine_folder_on_path() {
     }
 }
 
-fn engine_location(options: EngineOptions) -> music_engine::yue_server::YueServerLocation {
-    if options.new_cuda_fa_regression() {
-        music_engine::yue_server::note_in_log(
-            "flash-attention off: new CUDA compute capability, ggml 0.27 FA regression (#194)",
-        );
-    }
+fn engine_location(options: EngineOptions, backbone_bytes: Option<u64>) -> music_engine::yue_server::YueServerLocation {
     music_engine::yue_server::YueServerLocation {
         bundle_root: engine_bundle_root(),
         // The environment still wins, so a developer build needs no settings: a
@@ -4946,7 +5025,7 @@ fn engine_location(options: EngineOptions) -> music_engine::yue_server::YueServe
             .or_else(|| options.engine_bin.as_ref().map(|path| path.trim()).filter(|path| !path.is_empty()).map(PathBuf::from)),
         host: env::var("YUE_ENGINE_HOST").ok(),
         port: Some(music_engine::yue_server::engine_port()),
-        options: options.to_engine(),
+        options: options.to_engine(backbone_bytes),
     }
 }
 
@@ -10346,7 +10425,7 @@ mod tests {
     #[test]
     fn nothing_is_kept_in_memory_by_default() {
         assert!(!EngineOptions::default().keep_loaded);
-        assert!(!EngineOptions::default().to_engine().keep_loaded);
+        assert!(!EngineOptions::default().to_engine(None).keep_loaded);
     }
 
     /// Extra launch arguments are kept as typed and reach the engine last,
@@ -10362,7 +10441,7 @@ mod tests {
         assert_eq!(studio_owned_flag(&["--model=/x/b.gguf".into()]), Some("--model"));
         assert_eq!(studio_owned_flag(&["--clown-mode".into(), "--companion".into()]), Some("--companion"));
         let options = EngineOptions { extra_args: "--clown-mode".into(), ..EngineOptions::default() };
-        assert_eq!(options.to_engine().extra_args, "--clown-mode");
+        assert_eq!(options.to_engine(None).extra_args, "--clown-mode");
         let older: EngineOptions = serde_json::from_str("{}").unwrap();
         assert!(older.extra_args.is_empty() && older.engine_bin.is_none());
     }
@@ -10384,9 +10463,24 @@ mod tests {
         let restored: EngineOptions = serde_json::from_str(&serde_json::to_string(&options).unwrap()).unwrap();
         assert_eq!(restored.engine_bin, options.engine_bin);
         if env::var_os("YUE_ENGINE_BIN").is_none() {
-            assert!(engine_location(EngineOptions::default()).configured_executable.is_none());
-            assert_eq!(engine_location(options.clone()).configured_executable.as_deref(), options.engine_bin.as_deref().map(std::path::Path::new));
+            assert!(engine_location(EngineOptions::default(), None).configured_executable.is_none());
+            assert_eq!(engine_location(options.clone(), None).configured_executable.as_deref(), options.engine_bin.as_deref().map(std::path::Path::new));
         }
+    }
+
+    #[test]
+    fn a_song_cut_short_says_whether_the_length_or_the_memory_ended_it() {
+        let frames = |count: usize| vec!["1"; count].join(",");
+        let length = serde_json::json!({ "truncated": true, "duration": 60.0, "semantic_tokens": frames(1500) });
+        assert_eq!(cut_short(&length), Some("length"), "the duration's 1500 frames were reached");
+        let memory = serde_json::json!({ "truncated": true, "duration": 240.0, "semantic_tokens": frames(3537) });
+        assert_eq!(cut_short(&memory), Some("memory"), "the KV cache clamped the budget below the duration's 6000");
+        let capped = serde_json::json!({ "truncated": true, "duration": 600.0, "semantic_tokens": frames(9000) });
+        assert_eq!(cut_short(&capped), Some("length"), "the checkpoint's own 9000 frames are the length limit too");
+        let finished = serde_json::json!({ "duration": 240.0, "semantic_tokens": frames(3805) });
+        assert_eq!(cut_short(&finished), None, "a song that ended by itself carries no mark");
+        let older = serde_json::json!({ "duration": 60.0, "semantic_tokens": frames(1500) });
+        assert_eq!(cut_short(&older), None, "a song from an engine before the mark gets none");
     }
 
     /// A card that ran out of memory has to say so. The studio used to answer
@@ -10705,33 +10799,50 @@ mod tests {
         // carries `lm_batch_size`, and the engine refuses anything above the
         // ceiling it was loaded with. Offering more in the panel than the
         // engine was given is what made a request for two songs fail at once.
-        assert_eq!(EngineOptions::default().to_engine().max_batch, Some(1));
-        assert_eq!(EngineOptions { max_batch: Some(3), ..EngineOptions::default() }.to_engine().max_batch, Some(3));
-        let vulkan = EngineOptions { backend: music_engine::yue_server::ComputeBackend::Vulkan, ..EngineOptions::default() }.to_engine();
+        assert_eq!(EngineOptions::default().to_engine(None).max_batch, Some(1));
+        assert_eq!(EngineOptions { max_batch: Some(3), ..EngineOptions::default() }.to_engine(None).max_batch, Some(3));
+        let vulkan = EngineOptions { backend: music_engine::yue_server::ComputeBackend::Vulkan, ..EngineOptions::default() }.to_engine(None);
         assert!(vulkan.clamp_fp16, "Vulkan runs clamp hidden states to FP16");
-        let cuda = EngineOptions { backend: music_engine::yue_server::ComputeBackend::Cuda, ..EngineOptions::default() }.to_engine();
+        let cuda = EngineOptions { backend: music_engine::yue_server::ComputeBackend::Cuda, ..EngineOptions::default() }.to_engine(None);
         assert!(!cuda.clamp_fp16);
-        // A small card - 8 GB or less, NVIDIA or Radeon - that holds the KV cache in its own memory is held to a
-        // cache the full context does not overrun; a big card and the processor run the model's whole context (#194
-        // aside). The share of CUDA illegal-memory faults on 8 GB cards was the full 24576 context never being capped.
-        assert!(EngineOptions::small_vram_card(true, 8.0), "an 8 GB card on the GPU is capped");
-        assert!(EngineOptions::small_vram_card(true, 4.0));
-        assert!(!EngineOptions::small_vram_card(true, 12.0), "a 12 GB card runs the full context");
-        assert!(!EngineOptions::small_vram_card(true, 3.0), "an integrated GPU under 3.5 GB is left alone");
-        assert!(!EngineOptions::small_vram_card(false, 6.0), "the processor draws on host RAM, not the card");
-        assert_eq!(EngineOptions::capped_max_seq(None, true), Some(SMALL_VRAM_MAX_SEQ), "a small card is held to the cap");
-        assert_eq!(EngineOptions::capped_max_seq(None, false), None, "a big card runs the model's full context");
-        assert_eq!(EngineOptions::capped_max_seq(Some(24576), true), Some(24576), "the user's own value is kept");
-        assert_eq!(EngineOptions::capped_max_seq(Some(4096), true), Some(MIN_MAX_SEQ), "never below the engine's floor");
-        // Flash attention off (#194) roughly doubles the KV cache, so a mid-sized Blackwell card the full context fit
-        // with FA on overruns without it - a 12 GB RTX 5070 faulted out of memory on 3.8.4 (#201). It is held to the
-        // small-card cap up to FA_OFF_KV_CAP_MAX_VRAM_GB; a 24 GB card and FA-on cards keep the full context.
-        assert!(EngineOptions::fa_off_overruns_card(true, 12.0), "12 GB Blackwell with FA off is capped (#201)");
-        assert!(EngineOptions::fa_off_overruns_card(true, 16.0), "16 GB with FA off is capped");
-        assert!(!EngineOptions::fa_off_overruns_card(true, 24.0), "a 24 GB card holds the doubled cache");
-        assert!(!EngineOptions::fa_off_overruns_card(false, 12.0), "with FA on the cache is not doubled");
-        assert!(EngineOptions::fa_off_overruns_card(true, FA_OFF_KV_CAP_MAX_VRAM_GB), "a card exactly at the cap is still held");
-        assert!(!EngineOptions::fa_off_overruns_card(true, FA_OFF_KV_CAP_MAX_VRAM_GB + 0.5), "just above the cap keeps the full context");
+        // Every card starts on the model's full context; only the user's own value sets it smaller (#203, #228).
+        assert_eq!(EngineOptions::capped_max_seq(None), None, "the full context unless set");
+        assert_eq!(EngineOptions::capped_max_seq(Some(16384)), Some(16384), "the user's own value is passed as it is");
+        assert_eq!(EngineOptions::capped_max_seq(Some(4096)), Some(MIN_MAX_SEQ), "never below the engine's floor");
+        let set = EngineOptions { max_seq: Some(16384), ..EngineOptions::default() };
+        assert_eq!(set.clone().to_engine(None).max_seq, Some(16384));
+        let arguments = set.to_engine(None).arguments();
+        let at = arguments.iter().position(|argument| argument == "--max-seq").expect("--max-seq reaches the engine");
+        assert_eq!(arguments[at + 1], "16384", "the value saved in Settings is the one the engine starts with");
+        // Without flash attention the acoustic chunk is sized to the card (two KV sets of the full context, the
+        // acoustic half of the weights, a reserve); the song itself keeps the whole context.
+        const Q8: u64 = 3_810_232_064;
+        const BF16: u64 = 7_166_072_352;
+        let chunk = |card: f64, weights: u64| EngineOptions::nar_chunk_for(card, weights, false, MODEL_CONTEXT, 2);
+        assert_eq!(chunk(8.0, Q8), Some(NAR_CHUNK_MIN), "an 8 GB card gets the shortest chunk");
+        assert_eq!(chunk(8.0, BF16), Some(NAR_CHUNK_MIN));
+        assert_eq!(chunk(12.0, Q8), Some(3072));
+        assert_eq!(chunk(12.0, BF16), Some(2048));
+        assert_eq!(chunk(16.0, Q8), Some(4864));
+        assert_eq!(chunk(16.0, BF16), Some(4352));
+        assert_eq!(chunk(24.0, Q8), Some(7680));
+        assert_eq!(chunk(24.0, BF16), Some(7168));
+        assert_eq!(EngineOptions::nar_chunk_for(48.0, Q8, false, MODEL_CONTEXT, 2), None, "a card that holds every chunk the context makes is left alone");
+        assert!(EngineOptions::nar_chunk_for(16.0, BF16, true, MODEL_CONTEXT, 2) < chunk(16.0, BF16), "both halves kept loaded leave less room");
+        assert_eq!(chunk(16.0, Q8).unwrap() % NAR_CHUNK_STEP, 0);
+        // The choice of flash attention: saved settings with the old switch on read as Off, and Off or On is kept.
+        let old: EngineOptions = serde_json::from_value(serde_json::json!({ "disable_flash_attention": true })).unwrap();
+        assert_eq!(old.migrated().flash_attention, FlashAttention::Off);
+        let old: EngineOptions = serde_json::from_value(serde_json::json!({ "disable_flash_attention": false })).unwrap();
+        assert_eq!(old.migrated().flash_attention, FlashAttention::Auto);
+        let written = serde_json::to_value(EngineOptions { flash_attention: FlashAttention::On, ..EngineOptions::default() }).unwrap();
+        assert_eq!(written["flash_attention"], "on");
+        assert!(written.get("disable_flash_attention").is_none(), "the old switch is never written again");
+        let off = EngineOptions { flash_attention: FlashAttention::Off, ..EngineOptions::default() };
+        assert_eq!(off.flash_attention_off_reason(), Some("chosen in Settings"));
+        assert!(off.to_engine(None).disable_flash_attention);
+        let on = EngineOptions { flash_attention: FlashAttention::On, ..EngineOptions::default() };
+        assert!(!on.to_engine(None).disable_flash_attention, "On is passed even where Auto would turn it off");
         // The assistant is optional: it must survive a restart when configured,
         // and stay unavailable when it is not.
         assert!(restored.assistant.available());
@@ -10920,7 +11031,7 @@ mod tests {
 
     #[test]
     fn engine_options_become_launch_flags_with_a_batch_ceiling() {
-        let options = EngineOptions { max_seq: Some(8192), vae_core: Some(256), ..EngineOptions::default() }.to_engine();
+        let options = EngineOptions { max_seq: Some(8192), vae_core: Some(256), ..EngineOptions::default() }.to_engine(None);
         assert_eq!(options.max_batch, Some(1));
         assert_eq!(options.max_seq, Some(8192));
         assert_eq!(options.vae_core, Some(256));

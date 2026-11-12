@@ -1347,8 +1347,6 @@ export const zh = {
     maxSeqLabel: 'LM KV 缓存 (--max-seq)',
     maxSeqHint: '留空则使用模型自身的上下文长度。',
     diagnostics: '诊断',
-    noFlashAttentionLabel: '禁用 flash attention',
-    noFlashAttentionHint: '--no-fa。速度更慢；当驱动或显卡与 flash attention 不兼容时使用。',
     splitCfgLabel: '将 CFG 拆分为两次前向',
     splitCfgHint: '--no-batch-cfg。引导期间显存峰值更低，但每步更慢。',
     clampFp16Label: '将隐藏状态限制在 FP16 范围',
