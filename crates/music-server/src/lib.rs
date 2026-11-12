@@ -526,8 +526,8 @@ const CARD_RESERVE_GIB: f64 = 1.5;
 const NAR_CHUNK_MIN: u32 = 1024;
 const NAR_CHUNK_STEP: u32 = 256;
 /// What a set keeps on the card beside its KV cache with one track, by a part of its weights' file name and "keep
-/// models loaded": the peak less the desktop's share and the stage's cache, measured on the card.
-const SET_RESIDENT_GIB: &[(&str, bool, f64)] = &[];
+/// models loaded": the peak less the card's background and the stage's cache, measured on the card.
+const SET_RESIDENT_GIB: &[(&str, bool, f64)] = &[("Q8_0", false, 2.8), ("BF16", false, 4.6)];
 /// What the tracks of a request leave free on the card, for the driver and the peaks between two readings.
 const TRACKS_RESERVE_GIB: f64 = 1.0;
 
@@ -11492,6 +11492,23 @@ mod tests {
         assert_eq!(EngineOptions::tracks_that_fit(8.0 - 1.5, 2.6, kv, 1), 1);
         assert_eq!(EngineOptions::tracks_that_fit(4.0, 2.6, kv, 4), 1, "one track at least");
         assert_eq!(EngineOptions::tracks_that_fit(48.0, 2.6, kv, 2), 2, "never more than asked");
+    }
+
+    /// The measured sets on 8, 12 and 24 GB cards with 2.3 GB of the desktop and a full-context F16 cache: the
+    /// tracks Settings asks for stay when they fit, and fewer are taken when they do not; an unmeasured set is left
+    /// as Settings has it.
+    #[test]
+    fn a_measured_set_takes_the_tracks_each_card_holds() {
+        use music_engine::yue_server::ComputeBackend;
+        let at = |set: &str, card: f64, tracks: u32| {
+            let options = EngineOptions { backend: ComputeBackend::Cpu, kv_q8: false, max_batch: Some(tracks), ..EngineOptions::default() };
+            options.tracks_for_card(std::path::Path::new(&format!("YuE2-3B-{set}.gguf")), card - 2.3)
+        };
+        let q8: Vec<_> = [8.0, 12.0, 24.0].iter().flat_map(|card| [1, 2, 4].map(|tracks| at("Q8_0", *card, tracks))).collect();
+        assert_eq!(q8, [None, Some(1), Some(1), None, None, Some(2), None, None, None]);
+        let bf16: Vec<_> = [8.0, 12.0, 24.0].iter().flat_map(|card| [1, 2, 4].map(|tracks| at("BF16", *card, tracks))).collect();
+        assert_eq!(bf16, [None, Some(1), Some(1), None, Some(1), Some(1), None, None, None]);
+        assert_eq!(at("Q4_K_M", 8.0, 4), None, "an unmeasured set");
     }
 
     /// Extra launch arguments are kept as typed and reach the engine last,
