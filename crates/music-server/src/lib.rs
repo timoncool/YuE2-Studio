@@ -5221,7 +5221,6 @@ async fn engine_at_work(state: &AppState) -> bool {
 
 /// Starts the engine again with the saved options; an engine that does not start is counted for the hub by a reason
 /// that names no path on the computer.
-
 async fn restart_engine(state: &AppState) -> Result<(), String> {
     let started = start_engine_again(state).await;
     if let Err(error) = &started {

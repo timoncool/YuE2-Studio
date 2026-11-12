@@ -248,7 +248,6 @@ pub(crate) fn chosen_card() -> Vec<String> {
 /// Every NVIDIA card; `None` when nvidia-smi did not answer (not on PATH, did not start, failed), which says nothing
 /// about the cards. The answer is kept for half a minute: the setup status, polled every second, and the engine's
 /// watchdog ask for the cards while one is chosen.
-
 pub fn nvidia_cards() -> Option<Cards> {
     static LAST: std::sync::Mutex<Option<(std::time::Instant, Option<Cards>)>> = std::sync::Mutex::new(None);
     remembered(&LAST, CARDS_FRESH, ask_nvidia_smi_for_cards)
