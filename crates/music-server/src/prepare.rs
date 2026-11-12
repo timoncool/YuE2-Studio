@@ -436,6 +436,12 @@ fn plain_lyrics(found: &str) -> String {
     found.lines().map(|line| without_time(line.trim())).filter(|line| !line.is_empty()).collect::<Vec<_>>().join("\n")
 }
 
+/// The lyrics a recording sings, as plain lines laid out as dataset preparation
+/// lays out what it hears. None when nothing sung is left.
+pub(crate) fn recognised_lyrics(words: &[(f64, String)]) -> Option<String> {
+    transcript(words).map(|timed| plain_lyrics(&timed))
+}
+
 /// The style a song is prompted with when no assistant writes it: what
 /// MOSS-Music heard, its genre tags first, closed with the tempo.
 fn heard_style(note: &training::HeardNote) -> String {
@@ -1167,5 +1173,12 @@ mod tests {
         let text = transcript(&words).expect("words");
         assert!(text.starts_with("[0:00] hello there"), "{text}");
         assert!(transcript(&[(0.0, "<unk>".to_string())]).is_none());
+    }
+
+    #[test]
+    fn recognised_lyrics_are_lines_without_times() {
+        let words = vec![(0.0, "hello".to_string()), (0.3, "there.".to_string()), (2.0, "again".to_string()), (2.2, "now".to_string())];
+        assert_eq!(recognised_lyrics(&words).as_deref(), Some("hello there.\nagain now"));
+        assert!(recognised_lyrics(&[(0.0, "<unk>".to_string())]).is_none());
     }
 }

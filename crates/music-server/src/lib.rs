@@ -1294,6 +1294,7 @@ pub async fn serve() -> anyhow::Result<()> {
         .route("/v1/openrouter/catalog", get(openrouter_catalog))
         .route("/v1/openrouter/catalog/refresh", post(refresh_openrouter_catalog))
         .route("/v1/openrouter/transcriptions", post(create_openrouter_transcription))
+        .route("/v1/lyrics/recognise", post(recognise_lyrics))
         .route("/v1/openrouter/covers", post(create_openrouter_cover))
         .route("/editor", get(|| async { axum::response::Redirect::permanent("/editor/index.html") }))
         .route("/editor/{*path}", get(editor_asset))
@@ -3662,6 +3663,13 @@ async fn read_activity(State(state): State<AppState>) -> Json<Value> {
 /// nobody asked for. The first track that needs timings fetches the model and
 /// carries on.
 async fn ensure_local_recogniser(state: &AppState, config: &lyrics_sync::LyricsSyncConfig, song_id: &str) -> bool {
+    let title = state.library.get_song(song_id).ok().flatten().map(|song| song.title).unwrap_or_default();
+    ensure_local_recogniser_named(state, config, song_id, &title).await
+}
+
+/// The same for a recording that is not a song of the library: the activity
+/// strip names it by `title`.
+async fn ensure_local_recogniser_named(state: &AppState, config: &lyrics_sync::LyricsSyncConfig, song_id: &str, title: &str) -> bool {
     let ready = |state: &AppState| match config.provider {
         lyrics_sync::AsrProvider::Parakeet => state.lyrics_sync.parakeet_ready(config.runtime, config.whisper_model.as_deref()),
         lyrics_sync::AsrProvider::Whisper => {
@@ -3693,12 +3701,11 @@ async fn ensure_local_recogniser(state: &AppState, config: &lyrics_sync::LyricsS
         return ready(state);
     }
 
-    let title = state.library.get_song(song_id).ok().flatten().map(|song| song.title).unwrap_or_default();
-    note_activity(state, song_id, &title, "karaoke", "running", Some("karaoke.downloading".into())).await;
+    note_activity(state, song_id, title, "karaoke", "running", Some("karaoke.downloading".into())).await;
     for asset in missing {
         if let Err(error) = state.lyrics_sync.downloader().install(asset).await {
             eprintln!("could not fetch the karaoke model {}: {error}", asset.id);
-            note_activity(state, song_id, &title, "karaoke", "failed", Some(format!("{error:#}"))).await;
+            note_activity(state, song_id, title, "karaoke", "failed", Some(format!("{error:#}"))).await;
             return false;
         }
         // The downloader runs one file at a time in the background; the timings
@@ -3715,13 +3722,13 @@ async fn ensure_local_recogniser(state: &AppState, config: &lyrics_sync::LyricsS
             } else {
                 0
             };
-            note_activity(state, song_id, &title, "karaoke", "running", Some(format!("karaoke.downloading {percent}%"))).await;
+            note_activity(state, song_id, title, "karaoke", "running", Some(format!("karaoke.downloading {percent}%"))).await;
             tokio::time::sleep(std::time::Duration::from_millis(700)).await;
         }
     }
     // the download was this record's work: done or failed here, so no caller leaves it "downloading"
     let now_ready = ready(state);
-    note_activity(state, song_id, &title, "karaoke", if now_ready { "done" } else { "failed" }, (!now_ready).then(|| "karaoke.model-missing".to_string())).await;
+    note_activity(state, song_id, title, "karaoke", if now_ready { "done" } else { "failed" }, (!now_ready).then(|| "karaoke.model-missing".to_string())).await;
     now_ready
 }
 
@@ -6767,6 +6774,87 @@ async fn create_song_karaoke(
         .set_song_lrc(&id, &lrc)
         .map_err(|error| api_error(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?;
     Ok(Json(serde_json::json!({ "lrc": lrc, "lines": lines.len(), "provider": config.provider })))
+}
+
+#[derive(Debug, Deserialize)]
+struct RecogniseLyricsRequest {
+    /// A song of the library, or else a recording sent with the request.
+    #[serde(default)]
+    song_id: Option<String>,
+    #[serde(default)]
+    audio_base64: Option<String>,
+    #[serde(default)]
+    audio_format: Option<String>,
+    /// The recording's file name, which the activity strip shows while a recogniser downloads.
+    #[serde(default)]
+    audio_name: Option<String>,
+    /// Overrides the language guess, as for karaoke.
+    #[serde(default)]
+    language: Option<String>,
+}
+
+/// The lyrics a song or a recording sings, heard by the recogniser chosen for
+/// karaoke and laid out in lines as dataset preparation lays them out.
+async fn recognise_lyrics(
+    State(state): State<AppState>,
+    Json(request): Json<RecogniseLyricsRequest>,
+) -> Result<Json<Value>, (StatusCode, Json<ApiError>)> {
+    let config = state.lyrics_sync_config.read().await.clone();
+    if config.provider == lyrics_sync::AsrProvider::None {
+        return Err(api_error(StatusCode::CONFLICT, "karaoke.no-recogniser".into()));
+    }
+    if matches!(config.provider, lyrics_sync::AsrProvider::Whisper | lyrics_sync::AsrProvider::Parakeet) {
+        card_free_of_training(&state, "recognise lyrics").await?;
+    }
+    if !config.available() {
+        return Err(api_error(StatusCode::CONFLICT, "karaoke.off".into()));
+    }
+    let (audio, sent) = match (&request.song_id, &request.audio_base64) {
+        (Some(id), _) => {
+            let song = state
+                .library
+                .get_song(id)
+                .map_err(|error| api_error(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?
+                .ok_or_else(|| api_error(StatusCode::NOT_FOUND, "no such song".into()))?;
+            let path = state
+                .library
+                .media_path_for_song(&song)
+                .ok_or_else(|| api_error(StatusCode::BAD_REQUEST, "this track has no audio to listen to".into()))?;
+            (path, false)
+        }
+        (None, Some(encoded)) => {
+            use base64::Engine as _;
+            let bytes = base64::engine::general_purpose::STANDARD
+                .decode(encoded)
+                .map_err(|error| api_error(StatusCode::BAD_REQUEST, format!("the recording is not base64: {error}")))?;
+            let extension: String = request.audio_format.as_deref().unwrap_or("wav").chars().filter(char::is_ascii_alphanumeric).take(8).collect();
+            let path = std::env::temp_dir().join(format!("yue2-lyrics-{}.{}", uuid::Uuid::now_v7().simple(), if extension.is_empty() { "wav" } else { &extension }));
+            std::fs::write(&path, bytes).map_err(|error| api_error(StatusCode::INTERNAL_SERVER_ERROR, format!("could not keep the recording: {error}")))?;
+            (path, true)
+        }
+        (None, None) => return Err(api_error(StatusCode::BAD_REQUEST, "name a song_id or send audio_base64".into())),
+    };
+    let ready = match &request.song_id {
+        Some(id) => ensure_local_recogniser(&state, &config, id).await,
+        None => {
+            let name = request.audio_name.as_deref().map(str::trim).filter(|name| !name.is_empty()).unwrap_or("recording");
+            ensure_local_recogniser_named(&state, &config, &format!("recording:{name}"), name).await
+        }
+    };
+    if !ready {
+        if sent {
+            std::fs::remove_file(&audio).ok();
+        }
+        return Err(api_error(StatusCode::CONFLICT, "karaoke.model-missing".into()));
+    }
+    let heard = recognised_words(&state, &config, audio.clone(), request.language.clone(), String::new()).await;
+    if sent {
+        if let Err(error) = std::fs::remove_file(&audio) {
+            eprintln!("[ERROR] could not remove the recording {}: {error}", audio.display());
+        }
+    }
+    let lyrics = prepare::recognised_lyrics(&heard?).ok_or_else(|| api_error(StatusCode::BAD_GATEWAY, lyrics_sync::NO_WORDS.to_string()))?;
+    Ok(Json(serde_json::json!({ "text": lyrics, "provider": config.provider })))
 }
 
 async fn delete_song_karaoke(
