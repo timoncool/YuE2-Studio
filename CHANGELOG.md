@@ -9,6 +9,7 @@ Windows build.
 
 - **Flash attention can be switched on by hand** ([#228](https://github.com/timoncool/YuE2-Studio/issues/228)): Settings - Local engine has Auto, On and Off in place of the switch that could only turn it off. Auto still leaves it off on RTX 50 cards, where singing comes out garbled with it; On runs it there too.
 - **Settings - Local engine says which KV cache the engine runs with and why** ([#203](https://github.com/timoncool/YuE2-Studio/issues/203), [#228](https://github.com/timoncool/YuE2-Studio/issues/228)): an empty field read 24576 while a smaller cache was in use. The field now reads Auto, a line under it names the cache of the running engine (the model's full context, or set by you), and a saved value that has not reached the engine yet says it applies at the next start.
+- **The minimum of the sound stage explains itself and warns before it cuts a song off** ([#225](https://github.com/timoncool/YuE2-Studio/issues/225)): a Min tokens close to the length limit kept the song from ending - the model sang the lyrics, then filled the rest with near silence and was cut off at the limit. The field now says what the number means (25 frames are one second; empty lets the model end the song itself), and a minimum of 90 % of the length or more is flagged under it.
 
 ### Fixed
 

@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { libraryChanged, SELF_READ, useActivity, useAssistantStatus, useSetupStatus, type ActivityEntry } from '../services/studioQueries';
 import { hasSungLines, karaokeReason } from '../services/karaoke';
 import { clampDurationToKept } from '../services/createDuration';
+import { minTokensCutsTheSongOff } from '../services/samplingLimits';
 import {
   AlertTriangle, AudioLines, ChevronDown, CircleAlert, Dices, Ear, Eye, EyeOff, FileMusic, FolderOpen, Loader2,
   Grid2x2, Guitar, ListChecks, Music2, Pause, Piano, Play, RotateCcw, Save, Sparkles, Square, Tags, Upload, Wand2, Settings2, X,
@@ -331,7 +332,7 @@ const AutoTextarea: React.FC<React.TextareaHTMLAttributes<HTMLTextAreaElement> &
 };
 
 /** Seven knobs of one autoregressive stage, each defaulting to the checkpoint. */
-const SamplingGrid: React.FC<{ value: SamplingText; defaults?: YueSampling; onChange: (value: SamplingText) => void; t: (key: never) => string; maxTokensCap?: number }> = ({ value, defaults, onChange, t, maxTokensCap }) => {
+const SamplingGrid: React.FC<{ value: SamplingText; defaults?: YueSampling; onChange: (value: SamplingText) => void; t: (key: never) => string; maxTokensCap?: number; minTokensHint?: string }> = ({ value, defaults, onChange, t, maxTokensCap, minTokensHint }) => {
   const label: Record<keyof YueSampling, string> = {
     temperature: t('samplingTemperature' as never),
     top_p: 'Top P',
@@ -344,7 +345,7 @@ const SamplingGrid: React.FC<{ value: SamplingText; defaults?: YueSampling; onCh
   return (
     <div className="grid grid-cols-2 gap-2">
       {SAMPLING_KEYS.map(key => (
-        <Field key={key} label={label[key]}>
+        <Field key={key} label={label[key]} hint={key === 'min_tokens' ? minTokensHint : undefined}>
           <input
             value={value[key]}
             onChange={event => onChange({ ...value, [key]: event.target.value })}
@@ -2002,7 +2003,10 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
                       <input value={cfgScale} onChange={event => setCfgScale(event.target.value)} placeholder={tt('guidanceAuto')} inputMode="decimal" className={CONTROL} />
                     </Field>
                     <div className="mt-3">
-                      <SamplingGrid value={semanticSampling} defaults={defaults.semantic_sampling} onChange={setSemanticSampling} t={t as never} maxTokensCap={semanticBudget} />
+                      <SamplingGrid value={semanticSampling} defaults={defaults.semantic_sampling} onChange={setSemanticSampling} t={t as never} maxTokensCap={semanticBudget} minTokensHint={tt('samplingMinTokensHint')} />
+                      {minTokensCutsTheSongOff(semanticSampling.min_tokens, effectiveDuration) && (
+                        <p className="mt-2 text-[11px] leading-4 text-amber-600 dark:text-amber-400">{tt('samplingMinTokensCutsOff')}</p>
+                      )}
                       <p className={`mt-2 text-[11px] leading-4 ${semanticMaxTokens !== undefined && semanticMaxTokens > semanticBudget ? 'text-amber-600 dark:text-amber-400' : 'text-zinc-500'}`}>
                         {budgetText(semanticMaxTokens !== undefined && semanticMaxTokens > semanticBudget ? 'semanticBudgetOver' : 'semanticBudget')}
                       </p>
