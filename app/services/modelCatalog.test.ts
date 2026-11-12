@@ -1,5 +1,17 @@
 import { describe, expect, it } from 'vitest';
-import { completeCustomComponentIds, componentPrecision, componentsByKind, type ModelComponent } from './modelCatalog';
+import { completeCustomComponentIds, componentPrecision, componentsByKind, setupLabel, type ModelComponent } from './modelCatalog';
+
+describe('setupLabel', () => {
+  const t = ((key: string) => `<${key}>`) as Parameters<typeof setupLabel>[0];
+  it('names the set, and the own model first when it sings in the set\'s place', () => {
+    expect(setupLabel(t, 'ru', { selected_profile_id: 'quality-q8' })).toBe('<profile_quality-q8>');
+    expect(setupLabel(t, 'ru', { selected_component_ids: ['a'] })).toBe('<customSet>');
+    expect(setupLabel(t, 'ru', null)).toBe('<noProfile>');
+    expect(setupLabel(t, 'ru', { selected_profile_id: 'quality-q8', own_model: 'mine.gguf' })).toBe('<ownModelRow>: mine.gguf · <profile_quality-q8>');
+    expect(setupLabel(t, 'ru', { selected_profile_id: 'quality-q8', own_model: 'rs.gguf', own_model_name: { en: 'RS', ru: 'РС' } })).toBe('<ownModelRow>: РС · <profile_quality-q8>');
+    expect(setupLabel(t, 'ja', { selected_profile_id: 'quality-q8', own_model: 'rs.gguf', own_model_name: { en: 'RS' } })).toBe('<ownModelRow>: RS · <profile_quality-q8>');
+  });
+});
 
 const components: ModelComponent[] = [
   { id: 'backbone-q8', kind: 'backbone', filename: 'YuE2-3B-Q8_0.gguf', bytes: 1, sha256: 'a' },

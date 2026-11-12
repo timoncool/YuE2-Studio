@@ -25,7 +25,7 @@ import { composePlans, composeScore, transcribe, type ScorePlan } from '../servi
 import { chordBed, failed, instrumentalScore, matchSections, type SectionProposal } from '../services/scoreApi';
 import { sectionTagsOnly } from '../services/instrumental';
 import { lyricSyllables, syllableChangesOf, type SyllableChange } from '../services/syllables';
-import { profileLabel as setLabel } from '../services/modelCatalog';
+import { profileLabel as setLabel, setupLabel, type SetupChoice } from '../services/modelCatalog';
 import { REQUEST_FILE_ACCEPT, parseRequestFile, requestFileTitle, serializeRequest, type RequestFileFormat } from '../services/requestFile';
 import { AdapterPicker } from './AdapterPicker';
 import { CreatePlaylistModal } from './PlaylistModals';
@@ -79,12 +79,10 @@ type EngineDefaults = Partial<Record<string, unknown>> & {
 
 type ProfileFiles = { backbone: string; vae: string; transcriber?: string | null };
 
-type SetupStatus = {
+type SetupStatus = SetupChoice & {
   ready?: boolean;
   profile_files?: ProfileFiles | null;
   engine_ready?: boolean;
-  selected_profile_id?: string | null;
-  selected_component_ids?: string[] | null;
   effective_max_batch?: number;
   hardware?: { gpuName?: string; totalVramGb?: number; recommended?: string };
 };
@@ -547,11 +545,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
   const transcriberReady = Boolean(catalog?.transcriber);
   const effectiveCot: YueCot = cot || (defaults.cot as YueCot) || 'full';
 
-  const profileLabel = useMemo(() => {
-    if (setup?.selected_component_ids?.length) return t('customSet');
-    const id = setup?.selected_profile_id;
-    return id ? PROFILE_LABEL[id] ?? id : '—';
-  }, [setup, t]);
+  const profileLabel = useMemo(() => setupLabel(t, language, setup), [setup, t, language]);
 
   // A cover or a lyric timing finished: the library is read again for it.
   // What was finished before the page opened is in the library already.

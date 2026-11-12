@@ -3,7 +3,7 @@ import { useOpenRouterSettings, useSetupStatus } from '../services/studioQueries
 import { Disc, Layers, Library, Moon, Newspaper, ScrollText, Search, SlidersHorizontal, Sun } from 'lucide-react';
 import { View } from '../types';
 import { useI18n } from '../context/I18nContext';
-import { profileLabel } from '../services/modelCatalog';
+import { setupLabel } from '../services/modelCatalog';
 import { ResourceMonitor } from './ResourceMonitor';
 import { PlayerExtraButtons } from './player/PlayerExtraButtons';
 
@@ -51,12 +51,7 @@ const SystemWidget: React.FC<{ isOpen?: boolean }> = ({ isOpen }) => {
   const openRouterConfigured = openRouter?.configured === true;
   const engineReady = setup?.engine_ready === true;
   const modelReady = setup?.ready === true;
-  const setName = setup?.selected_profile_id
-    ? profileLabel(t, { id: setup.selected_profile_id, label: setup.selected_profile_id })
-    : (setup?.selected_component_ids?.length ? t('customSet') : t('noProfile'));
-  // the person's own model sings in place of the set's: its file is named first
-  const ownName = setup?.own_model ? setup.own_model_name?.[language] ?? setup.own_model_name?.en ?? setup.own_model : null;
-  const profile = ownName ? `${tt('ownModelRow')}: ${ownName} · ${setName}` : setName;
+  const profile = setupLabel(t, language, setup);
   // Without a model set on disk the engine is not starting, it is waiting.
   const engineLabel = unreachable ? t('engineUnavailable') : engineReady ? t('engineReachable') : modelReady ? t('engineStarting') : tt('engineWaitsForModels');
   const modelLabel = modelReady ? `${t('profileReady')}: ${profile}` : t('profileNotInstalled');
