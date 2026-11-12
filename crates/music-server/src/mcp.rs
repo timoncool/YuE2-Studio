@@ -467,6 +467,7 @@ const JOURNAL: &[(&str, &str, &str)] = &[
     ("models_select", "updated", "settings"),
     ("settings_set", "updated", "settings"),
     ("engine_options_set", "updated", "settings"),
+    ("engine_fitted_cache_reset", "updated", "settings"),
     ("karaoke_settings_set", "updated", "settings"),
     ("separator_settings_set", "updated", "settings"),
     ("cover_templates_set", "updated", "settings"),
@@ -1027,6 +1028,12 @@ fn tools() -> &'static [Tool] {
                 description: "Change the engine's launch options (the whole object as engine_options_get returns it, with your changes); engine_restart applies them.",
                 schema: || json!({ "type": "object" }),
                 call: |args| send(Method::PUT, "/engine/options".into(), args.clone()),
+            },
+            Tool {
+                name: "engine_fitted_cache_reset",
+                description: "Forget the KV cache the studio stepped down to after the card ran out of memory on a song (engine_options_get: in_effect.max_seq_reason fitted), so the engine starts on the model's full context again; restarts a running engine.",
+                schema: nothing,
+                call: |_| send(Method::DELETE, "/engine/options/fitted".into(), json!({})),
             },
             Tool {
                 name: "engine_restart",

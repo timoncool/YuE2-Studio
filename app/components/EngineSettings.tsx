@@ -17,7 +17,7 @@ type FlashAttention = 'auto' | 'on' | 'off';
 /** What the running engine was started with, as the service read it from the launch. */
 interface InEffect {
   max_seq: number;
-  max_seq_reason: 'full' | 'set';
+  max_seq_reason: 'full' | 'set' | 'fitted';
   flash_attention: boolean;
   nar_chunk_seconds: number | null;
 }
@@ -129,6 +129,24 @@ export const EngineSettings: React.FC = () => {
   useEffect(() => { void load(); }, [load]);
 
   const dirty = JSON.stringify(options) !== JSON.stringify(saved);
+
+  // The cache stepped down after the card ran out of memory goes back to the model's full context.
+  const resetFitted = async () => {
+    setBusy(true);
+    setError(null);
+    setNotice(null);
+    try {
+      const response = await fetch('/engine/options/fitted', { method: 'DELETE' });
+      const body = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(body?.error || `Resetting the fitted KV cache failed (${response.status})`);
+      setNotice(body?.engine_restarted ? t('engineOptionsSavedRestarted') : t('engineOptionsSavedLater'));
+      void load();
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Resetting the fitted KV cache failed.');
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const save = async () => {
     setBusy(true);
@@ -308,8 +326,21 @@ export const EngineSettings: React.FC = () => {
       </div>
       {inEffect && (
         <div className="-mt-1 space-y-0.5 text-xs leading-5 text-zinc-500 dark:text-zinc-400">
-          <span className="block">
-            {tt('maxSeqNow').replace('{n}', String(inEffect.max_seq)).replace('{reason}', tt(inEffect.max_seq_reason === 'set' ? 'maxSeqReasonSet' : 'maxSeqReasonFull'))}
+          <span className="flex flex-wrap items-center gap-2">
+            {tt('maxSeqNow').replace('{n}', String(inEffect.max_seq)).replace('{reason}', tt(
+              inEffect.max_seq_reason === 'set' ? 'maxSeqReasonSet' : inEffect.max_seq_reason === 'fitted' ? 'maxSeqReasonFitted' : 'maxSeqReasonFull',
+            ))}
+            {inEffect.max_seq_reason === 'fitted' && (
+              <button
+                type="button"
+                onClick={() => void resetFitted()}
+                disabled={busy}
+                title={tt('fittedResetHint')}
+                className="rounded-md border border-zinc-300 px-2 py-0.5 text-[11px] font-semibold text-zinc-700 hover:border-pink-400 hover:text-pink-600 disabled:opacity-50 dark:border-white/15 dark:text-zinc-200"
+              >
+                {tt('fittedReset')}
+              </button>
+            )}
           </span>
           {!inEffect.flash_attention && inEffect.nar_chunk_seconds != null && (
             <span className="block">{tt('narChunkNow').replace('{s}', String(inEffect.nar_chunk_seconds))}</span>

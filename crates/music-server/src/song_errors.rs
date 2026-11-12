@@ -18,6 +18,8 @@ pub enum SongError {
     TrainingOnCard,
     /// Lost with an engine that restarted: the card's memory ran out.
     LostVram,
+    /// Lost to the card's memory again after the studio made the song once more with this smaller KV cache.
+    LostVramRetried(u32),
     /// Lost with an engine that restarted: the computer's memory ran out.
     LostRam,
     /// Lost with an engine that restarted: the card failed, in the engine's own words when it gave any.
@@ -97,6 +99,7 @@ impl SongError {
             SongError::Raw(_) => return None,
             SongError::TrainingOnCard => "training_on_card",
             SongError::LostVram => "lost_vram",
+            SongError::LostVramRetried(_) => "lost_vram_retried",
             SongError::LostRam => "lost_ram",
             SongError::LostDevice(Some(_)) => "lost_device",
             SongError::LostDevice(None) => "lost_device_silent",
@@ -138,6 +141,7 @@ impl SongError {
             SongError::AdapterMissing(name) => put("name", json!(name)),
             SongError::LostExited { exit, .. } => put("exit", json!(exit)),
             SongError::LostPort { port, .. } => put("port", json!(port)),
+            SongError::LostVramRetried(max_seq) => put("n", json!(max_seq)),
             SongError::ContextShort { tokens, context, can_last, asked, .. } => {
                 put("tokens", json!(tokens));
                 put("context", json!(context));
@@ -185,6 +189,7 @@ impl fmt::Display for SongError {
             SongError::Raw(text) => f.write_str(text),
             SongError::TrainingOnCard => f.write_str("a training run has the card; songs can be made once it finishes or is stopped"),
             SongError::LostVram => f.write_str("The graphics card ran out of memory on this song and the engine restarted, so the song was lost. Choose a smaller model set in the model manager or a shorter song, and close whatever else uses the card; a card below the smallest set cannot make songs."),
+            SongError::LostVramRetried(max_seq) => write!(f, "The graphics card ran out of memory on this song, and again when it was made with a {max_seq} KV cache. Choose a smaller model set or a shorter song, and close whatever else uses the card."),
             SongError::LostRam => f.write_str("The computer ran out of memory (RAM) on this song and the engine restarted, so the song was lost. Close other programs that take memory, or choose a smaller model set in the model manager or a shorter song."),
             SongError::LostDevice(Some(detail)) => write!(f, "The graphics card failed during this song ({detail}) and the engine restarted, so the song was lost. The engine log is in Settings, Engine."),
             SongError::LostDevice(None) => f.write_str("The graphics card failed during this song (a CUDA or driver error) and the engine restarted, so the song was lost. The engine log is in Settings, Engine."),
@@ -241,6 +246,7 @@ mod tests {
             SongError::Raw("x".into()),
             SongError::TrainingOnCard,
             SongError::LostVram,
+            SongError::LostVramRetried(16384),
             SongError::LostRam,
             SongError::LostDevice(Some("x".into())),
             SongError::LostDevice(None),
@@ -269,6 +275,7 @@ mod tests {
                 SongError::Raw(_)
                 | SongError::TrainingOnCard
                 | SongError::LostVram
+                | SongError::LostVramRetried(_)
                 | SongError::LostRam
                 | SongError::LostDevice(_)
                 | SongError::LostAtLine(_)

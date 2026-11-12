@@ -617,6 +617,14 @@ impl Library {
         Ok(jobs.collect::<rusqlite::Result<_>>()?)
     }
 
+    /// One kept job by its id, with the request it was sent with.
+    pub fn music_job(&self, id: &str) -> Result<Option<StoredJob>> {
+        let connection = self.connection.lock().unwrap();
+        Ok(connection
+            .query_row("SELECT id,submitted_at,engine_id,title,style,lyrics,duration_seconds,playlist_id,generation_settings_json,request_json,status,message,attempt,resumed_as FROM music_jobs WHERE id=?1", params![id], stored_job_row)
+            .optional()?)
+    }
+
     /// The newest jobs that ended without a result, failed or stopped.
     pub fn ended_music_jobs(&self, limit: usize) -> Result<Vec<StoredJob>> {
         let connection = self.connection.lock().unwrap();

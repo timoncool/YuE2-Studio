@@ -11,6 +11,7 @@ type ErrorTexts = Record<string, string>;
 const EN: ErrorTexts = {
   training_on_card: 'A LoRA is training on the graphics card; make songs once it finishes or is stopped.',
   lost_vram: 'The graphics card ran out of memory on this song and the engine restarted, so the song was lost. Choose a smaller model set in Settings → Models or a shorter song, and close whatever else uses the card; a card below the smallest set cannot make songs.',
+  lost_vram_retried: 'The graphics card ran out of memory on this song, and again when it was made with a {n} KV cache. Choose a smaller model set or a shorter song, and close whatever else uses the card.',
   lost_ram: 'The computer ran out of memory (RAM) on this song and the engine restarted, so the song was lost. Close other programs that take memory, or choose a smaller model set in Settings → Models or a shorter song.',
   lost_device: 'The graphics card failed during this song ({detail}) and the engine restarted, so the song was lost. The engine log is in Settings → Local engine.',
   lost_device_silent: 'The graphics card failed during this song (a CUDA or driver error) and the engine restarted, so the song was lost. The engine log is in Settings → Local engine.',
@@ -38,6 +39,7 @@ const EN: ErrorTexts = {
 const RU: ErrorTexts = {
   training_on_card: 'На видеокарте идёт обучение LoRA: песни можно делать, когда оно закончится или будет остановлено.',
   lost_vram: 'На этой песне у видеокарты кончилась память, движок перезапустился, и песня потеряна. Выберите набор моделей поменьше в Настройках → Модели или песню короче и закройте всё, что ещё занимает видеокарту; на карте слабее самого маленького набора песни не делаются.',
+  lost_vram_retried: 'Видеокарте не хватило памяти на этой песне и при повторе с KV-кэшем {n}. Выберите набор моделей меньше или песню короче и закройте то, что ещё занимает карту.',
   lost_ram: 'На этой песне у компьютера кончилась оперативная память (RAM), движок перезапустился, и песня потеряна. Закройте программы, которые занимают память, или выберите набор моделей поменьше в Настройках → Модели или песню короче.',
   lost_device: 'Во время этой песни видеокарта дала сбой ({detail}), движок перезапустился, и песня потеряна. Лог движка — в Настройках → Локальный движок.',
   lost_device_silent: 'Во время этой песни видеокарта дала сбой (ошибка CUDA или драйвера), движок перезапустился, и песня потеряна. Лог движка — в Настройках → Локальный движок.',
@@ -65,6 +67,7 @@ const RU: ErrorTexts = {
 const ZH: ErrorTexts = {
   training_on_card: '显卡正在训练 LoRA，训练结束或停止后再生成歌曲。',
   lost_vram: '生成这首歌时显卡显存耗尽，引擎已重启，这首歌丢失了。请在“设置 → 模型”中选择更小的模型组合或更短的歌曲，并关闭其他占用显卡的程序；显卡低于最小组合时无法生成歌曲。',
+  lost_vram_retried: '生成这首歌时显卡显存耗尽，用 {n} 的 KV 缓存重做时又一次耗尽。请选择更小的模型组合或更短的歌曲，并关闭其他占用显卡的程序。',
   lost_ram: '生成这首歌时电脑内存（RAM）耗尽，引擎已重启，这首歌丢失了。请关闭占用内存的程序，或在“设置 → 模型”中选择更小的模型组合或更短的歌曲。',
   lost_device: '生成这首歌时显卡出错（{detail}），引擎已重启，这首歌丢失了。引擎日志在“设置 → 本地引擎”。',
   lost_device_silent: '生成这首歌时显卡出错（CUDA 或驱动错误），引擎已重启，这首歌丢失了。引擎日志在“设置 → 本地引擎”。',
@@ -92,6 +95,7 @@ const ZH: ErrorTexts = {
 const JA: ErrorTexts = {
   training_on_card: 'グラフィックカードで LoRA の学習中です。終わるか止めてから曲を作ってください。',
   lost_vram: 'この曲でグラフィックカードのメモリが足りなくなり、エンジンが再起動したため曲は失われました。「設定 → モデル」で小さいモデルセットか短い曲を選び、カードを使っている他のものを閉じてください。最小のセットに満たないカードでは曲を作れません。',
+  lost_vram_retried: 'この曲でグラフィックカードのメモリが足りなくなり、KV キャッシュ {n} で作り直したときも足りませんでした。小さいモデルセットか短い曲を選び、カードを使っている他のものを閉じてください。',
   lost_ram: 'この曲でパソコンのメモリ（RAM）が足りなくなり、エンジンが再起動したため曲は失われました。メモリを使う他のプログラムを閉じるか、「設定 → モデル」で小さいモデルセットか短い曲を選んでください。',
   lost_device: 'この曲の途中でグラフィックカードが失敗し（{detail}）、エンジンが再起動したため曲は失われました。エンジンのログは「設定 → ローカルエンジン」にあります。',
   lost_device_silent: 'この曲の途中でグラフィックカードが失敗し（CUDA またはドライバーのエラー）、エンジンが再起動したため曲は失われました。エンジンのログは「設定 → ローカルエンジン」にあります。',
@@ -119,6 +123,7 @@ const JA: ErrorTexts = {
 const KO: ErrorTexts = {
   training_on_card: '그래픽카드에서 LoRA 학습 중입니다. 학습이 끝나거나 멈춘 뒤 곡을 만드세요.',
   lost_vram: '이 곡에서 그래픽카드 메모리가 부족해 엔진이 다시 시작되었고 곡을 잃었습니다. "설정 → 모델"에서 더 작은 모델 세트나 더 짧은 곡을 고르고, 카드를 쓰는 다른 것을 닫으세요. 가장 작은 세트보다 약한 카드로는 곡을 만들 수 없습니다.',
+  lost_vram_retried: '이 곡에서 그래픽카드 메모리가 부족했고, KV 캐시 {n}으로 다시 만들 때도 부족했습니다. 더 작은 모델 세트나 더 짧은 곡을 고르고, 카드를 쓰는 다른 것을 닫으세요.',
   lost_ram: '이 곡에서 컴퓨터 메모리(RAM)가 부족해 엔진이 다시 시작되었고 곡을 잃었습니다. 메모리를 쓰는 다른 프로그램을 닫거나 "설정 → 모델"에서 더 작은 모델 세트나 더 짧은 곡을 고르세요.',
   lost_device: '이 곡을 만드는 중 그래픽카드에 오류가 나서({detail}) 엔진이 다시 시작되었고 곡을 잃었습니다. 엔진 로그는 "설정 → 로컬 엔진"에 있습니다.',
   lost_device_silent: '이 곡을 만드는 중 그래픽카드에 오류가 나서(CUDA 또는 드라이버 오류) 엔진이 다시 시작되었고 곡을 잃었습니다. 엔진 로그는 "설정 → 로컬 엔진"에 있습니다.',

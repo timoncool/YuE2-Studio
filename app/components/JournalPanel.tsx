@@ -31,6 +31,9 @@ export const JournalPanel: React.FC<{ open: boolean; onClose: () => void }> = ({
   // an agent's change in the window's words, never in a tool's name; the words
   // go in as they are, a $ in a title included
   const sentence = (line: JournalLine) => {
+    if (line.source === 'service') {
+      return t(`journalService_${line.verb}` as TranslationKey).replace('{name}', () => line.target).replace('{n}', () => line.text);
+    }
     if (line.source !== 'agent') return line.text;
     const verb = t(`journalVerb_${line.verb}` as TranslationKey);
     const kind = t(`journalKind_${line.kind}` as TranslationKey);

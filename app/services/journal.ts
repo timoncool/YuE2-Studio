@@ -6,8 +6,9 @@ export interface JournalLine {
   id: number;
   /** Seconds since 1970, as the library keeps moments. */
   at: string;
-  /** `agent` for a change an agent made, `studio` for a message a window showed. */
-  source: 'agent' | 'studio';
+  /** `agent` for a change an agent made, `studio` for a message a window showed, `service` for what the studio did
+   * by itself: `verb` names it, `target` and `text` are its name and its number. */
+  source: 'agent' | 'studio' | 'service';
   tone: string;
   /** An agent's change: what was done and to what kind of thing, and its name. */
   verb: string;
