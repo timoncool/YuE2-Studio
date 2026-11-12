@@ -1,7 +1,7 @@
 import React, { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { ArrowDown, ArrowUp, Copy, Plus, RotateCw, Trash2 } from 'lucide-react';
 import { useI18n } from '../context/I18nContext';
-import { songDetailStrings, songTokenStrings, songWritingStrings } from '../i18n/songWriting';
+import { songDetailStrings, songPartHints, songTokenStrings, songWritingStrings } from '../i18n/songWriting';
 import { cycleSection, editLyricLine, lyricSections, SECTION_PRESETS, sectionText, setStyleRole, STYLE_LANGUAGES, styleRole, toggleLetterCase, type LyricSection } from '../services/songWriting';
 import { styleSuggestions } from '../services/styleSuggestions';
 import { MAIN_STYLES } from '../data/genres';
@@ -12,7 +12,8 @@ const button = 'rounded-md p-1.5 text-zinc-500 hover:bg-pink-500/10 hover:text-p
 export function SongTextParts({ value, onChange, kind, style = '', cot = 'full' }: { value: string; onChange: (text: string) => void; kind: 'style' | 'lyrics'; style?: string; cot?: string }) {
   const [open, setOpen] = useState(false);
   const { language } = useI18n();
-  const s = { ...songWritingStrings[language], ...songDetailStrings[language], ...songTokenStrings[language] };
+  const s = { ...songWritingStrings[language], ...songDetailStrings[language], ...songTokenStrings[language], ...songPartHints[language] };
+  const hint = (text: string) => <span className="mt-0.5 block text-[10px] leading-4 text-zinc-400">{text}</span>;
   const suggestionId = useId();
   const suggestions = useMemo(() => styleSuggestions(language, MAIN_STYLES), [language]);
   const [newSound, setNewSound] = useState('');
@@ -55,12 +56,14 @@ export function SongTextParts({ value, onChange, kind, style = '', cot = 'full' 
       {kind === 'lyrics' && <p className="text-[11px] text-zinc-500" role="status">{tokens?.available ? `${tokens.tokens} ${s.tokens}` : tokenProblem || s.tokenLoading}</p>}
       {kind === 'style' && <div className="space-y-2 rounded-lg border border-zinc-200 p-2 dark:border-white/10">
         <div className="grid grid-cols-2 gap-2">
-          <label className="text-[11px] text-zinc-500">{s.language}<select className={control} value={styleRole(value, 'language')} onChange={event => onChange(setStyleRole(value, 'language', event.target.value))}><option value="">{s.auto}</option>{STYLE_LANGUAGES.map(name => <option key={name}>{name}</option>)}</select></label>
+          <label className="text-[11px] text-zinc-500">{s.language}<select className={control} value={styleRole(value, 'language')} onChange={event => onChange(setStyleRole(value, 'language', event.target.value))}><option value="">{s.auto}</option>{STYLE_LANGUAGES.map(name => <option key={name}>{name}</option>)}</select>{hint(s.languageHint)}</label>
           <label className="text-[11px] text-zinc-500">{s.tempo}<input key={`tempo-${styleRole(value, 'tempo')}`} type="number" min={40} max={200} className={control} defaultValue={styleRole(value, 'tempo')} placeholder={s.auto} onBlur={event => onChange(setStyleRole(value, 'tempo', event.target.value))} /></label>
         </div>
         <div className="flex items-center gap-2"><label className="flex items-center gap-1 text-[11px] text-zinc-500"><input type="checkbox" className="accent-pink-500" checked={Boolean(styleRole(value, 'tempo'))} onChange={event => onChange(setStyleRole(value, 'tempo', event.target.checked ? '88' : ''))} />BPM</label><input type="range" min={40} max={200} step={1} aria-label={s.tempo} className="w-full accent-pink-500 disabled:opacity-30" disabled={!styleRole(value, 'tempo')} value={styleRole(value, 'tempo') || '88'} onChange={event => onChange(setStyleRole(value, 'tempo', event.target.value))} /></div>
-        <label className="block text-[11px] text-zinc-500">{s.voice}<input key={`voice-${styleRole(value, 'voice')}`} className={control} list={suggestionId} defaultValue={styleRole(value, 'voice')} placeholder={s.auto} onBlur={event => onChange(setStyleRole(value, 'voice', event.target.value))} /></label>
+        {hint(s.tempoHint)}
+        <label className="block text-[11px] text-zinc-500">{s.voice}<input key={`voice-${styleRole(value, 'voice')}`} className={control} list={suggestionId} defaultValue={styleRole(value, 'voice')} placeholder={s.auto} onBlur={event => onChange(setStyleRole(value, 'voice', event.target.value))} />{hint(s.voiceHint)}</label>
         <div className="flex gap-1"><input className={control} list={suggestionId} aria-label={s.sound} value={newSound} onChange={event => setNewSound(event.target.value)} placeholder={s.sound} /><button type="button" className={button} title={s.add} disabled={!newSound.trim()} onClick={() => { const tempoAt = parts.findIndex(part => /^\s*(?:\d{2,3}\s*bpm|bpm\s*\d{2,3})\s*$/i.test(part)); const next = [...parts]; next.splice(tempoAt === parts.length - 1 ? tempoAt : parts.length, 0, ` ${newSound.trim()}`); onChange(next.filter(part => part.trim()).join(',')); setNewSound(''); }}><Plus size={13} /></button></div>
+        {hint(s.soundHint)}
         <datalist id={suggestionId}>{suggestions.map(item => <option key={item.value} value={item.value} label={item.label} />)}</datalist>
       </div>}
       {kind === 'style' ? parts.map((part, index) => <div key={index} className="flex gap-1">
