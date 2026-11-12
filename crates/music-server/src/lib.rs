@@ -4786,7 +4786,40 @@ async fn engine_at_work(state: &AppState) -> bool {
     working && state.engine.lock().await.as_mut().is_some_and(|engine| engine.process_alive())
 }
 
+/// Starts the engine again with the saved options; an engine that does not start is counted for the hub by a reason
+/// that names no path on the computer.
 async fn restart_engine(state: &AppState) -> Result<(), String> {
+    let started = start_engine_again(state).await;
+    if let (Err(error), Some(hub)) = (&started, &state.hub) {
+        hub.count("engine_failed", 1);
+        hub.failed("engine", &engine_failure_code(error));
+    }
+    started
+}
+
+/// What an engine that did not start died of, for the hub: the exit code and Windows' record of the fault when there
+/// is one, else the kind of failure - never a path, so one cause is one row.
+fn engine_failure_code(error: &str) -> String {
+    if let Some(at) = error.find("exited during startup with status") {
+        let rest = &error[at + "exited during startup with status".len()..];
+        let exit = rest.split(';').next().unwrap_or_default().trim().trim_start_matches("exit code:").trim();
+        let fault = rest.split_once("; ").map(|(_, fault)| format!("; {fault}")).unwrap_or_default();
+        return format!("exited during startup {exit}{fault}");
+    }
+    let kinds = [
+        ("did not pass GET /health", "no answer before the startup timeout"),
+        ("CUDA backend", "CUDA backend missing"),
+        ("runtime libraries could not be installed", "runtime libraries not installed"),
+        ("has no device", "device not present"),
+        ("runs neither CUDA build", "CUDA not supported by the card or driver"),
+        ("still answering on the engine port", "engine port busy"),
+        ("runtime was not found", "engine runtime not found"),
+        ("no model set is selected", "no model set selected"),
+    ];
+    kinds.iter().find(|(marker, _)| error.contains(marker)).map(|(_, kind)| kind.to_string()).unwrap_or_else(|| "other".into())
+}
+
+async fn start_engine_again(state: &AppState) -> Result<(), String> {
     let mut supervisor = state.engine.lock().await;
     let owned = supervisor.is_some();
     if let Some(engine) = supervisor.as_mut() {
@@ -5103,6 +5136,11 @@ fn engine_location(options: EngineOptions, backbone: Option<&std::path::Path>) -
         port: Some(music_engine::yue_server::engine_port()),
         options: options.to_engine(backbone),
     }
+}
+
+/// Whether Settings has the work on the processor: the studio's other models on the card follow that choice too.
+pub(crate) async fn processor_chosen(state: &AppState) -> bool {
+    state.engine_options.read().await.backend == music_engine::yue_server::ComputeBackend::Cpu
 }
 
 /// The weights the selected set resolves to, as paths the engine can open.
@@ -10715,6 +10753,18 @@ mod tests {
         assert_eq!(options.clone().to_engine(Some(backbone)).max_seq, Some(16384), "the fitted step reaches the engine");
         assert_eq!(SongError::LostVramRetried(16384).code(), Some("lost_vram_retried"));
         assert!(SongError::LostVramRetried(16384).to_string().contains("16384 KV cache"));
+    }
+
+    #[test]
+    fn an_engine_that_did_not_start_is_counted_by_a_reason_without_paths() {
+        let crashed = "the local engine did not start: yue-server exited during startup with status exit code: 0xc000001d; faulting module ggml-cpu-haswell.dll, exception 0xc000001d, offset 0x0000000000012345";
+        assert_eq!(engine_failure_code(crashed), "exited during startup 0xc000001d; faulting module ggml-cpu-haswell.dll, exception 0xc000001d, offset 0x0000000000012345");
+        let unrecorded = "the local engine did not start: yue-server exited during startup with status exit code: 0xc0000005";
+        assert_eq!(engine_failure_code(unrecorded), "exited during startup 0xc0000005");
+        let missing = "the local engine runtime was not found: the engine's CUDA backend C:\\Users\\someone\\YuE2\\cuda13\\ggml-cuda.dll is missing; reinstall the studio";
+        let code = engine_failure_code(missing);
+        assert!(!code.contains("someone"), "no path reaches the hub: {code}");
+        assert_eq!(engine_failure_code("something new"), "other");
     }
 
     /// A card that ran out of memory has to say so. The studio used to answer

@@ -628,7 +628,7 @@ impl Training {
     /// The listening pack this machine downloads and runs: every file but the MOSS-Music build its card does not take
     /// (`listen::hearing`).
     fn listen_files(&self) -> impl Iterator<Item = &'static Asset> {
-        let hearing = crate::listen::hearing(&crate::hardware::hardware());
+        let hearing = crate::listen::hearing(&crate::hardware::hardware(), false);
         listen_pack().iter().filter(move |asset| !asset.id.starts_with("moss-lm") || asset.relative_path.ends_with(hearing.lm))
     }
 
@@ -1385,6 +1385,7 @@ impl Training {
                 });
             }
             drop(lines_out);
+            let pid = child.id();
             let mut last_error = String::new();
             let status = loop {
                 tokio::select! {
@@ -1415,6 +1416,15 @@ impl Training {
             if !status.success() {
                 if last_error.contains("GGML_BACKEND=CUDA0 not found") {
                     bail!("{} stopped: the trainer's CUDA did not load on the graphics card, and training does not run on the processor; it needs NVIDIA driver {} or newer", stage.id, crate::hardware::CUDA13_DRIVER);
+                }
+                // a crash that wrote nothing says where it happened only in Windows' record of it
+                if last_error.is_empty() {
+                    if let Some(pid) = pid {
+                        let fault = tokio::task::spawn_blocking(move || music_core::process::fault_of(pid, std::time::Duration::from_secs(5))).await.ok().flatten();
+                        if let Some(fault) = fault {
+                            last_error = fault.to_string();
+                        }
+                    }
                 }
                 bail!("{} stopped ({status}){}", stage.id, if last_error.is_empty() { String::new() } else { format!(": {last_error}") });
             }
