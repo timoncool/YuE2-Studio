@@ -301,6 +301,8 @@ async fn status_summary() -> Value {
         "engine": engine["in_effect"],
         // the person's own YuE2 file the engine runs in place of the set's backbone, none for the set's
         "own_model": own["selected"],
+        // the community model that file is, by language; none for a file of the person's own
+        "own_model_name": own["selected_name"],
     })
 }
 

@@ -28,6 +28,7 @@ type NativeSetupStatus = {
   selected_profile_id?: string | null;
   selected_component_ids?: string[] | null;
   own_model?: string | null;
+  own_model_name?: Record<string, string> | null;
 };
 
 const StatusLine: React.FC<{ active: boolean; pending?: boolean; label: string }> = ({ active, pending, label }) => (
@@ -38,7 +39,7 @@ const StatusLine: React.FC<{ active: boolean; pending?: boolean; label: string }
 );
 
 const SystemWidget: React.FC<{ isOpen?: boolean }> = ({ isOpen }) => {
-  const { t } = useI18n();
+  const { t, language } = useI18n();
   const tt = t as unknown as (key: string) => string;
   const setupQuery = useSetupStatus<NativeSetupStatus>();
   const setup = setupQuery.isError ? null : setupQuery.data ?? null;
@@ -54,7 +55,8 @@ const SystemWidget: React.FC<{ isOpen?: boolean }> = ({ isOpen }) => {
     ? profileLabel(t, { id: setup.selected_profile_id, label: setup.selected_profile_id })
     : (setup?.selected_component_ids?.length ? t('customSet') : t('noProfile'));
   // the person's own model sings in place of the set's: its file is named first
-  const profile = setup?.own_model ? `${tt('ownModelRow')}: ${setup.own_model} · ${setName}` : setName;
+  const ownName = setup?.own_model ? setup.own_model_name?.[language] ?? setup.own_model_name?.en ?? setup.own_model : null;
+  const profile = ownName ? `${tt('ownModelRow')}: ${ownName} · ${setName}` : setName;
   // Without a model set on disk the engine is not starting, it is waiting.
   const engineLabel = unreachable ? t('engineUnavailable') : engineReady ? t('engineReachable') : modelReady ? t('engineStarting') : tt('engineWaitsForModels');
   const modelLabel = modelReady ? `${t('profileReady')}: ${profile}` : t('profileNotInstalled');

@@ -4,6 +4,8 @@ export interface ReportFacts {
   selected_profile_id?: string | null;
   /** The person's own YuE2 file the engine runs in place of the set's backbone. */
   own_model?: string | null;
+  /** The community model that file is, by language. */
+  own_model_name?: Record<string, string> | null;
   portable?: boolean;
 }
 
@@ -31,7 +33,10 @@ export function issueReportUrl(repositoryUrl: string, version: string, facts?: R
     ].filter(Boolean).join(', ');
     query.set('gpu', memory ? `${hardware.gpuName}, ${memory}` : hardware.gpuName);
   }
-  const models = [facts?.selected_profile_id, facts?.own_model ? `own model ${facts.own_model}` : ''].filter(Boolean).join(', ');
+  const own = facts?.own_model
+    ? facts.own_model_name?.en ? `own model ${facts.own_model_name.en} (${facts.own_model})` : `own model ${facts.own_model}`
+    : '';
+  const models = [facts?.selected_profile_id, own].filter(Boolean).join(', ');
   if (models) query.set('models', models);
   return `${repositoryUrl}/issues/new/choose?${query.toString()}`;
 }

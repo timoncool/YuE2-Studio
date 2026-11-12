@@ -112,6 +112,31 @@ pub fn file(id: &str, quant: Option<&str>, vram_gb: f64) -> Option<&'static File
     model.files.iter().find(|file| file.quant.eq_ignore_ascii_case(wanted))
 }
 
+/// What choosing community model `id` in `quant` (none: the card's) does, given the GGUF files of the own-models
+/// folder: the file is there and is chosen, or it is downloaded first; an id or quantisation the catalog has not got
+/// is refused.
+#[derive(Debug, PartialEq)]
+pub enum Choice {
+    Select(&'static str),
+    /// The file name the download lands as.
+    Download(&'static str),
+    Unknown,
+}
+
+pub fn choice(on_disk: &[String], id: &str, quant: Option<&str>, vram_gb: f64) -> Choice {
+    match file(id, quant, vram_gb) {
+        None => Choice::Unknown,
+        Some(file) if on_disk.iter().any(|name| name == file.asset.relative_path) => Choice::Select(file.asset.relative_path),
+        Some(file) => Choice::Download(file.asset.relative_path),
+    }
+}
+
+/// The name of the community model a file of the own-models folder is, in each language; none for a file of the
+/// person's own.
+pub fn name_of(file_name: &str) -> Option<&'static HashMap<String, String>> {
+    catalog().iter().find(|model| model.files.iter().any(|file| file.asset.relative_path == file_name)).map(|model| &model.name)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -141,5 +166,17 @@ mod tests {
         assert_eq!(file("rs-tw-2.0x0.75", None, 6.0).map(|file| file.quant), Some("Q6_K"));
         assert_eq!(file("rs-tw-2.0x0.75", Some("Q6_K"), 24.0).map(|file| file.asset.relative_path), Some("YuE2-3B-RS-TW-2.0x0.75-Q6_K.gguf"));
         assert!(file("no-such-model", None, 24.0).is_none());
+    }
+
+    #[test]
+    fn a_catalog_entry_not_on_disk_is_downloaded_and_one_there_is_chosen() {
+        let none: Vec<String> = Vec::new();
+        assert_eq!(choice(&none, "rs-tw-2.0x0.75", Some("Q8_0"), 24.0), Choice::Download("YuE2-3B-RS-TW-2.0x0.75-Q8_0.gguf"));
+        let there = vec!["mine.gguf".to_string(), "YuE2-3B-RS-TW-2.0x0.75-Q6_K.gguf".to_string()];
+        assert_eq!(choice(&there, "rs-tw-2.0x0.75", None, 6.0), Choice::Select("YuE2-3B-RS-TW-2.0x0.75-Q6_K.gguf"));
+        assert_eq!(choice(&there, "no-such-model", None, 24.0), Choice::Unknown);
+        assert_eq!(choice(&there, "rs-tw-2.0x0.75", Some("Q4_0"), 24.0), Choice::Unknown);
+        assert_eq!(name_of("YuE2-3B-RS-TW-2.0x0.75-Q6_K.gguf").and_then(|name| name.get("en")).map(String::as_str), Some("Ruach Studio TW 2.0×0.75 (the authors' choice)"));
+        assert!(name_of("mine.gguf").is_none());
     }
 }

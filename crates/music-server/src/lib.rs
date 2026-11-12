@@ -6271,7 +6271,9 @@ async fn compose_setup_status(state: &AppState, manager_status: model_manager::M
         fields.insert("selected_profile_id".into(), serde_json::to_value(selected_profile_id).unwrap_or(Value::Null));
         fields.insert("selected_component_ids".into(), serde_json::to_value(selected_component_ids).unwrap_or(Value::Null));
         // the person's own backbone in place of the set's, by its file name
-        fields.insert("own_model".into(), serde_json::to_value(state.own_backbone.read().await.clone()).unwrap_or(Value::Null));
+        let own_model = state.own_backbone.read().await.clone();
+        fields.insert("own_model_name".into(), serde_json::to_value(own_model.as_deref().and_then(community::name_of)).unwrap_or(Value::Null));
+        fields.insert("own_model".into(), serde_json::to_value(own_model).unwrap_or(Value::Null));
         fields.insert("hardware".into(), serde_json::to_value(hardware::hardware()).unwrap_or(Value::Null));
         fields.insert("engine_options".into(), serde_json::to_value(state.engine_options.read().await.clone()).unwrap_or(Value::Null));
         fields.insert("effective_max_batch".into(), Value::from(state.engine_options.read().await.effective_max_batch()));
@@ -8932,6 +8934,7 @@ async fn own_model_status(State(state): State<AppState>) -> Json<Value> {
     Json(serde_json::json!({
         "folder": folder.display().to_string(),
         "files": files.iter().map(|(name, bytes)| serde_json::json!({ "name": name, "bytes": bytes })).collect::<Vec<_>>(),
+        "selected_name": selected.as_deref().and_then(community::name_of),
         "selected": selected,
         "missing": missing,
         "community": community,
@@ -8960,9 +8963,17 @@ struct OwnModelRequest {
 async fn own_model_select(State(state): State<AppState>, Json(request): Json<OwnModelRequest>) -> Result<Json<Value>, (StatusCode, Json<ApiError>)> {
     let folder = own_models_folder(&state);
     let chosen = if let Some(id) = request.community.as_deref().filter(|id| !id.trim().is_empty()) {
-        let file = community::file(id.trim(), request.quant.as_deref(), hardware::hardware().total_vram_gb)
-            .ok_or_else(|| api_error(StatusCode::BAD_REQUEST, format!("{id} in {} is not a community model", request.quant.as_deref().unwrap_or("the card's quantisation"))))?;
-        if !state.community_downloads.is_installed(&file.asset) {
+        let vram = hardware::hardware().total_vram_gb;
+        let on_disk: Vec<String> = own_model_files(&folder).into_iter().map(|(name, _)| name).collect();
+        let chosen_file = match community::choice(&on_disk, id.trim(), request.quant.as_deref(), vram) {
+            community::Choice::Unknown => {
+                return Err(api_error(StatusCode::BAD_REQUEST, format!("{id} in {} is not a community model", request.quant.as_deref().unwrap_or("the card's quantisation"))));
+            }
+            community::Choice::Select(name) => Some(name),
+            community::Choice::Download(_) => None,
+        };
+        let file = community::file(id.trim(), request.quant.as_deref(), vram).expect("a choice the catalog knows");
+        if chosen_file.is_none() {
             if state.community_downloads.active().await.is_some_and(|progress| !progress.done) {
                 return Err(api_error(StatusCode::CONFLICT, "a community model is downloading; wait for it or cancel it".into()));
             }

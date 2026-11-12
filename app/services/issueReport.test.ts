@@ -9,6 +9,8 @@ describe('issueReportUrl', () => {
     expect(models(issueReportUrl(base, '3.9.0', { selected_profile_id: 'quality-q8' }))).toBe('quality-q8');
     expect(models(issueReportUrl(base, '3.9.0', { selected_profile_id: 'quality-q8', own_model: 'YuE2-3B-RS-TW-2.0x0.75-Q8_0.gguf' })))
       .toBe('quality-q8, own model YuE2-3B-RS-TW-2.0x0.75-Q8_0.gguf');
+    expect(models(issueReportUrl(base, '3.9.0', { selected_profile_id: 'quality-q8', own_model: 'YuE2-3B-RS-TW-2.0x0.75-Q8_0.gguf', own_model_name: { en: 'Ruach Studio TW 2.0×0.75' } })))
+      .toBe('quality-q8, own model Ruach Studio TW 2.0×0.75 (YuE2-3B-RS-TW-2.0x0.75-Q8_0.gguf)');
     expect(models(issueReportUrl(base, '3.9.0', {}))).toBeNull();
   });
 });
