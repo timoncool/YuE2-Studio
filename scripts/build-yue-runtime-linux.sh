@@ -35,5 +35,12 @@ cp "$server" "$output/"
 # -a keeps the version symlinks; the binary finds them through $ORIGIN.
 find "$worktree/build-linux" -maxdepth 2 -name 'lib*.so*' -exec cp -a {} "$output/" \;
 printf '{"commit":"%s","backend":"vulkan","platform":"linux"}\n' "$commit" > "$output/runtime.json"
-readelf -d "$output/yue-server" | grep -iE 'runpath|rpath' || true
+for binary in "$output"/yue-server "$output"/lib*.so*; do
+    [ -f "$binary" ] && [ ! -L "$binary" ] || continue
+    if readelf -d "$binary" | grep -iE 'runpath|rpath' | grep -qv 'ORIGIN'; then
+        echo "[ERROR] $binary keeps a build-machine library path:" >&2
+        readelf -d "$binary" | grep -iE 'runpath|rpath' >&2
+        exit 1
+    fi
+done
 echo "yue-server ($commit) built into $output"
