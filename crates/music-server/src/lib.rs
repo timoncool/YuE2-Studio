@@ -163,6 +163,10 @@ struct AppState {
     /// The KV cache the running engine started with, and the card's memory free before its weights loaded, which each
     /// request's tracks are fitted to (`tracks_for_card`).
     kv_cache_running: Arc<RwLock<Option<KvChoice>>>,
+    /// Whether the running engine keeps its models loaded, and why.
+    keep_decision: Arc<RwLock<Option<KeepDecision>>>,
+    /// When the engine last ended a song: models kept loaded go after a while without one.
+    engine_idle_since: Arc<std::sync::Mutex<std::time::Instant>>,
     /// Auto's switch to Q8 for the window to tell once in a run of the studio: pending until the window has shown it,
     /// and `kv_q8_told` keeps a later start of the engine from asking again.
     kv_q8_notice: Arc<RwLock<Option<KvChoice>>>,
@@ -539,7 +543,7 @@ const NAR_CHUNK_MIN: u32 = 1024;
 const NAR_CHUNK_STEP: u32 = 256;
 /// What a set keeps on the card beside its KV cache with one track, by a part of its weights' file name and "keep
 /// models loaded": the peak less the card's background and the stage's cache, measured on the card.
-const SET_RESIDENT_GIB: &[(&str, bool, f64)] = &[("Q8_0", false, 2.8), ("BF16", false, 4.6)];
+const SET_RESIDENT_GIB: &[(&str, bool, f64)] = &[("Q8_0", false, 2.8), ("BF16", false, 4.6), ("Q8_0", true, 6.6), ("BF16", true, 9.6)];
 /// What the tracks of a request leave free on the card, for the driver and the peaks between two readings.
 const TRACKS_RESERVE_GIB: f64 = 1.0;
 
@@ -758,7 +762,10 @@ struct OpenRouterTranscriptionRequest {
 #[serde(default)]
 struct EngineOptions {
     backend: music_engine::yue_server::ComputeBackend,
-    keep_loaded: bool,
+    keep_loaded: KeepLoaded,
+    /// What `Auto` decided for the start at hand (`decide_keep`); never saved.
+    #[serde(skip)]
+    auto_keeps: bool,
     max_batch: Option<u32>,
     max_seq: Option<u32>,
     vae_core: Option<u32>,
@@ -817,6 +824,79 @@ struct KvChoice {
     reason: &'static str,
     need_gib: Option<f64>,
     free_gib: Option<f64>,
+}
+
+/// Whether the engine keeps its models on the card between songs: `Auto` keeps them when the set kept whole, a
+/// full-context cache for each track and the reserve fit the card's memory free at the engine's start.
+#[derive(Debug, Clone, Copy, Default, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+enum KeepLoaded {
+    #[default]
+    Auto,
+    Yes,
+    No,
+}
+
+/// The saved switch of earlier settings reads as a choice: on is Yes, off is Auto.
+impl<'de> Deserialize<'de> for KeepLoaded {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        #[derive(Deserialize)]
+        #[serde(untagged)]
+        enum Saved {
+            Switch(bool),
+            Choice(String),
+        }
+        Ok(match Saved::deserialize(deserializer)? {
+            Saved::Switch(true) => KeepLoaded::Yes,
+            Saved::Switch(false) => KeepLoaded::Auto,
+            Saved::Choice(word) => match word.as_str() {
+                "yes" => KeepLoaded::Yes,
+                "no" => KeepLoaded::No,
+                "auto" => KeepLoaded::Auto,
+                other => return Err(serde::de::Error::unknown_variant(other, &["auto", "yes", "no"])),
+            },
+        })
+    }
+}
+
+/// What `Auto` decides for a start, and why: `set` (chosen in Settings), `fits` and `does_not_fit` (against the card's
+/// free memory, with the GiB needed and free), `not_on_card`, `free_unknown`, `unmeasured` (a set whose weight kept
+/// loaded was not measured).
+#[derive(Debug, Clone, PartialEq, Serialize)]
+struct KeepDecision {
+    keep: bool,
+    reason: &'static str,
+    need_gib: Option<f64>,
+    free_gib: Option<f64>,
+}
+
+/// `resident_gib`: what the set keeps on the card with its models loaded (`SET_RESIDENT_GIB`, kept); `kv_gib`: one
+/// track's full-context cache.
+fn keep_decision(choice: KeepLoaded, on_card: bool, resident_gib: Option<f64>, kv_gib: f64, tracks: u32, free_gib: Option<f64>) -> KeepDecision {
+    let decided = |keep: bool, reason: &'static str, need_gib: Option<f64>| KeepDecision { keep, reason, need_gib, free_gib };
+    match choice {
+        KeepLoaded::Yes => decided(true, "set", None),
+        KeepLoaded::No => decided(false, "set", None),
+        KeepLoaded::Auto if !on_card => decided(false, "not_on_card", None),
+        KeepLoaded::Auto => {
+            let Some(resident) = resident_gib else { return decided(false, "unmeasured", None) };
+            let Some(free) = free_gib else { return decided(false, "free_unknown", None) };
+            let need = resident + kv_gib * f64::from(tracks.max(1)) + TRACKS_RESERVE_GIB;
+            if need <= free { decided(true, "fits", Some(need)) } else { decided(false, "does_not_fit", Some(need)) }
+        }
+    }
+}
+
+impl KeepDecision {
+    /// The line of the engine log a start writes.
+    fn line(&self) -> String {
+        let numbers = match (self.need_gib, self.free_gib) {
+            (Some(need), Some(free)) => format!(": {need:.1} GB needed, {free:.1} GB free"),
+            _ => String::new(),
+        };
+        let kept = if self.keep { "kept loaded" } else { "loaded per song" };
+        format!("models {kept} ({}){numbers}", self.reason)
+    }
 }
 
 /// Flash attention as Settings chooses it: `Auto` leaves it off only where it is known to go wrong.
@@ -996,7 +1076,7 @@ impl EngineOptions {
     fn tracks_for_request(&self, backbone: &std::path::Path, free_gib: f64, context: u32, seconds: f64, guided: bool, q8: bool, asked: u32) -> Option<u32> {
         const GIB: f64 = 1024.0 * 1024.0 * 1024.0;
         let name = backbone.file_name()?.to_string_lossy().to_ascii_uppercase();
-        let resident = SET_RESIDENT_GIB.iter().find(|(set, kept, _)| name.contains(set) && *kept == self.keep_loaded).map(|(_, _, gib)| *gib)?;
+        let resident = SET_RESIDENT_GIB.iter().find(|(set, kept, _)| name.contains(set) && *kept == self.keeps()).map(|(_, _, gib)| *gib)?;
         let frames = (seconds.max(0.0) * 25.0).ceil();
         let tokens = (2.0 * frames + 3500.0).min(f64::from(context));
         let sets = if guided { 2.0 } else { 1.0 };
@@ -1042,7 +1122,7 @@ impl EngineOptions {
         let backbone_bytes = fs::metadata(backbone?).ok()?.len();
         // the factor of two is the calibration of the runs without flash attention, not the LM-KV sets of a track
         let sets = 2 * self.effective_max_batch();
-        Self::nar_chunk_for(hardware::hardware().total_vram_gb, backbone_bytes, self.keep_loaded, self.effective_max_seq(backbone).unwrap_or(MODEL_CONTEXT), sets)
+        Self::nar_chunk_for(hardware::hardware().total_vram_gb, backbone_bytes, self.keeps(), self.effective_max_seq(backbone).unwrap_or(MODEL_CONTEXT), sets)
     }
 
     /// Why a KV cache in Q8 does not apply to this start, `None` when it can: the engine reads it only through flash
@@ -1052,6 +1132,25 @@ impl EngineOptions {
             return Some(if self.uses_vulkan() { "vulkan" } else { "processor" });
         }
         self.flash_attention_off_reason().map(|_| "flash_attention_off")
+    }
+
+    /// Whether this start keeps the models loaded: as chosen, or as `Auto` decided for it.
+    fn keeps(&self) -> bool {
+        match self.keep_loaded {
+            KeepLoaded::Yes => true,
+            KeepLoaded::No => false,
+            KeepLoaded::Auto => self.auto_keeps,
+        }
+    }
+
+    /// `Auto` of "keep models loaded" for a start, against `free_gib`, the card's memory free before the weights load:
+    /// the set kept whole (`SET_RESIDENT_GIB`), a full-context cache for each track from Settings and the reserve.
+    fn keep_choice(&self, backbone: Option<&std::path::Path>, on_card: bool, free_gib: Option<f64>) -> KeepDecision {
+        const GIB: f64 = 1024.0 * 1024.0 * 1024.0;
+        let name = backbone.and_then(|backbone| backbone.file_name()).map(|name| name.to_string_lossy().to_ascii_uppercase()).unwrap_or_default();
+        let resident = SET_RESIDENT_GIB.iter().find(|(set, kept, _)| name.contains(set) && *kept).map(|(_, _, gib)| *gib);
+        let kv = f64::from(self.effective_max_seq(backbone).unwrap_or(MODEL_CONTEXT)) * KV_BYTES_PER_TOKEN / GIB;
+        keep_decision(self.keep_loaded, on_card, resident, kv, self.effective_max_batch(), free_gib)
     }
 
     /// The KV cache of a start: Q8 or F16 as chosen, Q8 only on a card with flash attention; Auto, F16 while the set, a
@@ -1068,7 +1167,7 @@ impl EngineOptions {
             KvCache::F16 => choice(false, "set", None),
             KvCache::Auto => {
                 let name = backbone.and_then(|backbone| backbone.file_name()).map(|name| name.to_string_lossy().to_ascii_uppercase()).unwrap_or_default();
-                let resident = SET_RESIDENT_GIB.iter().find(|(set, kept, _)| name.contains(set) && *kept == self.keep_loaded).map(|(_, _, gib)| *gib);
+                let resident = SET_RESIDENT_GIB.iter().find(|(set, kept, _)| name.contains(set) && *kept == self.keeps()).map(|(_, _, gib)| *gib);
                 let (Some(resident), Some(free)) = (resident, free_gib) else { return choice(false, "unmeasured", None) };
                 let kv = f64::from(self.effective_max_seq(backbone).unwrap_or(MODEL_CONTEXT)) * KV_BYTES_PER_TOKEN / GIB;
                 let need = resident + kv * f64::from(self.effective_max_batch()) + TRACKS_RESERVE_GIB;
@@ -1088,7 +1187,7 @@ impl EngineOptions {
         let fa_off = self.flash_attention_off_reason().is_some();
         music_engine::yue_server::YueServerOptions {
             backend: self.backend,
-            keep_loaded: self.keep_loaded,
+            keep_loaded: self.keeps(),
             max_batch: Some(self.effective_max_batch()),
             max_seq: self.effective_max_seq(backbone),
             vae_core: self.vae_core,
@@ -1336,6 +1435,8 @@ pub async fn serve() -> anyhow::Result<()> {
         running_max_seq: Arc::new(RwLock::new(MODEL_CONTEXT)),
         job_max_seq: Arc::new(RwLock::new(HashMap::new())),
         kv_cache_running: Arc::new(RwLock::new(None)),
+        keep_decision: Arc::new(RwLock::new(None)),
+        engine_idle_since: Arc::new(std::sync::Mutex::new(std::time::Instant::now())),
         kv_q8_notice: Arc::new(RwLock::new(None)),
         kv_q8_told: Arc::new(std::sync::atomic::AtomicBool::new(false)),
         memory_retry_lock: Arc::new(tokio::sync::Mutex::new(())),
@@ -1403,6 +1504,7 @@ pub async fn serve() -> anyhow::Result<()> {
     }
     prepare::resume(&state);
     tokio::spawn(resume_unfinished_jobs(state.clone()));
+    spawn_idle_eviction(state.clone());
     {
         let state = state.clone();
         tokio::spawn(async move {
@@ -3478,7 +3580,7 @@ async fn start_training_run(state: &AppState, dataset: &str, name: &str, recipe:
 /// Frees the card for a run and gives it back after: the assistant is stopped,
 /// and an engine kept loaded between songs is stopped and started again.
 async fn card_hooks(state: &AppState) -> training::CardHooks {
-    let keep_loaded = state.engine_options.read().await.keep_loaded;
+    let keep_loaded = models_kept(state).await;
     let (take_state, back_state) = (state.clone(), state.clone());
     training::CardHooks {
         take: Box::new(move || {
@@ -3579,6 +3681,7 @@ async fn card_free_of_training(state: &AppState, what: &str) -> Result<(), (Stat
     if state.training.active_run().await.is_some() {
         return Err(api_error(StatusCode::CONFLICT, format!("a LoRA is training on the card; {what} once it finishes")));
     }
+    evict_kept_models(state, &format!("to {what}")).await;
     Ok(())
 }
 
@@ -5082,6 +5185,7 @@ async fn engine_options(State(state): State<AppState>) -> Json<Value> {
     let fitted = backbone.as_deref().and_then(|backbone| options.fitted_max_seq.get(&EngineOptions::fitted_key(backbone)).copied());
     let saved_max_seq = options.effective_max_seq(backbone.as_deref()).unwrap_or(MODEL_CONTEXT);
     // What the running engine was started with, so the page says what is in effect, not only what is saved.
+    let keep = state.keep_decision.read().await.clone();
     let in_effect = launched.map(|launched| {
         serde_json::json!({
             "max_seq": launched.max_seq.unwrap_or(MODEL_CONTEXT),
@@ -5095,6 +5199,10 @@ async fn engine_options(State(state): State<AppState>) -> Json<Value> {
             "flash_attention": !launched.disable_flash_attention,
             "nar_chunk_seconds": launched.nar_chunk.map(|frames| (f64::from(frames) / SEMANTIC_FRAMES_PER_SECOND).round() as u64),
             "kv_q8": launched.kv_q8,
+            "keep_loaded": launched.keep_loaded,
+            "keep_loaded_reason": keep.as_ref().map(|decision| decision.reason),
+            "keep_loaded_need_gb": keep.as_ref().and_then(|decision| decision.need_gib),
+            "keep_loaded_free_gb": keep.as_ref().and_then(|decision| decision.free_gib),
         })
     });
     // the type of KV cache the running engine took, and why: Auto's choice comes with the GiB it weighed
@@ -5362,6 +5470,11 @@ async fn start_engine_again(state: &AppState) -> Result<(), String> {
         // are fitted to it (`tracks_for_request`)
         let mut attempt = attempt;
         attempt.card_free_mib = attempt.card_free_gib().map(|gib| (gib * 1024.0) as u64);
+        // whether the models stay between songs is decided first: what the set keeps on the card depends on it
+        let keep = attempt.keep_choice(Some(&backbone), attempt.cuda_build().is_some(), attempt.card_free_at_start());
+        attempt.auto_keeps = keep.keep;
+        music_engine::yue_server::note_in_log(&keep.line());
+        EVICT_FAILED.store(false, std::sync::atomic::Ordering::SeqCst);
         let kv = attempt.kv_cache_choice(Some(&backbone), attempt.card_free_at_start());
         music_engine::yue_server::note_in_log(&kv_cache_line(&kv, attempt.effective_max_batch(), attempt.effective_max_seq(Some(&backbone)).unwrap_or(MODEL_CONTEXT)));
         if let Some(reason) = attempt.flash_attention_off_reason() {
@@ -5379,6 +5492,7 @@ async fn start_engine_again(state: &AppState) -> Result<(), String> {
             Ok(_) => {
                 *state.running_max_seq.write().await = engine.config().options.max_seq.unwrap_or(MODEL_CONTEXT);
                 *state.kv_cache_running.write().await = Some(kv);
+                *state.keep_decision.write().await = Some(keep.clone());
                 if kv.q8 && kv.reason == "does_not_fit" && !state.kv_q8_told.swap(true, std::sync::atomic::Ordering::Relaxed) {
                     *state.kv_q8_notice.write().await = Some(kv);
                 }
@@ -5623,6 +5737,53 @@ fn put_the_engine_folder_on_path() {
             None => eprintln!("[ERROR] {} cannot go on PATH; the Visual C++ runtime beside the engine is not found through it", folder.display()),
         }
     }
+}
+
+/// Whether the running engine keeps its models loaded.
+async fn models_kept(state: &AppState) -> bool {
+    state.keep_decision.read().await.as_ref().is_some_and(|decision| decision.keep)
+}
+
+/// Gives the card back before other work on it - stems, Audio to MIDI, karaoke and recognition, the assistant on the
+/// card - or after a while without songs: models the engine keeps loaded are unloaded and load again with the next
+/// song.
+async fn evict_kept_models(state: &AppState, before: &str) {
+    if !models_kept(state).await || !state.music_server.health().await {
+        return;
+    }
+    match state.music_server.evict().await {
+        Ok(freed) => music_engine::yue_server::note_in_log(&format!("models unloaded {before}: {freed:.0} MB freed")),
+        // said once a start: an engine built before /evict answers every ask the same way
+        Err(error) if !EVICT_FAILED.swap(true, std::sync::atomic::Ordering::SeqCst) => {
+            studio_log!("[ERROR] the engine did not unload its models {before}, and kept models stay on the card until it restarts: {error:#}")
+        }
+        Err(_) => {}
+    }
+}
+
+/// An unload the running engine refused: it is not asked to say so again until the next start.
+static EVICT_FAILED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Seconds without a song after which models kept loaded are unloaded; `YUE_KEEP_IDLE_SECS` shortens it for a check.
+fn keep_idle_limit() -> std::time::Duration {
+    let seconds = env::var("YUE_KEEP_IDLE_SECS").ok().and_then(|value| value.trim().parse().ok()).unwrap_or(600);
+    std::time::Duration::from_secs(seconds)
+}
+
+/// Unloads models kept loaded once the engine has done nothing for `keep_idle_limit`, once per idle spell.
+fn spawn_idle_eviction(state: AppState) {
+    tokio::spawn(async move {
+        let mut evicted_for: Option<std::time::Instant> = None;
+        loop {
+            tokio::time::sleep(std::time::Duration::from_secs(15)).await;
+            let since = *state.engine_idle_since.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+            if evicted_for == Some(since) || since.elapsed() < keep_idle_limit() || another_job_under_way(&state, "").await {
+                continue;
+            }
+            evict_kept_models(&state, &format!("after {} s without a song", keep_idle_limit().as_secs())).await;
+            evicted_for = Some(since);
+        }
+    });
 }
 
 fn engine_location(options: EngineOptions, backbone: Option<&std::path::Path>) -> music_engine::yue_server::YueServerLocation {
@@ -8063,15 +8224,10 @@ async fn assistant_ask(
     Ok(content)
 }
 
-/// Frees the assistant's five gigabytes as soon as it has answered.
-///
-/// "Keep models in VRAM between jobs" is off by default, and it means what it
-/// says: nothing stays loaded. The assistant was the exception nobody chose -
-/// it wrote a draft, kept the card, and the engine then had too little to load its
-/// own weights. With the setting on, it stays, because that is what the
-/// setting is for. Either way the next request starts it again.
+/// Frees the assistant's five gigabytes as soon as it has answered, unless the engine keeps its models loaded (chosen,
+/// or decided by Auto for the running start). Either way the next request starts it again.
 async fn release_assistant_unless_kept(state: &AppState) {
-    if state.engine_options.read().await.keep_loaded {
+    if models_kept(state).await {
         return;
     }
     if state.assistant_runtime.base_url().await.is_some() {
@@ -10194,6 +10350,7 @@ fn spawn_job_watcher(state: AppState, job_id: String) {
         }
         let shared = another_job_under_way(&state, &job_id).await;
         let work = started.flatten().filter(|_| !shared).map(|at| at.elapsed());
+        *state.engine_idle_since.lock().unwrap_or_else(std::sync::PoisonError::into_inner) = std::time::Instant::now();
         // however it ended, it is no longer one the studio's closing could cut off
         let ended = state.jobs.read().await.get(&job_id).map(|job| {
             let profiles: Vec<String> = job.songs.iter().filter_map(|made| made.song.profile_id.clone()).collect();
@@ -11046,6 +11203,12 @@ impl EngineClient {
         self.json_response(self.send(self.http.post(self.url("/job")).query(&[("id", job_id), ("cancel", "1")]), false).await?).await
     }
 
+    /// Unloads the models the engine keeps loaded and no song holds; the MB it freed.
+    async fn evict(&self) -> anyhow::Result<f64> {
+        let answer: Value = self.json_response(self.send(self.http.post(self.url("/evict")), false).await?).await?;
+        answer.get("freed_mb").and_then(Value::as_f64).ok_or_else(|| anyhow::anyhow!("yue-server answered /evict without freed_mb: {answer}"))
+    }
+
     async fn result(&self, job_id: &str) -> anyhow::Result<EngineResultResponse> {
         let response = self.send(self.http.get(self.url("/job")).query(&[("id", job_id), ("result", "1")]), true).await?;
         let status = response.status();
@@ -11862,12 +12025,41 @@ mod tests {
         assert!(checked > 20, "only {checked} local references were found in the editor page");
     }
 
-    /// Nothing stays in VRAM unless the user asked for it. This is the setting
-    /// the assistant's unload is tied to, and it is off to begin with.
+    /// Models stay on the card only when Auto finds the room for them or Yes is chosen; the old switch reads as Yes when
+    /// on and as Auto when off.
     #[test]
-    fn nothing_is_kept_in_memory_by_default() {
-        assert!(!EngineOptions::default().keep_loaded);
-        assert!(!EngineOptions::default().to_engine(None).keep_loaded);
+    fn models_are_kept_when_auto_finds_room_or_yes_is_chosen() {
+        assert_eq!(EngineOptions::default().keep_loaded, KeepLoaded::Auto);
+        assert!(!EngineOptions::default().to_engine(None).keep_loaded, "Auto keeps nothing until a start decides");
+        assert!(EngineOptions { auto_keeps: true, ..EngineOptions::default() }.to_engine(None).keep_loaded);
+        assert!(!EngineOptions { keep_loaded: KeepLoaded::No, auto_keeps: true, ..EngineOptions::default() }.to_engine(None).keep_loaded);
+        use serde_json::json;
+        for (saved, read) in [(json!(true), KeepLoaded::Yes), (json!(false), KeepLoaded::Auto), (json!("no"), KeepLoaded::No), (json!("auto"), KeepLoaded::Auto)] {
+            let options: EngineOptions = serde_json::from_value(json!({ "keep_loaded": saved })).unwrap();
+            assert_eq!(options.keep_loaded, read, "{saved}");
+        }
+        assert_eq!(serde_json::to_value(EngineOptions { keep_loaded: KeepLoaded::Yes, ..EngineOptions::default() }).unwrap()["keep_loaded"], "yes");
+        assert!(!serde_json::to_value(EngineOptions { auto_keeps: true, ..EngineOptions::default() }).unwrap().as_object().unwrap().contains_key("auto_keeps"));
+    }
+
+    /// Auto weighs the set kept whole, a full-context cache for every track and the reserve against the card's free
+    /// memory: a 24 GB card keeps the Q8 set, an 8 GB one does not; a set not measured, an unread card or the
+    /// processor never.
+    #[test]
+    fn auto_keeps_the_models_only_where_they_and_their_work_fit() {
+        let q8 = std::path::Path::new("YuE2-3B-Q8_0.gguf");
+        let auto = EngineOptions { backend: music_engine::yue_server::ComputeBackend::Cuda, ..EngineOptions::default() };
+        let roomy = auto.keep_choice(Some(q8), true, Some(22.0));
+        assert!(roomy.keep && roomy.reason == "fits", "{roomy:?}");
+        let tight = auto.keep_choice(Some(q8), true, Some(7.5));
+        assert!(!tight.keep && tight.reason == "does_not_fit", "{tight:?}");
+        let eight = EngineOptions { max_batch: Some(8), ..auto.clone() }.keep_choice(Some(q8), true, Some(22.0));
+        assert!(!eight.keep, "eight tracks' caches: {eight:?}");
+        assert_eq!(auto.keep_choice(Some(std::path::Path::new("YuE2-3B-Q5_K_M.gguf")), true, Some(22.0)).reason, "unmeasured");
+        assert_eq!(auto.keep_choice(Some(q8), true, None).reason, "free_unknown");
+        assert_eq!(auto.keep_choice(Some(q8), false, Some(64.0)).reason, "not_on_card");
+        assert!(EngineOptions { keep_loaded: KeepLoaded::Yes, ..auto }.keep_choice(Some(q8), true, Some(1.0)).keep);
+        assert!(roomy.line().contains("GB needed"), "{}", roomy.line());
     }
 
     /// An empty overlap field hears 30 seconds again before each later chunk's fade; 0 leaves the flag out, so
@@ -12472,7 +12664,7 @@ mod tests {
     #[test]
     fn persisted_settings_round_trip_a_complete_custom_component_selection() {
         let settings = PersistedStudioSettings {
-            engine_options: EngineOptions { keep_loaded: true, max_batch: Some(2), ..EngineOptions::default() },
+            engine_options: EngineOptions { keep_loaded: KeepLoaded::Yes, max_batch: Some(2), ..EngineOptions::default() },
             assistant: AssistantConfig { provider: AssistantProvider::Local, local_base_url: Some("http://127.0.0.1:8080/v1".into()), local_model: Some("gemma".into()), openrouter_model: None, managed_model: None, managed_path: None, reasoning_effort: None, cli_agent: None, cli_model: None, cli_path: None, ..Default::default() },
             configuration: initial_configuration(),
             // Karaoke is off by default and has to survive a restart the same
@@ -12504,7 +12696,7 @@ mod tests {
         assert_eq!(restored.own_backbone.as_deref(), Some("YuE2-3B-RS-TW-2.0x0.75-Q8_0.gguf"));
         // Engine flags survive a restart, and the songs-per-request ceiling is
         // derived from them rather than assumed.
-        assert!(restored.engine_options.keep_loaded);
+        assert_eq!(restored.engine_options.keep_loaded, KeepLoaded::Yes);
         assert_eq!(restored.engine_options.effective_max_batch(), 2);
         // Four by default: songs decoded together are nearly free after the
         // first, and the upstream default of 1 left the slider disabled.
