@@ -1271,7 +1271,6 @@ export const zh = {
     separationRuntimeAuto: '自动',
     separationRuntimeGpu: '显卡',
     separationRuntimeCpu: '处理器',
-    separationGpuMissing: '未安装显卡版 ONNX Runtime——请在「设置 → 模型」的可选组件中添加。',
     separationWhichStems: '保留哪些',
     separationSectionHint: '把完成的音轨拆成分轨。HT-Demucs 分成六条；Mel-Band RoFormer（Dub Studio 的分离器）分成人声和伴奏，更干净，“仅人声”模式和训练所用的人声也由它分离。',
     separationRuntimeMissing: '缺少 ONNX Runtime——它会与模型一起下载。',

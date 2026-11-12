@@ -1271,7 +1271,6 @@ export const ko = {
     separationRuntimeAuto: '자동',
     separationRuntimeGpu: '그래픽 카드',
     separationRuntimeCpu: '프로세서',
-    separationGpuMissing: '그래픽 카드용 ONNX 런타임이 설치되지 않았습니다 — 설정 → 모델의 선택 항목에서 추가하세요.',
     separationWhichStems: '남길 항목',
     separationSectionHint: '완성된 트랙을 스템으로 나눕니다. HT-Demucs는 여섯 개로, Dub Studio의 분리기 Mel-Band RoFormer는 보컬과 반주로 더 깨끗하게 나누며, ‘보컬만’ 모드와 학습의 보컬도 이것으로 뽑습니다.',
     separationRuntimeMissing: 'ONNX 런타임이 없습니다. 모델과 함께 내려받습니다.',

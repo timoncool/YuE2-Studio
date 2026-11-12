@@ -1275,7 +1275,6 @@ export const ru = {
     separationRuntimeAuto: 'Авто',
     separationRuntimeGpu: 'Видеокарта',
     separationRuntimeCpu: 'Процессор',
-    separationGpuMissing: 'Сборка ONNX Runtime под видеокарту не установлена — добавьте её в «Настройки → Модели», в необязательных дополнениях.',
     separationWhichStems: 'Что оставить',
     separationSectionHint: 'Разбирает готовый трек на дорожки. HT-Demucs делит на шесть; Mel-Band RoFormer, разделитель Dub Studio, — на вокал и минус, чище, и из него же берётся вокал для режима «только вокал» и для обучения.',
     separationRuntimeMissing: 'Нет ONNX Runtime — он скачивается вместе с моделью.',

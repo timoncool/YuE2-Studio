@@ -1269,7 +1269,6 @@ export const ja = {
     separationRuntimeAuto: '自動',
     separationRuntimeGpu: 'グラフィックカード',
     separationRuntimeCpu: 'プロセッサ',
-    separationGpuMissing: 'カード用の ONNX Runtime が未導入です。「設定 → モデル」の任意追加から入れてください。',
     separationWhichStems: '残すもの',
     separationSectionHint: '完成したトラックをステムに分けます。HT-Demucs は6つに、Dub Studio の分離器 Mel-Band RoFormer はボーカルとインストに、よりきれいに分け、「ボーカルのみ」と学習のボーカルもこれで取ります。',
     separationRuntimeMissing: 'ONNX Runtime がありません。モデルと一緒にダウンロードされます。',

@@ -1276,7 +1276,6 @@ export const en = {
     separationRuntimeAuto: 'Auto',
     separationRuntimeGpu: 'Graphics card',
     separationRuntimeCpu: 'Processor',
-    separationGpuMissing: 'The card build of the ONNX Runtime is not installed — add it in Settings → Models, under the optional extras.',
     separationWhichStems: 'What to keep',
     separationSectionHint: 'Splits a finished track into stems. HT-Demucs gives six; Mel-Band RoFormer, Dub Studio’s separator, gives the vocals and the instrumental, more cleanly, and also separates the vocals of vocals-only songs and of training.',
     separationRuntimeMissing: 'The ONNX Runtime is missing; it is downloaded with the model.',
