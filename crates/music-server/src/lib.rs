@@ -1,3 +1,5 @@
+#[macro_use]
+pub mod studio_log;
 mod adapters;
 mod processing;
 mod vst;
@@ -1188,8 +1190,12 @@ struct OpenRouterResponse {
 /// in-process, so a release is a single executable rather than a launcher that
 /// has to start a second binary and keep it alive.
 pub async fn serve() -> anyhow::Result<()> {
-    if let Some(root) = studio_data_root() {
-        std::thread::spawn(move || install_record::sweep_aside(&root));
+    match studio_data_root() {
+        Some(root) => {
+            studio_log::log_to_file(&root);
+            std::thread::spawn(move || install_record::sweep_aside(&root));
+        }
+        None => studio_log!("[ERROR] the studio has no data folder; its log goes to the console only"),
     }
     put_the_engine_folder_on_path();
     let settings_path = studio_settings_path();
