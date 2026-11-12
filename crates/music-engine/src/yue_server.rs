@@ -203,6 +203,11 @@ const EXECUTABLE: &str = "yue-server.exe";
 #[cfg(not(windows))]
 const EXECUTABLE: &str = "yue-server";
 
+/// The engine executable's file name on this platform.
+pub fn executable_name() -> &'static str {
+    EXECUTABLE
+}
+
 /// The weights one engine process serves.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct YueModelFiles {

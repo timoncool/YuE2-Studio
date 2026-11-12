@@ -17,9 +17,7 @@
 
 use std::path::{Path, PathBuf};
 
-use anyhow::{bail, Result};
-#[cfg(test)]
-use anyhow::Context;
+use anyhow::{bail, Context, Result};
 
 use crate::downloads::{Asset, AssetKind, Downloader};
 use crate::hardware::CudaBuild;
@@ -288,7 +286,6 @@ fn is_on_the_search_path(library: &str) -> bool {
 /// version is part of the file name - `cublas64_13.dll`, not `cublas.dll`.
 /// Reading it here means the release can check itself instead of trusting
 /// that whoever built it remembered.
-#[cfg(test)]
 pub fn imported_libraries(binary: &Path) -> Result<Vec<String>> {
     let data = std::fs::read(binary)?;
     let at = |offset: usize| -> Result<u32> {
@@ -349,7 +346,6 @@ pub fn imported_libraries(binary: &Path) -> Result<Vec<String>> {
 
 /// Libraries every Windows machine has, or that arrive with the display
 /// driver. Everything else has to be shipped or downloaded.
-#[cfg(test)]
 fn is_provided_by_the_system(name: &str) -> bool {
     let name = name.to_ascii_lowercase();
     name.starts_with("api-ms-win-")
@@ -410,7 +406,6 @@ pub fn unresolved_dependencies(directory: &Path, entry_point: &str) -> Result<Ve
 /// What `entry_point` needs that none of `directories` holds and Windows does
 /// not supply: a downloaded tool resolves beside itself first, then in the
 /// engine's folder, which the studio puts on its PATH.
-#[cfg(test)]
 pub fn unresolved_in(directories: &[std::path::PathBuf], entry_point: &Path) -> Result<Vec<String>> {
     let mut seen: Vec<String> = Vec::new();
     let mut queue = vec![entry_point.to_path_buf()];

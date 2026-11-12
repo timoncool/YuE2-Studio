@@ -30,7 +30,7 @@ pub fn install(api: Router) {
 }
 
 /// The studio's name, as clients show it.
-const STUDIO: &str = "YuE2 Studio";
+pub(crate) const STUDIO: &str = "YuE2 Studio";
 /// The skill an agent reads, served as a resource and a prompt.
 const SKILL: &str = include_str!("../../../docs/mcp-skill.md");
 const SKILL_URI: &str = "studio://skill";
@@ -1905,6 +1905,18 @@ fn tools() -> &'static [Tool] {
                 call: |_| get("/v1/engine/logs".into()),
             },
             Tool {
+                name: "diagnostics_get",
+                description: "The studio's diagnostics, as Settings - Local engine - System diagnostics shows them: version, system, graphics card and CUDA build, memory, the music models and optional parts on disk, the own YuE2 model, DLLs the engine misses, and the latest log lines; `text` is what to paste into an issue.",
+                schema: nothing,
+                call: |_| get("/v1/diagnostics".into()),
+            },
+            Tool {
+                name: "diagnostics_report",
+                description: "Packs a bug report into the data folder's reports: the diagnostics, the journal and the logs, keys masked. Answers the zip's path; nothing is sent anywhere.",
+                schema: nothing,
+                call: |_| post("/v1/diagnostics/report".into(), json!({})),
+            },
+            Tool {
                 name: "studio_capabilities",
                 description: "What the studio can do with the installed models and providers, and which provider runs each capability.",
                 schema: nothing,
@@ -3251,6 +3263,7 @@ mod tests {
             "openrouter_catalog_refresh",
             "assistant_start",
             "assistant_stop",
+            "diagnostics_report",
             // the update screen put off: nothing of the person's changes
             "models_update_later",
         ];
@@ -3337,6 +3350,8 @@ mod tests {
         ("GET", "/health", "the service's identity for the desktop shell: initialize names the server and its version"),
         ("POST", "/engine/pick-executable", "a file dialog for the person: engine_options_set takes the executable's path"),
         ("POST", "/setup/kv-cache-notice/seen", "the window's note that it told the person: engine_options_get says the cache and why"),
+        ("POST", "/v1/diagnostics/report/reveal", "shows a report in the person's file manager: diagnostics_report answers its path"),
+        ("POST", "/v1/diagnostics/logs/reveal", "shows the log folder in the person's file manager: diagnostics_get carries the latest lines"),
         ("GET", "/v1/engine/progress", "the starting page's progress stream: studio_status and engine_logs"),
         ("GET", "/v1/proxy/image", "pictures from the internet relayed for the page"),
         ("POST", "/v1/files/save", "a save dialog for the person: the tools write to the path the agent names"),
