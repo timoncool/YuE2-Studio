@@ -101,8 +101,10 @@ connected and the address to paste.
   from score_transcribe, a melody from the MIDI editor - and the model writes the rest of the
   song on from it.
 - **score_chord_bed**: a score at once in a tempo, key and meter - chords over rests, one
-  section per lyrics tag - for a song that keeps that tempo and key and skips the planning;
-  pass its `abc` to song_create.
+  section per lyrics tag - for a song that keeps that tempo, key and chords; pass its `abc` to
+  song_create. With words to sing the model plans the melody over the bed's chords (the bed's
+  header opens the plan, each section is held to its chords) and the song's score is that plan;
+  without words the bed is played as it stands.
 - **harmony** (song_create, score_compose): when the model writes the score and loops one
   progression, `strength` about 6-10 breaks the loop, `follow_lyrics: true` holds the score to
   the lyrics' sections in order, `section_strength` gives each section its own opening and

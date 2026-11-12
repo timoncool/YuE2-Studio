@@ -1492,7 +1492,7 @@ fn tools() -> &'static [Tool] {
             },
             Tool {
                 name: "score_chord_bed",
-                description: "Write a chord bed at once, without the model planning: chords over rests in the Vocal voice and an empty Ins voice, one section per lyrics tag (bars from its lines), in the tempo, key and meter given; verses, choruses and a bridge each get a common progression, no chord repeats its neighbour. Pass its abc to song_create (cot full) and the model writes the melody and arrangement over that harmony. The same seed writes the same bed.",
+                description: "Write a chord bed at once, without the model planning: chords over rests in the Vocal voice and an empty Ins voice, one section per lyrics tag (bars from its lines), in the tempo, key and meter given; verses, choruses and a bridge each get a common progression, no chord repeats its neighbour. Pass its abc to song_create (cot full): with words to sing the model plans the melody over the bed's chords, section by section, and the song's score is that plan; without words the bed is played as it stands. The same seed writes the same bed.",
                 schema: || object(json!({ "bpm": { "type": "integer", "minimum": 40, "maximum": 240 }, "key": { "type": "string", "description": "tonic and m for minor: Em, F#m, Bb" }, "meter": { "type": "string", "enum": ["4/4", "3/4", "6/8", "2/4"] }, "lyrics": { "type": "string" }, "seed": { "type": "integer" } }), &["bpm", "key", "meter"]),
                 call: |args| post("/v1/score/chord-bed".into(), args.clone()),
             },

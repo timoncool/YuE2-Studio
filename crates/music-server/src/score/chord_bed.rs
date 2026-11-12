@@ -207,6 +207,85 @@ pub fn write(request: &BedRequest) -> Result<Bed, String> {
     Ok(Bed { abc, bars: total, progressions })
 }
 
+
+/// A bed read back from a score: its header up to the key, and each section's chords in order.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BedPlan {
+    pub header: String,
+    pub sections: Vec<(String, Vec<String>)>,
+}
+
+impl BedPlan {
+    /// The sections in the order the song goes through them.
+    pub fn order(&self) -> Vec<&str> {
+        self.sections.iter().map(|(label, _)| label.as_str()).collect()
+    }
+
+    /// The chords of each section name, as its first section of that name has them.
+    pub fn chords(&self) -> serde_json::Map<String, serde_json::Value> {
+        let mut by_name = serde_json::Map::new();
+        for (label, chords) in &self.sections {
+            if !by_name.contains_key(label) {
+                by_name.insert(label.clone(), serde_json::json!(chords));
+            }
+        }
+        by_name
+    }
+}
+
+/// The chord of a bar that holds nothing but a chord symbol over a rest, `"Am"z16`.
+fn bed_bar(bar: &str) -> Option<&str> {
+    let rest = bar.trim().strip_prefix('"')?;
+    let (chord, tail) = rest.split_once('"')?;
+    let length = tail.strip_prefix('z')?;
+    (!chord.is_empty() && !length.is_empty() && length.chars().all(|character| character.is_ascii_digit())).then_some(chord)
+}
+
+/// Whether a line of the band holds nothing but whole rests.
+fn rests_only(line: &str) -> bool {
+    line.split('|').map(str::trim).filter(|bar| !bar.is_empty()).all(|bar| {
+        bar.strip_prefix(['z', 'Z']).is_some_and(|length| length.chars().all(|character| character.is_ascii_digit()))
+    })
+}
+
+/// A score that is a bed and nothing more: every section named, the Vocal voice chords over rests, the Ins voice
+/// rests. `None` for any other score, one with a single note written in included.
+pub fn read(abc: &str) -> Option<BedPlan> {
+    let lines: Vec<&str> = abc.lines().collect();
+    let key = lines.iter().position(|line| line.starts_with("K:"))?;
+    let mut header = lines[..=key].join("\n");
+    header.push('\n');
+    let mut sections: Vec<(String, Vec<String>)> = Vec::new();
+    let mut voice = "";
+    for line in &lines[key + 1..] {
+        let line = line.trim();
+        if line.is_empty() || line.starts_with("%%") {
+            continue;
+        }
+        if let Some(label) = line.strip_prefix('%') {
+            let label = label.trim().to_lowercase();
+            if label.is_empty() {
+                return None;
+            }
+            sections.push((label, Vec::new()));
+        } else if let Some(name) = line.strip_prefix("V:") {
+            voice = name.trim();
+        } else if voice == "Vocal" {
+            let (_, chords) = sections.last_mut()?;
+            for bar in line.split('|').filter(|bar| !bar.trim().is_empty()) {
+                chords.push(bed_bar(bar)?.to_string());
+            }
+        } else if voice == "Ins" {
+            if !rests_only(line) {
+                return None;
+            }
+        } else {
+            return None;
+        }
+    }
+    (!sections.is_empty() && sections.iter().all(|(_, chords)| !chords.is_empty())).then_some(BedPlan { header, sections })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -252,6 +331,28 @@ mod tests {
         assert_eq!(bed.bars, 16, "no lyrics: verse, chorus, verse, chorus");
         assert!(crate::score::abc::parse(&bed.abc).is_ok(), "{}", bed.abc);
         assert!(crate::score::notation::read(&bed.abc).is_ok(), "{}", bed.abc);
+    }
+
+    #[test]
+    fn a_bed_is_read_back_as_its_header_and_each_sections_chords() {
+        let bed = write(&request("Em", "4/4", "[Verse]\nwalk on\nrun home\n[Chorus]\nhold on\n[Verse]\nsing loud")).unwrap();
+        let plan = read(&bed.abc).expect("a bed reads back");
+        assert!(plan.header.starts_with("X:1\n") && plan.header.ends_with("K:Em\n"), "{}", plan.header);
+        assert_eq!(plan.order(), vec!["verse", "chorus", "verse"]);
+        assert_eq!(plan.sections.iter().map(|(_, chords)| chords.len()).sum::<usize>(), bed.bars);
+        assert_eq!(plan.sections[0].1[..bed.progressions[0].len().min(4)], bed.progressions[0][..bed.progressions[0].len().min(4)]);
+        let chords = plan.chords();
+        assert_eq!(chords.len(), 2, "one list a section name");
+        assert_eq!(chords["verse"], serde_json::json!(plan.sections[0].1));
+    }
+
+    #[test]
+    fn a_score_with_a_note_in_it_is_no_bed() {
+        let bed = write(&request("C", "4/4", "[Verse]\nwalk on")).unwrap();
+        assert!(read(&bed.abc.replacen("z16|", "c8z8|", 1)).is_none(), "a note in the Vocal voice");
+        assert!(read(&bed.abc.replace("V: Ins\nz16|", "V: Ins\nC16|")).is_none(), "a note in the band");
+        assert!(read("X:1\nK:C\nV: Vocal\n\"C\"z16|\n").is_none(), "no section named");
+        assert!(read("X:1\nT:\n").is_none(), "no key");
     }
 
     #[test]

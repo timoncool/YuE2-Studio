@@ -162,8 +162,9 @@ Code, save [docs/mcp-skill.md](docs/mcp-skill.md) as `~/.claude/skills/yue2-stud
   score", and the model writes the rest of the song on from it in its key and meter, the opening
   coming back as a hook.
 - **Chord bed** — a score of chords over rests written at once in the tempo, key and meter you set,
-  one section per lyrics tag; the model writes the melody and the arrangement over it and the
-  planning step is skipped.
+  one section per lyrics tag. For a song with words the model writes its melody over those chords,
+  section by section, and the song keeps the score with that melody; an instrumental is played
+  from the bed as it stands, with no planning step.
 - **Chords and sections** — chord variety so the song stops looping one progression, sections that
   do not open the way the one before did, chords outside the key, and the score held to the
   lyrics' sections in their order.

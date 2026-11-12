@@ -9273,8 +9273,9 @@ async fn submit_music_job(state: AppState, mut request: CreateMusicJobRequest, a
         body["companion_scale"] = Value::from(companion_default(&state.adapters, &request));
     }
     // an opening is not the song: its words are laid and timed by the plan written on from it
-    let laid = if request.abc_continue { None } else { laid_out(&mut body, request.duration_seconds.is_none()) };
-    if request.lyric_timing != Some(false) && !request.abc_continue {
+    let opening = body.get("abc_continue").and_then(Value::as_bool) == Some(true);
+    let laid = if opening { None } else { laid_out(&mut body, request.duration_seconds.is_none()) };
+    if request.lyric_timing != Some(false) && !opening {
         lyric_schedule(&mut body);
     }
     let derived = match request.cover_of.clone() {
@@ -10883,13 +10884,24 @@ fn yue_request_from(request: &CreateMusicJobRequest, max_batch: u32) -> Result<V
     if request.abc_continue && (request.abc.as_deref().is_none_or(|text| text.trim().is_empty()) || request.cot.as_deref() == Some("off") || semantic_tokens.is_some()) {
         return Err("continuing a score needs its opening, in full or melody mode, without an existing semantic performance".into());
     }
+    // a chord bed under words to sing is not the song's score: its header opens the plan and its chords hold each
+    // section, so the model writes the melody over them; without words it is played as it stands
+    let mut bed: Option<score::chord_bed::BedPlan> = None;
     if let Some(abc) = request.abc.as_deref().map(|text| score::edits::read(text).score).filter(|value| !value.is_empty()) {
         let moved = score::transpose::move_score(&abc, step)?;
         if request.abc_continue {
             body["abc"] = Value::String(score::opening::sung(&moved)?);
             body["abc_continue"] = Value::Bool(true);
         } else {
-            body["abc"] = Value::String(format!("{moved}\n"));
+            let sung = score::phrasing::section_lines(&request.lyrics).iter().any(|(_, lines)| *lines > 0);
+            bed = score::chord_bed::read(&moved).filter(|_| sung && semantic_tokens.is_none() && request.cot.as_deref() != Some("off"));
+            match &bed {
+                Some(plan) => {
+                    body["abc"] = Value::String(plan.header.clone());
+                    body["abc_continue"] = Value::Bool(true);
+                }
+                None => body["abc"] = Value::String(format!("{moved}\n")),
+            }
         }
     } else if step != 0 {
         return Err("compose or load a score before transposing it".into());
@@ -10926,7 +10938,7 @@ fn yue_request_from(request: &CreateMusicJobRequest, max_batch: u32) -> Result<V
         }
     }
     // a score the model writes for a long song outgrows the checkpoint's score budget
-    let writes_score = request.cot.as_deref() != Some("off") && (body.get("abc").is_none() || request.abc_continue) && semantic_tokens.is_none();
+    let writes_score = request.cot.as_deref() != Some("off") && (body.get("abc").is_none() || request.abc_continue || bed.is_some()) && semantic_tokens.is_none();
     if let Some(duration) = request.duration_seconds.filter(|_| writes_score) {
         let tokens = (duration * SCORE_TOKENS_PER_SECOND).ceil() as u64;
         if tokens > CHECKPOINT_SCORE_TOKENS && request.abc_sampling.as_ref().and_then(|preset| preset.max_tokens).is_none() {
@@ -10941,6 +10953,13 @@ fn yue_request_from(request: &CreateMusicJobRequest, max_batch: u32) -> Result<V
         if writes_score {
             body["harmony"] = harmony.engine_field(&request.lyrics)?;
         }
+    }
+    if let Some(plan) = &bed {
+        if !body["harmony"].is_object() {
+            body["harmony"] = serde_json::json!({});
+        }
+        body["harmony"]["follow"] = serde_json::json!(plan.order());
+        body["harmony"]["chords"] = Value::Object(plan.chords());
     }
     if !request.adapters.is_empty() {
         body["adapters"] = Value::Array(adapter_fields(&request.adapters)?);
@@ -11806,6 +11825,28 @@ mod tests {
         assert_eq!(yue_request_from(&request, 1).unwrap()["abc"], "X:1\nK:C\nC\n");
         let marked_only = CreateMusicJobRequest { client_ref: None, abc: Some("%yue2-words 0123456789abcdef\n".into()), ..sample_request() };
         assert!(yue_request_from(&marked_only, 1).unwrap().get("abc").is_none());
+    }
+
+    #[test]
+    fn a_chord_bed_under_words_opens_the_plan_and_holds_each_sections_chords() {
+        let lyrics = "[Verse]\nwalk on\nrun home\n[Chorus]\nhold on";
+        let bed = score::chord_bed::write(&score::chord_bed::BedRequest { bpm: 96, key: "Em".into(), meter: "4/4".into(), lyrics: lyrics.into(), seed: 7 }).unwrap();
+        let request = CreateMusicJobRequest { client_ref: None, lyrics: lyrics.into(), abc: Some(bed.abc.clone()), ..sample_request() };
+        let body = yue_request_from(&request, 1).unwrap();
+        let header = body["abc"].as_str().unwrap();
+        assert!(header.ends_with("K:Em\n") && !header.contains("z16"), "the plan opens with the bed's header: {header}");
+        assert_eq!(body["abc_continue"], true);
+        assert_eq!(body["harmony"]["follow"], serde_json::json!(["verse", "chorus"]));
+        assert_eq!(body["harmony"]["chords"]["verse"].as_array().unwrap().len(), 4, "two lines, four bars");
+        assert_eq!(body["harmony"]["chords"]["chorus"].as_array().unwrap().len(), 4, "a section is whole fours of bars");
+
+        let no_words = CreateMusicJobRequest { client_ref: None, lyrics: "[Verse]\n[Chorus]".into(), abc: Some(bed.abc.clone()), ..sample_request() };
+        let played = yue_request_from(&no_words, 1).unwrap();
+        assert!(played["abc"].as_str().unwrap().contains("z16|"), "without words the bed is played as it stands");
+        assert!(played.get("abc_continue").is_none() && played.get("harmony").is_none());
+
+        let with_a_note = CreateMusicJobRequest { client_ref: None, lyrics: lyrics.into(), abc: Some(bed.abc.replacen("z16|", "c8z8|", 1)), ..sample_request() };
+        assert!(yue_request_from(&with_a_note, 1).unwrap().get("abc_continue").is_none(), "a score with a note in it is sung as written");
     }
 
     #[test]
