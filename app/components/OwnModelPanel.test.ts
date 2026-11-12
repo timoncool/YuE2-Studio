@@ -1,5 +1,9 @@
-import { describe, expect, it } from 'vitest';
-import { choiceOf, type OwnModelStatus } from './OwnModelPanel';
+import { describe, expect, it, vi } from 'vitest';
+import type { OwnModelStatus } from './OwnModelPanel';
+
+vi.mock('../context/I18nContext', () => ({ useI18n: () => ({ t: (key: string) => key, language: 'en' }) }));
+
+const { choiceOf } = await import('./OwnModelPanel');
 
 const status = (selected: string | null): OwnModelStatus => ({
   folder: '/models/yue2-cpp/own',
