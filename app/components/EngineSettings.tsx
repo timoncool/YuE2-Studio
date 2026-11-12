@@ -207,7 +207,7 @@ export const EngineSettings: React.FC = () => {
   };
 
   // With two cards or more, which one the studio computes on
-  const [cards, setCards] = useState<{ cards: { index: number; name: string; memory_gb: number }[]; running: number | null } | null>(null);
+  const [cards, setCards] = useState<{ cards: { index: number; name: string; memory_gb: number }[] | null; running: number | null } | null>(null);
   useEffect(() => {
     void fetch('/v1/system/gpus', { headers: SELF_READ }).then(response => (response.ok ? response.json() : null)).then(setCards).catch(() => undefined);
   }, []);
@@ -259,7 +259,7 @@ export const EngineSettings: React.FC = () => {
         <span className="mt-2 block text-xs leading-5 text-zinc-500 dark:text-zinc-400">{tt(`computeBackendHint_${options.backend}`)}</span>
       </div>
 
-      {cards && cards.cards.length > 1 && (
+      {cards?.cards && (cards.cards.length > 1 || (chosenCard !== null && !cards.cards.some(card => card.index === chosenCard))) && (
         <label className="block rounded-xl border border-zinc-200 p-3 dark:border-white/10">
           <span className="block text-sm font-medium text-zinc-800 dark:text-zinc-100">{t('gpuChoice')}</span>
           <select
@@ -268,11 +268,16 @@ export const EngineSettings: React.FC = () => {
             className={`${CONTROL} mt-2`}
           >
             <option value="">{t('gpuChoiceFirst')}</option>
+            {chosenCard !== null && !cards.cards.some(card => card.index === chosenCard) && <option value={String(chosenCard)}>{t('gpuChoiceMissing').replace('{index}', String(chosenCard))}</option>}
             {cards.cards.map(card => <option key={card.index} value={card.index}>{`${card.index}: ${card.name} · ${card.memory_gb.toFixed(0)} GB`}</option>)}
           </select>
-          <span className="mt-2 block text-xs leading-5 text-zinc-500 dark:text-zinc-400">
-            {chosenCard !== runningCard ? t('gpuChoiceRestart') : t('gpuChoiceHint')}
-          </span>
+          {chosenCard !== null && !cards.cards.some(card => card.index === chosenCard) ? (
+            <span className="mt-2 block text-xs leading-5 text-amber-600 dark:text-amber-300">{t('gpuChoiceGone').replace('{index}', String(chosenCard))}</span>
+          ) : (
+            <span className="mt-2 block text-xs leading-5 text-zinc-500 dark:text-zinc-400">
+              {chosenCard !== runningCard ? t('gpuChoiceRestart') : t('gpuChoiceHint')}
+            </span>
+          )}
         </label>
       )}
 

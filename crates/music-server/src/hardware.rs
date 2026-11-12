@@ -235,14 +235,40 @@ pub(crate) fn chosen_card() -> Vec<String> {
     }
 }
 
-/// Every NVIDIA card: its nvidia-smi index, name and memory in GB.
-pub fn nvidia_cards() -> Vec<(u32, String, f64)> {
-    let Ok(output) = quiet("nvidia-smi").args(["--query-gpu=index,name,memory.total", "--format=csv,noheader,nounits"]).output() else { return Vec::new() };
-    if !output.status.success() {
-        return Vec::new();
+/// Every NVIDIA card; `None` when nvidia-smi did not answer (not on PATH, did not start, failed), which says nothing
+/// about the cards. The answer is kept for half a minute: the setup status, polled every second, and the engine's
+/// watchdog ask for the cards while one is chosen.
+
+pub fn nvidia_cards() -> Option<Cards> {
+    static LAST: std::sync::Mutex<Option<(std::time::Instant, Option<Cards>)>> = std::sync::Mutex::new(None);
+    remembered(&LAST, CARDS_FRESH, ask_nvidia_smi_for_cards)
+}
+
+/// NVIDIA cards: nvidia-smi index, name and memory in GB.
+pub type Cards = Vec<(u32, String, f64)>;
+
+const CARDS_FRESH: std::time::Duration = std::time::Duration::from_secs(30);
+
+fn remembered<T: Clone>(slot: &std::sync::Mutex<Option<(std::time::Instant, T)>>, fresh: std::time::Duration, ask: impl FnOnce() -> T) -> T {
+    let mut last = slot.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+    if let Some((_, answer)) = last.as_ref().filter(|(at, _)| at.elapsed() < fresh) {
+        return answer.clone();
     }
-    String::from_utf8_lossy(&output.stdout)
-        .lines()
+    let answer = ask();
+    *last = Some((std::time::Instant::now(), answer.clone()));
+    answer
+}
+
+fn ask_nvidia_smi_for_cards() -> Option<Cards> {
+    let output = quiet("nvidia-smi").args(["--query-gpu=index,name,memory.total", "--format=csv,noheader,nounits"]).output().ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    Some(parse_cards(&String::from_utf8_lossy(&output.stdout)))
+}
+
+fn parse_cards(csv: &str) -> Cards {
+    csv.lines()
         .filter_map(|line| {
             let mut fields = line.split(',').map(str::trim);
             let index = fields.next()?.parse().ok()?;
@@ -562,6 +588,27 @@ mod tests {
         // A device id nobody carries names nothing, and an empty one is safe.
         assert_eq!(parse_lspci_name(listing, "0x1234"), None);
         assert_eq!(parse_lspci_name(listing, "0x"), None);
+    }
+
+    #[test]
+    fn the_card_list_reads_nvidia_smi_lines() {
+        let cards = parse_cards("0, NVIDIA GeForce RTX 4090, 24564\n1, NVIDIA GeForce RTX 3060, 12288\n");
+        assert_eq!(cards, vec![(0, "NVIDIA GeForce RTX 4090".to_string(), 24564.0 / 1024.0), (1, "NVIDIA GeForce RTX 3060".to_string(), 12.0)]);
+    }
+
+    #[test]
+    fn a_second_ask_within_its_life_does_not_run_nvidia_smi_again() {
+        let slot = std::sync::Mutex::new(None);
+        let asked = std::cell::Cell::new(0);
+        let ask = || {
+            asked.set(asked.get() + 1);
+            None::<Cards>
+        };
+        assert_eq!(remembered(&slot, std::time::Duration::from_secs(30), ask), None);
+        assert_eq!(remembered(&slot, std::time::Duration::from_secs(30), ask), None);
+        assert_eq!(asked.get(), 1, "a failed answer is kept too");
+        remembered(&slot, std::time::Duration::ZERO, ask);
+        assert_eq!(asked.get(), 2, "an answer past its life is asked again");
     }
 
     #[cfg(not(windows))]

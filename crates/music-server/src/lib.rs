@@ -4870,6 +4870,7 @@ fn engine_failure_code(error: &str) -> String {
         ("still answering on the engine port", "engine port busy"),
         ("runtime was not found", "engine runtime not found"),
         ("no model set is selected", "no model set selected"),
+        ("graphics card chosen in Settings", "chosen card not present"),
     ];
     kinds.iter().find(|(marker, _)| error.contains(marker)).map(|(_, kind)| kind.to_string()).unwrap_or_else(|| "other".into())
 }
@@ -4912,6 +4913,26 @@ async fn start_engine_again(state: &AppState) -> Result<(), String> {
     let options = state.engine_options.read().await.clone();
     if options.backend == music_engine::yue_server::ComputeBackend::Cuda && hardware::hardware().cuda.is_none() {
         return Err("CUDA was chosen, but this card or its driver runs neither CUDA build of the engine: it needs an NVIDIA card from the GTX 900 series on and driver 525 or newer. Update the NVIDIA driver, or choose Vulkan in Settings.".into());
+    }
+    // nvidia-smi is a process of its own: asked off the async workers, and only for a chosen card
+    let chosen_card = options.gpu;
+    if chosen_card.is_some() {
+        let cards = tokio::task::spawn_blocking(hardware::nvidia_cards)
+            .await
+            .map_err(|error| format!("the graphics card chosen in Settings - Local engine was not looked for: {error}"))?;
+        // the supervisor asks again every few seconds: the log gets each line once
+        let note_once = |line: &str| {
+            if music_engine::yue_server::startup_log_tail(1).last() != Some(&format!("[studio] {line}")) {
+                music_engine::yue_server::note_in_log(line);
+            }
+        };
+        if let Some(problem) = missing_chosen_card(chosen_card, cards.as_deref()) {
+            note_once(&problem);
+            return Err(problem);
+        }
+        if cards.is_none() {
+            note_once("nvidia-smi did not answer, so the graphics card chosen in Settings - Local engine is not checked; the engine starts as before");
+        }
     }
     let chain = options.device_chain(&state.failed_devices.read().await);
     {
@@ -4995,6 +5016,25 @@ async fn start_engine_again(state: &AppState) -> Result<(), String> {
         }
     }
     Err(last_error)
+}
+
+/// Why the engine cannot start on the card the settings name: a card that is not in this computer would leave CUDA
+/// with no device at all, and the engine would go to the processor without a word. Only nvidia-smi's own list says a
+/// card is gone: without an answer (`None`) the engine starts as it did before a card could be chosen.
+fn missing_chosen_card(chosen: Option<u32>, cards: Option<&[(u32, String, f64)]>) -> Option<String> {
+    let index = chosen?;
+    let cards = cards?;
+    if cards.iter().any(|(number, ..)| *number == index) {
+        return None;
+    }
+    let present = if cards.is_empty() {
+        "nvidia-smi lists no NVIDIA card".to_string()
+    } else {
+        format!("nvidia-smi lists {}", cards.iter().map(|(number, name, _)| format!("{number}: {name}")).collect::<Vec<_>>().join(", "))
+    };
+    Some(format!(
+        "the graphics card chosen in Settings - Local engine (number {index}) is not in this computer ({present}); choose another card or Auto there"
+    ))
 }
 
 /// The device's name as the settings show it.
@@ -5679,6 +5719,11 @@ pub fn studio_data_root() -> Option<PathBuf> {
 /// by the desktop shell and the standalone service before anything starts.
 pub fn apply_saved_gpu() {
     let Some(index) = load_studio_settings(&studio_settings_path()).and_then(|settings| settings.engine_options.gpu) else { return };
+    // a chosen card that is not in the computer is not pointed at: CUDA would see no card at all, and the engine start
+    // says why (`missing_chosen_card`)
+    if missing_chosen_card(Some(index), hardware::nvidia_cards().as_deref()).is_some() {
+        return;
+    }
     // SAFETY: called first thing in the process, before the service and its
     // runtimes read the environment; on Windows the variables are set through
     // SetEnvironmentVariableW, which is thread safe.
@@ -5690,13 +5735,16 @@ pub fn apply_saved_gpu() {
 
 /// The NVIDIA cards nvidia-smi lists, and which one the studio runs on.
 async fn system_gpus(State(state): State<AppState>) -> Json<Value> {
-    let cards = tokio::task::spawn_blocking(hardware::nvidia_cards).await.unwrap_or_default();
+    let answer = tokio::task::spawn_blocking(hardware::nvidia_cards).await.unwrap_or_default();
     let chosen = state.engine_options.read().await.gpu;
     let running = env::var("CUDA_VISIBLE_DEVICES").ok().and_then(|value| value.trim().parse::<u32>().ok());
     Json(serde_json::json!({
-        "cards": cards.iter().map(|(index, name, gigabytes)| serde_json::json!({ "index": index, "name": name, "memory_gb": gigabytes })).collect::<Vec<_>>(),
+        // null: nvidia-smi did not answer, so no card can be told apart
+        "cards": answer.as_ref().map(|cards| cards.iter().map(|(index, name, gigabytes)| serde_json::json!({ "index": index, "name": name, "memory_gb": gigabytes })).collect::<Vec<_>>()),
         "chosen": chosen,
         "running": running,
+        // the chosen card is not in the computer: why the engine does not start until another is chosen
+        "chosen_missing": missing_chosen_card(chosen, answer.as_deref()),
     }))
 }
 
@@ -10881,6 +10929,18 @@ mod tests {
         let mut complained = false;
         let counted: Vec<bool> = [false, false, false, true, false, false].iter().map(|&started| failure_is_new(&mut complained, started)).collect();
         assert_eq!(counted, [true, false, false, false, true, false], "three failed restarts are one failure; after a start the next failure is a second");
+    }
+
+    #[test]
+    fn a_chosen_card_that_is_not_there_is_said_not_left_to_the_processor() {
+        let cards = vec![(0, "NVIDIA GeForce RTX 4090".to_string(), 24.0)];
+        assert_eq!(missing_chosen_card(None, Some(&cards)), None);
+        assert_eq!(missing_chosen_card(Some(0), Some(&cards)), None);
+        let missing = missing_chosen_card(Some(1), Some(&cards)).expect("card 1 is not there");
+        assert!(missing.contains("number 1") && missing.contains("0: NVIDIA GeForce RTX 4090"), "{missing}");
+        assert!(missing_chosen_card(Some(0), Some(&[])).expect("no card at all").contains("lists no NVIDIA card"));
+        assert_eq!(missing_chosen_card(Some(7), None), None, "nvidia-smi did not answer: the card is not called gone");
+        assert_eq!(engine_failure_code(&missing), "chosen card not present");
     }
 
     /// A card that ran out of memory has to say so. The studio used to answer
