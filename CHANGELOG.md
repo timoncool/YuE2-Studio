@@ -30,6 +30,7 @@ Windows build.
 
 ### Fixed
 
+- **Karaoke on lyrics longer than the song times only what is sung**: when the text repeats verses the song never reaches, every lyric line was put on one moment of the song together with the sung ones. The sung lines now get their own times from the first copies of the text, and lines the song does not reach get none; a first line sung unclearly keeps its place from the first word heard.
 - **An instrumental writes a new score each time and keeps No score** ([#217](https://github.com/timoncool/YuE2-Studio/issues/217)): the score written for an instrumental stayed in the form, so the next instrumental was made from the same score, and No score was switched back to Melody + chords. The score written for an instrumental now belongs to that song only, a score you put in the form stays as you wrote it, and No score makes the instrumental without one.
 - **Lyrics edited after Reuse prompt stay when you come back to Create** ([#216](https://github.com/timoncool/YuE2-Studio/issues/216)): leaving Create and coming back loaded the reused song's lyrics over your edits; a Reuse now loads the song once.
 - **Cloud requests ride out a busy moment**, as in MiniMax Music3 Studio: an OpenRouter request (the assistant, descriptions, covers) that the service answers with 408, 409 or 429 is sent again after the wait it asks for, at most a minute, up to four times; a server that cannot be reached is named by its host.
