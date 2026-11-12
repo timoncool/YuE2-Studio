@@ -13,6 +13,7 @@ import { mapNativeLibrarySong } from '../services/nativeLibrary';
 import type { NativeLibrarySong } from '../types';
 import type { TranslationKey } from '../i18n/translations';
 import { stemOf } from '../services/songStems';
+import { shownSongs, toolsSongOnOpen, type ToolRun } from '../services/toolsSong';
 import { ConfirmDialog } from './ConfirmDialog';
 import { MidiTool } from './midi/MidiTool';
 import { MidiEditor } from './midi/MidiEditor';
@@ -88,7 +89,10 @@ export function StudioToolsPanel({ initialSongId }: { initialSongId?: string | n
     const list: NativeLibrarySong[] = Array.isArray(body) ? body : body.songs ?? [];
     const playable = list.filter(song => song.audio_path);
     setSongs(playable);
-    setSongId(current => current || playable[0]?.id || '');
+    const runOf = (path: string) =>
+      fetch(path, { headers: SELF_READ }).then(response => response.json() as Promise<{ run?: ToolRun | null }>).then(body => body.run ?? null);
+    const runs = await Promise.all([runOf('/v1/separation/status'), runOf('/v1/midi')]);
+    setSongId(current => current || toolsSongOnOpen(playable.map(song => song.id), runs));
   }, []);
 
   // A track handed over by a menu wins over whatever was chosen here before.
@@ -187,7 +191,7 @@ export function StudioToolsPanel({ initialSongId }: { initialSongId?: string | n
   // narrows it, and only the first handful of matches are drawn.
   const needle = query.trim().toLowerCase();
   const matches = needle ? songs.filter(song => song.title.toLowerCase().includes(needle)) : songs;
-  const visible = matches.slice(0, 12);
+  const visible = shownSongs(matches, songId, 12);
   const hidden = matches.length - visible.length;
   const settings = status?.settings ?? { stems: status?.stems ?? [], runtime: 'auto' as const };
   // what separating again replaces: the stems it makes that the song has already
