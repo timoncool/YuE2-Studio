@@ -610,8 +610,12 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
     setError(null);
   }, []);
 
+  // Create is kept in a React Activity: showing it again reruns this effect with the same Reuse, which would put the
+  // song's request back over what was edited since; each Reuse is applied once, by its timestamp
+  const appliedReuse = useRef<number | null>(null);
   useEffect(() => {
-    if (!initialData?.song) return;
+    if (!initialData?.song || appliedReuse.current === initialData.timestamp) return;
+    appliedReuse.current = initialData.timestamp;
     const song = initialData.song;
     const settings = (song.generationParams ?? {}) as Record<string, unknown>;
     applyRequest({ style: song.style, lyrics: song.lyrics, ...settings }, song.title || '');
@@ -1134,19 +1138,28 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
   /** An instrumental: the score - the form's, or one written now - with its voice moved to the
    *  instrument, and the lyrics' section tags without their words, so nothing is left to sing. */
   const createInstrumental = async () => {
+    // "No score" is honoured: the song is made from the section tags and the style alone
+    if (effectiveCot === 'off') {
+      const request = buildRequest();
+      request.cot = 'off';
+      delete request.abc;
+      delete request.semantic_tokens;
+      request.lyrics = sectionTagsOnly(lyrics);
+      generate(request);
+      return;
+    }
     setComposing(true);
     const controller = new AbortController();
     composeRun.current = controller;
     try {
-      if (effectiveCot === 'off') setCot('full');
+      // the instrumental score belongs to this request only: a score written for it is not left in the form for
+      // the next song, and a score the person gave stays as they wrote it
       const written = abc.trim() || await writeScoreAlone(controller.signal);
       const answer = await instrumentalScore(written);
       if (failed(answer)) throw new Error(answer.error);
-      setAbc(answer.abc.trimEnd());
-      setSemanticTokens('');
       const request = buildRequest();
       request.abc = answer.abc.trim();
-      request.cot = effectiveCot === 'off' ? 'full' : effectiveCot;
+      request.cot = effectiveCot;
       request.lyrics = sectionTagsOnly(lyrics);
       delete request.semantic_tokens;
       generate(request);
