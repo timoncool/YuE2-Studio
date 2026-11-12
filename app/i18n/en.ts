@@ -1578,6 +1578,7 @@ export const en = {
     midiCrossfade: 'Blend between the original track and the MIDI',
     midiLiveChunk: 'Transcribing piece {done}/{total}',
     midiNoteCount: '{count} notes',
+    workElapsed: 'running {time}',
     midiMute: 'Mute this instrument (MIDI side)',
     midiSolo: 'Solo this instrument (MIDI side)',
     derivedTool_cover: 'cover',

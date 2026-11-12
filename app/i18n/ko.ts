@@ -1573,6 +1573,7 @@ export const ko = {
     midiCrossfade: '원본과 MIDI 섞기',
     midiLiveChunk: '변환 중 {done}/{total}',
     midiNoteCount: '음표 {count}개',
+    workElapsed: '경과 {time}',
     midiMute: '이 악기 음소거(MIDI)',
     midiSolo: '이 악기만 듣기(MIDI)',
     derivedTool_cover: '커버',

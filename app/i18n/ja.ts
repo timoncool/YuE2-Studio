@@ -1573,6 +1573,7 @@ export const ja = {
     midiCrossfade: 'オリジナルとMIDIをブレンド',
     midiLiveChunk: '変換中 {done}/{total}',
     midiNoteCount: '{count} 音符',
+    workElapsed: '経過 {time}',
     midiMute: 'この楽器をミュート（MIDI側）',
     midiSolo: 'この楽器をソロ（MIDI側）',
     derivedTool_cover: 'カバー',

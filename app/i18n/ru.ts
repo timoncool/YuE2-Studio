@@ -1577,6 +1577,7 @@ export const ru = {
     midiCrossfade: 'Смешать оригинал и MIDI',
     midiLiveChunk: 'Распознаю кусок {done}/{total}',
     midiNoteCount: 'нот: {count}',
+    workElapsed: 'идёт {time}',
     midiMute: 'Заглушить инструмент (MIDI)',
     midiSolo: 'Только этот инструмент (MIDI)',
     derivedTool_cover: 'кавер',

@@ -1573,6 +1573,7 @@ export const zh = {
     midiCrossfade: '混合原曲与 MIDI',
     midiLiveChunk: '正在转写 {done}/{total}',
     midiNoteCount: '{count} 个音符',
+    workElapsed: '已用 {time}',
     midiMute: '静音此乐器（MIDI）',
     midiSolo: '独奏此乐器（MIDI）',
     derivedTool_cover: '翻唱',
