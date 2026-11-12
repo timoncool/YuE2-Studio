@@ -299,9 +299,10 @@ More tutorials and reviews:
     from 525 to 579. Both carry compiled code for every one of those architectures, so
     nothing is left for the driver to compile.
   - **AMD or Intel — experimental.** The engine runs on Vulkan through the card's own
-    driver. The Vulkan path itself is verified on NVIDIA (the same words heard as on
-    CUDA), but on AMD Radeon integrated graphics the song came out with unintelligible
-    vocals, and discrete AMD and Intel cards are untested. Reports from owners are welcome.
+    driver. Owners report songs made well on a Radeon RX 7900 XT under Windows and an
+    RX 7900 XTX under Ubuntu 26 ([#196](https://github.com/timoncool/YuE2-Studio/issues/196)),
+    but on AMD Radeon integrated graphics the song came out with unintelligible vocals, and
+    Intel cards are untested. LoRA training stays on NVIDIA. Reports from owners are welcome.
   - Without a GPU the engine falls back to the processor, which works but is many times
     slower.
 - 4–10 GB of disk for one model set.
