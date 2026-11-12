@@ -1098,6 +1098,9 @@ struct OpenRouterResponse {
 /// in-process, so a release is a single executable rather than a launcher that
 /// has to start a second binary and keep it alive.
 pub async fn serve() -> anyhow::Result<()> {
+    if let Some(root) = studio_data_root() {
+        std::thread::spawn(move || install_record::sweep_aside(&root));
+    }
     put_the_engine_folder_on_path();
     let settings_path = studio_settings_path();
     let persisted = load_studio_settings(&settings_path);
@@ -8450,7 +8453,12 @@ async fn update_job_now(state: &AppState) -> Option<update_screen::Job> {
 /// totals, and whether the window shows the screen at start) and the screen's download while it runs and after.
 async fn setup_update(State(state): State<AppState>) -> Result<Json<Value>, (StatusCode, Json<ApiError>)> {
     let plan = update_plan(&state).await?;
-    Ok(Json(serde_json::json!({ "plan": plan, "job": update_job_now(&state).await })))
+    Ok(Json(serde_json::json!({
+        "plan": plan,
+        "job": update_job_now(&state).await,
+        // karaoke's engine updated while this process holds the earlier one: it runs from the next start
+        "restart_to_apply": state.lyrics_sync.restart_to_apply(),
+    })))
 }
 
 /// POST /setup/update/apply - the update screen's button: downloads what the plan updates and adds, part by part
@@ -8490,7 +8498,7 @@ async fn setup_update_apply(State(state): State<AppState>) -> Result<Json<Value>
         }
     });
     let plan = update_plan(&state).await?;
-    Ok(Json(serde_json::json!({ "plan": plan, "job": update_job_now(&state).await })))
+    Ok(Json(serde_json::json!({ "plan": plan, "job": update_job_now(&state).await, "restart_to_apply": state.lyrics_sync.restart_to_apply() })))
 }
 
 /// The downloads of `rows`, part after part (audio.cpp's server with the CUDA libraries its build needs), then the

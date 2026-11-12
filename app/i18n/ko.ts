@@ -1851,6 +1851,7 @@ export const ko = {
     updateSettingsEntry: "이번 릴리스에서 바뀐 점",
     updateSettingsHint: "이번 릴리스가 업데이트하고, 추가하고, 더 이상 쓰지 않는 엔진과 모델",
     updateDone: "업데이트 완료: 새 엔진과 모델이 준비되었고 이전 것은 지워졌습니다",
+    updateRestartToApply: "노래방 엔진은 스튜디오를 다시 시작한 뒤 업데이트됩니다. 그때까지는 이전 엔진이 쓰입니다",
     updateFailed: "업데이트가 멈췄습니다: {error}. 내려받은 것은 남아 있습니다. «업데이트»를 누르면 이어서 진행합니다.",
     updateWhyCrisperwhisper: "노래방과 데이터셋 가사를 Faster-Whisper 대신 audio.cpp 서버의 CrisperWhisper 2.0 turbo가 듣고, 단어마다 시간이 붙습니다",
     updateWhyTranscribeAvx2: "Parakeet 엔진은 모든 64비트 프로세서에서 작동하며 AVX-512가 없는 프로세서에서 더 이상 스튜디오를 닫지 않습니다",

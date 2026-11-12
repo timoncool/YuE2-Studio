@@ -146,17 +146,68 @@ fn remove_if_there(path: &Path) -> Result<()> {
 }
 
 /// Deletes the files an earlier pin's record lists under `root` but `kept` (the file today's download replaced in
-/// place), and that record; the mark of today's install stays.
+/// place), and that record; the mark of today's install stays. A file a running program holds is moved aside.
 pub fn remove_earlier(record: &Path, root: &Path, kept: &Path) -> Result<()> {
     if let Some(parsed) = read(record) {
         for file in &parsed.files {
             let path = root.join(&file.path);
             if path != kept {
-                remove_if_there(&path)?;
+                if let Err(error) = remove_if_there(&path) {
+                    set_aside(&path).with_context(|| format!("{error:#}"))?;
+                }
             }
         }
     }
     remove_if_there(record)
+}
+
+/// The mark in the name of a file moved aside by `set_aside`.
+const ASIDE: &str = ".stale-";
+
+/// Moves `path` aside under a name of its own beside it, for a file a running program holds, which Windows lets be
+/// renamed but not removed or replaced; `sweep_aside` removes it at a later start.
+pub fn set_aside(path: &Path) -> Result<PathBuf> {
+    let name = path.file_name().map(|name| name.to_string_lossy().into_owned()).unwrap_or_default();
+    let aside = path.with_file_name(format!("{name}{ASIDE}{}", uuid::Uuid::now_v7().simple()));
+    // known before it exists, so a sweep running beside it never sees it unknown
+    SET_ASIDE_NOW.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).insert(aside.clone());
+    if let Err(error) = fs::rename(path, &aside) {
+        SET_ASIDE_NOW.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).remove(&aside);
+        return Err(error).with_context(|| format!("move {} aside", path.display()));
+    }
+    eprintln!("{} is held by a running program and was moved aside as {}; it is removed at the next start", path.display(), aside.display());
+    Ok(aside)
+}
+
+/// What `set_aside` moved in this run: the sweep of this run's start leaves it, as a failed replace may put it back.
+static SET_ASIDE_NOW: std::sync::Mutex<std::collections::BTreeSet<PathBuf>> = std::sync::Mutex::new(std::collections::BTreeSet::new());
+
+/// Whether a file name is one `set_aside` gives: the name, `ASIDE`, then a UUID's 32 hex digits at the end.
+fn set_aside_name(name: &str) -> bool {
+    name.rsplit_once(ASIDE).is_some_and(|(before, id)| !before.is_empty() && id.len() == 32 && id.bytes().all(|byte| byte.is_ascii_hexdigit()))
+}
+
+/// Removes what `set_aside` left under `root` in an earlier run, passing by the folders of the person's work.
+pub fn sweep_aside(root: &Path) {
+    // midi and karaoke hold downloaded runtimes beside the person's work, so they are walked; their work is safe
+    // because only set_aside's own names are removed
+    const WORK: [&str; 6] = ["media", "processing", "videos", "skins", "logs", "adapters"];
+    let Ok(entries) = fs::read_dir(root) else { return };
+    for entry in entries.flatten() {
+        let Ok(kind) = entry.file_type() else { continue };
+        let path = entry.path();
+        let name = entry.file_name().to_string_lossy().into_owned();
+        if kind.is_dir() {
+            if !WORK.contains(&name.as_str()) {
+                sweep_aside(&path);
+            }
+        } else if kind.is_file() && set_aside_name(&name) && !SET_ASIDE_NOW.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).contains(&path) {
+            match fs::remove_file(&path) {
+                Ok(()) => eprintln!("removed {}, moved aside by an earlier update", path.display()),
+                Err(error) => eprintln!("[ERROR] {} was not removed: {error}", path.display()),
+            }
+        }
+    }
 }
 
 /// The SHA-256 of a file, as lower-case hex.
@@ -270,5 +321,32 @@ mod tests {
                 assert!((file, size) != (other_file, other_size), "{url} and {other} share the key {file} of {size} bytes");
             }
         }
+    }
+
+    #[test]
+    fn a_file_moved_aside_is_gone_at_the_next_start_and_the_work_is_left() {
+        let root = scratch("aside");
+        let runtime = root.join("karaoke").join("runtime");
+        fs::create_dir_all(&runtime).unwrap();
+        fs::create_dir_all(root.join("media")).unwrap();
+        let held = runtime.join("engine.dll");
+        fs::write(&held, b"old").unwrap();
+        let aside = set_aside(&held).unwrap();
+        assert!(!held.exists() && aside.exists() && aside.parent() == held.parent());
+        sweep_aside(&root);
+        assert!(aside.exists(), "what this run moved aside stays, a failed replace may put it back");
+        // as a later start sees it
+        SET_ASIDE_NOW.lock().unwrap().remove(&aside);
+        let song = root.join("media").join(format!("song.flac{ASIDE}{}", uuid::Uuid::now_v7().simple()));
+        fs::write(&song, b"song").unwrap();
+        let dataset = root.join("hotstep").join("datasets").join("d1");
+        fs::create_dir_all(&dataset).unwrap();
+        let named_alike = dataset.join("0-My.stale-mix.wav");
+        fs::write(&named_alike, b"song").unwrap();
+        sweep_aside(&root);
+        assert!(!aside.exists(), "removed at the next start");
+        assert!(song.exists(), "the person's work is not swept, even under a name set_aside gives");
+        assert!(named_alike.exists(), "only the names set_aside gives are swept");
+        fs::remove_dir_all(&root).ok();
     }
 }

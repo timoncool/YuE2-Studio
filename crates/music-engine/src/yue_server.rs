@@ -109,7 +109,9 @@ fn port_unavailable(port: u16, error: &std::io::Error) -> String {
 fn excluded_range(port: u16) -> Option<(u16, u16)> {
     use std::os::windows::process::CommandExt;
     const CREATE_NO_WINDOW: u32 = 0x0800_0000;
-    let mut child = Command::new("netsh")
+    // Windows' own netsh by its full path: a bare name is looked for beside the studio first
+    let system = std::path::PathBuf::from(std::env::var_os("SystemRoot")?);
+    let mut child = Command::new(system.join("System32").join("netsh.exe"))
         .args(["interface", "ipv4", "show", "excludedportrange", "protocol=tcp"])
         .creation_flags(CREATE_NO_WINDOW)
         .stdin(Stdio::null())
@@ -119,9 +121,10 @@ fn excluded_range(port: u16) -> Option<(u16, u16)> {
         .ok()?;
     // read while it runs, so a listing longer than the pipe holds does not stop it
     let mut stdout = child.stdout.take()?;
+    // the listing comes in the console's code page, not UTF-8, on a Windows in another language
     let reader = thread::spawn(move || {
-        let mut listing = String::new();
-        stdout.read_to_string(&mut listing).map(|_| listing)
+        let mut listing = Vec::new();
+        stdout.read_to_end(&mut listing).map(|_| String::from_utf8_lossy(&listing).into_owned())
     });
     let deadline = Instant::now() + Duration::from_secs(3);
     while child.try_wait().ok()?.is_none() {

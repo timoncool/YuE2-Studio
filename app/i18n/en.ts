@@ -1855,6 +1855,7 @@ export const en = {
     updateSettingsEntry: "What changed in this release",
     updateSettingsHint: "The engines and models this release updates, adds and no longer needs",
     updateDone: "Update done: the new engines and models are in place, the old ones are removed",
+    updateRestartToApply: "Karaoke's engine updates after a restart of the studio: the earlier one stays in use until then",
     updateFailed: "The update stopped: {error}. What it downloaded stays; press Update to carry on.",
     updateWhyCrisperwhisper: "Karaoke and the dataset lyrics are heard by CrisperWhisper 2.0 turbo in the audio.cpp server instead of Faster-Whisper, with a time for every word",
     updateWhyTranscribeAvx2: "Parakeet's engine runs on any 64-bit processor and no longer closes the studio on processors without AVX-512",
