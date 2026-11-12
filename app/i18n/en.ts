@@ -1779,6 +1779,8 @@ export const en = {
     karaokeEditTime: 'Line start, mm:ss.cc',
     karaokeEditText: 'Line text',
     karaokeEditBadTime: 'Write each start as mm:ss.cc, for example 01:05.25.',
+    cardMemoryShort: 'Out of video memory',
+    cardMemoryShortHint: 'The card\'s memory is full, so the driver uses the computer\'s memory, which is tens of times slower. Fewer tracks per request, a smaller model set or a shorter song fit the card.',
     assistStagePreparing: 'Preparing the request',
     assistStageSent: 'Sent to the model',
     assistStageWriting: 'The model is writing',

@@ -269,6 +269,10 @@ export function useGenerations({ enabled, notify, onFinished }: GenerationOption
         return next;
       });
     }
+    const short = new Set(listed.filter(job => job.card_memory_short).map(job => job.id));
+    if (cards.some(entry => entry.jobId && short.has(entry.jobId) && !entry.memoryShort)) {
+      setCards(prev => prev.map(entry => (entry.jobId && short.has(entry.jobId) && !entry.memoryShort ? { ...entry, memoryShort: true } : entry)));
+    }
     // a job that left the list finished, failed or was stopped elsewhere
     for (const entry of [...waiting, ...leftEarly.current.values()]) {
       if (entry.jobId && entry.isGenerating && !running.has(entry.jobId)) void settle(entry);

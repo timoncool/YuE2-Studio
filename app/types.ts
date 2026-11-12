@@ -30,6 +30,8 @@ export interface Song {
   stage?: string;
   /** The running stage's counter, e.g. `57/64 · ~2:50`. */
   stageDetail?: string;
+  /** The card's memory is full and the driver lends the engine the computer's memory: the song crawls. */
+  memoryShort?: boolean;
   generationParams?: any;
   tags: string[];
   audioUrl?: string;
@@ -227,6 +229,8 @@ export interface YueJob {
   songs?: YueJobSong[];
   /** How the lyrics were laid along a score that came without sections. */
   laid?: { seconds: number; ceiling: number; crowded: { ratio: number; notes: number; syllables: number } | null };
+  /** The card's memory ran out and the driver lent the engine the computer's memory. */
+  card_memory_short?: boolean;
 }
 
 /** What the engine log says the running job is doing. */

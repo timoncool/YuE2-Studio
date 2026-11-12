@@ -1188,6 +1188,7 @@ const SongItem: React.FC<SongItemProps> = ({
                             {song.queuePosition ? `#${song.queuePosition}` : (t(song.stage as TranslationKey) || song.stage || t('creating') || 'Creating...')}
                         </span>
                         {!song.queuePosition && song.stageDetail && <span className="text-[10px] text-zinc-500">{song.stageDetail}</span>}
+                        {song.memoryShort && <span className="text-[10px] text-amber-500" title={t('cardMemoryShortHint')}>{t('cardMemoryShort')}</span>}
                         {onCancelJob && (
                             <button
                                 onClick={(e) => { e.stopPropagation(); onCancelJob(); }}

@@ -32,6 +32,7 @@ mod model_manager;
 mod hardware;
 mod request_log;
 mod resources;
+mod gpu_memory;
 mod chunked;
 mod separation;
 mod midi;
@@ -151,6 +152,8 @@ struct AppState {
     /// memory steps down from the cache it was made with, not from one another lost song already stepped to.
     running_max_seq: Arc<RwLock<u32>>,
     job_max_seq: Arc<RwLock<HashMap<String, u32>>>,
+    /// The tracks of one request the running engine was started with, when fewer than Settings asks fit its card.
+    running_max_batch: Arc<RwLock<Option<u32>>>,
     /// Songs lost together decide their step one at a time.
     memory_retry_lock: Arc<tokio::sync::Mutex<()>>,
     /// Audio to MIDI: the transcriber and its weights, the run at work or the
@@ -403,6 +406,10 @@ struct MusicJob {
     /// How the lyrics were laid along a score that came without sections.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     laid: Option<Value>,
+    /// The card's memory ran out while the song was made and the driver lent the engine the computer's own memory,
+    /// which makes it many times slower.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    card_memory_short: bool,
 }
 
 impl MusicJob {
@@ -482,6 +489,7 @@ fn job_from_stored(stored: library::StoredJob, status: MusicJobStatus, message: 
         params: None,
         playlist_id: stored.playlist_id,
         laid: None,
+        card_memory_short: false,
     }
 }
 
@@ -512,6 +520,11 @@ const CARD_RESERVE_GIB: f64 = 1.5;
 /// The shortest acoustic chunk the studio asks for, and the step it is sized in.
 const NAR_CHUNK_MIN: u32 = 1024;
 const NAR_CHUNK_STEP: u32 = 256;
+/// What a set keeps on the card beside its KV cache with one track, by a part of its weights' file name and "keep
+/// models loaded": the peak less the desktop's share and the stage's cache, measured on the card.
+const SET_RESIDENT_GIB: &[(&str, bool, f64)] = &[];
+/// What the tracks of a request leave free on the card, for the driver and the peaks between two readings.
+const TRACKS_RESERVE_GIB: f64 = 1.0;
 
 /// Songs the studio was closed on are started again, oldest first. The old
 /// job stays as `cancelled`, its message naming the job that took its place.
@@ -904,6 +917,30 @@ impl EngineOptions {
         Some(stepped.max(NAR_CHUNK_MIN))
     }
 
+    /// The most tracks of one request inside `free_gib`: the set's `resident_gib`, `kv_gib` of cache for each track
+    /// and the reserve; one at least, never more than `wanted`.
+    fn tracks_that_fit(free_gib: f64, resident_gib: f64, kv_gib: f64, wanted: u32) -> u32 {
+        let wanted = wanted.max(1);
+        if kv_gib <= 0.0 {
+            return wanted;
+        }
+        let fits = ((free_gib - resident_gib - TRACKS_RESERVE_GIB) / kv_gib).floor().max(1.0);
+        (fits as u32).min(wanted)
+    }
+
+    /// The tracks of one request this start takes when the number from Settings does not fit what the card has free:
+    /// the set, a KV cache for each track and the reserve. `None` when the number from Settings fits, or the set was
+    /// not measured.
+    fn tracks_for_card(&self, backbone: &std::path::Path, free_gib: f64) -> Option<u32> {
+        const GIB: f64 = 1024.0 * 1024.0 * 1024.0;
+        let name = backbone.file_name()?.to_string_lossy().to_ascii_uppercase();
+        let resident = SET_RESIDENT_GIB.iter().find(|(set, kept, _)| name.contains(set) && *kept == self.keep_loaded).map(|(_, _, gib)| *gib)?;
+        let kv = f64::from(self.effective_max_seq(Some(backbone)).unwrap_or(MODEL_CONTEXT)) * KV_BYTES_PER_TOKEN / GIB;
+        let wanted = self.effective_max_batch();
+        let fits = Self::tracks_that_fit(free_gib, resident, kv, wanted);
+        (fits < wanted).then_some(fits)
+    }
+
     /// Which card and which weights a fitted KV cache belongs to: another card or another set starts again from
     /// the full context.
     fn fitted_key(backbone: &std::path::Path) -> String {
@@ -1187,6 +1224,7 @@ pub async fn serve() -> anyhow::Result<()> {
         memory_retries: Arc::new(RwLock::new(HashMap::new())),
         running_max_seq: Arc::new(RwLock::new(MODEL_CONTEXT)),
         job_max_seq: Arc::new(RwLock::new(HashMap::new())),
+        running_max_batch: Arc::new(RwLock::new(None)),
         memory_retry_lock: Arc::new(tokio::sync::Mutex::new(())),
         midi: Arc::new(midi::Transcriber::new(&studio_data_root().unwrap_or_else(|| std::path::PathBuf::from(".")), acpp.clone())),
         midi_run: Arc::new(RwLock::new(None)),
@@ -4909,6 +4947,8 @@ async fn engine_options(State(state): State<AppState>) -> Json<Value> {
             },
             "flash_attention": !launched.disable_flash_attention,
             "nar_chunk_seconds": launched.nar_chunk.map(|frames| (f64::from(frames) / SEMANTIC_FRAMES_PER_SECOND).round() as u64),
+            // fewer tracks than Settings asks: that many fit the card's memory when the engine started
+            "max_batch_for_card": launched.max_batch.filter(|tracks| *tracks < options.effective_max_batch()),
         })
     });
     Json(serde_json::json!({
@@ -5149,7 +5189,7 @@ async fn start_engine_again(state: &AppState) -> Result<(), String> {
     }
     let mut last_error = String::new();
     for (index, device) in chain.iter().copied().enumerate() {
-        let attempt = EngineOptions { backend: device, ..options.clone() };
+        let mut attempt = EngineOptions { backend: device, ..options.clone() };
         let cuda = attempt.cuda_build();
         if !state.engine_runtime.is_ready(cuda) {
             state
@@ -5175,6 +5215,13 @@ async fn start_engine_again(state: &AppState) -> Result<(), String> {
                 music_engine::yue_server::note_in_log(&format!("KV cache {fitted}, fitted after the card ran out of memory on a song"));
             }
         }
+        // read before the engine takes any: what other programs keep on the card stays theirs
+        let free_gib = resources::nvidia_gpus().and_then(|gpus| gpus.first().map(|gpu| gpu.vram_total_mb.saturating_sub(gpu.vram_used_mb) as f64 / 1024.0));
+        let tracks = free_gib.and_then(|free| attempt.tracks_for_card(&backbone, free));
+        if let Some(tracks) = tracks {
+            music_engine::yue_server::note_in_log(&format!("{tracks} tracks a request instead of {}: that many fit the card's free memory", attempt.effective_max_batch()));
+            attempt.max_batch = Some(tracks);
+        }
         let config = engine_location(attempt, Some(&backbone))
             .resolve(models)
             .map_err(|error| format!("the local engine runtime was not found: {error}"))?;
@@ -5182,6 +5229,7 @@ async fn start_engine_again(state: &AppState) -> Result<(), String> {
         match tokio::task::block_in_place(|| engine.ensure_started(std::time::Duration::from_secs(60))) {
             Ok(_) => {
                 *state.running_max_seq.write().await = engine.config().options.max_seq.unwrap_or(MODEL_CONTEXT);
+                *state.running_max_batch.write().await = tracks;
                 *supervisor = Some(engine);
                 *state.active_device.write().await = Some(device);
                 if options.backend == music_engine::yue_server::ComputeBackend::Auto {
@@ -9053,6 +9101,13 @@ async fn create_music_job(
     submit_music_job(state, request, 0).await
 }
 
+/// The tracks one request may ask for: the number from Settings, or fewer when the running engine took fewer for
+/// its card.
+async fn track_limit(state: &AppState) -> u32 {
+    let saved = state.engine_options.read().await.effective_max_batch();
+    state.running_max_batch.read().await.map_or(saved, |running| running.min(saved))
+}
+
 /// The song a cover is made of. A new request refuses a source in the bin; a cover resumed after a restart was
 /// started before its source went there and keeps it.
 fn cover_source(library: &library::Library, id: &str, resumed: bool) -> Result<library::Song, (StatusCode, String)> {
@@ -9101,7 +9156,7 @@ async fn submit_music_job(state: AppState, mut request: CreateMusicJobRequest, a
     if let Some(missing) = request.adapters.iter().find(|adapter| !state.adapters.exists(&adapter.id)).map(|adapter| adapter.id.clone()) {
         return (StatusCode::BAD_REQUEST, Json(failed_request_job(request, engine_id, SongError::AdapterMissing(missing))));
     }
-    let max_batch = state.engine_options.read().await.effective_max_batch();
+    let max_batch = track_limit(&state).await;
     let mut body = match yue_request_from(&request, max_batch) {
         Ok(value) => value,
         Err(error) => return (StatusCode::BAD_REQUEST, Json(failed_request_job(request, engine_id, error))),
@@ -9150,6 +9205,7 @@ async fn submit_music_job(state: AppState, mut request: CreateMusicJobRequest, a
                 params: None,
                 playlist_id: request.playlist_id.clone(),
                 laid,
+                card_memory_short: false,
             };
             state.jobs.write().await.insert(job.id.clone(), job.clone());
             let running = *state.running_max_seq.read().await;
@@ -9243,6 +9299,7 @@ async fn submit_replay_job(state: AppState, request: ReplayMusicJobRequest, atte
         params: None,
         playlist_id: None,
         laid: None,
+        card_memory_short: false,
     };
     if let Some(song_id) = &request.song_id {
         if let Some(original) = state.library.get_song(song_id).map_err(|error| api_error(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))? {
@@ -9549,6 +9606,34 @@ fn add_to_playlist(library: &library::Library, playlist_id: &str, songs: impl It
     Ok(())
 }
 
+/// Says once on a song, in the engine log and on its card, that the card's memory is full and the driver lends the
+/// engine the computer's own memory: the song goes on many times slower instead of failing.
+async fn watch_card_memory(state: AppState, job_id: String) {
+    let mut every = tokio::time::interval(std::time::Duration::from_secs(15));
+    loop {
+        every.tick().await;
+        let Some(pid) = state.engine.try_lock().ok().and_then(|engine| engine.as_ref().and_then(|engine| engine.pid())) else { continue };
+        let reading = tokio::task::spawn_blocking(move || {
+            let card = resources::nvidia_gpus()?.into_iter().next()?;
+            Some((gpu_memory::shared_usage(pid)?, card.vram_used_mb, card.vram_total_mb))
+        })
+        .await
+        .ok()
+        .flatten();
+        let Some((shared, used, total)) = reading else { continue };
+        if gpu_memory::spilling(shared, used, total) {
+            music_engine::yue_server::note_in_log(&format!(
+                "the card's memory is full ({used} of {total} MiB) and the driver lends the engine {} MiB of the computer's memory: the song goes many times slower; fewer tracks, a smaller set or a shorter song fit the card",
+                shared / (1024 * 1024)
+            ));
+            if let Some(job) = state.jobs.write().await.get_mut(&job_id) {
+                job.card_memory_short = true;
+            }
+            return;
+        }
+    }
+}
+
 /// Follows one engine job to its end and imports what it made.
 ///
 /// The service owns this, not the window: a track finished while the
@@ -9563,7 +9648,9 @@ fn spawn_job_watcher(state: AppState, job_id: String) {
         if let Some(hub) = &state.hub {
             hub.task_running(true);
         }
+        let memory = tokio::spawn(watch_card_memory(state.clone(), job_id.clone()));
         follow_job(&state, &job_id, &mut started).await;
+        memory.abort();
         if let Some(hub) = &state.hub {
             hub.task_running(false);
         }
@@ -10096,7 +10183,7 @@ async fn local_music_model_catalog(
     };
     if let Value::Object(fields) = &mut catalog {
         fields.insert("transcriber".into(), transcriber.map(|path| Value::String(path.display().to_string())).unwrap_or(Value::Null));
-        fields.insert("max_batch".into(), Value::from(state.engine_options.read().await.effective_max_batch()));
+        fields.insert("max_batch".into(), Value::from(track_limit(&state).await));
     }
     Ok(Json(LocalMusicModelCatalog { engine_id, catalog }))
 }
@@ -10193,7 +10280,7 @@ async fn compose_score(
     State(state): State<AppState>,
     Json(request): Json<ComposeScoreRequest>,
 ) -> Result<(StatusCode, Json<ScoreJob>), (StatusCode, Json<ApiError>)> {
-    let maximum = state.engine_options.read().await.effective_max_batch();
+    let maximum = track_limit(&state).await;
     if request.lm_batch_size.unwrap_or(1) > maximum { return Err(api_error(StatusCode::BAD_REQUEST, format!("lm_batch_size exceeds the configured song limit {maximum}"))); }
     let body = compose_request_from(&request).map_err(|error| api_error(StatusCode::BAD_REQUEST, error))?;
     let remote = state
@@ -10825,6 +10912,7 @@ fn queued_not_configured_job(request: CreateMusicJobRequest, engine_id: String) 
         params: None,
         playlist_id: None,
         laid: None,
+        card_memory_short: false,
     }
 }
 
@@ -10852,6 +10940,7 @@ fn failed_request_job(request: CreateMusicJobRequest, engine_id: String, error: 
         params: error.code().map(|_| error.params()),
         playlist_id: None,
         laid: None,
+        card_memory_short: false,
     }
 }
 
@@ -11215,6 +11304,19 @@ mod tests {
         assert!(arguments.windows(2).any(|pair| pair == ["--nar-halo", "750"]), "{arguments:?}");
         let off = EngineOptions { chunk_overlap_seconds: Some(0), ..EngineOptions::default() };
         assert!(!off.to_engine(None).arguments().iter().any(|argument| argument == "--nar-halo"));
+    }
+
+    /// A request takes as many tracks as the card holds beside the set: a full-context cache of 2.625 GiB a track
+    /// on a 24 GB card with 2.2 GB of the desktop leaves room for fewer than 8 BF16 tracks, and 8 GB still makes one.
+    #[test]
+    fn a_request_takes_the_tracks_the_card_holds() {
+        const GIB: f64 = 1024.0 * 1024.0 * 1024.0;
+        let kv = f64::from(MODEL_CONTEXT) * KV_BYTES_PER_TOKEN / GIB;
+        let bf16 = EngineOptions::tracks_that_fit(24.0 - 2.2, 4.4, kv, 8);
+        assert!((1..8).contains(&bf16), "{bf16}");
+        assert_eq!(EngineOptions::tracks_that_fit(8.0 - 1.5, 2.6, kv, 1), 1);
+        assert_eq!(EngineOptions::tracks_that_fit(4.0, 2.6, kv, 4), 1, "one track at least");
+        assert_eq!(EngineOptions::tracks_that_fit(48.0, 2.6, kv, 2), 2, "never more than asked");
     }
 
     /// Extra launch arguments are kept as typed and reach the engine last,

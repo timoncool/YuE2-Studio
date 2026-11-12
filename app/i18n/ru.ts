@@ -1778,6 +1778,8 @@ export const ru = {
     karaokeEditTime: 'Начало строки, мм:сс.сс',
     karaokeEditText: 'Текст строки',
     karaokeEditBadTime: 'Начало пишется как мм:сс.сс, например 01:05.25.',
+    cardMemoryShort: 'Не хватает видеопамяти',
+    cardMemoryShortHint: 'Видеопамяти не хватает, драйвер использует оперативную — это в десятки раз медленнее. Уменьшите число треков, набор моделей или длину.',
     assistStagePreparing: 'Готовлю запрос',
     assistStageSent: 'Запрос ушёл модели',
     assistStageWriting: 'Модель пишет',

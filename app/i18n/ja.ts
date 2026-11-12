@@ -1774,6 +1774,8 @@ export const ja = {
     karaokeEditTime: '行の開始 mm:ss.cc',
     karaokeEditText: '行のテキスト',
     karaokeEditBadTime: '開始は mm:ss.cc の形で、例えば 01:05.25 と書きます。',
+    cardMemoryShort: 'ビデオメモリ不足',
+    cardMemoryShortHint: 'グラフィックカードのメモリが足りず、ドライバーがメインメモリを使っています。数十倍遅くなります。トラック数、モデルセット、曲の長さを減らしてください。',
     assistStagePreparing: 'リクエストを準備中',
     assistStageSent: 'モデルに送信しました',
     assistStageWriting: 'モデルが書いています',

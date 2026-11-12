@@ -105,7 +105,7 @@ fn unified_memory_gpu(used_mb: u64, total_mb: u64) -> Vec<GpuSnapshot> {
         .collect()
 }
 
-fn nvidia_gpus() -> Option<Vec<GpuSnapshot>> {
+pub(crate) fn nvidia_gpus() -> Option<Vec<GpuSnapshot>> {
     // the card the studio runs on, when one was chosen: that is the one to watch
     let output = dub_core::proc::host_command("nvidia-smi")
         .args(crate::hardware::chosen_card())

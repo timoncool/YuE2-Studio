@@ -506,6 +506,11 @@ impl YueServerSupervisor {
         &self.config
     }
 
+    /// The engine process this supervisor started, while it has one.
+    pub fn pid(&self) -> Option<u32> {
+        self.child.as_ref().map(Child::id)
+    }
+
     pub fn is_healthy(&self, timeout: Duration) -> bool {
         health_check(&self.config.host, self.config.port, timeout)
     }

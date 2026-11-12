@@ -1774,6 +1774,8 @@ export const ko = {
     karaokeEditTime: '줄 시작, mm:ss.cc',
     karaokeEditText: '줄 텍스트',
     karaokeEditBadTime: '시작은 mm:ss.cc 형식으로, 예: 01:05.25.',
+    cardMemoryShort: '비디오 메모리 부족',
+    cardMemoryShortHint: '그래픽카드 메모리가 부족해 드라이버가 시스템 메모리를 쓰고 있습니다. 수십 배 느립니다. 트랙 수, 모델 세트 또는 곡 길이를 줄이세요.',
     assistStagePreparing: '요청 준비 중',
     assistStageSent: '모델에 전송됨',
     assistStageWriting: '모델이 작성 중',

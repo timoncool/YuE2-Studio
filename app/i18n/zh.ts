@@ -1774,6 +1774,8 @@ export const zh = {
     karaokeEditTime: '行开始，mm:ss.cc',
     karaokeEditText: '行文字',
     karaokeEditBadTime: '开始时间写成 mm:ss.cc，例如 01:05.25。',
+    cardMemoryShort: '显存不足',
+    cardMemoryShortHint: '显存不足，驱动正在使用内存，速度会慢几十倍。请减少每次的曲目数、模型组或歌曲长度。',
     assistStagePreparing: '正在准备请求',
     assistStageSent: '已发送给模型',
     assistStageWriting: '模型正在生成',
