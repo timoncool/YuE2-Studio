@@ -438,12 +438,16 @@ can be dropped into by hand at:
 
 A file placed by hand with the exact catalogue name is recognised and never downloaded again.
 
-**Your own YuE2 model.** A YuE2-3B fine-tune in GGUF made for yue2.cpp, such as
-[goldhub/YuE2-RS-Finetunes](https://huggingface.co/goldhub/YuE2-RS-Finetunes), goes into
+**Your own YuE2 model.** A YuE2-3B fine-tune in GGUF made for yue2.cpp goes into
 `models\yue2-cpp\own\` and is chosen under Settings - Models - Your own YuE2 model; the engine then
 runs it in place of the set's backbone, with the set's VAE and transcriber. The studio does not
-download or check such a file, and its licence is its author's. With it the decoder companion stays
-off on Auto, and LoRA training and dataset preparation still run on the set's backbone.
+download or check a file you put there, and its licence is its author's. The same list has
+Community models: the merges of Ruach Studio's
+[YuE2-RS-Finetunes](https://huggingface.co/goldhub/YuE2-RS-Finetunes) in Q8_0 (3.8 GB) and Q6_K
+(2.9 GB), downloaded into that folder when chosen, pinned to revision `b371be9` and checked by
+SHA-256; their weights are under CC BY-NC-SA 4.0 (non-commercial, share-alike, credit the authors).
+With an own or community model the decoder companion stays off on Auto, and LoRA training and
+dataset preparation still run on the set's backbone.
 
 <details>
 <summary><b>Every file, with direct download links</b></summary>

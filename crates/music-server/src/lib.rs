@@ -1,6 +1,7 @@
 #[macro_use]
 pub mod studio_log;
 mod adapters;
+mod community;
 mod processing;
 mod vst;
 mod training;
@@ -99,6 +100,8 @@ struct AppState {
     selected_component_ids: Arc<RwLock<Option<Vec<String>>>>,
     /// The file in `models/yue2-cpp/own` that the engine runs in place of the set's backbone; none runs the set's.
     own_backbone: Arc<RwLock<Option<String>>>,
+    /// Downloads of community models (`community`) into `models/yue2-cpp/own`.
+    community_downloads: Arc<downloads::Downloader>,
     settings_path: PathBuf,
     openrouter_catalog: Arc<RwLock<OpenRouterCatalogState>>,
     library: library::Library,
@@ -1270,6 +1273,7 @@ pub async fn serve() -> anyhow::Result<()> {
     net::set(proxy);
     let (bind_to, network_keyed) = remote::start(persisted.as_ref().and_then(|settings| settings.network.clone()));
     let model_manager = ModelManager::from_environment()?;
+    let community_downloads = Arc::new(downloads::Downloader::new(model_manager.models_directory().join("own")));
     let persisted_components = persisted
         .as_ref()
         .and_then(|settings| settings.selected_component_ids.clone())
@@ -1355,6 +1359,7 @@ pub async fn serve() -> anyhow::Result<()> {
         selected_profile_id: Arc::new(RwLock::new(selected_profile_id)),
         selected_component_ids: Arc::new(RwLock::new(selected_component_ids)),
         own_backbone: Arc::new(RwLock::new(persisted.as_ref().and_then(|settings| settings.own_backbone.clone()))),
+        community_downloads,
         settings_path,
         openrouter_catalog: Arc::new(RwLock::new(OpenRouterCatalogState::default())),
         library: library::Library::open_default()?,
@@ -1596,6 +1601,8 @@ pub async fn serve() -> anyhow::Result<()> {
         .route("/setup/select", post(setup_select))
         .route("/setup/own-model", get(own_model_status).put(own_model_select))
         .route("/setup/own-model/reveal", post(own_model_reveal))
+        .route("/setup/own-model/cancel", post(own_model_cancel))
+        .route("/setup/own-model/remove", post(own_model_remove))
         .route("/setup/kv-cache-notice/seen", post(kv_cache_notice_seen))
         .route("/setup/cancel", post(setup_cancel))
         .route("/setup/update", get(setup_update))
@@ -8885,17 +8892,41 @@ async fn setup_select(
     Ok(Json(serde_json::to_value(compose_setup_status(&state, manager_status).await).unwrap_or(Value::Null)))
 }
 
-/// The person's own YuE2 files in `models/yue2-cpp/own`, the one chosen, and whether that one is still there.
+/// The person's own YuE2 files in `models/yue2-cpp/own`, the one chosen, and whether that one is still there; the
+/// community models with each file's size and whether it is downloaded, the quantisation the card takes, and the
+/// download under way.
 async fn own_model_status(State(state): State<AppState>) -> Json<Value> {
     let folder = own_models_folder(&state);
     let files = own_model_files(&folder);
     let selected = state.own_backbone.read().await.clone();
     let missing = selected.as_ref().is_some_and(|name| !files.iter().any(|(file, _)| file == name));
+    let card_quant = community::file(community::catalog()[0].id, None, hardware::hardware().total_vram_gb).map(|file| file.quant);
+    let community: Vec<Value> = community::catalog()
+        .iter()
+        .map(|model| {
+            serde_json::json!({
+                "id": model.id,
+                "name": model.name,
+                "author": model.author,
+                "page": model.page,
+                "license": model.license,
+                "files": model.files.iter().map(|file| serde_json::json!({
+                    "quant": file.quant,
+                    "file": file.asset.relative_path,
+                    "bytes": file.asset.bytes,
+                    "installed": files.iter().any(|(name, _)| name == file.asset.relative_path),
+                })).collect::<Vec<_>>(),
+            })
+        })
+        .collect();
     Json(serde_json::json!({
         "folder": folder.display().to_string(),
         "files": files.iter().map(|(name, bytes)| serde_json::json!({ "name": name, "bytes": bytes })).collect::<Vec<_>>(),
         "selected": selected,
         "missing": missing,
+        "community": community,
+        "card_quant": card_quant,
+        "download": state.community_downloads.active().await,
     }))
 }
 
@@ -8904,14 +8935,47 @@ struct OwnModelRequest {
     /// A file name in `models/yue2-cpp/own`; none or empty runs the set's own backbone again.
     #[serde(default)]
     file: Option<String>,
+    /// A community model by its catalog id, downloaded into the folder first when it is not there.
+    #[serde(default)]
+    community: Option<String>,
+    /// Its quantisation, Q8_0 or Q6_K; none takes the card's.
+    #[serde(default)]
+    quant: Option<String>,
 }
 
 /// Runs the engine on one of the person's own files in place of the set's backbone, or on the set's again; the engine
-/// starts again on the change, as it does when the set changes.
+/// starts again on the change, as it does when the set changes. A community model (`community`, with `quant` or the
+/// card's) already in the folder is chosen as its file; one not there yet is downloaded into it first and chosen
+/// once its digest matches the pin.
 async fn own_model_select(State(state): State<AppState>, Json(request): Json<OwnModelRequest>) -> Result<Json<Value>, (StatusCode, Json<ApiError>)> {
-    let chosen = request.file.map(|name| name.trim().to_string()).filter(|name| !name.is_empty());
+    let folder = own_models_folder(&state);
+    let chosen = if let Some(id) = request.community.as_deref().filter(|id| !id.trim().is_empty()) {
+        let file = community::file(id.trim(), request.quant.as_deref(), hardware::hardware().total_vram_gb)
+            .ok_or_else(|| api_error(StatusCode::BAD_REQUEST, format!("{id} in {} is not a community model", request.quant.as_deref().unwrap_or("the card's quantisation"))))?;
+        if !state.community_downloads.is_installed(&file.asset) {
+            if state.community_downloads.active().await.is_some_and(|progress| !progress.done) {
+                return Err(api_error(StatusCode::CONFLICT, "a community model is downloading; wait for it or cancel it".into()));
+            }
+            let background = state.clone();
+            tokio::spawn(async move {
+                match background.community_downloads.install_all("community", &[&file.asset]).await {
+                    Ok(()) => {
+                        *background.own_backbone.write().await = Some(file.asset.relative_path.to_string());
+                        if let Err(error) = persist_studio_settings(&background).await {
+                            studio_log!("[ERROR] the own model {} was downloaded but not saved as chosen: {error:#}", file.asset.relative_path);
+                        }
+                        reload_engine_if_models_changed(&background).await;
+                    }
+                    Err(error) => studio_log!("[ERROR] the community model {} did not download: {error:#}", file.asset.relative_path),
+                }
+            });
+            return Ok(own_model_status(State(state)).await);
+        }
+        Some(file.asset.relative_path.to_string())
+    } else {
+        request.file.map(|name| name.trim().to_string()).filter(|name| !name.is_empty())
+    };
     if let Some(name) = &chosen {
-        let folder = own_models_folder(&state);
         if !own_model_files(&folder).iter().any(|(file, _)| file == name) {
             return Err(api_error(StatusCode::BAD_REQUEST, format!("{name} is not a GGUF file in {}", folder.display())));
         }
@@ -8924,6 +8988,37 @@ async fn own_model_select(State(state): State<AppState>, Json(request): Json<Own
         let state = state.clone();
         tokio::spawn(async move { reload_engine_if_models_changed(&state).await });
     }
+    Ok(own_model_status(State(state)).await)
+}
+
+/// Stops the download of a community model; the part already fetched resumes on the next choice.
+async fn own_model_cancel(State(state): State<AppState>) -> Json<Value> {
+    let cancelled = state.community_downloads.cancel_for("community").await;
+    Json(serde_json::json!({ "cancelled": cancelled }))
+}
+
+#[derive(Debug, Deserialize)]
+struct OwnModelRemoveRequest {
+    file: String,
+}
+
+/// Moves one file of the own-models folder to the system's recycle bin; the engine runs the set's model again when
+/// it was the chosen one.
+async fn own_model_remove(State(state): State<AppState>, Json(request): Json<OwnModelRemoveRequest>) -> Result<Json<Value>, (StatusCode, Json<ApiError>)> {
+    let folder = own_models_folder(&state);
+    let name = request.file.trim().to_string();
+    if !own_model_files(&folder).iter().any(|(file, _)| *file == name) {
+        return Err(api_error(StatusCode::BAD_REQUEST, format!("{name} is not a GGUF file in {}", folder.display())));
+    }
+    let was_chosen = state.own_backbone.read().await.as_deref() == Some(name.as_str());
+    if was_chosen {
+        *state.own_backbone.write().await = None;
+        persist_studio_settings(&state)
+            .await
+            .map_err(|error| api_error(StatusCode::INTERNAL_SERVER_ERROR, format!("the choice was not saved: {error:#}")))?;
+        reload_engine_if_models_changed(&state).await;
+    }
+    trash::delete(folder.join(&name)).map_err(|error| api_error(StatusCode::INTERNAL_SERVER_ERROR, format!("{name} did not go to the recycle bin: {error}")))?;
     Ok(own_model_status(State(state)).await)
 }
 

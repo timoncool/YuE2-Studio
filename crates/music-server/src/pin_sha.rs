@@ -90,6 +90,9 @@ pub fn sha256(url: &str) -> Option<&'static str> {
     if let Some(model) = dub_tcpp::MODELS.iter().find(|model| model.download.url == url) {
         return Some(model.download.sha256);
     }
+    if let Some(sha256) = crate::community::sha256(url) {
+        return Some(sha256);
+    }
     crate::acpp::BUILDS
         .iter()
         .filter_map(|build| build.server())
@@ -220,6 +223,7 @@ mod tests {
         urls.extend(crate::training::pack().iter().map(|asset| asset.url));
         urls.extend(crate::training::listen_pack().iter().map(|asset| asset.url));
         urls.extend(crate::midi::SIZES.iter().flat_map(crate::midi::weight_assets).map(|asset| asset.url));
+        urls.extend(crate::community::catalog().iter().flat_map(|model| &model.files).map(|file| file.asset.url));
         let branches: Vec<&str> = urls.into_iter().filter(|url| url.contains("/resolve/main/") || url.contains("/raw/main/")).collect();
         assert!(branches.is_empty(), "downloads that follow a branch instead of a pinned revision: {branches:#?}");
     }

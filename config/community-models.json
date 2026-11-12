@@ -1,0 +1,112 @@
+{
+  "version": 1,
+  "models": [
+    {
+      "id": "rs-tw-2.0x0.75",
+      "author": "Ruach Studio",
+      "page": "https://huggingface.co/goldhub/YuE2-RS-Finetunes",
+      "license": "CC BY-NC-SA 4.0",
+      "name": {
+        "en": "Ruach Studio TW 2.0×0.75 (the authors' choice)",
+        "ru": "Ruach Studio TW 2.0×0.75 (выбор авторов)",
+        "zh": "Ruach Studio TW 2.0×0.75（作者推荐）",
+        "ja": "Ruach Studio TW 2.0×0.75（作者のおすすめ）",
+        "ko": "Ruach Studio TW 2.0×0.75 (제작자 추천)"
+      },
+      "files": [
+        { "quant": "Q8_0", "file": "YuE2-3B-RS-TW-2.0x0.75-Q8_0.gguf", "bytes": 3810233472, "sha256": "24d965f6f63656b55e5ff6f004627235b708293e2af9058feb162448197f83c4" },
+        { "quant": "Q6_K", "file": "YuE2-3B-RS-TW-2.0x0.75-Q6_K.gguf", "bytes": 2943332480, "sha256": "fed75c6ffe7c65e30e2a11b4002c7599d214cf514c9cd40db15456e8531da701" }
+      ]
+    },
+    {
+      "id": "rs-tw-2.0x0.9",
+      "author": "Ruach Studio",
+      "page": "https://huggingface.co/goldhub/YuE2-RS-Finetunes",
+      "license": "CC BY-NC-SA 4.0",
+      "name": { "en": "Ruach Studio TW 2.0×0.9", "ru": "Ruach Studio TW 2.0×0.9", "zh": "Ruach Studio TW 2.0×0.9", "ja": "Ruach Studio TW 2.0×0.9", "ko": "Ruach Studio TW 2.0×0.9" },
+      "files": [
+        { "quant": "Q8_0", "file": "YuE2-3B-RS-TW-2.0x0.9-Q8_0.gguf", "bytes": 3810233472, "sha256": "68bf186aaa3277094c07112ed3f491f8527633feb6f6df9628de650236fef66c" },
+        { "quant": "Q6_K", "file": "YuE2-3B-RS-TW-2.0x0.9-Q6_K.gguf", "bytes": 2943332480, "sha256": "96a56a99ded0c53f35a29e3690d56c052364f880d2fd2ebc603ccb5f00b8fc14" }
+      ]
+    },
+    {
+      "id": "rs-fw-0.7x0.75",
+      "author": "Ruach Studio",
+      "page": "https://huggingface.co/goldhub/YuE2-RS-Finetunes",
+      "license": "CC BY-NC-SA 4.0",
+      "name": { "en": "Ruach Studio FW 0.7×0.75", "ru": "Ruach Studio FW 0.7×0.75", "zh": "Ruach Studio FW 0.7×0.75", "ja": "Ruach Studio FW 0.7×0.75", "ko": "Ruach Studio FW 0.7×0.75" },
+      "files": [
+        { "quant": "Q8_0", "file": "YuE2-3B-RS-FW-0.7x0.75-Q8_0.gguf", "bytes": 3810233216, "sha256": "65c06120e2453005d66cf3bc1ac103bcb7d43c11e8902590d62870dfc3e267de" },
+        { "quant": "Q6_K", "file": "YuE2-3B-RS-FW-0.7x0.75-Q6_K.gguf", "bytes": 2943332224, "sha256": "a582e7724c5bba6d732e1855f9a27210029111741348792845a1a6d0bfaa22de" }
+      ]
+    },
+    {
+      "id": "rs-fw-1.5x0.75",
+      "author": "Ruach Studio",
+      "page": "https://huggingface.co/goldhub/YuE2-RS-Finetunes",
+      "license": "CC BY-NC-SA 4.0",
+      "name": { "en": "Ruach Studio FW 1.5×0.75", "ru": "Ruach Studio FW 1.5×0.75", "zh": "Ruach Studio FW 1.5×0.75", "ja": "Ruach Studio FW 1.5×0.75", "ko": "Ruach Studio FW 1.5×0.75" },
+      "files": [
+        { "quant": "Q8_0", "file": "YuE2-3B-RS-FW-1.5x0.75-Q8_0.gguf", "bytes": 3810233216, "sha256": "3e94b552d2c11273e5808f64c66b21ec43b02d8cd09cc36475c8b3f518f70de5" },
+        { "quant": "Q6_K", "file": "YuE2-3B-RS-FW-1.5x0.75-Q6_K.gguf", "bytes": 2943332224, "sha256": "849fb6a3383ba41002234e56e764572ecf90d57fa8aa59469550c6d0c1dda76b" }
+      ]
+    },
+    {
+      "id": "rs-fw-2.4x0.75",
+      "author": "Ruach Studio",
+      "page": "https://huggingface.co/goldhub/YuE2-RS-Finetunes",
+      "license": "CC BY-NC-SA 4.0",
+      "name": { "en": "Ruach Studio FW 2.4×0.75", "ru": "Ruach Studio FW 2.4×0.75", "zh": "Ruach Studio FW 2.4×0.75", "ja": "Ruach Studio FW 2.4×0.75", "ko": "Ruach Studio FW 2.4×0.75" },
+      "files": [
+        { "quant": "Q8_0", "file": "YuE2-3B-RS-FW-2.4x0.75-Q8_0.gguf", "bytes": 3810233216, "sha256": "25793826e9f28c8894b4f7c7f6d3ed54256cf1fcc1966030ac7b1b6a5918baf3" },
+        { "quant": "Q6_K", "file": "YuE2-3B-RS-FW-2.4x0.75-Q6_K.gguf", "bytes": 2943332224, "sha256": "a7fd39079bdbae1b0b3960c63f8684585d33da60d06b27c0110ec5608c155487" }
+      ]
+    },
+    {
+      "id": "rs-fw-3.4x0.7",
+      "author": "Ruach Studio",
+      "page": "https://huggingface.co/goldhub/YuE2-RS-Finetunes",
+      "license": "CC BY-NC-SA 4.0",
+      "name": { "en": "Ruach Studio FW 3.4×0.7", "ru": "Ruach Studio FW 3.4×0.7", "zh": "Ruach Studio FW 3.4×0.7", "ja": "Ruach Studio FW 3.4×0.7", "ko": "Ruach Studio FW 3.4×0.7" },
+      "files": [
+        { "quant": "Q8_0", "file": "YuE2-3B-RS-FW-3.4x0.7-Q8_0.gguf", "bytes": 3810233184, "sha256": "e83e41fa07a499600a9dfbdb78fad23467218f96e4e55b227ea98e0abb9ca64b" },
+        { "quant": "Q6_K", "file": "YuE2-3B-RS-FW-3.4x0.7-Q6_K.gguf", "bytes": 2943332192, "sha256": "4579c1cf271d730ed68da51af9936115df455b7e234e7f2b6643298d5cb66ead" }
+      ]
+    },
+    {
+      "id": "rs-fw-3.4x0.75",
+      "author": "Ruach Studio",
+      "page": "https://huggingface.co/goldhub/YuE2-RS-Finetunes",
+      "license": "CC BY-NC-SA 4.0",
+      "name": { "en": "Ruach Studio FW 3.4×0.75", "ru": "Ruach Studio FW 3.4×0.75", "zh": "Ruach Studio FW 3.4×0.75", "ja": "Ruach Studio FW 3.4×0.75", "ko": "Ruach Studio FW 3.4×0.75" },
+      "files": [
+        { "quant": "Q8_0", "file": "YuE2-3B-RS-FW-3.4x0.75-Q8_0.gguf", "bytes": 3810233216, "sha256": "d80abea0e40b691e5dae6da9291f4dcc6bdd1d7a08a66893d0537d42e44c6246" },
+        { "quant": "Q6_K", "file": "YuE2-3B-RS-FW-3.4x0.75-Q6_K.gguf", "bytes": 2943332224, "sha256": "f65a01627ec895bc8ecb9e3c0b7467aad406a1c329816e24bda392652421bb6a" }
+      ]
+    },
+    {
+      "id": "rs-fw-4.0x0.65",
+      "author": "Ruach Studio",
+      "page": "https://huggingface.co/goldhub/YuE2-RS-Finetunes",
+      "license": "CC BY-NC-SA 4.0",
+      "name": { "en": "Ruach Studio FW 4.0×0.65", "ru": "Ruach Studio FW 4.0×0.65", "zh": "Ruach Studio FW 4.0×0.65", "ja": "Ruach Studio FW 4.0×0.65", "ko": "Ruach Studio FW 4.0×0.65" },
+      "files": [
+        { "quant": "Q8_0", "file": "YuE2-3B-RS-FW-4.0x0.65-Q8_0.gguf", "bytes": 3810233184, "sha256": "8fce54e7c3d91071d96ca12518c43a9f17399cdf81b64347634b588a154538a5" },
+        { "quant": "Q6_K", "file": "YuE2-3B-RS-FW-4.0x0.65-Q6_K.gguf", "bytes": 2943332192, "sha256": "1b05410c227c36ff83e57249e3ecd7ecf50e9987410032689e830ca11b226a7b" }
+      ]
+    },
+    {
+      "id": "rs-fw-4.0x0.7",
+      "author": "Ruach Studio",
+      "page": "https://huggingface.co/goldhub/YuE2-RS-Finetunes",
+      "license": "CC BY-NC-SA 4.0",
+      "name": { "en": "Ruach Studio FW 4.0×0.7", "ru": "Ruach Studio FW 4.0×0.7", "zh": "Ruach Studio FW 4.0×0.7", "ja": "Ruach Studio FW 4.0×0.7", "ko": "Ruach Studio FW 4.0×0.7" },
+      "files": [
+        { "quant": "Q8_0", "file": "YuE2-3B-RS-FW-4.0x0.7-Q8_0.gguf", "bytes": 3810233184, "sha256": "6666c5c0a27f1a336253d21dbedfbd2f4aa464b96cb77ee61af8f03f8745e312" },
+        { "quant": "Q6_K", "file": "YuE2-3B-RS-FW-4.0x0.7-Q6_K.gguf", "bytes": 2943332192, "sha256": "0d71f543560506a81ded5054c1aec4e9e8cc1637b097c24a4ea662bd67488a20" }
+      ]
+    }
+  ],
+  "repository": "goldhub/YuE2-RS-Finetunes",
+  "revision": "b371be93fe7320c7084813b4f5967a6820756a06"
+}
