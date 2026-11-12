@@ -349,7 +349,7 @@ async fn describe_style_of(state: &AppState, audio: std::path::PathBuf, lyrics: 
     crate::release_assistant_unless_kept(state).await;
     let hearing = listen::hearing(&crate::hardware::hardware(), crate::processor_chosen(state).await);
     let heard = async {
-        if hearing.on_card && crate::hardware::hardware().cuda == Some(crate::hardware::CudaBuild::Cuda13) {
+        if hearing.on_card && crate::hardware::hardware().card_cuda == Some(crate::hardware::CudaBuild::Cuda13) {
             state.engine_runtime.install_missing(Some(crate::hardware::CudaBuild::Cuda13)).await.context("install cuBLAS for the captioner")?;
         }
         // the card's cuBLAS goes on the captioner's path only when it runs on the card
@@ -796,7 +796,7 @@ async fn listen_branch(state: &AppState, job: &Job, style_items: &[&training::Da
         // the engine; on a card that build does not run, it runs on the processor
         // the processor chosen in Settings is kept to here too, without the card's cuBLAS
         let on_card = !crate::processor_chosen(state).await;
-        if on_card && crate::hardware::hardware().cuda == Some(crate::hardware::CudaBuild::Cuda13) {
+        if on_card && crate::hardware::hardware().card_cuda == Some(crate::hardware::CudaBuild::Cuda13) {
             state.engine_runtime.install_missing(Some(crate::hardware::CudaBuild::Cuda13)).await.context("install cuBLAS for the captioner")?;
         } else if on_card {
             update(&shared, |status| status.notices.push("listen_on_cpu"));
