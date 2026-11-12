@@ -7738,11 +7738,12 @@ async fn transcribe_to_midi(state: &AppState, size: &'static midi::Size, audio: 
         let mut live = midi::Events::default();
         let mut on_event = |artifacts: &[acpp_server::TaskArtifact]| {
             let mut chunks = None;
-            for artifact in artifacts {
+            // the notes and the progress come as MuScriptor's event JSON; the stream's other artifacts are the result's
+            for artifact in artifacts.iter().filter(|artifact| artifact.meta.get("format").and_then(Value::as_str) == Some("muscriptor-event-json")) {
                 match live.take_streamed(&artifact.payload) {
                     Ok(Some(progress)) => chunks = Some(progress),
                     Ok(None) => {}
-                    Err(error) => eprintln!("[ERROR] MuScriptor: {error}"),
+                    Err(error) => eprintln!("[ERROR] MuScriptor's streamed {} ({}, {} bytes): {error}", artifact.id, artifact.kind, artifact.payload.len()),
                 }
             }
             if let Some(run) = background.midi_run.blocking_write().as_mut() {
