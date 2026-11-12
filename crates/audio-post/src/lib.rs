@@ -14,7 +14,7 @@ pub mod naturalize;
 pub mod quality;
 
 mod convolve;
-mod limiter;
+pub mod limiter;
 mod lowess;
 pub mod resample;
 mod spline;

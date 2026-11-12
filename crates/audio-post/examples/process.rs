@@ -5,7 +5,7 @@
 //!   process denoise|lifter|naturalize <in.wav> <out.wav>
 //!   process quality <in.wav>
 
-use audio_post::{denoise, lifter, mastering, naturalize, quality, Stereo};
+use audio_post::{denoise, lifter, limiter, mastering, naturalize, quality, Stereo};
 
 fn read(path: &str) -> Stereo {
     let mut reader = hound::WavReader::open(path).expect("open wav");
@@ -45,6 +45,14 @@ fn main() {
         "lifter" => write(&args[3], &lifter::lift(&read(&args[2]), &lifter::LifterSettings::default())),
         "naturalize" => write(&args[3], &naturalize::naturalize(&read(&args[2]), &naturalize::NaturalizeSettings::default())),
         "quality" => println!("{}", serde_json::to_string(&quality::evaluate(&read(&args[2]))).unwrap()),
+        "limit" => {
+            // process limit <in.wav> <out.wav> <ceiling dBFS>
+            let mut audio = read(&args[2]);
+            let ceiling = 10f64.powf(args[4].parse::<f64>().expect("ceiling in dBFS") / 20.0);
+            let rate = audio.rate;
+            limiter::limit(&mut audio.left, &mut audio.right, rate, ceiling, &limiter::LimiterConfig::default());
+            write(&args[3], &audio);
+        }
         other => panic!("unknown stage {other}"),
     }
     eprintln!("{} in {:.2} s", args[1], started.elapsed().as_secs_f64());
