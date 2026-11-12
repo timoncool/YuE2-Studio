@@ -2,6 +2,8 @@
 export interface ReportFacts {
   hardware?: { gpuName?: string; totalVramGb?: number; totalRamGb?: number };
   selected_profile_id?: string | null;
+  /** The person's own YuE2 file the engine runs in place of the set's backbone. */
+  own_model?: string | null;
   portable?: boolean;
 }
 
@@ -29,6 +31,7 @@ export function issueReportUrl(repositoryUrl: string, version: string, facts?: R
     ].filter(Boolean).join(', ');
     query.set('gpu', memory ? `${hardware.gpuName}, ${memory}` : hardware.gpuName);
   }
-  if (facts?.selected_profile_id) query.set('models', facts.selected_profile_id);
+  const models = [facts?.selected_profile_id, facts?.own_model ? `own model ${facts.own_model}` : ''].filter(Boolean).join(', ');
+  if (models) query.set('models', models);
   return `${repositoryUrl}/issues/new/choose?${query.toString()}`;
 }

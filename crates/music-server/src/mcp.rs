@@ -284,7 +284,7 @@ fn shape(name: &str, args: &Value, value: Value) -> Value {
 
 async fn status_summary() -> Value {
     let (jobs, activity, training, processing, separation) = tokio::join!(fetch("/v1/music/jobs"), fetch("/v1/activity"), fetch("/v1/training"), fetch("/v1/processing"), fetch("/v1/separation/status"));
-    let (midi, engine) = tokio::join!(fetch("/v1/midi"), fetch("/engine/options"));
+    let (midi, engine, own) = tokio::join!(fetch("/v1/midi"), fetch("/engine/options"), fetch("/setup/own-model"));
     let running_activity: Vec<Value> = activity["activity"].as_array().into_iter().flatten().filter(|entry| entry["state"] == "running").cloned().collect();
     let active_run = training["runs"].as_array().into_iter().flatten().find(|run| Some(run["id"].as_str().unwrap_or_default()) == training["active"].as_str()).map(compact_run);
     json!({
@@ -299,6 +299,8 @@ async fn status_summary() -> Value {
         "processing": processing["run"],
         // what the running engine started with: its KV cache and flash attention
         "engine": engine["in_effect"],
+        // the person's own YuE2 file the engine runs in place of the set's backbone, none for the set's
+        "own_model": own["selected"],
     })
 }
 

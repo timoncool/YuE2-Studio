@@ -6269,6 +6269,8 @@ async fn compose_setup_status(state: &AppState, manager_status: model_manager::M
         fields.insert("huggingface_mirror".into(), Value::Bool(net::current().huggingface_mirror));
         fields.insert("selected_profile_id".into(), serde_json::to_value(selected_profile_id).unwrap_or(Value::Null));
         fields.insert("selected_component_ids".into(), serde_json::to_value(selected_component_ids).unwrap_or(Value::Null));
+        // the person's own backbone in place of the set's, by its file name
+        fields.insert("own_model".into(), serde_json::to_value(state.own_backbone.read().await.clone()).unwrap_or(Value::Null));
         fields.insert("hardware".into(), serde_json::to_value(hardware::hardware()).unwrap_or(Value::Null));
         fields.insert("engine_options".into(), serde_json::to_value(state.engine_options.read().await.clone()).unwrap_or(Value::Null));
         fields.insert("effective_max_batch".into(), Value::from(state.engine_options.read().await.effective_max_batch()));
