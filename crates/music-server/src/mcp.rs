@@ -1029,7 +1029,7 @@ fn tools() -> &'static [Tool] {
             },
             Tool {
                 name: "engine_options_get",
-                description: "The engine's launch options: backend (auto, cuda, vulkan, cpu), keep models loaded, kv_q8 (the KV cache in Q8, half the memory, only with flash attention on a card: kv_q8_off_reason says why not), and the rest - including extra_args, any other command-line flag the engine takes, and engine_bin, a hand-built engine executable to run instead of the bundled one.",
+                description: "The engine's launch options: backend (auto, cuda, vulkan, cpu), keep models loaded, kv_q8 (the KV cache in Q8, half the memory, only with flash attention on an NVIDIA card through CUDA: kv_q8_off_reason says why not - processor, vulkan or flash_attention_off), and the rest - including extra_args, any other command-line flag the engine takes, and engine_bin, a hand-built engine executable to run instead of the bundled one.",
                 schema: nothing,
                 call: |_| get("/engine/options".into()),
             },

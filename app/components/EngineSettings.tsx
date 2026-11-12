@@ -13,7 +13,7 @@ import { useI18n } from '../context/I18nContext';
 
 type ComputeBackend = 'auto' | 'cuda' | 'vulkan' | 'cpu';
 type FlashAttention = 'auto' | 'on' | 'off';
-type KvQ8Off = 'processor' | 'flash_attention_off' | null;
+type KvQ8Off = 'processor' | 'vulkan' | 'flash_attention_off' | null;
 
 /** What the running engine was started with, as the service read it from the launch. */
 interface InEffect {
@@ -90,7 +90,7 @@ export const EngineSettings: React.FC = () => {
   const [inEffect, setInEffect] = useState<InEffect | null>(null);
   // why a KV cache in Q8 cannot apply here, as the service reads the machine (an Auto it resolves to the processor)
   const [serverKvQ8Off, setServerKvQ8Off] = useState<KvQ8Off>(null);
-  const kvQ8Off: KvQ8Off = options.backend === 'cpu' ? 'processor' : options.flash_attention === 'off' ? 'flash_attention_off'
+  const kvQ8Off: KvQ8Off = options.backend === 'cpu' ? 'processor' : options.backend === 'vulkan' ? 'vulkan' : options.flash_attention === 'off' ? 'flash_attention_off'
     : options.backend === saved.backend && options.flash_attention === saved.flash_attention ? serverKvQ8Off : null;
   const [savedMaxSeq, setSavedMaxSeq] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
@@ -394,7 +394,7 @@ export const EngineSettings: React.FC = () => {
         hint={tt('kvQ8Hint')}
         checked={options.kv_q8}
         disabled={kvQ8Off !== null}
-        note={kvQ8Off === 'processor' ? tt('kvQ8OffProcessor') : kvQ8Off === 'flash_attention_off' ? tt('kvQ8OffFlashAttention') : null}
+        note={kvQ8Off === 'processor' ? tt('kvQ8OffProcessor') : kvQ8Off === 'vulkan' ? tt('kvQ8OffVulkan') : kvQ8Off === 'flash_attention_off' ? tt('kvQ8OffFlashAttention') : null}
         onChange={value => setOptions(current => ({ ...current, kv_q8: value }))}
       />
 

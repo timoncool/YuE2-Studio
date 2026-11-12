@@ -166,7 +166,7 @@ impl SongError {
 }
 
 /// The engine's FATAL lines of a run whose numbers are not sound (`nar.h`, `vae.h`).
-const NOT_AUDIO: &[&str] = &["the velocity is not finite", "the solved latents are not audio", "the latents decoded to no audio"];
+const NOT_AUDIO: &[&str] = &["the velocity is not finite", "the solved latents are not audio", "decoded to no audio"];
 
 fn context_short(line: &str) -> Option<SongError> {
     let (start, of, tokens_so, s_and, asked_for) = CONTEXT_SHORT;
@@ -392,6 +392,7 @@ mod tests {
             "the velocity is not finite at step 10 after 3 evaluations",
             "the solved latents are not audio (0 NaN, 0 Inf, 96000 zeros of 96000) for T_lat=1500",
             "the latents decoded to no audio (T=1500)",
+            "tile 2/5 decoded to no audio",
         ] {
             let not_audio = SongError::from_fatal(line.into());
             assert_eq!(not_audio.code(), Some("not_audio"), "{line}");

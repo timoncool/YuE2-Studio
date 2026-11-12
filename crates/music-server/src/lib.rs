@@ -1002,10 +1002,10 @@ impl EngineOptions {
     }
 
     /// Why a KV cache in Q8 does not apply to this start, `None` when it can: the engine reads it only through flash
-    /// attention on a card.
+    /// attention on a card, and it is measured on CUDA alone, not yet on Vulkan.
     fn kv_q8_off_reason(&self) -> Option<&'static str> {
-        if self.cuda_build().is_none() && !self.uses_vulkan() {
-            return Some("processor");
+        if self.cuda_build().is_none() {
+            return Some(if self.uses_vulkan() { "vulkan" } else { "processor" });
         }
         self.flash_attention_off_reason().map(|_| "flash_attention_off")
     }
@@ -11427,19 +11427,25 @@ mod tests {
         assert!(!off.to_engine(None).arguments().iter().any(|argument| argument == "--nar-halo"));
     }
 
-    /// A KV cache in Q8 is off until chosen, and reaches the engine only on a card with flash attention.
+    /// A KV cache in Q8 is off until chosen, and reaches the engine only on a CUDA card with flash attention.
     #[test]
     fn a_q8_kv_cache_is_chosen_and_needs_flash_attention_on_a_card() {
+        use music_engine::yue_server::ComputeBackend;
         assert!(!EngineOptions::default().kv_q8, "off until chosen");
-        let on_cpu = EngineOptions { kv_q8: true, backend: music_engine::yue_server::ComputeBackend::Cpu, ..EngineOptions::default() };
+        let on_cpu = EngineOptions { kv_q8: true, backend: ComputeBackend::Cpu, ..EngineOptions::default() };
         assert_eq!(on_cpu.kv_q8_off_reason(), Some("processor"));
         assert!(!on_cpu.to_engine(None).arguments().iter().any(|argument| argument == "--kv-q8"));
-        let fa_off = EngineOptions { kv_q8: true, backend: music_engine::yue_server::ComputeBackend::Vulkan, flash_attention: FlashAttention::Off, ..EngineOptions::default() };
-        assert_eq!(fa_off.kv_q8_off_reason(), Some("flash_attention_off"));
-        assert!(!fa_off.kv_q8_now());
-        let on_card = EngineOptions { kv_q8: true, backend: music_engine::yue_server::ComputeBackend::Vulkan, flash_attention: FlashAttention::On, ..EngineOptions::default() };
-        assert!(on_card.kv_q8_now());
-        assert!(on_card.to_engine(None).arguments().iter().any(|argument| argument == "--kv-q8"));
+        let vulkan = EngineOptions { kv_q8: true, backend: ComputeBackend::Vulkan, flash_attention: FlashAttention::On, ..EngineOptions::default() };
+        assert_eq!(vulkan.kv_q8_off_reason(), Some("vulkan"), "measured on CUDA only");
+        assert!(!vulkan.to_engine(None).arguments().iter().any(|argument| argument == "--kv-q8"));
+        // the CUDA cases need a card that runs a CUDA build
+        if hardware::hardware().cuda.is_some() {
+            let fa_off = EngineOptions { kv_q8: true, backend: ComputeBackend::Cuda, flash_attention: FlashAttention::Off, ..EngineOptions::default() };
+            assert_eq!(fa_off.kv_q8_off_reason(), Some("flash_attention_off"));
+            let on_card = EngineOptions { kv_q8: true, backend: ComputeBackend::Cuda, flash_attention: FlashAttention::On, ..EngineOptions::default() };
+            assert!(on_card.kv_q8_now());
+            assert!(on_card.to_engine(None).arguments().iter().any(|argument| argument == "--kv-q8"));
+        }
     }
 
     /// A request takes as many tracks as the card holds beside the set: a full-context cache of 2.625 GiB a track

@@ -679,6 +679,38 @@
       ]
     },
     {
+      "id": "yue2-instrumental-kto",
+      "engine": "yue2-cpp",
+      "kind": "composition",
+      "author": "stevensu",
+      "page": "https://huggingface.co/stevensu/YuE2-3B-instrumental-kto-lora",
+      "license": "CC-BY-NC-4.0",
+      "name": {
+        "en": "Instrumental, no voice",
+        "ru": "Инструментал без голоса",
+        "zh": "纯音乐，无人声",
+        "ja": "インスト（声なし）",
+        "ko": "보컬 없는 연주곡"
+      },
+      "description": {
+        "en": "Keeps an instrumental really instrumental: without it, about half of the songs asked for without vocals still sing, hum or chant. Only for songs without lyrics - write section tags alone; arrangements come out a little simpler. Changes the composition, not the sound.",
+        "ru": "Делает инструментал действительно инструментальным: без неё примерно половина песен, заказанных без вокала, всё равно поёт, мычит или напевает. Только для песен без слов — пишите одни теги частей; аранжировки выходят чуть проще. Меняет композицию, не звук.",
+        "zh": "让纯音乐真正没有人声：不用它时，约一半要求无人声的歌曲仍会演唱、哼唱或吟唱。仅用于无歌词的歌曲——歌词只写段落标签；编曲会略为简单。改变作曲，不改变音色。",
+        "ja": "インストを本当に声のない曲にします：これなしでは、ボーカルなしを頼んだ曲の約半分が歌ったりハミングしたり唱えたりします。歌詞のない曲専用で、歌詞にはセクションタグだけを書きます。アレンジは少しシンプルになります。音色ではなく作曲を変えます。",
+        "ko": "연주곡을 정말 목소리 없이 만듭니다: 이것 없이는 보컬 없이 요청한 곡의 약 절반이 노래하거나 허밍하거나 읊조립니다. 가사 없는 곡 전용으로, 가사에는 섹션 태그만 쓰세요. 편곡은 조금 단순해집니다. 음색이 아니라 작곡을 바꿉니다."
+      },
+      "scales": {
+        "ar": 1
+      },
+      "files": [
+        {
+          "url": "https://huggingface.co/stevensu/YuE2-3B-instrumental-kto-lora/resolve/e41653af9f59c963238c41217be04c1dd001529b/adapter.safetensors",
+          "file": "instrumental-kto.safetensors",
+          "bytes": 69773128
+        }
+      ]
+    },
+    {
       "id": "yue2-slider-female",
       "engine": "yue2-cpp",
       "kind": "slider",
