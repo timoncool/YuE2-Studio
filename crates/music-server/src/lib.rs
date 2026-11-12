@@ -416,6 +416,10 @@ impl MusicJob {
     fn say(&mut self, error: SongError) {
         self.code = error.code();
         self.params = self.code.map(|_| error.params());
+        if let Some((code, params)) = song_errors::score_strength_reason(self.code, self.params.as_ref().unwrap_or(&serde_json::Map::new()), &self.generation_settings) {
+            self.code = Some(code);
+            self.params = Some(params);
+        }
         self.message = error.to_string();
     }
 }
@@ -1417,6 +1421,7 @@ pub async fn serve() -> anyhow::Result<()> {
         .route("/v1/scores", post(compose_score))
         .route("/v1/scores/{job_id}", get(score_job_status).post(cancel_score_job))
         .route("/v1/music/jobs/ended", get(list_ended_music_jobs))
+        .route("/v1/music/jobs/{job_id}/score-strength", post(make_again_at_score_strength))
         .route(
             "/v1/music/jobs/{job_id}",
             get(music_job_status).post(cancel_music_job).delete(dismiss_music_job),
@@ -8927,6 +8932,36 @@ async fn dismiss_music_job(State(state): State<AppState>, Path(job_id): Path<Str
     Ok(StatusCode::NO_CONTENT)
 }
 
+/// The adapters' score-half strengths brought to a sum of 1.0, each in its share: one LoRA goes to 1.0, two at 1.0
+/// each to 0.5 each. The sound half is left as it was. False when no adapter has a strength on the score half.
+fn score_half_at_one(adapters: &mut [AdapterUse]) -> bool {
+    let sum: f64 = adapters.iter().filter_map(|adapter| adapter.scales.get("ar")).filter(|scale| **scale > 0.0).sum();
+    if sum <= 0.0 {
+        return false;
+    }
+    for scale in adapters.iter_mut().filter_map(|adapter| adapter.scales.get_mut("ar")).filter(|scale| **scale > 0.0) {
+        *scale = (*scale / sum * 100.0).round() / 100.0;
+    }
+    true
+}
+
+/// POST /v1/music/jobs/{job_id}/score-strength - a song whose score could not be written made again with its LoRA at
+/// 1.0 on the score half, as the error's button offers: only this request changes, the form keeps its strengths.
+async fn make_again_at_score_strength(State(state): State<AppState>, Path(job_id): Path<String>) -> Result<(StatusCode, Json<MusicJob>), (StatusCode, Json<ApiError>)> {
+    let stored = state
+        .library
+        .music_job(&job_id)
+        .map_err(|error| api_error(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?
+        .ok_or_else(|| api_error(StatusCode::NOT_FOUND, "Music job was not found.".into()))?;
+    let mut request: CreateMusicJobRequest = serde_json::from_value(stored.request)
+        .map_err(|error| api_error(StatusCode::CONFLICT, format!("this job's request cannot be made again: {error}")))?;
+    if !score_half_at_one(&mut request.adapters) {
+        return Err(api_error(StatusCode::CONFLICT, "this song had no LoRA on the score half".into()));
+    }
+    request.client_ref = None;
+    Ok(submit_music_job(state, request, 0).await)
+}
+
 async fn list_active_music_jobs(State(state): State<AppState>) -> Json<Vec<MusicJob>> {
     let mut active: Vec<MusicJob> = state
         .jobs
@@ -10952,6 +10987,25 @@ mod tests {
         huge.insert("nar".to_string(), 40.0);
         let refused = CreateMusicJobRequest { client_ref: None, adapters: vec![AdapterUse { id: "x".into(), scales: huge }], ..sample_request() };
         assert!(yue_request_from(&refused, 1).is_err());
+    }
+
+    /// The error's button brings the score half to a sum of 1.0 in each LoRA's share and leaves the sound half alone.
+    #[test]
+    fn making_again_brings_the_score_half_to_one_in_proportion() {
+        let uses = |pairs: &[(&str, f64, f64)]| -> Vec<AdapterUse> {
+            pairs.iter().map(|(id, ar, nar)| AdapterUse { id: id.to_string(), scales: [("ar".to_string(), *ar), ("nar".to_string(), *nar)].into_iter().collect() }).collect()
+        };
+        let mut one = uses(&[("folk", 3.0, 1.0)]);
+        assert!(score_half_at_one(&mut one));
+        assert_eq!((one[0].scales["ar"], one[0].scales["nar"]), (1.0, 1.0));
+        let mut two = uses(&[("folk", 1.0, 1.0), ("metal", 1.0, 0.5)]);
+        assert!(score_half_at_one(&mut two));
+        assert_eq!((two[0].scales["ar"], two[1].scales["ar"], two[1].scales["nar"]), (0.5, 0.5, 0.5));
+        let mut uneven = uses(&[("folk", 1.5, 0.0), ("metal", 0.5, 0.0)]);
+        assert!(score_half_at_one(&mut uneven));
+        assert_eq!((uneven[0].scales["ar"], uneven[1].scales["ar"]), (0.75, 0.25));
+        let mut sound_only = uses(&[("voice", 0.0, 1.0)]);
+        assert!(!score_half_at_one(&mut sound_only), "no LoRA on the score half: nothing to make again");
     }
 
     #[test]

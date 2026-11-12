@@ -186,6 +186,7 @@ export function useGenerations({ enabled, notify, onFinished }: GenerationOption
       isGenerating: false,
       stage: job.status === 'failed' ? 'failed' : 'cancelled',
       failure: songErrorText(job, language),
+      failureCode: job.code,
     }));
   }, [ended.data, cards, t, language]);
 
@@ -368,6 +369,21 @@ export function useGenerations({ enabled, notify, onFinished }: GenerationOption
     if (target.jobId) await removeEnded(target.jobId).catch(error => notify(error instanceof Error ? error.message : String(error), 'error'));
   }, [remove, notify]);
 
+  /** A song whose score could not be written made again with its LoRA at 1.0 on Composition (the service keeps the
+   * request); the failed card goes once the new song is on its way. */
+  const scoreAgain = useCallback(async (key: string) => {
+    const jobId = key.startsWith(ENDED_PREFIX) ? key.slice(ENDED_PREFIX.length) : key;
+    try {
+      const response = await fetch(`/v1/music/jobs/${encodeURIComponent(jobId)}/score-strength`, { method: 'POST' });
+      const body = (await response.json().catch(() => null)) as (YueJob & { error?: string }) | null;
+      if (!response.ok || body?.status === 'failed') throw new Error((body && (body.error || songErrorText(body, language))) || `HTTP ${response.status}`);
+      await removeEnded(jobId);
+      void queryClient.invalidateQueries({ queryKey: activeJobsKey });
+    } catch (error) {
+      notify(error instanceof Error ? error.message : String(error), 'error');
+    }
+  }, [notify, language]);
+
   /**
    * Stops the songs this window is making. With `everything` it stops every
    * job of the service: another window's, an agent's, ones sent before this
@@ -414,6 +430,7 @@ export function useGenerations({ enabled, notify, onFinished }: GenerationOption
     track,
     cancel,
     reset,
+    scoreAgain,
     cancelAll,
   };
 }

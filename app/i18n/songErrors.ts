@@ -34,6 +34,7 @@ const EN: ErrorTexts = {
   context_short: 'The style, lyrics and score take {tokens} of the model\'s {context} tokens, so this song can last {can_last} s, and {asked} s were asked for. Make the song or its lyrics shorter.',
   score_unsingable: 'The score the model wrote for song {song} cannot be sung ({problem}). Draw another seed.',
   score_unsingable_adapters: 'The score the model wrote for song {song} cannot be sung ({problem}). LoRAs past their limits on the score half do this: lower their strengths or draw another seed.',
+  score_unsingable_strength: 'The score could not be written: the LoRA strength on Composition is {strength}. Try 1.0.',
 };
 
 const RU: ErrorTexts = {
@@ -62,6 +63,7 @@ const RU: ErrorTexts = {
   context_short: 'Стиль, текст и партитура занимают {tokens} из {context} токенов модели, поэтому песня может длиться {can_last} с, а запрошено {asked} с. Сократите песню или её текст.',
   score_unsingable: 'Партитуру, которую модель написала для песни {song}, нельзя спеть ({problem}). Попробуйте другое зерно.',
   score_unsingable_adapters: 'Партитуру, которую модель написала для песни {song}, нельзя спеть ({problem}). Так бывает, когда LoRA выкручены сверх своих пределов на партитуре: уменьшите их силу или попробуйте другое зерно.',
+  score_unsingable_strength: 'Партитура не написалась: сила LoRA на «Композиции» — {strength}. Попробуйте 1,0.',
 };
 
 const ZH: ErrorTexts = {
@@ -90,6 +92,7 @@ const ZH: ErrorTexts = {
   context_short: '风格、歌词和乐谱占用了模型 {context} 个 token 中的 {tokens} 个，因此这首歌最长 {can_last} 秒，而请求的是 {asked} 秒。请缩短歌曲或歌词。',
   score_unsingable: '模型为第 {song} 首歌写的乐谱无法演唱（{problem}）。请换一个种子。',
   score_unsingable_adapters: '模型为第 {song} 首歌写的乐谱无法演唱（{problem}）。LoRA 在乐谱部分超出其限度时会这样：请降低它们的强度或换一个种子。',
+  score_unsingable_strength: '乐谱未能写成：LoRA 在「作曲」上的强度为 {strength}。请试试 1.0。',
 };
 
 const JA: ErrorTexts = {
@@ -118,6 +121,7 @@ const JA: ErrorTexts = {
   context_short: 'スタイル、歌詞、楽譜でモデルの {context} トークンのうち {tokens} を使うため、この曲は {can_last} 秒までですが、{asked} 秒が指定されました。曲か歌詞を短くしてください。',
   score_unsingable: 'モデルが曲 {song} のために書いた楽譜は歌えません（{problem}）。別のシードを試してください。',
   score_unsingable_adapters: 'モデルが曲 {song} のために書いた楽譜は歌えません（{problem}）。楽譜側で LoRA を限度を超えて強くするとこうなります。強さを下げるか、別のシードを試してください。',
+  score_unsingable_strength: 'スコアを書けませんでした：「作曲」の LoRA の強さが {strength} です。1.0 を試してください。',
 };
 
 const KO: ErrorTexts = {
@@ -146,6 +150,7 @@ const KO: ErrorTexts = {
   context_short: '스타일, 가사, 악보가 모델의 {context} 토큰 중 {tokens}을(를) 차지해 이 곡은 최대 {can_last}초인데 {asked}초가 요청되었습니다. 곡이나 가사를 줄이세요.',
   score_unsingable: '모델이 곡 {song}을(를) 위해 쓴 악보는 부를 수 없습니다({problem}). 다른 시드를 써 보세요.',
   score_unsingable_adapters: '모델이 곡 {song}을(를) 위해 쓴 악보는 부를 수 없습니다({problem}). 악보 쪽에서 LoRA를 한도 넘게 세게 걸면 이렇게 됩니다. 강도를 낮추거나 다른 시드를 써 보세요.',
+  score_unsingable_strength: '악보를 쓰지 못했습니다: ‘작곡’의 LoRA 강도가 {strength}입니다. 1.0으로 해 보세요.',
 };
 
 const BY_LANGUAGE: Record<Language, ErrorTexts> = { en: EN, ru: RU, zh: ZH, ja: JA, ko: KO };
@@ -165,6 +170,9 @@ export function songErrorText(failure: SongFailure | null | undefined, language:
   const params = failure?.params ?? {};
   return template.replace(/\{(\w+)\}/g, (match, key: string) => {
     const value = params[key];
+    // a strength is written with one decimal, as the form shows it: 3,0 and not 3
+    if (key === 'strength' && typeof value === 'number') return value.toLocaleString(language, { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+    if (typeof value === 'number' && !Number.isInteger(value)) return value.toLocaleString(language);
     return value === undefined || value === null ? match : String(value);
   });
 }

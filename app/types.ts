@@ -15,6 +15,8 @@ export interface Song {
   isGenerating?: boolean;
   /** Why a generation ended without a song; the card stays until it is removed. */
   failure?: string;
+  /** A failed song's reason code (`i18n/songErrors.ts`), for the action its card offers. */
+  failureCode?: string;
   /** The engine job a generation's row follows. */
   jobId?: string;
   /** The playlist the song being made goes into. */

@@ -183,6 +183,30 @@ fn score_unsingable(line: &str) -> Option<SongError> {
     Some(SongError::ScoreUnsingable { line: line.to_string(), song: song.parse().ok()?, problem: problem.to_string(), adapters })
 }
 
+/// The sum of the adapters' strengths on the score half (`ar`) past which the model mostly cannot write a score: in
+/// the studio's own runs one LoRA at 1.2 wrote it and at 1.5 did not, and two at 1.0 each lost the key every time.
+pub const SCORE_STRENGTH_LIMIT: f64 = 1.2;
+
+/// The sum of the adapters' score-half strengths an engine request carries.
+pub fn score_strength(body: &Value) -> f64 {
+    body["adapters"].as_array().map(|adapters| adapters.iter().filter_map(|adapter| adapter["ar_scale"].as_f64()).sum()).unwrap_or(0.0)
+}
+
+/// A score the model could not write, with adapters on the score half past `SCORE_STRENGTH_LIMIT`: the reason names
+/// their summed strength (one decimal) instead of the general advice, `None` otherwise.
+pub fn score_strength_reason(code: Option<&str>, params: &Map<String, Value>, body: &Value) -> Option<(&'static str, Map<String, Value>)> {
+    if code != Some("score_unsingable_adapters") {
+        return None;
+    }
+    let strength = score_strength(body);
+    if strength <= SCORE_STRENGTH_LIMIT {
+        return None;
+    }
+    let mut params = params.clone();
+    params.insert("strength".into(), json!((strength * 10.0).round() / 10.0));
+    Some(("score_unsingable_strength", params))
+}
+
 impl fmt::Display for SongError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -354,5 +378,22 @@ mod tests {
         let other = SongError::from_fatal("lyric_schedule needs cfg_scale 1".into());
         assert_eq!(other.code(), Some("engine_fatal"));
         assert_eq!(other.to_string(), "lyric_schedule needs cfg_scale 1");
+    }
+
+    /// A score lost to LoRA past the limit on the score half names their summed strength; at or under the limit, or
+    /// without LoRA, the reason stays what the engine said.
+    #[test]
+    fn a_score_lost_to_strong_lora_names_their_strength() {
+        let line = "the score the model wrote for song 1 cannot be sung: it has no voice with bars. Adapters past their limits on the score half do this: lower their strengths or draw another seed.";
+        let error = SongError::from_fatal(line.into());
+        let body = |scales: &[f64]| json!({ "adapters": scales.iter().map(|ar| json!({ "name": "x", "ar_scale": ar, "nar_scale": 1.0 })).collect::<Vec<_>>() });
+        let (code, params) = score_strength_reason(error.code(), &error.params(), &body(&[1.0, 1.0])).expect("two at 1.0 is past the limit");
+        assert_eq!((code, params["strength"].as_f64(), params["song"].as_u64()), ("score_unsingable_strength", Some(2.0), Some(1)));
+        assert_eq!(score_strength_reason(error.code(), &error.params(), &body(&[1.54])).unwrap().1["strength"], 1.5);
+        assert!(score_strength_reason(error.code(), &error.params(), &body(&[SCORE_STRENGTH_LIMIT])).is_none(), "at the limit");
+        let seed = SongError::from_fatal("the score the model wrote for song 1 cannot be sung: it has no voice with bars. Draw another seed.".into());
+        assert!(score_strength_reason(seed.code(), &seed.params(), &json!({})).is_none(), "without LoRA");
+        let dictionary = include_str!("../../../app/i18n/songErrors.ts");
+        assert_eq!(dictionary.matches("score_unsingable_strength:").count(), 5, "the reason is in every language of the window");
     }
 }

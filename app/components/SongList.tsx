@@ -55,6 +55,8 @@ interface SongListProps {
     defaultOrder?: SongOrder;
     onCancelJob?: (jobId: string) => void;
     onResetJob?: (jobId: string) => void;
+    /** Makes a song whose score could not be written again with its LoRA at 1.0 on Composition. */
+    onScoreAgain?: (jobId: string) => void;
     onCancelAll?: () => void;
     onResetAll?: () => void;
     activeJobCount?: number;
@@ -162,6 +164,7 @@ export const SongList: React.FC<SongListProps> = ({
     onCancelJob,
     onCancelAll,
     onResetJob,
+    onScoreAgain,
     onResetAll,
     activeJobCount = 0,
     emptyMessage,
@@ -436,6 +439,7 @@ export const SongList: React.FC<SongListProps> = ({
                 ? () => onResetJob?.(song.jobId || song.id)
                 : undefined
             }
+            onScoreAgain={song.stage === 'failed' && song.failureCode === 'score_unsingable_strength' && onScoreAgain ? () => onScoreAgain(song.jobId || song.id) : undefined}
         />
     );
 
@@ -783,6 +787,7 @@ interface SongItemProps {
     onSongUpdate?: (updatedSong: Song) => void;
     onCancelJob?: () => void;
     onResetJob?: () => void;
+    onScoreAgain?: () => void;
     /** Opens the track this one was made from; absent when it is gone. */
     onOpenOriginal?: () => void;
     /** A stem shown under its song: its name stands where the badge naming the song would. */
@@ -813,6 +818,7 @@ const SongItem: React.FC<SongItemProps> = ({
     onSongUpdate,
     onCancelJob,
     onResetJob,
+    onScoreAgain,
     onOpenOriginal,
     nested = false,
 }) => {
@@ -1196,6 +1202,16 @@ const SongItem: React.FC<SongItemProps> = ({
                 ) : song.stage === 'failed' && onResetJob ? (
                     <div className="flex flex-col items-end gap-0.5">
                         <span className="text-red-400 text-[10px] font-sans" title={song.failure}>{t('generationFailed')}</span>
+                        {onScoreAgain && (
+                            <button
+                                type="button"
+                                title={song.failure}
+                                onClick={(e) => { e.stopPropagation(); onScoreAgain(); }}
+                                className="rounded-sm bg-amber-100 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-amber-800 hover:bg-amber-200 dark:bg-amber-400/15 dark:text-amber-200"
+                            >
+                                {t('scoreAgainAtOne')}
+                            </button>
+                        )}
                         <button
                             onClick={(e) => { e.stopPropagation(); onResetJob(); }}
                             className="text-[10px] text-zinc-500 hover:text-red-400 transition-colors font-sans"

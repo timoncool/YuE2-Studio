@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { AlertTriangle, Layers, Plus, X } from 'lucide-react';
 import { useI18n } from '../context/I18nContext';
-import { AdapterUse, InstalledAdapter, familyLabel, localized, startingScales, useAdapterLibrary } from '../services/adapters';
+import { AdapterUse, InstalledAdapter, SCORE_STRENGTH_LIMIT, familyLabel, localized, scoreStrength, startingScales, useAdapterLibrary } from '../services/adapters';
 import { NumberField } from './NumberField';
 
 /**
@@ -124,6 +124,13 @@ export const AdapterPicker: React.FC<AdapterPickerProps> = ({ value, onChange, o
           </div>
         );
       })}
+
+      {scoreStrength(value, slots) > SCORE_STRENGTH_LIMIT && (
+        <p className="flex items-start gap-1 text-[11px] leading-4 text-amber-600 dark:text-amber-300">
+          <AlertTriangle size={12} className="mt-0.5 shrink-0" />
+          {t('adaptersScoreStrong')}
+        </p>
+      )}
 
       {installed.length === 0 ? (
         <div className="flex flex-wrap items-center justify-between gap-2">

@@ -393,6 +393,7 @@ const JOURNAL: &[(&str, &str, &str)] = &[
     ("song_cover_photo_set", "updated", "cover"),
     ("song_cover_pattern_set", "updated", "cover"),
     ("song_job_dismiss", "discarded", "generation"),
+    ("song_job_score_again", "started", "generation"),
     ("song_create", "started", "generation"),
     ("song_replay", "started", "generation"),
     ("song_job_cancel", "cancelled", "generation"),
@@ -2508,6 +2509,12 @@ fn tools() -> &'static [Tool] {
                 description: "Take an ended song job's card off the create page (a failed or cancelled one, as its Remove does); a running job is cancelled with song_job_cancel.",
                 schema: || id_only("job_id", "song job id"),
                 call: |args| send(Method::DELETE, format!("/v1/music/jobs/{}", segment(&text(args, "job_id")?)), json!({})),
+            },
+            Tool {
+                name: "song_job_score_again",
+                description: "Make a failed song again with its LoRA brought to 1.0 on the score half (two LoRA share it, 0.5 each), as the button of the error 'score_unsingable_strength' does; only this request changes, the sound half keeps its strengths. Returns the new job.",
+                schema: || id_only("job_id", "the failed song job's id"),
+                call: |args| send(Method::POST, format!("/v1/music/jobs/{}/score-strength", segment(&text(args, "job_id")?)), json!({})),
             },
         ]
     })
