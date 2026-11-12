@@ -32,6 +32,7 @@ mod model_manager;
 mod hardware;
 mod request_log;
 mod resources;
+#[cfg(windows)]
 mod gpu_memory;
 mod chunked;
 mod separation;
@@ -410,6 +411,9 @@ struct MusicJob {
     /// which makes it many times slower.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     card_memory_short: bool,
+    /// The tracks the request asked for when fewer fit the card the engine started on; it made `lm_batch_size`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    tracks_asked: Option<u32>,
 }
 
 impl MusicJob {
@@ -490,6 +494,7 @@ fn job_from_stored(stored: library::StoredJob, status: MusicJobStatus, message: 
         playlist_id: stored.playlist_id,
         laid: None,
         card_memory_short: false,
+        tracks_asked: None,
     }
 }
 
@@ -926,6 +931,20 @@ impl EngineOptions {
         }
         let fits = ((free_gib - resident_gib - TRACKS_RESERVE_GIB) / kv_gib).floor().max(1.0);
         (fits as u32).min(wanted)
+    }
+
+    /// The card's memory a start has for its tracks: on NVIDIA what nvidia-smi says is free before the engine takes any,
+    /// on a Vulkan card its memory as the set's choice reads it. `None` on the processor, or when nvidia-smi does not
+    /// answer, which the engine log says; the tracks then stay as Settings has them.
+    fn card_free_gib(&self) -> Option<f64> {
+        if self.cuda_build().is_some() {
+            let free = resources::nvidia_gpus().and_then(|gpus| gpus.first().map(|gpu| gpu.vram_total_mb.saturating_sub(gpu.vram_used_mb) as f64 / 1024.0));
+            if free.is_none() {
+                music_engine::yue_server::note_in_log("the card's free memory was not read (nvidia-smi did not answer): the tracks a request stay as Settings has them");
+            }
+            return free;
+        }
+        self.uses_vulkan().then(|| hardware::hardware().total_vram_gb).filter(|gib| *gib > 0.0)
     }
 
     /// The tracks of one request this start takes when the number from Settings does not fit what the card has free:
@@ -5215,9 +5234,7 @@ async fn start_engine_again(state: &AppState) -> Result<(), String> {
                 music_engine::yue_server::note_in_log(&format!("KV cache {fitted}, fitted after the card ran out of memory on a song"));
             }
         }
-        // read before the engine takes any: what other programs keep on the card stays theirs
-        let free_gib = resources::nvidia_gpus().and_then(|gpus| gpus.first().map(|gpu| gpu.vram_total_mb.saturating_sub(gpu.vram_used_mb) as f64 / 1024.0));
-        let tracks = free_gib.and_then(|free| attempt.tracks_for_card(&backbone, free));
+        let tracks = if attempt.effective_max_batch() > 1 { attempt.card_free_gib().and_then(|free| attempt.tracks_for_card(&backbone, free)) } else { None };
         if let Some(tracks) = tracks {
             music_engine::yue_server::note_in_log(&format!("{tracks} tracks a request instead of {}: that many fit the card's free memory", attempt.effective_max_batch()));
             attempt.max_batch = Some(tracks);
@@ -9157,6 +9174,12 @@ async fn submit_music_job(state: AppState, mut request: CreateMusicJobRequest, a
         return (StatusCode::BAD_REQUEST, Json(failed_request_job(request, engine_id, SongError::AdapterMissing(missing))));
     }
     let max_batch = track_limit(&state).await;
+    // more tracks than the card the engine started on holds, within Settings: the request makes those and says so
+    let saved_batch = state.engine_options.read().await.effective_max_batch();
+    let tracks_asked = request.lm_batch_size.filter(|asked| *asked > max_batch && *asked <= saved_batch);
+    if tracks_asked.is_some() {
+        request.lm_batch_size = Some(max_batch);
+    }
     let mut body = match yue_request_from(&request, max_batch) {
         Ok(value) => value,
         Err(error) => return (StatusCode::BAD_REQUEST, Json(failed_request_job(request, engine_id, error))),
@@ -9206,6 +9229,7 @@ async fn submit_music_job(state: AppState, mut request: CreateMusicJobRequest, a
                 playlist_id: request.playlist_id.clone(),
                 laid,
                 card_memory_short: false,
+                tracks_asked,
             };
             state.jobs.write().await.insert(job.id.clone(), job.clone());
             let running = *state.running_max_seq.read().await;
@@ -9300,6 +9324,7 @@ async fn submit_replay_job(state: AppState, request: ReplayMusicJobRequest, atte
         playlist_id: None,
         laid: None,
         card_memory_short: false,
+        tracks_asked: None,
     };
     if let Some(song_id) = &request.song_id {
         if let Some(original) = state.library.get_song(song_id).map_err(|error| api_error(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))? {
@@ -9608,6 +9633,7 @@ fn add_to_playlist(library: &library::Library, playlist_id: &str, songs: impl It
 
 /// Says once on a song, in the engine log and on its card, that the card's memory is full and the driver lends the
 /// engine the computer's own memory: the song goes on many times slower instead of failing.
+#[cfg(windows)]
 async fn watch_card_memory(state: AppState, job_id: String) {
     let mut every = tokio::time::interval(std::time::Duration::from_secs(15));
     loop {
@@ -9648,8 +9674,10 @@ fn spawn_job_watcher(state: AppState, job_id: String) {
         if let Some(hub) = &state.hub {
             hub.task_running(true);
         }
+        #[cfg(windows)]
         let memory = tokio::spawn(watch_card_memory(state.clone(), job_id.clone()));
         follow_job(&state, &job_id, &mut started).await;
+        #[cfg(windows)]
         memory.abort();
         if let Some(hub) = &state.hub {
             hub.task_running(false);
@@ -10068,6 +10096,7 @@ async fn import_completed_result(state: &AppState, job: &MusicJob, job_id: &str)
             "output_format": generation_settings.get("output_format"),
             "cover_prompt": job.cover_prompt.clone(),
             "derived": job.derived.clone(),
+            "tracks_asked": job.tracks_asked,
             // the window showing this job's card hands the card to the song
             "job_id": job_id,
             "vocals_extraction": vocals_used_gpu.map(|used_gpu| serde_json::json!({ "used_gpu": used_gpu, "model": separation::MODEL.id })),
@@ -10913,6 +10942,7 @@ fn queued_not_configured_job(request: CreateMusicJobRequest, engine_id: String) 
         playlist_id: None,
         laid: None,
         card_memory_short: false,
+        tracks_asked: None,
     }
 }
 
@@ -10941,6 +10971,7 @@ fn failed_request_job(request: CreateMusicJobRequest, engine_id: String, error: 
         playlist_id: None,
         laid: None,
         card_memory_short: false,
+        tracks_asked: None,
     }
 }
 

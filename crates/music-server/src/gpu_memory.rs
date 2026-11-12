@@ -1,7 +1,8 @@
 //! The computer's own memory the graphics driver lends a process once the card's memory is full: Windows counts it
 //! per process as `\GPU Process Memory(pid_<pid>_...)\Shared Usage`. Work kept there runs many times slower.
 
-/// More of an engine's work than this in the computer's memory is a song that crawls.
+/// More of an engine's work than this in the computer's memory is a song that crawls; to be confirmed on a song that
+/// runs out of the card's memory.
 const SHARED_ALARM_BYTES: u64 = 1024 * 1024 * 1024;
 /// The share of the card's memory taken from which it counts as full.
 const CARD_FULL: f64 = 0.97;
@@ -14,7 +15,6 @@ pub fn spilling(shared_bytes: u64, card_used_mb: u64, card_total_mb: u64) -> boo
 
 /// The bytes of the computer's memory the driver lends process `pid` for its work on the card; `None` when the
 /// counters cannot be read.
-#[cfg(windows)]
 pub fn shared_usage(pid: u32) -> Option<u64> {
     use windows_sys::Win32::System::Performance::{
         PdhAddEnglishCounterW, PdhCloseQuery, PdhCollectQueryData, PdhGetRawCounterArrayW, PdhOpenQueryW, PDH_CSTATUS_VALID_DATA, PDH_HQUERY,
@@ -69,11 +69,6 @@ pub fn shared_usage(pid: u32) -> Option<u64> {
         .map(|item| item.RawValue.FirstValue.max(0) as u64)
         .sum();
     Some(total)
-}
-
-#[cfg(not(windows))]
-pub fn shared_usage(_pid: u32) -> Option<u64> {
-    None
 }
 
 #[cfg(test)]

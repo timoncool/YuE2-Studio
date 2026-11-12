@@ -322,6 +322,7 @@ export function useGenerations({ enabled, notify, onFinished }: GenerationOption
         throw new Error((job && songErrorText(job, language)) || job?.error || `The engine rejected this request (${response.status})`);
       }
       follow(id, job);
+      if (job.tracks_asked) notify(t('tracksForCardHint').replace('{asked}', String(job.tracks_asked)), 'info');
       if (job.laid) {
         notify(t('scoreLaidToast').replace('{seconds}', String(Math.round(job.laid.seconds))), 'info');
         const crowded = job.laid.crowded;

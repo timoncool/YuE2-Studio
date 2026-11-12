@@ -1059,6 +1059,11 @@ const SongItem: React.FC<SongItemProps> = ({
                                 {t('cutShort')}
                             </span>
                         ))}
+                        {song.tracksAsked && (
+                            <span title={t('tracksForCardHint').replace('{asked}', String(song.tracksAsked))} className="rounded-sm bg-amber-100 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-amber-800 dark:bg-amber-400/15 dark:text-amber-200">
+                                {t('tracksForCard')}
+                            </span>
+                        )}
                     </div>
                     <p className={`text-xs text-zinc-500 dark:text-zinc-500 font-medium max-w-2xl ${compact ? 'truncate' : 'line-clamp-2 pt-1'}`}>
                         {captionSummary(song.style)}

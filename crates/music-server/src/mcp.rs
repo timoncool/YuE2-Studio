@@ -125,6 +125,7 @@ fn compact_run(run: &Value) -> Value {
         "steps_done": steps.len(), "step_limit": run["recipe"]["steps"], "preset": run["recipe"]["preset"], "songs_per_step": run["recipe"]["grad_accum"],
         "stop": if tuned { run["recipe"]["stop"].clone() } else { Value::Null }, "target_kl": if tuned { run["recipe"]["target_kl"].clone() } else { Value::Null },
         "last_step": last, "checkpoints": run["checkpoints"], "installed": run["installed"], "error": run["error"],
+        "step_stage": run["step_stage"],
     })
 }
 
@@ -154,6 +155,7 @@ fn compact_job(job: &Value) -> Value {
         "id": job["id"], "title": job["title"], "status": job["status"], "phase": job["phase"], "message": job["message"],
         "duration_seconds": job["duration_seconds"], "seed": settings["seed"], "lm_seed": settings["lm_seed"],
         "adapters": settings["adapters"], "songs": songs,
+        "tracks": settings["lm_batch_size"], "tracks_asked": job["tracks_asked"], "card_memory_short": job["card_memory_short"].as_bool().unwrap_or(false),
     })
 }
 
@@ -282,7 +284,7 @@ fn shape(name: &str, args: &Value, value: Value) -> Value {
 
 async fn status_summary() -> Value {
     let (jobs, activity, training, processing, separation) = tokio::join!(fetch("/v1/music/jobs"), fetch("/v1/activity"), fetch("/v1/training"), fetch("/v1/processing"), fetch("/v1/separation/status"));
-    let midi = fetch("/v1/midi").await;
+    let (midi, engine) = tokio::join!(fetch("/v1/midi"), fetch("/engine/options"));
     let running_activity: Vec<Value> = activity["activity"].as_array().into_iter().flatten().filter(|entry| entry["state"] == "running").cloned().collect();
     let active_run = training["runs"].as_array().into_iter().flatten().find(|run| Some(run["id"].as_str().unwrap_or_default()) == training["active"].as_str()).map(compact_run);
     json!({
@@ -295,6 +297,8 @@ async fn status_summary() -> Value {
         "preparation": compact_preparation(&training["prepare"]),
         "training": active_run,
         "processing": processing["run"],
+        // what the running engine started with: its KV cache, and fewer tracks a request when that many fit the card
+        "engine": engine["in_effect"],
     })
 }
 

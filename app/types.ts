@@ -60,6 +60,8 @@ export interface Song {
   nativeReplayAvailable?: boolean;
   /** The engine stopped the song before its end: at its length limit, or where the model's memory ran out. */
   cutShort?: 'length' | 'memory';
+  /** Its request asked for this many tracks and fewer fit the card's memory. */
+  tracksAsked?: number;
   /** Processed versions kept beside the original; the active one plays. */
   audioVersions?: SongVersion[];
   /** `original`, a version id, or absent for a track never processed. */
@@ -231,6 +233,8 @@ export interface YueJob {
   laid?: { seconds: number; ceiling: number; crowded: { ratio: number; notes: number; syllables: number } | null };
   /** The card's memory ran out and the driver lent the engine the computer's memory. */
   card_memory_short?: boolean;
+  /** The tracks asked for when fewer fit the card; `lm_batch_size` of the settings is what is made. */
+  tracks_asked?: number;
 }
 
 /** What the engine log says the running job is doing. */
