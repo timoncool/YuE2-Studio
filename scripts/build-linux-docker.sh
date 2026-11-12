@@ -38,7 +38,9 @@ if [ "${1:-}" = "--inside" ]; then
   mkdir -p /cache/apt
   apt-get update -q >/dev/null
   apt-get install -y -q --no-install-recommends -o Dir::Cache::Archives=/cache/apt cuda-nvcc-$cuda cuda-cudart-dev-$cuda libcublas-dev-$cuda >/dev/null
-  export PATH=/usr/local/cuda/bin:$PATH
+  # the CUDA 12 backend's toolkit beside it, from the same repository (the audio.cpp server's CUDA 12 build is 12.9 too)
+  apt-get install -y -q --no-install-recommends -o Dir::Cache::Archives=/cache/apt cuda-nvcc-12-9 cuda-cudart-dev-12-9 libcublas-dev-12-9 >/dev/null
+  export PATH=/usr/local/cuda-13.3/bin:$PATH CUDA12_ROOT=/usr/local/cuda-12.9
   echo "[..] source $(git -c safe.directory=/src -C /src rev-parse --short HEAD)"
   rm -rf /cache/src && mkdir -p /cache/src
   git -c safe.directory=/src -C /src archive HEAD | tar -x -C /cache/src
@@ -53,6 +55,8 @@ if [ "${1:-}" = "--inside" ]; then
   backend=desktop/src-tauri/resources/yue2-cpp/cuda13/libggml-cuda.so
   [ -f "$backend" ] || { echo "[ERROR] the engine was built without its CUDA backend"; exit 1; }
   if ldd "$backend" | grep -i 'not found' | grep -v 'libcuda.so'; then echo "[ERROR] the CUDA backend misses libraries"; exit 1; fi
+  backend12=desktop/src-tauri/resources/yue2-cpp/cuda12/libggml-cuda.so
+  [ -f "$backend12" ] || { echo "[ERROR] the engine was built without its CUDA 12 backend"; exit 1; }
   # the engine answers --help with its usage and a non-zero code
   "$engine" --help > /tmp/engine-help.txt 2>&1 || true
   grep -q 'Usage' /tmp/engine-help.txt || { echo "[ERROR] the engine does not start"; head -5 /tmp/engine-help.txt; exit 1; }
