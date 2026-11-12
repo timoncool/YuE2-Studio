@@ -251,12 +251,13 @@ export const OptionalGroup: React.FC<{
     // none.
   }, [engines, open]);
 
+  // keyed on whether a download runs, not on its figures: every answer brings a new object, and a poll started
+  // again on each would ask at once, over and over, with no pause between
+  const downloadRunning = Boolean(status?.active_download && !status.active_download.done);
   useEffect(() => {
-    const active = status?.active_download;
-    const running = Boolean(active && !active.done);
-    if (!running && !starting) return;
+    if (!downloadRunning && !starting) return;
     return poll(() => load().catch(() => undefined), 1000);
-  }, [status?.active_download, starting, load]);
+  }, [downloadRunning, starting, load]);
 
   // The moment the server admits a download is running, the press has landed
   // and the real figures take over. If it never does - a refusal, a dead
