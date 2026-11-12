@@ -1,0 +1,131 @@
+[Store] Created (policy=NEVER)
+[BPE] Loaded from GGUF: 151851 vocab, 151387 merges
+[GGUF] C:\YuE2 Studio\data\models\yue2-cpp\YuE2-3B-Q8_0.gguf: 627 tensors, data at offset 5367296
+ggml_cuda_init: found 1 CUDA devices (Total VRAM: 24563 MiB):
+  Device 0: NVIDIA GeForce RTX 4090, compute capability 8.9, VMM: yes, VRAM: 24563 MiB
+[Load] Self-test on CUDA0: ok (84.6 ms)
+[Load] KV backend: CUDA0 (CPU threads: 16)
+[Server] yue-server 46a0c91 (2026-11-13)
+[Server] Listening on 127.0.0.1:8097
+[Server] Job ccb3d1dc7b7a0f0c: {
+  "style": "English, warm piano pop, expressive female voice, light drums, 88 BPM",
+  "lyrics": "[Verse]\nNeon fades along the lane\nFootsteps keep the time of rain\nFold the night and leave it here\nMorning has a sky to clear\n\n[Chorus]\nLet the day come into view\nEvery road begins with you\nHold a little room for light\nWe will sing beyond the night\n\n[Verse 2]\nNeon fades along the lane\nFootsteps keep the time of rain\nFold the night and leave it here\nMorning has a sky to clear\n\n[Chorus]\nLet the day come into view\nEvery road begins with you\nHold a little room for light\nWe will sing beyond the night\n\n[Bridge]\nNeon fades along the lane\nFootsteps keep the time of rain\nFold the night and leave it here\nMorning has a sky to clear\n\n[Chorus]\nLet the day come into view\nEvery road begins with you\nHold a little room for light\nWe will sing beyond the night\n\n[Verse 3]\nNeon fades along the lane\nFootsteps keep the time of rain\nFold the night and leave it here\nMorning has a sky to clear\n\n[Chorus]\nLet the day come into view\nEvery road begins with you\nHold a little room for light\nWe will sing beyond the night\n\n[Verse 4]\nNeon fades along the lane\nFootsteps keep the time of rain\nFold the night and leave it here\nMorning has a sky to clear\n\n[Chorus]\nLet the day come into view\nEvery road begins with you\nHold a little room for light\nWe will sing beyond the night\n\n[Bridge 2]\nNeon fades along the lane\nFootsteps keep the time of rain\nFold the night and leave it here\nMorning has a sky to clear\n\n[Chorus]\nLet the day come into view\nEvery road begins with you\nHold a little room for light\nWe will sing beyond the night\n\n[Verse 5]\nNeon fades along the lane\nFootsteps keep the time of rain\nFold the night and leave it here\nMorning has a sky to clear\n\n[Chorus]\nLet the day come into view\nEvery road begins with you\nHold a little room for light\nWe will sing beyond the night\n\n[Verse 6]\nNeon fades along the lane\nFootsteps keep the time of rain\nFold the night and leave it here\nMorning has a sky to clear\n\n[Outro]\nLet the day come into view\nEvery road begins with you\nHold a little room for light\nWe will sing beyond the night",
+  "duration": 60.0,
+  "lm_seed": 4242,
+  "seed": 4242,
+  "companion_scale": 0.0,
+  "output_format": "wav32"
+}
+[Load] Self-test on CUDA0: ok (1.2 ms)
+[Load] LM backend: CUDA0 (CPU threads: 16)
+[GGUF] C:\YuE2 Studio\data\models\yue2-cpp\YuE2-3B-Q8_0.gguf: 627 tensors, data at offset 5367296
+[LM-Config] 28L, H=2048, V=184704, Nh=16, Nkv=8, D=128, tied=0
+[Qwen3] Attn: Q+K+V fused
+[Qwen3] MLP: gate+up fused
+[WeightCtx] Loaded 311 tensors, 2195.1 MB into backend
+[Store] Load LM: 1036 ms
+[LM-KV] Allocated 1 sets x 28 layers (4D batched, f16), 532.0 MB
+[AR] Score song 0: 571 tokens prefilled, 44 ms
+[AR] Score prefill: 44 ms, CFG=1.00, top_k=30, budget=4096, songs=1, batch=1
+[AR] Score 0/4096
+[AR] Score 100/4096
+[AR] Score 200/4096
+[AR] Score 300/4096
+[AR] Score 400/4096
+[AR] Score 500/4096
+[AR] Score 600/4096
+[AR] Score 700/4096
+[AR] Score 800/4096
+[AR] Score 900/4096
+[AR] Score 1000/4096
+[AR] Score 1100/4096
+[AR] Score 1200/4096
+[AR] Score 1300/4096
+[AR] Score 1400/4096
+[AR] Score 1500/4096
+[AR] Score 1600/4096
+[AR] Score 1700/4096
+[AR] Score 1800/4096
+[AR] Score 1900/4096
+[AR] Score 2000/4096
+[AR] Score 2100/4096
+[AR] Score 2200/4096
+[AR] Score 2300/4096
+[AR] Score 2400/4096
+[AR] Score 2500/4096
+[AR] Score 2600/4096
+[AR] Score 2700/4096
+[AR] Score 2800/4096
+[AR] Score song 0: end token at step 2899
+[AR] Score song 0: 2899 tokens
+[AR] Score: 2899 tokens over 1 songs, 2900 steps, 11.7 s (4.0 ms/step)
+[Prompt] cot=full, songs=1, variations=1, 1 tracks
+[Pipeline] score of song 1 as written:
+X:1
+T:
+M:2/4
+L:1/16
+Qtre Ins2="
+: VocalIns Ins Insadc2|B8|
+% verse
+V: Vocal
+M:1/4
+A4|
+V: Ins
+M:1/4
+Z|
+V: Vocal
+M:2/4
+B4c3c|d2d2d2c2|B4z4|A3AA3A|
+V: Ins
+M:2/4
+Z4|
+V: Vocal
+B2B2B2A2|A4z4|Z|
+V: Ins
+Z3|
+% chorus
+V: Vocal
+A3AA3A|B2B2B2A2|A4z4|A3AA3A|
+[AR] Frame budget clamped to 1500 by the requested duration (60.0 s)
+[LM-KV] Allocated 1 sets x 28 layers (4D batched, f16), 728.0 MB
+[AR] Semantic song 0: 3472 tokens prefilled, 122 ms
+[AR] Semantic prefill: 122 ms, CFG=1.00, top_k=100, budget=1500, songs=1, batch=1
+[AR] Semantic 0/1500
+[AR] Semantic 100/1500
+[AR] Semantic 200/1500
+[AR] Semantic 300/1500
+[AR] Semantic 400/1500
+[AR] Semantic 500/1500
+[AR] Semantic 600/1500
+[AR] Semantic 700/1500
+[AR] Semantic 800/1500
+[AR] Semantic 900/1500
+[AR] Semantic 1000/1500
+[AR] Semantic 1100/1500
+[AR] Semantic 1200/1500
+[AR] Semantic 1300/1500
+[AR] Semantic 1400/1500
+[AR] Semantic 1500/1500
+[AR] Semantic song 0: 1500 tokens (truncated)
+[AR] Semantic: 1500 tokens over 1 songs, 1501 steps, 5.8 s (3.9 ms/step)
+[NAR] Song 0: 1500 frames (60.0 s), prefix 3472, 1 chunk of 1590, 1 variation
+[GGUF] C:\YuE2 Studio\data\models\yue2-cpp\YuE2-3B-Q8_0.gguf: 627 tensors, data at offset 5367296
+[Load] NAR backend: CUDA0 (shared)
+[NAR] Attn: Q+K+V fused
+[NAR] MLP: gate+up fused
+[WeightCtx] Loaded 317 tensors, 1433.5 MB into backend
+[NAR] Loaded: 28 layers, latent_dim=64, timestep_shift=1.000
+[Store] Load NAR: 640 ms
+[NAR] Graph: 1303 nodes, T_lat=1500, variations=1, prefix=4973, set=0
+[NAR] Step 1/32, 144 ms
+[NAR] Step 2/32, 110 ms
+[NAR] Step 3/32, 106 ms
+[NAR] Step 4/32, 109 ms
+[NAR] Step 5/32, 108 ms
+[NAR] Step 6/32, 107 ms
+[NAR] Step 7/32, 116 ms
+CUDA error: an illegal memory access was encountered
+  current device: 0, in function ggml_backend_cuda_synchronize at C:\yue2.cpp\ggml\src\ggml-cuda\ggml-cuda.cu:2948
+  cudaStreamSynchronize(cuda_ctx->stream())
+C:\yue2.cpp\ggml\src\ggml-cuda\ggml-cuda.cu:111: CUDA error

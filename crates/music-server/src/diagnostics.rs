@@ -174,6 +174,11 @@ pub async fn get(State(state): State<AppState>) -> Json<Value> {
     Json(json!({ "text": text(&report, &log), "report": report }))
 }
 
+/// An engine log as the pack carries it: without the text of any song, keys masked.
+fn engine_text(lines: &[String]) -> String {
+    masked(&crate::problem::without_request_text(lines).join("\n"))
+}
+
 /// The bug-report pack: the diagnostics, the journal, the studio's logs and the engine's, every one masked.
 fn pack(root: &Path, report: &Value, journal: &[crate::library::JournalEntry], engine_log: &[String]) -> Result<PathBuf, String> {
     let log = recent_log(root);
@@ -197,9 +202,9 @@ fn pack(root: &Path, report: &Value, journal: &[crate::library::JournalEntry], e
         }
     }
     if let Ok(bytes) = std::fs::read(music_engine::yue_server::startup_log_path()) {
-        put("engine-startup.log", masked(&String::from_utf8_lossy(&bytes)).as_bytes())?;
+        put("engine-startup.log", engine_text(&String::from_utf8_lossy(&bytes).lines().map(String::from).collect::<Vec<_>>()).as_bytes())?;
     }
-    put("engine.log", masked(&engine_log.join("\n")).as_bytes())?;
+    put("engine.log", engine_text(engine_log).as_bytes())?;
     zip.finish().map_err(|error| error.to_string())?;
     Ok(path)
 }
@@ -282,6 +287,35 @@ mod tests {
         assert_eq!(log.len(), LOG_LINES);
         assert_eq!(log.last().map(String::as_str), Some("key [key]"));
         assert_eq!(log_files(&root).iter().map(|path| path.file_name().unwrap().to_string_lossy().into_owned()).collect::<Vec<_>>(), vec!["yue2-studio.old.log", "yue2-studio.log"]);
+        std::fs::remove_dir_all(&root).ok();
+    }
+
+
+    /// The pack a person attaches to a public issue carries the engine's log without the text of a song: its loading,
+    /// steps and errors stay.
+    #[test]
+    fn the_pack_carries_no_text_of_a_song() {
+        let root = std::env::temp_dir().join(format!("yue2-diagnostics-{}", uuid::Uuid::now_v7()));
+        std::fs::create_dir_all(root.join("logs")).unwrap();
+        let lines: Vec<String> = include_str!("testdata/engine-log-with-song-text.log").lines().map(String::from).collect();
+        let path = pack(&root, &serde_json::json!({}), &[], &lines).unwrap();
+        let mut zip = zip::ZipArchive::new(std::fs::File::open(&path).unwrap()).unwrap();
+        let mut read = |name: &str| -> Option<String> {
+            let mut file = zip.by_name(name).ok()?;
+            let mut text = String::new();
+            std::io::Read::read_to_string(&mut file, &mut text).unwrap();
+            Some(text)
+        };
+        let engine = read("engine.log").unwrap();
+        let startup = read("engine-startup.log");
+        for log in std::iter::once(&engine).chain(startup.as_ref()) {
+            for text in ["\"lyrics\":", "Neon fades along the lane", "warm piano pop", "V: Vocal"] {
+                assert!(!log.contains(text), "{text} is in the pack");
+            }
+        }
+        for line in ["[request text left out]", "[AR] Score song 0: end token", "[NAR] Step 7/32", "CUDA error: an illegal memory access"] {
+            assert!(engine.contains(line), "{line} stays in the pack");
+        }
         std::fs::remove_dir_all(&root).ok();
     }
 
