@@ -15,7 +15,7 @@ import { mapNativeLibrarySong } from '../services/nativeLibrary';
 import type { NativeLibrarySong } from '../types';
 import type { TranslationKey } from '../i18n/translations';
 import { stemOf } from '../services/songStems';
-import { shownSongs, toolsSongOnOpen, type ToolRun } from '../services/toolsSong';
+import { libraryFailure, shownSongs, toolsSongOnOpen, type ToolRun } from '../services/toolsSong';
 import { ConfirmDialog } from './ConfirmDialog';
 import { MidiTool } from './midi/MidiTool';
 import { MidiEditor } from './midi/MidiEditor';
@@ -97,7 +97,7 @@ export function StudioToolsPanel({ initialSongId }: { initialSongId?: string | n
   const loadSongs = useCallback(async () => {
     try {
       const response = await fetch('/v1/library/songs');
-      if (!response.ok) throw new Error(`${response.status} ${await response.text()}`);
+      if (!response.ok) throw new Error(libraryFailure(response.status, await response.text()));
       const body = await response.json();
       const list: NativeLibrarySong[] = Array.isArray(body) ? body : body.songs ?? [];
       const playable = list.filter(song => song.audio_path);
