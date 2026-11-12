@@ -212,7 +212,7 @@ move around. Check the result with `ui_screenshot`.
 
 ## Tools by area
 
-- **studio**: `studio_status`, `studio_wait`, `studio_system`, `studio_capabilities`, `studio_open_data_folder` (in Explorer, for the user), `runtime_status` (midi, training pack, training listen), `system_gpus` (the cards and the one in use).
+- **studio**: `studio_status`, `studio_wait`, `studio_system`, `studio_capabilities`, `studio_open_data_folder` (in Explorer, for the user), `runtime_status` (midi, restore, training pack, training listen), `system_gpus` (the cards and the one in use).
 - **settings**: `settings_get`, `settings_set`.
 - **network**: `network_proxy_get`, `network_proxy_set` (no proxy, the system's or your own, and the HF-Mirror), `network_proxy_test`, `network_access_get`, `network_access_set` (opening the studio from other computers, a new key).
 - **journal**: `journal_read` (the Activity page), `journal_clear`, `journal_remove`.
@@ -242,6 +242,19 @@ move around. Check the result with `ui_screenshot`.
 - **winamp**: `winamp_get`, `winamp_set`, `winamp_skins`, `winamp_skin_add`, `winamp_museum`.
 - **video**: `video_open`, `video_get`, `video_set`, `video_render`, `video_play`, `video_pause`, `video_seek`, `video_close`.
 - **openrouter**: `openrouter_status`, `openrouter_set_key`, `openrouter_catalog`, `openrouter_catalog_refresh`, `openrouter_log`, `openrouter_complete`, `openrouter_cover`, `openrouter_transcribe`.
+- **restore**: `restore_status`, `restore_start` (a track or a file compressed to MP3, restored with Apollo into a new track `<title> · restored`), `restore_install`, `restore_remove`, `restore_cancel`.
+
+## Restore a track after compression
+
+1. `restore_status`; when `ready` is false, `restore_install` (Apollo, 66 MB, and audio.cpp's
+   server of the stems' device when it is missing) and `studio_wait`, or `restore_status` until
+   the download is done.
+2. `restore_start` with `song_id`, or `path` of any audio file. It removes the artefacts of MP3
+   compression and gives 44.1 kHz in the source's channels.
+3. `studio_wait until: restore`; `restore_status` run.library_song names the new track,
+   `<title> · restored`, which plays, downloads and goes to the tools like any track. Restoring
+   the same track again replaces it; `restore_cancel` stops the run.
+4. Apollo's weights are CC BY-SA 4.0.
 
 ## Turn a track into MIDI
 
