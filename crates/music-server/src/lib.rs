@@ -5477,13 +5477,15 @@ async fn execute_openrouter_json(
         .to_string();
     request_log::asked(what, &model, authenticated.request.body.to_string().chars().count());
     let started = std::time::Instant::now();
-    let response = net::client()
-        .post(format!("{}{}", providers::openrouter::API_BASE_URL, authenticated.request.path))
-        .bearer_auth(authenticated.api_key)
-        .json(&authenticated.request.body)
-        .send()
-        .await
-        .inspect_err(|error| request_log::failed(what, &model, &error.to_string()))?;
+    let client = net::client();
+    let response = net::send_cloud(|| {
+        client
+            .post(format!("{}{}", providers::openrouter::API_BASE_URL, authenticated.request.path))
+            .bearer_auth(&authenticated.api_key)
+            .json(&authenticated.request.body)
+    })
+    .await
+    .inspect_err(|error| request_log::failed(what, &model, &format!("{error:#}")))?;
     let status = response.status();
     let response = match response.error_for_status_ref() {
         Ok(_) => response,
@@ -7057,16 +7059,19 @@ async fn assistant_write_stream(
         let started = std::time::Instant::now();
 
         let client = net::client();
-        let mut outgoing = client
-            .post(format!("{}/chat/completions", base.trim_end_matches('/')))
-            .json(&body)
-            .timeout(std::time::Duration::from_secs(600));
-        if let Some(key) = key {
-            outgoing = outgoing
-                .header(reqwest::header::AUTHORIZATION, format!("Bearer {key}"))
-                .header("HTTP-Referer", "https://github.com/timoncool/YuE2-Studio")
-                .header("X-Title", "YuE2 Studio");
-        }
+        let outgoing = || {
+            let mut outgoing = client
+                .post(format!("{}/chat/completions", base.trim_end_matches('/')))
+                .json(&body)
+                .timeout(std::time::Duration::from_secs(600));
+            if let Some(key) = &key {
+                outgoing = outgoing
+                    .header(reqwest::header::AUTHORIZATION, format!("Bearer {key}"))
+                    .header("HTTP-Referer", "https://github.com/timoncool/YuE2-Studio")
+                    .header("X-Title", "YuE2 Studio");
+            }
+            outgoing
+        };
 
         // Until the first byte the window can be closed as well: a model
         // still loading or reading a long prompt sends nothing for minutes.
@@ -7076,7 +7081,7 @@ async fn assistant_write_stream(
                 release_assistant_unless_kept(&state).await;
                 return;
             }
-            sent = outgoing.send() => sent,
+            sent = net::send_cloud(outgoing) => sent,
         };
         let response = match sent {
             Ok(response) => response,
