@@ -1588,6 +1588,7 @@ export const ko = {
     midiStart: 'MIDI 만들기',
     midiAgain: 'MIDI 다시 만들기',
     midiStop: '중지',
+    midiStopped: '중지했습니다. 지금까지 들은 음표는 저장되지 않았습니다. "MIDI 만들기"로 다시 시작합니다.',
     midiForSelected: 'MIDI로',
     midiBatchStarted: '{count}곡을 차례로 MIDI로 바꿉니다. 진행 상황은 도구에 표시됩니다',
     midiBatchProgress: 'MIDI: {total}곡 중 {done}곡',

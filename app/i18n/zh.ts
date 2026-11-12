@@ -1588,6 +1588,7 @@ export const zh = {
     midiStart: '生成 MIDI',
     midiAgain: '重新生成 MIDI',
     midiStop: '停止',
+    midiStopped: '已停止。已听到的音符没有保存；“生成 MIDI”会重新开始。',
     midiForSelected: '转为 MIDI',
     midiBatchStarted: '{count} 首曲目将依次转为 MIDI，进度见工具页',
     midiBatchProgress: 'MIDI：{done} / {total}',

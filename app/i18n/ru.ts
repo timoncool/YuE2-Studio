@@ -1592,6 +1592,7 @@ export const ru = {
     midiStart: 'Сделать MIDI',
     midiAgain: 'Сделать MIDI заново',
     midiStop: 'Остановить',
+    midiStopped: 'Остановлено. Услышанные ноты не сохранились; «Сделать MIDI» начнёт заново.',
     midiForSelected: 'В MIDI',
     midiBatchStarted: '{count} треков уходят в MIDI по очереди: ход виден в «Инструментах»',
     midiBatchProgress: 'MIDI: {done} из {total}',

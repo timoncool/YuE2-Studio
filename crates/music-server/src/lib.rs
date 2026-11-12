@@ -8035,6 +8035,8 @@ async fn finish_midi_run(state: &AppState, outcome: anyhow::Result<usize>, outpu
                 run.notes = notes;
                 run.file = Some(plain_path(output));
             }
+            // a run the person stopped did not fail: the window says it stopped, not why it broke
+            Err(_) if midi_stopped(state) => run.stage = "stopped",
             Err(error) => run.error = Some(format!("{error:#}")),
         }
     }
@@ -8147,6 +8149,7 @@ async fn transcribe_to_midi(state: &AppState, size: &'static midi::Size, audio: 
     let result = tokio::task::spawn_blocking(move || -> anyhow::Result<Value> {
         // the notes and the chunks as the server streams them; the file and the count come from the answer
         let mut live = midi::Events::default();
+        let mut shown = std::time::Instant::now().checked_sub(std::time::Duration::from_secs(1)).unwrap_or_else(std::time::Instant::now);
         let mut on_event = |artifacts: &[acpp_server::TaskArtifact]| {
             let mut chunks = None;
             // the notes and the progress come as MuScriptor's event JSON; the stream's other artifacts are the result's
@@ -8164,7 +8167,12 @@ async fn transcribe_to_midi(state: &AppState, size: &'static midi::Size, audio: 
                     run.chunks_total = u32::try_from(total).unwrap_or(u32::MAX);
                 }
             }
-            *background.midi_notes.blocking_write() = live.notes.clone();
+            // the window reads the notes a few times a second: copying all of them on every event of a long track is
+            // thousands of copies of thousands of notes
+            if shown.elapsed() >= std::time::Duration::from_millis(200) {
+                *background.midi_notes.blocking_write() = live.notes.clone();
+                shown = std::time::Instant::now();
+            }
         };
         acpp::run_stream(&background.acpp, build, acpp_server::ModelEntry::muscriptor(&id, &model), serde_json::json!({ "audio": input }), &|| midi_stopped(&background), &mut on_event)
     })

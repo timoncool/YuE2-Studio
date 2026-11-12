@@ -1593,6 +1593,7 @@ export const en = {
     midiStart: 'Make MIDI',
     midiAgain: 'Make MIDI again',
     midiStop: 'Stop',
+    midiStopped: 'Stopped. The notes heard so far were not kept; Make MIDI starts again.',
     midiForSelected: 'To MIDI',
     midiBatchStarted: 'Turning {count} tracks into MIDI one after another: Studio tools shows how far it is',
     midiBatchProgress: 'MIDI: {done} of {total}',
