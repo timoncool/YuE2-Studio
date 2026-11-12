@@ -45,8 +45,9 @@ const CHANGES: &[Change] = &[
     Change { what: "llama-*", reason: "llama" },
     Change { what: "music-train", reason: "hotstep" },
     Change { what: "ace-caption", reason: "hotstep" },
-    Change { what: "cuda-cublas", reason: "cublas-wheel" },
     Change { what: "parakeet-onnx", reason: "parakeet-onnx-gone" },
+    Change { what: "ort-gpu", reason: "ort-gpu-gone" },
+    Change { what: "onnxruntime", reason: "ort-cpu" },
 ];
 
 /// Every reason, by its code, in English; the window says it in its own language by the code.
@@ -58,7 +59,7 @@ pub const REASONS: &[(&str, &str)] = &[
     ("cublas-wheel", "The same cuBLAS 12.9, now from NVIDIA's package with its checksum pinned"),
     ("faster-whisper-gone", "Faster-Whisper is replaced by CrisperWhisper"),
     ("parakeet-onnx-gone", "Parakeet runs on transcribe.cpp; these ONNX models are no longer read"),
-    ("ort-cpu", "Tempo, key and the listening pack run on ONNX Runtime on the processor"),
+    ("ort-cpu", "The tempo of a song is measured on the processor, in 5 to 7 seconds a song"),
     ("ort-gpu-gone", "ONNX Runtime no longer runs on the card; its CUDA, cuDNN and DirectML files are not read"),
     ("demucs-audiocpp", "Stems are split by HT-Demucs in the audio.cpp server"),
     ("audiocpp-server", "The audio.cpp engine behind stem separation, karaoke and audio-to-MIDI"),

@@ -1857,8 +1857,8 @@ mod import_tests {
         }
     }
 
-    /// The trainer and Audio to MIDI each sweep the shared tools folder of every release but their own: two
-    /// releases would delete each other's folder on every start.
+    /// The HOT-Step tools are one package: `scripts/build-hotstep-tools.ps1` builds it from both source files and
+    /// refuses two releases.
     #[test]
     fn the_trainer_and_the_transcriber_are_one_tools_release() {
         let read = |text: &str| serde_json::from_str::<serde_json::Value>(text).unwrap();

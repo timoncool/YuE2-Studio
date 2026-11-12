@@ -1851,7 +1851,7 @@ fn roformer_on_card(state: &AppState, runtime: lyrics_sync::OnnxFlavour) -> bool
             || std::env::var_os("PATH").is_some_and(|path| std::env::split_paths(&path).any(|folder| folder.join(name).is_file()))
     };
     runtime != lyrics_sync::OnnxFlavour::Cpu
-        && lyrics_sync::OnnxFlavour::Auto.card() == Some(lyrics_sync::OnnxCard::Cuda)
+        && lyrics_sync::OnnxFlavour::Auto.uses_cuda()
         && (!cfg!(windows) || engine_runtime::CUDA13_LIBRARIES.iter().all(|name| found(name)))
 }
 
@@ -6356,13 +6356,7 @@ fn karaoke_set(name: &str, device: lyrics_sync::OnnxFlavour, whisper_model: Opti
     let mut wanted: Vec<String> = Vec::new();
     match name {
         "parakeet" => {
-            // the transcribe.cpp build this machine runs and the model the dropdown names; on a card CUDA does not
-            // run, DirectML comes with it for the tempo model, as before transcribe.cpp (on NVIDIA, separation brings
-            // the CUDA runtime)
-            if device.card() == Some(lyrics_sync::OnnxCard::DirectMl) {
-                wanted.push("onnxruntime".into());
-                wanted.extend(lyrics_sync::DIRECTML_ASSETS.iter().map(|id| id.to_string()));
-            }
+            // the transcribe.cpp build this machine runs and the model the dropdown names
             wanted.extend(lyrics_sync::parakeet_assets(device, whisper_model).into_iter().map(String::from));
         }
         "whisper" => {
@@ -8268,6 +8262,12 @@ fn update_plan_now(state: &AppState, separation: lyrics_sync::OnnxFlavour, optio
     if leftovers.iter().any(|leftover| leftover.what == "htdemucs-onnx" && !leftover.paths.is_empty()) {
         take(Part::Separation, &separation::MODEL, state.separator.downloader());
     }
+    // the tempo of the listening pack moves from the card's ONNX Runtime to the processor's
+    if leftovers.iter().any(|leftover| leftover.what == "ort-gpu" && !leftover.paths.is_empty()) && state.training.listen_ready() {
+        if let Some(runtime) = lyrics_sync::asset("onnxruntime") {
+            take(Part::Karaoke, runtime, state.lyrics_sync.downloader());
+        }
+    }
     for (build, _) in update_acpp_builds(state, &leftovers, separation, options) {
         for asset in state.acpp.missing(build) {
             take(Part::Audiocpp, asset, state.acpp.downloader());
@@ -8386,8 +8386,12 @@ async fn run_update(state: &AppState, rows: &[update_screen::Row]) -> anyhow::Re
     }
     let demucs_ready = htdemucs_installed(state, separation);
     let midi_ready = !midi::SIZES.iter().any(|size| state.midi.model_installed(size)) || midi_build(&options).is_ok_and(|build| state.acpp.installed(build));
+    let tempo_ready = !state.training.listen_ready() || state.lyrics_sync.onnxruntime_library().is_some();
     tokio::task::spawn_blocking(move || {
         let mut gone = vec!["parakeet-onnx"];
+        if tempo_ready {
+            gone.push("ort-gpu");
+        }
         if demucs_ready {
             gone.push("htdemucs-onnx");
         }

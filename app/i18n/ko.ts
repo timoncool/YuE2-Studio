@@ -1852,7 +1852,7 @@ export const ko = {
     updateWhyCublasWheel: "같은 cuBLAS 12.9를 이제 체크섬이 고정된 NVIDIA 패키지에서 받습니다",
     updateWhyFasterWhisperGone: "Faster-Whisper는 CrisperWhisper로 대체되었습니다",
     updateWhyParakeetOnnxGone: "Parakeet은 transcribe.cpp에서 동작하며, 이 ONNX 모델은 더 이상 읽지 않습니다",
-    updateWhyOrtCpu: "템포, 키, 리스닝 팩은 프로세서의 ONNX Runtime에서 동작합니다",
+    updateWhyOrtCpu: "곡의 템포는 프로세서에서 곡당 5~7초 만에 측정됩니다",
     updateWhyOrtGpuGone: "ONNX Runtime은 더 이상 그래픽 카드에서 동작하지 않으며, CUDA·cuDNN·DirectML 파일을 읽지 않습니다",
     updateWhyDemucsAudiocpp: "스템은 audio.cpp 서버의 HT-Demucs가 나눕니다",
     updateWhyAudiocppServer: "스템 분리, 노래방, 오디오→MIDI를 담당하는 audio.cpp 엔진",

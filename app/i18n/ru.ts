@@ -1855,7 +1855,7 @@ export const ru = {
     updateWhyCublasWheel: "Тот же cuBLAS 12.9, теперь из пакета NVIDIA с закреплённой контрольной суммой",
     updateWhyFasterWhisperGone: "Faster-Whisper заменён CrisperWhisper",
     updateWhyParakeetOnnxGone: "Parakeet работает на transcribe.cpp, эти модели ONNX больше не читаются",
-    updateWhyOrtCpu: "Темп, тональность и пакет прослушивания работают на ONNX Runtime на процессоре",
+    updateWhyOrtCpu: "Темп песни считается на процессоре, за 5–7 секунд на песню",
     updateWhyOrtGpuGone: "ONNX Runtime больше не работает на видеокарте: его файлы CUDA, cuDNN и DirectML не читаются",
     updateWhyDemucsAudiocpp: "Стемы делит HT-Demucs в сервере audio.cpp",
     updateWhyAudiocppServer: "Движок audio.cpp: на нём разделение на дорожки, караоке и ноты из звука",

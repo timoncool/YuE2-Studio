@@ -1856,7 +1856,7 @@ export const en = {
     updateWhyCublasWheel: "The same cuBLAS 12.9, now from NVIDIA's package with its checksum pinned",
     updateWhyFasterWhisperGone: "Faster-Whisper is replaced by CrisperWhisper",
     updateWhyParakeetOnnxGone: "Parakeet runs on transcribe.cpp; these ONNX models are no longer read",
-    updateWhyOrtCpu: "Tempo, key and the listening pack run on ONNX Runtime on the processor",
+    updateWhyOrtCpu: "The tempo of a song is measured on the processor, in 5 to 7 seconds a song",
     updateWhyOrtGpuGone: "ONNX Runtime no longer runs on the card; its CUDA, cuDNN and DirectML files are not read",
     updateWhyDemucsAudiocpp: "Stems are split by HT-Demucs in the audio.cpp server",
     updateWhyAudiocppServer: "The audio.cpp engine behind stem separation, karaoke and audio-to-MIDI",
