@@ -1507,20 +1507,15 @@ pub async fn serve() -> anyhow::Result<()> {
                             }
                         }
                     }
-                    match restart_engine(&state).await {
-                        Ok(()) => {
-                            complained = false;
-                            *state.engine_start_error.write().await = None;
-                        }
-                        Err(error) => {
-                            *state.engine_start_error.write().await = Some(error.clone());
-                            // Say it once per failure, not once every few
-                            // seconds: a card with too little memory would
-                            // otherwise fill the log with the same line.
-                            if !complained {
-                                eprintln!("the local engine did not start: {error}");
-                                complained = true;
-                            }
+                    let started = start_engine_again(&state).await;
+                    *state.engine_start_error.write().await = started.as_ref().err().cloned();
+                    // Said and counted once per failure, not once every few
+                    // seconds: a card with too little memory would otherwise
+                    // fill the log, and the hub would count the time it lay down.
+                    if failure_is_new(&mut complained, started.is_ok()) {
+                        if let Err(error) = &started {
+                            eprintln!("the local engine did not start: {error}");
+                            count_engine_failure(&state, error);
                         }
                     }
                 }
@@ -4831,13 +4826,30 @@ async fn engine_at_work(state: &AppState) -> bool {
 
 /// Starts the engine again with the saved options; an engine that does not start is counted for the hub by a reason
 /// that names no path on the computer.
+
 async fn restart_engine(state: &AppState) -> Result<(), String> {
     let started = start_engine_again(state).await;
-    if let (Err(error), Some(hub)) = (&started, &state.hub) {
+    if let Err(error) = &started {
+        count_engine_failure(state, error);
+    }
+    started
+}
+
+fn count_engine_failure(state: &AppState, error: &str) {
+    if let Some(hub) = &state.hub {
         hub.count("engine_failed", 1);
         hub.failed("engine", &engine_failure_code(error));
     }
-    started
+}
+
+/// Whether the watchdog's start that just ended is a failure not yet said: the first of a run of failed starts is,
+/// the ones after it are not until a start succeeds.
+fn failure_is_new(complained: &mut bool, started: bool) -> bool {
+    if started {
+        *complained = false;
+        return false;
+    }
+    !std::mem::replace(complained, true)
 }
 
 /// What an engine that did not start died of, for the hub: the exit code and Windows' record of the fault when there
@@ -10862,6 +10874,13 @@ mod tests {
         let code = engine_failure_code(missing);
         assert!(!code.contains("someone"), "no path reaches the hub: {code}");
         assert_eq!(engine_failure_code("something new"), "other");
+    }
+
+    #[test]
+    fn the_watchdog_counts_a_failed_engine_once_until_it_starts_again() {
+        let mut complained = false;
+        let counted: Vec<bool> = [false, false, false, true, false, false].iter().map(|&started| failure_is_new(&mut complained, started)).collect();
+        assert_eq!(counted, [true, false, false, false, true, false], "three failed restarts are one failure; after a start the next failure is a second");
     }
 
     /// A card that ran out of memory has to say so. The studio used to answer
