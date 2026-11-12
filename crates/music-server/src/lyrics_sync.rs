@@ -1689,6 +1689,19 @@ pub fn heard_line_starts(words: &[(f64, String)], lyrics: &str) -> Vec<(String, 
     heard_lines(words, lyrics).0
 }
 
+/// What the alignment pays for heard words it leaves without a line, as the
+/// gap penalty of a sequence alignment: a line placed past a sung stretch the
+/// text does not cover costs `per_word` for each word skipped, so leaping over
+/// a verse for a line matched only in part costs more than that match brings.
+/// `leading` counts the words before the first placed line as well.
+#[derive(Debug, Clone, Copy)]
+pub struct Gaps {
+    pub per_word: f64,
+    pub leading: bool,
+}
+
+pub const GAPS: Gaps = Gaps { per_word: 0.05, leading: true };
+
 /// The sung lines with the moments they start, and what the recogniser heard outside the placed ones.
 fn heard_lines(words: &[(f64, String)], lyrics: &str) -> (Vec<(String, Option<f64>)>, Edges) {
     let lines: Vec<&str> = lyrics
@@ -1746,14 +1759,17 @@ fn heard_lines(words: &[(f64, String)], lyrics: &str) -> (Vec<(String, Option<f6
     // a chorus the model sang twice in a row shows its lines as they are first
     // sung, not where the recogniser heard them best.
     let credit = |score: f64| if score >= 0.7 { 1.0 } else { score };
-    let better = |left: (f64, usize, usize), right: (f64, usize, usize)| {
+    // (total, sum of placed line numbers, sum of starts, whether a line is placed yet)
+    type Kept = (f64, usize, usize, bool);
+    let better = |left: Kept, right: Kept| {
         left.0 > right.0 + 1e-9 || ((left.0 - right.0).abs() <= 1e-9 && (left.1, left.2) < (right.1, right.2))
     };
-    let mut best: Vec<Option<(f64, usize, usize)>> = vec![None; count + 1];
-    best[0] = Some((0.0, 0, 0));
+    let gaps = GAPS;
+    let mut best: Vec<Option<Kept>> = vec![None; count + 1];
+    best[0] = Some((0.0, 0, 0, false));
     let mut back: Vec<Vec<(usize, Option<usize>)>> = Vec::with_capacity(lines.len());
     for (index, &span) in spans.iter().enumerate() {
-        let mut next: Vec<Option<(f64, usize, usize)>> = vec![None; count + 1];
+        let mut next: Vec<Option<Kept>> = vec![None; count + 1];
         let mut choice = vec![(0usize, None); count + 1];
         for from in 0..=count {
             let Some(so_far) = best[from] else { continue };
@@ -1770,7 +1786,8 @@ fn heard_lines(words: &[(f64, String)], lyrics: &str) -> (Vec<(String, Option<f6
                     continue;
                 }
                 let after = (start + span).min(count);
-                let total = (so_far.0 + credit(score), so_far.1 + index, so_far.2 + start);
+                let skipped = if so_far.3 || gaps.leading { start - from } else { 0 };
+                let total = (so_far.0 + credit(score) - gaps.per_word * skipped as f64, so_far.1 + index, so_far.2 + start, true);
                 if next[after].is_none_or(|kept| better(total, kept)) {
                     next[after] = Some(total);
                     choice[after] = (from, Some(start));
@@ -2197,6 +2214,24 @@ Third");
         words.push((20.0, "yeah".into()));
         words.push((21.0, "oh".into()));
         assert_eq!(align_lyrics(&words, &lyrics).len(), 1, "two stray words do not time 68 lines");
+    }
+
+    #[test]
+    fn a_verse_whose_first_line_is_not_sung_stays_on_its_first_performance() {
+        // what Parakeet heard in en-A, a song that sings its verse twice, against a text whose first line it never sings
+        let words: Vec<(f64, String)> = include_str!("testdata/en-A-words.txt")
+            .lines()
+            .filter_map(|line| line.strip_prefix("W "))
+            .filter_map(|rest| {
+                let mut parts = rest.trim().splitn(2, ' ');
+                Some((parts.next()?.parse().ok()?, parts.next()?.trim().to_string()))
+            })
+            .collect();
+        assert_eq!(words.len(), 150);
+        let lines = align_lyrics(&words, include_str!("testdata/en-A-first-line-changed.txt"));
+        let starts: Vec<f64> = lines.iter().map(|(at, _)| *at).collect();
+        assert_eq!(starts, vec![11.76, 14.48, 17.28, 19.84, 22.88, 25.68], "{lines:?}");
+        assert_eq!(lines[1].1, "Footsteps keep the time of rain");
     }
 
 /// Karaoke's engine loaded in this process and installed over: the record says the new release, the process keeps
