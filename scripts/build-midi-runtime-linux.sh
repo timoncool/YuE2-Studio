@@ -41,7 +41,8 @@ cp "$build/ace-caption" "$output/music-caption"
 find "$build" -maxdepth 2 -name 'lib*.so*' -exec cp -a {} "$output/" \;
 echo "$commit" > "$output/runtime.commit"
 for binary in music-midi music-caption; do
-    if readelf -d "$output/$binary" | grep -iE 'runpath|rpath' | grep -qv 'ORIGIN'; then
+    # every entry of the path, not the line: CMake appends the toolkit's folder after $ORIGIN
+    if readelf -d "$output/$binary" | grep -iE 'runpath|rpath' | grep -qE '(\[|:)/'; then
         echo "[ERROR] $binary keeps a build-machine library path:" >&2
         readelf -d "$output/$binary" | grep -iE 'runpath|rpath' >&2
         exit 1
