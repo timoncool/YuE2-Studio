@@ -615,9 +615,9 @@ mod tests {
         let unpacked: Vec<_> = CUDA13_LIBRARIES.iter().map(|library| runtime.library_dir().join(library)).collect();
         crate::install_record::write(&runtime.downloader().record_of(asset), asset.url, "", &unpacked, runtime.downloader().root()).unwrap();
         assert!(runtime.downloader().is_installed(asset));
-        // The other build asks for its own cuBLAS, unless PATH has it.
+        // The other build asks for its own downloads (cuBLAS; on Linux its CUDA runtime too), unless PATH has them.
         if !CUDA12_LIBRARIES.iter().all(|library| is_on_the_search_path(library)) {
-            assert_eq!(runtime.missing(Some(CudaBuild::Cuda12)).len(), 1);
+            assert_eq!(runtime.missing(Some(CudaBuild::Cuda12)).len(), cuda_assets(CudaBuild::Cuda12).len());
         }
         std::fs::remove_dir_all(&root).ok();
     }
