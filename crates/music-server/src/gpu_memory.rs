@@ -5,7 +5,7 @@
 /// runs out of the card's memory.
 const SHARED_ALARM_BYTES: u64 = 1024 * 1024 * 1024;
 /// The share of the card's memory taken from which it counts as full.
-const CARD_FULL: f64 = 0.97;
+const CARD_FULL: f64 = 0.95;
 
 /// Whether the driver lends a song's engine the computer's memory: the card's own is nearly all taken and more than
 /// `SHARED_ALARM_BYTES` of the engine's work is kept outside it.
