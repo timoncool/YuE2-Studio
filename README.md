@@ -93,8 +93,8 @@ Code, save [docs/mcp-skill.md](docs/mcp-skill.md) as `~/.claude/skills/yue2-stud
   or Whisper. Your lyrics are kept; only the timing is borrowed.
 - **Six stems on the GPU** — drums, bass, other, vocals, guitar and piano with HT-Demucs.
 - **Any track to MIDI** — a song, a stem or a processed take becomes multi-instrument MIDI
-  (34 instrument groups and drums) with MuScriptor on the GPU, through HOT-Step's native
-  port. A piano roll fills in while it listens; play it against the original, mute or solo
+  (34 instrument groups and drums) with MuScriptor on the GPU, in the audio.cpp server.
+  A piano roll fills in while it listens; play it against the original, mute or solo
   an instrument, save the .mid. Downloaded the first time it is used.
 - **A MIDI editor** — a piano roll with tracks, instruments and drums: play a song in from a
   MIDI keyboard or the computer's keys, record or draw it, edit a track's MIDI, save it to the
@@ -327,7 +327,8 @@ the fixes back as a pull request.** The studio keeps its data in `~/.local/share
 | Training a LoRA · music-train | CUDA | not available | not available |
 | Style by ear · MOSS-Music | CUDA | processor | processor |
 | Tempo · Beat This! | processor | processor | processor |
-| Stems · HT-Demucs | CUDA | processor | processor |
+| Stems · HT-Demucs | CUDA | Vulkan | processor |
+| Stems · Mel-Band RoFormer | CUDA | processor | processor |
 | Karaoke timing · Parakeet | CUDA | Vulkan | processor |
 | Karaoke timing · Whisper | CUDA | processor | processor |
 | Writing assistant · llama.cpp | CUDA | Vulkan | processor |
@@ -340,7 +341,8 @@ The main, tested path is an NVIDIA card.
 - Training needs an NVIDIA card with 11 GB of video memory or more. The trainer has no other
   path, and on the processor one run would take days, so on any other machine the studio
   does not offer the training files.
-- On AMD and Intel cards stems are separated on the processor.
+- On AMD and Intel cards HT-Demucs separates the stems through Vulkan in the audio.cpp server;
+  Mel-Band RoFormer and MuScriptor (audio to MIDI) run on the processor.
 - Karaoke's Parakeet runs on transcribe.cpp, the engine Dub Studio and Speech Studio use: its
   CUDA build on an NVIDIA card with a CUDA 13 driver (on Linux when the system has CUDA 13's
   cuBLAS), its Vulkan build on any other card, its processor build without one; on a Mac, Metal
