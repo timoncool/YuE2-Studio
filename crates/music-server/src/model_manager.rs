@@ -809,7 +809,7 @@ const PROFILE_SETS: [(&str, &str, [&str; 5]); 4] = [
     ("native", "Full native - BF16 backbone, original weights", ["backbone-bf16", "vae-f32", "transcriber-f32", "mert-f32", COMPANION]),
 ];
 
-fn profiles() -> Vec<Profile> {
+pub(crate) fn profiles() -> Vec<Profile> {
     PROFILE_SETS.iter().map(|(id, label, ids)| profile(id, label, ids)).collect()
 }
 
