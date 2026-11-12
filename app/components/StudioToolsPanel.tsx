@@ -90,7 +90,13 @@ export function StudioToolsPanel({ initialSongId }: { initialSongId?: string | n
     const playable = list.filter(song => song.audio_path);
     setSongs(playable);
     const runOf = (path: string) =>
-      fetch(path, { headers: SELF_READ }).then(response => response.json() as Promise<{ run?: ToolRun | null }>).then(body => body.run ?? null);
+      fetch(path, { headers: SELF_READ })
+        .then(response => response.json() as Promise<{ run?: ToolRun | null }>)
+        .then(body => body.run ?? null)
+        .catch((error: unknown) => {
+          console.error(`[ERROR] the run at ${path} was not read:`, error);
+          return null;
+        });
     const runs = await Promise.all([runOf('/v1/separation/status'), runOf('/v1/midi')]);
     setSongId(current => current || toolsSongOnOpen(playable.map(song => song.id), runs));
   }, []);
