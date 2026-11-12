@@ -7222,13 +7222,25 @@ async fn create_song_karaoke(
         work_ended(&state, "karaoke", Err("karaoke.no-match"), false);
         return Err(api_error(StatusCode::BAD_GATEWAY, "karaoke.no-match".into()));
     }
-    work_ended(&state, "karaoke", Ok(()), false);
     let lrc = lyrics_sync::enhanced_lrc(&lines);
-    state
-        .library
-        .set_song_lrc(&id, &lrc)
-        .map_err(|error| api_error(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?;
+    store_karaoke(|| state.library.set_song_lrc(&id, &lrc).map(|_| ()), |ended| work_ended(&state, "karaoke", ended, false))
+        .map_err(|error| api_error(StatusCode::INTERNAL_SERVER_ERROR, error))?;
     Ok(Json(serde_json::json!({ "lrc": lrc, "lines": lines.len(), "provider": config.provider })))
+}
+
+/// Stores a karaoke that was made, and counts it made only once it is stored.
+fn store_karaoke(save: impl FnOnce() -> anyhow::Result<()>, ended: impl FnOnce(Result<(), &str>)) -> Result<(), String> {
+    match save() {
+        Ok(()) => {
+            ended(Ok(()));
+            Ok(())
+        }
+        Err(error) => {
+            let reason = error.to_string();
+            ended(Err(&reason));
+            Err(reason)
+        }
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -11780,6 +11792,18 @@ mod tests {
         assert_eq!(auto.flash_attention_off_reason(), None, "RTX 50 cards too, as in 3.8.3");
         let off = EngineOptions { flash_attention: FlashAttention::Off, ..auto };
         assert_eq!(off.flash_attention_off_reason(), Some("chosen in Settings"));
+    }
+
+    /// A karaoke is counted made only once it is stored: a save that fails counts it failed, with the reason.
+    #[test]
+    fn a_karaoke_that_was_not_stored_is_not_counted_made() {
+        let mut counted = Vec::new();
+        let failed = store_karaoke(|| Err(anyhow::anyhow!("disk full")), |ended| counted.push(ended.map_err(str::to_string)));
+        assert_eq!(failed, Err("disk full".into()));
+        assert_eq!(counted, vec![Err("disk full".to_string())]);
+        counted.clear();
+        assert_eq!(store_karaoke(|| Ok(()), |ended| counted.push(ended.map_err(str::to_string))), Ok(()));
+        assert_eq!(counted, vec![Ok(())]);
     }
 
     /// Every file the editor page loads has to be embedded; a missing
