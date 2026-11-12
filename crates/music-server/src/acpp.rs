@@ -311,8 +311,31 @@ pub fn describe(error: &AcppError) -> String {
 /// Runs `request` on `model` in the server of `build` (`take`): the one at work when it carries the model, else a new
 /// one once the runs on it have ended; a server under work is never replaced. `stop` is asked every tenth of a second,
 /// while the run waits for the server too. The run counts from the moment its server is chosen.
-
 pub fn run(acpp: &Acpp, build: Build, model: ModelEntry, request: Value, stop: &(dyn Fn() -> bool + Sync)) -> Result<Value> {
+    run_with(acpp, build, model, stop, |server, id, cancel| server.run_task(id, request, cancel))
+}
+
+/// [`run`] through the server's stream: the artifacts of each event go to `on_event` as the model produces them; the
+/// answer is the same result.
+pub fn run_stream(
+    acpp: &Acpp,
+    build: Build,
+    model: ModelEntry,
+    request: Value,
+    stop: &(dyn Fn() -> bool + Sync),
+    on_event: &mut dyn FnMut(&[acpp_server::TaskArtifact]),
+) -> Result<Value> {
+    run_with(acpp, build, model, stop, |server, id, cancel| server.run_task_stream(id, request, cancel, on_event))
+}
+
+/// A task on `model` in the server of `build` as [`run`] chooses it, with `stop` turned into the task's cancel.
+fn run_with(
+    acpp: &Acpp,
+    build: Build,
+    model: ModelEntry,
+    stop: &(dyn Fn() -> bool + Sync),
+    task: impl FnOnce(&Server, &str, &AtomicBool) -> std::result::Result<Value, AcppError>,
+) -> Result<Value> {
     let id = model.id.clone();
     acpp.register(model);
     let backend = build.backend();
@@ -339,7 +362,7 @@ pub fn run(acpp: &Acpp, build: Build, model: ModelEntry, request: Value, stop: &
                 std::thread::sleep(Duration::from_millis(100));
             }
         });
-        let answer = server.run_task(id, request, &cancel);
+        let answer = task(&server, id, &cancel);
         finished.store(true, Ordering::SeqCst);
         answer
     });
