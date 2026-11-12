@@ -600,6 +600,12 @@ pub fn parse_step_stage(line: &str) -> Option<(u32, &'static str)> {
     Some((value.get("step")?.as_u64()? as u32, stage))
 }
 
+/// The trainer's line that its card has no BF16 for the ConvRot8 layers: it trains on the F32 path, several times
+/// slower, as on the RTX 20xx cards.
+pub fn takes_f32_path(line: &str) -> bool {
+    line.contains("ConvRot8 BF16 unsupported") && line.contains("F32 path")
+}
+
 /// The part of a step working now: `index` of `of` parts, `of` known once a whole step has been seen.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct StepStageNow {
@@ -830,6 +836,12 @@ mod tests {
         stages.started(2, "AR CE and KL backward", 1200);
         let second = stages.now(1300).unwrap();
         assert_eq!((second.step, second.index, second.of, second.step_elapsed_ms), (2, 2, Some(3), 300));
+    }
+
+    #[test]
+    fn the_trainers_f32_path_line_is_recognised() {
+        assert!(takes_f32_path("[yue2-aitk] ConvRot8 BF16 unsupported on this backend; using the F32 path (#199)"));
+        assert!(!takes_f32_path("[yue2-aitk] CUDA graph warmup complete"));
     }
 
     #[test]

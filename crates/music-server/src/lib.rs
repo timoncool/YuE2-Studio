@@ -2914,6 +2914,7 @@ async fn read_training(State(state): State<AppState>) -> Json<Value> {
                 if going {
                     value["device"] = serde_json::json!(device);
                     value["step_stage"] = serde_json::json!(training.step_stage());
+                    value["f32_path"] = serde_json::json!(training.f32_path());
                 }
             }
             value

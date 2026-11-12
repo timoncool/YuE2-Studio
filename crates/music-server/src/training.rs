@@ -310,6 +310,8 @@ pub struct Training {
     ended: std::sync::OnceLock<RunEnded>,
     /// The parts of the steps of the training stage going now.
     step_stages: std::sync::Mutex<yue_train::StepStages>,
+    /// The trainer said its card has no BF16 for the ConvRot8 layers and took the F32 path, several times slower.
+    f32_path: std::sync::atomic::AtomicBool,
 }
 
 /// How a training run ended, for whoever counts finished work: `Ok` done, `Err` the reason, and whether it was stopped.
@@ -596,6 +598,7 @@ impl Training {
             edits: std::sync::Mutex::new(()),
             ended: std::sync::OnceLock::new(),
             step_stages: std::sync::Mutex::new(yue_train::StepStages::default()),
+            f32_path: std::sync::atomic::AtomicBool::new(false),
         }
     }
 
@@ -1124,6 +1127,11 @@ impl Training {
         self.step_stages.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).now(unix_millis())
     }
 
+    /// Whether the training stage going now took the trainer's F32 path, several times slower (RTX 20xx).
+    pub fn f32_path(&self) -> bool {
+        self.f32_path.load(std::sync::atomic::Ordering::Relaxed)
+    }
+
     pub fn checkpoints(&self, run_id: &str) -> Vec<yue_train::TrainingCheckpoint> {
         self.run_dir(run_id).map(|dir| yue_train::checkpoints(&dir)).unwrap_or_default()
     }
@@ -1418,6 +1426,7 @@ impl Training {
             }
             drop(lines_out);
             *self.step_stages.lock().unwrap_or_else(|poisoned| poisoned.into_inner()) = yue_train::StepStages::default();
+            self.f32_path.store(false, std::sync::atomic::Ordering::Relaxed);
             let pid = child.id();
             let mut last_error = String::new();
             let status = loop {
@@ -1436,6 +1445,8 @@ impl Training {
                                 }
                             } else if let Some((step, stage)) = yue_train::parse_step_stage(&line) {
                                 self.step_stages.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).started(step, stage, unix_millis());
+                            } else if yue_train::takes_f32_path(&line) {
+                                self.f32_path.store(true, std::sync::atomic::Ordering::Relaxed);
                             } else if line.contains("FATAL") || line.to_ascii_lowercase().contains("error") {
                                 last_error = line;
                             }

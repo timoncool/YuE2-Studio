@@ -41,6 +41,7 @@ import {
   prepareDataset,
   revealDataset,
   setTrainAfter,
+  continueTarget,
   startRun,
   stepsDone,
   takeAsIs,
@@ -881,7 +882,8 @@ const ContinueRun: React.FC<{ run: TrainingRun; onChanged: () => void; onError: 
   if (from === undefined) {
     return run.resume_refused && run.checkpoints.length > 0 ? <p className="mt-3 text-[11px] leading-4 text-zinc-500">{tt(`trainingResume_${run.resume_refused}`)}</p> : null;
   }
-  const suggested = from + Math.max(Number(run.recipe.save_every) || 1, 1) * 4;
+  const suggested = continueTarget(run, from);
+  const lastStep = run.steps[run.steps.length - 1]?.step;
   const target = Number(steps || suggested);
   const valid = Number.isInteger(target) && target > from;
   const start = () => {
@@ -912,6 +914,11 @@ const ContinueRun: React.FC<{ run: TrainingRun; onChanged: () => void; onError: 
           />
         </label>
       </div>
+      {run.status === 'interrupted' && lastStep !== undefined && (
+        <p className="mt-1.5 text-[11px] leading-4 text-amber-700 dark:text-amber-300">
+          {tt('trainingInterruptedAt').replace('{step}', String(lastStep)).replace('{from}', String(from)).replace('{to}', String(target))}
+        </p>
+      )}
       <p className="mt-1.5 text-[11px] leading-4 text-zinc-500">{tt('trainingContinueHint').replace('{step}', String(from))}</p>
     </div>
   );
@@ -999,6 +1006,7 @@ const RunCard: React.FC<{ run: TrainingRun; onChanged: () => void; onError: (mes
       )}
       {running && run.device && !onCpu && <p className="mt-1.5 text-[11px] text-zinc-500">{t('trainingOnDevice').replace('{device}', run.device)}</p>}
       {onCpu && <p role="alert" className="mt-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-300">{t('trainingOnCpuWarning')}</p>}
+      {running && !onCpu && run.f32_path && <p role="alert" className="mt-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-300">{t('trainingF32Path')}</p>}
       {running && !onCpu && cardFull && <p role="alert" className="mt-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-300">{t(tunedRun ? 'trainingCardFullWarning' : 'trainingCardFullWarningPreset')}</p>}
 
       {run.checkpoints.length > 0 && (

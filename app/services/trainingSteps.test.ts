@@ -1,5 +1,16 @@
 import { describe, expect, it } from 'vitest';
-import { stepsDone } from './training';
+import { continueTarget, stepsDone } from './training';
+
+describe('training a run further', () => {
+  it('takes a run the studio closed on to the steps it was started for', () => {
+    expect(continueTarget({ status: 'interrupted', recipe: { steps: 1500, save_every: 250 } as never }, 1000)).toBe(1500);
+  });
+
+  it('takes a finished or stopped run four checkpoints further', () => {
+    expect(continueTarget({ status: 'done', recipe: { steps: 1500, save_every: 250 } as never }, 1500)).toBe(2500);
+    expect(continueTarget({ status: 'interrupted', recipe: { steps: 1000, save_every: 250 } as never }, 1000)).toBe(2000);
+  });
+});
 
 describe('the bar of a training run between whole steps', () => {
   it('moves by the parts of the step going once a whole step told how many there are', () => {
