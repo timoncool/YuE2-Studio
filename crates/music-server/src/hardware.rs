@@ -42,6 +42,8 @@ pub struct Hardware {
     /// The engine computes on the card through Vulkan: a card with no CUDA build of the engine for it (every card on
     /// Linux, an AMD or Intel one on Windows), not Apple's Metal.
     pub vulkan: bool,
+    /// No card the songs are computed on: none at all, or one with less memory than the smallest local set needs.
+    pub on_processor: bool,
 }
 
 /// The engine ships one CUDA backend per toolkit. CUDA 13 targets Turing and
@@ -148,6 +150,7 @@ fn probe() -> &'static Hardware {
         let vulkan = gpu_name.is_some() && cuda.is_none() && !cfg!(target_os = "macos");
         Hardware {
             vulkan,
+            on_processor: computes_on_processor(total_vram_gb),
             gpu_name,
             total_vram_gb,
             total_ram_gb,
@@ -164,6 +167,13 @@ fn probe() -> &'static Hardware {
 
 pub fn hardware() -> Hardware {
     probe().clone()
+}
+
+/// Whether songs are computed on the processor: no card, or a card below the smallest local set (built-in graphics);
+/// a Mac computes on Metal.
+fn computes_on_processor(total_vram_gb: f64) -> bool {
+    let smallest = VRAM_TIERS.iter().map(|(_, tier)| *tier).fold(f64::INFINITY, f64::min);
+    !cfg!(target_os = "macos") && total_vram_gb < smallest
 }
 
 /// VRAM tiers follow the strict-eviction peak of each set: the larger backbone
@@ -472,6 +482,17 @@ fn best_adapter(names: &str, sizes: &str) -> Option<(String, f64)> {
 
 #[cfg(test)]
 mod tests {
+    /// Songs are computed on the processor without a card and on built-in graphics below the smallest set; the window
+    /// says so then.
+    #[cfg(not(target_os = "macos"))]
+    #[test]
+    fn songs_go_to_the_processor_without_a_card_or_on_built_in_graphics() {
+        assert!(super::computes_on_processor(0.0));
+        assert!(super::computes_on_processor(2.0), "built-in graphics with 2 GB");
+        assert!(!super::computes_on_processor(8.0), "an 8 GB card holds the smallest set");
+        assert!(!super::computes_on_processor(24.0));
+    }
+
     #[test]
     fn the_apple_chip_is_read_from_the_system_profiler_json() {
         let profile = r#"{ "SPDisplaysDataType" : [ { "_name" : "Apple M2 Max", "sppci_cores" : "30", "sppci_model" : "Apple M2 Max" } ] }"#;

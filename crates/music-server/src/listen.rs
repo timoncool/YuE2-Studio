@@ -401,6 +401,7 @@ mod tests {
             driver_major: None,
             recommended: None,
             vulkan: false,
+            on_processor: false,
         };
         let cuda13 = Some(crate::hardware::CudaBuild::Cuda13);
         assert_eq!(hearing(&card(24.0, cuda13), false), Hearing { lm: "moss-lm-q8_0.gguf", on_card: true, seconds: 420.0 });
