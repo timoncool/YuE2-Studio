@@ -63,18 +63,29 @@ pub enum SongError {
 /// The Windows status of a process that ran an instruction the processor does not have.
 const ILLEGAL_INSTRUCTION: &str = "0xc000001d";
 
-/// What a Windows exit status of the engine means, for the statuses a person can act on.
 fn exit_meaning(exit: &str) -> Option<&'static str> {
-    Some(match exit {
-        "0xc0000005" => "a crash: an access violation",
-        ILLEGAL_INSTRUCTION => "an instruction this processor does not have",
-        "0xc0000409" => "a crash: the engine aborted",
-        "0xc00000fd" => "a crash: a stack overflow",
-        "0xc0000374" => "a crash: corrupted memory",
-        "0xc0000135" | "0xc0000139" | "0xc0000142" => "a library of the engine did not load",
-        "0xc0000017" | "0xc000012d" => "the computer ran out of memory",
-        _ => return None,
-    })
+    exit_entry(exit).map(|(_, _, words)| *words)
+}
+
+/// The exit statuses of the engine a person can act on: the statuses, the window's key for them
+/// (`app/i18n/songErrors.ts` `EXIT_MEANINGS`) and the English words.
+const EXIT_MEANINGS: &[(&[&str], &str, &str)] = &[
+    (&["0xc0000005"], "access_violation", "a crash: an access violation"),
+    (&[ILLEGAL_INSTRUCTION], "illegal_instruction", "an instruction this processor does not have"),
+    (&["0xc0000409"], "aborted", "a crash: the engine aborted"),
+    (&["0xc00000fd"], "stack_overflow", "a crash: a stack overflow"),
+    (&["0xc0000374"], "corrupted_memory", "a crash: corrupted memory"),
+    (&["0xc0000135", "0xc0000139", "0xc0000142"], "library", "a library of the engine did not load"),
+    (&["0xc0000017", "0xc000012d"], "out_of_memory", "the computer ran out of memory"),
+];
+
+fn exit_entry(exit: &str) -> Option<&'static (&'static [&'static str], &'static str, &'static str)> {
+    EXIT_MEANINGS.iter().find(|(statuses, _, _)| statuses.contains(&exit))
+}
+
+/// The window's key for what an exit status means; `none` for a status without one.
+fn exit_meaning_key(exit: &str) -> &'static str {
+    exit_entry(exit).map_or("none", |(_, key, _)| *key)
 }
 
 const CONTEXT_SHORT: (&str, &str, &str, &str, &str) =
@@ -112,6 +123,7 @@ impl SongError {
             SongError::LostAtLine(_) => "lost_at_line",
             SongError::Lost => "lost",
             SongError::LostExited { exit, .. } if exit == ILLEGAL_INSTRUCTION => "lost_illegal_instruction",
+            SongError::LostExited { line: Some(_), .. } => "lost_exited_at_line",
             SongError::LostExited { .. } => "lost_exited",
             SongError::LostPort { set: true, .. } => "lost_port_set",
             SongError::LostPort { set: false, .. } => "lost_port_taken",
@@ -146,7 +158,13 @@ impl SongError {
             | SongError::EngineRefused(detail) => put("detail", json!(detail)),
             SongError::LostAtLine(line) | SongError::EngineFatal(line) | SongError::NotAudio(line) => put("line", json!(line)),
             SongError::AdapterMissing(name) => put("name", json!(name)),
-            SongError::LostExited { exit, .. } => put("exit", json!(exit)),
+            SongError::LostExited { exit, line } => {
+                put("exit", json!(exit));
+                put("meaning", json!(exit_meaning_key(exit)));
+                if let Some(line) = line {
+                    put("line", json!(line));
+                }
+            }
             SongError::LostPort { port, .. } => put("port", json!(port)),
             SongError::LostVramRetried(max_seq) => put("n", json!(max_seq)),
             SongError::ContextShort { tokens, context, can_last, asked, .. } => {
@@ -288,6 +306,7 @@ mod tests {
             SongError::LostAtLine("x".into()),
             SongError::Lost,
             SongError::LostExited { exit: "0xc0000005".into(), line: None },
+            SongError::LostExited { exit: "0xc0000135".into(), line: Some("x".into()) },
             SongError::LostExited { exit: ILLEGAL_INSTRUCTION.into(), line: Some("x".into()) },
             SongError::LostPort { port: 18087, set: true, note: None },
             SongError::LostPort { port: 18088, set: false, note: Some("x".into()) },
@@ -419,5 +438,24 @@ mod tests {
         assert!(score_strength_reason(seed.code(), &seed.params(), &json!({})).is_none(), "without LoRA");
         let dictionary = include_str!("../../../app/i18n/songErrors.ts");
         assert_eq!(dictionary.matches("score_unsingable_strength:").count(), 5, "the reason is in every language of the window");
+    }
+
+    /// A song lost with an engine that exited gives the window what the exit status means and the engine's last line,
+    /// as the English text does; a status without a meaning says `none`.
+    #[test]
+    fn a_lost_song_carries_what_the_exit_means_and_the_last_line_to_the_window() {
+        let lost = SongError::LostExited { exit: "0xc0000135".into(), line: Some("load cublas64_13.dll".into()) };
+        assert_eq!(lost.code(), Some("lost_exited_at_line"));
+        let params = lost.params();
+        assert_eq!(params["meaning"], "library");
+        assert_eq!(params["line"], "load cublas64_13.dll");
+        assert!(lost.to_string().contains("a library of the engine did not load"));
+        let bare = SongError::LostExited { exit: "0x00000001".into(), line: None };
+        assert_eq!(bare.code(), Some("lost_exited"));
+        assert_eq!(bare.params()["meaning"], "none");
+        assert!(bare.params().get("line").is_none());
+        for (statuses, key, _) in EXIT_MEANINGS {
+            assert!(statuses.iter().all(|status| exit_meaning_key(status) == *key));
+        }
     }
 }
