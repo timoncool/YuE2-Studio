@@ -1845,7 +1845,7 @@ export const zh = {
     updateDone: "更新完成：新的引擎和模型已就位，旧的已移除",
     updateFailed: "更新已停止：{error}。已下载的内容会保留；按“更新”继续。",
     updateWhyCrisperwhisper: "卡拉 OK 和数据集歌词改由 audio.cpp 服务器中的 CrisperWhisper 2.0 turbo 识别，取代 Faster-Whisper，每个词都有时间",
-    updateWhyTranscribeAvx2: "为所有支持 AVX2 的处理器构建：在没有 AVX-512 的处理器上，Parakeet 不再导致工作室关闭",
+    updateWhyTranscribeAvx2: "Parakeet 引擎可在任何 64 位处理器上运行，在没有 AVX-512 的处理器上不再导致工作室关闭",
     updateWhyLlama: "助手使用更新的 llama.cpp",
     updateWhyHotstep: "HOT-Step 工具的新构建，用于训练和描述",
     updateWhyCublasWheel: "同样的 cuBLAS 12.9，现在来自 NVIDIA 的软件包，并固定了校验和",

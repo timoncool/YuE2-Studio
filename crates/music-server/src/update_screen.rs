@@ -52,7 +52,7 @@ const CHANGES: &[Change] = &[
 /// Every reason, by its code, in English; the window says it in its own language by the code.
 pub const REASONS: &[(&str, &str)] = &[
     ("crisperwhisper", "Karaoke and the dataset lyrics are heard by CrisperWhisper 2.0 turbo in the audio.cpp server instead of Faster-Whisper, with a time for every word"),
-    ("transcribe-avx2", "Built for every processor with AVX2: Parakeet no longer closes the studio on processors without AVX-512"),
+    ("transcribe-avx2", "Parakeet's engine runs on any 64-bit processor and no longer closes the studio on processors without AVX-512"),
     ("llama", "A newer llama.cpp for the assistant"),
     ("hotstep", "A newer build of HOT-Step's tools for training and captions"),
     ("cublas-wheel", "The same cuBLAS 12.9, now from NVIDIA's package with its checksum pinned"),

@@ -66,7 +66,8 @@ pub fn decode(audio: &Path) -> Result<Vec<f32>> {
 
 /// A session on the card a path reaches, when one is given; says whether the card took it.
 fn session(model: &Path, card: Option<crate::lyrics_sync::OnnxCard>) -> Result<(Session, bool)> {
-    let mut builder = Session::builder().context("prepare an ONNX session")?;
+    let environment = dub_core::runtime::ort_env().map_err(|error| anyhow::anyhow!(error))?;
+    let mut builder = Session::builder(&environment).context("prepare an ONNX session")?;
     let (mut on_card, took) = crate::lyrics_sync::with_card(builder.clone(), card);
     if took {
         match on_card.commit_from_file(model) {

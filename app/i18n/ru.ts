@@ -1848,7 +1848,7 @@ export const ru = {
     updateDone: "Обновление готово: новые движки и модели на месте, старые убраны",
     updateFailed: "Обновление остановилось: {error}. Скачанное остаётся — нажмите «Обновить», чтобы продолжить.",
     updateWhyCrisperwhisper: "Караоке и тексты датасета слушает CrisperWhisper 2.0 turbo в сервере audio.cpp вместо Faster-Whisper, со временем каждого слова",
-    updateWhyTranscribeAvx2: "Собран под любой процессор с AVX2: Parakeet больше не закрывает студию на процессорах без AVX-512",
+    updateWhyTranscribeAvx2: "Движок Parakeet работает на любом 64-битном процессоре и больше не закрывает студию на процессорах без AVX-512",
     updateWhyLlama: "Новая сборка llama.cpp для ассистента",
     updateWhyHotstep: "Новая сборка инструментов HOT-Step для обучения и описаний",
     updateWhyCublasWheel: "Тот же cuBLAS 12.9, теперь из пакета NVIDIA с закреплённой контрольной суммой",

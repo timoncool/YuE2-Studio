@@ -37,12 +37,12 @@ pub struct RecordedFile {
 /// archive that tells its version apart, relative to where the archive
 /// unpacks or picks into, and that file's size in the archive of the pin.
 const KEY_FILES: &[(&str, &str, u64)] = &[
-    ("https://github.com/ggml-org/llama.cpp/releases/download/b11900/llama-b11900-bin-win-cuda-13.4-x64.zip", "ggml-cuda.dll", 154_890_752),
-    ("https://github.com/ggml-org/llama.cpp/releases/download/b11900/llama-b11900-bin-win-cuda-12.4-x64.zip", "ggml-cuda.dll", 593_773_568),
-    ("https://github.com/ggml-org/llama.cpp/releases/download/b11900/llama-b11900-bin-win-vulkan-x64.zip", "ggml-vulkan.dll", 41_590_784),
-    ("https://github.com/ggml-org/llama.cpp/releases/download/b11900/llama-b11900-bin-win-cpu-x64.zip", "ggml-cpu-haswell.dll", 1_426_944),
-    ("https://github.com/microsoft/onnxruntime/releases/download/v1.30.0/onnxruntime-win-x64-1.30.0.zip", "onnxruntime.dll", 16_462_648),
-    ("https://github.com/microsoft/onnxruntime/releases/download/v1.30.0/onnxruntime-win-x64-gpu_cuda12-1.30.0.zip", "onnxruntime_providers_cuda.dll", 352_453_432),
+    ("https://github.com/ggml-org/llama.cpp/releases/download/b12248/llama-b12248-bin-win-cuda-13.5-x64.zip", "ggml-cuda.dll", 160_740_864),
+    ("https://github.com/ggml-org/llama.cpp/releases/download/b12248/llama-b12248-bin-win-cuda-12.4-x64.zip", "ggml-cuda.dll", 614_017_024),
+    ("https://github.com/ggml-org/llama.cpp/releases/download/b12248/llama-b12248-bin-win-vulkan-x64.zip", "ggml-vulkan.dll", 42_011_136),
+    ("https://github.com/ggml-org/llama.cpp/releases/download/b12248/llama-b12248-bin-win-cpu-x64.zip", "ggml-cpu-haswell.dll", 1_465_856),
+    ("https://github.com/microsoft/onnxruntime/releases/download/v1.31.1/onnxruntime-win-x64-1.31.1.zip", "onnxruntime.dll", 17_253_728),
+    ("https://github.com/microsoft/onnxruntime/releases/download/v1.31.1/onnxruntime-win-x64-gpu_cuda12-1.31.1.zip", "onnxruntime_providers_cuda.dll", 366_171_448),
     ("https://github.com/ggml-org/llama.cpp/releases/download/b11236/cudart-llama-bin-win-cuda-13.4-x64.zip", "cudart64_13.dll", 551_024),
     ("https://github.com/ggml-org/llama.cpp/releases/download/b11236/cudart-llama-bin-win-cuda-12.4-x64.zip", "cudart64_12.dll", 553_984),
     ("https://developer.download.nvidia.com/compute/cuda/redist/libcublas/windows-x86_64/libcublas-windows-x86_64-13.5.1.27-archive.zip", "cublasLt64_13.dll", 460_301_424),
@@ -59,9 +59,9 @@ const KEY_FILES: &[(&str, &str, u64)] = &[
     // BSRoformer.cpp and transcribe.cpp all-variants archives: the cli/library is one file across the builds, so a build's key is its GPU module (unique by build and version); the processor build, which has none, keeps the cli/library.
     ("https://github.com/timoncool/BSRoformer.cpp/releases/download/studio-0.1.1/BSRoformer-windows-cuda13-x64.zip", "ggml-cuda.dll", 129_091_584),
     ("https://github.com/timoncool/BSRoformer.cpp/releases/download/studio-0.1.1/BSRoformer-windows-cpu-x64.zip", "bs_roformer-cli.exe", 183_808),
-    ("https://github.com/timoncool/transcribe.cpp/releases/download/engine-0.2.0/transcribe-windows-cuda13-x64.zip", "ggml-cuda.dll", 140_795_392),
-    ("https://github.com/timoncool/transcribe.cpp/releases/download/engine-0.2.0/transcribe-windows-vulkan-x64.zip", "ggml-vulkan.dll", 45_308_928),
-    ("https://github.com/timoncool/transcribe.cpp/releases/download/engine-0.2.0/transcribe-windows-cpu-x64.zip", "transcribe.dll", 2_054_144),
+    ("https://github.com/timoncool/transcribe.cpp/releases/download/engine-0.2.1/transcribe-windows-cuda13-x64.zip", "ggml-cuda.dll", 140_795_392),
+    ("https://github.com/timoncool/transcribe.cpp/releases/download/engine-0.2.1/transcribe-windows-vulkan-x64.zip", "ggml-vulkan.dll", 45_308_928),
+    ("https://github.com/timoncool/transcribe.cpp/releases/download/engine-0.2.1/transcribe-windows-cpu-x64.zip", "transcribe.dll", 2_054_656),
 ];
 
 /// The record of the archive or file at `path`.
@@ -259,10 +259,10 @@ mod tests {
     }
 
     /// The key file of the pin that replaces 3.7.0's: llama.cpp b11236 left on disk without a record is not taken
-    /// for b11900.
+    /// for b12248.
     #[test]
     fn a_3_7_0_runtime_without_a_record_is_not_taken_for_todays_pin() {
-        let (_, llama) = key_file("https://github.com/ggml-org/llama.cpp/releases/download/b11900/llama-b11900-bin-win-cuda-13.4-x64.zip").unwrap();
+        let (_, llama) = key_file("https://github.com/ggml-org/llama.cpp/releases/download/b12248/llama-b12248-bin-win-cuda-13.5-x64.zip").unwrap();
         assert_ne!(llama, 8_917_504, "b11236's llama-server-impl.dll");
     }
 
