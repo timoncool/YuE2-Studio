@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { openRouterSettingsChanged, SELF_READ } from '../services/studioQueries';
-import { Check, ChevronDown, Download, FolderDown, FolderOpen, Loader2, Square, Trash2, X } from 'lucide-react';
+import { Check, ChevronDown, Download, FolderDown, FolderOpen, Loader2, Play, Square, Trash2, X } from 'lucide-react';
 import { useI18n } from '../context/I18nContext';
 import { poll } from '../services/poll';
 import { DevicePicker, type Device } from './DevicePicker';
@@ -20,6 +20,7 @@ import {
   componentPrecision,
   componentsByKind,
   completeCustomComponentIds,
+  partialOnDisk,
   profileLabel,
   selectedComponentBytes,
   type ModelComponent,
@@ -755,6 +756,7 @@ const MIDI_ENGINES: EngineChoice[] = [{ id: 'muscriptor', label: 'MuScriptor', d
 
 export const SetupGate: React.FC<{ onReady?: () => void; mode?: 'first-run' | 'settings'; focus?: string | null }> =({ onReady, mode = 'first-run', focus = null }) => {
   const { t, language } = useI18n();
+  const tt = t as unknown as (key: string) => string;
   const assistantEngines = useMemo<EngineChoice[]>(() => [
     { id: 'managed', label: 'llama.cpp' },
     { id: 'local', label: t('assistantLocal'), device: false, byAddress: true },
@@ -844,6 +846,7 @@ export const SetupGate: React.FC<{ onReady?: () => void; mode?: 'first-run' | 's
   /// the top says the same thing as the list underneath.
   const recommended = catalog?.profiles.find((profile) => profile.id === status?.recommended_profile_id);
   const active = status?.active;
+  const jobRunning = active?.status === 'downloading';
   const progress = active && active.total_bytes > 0 ? Math.min(100, (active.downloaded_bytes / active.total_bytes) * 100) : 0;
   const installedIds = status?.installed_components ?? [];
   const missing = (chosenIds ?? chosenValues).filter((id) => !installedIds.includes(id));
@@ -878,15 +881,15 @@ export const SetupGate: React.FC<{ onReady?: () => void; mode?: 'first-run' | 's
   // The start screen's statistics checkbox: checked, and sent with the first download (it counts as seen).
   const [telemetryOn, setTelemetryOn] = useState(true);
   const [telemetryPreview, setTelemetryPreview] = useState(false);
-  const download = async () => {
-    if (!chosenIds || starting) return;
+  const download = async (ids: string[] | null = chosenIds) => {
+    if (!ids || starting) return;
     setError(null);
     setStarting(true);
     try {
       const response = await fetch('/setup/download', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ component_ids: chosenIds }),
+        body: JSON.stringify({ component_ids: ids }),
       });
       if (!response.ok) setError(await errorMessage(response));
       else await refresh().catch(() => undefined);
@@ -995,6 +998,8 @@ export const SetupGate: React.FC<{ onReady?: () => void; mode?: 'first-run' | 's
                 <div className="space-y-2">
                   {(catalog?.profiles ?? []).filter((profile) => profile.installable).map((profile) => {
                     const missingHere = profile.components.filter((id) => !installedIds.includes(id));
+                    const partialHere = partialOnDisk(catalog?.components ?? [], missingHere);
+                    const partialIds = missingHere.filter((id) => (catalog?.components.find((entry) => entry.id === id)?.partial_bytes ?? 0) > 0);
                     const active = chosenKey === [...profile.components].sort().join('|');
                     // What the set is actually made of, role by role, instead of
                     // a name cut off after twenty characters.
@@ -1037,8 +1042,35 @@ export const SetupGate: React.FC<{ onReady?: () => void; mode?: 'first-run' | 's
                           <p className={`text-[11px] font-medium ${missingHere.length === 0 ? 'text-emerald-600 dark:text-emerald-300' : 'text-zinc-500'}`}>
                             {missingHere.length === 0
                               ? t('installed')
-                              : `${t('toDownload')} ${bytes(selectedComponentBytes(catalog?.components || [], missingHere))}`}
+                              : partialHere.done > 0 && !jobRunning
+                                ? tt('partialOnDisk').replace('{done}', bytes(partialHere.done)).replace('{total}', bytes(partialHere.total))
+                                : `${t('toDownload')} ${bytes(selectedComponentBytes(catalog?.components || [], missingHere))}`}
                           </p>
+                          {missingHere.length > 0 && partialHere.done > 0 && !jobRunning && (
+                            <span className="flex shrink-0 items-center gap-1">
+                              <span
+                                role="button"
+                                tabIndex={0}
+                                onClick={(event) => { event.stopPropagation(); void download(profile.components); }}
+                                onKeyDown={(event) => { if (event.key === 'Enter') { event.stopPropagation(); void download(profile.components); } }}
+                                className="inline-flex cursor-pointer items-center gap-1 rounded-lg border border-pink-400 px-2 py-1 text-[11px] font-medium text-pink-600 hover:bg-pink-500/10 dark:text-pink-300"
+                              >
+                                <Play size={12} />
+                                {tt('partialResume')}
+                              </span>
+                              <span
+                                role="button"
+                                tabIndex={0}
+                                onClick={(event) => { event.stopPropagation(); void removeComponents(partialIds); }}
+                                onKeyDown={(event) => { if (event.key === 'Enter') { event.stopPropagation(); void removeComponents(partialIds); } }}
+                                title={tt('partialDiscardHint')}
+                                className="inline-flex cursor-pointer items-center gap-1 rounded-lg border border-zinc-300 px-2 py-1 text-[11px] font-medium text-zinc-500 hover:border-rose-400 hover:text-rose-600 dark:border-white/15 dark:text-zinc-400"
+                              >
+                                <Trash2 size={12} />
+                                {tt('partialDiscard')}
+                              </span>
+                            </span>
+                          )}
                           {missingHere.length === 0 && (
                             <span
                               role="button"

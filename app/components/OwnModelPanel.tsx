@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { ExternalLink, FolderOpen, Loader2, RotateCw, Square, Trash2 } from 'lucide-react';
+import { ExternalLink, FolderOpen, Loader2, Play, RotateCw, Square, Trash2 } from 'lucide-react';
 import { useI18n } from '../context/I18nContext';
 import { poll } from '../services/poll';
 
@@ -9,7 +9,7 @@ export type CommunityModel = {
   author: string;
   page: string;
   license: string;
-  files: { quant: string; file: string; bytes: number; installed: boolean }[];
+  files: { quant: string; file: string; bytes: number; installed: boolean; partial_bytes?: number }[];
 };
 
 export type OwnModelStatus = {
@@ -122,6 +122,9 @@ export const OwnModelPanel: React.FC = () => {
   const ownFiles = (status?.files ?? []).filter((file) => !communityFiles.has(file.name));
   const percent = status?.download && status.download.total_bytes > 0 ? Math.floor((status.download.downloaded_bytes / status.download.total_bytes) * 100) : 0;
   const removable = status?.files.find((file) => file.name === status.selected);
+  // what stopped downloads left in the folder: each resumes, or goes
+  const unfinished = (status?.community ?? []).flatMap((model) =>
+    model.files.filter((file) => !file.installed && (file.partial_bytes ?? 0) > 0).map((file) => ({ model, file })));
 
   return (
     <div className="mt-4 rounded-lg border border-zinc-200 p-3 dark:border-white/10">
@@ -168,6 +171,20 @@ export const OwnModelPanel: React.FC = () => {
         </div>
       )}
       {status?.download?.error && !downloading && <p role="alert" className="mt-1 select-text text-[11px] leading-4 text-rose-600 dark:text-rose-300">{status.download.error}</p>}
+      {!downloading && unfinished.map(({ model, file }) => (
+        <div key={file.file} className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-zinc-500 dark:text-zinc-400">
+          <span className="min-w-0 flex-1">
+            {(model.name[language] ?? model.name.en) + ` · ${file.quant} · `}
+            {tt('partialOnDisk').replace('{done}', gigabytes(file.partial_bytes ?? 0)).replace('{total}', gigabytes(file.bytes))}
+          </span>
+          <button type="button" onClick={() => void choose(`${COMMUNITY}${model.id}:${file.quant}`)} disabled={busy} className="inline-flex items-center gap-1 rounded-lg border border-pink-400 px-2 py-1 font-medium text-pink-600 hover:bg-pink-500/10 disabled:opacity-40 dark:text-pink-300">
+            <Play size={12} />{tt('partialResume')}
+          </button>
+          <button type="button" onClick={() => void send('/setup/own-model/discard', 'POST', { community: model.id, quant: file.quant })} disabled={busy} title={tt('partialDiscardHint')} className="inline-flex items-center gap-1 rounded-lg border border-zinc-300 px-2 py-1 font-medium text-zinc-600 hover:border-rose-400 hover:text-rose-600 disabled:opacity-40 dark:border-white/15 dark:text-zinc-300">
+            <Trash2 size={12} />{tt('partialDiscard')}
+          </button>
+        </div>
+      ))}
       {status && status.files.length === 0 && <p className="mt-1 text-[11px] leading-4 text-zinc-500 dark:text-zinc-400">{tt('ownModelEmpty')}</p>}
       {status?.missing && status.selected && (
         <p role="alert" className="mt-1 text-[11px] leading-4 text-amber-600 dark:text-amber-300">{tt('ownModelMissing').replace('{file}', status.selected)}</p>

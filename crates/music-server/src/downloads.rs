@@ -275,7 +275,7 @@ impl Downloader {
     }
 
     pub fn partial_bytes(&self, asset: &Asset) -> u64 {
-        fs::metadata(self.path_of(asset).with_extension("part")).map(|meta| meta.len()).unwrap_or(0)
+        crate::chunked::on_disk(&self.path_of(asset).with_extension("part"))
     }
 
     pub fn status_of(&self, assets: &[Asset]) -> Vec<AssetStatus> {
@@ -398,7 +398,9 @@ impl Downloader {
             freed += drop_file(self.path_of(asset))?;
         }
 
-        freed += drop_file(self.path_of(asset).with_extension("part"))?;
+        let part = self.path_of(asset).with_extension("part");
+        freed += drop_file(crate::chunked::manifest_path(&part))?;
+        freed += drop_file(part)?;
         drop_file(self.record_of(asset))?;
         Ok(freed)
     }
@@ -1231,6 +1233,26 @@ mod tests {
 
         fs::write(downloader.path_of(&entry), vec![0u8; 64]).unwrap();
         assert!(downloader.is_installed(&entry));
+        fs::remove_dir_all(&root).ok();
+    }
+
+    /// A stopped ranged download leaves its part file at the whole size and the record of its pieces beside it: the
+    /// pieces are what is reported, and removing the asset takes both, so the next download starts from nothing.
+    #[test]
+    fn a_stopped_download_is_reported_by_its_pieces_and_removed_with_their_record() {
+        let root = std::env::temp_dir().join(format!("downloads-{}", uuid::Uuid::now_v7()));
+        let downloader = Downloader::new(root.clone());
+        let entry = asset();
+        let part = downloader.path_of(&entry).with_extension("part");
+        fs::create_dir_all(part.parent().unwrap()).unwrap();
+        fs::File::create(&part).unwrap().set_len(64).unwrap();
+        fs::write(crate::chunked::manifest_path(&part), 0u64.to_le_bytes()).unwrap();
+
+        assert!(!downloader.is_installed(&entry));
+        assert_eq!(downloader.partial_bytes(&entry), 64, "one piece, the whole of a file shorter than a piece");
+        downloader.remove(&entry).unwrap();
+        assert!(!part.exists() && !crate::chunked::manifest_path(&part).exists());
+        assert_eq!(downloader.partial_bytes(&entry), 0);
         fs::remove_dir_all(&root).ok();
     }
 

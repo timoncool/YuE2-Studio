@@ -9,7 +9,18 @@ export type ModelComponent = {
   /** The file at its pinned revision on Hugging Face, and the same on HF-Mirror. */
   url?: string;
   mirror_url?: string;
+  /** What a stopped download of it left on disk; the next download resumes it. */
+  partial_bytes?: number;
 };
+
+/** What stopped downloads of the files not yet installed left on disk, and how much those files take whole. */
+export function partialOnDisk(components: ModelComponent[], missing: string[]): { done: number; total: number } {
+  const unfinished = components.filter((component) => missing.includes(component.id) && (component.partial_bytes ?? 0) > 0);
+  return {
+    done: unfinished.reduce((sum, component) => sum + (component.partial_bytes ?? 0), 0),
+    total: unfinished.reduce((sum, component) => sum + component.bytes, 0),
+  };
+}
 
 /** Every runnable set has one of each. */
 export const REQUIRED_KINDS = ['backbone', 'vae'] as const;

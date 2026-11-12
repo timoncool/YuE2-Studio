@@ -1,5 +1,17 @@
 import { describe, expect, it } from 'vitest';
-import { completeCustomComponentIds, componentPrecision, componentsByKind, setupLabel, type ModelComponent } from './modelCatalog';
+import { completeCustomComponentIds, componentPrecision, componentsByKind, partialOnDisk, setupLabel, type ModelComponent } from './modelCatalog';
+
+describe('partialOnDisk', () => {
+  it('counts what stopped downloads left of the files still missing, against those files whole', () => {
+    const files: ModelComponent[] = [
+      { id: 'a', kind: 'backbone', filename: 'a.gguf', bytes: 100, sha256: 'a', partial_bytes: 40 },
+      { id: 'b', kind: 'vae', filename: 'b.gguf', bytes: 50, sha256: 'b' },
+      { id: 'c', kind: 'transcriber', filename: 'c.gguf', bytes: 30, sha256: 'c', partial_bytes: 30 },
+    ];
+    expect(partialOnDisk(files, ['a', 'b'])).toEqual({ done: 40, total: 100 });
+    expect(partialOnDisk(files, ['b'])).toEqual({ done: 0, total: 0 });
+  });
+});
 
 describe('setupLabel', () => {
   const t = ((key: string) => `<${key}>`) as Parameters<typeof setupLabel>[0];

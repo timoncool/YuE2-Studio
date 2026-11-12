@@ -1602,6 +1602,7 @@ pub async fn serve() -> anyhow::Result<()> {
         .route("/setup/own-model", get(own_model_status).put(own_model_select))
         .route("/setup/own-model/reveal", post(own_model_reveal))
         .route("/setup/own-model/cancel", post(own_model_cancel))
+        .route("/setup/own-model/discard", post(own_model_discard))
         .route("/setup/own-model/remove", post(own_model_remove))
         .route("/setup/kv-cache-notice/seen", post(kv_cache_notice_seen))
         .route("/setup/cancel", post(setup_cancel))
@@ -8822,14 +8823,20 @@ async fn open_data_directory() -> Result<Json<Value>, (StatusCode, Json<ApiError
 
 async fn setup_catalog(State(state): State<AppState>) -> Json<Value> {
     let catalog = state.model_manager.catalog();
-    // each file at its pinned revision, on Hugging Face and on the mirror, for a download by hand
-    let sources: Vec<(String, String)> = catalog.components.iter().map(|component| (component.url(), net::mirror_url(&component.url()))).collect();
+    // each file at its pinned revision, on Hugging Face and on the mirror, for a download by hand, and what an
+    // unfinished download of it left on disk
+    let sources: Vec<(String, String, u64)> = catalog
+        .components
+        .iter()
+        .map(|component| (component.url(), net::mirror_url(&component.url()), state.model_manager.partial_bytes(&component.filename)))
+        .collect();
     let mut value = serde_json::to_value(catalog).unwrap_or_else(|_| serde_json::json!({}));
     if let Some(components) = value.get_mut("components").and_then(Value::as_array_mut) {
-        for (component, (url, mirror_url)) in components.iter_mut().zip(sources) {
+        for (component, (url, mirror_url, partial)) in components.iter_mut().zip(sources) {
             if let Value::Object(fields) = component {
                 fields.insert("url".into(), Value::String(url));
                 fields.insert("mirror_url".into(), Value::String(mirror_url));
+                fields.insert("partial_bytes".into(), Value::from(partial));
             }
         }
     }
@@ -8918,8 +8925,8 @@ async fn setup_select(
 }
 
 /// The person's own YuE2 files in `models/yue2-cpp/own`, the one chosen, and whether that one is still there; the
-/// community models with each file's size and whether it is downloaded, the quantisation the card takes, and the
-/// download under way.
+/// community models with each file's size, whether it is downloaded and how much an unfinished download of it left on
+/// disk, the quantisation the card takes, and the download under way.
 async fn own_model_status(State(state): State<AppState>) -> Json<Value> {
     let folder = own_models_folder(&state);
     let files = own_model_files(&folder);
@@ -8940,6 +8947,7 @@ async fn own_model_status(State(state): State<AppState>) -> Json<Value> {
                     "file": file.asset.relative_path,
                     "bytes": file.asset.bytes,
                     "installed": files.iter().any(|(name, _)| name == file.asset.relative_path),
+                    "partial_bytes": state.community_downloads.partial_bytes(&file.asset),
                 })).collect::<Vec<_>>(),
             })
         })
@@ -9029,6 +9037,23 @@ async fn own_model_select(State(state): State<AppState>, Json(request): Json<Own
 async fn own_model_cancel(State(state): State<AppState>) -> Json<Value> {
     let cancelled = state.community_downloads.cancel_for("community").await;
     Json(serde_json::json!({ "cancelled": cancelled }))
+}
+
+/// Takes away what a stopped download of a community model left in the folder (its part file and the record of its
+/// pieces); the next choice of that model downloads it from the start. A file that arrived whole is removed with
+/// `remove`, and one downloading now is stopped with `cancel` first.
+async fn own_model_discard(State(state): State<AppState>, Json(request): Json<OwnModelRequest>) -> Result<Json<Value>, (StatusCode, Json<ApiError>)> {
+    let id = request.community.as_deref().map(str::trim).filter(|id| !id.is_empty()).ok_or_else(|| api_error(StatusCode::BAD_REQUEST, "name the community model to discard".into()))?;
+    let file = community::file(id, request.quant.as_deref(), hardware::hardware().total_vram_gb)
+        .ok_or_else(|| api_error(StatusCode::BAD_REQUEST, format!("{id} in {} is not a community model", request.quant.as_deref().unwrap_or("the card's quantisation"))))?;
+    if own_model_files(&own_models_folder(&state)).iter().any(|(name, _)| name == file.asset.relative_path) {
+        return Err(api_error(StatusCode::CONFLICT, format!("{} arrived whole; remove it instead", file.asset.relative_path)));
+    }
+    if state.community_downloads.active().await.is_some_and(|progress| !progress.done && progress.asset_id == file.asset.id) {
+        return Err(api_error(StatusCode::CONFLICT, format!("{} is downloading; cancel it first", file.asset.relative_path)));
+    }
+    state.community_downloads.remove(&file.asset).map_err(|error| api_error(StatusCode::INTERNAL_SERVER_ERROR, format!("{error:#}")))?;
+    Ok(own_model_status(State(state)).await)
 }
 
 #[derive(Debug, Deserialize)]

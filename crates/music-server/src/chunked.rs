@@ -286,10 +286,21 @@ impl std::fmt::Display for Refused {
 impl std::error::Error for Refused {}
 
 /// The offsets already on disk, from the manifest beside the part file.
-fn manifest_path(part: &Path) -> PathBuf {
+pub fn manifest_path(part: &Path) -> PathBuf {
     let mut name = part.as_os_str().to_os_string();
     name.push(".done");
     PathBuf::from(name)
+}
+
+/// How much of a download lies in its part file: the pieces its manifest names, the part file being reserved at
+/// the whole size; a part file without a manifest (a server without ranges) holds what it is long.
+pub fn on_disk(part: &Path) -> u64 {
+    let Ok(length) = std::fs::metadata(part).map(|meta| meta.len()) else { return 0 };
+    if !manifest_path(part).exists() {
+        return length;
+    }
+    let done: std::collections::HashSet<u64> = completed_offsets(part).into_iter().filter(|offset| *offset < length).collect();
+    done.iter().map(|offset| CHUNK.min(length - offset)).sum()
 }
 
 fn completed_offsets(part: &Path) -> Vec<u64> {
@@ -556,6 +567,23 @@ mod tests {
     #[test]
     fn a_missing_manifest_means_nothing_is_done_yet() {
         assert!(completed_offsets(Path::new("nowhere/at/all.part")).is_empty());
+    }
+
+    /// A part file is reserved at the whole size: what is on disk is the pieces its manifest names, the last one
+    /// shorter; without a manifest the part file holds what it is long.
+    #[test]
+    fn a_part_file_holds_the_pieces_its_manifest_names() {
+        let folder = std::env::temp_dir().join(format!("on-disk-{}", uuid::Uuid::now_v7()));
+        std::fs::create_dir_all(&folder).unwrap();
+        let part = folder.join("model.gguf.part");
+        let total = CHUNK * 2 + 10;
+        std::fs::File::create(&part).unwrap().set_len(total).unwrap();
+        assert_eq!(on_disk(&part), total, "no manifest: a download without ranges");
+        let offsets: Vec<u8> = [0u64, CHUNK * 2].iter().flat_map(|offset| offset.to_le_bytes()).collect();
+        std::fs::write(manifest_path(&part), offsets).unwrap();
+        assert_eq!(on_disk(&part), CHUNK + 10);
+        assert_eq!(on_disk(&folder.join("nothing.part")), 0);
+        std::fs::remove_dir_all(&folder).ok();
     }
 
     /// A host nothing listens on is given up after three attempts, not eight,

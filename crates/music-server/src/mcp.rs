@@ -481,6 +481,7 @@ const JOURNAL: &[(&str, &str, &str)] = &[
     ("models_select", "updated", "settings"),
     ("models_own_select", "updated", "settings"),
     ("models_own_cancel", "cancelled", "download"),
+    ("models_own_discard", "deleted", "download"),
     ("models_own_remove", "deleted", "model"),
     ("settings_set", "updated", "settings"),
     ("engine_options_set", "updated", "settings"),
@@ -988,7 +989,7 @@ fn tools() -> &'static [Tool] {
             },
             Tool {
                 name: "models_catalog",
-                description: "Every model set and file the studio can download, with sizes and the video memory each needs.",
+                description: "Every model set and file the studio can download, with sizes and the video memory each needs; partial_bytes of a file is what a stopped download of it left on disk (models_download resumes it, models_remove takes it away).",
                 schema: nothing,
                 call: |_| get("/setup/catalog".into()),
             },
@@ -1048,9 +1049,15 @@ fn tools() -> &'static [Tool] {
             },
             Tool {
                 name: "models_own_cancel",
-                description: "Stop the download of a community model; the part fetched resumes on the next models_own_select.",
+                description: "Stop the download of a community model; the part fetched resumes on the next models_own_select, and models_own_list shows it as partial_bytes until then.",
                 schema: nothing,
                 call: |_| post("/setup/own-model/cancel".into(), json!({})),
+            },
+            Tool {
+                name: "models_own_discard",
+                description: "Take away what a stopped download of a community model left in the folder (community, its id; quant, else the card's): its part file and the record of its pieces, partial_bytes in models_own_list. The next models_own_select downloads it from the start. A file that arrived whole is removed with models_own_remove; one downloading now is stopped with models_own_cancel first.",
+                schema: || object(json!({ "community": { "type": "string" }, "quant": { "type": "string", "enum": ["Q8_0", "Q6_K"] } }), &["community"]),
+                call: |args| post("/setup/own-model/discard".into(), args.clone()),
             },
             Tool {
                 name: "models_own_remove",
@@ -1887,7 +1894,7 @@ fn tools() -> &'static [Tool] {
             },
             Tool {
                 name: "models_remove",
-                description: "Delete downloaded model files by component id (see models_catalog).",
+                description: "Delete downloaded model files by component id (see models_catalog), and what a stopped download of them left (partial_bytes in models_catalog): the next download of that component starts from the beginning.",
                 schema: || object(json!({ "ids": { "type": "array", "items": { "type": "string" } } }), &["ids"]),
                 call: |args| post("/setup/remove".into(), args.clone()),
             },

@@ -192,6 +192,12 @@ impl ModelManager {
         }
     }
 
+    /// How much of a component a download left behind unfinished: its part file's pieces, or 0. The next download
+    /// of it resumes them; removing the component takes them away.
+    pub fn partial_bytes(&self, filename: &str) -> u64 {
+        crate::chunked::on_disk(&part_path(&self.root.join(filename)))
+    }
+
     /// `target` is the set the user actually selected. Progress and readiness
     /// are reported against it, so a machine that deliberately runs the Light
     /// set is never told it is missing the hardware-recommended download.
@@ -247,7 +253,9 @@ impl ModelManager {
             }
             // A half-finished download of the same component is just as much
             // disk as the finished one.
-            let _ = fs::remove_file(self.root.join(format!("{}.part", component.filename)));
+            let part = part_path(&self.root.join(&component.filename));
+            let _ = fs::remove_file(crate::chunked::manifest_path(&part));
+            let _ = fs::remove_file(part);
         }
         // A remembered download resumes on the next start. Deleting the files
         // without forgetting the job is how twenty-six gigabytes came back by
