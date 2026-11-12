@@ -2008,7 +2008,7 @@ fn htdemucs_installed(state: &AppState, runtime: lyrics_sync::OnnxFlavour) -> bo
 /// to stop one of them was to close the studio.
 async fn cancel_separation_download(State(state): State<AppState>) -> Json<Value> {
     state.separator.downloader().cancel();
-    state.acpp.downloader().cancel();
+    state.acpp.downloader().cancel_for("separation").await;
     Json(serde_json::json!({ "cancelled": true }))
 }
 
@@ -7474,7 +7474,7 @@ async fn cancel_midi(State(state): State<AppState>) -> Json<Value> {
     state.midi_stop.0.store(true, std::sync::atomic::Ordering::Relaxed);
     state.midi_stop.1.notify_waiters();
     state.midi.downloader().cancel();
-    state.acpp.downloader().cancel();
+    state.acpp.downloader().cancel_for("midi").await;
     Json(serde_json::json!({ "cancelled": true }))
 }
 

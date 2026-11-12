@@ -416,6 +416,16 @@ impl Downloader {
         self.active().await.filter(|progress| progress.scope.as_deref() == Some(scope))
     }
 
+    /// Stops the running download only when the panel of `scope` started it: a downloader two panels share (audio.cpp's
+    /// server carries the stems and Audio to MIDI) keeps the other panel's download going.
+    pub async fn cancel_for(&self, scope: &str) -> bool {
+        let ours = self.active_for(scope).await.is_some_and(|progress| !progress.done);
+        if ours {
+            self.cancel();
+        }
+        ours
+    }
+
     /// The panel's set failed after its files arrived: the step that completes it did not, and the panel shows the
     /// reason as it shows a failed download.
     pub async fn fail(&self, scope: &str, error: String) {
