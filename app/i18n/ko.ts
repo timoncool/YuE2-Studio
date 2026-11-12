@@ -1465,6 +1465,7 @@ export const ko = {
     describeCover: '앨범 커버 설명',
     generateCoverPreview: '커버 미리보기 생성',
     noSongsYet: '아직 트랙이 없습니다.',
+    toolsSongsFailed: '라이브러리가 응답하지 않았습니다: {error}. 다시 시도하려면 새로 고침을 누르세요.',
     noLyrics: '가사 없음',
     noLyricsSaved: '저장된 가사 없음',
     closeNotification: '알림 닫기',

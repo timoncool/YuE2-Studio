@@ -1463,6 +1463,7 @@ export const ja = {
     describeCover: 'アルバムカバーの説明',
     generateCoverPreview: 'カバーのプレビューを生成',
     noSongsYet: 'まだ曲がありません。',
+    toolsSongsFailed: 'ライブラリが応答しませんでした：{error}。「更新」を押してもう一度試してください。',
     noLyrics: '歌詞なし',
     downloadSrt: 'SRT（字幕）をダウンロード',
     downloadSrtHint: '同じタイミングを字幕として書き出します。LRC ではなく SRT を読み込む動画編集ソフト（CapCut、Jianying、Premiere）向けで、各行は歌われている間だけ表示され、歌のない演奏部分は空きになります。',

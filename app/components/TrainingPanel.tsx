@@ -2,7 +2,9 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { karaokeStatusChanged, useSystemResources } from '../services/studioQueries';
 import { AlertTriangle, BookOpen, Check, CheckSquare, ChevronDown, Clock, ChevronLeft, ChevronRight, Cpu, Download, FolderInput, FolderOpen, FolderOutput, Headphones, Library, Loader2, Mic2, MoreHorizontal, Music, Play, Plus, RotateCcw, Search, Square, Trash2, UploadCloud, Wand2, X } from 'lucide-react';
 import { useI18n } from '../context/I18nContext';
+import { poll } from '../services/poll';
 import { AUDIO_ACCEPT } from '../services/audioFiles';
+import { karaokeReason } from '../services/karaoke';
 import { ConfirmDialog } from './ConfirmDialog';
 import { StemPlayer } from './StemPlayer';
 import { TrainingGuide } from './TrainingGuide';
@@ -369,7 +371,7 @@ function songState(item: DatasetItem, job: PrepareStatus | null, datasetId: stri
   if (mine && !mine.finished && mine.pending.includes(item.id)) {
     return { kind: 'queued', text: t('trainingQueued') };
   }
-  if (failure) return { kind: 'failed', text: failure.error };
+  if (failure) return { kind: 'failed', text: karaokeReason(t, failure.error) ?? failure.error };
   const lacks = [
     item.lyrics_state === 'wanted' ? t('trainingLacksLyrics') : '',
     item.lyrics_state === 'found' ? t('trainingLacksSections') : '',
@@ -1087,9 +1089,7 @@ export const TrainingPanel: React.FC = () => {
   const job = state?.prepare ?? null;
   const busy = Boolean(state?.active || (job && !job.finished) || adding || (state?.download && !state.download.done) || (state?.listen?.download && !state.listen.download.done));
   useEffect(() => {
-    void refresh();
-    const timer = window.setInterval(() => void refresh(), busy ? 1500 : 5000);
-    return () => window.clearInterval(timer);
+    return poll(refresh, busy ? 1500 : 5000);
   }, [refresh, busy]);
 
   // a run that starts by itself after preparation is shown where it runs

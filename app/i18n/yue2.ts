@@ -236,6 +236,7 @@ const en = {
   computeBackendHint_vulkan: "Through the card's own driver, nothing to download. Verified on NVIDIA; experimental on AMD and Intel.",
   computeBackendHint_cpu: "Works everywhere, but a song takes many times longer than on a GPU.",
   karaokeNoWords: "No sung words could be heard in this track, so there is nothing to time. The vocal may be too buried or unclear, or the track may be instrumental.",
+  karaokeNoTimings: "The cloud recogniser answered without timed words, so there is nothing to time. Pick an OpenRouter model that returns timings (the Whisper family) in Settings - Providers, or a recogniser on this computer.",
   engineWaitsForModels: "YuE2 engine waits for a model set",
 } as const;
 
@@ -473,6 +474,7 @@ const ru: Yue2Strings = {
   computeBackendHint_vulkan: "Через драйвер самой карты, ничего скачивать не нужно. Проверено на NVIDIA; на AMD и Intel — экспериментально.",
   computeBackendHint_cpu: "Работает везде, но песня считается во много раз дольше, чем на видеокарте.",
   karaokeNoWords: "В треке не удалось расслышать спетых слов, поэтому таймингов нет. Вокал может быть слишком утоплен или неразборчив, либо трек инструментальный.",
+  karaokeNoTimings: "Облачный распознаватель ответил без таймингов слов, поэтому таймингов нет. Выберите в «Настройки - Провайдеры» модель OpenRouter, которая возвращает тайминги (семейство Whisper), или распознаватель на этом компьютере.",
   engineWaitsForModels: "Движок YuE2 ждёт модели",
 };
 
@@ -708,6 +710,7 @@ const zh: Yue2Strings = {
   computeBackendHint_vulkan: "通过显卡自身驱动运行，无需下载。已在 NVIDIA 上验证；在 AMD 和 Intel 上为实验性质。",
   computeBackendHint_cpu: "任何机器都能运行，但一首歌比在显卡上慢很多倍。",
   karaokeNoWords: "这首曲目中听不出唱出的歌词，因此无法生成时间轴。人声可能过于模糊或被伴奏掩盖，也可能是纯音乐。",
+  karaokeNoTimings: "云端识别器返回的结果没有逐词时间，因此无法生成时间轴。请在“设置 - 服务商”中选择能返回时间的 OpenRouter 模型（Whisper 系列），或使用本机识别器。",
   engineWaitsForModels: "YuE2 引擎等待模型组",
 };
 
@@ -943,6 +946,7 @@ const ja: Yue2Strings = {
   computeBackendHint_vulkan: "カード自身のドライバーで動作し、ダウンロードは不要です。NVIDIA で確認済み、AMD と Intel では実験的です。",
   computeBackendHint_cpu: "どこでも動きますが、GPU より何倍も時間がかかります。",
   karaokeNoWords: "このトラックでは歌われた言葉が聞き取れないため、タイミングを付けられません。ボーカルが埋もれているか不明瞭か、インストゥルメンタルの可能性があります。",
+  karaokeNoTimings: "クラウドの認識器が単語のタイミングなしで応答したため、タイミングを付けられません。「設定 - プロバイダー」でタイミングを返す OpenRouter モデル（Whisper 系）を選ぶか、このコンピューターの認識器を使ってください。",
   engineWaitsForModels: "YuE2 エンジンはモデルセット待ち",
 };
 
@@ -1178,6 +1182,7 @@ const ko: Yue2Strings = {
   computeBackendHint_vulkan: "그래픽카드 자체 드라이버로 동작하며 내려받을 것이 없습니다. NVIDIA에서 확인했고 AMD와 Intel에서는 실험적입니다.",
   computeBackendHint_cpu: "어디서나 동작하지만 그래픽카드보다 몇 배 오래 걸립니다.",
   karaokeNoWords: "이 트랙에서 불린 가사를 알아들을 수 없어 타이밍을 만들 수 없습니다. 보컬이 묻혔거나 불분명하거나 연주곡일 수 있습니다.",
+  karaokeNoTimings: "클라우드 인식기가 단어 타이밍 없이 응답해 타이밍을 만들 수 없습니다. '설정 - 제공자'에서 타이밍을 반환하는 OpenRouter 모델(Whisper 계열)을 고르거나 이 컴퓨터의 인식기를 사용하세요.",
   engineWaitsForModels: "YuE2 엔진이 모델 세트를 기다립니다",
 };
 

@@ -1465,6 +1465,7 @@ export const zh = {
     describeCover: '描述专辑封面',
     generateCoverPreview: '生成封面预览',
     noSongsYet: '还没有曲目。',
+    toolsSongsFailed: '媒体库没有响应：{error}。点击“刷新”重试。',
     noLyrics: '无歌词',
     noLyricsSaved: '尚未保存歌词',
     closeNotification: '关闭通知',
