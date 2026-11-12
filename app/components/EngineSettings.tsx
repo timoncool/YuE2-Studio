@@ -23,8 +23,6 @@ interface InEffect {
   max_seq_reason: 'full' | 'set' | 'fitted' | 'fitted_before';
   flash_attention: boolean;
   nar_chunk_seconds: number | null;
-  /** Fewer tracks a request than Settings asks: that many fit the card's free memory when the engine started. */
-  max_batch_for_card?: number | null;
 }
 
 interface EngineOptions {
@@ -366,9 +364,6 @@ export const EngineSettings: React.FC = () => {
           </span>
           {!inEffect.flash_attention && inEffect.nar_chunk_seconds != null && (
             <span className="block">{tt('narChunkNow').replace('{s}', String(inEffect.nar_chunk_seconds))}</span>
-          )}
-          {inEffect.max_batch_for_card != null && (
-            <span className="block">{tt('maxBatchForCard').replace('{n}', String(inEffect.max_batch_for_card))}</span>
           )}
           {savedMaxSeq != null && savedMaxSeq !== inEffect.max_seq && (
             <span className="block text-amber-600 dark:text-amber-300">{tt('maxSeqPending').replace('{n}', String(savedMaxSeq))}</span>

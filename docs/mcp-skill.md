@@ -42,9 +42,9 @@ connected and the address to paste.
 ## Ground rules
 
 - **Start with `studio_status`.** It tells what runs now and whether the window is open.
-  Its `engine` is what the running engine started with: `max_batch_for_card` when fewer tracks a
-  request than Settings asks fit the card. A song job says `tracks_asked` when it made fewer tracks
-  than asked for that reason, and `card_memory_short` when the card's memory ran out and the driver
+  Its `engine` is what the running engine started with. A song job says `tracks_asked` when fewer of
+  its tracks than asked fit the card's memory for its length (the studio reckons this for each song)
+  and it made as many as fit, and `card_memory_short` when the card's memory ran out and the driver
   lent the engine the computer's memory (the song goes on, many times slower). A training run says
   `step_stage`: the part of the step the trainer works on.
 - **Long work is a job**: songs, scores, stems, MIDI, karaoke, preparation, training. Start it,

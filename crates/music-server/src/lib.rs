@@ -5022,8 +5022,6 @@ async fn engine_options(State(state): State<AppState>) -> Json<Value> {
             },
             "flash_attention": !launched.disable_flash_attention,
             "nar_chunk_seconds": launched.nar_chunk.map(|frames| (f64::from(frames) / SEMANTIC_FRAMES_PER_SECOND).round() as u64),
-            // fewer tracks than Settings asks: that many fit the card's memory when the engine started
-            "max_batch_for_card": launched.max_batch.filter(|tracks| *tracks < options.effective_max_batch()),
             "kv_q8": launched.kv_q8,
         })
     });
