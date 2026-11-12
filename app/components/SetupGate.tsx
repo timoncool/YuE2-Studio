@@ -189,6 +189,8 @@ export const OptionalGroup: React.FC<{
   const choiceRead = useRef(false);
   const modelRead = useRef(false);
   const statusGeneration = useRef(0);
+  // the engines by their ids: a list made anew by the page with the same engines does not start the reads again
+  const engineIds = (engines ?? []).map((choice) => choice.id).join('\n');
   const load = useCallback(async () => {
     const generation = statusGeneration.current;
     const response = await fetch(statusUrl, { headers: SELF_READ });
@@ -197,7 +199,7 @@ export const OptionalGroup: React.FC<{
       if (generation !== statusGeneration.current) return;
       setStatus(body);
       const savedEngine = body.provider ?? body.settings?.engine;
-      if (!choiceRead.current && savedEngine && engines?.some((choice) => choice.id === savedEngine)) {
+      if (!choiceRead.current && savedEngine && engineIds.split('\n').includes(savedEngine)) {
         choiceRead.current = true;
         setEngine(savedEngine);
       }
@@ -212,7 +214,7 @@ export const OptionalGroup: React.FC<{
       return body;
     }
     throw new Error(await errorMessage(response));
-  }, [statusUrl, engines]);
+  }, [statusUrl, engineIds]);
 
   /// The engine and the device are a setting before they are a download: they
   /// decide which files the one button fetches.
@@ -739,8 +741,29 @@ const WhereItRuns: React.FC<{ trainingVram: number | null }> = ({ trainingVram }
   );
 };
 
-export const SetupGate: React.FC<{ onReady?: () => void; mode?: 'first-run' | 'settings'; focus?: string | null }> = ({ onReady, mode = 'first-run', focus = null }) => {
-  const { t } = useI18n();
+// one list for the life of the module: a group's status poll is keyed on its engines, and a list made anew on every
+// render of the page would start the poll again each time
+const SEPARATION_ENGINES: EngineChoice[] = [{ id: 'htdemucs', label: 'HT-Demucs' }, { id: 'roformer', label: 'Mel-Band RoFormer' }];
+const KARAOKE_ENGINES: EngineChoice[] = [
+  { id: 'parakeet', label: 'Parakeet' },
+  { id: 'whisper', label: 'CrisperWhisper' },
+  { id: 'open_router', label: 'OpenRouter', device: false },
+];
+const TRAINING_ENGINES: EngineChoice[] = [{ id: 'music-train', label: 'HOT-Step music-train', devicePicker: false }];
+const LISTEN_ENGINES: EngineChoice[] = [{ id: 'moss-music', label: 'MOSS-Music', devicePicker: false }];
+const MIDI_ENGINES: EngineChoice[] = [{ id: 'muscriptor', label: 'MuScriptor', devicePicker: false }];
+
+export const SetupGate: React.FC<{ onReady?: () => void; mode?: 'first-run' | 'settings'; focus?: string | null }> =({ onReady, mode = 'first-run', focus = null }) => {
+  const { t, language } = useI18n();
+  const assistantEngines = useMemo<EngineChoice[]>(() => [
+    { id: 'managed', label: 'llama.cpp' },
+    { id: 'local', label: t('assistantLocal'), device: false, byAddress: true },
+    { id: 'open_router', label: 'OpenRouter', device: false },
+    { id: 'agent', label: t('assistantAgent'), device: false },
+    { id: 'cli', label: t('assistantCli'), device: false },
+    { id: 'none', label: t('assistantDisabled'), device: false },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  ], [language]);
   const [status, setStatus] = useState<SetupStatus | null>(null);
   const [catalog, setCatalog] = useState<Catalog | null>(null);
   const [updateOpen, setUpdateOpen] = useState(false);
@@ -760,14 +783,20 @@ export const SetupGate: React.FC<{ onReady?: () => void; mode?: 'first-run' | 's
       .catch(() => undefined);
   }, [mode]);
 
+  // the latest onReady, outside the status poll's keys: the page passes a new function on every render, and a poll
+  // keyed on it would ask at once each time
+  const ready = useRef(onReady);
+  useEffect(() => {
+    ready.current = onReady;
+  }, [onReady]);
   const refresh = useCallback(async () => {
     const response = await fetch('/setup/status', { headers: SELF_READ });
     if (!response.ok) throw new Error(await errorMessage(response));
     const next: SetupStatus = await response.json();
     setStatus(next);
-    if (next.ready && next.engine_ready) onReady?.();
+    if (next.ready && next.engine_ready) ready.current?.();
     return next;
-  }, [onReady]);
+  }, []);
 
   // What to show as chosen: what the studio is actually set to, not what it
   // would recommend. Preselecting the recommendation made an installed studio
@@ -1233,14 +1262,7 @@ export const SetupGate: React.FC<{ onReady?: () => void; mode?: 'first-run' | 's
               purpose={t('assistantOptionalPurpose')}
               statusUrl="/v1/assistant/runtime"
               installUrl="/v1/assistant/runtime/install"
-              engines={[
-                { id: 'managed', label: 'llama.cpp' },
-                { id: 'local', label: t('assistantLocal'), device: false, byAddress: true },
-                { id: 'open_router', label: 'OpenRouter', device: false },
-                { id: 'agent', label: t('assistantAgent'), device: false },
-                { id: 'cli', label: t('assistantCli'), device: false },
-                { id: 'none', label: t('assistantDisabled'), device: false },
-              ]}
+              engines={assistantEngines}
               settingsUrl="/v1/assistant/status"
               removeUrl="/v1/assistant/runtime/remove"
               cancelUrl="/v1/assistant/runtime/cancel"
@@ -1261,7 +1283,7 @@ export const SetupGate: React.FC<{ onReady?: () => void; mode?: 'first-run' | 's
               settingsUrl="/v1/separation/settings"
               removeUrl="/v1/separation/remove"
               cancelUrl="/v1/separation/runtime/cancel"
-              engines={[{ id: 'htdemucs', label: 'HT-Demucs' }, { id: 'roformer', label: 'Mel-Band RoFormer' }]}
+              engines={SEPARATION_ENGINES}
             />
             <OptionalGroup
               title={t('karaokeSection')}
@@ -1271,11 +1293,7 @@ export const SetupGate: React.FC<{ onReady?: () => void; mode?: 'first-run' | 's
               removeUrl="/v1/karaoke/remove"
               settingsUrl="/v1/karaoke/status"
               cancelUrl="/v1/karaoke/cancel"
-              engines={[
-                { id: 'parakeet', label: 'Parakeet' },
-                { id: 'whisper', label: 'CrisperWhisper' },
-                { id: 'open_router', label: 'OpenRouter', device: false },
-              ]}
+              engines={KARAOKE_ENGINES}
             >
               {(engine) => <KaraokeExtras engine={engine} />}
             </OptionalGroup>
@@ -1288,7 +1306,7 @@ export const SetupGate: React.FC<{ onReady?: () => void; mode?: 'first-run' | 's
                 statusUrl="/v1/training/pack/runtime"
                 installUrl="/v1/training/pack/install"
                 cancelUrl="/v1/training/pack/cancel"
-                engines={[{ id: 'music-train', label: 'HOT-Step music-train', devicePicker: false }]}
+                engines={TRAINING_ENGINES}
               />
             )}
             {mode === 'settings' && (
@@ -1298,7 +1316,7 @@ export const SetupGate: React.FC<{ onReady?: () => void; mode?: 'first-run' | 's
                 statusUrl="/v1/training/listen/runtime"
                 installUrl="/v1/training/listen/install"
                 cancelUrl="/v1/training/pack/cancel"
-                engines={[{ id: 'moss-music', label: 'MOSS-Music', devicePicker: false }]}
+                engines={LISTEN_ENGINES}
               />
             )}
             {mode === 'settings' && (
@@ -1309,7 +1327,7 @@ export const SetupGate: React.FC<{ onReady?: () => void; mode?: 'first-run' | 's
                 installUrl="/v1/midi/install"
                 removeUrl="/v1/midi/remove"
                 cancelUrl="/v1/midi/cancel"
-                engines={[{ id: 'muscriptor', label: 'MuScriptor', devicePicker: false }]}
+                engines={MIDI_ENGINES}
               />
             )}
           </div>
