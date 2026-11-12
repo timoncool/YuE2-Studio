@@ -2188,6 +2188,15 @@ fn roformer_library_sources(state: &AppState) -> Vec<std::path::PathBuf> {
     vec![state.engine_runtime.library_dir(), engine_bundle_root()]
 }
 
+/// Whether the separator chosen in Settings would run on the card under `runtime`: RoFormer by `roformer_on_card`,
+/// HT-Demucs by the audio.cpp server build that choice takes.
+async fn separator_on_card(state: &AppState, runtime: lyrics_sync::OnnxFlavour) -> bool {
+    match state.separation_config.read().await.engine {
+        separation::Engine::Roformer => roformer_on_card(state, runtime),
+        separation::Engine::Htdemucs => separation_build(runtime).is_ok_and(acpp::on_card),
+    }
+}
+
 /// The separator's files to download for its engine: HT-Demucs's model, or RoFormer's model and engine build.
 fn roformer_set(gpu: bool) -> Vec<&'static downloads::Asset> {
     std::iter::once(&separation::ROFORMER_MODEL).chain(separation::Separator::roformer_engine(gpu)).collect()
