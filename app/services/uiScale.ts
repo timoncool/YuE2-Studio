@@ -37,7 +37,11 @@ export async function applyUiScale(percent: number): Promise<void> {
   if (isDesktop()) {
     await getCurrentWebview().setZoom(factor);
   } else {
-    document.documentElement.style.zoom = String(factor);
+    const root = document.documentElement;
+    root.style.zoom = String(factor);
+    // a vh or vw inside the zoomed page is scaled with it: --vh and --vw stay one per cent of what is visible
+    root.style.setProperty('--vh', `calc(1vh / ${factor})`);
+    root.style.setProperty('--vw', `calc(1vw / ${factor})`);
   }
 }
 
@@ -60,4 +64,10 @@ export function scaleForKey(key: string, current: number): number | null {
   if (key === '-' || key === '_') return clampUiScale(current - UI_SCALE_STEP);
   if (key === '0') return UI_SCALE_DEFAULT;
   return null;
+}
+
+/** The page's own scale: a pointer's clientX and an element's getBoundingClientRect come in screen pixels, the layout
+ * (scrollLeft, a width in CSS, a position set in style) in CSS pixels, which is the screen's divided by this. */
+export function pageZoom(): number {
+  return Number(document.documentElement.style.zoom) || 1;
 }

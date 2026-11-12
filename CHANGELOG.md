@@ -41,6 +41,7 @@ Windows build.
 
 ### Fixed
 
+- **A scaled studio in a browser tab fits the window**, as in ACE-Step Studio ([#165](https://github.com/timoncool/YuE2-Studio/issues/165)): at an interface scale other than 100 % the studio and its dialogs fit the tab, with the player at the bottom and no scrolling of the page, and the "slide to turn on" knob and a click on the MIDI player's notes follow the pointer.
 - **What the studio starts ends with it, and what it opens for you stays**, as in ACE-Step Studio: the engine, the assistant's server and the other helpers end when the studio closes, also on Linux and macOS and before the update installer runs, while a file manager the studio opened stays open after it closes.
 - **Updating karaoke's engine while karaoke has run no longer breaks it**, as in MiniMax Music3 Studio: an install over the engine the studio has loaded stopped at its first file, having removed some of the earlier ones, and karaoke reported the model missing until the next start. Files a running studio holds are now moved aside and removed at the next start, the new engine lands whole, and the update screen says it is used from the next start of the studio. A reserved port range is also found on a Windows in another language.
 - **The karaoke of a video moves up to 30 seconds either way, in hundredths** ([#231](https://github.com/timoncool/YuE2-Studio/issues/231)): the lyrics offset in the video window reached only 3 seconds in tenths; it now takes from -30.00 to +30.00 seconds, on the slider and typed in its field.

@@ -175,7 +175,7 @@ export const MidiImportDialog: React.FC<{
 
   return (
     <div className="fixed inset-0 z-80 flex items-center justify-center bg-black/50 p-4">
-      <div role="dialog" aria-modal="true" aria-labelledby="midi-import-title" className="flex max-h-[88vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl dark:bg-zinc-900">
+      <div role="dialog" aria-modal="true" aria-labelledby="midi-import-title" className="flex max-h-[calc(var(--vh)*88)] w-full max-w-2xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl dark:bg-zinc-900">
         <div className="flex items-center justify-between border-b border-zinc-200 px-5 py-3.5 dark:border-white/10">
           <h3 id="midi-import-title" className="flex items-center gap-2 text-base font-bold text-zinc-900 dark:text-white">
             <FileMusic size={17} className="text-pink-500" /> {say('midiInTitle')}

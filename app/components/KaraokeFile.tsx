@@ -97,7 +97,7 @@ export const KaraokeFile: React.FC<{ song: Song; onDone: (lrc: string) => void }
       />
       {rows && (
         <div className="space-y-1.5 rounded-xl border border-zinc-200 p-2 dark:border-white/10">
-          <div className="max-h-[40vh] space-y-1 overflow-y-auto">
+          <div className="max-h-[calc(var(--vh)*40)] space-y-1 overflow-y-auto">
             {rows.map((row, index) => (
               <div key={index} className="flex gap-1.5">
                 <input
