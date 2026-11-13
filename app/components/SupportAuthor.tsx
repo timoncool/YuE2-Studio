@@ -11,7 +11,7 @@ export const SupportAuthor: React.FC<{ donatePage: string }> = ({ donatePage }) 
     <div className="flex flex-wrap gap-2">
       <a href="https://dalink.to/nerual_dreming" target="_blank" rel="noopener noreferrer" className={ABOUT_LINK}><CreditCard size={14} aria-hidden="true" />{t('donateCardButton')}</a>
       <a href="https://boosty.to/neuro_art" target="_blank" rel="noopener noreferrer" className={ABOUT_LINK}><SiBoosty size={14} aria-hidden="true" />{t('donateMonthlyButton')}</a>
-      <a href={donatePage} target="_blank" rel="noopener noreferrer" className={ABOUT_LINK}>{t('donateOther')}<ExternalLink size={13} aria-hidden="true" /></a>
+      <a href={donatePage} target="_blank" rel="noopener noreferrer" className={ABOUT_LINK}>{t('supportPageButton')}<ExternalLink size={13} aria-hidden="true" /></a>
     </div>
   );
 };

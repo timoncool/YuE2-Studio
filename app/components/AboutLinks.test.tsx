@@ -50,11 +50,23 @@ describe('About: the author and support', () => {
     }
   });
 
+  it('names the support page button with the same words the line above it uses', () => {
+    expect(ru.supportPageButton).toBe('Страница поддержки');
+    expect(ru.supportLine).toBe('Всё здесь бесплатно. Донаты оплачивают время, которое на это уходит. Apple Pay, Google Pay, криптовалюта и другие способы — на странице поддержки.');
+    const inLine = { en: 'support page', ru: 'странице поддержки', zh: zh.supportPageButton, ja: ja.supportPageButton, ko: ko.supportPageButton };
+    expect(en.supportPageButton.toLowerCase()).toBe(inLine.en);
+    for (const [strings, words] of [[en, inLine.en], [ru, inLine.ru], [zh, inLine.zh], [ja, inLine.ja], [ko, inLine.ko]] as const) {
+      expect(strings.supportLine).toContain(words);
+      expect(strings.supportLine).toMatch(/Apple Pay[\s\S]*Google Pay/);
+    }
+  });
+
   it('supports the author with a card, Boosty and the donation page for the rest, no wallets in the program', async () => {
     await show(<SupportAuthor donatePage="https://timoncool.github.io/YuE2-Studio/donate.html" />);
     const buttons = [...host.querySelectorAll('a')];
     expect(buttons.map(button => button.getAttribute('href'))).toEqual(['https://dalink.to/nerual_dreming', 'https://boosty.to/neuro_art', 'https://timoncool.github.io/YuE2-Studio/donate.html']);
-    expect(buttons[2].textContent).toContain('donateOther');
+    expect(buttons[2].textContent).toContain('supportPageButton');
+    expect(buttons[2].querySelector('svg')).not.toBeNull();
     for (const address of WALLET_ADDRESSES) expect(host.innerHTML).not.toContain(address);
     expect(host.querySelectorAll('code, [aria-expanded]').length).toBe(0);
     expect(host.textContent).not.toContain('allLinks');
