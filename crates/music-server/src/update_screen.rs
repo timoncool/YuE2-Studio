@@ -45,20 +45,23 @@ const CHANGES: &[Change] = &[
     Change { what: "llama-*", reason: "llama" },
     Change { what: "music-train", reason: "hotstep" },
     Change { what: "ace-caption", reason: "hotstep" },
-    Change { what: "cuda-cublas", reason: "cublas-wheel" },
+    Change { what: "crisperwhisper-*", reason: "crisperwhisper" },
+    Change { what: "faster-whisper", reason: "faster-whisper-gone" },
     Change { what: "parakeet-onnx", reason: "parakeet-onnx-gone" },
+    Change { what: "ort-gpu", reason: "ort-gpu-gone" },
+    Change { what: "onnxruntime", reason: "ort-cpu" },
 ];
 
 /// Every reason, by its code, in English; the window says it in its own language by the code.
 pub const REASONS: &[(&str, &str)] = &[
     ("crisperwhisper", "Karaoke and the dataset lyrics are heard by CrisperWhisper 2.0 turbo in the audio.cpp server instead of Faster-Whisper, with a time for every word"),
-    ("transcribe-avx2", "Built for every processor with AVX2: Parakeet no longer closes the studio on processors without AVX-512"),
+    ("transcribe-avx2", "Parakeet's engine runs on any 64-bit processor and no longer closes the studio on processors without AVX-512"),
     ("llama", "A newer llama.cpp for the assistant"),
     ("hotstep", "A newer build of HOT-Step's tools for training and captions"),
     ("cublas-wheel", "The same cuBLAS 12.9, now from NVIDIA's package with its checksum pinned"),
     ("faster-whisper-gone", "Faster-Whisper is replaced by CrisperWhisper"),
     ("parakeet-onnx-gone", "Parakeet runs on transcribe.cpp; these ONNX models are no longer read"),
-    ("ort-cpu", "Tempo, key and the listening pack run on ONNX Runtime on the processor"),
+    ("ort-cpu", "The tempo of a song is measured on the processor, in 5 to 7 seconds a song"),
     ("ort-gpu-gone", "ONNX Runtime no longer runs on the card; its CUDA, cuDNN and DirectML files are not read"),
     ("demucs-audiocpp", "Stems are split by HT-Demucs in the audio.cpp server"),
     ("audiocpp-server", "The audio.cpp engine behind stem separation, karaoke and audio-to-MIDI"),
@@ -333,7 +336,7 @@ mod tests {
     #[test]
     fn a_models_files_are_one_row_and_a_runtime_its_own() {
         let p = plan(
-            vec![candidate("transcribe-engine", false, "runtime/transcribe_engine.dll", Some("https://github.com/timoncool/transcribe.cpp/releases/download/engine-0.1.1/transcribe_engine.dll"))],
+            vec![candidate("transcribe-engine", false, "runtime/transcribe_engine.dll", Some("https://github.com/timoncool/transcribe.cpp/releases/download/engine-0.2.0/transcribe-windows-cpu-x64.zip"))],
             vec![candidate("htdemucs-6s", true, "models/htdemucs/htdemucs-6stems-f16.gguf", None), candidate("htdemucs-6s-config", true, "models/htdemucs/config.json", None)],
             Vec::new(),
             Path::new("/nowhere"),
@@ -341,7 +344,7 @@ mod tests {
         );
         assert_eq!(p.updated.len(), 1);
         let engine = &p.updated[0];
-        assert_eq!((engine.from.as_deref(), engine.reason_code), (Some("engine-0.1.1"), "transcribe-avx2"));
+        assert_eq!((engine.from.as_deref(), engine.reason_code), (Some("engine-0.2.0"), "transcribe-avx2"));
         assert_eq!(p.added.len(), 1, "a model's files are one row");
         let model = &p.added[0];
         assert_eq!((model.id.as_str(), model.ids.len(), model.bytes, model.download), ("models/htdemucs", 2, 200, 120));
@@ -369,5 +372,17 @@ mod tests {
         assert!(!plan(Vec::new(), Vec::new(), leftovers(), root.path(), "9.9.9").show, "shown once per release");
         assert!(plan(Vec::new(), Vec::new(), leftovers(), root.path(), "10.0.0").show, "the next release shows its own");
         assert!(!plan(Vec::new(), Vec::new(), Vec::new(), root.path(), "10.0.0").show, "an empty plan shows nothing");
+    }
+
+    #[test]
+    fn faster_whisper_of_an_earlier_release_is_a_row_and_stays_until_its_replacement_is_in_place() {
+        let root = tempfile::tempdir().unwrap();
+        let models = root.path().join("karaoke/models/whisper/faster-whisper-large-v3-turbo");
+        std::fs::create_dir_all(&models).unwrap();
+        std::fs::write(models.join("model.bin"), vec![0u8; 700]).unwrap();
+        let p = plan(Vec::new(), Vec::new(), crate::retired::leftovers(root.path()), root.path(), "9.9.9");
+        let row = p.retired.iter().find(|row| row.reason_code == "faster-whisper-gone").expect("Faster-Whisper is a row of the screen");
+        assert_eq!((row.paths.clone(), row.size), (vec!["karaoke/models/whisper".to_string()], 700));
+        assert!(models.is_dir(), "the plan itself removes nothing: karaoke keeps it until CrisperWhisper is downloaded");
     }
 }

@@ -31,6 +31,9 @@ export const JournalPanel: React.FC<{ open: boolean; onClose: () => void }> = ({
   // an agent's change in the window's words, never in a tool's name; the words
   // go in as they are, a $ in a title included
   const sentence = (line: JournalLine) => {
+    if (line.source === 'service') {
+      return t(`journalService_${line.verb}` as TranslationKey).replace('{name}', () => line.target).replace('{n}', () => line.text);
+    }
     if (line.source !== 'agent') return line.text;
     const verb = t(`journalVerb_${line.verb}` as TranslationKey);
     const kind = t(`journalKind_${line.kind}` as TranslationKey);
@@ -45,7 +48,7 @@ export const JournalPanel: React.FC<{ open: boolean; onClose: () => void }> = ({
   return (
     <aside
       aria-label={t('journal')}
-      className="fixed inset-y-0 right-0 z-[55] flex w-[min(24rem,100vw)] flex-col border-l border-zinc-200 bg-white shadow-2xl dark:border-white/10 dark:bg-suno-panel"
+      className="fixed inset-y-0 right-0 z-[55] flex w-[min(24rem,calc(var(--vw)*100))] flex-col border-l border-zinc-200 bg-white shadow-2xl dark:border-white/10 dark:bg-suno-panel"
     >
       <div className="flex h-14 shrink-0 items-center gap-2 border-b border-zinc-200 px-4 dark:border-white/5">
         <h2 className="text-sm font-semibold text-zinc-900 dark:text-white">{t('journal')}</h2>

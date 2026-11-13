@@ -1,7 +1,10 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { libraryChanged, SELF_READ, useActivity, useAssistantStatus, useSetupStatus, type ActivityEntry } from '../services/studioQueries';
-import { hasSungLines, karaokeReason } from '../services/karaoke';
+import { hasSungLines, karaokeReason, recogniseLyrics } from '../services/karaoke';
+import { ConfirmDialog } from './ConfirmDialog';
 import { clampDurationToKept } from '../services/createDuration';
+import { minTokensCutsTheSongOff } from '../services/samplingLimits';
+import { foldedAfter, keepFolded, keptFolded } from '../services/createFold';
 import {
   AlertTriangle, AudioLines, ChevronDown, CircleAlert, Dices, Ear, Eye, EyeOff, FileMusic, FolderOpen, Loader2,
   Grid2x2, Guitar, ListChecks, Music2, Pause, Piano, Play, RotateCcw, Save, Sparkles, Square, Tags, Upload, Wand2, Settings2, X,
@@ -19,10 +22,10 @@ import { MidiImportDialog } from './MidiImportDialog';
 import { isMidiFile } from '../services/midiFiles';
 import { trackMidiBase64 } from '../services/midiEditor';
 import { composePlans, composeScore, transcribe, type ScorePlan } from '../services/transcription';
-import { chordBed, failed, instrumentalScore, matchSections, type SectionProposal } from '../services/scoreApi';
+import { bedLine, chordBed, failed, instrumentalScore, matchSections, type BedSection, type SectionProposal } from '../services/scoreApi';
 import { sectionTagsOnly } from '../services/instrumental';
 import { lyricSyllables, syllableChangesOf, type SyllableChange } from '../services/syllables';
-import { profileLabel as setLabel } from '../services/modelCatalog';
+import { profileLabel as setLabel, setupLabel, type SetupChoice } from '../services/modelCatalog';
 import { REQUEST_FILE_ACCEPT, parseRequestFile, requestFileTitle, serializeRequest, type RequestFileFormat } from '../services/requestFile';
 import { AdapterPicker } from './AdapterPicker';
 import { CreatePlaylistModal } from './PlaylistModals';
@@ -76,12 +79,10 @@ type EngineDefaults = Partial<Record<string, unknown>> & {
 
 type ProfileFiles = { backbone: string; vae: string; transcriber?: string | null };
 
-type SetupStatus = {
+type SetupStatus = SetupChoice & {
   ready?: boolean;
   profile_files?: ProfileFiles | null;
   engine_ready?: boolean;
-  selected_profile_id?: string | null;
-  selected_component_ids?: string[] | null;
   effective_max_batch?: number;
   hardware?: { gpuName?: string; totalVramGb?: number; recommended?: string };
 };
@@ -300,15 +301,40 @@ const SliderRow: React.FC<{
   );
 };
 
-const Card: React.FC<{ title: string; icon?: React.ReactNode; actions?: React.ReactNode; children: React.ReactNode }> = ({ title, icon, actions, children }) => (
-  <div className="overflow-hidden rounded-xl border border-zinc-200 bg-white dark:border-white/5 dark:bg-suno-card">
-    <div className="flex items-center justify-between gap-2 border-b border-zinc-100 bg-zinc-50 px-3 py-2 dark:border-white/5 dark:bg-white/5">
-      <span className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">{icon}{title}</span>
-      {actions && <div className="flex items-center gap-1">{actions}</div>}
+/** A block of the form; with `fold` its title folds and opens it, and the choice is kept across restarts. */
+const Card: React.FC<{ title: string; icon?: React.ReactNode; actions?: React.ReactNode; fold?: string; children: React.ReactNode }> = ({ title, icon, actions, fold, children }) => {
+  const [folded, setFolded] = useState(() => (fold ? keptFolded().includes(fold) : false));
+  // React keeps a block's state when the simple mode's block in the same place turns into a studio one
+  useEffect(() => setFolded(fold ? keptFolded().includes(fold) : false), [fold]);
+  const toggle = () => {
+    if (!fold) return;
+    setFolded(current => {
+      keepFolded(foldedAfter(keptFolded(), fold, !current));
+      return !current;
+    });
+  };
+  return (
+    <div className="overflow-hidden rounded-xl border border-zinc-200 bg-white dark:border-white/5 dark:bg-suno-card">
+      <div className={`flex items-center justify-between gap-2 bg-zinc-50 px-3 py-2 dark:bg-white/5 ${folded ? '' : 'border-b border-zinc-100 dark:border-white/5'}`}>
+        {fold ? (
+          <button
+            type="button"
+            onClick={toggle}
+            aria-expanded={!folded}
+            className="flex min-w-0 flex-1 items-center gap-1.5 text-left text-[11px] font-bold uppercase tracking-wide text-zinc-500 transition-colors hover:text-black dark:text-zinc-400 dark:hover:text-white"
+          >
+            <ChevronDown size={14} className={folded ? '-rotate-90 transition-transform' : 'transition-transform'} />
+            {icon}{title}
+          </button>
+        ) : (
+          <span className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">{icon}{title}</span>
+        )}
+        {actions && <div className="flex items-center gap-1">{actions}</div>}
+      </div>
+      {!folded && <div className="p-3">{children}</div>}
     </div>
-    <div className="p-3">{children}</div>
-  </div>
-);
+  );
+};
 
 const Stage: React.FC<{ title: string; hint: string; children: React.ReactNode }> = ({ title, hint, children }) => (
   <section>
@@ -331,7 +357,7 @@ const AutoTextarea: React.FC<React.TextareaHTMLAttributes<HTMLTextAreaElement> &
 };
 
 /** Seven knobs of one autoregressive stage, each defaulting to the checkpoint. */
-const SamplingGrid: React.FC<{ value: SamplingText; defaults?: YueSampling; onChange: (value: SamplingText) => void; t: (key: never) => string; maxTokensCap?: number }> = ({ value, defaults, onChange, t, maxTokensCap }) => {
+const SamplingGrid: React.FC<{ value: SamplingText; defaults?: YueSampling; onChange: (value: SamplingText) => void; t: (key: never) => string; maxTokensCap?: number; minTokensHint?: string }> = ({ value, defaults, onChange, t, maxTokensCap, minTokensHint }) => {
   const label: Record<keyof YueSampling, string> = {
     temperature: t('samplingTemperature' as never),
     top_p: 'Top P',
@@ -344,7 +370,7 @@ const SamplingGrid: React.FC<{ value: SamplingText; defaults?: YueSampling; onCh
   return (
     <div className="grid grid-cols-2 gap-2">
       {SAMPLING_KEYS.map(key => (
-        <Field key={key} label={label[key]}>
+        <Field key={key} label={label[key]} hint={key === 'min_tokens' ? minTokensHint : undefined}>
           <input
             value={value[key]}
             onChange={event => onChange({ ...value, [key]: event.target.value })}
@@ -488,7 +514,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
   const [bedKey, setBedKey] = useState('C');
   const [bedMeter, setBedMeter] = useState('4/4');
   const [bedBusy, setBedBusy] = useState(false);
-  const [bedWritten, setBedWritten] = useState<string[][] | null>(null);
+  const [bedWritten, setBedWritten] = useState<BedSection[] | null>(null);
   const [coverSource, setCoverSource] = useState<string>('');
   // the library song a cover's melody was taken from, which the new song names
   const [coverSongId, setCoverSongId] = useState<string | null>(null);
@@ -519,11 +545,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
   const transcriberReady = Boolean(catalog?.transcriber);
   const effectiveCot: YueCot = cot || (defaults.cot as YueCot) || 'full';
 
-  const profileLabel = useMemo(() => {
-    if (setup?.selected_component_ids?.length) return t('customSet');
-    const id = setup?.selected_profile_id;
-    return id ? PROFILE_LABEL[id] ?? id : '—';
-  }, [setup, t]);
+  const profileLabel = useMemo(() => setupLabel(t, language, setup), [setup, t, language]);
 
   // A cover or a lyric timing finished: the library is read again for it.
   // What was finished before the page opened is in the library already.
@@ -609,8 +631,12 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
     setError(null);
   }, []);
 
+  // Create is kept in a React Activity: showing it again reruns this effect with the same Reuse, which would put the
+  // song's request back over what was edited since; each Reuse is applied once, by its timestamp
+  const appliedReuse = useRef<number | null>(null);
   useEffect(() => {
-    if (!initialData?.song) return;
+    if (!initialData?.song || appliedReuse.current === initialData.timestamp) return;
+    appliedReuse.current = initialData.timestamp;
     const song = initialData.song;
     const settings = (song.generationParams ?? {}) as Record<string, unknown>;
     applyRequest({ style: song.style, lyrics: song.lyrics, ...settings }, song.title || '');
@@ -1002,6 +1028,23 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
 
   // A cover of a recording that came without a style: MOSS-Music hears the
   // source and the style is written from that.
+  const [hearingLyrics, setHearingLyrics] = useState(false);
+  const [confirmHearLyrics, setConfirmHearLyrics] = useState(false);
+  /** The karaoke recogniser hears what the cover's source sings; the lyrics take it, to be edited. */
+  const hearLyrics = async () => {
+    if ((!coverSongId && !coverFile) || hearingLyrics) return;
+    setHearingLyrics(true);
+    setError(null);
+    try {
+      setLyrics(await recogniseLyrics(coverSongId ? { songId: coverSongId } : { file: coverFile! }));
+    } catch (reason) {
+      const message = reason instanceof Error ? reason.message : String(reason);
+      setError(karaokeReason(t, message) ?? message);
+    } finally {
+      setHearingLyrics(false);
+    }
+  };
+
   const [describing, setDescribing] = useState(false);
   const describeByEar = async () => {
     if (!coverSongId && !coverFile) return;
@@ -1133,19 +1176,28 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
   /** An instrumental: the score - the form's, or one written now - with its voice moved to the
    *  instrument, and the lyrics' section tags without their words, so nothing is left to sing. */
   const createInstrumental = async () => {
+    // "No score" is honoured: the song is made from the section tags and the style alone
+    if (effectiveCot === 'off') {
+      const request = buildRequest();
+      request.cot = 'off';
+      delete request.abc;
+      delete request.semantic_tokens;
+      request.lyrics = sectionTagsOnly(lyrics);
+      generate(request);
+      return;
+    }
     setComposing(true);
     const controller = new AbortController();
     composeRun.current = controller;
     try {
-      if (effectiveCot === 'off') setCot('full');
+      // the instrumental score belongs to this request only: a score written for it is not left in the form for
+      // the next song, and a score the person gave stays as they wrote it
       const written = abc.trim() || await writeScoreAlone(controller.signal);
       const answer = await instrumentalScore(written);
       if (failed(answer)) throw new Error(answer.error);
-      setAbc(answer.abc.trimEnd());
-      setSemanticTokens('');
       const request = buildRequest();
       request.abc = answer.abc.trim();
-      request.cot = effectiveCot === 'off' ? 'full' : effectiveCot;
+      request.cot = effectiveCot;
       request.lyrics = sectionTagsOnly(lyrics);
       delete request.semantic_tokens;
       generate(request);
@@ -1547,6 +1599,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
 
           <Card
             title={tt('styleCardTitle')}
+            fold="style"
             icon={<Music2 size={13} />}
             actions={
               <>
@@ -1625,6 +1678,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
 
           <Card
             title={t('lyrics')}
+            fold="lyrics"
             actions={
               <>
                 <button type="button" onClick={() => (assistantReady ? void layOutLyrics() : openAssistantSetup())} disabled={assistantReady && (assisting !== null || !lyrics.trim())} className={ICON} title={assistantReady ? t('formatLyrics') : t('setUpAssistant')}>
@@ -1633,6 +1687,18 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
                 <button type="button" onClick={() => (assistantReady ? void askAssistant('lyrics') : openAssistantSetup())} disabled={assistantReady && (assisting !== null)} className={ICON} title={assistantReady ? t('writeLyrics') : t('setUpAssistant')}>
                   {assisting === 'lyrics' ? <Loader2 size={14} className="animate-spin" /> : <Wand2 size={14} className="text-pink-500" />}
                 </button>
+                {mode === 'cover' && (coverSongId || coverFile) && (
+                  <button
+                    type="button"
+                    onClick={() => (lyrics.trim() ? setConfirmHearLyrics(true) : void hearLyrics())}
+                    disabled={hearingLyrics}
+                    className={ICON}
+                    aria-label={t('recogniseFromSource')}
+                    title={t('recogniseFromSourceHint')}
+                  >
+                    {hearingLyrics ? <Loader2 size={14} className="animate-spin" /> : <Ear size={14} />}
+                  </button>
+                )}
                 <button type="button" onClick={() => setLyrics('')} className={ICON} title={t('resetPrompt')}><RotateCcw size={14} /></button>
               </>
             }
@@ -1651,6 +1717,14 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
               placeholder={'[Verse 1]\n…\n\n[Chorus]\n…'}
               aria-label={t('lyrics')}
               className={`${CONTROL} resize-none overflow-y-auto font-mono text-xs leading-5 custom-scrollbar`}
+            />
+            <ConfirmDialog
+              isOpen={confirmHearLyrics}
+              title={t('recogniseFromSource')}
+              message={t('recogniseFromSourceReplace')}
+              confirmLabel={t('recogniseFromSource')}
+              onConfirm={() => { setConfirmHearLyrics(false); void hearLyrics(); }}
+              onCancel={() => setConfirmHearLyrics(false)}
             />
             {resingFrom && (
               <div className="mt-2 rounded-lg border border-pink-500/25 bg-pink-500/5 p-2 text-[11px] leading-5 text-zinc-600 dark:text-zinc-300">
@@ -1677,6 +1751,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
 
           <Card
             title={tt('scoreCardTitle')}
+            fold="score"
             icon={<FileMusic size={13} />}
             actions={
               <>
@@ -1805,7 +1880,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
                             if (failed(answer)) { setError(answer.error); return; }
                             setAbc(answer.abc.trimEnd());
                             setPlans([]); setSelectedPlan(0); setSemanticTokens(''); setContinueScore(false);
-                            setBedWritten(answer.progressions);
+                            setBedWritten(answer.sections);
                           })
                           .finally(() => setBedBusy(false));
                       }}
@@ -1816,7 +1891,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
                     </button>
                     {bedWritten && (
                       <p className="mt-2 text-[11px] leading-4 text-zinc-500">
-                        {tt('chordBedWritten').replace('{verse}', bedWritten[0].join(' ')).replace('{chorus}', bedWritten[1].join(' ')).replace('{bridge}', bedWritten[2].join(' '))}
+                        {tt('chordBedWritten').replace('{sections}', () => bedLine(bedWritten))}
                       </p>
                     )}
                   </div>
@@ -1866,11 +1941,12 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
             onChange={setAdapters}
             onTrigger={applyTrigger}
             iconClass={ICON}
-            frame={(title, icon, actions, body) => <Card title={title} icon={icon} actions={actions}>{body}</Card>}
+            frame={(title, icon, actions, body) => <Card title={title} icon={icon} actions={actions} fold="lora">{body}</Card>}
           />
 
           <Card
             title={t('quality')}
+            fold="quality"
             actions={
               <button type="button" onClick={() => resetParameters()} className="rounded-md px-2 py-1 text-[10px] font-semibold text-zinc-500 transition-colors hover:bg-zinc-200 hover:text-black dark:hover:bg-white/10 dark:hover:text-white">
                 {t('resetToDefaults')}
@@ -2002,7 +2078,10 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
                       <input value={cfgScale} onChange={event => setCfgScale(event.target.value)} placeholder={tt('guidanceAuto')} inputMode="decimal" className={CONTROL} />
                     </Field>
                     <div className="mt-3">
-                      <SamplingGrid value={semanticSampling} defaults={defaults.semantic_sampling} onChange={setSemanticSampling} t={t as never} maxTokensCap={semanticBudget} />
+                      <SamplingGrid value={semanticSampling} defaults={defaults.semantic_sampling} onChange={setSemanticSampling} t={t as never} maxTokensCap={semanticBudget} minTokensHint={tt('samplingMinTokensHint')} />
+                      {minTokensCutsTheSongOff(semanticSampling.min_tokens, effectiveDuration) && (
+                        <p className="mt-2 text-[11px] leading-4 text-amber-600 dark:text-amber-400">{tt('samplingMinTokensCutsOff')}</p>
+                      )}
                       <p className={`mt-2 text-[11px] leading-4 ${semanticMaxTokens !== undefined && semanticMaxTokens > semanticBudget ? 'text-amber-600 dark:text-amber-400' : 'text-zinc-500'}`}>
                         {budgetText(semanticMaxTokens !== undefined && semanticMaxTokens > semanticBudget ? 'semanticBudgetOver' : 'semanticBudget')}
                       </p>

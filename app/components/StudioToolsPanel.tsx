@@ -1,7 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { SELF_READ } from '../services/studioQueries';
+import { SELF_READ, useKaraokeStatus } from '../services/studioQueries';
+import { karaokeReason, recogniseLyrics } from '../services/karaoke';
 import { Check, Copy, Download, FileAudio, KeyboardMusic, Loader2, Music, Play, RefreshCw, Scissors, Search, SlidersHorizontal, Wand2 } from 'lucide-react';
 import { useI18n } from '../context/I18nContext';
+import { poll } from '../services/poll';
 import { saveFile } from '../services/saveFile';
 import { tempoAndKey } from '../services/songDownload';
 import { DevicePicker } from './DevicePicker';
@@ -13,9 +15,12 @@ import { mapNativeLibrarySong } from '../services/nativeLibrary';
 import type { NativeLibrarySong } from '../types';
 import type { TranslationKey } from '../i18n/translations';
 import { stemOf } from '../services/songStems';
+import { derivedBy, libraryFailure, restoredOf, shownSongs, toolsSongOnOpen, type ToolRun } from '../services/toolsSong';
+import { RestoreTool } from './RestoreTool';
 import { ConfirmDialog } from './ConfirmDialog';
 import { MidiTool } from './midi/MidiTool';
 import { MidiEditor } from './midi/MidiEditor';
+import { WorkProgress } from './WorkProgress';
 
 /**
  * Studio tools.
@@ -44,7 +49,7 @@ interface SeparationStatus {
   /** The separator: HT-Demucs for six stems, Mel-Band RoFormer for the vocals and the instrumental. */
   engine?: 'htdemucs' | 'roformer';
   settings: { stems: string[]; runtime: 'auto' | 'cuda' | 'cpu'; engine?: 'htdemucs' | 'roformer' };
-  run: { song_id: string; progress: number; done: boolean; error: string | null; stems: string[] } | null;
+  run: { song_id: string; progress: number; started_ms: number; elapsed_ms?: number; done: boolean; error: string | null; stems: string[] } | null;
 }
 
 interface CatalogModel {
@@ -78,16 +83,42 @@ export function StudioToolsPanel({ initialSongId }: { initialSongId?: string | n
   const [asrLanguage, setAsrLanguage] = useState('');
   const [asrBusy, setAsrBusy] = useState(false);
   const [asrText, setAsrText] = useState('');
+  const { data: karaoke } = useKaraokeStatus();
+  const karaokeRecogniser = Boolean(karaoke?.provider && karaoke.provider !== 'none');
+  const [chosenWay, setChosenWay] = useState<'karaoke' | 'openrouter' | null>(null);
+  // the karaoke recogniser hears the file on this computer when one is chosen; OpenRouter otherwise
+  const asrWay = chosenWay ?? (karaokeRecogniser ? 'karaoke' : 'openrouter');
   const [copied, setCopied] = useState(false);
   const [query, setQuery] = useState('');
   const filePicker = useRef<HTMLInputElement | null>(null);
 
+  // an empty list before the library has answered is not "no songs"
+  const [songsLoaded, setSongsLoaded] = useState(false);
+  const [songsError, setSongsError] = useState<string | null>(null);
   const loadSongs = useCallback(async () => {
-    const body = await fetch('/v1/library/songs').then(response => response.json());
-    const list: NativeLibrarySong[] = Array.isArray(body) ? body : body.songs ?? [];
-    const playable = list.filter(song => song.audio_path);
-    setSongs(playable);
-    setSongId(current => current || playable[0]?.id || '');
+    try {
+      const response = await fetch('/v1/library/songs');
+      if (!response.ok) throw new Error(libraryFailure(response.status, await response.text()));
+      const body = await response.json();
+      const list: NativeLibrarySong[] = Array.isArray(body) ? body : body.songs ?? [];
+      const playable = list.filter(song => song.audio_path);
+      setSongs(playable);
+      setSongsError(null);
+      const runOf = (path: string) =>
+        fetch(path, { headers: SELF_READ })
+          .then(response => response.json() as Promise<{ run?: ToolRun | null }>)
+          .then(body => body.run ?? null)
+          .catch((error: unknown) => {
+            console.error(`[ERROR] the run at ${path} was not read:`, error);
+            return null;
+          });
+      const runs = await Promise.all([runOf('/v1/separation/status'), runOf('/v1/midi')]);
+      setSongId(current => current || toolsSongOnOpen(playable.map(song => song.id), runs));
+    } catch (failure) {
+      setSongsError(failure instanceof Error ? failure.message : String(failure));
+    } finally {
+      setSongsLoaded(true);
+    }
   }, []);
 
   // A track handed over by a menu wins over whatever was chosen here before.
@@ -96,7 +127,7 @@ export function StudioToolsPanel({ initialSongId }: { initialSongId?: string | n
   }, [initialSongId]);
 
   useEffect(() => {
-    void loadSongs().catch(() => undefined);
+    void loadSongs();
     void fetch('/v1/openrouter/catalog')
       .then(response => response.json())
       .then((body: { models?: CatalogModel[] }) => {
@@ -118,9 +149,7 @@ export function StudioToolsPanel({ initialSongId }: { initialSongId?: string | n
   }, [songId]);
 
   useEffect(() => {
-    void refresh().catch(() => undefined);
-    const timer = window.setInterval(() => void refresh().catch(() => undefined), 1000);
-    return () => window.clearInterval(timer);
+    return poll(() => refresh().catch(() => undefined), 1000);
   }, [refresh]);
 
   const saveSettings = async (next: SeparationStatus['settings']) => {
@@ -158,14 +187,18 @@ export function StudioToolsPanel({ initialSongId }: { initialSongId?: string | n
   };
 
   const transcribe = async () => {
-    if (!asrFile || !asrModel) return;
+    if (!asrFile || (asrWay === 'openrouter' && !asrModel)) return;
     setAsrBusy(true);
     setError(null);
     setAsrText('');
     try {
-      setAsrText(await transcribeWithNativeOpenRouter(asrModel, asrFile, asrLanguage.trim() || undefined));
+      const language = asrLanguage.trim() || undefined;
+      setAsrText(asrWay === 'karaoke'
+        ? await recogniseLyrics({ file: asrFile }, language)
+        : await transcribeWithNativeOpenRouter(asrModel, asrFile, language));
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : String(reason));
+      const message = reason instanceof Error ? reason.message : String(reason);
+      setError(karaokeReason(t, message) ?? message);
     } finally {
       setAsrBusy(false);
     }
@@ -186,14 +219,14 @@ export function StudioToolsPanel({ initialSongId }: { initialSongId?: string | n
   // narrows it, and only the first handful of matches are drawn.
   const needle = query.trim().toLowerCase();
   const matches = needle ? songs.filter(song => song.title.toLowerCase().includes(needle)) : songs;
-  const visible = matches.slice(0, 12);
+  const visible = shownSongs(matches, songId, 12);
   const hidden = matches.length - visible.length;
   const settings = status?.settings ?? { stems: status?.stems ?? [], runtime: 'auto' as const };
   // what separating again replaces: the stems it makes that the song has already
   const replacing = stems.filter(stem => settings.stems.includes(stem));
   const run = status?.run?.song_id === songId ? status?.run : null;
   const running = Boolean(run && !run.done);
-  const percent = Math.round((run?.progress ?? 0) * 100);
+  const percent = run && run.progress > 0 ? Math.round(run.progress * 100) : null;
   const download = status?.download;
 
   return (
@@ -234,7 +267,9 @@ export function StudioToolsPanel({ initialSongId }: { initialSongId?: string | n
               />
             </div>
             <div className="mt-2 max-h-56 overflow-y-auto rounded-lg border border-zinc-200 dark:border-white/10">
-              {visible.length === 0 && (
+              {!songsLoaded && <Loader2 size={14} className="mx-3 my-3 animate-spin text-zinc-400" />}
+              {songsError && <p className="px-3 py-3 text-xs text-rose-600 dark:text-rose-300">{t('toolsSongsFailed').replace('{error}', songsError)}</p>}
+              {songsLoaded && !songsError && visible.length === 0 && (
                 <p className="px-3 py-3 text-xs text-zinc-500">{t('noSongsYet')}</p>
               )}
               {visible.map(song => (
@@ -318,6 +353,15 @@ export function StudioToolsPanel({ initialSongId }: { initialSongId?: string | n
               {stems.length > 0 ? t('stemsAgain') : t('stemsStart')}
             </button>
             {chosenIsStem && <p className="mt-2 text-xs leading-5 text-zinc-500 dark:text-zinc-400">{t('stemOfStem')}</p>}
+            {/* the model is in place and the server it runs in is not (missing or of an earlier release): why Split waits */}
+            {status && status.model.installed && !status.ready && (
+              <p className="mt-2 text-xs leading-5 text-amber-600 dark:text-amber-300">
+                {t('updateWhyAudiocppServer')} ·{' '}
+                <button type="button" onClick={() => window.dispatchEvent(new CustomEvent('yue:open-settings', { detail: 'models' }))} className="underline underline-offset-2">
+                  {t('changeProfileHint')}
+                </button>
+              </p>
+            )}
             <ConfirmDialog
               isOpen={confirmReplace}
               title={t('replaceStemsTitle')}
@@ -358,17 +402,7 @@ export function StudioToolsPanel({ initialSongId }: { initialSongId?: string | n
             </div>
           )}
 
-          {running && (
-            <div className="mt-3">
-              <div className="flex items-center justify-between text-xs font-medium text-zinc-700 dark:text-zinc-200">
-                <span className="flex items-center gap-2"><Loader2 size={14} className="animate-spin text-pink-500" />{t('stemsRunning')}</span>
-                <span className="tabular-nums text-zinc-500">{percent}%</span>
-              </div>
-              <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-zinc-200 dark:bg-black/30">
-                <div className="h-full bg-linear-to-r from-orange-500 to-pink-500 transition-[width]" style={{ width: `${percent}%` }} />
-              </div>
-            </div>
-          )}
+          {running && <WorkProgress label={t('stemsRunning')} percent={percent} elapsedMs={run?.elapsed_ms} />}
 
           {stems.length > 0 && (
             <div className="mt-3 space-y-2">
@@ -401,6 +435,16 @@ export function StudioToolsPanel({ initialSongId }: { initialSongId?: string | n
             <p role="alert" className="mt-3 select-text rounded-lg bg-rose-500/10 px-3 py-2 text-xs text-rose-700 wrap-anywhere dark:text-rose-300">{run.error}</p>
           )}
         </section>
+
+        {/* Restore after compression, on the track chosen above or a file. */}
+        <RestoreTool
+          songId={songId}
+          songTitle={songs.find(song => song.id === songId)?.title ?? ''}
+          restoredId={restoredOf(songs, songId)}
+          chosenIsRestored={derivedBy(songs.find(song => song.id === songId), 'restore')}
+          card={CARD}
+          onDone={() => void loadSongs()}
+        />
 
         {/* Audio to MIDI, on the track chosen above. */}
         <MidiTool songId={songId} songTitle={songs.find(song => song.id === songId)?.title ?? ''} card={CARD} />
@@ -485,11 +529,30 @@ export function StudioToolsPanel({ initialSongId }: { initialSongId?: string | n
           </div>
           <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-300">{t('transcribeIntro')}</p>
 
+          <div role="radiogroup" aria-label={t('transcribeWay')} className="mt-3 inline-flex rounded-lg border border-zinc-200 p-0.5 text-xs font-semibold dark:border-white/10">
+            {(['karaoke', 'openrouter'] as const).map(way => (
+              <button
+                key={way}
+                type="button"
+                role="radio"
+                aria-checked={asrWay === way}
+                onClick={() => setChosenWay(way)}
+                title={t(way === 'karaoke' ? 'transcribeWayKaraokeHint' : 'transcribeWayOpenRouterHint')}
+                className={`rounded-md px-3 py-1.5 ${asrWay === way ? 'bg-pink-600 text-white' : 'text-zinc-600 hover:text-pink-600 dark:text-zinc-300'}`}
+              >
+                {t(way === 'karaoke' ? 'transcribeWayKaraoke' : 'transcribeWayOpenRouter')}
+              </button>
+            ))}
+          </div>
+          {asrWay === 'karaoke' && !karaokeRecogniser && <p className="mt-2 text-xs text-amber-600 dark:text-amber-400">{t('karaokeNoRecogniser')}</p>}
+
           <div className="mt-3 grid gap-2 md:grid-cols-3">
-            <select value={asrModel} onChange={event => setAsrModel(event.target.value)} className={CONTROL}>
-              {asrModels.length === 0 && <option value="">{t('noSpeechModel')}</option>}
-              {asrModels.map(model => <option key={model.id} value={model.id}>{model.name}</option>)}
-            </select>
+            {asrWay === 'openrouter' && (
+              <select value={asrModel} onChange={event => setAsrModel(event.target.value)} className={CONTROL}>
+                {asrModels.length === 0 && <option value="">{t('noSpeechModel')}</option>}
+                {asrModels.map(model => <option key={model.id} value={model.id}>{model.name}</option>)}
+              </select>
+            )}
             <button
               type="button"
               onClick={() => filePicker.current?.click()}
@@ -515,7 +578,7 @@ export function StudioToolsPanel({ initialSongId }: { initialSongId?: string | n
           <button
             type="button"
             onClick={() => void transcribe()}
-            disabled={!asrFile || !asrModel || asrBusy}
+            disabled={!asrFile || (asrWay === 'openrouter' ? !asrModel : !karaokeRecogniser) || asrBusy}
             className="mt-3 inline-flex items-center gap-2 rounded-lg bg-linear-to-r from-orange-500 to-pink-600 px-4 py-2 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-50"
           >
             {asrBusy ? <Loader2 size={14} className="animate-spin" /> : <FileAudio size={14} />} {t('transcribeAudio')}

@@ -2,7 +2,9 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { karaokeStatusChanged, useSystemResources } from '../services/studioQueries';
 import { AlertTriangle, BookOpen, Check, CheckSquare, ChevronDown, Clock, ChevronLeft, ChevronRight, Cpu, Download, FolderInput, FolderOpen, FolderOutput, Headphones, Library, Loader2, Mic2, MoreHorizontal, Music, Play, Plus, RotateCcw, Search, Square, Trash2, UploadCloud, Wand2, X } from 'lucide-react';
 import { useI18n } from '../context/I18nContext';
+import { poll } from '../services/poll';
 import { AUDIO_ACCEPT } from '../services/audioFiles';
+import { karaokeReason } from '../services/karaoke';
 import { ConfirmDialog } from './ConfirmDialog';
 import { StemPlayer } from './StemPlayer';
 import { TrainingGuide } from './TrainingGuide';
@@ -41,7 +43,9 @@ import {
   prepareDataset,
   revealDataset,
   setTrainAfter,
+  continueTarget,
   startRun,
+  stepsDone,
   takeAsIs,
   updateDataset,
   updateItem,
@@ -352,9 +356,9 @@ const separateOnCard = async () => {
   if (!response.ok) throw new Error(`Separation: HTTP ${response.status}`);
 };
 
-/** Turns on the recogniser dataset lyrics need: Whisper large-v3, fetched on its first use. */
+/** Turns on the recogniser dataset lyrics need: CrisperWhisper, fetched on its first use. */
 const enableRecogniser = () =>
-  fetch('/v1/karaoke/status', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ enabled: true, provider: 'whisper', whisper_model: 'whisper-large-v3' }) }).then(response => {
+  fetch('/v1/karaoke/status', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ enabled: true, provider: 'whisper' }) }).then(response => {
     if (!response.ok) throw new Error(`Karaoke: HTTP ${response.status}`);
     karaokeStatusChanged();
   });
@@ -367,7 +371,7 @@ function songState(item: DatasetItem, job: PrepareStatus | null, datasetId: stri
   if (mine && !mine.finished && mine.pending.includes(item.id)) {
     return { kind: 'queued', text: t('trainingQueued') };
   }
-  if (failure) return { kind: 'failed', text: failure.error };
+  if (failure) return { kind: 'failed', text: karaokeReason(t, failure.error) ?? failure.error };
   const lacks = [
     item.lyrics_state === 'wanted' ? t('trainingLacksLyrics') : '',
     item.lyrics_state === 'found' ? t('trainingLacksSections') : '',
@@ -880,7 +884,8 @@ const ContinueRun: React.FC<{ run: TrainingRun; onChanged: () => void; onError: 
   if (from === undefined) {
     return run.resume_refused && run.checkpoints.length > 0 ? <p className="mt-3 text-[11px] leading-4 text-zinc-500">{tt(`trainingResume_${run.resume_refused}`)}</p> : null;
   }
-  const suggested = from + Math.max(Number(run.recipe.save_every) || 1, 1) * 4;
+  const suggested = continueTarget(run, from);
+  const lastStep = run.steps[run.steps.length - 1]?.step;
   const target = Number(steps || suggested);
   const valid = Number.isInteger(target) && target > from;
   const start = () => {
@@ -911,6 +916,11 @@ const ContinueRun: React.FC<{ run: TrainingRun; onChanged: () => void; onError: 
           />
         </label>
       </div>
+      {run.status === 'interrupted' && lastStep !== undefined && (
+        <p className="mt-1.5 text-[11px] leading-4 text-amber-700 dark:text-amber-300">
+          {tt('trainingInterruptedAt').replace('{step}', String(lastStep)).replace('{from}', String(from)).replace('{to}', String(target))}
+        </p>
+      )}
       <p className="mt-1.5 text-[11px] leading-4 text-zinc-500">{tt('trainingContinueHint').replace('{step}', String(from))}</p>
     </div>
   );
@@ -930,7 +940,9 @@ const RunCard: React.FC<{ run: TrainingRun; onChanged: () => void; onError: (mes
   const recent = run.steps.slice(-10).map(step => step.step_ms).filter((ms): ms is number => typeof ms === 'number');
   const perStep = recent.length ? recent.reduce((a, b) => a + b, 0) / recent.length / 1000 : 0;
   const left = last && perStep && target <= 0 ? (cap - last.step) * perStep : 0;
-  const percent = last ? Math.min(100, 100 * Math.max(last.step / cap, target > 0 && kl !== null ? kl / target : 0)) : 0;
+  const part = running ? run.step_stage ?? null : null;
+  const done = stepsDone(last?.step, part);
+  const percent = last || part ? Math.min(100, 100 * Math.max(done / cap, target > 0 && kl !== null ? kl / target : 0)) : 0;
   const stageIndex = run.stage ? run.stages.indexOf(run.stage) : run.status === 'done' ? run.stages.length : -1;
   // A card whose own memory is full borrows system memory through the
   // driver, and a run that took an hour takes a day; the log does not say so.
@@ -970,20 +982,33 @@ const RunCard: React.FC<{ run: TrainingRun; onChanged: () => void; onError: (mes
         ))}
       </div>
 
-      {last && (
+      {(last || part) && (
         <>
-          <div className="mt-3 flex items-baseline justify-between text-[11px] tabular-nums text-zinc-600 dark:text-zinc-300">
-            <span>{t('trainingStep')} {last.step} · {t('trainingLoss')} {last.loss.toFixed(3)}{kl !== null ? ` · KL ${kl.toFixed(2)}${target > 0 ? ` / ${target}` : ''}` : ''}</span>
-            {running && left > 0 && <span>{clock(left)} {t('trainingLeft')}</span>}
-          </div>
+          {last && (
+            <div className="mt-3 flex items-baseline justify-between text-[11px] tabular-nums text-zinc-600 dark:text-zinc-300">
+              <span>{t('trainingStep')} {last.step} · {t('trainingLoss')} {last.loss.toFixed(3)}{kl !== null ? ` · KL ${kl.toFixed(2)}${target > 0 ? ` / ${target}` : ''}` : ''}</span>
+              {running && left > 0 && <span>{clock(left)} {t('trainingLeft')}</span>}
+            </div>
+          )}
           <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-zinc-200 dark:bg-white/10">
             <div className="h-full bg-linear-to-r from-orange-500 to-pink-600 transition-[width]" style={{ width: `${percent}%` }} />
           </div>
-          <LossLine steps={run.steps} />
+          {part && (
+            <p className="mt-1 text-[11px] tabular-nums text-zinc-500">
+              {(part.of ? t('trainingStepPartOf') : t('trainingStepPart'))
+                .replace('{step}', String(part.step))
+                .replace('{steps}', String(cap))
+                .replace('{index}', String(part.index))
+                .replace('{of}', String(part.of ?? ''))
+                .replace('{part}', tt(`trainingPart_${part.stage.replace(/ /g, '_')}`))}
+            </p>
+          )}
+          {last && <LossLine steps={run.steps} />}
         </>
       )}
       {running && run.device && !onCpu && <p className="mt-1.5 text-[11px] text-zinc-500">{t('trainingOnDevice').replace('{device}', run.device)}</p>}
       {onCpu && <p role="alert" className="mt-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-300">{t('trainingOnCpuWarning')}</p>}
+      {running && !onCpu && run.f32_path && <p role="alert" className="mt-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-300">{t('trainingF32Path')}</p>}
       {running && !onCpu && cardFull && <p role="alert" className="mt-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-300">{t(tunedRun ? 'trainingCardFullWarning' : 'trainingCardFullWarningPreset')}</p>}
 
       {run.checkpoints.length > 0 && (
@@ -1049,6 +1074,14 @@ export const TrainingPanel: React.FC = () => {
   const [importing, setImporting] = useState(false);
   const [deleting, setDeleting] = useState<{ kind: 'dataset' | 'run'; id: string } | null>(null);
   const [guideOpen, setGuideOpen] = useState(false);
+  // a LoRA trains on the set's backbone even while songs are made on the person's own model
+  const [ownModel, setOwnModel] = useState<string | null>(null);
+  useEffect(() => {
+    void fetch('/setup/own-model')
+      .then(response => (response.ok ? response.json() : null))
+      .then((body: { selected?: string | null } | null) => setOwnModel(body?.selected ?? null))
+      .catch((problem: unknown) => console.warn('[training] the own model was not read:', errorText(problem)));
+  }, []);
 
   // the service being away is its own message, gone as soon as it answers again
   const [offline, setOffline] = useState<string | null>(null);
@@ -1064,9 +1097,7 @@ export const TrainingPanel: React.FC = () => {
   const job = state?.prepare ?? null;
   const busy = Boolean(state?.active || (job && !job.finished) || adding || (state?.download && !state.download.done) || (state?.listen?.download && !state.listen.download.done));
   useEffect(() => {
-    void refresh();
-    const timer = window.setInterval(() => void refresh(), busy ? 1500 : 5000);
-    return () => window.clearInterval(timer);
+    return poll(refresh, busy ? 1500 : 5000);
   }, [refresh, busy]);
 
   // a run that starts by itself after preparation is shown where it runs
@@ -1197,7 +1228,10 @@ export const TrainingPanel: React.FC = () => {
           </>
         ) : (
           <>
-            <p className="min-w-0 flex-1 text-sm text-zinc-600 dark:text-zinc-400">{t('trainingIntro')}</p>
+            <p className="min-w-0 flex-1 text-sm text-zinc-600 dark:text-zinc-400">
+              {t('trainingIntro')}
+              {ownModel && <span className="mt-1 block text-xs text-amber-700 dark:text-amber-300">{(t as unknown as (key: string) => string)('trainingOnSetModel').replace('{file}', ownModel)}</span>}
+            </p>
             <button type="button" onClick={() => setGuideOpen(value => !value)} className={OUTLINE} aria-pressed={guideOpen}><BookOpen size={13} />{t('trainingGuideOpen')}</button>
           </>
         )}

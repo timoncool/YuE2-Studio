@@ -127,6 +127,9 @@ pub struct Plan {
     pub ranged: bool,
 }
 
+/// Asks for one byte, which answers both questions at once: how big the file
+/// is, and whether ranges work at all. A HEAD answers the first only, and some
+/// CDNs answer it differently from the GET that follows.
 pub async fn probe(http: &reqwest::Client, url: &str) -> Result<(Plan, String)> {
     let mut last = String::new();
     let mut unreachable = 0;
@@ -155,7 +158,13 @@ pub async fn probe(http: &reqwest::Client, url: &str) -> Result<(Plan, String)> 
     // failure in telemetry, a network behind the Great Firewall among them. The
     // HF-Mirror usually answers where it does not, so fall back to it once before
     // giving up; a non-HF url mirrors to itself and drops straight through.
-    if unreachable == CONNECT_RETRIES {
+    // Through a proxy whose address takes no connection the mirror is behind the same dead proxy: the proxy is named
+    // instead. A proxy that takes the connection and cannot reach the host is alive, and the mirror is tried through it.
+    let proxy = match crate::net::route_for(url).filter(|_| unreachable == CONNECT_RETRIES) {
+        Some(route) if !route.takes_connections().await => Some(route),
+        _ => None,
+    };
+    if unreachable == CONNECT_RETRIES && proxy.is_none() {
         let mirror = crate::net::mirror_url(url);
         if mirror != url {
             if let Ok(found) = Box::pin(probe(http, &mirror)).await {
@@ -163,7 +172,7 @@ pub async fn probe(http: &reqwest::Client, url: &str) -> Result<(Plan, String)> 
             }
         }
     }
-    Err(anyhow!("{}", start_failure(url, attempts, unreachable == CONNECT_RETRIES, &last)))
+    Err(anyhow!("{}", start_failure(url, attempts, unreachable == CONNECT_RETRIES, &last, proxy.as_ref())))
 }
 
 /// Attempts at a host that cannot be connected to at all - no route, no DNS
@@ -180,8 +189,11 @@ fn cannot_connect(error: &anyhow::Error) -> bool {
 /// Why a download could not start. The host is named on its own, so it
 /// survives the statistics' removal of addresses: which server a network
 /// cannot reach is the whole question.
-fn start_failure(url: &str, attempts: u32, unreachable: bool, last: &str) -> String {
+fn start_failure(url: &str, attempts: u32, unreachable: bool, last: &str, proxy: Option<&crate::net::ProxyRoute>) -> String {
     let host = reqwest::Url::parse(url).ok().and_then(|parsed| parsed.host_str().map(str::to_owned)).unwrap_or_default();
+    if let Some(proxy) = proxy.filter(|_| unreachable) {
+        return format!("could not connect to {host} ({attempts} attempts) for {url} through a proxy: {last}. {}", proxy.did_not_connect());
+    }
     let mirror = if host == "huggingface.co" {
         ". Hugging Face did not answer from this network: Settings - Network can take models from the HF-Mirror instead"
     } else {
@@ -274,10 +286,21 @@ impl std::fmt::Display for Refused {
 impl std::error::Error for Refused {}
 
 /// The offsets already on disk, from the manifest beside the part file.
-fn manifest_path(part: &Path) -> PathBuf {
+pub fn manifest_path(part: &Path) -> PathBuf {
     let mut name = part.as_os_str().to_os_string();
     name.push(".done");
     PathBuf::from(name)
+}
+
+/// How much of a download lies in its part file: the pieces its manifest names, the part file being reserved at
+/// the whole size; a part file without a manifest (a server without ranges) holds what it is long.
+pub fn on_disk(part: &Path) -> u64 {
+    let Ok(length) = std::fs::metadata(part).map(|meta| meta.len()) else { return 0 };
+    if !manifest_path(part).exists() {
+        return length;
+    }
+    let done: std::collections::HashSet<u64> = completed_offsets(part).into_iter().filter(|offset| *offset < length).collect();
+    done.iter().map(|offset| CHUNK.min(length - offset)).sum()
 }
 
 fn completed_offsets(part: &Path) -> Vec<u64> {
@@ -546,6 +569,23 @@ mod tests {
         assert!(completed_offsets(Path::new("nowhere/at/all.part")).is_empty());
     }
 
+    /// A part file is reserved at the whole size: what is on disk is the pieces its manifest names, the last one
+    /// shorter; without a manifest the part file holds what it is long.
+    #[test]
+    fn a_part_file_holds_the_pieces_its_manifest_names() {
+        let folder = std::env::temp_dir().join(format!("on-disk-{}", uuid::Uuid::now_v7()));
+        std::fs::create_dir_all(&folder).unwrap();
+        let part = folder.join("model.gguf.part");
+        let total = CHUNK * 2 + 10;
+        std::fs::File::create(&part).unwrap().set_len(total).unwrap();
+        assert_eq!(on_disk(&part), total, "no manifest: a download without ranges");
+        let offsets: Vec<u8> = [0u64, CHUNK * 2].iter().flat_map(|offset| offset.to_le_bytes()).collect();
+        std::fs::write(manifest_path(&part), offsets).unwrap();
+        assert_eq!(on_disk(&part), CHUNK + 10);
+        assert_eq!(on_disk(&folder.join("nothing.part")), 0);
+        std::fs::remove_dir_all(&folder).ok();
+    }
+
     /// A host nothing listens on is given up after three attempts, not eight,
     /// and the reason names it beside the address.
     #[tokio::test]
@@ -557,8 +597,21 @@ mod tests {
         let error = probe(&http, &format!("http://127.0.0.1:{port}/model.gguf")).await.unwrap_err().to_string();
         assert!(error.starts_with(&format!("could not connect to 127.0.0.1 (3 attempts) for http://127.0.0.1:{port}/model.gguf: ")), "{error}");
         assert!(!error.contains("HF-Mirror"));
-        assert!(start_failure("https://huggingface.co/a/b/resolve/c/d.gguf", 3, true, "x").starts_with("could not connect to huggingface.co (3 attempts)"));
-        assert!(start_failure("https://huggingface.co/a/b/resolve/c/d.gguf", 3, true, "x").ends_with("HF-Mirror instead"));
-        assert_eq!(start_failure("https://github.com/a/b.zip", 8, false, "x"), "could not start https://github.com/a/b.zip from github.com after 8 attempts: x");
+        assert!(start_failure("https://huggingface.co/a/b/resolve/c/d.gguf", 3, true, "x", None).starts_with("could not connect to huggingface.co (3 attempts)"));
+        assert!(start_failure("https://huggingface.co/a/b/resolve/c/d.gguf", 3, true, "x", None).ends_with("HF-Mirror instead"));
+        assert_eq!(start_failure("https://github.com/a/b.zip", 8, false, "x", None), "could not start https://github.com/a/b.zip from github.com after 8 attempts: x");
+    }
+
+    #[test]
+    fn a_proxy_that_does_not_connect_is_named_and_the_mirror_is_not_offered() {
+        let system = crate::net::ProxyRoute { address: "http://127.0.0.1:10809".into(), system: true };
+        let through = start_failure("https://huggingface.co/a/b/resolve/c/d.gguf", 3, true, "tunnel error", Some(&system));
+        assert!(through.contains(". The system proxy http://127.0.0.1:10809 did not answer"), "{through}");
+        assert!(through.contains("choose No proxy in Settings - Providers"), "{through}");
+        assert!(!through.contains("HF-Mirror"), "the mirror sits behind the same proxy: {through}");
+        let own = crate::net::ProxyRoute { address: "socks5h://proxy.example:1080".into(), system: false };
+        assert!(start_failure("https://github.com/a/b.zip", 3, true, "x", Some(&own)).contains("The proxy set in Settings - Providers socks5h://proxy.example:1080"));
+        let answered = start_failure("https://huggingface.co/a/b/resolve/c/d.gguf", 8, false, "x", Some(&system));
+        assert!(answered.ends_with("HF-Mirror instead") && !answered.contains("proxy"), "a server that answered through the proxy is not the proxy's fault: {answered}");
     }
 }

@@ -192,6 +192,12 @@ impl ModelManager {
         }
     }
 
+    /// How much of a component a download left behind unfinished: its part file's pieces, or 0. The next download
+    /// of it resumes them; removing the component takes them away.
+    pub fn partial_bytes(&self, filename: &str) -> u64 {
+        crate::chunked::on_disk(&part_path(&self.root.join(filename)))
+    }
+
     /// `target` is the set the user actually selected. Progress and readiness
     /// are reported against it, so a machine that deliberately runs the Light
     /// set is never told it is missing the hardware-recommended download.
@@ -247,7 +253,9 @@ impl ModelManager {
             }
             // A half-finished download of the same component is just as much
             // disk as the finished one.
-            let _ = fs::remove_file(self.root.join(format!("{}.part", component.filename)));
+            let part = part_path(&self.root.join(&component.filename));
+            let _ = fs::remove_file(crate::chunked::manifest_path(&part));
+            let _ = fs::remove_file(part);
         }
         // A remembered download resumes on the next start. Deleting the files
         // without forgetting the job is how twenty-six gigabytes came back by
@@ -395,13 +403,14 @@ impl ModelManager {
                 Err(error) => {
                     job.status = DownloadStatus::Failed;
                     job.error = Some(error.to_string());
+                    if let Some(hub) = self.hub.get() {
+                        hub.setup_failed(crate::downloads::failure_code(&error));
+                    }
                 }
             }
-            if let Some(hub) = self.hub.get() {
-                match job.status {
-                    DownloadStatus::Completed => hub.setup_ready(),
-                    DownloadStatus::Failed => hub.setup_failed(job.error.as_deref().unwrap_or_default()),
-                    _ => {}
+            if matches!(job.status, DownloadStatus::Completed) {
+                if let Some(hub) = self.hub.get() {
+                    hub.setup_ready();
                 }
             }
             let _ = self.persist_locked(&state);
@@ -800,7 +809,7 @@ const PROFILE_SETS: [(&str, &str, [&str; 5]); 4] = [
     ("native", "Full native - BF16 backbone, original weights", ["backbone-bf16", "vae-f32", "transcriber-f32", "mert-f32", COMPANION]),
 ];
 
-fn profiles() -> Vec<Profile> {
+pub(crate) fn profiles() -> Vec<Profile> {
     PROFILE_SETS.iter().map(|(id, label, ids)| profile(id, label, ids)).collect()
 }
 

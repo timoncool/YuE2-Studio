@@ -1,14 +1,17 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { openRouterSettingsChanged, SELF_READ } from '../services/studioQueries';
-import { Check, ChevronDown, Download, FolderDown, FolderOpen, Loader2, Square, Trash2, X } from 'lucide-react';
+import { Check, ChevronDown, Download, FolderDown, FolderOpen, Loader2, Play, Square, Trash2, X } from 'lucide-react';
 import { useI18n } from '../context/I18nContext';
+import { poll } from '../services/poll';
 import { DevicePicker, type Device } from './DevicePicker';
 import { ManualDownloads } from './ManualDownloads';
 import { UpdatePlanView } from './UpdateScreen';
 import { MirrorOffer } from './MirrorOffer';
 import { AssistantExtras } from './AssistantSettings';
+import { AssistantRules } from './AssistantRules';
 import { KaraokeExtras } from './KaraokeSettings';
 import { HubTelemetryPreview } from './HubTelemetryPreview';
+import { OwnModelPanel } from './OwnModelPanel';
 import { setTelemetry } from '../services/studioHub';
 import { programName } from '../services/programs';
 import type { TranslationKey } from '../i18n/translations';
@@ -17,6 +20,7 @@ import {
   componentPrecision,
   componentsByKind,
   completeCustomComponentIds,
+  partialOnDisk,
   profileLabel,
   selectedComponentBytes,
   type ModelComponent,
@@ -47,7 +51,7 @@ type SetupStatus = {
   ready: boolean;
   selected_profile_id?: string | null;
   selected_component_ids?: string[] | null;
-  hardware?: { gpuName?: string; totalVramGb?: number; totalRamGb?: number; recommended?: string; reason?: string };
+  hardware?: { gpuName?: string; totalVramGb?: number; totalRamGb?: number; vulkan?: boolean; onProcessor?: boolean; recommended?: string; reason?: string };
   engine_ready: boolean;
   engine_id: string;
   first_run: boolean;
@@ -186,6 +190,8 @@ export const OptionalGroup: React.FC<{
   const choiceRead = useRef(false);
   const modelRead = useRef(false);
   const statusGeneration = useRef(0);
+  // the engines by their ids: a list made anew by the page with the same engines does not start the reads again
+  const engineIds = (engines ?? []).map((choice) => choice.id).join('\n');
   const load = useCallback(async () => {
     const generation = statusGeneration.current;
     const response = await fetch(statusUrl, { headers: SELF_READ });
@@ -194,7 +200,7 @@ export const OptionalGroup: React.FC<{
       if (generation !== statusGeneration.current) return;
       setStatus(body);
       const savedEngine = body.provider ?? body.settings?.engine;
-      if (!choiceRead.current && savedEngine && engines?.some((choice) => choice.id === savedEngine)) {
+      if (!choiceRead.current && savedEngine && engineIds.split('\n').includes(savedEngine)) {
         choiceRead.current = true;
         setEngine(savedEngine);
       }
@@ -209,7 +215,7 @@ export const OptionalGroup: React.FC<{
       return body;
     }
     throw new Error(await errorMessage(response));
-  }, [statusUrl, engines]);
+  }, [statusUrl, engineIds]);
 
   /// The engine and the device are a setting before they are a download: they
   /// decide which files the one button fetches.
@@ -249,13 +255,13 @@ export const OptionalGroup: React.FC<{
     // none.
   }, [engines, open]);
 
+  // keyed on whether a download runs, not on its figures: every answer brings a new object, and a poll started
+  // again on each would ask at once, over and over, with no pause between
+  const downloadRunning = Boolean(status?.active_download && !status.active_download.done);
   useEffect(() => {
-    const active = status?.active_download;
-    const running = Boolean(active && !active.done);
-    if (!running && !starting) return;
-    const timer = window.setInterval(() => void load().catch(() => undefined), 1000);
-    return () => window.clearInterval(timer);
-  }, [status?.active_download, starting, load]);
+    if (!downloadRunning && !starting) return;
+    return poll(() => load().catch(() => undefined), 1000);
+  }, [downloadRunning, starting, load]);
 
   // The moment the server admits a download is running, the press has landed
   // and the real figures take over. If it never does - a refusal, a dead
@@ -284,10 +290,8 @@ export const OptionalGroup: React.FC<{
   const models = assets.filter((asset) => {
     if (asset.kind !== 'model') return false;
     if (!engines || engines.length === 0) return false;
-    // A faster-whisper model is a directory of files - weights, tokenizer,
-    // vocabulary - and only the weights are a choice. The rest carry no VRAM
-    // figure, which is how they are told apart here.
-    if (engine === 'whisper') return asset.id.startsWith('whisper-') && asset.vram_gb != null;
+    // CrisperWhisper is one model, its weights the row that stands for the whole folder.
+    if (engine === 'whisper') return asset.id === 'crisperwhisper-turbo';
     // Parakeet comes as v3 and Ultra; the engine build follows the card, so only the models are a choice.
     if (engine === 'parakeet') return asset.id === 'parakeet-tdt-int8' || asset.id === 'parakeet-ultra-int8';
     if (engine === 'open_router') return false;
@@ -671,21 +675,23 @@ export const OptionalGroup: React.FC<{
  * and the question is only which of them to use.
  */
 /** How a part of the studio computes on a kind of machine. */
-type Path = 'cuda' | 'vulkan' | 'directml' | 'cpu' | 'none';
+type Path = 'cuda' | 'vulkan' | 'cpu' | 'none';
 
 /**
  * What runs where in this studio, as the code decides it: the engine walks
- * CUDA, Vulkan and the processor, and so does transcribe.cpp; the ONNX parts take CUDA or DirectML;
+ * CUDA, Vulkan and the processor, and so does transcribe.cpp; the ONNX tempo model runs on the processor;
  * the rest has a CUDA build and a processor one.
  */
-const WHERE_IT_RUNS: { part: TranslationKey; name: string; nvidia: Path; other: Path; none: Path }[] = [
+export const WHERE_IT_RUNS: { part: TranslationKey; name: string; nvidia: Path; other: Path; none: Path }[] = [
   { part: 'hubPartSongs', name: 'yue2.cpp', nvidia: 'cuda', other: 'vulkan', none: 'cpu' },
   { part: 'hubPartTraining', name: 'music-train', nvidia: 'cuda', other: 'none', none: 'none' },
   { part: 'hubPartListen', name: 'MOSS-Music', nvidia: 'cuda', other: 'cpu', none: 'cpu' },
-  { part: 'hubPartTempo', name: 'Beat This!', nvidia: 'cuda', other: 'directml', none: 'cpu' },
-  { part: 'hubPartStems', name: 'HT-Demucs', nvidia: 'cuda', other: 'cpu', none: 'cpu' },
+  { part: 'hubPartTempo', name: 'Beat This!', nvidia: 'cpu', other: 'cpu', none: 'cpu' },
+  { part: 'hubPartStems', name: 'HT-Demucs', nvidia: 'cuda', other: 'vulkan', none: 'cpu' },
+  { part: 'hubPartStems', name: 'Mel-Band RoFormer', nvidia: 'cuda', other: 'vulkan', none: 'cpu' },
+  { part: 'restoreTitle', name: 'Apollo', nvidia: 'cuda', other: 'vulkan', none: 'cpu' },
   { part: 'hubPartKaraoke', name: 'Parakeet', nvidia: 'cuda', other: 'vulkan', none: 'cpu' },
-  { part: 'hubPartKaraoke', name: 'Whisper', nvidia: 'cuda', other: 'cpu', none: 'cpu' },
+  { part: 'hubPartKaraoke', name: 'CrisperWhisper', nvidia: 'cuda', other: 'vulkan', none: 'cpu' },
   { part: 'hubPartAssistant', name: 'llama.cpp', nvidia: 'cuda', other: 'vulkan', none: 'cpu' },
   { part: 'hubPartMidi', name: 'MuScriptor', nvidia: 'cuda', other: 'cpu', none: 'cpu' },
 ];
@@ -694,7 +700,7 @@ const WHERE_IT_RUNS: { part: TranslationKey; name: string; nvidia: Path; other: 
 const WhereItRuns: React.FC<{ trainingVram: number | null }> = ({ trainingVram }) => {
   const { t } = useI18n();
   const cell = (path: Path) =>
-    path === 'cpu' ? t('hubOnCpu') : path === 'none' ? t('hubNotHere') : path === 'cuda' ? 'CUDA' : path === 'vulkan' ? 'Vulkan' : 'DirectML';
+    path === 'cpu' ? t('hubOnCpu') : path === 'none' ? t('hubNotHere') : path === 'cuda' ? 'CUDA' : 'Vulkan';
   const tone = (path: Path) => (path === 'none' ? 'text-zinc-400 dark:text-zinc-500' : path === 'cpu' ? 'text-zinc-600 dark:text-zinc-300' : 'font-semibold text-zinc-900 dark:text-white');
   return (
     <details className="group mt-5 overflow-hidden rounded-xl border border-zinc-200 bg-white dark:border-white/10 dark:bg-suno-card">
@@ -737,8 +743,31 @@ const WhereItRuns: React.FC<{ trainingVram: number | null }> = ({ trainingVram }
   );
 };
 
-export const SetupGate: React.FC<{ onReady?: () => void; mode?: 'first-run' | 'settings'; focus?: string | null }> = ({ onReady, mode = 'first-run', focus = null }) => {
-  const { t } = useI18n();
+// one list for the life of the module: a group's status poll is keyed on its engines, and a list made anew on every
+// render of the page would start the poll again each time
+const SEPARATION_ENGINES: EngineChoice[] = [{ id: 'htdemucs', label: 'HT-Demucs' }, { id: 'roformer', label: 'Mel-Band RoFormer' }];
+const KARAOKE_ENGINES: EngineChoice[] = [
+  { id: 'parakeet', label: 'Parakeet' },
+  { id: 'whisper', label: 'CrisperWhisper' },
+  { id: 'open_router', label: 'OpenRouter', device: false },
+];
+const TRAINING_ENGINES: EngineChoice[] = [{ id: 'music-train', label: 'HOT-Step music-train', devicePicker: false }];
+const LISTEN_ENGINES: EngineChoice[] = [{ id: 'moss-music', label: 'MOSS-Music', devicePicker: false }];
+const MIDI_ENGINES: EngineChoice[] = [{ id: 'muscriptor', label: 'MuScriptor', devicePicker: false }];
+const RESTORE_ENGINES: EngineChoice[] = [{ id: 'apollo', label: 'Apollo', devicePicker: false }];
+
+export const SetupGate: React.FC<{ onReady?: () => void; mode?: 'first-run' | 'settings'; focus?: string | null }> =({ onReady, mode = 'first-run', focus = null }) => {
+  const { t, language } = useI18n();
+  const tt = t as unknown as (key: string) => string;
+  const assistantEngines = useMemo<EngineChoice[]>(() => [
+    { id: 'managed', label: 'llama.cpp' },
+    { id: 'local', label: t('assistantLocal'), device: false, byAddress: true },
+    { id: 'open_router', label: 'OpenRouter', device: false },
+    { id: 'agent', label: t('assistantAgent'), device: false },
+    { id: 'cli', label: t('assistantCli'), device: false },
+    { id: 'none', label: t('assistantDisabled'), device: false },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  ], [language]);
   const [status, setStatus] = useState<SetupStatus | null>(null);
   const [catalog, setCatalog] = useState<Catalog | null>(null);
   const [updateOpen, setUpdateOpen] = useState(false);
@@ -758,14 +787,20 @@ export const SetupGate: React.FC<{ onReady?: () => void; mode?: 'first-run' | 's
       .catch(() => undefined);
   }, [mode]);
 
+  // the latest onReady, outside the status poll's keys: the page passes a new function on every render, and a poll
+  // keyed on it would ask at once each time
+  const ready = useRef(onReady);
+  useEffect(() => {
+    ready.current = onReady;
+  }, [onReady]);
   const refresh = useCallback(async () => {
     const response = await fetch('/setup/status', { headers: SELF_READ });
     if (!response.ok) throw new Error(await errorMessage(response));
     const next: SetupStatus = await response.json();
     setStatus(next);
-    if (next.ready && next.engine_ready) onReady?.();
+    if (next.ready && next.engine_ready) ready.current?.();
     return next;
-  }, [onReady]);
+  }, []);
 
   // What to show as chosen: what the studio is actually set to, not what it
   // would recommend. Preselecting the recommendation made an installed studio
@@ -800,9 +835,7 @@ export const SetupGate: React.FC<{ onReady?: () => void; mode?: 'first-run' | 's
   }, []);
 
   useEffect(() => {
-    void refresh().catch((reason) => setError(reason.message));
-    const timer = window.setInterval(() => void refresh().catch((reason) => setError(reason.message)), 1000);
-    return () => window.clearInterval(timer);
+    return poll(() => refresh().catch((reason) => setError(reason.message)), 1000);
   }, [refresh]);
 
   const groups = useMemo(() => componentsByKind(catalog?.components || []), [catalog]);
@@ -815,6 +848,7 @@ export const SetupGate: React.FC<{ onReady?: () => void; mode?: 'first-run' | 's
   /// the top says the same thing as the list underneath.
   const recommended = catalog?.profiles.find((profile) => profile.id === status?.recommended_profile_id);
   const active = status?.active;
+  const jobRunning = active?.status === 'downloading';
   const progress = active && active.total_bytes > 0 ? Math.min(100, (active.downloaded_bytes / active.total_bytes) * 100) : 0;
   const installedIds = status?.installed_components ?? [];
   const missing = (chosenIds ?? chosenValues).filter((id) => !installedIds.includes(id));
@@ -849,15 +883,15 @@ export const SetupGate: React.FC<{ onReady?: () => void; mode?: 'first-run' | 's
   // The start screen's statistics checkbox: checked, and sent with the first download (it counts as seen).
   const [telemetryOn, setTelemetryOn] = useState(true);
   const [telemetryPreview, setTelemetryPreview] = useState(false);
-  const download = async () => {
-    if (!chosenIds || starting) return;
+  const download = async (ids: string[] | null = chosenIds) => {
+    if (!ids || starting) return;
     setError(null);
     setStarting(true);
     try {
       const response = await fetch('/setup/download', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ component_ids: chosenIds }),
+        body: JSON.stringify({ component_ids: ids }),
       });
       if (!response.ok) setError(await errorMessage(response));
       else await refresh().catch(() => undefined);
@@ -915,13 +949,13 @@ export const SetupGate: React.FC<{ onReady?: () => void; mode?: 'first-run' | 's
           </details>
         )}
 
-        {error && (
+        {(error || (active?.status === 'failed' && active.error)) && (
           <div className="mt-5 flex gap-2 rounded-xl border border-rose-300 bg-rose-50 px-4 py-3 text-sm text-rose-700 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-200">
-            <X size={16} className="mt-0.5 shrink-0" />{error}
+            <X size={16} className="mt-0.5 shrink-0" /><span className="min-w-0 break-words">{error || active?.error}</span>
           </div>
         )}
 
-        {mode === 'first-run' && (
+        {(mode === 'first-run' || active?.status === 'failed') && (
           <MirrorOffer
             recheck={status?.active?.status === 'failed' ? status.active.id : ''}
             onSwitched={() => void refresh().catch((reason) => setError(reason.message))}
@@ -935,9 +969,10 @@ export const SetupGate: React.FC<{ onReady?: () => void; mode?: 'first-run' | 's
               prose in a Russian window, and it called the answer "Native
               quality", which reads as the unquantised weights it is not. */}
           {recommended
-            ? `${status?.hardware?.gpuName ?? ''}${status?.hardware?.totalVramGb ? `, ${status.hardware.totalVramGb.toFixed(1)} GB` : ''} — ${profileLabel(t, recommended)} · ${bytes(recommended.total_bytes)}`
+            ? `${status?.hardware?.gpuName ?? ''}${status?.hardware?.totalVramGb ? `, ${status.hardware.totalVramGb.toFixed(1)} GB` : ''}${status?.hardware?.vulkan ? ` (${t('recommendedOnVulkan')})` : ''} — ${profileLabel(t, recommended)} · ${bytes(recommended.total_bytes)}`
             : status?.hardware?.reason || t('recommendedFallback')}
           . {t('setupResumable')}
+          {status?.hardware?.onProcessor && <span className="mt-2 block text-amber-700 dark:text-amber-300">{t('songsOnProcessor')}</span>}
         </div>}
 
 
@@ -965,6 +1000,8 @@ export const SetupGate: React.FC<{ onReady?: () => void; mode?: 'first-run' | 's
                 <div className="space-y-2">
                   {(catalog?.profiles ?? []).filter((profile) => profile.installable).map((profile) => {
                     const missingHere = profile.components.filter((id) => !installedIds.includes(id));
+                    const partialHere = partialOnDisk(catalog?.components ?? [], missingHere);
+                    const partialIds = missingHere.filter((id) => (catalog?.components.find((entry) => entry.id === id)?.partial_bytes ?? 0) > 0);
                     const active = chosenKey === [...profile.components].sort().join('|');
                     // What the set is actually made of, role by role, instead of
                     // a name cut off after twenty characters.
@@ -1007,8 +1044,35 @@ export const SetupGate: React.FC<{ onReady?: () => void; mode?: 'first-run' | 's
                           <p className={`text-[11px] font-medium ${missingHere.length === 0 ? 'text-emerald-600 dark:text-emerald-300' : 'text-zinc-500'}`}>
                             {missingHere.length === 0
                               ? t('installed')
-                              : `${t('toDownload')} ${bytes(selectedComponentBytes(catalog?.components || [], missingHere))}`}
+                              : partialHere.done > 0 && !jobRunning
+                                ? tt('partialOnDisk').replace('{done}', bytes(partialHere.done)).replace('{total}', bytes(partialHere.total))
+                                : `${t('toDownload')} ${bytes(selectedComponentBytes(catalog?.components || [], missingHere))}`}
                           </p>
+                          {missingHere.length > 0 && partialHere.done > 0 && !jobRunning && (
+                            <span className="flex shrink-0 items-center gap-1">
+                              <span
+                                role="button"
+                                tabIndex={0}
+                                onClick={(event) => { event.stopPropagation(); void download(profile.components); }}
+                                onKeyDown={(event) => { if (event.key === 'Enter') { event.stopPropagation(); void download(profile.components); } }}
+                                className="inline-flex cursor-pointer items-center gap-1 rounded-lg border border-pink-400 px-2 py-1 text-[11px] font-medium text-pink-600 hover:bg-pink-500/10 dark:text-pink-300"
+                              >
+                                <Play size={12} />
+                                {tt('partialResume')}
+                              </span>
+                              <span
+                                role="button"
+                                tabIndex={0}
+                                onClick={(event) => { event.stopPropagation(); void removeComponents(partialIds); }}
+                                onKeyDown={(event) => { if (event.key === 'Enter') { event.stopPropagation(); void removeComponents(partialIds); } }}
+                                title={tt('partialDiscardHint')}
+                                className="inline-flex cursor-pointer items-center gap-1 rounded-lg border border-zinc-300 px-2 py-1 text-[11px] font-medium text-zinc-500 hover:border-rose-400 hover:text-rose-600 dark:border-white/15 dark:text-zinc-400"
+                              >
+                                <Trash2 size={12} />
+                                {tt('partialDiscard')}
+                              </span>
+                            </span>
+                          )}
                           {missingHere.length === 0 && (
                             <span
                               role="button"
@@ -1075,6 +1139,7 @@ export const SetupGate: React.FC<{ onReady?: () => void; mode?: 'first-run' | 's
               );
             })}
             {!chosenIds && <p className="text-xs text-amber-600 dark:text-amber-300">{t('incompleteSet')}</p>}
+            {mode === 'settings' && <OwnModelPanel />}
             <ManualDownloads
               files={missing.flatMap((id) => catalog?.components.find((component) => component.id === id) ?? [])}
               folder={status?.model_root}
@@ -1231,20 +1296,18 @@ export const SetupGate: React.FC<{ onReady?: () => void; mode?: 'first-run' | 's
               purpose={t('assistantOptionalPurpose')}
               statusUrl="/v1/assistant/runtime"
               installUrl="/v1/assistant/runtime/install"
-              engines={[
-                { id: 'managed', label: 'llama.cpp' },
-                { id: 'local', label: t('assistantLocal'), device: false, byAddress: true },
-                { id: 'open_router', label: 'OpenRouter', device: false },
-                { id: 'agent', label: t('assistantAgent'), device: false },
-                { id: 'cli', label: t('assistantCli'), device: false },
-                { id: 'none', label: t('assistantDisabled'), device: false },
-              ]}
+              engines={assistantEngines}
               settingsUrl="/v1/assistant/status"
               removeUrl="/v1/assistant/runtime/remove"
               cancelUrl="/v1/assistant/runtime/cancel"
               serverField
             >
-              {(engine) => <AssistantExtras engine={engine} />}
+              {(engine) => (
+                <>
+                  <AssistantExtras engine={engine} />
+                  {engine !== 'none' && <AssistantRules />}
+                </>
+              )}
             </OptionalGroup>
             <OptionalGroup
               title={t('stemsTitle')}
@@ -1254,7 +1317,7 @@ export const SetupGate: React.FC<{ onReady?: () => void; mode?: 'first-run' | 's
               settingsUrl="/v1/separation/settings"
               removeUrl="/v1/separation/remove"
               cancelUrl="/v1/separation/runtime/cancel"
-              engines={[{ id: 'htdemucs', label: 'HT-Demucs' }, { id: 'roformer', label: 'Mel-Band RoFormer' }]}
+              engines={SEPARATION_ENGINES}
             />
             <OptionalGroup
               title={t('karaokeSection')}
@@ -1264,11 +1327,7 @@ export const SetupGate: React.FC<{ onReady?: () => void; mode?: 'first-run' | 's
               removeUrl="/v1/karaoke/remove"
               settingsUrl="/v1/karaoke/status"
               cancelUrl="/v1/karaoke/cancel"
-              engines={[
-                { id: 'parakeet', label: 'Parakeet' },
-                { id: 'whisper', label: 'Whisper' },
-                { id: 'open_router', label: 'OpenRouter', device: false },
-              ]}
+              engines={KARAOKE_ENGINES}
             >
               {(engine) => <KaraokeExtras engine={engine} />}
             </OptionalGroup>
@@ -1281,7 +1340,7 @@ export const SetupGate: React.FC<{ onReady?: () => void; mode?: 'first-run' | 's
                 statusUrl="/v1/training/pack/runtime"
                 installUrl="/v1/training/pack/install"
                 cancelUrl="/v1/training/pack/cancel"
-                engines={[{ id: 'music-train', label: 'HOT-Step music-train', devicePicker: false }]}
+                engines={TRAINING_ENGINES}
               />
             )}
             {mode === 'settings' && (
@@ -1291,7 +1350,7 @@ export const SetupGate: React.FC<{ onReady?: () => void; mode?: 'first-run' | 's
                 statusUrl="/v1/training/listen/runtime"
                 installUrl="/v1/training/listen/install"
                 cancelUrl="/v1/training/pack/cancel"
-                engines={[{ id: 'moss-music', label: 'MOSS-Music', devicePicker: false }]}
+                engines={LISTEN_ENGINES}
               />
             )}
             {mode === 'settings' && (
@@ -1302,7 +1361,18 @@ export const SetupGate: React.FC<{ onReady?: () => void; mode?: 'first-run' | 's
                 installUrl="/v1/midi/install"
                 removeUrl="/v1/midi/remove"
                 cancelUrl="/v1/midi/cancel"
-                engines={[{ id: 'muscriptor', label: 'MuScriptor', devicePicker: false }]}
+                engines={MIDI_ENGINES}
+              />
+            )}
+            {mode === 'settings' && (
+              <OptionalGroup
+                title={t('restoreTitle')}
+                purpose={t('restorePurpose')}
+                statusUrl="/v1/restore/runtime"
+                installUrl="/v1/restore/install"
+                removeUrl="/v1/restore/remove"
+                cancelUrl="/v1/restore/cancel"
+                engines={RESTORE_ENGINES}
               />
             )}
           </div>

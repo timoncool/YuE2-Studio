@@ -121,7 +121,8 @@ import { registerPlayer } from './services/audioGraph';
 import { serveVisualizerFeed } from './services/visualizerFeed';
 import { winampControl, winampOn } from './services/winamp';
 import { notePlayed } from './services/playHistory';
-import { createNativePlaylist, deleteNativeSong, moveStoredLikes, setNativeSongLiked, updateNativePlaylist } from './services/nativeLibrary';
+import { deleteQuestion } from './services/deleteQuestion';
+import { createNativePlaylist, deleteNativeSong, moveStoredLikes, restoreTrashedSong, setNativeSongLiked, updateNativePlaylist } from './services/nativeLibrary';
 import { foldStems } from './services/songStems';
 import { noteStudioMessage } from './services/journal';
 import { JournalPanel } from './components/JournalPanel';
@@ -197,7 +198,7 @@ function AppContent() {
   // page for a second on every launch is how a ready studio was made to look
   // like a bill.
   const [nativeModels, setNativeModels] = useState<'unknown' | 'missing' | 'installed' | 'offline'>('unknown');
-  const setupQuery = useSetupStatus<{ ready?: boolean; engine_ready?: boolean }>();
+  const setupQuery = useSetupStatus<{ ready?: boolean; engine_ready?: boolean; trash_days?: number; kv_cache_notice?: { need_gib: number | null; free_gib: number | null } | null }>();
   useEffect(() => {
     // A service that does not answer is not an engine that is still coming
     // up: the application has been closed, and saying "starting" at a dead
@@ -405,6 +406,19 @@ function AppContent() {
     setToast(prev => ({ ...prev, isVisible: false }));
   };
 
+  // Auto took the KV cache to Q8 at the engine's start: said once in a run of the studio, then marked as told
+  const kvCacheNotice = setupQuery.data?.kv_cache_notice ?? null;
+  const kvCacheTold = useRef(false);
+  useEffect(() => {
+    if (!kvCacheNotice || kvCacheTold.current) return;
+    kvCacheTold.current = true;
+    const gb = (gib: number | null) => (gib == null ? '?' : gib.toFixed(1));
+    showToast((t as unknown as (key: string) => string)('kvCacheSwitched').replace('{need}', gb(kvCacheNotice.need_gib)).replace('{free}', gb(kvCacheNotice.free_gib)), 'info');
+    void fetch('/setup/kv-cache-notice/seen', { method: 'POST' })
+      .catch((problem: unknown) => console.error('[ERROR] the studio did not learn the KV cache notice was shown:', problem));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [kvCacheNotice]);
+
   // The songs being made: their cards, the jobs they follow, and the row each
   // hands to the song it becomes.
   const generations = useGenerations({
@@ -590,12 +604,13 @@ function AppContent() {
       change(scaleForKey(event.deltaY < 0 ? '+' : '-', scale));
     };
     const onScale = (event: Event) => { scale = (event as CustomEvent<number>).detail; };
-    window.addEventListener('keydown', onKey);
-    window.addEventListener('wheel', onWheel, { passive: false });
+    // caught on the way down, so a panel that handles the wheel or a key itself does not keep the scale from changing
+    window.addEventListener('keydown', onKey, { capture: true });
+    window.addEventListener('wheel', onWheel, { passive: false, capture: true });
     window.addEventListener(UI_SCALE_EVENT, onScale);
     return () => {
-      window.removeEventListener('keydown', onKey);
-      window.removeEventListener('wheel', onWheel);
+      window.removeEventListener('keydown', onKey, { capture: true });
+      window.removeEventListener('wheel', onWheel, { capture: true });
       window.removeEventListener(UI_SCALE_EVENT, onScale);
     };
   }, []);
@@ -1085,7 +1100,12 @@ function AppContent() {
     if (repeat === 'none' || repeat === 'all' || repeat === 'one' || repeat === 'stop') setRepeatMode(repeat);
     return { text: 'Set.' };
   });
-  useBridgeCommand('video_open', ({ song_id }) => {
+  useBridgeCommand('video_open', async ({ song_id }) => {
+    if (!librarySongs.some(entry => entry.id === song_id)) {
+      const response = await fetch(`/v1/library/songs/${encodeURIComponent(String(song_id))}`);
+      const binned = response.ok ? await response.json() as { title?: string; metadata?: { deleted_at?: unknown } } : null;
+      if (binned?.metadata?.deleted_at) throw new Error(`"${binned.title ?? ''}" is in the library's bin; restore it in Library - Bin to work with it`);
+    }
     const song = songById(song_id);
     setSongForVideo(song);
     return { text: `The video editor is open for ${song.title}.` };
@@ -1131,11 +1151,14 @@ function AppContent() {
   const handleDeleteSongs = (songsToDelete: Song[]) => {
     if (songsToDelete.length === 0) return;
 
+    const days = setupQuery.data?.trash_days;
+    if (days === undefined) {
+      showToast(t('serviceUnavailable'), 'error');
+      return;
+    }
     const isSingle = songsToDelete.length === 1;
     const title = isSingle ? t('confirmDeleteTitle') : t('confirmDeleteManyTitle');
-    const message = isSingle
-      ? t('deleteSongConfirm').replace('{title}', () => songsToDelete[0].title)
-      : t('deleteSongsConfirm').replace('{count}', String(songsToDelete.length));
+    const message = deleteQuestion(t, songsToDelete, days);
 
     setConfirmDialog({
       title,
@@ -1176,12 +1199,21 @@ function AppContent() {
           setPlayQueue(prev => prev.filter(s => !idsToDelete.has(s.id) || failed.includes(s.id)));
         }
 
+        // what went to the bin comes back from the message, with its stems
+        const undo = {
+          label: t('undo'),
+          onClick: () => {
+            void Promise.all(succeeded.map(id => restoreTrashedSong(id)))
+              .then(() => { libraryChanged(); showToast(t('songsRestored')); })
+              .catch((error: unknown) => showToast(error instanceof Error ? error.message : String(error), 'error'));
+          },
+        };
         if (failed.length > 0) {
           showToast(t('songsDeletedPartial').replace('{succeeded}', String(succeeded.length)).replace('{total}', String(songsToDelete.length)), 'error');
         } else if (isSingle) {
-          showToast(t('songDeleted'));
+          showToast(t('songDeleted'), 'success', undo);
         } else {
-          showToast(t('songsDeletedSuccess'));
+          showToast(t('songsDeletedSuccess'), 'success', undo);
         }
       },
     });
@@ -1374,6 +1406,7 @@ function AppContent() {
             onSelectPlaylist={(p) => handleNavigateToPlaylist(p.id)}
             onPlayPlaylist={(p, songs) => playFromPlaylist(p.id)(songs[0], songs)}
             onError={message => showToast(message, 'error')}
+            onToast={(message, type) => showToast(message, type)}
             onImported={count => { libraryChanged(); showToast(t('importedToLibrary').replace('{count}', String(count))); }}
             likedSongIds={likedSongIds}
             onToggleLike={toggleLike}
@@ -1496,6 +1529,7 @@ function AppContent() {
                 onSongUpdate={handleSongUpdate}
                 onCancelJob={generations.cancel}
                 onResetJob={generations.reset}
+                onScoreAgain={(id, how) => void generations.scoreAgain(id, how)}
                 onCancelAll={() => void generations.cancelAll()}
                 onResetAll={stopEverything}
                 activeJobCount={generations.activeJobCount}
@@ -1543,7 +1577,7 @@ function AppContent() {
 
   return (
     <SongActionsProvider value={songActions}>
-    <div className="flex h-dvh min-h-0 min-w-0 flex-col overflow-hidden bg-white dark:bg-suno text-zinc-900 dark:text-white font-sans antialiased selection:bg-pink-500/30 transition-colors duration-300">
+    <div className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden bg-white dark:bg-suno text-zinc-900 dark:text-white font-sans antialiased selection:bg-pink-500/30 transition-colors duration-300">
       <HubBars items={hubItems} elapsed={hubElapsed} view={hubSection} closed={hubClosed} onClosed={closeHubNotice} />
       {hubPopup && <HubPopup item={hubPopup} onClose={() => closeHubNotice(hubPopup.id)} onOpen={openHubTarget} />}
       <ShellPrompts />

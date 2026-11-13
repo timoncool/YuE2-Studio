@@ -39,6 +39,11 @@ pub struct Hardware {
     pub driver_major: Option<u32>,
     /// The model set id that fits this card, none when no set does.
     pub recommended: Option<&'static str>,
+    /// The engine computes on the card through Vulkan: a card with no CUDA build of the engine for it (every card on
+    /// Linux, an AMD or Intel one on Windows), not Apple's Metal.
+    pub vulkan: bool,
+    /// No card the songs are computed on: none at all, or one with less memory than the smallest local set needs.
+    pub on_processor: bool,
 }
 
 /// The engine ships one CUDA backend per toolkit. CUDA 13 targets Turing and
@@ -118,13 +123,19 @@ pub fn accumulates_in_fp16() -> bool {
     probe().compute_capability.is_some_and(|compute| compute < (8, 0))
 }
 
+/// The CUDA build of the engine a card and driver that run `card` compute on: either build on Windows and Linux, the
+/// same table on both; none on a Mac, which has Metal.
+fn engine_cuda(card: Option<CudaBuild>) -> Option<CudaBuild> {
+    if cfg!(target_os = "macos") { None } else { card }
+}
+
 /// `nvidia-smi` costs tens of milliseconds and the setup screen polls status
 /// once per second while a download runs. The machine's GPU does not change
 /// inside one process lifetime, so probe it once.
 fn probe() -> &'static Hardware {
     static HARDWARE: OnceLock<Hardware> = OnceLock::new();
     HARDWARE.get_or_init(|| {
-        let mut system = System::new();
+        let mut system = System::new().expect("sysinfo has Windows, Linux and macOS");
         system.refresh_memory();
         let total_ram_gb = system.total_memory() as f64 / GIB;
         let (gpu_name, total_vram_gb, nvidia) = match nvidia_smi() {
@@ -135,14 +146,15 @@ fn probe() -> &'static Hardware {
             },
         };
         let device = if nvidia { nvidia_cuda_device() } else { None };
-        // The CUDA builds of the engine and their cuBLAS ship for Windows only; the Linux package
-        // carries the Vulkan engine and the macOS one Metal, whatever the card.
         let runs_cuda = device.and_then(|(compute, driver)| cuda_build(compute, driver)).is_some();
-        let cuda = if cfg!(windows) { device.and_then(|(compute, driver)| cuda_build(compute, driver)) } else { None };
+        let cuda = engine_cuda(device.and_then(|(compute, driver)| cuda_build(compute, driver)));
         let card_cuda = device.and_then(|(compute, driver)| cuda_build(compute, driver));
         let compute_capability = device.map(|(compute, _)| compute);
         let driver_major = device.map(|(_, driver)| driver);
+        let vulkan = gpu_name.is_some() && cuda.is_none() && !cfg!(target_os = "macos");
         Hardware {
+            vulkan,
+            on_processor: computes_on_processor(nvidia, total_vram_gb),
             gpu_name,
             total_vram_gb,
             total_ram_gb,
@@ -159,6 +171,13 @@ fn probe() -> &'static Hardware {
 
 pub fn hardware() -> Hardware {
     probe().clone()
+}
+
+/// Whether songs are computed on the processor: no card, or built-in graphics below the smallest local set. An
+/// NVIDIA card nvidia-smi lists is where the engine computes on CUDA at any size; a Mac computes on Metal.
+fn computes_on_processor(nvidia: bool, total_vram_gb: f64) -> bool {
+    let smallest = VRAM_TIERS.iter().map(|(_, tier)| *tier).fold(f64::INFINITY, f64::min);
+    !cfg!(target_os = "macos") && !nvidia && total_vram_gb < smallest
 }
 
 /// VRAM tiers follow the strict-eviction peak of each set: the larger backbone
@@ -230,14 +249,39 @@ pub(crate) fn chosen_card() -> Vec<String> {
     }
 }
 
-/// Every NVIDIA card: its nvidia-smi index, name and memory in GB.
-pub fn nvidia_cards() -> Vec<(u32, String, f64)> {
-    let Ok(output) = quiet("nvidia-smi").args(["--query-gpu=index,name,memory.total", "--format=csv,noheader,nounits"]).output() else { return Vec::new() };
-    if !output.status.success() {
-        return Vec::new();
+/// Every NVIDIA card; `None` when nvidia-smi did not answer (not on PATH, did not start, failed), which says nothing
+/// about the cards. The answer is kept for half a minute: the setup status, polled every second, and the engine's
+/// watchdog ask for the cards while one is chosen.
+pub fn nvidia_cards() -> Option<Cards> {
+    static LAST: std::sync::Mutex<Option<(std::time::Instant, Option<Cards>)>> = std::sync::Mutex::new(None);
+    remembered(&LAST, CARDS_FRESH, ask_nvidia_smi_for_cards)
+}
+
+/// NVIDIA cards: nvidia-smi index, name and memory in GB.
+pub type Cards = Vec<(u32, String, f64)>;
+
+const CARDS_FRESH: std::time::Duration = std::time::Duration::from_secs(30);
+
+fn remembered<T: Clone>(slot: &std::sync::Mutex<Option<(std::time::Instant, T)>>, fresh: std::time::Duration, ask: impl FnOnce() -> T) -> T {
+    let mut last = slot.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+    if let Some((_, answer)) = last.as_ref().filter(|(at, _)| at.elapsed() < fresh) {
+        return answer.clone();
     }
-    String::from_utf8_lossy(&output.stdout)
-        .lines()
+    let answer = ask();
+    *last = Some((std::time::Instant::now(), answer.clone()));
+    answer
+}
+
+fn ask_nvidia_smi_for_cards() -> Option<Cards> {
+    let output = quiet("nvidia-smi").args(["--query-gpu=index,name,memory.total", "--format=csv,noheader,nounits"]).output().ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    Some(parse_cards(&String::from_utf8_lossy(&output.stdout)))
+}
+
+fn parse_cards(csv: &str) -> Cards {
+    csv.lines()
         .filter_map(|line| {
             let mut fields = line.split(',').map(str::trim);
             let index = fields.next()?.parse().ok()?;
@@ -441,6 +485,29 @@ fn best_adapter(names: &str, sizes: &str) -> Option<(String, f64)> {
 
 #[cfg(test)]
 mod tests {
+    /// Songs are computed on the processor without a card and on built-in graphics below the smallest set; an NVIDIA
+    /// card of any size computes on CUDA. The window says so then.
+    #[cfg(not(target_os = "macos"))]
+    #[test]
+    fn songs_go_to_the_processor_without_a_card_or_on_built_in_graphics() {
+        assert!(super::computes_on_processor(false, 0.0), "no card");
+        assert!(super::computes_on_processor(false, 0.125), "Intel UHD with 128 MB");
+        assert!(!super::computes_on_processor(true, 3.0), "an NVIDIA card of 3 GB computes on CUDA");
+        assert!(!super::computes_on_processor(false, 16.0), "an AMD card of 16 GB");
+    }
+
+    #[test]
+    fn the_engine_computes_on_the_cuda_build_this_platform_ships() {
+        use super::{engine_cuda, CudaBuild};
+        assert_eq!(engine_cuda(None), None, "no NVIDIA card, or a driver that runs neither build: Vulkan");
+        if cfg!(target_os = "macos") {
+            assert_eq!(engine_cuda(Some(CudaBuild::Cuda13)), None, "a Mac computes on Metal");
+        } else {
+            assert_eq!(engine_cuda(Some(CudaBuild::Cuda13)), Some(CudaBuild::Cuda13), "Turing and newer, driver 580 or newer");
+            assert_eq!(engine_cuda(Some(CudaBuild::Cuda12)), Some(CudaBuild::Cuda12), "Maxwell to Volta and GTX 16, driver 525 or newer");
+        }
+    }
+
     #[test]
     fn the_apple_chip_is_read_from_the_system_profiler_json() {
         let profile = r#"{ "SPDisplaysDataType" : [ { "_name" : "Apple M2 Max", "sppci_cores" : "30", "sppci_model" : "Apple M2 Max" } ] }"#;
@@ -557,6 +624,27 @@ mod tests {
         // A device id nobody carries names nothing, and an empty one is safe.
         assert_eq!(parse_lspci_name(listing, "0x1234"), None);
         assert_eq!(parse_lspci_name(listing, "0x"), None);
+    }
+
+    #[test]
+    fn the_card_list_reads_nvidia_smi_lines() {
+        let cards = parse_cards("0, NVIDIA GeForce RTX 4090, 24564\n1, NVIDIA GeForce RTX 3060, 12288\n");
+        assert_eq!(cards, vec![(0, "NVIDIA GeForce RTX 4090".to_string(), 24564.0 / 1024.0), (1, "NVIDIA GeForce RTX 3060".to_string(), 12.0)]);
+    }
+
+    #[test]
+    fn a_second_ask_within_its_life_does_not_run_nvidia_smi_again() {
+        let slot = std::sync::Mutex::new(None);
+        let asked = std::cell::Cell::new(0);
+        let ask = || {
+            asked.set(asked.get() + 1);
+            None::<Cards>
+        };
+        assert_eq!(remembered(&slot, std::time::Duration::from_secs(30), ask), None);
+        assert_eq!(remembered(&slot, std::time::Duration::from_secs(30), ask), None);
+        assert_eq!(asked.get(), 1, "a failed answer is kept too");
+        remembered(&slot, std::time::Duration::ZERO, ask);
+        assert_eq!(asked.get(), 2, "an answer past its life is asked again");
     }
 
     #[cfg(not(windows))]

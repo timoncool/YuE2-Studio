@@ -5,7 +5,7 @@ import { songErrorText } from '../i18n/songErrors';
 import type { Song, YueJob, YueProgress, YueRequest } from '../types';
 import { followEngineProgress, stageDetail, type StageClock } from './engineProgress';
 import { mapNativeLibrarySong, setNativeSongNote } from './nativeLibrary';
-import { playlistsChanged, queryClient, readJson, updateLibraryPlaylists, updateLibrarySongs, useLibrarySongs } from './studioQueries';
+import { hubStateChanged, playlistsChanged, queryClient, readJson, updateLibraryPlaylists, updateLibrarySongs, useLibrarySongs } from './studioQueries';
 
 /**
  * The songs being made, as cards in the list. A card follows its engine job
@@ -186,6 +186,7 @@ export function useGenerations({ enabled, notify, onFinished }: GenerationOption
       isGenerating: false,
       stage: job.status === 'failed' ? 'failed' : 'cancelled',
       failure: songErrorText(job, language),
+      failureCode: job.code,
     }));
   }, [ended.data, cards, t, language]);
 
@@ -234,6 +235,8 @@ export function useGenerations({ enabled, notify, onFinished }: GenerationOption
         notify(songErrorText(job, language) || t('generationFailed'), job.status === 'failed' ? 'error' : 'info');
       }
       // still queued or running: the list was read before this job was sent
+      // an ended song can bring the hub's next step, and the hub's asks wait for no song to run
+      if (job.status === 'completed' || job.status === 'failed' || job.status === 'cancelled') hubStateChanged();
     } catch (error) {
       leftEarly.current.delete(jobId);
       remove(running.id);
@@ -265,6 +268,10 @@ export function useGenerations({ enabled, notify, onFinished }: GenerationOption
         for (const job of fresh) next.set(job.id, `restored_${job.id}`);
         return next;
       });
+    }
+    const short = new Set(listed.filter(job => job.card_memory_short).map(job => job.id));
+    if (cards.some(entry => entry.jobId && short.has(entry.jobId) && !entry.memoryShort)) {
+      setCards(prev => prev.map(entry => (entry.jobId && short.has(entry.jobId) && !entry.memoryShort ? { ...entry, memoryShort: true } : entry)));
     }
     // a job that left the list finished, failed or was stopped elsewhere
     for (const entry of [...waiting, ...leftEarly.current.values()]) {
@@ -315,6 +322,7 @@ export function useGenerations({ enabled, notify, onFinished }: GenerationOption
         throw new Error((job && songErrorText(job, language)) || job?.error || `The engine rejected this request (${response.status})`);
       }
       follow(id, job);
+      if (job.tracks_asked) notify(t('tracksForCardHint').replace('{asked}', String(job.tracks_asked)), 'info');
       if (job.laid) {
         notify(t('scoreLaidToast').replace('{seconds}', String(Math.round(job.laid.seconds))), 'info');
         const crowded = job.laid.crowded;
@@ -366,6 +374,21 @@ export function useGenerations({ enabled, notify, onFinished }: GenerationOption
     if (target.jobId) await removeEnded(target.jobId).catch(error => notify(error instanceof Error ? error.message : String(error), 'error'));
   }, [remove, notify]);
 
+  /** A song whose score could not be written made again with its LoRA at 1.0 on Composition (the service keeps the
+   * request); the failed card goes once the new song is on its way. */
+  const scoreAgain = useCallback(async (key: string, how: 'score-strength' | 'again' = 'score-strength') => {
+    const jobId = key.startsWith(ENDED_PREFIX) ? key.slice(ENDED_PREFIX.length) : key;
+    try {
+      const response = await fetch(`/v1/music/jobs/${encodeURIComponent(jobId)}/${how}`, { method: 'POST' });
+      const body = (await response.json().catch(() => null)) as (YueJob & { error?: string }) | null;
+      if (!response.ok || body?.status === 'failed') throw new Error((body && (body.error || songErrorText(body, language))) || `HTTP ${response.status}`);
+      await removeEnded(jobId);
+      void queryClient.invalidateQueries({ queryKey: activeJobsKey });
+    } catch (error) {
+      notify(error instanceof Error ? error.message : String(error), 'error');
+    }
+  }, [notify, language]);
+
   /**
    * Stops the songs this window is making. With `everything` it stops every
    * job of the service: another window's, an agent's, ones sent before this
@@ -412,6 +435,7 @@ export function useGenerations({ enabled, notify, onFinished }: GenerationOption
     track,
     cancel,
     reset,
+    scoreAgain,
     cancelAll,
   };
 }

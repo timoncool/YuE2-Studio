@@ -452,6 +452,27 @@ footer p { margin: 0 0 8px; }
     </div>
   </section>
 
+  <section id="speed">
+    <h2>どのくらい速いか</h2>
+    <p class="sub">3 分の曲がグラフィックカードごとにどれだけかかるか。YuE2 Studio のインストールが 30 日間に報告した平均です（バージョン 3.8、モデルの読み込みを含む。使うモデルセットは人によって違うので、結果は異なることがあります）。</p>
+    <div class="scroll"><table>
+          <thead><tr><th>お使いのグラフィックカード</th><th>3 分の曲</th><th>速度</th></tr></thead>
+          <tbody>
+          <tr><td>NVIDIA、24 GB 以上</td><td>約 1 分</td><td>実時間の 2.7 倍</td></tr>
+          <tr><td>NVIDIA、16 GB</td><td>約 2 分</td><td>1.6×</td></tr>
+          <tr><td>NVIDIA、12 GB</td><td>約 2 分</td><td>1.4×</td></tr>
+          <tr><td>NVIDIA、8 GB 以下</td><td>約 5 分</td><td>0.6×</td></tr>
+          <tr><td>AMD、16 GB 以上（Vulkan）</td><td>3〜4 分</td><td>0.9×</td></tr>
+          <tr><td>Intel Arc、12 GB（Vulkan）</td><td>約 7 分</td><td>0.4×</td></tr>
+          <tr><td>Apple シリコン、24 GB 以上</td><td>約 8 分</td><td>0.4×</td></tr>
+          <tr><td>Apple シリコン、16 GB</td><td>約 15 分</td><td>0.2×</td></tr>
+          <tr><td>AMD、8 GB 以下（Vulkan）</td><td>約 1 時間</td><td>0.05×</td></tr>
+          <tr><td>グラフィックカードなし（プロセッサ）</td><td>約 2.5 時間</td><td>0.02×</td></tr>
+          </tbody>
+        </table></div>
+    <p class="note">私たちのマシン（RTX 4090、Ryzen 9 9950X3D、Windows 11、Q8_0 セット）では、1 分の曲が 20 秒、4 分の曲が 54 秒、10 分の曲が約 3 分。動作中のカード使用量は 5〜8 GB です。</p>
+  </section>
+
   <section id="start">
     <h2>はじめかた</h2>
     <ol class="steps">

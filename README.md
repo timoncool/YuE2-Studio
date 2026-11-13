@@ -93,9 +93,12 @@ Code, save [docs/mcp-skill.md](docs/mcp-skill.md) as `~/.claude/skills/yue2-stud
   or Whisper. Your lyrics are kept; only the timing is borrowed.
 - **Six stems on the GPU** — drums, bass, other, vocals, guitar and piano with HT-Demucs.
 - **Any track to MIDI** — a song, a stem or a processed take becomes multi-instrument MIDI
-  (34 instrument groups and drums) with MuScriptor on the GPU, through HOT-Step's native
-  port. A piano roll fills in while it listens; play it against the original, mute or solo
+  (34 instrument groups and drums) with MuScriptor on the GPU, in the audio.cpp server.
+  A piano roll fills in while it listens; play it against the original, mute or solo
   an instrument, save the .mid. Downloaded the first time it is used.
+- **Restore a track after compression** — Apollo removes the artefacts of MP3 compression
+  from a song or any audio file and gives 44.1 kHz in the source's channels, as a new track
+  beside it, in the audio.cpp server.
 - **A MIDI editor** — a piano roll with tracks, instruments and drums: play a song in from a
   MIDI keyboard or the computer's keys, record or draw it, edit a track's MIDI, save it to the
   library as a track and send it to a cover, or open the create form's score in it. A .mid
@@ -162,8 +165,9 @@ Code, save [docs/mcp-skill.md](docs/mcp-skill.md) as `~/.claude/skills/yue2-stud
   score", and the model writes the rest of the song on from it in its key and meter, the opening
   coming back as a hook.
 - **Chord bed** — a score of chords over rests written at once in the tempo, key and meter you set,
-  one section per lyrics tag; the model writes the melody and the arrangement over it and the
-  planning step is skipped.
+  one section per lyrics tag. For a song with words the model writes its melody over those chords,
+  section by section, and the song keeps the score with that melody; an instrumental is played
+  from the bed as it stands, with no planning step.
 - **Chords and sections** — chord variety so the song stops looping one progression, sections that
   do not open the way the one before did, chords outside the key, and the score held to the
   lyrics' sections in their order.
@@ -299,9 +303,10 @@ More tutorials and reviews:
     from 525 to 579. Both carry compiled code for every one of those architectures, so
     nothing is left for the driver to compile.
   - **AMD or Intel — experimental.** The engine runs on Vulkan through the card's own
-    driver. The Vulkan path itself is verified on NVIDIA (the same words heard as on
-    CUDA), but on AMD Radeon integrated graphics the song came out with unintelligible
-    vocals, and discrete AMD and Intel cards are untested. Reports from owners are welcome.
+    driver. Owners report songs made well on a Radeon RX 7900 XT under Windows and an
+    RX 7900 XTX under Ubuntu 26 ([#196](https://github.com/timoncool/YuE2-Studio/issues/196)),
+    but on AMD Radeon integrated graphics the song came out with unintelligible vocals, and
+    Intel cards are untested. LoRA training stays on NVIDIA. Reports from owners are welcome.
   - Without a GPU the engine falls back to the processor, which works but is many times
     slower.
 - 4–10 GB of disk for one model set.
@@ -313,10 +318,31 @@ More tutorials and reviews:
 ### Linux (experimental)
 
 The .deb and the AppImage for Linux x86-64 are **experimental**. They come from the same code with the
-Linux build of the same engine (Vulkan, and the processor), but the author works on Windows and has not
-run them on a real Linux desktop. **If you live on Linux, it would be great if you polished them and sent
-the fixes back as a pull request.** The studio keeps its data in `~/.local/share/yue2-studio`
-(`$XDG_DATA_HOME`).
+Linux build of the same engine (CUDA 13 and CUDA 12 on NVIDIA cards, Vulkan on the others, and the
+processor), but the author works on Windows and has not run them on a real Linux desktop. **If you live on
+Linux, it would be great if you polished them and sent the fixes back as a pull request.** The studio keeps
+its data in `~/.local/share/yue2-studio` (`$XDG_DATA_HOME`).
+
+## How fast is it
+
+How long a 3-minute song takes, by graphics card. These are averages from what YuE2 Studio installations reported
+over 30 days (version 3.8, loading the models included; people run different model sets, so yours can differ).
+
+| Your graphics card | A 3-minute song | Speed |
+|---|---|---|
+| NVIDIA, 24 GB or more | about 1 minute | 2.7× faster than real time |
+| NVIDIA, 16 GB | about 2 minutes | 1.6× |
+| NVIDIA, 12 GB | about 2 minutes | 1.4× |
+| NVIDIA, 8 GB or less | about 5 minutes | 0.6× |
+| AMD, 16 GB or more (Vulkan) | 3–4 minutes | 0.9× |
+| Intel Arc, 12 GB (Vulkan) | about 7 minutes | 0.4× |
+| Apple silicon, 24 GB or more | about 8 minutes | 0.4× |
+| Apple silicon, 16 GB | about 15 minutes | 0.2× |
+| AMD, 8 GB or less (Vulkan) | about an hour | 0.05× |
+| No graphics card (processor) | about 2.5 hours | 0.02× |
+
+On our machine (RTX 4090, Ryzen 9 9950X3D, Windows 11, the Q8_0 set): a 1-minute song in 20 s, a 4-minute song in
+54 s, a 10-minute song in about 3 minutes; the card holds 5–8 GB while it works.
 
 ## What runs where
 
@@ -325,28 +351,29 @@ the fixes back as a pull request.** The studio keeps its data in `~/.local/share
 | Making songs · yue2.cpp | CUDA | Vulkan | processor |
 | Training a LoRA · music-train | CUDA | not available | not available |
 | Style by ear · MOSS-Music | CUDA | processor | processor |
-| Tempo · Beat This! | CUDA | DirectML | processor |
-| Stems · HT-Demucs | CUDA | processor | processor |
+| Tempo · Beat This! | processor | processor | processor |
+| Stems · HT-Demucs | CUDA | Vulkan | processor |
+| Stems · Mel-Band RoFormer | CUDA | Vulkan | processor |
+| Restore after compression · Apollo | CUDA | Vulkan | processor |
 | Karaoke timing · Parakeet | CUDA | Vulkan | processor |
 | Karaoke timing · Whisper | CUDA | processor | processor |
 | Writing assistant · llama.cpp | CUDA | Vulkan | processor |
 | Audio to MIDI · MuScriptor | CUDA | processor | processor |
 
-**The paths for AMD and Intel cards (Vulkan, DirectML) and work on the processor are
+**The paths for AMD and Intel cards (Vulkan) and work on the processor are
 experimental:** they exist for computers where the studio would not run at all otherwise.
 The main, tested path is an NVIDIA card.
 
 - Training needs an NVIDIA card with 11 GB of video memory or more. The trainer has no other
   path, and on the processor one run would take days, so on any other machine the studio
   does not offer the training files.
-- On AMD and Intel cards stems are separated on the processor: the HT-Demucs model does not
-  run through DirectML (out of memory on a 2 GB integrated card, over 20 GB and minutes for
-  30 seconds of audio on a 24 GB one).
+- On AMD and Intel cards HT-Demucs separates the stems through Vulkan in the audio.cpp server and
+  Mel-Band RoFormer through its Vulkan build; MuScriptor (audio to MIDI) runs on the processor there.
 - Karaoke's Parakeet runs on transcribe.cpp, the engine Dub Studio and Speech Studio use: its
-  CUDA build on an NVIDIA card with a CUDA 13 driver (on Linux when the system has CUDA 13's
+  CUDA 13 or CUDA 12 build by the card and driver (on Linux when the system has that CUDA's
   cuBLAS), its Vulkan build on any other card, its processor build without one; on a Mac, Metal
-  on Apple silicon and the processor on Intel. The tempo model reaches any DirectX 12 card through
-  DirectML, whose runtime comes with karaoke's card path.
+  on Apple silicon and the processor on Intel.
+- The tempo model runs on the processor on every machine, in 5 to 7 seconds a song.
 - "Auto" in a device choice takes the card when its runtime is installed, and the processor
   otherwise. The same table is in the studio, under Settings → Models.
 
@@ -436,6 +463,17 @@ can be dropped into by hand at:
 
 A file placed by hand with the exact catalogue name is recognised and never downloaded again.
 
+**Your own YuE2 model.** A YuE2-3B fine-tune in GGUF made for yue2.cpp goes into
+`models\yue2-cpp\own\` and is chosen under Settings - Models - Your own YuE2 model; the engine then
+runs it in place of the set's backbone, with the set's VAE and transcriber. The studio does not
+download or check a file you put there, and its licence is its author's. The same list has
+Community models: the merges of Ruach Studio's
+[YuE2-RS-Finetunes](https://huggingface.co/goldhub/YuE2-RS-Finetunes) in Q8_0 (3.8 GB) and Q6_K
+(2.9 GB), downloaded into that folder when chosen, pinned to revision `b371be9` and checked by
+SHA-256; their weights are under CC BY-NC-SA 4.0 (non-commercial, share-alike, credit the authors).
+With an own or community model the decoder companion stays off on Auto, and LoRA training and
+dataset preparation still run on the set's backbone.
+
 <details>
 <summary><b>Every file, with direct download links</b></summary>
 
@@ -489,19 +527,22 @@ the exact name in the listed folder is recognised and not downloaded again.
 | [faster-whisper-large-v3](https://huggingface.co/Systran/faster-whisper-large-v3/tree/main): `config.json`, `model.bin`, `preprocessor_config.json`, `tokenizer.json`, `vocabulary.json` | Whisper large-v3 | 2.9 GB | `karaoke\models\whisper\faster-whisper-large-v3\` |
 | [`parakeet-tdt-0.6b-v3-Q8_0.gguf`](https://huggingface.co/handy-computer/parakeet-tdt-0.6b-v3-gguf/resolve/d8d8c32cb2017c57e5307767343e97870f8a7f53/parakeet-tdt-0.6b-v3-Q8_0.gguf) | Parakeet TDT v3, European languages | 0.7 GB | `karaoke\models\asr-gguf-parakeet-v3\` |
 | [`parakeet-ultra-Q8_0.gguf`](https://huggingface.co/handy-computer/parakeet-ultra-gguf/resolve/a1539be1b849ea7463b88343e5277b373d0c4ea9/parakeet-ultra-Q8_0.gguf) | Parakeet Ultra, fewer wrong words in Russian and in noise | 0.7 GB | `karaoke\models\asr-gguf-parakeet-ultra\` |
-| [`transcribe_engine.dll`](https://github.com/timoncool/transcribe.cpp/releases/download/engine-0.1.1/transcribe_engine.dll) (CUDA), [`transcribe_engine-vulkan.dll`](https://github.com/timoncool/transcribe.cpp/releases/download/engine-0.1.1/transcribe_engine-vulkan.dll), [`transcribe_engine-cpu.dll`](https://github.com/timoncool/transcribe.cpp/releases/download/engine-0.1.1/transcribe_engine-cpu.dll) | transcribe.cpp, the engine Parakeet runs on: one build, the one for your card | 3.7-145 MB | `karaoke\models\transcribe-engine\`, `transcribe-engine-vulkan\`, `transcribe-engine-cpu\`, each as `transcribe_engine.dll` |
+| [`transcribe-windows-cuda13-x64.zip`](https://github.com/timoncool/transcribe.cpp/releases/download/engine-0.2.1/transcribe-windows-cuda13-x64.zip), [`transcribe-windows-vulkan-x64.zip`](https://github.com/timoncool/transcribe.cpp/releases/download/engine-0.2.1/transcribe-windows-vulkan-x64.zip), [`transcribe-windows-cpu-x64.zip`](https://github.com/timoncool/transcribe.cpp/releases/download/engine-0.2.1/transcribe-windows-cpu-x64.zip) | transcribe.cpp, the engine Parakeet runs on: one build, the one for your card, unpacked | 5-131 MB | `karaoke\runtime\transcribe-engine\` (CUDA), `transcribe-engine-vulkan\`, `transcribe-engine-cpu\` |
+
+**The audio.cpp server** — HT-Demucs and MuScriptor run in it; one build, the one for your card, unpacked
+
+| File | What for | Size | Put in `data\` |
+| --- | --- | --- | --- |
+| [`audiocpp-server-win-cuda13-x64.zip`](https://github.com/timoncool/audio.cpp/releases/download/server-31cb1a4a/audiocpp-server-win-cuda13-x64.zip), [`audiocpp-server-win-cuda12-x64.zip`](https://github.com/timoncool/audio.cpp/releases/download/server-31cb1a4a/audiocpp-server-win-cuda12-x64.zip), [`audiocpp-server-win-vulkan-x64.zip`](https://github.com/timoncool/audio.cpp/releases/download/server-31cb1a4a/audiocpp-server-win-vulkan-x64.zip), [`audiocpp-server-win-cpu-x64.zip`](https://github.com/timoncool/audio.cpp/releases/download/server-31cb1a4a/audiocpp-server-win-cpu-x64.zip) | audio.cpp's server: CUDA 13, CUDA 12, Vulkan or the processor | 20-185 MB | `audiocpp\runtime\audiocpp\` (CUDA 13), `audiocpp-cuda12\`, `audiocpp-vulkan\`, `audiocpp-cpu\` |
+| [`libcufft-windows-x86_64-12.4.0.43-archive.zip`](https://developer.download.nvidia.com/compute/cuda/redist/libcufft/windows-x86_64/libcufft-windows-x86_64-12.4.0.43-archive.zip) | `cufft64_12.dll` out of it, for the CUDA 13 build | 160 MB | `audiocpp\runtime\audiocpp\` |
 
 **Stems and vocals for recognition**
 
 | File | What for | Size | Put in `data\` |
 | --- | --- | --- | --- |
-| [`htdemucs_6s_fp16weights.onnx`](https://huggingface.co/StemSplitio/htdemucs-6s-onnx/resolve/49df9b6989cf2150840ea65b0bef77a2e471b678/htdemucs_6s_fp16weights.onnx) | HT-Demucs, six stems | 130 MB | `separation\models\htdemucs\htdemucs_6s_fp16.onnx` (this name) |
+| [`htdemucs-6stems-f16.gguf`](https://huggingface.co/audio-cpp/audio.cpp-gguf/resolve/462b4cec041e06ffb3d8fcf0d8c655051b1cd9f5/HTDemucs-6stems-GGUF/htdemucs-6stems-f16.gguf) | HT-Demucs, six stems, audio.cpp's own GGUF | 55 MB | `separation\models\htdemucs\` |
 
-**MIDI from audio** — the transcriber and one of the models
-
-| File | What for | Size | Put in `data\` |
-| --- | --- | --- | --- |
-| [`music-midi-cuda-windows-x64.zip`](https://github.com/timoncool/YuE2-Studio/releases/download/music-midi-8a5e42c4/music-midi-cuda-windows-x64.zip) | HOT-Step's `ace-midi`, unpacked | 126 MB | `midi\runtime\music-midi\` |
+**MIDI from audio** — one of the models, in the audio.cpp server above
 | [muscriptor-small](https://huggingface.co/cocktailpeanut/muscriptor-small/tree/31a8f75d6a8b5383fd71ad1371dc1620389ab722): `config.json`, `model.safetensors` | fast, 103M | 0.4 GB | `midi\models\muscriptor-small\` |
 | [muscriptor-medium](https://huggingface.co/cocktailpeanut/muscriptor-medium/tree/27246ba68bd4d8f98bdec10a6edf8d7cf42a8826): `config.json`, `model.safetensors` | balanced, 307M | 1.2 GB | `midi\models\muscriptor-medium\` |
 | [muscriptor-large](https://huggingface.co/cocktailpeanut/muscriptor-large/tree/87f4bf981f56f90fb5043153b3f54af3c3053da9): `config.json`, `model.safetensors` | best, 1.4B | 5.5 GB | `midi\models\muscriptor-large\` |

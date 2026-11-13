@@ -85,6 +85,24 @@ export interface TrainingRun {
   continuations?: { from: number; to: number; at: string }[];
   /** What the trainer computes on while it runs: "CUDA0", "Vulkan0", "CPU". */
   device?: string | null;
+  /** The part of a step the trainer is working on: `index` of `of`, `of` known after the first whole step. */
+  step_stage?: { step: number; stage: string; index: number; of: number | null; step_elapsed_ms: number } | null;
+  /** The trainer took its F32 path, several times slower: the card has no BF16 for its layers (RTX 20xx). */
+  f32_path?: boolean;
+}
+
+/** The steps "train further" goes up to unless another number is typed: a run the studio closed on goes on to the
+ *  steps it was started for, a finished or stopped one four checkpoints past where it goes on from. */
+export function continueTarget(run: Pick<TrainingRun, 'status' | 'recipe'>, from: number): number {
+  const planned = Number(run.recipe.steps);
+  if (run.status === 'interrupted' && Number.isInteger(planned) && planned > from) return planned;
+  return from + Math.max(Number(run.recipe.save_every) || 1, 1) * 4;
+}
+
+/** Where the bar of a run stands, in steps: whole steps done, and within the step going the parts started of all. */
+export function stepsDone(lastStep: number | undefined, part: TrainingRun['step_stage']): number {
+  if (part && part.of) return Math.max(lastStep ?? 0, part.step - 1 + part.index / part.of);
+  return lastStep ?? 0;
 }
 
 export interface TrainingState {

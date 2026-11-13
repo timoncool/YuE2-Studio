@@ -85,6 +85,19 @@ export interface AdapterUse {
   disabled?: boolean;
 }
 
+/** The summed Composition strength past which the model mostly cannot write a score (the service's
+ * `SCORE_STRENGTH_LIMIT`): in the studio's own runs one LoRA at 1.2 wrote it and at 1.5 did not, and two at 1.0 each
+ * lost the key every time. */
+export const SCORE_STRENGTH_LIMIT = 1.2;
+
+/** The summed strength of the LoRA in use on the slots whose role is composition. */
+export function scoreStrength(uses: AdapterUse[], slots: AdapterSlot[]): number {
+  const composition = new Set(slots.filter(slot => slot.role === 'composition').map(slot => slot.id));
+  return uses
+    .filter(use => !use.disabled)
+    .reduce((sum, use) => sum + Object.entries(use.scales).filter(([slot]) => composition.has(slot)).reduce((total, [, scale]) => total + scale, 0), 0);
+}
+
 export function localized(text: AdapterText | undefined, language: Language): string {
   if (!text) return '';
   if (typeof text === 'string') return text;

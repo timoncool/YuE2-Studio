@@ -17,6 +17,7 @@ use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::sync::RwLock;
 
 use crate::downloads::{Asset, AssetKind, Downloader};
+use crate::unix_millis;
 
 /// The downloader scope the training page reads its progress under.
 pub const SCOPE: &str = "training";
@@ -306,7 +307,16 @@ pub struct Training {
     /// Held over each read-change-write of a `run.json` or `dataset.json`, so
     /// two edits never write over each other.
     edits: std::sync::Mutex<()>,
+    /// Told how each run ended: done, or the failure's reason and whether it was stopped.
+    ended: std::sync::OnceLock<RunEnded>,
+    /// The parts of the steps of the training stage going now.
+    step_stages: std::sync::Mutex<yue_train::StepStages>,
+    /// The trainer said its card has no BF16 for the ConvRot8 layers and took the F32 path, several times slower.
+    f32_path: std::sync::atomic::AtomicBool,
 }
+
+/// How a training run ended, for whoever counts finished work: `Ok` done, `Err` the reason, and whether it was stopped.
+pub type RunEnded = Box<dyn Fn(std::result::Result<(), String>, bool) + Send + Sync>;
 
 struct Active {
     run_id: String,
@@ -581,7 +591,21 @@ fn write_steps(dir: &Path, steps: &[TrainingStepRecord]) -> Result<()> {
 impl Training {
     pub fn new(data_root: &Path, engine: &str) -> Self {
         let root = data_root.join("training");
-        Self { downloader: Downloader::with_runtimes(root.clone(), tools_root(data_root)), root, engine: engine.to_string(), active: RwLock::new(None), edits: std::sync::Mutex::new(()) }
+        Self {
+            downloader: Downloader::with_runtimes(root.clone(), tools_root(data_root)),
+            root,
+            engine: engine.to_string(),
+            active: RwLock::new(None),
+            edits: std::sync::Mutex::new(()),
+            ended: std::sync::OnceLock::new(),
+            step_stages: std::sync::Mutex::new(yue_train::StepStages::default()),
+            f32_path: std::sync::atomic::AtomicBool::new(false),
+        }
+    }
+
+    /// Who is told how each run ends; set once.
+    pub fn on_run_ended(&self, ended: RunEnded) {
+        let _ = self.ended.set(ended);
     }
 
     pub fn downloader(&self) -> &Downloader {
@@ -628,7 +652,7 @@ impl Training {
     /// The listening pack this machine downloads and runs: every file but the MOSS-Music build its card does not take
     /// (`listen::hearing`).
     fn listen_files(&self) -> impl Iterator<Item = &'static Asset> {
-        let hearing = crate::listen::hearing(&crate::hardware::hardware());
+        let hearing = crate::listen::hearing(&crate::hardware::hardware(), false);
         listen_pack().iter().filter(move |asset| !asset.id.starts_with("moss-lm") || asset.relative_path.ends_with(hearing.lm))
     }
 
@@ -1099,6 +1123,16 @@ impl Training {
         self.active.read().await.as_ref().map(|active| active.run_id.clone())
     }
 
+    /// The part of a step the training stage is working on now.
+    pub fn step_stage(&self) -> Option<yue_train::StepStageNow> {
+        self.step_stages.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).now(unix_millis())
+    }
+
+    /// Whether the training stage going now took the trainer's F32 path, several times slower (RTX 20xx).
+    pub fn f32_path(&self) -> bool {
+        self.f32_path.load(std::sync::atomic::Ordering::Relaxed)
+    }
+
     pub fn checkpoints(&self, run_id: &str) -> Vec<yue_train::TrainingCheckpoint> {
         self.run_dir(run_id).map(|dir| yue_train::checkpoints(&dir)).unwrap_or_default()
     }
@@ -1272,6 +1306,13 @@ impl Training {
 
     /// Records how a run ended and lets the next one start.
     async fn settle(&self, run_id: &str, outcome: Result<bool>) {
+        if let Some(ended) = self.ended.get() {
+            match &outcome {
+                Ok(true) => ended(Ok(()), false),
+                Ok(false) => ended(Err("stopped".to_string()), true),
+                Err(error) => ended(Err(format!("{error:#}")), false),
+            }
+        }
         {
             let _edit = self.edits.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
             if let Ok(mut run) = self.run(run_id) {
@@ -1385,6 +1426,9 @@ impl Training {
                 });
             }
             drop(lines_out);
+            *self.step_stages.lock().unwrap_or_else(|poisoned| poisoned.into_inner()) = yue_train::StepStages::default();
+            self.f32_path.store(false, std::sync::atomic::Ordering::Relaxed);
+            let pid = child.id();
             let mut last_error = String::new();
             let status = loop {
                 tokio::select! {
@@ -1400,6 +1444,10 @@ impl Training {
                                 if let Err(error) = recorded {
                                     log.write_all(format!("[studio] the step was not recorded: {error:#}\n").as_bytes()).await?;
                                 }
+                            } else if let Some((step, stage)) = yue_train::parse_step_stage(&line) {
+                                self.step_stages.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).started(step, stage, unix_millis());
+                            } else if yue_train::takes_f32_path(&line) {
+                                self.f32_path.store(true, std::sync::atomic::Ordering::Relaxed);
                             } else if line.contains("FATAL") || line.to_ascii_lowercase().contains("error") {
                                 last_error = line;
                             }
@@ -1415,6 +1463,15 @@ impl Training {
             if !status.success() {
                 if last_error.contains("GGML_BACKEND=CUDA0 not found") {
                     bail!("{} stopped: the trainer's CUDA did not load on the graphics card, and training does not run on the processor; it needs NVIDIA driver {} or newer", stage.id, crate::hardware::CUDA13_DRIVER);
+                }
+                // a crash says where it happened only in Windows' record of it
+                if last_error.is_empty() || music_core::process::exited_on_exception(status.code()) {
+                    if let Some(pid) = pid {
+                        let fault = tokio::task::spawn_blocking(move || music_core::process::fault_of(pid, std::time::Duration::from_secs(5))).await.ok().flatten();
+                        if let Some(fault) = fault {
+                            last_error = if last_error.is_empty() { fault.to_string() } else { format!("{last_error} | {fault}") };
+                        }
+                    }
                 }
                 bail!("{} stopped ({status}){}", stage.id, if last_error.is_empty() { String::new() } else { format!(": {last_error}") });
             }
@@ -1847,8 +1904,8 @@ mod import_tests {
         }
     }
 
-    /// The trainer and Audio to MIDI each sweep the shared tools folder of every release but their own: two
-    /// releases would delete each other's folder on every start.
+    /// The HOT-Step tools are one package: `scripts/build-hotstep-tools.ps1` builds it from both source files and
+    /// refuses two releases.
     #[test]
     fn the_trainer_and_the_transcriber_are_one_tools_release() {
         let read = |text: &str| serde_json::from_str::<serde_json::Value>(text).unwrap();

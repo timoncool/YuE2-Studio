@@ -3,7 +3,7 @@ import { useOpenRouterSettings, useSetupStatus } from '../services/studioQueries
 import { Disc, Layers, Library, Moon, Newspaper, ScrollText, Search, SlidersHorizontal, Sun } from 'lucide-react';
 import { View } from '../types';
 import { useI18n } from '../context/I18nContext';
-import { profileLabel } from '../services/modelCatalog';
+import { setupLabel } from '../services/modelCatalog';
 import { ResourceMonitor } from './ResourceMonitor';
 import { PlayerExtraButtons } from './player/PlayerExtraButtons';
 
@@ -27,6 +27,8 @@ type NativeSetupStatus = {
   engine_id: string;
   selected_profile_id?: string | null;
   selected_component_ids?: string[] | null;
+  own_model?: string | null;
+  own_model_name?: Record<string, string> | null;
 };
 
 const StatusLine: React.FC<{ active: boolean; pending?: boolean; label: string }> = ({ active, pending, label }) => (
@@ -37,7 +39,7 @@ const StatusLine: React.FC<{ active: boolean; pending?: boolean; label: string }
 );
 
 const SystemWidget: React.FC<{ isOpen?: boolean }> = ({ isOpen }) => {
-  const { t } = useI18n();
+  const { t, language } = useI18n();
   const tt = t as unknown as (key: string) => string;
   const setupQuery = useSetupStatus<NativeSetupStatus>();
   const setup = setupQuery.isError ? null : setupQuery.data ?? null;
@@ -49,9 +51,7 @@ const SystemWidget: React.FC<{ isOpen?: boolean }> = ({ isOpen }) => {
   const openRouterConfigured = openRouter?.configured === true;
   const engineReady = setup?.engine_ready === true;
   const modelReady = setup?.ready === true;
-  const profile = setup?.selected_profile_id
-    ? profileLabel(t, { id: setup.selected_profile_id, label: setup.selected_profile_id })
-    : (setup?.selected_component_ids?.length ? t('customSet') : t('noProfile'));
+  const profile = setupLabel(t, language, setup);
   // Without a model set on disk the engine is not starting, it is waiting.
   const engineLabel = unreachable ? t('engineUnavailable') : engineReady ? t('engineReachable') : modelReady ? t('engineStarting') : tt('engineWaitsForModels');
   const modelLabel = modelReady ? `${t('profileReady')}: ${profile}` : t('profileNotInstalled');
@@ -104,7 +104,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         <div className="fixed inset-0 z-40 bg-black/60 backdrop-blur-xs md:hidden" onClick={onToggle} />
       )}
 
-      <aside className={`fixed inset-y-0 left-0 z-50 flex h-full min-h-0 shrink-0 flex-col overflow-hidden border-r border-zinc-200 bg-white py-4 transition-[width,transform] duration-300 dark:border-white/5 dark:bg-suno-sidebar md:relative md:inset-auto ${isOpen ? 'w-[min(20rem,calc(100vw-2.5rem))] md:w-[200px]' : 'w-[72px]'}`}>
+      <aside className={`fixed inset-y-0 left-0 z-50 flex h-full min-h-0 shrink-0 flex-col overflow-hidden border-r border-zinc-200 bg-white py-4 transition-[width,transform] duration-300 dark:border-white/5 dark:bg-suno-sidebar md:relative md:inset-auto ${isOpen ? 'w-[min(20rem,calc(var(--vw)*100-2.5rem))] md:w-[200px]' : 'w-[72px]'}`}>
         <div className="mb-6 flex min-w-0 items-center justify-between gap-2 px-3">
           <div className="flex min-w-0 items-center gap-3">
             {/* The studio mark: the application icon. */}

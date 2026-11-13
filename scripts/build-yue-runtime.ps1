@@ -94,9 +94,9 @@ function Invoke-CMakeBuild([string]$backend) {
         'sm_89' { '-DCMAKE_CUDA_ARCHITECTURES=89' }
     }
     $backendFlags = switch ($backend) {
-        'cuda' { "-DGGML_CUDA=ON $cudaArch" }
+        'cuda' { "-DGGML_CUDA=ON -DGGML_CUDA_NCCL=OFF $cudaArch" }
         'vulkan' { '-DGGML_NATIVE=OFF -DGGML_VULKAN=ON' }
-        'all' { "-DGGML_BACKEND_DL=ON -DGGML_CPU_ALL_VARIANTS=ON -DGGML_VULKAN=ON -DGGML_CUDA=ON $cudaArch" }
+        'all' { "-DGGML_BACKEND_DL=ON -DGGML_CPU_ALL_VARIANTS=ON -DGGML_VULKAN=ON -DGGML_CUDA=ON -DGGML_CUDA_NCCL=OFF $cudaArch" }
     }
     $ccache = if (Get-Command ccache -ErrorAction SilentlyContinue) { '-DGGML_CCACHE=ON' } else { '-DGGML_CCACHE=OFF' }
     # Program databases beside the binaries turn a crash offset into a line.
@@ -136,7 +136,7 @@ function Invoke-Cuda12Build {
     # -Wno-deprecated-gpu-targets silences the notice that CUDA 12 is the last
     # toolkit for Maxwell, Pascal and Volta.
     $cudaFlags = '-Wno-deprecated-gpu-targets'
-    $flags = "-DGGML_NATIVE=OFF -DGGML_BACKEND_DL=ON -DGGML_CUDA=ON -DGGML_VULKAN=OFF `"-DCMAKE_CUDA_ARCHITECTURES=52-real;60-real;61-real;70-real;75-real;80-real;86-real;89-real;90-real;120a-real`" `"-DCMAKE_CUDA_COMPILER=$root/bin/nvcc.exe`" `"-DCUDAToolkit_ROOT=$root`" `"-DCMAKE_CUDA_FLAGS=$cudaFlags`""
+    $flags = "-DGGML_NATIVE=OFF -DGGML_BACKEND_DL=ON -DGGML_CUDA=ON -DGGML_CUDA_NCCL=OFF -DGGML_VULKAN=OFF `"-DCMAKE_CUDA_ARCHITECTURES=52-real;60-real;61-real;70-real;75-real;80-real;86-real;89-real;90-real;120a-real`" `"-DCMAKE_CUDA_COMPILER=$root/bin/nvcc.exe`" `"-DCUDAToolkit_ROOT=$root`" `"-DCMAKE_CUDA_FLAGS=$cudaFlags`""
     $ccache = if (Get-Command ccache -ErrorAction SilentlyContinue) { '-DGGML_CCACHE=ON' } else { '-DGGML_CCACHE=OFF' }
     $symbols = '-DCMAKE_MSVC_DEBUG_INFORMATION_FORMAT=ProgramDatabase -DCMAKE_EXE_LINKER_FLAGS=/DEBUG -DCMAKE_SHARED_LINKER_FLAGS=/DEBUG'
     $parallelism = [Math]::Max(1, [Environment]::ProcessorCount)

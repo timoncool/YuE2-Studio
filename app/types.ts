@@ -15,6 +15,8 @@ export interface Song {
   isGenerating?: boolean;
   /** Why a generation ended without a song; the card stays until it is removed. */
   failure?: string;
+  /** A failed song's reason code (`i18n/songErrors.ts`), for the action its card offers. */
+  failureCode?: string;
   /** The engine job a generation's row follows. */
   jobId?: string;
   /** The playlist the song being made goes into. */
@@ -28,6 +30,8 @@ export interface Song {
   stage?: string;
   /** The running stage's counter, e.g. `57/64 · ~2:50`. */
   stageDetail?: string;
+  /** The card's memory is full and the driver lends the engine the computer's memory: the song crawls. */
+  memoryShort?: boolean;
   generationParams?: any;
   tags: string[];
   audioUrl?: string;
@@ -54,6 +58,10 @@ export interface Song {
   timeSignature?: string;
   /** The track carries its semantic stream, so POST /v1/music/replay can re-render it. */
   nativeReplayAvailable?: boolean;
+  /** The engine stopped the song before its end: at its length limit, or where the model's memory ran out. */
+  cutShort?: 'length' | 'memory';
+  /** Its request asked for this many tracks and fewer fit the card's memory. */
+  tracksAsked?: number;
   /** Processed versions kept beside the original; the active one plays. */
   audioVersions?: SongVersion[];
   /** `original`, a version id, or absent for a track never processed. */
@@ -188,6 +196,8 @@ export interface NativeLibrarySong {
   audio_codes?: unknown | null;
   /** The library's list leaves the replay request and the semantic stream out and says only whether both are kept. */
   replay_available?: boolean;
+  /** The engine stopped the song before its end: at its length limit, or where the model's memory ran out. */
+  cut_short?: 'length' | 'memory';
   created_at: string;
   updated_at?: string;
 }
@@ -221,6 +231,10 @@ export interface YueJob {
   songs?: YueJobSong[];
   /** How the lyrics were laid along a score that came without sections. */
   laid?: { seconds: number; ceiling: number; crowded: { ratio: number; notes: number; syllables: number } | null };
+  /** The card's memory ran out and the driver lent the engine the computer's memory. */
+  card_memory_short?: boolean;
+  /** The tracks asked for when fewer fit the card; `lm_batch_size` of the settings is what is made. */
+  tracks_asked?: number;
 }
 
 /** What the engine log says the running job is doing. */

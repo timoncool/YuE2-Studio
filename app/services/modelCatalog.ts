@@ -9,7 +9,18 @@ export type ModelComponent = {
   /** The file at its pinned revision on Hugging Face, and the same on HF-Mirror. */
   url?: string;
   mirror_url?: string;
+  /** What a stopped download of it left on disk; the next download resumes it. */
+  partial_bytes?: number;
 };
+
+/** What stopped downloads of the files not yet installed left on disk, and how much those files take whole. */
+export function partialOnDisk(components: ModelComponent[], missing: string[]): { done: number; total: number } {
+  const unfinished = components.filter((component) => missing.includes(component.id) && (component.partial_bytes ?? 0) > 0);
+  return {
+    done: unfinished.reduce((sum, component) => sum + (component.partial_bytes ?? 0), 0),
+    total: unfinished.reduce((sum, component) => sum + component.bytes, 0),
+  };
+}
 
 /** Every runnable set has one of each. */
 export const REQUIRED_KINDS = ['backbone', 'vae'] as const;
@@ -71,4 +82,25 @@ export const selectedComponentBytes = (components: ModelComponent[], ids: string
 export function profileLabel(t: (key: TranslationKey) => string, profile: { id: string; label: string }): string {
   const key = `profile_${profile.id}`;
   return key in translations.en ? t(key as TranslationKey) : profile.label;
+}
+
+/** What the setup status says sings: the chosen set, a set of the person's own components, or none. */
+export interface SetupChoice {
+  selected_profile_id?: string | null;
+  selected_component_ids?: string[] | null;
+  /** The person's own YuE2 file the engine runs in place of the set's backbone. */
+  own_model?: string | null;
+  /** The community model that file is, by language. */
+  own_model_name?: Record<string, string> | null;
+}
+
+/** The set the studio sings with, as every place of the window names it; the own model is named first when it
+ *  sings in place of the set's backbone. */
+export function setupLabel(t: (key: TranslationKey) => string, language: string, setup: SetupChoice | null | undefined): string {
+  const say = t as unknown as (key: string) => string;
+  const set = setup?.selected_profile_id
+    ? profileLabel(t, { id: setup.selected_profile_id, label: setup.selected_profile_id })
+    : setup?.selected_component_ids?.length ? t('customSet') : t('noProfile');
+  const own = setup?.own_model ? setup.own_model_name?.[language] ?? setup.own_model_name?.en ?? setup.own_model : null;
+  return own ? `${say('ownModelRow')}: ${own} · ${set}` : set;
 }

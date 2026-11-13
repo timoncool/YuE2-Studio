@@ -301,6 +301,7 @@ pub async fn set_train_after(State(state): State<AppState>, Json(request): Json<
 pub async fn describe_song_style(State(state): State<AppState>, Path(song_id): Path<String>) -> Result<Json<serde_json::Value>, (StatusCode, Json<ApiError>)> {
     let song = state.library.get_song(&song_id).map_err(|error| api_error(StatusCode::INTERNAL_SERVER_ERROR, format!("{error:#}")))?
         .ok_or_else(|| api_error(StatusCode::NOT_FOUND, format!("no library song {song_id}")))?;
+    crate::refuse_trashed(&song)?;
     let audio = state.library.media_path_for_song(&song).ok_or_else(|| api_error(StatusCode::BAD_REQUEST, format!("{} has no audio", song.title)))?;
     describe_style_of(&state, audio, &song.lyrics).await
 }
@@ -337,8 +338,8 @@ async fn describe_style_of(state: &AppState, audio: std::path::PathBuf, lyrics: 
     if !state.training.listen_ready() {
         return Err(api_error(StatusCode::CONFLICT, "auto-describe (MOSS-Music) is not installed; install it on the training page".into()));
     }
-    // the tempo is measured on the card the machine's runtime reaches
-    let card = state.lyrics_sync.onnx_card(crate::lyrics_sync::OnnxFlavour::Auto).map_err(|error| api_error(StatusCode::CONFLICT, format!("{error:#}")))?;
+    // the tempo is measured on the processor, on the studio's ONNX Runtime
+    state.lyrics_sync.bind_ort().map_err(|error| api_error(StatusCode::CONFLICT, format!("{error:#}")))?;
     if state.training.active_run().await.is_some() || state.prepare.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).as_ref().is_some_and(|job| !job.finished) {
         return Err(api_error(StatusCode::CONFLICT, "the card is training or preparing songs; describe once it is free".into()));
     }
@@ -346,16 +347,18 @@ async fn describe_style_of(state: &AppState, audio: std::path::PathBuf, lyrics: 
     let hooks = crate::card_hooks(state).await;
     (hooks.take)().await;
     crate::release_assistant_unless_kept(state).await;
+    let hearing = listen::hearing(&crate::hardware::hardware(), crate::processor_chosen(state).await);
     let heard = async {
-        if crate::hardware::hardware().cuda == Some(crate::hardware::CudaBuild::Cuda13) {
+        if hearing.on_card && crate::hardware::hardware().card_cuda == Some(crate::hardware::CudaBuild::Cuda13) {
             state.engine_runtime.install_missing(Some(crate::hardware::CudaBuild::Cuda13)).await.context("install cuBLAS for the captioner")?;
         }
-        let (captioner, moss, facts_dir, libraries) = (state.training.captioner(), state.training.moss_dir(), state.training.audio_facts_dir(), crate::engine_bundle_root());
+        // the card's cuBLAS goes on the captioner's path only when it runs on the card
+        let (captioner, moss, facts_dir, libraries) = (state.training.captioner(), state.training.moss_dir(), state.training.audio_facts_dir(), hearing.on_card.then(crate::engine_bundle_root));
         tokio::task::spawn_blocking(move || -> anyhow::Result<(listen::Heard, audio_facts::Facts)> {
-            let facts = audio_facts::Measurer::load(&facts_dir, card)?.measure_mono(&audio_facts::decode(&audio)?)?;
+            let facts = audio_facts::Measurer::load(&facts_dir)?.measure_mono(&audio_facts::decode(&audio)?)?;
             let cancel = AtomicBool::new(false);
             let mut caption: Option<anyhow::Result<String>> = None;
-            listen::hear_batch(&captioner, &moss, &listen::hearing(&crate::hardware::hardware()), Some(&libraries), std::slice::from_ref(&audio), &cancel, |_, heard| caption = Some(heard))?;
+            listen::hear_batch(&captioner, &moss, &hearing, libraries.as_deref(), std::slice::from_ref(&audio), &cancel, |_, heard| caption = Some(heard))?;
             let caption = caption.context("MOSS-Music wrote nothing for the song")??;
             Ok((listen::heard(&caption, &facts)?, facts))
         })
@@ -432,6 +435,12 @@ pub async fn take_as_is(
 /// Found lyrics as plain lines: a recognised transcript loses its times.
 fn plain_lyrics(found: &str) -> String {
     found.lines().map(|line| without_time(line.trim())).filter(|line| !line.is_empty()).collect::<Vec<_>>().join("\n")
+}
+
+/// The lyrics a recording sings, as plain lines laid out as dataset preparation
+/// lays out what it hears. None when nothing sung is left.
+pub(crate) fn recognised_lyrics(words: &[(f64, String)]) -> Option<String> {
+    transcript(words).map(|timed| plain_lyrics(&timed))
 }
 
 /// The style a song is prompted with when no assistant writes it: what
@@ -667,7 +676,7 @@ async fn lyrics_branch(state: &AppState, job: &Job, lyric_items: &[&training::Da
             match crate::vocal_separator(state).await {
                 Some(separator) if !to_separate.is_empty() => {
                     // the processor was chosen for separation on a machine with a card that runs it
-                    if matches!(state.separation_config.read().await.runtime, lyrics_sync::OnnxFlavour::Cpu) && crate::hardware::hardware().runs_cuda {
+                    if matches!(state.separation_config.read().await.runtime, lyrics_sync::OnnxFlavour::Cpu) && crate::separator_on_card(state, lyrics_sync::OnnxFlavour::Auto).await {
                         update(&shared, |status| status.notices.push("separator_on_cpu"));
                     }
                     stage(&shared, "vocals", to_separate.iter().map(|(item, ..)| item.clone()).collect());
@@ -785,17 +794,19 @@ async fn listen_branch(state: &AppState, job: &Job, style_items: &[&training::Da
         crate::release_assistant_unless_kept(state).await;
         // The captioner is a CUDA 13 build and imports cuBLAS 13 from beside
         // the engine; on a card that build does not run, it runs on the processor
-        if crate::hardware::hardware().cuda == Some(crate::hardware::CudaBuild::Cuda13) {
+        // the processor chosen in Settings is kept to here too, without the card's cuBLAS
+        let on_card = !crate::processor_chosen(state).await;
+        if on_card && crate::hardware::hardware().card_cuda == Some(crate::hardware::CudaBuild::Cuda13) {
             state.engine_runtime.install_missing(Some(crate::hardware::CudaBuild::Cuda13)).await.context("install cuBLAS for the captioner")?;
-        } else {
+        } else if on_card {
             update(&shared, |status| status.notices.push("listen_on_cpu"));
         }
-        let card = state.lyrics_sync.onnx_card(crate::lyrics_sync::OnnxFlavour::Auto)?;
+        state.lyrics_sync.bind_ort()?;
         let (captioner, moss, facts_dir) = (state.training.captioner(), state.training.moss_dir(), state.training.audio_facts_dir());
         let ids: Vec<String> = style_items.iter().map(|item| item.id.clone()).collect();
         let audio: Vec<PathBuf> = ids.iter().map(|item| state.training.item_audio(id, item)).collect::<anyhow::Result<_>>()?;
         // the tempo is measured ahead of MOSS: four threads decode, Beat This!
-        // - loaded once, on the card - measures. Each song's
+        // - loaded once, on the processor - measures. Each song's
         // description is stored the moment MOSS has heard it
         let facts: Arc<Mutex<Vec<Option<Result<audio_facts::Facts, String>>>>> = Arc::new(Mutex::new(vec![None; audio.len()]));
         let (decoded_tx, decoded) = std::sync::mpsc::sync_channel::<(usize, anyhow::Result<Vec<f32>>)>(8);
@@ -816,7 +827,7 @@ async fn listen_branch(state: &AppState, job: &Job, style_items: &[&training::Da
         // measurement that will never come
         let measured_all = Arc::new(AtomicBool::new(false));
         {
-            let (facts, facts_dir, facts_shared, finished) = (facts.clone(), facts_dir.clone(), shared.clone(), measured_all.clone());
+            let (facts, facts_dir, finished) = (facts.clone(), facts_dir.clone(), measured_all.clone());
             measuring.push(std::thread::spawn(move || {
                 struct Finished(Arc<AtomicBool>);
                 impl Drop for Finished {
@@ -825,10 +836,7 @@ async fn listen_branch(state: &AppState, job: &Job, style_items: &[&training::Da
                     }
                 }
                 let _finished = Finished(finished);
-                let mut measurer = audio_facts::Measurer::load(&facts_dir, card).map_err(|error| format!("{error:#}"));
-                if matches!(&measurer, Ok(measurer) if !measurer.on_gpu) {
-                    update(&facts_shared, |status| status.notices.push(if crate::lyrics_sync::OnnxFlavour::Auto.card() == Some(crate::lyrics_sync::OnnxCard::DirectMl) { "facts_on_cpu_directml" } else { "facts_on_cpu" }));
-                }
+                let mut measurer = audio_facts::Measurer::load(&facts_dir).map_err(|error| format!("{error:#}"));
                 for (index, mono) in decoded {
                     let measured = match (&mut measurer, mono) {
                         (Ok(measurer), Ok(mono)) => measurer.measure_mono(&mono).map_err(|error| format!("{error:#}")),
@@ -841,9 +849,11 @@ async fn listen_branch(state: &AppState, job: &Job, style_items: &[&training::Da
         }
         let (task_shared, task_cancel, task_facts, task_measured_all) = (shared.clone(), cancel.clone(), facts.clone(), measured_all.clone());
         let (training, dataset_id, task_ids, task_job) = (state.training.clone(), id.to_string(), ids.clone(), job.clone());
-        let libraries = crate::engine_bundle_root();
+        let hearing = listen::hearing(&crate::hardware::hardware(), crate::processor_chosen(state).await);
+        // the card's cuBLAS goes on the captioner's path only when it runs on the card
+        let libraries = hearing.on_card.then(crate::engine_bundle_root);
         let log = tokio::task::spawn_blocking(move || {
-            listen::hear_batch(&captioner, &moss, &listen::hearing(&crate::hardware::hardware()), Some(&libraries), &audio, &task_cancel, |index, caption| {
+            listen::hear_batch(&captioner, &moss, &hearing, libraries.as_deref(), &audio, &task_cancel, |index, caption| {
                 let item = &task_ids[index];
                 let measured = loop {
                     if let Some(measured) = task_facts.lock().unwrap_or_else(|poisoned| poisoned.into_inner())[index].clone() {
@@ -1166,5 +1176,12 @@ mod tests {
         let text = transcript(&words).expect("words");
         assert!(text.starts_with("[0:00] hello there"), "{text}");
         assert!(transcript(&[(0.0, "<unk>".to_string())]).is_none());
+    }
+
+    #[test]
+    fn recognised_lyrics_are_lines_without_times() {
+        let words = vec![(0.0, "hello".to_string()), (0.3, "there.".to_string()), (2.0, "again".to_string()), (2.2, "now".to_string())];
+        assert_eq!(recognised_lyrics(&words).as_deref(), Some("hello there.\nagain now"));
+        assert!(recognised_lyrics(&[(0.0, "<unk>".to_string())]).is_none());
     }
 }

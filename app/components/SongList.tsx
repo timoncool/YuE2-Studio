@@ -17,6 +17,7 @@ import { exactMoment, relativeMoment } from '../services/dates';
 import { compareBy, SONG_ORDERS, useListOrder, type SongOrder } from '../services/songOrder';
 import { onPlayHistory } from '../services/playHistory';
 import { downloadSongAudio } from '../services/songDownload';
+import { nameMatches, searchWords, songMatches } from '../services/songSearch';
 
 interface SongListProps {
     songs: Song[];
@@ -55,6 +56,9 @@ interface SongListProps {
     defaultOrder?: SongOrder;
     onCancelJob?: (jobId: string) => void;
     onResetJob?: (jobId: string) => void;
+    /** Makes a failed song again: its LoRA at 1.0 on Composition when its score could not be written, as it was when
+     *  the card computed something other than sound. */
+    onScoreAgain?: (jobId: string, how: 'score-strength' | 'again') => void;
     onCancelAll?: () => void;
     onResetAll?: () => void;
     activeJobCount?: number;
@@ -162,6 +166,7 @@ export const SongList: React.FC<SongListProps> = ({
     onCancelJob,
     onCancelAll,
     onResetJob,
+    onScoreAgain,
     onResetAll,
     activeJobCount = 0,
     emptyMessage,
@@ -258,15 +263,12 @@ export const SongList: React.FC<SongListProps> = ({
         return next;
     });
 
+    const words = useMemo(() => searchWords(searchQuery), [searchQuery]);
+
     const filteredSongs = useMemo(() => {
         return songs.filter(song => {
             // 1. Search Logic
-            const matchesSearch =
-                song.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                song.style.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                song.tags.some(tag => tag.toLowerCase().includes(searchQuery.toLowerCase()));
-
-            if (!matchesSearch) return false;
+            if (!songMatches(song, words)) return false;
 
             // 2. Filter Logic
             if (activeFilters.size === 0) return true;
@@ -283,16 +285,16 @@ export const SongList: React.FC<SongListProps> = ({
 
             return true;
         });
-    }, [songs, searchQuery, activeFilters, likedSongIds]);
+    }, [songs, words, activeFilters, likedSongIds]);
 
     const filteredUploads = useMemo(() => {
         if (activeFilters.size > 0) return [];
         if (!referenceTracks.length) return [];
         return referenceTracks.filter(track => {
             const title = track.filename.replace(/\.[^/.]+$/, '');
-            return title.toLowerCase().includes(searchQuery.toLowerCase());
+            return nameMatches(title, words);
         });
-    }, [referenceTracks, searchQuery, activeFilters]);
+    }, [referenceTracks, words, activeFilters]);
 
     // The songs being made stay on top, newest first, and the newest finished
     // song sits right under them: a card that finishes becomes the song in its
@@ -436,6 +438,9 @@ export const SongList: React.FC<SongListProps> = ({
                 ? () => onResetJob?.(song.jobId || song.id)
                 : undefined
             }
+            onScoreAgain={song.stage === 'failed' && (song.failureCode === 'score_unsingable_strength' || song.failureCode === 'not_audio') && onScoreAgain
+                ? () => onScoreAgain(song.jobId || song.id, song.failureCode === 'not_audio' ? 'again' : 'score-strength')
+                : undefined}
         />
     );
 
@@ -783,13 +788,14 @@ interface SongItemProps {
     onSongUpdate?: (updatedSong: Song) => void;
     onCancelJob?: () => void;
     onResetJob?: () => void;
+    onScoreAgain?: () => void;
     /** Opens the track this one was made from; absent when it is gone. */
     onOpenOriginal?: () => void;
     /** A stem shown under its song: its name stands where the badge naming the song would. */
     nested?: boolean;
 }
 
-const SongItem: React.FC<SongItemProps> = ({
+export const SongItem: React.FC<SongItemProps> = ({
     song,
     isCurrent,
     isSelected,
@@ -813,6 +819,7 @@ const SongItem: React.FC<SongItemProps> = ({
     onSongUpdate,
     onCancelJob,
     onResetJob,
+    onScoreAgain,
     onOpenOriginal,
     nested = false,
 }) => {
@@ -943,8 +950,11 @@ const SongItem: React.FC<SongItemProps> = ({
                         )}
                     </div>
                 ) : (
-                    <div
-                        className={`absolute inset-0 bg-black/40 flex items-center justify-center backdrop-blur-[1px] cursor-pointer transition-opacity duration-200 ${isCurrent ? 'opacity-100' : 'opacity-0 group-hover/image:opacity-100'}`}
+                    <button
+                        type="button"
+                        aria-label={`${isCurrent && isPlaying ? t('pause') : t('play')}: ${song.title}`}
+                        aria-pressed={isCurrent && isPlaying}
+                        className={`absolute inset-0 bg-black/40 flex items-center justify-center backdrop-blur-[1px] cursor-pointer transition-opacity duration-200 focus-visible:opacity-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-pink-500 ${isCurrent ? 'opacity-100' : 'opacity-0 group-hover/image:opacity-100'}`}
                         onClick={(e) => {
                             e.stopPropagation();
                             onPlay();
@@ -957,7 +967,7 @@ const SongItem: React.FC<SongItemProps> = ({
                                 <Play fill="black" className={`text-black ml-0.5 ${compact ? 'h-3.5 w-3.5' : 'h-5 w-5'}`} />
                             )}
                         </div>
-                    </div>
+                    </button>
                 )}
             </div>
 
@@ -1041,6 +1051,25 @@ const SongItem: React.FC<SongItemProps> = ({
                     <div className={`flex items-center gap-2 text-xs text-zinc-500 dark:text-zinc-400 ${compact ? 'hidden' : 'h-5'}`}>
                         <span>{song.ditModel === 'imported-audio' ? t('importedAudio') : 'YuE2'}</span>
                         {song.nativeReplayAvailable && <span title={t('replayAvailable')} className="rounded-sm bg-zinc-200/70 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide dark:bg-white/10">replay</span>}
+                        {song.cutShort && (song.cutShort === 'length' && song.nativeReplayAvailable && songActions.replay ? (
+                            <button
+                                type="button"
+                                title={t('cutShortLength')}
+                                onClick={event => { event.stopPropagation(); songActions.replay?.(song); }}
+                                className="rounded-sm bg-amber-100 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-amber-800 hover:bg-amber-200 dark:bg-amber-400/15 dark:text-amber-200"
+                            >
+                                {t('cutShort')}
+                            </button>
+                        ) : (
+                            <span title={t(song.cutShort === 'length' ? 'cutShortLength' : 'cutShortMemory')} className="rounded-sm bg-amber-100 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-amber-800 dark:bg-amber-400/15 dark:text-amber-200">
+                                {t('cutShort')}
+                            </span>
+                        ))}
+                        {song.tracksAsked && (
+                            <span title={t('tracksForCardHint').replace('{asked}', String(song.tracksAsked))} className="rounded-sm bg-amber-100 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-amber-800 dark:bg-amber-400/15 dark:text-amber-200">
+                                {t('tracksForCard')}
+                            </span>
+                        )}
                     </div>
                     <p className={`text-xs text-zinc-500 dark:text-zinc-500 font-medium max-w-2xl ${compact ? 'truncate' : 'line-clamp-2 pt-1'}`}>
                         {captionSummary(song.style)}
@@ -1170,6 +1199,7 @@ const SongItem: React.FC<SongItemProps> = ({
                             {song.queuePosition ? `#${song.queuePosition}` : (t(song.stage as TranslationKey) || song.stage || t('creating') || 'Creating...')}
                         </span>
                         {!song.queuePosition && song.stageDetail && <span className="text-[10px] text-zinc-500">{song.stageDetail}</span>}
+                        {song.memoryShort && <span className="text-[10px] text-amber-500" title={t('cardMemoryShortHint')}>{t('cardMemoryShort')}</span>}
                         {onCancelJob && (
                             <button
                                 onClick={(e) => { e.stopPropagation(); onCancelJob(); }}
@@ -1182,6 +1212,16 @@ const SongItem: React.FC<SongItemProps> = ({
                 ) : song.stage === 'failed' && onResetJob ? (
                     <div className="flex flex-col items-end gap-0.5">
                         <span className="text-red-400 text-[10px] font-sans" title={song.failure}>{t('generationFailed')}</span>
+                        {onScoreAgain && (
+                            <button
+                                type="button"
+                                title={song.failure}
+                                onClick={(e) => { e.stopPropagation(); onScoreAgain(); }}
+                                className="rounded-sm bg-amber-100 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-amber-800 hover:bg-amber-200 dark:bg-amber-400/15 dark:text-amber-200"
+                            >
+                                {song.failureCode === 'not_audio' ? t('songAgain') : t('scoreAgainAtOne')}
+                            </button>
+                        )}
                         <button
                             onClick={(e) => { e.stopPropagation(); onResetJob(); }}
                             className="text-[10px] text-zinc-500 hover:text-red-400 transition-colors font-sans"

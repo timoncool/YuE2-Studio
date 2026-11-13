@@ -12,10 +12,71 @@ use crate::update_screen::Leftover;
 const RETIRED: &[(&str, &str, &[&str])] = &[
     // the ONNX Parakeet of 3.6 and earlier; karaoke recognises on transcribe.cpp
     ("parakeet-onnx", "Parakeet (ONNX)", &["karaoke/models/parakeet", "karaoke/models/parakeet-fp32", "karaoke/models/parakeet-ultra"]),
+    // Faster-Whisper (CTranslate2) of 3.8 and earlier with its CUDA 11 cuBLAS and cuDNN 8 and its models; karaoke
+    // hears with CrisperWhisper on audio.cpp's server
+    (
+        "faster-whisper",
+        "Faster-Whisper",
+        &[
+            "karaoke/runtime/whisper",
+            "karaoke/models/whisper",
+            "karaoke/runtime/whisper-faster.zip",
+            "karaoke/runtime/whisper-faster.zip.json",
+            "karaoke/runtime/whisper-faster.part",
+            "karaoke/runtime/whisper-cublas.zip",
+            "karaoke/runtime/whisper-cublas.zip.json",
+            "karaoke/runtime/whisper-cublas.part",
+            "karaoke/runtime/whisper-cublas.tar.xz",
+            "karaoke/runtime/whisper-cublas.tar.xz.json",
+            "karaoke/runtime/whisper-cublas.tar.part",
+            "karaoke/runtime/whisper-cudnn.zip",
+            "karaoke/runtime/whisper-cudnn.zip.json",
+            "karaoke/runtime/whisper-cudnn.part",
+            "karaoke/runtime/whisper-cudnn.tar.xz",
+            "karaoke/runtime/whisper-cudnn.tar.xz.json",
+            "karaoke/runtime/whisper-cudnn.tar.part",
+        ],
+    ),
     // the ONNX HT-Demucs of 3.7 and earlier; stems separate on audio.cpp's server
     ("htdemucs-onnx", "HT-Demucs (ONNX)", &["separation/models/htdemucs/htdemucs_6s_fp16.onnx"]),
     // HOT-Step's MIDI transcriber of 3.6 and earlier; MuScriptor runs on audio.cpp's server
     ("midi-hotstep", "HOT-Step MIDI transcriber", &["midi/runtime"]),
+    // ONNX Runtime on the card, CUDA and DirectML, with their CUDA and DirectML libraries, of 3.8 and earlier; the
+    // tempo model runs on the processor build
+    (
+        "ort-gpu",
+        "ONNX Runtime for the graphics card (CUDA, cuDNN, DirectML)",
+        &[
+            "karaoke/runtime/onnx-cuda",
+            "karaoke/runtime/onnx-dml",
+            "karaoke/runtime/onnxruntime-cuda.zip",
+            "karaoke/runtime/onnxruntime-cuda.zip.json",
+            "karaoke/runtime/onnxruntime-cuda.tgz",
+            "karaoke/runtime/onnxruntime-cuda.tgz.json",
+            "karaoke/runtime/cuda-cublas.whl",
+            "karaoke/runtime/cuda-cublas.whl.json",
+            "karaoke/runtime/cuda-cublas.zip",
+            "karaoke/runtime/cuda-cublas.zip.json",
+            "karaoke/runtime/cuda-cudart.zip",
+            "karaoke/runtime/cuda-cudart.zip.json",
+            "karaoke/runtime/cuda-cudart.tar.xz",
+            "karaoke/runtime/cuda-cudart.tar.xz.json",
+            "karaoke/runtime/cuda-cufft.zip",
+            "karaoke/runtime/cuda-cufft.zip.json",
+            "karaoke/runtime/cuda-cufft.tar.xz",
+            "karaoke/runtime/cuda-cufft.tar.xz.json",
+            "karaoke/runtime/cuda-curand.tar.xz",
+            "karaoke/runtime/cuda-curand.tar.xz.json",
+            "karaoke/runtime/cuda-cudnn.zip",
+            "karaoke/runtime/cuda-cudnn.zip.json",
+            "karaoke/runtime/cuda-cudnn.tar.xz",
+            "karaoke/runtime/cuda-cudnn.tar.xz.json",
+            "karaoke/runtime/onnxruntime-directml.nupkg",
+            "karaoke/runtime/onnxruntime-directml.nupkg.json",
+            "karaoke/runtime/directml.nupkg",
+            "karaoke/runtime/directml.nupkg.json",
+        ],
+    ),
 ];
 
 /// The leftovers under `data_root`, each with the paths of it that are there.
@@ -75,16 +136,19 @@ mod tests {
             root.path().join("karaoke/models/asr-gguf-parakeet-v3/parakeet-tdt-0.6b-v3-Q8_0.gguf"),
             root.path().join("separation/models/htdemucs/htdemucs-6stems-f16.gguf"),
             root.path().join("midi/models/muscriptor-medium/model.safetensors"),
+            root.path().join("karaoke/runtime/onnx/onnxruntime.dll"),
+            root.path().join("karaoke/runtime/onnxruntime.zip.json"),
         ];
         for file in &kept {
             fs::create_dir_all(file.parent().unwrap()).unwrap();
             fs::write(file, b"x").unwrap();
         }
         let found: Vec<(&str, usize)> = leftovers(root.path()).iter().map(|leftover| (leftover.what, leftover.paths.len())).collect();
-        assert_eq!(found, vec![("parakeet-onnx", 3), ("htdemucs-onnx", 1), ("midi-hotstep", 1)]);
+        assert_eq!(found, vec![("parakeet-onnx", 3), ("faster-whisper", 17), ("htdemucs-onnx", 1), ("midi-hotstep", 1), ("ort-gpu", 28)]);
         remove_leftovers(root.path(), &["parakeet-onnx"]);
         assert!(root.path().join("separation/models/htdemucs/htdemucs_6s_fp16.onnx").is_file(), "the others wait for their turn");
-        remove_leftovers(root.path(), &["parakeet-onnx", "htdemucs-onnx", "midi-hotstep"]);
+        assert!(root.path().join("karaoke/models/whisper").is_dir(), "Faster-Whisper waits for CrisperWhisper");
+        remove_leftovers(root.path(), &["parakeet-onnx", "faster-whisper", "htdemucs-onnx", "midi-hotstep", "ort-gpu"]);
         assert!(leftovers(root.path()).iter().all(|leftover| leftover.paths.is_empty()));
         assert!(kept.iter().all(|file| file.is_file()));
     }

@@ -11,9 +11,12 @@ sees what you do in the studio's window.
 
 ## If the studio is not running yet
 
-1. It is a Windows desktop application. If it is not installed, download the installer or
-   the portable archive from https://github.com/timoncool/YuE2-Studio/releases/latest (it needs an
-   NVIDIA card; the first start offers to download the models).
+1. If it is not installed, take the package for this computer from
+   https://github.com/timoncool/YuE2-Studio/releases/latest: the installer or the portable
+   archive for Windows, the .dmg for a Mac with Apple silicon, the .deb or the AppImage for Linux
+   (experimental). An NVIDIA card is not required: without one the engine runs on the processor,
+   many times slower, and AMD and Intel cards go through Vulkan - see the README. The
+   first start offers to download the models.
 2. Start it. The MCP server is up as soon as its window is: `http://127.0.0.1:8791/mcp`.
    Nothing else to install - no npx, no bridge.
 3. Connect (below), then call `studio_status`. If the models are missing, `models_catalog`
@@ -39,6 +42,11 @@ connected and the address to paste.
 ## Ground rules
 
 - **Start with `studio_status`.** It tells what runs now and whether the window is open.
+  Its `engine` is what the running engine started with. A song job says `tracks_asked` when fewer of
+  its tracks than asked fit the card's memory for its length (the studio reckons this for each song)
+  and it made as many as fit, and `card_memory_short` when the card's memory ran out and the driver
+  lent the engine the computer's memory (the song goes on, many times slower). A training run says
+  `step_stage`: the part of the step the trainer works on.
 - **Long work is a job**: songs, scores, stems, MIDI, karaoke, preparation, training. Start it,
   then `studio_wait` (a `job_id`, or `until: stems | midi | processing | covers_and_karaoke |
   song_jobs | preparation | training | idle`) instead of
@@ -93,8 +101,10 @@ connected and the address to paste.
   from score_transcribe, a melody from the MIDI editor - and the model writes the rest of the
   song on from it.
 - **score_chord_bed**: a score at once in a tempo, key and meter - chords over rests, one
-  section per lyrics tag - for a song that keeps that tempo and key and skips the planning;
-  pass its `abc` to song_create.
+  section per lyrics tag - for a song that keeps that tempo, key and chords; pass its `abc` to
+  song_create. With words to sing the model plans the melody over the bed's chords (the bed's
+  header opens the plan, each section is held to its chords) and the song's score is that plan;
+  without words the bed is played as it stands.
 - **harmony** (song_create, score_compose): when the model writes the score and loops one
   progression, `strength` about 6-10 breaks the loop, `follow_lyrics: true` holds the score to
   the lyrics' sections in order, `section_strength` gives each section its own opening and
@@ -127,7 +137,7 @@ connected and the address to paste.
    `dataset_add_folder` with the folder.
 3. `dataset_prepare` with `lyrics: missing, style: missing, writer: agent`, then
    `studio_wait until: preparation`. The studio finds the lyrics in LRCLIB, QQ Music and
-   Kugou, recognises only what they miss with Whisper, and listens to every song with
+   Kugou, recognises only what they miss with CrisperWhisper, and listens to every song with
    MOSS-Music, measuring the tempo. It leaves the writing to you.
 4. `dataset_get`. For each song:
    - `lyrics_state: found` - the words are there (from a database when `lyrics_source`
@@ -202,20 +212,20 @@ move around. Check the result with `ui_screenshot`.
 
 ## Tools by area
 
-- **studio**: `studio_status`, `studio_wait`, `studio_system`, `studio_capabilities`, `studio_open_data_folder` (in Explorer, for the user), `runtime_status` (midi, training pack, training listen), `system_gpus` (the cards and the one in use).
+- **studio**: `studio_status`, `studio_wait`, `studio_system`, `studio_capabilities`, `studio_open_data_folder` (in Explorer, for the user), `runtime_status` (midi, restore, training pack, training listen), `system_gpus` (the cards and the one in use).
 - **settings**: `settings_get`, `settings_set`.
 - **network**: `network_proxy_get`, `network_proxy_set` (no proxy, the system's or your own, and the HF-Mirror), `network_proxy_test`, `network_access_get`, `network_access_set` (opening the studio from other computers, a new key).
 - **journal**: `journal_read` (the Activity page), `journal_clear`, `journal_remove`.
-- **models**: `models_status`, `models_catalog`, `models_download`, `models_adopt` (files already on disk), `models_select`, `models_cancel_download`, `models_remove`, `models_update_plan` (what this release updates, adds and no longer needs, with the reasons: the update screen), `models_update_apply` (its button: downloads, then removes what former releases left), `models_update_later` (its «Later»).
-- **engine**: `engine_options_get`, `engine_options_set`, `engine_restart`, `engine_logs`.
-- **song**: `song_defaults` (what a field left out becomes), `song_create` (playlist_id puts the made songs into a playlist), `song_job_get`, `song_jobs_list`, `song_job_cancel`, `song_replay`, `song_tokenize`, `song_job_dismiss` (an ended job's card off the page).
+- **models**: `models_status`, `models_catalog`, `models_download`, `models_adopt` (files already on disk), `models_select`, `models_own_list`, `models_own_select`, `models_own_cancel`, `models_own_discard` (what a stopped community download left), `models_own_remove` and `models_own_reveal` (your own YuE2 fine-tune in GGUF from `models/yue2-cpp/own` in place of the set's backbone, or a community model from the catalog, downloaded there first), `models_cancel_download`, `models_remove`, `models_update_plan` (what this release updates, adds and no longer needs, with the reasons: the update screen), `models_update_apply` (its button: downloads, then removes what former releases left), `models_update_later` (its «Later»).
+- **engine**: `engine_options_get`, `engine_options_set`, `engine_restart`, `engine_logs`, `diagnostics_get` (the diagnostics and their text for an issue), `diagnostics_report` (a bug-report zip in the data folder's reports), `problem_preview` (exactly what a report would send), `problem_report` (a problem reported without a GitHub account: Studio Hub's bot opens a public issue and answers its number and url; a refusal by code - field, rate, not_configured, busy, unreachable - means the GitHub form). After the card ran out of memory on a song the studio makes it once more with a smaller KV cache and keeps that step for the card (`in_effect.max_seq_reason` is `fitted`); `engine_fitted_cache_reset` goes back to the model's full context.
+- **song**: `song_defaults` (what a field left out becomes), `song_create` (playlist_id puts the made songs into a playlist), `song_job_get`, `song_jobs_list`, `song_job_cancel`, `song_replay`, `song_tokenize`, `song_job_dismiss` (an ended job's card off the page), `song_job_score_again` (a song failed with `score_unsingable_strength` made again with its LoRA at 1.0 on Composition), `song_job_again` (a song failed with `not_audio` made again with the same request).
 - **score**: `score_compose`, `score_chord_bed`, `score_job_get`, `score_job_cancel`, `score_transcribe`, `score_match_sections`, `score_to_midi` (base64 .mid), `score_instrumental` (the voice's melody to the instrument), `score_vocal_octave`, `score_from_midi` (a .mid path), `score_mark` (sections from style and lyrics).
 - **writing**: `writing_guide`, `writing_examples`.
 - **assistant**: `assistant_requests_wait`, `assistant_request_answer` (when you are the assistant), `assistant_sections`, `assistant_write`, `assistant_status`, `assistant_set`, `assistant_local_models`, `assistant_cli_agents` (Claude Code, Codex, opencode, Antigravity, Muse Code: installed or how to install), `assistant_runtime`, `assistant_model_install`, `assistant_model_remove`, `assistant_cancel_download`, `assistant_start`, `assistant_stop`.
-- **library**: `library_songs_list` (since/until), `library_liked`, `library_song_like`, `library_song_get`, `library_song_update`, `library_song_delete`, `library_import_audio`, `library_file_tags_get`, `library_file_tags_set`, `library_song_files`, `library_version_select`, `library_version_delete`, `library_song_describe_style` (by ear, for a cover of a recording without one), `recording_describe_style` (the same for an audio file on disk), `library_song_note_set` (the song's note).
+- **library**: `library_songs_list` (since/until), `library_liked`, `library_song_like`, `library_song_get`, `library_song_update`, `library_song_delete` (to the bin for 30 days, with its stems), `library_trash_list`, `library_trash_restore`, `library_trash_delete` (for good), `library_trash_empty`, `library_import_audio`, `library_file_tags_get`, `library_file_tags_set`, `library_song_files`, `library_version_select`, `library_version_delete`, `library_song_describe_style` (by ear, for a cover of a recording without one), `recording_describe_style` (the same for an audio file on disk), `library_song_note_set` (the song's note).
 - **playlist**: `playlist_list`, `playlist_create`, `playlist_update`, `playlist_delete`, `playlist_get`.
 - **cover**: `cover_draw`, `cover_templates_get`, `cover_templates_set`, `cover_set_from_file`, `cover_prompt_render`, `cover_look_get`, `cover_look_set` (the photo or pattern of tracks without a cover, unique: each track's pattern drawn from its words and music style, kept in the file or not), `cover_scenes`, `cover_photos_search`, `video_backgrounds_search`, `song_cover_photo_set`, `song_cover_pattern_set`.
-- **karaoke**: `karaoke_make`, `karaoke_settings_get`, `karaoke_settings_set`, `recogniser_install`, `recogniser_remove`, `recogniser_cancel_download`, `karaoke_delete`.
+- **karaoke**: `karaoke_make`, `karaoke_settings_get`, `karaoke_settings_set`, `recogniser_install`, `recogniser_remove`, `recogniser_cancel_download`, `karaoke_delete`, `karaoke_set` (the person's own .srt, .ass or .lrc, or edited LRC lines), `lyrics_recognise` (the lyrics a song or an audio file sings, heard by the karaoke recogniser).
 - **stems**: `stems_split`, `stems_get`.
 - **separator**: `separator_status`, `separator_runtime`, `separator_runtime_install`, `separator_cancel_download`, `separator_install`, `separator_remove`, `separator_settings_get`, `separator_settings_set`.
 - **midi**: `midi_status`, `midi_transcribe`, `midi_get`, `midi_delete`, `midi_install`, `midi_remove`, `midi_cancel`, `midi_set` (a .mid of your own).
@@ -232,6 +242,19 @@ move around. Check the result with `ui_screenshot`.
 - **winamp**: `winamp_get`, `winamp_set`, `winamp_skins`, `winamp_skin_add`, `winamp_museum`.
 - **video**: `video_open`, `video_get`, `video_set`, `video_render`, `video_play`, `video_pause`, `video_seek`, `video_close`.
 - **openrouter**: `openrouter_status`, `openrouter_set_key`, `openrouter_catalog`, `openrouter_catalog_refresh`, `openrouter_log`, `openrouter_complete`, `openrouter_cover`, `openrouter_transcribe`.
+- **restore**: `restore_status`, `restore_start` (a track or a file compressed to MP3, restored with Apollo into a new track `<title> · restored`), `restore_install`, `restore_remove`, `restore_cancel`.
+
+## Restore a track after compression
+
+1. `restore_status`; when `ready` is false, `restore_install` (Apollo, 66 MB, and audio.cpp's
+   server of the stems' device when it is missing) and `studio_wait`, or `restore_status` until
+   the download is done.
+2. `restore_start` with `song_id`, or `path` of any audio file. It removes the artefacts of MP3
+   compression and gives 44.1 kHz in the source's channels.
+3. `studio_wait until: restore`; `restore_status` run.library_song names the new track,
+   `<title> · restored`, which plays, downloads and goes to the tools like any track. Restoring
+   the same track again replaces it; `restore_cancel` stops the run.
+4. Apollo's weights are CC BY-SA 4.0.
 
 ## Turn a track into MIDI
 

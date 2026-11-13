@@ -146,13 +146,17 @@ pub struct ChordBedRequest {
     seed: Option<u64>,
 }
 
-/// A score of chords over rests for the lyrics' sections, written at once in the tempo, key and
-/// meter asked for, so a song is sung without the planning stage.
 pub async fn chord_bed(Json(request): Json<ChordBedRequest>) -> Answer {
     too_long(&request.lyrics)?;
     let seed = request.seed.unwrap_or_else(|| uuid::Uuid::now_v7().as_u128() as u64);
     match chord_bed::write(&chord_bed::BedRequest { bpm: request.bpm, key: request.key, meter: request.meter, lyrics: request.lyrics, seed }) {
-        Ok(bed) => Ok(Json(json!({ "ok": true, "abc": bed.abc, "bars": bed.bars, "progressions": bed.progressions, "seed": seed }))),
+        Ok(bed) => {
+            let Some(plan) = chord_bed::read(&bed.abc) else {
+                return problem("the chord bed just written does not read back as a bed".into());
+            };
+            let sections: Vec<Value> = plan.sections_once().into_iter().map(|(label, chords)| json!({ "label": label, "chords": chords })).collect();
+            Ok(Json(json!({ "ok": true, "abc": bed.abc, "bars": bed.bars, "progressions": bed.progressions, "sections": sections, "seed": seed })))
+        }
         Err(reason) => problem(reason),
     }
 }

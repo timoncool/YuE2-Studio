@@ -452,6 +452,27 @@ footer p { margin: 0 0 8px; }
     </div>
   </section>
 
+  <section id="speed">
+    <h2>How fast is it</h2>
+    <p class="sub">How long a 3-minute song takes, by graphics card. These are averages from what YuE2 Studio installations reported over 30 days (version 3.8, loading the models included; people run different model sets, so yours can differ).</p>
+    <div class="scroll"><table>
+          <thead><tr><th>Your graphics card</th><th>A 3-minute song</th><th>Speed</th></tr></thead>
+          <tbody>
+          <tr><td>NVIDIA, 24 GB or more</td><td>about 1 minute</td><td>2.7× faster than real time</td></tr>
+          <tr><td>NVIDIA, 16 GB</td><td>about 2 minutes</td><td>1.6×</td></tr>
+          <tr><td>NVIDIA, 12 GB</td><td>about 2 minutes</td><td>1.4×</td></tr>
+          <tr><td>NVIDIA, 8 GB or less</td><td>about 5 minutes</td><td>0.6×</td></tr>
+          <tr><td>AMD, 16 GB or more (Vulkan)</td><td>3–4 minutes</td><td>0.9×</td></tr>
+          <tr><td>Intel Arc, 12 GB (Vulkan)</td><td>about 7 minutes</td><td>0.4×</td></tr>
+          <tr><td>Apple silicon, 24 GB or more</td><td>about 8 minutes</td><td>0.4×</td></tr>
+          <tr><td>Apple silicon, 16 GB</td><td>about 15 minutes</td><td>0.2×</td></tr>
+          <tr><td>AMD, 8 GB or less (Vulkan)</td><td>about an hour</td><td>0.05×</td></tr>
+          <tr><td>No graphics card (processor)</td><td>about 2.5 hours</td><td>0.02×</td></tr>
+          </tbody>
+        </table></div>
+    <p class="note">On our machine (RTX 4090, Ryzen 9 9950X3D, Windows 11, the Q8_0 set): a 1-minute song in 20 s, a 4-minute song in 54 s, a 10-minute song in about 3 minutes; the card holds 5–8 GB while it works.</p>
+  </section>
+
   <section id="start">
     <h2>Getting started</h2>
     <ol class="steps">

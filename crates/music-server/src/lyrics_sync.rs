@@ -17,7 +17,6 @@
 
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use anyhow::{anyhow, bail, Context, Result};
@@ -60,10 +59,13 @@ impl LyricsSyncConfig {
         self.enabled && self.provider != AsrProvider::None
     }
 
-    /// A choice the dropdown no longer offers, as the one it became: fp32 Parakeet is the v3 model.
+    /// A choice the dropdown no longer offers, as the one it became: fp32 Parakeet is the v3 model, and a Whisper size
+    /// of the retired Faster-Whisper names no model at all.
     pub fn migrated(mut self) -> Self {
-        if self.whisper_model.as_deref() == Some(PARAKEET_FP32) {
-            self.whisper_model = Some(PARAKEET_V3.to_string());
+        match self.whisper_model.as_deref() {
+            Some(PARAKEET_FP32) => self.whisper_model = Some(PARAKEET_V3.to_string()),
+            Some(PARAKEET_V3) | Some(PARAKEET_ULTRA) | None => {}
+            Some(_) => self.whisper_model = None,
         }
         self
     }
@@ -73,14 +75,20 @@ impl LyricsSyncConfig {
 /// code, not a sentence, so it is put in the reader's language.
 pub const NO_WORDS: &str = "karaoke.no-words";
 
-/// Where the recogniser's binaries live once unpacked. CTranslate2 loads its
-/// CUDA libraries from beside the executable, so they share one directory - the
-/// way Dub Studio arranges it, and the reason its card mode works instead of
-/// quietly falling back to the processor.
-pub const WHISPER_RUNTIME_DIR: &str = "whisper";
+/// A cloud recogniser answered with no timed segments: the model returns no timings, or heard nothing. Not
+/// `NO_WORDS`, which marks a song instrumental in dataset preparation.
+pub const NO_TIMINGS: &str = "karaoke.no-timings";
 
-/// The model sizes the recogniser knows, as `--model` names them.
-pub const WHISPER_SIZES: &[&str] = &["tiny", "base", "small", "medium", "large-v3", "large-v3-turbo"];
+/// CrisperWhisper's id in audio.cpp's server and the id of its weights among the downloads; the folder its files land
+/// in is the Hugging Face repository's, as the other programs keep it.
+pub const CRISPERWHISPER: &str = "crisperwhisper";
+pub const CRISPERWHISPER_MODEL: &str = "crisperwhisper-turbo";
+const CRISPERWHISPER_DIR: &str = "models/crisperwhisper2-turbo";
+
+/// One file of CrisperWhisper's repository beside its weights.
+const fn crisper_file(id: &'static str, url: &'static str, relative_path: &'static str, bytes: u64) -> Asset {
+    Asset { id, label: "CrisperWhisper 2.0 turbo", kind: AssetKind::Model, url, relative_path, bytes, unzip_into: None, marker: "", pick: &[], vram_gb: None, note: "Part of CrisperWhisper 2.0 turbo." }
+}
 
 /// Phrases Whisper writes over music and silence instead of saying it heard
 /// no words: the verbatim hallucinations of the "Bag of Hallucinations"
@@ -134,471 +142,53 @@ pub fn is_hallucination(text: &str) -> bool {
     KNOWN.get_or_init(|| HALLUCINATIONS.lines().filter(|line| !line.is_empty()).collect()).contains(plain.as_str())
 }
 
-/// The words and their times out of faster-whisper's JSON.
-///
-/// A segment that came back without word timestamps becomes one long "word":
-/// better a line placed roughly than a line dropped, and the written lyrics are
-/// laid back over whatever times these are.
-fn whisper_words_from_json(text: &str) -> Vec<(f64, String)> {
-    let Ok(value) = serde_json::from_str::<serde_json::Value>(text) else { return Vec::new() };
-    let Some(segments) = value.get("segments").and_then(|value| value.as_array()) else { return Vec::new() };
-    let mut words = Vec::new();
-    for segment in segments {
-        if is_hallucination(segment.get("text").and_then(|value| value.as_str()).unwrap_or_default()) {
-            continue;
-        }
-        match segment.get("words").and_then(|value| value.as_array()) {
-            Some(list) if !list.is_empty() => {
-                for entry in list {
-                    let word = entry
-                        .get("word")
-                        .or_else(|| entry.get("text"))
-                        .and_then(|value| value.as_str())
-                        .unwrap_or_default()
-                        .trim()
-                        .to_string();
-                    if word.is_empty() {
-                        continue;
-                    }
-                    words.push((entry.get("start").and_then(|value| value.as_f64()).unwrap_or(0.0), word));
-                }
-            }
-            _ => {
-                let word = segment.get("text").and_then(|value| value.as_str()).unwrap_or_default().trim().to_string();
-                if !word.is_empty() {
-                    words.push((segment.get("start").and_then(|value| value.as_f64()).unwrap_or(0.0), word));
-                }
-            }
-        }
-    }
-    words
+/// The words of a transcript with their start times, less those of a segment that is the model filling a gap rather
+/// than words that were sung.
+fn heard_words(transcript: &acpp_server::Transcript) -> Vec<(f64, String)> {
+    let made_up: Vec<(f64, f64)> = transcript.segments.iter().filter(|segment| is_hallucination(&segment.text)).map(|segment| (segment.start, segment.end)).collect();
+    transcript
+        .words
+        .iter()
+        // a segment's end is the next one's start: a word there belongs to the next; a segment of no length holds
+        // only a word at its very time
+        .filter(|word| !made_up.iter().any(|(start, end)| if start == end { word.start == *start } else { word.start >= *start && word.start < *end }))
+        .map(|word| (word.start, word.text.clone()))
+        .collect()
+}
+
+/// Every file of CrisperWhisper, by its download id.
+pub fn crisper_assets() -> Vec<&'static str> {
+    ASSETS.iter().filter(|asset| asset.relative_path.starts_with(CRISPERWHISPER_DIR)).map(|asset| asset.id).collect()
 }
 
 pub const ASSETS: &[Asset] = &[
-    #[cfg(windows)]
+    // CrisperWhisper 2.0 turbo as Speech Studio and Dub Studio fetch it: the Hugging Face repository at its revision,
+    // in a folder of that name, so one program's copy serves the others; audio.cpp's server runs it (`acpp`)
     Asset {
-        id: "whisper-engine",
-        label: "Whisper (faster-whisper standalone)",
-        kind: AssetKind::Runtime,
-        url: "https://github.com/Purfview/whisper-standalone-win/releases/download/faster-whisper/Whisper-Faster_r192.3_windows.zip",
-        relative_path: "runtime/whisper-faster.zip",
-        bytes: 87_654_143,
-        unzip_into: Some(WHISPER_RUNTIME_DIR),
-        marker: "whisper-faster",
-        pick: &[],
-        vram_gb: None,
-        note: "Purfview's build of faster-whisper: word timestamps, on the card or the processor.",
-    },
-    #[cfg(windows)]
-    Asset {
-        id: "whisper-cublas",
-        label: "NVIDIA cuBLAS 11.11 (for Whisper)",
-        kind: AssetKind::Runtime,
-        url: "https://developer.download.nvidia.com/compute/cuda/redist/libcublas/windows-x86_64/libcublas-windows-x86_64-11.11.3.6-archive.zip",
-        relative_path: "runtime/whisper-cublas.zip",
-        bytes: 420_850_025,
-        unzip_into: Some(WHISPER_RUNTIME_DIR),
-        marker: "cublas64_11",
-        pick: &["cublas64_11.dll", "cublasLt64_11.dll"],
-        vram_gb: None,
-        note: "CTranslate2 is built against CUDA 11; without these the card is never used.",
-    },
-    #[cfg(windows)]
-    Asset {
-        id: "whisper-cudnn",
-        label: "NVIDIA cuDNN 8.9 (for Whisper)",
-        kind: AssetKind::Runtime,
-        url: "https://developer.download.nvidia.com/compute/cudnn/redist/cudnn/windows-x86_64/cudnn-windows-x86_64-8.9.7.29_cuda11-archive.zip",
-        relative_path: "runtime/whisper-cudnn.zip",
-        bytes: 704_240_064,
-        unzip_into: Some(WHISPER_RUNTIME_DIR),
-        marker: "cudnn64_8",
-        pick: &["cudnn64_8.dll", "cudnn_ops_infer64_8.dll", "cudnn_cnn_infer64_8.dll"],
-        vram_gb: None,
-        note: "The convolution kernels the encoder spends its time in.",
-    },
-    // r189.1 is Purfview's last Linux build of faster-whisper itself (not
-    // XXL): CTranslate2 on CUDA 11, the same libraries as on Windows.
-    #[cfg(target_os = "linux")]
-    Asset {
-        id: "whisper-engine",
-        label: "Whisper (faster-whisper standalone)",
-        kind: AssetKind::Runtime,
-        url: "https://github.com/Purfview/whisper-standalone-win/releases/download/faster-whisper/Whisper-Faster_r189.1_linux.zip",
-        relative_path: "runtime/whisper-faster.zip",
-        bytes: 106_093_648,
-        unzip_into: Some(WHISPER_RUNTIME_DIR),
-        marker: "whisper-faster",
-        pick: &[],
-        vram_gb: None,
-        note: "Purfview's build of faster-whisper: word timestamps, on the card or the processor.",
-    },
-    #[cfg(target_os = "linux")]
-    Asset {
-        id: "whisper-cublas",
-        label: "NVIDIA cuBLAS 11.11 (for Whisper)",
-        kind: AssetKind::Runtime,
-        url: "https://developer.download.nvidia.com/compute/cuda/redist/libcublas/linux-x86_64/libcublas-linux-x86_64-11.11.3.6-archive.tar.xz",
-        relative_path: "runtime/whisper-cublas.tar.xz",
-        bytes: 500_681_532,
-        unzip_into: Some(WHISPER_RUNTIME_DIR),
-        marker: "libcublas.so.11",
-        pick: &["libcublas.so.11", "libcublasLt.so.11"],
-        vram_gb: None,
-        note: "CTranslate2 is built against CUDA 11; without these the card is never used.",
-    },
-    #[cfg(target_os = "linux")]
-    Asset {
-        id: "whisper-cudnn",
-        label: "NVIDIA cuDNN 8.9 (for Whisper)",
-        kind: AssetKind::Runtime,
-        url: "https://developer.download.nvidia.com/compute/cudnn/redist/cudnn/linux-x86_64/cudnn-linux-x86_64-8.9.7.29_cuda11-archive.tar.xz",
-        relative_path: "runtime/whisper-cudnn.tar.xz",
-        bytes: 860_967_256,
-        unzip_into: Some(WHISPER_RUNTIME_DIR),
-        marker: "libcudnn.so.8",
-        pick: &["libcudnn.so.8", "libcudnn_ops_infer.so.8", "libcudnn_cnn_infer.so.8"],
-        vram_gb: None,
-        note: "The convolution kernels the encoder spends its time in.",
-    },
-    Asset {
-        id: "whisper-tiny",
-        label: "Whisper tiny",
+        id: CRISPERWHISPER_MODEL,
+        label: "CrisperWhisper 2.0 turbo",
         kind: AssetKind::Model,
-        url: "https://huggingface.co/Systran/faster-whisper-tiny/resolve/d90ca5fe260221311c53c58e660288d3deb8d356/model.bin",
-        relative_path: "models/whisper/faster-whisper-tiny/model.bin",
-        bytes: 75_538_270,
-        unzip_into: None,
-        marker: "",
-        pick: &[],
-        vram_gb: Some(1),
-        note: "The smallest there is. For a quick check, not for lyrics.",
-    },
-    Asset {
-        id: "whisper-tiny-config",
-        label: "Whisper tiny (config.json)",
-        kind: AssetKind::Model,
-        url: "https://huggingface.co/Systran/faster-whisper-tiny/resolve/d90ca5fe260221311c53c58e660288d3deb8d356/config.json",
-        relative_path: "models/whisper/faster-whisper-tiny/config.json",
-        bytes: 2_249,
-        unzip_into: None,
-        marker: "",
-        pick: &[],
-        vram_gb: None,
-        note: "Part of the model above.",
-    },
-    Asset {
-        id: "whisper-tiny-tokenizer",
-        label: "Whisper tiny (tokenizer.json)",
-        kind: AssetKind::Model,
-        url: "https://huggingface.co/Systran/faster-whisper-tiny/resolve/d90ca5fe260221311c53c58e660288d3deb8d356/tokenizer.json",
-        relative_path: "models/whisper/faster-whisper-tiny/tokenizer.json",
-        bytes: 2_203_239,
-        unzip_into: None,
-        marker: "",
-        pick: &[],
-        vram_gb: None,
-        note: "Part of the model above.",
-    },
-    Asset {
-        id: "whisper-tiny-vocabulary",
-        label: "Whisper tiny (vocabulary.txt)",
-        kind: AssetKind::Model,
-        url: "https://huggingface.co/Systran/faster-whisper-tiny/resolve/d90ca5fe260221311c53c58e660288d3deb8d356/vocabulary.txt",
-        relative_path: "models/whisper/faster-whisper-tiny/vocabulary.txt",
-        bytes: 459_861,
-        unzip_into: None,
-        marker: "",
-        pick: &[],
-        vram_gb: None,
-        note: "Part of the model above.",
-    },
-    Asset {
-        id: "whisper-base",
-        label: "Whisper base",
-        kind: AssetKind::Model,
-        url: "https://huggingface.co/Systran/faster-whisper-base/resolve/ebe41f70d5b6dfa9166e2c581c45c9c0cfc57b66/model.bin",
-        relative_path: "models/whisper/faster-whisper-base/model.bin",
-        bytes: 145_217_532,
-        unzip_into: None,
-        marker: "",
-        pick: &[],
-        vram_gb: Some(1),
-        note: "Fast and small; misses words in dense mixes.",
-    },
-    Asset {
-        id: "whisper-base-config",
-        label: "Whisper base (config.json)",
-        kind: AssetKind::Model,
-        url: "https://huggingface.co/Systran/faster-whisper-base/resolve/ebe41f70d5b6dfa9166e2c581c45c9c0cfc57b66/config.json",
-        relative_path: "models/whisper/faster-whisper-base/config.json",
-        bytes: 2_309,
-        unzip_into: None,
-        marker: "",
-        pick: &[],
-        vram_gb: None,
-        note: "Part of the model above.",
-    },
-    Asset {
-        id: "whisper-base-tokenizer",
-        label: "Whisper base (tokenizer.json)",
-        kind: AssetKind::Model,
-        url: "https://huggingface.co/Systran/faster-whisper-base/resolve/ebe41f70d5b6dfa9166e2c581c45c9c0cfc57b66/tokenizer.json",
-        relative_path: "models/whisper/faster-whisper-base/tokenizer.json",
-        bytes: 2_203_239,
-        unzip_into: None,
-        marker: "",
-        pick: &[],
-        vram_gb: None,
-        note: "Part of the model above.",
-    },
-    Asset {
-        id: "whisper-base-vocabulary",
-        label: "Whisper base (vocabulary.txt)",
-        kind: AssetKind::Model,
-        url: "https://huggingface.co/Systran/faster-whisper-base/resolve/ebe41f70d5b6dfa9166e2c581c45c9c0cfc57b66/vocabulary.txt",
-        relative_path: "models/whisper/faster-whisper-base/vocabulary.txt",
-        bytes: 459_861,
-        unzip_into: None,
-        marker: "",
-        pick: &[],
-        vram_gb: None,
-        note: "Part of the model above.",
-    },
-    Asset {
-        id: "whisper-small",
-        label: "Whisper small",
-        kind: AssetKind::Model,
-        url: "https://huggingface.co/Systran/faster-whisper-small/resolve/536b0662742c02347bc0e980a01041f333bce120/model.bin",
-        relative_path: "models/whisper/faster-whisper-small/model.bin",
-        bytes: 483_546_902,
-        unzip_into: None,
-        marker: "",
-        pick: &[],
-        vram_gb: Some(2),
-        note: "Noticeably better than base without asking much of the card.",
-    },
-    Asset {
-        id: "whisper-small-config",
-        label: "Whisper small (config.json)",
-        kind: AssetKind::Model,
-        url: "https://huggingface.co/Systran/faster-whisper-small/resolve/536b0662742c02347bc0e980a01041f333bce120/config.json",
-        relative_path: "models/whisper/faster-whisper-small/config.json",
-        bytes: 2_370,
-        unzip_into: None,
-        marker: "",
-        pick: &[],
-        vram_gb: None,
-        note: "Part of the model above.",
-    },
-    Asset {
-        id: "whisper-small-tokenizer",
-        label: "Whisper small (tokenizer.json)",
-        kind: AssetKind::Model,
-        url: "https://huggingface.co/Systran/faster-whisper-small/resolve/536b0662742c02347bc0e980a01041f333bce120/tokenizer.json",
-        relative_path: "models/whisper/faster-whisper-small/tokenizer.json",
-        bytes: 2_203_239,
-        unzip_into: None,
-        marker: "",
-        pick: &[],
-        vram_gb: None,
-        note: "Part of the model above.",
-    },
-    Asset {
-        id: "whisper-small-vocabulary",
-        label: "Whisper small (vocabulary.txt)",
-        kind: AssetKind::Model,
-        url: "https://huggingface.co/Systran/faster-whisper-small/resolve/536b0662742c02347bc0e980a01041f333bce120/vocabulary.txt",
-        relative_path: "models/whisper/faster-whisper-small/vocabulary.txt",
-        bytes: 459_861,
-        unzip_into: None,
-        marker: "",
-        pick: &[],
-        vram_gb: None,
-        note: "Part of the model above.",
-    },
-    Asset {
-        id: "whisper-medium",
-        label: "Whisper medium",
-        kind: AssetKind::Model,
-        url: "https://huggingface.co/Systran/faster-whisper-medium/resolve/08e178d48790749d25932bbc082711ddcfdfbc4f/model.bin",
-        relative_path: "models/whisper/faster-whisper-medium/model.bin",
-        bytes: 1_527_906_378,
+        url: "https://huggingface.co/nyralabs/CrisperWhisper2.0_turbo/resolve/de0369c8a68025b7f6e86387b6eb5a3b369787c8/model.safetensors",
+        relative_path: "models/crisperwhisper2-turbo/model.safetensors",
+        bytes: 1_617_907_538,
         unzip_into: None,
         marker: "",
         pick: &[],
         vram_gb: Some(3),
-        note: "Slower than turbo and rarely better on sung words.",
+        note: "Whisper large-v3 turbo trained for verbatim word timings, in audio.cpp: what karaoke and the dataset lyrics are heard with.",
     },
-    Asset {
-        id: "whisper-medium-config",
-        label: "Whisper medium (config.json)",
-        kind: AssetKind::Model,
-        url: "https://huggingface.co/Systran/faster-whisper-medium/resolve/08e178d48790749d25932bbc082711ddcfdfbc4f/config.json",
-        relative_path: "models/whisper/faster-whisper-medium/config.json",
-        bytes: 2_257,
-        unzip_into: None,
-        marker: "",
-        pick: &[],
-        vram_gb: None,
-        note: "Part of the model above.",
-    },
-    Asset {
-        id: "whisper-medium-tokenizer",
-        label: "Whisper medium (tokenizer.json)",
-        kind: AssetKind::Model,
-        url: "https://huggingface.co/Systran/faster-whisper-medium/resolve/08e178d48790749d25932bbc082711ddcfdfbc4f/tokenizer.json",
-        relative_path: "models/whisper/faster-whisper-medium/tokenizer.json",
-        bytes: 2_203_239,
-        unzip_into: None,
-        marker: "",
-        pick: &[],
-        vram_gb: None,
-        note: "Part of the model above.",
-    },
-    Asset {
-        id: "whisper-medium-vocabulary",
-        label: "Whisper medium (vocabulary.txt)",
-        kind: AssetKind::Model,
-        url: "https://huggingface.co/Systran/faster-whisper-medium/resolve/08e178d48790749d25932bbc082711ddcfdfbc4f/vocabulary.txt",
-        relative_path: "models/whisper/faster-whisper-medium/vocabulary.txt",
-        bytes: 459_861,
-        unzip_into: None,
-        marker: "",
-        pick: &[],
-        vram_gb: None,
-        note: "Part of the model above.",
-    },
-    Asset {
-        id: "whisper-large-v3",
-        label: "Whisper large-v3",
-        kind: AssetKind::Model,
-        url: "https://huggingface.co/Systran/faster-whisper-large-v3/resolve/edaa852ec7e145841d8ffdb056a99866b5f0a478/model.bin",
-        relative_path: "models/whisper/faster-whisper-large-v3/model.bin",
-        bytes: 3_087_284_237,
-        unzip_into: None,
-        marker: "",
-        pick: &[],
-        vram_gb: Some(5),
-        note: "The full model. Slower than turbo, and the most accurate on hard mixes.",
-    },
-    Asset {
-        id: "whisper-large-v3-config",
-        label: "Whisper large-v3 (config.json)",
-        kind: AssetKind::Model,
-        url: "https://huggingface.co/Systran/faster-whisper-large-v3/resolve/edaa852ec7e145841d8ffdb056a99866b5f0a478/config.json",
-        relative_path: "models/whisper/faster-whisper-large-v3/config.json",
-        bytes: 2_394,
-        unzip_into: None,
-        marker: "",
-        pick: &[],
-        vram_gb: None,
-        note: "Part of the model above.",
-    },
-    Asset {
-        id: "whisper-large-v3-preprocessor-config",
-        label: "Whisper large-v3 (preprocessor_config.json)",
-        kind: AssetKind::Model,
-        url: "https://huggingface.co/Systran/faster-whisper-large-v3/resolve/edaa852ec7e145841d8ffdb056a99866b5f0a478/preprocessor_config.json",
-        relative_path: "models/whisper/faster-whisper-large-v3/preprocessor_config.json",
-        bytes: 340,
-        unzip_into: None,
-        marker: "",
-        pick: &[],
-        vram_gb: None,
-        note: "Part of the model above.",
-    },
-    Asset {
-        id: "whisper-large-v3-tokenizer",
-        label: "Whisper large-v3 (tokenizer.json)",
-        kind: AssetKind::Model,
-        url: "https://huggingface.co/Systran/faster-whisper-large-v3/resolve/edaa852ec7e145841d8ffdb056a99866b5f0a478/tokenizer.json",
-        relative_path: "models/whisper/faster-whisper-large-v3/tokenizer.json",
-        bytes: 2_480_617,
-        unzip_into: None,
-        marker: "",
-        pick: &[],
-        vram_gb: None,
-        note: "Part of the model above.",
-    },
-    Asset {
-        id: "whisper-large-v3-vocabulary",
-        label: "Whisper large-v3 (vocabulary.json)",
-        kind: AssetKind::Model,
-        url: "https://huggingface.co/Systran/faster-whisper-large-v3/resolve/edaa852ec7e145841d8ffdb056a99866b5f0a478/vocabulary.json",
-        relative_path: "models/whisper/faster-whisper-large-v3/vocabulary.json",
-        bytes: 1_068_114,
-        unzip_into: None,
-        marker: "",
-        pick: &[],
-        vram_gb: None,
-        note: "Part of the model above.",
-    },
-    Asset {
-        id: "whisper-large-v3-turbo",
-        label: "Whisper large-v3-turbo",
-        kind: AssetKind::Model,
-        url: "https://huggingface.co/deepdml/faster-whisper-large-v3-turbo-ct2/resolve/4df90f75321148c3a29a9e2351b7ddf8f5b115a8/model.bin",
-        relative_path: "models/whisper/faster-whisper-large-v3-turbo/model.bin",
-        bytes: 1_617_884_929,
-        unzip_into: None,
-        marker: "",
-        pick: &[],
-        vram_gb: Some(3),
-        note: "The accurate choice for sung lyrics.",
-    },
-    Asset {
-        id: "whisper-large-v3-turbo-config",
-        label: "Whisper large-v3-turbo (config.json)",
-        kind: AssetKind::Model,
-        url: "https://huggingface.co/deepdml/faster-whisper-large-v3-turbo-ct2/resolve/4df90f75321148c3a29a9e2351b7ddf8f5b115a8/config.json",
-        relative_path: "models/whisper/faster-whisper-large-v3-turbo/config.json",
-        bytes: 2_263,
-        unzip_into: None,
-        marker: "",
-        pick: &[],
-        vram_gb: None,
-        note: "Part of the model above.",
-    },
-    Asset {
-        id: "whisper-large-v3-turbo-preprocessor-config",
-        label: "Whisper large-v3-turbo (preprocessor_config.json)",
-        kind: AssetKind::Model,
-        url: "https://huggingface.co/deepdml/faster-whisper-large-v3-turbo-ct2/resolve/4df90f75321148c3a29a9e2351b7ddf8f5b115a8/preprocessor_config.json",
-        relative_path: "models/whisper/faster-whisper-large-v3-turbo/preprocessor_config.json",
-        bytes: 340,
-        unzip_into: None,
-        marker: "",
-        pick: &[],
-        vram_gb: None,
-        note: "Part of the model above.",
-    },
-    Asset {
-        id: "whisper-large-v3-turbo-tokenizer",
-        label: "Whisper large-v3-turbo (tokenizer.json)",
-        kind: AssetKind::Model,
-        url: "https://huggingface.co/deepdml/faster-whisper-large-v3-turbo-ct2/resolve/4df90f75321148c3a29a9e2351b7ddf8f5b115a8/tokenizer.json",
-        relative_path: "models/whisper/faster-whisper-large-v3-turbo/tokenizer.json",
-        bytes: 2_710_337,
-        unzip_into: None,
-        marker: "",
-        pick: &[],
-        vram_gb: None,
-        note: "Part of the model above.",
-    },
-    Asset {
-        id: "whisper-large-v3-turbo-vocabulary",
-        label: "Whisper large-v3-turbo (vocabulary.json)",
-        kind: AssetKind::Model,
-        url: "https://huggingface.co/deepdml/faster-whisper-large-v3-turbo-ct2/resolve/4df90f75321148c3a29a9e2351b7ddf8f5b115a8/vocabulary.json",
-        relative_path: "models/whisper/faster-whisper-large-v3-turbo/vocabulary.json",
-        bytes: 1_068_114,
-        unzip_into: None,
-        marker: "",
-        pick: &[],
-        vram_gb: None,
-        note: "Part of the model above.",
-    },
+    crisper_file("crisperwhisper-turbo-license", "https://huggingface.co/nyralabs/CrisperWhisper2.0_turbo/resolve/de0369c8a68025b7f6e86387b6eb5a3b369787c8/LICENSE.md", "models/crisperwhisper2-turbo/LICENSE.md", 17_784),
+    crisper_file("crisperwhisper-turbo-readme", "https://huggingface.co/nyralabs/CrisperWhisper2.0_turbo/resolve/de0369c8a68025b7f6e86387b6eb5a3b369787c8/README.md", "models/crisperwhisper2-turbo/README.md", 10_974),
+    crisper_file("crisperwhisper-turbo-added-tokens", "https://huggingface.co/nyralabs/CrisperWhisper2.0_turbo/resolve/de0369c8a68025b7f6e86387b6eb5a3b369787c8/added_tokens.json", "models/crisperwhisper2-turbo/added_tokens.json", 35_319),
+    crisper_file("crisperwhisper-turbo-config", "https://huggingface.co/nyralabs/CrisperWhisper2.0_turbo/resolve/de0369c8a68025b7f6e86387b6eb5a3b369787c8/config.json", "models/crisperwhisper2-turbo/config.json", 1_211),
+    crisper_file("crisperwhisper-turbo-generation-config", "https://huggingface.co/nyralabs/CrisperWhisper2.0_turbo/resolve/de0369c8a68025b7f6e86387b6eb5a3b369787c8/generation_config.json", "models/crisperwhisper2-turbo/generation_config.json", 3_880),
+    crisper_file("crisperwhisper-turbo-merges", "https://huggingface.co/nyralabs/CrisperWhisper2.0_turbo/resolve/de0369c8a68025b7f6e86387b6eb5a3b369787c8/merges.txt", "models/crisperwhisper2-turbo/merges.txt", 493_869),
+    crisper_file("crisperwhisper-turbo-normalizer", "https://huggingface.co/nyralabs/CrisperWhisper2.0_turbo/resolve/de0369c8a68025b7f6e86387b6eb5a3b369787c8/normalizer.json", "models/crisperwhisper2-turbo/normalizer.json", 52_666),
+    crisper_file("crisperwhisper-turbo-preprocessor-config", "https://huggingface.co/nyralabs/CrisperWhisper2.0_turbo/resolve/de0369c8a68025b7f6e86387b6eb5a3b369787c8/preprocessor_config.json", "models/crisperwhisper2-turbo/preprocessor_config.json", 357),
+    crisper_file("crisperwhisper-turbo-special-tokens-map", "https://huggingface.co/nyralabs/CrisperWhisper2.0_turbo/resolve/de0369c8a68025b7f6e86387b6eb5a3b369787c8/special_tokens_map.json", "models/crisperwhisper2-turbo/special_tokens_map.json", 2_186),
+    crisper_file("crisperwhisper-turbo-tokenizer", "https://huggingface.co/nyralabs/CrisperWhisper2.0_turbo/resolve/de0369c8a68025b7f6e86387b6eb5a3b369787c8/tokenizer.json", "models/crisperwhisper2-turbo/tokenizer.json", 3_937_105),
+    crisper_file("crisperwhisper-turbo-tokenizer-config", "https://huggingface.co/nyralabs/CrisperWhisper2.0_turbo/resolve/de0369c8a68025b7f6e86387b6eb5a3b369787c8/tokenizer_config.json", "models/crisperwhisper2-turbo/tokenizer_config.json", 288_287),
+    crisper_file("crisperwhisper-turbo-vocab", "https://huggingface.co/nyralabs/CrisperWhisper2.0_turbo/resolve/de0369c8a68025b7f6e86387b6eb5a3b369787c8/vocab.json", "models/crisperwhisper2-turbo/vocab.json", 835_528),
     // Parakeet on transcribe.cpp, the files Dub Studio and Speech Studio fetch under the same names, so one
     // program's copy serves the others; addresses and sizes are the shared binding's.
     Asset {
@@ -640,6 +230,20 @@ pub const ASSETS: &[Asset] = &[
         pick: &[],
         vram_gb: None,
         note: "Runs Parakeet on an NVIDIA card.",
+    },
+    #[cfg(any(windows, target_os = "linux"))]
+    Asset {
+        id: "transcribe-engine-cuda12",
+        label: "transcribe.cpp (CUDA 12)",
+        kind: AssetKind::Runtime,
+        url: dub_tcpp::Build::Cuda12.download().url,
+        relative_path: TCPP_CUDA12,
+        bytes: dub_tcpp::Build::Cuda12.download().size,
+        unzip_into: Some("transcribe-engine-cuda12"),
+        marker: dub_tcpp::LIBRARY,
+        pick: &[],
+        vram_gb: None,
+        note: "Runs Parakeet on an NVIDIA card CUDA 13 does not run - Maxwell to Volta, or a driver older than 580.",
     },
     #[cfg(any(windows, target_os = "linux"))]
     Asset {
@@ -685,296 +289,63 @@ pub const ASSETS: &[Asset] = &[
     },
     #[cfg(windows)]
     Asset {
-        id: "onnxruntime-cuda",
-        label: "ONNX Runtime 1.30.0 · CUDA",
-        kind: AssetKind::Runtime,
-        url: "https://github.com/microsoft/onnxruntime/releases/download/v1.30.0/onnxruntime-win-x64-gpu_cuda12-1.30.0.zip",
-        relative_path: "runtime/onnxruntime-cuda.zip",
-        bytes: 379_723_801,
-        unzip_into: Some("onnx-cuda"),
-        marker: "onnxruntime_providers_cuda.dll",
-        pick: &[],
-        vram_gb: Some(2),
-        note: "Runs the separator on an NVIDIA card instead of the processor. Needs CUDA 12.",
-    },
-    #[cfg(windows)]
-    Asset {
-        id: "cuda-cublas",
-        label: "NVIDIA cuBLAS 12.9",
-        kind: AssetKind::Runtime,
-        // NVIDIA's PyPI wheel (a zip): its redistributable archive of 12.9.2.10 has no published SHA-256
-        url: "https://files.pythonhosted.org/packages/20/e2/fc9a0e985249d873150276d5afb02e39a66817fedbf1a385724393e505ed/nvidia_cublas_cu12-12.9.2.10-py3-none-win_amd64.whl",
-        relative_path: "runtime/cuda-cublas.whl",
-        bytes: 553_162_896,
-        unzip_into: Some("onnx-cuda"),
-        marker: "cublasLt64_12.dll",
-        pick: &["cublasLt64_12.dll", "cublas64_12.dll"],
-        vram_gb: None,
-        note: "The linear algebra the CUDA provider is built on.",
-    },
-    #[cfg(windows)]
-    Asset {
-        id: "cuda-cudart",
-        label: "NVIDIA CUDA runtime 12.9",
-        kind: AssetKind::Runtime,
-        url: "https://developer.download.nvidia.com/compute/cuda/redist/cuda_cudart/windows-x86_64/cuda_cudart-windows-x86_64-12.9.79-archive.zip",
-        relative_path: "runtime/cuda-cudart.zip",
-        bytes: 3_521_238,
-        unzip_into: Some("onnx-cuda"),
-        marker: "cudart64_12.dll",
-        pick: &["cudart64_12.dll"],
-        vram_gb: None,
-        note: "The CUDA runtime itself.",
-    },
-    #[cfg(windows)]
-    Asset {
-        id: "cuda-cufft",
-        label: "NVIDIA cuFFT 11.4",
-        kind: AssetKind::Runtime,
-        url: "https://developer.download.nvidia.com/compute/cuda/redist/libcufft/windows-x86_64/libcufft-windows-x86_64-11.4.1.4-archive.zip",
-        relative_path: "runtime/cuda-cufft.zip",
-        bytes: 198_361_265,
-        unzip_into: Some("onnx-cuda"),
-        marker: "cufft64_11.dll",
-        pick: &["cufft64_11.dll"],
-        vram_gb: None,
-        note: "The transforms the provider uses for spectral work.",
-    },
-    #[cfg(windows)]
-    Asset {
-        id: "cuda-cudnn",
-        label: "NVIDIA cuDNN 9.25",
-        kind: AssetKind::Runtime,
-        url: "https://developer.download.nvidia.com/compute/cudnn/redist/cudnn/windows-x86_64/cudnn-windows-x86_64-9.25.0.15_cuda12-archive.zip",
-        relative_path: "runtime/cuda-cudnn.zip",
-        bytes: 1_904_452_100,
-        unzip_into: Some("onnx-cuda"),
-        marker: "cudnn64_9.dll",
-        // Everything the convolution path loads, and nothing else: the
-        // attention kernels alone are another 250 MB the separator never calls.
-        pick: &[
-            "cudnn64_9.dll",
-            "cudnn_graph64_9.dll",
-            "cudnn_ops64_9.dll",
-            "cudnn_cnn64_9.dll",
-            "cudnn_heuristic64_9.dll",
-            "cudnn_engines_precompiled64_9.dll",
-            "cudnn_engines_runtime_compiled64_9.dll",
-            "cudnn_engines_tensor_ir64_9.dll",
-            "cudnn_ext64_9.dll",
-        ],
-        vram_gb: None,
-        note: "The convolution kernels the separator spends its time in.",
-    },
-    #[cfg(windows)]
-    Asset {
         id: "onnxruntime",
-        label: "ONNX Runtime 1.30.0",
+        label: "ONNX Runtime 1.31.1",
         kind: AssetKind::Runtime,
-        url: "https://github.com/microsoft/onnxruntime/releases/download/v1.30.0/onnxruntime-win-x64-1.30.0.zip",
+        url: "https://github.com/microsoft/onnxruntime/releases/download/v1.31.1/onnxruntime-win-x64-1.31.1.zip",
         relative_path: "runtime/onnxruntime.zip",
-        bytes: 82_645_522,
+        bytes: 82_929_944,
         unzip_into: Some("onnx"),
         marker: "onnxruntime.dll",
         pick: &[],
         vram_gb: None,
-        note: "Parakeet runs on this; it is loaded at run time, not linked in.",
+        note: "The tempo model runs on this, on the processor; it is loaded at run time, not linked in.",
     },
     #[cfg(target_os = "macos")]
     Asset {
         id: "onnxruntime",
-        label: "ONNX Runtime 1.30.0",
+        label: "ONNX Runtime 1.31.1",
         kind: AssetKind::Runtime,
-        url: "https://github.com/microsoft/onnxruntime/releases/download/v1.30.0/onnxruntime-osx-arm64-1.30.0.tgz",
+        url: "https://github.com/microsoft/onnxruntime/releases/download/v1.31.1/onnxruntime-osx-arm64-1.31.1.tgz",
         relative_path: "runtime/onnxruntime.tgz",
-        bytes: 42_373_116,
+        bytes: 36_936_435,
         unzip_into: Some("onnx"),
         marker: "libonnxruntime",
         pick: &[],
         vram_gb: None,
-        note: "Parakeet runs on this; it is loaded at run time, not linked in.",
-    },
-    // The card path for every card that is not an NVIDIA one running CUDA:
-    // DirectML over DirectX 12. 1.24.4 is the last DirectML build Microsoft
-    // publishes; it speaks the same API level (24) as the builds above.
-    #[cfg(windows)]
-    Asset {
-        id: "onnxruntime-directml",
-        label: "ONNX Runtime 1.24.4 · DirectML",
-        kind: AssetKind::Runtime,
-        url: "https://api.nuget.org/v3-flatcontainer/microsoft.ml.onnxruntime.directml/1.24.4/microsoft.ml.onnxruntime.directml.1.24.4.nupkg",
-        relative_path: "runtime/onnxruntime-directml.nupkg",
-        bytes: 12_458_649,
-        unzip_into: Some("onnx-dml"),
-        marker: "onnxruntime.dll",
-        pick: &["runtimes/win-x64/native/onnxruntime.dll", "runtimes/win-x64/native/onnxruntime_providers_shared.dll"],
-        vram_gb: None,
-        note: "Runs karaoke's Parakeet and the tempo model on an AMD or Intel card through DirectX 12.",
-    },
-    #[cfg(windows)]
-    Asset {
-        id: "directml",
-        label: "DirectML 1.15.4",
-        kind: AssetKind::Runtime,
-        url: "https://api.nuget.org/v3-flatcontainer/microsoft.ai.directml/1.15.4/microsoft.ai.directml.1.15.4.nupkg",
-        relative_path: "runtime/directml.nupkg",
-        bytes: 202_292_617,
-        unzip_into: Some("onnx-dml"),
-        marker: "DirectML.dll",
-        // the package carries the library for Xbox too, under the same name
-        pick: &["bin/x64-win/DirectML.dll"],
-        vram_gb: None,
-        note: "The DirectML the runtime above is built for; the copy inside Windows is older.",
-    },
-    // Linux: the same versions as the Windows builds above, from the same
-    // places - Microsoft's tarballs and NVIDIA's linux-x86_64 redistributables.
-    #[cfg(target_os = "linux")]
-    Asset {
-        id: "onnxruntime-cuda",
-        label: "ONNX Runtime 1.30.0 · CUDA",
-        kind: AssetKind::Runtime,
-        url: "https://github.com/microsoft/onnxruntime/releases/download/v1.30.0/onnxruntime-linux-x64-gpu_cuda12-1.30.0.tgz",
-        relative_path: "runtime/onnxruntime-cuda.tgz",
-        bytes: 439_354_926,
-        unzip_into: Some("onnx-cuda"),
-        marker: "libonnxruntime_providers_cuda.so",
-        pick: &[],
-        vram_gb: Some(2),
-        note: "Runs the separator on an NVIDIA card instead of the processor. Needs CUDA 12.",
-    },
-    #[cfg(target_os = "linux")]
-    Asset {
-        id: "cuda-cublas",
-        label: "NVIDIA cuBLAS 12.9",
-        kind: AssetKind::Runtime,
-        // NVIDIA's PyPI wheel (a zip): its redistributable archive of 12.9.2.10 has no published SHA-256
-        url: "https://files.pythonhosted.org/packages/cb/c0/0a517bfe63ccd3b92eb254d264e28fca3c7cab75d07daea315250fb1bf73/nvidia_cublas_cu12-12.9.2.10-py3-none-manylinux_2_27_x86_64.whl",
-        relative_path: "runtime/cuda-cublas.whl",
-        bytes: 581_240_110,
-        unzip_into: Some("onnx-cuda"),
-        marker: "libcublasLt.so.12",
-        pick: &["libcublasLt.so.12", "libcublas.so.12"],
-        vram_gb: None,
-        note: "The linear algebra the CUDA provider is built on.",
-    },
-    #[cfg(target_os = "linux")]
-    Asset {
-        id: "cuda-cudart",
-        label: "NVIDIA CUDA runtime 12.9",
-        kind: AssetKind::Runtime,
-        url: "https://developer.download.nvidia.com/compute/cuda/redist/cuda_cudart/linux-x86_64/cuda_cudart-linux-x86_64-12.9.79-archive.tar.xz",
-        relative_path: "runtime/cuda-cudart.tar.xz",
-        bytes: 1_514_676,
-        unzip_into: Some("onnx-cuda"),
-        marker: "libcudart.so.12",
-        pick: &["libcudart.so.12"],
-        vram_gb: None,
-        note: "The CUDA runtime itself.",
-    },
-    #[cfg(target_os = "linux")]
-    Asset {
-        id: "cuda-cufft",
-        label: "NVIDIA cuFFT 11.4",
-        kind: AssetKind::Runtime,
-        url: "https://developer.download.nvidia.com/compute/cuda/redist/libcufft/linux-x86_64/libcufft-linux-x86_64-11.4.1.4-archive.tar.xz",
-        relative_path: "runtime/cuda-cufft.tar.xz",
-        bytes: 470_942_192,
-        unzip_into: Some("onnx-cuda"),
-        marker: "libcufft.so.11",
-        pick: &["libcufft.so.11"],
-        vram_gb: None,
-        note: "The transforms the provider uses for spectral work.",
-    },
-    // The Linux provider links cuRAND by name; the Windows one does not.
-    #[cfg(target_os = "linux")]
-    Asset {
-        id: "cuda-curand",
-        label: "NVIDIA cuRAND 10.3",
-        kind: AssetKind::Runtime,
-        url: "https://developer.download.nvidia.com/compute/cuda/redist/libcurand/linux-x86_64/libcurand-linux-x86_64-10.3.10.19-archive.tar.xz",
-        relative_path: "runtime/cuda-curand.tar.xz",
-        bytes: 89_582_256,
-        unzip_into: Some("onnx-cuda"),
-        marker: "libcurand.so.10",
-        pick: &["libcurand.so.10"],
-        vram_gb: None,
-        note: "Random numbers, which the CUDA provider is linked against.",
-    },
-    #[cfg(target_os = "linux")]
-    Asset {
-        id: "cuda-cudnn",
-        label: "NVIDIA cuDNN 9.25",
-        kind: AssetKind::Runtime,
-        url: "https://developer.download.nvidia.com/compute/cudnn/redist/cudnn/linux-x86_64/cudnn-linux-x86_64-9.25.0.15_cuda12-archive.tar.xz",
-        relative_path: "runtime/cuda-cudnn.tar.xz",
-        bytes: 987_863_504,
-        unzip_into: Some("onnx-cuda"),
-        marker: "libcudnn.so.9",
-        pick: &[
-            "libcudnn.so.9",
-            "libcudnn_graph.so.9",
-            "libcudnn_ops.so.9",
-            "libcudnn_cnn.so.9",
-            "libcudnn_heuristic.so.9",
-            "libcudnn_engines_precompiled.so.9",
-            "libcudnn_engines_runtime_compiled.so.9",
-            "libcudnn_engines_tensor_ir.so.9",
-            "libcudnn_ext.so.9",
-        ],
-        vram_gb: None,
-        note: "The convolution kernels the separator spends its time in.",
+        note: "The tempo model runs on this, on the processor; it is loaded at run time, not linked in.",
     },
     #[cfg(target_os = "linux")]
     Asset {
         id: "onnxruntime",
-        label: "ONNX Runtime 1.30.0",
+        label: "ONNX Runtime 1.31.1",
         kind: AssetKind::Runtime,
-        url: "https://github.com/microsoft/onnxruntime/releases/download/v1.30.0/onnxruntime-linux-x64-1.30.0.tgz",
+        url: "https://github.com/microsoft/onnxruntime/releases/download/v1.31.1/onnxruntime-linux-x64-1.31.1.tgz",
         relative_path: "runtime/onnxruntime.tgz",
-        bytes: 11_306_877,
+        bytes: 11_413_655,
         unzip_into: Some("onnx"),
         marker: "libonnxruntime.so",
         pick: &[],
         vram_gb: None,
-        note: "Parakeet runs on this; it is loaded at run time, not linked in.",
+        note: "The tempo model runs on this, on the processor; it is loaded at run time, not linked in.",
     },
 ];
 
-/// The file names of this platform's ONNX Runtime and of the libraries its
-/// CUDA provider loads.
+/// The file name of this platform's ONNX Runtime.
 #[cfg(target_os = "macos")]
 mod libraries {
     pub const ORT: &str = "libonnxruntime.dylib";
-    pub const ORT_SHARED: &str = "libonnxruntime_providers_shared.dylib";
-    pub const CUDA: &[&str] = &[];
 }
 
 #[cfg(windows)]
 mod libraries {
     pub const ORT: &str = "onnxruntime.dll";
-    pub const ORT_SHARED: &str = "onnxruntime_providers_shared.dll";
-    pub const CUDA: &[&str] = &["onnxruntime_providers_cuda.dll", "cublasLt64_12.dll", "cudart64_12.dll", "cudnn64_9.dll"];
 }
 
 #[cfg(target_os = "linux")]
 mod libraries {
     pub const ORT: &str = "libonnxruntime.so";
-    pub const ORT_SHARED: &str = "libonnxruntime_providers_shared.so";
-    pub const CUDA: &[&str] =
-        &["libonnxruntime_providers_cuda.so", "libcublasLt.so.12", "libcublas.so.12", "libcudart.so.12", "libcufft.so.11", "libcurand.so.10", "libcudnn.so.9"];
 }
-
-/// The CUDA provider's parts, in the order they are used: `karaoke_set` and the
-/// separator build their card path out of these.
-#[cfg(target_os = "macos")]
-pub const CUDA_ASSETS: &[&str] = &[];
-#[cfg(windows)]
-pub const CUDA_ASSETS: &[&str] = &["onnxruntime-cuda", "cuda-cudart", "cuda-cublas", "cuda-cufft", "cuda-cudnn"];
-#[cfg(target_os = "linux")]
-pub const CUDA_ASSETS: &[&str] = &["onnxruntime-cuda", "cuda-cudart", "cuda-cublas", "cuda-cufft", "cuda-curand", "cuda-cudnn"];
-
-/// Everything the DirectML path needs, in the order it is used.
-pub const DIRECTML_ASSETS: [&str; 2] = ["onnxruntime-directml", "directml"];
 
 /// Which build of the ONNX Runtime to load.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -987,42 +358,6 @@ pub enum OnnxFlavour {
     #[default]
     Cuda,
     Cpu,
-}
-
-impl OnnxFlavour {
-    /// Whether work runs on the card through CUDA: only an NVIDIA card with a
-    /// driver that runs CUDA does. An AMD card was sent to the CUDA provider
-    /// and failed, after being offered gigabytes of CUDA libraries.
-    pub fn uses_cuda(self) -> bool {
-        !matches!(self, OnnxFlavour::Cpu) && crate::hardware::hardware().runs_cuda
-    }
-
-    /// Whether work runs on the card through DirectML: every card CUDA does
-    /// not run on - AMD, Intel, an NVIDIA card whose driver is too old - as
-    /// long as there is a card at all.
-    pub fn uses_directml(self) -> bool {
-        let hardware = crate::hardware::hardware();
-        cfg!(windows) && !matches!(self, OnnxFlavour::Cpu) && !hardware.runs_cuda && hardware.gpu_name.is_some()
-    }
-
-    /// The card path this choice takes on this machine; none is the processor.
-    pub fn card(self) -> Option<OnnxCard> {
-        if self.uses_cuda() {
-            Some(OnnxCard::Cuda)
-        } else if self.uses_directml() {
-            Some(OnnxCard::DirectMl)
-        } else {
-            None
-        }
-    }
-}
-
-/// How an ONNX Runtime build reaches the graphics card.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "snake_case")]
-pub enum OnnxCard {
-    Cuda,
-    DirectMl,
 }
 
 /// The words Parakeet hears in one track, each with the second it starts. `language` is a hint the model takes
@@ -1044,121 +379,12 @@ fn parakeet_transcribe(asr: &std::sync::Mutex<dub_tcpp::TcppAsr>, model: &dub_tc
     Ok(words)
 }
 
-/// A DXGI adapter tests pin DirectML to - the integrated Radeon beside an
-/// NVIDIA card - where the studio takes the fastest card.
-#[cfg(test)]
-static DIRECTML_ADAPTER: std::sync::OnceLock<i32> = std::sync::OnceLock::new();
-
-/// Puts a session on the card a path reaches: CUDA, or DirectML with what it
-/// requires - no memory pattern, one operator at a time - on the fastest card
-/// DirectX reports. Says whether the card took it: a card that refuses runs
-/// the work on the processor and the caller reports that, instead of it
-/// quietly taking ten times as long.
-pub fn with_card(builder: ort::session::builder::SessionBuilder, card: Option<OnnxCard>) -> (ort::session::builder::SessionBuilder, bool) {
-    let attempt = match card {
-        None => return (builder, false),
-        Some(OnnxCard::Cuda) => builder.clone().with_execution_providers([ort::ep::CUDA::default().build().error_on_failure()]),
-        Some(OnnxCard::DirectMl) => {
-            let provider = ort::ep::DirectML::default()
-                .with_performance_preference(ort::ep::directml::PerformancePreference::HighPerformance)
-                .with_device_filter(ort::ep::directml::DeviceFilter::Gpu);
-            #[cfg(test)]
-            let provider = match DIRECTML_ADAPTER.get() {
-                Some(&adapter) => provider.with_device_id(adapter),
-                None => provider,
-            };
-            builder
-                .clone()
-                .with_memory_pattern(false)
-                .and_then(|builder| builder.with_parallel_execution(false))
-                .and_then(|builder| builder.with_execution_providers([provider.build().error_on_failure()]))
-        }
-    };
-    match attempt {
-        Ok(on_card) => (on_card, true),
-        Err(error) => {
-            eprintln!("[ERROR] the {card:?} provider did not register, the processor runs this instead: {error}");
-            (builder, false)
-        }
-    }
-}
-
-fn point_ort_at(runtime: &Path, card: Option<OnnxCard>) {
+fn point_ort_at(runtime: &Path) {
     unsafe { std::env::set_var("ORT_DYLIB_PATH", runtime) };
-    let Some(directory) = runtime.parent() else { return };
     #[cfg(windows)]
-    {
+    if let Some(directory) = runtime.parent() {
         let existing = std::env::var("PATH").unwrap_or_default();
         unsafe { std::env::set_var("PATH", format!("{};{existing}", directory.display())) };
-        if card == Some(OnnxCard::DirectMl) {
-            preload(&directory.join("DirectML.dll"));
-        }
-    }
-    #[cfg(target_os = "linux")]
-    if card == Some(OnnxCard::Cuda) {
-        preload_cuda(directory);
-    }
-    #[cfg(not(any(windows, target_os = "linux")))]
-    let _ = (directory, card);
-}
-
-/// Linux reads LD_LIBRARY_PATH once, at process start, and the CUDA provider
-/// carries no path to its libraries. A library already loaded is what the
-/// loader hands every later request for its name, so each one in the folder
-/// is loaded here by its full path first, dependencies before dependants -
-/// in passes, because which needs which is the libraries' business.
-#[cfg(target_os = "linux")]
-fn preload_cuda(directory: &Path) {
-    use std::os::unix::ffi::OsStrExt;
-    unsafe extern "C" {
-        fn dlopen(filename: *const std::ffi::c_char, flag: std::ffi::c_int) -> *mut std::ffi::c_void;
-        fn dlerror() -> *const std::ffi::c_char;
-    }
-    const RTLD_NOW: std::ffi::c_int = 2;
-    const RTLD_GLOBAL: std::ffi::c_int = 0x100;
-    let mut pending: Vec<PathBuf> = fs::read_dir(directory)
-        .map(|entries| {
-            entries
-                .flatten()
-                .map(|entry| entry.path())
-                .filter(|path| {
-                    let name = path.file_name().unwrap_or_default().to_string_lossy();
-                    // the loader's names only: `libcudnn_ops.so.9`, not the versioned file it links to
-                    !name.starts_with("libonnxruntime") && name.split_once(".so.").is_some_and(|(_, version)| !version.is_empty() && version.bytes().all(|byte| byte.is_ascii_digit()))
-                })
-                .collect()
-        })
-        .unwrap_or_default();
-    while !pending.is_empty() {
-        let before = pending.len();
-        let mut errors = Vec::new();
-        pending.retain(|library| {
-            let Ok(name) = std::ffi::CString::new(library.as_os_str().as_bytes()) else { return false };
-            if !unsafe { dlopen(name.as_ptr(), RTLD_NOW | RTLD_GLOBAL) }.is_null() {
-                return false;
-            }
-            let error = unsafe { dlerror() };
-            errors.push(if error.is_null() { library.display().to_string() } else { unsafe { std::ffi::CStr::from_ptr(error) }.to_string_lossy().into_owned() });
-            true
-        });
-        if pending.len() == before {
-            eprintln!("[ERROR] the CUDA libraries did not load, the provider will not register: {}", errors.join("; "));
-            return;
-        }
-    }
-}
-
-#[cfg(windows)]
-fn preload(library: &Path) {
-    use std::os::windows::ffi::OsStrExt;
-    #[link(name = "kernel32")]
-    unsafe extern "system" {
-        fn LoadLibraryExW(name: *const u16, file: *mut std::ffi::c_void, flags: u32) -> *mut std::ffi::c_void;
-    }
-    const LOAD_WITH_ALTERED_SEARCH_PATH: u32 = 0x8;
-    let wide: Vec<u16> = library.as_os_str().encode_wide().chain(Some(0)).collect();
-    if unsafe { LoadLibraryExW(wide.as_ptr(), std::ptr::null_mut(), LOAD_WITH_ALTERED_SEARCH_PATH) }.is_null() {
-        eprintln!("[ERROR] could not load {}: {}", library.display(), std::io::Error::last_os_error());
     }
 }
 
@@ -1172,17 +398,27 @@ pub const PARAKEET_FP32: &str = "parakeet-tdt-fp32";
 #[cfg(windows)]
 const TCPP_CUDA: &str = "runtime/transcribe-cuda.zip";
 #[cfg(windows)]
+const TCPP_CUDA12: &str = "runtime/transcribe-cuda12.zip";
+#[cfg(windows)]
 const TCPP_VULKAN: &str = "runtime/transcribe-vulkan.zip";
 #[cfg(windows)]
 const TCPP_CPU: &str = "runtime/transcribe-cpu.zip";
 #[cfg(target_os = "linux")]
 const TCPP_CUDA: &str = "runtime/transcribe-cuda.tar.gz";
 #[cfg(target_os = "linux")]
+const TCPP_CUDA12: &str = "runtime/transcribe-cuda12.tar.gz";
+#[cfg(target_os = "linux")]
 const TCPP_VULKAN: &str = "runtime/transcribe-vulkan.tar.gz";
 #[cfg(target_os = "linux")]
 const TCPP_CPU: &str = "runtime/transcribe-cpu.tar.gz";
 #[cfg(target_os = "macos")]
 const TCPP_CPU: &str = "runtime/transcribe-engine-cpu/libtranscribe_engine.dylib";
+
+/// The transcribe.cpp builds loaded in this process, by folder, with the release they were loaded from.
+fn loaded_engines() -> &'static std::sync::Mutex<std::collections::HashMap<&'static str, String>> {
+    static LOADED: std::sync::OnceLock<std::sync::Mutex<std::collections::HashMap<&'static str, String>>> = std::sync::OnceLock::new();
+    LOADED.get_or_init(Default::default)
+}
 
 /// The transcribe.cpp model the dropdown names.
 pub fn parakeet_model(variant: Option<&str>) -> &'static dub_tcpp::Model {
@@ -1195,8 +431,8 @@ pub fn parakeet_model_asset(variant: Option<&str>) -> &'static str {
     if variant == Some(PARAKEET_ULTRA) { PARAKEET_ULTRA } else { PARAKEET_V3 }
 }
 
-/// The engine build this machine runs Parakeet on: the processor when chosen, CUDA on a card and driver CUDA 13
-/// runs on (the build is CUDA 13; on Linux only when the system has its cuBLAS), Vulkan on any other card, the
+/// The engine build this machine runs Parakeet on: the processor when chosen, the CUDA build of the card and driver -
+/// CUDA 13 or CUDA 12 (on Linux only when the loader finds that CUDA's cuBLAS) - Vulkan on any other card, the
 /// processor without one. A Mac has one build, in the processor's place: Metal and the processor on Apple silicon,
 /// the processor on Intel.
 pub fn parakeet_build(runtime: OnnxFlavour) -> Option<dub_tcpp::Build> {
@@ -1207,25 +443,43 @@ pub fn parakeet_build(runtime: OnnxFlavour) -> Option<dub_tcpp::Build> {
         return None;
     }
     let hardware = crate::hardware::hardware();
-    Some(if matches!(runtime, OnnxFlavour::Cpu) || hardware.gpu_name.is_none() {
-        dub_tcpp::Build::Cpu
-    } else if hardware.card_cuda == Some(crate::hardware::CudaBuild::Cuda13) {
-        if cfg!(target_os = "linux") && !system_library("libcublas.so.13") { dub_tcpp::Build::Vulkan } else { dub_tcpp::Build::Cuda }
-    } else {
-        dub_tcpp::Build::Vulkan
-    })
+    Some(parakeet_build_for(runtime, hardware.gpu_name.is_some(), hardware.card_cuda, |name| !cfg!(target_os = "linux") || system_library(name)))
 }
 
-/// Whether Linux's loader finds `name` without help: the CUDA build of transcribe.cpp looks for cuBLAS beside itself
-/// and then where the system keeps libraries, as the music engine does, and the studio downloads none for Linux.
+/// [`parakeet_build`] of a machine: a card or none, the CUDA build its card and driver run, and whether the loader
+/// finds a library.
+fn parakeet_build_for(runtime: OnnxFlavour, card: bool, cuda: Option<crate::hardware::CudaBuild>, finds: impl Fn(&str) -> bool) -> dub_tcpp::Build {
+    if matches!(runtime, OnnxFlavour::Cpu) || !card {
+        return dub_tcpp::Build::Cpu;
+    }
+    match cuda {
+        Some(crate::hardware::CudaBuild::Cuda13) if finds("libcublas.so.13") => dub_tcpp::Build::Cuda,
+        Some(crate::hardware::CudaBuild::Cuda12) if finds("libcublas.so.12") => dub_tcpp::Build::Cuda12,
+        _ => dub_tcpp::Build::Vulkan,
+    }
+}
+
+/// Whether Linux's loader finds `name` without help: the CUDA build of transcribe.cpp looks for cuBLAS beside itself,
+/// in LD_LIBRARY_PATH - where the studio downloads the music engine's CUDA libraries - and where the system keeps
+/// libraries. Only a library found is remembered: one downloaded while the studio runs counts at once.
 fn system_library(name: &str) -> bool {
-    static FOUND: std::sync::OnceLock<std::collections::HashMap<String, bool>> = std::sync::OnceLock::new();
-    let probe = |name: &str| {
-        let listed = std::env::var_os("LD_LIBRARY_PATH").is_some_and(|path| std::env::split_paths(&path).any(|dir| dir.join(name).is_file()));
-        let cached = fs::read("/etc/ld.so.cache").is_ok_and(|cache| cache.windows(name.len()).any(|bytes| bytes == name.as_bytes()));
-        listed || cached || ["/lib", "/usr/lib", "/lib64", "/usr/lib64", "/usr/lib/x86_64-linux-gnu"].iter().any(|dir| Path::new(dir).join(name).is_file())
-    };
-    FOUND.get_or_init(|| ["libcublas.so.13"].into_iter().map(|library| (library.to_string(), probe(library))).collect()).get(name).copied().unwrap_or_else(|| probe(name))
+    static FOUND: std::sync::Mutex<Vec<String>> = std::sync::Mutex::new(Vec::new());
+    let mut found = FOUND.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+    if found.iter().any(|library| library == name) {
+        return true;
+    }
+    let present = loader_finds(name, std::env::var_os("LD_LIBRARY_PATH").as_deref(), Path::new("/etc/ld.so.cache"));
+    if present {
+        found.push(name.to_string());
+    }
+    present
+}
+
+/// Whether `name` is in a folder of `library_path`, in the loader's cache file or in a system library folder.
+fn loader_finds(name: &str, library_path: Option<&std::ffi::OsStr>, cache: &Path) -> bool {
+    let listed = library_path.is_some_and(|path| std::env::split_paths(path).any(|dir| dir.join(name).is_file()));
+    let cached = fs::read(cache).is_ok_and(|cache| cache.windows(name.len()).any(|bytes| bytes == name.as_bytes()));
+    listed || cached || ["/lib", "/usr/lib", "/lib64", "/usr/lib64", "/usr/lib/x86_64-linux-gnu"].iter().any(|dir| Path::new(dir).join(name).is_file())
 }
 
 /// The files Parakeet runs from on this machine: its engine build and the model the dropdown names.
@@ -1253,39 +507,50 @@ pub struct SyncStatus {
     pub installed_models: Vec<String>,
     pub assets: Vec<crate::downloads::AssetStatus>,
     pub active_download: Option<crate::downloads::DownloadProgress>,
+    /// The recogniser's engine was updated while this process holds the earlier one: the new one runs from the next
+    /// start of the studio.
+    pub restart_to_apply: bool,
 }
 
 pub struct LyricsSync {
     downloader: Downloader,
-    /// Where the music engine's cuBLAS 13 is, which transcribe.cpp's CUDA build imports.
-    cuda_libraries: std::sync::OnceLock<PathBuf>,
+    /// Where the music engine's CUDA libraries are, which transcribe.cpp's CUDA builds import: its cuBLAS folder, and
+    /// its own folder with CUDA 12's runtime.
+    cuda_libraries: std::sync::OnceLock<Vec<PathBuf>>,
+    /// audio.cpp's server of the studio, which CrisperWhisper runs in beside the tools' models.
+    acpp: std::sync::OnceLock<std::sync::Arc<crate::acpp::Acpp>>,
 }
 
 impl LyricsSync {
     pub fn new(data_root: &Path) -> Self {
-        Self { downloader: Downloader::new(data_root.join("karaoke")), cuda_libraries: std::sync::OnceLock::new() }
+        Self { downloader: Downloader::new(data_root.join("karaoke")), cuda_libraries: std::sync::OnceLock::new(), acpp: std::sync::OnceLock::new() }
     }
 
-    /// The folder of the cuBLAS 13 the music engine runs on: transcribe.cpp's CUDA build takes links to it.
-    pub fn set_cuda_libraries(&self, folder: PathBuf) {
-        self.cuda_libraries.set(folder).ok();
+    /// The folders of the CUDA libraries the music engine runs on: transcribe.cpp's CUDA builds take links to them.
+    pub fn set_cuda_libraries(&self, folders: Vec<PathBuf>) {
+        self.cuda_libraries.set(folders).ok();
     }
 
-    /// Windows looks for a library's imports beside it: the CUDA build gets links to the engine's cuBLAS 13, no
-    /// copies, unless the files are on PATH already.
-    fn link_tcpp_cuda(&self, engine_dir: &Path) -> Result<()> {
+    /// Windows looks for a library's imports beside it: a CUDA build gets links to the engine's libraries of its CUDA
+    /// - cuBLAS 13, or cuBLAS 12 and CUDA 12's runtime - no copies, unless the files are on PATH already.
+    fn link_tcpp_cuda(&self, engine_dir: &Path, build: dub_tcpp::Build) -> Result<()> {
         if !cfg!(windows) {
             return Ok(());
         }
+        let (libraries, cuda): (&[&str], u32) = match build {
+            dub_tcpp::Build::Cuda => (&crate::engine_runtime::CUDA13_LIBRARIES, 13),
+            dub_tcpp::Build::Cuda12 => (&[crate::engine_runtime::CUDA12_LIBRARIES[0], crate::engine_runtime::CUDA12_LIBRARIES[1], "cudart64_12.dll"], 12),
+            dub_tcpp::Build::Vulkan | dub_tcpp::Build::Cpu => return Ok(()),
+        };
         let on_path = |name: &str| std::env::var_os("PATH").is_some_and(|path| std::env::split_paths(&path).any(|dir| dir.join(name).is_file()));
-        for name in crate::engine_runtime::CUDA13_LIBRARIES {
+        for name in libraries {
             let target = engine_dir.join(name);
             if target.is_file() || on_path(name) {
                 continue;
             }
-            let source = self.cuda_libraries.get().map(|folder| folder.join(name)).filter(|source| source.is_file());
+            let source = self.cuda_libraries.get().into_iter().flatten().map(|folder| folder.join(name)).find(|source| source.is_file());
             let Some(source) = source else {
-                bail!("transcribe.cpp on the card needs {name}, which comes with the music engine's CUDA 13 runtime: download it in Settings - Local engine, or choose the processor");
+                bail!("transcribe.cpp on the card needs {name}, which comes with the music engine's CUDA {cuda} runtime: download it in Settings - Local engine, or choose the processor");
             };
             if fs::hard_link(&source, &target).is_err() {
                 fs::copy(&source, &target).with_context(|| format!("copy {} beside transcribe.cpp", source.display()))?;
@@ -1298,23 +563,82 @@ impl LyricsSync {
         &self.downloader
     }
 
-    /// The CUDA build first: on a machine that has one, the CPU build would be
-    /// a silent downgrade.
-    pub fn whisper_binary(&self) -> Option<PathBuf> {
-        crate::downloads::locate_binary(self.downloader.root(), &[WHISPER_RUNTIME_DIR], "whisper-faster")
+    /// audio.cpp's server of the studio, which CrisperWhisper runs in; set once at start.
+    pub fn set_acpp(&self, acpp: std::sync::Arc<crate::acpp::Acpp>) {
+        self.acpp.set(acpp).ok();
     }
 
-    /// What `--model_dir` is given: the binary looks inside it for a directory
-    /// called `faster-whisper-<size>`.
-    fn whisper_model_dir(&self) -> PathBuf {
-        self.downloader.root().join("models").join("whisper")
+    fn acpp(&self) -> Result<&crate::acpp::Acpp> {
+        self.acpp.get().map(std::sync::Arc::as_ref).ok_or_else(|| anyhow!("audio.cpp's server is not set up"))
     }
 
-    /// The size a model id stands for - `whisper-large-v3` is `large-v3`, which
-    /// is the name the binary is given.
-    fn whisper_size(id: &str) -> Option<&str> {
-        let size = id.strip_prefix("whisper-")?;
-        WHISPER_SIZES.contains(&size).then_some(size)
+    /// Every file of CrisperWhisper is on disk.
+    pub fn crisper_model_ready(&self) -> bool {
+        crisper_assets().iter().all(|id| asset(id).is_some_and(|asset| self.downloader.is_installed(asset)))
+    }
+
+    /// CrisperWhisper runs here: every file of the model, and the audio.cpp server of the build `runtime` runs on.
+    pub fn crisper_ready(&self, runtime: OnnxFlavour) -> bool {
+        self.crisper_model_ready() && self.acpp.get().is_some_and(|acpp| crate::acpp::build_for_runtime(runtime).is_ok_and(|build| acpp.installed(build)))
+    }
+
+    /// `work` on the server of `runtime`'s build carrying CrisperWhisper. An error, before the server is looked up,
+    /// when a part of CrisperWhisper is not downloaded.
+    fn with_crisper<T>(&self, runtime: OnnxFlavour, work: impl FnOnce(&acpp_server::Server) -> Result<T>) -> Result<T> {
+        let build = crate::acpp::build_for_runtime(runtime)?;
+        if !self.crisper_ready(runtime) {
+            bail!("CrisperWhisper is not completely downloaded into {}: download it in Settings - Models", self.downloader.root().join(CRISPERWHISPER_DIR).display());
+        }
+        self.acpp()?.with_server(build, self.crisper_entry(), &|| false, work)
+    }
+
+    /// CrisperWhisper as audio.cpp's server carries it.
+    fn crisper_entry(&self) -> acpp_server::ModelEntry {
+        acpp_server::ModelEntry::crisperwhisper(CRISPERWHISPER, &self.downloader.root().join(CRISPERWHISPER_DIR))
+    }
+
+    /// Registers CrisperWhisper with audio.cpp's server at start, beside the stems' and MIDI's models.
+    pub fn register_crisper(&self) {
+        if let Some(acpp) = self.acpp.get() {
+            acpp.register(self.crisper_entry());
+        }
+    }
+
+    /// The words CrisperWhisper hears in one track, each with the second it starts, on `runtime`'s build of the
+    /// audio.cpp server; the server leaves the card afterwards when nothing else runs on it.
+    pub fn crisper_words(&self, runtime: OnnxFlavour, audio: &Path, language: Option<&str>) -> Result<Vec<(f64, String)>> {
+        self.with_crisper(runtime, |server| self.crisper_transcribe(server, audio, language))
+    }
+
+    /// One track through the running server: decoded to the 16 kHz mono WAV the server reads, told its language when
+    /// it is known ("auto" or none lets the model hear it), and what a hallucinated segment holds left out.
+    fn crisper_transcribe(&self, server: &acpp_server::Server, audio: &Path, language: Option<&str>) -> Result<Vec<(f64, String)>> {
+        let work = self.downloader.root().join("work");
+        fs::create_dir_all(&work).with_context(|| format!("create {}", work.display()))?;
+        let told = match language.map(str::trim).filter(|code| !code.is_empty() && *code != "auto") {
+            Some(code) => Some(acpp_server::language::whisper_code(code).map_err(|error| anyhow!("{error}"))?.to_string()),
+            None => None,
+        };
+        let wav = work.join(format!("sync-{}.wav", uuid::Uuid::now_v7()));
+        if let Err(error) = crate::audio_pcm::write_wav16k_mono(audio, &wav) {
+            fs::remove_file(&wav).ok();
+            return Err(error.context(format!("decode {} for recognition", audio.display())));
+        }
+        let request = acpp_server::TranscribeRequest {
+            model: CRISPERWHISPER.to_string(),
+            wav: wav.clone(),
+            language: told,
+            prompt: None,
+            options: serde_json::Map::new(),
+            within: None,
+        };
+        let transcript = server.transcribe_details(&request);
+        fs::remove_file(&wav).ok();
+        let words = heard_words(&transcript.map_err(|error| anyhow!("CrisperWhisper: {error}"))?);
+        if words.is_empty() {
+            bail!(NO_WORDS);
+        }
+        Ok(words)
     }
 
     pub fn installed_models(&self) -> Vec<&'static Asset> {
@@ -1328,15 +652,6 @@ impl LyricsSync {
     pub fn parakeet_ready(&self, runtime: OnnxFlavour, model: Option<&str>) -> bool {
         let wanted = parakeet_assets(runtime, model);
         !wanted.is_empty() && wanted.iter().all(|id| asset(id).is_some_and(|asset| self.downloader.is_installed(asset)))
-    }
-
-    /// Whether the Whisper model the configuration names is actually on disk.
-    /// A faster-whisper model is a directory, not a file - and
-    /// `whisper_model_path` has already checked that every file inside it
-    /// arrived. Asking whether that path is a file said no to a complete
-    /// installation, which is how a finished download still refused to run.
-    pub fn whisper_model_ready(&self, config: &LyricsSyncConfig) -> bool {
-        self.whisper_model_path(config).is_some_and(|path| path.is_dir())
     }
 
     /// Any Parakeet whole on disk, whichever build and variant.
@@ -1358,37 +673,37 @@ impl LyricsSync {
         let root = self.downloader.root().join("models");
         let model = parakeet_model(variant);
         let engine = self.downloader.runtime_dir(build.dir());
-        if build == dub_tcpp::Build::Cuda {
-            self.link_tcpp_cuda(&engine)?;
-        }
+        self.link_tcpp_cuda(&engine, build)?;
         let asr = dub_tcpp::shared(&engine, &dub_tcpp::model_path(&root, model)).map_err(|error| anyhow!("load Parakeet: {error}"))?;
+        // the library stays in the process until it ends: an install over it is used from the next start
+        if let Some(record) = self.engine_record(build).and_then(|record| crate::install_record::read(&record)) {
+            loaded_engines().lock().unwrap_or_else(|poisoned| poisoned.into_inner()).entry(build.dir()).or_insert(record.url);
+        }
         Ok((asr, model))
     }
 
-    /// `ort` loads this at run time; linking it would tie the build to one
-    /// toolchain and one machine's libraries.
-    pub fn onnxruntime_library(&self) -> Option<PathBuf> {
-        self.machine_runtime().map(|(library, _)| library)
+    /// The install record of a transcribe.cpp build's archive.
+    fn engine_record(&self, build: dub_tcpp::Build) -> Option<PathBuf> {
+        ASSETS.iter().find(|asset| asset.unzip_into == Some(build.dir())).map(|asset| self.downloader.record_of(asset))
     }
 
-    /// The ONNX Runtime this process loads, and the card it reaches. A process
-    /// binds one build on first use, so it is chosen by the machine, not by a
-    /// setting: the build for this machine's card when every file of it is
-    /// there - it carries the processor provider too - else the processor build.
-    /// Only a build at today's pin counts: an earlier one left on disk is not loaded.
-    pub fn machine_runtime(&self) -> Option<(PathBuf, Option<OnnxCard>)> {
-        let cuda = self.downloader.runtime_dir("onnx-cuda").join(libraries::ORT);
-        let directml = self.downloader.runtime_dir("onnx-dml").join(libraries::ORT);
+    /// A transcribe.cpp build this process has loaded whose files on disk are now another release's: the process keeps
+    /// the one it loaded (a loaded build is never unloaded), so the new one runs from the next start of the studio.
+    pub fn restart_to_apply(&self) -> bool {
+        let loaded = loaded_engines().lock().unwrap_or_else(|poisoned| poisoned.into_inner()).clone();
+        dub_tcpp::Build::ALL.iter().any(|build| {
+            loaded.get(build.dir()).is_some_and(|url| {
+                self.engine_record(*build).and_then(|record| crate::install_record::read(&record)).is_some_and(|now| now.url != *url)
+            })
+        })
+    }
+
+    /// `ort` loads this at run time; linking it would tie the build to one
+    /// toolchain and one machine's libraries. The processor build at today's
+    /// pin: an earlier one left on disk is not loaded.
+    pub fn onnxruntime_library(&self) -> Option<PathBuf> {
         let cpu = self.downloader.runtime_dir("onnx").join(libraries::ORT);
-        match OnnxFlavour::Auto.card() {
-            Some(OnnxCard::Cuda) if self.has_cuda_libraries() => return Some((cuda, Some(OnnxCard::Cuda))),
-            Some(OnnxCard::DirectMl) if self.has_directml_libraries() => return Some((directml, Some(OnnxCard::DirectMl))),
-            _ => {}
-        }
-        [(cpu, "onnxruntime"), (cuda, "onnxruntime-cuda"), (directml, "onnxruntime-directml")]
-            .into_iter()
-            .find(|(library, id)| library.is_file() && self.pinned(&[id]))
-            .map(|(library, _)| (library, None))
+        (cpu.is_file() && self.pinned(&["onnxruntime"])).then_some(cpu)
     }
 
     /// Whether every one of these downloads is installed at today's pin.
@@ -1396,67 +711,31 @@ impl LyricsSync {
         ids.iter().all(|id| asset(id).is_some_and(|asset| self.downloader.is_installed(asset)))
     }
 
-    /// The DirectML build and the DirectML it is built for, side by side, at today's pins.
-    pub fn has_directml_libraries(&self) -> bool {
-        let dir = self.downloader.runtime_dir("onnx-dml");
-        [libraries::ORT, libraries::ORT_SHARED, "DirectML.dll"].iter().all(|name| dir.join(name).is_file()) && self.pinned(&DIRECTML_ASSETS)
-    }
-
-    /// Binds `ort` to this machine's runtime - once per process, before
+    /// Binds `ort` to the studio's processor runtime - once per process, before
     /// anything touches `ort`, or it binds to whatever `onnxruntime.dll` the
-    /// system happens to have - and says which card the bound build reaches.
-    /// Every piece of work on ONNX asks here first, so all of it runs on the
-    /// one build that was bound. The library is loaded here, not on first use:
-    /// one this process cannot load (another system's build, a signature macOS
-    /// refuses) is then an error of the work that needed it, where `ort` would
-    /// panic and stay unusable until the studio restarts.
-    pub fn bind_ort(&self) -> Result<Option<OnnxCard>> {
-        static BOUND: std::sync::OnceLock<Option<OnnxCard>> = std::sync::OnceLock::new();
-        if let Some(card) = BOUND.get() {
-            return Ok(*card);
+    /// system happens to have. Every piece of work on ONNX asks here first. The
+    /// library is loaded here, not on first use: one this process cannot load
+    /// (another system's build, a signature macOS refuses) is then an error of
+    /// the work that needed it, where `ort` would panic and stay unusable until
+    /// the studio restarts.
+    pub fn bind_ort(&self) -> Result<()> {
+        static BOUND: std::sync::OnceLock<()> = std::sync::OnceLock::new();
+        if BOUND.get().is_some() {
+            return Ok(());
         }
-        let (library, card) = self.machine_runtime().ok_or_else(|| anyhow!("the ONNX Runtime library is not installed"))?;
-        point_ort_at(&library, card);
-        // Microsoft's builds send usage telemetry unless the environment turns it off
-        let configured = ort::init_from(&library).map_err(|error| anyhow!("load ONNX Runtime {}: {error}", library.display()))?.with_telemetry(false).commit();
-        if !configured {
-            bail!("ONNX Runtime was set up before its library was bound, so its telemetry could not be turned off");
-        }
-        Ok(*BOUND.get_or_init(|| card))
-    }
-
-    /// The card work set to `runtime` runs on, with the machine's runtime
-    /// bound first; none is the processor.
-    pub fn onnx_card(&self, runtime: OnnxFlavour) -> Result<Option<OnnxCard>> {
-        let bound = self.bind_ort()?;
-        Ok(if matches!(runtime, OnnxFlavour::Cpu) { None } else { bound })
-    }
-
-    /// The CUDA provider is a separate library, and it in turn needs cuBLAS and
-    /// cuDNN beside it. Without all of them the provider refuses to load and the
-    /// run silently lands on the processor. All of them at today's pins.
-    pub fn has_cuda_libraries(&self) -> bool {
-        let dir = self.downloader.runtime_dir("onnx-cuda");
-        libraries::CUDA.iter().all(|name| dir.join(name).is_file()) && self.pinned(CUDA_ASSETS)
-    }
-
-    /// A model counts as present only with every one of its files: a directory
-    /// missing its tokenizer loads exactly as far as an error message.
-    fn whisper_model_path(&self, config: &LyricsSyncConfig) -> Option<PathBuf> {
-        let size = Self::whisper_size(config.whisper_model.as_deref()?)?;
-        let prefix = format!("models/whisper/faster-whisper-{size}/");
-        let parts: Vec<&'static Asset> = ASSETS.iter().filter(|asset| asset.relative_path.starts_with(&prefix)).collect();
-        if parts.is_empty() || !parts.iter().all(|asset| self.downloader.is_installed(asset)) {
-            return None;
-        }
-        Some(self.whisper_model_dir().join(format!("faster-whisper-{size}")))
+        let library = self.onnxruntime_library().ok_or_else(|| anyhow!("the ONNX Runtime library is not installed"))?;
+        point_ort_at(&library);
+        // the process's one environment, telemetry off, over the library pointed at above
+        dub_core::runtime::ort_env().map_err(|error| anyhow!(error))?;
+        BOUND.get_or_init(|| ());
+        Ok(())
     }
 
     pub async fn status(&self, config: &LyricsSyncConfig) -> SyncStatus {
-        let whisper_binary = self.whisper_binary();
+        let whisper_binary = self.acpp.get().and_then(|acpp| crate::acpp::build_for_runtime(config.runtime).ok().map(|build| acpp.exe(build))).filter(|exe| exe.is_file());
         let ready = match config.provider {
             AsrProvider::None => false,
-            AsrProvider::Whisper => whisper_binary.is_some() && self.whisper_model_path(config).is_some(),
+            AsrProvider::Whisper => self.crisper_ready(config.runtime),
             AsrProvider::Parakeet => self.parakeet_ready(config.runtime, config.whisper_model.as_deref()),
             AsrProvider::OpenRouter => config.openrouter_model.as_deref().is_some_and(|model| !model.trim().is_empty()),
         };
@@ -1472,6 +751,7 @@ impl LyricsSync {
             installed_models: self.installed_models().iter().map(|asset| asset.id.to_string()).collect(),
             assets: self.downloader.status_of(ASSETS),
             active_download: self.downloader.active_for("karaoke").await,
+            restart_to_apply: self.restart_to_apply(),
         }
     }
 
@@ -1522,13 +802,22 @@ impl LyricsSync {
                 dub_tcpp::unload();
                 Recognised::OnDevice
             }
-            AsrProvider::Whisper => match self.whisper_many(config, audio, language, heard, cancel) {
-                Ok(recognised) => recognised,
-                Err(error) => {
+            AsrProvider::Whisper => {
+                // the server ends after the run, so the card is the music engine's between recognitions
+                let run = self.with_crisper(config.runtime, |server| {
+                    for (index, path) in audio.iter().enumerate() {
+                        if cancel.load(Ordering::Relaxed) {
+                            break;
+                        }
+                        heard(index, self.crisper_transcribe(server, path, language));
+                    }
+                    Ok(())
+                });
+                if let Err(error) = run {
                     failed(heard, error);
-                    Recognised::OnDevice
                 }
-            },
+                Recognised::OnDevice
+            }
             _ => {
                 failed(heard, anyhow!("this recogniser does not run on this computer"));
                 Recognised::OnDevice
@@ -1536,299 +825,107 @@ impl LyricsSync {
         }
     }
 
-    /// One Whisper run over several tracks; the JSON it writes for each is
-    /// named after the file it was given, and handed on as soon as it is whole.
-    fn whisper_many(
-        &self,
-        config: &LyricsSyncConfig,
-        audio: &[PathBuf],
-        language: Option<&str>,
-        heard: &mut dyn FnMut(usize, Result<Vec<(f64, String)>>),
-        cancel: &AtomicBool,
-    ) -> Result<Recognised> {
-        let binary = self.whisper_binary().ok_or_else(|| anyhow!("the Whisper runtime is not installed"))?;
-        let size = config
-            .whisper_model
-            .as_deref()
-            .and_then(Self::whisper_size)
-            .ok_or_else(|| anyhow!("no Whisper model is downloaded and selected"))?;
-        if self.whisper_model_path(config).is_none() {
-            bail!("the Whisper model {size} is not completely downloaded");
-        }
-        let work = self.downloader.root().join("work").join(format!("batch-{}", uuid::Uuid::now_v7()));
-        let out_dir = work.join("out");
-        fs::create_dir_all(&out_dir).with_context(|| format!("create {}", out_dir.display()))?;
-        let mut wavs: Vec<(usize, PathBuf)> = Vec::with_capacity(audio.len());
-        let mut answered = vec![false; audio.len()];
-        for (index, path) in audio.iter().enumerate() {
-            let wav = work.join(format!("{index}.wav"));
-            match crate::audio_pcm::write_wav16k_mono(path, &wav) {
-                Ok(()) => wavs.push((index, wav)),
-                Err(error) => {
-                    answered[index] = true;
-                    heard(index, Err(error.context(format!("decode {} for recognition", path.display()))));
-                }
-            }
-        }
-        // A track's JSON is taken once it parses: Whisper writes it whole when
-        // that track is done, and a half-written one is simply read next time
-        let mut take = |answered: &mut Vec<bool>| {
-            for index in 0..audio.len() {
-                if answered[index] {
-                    continue;
-                }
-                let Ok(text) = fs::read_to_string(out_dir.join(format!("{index}.json"))) else { continue };
-                if serde_json::from_str::<serde_json::Value>(&text).is_err() {
-                    continue;
-                }
-                answered[index] = true;
-                let words = whisper_words_from_json(&text);
-                heard(index, if words.is_empty() { Err(anyhow!(NO_WORDS)) } else { Ok(words) });
-            }
-        };
-        let on_card = config.runtime.uses_cuda();
-        let all: Vec<PathBuf> = wavs.iter().map(|(_, wav)| wav.clone()).collect();
-        let mut outcome = self.run_whisper_many(&binary, size, &all, &out_dir, language, on_card, &mut || take(&mut answered), cancel);
-        let mut recognised = Recognised::OnDevice;
-        if outcome.as_ref().is_err_and(|error| error.to_string() != "cancelled") && on_card {
-            // the card refused: the processor takes only what is still unheard,
-            // and the page is told it ran there
-            take(&mut answered);
-            let refused = outcome.unwrap_err();
-            let left: Vec<PathBuf> = wavs.iter().filter(|(index, _)| !answered[*index]).map(|(_, wav)| wav.clone()).collect();
-            outcome = if left.is_empty() {
-                Ok(())
-            } else {
-                recognised = Recognised::OnProcessor;
-                self.run_whisper_many(&binary, size, &left, &out_dir, language, false, &mut || take(&mut answered), cancel)
-                    .with_context(|| format!("the card was tried first and refused: {refused}"))
-            };
-        }
-        take(&mut answered);
-        let run_error = outcome.err().map(|error| format!("{error:#}"));
-        for (index, done) in answered.iter().enumerate() {
-            if !done {
-                heard(index, Err(anyhow!("{}", run_error.clone().unwrap_or_else(|| "whisper wrote no JSON for this track".into()))));
-            }
-        }
-        fs::remove_dir_all(&work).ok();
-        Ok(recognised)
-    }
-
-    /// Runs faster-whisper over one track and returns the words it heard.
-    ///
-    /// Purfview's standalone build, asked for JSON with word timestamps - the
-    /// same recogniser Dub Studio uses. It replaced whisper.cpp, which was
-    /// asked for an LRC file: that file is written line by line, word times had
-    /// to be guessed out of it, and when the run failed the binary exited zero
-    /// and wrote nothing at all, so the only thing anyone ever saw was
-    /// "whisper-cli produced no LRC file".
-    pub fn whisper_words(&self, config: &LyricsSyncConfig, audio: &Path, language: Option<&str>, _lyrics: &str) -> Result<Vec<(f64, String)>> {
-        let binary = self.whisper_binary().ok_or_else(|| anyhow!("the Whisper runtime is not installed"))?;
-        let size = config
-            .whisper_model
-            .as_deref()
-            .and_then(Self::whisper_size)
-            .ok_or_else(|| anyhow!("no Whisper model is downloaded and selected"))?;
-        if self.whisper_model_path(config).is_none() {
-            bail!("the Whisper model {size} is not completely downloaded");
-        }
-
-        let work = self.downloader.root().join("work");
-        fs::create_dir_all(&work).with_context(|| format!("create {}", work.display()))?;
-        let stem = work.join(format!("sync-{}", uuid::Uuid::now_v7()));
-        let wav = stem.with_extension("wav");
-        crate::audio_pcm::write_wav16k_mono(audio, &wav)
-            .with_context(|| format!("decode {} for recognition", audio.display()))?;
-        let out_dir = stem.with_extension("out");
-        fs::remove_dir_all(&out_dir).ok();
-        fs::create_dir_all(&out_dir).with_context(|| format!("create {}", out_dir.display()))?;
-
-        let on_card = config.runtime.uses_cuda();
-        let mut outcome = self.run_whisper(&binary, size, &wav, &out_dir, language, on_card);
-        // CTranslate2 fails inside itself on a machine without usable CUDA, so
-        // the card is tried and the processor is the answer to its refusal -
-        // once, and only in that direction.
-        if outcome.is_err() && on_card {
-            let refused = outcome.unwrap_err();
-            fs::remove_dir_all(&out_dir).ok();
-            fs::create_dir_all(&out_dir).ok();
-            outcome = self
-                .run_whisper(&binary, size, &wav, &out_dir, language, false)
-                .with_context(|| format!("the card was tried first and refused: {refused}"));
-        }
-        fs::remove_file(&wav).ok();
-
-        if let Err(error) = outcome {
-            fs::remove_dir_all(&out_dir).ok();
-            return Err(error);
-        }
-        let json = fs::read_dir(&out_dir)
-            .with_context(|| format!("read {}", out_dir.display()))?
-            .flatten()
-            .map(|entry| entry.path())
-            .find(|path| path.extension().and_then(|value| value.to_str()) == Some("json"))
-            .ok_or_else(|| anyhow!("whisper wrote no JSON into {}", out_dir.display()))?;
-        let text = fs::read_to_string(&json).with_context(|| format!("read {}", json.display()))?;
-        let words = whisper_words_from_json(&text);
-        fs::remove_dir_all(&out_dir).ok();
-        if words.is_empty() {
-            bail!(NO_WORDS);
-        }
-        Ok(words)
-    }
-
-    /// One run of the recogniser, with its complaints kept: a failure here is
-    /// the only place that ever says why nothing was recognised.
-    fn run_whisper(&self, binary: &Path, size: &str, wav: &Path, out_dir: &Path, language: Option<&str>, on_card: bool) -> Result<()> {
-        self.run_whisper_many(binary, size, &[wav.to_path_buf()], out_dir, language, on_card, &mut || {}, &AtomicBool::new(false))
-    }
-
-    /// Whisper over every file in one process; `poll` is called while it
-    /// works, to pick up what it has written, and `cancel` stops it between polls.
-    #[allow(clippy::too_many_arguments)]
-    fn run_whisper_many(
-        &self,
-        binary: &Path,
-        size: &str,
-        wavs: &[PathBuf],
-        out_dir: &Path,
-        language: Option<&str>,
-        on_card: bool,
-        poll: &mut dyn FnMut(),
-        cancel: &AtomicBool,
-    ) -> Result<()> {
-        let mut command = Command::new(binary);
-        if let Some(path) = music_core::process::own_libraries_first(binary) {
-            command.env("LD_LIBRARY_PATH", path);
-        }
-        dub_core::proc::outside_appimage(&mut command);
-        command
-            .args(wavs)
-            .arg("--model")
-            .arg(size)
-            .arg("--model_dir")
-            .arg(self.whisper_model_dir())
-            .arg("--task")
-            .arg("transcribe")
-            .arg("--output_format")
-            .arg("json")
-            .arg("--output_dir")
-            .arg(out_dir)
-            .arg("--word_timestamps")
-            .arg("True")
-            .arg("--compute_type")
-            .arg(if on_card { "int8_float16" } else { "int8" })
-            .arg("--device")
-            .arg(if on_card { "cuda" } else { "cpu" })
-            .arg("--beep_off")
-            // A hallucination fed back as the next window's prompt is how one
-            // subtitler's credit becomes eight; lyrics lose nothing by it
-            .args(["--condition_on_previous_text", "False"]);
-        // A language it was told beats one it has to guess, and "auto" is not a
-        // language code - passing it as one is how a run comes back empty.
-        if let Some(code) = language.map(str::trim).filter(|code| !code.is_empty() && *code != "auto") {
-            command.arg("--language").arg(code);
-        }
-        command
-            // The weights are on this disk; a recogniser that goes looking for
-            // them on the network is one that fails without one.
-            .env("HF_HUB_OFFLINE", "1")
-            .env("TRANSFORMERS_OFFLINE", "1")
-            .stdin(Stdio::null());
-        // Its output goes to a file: a pipe nobody reads while it works through
-        // a whole dataset fills up and stalls it.
-        let log_path = out_dir.with_extension("log");
-        let log = fs::File::create(&log_path).with_context(|| format!("create {}", log_path.display()))?;
-        command.stdout(log.try_clone()?).stderr(log);
-        // CTranslate2 and the CUDA libraries sit beside the binary, and that is
-        // where they are found from.
-        if let Some(directory) = binary.parent() {
-            command.current_dir(directory);
-            // a Linux loader does not look beside the program
-            #[cfg(target_os = "linux")]
-            command.env(
-                "LD_LIBRARY_PATH",
-                std::env::join_paths(std::iter::once(directory.to_path_buf()).chain(std::env::var_os("LD_LIBRARY_PATH").iter().flat_map(std::env::split_paths)))
-                    .unwrap_or_else(|_| directory.as_os_str().to_owned()),
-            );
-            // CTranslate2 in this build asks for an executable stack, which glibc 2.41 and later refuse unless told
-            #[cfg(target_os = "linux")]
-            command.env(
-                "GLIBC_TUNABLES",
-                std::env::var("GLIBC_TUNABLES").ok().filter(|tunables| !tunables.is_empty()).map_or_else(|| "glibc.rtld.execstack=2".to_string(), |tunables| format!("{tunables}:glibc.rtld.execstack=2")),
-            );
-        }
-        hide_console(&mut command);
-
-        let mut child = command.spawn().with_context(|| format!("run {}", binary.display()))?;
-        let status = loop {
-            if let Some(status) = child.try_wait()? {
-                break status;
-            }
-            if cancel.load(Ordering::Relaxed) {
-                child.kill().ok();
-                child.wait().ok();
-                bail!("cancelled");
-            }
-            poll();
-            std::thread::sleep(std::time::Duration::from_millis(500));
-        };
-        let output = fs::read_to_string(&log_path).unwrap_or_default();
-        fs::remove_file(&log_path).ok();
-        if status.success() {
-            return Ok(());
-        }
-        let mut tail: Vec<&str> = output.lines().filter(|line| !line.trim().is_empty()).rev().take(8).collect();
-        tail.reverse();
-        bail!("whisper exited with {}: {}", status, tail.join(" | "))
-    }
 }
 
-/// Groups a word stream into karaoke lines: a new line at a noticeable pause,
-/// at sentence-ending punctuation, or once a line grows past comfortable
-/// reading length. Ported from the segmentation Dub Studio uses for subtitles.
+/// Groups a word stream into lines: a sentence's end closes its line; a pause
+/// between the starts of two words opens a new one, 1.2 s anywhere (a held
+/// note is not a pause) or 0.6 s after a comma, except before the word that
+/// ends the sentence within 3 s; a line past 48 characters is
+/// cut after its last comma, else before its last word. Words of a script
+/// written without spaces (Chinese, Japanese) join without them, and the
+/// length counts characters either way.
 pub fn group_words(words: &[(f64, String)]) -> Vec<(f64, String)> {
-    const PAUSE: f64 = 0.6;
-    const MAX_CHARS: usize = 42;
+    const PAUSE: f64 = 1.2;
+    const PAUSE_AFTER_COMMA: f64 = 0.6;
+    const HELD_NOTE: f64 = 3.0;
 
     let mut lines: Vec<(f64, String)> = Vec::new();
-    let mut start = 0.0;
-    let mut current = String::new();
-    let mut previous: Option<f64> = None;
-
+    let mut current: Vec<(f64, &str)> = Vec::new();
     for (at, word) in words {
-        let pause = previous.is_some_and(|last| at - last > PAUSE);
-        let too_long = current.chars().count() + word.chars().count() + 1 > MAX_CHARS;
-        if !current.is_empty() && (pause || too_long) {
-            lines.push((start, std::mem::take(&mut current)));
+        let word = word.as_str();
+        if let Some(&(last_at, last)) = current.last() {
+            let after_comma = ends_clause(last) || starts_with_any(word, CLAUSE_ENDS);
+            let wait = if after_comma { PAUSE_AFTER_COMMA } else { PAUSE };
+            // a word that ends the sentence stays with it however long the note before it was held;
+            // punctuation a recogniser hangs at the start of the next word ends the line before it
+            let paused = at - last_at > wait && !(ends_sentence(word) && at - last_at < HELD_NOTE);
+            if paused || starts_with_any(word, SENTENCE_ENDS) {
+                lines.push(joined_line(&std::mem::take(&mut current)));
+            }
         }
-        if current.is_empty() {
-            start = *at;
-        } else {
-            current.push(' ');
+        current.push((*at, word));
+        if ends_sentence(word) {
+            lines.push(joined_line(&std::mem::take(&mut current)));
+            continue;
         }
-        current.push_str(word);
-        if word.ends_with(['.', '!', '?', '…']) {
-            lines.push((start, std::mem::take(&mut current)));
+        while current.len() > 1 && joined_line(&current).1.chars().count() > LINE_CHARS {
+            let before_last = current.len() - 1;
+            let cut = current[..before_last].iter().rposition(|(_, word)| ends_clause(word)).map_or(before_last, |index| index + 1);
+            lines.push(joined_line(&current[..cut]));
+            current.drain(..cut);
         }
-        previous = Some(*at);
     }
     if !current.is_empty() {
-        lines.push((start, current));
+        lines.push(joined_line(&current));
     }
     merge_flashing_lines(lines)
 }
 
+/// The longest line, in characters, that reads at a glance.
+const LINE_CHARS: usize = 48;
+const SENTENCE_ENDS: &[char] = &['.', '!', '?', '…', '。', '！', '？'];
+const CLAUSE_ENDS: &[char] = &[',', ';', '，', '、', '；'];
+const CLOSING_QUOTES: &[char] = &['"', '\'', '»', '”', '’', ')', '」', '』', '）'];
+
+/// Whether a word ends a sentence, a closing quote or bracket after the mark aside.
+fn ends_sentence(word: &str) -> bool {
+    word.trim_end().trim_end_matches(CLOSING_QUOTES).ends_with(SENTENCE_ENDS)
+}
+
+/// Whether a word ends a clause with a comma or its like.
+fn ends_clause(word: &str) -> bool {
+    word.trim_end().trim_end_matches(CLOSING_QUOTES).ends_with(CLAUSE_ENDS)
+}
+
+fn starts_with_any(word: &str, marks: &[char]) -> bool {
+    word.trim_start().starts_with(marks)
+}
+
+/// A character of a script written without spaces between words.
+fn unspaced(c: char) -> bool {
+    matches!(c, '\u{3040}'..='\u{30FF}' | '\u{3400}'..='\u{4DBF}' | '\u{4E00}'..='\u{9FFF}' | '\u{F900}'..='\u{FAFF}' | '\u{3000}'..='\u{303F}' | '\u{FF00}'..='\u{FFEF}')
+}
+
+/// The words of a line as text, starting at its first word.
+fn joined_line(words: &[(f64, &str)]) -> (f64, String) {
+    let mut text = String::new();
+    for (_, word) in words {
+        let word = word.trim();
+        let glued = text.chars().last().is_some_and(unspaced) && word.chars().next().is_some_and(unspaced);
+        if !text.is_empty() && !glued {
+            text.push(' ');
+        }
+        text.push_str(word);
+    }
+    (words.first().map_or(0.0, |(at, _)| *at), text)
+}
+
 /// ACE Step Studio merged LRC lines that begin less than two seconds apart so
-/// they do not flash past unread. Karaoke here follows the same rule.
+/// they do not flash past unread. Karaoke here follows the same rule, except
+/// across the end of a sentence.
 fn merge_flashing_lines(lines: Vec<(f64, String)>) -> Vec<(f64, String)> {
     const MIN_DISPLAY_SECONDS: f64 = 2.0;
     let mut merged: Vec<(f64, String)> = Vec::with_capacity(lines.len());
     for (start, text) in lines {
         match merged.last_mut() {
-            Some((previous_start, previous_text)) if start - *previous_start < MIN_DISPLAY_SECONDS => {
-                previous_text.push(' ');
+            Some((previous_start, previous_text))
+                if start - *previous_start < MIN_DISPLAY_SECONDS
+                    && !ends_sentence(previous_text)
+                    && previous_text.chars().count() + 1 + text.chars().count() <= LINE_CHARS =>
+            {
+                if !(previous_text.chars().last().is_some_and(unspaced) && text.chars().next().is_some_and(unspaced)) {
+                    previous_text.push(' ');
+                }
                 previous_text.push_str(&text);
             }
             _ => merged.push((start, text)),
@@ -1998,12 +1095,10 @@ pub fn align_lyrics(words: &[(f64, String)], lyrics: &str) -> Vec<(f64, String)>
     if words.is_empty() {
         return Vec::new();
     }
-    let heard_lines = heard_line_starts(words, lyrics);
+    let (heard_lines, edges) = heard_lines(words, lyrics);
     let lines: Vec<&str> = heard_lines.iter().map(|(line, _)| line.as_str()).collect();
     let mut placed: Vec<Option<f64>> = heard_lines.iter().map(|(_, at)| *at).collect();
-    let first = words.first().map(|(at, _)| *at).unwrap_or(0.0);
-    let last = words.last().map(|(at, _)| *at).unwrap_or(0.0);
-    interpolate(&lines, &mut placed, first, last);
+    interpolate(&lines, &mut placed, &edges);
     lines
         .iter()
         .zip(placed)
@@ -2014,13 +1109,32 @@ pub fn align_lyrics(words: &[(f64, String)], lyrics: &str) -> Vec<(f64, String)>
 /// Every sung line of the lyrics with the moment the recogniser heard it start,
 /// or None for a line it did not hear clearly enough to place.
 pub fn heard_line_starts(words: &[(f64, String)], lyrics: &str) -> Vec<(String, Option<f64>)> {
+    heard_lines(words, lyrics).0
+}
+
+/// What the alignment pays for heard words it leaves without a line, as the
+/// gap penalty of a sequence alignment: a line placed past a sung stretch the
+/// text does not cover costs `per_word` for each word skipped, so leaping over
+/// a verse for a line matched only in part costs more than that match brings.
+/// `leading` counts the words before the first placed line as well.
+#[derive(Debug, Clone, Copy)]
+pub struct Gaps {
+    pub per_word: f64,
+    pub leading: bool,
+}
+
+pub const GAPS: Gaps = Gaps { per_word: 0.05, leading: true };
+
+/// The sung lines with the moments they start, and what the recogniser heard outside the placed ones.
+fn heard_lines(words: &[(f64, String)], lyrics: &str) -> (Vec<(String, Option<f64>)>, Edges) {
     let lines: Vec<&str> = lyrics
         .lines()
         .map(str::trim)
         .filter(|line| !line.is_empty() && !(line.starts_with('[') && line.ends_with(']')))
         .collect();
     if lines.is_empty() || words.is_empty() {
-        return lines.iter().map(|line| ((*line).to_string(), None)).collect();
+        let edges = Edges { before: 0, after: 0, first: 0.0, last: 0.0 };
+        return (lines.iter().map(|line| ((*line).to_string(), None)).collect(), edges);
     }
 
     let heard: Vec<(f64, String)> = words.iter().map(|(at, word)| (*at, normalise(word))).collect();
@@ -2058,19 +1172,27 @@ pub fn heard_line_starts(words: &[(f64, String)], lyrics: &str) -> Vec<(String, 
         })
         .collect();
 
-    // best[p]: the best (total, sum of starts) so far with the next line free
-    // to start at word p or later. Each line is either placed at some start
-    // >= p, which moves p past it, or left out. A clearly recognised line
-    // counts the same wherever it is heard best, and between equal totals the
-    // earlier placement wins: a chorus the model sang twice in a row shows its
-    // lines as they are first sung, not where the recogniser heard them best.
+    // best[p]: the best (total, sum of placed line numbers, sum of starts) so
+    // far with the next line free to start at word p or later. Each line is
+    // either placed at some start >= p, which moves p past it, or left out. A
+    // clearly recognised line counts the same wherever it is heard best.
+    // Between equal totals the earlier lines of the text win - a verse written
+    // out more times than the song sings it is heard as its first copies, so
+    // the copies past the song stay unplaced - and then the earlier placement:
+    // a chorus the model sang twice in a row shows its lines as they are first
+    // sung, not where the recogniser heard them best.
     let credit = |score: f64| if score >= 0.7 { 1.0 } else { score };
-    let better = |left: (f64, usize), right: (f64, usize)| left.0 > right.0 + 1e-9 || ((left.0 - right.0).abs() <= 1e-9 && left.1 < right.1);
-    let mut best: Vec<Option<(f64, usize)>> = vec![None; count + 1];
-    best[0] = Some((0.0, 0));
+    // (total, sum of placed line numbers, sum of starts, whether a line is placed yet)
+    type Kept = (f64, usize, usize, bool);
+    let better = |left: Kept, right: Kept| {
+        left.0 > right.0 + 1e-9 || ((left.0 - right.0).abs() <= 1e-9 && (left.1, left.2) < (right.1, right.2))
+    };
+    let gaps = GAPS;
+    let mut best: Vec<Option<Kept>> = vec![None; count + 1];
+    best[0] = Some((0.0, 0, 0, false));
     let mut back: Vec<Vec<(usize, Option<usize>)>> = Vec::with_capacity(lines.len());
     for (index, &span) in spans.iter().enumerate() {
-        let mut next: Vec<Option<(f64, usize)>> = vec![None; count + 1];
+        let mut next: Vec<Option<Kept>> = vec![None; count + 1];
         let mut choice = vec![(0usize, None); count + 1];
         for from in 0..=count {
             let Some(so_far) = best[from] else { continue };
@@ -2087,7 +1209,8 @@ pub fn heard_line_starts(words: &[(f64, String)], lyrics: &str) -> Vec<(String, 
                     continue;
                 }
                 let after = (start + span).min(count);
-                let total = (so_far.0 + credit(score), so_far.1 + start);
+                let skipped = if so_far.3 || gaps.leading { start - from } else { 0 };
+                let total = (so_far.0 + credit(score) - gaps.per_word * skipped as f64, so_far.1 + index, so_far.2 + start, true);
                 if next[after].is_none_or(|kept| better(total, kept)) {
                     next[after] = Some(total);
                     choice[after] = (from, Some(start));
@@ -2110,23 +1233,45 @@ pub fn heard_line_starts(words: &[(f64, String)], lyrics: &str) -> Vec<(String, 
         position = from;
     }
 
-    // A clearly recognised line was credited in full, so its start may sit a
-    // word early; settle it where it matches best, between its neighbours.
+    // A clearly recognised line was credited in full, so its start may sit as
+    // early as the first word it still matches from - a few sounds the
+    // recogniser heard before it count too; settle it where it matches best,
+    // between its neighbours and within its own length.
     for index in 0..lines.len() {
         let Some(start) = starts[index] else { continue };
         let floor = starts[..index].iter().rev().flatten().next().map(|previous| previous + 1).unwrap_or(0);
         let ceiling = starts[index + 1..].iter().flatten().next().copied().unwrap_or(count);
         let low = start.saturating_sub(2).max(floor);
-        let high = (start + 2).min(ceiling.saturating_sub(1)).min(count.saturating_sub(1));
+        let high = (start + spans[index].max(2)).min(ceiling.saturating_sub(1)).min(count.saturating_sub(1));
         let settled = (low..=high).fold(start, |kept, candidate| if scores[index][candidate] > scores[index][kept] { candidate } else { kept });
         starts[index] = Some(settled);
     }
-    lines.iter().zip(starts).map(|(line, start)| ((*line).to_string(), start.map(|start| heard[start].0))).collect()
+
+    // the words heard before the first placed line and after the last one: an
+    // edge gap is timed only when the recogniser heard enough there to sing it
+    let first_start = starts.iter().flatten().next().copied().unwrap_or(count);
+    let after_last = starts
+        .iter()
+        .zip(&spans)
+        .filter_map(|(start, &span)| start.map(|start| (start + span).min(count)))
+        .last()
+        .unwrap_or(0);
+    let edges = Edges {
+        before: first_start,
+        after: count - after_last.min(count),
+        first: heard.first().map(|(at, _)| *at).unwrap_or(0.0),
+        last: heard.last().map(|(at, _)| *at).unwrap_or(0.0),
+    };
+    (lines.iter().zip(starts).map(|(line, start)| ((*line).to_string(), start.map(|start| heard[start].0))).collect(), edges)
 }
 
 /// Lines the recogniser could not place are spread evenly between the ones it
-/// could, so a karaoke file has no silent holes.
-fn interpolate(lines: &[&str], placed: &mut [Option<f64>], first: f64, last: f64) {
+/// could, so a karaoke file has no silent holes. A gap before the first placed
+/// line or after the last one is timed only when the recogniser heard at least
+/// as many unmatched words there as the gap has lines - a first line sung
+/// unclearly keeps its place - and otherwise is not in the song as heard (a
+/// text longer than what was sung) and gets no time.
+fn interpolate(lines: &[&str], placed: &mut [Option<f64>], edges: &Edges) {
     let mut index = 0;
     while index < lines.len() {
         if placed[index].is_some() {
@@ -2137,13 +1282,31 @@ fn interpolate(lines: &[&str], placed: &mut [Option<f64>], first: f64, last: f64
         while index < lines.len() && placed[index].is_none() {
             index += 1;
         }
-        let before = gap_start.checked_sub(1).and_then(|previous| placed[previous]).unwrap_or(first);
-        let after = placed.get(index).copied().flatten().unwrap_or(last.max(before));
-        let steps = (index - gap_start + 1) as f64;
-        for (offset, slot) in placed[gap_start..index].iter_mut().enumerate() {
-            *slot = Some(before + (after - before) * ((offset + 1) as f64 / steps));
+        let gap = index - gap_start;
+        let before = gap_start.checked_sub(1).and_then(|previous| placed[previous]);
+        let after = placed.get(index).copied().flatten();
+        let (from, to, leading) = match (before, after) {
+            (Some(before), Some(after)) => (before, after, false),
+            (None, Some(after)) if edges.before >= gap => (edges.first, after, true),
+            (Some(before), None) if edges.after >= gap => (before, edges.last.max(before), false),
+            (None, None) if edges.before >= gap => (edges.first, edges.last, true),
+            _ => continue,
+        };
+        // a leading gap starts at the first word heard; any other one starts after the line before it
+        let (offset, steps) = if leading { (0.0, gap as f64) } else { (1.0, (gap + 1) as f64) };
+        for (position, slot) in placed[gap_start..index].iter_mut().enumerate() {
+            *slot = Some(from + (to - from) * ((position as f64 + offset) / steps));
         }
     }
+}
+
+/// What the recogniser heard outside the placed lines: how many words before
+/// the first one and after the last one, and the times of the first and last word.
+struct Edges {
+    before: usize,
+    after: usize,
+    first: f64,
+    last: f64,
 }
 
 /// A word without its last character, for tolerating inflected endings.
@@ -2191,16 +1354,6 @@ fn similarity(expected: &str, heard: &str) -> f64 {
     previous[right.len()] as f64 / left.len() as f64
 }
 
-#[cfg(windows)]
-fn hide_console(command: &mut Command) {
-    use std::os::windows::process::CommandExt;
-    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
-    command.creation_flags(CREATE_NO_WINDOW);
-}
-
-#[cfg(not(windows))]
-fn hide_console(_command: &mut Command) {}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2225,24 +1378,40 @@ mod tests {
         assert!(!is_hallucination("Если б мне платили каждый раз,"));
         assert!(!is_hallucination("Спасибо, что ты рядом со мной"));
         assert!(!is_hallucination("Поехали!"));
-        let json = r#"{"segments":[{"start":1.0,"text":" Субтитры создавал DimaTorzok","words":[{"start":1.0,"word":" Субтитры"}]},{"start":5.0,"text":" Тьма во мне","words":[{"start":5.0,"word":" Тьма"},{"start":5.4,"word":" во"},{"start":5.6,"word":" мне"}]}]}"#;
-        let words = whisper_words_from_json(json);
+        let word = |text: &str, start: f64| acpp_server::TranscriptWord { text: text.into(), start, end: start + 0.3, confidence: 1.0 };
+        let span = |text: &str, start: f64, end: f64| acpp_server::TranscriptSpan { text: text.into(), start, end, confidence: 1.0 };
+        let transcript = acpp_server::Transcript {
+            text: String::new(),
+            language: Some("ru".into()),
+            words: vec![word("Субтитры", 1.0), word("Тьма", 5.0), word("во", 5.4), word("мне", 5.6)],
+            segments: vec![span(" Субтитры создавал DimaTorzok", 1.0, 2.0), span(" Тьма во мне", 5.0, 6.0)],
+        };
+        let words = heard_words(&transcript);
         assert_eq!(words.iter().map(|(_, word)| word.as_str()).collect::<Vec<_>>(), ["Тьма", "во", "мне"]);
+        assert_eq!(words[0].0, 5.0);
+        let touching = acpp_server::Transcript {
+            text: String::new(),
+            language: Some("ru".into()),
+            words: vec![word("Тьма", 5.2), word("во", 5.6)],
+            segments: vec![span("[Music]", 0.0, 5.2), span(" Тьма во", 5.2, 6.0)],
+        };
+        assert_eq!(heard_words(&touching).len(), 2, "the first word of the line after a filler is sung");
+        let instant = acpp_server::Transcript {
+            text: String::new(),
+            language: Some("ru".into()),
+            words: vec![word("Тьма", 12.5), word("во", 20.0), word("мне", 40.0)],
+            segments: vec![span("[Music]", 12.0, 12.0), span(" Тьма во мне", 12.5, 41.0)],
+        };
+        assert_eq!(heard_words(&instant).len(), 3, "a filler of no length takes no later word");
     }
 
     // The releases every runtime download is pinned to.
-    #[cfg(not(target_os = "linux"))]
-    const WHISPER_BUILD: &str = "Whisper-Faster_r192.3";
-    #[cfg(target_os = "linux")]
-    const WHISPER_BUILD: &str = "Whisper-Faster_r189.1";
-    const WHISPER_CUBLAS_BUILD: &str = "11.11.3.6";
-    const WHISPER_CUDNN_BUILD: &str = "8.9.7.29";
     const CUBLAS_BUILD: &str = "12.9.2.10";
     const CUDART_BUILD: &str = "12.9.79";
     const CUFFT_BUILD: &str = "11.4.1.4";
     const CUDNN_BUILD: &str = "9.25.0.15";
     const CURAND_BUILD: &str = "10.3.10.19";
-    const ONNXRUNTIME_BUILD: &str = "v1.30.0";
+    const ONNXRUNTIME_BUILD: &str = "v1.31.1";
     const ONNXRUNTIME_DIRECTML_BUILD: &str = "onnxruntime.directml/1.24.4/";
     const DIRECTML_BUILD: &str = "ai.directml/1.15.4/";
 
@@ -2276,6 +1445,60 @@ mod tests {
                 (12.0, "the engine dies".to_string()),
             ]
         );
+    }
+
+    fn timed(words: &[(f64, &str)]) -> Vec<(f64, String)> {
+        words.iter().map(|(at, word)| (*at, word.to_string())).collect()
+    }
+
+    #[test]
+    fn a_held_note_does_not_break_a_line() {
+        let words = timed(&[(10.0, "Feel"), (10.3, "the"), (10.6, "rhythm"), (11.0, "in"), (11.3, "my"), (12.2, "feet.")]);
+        assert_eq!(group_words(&words), vec![(10.0, "Feel the rhythm in my feet.".to_string())]);
+        // held past the pause: the word that ends the sentence still stays on its line
+        let held = timed(&[(10.0, "Feel"), (10.3, "the"), (10.6, "rhythm"), (11.0, "in"), (11.3, "my"), (13.0, "feet.")]);
+        assert_eq!(group_words(&held), vec![(10.0, "Feel the rhythm in my feet.".to_string())]);
+    }
+
+    #[test]
+    fn a_sentence_end_closes_its_line_even_inside_the_flash_window() {
+        let words = timed(&[(20.0, "dancing"), (20.4, "through"), (20.8, "these"), (21.1, "city"), (21.6, "lanes."), (22.2, "Shadows"), (22.6, "moving,"), (23.4, "flashing"), (23.8, "heat.")]);
+        assert_eq!(
+            group_words(&words),
+            vec![(20.0, "dancing through these city lanes.".to_string()), (22.2, "Shadows moving, flashing heat.".to_string())]
+        );
+    }
+
+    #[test]
+    fn a_pause_after_a_comma_is_shorter() {
+        let words = timed(&[(0.0, "Take"), (0.3, "my"), (0.6, "hand,"), (1.4, "we'll"), (1.7, "find"), (2.0, "our"), (2.3, "way"), (5.0, "now")]);
+        assert_eq!(group_words(&words), vec![(0.0, "Take my hand, we'll find our way".to_string()), (5.0, "now".to_string())]);
+        let lines = group_words(&timed(&[(0.0, "Take"), (0.3, "my"), (0.6, "hand,"), (3.0, "we'll"), (3.3, "find")]));
+        assert_eq!(lines, vec![(0.0, "Take my hand,".to_string()), (3.0, "we'll find".to_string())]);
+    }
+
+    #[test]
+    fn a_long_line_without_marks_is_cut_at_a_word() {
+        let text = "one two three four five six seven eight nine ten eleven twelve thirteen fourteen";
+        let words: Vec<(f64, String)> = text.split(' ').enumerate().map(|(index, word)| (index as f64 * 0.4, word.to_string())).collect();
+        let lines = group_words(&words);
+        assert!(lines.len() >= 2, "{lines:?}");
+        assert!(lines.iter().all(|(_, line)| line.chars().count() <= 48 + "fourteen".len()), "{lines:?}");
+        assert_eq!(lines.iter().map(|(_, line)| line.as_str()).collect::<Vec<_>>().join(" "), text);
+    }
+
+    #[test]
+    fn a_long_line_is_cut_after_its_last_comma() {
+        let words = timed(&[(0.0, "Hear"), (0.3, "the"), (0.6, "echoes"), (0.9, "of"), (1.1, "the"), (1.3, "streets,"), (1.6, "whispers"), (1.9, "of"), (2.1, "a"), (2.3, "thousand"), (2.6, "beats"), (2.9, "tonight"), (3.2, "again")]);
+        let lines = group_words(&words);
+        assert_eq!(lines[0].1, "Hear the echoes of the streets,", "{lines:?}");
+        assert_eq!(lines[1].1, "whispers of a thousand beats tonight again", "{lines:?}");
+    }
+
+    #[test]
+    fn chinese_words_join_without_spaces() {
+        let words = timed(&[(0.0, "我"), (0.3, "爱"), (0.6, "你。"), (5.0, "再见")]);
+        assert_eq!(group_words(&words), vec![(0.0, "我爱你。".to_string()), (5.0, "再见".to_string())]);
     }
 
     #[test]
@@ -2366,22 +1589,117 @@ Third");
         assert_eq!(lines[2].0, 10.0);
     }
 
+    /// A text that repeats its verse more times than the song sings it: the sung lines get their own times from the
+    /// first copies, and the copies past the song get no time at all instead of one shared point.
     #[test]
-    fn the_whisper_runtime_is_pinned_and_every_asset_is_distinct() {
+    fn a_text_longer_than_the_song_times_only_what_was_sung() {
+        let verse = ["neon fades along the lane", "footsteps keep the time of rain", "fold the night and leave it here", "morning has a sky to clear"];
+        let lyrics = (0..4).flat_map(|_| verse.iter()).copied().collect::<Vec<_>>().join("\n");
+        // the song sings the verse once and a half
+        let mut words: Vec<(f64, String)> = Vec::new();
+        let mut at = 10.0;
+        for line in verse.iter().chain(&verse[..2]) {
+            for word in line.split_whitespace() {
+                words.push((at, word.to_string()));
+                at += 0.5;
+            }
+            at += 1.0;
+        }
+        let lines = align_lyrics(&words, &lyrics);
+        assert_eq!(lines.len(), 6, "only the sung lines are timed: {lines:?}");
+        assert!(lines.windows(2).all(|pair| pair[0].0 < pair[1].0), "every sung line has its own time: {lines:?}");
+        assert_eq!(lines[0].0, 10.0);
+        let timed = align_lyrics_words(&words, &lyrics);
+        assert_eq!(timed.len(), 6);
+    }
+
+    /// A first line the recogniser heard but could not match keeps its place, from the first word heard.
+    #[test]
+    fn a_first_line_heard_unclearly_starts_at_the_first_word() {
+        let lyrics = "Neon fades along the lane\nFootsteps keep the time of rain\nFold the night and leave it here";
+        let mut words: Vec<(f64, String)> = vec![(5.0, "mmm".into()), (5.6, "ahh".into()), (6.2, "ooh".into())];
+        let mut at = 10.0;
+        for line in ["footsteps keep the time of rain", "fold the night and leave it here"] {
+            for word in line.split_whitespace() {
+                words.push((at, word.to_string()));
+                at += 0.5;
+            }
+            at += 1.0;
+        }
+        let lines = align_lyrics(&words, lyrics);
+        assert_eq!(lines.len(), 3, "{lines:?}");
+        assert_eq!((lines[0].0, lines[0].1.as_str()), (5.0, "Neon fades along the lane"));
+        assert_eq!(lines[1].0, 10.0, "{lines:?}");
+    }
+
+    /// Lines past the song stay without a time when nothing was heard after the last sung line, and when what was
+    /// heard there is fewer words than the lines.
+    #[test]
+    fn lines_past_the_song_get_no_time_from_a_few_stray_words() {
+        let sung = "neon fades along the lane";
+        let lyrics = std::iter::once(sung.to_string()).chain((0..68).map(|line| format!("extra line number {line} of the text"))).collect::<Vec<_>>().join("\n");
+        let mut words: Vec<(f64, String)> = sung.split_whitespace().enumerate().map(|(index, word)| (10.0 + index as f64 * 0.5, word.to_string())).collect();
+        assert_eq!(align_lyrics(&words, &lyrics).len(), 1, "no words after the sung line");
+        words.push((20.0, "yeah".into()));
+        words.push((21.0, "oh".into()));
+        assert_eq!(align_lyrics(&words, &lyrics).len(), 1, "two stray words do not time 68 lines");
+    }
+
+    #[test]
+    fn a_verse_whose_first_line_is_not_sung_stays_on_its_first_performance() {
+        // what Parakeet heard in en-A, a song that sings its verse twice, against a text whose first line it never sings
+        let words: Vec<(f64, String)> = include_str!("testdata/en-A-words.txt")
+            .lines()
+            .filter_map(|line| line.strip_prefix("W "))
+            .filter_map(|rest| {
+                let mut parts = rest.trim().splitn(2, ' ');
+                Some((parts.next()?.parse().ok()?, parts.next()?.trim().to_string()))
+            })
+            .collect();
+        assert_eq!(words.len(), 150);
+        let lines = align_lyrics(&words, include_str!("testdata/en-A-first-line-changed.txt"));
+        let starts: Vec<f64> = lines.iter().map(|(at, _)| *at).collect();
+        assert_eq!(starts, vec![11.76, 14.48, 17.28, 19.84, 22.88, 25.68], "{lines:?}");
+        assert_eq!(lines[1].1, "Footsteps keep the time of rain");
+    }
+
+/// Karaoke's engine loaded in this process and installed over: the record says the new release, the process keeps
+    /// the one it loaded, and the window is told it runs from the next start; a file of the record gone from the
+    /// folder makes the install not done.
+    #[test]
+    fn an_engine_installed_over_the_loaded_one_waits_for_a_restart_and_must_be_whole() {
+        let root = tempfile::tempdir().unwrap();
+        let sync = LyricsSync::new(root.path());
+        let build = dub_tcpp::Build::Cpu;
+        let asset = ASSETS.iter().find(|asset| asset.unzip_into == Some(build.dir())).expect("the processor build");
+        let dir = sync.downloader.runtime_dir(build.dir());
+        std::fs::create_dir_all(&dir).unwrap();
+        let files: Vec<PathBuf> = [dub_tcpp::LIBRARY, "ggml-cpu-alderlake.dll"].iter().map(|name| dir.join(name)).collect();
+        for file in &files {
+            std::fs::write(file, b"x").unwrap();
+        }
+        let record = sync.downloader.record_of(asset);
+        crate::install_record::write(&record, "https://example.invalid/engine-0.2.0.zip", "", &files, sync.downloader.root()).unwrap();
+        loaded_engines().lock().unwrap().insert(build.dir(), "https://example.invalid/engine-0.2.0.zip".into());
+        assert!(!sync.restart_to_apply(), "the loaded release is the one on disk");
+        crate::install_record::write(&record, asset.url, "", &files, sync.downloader.root()).unwrap();
+        assert!(sync.restart_to_apply(), "today's release is on disk, the process holds the earlier one");
+        assert!(sync.downloader.is_installed(asset));
+        std::fs::remove_file(&files[1]).unwrap();
+        assert!(!sync.downloader.is_installed(asset), "a file of the record is missing: not installed");
+        loaded_engines().lock().unwrap().remove(build.dir());
+    }
+
+    #[test]
+    fn every_runtime_is_pinned_and_every_asset_is_distinct() {
         for entry in ASSETS {
             assert!(entry.bytes > 0, "{} has no size", entry.id);
             assert!(entry.url.starts_with("https://"), "{} is not fetched over https", entry.id);
             assert_eq!(ASSETS.iter().filter(|other| other.id == entry.id).count(), 1);
             if entry.kind == AssetKind::Runtime {
-                // Every runtime is pinned to an exact release - whisper.cpp to
-                // its tag, ONNX Runtime to its version - so a working setup
-                // keeps working.
-                // NVIDIA's libraries are pinned by their own version in the
-                // archive name, the same way the others are.
-                let pinned = entry.url.contains(WHISPER_BUILD)
-                    || entry.url.contains(WHISPER_CUBLAS_BUILD)
-                    || entry.url.contains(WHISPER_CUDNN_BUILD)
-                    || entry.url.contains(ONNXRUNTIME_BUILD)
+                // Every runtime is pinned to an exact release, so a working setup keeps working; NVIDIA's libraries
+                // by their own version in the archive name.
+                let pinned = entry.url.contains(ONNXRUNTIME_BUILD)
                     || entry.url.contains(ONNXRUNTIME_DIRECTML_BUILD)
                     || entry.url.contains(DIRECTML_BUILD)
                     || entry.url.contains(CUBLAS_BUILD)
@@ -2408,32 +1726,65 @@ Third");
         config.provider = AsrProvider::Whisper;
         assert!(config.available());
     }
+
+    /// A cuBLAS that arrives in the folder on LD_LIBRARY_PATH while the studio runs is found on the next ask: a
+    /// library not found is asked about again, never remembered missing.
+    #[test]
+    fn a_library_downloaded_after_a_miss_is_found_without_a_restart() {
+        let folder = std::env::temp_dir().join(format!("loader-finds-{}", uuid::Uuid::now_v7()));
+        fs::create_dir_all(&folder).unwrap();
+        let name = format!("libstudio-test-{}.so.13", uuid::Uuid::now_v7());
+        let path = std::env::join_paths([folder.as_path()]).unwrap();
+        let no_cache = folder.join("no-ld.so.cache");
+        assert!(!loader_finds(&name, Some(&path), &no_cache));
+        fs::write(folder.join(&name), b"x").unwrap();
+        assert!(loader_finds(&name, Some(&path), &no_cache));
+        assert!(!loader_finds(&name, None, &no_cache), "outside the library path it is not taken for found");
+        fs::remove_dir_all(&folder).ok();
+    }
+
+
+    /// Parakeet takes the CUDA build of the card and driver - 13 or 12 - Vulkan on a card without one, or on Linux
+    /// without that CUDA's cuBLAS, and the processor without a card or when it is chosen.
+    #[test]
+    fn parakeet_takes_the_cuda_build_of_the_card() {
+        use crate::hardware::CudaBuild;
+        let all = |_: &str| true;
+        assert_eq!(parakeet_build_for(OnnxFlavour::Auto, true, Some(CudaBuild::Cuda13), all), dub_tcpp::Build::Cuda);
+        assert_eq!(parakeet_build_for(OnnxFlavour::Auto, true, Some(CudaBuild::Cuda12), all), dub_tcpp::Build::Cuda12);
+        assert_eq!(parakeet_build_for(OnnxFlavour::Auto, true, None, all), dub_tcpp::Build::Vulkan, "an AMD or Intel card");
+        assert_eq!(parakeet_build_for(OnnxFlavour::Auto, false, None, all), dub_tcpp::Build::Cpu, "no card");
+        assert_eq!(parakeet_build_for(OnnxFlavour::Cpu, true, Some(CudaBuild::Cuda12), all), dub_tcpp::Build::Cpu);
+        let no_cublas12 = |name: &str| name != "libcublas.so.12";
+        assert_eq!(parakeet_build_for(OnnxFlavour::Auto, true, Some(CudaBuild::Cuda12), no_cublas12), dub_tcpp::Build::Vulkan, "Linux without cuBLAS 12");
+        assert_eq!(parakeet_build_for(OnnxFlavour::Auto, true, Some(CudaBuild::Cuda13), no_cublas12), dub_tcpp::Build::Cuda);
+    }
+
+    #[test]
+    fn a_retired_choice_of_model_becomes_the_one_offered() {
+        let with = |model: Option<&str>| LyricsSyncConfig { whisper_model: model.map(String::from), ..LyricsSyncConfig::default() }.migrated().whisper_model;
+        assert_eq!(with(Some(PARAKEET_FP32)).as_deref(), Some(PARAKEET_V3));
+        assert_eq!(with(Some(PARAKEET_ULTRA)).as_deref(), Some(PARAKEET_ULTRA));
+        assert_eq!(with(Some(PARAKEET_V3)).as_deref(), Some(PARAKEET_V3));
+        assert_eq!(with(Some("whisper-large-v3")), None);
+        assert_eq!(with(None), None);
+    }
 }
 
 #[cfg(test)]
 mod live_recognition {
     use super::*;
 
-    /// The whole recognition path against a real installation, when one is
-    /// pointed at: decode, run the recogniser, read its JSON, get words with
-    /// times. Checking the download and the binary separately is what let a
-    /// finished installation still refuse to run.
+    /// The whole recognition path against a real installation, when one is pointed at: decode, run CrisperWhisper in
+    /// audio.cpp's server, get words with times.
     #[test]
     fn recognising_a_real_track_end_to_end() {
         let (Some(root), Some(track)) = (std::env::var_os("YUE_DATA_ROOT"), std::env::var_os("YUE_TEST_TRACK")) else { return };
-        let sync = LyricsSync::new(std::path::Path::new(&root));
-        let config = LyricsSyncConfig {
-            enabled: true,
-            provider: AsrProvider::Whisper,
-            whisper_model: Some("whisper-large-v3".into()),
-            runtime: OnnxFlavour::Cuda,
-            ..Default::default()
-        };
-        assert!(sync.whisper_binary().is_some(), "the recogniser is not installed");
-        assert!(sync.whisper_model_ready(&config), "the model is not considered ready");
-        let words = sync
-            .whisper_words(&config, std::path::Path::new(&track), Some("ru"), "")
-            .expect("recognition");
+        let root = std::path::Path::new(&root);
+        let sync = LyricsSync::new(root);
+        sync.set_acpp(std::sync::Arc::new(crate::acpp::Acpp::new(root)));
+        assert!(sync.crisper_ready(OnnxFlavour::Cuda), "CrisperWhisper or its server is not installed");
+        let words = sync.crisper_words(OnnxFlavour::Cuda, std::path::Path::new(&track), Some("ru")).expect("recognition");
         eprintln!("words: {}", words.len());
         for (at, word) in words.iter().take(8) {
             eprintln!("  {at:.2}s {word}");
@@ -2491,7 +1842,7 @@ mod live_recognition {
         // Windows and Linux fetch the engine-0.2.0 archive and unpack it into the build's folder under runtime/, where the
         // loader (runtime_dir(build.dir())) opens LIBRARY; the studio ships the CUDA 13, Vulkan and processor builds.
         #[cfg(any(windows, target_os = "linux"))]
-        for build in [dub_tcpp::Build::Cuda, dub_tcpp::Build::Vulkan, dub_tcpp::Build::Cpu] {
+        for build in dub_tcpp::Build::ALL {
             let asset = asset(build.dir()).unwrap();
             assert_eq!(asset.unzip_into, Some(build.dir()));
             assert_eq!(asset.marker, dub_tcpp::LIBRARY);
@@ -2542,69 +1893,12 @@ mod live_recognition {
 
 
 #[cfg(all(test, windows))]
-mod directml_live {
+mod parakeet_live {
     use super::*;
     use std::time::Instant;
 
-    /// Where the DirectML.dll this process loaded came from.
-    fn loaded_directml() -> Option<PathBuf> {
-        #[link(name = "kernel32")]
-        unsafe extern "system" {
-            fn GetModuleHandleW(name: *const u16) -> *mut std::ffi::c_void;
-            fn GetModuleFileNameW(module: *mut std::ffi::c_void, file: *mut u16, size: u32) -> u32;
-        }
-        let name: Vec<u16> = "DirectML.dll".encode_utf16().chain(Some(0)).collect();
-        let module = unsafe { GetModuleHandleW(name.as_ptr()) };
-        if module.is_null() {
-            return None;
-        }
-        let mut path = vec![0u16; 1024];
-        let length = unsafe { GetModuleFileNameW(module, path.as_mut_ptr(), path.len() as u32) } as usize;
-        Some(PathBuf::from(String::from_utf16_lossy(&path[..length])))
-    }
-
     fn env_path(name: &str) -> PathBuf {
         PathBuf::from(std::env::var_os(name).unwrap_or_else(|| panic!("{name} is not set")))
-    }
-
-    /// The DirectML build installed the way the studio installs it and bound,
-    /// once for the process. `YUE_TEST_DML_ADAPTER` pins a DXGI adapter - the
-    /// integrated Radeon beside an NVIDIA card - instead of the fastest card.
-    fn directml() -> Option<OnnxCard> {
-        static BOUND: std::sync::Once = std::sync::Once::new();
-        BOUND.call_once(|| {
-            let sync = LyricsSync::new(&env_path("YUE_DATA_ROOT"));
-            let parts: Vec<&'static Asset> = DIRECTML_ASSETS.iter().filter_map(|id| asset(id)).collect();
-            tokio::runtime::Runtime::new().unwrap().block_on(sync.downloader().install_all("test", &parts)).expect("install DirectML");
-            assert!(sync.has_directml_libraries(), "the DirectML build is incomplete after installing it");
-            if let Ok(adapter) = std::env::var("YUE_TEST_DML_ADAPTER") {
-                DIRECTML_ADAPTER.set(adapter.parse().expect("a DXGI adapter index")).unwrap();
-            }
-            let runtime = sync.downloader().runtime_dir("onnx-dml");
-            point_ort_at(&runtime.join("onnxruntime.dll"), Some(OnnxCard::DirectMl));
-            assert_eq!(loaded_directml().as_deref(), Some(runtime.join("DirectML.dll").as_path()), "another DirectML.dll serves the process");
-        });
-        Some(OnnxCard::DirectMl)
-    }
-
-    /// Beat This! on the card beside the processor: the time and the tempo.
-    #[test]
-    #[ignore = "downloads DirectML; needs YUE_DATA_ROOT, YUE_TEST_TRACK and YUE_TEST_BEAT_THIS"]
-    fn beat_this_runs_through_directml() {
-        let card = directml();
-        let mono = crate::audio_facts::decode(&env_path("YUE_TEST_TRACK")).expect("decode the track");
-        let beat = env_path("YUE_TEST_BEAT_THIS");
-        let measure = |card| {
-            let started = Instant::now();
-            let mut measurer = crate::audio_facts::Measurer::load(&beat, card).expect("load Beat This");
-            let facts = measurer.measure_mono(&mono).expect("measure");
-            (facts.bpm, measurer.on_gpu, started.elapsed().as_secs_f64())
-        };
-        let (card_bpm, on_gpu, card_time) = measure(card);
-        assert!(on_gpu, "DirectML did not take Beat This");
-        let (processor_bpm, _, processor_time) = measure(None);
-        eprintln!("tempo: card {card_bpm} BPM in {card_time:.1} s, processor {processor_bpm} BPM in {processor_time:.1} s");
-        assert_eq!(card_bpm, processor_bpm, "the card hears another tempo");
     }
 
     /// Parakeet on each transcribe.cpp build, from the karaoke folder of `YUE_DATA_ROOT`: how much of the song's own
@@ -2627,6 +1921,36 @@ mod directml_live {
             eprintln!("Parakeet on {build:?}: {:.0}% of the lyrics in order, {:.1} s\n  {}", share * 100.0, started.elapsed().as_secs_f64(), heard.join(" "));
             assert!(share > 0.5, "{build:?} hears too little of the lyrics");
         }
+    }
+
+/// The processor build of an earlier release loaded in this process, then today's installed over it, as the update
+    /// screen does while karaoke runs: every file of today's record is on disk at its size afterwards.
+    /// `YUE_DATA_ROOT` is a copy whose karaoke holds the earlier build and its record; `YUE_MODELS_ROOT` the folder of
+    /// the Parakeet models.
+    #[tokio::test]
+    #[ignore = "needs YUE_DATA_ROOT with an earlier processor build of transcribe.cpp and YUE_MODELS_ROOT, and the network"]
+    async fn an_install_over_the_loaded_engine_leaves_every_file() {
+        let data = env_path("YUE_DATA_ROOT");
+        let sync = LyricsSync::new(&data);
+        let build = dub_tcpp::Build::Cpu;
+        let asset = ASSETS.iter().find(|asset| asset.unzip_into == Some(build.dir())).expect("the processor build");
+        assert!(!sync.downloader.is_installed(asset), "the earlier release is on disk");
+        let model = parakeet_model(None);
+        let _asr = dub_tcpp::shared(&sync.downloader.runtime_dir(build.dir()), &dub_tcpp::model_path(&env_path("YUE_MODELS_ROOT"), model)).expect("load the earlier build");
+        let outcome = sync.downloader.install_all("karaoke", &[asset]).await;
+        let record = crate::install_record::read(&sync.downloader.record_of(asset));
+        let missing: Vec<String> = record
+            .iter()
+            .flat_map(|record| record.files.iter())
+            .filter(|file| std::fs::metadata(sync.downloader.root().join(&file.path)).map(|meta| meta.len()) .ok() != Some(file.size))
+            .map(|file| file.path.clone())
+            .collect();
+        let on_disk: Vec<String> = std::fs::read_dir(sync.downloader.runtime_dir(build.dir())).unwrap().flatten().map(|entry| entry.file_name().to_string_lossy().into_owned()).collect();
+        eprintln!("install: {outcome:?}\nrecord: {:?}\nmissing or of another size: {missing:?}\non disk: {on_disk:?}", record.as_ref().map(|record| &record.url));
+        outcome.expect("the install");
+        assert!(record.is_some_and(|record| record.url == asset.url), "today's record");
+        assert!(missing.is_empty(), "every file of the record: {missing:?}");
+        assert!(sync.downloader.is_installed(asset));
     }
 
     /// Words without punctuation, in lower case.

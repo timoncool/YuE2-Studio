@@ -452,6 +452,27 @@ footer p { margin: 0 0 8px; }
     </div>
   </section>
 
+  <section id="speed">
+    <h2>얼마나 빠른가</h2>
+    <p class="sub">3분짜리 노래가 그래픽 카드별로 얼마나 걸리는지입니다. YuE2 Studio 설치본이 30일 동안 보고한 평균입니다(버전 3.8, 모델 불러오기 포함. 사람마다 쓰는 모델 세트가 달라 결과가 다를 수 있습니다).</p>
+    <div class="scroll"><table>
+          <thead><tr><th>내 그래픽 카드</th><th>3분짜리 노래</th><th>속도</th></tr></thead>
+          <tbody>
+          <tr><td>NVIDIA, 24 GB 이상</td><td>약 1분</td><td>실시간의 2.7배</td></tr>
+          <tr><td>NVIDIA, 16 GB</td><td>약 2분</td><td>1.6×</td></tr>
+          <tr><td>NVIDIA, 12 GB</td><td>약 2분</td><td>1.4×</td></tr>
+          <tr><td>NVIDIA, 8 GB 이하</td><td>약 5분</td><td>0.6×</td></tr>
+          <tr><td>AMD, 16 GB 이상 (Vulkan)</td><td>3–4분</td><td>0.9×</td></tr>
+          <tr><td>Intel Arc, 12 GB (Vulkan)</td><td>약 7분</td><td>0.4×</td></tr>
+          <tr><td>Apple 실리콘, 24 GB 이상</td><td>약 8분</td><td>0.4×</td></tr>
+          <tr><td>Apple 실리콘, 16 GB</td><td>약 15분</td><td>0.2×</td></tr>
+          <tr><td>AMD, 8 GB 이하 (Vulkan)</td><td>약 1시간</td><td>0.05×</td></tr>
+          <tr><td>그래픽 카드 없음 (프로세서)</td><td>약 2.5시간</td><td>0.02×</td></tr>
+          </tbody>
+        </table></div>
+    <p class="note">우리 컴퓨터(RTX 4090, Ryzen 9 9950X3D, Windows 11, Q8_0 세트)에서는 1분 노래 20초, 4분 노래 54초, 10분 노래 약 3분이 걸리며, 작업 중 카드는 5–8 GB를 씁니다.</p>
+  </section>
+
   <section id="start">
     <h2>시작하기</h2>
     <ol class="steps">

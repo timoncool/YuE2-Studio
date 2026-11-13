@@ -45,6 +45,15 @@ pub fn build_for(choice: &str) -> Result<Build> {
     }
 }
 
+/// [`build_for`] of a device setting: the processor, the card (CUDA, or Vulkan on a card of another make) or Auto.
+pub fn build_for_runtime(runtime: crate::lyrics_sync::OnnxFlavour) -> Result<Build> {
+    build_for(match runtime {
+        crate::lyrics_sync::OnnxFlavour::Cpu => "cpu",
+        crate::lyrics_sync::OnnxFlavour::Cuda => "gpu",
+        crate::lyrics_sync::OnnxFlavour::Auto => "auto",
+    })
+}
+
 /// Whether a build computes on the graphics card.
 pub fn on_card(build: Build) -> bool {
     !matches!(build, Build::Cpu)
@@ -135,6 +144,48 @@ fn cuda12_assets() -> &'static [Asset] {
     })
 }
 
+/// Linux: the cuFFT of each CUDA build from NVIDIA's manylinux wheels, unpacked beside the server; its CUDA runtime
+/// and cuBLAS are the music engine's (`engine_runtime::LINUX_CUDA13` / `LINUX_CUDA12`), one copy for both.
+#[cfg(target_os = "linux")]
+static LINUX_CUDA: [(Build, Asset); 2] = [
+    (Build::Cuda13, Asset {
+        id: "audiocpp-libcufft12",
+        label: "NVIDIA cuFFT 12.4 (for the audio.cpp server)",
+        kind: AssetKind::Runtime,
+        url: "https://files.pythonhosted.org/packages/76/bf/3fea3d1c6262bded26ae00e3106432d63235954965d7785f5051ac146651/nvidia_cufft-12.4.0.43-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl",
+        relative_path: "runtime/audiocpp-cuda13-cufft.whl",
+        bytes: 161_750_089,
+        unzip_into: Some(Build::Cuda13.folder()),
+        marker: "libcufft.so.12",
+        pick: &["libcufft.so.12"],
+        vram_gb: None,
+        note: "Part of the CUDA 13 server.",
+    }),
+    (Build::Cuda12, Asset {
+        id: "audiocpp-libcufft11",
+        label: "NVIDIA cuFFT 11.4 (for the audio.cpp server)",
+        kind: AssetKind::Runtime,
+        url: "https://files.pythonhosted.org/packages/95/f4/61e6996dd20481ee834f57a8e9dca28b1869366a135e0d42e2aa8493bdd4/nvidia_cufft_cu12-11.4.1.4-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl",
+        relative_path: "runtime/audiocpp-cuda12-cufft.whl",
+        bytes: 200_877_592,
+        unzip_into: Some(Build::Cuda12.folder()),
+        marker: "libcufft.so.11",
+        pick: &["libcufft.so.11"],
+        vram_gb: None,
+        note: "Part of the CUDA 12 server.",
+    }),
+];
+
+/// Linux: the CUDA libraries a CUDA build of the server loads - its CUDA runtime and cuBLAS from the music engine's
+/// folder (`engine_runtime::LINUX_CUDA13` / `LINUX_CUDA12`), its cuFFT beside it.
+fn linux_cuda_libraries(build: Build) -> &'static [&'static str] {
+    match build {
+        Build::Cuda13 => &["libcudart.so.13", "libcublas.so.13", "libcublasLt.so.13", "libcufft.so.12"],
+        Build::Cuda12 => &["libcudart.so.12", "libcublas.so.12", "libcublasLt.so.12", "libcufft.so.11"],
+        Build::Vulkan | Build::Cpu | Build::Metal => &[],
+    }
+}
+
 /// Every download a build of the server needs, the program first.
 pub fn assets(build: Build) -> Vec<&'static Asset> {
     let mut assets: Vec<&'static Asset> = server_asset(build).into_iter().collect();
@@ -144,6 +195,8 @@ pub fn assets(build: Build) -> Vec<&'static Asset> {
         Build::Cuda12 => assets.extend(cuda12_assets().iter()),
         Build::Vulkan | Build::Cpu | Build::Metal => {}
     }
+    #[cfg(target_os = "linux")]
+    assets.extend(LINUX_CUDA.iter().filter(|(of, _)| *of == build).map(|(_, asset)| asset));
     assets
 }
 
@@ -156,8 +209,10 @@ pub struct Acpp {
     /// Every model the server may carry, by id. One server per build serves them all: a config that names only the
     /// model of the run at hand would restart the server whenever another tool asks for its own.
     known: std::sync::Mutex<Vec<ModelEntry>>,
-    /// Runs at work on the servers.
-    active: std::sync::Mutex<usize>,
+    /// Runs at work, by build.
+    active: std::sync::Mutex<Vec<(Build, usize)>>,
+    /// Signalled whenever a run ends: one waiting for its backend to be free looks again.
+    ended: std::sync::Condvar,
 }
 
 impl Acpp {
@@ -167,7 +222,8 @@ impl Acpp {
             logs: data_root.join("logs").join("audiocpp"),
             cuda13_libraries: OnceLock::new(),
             known: std::sync::Mutex::new(Vec::new()),
-            active: std::sync::Mutex::new(0),
+            active: std::sync::Mutex::new(Vec::new()),
+            ended: std::sync::Condvar::new(),
         }
     }
 
@@ -202,7 +258,8 @@ impl Acpp {
         self.downloader.runtime_dir(build.folder())
     }
 
-    fn exe(&self, build: Build) -> PathBuf {
+    /// The server program of a build, where it is or will be once downloaded.
+    pub fn exe(&self, build: Build) -> PathBuf {
         std::env::var_os("YUE_AUDIOCPP_SERVER").map(PathBuf::from).unwrap_or_else(|| self.folder(build).join(exe_name()))
     }
 
@@ -220,17 +277,21 @@ impl Acpp {
         self.missing(build).is_empty() && (std::env::var_os("YUE_AUDIOCPP_SERVER").is_some() || self.missing_libraries(build).is_empty())
     }
 
-    /// The CUDA libraries a CUDA build imports that are in none of the places Windows loads them from for the server:
-    /// beside the program, the music engine's cuBLAS 13, and PATH, which the server inherits (an installed CUDA
-    /// Toolkit's own, for which the engine downloads none).
+    /// The CUDA libraries a CUDA build loads that are in none of the places the loader finds them for the server: beside
+    /// the program, the music engine's CUDA libraries (`cuda13_libraries`, on Linux those of both CUDA builds), and
+    /// PATH or LD_LIBRARY_PATH, which the server inherits (an installed CUDA Toolkit's own).
     fn missing_libraries(&self, build: Build) -> Vec<&'static str> {
         let beside = self.folder(build);
-        let path: Vec<PathBuf> = std::env::var_os("PATH").map(|path| std::env::split_paths(&path).collect()).unwrap_or_default();
+        let variable = if cfg!(windows) { "PATH" } else { "LD_LIBRARY_PATH" };
+        let path: Vec<PathBuf> = std::env::var_os(variable).map(|path| std::env::split_paths(&path).collect()).unwrap_or_default();
         let mut dirs: Vec<&Path> = vec![&beside];
         if let Some(cuda13) = self.cuda13_libraries.get() {
             dirs.push(cuda13);
         }
         dirs.extend(path.iter().map(PathBuf::as_path));
+        if cfg!(target_os = "linux") {
+            return linux_cuda_libraries(build).iter().copied().filter(|library| !dirs.iter().any(|dir| dir.join(library).is_file())).collect();
+        }
         acpp_server::asset::missing_libraries(build, &dirs)
     }
 
@@ -246,12 +307,10 @@ impl Acpp {
         }
     }
 
-    /// The running server of this build carrying `model` (registered with it) and every other registered model on
-    /// disk: the one there is, or a new one in its place when the models on disk changed or the process ended. An
-    /// error, before the program starts, when the program or its CUDA libraries are missing or `model` is not on disk.
-    fn server(&self, build: Build, model: ModelEntry) -> Result<Arc<Server>> {
-        let id = model.id.clone();
-        self.register(model);
+    /// The server of this build carrying every registered model on disk, `id` among them: the running one when its
+    /// models are these, else a new one in its place. An error, before the program starts, when the program or its
+    /// CUDA libraries are missing or `id` is not on disk.
+    fn server(&self, build: Build, id: &str) -> Result<Arc<Server>> {
         let config = self.config(build, self.models_on_disk());
         if !config.models.iter().any(|entry| entry.id == id) {
             bail!("{id} is not on disk; download it in Settings - Models");
@@ -266,8 +325,16 @@ impl Acpp {
             }
         }
         let cuda13 = self.cuda13_libraries.get().cloned();
+        let beside = self.folder(build);
         let server = acpp_server::SERVERS
             .get(&config, READY_WITHIN, &|command| {
+                // a Linux loader does not look beside the program: the CUDA libraries lie in its folder
+                if cfg!(target_os = "linux") {
+                    let inherited = std::env::var_os("LD_LIBRARY_PATH").unwrap_or_default();
+                    if let Ok(path) = std::env::join_paths(std::iter::once(beside.clone()).chain(std::env::split_paths(&inherited))) {
+                        command.env("LD_LIBRARY_PATH", path);
+                    }
+                }
                 // cuBLAS 13 lies beside the music engine, which the studio's PATH already names first
                 if let Some(folder) = &cuda13 {
                     let existing = std::env::var_os("PATH").unwrap_or_default();
@@ -277,6 +344,44 @@ impl Acpp {
                 }
             })
             .map_err(|error| anyhow!("{}", describe(&error)))?;
+        Ok(server)
+    }
+
+    /// `work` on the server of `build` carrying `model`: the one at work when it carries the model, else a new one once
+    /// the runs on it have ended; a server under work is never replaced. The run counts from the moment its server is
+    /// chosen; `stop`, asked while it waits for the server, ends it with "stopped" first.
+    pub fn with_server<T>(&self, build: Build, model: ModelEntry, stop: &(dyn Fn() -> bool + Sync), work: impl FnOnce(&Server) -> Result<T>) -> Result<T> {
+        let id = model.id.clone();
+        self.register(model);
+        let backend = build.backend();
+        let server = self.claim(build, stop, |busy| {
+            let running = acpp_server::SERVERS.running(backend);
+            let seen = running.as_ref().map(|server| Seen { alive: server.alive(), carries: server.config().models.iter().any(|entry| entry.id == id) });
+            match take(seen, busy) {
+                Take::Running => Ok(Some(running.expect("a running server was seen"))),
+                Take::Wait => Ok(None),
+                Take::Start => self.server(build, &id).map(Some),
+            }
+        })?;
+        let _work = Work { acpp: self, build };
+        work(&server)
+    }
+
+    /// The server `choose` gives for a run of `build`, counted as at work on it. `choose` is asked, with whether a run is
+    /// at work on the backend, under the count's lock: `None` waits for a run to end and asks again. `stop`, asked while
+    /// the run waits, ends it with "stopped" before it counts or touches a server.
+    fn claim<S>(&self, build: Build, stop: &(dyn Fn() -> bool + Sync), mut choose: impl FnMut(bool) -> Result<Option<S>>) -> Result<S> {
+        let mut active = self.active.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        let server = loop {
+            if let Some(server) = choose(busy(&active, build.backend()))? {
+                break server;
+            }
+            if stop() {
+                bail!("stopped");
+            }
+            active = self.ended.wait_timeout(active, Duration::from_millis(100)).unwrap_or_else(|poisoned| poisoned.into_inner()).0;
+        };
+        begin(&mut active, build);
         Ok(server)
     }
 }
@@ -289,49 +394,130 @@ pub fn describe(error: &AcppError) -> String {
     }
 }
 
-/// Runs `request` on `model` in the server of `build` (`Acpp::server`). `stop` is asked every tenth of a second.
-/// When the last run on the server ends - done, failed or stopped - the server is ended: an idle server still holds
-/// a gigabyte of the card, which belongs to the music engine between runs, and a stopped run would otherwise go on
-/// to its end. A run counts from before its server is looked up, so one that ends meanwhile leaves the server to it.
+/// Runs `request` on `model` in the server of `build` (`take`): the one at work when it carries the model, else a new
+/// one once the runs on it have ended; a server under work is never replaced. `stop` is asked every tenth of a second,
+/// while the run waits for the server too. The run counts from the moment its server is chosen.
 pub fn run(acpp: &Acpp, build: Build, model: ModelEntry, request: Value, stop: &(dyn Fn() -> bool + Sync)) -> Result<Value> {
-    *acpp.active.lock().unwrap_or_else(|poisoned| poisoned.into_inner()) += 1;
+    run_with(acpp, build, model, stop, |server, id, cancel| server.run_task(id, request, cancel))
+}
+
+/// [`run`] through the server's stream: the artifacts of each event go to `on_event` as the model produces them; the
+/// answer is the same result.
+pub fn run_stream(
+    acpp: &Acpp,
+    build: Build,
+    model: ModelEntry,
+    request: Value,
+    stop: &(dyn Fn() -> bool + Sync),
+    on_event: &mut dyn FnMut(&[acpp_server::TaskArtifact]),
+) -> Result<Value> {
+    run_with(acpp, build, model, stop, |server, id, cancel| server.run_task_stream(id, request, cancel, on_event))
+}
+
+fn run_with(
+    acpp: &Acpp,
+    build: Build,
+    model: ModelEntry,
+    stop: &(dyn Fn() -> bool + Sync),
+    task: impl FnOnce(&Server, &str, &AtomicBool) -> std::result::Result<Value, AcppError>,
+) -> Result<Value> {
     let id = model.id.clone();
-    let server = match acpp.server(build, model) {
-        Ok(server) => server,
-        Err(error) => {
-            *acpp.active.lock().unwrap_or_else(|poisoned| poisoned.into_inner()) -= 1;
-            return Err(error);
-        }
-    };
-    let id = id.as_str();
-    let cancel = AtomicBool::new(false);
-    let finished = AtomicBool::new(false);
-    let answer = std::thread::scope(|scope| {
-        scope.spawn(|| {
-            while !finished.load(Ordering::SeqCst) {
-                if stop() {
-                    cancel.store(true, Ordering::SeqCst);
-                    return;
+    acpp.with_server(build, model, stop, |server| {
+        let id = id.as_str();
+        let cancel = AtomicBool::new(false);
+        let finished = AtomicBool::new(false);
+        let answer = std::thread::scope(|scope| {
+            scope.spawn(|| {
+                while !finished.load(Ordering::SeqCst) {
+                    if stop() {
+                        cancel.store(true, Ordering::SeqCst);
+                        return;
+                    }
+                    std::thread::sleep(Duration::from_millis(100));
                 }
-                std::thread::sleep(Duration::from_millis(100));
-            }
+            });
+            let answer = task(server, id, &cancel);
+            finished.store(true, Ordering::SeqCst);
+            answer
         });
-        let answer = server.run_task(id, request, &cancel);
-        finished.store(true, Ordering::SeqCst);
-        answer
-    });
-    let last = {
-        let mut active = acpp.active.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
-        *active -= 1;
-        *active == 0
-    };
-    if last {
-        server.kill();
+        match answer {
+            Ok(result) => Ok(result),
+            Err(AcppError::Cancelled) => bail!("stopped"),
+            Err(error) => Err(anyhow!("audio.cpp's {id}: {}", describe(&error))),
+        }
+    })
+}
+
+/// The server running on a backend, as a run about to start sees it.
+#[derive(Debug, Clone, Copy)]
+struct Seen {
+    alive: bool,
+    /// It carries the model the run needs.
+    carries: bool,
+}
+
+/// What a run does with the server of its backend.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Take {
+    /// The one running, as it is: another run is at work on it.
+    Running,
+    /// Wait for the runs on it to end: it lacks the model, and replacing it would break them.
+    Wait,
+    /// `SERVERS.get`: the running one when its models are today's, else a new one in its place.
+    Start,
+}
+
+/// A server under work is never replaced: the run takes it as it is when it carries the model, else waits.
+fn take(running: Option<Seen>, busy: bool) -> Take {
+    match running {
+        Some(seen) if seen.alive && busy => {
+            if seen.carries {
+                Take::Running
+            } else {
+                Take::Wait
+            }
+        }
+        _ => Take::Start,
     }
-    match answer {
-        Ok(result) => Ok(result),
-        Err(AcppError::Cancelled) => bail!("stopped"),
-        Err(error) => Err(anyhow!("audio.cpp's {id}: {}", describe(&error))),
+}
+
+/// Some run is at work on a server of `backend`: the CUDA builds share one.
+fn busy(active: &[(Build, usize)], backend: acpp_server::Backend) -> bool {
+    active.iter().any(|(build, runs)| build.backend() == backend && *runs > 0)
+}
+
+fn begin(active: &mut Vec<(Build, usize)>, build: Build) {
+    match active.iter_mut().find(|(at, _)| *at == build) {
+        Some((_, runs)) => *runs += 1,
+        None => active.push((build, 1)),
+    }
+}
+
+/// Counts a run of `build` off; whether its backend is free now.
+fn end(active: &mut [(Build, usize)], build: Build) -> bool {
+    if let Some((_, runs)) = active.iter_mut().find(|(at, _)| *at == build) {
+        *runs = runs.saturating_sub(1);
+    }
+    !busy(active, build.backend())
+}
+
+/// A run at work. When it ends - done, failed, stopped or panicking - it is counted off, and the last one on its
+/// backend ends the server: an idle server still holds a gigabyte of the card, which belongs to the music engine
+/// between runs, and a stopped run would otherwise go on to its end.
+struct Work<'a> {
+    acpp: &'a Acpp,
+    build: Build,
+}
+
+impl Drop for Work<'_> {
+    fn drop(&mut self) {
+        let mut active = self.acpp.active.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        if end(&mut active, self.build) {
+            if let Some(server) = acpp_server::SERVERS.running(self.build.backend()) {
+                server.kill();
+            }
+        }
+        self.acpp.ended.notify_all();
     }
 }
 
@@ -355,11 +541,76 @@ mod tests {
         }
     }
 
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn a_linux_cuda_build_lays_every_library_its_server_loads_beside_it() {
+        // the server's cuFFT beside it, its CUDA runtime and cuBLAS in the one folder of the engine's
+        for (build, cuda) in [(Build::Cuda13, crate::hardware::CudaBuild::Cuda13), (Build::Cuda12, crate::hardware::CudaBuild::Cuda12)] {
+            let downloads = assets(build);
+            let shared = crate::engine_runtime::cuda_assets(cuda);
+            for library in linux_cuda_libraries(build) {
+                let found = downloads.iter().chain(shared.iter()).any(|asset| asset.pick.contains(library));
+                assert!(found, "{build:?} loads {library}, which nothing downloads");
+            }
+            for download in &downloads {
+                assert_eq!(download.unzip_into, Some(build.folder()), "{} lands beside the {build:?} server", download.id);
+                assert!(crate::pin_sha::sha256(download.url).is_some(), "{} names the SHA-256 of its pin", download.id);
+            }
+            for library in shared {
+                assert!(!downloads.iter().any(|asset| asset.url == library.url), "{} is downloaded once, by the engine runtime", library.id);
+                assert!(crate::pin_sha::sha256(library.url).is_some(), "{} names the SHA-256 of its pin", library.id);
+            }
+        }
+    }
+
     #[test]
     fn a_processor_choice_runs_the_processor_build() {
         if Build::for_this_mac().is_none() {
             assert_eq!(build_for("cpu").unwrap(), Build::Cpu);
             assert!(!on_card(Build::Cpu));
         }
+    }
+
+    #[test]
+    fn a_server_at_work_is_taken_as_it_is_or_waited_for_never_replaced() {
+        let carrying = Seen { alive: true, carries: true };
+        let lacking = Seen { alive: true, carries: false };
+        assert_eq!(take(Some(carrying), true), Take::Running, "another run's server carries the model");
+        assert_eq!(take(Some(lacking), true), Take::Wait, "it lacks the model and another run is at work on it");
+        assert_eq!(take(Some(lacking), false), Take::Start, "nobody is at work: replaced as before");
+        assert_eq!(take(None, false), Take::Start, "no server yet");
+        assert_eq!(take(Some(Seen { alive: false, carries: true }), true), Take::Start, "a server that died serves nobody");
+    }
+
+    #[test]
+    fn runs_are_counted_by_build_and_a_backend_frees_with_its_last_run() {
+        let mut active = Vec::new();
+        begin(&mut active, Build::Cuda13);
+        begin(&mut active, Build::Cpu);
+        begin(&mut active, Build::Cuda13);
+        assert!(end(&mut active, Build::Cpu), "the processor's server ends with its own run");
+        assert!(busy(&active, Build::Cuda13.backend()), "the CUDA runs keep the card's server");
+        assert!(!busy(&active, Build::Cpu.backend()));
+        assert!(!end(&mut active, Build::Cuda13), "one CUDA run still works");
+        assert!(end(&mut active, Build::Cuda13), "the last CUDA run frees its backend");
+        assert!(end(&mut active, Build::Cpu), "counting off below zero stays free");
+    }
+
+    #[test]
+    fn a_run_stopped_while_it_waits_neither_counts_nor_takes_a_server() {
+        let root = tempfile::tempdir().unwrap();
+        let acpp = Acpp::new(root.path());
+        begin(&mut acpp.active.lock().unwrap(), Build::Cuda13);
+        let asked = std::sync::atomic::AtomicUsize::new(0);
+        let stop = || asked.load(Ordering::SeqCst) >= 2;
+        let outcome = acpp.claim(Build::Cuda13, &stop, |busy| {
+            assert!(busy, "another run is at work");
+            asked.fetch_add(1, Ordering::SeqCst);
+            Ok(None::<()>)
+        });
+        assert_eq!(outcome.unwrap_err().to_string(), "stopped");
+        assert_eq!(asked.load(Ordering::SeqCst), 2, "it looked again after the wait, then stopped");
+        assert_eq!(*acpp.active.lock().unwrap(), vec![(Build::Cuda13, 1)], "the stopped run is not counted");
+        assert!(acpp.claim(Build::Cpu, &|| true, |_| Ok(Some(()))).is_ok(), "a server at hand is taken before stop is asked");
     }
 }

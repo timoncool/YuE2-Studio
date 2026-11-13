@@ -30,7 +30,7 @@ pub fn install(api: Router) {
 }
 
 /// The studio's name, as clients show it.
-const STUDIO: &str = "YuE2 Studio";
+pub(crate) const STUDIO: &str = "YuE2 Studio";
 /// The skill an agent reads, served as a resource and a prompt.
 const SKILL: &str = include_str!("../../../docs/mcp-skill.md");
 const SKILL_URI: &str = "studio://skill";
@@ -125,6 +125,7 @@ fn compact_run(run: &Value) -> Value {
         "steps_done": steps.len(), "step_limit": run["recipe"]["steps"], "preset": run["recipe"]["preset"], "songs_per_step": run["recipe"]["grad_accum"],
         "stop": if tuned { run["recipe"]["stop"].clone() } else { Value::Null }, "target_kl": if tuned { run["recipe"]["target_kl"].clone() } else { Value::Null },
         "last_step": last, "checkpoints": run["checkpoints"], "installed": run["installed"], "error": run["error"],
+        "step_stage": run["step_stage"],
     })
 }
 
@@ -154,6 +155,7 @@ fn compact_job(job: &Value) -> Value {
         "id": job["id"], "title": job["title"], "status": job["status"], "phase": job["phase"], "message": job["message"],
         "duration_seconds": job["duration_seconds"], "seed": settings["seed"], "lm_seed": settings["lm_seed"],
         "adapters": settings["adapters"], "songs": songs,
+        "tracks": settings["lm_batch_size"], "tracks_asked": job["tracks_asked"], "card_memory_short": job["card_memory_short"].as_bool().unwrap_or(false),
     })
 }
 
@@ -282,7 +284,7 @@ fn shape(name: &str, args: &Value, value: Value) -> Value {
 
 async fn status_summary() -> Value {
     let (jobs, activity, training, processing, separation) = tokio::join!(fetch("/v1/music/jobs"), fetch("/v1/activity"), fetch("/v1/training"), fetch("/v1/processing"), fetch("/v1/separation/status"));
-    let midi = fetch("/v1/midi").await;
+    let (midi, engine, own, restore) = tokio::join!(fetch("/v1/midi"), fetch("/engine/options"), fetch("/setup/own-model"), fetch("/v1/restore"));
     let running_activity: Vec<Value> = activity["activity"].as_array().into_iter().flatten().filter(|entry| entry["state"] == "running").cloned().collect();
     let active_run = training["runs"].as_array().into_iter().flatten().find(|run| Some(run["id"].as_str().unwrap_or_default()) == training["active"].as_str()).map(compact_run);
     json!({
@@ -292,9 +294,16 @@ async fn status_summary() -> Value {
         "covers_and_karaoke": running_activity,
         "stems": separation["run"],
         "midi": midi["run"],
+        "restore": restore["run"],
         "preparation": compact_preparation(&training["prepare"]),
         "training": active_run,
         "processing": processing["run"],
+        // what the running engine started with: its KV cache and flash attention
+        "engine": engine["in_effect"],
+        // the person's own YuE2 file the engine runs in place of the set's backbone, none for the set's
+        "own_model": own["selected"],
+        // the community model that file is, by language; none for a file of the person's own
+        "own_model_name": own["selected_name"],
     })
 }
 
@@ -306,6 +315,7 @@ fn busy(summary: &Value) -> Vec<&'static str> {
         ("covers_and_karaoke", summary["covers_and_karaoke"].as_array().is_some_and(|entries| !entries.is_empty())),
         ("stems", unfinished(&summary["stems"])),
         ("processing", unfinished(&summary["processing"])),
+        ("restore", unfinished(&summary["restore"])),
         ("midi", unfinished(&summary["midi"]) || summary["midi"]["batch"]["queued"].as_array().is_some_and(|queued| !queued.is_empty())),
         ("preparation", summary["preparation"].is_object() && summary["preparation"]["finished"] != true),
         ("training", !summary["training"].is_null()),
@@ -367,14 +377,14 @@ fn annotations(name: &str) -> Value {
     // a verb that changes something outweighs a noun that reads
     const CHANGES: &[&str] = &["install", "import", "remove", "delete", "refresh", "create", "update", "start", "cancel", "select", "download", "apply", "restart"];
     // reads whose names the rules above miss: create_form names the create page
-    const READ_NAMES: &[&str] = &["lyrics_syllables", "assistant_cli_agents", "system_gpus", "cover_scenes", "cover_photos_search", "video_backgrounds_search", "network_proxy_test", "journal_read", "score_to_midi", "score_instrumental", "score_vocal_octave", "score_from_midi", "score_mark", "lyrics_find", "cover_prompt_render", "studio_wait", "engine_presets_get", "assistant_requests_wait", "ui_console", "song_defaults", "create_form_get", "library_liked", "score_chord_bed", "song_tokenize", "score_match_sections", "models_update_plan"];
+    const READ_NAMES: &[&str] = &["lyrics_syllables", "assistant_cli_agents", "system_gpus", "cover_scenes", "cover_photos_search", "video_backgrounds_search", "network_proxy_test", "journal_read", "score_to_midi", "score_instrumental", "score_vocal_octave", "score_from_midi", "score_mark", "lyrics_find", "cover_prompt_render", "studio_wait", "engine_presets_get", "assistant_requests_wait", "ui_console", "song_defaults", "create_form_get", "library_liked", "score_chord_bed", "song_tokenize", "score_match_sections", "models_update_plan", "problem_preview"];
     // writes over what was stored, so the earlier content is gone: a client asks first
-    const OVERWRITES: &[&str] = &["library_song_update", "playlist_update", "dataset_update", "dataset_song_update", "dataset_prepare", "lora_update", "stems_split", "karaoke_make", "midi_transcribe", "cover_draw", "cover_set_from_file", "openrouter_set_key", "models_update_apply"];
+    const OVERWRITES: &[&str] = &["library_song_update", "playlist_update", "dataset_update", "dataset_song_update", "dataset_prepare", "lora_update", "stems_split", "restore_start", "karaoke_make", "midi_transcribe", "cover_draw", "cover_set_from_file", "openrouter_set_key", "models_update_apply"];
     let changes = CHANGES.iter().any(|verb| name.split('_').any(|word| word == *verb));
     let read_only = READ_NAMES.contains(&name) || !changes && (READS.iter().any(|part| name.ends_with(part) || name.contains(&format!("{part}_"))) || name.starts_with("writing_"));
     let destructive = name.ends_with("_delete") || name.ends_with("_remove") || name == "processing_discard" || name.ends_with("_cancel") || name.contains("_cancel_") || OVERWRITES.contains(&name);
     // what reaches the internet: OpenRouter, Hugging Face, the lyric databases and every download
-    let open_world = name.starts_with("openrouter_") || name.contains("_hf") || name == "lyrics_find" || name == "models_download" || name == "models_update_apply" || name == "lora_install_catalog" || name.ends_with("_install") && name != "training_checkpoint_install";
+    let open_world = name.starts_with("openrouter_") || name == "problem_report" || name.contains("_hf") || name == "lyrics_find" || name == "models_download" || name == "models_update_apply" || name == "lora_install_catalog" || name.ends_with("_install") && name != "training_checkpoint_install";
     let title = name.replace('_', " ");
     json!({ "title": title, "readOnlyHint": read_only, "destructiveHint": destructive, "idempotentHint": read_only || name.ends_with("_set") || name.contains("_select"), "openWorldHint": open_world })
 }
@@ -393,11 +403,16 @@ const JOURNAL: &[(&str, &str, &str)] = &[
     ("song_cover_photo_set", "updated", "cover"),
     ("song_cover_pattern_set", "updated", "cover"),
     ("song_job_dismiss", "discarded", "generation"),
+    ("song_job_score_again", "started", "generation"),
+    ("song_job_again", "started", "generation"),
     ("song_create", "started", "generation"),
     ("song_replay", "started", "generation"),
     ("song_job_cancel", "cancelled", "generation"),
     ("library_song_update", "updated", "song"),
     ("library_song_delete", "deleted", "song"),
+    ("library_trash_restore", "restored", "song"),
+    ("library_trash_delete", "deleted", "song"),
+    ("library_trash_empty", "deleted", "song"),
     ("library_import_audio", "imported", "song"),
     ("library_version_select", "updated", "song"),
     ("library_version_delete", "deleted", "version"),
@@ -407,7 +422,10 @@ const JOURNAL: &[(&str, &str, &str)] = &[
     ("stems_split", "started", "stems"),
     ("karaoke_make", "started", "karaoke"),
     ("karaoke_delete", "deleted", "karaoke"),
+    ("karaoke_set", "updated", "karaoke"),
     ("midi_transcribe", "started", "midi"),
+    ("restore_start", "started", "restore"),
+    ("restore_cancel", "cancelled", "restore"),
     ("midi_cancel", "cancelled", "midi"),
     ("midi_delete", "deleted", "midi"),
     ("score_compose", "started", "score"),
@@ -452,6 +470,7 @@ const JOURNAL: &[(&str, &str, &str)] = &[
     ("separator_runtime_install", "started", "download"),
     ("recogniser_install", "started", "download"),
     ("midi_install", "started", "download"),
+    ("restore_install", "started", "download"),
     ("models_cancel_download", "cancelled", "download"),
     ("training_pack_cancel", "cancelled", "download"),
     ("assistant_cancel_download", "cancelled", "download"),
@@ -460,13 +479,19 @@ const JOURNAL: &[(&str, &str, &str)] = &[
     ("lora_cancel_download", "cancelled", "download"),
     ("models_adopt", "installed", "model"),
     ("models_remove", "deleted", "model"),
+    ("restore_remove", "deleted", "model"),
     ("assistant_model_remove", "deleted", "model"),
     ("separator_remove", "deleted", "model"),
     ("recogniser_remove", "deleted", "model"),
     ("midi_remove", "deleted", "model"),
     ("models_select", "updated", "settings"),
+    ("models_own_select", "updated", "settings"),
+    ("models_own_cancel", "cancelled", "download"),
+    ("models_own_discard", "deleted", "download"),
+    ("models_own_remove", "deleted", "model"),
     ("settings_set", "updated", "settings"),
     ("engine_options_set", "updated", "settings"),
+    ("engine_fitted_cache_reset", "updated", "settings"),
     ("karaoke_settings_set", "updated", "settings"),
     ("separator_settings_set", "updated", "settings"),
     ("cover_templates_set", "updated", "settings"),
@@ -518,7 +543,7 @@ fn name_source(kind: &str, args: &Value) -> Option<NameSource> {
     let listed = |path: &str, list, id: &str| NameSource { path: path.into(), list: Some((list, id.to_string())), field: "name" };
     match kind {
         "playlist" => id("playlist_id").map(|id| itself(format!("/v1/library/playlists/{}", segment(id)), "name")),
-        "song" | "generation" | "version" | "stems" | "karaoke" | "midi" | "score" | "processing" | "cover" => {
+        "song" | "generation" | "version" | "stems" | "karaoke" | "midi" | "score" | "restore" | "processing" | "cover" => {
             id("song_id").map(|id| itself(format!("/v1/library/songs/{}", segment(id)), "title"))
         }
         "lora" => id("lora_id").map(|id| listed("/v1/adapters", "installed", id)),
@@ -952,8 +977,8 @@ fn tools() -> &'static [Tool] {
             },
             Tool {
                 name: "studio_wait",
-                description: "Wait for work to finish instead of polling: a song or score job (job_id), or until one kind of work is over - song_jobs, covers_and_karaoke, stems, midi, processing, preparation, training - or everything (until: idle, the default). Returns when it is done or after seconds (30 by default, at most 55, under the minute clients allow a call) with how far it got; call it again to keep waiting.",
-                schema: || object(json!({ "job_id": { "type": "string" }, "until": { "type": "string", "enum": ["idle", "song_jobs", "covers_and_karaoke", "stems", "midi", "processing", "preparation", "training"] }, "seconds": { "type": "integer" } }), &[]),
+                description: "Wait for work to finish instead of polling: a song or score job (job_id), or until one kind of work is over - song_jobs, covers_and_karaoke, stems, midi, restore, processing, preparation, training - or everything (until: idle, the default). Returns when it is done or after seconds (30 by default, at most 55, under the minute clients allow a call) with how far it got; call it again to keep waiting.",
+                schema: || object(json!({ "job_id": { "type": "string" }, "until": { "type": "string", "enum": ["idle", "song_jobs", "covers_and_karaoke", "stems", "midi", "restore", "processing", "preparation", "training"] }, "seconds": { "type": "integer" } }), &[]),
                 call: |_| composite("wait"),
             },
             Tool {
@@ -970,7 +995,7 @@ fn tools() -> &'static [Tool] {
             },
             Tool {
                 name: "models_catalog",
-                description: "Every model set and file the studio can download, with sizes and the video memory each needs.",
+                description: "Every model set and file the studio can download, with sizes and the video memory each needs; partial_bytes of a file is what a stopped download of it left on disk (models_download resumes it, models_remove takes it away).",
                 schema: nothing,
                 call: |_| get("/setup/catalog".into()),
             },
@@ -1017,8 +1042,44 @@ fn tools() -> &'static [Tool] {
                 call: |args| post("/setup/select".into(), args.clone()),
             },
             Tool {
+                name: "models_own_list",
+                description: "Your own YuE2 models: the GGUF files in models/yue2-cpp/own (folder), each by name and size, the one the engine runs in place of the set's backbone (selected, none for the set's own), and missing when that file is gone; community, the catalog of community fine-tunes (Ruach Studio, CC BY-NC-SA 4.0) with each quantisation's file, size and whether it is downloaded; card_quant, the quantisation this card takes; download, the one under way. The VAE and the rest come from the chosen set.",
+                schema: nothing,
+                call: |_| get("/setup/own-model".into()),
+            },
+            Tool {
+                name: "models_own_select",
+                description: "Run the engine on one of your own YuE2 files (file, a name from models_own_list) in place of the set's backbone, or on the set's again (file empty or left out). A community model (community, its id from models_own_list; quant Q8_0 or Q6_K, else the card's) not on disk yet is downloaded into the folder first - models_own_list shows the download - and chosen once its digest matches the pin. The engine starts again. With your own model the decoder companion is off unless a song asks for it, and LoRA training still runs on the set's backbone.",
+                schema: || object(json!({ "file": { "type": "string" }, "community": { "type": "string" }, "quant": { "type": "string", "enum": ["Q8_0", "Q6_K"] } }), &[]),
+                call: |args| send(Method::PUT, "/setup/own-model".into(), args.clone()),
+            },
+            Tool {
+                name: "models_own_cancel",
+                description: "Stop the download of a community model; the part fetched resumes on the next models_own_select, and models_own_list shows it as partial_bytes until then.",
+                schema: nothing,
+                call: |_| post("/setup/own-model/cancel".into(), json!({})),
+            },
+            Tool {
+                name: "models_own_discard",
+                description: "Take away what a stopped download of a community model left in the folder (community, its id; quant, else the card's): its part file and the record of its pieces, partial_bytes in models_own_list. The next models_own_select downloads it from the start. A file that arrived whole is removed with models_own_remove; one downloading now is stopped with models_own_cancel first.",
+                schema: || object(json!({ "community": { "type": "string" }, "quant": { "type": "string", "enum": ["Q8_0", "Q6_K"] } }), &["community"]),
+                call: |args| post("/setup/own-model/discard".into(), args.clone()),
+            },
+            Tool {
+                name: "models_own_remove",
+                description: "Move one of your own YuE2 files (file, a name from models_own_list) to the system's recycle bin; the engine runs the set's model again when it was the chosen one.",
+                schema: || object(json!({ "file": { "type": "string" } }), &["file"]),
+                call: |args| post("/setup/own-model/remove".into(), args.clone()),
+            },
+            Tool {
+                name: "models_own_reveal",
+                description: "Open the folder of your own YuE2 models (models/yue2-cpp/own) in the file manager, making it first when it is not there.",
+                schema: nothing,
+                call: |_| post("/setup/own-model/reveal".into(), json!({})),
+            },
+            Tool {
                 name: "engine_options_get",
-                description: "The engine's launch options: backend (auto, cuda, vulkan, cpu), keep models loaded, and the rest - including extra_args, any other command-line flag the engine takes, and engine_bin, a hand-built engine executable to run instead of the bundled one.",
+                description: "The engine's launch options: backend (auto, cuda, vulkan, cpu), keep_loaded (auto, yes, no: Auto keeps the models on the card between songs when the set kept whole, a full-context cache for each track and a reserve fit its free memory at the engine's start; in_effect says whether the running engine keeps them and why; kept models are unloaded before other work on the card and after 10 minutes without a song), kv_cache (auto, f16 or q8: Auto keeps F16 while the set and a full-context cache for each track fit the card's free memory and takes Q8, half the memory, when they do not; Q8 only with flash attention on an NVIDIA card through CUDA, kv_q8_off_reason says why not - processor, vulkan or flash_attention_off; the same seed gives another song on another type of cache), kv_cache_now (the running engine's cache: q8, reason - set, fits, does_not_fit, unmeasured or why Q8 does not apply - need_gib and free_gib), and the rest - including extra_args, any other command-line flag the engine takes, and engine_bin, a hand-built engine executable to run instead of the bundled one.",
                 schema: nothing,
                 call: |_| get("/engine/options".into()),
             },
@@ -1027,6 +1088,12 @@ fn tools() -> &'static [Tool] {
                 description: "Change the engine's launch options (the whole object as engine_options_get returns it, with your changes); engine_restart applies them.",
                 schema: || json!({ "type": "object" }),
                 call: |args| send(Method::PUT, "/engine/options".into(), args.clone()),
+            },
+            Tool {
+                name: "engine_fitted_cache_reset",
+                description: "Forget the KV cache the studio stepped down to after the card ran out of memory on a song (engine_options_get: in_effect.max_seq_reason fitted), so the engine starts on the model's full context again; restarts a running engine.",
+                schema: nothing,
+                call: |_| send(Method::DELETE, "/engine/options/fitted".into(), json!({})),
             },
             Tool {
                 name: "engine_restart",
@@ -1475,7 +1542,7 @@ fn tools() -> &'static [Tool] {
             },
             Tool {
                 name: "score_chord_bed",
-                description: "Write a chord bed at once, without the model planning: chords over rests in the Vocal voice and an empty Ins voice, one section per lyrics tag (bars from its lines), in the tempo, key and meter given; verses, choruses and a bridge each get a common progression, no chord repeats its neighbour. Pass its abc to song_create (cot full) and the model writes the melody and arrangement over that harmony. The same seed writes the same bed.",
+                description: "Write a chord bed at once, without the model planning: chords over rests in the Vocal voice and an empty Ins voice, one section per lyrics tag (bars from its lines), in the tempo, key and meter given; verses, choruses and a bridge each get a common progression, no chord repeats its neighbour; a section plays as many of its chords as its bars take, and the answer's sections name each section once with the chords it plays. Pass its abc to song_create (cot full): with words to sing the model plans the melody over the bed's chords, section by section, and the song's score is that plan; without words the bed is played as it stands. The same seed writes the same bed.",
                 schema: || object(json!({ "bpm": { "type": "integer", "minimum": 40, "maximum": 240 }, "key": { "type": "string", "description": "tonic and m for minor: Em, F#m, Bb" }, "meter": { "type": "string", "enum": ["4/4", "3/4", "6/8", "2/4"] }, "lyrics": { "type": "string" }, "seed": { "type": "integer" } }), &["bpm", "key", "meter"]),
                 call: |args| post("/v1/score/chord-bed".into(), args.clone()),
             },
@@ -1602,9 +1669,33 @@ fn tools() -> &'static [Tool] {
             },
             Tool {
                 name: "library_song_delete",
-                description: "Remove a song from the library.",
+                description: "Put a song in the library's bin, with the songs made from it (its stems). The bin keeps them for the days library_trash_list names; library_trash_restore brings them back.",
                 schema: || id_only("song_id", "library song id"),
                 call: |args| send(Method::DELETE, format!("/v1/library/songs/{}", segment(&text(args, "song_id")?)), json!({})),
+            },
+            Tool {
+                name: "library_trash_list",
+                description: "The songs in the library's bin: when each went there, when it goes for good, how many songs went with it, and how many days the bin keeps a song (days).",
+                schema: nothing,
+                call: |_| get("/v1/library/trash".into()),
+            },
+            Tool {
+                name: "library_trash_restore",
+                description: "Bring a song back from the library's bin, with the songs that went there with it.",
+                schema: || id_only("song_id", "song id in the bin"),
+                call: |args| post(format!("/v1/library/trash/{}/restore", segment(&text(args, "song_id")?)), json!({})),
+            },
+            Tool {
+                name: "library_trash_delete",
+                description: "Delete a song of the bin for good, with the songs that went there with it; its files go to the system's recycle bin.",
+                schema: || id_only("song_id", "song id in the bin"),
+                call: |args| send(Method::DELETE, format!("/v1/library/trash/{}", segment(&text(args, "song_id")?)), json!({})),
+            },
+            Tool {
+                name: "library_trash_empty",
+                description: "Delete every song of the library's bin for good; their files go to the system's recycle bin.",
+                schema: nothing,
+                call: |_| send(Method::DELETE, "/v1/library/trash".into(), json!({})),
             },
             Tool {
                 name: "library_import_audio",
@@ -1689,6 +1780,37 @@ fn tools() -> &'static [Tool] {
                 description: "The stems of a library song and the progress of a split.",
                 schema: || id_only("song_id", "library song id"),
                 call: |args| get(format!("/v1/library/songs/{}/stems", segment(&text(args, "song_id")?))),
+            },
+            // ---------------------------------------------------------------- restore after compression
+            Tool {
+                name: "restore_status",
+                description: "Restore after compression (Apollo, weights CC BY-SA 4.0): whether Apollo and audio.cpp's server (on the stems' device) are installed, what is still to download, the download at work, and the restoration at work or the last one (run: song_id, title, stage, error, library_song).",
+                schema: nothing,
+                call: |_| get("/v1/restore".into()),
+            },
+            Tool {
+                name: "restore_start",
+                description: "Remove the artefacts of MP3 compression from a library track (song_id) or an audio file on this computer (path): the result is 44.1 kHz in the channels of the source and becomes a new library track beside it, titled '<title> · restored' (made_from, made_by restore). Restoring a track again replaces the track its last restoration made; a restored track is not restored again. Apollo must be installed first (restore_install). Wait with studio_wait until restore; restore_status run.library_song names the new track.",
+                schema: || object(json!({ "song_id": { "type": "string" }, "path": { "type": "string", "description": "an audio file on this computer, instead of song_id" } }), &[]),
+                call: |args| post("/v1/restore/start".into(), args.clone()),
+            },
+            Tool {
+                name: "restore_install",
+                description: "Download Apollo (66 MB) and audio.cpp's server of the stems' device, whichever is missing. restore_status shows the progress.",
+                schema: nothing,
+                call: |_| post("/v1/restore/install".into(), json!({})),
+            },
+            Tool {
+                name: "restore_remove",
+                description: "Delete Apollo's weights; the restored tracks stay in the library.",
+                schema: nothing,
+                call: |_| post("/v1/restore/remove".into(), json!({})),
+            },
+            Tool {
+                name: "restore_cancel",
+                description: "Stop the restoration at work, or the download for it.",
+                schema: nothing,
+                call: |_| post("/v1/restore/cancel".into(), json!({})),
             },
             // ---------------------------------------------------------------- audio to MIDI
             Tool {
@@ -1809,7 +1931,7 @@ fn tools() -> &'static [Tool] {
             },
             Tool {
                 name: "models_remove",
-                description: "Delete downloaded model files by component id (see models_catalog).",
+                description: "Delete downloaded model files by component id (see models_catalog), and what a stopped download of them left (partial_bytes in models_catalog): the next download of that component starts from the beginning.",
                 schema: || object(json!({ "ids": { "type": "array", "items": { "type": "string" } } }), &["ids"]),
                 call: |args| post("/setup/remove".into(), args.clone()),
             },
@@ -1818,6 +1940,30 @@ fn tools() -> &'static [Tool] {
                 description: "The music engine's recent log, for when a song fails or the engine will not start.",
                 schema: nothing,
                 call: |_| get("/v1/engine/logs".into()),
+            },
+            Tool {
+                name: "diagnostics_get",
+                description: "The studio's diagnostics, as Settings - Local engine - System diagnostics shows them: version, system, graphics card and CUDA build, memory, the music models and optional parts on disk, the own YuE2 model, DLLs the engine misses, and the latest log lines; `text` is what to paste into an issue.",
+                schema: nothing,
+                call: |_| get("/v1/diagnostics".into()),
+            },
+            Tool {
+                name: "diagnostics_report",
+                description: "Packs a bug report into the data folder's reports: the diagnostics, the journal and the logs, keys masked. Answers the zip's path; nothing is sent anywhere.",
+                schema: nothing,
+                call: |_| post("/v1/diagnostics/report".into(), json!({})),
+            },
+            Tool {
+                name: "problem_preview",
+                description: "Exactly what problem_report would send to Studio Hub now (the words, version, system, card, model set and the cleaned engine log), as Report a problem shows it under \"what will be sent\". kind is bug (default), idea or question; what needs 10 characters at least; attach_log is true unless set false.",
+                schema: || object(json!({ "kind": { "type": "string", "enum": ["bug", "idea", "question"] }, "what": { "type": "string" }, "steps": { "type": "string" }, "expected": { "type": "string" }, "attach_log": { "type": "boolean" } }), &["what"]),
+                call: |args| post("/v1/problem/preview".into(), args.clone()),
+            },
+            Tool {
+                name: "problem_report",
+                description: "Reports a problem without a GitHub account, as Report a problem does: Studio Hub's bot opens a public GitHub issue with the words and the facts problem_preview shows, and answers its number and url. A refusal comes back by code: field, rate (retry_after_s), not_configured, busy or unreachable - then the GitHub form is the way.",
+                schema: || object(json!({ "kind": { "type": "string", "enum": ["bug", "idea", "question"] }, "what": { "type": "string" }, "steps": { "type": "string" }, "expected": { "type": "string" }, "attach_log": { "type": "boolean" } }), &["what"]),
+                call: |args| post("/v1/problem/report".into(), args.clone()),
             },
             Tool {
                 name: "studio_capabilities",
@@ -1845,8 +1991,8 @@ fn tools() -> &'static [Tool] {
             },
             Tool {
                 name: "assistant_set",
-                description: "Choose the writing assistant: provider none, local (an OpenAI-compatible server at local_base_url with local_model), managed (a model the studio runs: managed_model, or a GGUF at managed_path), openrouter (openrouter_model), agent (the connected MCP agent) or cli (an agent CLI on this machine: cli_agent, cli_model, cli_path); reasoning_effort off, minimal, low, medium or high.",
-                schema: || object(json!({ "provider": { "type": "string", "enum": ["none", "local", "managed", "openrouter", "agent", "cli"] }, "local_base_url": { "type": "string" }, "local_model": { "type": "string" }, "managed_model": { "type": "string" }, "managed_path": { "type": "string" }, "openrouter_model": { "type": "string" }, "cli_agent": { "type": "string" }, "cli_model": { "type": "string" }, "cli_path": { "type": "string" }, "reasoning_effort": { "type": "string" } }), &[]),
+                description: "Choose the writing assistant: provider none, local (an OpenAI-compatible server at local_base_url with local_model), managed (a model the studio runs: managed_model, or a GGUF at managed_path), openrouter (openrouter_model), agent (the connected MCP agent) or cli (an agent CLI on this machine: cli_agent, cli_model, cli_path); reasoning_effort off, minimal, low, medium or high. own_rules {song, style, lyrics}: the person's own rules for each task, after the studio's guide; avoid_words: words the assistant must not write, one a line or comma-separated.",
+                schema: || object(json!({ "provider": { "type": "string", "enum": ["none", "local", "managed", "openrouter", "agent", "cli"] }, "local_base_url": { "type": "string" }, "local_model": { "type": "string" }, "managed_model": { "type": "string" }, "managed_path": { "type": "string" }, "openrouter_model": { "type": "string" }, "cli_agent": { "type": "string" }, "cli_model": { "type": "string" }, "cli_path": { "type": "string" }, "reasoning_effort": { "type": "string" }, "own_rules": { "type": "object", "properties": { "song": { "type": "string" }, "style": { "type": "string" }, "lyrics": { "type": "string" } } }, "avoid_words": { "type": "string" } }), &[]),
                 call: |args| send(Method::PUT, "/v1/assistant/status".into(), args.clone()),
             },
             Tool {
@@ -1905,7 +2051,7 @@ fn tools() -> &'static [Tool] {
             },
             Tool {
                 name: "karaoke_settings_set",
-                description: "Choose the recogniser used for karaoke and for dataset lyrics: enabled, provider (parakeet, whisper, openrouter), whisper_model (for parakeet: parakeet-tdt-int8 is Parakeet v3, parakeet-ultra-int8 is Ultra, both on transcribe.cpp), openrouter_model, runtime (cpu, or cuda for the card: transcribe.cpp runs CUDA on an NVIDIA card, Vulkan on any other).",
+                description: "Choose the recogniser used for karaoke and for dataset lyrics: enabled, provider (parakeet, whisper - CrisperWhisper 2.0 turbo in audio.cpp's server -, openrouter), whisper_model (for parakeet: parakeet-tdt-int8 is Parakeet v3, parakeet-ultra-int8 is Ultra, both on transcribe.cpp), openrouter_model, runtime (cpu, or cuda for the card: transcribe.cpp and the audio.cpp server run CUDA on an NVIDIA card, Vulkan on any other).",
                 schema: || object(json!({ "enabled": { "type": "boolean" }, "provider": { "type": "string" }, "whisper_model": { "type": "string" }, "openrouter_model": { "type": "string" }, "runtime": { "type": "string" } }), &[]),
                 call: |args| send(Method::PUT, "/v1/karaoke/status".into(), args.clone()),
             },
@@ -1932,6 +2078,22 @@ fn tools() -> &'static [Tool] {
                 description: "Remove a library song's karaoke timings.",
                 schema: || id_only("song_id", "library song id"),
                 call: |args| send(Method::DELETE, format!("/v1/library/songs/{}/karaoke", segment(&text(args, "song_id")?)), json!({})),
+            },
+            Tool {
+                name: "karaoke_set",
+                description: "Set a library song's karaoke from a subtitle file on this computer (path: .srt, .ass, .ssa or .lrc) or from LRC text (lrc: one [mm:ss.cc] line each), in place of the recognised timings.",
+                schema: || object(json!({ "song_id": { "type": "string" }, "path": { "type": "string" }, "lrc": { "type": "string" } }), &["song_id"]),
+                call: |args| {
+                    let path = format!("/v1/library/songs/{}/karaoke", segment(&text(args, "song_id")?));
+                    if let Some(lrc) = args.get("lrc").and_then(Value::as_str) {
+                        return send(Method::PUT, path, json!({ "lrc": lrc }));
+                    }
+                    let file = PathBuf::from(text(args, "path")?);
+                    use base64::Engine;
+                    let bytes = std::fs::read(&file).map_err(|error| format!("read {}: {error}", file.display()))?;
+                    let content = base64::engine::general_purpose::STANDARD.encode(bytes);
+                    send(Method::PUT, path, json!({ "content_base64": content, "file_name": file_name(&file) }))
+                },
             },
             Tool {
                 name: "separator_status",
@@ -2073,6 +2235,21 @@ fn tools() -> &'static [Tool] {
                     let bytes = std::fs::read(&path).map_err(|error| format!("read {}: {error}", path.display()))?;
                     let format = path.extension().and_then(|value| value.to_str()).unwrap_or("wav").to_lowercase();
                     post("/v1/openrouter/transcriptions".into(), json!({ "model_id": text(args, "model_id")?, "audio_base64": base64::engine::general_purpose::STANDARD.encode(bytes), "audio_format": format, "language": args.get("language") }))
+                },
+            },
+            Tool {
+                name: "lyrics_recognise",
+                description: "The lyrics a library song or an audio file on this computer sings, heard by the recogniser chosen for karaoke (Settings - Karaoke) and laid out in lines. Give song_id or path.",
+                schema: || object(json!({ "song_id": { "type": "string" }, "path": { "type": "string" }, "language": { "type": "string" } }), &[]),
+                call: |args| {
+                    use base64::Engine;
+                    if let Some(song_id) = args.get("song_id").and_then(Value::as_str) {
+                        return post("/v1/lyrics/recognise".into(), json!({ "song_id": song_id, "language": args.get("language") }));
+                    }
+                    let path = PathBuf::from(text(args, "path")?);
+                    let bytes = std::fs::read(&path).map_err(|error| format!("read {}: {error}", path.display()))?;
+                    let format = path.extension().and_then(|value| value.to_str()).unwrap_or("wav").to_lowercase();
+                    post("/v1/lyrics/recognise".into(), json!({ "audio_base64": base64::engine::general_purpose::STANDARD.encode(bytes), "audio_format": format, "audio_name": file_name(&path), "language": args.get("language") }))
                 },
             },
             Tool {
@@ -2246,7 +2423,7 @@ fn tools() -> &'static [Tool] {
             },
             Tool {
                 name: "dataset_prepare",
-                description: "Fill a dataset in by itself: lyrics from the lyric databases, Whisper only for songs they miss, sections laid out by the assistant, styles written from what MOSS-Music hears. lyrics and style: missing (only what is not done yet), all (again, for the chosen songs) or none. items: song ids, all songs when left out. train: start this run once every song is ready. Watch training_status.",
+                description: "Fill a dataset in by itself: lyrics from the lyric databases, CrisperWhisper only for songs they miss, sections laid out by the assistant, styles written from what MOSS-Music hears. lyrics and style: missing (only what is not done yet), all (again, for the chosen songs) or none. items: song ids, all songs when left out. train: start this run once every song is ready. Watch training_status.",
                 schema: || object(json!({
                     "dataset_id": { "type": "string" },
                     "items": { "type": "array", "items": { "type": "string" } },
@@ -2361,13 +2538,14 @@ fn tools() -> &'static [Tool] {
             },
             Tool {
                 name: "runtime_status",
-                description: "Whether a downloadable part is installed and what it would download: midi (the Audio to MIDI transcriber), training_pack (the trainer and its models) or training_listen (the recognisers that hear a dataset).",
-                schema: || object(json!({ "part": { "type": "string", "enum": ["midi", "training_pack", "training_listen"] } }), &["part"]),
+                description: "Whether a downloadable part is installed and what it would download: midi (the Audio to MIDI transcriber), restore (Apollo, Restore after compression), training_pack (the trainer and its models) or training_listen (the recognisers that hear a dataset).",
+                schema: || object(json!({ "part": { "type": "string", "enum": ["midi", "restore", "training_pack", "training_listen"] } }), &["part"]),
                 call: |args| get(match text(args, "part")?.as_str() {
                     "midi" => "/v1/midi/runtime".into(),
+                    "restore" => "/v1/restore/runtime".into(),
                     "training_pack" => "/v1/training/pack/runtime".into(),
                     "training_listen" => "/v1/training/listen/runtime".into(),
-                    other => return Err(format!("no part '{other}': midi, training_pack or training_listen")),
+                    other => return Err(format!("no part '{other}': midi, restore, training_pack or training_listen")),
                 }),
             },
             Tool {
@@ -2501,6 +2679,18 @@ fn tools() -> &'static [Tool] {
                 description: "Take an ended song job's card off the create page (a failed or cancelled one, as its Remove does); a running job is cancelled with song_job_cancel.",
                 schema: || id_only("job_id", "song job id"),
                 call: |args| send(Method::DELETE, format!("/v1/music/jobs/{}", segment(&text(args, "job_id")?)), json!({})),
+            },
+            Tool {
+                name: "song_job_score_again",
+                description: "Make a failed song again with its LoRA brought to 1.0 on the score half (two LoRA share it, 0.5 each), as the button of the error 'score_unsingable_strength' does; only this request changes, the sound half keeps its strengths. Returns the new job.",
+                schema: || id_only("job_id", "the failed song job's id"),
+                call: |args| send(Method::POST, format!("/v1/music/jobs/{}/score-strength", segment(&text(args, "job_id")?)), json!({})),
+            },
+            Tool {
+                name: "song_job_again",
+                description: "Make a failed song again with the same request, as the button of the error 'not_audio' does (the card computed something other than sound). Returns the new job.",
+                schema: || id_only("job_id", "the failed song job's id"),
+                call: |args| send(Method::POST, format!("/v1/music/jobs/{}/again", segment(&text(args, "job_id")?)), json!({})),
             },
         ]
     })
@@ -2947,6 +3137,16 @@ mod tests {
         assert!(!notices.contains(&json!({ "changed": "library_songs_list" })));
     }
 
+    /// How long the bin keeps a song is the service's to say (`days` of library_trash_list): no tool writes it in.
+    #[test]
+    fn no_tool_writes_in_how_long_the_bin_keeps_a_song() {
+        for tool in tools().iter().filter(|tool| tool.name.starts_with("library_")) {
+            assert!(!tool.description.contains("30 days"), "{} writes in the bin's length", tool.name);
+        }
+        let list = tools().iter().find(|tool| tool.name == "library_trash_list").expect("the bin's list");
+        assert!(list.description.contains("(days)"), "the list names the field that says it");
+    }
+
     #[test]
     fn a_command_goes_to_the_window_the_person_turned_to() {
         let (older, newer) = (u64::MAX - 20, u64::MAX - 21);
@@ -3091,12 +3291,14 @@ mod tests {
             "create_form_set",
             "create_form_submit",
             "dataset_reveal",
+            "models_own_reveal",
             "studio_open_data_folder",
             "vst_open_editor",
             // answers that store nothing
             "openrouter_complete",
             "openrouter_cover",
             "openrouter_transcribe",
+            "lyrics_recognise",
             "assistant_write",
             "assistant_sections",
             "assistant_request_answer",
@@ -3111,6 +3313,9 @@ mod tests {
             "openrouter_catalog_refresh",
             "assistant_start",
             "assistant_stop",
+            "diagnostics_report",
+            // a message to GitHub through the hub: the issue is its record
+            "problem_report",
             // the update screen put off: nothing of the person's changes
             "models_update_later",
         ];
@@ -3196,6 +3401,9 @@ mod tests {
     const NOT_TOOLS: &[(&str, &str, &str)] = &[
         ("GET", "/health", "the service's identity for the desktop shell: initialize names the server and its version"),
         ("POST", "/engine/pick-executable", "a file dialog for the person: engine_options_set takes the executable's path"),
+        ("POST", "/setup/kv-cache-notice/seen", "the window's note that it told the person: engine_options_get says the cache and why"),
+        ("POST", "/v1/diagnostics/report/reveal", "shows a report in the person's file manager: diagnostics_report answers its path"),
+        ("POST", "/v1/diagnostics/logs/reveal", "shows the log folder in the person's file manager: diagnostics_get carries the latest lines"),
         ("GET", "/v1/engine/progress", "the starting page's progress stream: studio_status and engine_logs"),
         ("GET", "/v1/proxy/image", "pictures from the internet relayed for the page"),
         ("POST", "/v1/files/save", "a save dialog for the person: the tools write to the path the agent names"),
@@ -3227,8 +3435,8 @@ mod tests {
 
     /// What the composite tools read.
     const COMPOSITE_ROUTES: &[(&str, &[(&str, &str)])] = &[
-        ("composite:status", &[("GET", "/v1/music/jobs"), ("GET", "/v1/activity"), ("GET", "/v1/training"), ("GET", "/v1/processing"), ("GET", "/v1/separation/status"), ("GET", "/v1/midi")]),
-        ("composite:wait", &[("GET", "/v1/music/jobs/x1"), ("GET", "/v1/scores/x1"), ("GET", "/v1/music/jobs"), ("GET", "/v1/activity"), ("GET", "/v1/training"), ("GET", "/v1/processing"), ("GET", "/v1/separation/status"), ("GET", "/v1/midi")]),
+        ("composite:status", &[("GET", "/v1/music/jobs"), ("GET", "/v1/activity"), ("GET", "/v1/training"), ("GET", "/v1/processing"), ("GET", "/v1/separation/status"), ("GET", "/v1/midi"), ("GET", "/v1/restore")]),
+        ("composite:wait", &[("GET", "/v1/music/jobs/x1"), ("GET", "/v1/scores/x1"), ("GET", "/v1/music/jobs"), ("GET", "/v1/activity"), ("GET", "/v1/training"), ("GET", "/v1/processing"), ("GET", "/v1/separation/status"), ("GET", "/v1/midi"), ("GET", "/v1/restore")]),
         ("composite:questions", &[]),
         ("composite:answer", &[]),
         ("composite:equalizer_export", &[]),

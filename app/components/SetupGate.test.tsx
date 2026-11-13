@@ -1,7 +1,7 @@
 import React, { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { OptionalGroup } from './SetupGate';
+import { OptionalGroup, WHERE_IT_RUNS } from './SetupGate';
 
 vi.mock('../context/I18nContext', () => ({ useI18n: () => ({ t: (key: string) => key }) }));
 vi.mock('../services/studioQueries', () => ({ openRouterSettingsChanged: vi.fn(), SELF_READ: { 'x-hub-skip': '1' } }));
@@ -230,5 +230,32 @@ describe('optional capability installation', () => {
     await start();
     expect(button('cancelDownload')).toBeNull();
     expectReady(true);
+  });
+});
+
+describe('optional capability reads', () => {
+  it('a page drawn again with the same engines does not ask the group again', async () => {
+    let asked = 0;
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      if (url === '/status') asked += 1;
+      return response({ provider: 'managed', runtime: 'cpu', assets: [] });
+    }));
+    host = document.createElement('div');
+    document.body.append(host);
+    root = createRoot(host);
+    const draw = () => root.render(<OptionalGroup title="Writing assistant" purpose="Write songs" statusUrl="/status" installUrl="/install" engines={[{ id: 'managed', label: 'Text engine' }]} embedded />);
+    await act(async () => draw());
+    const first = asked;
+    expect(first).toBeGreaterThanOrEqual(1);
+    for (let again = 0; again < 5; again++) await act(async () => draw());
+    expect(asked).toBe(first);
+  });
+});
+
+describe('where each part runs', () => {
+  it('says HT-Demucs and Mel-Band RoFormer compute on AMD and Intel cards through Vulkan', () => {
+    const row = (name: string) => WHERE_IT_RUNS.find(entry => entry.name === name);
+    expect(row('HT-Demucs')?.other).toBe('vulkan');
+    expect(row('Mel-Band RoFormer')?.other).toBe('vulkan');
   });
 });

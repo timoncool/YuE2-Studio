@@ -575,6 +575,142 @@
       ]
     },
     {
+      "id": "yue2-1980s-italo-disco",
+      "engine": "yue2-cpp",
+      "kind": "style",
+      "author": "James E. Petts",
+      "page": "https://huggingface.co/jamespetts/yue2-1980s-italo-disco-lora",
+      "license": "CC0-1.0",
+      "trigger": "italodisco",
+      "name": {
+        "en": "1980s Italo Disco",
+        "ru": "Итало-диско 1980-х",
+        "zh": "1980年代意大利迪斯科",
+        "ja": "1980年代イタロ・ディスコ",
+        "ko": "1980년대 이탈로 디스코"
+      },
+      "description": {
+        "en": "1980s Italo disco production: arpeggiated synths, vocoder colour, octave bass and drum machines. Start the style with italodisco. Changes the sound, not the composition.",
+        "ru": "Продакшн итало-диско 1980-х: арпеджио синтезаторов, оттенок вокодера, октавный бас и драм-машины. Начните стиль со слова italodisco. Меняет звук, не композицию.",
+        "zh": "1980 年代意大利迪斯科制作：琶音合成器、声码器色彩、八度贝斯与鼓机。风格以 italodisco 开头。改变音色，不改变作曲。",
+        "ja": "1980年代イタロ・ディスコのプロダクション：アルペジオのシンセ、ボコーダーの色、オクターブ・ベース、ドラムマシン。スタイルの先頭に italodisco と書きます。作曲ではなく音色を変えます。",
+        "ko": "1980년대 이탈로 디스코 프로덕션: 아르페지오 신스, 보코더 색채, 옥타브 베이스, 드럼 머신. 스타일 맨 앞에 italodisco를 넣으세요. 작곡이 아니라 음색을 바꿉니다."
+      },
+      "scales": {
+        "nar": 1
+      },
+      "files": [
+        {
+          "url": "https://huggingface.co/jamespetts/yue2-1980s-italo-disco-lora/resolve/3e26123e7c8b970058c8d8915c80245f3d996cd7/yue2_1980s_italo_disco_engine_unfused.safetensors",
+          "file": "yue2_1980s_italo_disco_engine_unfused.safetensors",
+          "bytes": 69772302
+        }
+      ]
+    },
+    {
+      "id": "yue2-1980s-two-tone-ska",
+      "engine": "yue2-cpp",
+      "kind": "style",
+      "author": "James E. Petts",
+      "page": "https://huggingface.co/jamespetts/yue2-1980s-two-tone-ska-lora",
+      "license": "CC0-1.0",
+      "trigger": "twotone",
+      "name": {
+        "en": "1980s Two-Tone Ska",
+        "ru": "Ска 2 Tone 1980-х",
+        "zh": "1980年代 2 Tone 斯卡",
+        "ja": "1980年代ツートーン・スカ",
+        "ko": "1980년대 투톤 스카"
+      },
+      "description": {
+        "en": "Early 1980s British two-tone ska: offbeat guitar skank, organ shuffle, walking bass and brass stabs. Start the style with twotone. Changes the sound, not the composition.",
+        "ru": "Британский ска 2 Tone начала 1980-х: гитара на слабые доли, органный шаффл, шагающий бас и выстрелы духовых. Начните стиль со слова twotone. Меняет звук, не композицию.",
+        "zh": "1980 年代初英国 2 Tone 斯卡：反拍吉他、管风琴 shuffle、行走贝斯与铜管短促重音。风格以 twotone 开头。改变音色，不改变作曲。",
+        "ja": "1980年代初頭の英国ツートーン・スカ：裏拍のギター・カッティング、オルガンのシャッフル、ウォーキング・ベース、ブラスのスタブ。スタイルの先頭に twotone と書きます。作曲ではなく音色を変えます。",
+        "ko": "1980년대 초 영국 투톤 스카: 엇박 기타 스캥크, 오르간 셔플, 워킹 베이스, 브라스 스탭. 스타일 맨 앞에 twotone을 넣으세요. 작곡이 아니라 음색을 바꿉니다."
+      },
+      "scales": {
+        "nar": 1
+      },
+      "files": [
+        {
+          "url": "https://huggingface.co/jamespetts/yue2-1980s-two-tone-ska-lora/resolve/d1619dcec6c81041510938f58b79c1364d42def4/yue2_1980s_two_tone_ska_unfused.safetensors",
+          "file": "yue2_1980s_two_tone_ska_unfused.safetensors",
+          "bytes": 69772303
+        }
+      ]
+    },
+    {
+      "id": "yue2-keygen-music",
+      "engine": "yue2-cpp",
+      "kind": "style",
+      "author": "monsterovich",
+      "page": "https://huggingface.co/monsterovich/yue2-keygen-music-lora",
+      "license": "not stated by the author",
+      "name": {
+        "en": "Keygen Music",
+        "ru": "Музыка кейгенов",
+        "zh": "注册机音乐",
+        "ja": "キージェン・ミュージック",
+        "ko": "키젠 음악"
+      },
+      "description": {
+        "en": "The chiptune and tracker sound of software keygens: bright square leads, arpeggios and punchy techno drums. Trained on instrumentals, so it suits songs without vocals. Changes both the composition and the sound.",
+        "ru": "Чиптюн и трекерный звук кейгенов: яркие квадратные лиды, арпеджио и плотные техно-барабаны. Обучен на инструменталах, поэтому лучше подходит песням без вокала. Меняет и композицию, и звучание.",
+        "zh": "注册机的芯片音乐与 tracker 音色：明亮的方波主旋律、琶音与有力的 techno 鼓。以纯音乐训练，更适合无人声的歌曲。同时改变作曲与音色。",
+        "ja": "キージェンのチップチューンとトラッカーの音：明るい矩形波のリード、アルペジオ、パンチのあるテクノのドラム。インストで学習したため、ボーカルのない曲に向きます。作曲とサウンドの両方を変えます。",
+        "ko": "키젠의 칩튠과 트래커 사운드: 밝은 사각파 리드, 아르페지오, 펀치감 있는 테크노 드럼. 연주곡으로 학습해 보컬 없는 곡에 어울립니다. 작곡과 사운드를 모두 바꿉니다."
+      },
+      "scales": {
+        "ar": 0.3,
+        "nar": 0.5
+      },
+      "files": [
+        {
+          "url": "https://huggingface.co/monsterovich/yue2-keygen-music-lora/resolve/c1ff6ec5b3907673ece0d245725addce340082ed/adapter-ar/lora.safetensors",
+          "file": "keygen-ar.safetensors",
+          "bytes": 69772944
+        },
+        {
+          "url": "https://huggingface.co/monsterovich/yue2-keygen-music-lora/resolve/c1ff6ec5b3907673ece0d245725addce340082ed/adapter-nar/lora.safetensors",
+          "file": "keygen-nar.safetensors",
+          "bytes": 140046120
+        }
+      ]
+    },
+    {
+      "id": "yue2-instrumental-kto",
+      "engine": "yue2-cpp",
+      "kind": "composition",
+      "author": "stevensu",
+      "page": "https://huggingface.co/stevensu/YuE2-3B-instrumental-kto-lora",
+      "license": "CC-BY-NC-4.0",
+      "name": {
+        "en": "Instrumental, no voice",
+        "ru": "Инструментал без голоса",
+        "zh": "纯音乐，无人声",
+        "ja": "インスト（声なし）",
+        "ko": "보컬 없는 연주곡"
+      },
+      "description": {
+        "en": "Keeps an instrumental really instrumental: without it, about half of the songs asked for without vocals still sing, hum or chant. Only for songs without lyrics - write section tags alone; arrangements come out a little simpler. Changes the composition, not the sound.",
+        "ru": "Делает инструментал действительно инструментальным: без неё примерно половина песен, заказанных без вокала, всё равно поёт, мычит или напевает. Только для песен без слов — пишите одни теги частей; аранжировки выходят чуть проще. Меняет композицию, не звук.",
+        "zh": "让纯音乐真正没有人声：不用它时，约一半要求无人声的歌曲仍会演唱、哼唱或吟唱。仅用于无歌词的歌曲——歌词只写段落标签；编曲会略为简单。改变作曲，不改变音色。",
+        "ja": "インストを本当に声のない曲にします：これなしでは、ボーカルなしを頼んだ曲の約半分が歌ったりハミングしたり唱えたりします。歌詞のない曲専用で、歌詞にはセクションタグだけを書きます。アレンジは少しシンプルになります。音色ではなく作曲を変えます。",
+        "ko": "연주곡을 정말 목소리 없이 만듭니다: 이것 없이는 보컬 없이 요청한 곡의 약 절반이 노래하거나 허밍하거나 읊조립니다. 가사 없는 곡 전용으로, 가사에는 섹션 태그만 쓰세요. 편곡은 조금 단순해집니다. 음색이 아니라 작곡을 바꿉니다."
+      },
+      "scales": {
+        "ar": 1
+      },
+      "files": [
+        {
+          "url": "https://huggingface.co/stevensu/YuE2-3B-instrumental-kto-lora/resolve/e41653af9f59c963238c41217be04c1dd001529b/adapter.safetensors",
+          "file": "instrumental-kto.safetensors",
+          "bytes": 69773128
+        }
+      ]
+    },
+    {
       "id": "yue2-slider-female",
       "engine": "yue2-cpp",
       "kind": "slider",

@@ -11,12 +11,14 @@ type ErrorTexts = Record<string, string>;
 const EN: ErrorTexts = {
   training_on_card: 'A LoRA is training on the graphics card; make songs once it finishes or is stopped.',
   lost_vram: 'The graphics card ran out of memory on this song and the engine restarted, so the song was lost. Choose a smaller model set in Settings → Models or a shorter song, and close whatever else uses the card; a card below the smallest set cannot make songs.',
+  lost_vram_retried: 'The graphics card ran out of memory on this song, and again when it was made with a {n} KV cache. Choose a smaller model set or a shorter song, and close whatever else uses the card.',
   lost_ram: 'The computer ran out of memory (RAM) on this song and the engine restarted, so the song was lost. Close other programs that take memory, or choose a smaller model set in Settings → Models or a shorter song.',
   lost_device: 'The graphics card failed during this song ({detail}) and the engine restarted, so the song was lost. The engine log is in Settings → Local engine.',
   lost_device_silent: 'The graphics card failed during this song (a CUDA or driver error) and the engine restarted, so the song was lost. The engine log is in Settings → Local engine.',
   lost_at_line: 'The engine stopped during this song and restarted, so the song was lost; its last line was {line}. The engine log is in Settings → Local engine.',
   lost: 'The engine stopped during this song and restarted, so the song was lost. The engine log is in Settings → Local engine.',
-  lost_exited: 'The engine crashed during this song (exit code {exit}) and restarted, so the song was lost. The engine log is in Settings → Local engine.',
+  lost_exited: 'The engine crashed during this song ({meaning}exit code {exit}) and restarted, so the song was lost. The engine log is in Settings → Local engine.',
+  lost_exited_at_line: 'The engine crashed during this song ({meaning}exit code {exit}) and restarted, so the song was lost; its last line was {line}. The engine log is in Settings → Local engine.',
   lost_port_set: 'The engine could not listen on port {port}, which YUE_ENGINE_PORT sets, so the song was lost: another program holds it. Close that program or set another port.',
   lost_port_taken: 'The engine could not listen on port {port}, so the song was lost: another program took the port after the studio chose it. Restart the studio: it chooses a free port at start.',
   lost_illegal_instruction: 'The engine stopped during this song on an instruction this processor does not have (exit code {exit}) and restarted, so the song was lost. Please report it with the engine log from Settings → Local engine.',
@@ -33,17 +35,21 @@ const EN: ErrorTexts = {
   context_short: 'The style, lyrics and score take {tokens} of the model\'s {context} tokens, so this song can last {can_last} s, and {asked} s were asked for. Make the song or its lyrics shorter.',
   score_unsingable: 'The score the model wrote for song {song} cannot be sung ({problem}). Draw another seed.',
   score_unsingable_adapters: 'The score the model wrote for song {song} cannot be sung ({problem}). LoRAs past their limits on the score half do this: lower their strengths or draw another seed.',
+  score_unsingable_strength: 'The score could not be written: the LoRA strength on Composition is {strength}. Try 1.0.',
+  not_audio: 'The graphics card computed something that is not sound on this song ({line}), so the engine stopped it instead of writing silence. Make the song again: a new run usually comes out right.',
 };
 
 const RU: ErrorTexts = {
   training_on_card: 'На видеокарте идёт обучение LoRA: песни можно делать, когда оно закончится или будет остановлено.',
   lost_vram: 'На этой песне у видеокарты кончилась память, движок перезапустился, и песня потеряна. Выберите набор моделей поменьше в Настройках → Модели или песню короче и закройте всё, что ещё занимает видеокарту; на карте слабее самого маленького набора песни не делаются.',
+  lost_vram_retried: 'Видеокарте не хватило памяти на этой песне и при повторе с KV-кэшем {n}. Выберите набор моделей меньше или песню короче и закройте то, что ещё занимает карту.',
   lost_ram: 'На этой песне у компьютера кончилась оперативная память (RAM), движок перезапустился, и песня потеряна. Закройте программы, которые занимают память, или выберите набор моделей поменьше в Настройках → Модели или песню короче.',
   lost_device: 'Во время этой песни видеокарта дала сбой ({detail}), движок перезапустился, и песня потеряна. Лог движка — в Настройках → Локальный движок.',
   lost_device_silent: 'Во время этой песни видеокарта дала сбой (ошибка CUDA или драйвера), движок перезапустился, и песня потеряна. Лог движка — в Настройках → Локальный движок.',
   lost_at_line: 'Движок остановился во время этой песни и перезапустился, песня потеряна; его последняя строка: {line}. Лог движка — в Настройках → Локальный движок.',
   lost: 'Движок остановился во время этой песни и перезапустился, песня потеряна. Лог движка — в Настройках → Локальный движок.',
-  lost_exited: 'Движок упал во время этой песни (код выхода {exit}) и перезапустился, песня потеряна. Лог движка — в Настройках → Локальный движок.',
+  lost_exited: 'Движок упал во время этой песни ({meaning}код выхода {exit}) и перезапустился, песня потеряна. Лог движка — в Настройках → Локальный движок.',
+  lost_exited_at_line: 'Движок упал во время этой песни ({meaning}код выхода {exit}) и перезапустился, песня потеряна; его последняя строка: {line}. Лог движка — в Настройках → Локальный движок.',
   lost_port_set: 'Движок не смог слушать порт {port}, заданный в YUE_ENGINE_PORT, песня потеряна: порт занят другой программой. Закройте её или задайте другой порт.',
   lost_port_taken: 'Движок не смог слушать порт {port}, песня потеряна: порт заняла другая программа после того, как студия его выбрала. Перезапустите студию — при старте она выберет свободный порт.',
   lost_illegal_instruction: 'Движок остановился во время этой песни на инструкции, которой нет у этого процессора (код выхода {exit}), и перезапустился, песня потеряна. Сообщите об этом и приложите лог движка из Настроек → Локальный движок.',
@@ -60,17 +66,21 @@ const RU: ErrorTexts = {
   context_short: 'Стиль, текст и партитура занимают {tokens} из {context} токенов модели, поэтому песня может длиться {can_last} с, а запрошено {asked} с. Сократите песню или её текст.',
   score_unsingable: 'Партитуру, которую модель написала для песни {song}, нельзя спеть ({problem}). Попробуйте другое зерно.',
   score_unsingable_adapters: 'Партитуру, которую модель написала для песни {song}, нельзя спеть ({problem}). Так бывает, когда LoRA выкручены сверх своих пределов на партитуре: уменьшите их силу или попробуйте другое зерно.',
+  score_unsingable_strength: 'Партитура не написалась: сила LoRA на «Композиции» — {strength}. Попробуйте 1,0.',
+  not_audio: 'Видеокарта насчитала на этой песне не звук ({line}), и движок остановил её, а не записал тишину. Сделайте песню ещё раз: новый прогон обычно выходит правильно.',
 };
 
 const ZH: ErrorTexts = {
   training_on_card: '显卡正在训练 LoRA，训练结束或停止后再生成歌曲。',
   lost_vram: '生成这首歌时显卡显存耗尽，引擎已重启，这首歌丢失了。请在“设置 → 模型”中选择更小的模型组合或更短的歌曲，并关闭其他占用显卡的程序；显卡低于最小组合时无法生成歌曲。',
+  lost_vram_retried: '生成这首歌时显卡显存耗尽，用 {n} 的 KV 缓存重做时又一次耗尽。请选择更小的模型组合或更短的歌曲，并关闭其他占用显卡的程序。',
   lost_ram: '生成这首歌时电脑内存（RAM）耗尽，引擎已重启，这首歌丢失了。请关闭占用内存的程序，或在“设置 → 模型”中选择更小的模型组合或更短的歌曲。',
   lost_device: '生成这首歌时显卡出错（{detail}），引擎已重启，这首歌丢失了。引擎日志在“设置 → 本地引擎”。',
   lost_device_silent: '生成这首歌时显卡出错（CUDA 或驱动错误），引擎已重启，这首歌丢失了。引擎日志在“设置 → 本地引擎”。',
   lost_at_line: '生成这首歌时引擎停止并已重启，这首歌丢失了；它的最后一行是 {line}。引擎日志在“设置 → 本地引擎”。',
   lost: '生成这首歌时引擎停止并已重启，这首歌丢失了。引擎日志在“设置 → 本地引擎”。',
-  lost_exited: '生成这首歌时引擎崩溃（退出码 {exit}）并已重启，这首歌丢失了。引擎日志在“设置 → 本地引擎”。',
+  lost_exited: '生成这首歌时引擎崩溃（{meaning}退出码 {exit}）并已重启，这首歌丢失了。引擎日志在“设置 → 本地引擎”。',
+  lost_exited_at_line: '生成这首歌时引擎崩溃（{meaning}退出码 {exit}）并已重启，这首歌丢失了；它的最后一行是 {line}。引擎日志在“设置 → 本地引擎”。',
   lost_port_set: '引擎无法监听 YUE_ENGINE_PORT 指定的端口 {port}，这首歌丢失了：该端口被其他程序占用。请关闭该程序或设置其他端口。',
   lost_port_taken: '引擎无法监听端口 {port}，这首歌丢失了：工作室选定该端口后被其他程序占用。请重启工作室，它会在启动时选择空闲端口。',
   lost_illegal_instruction: '生成这首歌时引擎遇到此处理器不支持的指令而停止（退出码 {exit}）并已重启，这首歌丢失了。请附上“设置 → 本地引擎”中的引擎日志反馈此问题。',
@@ -87,17 +97,21 @@ const ZH: ErrorTexts = {
   context_short: '风格、歌词和乐谱占用了模型 {context} 个 token 中的 {tokens} 个，因此这首歌最长 {can_last} 秒，而请求的是 {asked} 秒。请缩短歌曲或歌词。',
   score_unsingable: '模型为第 {song} 首歌写的乐谱无法演唱（{problem}）。请换一个种子。',
   score_unsingable_adapters: '模型为第 {song} 首歌写的乐谱无法演唱（{problem}）。LoRA 在乐谱部分超出其限度时会这样：请降低它们的强度或换一个种子。',
+  score_unsingable_strength: '乐谱未能写成：LoRA 在「作曲」上的强度为 {strength}。请试试 1.0。',
+  not_audio: '显卡在这首歌上算出了不是声音的数值（{line}），引擎因此停止了它，而没有写出静音。请再生成一次：重新运行通常就正常了。',
 };
 
 const JA: ErrorTexts = {
   training_on_card: 'グラフィックカードで LoRA の学習中です。終わるか止めてから曲を作ってください。',
   lost_vram: 'この曲でグラフィックカードのメモリが足りなくなり、エンジンが再起動したため曲は失われました。「設定 → モデル」で小さいモデルセットか短い曲を選び、カードを使っている他のものを閉じてください。最小のセットに満たないカードでは曲を作れません。',
+  lost_vram_retried: 'この曲でグラフィックカードのメモリが足りなくなり、KV キャッシュ {n} で作り直したときも足りませんでした。小さいモデルセットか短い曲を選び、カードを使っている他のものを閉じてください。',
   lost_ram: 'この曲でパソコンのメモリ（RAM）が足りなくなり、エンジンが再起動したため曲は失われました。メモリを使う他のプログラムを閉じるか、「設定 → モデル」で小さいモデルセットか短い曲を選んでください。',
   lost_device: 'この曲の途中でグラフィックカードが失敗し（{detail}）、エンジンが再起動したため曲は失われました。エンジンのログは「設定 → ローカルエンジン」にあります。',
   lost_device_silent: 'この曲の途中でグラフィックカードが失敗し（CUDA またはドライバーのエラー）、エンジンが再起動したため曲は失われました。エンジンのログは「設定 → ローカルエンジン」にあります。',
   lost_at_line: 'この曲の途中でエンジンが止まって再起動し、曲は失われました。最後の行：{line}。エンジンのログは「設定 → ローカルエンジン」にあります。',
   lost: 'この曲の途中でエンジンが止まって再起動し、曲は失われました。エンジンのログは「設定 → ローカルエンジン」にあります。',
-  lost_exited: 'この曲の途中でエンジンがクラッシュし（終了コード {exit}）、再起動したため曲は失われました。エンジンのログは「設定 → ローカルエンジン」にあります。',
+  lost_exited: 'この曲の途中でエンジンがクラッシュし（{meaning}終了コード {exit}）、再起動したため曲は失われました。エンジンのログは「設定 → ローカルエンジン」にあります。',
+  lost_exited_at_line: 'この曲の途中でエンジンがクラッシュし（{meaning}終了コード {exit}）、再起動したため曲は失われました。最後の行：{line}。エンジンのログは「設定 → ローカルエンジン」にあります。',
   lost_port_set: 'エンジンが YUE_ENGINE_PORT で指定したポート {port} で待ち受けできず、曲は失われました。別のプログラムがそのポートを使っています。そのプログラムを閉じるか、別のポートを指定してください。',
   lost_port_taken: 'エンジンがポート {port} で待ち受けできず、曲は失われました。スタジオが選んだ後に別のプログラムがそのポートを使い始めました。スタジオを再起動してください。起動時に空いているポートを選びます。',
   lost_illegal_instruction: 'この曲の途中でエンジンがこのプロセッサーにない命令で止まり（終了コード {exit}）、再起動したため曲は失われました。「設定 → ローカルエンジン」のエンジンログを添えて報告してください。',
@@ -114,17 +128,21 @@ const JA: ErrorTexts = {
   context_short: 'スタイル、歌詞、楽譜でモデルの {context} トークンのうち {tokens} を使うため、この曲は {can_last} 秒までですが、{asked} 秒が指定されました。曲か歌詞を短くしてください。',
   score_unsingable: 'モデルが曲 {song} のために書いた楽譜は歌えません（{problem}）。別のシードを試してください。',
   score_unsingable_adapters: 'モデルが曲 {song} のために書いた楽譜は歌えません（{problem}）。楽譜側で LoRA を限度を超えて強くするとこうなります。強さを下げるか、別のシードを試してください。',
+  score_unsingable_strength: 'スコアを書けませんでした：「作曲」の LoRA の強さが {strength} です。1.0 を試してください。',
+  not_audio: 'この曲でグラフィックカードが音ではない値を計算したため（{line}）、エンジンは無音を書き出さずに止めました。もう一度作ってください。新しい実行はたいてい正しく出ます。',
 };
 
 const KO: ErrorTexts = {
   training_on_card: '그래픽카드에서 LoRA 학습 중입니다. 학습이 끝나거나 멈춘 뒤 곡을 만드세요.',
   lost_vram: '이 곡에서 그래픽카드 메모리가 부족해 엔진이 다시 시작되었고 곡을 잃었습니다. "설정 → 모델"에서 더 작은 모델 세트나 더 짧은 곡을 고르고, 카드를 쓰는 다른 것을 닫으세요. 가장 작은 세트보다 약한 카드로는 곡을 만들 수 없습니다.',
+  lost_vram_retried: '이 곡에서 그래픽카드 메모리가 부족했고, KV 캐시 {n}으로 다시 만들 때도 부족했습니다. 더 작은 모델 세트나 더 짧은 곡을 고르고, 카드를 쓰는 다른 것을 닫으세요.',
   lost_ram: '이 곡에서 컴퓨터 메모리(RAM)가 부족해 엔진이 다시 시작되었고 곡을 잃었습니다. 메모리를 쓰는 다른 프로그램을 닫거나 "설정 → 모델"에서 더 작은 모델 세트나 더 짧은 곡을 고르세요.',
   lost_device: '이 곡을 만드는 중 그래픽카드에 오류가 나서({detail}) 엔진이 다시 시작되었고 곡을 잃었습니다. 엔진 로그는 "설정 → 로컬 엔진"에 있습니다.',
   lost_device_silent: '이 곡을 만드는 중 그래픽카드에 오류가 나서(CUDA 또는 드라이버 오류) 엔진이 다시 시작되었고 곡을 잃었습니다. 엔진 로그는 "설정 → 로컬 엔진"에 있습니다.',
   lost_at_line: '이 곡을 만드는 중 엔진이 멈췄다가 다시 시작되어 곡을 잃었습니다. 마지막 줄: {line}. 엔진 로그는 "설정 → 로컬 엔진"에 있습니다.',
   lost: '이 곡을 만드는 중 엔진이 멈췄다가 다시 시작되어 곡을 잃었습니다. 엔진 로그는 "설정 → 로컬 엔진"에 있습니다.',
-  lost_exited: '이 곡을 만드는 중 엔진이 비정상 종료되었고(종료 코드 {exit}) 다시 시작되어 곡을 잃었습니다. 엔진 로그는 "설정 → 로컬 엔진"에 있습니다.',
+  lost_exited: '이 곡을 만드는 중 엔진이 비정상 종료되었고({meaning}종료 코드 {exit}) 다시 시작되어 곡을 잃었습니다. 엔진 로그는 "설정 → 로컬 엔진"에 있습니다.',
+  lost_exited_at_line: '이 곡을 만드는 중 엔진이 비정상 종료되었고({meaning}종료 코드 {exit}) 다시 시작되어 곡을 잃었습니다. 마지막 줄: {line}. 엔진 로그는 "설정 → 로컬 엔진"에 있습니다.',
   lost_port_set: '엔진이 YUE_ENGINE_PORT에 지정된 포트 {port}에서 대기할 수 없어 곡을 잃었습니다. 다른 프로그램이 그 포트를 쓰고 있습니다. 그 프로그램을 닫거나 다른 포트를 지정하세요.',
   lost_port_taken: '엔진이 포트 {port}에서 대기할 수 없어 곡을 잃었습니다. 스튜디오가 포트를 고른 뒤 다른 프로그램이 그 포트를 차지했습니다. 스튜디오를 다시 시작하세요. 시작할 때 빈 포트를 고릅니다.',
   lost_illegal_instruction: '이 곡을 만드는 중 엔진이 이 프로세서에 없는 명령에서 멈췄고(종료 코드 {exit}) 다시 시작되어 곡을 잃었습니다. "설정 → 로컬 엔진"의 엔진 로그와 함께 알려 주세요.',
@@ -141,9 +159,66 @@ const KO: ErrorTexts = {
   context_short: '스타일, 가사, 악보가 모델의 {context} 토큰 중 {tokens}을(를) 차지해 이 곡은 최대 {can_last}초인데 {asked}초가 요청되었습니다. 곡이나 가사를 줄이세요.',
   score_unsingable: '모델이 곡 {song}을(를) 위해 쓴 악보는 부를 수 없습니다({problem}). 다른 시드를 써 보세요.',
   score_unsingable_adapters: '모델이 곡 {song}을(를) 위해 쓴 악보는 부를 수 없습니다({problem}). 악보 쪽에서 LoRA를 한도 넘게 세게 걸면 이렇게 됩니다. 강도를 낮추거나 다른 시드를 써 보세요.',
+  score_unsingable_strength: '악보를 쓰지 못했습니다: ‘작곡’의 LoRA 강도가 {strength}입니다. 1.0으로 해 보세요.',
+  not_audio: '그래픽카드가 이 곡에서 소리가 아닌 값을 계산해({line}) 엔진이 무음을 쓰지 않고 곡을 멈췄습니다. 곡을 다시 만드세요. 새로 실행하면 대개 제대로 나옵니다.',
 };
 
 const BY_LANGUAGE: Record<Language, ErrorTexts> = { en: EN, ru: RU, zh: ZH, ja: JA, ko: KO };
+
+// What an exit status of the engine means, by the service's key (song_errors.rs `EXIT_MEANINGS`), written before
+// "exit code" in the templates; `none` is a status without a meaning.
+const EXIT_MEANINGS: Record<Language, Record<string, string>> = {
+  en: {
+    access_violation: 'a crash: an access violation, ',
+    illegal_instruction: 'an instruction this processor does not have, ',
+    aborted: 'a crash: the engine aborted, ',
+    stack_overflow: 'a crash: a stack overflow, ',
+    corrupted_memory: 'a crash: corrupted memory, ',
+    library: 'a library of the engine did not load, ',
+    out_of_memory: 'the computer ran out of memory, ',
+    none: '',
+  },
+  ru: {
+    access_violation: 'сбой: нарушение доступа к памяти, ',
+    illegal_instruction: 'инструкция, которой нет у этого процессора, ',
+    aborted: 'сбой: движок прервал работу, ',
+    stack_overflow: 'сбой: переполнение стека, ',
+    corrupted_memory: 'сбой: повреждённая память, ',
+    library: 'не загрузилась библиотека движка, ',
+    out_of_memory: 'компьютеру не хватило памяти, ',
+    none: '',
+  },
+  zh: {
+    access_violation: '崩溃：内存访问冲突，',
+    illegal_instruction: '此处理器不支持的指令，',
+    aborted: '崩溃：引擎中止，',
+    stack_overflow: '崩溃：栈溢出，',
+    corrupted_memory: '崩溃：内存损坏，',
+    library: '引擎的某个库未能加载，',
+    out_of_memory: '计算机内存不足，',
+    none: '',
+  },
+  ja: {
+    access_violation: 'クラッシュ：アクセス違反、',
+    illegal_instruction: 'このプロセッサーにない命令、',
+    aborted: 'クラッシュ：エンジンが中断、',
+    stack_overflow: 'クラッシュ：スタックオーバーフロー、',
+    corrupted_memory: 'クラッシュ：メモリ破損、',
+    library: 'エンジンのライブラリが読み込まれなかった、',
+    out_of_memory: 'コンピューターのメモリ不足、',
+    none: '',
+  },
+  ko: {
+    access_violation: '충돌: 메모리 접근 위반, ',
+    illegal_instruction: '이 프로세서에 없는 명령, ',
+    aborted: '충돌: 엔진 중단, ',
+    stack_overflow: '충돌: 스택 오버플로, ',
+    corrupted_memory: '충돌: 메모리 손상, ',
+    library: '엔진 라이브러리를 불러오지 못함, ',
+    out_of_memory: '컴퓨터 메모리 부족, ',
+    none: '',
+  },
+};
 
 /** A failed song as the service sent it: its English text and, when the reason has a kind, a code with fields. */
 export interface SongFailure {
@@ -160,6 +235,10 @@ export function songErrorText(failure: SongFailure | null | undefined, language:
   const params = failure?.params ?? {};
   return template.replace(/\{(\w+)\}/g, (match, key: string) => {
     const value = params[key];
+    if (key === 'meaning' && value !== undefined && value !== null) return EXIT_MEANINGS[language][String(value)] ?? '';
+    // a strength is written with one decimal, as the form shows it: 3,0 and not 3
+    if (key === 'strength' && typeof value === 'number') return value.toLocaleString(language, { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+    if (typeof value === 'number' && !Number.isInteger(value)) return value.toLocaleString(language);
     return value === undefined || value === null ? match : String(value);
   });
 }

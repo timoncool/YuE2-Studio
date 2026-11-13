@@ -114,24 +114,27 @@ fn seconds_within(peaks: &[(f64, f64)], budget: f64) -> Option<f64> {
     Some(MAX_SECONDS)
 }
 
-/// Q8_0 where the card holds it for two minutes of a song, Q4_K_M where it does not, the processor with Q4_K_M
-/// where not even a minute fits or the card does not run the captioner's CUDA 13.
-pub fn hearing(hardware: &crate::hardware::Hardware) -> Hearing {
+pub fn hearing(hardware: &crate::hardware::Hardware, processor_chosen: bool) -> Hearing {
     // the Mac's captioner computes on Metal in the memory it shares with the system, which the table does not measure
     if cfg!(target_os = "macos") {
         return Hearing { lm: "moss-lm-q8_0.gguf", on_card: true, seconds: MAX_SECONDS };
     }
     let budget = hardware.total_vram_gb - CARD_RESERVE_GB;
     let cuda13 = hardware.card_cuda == Some(crate::hardware::CudaBuild::Cuda13);
-    if cuda13 {
-        if let Some(seconds) = seconds_within(&PEAK_Q8_0, budget).filter(|seconds| *seconds >= 120.0) {
-            return Hearing { lm: "moss-lm-q8_0.gguf", on_card: true, seconds };
-        }
-        if let Some(seconds) = seconds_within(&PEAK_Q4_K_M, budget) {
-            return Hearing { lm: "moss-lm-q4_k_m.gguf", on_card: true, seconds };
-        }
+    let card = if cuda13 {
+        seconds_within(&PEAK_Q8_0, budget)
+            .filter(|seconds| *seconds >= 120.0)
+            .map(|seconds| Hearing { lm: "moss-lm-q8_0.gguf", on_card: true, seconds })
+            .or_else(|| seconds_within(&PEAK_Q4_K_M, budget).map(|seconds| Hearing { lm: "moss-lm-q4_k_m.gguf", on_card: true, seconds }))
+    } else {
+        None
+    };
+    match card {
+        // the processor chosen in Settings is kept to here too, with the build this machine downloaded for its card
+        Some(card) if processor_chosen => Hearing { lm: card.lm, on_card: false, seconds: PROCESSOR_SECONDS },
+        Some(card) => card,
+        None => Hearing { lm: "moss-lm-q4_k_m.gguf", on_card: false, seconds: PROCESSOR_SECONDS },
     }
-    Hearing { lm: "moss-lm-q4_k_m.gguf", on_card: false, seconds: PROCESSOR_SECONDS }
 }
 
 /// One run of the captioner over several songs, the way HOT-Step labels a
@@ -228,8 +231,15 @@ pub fn hear_batch(
             log.push(line);
         }
     }
+    let pid = child.id();
     let status = child.wait().context("wait for the captioner")?;
-    let tail = log.iter().rev().take(8).rev().cloned().collect::<Vec<_>>().join(" | ");
+    let mut tail = log.iter().rev().take(8).rev().cloned().collect::<Vec<_>>().join(" | ");
+    // a crash that wrote nothing says where it happened only in Windows' record of it
+    if !status.success() && (tail.is_empty() || music_core::process::exited_on_exception(status.code())) {
+        if let Some(fault) = music_core::process::fault_of(pid, std::time::Duration::from_secs(5)) {
+            tail = if tail.is_empty() { fault.to_string() } else { format!("{tail} | {fault}") };
+        }
+    }
     for (index, seen) in reported.iter().enumerate() {
         if !seen {
             done(index, Err(anyhow::anyhow!("the captioner wrote nothing for this song ({status}): {tail}")));
@@ -390,19 +400,24 @@ mod tests {
             compute_capability: None,
             driver_major: None,
             recommended: None,
+            vulkan: false,
+            on_processor: false,
         };
         let cuda13 = Some(crate::hardware::CudaBuild::Cuda13);
-        assert_eq!(hearing(&card(24.0, cuda13)), Hearing { lm: "moss-lm-q8_0.gguf", on_card: true, seconds: 420.0 });
-        let sixteen = hearing(&card(16.0, cuda13));
+        assert_eq!(hearing(&card(24.0, cuda13), false), Hearing { lm: "moss-lm-q8_0.gguf", on_card: true, seconds: 420.0 });
+        let sixteen = hearing(&card(16.0, cuda13), false);
         assert_eq!(sixteen.lm, "moss-lm-q8_0.gguf");
         assert!(sixteen.on_card && sixteen.seconds >= 240.0 && sixteen.seconds < 300.0, "{sixteen:?}");
-        let twelve = hearing(&card(12.0, cuda13));
+        let twelve = hearing(&card(12.0, cuda13), false);
         assert_eq!((twelve.lm, twelve.on_card), ("moss-lm-q4_k_m.gguf", true));
         assert!(twelve.seconds > 180.0 && twelve.seconds < 300.0, "{twelve:?}");
         let small = Hearing { lm: "moss-lm-q4_k_m.gguf", on_card: false, seconds: PROCESSOR_SECONDS };
-        assert_eq!(hearing(&card(8.0, cuda13)), small, "not a minute fits in 8 GB");
-        assert_eq!(hearing(&card(6.0, cuda13)), small);
-        assert_eq!(hearing(&card(24.0, None)), small, "the captioner's CUDA 13 does not run on this card");
+        assert_eq!(hearing(&card(8.0, cuda13), false), small, "not a minute fits in 8 GB");
+        assert_eq!(hearing(&card(6.0, cuda13), false), small);
+        assert_eq!(hearing(&card(24.0, None), false), small, "the captioner's CUDA 13 does not run on this card");
+        // the processor chosen in Settings keeps the captioner off the card, with the build downloaded for the card
+        assert_eq!(hearing(&card(24.0, cuda13), true), Hearing { lm: "moss-lm-q8_0.gguf", on_card: false, seconds: PROCESSOR_SECONDS });
+        assert_eq!(hearing(&card(8.0, cuda13), true), small);
     }
 
     #[test]

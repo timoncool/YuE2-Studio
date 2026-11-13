@@ -35,18 +35,14 @@ pub struct Facts {
     pub bpm: u32,
 }
 
-/// Beat This! loaded once for a whole batch of songs.
+/// Beat This! loaded once for a whole batch of songs, on the processor.
 pub struct Measurer {
     beat: Session,
-    /// True when the graphics card does the work.
-    pub on_gpu: bool,
 }
 
 impl Measurer {
-    /// Loads the model, on the card a path reaches when one is given and it takes it.
-    pub fn load(models: &Path, card: Option<crate::lyrics_sync::OnnxCard>) -> Result<Self> {
-        let (beat, on_gpu) = session(&models.join(BEAT_MODEL), card)?;
-        Ok(Self { beat, on_gpu })
+    pub fn load(models: &Path) -> Result<Self> {
+        Ok(Self { beat: session(&models.join(BEAT_MODEL))? })
     }
 
     /// Measures decoded audio, mono at 22.05 kHz.
@@ -64,18 +60,9 @@ pub fn decode(audio: &Path) -> Result<Vec<f32>> {
     Ok(stereo.left.iter().zip(&stereo.right).map(|(left, right)| 0.5 * (left + right)).collect())
 }
 
-/// A session on the card a path reaches, when one is given; says whether the card took it.
-fn session(model: &Path, card: Option<crate::lyrics_sync::OnnxCard>) -> Result<(Session, bool)> {
-    let mut builder = Session::builder().context("prepare an ONNX session")?;
-    let (mut on_card, took) = crate::lyrics_sync::with_card(builder.clone(), card);
-    if took {
-        match on_card.commit_from_file(model) {
-            Ok(session) => return Ok((session, true)),
-            Err(error) => eprintln!("[ERROR] the card could not load {}, the processor measures instead: {error}", model.display()),
-        }
-    }
-    let session = builder.commit_from_file(model).with_context(|| format!("load {}", model.display()))?;
-    Ok((session, false))
+fn session(model: &Path) -> Result<Session> {
+    let environment = dub_core::runtime::ort_env().map_err(|error| anyhow::anyhow!(error))?;
+    Session::builder(&environment).context("prepare an ONNX session")?.commit_from_file(model).with_context(|| format!("load {}", model.display()))
 }
 
 // ---- tempo ----------------------------------------------------------------
@@ -274,13 +261,7 @@ mod tests {
     #[ignore]
     fn measures_real_songs() {
         let models = std::path::PathBuf::from(std::env::var("AUDIO_FACTS_MODELS").expect("AUDIO_FACTS_MODELS"));
-        let card = match std::env::var("AUDIO_FACTS_CARD").as_deref() {
-            Ok("cuda") => Some(crate::lyrics_sync::OnnxCard::Cuda),
-            Ok("directml") => Some(crate::lyrics_sync::OnnxCard::DirectMl),
-            _ => None,
-        };
-        let mut measurer = Measurer::load(&models, card).expect("load the models");
-        println!("on the card: {}", measurer.on_gpu);
+        let mut measurer = Measurer::load(&models).expect("load the models");
         for song in std::env::var("AUDIO_FACTS_SONGS").expect("AUDIO_FACTS_SONGS").split(';') {
             let started = std::time::Instant::now();
             let facts = measurer.measure_mono(&decode(Path::new(song)).expect("decode")).expect("measure");

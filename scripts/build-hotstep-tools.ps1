@@ -65,8 +65,9 @@ if ($LASTEXITCODE -ne 0) { throw 'Could not initialise the HOT-Step submodules.'
 # instead of stopping with "no backend available" or 0xc000001d. Vulkan is not
 # built: the transcriber's Vulkan path writes wrong notes (HOT-Step 3e7a0778 and
 # 91e92a8a alike), and the trainer computes on CUDA. Machine code for every
-# card, no PTX; no NCCL.
-$common = '-DGGML_VULKAN=OFF -DGGML_BACKEND_DL=ON -DGGML_CPU_ALL_VARIANTS=ON -DGGML_NATIVE=OFF -DGGML_CCACHE=OFF'
+# card, no PTX; no NCCL. tinyBLAS and CUDA graphs are on, as llama.cpp ships
+# them: standalone ggml leaves both off.
+$common = '-DGGML_VULKAN=OFF -DGGML_BACKEND_DL=ON -DGGML_CPU_ALL_VARIANTS=ON -DGGML_NATIVE=OFF -DGGML_CCACHE=OFF -DGGML_LLAMAFILE=ON -DGGML_CUDA_GRAPHS=ON'
 switch ($Build) {
     'cuda13' {
         # BF16 training needs Ampere or newer; transcription runs on Turing too.

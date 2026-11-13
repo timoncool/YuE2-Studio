@@ -109,7 +109,9 @@ fn port_unavailable(port: u16, error: &std::io::Error) -> String {
 fn excluded_range(port: u16) -> Option<(u16, u16)> {
     use std::os::windows::process::CommandExt;
     const CREATE_NO_WINDOW: u32 = 0x0800_0000;
-    let mut child = Command::new("netsh")
+    // Windows' own netsh by its full path: a bare name is looked for beside the studio first
+    let system = std::path::PathBuf::from(std::env::var_os("SystemRoot")?);
+    let mut child = Command::new(system.join("System32").join("netsh.exe"))
         .args(["interface", "ipv4", "show", "excludedportrange", "protocol=tcp"])
         .creation_flags(CREATE_NO_WINDOW)
         .stdin(Stdio::null())
@@ -119,9 +121,10 @@ fn excluded_range(port: u16) -> Option<(u16, u16)> {
         .ok()?;
     // read while it runs, so a listing longer than the pipe holds does not stop it
     let mut stdout = child.stdout.take()?;
+    // the listing comes in the console's code page, not UTF-8, on a Windows in another language
     let reader = thread::spawn(move || {
-        let mut listing = String::new();
-        stdout.read_to_string(&mut listing).map(|_| listing)
+        let mut listing = Vec::new();
+        stdout.read_to_end(&mut listing).map(|_| String::from_utf8_lossy(&listing).into_owned())
     });
     let deadline = Instant::now() + Duration::from_secs(3);
     while child.try_wait().ok()?.is_none() {
@@ -199,6 +202,11 @@ fn listener_of(port: u16) -> Option<(u32, String)> {
 const EXECUTABLE: &str = "yue-server.exe";
 #[cfg(not(windows))]
 const EXECUTABLE: &str = "yue-server";
+
+/// The engine executable's file name on this platform.
+pub fn executable_name() -> &'static str {
+    EXECUTABLE
+}
 
 /// The weights one engine process serves.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -279,10 +287,18 @@ pub struct YueServerOptions {
     pub vae_core: Option<u32>,
     /// `--vae-halo`: VAE tile halo frames (upstream default 16).
     pub vae_halo: Option<u32>,
+    /// `--nar-chunk`: the longest acoustic chunk in frames; none is what the
+    /// context holds.
+    pub nar_chunk: Option<u32>,
+    /// `--nar-halo`: frames a later acoustic chunk solves again before its fade, so the sound does not drop after
+    /// the seam; none is the fade alone.
+    pub nar_halo: Option<u32>,
     /// `--no-fa`: disable flash attention.
     pub disable_flash_attention: bool,
     /// `--clamp-fp16`: clamp hidden states to the FP16 range.
     pub clamp_fp16: bool,
+    /// `--kv-q8`: the KV cache in Q8_0, about half the F16 one; the engine reads it through flash attention on a card.
+    pub kv_q8: bool,
     /// The folder beside the executable whose `ggml-cuda.dll` the engine
     /// loads, passed as `YUE_CUDA_BACKEND`; none off CUDA. A release keeps
     /// one CUDA backend per toolkit in folders of their own.
@@ -304,6 +320,8 @@ impl YueServerOptions {
             ("--max-seq", self.max_seq),
             ("--vae-core", self.vae_core),
             ("--vae-halo", self.vae_halo),
+            ("--nar-chunk", self.nar_chunk),
+            ("--nar-halo", self.nar_halo),
         ] {
             if let Some(value) = value {
                 arguments.push(flag.into());
@@ -315,6 +333,9 @@ impl YueServerOptions {
         }
         if self.clamp_fp16 {
             arguments.push("--clamp-fp16".into());
+        }
+        if self.kv_q8 {
+            arguments.push("--kv-q8".into());
         }
         // Last, so a line of extra arguments can also override one of the
         // flags the studio set itself - the engine keeps the value it read
@@ -451,11 +472,12 @@ impl YueServerLaunchConfig {
     pub fn cuda_backend(&self) -> Result<Option<PathBuf>> {
         let Some(folder) = self.options.cuda_folder else { return Ok(None) };
         let directory = self.executable.parent().context("the engine executable has no folder")?;
-        let backend = directory.join(folder).join("ggml-cuda.dll");
+        let name = if cfg!(windows) { "ggml-cuda.dll" } else { "libggml-cuda.so" };
+        let backend = directory.join(folder).join(name);
         if backend.is_file() {
             return Ok(Some(backend));
         }
-        if directory.join("ggml-cuda.dll").is_file() {
+        if directory.join(name).is_file() {
             return Ok(None);
         }
         bail!("the engine's CUDA backend {} is missing; reinstall the studio", backend.display())
@@ -493,6 +515,11 @@ impl YueServerSupervisor {
 
     pub fn config(&self) -> &YueServerLaunchConfig {
         &self.config
+    }
+
+    /// The engine process this supervisor started, while it has one.
+    pub fn pid(&self) -> Option<u32> {
+        self.child.as_ref().map(Child::id)
     }
 
     pub fn is_healthy(&self, timeout: Duration) -> bool {
@@ -628,7 +655,15 @@ impl YueServerSupervisor {
             }
             if let Some(child) = self.child.as_mut() {
                 if let Some(status) = child.try_wait().context("inspect starting yue-server")? {
-                    bail!("yue-server exited during startup with status {status}");
+                    // a crash says nothing of where: Windows' record of it names the module
+                    let fault = music_core::process::exited_on_exception(status.code()).then(|| music_core::process::fault_of(child.id(), Duration::from_secs(5))).flatten();
+                    match fault {
+                        Some(fault) => {
+                            note_in_log(&format!("the engine crashed during startup: {fault}"));
+                            bail!("yue-server exited during startup with status {status}; {fault}");
+                        }
+                        None => bail!("yue-server exited during startup with status {status}"),
+                    }
                 }
             }
             if Instant::now() >= deadline {
@@ -894,15 +929,21 @@ mod tests {
             max_seq: Some(8192),
             vae_core: Some(256),
             vae_halo: Some(16),
+            nar_chunk: Some(2560),
+            nar_halo: Some(750),
             disable_flash_attention: true,
             clamp_fp16: true,
+            kv_q8: true,
             cuda_folder: None,
             extra_args: String::new(),
         }
         .arguments();
         assert_eq!(
             arguments,
-            vec!["--keep-loaded", "--max-batch", "2", "--max-seq", "8192", "--vae-core", "256", "--vae-halo", "16", "--no-fa", "--clamp-fp16"]
+            vec![
+                "--keep-loaded", "--max-batch", "2", "--max-seq", "8192", "--vae-core", "256", "--vae-halo", "16", "--nar-chunk", "2560",
+                "--nar-halo", "750", "--no-fa", "--clamp-fp16", "--kv-q8"
+            ]
         );
         assert!(YueServerOptions::default().arguments().is_empty());
 

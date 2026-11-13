@@ -366,6 +366,7 @@ fn spawn_update_check(app: tauri::AppHandle) {
             .installer_arg(install_directory)
             .on_before_exit(move || {
                 cleanup.cleanup_before_exit();
+                music_engine::process_group::terminate_group_members();
                 if !music_engine::process_group::release_children() {
                     eprintln!("[ERROR] could not release the update installer from the studio's job");
                 }
@@ -404,6 +405,60 @@ fn hide_own_console_window() {
             }
         }
     }
+}
+
+/// The studio's console without a window. On Windows 11 24H2 and later the manifest's consoleAllocationPolicy keeps
+/// a start from Explorer without a console, and `AllocConsoleWithOptions` makes one with no window and no Terminal
+/// tab, which every child program inherits instead of opening its own; started from a terminal, the studio keeps
+/// that terminal's console and writes its log there. Before 24H2 the function does not exist and the console Windows
+/// gave is hidden as before.
+#[cfg(windows)]
+fn console_without_window() {
+    #[repr(C)]
+    struct AllocConsoleOptions {
+        mode: i32,
+        use_show_window: i32,
+        show_window: u16,
+    }
+    const ALLOC_CONSOLE_MODE_NO_WINDOW: i32 = 2;
+    type AllocConsoleWithOptions = unsafe extern "system" fn(options: *const AllocConsoleOptions, result: *mut i32) -> i32;
+    unsafe extern "system" {
+        fn GetModuleHandleW(name: *const u16) -> isize;
+        fn GetProcAddress(module: isize, name: *const u8) -> *const std::ffi::c_void;
+    }
+
+    let kernel32: Vec<u16> = "kernel32.dll".encode_utf16().chain(std::iter::once(0)).collect();
+    let allocate = unsafe {
+        let module = GetModuleHandleW(kernel32.as_ptr());
+        if module == 0 { std::ptr::null() } else { GetProcAddress(module, c"AllocConsoleWithOptions".as_ptr().cast()) }
+    };
+    if allocate.is_null() {
+        hide_own_console_window();
+        return;
+    }
+    let allocate: AllocConsoleWithOptions = unsafe { std::mem::transmute(allocate) };
+    let options = AllocConsoleOptions { mode: ALLOC_CONSOLE_MODE_NO_WINDOW, use_show_window: 0, show_window: 0 };
+    let mut result = 0;
+    let failed = unsafe { allocate(&options, &mut result) } < 0;
+    if failed {
+        console_then_hidden();
+    }
+}
+
+/// A start from Explorer on 24H2 has no console at all (the manifest's `detached` policy): when the windowless one
+/// could not be made, one is made and hidden, so the child programs share it instead of opening one each.
+#[cfg(windows)]
+fn console_then_hidden() {
+    unsafe extern "system" {
+        fn GetConsoleWindow() -> isize;
+        fn AllocConsole() -> i32;
+    }
+    unsafe {
+        if GetConsoleWindow() == 0 {
+            AllocConsole();
+        }
+    }
+    hide_own_console_window();
 }
 
 /// Tauri's own WebView2 switches, followed by whatever the user set in the
@@ -573,7 +628,7 @@ fn point_gstreamer_inside_the_appimage() {
 
 pub fn run() {
     #[cfg(windows)]
-    hide_own_console_window();
+    console_without_window();
     #[cfg(target_os = "linux")]
     point_gstreamer_inside_the_appimage();
 
@@ -789,7 +844,11 @@ pub fn run() {
                     let app = app.clone();
                     std::thread::spawn(move || confirm_quit(&app));
                 }
-                tauri::RunEvent::Exit => music_server::stop_engine(),
+                tauri::RunEvent::Exit => {
+                    music_server::stop_engine();
+                    // the servers and engines the studio started end with it, also where no job object ends them (macOS)
+                    music_engine::process_group::terminate_group_members();
+                }
                 _ => {}
             }
         });
