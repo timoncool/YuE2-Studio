@@ -44,11 +44,9 @@ describe('About: the author and support', () => {
     for (const icon of host.querySelectorAll('svg')) expect(icon.getAttribute('aria-hidden')).toBe('true');
   });
 
-  it('says in one line where what is, and the program block has no line about sending reports', () => {
-    expect(ru.aboutAuthorWhere).toBe('Новости, релизы и планы — в Telegram @nerual_dreming и в X; портативные сборки нейросетей — в @neuroport; все проекты и исходный код — на GitHub.');
+  it('has no explanation lines: no line on where what is, none on sending reports, none per link', () => {
     for (const strings of [en, ru, zh, ja, ko]) {
-      expect(strings.aboutAuthorWhere).toMatch(/@nerual_dreming[\s\S]*@neuroport[\s\S]*GitHub/);
-      expect(Object.keys(strings).filter(key => key.startsWith('aboutLink') || key === 'aboutReportLine')).toEqual([]);
+      expect(Object.keys(strings).filter(key => key.startsWith('aboutLink') || key === 'aboutReportLine' || key === 'aboutAuthorWhere')).toEqual([]);
     }
   });
 

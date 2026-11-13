@@ -1879,7 +1879,6 @@ export const zh = {
     donateOther: '其他方式',
     aboutAuthor: '作者',
     aboutAuthorLede: '我开发能在你自己电脑上运行的免费应用，涵盖音乐、配音、语音等领域。全部源代码开源，放在 GitHub 上。',
-    aboutAuthorWhere: '新闻、版本和计划在 Telegram @nerual_dreming 和 X 上；神经网络便携版在 @neuroport；全部项目和源代码在 GitHub 上。',
     modelsSection: '模型',
     modelsSectionHint: '每个角色使用的量化，以及磁盘上已有的文件',
     sortRecentlyPlayed: "最近播放",

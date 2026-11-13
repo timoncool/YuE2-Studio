@@ -1883,7 +1883,6 @@ export const en = {
     donateOther: 'Other ways',
     aboutAuthor: 'Author',
     aboutAuthorLede: 'I build free apps that run on your own computer: music, dubbing, voice and more. All the source code is open and lives on GitHub.',
-    aboutAuthorWhere: 'News, releases and plans are on Telegram @nerual_dreming and on X; portable builds of neural networks are in @neuroport; all projects and the source code are on GitHub.',
     modelsSection: 'Models',
     modelsSectionHint: 'Which quantisation each role runs, and what is on disk',
     sortRecentlyPlayed: "Recently played",

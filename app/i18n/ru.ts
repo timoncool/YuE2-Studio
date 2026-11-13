@@ -1882,7 +1882,6 @@ export const ru = {
     donateOther: 'Другие способы',
     aboutAuthor: 'Автор',
     aboutAuthorLede: 'Я делаю бесплатные приложения, которые работают на вашем компьютере: музыка, озвучка, голос и не только. Весь исходный код открыт и лежит на GitHub.',
-    aboutAuthorWhere: 'Новости, релизы и планы — в Telegram @nerual_dreming и в X; портативные сборки нейросетей — в @neuroport; все проекты и исходный код — на GitHub.',
     modelsSection: 'Модели',
     modelsSectionHint: 'Какой квант в каждой роли и что лежит на диске',
     sortRecentlyPlayed: "Недавно слушали",

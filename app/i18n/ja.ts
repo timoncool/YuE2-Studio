@@ -1879,7 +1879,6 @@ export const ja = {
     donateOther: 'その他の方法',
     aboutAuthor: '作者',
     aboutAuthorLede: 'お使いのパソコンで動く無料アプリを作っています。音楽、吹き替え、音声など、分野はさまざまです。ソースコードはすべて公開されていて、GitHub にあります。',
-    aboutAuthorWhere: 'ニュース、リリース、予定は Telegram @nerual_dreming と X に、ニューラルネットワークのポータブル版は @neuroport に、すべてのプロジェクトとソースコードは GitHub にあります。',
     modelsSection: 'モデル',
     modelsSectionHint: '各役割の量子化と、ディスク上にあるもの',
   sortRecentlyPlayed: "最近再生した曲",

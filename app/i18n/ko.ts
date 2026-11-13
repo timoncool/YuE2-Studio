@@ -1879,7 +1879,6 @@ export const ko = {
     donateOther: '다른 방법',
     aboutAuthor: '만든 사람',
     aboutAuthorLede: '여러분의 컴퓨터에서 직접 실행되는 무료 앱을 만듭니다. 음악, 더빙, 음성 등 분야도 다양합니다. 모든 소스 코드는 공개되어 GitHub에 있습니다.',
-    aboutAuthorWhere: '소식, 릴리스, 계획은 Telegram @nerual_dreming과 X에, 신경망 포터블 빌드는 @neuroport에, 모든 프로젝트와 소스 코드는 GitHub에 있습니다.',
     modelsSection: '모델',
     modelsSectionHint: '역할별 양자화와 디스크에 있는 파일',
     sortRecentlyPlayed: "최근 재생",

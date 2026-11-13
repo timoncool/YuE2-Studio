@@ -238,7 +238,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, initialSec
                   <h4 id="about-author" className={ABOUT_HEADING}>{t('aboutAuthor')}</h4>
                   <p className="font-medium text-zinc-900 dark:text-white">Nerual Dreming</p>
                   <p className="text-xs leading-5">{t('aboutAuthorLede')}</p>
-                  <p className="text-xs leading-5">{t('aboutAuthorWhere')}</p>
                   <AuthorLinks />
                 </section>
 
