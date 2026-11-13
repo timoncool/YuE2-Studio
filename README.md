@@ -318,10 +318,31 @@ More tutorials and reviews:
 ### Linux (experimental)
 
 The .deb and the AppImage for Linux x86-64 are **experimental**. They come from the same code with the
-Linux build of the same engine (Vulkan, and the processor), but the author works on Windows and has not
-run them on a real Linux desktop. **If you live on Linux, it would be great if you polished them and sent
-the fixes back as a pull request.** The studio keeps its data in `~/.local/share/yue2-studio`
-(`$XDG_DATA_HOME`).
+Linux build of the same engine (CUDA 13 and CUDA 12 on NVIDIA cards, Vulkan on the others, and the
+processor), but the author works on Windows and has not run them on a real Linux desktop. **If you live on
+Linux, it would be great if you polished them and sent the fixes back as a pull request.** The studio keeps
+its data in `~/.local/share/yue2-studio` (`$XDG_DATA_HOME`).
+
+## How fast is it
+
+How long a 3-minute song takes, by graphics card. These are averages from what YuE2 Studio installations reported
+over 30 days (version 3.8, loading the models included; people run different model sets, so yours can differ).
+
+| Your graphics card | A 3-minute song | Speed |
+|---|---|---|
+| NVIDIA, 24 GB or more | about 1 minute | 2.7× faster than real time |
+| NVIDIA, 16 GB | about 2 minutes | 1.6× |
+| NVIDIA, 12 GB | about 2 minutes | 1.4× |
+| NVIDIA, 8 GB or less | about 5 minutes | 0.6× |
+| AMD, 16 GB or more (Vulkan) | 3–4 minutes | 0.9× |
+| Intel Arc, 12 GB (Vulkan) | about 7 minutes | 0.4× |
+| Apple silicon, 24 GB or more | about 8 minutes | 0.4× |
+| Apple silicon, 16 GB | about 15 minutes | 0.2× |
+| AMD, 8 GB or less (Vulkan) | about an hour | 0.05× |
+| No graphics card (processor) | about 2.5 hours | 0.02× |
+
+On our machine (RTX 4090, Ryzen 9 9950X3D, Windows 11, the Q8_0 set): a 1-minute song in 20 s, a 4-minute song in
+54 s, a 10-minute song in about 3 minutes; the card holds 5–8 GB while it works.
 
 ## What runs where
 
