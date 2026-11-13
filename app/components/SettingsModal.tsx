@@ -13,7 +13,7 @@ import { FileTagSettings } from './FileTagSettings';
 import { HubSettings } from './HubSettings';
 import { STUDIO_REPO_URL, STUDIO_SITE_URL, type ReportFacts } from '../services/issueReport';
 import { ProblemReportDialog } from './ProblemReportDialog';
-import { ABOUT_LINK, AuthorLinks } from './AuthorLinks';
+import { ABOUT_HEADING, ABOUT_LINK, AuthorLinks } from './AuthorLinks';
 import { SupportAuthor } from './SupportAuthor';
 import { useSetupStatus } from '../services/studioQueries';
 import { onSidebarExtras, setSidebarExtras, sidebarExtras, type SidebarExtras } from '../services/playerPanels';
@@ -223,29 +223,30 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, initialSec
             )}
 
             {section === 'about' && (
-              <div className="max-w-lg space-y-6 text-sm text-zinc-600 dark:text-zinc-400">
-                <div className="space-y-1">
+              <div className="max-w-xl space-y-4 text-sm text-zinc-600 dark:text-zinc-400">
+                <div className="space-y-0.5">
                   <p className="text-zinc-900 dark:text-white">YuE2 Studio · {t('version')} {__APP_VERSION__}</p>
-                  <p>{t('localAIMusicGenerator')}</p>
-                  <div className="flex flex-wrap gap-2 pt-2">
-                    <a href={STUDIO_REPO_URL} target="_blank" rel="noopener noreferrer" className={ABOUT_LINK}><SiGithub size={14} aria-hidden="true" />GitHub</a>
+                  <p className="text-xs">{t('localAIMusicGenerator')}</p>
+                  <p className="pt-1 text-xs leading-5">{t('aboutReportLine')}</p>
+                  <div className="flex flex-wrap gap-2 pt-1">
                     <button type="button" onClick={() => setReporting(true)} className={ABOUT_LINK}><Bug size={14} aria-hidden="true" />{t('problemTitle')}</button>
+                    <a href={STUDIO_REPO_URL} target="_blank" rel="noopener noreferrer" className={ABOUT_LINK}><SiGithub size={14} aria-hidden="true" />GitHub</a>
                     {reporting && <ProblemReportDialog facts={reportFacts} onClose={() => setReporting(false)} />}
                   </div>
                 </div>
 
-                {/* Whose studio this is, and where to find the author. */}
-                <div className="space-y-3 border-t border-zinc-200 pt-4 dark:border-zinc-700/50">
+                <section aria-labelledby="about-author" className="space-y-2 border-t border-zinc-200 pt-3 dark:border-zinc-700/50">
+                  <h4 id="about-author" className={ABOUT_HEADING}>{t('aboutAuthor')}</h4>
                   <p className="font-medium text-zinc-900 dark:text-white">Nerual Dreming</p>
+                  <p className="text-xs leading-5">{t('aboutAuthorLede')}</p>
                   <AuthorLinks />
-                </div>
+                </section>
 
-                {/* Support, in the author's own words: the software is free. */}
-                <div className="space-y-3 border-t border-zinc-200 pt-4 dark:border-zinc-700/50">
-                  <p className="font-medium text-zinc-900 dark:text-white">{t('supportTheAuthor')}</p>
+                <section aria-labelledby="about-support" className="space-y-2 border-t border-zinc-200 pt-3 dark:border-zinc-700/50">
+                  <h4 id="about-support" className={ABOUT_HEADING}>{t('supportTheAuthor')}</h4>
                   <p className="text-xs leading-5">{t('supportLine')}</p>
                   <SupportAuthor donatePage={`${STUDIO_SITE_URL}donate.html`} />
-                </div>
+                </section>
               </div>
             )}
           </div>
