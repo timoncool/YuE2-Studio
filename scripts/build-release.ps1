@@ -2,7 +2,7 @@ param(
     [ValidatePattern('^\d+\.\d+\.\d+([\-+][0-9A-Za-z.-]+)?$')]
     [string]$Version,
     [string]$ReleaseNotes = "",
-    [ValidateSet('auto', 'cuda', 'vulkan', 'all')]
+    [ValidateSet('auto', 'cuda', 'hip', 'vulkan', 'all')]
     [string]$RuntimeBackend = 'all',
     # The CUDA 12 toolkit of the engine's second CUDA backend.
     [string]$Cuda12Root = $env:CUDA_PATH_V12_9
@@ -61,7 +61,7 @@ try {
     # for this backend: a CUDA build of ggml is the slow part of a release.
     $stampPath = Join-Path $engineResourceRoot 'runtime.json'
     $stamp = if (Test-Path $stampPath) { Get-Content -Raw $stampPath | ConvertFrom-Json } else { $null }
-    $stagedIsCurrent = $stamp -and $stamp.commit -eq $engineSource.commit -and $stamp.backend -eq $RuntimeBackend -and $stamp.cuda_architecture -eq 'universal' -and ($RuntimeBackend -ne 'all' -or @($stamp.cuda_builds).Count -eq 2) -and (Test-Path (Join-Path $engineResourceRoot 'yue-server.exe'))
+    $stagedIsCurrent = $stamp -and $stamp.commit -eq $engineSource.commit -and $stamp.backend -eq $RuntimeBackend -and $stamp.cuda_architecture -eq 'universal' -and ($RuntimeBackend -ne 'all' -or @($stamp.cuda_builds).Count -eq 2) -and (Test-Path (Join-Path $engineResourceRoot 'yue-server.exe')) -and ($RuntimeBackend -ne 'hip' -or ((Test-Path (Join-Path $engineResourceRoot 'ggml-hip.dll')) -and (Test-Path (Join-Path $engineResourceRoot 'amd_comgr.dll'))))
     if (-not $stagedIsCurrent) {
         & (Join-Path $PSScriptRoot 'build-yue-runtime.ps1') -OutputDirectory $engineResourceRoot -RuntimeBackend $RuntimeBackend -CudaArchitecture universal -Cuda12Root $Cuda12Root
         if (-not $?) { throw "The nested build script failed; release packaging stopped." }
