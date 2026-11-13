@@ -51,7 +51,7 @@ describe('ProblemReportDialog', () => {
     serve({ '/v1/problem/report': { status: 200, body: { number: 77, url: 'https://github.com/x/y/issues/77' } } });
     await open();
     expect(sendButton().disabled).toBe(true);
-    expect([...host.querySelectorAll('a')].some(link => link.textContent?.includes('problemOpenGithub')), 'one main action: Send while the bot sends').toBe(false);
+    expect(host.querySelectorAll('input[type="radio"]').length, 'no choice of way: two buttons say it').toBe(0);
     expect(host.textContent, 'the window carries no links to the author').not.toContain('problemAuthorNews');
     expect(host.querySelector('a[href="https://x.com/nerualdreming"]')).toBeNull();
     await type('short');
@@ -115,32 +115,28 @@ describe('ProblemReportDialog', () => {
     expect(calls.find(call => call.path === '/v1/problem/report')?.body).toMatchObject({ kind: 'question', steps: '', expected: '', attach_log: false });
   });
 
-  it('sends anonymously by default, and from the own account through the form with the text and the title', async () => {
+  it('offers two ways as two buttons named by their result, GitHub the main one, both explained in view', async () => {
     serve({});
     await open();
-    const ways = () => [...host.querySelectorAll('input[name="problem-way"]')] as HTMLInputElement[];
-    const button = () => host.querySelector('.mt-5 a, .mt-5 button') as HTMLElement;
-    expect(ways().map(way => [way.value, way.checked])).toEqual([['bot', true], ['github', false]]);
-    expect(host.querySelector('[role="radiogroup"][aria-label="problemWay"]')).not.toBeNull();
-    expect(button().textContent).toContain('problemSend');
-    expect(host.textContent).toContain('problemAttachLog');
-    expect(host.textContent).toContain('problemPublic');
+    const footer = () => [...host.querySelectorAll('.mt-5 a, .mt-5 button')] as HTMLElement[];
+    const label = (element: HTMLElement) => element.querySelector('span')?.textContent;
+    expect(host.querySelectorAll('input[type="radio"]').length).toBe(0);
+    expect(footer().map(label)).toEqual(['problemSendOwn', 'problemSendAnon']);
+    expect(footer()[0].tagName, 'the main one is the GitHub form, first on a phone').toBe('A');
+    expect(footer()[0].className).toContain('bg-pink-600');
+    expect(footer()[1].className, 'anonymous sending is the fallback').not.toContain('bg-pink-600');
+    for (const element of footer()) expect(label(element)?.startsWith('problemSend')).toBe(true);
+    const text = host.textContent ?? '';
+    for (const line of ['problemOwnName', 'problemOwnLine', 'problemAnonName', 'problemAnonLine', 'problemAttachLog']) expect(text).toContain(line);
+    expect(text.indexOf('problemOwnLine')).toBeLessThan(text.indexOf('problemAnonLine'));
+    expect(text.indexOf('problemAnonLine'), 'the log belongs to the anonymous way, after its line').toBeLessThan(text.indexOf('problemAttachLog'));
+    expect(footer()[0].getAttribute('aria-disabled')).toBe('true');
     await type('The song stops at decoding\nevery time');
-    await act(async () => ways()[1].click());
-    expect(button().tagName).toBe('A');
-    expect(button().textContent).toContain('problemOpenGithub');
-    expect(host.textContent).not.toContain('problemSend');
-    expect(host.textContent).not.toContain('problemAttachLog');
-    expect(host.textContent).not.toContain('problemPublic');
-    expect(host.textContent).toContain('problemGithubLog');
-    const link = new URL(button().getAttribute('href')!);
+    const link = new URL(footer()[0].getAttribute('href')!);
     expect(link.searchParams.get('template')).toBe('2-ru-1-bug.yml');
     expect(link.searchParams.get('what')).toBe('The song stops at decoding\nevery time');
     expect(link.searchParams.get('title')).toBe('The song stops at decoding');
-    expect(button().getAttribute('target')).toBe('_blank');
-    await act(async () => ways()[0].click());
-    expect(button().textContent).toContain('problemSend');
-    expect(host.textContent).toContain('problemAttachLog');
+    expect(footer()[0].getAttribute('target')).toBe('_blank');
   });
 
   it('says why a report did not go, each kind in its own words', () => {

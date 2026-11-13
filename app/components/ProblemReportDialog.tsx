@@ -14,11 +14,8 @@ export interface ProblemRefusal {
 
 const MIN_WHAT = 10;
 
-/** The window's one main action, whichever way of sending is chosen. */
+/** The window's one main action: the form on GitHub, sent from the person's own account. */
 const PRIMARY = 'inline-flex items-center gap-1.5 rounded-lg bg-pink-600 px-4 py-2 text-sm font-medium text-white hover:bg-pink-700 disabled:opacity-40';
-
-/** How the report goes: the studio's bot publishes it, or the person's own GitHub account through the form. */
-export type SendWay = 'bot' | 'github';
 
 /** The labels of the three text fields of each kind, as the GitHub form of that kind names them; a question has one. */
 export const FIELDS: Record<IssueKind, [string, string | null, string | null]> = {
@@ -63,7 +60,6 @@ export const ProblemReportDialog: React.FC<Props> = ({ facts, onClose }) => {
   const { t, language } = useI18n();
   const tt = t as (key: string) => string;
   const [kind, setKind] = useState<IssueKind>('bug');
-  const [way, setWay] = useState<SendWay>('bot');
   const [what, setWhat] = useState('');
   const [steps, setSteps] = useState('');
   const [expected, setExpected] = useState('');
@@ -177,58 +173,42 @@ export const ProblemReportDialog: React.FC<Props> = ({ facts, onClose }) => {
                 <textarea value={expected} onChange={event => setExpected(event.target.value)} rows={2} className={field} />
               </label>
             )}
-            <div role="radiogroup" aria-label={tt('problemWay')} className="space-y-1">
-              <p className="text-xs font-medium text-zinc-600 dark:text-zinc-300">{tt('problemWay')}</p>
-              {(['bot', 'github'] as const).map(option => (
-                <label key={option} className={`flex cursor-pointer items-start gap-2 rounded-lg border p-2 text-xs ${way === option ? 'border-pink-500' : 'border-zinc-200 dark:border-white/10'}`}>
-                  <input type="radio" name="problem-way" value={option} checked={way === option} onChange={() => setWay(option)} className="mt-0.5" />
-                  <span>
-                    <span className="block font-medium text-zinc-800 dark:text-zinc-100">{tt(option === 'bot' ? 'problemWayBot' : 'problemWayGithub')}</span>
-                    <span className="block text-zinc-500 dark:text-zinc-400">{tt(option === 'bot' ? 'problemWayBotHint' : 'problemWayGithubHint')}</span>
-                  </span>
-                </label>
-              ))}
+            {/* the two ways, said before either button: the GitHub form first, the anonymous message as the fallback */}
+            <div className="space-y-1 text-xs text-zinc-500 dark:text-zinc-400">
+              <p><b className="font-semibold text-zinc-700 dark:text-zinc-200">{tt('problemOwnName')}</b> — {tt('problemOwnLine')}</p>
+              <p><b className="font-semibold text-zinc-700 dark:text-zinc-200">{tt('problemAnonName')}</b> — {tt('problemAnonLine')}</p>
             </div>
-            {way === 'bot' ? (
-              <>
-                <label className="flex items-center gap-2 text-xs text-zinc-700 dark:text-zinc-200">
-                  <input type="checkbox" checked={attachLog} onChange={event => setAttachLog(event.target.checked)} />
-                  {tt('problemAttachLog')}
-                </label>
-                <details className="rounded-lg border border-zinc-200 p-2 text-xs dark:border-white/10" onToggle={event => setPreviewOpen((event.target as HTMLDetailsElement).open)}>
-                  <summary className="cursor-pointer text-zinc-600 dark:text-zinc-300">{tt('problemWillSend')}</summary>
-                  {preview ? (
-                    <pre className="mt-2 max-h-48 overflow-auto whitespace-pre-wrap text-[11px] text-zinc-600 dark:text-zinc-300">{sentText(preview)}</pre>
-                  ) : (
-                    <span className="mt-2 block text-zinc-500">{previewError ?? <Loader2 size={12} className="inline animate-spin" />}</span>
-                  )}
-                </details>
-                <p className="text-xs text-zinc-500 dark:text-zinc-400">{tt('problemPublic')}</p>
-                {refusal && <p role="alert" className="text-xs text-rose-600 dark:text-rose-400">{refusalText(refusal, tt)}</p>}
-              </>
-            ) : (
-              <p className="text-xs text-zinc-500 dark:text-zinc-400">{tt('problemGithubLog')}</p>
-            )}
+            <label className="flex items-center gap-2 text-xs text-zinc-700 dark:text-zinc-200">
+              <input type="checkbox" checked={attachLog} onChange={event => setAttachLog(event.target.checked)} />
+              {tt('problemAttachLog')}
+            </label>
+            <details className="rounded-lg border border-zinc-200 p-2 text-xs dark:border-white/10" onToggle={event => setPreviewOpen((event.target as HTMLDetailsElement).open)}>
+              <summary className="cursor-pointer text-zinc-600 dark:text-zinc-300">{tt('problemWillSend')}</summary>
+              {preview ? (
+                <pre className="mt-2 max-h-48 overflow-auto whitespace-pre-wrap text-[11px] text-zinc-600 dark:text-zinc-300">{sentText(preview)}</pre>
+              ) : (
+                <span className="mt-2 block text-zinc-500">{previewError ?? <Loader2 size={12} className="inline animate-spin" />}</span>
+              )}
+            </details>
+            {refusal && <p role="alert" className="text-xs text-rose-600 dark:text-rose-400">{refusalText(refusal, tt)}</p>}
           </div>
         )}
         {!sent && (
-          <div className="mt-5 flex justify-end">
-            {way === 'bot' ? (
-              <button type="button" onClick={() => void send()} disabled={sending || tooShort} className={PRIMARY}>
-                {sending && <Loader2 size={14} className="animate-spin" aria-hidden="true" />}{tt('problemSend')}
-              </button>
-            ) : (
-              // the one action of this way: the window stays open beside the form
-              <a
-                href={tooShort ? undefined : githubUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                aria-disabled={tooShort}
-                className={`${PRIMARY} ${tooShort ? 'pointer-events-none opacity-40' : ''}`}
-              >
-                <SiGithub size={14} aria-hidden="true" />{tt('problemOpenGithub')}<ExternalLink size={13} aria-hidden="true" />
-              </a>
-            )}
+          <div className="mt-5 flex flex-col gap-2 sm:flex-row-reverse sm:justify-start">
+            {/* the main way: the form on GitHub with what is typed here, in a new tab beside the window */}
+            <a
+              href={tooShort ? undefined : githubUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-disabled={tooShort}
+              className={`${PRIMARY} justify-center ${tooShort ? 'pointer-events-none opacity-40' : ''}`}
+            >
+              <SiGithub size={14} aria-hidden="true" /><span>{tt('problemSendOwn')}</span><ExternalLink size={13} aria-hidden="true" />
+            </a>
+            {/* the fallback: anonymously, through the studio's bot */}
+            <button type="button" onClick={() => void send()} disabled={sending || tooShort} className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-zinc-300 px-4 py-2 text-sm font-medium text-zinc-700 hover:border-pink-500 hover:text-pink-500 disabled:opacity-40 dark:border-zinc-600 dark:text-zinc-200">
+              {sending && <Loader2 size={14} className="animate-spin" aria-hidden="true" />}<span>{tt('problemSendAnon')}</span>
+            </button>
           </div>
         )}
       </div>
