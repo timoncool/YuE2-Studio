@@ -1,4 +1,3 @@
-import { StudioFamily } from './StudioFamily';
 import React, { useEffect, useRef, useState } from 'react';
 import { BarChart3, Boxes, Bug, Cloud, Cpu, Image as ImageIcon, Info, Monitor, Plug, User as UserIcon, X } from 'lucide-react';
 import { SiGithub } from '@icons-pack/react-simple-icons';
@@ -228,10 +227,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, initialSec
                 <div className="space-y-1">
                   <p className="text-zinc-900 dark:text-white">YuE2 Studio · {t('version')} {__APP_VERSION__}</p>
                   <p>{t('localAIMusicGenerator')}</p>
-                  <p className="text-xs text-zinc-400 dark:text-zinc-500">{t('poweredBy')}</p>
                   <div className="flex flex-wrap gap-2 pt-2">
-                    <a href={STUDIO_REPO_URL} target="_blank" rel="noopener noreferrer" className={ABOUT_LINK}><SiGithub size={14} />GitHub</a>
-                    <button type="button" onClick={() => setReporting(true)} className={ABOUT_LINK}><Bug size={14} />{t('problemTitle')}</button>
+                    <a href={STUDIO_REPO_URL} target="_blank" rel="noopener noreferrer" className={ABOUT_LINK}><SiGithub size={14} aria-hidden="true" />GitHub</a>
+                    <button type="button" onClick={() => setReporting(true)} className={ABOUT_LINK}><Bug size={14} aria-hidden="true" />{t('problemTitle')}</button>
                     {reporting && <ProblemReportDialog facts={reportFacts} onClose={() => setReporting(false)} />}
                   </div>
                 </div>
@@ -239,11 +237,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, initialSec
                 {/* Whose studio this is, and where to find the author. */}
                 <div className="space-y-3 border-t border-zinc-200 pt-4 dark:border-zinc-700/50">
                   <p className="font-medium text-zinc-900 dark:text-white">Nerual Dreming</p>
-                  <p className="text-xs leading-5">{t('authorLine')}</p>
                   <AuthorLinks />
                 </div>
-
-                <StudioFamily current="yue2" />
 
                 {/* Support, in the author's own words: the software is free. */}
                 <div className="space-y-3 border-t border-zinc-200 pt-4 dark:border-zinc-700/50">
