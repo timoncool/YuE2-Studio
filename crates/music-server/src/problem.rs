@@ -75,6 +75,10 @@ fn engine_log_tail(state: &AppState) -> String {
 /// What stands where the engine printed what a person asked for.
 const LEFT_OUT: &str = "[request text left out]";
 
+/// The fields of the request body yue-server prints after `[Server] Job <id>: {` (`request_to_json`, one field a line)
+/// that hold what a person wrote; its numbers, models and adapters are the other fields.
+const TEXT_FIELDS: &[&str] = &["\"style\":", "\"lyrics\":", "\"abc\":"];
+
 /// The tags the engine starts its own lines with: a line under one of them ends the text the engine printed after
 /// a header such as `[Server] Job <id>: {`. A tag the engine gains later is read as text until the next known one,
 /// which leaves out more, never less.
@@ -96,15 +100,17 @@ fn engine_tag(line: &str) -> Option<&str> {
     Some(tag)
 }
 
-/// The engine's log with the text of each request - the request as it arrived, its style and lyrics among it, and the
-/// score the model wrote - replaced by one line [`LEFT_OUT`]; loading, steps and errors stay. The engine prints that
-/// text after a header (`[Server] Job <id>: {`, `[Pipeline] score of song N as written:`) up to its next own line.
-/// Untagged lines before the first engine line may belong to text whose header is earlier and go too, except those
-/// that read as a failure: an engine that fails at its start prints them before any line of its own.
+/// The engine's log with what a person wrote - the style, lyrics and score of each request, and the score the model
+/// wrote - replaced by one line [`LEFT_OUT`]; the request's numbers, models and adapters, loading, steps and errors
+/// stay. The request body follows `[Server] Job <id>: {` one field a line up to its `}`; the model's score follows
+/// `[Pipeline] score of song N as written:` up to the engine's next own line. Untagged lines before the first engine
+/// line may belong to text whose header is earlier and go too, except those that read as a failure: an engine that
+/// fails at its start prints them before any line of its own.
 pub fn without_request_text(lines: &[String]) -> Vec<String> {
     let mut kept: Vec<String> = Vec::with_capacity(lines.len());
     let mut in_text = true;
     let mut after_header = false;
+    let mut in_request = false;
     let leave_out = |kept: &mut Vec<String>| {
         if kept.last().map(String::as_str) != Some(LEFT_OUT) {
             kept.push(LEFT_OUT.to_string());
@@ -112,9 +118,23 @@ pub fn without_request_text(lines: &[String]) -> Vec<String> {
     };
     for line in lines {
         let trimmed = line.trim_end();
-        let header = engine_tag(trimmed).is_some()
-            && ((trimmed.contains("] Job ") && trimmed.ends_with('{')) || trimmed.ends_with(" as written:"));
-        if header {
+        if in_request {
+            // the request body, one field a line: its numbers, models and adapters stay, what a person wrote goes
+            if TEXT_FIELDS.iter().any(|name| trimmed.trim_start().starts_with(name)) {
+                leave_out(&mut kept);
+            } else {
+                kept.push(line.clone());
+            }
+            in_request = trimmed != "}";
+            continue;
+        }
+        if engine_tag(trimmed).is_some() && trimmed.contains("] Job ") && trimmed.ends_with('{') {
+            kept.push(line.clone());
+            in_request = true;
+            in_text = false;
+            continue;
+        }
+        if engine_tag(trimmed).is_some() && trimmed.ends_with(" as written:") {
             kept.push(line.clone());
             leave_out(&mut kept);
             in_text = true;
@@ -287,7 +307,13 @@ mod tests {
         for text in song {
             assert!(!log.contains(text), "{text} left the studio");
         }
-        assert_eq!(kept.iter().filter(|line| line.as_str() == LEFT_OUT).count(), 2, "one mark for the request, one for the score");
+        assert_eq!(kept.iter().filter(|line| line.as_str() == LEFT_OUT).count(), 2, "one mark for the request's words, one for the score");
+        // the request's numbers stay for whoever reads the report: every field of the body but the person's words
+        let numbers = |lines: &[String]| -> Vec<String> {
+            lines.iter().map(|line| line.trim().to_string()).filter(|line| ["\"duration\":", "\"seed\":", "\"lm_seed\":", "\"companion_scale\":", "\"output_format\":"].iter().any(|name| line.starts_with(name))).collect()
+        };
+        assert_eq!(numbers(&kept), numbers(&lines), "the request's numbers are all kept");
+        assert!(numbers(&lines).len() >= 5);
         for line in ["[Server] Job ", "[Pipeline] score of song 1 as written:", "[AR] Score song 0: end token", "[NAR] Step 7/32", "[Store] Load LM:", "CUDA error: an illegal memory access", "ggml-cuda.cu:111: CUDA error"] {
             assert!(log.contains(line), "{line} stays");
         }
@@ -319,6 +345,6 @@ mod tests {
         let song = ["Neon fades along the lane".to_string(), "Meet me at 5:30".to_string(), "[Chorus]".to_string(), "[NAR] Step 1/32, 107 ms".to_string()];
         assert_eq!(without_request_text(&song), [LEFT_OUT, "[NAR] Step 1/32, 107 ms"]);
         let after_header = ["[Server] Job 0123456789abcdef: {".to_string(), "  \"style\": \"an error of my ways\",".to_string(), "}".to_string(), "[Prompt] cot=full, songs=1, variations=1, 1 tracks".to_string()];
-        assert_eq!(without_request_text(&after_header), ["[Server] Job 0123456789abcdef: {", LEFT_OUT, "[Prompt] cot=full, songs=1, variations=1, 1 tracks"], "after a header the text goes whatever it says");
+        assert_eq!(without_request_text(&after_header), ["[Server] Job 0123456789abcdef: {", LEFT_OUT, "}", "[Prompt] cot=full, songs=1, variations=1, 1 tracks"], "a text field goes whatever it says");
     }
 }
