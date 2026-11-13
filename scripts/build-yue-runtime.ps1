@@ -128,7 +128,7 @@ function Invoke-CMakeBuild([string]$backend) {
     # With runtime-loaded backends nothing links against ggml-cuda, ggml-vulkan
     # or the CPU variants, so naming yue-server alone would skip them: the
     # all-backends build builds the whole tree, as upstream's buildall does.
-    $targets = if ($backend -eq 'all') { '' } else { ($shippedTargets | ForEach-Object { "--target $_" }) -join ' ' }
+    $targets = if ($backend -eq 'all') { '' } elseif ($backend -eq 'hip') { '--target ggml-hip yue-server' } else { ($shippedTargets | ForEach-Object { "--target $_" }) -join ' ' }
     $parallelism = [Math]::Max(1, [Environment]::ProcessorCount)
     $vcvars = Get-VcVars64
     # Ninja drives nvcc and cl directly, so the build does not depend on the
@@ -208,7 +208,15 @@ foreach ($target in $shippedTargets) {
     $pdb = Join-Path $binDirectory "$target.pdb"
     if (Test-Path $pdb) { Copy-Item $pdb $resolvedOutputDirectory -Force }
 }
+# GGML_BACKEND_DL builds backends separately: yue-server can link successfully
+# even if the actual HIP module was never built. Fail packaging in that case.
+if ($backend -eq 'hip' -and -not (Test-Path (Join-Path $binDirectory 'ggml-hip.dll'))) {
+    throw 'HIP build produced yue-server.exe but no ggml-hip.dll; native GPU inference would be unavailable.'
+}
 Get-ChildItem -Path $binDirectory -Filter '*.dll' -File | Copy-Item -Destination $resolvedOutputDirectory -Force
+if ($backend -eq 'hip' -and -not (Test-Path (Join-Path $resolvedOutputDirectory 'ggml-hip.dll'))) {
+    throw 'The staged HIP engine does not contain ggml-hip.dll.'
+}
 
 # The HIP runtime travels with the engine as the ROCm license allows: the
 # backend imports amdhip64, hipblas and rocblas, none of which a display
