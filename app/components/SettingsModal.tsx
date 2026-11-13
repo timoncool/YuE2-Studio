@@ -235,8 +235,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, initialSec
                 </div>
 
                 <section aria-labelledby="about-author" className="space-y-2 border-t border-zinc-200 pt-3 dark:border-zinc-700/50">
-                  <h4 id="about-author" className={ABOUT_HEADING}>{t('aboutAuthor')}</h4>
-                  <p className="font-medium text-zinc-900 dark:text-white">Nerual Dreming</p>
+                  <div className="flex items-baseline gap-2 whitespace-nowrap">
+                    <h4 id="about-author" className={ABOUT_HEADING}>{t('aboutAuthor')}</h4>
+                    <p className="font-medium text-zinc-900 dark:text-white">Nerual Dreming</p>
+                  </div>
                   <p className="text-xs leading-5">{t('aboutAuthorLede')}</p>
                   <AuthorLinks />
                 </section>
