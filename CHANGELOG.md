@@ -53,7 +53,7 @@ Windows build.
 - **A score that lost only its header is kept more often**: the engine also drops the stray text the model wrote in the header before filling in the meter, length and key, where such a score used to fail.
 
 - **Karaoke lines start where they are sung more often**, as in ACE-Step Studio: the alignment counts a recognised word it has to skip, the words heard before the first line included, so a line is no longer pulled onto an earlier word that merely sounds alike.
-- **About links to the X page beside Telegram**: the studio's About, the README, the donation page and the issue forms point to x.com/nerualdreming as well.
+- **About: the links and the donation are put in order, and a wallet's address is copied with a button**: under the studio's version are GitHub and Report a problem; the author's links - Telegram, X, GitHub and the site - are one row of the same buttons, each signed with its network and name; Support the author follows the donation page - a bank card, a monthly subscription on Boosty and crypto, where Copy takes the address alone - with a link to all the ways and instructions on the studio's site. The README and the donation page point to x.com/nerualdreming as well.
 
 ### Fixed
 

@@ -1,6 +1,9 @@
 /** The studio's repository, where its issue forms are. */
 export const STUDIO_REPO_URL = 'https://github.com/timoncool/YuE2-Studio';
 
+/** The studio's site, its donation page among its pages. */
+export const STUDIO_SITE_URL = 'https://timoncool.github.io/YuE2-Studio/';
+
 /** What the bug form on GitHub asks about this computer, as far as the studio knows it. */
 export interface ReportFacts {
   hardware?: { gpuName?: string; totalVramGb?: number; totalRamGb?: number };
