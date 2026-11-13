@@ -112,6 +112,21 @@ ${SAMPLES.slice(6).map(sampleCard).join('\n')}
     .map(([title, body], index) => `      <li><b><span class="num">${index + 1}</span>${escape(title.replace(/\s*[—-]\s*$/, ''))}</b><span>${escape(capital(body))}</span></li>`)
     .join('\n');
 
+  const sp = STUDIO.speed?.[lang];
+  const speed = sp ? `  <section id="speed">
+    <h2>${escape(sp.title)}</h2>
+    <p class="sub">${escape(sp.sub)}</p>
+    <div class="scroll"><table>
+          <thead><tr>${sp.head.map((cell) => `<th>${escape(cell)}</th>`).join('')}</tr></thead>
+          <tbody>
+${sp.rows.map((row) => `          <tr>${row.map((cell) => `<td>${escape(cell)}</td>`).join('')}</tr>`).join('\n')}
+          </tbody>
+        </table></div>
+    <p class="note">${escape(sp.note)}</p>
+  </section>
+
+` : '';
+
   // Questions and answers: shown as they are, and handed to search engines and AI answers as FAQPage.
   const setsTable = `<div class="scroll"><table>
           <thead><tr><th>${escape(s.modelsGpu)}</th><th>${escape(s.modelsSet)}</th><th>${escape(s.modelsSize)}</th></tr></thead>
@@ -255,7 +270,7 @@ ${s.shots.filter(([name]) => !shown.has(name)).map(([name, caption]) => `      <
     </div>
   </section>
 
-  <section id="start">
+${speed}  <section id="start">
     <h2>${escape(s.startTitle)}</h2>
     <ol class="steps">
 ${steps}
