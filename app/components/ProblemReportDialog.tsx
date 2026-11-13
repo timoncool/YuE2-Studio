@@ -201,12 +201,12 @@ export const ProblemReportDialog: React.FC<Props> = ({ facts, onClose }) => {
               target="_blank"
               rel="noopener noreferrer"
               aria-disabled={tooShort}
-              className={`${PRIMARY} justify-center ${tooShort ? 'pointer-events-none opacity-40' : ''}`}
+              className={`${PRIMARY} justify-center whitespace-nowrap ${tooShort ? 'pointer-events-none opacity-40' : ''}`}
             >
               <SiGithub size={14} aria-hidden="true" /><span>{tt('problemSendOwn')}</span><ExternalLink size={13} aria-hidden="true" />
             </a>
             {/* the fallback: anonymously, through the studio's bot */}
-            <button type="button" onClick={() => void send()} disabled={sending || tooShort} className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-zinc-300 px-4 py-2 text-sm font-medium text-zinc-700 hover:border-pink-500 hover:text-pink-500 disabled:opacity-40 dark:border-zinc-600 dark:text-zinc-200">
+            <button type="button" onClick={() => void send()} disabled={sending || tooShort} className="inline-flex items-center justify-center gap-1.5 whitespace-nowrap rounded-lg border border-zinc-300 px-4 py-2 text-sm font-medium text-zinc-700 hover:border-pink-500 hover:text-pink-500 disabled:opacity-40 dark:border-zinc-600 dark:text-zinc-200">
               {sending && <Loader2 size={14} className="animate-spin" aria-hidden="true" />}<span>{tt('problemSendAnon')}</span>
             </button>
           </div>
