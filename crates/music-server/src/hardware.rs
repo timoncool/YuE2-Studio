@@ -42,6 +42,10 @@ pub struct Hardware {
     /// The engine computes on the card through Vulkan: a card with no CUDA build of the engine for it (every card on
     /// Linux, an AMD or Intel one on Windows), not Apple's Metal.
     pub vulkan: bool,
+    /// A Windows ROCm runtime this machine can load the engine's native HIP
+    /// backend against: an AMD card need not fall back to Vulkan here. Windows
+    /// only; everywhere else Vulkan covers AMD.
+    pub hip: bool,
     /// No card the songs are computed on: none at all, or one with less memory than the smallest local set needs.
     pub on_processor: bool,
 }
@@ -152,8 +156,10 @@ fn probe() -> &'static Hardware {
         let compute_capability = device.map(|(compute, _)| compute);
         let driver_major = device.map(|(_, driver)| driver);
         let vulkan = gpu_name.is_some() && cuda.is_none() && !cfg!(target_os = "macos");
+        let hip = cfg!(target_os = "windows") && !nvidia && gpu_name.is_some() && hip_runtime_installed();
         Hardware {
             vulkan,
+            hip,
             on_processor: computes_on_processor(nvidia, total_vram_gb),
             gpu_name,
             total_vram_gb,
@@ -171,6 +177,27 @@ fn probe() -> &'static Hardware {
 
 pub fn hardware() -> Hardware {
     probe().clone()
+}
+
+/// Whether a Windows ROCm runtime is installed for this machine's AMD card:
+/// the HIP SDK's own install (or an extracted TheRock dist) either sets
+/// `HIP_PATH`/`ROCM_PATH` or lands under `Program Files\AMD\ROCm`, and both
+/// carry the `amdhip64` runtime DLL the ggml HIP backend loads. The vendor of
+/// the card alone says nothing - this stays false without the runtime.
+fn hip_runtime_installed() -> bool {
+    fn dir_with_hip_dll(path: &std::path::Path) -> bool {
+        let bin = path.join("bin");
+        let dir = if bin.is_dir() { &bin } else { path };
+        let Ok(entries) = std::fs::read_dir(dir) else { return false };
+        entries.filter_map(Result::ok).any(|entry| {
+            entry.file_name().to_string_lossy().to_ascii_lowercase().starts_with("amdhip64")
+        })
+    }
+    ["HIP_PATH", "ROCM_PATH"].iter().find_map(std::env::var_os).map_or(false, |path| {
+        dir_with_hip_dll(std::path::Path::new(&path))
+    }) || std::path::Path::new(r"C:\Program Files\AMD\ROCm").read_dir().map_or(false, |entries| {
+        entries.filter_map(Result::ok).any(|entry| dir_with_hip_dll(&entry.path()))
+    })
 }
 
 /// Whether songs are computed on the processor: no card, or built-in graphics below the smallest local set. An

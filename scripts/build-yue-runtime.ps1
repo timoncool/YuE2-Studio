@@ -2,14 +2,18 @@ param(
     [Parameter(Mandatory = $true)]
     [ValidateNotNullOrEmpty()]
     [string]$OutputDirectory,
-    [ValidateSet('auto', 'cuda', 'vulkan', 'all')]
+    [ValidateSet('auto', 'cuda', 'hip', 'vulkan', 'all')]
     [string]$RuntimeBackend = 'auto',
     [ValidateSet('universal', 'native', 'sm_89')]
     [string]$CudaArchitecture = 'universal',
     # CUDA 13 dropped Maxwell, Pascal and Volta, so a universal all-backends
     # build adds a second ggml-cuda from a CUDA 12 toolkit: the redist archives
     # unpacked into one folder, or an installed toolkit.
-    [string]$Cuda12Root = $env:CUDA_PATH_V12_9
+    [string]$Cuda12Root = $env:CUDA_PATH_V12_9,
+    # The ROCm Windows SDK the HIP build compiles with: the HIP SDK installer's
+    # root, or an extracted TheRock dist. The runtime DLLs the ggml HIP backend
+    # imports ship beside the engine, so players need no SDK of their own.
+    [string]$RocmPath = $(if ($env:ROCM_PATH) { $env:ROCM_PATH } elseif ($env:HIP_PATH) { $env:HIP_PATH })
 )
 
 # Cmdlet failures stop the build; native tools report progress on stderr, so
@@ -32,6 +36,18 @@ function Test-CudaToolchain {
     return [bool]$nvcc
 }
 
+function Test-HipToolchain {
+    if ([string]::IsNullOrWhiteSpace($RocmPath) -or -not (Test-Path (Join-Path $RocmPath 'bin\hipcc.exe'))) { return $false }
+    return $true
+}
+
+function Assert-HipSdk {
+    if ([string]::IsNullOrWhiteSpace($RocmPath)) {
+        throw 'The HIP build requires a ROCm Windows SDK: pass -RocmPath or set ROCM_PATH/HIP_PATH (the HIP SDK install root or an extracted TheRock dist).'
+    }
+    if (-not (Test-Path (Join-Path $RocmPath 'bin\hipcc.exe'))) { throw "The HIP build requires hipcc.exe under '$RocmPath\bin'." }
+}
+
 function Assert-VulkanSdk {
     $sdk = $env:VULKAN_SDK
     $glslc = Get-Command glslc -ErrorAction SilentlyContinue
@@ -44,10 +60,12 @@ function Resolve-RuntimeBackend {
     switch ($RuntimeBackend) {
         'auto' {
             if (Test-CudaToolchain) { return 'cuda' }
+            if (Test-HipToolchain) { return 'hip' }
             if ($env:VULKAN_SDK) { Assert-VulkanSdk; return 'vulkan' }
-            throw 'No native toolchain found. Install the CUDA Toolkit or a Vulkan SDK.'
+            throw 'No native toolchain found. Install the CUDA Toolkit, a ROCm Windows SDK or a Vulkan SDK.'
         }
         'cuda' { if (-not (Test-CudaToolchain)) { throw 'The CUDA build requires nvcc.' } }
+        'hip' { Assert-HipSdk }
         'vulkan' { Assert-VulkanSdk }
         'all' {
             if (-not (Test-CudaToolchain)) { throw 'The all-backends build requires nvcc.' }
@@ -95,6 +113,11 @@ function Invoke-CMakeBuild([string]$backend) {
     }
     $backendFlags = switch ($backend) {
         'cuda' { "-DGGML_CUDA=ON -DGGML_CUDA_NCCL=OFF $cudaArch" }
+        # The ROCm SDK's hipcc is the C++ compiler for the whole tree: Windows
+        # CMake has no HIP language, so ggml-hip compiles the CUDA sources
+        # through hipcc's HIP compatibility layer. The dist must carry device
+        # code for the card: a gfx110X dist for a 7900 XTX-class Radeon.
+        'hip' { '-DGGML_NATIVE=OFF -DGGML_HIP=ON -DGGML_CUDA=OFF -DGGML_VULKAN=OFF -DGGML_HIP_RCCL=OFF -DGGML_BACKEND_DL=ON' }
         'vulkan' { '-DGGML_NATIVE=OFF -DGGML_VULKAN=ON' }
         'all' { "-DGGML_BACKEND_DL=ON -DGGML_CPU_ALL_VARIANTS=ON -DGGML_VULKAN=ON -DGGML_CUDA=ON -DGGML_CUDA_NCCL=OFF $cudaArch" }
     }
@@ -115,7 +138,10 @@ function Invoke-CMakeBuild([string]$backend) {
     # localised Visual Studio prints in its own language; without it an edited
     # header would not rebuild anything.
     # --fresh: a cache from an earlier configure keeps what this one does not pass.
-    $command = "set `"VSLANG=1033`" && call `"$vcvars`" >nul && cmake --fresh -S . -B `"$buildDirectoryName`" -G Ninja -DCMAKE_BUILD_TYPE=Release $ccache $symbols $backendFlags && cmake --build `"$buildDirectoryName`" $targets --parallel $parallelism"
+    # The HIP build swaps the compiler: hipcc drives clang for host and device,
+    # with MSVC's headers and libraries from vcvars as the ABI.
+    $hipEnv = if ($backend -eq 'hip') { "set `"ROCM_PATH=$RocmPath`" && set `"PATH=$RocmPath\bin;%PATH%`" && set `"CC=clang.exe`" && set `"CXX=hipcc.exe`" && " } else { '' }
+    $command = "set `"VSLANG=1033`" && call `"$vcvars`" >nul && $hipEnv`cmake --fresh -S . -B `"$buildDirectoryName`" -G Ninja -DCMAKE_BUILD_TYPE=Release $ccache $symbols $backendFlags && cmake --build `"$buildDirectoryName`" $targets --parallel $parallelism"
     Push-Location $engineWorktree
     try { & cmd.exe /d /s /c $command | Out-Host } finally { Pop-Location }
     if ($LASTEXITCODE -ne 0) { throw "yue2.cpp $backend build failed." }
@@ -183,6 +209,27 @@ foreach ($target in $shippedTargets) {
     if (Test-Path $pdb) { Copy-Item $pdb $resolvedOutputDirectory -Force }
 }
 Get-ChildItem -Path $binDirectory -Filter '*.dll' -File | Copy-Item -Destination $resolvedOutputDirectory -Force
+
+# The HIP runtime travels with the engine as the ROCm license allows: the
+# backend imports amdhip64, hipblas and rocblas, none of which a display
+# driver installs. The set below is the verified closure for gfx1100: the
+# direct imports plus amd_comgr (hip needs it to see the device at all),
+# rocm_kpack, the rocblas/hipblaslt kernel libraries and the .kpack
+# directory, all resolved relative to the DLLs' own folder.
+if ($backend -eq 'hip') {
+    $rocmBin = Join-Path $RocmPath 'bin'
+    foreach ($library in @('amdhip64*.dll', 'hipblas.dll', 'rocblas.dll', 'rocsolver.dll', 'libhipblaslt.dll', 'origami.dll', 'amd_comgr.dll', 'rocm_kpack.dll')) {
+        $found = Get-ChildItem -Path $rocmBin -Filter $library -File -ErrorAction SilentlyContinue
+        if (-not $found) { throw "The HIP runtime library '$library' was not found under '$rocmBin'." }
+        $found | Copy-Item -Destination $resolvedOutputDirectory -Force
+    }
+    foreach ($dataDir in @('rocblas', 'hipblaslt')) {
+        $src = Join-Path $rocmBin $dataDir
+        if (Test-Path $src) { Copy-Item $src -Destination $resolvedOutputDirectory -Recurse -Force }
+    }
+    $kpack = Join-Path $RocmPath '.kpack'
+    if (Test-Path $kpack) { Copy-Item $kpack -Destination $resolvedOutputDirectory -Recurse -Force }
+}
 
 # Each CUDA backend in a folder of its own, none beside the executable: the
 # studio names the one the card and its driver run in YUE_CUDA_BACKEND.

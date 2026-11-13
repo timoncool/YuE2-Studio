@@ -13,15 +13,15 @@ import { DiagnosticsPanel } from './DiagnosticsPanel';
  * request may compose, which is why the create panel clamps to it.
  */
 
-type ComputeBackend = 'auto' | 'cuda' | 'vulkan' | 'cpu';
+type ComputeBackend = 'auto' | 'cuda' | 'hip' | 'vulkan' | 'cpu';
 type FlashAttention = 'auto' | 'on' | 'off';
-type KvQ8Off = 'processor' | 'vulkan' | 'flash_attention_off' | null;
+type KvQ8Off = 'processor' | 'vulkan' | 'hip' | 'flash_attention_off' | null;
 type KvCache = 'auto' | 'f16' | 'q8';
 
 /** The KV cache the running engine took, and why (`KvChoice` of the service). */
 export interface KvCacheNow {
   q8: boolean;
-  reason: 'set' | 'fits' | 'does_not_fit' | 'unmeasured' | 'processor' | 'vulkan' | 'flash_attention_off';
+  reason: 'set' | 'fits' | 'does_not_fit' | 'unmeasured' | 'processor' | 'vulkan' | 'hip' | 'flash_attention_off';
   need_gib: number | null;
   free_gib: number | null;
 }
@@ -131,7 +131,7 @@ export const EngineSettings: React.FC = () => {
   // why a KV cache in Q8 cannot apply here, as the service reads the machine (an Auto it resolves to the processor)
   const [serverKvQ8Off, setServerKvQ8Off] = useState<KvQ8Off>(null);
   const [kvCacheNow, setKvCacheNow] = useState<KvCacheNow | null>(null);
-  const kvQ8Off: KvQ8Off = options.backend === 'cpu' ? 'processor' : options.backend === 'vulkan' ? 'vulkan' : options.flash_attention === 'off' ? 'flash_attention_off'
+  const kvQ8Off: KvQ8Off = options.backend === 'cpu' ? 'processor' : options.backend === 'vulkan' ? 'vulkan' : options.backend === 'hip' ? 'hip' : options.flash_attention === 'off' ? 'flash_attention_off'
     : options.backend === saved.backend && options.flash_attention === saved.flash_attention ? serverKvQ8Off : null;
   const [savedMaxSeq, setSavedMaxSeq] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
@@ -296,8 +296,8 @@ export const EngineSettings: React.FC = () => {
 
       <div className="rounded-xl border border-zinc-200 p-3 dark:border-white/10">
         <span className="block text-sm font-medium text-zinc-800 dark:text-zinc-100">{tt('computeBackendLabel')}</span>
-        <div className="mt-2 grid grid-cols-2 gap-1 rounded-lg bg-zinc-100 p-1 sm:grid-cols-4 dark:bg-black/30" role="radiogroup" aria-label={tt('computeBackendLabel')}>
-          {(['auto', 'cuda', 'vulkan', 'cpu'] as const).map(value => (
+        <div className="mt-2 grid grid-cols-2 gap-1 rounded-lg bg-zinc-100 p-1 sm:grid-cols-5 dark:bg-black/30" role="radiogroup" aria-label={tt('computeBackendLabel')}>
+          {(['auto', 'cuda', 'hip', 'vulkan', 'cpu'] as const).map(value => (
             <button
               key={value}
               type="button"
@@ -451,7 +451,7 @@ export const EngineSettings: React.FC = () => {
         <span className="mt-2 block text-xs leading-5 text-zinc-500 dark:text-zinc-400">{tt('kvCacheHint')}</span>
         {kvQ8Off !== null && (
           <span className="mt-1 block text-xs leading-5 text-amber-600 dark:text-amber-300">
-            {kvQ8Off === 'processor' ? tt('kvQ8OffProcessor') : kvQ8Off === 'vulkan' ? tt('kvQ8OffVulkan') : tt('kvQ8OffFlashAttention')}
+            {kvQ8Off === 'processor' ? tt('kvQ8OffProcessor') : kvQ8Off === 'vulkan' ? tt('kvQ8OffVulkan') : kvQ8Off === 'hip' ? tt('kvQ8OffHip') : tt('kvQ8OffFlashAttention')}
           </span>
         )}
         {kvCacheNow && <span className="mt-1 block text-xs leading-5 text-zinc-500 dark:text-zinc-400">{kvCacheNowLine(tt, kvCacheNow)}</span>}
