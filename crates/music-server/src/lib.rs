@@ -4083,7 +4083,9 @@ async fn cancel_restore(State(state): State<AppState>) -> Json<Value> {
 /// beside it. Restoring a track again replaces the track its last restoration made.
 async fn start_restore(State(state): State<AppState>, Json(request): Json<RestoreRequest>) -> Result<Json<Value>, (StatusCode, Json<ApiError>)> {
     card_free_of_training(&state, "restore tracks").await?;
-    if state.restore_run.read().await.as_ref().is_some_and(|run| !run.done) {
+    // held from the check to the start, so a second request in between finds this one running
+    let mut slot = state.restore_run.write().await;
+    if slot.as_ref().is_some_and(|run| !run.done) {
         return Err(api_error(StatusCode::CONFLICT, "a track is already being restored".into()));
     }
     let runtime = state.separation_config.read().await.runtime;
@@ -4129,7 +4131,8 @@ async fn start_restore(State(state): State<AppState>, Json(request): Json<Restor
         RestoreSource::File { title, .. } => (None, title.clone()),
     };
     state.restore_stop.store(false, std::sync::atomic::Ordering::Relaxed);
-    *state.restore_run.write().await = Some(RestoreRun { song_id: song_id.clone(), title, stage: "restoring", started_ms: unix_millis(), done: false, error: None, used_gpu: None, library_song: None });
+    *slot = Some(RestoreRun { song_id: song_id.clone(), title, stage: "restoring", started_ms: unix_millis(), done: false, error: None, used_gpu: None, library_song: None });
+    drop(slot);
 
     let background = state.clone();
     let model = state.separator.restore_model_path();
@@ -5281,35 +5284,34 @@ fn purge_old_trash(state: &AppState) {
 /// Removes a song of the bin and the songs that went there with it from the
 /// library, their files sent to the system's recycle bin first.
 fn delete_for_good(state: &AppState, id: &str) -> anyhow::Result<()> {
-    delete_songs_for_good(&state.library, id, |song| song_files(state, song), |path| trash::delete(path).map_err(|error| error.to_string()))
+    delete_songs_for_good(&state.library, id, |song| song_files(state, song), |paths| trash::delete_all(paths).map_err(|error| error.to_string()))
 }
 
-/// A file the recycle bin does not take (a Linux desktop without one, a
-/// network drive) keeps the songs in the studio's bin and is named; nothing is
-/// deleted past it.
 fn delete_songs_for_good(
     library: &library::Library,
     id: &str,
     files: impl Fn(&library::Song) -> Vec<std::path::PathBuf>,
-    recycle: impl Fn(&std::path::Path) -> Result<(), String>,
+    recycle: impl Fn(&[std::path::PathBuf]) -> Result<(), String>,
 ) -> anyhow::Result<()> {
     let mut songs: Vec<library::Song> = library.trashed_songs()?.into_iter().filter(|song| library::trashed_with(song) == Some(id)).collect();
     if let Some(song) = library.get_song(id)? {
         songs.push(song);
     }
+    // each song's files go to the recycle bin in one request and the song leaves the library right after, so a refusal
+    // keeps that song in the studio's bin with its files rather than without some of them
     let mut refused = Vec::new();
     for song in &songs {
-        for path in files(song).into_iter().filter(|path| path.exists()) {
-            if let Err(error) = recycle(&path) {
-                refused.push(format!("{}: {error}", plain_path(&path)));
+        let paths: Vec<std::path::PathBuf> = files(song).into_iter().filter(|path| path.exists()).collect();
+        if !paths.is_empty() {
+            if let Err(error) = recycle(&paths) {
+                refused.push(format!("{}: {error}", song.title));
+                continue;
             }
         }
+        library.delete_song(&song.id)?;
     }
     if !refused.is_empty() {
-        anyhow::bail!("the system's recycle bin did not take these files, so the song stays in the studio's bin: {}", refused.join("; "));
-    }
-    for song in &songs {
-        library.delete_song(&song.id)?;
+        anyhow::bail!("the system's recycle bin did not take the files of these songs, so they stay in the studio's bin: {}", refused.join("; "));
     }
     Ok(())
 }
@@ -7885,6 +7887,12 @@ async fn set_song_karaoke(
     Path(id): Path<String>,
     Json(mut request): Json<KaraokeSetRequest>,
 ) -> Result<Json<Value>, (StatusCode, Json<ApiError>)> {
+    let song = state
+        .library
+        .get_song(&id)
+        .map_err(|error| api_error(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?
+        .ok_or_else(|| api_error(StatusCode::NOT_FOUND, "no such song".into()))?;
+    refuse_trashed(&song)?;
     if let Some(encoded) = request.content_base64.take() {
         use base64::Engine as _;
         let bytes = base64::engine::general_purpose::STANDARD
@@ -12994,17 +13002,24 @@ mod tests {
         library.set_song_trashed(&song, true, None).unwrap();
         library.set_song_trashed(&stem, true, Some(&song)).unwrap();
         std::fs::create_dir_all(&root).unwrap();
-        let file = root.join("harbour.flac");
-        std::fs::write(&file, b"fLaC").unwrap();
-        let files = |_: &library::Song| vec![file.clone()];
+        let (song_file, stem_file) = (root.join("harbour.flac"), root.join("harbour-vocals.flac"));
+        std::fs::write(&song_file, b"fLaC").unwrap();
+        std::fs::write(&stem_file, b"fLaC").unwrap();
+        let files = |of: &library::Song| vec![if of.id == song { song_file.clone() } else { stem_file.clone() }];
 
         let refused = delete_songs_for_good(&library, &song, files, |_| Err("no recycle bin on this desktop".into())).unwrap_err();
         assert!(format!("{refused:#}").contains("no recycle bin on this desktop"), "{refused:#}");
-        assert!(file.exists(), "a file the recycle bin refused is not deleted past it");
+        assert!(song_file.exists() && stem_file.exists(), "a file the recycle bin refused is not deleted past it");
         assert_eq!(library.trashed_songs().unwrap().len(), 2, "the song and its stem stay in the studio's bin");
 
+        // the bin takes the stem and refuses the song: the stem goes whole, the song stays with its file
+        let refuses_song = |paths: &[std::path::PathBuf]| if paths.contains(&song_file) { Err("refused".to_string()) } else { std::fs::remove_file(&paths[0]).map_err(|error| error.to_string()) };
+        delete_songs_for_good(&library, &song, files, refuses_song).unwrap_err();
+        assert!(library.get_song(&stem).unwrap().is_none() && !stem_file.exists(), "the stem left with its file");
+        assert!(library.get_song(&song).unwrap().is_some() && song_file.exists(), "the refused song stays with its file");
+
         let recycled = std::cell::RefCell::new(Vec::new());
-        delete_songs_for_good(&library, &song, files, |path| { recycled.borrow_mut().push(path.to_path_buf()); Ok(()) }).unwrap();
+        delete_songs_for_good(&library, &song, files, |paths| { recycled.borrow_mut().extend_from_slice(paths); Ok(()) }).unwrap();
         assert!(library.get_song(&song).unwrap().is_none() && library.get_song(&stem).unwrap().is_none());
         assert!(!recycled.borrow().is_empty());
         drop(library);
