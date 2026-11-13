@@ -1,8 +1,11 @@
 import React, { act } from 'react';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-vi.mock('../context/I18nContext', () => ({ useI18n: () => ({ t: (key: string) => key, language: 'en' }) }));
+const windowLanguage = vi.hoisted(() => ({ current: 'en' }));
+vi.mock('../context/I18nContext', () => ({ useI18n: () => ({ t: (key: string) => key, language: windowLanguage.current }) }));
 
 const { AuthorLinks, AUTHOR_LINKS, ABOUT_LINK } = await import('./AuthorLinks');
 const { en } = await import('../i18n/en');
@@ -50,21 +53,33 @@ describe('About: the author and support', () => {
     }
   });
 
-  it('names the support page button with the same words the line above it uses', () => {
-    expect(ru.supportPageButton).toBe('Страница поддержки');
-    expect(ru.supportLine).toBe('Всё здесь бесплатно. Донаты оплачивают время, которое на это уходит. Apple Pay, Google Pay, криптовалюта и другие способы — на странице поддержки.');
-    const inLine = { en: 'support page', ru: 'странице поддержки', zh: zh.supportPageButton, ja: ja.supportPageButton, ko: ko.supportPageButton };
-    expect(en.supportPageButton.toLowerCase()).toBe(inLine.en);
-    for (const [strings, words] of [[en, inLine.en], [ru, inLine.ru], [zh, inLine.zh], [ja, inLine.ja], [ko, inLine.ko]] as const) {
-      expect(strings.supportLine).toContain(words);
+  it('names the donation page button exactly as the page is titled on the site, and the line above it uses that title', () => {
+    const site = readFileSync(resolve(__dirname, '../../docs/site/donate-body.html'), 'utf8');
+    const pageTitles = [...site.matchAll(/^\s*title:"([^"]+)",$/gm)].map(match => match[1]);
+    expect(ru.supportLine).toBe('Всё здесь бесплатно. Донаты оплачивают время, которое на это уходит. Apple Pay, Google Pay, криптовалюта и другие способы — на странице «Поддержать разработку».');
+    for (const strings of [en, ru, zh, ja, ko]) {
+      expect(pageTitles).toContain(strings.supportPageButton);
+      const named = strings.supportLine.match(/[«“「]([^»”」]+)[»”」]/)?.[1];
+      expect(named).toBe(strings.supportPageButton);
       expect(strings.supportLine).toMatch(/Apple Pay[\s\S]*Google Pay/);
+      expect(strings.supportLine.toLowerCase()).not.toMatch(/страниц[аеы] поддержки|support page/);
     }
+    expect([en, ru, zh, ja, ko].map(strings => strings.supportPageButton)).toEqual(pageTitles.slice(0, 5));
   });
 
   it('supports the author with a card, Boosty and the donation page for the rest, no wallets in the program', async () => {
     await show(<SupportAuthor donatePage="https://timoncool.github.io/YuE2-Studio/donate.html" />);
     const buttons = [...host.querySelectorAll('a')];
-    expect(buttons.map(button => button.getAttribute('href'))).toEqual(['https://dalink.to/nerual_dreming', 'https://boosty.to/neuro_art', 'https://timoncool.github.io/YuE2-Studio/donate.html']);
+    expect(buttons.map(button => button.getAttribute('href'))).toEqual(['https://dalink.to/nerual_dreming', 'https://boosty.to/neuro_art', 'https://timoncool.github.io/YuE2-Studio/donate.html?from=app&lang=en']);
+    const page = new URL(buttons[2].getAttribute('href')!);
+    expect(page.searchParams.get('from')).toBe('app');
+    expect(page.searchParams.get('lang')).toBe('en');
+    act(() => root.unmount());
+    host.remove();
+    windowLanguage.current = 'ko';
+    await show(<SupportAuthor donatePage="https://timoncool.github.io/YuE2-Studio/donate.html" />);
+    windowLanguage.current = 'en';
+    expect(new URL(host.querySelectorAll('a')[2].getAttribute('href')!).searchParams.get('lang')).toBe('ko');
     expect(buttons[2].textContent).toContain('supportPageButton');
     expect(buttons[2].querySelector('svg')).not.toBeNull();
     for (const address of WALLET_ADDRESSES) expect(host.innerHTML).not.toContain(address);
