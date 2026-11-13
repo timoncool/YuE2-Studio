@@ -4,7 +4,12 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('../context/I18nContext', () => ({ useI18n: () => ({ t: (key: string) => key, language: 'en' }) }));
 
-const { AuthorLinks, AUTHOR_LINKS } = await import('./AuthorLinks');
+const { AuthorLinks, AUTHOR_LINKS, ABOUT_LINK } = await import('./AuthorLinks');
+const { en } = await import('../i18n/en');
+const { ru } = await import('../i18n/ru');
+const { zh } = await import('../i18n/zh');
+const { ja } = await import('../i18n/ja');
+const { ko } = await import('../i18n/ko');
 const { SupportAuthor } = await import('./SupportAuthor');
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
@@ -26,17 +31,25 @@ async function show(node: React.ReactNode) {
 const WALLET_ADDRESSES = ['TQST9Lp2TjK6FiVkn4fwfGUee7NmkxEE7C', '1E7dHL22RpyhJGVpcvKdbyZgksSYkYeEBC', '0xb5db65adf478983186d4897ba92fe2c25c594a0c'];
 
 describe('About: the author and support', () => {
-  it('lists the author\'s links one a line, each "Network · name" and what is there, no neuro-cartel and no other studios', async () => {
+  it('shows the author\'s links as buttons signed "Network · name", no neuro-cartel and no other studios', async () => {
     await show(<AuthorLinks />);
-    const links = [...host.querySelectorAll('li a')];
+    const links = [...host.querySelectorAll('a')];
     expect(links.length).toBe(AUTHOR_LINKS.length);
-    const names = links.map(link => link.querySelector('span > span:first-child')?.textContent);
-    expect(names).toEqual(['Telegram · @nerual_dreming', 'X · @nerualdreming', 'Telegram · @neuroport', 'GitHub · timoncool', 'aboutSite · artgeneration.me']);
-    const whats = links.map(link => link.querySelector('span > span:last-child')?.textContent);
-    expect(whats).toEqual([' — aboutLinkNews', ' — aboutLinkX', ' — aboutLinkPortable', ' — aboutLinkGithub', ' — aboutLinkSite']);
+    expect(host.querySelectorAll('li').length).toBe(0);
+    for (const link of links) expect(link.className).toBe(ABOUT_LINK);
+    expect(links.map(link => link.querySelector('span')?.textContent)).toEqual(['Telegram · @nerual_dreming', 'Telegram · @neuroport', 'X · @nerualdreming', 'GitHub · timoncool', 'aboutSite · artgeneration.me']);
+    expect(host.textContent).not.toContain('aboutLink');
     expect(host.innerHTML).not.toContain('neuro-cartel');
     expect(host.innerHTML).not.toMatch(/MiniMax|ACE-Step|studioFamily/);
     for (const icon of host.querySelectorAll('svg')) expect(icon.getAttribute('aria-hidden')).toBe('true');
+  });
+
+  it('says in one line where what is, and the program block has no line about sending reports', () => {
+    expect(ru.aboutAuthorWhere).toBe('Новости, релизы и планы — в Telegram @nerual_dreming и в X; портативные сборки нейросетей — в @neuroport; все проекты и исходный код — на GitHub.');
+    for (const strings of [en, ru, zh, ja, ko]) {
+      expect(strings.aboutAuthorWhere).toMatch(/@nerual_dreming[\s\S]*@neuroport[\s\S]*GitHub/);
+      expect(Object.keys(strings).filter(key => key.startsWith('aboutLink') || key === 'aboutReportLine')).toEqual([]);
+    }
   });
 
   it('supports the author with a card, Boosty and the donation page for the rest, no wallets in the program', async () => {

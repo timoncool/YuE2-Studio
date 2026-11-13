@@ -227,7 +227,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, initialSec
                 <div className="space-y-0.5">
                   <p className="text-zinc-900 dark:text-white">YuE2 Studio · {t('version')} {__APP_VERSION__}</p>
                   <p className="text-xs">{t('localAIMusicGenerator')}</p>
-                  <p className="pt-1 text-xs leading-5">{t('aboutReportLine')}</p>
                   <div className="flex flex-wrap gap-2 pt-1">
                     <button type="button" onClick={() => setReporting(true)} className={ABOUT_LINK}><Bug size={14} aria-hidden="true" />{t('problemTitle')}</button>
                     <a href={STUDIO_REPO_URL} target="_blank" rel="noopener noreferrer" className={ABOUT_LINK}><SiGithub size={14} aria-hidden="true" />GitHub</a>
@@ -239,6 +238,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, initialSec
                   <h4 id="about-author" className={ABOUT_HEADING}>{t('aboutAuthor')}</h4>
                   <p className="font-medium text-zinc-900 dark:text-white">Nerual Dreming</p>
                   <p className="text-xs leading-5">{t('aboutAuthorLede')}</p>
+                  <p className="text-xs leading-5">{t('aboutAuthorWhere')}</p>
                   <AuthorLinks />
                 </section>
 
