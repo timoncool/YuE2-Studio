@@ -5779,7 +5779,7 @@ async fn start_engine_again(state: &AppState) -> Result<(), String> {
         return Err("CUDA was chosen, but this card or its driver runs neither CUDA build of the engine: it needs an NVIDIA card from the GTX 900 series on and driver 525 or newer. Update the NVIDIA driver, or choose Vulkan in Settings.".into());
     }
     if options.backend == music_engine::yue_server::ComputeBackend::Hip && !hardware::hardware().hip {
-        return Err("Native HIP was chosen, but no Windows ROCm runtime was found for this machine's AMD card: install the AMD HIP SDK (or extract TheRock's Windows dist) and set HIP_PATH, or choose Vulkan in Settings.".into());
+        return Err("Native HIP was selected, but a HIP-capable AMD engine and runtime were not detected. Use a complete Windows ROCm gfx1100 bundle with ggml-hip.dll and its dependencies, or configure a compatible ROCm SDK. No fallback backend was attempted.".into());
     }
     // nvidia-smi is a process of its own: asked off the async workers, and only for a chosen card
     let chosen_card = options.gpu;
