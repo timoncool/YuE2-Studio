@@ -1,6 +1,4 @@
 import React, { act } from 'react';
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -53,18 +51,17 @@ describe('About: the author and support', () => {
     }
   });
 
-  it('names the donation page button exactly as the page is titled on the site, and the line above it uses that title', () => {
-    const site = readFileSync(resolve(__dirname, '../../docs/site/donate-body.html'), 'utf8');
-    const pageTitles = [...site.matchAll(/^\s*title:"([^"]+)",$/gm)].map(match => match[1]);
-    expect(ru.supportLine).toBe('Всё здесь бесплатно. Донаты оплачивают время, которое на это уходит. Apple Pay, Google Pay, криптовалюта и другие способы — на странице «Поддержать разработку».');
-    for (const strings of [en, ru, zh, ja, ko]) {
-      expect(pageTitles).toContain(strings.supportPageButton);
-      const named = strings.supportLine.match(/[«“「]([^»”」]+)[»”」]/)?.[1];
-      expect(named).toBe(strings.supportPageButton);
-      expect(strings.supportLine).toMatch(/Apple Pay[\s\S]*Google Pay/);
-      expect(strings.supportLine.toLowerCase()).not.toMatch(/страниц[аеы] поддержки|support page/);
+  it('says "free" once on the whole page in every language and names no page in the text', () => {
+    expect(ru.aboutAuthorLede).toBe('Я делаю приложения, которые работают на вашем компьютере: музыка, озвучка, голос и не только. Весь исходный код открыт.');
+    expect(ru.supportLine).toBe('Всё здесь бесплатно. Донаты оплачивают время, которое на это уходит.');
+    expect(ru.supportPageButton).toBe('Все способы');
+    const free = [[en, /\bfree\b/gi], [ru, /бесплатн/gi], [zh, /免费/g], [ja, /無料/g], [ko, /무료/g]] as const;
+    for (const [strings, word] of free) {
+      const page = [strings.localAIMusicGenerator, strings.problemTitle, strings.aboutAuthor, strings.aboutAuthorLede, strings.supportTheAuthor,
+        strings.supportLine, strings.donateCardButton, strings.donateMonthlyButton, strings.supportPageButton, strings.aboutSite].join('\n');
+      expect(page.match(word)?.length).toBe(1);
+      expect(strings.supportLine).not.toMatch(/Apple Pay|[«“「]/);
     }
-    expect([en, ru, zh, ja, ko].map(strings => strings.supportPageButton)).toEqual(pageTitles.slice(0, 5));
   });
 
   it('supports the author with a card, Boosty and the donation page for the rest, no wallets in the program', async () => {
