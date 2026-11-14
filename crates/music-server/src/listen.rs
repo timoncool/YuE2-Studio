@@ -401,6 +401,7 @@ mod tests {
             driver_major: None,
             recommended: None,
             vulkan: false,
+            hip: false,
             on_processor: false,
         };
         let cuda13 = Some(crate::hardware::CudaBuild::Cuda13);

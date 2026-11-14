@@ -926,7 +926,7 @@ impl EngineOptions {
         use music_engine::yue_server::ComputeBackend;
         match self.backend {
             ComputeBackend::Cuda | ComputeBackend::Auto => hardware::hardware().cuda,
-            ComputeBackend::Vulkan | ComputeBackend::Cpu => None,
+            ComputeBackend::Hip | ComputeBackend::Vulkan | ComputeBackend::Cpu => None,
         }
     }
 
@@ -945,7 +945,7 @@ impl EngineOptions {
                 let hardware = hardware::hardware();
                 hardware.cuda.is_none() && hardware.gpu_name.is_some()
             }
-            ComputeBackend::Cuda | ComputeBackend::Cpu => false,
+            ComputeBackend::Cuda | ComputeBackend::Hip | ComputeBackend::Cpu => false,
         }
     }
 
@@ -979,6 +979,10 @@ impl EngineOptions {
             let mut chain = Vec::new();
             if hardware.cuda.is_some() {
                 chain.push(ComputeBackend::Cuda);
+            }
+            // an AMD card with a ROCm runtime takes native HIP over Vulkan
+            if hardware.hip {
+                chain.push(ComputeBackend::Hip);
             }
             // an NVIDIA card that runs CUDA is never tried on Vulkan
             if hardware.gpu_name.is_some() && (!hardware.nvidia || hardware.cuda.is_none()) {
@@ -1133,8 +1137,12 @@ impl EngineOptions {
     }
 
     /// Why a KV cache in Q8 does not apply to this start, `None` when it can: the engine reads it only through flash
-    /// attention on a card, and it is measured on CUDA alone, not yet on Vulkan.
+    /// attention on a card, and it is measured on CUDA alone, not yet on Vulkan or native HIP.
     fn kv_q8_off_reason(&self) -> Option<&'static str> {
+        use music_engine::yue_server::ComputeBackend;
+        if self.backend == ComputeBackend::Hip {
+            return Some("hip");
+        }
         if self.cuda_build().is_none() {
             return Some(if self.uses_vulkan() { "vulkan" } else { "processor" });
         }
@@ -5770,6 +5778,9 @@ async fn start_engine_again(state: &AppState) -> Result<(), String> {
     if options.backend == music_engine::yue_server::ComputeBackend::Cuda && hardware::hardware().cuda.is_none() {
         return Err("CUDA was chosen, but this card or its driver runs neither CUDA build of the engine: it needs an NVIDIA card from the GTX 900 series on and driver 525 or newer. Update the NVIDIA driver, or choose Vulkan in Settings.".into());
     }
+    if options.backend == music_engine::yue_server::ComputeBackend::Hip && !hardware::hardware().hip {
+        return Err("Native HIP was selected, but a HIP-capable AMD engine and runtime were not detected. Use a complete Windows ROCm HIP bundle - ggml-hip.dll and its runtime dependencies, with device kernels for this card - or configure a compatible ROCm SDK. The engine log names the gfx target it found. No fallback backend was attempted.".into());
+    }
     // nvidia-smi is a process of its own: asked off the async workers, and only for a chosen card
     let chosen_card = options.gpu;
     if chosen_card.is_some() {
@@ -5917,6 +5928,7 @@ fn device_name(device: music_engine::yue_server::ComputeBackend) -> &'static str
     match device {
         ComputeBackend::Auto => "Auto",
         ComputeBackend::Cuda => "CUDA",
+        ComputeBackend::Hip => "AMD HIP (ROCm)",
         ComputeBackend::Vulkan => "Vulkan",
         ComputeBackend::Cpu => "the processor",
     }
@@ -12332,16 +12344,16 @@ mod tests {
     #[test]
     fn a_device_chosen_in_settings_is_the_only_one_tried() {
         use music_engine::yue_server::ComputeBackend;
-        for device in [ComputeBackend::Cuda, ComputeBackend::Vulkan, ComputeBackend::Cpu] {
+        for device in [ComputeBackend::Cuda, ComputeBackend::Hip, ComputeBackend::Vulkan, ComputeBackend::Cpu] {
             let options = EngineOptions { backend: device, ..EngineOptions::default() };
             assert_eq!(options.device_chain(&[device]), vec![device]);
         }
         // Auto always ends on the processor and never retries a failed device.
         // Off Windows the chain starts from Auto itself - the engine's own
-        // best device, Metal on macOS - so only the CUDA/Vulkan failures of a
-        // Windows chain remove entries before it.
+        // best device, Metal on macOS - so only the CUDA/HIP/Vulkan failures
+        // of a Windows chain remove entries before it.
         let auto = EngineOptions::default();
-        let chain = auto.device_chain(&[ComputeBackend::Cuda, ComputeBackend::Vulkan]);
+        let chain = auto.device_chain(&[ComputeBackend::Cuda, ComputeBackend::Hip, ComputeBackend::Vulkan]);
         if cfg!(windows) {
             assert_eq!(chain, vec![ComputeBackend::Cpu]);
         } else {

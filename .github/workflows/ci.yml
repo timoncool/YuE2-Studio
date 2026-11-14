@@ -22,6 +22,63 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - name: Service tests
         run: cargo test -p music-server --locked
+      - name: HIP Windows release PowerShell syntax (no GPU or signing certificate needed)
+        shell: pwsh
+        run: |
+          $scripts = @(
+            'scripts/build-release.ps1',
+            'scripts/build-yue-runtime.ps1',
+            'scripts/sign-hip-engine.ps1',
+            'scripts/audit-hip-release.ps1',
+            'scripts/test-hip-installer.ps1'
+          )
+          foreach ($script in $scripts) {
+            $tokens = $null
+            $errors = $null
+            [System.Management.Automation.Language.Parser]::ParseFile(
+              (Resolve-Path $script).Path, [ref]$tokens, [ref]$errors
+            ) | Out-Null
+            if ($errors.Count -gt 0) {
+              $errors | Format-List | Out-String | Write-Host
+              throw "PowerShell parser found $($errors.Count) error(s) in $script"
+            }
+            Write-Host "[syntax PASS] $script"
+          }
+      - name: HIP release audit contracts (synthetic, no GPU)
+        shell: pwsh
+        run: |
+          $root = Join-Path $env:RUNNER_TEMP 'hip-audit-test'
+          $tag = '-hip-gfx1100'
+          $name = "YuE2.Studio_4.0.0$($tag)_x64-setup.exe"
+          $portable = Join-Path $root 'YuE2-Studio-4.0.0-portable'
+          $engine = Join-Path $portable 'resources/yue2-cpp'
+          New-Item -ItemType Directory -Force $engine | Out-Null
+          foreach ($path in @($name,"$name.sig","YuE2-Studio-4.0.0$tag-portable-windows-x64.zip")) {
+            Set-Content -LiteralPath (Join-Path $root $path) -Value 'fixture'
+          }
+          foreach ($path in @('yue-server.exe','ggml-hip.dll','hipblas.dll','rocblas.dll','amd_comgr.dll')) {
+            Set-Content -LiteralPath (Join-Path $engine $path) -Value 'fixture'
+          }
+          $manifest = @{
+            version = '4.0.0'
+            platforms = @{
+              'windows-x86_64' = @{
+                signature = 'synthetic-not-cryptographically-valid'
+                url = "https://github.com/timoncool/YuE2-Studio/releases/download/v4.0.0/$name"
+              }
+            }
+          }
+          $manifest | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $root "latest$tag.json")
+          @{ backend = 'hip'; hip_arch = 'gfx1100' } | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $engine 'runtime.json')
+          & ./scripts/audit-hip-release.ps1 -ReleaseDir $root -HipArch gfx1100
+          if ($LASTEXITCODE -ne 0) { throw 'Expected positive unsigned fixture to satisfy layout/updater contract.' }
+          @{ backend = 'hip'; hip_arch = 'gfx1101' } | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $engine 'runtime.json')
+          & ./scripts/audit-hip-release.ps1 -ReleaseDir $root -HipArch gfx1100
+          if ($LASTEXITCODE -ne 1) { throw 'Mismatched HIP device architecture was not rejected.' }
+          Write-Host '[contract PASS] valid layout accepted; mismatched architecture rejected'
+          # The expected negative test exits 1; clear its code so the CI step
+          # itself succeeds only after verifying that it WAS rejected.
+          exit 0
 
   # the same tests on Linux, the platform the studio's Linux package runs on; the repository's toolchain file names
   # the Windows one, so the runner's own stable toolchain is taken
