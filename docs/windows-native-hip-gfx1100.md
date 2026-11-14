@@ -73,6 +73,73 @@ architecture changes build inputs and test coverage, not Studio code** —
 detection is layout-based, the engine validates the real device, and every
 artifact already carries its target list.
 
+## Windows driver/runtime deployment and release-signing policy
+
+**Physical test status is not ISV deployment approval.** The current
+gfx1100 reference run used an isolated app-local TheRock ROCm 10.1 bundle,
+including `amdhip64*.dll`. Keep that setup for reproducible development
+and regression; it is NOT yet the approved production installer layout.
+
+AMD's Windows HIP SDK *application deployment guidelines* state that
+production users obtain the HIP **runtime from the AMD GPU driver**, while
+ISVs may ship the relevant **HIP SDK libraries** with their applications.
+The minimum required GPU driver and its compatible HIP runtime should be
+documented together with the compiler/library version. The current local
+TheRock 10.1 DLL closure has not yet been independently qualified against
+that driver-runtime deployment policy. A public release must pass a clean
+Windows install using the intended driver/runtime arrangement; do not claim
+"no SDK required" based solely on the private runtime validation.
+
+Reference:
+https://rocm.docs.amd.com/projects/install-on-windows/en/develop/conceptual/deployment-guidelines.html
+
+Before the first official Windows HIP release:
+1. Check each AMD redistributable DLL, kernel data package and licence for
+   the chosen Windows SDK/driver pairing; record the source and SPDX licence.
+2. Validate HIP device enumeration, `ROCm0`, GGML backend dynamic loading,
+   rocBLAS kernels and one entire song with the AMD-driver-provided runtime.
+   If the certified combination needs a private-runtime exception, obtain
+   explicit owner/maintainer approval and document its basis and limitations.
+3. Sign the first-party HIP engine DLLs and `yue-server.exe` **before**
+   Tauri bundles resources. Configure Tauri Windows Authenticode signing
+   for the Studio executable and NSIS installer **during** its build.
+   The Tauri updater Ed25519 `.sig` must be generated over the finalized
+   installer; **never re-sign or modify the installer after that step**.
+4. For an opt-in publisher-signed HIP release, set a valid
+   `YUE_AUTHENTICODE_CERT_THUMBPRINT` and `YUE_REQUIRE_SIGNED_RELEASE=1`
+   on the trusted Windows release machine, then use `build-release.ps1`.
+   `scripts/audit-hip-release.ps1` checks HIP artifact isolation,
+   manifest-to-installer naming, architecture stamp, and Authenticode state.
+   It does **not** cryptographically validate the independent Tauri updater
+   Ed25519 signature; verify that separately with Tauri's updater key.
+5. OV and EV certificates have the same SmartScreen reputation-building
+   behavior (EV no longer grants immediate initial trust). Smart App
+   Control and SmartScreen are distinct checks: a signature is necessary
+   for a trustworthy public distribution but is not a guarantee against
+   every warning or block. Do not disable SAC to pass the release gate.
+
+Microsoft:
+https://learn.microsoft.com/en-us/windows/apps/package-and-deploy/code-signing-options
+https://learn.microsoft.com/en-us/windows/apps/package-and-deploy/smartscreen-reputation
+
+Tauri:
+https://v2.tauri.app/distribute/sign/windows/
+
+**HIP update isolation:** the Tauri release config must embed the
+`latest-hip-<targets>.json` endpoint, matching the generated manifest.
+The HIP manifest and all corresponding installer/ZIP assets must coexist
+on the upstream release that GitHub marks as `latest`; otherwise
+`releases/latest/download/` will resolve to a release without those
+assets. The maintainer owns this publication policy. A different
+manifest filename alone never separated the updater before the fix.
+
+**Support tiers:** `gfx1100` (RX 7900 XTX) remains physical PASS on the
+recorded code/build; `gfx1101`–`gfx1103` remain compile/closure-only
+until separately run; `gfx103X`, `gfx115X`, `gfx120X` have no
+end-to-end physical evidence for this project. In particular the mere
+existence of a kernel tarball, a successful hipcc compile or a signature
+does not qualify a GPU family for release.
+
 ## Source provenance and upstream dependencies
 
 Until the engine and GGML changes are merged, keep the published engine pin
@@ -146,7 +213,8 @@ without assuming an installed SDK. Startup still needs to confirm that
 when collecting HIP-only evidence.
 
 Perform an actual Tauri GUI test: select HIP; create a song; verify the
-job, progress, cancellation, local library, playback and MP3/WAV export.
+job, progress, cancellation, local library, playback and FLAC export.
+Other export formats need separate tests before a PASS claim.
 The standalone yue-server health + job contract does **not** constitute a
 GUI end-to-end test.
 
