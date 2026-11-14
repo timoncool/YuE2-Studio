@@ -112,7 +112,7 @@ try {
     # the app and NSIS installer before producing the updater Ed25519 .sig.
     # Never alter/re-sign an installer after its updater signature is created.
     if ($RuntimeBackend -eq 'hip' -and -not [string]::IsNullOrWhiteSpace($authenticodeThumbprint)) {
-        & (Join-Path $PSScriptRoot 'sign-hip-engine.ps1') -EngineRoot $engineResourceRoot -Thumbprint $authenticodeThumbprint
+        & (Join-Path $PSScriptRoot 'sign-hip-engine.ps1') -EngineRoot $engineResourceRoot -AdditionalProjectRoot $vstResourceRoot -Thumbprint $authenticodeThumbprint
         if (-not $?) { throw 'Signing the staged HIP engine failed.' }
         if ($LASTEXITCODE -ne 0) { throw "HIP engine signing exited with $LASTEXITCODE." }
     }
