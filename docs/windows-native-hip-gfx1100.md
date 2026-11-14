@@ -20,10 +20,10 @@ the SDKs used here; **Unsupported** = no path today.
 
 | Family | gfx ids | Example cards | TheRock 10.1 dist | Device compile | BLAS kernel closure | Physical validation | Status |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| RDNA 3 dGPU | `gfx1100` | RX 7900 XTX | `gfx110X` | PASS (full build) | present (gfx1100-1103) | 30-check regression + GUI + installer payload | **Verified** |
+| RDNA 3 dGPU | `gfx1100` | RX 7900 XTX | `gfx110X` | PASS (full build) | present (gfx1100-1103) | 33-check regression + GUI + installer payload (actual NSIS installation remains BLOCKED) | **Verified** |
 | RDNA 3 dGPU | `gfx1101`, `gfx1102` | RX 7800 XT / 7700 XT / 7600 | `gfx110X` | PASS (probe + family build) | present | none | **Build-verified** |
 | RDNA 3 iGPU | `gfx1103` | Phoenix APUs | `gfx110X` | PASS (probe) | present | none | **Build-verified** (shared-memory VRAM may gate model size) |
-| RDNA 3+ APU | `gfx1150`, `gfx1151` | Ryzen 890M | none for 10.1 | PASS (probe; device libs are arch-generic) | **absent** from every dist used here | none | **Experimental** |
+| RDNA 3+ APU | `gfx1150`, `gfx1151` | Ryzen 890M / Radeon 8060S | none for 10.1 | PASS (probe; device libs are arch-generic) | **absent** from every dist used here | none | **Experimental** |
 | RDNA 2 | `gfx1030`/`1031`/`1032` | RX 6800 / 6700 / 6600 | `gfx103X` | PASS (probe) | needs the `gfx103X` dist's closure | none | **Experimental** |
 | RDNA 4 | `gfx1200`, `gfx1201` | RX 9070 series | `gfx120X` | PASS (probe) | needs the `gfx120X` dist's closure | none | **Experimental** |
 
@@ -59,10 +59,13 @@ Studio application, with a per-family engine bundle staged by
 `scripts/build-yue-runtime.ps1 -RuntimeBackend hip -HipArch <ids>` and
 packaged by `scripts/build-release.ps1` into flavor-tagged artifacts
 (`…-hip-<targets>_x64-setup.exe`, `latest-hip-<targets>.json`). Release
-assets are named by **card generation, not gfx id**, so users never learn
-targets or swap DLLs: today that is one `RDNA 3` package covering
-RX 7900/7800/7700/7600; `gfx103X`/`gfx120X` packages follow the same
-pipeline once physically validated. The default CUDA/Vulkan Windows package
+assets can be presented by **card generation**, so users need not learn
+targets or swap DLLs. A proposed `RDNA 3` package can contain device code
+for RX 7900/7800/7700/7600, but **only gfx1100/RX 7900 XTX is physically
+validated** so far; a retail RDNA3-wide compatibility claim requires
+runtime + full-song testing on the other targets. `gfx103X`/`gfx120X`
+packages follow the same pipeline only after their own kernel closure and
+physical acceptance are completed. The default CUDA/Vulkan Windows package
 is untouched, and the HIP updater manifest is tag-named so no channel can
 ever cross-serve the other flavor.
 
