@@ -236,13 +236,15 @@ if ($backend -eq 'hip' -and -not (Test-Path (Join-Path $resolvedOutputDirectory 
     throw 'The staged HIP engine does not contain ggml-hip.dll.'
 }
 
-# The HIP runtime travels with the engine as the ROCm license allows: the
-# backend imports amdhip64, hipblas and rocblas, none of which a display
-# driver installs. The set below is the verified gfx1100-family closure: the
-# direct imports plus amd_comgr (hip needs it to see the device at all),
-# rocm_kpack, the rocblas/hipblaslt kernel libraries and the .kpack
-# directory, all resolved relative to the DLLs' own folder. Those kernel
-# libraries are family-scoped: a dist must cover every target in -HipArch.
+# Reproducible development / physical validation bundle for the selected
+# TheRock distribution. The present gfx1100 test bundle stages amdhip64,
+# hipblas and rocblas next to the engine to isolate its exact dependencies.
+# This is NOT yet an approved public ISV deployment recipe: AMD's official
+# Windows guidelines say the HIP runtime comes from the AMD GPU driver while
+# apps may redistribute compatible HIP SDK libraries. Driver-runtime ABI,
+# licence and kernel closure must be qualified before a public HIP release.
+# These kernel libraries are family-scoped; a dist must cover every target in
+# -HipArch. https://rocm.docs.amd.com/projects/install-on-windows/en/develop/conceptual/deployment-guidelines.html
 if ($backend -eq 'hip') {
     $rocmBin = Join-Path $RocmPath 'bin'
     foreach ($library in @('amdhip64*.dll', 'hipblas.dll', 'rocblas.dll', 'rocsolver.dll', 'libhipblaslt.dll', 'origami.dll', 'amd_comgr.dll', 'rocm_kpack.dll')) {
