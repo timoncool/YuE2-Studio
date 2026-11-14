@@ -56,6 +56,9 @@ $releaseConfigPath = Join-Path $tauriRoot 'tauri.release.conf.json'
 $flavorTag = if ($RuntimeBackend -eq 'hip') { '-hip-' + ($HipArch -replace ',', '-') } else { '' }
 $manifestName = if ($flavorTag) { "latest$flavorTag.json" } else { 'latest.json' }
 $authenticodeThumbprint = $env:YUE_AUTHENTICODE_CERT_THUMBPRINT
+if ($RuntimeBackend -eq 'hip' -and $env:YUE_REQUIRE_SIGNED_RELEASE -eq '1' -and [string]::IsNullOrWhiteSpace($authenticodeThumbprint)) {
+    throw 'A signed public HIP release requires YUE_AUTHENTICODE_CERT_THUMBPRINT and a trusted Windows code-signing certificate. Unsigned CI builds are still permitted.'
+}
 $releaseDir = Join-Path $repoRoot "release\$Version$flavorTag"
 $engineResourceRoot = Join-Path $tauriRoot 'resources\yue2-cpp'
 $vstResourceRoot = Join-Path $tauriRoot 'resources\vst-host'
@@ -182,6 +185,14 @@ try {
         ($latest | ConvertTo-Json -Depth 8),
         (New-Object System.Text.UTF8Encoding($false))
     )
+    if ($RuntimeBackend -eq 'hip') {
+        # No GPU required: verify package naming, updater isolation, source
+        # architecture stamp and (for an actual public release) every PE
+        # Authenticode signature including the NSIS installer.
+        & (Join-Path $PSScriptRoot 'audit-hip-release.ps1') -ReleaseDir $releaseDir -HipArch $HipArch -RequireTrustedSignatures:($env:YUE_REQUIRE_SIGNED_RELEASE -eq '1')
+        if (-not $?) { throw 'HIP release audit failed.' }
+        if ($LASTEXITCODE -ne 0) { throw "HIP release audit failed with exit code $LASTEXITCODE." }
+    }
     Get-ChildItem $releaseDir -File | Select-Object Name, Length | Format-Table | Out-Host
 }
 catch {
