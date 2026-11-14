@@ -22,6 +22,28 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - name: Service tests
         run: cargo test -p music-server --locked
+      - name: HIP Windows release PowerShell syntax (no GPU or signing certificate needed)
+        shell: pwsh
+        run: |
+          $scripts = @(
+            'scripts/build-release.ps1',
+            'scripts/build-yue-runtime.ps1',
+            'scripts/sign-hip-engine.ps1',
+            'scripts/audit-hip-release.ps1',
+            'scripts/test-hip-installer.ps1'
+          )
+          foreach ($script in $scripts) {
+            $tokens = $null
+            $errors = $null
+            [System.Management.Automation.Language.Parser]::ParseFile(
+              (Resolve-Path $script).Path, [ref]$tokens, [ref]$errors
+            ) | Out-Null
+            if ($errors.Count -gt 0) {
+              $errors | Format-List | Out-String | Write-Host
+              throw "PowerShell parser found $($errors.Count) error(s) in $script"
+            }
+            Write-Host "[syntax PASS] $script"
+          }
 
   # the same tests on Linux, the platform the studio's Linux package runs on; the repository's toolchain file names
   # the Windows one, so the runner's own stable toolchain is taken
