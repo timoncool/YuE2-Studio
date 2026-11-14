@@ -76,6 +76,9 @@ jobs:
           & ./scripts/audit-hip-release.ps1 -ReleaseDir $root -HipArch gfx1100
           if ($LASTEXITCODE -ne 1) { throw 'Mismatched HIP device architecture was not rejected.' }
           Write-Host '[contract PASS] valid layout accepted; mismatched architecture rejected'
+          # The expected negative test exits 1; clear its code so the CI step
+          # itself succeeds only after verifying that it WAS rejected.
+          exit 0
 
   # the same tests on Linux, the platform the studio's Linux package runs on; the repository's toolchain file names
   # the Windows one, so the runner's own stable toolchain is taken
