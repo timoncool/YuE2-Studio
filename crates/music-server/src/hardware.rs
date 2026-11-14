@@ -202,7 +202,8 @@ fn has_hip_runtime_dll(root: &std::path::Path) -> bool {
 /// Whether a HIP-capable engine and ROCm runtime are present for Windows.
 /// SDK environment variables are not required when the Studio ships the
 /// verified runtime beside yue-server.exe (portable and installed builds).
-/// Actual gfx1100 availability is validated by yue-server on startup.
+/// Actual device support - including the architecture match between the card
+/// and the bundle's device kernels - is validated by yue-server on startup.
 fn hip_runtime_installed() -> bool {
     let bundle = crate::engine_bundle_root();
     if hip_bundle_ready(&bundle) {
