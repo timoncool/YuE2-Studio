@@ -117,8 +117,10 @@ try {
     # GitHub replaces spaces in asset names with dots; the manifest must name
     # the asset as it will be served. A HIP flavor also carries its tag, so
     # its installer can be uploaded beside the default one, never over it.
+    # (Literal .Replace: a regex here would treat the version's dots as
+    # wildcards and mangle the name.)
     $assetName = $nsisInstaller.Name -replace ' ', '.'
-    if ($flavorTag) { $assetName = $assetName -replace "_$Version_", "_$Version$flavorTag`_" }
+    if ($flavorTag) { $assetName = $assetName.Replace("_${Version}_", "_$Version$flavorTag`_") }
     Copy-Item $nsisInstaller.FullName (Join-Path $releaseDir $assetName) -Force
     Copy-Item $signaturePath (Join-Path $releaseDir "$assetName.sig") -Force
 
