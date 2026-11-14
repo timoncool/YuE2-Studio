@@ -13,7 +13,12 @@ param(
     # The ROCm Windows SDK the HIP build compiles with: the HIP SDK installer's
     # root, or an extracted TheRock dist. The runtime DLLs the ggml HIP backend
     # imports ship beside the engine, so players need no SDK of their own.
-    [string]$RocmPath = $(if ($env:ROCM_PATH) { $env:ROCM_PATH } elseif ($env:HIP_PATH) { $env:HIP_PATH })
+    [string]$RocmPath = $(if ($env:ROCM_PATH) { $env:ROCM_PATH } elseif ($env:HIP_PATH) { $env:HIP_PATH }),
+    # gfx target(s) for the HIP engine's device code: one id, or a comma list
+    # for a multi-target binary. Passed to the engine's buildhip.cmd, which
+    # forwards it to hipcc's --offload-arch. The runtime staged beside the
+    # engine must carry device and BLAS kernels for every listed target.
+    [string]$HipArch = $(if ($env:HIP_ARCHS) { $env:HIP_ARCHS } else { 'gfx1100' })
 )
 
 # Cmdlet failures stop the build; native tools report progress on stderr, so
@@ -101,6 +106,25 @@ function Sync-PinnedSource {
     if ($LASTEXITCODE -ne 0) { throw 'Could not initialise yue2.cpp submodules.' }
 }
 
+# The HIP build is the engine's own tested recipe, not a second flag set here:
+# buildhip.cmd resolves the MSVC toolchain and the SDK's clang (official and
+# TheRock layouts differ), passes the gfx target to hipcc, points minimal
+# dists at their device libraries and keeps the CPU backend free of the MSVC
+# libomp runtime (GGML_OPENMP=OFF). One source of truth for one engine.
+function Invoke-HipBuild {
+    $buildhip = Join-Path $engineWorktree 'buildhip.cmd'
+    if (-not (Test-Path $buildhip)) {
+        throw "The pinned yue2.cpp $($engineSource.commit) carries no buildhip.cmd, so this script cannot build a Windows HIP engine from it. The pin must point at an engine with the native HIP build (the merged fix/native-hip-build-portability line)."
+    }
+    if (-not (Get-Command ninja -ErrorAction SilentlyContinue)) { throw 'Ninja is required on PATH.' }
+    Push-Location $engineWorktree
+    try {
+        & cmd.exe /d /c "set `"ROCM_PATH=$RocmPath`" && set `"HIP_ARCHS=$HipArch`" && call buildhip.cmd" | Out-Host
+    } finally { Pop-Location }
+    if ($LASTEXITCODE -ne 0) { throw "yue2.cpp HIP build failed (buildhip.cmd exit $LASTEXITCODE) for HIP_ARCHS=$HipArch." }
+    return 'build-hip'
+}
+
 function Invoke-CMakeBuild([string]$backend) {
     # GGML_NATIVE=OFF plus an explicit architecture list: a binary that runs on
     # other people's CPUs and on Turing through Blackwell. Every consumer card
@@ -113,11 +137,6 @@ function Invoke-CMakeBuild([string]$backend) {
     }
     $backendFlags = switch ($backend) {
         'cuda' { "-DGGML_CUDA=ON -DGGML_CUDA_NCCL=OFF $cudaArch" }
-        # The ROCm SDK's hipcc is the C++ compiler for the whole tree: Windows
-        # CMake has no HIP language, so ggml-hip compiles the CUDA sources
-        # through hipcc's HIP compatibility layer. The dist must carry device
-        # code for the card: a gfx110X dist for a 7900 XTX-class Radeon.
-        'hip' { '-DGGML_NATIVE=OFF -DGGML_HIP=ON -DGGML_CUDA=OFF -DGGML_VULKAN=OFF -DGGML_HIP_RCCL=OFF -DGGML_BACKEND_DL=ON' }
         'vulkan' { '-DGGML_NATIVE=OFF -DGGML_VULKAN=ON' }
         'all' { "-DGGML_BACKEND_DL=ON -DGGML_CPU_ALL_VARIANTS=ON -DGGML_VULKAN=ON -DGGML_CUDA=ON -DGGML_CUDA_NCCL=OFF $cudaArch" }
     }
@@ -128,7 +147,7 @@ function Invoke-CMakeBuild([string]$backend) {
     # With runtime-loaded backends nothing links against ggml-cuda, ggml-vulkan
     # or the CPU variants, so naming yue-server alone would skip them: the
     # all-backends build builds the whole tree, as upstream's buildall does.
-    $targets = if ($backend -eq 'all') { '' } elseif ($backend -eq 'hip') { '--target ggml-hip yue-server' } else { ($shippedTargets | ForEach-Object { "--target $_" }) -join ' ' }
+    $targets = if ($backend -eq 'all') { '' } else { ($shippedTargets | ForEach-Object { "--target $_" }) -join ' ' }
     $parallelism = [Math]::Max(1, [Environment]::ProcessorCount)
     $vcvars = Get-VcVars64
     # Ninja drives nvcc and cl directly, so the build does not depend on the
@@ -138,10 +157,7 @@ function Invoke-CMakeBuild([string]$backend) {
     # localised Visual Studio prints in its own language; without it an edited
     # header would not rebuild anything.
     # --fresh: a cache from an earlier configure keeps what this one does not pass.
-    # The HIP build swaps the compiler: hipcc drives clang for host and device,
-    # with MSVC's headers and libraries from vcvars as the ABI.
-    $hipEnv = if ($backend -eq 'hip') { "set `"ROCM_PATH=$RocmPath`" && set `"PATH=$RocmPath\bin;%PATH%`" && set `"CC=clang.exe`" && set `"CXX=hipcc.exe`" && " } else { '' }
-    $command = "set `"VSLANG=1033`" && call `"$vcvars`" >nul && $hipEnv`cmake --fresh -S . -B `"$buildDirectoryName`" -G Ninja -DCMAKE_BUILD_TYPE=Release $ccache $symbols $backendFlags && cmake --build `"$buildDirectoryName`" $targets --parallel $parallelism"
+    $command = "set `"VSLANG=1033`" && call `"$vcvars`" >nul && cmake --fresh -S . -B `"$buildDirectoryName`" -G Ninja -DCMAKE_BUILD_TYPE=Release $ccache $symbols $backendFlags && cmake --build `"$buildDirectoryName`" $targets --parallel $parallelism"
     Push-Location $engineWorktree
     try { & cmd.exe /d /s /c $command | Out-Host } finally { Pop-Location }
     if ($LASTEXITCODE -ne 0) { throw "yue2.cpp $backend build failed." }
@@ -188,7 +204,9 @@ function Invoke-Cuda12Build {
 
 Sync-PinnedSource
 $backend = Resolve-RuntimeBackend
-$buildDirectoryName = Invoke-CMakeBuild $backend
+# The HIP build delegates to the engine's buildhip.cmd (see Invoke-HipBuild);
+# every other backend configures CMake here.
+$buildDirectoryName = if ($backend -eq 'hip') { Invoke-HipBuild } else { Invoke-CMakeBuild $backend }
 $shipsTwoCudaBuilds = $backend -eq 'all' -and $CudaArchitecture -eq 'universal'
 $cuda12Directory = if ($shipsTwoCudaBuilds) { Invoke-Cuda12Build } else { $null }
 $binDirectory = @(
@@ -220,10 +238,11 @@ if ($backend -eq 'hip' -and -not (Test-Path (Join-Path $resolvedOutputDirectory 
 
 # The HIP runtime travels with the engine as the ROCm license allows: the
 # backend imports amdhip64, hipblas and rocblas, none of which a display
-# driver installs. The set below is the verified closure for gfx1100: the
+# driver installs. The set below is the verified gfx1100-family closure: the
 # direct imports plus amd_comgr (hip needs it to see the device at all),
 # rocm_kpack, the rocblas/hipblaslt kernel libraries and the .kpack
-# directory, all resolved relative to the DLLs' own folder.
+# directory, all resolved relative to the DLLs' own folder. Those kernel
+# libraries are family-scoped: a dist must cover every target in -HipArch.
 if ($backend -eq 'hip') {
     $rocmBin = Join-Path $RocmPath 'bin'
     foreach ($library in @('amdhip64*.dll', 'hipblas.dll', 'rocblas.dll', 'rocsolver.dll', 'libhipblaslt.dll', 'origami.dll', 'amd_comgr.dll', 'rocm_kpack.dll')) {
@@ -276,6 +295,7 @@ $stamp = [pscustomobject]@{
     backend = $backend
     cuda_architecture = $CudaArchitecture
     cuda_builds = if ($shipsTwoCudaBuilds) { @('cuda13', 'cuda12') } else { @() }
+    hip_arch = if ($backend -eq 'hip') { $HipArch } else { $null }
     runtime = 'yue-server.exe'
 }
 [System.IO.File]::WriteAllText((Join-Path $resolvedOutputDirectory 'runtime.json'), ($stamp | ConvertTo-Json), (New-Object System.Text.UTF8Encoding($false)))
