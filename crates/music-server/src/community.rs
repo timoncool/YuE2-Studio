@@ -147,7 +147,7 @@ mod tests {
         assert_eq!(models.len(), 9);
         assert_eq!(models[0].id, "rs-tw-2.0x0.75", "the authors' choice comes first");
         for model in models {
-            for language in ["en", "ru", "zh", "ja", "ko"] {
+            for language in ["en", "ru", "zh", "ja", "ko", "pt"] {
                 assert!(model.name.get(language).is_some_and(|name| !name.is_empty()), "{} has no {language} name", model.id);
             }
             assert_eq!(model.files.len(), 2, "{}", model.id);

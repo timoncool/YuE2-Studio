@@ -20,14 +20,16 @@
         "ru": "Инструментал",
         "zh": "纯音乐",
         "ja": "インストゥルメンタル",
-        "ko": "인스트루멘털"
+        "ko": "인스트루멘털",
+        "pt": "Instrumental"
       },
       "description": {
         "en": "Songs without vocals. Write [instrumental] or only section tags such as [intro] [verse] [chorus] in the lyrics; the score mode works best.",
         "ru": "Песни без вокала. В текст впишите [instrumental] или только теги частей: [intro] [verse] [chorus]. Лучше всего работает с партитурой.",
         "zh": "无人声的歌曲。在歌词中写 [instrumental] 或只写段落标签，如 [intro] [verse] [chorus]；配合乐谱模式效果最佳。",
         "ja": "ボーカルなしの曲。歌詞に [instrumental] か [intro] [verse] [chorus] などのセクションタグだけを書きます。スコアモードで最もよく機能します。",
-        "ko": "보컬 없는 곡. 가사에 [instrumental] 또는 [intro] [verse] [chorus] 같은 섹션 태그만 적으세요. 악보 모드에서 가장 잘 동작합니다."
+        "ko": "보컬 없는 곡. 가사에 [instrumental] 또는 [intro] [verse] [chorus] 같은 섹션 태그만 적으세요. 악보 모드에서 가장 잘 동작합니다.",
+        "pt": "Músicas sem voz. Escrever [instrumental] ou só etiquetas de secção como [intro] [verse] [chorus] na letra; o modo de partitura funciona melhor."
       },
       "scales": {
         "ar": 1
@@ -51,14 +53,16 @@
         "ru": "Индастриал-рок",
         "zh": "工业摇滚",
         "ja": "インダストリアル・ロック",
-        "ko": "인더스트리얼 록"
+        "ko": "인더스트리얼 록",
+        "pt": "Rock industrial"
       },
       "description": {
         "en": "Heavy machine rhythms and distorted guitars. Changes both the composition and the sound.",
         "ru": "Тяжёлые машинные ритмы и перегруженные гитары. Меняет и композицию, и звучание.",
         "zh": "沉重的机械节奏与失真吉他。同时改变作曲与音色。",
         "ja": "重い機械的リズムと歪んだギター。作曲とサウンドの両方を変えます。",
-        "ko": "묵직한 기계적 리듬과 디스토션 기타. 작곡과 사운드를 모두 바꿉니다."
+        "ko": "묵직한 기계적 리듬과 디스토션 기타. 작곡과 사운드를 모두 바꿉니다.",
+        "pt": "Ritmos pesados de máquina e guitarras distorcidas. Altera tanto a composição como o som."
       },
       "scales": {
         "ar": 1,
@@ -88,14 +92,16 @@
         "ru": "Эпический трейлер",
         "zh": "史诗预告片",
         "ja": "エピック・トレーラー",
-        "ko": "에픽 트레일러"
+        "ko": "에픽 트레일러",
+        "pt": "Trailer épico"
       },
       "description": {
         "en": "Cinematic epic in the manner of trailer music: choirs, brass, big drums.",
         "ru": "Кинематографичный эпик в духе трейлерной музыки: хоры, медь, большие барабаны.",
         "zh": "预告片风格的电影史诗：合唱、铜管、大鼓。",
         "ja": "トレーラー音楽風のシネマティックなエピック：合唱、金管、大太鼓。",
-        "ko": "트레일러 음악 풍의 시네마틱 에픽: 합창, 금관, 큰 드럼."
+        "ko": "트레일러 음악 풍의 시네마틱 에픽: 합창, 금관, 큰 드럼.",
+        "pt": "Épico cinematográfico à maneira da música de trailers: coros, metais, grandes tambores."
       },
       "scales": {
         "ar": 0.5,
@@ -126,14 +132,16 @@
         "ru": "SV Billie",
         "zh": "SV Billie",
         "ja": "SV Billie",
-        "ko": "SV Billie"
+        "ko": "SV Billie",
+        "pt": "SV Billie"
       },
       "description": {
         "en": "An artist LoRA: breathy intimate vocals over soft modern pop.",
         "ru": "Артист-LoRA: шепчущий интимный вокал поверх мягкого современного попа.",
         "zh": "艺人 LoRA：柔和现代流行上的气声亲密人声。",
         "ja": "アーティストLoRA：柔らかなモダンポップに息づかいの多い親密なボーカル。",
-        "ko": "아티스트 LoRA: 부드러운 모던 팝 위의 숨결 섞인 친밀한 보컬."
+        "ko": "아티스트 LoRA: 부드러운 모던 팝 위의 숨결 섞인 친밀한 보컬.",
+        "pt": "Uma LoRA de artista: voz intimista e sussurrada sobre pop moderno e suave."
       },
       "scales": {
         "ar": 1,
@@ -159,14 +167,16 @@
         "ru": "Дрим-поп",
         "zh": "梦幻流行",
         "ja": "ドリームポップ",
-        "ko": "드림 팝"
+        "ko": "드림 팝",
+        "pt": "Dream pop"
       },
       "description": {
         "en": "Hazy reverb guitars and floating vocals. Works best with the score off.",
         "ru": "Туманные гитары в ревербе и парящий вокал. Лучше работает без партитуры.",
         "zh": "朦胧混响吉他与漂浮人声。关闭乐谱时效果最佳。",
         "ja": "霞んだリバーブギターと浮遊するボーカル。スコアなしで最もよく機能します。",
-        "ko": "몽환적인 리버브 기타와 떠다니는 보컬. 악보 없이 가장 잘 동작합니다."
+        "ko": "몽환적인 리버브 기타와 떠다니는 보컬. 악보 없이 가장 잘 동작합니다.",
+        "pt": "Guitarras enevoadas com reverberação e vozes flutuantes. Funciona melhor com a partitura desligada."
       },
       "scales": {
         "ar": 1,
@@ -192,14 +202,16 @@
         "ru": "Олдскул хип-хоп",
         "zh": "老派嘻哈",
         "ja": "オールドスクール・ヒップホップ",
-        "ko": "올드스쿨 힙합"
+        "ko": "올드스쿨 힙합",
+        "pt": "Hip-hop old school"
       },
       "description": {
         "en": "Boom-bap drums, dusty samples and nineties flow. Works best with the score off.",
         "ru": "Бум-бэп барабаны, пыльные сэмплы и флоу девяностых. Лучше работает без партитуры.",
         "zh": "Boom-bap 鼓、复古采样与九十年代的 flow。关闭乐谱时效果最佳。",
         "ja": "ブーンバップのドラム、埃っぽいサンプル、90年代のフロウ。スコアなしで最もよく機能します。",
-        "ko": "붐뱁 드럼, 빈티지 샘플, 90년대 플로우. 악보 없이 가장 잘 동작합니다."
+        "ko": "붐뱁 드럼, 빈티지 샘플, 90년대 플로우. 악보 없이 가장 잘 동작합니다.",
+        "pt": "Bateria boom-bap, samples poeirentos e flow dos anos noventa. Funciona melhor com a partitura desligada."
       },
       "scales": {
         "ar": 1,
@@ -225,14 +237,16 @@
         "ru": "Воинственное регги",
         "zh": "激进雷鬼",
         "ja": "ミリタント・レゲエ",
-        "ko": "밀리턴트 레게"
+        "ko": "밀리턴트 레게",
+        "pt": "Reggae militante"
       },
       "description": {
         "en": "Modern militant roots reggae: raspy patois vocals, steppers grooves, deep sub bass. Start the style with mltnt and one descriptive sentence.",
         "ru": "Современное воинственное рутс-регги: хрипловатый вокал на патуа, грувы стэпперс, глубокий саб-бас. Начните стиль с mltnt и одного описательного предложения.",
         "zh": "现代激进根源雷鬼：沙哑的帕托瓦语演唱、steppers 律动、深沉的超低音。风格以 mltnt 开头，再写一句描述。",
         "ja": "モダンなミリタント・ルーツ・レゲエ：かすれたパトワ語ボーカル、ステッパーズのグルーヴ、深いサブベース。スタイルは mltnt と説明文 1 文で始めます。",
-        "ko": "현대적인 밀리턴트 루츠 레게: 거친 파투아 보컬, 스테퍼스 그루브, 깊은 서브 베이스. 스타일을 mltnt와 설명 한 문장으로 시작하세요."
+        "ko": "현대적인 밀리턴트 루츠 레게: 거친 파투아 보컬, 스테퍼스 그루브, 깊은 서브 베이스. 스타일을 mltnt와 설명 한 문장으로 시작하세요.",
+        "pt": "Roots reggae militante moderno: voz rouca em patoá, grooves steppers, sub-grave profundo. Começar o estilo com mltnt e uma frase descritiva."
       },
       "scales": {
         "ar": 1,
@@ -258,14 +272,16 @@
         "ru": "Французский шансон",
         "zh": "法国香颂",
         "ja": "シャンソン",
-        "ko": "샹송"
+        "ko": "샹송",
+        "pt": "Chanson française"
       },
       "description": {
         "en": "French chanson with expressive voices, clean breaths and whispers. Start the style with chnsn and one descriptive sentence.",
         "ru": "Французский шансон: выразительные голоса, чистые вдохи и шёпот. Начните стиль с chnsn и одного описательного предложения.",
         "zh": "法国香颂：富有表现力的嗓音、清晰的呼吸与低语。风格以 chnsn 开头，再写一句描述。",
         "ja": "表情豊かな声、きれいなブレスとささやきのシャンソン。スタイルは chnsn と説明文 1 文で始めます。",
-        "ko": "표현력 있는 목소리와 깨끗한 숨소리, 속삭임의 샹송. 스타일을 chnsn과 설명 한 문장으로 시작하세요."
+        "ko": "표현력 있는 목소리와 깨끗한 숨소리, 속삭임의 샹송. 스타일을 chnsn과 설명 한 문장으로 시작하세요.",
+        "pt": "Chanson francesa com vozes expressivas, respirações limpas e sussurros. Começar o estilo com chnsn e uma frase descritiva."
       },
       "scales": {
         "ar": 1,
@@ -291,14 +307,16 @@
         "ru": "Каввали",
         "zh": "卡瓦利",
         "ja": "カッワーリー",
-        "ko": "카왈리"
+        "ko": "카왈리",
+        "pt": "Qawwali"
       },
       "description": {
         "en": "Sufi qawwali as a live party performs it: a lead voice, a male chorus, harmonium, tabla and handclaps. Start the style with qwwl and describe the delivery.",
         "ru": "Суфийское каввали вживую: ведущий голос, мужской хор, фисгармония, табла и хлопки. Начните стиль с qwwl и опишите манеру исполнения.",
         "zh": "现场演出的苏菲卡瓦利：领唱、男声合唱、簧风琴、塔布拉鼓和拍手。风格以 qwwl 开头并描述演唱方式。",
         "ja": "ライブで演奏されるスーフィーのカッワーリー：リードボーカル、男性コーラス、ハルモニウム、タブラ、手拍子。スタイルは qwwl で始め、歌い方を書きます。",
-        "ko": "라이브로 연주되는 수피 카왈리: 리드 보컬, 남성 합창, 하모니움, 타블라, 손뼉. 스타일을 qwwl로 시작하고 창법을 적으세요."
+        "ko": "라이브로 연주되는 수피 카왈리: 리드 보컬, 남성 합창, 하모니움, 타블라, 손뼉. 스타일을 qwwl로 시작하고 창법을 적으세요.",
+        "pt": "Qawwali sufi como um grupo o toca ao vivo: uma voz principal, um coro masculino, harmónio, tabla e palmas. Começar o estilo com qwwl e descrever a interpretação."
       },
       "scales": {
         "ar": 1,
@@ -324,14 +342,16 @@
         "ru": "Болгарские голоса",
         "zh": "保加利亚之声",
         "ja": "ブルガリアン・ヴォイス",
-        "ko": "불가리아 보이스"
+        "ko": "불가리아 보이스",
+        "pt": "Vozes búlgaras"
       },
       "description": {
         "en": "The Bulgarian women's choir: a cappella, and fusion with trap, jungle or tribal house. Start the style with blgr; language Bulgarian.",
         "ru": "Болгарский женский хор: а капелла и сплавы с трэпом, джанглом, трайбл-хаусом. Начните стиль с blgr; язык — Bulgarian.",
         "zh": "保加利亚女声合唱：无伴奏，也可与 trap、jungle、tribal house 融合。风格以 blgr 开头；语言写 Bulgarian。",
         "ja": "ブルガリア女声合唱：ア・カペラ、トラップやジャングル、トライバル・ハウスとの融合も。スタイルは blgr で始め、言語は Bulgarian。",
-        "ko": "불가리아 여성 합창: 아카펠라, 트랩·정글·트라이벌 하우스와의 퓨전. 스타일을 blgr로 시작하고 언어는 Bulgarian으로."
+        "ko": "불가리아 여성 합창: 아카펠라, 트랩·정글·트라이벌 하우스와의 퓨전. 스타일을 blgr로 시작하고 언어는 Bulgarian으로.",
+        "pt": "O coro feminino búlgaro: a cappella, e em fusão com trap, jungle ou tribal house. Começar o estilo com blgr; língua búlgara."
       },
       "scales": {
         "ar": 1,
@@ -357,14 +377,16 @@
         "ru": "Фолк-трубадур",
         "zh": "民谣游吟诗人",
         "ja": "フォーク・トルバドゥール",
-        "ko": "포크 트루바두르"
+        "ko": "포크 트루바두르",
+        "pt": "Trovador folk"
       },
       "description": {
         "en": "Storytelling folk: protest ballads, hymns, fingerpicked waltzes. Start the style with trbdr and describe the delivery.",
         "ru": "Фолк-повествование: протестные баллады, гимны, вальсы с перебором. Начните стиль с trbdr и опишите манеру исполнения.",
         "zh": "叙事民谣：抗议民谣、赞美诗、指弹华尔兹。风格以 trbdr 开头并描述演唱方式。",
         "ja": "語りのフォーク：プロテスト・バラード、賛美歌、フィンガーピッキングのワルツ。スタイルは trbdr で始め、歌い方を書きます。",
-        "ko": "이야기하는 포크: 저항 발라드, 찬송가, 핑거피킹 왈츠. 스타일을 trbdr로 시작하고 창법을 적으세요."
+        "ko": "이야기하는 포크: 저항 발라드, 찬송가, 핑거피킹 왈츠. 스타일을 trbdr로 시작하고 창법을 적으세요.",
+        "pt": "Folk narrativo: baladas de protesto, hinos, valsas dedilhadas. Começar o estilo com trbdr e descrever a interpretação."
       },
       "scales": {
         "ar": 1,
@@ -390,14 +412,16 @@
         "ru": "Итальянская эстрада",
         "zh": "意大利流行",
         "ja": "カンツォーネ",
-        "ko": "칸초네"
+        "ko": "칸초네",
+        "pt": "Canzone italiana"
       },
       "description": {
         "en": "The Sanremo-era Italian ballad: a warm raspy baritone, piano, strings and a sweeping chorus, sung in Italian. Start the style with cnzn.",
         "ru": "Итальянская баллада эпохи Сан-Ремо: тёплый хрипловатый баритон, фортепиано, струнные и размашистый припев, на итальянском. Начните стиль с cnzn.",
         "zh": "圣雷莫时代的意大利抒情歌：温暖沙哑的男中音、钢琴、弦乐和宏大的副歌，意大利语演唱。风格以 cnzn 开头。",
         "ja": "サンレモ時代のイタリアン・バラード：温かくかすれたバリトン、ピアノ、ストリングス、壮大なサビ、イタリア語。スタイルは cnzn で始めます。",
-        "ko": "산레모 시대 이탈리아 발라드: 따뜻하고 거친 바리톤, 피아노, 현악, 웅장한 후렴, 이탈리아어. 스타일을 cnzn으로 시작하세요."
+        "ko": "산레모 시대 이탈리아 발라드: 따뜻하고 거친 바리톤, 피아노, 현악, 웅장한 후렴, 이탈리아어. 스타일을 cnzn으로 시작하세요.",
+        "pt": "A balada italiana da era de Sanremo: um barítono quente e rouco, piano, cordas e um refrão arrebatador, cantada em italiano. Começar o estilo com cnzn."
       },
       "scales": {
         "ar": 1,
@@ -423,14 +447,16 @@
         "ru": "Хриплый рок-соул",
         "zh": "沙哑摇滚灵魂乐",
         "ja": "ハスキー・ロックソウル",
-        "ko": "허스키 록 소울"
+        "ko": "허스키 록 소울",
+        "pt": "Rock-soul rouco"
       },
       "description": {
         "en": "A raspy, gravelly female powerhouse: cool half-spoken verses that climb into belted choruses, from 1960s rhythm and blues to arena soul-rock. English lyrics. Start the style with grvl; score mode full.",
         "ru": "Хриплый мощный женский голос: прохладные полуговорные куплеты, переходящие в припевы на крике, от ритм-энд-блюза 1960-х до стадионного соул-рока. Английский текст. Начните стиль с grvl; партитура — полная.",
         "zh": "沙哑有力的女声：冷静的半念白主歌攀升到高亢的副歌，从 1960 年代节奏布鲁斯到体育场灵魂摇滚。英文歌词。风格以 grvl 开头；乐谱模式 full。",
         "ja": "ハスキーで力強い女性ボーカル：クールな語りに近いヴァースからベルトで歌うサビへ、1960年代R&Bからアリーナ・ソウルロックまで。英語の歌詞。スタイルは grvl で始め、スコアは full。",
-        "ko": "허스키하고 힘 있는 여성 보컬: 차분한 반쯤 말하는 벌스에서 벨팅 후렴으로, 1960년대 리듬 앤 블루스부터 아레나 소울 록까지. 영어 가사. 스타일을 grvl로 시작하고 악보 모드는 full."
+        "ko": "허스키하고 힘 있는 여성 보컬: 차분한 반쯤 말하는 벌스에서 벨팅 후렴으로, 1960년대 리듬 앤 블루스부터 아레나 소울 록까지. 영어 가사. 스타일을 grvl로 시작하고 악보 모드는 full.",
+        "pt": "Uma voz feminina rouca e áspera, de grande potência: estrofes frias, meio faladas, que sobem para refrães cantados a plenos pulmões, do rhythm and blues dos anos 60 ao soul-rock de estádio. Letra em inglês. Começar o estilo com grvl; modo de partitura completo."
       },
       "scales": {
         "ar": 1,
@@ -456,14 +482,16 @@
         "ru": "Квайет-сторм R&B",
         "zh": "Quiet storm R&B",
         "ja": "クワイエット・ストーム R&B",
-        "ko": "콰이어트 스톰 R&B"
+        "ko": "콰이어트 스톰 R&B",
+        "pt": "R&B quiet storm"
       },
       "description": {
         "en": "Late-night 1980s and 1990s quiet storm: a sweet, sultry female lead over deep bass, electric piano, pads and slow drum machines, with tenor sax on the sophisti-pop side. Start the style with qtstrm and name the voice: smoky contralto, breathy soprano, husky contralto or soulful mezzo.",
         "ru": "Ночной квайет-сторм 1980–1990-х: нежный чувственный женский голос, глубокий бас, электропиано, пэды и медленная драм-машина, на софисти-поп стороне — тенор-саксофон. Начните стиль с qtstrm и назовите голос: smoky contralto, breathy soprano, husky contralto или soulful mezzo.",
         "zh": "1980–1990 年代的深夜 quiet storm：甜美性感的女主唱，深沉贝斯、电钢琴、铺底合成器和慢速鼓机，sophisti-pop 一侧有次中音萨克斯。风格以 qtstrm 开头并写明嗓音：smoky contralto、breathy soprano、husky contralto 或 soulful mezzo。",
         "ja": "1980〜90年代の深夜のクワイエット・ストーム：甘く官能的な女性リードに深いベース、エレピ、パッド、スローなドラムマシン、ソフィスティ・ポップ寄りではテナーサックス。スタイルは qtstrm で始め、声を指定します：smoky contralto、breathy soprano、husky contralto、soulful mezzo。",
-        "ko": "1980~90년대 심야 콰이어트 스톰: 달콤하고 관능적인 여성 리드에 깊은 베이스, 일렉트릭 피아노, 패드, 느린 드럼 머신, 소피스티 팝 쪽은 테너 색소폰. 스타일을 qtstrm으로 시작하고 목소리를 지정하세요: smoky contralto, breathy soprano, husky contralto, soulful mezzo."
+        "ko": "1980~90년대 심야 콰이어트 스톰: 달콤하고 관능적인 여성 리드에 깊은 베이스, 일렉트릭 피아노, 패드, 느린 드럼 머신, 소피스티 팝 쪽은 테너 색소폰. 스타일을 qtstrm으로 시작하고 목소리를 지정하세요: smoky contralto, breathy soprano, husky contralto, soulful mezzo.",
+        "pt": "Quiet storm de fim de noite dos anos 80 e 90: uma voz feminina doce e sensual sobre baixo profundo, piano elétrico, pads e caixas de ritmos lentas, com saxofone tenor do lado sophisti-pop. Começar o estilo com qtstrm e nomear a voz: smoky contralto, breathy soprano, husky contralto ou soulful mezzo."
       },
       "scales": {
         "ar": 1,
@@ -489,14 +517,16 @@
         "ru": "Тёмный суфийский фьюжн",
         "zh": "暗黑苏菲融合",
         "ja": "ダーク・スーフィー・フュージョン",
-        "ko": "다크 수피 퓨전"
+        "ko": "다크 수피 퓨전",
+        "pt": "Fusão sufi sombria"
       },
       "description": {
         "en": "A qawwali voice in dark studio production: long aching held notes and sargam runs over ambient guitar, synth textures, deep bass and slow heavy beats. Start the style with drksf; works best with the score off and syllable lyrics (Aaa, Sa re ga ma).",
         "ru": "Голос каввали в тёмной студийной обработке: долгие тянущиеся ноты и пассажи саргам поверх эмбиент-гитары, синтезаторных текстур, глубокого баса и медленного тяжёлого бита. Начните стиль с drksf; лучше всего без партитуры и со слоговым текстом (Aaa, Sa re ga ma).",
         "zh": "暗黑录音室制作中的卡瓦利嗓音：悠长的延音和 sargam 快速音阶，配以氛围吉他、合成器质感、深沉贝斯和缓慢厚重的节拍。风格以 drksf 开头；关闭乐谱并使用音节歌词（Aaa、Sa re ga ma）效果最好。",
         "ja": "ダークなスタジオ制作のカッワーリーの声：アンビエント・ギター、シンセのテクスチャ、深いベース、遅く重いビートの上で長く伸ばす音とサルガムの連なり。スタイルは drksf で始め、スコアはオフ、音節の歌詞（Aaa、Sa re ga ma）で最も良く鳴ります。",
-        "ko": "다크한 스튜디오 프로덕션의 카왈리 보컬: 앰비언트 기타, 신스 텍스처, 깊은 베이스, 느리고 무거운 비트 위로 길게 끄는 음과 사르감 패시지. 스타일을 drksf로 시작하고, 악보 끄기와 음절 가사(Aaa, Sa re ga ma)가 가장 잘 어울립니다."
+        "ko": "다크한 스튜디오 프로덕션의 카왈리 보컬: 앰비언트 기타, 신스 텍스처, 깊은 베이스, 느리고 무거운 비트 위로 길게 끄는 음과 사르감 패시지. 스타일을 drksf로 시작하고, 악보 끄기와 음절 가사(Aaa, Sa re ga ma)가 가장 잘 어울립니다.",
+        "pt": "Uma voz de qawwali numa produção de estúdio sombria: notas longas e doridas e passagens de sargam sobre guitarra ambiente, texturas de sintetizador, baixo profundo e batidas lentas e pesadas. Começar o estilo com drksf; funciona melhor com a partitura desligada e letra em sílabas (Aaa, Sa re ga ma)."
       },
       "scales": {
         "ar": 1,
@@ -522,14 +552,16 @@
         "ru": "Мелодичный дэт-метал",
         "zh": "旋律死亡金属",
         "ja": "メロディック・デスメタル",
-        "ko": "멜로딕 데스메탈"
+        "ko": "멜로딕 데스메탈",
+        "pt": "Death metal melódico"
       },
       "description": {
         "en": "Melodic death metal: growled vocals over harmonised guitars and blast beats. Start the style with deathmetal.",
         "ru": "Мелодичный дэт-метал: гроулинг поверх гармонизованных гитар и бластбитов. Начните стиль с deathmetal.",
         "zh": "旋律死亡金属：嘶吼演唱配和声吉他与 blast beat。风格以 deathmetal 开头。",
         "ja": "メロディック・デスメタル：ハモるギターとブラストビートにグロウル。スタイルは deathmetal で始めます。",
-        "ko": "멜로딕 데스메탈: 화성 기타와 블래스트 비트 위의 그로울링. 스타일을 deathmetal로 시작하세요."
+        "ko": "멜로딕 데스메탈: 화성 기타와 블래스트 비트 위의 그로울링. 스타일을 deathmetal로 시작하세요.",
+        "pt": "Death metal melódico: voz gutural sobre guitarras harmonizadas e blast beats. Começar o estilo com deathmetal."
       },
       "scales": {
         "ar": 1
@@ -554,14 +586,16 @@
         "ru": "Евродиско 1980-х",
         "zh": "1980年代欧陆迪斯科",
         "ja": "1980年代ユーロディスコ",
-        "ko": "1980년대 유로디스코"
+        "ko": "1980년대 유로디스코",
+        "pt": "Eurodisco dos anos 80"
       },
       "description": {
         "en": "1980s Eurodisco production: wall-of-sound synths, chorused bass, four-on-the-floor drums and 80s studio gloss. Start the style with eurodisco. Changes the sound, not the composition.",
         "ru": "Продакшн евродиско 1980-х: стена синтезаторов, хорусный бас, ровная бочка и студийный лоск 80-х. Начните стиль со слова eurodisco. Меняет звук, не композицию.",
         "zh": "1980 年代欧陆迪斯科制作：铺满的合成器、合唱贝斯、四四拍鼓点与 80 年代录音室光泽。风格以 eurodisco 开头。改变音色，不改变作曲。",
         "ja": "1980年代ユーロディスコのプロダクション：壁のようなシンセ、コーラスの効いたベース、四つ打ちドラム、80年代のスタジオの艶。スタイルの先頭に eurodisco と書きます。作曲ではなく音色を変えます。",
-        "ko": "1980년대 유로디스코 프로덕션: 벽처럼 쌓은 신스, 코러스 베이스, 4/4 드럼, 80년대 스튜디오 광택. 스타일 맨 앞에 eurodisco를 넣으세요. 작곡이 아니라 음색을 바꿉니다."
+        "ko": "1980년대 유로디스코 프로덕션: 벽처럼 쌓은 신스, 코러스 베이스, 4/4 드럼, 80년대 스튜디오 광택. 스타일 맨 앞에 eurodisco를 넣으세요. 작곡이 아니라 음색을 바꿉니다.",
+        "pt": "Produção eurodisco dos anos 80: parede de sintetizadores, baixo com chorus, bateria four-on-the-floor e o brilho de estúdio dos anos 80. Começar o estilo com eurodisco. Altera o som, não a composição."
       },
       "scales": {
         "nar": 1
@@ -587,14 +621,16 @@
         "ru": "Итало-диско 1980-х",
         "zh": "1980年代意大利迪斯科",
         "ja": "1980年代イタロ・ディスコ",
-        "ko": "1980년대 이탈로 디스코"
+        "ko": "1980년대 이탈로 디스코",
+        "pt": "Italo disco dos anos 80"
       },
       "description": {
         "en": "1980s Italo disco production: arpeggiated synths, vocoder colour, octave bass and drum machines. Start the style with italodisco. Changes the sound, not the composition.",
         "ru": "Продакшн итало-диско 1980-х: арпеджио синтезаторов, оттенок вокодера, октавный бас и драм-машины. Начните стиль со слова italodisco. Меняет звук, не композицию.",
         "zh": "1980 年代意大利迪斯科制作：琶音合成器、声码器色彩、八度贝斯与鼓机。风格以 italodisco 开头。改变音色，不改变作曲。",
         "ja": "1980年代イタロ・ディスコのプロダクション：アルペジオのシンセ、ボコーダーの色、オクターブ・ベース、ドラムマシン。スタイルの先頭に italodisco と書きます。作曲ではなく音色を変えます。",
-        "ko": "1980년대 이탈로 디스코 프로덕션: 아르페지오 신스, 보코더 색채, 옥타브 베이스, 드럼 머신. 스타일 맨 앞에 italodisco를 넣으세요. 작곡이 아니라 음색을 바꿉니다."
+        "ko": "1980년대 이탈로 디스코 프로덕션: 아르페지오 신스, 보코더 색채, 옥타브 베이스, 드럼 머신. 스타일 맨 앞에 italodisco를 넣으세요. 작곡이 아니라 음색을 바꿉니다.",
+        "pt": "Produção italo disco dos anos 80: sintetizadores em arpejo, cor de vocoder, baixo em oitavas e caixas de ritmos. Começar o estilo com italodisco. Altera o som, não a composição."
       },
       "scales": {
         "nar": 1
@@ -620,14 +656,16 @@
         "ru": "Ска 2 Tone 1980-х",
         "zh": "1980年代 2 Tone 斯卡",
         "ja": "1980年代ツートーン・スカ",
-        "ko": "1980년대 투톤 스카"
+        "ko": "1980년대 투톤 스카",
+        "pt": "Ska two-tone dos anos 80"
       },
       "description": {
         "en": "Early 1980s British two-tone ska: offbeat guitar skank, organ shuffle, walking bass and brass stabs. Start the style with twotone. Changes the sound, not the composition.",
         "ru": "Британский ска 2 Tone начала 1980-х: гитара на слабые доли, органный шаффл, шагающий бас и выстрелы духовых. Начните стиль со слова twotone. Меняет звук, не композицию.",
         "zh": "1980 年代初英国 2 Tone 斯卡：反拍吉他、管风琴 shuffle、行走贝斯与铜管短促重音。风格以 twotone 开头。改变音色，不改变作曲。",
         "ja": "1980年代初頭の英国ツートーン・スカ：裏拍のギター・カッティング、オルガンのシャッフル、ウォーキング・ベース、ブラスのスタブ。スタイルの先頭に twotone と書きます。作曲ではなく音色を変えます。",
-        "ko": "1980년대 초 영국 투톤 스카: 엇박 기타 스캥크, 오르간 셔플, 워킹 베이스, 브라스 스탭. 스타일 맨 앞에 twotone을 넣으세요. 작곡이 아니라 음색을 바꿉니다."
+        "ko": "1980년대 초 영국 투톤 스카: 엇박 기타 스캥크, 오르간 셔플, 워킹 베이스, 브라스 스탭. 스타일 맨 앞에 twotone을 넣으세요. 작곡이 아니라 음색을 바꿉니다.",
+        "pt": "Ska two-tone britânico do início dos anos 80: guitarra em contratempo, órgão em shuffle, baixo em walking e ataques de metais. Começar o estilo com twotone. Altera o som, não a composição."
       },
       "scales": {
         "nar": 1
@@ -652,14 +690,16 @@
         "ru": "Музыка кейгенов",
         "zh": "注册机音乐",
         "ja": "キージェン・ミュージック",
-        "ko": "키젠 음악"
+        "ko": "키젠 음악",
+        "pt": "Música de keygen"
       },
       "description": {
         "en": "The chiptune and tracker sound of software keygens: bright square leads, arpeggios and punchy techno drums. Trained on instrumentals, so it suits songs without vocals. Changes both the composition and the sound.",
         "ru": "Чиптюн и трекерный звук кейгенов: яркие квадратные лиды, арпеджио и плотные техно-барабаны. Обучен на инструменталах, поэтому лучше подходит песням без вокала. Меняет и композицию, и звучание.",
         "zh": "注册机的芯片音乐与 tracker 音色：明亮的方波主旋律、琶音与有力的 techno 鼓。以纯音乐训练，更适合无人声的歌曲。同时改变作曲与音色。",
         "ja": "キージェンのチップチューンとトラッカーの音：明るい矩形波のリード、アルペジオ、パンチのあるテクノのドラム。インストで学習したため、ボーカルのない曲に向きます。作曲とサウンドの両方を変えます。",
-        "ko": "키젠의 칩튠과 트래커 사운드: 밝은 사각파 리드, 아르페지오, 펀치감 있는 테크노 드럼. 연주곡으로 학습해 보컬 없는 곡에 어울립니다. 작곡과 사운드를 모두 바꿉니다."
+        "ko": "키젠의 칩튠과 트래커 사운드: 밝은 사각파 리드, 아르페지오, 펀치감 있는 테크노 드럼. 연주곡으로 학습해 보컬 없는 곡에 어울립니다. 작곡과 사운드를 모두 바꿉니다.",
+        "pt": "O som chiptune e de tracker dos keygens de software: solos de onda quadrada brilhantes, arpejos e bateria techno com impacto. Treinada com instrumentais, por isso serve para músicas sem voz. Altera tanto a composição como o som."
       },
       "scales": {
         "ar": 0.3,
@@ -690,14 +730,16 @@
         "ru": "Инструментал без голоса",
         "zh": "纯音乐，无人声",
         "ja": "インスト（声なし）",
-        "ko": "보컬 없는 연주곡"
+        "ko": "보컬 없는 연주곡",
+        "pt": "Instrumental, sem voz"
       },
       "description": {
         "en": "Keeps an instrumental really instrumental: without it, about half of the songs asked for without vocals still sing, hum or chant. Only for songs without lyrics - write section tags alone; arrangements come out a little simpler. Changes the composition, not the sound.",
         "ru": "Делает инструментал действительно инструментальным: без неё примерно половина песен, заказанных без вокала, всё равно поёт, мычит или напевает. Только для песен без слов — пишите одни теги частей; аранжировки выходят чуть проще. Меняет композицию, не звук.",
         "zh": "让纯音乐真正没有人声：不用它时，约一半要求无人声的歌曲仍会演唱、哼唱或吟唱。仅用于无歌词的歌曲——歌词只写段落标签；编曲会略为简单。改变作曲，不改变音色。",
         "ja": "インストを本当に声のない曲にします：これなしでは、ボーカルなしを頼んだ曲の約半分が歌ったりハミングしたり唱えたりします。歌詞のない曲専用で、歌詞にはセクションタグだけを書きます。アレンジは少しシンプルになります。音色ではなく作曲を変えます。",
-        "ko": "연주곡을 정말 목소리 없이 만듭니다: 이것 없이는 보컬 없이 요청한 곡의 약 절반이 노래하거나 허밍하거나 읊조립니다. 가사 없는 곡 전용으로, 가사에는 섹션 태그만 쓰세요. 편곡은 조금 단순해집니다. 음색이 아니라 작곡을 바꿉니다."
+        "ko": "연주곡을 정말 목소리 없이 만듭니다: 이것 없이는 보컬 없이 요청한 곡의 약 절반이 노래하거나 허밍하거나 읊조립니다. 가사 없는 곡 전용으로, 가사에는 섹션 태그만 쓰세요. 편곡은 조금 단순해집니다. 음색이 아니라 작곡을 바꿉니다.",
+        "pt": "Mantém um instrumental realmente instrumental: sem ela, cerca de metade das músicas pedidas sem voz ainda cantam, trauteiam ou entoam. Só para músicas sem letra - escrever apenas etiquetas de secção; os arranjos saem um pouco mais simples. Altera a composição, não o som."
       },
       "scales": {
         "ar": 1
@@ -721,14 +763,16 @@
         "ru": "Женский вокал",
         "zh": "女声",
         "ja": "女性ボーカル",
-        "ko": "여성 보컬"
+        "ko": "여성 보컬",
+        "pt": "Feminina"
       },
       "description": {
         "en": "One adult female lead, with the song's phrasing and timbre intact",
         "ru": "Одна взрослая солистка, фразировка и тембр песни сохраняются",
         "zh": "一位成年女主唱，保留歌曲的乐句与音色",
         "ja": "成人女性のリードボーカル1人。曲のフレージングと音色はそのまま",
-        "ko": "성인 여성 리드 보컬 한 명, 곡의 프레이징과 음색은 유지"
+        "ko": "성인 여성 리드 보컬 한 명, 곡의 프레이징과 음색은 유지",
+        "pt": "Uma voz principal feminina adulta, com o fraseado e o timbre da música intactos"
       },
       "scales": {
         "ar": 1
@@ -756,14 +800,16 @@
         "ru": "Мужской вокал",
         "zh": "男声",
         "ja": "男性ボーカル",
-        "ko": "남성 보컬"
+        "ko": "남성 보컬",
+        "pt": "Masculina"
       },
       "description": {
         "en": "One adult male lead, with the song's phrasing and timbre intact",
         "ru": "Один взрослый солист, фразировка и тембр песни сохраняются",
         "zh": "一位成年男主唱，保留歌曲的乐句与音色",
         "ja": "成人男性のリードボーカル1人。曲のフレージングと音色はそのまま",
-        "ko": "성인 남성 리드 보컬 한 명, 곡의 프레이징과 음색은 유지"
+        "ko": "성인 남성 리드 보컬 한 명, 곡의 프레이징과 음색은 유지",
+        "pt": "Uma voz principal masculina adulta, com o fraseado e o timbre da música intactos"
       },
       "scales": {
         "ar": 1
@@ -791,14 +837,16 @@
         "ru": "Поп",
         "zh": "流行",
         "ja": "ポップ",
-        "ko": "팝"
+        "ko": "팝",
+        "pt": "Pop"
       },
       "description": {
         "en": "Clear hooks, crisp drums and a polished chorus",
         "ru": "Яркие хуки, чёткие барабаны и отполированный припев",
         "zh": "清晰的抓耳旋律、利落的鼓与精致的副歌",
         "ja": "明快なフック、歯切れのいいドラム、磨かれたサビ",
-        "ko": "선명한 훅, 또렷한 드럼, 세련된 후렴"
+        "ko": "선명한 훅, 또렷한 드럼, 세련된 후렴",
+        "pt": "Ganchos claros, bateria nítida e um refrão polido"
       },
       "scales": {
         "ar": 1
@@ -826,14 +874,16 @@
         "ru": "Хип-хоп",
         "zh": "嘻哈",
         "ja": "ヒップホップ",
-        "ko": "힙합"
+        "ko": "힙합",
+        "pt": "Hip-hop"
       },
       "description": {
         "en": "Rapped verses, deep sub bass and nimble hats",
         "ru": "Читка в куплетах, глубокий саб-бас и подвижные хэты",
         "zh": "说唱主歌、深沉的超低音与灵活的踩镲",
         "ja": "ラップのヴァース、深いサブベース、軽快なハット",
-        "ko": "랩 벌스, 깊은 서브 베이스, 경쾌한 하이햇"
+        "ko": "랩 벌스, 깊은 서브 베이스, 경쾌한 하이햇",
+        "pt": "Estrofes em rap, sub-grave profundo e pratos ágeis"
       },
       "scales": {
         "ar": 1
@@ -861,14 +911,16 @@
         "ru": "R&B",
         "zh": "R&B",
         "ja": "R&B",
-        "ko": "R&B"
+        "ko": "R&B",
+        "pt": "R&B"
       },
       "description": {
         "en": "Warm keys, deep pocket and fluid vocal phrasing",
         "ru": "Тёплые клавиши, глубокий грув и плавная фразировка вокала",
         "zh": "温暖的键盘、深沉的律动与流畅的人声",
         "ja": "温かいキーボード、深いグルーヴ、滑らかなボーカル",
-        "ko": "따뜻한 건반, 깊은 그루브, 유려한 보컬"
+        "ko": "따뜻한 건반, 깊은 그루브, 유려한 보컬",
+        "pt": "Teclados quentes, groove bem assente e fraseado vocal fluido"
       },
       "scales": {
         "ar": 1
@@ -896,14 +948,16 @@
         "ru": "Инди-рок",
         "zh": "独立摇滚",
         "ja": "インディーロック",
-        "ko": "인디 록"
+        "ko": "인디 록",
+        "pt": "Indie rock"
       },
       "description": {
         "en": "Chiming guitars, moving bass and a human drum kit",
         "ru": "Звенящие гитары, подвижный бас и живые барабаны",
         "zh": "清脆的吉他、灵动的贝斯与真实鼓组",
         "ja": "きらめくギター、動くベース、人間味のあるドラム",
-        "ko": "맑게 울리는 기타, 움직이는 베이스, 사람 냄새 나는 드럼"
+        "ko": "맑게 울리는 기타, 움직이는 베이스, 사람 냄새 나는 드럼",
+        "pt": "Guitarras cintilantes, baixo em movimento e uma bateria humana"
       },
       "scales": {
         "ar": 1
@@ -931,14 +985,16 @@
         "ru": "Поп-панк",
         "zh": "流行朋克",
         "ja": "ポップパンク",
-        "ko": "팝 펑크"
+        "ko": "팝 펑크",
+        "pt": "Pop punk"
       },
       "description": {
         "en": "Palm-muted power chords and driving chorus drums",
         "ru": "Глушёные пауэр-аккорды и напористые барабаны в припеве",
         "zh": "闷音强力和弦与推进感十足的副歌鼓",
         "ja": "パームミュートのパワーコードと疾走するサビのドラム",
-        "ko": "팜뮤트 파워 코드와 몰아치는 후렴 드럼"
+        "ko": "팜뮤트 파워 코드와 몰아치는 후렴 드럼",
+        "pt": "Power chords abafados com a palma e bateria de refrão a empurrar"
       },
       "scales": {
         "ar": 1
@@ -966,14 +1022,16 @@
         "ru": "Метал",
         "zh": "金属",
         "ja": "メタル",
-        "ko": "메탈"
+        "ko": "메탈",
+        "pt": "Metal"
       },
       "description": {
         "en": "Heavy guitar riffs, tight kicks and big melodic choruses",
         "ru": "Тяжёлые гитарные риффы, плотная бочка и большие мелодичные припевы",
         "zh": "沉重的吉他连复段、紧实的底鼓与宏大的旋律副歌",
         "ja": "ヘヴィなギターリフ、タイトなキック、壮大なメロディックなサビ",
-        "ko": "묵직한 기타 리프, 타이트한 킥, 웅장한 멜로디 후렴"
+        "ko": "묵직한 기타 리프, 타이트한 킥, 웅장한 멜로디 후렴",
+        "pt": "Riffs pesados de guitarra, bombos secos e grandes refrães melódicos"
       },
       "scales": {
         "ar": 1
@@ -1001,14 +1059,16 @@
         "ru": "Кантри",
         "zh": "乡村",
         "ja": "カントリー",
-        "ko": "컨트리"
+        "ko": "컨트리",
+        "pt": "Country"
       },
       "description": {
         "en": "Acoustic strum, twangy fills and an easy backbeat",
         "ru": "Акустический бой, твэнговые сбивки и лёгкий бэкбит",
         "zh": "原声扫弦、鼻音感的加花与轻松的反拍",
         "ja": "アコースティックのストローク、トワンギーなフィル、軽いバックビート",
-        "ko": "어쿠스틱 스트럼, 트왱한 필, 편안한 백비트"
+        "ko": "어쿠스틱 스트럼, 트왱한 필, 편안한 백비트",
+        "pt": "Guitarra acústica rasgada, floreados com twang e um backbeat descontraído"
       },
       "scales": {
         "ar": 1
@@ -1036,14 +1096,16 @@
         "ru": "Акустический фолк",
         "zh": "原声民谣",
         "ja": "アコースティック・フォーク",
-        "ko": "어쿠스틱 포크"
+        "ko": "어쿠스틱 포크",
+        "pt": "Folk acústico"
       },
       "description": {
         "en": "Fingerpicked strings and a warm small-room performance",
         "ru": "Перебор струн и тёплое исполнение в небольшой комнате",
         "zh": "指弹与温暖的小房间演奏",
         "ja": "フィンガーピッキングと温かい小部屋の演奏",
-        "ko": "핑거피킹과 따뜻한 작은 방 연주"
+        "ko": "핑거피킹과 따뜻한 작은 방 연주",
+        "pt": "Cordas dedilhadas e uma interpretação quente de sala pequena"
       },
       "scales": {
         "ar": 1
@@ -1071,14 +1133,16 @@
         "ru": "Хаус",
         "zh": "浩室",
         "ja": "ハウス",
-        "ko": "하우스"
+        "ko": "하우스",
+        "pt": "House"
       },
       "description": {
         "en": "Steady club kick, offbeat hats and a rolling bass line",
         "ru": "Ровная клубная бочка, хэты в офбит и катящийся бас",
         "zh": "稳定的俱乐部底鼓、反拍踩镲与滚动的贝斯",
         "ja": "一定のクラブキック、裏拍のハット、転がるベース",
-        "ko": "일정한 클럽 킥, 오프비트 하이햇, 굴러가는 베이스"
+        "ko": "일정한 클럽 킥, 오프비트 하이햇, 굴러가는 베이스",
+        "pt": "Bombo de discoteca constante, pratos em contratempo e uma linha de baixo a rolar"
       },
       "scales": {
         "ar": 1
@@ -1106,14 +1170,16 @@
         "ru": "Диско-фанк",
         "zh": "迪斯科放克",
         "ja": "ディスコ・ファンク",
-        "ko": "디스코 펑크"
+        "ko": "디스코 펑크",
+        "pt": "Disco funk"
       },
       "description": {
         "en": "Elastic bass, clipped guitar and bright dance-floor strings",
         "ru": "Упругий бас, рубленая гитара и яркие танцевальные струнные",
         "zh": "弹性的贝斯、切音吉他与明亮的舞池弦乐",
         "ja": "弾むベース、カッティングギター、華やかなストリングス",
-        "ko": "탄력 있는 베이스, 커팅 기타, 화려한 댄스 스트링"
+        "ko": "탄력 있는 베이스, 커팅 기타, 화려한 댄스 스트링",
+        "pt": "Baixo elástico, guitarra cortada e cordas luminosas de pista de dança"
       },
       "scales": {
         "ar": 1
@@ -1141,14 +1207,16 @@
         "ru": "K-pop",
         "zh": "K-pop",
         "ja": "K-POP",
-        "ko": "K-pop"
+        "ko": "K-pop",
+        "pt": "K-pop"
       },
       "description": {
         "en": "Sharp synth hooks, tight edits and a big chorus lift",
         "ru": "Острые синт-хуки, плотный монтаж и мощный подъём в припеве",
         "zh": "尖锐的合成器旋律、紧凑的剪辑与副歌的大提升",
         "ja": "鋭いシンセフック、タイトな編集、サビの大きな盛り上がり",
-        "ko": "날카로운 신스 훅, 타이트한 편집, 후렴의 큰 상승"
+        "ko": "날카로운 신스 훅, 타이트한 편집, 후렴의 큰 상승",
+        "pt": "Ganchos de sintetizador afiados, cortes precisos e um grande impulso no refrão"
       },
       "scales": {
         "ar": 1
@@ -1176,14 +1244,16 @@
         "ru": "Реггетон",
         "zh": "雷鬼动",
         "ja": "レゲトン",
-        "ko": "레게톤"
+        "ko": "레게톤",
+        "pt": "Reggaeton"
       },
       "description": {
         "en": "Dembow drums, rounded sub bass and clipped melodic hooks",
         "ru": "Барабаны дембоу, округлый саб-бас и рубленые мелодичные хуки",
         "zh": "Dembow 鼓、圆润的超低音与切分旋律",
         "ja": "デンボウのドラム、丸いサブベース、刻むメロディフック",
-        "ko": "뎀보우 드럼, 둥근 서브 베이스, 끊어지는 멜로디 훅"
+        "ko": "뎀보우 드럼, 둥근 서브 베이스, 끊어지는 멜로디 훅",
+        "pt": "Bateria dembow, sub-grave arredondado e ganchos melódicos cortados"
       },
       "scales": {
         "ar": 1
@@ -1211,14 +1281,16 @@
         "ru": "Афробит",
         "zh": "非洲节拍",
         "ja": "アフロビーツ",
-        "ko": "아프로비트"
+        "ko": "아프로비트",
+        "pt": "Afrobeats"
       },
       "description": {
         "en": "Interlocking percussion, melodic bass and buoyant guitar",
         "ru": "Переплетённая перкуссия, мелодичный бас и лёгкая гитара",
         "zh": "交织的打击乐、旋律性贝斯与轻快的吉他",
         "ja": "絡み合うパーカッション、メロディックなベース、軽やかなギター",
-        "ko": "얽히는 퍼커션, 멜로딕한 베이스, 경쾌한 기타"
+        "ko": "얽히는 퍼커션, 멜로딕한 베이스, 경쾌한 기타",
+        "pt": "Percussão entrelaçada, baixo melódico e guitarra leve"
       },
       "scales": {
         "ar": 1
@@ -1246,14 +1318,16 @@
         "ru": "Лоу-фай",
         "zh": "Lo-fi",
         "ja": "ローファイ",
-        "ko": "로파이"
+        "ko": "로파이",
+        "pt": "Lo-fi"
       },
       "description": {
         "en": "Soft swung drums, mellow keys and gentle tape warmth",
         "ru": "Мягкие свинговые барабаны, спокойные клавиши и тёплая плёнка",
         "zh": "柔和的摇摆鼓、温润的键盘与温暖的磁带质感",
         "ja": "柔らかいスウィングのドラム、穏やかな鍵盤、温かいテープ感",
-        "ko": "부드러운 스윙 드럼, 차분한 건반, 따뜻한 테이프 질감"
+        "ko": "부드러운 스윙 드럼, 차분한 건반, 따뜻한 테이프 질감",
+        "pt": "Bateria suave com swing, teclados amenos e um calor suave de fita"
       },
       "scales": {
         "ar": 1
