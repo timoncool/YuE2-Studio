@@ -55,8 +55,24 @@ pub fn flac(audio: &Stereo) -> Result<Vec<u8>> {
     let gain = fitting_gain(audio);
     let samples: Vec<i32> = audio.left.iter().zip(&audio.right).flat_map(|(left, right)| [*left, *right]).map(|sample| flac_sample(sample, gain)).collect();
     let mut buffer: Vec<u8> = Vec::new();
-    flac_frames(audio.rate, frames, &mut buffer, |encoder| {
+    flac_frames(audio.rate, 24, frames, &mut buffer, |encoder| {
         if encoder.process_interleaved(&samples, frames as u32).is_err() {
+            bail!("encode FLAC: {:?}", encoder.state());
+        }
+        Ok(())
+    })?;
+    set_flac_total_samples(&mut buffer, frames as u64);
+    Ok(buffer)
+}
+
+/// Lossless FLAC from interleaved stereo integer samples already at `bits`
+/// (16 or 24): the exporter quantizes and dithers itself, so what is written
+/// is exactly what it chose. Built in memory, as `flac` is.
+pub fn flac_pcm(samples: &[i32], bits: u32, rate: u32) -> Result<Vec<u8>> {
+    let frames = samples.len() / 2;
+    let mut buffer: Vec<u8> = Vec::new();
+    flac_frames(rate, bits, frames, &mut buffer, |encoder| {
+        if encoder.process_interleaved(&samples[..frames * 2], frames as u32).is_err() {
             bail!("encode FLAC: {:?}", encoder.state());
         }
         Ok(())
@@ -71,14 +87,14 @@ fn flac_sample(sample: f32, gain: f32) -> i32 {
     ((sample * gain).clamp(-1.0, 1.0) * FLAC_FULL).round() as i32
 }
 
-/// The 24-bit stereo libFLAC encoder `flac` writes with, its frames fed by `feed`.
-fn flac_frames(rate: u32, frames: usize, sink: &mut dyn std::io::Write, feed: impl FnOnce(&mut flac_bound::FlacEncoder) -> Result<()>) -> Result<()> {
+/// The stereo libFLAC encoder at `bits` a sample, its frames fed by `feed`.
+fn flac_frames(rate: u32, bits: u32, frames: usize, sink: &mut dyn std::io::Write, feed: impl FnOnce(&mut flac_bound::FlacEncoder) -> Result<()>) -> Result<()> {
     use flac_bound::{FlacEncoder, WriteWrapper};
     let mut sink = WriteWrapper(sink);
     let mut encoder = FlacEncoder::new()
         .ok_or_else(|| anyhow!("libFLAC could not make an encoder"))?
         .channels(2)
-        .bits_per_sample(24)
+        .bits_per_sample(bits)
         .sample_rate(rate)
         .compression_level(8)
         .verify(true)
@@ -122,7 +138,7 @@ pub fn flac_dual_mono<W: std::io::Read + std::io::Write + std::io::Seek>(samples
     let start = sink.stream_position()?;
     let mut both: Vec<i32> = Vec::new();
     let mut buffered = std::io::BufWriter::with_capacity(1 << 20, &mut *sink);
-    flac_frames(out_rate, frames, &mut buffered, |encoder| {
+    flac_frames(out_rate, 24, frames, &mut buffered, |encoder| {
         mono_pieces(samples, rate, out_rate, |piece| {
             both.clear();
             both.extend(piece.iter().flat_map(|sample| {

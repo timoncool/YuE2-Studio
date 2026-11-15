@@ -8,6 +8,7 @@ Windows build.
 ### Added
 
 - **The studio in Portuguese** (translation by DJ José Silva): Português is the sixth language of the window, chosen in Settings and taken by itself on a computer set to Portuguese. The whole window, the training guide, the reasons a song failed and the forms for reporting a problem on GitHub are in Portuguese of Portugal; the writing assistant answers in it.
+- **Export, in a song's menu** (by jaredlaham): a song is written out as a new file - WAV in 16, 24 bits or 32-bit float, FLAC in 16 or 24, MP3 from 128 to 320 kbps, at its own rate or at 44.1, 48, 88.2 or 96 kHz - and can be brought to a loudness target on the way: -14 LUFS for streaming, -16 for Apple Music and podcasts, -23 for broadcast, or your own. Loudness is measured to ITU-R BS.1770 and set by one gain held under a true-peak ceiling; there is no limiter, and the report says when the ceiling stopped the gain short. Dither is added only when bits are taken away. The report shows the loudness and true peak before and after and everything done to the sound; the song in the library is not touched. An agent does the same with `song_export`.
 - **Two more visualizers, "Black hole" and "Tunnel"** (by telesoho): a black hole with its disk of light, bent as gravity bends it, brightening and tilting with the song; and a flight through a tunnel that jumps on the loud notes, with a threshold of its own. Both sit beside MilkDrop and the spectrum, in the panel and in the visualizer's window.
 
 ### Fixed

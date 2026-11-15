@@ -48,6 +48,7 @@ mod score;
 mod sizes;
 pub mod net;
 mod saving;
+mod export;
 mod skins;
 pub use saving::{set_save_dialog, SaveDialog};
 mod skill;
@@ -1375,6 +1376,7 @@ pub async fn serve() -> anyhow::Result<()> {
         Some(root) => {
             studio_log::log_to_file(&root);
             std::thread::spawn(move || install_record::sweep_aside(&root));
+            std::thread::spawn(export::sweep);
         }
         None => studio_log!("[ERROR] the studio has no data folder; its log goes to the console only"),
     }
@@ -1701,6 +1703,10 @@ pub async fn serve() -> anyhow::Result<()> {
         .route("/v1/activity", get(read_activity))
         .route("/v1/cover-templates", get(read_cover_templates).put(write_cover_templates))
         .route("/v1/library/file-tags", get(read_file_tags).put(write_file_tags))
+        .route("/v1/exports", post(export::start))
+        .route("/v1/exports/{id}", get(export::status).delete(export::forget))
+        .route("/v1/exports/{id}/cancel", post(export::cancel))
+        .route("/v1/exports/{id}/file", get(export::file))
         .route("/v1/cover-templates/render", post(render_cover_template))
         .route("/v1/openrouter/completions", post(create_openrouter_completion))
         .route("/v1/library/songs", get(library_songs).post(create_library_song))

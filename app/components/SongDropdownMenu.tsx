@@ -26,7 +26,9 @@ import {
     FileMusic,
     Wand2,
     Piano,
+    FileOutput,
 } from 'lucide-react';
+import { openExport } from './ExportDialog';
 
 /** The one menu of a song. Its actions come from the app through
  *  SongActionsContext, so every place that opens it offers the same items. */
@@ -357,6 +359,11 @@ export const SongDropdownMenu: React.FC<SongDropdownMenuProps> = ({
                 icon={<Download size={14} />}
                 label={t('download')}
                 onClick={handleDownload}
+            />
+            <MenuItem
+                icon={<FileOutput size={14} />}
+                label={t('exportMenu')}
+                onClick={() => handleAction(() => openExport(song))}
             />
 
             {/* Owner-only Actions */}

@@ -113,6 +113,7 @@ import { FilesPanel } from './components/FilesPanel';
 import { SearchPage } from './components/SearchPage';
 import { NewsPage } from './components/NewsPage';
 import { ConfirmDialog } from './components/ConfirmDialog';
+import { ExportDialog } from './components/ExportDialog';
 import { SetupGate } from './components/SetupGate';
 import { UpdateScreen, readUpdatePlan } from './components/UpdateScreen';
 import { EngineStarting } from './components/EngineStarting';
@@ -1742,6 +1743,7 @@ function AppContent() {
           onCoverSaved={applyCoverUpdate}
         />
       )}
+      <ExportDialog />
       <SettingsModal
         isOpen={showSettingsModal}
         initialSection={settingsSection}

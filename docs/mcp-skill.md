@@ -78,6 +78,11 @@ connected and the address to paste.
 - **Files on this computer are passed by path**: `dataset_add_folder`,
   `library_import_audio`, `score_transcribe`, `cover_set_from_file`, `video_set`.
   `library_song_files` and `dataset_song_files` give the paths of the studio's own files.
+- **A song for release or a DAW** is `song_export`: a new WAV, FLAC or MP3 in a folder
+  you name, at a chosen rate and bit depth, brought to a loudness target if asked
+  (`loudness: {target_lufs: -14, ceiling_dbtp: -1}` for streaming). `song_export_get`
+  answers the file's path and what was done to the sound, `song_export_cancel` stops it;
+  the library song is not changed.
 - **You write, not the studio's assistant.** The studio has a small local model (Gemma)
   for users without an agent. You write better: read `writing_guide` and
   `writing_examples` first and write the style, lyrics and scores yourself. Use
