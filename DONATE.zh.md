@@ -1,6 +1,6 @@
 <div align="center">
 
-[English](DONATE.md) · [Русский](DONATE.ru.md) · **中文** · [日本語](DONATE.ja.md) · [한국어](DONATE.ko.md)
+[English](DONATE.md) · [Русский](DONATE.ru.md) · **中文** · [日本語](DONATE.ja.md) · [한국어](DONATE.ko.md) · [Português](DONATE.pt.md)
 
 # 支持开源 AI
 
@@ -33,7 +33,7 @@
 
 - ⭐ 给仓库点个 star —— 别人正是这样找到它的。
 - 🐞 出问题时带上引擎日志提交 issue：日志能把抱怨变成修复。
-- 🌍 提交翻译修正 —— 工作室支持英语、俄语、中文、日语和韩语。
+- 🌍 提交翻译修正 —— 工作室支持英语、俄语、中文、日语、韩语和葡萄牙语。
 - 📣 分享你用它做出的作品，并注明是用什么做的。
 
 ---

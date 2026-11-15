@@ -1,6 +1,6 @@
 <div align="center">
 
-**English** · [Русский](DONATE.ru.md) · [中文](DONATE.zh.md) · [日本語](DONATE.ja.md) · [한국어](DONATE.ko.md)
+**English** · [Русский](DONATE.ru.md) · [中文](DONATE.zh.md) · [日本語](DONATE.ja.md) · [한국어](DONATE.ko.md) · [Português](DONATE.pt.md)
 
 # Support Open-Source AI
 
@@ -34,7 +34,7 @@ that difference is what keeps work like this going.
 
 - ⭐ Star the repository — it is how other people find it.
 - 🐞 Open an issue with the engine log when something breaks; a log turns a complaint into a fix.
-- 🌍 Send a translation fix — the studio speaks English, Russian, Chinese, Japanese and Korean.
+- 🌍 Send a translation fix — the studio speaks English, Russian, Chinese, Japanese, Korean and Portuguese.
 - 📣 Post what you made with it and say what it was made in.
 
 ---

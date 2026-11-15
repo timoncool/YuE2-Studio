@@ -17,11 +17,12 @@ const { name: NAME, repo: REPO, site: SITE } = STUDIO;
 const DONATE = Object.fromEntries(['donate.css', 'donate-lang.html', 'donate-body.html']
   .map((name) => [name, readFileSync(join(docs, 'site', name), 'utf8').trimEnd()]));
 
-// The studio family as tabs over the page: the same language on each site.
+// The studio family as tabs over the page: the same language on each site, English where a site lacks it.
+const FAMILY_LANGUAGES = ['en', 'ru', 'zh', 'ja', 'ko'];
 const FAMILY = [
-  ['yue2', 'YuE2 Studio', 'https://timoncool.github.io/YuE2-Studio/'],
-  ['minimax', 'MiniMax Music3 Studio', 'https://timoncool.github.io/MiniMax-Music3-Studio/'],
-  ['ace', 'ACE-Step Studio', 'https://timoncool.github.io/ACE-Step-Studio/'],
+  ['yue2', 'YuE2 Studio', 'https://timoncool.github.io/YuE2-Studio/', ORDER],
+  ['minimax', 'MiniMax Music3 Studio', 'https://timoncool.github.io/MiniMax-Music3-Studio/', FAMILY_LANGUAGES],
+  ['ace', 'ACE-Step Studio', 'https://timoncool.github.io/ACE-Step-Studio/', FAMILY_LANGUAGES],
 ];
 
 // The questions every studio answers the same way; the answers come from the studio's own strings.
@@ -31,6 +32,7 @@ const WORDS = {
   zh: { starCta: '在 GitHub 上加星', download: '下载', moreSamples: '更多示例', faqTitle: '常见问题', qGpu: '需要什么显卡？', qFree: '免费吗？', aFree: '是的。工作室免费且开源，模型也可以在其中免费下载。', qOffline: '没有网络能用吗？我的音乐会被上传吗？', qLicense: '生成的歌曲可以使用吗？', qLora: '能用我自己的风格训练吗？', qAgent: 'AI 智能体能操作它吗？', qInside: '安装包里有什么？', qBuilt: '它是如何构建的？', updated: '更新于', stars: 'GitHub 星标', reviewsTitle: '社区评测', reviewsSub: '来自社区的视频评测和教程。', reviewsCta: '做了评测或教程？在简介中加上项目链接——优秀的作品会出现在这里。欢迎投稿：', reviewsMore: '更多' },
   ja: { starCta: 'GitHub でスター', download: 'ダウンロード', moreSamples: 'その他のサンプル', faqTitle: 'よくある質問', qGpu: 'どんなグラフィックカードが必要ですか？', qFree: '無料ですか？', aFree: 'はい。スタジオは無料のオープンソースで、モデルもスタジオ内から無料でダウンロードできます。', qOffline: 'オフラインで使えますか？ 音楽はどこかに送られますか？', qLicense: '作った曲は使えますか？', qLora: '自分のスタイルで学習させられますか？', qAgent: 'AI エージェントから操作できますか？', qInside: 'ダウンロードの中身は？', qBuilt: 'どのように作られていますか？', updated: '更新日', stars: 'GitHub スター', reviewsTitle: 'コミュニティのレビュー', reviewsSub: 'コミュニティによる動画レビューとチュートリアル。', reviewsCta: 'レビューやチュートリアルを作りましたか？説明欄にプロジェクトのリンクを追加してください。良い作品はここで紹介します。投稿は次から：', reviewsMore: 'もっと見る' },
   ko: { starCta: 'GitHub에서 스타 주기', download: '다운로드', moreSamples: '더 많은 예시', faqTitle: '자주 묻는 질문', qGpu: '어떤 그래픽 카드가 필요한가요?', qFree: '무료인가요?', aFree: '네. 스튜디오는 무료 오픈 소스이며, 모델도 스튜디오 안에서 무료로 내려받습니다.', qOffline: '인터넷 없이 되나요? 내 음악이 어딘가로 전송되나요?', qLicense: '만든 곡을 사용할 수 있나요?', qLora: '내 스타일로 학습시킬 수 있나요?', qAgent: 'AI 에이전트가 사용할 수 있나요?', qInside: '다운로드에는 무엇이 들어 있나요?', qBuilt: '어떻게 만들어졌나요?', updated: '업데이트', stars: 'GitHub 스타', reviewsTitle: '커뮤니티 리뷰', reviewsSub: '커뮤니티가 만든 영상 리뷰와 튜토리얼.', reviewsCta: '리뷰나 튜토리얼을 만드셨나요? 설명란에 프로젝트 링크를 넣어 주세요. 좋은 작품은 여기에 소개됩니다. 제보는 다음에서:', reviewsMore: '더 보기' },
+  pt: { starCta: 'Dar uma estrela no GitHub', download: 'Descarregar', moreSamples: 'Mais exemplos', faqTitle: 'Perguntas', qGpu: 'De que placa gráfica preciso?', qFree: 'É gratuito?', aFree: 'Sim. O estúdio é gratuito e de código aberto, e os modelos descarregam-se gratuitamente de dentro dele.', qOffline: 'Funciona offline? A minha música é enviada para algum lado?', qLicense: 'Posso usar as músicas que faço?', qLora: 'Posso treiná-lo no meu próprio estilo?', qAgent: 'Um agente de IA pode usá-lo?', qInside: 'O que vem na transferência?', qBuilt: 'Como é feito?', updated: 'Atualizado', stars: 'Estrelas no GitHub', reviewsTitle: 'Análises da comunidade', reviewsSub: 'Análises em vídeo e tutoriais feitos pela comunidade.', reviewsCta: 'Fez uma análise ou um tutorial? Ponha uma ligação para o projeto na descrição — as melhores aparecem aqui. Envie a sua através de', reviewsMore: 'Mais' },
 };
 
 const escape = (text) => String(text)
@@ -73,7 +75,7 @@ function page(lang) {
     `<link rel="alternate" hreflang="x-default" href="${pageUrl('en')}" />`,
   ].join('\n');
   const family = FAMILY
-    .map(([id, label, url]) => `    <a href="${url}${lang === 'en' ? '' : file(lang)}"${id === STUDIO.id ? ' aria-current="page"' : ''}>${label}</a>`)
+    .map(([id, label, url, languages]) => `    <a href="${url}${lang === 'en' || !languages.includes(lang) ? '' : file(lang)}"${id === STUDIO.id ? ' aria-current="page"' : ''}>${label}</a>`)
     .join('\n');
   const nav = ORDER
     .map((code) => `      <a href="${file(code)}" hreflang="${code}"${code === lang ? ' aria-current="page"' : ''}>${escape(STRINGS[code].label)}</a>`)

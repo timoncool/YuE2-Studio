@@ -18,7 +18,7 @@
 [![Last commit](https://img.shields.io/github/last-commit/timoncool/YuE2-Studio?style=flat-square)](https://github.com/timoncool/YuE2-Studio/commits/main)
 [![Downloads](https://img.shields.io/github/downloads/timoncool/YuE2-Studio/total?style=flat-square)](https://github.com/timoncool/YuE2-Studio/releases)
 
-**English** · [Русский](https://timoncool.github.io/YuE2-Studio/ru.html) · [中文](https://timoncool.github.io/YuE2-Studio/zh.html) · [日本語](https://timoncool.github.io/YuE2-Studio/ja.html) · [한국어](https://timoncool.github.io/YuE2-Studio/ko.html)
+**English** · [Русский](https://timoncool.github.io/YuE2-Studio/ru.html) · [中文](https://timoncool.github.io/YuE2-Studio/zh.html) · [日本語](https://timoncool.github.io/YuE2-Studio/ja.html) · [한국어](https://timoncool.github.io/YuE2-Studio/ko.html) · [Português](https://timoncool.github.io/YuE2-Studio/pt.html)
 
 ![YuE2 Studio](docs/screenshots/en-01-create.png)
 
@@ -145,7 +145,7 @@ Code, save [docs/mcp-skill.md](docs/mcp-skill.md) as `~/.claude/skills/yue2-stud
 - **A library of plain files** — search, playlists, cover art from prompt templates, tracks
   exported with title, lyrics and cover in their own tags (Vorbis comments in a FLAC, ID3 in an
   MP3). Interface in English, Russian,
-  Chinese, Japanese and Korean.
+  Chinese, Japanese, Korean and Portuguese.
 - **A cover for every track** — a track without one wears a free (CC0) Wikimedia Commons
   photograph that fits the genres, moods and instruments of its style, a pattern in one of 21
   DiceBear styles, or a cover OpenRouter generates for every new track. It is chosen by the
@@ -213,7 +213,8 @@ In YuE2, the same editor opens ABC scores and applies notes, chords and sections
 
 The same screens in the language you read: [Русский](https://timoncool.github.io/YuE2-Studio/ru.html),
 [中文](https://timoncool.github.io/YuE2-Studio/zh.html), [日本語](https://timoncool.github.io/YuE2-Studio/ja.html),
-[한국어](https://timoncool.github.io/YuE2-Studio/ko.html) — on the project page, or in
+[한국어](https://timoncool.github.io/YuE2-Studio/ko.html),
+[Português](https://timoncool.github.io/YuE2-Studio/pt.html) — on the project page, or in
 [docs/screenshots](docs/screenshots).
 
 ## Samples
@@ -711,7 +712,7 @@ statistics off entirely: no id exists and nothing is counted.
 
 I build open-source software and do AI research. Most of what I create is free and available to everyone. Your donations help me keep creating without worrying about where the next meal comes from =)
 
-**[All donation methods](DONATE.md)** · [Русский](DONATE.ru.md) · [中文](DONATE.zh.md) · [日本語](DONATE.ja.md) · [한국어](DONATE.ko.md) | **[dalink.to/nerual_dreming](https://dalink.to/nerual_dreming)** | **[boosty.to/neuro_art](https://boosty.to/neuro_art)**
+**[All donation methods](DONATE.md)** · [Русский](DONATE.ru.md) · [中文](DONATE.zh.md) · [日本語](DONATE.ja.md) · [한국어](DONATE.ko.md) · [Português](DONATE.pt.md) | **[dalink.to/nerual_dreming](https://dalink.to/nerual_dreming)** | **[boosty.to/neuro_art](https://boosty.to/neuro_art)**
 
 - **BTC:** `1E7dHL22RpyhJGVpcvKdbyZgksSYkYeEBC`
 - **ETH (ERC20):** `0xb5db65adf478983186d4897ba92fe2c25c594a0c`
