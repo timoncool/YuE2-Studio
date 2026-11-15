@@ -472,6 +472,12 @@ Community models: the merges of Ruach Studio's
 [YuE2-RS-Finetunes](https://huggingface.co/goldhub/YuE2-RS-Finetunes) in Q8_0 (3.8 GB) and Q6_K
 (2.9 GB), downloaded into that folder when chosen, pinned to revision `b371be9` and checked by
 SHA-256; their weights are under CC BY-NC-SA 4.0 (non-commercial, share-alike, credit the authors).
+Beside them are the six merges of
+[YuE2-3B-Ruach_Studio-IRA-Merge](https://huggingface.co/goldhub/YuE2-3B-Ruach_Studio-IRA-Merge)
+(revision `17356b2`, CC BY-NC 4.0): IRA, with Mothersuperior's Instrumental and Real Audio adapters
+in the weights; IRAE, IRAE v2 and v3, which add monsterovich's Epic Trailer at three strengths; and
+the experimental IRAE-IR and IRAE-IR v2 with his Industrial Rock, for rock instrumentals. The
+adapters inside a merge are not loaded again on top of it.
 With an own or community model the decoder companion stays off on Auto, and LoRA training and
 dataset preparation still run on the set's backbone.
 
