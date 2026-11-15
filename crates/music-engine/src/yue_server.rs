@@ -581,9 +581,11 @@ impl YueServerSupervisor {
                 command.stderr(Stdio::null());
             }
         }
+        #[cfg(windows)]
         configure_child_process(&mut command);
-        let child = command
-            .spawn()
+        // Through `spawn_dying_with_parent`, not `Command::spawn`: the engine must
+        // not outlive a studio that is killed rather than closed.
+        let child = music_core::process::spawn_dying_with_parent(command)
             .with_context(|| format!("start yue-server {}", self.config.executable.display()))?;
         // The engine must not outlive the studio, however the studio ends.
         music_core::process::adopt(&child);
@@ -756,6 +758,10 @@ fn http_get(host: &str, port: u16, path: &str, timeout: Duration) -> Option<Stri
     Some(response)
 }
 
+/// The engine's own process group, on the platform that has such a thing to ask
+/// for. The lifetime binding is not here: it comes from
+/// `music_core::process::spawn_dying_with_parent`, which is how the engine is
+/// spawned on every platform.
 #[cfg(windows)]
 fn configure_child_process(command: &mut Command) {
     use std::os::windows::process::CommandExt;
@@ -764,14 +770,6 @@ fn configure_child_process(command: &mut Command) {
     // CTRL_BREAK reach it for a graceful stop.
     command.creation_flags(CREATE_NEW_PROCESS_GROUP);
     // The job object `adopt` assigns is what kills it with us on Windows.
-}
-
-/// Beyond the platform group flags, the engine is bound to the studio's
-/// lifetime: Windows does that with a job object in `adopt`, Linux with
-/// `PR_SET_PDEATHSIG` set here, before the exec.
-#[cfg(not(windows))]
-fn configure_child_process(command: &mut Command) {
-    music_core::process::ensure_dies_with_parent(command);
 }
 
 #[cfg(windows)]

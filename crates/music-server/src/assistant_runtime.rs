@@ -885,10 +885,12 @@ impl AssistantRuntime {
                 command.arg("--reasoning").arg("on").arg("--reasoning-budget").arg(budget);
             }
         }
+        #[cfg(windows)]
         hide_console(&mut command);
 
-        let child = command
-            .spawn()
+        // Through `spawn_dying_with_parent`: a studio killed rather than closed
+        // must not leave a `llama-server` holding the card.
+        let child = music_core::process::spawn_dying_with_parent(command)
             .with_context(|| format!("start llama-server {}", binary.display()))?;
         music_core::process::adopt(&child);
         let base_url = format!("http://127.0.0.1:{port}/v1");
@@ -1019,14 +1021,6 @@ fn hide_console(command: &mut Command) {
     command.creation_flags(CREATE_NO_WINDOW);
     // The assistant is a second multi-gigabyte process holding VRAM; the job
     // object `adopt` assigns is what kills it with the studio on Windows.
-}
-
-/// Off Windows the sidecar needs the same lifetime binding the engine gets,
-/// or a studio that is killed rather than closed leaves a `llama-server`
-/// holding the card.
-#[cfg(not(windows))]
-fn hide_console(command: &mut Command) {
-    music_core::process::ensure_dies_with_parent(command);
 }
 
 #[cfg(test)]
