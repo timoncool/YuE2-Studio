@@ -99,6 +99,12 @@ pub fn chord_pitches(symbol: &str) -> Result<Vec<i32>, String> {
 
 /// The score as a format-1 MIDI file, or why it cannot be read.
 pub fn midi_of(text: &str) -> Result<Vec<u8>, String> {
+    midi_with(text, |_| true)
+}
+
+/// The score as a MIDI file holding the conductor track and only the lines `keep` names
+/// (`Vocal`, `Ins`, `Chords`), each exactly as the whole file has it.
+pub fn midi_with(text: &str, keep: impl Fn(&str) -> bool) -> Result<Vec<u8>, String> {
     let score = abc::parse(text)?;
     let vocal = &score.voices[abc::VOCAL];
     let end = tick(vocal.time);
@@ -126,7 +132,7 @@ pub fn midi_of(text: &str) -> Result<Vec<u8>, String> {
     let mut tracks = vec![conductor];
     for (name, voice, channel, program, velocity) in LINES {
         let notes = &score.voices[voice].notes;
-        if notes.is_empty() {
+        if notes.is_empty() || !keep(name) {
             continue;
         }
         let mut events = vec![(0, smf::text(smf::NAME, name)), (0, smf::program(channel, program))];
@@ -136,7 +142,7 @@ pub fn midi_of(text: &str) -> Result<Vec<u8>, String> {
         }
         tracks.push(events);
     }
-    if !vocal.chords.is_empty() {
+    if !vocal.chords.is_empty() && keep(CHORDS.0) {
         let (name, channel, program, velocity) = CHORDS;
         let mut events = vec![(0, smf::text(smf::NAME, name)), (0, smf::program(channel, program))];
         for (index, (onset, symbol)) in vocal.chords.iter().enumerate() {

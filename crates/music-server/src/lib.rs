@@ -49,6 +49,7 @@ mod sizes;
 pub mod net;
 mod saving;
 mod export;
+mod song_midi;
 mod skins;
 pub use saving::{set_save_dialog, SaveDialog};
 mod skill;
@@ -1674,6 +1675,8 @@ pub async fn serve() -> anyhow::Result<()> {
         .route("/v1/midi/transcribe", post(start_midi))
         .route("/v1/library/songs/{id}/midi", get(read_song_midi).put(write_song_midi).delete(delete_song_midi))
         .route("/v1/library/songs/{id}/midi/file", get(song_midi_file))
+        .route("/v1/library/songs/{id}/midi/parts", get(song_midi::list))
+        .route("/v1/library/songs/{id}/midi/parts/{part}", get(song_midi::file).post(song_midi::write))
         .route("/v1/training/datasets/{id}/items/{item}/files", get(dataset_song_files))
         .route("/v1/training/prepare/cancel", post(prepare::cancel))
         .route("/v1/training/datasets/{id}/take-as-is", post(prepare::take_as_is))

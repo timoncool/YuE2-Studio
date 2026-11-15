@@ -82,7 +82,9 @@ connected and the address to paste.
   you name, at a chosen rate and bit depth, brought to a loudness target if asked
   (`loudness: {target_lufs: -14, ceiling_dbtp: -1}` for streaming). `song_export_get`
   answers the file's path and what was done to the sound, `song_export_cancel` stops it;
-  the library song is not changed.
+  the library song is not changed. Its MIDI goes the same way: `library_song_midi_files`
+  lists the score's parts (score, lead, voice, chords) and the track's own MIDI, and
+  `library_song_midi_part_write` writes one into a folder.
 - **You write, not the studio's assistant.** The studio has a small local model (Gemma)
   for users without an agent. You write better: read `writing_guide` and
   `writing_examples` first and write the style, lyrics and scores yourself. Use

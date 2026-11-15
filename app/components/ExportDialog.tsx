@@ -5,6 +5,7 @@ import { useI18n } from '../context/I18nContext';
 import type { TranslationKey } from '../i18n/translations';
 import { apiUrl } from '../services/apiBase';
 import { saveFile } from '../services/saveFile';
+import { SongMidiFiles } from './SongMidiFiles';
 
 const EXPORT_EVENT = 'studio:export';
 
@@ -282,6 +283,8 @@ export const ExportDialog: React.FC = () => {
             </button>
           )}
         </div>
+
+        <SongMidiFiles songId={song.id} />
       </div>
     </div>,
     document.body,
