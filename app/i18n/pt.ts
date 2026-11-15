@@ -2017,6 +2017,7 @@ export const pt = {
     keepLoadedReasonUnmeasured: 'o peso deste conjunto mantido carregado não está medido',
     keepLoadedReasonUnknown: 'a memória livre da placa não foi lida',
     noTranscriber: 'Nenhum (sem versões)',
+    ownDecoder: 'O decodificador do próprio VAE',
     chunkOverlapLabel: 'Sobreposição dos blocos de som, s',
     chunkOverlapHint: 'Uma música mais longa do que a cache KV comporta recebe o som em partes. Cada parte seguinte volta a ouvir estes segundos da música antes de se juntar, para o som não cair depois da costura. Vazio é 30; 0 junta só com o fundido. Mais custa uns segundos por música.',
     maxSeqHintYue: 'Vazio é o contexto completo do modelo, 24576 tokens. Um valor mais pequeno poupa memória da placa, mas uma música longa será cortada.',

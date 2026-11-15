@@ -1233,7 +1233,7 @@ impl EngineOptions {
 /// restart would report a start that never becomes healthy - so it is refused
 /// while it is still a form field rather than a broken engine.
 fn studio_owned_flag(arguments: &[String]) -> Option<&str> {
-    const OWNED: [&str; 7] = ["--host", "--port", "--model", "--vae", "--companion", "--transcriber", "--adapters"];
+    const OWNED: [&str; 8] = ["--host", "--port", "--model", "--vae", "--vae-decoder", "--companion", "--transcriber", "--adapters"];
     arguments.iter().find_map(|argument| {
         let name = argument.split('=').next().unwrap_or(argument);
         OWNED.contains(&name).then_some(name)
@@ -6275,6 +6275,7 @@ async fn set_engine_models(state: &AppState) -> Result<music_engine::yue_server:
     Ok(music_engine::yue_server::YueModelFiles {
         backbone: root.join(&files.backbone),
         vae: root.join(&files.vae),
+        vae_decoder: files.vae_decoder.map(|name| root.join(name)),
         transcriber: files.transcriber.map(|name| root.join(name)),
         adapters: Some(adapters),
         companion: root.join(&files.companion),
@@ -6322,6 +6323,11 @@ async fn reload_engine_if_models_changed(state: &AppState) {
     };
     let unchanged = same(&current.backbone, &wanted.backbone)
         && same(&current.vae, &wanted.vae)
+        && match (&current.vae_decoder, &wanted.vae_decoder) {
+            (Some(a), Some(b)) => same(a, b),
+            (None, None) => true,
+            _ => false,
+        }
         && match (&current.transcriber, &wanted.transcriber) {
             (Some(a), Some(b)) => same(a, b),
             (None, None) => true,
