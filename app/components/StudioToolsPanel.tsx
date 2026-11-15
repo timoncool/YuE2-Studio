@@ -9,7 +9,7 @@ import { tempoAndKey } from '../services/songDownload';
 import { DevicePicker } from './DevicePicker';
 import { transcribeWithNativeOpenRouter } from '../services/nativeOpenRouter';
 import { apiUrl } from '../services/apiBase';
-import { openExternal } from '../services/externalLinks';
+import { openAudioEditor } from '../services/audioEditor';
 import { StemPlayer } from './StemPlayer';
 import { mapNativeLibrarySong } from '../services/nativeLibrary';
 import type { NativeLibrarySong } from '../types';
@@ -477,7 +477,7 @@ export function StudioToolsPanel({ initialSongId }: { initialSongId?: string | n
               onClick={() => {
                 if (!songId) return;
                 const url = apiUrl(`/v1/library/media/${encodeURIComponent(songId)}`);
-                void openExternal(apiUrl(`/editor/index.html?audioUrl=${encodeURIComponent(url)}`));
+                void openAudioEditor(url);
               }}
               disabled={!songId}
               className="inline-flex items-center gap-2 rounded-lg border border-zinc-300 px-3 py-2 text-xs font-semibold text-zinc-700 hover:border-pink-400 hover:text-pink-600 disabled:opacity-50 dark:border-white/15 dark:text-zinc-200"
@@ -490,7 +490,7 @@ export function StudioToolsPanel({ initialSongId }: { initialSongId?: string | n
                 type="button"
                 onClick={() => {
                   const url = apiUrl(`/v1/library/songs/${encodeURIComponent(songId)}/stems/${stem}`);
-                  void openExternal(apiUrl(`/editor/index.html?audioUrl=${encodeURIComponent(url)}`));
+                  void openAudioEditor(url);
                 }}
                 className="inline-flex items-center gap-2 rounded-lg border border-zinc-200 px-3 py-2 text-xs font-medium text-zinc-600 hover:border-pink-400 hover:text-pink-600 dark:border-white/10 dark:text-zinc-300"
               >

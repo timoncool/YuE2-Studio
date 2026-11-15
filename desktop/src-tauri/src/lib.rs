@@ -515,6 +515,35 @@ async fn open_visualizer_window(app: tauri::AppHandle) -> Result<(), String> {
     window.build().map(|_| ()).map_err(|error| error.to_string())
 }
 
+/// The audio editor (AudioMass) in a window of its own, or the one already
+/// open sent to the file asked for and brought forward. The editor is static
+/// files the local service serves, so the page is an external URL rather than
+/// one in the app bundle. Built here, like the visualiser, because every
+/// window of the app shares one WebView2 environment and must be opened with
+/// the same switches the main window was.
+#[tauri::command]
+async fn open_audio_editor_window(app: tauri::AppHandle, url: String) -> Result<(), String> {
+    use tauri::Manager as _;
+    let target: tauri::Url = url.parse().map_err(|error| format!("Not an editor address: {error}"))?;
+    if let Some(window) = app.get_webview_window("audio-editor") {
+        window.show().map_err(|error| error.to_string())?;
+        window.set_focus().map_err(|error| error.to_string())?;
+        return window.navigate(target).map_err(|error| error.to_string());
+    }
+    let title = format!("{} - Audio Editor", app.package_info().name);
+    let window = tauri::WebviewWindowBuilder::new(&app, "audio-editor", tauri::WebviewUrl::External(target))
+        .title(title)
+        .inner_size(1280.0, 800.0)
+        .min_inner_size(640.0, 400.0);
+    #[cfg(windows)]
+    let window = window.additional_browser_args(&webview_browser_arguments());
+    let window = match window_proxy_url() {
+        Some(url) => window.proxy_url(url),
+        None => window,
+    };
+    window.build().map(|_| ()).map_err(|error| error.to_string())
+}
+
 /// The window's shape: only these rectangles, [left, top, right, bottom] in
 /// physical pixels of the page, are the window, and a click anywhere else
 /// goes to whatever lies below. No rectangles: the whole window again. The
@@ -692,6 +721,7 @@ pub fn run() {
         .manage(Prompts::default())
         .invoke_handler(tauri::generate_handler![
             open_visualizer_window,
+            open_audio_editor_window,
             set_window_region,
             quit_prompt_shown,
             quit_prompt_cancelled,

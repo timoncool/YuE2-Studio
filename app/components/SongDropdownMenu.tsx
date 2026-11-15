@@ -4,8 +4,7 @@ import { useKaraokeStatus } from '../services/studioQueries';
 import { hasSungLines, karaokeReason } from '../services/karaoke';
 import { Song } from '../types';
 import { useI18n } from '../context/I18nContext';
-import { openExternal } from '../services/externalLinks';
-import { apiUrl } from '../services/apiBase';
+import { openAudioEditor } from '../services/audioEditor';
 import { downloadSongAudio } from '../services/songDownload';
 import { openMidi, openStems } from '../services/openStems';
 import { useAuth } from '../context/AuthContext';
@@ -213,8 +212,8 @@ export const SongDropdownMenu: React.FC<SongDropdownMenuProps> = ({
             ? song.audioUrl
             : `${window.location.origin}${song.audioUrl}`;
         // AudioMass is a fully client-side editor shipped as static assets, so
-        // it runs without any backend service.
-        void openExternal(apiUrl(`/editor/index.html?audioUrl=${encodeURIComponent(audioUrl)}`));
+        // it runs without any backend service - in a window of the studio.
+        void openAudioEditor(audioUrl);
         onClose();
     };
 
