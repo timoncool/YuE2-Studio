@@ -72,6 +72,8 @@ lzma-rust2.workspace = true
 
 [target.'cfg(windows)'.dependencies]
 windows-sys.workspace = true
+# The model folders moved to another disk leave a junction where they were (model_storage).
+junction = "2.1"
 
 [dev-dependencies]
 roxmltree = "0.21"

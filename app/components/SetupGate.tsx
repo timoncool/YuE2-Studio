@@ -12,6 +12,7 @@ import { AssistantRules } from './AssistantRules';
 import { KaraokeExtras } from './KaraokeSettings';
 import { HubTelemetryPreview } from './HubTelemetryPreview';
 import { OwnModelPanel } from './OwnModelPanel';
+import { ModelStorageCard } from './ModelStorageCard';
 import { setTelemetry } from '../services/studioHub';
 import { programName } from '../services/programs';
 import type { TranslationKey } from '../i18n/translations';
@@ -1140,6 +1141,7 @@ export const SetupGate: React.FC<{ onReady?: () => void; mode?: 'first-run' | 's
             })}
             {!chosenIds && <p className="text-xs text-amber-600 dark:text-amber-300">{t('incompleteSet')}</p>}
             {mode === 'settings' && <OwnModelPanel />}
+            <ModelStorageCard />
             <ManualDownloads
               files={missing.flatMap((id) => catalog?.components.find((component) => component.id === id) ?? [])}
               folder={status?.model_root}

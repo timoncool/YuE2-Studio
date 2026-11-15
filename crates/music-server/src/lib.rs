@@ -52,6 +52,7 @@ mod export;
 mod song_midi;
 mod ableton;
 mod ableton_project;
+mod model_storage;
 mod skins;
 pub use saving::{set_save_dialog, SaveDialog};
 mod skill;
@@ -1380,6 +1381,9 @@ pub async fn serve() -> anyhow::Result<()> {
             studio_log::log_to_file(&root);
             std::thread::spawn(move || install_record::sweep_aside(&root));
             std::thread::spawn(export::sweep);
+            if let Some(root) = studio_data_root() {
+                std::thread::spawn(move || model_storage::sweep(&root));
+            }
         }
         None => studio_log!("[ERROR] the studio has no data folder; its log goes to the console only"),
     }
@@ -1708,6 +1712,9 @@ pub async fn serve() -> anyhow::Result<()> {
         .route("/v1/activity", get(read_activity))
         .route("/v1/cover-templates", get(read_cover_templates).put(write_cover_templates))
         .route("/v1/library/file-tags", get(read_file_tags).put(write_file_tags))
+        .route("/v1/storage", get(model_storage::status).put(model_storage::change))
+        .route("/v1/storage/pick", post(model_storage::pick))
+        .route("/v1/storage/cancel", post(model_storage::cancel))
         .route("/v1/exports", post(export::start))
         .route("/v1/exports/{id}", get(export::status).delete(export::forget))
         .route("/v1/exports/{id}/cancel", post(export::cancel))
@@ -5707,6 +5714,20 @@ async fn pick_engine_executable() -> Result<Json<Value>, (StatusCode, Json<ApiEr
 async fn engine_at_work(state: &AppState) -> bool {
     let working = state.jobs.read().await.values().any(|job| matches!(job.status, MusicJobStatus::Running));
     working && state.engine.lock().await.as_mut().is_some_and(|engine| engine.process_alive())
+}
+
+/// Stops what holds the model files open - the engine this studio started and the writing assistant - so the files
+/// can be moved. Answers whether an engine was running, for the caller to start it again; the caller holds
+/// `engine_use`, so nothing starts one meanwhile.
+async fn stop_engine_for_files(state: &AppState) -> bool {
+    state.assistant_runtime.stop().await;
+    let mut supervisor = state.engine.lock().await;
+    let Some(engine) = supervisor.as_mut() else { return false };
+    let was_up = engine.process_alive();
+    if let Err(error) = tokio::task::block_in_place(|| engine.stop(std::time::Duration::from_secs(10))) {
+        studio_log!("[ERROR] the engine did not stop before its files were moved: {error}");
+    }
+    was_up
 }
 
 /// Starts the engine again with the saved options; an engine that does not start is counted for the hub by a reason

@@ -282,7 +282,7 @@ fn shape(name: &str, args: &Value, value: Value) -> Value {
     }
 }
 
-async fn status_summary() -> Value {
+pub(crate) async fn status_summary() -> Value {
     let (jobs, activity, training, processing, separation) = tokio::join!(fetch("/v1/music/jobs"), fetch("/v1/activity"), fetch("/v1/training"), fetch("/v1/processing"), fetch("/v1/separation/status"));
     let (midi, engine, own, restore) = tokio::join!(fetch("/v1/midi"), fetch("/engine/options"), fetch("/setup/own-model"), fetch("/v1/restore"));
     let running_activity: Vec<Value> = activity["activity"].as_array().into_iter().flatten().filter(|entry| entry["state"] == "running").cloned().collect();
@@ -308,7 +308,7 @@ async fn status_summary() -> Value {
 }
 
 /// Whether anything in a status summary is still at work.
-fn busy(summary: &Value) -> Vec<&'static str> {
+pub(crate) fn busy(summary: &Value) -> Vec<&'static str> {
     let unfinished = |run: &Value| run.is_object() && run["done"] != true;
     [
         ("song_jobs", summary["song_jobs"].as_array().is_some_and(|jobs| !jobs.is_empty())),
@@ -461,6 +461,8 @@ const JOURNAL: &[(&str, &str, &str)] = &[
     ("lora_update", "updated", "lora"),
     ("lora_delete", "deleted", "lora"),
     ("lora_export_comfyui", "exported", "lora"),
+    ("storage_set", "updated", "settings"),
+    ("storage_cancel", "cancelled", "settings"),
     ("song_export", "exported", "song"),
     ("song_export_live", "exported", "song"),
     ("library_song_midi_part_write", "exported", "midi"),
@@ -2155,6 +2157,24 @@ fn tools() -> &'static [Tool] {
                 call: |args| get(format!("/v1/library/songs/{}/files", segment(&text(args, "song_id")?))),
             },
             Tool {
+                name: "storage_get",
+                description: "Where the studio's downloads are kept - the model sets, LoRAs, the stem separator, karaoke, the audio.cpp runtime, the assistant's models, the trainer and Audio to MIDI: the folder (the studio's data folder, or one a person chose on another disk), the room free and in all on its disk, what each folder takes and whether it is kept elsewhere behind a link; and a move in progress - the folder at work and the bytes copied of it - or what the last move came to, folder by folder.",
+                schema: nothing,
+                call: |_| get("/v1/storage".into()),
+            },
+            Tool {
+                name: "storage_set",
+                description: "Move the studio's downloads to another disk, or back. directory: a folder (full path) - the studio makes its own folder inside it, moves each download folder there and leaves a link where it was, so nothing else changes; null brings them back into the studio's data folder. The library, datasets and training runs never move. The engine and the writing assistant stop for the move and the engine starts again after it; refused while a song, a download or any other work is running. On the same disk it is instant; to another disk the files are copied and checked first. storage_get tells how far it is; a folder that could not move says why and stays where it was.",
+                schema: || object(json!({ "directory": { "type": ["string", "null"] } }), &["directory"]),
+                call: |args| send(Method::PUT, "/v1/storage".into(), args.clone()),
+            },
+            Tool {
+                name: "storage_cancel",
+                description: "Stop a move started by storage_set after the file being copied: the folder at work stays where it was, those already moved stay moved.",
+                schema: nothing,
+                call: |_| post("/v1/storage/cancel".into(), json!({})),
+            },
+            Tool {
                 name: "song_export",
                 description: "Write a library song out as a new file; the song in the library is not changed. format: wav (bit_depth 16, 24 or 32f), flac (16 or 24) or mp3 (mp3_kbps 320, 256, 224, 192, 160 or 128). sample_rate: 44100, 48000, 88200 or 96000; left out, the song's own. loudness: {target_lufs, ceiling_dbtp} brings the song to a loudness target by one gain held under the true-peak ceiling (-14 and -1 is the common streaming reference, -23 and -1 EBU R 128); there is no limiter, and the report says when the ceiling stopped the gain short. Dither is added only when bits are taken away. folder: the folder on this computer to write into, a full path; the file never replaces another. Answers the export's id: song_export_get tells its stage and, when done, the file's path and what was done to the sound.",
                 schema: || object(json!({
@@ -3458,6 +3478,7 @@ mod tests {
         ("POST", "/v1/files/save", "a save dialog for the person: the tools write to the path the agent names"),
         ("POST", "/v1/files/save/{id}", "a save dialog for the person: the tools write to the path the agent names"),
         ("POST", "/v1/files/reveal", "shows a file in the person's file manager"),
+        ("POST", "/v1/storage/pick", "a folder dialog for the person: storage_set takes the folder's path"),
         ("GET", "/v1/exports/{id}/file", "the window's Save dialog reads an export from here: song_export writes into the folder the agent names and song_export_get answers the path"),
         ("GET", "/v1/library/songs/{id}/midi/parts/{part}", "the window's Save dialog reads a part's MIDI from here: library_song_midi_part_write writes it into the folder the agent names"),
         ("GET", "/v1/exports/live/{id}/file", "the window's Save dialog reads a Live project from here: song_export_live writes it into the folder the agent names"),
