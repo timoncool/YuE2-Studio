@@ -21,10 +21,17 @@
 //!   other order survives a normal exit and loses to a power cut: the manifest
 //!   would promise data that never landed, and the resumed download would skip
 //!   a hole.
+//! * One counted request per file. Hugging Face counts every request to
+//!   `/resolve/` as a download and answers it with a redirect to a signed CDN
+//!   address. The probe follows that redirect once and the pieces go to where it
+//!   led, so a file is one download on the model's page whatever its size (#249).
+//!   The signed address runs out after about an hour; the first piece that meets
+//!   the refusal resolves it again, once.
 //!
 //! Where a server does not serve ranges, this falls back to reading the whole
 //! body in order, which is what the studio did everywhere before.
 
+use std::collections::HashMap;
 use std::fs::{File, OpenOptions};
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -141,9 +148,48 @@ pub struct Plan {
     pub ranged: bool,
 }
 
+/// The address each resolved download was asked for, by the address it was
+/// redirected to: a signed CDN address runs out, and only the original can be
+/// resolved again.
+fn origins() -> &'static Mutex<HashMap<String, String>> {
+    static ORIGINS: OnceLock<Mutex<HashMap<String, String>>> = OnceLock::new();
+    ORIGINS.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+fn remember(resolved: &str, asked: &str) {
+    if resolved != asked {
+        if let Ok(mut map) = origins().lock() {
+            // an address resolved from another resolved one keeps the first original
+            let first = map.get(asked).cloned().unwrap_or_else(|| asked.to_owned());
+            map.insert(resolved.to_owned(), first);
+        }
+    }
+}
+
+fn origin_of(resolved: &str) -> Option<String> {
+    origins().lock().ok().and_then(|map| map.get(resolved).cloned())
+}
+
+/// A redirected address the server no longer honours (its signature ran out):
+/// resolved again, not retried as it is.
+#[derive(Debug)]
+struct Expired(String);
+
+impl std::fmt::Display for Expired {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
+impl std::error::Error for Expired {}
+
 /// Asks for one byte, which answers both questions at once: how big the file
 /// is, and whether ranges work at all. A HEAD answers the first only, and some
 /// CDNs answer it differently from the GET that follows.
+///
+/// The address returned is where the server's redirect led (the url itself when
+/// there was none): `fetch` takes its pieces from there, so the Hub counts the
+/// file once.
 pub async fn probe(http: &reqwest::Client, url: &str) -> Result<(Plan, String)> {
     let mut last = String::new();
     let mut unreachable = 0;
@@ -151,7 +197,10 @@ pub async fn probe(http: &reqwest::Client, url: &str) -> Result<(Plan, String)> 
     for attempt in 0..RETRIES {
         attempts = attempt + 1;
         match probe_once(http, url).await {
-            Ok(plan) => return Ok((plan, url.to_owned())),
+            Ok((plan, resolved)) => {
+                remember(&resolved, url);
+                return Ok((plan, resolved));
+            }
             Err(error) if error.is::<Refused>() => return Err(error),
             Err(error) => {
                 last = format!("{error:#}");
@@ -264,8 +313,9 @@ async fn send(http: &reqwest::Client, url: &str, range: Option<String>) -> Resul
     }
 }
 
-async fn probe_once(http: &reqwest::Client, url: &str) -> Result<Plan> {
+async fn probe_once(http: &reqwest::Client, url: &str) -> Result<(Plan, String)> {
     let response = send(http, url, Some("bytes=0-0".into())).await?;
+    let resolved = response.url().to_string();
     if response.status() == reqwest::StatusCode::PARTIAL_CONTENT {
         let total = response
             .headers()
@@ -275,7 +325,7 @@ async fn probe_once(http: &reqwest::Client, url: &str) -> Result<Plan> {
             .and_then(|value| value.trim().parse::<u64>().ok())
             .unwrap_or(0);
         if total > 0 {
-            return Ok(Plan { total, ranged: true });
+            return Ok((Plan { total, ranged: true }, resolved));
         }
     }
     if response.status().is_client_error() {
@@ -284,7 +334,21 @@ async fn probe_once(http: &reqwest::Client, url: &str) -> Result<Plan> {
     if !response.status().is_success() {
         bail!("{url} answered {}", response.status());
     }
-    Ok(Plan { total: response.content_length().unwrap_or(0), ranged: false })
+    Ok((Plan { total: response.content_length().unwrap_or(0), ranged: false }, resolved))
+}
+
+/// A signed address ran out under a piece: the first piece to meet it resolves
+/// the original again, and the rest find the new address already in place.
+async fn refresh(http: &reqwest::Client, current: &tokio::sync::Mutex<String>, failed: &str) -> Result<()> {
+    let mut url = current.lock().await;
+    if *url != failed {
+        return Ok(());
+    }
+    let origin = origin_of(failed).ok_or_else(|| anyhow!("{failed} ran out and has no address to resolve it again from"))?;
+    let (_, fresh) = probe_once(http, &origin).await?;
+    remember(&fresh, &origin);
+    *url = fresh;
+    Ok(())
 }
 
 /// A server that said no (a 4xx; "too many requests" is waited out in `send`): asking again gets the same answer.
@@ -449,13 +513,16 @@ pub async fn fetch(
     // rest, and so does the user pressing cancel.
     let stop = cancel;
     let failure: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(None));
+    // Shared, not copied: a signed address resolved again by one piece is the
+    // address every other piece takes next.
+    let current = Arc::new(tokio::sync::Mutex::new(url.to_string()));
 
     // Tasks, not connections: the semaphore above decides how many of them are
     // talking to a server at any moment, so a second download gets a turn.
     let workers = (0..SLOTS.min(queue.lock().map(|queue| queue.len()).unwrap_or(1)).max(1)).map(|_| {
-        let (http, url, file, queue, written, stop, failure, manifest) = (
+        let (http, current, file, queue, written, stop, failure, manifest) = (
             http.clone(),
-            url.to_string(),
+            current.clone(),
             file.clone(),
             queue.clone(),
             written.clone(),
@@ -469,7 +536,7 @@ pub async fn fetch(
                     return;
                 }
                 let Some((start, end, have)) = ({ let mut queue = queue.lock().unwrap(); queue.pop_front() }) else { return };
-                if let Err(error) = piece(&http, &url, &file, start, end, have, &written, &stop, &manifest).await {
+                if let Err(error) = piece(&http, &current, &file, start, end, have, &written, &stop, &manifest).await {
                     stop.store(true, Ordering::Relaxed);
                     *failure.lock().unwrap() = Some(error.to_string());
                     return;
@@ -493,7 +560,7 @@ pub async fn fetch(
 /// attempt brought stays on the disk and the next one asks for the rest.
 async fn piece(
     http: &reqwest::Client,
-    url: &str,
+    current: &tokio::sync::Mutex<String>,
     file: &Arc<File>,
     start: u64,
     end: u64,
@@ -509,8 +576,10 @@ async fn piece(
             bail!("cancelled");
         }
         let mut got = 0u64;
-        let outcome = once(http, url, file, start, end, have, written, &mut got, stop, manifest).await;
+        let url = current.lock().await.clone();
+        let outcome = once(http, &url, file, start, end, have, written, &mut got, stop, manifest).await;
         have += got;
+        empty = if got > 0 { 0 } else { empty + 1 };
         let last = match outcome {
             Ok(()) if have == wanted => break,
             Ok(()) => format!("incomplete range: {have} of {wanted} bytes"),
@@ -518,10 +587,17 @@ async fn piece(
                 if stop.load(Ordering::Relaxed) {
                     bail!("cancelled");
                 }
-                error.to_string()
+                if error.is::<Expired>() && empty < RETRIES {
+                    // resolved again at once: the wait below is for a bad line, not for a signature
+                    match refresh(http, current, &url).await {
+                        Ok(()) => continue,
+                        Err(again) => format!("{error}; resolving it again: {again:#}"),
+                    }
+                } else {
+                    error.to_string()
+                }
             }
         };
-        empty = if got > 0 { 0 } else { empty + 1 };
         if empty >= RETRIES {
             return Err(anyhow!("range {}-{end} failed after {RETRIES} attempts: {last}", start + have));
         }
@@ -549,6 +625,9 @@ async fn once(
 ) -> Result<()> {
     let from = start + have;
     let response = send(http, url, Some(format!("bytes={from}-{end}"))).await?;
+    if matches!(response.status().as_u16(), 401 | 403 | 410) && origin_of(url).is_some() {
+        return Err(Expired(format!("range {from}-{end}: the redirected address answered {}", response.status())).into());
+    }
     if response.status() != reqwest::StatusCode::PARTIAL_CONTENT {
         bail!("range {from}-{end}: answered {} where 206 was expected", response.status());
     }
@@ -753,6 +832,89 @@ mod tests {
         assert_eq!(std::fs::read(&part).unwrap(), body, "the bytes the manifest promised were not on the disk");
         assert_eq!(*asked.lock().unwrap(), vec![(0, total - 1)]);
         assert_eq!(written.load(Ordering::Relaxed), total);
+        std::fs::remove_dir_all(&folder).ok();
+    }
+
+
+    /// A file served behind a redirect, as the Hub serves one: `/resolve/` answers 302 to a signed address, which serves ranges. Counts the
+    /// requests to `/resolve/`; the signed address stops being honoured after `honour` ranges when `honour` is set.
+    async fn hub_with_cdn(body: Arc<Vec<u8>>, honour: Option<usize>) -> (String, Arc<std::sync::atomic::AtomicUsize>) {
+        use axum::http::{header, HeaderMap, StatusCode};
+        use axum::response::IntoResponse;
+        use std::sync::atomic::AtomicUsize;
+        let resolves = Arc::new(AtomicUsize::new(0));
+        let served = Arc::new(AtomicUsize::new(0));
+        let (counted, cdn_served) = (resolves.clone(), served.clone());
+        let app = axum::Router::new()
+            .route(
+                "/m/resolve/rev/model.gguf",
+                axum::routing::get(move || {
+                    let token = counted.fetch_add(1, Ordering::SeqCst) + 1;
+                    async move { (StatusCode::FOUND, [(header::LOCATION, format!("/cdn/model.gguf?token={token}"))]).into_response() }
+                }),
+            )
+            .route(
+                "/cdn/model.gguf",
+                axum::routing::get(move |query: axum::extract::RawQuery, headers: HeaderMap| {
+                    let (body, served) = (body.clone(), cdn_served.clone());
+                    async move {
+                        let token: usize = query.0.unwrap_or_default().trim_start_matches("token=").parse().unwrap_or(0);
+                        let n = served.fetch_add(1, Ordering::SeqCst);
+                        if honour.is_some_and(|honour| token == 1 && n >= honour) {
+                            return StatusCode::FORBIDDEN.into_response();
+                        }
+                        let range = headers.get(header::RANGE).and_then(|value| value.to_str().ok()).unwrap_or("bytes=0-");
+                        let (a, b) = range.trim_start_matches("bytes=").split_once('-').unwrap();
+                        let a: usize = a.parse().unwrap();
+                        let b: usize = b.parse().unwrap_or(body.len() - 1).min(body.len() - 1);
+                        (
+                            StatusCode::PARTIAL_CONTENT,
+                            [(header::CONTENT_RANGE, format!("bytes {a}-{b}/{}", body.len()))],
+                            body[a..=b].to_vec(),
+                        )
+                            .into_response()
+                    }
+                }),
+            );
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        tokio::spawn(async move { axum::serve(listener, app).await.ok() });
+        (format!("http://{address}/m/resolve/rev/model.gguf"), resolves)
+    }
+
+    fn body_of(length: usize) -> Arc<Vec<u8>> {
+        Arc::new((0..length).map(|i| (i * 31 + i / 7) as u8).collect())
+    }
+
+    /// #249: a file is one request to `/resolve/`; its pieces come from the address the redirect led to.
+    #[tokio::test]
+    async fn a_redirected_file_is_resolved_once_and_its_pieces_come_from_where_it_led() {
+        let body = body_of(200_123);
+        let (url, resolves) = hub_with_cdn(body.clone(), None).await;
+        let http = reqwest::Client::builder().no_proxy().build().unwrap();
+        let (plan, resolved) = probe(&http, &url).await.unwrap();
+        assert!(plan.ranged && plan.total == body.len() as u64);
+        assert!(resolved.contains("/cdn/model.gguf?token=1"), "{resolved}");
+        let folder = std::env::temp_dir().join(format!("resolve-once-{}", uuid::Uuid::now_v7()));
+        let part = folder.join("model.gguf.part");
+        fetch(&http, &resolved, &part, plan, Arc::new(AtomicU64::new(0)), Arc::new(AtomicBool::new(false))).await.unwrap();
+        assert_eq!(std::fs::read(&part).unwrap(), *body);
+        assert_eq!(resolves.load(Ordering::SeqCst), 1, "one counted request for the whole file");
+        std::fs::remove_dir_all(&folder).ok();
+    }
+
+    /// A signed address that has run out is resolved again once, and the download finishes from the new one.
+    #[tokio::test]
+    async fn a_signed_address_that_ran_out_is_resolved_again_once() {
+        let body = body_of(300_009);
+        let (url, resolves) = hub_with_cdn(body.clone(), Some(1)).await;
+        let http = reqwest::Client::builder().no_proxy().build().unwrap();
+        let (plan, resolved) = probe(&http, &url).await.unwrap();
+        let folder = std::env::temp_dir().join(format!("resolve-again-{}", uuid::Uuid::now_v7()));
+        let part = folder.join("model.gguf.part");
+        fetch(&http, &resolved, &part, plan, Arc::new(AtomicU64::new(0)), Arc::new(AtomicBool::new(false))).await.unwrap();
+        assert_eq!(std::fs::read(&part).unwrap(), *body);
+        assert_eq!(resolves.load(Ordering::SeqCst), 2, "the probe, and once more when the signature ran out");
         std::fs::remove_dir_all(&folder).ok();
     }
 
