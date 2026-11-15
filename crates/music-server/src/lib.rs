@@ -676,6 +676,9 @@ struct EngineSubmitResponse {
 #[derive(Debug, Deserialize)]
 struct EngineJobResponse {
     status: String,
+    /// The tracks of a running job that are finished and can be fetched one by one; an engine before 4.1 names none.
+    #[serde(default)]
+    tracks_ready: usize,
 }
 
 struct EngineResultResponse {
@@ -5625,7 +5628,8 @@ async fn update_engine_options(
     let _ = persist_studio_settings(&state).await;
 
     let mut restarted = false;
-    if changed && state.music_server.health().await {
+    // a song being made is not interrupted for a saved option: the value reaches the engine at its next start
+    if changed && !engine_at_work(&state).await && state.music_server.health().await {
         let _restart = state.engine_use.write().await;
         restart_engine(&state).await.map_err(|error| api_error(StatusCode::SERVICE_UNAVAILABLE, error))?;
         restarted = true;
@@ -5645,7 +5649,7 @@ async fn reset_fitted_max_seq(State(state): State<AppState>) -> Result<Json<Valu
     let removed = state.engine_options.write().await.fitted_max_seq.remove(&key).is_some();
     persist_studio_settings(&state).await.map_err(|error| api_error(StatusCode::INTERNAL_SERVER_ERROR, format!("the settings could not be saved: {error}")))?;
     let mut restarted = false;
-    if removed && state.music_server.health().await {
+    if removed && !engine_at_work(&state).await && state.music_server.health().await {
         let _restart = state.engine_use.write().await;
         restart_engine(&state).await.map_err(|error| api_error(StatusCode::SERVICE_UNAVAILABLE, error))?;
         restarted = true;
@@ -5654,6 +5658,10 @@ async fn reset_fitted_max_seq(State(state): State<AppState>) -> Result<Json<Valu
 }
 
 async fn restart_local_engine(State(state): State<AppState>) -> Result<Json<Value>, (StatusCode, Json<ApiError>)> {
+    // the button is obeyed; the song it ends is named in the log beside its last line
+    if engine_at_work(&state).await {
+        music_engine::yue_server::note_in_log("the engine was restarted from the window while a song was being made; that song is lost");
+    }
     let _restart = state.engine_use.write().await;
     restart_engine(&state).await.map_err(|error| api_error(StatusCode::SERVICE_UNAVAILABLE, error))?;
     Ok(Json(serde_json::json!({ "engine_id": PRIMARY_MUSIC_ENGINE_ID, "restarted": true })))
@@ -10910,6 +10918,8 @@ async fn follow_job(state: &AppState, job_id: &str, started: &mut Option<Option<
     let (state, job_id) = (state.clone(), job_id.to_string());
     {
         let mut unreachable = 0u32;
+        // the tracks taken into the library while the job still runs
+        let mut early: Vec<CompletedSong> = Vec::new();
         loop {
             tokio::time::sleep(std::time::Duration::from_millis(1000)).await;
             let Some(existing) = state.jobs.read().await.get(&job_id).cloned() else { return };
@@ -10941,22 +10951,43 @@ async fn follow_job(state: &AppState, job_id: &str, started: &mut Option<Option<
             if remote.status == "running" && started.is_none() {
                 *started = Some((!another_job_under_way(&state, &job_id).await).then(std::time::Instant::now));
             }
+            // a job of several tracks hands each one over as it is finished, so the first is heard while the rest are made
+            let asked = tracks_asked(&existing.generation_settings);
+            if remote.status == "running" && asked > 1 && remote.tracks_ready > early.len() {
+                match import_ready_track(&state, &existing, &job_id, early.len(), asked).await {
+                    Ok(songs) => {
+                        if let Some(playlist) = existing.playlist_id.as_deref() {
+                            if let Err(error) = add_to_playlist(&state.library, playlist, songs.iter().map(|song| song.id.clone())) {
+                                studio_log!("[ERROR] a finished track of job {job_id} could not be added to the playlist: {error:#}");
+                            }
+                        }
+                        early.extend(songs);
+                        if let Some(job) = state.jobs.write().await.get_mut(&job_id).filter(|job| !matches!(job.status, MusicJobStatus::Cancelled)) {
+                            job.song = early.first().cloned();
+                            job.songs = early.clone();
+                        }
+                    }
+                    // the track stays with the engine and is taken with the rest when the job ends, where a failure is the job's
+                    Err(error) => studio_log!("[ERROR] a finished track of job {job_id} was not taken while the job runs: {error:#}"),
+                }
+            }
             if remote.status == "done" {
-                let imported = import_completed_result(&state, &existing, &job_id).await;
+                let imported = import_completed_result(&state, &existing, &job_id, early.len()).await;
                 let mut jobs = state.jobs.write().await;
                 let Some(job) = jobs.get_mut(&job_id) else { return };
                 if matches!(job.status, MusicJobStatus::Cancelled) { return; }
                 match imported {
-                    Ok(songs) => {
+                    Ok(rest) => {
                         job.status = MusicJobStatus::Completed;
                         job.phase = MusicJobPhase::Completed;
-                        job.song = songs.first().cloned();
                         job.message = "The engine finished this job and its tracks were imported into the library.".into();
                         if let Some(playlist) = existing.playlist_id.as_deref() {
-                            if let Err(error) = add_to_playlist(&state.library, playlist, songs.iter().map(|song| song.id.clone())) {
+                            if let Err(error) = add_to_playlist(&state.library, playlist, rest.iter().map(|song| song.id.clone())) {
                                 job.message = format!("{} They could not be added to the playlist: {error:#}", job.message);
                             }
                         }
+                        let songs: Vec<CompletedSong> = early.iter().cloned().chain(rest).collect();
+                        job.song = songs.first().cloned();
                         job.songs = songs;
                     }
                     Err(error) => job.fail(SongError::ImportFailed(error.to_string())),
@@ -10982,9 +11013,29 @@ fn songs_seconds(songs: &[CompletedSong]) -> f64 {
     songs.iter().filter_map(|made| made.song.metadata.get("duration_seconds").and_then(Value::as_f64)).sum()
 }
 
-async fn import_completed_result(state: &AppState, job: &MusicJob, job_id: &str) -> anyhow::Result<Vec<CompletedSong>> {
+/// The tracks a request asks for: its songs times the variations of each.
+fn tracks_asked(settings: &Value) -> usize {
+    let of = |key: &str| settings.get(key).and_then(Value::as_u64).unwrap_or(1).max(1) as usize;
+    of("lm_batch_size") * of("synth_batch_size")
+}
+
+/// The finished job's tracks into the library, past the first `taken` that went there while it ran.
+async fn import_completed_result(state: &AppState, job: &MusicJob, job_id: &str, taken: usize) -> anyhow::Result<Vec<CompletedSong>> {
     let result = state.music_server.result(job_id).await?;
     let tracks = engine_result::parse_multipart_result(&result.content_type, &result.body)?;
+    let count = tracks.len();
+    import_tracks(state, job, job_id, tracks.into_iter().enumerate().skip(taken).collect(), count).await
+}
+
+/// One finished track of a job that still runs into the library, so it is heard while the rest are made.
+async fn import_ready_track(state: &AppState, job: &MusicJob, job_id: &str, index: usize, count: usize) -> anyhow::Result<Vec<CompletedSong>> {
+    let result = state.music_server.result_track(job_id, index).await?;
+    let tracks = engine_result::parse_multipart_result(&result.content_type, &result.body)?;
+    import_tracks(state, job, job_id, tracks.into_iter().map(|track| (index, track)).collect(), count).await
+}
+
+/// `tracks` carry their place among the `count` the job makes, which numbers the titles of more than one.
+async fn import_tracks(state: &AppState, job: &MusicJob, job_id: &str, tracks: Vec<(usize, engine_result::ResultTrack)>, count: usize) -> anyhow::Result<Vec<CompletedSong>> {
     // a song of the person's own model counts as the set `own`, its file named on the song only
     let own_model = state.own_backbone.read().await.clone();
     let kv_cache = *state.kv_cache_running.read().await;
@@ -10992,9 +11043,8 @@ async fn import_completed_result(state: &AppState, job: &MusicJob, job_id: &str)
     // The engine's defaults fill whatever the request left out, so a stored
     // track records every value it was made with, not only the ones typed.
     let engine_defaults = state.music_server.props().await.ok().and_then(|props| props.get("defaults").cloned());
-    let count = tracks.len();
-    let mut imported = Vec::with_capacity(count);
-    for (index, track) in tracks.into_iter().enumerate() {
+    let mut imported = Vec::with_capacity(tracks.len());
+    for (index, track) in tracks {
         let mut replay = track.replay_request;
         let style = replay.get("style").and_then(Value::as_str).unwrap_or_default().to_owned();
         let lyrics = replay.get("lyrics").and_then(Value::as_str).unwrap_or_default().to_owned();
@@ -11618,7 +11668,16 @@ impl EngineClient {
     }
 
     async fn result(&self, job_id: &str) -> anyhow::Result<EngineResultResponse> {
-        let response = self.send(self.http.get(self.url("/job")).query(&[("id", job_id), ("result", "1")]), true).await?;
+        self.result_of(&[("id", job_id), ("result", "1")]).await
+    }
+
+    /// One finished track of a job that still runs, in the form of the whole result.
+    async fn result_track(&self, job_id: &str, index: usize) -> anyhow::Result<EngineResultResponse> {
+        self.result_of(&[("id", job_id), ("result", "1"), ("track", &index.to_string())]).await
+    }
+
+    async fn result_of(&self, query: &[(&str, &str)]) -> anyhow::Result<EngineResultResponse> {
+        let response = self.send(self.http.get(self.url("/job")).query(query), true).await?;
         let status = response.status();
         if !status.is_success() {
             anyhow::bail!("yue-server returned {status}: {}", response.text().await?);
