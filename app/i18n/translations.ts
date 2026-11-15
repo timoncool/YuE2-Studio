@@ -14,6 +14,7 @@ import { midiEditorStrings } from './midiEditor';
 import { noticeStrings } from './notices';
 import { shellStrings } from './shell';
 import { exportStrings } from './exportDialog';
+import { stemMixerStrings } from './stemMixer';
 
 export type Language = 'en' | 'zh' | 'ja' | 'ko' | 'ru' | 'pt';
 
@@ -27,16 +28,16 @@ export const LANGUAGE_NAMES: Record<Language, string> = {
   pt: 'Português',
 };
 
-const enAll = { ...en, ...yue2.en, ...adapterStrings.en, ...processingStrings.en, ...trainingStrings.en, ...hubStrings.en, ...scoreStrings.en, ...midiEditorStrings.en, ...noticeStrings.en, ...shellStrings.en, ...exportStrings.en };
+const enAll = { ...en, ...yue2.en, ...adapterStrings.en, ...processingStrings.en, ...trainingStrings.en, ...hubStrings.en, ...scoreStrings.en, ...midiEditorStrings.en, ...noticeStrings.en, ...shellStrings.en, ...exportStrings.en, ...stemMixerStrings.en };
 
 export type TranslationKey = keyof typeof enAll;
 
 export const translations: Record<Language, Partial<Record<TranslationKey, string>>> = {
   en: enAll,
-  zh: { ...zh, ...yue2.zh, ...adapterStrings.zh, ...processingStrings.zh, ...trainingStrings.zh, ...hubStrings.zh, ...scoreStrings.zh, ...midiEditorStrings.zh, ...noticeStrings.zh, ...shellStrings.zh, ...exportStrings.zh },
-  ja: { ...ja, ...yue2.ja, ...adapterStrings.ja, ...processingStrings.ja, ...trainingStrings.ja, ...hubStrings.ja, ...scoreStrings.ja, ...midiEditorStrings.ja, ...noticeStrings.ja, ...shellStrings.ja, ...exportStrings.ja },
-  ko: { ...ko, ...yue2.ko, ...adapterStrings.ko, ...processingStrings.ko, ...trainingStrings.ko, ...hubStrings.ko, ...scoreStrings.ko, ...midiEditorStrings.ko, ...noticeStrings.ko, ...shellStrings.ko, ...exportStrings.ko },
-  ru: { ...ru, ...yue2.ru, ...adapterStrings.ru, ...processingStrings.ru, ...trainingStrings.ru, ...hubStrings.ru, ...scoreStrings.ru, ...midiEditorStrings.ru, ...noticeStrings.ru, ...shellStrings.ru, ...exportStrings.ru },
+  zh: { ...zh, ...yue2.zh, ...adapterStrings.zh, ...processingStrings.zh, ...trainingStrings.zh, ...hubStrings.zh, ...scoreStrings.zh, ...midiEditorStrings.zh, ...noticeStrings.zh, ...shellStrings.zh, ...exportStrings.zh, ...stemMixerStrings.zh },
+  ja: { ...ja, ...yue2.ja, ...adapterStrings.ja, ...processingStrings.ja, ...trainingStrings.ja, ...hubStrings.ja, ...scoreStrings.ja, ...midiEditorStrings.ja, ...noticeStrings.ja, ...shellStrings.ja, ...exportStrings.ja, ...stemMixerStrings.ja },
+  ko: { ...ko, ...yue2.ko, ...adapterStrings.ko, ...processingStrings.ko, ...trainingStrings.ko, ...hubStrings.ko, ...scoreStrings.ko, ...midiEditorStrings.ko, ...noticeStrings.ko, ...shellStrings.ko, ...exportStrings.ko, ...stemMixerStrings.ko },
+  ru: { ...ru, ...yue2.ru, ...adapterStrings.ru, ...processingStrings.ru, ...trainingStrings.ru, ...hubStrings.ru, ...scoreStrings.ru, ...midiEditorStrings.ru, ...noticeStrings.ru, ...shellStrings.ru, ...exportStrings.ru, ...stemMixerStrings.ru },
   // one file for the whole language: what it lacks is read in English, never as a bare key
-  pt: { ...enAll, ...pt, ...exportStrings.pt },
+  pt: { ...enAll, ...pt, ...exportStrings.pt, ...stemMixerStrings.pt },
 };
