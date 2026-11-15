@@ -11,10 +11,11 @@
 //! process ends, however it ends.
 //!
 //! Linux has no job objects. There the answer is `PR_SET_PDEATHSIG`, set in the
-//! forked child before it execs; see `configure_child_process` in
-//! `music-engine`'s `yue_server`. This module's `adopt` therefore does nothing
-//! off Windows - it is the spawn-side hook, not this one, that keeps a Linux
-//! engine from being orphaned.
+//! forked child before it execs - but that signal is bound to the *thread* that
+//! made the fork, not to the process (see `ensure_dies_with_parent`), so a Linux
+//! child is spawned from a thread of our own that is never retired:
+//! `spawn_dying_with_parent`. This module's `adopt` therefore does nothing off
+//! Windows - it is the job-object side of the binding, not the only one.
 
 use std::process::Child;
 
@@ -56,84 +57,131 @@ pub fn adopt_handle(handle: isize) {
 #[cfg(not(windows))]
 pub fn adopt_handle(_handle: isize) {}
 
-/// Wires up the spawn so the child cannot outlive this process.
+/// Arms the parent-death signal on the child, set inside `pre_exec`.
 ///
-/// Call this on the `Command` immediately before `spawn`. On Linux it is the
-/// only thing standing between a hard-killed studio and a `yue-server` left
-/// holding the graphics card and the engine port - which then blocks the next
-/// start with a bind failure that looks like a completely different problem.
+/// The invariant this rests on: `spawn_dying_with_parent` below is its only
+/// caller, and it calls this from the thread that spawns the child.
+/// `PR_SET_PDEATHSIG` is per-*thread* - the kernel sends the signal when the
+/// thread that made the fork terminates, not when the process does - so arming
+/// it from a thread that retires SIGKILLs a perfectly healthy child. That is
+/// what `spawn_on_the_thread_that_never_retires` is for; see issue #246.
 ///
-/// A no-op elsewhere: on Windows `adopt` below covers the same ground with a
-/// job object after the child exists; macOS has no parent-death signal.
-pub fn ensure_dies_with_parent(command: &mut std::process::Command) {
-    #[cfg(target_os = "linux")]
-    {
-        use std::os::unix::process::CommandExt;
+/// Linux only: Windows binds the child with a job object in `adopt` once it
+/// exists, and macOS has no parent-death signal.
+#[cfg(target_os = "linux")]
+pub(crate) fn ensure_dies_with_parent(command: &mut std::process::Command) {
+    use std::os::unix::process::CommandExt;
 
-        let parent = std::process::id() as libc::pid_t;
-        // `PR_SET_PDEATHSIG` is per-thread and cleared across a successful
-        // `execve`, so it has to be set in the forked child, which is what
-        // `pre_exec` brackets. Everything inside is async-signal-safe.
-        unsafe {
-            command.pre_exec(move || {
-                // SIGKILL rather than SIGTERM: a model server holds no unsaved
-                // state, and a signal it may handle slowly (the engine ignores
-                // SIGTERM mid-inference) would leave exactly the orphan this
-                // exists to prevent.
-                if libc::prctl(libc::PR_SET_PDEATHSIG, libc::SIGKILL) != 0 {
-                    return Err(std::io::Error::last_os_error());
-                }
-                // The parent may have died between fork and the call above, in
-                // which case the signal will never come. Noticing turns a quiet
-                // orphan into a failed start the supervisor can retry.
-                if libc::getppid() != parent {
-                    return Err(std::io::Error::other("the studio exited while the child was starting"));
-                }
-                Ok(())
-            });
-        }
-    }
-    #[cfg(not(target_os = "linux"))]
-    {
-        let _ = command;
+    let parent = std::process::id() as libc::pid_t;
+    // `PR_SET_PDEATHSIG` is cleared across a successful `execve`, so it has to
+    // be set in the forked child, which is what `pre_exec` brackets. Everything
+    // inside is async-signal-safe.
+    unsafe {
+        command.pre_exec(move || {
+            // SIGKILL rather than SIGTERM: a model server holds no unsaved
+            // state, and a signal it may handle slowly (the engine ignores
+            // SIGTERM mid-inference) would leave exactly the orphan this
+            // exists to prevent.
+            if libc::prctl(libc::PR_SET_PDEATHSIG, libc::SIGKILL) != 0 {
+                return Err(std::io::Error::last_os_error());
+            }
+            // The parent may have died between fork and the call above, in
+            // which case the signal will never come. Noticing turns a quiet
+            // orphan into a failed start the supervisor can retry.
+            if libc::getppid() != parent {
+                return Err(std::io::Error::other("the studio exited while the child was starting"));
+            }
+            Ok(())
+        });
     }
 }
 
-/// Starts the child of a `Command` prepared with [`ensure_dies_with_parent`].
+/// Spawns `command` so the child cannot outlive this process, however it ends.
 ///
-/// On Linux the parent-death signal follows the thread that forked the child, not the process: a child started from
-/// a runtime worker is killed when that worker is retired, with the studio alive. One thread that never ends starts
-/// every such child.
-pub fn spawn_bound(command: &mut std::process::Command) -> std::io::Result<std::process::Child> {
+/// The engine and the assistant sidecar go through here instead of
+/// `Command::spawn`: their supervisor is not enough when the studio is killed
+/// rather than closed, which is the case this exists for.
+///
+/// Windows does the binding after the child exists, with the job object `adopt`
+/// assigns; macOS leaves it to the supervisor. Linux uses `PR_SET_PDEATHSIG`,
+/// and that signal is per-thread, so the spawn happens on
+/// `spawn_on_the_thread_that_never_retires` below.
+pub fn spawn_dying_with_parent(command: std::process::Command) -> std::io::Result<Child> {
     #[cfg(target_os = "linux")]
     {
-        use std::sync::{mpsc, Mutex};
-
-        struct Order(*mut std::process::Command, mpsc::SyncSender<std::io::Result<std::process::Child>>);
-        // The pointer is read only while the caller below waits for the answer.
-        unsafe impl Send for Order {}
-
-        static SPAWNER: Mutex<Option<mpsc::Sender<Order>>> = Mutex::new(None);
-        let ended = || std::io::Error::other("the thread that starts child processes has ended");
-        let (answer, spawned) = mpsc::sync_channel(1);
-        {
-            let mut spawner = SPAWNER.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
-            if spawner.is_none() {
-                let (orders, queue) = mpsc::channel::<Order>();
-                std::thread::Builder::new().name("child-spawner".into()).spawn(move || {
-                    for Order(command, answer) in queue {
-                        let _ = answer.send(unsafe { (*command).spawn() });
-                    }
-                })?;
-                *spawner = Some(orders);
-            }
-            spawner.as_ref().ok_or_else(ended)?.send(Order(command, answer)).map_err(|_| ended())?;
-        }
-        spawned.recv().map_err(|_| ended())?
+        spawn_on_the_thread_that_never_retires(command)
     }
     #[cfg(not(target_os = "linux"))]
     {
+        let mut command = command;
         command.spawn()
+    }
+}
+
+/// Spawns `command` from a thread that is never retired, so the parent-death
+/// signal set in the child refers to a thread whose termination really does mean
+/// "this process is going away".
+///
+/// One thread serves every child: it is created the first time one is spawned and
+/// then blocks on a channel for the rest of the process' life. Its termination at
+/// exit is what makes the kernel send the signal - which is why the loop below has
+/// no exit.
+#[cfg(target_os = "linux")]
+fn spawn_on_the_thread_that_never_retires(command: std::process::Command) -> std::io::Result<Child> {
+    use std::panic::{catch_unwind, AssertUnwindSafe};
+    use std::sync::mpsc::{self, Sender};
+    use std::sync::OnceLock;
+
+    type SpawnRequest = (std::process::Command, Sender<std::io::Result<Child>>);
+
+    static SPAWNER: OnceLock<Sender<SpawnRequest>> = OnceLock::new();
+
+    let spawner = SPAWNER.get_or_init(|| {
+        let (spawner, requests) = mpsc::channel::<SpawnRequest>();
+        let thread = std::thread::Builder::new().name("child-spawner".into()).spawn(move || {
+            for (mut command, answer) in requests {
+                // Armed here rather than at the call site: this is the thread that
+                // forks, so this is the thread the signal will be tied to. The
+                // catch is not belt and braces: a panic here would unwind the loop
+                // and take every child already spawned with it, all of them bound
+                // to this thread's death, so it becomes an error for the one caller
+                // that asked instead.
+                let spawned = catch_unwind(AssertUnwindSafe(|| {
+                    ensure_dies_with_parent(&mut command);
+                    command.spawn()
+                }))
+                .unwrap_or_else(|_| Err(std::io::Error::other("panicked while starting a child")));
+                let _ = answer.send(spawned);
+            }
+        });
+        match thread {
+            Ok(_) => spawner,
+            // No thread to spawn from. Dropping the receiver makes every send
+            // below fail, and the caller spawns in place without the signal -
+            // better no binding than one tied to a thread that retires - and says
+            // so, because the child is now unbound for the rest of the process.
+            Err(error) => {
+                eprintln!(
+                    "yue2-studio: no thread to spawn children from ({error}); they will not be bound to this process' lifetime"
+                );
+                let (spawner, requests) = mpsc::channel::<SpawnRequest>();
+                drop(requests);
+                spawner
+            }
+        }
+    });
+
+    let (answer, answered) = mpsc::channel();
+    match spawner.send((command, answer)) {
+        Ok(()) => answered.recv().unwrap_or_else(|_| {
+            Err(std::io::Error::other("the child could not be spawned: the thread that spawns it died"))
+        }),
+        Err(mpsc::SendError((mut command, _))) => {
+            eprintln!(
+                "yue2-studio: the thread that spawns children is gone; starting this child unbound from the process' lifetime"
+            );
+            command.spawn()
+        }
     }
 }
 
@@ -342,8 +390,7 @@ mod tests {
         let asked = std::thread::spawn(|| {
             let mut command = std::process::Command::new("sleep");
             command.arg("30");
-            ensure_dies_with_parent(&mut command);
-            spawn_bound(&mut command).expect("spawn a child")
+            spawn_dying_with_parent(command).expect("spawn a child")
         });
         let mut child = asked.join().expect("the thread that asked");
         std::thread::sleep(std::time::Duration::from_millis(500));
