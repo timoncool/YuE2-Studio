@@ -1964,6 +1964,7 @@ export const en = {
     updateWhyParakeetOnnxGone: "Parakeet runs on transcribe.cpp; these ONNX models are no longer read",
     updateWhyOrtCpu: "The tempo of a song is measured on the processor, in 5 to 7 seconds a song",
     updateWhyOrtGpuGone: "ONNX Runtime no longer runs on the card; its CUDA, cuDNN and DirectML files are not read",
+    updateWhyVaeRsDecoder: "Songs are turned into sound by Ruach Studio's YuE2-VAE-RS x3 decoder: the highs keep their level and nothing is added above 20 kHz. Until it is downloaded the studio decodes as before",
     updateWhyDemucsAudiocpp: "Stems are split by HT-Demucs in the audio.cpp server",
     updateWhyAudiocppServer: "The audio.cpp engine behind stem separation, karaoke and audio-to-MIDI",
     updateWhyAudiocppCuda: "A CUDA library the audio.cpp engine needs on an NVIDIA card",

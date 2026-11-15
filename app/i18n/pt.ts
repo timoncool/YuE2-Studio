@@ -1853,6 +1853,7 @@ export const pt = {
     updateWhyParakeetOnnxGone: 'O Parakeet corre no transcribe.cpp; estes modelos ONNX já não são lidos',
     updateWhyOrtCpu: 'O tempo de uma música é medido no processador, em 5 a 7 segundos por música',
     updateWhyOrtGpuGone: 'O ONNX Runtime já não corre na placa; os seus ficheiros CUDA, cuDNN e DirectML não são lidos',
+    updateWhyVaeRsDecoder: 'As canções passam a som pelo decodificador YuE2-VAE-RS x3 da Ruach Studio: os agudos mantêm o nível e nada é acrescentado acima de 20 kHz. Até ser descarregado, o estúdio decodifica como antes',
     updateWhyDemucsAudiocpp: 'As pistas são separadas pelo HT-Demucs no servidor audio.cpp',
     updateWhyAudiocppServer: 'O motor audio.cpp por trás da separação de pistas, do karaoke e do áudio para MIDI',
     updateWhyAudiocppCuda: 'Uma biblioteca CUDA de que o motor audio.cpp precisa numa placa NVIDIA',

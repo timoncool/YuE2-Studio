@@ -140,6 +140,18 @@ pub struct ProfileModelFiles {
     pub companion: String,
 }
 
+
+/// A set's decoder that is not on disk yet, as the update screen names it.
+#[derive(Debug, Clone)]
+pub struct MissingDecoder {
+    pub id: &'static str,
+    pub filename: &'static str,
+    pub url: String,
+    pub bytes: u64,
+    /// What an unfinished download of it left on disk.
+    pub partial: u64,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum DownloadStatus {
@@ -341,6 +353,49 @@ impl ModelManager {
         self.installed_files_from_selection(selection, "selected custom component set")
     }
 
+
+    /// The decoder of the chosen set that is not on disk while the rest of the set is: what the update screen
+    /// offers a studio whose set was installed before the decoder was published.
+    pub fn decoder_to_fetch(&self, profile_id: Option<&str>, component_ids: Option<&[String]>) -> Option<MissingDecoder> {
+        let request = match (component_ids, profile_id) {
+            (Some(ids), _) => InstallRequest { profile_id: None, component_ids: ids.to_vec() },
+            (None, Some(profile)) => InstallRequest { profile_id: Some(profile.into()), component_ids: vec![] },
+            (None, None) => return None,
+        };
+        let selection = resolve_install(request).ok()?;
+        let on_disk = |component: &Component| published_component(&self.root.join(component.filename), component);
+        if !selection.components.iter().filter(|component| !optional_kind(component.kind)).all(on_disk) {
+            return None;
+        }
+        let decoder = selection.components.iter().find(|component| component.kind == "vae-decoder" && !on_disk(component))?;
+        Some(MissingDecoder { id: decoder.id, filename: decoder.filename, url: decoder.url(), bytes: decoder.bytes, partial: self.partial_bytes(decoder.filename) })
+    }
+
+    /// The bytes of a component on disk: all of them once it is published, else what its download left.
+    pub fn arrived_bytes(&self, id: &str) -> u64 {
+        components().iter().find(|component| component.id == id).map_or(0, |component| {
+            if published_component(&self.root.join(component.filename), component) { component.bytes } else { self.partial_bytes(component.filename) }
+        })
+    }
+
+    /// Downloads one component a set runs without, beside the set already on disk, and returns when it is there.
+    pub async fn fetch_optional(&self, id: &str) -> Result<()> {
+        let component = components()
+            .into_iter()
+            .find(|component| component.id == id && optional_kind(component.kind))
+            .with_context(|| format!("'{id}' is not a component a set runs without"))?;
+        if self.state.read().await.active.as_ref().is_some_and(|job| matches!(job.status, DownloadStatus::Downloading)) {
+            bail!("a model download is already running");
+        }
+        if verified_file_async(self.root.join(component.filename), component.clone()).await? {
+            return Ok(());
+        }
+        let total_bytes = component.bytes;
+        preflight_space(&self.root, &ResolvedInstall { profile_id: None, components: vec![component.clone()], total_bytes, already_present_bytes: 0 })?;
+        self.cancelled.store(false, Ordering::SeqCst);
+        self.download_component(&component).await
+    }
+
     /// A saved hand-picked set stays chosen while the files picked for it are
     /// there. The companion is not the user's pick: missing, it is fetched
     /// with the set rather than dropping the set for the recommended one.
@@ -443,6 +498,9 @@ impl ModelManager {
         let target = self.root.join(component.filename);
         let part = part_path(&target);
         let url = crate::net::model_url(&component.url());
+        if let Some(folder) = target.parent() {
+            tokio::fs::create_dir_all(folder).await.with_context(|| format!("create {}", folder.display()))?;
+        }
 
         // another program of timoncool's has this file: taken through the same checksum a download passes
         let name = Path::new(component.filename).file_name().unwrap_or_default();
@@ -1067,6 +1125,9 @@ mod tests {
         assert_eq!((files.vae.as_str(), files.vae_decoder), ("YuE2-Vae-F32.gguf", None));
         let status = status_snapshot(root.clone(), None, Some(InstallRequest { profile_id: Some("quality-q8".into()), component_ids: vec![] }));
         assert!(status.ready && status.download_pending > 0);
+        let offered = manager.decoder_to_fetch(Some("quality-q8"), None).expect("the set's decoder is offered");
+        assert_eq!((offered.id, offered.bytes, offered.partial), (DECODER, 803056768, 0));
+        assert!(manager.decoder_to_fetch(Some("light"), None).is_none(), "a set that is not on disk is not offered its decoder alone");
         let decoder = components().into_iter().find(|component| component.id == DECODER).unwrap();
         assert_eq!(decoder.kind, "vae-decoder");
         fs::create_dir_all(root.join(decoder.filename).parent().unwrap()).unwrap();
@@ -1075,6 +1136,8 @@ mod tests {
         // a hand-picked set without a decoder stays without one, and two decoders are not a set
         let picked: Vec<String> = ["backbone-q8", "vae-f32"].map(String::from).to_vec();
         assert_eq!(manager.installed_component_files(&picked).unwrap().vae_decoder, None);
+        assert!(manager.decoder_to_fetch(None, Some(&picked)).is_none() && manager.decoder_to_fetch(Some("quality-q8"), None).is_none());
+        assert_eq!(manager.arrived_bytes(DECODER), decoder.bytes);
         let two: Vec<String> = ["backbone-q8", "vae-f32", "vae-rs-x3-v1", "vae-rs-x3-v2"].map(String::from).to_vec();
         assert!(resolve_install(InstallRequest { profile_id: None, component_ids: two }).is_err());
         let _ = fs::remove_dir_all(root);

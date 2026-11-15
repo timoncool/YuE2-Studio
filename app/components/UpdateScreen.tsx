@@ -27,6 +27,7 @@ const WHY: Record<string, TranslationKey> = {
   'audiocpp-cuda': 'updateWhyAudiocppCuda',
   'htdemucs-onnx-gone': 'updateWhyHtdemucsOnnxGone',
   'midi-audiocpp': 'updateWhyMidiAudiocpp',
+  'vae-rs-decoder': 'updateWhyVaeRsDecoder',
   'newer': 'updateWhyNewer',
   'unused': 'updateWhyUnused',
 };

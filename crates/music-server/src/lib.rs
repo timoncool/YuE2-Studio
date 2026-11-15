@@ -9760,7 +9760,7 @@ fn update_catalogue(part: update_screen::Part) -> Vec<&'static downloads::Asset>
         Part::Training => training::pack().iter().collect(),
         Part::Listening => training::listen_pack().iter().collect(),
         Part::Audiocpp => acpp::BUILDS.into_iter().flat_map(acpp::assets).collect(),
-        Part::Assistant => Vec::new(),
+        Part::Assistant | Part::Models => Vec::new(),
     };
     let mut seen = std::collections::HashSet::new();
     assets.retain(|asset| seen.insert(asset.id));
@@ -9778,7 +9778,7 @@ fn update_downloader(state: &AppState, part: update_screen::Part) -> Option<(&do
         Part::Training => Some((state.training.downloader(), training::SCOPE)),
         Part::Listening => Some((state.training.downloader(), training::LISTEN_SCOPE)),
         Part::Audiocpp => Some((state.acpp.downloader(), "audiocpp")),
-        Part::Assistant => None,
+        Part::Assistant | Part::Models => None,
     }
 }
 
@@ -9823,7 +9823,13 @@ fn update_acpp_builds(
 
 /// This release's plan against the disk. It downloads and removes nothing; a file already today's pin byte for byte
 /// gets its install record on the way, as every status read writes it.
-fn update_plan_now(state: &AppState, separation: lyrics_sync::OnnxFlavour, options: &EngineOptions, karaoke: &lyrics_sync::LyricsSyncConfig) -> update_screen::Plan {
+fn update_plan_now(
+    state: &AppState,
+    separation: lyrics_sync::OnnxFlavour,
+    options: &EngineOptions,
+    karaoke: &lyrics_sync::LyricsSyncConfig,
+    decoder: Option<model_manager::MissingDecoder>,
+) -> update_screen::Plan {
     use update_screen::{Candidate, Part};
     let of = |part: Part, asset: &'static downloads::Asset, downloader: &downloads::Downloader, earlier: Option<String>| Candidate {
         part,
@@ -9831,7 +9837,7 @@ fn update_plan_now(state: &AppState, separation: lyrics_sync::OnnxFlavour, optio
         label: asset.label,
         model: asset.kind == downloads::AssetKind::Model,
         relative_path: asset.relative_path,
-        url: asset.url,
+        url: asset.url.to_string(),
         bytes: asset.bytes,
         downloaded: downloader.partial_bytes(asset),
         earlier,
@@ -9854,7 +9860,7 @@ fn update_plan_now(state: &AppState, separation: lyrics_sync::OnnxFlavour, optio
                 label: asset.label,
                 model: asset.kind == assistant_runtime::AssetKind::Model,
                 relative_path: asset.relative_path,
-                url: asset.url,
+                url: asset.url.to_string(),
                 bytes: asset.bytes,
                 downloaded: assistant.partial_bytes(asset),
                 earlier,
@@ -9864,6 +9870,20 @@ fn update_plan_now(state: &AppState, separation: lyrics_sync::OnnxFlavour, optio
     let data_root = update_data_root(state);
     let leftovers = retired::leftovers(data_root);
     let mut added = Vec::new();
+    // a set installed before its decoder was published decodes with the VAE's own until this arrives
+    if let Some(decoder) = decoder {
+        added.push(Candidate {
+            part: Part::Models,
+            id: decoder.id,
+            label: "YuE2-VAE-RS x3 decoder",
+            model: true,
+            relative_path: decoder.filename,
+            url: decoder.url,
+            bytes: decoder.bytes,
+            downloaded: decoder.partial,
+            earlier: None,
+        });
+    }
     let mut take = |part: Part, asset: &'static downloads::Asset, downloader: &downloads::Downloader| {
         if !downloader.is_installed(asset) && !updated.iter().chain(added.iter()).any(|row: &Candidate| row.id == asset.id) {
             added.push(of(part, asset, downloader, None));
@@ -9896,8 +9916,13 @@ async fn update_plan(state: &AppState) -> Result<update_screen::Plan, (StatusCod
     let separation = state.separation_config.read().await.runtime;
     let options = state.engine_options.read().await.clone();
     let karaoke = state.lyrics_sync_config.read().await.clone();
+    let picked = state.selected_component_ids.read().await.clone();
+    let profile = state.selected_profile_id.read().await.clone();
     let state = state.clone();
-    tokio::task::spawn_blocking(move || update_plan_now(&state, separation, &options, &karaoke))
+    tokio::task::spawn_blocking(move || {
+        let decoder = state.model_manager.decoder_to_fetch(profile.as_deref(), picked.as_deref());
+        update_plan_now(&state, separation, &options, &karaoke, decoder)
+    })
         .await
         .map_err(|error| api_error(StatusCode::INTERNAL_SERVER_ERROR, format!("the update plan was not read: {error}")))
 }
@@ -9907,6 +9932,7 @@ async fn update_job_now(state: &AppState) -> Option<update_screen::Job> {
     let mut job = state.update_job.read().await.clone()?;
     for row in job.rows_mut() {
         let arrived: u64 = match update_downloader(state, row.part) {
+            _ if row.part == update_screen::Part::Models => row.ids.iter().map(|id| state.model_manager.arrived_bytes(id)).sum(),
             Some((downloader, _)) => update_catalogue(row.part)
                 .into_iter()
                 .filter(|asset| row.ids.contains(&asset.id))
@@ -9992,6 +10018,11 @@ async fn run_update(state: &AppState, rows: &[update_screen::Row]) -> anyhow::Re
     for part in parts {
         let ids: Vec<&str> = rows.iter().filter(|row| row.part == part).flat_map(|row| row.ids.iter().copied()).collect();
         match (part, update_downloader(state, part)) {
+            (update_screen::Part::Models, _) => {
+                for id in &ids {
+                    state.model_manager.fetch_optional(id).await?;
+                }
+            }
             (update_screen::Part::Audiocpp, _) => {
                 let assets: Vec<&'static downloads::Asset> = update_catalogue(part).into_iter().filter(|asset| ids.contains(&asset.id)).collect();
                 state.acpp.downloader().install_all("audiocpp", &assets).await?;
