@@ -26,6 +26,8 @@ cd "$root"
 npm --prefix app install
 npm --prefix desktop install
 cd desktop
-npm exec tauri build -- --config src-tauri/tauri.macos-release.conf.json --bundles dmg
+# Finder's DMG layout automation can keep the temporary image busy after the
+# layout is set. CI mode skips that cosmetic step so the image can be detached.
+CI=true npm exec tauri build -- --config src-tauri/tauri.macos-release.conf.json --bundles dmg
 
 find src-tauri/target/release/bundle/dmg -name '*.dmg'

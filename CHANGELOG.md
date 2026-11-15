@@ -21,6 +21,7 @@ Windows build.
 - **The buttons over a score are readable in the dark theme** ([#236](https://github.com/timoncool/YuE2-Studio/issues/236)): the sheet is white in both themes, and the dark theme drew them pale grey on it.
 - **The create form can be made wider** ([#243](https://github.com/timoncool/YuE2-Studio/issues/243)): up to 70% of the window instead of 40%, with the song list keeping its 280 pixels.
 - **The equalizer, visualizer and Winamp mode keep their sound on Linux** (by DjagbleyEmmanuel): a Web Audio context that the system interrupted - WebKitGTK calls the state "interrupted", where the studio only knew "suspended" - stayed silent while the song played on, and only a restart brought the sound back. The player's context, Winamp's and the visualizer window's are now resumed whenever they stop running.
+- **A video export no longer hangs** (by Sheng Gao): the export waited without end for a video encoder that had stopped taking frames, and for a background clip asked for the frame it already showed. A stalled encoder is now given 15 seconds, after which the export starts over with the software encoder, and the progress moves with every few frames.
 - **"Edit audio" opens inside the studio** (by DjagbleyEmmanuel): the AudioMass editor was handed to the system browser; it now opens in a window of the studio, like the visualizer, on the file asked for, and a second edit reuses that window. A plain browser still opens it in a tab.
 
 ## 2026-11-13 — 4.0.0
