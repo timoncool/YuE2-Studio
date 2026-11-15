@@ -16,6 +16,10 @@ Windows build.
 - **An engine that exits at its start says why**: the error, and the anonymous report of it, carry the engine's own FATAL line.
 - **"The assistant is unreachable" says where its address and model are set** ([#239](https://github.com/timoncool/YuE2-Studio/issues/239)): Settings - Models - Writing assistant.
 - **Songs a request**: a count the form kept from a time the engine took more is cut to what it takes now instead of refused ([#244](https://github.com/timoncool/YuE2-Studio/issues/244)).
+- **"Describe by ear", training, the writing assistant and VST effects no longer depend on the Visual C++ runtime Windows has** ([#204](https://github.com/timoncool/YuE2-Studio/issues/204)): the programs the studio downloads for them came without the runtime they were built with, and with an older one in Windows they stopped at their start with 0xc0000005 and not a word - "the captioner wrote nothing for this song". The studio now puts its own runtime beside every program it starts.
+- **The "Load MIDI" window opens over the whole studio** ([#240](https://github.com/timoncool/YuE2-Studio/issues/240)): it was drawn inside the create form, cut by the form's edge with its button under the player.
+- **The buttons over a score are readable in the dark theme** ([#236](https://github.com/timoncool/YuE2-Studio/issues/236)): the sheet is white in both themes, and the dark theme drew them pale grey on it.
+- **The create form can be made wider** ([#243](https://github.com/timoncool/YuE2-Studio/issues/243)): up to 70% of the window instead of 40%, with the song list keeping its 280 pixels.
 
 ## 2026-11-13 — 4.0.0
 
