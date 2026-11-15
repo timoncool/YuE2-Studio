@@ -5901,6 +5901,9 @@ async fn start_engine_again(state: &AppState) -> Result<(), String> {
                 }
                 *supervisor = Some(engine);
                 *state.active_device.write().await = Some(device);
+                if let (Some(hub), Some(name)) = (&state.hub, hub_device(device)) {
+                    hub.computes_on(name);
+                }
                 if options.backend == music_engine::yue_server::ComputeBackend::Auto {
                     music_engine::yue_server::note_in_log(&format!("computing on {}", device_name(device)));
                 }
@@ -5968,6 +5971,17 @@ fn device_name(device: music_engine::yue_server::ComputeBackend) -> &'static str
         ComputeBackend::Cuda => "CUDA",
         ComputeBackend::Vulkan => "Vulkan",
         ComputeBackend::Cpu => "the processor",
+    }
+}
+
+/// The device as the hub's report names backends; none for a choice that is not a device.
+fn hub_device(device: music_engine::yue_server::ComputeBackend) -> Option<&'static str> {
+    use music_engine::yue_server::ComputeBackend;
+    match device {
+        ComputeBackend::Auto => None,
+        ComputeBackend::Cuda => Some("cuda"),
+        ComputeBackend::Vulkan => Some("vulkan"),
+        ComputeBackend::Cpu => Some("cpu"),
     }
 }
 
@@ -6667,6 +6681,7 @@ fn hub_gpu(vendor: &str, vram_gb: f64, backend: &str, compute: Option<(u32, u32)
         vram_gb: studio_hub_client::Gpu::vram_bucket((vram_gb * 1_073_741_824.0) as u64),
         backend: backend.into(),
         compute: compute.filter(|_| vendor == "nvidia").and_then(|(major, minor)| studio_hub_client::Gpu::compute_capability(major, minor)),
+        active: None,
     }
 }
 

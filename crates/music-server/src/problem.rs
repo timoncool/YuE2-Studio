@@ -240,7 +240,7 @@ mod tests {
             data_dir: data.clone(),
             http: reqwest::Client::new(),
             os_label: "windows 11".into(),
-            gpu: studio_hub_client::Gpu { vendor: "nvidia".into(), vram_gb: "24".into(), backend: "cuda".into(), compute: Some("8.9".into()) },
+            gpu: studio_hub_client::Gpu { vendor: "nvidia".into(), vram_gb: "24".into(), backend: "cuda".into(), compute: Some("8.9".into()), active: None },
             ui_lang: "en".into(),
             urls,
         })
