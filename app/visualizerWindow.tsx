@@ -24,7 +24,13 @@ const Window: React.FC = () => {
   const [bar, setBar] = useState(true);
   const [view, setView] = useState(visualizer);
   useEffect(() => onVisualizer(setView), []);
-  const name = view.engine === 'milkdrop' ? view.preset ?? '' : t(`vizLook_${view.look}` as never);
+  const name = view.engine === 'milkdrop'
+    ? view.preset ?? ''
+    : view.engine === 'blackhole'
+      ? t('vizBlackHole')
+      : view.engine === 'tunnel'
+        ? t('vizTunnel')
+        : t(`vizLook_${view.look}` as never);
 
   // the page's own menu (save image, inspect) has no place over the picture
   useEffect(() => {

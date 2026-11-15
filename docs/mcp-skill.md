@@ -197,7 +197,8 @@ a minimised window or a hidden tab holds the preview and the render.
   "Vocal Booster"...), or `bands` / `preamp_db`, `balance`, `mono`, `panel_open`,
   `save_preset`. `.EQF` files: `equalizer_import`, `equalizer_export`.
 - Visualiser: `visualizer_set` with `place` (panel, window), `fullscreen`, `engine`
-  (milkdrop, spectrum), `preset` (`visualizer_presets` searches them), `look`, `step`.
+  (milkdrop, spectrum, blackhole, tunnel), `preset` (`visualizer_presets` searches them),
+  `look`, `step`, `jump_at` (how loud a note makes the tunnel jump).
 - Winamp mode, the whole window as a Winamp 2 player: `winamp_set` `on: true` (with a
   `skin` from `winamp_skins`), `on: false` to come back. While it is on, `player_*` drive it;
   `winamp_set` also opens its windows, shades them, sets its equalizer and MilkDrop,

@@ -1293,17 +1293,18 @@ fn tools() -> &'static [Tool] {
             },
             Tool {
                 name: "visualizer_get",
-                description: "The visualiser: where it is (closed, panel over the studio, window of its own), fullscreen, the engine (milkdrop or spectrum), the MilkDrop preset on screen, the spectrum look and the looks there are, held or cycling, random or in order, the preset name shown, seconds per preset, the panel's size.",
+                description: "The visualiser: where it is (closed, panel over the studio, window of its own), fullscreen, the engine (milkdrop, spectrum, blackhole or tunnel), the MilkDrop preset on screen, the spectrum look and the looks there are, the tunnel's jump threshold, held or cycling, random or in order, the preset name shown, seconds per preset, the panel's size.",
                 schema: nothing,
                 call: |args| window("visualizer_get", args, 15),
             },
             Tool {
                 name: "visualizer_set",
-                description: "Work the visualiser as its buttons and keys do; what is not given stays. place: closed | panel (floating over the studio, resizable) | window (a window of its own). fullscreen. engine: milkdrop | spectrum. preset: a MilkDrop preset by name or part of one (visualizer_presets lists them). look: a spectrum look (visualizer_get lists them). step: next | previous. locked: stay on this preset. random: random or in order. show_name. cycle_seconds: how long MilkDrop stays on a preset. panel_size: {width, height} and panel_position: {x, y} in pixels. It hears the player after the equalizer; press play for it to move.",
+                description: "Work the visualiser as its buttons and keys do; what is not given stays. place: closed | panel (floating over the studio, resizable) | window (a window of its own). fullscreen. engine: milkdrop | spectrum | blackhole | tunnel. jump_at: how loud a note makes the tunnel jump, 0 to 1. preset: a MilkDrop preset by name or part of one (visualizer_presets lists them). look: a spectrum look (visualizer_get lists them). step: next | previous. locked: stay on this preset. random: random or in order. show_name. cycle_seconds: how long MilkDrop stays on a preset. panel_size: {width, height} and panel_position: {x, y} in pixels. It hears the player after the equalizer; press play for it to move.",
                 schema: || object(json!({
                     "place": { "type": "string", "enum": ["closed", "panel", "window"] },
                     "fullscreen": { "type": "boolean" },
-                    "engine": { "type": "string", "enum": ["milkdrop", "spectrum"] },
+                    "engine": { "type": "string", "enum": ["milkdrop", "spectrum", "blackhole", "tunnel"] },
+                    "jump_at": { "type": "number", "minimum": 0, "maximum": 1 },
                     "preset": { "type": "string" },
                     "look": { "type": "string" },
                     "step": { "type": "string", "enum": ["next", "previous"] },

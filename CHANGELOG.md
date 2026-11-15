@@ -8,6 +8,7 @@ Windows build.
 ### Added
 
 - **The studio in Portuguese** (translation by DJ José Silva): Português is the sixth language of the window, chosen in Settings and taken by itself on a computer set to Portuguese. The whole window, the training guide, the reasons a song failed and the forms for reporting a problem on GitHub are in Portuguese of Portugal; the writing assistant answers in it.
+- **Two more visualizers, "Black hole" and "Tunnel"** (by telesoho): a black hole with its disk of light, bent as gravity bends it, brightening and tilting with the song; and a flight through a tunnel that jumps on the loud notes, with a threshold of its own. Both sit beside MilkDrop and the spectrum, in the panel and in the visualizer's window.
 
 ### Fixed
 

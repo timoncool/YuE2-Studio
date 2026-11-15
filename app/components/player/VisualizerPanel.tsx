@@ -66,7 +66,7 @@ export const EngineTabs: React.FC = () => {
   useEffect(() => onVisualizer((state) => setEngine(state.engine)), []);
   return (
     <div className="flex rounded-md bg-black/5 p-0.5 dark:bg-white/5">
-      {(['milkdrop', 'spectrum'] as const).map((id) => (
+      {(['milkdrop', 'spectrum', 'blackhole', 'tunnel'] as const).map((id) => (
         <button
           key={id}
           type="button"
@@ -74,7 +74,7 @@ export const EngineTabs: React.FC = () => {
           onClick={() => setVisualizer({ engine: id })}
           className={`rounded-sm px-2 py-0.5 text-[10px] font-semibold ${engine === id ? 'bg-pink-500 text-white' : 'text-zinc-500 hover:text-zinc-900 dark:hover:text-white'}`}
         >
-          {id === 'milkdrop' ? 'MilkDrop' : t('vizSpectrum')}
+          {id === 'milkdrop' ? 'MilkDrop' : id === 'spectrum' ? t('vizSpectrum') : id === 'blackhole' ? t('vizBlackHole') : t('vizTunnel')}
         </button>
       ))}
     </div>
@@ -110,6 +110,20 @@ export const VisualizerControls: React.FC<{ onFullscreen: () => void; tone?: 'pa
         <button type="button" onPointerDown={stop} onClick={() => setVisualizer({ random: !view.random })} title={view.random ? t('vizRandomHint') : t('vizInOrderHint')} className={button}>
           {view.random ? <Shuffle size={14} /> : <ListOrdered size={14} />}
         </button>
+      )}
+      {view.engine === 'tunnel' && (
+        <input
+          type="range"
+          min={0}
+          max={1}
+          step={0.05}
+          value={view.jumpAt}
+          title={t('vizJumpAt')}
+          aria-label={t('vizJumpAt')}
+          onPointerDown={stop}
+          onChange={(event) => setVisualizer({ jumpAt: Number(event.target.value) })}
+          className="w-16 accent-pink-500"
+        />
       )}
       <button type="button" onPointerDown={stop} onClick={onFullscreen} title={t('vizFullscreen')} className={button}>
         {view.fullscreen ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
@@ -188,7 +202,13 @@ export const VisualizerPanel: React.FC = () => {
     window.addEventListener('pointerup', up);
   };
 
-  const name = view.engine === 'milkdrop' ? view.preset ?? '' : t(`vizLook_${view.look}` as never);
+  const name = view.engine === 'milkdrop'
+    ? view.preset ?? ''
+    : view.engine === 'blackhole'
+      ? t('vizBlackHole')
+      : view.engine === 'tunnel'
+        ? t('vizTunnel')
+        : t(`vizLook_${view.look}` as never);
   const button = 'text-zinc-400 hover:text-zinc-900 dark:hover:text-white';
 
   return (
