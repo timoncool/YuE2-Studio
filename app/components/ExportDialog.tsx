@@ -6,6 +6,7 @@ import type { TranslationKey } from '../i18n/translations';
 import { apiUrl } from '../services/apiBase';
 import { saveFile } from '../services/saveFile';
 import { SongMidiFiles } from './SongMidiFiles';
+import { AbletonProject } from './AbletonProject';
 
 const EXPORT_EVENT = 'studio:export';
 
@@ -285,6 +286,7 @@ export const ExportDialog: React.FC = () => {
         </div>
 
         <SongMidiFiles songId={song.id} />
+        <AbletonProject songId={song.id} />
       </div>
     </div>,
     document.body,

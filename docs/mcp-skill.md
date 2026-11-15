@@ -84,7 +84,8 @@ connected and the address to paste.
   answers the file's path and what was done to the sound, `song_export_cancel` stops it;
   the library song is not changed. Its MIDI goes the same way: `library_song_midi_files`
   lists the score's parts (score, lead, voice, chords) and the track's own MIDI, and
-  `library_song_midi_part_write` writes one into a folder.
+  `library_song_midi_part_write` writes one into a folder. `song_export_live` writes the
+  song as an Ableton Live 12 project: the song, its stems and its MIDI on tracks, zipped.
 - **You write, not the studio's assistant.** The studio has a small local model (Gemma)
   for users without an agent. You write better: read `writing_guide` and
   `writing_examples` first and write the style, lyrics and scores yourself. Use

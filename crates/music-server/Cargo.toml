@@ -73,6 +73,9 @@ lzma-rust2.workspace = true
 [target.'cfg(windows)'.dependencies]
 windows-sys.workspace = true
 
+[dev-dependencies]
+roxmltree = "0.21"
+
 [target.'cfg(target_os = "linux")'.dependencies]
 # gnu_get_libc_version: which llama.cpp build this Linux starts (assistant_runtime::glibc_version).
 libc = "0.2"

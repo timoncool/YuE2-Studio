@@ -66,6 +66,15 @@ const en = {
   exportMidiOwnHeard: 'Audio to MIDI (an estimate)',
   exportMidiOwnHeardHint: 'heard in the recording by the transcriber; expect wrong and missing notes',
   exportMidiNoOwn: 'No audio to MIDI yet: Tools can transcribe the recording.',
+  exportLiveTitle: 'Ableton Live project',
+  exportLiveHint: 'A Live 12 set with the song on a track that plays, its stems on tracks that are switched off and its MIDI on MIDI tracks, at the score\'s tempo - zipped with the files beside it. It is made from what the song has now: split it into stems and make its MIDI in Tools first to have them in the set.',
+  exportLiveMake: 'Make the project',
+  exportLiveMaking: 'Making the project',
+  exportLiveMade: '{file}: {tracks} tracks at {bpm} BPM, {meter}',
+  exportLiveTempoDefault: 'The song has no score, so the set is at Live\'s default tempo, not the song\'s.',
+  exportLiveNoStems: 'The song has no stems yet, so the set has the song alone.',
+  exportLiveLeftOff: 'In the folder but not on a track (a set holds 8, as Live Lite does): {files}',
+  exportLiveFailed: 'The project was not made: {error}',
 };
 
 type Strings = typeof en;
@@ -136,6 +145,15 @@ const ru: Strings = {
   exportMidiOwnHeard: 'Аудио в MIDI (оценка)',
   exportMidiOwnHeardHint: 'снято с записи распознавателем; возможны неверные и пропущенные ноты',
   exportMidiNoOwn: 'Аудио в MIDI ещё не делалось: запись можно распознать в Инструментах.',
+  exportLiveTitle: 'Проект Ableton Live',
+  exportLiveHint: 'Набор Live 12: песня на дорожке, которая играет, её стемы на выключенных дорожках и её MIDI на MIDI-дорожках, в темпе партитуры - архивом вместе с файлами. Делается из того, что у песни есть сейчас: чтобы стемы и MIDI попали в набор, сначала разделите песню на стемы и сделайте MIDI в Инструментах.',
+  exportLiveMake: 'Сделать проект',
+  exportLiveMaking: 'Проект делается',
+  exportLiveMade: '{file}: дорожек {tracks}, {bpm} BPM, {meter}',
+  exportLiveTempoDefault: 'У песни нет партитуры, поэтому в наборе темп Live по умолчанию, а не темп песни.',
+  exportLiveNoStems: 'У песни ещё нет стемов, поэтому в наборе только сама песня.',
+  exportLiveLeftOff: 'В папке, но не на дорожке (в наборе 8 дорожек, как в Live Lite): {files}',
+  exportLiveFailed: 'Проект не сделан: {error}',
 };
 
 const zh: Strings = {
@@ -204,6 +222,15 @@ const zh: Strings = {
   exportMidiOwnHeard: '音频转 MIDI（估计）',
   exportMidiOwnHeardHint: '由转写器从录音中听出；可能有错音和漏音',
   exportMidiNoOwn: '还没有音频转 MIDI：可在“工具”中转写录音。',
+  exportLiveTitle: 'Ableton Live 工程',
+  exportLiveHint: '一个 Live 12 工程：歌曲在一条会播放的轨道上，分轨在关闭的轨道上，MIDI 在 MIDI 轨道上，速度取自乐谱——连同文件一起打包成 zip。它只用歌曲现有的内容制作：想让分轨和 MIDI 进入工程，请先在“工具”中分离分轨并生成 MIDI。',
+  exportLiveMake: '制作工程',
+  exportLiveMaking: '正在制作工程',
+  exportLiveMade: '{file}：{tracks} 条轨道，{bpm} BPM，{meter}',
+  exportLiveTempoDefault: '这首歌没有乐谱，因此工程使用 Live 的默认速度，而不是歌曲的速度。',
+  exportLiveNoStems: '这首歌还没有分轨，因此工程里只有歌曲本身。',
+  exportLiveLeftOff: '在文件夹中但不在轨道上（工程最多 8 条轨道，与 Live Lite 相同）：{files}',
+  exportLiveFailed: '工程未能制作：{error}',
 };
 
 const ja: Strings = {
@@ -272,6 +299,15 @@ const ja: Strings = {
   exportMidiOwnHeard: 'オーディオから MIDI（推定）',
   exportMidiOwnHeardHint: '録音から採譜したものです。誤った音や抜けた音があり得ます',
   exportMidiNoOwn: 'オーディオからの MIDI はまだありません。ツールで録音を採譜できます。',
+  exportLiveTitle: 'Ableton Live プロジェクト',
+  exportLiveHint: 'Live 12 のセットです。曲は再生されるトラックに、ステムはオフにしたトラックに、MIDI は MIDI トラックに、楽譜のテンポで置かれ、ファイルと一緒に zip にまとめます。曲が今持っているものから作ります。ステムと MIDI をセットに入れるには、先にツールでステム分離と MIDI 化を行ってください。',
+  exportLiveMake: 'プロジェクトを作る',
+  exportLiveMaking: 'プロジェクトを作成中',
+  exportLiveMade: '{file}：{tracks} トラック、{bpm} BPM、{meter}',
+  exportLiveTempoDefault: 'この曲には楽譜がないため、セットは曲のテンポではなく Live の既定のテンポです。',
+  exportLiveNoStems: 'この曲にはまだステムがないため、セットには曲だけが入っています。',
+  exportLiveLeftOff: 'フォルダーにはありますがトラックには置いていません（セットは Live Lite と同じ 8 トラックまで）：{files}',
+  exportLiveFailed: 'プロジェクトを作れませんでした：{error}',
 };
 
 const ko: Strings = {
@@ -340,6 +376,15 @@ const ko: Strings = {
   exportMidiOwnHeard: '오디오에서 MIDI (추정)',
   exportMidiOwnHeardHint: '녹음에서 채보한 것으로, 틀리거나 빠진 음이 있을 수 있습니다',
   exportMidiNoOwn: '오디오에서 만든 MIDI가 아직 없습니다. 도구에서 녹음을 채보할 수 있습니다.',
+  exportLiveTitle: 'Ableton Live 프로젝트',
+  exportLiveHint: 'Live 12 세트입니다. 곡은 재생되는 트랙에, 스템은 꺼 둔 트랙에, MIDI는 MIDI 트랙에 악보의 템포로 놓이고, 파일과 함께 zip으로 묶입니다. 곡이 지금 가진 것으로 만듭니다. 스템과 MIDI를 세트에 넣으려면 먼저 도구에서 스템을 분리하고 MIDI를 만드세요.',
+  exportLiveMake: '프로젝트 만들기',
+  exportLiveMaking: '프로젝트 만드는 중',
+  exportLiveMade: '{file}: 트랙 {tracks}개, {bpm} BPM, {meter}',
+  exportLiveTempoDefault: '이 곡에는 악보가 없어 세트가 곡의 템포가 아니라 Live의 기본 템포입니다.',
+  exportLiveNoStems: '이 곡에는 아직 스템이 없어 세트에 곡만 들어 있습니다.',
+  exportLiveLeftOff: '폴더에는 있지만 트랙에는 없습니다(세트는 Live Lite처럼 8트랙까지): {files}',
+  exportLiveFailed: '프로젝트를 만들지 못했습니다: {error}',
 };
 
 const pt: Strings = {
@@ -408,6 +453,15 @@ const pt: Strings = {
   exportMidiOwnHeard: 'Áudio para MIDI (uma estimativa)',
   exportMidiOwnHeardHint: 'ouvido na gravação pelo transcritor; contar com notas erradas e em falta',
   exportMidiNoOwn: 'Ainda não há áudio para MIDI: as Ferramentas podem transcrever a gravação.',
+  exportLiveTitle: 'Projeto do Ableton Live',
+  exportLiveHint: 'Um set do Live 12 com a música numa faixa que toca, as suas pistas em faixas desligadas e o seu MIDI em faixas MIDI, no tempo da partitura - num zip com os ficheiros ao lado. É feito com o que a música tem agora: para as pistas e o MIDI entrarem no set, separar primeiro as pistas e criar o MIDI nas Ferramentas.',
+  exportLiveMake: 'Criar o projeto',
+  exportLiveMaking: 'A criar o projeto',
+  exportLiveMade: '{file}: {tracks} faixas a {bpm} BPM, {meter}',
+  exportLiveTempoDefault: 'A música não tem partitura, por isso o set está no tempo predefinido do Live, não no da música.',
+  exportLiveNoStems: 'A música ainda não tem pistas separadas, por isso o set tem só a música.',
+  exportLiveLeftOff: 'Na pasta mas não numa faixa (um set leva 8, como o Live Lite): {files}',
+  exportLiveFailed: 'O projeto não foi criado: {error}',
 };
 
 export const exportStrings = { en, ru, zh, ja, ko, pt };
