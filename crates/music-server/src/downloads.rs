@@ -1246,10 +1246,10 @@ mod tests {
         let part = downloader.path_of(&entry).with_extension("part");
         fs::create_dir_all(part.parent().unwrap()).unwrap();
         fs::File::create(&part).unwrap().set_len(64).unwrap();
-        fs::write(crate::chunked::manifest_path(&part), 0u64.to_le_bytes()).unwrap();
+        fs::write(crate::chunked::manifest_path(&part), crate::chunked::manifest_of(64, &[(0, 40)])).unwrap();
 
         assert!(!downloader.is_installed(&entry));
-        assert_eq!(downloader.partial_bytes(&entry), 64, "one piece, the whole of a file shorter than a piece");
+        assert_eq!(downloader.partial_bytes(&entry), 40, "what its one piece has come to");
         downloader.remove(&entry).unwrap();
         assert!(!part.exists() && !crate::chunked::manifest_path(&part).exists());
         assert_eq!(downloader.partial_bytes(&entry), 0);

@@ -3,6 +3,20 @@
 What changed, newest first. Dates are release dates; the studio is versioned by its
 Windows build.
 
+## 2026-11-15 — 4.0.1
+
+### Fixed
+
+- **"Keep models loaded: Auto" leaves the card its headroom** ([#238](https://github.com/timoncool/YuE2-Studio/issues/238), [#235](https://github.com/timoncool/YuE2-Studio/issues/235)): Auto kept the models on a card they only just fitted, and whatever reached the card after the start - the desktop, a browser - pushed the next song into the system's memory, where it runs many times slower and may run out. Auto now keeps the models only where 2.5 GB stay free beside them: a 12 GB card loads them for each song, as before 4.0.0, a 16 GB card keeps the Q8 set and not the BF16 one, a 24 GB card keeps either. The switch saved by a version before 4.0.0 reads as Auto, not as Yes.
+- **On Linux the engine is no longer killed in the middle of a song** ([#246](https://github.com/timoncool/YuE2-Studio/issues/246), found and explained by BitOBSessiOn): the engine was tied to the life of the thread that started it, not of the studio, and died with SIGKILL when that thread was retired - about one song in three or four. The engine and the writing assistant's llama-server now start from a thread that lives as long as the studio.
+- **A song carried on past what the KV cache holds is carried on as far as it holds**: "+N seconds" on a song near the end of the cache was refused with "the prompt and the score take ... so a song can last ... s". The studio now makes it again with the seconds that fit, and the engine log says how many.
+- **A model file is a handful of requests, not hundreds** ([#249](https://github.com/timoncool/YuE2-Studio/issues/249), reported by igrbible): a download was cut into 16 MB pieces, about 230 requests for a 3.8 GB model, and Hugging Face counts each as a download of it. A file is now fetched in one piece a connection, four at most; a dropped connection asks only for the rest of its piece, and a download closed halfway goes on from the last 16 MB it noted. A download left by an earlier version starts over.
+- **A hub popup is closed for good by any answer**: a button or a link inside it closes it as the cross does, and it does not come back.
+- **With LoRA, a score that cannot be sung is written again more times**: five instead of two before the song fails with "the score the model wrote cannot be sung".
+- **An engine that exits at its start says why**: the error, and the anonymous report of it, carry the engine's own FATAL line.
+- **"The assistant is unreachable" says where its address and model are set** ([#239](https://github.com/timoncool/YuE2-Studio/issues/239)): Settings - Models - Writing assistant.
+- **Songs a request**: a count the form kept from a time the engine took more is cut to what it takes now instead of refused ([#244](https://github.com/timoncool/YuE2-Studio/issues/244)).
+
 ## 2026-11-13 — 4.0.0
 
 ### Added

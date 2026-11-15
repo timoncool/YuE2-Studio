@@ -552,7 +552,13 @@ const NAR_CHUNK_STEP: u32 = 256;
 /// models loaded": the peak less the card's background and the stage's cache, measured on the card.
 const SET_RESIDENT_GIB: &[(&str, bool, f64)] = &[("Q8_0", false, 2.8), ("BF16", false, 4.6), ("Q8_0", true, 6.6), ("BF16", true, 9.6)];
 /// What the tracks of a request leave free on the card, for the driver and the peaks between two readings.
+/// Times the engine writes a song's score again from another seed when the one it wrote cannot be sung; it stops at
+/// eight, and its own default is two.
+const SCORE_REDRAWS: u64 = 5;
 const TRACKS_RESERVE_GIB: f64 = 1.0;
+/// What a card keeps free beside models that stay loaded: the desktop and a browser take from the same memory after
+/// the engine has started, and a card filled to the brim computes through the system's memory, many times slower.
+const KEEP_HEADROOM_GIB: f64 = 2.5;
 
 /// Songs the studio was closed on are started again, oldest first. The old
 /// job stays as `cancelled`, its message naming the job that took its place.
@@ -844,7 +850,7 @@ enum KeepLoaded {
     No,
 }
 
-/// The saved switch of earlier settings reads as a choice: on is Yes, off is Auto.
+/// The saved switch of earlier settings reads as Auto either way: on, it kept the models on a card of any size.
 impl<'de> Deserialize<'de> for KeepLoaded {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         #[derive(Deserialize)]
@@ -854,8 +860,7 @@ impl<'de> Deserialize<'de> for KeepLoaded {
             Choice(String),
         }
         Ok(match Saved::deserialize(deserializer)? {
-            Saved::Switch(true) => KeepLoaded::Yes,
-            Saved::Switch(false) => KeepLoaded::Auto,
+            Saved::Switch(_) => KeepLoaded::Auto,
             Saved::Choice(word) => match word.as_str() {
                 "yes" => KeepLoaded::Yes,
                 "no" => KeepLoaded::No,
@@ -888,7 +893,7 @@ fn keep_decision(choice: KeepLoaded, on_card: bool, resident_gib: Option<f64>, k
         KeepLoaded::Auto => {
             let Some(resident) = resident_gib else { return decided(false, "unmeasured", None) };
             let Some(free) = free_gib else { return decided(false, "free_unknown", None) };
-            let need = resident + kv_gib * f64::from(tracks.max(1)) + TRACKS_RESERVE_GIB;
+            let need = resident + kv_gib * f64::from(tracks.max(1)) + TRACKS_RESERVE_GIB + KEEP_HEADROOM_GIB;
             if need <= free { decided(true, "fits", Some(need)) } else { decided(false, "does_not_fit", Some(need)) }
         }
     }
@@ -8241,7 +8246,7 @@ async fn assistant_write_stream(
             Ok(response) => response,
             Err(error) => {
                 request_log::failed("assistant", &model, &error.to_string());
-                emit(sender.clone(), serde_json::json!({ "error": format!("the assistant is unreachable: {error}") })).await;
+                emit(sender.clone(), serde_json::json!({ "error": format!("the assistant is unreachable: {error}. Its address and model are set in Settings - Models - Writing assistant") })).await;
                 return;
             }
         };
@@ -10759,6 +10764,7 @@ fn spawn_job_watcher(state: AppState, job_id: String) {
                 eprintln!("[ERROR] the song's state could not be kept: {error:#}");
             }
         }
+        retry_within_context(&state, &job_id).await;
         retry_after_memory(&state, &job_id).await;
         state.job_max_seq.write().await.remove(&job_id);
     });
@@ -10778,6 +10784,38 @@ fn memory_retry_step(lost_vram: bool, already_retried: bool, card_busy: bool, se
 struct MemoryRetry {
     max_seq: u32,
     lower: bool,
+}
+
+/// The seconds a song can still be carried on by when `extra` were refused: the refusal names the seconds the KV cache
+/// holds (`can_last`) and the least it was asked to hold (`asked`: the song so far and three quarters of `extra`).
+/// `None` when less than two seconds fit.
+fn extension_that_fits(extra: f64, asked: f64, can_last: f64) -> Option<f64> {
+    let so_far = asked - extra * 0.75;
+    let fits = (can_last - 1.0 - so_far).floor();
+    (fits >= 2.0 && fits < extra).then_some(fits)
+}
+
+/// A song carried on further than the KV cache holds is carried on as far as it does: the engine refuses a minimum it
+/// cannot reach (`context_short`), and the song is asked for again with the seconds its refusal left room for.
+async fn retry_within_context(state: &AppState, job_id: &str) {
+    let refusal = state.jobs.read().await.get(job_id).filter(|job| matches!(job.status, MusicJobStatus::Failed) && job.code == Some("context_short")).and_then(|job| {
+        let params = job.params.as_ref()?;
+        Some((params.get("can_last")?.as_f64()?, params.get("asked")?.as_f64()?))
+    });
+    let Some((can_last, asked)) = refusal else { return };
+    let Ok(Some(stored)) = state.library.music_job(job_id) else { return };
+    let Some(mut request) = stored.request.get("replay").and_then(|replay| serde_json::from_value::<ReplayMusicJobRequest>(replay.clone()).ok()) else { return };
+    let Some(extra) = request.extend_seconds else { return };
+    let Some(fits) = extension_that_fits(extra, asked, can_last) else { return };
+    request.extend_seconds = Some(fits);
+    let Ok((_, Json(again))) = submit_replay_job(state.clone(), request, stored.attempt).await else { return };
+    music_engine::yue_server::note_in_log(&format!("the song is carried on by {fits:.0} s where {extra:.0} s were asked for: the KV cache holds no more (job {})", again.id));
+    // the refused attempt gives way to the one made again
+    state.jobs.write().await.remove(job_id);
+    state.job_max_seq.write().await.remove(job_id);
+    if let Err(error) = state.library.forget_music_job(job_id) {
+        eprintln!("[ERROR] the refused attempt could not be forgotten: {error:#}");
+    }
 }
 
 async fn retry_after_memory(state: &AppState, job_id: &str) {
@@ -11904,6 +11942,9 @@ fn yue_request_from(request: &CreateMusicJobRequest, max_batch: u32) -> Result<V
     }
     if !request.adapters.is_empty() {
         body["adapters"] = Value::Array(adapter_fields(&request.adapters)?);
+        // with adapters the first scores are more often ones that cannot be sung: the engine writes the score again
+        // from another seed more times than it does by itself
+        body["plan_retries"] = Value::from(SCORE_REDRAWS);
     }
     Ok(body)
 }
@@ -12403,7 +12444,7 @@ mod tests {
         assert!(EngineOptions { auto_keeps: true, ..EngineOptions::default() }.to_engine(None).keep_loaded);
         assert!(!EngineOptions { keep_loaded: KeepLoaded::No, auto_keeps: true, ..EngineOptions::default() }.to_engine(None).keep_loaded);
         use serde_json::json;
-        for (saved, read) in [(json!(true), KeepLoaded::Yes), (json!(false), KeepLoaded::Auto), (json!("no"), KeepLoaded::No), (json!("auto"), KeepLoaded::Auto)] {
+        for (saved, read) in [(json!(true), KeepLoaded::Auto), (json!(false), KeepLoaded::Auto), (json!("yes"), KeepLoaded::Yes), (json!("no"), KeepLoaded::No), (json!("auto"), KeepLoaded::Auto)] {
             let options: EngineOptions = serde_json::from_value(json!({ "keep_loaded": saved })).unwrap();
             assert_eq!(options.keep_loaded, read, "{saved}");
         }
@@ -12422,6 +12463,11 @@ mod tests {
         assert!(roomy.keep && roomy.reason == "fits", "{roomy:?}");
         let tight = auto.keep_choice(Some(q8), true, Some(7.5));
         assert!(!tight.keep && tight.reason == "does_not_fit", "{tight:?}");
+        let bf16 = std::path::Path::new("YuE2-3B-BF16.gguf");
+        assert!(!auto.keep_choice(Some(q8), true, Some(11.3)).keep, "a 12 GB card is left its headroom");
+        assert!(auto.keep_choice(Some(q8), true, Some(15.3)).keep, "a 16 GB card keeps the Q8 set");
+        assert!(!auto.keep_choice(Some(bf16), true, Some(15.3)).keep, "a 16 GB card does not keep the BF16 set");
+        assert!(auto.keep_choice(Some(bf16), true, Some(22.5)).keep, "a 24 GB card keeps the BF16 set");
         let eight = EngineOptions { max_batch: Some(8), ..auto.clone() }.keep_choice(Some(q8), true, Some(22.0));
         assert!(!eight.keep, "eight tracks' caches: {eight:?}");
         assert_eq!(auto.keep_choice(Some(std::path::Path::new("YuE2-3B-Q5_K_M.gguf")), true, Some(22.0)).reason, "unmeasured");
@@ -12429,6 +12475,16 @@ mod tests {
         assert_eq!(auto.keep_choice(Some(q8), false, Some(64.0)).reason, "not_on_card");
         assert!(EngineOptions { keep_loaded: KeepLoaded::Yes, ..auto }.keep_choice(Some(q8), true, Some(1.0)).keep);
         assert!(roomy.line().contains("GB needed"), "{}", roomy.line());
+    }
+
+    /// A song of 240 s carried on by 20 s is refused at 255 s where the cache holds 254: 13 s of it fit. A song the
+    /// cache has no two seconds left for is not made again.
+    #[test]
+    fn a_song_carried_on_past_the_cache_is_carried_on_as_far_as_it_holds() {
+        assert_eq!(extension_that_fits(20.0, 255.0, 254.0), Some(13.0));
+        assert_eq!(extension_that_fits(30.0, 300.0, 299.0), Some(20.0));
+        assert_eq!(extension_that_fits(10.0, 250.0, 241.0), None);
+        assert_eq!(extension_that_fits(10.0, 100.0, 400.0), None, "a refusal that leaves room for all of it is not this one");
     }
 
     /// Kept models go a while after the last song, once a spell; before the first song there is nothing to unload.

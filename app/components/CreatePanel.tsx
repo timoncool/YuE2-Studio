@@ -759,7 +759,8 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
     const durationValue = numberOrUndefined(duration);
     if (durationValue !== undefined) request.duration_seconds = Math.min(Math.max(durationValue, 1), MAX_DURATION_SECONDS);
     const lmBatchValue = numberOrUndefined(lmBatch);
-    if (lmBatchValue !== undefined) request.lm_batch_size = lmBatchValue;
+    // a count kept from a time the engine took more songs a request is cut to what it takes now
+    if (lmBatchValue !== undefined) request.lm_batch_size = Math.min(lmBatchValue, Math.max(maxBatch, 1));
     const synthBatchValue = numberOrUndefined(synthBatch);
     if (synthBatchValue !== undefined) request.synth_batch_size = synthBatchValue;
     const stepsValue = numberOrUndefined(steps);

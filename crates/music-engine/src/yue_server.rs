@@ -582,8 +582,7 @@ impl YueServerSupervisor {
             }
         }
         configure_child_process(&mut command);
-        let child = command
-            .spawn()
+        let child = music_core::process::spawn_bound(&mut command)
             .with_context(|| format!("start yue-server {}", self.config.executable.display()))?;
         // The engine must not outlive the studio, however the studio ends.
         music_core::process::adopt(&child);
@@ -662,7 +661,10 @@ impl YueServerSupervisor {
                             note_in_log(&format!("the engine crashed during startup: {fault}"));
                             bail!("yue-server exited during startup with status {status}; {fault}");
                         }
-                        None => bail!("yue-server exited during startup with status {status}"),
+                        None => match fatal_of_this_start() {
+                            Some(fatal) => bail!("yue-server exited during startup with status {status}; {fatal}"),
+                            None => bail!("yue-server exited during startup with status {status}"),
+                        },
                     }
                 }
             }
@@ -795,6 +797,17 @@ fn request_graceful_shutdown(child: &Child) -> Result<()> {
         bail!("send SIGTERM to yue-server failed: {}", std::io::Error::last_os_error());
     }
     Ok(())
+}
+
+/// The engine's own last word of the start under way: the last FATAL line its log holds after the line this start
+/// wrote, its paths left out so that one cause reads the same on every computer.
+fn fatal_of_this_start() -> Option<String> {
+    let bytes = fs::read(startup_log_path()).ok()?;
+    let tail = String::from_utf8_lossy(&bytes[bytes.len().saturating_sub(64 * 1024)..]).into_owned();
+    let since = tail.rfind("---- starting ").map_or(tail.as_str(), |at| &tail[at..]);
+    let line = since.lines().rev().find(|line| line.contains("FATAL"))?;
+    let words: Vec<&str> = line.split_whitespace().map(|word| if word.contains('\\') || word.contains('/') { "<path>" } else { word }).collect();
+    Some(words.join(" "))
 }
 
 /// Writes one line of the studio's own into the engine log, so a reader can
