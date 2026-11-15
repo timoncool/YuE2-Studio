@@ -1,0 +1,26 @@
+name: Ideia
+description: Sugerir uma função ou uma melhoria
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Primeiro [procurar nas mensagens existentes](https://github.com/timoncool/YuE2-Studio/issues?q=is%3Aissue) — se a ideia já lá estiver, acrescentar um 👍.
+  - type: textarea
+    id: problem
+    attributes:
+      label: O que quer fazer?
+      description: A tarefa ou o problema, ainda não a solução.
+      placeholder: "Faço versões das minhas próprias músicas e tenho de cortar a introdução à mão de cada vez."
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: Como poderia o YuE2 Studio ajudar?
+      placeholder: "Uma pega de corte na faixa de origem antes de fazer a versão."
+  - type: textarea
+    id: examples
+    attributes:
+      label: Exemplos ou capturas de ecrã
+      description: Como outros programas o fazem, esboços, ligações.

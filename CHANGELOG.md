@@ -5,6 +5,10 @@ Windows build.
 
 ## 2026-11-15 — 4.0.1
 
+### Added
+
+- **The studio in Portuguese** (translation by DJ José Silva): Português is the sixth language of the window, chosen in Settings and taken by itself on a computer set to Portuguese. The whole window, the training guide, the reasons a song failed and the forms for reporting a problem on GitHub are in Portuguese of Portugal; the writing assistant answers in it.
+
 ### Fixed
 
 - **"Keep models loaded: Auto" leaves the card its headroom** ([#238](https://github.com/timoncool/YuE2-Studio/issues/238), [#235](https://github.com/timoncool/YuE2-Studio/issues/235)): Auto kept the models on a card they only just fitted, and whatever reached the card after the start - the desktop, a browser - pushed the next song into the system's memory, where it runs many times slower and may run out. Auto now keeps the models only where 2.5 GB stay free beside them: a 12 GB card loads them for each song, as before 4.0.0, a 16 GB card keeps the Q8 set and not the BF16 one, a 24 GB card keeps either. The switch saved by a version before 4.0.0 reads as Auto, not as Yes.

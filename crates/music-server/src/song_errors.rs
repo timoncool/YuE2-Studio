@@ -363,8 +363,8 @@ mod tests {
         for error in one_of_each() {
             let Some(code) = error.code() else { continue };
             let found = dictionary.matches(&format!("\n  {code}:")).count();
-            if found != 5 {
-                missing.push(format!("{code}: {found} of 5"));
+            if found != 6 {
+                missing.push(format!("{code}: {found} of 6"));
             }
             for key in error.params().keys() {
                 let named = dictionary.matches(&format!("{{{key}}}")).count();
@@ -437,7 +437,7 @@ mod tests {
         let seed = SongError::from_fatal("the score the model wrote for song 1 cannot be sung: it has no voice with bars. Draw another seed.".into());
         assert!(score_strength_reason(seed.code(), &seed.params(), &json!({})).is_none(), "without LoRA");
         let dictionary = include_str!("../../../app/i18n/songErrors.ts");
-        assert_eq!(dictionary.matches("score_unsingable_strength:").count(), 5, "the reason is in every language of the window");
+        assert_eq!(dictionary.matches("score_unsingable_strength:").count(), 6, "the reason is in every language of the window");
     }
 
     /// A song lost with an engine that exited gives the window what the exit status means and the engine's last line,

@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, ReactNode } from 'react';
-import { translations, Language, TranslationKey } from '../i18n/translations';
+import { translations, Language, LANGUAGE_NAMES, TranslationKey } from '../i18n/translations';
 
 interface I18nContextType {
   language: Language;
@@ -19,8 +19,9 @@ if (import.meta.hot) import.meta.hot.data.i18nContext = I18nContext;
 export const I18nProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [language, setLanguage] = useState<Language>(() => {
     const stored = localStorage.getItem('language') as Language;
-    if (stored === 'zh' || stored === 'en' || stored === 'ja' || stored === 'ko' || stored === 'ru') return stored;
+    if (stored && stored in LANGUAGE_NAMES) return stored;
     if (typeof navigator !== 'undefined' && navigator.language?.startsWith('ru')) return 'ru';
+    if (typeof navigator !== 'undefined' && navigator.language?.startsWith('pt')) return 'pt';
     return 'en';
   });
 

@@ -26,7 +26,7 @@ export type IssueKind = 'bug' | 'idea' | 'question';
 const KINDS: Record<IssueKind, string> = { bug: '1-bug', idea: '2-idea', question: '3-question' };
 
 /** Each window language's place in GitHub's list of forms: English first. */
-const ORDER: Record<string, string> = { en: '1', ru: '2', zh: '3', ja: '4', ko: '5' };
+const ORDER: Record<string, string> = { en: '1', ru: '2', zh: '3', ja: '4', ko: '5', pt: '6' };
 
 /** The form of `kind` in the window's language, the English one for a language the forms do not have. */
 export function issueTemplate(language: string, kind: IssueKind = 'bug'): string {

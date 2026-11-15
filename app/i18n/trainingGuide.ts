@@ -1,4 +1,5 @@
 import type { Language } from './translations';
+import { ptTrainingGuide } from './ptExtra';
 
 /**
  * The training guide of YuE2 Studio, per language. It follows the studio's own
@@ -699,4 +700,4 @@ const ko: Guide = {
   ],
 };
 
-export const trainingGuide: Record<Language, Guide> = { en, ru, zh, ja, ko };
+export const trainingGuide: Record<Language, Guide> = { en, ru, zh, ja, ko, pt: ptTrainingGuide };

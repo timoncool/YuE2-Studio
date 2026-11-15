@@ -1,9 +1,10 @@
 import type { Language } from './translations';
+import { ptExitMeanings } from './ptExtra';
 
 // Why a song failed, in the window's language. The service sends a code and fields beside
 // its English text (crates/music-server/src/song_errors.rs); here is a template for each
 // code. The service's test `every_code_has_a_translation_in_every_language` checks that each
-// code has a line in all five languages. The codes are the same in every music studio; YuE2 adds
+// code has a line in all six languages. The codes are the same in every music studio; YuE2 adds
 // its own engine's (adapter_missing … score_unsingable_adapters).
 
 type ErrorTexts = Record<string, string>;
@@ -163,7 +164,38 @@ const KO: ErrorTexts = {
   not_audio: '그래픽카드가 이 곡에서 소리가 아닌 값을 계산해({line}) 엔진이 무음을 쓰지 않고 곡을 멈췄습니다. 곡을 다시 만드세요. 새로 실행하면 대개 제대로 나옵니다.',
 };
 
-const BY_LANGUAGE: Record<Language, ErrorTexts> = { en: EN, ru: RU, zh: ZH, ja: JA, ko: KO };
+const PT: ErrorTexts = {
+  training_on_card: 'Há uma LoRA a treinar na placa gráfica; fazer músicas quando terminar ou for parada.',
+  lost_vram: 'A placa gráfica ficou sem memória nesta música e o motor reiniciou, por isso a música perdeu-se. Escolher um conjunto de modelos mais pequeno em Definições → Modelos ou uma música mais curta, e fechar o que mais estiver a usar a placa; uma placa abaixo do conjunto mais pequeno não consegue fazer músicas.',
+  lost_vram_retried: 'A placa gráfica ficou sem memória nesta música, e de novo quando foi feita com uma cache KV de {n}. Escolher um conjunto de modelos mais pequeno ou uma música mais curta, e fechar o que mais estiver a usar a placa.',
+  lost_ram: 'O computador ficou sem memória (RAM) nesta música e o motor reiniciou, por isso a música perdeu-se. Fechar outros programas que ocupem memória, ou escolher um conjunto de modelos mais pequeno em Definições → Modelos ou uma música mais curta.',
+  lost_device: 'A placa gráfica falhou durante esta música ({detail}) e o motor reiniciou, por isso a música perdeu-se. O registo do motor está em Definições → Motor local.',
+  lost_device_silent: 'A placa gráfica falhou durante esta música (um erro de CUDA ou do controlador) e o motor reiniciou, por isso a música perdeu-se. O registo do motor está em Definições → Motor local.',
+  lost_at_line: 'O motor parou durante esta música e reiniciou, por isso a música perdeu-se; a última linha foi {line}. O registo do motor está em Definições → Motor local.',
+  lost: 'O motor parou durante esta música e reiniciou, por isso a música perdeu-se. O registo do motor está em Definições → Motor local.',
+  lost_exited: 'O motor falhou durante esta música ({meaning}código de saída {exit}) e reiniciou, por isso a música perdeu-se. O registo do motor está em Definições → Motor local.',
+  lost_exited_at_line: 'O motor falhou durante esta música ({meaning}código de saída {exit}) e reiniciou, por isso a música perdeu-se; a última linha foi {line}. O registo do motor está em Definições → Motor local.',
+  lost_port_set: 'O motor não conseguiu escutar na porta {port}, definida por YUE_ENGINE_PORT, por isso a música perdeu-se: outro programa está a usá-la. Fechar esse programa ou definir outra porta.',
+  lost_port_taken: 'O motor não conseguiu escutar na porta {port}, por isso a música perdeu-se: outro programa ocupou a porta depois de o estúdio a escolher. Reiniciar o estúdio: escolhe uma porta livre ao arrancar.',
+  lost_illegal_instruction: 'O motor parou durante esta música numa instrução que este processador não tem (código de saída {exit}) e reiniciou, por isso a música perdeu-se. Comunicar o problema com o registo do motor de Definições → Motor local.',
+  load_vram: 'A placa gráfica ficou sem memória enquanto o motor carregava os modelos. Escolher uma quantização mais pequena em Definições → Modelos, ou fechar o que mais estiver a usar a placa — o assistente de escrita ocupa vários gigabytes.',
+  load_ram: 'O computador ficou sem memória (RAM) enquanto o motor carregava os modelos. Fechar outros programas que ocupem memória, ou escolher uma quantização mais pequena em Definições → Modelos.',
+  engine_fatal: 'O motor parou esta música: {line}',
+  engine_failed: 'O motor parou esta música; o motivo está no registo em Definições → Motor local.',
+  engine_unreachable: 'O motor deixou de responder sobre esta música: {detail}',
+  import_failed: 'O motor terminou a música, mas o estúdio não a conseguiu passar para a biblioteca: {detail}',
+  adapter_missing: 'A LoRA {name} não está instalada; adicioná-la de novo na página LoRA.',
+  vocals_only_no_separator: '«Só a voz» precisa do separador de pistas: instalá-lo nas Ferramentas do estúdio.',
+  separator_unavailable: 'O separador de pistas não consegue correr neste computador: {detail}',
+  engine_refused: 'O motor não aceitou esta música: {detail}',
+  context_short: 'O estilo, a letra e a partitura ocupam {tokens} dos {context} tokens do modelo, por isso esta música pode durar {can_last} s, e foram pedidos {asked} s. Encurtar a música ou a letra.',
+  score_unsingable: 'A partitura que o modelo escreveu para a música {song} não pode ser cantada ({problem}). Tirar outra semente.',
+  score_unsingable_adapters: 'A partitura que o modelo escreveu para a música {song} não pode ser cantada ({problem}). Isto acontece com LoRAs acima dos seus limites na metade da partitura: baixar a força delas ou tirar outra semente.',
+  score_unsingable_strength: 'A partitura não pôde ser escrita: a força da LoRA na Composição é {strength}. Experimentar 1.0.',
+  not_audio: 'A placa gráfica calculou nesta música algo que não é som ({line}), por isso o motor parou-a em vez de gravar silêncio. Fazer a música de novo: uma nova tentativa costuma sair bem.',
+};
+
+const BY_LANGUAGE: Record<Language, ErrorTexts> = { en: EN, ru: RU, zh: ZH, ja: JA, ko: KO, pt: PT };
 
 // What an exit status of the engine means, by the service's key (song_errors.rs `EXIT_MEANINGS`), written before
 // "exit code" in the templates; `none` is a status without a meaning.
@@ -218,6 +250,7 @@ const EXIT_MEANINGS: Record<Language, Record<string, string>> = {
     out_of_memory: '컴퓨터 메모리 부족, ',
     none: '',
   },
+  pt: ptExitMeanings,
 };
 
 /** A failed song as the service sent it: its English text and, when the reason has a kind, a code with fields. */
