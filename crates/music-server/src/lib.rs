@@ -60,6 +60,7 @@ mod song_errors;
 mod retired;
 mod update_screen;
 mod acpp;
+mod agent_use;
 
 use song_errors::SongError;
 
@@ -1362,6 +1363,7 @@ struct OpenRouterResponse {
 /// in-process, so a release is a single executable rather than a launcher that
 /// has to start a second binary and keep it alive.
 pub async fn serve() -> anyhow::Result<()> {
+    let _ = SERVICE_RUNTIME.set(tokio::runtime::Handle::current());
     match studio_data_root() {
         Some(root) => {
             studio_log::log_to_file(&root);
@@ -1768,6 +1770,8 @@ pub async fn serve() -> anyhow::Result<()> {
         .route("/mcp/window/result", post(mcp::window_result))
         .route("/mcp/window/focus", post(mcp::window_focus))
         .fallback(remote::interface)
+        // inside the guard: a request it refused is nobody's use
+        .layer(axum::middleware::from_fn(agent_use::track))
         .layer(axum::middleware::from_fn(remote::guard))
         // Everything here is live state or a local file: nothing is worth a
         // browser cache, and Chrome holds a second request for a URL until a
@@ -6598,6 +6602,26 @@ pub fn stop_engine() {
             eprintln!("[ERROR] the engine was not stopped at exit: {error:#}");
         }
     }
+}
+
+/// The runtime the service runs on, for the shell's questions asked from a thread of its own.
+static SERVICE_RUNTIME: std::sync::OnceLock<tokio::runtime::Handle> = std::sync::OnceLock::new();
+
+/// How long ago an agent last used the studio - over MCP or its API, anything but the studio's
+/// own window - for the desktop shell, which stops a studio it started for an agent once nobody
+/// uses it. None while no agent has called since the service started.
+pub fn agent_quiet_for() -> Option<std::time::Duration> {
+    agent_use::quiet_for()
+}
+
+/// What the service in this process is still doing - songs, covers and karaoke, stems, MIDI,
+/// processing, restoring, a dataset's preparation, training, a download - for the desktop
+/// shell's idle stop. None when it could not say within `wait`, which is never idle. A studio
+/// whose service runs elsewhere, or failed to start, has nothing of its own at work. Asked from
+/// a thread of the shell's own: blocking on the service's runtime from inside it would panic.
+pub fn work_in_progress(wait: std::time::Duration) -> Option<Vec<&'static str>> {
+    let Some(runtime) = SERVICE_RUNTIME.get() else { return Some(Vec::new()) };
+    runtime.block_on(async { tokio::time::timeout(wait, mcp::at_work()).await.ok().flatten() })
 }
 
 pub(crate) fn studio_version() -> &'static str {

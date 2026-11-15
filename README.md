@@ -39,7 +39,9 @@ runtime path is Python.
 
 Given this repository, an agent can set everything up and drive the studio by itself:
 
-1. Install the studio from the [latest release](https://github.com/timoncool/YuE2-Studio/releases/latest) and start it.
+1. Install the studio from the [latest release](https://github.com/timoncool/YuE2-Studio/releases/latest) and start it,
+   with `--headless` to keep its window off the user's screen (see
+   [Drive it from an agent](#drive-it-from-an-agent-mcp)).
 2. Connect to its MCP server at `http://127.0.0.1:8791/mcp`:
    `claude mcp add --transport http yue2-studio http://127.0.0.1:8791/mcp`
 3. Read the skill it serves (resource `studio://skill`, prompt `studio`), the same text as
@@ -417,6 +419,19 @@ also answers the studio's own write buttons and dataset preparation. Settings, *
 
 ```bash
 claude mcp add --transport http yue2-studio http://127.0.0.1:8791/mcp
+```
+
+**Without a window.** An agent that finds the studio closed starts it with `--headless`: the
+studio runs as usual with its window hidden, a tray icon the only sign of it, and stops by
+itself after ten minutes with no agent calls and nothing at work (`YUE_STUDIO_IDLE_SHUTDOWN_S`
+sets other seconds). Opening the studio the usual way brings its window up in the same
+session. `--stop` ends it, unless its window is open or something is at work. The installed
+executable is `%LOCALAPPDATA%\YuE2 Studio\YuE2-Studio.exe` on Windows (or the folder chosen
+when installing), `/Applications/YuE2 Studio.app/Contents/MacOS/YuE2-Studio` on a Mac and
+`/usr/bin/YuE2-Studio` from the .deb.
+
+```powershell
+Start-Process "$env:LOCALAPPDATA\YuE2 Studio\YuE2-Studio.exe" -ArgumentList '--headless' -WindowStyle Hidden
 ```
 
 [docs/mcp-skill.md](docs/mcp-skill.md) is the skill an agent reads: every tool, what the
