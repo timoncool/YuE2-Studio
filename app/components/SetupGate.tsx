@@ -52,7 +52,7 @@ type SetupStatus = {
   ready: boolean;
   selected_profile_id?: string | null;
   selected_component_ids?: string[] | null;
-  hardware?: { gpuName?: string; totalVramGb?: number; totalRamGb?: number; vulkan?: boolean; onProcessor?: boolean; recommended?: string; reason?: string };
+  hardware?: { gpuName?: string; totalVramGb?: number; totalRamGb?: number; vulkan?: boolean; onProcessor?: boolean; shortOfSmallestSet?: number | null; recommended?: string; reason?: string };
   engine_ready: boolean;
   engine_id: string;
   first_run: boolean;
@@ -974,6 +974,11 @@ export const SetupGate: React.FC<{ onReady?: () => void; mode?: 'first-run' | 's
             : status?.hardware?.reason || t('recommendedFallback')}
           . {t('setupResumable')}
           {status?.hardware?.onProcessor && <span className="mt-2 block text-amber-700 dark:text-amber-300">{t('songsOnProcessor')}</span>}
+          {status?.hardware?.shortOfSmallestSet && (
+            <span className="mt-2 block text-amber-700 dark:text-amber-300">
+              {t('cardShortOfSet').replace('{have}', (status.hardware.totalVramGb ?? 0).toFixed(1)).replace('{need}', String(status.hardware.shortOfSmallestSet))}
+            </span>
+          )}
         </div>}
 
 

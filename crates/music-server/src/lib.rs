@@ -5681,7 +5681,7 @@ async fn reset_fitted_max_seq(State(state): State<AppState>) -> Result<Json<Valu
 async fn restart_local_engine(State(state): State<AppState>) -> Result<Json<Value>, (StatusCode, Json<ApiError>)> {
     // the button is obeyed; the song it ends is named in the log beside its last line
     if engine_at_work(&state).await {
-        music_engine::yue_server::note_in_log("the engine was restarted from the window while a song was being made; that song is lost");
+        music_engine::yue_server::note_in_log(&format!("{RESTARTED_UNDER_A_SONG}; that song is lost"));
     }
     let _restart = state.engine_use.write().await;
     restart_engine(&state).await.map_err(|error| api_error(StatusCode::SERVICE_UNAVAILABLE, error))?;
@@ -6006,11 +6006,17 @@ fn previous_run(tail: &[String]) -> String {
     }
 }
 
+/// What the studio writes into the engine's log when the person restarts the engine under a song: the song lost
+/// with that engine was stopped by them, and is told and counted so.
+const RESTARTED_UNDER_A_SONG: &str = "the engine was restarted from the window while a song was being made";
+
 /// Why a song was lost with an engine that restarted during it, from the log
 /// of the run that ended.
 fn lost_job_reason(log: &str) -> SongError {
     let lowered = log.to_lowercase();
-    if describes_exhausted_memory(&lowered) {
+    if lowered.contains(RESTARTED_UNDER_A_SONG) {
+        SongError::LostRestarted
+    } else if describes_exhausted_memory(&lowered) {
         SongError::LostVram
     } else if describes_exhausted_ram(&lowered) {
         SongError::LostRam
@@ -6845,6 +6851,11 @@ async fn compose_setup_status(state: &AppState, manager_status: model_manager::M
             Value::Bool(state.music_server.health().await),
         );
         fields.insert("engine_error".into(), serde_json::to_value(state.engine_start_error.read().await.clone()).unwrap_or(Value::Null));
+        // a card is there, yet the engine ended up on the processor: Auto went down its devices one by one
+        let fell = *state.active_device.read().await == Some(music_engine::yue_server::ComputeBackend::Cpu)
+            && state.engine_options.read().await.backend == music_engine::yue_server::ComputeBackend::Auto
+            && !hardware::hardware().on_processor;
+        fields.insert("engine_on_processor".into(), Value::Bool(fell));
         fields.insert("engine_id".into(), Value::String(PRIMARY_MUSIC_ENGINE_ID.into()));
         fields.insert("trash_days".into(), Value::from(TRASH_DAYS));
         // whether the files a person downloads by hand are better taken from the mirror, as the studio's are
@@ -10976,7 +10987,14 @@ async fn follow_job(state: &AppState, job_id: &str, started: &mut Option<Option<
                     unreachable += 1;
                     if forgotten || unreachable >= 60 {
                         if let Some(job) = state.jobs.write().await.get_mut(&job_id) {
-                            job.fail(if forgotten { lost_job_reason(&previous_run_log()) } else { SongError::EngineUnreachable(error.to_string()) });
+                            let reason = if forgotten { lost_job_reason(&previous_run_log()) } else { SongError::EngineUnreachable(error.to_string()) };
+                            // the person's own restart stopped it: a stopped song, not a failed one
+                            let stopped = matches!(reason, SongError::LostRestarted);
+                            job.fail(reason);
+                            if stopped {
+                                job.status = MusicJobStatus::Cancelled;
+                                job.phase = MusicJobPhase::Cancelled;
+                            }
                         }
                         return;
                     }
@@ -12376,6 +12394,14 @@ mod tests {
         let access = lost_job_reason("[studio] the previous engine had exited: exit code: 0xc0000005 (0xc0000005)");
         assert_eq!(access.code(), Some("lost_exited"));
         assert_eq!(access.params()["exit"], "0xc0000005");
+        assert_eq!(lost_job_reason("[NAR] Step 3/16").code(), Some("lost_at_line"));
+    }
+
+    /// The person's own restart of the engine is said so, whatever the engine was writing when it went.
+    #[test]
+    fn a_song_lost_to_the_persons_restart_is_stopped_not_failed() {
+        let log = format!("[NAR] Step 3/16\n[studio] {RESTARTED_UNDER_A_SONG}; that song is lost");
+        assert_eq!(lost_job_reason(&log).code(), Some("lost_restarted"));
         assert_eq!(lost_job_reason("[NAR] Step 3/16").code(), Some("lost_at_line"));
     }
 
