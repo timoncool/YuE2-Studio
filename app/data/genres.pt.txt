@@ -1,0 +1,105 @@
+16-bit	chiptune de 16 bits
+2-step	2-step (garage britânico)
+acid house	acid house
+acid techno	acid techno
+acid trance	acid trance
+acoustic chicago blues	blues acústico de Chicago
+acoustic rock	rock acústico
+acoustic texas blues	blues acústico do Texas
+african folk	folclore africano
+afrikaner folk	folclore africânder
+afro house	afro house
+afro trap	afro trap
+afro-cuban jazz	jazz afro-cubano
+afro-funk	afro-funk
+afro-jazz	afro-jazz
+afro-rock	afro-rock
+afrobeat	afrobeat
+afropiano	afropiano (amapiano com afrobeats)
+afroswing	afroswing
+algorave	algorave (música de dança programada ao vivo)
+alternative r &b	R&B alternativo
+alternative rock	rock alternativo
+ambient techno	techno ambiente
+anti-folk	anti-folk
+avant-garde jazz	jazz de vanguarda
+bachata	bachata
+bedroom pop	bedroom pop (pop caseiro, intimista)
+bluegrass	bluegrass
+blues rock	blues rock
+boogie	boogie
+bossa nova	bossa nova
+bubblegum bass	bubblegum bass (eletrónica aguda e açucarada)
+bubblegum dance	bubblegum dance (eurodance leve)
+cabaret	cabaré
+cajun	música cajun
+cape verdean	música de Cabo Verde
+caribbean	música das Caraíbas
+carnatic	música carnática (clássica do sul da Índia)
+celtic	música celta
+chanson	chanson francesa
+chillstep	chillstep
+chillsynth	chillsynth
+classical	música clássica
+cloud rap	cloud rap
+coptic	música copta
+cumbia	cúmbia
+dance	música de dança
+dancehall	dancehall
+dancepop	dance-pop
+dembow	dembow
+dirty south	dirty south (rap do sul dos EUA)
+dream pop	dream pop
+drill	drill
+dubstep	dubstep
+edm	EDM, música eletrónica de dança
+egyptian	música egípcia
+garage	garage
+gnawa	gnawa (música ritual de Marrocos)
+goa trance	goa trance
+grime	grime
+griot	música dos griots (África Ocidental)
+grunge	grunge
+hip hop	hip hop
+house	house
+hyphy	hyphy (rap da Baía de São Francisco)
+illbient	illbient
+indie	indie
+jazz	jazz
+jungle	jungle
+k-pop	k-pop
+kawaii future bass	kawaii future bass
+klezmer	klezmer
+liquid drum and bass	liquid drum and bass
+mariachi	mariachi
+math rock	math rock
+merengue	merengue
+motown	Motown
+new jack swing	new jack swing
+new wave	new wave
+p-funk	p-funk
+pacific reggae	reggae do Pacífico
+polka	polca
+pop	pop
+raga	raga
+rap	rap
+reggae	reggae
+rock	rock
+rockabilly	rockabilly
+rumba	rumba
+salsa	salsa
+samba	samba
+ska	ska
+soul	soul
+southern rock	rock sulista
+surf	surf
+surf rock	surf rock
+swamp blues	swamp blues (blues dos pântanos da Luisiana)
+swing	swing
+symphonic metal	metal sinfónico
+synthpop	synth-pop
+synthwave	synthwave
+tango	tango
+trance	trance
+trap	trap
+tuareg	música tuaregue
