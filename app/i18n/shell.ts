@@ -12,6 +12,8 @@ const en = {
   shellUpdateLater: 'Later',
   shellUpdateInstalling: 'Downloading and installing…',
   shellUpdateFailed: 'The update did not install: {error}',
+  shellCloseToTray: 'Keep running in the system tray when the window is closed',
+  shellCloseToTrayHint: 'Closing the window hides it; songs keep being made. Click the tray icon to bring it back, and quit from its menu.',
 };
 
 type Strings = typeof en;
@@ -28,6 +30,8 @@ const ru: Strings = {
   shellUpdateLater: 'Позже',
   shellUpdateInstalling: 'Скачиваю и устанавливаю…',
   shellUpdateFailed: 'Обновление не установилось: {error}',
+  shellCloseToTray: 'Продолжать работу в системном трее при закрытии окна',
+  shellCloseToTrayHint: 'Закрытие окна только прячет его, песни продолжают создаваться. Нажмите на значок в трее, чтобы вернуть окно, а выйти можно из его меню.',
 };
 
 const zh: Strings = {
@@ -42,6 +46,8 @@ const zh: Strings = {
   shellUpdateLater: '稍后',
   shellUpdateInstalling: '正在下载并安装…',
   shellUpdateFailed: '更新未能安装：{error}',
+  shellCloseToTray: '关闭窗口时继续在系统托盘中运行',
+  shellCloseToTrayHint: '关闭窗口只会将其隐藏，歌曲会继续生成。点击托盘图标即可恢复窗口，并可从其菜单退出。',
 };
 
 const ja: Strings = {
@@ -56,6 +62,8 @@ const ja: Strings = {
   shellUpdateLater: '後で',
   shellUpdateInstalling: 'ダウンロードしてインストールしています…',
   shellUpdateFailed: 'アップデートをインストールできませんでした：{error}',
+  shellCloseToTray: 'ウィンドウを閉じてもシステムトレイで動作し続ける',
+  shellCloseToTrayHint: 'ウィンドウを閉じると非表示になるだけで、曲の生成は続きます。トレイのアイコンをクリックすると戻り、終了はそのメニューから行います。',
 };
 
 const ko: Strings = {
@@ -70,6 +78,8 @@ const ko: Strings = {
   shellUpdateLater: '나중에',
   shellUpdateInstalling: '다운로드하고 설치하는 중…',
   shellUpdateFailed: '업데이트를 설치하지 못했습니다: {error}',
+  shellCloseToTray: '창을 닫아도 시스템 트레이에서 계속 실행',
+  shellCloseToTrayHint: '창을 닫으면 숨겨질 뿐 노래 생성은 계속됩니다. 트레이 아이콘을 클릭하면 다시 열리고, 종료는 트레이 메뉴에서 합니다.',
 };
 
 export const shellStrings = { en, ru, zh, ja, ko };

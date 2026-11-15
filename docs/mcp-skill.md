@@ -17,8 +17,19 @@ sees what you do in the studio's window.
    (experimental). An NVIDIA card is not required: without one the engine runs on the processor,
    many times slower, and AMD and Intel cards go through Vulkan - see the README. The
    first start offers to download the models.
-2. Start it. The MCP server is up as soon as its window is: `http://127.0.0.1:8791/mcp`.
-   Nothing else to install - no npx, no bridge.
+2. Start it with `--headless`: the studio runs with its window hidden, nothing on the user's
+   screen but a tray icon, and answers at `http://127.0.0.1:8791/mcp` within seconds.
+   Nothing else to install - no npx, no bridge. The executable: on Windows
+   `%LOCALAPPDATA%\YuE2 Studio\YuE2-Studio.exe` (or the folder chosen when installing, or the
+   portable copy's own folder), on a Mac `/Applications/YuE2 Studio.app/Contents/MacOS/YuE2-Studio`,
+   from the .deb `/usr/bin/YuE2-Studio`, or the AppImage itself. Start it detached:
+   `Start-Process "$env:LOCALAPPDATA\YuE2 Studio\YuE2-Studio.exe" -ArgumentList '--headless' -WindowStyle Hidden`
+   in PowerShell, `nohup "<executable>" --headless >/dev/null 2>&1 &` elsewhere.
+   It stops by itself after ten minutes with no calls from you and nothing at work
+   (`YUE_STUDIO_IDLE_SHUTDOWN_S` sets other seconds); `<executable> --stop` ends it sooner, but
+   not while the user has its window open or something is at work. When the user opens the
+   studio, its window comes up in the same session. `--headless` on a running studio changes
+   nothing.
 3. Connect (below), then call `studio_status`. If the models are missing, `models_catalog`
    and `models_download` fetch them.
 
@@ -189,7 +200,8 @@ window logged, when a button did nothing.
 **A video clip**
 
 The editor works in the studio's window, which must be visible while you edit and render:
-a minimised window or a hidden tab holds the preview and the render.
+a minimised window or a hidden tab holds the preview and the render, and so does a studio
+started with `--headless` until the user opens it.
 
 1. `video_open` with a song id, `video_get` to see the presets and settings.
 2. `video_set`: preset, aspect ratio, colours, effects, text layers, karaoke lyrics,

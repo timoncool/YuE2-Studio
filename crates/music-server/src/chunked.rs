@@ -90,6 +90,32 @@ const RATE_LIMIT_BUDGET: std::time::Duration = std::time::Duration::from_secs(20
 /// cent with nothing under it is indistinguishable from a hang.
 static WAITING: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
+/// Files being fetched right now. Every large download of the studio - a model set, a
+/// runtime, a LoRA, the assistant's model - comes through `fetch`, so this is the one place
+/// that knows whether the studio is downloading at all.
+static FETCHING: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
+/// Counts one fetch for as long as it lives, a cancelled one included.
+struct Fetching;
+
+impl Fetching {
+    fn start() -> Self {
+        FETCHING.fetch_add(1, Ordering::Relaxed);
+        Fetching
+    }
+}
+
+impl Drop for Fetching {
+    fn drop(&mut self) {
+        FETCHING.fetch_sub(1, Ordering::Relaxed);
+    }
+}
+
+/// Whether a file is being fetched right now.
+pub fn downloading() -> bool {
+    FETCHING.load(Ordering::Relaxed) > 0
+}
+
 /// How long the download is being kept waiting, if it is.
 pub fn waiting_for_server() -> Option<u64> {
     match WAITING.load(Ordering::Relaxed) {
@@ -460,6 +486,7 @@ pub async fn fetch(
     written: Arc<AtomicU64>,
     cancel: Arc<AtomicBool>,
 ) -> Result<()> {
+    let _fetching = Fetching::start();
     if let Some(parent) = part.parent() {
         std::fs::create_dir_all(parent).with_context(|| format!("create {}", parent.display()))?;
     }

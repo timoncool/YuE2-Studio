@@ -325,6 +325,17 @@ pub(crate) fn busy(summary: &Value) -> Vec<&'static str> {
     .collect()
 }
 
+/// What is at work for the desktop shell's idle stop: what `studio_wait` waits on, and a
+/// download. None while the routes are not built yet, when nothing can be read.
+pub(crate) async fn at_work() -> Option<Vec<&'static str>> {
+    API.get()?;
+    let mut working = busy(&status_summary().await);
+    if crate::chunked::downloading() {
+        working.push("download");
+    }
+    Some(working)
+}
+
 /// How long one wait holds a call: clients give up on a tool call after about
 /// a minute, so a wait answers before that and the agent calls it again.
 const WAIT_DEFAULT: u64 = 30;

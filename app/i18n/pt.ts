@@ -2588,6 +2588,8 @@ export const pt = {
     shellUpdatePortable: 'A versão {version} está pronta. Uma cópia portátil atualiza-se à mão: abrir a página de transferência?',
     shellUpdateInstall: 'Instalar',
     shellUpdateOpen: 'Abrir a página',
+    shellCloseToTray: 'Continuar a funcionar na área de notificação quando a janela é fechada',
+    shellCloseToTrayHint: 'Fechar a janela apenas a esconde; as músicas continuam a ser feitas. Clique no ícone da área de notificação para a trazer de volta e saia pelo menu dele.',
     shellUpdateLater: 'Mais tarde',
     shellUpdateInstalling: 'A descarregar e instalar…',
     shellUpdateFailed: 'A atualização não foi instalada: {error}',
