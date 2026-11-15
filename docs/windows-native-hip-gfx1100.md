@@ -76,6 +76,32 @@ architecture changes build inputs and test coverage, not Studio code** —
 detection is layout-based, the engine validates the real device, and every
 artifact already carries its target list.
 
+## Engine startup retry policy (Windows HIP and other backends)
+
+The Studio watchdog previously attempted to restart an installed-but-
+unhealthy engine every roughly two seconds, even when Windows code
+integrity permanently rejected its HIP backend DLLs. The 2026-11-15
+gfx1100 GUI evidence contains 25 such attempted restarts. This
+**does not imply GPU computation succeeded**, and repeated launches do
+not repair missing libraries or Windows application-control policy.
+
+The new watchdog uses a bounded retry schedule for the same engine
+settings and selected model configuration: approximately 5, 15, 30,
+and 60 seconds, then suspends after the fifth failed automatic start.
+Successful health resets the failure budget. Changing engine settings
+or selected models also resets the budget; the explicit Settings
+**Restart** action remains available and bypasses the watchdog counter.
+Explicit HIP still has **no CPU/Vulkan fallback**. An error remains
+visible while automatic attempts are paused.
+
+Pure Rust unit tests cover: bounded retries, suspended unchanged
+configuration, reset after configuration change, and reset after
+successful start. These tests run without ROCm or a Radeon GPU.
+**A full CI result must be attached for the changed Rust HEAD before
+a merge/readiness claim.** The original Studio GUI full-generation
+physical evidence remains attributed to its original executable,
+not to this watchdog fix.
+
 ## Windows driver/runtime deployment and release-signing policy
 
 **Physical test status is not ISV deployment approval.** The current
