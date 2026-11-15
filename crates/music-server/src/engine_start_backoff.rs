@@ -82,7 +82,7 @@ mod tests {
             let when = now + Duration::from_secs(1000 * i as u64);
             assert_eq!(backoff.finish(when, false), RetryOutcome::Wait(Duration::from_secs(*seconds)));
             assert!(!backoff.allow(when));
-            assert!(!backoff.allow(when + Duration::from_secs(seconds - 1)));
+            assert!(!backoff.allow(when + Duration::from_secs(*seconds - 1)));
             assert!(backoff.allow(when + Duration::from_secs(*seconds)));
         }
         assert_eq!(backoff.finish(now + Duration::from_secs(4000), false), RetryOutcome::Suspended);
