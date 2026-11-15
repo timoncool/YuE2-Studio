@@ -203,29 +203,35 @@ pub fn write_project(contents: &Contents, target: &Path) -> Result<Project> {
     let audio_files: Vec<(String, PathBuf)> = audio_files.into_iter().map(|(_, _, name, path)| (name, path)).collect();
 
     let partial = target.with_extension("zip.part");
-    let file = std::fs::File::create(&partial).with_context(|| format!("create {}", partial.display()))?;
-    let mut zip = zip::ZipWriter::new(std::io::BufWriter::new(file));
-    let stored = zip::write::SimpleFileOptions::default().compression_method(zip::CompressionMethod::Stored).large_file(true);
-    let deflated = zip::write::SimpleFileOptions::default().compression_method(zip::CompressionMethod::Deflated);
     let mut listed = Vec::new();
-    let mut add = |zip: &mut zip::ZipWriter<_>, name: String, options, bytes: &mut dyn std::io::Read| -> Result<()> {
-        zip.start_file(format!("{root}/{name}"), options)?;
-        std::io::copy(bytes, zip)?;
-        listed.push(name);
-        Ok(())
-    };
-    // the set is already gzipped; storing it keeps it byte for byte what was built
-    add(&mut zip, format!("{title}.als"), stored, &mut set.as_slice())?;
-    for (name, path) in &audio_files {
-        let mut source = std::fs::File::open(path).with_context(|| format!("open {}", path.display()))?;
-        add(&mut zip, format!("Samples/Imported/{name}"), stored, &mut source)?;
+    let written = (|| -> Result<()> {
+        let file = std::fs::File::create(&partial).with_context(|| format!("create {}", partial.display()))?;
+        let mut zip = zip::ZipWriter::new(std::io::BufWriter::new(file));
+        let stored = zip::write::SimpleFileOptions::default().compression_method(zip::CompressionMethod::Stored).large_file(true);
+        let deflated = zip::write::SimpleFileOptions::default().compression_method(zip::CompressionMethod::Deflated);
+        let mut add = |zip: &mut zip::ZipWriter<_>, name: String, options, bytes: &mut dyn std::io::Read| -> Result<()> {
+            zip.start_file(format!("{root}/{name}"), options)?;
+            std::io::copy(bytes, zip)?;
+            listed.push(name);
+            Ok(())
+        };
+        // the set is already gzipped; storing it keeps it byte for byte what was built
+        add(&mut zip, format!("{title}.als"), stored, &mut set.as_slice())?;
+        for (name, path) in &audio_files {
+            let mut source = std::fs::File::open(path).with_context(|| format!("open {}", path.display()))?;
+            add(&mut zip, format!("Samples/Imported/{name}"), stored, &mut source)?;
+        }
+        for (_, name, bytes) in &contents.midi {
+            add(&mut zip, format!("MIDI/{name}"), deflated, &mut bytes.as_slice())?;
+        }
+        add(&mut zip, "READ ME.txt".into(), deflated, &mut read_me(contents, &files, &left_off).as_bytes())?;
+        zip.finish()?.flush()?;
+        std::fs::rename(&partial, target).with_context(|| format!("publish {}", target.display()))
+    })();
+    if let Err(error) = written {
+        let _ = std::fs::remove_file(&partial);
+        return Err(error);
     }
-    for (_, name, bytes) in &contents.midi {
-        add(&mut zip, format!("MIDI/{name}"), deflated, &mut bytes.as_slice())?;
-    }
-    add(&mut zip, "READ ME.txt".into(), deflated, &mut read_me(contents, &files, &left_off).as_bytes())?;
-    zip.finish()?.flush()?;
-    std::fs::rename(&partial, target).with_context(|| format!("publish {}", target.display()))?;
     Ok(Project { files: listed, tracks: files.into_iter().map(|(track, _)| track).collect(), left_off })
 }
 
