@@ -850,6 +850,26 @@ fn components() -> Vec<Component> {
         c("backbone-q5", "backbone", "YuE2-3B-Q5_K_M.gguf", 2622936832, "cd3efd250b734a229172800f08f33a893ad1f66b521666e176cdae4a0729b281"),
         // The VAE ships in F32 only: its weights are the audio.
         c("vae-f32", "vae", "YuE2-Vae-F32.gguf", 530497344, "93e49dfb1970e89ad64cacb17cf13b5d05f6bb30ef7ed3adae3050bcb728638a"),
+        // Ruach Studio's float32 decoders, YuE2-VAE-RS x3 v1 and v2 (CC BY-NC 4.0, like YuE2): F32 only, as released. They need an engine
+        // whose VAE reader knows their keys (decoder_pre_units, decoder_extra_units, halo_frames, weights_f32): timoncool/yue2.cpp#2
+        Component {
+            id: "vae-rs-x3-v1",
+            kind: "vae",
+            filename: "VAE-RS/YuE2-VAE-RS-x3_v1-F32.gguf",
+            bytes: 803056768,
+            sha256: "368a91278f0b25e67bc14b1a894f9e8c341c5fccb70afa880fbc1de6afdb4959",
+            repository: RUACH_VAE_REPOSITORY,
+            revision: RUACH_VAE_REVISION,
+        },
+        Component {
+            id: "vae-rs-x3-v2",
+            kind: "vae",
+            filename: "VAE-RS/YuE2-VAE-RS-x3_v2-F32.gguf",
+            bytes: 803056768,
+            sha256: "93de6e8a18246670f4cf49d5f4f193aece95dda48463eda13a303e7f0d313f97",
+            repository: RUACH_VAE_REPOSITORY,
+            revision: RUACH_VAE_REVISION,
+        },
         // SheetSage2's head; the MERT encoder it reads is a file of its own
         c("transcriber-f32", "transcriber", "SheetSage2-F32.gguf", 228738176, "4988c01b64c2812dd71eb89a9ab1937a3385ff2ba869bf495ccb69af4ec744cd"),
         c("transcriber-q8", "transcriber", "SheetSage2-Q8_0.gguf", 105629856, "95d8fa8761753b4833782a52b68d5c0afa3bd3cfbc03d3dcbbf8ded0c13f611e"),
@@ -903,6 +923,10 @@ fn precision(filename: &str) -> &str {
     let stem = filename.strip_suffix(".gguf").unwrap_or(filename);
     stem.rsplit_once('-').map_or(stem, |(_, tail)| tail)
 }
+
+/// Ruach Studio's decoders: https://huggingface.co/goldhub/YuE2-VAE-RS-x3, pinned.
+const RUACH_VAE_REPOSITORY: &str = "goldhub/YuE2-VAE-RS-x3";
+const RUACH_VAE_REVISION: &str = "be7adad4d8f345549cfb59f94af26e9e3ca6ae67";
 
 fn c(id: &'static str, kind: &'static str, filename: &'static str, bytes: u64, sha256: &'static str) -> Component {
     Component { id, kind, filename, bytes, sha256, repository: REPOSITORY, revision: REVISION }
@@ -1063,9 +1087,13 @@ mod tests {
 
     #[test]
     fn catalog_pins_every_published_file() {
-        assert_eq!(components().len(), 10);
+        assert_eq!(components().len(), 12);
         assert!(components().iter().all(|component| component.sha256.len() == 64 && component.revision.len() == 40));
-        assert!(components().iter().filter(|component| component.id != COMPANION).all(|component| component.revision == REVISION));
+        let ruach = |component: &&Component| component.repository == RUACH_VAE_REPOSITORY;
+        assert!(components().iter().filter(|component| component.id != COMPANION && !ruach(component)).all(|component| component.revision == REVISION));
+        // the Ruach Studio decoders: their own pinned repository, float32 only, offered as VAEs
+        assert!(components().iter().filter(ruach).all(|component| component.revision == RUACH_VAE_REVISION && component.kind == "vae" && component.filename.ends_with("-F32.gguf")));
+        assert_eq!(components().iter().filter(ruach).count(), 2);
     }
 
     #[tokio::test]

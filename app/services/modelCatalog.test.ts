@@ -64,6 +64,14 @@ describe('YuE2 model catalog helpers', () => {
     expect(componentPrecision(components[2])).toBe('F32');
   });
 
+  it("names Ruach Studio's decoders, which are F32 like the set's own VAE", () => {
+    const v1: ModelComponent = { id: 'vae-rs-x3-v1', kind: 'vae', filename: 'VAE-RS/YuE2-VAE-RS-x3_v1-F32.gguf', bytes: 1, sha256: 'r1' };
+    const v2: ModelComponent = { id: 'vae-rs-x3-v2', kind: 'vae', filename: 'VAE-RS/YuE2-VAE-RS-x3_v2-F32.gguf', bytes: 1, sha256: 'r2' };
+    expect(componentPrecision(v1)).toBe('RS x3 v1 · F32');
+    expect(componentPrecision(v2)).toBe('RS x3 v2 · F32');
+    expect(completeCustomComponentIds([...components, v1, v2], { backbone: 'backbone-q5', vae: 'vae-rs-x3-v1' })).toEqual(['backbone-q5', 'vae-rs-x3-v1']);
+  });
+
   it('puts the decoder companion in every set without offering it as a choice', () => {
     const companion: ModelComponent = { id: 'companion-v9', kind: 'companion', filename: 'nar_lora_joint_v9.safetensors', bytes: 1, sha256: 'e' };
     const catalog = [...components, companion];

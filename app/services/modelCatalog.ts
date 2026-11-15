@@ -43,6 +43,9 @@ export const componentKindLabel = (kind: string) => labels[kind as keyof typeof 
 export const isOptionalKind = (kind: string) => (OPTIONAL_KINDS as readonly string[]).includes(kind);
 
 export const componentPrecision = (component: ModelComponent) => {
+  // Ruach Studio's decoders are F32 like the set's own VAE, so they are told apart by name
+  const ruach = component.filename.match(/VAE-RS-x3_(v\d+)-F32\.gguf$/i)?.[1];
+  if (ruach) return `RS x3 ${ruach} · F32`;
   // the GGUF files end in -<ggml type>.gguf, the companion in _v<version>.safetensors
   const quant = component.filename.match(/-([A-Z0-9_]+)\.gguf$/i)?.[1];
   if (quant) return quant.toUpperCase();
