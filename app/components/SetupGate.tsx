@@ -809,15 +809,19 @@ export const SetupGate: React.FC<{ onReady?: () => void; mode?: 'first-run' | 's
   // What to show as chosen: what the studio is actually set to, not what it
   // would recommend. Preselecting the recommendation made an installed studio
   // look like it had 26 GB to download.
-  const [preselected, setPreselected] = useState(false);
+  // the studio's selection the selects were last filled from: they follow it when it changes outside them (a preset)
+  const seeded = useRef<string | null>(null);
 
   useEffect(() => {
-    if (preselected || !catalog || !status) return;
+    if (!catalog || !status) return;
     const ids = status.selected_component_ids?.length
       ? status.selected_component_ids
       : catalog.profiles.find((profile) => profile.id === status.selected_profile_id)?.components
         ?? catalog.profiles.find((profile) => profile.id === catalog.recommended_profile_id)?.components
         ?? [];
+    const key = [...ids].sort().join('|');
+    if (seeded.current === key) return;
+    seeded.current = key;
     if (ids.length === 0) return;
     const picked: Record<string, string> = {};
     for (const id of ids) {
@@ -825,8 +829,7 @@ export const SetupGate: React.FC<{ onReady?: () => void; mode?: 'first-run' | 's
       if (component) picked[component.kind] = component.id;
     }
     setChoice(picked);
-    setPreselected(true);
-  }, [catalog, status, preselected]);
+  }, [catalog, status]);
 
   useEffect(() => {
     void fetch('/setup/catalog')
@@ -1125,13 +1128,15 @@ export const SetupGate: React.FC<{ onReady?: () => void; mode?: 'first-run' | 's
                     </select>
                   </label>
                   <div className="mb-2 flex shrink-0 items-center gap-2">
-                    <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${isInstalled ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-300' : 'bg-zinc-200/70 text-zinc-500 dark:bg-white/10 dark:text-zinc-400'}`}>
-                      {isInstalled
-                        ? selectedId && status?.taken_from?.[selectedId]
-                          ? t('takenFrom').replace('{app}', programName(status.taken_from[selectedId].app))
-                          : t('installed')
-                        : t('missingBadge')}
-                    </span>
+                    {(selectedId || !group.optional) && (
+                      <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${isInstalled ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-300' : 'bg-zinc-200/70 text-zinc-500 dark:bg-white/10 dark:text-zinc-400'}`}>
+                        {isInstalled
+                          ? selectedId && status?.taken_from?.[selectedId]
+                            ? t('takenFrom').replace('{app}', programName(status.taken_from[selectedId].app))
+                            : t('installed')
+                          : t('missingBadge')}
+                      </span>
+                    )}
                     {isInstalled && (
                       <button
                         type="button"

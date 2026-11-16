@@ -135,7 +135,7 @@ const createDragPreview = (element: HTMLElement) => {
 };
 
 /** A generation's card rather than a song: being made, or stopped and waiting to be cleared. */
-const isCard = (song: Song) => Boolean(song.isGenerating) || song.stage === 'cancelled' || song.stage === 'failed';
+export const isCard = (song: Song) => Boolean(song.isGenerating) || song.stage === 'cancelled' || song.stage === 'failed';
 
 export const SongList: React.FC<SongListProps> = ({
     songs,
