@@ -1893,7 +1893,7 @@ pub async fn serve() -> anyhow::Result<()> {
                         }
                         engine_start_backoff::RetryOutcome::Suspended => {
                             music_engine::yue_server::note_in_log(
-                                "engine start failed repeatedly; automatic retries paused until engine settings or selected models change. Use Restart in Settings to retry manually."
+                                "engine start failed repeatedly; it is now tried every five minutes, and at once when engine settings or the selected models change. Restart in Settings tries now."
                             );
                         }
                     }

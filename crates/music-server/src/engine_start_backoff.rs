@@ -5,6 +5,8 @@ use std::time::{Duration, Instant};
 
 const RETRY_DELAYS_SECONDS: [u64; 4] = [5, 15, 30, 60];
 pub(super) const MAX_AUTOMATIC_FAILURES: u8 = 5;
+/// How far apart the starts are once that many have failed in a row.
+pub(super) const SLOW_RETRY: Duration = Duration::from_secs(300);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum RetryOutcome {
@@ -42,7 +44,7 @@ impl<K: Clone + PartialEq> EngineStartBackoff<K> {
     }
 
     pub(super) fn allow(&self, now: Instant) -> bool {
-        !self.suspended && self.retry_at.is_none_or(|next| now >= next)
+        self.retry_at.is_none_or(|next| now >= next)
     }
 
     pub(super) fn reset_failures(&mut self) {
@@ -58,9 +60,12 @@ impl<K: Clone + PartialEq> EngineStartBackoff<K> {
         }
         self.consecutive_failures = self.consecutive_failures.saturating_add(1);
         if self.consecutive_failures >= MAX_AUTOMATIC_FAILURES {
+            // a cause that goes away by itself (a model file put back, memory another program gave up) still
+            // brings the engine back: the starts go on, far apart
+            let first = !self.suspended;
             self.suspended = true;
-            self.retry_at = None;
-            return RetryOutcome::Suspended;
+            self.retry_at = Some(now + SLOW_RETRY);
+            return if first { RetryOutcome::Suspended } else { RetryOutcome::Wait(SLOW_RETRY) };
         }
         let delay = Duration::from_secs(RETRY_DELAYS_SECONDS[usize::from(self.consecutive_failures - 1)]);
         self.retry_at = Some(now + delay);
@@ -85,8 +90,12 @@ mod tests {
             assert!(!backoff.allow(when + Duration::from_secs(*seconds - 1)));
             assert!(backoff.allow(when + Duration::from_secs(*seconds)));
         }
-        assert_eq!(backoff.finish(now + Duration::from_secs(4000), false), RetryOutcome::Suspended);
-        assert!(!backoff.allow(now + Duration::from_secs(100_000)));
+        let fifth = now + Duration::from_secs(4000);
+        assert_eq!(backoff.finish(fifth, false), RetryOutcome::Suspended);
+        assert!(!backoff.allow(fifth + SLOW_RETRY - Duration::from_secs(1)));
+        assert!(backoff.allow(fifth + SLOW_RETRY), "the engine is tried again, far apart, and comes back when its cause is gone");
+        assert_eq!(backoff.finish(fifth + SLOW_RETRY, false), RetryOutcome::Wait(SLOW_RETRY));
+        assert_eq!(backoff.finish(fifth + SLOW_RETRY * 2, true), RetryOutcome::Success);
     }
 
     #[test]
@@ -96,7 +105,7 @@ mod tests {
         backoff.observe(&"backend-a".into());
         for _ in 0..MAX_AUTOMATIC_FAILURES { backoff.finish(now, false); }
         backoff.observe(&"backend-a".into());
-        assert!(!backoff.allow(now + Duration::from_secs(86400)));
+        assert!(!backoff.allow(now + SLOW_RETRY - Duration::from_secs(1)));
         backoff.observe(&"backend-b".into());
         assert!(backoff.allow(now));
     }
