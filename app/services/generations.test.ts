@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Song } from '../types';
-import { rowsFor, rowTaken, stillWaiting } from './generations';
+import { keepingDeleted, rowsFor, rowTaken, stillWaiting } from './generations';
 
 const song = (id: string, fields: Partial<Song> = {}): Song => ({
   id,
@@ -43,5 +43,25 @@ describe('the rows of a job of several tracks', () => {
     expect(rowTaken(rows, [third, second, first], third)).toBe('temp_1');
     expect(rowTaken(['only'], [first], first)).toBe('only');
     expect(rowTaken(['only'], [second, first], second)).toBeUndefined();
+  });
+
+  it('keeps the place of a song deleted while its job still runs, so cards and rows do not shift', () => {
+    const rows = rowsFor('temp_1', 3);
+    const [a, b, c] = [song('a'), song('b'), song('c')];
+    const known = new Map([['job', [b, a]], ['old', [song('x')]]]);
+
+    // the first song was deleted: the library lists the second alone, then the third arrives
+    const afterDelete = keepingDeleted(new Map([['job', [b]]]), known);
+    expect(afterDelete.get('job')?.map(entry => entry.id)).toEqual(['b', 'a']);
+    expect(rowTaken(rows, afterDelete.get('job')!, b)).toBe('temp_1~2');
+    const cards = rows.map(id => song(id, { jobId: 'job' }));
+    expect(stillWaiting(cards, afterDelete, new Map([['job', rows]])).map(entry => entry.id)).toEqual(['temp_1']);
+
+    const withThird = keepingDeleted(new Map([['job', [c, b]]]), afterDelete);
+    expect(withThird.get('job')?.map(entry => entry.id)).toEqual(['c', 'b', 'a']);
+    expect(rowTaken(rows, withThird.get('job')!, c)).toBe('temp_1');
+    expect(stillWaiting(cards, withThird, new Map([['job', rows]]))).toEqual([]);
+    // a job whose songs are all deleted is still remembered
+    expect(afterDelete.get('old')?.map(entry => entry.id)).toEqual(['x']);
   });
 });

@@ -110,6 +110,17 @@ export function stillWaiting(cards: Song[], madeOf: ReadonlyMap<string, Song[]>,
   });
 }
 
+/** `made` with the songs `known` held before and the library lists no longer, each job's newest first: a song deleted
+ *  while its job still runs keeps its place among the job's songs, so the job's cards and rows do not shift. */
+export function keepingDeleted(made: Map<string, Song[]>, known: ReadonlyMap<string, Song[]>): Map<string, Song[]> {
+  for (const [job, before] of known) {
+    const there = made.get(job) ?? [];
+    const gone = before.filter(song => !there.some(entry => entry.id === song.id));
+    if (gone.length > 0) made.set(job, [...there, ...gone].sort((a, b) => (a.id < b.id ? 1 : -1)));
+  }
+  return made;
+}
+
 /** Asks the engine to stop a job; a refusal is told, the card is already marked. */
 async function stopJob(jobId: string): Promise<void> {
   const response = await fetch(`/v1/music/jobs/${encodeURIComponent(jobId)}`, { method: 'POST' });
@@ -148,7 +159,9 @@ export function useGenerations({ enabled, notify, onFinished }: GenerationOption
     cardsNow.current = cards;
   }, [cards]);
 
-  // the songs each job made; the library lists newest first
+  // the songs each job made, newest first as the library lists them. A song deleted while this window is open keeps
+  // its place among them: a job's cards and rows count every song it handed over, not only the ones still there.
+  const handed = useRef(new Map<string, Song[]>());
   const madeOf = useMemo(() => {
     const made = new Map<string, Song[]>();
     for (const song of library) {
@@ -157,7 +170,8 @@ export function useGenerations({ enabled, notify, onFinished }: GenerationOption
       if (songs) songs.push(song);
       else made.set(song.madeByJob, [song]);
     }
-    return made;
+    handed.current = keepingDeleted(made, handed.current);
+    return handed.current;
   }, [library]);
 
   // a card stays until the library holds its song, so its row is never empty
@@ -270,7 +284,9 @@ export function useGenerations({ enabled, notify, onFinished }: GenerationOption
     }
     const note = takePendingNote(finished.id, made, noteError);
     if (note) made = made.map(song => ({ ...song, note }));
-    updateLibrarySongs(songs => [...made.filter(song => !songs.some(entry => entry.id === song.id)), ...songs]);
+    // a song the job handed over earlier and the person has deleted since is not brought back
+    const deleted = new Set((handed.current.get(job.id) ?? []).filter(song => !library.some(entry => entry.id === song.id)).map(song => song.id));
+    updateLibrarySongs(songs => [...made.filter(song => !deleted.has(song.id) && !songs.some(entry => entry.id === song.id)), ...songs]);
     if (job.playlist_id) {
       // the songs are in their playlist at once, so a list showing it keeps their row
       const into = job.playlist_id;

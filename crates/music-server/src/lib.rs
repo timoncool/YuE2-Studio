@@ -608,8 +608,15 @@ async fn resume_unfinished_jobs(state: AppState) {
         return;
     }
     for old in cut_off {
+        // tracks the cut-off job handed over while it ran are in the library: the job made again leaves them out
+        let kept = state.library.songs_of_music_job(&old.id);
+        let asked = tracks_asked(old.request.get("replay").unwrap_or(&old.request));
         let (resumed_as, message) = if old.attempt >= MAX_RESUMES {
             (None, format!("Cut off when the studio closed, and already started again {MAX_RESUMES} times; make it again by hand."))
+        } else if let Err(error) = &kept {
+            (None, format!("Cut off when the studio closed; the songs it had finished could not be counted, so it was not started again: {error:#}"))
+        } else if kept.as_ref().is_ok_and(|kept| *kept >= asked) {
+            (None, "Cut off when the studio closed; its songs were all in the library by then.".to_string())
         } else if let Some(replay) = old.request.get("replay") {
             match serde_json::from_value::<ReplayMusicJobRequest>(replay.clone()) {
                 Err(error) => (None, format!("Cut off when the studio closed; its request could not be read to start it again: {error}")),
@@ -635,6 +642,11 @@ async fn resume_unfinished_jobs(state: AppState) {
                 }
             }
         };
+        if let (Some(again), Ok(kept)) = (&resumed_as, &kept) {
+            if *kept > 0 {
+                state.tracks_kept.write().await.insert(again.clone(), *kept);
+            }
+        }
         if let Err(error) = state.library.cancel_cut_off_music_job(&old.id, resumed_as.as_deref(), &message) {
             eprintln!("[ERROR] a cut-off song could not be marked: {error:#}");
         }
