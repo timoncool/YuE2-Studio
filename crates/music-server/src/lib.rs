@@ -25,6 +25,7 @@ mod downloads;
 mod install_record;
 mod pin_sha;
 mod engine_runtime;
+mod engine_start_backoff;
 mod lyrics_db;
 mod mcp;
 mod lyrics_sync;
@@ -1832,18 +1833,35 @@ pub async fn serve() -> anyhow::Result<()> {
             // a startup that is failing, and repeating "stopped answering" every
             // two seconds is what filled a whole log with one sentence.
             let mut was_running = false;
+            // Bound retries for persistent startup failures regardless of backend.
+            // A user-initiated /engine/restart remains independent of this loop.
+            let mut start_backoff = engine_start_backoff::EngineStartBackoff::default();
             loop {
                 let ready = state.model_manager.status(effective_install_target(&state).await).await.ready;
                 // an engine inside a long step does not answer /health in time; while it is still a
                 // running process with a job on it, it is at work, not gone
                 let running = state.music_server.health().await || engine_at_work(&state).await;
+                // A changed runtime or model selection can resolve a prior failure.
+                let retry_key = (
+                    state.engine_options.read().await.clone(),
+                    state.selected_profile_id.read().await.clone(),
+                    state.selected_component_ids.read().await.clone(),
+                    state.own_backbone.read().await.clone(),
+                );
+                start_backoff.observe(&retry_key);
+                if running {
+                    start_backoff.reset_failures();
+                }
                 // the card has one owner: a preparation or a training run
                 // holding it is left alone, and the engine comes back after
                 let preparing = state.prepare.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).as_ref().is_some_and(|job| !job.finished);
                 let card_taken = preparing || state.training.active_run().await.is_some();
                 // a restart under way elsewhere is left alone
                 let quiet = state.engine_use.try_write().ok();
-                if ready && !running && !card_taken && quiet.is_some() && !state.music_server.health().await {
+                if ready && !running && !card_taken && quiet.is_some()
+                    && start_backoff.allow(std::time::Instant::now())
+                    && !state.music_server.health().await
+                {
                     if was_running {
                         // It was answering and now it is not: the one line that
                         // explains a log which suddenly starts again from
@@ -1863,7 +1881,22 @@ pub async fn serve() -> anyhow::Result<()> {
                         }
                     }
                     let started = start_engine_again(&state).await;
+                    let retry = start_backoff.finish(std::time::Instant::now(), started.is_ok());
                     *state.engine_start_error.write().await = started.as_ref().err().cloned();
+                    match retry {
+                        engine_start_backoff::RetryOutcome::Success => {}
+                        engine_start_backoff::RetryOutcome::Wait(delay) => {
+                            music_engine::yue_server::note_in_log(&format!(
+                                "engine start failed; next automatic retry in {} seconds",
+                                delay.as_secs()
+                            ));
+                        }
+                        engine_start_backoff::RetryOutcome::Suspended => {
+                            music_engine::yue_server::note_in_log(
+                                "engine start failed repeatedly; automatic retries paused until engine settings or selected models change. Use Restart in Settings to retry manually."
+                            );
+                        }
+                    }
                     // Said and counted once per failure, not once every few
                     // seconds: a card with too little memory would otherwise
                     // fill the log, and the hub would count the time it lay down.
