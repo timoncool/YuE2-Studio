@@ -65,14 +65,14 @@ export const EngineTabs: React.FC = () => {
   const [engine, setEngine] = useState<VisualizerEngine>(() => visualizer().engine);
   useEffect(() => onVisualizer((state) => setEngine(state.engine)), []);
   return (
-    <div className="flex rounded-md bg-black/5 p-0.5 dark:bg-white/5">
+    <div className="flex min-w-0 flex-wrap rounded-md bg-black/5 p-0.5 dark:bg-white/5">
       {(['milkdrop', 'spectrum', 'blackhole', 'tunnel'] as const).map((id) => (
         <button
           key={id}
           type="button"
           onPointerDown={(event) => event.stopPropagation()}
           onClick={() => setVisualizer({ engine: id })}
-          className={`rounded-sm px-2 py-0.5 text-[10px] font-semibold ${engine === id ? 'bg-pink-500 text-white' : 'text-zinc-500 hover:text-zinc-900 dark:hover:text-white'}`}
+          className={`whitespace-nowrap rounded-sm px-2 py-0.5 text-[10px] font-semibold ${engine === id ? 'bg-pink-500 text-white' : 'text-zinc-500 hover:text-zinc-900 dark:hover:text-white'}`}
         >
           {id === 'milkdrop' ? 'MilkDrop' : id === 'spectrum' ? t('vizSpectrum') : id === 'blackhole' ? t('vizBlackHole') : t('vizTunnel')}
         </button>
@@ -122,7 +122,7 @@ export const VisualizerControls: React.FC<{ onFullscreen: () => void; tone?: 'pa
           aria-label={t('vizJumpAt')}
           onPointerDown={stop}
           onChange={(event) => setVisualizer({ jumpAt: Number(event.target.value) })}
-          className="w-16 accent-pink-500"
+          className="w-14 accent-pink-500"
         />
       )}
       <button type="button" onPointerDown={stop} onClick={onFullscreen} title={t('vizFullscreen')} className={button}>
@@ -204,11 +204,9 @@ export const VisualizerPanel: React.FC = () => {
 
   const name = view.engine === 'milkdrop'
     ? view.preset ?? ''
-    : view.engine === 'blackhole'
-      ? t('vizBlackHole')
-      : view.engine === 'tunnel'
-        ? t('vizTunnel')
-        : t(`vizLook_${view.look}` as never);
+    : view.engine === 'spectrum'
+      ? t(`vizLook_${view.look}` as never)
+      : '';
   const button = 'text-zinc-400 hover:text-zinc-900 dark:hover:text-white';
 
   return (
@@ -216,18 +214,20 @@ export const VisualizerPanel: React.FC = () => {
       <div className="overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-2xl dark:border-white/10 dark:bg-suno-card">
         <div
           onPointerDown={panel.onDragStart}
-          className={`flex items-center gap-2 border-b border-zinc-200 px-2.5 py-1.5 dark:border-white/10 ${panel.dragging ? 'cursor-grabbing' : 'cursor-grab'}`}
+          className={`flex flex-wrap items-center gap-x-2 gap-y-1 border-b border-zinc-200 px-2.5 py-1.5 dark:border-white/10 ${panel.dragging ? 'cursor-grabbing' : 'cursor-grab'}`}
         >
           <Move size={12} className="shrink-0 text-zinc-400" />
           <EngineTabs />
           <span className="min-w-0 flex-1 truncate text-[11px] text-zinc-500" title={name}>{name}</span>
-          <VisualizerControls onFullscreen={fullscreen} />
-          <button type="button" onPointerDown={(event) => event.stopPropagation()} onClick={() => void popOut()} title={t('vizPopOut')} className={button}>
-            <ExternalLink size={14} />
-          </button>
-          <button type="button" onPointerDown={(event) => event.stopPropagation()} onClick={close} title={t('close')} className={button}>
-            <X size={15} />
-          </button>
+          <div className="ml-auto flex shrink-0 items-center gap-2">
+            <VisualizerControls onFullscreen={fullscreen} />
+            <button type="button" onPointerDown={(event) => event.stopPropagation()} onClick={() => void popOut()} title={t('vizPopOut')} className={button}>
+              <ExternalLink size={14} />
+            </button>
+            <button type="button" onPointerDown={(event) => event.stopPropagation()} onClick={close} title={t('close')} className={button}>
+              <X size={15} />
+            </button>
+          </div>
         </div>
         <div ref={body} className="relative bg-black" style={{ height: size.height }}>
           {graph ? (
