@@ -290,7 +290,12 @@ impl ModelManager {
     }
 
     pub async fn install(&self, request: InstallRequest) -> Result<DownloadJob> {
-        let mut selection = resolve_install(request)?;
+        self.start(resolve_install(request)?).await
+    }
+
+    /// Starts the one download the manager runs at a time: a second is refused while it runs, since four connections
+    /// are the whole budget of the files' host.
+    async fn start(&self, mut selection: ResolvedInstall) -> Result<DownloadJob> {
         fs::create_dir_all(&self.root)
             .with_context(|| format!("create model root {}", self.root.display()))?;
         preflight_space(&self.root, &selection)?;
@@ -378,22 +383,30 @@ impl ModelManager {
         })
     }
 
-    /// Downloads one component a set runs without, beside the set already on disk, and returns when it is there.
+    /// Downloads one component a set runs without, beside the set already on disk, and returns when it is there. It
+    /// is the manager's one download while it runs: the window shows its progress, and a set's download waits for it.
     pub async fn fetch_optional(&self, id: &str) -> Result<()> {
         let component = components()
             .into_iter()
             .find(|component| component.id == id && optional_kind(component.kind))
             .with_context(|| format!("'{id}' is not a component a set runs without"))?;
-        if self.state.read().await.active.as_ref().is_some_and(|job| matches!(job.status, DownloadStatus::Downloading)) {
-            bail!("a model download is already running");
-        }
         if verified_file_async(self.root.join(component.filename), component.clone()).await? {
             return Ok(());
         }
         let total_bytes = component.bytes;
-        preflight_space(&self.root, &ResolvedInstall { profile_id: None, components: vec![component.clone()], total_bytes, already_present_bytes: 0 })?;
-        self.cancelled.store(false, Ordering::SeqCst);
-        self.download_component(&component).await
+        let job = self.start(ResolvedInstall { profile_id: None, components: vec![component], total_bytes, already_present_bytes: 0 }).await?;
+        loop {
+            tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+            let state = self.state.read().await;
+            let Some(active) = state.active.as_ref().filter(|active| active.id == job.id) else {
+                bail!("the download of {id} was replaced by another before it ended");
+            };
+            match active.status {
+                DownloadStatus::Downloading => continue,
+                DownloadStatus::Completed => return Ok(()),
+                _ => bail!("{id} was not downloaded: {}", active.error.as_deref().unwrap_or("the download was stopped")),
+            }
+        }
     }
 
     /// A saved hand-picked set stays chosen while the files picked for it are

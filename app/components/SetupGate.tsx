@@ -53,8 +53,8 @@ type SetupStatus = {
   ready: boolean;
   selected_profile_id?: string | null;
   selected_component_ids?: string[] | null;
-  /** The person's own YuE2 file the engine runs in place of the set's backbone. */
-  own_model?: string | null;
+  /** The preset the studio runs as now: `ruach`, or none. */
+  preset?: string | null;
   hardware?: { gpuName?: string; totalVramGb?: number; totalRamGb?: number; vulkan?: boolean; onProcessor?: boolean; shortOfSmallestSet?: number | null; recommended?: string; reason?: string };
   engine_ready: boolean;
   engine_id: string;
@@ -1150,8 +1150,7 @@ export const SetupGate: React.FC<{ onReady?: () => void; mode?: 'first-run' | 's
             {!chosenIds && <p className="text-xs text-amber-600 dark:text-amber-300">{t('incompleteSet')}</p>}
             {mode === 'settings' && (
               <ModelPreset
-                componentIds={status?.selected_component_ids}
-                ownModel={status?.own_model}
+                inUse={status?.preset === 'ruach'}
                 disabled={active?.status === 'downloading'}
                 onDone={() => void refresh().catch(() => undefined)}
               />

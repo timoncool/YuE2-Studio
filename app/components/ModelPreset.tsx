@@ -2,26 +2,12 @@ import React, { useState } from 'react';
 import { CheckCircle2, Loader2, Wand2 } from 'lucide-react';
 import { useI18n } from '../context/I18nContext';
 
-const PRESET_DECODER = 'vae-rs-x3-v1';
-const PRESET_MODEL = 'RS-TW-2.0x0.75';
-
-/** Whether the studio runs as the preset sets it: Ruach Studio's decoder in the chosen set and their fine-tune singing. */
-export function presetInUse(componentIds: string[] | null | undefined, ownModel: string | null | undefined): boolean {
-  return Boolean(componentIds?.includes(PRESET_DECODER)) && Boolean(ownModel?.includes(PRESET_MODEL));
-}
-
-/** Settings - Models: Ruach Studio's fine-tune and decoder, set up in one step. */
-export const ModelPreset: React.FC<{
-  componentIds: string[] | null | undefined;
-  ownModel: string | null | undefined;
-  disabled: boolean;
-  onDone: () => void;
-}> = ({ componentIds, ownModel, disabled, onDone }) => {
+/** Settings - Models: Ruach Studio's fine-tune and decoder, set up in one step. `inUse` is what the service says of the preset. */
+export const ModelPreset: React.FC<{ inUse: boolean; disabled: boolean; onDone: () => void }> = ({ inUse, disabled, onDone }) => {
   const { t } = useI18n();
   const tt = t as unknown as (key: string) => string;
   const [starting, setStarting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const inUse = presetInUse(componentIds, ownModel);
 
   const use = async () => {
     if (starting) return;

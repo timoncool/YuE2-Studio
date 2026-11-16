@@ -166,6 +166,9 @@ struct AppState {
     separation_run: Arc<RwLock<Option<SeparationRun>>>,
     /// Songs made again after the card ran out of memory, by job, with the KV cache they were made again with.
     memory_retries: Arc<RwLock<HashMap<String, u32>>>,
+    /// Tracks of a lost attempt that went to the library while it ran, by the job that makes the songs again: that job
+    /// makes those tracks once more and leaves them out, so none is in the library twice.
+    tracks_kept: Arc<RwLock<HashMap<String, usize>>>,
     /// The KV cache the running engine was started with, and the one each job was sent to: a song lost to the card's
     /// memory steps down from the cache it was made with, not from one another lost song already stepped to.
     running_max_seq: Arc<RwLock<u32>>,
@@ -1460,6 +1463,7 @@ pub async fn serve() -> anyhow::Result<()> {
         acpp: acpp.clone(),
         separation_run: Arc::new(RwLock::new(None)),
         memory_retries: Arc::new(RwLock::new(HashMap::new())),
+        tracks_kept: Arc::new(RwLock::new(HashMap::new())),
         running_max_seq: Arc::new(RwLock::new(MODEL_CONTEXT)),
         job_max_seq: Arc::new(RwLock::new(HashMap::new())),
         kv_cache_running: Arc::new(RwLock::new(None)),
@@ -6346,41 +6350,44 @@ fn own_model_files(folder: &std::path::Path) -> Vec<(String, u64)> {
 /// when the files it serves are not the ones now selected; an engine that is
 /// not running is left to the supervisor loop.
 async fn reload_engine_if_models_changed(state: &AppState) {
-    let Ok(wanted) = selected_engine_models(state).await else { return };
-    let current = {
-        let supervisor = state.engine.lock().await;
-        supervisor.as_ref().map(|engine| engine.config().models.clone())
-    };
-    let Some(current) = current else { return };
-    let same = |a: &std::path::Path, b: &std::path::Path| {
-        fs::canonicalize(a).ok().zip(fs::canonicalize(b).ok()).is_some_and(|(a, b)| a == b)
-    };
-    let unchanged = same(&current.backbone, &wanted.backbone)
-        && same(&current.vae, &wanted.vae)
-        && match (&current.vae_decoder, &wanted.vae_decoder) {
-            (Some(a), Some(b)) => same(a, b),
-            (None, None) => true,
-            _ => false,
-        }
-        && match (&current.transcriber, &wanted.transcriber) {
-            (Some(a), Some(b)) => same(a, b),
-            (None, None) => true,
-            _ => false,
-        }
-        && match (&current.adapters, &wanted.adapters) {
-            (Some(a), Some(b)) => same(a, b),
-            (None, None) => true,
-            _ => false,
-        };
-    if unchanged {
+    if engine_serves_selection(state).await != Some(false) {
         return;
     }
     let _restart = state.engine_use.write().await;
     wait_for_sent_songs(state).await;
+    // two changes made together ask for this at once: the second finds the engine already on the selection
+    if engine_serves_selection(state).await != Some(false) {
+        return;
+    }
     music_engine::yue_server::note_in_log("the selected model set changed; restarting the engine on it");
     if let Err(error) = restart_engine(state).await {
         eprintln!("the engine did not restart on the new model set: {error}");
     }
+}
+
+/// Whether the running engine serves the files now selected; none when no engine runs or the selection cannot be
+/// read.
+async fn engine_serves_selection(state: &AppState) -> Option<bool> {
+    let wanted = selected_engine_models(state).await.ok()?;
+    let current = {
+        let supervisor = state.engine.lock().await;
+        supervisor.as_ref().map(|engine| engine.config().models.clone())
+    }?;
+    let same = |a: &std::path::Path, b: &std::path::Path| {
+        fs::canonicalize(a).ok().zip(fs::canonicalize(b).ok()).is_some_and(|(a, b)| a == b)
+    };
+    let same_or_none = |a: &Option<PathBuf>, b: &Option<PathBuf>| match (a, b) {
+        (Some(a), Some(b)) => same(a, b),
+        (None, None) => true,
+        _ => false,
+    };
+    Some(
+        same(&current.backbone, &wanted.backbone)
+            && same(&current.vae, &wanted.vae)
+            && same_or_none(&current.vae_decoder, &wanted.vae_decoder)
+            && same_or_none(&current.transcriber, &wanted.transcriber)
+            && same_or_none(&current.adapters, &wanted.adapters),
+    )
 }
 
 /// Waits until the studio has taken every song it sent the engine: a restart
@@ -6935,6 +6942,7 @@ async fn compose_setup_status(state: &AppState, manager_status: model_manager::M
             && state.engine_options.read().await.backend == music_engine::yue_server::ComputeBackend::Auto
             && !hardware::hardware().on_processor;
         fields.insert("engine_on_processor".into(), Value::Bool(fell));
+        fields.insert("preset".into(), if preset_in_use(state).await { Value::from("ruach") } else { Value::Null });
         fields.insert("engine_id".into(), Value::String(PRIMARY_MUSIC_ENGINE_ID.into()));
         fields.insert("trash_days".into(), Value::from(TRASH_DAYS));
         // whether the files a person downloads by hand are better taken from the mirror, as the studio's are
@@ -9600,6 +9608,17 @@ struct SetupPresetRequest {
     id: String,
 }
 
+/// Whether the studio runs as the Ruach Studio preset sets it: their decoder in the chosen set and their fine-tune,
+/// in either quantisation, singing in place of the set's model.
+async fn preset_in_use(state: &AppState) -> bool {
+    let decoder = state.selected_component_ids.read().await.as_ref().is_some_and(|ids| ids.iter().any(|id| id == model_manager::PRESET_DECODER));
+    let own = state.own_backbone.read().await.clone();
+    decoder
+        && own.is_some_and(|file| {
+            community::catalog().iter().any(|model| model.id == model_manager::PRESET_MODEL && model.files.iter().any(|entry| entry.asset.relative_path == file))
+        })
+}
+
 /// POST /setup/preset - a way of the studio others made, in one step. `ruach`: Ruach Studio's fine-tune sings in
 /// place of the set's model and their decoder turns the song into sound; the set chosen now keeps its other parts.
 /// What is not on disk is downloaded, and the engine starts on each part as it arrives.
@@ -9616,6 +9635,11 @@ async fn setup_preset(State(state): State<AppState>, Json(request): Json<SetupPr
     };
     let ids = model_manager::with_decoder(&base, model_manager::PRESET_DECODER);
     state.model_manager.installed_component_files(&ids).map_err(|error| api_error(StatusCode::CONFLICT, error.to_string()))?;
+    // nothing is changed while a download is under way: the preset is taken whole or not at all
+    let set_downloading = state.model_manager.status(None).await.active.is_some_and(|job| matches!(job.status, model_manager::DownloadStatus::Downloading));
+    if set_downloading || state.community_downloads.active().await.is_some_and(|progress| !progress.done) {
+        return Err(api_error(StatusCode::CONFLICT, "a model is downloading; wait for it or cancel it, then choose the preset".into()));
+    }
     *state.selected_profile_id.write().await = None;
     *state.selected_component_ids.write().await = Some(ids.clone());
     persist_studio_settings(&state)
@@ -11087,6 +11111,12 @@ async fn retry_after_memory(state: &AppState, job_id: &str) {
     };
     let Some(again) = again else { return };
     state.memory_retries.write().await.insert(again.clone(), retry.max_seq);
+    // tracks the lost attempt handed over while it ran stay in the library; the attempt made again leaves them out
+    let handed = state.jobs.read().await.get(job_id).map_or(0, |job| job.songs.len());
+    let kept = state.tracks_kept.write().await.remove(job_id).unwrap_or(0) + handed;
+    if kept > 0 {
+        state.tracks_kept.write().await.insert(again.clone(), kept);
+    }
     if let Some(hub) = &state.hub {
         hub.count("song_memory_retry", 1);
     }
@@ -11159,8 +11189,9 @@ async fn follow_job(state: &AppState, job_id: &str, started: &mut Option<Option<
             }
             // a job of several tracks hands each one over as it is finished, so the first is heard while the rest are made
             let asked = tracks_asked(&existing.generation_settings);
-            if remote.status == "running" && asked > 1 && remote.tracks_ready > early.len() {
-                match import_ready_track(&state, &existing, &job_id, early.len(), asked).await {
+            let kept = state.tracks_kept.read().await.get(&job_id).copied().unwrap_or(0);
+            if remote.status == "running" && asked > 1 && remote.tracks_ready > kept + early.len() {
+                match import_ready_track(&state, &existing, &job_id, kept + early.len(), asked).await {
                     Ok(songs) => {
                         if let Some(playlist) = existing.playlist_id.as_deref() {
                             if let Err(error) = add_to_playlist(&state.library, playlist, songs.iter().map(|song| song.id.clone())) {
@@ -11178,7 +11209,8 @@ async fn follow_job(state: &AppState, job_id: &str, started: &mut Option<Option<
                 }
             }
             if remote.status == "done" {
-                let imported = import_completed_result(&state, &existing, &job_id, early.len()).await;
+                let imported = import_completed_result(&state, &existing, &job_id, kept + early.len()).await;
+                state.tracks_kept.write().await.remove(&job_id);
                 let mut jobs = state.jobs.write().await;
                 let Some(job) = jobs.get_mut(&job_id) else { return };
                 if matches!(job.status, MusicJobStatus::Cancelled) { return; }
