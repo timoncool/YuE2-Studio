@@ -35,6 +35,8 @@ interface Props {
 interface Graph {
   context: AudioContext;
   nodes: Map<string, { gain: GainNode; pan: StereoPannerNode }>;
+  /** Ends the watch that keeps the context running. */
+  release: () => void;
 }
 
 const SLIDER = 'h-1 w-20 accent-pink-500';
@@ -63,7 +65,7 @@ export const StemMixer: React.FC<Props> = ({ stems, urlFor, mixUrl, label, onDow
   const ensureGraph = useCallback(() => {
     if (graph.current) return graph.current;
     const context = new AudioContext();
-    keepContextRunning(context);
+    const release = keepContextRunning(context);
     const nodes = new Map<string, { gain: GainNode; pan: StereoPannerNode }>();
     for (const stem of stems) {
       const element = elements.current.get(stem);
@@ -74,7 +76,7 @@ export const StemMixer: React.FC<Props> = ({ stems, urlFor, mixUrl, label, onDow
       source.connect(gain).connect(pan).connect(context.destination);
       nodes.set(stem, { gain, pan });
     }
-    graph.current = { context, nodes };
+    graph.current = { context, nodes, release };
     return graph.current;
   }, [stems]);
 
@@ -119,6 +121,7 @@ export const StemMixer: React.FC<Props> = ({ stems, urlFor, mixUrl, label, onDow
   // stop everything on the way out
   useEffect(() => () => {
     for (const element of elements.current.values()) element.pause();
+    graph.current?.release();
     void graph.current?.context.close();
   }, []);
 

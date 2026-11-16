@@ -139,7 +139,8 @@ fn copy_track(block: &str, kind: &str, track_id: u64, next: &mut u64, plan: &Tra
     let (name_start, name_end) = element(&text, "<Name>", "</Name>").ok_or_else(|| anyhow!("a {kind} without a name"))?;
     let name = &text[name_start..name_end];
     let named = Regex::new(r#"<UserName Value="[^"]*" />"#)?
-        .replace(name, format!(r#"<UserName Value="{}" />"#, attribute(&plan.name)))
+        // a name is taken as written: a `$` in a song's title is not a reference to a group
+        .replace(name, regex::NoExpand(&format!(r#"<UserName Value="{}" />"#, attribute(&plan.name))))
         .into_owned();
     text.replace_range(name_start..name_end, &named);
     // and its colour, the first Color after the name
@@ -540,6 +541,10 @@ mod tests {
         let built = build_xml(&gunzip(LIVE_12_TEMPLATE).unwrap(), &odd).unwrap();
         let document = roxmltree::Document::parse(&built).unwrap();
         assert!(document.descendants().any(|node| node.attribute("Value") == Some(r#"Lead "A" <1> & 2"#)));
+        odd.midi[0].name = "$100 Bill ${x} $name".into();
+        let built = build_xml(&gunzip(LIVE_12_TEMPLATE).unwrap(), &odd).unwrap();
+        let document = roxmltree::Document::parse(&built).unwrap();
+        assert!(document.descendants().any(|node| node.attribute("Value") == Some("$100 Bill ${x} $name")), "a dollar sign in a title is a dollar sign");
         odd.bpm = 5.0;
         assert!(build_xml(&gunzip(LIVE_12_TEMPLATE).unwrap(), &odd).is_err());
     }
