@@ -890,6 +890,10 @@ async fn open_visualizer_window(app: tauri::AppHandle) -> Result<(), String> {
 async fn open_audio_editor_window(app: tauri::AppHandle, url: String) -> Result<(), String> {
     use tauri::Manager as _;
     let target: tauri::Url = url.parse().map_err(|error| format!("Not an editor address: {error}"))?;
+    // the editor is a page of the studio's own service: no other address gets a window of the app
+    if !matches!(target.host_str(), Some("127.0.0.1" | "localhost")) {
+        return Err(format!("The audio editor opens pages of the studio's own service only, not {}", target.host_str().unwrap_or("an address without a host")));
+    }
     if let Some(window) = app.get_webview_window("audio-editor") {
         window.show().map_err(|error| error.to_string())?;
         window.set_focus().map_err(|error| error.to_string())?;
