@@ -12,6 +12,18 @@ describe('YuE2 strings', () => {
     }
   });
 
+  it('HIP auto-device guidance is written in the matching locale', () => {
+    expect(yue2.en.computeBackendHint_auto).toContain('HIP');
+    expect(yue2.en.computeBackendHint_auto).not.toMatch(/[\u0400-\u04ff\u3400-\u9fff]/);
+    expect(yue2.ru.computeBackendHint_auto).toContain('HIP');
+    expect(yue2.ru.computeBackendHint_auto).toMatch(/[\u0400-\u04ff]/);
+    expect(yue2.ru.computeBackendHint_auto).not.toMatch(/[\u3400-\u9fff]/);
+    expect(yue2.zh.computeBackendHint_auto).toMatch(/[\u3400-\u9fff]/);
+    for (const strings of Object.values(yue2)) {
+      expect(strings.computeBackendHint_hip).toContain('HIP');
+    }
+  });
+
   it('no string names the model this studio was forked from', () => {
     for (const [language, strings] of Object.entries(yue2)) {
       for (const [key, value] of Object.entries(strings)) {

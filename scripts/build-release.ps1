@@ -2,10 +2,14 @@ param(
     [ValidatePattern('^\d+\.\d+\.\d+([\-+][0-9A-Za-z.-]+)?$')]
     [string]$Version,
     [string]$ReleaseNotes = "",
-    [ValidateSet('auto', 'cuda', 'vulkan', 'all')]
+    [ValidateSet('auto', 'cuda', 'hip', 'vulkan', 'all')]
     [string]$RuntimeBackend = 'all',
     # The CUDA 12 toolkit of the engine's second CUDA backend.
-    [string]$Cuda12Root = $env:CUDA_PATH_V12_9
+    [string]$Cuda12Root = $env:CUDA_PATH_V12_9,
+    # gfx target(s) of the opt-in HIP engine: one id or a comma list. Only
+    # read for -RuntimeBackend hip; every artifact of that flavor is named
+    # after it so a HIP release can never overwrite the default Windows one.
+    [string]$HipArch = $(if ($env:HIP_ARCHS) { $env:HIP_ARCHS } else { 'gfx1100' })
 )
 
 $ErrorActionPreference = 'Stop'
@@ -47,7 +51,15 @@ $desktopRoot = Join-Path $repoRoot 'desktop'
 $tauriRoot = Join-Path $desktopRoot 'src-tauri'
 $templatePath = Join-Path $tauriRoot 'tauri.release.conf.template.json'
 $releaseConfigPath = Join-Path $tauriRoot 'tauri.release.conf.json'
-$releaseDir = Join-Path $repoRoot "release\$Version"
+# The default Windows package stays exactly what it was; a HIP flavor lands
+# in its own folder so neither can overwrite the other's files.
+$flavorTag = if ($RuntimeBackend -eq 'hip') { '-hip-' + ($HipArch -replace ',', '-') } else { '' }
+$manifestName = if ($flavorTag) { "latest$flavorTag.json" } else { 'latest.json' }
+$authenticodeThumbprint = $env:YUE_AUTHENTICODE_CERT_THUMBPRINT
+if ($RuntimeBackend -eq 'hip' -and $env:YUE_REQUIRE_SIGNED_RELEASE -eq '1' -and [string]::IsNullOrWhiteSpace($authenticodeThumbprint)) {
+    throw 'Signed public HIP releases require YUE_AUTHENTICODE_CERT_THUMBPRINT and a trusted code-signing certificate; unsigned CI builds remain permitted.'
+}
+$releaseDir = Join-Path $repoRoot "release\$Version$flavorTag"
 $engineResourceRoot = Join-Path $tauriRoot 'resources\yue2-cpp'
 $vstResourceRoot = Join-Path $tauriRoot 'resources\vst-host'
 $engineSource = Get-Content -Raw (Join-Path $repoRoot 'engines\yue2-cpp-source.json') | ConvertFrom-Json
@@ -61,9 +73,9 @@ try {
     # for this backend: a CUDA build of ggml is the slow part of a release.
     $stampPath = Join-Path $engineResourceRoot 'runtime.json'
     $stamp = if (Test-Path $stampPath) { Get-Content -Raw $stampPath | ConvertFrom-Json } else { $null }
-    $stagedIsCurrent = $stamp -and $stamp.commit -eq $engineSource.commit -and $stamp.backend -eq $RuntimeBackend -and $stamp.cuda_architecture -eq 'universal' -and ($RuntimeBackend -ne 'all' -or @($stamp.cuda_builds).Count -eq 2) -and (Test-Path (Join-Path $engineResourceRoot 'yue-server.exe'))
+    $stagedIsCurrent = $stamp -and $stamp.commit -eq $engineSource.commit -and $stamp.backend -eq $RuntimeBackend -and $stamp.cuda_architecture -eq 'universal' -and ($RuntimeBackend -ne 'all' -or @($stamp.cuda_builds).Count -eq 2) -and ($RuntimeBackend -ne 'hip' -or $stamp.hip_arch -eq $HipArch) -and (Test-Path (Join-Path $engineResourceRoot 'yue-server.exe')) -and ($RuntimeBackend -ne 'hip' -or ((Test-Path (Join-Path $engineResourceRoot 'ggml-hip.dll')) -and (Test-Path (Join-Path $engineResourceRoot 'amd_comgr.dll'))))
     if (-not $stagedIsCurrent) {
-        & (Join-Path $PSScriptRoot 'build-yue-runtime.ps1') -OutputDirectory $engineResourceRoot -RuntimeBackend $RuntimeBackend -CudaArchitecture universal -Cuda12Root $Cuda12Root
+        & (Join-Path $PSScriptRoot 'build-yue-runtime.ps1') -OutputDirectory $engineResourceRoot -RuntimeBackend $RuntimeBackend -CudaArchitecture universal -Cuda12Root $Cuda12Root -HipArch $HipArch
         if (-not $?) { throw "The nested build script failed; release packaging stopped." }
         if ($LASTEXITCODE -ne 0) { throw "the engine runtime build failed with exit code $LASTEXITCODE" }
     }
@@ -88,6 +100,34 @@ try {
     $config = Get-Content -Raw $templatePath
     $config = $config.Replace('__TAURI_UPDATER_PUBKEY__', $env:TAURI_UPDATER_PUBKEY)
     $config = $config.Replace('__RELEASE_VERSION__', $Version)
+    # The shipped Tauri updater endpoint must match the HIP-specific manifest.
+    $defaultUpdater = 'https://github.com/timoncool/YuE2-Studio/releases/latest/download/latest.json'
+    if ($flavorTag) {
+        if (-not $config.Contains($defaultUpdater)) { throw 'Expected default updater endpoint was not found in the release template.' }
+        $config = $config.Replace($defaultUpdater, "https://github.com/timoncool/YuE2-Studio/releases/latest/download/$manifestName")
+    }
+    if (-not $config.Contains("/$manifestName")) { throw "Release config does not point to $manifestName." }
+
+    # Sign first-party PE files before Tauri bundles them; Tauri itself signs
+    # the app and NSIS installer before producing the updater Ed25519 .sig.
+    # Never alter/re-sign an installer after its updater signature is created.
+    if ($RuntimeBackend -eq 'hip' -and -not [string]::IsNullOrWhiteSpace($authenticodeThumbprint)) {
+        & (Join-Path $PSScriptRoot 'sign-hip-engine.ps1') -EngineRoot $engineResourceRoot -AdditionalProjectRoot $vstResourceRoot -Thumbprint $authenticodeThumbprint
+        if (-not $?) { throw 'Signing the staged HIP engine failed.' }
+        if ($LASTEXITCODE -ne 0) { throw "HIP engine signing exited with $LASTEXITCODE." }
+    }
+    if (-not [string]::IsNullOrWhiteSpace($authenticodeThumbprint)) {
+        if ($authenticodeThumbprint -notmatch '^[0-9a-fA-F]{40}$') {
+            throw 'YUE_AUTHENTICODE_CERT_THUMBPRINT must be a 40-character SHA1 certificate thumbprint.'
+        }
+        $configObject = $config | ConvertFrom-Json
+        $configObject.bundle | Add-Member -NotePropertyName windows -NotePropertyValue ([pscustomobject]@{
+            certificateThumbprint = $authenticodeThumbprint
+            digestAlgorithm = 'sha256'
+            timestampUrl = 'http://timestamp.digicert.com'
+        }) -Force
+        $config = $configObject | ConvertTo-Json -Depth 32
+    }
     [System.IO.File]::WriteAllText($releaseConfigPath, $config, (New-Object System.Text.UTF8Encoding($false)))
 
     Push-Location $desktopRoot
@@ -108,8 +148,12 @@ try {
     $signature = (Get-Content -Raw $signaturePath).Trim()
 
     # GitHub replaces spaces in asset names with dots; the manifest must name
-    # the asset as it will be served.
+    # the asset as it will be served. A HIP flavor also carries its tag, so
+    # its installer can be uploaded beside the default one, never over it.
+    # (Literal .Replace: a regex here would treat the version's dots as
+    # wildcards and mangle the name.)
     $assetName = $nsisInstaller.Name -replace ' ', '.'
+    if ($flavorTag) { $assetName = $assetName.Replace("_${Version}_", "_$Version$flavorTag`_") }
     Copy-Item $nsisInstaller.FullName (Join-Path $releaseDir $assetName) -Force
     Copy-Item $signaturePath (Join-Path $releaseDir "$assetName.sig") -Force
 
@@ -125,7 +169,7 @@ try {
     Get-ChildItem (Join-Path $portableRoot 'resources\yue2-cpp') -Filter '*.pdb' | Remove-Item -Force
     Copy-Item $vstResourceRoot (Join-Path $portableRoot 'resources\vst-host') -Recurse -Force
     New-Item -ItemType File -Path (Join-Path $portableRoot 'portable.flag') -Force | Out-Null
-    $portableZip = Join-Path $releaseDir "YuE2-Studio-$Version-portable-windows-x64.zip"
+    $portableZip = Join-Path $releaseDir "YuE2-Studio-$Version$flavorTag-portable-windows-x64.zip"
     if (Test-Path $portableZip) { Remove-Item -Force $portableZip }
     Compress-Archive -Path "$portableRoot\*" -DestinationPath $portableZip -Force
 
@@ -140,12 +184,20 @@ try {
             }
         }
     }
-    # A byte-order mark in front of the JSON makes the updater reject it.
+    # A byte-order mark in front of the JSON makes the updater reject it. The
+    # HIP flavor writes a tag-named manifest: publishing it can never replace
+    # the default channel's latest.json, and default-channel publishing can
+    # never serve a HIP installer.
     [System.IO.File]::WriteAllText(
-        (Join-Path $releaseDir 'latest.json'),
+        (Join-Path $releaseDir $manifestName),
         ($latest | ConvertTo-Json -Depth 8),
         (New-Object System.Text.UTF8Encoding($false))
     )
+    if ($RuntimeBackend -eq 'hip') {
+        & (Join-Path $PSScriptRoot 'audit-hip-release.ps1') -ReleaseDir $releaseDir -HipArch $HipArch -RequireTrustedSignatures:($env:YUE_REQUIRE_SIGNED_RELEASE -eq '1')
+        if (-not $?) { throw 'HIP release audit failed.' }
+        if ($LASTEXITCODE -ne 0) { throw "HIP release audit exited with $LASTEXITCODE." }
+    }
     Get-ChildItem $releaseDir -File | Select-Object Name, Length | Format-Table | Out-Host
 }
 catch {

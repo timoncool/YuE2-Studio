@@ -25,6 +25,7 @@ mod downloads;
 mod install_record;
 mod pin_sha;
 mod engine_runtime;
+mod engine_start_backoff;
 mod lyrics_db;
 mod mcp;
 mod lyrics_sync;
@@ -926,7 +927,7 @@ impl EngineOptions {
         use music_engine::yue_server::ComputeBackend;
         match self.backend {
             ComputeBackend::Cuda | ComputeBackend::Auto => hardware::hardware().cuda,
-            ComputeBackend::Vulkan | ComputeBackend::Cpu => None,
+            ComputeBackend::Hip | ComputeBackend::Vulkan | ComputeBackend::Cpu => None,
         }
     }
 
@@ -945,7 +946,7 @@ impl EngineOptions {
                 let hardware = hardware::hardware();
                 hardware.cuda.is_none() && hardware.gpu_name.is_some()
             }
-            ComputeBackend::Cuda | ComputeBackend::Cpu => false,
+            ComputeBackend::Cuda | ComputeBackend::Hip | ComputeBackend::Cpu => false,
         }
     }
 
@@ -979,6 +980,10 @@ impl EngineOptions {
             let mut chain = Vec::new();
             if hardware.cuda.is_some() {
                 chain.push(ComputeBackend::Cuda);
+            }
+            // an AMD card with a ROCm runtime takes native HIP over Vulkan
+            if hardware.hip {
+                chain.push(ComputeBackend::Hip);
             }
             // an NVIDIA card that runs CUDA is never tried on Vulkan
             if hardware.gpu_name.is_some() && (!hardware.nvidia || hardware.cuda.is_none()) {
@@ -1133,8 +1138,12 @@ impl EngineOptions {
     }
 
     /// Why a KV cache in Q8 does not apply to this start, `None` when it can: the engine reads it only through flash
-    /// attention on a card, and it is measured on CUDA alone, not yet on Vulkan.
+    /// attention on a card, and it is measured on CUDA alone, not yet on Vulkan or native HIP.
     fn kv_q8_off_reason(&self) -> Option<&'static str> {
+        use music_engine::yue_server::ComputeBackend;
+        if self.backend == ComputeBackend::Hip {
+            return Some("hip");
+        }
         if self.cuda_build().is_none() {
             return Some(if self.uses_vulkan() { "vulkan" } else { "processor" });
         }
@@ -1798,18 +1807,37 @@ pub async fn serve() -> anyhow::Result<()> {
             // a startup that is failing, and repeating "stopped answering" every
             // two seconds is what filled a whole log with one sentence.
             let mut was_running = false;
+            // Automatic starts are bounded for an unchanged config: a missing
+            // HIP DLL or an App Control denial is not fixed by retrying at 2 Hz.
+            // User-initiated /engine/restart bypasses this watchdog state.
+            let mut start_backoff = engine_start_backoff::EngineStartBackoff::default();
             loop {
                 let ready = state.model_manager.status(effective_install_target(&state).await).await.ready;
                 // an engine inside a long step does not answer /health in time; while it is still a
                 // running process with a job on it, it is at work, not gone
                 let running = state.music_server.health().await || engine_at_work(&state).await;
+                // Changing an engine option or selected model can resolve the
+                // failure; do not keep retrying a permanently broken config.
+                let retry_key = (
+                    state.engine_options.read().await.clone(),
+                    state.selected_profile_id.read().await.clone(),
+                    state.selected_component_ids.read().await.clone(),
+                    state.own_backbone.read().await.clone(),
+                );
+                start_backoff.observe(&retry_key);
+                if running {
+                    start_backoff.reset_failures();
+                }
                 // the card has one owner: a preparation or a training run
                 // holding it is left alone, and the engine comes back after
                 let preparing = state.prepare.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).as_ref().is_some_and(|job| !job.finished);
                 let card_taken = preparing || state.training.active_run().await.is_some();
                 // a restart under way elsewhere is left alone
                 let quiet = state.engine_use.try_write().ok();
-                if ready && !running && !card_taken && quiet.is_some() && !state.music_server.health().await {
+                if ready && !running && !card_taken && quiet.is_some()
+                    && start_backoff.allow(std::time::Instant::now())
+                    && !state.music_server.health().await
+                {
                     if was_running {
                         // It was answering and now it is not: the one line that
                         // explains a log which suddenly starts again from
@@ -1829,7 +1857,22 @@ pub async fn serve() -> anyhow::Result<()> {
                         }
                     }
                     let started = start_engine_again(&state).await;
+                    let retry = start_backoff.finish(std::time::Instant::now(), started.is_ok());
                     *state.engine_start_error.write().await = started.as_ref().err().cloned();
+                    match retry {
+                        engine_start_backoff::RetryOutcome::Success => {}
+                        engine_start_backoff::RetryOutcome::Wait(delay) => {
+                            music_engine::yue_server::note_in_log(&format!(
+                                "engine start failed; next automatic retry in {} seconds",
+                                delay.as_secs()
+                            ));
+                        }
+                        engine_start_backoff::RetryOutcome::Suspended => {
+                            music_engine::yue_server::note_in_log(
+                                "engine start failed repeatedly; automatic retries paused until engine settings or selected models change. Use Restart in Settings to retry manually."
+                            );
+                        }
+                    }
                     // Said and counted once per failure, not once every few
                     // seconds: a card with too little memory would otherwise
                     // fill the log, and the hub would count the time it lay down.
@@ -5770,6 +5813,9 @@ async fn start_engine_again(state: &AppState) -> Result<(), String> {
     if options.backend == music_engine::yue_server::ComputeBackend::Cuda && hardware::hardware().cuda.is_none() {
         return Err("CUDA was chosen, but this card or its driver runs neither CUDA build of the engine: it needs an NVIDIA card from the GTX 900 series on and driver 525 or newer. Update the NVIDIA driver, or choose Vulkan in Settings.".into());
     }
+    if options.backend == music_engine::yue_server::ComputeBackend::Hip && !hardware::hardware().hip {
+        return Err("Native HIP was selected, but a HIP-capable AMD engine and runtime were not detected. Use a complete Windows ROCm HIP bundle - ggml-hip.dll and its runtime dependencies, with device kernels for this card - or configure a compatible ROCm SDK. The engine log names the gfx target it found. No fallback backend was attempted.".into());
+    }
     // nvidia-smi is a process of its own: asked off the async workers, and only for a chosen card
     let chosen_card = options.gpu;
     if chosen_card.is_some() {
@@ -5917,6 +5963,7 @@ fn device_name(device: music_engine::yue_server::ComputeBackend) -> &'static str
     match device {
         ComputeBackend::Auto => "Auto",
         ComputeBackend::Cuda => "CUDA",
+        ComputeBackend::Hip => "AMD HIP (ROCm)",
         ComputeBackend::Vulkan => "Vulkan",
         ComputeBackend::Cpu => "the processor",
     }
@@ -12332,16 +12379,16 @@ mod tests {
     #[test]
     fn a_device_chosen_in_settings_is_the_only_one_tried() {
         use music_engine::yue_server::ComputeBackend;
-        for device in [ComputeBackend::Cuda, ComputeBackend::Vulkan, ComputeBackend::Cpu] {
+        for device in [ComputeBackend::Cuda, ComputeBackend::Hip, ComputeBackend::Vulkan, ComputeBackend::Cpu] {
             let options = EngineOptions { backend: device, ..EngineOptions::default() };
             assert_eq!(options.device_chain(&[device]), vec![device]);
         }
         // Auto always ends on the processor and never retries a failed device.
         // Off Windows the chain starts from Auto itself - the engine's own
-        // best device, Metal on macOS - so only the CUDA/Vulkan failures of a
-        // Windows chain remove entries before it.
+        // best device, Metal on macOS - so only the CUDA/HIP/Vulkan failures
+        // of a Windows chain remove entries before it.
         let auto = EngineOptions::default();
-        let chain = auto.device_chain(&[ComputeBackend::Cuda, ComputeBackend::Vulkan]);
+        let chain = auto.device_chain(&[ComputeBackend::Cuda, ComputeBackend::Hip, ComputeBackend::Vulkan]);
         if cfg!(windows) {
             assert_eq!(chain, vec![ComputeBackend::Cpu]);
         } else {

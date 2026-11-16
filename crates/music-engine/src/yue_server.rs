@@ -246,14 +246,18 @@ pub struct YueServerLaunchConfig {
 }
 
 /// The ggml backend the engine computes on. The bundled engine loads its
-/// backends at run time, so one build serves NVIDIA (CUDA), AMD and Intel
-/// (Vulkan) and the processor; `Auto` lets ggml take the best device it finds.
+/// backends at run time, so one build serves NVIDIA (CUDA), AMD through native
+/// HIP where a Windows ROCm runtime is installed, AMD and Intel (Vulkan) and
+/// the processor; `Auto` lets ggml take the best device it finds.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ComputeBackend {
     #[default]
     Auto,
     Cuda,
+    /// AMD's native HIP runtime (ROCm). The ggml HIP backend names its
+    /// devices after ROCm, not HIP.
+    Hip,
     Vulkan,
     Cpu,
 }
@@ -264,6 +268,7 @@ impl ComputeBackend {
         match self {
             Self::Auto => None,
             Self::Cuda => Some("CUDA0"),
+            Self::Hip => Some("ROCm0"),
             Self::Vulkan => Some("Vulkan0"),
             Self::Cpu => Some("CPU"),
         }
@@ -847,9 +852,11 @@ mod tests {
     fn the_compute_backend_names_the_device_ggml_reads() {
         assert_eq!(ComputeBackend::Auto.ggml_device(), None);
         assert_eq!(ComputeBackend::Cuda.ggml_device(), Some("CUDA0"));
+        assert_eq!(ComputeBackend::Hip.ggml_device(), Some("ROCm0"));
         assert_eq!(ComputeBackend::Vulkan.ggml_device(), Some("Vulkan0"));
         assert_eq!(ComputeBackend::Cpu.ggml_device(), Some("CPU"));
         assert_eq!(serde_json::to_value(ComputeBackend::Vulkan).unwrap(), "vulkan");
+        assert_eq!(serde_json::to_value(ComputeBackend::Hip).unwrap(), "hip");
     }
 
     fn fresh_directory(label: &str) -> PathBuf {

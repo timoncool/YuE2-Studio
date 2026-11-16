@@ -42,6 +42,10 @@ pub struct Hardware {
     /// The engine computes on the card through Vulkan: a card with no CUDA build of the engine for it (every card on
     /// Linux, an AMD or Intel one on Windows), not Apple's Metal.
     pub vulkan: bool,
+    /// A Windows ROCm runtime this machine can load the engine's native HIP
+    /// backend against: an AMD card need not fall back to Vulkan here. Windows
+    /// only; everywhere else Vulkan covers AMD.
+    pub hip: bool,
     /// No card the songs are computed on: none at all, or one with less memory than the smallest local set needs.
     pub on_processor: bool,
 }
@@ -152,8 +156,10 @@ fn probe() -> &'static Hardware {
         let compute_capability = device.map(|(compute, _)| compute);
         let driver_major = device.map(|(_, driver)| driver);
         let vulkan = gpu_name.is_some() && cuda.is_none() && !cfg!(target_os = "macos");
+        let hip = cfg!(target_os = "windows") && !nvidia && gpu_name.is_some() && hip_runtime_installed();
         Hardware {
             vulkan,
+            hip,
             on_processor: computes_on_processor(nvidia, total_vram_gb),
             gpu_name,
             total_vram_gb,
@@ -171,6 +177,54 @@ fn probe() -> &'static Hardware {
 
 pub fn hardware() -> Hardware {
     probe().clone()
+}
+
+/// Recognise the app-local runtime shipped with an optional Windows HIP bundle.
+/// This is a file-layout preflight, NOT a GPU capability test: selecting ROCm0
+/// still requires yue-server to load ggml-hip and enumerate a real HIP device.
+fn hip_bundle_ready(root: &std::path::Path) -> bool {
+    ["yue-server.exe", "ggml-hip.dll", "hipblas.dll", "rocblas.dll", "amd_comgr.dll", "rocm_kpack.dll"]
+        .iter()
+        .all(|name| root.join(name).is_file())
+        && has_hip_runtime_dll(root)
+}
+
+/// The HIP runtime DLL name can be versioned (amdhip64_7.dll, etc.).
+fn has_hip_runtime_dll(root: &std::path::Path) -> bool {
+    std::fs::read_dir(root).ok().is_some_and(|entries| {
+        entries.filter_map(Result::ok).any(|entry| {
+            let name = entry.file_name().to_string_lossy().to_ascii_lowercase();
+            name.starts_with("amdhip64") && name.ends_with(".dll")
+        })
+    })
+}
+
+/// Whether a HIP-capable engine and ROCm runtime are present for Windows.
+/// SDK environment variables are not required when the Studio ships the
+/// verified runtime beside yue-server.exe (portable and installed builds).
+/// Actual device support - including the architecture match between the card
+/// and the bundle's device kernels - is validated by yue-server on startup.
+fn hip_runtime_installed() -> bool {
+    let bundle = crate::engine_bundle_root();
+    if hip_bundle_ready(&bundle) {
+        return true;
+    }
+    // A development SDK can supply the runtime, but not the engine backend:
+    // do not show HIP if the engine was built without ggml-hip.dll.
+    if !bundle.join("ggml-hip.dll").is_file() {
+        return false;
+    }
+    let dir_has_sdk = |path: &std::path::Path| {
+        let bin = path.join("bin");
+        has_hip_runtime_dll(if bin.is_dir() { &bin } else { path })
+    };
+    ["HIP_PATH", "ROCM_PATH"]
+        .iter()
+        .filter_map(std::env::var_os)
+        .any(|path| dir_has_sdk(std::path::Path::new(&path)))
+        || std::path::Path::new(r"C:\Program Files\AMD\ROCm").read_dir().ok().is_some_and(|entries| {
+            entries.filter_map(Result::ok).any(|entry| dir_has_sdk(&entry.path()))
+        })
 }
 
 /// Whether songs are computed on the processor: no card, or built-in graphics below the smallest local set. An
@@ -485,6 +539,30 @@ fn best_adapter(names: &str, sizes: &str) -> Option<(String, f64)> {
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn portable_hip_bundle_is_found_without_sdk_environment_variables() {
+        use std::time::{SystemTime, UNIX_EPOCH};
+        let nonce = SystemTime::now().duration_since(UNIX_EPOCH).expect("clock").as_nanos();
+        let root = std::env::temp_dir().join(format!("yue-hip-bundle-{}-{nonce}", std::process::id()));
+        std::fs::create_dir_all(&root).expect("temporary bundle");
+
+        let files = ["yue-server.exe", "ggml-hip.dll", "hipblas.dll", "rocblas.dll", "amd_comgr.dll", "rocm_kpack.dll", "amdhip64_7.dll"];
+        for name in files {
+            std::fs::write(root.join(name), b"").expect("create bundle fixture");
+        }
+        assert!(super::hip_bundle_ready(&root), "portable ROCm DLLs are sufficient to advertise HIP");
+
+        std::fs::remove_file(root.join("amd_comgr.dll")).expect("remove hidden device-enumeration dependency");
+        assert!(!super::hip_bundle_ready(&root), "incomplete runtime must not advertise HIP");
+        std::fs::write(root.join("amd_comgr.dll"), b"").expect("restore runtime fixture");
+
+        std::fs::remove_file(root.join("ggml-hip.dll")).expect("remove compute backend");
+        assert!(!super::hip_bundle_ready(&root), "a runtime alone is not a HIP-capable engine");
+
+        std::fs::remove_dir_all(&root).expect("remove temporary fixture");
+    }
+
     /// Songs are computed on the processor without a card and on built-in graphics below the smallest set; an NVIDIA
     /// card of any size computes on CUDA. The window says so then.
     #[cfg(not(target_os = "macos"))]
