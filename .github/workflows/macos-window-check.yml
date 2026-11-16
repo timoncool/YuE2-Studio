@@ -12,15 +12,20 @@ jobs:
     runs-on: macos-15
     timeout-minutes: 20
     env:
-      VERSION: "4.0.0"
+      VERSION: "4.1.0"
       APP: "YuE2 Studio"
-      DMG: "YuE2-Studio-4.0.0-macos-arm64.dmg"
+      DMG: "YuE2-Studio-4.1.0-macos-arm64.dmg"
+      BUILD_RUN: "43940246685"
       PORT: "8791"
       GH_TOKEN: ${{ github.token }}
     steps:
       - name: The dmg, mounted and copied out
         run: |
-          gh release download "v$VERSION" -R "$GITHUB_REPOSITORY" -p "$DMG" -D "$RUNNER_TEMP"
+          if [ -n "$BUILD_RUN" ]; then
+            gh run download "$BUILD_RUN" -R "$GITHUB_REPOSITORY" -n yue2-studio-macos-arm64 -D "$RUNNER_TEMP"
+          else
+            gh release download "v$VERSION" -R "$GITHUB_REPOSITORY" -p "$DMG" -D "$RUNNER_TEMP"
+          fi
           shasum -a 256 "$RUNNER_TEMP/$DMG"
           hdiutil attach -nobrowse -readonly -mountpoint /Volumes/studio "$RUNNER_TEMP/$DMG"
           ls /Volumes/studio
@@ -65,6 +70,26 @@ jobs:
           lines=$(wc -l < page.txt); echo "first screen: $lines lines"; head -12 page.txt
           [ "$lines" -gt 5 ] || { echo "[ERROR] the first screen read back empty"; exit 1; }
           echo "[OK] $APP $VERSION: window open, first screen read through the MCP"
+      - name: Without a window, and stopped by --stop
+        run: |
+          bin="$(ls "$RUNNER_TEMP/$APP.app/Contents/MacOS" | grep -i studio | head -1)"
+          exe="$RUNNER_TEMP/$APP.app/Contents/MacOS/$bin"
+          pkill -f "$APP.app/Contents/MacOS" || true
+          for i in $(seq 1 30); do curl -s -m 2 -o /dev/null "http://127.0.0.1:$PORT/health" || break; sleep 1; done
+          nohup "$exe" --headless > "$RUNNER_TEMP/headless.log" 2>&1 &
+          for i in $(seq 1 90); do
+            code=$(curl -s -m 2 -o /dev/null -w '%{http_code}' "http://127.0.0.1:$PORT/health" || true)
+            [ "$code" = 200 ] && break
+            sleep 2
+          done
+          [ "$code" = 200 ] || { echo "[ERROR] --headless: no answer on $PORT"; tail -40 "$RUNNER_TEMP/headless.log"; exit 1; }
+          echo "[OK] --headless: the service answers"
+          "$exe" --stop || echo "[..] --stop exit $?"
+          for i in $(seq 1 30); do
+            curl -s -m 2 -o /dev/null "http://127.0.0.1:$PORT/health" || { echo "[OK] --stop ended the studio"; exit 0; }
+            sleep 1
+          done
+          echo "[ERROR] the studio still answers after --stop"; tail -40 "$RUNNER_TEMP/headless.log"; exit 1
       - uses: actions/upload-artifact@v4
         if: always()
         with:
