@@ -22,6 +22,11 @@ struct ModelFile {
     author: String,
     page: String,
     license: String,
+    /// The Hugging Face repository and revision of this model's files, where they are not the catalog's own.
+    #[serde(default)]
+    repository: Option<String>,
+    #[serde(default)]
+    revision: Option<String>,
     name: HashMap<String, String>,
     files: Vec<FileEntry>,
 }
@@ -63,7 +68,10 @@ pub fn catalog() -> &'static [Model] {
         parsed
             .models
             .into_iter()
-            .map(|model| Model {
+            .map(|model| {
+                let repository = model.repository.unwrap_or_else(|| parsed.repository.clone());
+                let revision = model.revision.unwrap_or_else(|| parsed.revision.clone());
+                Model {
                 id: leak(model.id),
                 author: leak(model.author),
                 page: leak(model.page),
@@ -73,7 +81,7 @@ pub fn catalog() -> &'static [Model] {
                     .files
                     .into_iter()
                     .map(|entry| {
-                        let url = format!("https://huggingface.co/{}/resolve/{}/{}", parsed.repository, parsed.revision, entry.file);
+                        let url = format!("https://huggingface.co/{repository}/resolve/{revision}/{}", entry.file);
                         let file = leak(entry.file);
                         File {
                             quant: leak(entry.quant),
@@ -94,6 +102,7 @@ pub fn catalog() -> &'static [Model] {
                         }
                     })
                     .collect(),
+                }
             })
             .collect()
     })
@@ -144,15 +153,16 @@ mod tests {
     #[test]
     fn the_catalog_reads_with_a_pinned_revision_and_a_digest_for_every_file() {
         let models = catalog();
-        assert_eq!(models.len(), 9);
+        assert_eq!(models.len(), 15);
         assert_eq!(models[0].id, "rs-tw-2.0x0.75", "the authors' choice comes first");
         for model in models {
-            for language in ["en", "ru", "zh", "ja", "ko"] {
+            for language in ["en", "ru", "zh", "ja", "ko", "pt"] {
                 assert!(model.name.get(language).is_some_and(|name| !name.is_empty()), "{} has no {language} name", model.id);
             }
             assert_eq!(model.files.len(), 2, "{}", model.id);
             for file in &model.files {
-                assert!(file.asset.url.contains("/resolve/b371be93fe7320c7084813b4f5967a6820756a06/"), "{}", file.asset.url);
+                let revision = if model.id.starts_with("rs-ira") { "17356b21966375be05fe6c0afe6adb80653177dd" } else { "b371be93fe7320c7084813b4f5967a6820756a06" };
+                assert!(file.asset.url.contains(&format!("/resolve/{revision}/")), "{}", file.asset.url);
                 assert!(file.sha256.len() == 64 && file.sha256.bytes().all(|byte| byte.is_ascii_hexdigit()), "{}", file.asset.id);
                 assert_eq!(sha256(file.asset.url), Some(file.sha256));
                 assert!(file.asset.relative_path.ends_with(".gguf") && !file.asset.relative_path.contains('/'), "lands in the own-models folder itself");

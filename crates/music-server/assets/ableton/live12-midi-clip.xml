@@ -1,0 +1,110 @@
+<MidiClip Id="2" Time="0">
+	<LomId Value="0" />
+	<LomIdView Value="0" />
+	<CurrentStart Value="0" />
+	<CurrentEnd Value="189" />
+	<Loop>
+		<LoopStart Value="0" />
+		<LoopEnd Value="189" />
+		<StartRelative Value="0" />
+		<LoopOn Value="true" />
+		<OutMarker Value="189" />
+		<HiddenLoopStart Value="0" />
+		<HiddenLoopEnd Value="189" />
+	</Loop>
+	<Name Value="" />
+	<Annotation Value="" />
+	<Color Value="22" />
+	<LaunchMode Value="0" />
+	<LaunchQuantisation Value="0" />
+	<TimeSignature>
+		<TimeSignatures>
+			<RemoteableTimeSignature Id="0">
+				<Numerator Value="3" />
+				<Denominator Value="4" />
+				<Time Value="0" />
+			</RemoteableTimeSignature>
+		</TimeSignatures>
+	</TimeSignature>
+	<Envelopes>
+		<Envelopes />
+	</Envelopes>
+	<ScrollerTimePreserver>
+		<LeftTime Value="0" />
+		<RightTime Value="189" />
+	</ScrollerTimePreserver>
+	<TimeSelection>
+		<AnchorTime Value="0" />
+		<OtherTime Value="0" />
+	</TimeSelection>
+	<Legato Value="false" />
+	<Ram Value="false" />
+	<GrooveSettings>
+		<GrooveId Value="-1" />
+	</GrooveSettings>
+	<Disabled Value="false" />
+	<VelocityAmount Value="0" />
+	<FollowAction>
+		<FollowTime Value="4" />
+		<IsLinked Value="true" />
+		<LoopIterations Value="1" />
+		<FollowActionA Value="4" />
+		<FollowActionB Value="0" />
+		<FollowChanceA Value="100" />
+		<FollowChanceB Value="0" />
+		<JumpIndexA Value="1" />
+		<JumpIndexB Value="1" />
+		<FollowActionEnabled Value="false" />
+	</FollowAction>
+	<Grid>
+		<FixedNumerator Value="1" />
+		<FixedDenominator Value="16" />
+		<GridIntervalPixel Value="20" />
+		<Ntoles Value="2" />
+		<SnapToGrid Value="true" />
+		<Fixed Value="false" />
+	</Grid>
+	<FreezeStart Value="0" />
+	<FreezeEnd Value="0" />
+	<IsWarped Value="true" />
+	<TakeId Value="1" />
+	<IsInKey Value="true" />
+	<ScaleInformation>
+		<Root Value="0" />
+		<Name Value="0" />
+	</ScaleInformation>
+	<AutomationEnvelopesListWrapper LomId="0" />
+	<Notes>
+		<KeyTracks />
+		<PerNoteEventStore>
+			<EventLists />
+		</PerNoteEventStore>
+		<NoteProbabilityGroups />
+		<ProbabilityGroupIdGenerator>
+			<NextId Value="1" />
+		</ProbabilityGroupIdGenerator>
+		<NoteIdGenerator>
+			<NextId Value="719" />
+		</NoteIdGenerator>
+	</Notes>
+	<BankSelectCoarse Value="-1" />
+	<BankSelectFine Value="-1" />
+	<ProgramChange Value="0" />
+	<NoteEditorFoldInZoom Value="-1" />
+	<NoteEditorFoldInScroll Value="0" />
+	<NoteEditorFoldOutZoom Value="230" />
+	<NoteEditorFoldOutScroll Value="-70" />
+	<NoteEditorFoldScaleZoom Value="-1" />
+	<NoteEditorFoldScaleScroll Value="0" />
+	<NoteSpellingPreference Value="0" />
+	<AccidentalSpellingPreference Value="3" />
+	<PreferFlatRootNote Value="false" />
+	<ExpressionGrid>
+		<FixedNumerator Value="1" />
+		<FixedDenominator Value="16" />
+		<GridIntervalPixel Value="20" />
+		<Ntoles Value="2" />
+		<SnapToGrid Value="false" />
+		<Fixed Value="false" />
+	</ExpressionGrid>
+</MidiClip>

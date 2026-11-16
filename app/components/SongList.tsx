@@ -135,7 +135,7 @@ const createDragPreview = (element: HTMLElement) => {
 };
 
 /** A generation's card rather than a song: being made, or stopped and waiting to be cleared. */
-const isCard = (song: Song) => Boolean(song.isGenerating) || song.stage === 'cancelled' || song.stage === 'failed';
+export const isCard = (song: Song) => Boolean(song.isGenerating) || song.stage === 'cancelled' || song.stage === 'failed';
 
 export const SongList: React.FC<SongListProps> = ({
     songs,
@@ -577,7 +577,7 @@ export const SongList: React.FC<SongListProps> = ({
 
                     {(searchQuery || activeFilters.size > 0) && listItems.length > 0 && (
                         <p className="-mt-3 text-xs text-zinc-500" role="status">
-                            {t('shownOf').replace('{shown}', String(listItems.length)).replace('{total}', String(songs.length))}
+                            {t('shownOf').replace('{shown}', String(listItems.length)).replace('{total}', String(librarySize))}
                         </p>
                     )}
                 </div>

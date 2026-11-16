@@ -10,7 +10,7 @@ import { TRACK_ARTIST } from '../../services/studio';
 import { trackCoverUrl } from '../../services/playerPanels';
 import { isDesktop } from '../../services/externalLinks';
 import { applyUiScale, storedUiScale } from '../../services/uiScale';
-import { EQ_BANDS, equalizer, setEqualizer } from '../../services/audioGraph';
+import { EQ_BANDS, equalizer, keepContextRunning, setEqualizer } from '../../services/audioGraph';
 import { addWinampSkin, pickSkin, registerWinampControl, setWinampSettings, winampSettings, winampSkins, type WinampSkin } from '../../services/winamp';
 import { sharpenSkin, sharpSkinCss, skinScale } from '../../services/winampSharp';
 import { loadMilkdropPresets } from './VisualizerView';
@@ -404,6 +404,10 @@ export const WinampMode: React.FC<Props> = ({ queue, startIndex, startSeconds, p
       if (disposed) return;
       await webamp.renderInto(node);
       if (disposed) return;
+      // Webamp resumes its context only from "suspended"; WebKitGTK calls the state
+      // "interrupted", and a context left in it plays the song silently
+      const media = (webamp as unknown as { media?: { _context?: AudioContext } }).media;
+      if (media?._context) cleanups.push(keepContextRunning(media._context));
       if (target) {
         const place = target as { x: number; y: number; width: number; height: number };
         const boxes = [...node.querySelectorAll<HTMLElement>(SELECTOR)].map((element) => element.getBoundingClientRect()).filter((box) => box.width > 0 && box.height > 0);

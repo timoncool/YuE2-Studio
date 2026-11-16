@@ -21,10 +21,17 @@
 //!   other order survives a normal exit and loses to a power cut: the manifest
 //!   would promise data that never landed, and the resumed download would skip
 //!   a hole.
+//! * One counted request per file. Hugging Face counts every request to
+//!   `/resolve/` as a download and answers it with a redirect to a signed CDN
+//!   address. The probe follows that redirect once and the pieces go to where it
+//!   led, so a file is one download on the model's page whatever its size (#249).
+//!   The signed address runs out after about an hour; the first piece that meets
+//!   the refusal resolves it again, once.
 //!
 //! Where a server does not serve ranges, this falls back to reading the whole
 //! body in order, which is what the studio did everywhere before.
 
+use std::collections::HashMap;
 use std::fs::{File, OpenOptions};
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -34,9 +41,23 @@ use std::sync::{Arc, Mutex, OnceLock};
 use anyhow::{anyhow, bail, Context, Result};
 use futures_util::StreamExt;
 
-/// How much of a file one task fetches. Small enough that a dropped connection
-/// costs little, large enough that the queue is not mostly bookkeeping.
-const CHUNK: u64 = 16 * 1024 * 1024;
+/// The smallest piece worth a connection of its own.
+const PIECE_MIN: u64 = 64 * 1024 * 1024;
+
+/// How often a piece notes in the manifest how far it has come: what a download closed halfway fetches again.
+const CHECKPOINT: u64 = 16 * 1024 * 1024;
+
+/// The pieces a file of `total` bytes is fetched in, the first and the last byte of each: one per connection, fewer
+/// for a file too small to be worth it. Hugging Face counts every request for a model file as a download of it, so
+/// a file is a handful of requests whatever its size, and a dropped connection asks only for the rest of its piece.
+fn pieces_of(total: u64) -> Vec<(u64, u64)> {
+    if total == 0 {
+        return Vec::new();
+    }
+    let count = total.div_ceil(PIECE_MIN).clamp(1, SLOTS as u64);
+    let size = total.div_ceil(count);
+    (0..count).map(|index| (index * size, ((index + 1) * size).min(total) - 1)).filter(|(start, _)| *start < total).collect()
+}
 
 /// Connections for the whole studio - not per file and not per panel.
 ///
@@ -52,8 +73,8 @@ fn connections() -> &'static tokio::sync::Semaphore {
     BUDGET.get_or_init(|| tokio::sync::Semaphore::new(SLOTS))
 }
 
-/// Attempts per piece before the download gives up. Transient drops are normal
-/// on a twelve gigabyte file - seven hundred pieces - and a retry is cheap.
+/// Attempts in a row that bring nothing before a piece gives up. Transient drops are normal on a twelve gigabyte
+/// file, and an attempt that brought bytes starts the count again.
 const RETRIES: u32 = 8;
 
 /// How long a download may spend waiting to be let in before it gives up.
@@ -68,6 +89,32 @@ const RATE_LIMIT_BUDGET: std::time::Duration = std::time::Duration::from_secs(20
 /// download that is queued rather than broken can say so. A bar at nought per
 /// cent with nothing under it is indistinguishable from a hang.
 static WAITING: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// Files being fetched right now. Every large download of the studio - a model set, a
+/// runtime, a LoRA, the assistant's model - comes through `fetch`, so this is the one place
+/// that knows whether the studio is downloading at all.
+static FETCHING: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
+/// Counts one fetch for as long as it lives, a cancelled one included.
+struct Fetching;
+
+impl Fetching {
+    fn start() -> Self {
+        FETCHING.fetch_add(1, Ordering::Relaxed);
+        Fetching
+    }
+}
+
+impl Drop for Fetching {
+    fn drop(&mut self) {
+        FETCHING.fetch_sub(1, Ordering::Relaxed);
+    }
+}
+
+/// Whether a file is being fetched right now.
+pub fn downloading() -> bool {
+    FETCHING.load(Ordering::Relaxed) > 0
+}
 
 /// How long the download is being kept waiting, if it is.
 pub fn waiting_for_server() -> Option<u64> {
@@ -127,9 +174,48 @@ pub struct Plan {
     pub ranged: bool,
 }
 
+/// The address each resolved download was asked for, by the address it was
+/// redirected to: a signed CDN address runs out, and only the original can be
+/// resolved again.
+fn origins() -> &'static Mutex<HashMap<String, String>> {
+    static ORIGINS: OnceLock<Mutex<HashMap<String, String>>> = OnceLock::new();
+    ORIGINS.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+fn remember(resolved: &str, asked: &str) {
+    if resolved != asked {
+        if let Ok(mut map) = origins().lock() {
+            // an address resolved from another resolved one keeps the first original
+            let first = map.get(asked).cloned().unwrap_or_else(|| asked.to_owned());
+            map.insert(resolved.to_owned(), first);
+        }
+    }
+}
+
+fn origin_of(resolved: &str) -> Option<String> {
+    origins().lock().ok().and_then(|map| map.get(resolved).cloned())
+}
+
+/// A redirected address the server no longer honours (its signature ran out):
+/// resolved again, not retried as it is.
+#[derive(Debug)]
+struct Expired(String);
+
+impl std::fmt::Display for Expired {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
+impl std::error::Error for Expired {}
+
 /// Asks for one byte, which answers both questions at once: how big the file
 /// is, and whether ranges work at all. A HEAD answers the first only, and some
 /// CDNs answer it differently from the GET that follows.
+///
+/// The address returned is where the server's redirect led (the url itself when
+/// there was none): `fetch` takes its pieces from there, so the Hub counts the
+/// file once.
 pub async fn probe(http: &reqwest::Client, url: &str) -> Result<(Plan, String)> {
     let mut last = String::new();
     let mut unreachable = 0;
@@ -137,7 +223,10 @@ pub async fn probe(http: &reqwest::Client, url: &str) -> Result<(Plan, String)> 
     for attempt in 0..RETRIES {
         attempts = attempt + 1;
         match probe_once(http, url).await {
-            Ok(plan) => return Ok((plan, url.to_owned())),
+            Ok((plan, resolved)) => {
+                remember(&resolved, url);
+                return Ok((plan, resolved));
+            }
             Err(error) if error.is::<Refused>() => return Err(error),
             Err(error) => {
                 last = format!("{error:#}");
@@ -250,8 +339,9 @@ async fn send(http: &reqwest::Client, url: &str, range: Option<String>) -> Resul
     }
 }
 
-async fn probe_once(http: &reqwest::Client, url: &str) -> Result<Plan> {
+async fn probe_once(http: &reqwest::Client, url: &str) -> Result<(Plan, String)> {
     let response = send(http, url, Some("bytes=0-0".into())).await?;
+    let resolved = response.url().to_string();
     if response.status() == reqwest::StatusCode::PARTIAL_CONTENT {
         let total = response
             .headers()
@@ -261,7 +351,7 @@ async fn probe_once(http: &reqwest::Client, url: &str) -> Result<Plan> {
             .and_then(|value| value.trim().parse::<u64>().ok())
             .unwrap_or(0);
         if total > 0 {
-            return Ok(Plan { total, ranged: true });
+            return Ok((Plan { total, ranged: true }, resolved));
         }
     }
     if response.status().is_client_error() {
@@ -270,7 +360,21 @@ async fn probe_once(http: &reqwest::Client, url: &str) -> Result<Plan> {
     if !response.status().is_success() {
         bail!("{url} answered {}", response.status());
     }
-    Ok(Plan { total: response.content_length().unwrap_or(0), ranged: false })
+    Ok((Plan { total: response.content_length().unwrap_or(0), ranged: false }, resolved))
+}
+
+/// A signed address ran out under a piece: the first piece to meet it resolves
+/// the original again, and the rest find the new address already in place.
+async fn refresh(http: &reqwest::Client, current: &tokio::sync::Mutex<String>, failed: &str) -> Result<()> {
+    let mut url = current.lock().await;
+    if *url != failed {
+        return Ok(());
+    }
+    let origin = origin_of(failed).ok_or_else(|| anyhow!("{failed} ran out and has no address to resolve it again from"))?;
+    let (_, fresh) = probe_once(http, &origin).await?;
+    remember(&fresh, &origin);
+    *url = fresh;
+    Ok(())
 }
 
 /// A server that said no (a 4xx; "too many requests" is waited out in `send`): asking again gets the same answer.
@@ -285,30 +389,81 @@ impl std::fmt::Display for Refused {
 
 impl std::error::Error for Refused {}
 
-/// The offsets already on disk, from the manifest beside the part file.
+/// The manifest beside the part file: how far each piece of it has come.
 pub fn manifest_path(part: &Path) -> PathBuf {
+    let mut name = part.as_os_str().to_os_string();
+    name.push(".pieces");
+    PathBuf::from(name)
+}
+
+/// The manifest of the sixteen megabyte pieces earlier versions fetched a file in.
+fn earlier_manifest_path(part: &Path) -> PathBuf {
     let mut name = part.as_os_str().to_os_string();
     name.push(".done");
     PathBuf::from(name)
 }
 
-/// How much of a download lies in its part file: the pieces its manifest names, the part file being reserved at
-/// the whole size; a part file without a manifest (a server without ranges) holds what it is long.
+/// How much of a download lies in its part file: what its manifest says of each piece, the part file being reserved
+/// at the whole size; a part file without a manifest (a server without ranges) holds what it is long, and one left by
+/// an earlier version's pieces starts over.
 pub fn on_disk(part: &Path) -> u64 {
     let Ok(length) = std::fs::metadata(part).map(|meta| meta.len()) else { return 0 };
-    if !manifest_path(part).exists() {
-        return length;
+    if manifest_path(part).exists() {
+        return progress_of(part, length).values().sum();
     }
-    let done: std::collections::HashSet<u64> = completed_offsets(part).into_iter().filter(|offset| *offset < length).collect();
-    done.iter().map(|offset| CHUNK.min(length - offset)).sum()
+    if earlier_manifest_path(part).exists() {
+        return 0;
+    }
+    length
 }
 
-fn completed_offsets(part: &Path) -> Vec<u64> {
-    let Ok(bytes) = std::fs::read(manifest_path(part)) else { return Vec::new() };
-    bytes
-        .chunks_exact(8)
-        .map(|entry| u64::from_le_bytes([entry[0], entry[1], entry[2], entry[3], entry[4], entry[5], entry[6], entry[7]]))
-        .collect()
+/// The mark of the manifest's first entry, which carries the size of the file the manifest was written for.
+const WHOLE: u64 = u64::MAX;
+
+fn entry(first: u64, second: u64) -> [u8; 16] {
+    let mut entry = [0u8; 16];
+    entry[..8].copy_from_slice(&first.to_le_bytes());
+    entry[8..].copy_from_slice(&second.to_le_bytes());
+    entry
+}
+
+/// A manifest as a download writes it, for the tests of what reads one: the file's size, then each piece's first
+/// byte and how far it has come.
+#[cfg(test)]
+pub(crate) fn manifest_of(total: u64, notes: &[(u64, u64)]) -> Vec<u8> {
+    std::iter::once(entry(WHOLE, total)).chain(notes.iter().map(|(start, have)| entry(*start, *have))).flatten().collect()
+}
+
+/// How far each piece has come, by its first byte: the furthest note of the manifest, which holds only for the file
+/// size it was written for.
+fn progress_of(part: &Path, total: u64) -> std::collections::HashMap<u64, u64> {
+    let mut progress = std::collections::HashMap::new();
+    let Ok(bytes) = std::fs::read(manifest_path(part)) else { return progress };
+    let mut entries = bytes.chunks_exact(16).map(|entry| {
+        let (first, second) = entry.split_at(8);
+        (u64::from_le_bytes(first.try_into().unwrap_or_default()), u64::from_le_bytes(second.try_into().unwrap_or_default()))
+    });
+    if entries.next() != Some((WHOLE, total)) {
+        return progress;
+    }
+    let lengths: std::collections::HashMap<u64, u64> = pieces_of(total).into_iter().map(|(start, end)| (start, end - start + 1)).collect();
+    for (start, have) in entries {
+        if lengths.get(&start).is_some_and(|length| have <= *length) {
+            let noted = progress.entry(start).or_insert(0u64);
+            *noted = (*noted).max(have);
+        }
+    }
+    progress
+}
+
+/// A piece's progress, noted after its bytes reached the disk: the other order loses a power cut, the manifest
+/// promising data that never landed.
+fn note(file: &File, manifest: &Mutex<File>, start: u64, have: u64) {
+    file.sync_data().ok();
+    if let Ok(mut manifest) = manifest.lock() {
+        manifest.write_all(&entry(start, have)).ok();
+        manifest.sync_data().ok();
+    }
 }
 
 #[cfg(windows)]
@@ -323,12 +478,6 @@ fn write_at(file: &File, buffer: &[u8], offset: u64) -> std::io::Result<usize> {
     file.write_at(buffer, offset)
 }
 
-/// Fetches `url` into `part`, several pieces at a time, and reports progress by
-/// adding to `written`.
-///
-/// `written` starts at whatever the resumed pieces already account for, so the
-/// caller can add several files' counters together and get a figure that only
-/// ever goes up.
 pub async fn fetch(
     http: &reqwest::Client,
     url: &str,
@@ -337,6 +486,7 @@ pub async fn fetch(
     written: Arc<AtomicU64>,
     cancel: Arc<AtomicBool>,
 ) -> Result<()> {
+    let _fetching = Fetching::start();
     if let Some(parent) = part.parent() {
         std::fs::create_dir_all(parent).with_context(|| format!("create {}", parent.display()))?;
     }
@@ -344,6 +494,9 @@ pub async fn fetch(
         return whole(http, url, part, written, cancel).await;
     }
 
+    // A manifest speaks of the part file it was written beside: left after that file was removed, or beside one of
+    // another length, it notes bytes that are not there.
+    let reserved = std::fs::metadata(part).is_ok_and(|meta| meta.len() == plan.total);
     let file = Arc::new(
         OpenOptions::new()
             .create(true)
@@ -354,27 +507,31 @@ pub async fn fetch(
     );
     file.set_len(plan.total).with_context(|| format!("reserve {} bytes", plan.total))?;
 
-    let done: std::collections::HashSet<u64> = completed_offsets(part).into_iter().filter(|offset| *offset < plan.total).collect();
-    let manifest = Arc::new(Mutex::new(
-        OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(manifest_path(part))
-            .with_context(|| format!("open {}", manifest_path(part).display()))?,
-    ));
+    std::fs::remove_file(earlier_manifest_path(part)).ok();
+    let progress = if reserved { progress_of(part, plan.total) } else { std::collections::HashMap::new() };
+    let mut noted = OpenOptions::new()
+        .create(true)
+        .write(true)
+        .truncate(progress.is_empty())
+        .append(!progress.is_empty())
+        .open(manifest_path(part))
+        .with_context(|| format!("open {}", manifest_path(part).display()))?;
+    if progress.is_empty() {
+        noted.write_all(&entry(WHOLE, plan.total)).with_context(|| format!("write {}", manifest_path(part).display()))?;
+    }
+    let manifest = Arc::new(Mutex::new(noted));
 
     let mut pieces = Vec::new();
-    let mut start = 0u64;
-    while start < plan.total {
-        let end = (start + CHUNK - 1).min(plan.total - 1);
-        if done.contains(&start) {
-            written.fetch_add(end - start + 1, Ordering::Relaxed);
-        } else {
-            pieces.push((start, end));
+    for (start, end) in pieces_of(plan.total) {
+        let have = progress.get(&start).copied().unwrap_or(0);
+        written.fetch_add(have, Ordering::Relaxed);
+        if have < end - start + 1 {
+            pieces.push((start, end, have));
         }
-        start += CHUNK;
     }
     if pieces.is_empty() {
+        file.sync_all().ok();
+        std::fs::remove_file(manifest_path(part)).ok();
         return Ok(());
     }
 
@@ -383,13 +540,16 @@ pub async fn fetch(
     // rest, and so does the user pressing cancel.
     let stop = cancel;
     let failure: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(None));
+    // Shared, not copied: a signed address resolved again by one piece is the
+    // address every other piece takes next.
+    let current = Arc::new(tokio::sync::Mutex::new(url.to_string()));
 
     // Tasks, not connections: the semaphore above decides how many of them are
     // talking to a server at any moment, so a second download gets a turn.
     let workers = (0..SLOTS.min(queue.lock().map(|queue| queue.len()).unwrap_or(1)).max(1)).map(|_| {
-        let (http, url, file, queue, written, stop, failure, manifest) = (
+        let (http, current, file, queue, written, stop, failure, manifest) = (
             http.clone(),
-            url.to_string(),
+            current.clone(),
             file.clone(),
             queue.clone(),
             written.clone(),
@@ -402,8 +562,8 @@ pub async fn fetch(
                 if stop.load(Ordering::Relaxed) {
                     return;
                 }
-                let Some((start, end)) = ({ let mut queue = queue.lock().unwrap(); queue.pop_front() }) else { return };
-                if let Err(error) = piece(&http, &url, &file, start, end, &written, &stop, &manifest).await {
+                let Some((start, end, have)) = ({ let mut queue = queue.lock().unwrap(); queue.pop_front() }) else { return };
+                if let Err(error) = piece(&http, &current, &file, start, end, have, &written, &stop, &manifest).await {
                     stop.store(true, Ordering::Relaxed);
                     *failure.lock().unwrap() = Some(error.to_string());
                     return;
@@ -423,55 +583,59 @@ pub async fn fetch(
     Ok(())
 }
 
-/// One piece, with the retries that make a long download survive a bad line.
+/// One piece from the byte it has come to, with the retries that make a long download survive a bad line: what an
+/// attempt brought stays on the disk and the next one asks for the rest.
 async fn piece(
     http: &reqwest::Client,
-    url: &str,
+    current: &tokio::sync::Mutex<String>,
     file: &Arc<File>,
     start: u64,
     end: u64,
+    mut have: u64,
     written: &Arc<AtomicU64>,
     stop: &Arc<AtomicBool>,
     manifest: &Arc<Mutex<File>>,
 ) -> Result<()> {
     let wanted = end - start + 1;
-    let mut last = String::new();
-    for attempt in 0..RETRIES {
+    let mut empty = 0u32;
+    while have < wanted {
         if stop.load(Ordering::Relaxed) {
             bail!("cancelled");
         }
         let mut got = 0u64;
-        let outcome = once(http, url, file, start, end, written, &mut got, stop).await;
-        match outcome {
-            Ok(()) if got == wanted => {
-                // The bytes reach the disk before the manifest says they did.
-                // The other order loses a power cut: a resumed download would
-                // skip a piece that is a hole.
-                file.sync_data().ok();
-                if let Ok(mut manifest) = manifest.lock() {
-                    manifest.write_all(&start.to_le_bytes()).ok();
-                    manifest.sync_data().ok();
-                }
-                return Ok(());
-            }
-            Ok(()) => last = format!("incomplete range: {got} of {wanted} bytes"),
+        let url = current.lock().await.clone();
+        let outcome = once(http, &url, file, start, end, have, written, &mut got, stop, manifest).await;
+        have += got;
+        empty = if got > 0 { 0 } else { empty + 1 };
+        let last = match outcome {
+            Ok(()) if have == wanted => break,
+            Ok(()) => format!("incomplete range: {have} of {wanted} bytes"),
             Err(error) => {
                 if stop.load(Ordering::Relaxed) {
                     bail!("cancelled");
                 }
-                last = error.to_string();
+                if error.is::<Expired>() && empty < RETRIES {
+                    // resolved again at once: the wait below is for a bad line, not for a signature
+                    match refresh(http, current, &url).await {
+                        Ok(()) => continue,
+                        Err(again) => format!("{error}; resolving it again: {again:#}"),
+                    }
+                } else {
+                    error.to_string()
+                }
             }
+        };
+        if empty >= RETRIES {
+            return Err(anyhow!("range {}-{end} failed after {RETRIES} attempts: {last}", start + have));
         }
-        // The failed attempt's bytes are subtracted again, or the bar would
-        // count them twice when the retry fetches the same range.
-        written.fetch_sub(got.min(written.load(Ordering::Relaxed)), Ordering::Relaxed);
         // Exponential, as the Hub's own download protocol asks for: half a
         // second, then one, two, four - eight attempts spanning a minute
         // instead of the three seconds a linear back-off gave a network that
         // needs a moment to come back.
-        tokio::time::sleep(std::time::Duration::from_millis(500 << attempt.min(7))).await;
+        tokio::time::sleep(std::time::Duration::from_millis(500 << empty.min(7))).await;
     }
-    Err(anyhow!("range {start}-{end} failed after {RETRIES} attempts: {last}"))
+    note(file, manifest, start, wanted);
+    Ok(())
 }
 
 async fn once(
@@ -480,24 +644,34 @@ async fn once(
     file: &Arc<File>,
     start: u64,
     end: u64,
+    have: u64,
     written: &Arc<AtomicU64>,
     got: &mut u64,
     stop: &Arc<AtomicBool>,
+    manifest: &Arc<Mutex<File>>,
 ) -> Result<()> {
-    let response = send(http, url, Some(format!("bytes={start}-{end}"))).await?;
+    let from = start + have;
+    let response = send(http, url, Some(format!("bytes={from}-{end}"))).await?;
+    if matches!(response.status().as_u16(), 401 | 403 | 410) && origin_of(url).is_some() {
+        return Err(Expired(format!("range {from}-{end}: the redirected address answered {}", response.status())).into());
+    }
     if response.status() != reqwest::StatusCode::PARTIAL_CONTENT {
-        bail!("range {start}-{end}: answered {} where 206 was expected", response.status());
+        bail!("range {from}-{end}: answered {} where 206 was expected", response.status());
     }
     let mut stream = response.bytes_stream();
-    let mut offset = start;
+    let mut offset = from;
+    let mut unnoted = 0u64;
     while let Some(chunk) = stream.next().await {
-        // Checked here and not only between pieces: four sixteen megabyte
-        // pieces in flight is ten seconds of downloading after the user has
-        // pressed stop, which reads as a button that did nothing.
+        // Checked here and not only between pieces: a piece is a quarter of
+        // the file, which is minutes of downloading after the user has pressed
+        // stop, and that reads as a button that did nothing.
         if stop.load(Ordering::Relaxed) {
             bail!("cancelled");
         }
         let chunk = chunk.context("read range")?;
+        if offset + chunk.len() as u64 > end + 1 {
+            bail!("range {from}-{end}: the server sent more than was asked for");
+        }
         let mut placed = 0usize;
         while placed < chunk.len() {
             let count = write_at(file, &chunk[placed..], offset + placed as u64).context("write range")?;
@@ -509,6 +683,11 @@ async fn once(
         offset += chunk.len() as u64;
         *got += chunk.len() as u64;
         written.fetch_add(chunk.len() as u64, Ordering::Relaxed);
+        unnoted += chunk.len() as u64;
+        if unnoted >= CHECKPOINT {
+            note(file, manifest, start, have + *got);
+            unnoted = 0;
+        }
     }
     Ok(())
 }
@@ -538,13 +717,38 @@ mod tests {
     use super::*;
 
     #[test]
-    fn a_manifest_reads_back_the_offsets_it_was_given() {
-        let directory = std::env::temp_dir().join(format!("yue2-chunked-{}", std::process::id()));
+    fn a_manifest_gives_how_far_each_piece_of_its_file_has_come() {
+        let directory = std::env::temp_dir().join(format!("yue2-chunked-{}", uuid::Uuid::now_v7()));
         std::fs::create_dir_all(&directory).unwrap();
         let part = directory.join("model.gguf.part");
-        std::fs::write(manifest_path(&part), [0u64, CHUNK, CHUNK * 2].iter().flat_map(|offset| offset.to_le_bytes()).collect::<Vec<u8>>()).unwrap();
-        assert_eq!(completed_offsets(&part), vec![0, CHUNK, CHUNK * 2]);
+        let total = PIECE_MIN * 8;
+        let pieces = pieces_of(total);
+        assert_eq!(pieces.len(), SLOTS, "a file is one piece a connection, whatever its size");
+        assert_eq!(pieces[0], (0, PIECE_MIN * 2 - 1));
+        assert_eq!(pieces.last().unwrap().1, total - 1);
+        let second = pieces[1].0;
+        let notes: Vec<u8> = [entry(WHOLE, total), entry(0, CHECKPOINT), entry(0, CHECKPOINT * 3), entry(second, CHECKPOINT), entry(7, CHECKPOINT), entry(second, PIECE_MIN * 9)].concat();
+        std::fs::write(manifest_path(&part), &notes).unwrap();
+        let progress = progress_of(&part, total);
+        assert_eq!(progress.get(&0), Some(&(CHECKPOINT * 3)), "the furthest note of a piece");
+        assert_eq!(progress.get(&second), Some(&CHECKPOINT), "a note longer than its piece is not believed");
+        assert_eq!(progress.len(), 2, "a note of a byte no piece starts at is not believed");
+        assert!(progress_of(&part, total + 1).is_empty(), "a manifest holds for the file size it was written for");
         std::fs::remove_dir_all(&directory).ok();
+    }
+
+    #[test]
+    fn a_small_file_is_one_piece_and_pieces_cover_the_file_without_gaps() {
+        assert_eq!(pieces_of(0), vec![]);
+        assert_eq!(pieces_of(10), vec![(0, 9)]);
+        assert_eq!(pieces_of(PIECE_MIN + 1).len(), 2);
+        for total in [1, PIECE_MIN - 1, PIECE_MIN, PIECE_MIN + 1, PIECE_MIN * 3 + 5, PIECE_MIN * 61 + 7] {
+            let pieces = pieces_of(total);
+            assert!(pieces.len() <= SLOTS);
+            assert_eq!(pieces[0].0, 0);
+            assert_eq!(pieces.last().unwrap().1, total - 1);
+            assert!(pieces.windows(2).all(|pair| pair[0].1 + 1 == pair[1].0), "{total}: {pieces:?}");
+        }
     }
 
     /// The header as Hugging Face actually sends it, copied from a live
@@ -566,23 +770,178 @@ mod tests {
 
     #[test]
     fn a_missing_manifest_means_nothing_is_done_yet() {
-        assert!(completed_offsets(Path::new("nowhere/at/all.part")).is_empty());
+        assert!(progress_of(Path::new("nowhere/at/all.part"), 10).is_empty());
     }
 
-    /// A part file is reserved at the whole size: what is on disk is the pieces its manifest names, the last one
-    /// shorter; without a manifest the part file holds what it is long.
     #[test]
-    fn a_part_file_holds_the_pieces_its_manifest_names() {
+    fn a_part_file_holds_what_its_manifest_says_of_its_pieces() {
         let folder = std::env::temp_dir().join(format!("on-disk-{}", uuid::Uuid::now_v7()));
         std::fs::create_dir_all(&folder).unwrap();
         let part = folder.join("model.gguf.part");
-        let total = CHUNK * 2 + 10;
+        let total = PIECE_MIN * 2 + 10;
         std::fs::File::create(&part).unwrap().set_len(total).unwrap();
         assert_eq!(on_disk(&part), total, "no manifest: a download without ranges");
-        let offsets: Vec<u8> = [0u64, CHUNK * 2].iter().flat_map(|offset| offset.to_le_bytes()).collect();
-        std::fs::write(manifest_path(&part), offsets).unwrap();
-        assert_eq!(on_disk(&part), CHUNK + 10);
+        std::fs::write(earlier_manifest_path(&part), 0u64.to_le_bytes()).unwrap();
+        assert_eq!(on_disk(&part), 0, "the pieces of an earlier version start over");
+        let last = pieces_of(total).last().unwrap().0;
+        std::fs::write(manifest_path(&part), [entry(WHOLE, total), entry(0, CHECKPOINT), entry(last, 10)].concat()).unwrap();
+        assert_eq!(on_disk(&part), CHECKPOINT + 10);
         assert_eq!(on_disk(&folder.join("nothing.part")), 0);
+        std::fs::remove_dir_all(&folder).ok();
+    }
+
+    /// A server of one file by ranges; with `cut`, its first answer stops after that many bytes. Gives its port and
+    /// the ranges it was asked for.
+    async fn range_server(body: Vec<u8>, cut: Option<usize>) -> (u16, Arc<Mutex<Vec<(u64, u64)>>>) {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let asked: Arc<Mutex<Vec<(u64, u64)>>> = Arc::new(Mutex::new(Vec::new()));
+        let seen = asked.clone();
+        tokio::spawn(async move {
+            loop {
+                let Ok((mut socket, _)) = listener.accept().await else { return };
+                let mut request = Vec::new();
+                let mut buffer = [0u8; 1024];
+                while !request.windows(4).any(|window| window == b"\r\n\r\n") {
+                    let Ok(count) = socket.read(&mut buffer).await else { break };
+                    if count == 0 {
+                        break;
+                    }
+                    request.extend_from_slice(&buffer[..count]);
+                }
+                let text = String::from_utf8_lossy(&request).to_ascii_lowercase();
+                let range = text.lines().find_map(|line| line.strip_prefix("range: bytes=")).unwrap_or("0-0").trim().to_string();
+                let (from, to) = range.split_once('-').unwrap();
+                let (from, to): (u64, u64) = (from.parse().unwrap(), to.parse().unwrap());
+                let first = { let mut seen = seen.lock().unwrap(); seen.push((from, to)); seen.len() == 1 };
+                let head = format!("HTTP/1.1 206 Partial Content\r\nContent-Range: bytes {from}-{to}/{}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n", body.len(), to - from + 1);
+                socket.write_all(head.as_bytes()).await.ok();
+                let slice = &body[from as usize..=to as usize];
+                socket.write_all(match cut { Some(cut) if first => &slice[..cut], _ => slice }).await.ok();
+                socket.shutdown().await.ok();
+            }
+        });
+        (port, asked)
+    }
+
+    /// A server that drops the connection halfway and answers the rest on the next request: the piece is asked for
+    /// from the byte it has come to, and the file is whole.
+    #[tokio::test]
+    async fn a_dropped_connection_asks_only_for_the_rest_of_its_piece() {
+        let body: Vec<u8> = (0..200_000u32).map(|index| (index % 251) as u8).collect();
+        let (port, asked) = range_server(body.clone(), Some(70_000)).await;
+        let folder = std::env::temp_dir().join(format!("resume-{}", uuid::Uuid::now_v7()));
+        std::fs::create_dir_all(&folder).unwrap();
+        let part = folder.join("model.gguf.part");
+        let http = reqwest::Client::builder().no_proxy().build().unwrap();
+        let written = Arc::new(AtomicU64::new(0));
+        fetch(&http, &format!("http://127.0.0.1:{port}/model.gguf"), &part, Plan { total: body.len() as u64, ranged: true }, written.clone(), Arc::new(AtomicBool::new(false))).await.unwrap();
+        assert_eq!(std::fs::read(&part).unwrap(), body);
+        assert_eq!(written.load(Ordering::Relaxed), body.len() as u64, "the bar counts every byte once");
+        assert_eq!(*asked.lock().unwrap(), vec![(0, 199_999), (70_000, 199_999)]);
+        assert!(!manifest_path(&part).exists());
+        std::fs::remove_dir_all(&folder).ok();
+    }
+
+    #[tokio::test]
+    async fn a_manifest_without_its_part_file_is_not_believed() {
+        let body: Vec<u8> = (0..100_000u32).map(|index| (index % 241) as u8).collect();
+        let total = body.len() as u64;
+        let (port, asked) = range_server(body.clone(), None).await;
+        let folder = std::env::temp_dir().join(format!("stale-{}", uuid::Uuid::now_v7()));
+        std::fs::create_dir_all(&folder).unwrap();
+        let part = folder.join("model.gguf.part");
+        std::fs::write(manifest_path(&part), [entry(WHOLE, total), entry(0, total)].concat()).unwrap();
+        let http = reqwest::Client::builder().no_proxy().build().unwrap();
+        let written = Arc::new(AtomicU64::new(0));
+        fetch(&http, &format!("http://127.0.0.1:{port}/model.gguf"), &part, Plan { total, ranged: true }, written.clone(), Arc::new(AtomicBool::new(false))).await.unwrap();
+        assert_eq!(std::fs::read(&part).unwrap(), body, "the bytes the manifest promised were not on the disk");
+        assert_eq!(*asked.lock().unwrap(), vec![(0, total - 1)]);
+        assert_eq!(written.load(Ordering::Relaxed), total);
+        std::fs::remove_dir_all(&folder).ok();
+    }
+
+
+    /// A file served behind a redirect, as the Hub serves one: `/resolve/` answers 302 to a signed address, which serves ranges. Counts the
+    /// requests to `/resolve/`; the signed address stops being honoured after `honour` ranges when `honour` is set.
+    async fn hub_with_cdn(body: Arc<Vec<u8>>, honour: Option<usize>) -> (String, Arc<std::sync::atomic::AtomicUsize>) {
+        use axum::http::{header, HeaderMap, StatusCode};
+        use axum::response::IntoResponse;
+        use std::sync::atomic::AtomicUsize;
+        let resolves = Arc::new(AtomicUsize::new(0));
+        let served = Arc::new(AtomicUsize::new(0));
+        let (counted, cdn_served) = (resolves.clone(), served.clone());
+        let app = axum::Router::new()
+            .route(
+                "/m/resolve/rev/model.gguf",
+                axum::routing::get(move || {
+                    let token = counted.fetch_add(1, Ordering::SeqCst) + 1;
+                    async move { (StatusCode::FOUND, [(header::LOCATION, format!("/cdn/model.gguf?token={token}"))]).into_response() }
+                }),
+            )
+            .route(
+                "/cdn/model.gguf",
+                axum::routing::get(move |query: axum::extract::RawQuery, headers: HeaderMap| {
+                    let (body, served) = (body.clone(), cdn_served.clone());
+                    async move {
+                        let token: usize = query.0.unwrap_or_default().trim_start_matches("token=").parse().unwrap_or(0);
+                        let n = served.fetch_add(1, Ordering::SeqCst);
+                        if honour.is_some_and(|honour| token == 1 && n >= honour) {
+                            return StatusCode::FORBIDDEN.into_response();
+                        }
+                        let range = headers.get(header::RANGE).and_then(|value| value.to_str().ok()).unwrap_or("bytes=0-");
+                        let (a, b) = range.trim_start_matches("bytes=").split_once('-').unwrap();
+                        let a: usize = a.parse().unwrap();
+                        let b: usize = b.parse().unwrap_or(body.len() - 1).min(body.len() - 1);
+                        (
+                            StatusCode::PARTIAL_CONTENT,
+                            [(header::CONTENT_RANGE, format!("bytes {a}-{b}/{}", body.len()))],
+                            body[a..=b].to_vec(),
+                        )
+                            .into_response()
+                    }
+                }),
+            );
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        tokio::spawn(async move { axum::serve(listener, app).await.ok() });
+        (format!("http://{address}/m/resolve/rev/model.gguf"), resolves)
+    }
+
+    fn body_of(length: usize) -> Arc<Vec<u8>> {
+        Arc::new((0..length).map(|i| (i * 31 + i / 7) as u8).collect())
+    }
+
+    /// #249: a file is one request to `/resolve/`; its pieces come from the address the redirect led to.
+    #[tokio::test]
+    async fn a_redirected_file_is_resolved_once_and_its_pieces_come_from_where_it_led() {
+        let body = body_of(200_123);
+        let (url, resolves) = hub_with_cdn(body.clone(), None).await;
+        let http = reqwest::Client::builder().no_proxy().build().unwrap();
+        let (plan, resolved) = probe(&http, &url).await.unwrap();
+        assert!(plan.ranged && plan.total == body.len() as u64);
+        assert!(resolved.contains("/cdn/model.gguf?token=1"), "{resolved}");
+        let folder = std::env::temp_dir().join(format!("resolve-once-{}", uuid::Uuid::now_v7()));
+        let part = folder.join("model.gguf.part");
+        fetch(&http, &resolved, &part, plan, Arc::new(AtomicU64::new(0)), Arc::new(AtomicBool::new(false))).await.unwrap();
+        assert_eq!(std::fs::read(&part).unwrap(), *body);
+        assert_eq!(resolves.load(Ordering::SeqCst), 1, "one counted request for the whole file");
+        std::fs::remove_dir_all(&folder).ok();
+    }
+
+    /// A signed address that has run out is resolved again once, and the download finishes from the new one.
+    #[tokio::test]
+    async fn a_signed_address_that_ran_out_is_resolved_again_once() {
+        let body = body_of(300_009);
+        let (url, resolves) = hub_with_cdn(body.clone(), Some(1)).await;
+        let http = reqwest::Client::builder().no_proxy().build().unwrap();
+        let (plan, resolved) = probe(&http, &url).await.unwrap();
+        let folder = std::env::temp_dir().join(format!("resolve-again-{}", uuid::Uuid::now_v7()));
+        let part = folder.join("model.gguf.part");
+        fetch(&http, &resolved, &part, plan, Arc::new(AtomicU64::new(0)), Arc::new(AtomicBool::new(false))).await.unwrap();
+        assert_eq!(std::fs::read(&part).unwrap(), *body);
+        assert_eq!(resolves.load(Ordering::SeqCst), 2, "the probe, and once more when the signature ran out");
         std::fs::remove_dir_all(&folder).ok();
     }
 

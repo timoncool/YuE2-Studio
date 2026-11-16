@@ -175,6 +175,7 @@ pub fn hear_batch(
     let listing: Vec<String> = inputs.iter().enumerate().map(|(index, path)| format!("{}\t{}", path.display(), work.path().join(index.to_string()).display())).collect();
     std::fs::write(&list, listing.join("\n"))?;
 
+    music_core::process::runtime_beside(exe);
     let mut command = Command::new(exe);
     if let Some(path) = music_core::process::own_libraries_first(exe) {
         command.env("LD_LIBRARY_PATH", path);
@@ -206,6 +207,7 @@ pub fn hear_batch(
         command.env("CUDA_VISIBLE_DEVICES", "-1");
     }
     quiet(&mut command);
+    let started_as = format!("{command:?}");
     let mut child = command.spawn().with_context(|| format!("start {}", exe.display()))?;
     let stderr = child.stderr.take().context("the captioner's messages")?;
 
@@ -238,6 +240,17 @@ pub fn hear_batch(
     if !status.success() && (tail.is_empty() || music_core::process::exited_on_exception(status.code())) {
         if let Some(fault) = music_core::process::fault_of(pid, std::time::Duration::from_secs(5)) {
             tail = if tail.is_empty() { fault.to_string() } else { format!("{tail} | {fault}") };
+        }
+    }
+    // a captioner that failed leaves its whole run in the studio's log, which a report carries: how it was started,
+    // every line it wrote, how it ended
+    if !status.success() || reported.iter().any(|seen| !seen) {
+        studio_log!("[ERROR] the captioner ended with {status}, {} of {} songs described, {} lines of its own; started as {started_as}", reported.iter().filter(|seen| **seen).count(), reported.len(), log.len());
+        for line in &log {
+            studio_log!("[captioner] {line}");
+        }
+        if log.is_empty() {
+            studio_log!("[captioner] it wrote nothing before it ended{}", if tail.is_empty() { ", and Windows kept no record of a fault" } else { "" });
         }
     }
     for (index, seen) in reported.iter().enumerate() {
@@ -402,6 +415,7 @@ mod tests {
             recommended: None,
             vulkan: false,
             on_processor: false,
+            short_of_smallest_set: None,
         };
         let cuda13 = Some(crate::hardware::CudaBuild::Cuda13);
         assert_eq!(hearing(&card(24.0, cuda13), false), Hearing { lm: "moss-lm-q8_0.gguf", on_card: true, seconds: 420.0 });

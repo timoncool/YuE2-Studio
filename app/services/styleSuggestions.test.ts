@@ -16,7 +16,7 @@ describe('style suggestions', () => {
   });
 
   it('gloss every phrase of the list in each language that has a file, and nothing else', () => {
-    expect(Object.keys(STYLE_GLOSSES).sort()).toEqual(['ja', 'ko', 'ru', 'zh']);
+    expect(Object.keys(STYLE_GLOSSES).sort()).toEqual(['ja', 'ko', 'pt', 'ru', 'zh']);
     for (const [language, glosses] of Object.entries(STYLE_GLOSSES)) {
       expect([...glosses!.keys()], language).toEqual(STYLE_SUGGESTIONS);
       for (const [phrase, gloss] of glosses!) expect(gloss, `${language}: ${phrase}`).not.toBe('');
@@ -24,7 +24,7 @@ describe('style suggestions', () => {
   });
 
   it('gloss every genre of the studio in each language that has a file, and nothing else', () => {
-    expect(Object.keys(GENRE_GLOSSES).sort()).toEqual(['ja', 'ko', 'ru', 'zh']);
+    expect(Object.keys(GENRE_GLOSSES).sort()).toEqual(['ja', 'ko', 'pt', 'ru', 'zh']);
     for (const [language, glosses] of Object.entries(GENRE_GLOSSES)) {
       expect([...glosses!.keys()], language).toEqual(MAIN_STYLES);
       for (const [genre, gloss] of glosses!) expect(gloss, `${language}: ${genre}`).not.toBe('');

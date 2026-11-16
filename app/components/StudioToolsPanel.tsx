@@ -9,8 +9,8 @@ import { tempoAndKey } from '../services/songDownload';
 import { DevicePicker } from './DevicePicker';
 import { transcribeWithNativeOpenRouter } from '../services/nativeOpenRouter';
 import { apiUrl } from '../services/apiBase';
-import { openExternal } from '../services/externalLinks';
-import { StemPlayer } from './StemPlayer';
+import { openAudioEditor } from '../services/audioEditor';
+import { StemMixer } from './StemMixer';
 import { mapNativeLibrarySong } from '../services/nativeLibrary';
 import type { NativeLibrarySong } from '../types';
 import type { TranslationKey } from '../i18n/translations';
@@ -404,30 +404,21 @@ export function StudioToolsPanel({ initialSongId }: { initialSongId?: string | n
 
           {running && <WorkProgress label={t('stemsRunning')} percent={percent} elapsedMs={run?.elapsed_ms} />}
 
-          {stems.length > 0 && (
-            <div className="mt-3 space-y-2">
-              {stems.map(stem => {
-                const url = apiUrl(`/v1/library/songs/${encodeURIComponent(songId)}/stems/${stem}`);
-                return (
-                  <div key={stem} className="flex items-center gap-2">
-                    <div className="min-w-0 flex-1">
-                      <StemPlayer src={url} label={t(`stem_${stem}` as never) || stem} />
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const song = songs.find(candidate => candidate.id === songId);
-                        const tempoKey = song ? tempoAndKey((song.generation_settings as Record<string, unknown> | null | undefined)?.abc) : '';
-                        void saveFile(`${song?.title ?? 'track'} - ${stem}${tempoKey ? ` - ${tempoKey}` : ''}.wav`, { url });
-                      }}
-                      className="shrink-0 text-zinc-400 hover:text-pink-500"
-                      title={t('download')}
-                    >
-                      <Download size={15} />
-                    </button>
-                  </div>
-                );
-              })}
+          {stems.length > 0 && songId && (
+            <div className="mt-3">
+              <StemMixer
+                // the audio graph is wired once for a set of stems: another set is another mixer
+                key={`${songId}:${stems.join(',')}`}
+                stems={stems}
+                urlFor={stem => apiUrl(`/v1/library/songs/${encodeURIComponent(songId)}/stems/${stem}`)}
+                mixUrl={apiUrl(`/v1/library/media/${encodeURIComponent(songId)}`)}
+                label={stem => t(`stem_${stem}` as never) || stem}
+                onDownload={stem => {
+                  const song = songs.find(candidate => candidate.id === songId);
+                  const tempoKey = song ? tempoAndKey((song.generation_settings as Record<string, unknown> | null | undefined)?.abc) : '';
+                  void saveFile(`${song?.title ?? 'track'} - ${stem}${tempoKey ? ` - ${tempoKey}` : ''}.wav`, { url: apiUrl(`/v1/library/songs/${encodeURIComponent(songId)}/stems/${stem}`) });
+                }}
+              />
             </div>
           )}
 
@@ -477,7 +468,7 @@ export function StudioToolsPanel({ initialSongId }: { initialSongId?: string | n
               onClick={() => {
                 if (!songId) return;
                 const url = apiUrl(`/v1/library/media/${encodeURIComponent(songId)}`);
-                void openExternal(apiUrl(`/editor/index.html?audioUrl=${encodeURIComponent(url)}`));
+                void openAudioEditor(url);
               }}
               disabled={!songId}
               className="inline-flex items-center gap-2 rounded-lg border border-zinc-300 px-3 py-2 text-xs font-semibold text-zinc-700 hover:border-pink-400 hover:text-pink-600 disabled:opacity-50 dark:border-white/15 dark:text-zinc-200"
@@ -490,7 +481,7 @@ export function StudioToolsPanel({ initialSongId }: { initialSongId?: string | n
                 type="button"
                 onClick={() => {
                   const url = apiUrl(`/v1/library/songs/${encodeURIComponent(songId)}/stems/${stem}`);
-                  void openExternal(apiUrl(`/editor/index.html?audioUrl=${encodeURIComponent(url)}`));
+                  void openAudioEditor(url);
                 }}
                 className="inline-flex items-center gap-2 rounded-lg border border-zinc-200 px-3 py-2 text-xs font-medium text-zinc-600 hover:border-pink-400 hover:text-pink-600 dark:border-white/10 dark:text-zinc-300"
               >

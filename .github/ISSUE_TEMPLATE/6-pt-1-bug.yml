@@ -1,0 +1,71 @@
+name: Relatório de erro
+description: Algo está avariado ou funciona mal
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Obrigado por comunicar! Muitos problemas já estão corrigidos na [versão mais recente](https://github.com/timoncool/YuE2-Studio/releases/latest).
+        Aberto a partir do estúdio, os campos do fundo já vêm preenchidos.
+  - type: textarea
+    id: what
+    attributes:
+      label: O que aconteceu?
+      description: Copiar o texto exato do erro da notificação, se houve uma. Podem largar-se aqui capturas de ecrã.
+      placeholder: |
+        A música para em "Decoding" com "O motor parou durante esta música…"
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Passos para reproduzir
+      placeholder: |
+        1. Abrir Criar
+        2. Colar a letra, 3 minutos
+        3. Carregar em Criar
+  - type: textarea
+    id: expected
+    attributes:
+      label: O que esperava?
+  - type: upload
+    id: log
+    attributes:
+      label: Registo ou pacote de relatório
+      description: "No estúdio: **Definições → Motor local → Diagnóstico do sistema → Criar um pacote para o relatório de erro**, e largar aqui o .zip. Se o estúdio não abrir, largar o `engine.log` da pasta de dados."
+    validations:
+      required: false
+      accept: ".zip,.log,.txt,.png,.jpg,.mp4"
+  - type: input
+    id: version
+    attributes:
+      label: Versão do YuE2 Studio
+      description: "**Definições → Sobre**"
+    validations:
+      required: true
+  - type: dropdown
+    id: package
+    attributes:
+      label: Sistema e pacote
+      options:
+        - Windows — installer (.exe)
+        - Windows — portable (.zip)
+        - macOS — Apple Silicon (.dmg)
+        - Linux — AppImage
+        - Linux — .deb
+        - Other
+  - type: input
+    id: os
+    attributes:
+      label: Versão do sistema
+      placeholder: "Windows 11 24H2 · macOS 15.4 · Ubuntu 24.04"
+  - type: input
+    id: gpu
+    attributes:
+      label: Placa gráfica
+      placeholder: "RTX 3060 12 GB, controlador 581.57 · RX 6600 XT 8 GB · Apple M3 16 GB · sem GPU"
+  - type: input
+    id: models
+    attributes:
+      label: Conjunto de modelos
+      description: "**Definições → Modelos**"

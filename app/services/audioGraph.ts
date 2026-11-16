@@ -126,26 +126,81 @@ let pending: AudioContext | null = null;
  * equalizer.
  */
 function startAudioGraph(audio: HTMLMediaElement): void {
-  if (graph) return;
-  const context = pending ?? new AudioContext();
-  if (!pending) {
-    pending = context;
-    context.addEventListener('statechange', () => feedWhenRunning(context, audio));
+  player = audio;
+  if (graph) {
+    wake(graph.context);
+    return;
   }
-  feedWhenRunning(context, audio);
+  if (pending) {
+    feedWhenRunning(pending);
+    wake(pending);
+    return;
+  }
+  // a playback hint asks for a roomier buffer: the filters cost a little time a live hint does not allow for
+  const context = new AudioContext({ latencyHint: 'playback' });
+  pending = context;
+  keepContextRunning(context);
+  context.addEventListener('statechange', () => feedWhenRunning(context));
+  feedWhenRunning(context);
   wake(context);
 }
 
-function feedWhenRunning(context: AudioContext, audio: HTMLMediaElement): void {
-  if (context.state !== 'running' || pending !== context) return;
-  pending = null;
-  feed(context, audio);
+function feedWhenRunning(context: AudioContext): void {
+  if (context.state !== 'running' || pending !== context || !player) return;
+  try {
+    feed(context, player);
+    pending = null;
+  } catch (error) {
+    // the element can be fed into one graph only: waiting for another attempt would never succeed
+    pending = null;
+    console.error('[ERROR] the player could not be fed to the equalizer:', error);
+  }
 }
 
-/** Asks a suspended context to run: the browser lets it after the user's click. */
+/**
+ * Asks a context to run: the browser lets it after the user's click. WebKitGTK
+ * calls the state "interrupted" where other browsers say "suspended", and a
+ * context that stays interrupted silences everything the player sends to it.
+ */
 function wake(context: AudioContext): void {
-  if (context.state !== 'suspended') return;
-  context.resume().catch((error: unknown) => console.error('[ERROR] the equalizer audio context did not start:', error));
+  if (context.state === 'running' || context.state === 'closed') return;
+  // a context that is not running yet may refuse until the next gesture: the watch asks again
+  context.resume().catch(() => {});
+}
+
+const kept = new WeakSet<AudioContext>();
+
+/**
+ * Keeps a context running for as long as it is open: WebKitGTK interrupts the
+ * sound when another context or audio session takes over, and only a `resume`
+ * brings it back. The player must never stay silent because nobody asked.
+ */
+export function keepContextRunning(context: AudioContext): () => void {
+  if (kept.has(context)) return () => {};
+  kept.add(context);
+  const resume = () => wake(context);
+  const options: AddEventListenerOptions = { capture: true, passive: true };
+  context.addEventListener('statechange', resume);
+  document.addEventListener('pointerdown', resume, options);
+  document.addEventListener('touchend', resume, options);
+  document.addEventListener('click', resume, options);
+  document.addEventListener('keydown', resume, options);
+  document.addEventListener('visibilitychange', resume);
+  window.addEventListener('focus', resume);
+  // an interruption can come from outside the page: nothing announces it, so it is asked about
+  const timer = window.setInterval(resume, 1500);
+  resume();
+  return () => {
+    context.removeEventListener('statechange', resume);
+    document.removeEventListener('pointerdown', resume, options);
+    document.removeEventListener('touchend', resume, options);
+    document.removeEventListener('click', resume, options);
+    document.removeEventListener('keydown', resume, options);
+    document.removeEventListener('visibilitychange', resume);
+    window.removeEventListener('focus', resume);
+    window.clearInterval(timer);
+    kept.delete(context);
+  };
 }
 
 let player: HTMLMediaElement | null = null;
@@ -158,7 +213,7 @@ export function registerPlayer(audio: HTMLMediaElement): void {
   player = audio;
   audio.addEventListener('play', () => {
     if (needsGraph() || pending) startAudioGraph(audio);
-    if (graph) wake(graph.context);
+    else if (graph) wake(graph.context);
   });
 }
 

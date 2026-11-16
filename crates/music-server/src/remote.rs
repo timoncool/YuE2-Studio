@@ -108,7 +108,7 @@ fn from_another_site(headers: &axum::http::HeaderMap) -> bool {
 
 /// A host, with or without its port, that can only be this computer. A site whose name was pointed at 127.0.0.1
 /// (DNS rebinding) is asked for by that name.
-fn loopback_host(authority: &str) -> bool {
+pub(crate) fn loopback_host(authority: &str) -> bool {
     let host = match authority.strip_prefix('[') {
         Some(bracketed) => bracketed.split(']').next().unwrap_or_default(),
         None => authority.rsplit_once(':').filter(|(_, port)| port.bytes().all(|byte| byte.is_ascii_digit())).map_or(authority, |(host, _)| host),

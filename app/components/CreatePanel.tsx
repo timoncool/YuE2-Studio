@@ -403,11 +403,16 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
   const tt = t as unknown as (key: string) => string;
 
   const [name, setName] = useState(() => keptDraft().name ?? '');
+  // a name the form was filled with (an example, a reused song, the assistant) goes with one song; a typed one stays
+  const [nameFilled, setNameFilled] = useState(() => keptDraft().nameFilled === '1');
+  const nameNow = useRef(name);
+  nameNow.current = name;
+  const typeName = (value: string) => { setName(value); setNameFilled(false); };
   const [style, setStyle] = useState(() => keptDraft().style ?? '');
   const [lyrics, setLyrics] = useState(() => keptDraft().lyrics ?? '');
   useEffect(() => {
-    try { window.localStorage.setItem(DRAFT_KEY, JSON.stringify({ name, style, lyrics })); } catch { /* kept until a reload */ }
-  }, [name, style, lyrics]);
+    try { window.localStorage.setItem(DRAFT_KEY, JSON.stringify({ name, style, lyrics, nameFilled: nameFilled ? '1' : '' })); } catch { /* kept until a reload */ }
+  }, [name, style, lyrics, nameFilled]);
   const [abc, setAbc] = useState('');
   const [cot, setCot] = useState<YueCot | ''>('');
   const [showNotation, setShowNotation] = useState(true);
@@ -596,7 +601,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
   const applyRequest = useCallback((request: Record<string, unknown>, title?: string) => {
     setResingFrom(null);
     instrumentalChange.current = null;
-    if (title !== undefined) setName(title);
+    if (title !== undefined) { setName(title); setNameFilled(title.trim() !== ''); }
     if (typeof request.style === 'string') setStyle(request.style);
     if (typeof request.lyrics === 'string') setLyrics(request.lyrics);
     setAbc(typeof request.abc === 'string' ? request.abc.trimEnd() : '');
@@ -698,7 +703,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
       setAbc(request.abc.trimEnd());
       if (request.cot) setCot(request.cot);
       if (request.lyrics) setLyrics(current => (current.trim() ? current : request.lyrics ?? ''));
-      if (request.title) setName(current => (current.trim() ? current : request.title ?? ''));
+      if (request.title && !nameNow.current.trim()) { setName(request.title); setNameFilled(true); }
       setSemanticTokens('');
       setMode('studio');
       if (request.edit) {
@@ -759,7 +764,8 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
     const durationValue = numberOrUndefined(duration);
     if (durationValue !== undefined) request.duration_seconds = Math.min(Math.max(durationValue, 1), MAX_DURATION_SECONDS);
     const lmBatchValue = numberOrUndefined(lmBatch);
-    if (lmBatchValue !== undefined) request.lm_batch_size = lmBatchValue;
+    // a count kept from a time the engine took more songs a request is cut to what it takes now
+    if (lmBatchValue !== undefined) request.lm_batch_size = Math.min(lmBatchValue, Math.max(maxBatch, 1));
     const synthBatchValue = numberOrUndefined(synthBatch);
     if (synthBatchValue !== undefined) request.synth_batch_size = synthBatchValue;
     const stepsValue = numberOrUndefined(steps);
@@ -983,7 +989,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
       if (typeof body?.lyrics === 'string') setLyrics(body.lyrics);
       if (typeof body?.style === 'string') setStyle(body.style);
       if (typeof body?.abc === 'string') setAbc(body.abc.trimEnd());
-      if (typeof body?.title === 'string' && body.title.trim() && target !== 'score') setName(body.title.trim());
+      if (typeof body?.title === 'string' && body.title.trim() && target !== 'score') { setName(body.title.trim()); setNameFilled(true); }
       if (typeof body?.cover_prompt === 'string' && body.cover_prompt.trim()) setCoverPrompt(body.cover_prompt.trim());
       if (typeof body?.duration_seconds === 'number' && body.duration_seconds >= 10 && target === 'all') {
         setDuration(String(Math.min(MAX_DURATION_SECONDS, clampDurationToKept(body.duration_seconds, keptCreateDuration()))));
@@ -1164,6 +1170,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
   const generate = (request: YueRequest) => {
     if (forever) foreverRequest.current = { ...request };
     onGenerate(request);
+    if (nameFilled) { setName(''); setNameFilled(false); }
   };
   useEffect(() => {
     if (!forever) { foreverRequest.current = null; return; }
@@ -1234,7 +1241,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
 
   // An agent connected over MCP reads and fills this form as the user sees it
   const formFields: Record<string, [unknown, (value: string) => void]> = {
-    title: [name, setName],
+    title: [name, typeName],
     style: [style, setStyle],
     lyrics: [lyrics, setLyrics],
     abc: [abc, setAbc],
@@ -1653,7 +1660,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
             )}
             <input
               value={name}
-              onChange={event => setName(event.target.value)}
+              onChange={event => typeName(event.target.value)}
               placeholder={t('untitled')}
               aria-label={t('untitled')}
               className="w-full border-0 bg-transparent p-0 text-lg font-bold text-zinc-900 outline-hidden placeholder:text-zinc-300 dark:text-white dark:placeholder:text-zinc-600"

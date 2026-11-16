@@ -282,7 +282,7 @@ fn shape(name: &str, args: &Value, value: Value) -> Value {
     }
 }
 
-async fn status_summary() -> Value {
+pub(crate) async fn status_summary() -> Value {
     let (jobs, activity, training, processing, separation) = tokio::join!(fetch("/v1/music/jobs"), fetch("/v1/activity"), fetch("/v1/training"), fetch("/v1/processing"), fetch("/v1/separation/status"));
     let (midi, engine, own, restore) = tokio::join!(fetch("/v1/midi"), fetch("/engine/options"), fetch("/setup/own-model"), fetch("/v1/restore"));
     let running_activity: Vec<Value> = activity["activity"].as_array().into_iter().flatten().filter(|entry| entry["state"] == "running").cloned().collect();
@@ -308,7 +308,7 @@ async fn status_summary() -> Value {
 }
 
 /// Whether anything in a status summary is still at work.
-fn busy(summary: &Value) -> Vec<&'static str> {
+pub(crate) fn busy(summary: &Value) -> Vec<&'static str> {
     let unfinished = |run: &Value| run.is_object() && run["done"] != true;
     [
         ("song_jobs", summary["song_jobs"].as_array().is_some_and(|jobs| !jobs.is_empty())),
@@ -323,6 +323,17 @@ fn busy(summary: &Value) -> Vec<&'static str> {
     .into_iter()
     .filter_map(|(what, working)| working.then_some(what))
     .collect()
+}
+
+/// What is at work for the desktop shell's idle stop: what `studio_wait` waits on, and a
+/// download. None while the routes are not built yet, when nothing can be read.
+pub(crate) async fn at_work() -> Option<Vec<&'static str>> {
+    API.get()?;
+    let mut working = busy(&status_summary().await);
+    if crate::chunked::downloading() {
+        working.push("download");
+    }
+    Some(working)
 }
 
 /// How long one wait holds a call: clients give up on a tool call after about
@@ -461,6 +472,12 @@ const JOURNAL: &[(&str, &str, &str)] = &[
     ("lora_update", "updated", "lora"),
     ("lora_delete", "deleted", "lora"),
     ("lora_export_comfyui", "exported", "lora"),
+    ("storage_set", "updated", "settings"),
+    ("storage_cancel", "cancelled", "settings"),
+    ("song_export", "exported", "song"),
+    ("song_export_live", "exported", "song"),
+    ("library_song_midi_part_write", "exported", "midi"),
+    ("song_export_cancel", "cancelled", "song"),
     ("models_download", "started", "download"),
     ("models_update_apply", "started", "download"),
     ("training_pack_install", "started", "download"),
@@ -485,6 +502,7 @@ const JOURNAL: &[(&str, &str, &str)] = &[
     ("recogniser_remove", "deleted", "model"),
     ("midi_remove", "deleted", "model"),
     ("models_select", "updated", "settings"),
+    ("models_preset", "updated", "settings"),
     ("models_own_select", "updated", "settings"),
     ("models_own_cancel", "cancelled", "download"),
     ("models_own_discard", "deleted", "download"),
@@ -1042,6 +1060,12 @@ fn tools() -> &'static [Tool] {
                 call: |args| post("/setup/select".into(), args.clone()),
             },
             Tool {
+                name: "models_preset",
+                description: "Set the studio up the way others made it, in one step. id ruach: Ruach Studio's fine-tune (TW 2.0x0.75, the quantisation the card takes) sings in place of the set's model and their YuE2-VAE-RS x3 decoder turns the song into sound; the set chosen now keeps its VAE, transcriber and the rest. What is not on disk is downloaded (models_status and models_own_list show the progress) and the engine starts on each part as it arrives. The decoder takes about 4 GB of the card while it decodes, the VAE's own 2.5 GB. To go back: models_select with a set's profile_id, and models_own_select with no file.",
+                schema: || object(json!({ "id": { "type": "string", "enum": ["ruach"] } }), &["id"]),
+                call: |args| post("/setup/preset".into(), args.clone()),
+            },
+            Tool {
                 name: "models_own_list",
                 description: "Your own YuE2 models: the GGUF files in models/yue2-cpp/own (folder), each by name and size, the one the engine runs in place of the set's backbone (selected, none for the set's own), and missing when that file is gone; community, the catalog of community fine-tunes (Ruach Studio, CC BY-NC-SA 4.0) with each quantisation's file, size and whether it is downloaded; card_quant, the quantisation this card takes; download, the one under way. The VAE and the rest come from the chosen set.",
                 schema: nothing,
@@ -1293,17 +1317,18 @@ fn tools() -> &'static [Tool] {
             },
             Tool {
                 name: "visualizer_get",
-                description: "The visualiser: where it is (closed, panel over the studio, window of its own), fullscreen, the engine (milkdrop or spectrum), the MilkDrop preset on screen, the spectrum look and the looks there are, held or cycling, random or in order, the preset name shown, seconds per preset, the panel's size.",
+                description: "The visualiser: where it is (closed, panel over the studio, window of its own), fullscreen, the engine (milkdrop, spectrum, blackhole or tunnel), the MilkDrop preset on screen, the spectrum look and the looks there are, the tunnel's jump threshold, held or cycling, random or in order, the preset name shown, seconds per preset, the panel's size.",
                 schema: nothing,
                 call: |args| window("visualizer_get", args, 15),
             },
             Tool {
                 name: "visualizer_set",
-                description: "Work the visualiser as its buttons and keys do; what is not given stays. place: closed | panel (floating over the studio, resizable) | window (a window of its own). fullscreen. engine: milkdrop | spectrum. preset: a MilkDrop preset by name or part of one (visualizer_presets lists them). look: a spectrum look (visualizer_get lists them). step: next | previous. locked: stay on this preset. random: random or in order. show_name. cycle_seconds: how long MilkDrop stays on a preset. panel_size: {width, height} and panel_position: {x, y} in pixels. It hears the player after the equalizer; press play for it to move.",
+                description: "Work the visualiser as its buttons and keys do; what is not given stays. place: closed | panel (floating over the studio, resizable) | window (a window of its own). fullscreen. engine: milkdrop | spectrum | blackhole | tunnel. jump_at: how loud a note makes the tunnel jump, 0 to 1. preset: a MilkDrop preset by name or part of one (visualizer_presets lists them). look: a spectrum look (visualizer_get lists them). step: next | previous. locked: stay on this preset. random: random or in order. show_name. cycle_seconds: how long MilkDrop stays on a preset. panel_size: {width, height} and panel_position: {x, y} in pixels. It hears the player after the equalizer; press play for it to move.",
                 schema: || object(json!({
                     "place": { "type": "string", "enum": ["closed", "panel", "window"] },
                     "fullscreen": { "type": "boolean" },
-                    "engine": { "type": "string", "enum": ["milkdrop", "spectrum"] },
+                    "engine": { "type": "string", "enum": ["milkdrop", "spectrum", "blackhole", "tunnel"] },
+                    "jump_at": { "type": "number", "minimum": 0, "maximum": 1 },
                     "preset": { "type": "string" },
                     "look": { "type": "string" },
                     "step": { "type": "string", "enum": ["next", "previous"] },
@@ -2148,6 +2173,68 @@ fn tools() -> &'static [Tool] {
                 description: "Where a library song's files are on this computer: its audio, its cover, each stem and its MIDI; read or open them directly.",
                 schema: || id_only("song_id", "library song id"),
                 call: |args| get(format!("/v1/library/songs/{}/files", segment(&text(args, "song_id")?))),
+            },
+            Tool {
+                name: "storage_get",
+                description: "Where the studio's downloads are kept - the model sets, LoRAs, the stem separator, karaoke, the audio.cpp runtime, the assistant's models, the trainer and Audio to MIDI: the folder (the studio's data folder, or one a person chose on another disk), the room free and in all on its disk, what each folder takes and whether it is kept elsewhere behind a link; and a move in progress - the folder at work and the bytes copied of it - or what the last move came to, folder by folder.",
+                schema: nothing,
+                call: |_| get("/v1/storage".into()),
+            },
+            Tool {
+                name: "storage_set",
+                description: "Move the studio's downloads to another disk, or back. directory: a folder (full path) - the studio makes its own folder inside it, moves each download folder there and leaves a link where it was, so nothing else changes; null brings them back into the studio's data folder. The library, datasets and training runs never move. The engine and the writing assistant stop for the move and the engine starts again after it; refused while a song, a download or any other work is running. On the same disk it is instant; to another disk the files are copied and checked first. storage_get tells how far it is; a folder that could not move says why and stays where it was.",
+                schema: || object(json!({ "directory": { "type": ["string", "null"] } }), &["directory"]),
+                call: |args| send(Method::PUT, "/v1/storage".into(), args.clone()),
+            },
+            Tool {
+                name: "storage_cancel",
+                description: "Stop a move started by storage_set after the file being copied: the folder at work stays where it was, those already moved stay moved.",
+                schema: nothing,
+                call: |_| post("/v1/storage/cancel".into(), json!({})),
+            },
+            Tool {
+                name: "song_export",
+                description: "Write a library song out as a new file; the song in the library is not changed. format: wav (bit_depth 16, 24 or 32f), flac (16 or 24) or mp3 (mp3_kbps 320, 256, 224, 192, 160 or 128). sample_rate: 44100, 48000, 88200 or 96000; left out, the song's own. loudness: {target_lufs, ceiling_dbtp} brings the song to a loudness target by one gain held under the true-peak ceiling (-14 and -1 is the common streaming reference, -23 and -1 EBU R 128); there is no limiter, and the report says when the ceiling stopped the gain short. Dither is added only when bits are taken away. folder: the folder on this computer to write into, a full path; the file never replaces another. Answers the export's id: song_export_get tells its stage and, when done, the file's path and what was done to the sound.",
+                schema: || object(json!({
+                    "song_id": { "type": "string" },
+                    "folder": { "type": "string" },
+                    "format": { "type": "string", "enum": ["wav", "flac", "mp3"] },
+                    "sample_rate": { "type": "integer", "enum": [44100, 48000, 88200, 96000] },
+                    "bit_depth": { "type": "string", "enum": ["16", "24", "32f"] },
+                    "mp3_kbps": { "type": "integer", "enum": [320, 256, 224, 192, 160, 128] },
+                    "loudness": { "type": "object", "properties": { "target_lufs": { "type": "number", "minimum": -40, "maximum": -5 }, "ceiling_dbtp": { "type": "number", "minimum": -9, "maximum": 0 } }, "required": ["target_lufs", "ceiling_dbtp"] }
+                }), &["song_id", "folder", "format"]),
+                call: |args| post("/v1/exports".into(), args.clone()),
+            },
+            Tool {
+                name: "song_export_get",
+                description: "An export started by song_export: its stage and fraction while it runs; when done, the file's path and the report - the format written, the loudness and true peak before and after, the gain, and a note for each thing done to the sound; or the error.",
+                schema: || id_only("export_id", "the id song_export answered"),
+                call: |args| get(format!("/v1/exports/{}", segment(&text(args, "export_id")?))),
+            },
+            Tool {
+                name: "song_export_cancel",
+                description: "Stop a running export; nothing is written.",
+                schema: || id_only("export_id", "the id song_export answered"),
+                call: |args| post(format!("/v1/exports/{}/cancel", segment(&text(args, "export_id")?)), json!({})),
+            },
+            Tool {
+                name: "song_export_live",
+                description: "Write a library song as an Ableton Live 12 project, a zip in the folder named (a full path): a Live set with the song on a track that plays, each stem the song has on a track that is switched off, and the parts of its score and its own MIDI on MIDI tracks, at the score's tempo and meter (Live's default when the song has no score), with the audio and MIDI files beside the set and a read-me. It is made from what the song has now: stems_split and midi_transcribe first, to have stems and MIDI in it. Answers the zip's path, the tracks, and the files left off a track (a set holds eight, as Live Lite does).",
+                schema: || object(json!({ "song_id": { "type": "string" }, "folder": { "type": "string" } }), &["song_id", "folder"]),
+                call: |args| post("/v1/exports/live".into(), args.clone()),
+            },
+            Tool {
+                name: "library_song_midi_files",
+                description: "The MIDI a library song has for a DAW, each file named for where its notes come from. score: the score the song was generated with - its tempo, meter and key, and the parts with notes: score (the whole of it), lead, voice, chords; a song made without a score has none. own: the track's own MIDI, transcribed from the recording (an estimate) or edited in the MIDI editor.",
+                schema: || id_only("song_id", "library song id"),
+                call: |args| get(format!("/v1/library/songs/{}/midi/parts", segment(&text(args, "song_id")?))),
+            },
+            Tool {
+                name: "library_song_midi_part_write",
+                description: "Write one of a song's MIDI files into a folder on this computer: part is score, lead, voice or chords (from the score the song was generated with, at its tempo, meter and key, with its section markers) or own (the track's own MIDI). folder: a full path. Answers the file's path; the file never replaces another.",
+                schema: || object(json!({ "song_id": { "type": "string" }, "part": { "type": "string", "enum": ["score", "lead", "voice", "chords", "own"] }, "folder": { "type": "string" } }), &["song_id", "part", "folder"]),
+                call: |args| post(format!("/v1/library/songs/{}/midi/parts/{}", segment(&text(args, "song_id")?), segment(&text(args, "part")?)), body_without(args, &["song_id", "part"])),
             },
             Tool {
                 name: "cover_set_from_file",
@@ -3409,6 +3496,12 @@ mod tests {
         ("POST", "/v1/files/save", "a save dialog for the person: the tools write to the path the agent names"),
         ("POST", "/v1/files/save/{id}", "a save dialog for the person: the tools write to the path the agent names"),
         ("POST", "/v1/files/reveal", "shows a file in the person's file manager"),
+        ("POST", "/v1/storage/pick", "a folder dialog for the person: storage_set takes the folder's path"),
+        ("GET", "/v1/exports/{id}/file", "the window's Save dialog reads an export from here: song_export writes into the folder the agent names and song_export_get answers the path"),
+        ("GET", "/v1/library/songs/{id}/midi/parts/{part}", "the window's Save dialog reads a part's MIDI from here: library_song_midi_part_write writes it into the folder the agent names"),
+        ("GET", "/v1/exports/live/{id}/file", "the window's Save dialog reads a Live project from here: song_export_live writes it into the folder the agent names"),
+        ("DELETE", "/v1/exports/live/{id}", "the window lets go of a Live project it did not save: an agent's project is a file in its own folder"),
+        ("DELETE", "/v1/exports/{id}", "the window lets go of an export it did not save: an agent's export is a file in its own folder"),
         ("GET", "/v1/skins", "the page's Winamp reads its skins here: winamp_skins asks the window for the same list"),
         ("POST", "/v1/skins", "the page's upload of a .wsz: winamp_skin_add adds one from a path"),
         ("GET", "/v1/skins/file/{name}", "a skin's file for the page's Winamp"),

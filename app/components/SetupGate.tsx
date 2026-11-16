@@ -6,12 +6,14 @@ import { poll } from '../services/poll';
 import { DevicePicker, type Device } from './DevicePicker';
 import { ManualDownloads } from './ManualDownloads';
 import { UpdatePlanView } from './UpdateScreen';
+import { ModelPreset } from './ModelPreset';
 import { MirrorOffer } from './MirrorOffer';
 import { AssistantExtras } from './AssistantSettings';
 import { AssistantRules } from './AssistantRules';
 import { KaraokeExtras } from './KaraokeSettings';
 import { HubTelemetryPreview } from './HubTelemetryPreview';
 import { OwnModelPanel } from './OwnModelPanel';
+import { ModelStorageCard } from './ModelStorageCard';
 import { setTelemetry } from '../services/studioHub';
 import { programName } from '../services/programs';
 import type { TranslationKey } from '../i18n/translations';
@@ -51,7 +53,9 @@ type SetupStatus = {
   ready: boolean;
   selected_profile_id?: string | null;
   selected_component_ids?: string[] | null;
-  hardware?: { gpuName?: string; totalVramGb?: number; totalRamGb?: number; vulkan?: boolean; onProcessor?: boolean; recommended?: string; reason?: string };
+  /** The preset the studio runs as now: `ruach`, or none. */
+  preset?: string | null;
+  hardware?: { gpuName?: string; totalVramGb?: number; totalRamGb?: number; vulkan?: boolean; onProcessor?: boolean; shortOfSmallestSet?: number | null; recommended?: string; reason?: string };
   engine_ready: boolean;
   engine_id: string;
   first_run: boolean;
@@ -805,15 +809,19 @@ export const SetupGate: React.FC<{ onReady?: () => void; mode?: 'first-run' | 's
   // What to show as chosen: what the studio is actually set to, not what it
   // would recommend. Preselecting the recommendation made an installed studio
   // look like it had 26 GB to download.
-  const [preselected, setPreselected] = useState(false);
+  // the studio's selection the selects were last filled from: they follow it when it changes outside them (a preset)
+  const seeded = useRef<string | null>(null);
 
   useEffect(() => {
-    if (preselected || !catalog || !status) return;
+    if (!catalog || !status) return;
     const ids = status.selected_component_ids?.length
       ? status.selected_component_ids
       : catalog.profiles.find((profile) => profile.id === status.selected_profile_id)?.components
         ?? catalog.profiles.find((profile) => profile.id === catalog.recommended_profile_id)?.components
         ?? [];
+    const key = [...ids].sort().join('|');
+    if (seeded.current === key) return;
+    seeded.current = key;
     if (ids.length === 0) return;
     const picked: Record<string, string> = {};
     for (const id of ids) {
@@ -821,8 +829,7 @@ export const SetupGate: React.FC<{ onReady?: () => void; mode?: 'first-run' | 's
       if (component) picked[component.kind] = component.id;
     }
     setChoice(picked);
-    setPreselected(true);
-  }, [catalog, status, preselected]);
+  }, [catalog, status]);
 
   useEffect(() => {
     void fetch('/setup/catalog')
@@ -973,6 +980,11 @@ export const SetupGate: React.FC<{ onReady?: () => void; mode?: 'first-run' | 's
             : status?.hardware?.reason || t('recommendedFallback')}
           . {t('setupResumable')}
           {status?.hardware?.onProcessor && <span className="mt-2 block text-amber-700 dark:text-amber-300">{t('songsOnProcessor')}</span>}
+          {status?.hardware?.shortOfSmallestSet && (
+            <span className="mt-2 block text-amber-700 dark:text-amber-300">
+              {t('cardShortOfSet').replace('{have}', (status.hardware.totalVramGb ?? 0).toFixed(1)).replace('{need}', String(status.hardware.shortOfSmallestSet))}
+            </span>
+          )}
         </div>}
 
 
@@ -1107,7 +1119,7 @@ export const SetupGate: React.FC<{ onReady?: () => void; mode?: 'first-run' | 's
                       disabled={active?.status === 'downloading'}
                       className="w-full rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm text-zinc-900 focus:border-pink-500 focus:outline-hidden disabled:opacity-50 dark:border-white/10 dark:bg-black/20 dark:text-white"
                     >
-                      <option value="">{group.optional ? t('noTranscriber') : t('chooseComponent')}</option>
+                      <option value="">{group.optional ? t(group.kind === 'vae-decoder' ? 'ownDecoder' : 'noTranscriber') : t('chooseComponent')}</option>
                       {group.components.map((component) => (
                         <option key={component.id} value={component.id}>
                           {componentPrecision(component)} — {bytes(component.bytes)}{installedIds.includes(component.id) ? ` · ${t('installed')}` : ''}
@@ -1116,13 +1128,15 @@ export const SetupGate: React.FC<{ onReady?: () => void; mode?: 'first-run' | 's
                     </select>
                   </label>
                   <div className="mb-2 flex shrink-0 items-center gap-2">
-                    <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${isInstalled ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-300' : 'bg-zinc-200/70 text-zinc-500 dark:bg-white/10 dark:text-zinc-400'}`}>
-                      {isInstalled
-                        ? selectedId && status?.taken_from?.[selectedId]
-                          ? t('takenFrom').replace('{app}', programName(status.taken_from[selectedId].app))
-                          : t('installed')
-                        : t('missingBadge')}
-                    </span>
+                    {(selectedId || !group.optional) && (
+                      <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${isInstalled ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-300' : 'bg-zinc-200/70 text-zinc-500 dark:bg-white/10 dark:text-zinc-400'}`}>
+                        {isInstalled
+                          ? selectedId && status?.taken_from?.[selectedId]
+                            ? t('takenFrom').replace('{app}', programName(status.taken_from[selectedId].app))
+                            : t('installed')
+                          : t('missingBadge')}
+                      </span>
+                    )}
                     {isInstalled && (
                       <button
                         type="button"
@@ -1139,7 +1153,15 @@ export const SetupGate: React.FC<{ onReady?: () => void; mode?: 'first-run' | 's
               );
             })}
             {!chosenIds && <p className="text-xs text-amber-600 dark:text-amber-300">{t('incompleteSet')}</p>}
+            {mode === 'settings' && (
+              <ModelPreset
+                inUse={status?.preset === 'ruach'}
+                disabled={active?.status === 'downloading'}
+                onDone={() => void refresh().catch(() => undefined)}
+              />
+            )}
             {mode === 'settings' && <OwnModelPanel />}
+            <ModelStorageCard />
             <ManualDownloads
               files={missing.flatMap((id) => catalog?.components.find((component) => component.id === id) ?? [])}
               folder={status?.model_root}

@@ -120,7 +120,7 @@ const Toggle: React.FC<{ label: string; hint: string; checked: boolean; onChange
 export const EngineSettings: React.FC = () => {
   const { t } = useI18n();
   const tt = t as unknown as (key: string) => string;
-  const { data: setup } = useSetupStatus<{ hardware?: { onProcessor?: boolean } }>();
+  const { data: setup } = useSetupStatus<{ hardware?: { onProcessor?: boolean; shortOfSmallestSet?: number | null; totalVramGb?: number }; engine_on_processor?: boolean }>();
   const [options, setOptions] = useState<EngineOptions>(DEFAULTS);
   const [saved, setSaved] = useState<EngineOptions>(DEFAULTS);
   // Which engine executable a start takes and which one is running, so the
@@ -312,6 +312,12 @@ export const EngineSettings: React.FC = () => {
         </div>
         <span className="mt-2 block text-xs leading-5 text-zinc-500 dark:text-zinc-400">{tt(`computeBackendHint_${options.backend}`)}</span>
         {setup?.hardware?.onProcessor && <span className="mt-2 block text-xs leading-5 text-amber-700 dark:text-amber-300">{tt('songsOnProcessor')}</span>}
+        {setup?.hardware?.shortOfSmallestSet && (
+          <span className="mt-2 block text-xs leading-5 text-amber-700 dark:text-amber-300">
+            {tt('cardShortOfSet').replace('{have}', (setup.hardware.totalVramGb ?? 0).toFixed(1)).replace('{need}', String(setup.hardware.shortOfSmallestSet))}
+          </span>
+        )}
+        {setup?.engine_on_processor && <span className="mt-2 block text-xs leading-5 text-amber-700 dark:text-amber-300">{tt('engineOnProcessorHint')}</span>}
       </div>
 
       {cards?.cards && (cards.cards.length > 1 || (chosenCard !== null && !cards.cards.some(card => card.index === chosenCard))) && (

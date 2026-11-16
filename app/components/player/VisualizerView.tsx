@@ -5,12 +5,15 @@ import type { ConstructorOptions } from 'audiomotion-analyzer';
 import { useI18n } from '../../context/I18nContext';
 import { onVisualizer, onVisualizerCommand, setVisualizer, visualizer, type VisualizerEngine, type VisualizerState } from '../../services/visualizerState';
 import { loadButterchurn } from '../../services/butterchurn';
+import { blackHoleDrive, createBlackHoleVisualizer, type BlackHoleDrive, type BlackHoleVisualizer } from '../../services/blackHole';
+import { createTunnelVisualizer, tunnelDrive, type TunnelDrive, type TunnelVisualizer } from '../../services/tunnel';
 
 /**
  * One picture of the music, from a Web Audio source: MilkDrop through
- * Butterchurn, with its preset packs, or a spectrum analyser through
- * audioMotion-analyzer, in a handful of classic looks. The same view runs in
- * the panel over the studio, fullscreen and in a window of its own.
+ * Butterchurn, with its preset packs, a spectrum analyser through
+ * audioMotion-analyzer, a Schwarzschild black-hole geodesic, or a feedback
+ * tunnel. The same view runs in the panel over the studio, fullscreen and in
+ * a window of its own.
  *
  * Keys, as in spotifast: N / right - next, P / left - previous, L - keep this
  * one, R - random or in order, T - show the name, F - fullscreen, Esc - back.
@@ -96,6 +99,8 @@ export const VisualizerView: React.FC<{
   const canvas = useRef<HTMLCanvasElement>(null);
   const milkdrop = useRef<ButterchurnVisualizer | null>(null);
   const analyser = useRef<AudioMotionAnalyzer | null>(null);
+  const hole = useRef<BlackHoleVisualizer | null>(null);
+  const tunnel = useRef<TunnelVisualizer | null>(null);
   const blended = useRef(false);
   const [view, setView] = useState<VisualizerState>(visualizer);
   const [presets, setPresets] = useState<[string, object][]>([]);
@@ -107,9 +112,16 @@ export const VisualizerView: React.FC<{
   useEffect(() => onVisualizer(setView), []);
 
   const lookIndex = Math.max(0, SPECTRUM_LOOKS.findIndex((entry) => entry.id === look));
-  const name = engine === 'milkdrop' ? preset ?? '' : t(`vizLook_${SPECTRUM_LOOKS[lookIndex].id}` as never);
+  const name = engine === 'milkdrop'
+    ? preset ?? ''
+    : engine === 'blackhole'
+      ? t('vizBlackHole')
+      : engine === 'tunnel'
+        ? t('vizTunnel')
+        : t(`vizLook_${SPECTRUM_LOOKS[lookIndex].id}` as never);
 
   const step = useCallback((direction: 1 | -1) => {
+    if (engine === 'blackhole' || engine === 'tunnel') return;
     if (engine === 'spectrum') {
       setVisualizer({ look: SPECTRUM_LOOKS[(lookIndex + direction + SPECTRUM_LOOKS.length) % SPECTRUM_LOOKS.length].id });
       return;
@@ -160,6 +172,95 @@ export const VisualizerView: React.FC<{
         milkdrop.current = null;
       };
     }
+    if (engine === 'blackhole') {
+      let frame = 0;
+      let tap: AnalyserNode | null = null;
+      let drive: BlackHoleDrive | undefined;
+      const bins = new Uint8Array(1024);
+      const started = performance.now();
+      try {
+        if (!canvas.current || !box.current) return undefined;
+        const drawer = createBlackHoleVisualizer(canvas.current);
+        drawer.resize(box.current.clientWidth || 640, box.current.clientHeight || 360);
+        hole.current = drawer;
+        tap = context.createAnalyser();
+        tap.fftSize = 2048;
+        tap.smoothingTimeConstant = 0.75;
+        source.connect(tap);
+        setReady(true);
+        const draw = () => {
+          if (!hole.current || !tap) return;
+          tap.getByteFrequencyData(bins);
+          drive = blackHoleDrive({
+            spectrum: bins,
+            sampleRate: context.sampleRate,
+            fftSize: tap.fftSize,
+            time: (performance.now() - started) / 1000,
+            prev: drive,
+          });
+          hole.current.render(drive);
+          frame = requestAnimationFrame(draw);
+        };
+        frame = requestAnimationFrame(draw);
+      } catch (error) {
+        setProblem(error instanceof Error ? error.message : String(error));
+      }
+      return () => {
+        cancelAnimationFrame(frame);
+        if (tap) {
+          try { source.disconnect(tap); } catch { /* already gone */ }
+        }
+        hole.current?.destroy();
+        hole.current = null;
+      };
+    }
+    if (engine === 'tunnel') {
+      let frame = 0;
+      let tap: AnalyserNode | null = null;
+      let drive: TunnelDrive | undefined;
+      const bins = new Uint8Array(1024);
+      const prevBins = new Uint8Array(1024);
+      let heard = false;
+      const started = performance.now();
+      try {
+        if (!canvas.current || !box.current) return undefined;
+        const drawer = createTunnelVisualizer(canvas.current);
+        drawer.resize(box.current.clientWidth || 640, box.current.clientHeight || 360);
+        tunnel.current = drawer;
+        tap = context.createAnalyser();
+        tap.fftSize = 2048;
+        tap.smoothingTimeConstant = 0;
+        source.connect(tap);
+        setReady(true);
+        const draw = () => {
+          if (!tunnel.current || !tap) return;
+          tap.getByteFrequencyData(bins);
+          drive = tunnelDrive({
+            spectrum: bins,
+            prevSpectrum: heard ? prevBins : null,
+            sampleRate: context.sampleRate,
+            fftSize: tap.fftSize,
+            time: (performance.now() - started) / 1000,
+            prev: drive,
+          });
+          prevBins.set(bins);
+          heard = true;
+          tunnel.current.render(drive, visualizer().jumpAt);
+          frame = requestAnimationFrame(draw);
+        };
+        frame = requestAnimationFrame(draw);
+      } catch (error) {
+        setProblem(error instanceof Error ? error.message : String(error));
+      }
+      return () => {
+        cancelAnimationFrame(frame);
+        if (tap) {
+          try { source.disconnect(tap); } catch { /* already gone */ }
+        }
+        tunnel.current?.destroy();
+        tunnel.current = null;
+      };
+    }
     let cancelled = false;
     void import('audiomotion-analyzer').then((module) => {
       if (cancelled || !box.current) return;
@@ -185,7 +286,7 @@ export const VisualizerView: React.FC<{
       // the first preset of a new drawing comes in at once: a blend from nothing washes out white
       milkdrop.current?.loadPreset(found[1], blended.current ? BLEND : 0);
       blended.current = true;
-    } else {
+    } else if (engine === 'spectrum') {
       analyser.current?.setOptions({ ...BASE, ...SPECTRUM_LOOKS[lookIndex].options });
     }
     if (!name) return undefined;
@@ -212,6 +313,8 @@ export const VisualizerView: React.FC<{
         canvas.current.height = Math.round(node.clientHeight * ratio);
         milkdrop.current.setRendererSize(node.clientWidth, node.clientHeight);
       }
+      hole.current?.resize(node.clientWidth, node.clientHeight);
+      tunnel.current?.resize(node.clientWidth, node.clientHeight);
     });
     observer.observe(node);
     return () => observer.disconnect();
@@ -239,7 +342,9 @@ export const VisualizerView: React.FC<{
       onDoubleClick={onFullscreen}
       className="relative h-full w-full overflow-hidden bg-black outline-hidden"
     >
-      {engine === 'milkdrop' && <canvas ref={canvas} data-webgl className="absolute inset-0 h-full w-full" />}
+      {(engine === 'milkdrop' || engine === 'blackhole' || engine === 'tunnel') && (
+        <canvas key={engine} ref={canvas} data-webgl className="absolute inset-0 h-full w-full" />
+      )}
       {showName && flash && (
         <div className="pointer-events-none absolute left-3 top-3 z-10 max-w-[80%] truncate rounded-md bg-black/60 px-2 py-1 text-[11px] text-white">{flash}</div>
       )}

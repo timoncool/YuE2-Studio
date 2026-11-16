@@ -49,12 +49,12 @@ describe('YuE2 model catalog helpers', () => {
     ];
     expect(completeCustomComponentIds(catalog, { backbone: 'backbone-q8', vae: 'vae-f32', transcriber: 'transcriber-q8' }))
       .toEqual(['backbone-q8', 'vae-f32', 'transcriber-q8', 'mert-q8']);
-    expect(componentsByKind(catalog).map((group) => group.kind)).toEqual(['backbone', 'vae', 'transcriber']);
+    expect(componentsByKind(catalog).map((group) => group.kind)).toEqual(['backbone', 'vae', 'vae-decoder', 'transcriber']);
   });
 
   it('groups by role and marks the optional one', () => {
     const groups = componentsByKind(components);
-    expect(groups.map((group) => group.kind)).toEqual(['backbone', 'vae', 'transcriber']);
+    expect(groups.map((group) => group.kind)).toEqual(['backbone', 'vae', 'vae-decoder', 'transcriber']);
     expect(groups.find((group) => group.kind === 'transcriber')?.optional).toBe(true);
   });
 
@@ -64,11 +64,23 @@ describe('YuE2 model catalog helpers', () => {
     expect(componentPrecision(components[2])).toBe('F32');
   });
 
+  it("names Ruach Studio's decoders, which stand beside the set's VAE and not in its place", () => {
+    const v1: ModelComponent = { id: 'vae-rs-x3-v1', kind: 'vae-decoder', filename: 'VAE-RS/YuE2-VAE-RS-x3_v1-F32.gguf', bytes: 1, sha256: 'r1' };
+    const v2: ModelComponent = { id: 'vae-rs-x3-v2', kind: 'vae-decoder', filename: 'VAE-RS/YuE2-VAE-RS-x3_v2-F32.gguf', bytes: 1, sha256: 'r2' };
+    expect(componentPrecision(v1)).toBe('RS x3 v1 · F32');
+    expect(componentPrecision(v2)).toBe('RS x3 v2 · F32');
+    const catalog = [...components, v1, v2];
+    expect(completeCustomComponentIds(catalog, { backbone: 'backbone-q5', vae: 'vae-f32', 'vae-decoder': 'vae-rs-x3-v1' })).toEqual(['backbone-q5', 'vae-f32', 'vae-rs-x3-v1']);
+    expect(completeCustomComponentIds(catalog, { backbone: 'backbone-q5', vae: 'vae-f32' })).toEqual(['backbone-q5', 'vae-f32']);
+    expect(completeCustomComponentIds(catalog, { backbone: 'backbone-q5', vae: 'vae-rs-x3-v1' })).toBeNull();
+    expect(componentsByKind(catalog).find((group) => group.kind === 'vae-decoder')).toMatchObject({ optional: true, components: [v1, v2] });
+  });
+
   it('puts the decoder companion in every set without offering it as a choice', () => {
     const companion: ModelComponent = { id: 'companion-v9', kind: 'companion', filename: 'nar_lora_joint_v9.safetensors', bytes: 1, sha256: 'e' };
     const catalog = [...components, companion];
     expect(completeCustomComponentIds(catalog, { backbone: 'backbone-q5', vae: 'vae-f32' })).toEqual(['backbone-q5', 'vae-f32', 'companion-v9']);
-    expect(componentsByKind(catalog).map((group) => group.kind)).toEqual(['backbone', 'vae', 'transcriber']);
+    expect(componentsByKind(catalog).map((group) => group.kind)).toEqual(['backbone', 'vae', 'vae-decoder', 'transcriber']);
     expect(componentPrecision(companion)).toBe('v9');
   });
 });

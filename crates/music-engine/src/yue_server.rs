@@ -213,6 +213,8 @@ pub fn executable_name() -> &'static str {
 pub struct YueModelFiles {
     pub backbone: PathBuf,
     pub vae: PathBuf,
+    /// A file holding a decoder alone, which decodes in place of the VAE's own; the VAE keeps encoding.
+    pub vae_decoder: Option<PathBuf>,
     /// SheetSage2; without it the engine has no `/transcribe` route.
     pub transcriber: Option<PathBuf>,
     /// The folder of adapters requests may name; without it they name none.
@@ -452,6 +454,7 @@ impl YueServerLocation {
         let models = YueModelFiles {
             backbone: canonical_file(&models.backbone, "YuE2 backbone")?,
             vae: canonical_file(&models.vae, "YuE2 VAE")?,
+            vae_decoder: models.vae_decoder.map(|path| canonical_file(&path, "YuE2 VAE decoder")).transpose()?,
             transcriber: models
                 .transcriber
                 .map(|path| canonical_file(&path, "SheetSage2 transcriber"))
@@ -492,6 +495,10 @@ impl YueServerLaunchConfig {
             "--companion".into(),
             strip_verbatim(&self.models.companion).into(),
         ];
+        if let Some(decoder) = &self.models.vae_decoder {
+            arguments.push("--vae-decoder".into());
+            arguments.push(strip_verbatim(decoder).into());
+        }
         if let Some(transcriber) = &self.models.transcriber {
             arguments.push("--transcriber".into());
             arguments.push(strip_verbatim(transcriber).into());
@@ -581,9 +588,11 @@ impl YueServerSupervisor {
                 command.stderr(Stdio::null());
             }
         }
+        #[cfg(windows)]
         configure_child_process(&mut command);
-        let child = command
-            .spawn()
+        // Through `spawn_dying_with_parent`, not `Command::spawn`: the engine must
+        // not outlive a studio that is killed rather than closed.
+        let child = music_core::process::spawn_dying_with_parent(command)
             .with_context(|| format!("start yue-server {}", self.config.executable.display()))?;
         // The engine must not outlive the studio, however the studio ends.
         music_core::process::adopt(&child);
@@ -662,7 +671,10 @@ impl YueServerSupervisor {
                             note_in_log(&format!("the engine crashed during startup: {fault}"));
                             bail!("yue-server exited during startup with status {status}; {fault}");
                         }
-                        None => bail!("yue-server exited during startup with status {status}"),
+                        None => match fatal_of_this_start() {
+                            Some(fatal) => bail!("yue-server exited during startup with status {status}; {fatal}"),
+                            None => bail!("yue-server exited during startup with status {status}"),
+                        },
                     }
                 }
             }
@@ -756,6 +768,10 @@ fn http_get(host: &str, port: u16, path: &str, timeout: Duration) -> Option<Stri
     Some(response)
 }
 
+/// The engine's own process group, on the platform that has such a thing to ask
+/// for. The lifetime binding is not here: it comes from
+/// `music_core::process::spawn_dying_with_parent`, which is how the engine is
+/// spawned on every platform.
 #[cfg(windows)]
 fn configure_child_process(command: &mut Command) {
     use std::os::windows::process::CommandExt;
@@ -764,14 +780,6 @@ fn configure_child_process(command: &mut Command) {
     // CTRL_BREAK reach it for a graceful stop.
     command.creation_flags(CREATE_NEW_PROCESS_GROUP);
     // The job object `adopt` assigns is what kills it with us on Windows.
-}
-
-/// Beyond the platform group flags, the engine is bound to the studio's
-/// lifetime: Windows does that with a job object in `adopt`, Linux with
-/// `PR_SET_PDEATHSIG` set here, before the exec.
-#[cfg(not(windows))]
-fn configure_child_process(command: &mut Command) {
-    music_core::process::ensure_dies_with_parent(command);
 }
 
 #[cfg(windows)]
@@ -795,6 +803,17 @@ fn request_graceful_shutdown(child: &Child) -> Result<()> {
         bail!("send SIGTERM to yue-server failed: {}", std::io::Error::last_os_error());
     }
     Ok(())
+}
+
+/// The engine's own last word of the start under way: the last FATAL line its log holds after the line this start
+/// wrote, its paths left out so that one cause reads the same on every computer.
+fn fatal_of_this_start() -> Option<String> {
+    let bytes = fs::read(startup_log_path()).ok()?;
+    let tail = String::from_utf8_lossy(&bytes[bytes.len().saturating_sub(64 * 1024)..]).into_owned();
+    let since = tail.rfind("---- starting ").map_or(tail.as_str(), |at| &tail[at..]);
+    let line = since.lines().rev().find(|line| line.contains("FATAL"))?;
+    let words: Vec<&str> = line.split_whitespace().map(|word| if word.contains('\\') || word.contains('/') { "<path>" } else { word }).collect();
+    Some(words.join(" "))
 }
 
 /// Writes one line of the studio's own into the engine log, so a reader can
@@ -863,7 +882,7 @@ mod tests {
     fn resolves_bundled_runtime_and_names_every_model_on_the_command_line() {
         let root = fresh_directory("runtime");
         fs::write(root.join(EXECUTABLE), b"test").unwrap();
-        for name in ["b.gguf", "v.gguf", "t.gguf", "c.safetensors"] {
+        for name in ["b.gguf", "v.gguf", "d.gguf", "t.gguf", "c.safetensors"] {
             fs::write(root.join(name), b"gguf").unwrap();
         }
         fs::create_dir_all(root.join("adapters")).unwrap();
@@ -877,6 +896,7 @@ mod tests {
         .resolve(YueModelFiles {
             backbone: root.join("b.gguf"),
             vae: root.join("v.gguf"),
+            vae_decoder: Some(root.join("d.gguf")),
             transcriber: Some(root.join("t.gguf")),
             adapters: Some(root.join("adapters")),
             companion: root.join("c.safetensors"),
@@ -887,6 +907,7 @@ mod tests {
         let flag = |name: &str| arguments.iter().position(|value| value == name).unwrap();
         assert!(arguments[flag("--model") + 1].ends_with("b.gguf"));
         assert!(arguments[flag("--vae") + 1].ends_with("v.gguf"));
+        assert!(arguments[flag("--vae-decoder") + 1].ends_with("d.gguf"));
         assert!(arguments[flag("--transcriber") + 1].ends_with("t.gguf"));
         assert!(arguments[flag("--adapters") + 1].ends_with("adapters"));
         assert!(arguments[flag("--companion") + 1].ends_with("c.safetensors"));
@@ -903,7 +924,7 @@ mod tests {
         fs::write(root.join(EXECUTABLE), b"test").unwrap();
         let config = |folder| YueServerLaunchConfig {
             executable: root.join(EXECUTABLE),
-            models: YueModelFiles { backbone: root.join("b.gguf"), vae: root.join("v.gguf"), transcriber: None, adapters: None, companion: root.join("c.safetensors") },
+            models: YueModelFiles { backbone: root.join("b.gguf"), vae: root.join("v.gguf"), vae_decoder: None, transcriber: None, adapters: None, companion: root.join("c.safetensors") },
             host: DEFAULT_HOST.into(),
             port: DEFAULT_PORT,
             options: YueServerOptions { cuda_folder: folder, ..Default::default() },
@@ -982,6 +1003,7 @@ mod tests {
         .resolve(YueModelFiles {
             backbone: root.join("absent.gguf"),
             vae: root.join("absent.gguf"),
+            vae_decoder: None,
             transcriber: None,
             adapters: None,
             companion: root.join("absent.safetensors"),

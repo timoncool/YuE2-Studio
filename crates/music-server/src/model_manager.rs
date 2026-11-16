@@ -130,11 +130,26 @@ pub struct DownloadJob {
 pub struct ProfileModelFiles {
     pub backbone: String,
     pub vae: String,
+    /// A file holding a decoder alone, which decodes in place of the VAE's
+    /// own; the VAE keeps encoding.
+    pub vae_decoder: Option<String>,
     /// SheetSage2 is optional: without it the studio generates but cannot
     /// read a recording into a score.
     pub transcriber: Option<String>,
     /// The decoder adapter paired with the tokenizer head of the training codes.
     pub companion: String,
+}
+
+
+/// A set's decoder that is not on disk yet, as the update screen names it.
+#[derive(Debug, Clone)]
+pub struct MissingDecoder {
+    pub id: &'static str,
+    pub filename: &'static str,
+    pub url: String,
+    pub bytes: u64,
+    /// What an unfinished download of it left on disk.
+    pub partial: u64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -275,7 +290,12 @@ impl ModelManager {
     }
 
     pub async fn install(&self, request: InstallRequest) -> Result<DownloadJob> {
-        let mut selection = resolve_install(request)?;
+        self.start(resolve_install(request)?).await
+    }
+
+    /// Starts the one download the manager runs at a time: a second is refused while it runs, since four connections
+    /// are the whole budget of the files' host.
+    async fn start(&self, mut selection: ResolvedInstall) -> Result<DownloadJob> {
         fs::create_dir_all(&self.root)
             .with_context(|| format!("create model root {}", self.root.display()))?;
         preflight_space(&self.root, &selection)?;
@@ -338,6 +358,57 @@ impl ModelManager {
         self.installed_files_from_selection(selection, "selected custom component set")
     }
 
+
+    /// The decoder of the chosen set that is not on disk while the rest of the set is: what the update screen
+    /// offers a studio whose set was installed before the decoder was published.
+    pub fn decoder_to_fetch(&self, profile_id: Option<&str>, component_ids: Option<&[String]>) -> Option<MissingDecoder> {
+        let request = match (component_ids, profile_id) {
+            (Some(ids), _) => InstallRequest { profile_id: None, component_ids: ids.to_vec() },
+            (None, Some(profile)) => InstallRequest { profile_id: Some(profile.into()), component_ids: vec![] },
+            (None, None) => return None,
+        };
+        let selection = resolve_install(request).ok()?;
+        let on_disk = |component: &Component| published_component(&self.root.join(component.filename), component);
+        if !selection.components.iter().filter(|component| !optional_kind(component.kind)).all(on_disk) {
+            return None;
+        }
+        let decoder = selection.components.iter().find(|component| component.kind == "vae-decoder" && !on_disk(component))?;
+        Some(MissingDecoder { id: decoder.id, filename: decoder.filename, url: decoder.url(), bytes: decoder.bytes, partial: self.partial_bytes(decoder.filename) })
+    }
+
+    /// The bytes of a component on disk: all of them once it is published, else what its download left.
+    pub fn arrived_bytes(&self, id: &str) -> u64 {
+        components().iter().find(|component| component.id == id).map_or(0, |component| {
+            if published_component(&self.root.join(component.filename), component) { component.bytes } else { self.partial_bytes(component.filename) }
+        })
+    }
+
+    /// Downloads one component a set runs without, beside the set already on disk, and returns when it is there. It
+    /// is the manager's one download while it runs: the window shows its progress, and a set's download waits for it.
+    pub async fn fetch_optional(&self, id: &str) -> Result<()> {
+        let component = components()
+            .into_iter()
+            .find(|component| component.id == id && optional_kind(component.kind))
+            .with_context(|| format!("'{id}' is not a component a set runs without"))?;
+        if verified_file_async(self.root.join(component.filename), component.clone()).await? {
+            return Ok(());
+        }
+        let total_bytes = component.bytes;
+        let job = self.start(ResolvedInstall { profile_id: None, components: vec![component], total_bytes, already_present_bytes: 0 }).await?;
+        loop {
+            tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+            let state = self.state.read().await;
+            let Some(active) = state.active.as_ref().filter(|active| active.id == job.id) else {
+                bail!("the download of {id} was replaced by another before it ended");
+            };
+            match active.status {
+                DownloadStatus::Downloading => continue,
+                DownloadStatus::Completed => return Ok(()),
+                _ => bail!("{id} was not downloaded: {}", active.error.as_deref().unwrap_or("the download was stopped")),
+            }
+        }
+    }
+
     /// A saved hand-picked set stays chosen while the files picked for it are
     /// there. The companion is not the user's pick: missing, it is fetched
     /// with the set rather than dropping the set for the recommended one.
@@ -351,13 +422,18 @@ impl ModelManager {
         })
     }
 
-    /// The files of a set to start the engine on. A transcriber not on disk
-    /// yet leaves the set without one rather than keeping the engine down.
+    /// The files of a set to start the engine on. A transcriber or a decoder
+    /// not on disk yet leaves the set without one rather than keeping the
+    /// engine down: the VAE's own decoder decodes then.
     fn installed_files_from_selection(&self, selection: ResolvedInstall, label: &str) -> Result<ProfileModelFiles> {
-        let mut transcriber_complete = true;
+        let (mut transcriber_complete, mut decoder_there) = (true, true);
         for component in &selection.components {
             let path = self.root.join(component.filename);
             if !published_component(&path, component) {
+                if component.kind == "vae-decoder" {
+                    decoder_there = false;
+                    continue;
+                }
                 if optional_kind(component.kind) {
                     transcriber_complete = false;
                     continue;
@@ -368,6 +444,9 @@ impl ModelManager {
         let mut files = profile_files_from_components(&selection.components);
         if !transcriber_complete {
             files.transcriber = None;
+        }
+        if !decoder_there {
+            files.vae_decoder = None;
         }
         Ok(files)
     }
@@ -432,6 +511,9 @@ impl ModelManager {
         let target = self.root.join(component.filename);
         let part = part_path(&target);
         let url = crate::net::model_url(&component.url());
+        if let Some(folder) = target.parent() {
+            tokio::fs::create_dir_all(folder).await.with_context(|| format!("create {}", folder.display()))?;
+        }
 
         // another program of timoncool's has this file: taken through the same checksum a download passes
         let name = Path::new(component.filename).file_name().unwrap_or_default();
@@ -645,6 +727,9 @@ fn validate_complete_set(selected: &[Component]) -> Result<()> {
             bail!("a runnable YuE2 installation requires exactly one {kind} component");
         }
     }
+    if selected.iter().filter(|component| component.kind == "vae-decoder").count() > 1 {
+        bail!("a YuE2 installation takes at most one decoder beside its VAE");
+    }
     let heads: Vec<&Component> = selected.iter().filter(|component| component.kind == "transcriber").collect();
     if heads.len() > 1 {
         bail!("a YuE2 installation takes at most one transcriber");
@@ -661,6 +746,7 @@ fn profile_files_from_components(components: &[Component]) -> ProfileModelFiles 
     ProfileModelFiles {
         backbone: filename("backbone").expect("complete set"),
         vae: filename("vae").expect("complete set"),
+        vae_decoder: filename("vae-decoder"),
         transcriber: filename("transcriber"),
         companion: filename("companion").expect("complete set"),
     }
@@ -789,6 +875,21 @@ pub fn profile_components(profile_id: &str) -> Vec<String> {
     PROFILE_SETS.iter().find(|set| set.0 == profile_id).map(|set| set.2.iter().map(|id| id.to_string()).collect()).unwrap_or_default()
 }
 
+
+/// The decoder and the community fine-tune of the "Ruach Studio" preset: their v1 decoder, their own default, and
+/// the fine-tune they call their choice.
+pub const PRESET_DECODER: &str = "vae-rs-x3-v1";
+pub const PRESET_MODEL: &str = "rs-tw-2.0x0.75";
+
+/// `ids` with `decoder` as their one decoder: any other decoder among them gives way to it.
+pub fn with_decoder(ids: &[String], decoder: &str) -> Vec<String> {
+    let catalog = components();
+    let is_decoder = |id: &str| catalog.iter().any(|component| component.id == id && component.kind == "vae-decoder");
+    let mut ids: Vec<String> = ids.iter().filter(|id| !is_decoder(id)).cloned().collect();
+    ids.push(decoder.to_string());
+    ids
+}
+
 /// The declared set whose components are exactly these, whatever order they
 /// arrive in: picking every component of a set by hand is choosing that set.
 pub fn profile_matching(component_ids: &[String]) -> Option<&'static str> {
@@ -850,6 +951,26 @@ fn components() -> Vec<Component> {
         c("backbone-q5", "backbone", "YuE2-3B-Q5_K_M.gguf", 2622936832, "cd3efd250b734a229172800f08f33a893ad1f66b521666e176cdae4a0729b281"),
         // The VAE ships in F32 only: its weights are the audio.
         c("vae-f32", "vae", "YuE2-Vae-F32.gguf", 530497344, "93e49dfb1970e89ad64cacb17cf13b5d05f6bb30ef7ed3adae3050bcb728638a"),
+        // Ruach Studio's float32 decoders, YuE2-VAE-RS x3 v1 and v2 (CC BY-NC 4.0, like YuE2): F32 only, as released. They need an engine
+        // whose VAE reader knows their keys (decoder_pre_units, decoder_extra_units, halo_frames, weights_f32): timoncool/yue2.cpp#2
+        Component {
+            id: "vae-rs-x3-v1",
+            kind: "vae-decoder",
+            filename: "VAE-RS/YuE2-VAE-RS-x3_v1-F32.gguf",
+            bytes: 803056768,
+            sha256: "368a91278f0b25e67bc14b1a894f9e8c341c5fccb70afa880fbc1de6afdb4959",
+            repository: RUACH_VAE_REPOSITORY,
+            revision: RUACH_VAE_REVISION,
+        },
+        Component {
+            id: "vae-rs-x3-v2",
+            kind: "vae-decoder",
+            filename: "VAE-RS/YuE2-VAE-RS-x3_v2-F32.gguf",
+            bytes: 803056768,
+            sha256: "93de6e8a18246670f4cf49d5f4f193aece95dda48463eda13a303e7f0d313f97",
+            repository: RUACH_VAE_REPOSITORY,
+            revision: RUACH_VAE_REVISION,
+        },
         // SheetSage2's head; the MERT encoder it reads is a file of its own
         c("transcriber-f32", "transcriber", "SheetSage2-F32.gguf", 228738176, "4988c01b64c2812dd71eb89a9ab1937a3385ff2ba869bf495ccb69af4ec744cd"),
         c("transcriber-q8", "transcriber", "SheetSage2-Q8_0.gguf", 105629856, "95d8fa8761753b4833782a52b68d5c0afa3bd3cfbc03d3dcbbf8ded0c13f611e"),
@@ -868,9 +989,8 @@ fn components() -> Vec<Component> {
     ]
 }
 
-/// The parts of a set the studio runs without: SheetSage2 and the MERT it reads.
 fn optional_kind(kind: &str) -> bool {
-    matches!(kind, "transcriber" | "transcriber-base")
+    matches!(kind, "transcriber" | "transcriber-base" | "vae-decoder")
 }
 
 /// Transcribers of the single-file release, read as the nearest one published now.
@@ -904,6 +1024,10 @@ fn precision(filename: &str) -> &str {
     stem.rsplit_once('-').map_or(stem, |(_, tail)| tail)
 }
 
+/// Ruach Studio's decoders: https://huggingface.co/goldhub/YuE2-VAE-RS-x3, pinned.
+const RUACH_VAE_REPOSITORY: &str = "goldhub/YuE2-VAE-RS-x3";
+const RUACH_VAE_REVISION: &str = "be7adad4d8f345549cfb59f94af26e9e3ca6ae67";
+
 fn c(id: &'static str, kind: &'static str, filename: &'static str, bytes: u64, sha256: &'static str) -> Component {
     Component { id, kind, filename, bytes, sha256, repository: REPOSITORY, revision: REVISION }
 }
@@ -918,6 +1042,7 @@ mod tests {
         assert_eq!(profile_matching(&ids(&["transcriber-f32", "mert-f32", "backbone-bf16", "vae-f32"])), Some("native"));
         assert_eq!(profile_matching(&ids(&["transcriber-f32", "mert-f32", "backbone-bf16", "vae-f32", COMPANION])), Some("native"));
         assert_eq!(profile_matching(&ids(&["backbone-q8", "vae-f32", "transcriber-q8", "mert-q8"])), Some("quality-q8"));
+        assert_eq!(profile_matching(&ids(&["backbone-q8", "vae-f32", "vae-rs-x3-v1", "transcriber-q8", "mert-q8"])), None, "a set picked with a decoder is the person's own");
         assert_eq!(profile_matching(&ids(&["backbone-q8", "vae-f32"])), None);
         assert_eq!(profile_matching(&ids(&["backbone-q8", "vae-f32", "transcriber-f32"])), None);
     }
@@ -1004,6 +1129,68 @@ mod tests {
         let _ = fs::remove_dir_all(root);
     }
 
+
+    /// The sets decode with the VAE's own decoder. A set picked with Ruach Studio's decoder runs on the VAE's own until
+    /// the decoder is on disk, is offered it meanwhile, and names it once it is there.
+    #[test]
+    fn a_set_without_its_decoder_on_disk_decodes_with_the_vae_and_takes_the_decoder_when_it_arrives() {
+        let root = std::env::temp_dir().join(format!("yue2-decoder-{}", uuid::Uuid::now_v7()));
+        fs::create_dir_all(&root).unwrap();
+        let manager = ModelManager {
+            root: root.clone(),
+            state_path: root.join("state.json"),
+            http: reqwest::Client::new(),
+            state: Arc::new(RwLock::new(PersistentState::default())),
+            cancelled: Arc::new(AtomicBool::new(false)),
+            hub: Arc::default(),
+        };
+        for component in components().iter().filter(|component| ["backbone-q8", "vae-f32", COMPANION].contains(&component.id)) {
+            fs::File::create(root.join(component.filename)).unwrap().set_len(component.bytes).unwrap();
+        }
+        assert!(profiles().iter().all(|profile| !profile.components.iter().any(|id| id.starts_with("vae-rs"))), "no set carries the decoder");
+        assert_eq!(manager.installed_profile_files("quality-q8").unwrap().vae_decoder, None);
+        assert!(manager.decoder_to_fetch(Some("quality-q8"), None).is_none(), "a set is not offered a decoder nobody picked");
+
+        let with_decoder: Vec<String> = ["backbone-q8", "vae-f32", "vae-rs-x3-v1"].map(String::from).to_vec();
+        let files = manager.installed_component_files(&with_decoder).unwrap();
+        assert_eq!((files.vae.as_str(), files.vae_decoder), ("YuE2-Vae-F32.gguf", None));
+        let offered = manager.decoder_to_fetch(None, Some(&with_decoder)).expect("the picked decoder is offered");
+        assert_eq!((offered.id, offered.bytes, offered.partial), ("vae-rs-x3-v1", 803056768, 0));
+        let on_light: Vec<String> = ["backbone-q5", "vae-f32", "vae-rs-x3-v1"].map(String::from).to_vec();
+        assert!(manager.decoder_to_fetch(None, Some(&on_light)).is_none(), "a set that is not on disk is not offered its decoder alone");
+
+        let decoder = components().into_iter().find(|component| component.id == "vae-rs-x3-v1").unwrap();
+        assert_eq!(decoder.kind, "vae-decoder");
+        fs::create_dir_all(root.join(decoder.filename).parent().unwrap()).unwrap();
+        fs::File::create(root.join(decoder.filename)).unwrap().set_len(decoder.bytes).unwrap();
+        assert_eq!(manager.installed_component_files(&with_decoder).unwrap().vae_decoder.as_deref(), Some(decoder.filename));
+        assert!(manager.decoder_to_fetch(None, Some(&with_decoder)).is_none());
+        assert_eq!(manager.arrived_bytes("vae-rs-x3-v1"), decoder.bytes);
+        // a hand-picked set without a decoder stays without one, and two decoders are not a set
+        let picked: Vec<String> = ["backbone-q8", "vae-f32"].map(String::from).to_vec();
+        assert_eq!(manager.installed_component_files(&picked).unwrap().vae_decoder, None);
+        let two: Vec<String> = ["backbone-q8", "vae-f32", "vae-rs-x3-v1", "vae-rs-x3-v2"].map(String::from).to_vec();
+        assert!(resolve_install(InstallRequest { profile_id: None, component_ids: two }).is_err());
+        let _ = fs::remove_dir_all(root);
+    }
+
+
+    /// The Ruach Studio preset keeps the chosen set and puts its decoder beside the VAE, in place of any other decoder.
+    #[test]
+    fn the_preset_puts_its_decoder_beside_the_chosen_set() {
+        let ids = |list: &[&str]| list.iter().map(|id| id.to_string()).collect::<Vec<_>>();
+        let set = profile_components("quality-q8");
+        let with = with_decoder(&set, PRESET_DECODER);
+        assert_eq!(with.len(), set.len() + 1);
+        assert!(resolve_install(InstallRequest { profile_id: None, component_ids: with.clone() }).is_ok());
+        assert_eq!(with_decoder(&with, PRESET_DECODER), with, "applied twice it is the same set");
+        let other = with_decoder(&ids(&["backbone-q5", "vae-f32", "vae-rs-x3-v2"]), PRESET_DECODER);
+        assert_eq!(other, ids(&["backbone-q5", "vae-f32", "vae-rs-x3-v1"]));
+        assert!(components().iter().any(|component| component.id == PRESET_DECODER && component.kind == "vae-decoder"));
+        assert!(crate::community::catalog().iter().any(|model| model.id == PRESET_MODEL), "the preset's fine-tune is in the community catalog");
+    }
+
+
     #[test]
     fn the_single_file_transcriber_is_cleared_and_a_head_goes_with_its_mert() {
         let root = std::env::temp_dir().join(format!("yue2-retired-{}", uuid::Uuid::now_v7()));
@@ -1063,9 +1250,13 @@ mod tests {
 
     #[test]
     fn catalog_pins_every_published_file() {
-        assert_eq!(components().len(), 10);
+        assert_eq!(components().len(), 12);
         assert!(components().iter().all(|component| component.sha256.len() == 64 && component.revision.len() == 40));
-        assert!(components().iter().filter(|component| component.id != COMPANION).all(|component| component.revision == REVISION));
+        let ruach = |component: &&Component| component.repository == RUACH_VAE_REPOSITORY;
+        assert!(components().iter().filter(|component| component.id != COMPANION && !ruach(component)).all(|component| component.revision == REVISION));
+        // the Ruach Studio decoders: their own pinned repository, float32 only, offered as VAEs
+        assert!(components().iter().filter(ruach).all(|component| component.revision == RUACH_VAE_REVISION && component.kind == "vae-decoder" && component.filename.ends_with("-F32.gguf")));
+        assert_eq!(components().iter().filter(ruach).count(), 2);
     }
 
     #[tokio::test]

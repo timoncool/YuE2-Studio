@@ -5,7 +5,7 @@
  * commands (next, previous) go to whichever window draws.
  */
 
-export type VisualizerEngine = 'milkdrop' | 'spectrum';
+export type VisualizerEngine = 'milkdrop' | 'spectrum' | 'blackhole' | 'tunnel';
 export type VisualizerPlace = 'closed' | 'panel' | 'window';
 
 export interface VisualizerState {
@@ -23,6 +23,8 @@ export interface VisualizerState {
   /** How long MilkDrop stays on a preset. */
   cycleSeconds: number;
   fullscreen: boolean;
+  /** Tunnel note strength that makes the source jump. 0…1. */
+  jumpAt: number;
 }
 
 export type VisualizerCommand = 'next' | 'previous';
@@ -42,13 +44,17 @@ const DEFAULT: VisualizerState = {
   showName: true,
   cycleSeconds: 15,
   fullscreen: false,
+  jumpAt: 0.45,
 };
 
 function load(): VisualizerState {
   try {
     const saved = JSON.parse(localStorage.getItem(STORE) ?? 'null') as Partial<VisualizerState> | null;
     // where it is shown and fullscreen belong to this run
-    return { ...DEFAULT, ...(saved ?? {}), place: 'closed', fullscreen: false };
+    const loaded = { ...DEFAULT, ...(saved ?? {}), place: 'closed' as const, fullscreen: false };
+    const jumpAt = Number(loaded.jumpAt);
+    loaded.jumpAt = Number.isFinite(jumpAt) ? Math.min(1, Math.max(0, jumpAt)) : 0.45;
+    return loaded;
   } catch {
     return DEFAULT;
   }
@@ -60,7 +66,8 @@ const commandListeners = new Set<(command: VisualizerCommand) => void>();
 const channel = typeof BroadcastChannel === 'undefined' ? null : new BroadcastChannel(CHANNEL);
 
 function publish(next: VisualizerState, share: boolean): void {
-  state = next;
+  const jumpAt = Number(next.jumpAt);
+  state = { ...next, jumpAt: Number.isFinite(jumpAt) ? Math.min(1, Math.max(0, jumpAt)) : 0.45 };
   try {
     localStorage.setItem(STORE, JSON.stringify(state));
   } catch {

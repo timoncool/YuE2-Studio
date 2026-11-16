@@ -252,7 +252,7 @@ fn craft_notes(request: &AssistRequest) -> String {
 }
 
 /// The lyrics language a locale names, for the fallback note. The frontend
-/// sends the studio's UI locale ("en", "ru", "zh", "ja", "ko") or the text
+/// sends the studio's UI locale ("en", "ru", "zh", "ja", "ko", "pt") or the text
 /// language the user chose; a region suffix ("zh-CN") is ignored.
 fn locale_language(locale: &str) -> Option<&'static str> {
     let code = locale.split(['-', '_']).next().unwrap_or("").trim().to_lowercase();
@@ -262,6 +262,7 @@ fn locale_language(locale: &str) -> Option<&'static str> {
         "zh" => "Mandarin Chinese",
         "ja" => "Japanese",
         "ko" => "Korean",
+        "pt" => "Portuguese",
         _ => return None,
     })
 }

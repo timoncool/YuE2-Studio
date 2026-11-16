@@ -233,7 +233,7 @@ export const ScoreView: React.FC<{ abc: string; className?: string; title?: stri
     setNotice(t(octaves < 0 ? 'scoreVoiceDownDone' : 'scoreVoiceUpDone').replace('{note}', answer.middle === null ? '' : noteName(answer.middle)));
   };
 
-  const button = 'inline-flex items-center gap-1 rounded-md border border-zinc-200 px-2 py-1 text-[11px] font-medium text-zinc-600 transition-colors hover:border-pink-400 hover:text-pink-600 dark:border-white/10 dark:text-zinc-300';
+  const button = 'inline-flex items-center gap-1 rounded-md border border-zinc-200 px-2 py-1 text-[11px] font-medium text-zinc-600 transition-colors hover:border-pink-400 hover:text-pink-600';
   return (
     <div className={className}>
       {!failed && (

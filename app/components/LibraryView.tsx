@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import { Song, Playlist } from '../types';
 import { Heart, Plus, Play, Upload, Loader2, MoreHorizontal, ListMusic } from 'lucide-react';
 import { useI18n } from '../context/I18nContext';
@@ -9,7 +9,8 @@ import { updateLibraryPlaylists } from '../services/studioQueries';
 import { named } from '../services/accessibleName';
 import { ConfirmDialog } from './ConfirmDialog';
 import { PlaylistCover, PlaylistEditModal, PlaylistMenu, playlistSongs } from './PlaylistEditor';
-import { SongList } from './SongList';
+import { isCard, SongList } from './SongList';
+import { foldStems } from '../services/songStems';
 import { LibraryTrash } from './LibraryTrash';
 import { SONG_ORDERS, type SongOrder } from '../services/songOrder';
 
@@ -168,6 +169,8 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
             emptyMessage={emptyMessage}
         />
     );
+    // a stem is part of its song: the tab counts what the list under it counts
+    const songsInLibrary = useMemo(() => foldStems(allSongs.filter(song => !isCard(song)), allSongs).songs.length, [allSongs]);
     const tabButton = (tab: LibraryTab, label: string, count?: number) => (
         <button
             type="button"
@@ -198,7 +201,7 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
 
              {/* Tabs, and the order of the list they show */}
              <div role="tablist" className="mb-8 flex min-w-0 flex-wrap items-center gap-x-5 gap-y-1 border-b border-zinc-200 pb-1 dark:border-white/10">
-                 {tabButton('all', t('allSongs'), allSongs.length)}
+                 {tabButton('all', t('allSongs'), songsInLibrary)}
                  {tabButton('liked', t('likedTab'), likedSongs.length)}
                  {tabButton('playlists', t('playlists'), playlists.length)}
                  {tabButton('import', t('importAudioTab'))}

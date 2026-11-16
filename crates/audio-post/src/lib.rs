@@ -7,8 +7,10 @@
 //! and settings.
 
 pub mod denoise;
+pub mod dither;
 pub mod encode;
 pub mod lifter;
+pub mod loudness;
 pub mod mastering;
 pub mod naturalize;
 pub mod quality;

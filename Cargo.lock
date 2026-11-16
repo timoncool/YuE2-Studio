@@ -1380,6 +1380,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "junction"
+version = "2.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cde48f36530cbd91b65f050101e6c056d6eb743cea2a8f0f19beef69c6742ff8"
+dependencies = [
+ "scopeguard",
+ "windows-sys 0.61.2",
+]
+
+[[package]]
 name = "kurbo"
 version = "0.13.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1699,6 +1709,7 @@ dependencies = [
  "http",
  "hyper-util",
  "include_dir",
+ "junction",
  "libc",
  "lofty",
  "lzma-rust2",
@@ -1710,6 +1721,7 @@ dependencies = [
  "reqwest",
  "resvg",
  "rfd",
+ "roxmltree",
  "rusqlite",
  "serde",
  "serde_json",
@@ -2881,7 +2893,7 @@ dependencies = [
 [[package]]
 name = "studio-hub-client"
 version = "0.1.0"
-source = "git+https://github.com/timoncool/studio-hub-client?rev=073d1b553b3cd50a47d863fd560e1bd1a9ce3afa#073d1b553b3cd50a47d863fd560e1bd1a9ce3afa"
+source = "git+https://github.com/timoncool/studio-hub-client?rev=34ac5dd132a23aec0cce29f5efbebc6de996cb9c#34ac5dd132a23aec0cce29f5efbebc6de996cb9c"
 dependencies = [
  "axum",
  "chrono",

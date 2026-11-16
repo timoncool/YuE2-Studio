@@ -1,0 +1,398 @@
+808	caixa de ritmos 808
+accelerating	a acelerar
+acoustic guitar	guitarra acústica
+acoustic piano	piano acústico
+active electric bass	baixo elétrico ativo
+aggressive	agressivo
+airy reverb and delay	reverberação e delay arejados
+alto recorder	flauta de bisel alto
+ambient	ambiente
+andalusian accent	sotaque andaluz
+angsty	angustiado, inquietação adolescente
+anime	anime
+anime opening	abertura de anime
+anthemic	com ar de hino
+anthemic crowd vocals	vozes de multidão em hino
+anticipation	expectativa
+AOR classic rock	rock clássico AOR (de rádio)
+appalachian revival feel	ar de revivalismo dos Apalaches
+arena rock	rock de estádio
+atmosphere	atmosfera
+atmospheric	atmosférico
+autotune	autotune
+autotune accents	toques de autotune
+background vocals	vozes de fundo
+ballad	balada
+ballad pop	balada pop
+banjo	banjo
+baritone	barítono
+bass	baixo
+bass clarinet	clarinete baixo
+bass pattern	padrão de baixo
+belted vocals	voz projetada com força
+bicycle horn	buzina de bicicleta
+blues	blues
+bold	arrojado
+boogie piano	piano boogie
+boogie-woogie piano	piano boogie-woogie
+bouncing	saltitante
+brass punches	ataques de metais
+bright	luminoso
+bright close chords	acordes luminosos em posição cerrada
+bright steelpan	steelpan luminoso
+bright tone	timbre luminoso
+brushed drums	bateria com vassouras
+call and response vocals	vozes em pergunta e resposta
+carefree summer energy	energia despreocupada de verão
+catchy	que fica no ouvido
+catchy chant hook	refrão cantado em coro que fica no ouvido
+cathedral choir swells	crescendos de coro de catedral
+celebratory	festivo
+cello	violoncelo
+chinese epic rock	rock épico chinês
+chinese pop	pop chinês
+chinese traditional folk	folclore tradicional chinês
+chopped vocal hooks	ganchos de voz recortada
+cinematic	cinematográfico
+cinematic rock	rock cinematográfico
+cinematic strings	cordas cinematográficas
+city pop	city pop
+clarinet	clarinete
+classic	clássico
+classic country	country clássico
+classic rock	rock clássico
+clean guitar chord stabs	golpes de acordes de guitarra limpa
+clean pop drum groove	groove de bateria pop limpo
+close-mic	microfone muito próximo
+club anthem	hino de discoteca
+comedic	cómico
+comedy rock	rock humorístico
+comfortable	confortável
+congas	congas
+contemporary christian	música cristã contemporânea
+contemporary country	country contemporâneo
+country	country
+crisp hi-hats	pratos de choque nítidos
+crowd-shout hooks	ganchos gritados pela multidão
+cute	fofo
+cyberpunk atmosphere	atmosfera cyberpunk
+cymbals	pratos
+dance music	música de dança
+dance pop	dance-pop
+dance-floor fire	fogo na pista de dança
+danceable	dançável
+dark cabaret	cabaré sombrio
+decelerating	a abrandar
+deep sub-bass	sub-grave profundo
+disco	disco
+distorted guitars	guitarras distorcidas
+DJ	DJ
+double-kick drums	bateria de bombo duplo
+dramatic	dramático
+dramatic crescendos	crescendos dramáticos
+dreamy	sonhador
+driving bass	baixo que empurra
+driving palm-muted electric guitars	guitarras elétricas abafadas com a palma, a empurrar
+driving rhythm	ritmo que empurra
+driving rhythm section	secção rítmica que empurra
+drum kit	bateria
+drums	bateria
+duet	dueto
+dynamic	dinâmico
+electric guitar	guitarra elétrica
+electric guitar chords	acordes de guitarra elétrica
+electric piano	piano elétrico
+electro swing	electro swing
+electronic	eletrónico
+electronic drums	bateria eletrónica
+electronic textures	texturas eletrónicas
+emotion	emoção
+emotional	emotivo
+emotional and expressive	emotivo e expressivo
+emotional and intimate atmosphere	atmosfera emotiva e intimista
+emotional storytelling	narrativa emotiva
+energetic	enérgico
+energetic and joyful	enérgico e alegre
+english	inglês
+epic	épico
+escalating tension	tensão crescente
+ethereal	etéreo
+eurobeat	eurobeat
+excited	entusiasmado
+explosive chorus	refrão explosivo
+expressive and melodic	expressivo e melódico
+expressive female voice	voz feminina expressiva
+expressive tone	timbre expressivo
+fading into silence	a desvanecer até ao silêncio
+fast pace	andamento rápido
+fast tempo	tempo rápido
+fast violin	violino rápido
+female	feminino
+female vocals	voz feminina
+festive rhythm	ritmo festivo
+fiddle	rabeca (violino popular)
+final chorus	refrão final
+finger snaps	estalos de dedos
+fingerstyle jazz guitar	guitarra de jazz dedilhada
+flamenco gipsy female vocals	voz feminina cigana de flamenco
+flamenco guitar	guitarra flamenca
+folk	folk
+funk	funk
+funk soul	funk soul
+funky bass	baixo funky
+funky house	funky house
+fusion	fusão
+futuristic	futurista
+gentle filter movement	movimento suave de filtro
+gentle rhythm	ritmo suave
+good time country	country bem-disposto
+gorgeous	deslumbrante
+grand piano	piano de cauda
+gritty english lead vocal	voz principal áspera em inglês
+groovy	com groove
+groovy bass	baixo com groove
+groovy soulful jazz-funk	jazz-funk com groove e alma
+growling	voz rosnada
+guitar	guitarra
+guitar solo	solo de guitarra
+halftime bridge switch	ponte que passa a meio-tempo
+hammond organ	órgão Hammond
+happy	alegre
+happy mood	ambiente alegre
+harmonica	harmónica
+harmonized vocals	vozes harmonizadas
+harmony	harmonia
+harsh screamed vocals	voz gritada e áspera
+heartbreak	desgosto de amor
+heartfelt	sentido, de coração
+heavy drums	bateria pesada
+heavy metal	heavy metal
+heavy metal rock	rock heavy metal
+high tenor	tenor agudo
+honking sax section	secção de saxofones a buzinar
+honky tonk	honky tonk
+honky-tonk piano	piano honky-tonk
+humorous	humorístico
+husky voice	voz rouca
+infectious finish	final contagiante
+inspiring	inspirador
+instrumental	instrumental
+intellectual satire mood	ambiente de sátira intelectual
+intense	intenso
+intimate mandarin male vocal	voz masculina intimista em mandarim
+intimate piano ballad	balada intimista ao piano
+ironic	irónico
+j-eurobeat	eurobeat japonês
+j-heavymetal	heavy metal japonês
+j-pop	j-pop
+japanese	japonês
+jazz ballad	balada de jazz
+jazz fusion	jazz de fusão
+jazz manouche	jazz manouche (jazz cigano)
+joyful	jubiloso
+joyful energy	energia jubilosa
+joyful male harmonies	harmonias masculinas jubilosas
+keyboard	teclado
+latin pop	pop latino
+layered but spacious	em camadas mas com espaço
+layered harmonies	harmonias em camadas
+layered vocal harmonies	harmonias vocais em camadas
+less drum	menos bateria
+light pop	pop ligeiro
+live vocal style	estilo de voz ao vivo
+lively fiddle	rabeca animada
+lush orchestral strings	cordas orquestrais exuberantes
+lush riffs	riffs exuberantes
+lyrical memorable melody	melodia lírica e memorável
+male lead vocal	voz principal masculina
+male singer	cantor
+male vocals	voz masculina
+male voice	voz masculina
+mandarin	mandarim
+mandarin child-and-adult unison vocals	vozes de criança e adulto em uníssono, em mandarim
+mandolin	bandolim
+mediterranean vibe	ambiente mediterrânico
+medium beat	batida média
+medium tempo	tempo médio
+medium tempo southern gospel	gospel sulista em tempo médio
+melodic	melódico
+melodic bassline	linha de baixo melódica
+melodic rap	rap melódico
+metal	metal
+metallic vocal fx	efeitos metálicos na voz
+mezzo-soprano female	voz feminina de meio-soprano
+middle tempo	tempo médio
+minimal and clean arrangement	arranjo mínimo e limpo
+minimal hi-hat pattern	padrão mínimo de pratos de choque
+minor-key chamber folk	folk de câmara em tom menor
+moderate groove	groove moderado
+modern flamenco rap fusion	fusão moderna de flamenco e rap
+modern rock	rock moderno
+muffled female vocals	voz feminina abafada
+muted trumpet	trompete com surdina
+nature	natureza
+neon city night	noite de cidade em néon
+neon light	luz de néon
+neon pads	pads de néon
+neon-lit night drive	passeio noturno de carro sob néons
+new age	new age
+new orleans brass-funk	brass-funk de Nova Orleães
+nostalgic	nostálgico
+obsessive	obsessivo
+orchestra jazz	jazz de orquestra
+overdriven guitar	guitarra em overdrive
+overdriven organ	órgão em overdrive
+pad	pad (fundo de sintetizador)
+palm-muted guitar riff	riff de guitarra abafada com a palma
+palm-muted riffs	riffs abafados com a palma
+palmas	palmas (flamenco)
+peaceful	tranquilo
+percussion	percussão
+piano	piano
+piano stabs	golpes de piano
+pipa	pipa (alaúde chinês)
+pizzicato strings	cordas em pizzicato
+playful	brincalhão
+playful mandarin duet	dueto brincalhão em mandarim
+playful piano	piano brincalhão
+polished and warm	polido e quente
+pop ballad	balada pop
+pop music	música pop
+pop vocal	voz pop
+pop-rock hit	êxito pop-rock
+power metal	power metal
+powerful	poderoso
+powerful belting	voz projetada com potência
+powerful english vocal	voz poderosa em inglês
+powerful rhythm	ritmo poderoso
+pulsing melodic guitar	guitarra melódica pulsante
+punchy bassline	linha de baixo com impacto
+punchy rock drums	bateria de rock com impacto
+punk	punk
+R&B	R&B
+R&B hook	gancho de R&B
+rap vocals	voz de rap
+rapid hi-hats	pratos de choque rápidos
+reflective bridge	ponte reflexiva
+reflective vocal phrase	frase vocal reflexiva
+reggaeton	reggaeton
+retro	retro
+retro-futuristic euphoria	euforia retrofuturista
+rhythm guitar	guitarra ritmo
+rhythmic	rítmico
+rhythmic sense	sentido rítmico
+risers	subidas de tensão (risers)
+romantic	romântico
+romantic danceable	romântico e dançável
+room reverb	reverberação de sala
+rubbery bass	baixo elástico
+satirical mood	ambiente satírico
+saxophone	saxofone
+second-line drums	bateria second line (Nova Orleães)
+seductive	sedutor
+serene	sereno
+shaanxi opera	ópera de Shaanxi
+sharp lyrics	letra afiada
+shimmering guitars	guitarras cintilantes
+shiny archtop chops	acordes secos e brilhantes de guitarra archtop
+simple and memorable	simples e memorável
+simple drums	bateria simples
+sleigh bells	guizos de trenó
+slow	lento
+slow tempo	tempo lento
+sly and theatrical	matreiro e teatral
+smiling	sorridente
+smooth	suave
+smooth male vocals	voz masculina suave
+smooth R&B bounce	balanço suave de R&B
+soaring retro synth leads	solos de sintetizador retro a planar
+soft	suave
+soft and bright	suave e luminoso
+soft and slightly fragile	suave e ligeiramente frágil
+soft low-pass	passa-baixo suave
+solo	solo
+soul music	música soul
+soul-blues	soul-blues
+soulful	com alma
+soulful and lively	com alma e animado
+sousaphone	sousafone
+southern soul	soul sulista
+spirited	cheio de vida
+spiritual	espiritual
+sprung rhythm	ritmo solto, de acentos livres
+stacked harmonies	harmonias sobrepostas
+static noise	ruído de estática
+steel guitar	steel guitar (guitarra havaiana)
+storytelling	narrativa
+strange	estranho
+street spirit	espírito de rua
+strong harmony choruses	refrães com harmonias fortes
+strong rhythm	ritmo forte
+studio quality	qualidade de estúdio
+sub-bass	sub-grave
+subtle chorus width	largura subtil de chorus
+sung-rap verses in punjabi	estrofes de rap cantado em punjabi
+super eurobeat	super eurobeat
+surprise	surpresa
+sweet vibe	ambiente doce
+swing jazz	jazz swing
+swirling arps	arpejos em espiral
+symphony	sinfonia
+syncopated acoustic guitar	guitarra acústica sincopada
+syncopated claps	palmas sincopadas
+synth	sintetizador
+synth bass	baixo de sintetizador
+synth stabs	golpes de sintetizador
+synth-pop	synth-pop
+synth-pop production	produção synth-pop
+synthesizer	sintetizador
+teen pop	pop adolescente
+tenor	tenor
+tenor saxophone	saxofone tenor
+theatrical hard rock	hard rock teatral
+tight live rhythm section	secção rítmica ao vivo, bem coesa
+tight punchy kick	bombo seco e com impacto
+toy piano	piano de brinquedo
+trio vocals	trio vocal
+triumph	triunfo
+trombone and baritone sax	trombone e saxofone barítono
+trumpet stabs	golpes de trompete
+UK garage bounce	balanço de UK garage
+UK pop rap	pop rap britânico
+unhurried phrasing	fraseado sem pressa
+upbeat	animado
+upbeat but sad melody	melodia animada mas triste
+upbeat christian country song	canção country cristã animada
+upbeat disco funk	disco funk animado
+upbeat gospel bluegrass style	estilo gospel bluegrass animado
+upbeat production	produção animada
+upbeat saxophone riff	riff de saxofone animado
+uplifting	que eleva o ânimo
+uplifting and emotional	que eleva o ânimo e emotivo
+upright bass	contrabaixo
+upright bass driving rhythm	contrabaixo a empurrar o ritmo
+urban strings	cordas urbanas
+vibrant and organic production	produção vibrante e orgânica
+vibrato	vibrato
+vintage	vintage
+vintage motown soul duet	dueto soul vintage ao estilo Motown
+vintage nightclub vibe	ambiente de clube noturno vintage
+violin	violino
+viral	viral
+virtuoso	virtuoso
+wah-wah electric guitar riff	riff de guitarra elétrica com wah-wah
+walking upright slap	contrabaixo em walking com slap
+warm	quente
+warm analog production	produção analógica quente
+warm analog texture	textura analógica quente
+warm electric bass	baixo elétrico quente
+warm english vocal	voz quente em inglês
+warm piano	piano quente
+warm piano pop	pop quente ao piano
+warm tone	timbre quente
+water FX	efeitos de água
+wavesynth layers	camadas de wavesynth
+well-defined rhythm	ritmo bem definido
+wide stereo image	imagem estéreo ampla
+xylophone	xilofone
+youthful street energy	energia jovem de rua

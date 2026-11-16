@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { FileMusic, Loader2, X } from 'lucide-react';
 import { useI18n } from '../context/I18nContext';
 import type { TranslationKey } from '../i18n/translations';
@@ -173,7 +174,7 @@ export const MidiImportDialog: React.FC<{
     onOpen({ abc: answer.abc, lyrics: answer.facts.karaoke ? answer.lyrics : null, summary: [factLine, ...answer.notices.map(notice)].join(' '), mode });
   };
 
-  return (
+  return createPortal(
     <div className="fixed inset-0 z-80 flex items-center justify-center bg-black/50 p-4">
       <div role="dialog" aria-modal="true" aria-labelledby="midi-import-title" className="flex max-h-[calc(var(--vh)*88)] w-full max-w-2xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl dark:bg-zinc-900">
         <div className="flex items-center justify-between border-b border-zinc-200 px-5 py-3.5 dark:border-white/10">
@@ -323,6 +324,7 @@ export const MidiImportDialog: React.FC<{
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 };

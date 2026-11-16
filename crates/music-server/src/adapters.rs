@@ -1206,13 +1206,13 @@ mod tests {
             let families = music_engine::model::MODEL_FAMILIES;
             assert!(families.is_empty() || families.iter().any(|(name, _)| entry.model.as_deref() == Some(*name)), "{} names no model size", entry.id);
             if let Text::Localized(names) = &entry.name {
-                for lang in ["en", "ru", "zh", "ja", "ko"] {
+                for lang in ["en", "ru", "zh", "ja", "ko", "pt"] {
                     assert!(names.contains_key(lang), "{} has no {lang} name", entry.id);
                 }
             }
             // a curated entry is described in every interface language
             let Text::Localized(descriptions) = &entry.description else { panic!("{} is not described per language", entry.id) };
-            for lang in ["en", "ru", "zh", "ja", "ko"] {
+            for lang in ["en", "ru", "zh", "ja", "ko", "pt"] {
                 assert!(descriptions.get(lang).is_some_and(|text| !text.trim().is_empty()), "{} has no {lang} description", entry.id);
             }
         }

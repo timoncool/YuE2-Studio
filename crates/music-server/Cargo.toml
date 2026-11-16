@@ -52,7 +52,7 @@ sha2.workspace = true
 symphonia.workspace = true
 sysinfo.workspace = true
 # Studio Hub: anonymous statistics and the news feed (telemetry only after the start screen showed its choice).
-studio-hub-client = { git = "https://github.com/timoncool/studio-hub-client", rev = "073d1b553b3cd50a47d863fd560e1bd1a9ce3afa" }
+studio-hub-client = { git = "https://github.com/timoncool/studio-hub-client", rev = "34ac5dd132a23aec0cce29f5efbebc6de996cb9c" }
 ort.workspace = true
 realfft = "3.5"
 regex = "1"
@@ -72,6 +72,11 @@ lzma-rust2.workspace = true
 
 [target.'cfg(windows)'.dependencies]
 windows-sys.workspace = true
+# The model folders moved to another disk leave a junction where they were (model_storage).
+junction = "2.1"
+
+[dev-dependencies]
+roxmltree = "0.21"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 # gnu_get_libc_version: which llama.cpp build this Linux starts (assistant_runtime::glibc_version).

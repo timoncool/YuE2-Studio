@@ -18,7 +18,7 @@
 [![Last commit](https://img.shields.io/github/last-commit/timoncool/YuE2-Studio?style=flat-square)](https://github.com/timoncool/YuE2-Studio/commits/main)
 [![Downloads](https://img.shields.io/github/downloads/timoncool/YuE2-Studio/total?style=flat-square)](https://github.com/timoncool/YuE2-Studio/releases)
 
-**English** · [Русский](https://timoncool.github.io/YuE2-Studio/ru.html) · [中文](https://timoncool.github.io/YuE2-Studio/zh.html) · [日本語](https://timoncool.github.io/YuE2-Studio/ja.html) · [한국어](https://timoncool.github.io/YuE2-Studio/ko.html)
+**English** · [Русский](https://timoncool.github.io/YuE2-Studio/ru.html) · [中文](https://timoncool.github.io/YuE2-Studio/zh.html) · [日本語](https://timoncool.github.io/YuE2-Studio/ja.html) · [한국어](https://timoncool.github.io/YuE2-Studio/ko.html) · [Português](https://timoncool.github.io/YuE2-Studio/pt.html)
 
 ![YuE2 Studio](docs/screenshots/en-01-create.png)
 
@@ -39,7 +39,9 @@ runtime path is Python.
 
 Given this repository, an agent can set everything up and drive the studio by itself:
 
-1. Install the studio from the [latest release](https://github.com/timoncool/YuE2-Studio/releases/latest) and start it.
+1. Install the studio from the [latest release](https://github.com/timoncool/YuE2-Studio/releases/latest) and start it,
+   with `--headless` to keep its window off the user's screen (see
+   [Drive it from an agent](#drive-it-from-an-agent-mcp)).
 2. Connect to its MCP server at `http://127.0.0.1:8791/mcp`:
    `claude mcp add --transport http yue2-studio http://127.0.0.1:8791/mcp`
 3. Read the skill it serves (resource `studio://skill`, prompt `studio`), the same text as
@@ -51,8 +53,9 @@ Code, save [docs/mcp-skill.md](docs/mcp-skill.md) as `~/.claude/skills/yue2-stud
 ## What you can do
 
 - **A player of its own** — a ten-band equalizer on Winamp's frequencies with its presets,
-  your own and .EQF files; a MilkDrop visualiser with hundreds of presets or a spectrum in ten
-  looks, over the studio, fullscreen or in its own window; and a Winamp mode that turns the whole
+  your own and .EQF files; a MilkDrop visualiser with hundreds of presets, a spectrum in ten
+  looks, a black hole with its disk of light that brightens and tilts with the song, or a flight
+  through a tunnel that jumps on the loud notes, over the studio, fullscreen or in its own window; and a Winamp mode that turns the whole
   window into a skinned Winamp 2 whose windows move apart, dock and resize — the original skin
   and ten more included, sharp at any scale, the Winamp Skin Museum one click away,
   Ctrl+M to switch. The song, its place and the equalizer carry over both ways.
@@ -60,9 +63,17 @@ Code, save [docs/mcp-skill.md](docs/mcp-skill.md) as `~/.claude/skills/yue2-stud
   saved where you say, in Windows' own Save dialog, and the Files panel shows each save.
 - **A proxy for the whole studio** — HTTP, HTTPS, SOCKS5 or SOCKS4, with a login: model
   downloads, Hugging Face, OpenRouter and updates go through it.
+- **Models on another disk** — the setup screen and Settings show where the downloads are kept
+  and how much room that disk has; one button moves the model sets, LoRAs, the stem separator,
+  karaoke, the assistant's models, the trainer and Audio to MIDI to another folder, leaving a link
+  so everything that shares them keeps working. Songs and datasets stay. One more button brings
+  them back.
 - **Full songs from a style and lyrics** — up to ten minutes, in the languages the model
   sings. In Russian a stress mark (the combining acute U+0301, Alt+0769 on Windows) after a
   vowel moves the sung stress to it, as Ruach Studio documents. On an RTX 4090 with the Q8_0 set a 3:38 song renders in about 46 seconds.
+- **Songs one by one** — ask for several songs at once and each lands in the library as soon as
+  it is finished, ready to play while the rest are still made; a stopped request keeps the songs
+  it finished.
 - **Read and edit the score** — the model writes its composition in ABC notation first; the
   studio engraves it as sheet music. Edit the notes, tempo or key and create again: the
   composition stays, the performance changes. Or switch to melody-only, or no score at all.
@@ -92,6 +103,9 @@ Code, save [docs/mcp-skill.md](docs/mcp-skill.md) as `~/.claude/skills/yue2-stud
 - **Word-level karaoke** — enhanced LRC with a timestamp on every word, aligned by Parakeet
   or Whisper. Your lyrics are kept; only the timing is borrowed.
 - **Six stems on the GPU** — drums, bass, other, vocals, guitar and piano with HT-Demucs.
+- **A stem mixer** — a song's stems play together on one transport over its waveform, each with
+  mute, solo, volume and pan, and a loop over a section: the drums with the bass alone, or the
+  band without the voice. The stem files stay as separated.
 - **Any track to MIDI** — a song, a stem or a processed take becomes multi-instrument MIDI
   (34 instrument groups and drums) with MuScriptor on the GPU, in the audio.cpp server.
   A piano roll fills in while it listens; play it against the original, mute or solo
@@ -110,6 +124,12 @@ Code, save [docs/mcp-skill.md](docs/mcp-skill.md) as `~/.claude/skills/yue2-stud
 - **LoRA** — LoRA and LoKr files for either half of the model, the composition or the
   sound, each with its own strength, picked in the create form. A catalogue of ready ones
   with their authors credited, and a search on Hugging Face that downloads what you pick.
+- **Ruach Studio's sound in one step** — the "Ruach Studio" preset in Settings - Models puts their
+  fine-tune in place of the set's model and their YuE2-VAE-RS x3 decoder in place of the VAE's
+  own, and downloads what is missing; the decoder alone can be chosen on any set. It keeps the
+  10-16 kHz band at the source's level and adds nothing above 20 kHz, at 4 GB of the card while it
+  decodes against 2.5 GB. Six more community models - Ruach Studio's IRA and IRAE merges - are
+  in the list of your own models, in Q8_0 and Q6_K.
 - **Train your own LoRA** — an optional tab on the LoRA page: songs of one artist or
   style become a LoRA on your own card with HOT-Step's trainer and its tuned recipe (LoKr,
   Prodigy, lyric timing from a forced aligner that also reads Cyrillic). Every setting of
@@ -142,10 +162,17 @@ Code, save [docs/mcp-skill.md](docs/mcp-skill.md) as `~/.claude/skills/yue2-stud
   it once, changing nothing on the way: lossless 24-bit FLAC by default (libFLAC, the reference
   encoder), MP3 with LAME when you choose it. Normalisation is a stage under Process, after
   mastering, never part of generation.
+- **Export for release** — from a song's menu: WAV in 16, 24 bits or 32-bit float, FLAC in 16 or
+  24, MP3 from 128 to 320 kbps, at its own rate or 44.1–96 kHz, brought on the way to a loudness
+  target: −14 LUFS for streaming, −16 for Apple Music and podcasts, −23 for broadcast, or your
+  own, under a true-peak ceiling. A report shows loudness and peak before and after; the song in
+  the library is untouched. The same window gives the song's MIDI - the whole score, or its lead,
+  voice line or chords alone - and an Ableton Live 12 project with the song, its stems and its
+  MIDI on their tracks.
 - **A library of plain files** — search, playlists, cover art from prompt templates, tracks
   exported with title, lyrics and cover in their own tags (Vorbis comments in a FLAC, ID3 in an
   MP3). Interface in English, Russian,
-  Chinese, Japanese and Korean.
+  Chinese, Japanese, Korean and Portuguese.
 - **A cover for every track** — a track without one wears a free (CC0) Wikimedia Commons
   photograph that fits the genres, moods and instruments of its style, a pattern in one of 21
   DiceBear styles, or a cover OpenRouter generates for every new track. It is chosen by the
@@ -159,6 +186,10 @@ Code, save [docs/mcp-skill.md](docs/mcp-skill.md) as `~/.claude/skills/yue2-stud
   lyrics, text layers and effects, rendered to MP4 on your machine.
 - **Activity** — a log in the sidebar of every change a connected agent makes and every
   message the studio shows.
+- **No window when an agent works, a tray when you want it** — `--headless` starts the studio with
+  only a tray icon, and it stops by itself after ten idle minutes; `--stop` ends it when its
+  window is hidden and nothing is at work. "Keep running in the system tray when the window is
+  closed" hides the window instead of quitting, and a second launch brings up the one that runs.
 - **Likes, sorting and stems in order** — a like is kept with the song for every window and
   agent, every list sorts by date, title or length, and a song's stems fold under it.
 - **A song from a seed** — hum, play or write an opening, turn on "Continue the song from this
@@ -213,7 +244,8 @@ In YuE2, the same editor opens ABC scores and applies notes, chords and sections
 
 The same screens in the language you read: [Русский](https://timoncool.github.io/YuE2-Studio/ru.html),
 [中文](https://timoncool.github.io/YuE2-Studio/zh.html), [日本語](https://timoncool.github.io/YuE2-Studio/ja.html),
-[한국어](https://timoncool.github.io/YuE2-Studio/ko.html) — on the project page, or in
+[한국어](https://timoncool.github.io/YuE2-Studio/ko.html),
+[Português](https://timoncool.github.io/YuE2-Studio/pt.html) — on the project page, or in
 [docs/screenshots](docs/screenshots).
 
 ## Samples
@@ -419,6 +451,19 @@ also answers the studio's own write buttons and dataset preparation. Settings, *
 claude mcp add --transport http yue2-studio http://127.0.0.1:8791/mcp
 ```
 
+**Without a window.** An agent that finds the studio closed starts it with `--headless`: the
+studio runs as usual with its window hidden, a tray icon the only sign of it, and stops by
+itself after ten minutes with no agent calls and nothing at work (`YUE_STUDIO_IDLE_SHUTDOWN_S`
+sets other seconds). Opening the studio the usual way brings its window up in the same
+session. `--stop` ends it, unless its window is open or something is at work. The installed
+executable is `%LOCALAPPDATA%\YuE2 Studio\YuE2-Studio.exe` on Windows (or the folder chosen
+when installing), `/Applications/YuE2 Studio.app/Contents/MacOS/YuE2-Studio` on a Mac and
+`/usr/bin/YuE2-Studio` from the .deb.
+
+```powershell
+Start-Process "$env:LOCALAPPDATA\YuE2 Studio\YuE2-Studio.exe" -ArgumentList '--headless' -WindowStyle Hidden
+```
+
 [docs/mcp-skill.md](docs/mcp-skill.md) is the skill an agent reads: every tool, what the
 model expects, and step-by-step recipes.
 
@@ -471,6 +516,12 @@ Community models: the merges of Ruach Studio's
 [YuE2-RS-Finetunes](https://huggingface.co/goldhub/YuE2-RS-Finetunes) in Q8_0 (3.8 GB) and Q6_K
 (2.9 GB), downloaded into that folder when chosen, pinned to revision `b371be9` and checked by
 SHA-256; their weights are under CC BY-NC-SA 4.0 (non-commercial, share-alike, credit the authors).
+Beside them are the six merges of
+[YuE2-3B-Ruach_Studio-IRA-Merge](https://huggingface.co/goldhub/YuE2-3B-Ruach_Studio-IRA-Merge)
+(revision `17356b2`, CC BY-NC 4.0): IRA, with Mothersuperior's Instrumental and Real Audio adapters
+in the weights; IRAE, IRAE v2 and v3, which add monsterovich's Epic Trailer at three strengths; and
+the experimental IRAE-IR and IRAE-IR v2 with his Industrial Rock, for rock instrumentals. The
+adapters inside a merge are not loaded again on top of it.
 With an own or community model the decoder companion stays off on Auto, and LoRA training and
 dataset preparation still run on the set's backbone.
 
@@ -711,7 +762,7 @@ statistics off entirely: no id exists and nothing is counted.
 
 I build open-source software and do AI research. Most of what I create is free and available to everyone. Your donations help me keep creating without worrying about where the next meal comes from =)
 
-**[All donation methods](DONATE.md)** · [Русский](DONATE.ru.md) · [中文](DONATE.zh.md) · [日本語](DONATE.ja.md) · [한국어](DONATE.ko.md) | **[dalink.to/nerual_dreming](https://dalink.to/nerual_dreming)** | **[boosty.to/neuro_art](https://boosty.to/neuro_art)**
+**[All donation methods](DONATE.md)** · [Русский](DONATE.ru.md) · [中文](DONATE.zh.md) · [日本語](DONATE.ja.md) · [한국어](DONATE.ko.md) · [Português](DONATE.pt.md) | **[dalink.to/nerual_dreming](https://dalink.to/nerual_dreming)** | **[boosty.to/neuro_art](https://boosty.to/neuro_art)**
 
 - **BTC:** `1E7dHL22RpyhJGVpcvKdbyZgksSYkYeEBC`
 - **ETH (ERC20):** `0xb5db65adf478983186d4897ba92fe2c25c594a0c`

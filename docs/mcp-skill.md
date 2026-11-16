@@ -17,8 +17,19 @@ sees what you do in the studio's window.
    (experimental). An NVIDIA card is not required: without one the engine runs on the processor,
    many times slower, and AMD and Intel cards go through Vulkan - see the README. The
    first start offers to download the models.
-2. Start it. The MCP server is up as soon as its window is: `http://127.0.0.1:8791/mcp`.
-   Nothing else to install - no npx, no bridge.
+2. Start it with `--headless`: the studio runs with its window hidden, nothing on the user's
+   screen but a tray icon, and answers at `http://127.0.0.1:8791/mcp` within seconds.
+   Nothing else to install - no npx, no bridge. The executable: on Windows
+   `%LOCALAPPDATA%\YuE2 Studio\YuE2-Studio.exe` (or the folder chosen when installing, or the
+   portable copy's own folder), on a Mac `/Applications/YuE2 Studio.app/Contents/MacOS/YuE2-Studio`,
+   from the .deb `/usr/bin/YuE2-Studio`, or the AppImage itself. Start it detached:
+   `Start-Process "$env:LOCALAPPDATA\YuE2 Studio\YuE2-Studio.exe" -ArgumentList '--headless' -WindowStyle Hidden`
+   in PowerShell, `nohup "<executable>" --headless >/dev/null 2>&1 &` elsewhere.
+   It stops by itself after ten minutes with no calls from you and nothing at work
+   (`YUE_STUDIO_IDLE_SHUTDOWN_S` sets other seconds); `<executable> --stop` ends it sooner, but
+   not while the user has its window open or something is at work. When the user opens the
+   studio, its window comes up in the same session. `--headless` on a running studio changes
+   nothing.
 3. Connect (below), then call `studio_status`. If the models are missing, `models_catalog`
    and `models_download` fetch them.
 
@@ -78,6 +89,14 @@ connected and the address to paste.
 - **Files on this computer are passed by path**: `dataset_add_folder`,
   `library_import_audio`, `score_transcribe`, `cover_set_from_file`, `video_set`.
   `library_song_files` and `dataset_song_files` give the paths of the studio's own files.
+- **A song for release or a DAW** is `song_export`: a new WAV, FLAC or MP3 in a folder
+  you name, at a chosen rate and bit depth, brought to a loudness target if asked
+  (`loudness: {target_lufs: -14, ceiling_dbtp: -1}` for streaming). `song_export_get`
+  answers the file's path and what was done to the sound, `song_export_cancel` stops it;
+  the library song is not changed. Its MIDI goes the same way: `library_song_midi_files`
+  lists the score's parts (score, lead, voice, chords) and the track's own MIDI, and
+  `library_song_midi_part_write` writes one into a folder. `song_export_live` writes the
+  song as an Ableton Live 12 project: the song, its stems and its MIDI on tracks, zipped.
 - **You write, not the studio's assistant.** The studio has a small local model (Gemma)
   for users without an agent. You write better: read `writing_guide` and
   `writing_examples` first and write the style, lyrics and scores yourself. Use
@@ -181,7 +200,8 @@ window logged, when a button did nothing.
 **A video clip**
 
 The editor works in the studio's window, which must be visible while you edit and render:
-a minimised window or a hidden tab holds the preview and the render.
+a minimised window or a hidden tab holds the preview and the render, and so does a studio
+started with `--headless` until the user opens it.
 
 1. `video_open` with a song id, `video_get` to see the presets and settings.
 2. `video_set`: preset, aspect ratio, colours, effects, text layers, karaoke lyrics,
@@ -197,7 +217,8 @@ a minimised window or a hidden tab holds the preview and the render.
   "Vocal Booster"...), or `bands` / `preamp_db`, `balance`, `mono`, `panel_open`,
   `save_preset`. `.EQF` files: `equalizer_import`, `equalizer_export`.
 - Visualiser: `visualizer_set` with `place` (panel, window), `fullscreen`, `engine`
-  (milkdrop, spectrum), `preset` (`visualizer_presets` searches them), `look`, `step`.
+  (milkdrop, spectrum, blackhole, tunnel), `preset` (`visualizer_presets` searches them),
+  `look`, `step`, `jump_at` (how loud a note makes the tunnel jump).
 - Winamp mode, the whole window as a Winamp 2 player: `winamp_set` `on: true` (with a
   `skin` from `winamp_skins`), `on: false` to come back. While it is on, `player_*` drive it;
   `winamp_set` also opens its windows, shades them, sets its equalizer and MilkDrop,
@@ -216,7 +237,10 @@ move around. Check the result with `ui_screenshot`.
 - **settings**: `settings_get`, `settings_set`.
 - **network**: `network_proxy_get`, `network_proxy_set` (no proxy, the system's or your own, and the HF-Mirror), `network_proxy_test`, `network_access_get`, `network_access_set` (opening the studio from other computers, a new key).
 - **journal**: `journal_read` (the Activity page), `journal_clear`, `journal_remove`.
-- **models**: `models_status`, `models_catalog`, `models_download`, `models_adopt` (files already on disk), `models_select`, `models_own_list`, `models_own_select`, `models_own_cancel`, `models_own_discard` (what a stopped community download left), `models_own_remove` and `models_own_reveal` (your own YuE2 fine-tune in GGUF from `models/yue2-cpp/own` in place of the set's backbone, or a community model from the catalog, downloaded there first), `models_cancel_download`, `models_remove`, `models_update_plan` (what this release updates, adds and no longer needs, with the reasons: the update screen), `models_update_apply` (its button: downloads, then removes what former releases left), `models_update_later` (its «Later»).
+- **where the downloads are kept**: `storage_get` (the folder, the room on its disk, what each
+  download folder takes), `storage_set` (move them to a folder on another disk, a link stays
+  where they were; `directory: null` brings them back), `storage_cancel`.
+- **models**: `models_status`, `models_catalog`, `models_download`, `models_adopt` (files already on disk), `models_select`, `models_preset` (`ruach`: Ruach Studio's fine-tune and their YuE2-VAE-RS x3 decoder set up in one step), `models_own_list`, `models_own_select`, `models_own_cancel`, `models_own_discard` (what a stopped community download left), `models_own_remove` and `models_own_reveal` (your own YuE2 fine-tune in GGUF from `models/yue2-cpp/own` in place of the set's backbone, or a community model from the catalog, downloaded there first), `models_cancel_download`, `models_remove`, `models_update_plan` (what this release updates, adds and no longer needs, with the reasons: the update screen), `models_update_apply` (its button: downloads, then removes what former releases left), `models_update_later` (its «Later»).
 - **engine**: `engine_options_get`, `engine_options_set`, `engine_restart`, `engine_logs`, `diagnostics_get` (the diagnostics and their text for an issue), `diagnostics_report` (a bug-report zip in the data folder's reports), `problem_preview` (exactly what a report would send), `problem_report` (a problem reported without a GitHub account: Studio Hub's bot opens a public issue and answers its number and url; a refusal by code - field, rate, not_configured, busy, unreachable - means the GitHub form). After the card ran out of memory on a song the studio makes it once more with a smaller KV cache and keeps that step for the card (`in_effect.max_seq_reason` is `fitted`); `engine_fitted_cache_reset` goes back to the model's full context.
 - **song**: `song_defaults` (what a field left out becomes), `song_create` (playlist_id puts the made songs into a playlist), `song_job_get`, `song_jobs_list`, `song_job_cancel`, `song_replay`, `song_tokenize`, `song_job_dismiss` (an ended job's card off the page), `song_job_score_again` (a song failed with `score_unsingable_strength` made again with its LoRA at 1.0 on Composition), `song_job_again` (a song failed with `not_audio` made again with the same request).
 - **score**: `score_compose`, `score_chord_bed`, `score_job_get`, `score_job_cancel`, `score_transcribe`, `score_match_sections`, `score_to_midi` (base64 .mid), `score_instrumental` (the voice's melody to the instrument), `score_vocal_octave`, `score_from_midi` (a .mid path), `score_mark` (sections from style and lyrics).

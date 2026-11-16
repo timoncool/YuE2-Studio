@@ -7,6 +7,7 @@ import { X, Play, Pause, Download, Wand2, Image as ImageIcon, Music, Video, Load
 import { FFmpeg } from '@ffmpeg/ffmpeg';
 import { fetchFile, toBlobURL } from '@ffmpeg/util';
 import { createHardwareEncoder, type HardwareEncoder } from '../services/videoEncoder';
+import { seekVideoToTime } from '../services/videoFrame';
 import { lineProgress } from '../services/lrc-parser';
 import { useResponsive } from '../context/ResponsiveContext';
 import { useBridgeCommand } from '../services/mcpBridge';
@@ -848,9 +849,10 @@ export const VideoGeneratorModal: React.FC<VideoGeneratorModalProps> = ({ isOpen
     const currentTexts = textLayersRef.current;
     const capturedFrames: string[] = [];
     // One GPU encoder for the whole export, or none and the JPEG path below.
-    const hardware: HardwareEncoder | null = await createHardwareEncoder({ width: outWidth, height: outHeight, fps }).catch(() => null);
+    let hardware: HardwareEncoder | null = await createHardwareEncoder({ width: outWidth, height: outHeight, fps }).catch(() => null);
 
-    for (let frameIndex = 0; frameIndex < totalFrames; frameIndex++) {
+    let frameIndex = 0;
+    while (frameIndex < totalFrames) {
       const time = frameIndex / fps;
       // a frame between two analysed ones (fps above the audio's block rate) shows the one before it
       let analysedFrame = frameIndex;
@@ -878,19 +880,7 @@ export const VideoGeneratorModal: React.FC<VideoGeneratorModalProps> = ({ isOpen
         const videoTime = time % (bgVideo.duration || 1);
         // The frame is drawn only once the clip shows it: a seek far from a keyframe decodes for
         // longer than a frame lasts, and drawing before it ends repeats the old picture.
-        await new Promise<void>((resolve, reject) => {
-          const done = () => {
-            clearTimeout(timer);
-            bgVideo!.removeEventListener('seeked', done);
-            resolve();
-          };
-          const timer = setTimeout(() => {
-            bgVideo!.removeEventListener('seeked', done);
-            reject(new Error(`the background video did not reach ${videoTime.toFixed(2)} s`));
-          }, 10_000);
-          bgVideo!.addEventListener('seeked', done);
-          bgVideo!.currentTime = videoTime;
-        });
+        await seekVideoToTime(bgVideo, videoTime);
         bgSource = bgVideo;
       }
 
@@ -1213,17 +1203,28 @@ export const VideoGeneratorModal: React.FC<VideoGeneratorModalProps> = ({ isOpen
       // trip below is the fallback, and it is what made this slow.
       if (outputContext) outputContext.drawImage(canvas, 0, 0, outWidth, outHeight);
       if (hardware) {
-        await hardware.encode(output, frameIndex);
+        try {
+          await hardware.encode(output, frameIndex);
+        } catch (error) {
+          console.warn('The video encoder stopped responding; retrying with the software encoder.', error);
+          hardware.close();
+          hardware = null;
+          capturedFrames.length = 0;
+          frameIndex = 0;
+          setExportProgress(15);
+          continue;
+        }
       } else {
         const frameData = output.toDataURL('image/jpeg', 0.85);
         capturedFrames.push(frameData.split(',')[1]);
       }
 
       // Update progress + yield to prevent Chrome "page not responding" alert
-      if (frameIndex % 30 === 0) {
-        setExportProgress(15 + Math.round((frameIndex / totalFrames) * 55));
+      if (frameIndex % 5 === 0 || frameIndex === totalFrames - 1) {
+        setExportProgress(15 + ((frameIndex + 1) / totalFrames) * 55);
         await new Promise(r => setTimeout(r, 0));
       }
+      frameIndex++;
     }
 
     setExportStage('encoding');

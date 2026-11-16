@@ -11,10 +11,11 @@
 //! process ends, however it ends.
 //!
 //! Linux has no job objects. There the answer is `PR_SET_PDEATHSIG`, set in the
-//! forked child before it execs; see `configure_child_process` in
-//! `music-engine`'s `yue_server`. This module's `adopt` therefore does nothing
-//! off Windows - it is the spawn-side hook, not this one, that keeps a Linux
-//! engine from being orphaned.
+//! forked child before it execs - but that signal is bound to the *thread* that
+//! made the fork, not to the process (see `ensure_dies_with_parent`), so a Linux
+//! child is spawned from a thread of our own that is never retired:
+//! `spawn_dying_with_parent`. This module's `adopt` therefore does nothing off
+//! Windows - it is the job-object side of the binding, not the only one.
 
 use std::process::Child;
 
@@ -56,46 +57,131 @@ pub fn adopt_handle(handle: isize) {
 #[cfg(not(windows))]
 pub fn adopt_handle(_handle: isize) {}
 
-/// Wires up the spawn so the child cannot outlive this process.
+/// Arms the parent-death signal on the child, set inside `pre_exec`.
 ///
-/// Call this on the `Command` immediately before `spawn`. On Linux it is the
-/// only thing standing between a hard-killed studio and a `yue-server` left
-/// holding the graphics card and the engine port - which then blocks the next
-/// start with a bind failure that looks like a completely different problem.
+/// The invariant this rests on: `spawn_dying_with_parent` below is its only
+/// caller, and it calls this from the thread that spawns the child.
+/// `PR_SET_PDEATHSIG` is per-*thread* - the kernel sends the signal when the
+/// thread that made the fork terminates, not when the process does - so arming
+/// it from a thread that retires SIGKILLs a perfectly healthy child. That is
+/// what `spawn_on_the_thread_that_never_retires` is for; see issue #246.
 ///
-/// A no-op elsewhere: on Windows `adopt` below covers the same ground with a
-/// job object after the child exists; macOS has no parent-death signal.
-pub fn ensure_dies_with_parent(command: &mut std::process::Command) {
+/// Linux only: Windows binds the child with a job object in `adopt` once it
+/// exists, and macOS has no parent-death signal.
+#[cfg(target_os = "linux")]
+pub(crate) fn ensure_dies_with_parent(command: &mut std::process::Command) {
+    use std::os::unix::process::CommandExt;
+
+    let parent = std::process::id() as libc::pid_t;
+    // `PR_SET_PDEATHSIG` is cleared across a successful `execve`, so it has to
+    // be set in the forked child, which is what `pre_exec` brackets. Everything
+    // inside is async-signal-safe.
+    unsafe {
+        command.pre_exec(move || {
+            // SIGKILL rather than SIGTERM: a model server holds no unsaved
+            // state, and a signal it may handle slowly (the engine ignores
+            // SIGTERM mid-inference) would leave exactly the orphan this
+            // exists to prevent.
+            if libc::prctl(libc::PR_SET_PDEATHSIG, libc::SIGKILL) != 0 {
+                return Err(std::io::Error::last_os_error());
+            }
+            // The parent may have died between fork and the call above, in
+            // which case the signal will never come. Noticing turns a quiet
+            // orphan into a failed start the supervisor can retry.
+            if libc::getppid() != parent {
+                return Err(std::io::Error::other("the studio exited while the child was starting"));
+            }
+            Ok(())
+        });
+    }
+}
+
+/// Spawns `command` so the child cannot outlive this process, however it ends.
+///
+/// The engine and the assistant sidecar go through here instead of
+/// `Command::spawn`: their supervisor is not enough when the studio is killed
+/// rather than closed, which is the case this exists for.
+///
+/// Windows does the binding after the child exists, with the job object `adopt`
+/// assigns; macOS leaves it to the supervisor. Linux uses `PR_SET_PDEATHSIG`,
+/// and that signal is per-thread, so the spawn happens on
+/// `spawn_on_the_thread_that_never_retires` below.
+pub fn spawn_dying_with_parent(command: std::process::Command) -> std::io::Result<Child> {
     #[cfg(target_os = "linux")]
     {
-        use std::os::unix::process::CommandExt;
-
-        let parent = std::process::id() as libc::pid_t;
-        // `PR_SET_PDEATHSIG` is per-thread and cleared across a successful
-        // `execve`, so it has to be set in the forked child, which is what
-        // `pre_exec` brackets. Everything inside is async-signal-safe.
-        unsafe {
-            command.pre_exec(move || {
-                // SIGKILL rather than SIGTERM: a model server holds no unsaved
-                // state, and a signal it may handle slowly (the engine ignores
-                // SIGTERM mid-inference) would leave exactly the orphan this
-                // exists to prevent.
-                if libc::prctl(libc::PR_SET_PDEATHSIG, libc::SIGKILL) != 0 {
-                    return Err(std::io::Error::last_os_error());
-                }
-                // The parent may have died between fork and the call above, in
-                // which case the signal will never come. Noticing turns a quiet
-                // orphan into a failed start the supervisor can retry.
-                if libc::getppid() != parent {
-                    return Err(std::io::Error::other("the studio exited while the child was starting"));
-                }
-                Ok(())
-            });
-        }
+        spawn_on_the_thread_that_never_retires(command)
     }
     #[cfg(not(target_os = "linux"))]
     {
-        let _ = command;
+        let mut command = command;
+        command.spawn()
+    }
+}
+
+/// Spawns `command` from a thread that is never retired, so the parent-death
+/// signal set in the child refers to a thread whose termination really does mean
+/// "this process is going away".
+///
+/// One thread serves every child: it is created the first time one is spawned and
+/// then blocks on a channel for the rest of the process' life. Its termination at
+/// exit is what makes the kernel send the signal - which is why the loop below has
+/// no exit.
+#[cfg(target_os = "linux")]
+fn spawn_on_the_thread_that_never_retires(command: std::process::Command) -> std::io::Result<Child> {
+    use std::panic::{catch_unwind, AssertUnwindSafe};
+    use std::sync::mpsc::{self, Sender};
+    use std::sync::OnceLock;
+
+    type SpawnRequest = (std::process::Command, Sender<std::io::Result<Child>>);
+
+    static SPAWNER: OnceLock<Sender<SpawnRequest>> = OnceLock::new();
+
+    let spawner = SPAWNER.get_or_init(|| {
+        let (spawner, requests) = mpsc::channel::<SpawnRequest>();
+        let thread = std::thread::Builder::new().name("child-spawner".into()).spawn(move || {
+            for (mut command, answer) in requests {
+                // Armed here rather than at the call site: this is the thread that
+                // forks, so this is the thread the signal will be tied to. The
+                // catch is not belt and braces: a panic here would unwind the loop
+                // and take every child already spawned with it, all of them bound
+                // to this thread's death, so it becomes an error for the one caller
+                // that asked instead.
+                let spawned = catch_unwind(AssertUnwindSafe(|| {
+                    ensure_dies_with_parent(&mut command);
+                    command.spawn()
+                }))
+                .unwrap_or_else(|_| Err(std::io::Error::other("panicked while starting a child")));
+                let _ = answer.send(spawned);
+            }
+        });
+        match thread {
+            Ok(_) => spawner,
+            // No thread to spawn from. Dropping the receiver makes every send
+            // below fail, and the caller spawns in place without the signal -
+            // better no binding than one tied to a thread that retires - and says
+            // so, because the child is now unbound for the rest of the process.
+            Err(error) => {
+                eprintln!(
+                    "yue2-studio: no thread to spawn children from ({error}); they will not be bound to this process' lifetime"
+                );
+                let (spawner, requests) = mpsc::channel::<SpawnRequest>();
+                drop(requests);
+                spawner
+            }
+        }
+    });
+
+    let (answer, answered) = mpsc::channel();
+    match spawner.send((command, answer)) {
+        Ok(()) => answered.recv().unwrap_or_else(|_| {
+            Err(std::io::Error::other("the child could not be spawned: the thread that spawns it died"))
+        }),
+        Err(mpsc::SendError((mut command, _))) => {
+            eprintln!(
+                "yue2-studio: the thread that spawns children is gone; starting this child unbound from the process' lifetime"
+            );
+            command.spawn()
+        }
     }
 }
 
@@ -111,6 +197,49 @@ pub fn own_libraries_first(program: impl AsRef<std::path::Path>) -> Option<std::
         paths.extend(std::env::split_paths(&inherited));
     }
     std::env::join_paths(paths).ok()
+}
+
+
+/// The C++ runtime a program built with Visual Studio asks Windows for.
+const RUNTIME_LIBRARIES: [&str; 5] = ["msvcp140.dll", "msvcp140_1.dll", "vcruntime140.dll", "vcruntime140_1.dll", "vcomp140.dll"];
+
+static RUNTIME_SOURCE: std::sync::OnceLock<std::path::PathBuf> = std::sync::OnceLock::new();
+
+/// Names the folder whose C++ runtime goes beside the programs the studio starts: the engine's, which the installer
+/// brings whole.
+pub fn runtime_libraries_from(folder: std::path::PathBuf) {
+    let _ = RUNTIME_SOURCE.set(folder);
+}
+
+/// A program downloaded without the C++ runtime it was built with takes the one Windows has, and with an older one
+/// it stops at its first lock with an access violation and not a word (0xc0000005). The studio's own runtime goes
+/// beside it, where Windows looks first; what the program brought itself stays.
+pub fn runtime_beside(program: impl AsRef<std::path::Path>) {
+    if !cfg!(windows) {
+        return;
+    }
+    let (Some(source), Some(folder)) = (RUNTIME_SOURCE.get(), program.as_ref().parent()) else { return };
+    if let Err(error) = bring_missing(source, folder, &RUNTIME_LIBRARIES) {
+        eprintln!("[ERROR] the C++ runtime was not put beside {}: {error}", program.as_ref().display());
+    }
+}
+
+/// Copies into `folder` each of `names` that `source` has and `folder` lacks; says how many it copied. A library
+/// arrives under another name and takes its own only whole, so a copy cut short is never what a program loads.
+fn bring_missing(source: &std::path::Path, folder: &std::path::Path, names: &[&str]) -> std::io::Result<usize> {
+    static ONE_AT_A_TIME: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    let _held = ONE_AT_A_TIME.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+    let mut brought = 0;
+    for name in names {
+        let (from, to) = (source.join(name), folder.join(name));
+        if from.is_file() && !to.exists() {
+            let arriving = folder.join(format!("{name}.arriving"));
+            std::fs::copy(&from, &arriving)?;
+            std::fs::rename(&arriving, &to)?;
+            brought += 1;
+        }
+    }
+    Ok(brought)
 }
 
 /// Where a child that crashed without a word went down, as Windows recorded it: the module the fault happened in
@@ -253,6 +382,41 @@ mod tests {
         adopt(&child);
         child.kill().ok();
         child.wait().ok();
+    }
+
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn a_child_outlives_the_thread_that_asked_for_it() {
+        let asked = std::thread::spawn(|| {
+            let mut command = std::process::Command::new("sleep");
+            command.arg("30");
+            spawn_dying_with_parent(command).expect("spawn a child")
+        });
+        let mut child = asked.join().expect("the thread that asked");
+        std::thread::sleep(std::time::Duration::from_millis(500));
+        let alive = child.try_wait().expect("the child's state").is_none();
+        child.kill().ok();
+        child.wait().ok();
+        assert!(alive, "the child was killed when the thread that asked for it ended");
+    }
+
+    #[test]
+    fn a_program_gets_the_runtime_it_lacks_and_keeps_the_one_it_brought() {
+        let root = std::env::temp_dir().join(format!("music-core-runtime-{}", std::process::id()));
+        let (source, folder) = (root.join("engine"), root.join("tool"));
+        std::fs::create_dir_all(&source).unwrap();
+        std::fs::create_dir_all(&folder).unwrap();
+        std::fs::write(source.join("msvcp140.dll"), b"the studio's").unwrap();
+        std::fs::write(source.join("vcruntime140.dll"), b"the studio's").unwrap();
+        std::fs::write(folder.join("vcruntime140.dll"), b"the tool's own").unwrap();
+        let names = ["msvcp140.dll", "vcruntime140.dll", "vcomp140.dll"];
+        assert_eq!(bring_missing(&source, &folder, &names).unwrap(), 1, "one was missing and the source had it");
+        assert_eq!(std::fs::read(folder.join("msvcp140.dll")).unwrap(), b"the studio's");
+        assert_eq!(std::fs::read(folder.join("vcruntime140.dll")).unwrap(), b"the tool's own");
+        assert!(!folder.join("vcomp140.dll").exists(), "what the source lacks is not made up");
+        assert!(!folder.join("msvcp140.dll.arriving").exists());
+        assert_eq!(bring_missing(&source, &folder, &names).unwrap(), 0, "a second start copies nothing");
+        std::fs::remove_dir_all(&root).ok();
     }
 
     #[test]

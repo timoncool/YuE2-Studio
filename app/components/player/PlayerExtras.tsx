@@ -169,7 +169,7 @@ export const PlayerExtras: React.FC<Props> = ({ queue, currentSong, currentTime,
   useBridgeCommand('visualizer_get', () => visualizerReport());
   useBridgeCommand('visualizer_set', async (args) => {
     const change: Partial<VisualizerState> = {};
-    if (args.engine === 'milkdrop' || args.engine === 'spectrum') change.engine = args.engine;
+    if (args.engine === 'milkdrop' || args.engine === 'spectrum' || args.engine === 'blackhole' || args.engine === 'tunnel') change.engine = args.engine;
     if (typeof args.preset === 'string') {
       const names = await milkdropPresetNames();
       const found = names.find((entry) => entry.toLowerCase() === String(args.preset).toLowerCase())
@@ -186,6 +186,7 @@ export const PlayerExtras: React.FC<Props> = ({ queue, currentSong, currentTime,
       if (typeof value === 'boolean') change[key] = value;
     }
     if (args.cycle_seconds !== undefined) change.cycleSeconds = Math.max(3, Number(args.cycle_seconds) || 15);
+    if (args.jump_at !== undefined) change.jumpAt = Math.min(1, Math.max(0, Number(args.jump_at) || 0));
     const vizPlace = args.panel_position as { x?: number; y?: number } | undefined;
     if (vizPlace) placePanel('visualizer', Number(vizPlace.x) || 0, Number(vizPlace.y) || 0);
     if (args.panel_size && typeof args.panel_size === 'object') {

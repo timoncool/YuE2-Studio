@@ -44,6 +44,9 @@ pub struct Hardware {
     pub vulkan: bool,
     /// No card the songs are computed on: none at all, or one with less memory than the smallest local set needs.
     pub on_processor: bool,
+    /// The video memory the smallest local set needs, GB, when the card the songs are computed on has less: said
+    /// before the first song, since such a card runs out of memory or spills into the computer's.
+    pub short_of_smallest_set: Option<f64>,
 }
 
 /// The engine ships one CUDA backend per toolkit. CUDA 13 targets Turing and
@@ -155,6 +158,7 @@ fn probe() -> &'static Hardware {
         Hardware {
             vulkan,
             on_processor: computes_on_processor(nvidia, total_vram_gb),
+            short_of_smallest_set: short_of_smallest_set(nvidia, total_vram_gb),
             gpu_name,
             total_vram_gb,
             total_ram_gb,
@@ -173,11 +177,19 @@ pub fn hardware() -> Hardware {
     probe().clone()
 }
 
+
 /// Whether songs are computed on the processor: no card, or built-in graphics below the smallest local set. An
 /// NVIDIA card nvidia-smi lists is where the engine computes on CUDA at any size; a Mac computes on Metal.
 fn computes_on_processor(nvidia: bool, total_vram_gb: f64) -> bool {
     let smallest = VRAM_TIERS.iter().map(|(_, tier)| *tier).fold(f64::INFINITY, f64::min);
     !cfg!(target_os = "macos") && !nvidia && total_vram_gb < smallest
+}
+
+/// What the smallest set needs, when the card that computes the songs has less of it: an NVIDIA card computes on
+/// CUDA at any size, so one below the smallest tier is where songs run out of memory.
+fn short_of_smallest_set(nvidia: bool, total_vram_gb: f64) -> Option<f64> {
+    let smallest = VRAM_TIERS.iter().map(|(_, tier)| *tier).fold(f64::INFINITY, f64::min);
+    (!cfg!(target_os = "macos") && !computes_on_processor(nvidia, total_vram_gb) && total_vram_gb > 0.0 && total_vram_gb < smallest).then_some(smallest)
 }
 
 /// VRAM tiers follow the strict-eviction peak of each set: the larger backbone
@@ -494,7 +506,13 @@ mod tests {
         assert!(super::computes_on_processor(false, 0.125), "Intel UHD with 128 MB");
         assert!(!super::computes_on_processor(true, 3.0), "an NVIDIA card of 3 GB computes on CUDA");
         assert!(!super::computes_on_processor(false, 16.0), "an AMD card of 16 GB");
+        if !cfg!(target_os = "macos") {
+            assert_eq!(super::short_of_smallest_set(true, 4.0), Some(5.5), "an NVIDIA card of 4 GB is told what the smallest set needs");
+            assert_eq!(super::short_of_smallest_set(true, 6.0), None);
+            assert_eq!(super::short_of_smallest_set(false, 0.0), None, "no card: that is said as the processor");
+        }
     }
+
 
     #[test]
     fn the_engine_computes_on_the_cuda_build_this_platform_ships() {

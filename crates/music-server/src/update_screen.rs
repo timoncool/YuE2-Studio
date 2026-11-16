@@ -23,6 +23,8 @@ pub enum Part {
     Listening,
     Assistant,
     Audiocpp,
+    /// A weight of the song models' set, which the model manager downloads.
+    Models,
 }
 
 /// One change of this release: a download by its id (a trailing `*` takes every id it begins) or a leftover by the
@@ -50,6 +52,7 @@ const CHANGES: &[Change] = &[
     Change { what: "parakeet-onnx", reason: "parakeet-onnx-gone" },
     Change { what: "ort-gpu", reason: "ort-gpu-gone" },
     Change { what: "onnxruntime", reason: "ort-cpu" },
+    Change { what: "vae-rs-x3-*", reason: "vae-rs-decoder" },
 ];
 
 /// Every reason, by its code, in English; the window says it in its own language by the code.
@@ -68,6 +71,7 @@ pub const REASONS: &[(&str, &str)] = &[
     ("audiocpp-cuda", "A CUDA library the audio.cpp engine needs on an NVIDIA card"),
     ("htdemucs-onnx-gone", "No longer needed — HT-Demucs now runs in the audio.cpp engine"),
     ("midi-audiocpp", "Audio to MIDI runs MuScriptor in the audio.cpp server"),
+    ("vae-rs-decoder", "Songs are turned into sound by Ruach Studio's YuE2-VAE-RS x3 decoder: the highs keep the level the model wrote and nothing is added above 20 kHz; until it is downloaded the studio decodes as before"),
     ("newer", "This release uses another build of it"),
     ("unused", "No longer used"),
 ];
@@ -93,7 +97,7 @@ pub struct Candidate {
     pub label: &'static str,
     pub model: bool,
     pub relative_path: &'static str,
-    pub url: &'static str,
+    pub url: String,
     pub bytes: u64,
     pub downloaded: u64,
     /// What an earlier release left of it: the URL its record names, or nothing when its files lie there unrecorded.
@@ -191,7 +195,7 @@ fn rows(candidates: Vec<Candidate>, default_reason: &'static str) -> Vec<Row> {
             ids: vec![candidate.id],
             name: candidate.label.split(": ").next().unwrap_or(candidate.label).to_string(),
             from: candidate.earlier.as_deref().map(release_of),
-            to: release_of(candidate.url),
+            to: release_of(&candidate.url),
             bytes: candidate.bytes,
             download: left,
             reason_code: code,
@@ -302,7 +306,7 @@ mod tests {
             label: "HT-Demucs 6s: model",
             model,
             relative_path,
-            url: "https://huggingface.co/audio-cpp/audio.cpp-gguf/resolve/462b4cec041e06ffb3d8fcf0d8c655051b1cd9f5/HTDemucs-6stems-GGUF/htdemucs-6stems-f16.gguf",
+            url: "https://huggingface.co/audio-cpp/audio.cpp-gguf/resolve/462b4cec041e06ffb3d8fcf0d8c655051b1cd9f5/HTDemucs-6stems-GGUF/htdemucs-6stems-f16.gguf".into(),
             bytes: 100,
             downloaded: 40,
             earlier: earlier.map(String::from),
@@ -351,6 +355,32 @@ mod tests {
         assert_eq!((model.name.as_str(), model.reason_code), ("HT-Demucs 6s", "demucs-audiocpp"));
         assert_eq!(p.download, 60 + 120);
         assert!(p.show);
+    }
+
+
+    /// The decoder a set gained is a row of the model manager's, with its own reason and the bytes still to come.
+    #[test]
+    fn a_decoder_the_set_gained_is_added_with_its_own_reason() {
+        let root = std::env::temp_dir().join(format!("update-decoder-{}", std::process::id()));
+        std::fs::create_dir_all(&root).unwrap();
+        let decoder = Candidate {
+            part: Part::Models,
+            id: "vae-rs-x3-v1",
+            label: "YuE2-VAE-RS x3 decoder",
+            model: true,
+            relative_path: "VAE-RS/YuE2-VAE-RS-x3_v1-F32.gguf",
+            url: "https://huggingface.co/goldhub/YuE2-VAE-RS-x3/resolve/be7adad4d8f345549cfb59f94af26e9e3ca6ae67/VAE-RS/YuE2-VAE-RS-x3_v1-F32.gguf".into(),
+            bytes: 803_056_768,
+            downloaded: 3_056_768,
+            earlier: None,
+        };
+        let plan = plan(Vec::new(), vec![decoder], Vec::new(), &root, "4.1.0");
+        assert_eq!(plan.added.len(), 1);
+        let row = &plan.added[0];
+        assert_eq!((row.part, row.ids.as_slice(), row.reason_code, row.to.as_str()), (Part::Models, &["vae-rs-x3-v1"][..], "vae-rs-decoder", "be7adad4"));
+        assert_eq!((plan.download, plan.show), (800_000_000, true));
+        assert!(!english("vae-rs-decoder").is_empty());
+        let _ = std::fs::remove_dir_all(root);
     }
 
     #[test]

@@ -1,4 +1,4 @@
-import { ensureAudioGraph, onAudioGraph, type AudioGraph } from './audioGraph';
+import { ensureAudioGraph, keepContextRunning, onAudioGraph, type AudioGraph } from './audioGraph';
 import { onVisualizer, visualizer } from './visualizerState';
 
 /**
@@ -90,6 +90,8 @@ export interface ReceivedFeed {
 /** Opened by the visualiser window. */
 export async function receiveVisualizerFeed(): Promise<ReceivedFeed> {
   const context = new AudioContext();
+  // its window was opened by a click, but WebKitGTK can still hand the context over interrupted
+  const keep = keepContextRunning(context);
   await context.audioWorklet.addModule('/worklets/pcm-player.js');
   const player = new AudioWorkletNode(context, 'pcm-player', { numberOfInputs: 0, numberOfOutputs: 1, outputChannelCount: [2] });
   const mute = context.createGain();
@@ -119,6 +121,7 @@ export async function receiveVisualizerFeed(): Promise<ReceivedFeed> {
       bye();
       window.removeEventListener('beforeunload', bye);
       channel.close();
+      keep();
       void context.close();
     },
   };

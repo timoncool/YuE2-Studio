@@ -1,0 +1,131 @@
+<AudioClip Id="0" Time="0">
+	<LomId Value="0" />
+	<LomIdView Value="0" />
+	<CurrentStart Value="0" />
+	<CurrentEnd Value="16" />
+	<Loop>
+		<LoopStart Value="0" />
+		<LoopEnd Value="16" />
+		<StartRelative Value="0" />
+		<LoopOn Value="true" />
+		<OutMarker Value="16" />
+		<HiddenLoopStart Value="0" />
+		<HiddenLoopEnd Value="16" />
+	</Loop>
+	<Name Value="" />
+	<Annotation Value="" />
+	<Color Value="2" />
+	<LaunchMode Value="0" />
+	<LaunchQuantisation Value="0" />
+	<TimeSignature>
+		<TimeSignatures>
+			<RemoteableTimeSignature Id="0">
+				<Numerator Value="4" />
+				<Denominator Value="4" />
+				<Time Value="0" />
+			</RemoteableTimeSignature>
+		</TimeSignatures>
+	</TimeSignature>
+	<Envelopes>
+		<Envelopes />
+	</Envelopes>
+	<ScrollerTimePreserver>
+		<LeftTime Value="0" />
+		<RightTime Value="0" />
+	</ScrollerTimePreserver>
+	<TimeSelection>
+		<AnchorTime Value="0" />
+		<OtherTime Value="0" />
+	</TimeSelection>
+	<Legato Value="false" />
+	<Ram Value="false" />
+	<GrooveSettings>
+		<GrooveId Value="-1" />
+	</GrooveSettings>
+	<Disabled Value="false" />
+	<VelocityAmount Value="0" />
+	<FollowAction>
+		<FollowTime Value="4" />
+		<IsLinked Value="true" />
+		<LoopIterations Value="1" />
+		<FollowActionA Value="4" />
+		<FollowActionB Value="0" />
+		<FollowChanceA Value="100" />
+		<FollowChanceB Value="0" />
+		<JumpIndexA Value="1" />
+		<JumpIndexB Value="1" />
+		<FollowActionEnabled Value="false" />
+	</FollowAction>
+	<Grid>
+		<FixedNumerator Value="1" />
+		<FixedDenominator Value="16" />
+		<GridIntervalPixel Value="20" />
+		<Ntoles Value="2" />
+		<SnapToGrid Value="true" />
+		<Fixed Value="false" />
+	</Grid>
+	<FreezeStart Value="0" />
+	<FreezeEnd Value="0" />
+	<IsWarped Value="true" />
+	<TakeId Value="1" />
+	<IsInKey Value="true" />
+	<ScaleInformation>
+		<Root Value="0" />
+		<Name Value="0" />
+	</ScaleInformation>
+	<AutomationEnvelopesListWrapper LomId="0" />
+	<SampleRef>
+		<FileRef>
+			<RelativePathType Value="1" />
+			<RelativePath Value="" />
+			<Path Value="" />
+			<Type Value="2" />
+			<LivePackName Value="" />
+			<LivePackId Value="" />
+			<OriginalFileSize Value="0" />
+			<OriginalCrc Value="0" />
+			<SourceHint Value="" />
+		</FileRef>
+		<LastModDate Value="0" />
+		<SourceContext />
+		<SampleUsageHint Value="0" />
+		<DefaultDuration Value="395859" />
+		<DefaultSampleRate Value="44100" />
+		<SamplesToAutoWarp Value="1" />
+	</SampleRef>
+	<Onsets>
+		<UserOnsets />
+		<HasUserOnsets Value="false" />
+	</Onsets>
+	<WarpMode Value="0" />
+	<GranularityTones Value="30" />
+	<GranularityTexture Value="65" />
+	<FluctuationTexture Value="25" />
+	<TransientResolution Value="6" />
+	<TransientLoopMode Value="2" />
+	<TransientEnvelope Value="100" />
+	<ComplexProFormants Value="100" />
+	<ComplexProEnvelope Value="128" />
+	<Sync Value="true" />
+	<HiQ Value="true" />
+	<Fade Value="true" />
+	<Fades>
+		<FadeInLength Value="0" />
+		<FadeOutLength Value="0" />
+		<ClipFadesAreInitialized Value="true" />
+		<CrossfadeInState Value="0" />
+		<FadeInCurveSkew Value="0" />
+		<FadeInCurveSlope Value="0" />
+		<FadeOutCurveSkew Value="0" />
+		<FadeOutCurveSlope Value="0" />
+		<IsDefaultFadeIn Value="true" />
+		<IsDefaultFadeOut Value="true" />
+	</Fades>
+	<PitchCoarse Value="0" />
+	<PitchFine Value="0" />
+	<SampleVolume Value="1" />
+	<WarpMarkers />
+	<SavedWarpMarkersForStretched />
+	<MarkersGenerated Value="true" />
+	<IsSongTempoLeader Value="false" />
+</AudioClip>

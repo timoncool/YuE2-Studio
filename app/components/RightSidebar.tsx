@@ -8,8 +8,7 @@ import { mapNativeLibrarySong, setNativeSongNote, updateNativeSong } from '../se
 import { pendingNotes } from '../services/generations';
 import { useAuth } from '../context/AuthContext';
 import { useI18n } from '../context/I18nContext';
-import { openExternal } from '../services/externalLinks';
-import { apiUrl } from '../services/apiBase';
+import { openAudioEditor } from '../services/audioEditor';
 import { SongDropdownMenu } from './SongDropdownMenu';
 import { KaraokeAction } from './KaraokeAction';
 import { KaraokeFile } from './KaraokeFile';
@@ -399,7 +398,7 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({ song, onClose, onOpe
                             onClick={() => {
                                 if (!song?.audioUrl) return;
                                 const audioUrl = song.audioUrl.startsWith('http') ? song.audioUrl : `${window.location.origin}${song.audioUrl}`;
-                                void openExternal(apiUrl(`/editor/index.html?audioUrl=${encodeURIComponent(audioUrl)}`));
+                                void openAudioEditor(audioUrl);
                             }}
                             title={t('openInEditor')}
                             className="p-3 text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white hover:bg-zinc-300/50 dark:hover:bg-white/10 rounded-xl transition-all duration-200"

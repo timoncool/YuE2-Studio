@@ -27,6 +27,8 @@ pub enum SongError {
     /// Lost with an engine that restarted, whose last line says where it was.
     LostAtLine(String),
     Lost,
+    /// Lost with an engine the person restarted from the window while the song was being made: theirs to do, not a failure.
+    LostRestarted,
     /// Lost with an engine that ended on this exit code (`0xc0000005`), with its last line when it wrote one.
     LostExited { exit: String, line: Option<String> },
     /// Lost with an engine that could not listen on its port: `set` when YUE_ENGINE_PORT names it, else another
@@ -122,6 +124,7 @@ impl SongError {
             SongError::LostDevice(None) => "lost_device_silent",
             SongError::LostAtLine(_) => "lost_at_line",
             SongError::Lost => "lost",
+            SongError::LostRestarted => "lost_restarted",
             SongError::LostExited { exit, .. } if exit == ILLEGAL_INSTRUCTION => "lost_illegal_instruction",
             SongError::LostExited { line: Some(_), .. } => "lost_exited_at_line",
             SongError::LostExited { .. } => "lost_exited",
@@ -247,6 +250,7 @@ impl fmt::Display for SongError {
             SongError::LostDevice(None) => f.write_str("The graphics card failed during this song (a CUDA or driver error) and the engine restarted, so the song was lost. The engine log is in Settings, Engine."),
             SongError::LostAtLine(line) => write!(f, "The engine stopped during this song and restarted, so the song was lost; its last line was {line}. The engine log is in Settings, Engine."),
             SongError::Lost => f.write_str("The engine stopped during this song and restarted, so the song was lost. The engine log is in Settings, Engine."),
+            SongError::LostRestarted => f.write_str("The engine was restarted from the studio while this song was being made, so the song was stopped. Make it again."),
             SongError::LostExited { exit, line } => {
                 let how = match exit_meaning(exit) {
                     Some(meaning) => format!("{meaning}, exit code {exit}"),
@@ -305,6 +309,7 @@ mod tests {
             SongError::LostDevice(None),
             SongError::LostAtLine("x".into()),
             SongError::Lost,
+            SongError::LostRestarted,
             SongError::LostExited { exit: "0xc0000005".into(), line: None },
             SongError::LostExited { exit: "0xc0000135".into(), line: Some("x".into()) },
             SongError::LostExited { exit: ILLEGAL_INSTRUCTION.into(), line: Some("x".into()) },
@@ -335,6 +340,7 @@ mod tests {
                 | SongError::LostDevice(_)
                 | SongError::LostAtLine(_)
                 | SongError::Lost
+                | SongError::LostRestarted
                 | SongError::LostExited { .. }
                 | SongError::LostPort { .. }
                 | SongError::LoadVram
@@ -363,8 +369,8 @@ mod tests {
         for error in one_of_each() {
             let Some(code) = error.code() else { continue };
             let found = dictionary.matches(&format!("\n  {code}:")).count();
-            if found != 5 {
-                missing.push(format!("{code}: {found} of 5"));
+            if found != 6 {
+                missing.push(format!("{code}: {found} of 6"));
             }
             for key in error.params().keys() {
                 let named = dictionary.matches(&format!("{{{key}}}")).count();
@@ -437,7 +443,7 @@ mod tests {
         let seed = SongError::from_fatal("the score the model wrote for song 1 cannot be sung: it has no voice with bars. Draw another seed.".into());
         assert!(score_strength_reason(seed.code(), &seed.params(), &json!({})).is_none(), "without LoRA");
         let dictionary = include_str!("../../../app/i18n/songErrors.ts");
-        assert_eq!(dictionary.matches("score_unsingable_strength:").count(), 5, "the reason is in every language of the window");
+        assert_eq!(dictionary.matches("score_unsingable_strength:").count(), 6, "the reason is in every language of the window");
     }
 
     /// A song lost with an engine that exited gives the window what the exit status means and the engine's last line,

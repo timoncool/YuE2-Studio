@@ -50,6 +50,7 @@ const KEYFRAME_SECONDS = 2;
  * until the process runs out of video memory. The loop waits instead.
  */
 const QUEUE_LIMIT = 12;
+const QUEUE_WAIT_TIMEOUT_MS = 15_000;
 
 /**
  * Tried in order. Hardware encoders differ in the profiles they accept, and a
@@ -115,9 +116,13 @@ export async function createHardwareEncoder(options: EncoderOptions): Promise<Ha
     async encode(canvas, frameIndex) {
       if (failure) throw failure;
       // Wait rather than pile frames up in graphics memory.
+      const queueWaitStarted = performance.now();
       while (encoder.encodeQueueSize > QUEUE_LIMIT) {
         await new Promise((resolve) => setTimeout(resolve, 8));
         if (failure) throw failure;
+        if (performance.now() - queueWaitStarted >= QUEUE_WAIT_TIMEOUT_MS) {
+          throw new Error('The video encoder stopped processing frames.');
+        }
       }
       // A VideoFrame holds GPU memory until closed; leaking them stalls the
       // encoder within a few seconds of footage.

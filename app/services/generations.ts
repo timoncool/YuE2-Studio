@@ -80,6 +80,47 @@ function card(id: string, fields: CardFields): Song {
   };
 }
 
+/** The tracks a job makes: its songs times the variations of each. */
+function tracksOf(job: YueJob): number {
+  const of = (key: string) => Math.max(1, Number(job.generation_settings?.[key]) || 1);
+  return of('lm_batch_size') * of('synth_batch_size');
+}
+
+/** The rows a job's cards are drawn in, top to bottom: one a track, the first of them the card the request began as. */
+export function rowsFor(first: string, tracks: number): string[] {
+  return Array.from({ length: tracks }, (_, index) => (index === 0 ? first : `${first}~${index + 1}`));
+}
+
+/** The row a song took: `made` are its job's songs in the library, newest first, and the first song a job finished
+ *  took its lowest card, the last one the card on top. */
+export function rowTaken(rows: string[], made: Song[], song: Song): string | undefined {
+  return rows[rows.length - (made.length - made.indexOf(song))];
+}
+
+/** The cards still waiting for a song: a job keeps a card for each track the library does not hold yet, its lower
+ *  cards leaving first, so a finished song takes the row of the card under which nothing moves. */
+export function stillWaiting(cards: Song[], madeOf: ReadonlyMap<string, Song[]>, rowsOfJob: ReadonlyMap<string, string[]>): Song[] {
+  const kept = new Map<string, number>();
+  return cards.filter(entry => {
+    if (!entry.jobId) return true;
+    const left = (rowsOfJob.get(entry.jobId)?.length ?? 1) - (madeOf.get(entry.jobId)?.length ?? 0);
+    const seen = kept.get(entry.jobId) ?? 0;
+    kept.set(entry.jobId, seen + 1);
+    return seen < left;
+  });
+}
+
+/** `made` with the songs `known` held before and the library lists no longer, each job's newest first: a song deleted
+ *  while its job still runs keeps its place among the job's songs, so the job's cards and rows do not shift. */
+export function keepingDeleted(made: Map<string, Song[]>, known: ReadonlyMap<string, Song[]>): Map<string, Song[]> {
+  for (const [job, before] of known) {
+    const there = made.get(job) ?? [];
+    const gone = before.filter(song => !there.some(entry => entry.id === song.id));
+    if (gone.length > 0) made.set(job, [...there, ...gone].sort((a, b) => (a.id < b.id ? 1 : -1)));
+  }
+  return made;
+}
+
 /** Asks the engine to stop a job; a refusal is told, the card is already marked. */
 async function stopJob(jobId: string): Promise<void> {
   const response = await fetch(`/v1/music/jobs/${encodeURIComponent(jobId)}`, { method: 'POST' });
@@ -105,9 +146,9 @@ async function removeEnded(jobId: string): Promise<void> {
 export function useGenerations({ enabled, notify, onFinished }: GenerationOptions) {
   const { t, language } = useI18n();
   const [cards, setCards] = useState<Song[]>([]);
-  // job -> the row its card was drawn in; kept after the card is gone, so the
-  // song that took the row keeps it
-  const [rowOfJob, setRowOfJob] = useState<ReadonlyMap<string, string>>(() => new Map());
+  // job -> the rows its cards were drawn in, top to bottom; kept after the cards are gone, so the
+  // songs that took the rows keep them
+  const [rowsOfJob, setRowsOfJob] = useState<ReadonlyMap<string, string[]>>(() => new Map());
   const library = useLibrarySongs().data ?? NO_SONGS;
   const settling = useRef(new Set<string>());
   // jobs this window stopped: a read of the running jobs sent before the stop
@@ -118,17 +159,23 @@ export function useGenerations({ enabled, notify, onFinished }: GenerationOption
     cardsNow.current = cards;
   }, [cards]);
 
-  // the newest song each job made; the library lists newest first
-  const madeBy = useMemo(() => {
-    const first = new Map<string, Song>();
+  // the songs each job made, newest first as the library lists them. A song deleted while this window is open keeps
+  // its place among them: a job's cards and rows count every song it handed over, not only the ones still there.
+  const handed = useRef(new Map<string, Song[]>());
+  const madeOf = useMemo(() => {
+    const made = new Map<string, Song[]>();
     for (const song of library) {
-      if (song.madeByJob && !first.has(song.madeByJob)) first.set(song.madeByJob, song);
+      if (!song.madeByJob) continue;
+      const songs = made.get(song.madeByJob);
+      if (songs) songs.push(song);
+      else made.set(song.madeByJob, [song]);
     }
-    return first;
+    handed.current = keepingDeleted(made, handed.current);
+    return handed.current;
   }, [library]);
 
   // a card stays until the library holds its song, so its row is never empty
-  const waiting = useMemo(() => cards.filter(entry => !(entry.jobId && madeBy.has(entry.jobId))), [cards, madeBy]);
+  const waiting = useMemo(() => stillWaiting(cards, madeOf, rowsOfJob), [cards, madeOf, rowsOfJob]);
   const following = waiting.filter(entry => entry.jobId && entry.isGenerating).length;
 
   const noteError = useEffectEvent((message: string) => notify(`${t('songNote')}: ${message}`, 'error'));
@@ -139,21 +186,30 @@ export function useGenerations({ enabled, notify, onFinished }: GenerationOption
   const finishedJobs = useRef(new Set<string>());
   useEffect(() => {
     if (waiting.length === cards.length) return;
+    const staying = new Set(waiting.flatMap(entry => (entry.jobId ? [entry.jobId] : [])));
     for (const entry of cards) {
-      if (entry.jobId && entry.isGenerating && madeBy.has(entry.jobId) && !finishedJobs.current.has(entry.jobId)) leftEarly.current.set(entry.jobId, entry);
+      // the last card of a job that still reads as running
+      if (entry.jobId && entry.isGenerating && !staying.has(entry.jobId) && !finishedJobs.current.has(entry.jobId)) leftEarly.current.set(entry.jobId, entry);
     }
-    setCards(prev => prev.filter(entry => !(entry.jobId && madeBy.has(entry.jobId))));
-  }, [waiting, cards, madeBy]);
+    setCards(prev => stillWaiting(prev, madeOf, rowsOfJob));
+  }, [waiting, cards, madeOf, rowsOfJob]);
 
-  // the card takes the service's time for its job: a window on another
-  // computer has another clock, and the cards are ordered by this time
+  // the cards take the service's time for their job: a window on another
+  // computer has another clock, and the cards are ordered by this time. A job
+  // of several tracks gets a card for each, under the one the request began as.
   const follow = useCallback((cardId: string, job: YueJob) => {
-    setCards(prev => prev.map(entry => (entry.id === cardId ? { ...entry, jobId: job.id, createdAt: new Date(job.submitted_at) } : entry)));
-    setRowOfJob(prev => (prev.has(job.id) ? prev : new Map(prev).set(job.id, cardId)));
+    const rows = rowsFor(cardId, tracksOf(job));
+    setCards(prev => prev.flatMap(entry => (entry.id === cardId ? rows.map(id => ({ ...entry, id, jobId: job.id, createdAt: new Date(job.submitted_at) })) : [entry])));
+    setRowsOfJob(prev => (prev.has(job.id) ? prev : new Map(prev).set(job.id, rows)));
   }, []);
 
   const remove = useCallback((cardId: string) => {
     setCards(prev => prev.filter(entry => entry.id !== cardId));
+  }, []);
+
+  /** Takes every card of a job away, or the one card of a request that has no job yet. */
+  const removeCards = useCallback((of: Song) => {
+    setCards(prev => prev.filter(entry => (of.jobId ? entry.jobId !== of.jobId : entry.id !== of.id)));
   }, []);
 
   // One read of the running jobs for all cards, while any is running. It goes
@@ -165,6 +221,30 @@ export function useGenerations({ enabled, notify, onFinished }: GenerationOption
     refetchInterval: query => (following > 0 || (query.state.data?.length ?? 0) > 0 ? POLL_MS : false),
     refetchIntervalInBackground: true,
   });
+
+  // A job of several songs hands each one over as it is finished: it joins the library, and its playlist, while the
+  // rest are still made.
+  const takenEarly = useRef(new Set<string>());
+  const takeEarly = useEffectEvent((running: YueJob[]) => {
+    for (const job of running) {
+      if (job.status !== 'running') continue;
+      const made = (job.songs ?? []).filter(entry => !takenEarly.current.has(entry.song.id)).map(entry => mapNativeLibrarySong(entry.song));
+      if (made.length === 0) continue;
+      made.forEach(song => takenEarly.current.add(song.id));
+      updateLibrarySongs(songs => [...made.filter(song => !songs.some(entry => entry.id === song.id)), ...songs]);
+      if (job.playlist_id) {
+        const into = job.playlist_id;
+        updateLibraryPlaylists(lists => lists.map(list => (list.id === into
+          ? { ...list, songIds: [...(list.songIds ?? []), ...made.map(song => song.id).filter(id => !(list.songIds ?? []).includes(id))] }
+          : list)));
+        playlistsChanged();
+      }
+      notify(t('trackReady'), 'success');
+    }
+  });
+  useEffect(() => {
+    if (jobs.data) takeEarly(jobs.data);
+  }, [jobs.data]);
 
   // Jobs that ended without a song stay as cards, across restarts, until removed.
   const ended = useQuery({
@@ -197,14 +277,16 @@ export function useGenerations({ enabled, notify, onFinished }: GenerationOption
       .map(entry => mapNativeLibrarySong(entry.song))
       .sort((a, b) => (a.id < b.id ? 1 : -1));
     if (made.length === 0) {
-      remove(finished.id);
+      removeCards(finished);
       generationFailed();
       notify(songErrorText(job, language) || t('generationFailed'), 'error');
       return;
     }
     const note = takePendingNote(finished.id, made, noteError);
     if (note) made = made.map(song => ({ ...song, note }));
-    updateLibrarySongs(songs => [...made.filter(song => !songs.some(entry => entry.id === song.id)), ...songs]);
+    // a song the job handed over earlier and the person has deleted since is not brought back
+    const deleted = new Set((handed.current.get(job.id) ?? []).filter(song => !library.some(entry => entry.id === song.id)).map(song => song.id));
+    updateLibrarySongs(songs => [...made.filter(song => !deleted.has(song.id) && !songs.some(entry => entry.id === song.id)), ...songs]);
     if (job.playlist_id) {
       // the songs are in their playlist at once, so a list showing it keeps their row
       const into = job.playlist_id;
@@ -219,7 +301,7 @@ export function useGenerations({ enabled, notify, onFinished }: GenerationOption
 
   const settle = useEffectEvent(async (running: Song) => {
     const jobId = running.jobId;
-    if (!jobId || settling.current.has(jobId)) return;
+    if (!jobId || settling.current.has(jobId) || finishedJobs.current.has(jobId)) return;
     settling.current.add(jobId);
     try {
       const job = await readJson<YueJob>(`/v1/music/jobs/${encodeURIComponent(jobId)}`);
@@ -228,8 +310,8 @@ export function useGenerations({ enabled, notify, onFinished }: GenerationOption
         finish(running, job);
       } else if (job.status === 'failed' || job.status === 'cancelled') {
         leftEarly.current.delete(jobId);
-        // the card leaves with the running jobs and comes back from the ended ones
-        remove(running.id);
+        // the cards leave with the running jobs and one comes back from the ended ones
+        removeCards(running);
         void queryClient.invalidateQueries({ queryKey: endedJobsKey });
         if (job.status === 'failed') generationFailed();
         notify(songErrorText(job, language) || t('generationFailed'), job.status === 'failed' ? 'error' : 'info');
@@ -239,7 +321,7 @@ export function useGenerations({ enabled, notify, onFinished }: GenerationOption
       if (job.status === 'completed' || job.status === 'failed' || job.status === 'cancelled') hubStateChanged();
     } catch (error) {
       leftEarly.current.delete(jobId);
-      remove(running.id);
+      removeCards(running);
       notify(error instanceof Error ? error.message : String(error), 'error');
     } finally {
       settling.current.delete(jobId);
@@ -253,19 +335,19 @@ export function useGenerations({ enabled, notify, onFinished }: GenerationOption
     const fresh = listed.filter(job => !shown.has(job.id) && !(job.client_ref && shown.has(job.client_ref)) && !stopped.current.has(job.id));
     if (fresh.length > 0) {
       setCards(prev => [
-        ...fresh.map(job => card(`restored_${job.id}`, {
+        ...fresh.flatMap(job => rowsFor(`restored_${job.id}`, tracksOf(job)).map(id => card(id, {
           title: job.title || t('generating'),
           style: job.style,
           lyrics: job.lyrics,
           jobId: job.id,
           createdAt: new Date(job.submitted_at),
           playlistId: job.playlist_id,
-        })),
+        }))),
         ...prev,
       ]);
-      setRowOfJob(prev => {
+      setRowsOfJob(prev => {
         const next = new Map(prev);
-        for (const job of fresh) next.set(job.id, `restored_${job.id}`);
+        for (const job of fresh) next.set(job.id, rowsFor(`restored_${job.id}`, tracksOf(job)));
         return next;
       });
     }
@@ -296,7 +378,8 @@ export function useGenerations({ enabled, notify, onFinished }: GenerationOption
       setCards(prev => {
         const running = prev.filter(entry => entry.isGenerating && entry.jobId);
         if (running.length === 0) return prev;
-        const active = running.reduce((oldest, entry) => (entry.createdAt < oldest.createdAt ? entry : oldest));
+        // of a job's cards the lowest one shows the work: the song being made takes that card's row
+        const active = running.reduce((oldest, entry) => (entry.createdAt <= oldest.createdAt ? entry : oldest));
         return prev.map(entry => {
           if (!entry.isGenerating || !entry.jobId) return entry;
           if (entry.id === active.id) {
@@ -341,12 +424,21 @@ export function useGenerations({ enabled, notify, onFinished }: GenerationOption
     setCards(prev => (prev.some(entry => entry.jobId === jobId)
       ? prev.map(entry => (entry.jobId === jobId ? { ...entry, title: fields.title, style: fields.style ?? entry.style, lyrics: fields.lyrics ?? entry.lyrics } : entry))
       : [card(id, { ...fields, jobId }), ...prev]));
-    setRowOfJob(prev => (prev.has(jobId) ? prev : new Map(prev).set(jobId, id)));
+    setRowsOfJob(prev => (prev.has(jobId) ? prev : new Map(prev).set(jobId, [id])));
   }, []);
 
   const cancel = useCallback(async (jobId: string) => {
     stopped.current.add(jobId);
-    setCards(prev => prev.map(entry => (entry.jobId === jobId ? { ...entry, isGenerating: false, stage: 'cancelled' } : entry)));
+    // a stopped job of several tracks is one stopped card: the tracks it finished are songs already
+    setCards(prev => {
+      let marked = false;
+      return prev.flatMap(entry => {
+        if (entry.jobId !== jobId) return [entry];
+        if (marked) return [];
+        marked = true;
+        return [{ ...entry, isGenerating: false, stage: 'cancelled' }];
+      });
+    });
     try {
       await stopJob(jobId);
     } catch (error) {
@@ -363,7 +455,7 @@ export function useGenerations({ enabled, notify, onFinished }: GenerationOption
     const target = cardsNow.current.find(entry => entry.jobId === key || entry.id === key);
     if (!target) return;
     if (target.jobId) stopped.current.add(target.jobId);
-    remove(target.id);
+    removeCards(target);
     if (target.jobId && target.isGenerating) {
       try {
         await stopJob(target.jobId);
@@ -372,7 +464,7 @@ export function useGenerations({ enabled, notify, onFinished }: GenerationOption
       }
     }
     if (target.jobId) await removeEnded(target.jobId).catch(error => notify(error instanceof Error ? error.message : String(error), 'error'));
-  }, [remove, notify]);
+  }, [removeCards, notify]);
 
   /** A song whose score could not be written made again with its LoRA at 1.0 on Composition (the service keeps the
    * request); the failed card goes once the new song is on its way. */
@@ -419,12 +511,16 @@ export function useGenerations({ enabled, notify, onFinished }: GenerationOption
     void queryClient.invalidateQueries({ queryKey: activeJobsKey });
   }, [notify]);
 
-  // The list for the create page: the cards, then the library; the newest
-  // song of a job is drawn in the row its card had.
+  // The list for the create page: the cards, then the library; a song of a
+  // job is drawn in the row of the card it took the place of. The first song
+  // a job finishes takes its lowest card, the last one the card on top.
   const keyed = useMemo(() => library.map(song => {
-    const row = song.madeByJob && madeBy.get(song.madeByJob) === song ? rowOfJob.get(song.madeByJob) : undefined;
+    const rows = song.madeByJob ? rowsOfJob.get(song.madeByJob) : undefined;
+    const made = song.madeByJob ? madeOf.get(song.madeByJob) : undefined;
+    if (!rows || !made) return song;
+    const row = rowTaken(rows, made, song);
     return row ? { ...song, viewKey: row } : song;
-  }), [library, madeBy, rowOfJob]);
+  }), [library, madeOf, rowsOfJob]);
   const songs = useMemo(() => (waiting.length || endedCards.length ? [...waiting, ...endedCards, ...keyed] : keyed), [waiting, endedCards, keyed]);
 
   return {

@@ -31,8 +31,8 @@ type NativeSetupStatus = {
   own_model_name?: Record<string, string> | null;
 };
 
-const StatusLine: React.FC<{ active: boolean; pending?: boolean; label: string }> = ({ active, pending, label }) => (
-  <div className="flex min-w-0 items-center gap-1.5 text-zinc-500 dark:text-zinc-400" title={label}>
+const StatusLine: React.FC<{ active: boolean; pending?: boolean; label: string; hint?: string }> = ({ active, pending, label, hint }) => (
+  <div className="flex min-w-0 items-center gap-1.5 text-zinc-500 dark:text-zinc-400" title={hint ?? label}>
     <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${active ? 'bg-emerald-500' : pending ? 'animate-pulse bg-amber-400' : 'bg-zinc-400 dark:bg-zinc-600'}`} />
     <span className="truncate">{label}</span>
   </div>
@@ -53,13 +53,15 @@ const SystemWidget: React.FC<{ isOpen?: boolean }> = ({ isOpen }) => {
   const modelReady = setup?.ready === true;
   const profile = setupLabel(t, language, setup);
   // Without a model set on disk the engine is not starting, it is waiting.
-  const engineLabel = unreachable ? t('engineUnavailable') : engineReady ? t('engineReachable') : modelReady ? t('engineStarting') : tt('engineWaitsForModels');
+  // a card is there, but the engine went down its devices to the processor: ready, and many times slower
+  const onProcessor = engineReady && (setup as { engine_on_processor?: boolean } | null)?.engine_on_processor === true;
+  const engineLabel = unreachable ? t('engineUnavailable') : onProcessor ? t('engineOnProcessor') : engineReady ? t('engineReachable') : modelReady ? t('engineStarting') : tt('engineWaitsForModels');
   const modelLabel = modelReady ? `${t('profileReady')}: ${profile}` : t('profileNotInstalled');
 
   if (!isOpen) {
     return (
-      <div className="flex w-full justify-center py-2" title={`${engineLabel} · ${modelLabel}`}>
-        <span className={`h-2 w-2 rounded-full ${engineReady && modelReady ? 'bg-emerald-500' : unreachable ? 'bg-rose-500' : 'animate-pulse bg-amber-400'}`} />
+      <div className="flex w-full justify-center py-2" title={onProcessor ? `${engineLabel}. ${t('engineOnProcessorHint')}` : `${engineLabel} · ${modelLabel}`}>
+        <span className={`h-2 w-2 rounded-full ${onProcessor ? 'bg-amber-400' : engineReady && modelReady ? 'bg-emerald-500' : unreachable ? 'bg-rose-500' : 'animate-pulse bg-amber-400'}`} />
       </div>
     );
   }
@@ -76,7 +78,7 @@ const SystemWidget: React.FC<{ isOpen?: boolean }> = ({ isOpen }) => {
 
   return (
     <div className="space-y-1.5 rounded-xl border border-zinc-200/70 bg-zinc-50/80 px-3 py-2 text-[10px] dark:border-white/5 dark:bg-zinc-900/50">
-      <StatusLine active={engineReady && modelReady} pending={!unreachable && !(engineReady && modelReady)} label={engineLabel} />
+      <StatusLine active={engineReady && modelReady && !onProcessor} pending={onProcessor || (!unreachable && !(engineReady && modelReady))} label={engineLabel} hint={onProcessor ? t('engineOnProcessorHint') : undefined} />
       <StatusLine active={modelReady} pending={!unreachable && !modelReady} label={modelLabel} />
       <StatusLine active={openRouterConfigured} label={openRouterConfigured ? t('openRouterConfigured') : t('openRouterNotConfigured')} />
     </div>

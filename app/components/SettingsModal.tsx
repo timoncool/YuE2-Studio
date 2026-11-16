@@ -218,6 +218,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, initialSec
 
                 <SidebarExtrasSetting />
 
+                <CloseToTraySetting />
+
                 <NetworkAccessSetting />
               </div>
             )}
@@ -318,6 +320,41 @@ const SidebarExtrasSetting: React.FC = () => {
       {row('winamp', t('winampTitle'))}
       {row('equalizer', t('eqTitle'))}
       {row('visualizer', t('vizTitle'))}
+    </div>
+  );
+};
+
+type ShellInvoke = (command: string, args?: Record<string, unknown>) => Promise<unknown>;
+
+/**
+ * Whether closing the window keeps the studio running in the system tray. The desktop shell keeps the choice and owns
+ * the tray icon, so there is nothing to show in a browser. A change the shell could not make is shown, not kept.
+ */
+const CloseToTraySetting: React.FC = () => {
+  const { t } = useI18n();
+  const invoke = (window as unknown as { __TAURI__?: { core?: { invoke?: ShellInvoke } } }).__TAURI__?.core?.invoke;
+  const [enabled, setEnabled] = React.useState<boolean | null>(null);
+  const [error, setError] = React.useState<string | null>(null);
+  React.useEffect(() => {
+    invoke?.('close_to_tray')
+      .then((saved) => setEnabled(saved === true))
+      .catch((reason: unknown) => setError(String(reason)));
+  }, [invoke]);
+  if (!invoke) return null;
+  const change = (next: boolean) => {
+    setError(null);
+    invoke('set_close_to_tray', { enabled: next })
+      .then((saved) => setEnabled(saved === true))
+      .catch((reason: unknown) => setError(String(reason)));
+  };
+  return (
+    <div className="space-y-2">
+      <label className="flex items-center gap-2 text-sm font-semibold text-zinc-900 dark:text-white">
+        <input type="checkbox" checked={enabled === true} disabled={enabled === null} onChange={(event) => change(event.target.checked)} className="accent-pink-500" />
+        {t('shellCloseToTray')}
+      </label>
+      <p className="text-xs text-zinc-500 dark:text-zinc-400">{t('shellCloseToTrayHint')}</p>
+      {error && <p className="text-xs text-rose-600 dark:text-rose-300">{error}</p>}
     </div>
   );
 };

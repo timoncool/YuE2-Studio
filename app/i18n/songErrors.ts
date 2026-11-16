@@ -1,9 +1,10 @@
 import type { Language } from './translations';
+import { ptExitMeanings } from './ptExtra';
 
 // Why a song failed, in the window's language. The service sends a code and fields beside
 // its English text (crates/music-server/src/song_errors.rs); here is a template for each
 // code. The service's test `every_code_has_a_translation_in_every_language` checks that each
-// code has a line in all five languages. The codes are the same in every music studio; YuE2 adds
+// code has a line in all six languages. The codes are the same in every music studio; YuE2 adds
 // its own engine's (adapter_missing … score_unsingable_adapters).
 
 type ErrorTexts = Record<string, string>;
@@ -17,6 +18,7 @@ const EN: ErrorTexts = {
   lost_device_silent: 'The graphics card failed during this song (a CUDA or driver error) and the engine restarted, so the song was lost. The engine log is in Settings → Local engine.',
   lost_at_line: 'The engine stopped during this song and restarted, so the song was lost; its last line was {line}. The engine log is in Settings → Local engine.',
   lost: 'The engine stopped during this song and restarted, so the song was lost. The engine log is in Settings → Local engine.',
+  lost_restarted: 'The engine was restarted from the studio while this song was being made, so the song was stopped. Make it again.',
   lost_exited: 'The engine crashed during this song ({meaning}exit code {exit}) and restarted, so the song was lost. The engine log is in Settings → Local engine.',
   lost_exited_at_line: 'The engine crashed during this song ({meaning}exit code {exit}) and restarted, so the song was lost; its last line was {line}. The engine log is in Settings → Local engine.',
   lost_port_set: 'The engine could not listen on port {port}, which YUE_ENGINE_PORT sets, so the song was lost: another program holds it. Close that program or set another port.',
@@ -48,6 +50,7 @@ const RU: ErrorTexts = {
   lost_device_silent: 'Во время этой песни видеокарта дала сбой (ошибка CUDA или драйвера), движок перезапустился, и песня потеряна. Лог движка — в Настройках → Локальный движок.',
   lost_at_line: 'Движок остановился во время этой песни и перезапустился, песня потеряна; его последняя строка: {line}. Лог движка — в Настройках → Локальный движок.',
   lost: 'Движок остановился во время этой песни и перезапустился, песня потеряна. Лог движка — в Настройках → Локальный движок.',
+  lost_restarted: 'Движок перезапустили из студии, пока делалась эта песня, поэтому песня остановлена. Сделайте её заново.',
   lost_exited: 'Движок упал во время этой песни ({meaning}код выхода {exit}) и перезапустился, песня потеряна. Лог движка — в Настройках → Локальный движок.',
   lost_exited_at_line: 'Движок упал во время этой песни ({meaning}код выхода {exit}) и перезапустился, песня потеряна; его последняя строка: {line}. Лог движка — в Настройках → Локальный движок.',
   lost_port_set: 'Движок не смог слушать порт {port}, заданный в YUE_ENGINE_PORT, песня потеряна: порт занят другой программой. Закройте её или задайте другой порт.',
@@ -79,6 +82,7 @@ const ZH: ErrorTexts = {
   lost_device_silent: '生成这首歌时显卡出错（CUDA 或驱动错误），引擎已重启，这首歌丢失了。引擎日志在“设置 → 本地引擎”。',
   lost_at_line: '生成这首歌时引擎停止并已重启，这首歌丢失了；它的最后一行是 {line}。引擎日志在“设置 → 本地引擎”。',
   lost: '生成这首歌时引擎停止并已重启，这首歌丢失了。引擎日志在“设置 → 本地引擎”。',
+  lost_restarted: '生成这首歌时，引擎被从工作室中重新启动，因此这首歌已停止。请重新生成。',
   lost_exited: '生成这首歌时引擎崩溃（{meaning}退出码 {exit}）并已重启，这首歌丢失了。引擎日志在“设置 → 本地引擎”。',
   lost_exited_at_line: '生成这首歌时引擎崩溃（{meaning}退出码 {exit}）并已重启，这首歌丢失了；它的最后一行是 {line}。引擎日志在“设置 → 本地引擎”。',
   lost_port_set: '引擎无法监听 YUE_ENGINE_PORT 指定的端口 {port}，这首歌丢失了：该端口被其他程序占用。请关闭该程序或设置其他端口。',
@@ -110,6 +114,7 @@ const JA: ErrorTexts = {
   lost_device_silent: 'この曲の途中でグラフィックカードが失敗し（CUDA またはドライバーのエラー）、エンジンが再起動したため曲は失われました。エンジンのログは「設定 → ローカルエンジン」にあります。',
   lost_at_line: 'この曲の途中でエンジンが止まって再起動し、曲は失われました。最後の行：{line}。エンジンのログは「設定 → ローカルエンジン」にあります。',
   lost: 'この曲の途中でエンジンが止まって再起動し、曲は失われました。エンジンのログは「設定 → ローカルエンジン」にあります。',
+  lost_restarted: 'この曲の作成中にスタジオからエンジンが再起動されたため、曲は停止されました。もう一度作成してください。',
   lost_exited: 'この曲の途中でエンジンがクラッシュし（{meaning}終了コード {exit}）、再起動したため曲は失われました。エンジンのログは「設定 → ローカルエンジン」にあります。',
   lost_exited_at_line: 'この曲の途中でエンジンがクラッシュし（{meaning}終了コード {exit}）、再起動したため曲は失われました。最後の行：{line}。エンジンのログは「設定 → ローカルエンジン」にあります。',
   lost_port_set: 'エンジンが YUE_ENGINE_PORT で指定したポート {port} で待ち受けできず、曲は失われました。別のプログラムがそのポートを使っています。そのプログラムを閉じるか、別のポートを指定してください。',
@@ -141,6 +146,7 @@ const KO: ErrorTexts = {
   lost_device_silent: '이 곡을 만드는 중 그래픽카드에 오류가 나서(CUDA 또는 드라이버 오류) 엔진이 다시 시작되었고 곡을 잃었습니다. 엔진 로그는 "설정 → 로컬 엔진"에 있습니다.',
   lost_at_line: '이 곡을 만드는 중 엔진이 멈췄다가 다시 시작되어 곡을 잃었습니다. 마지막 줄: {line}. 엔진 로그는 "설정 → 로컬 엔진"에 있습니다.',
   lost: '이 곡을 만드는 중 엔진이 멈췄다가 다시 시작되어 곡을 잃었습니다. 엔진 로그는 "설정 → 로컬 엔진"에 있습니다.',
+  lost_restarted: '이 곡을 만드는 동안 스튜디오에서 엔진을 다시 시작해 곡이 중지되었습니다. 다시 만들어 주세요.',
   lost_exited: '이 곡을 만드는 중 엔진이 비정상 종료되었고({meaning}종료 코드 {exit}) 다시 시작되어 곡을 잃었습니다. 엔진 로그는 "설정 → 로컬 엔진"에 있습니다.',
   lost_exited_at_line: '이 곡을 만드는 중 엔진이 비정상 종료되었고({meaning}종료 코드 {exit}) 다시 시작되어 곡을 잃었습니다. 마지막 줄: {line}. 엔진 로그는 "설정 → 로컬 엔진"에 있습니다.',
   lost_port_set: '엔진이 YUE_ENGINE_PORT에 지정된 포트 {port}에서 대기할 수 없어 곡을 잃었습니다. 다른 프로그램이 그 포트를 쓰고 있습니다. 그 프로그램을 닫거나 다른 포트를 지정하세요.',
@@ -163,7 +169,39 @@ const KO: ErrorTexts = {
   not_audio: '그래픽카드가 이 곡에서 소리가 아닌 값을 계산해({line}) 엔진이 무음을 쓰지 않고 곡을 멈췄습니다. 곡을 다시 만드세요. 새로 실행하면 대개 제대로 나옵니다.',
 };
 
-const BY_LANGUAGE: Record<Language, ErrorTexts> = { en: EN, ru: RU, zh: ZH, ja: JA, ko: KO };
+const PT: ErrorTexts = {
+  training_on_card: 'Há uma LoRA a treinar na placa gráfica; fazer músicas quando terminar ou for parada.',
+  lost_vram: 'A placa gráfica ficou sem memória nesta música e o motor reiniciou, por isso a música perdeu-se. Escolher um conjunto de modelos mais pequeno em Definições → Modelos ou uma música mais curta, e fechar o que mais estiver a usar a placa; uma placa abaixo do conjunto mais pequeno não consegue fazer músicas.',
+  lost_vram_retried: 'A placa gráfica ficou sem memória nesta música, e de novo quando foi feita com uma cache KV de {n}. Escolher um conjunto de modelos mais pequeno ou uma música mais curta, e fechar o que mais estiver a usar a placa.',
+  lost_ram: 'O computador ficou sem memória (RAM) nesta música e o motor reiniciou, por isso a música perdeu-se. Fechar outros programas que ocupem memória, ou escolher um conjunto de modelos mais pequeno em Definições → Modelos ou uma música mais curta.',
+  lost_device: 'A placa gráfica falhou durante esta música ({detail}) e o motor reiniciou, por isso a música perdeu-se. O registo do motor está em Definições → Motor local.',
+  lost_device_silent: 'A placa gráfica falhou durante esta música (um erro de CUDA ou do controlador) e o motor reiniciou, por isso a música perdeu-se. O registo do motor está em Definições → Motor local.',
+  lost_at_line: 'O motor parou durante esta música e reiniciou, por isso a música perdeu-se; a última linha foi {line}. O registo do motor está em Definições → Motor local.',
+  lost: 'O motor parou durante esta música e reiniciou, por isso a música perdeu-se. O registo do motor está em Definições → Motor local.',
+  lost_restarted: 'O motor foi reiniciado a partir do estúdio enquanto esta música era feita, por isso a música foi parada. Fazer de novo.',
+  lost_exited: 'O motor falhou durante esta música ({meaning}código de saída {exit}) e reiniciou, por isso a música perdeu-se. O registo do motor está em Definições → Motor local.',
+  lost_exited_at_line: 'O motor falhou durante esta música ({meaning}código de saída {exit}) e reiniciou, por isso a música perdeu-se; a última linha foi {line}. O registo do motor está em Definições → Motor local.',
+  lost_port_set: 'O motor não conseguiu escutar na porta {port}, definida por YUE_ENGINE_PORT, por isso a música perdeu-se: outro programa está a usá-la. Fechar esse programa ou definir outra porta.',
+  lost_port_taken: 'O motor não conseguiu escutar na porta {port}, por isso a música perdeu-se: outro programa ocupou a porta depois de o estúdio a escolher. Reiniciar o estúdio: escolhe uma porta livre ao arrancar.',
+  lost_illegal_instruction: 'O motor parou durante esta música numa instrução que este processador não tem (código de saída {exit}) e reiniciou, por isso a música perdeu-se. Comunicar o problema com o registo do motor de Definições → Motor local.',
+  load_vram: 'A placa gráfica ficou sem memória enquanto o motor carregava os modelos. Escolher uma quantização mais pequena em Definições → Modelos, ou fechar o que mais estiver a usar a placa — o assistente de escrita ocupa vários gigabytes.',
+  load_ram: 'O computador ficou sem memória (RAM) enquanto o motor carregava os modelos. Fechar outros programas que ocupem memória, ou escolher uma quantização mais pequena em Definições → Modelos.',
+  engine_fatal: 'O motor parou esta música: {line}',
+  engine_failed: 'O motor parou esta música; o motivo está no registo em Definições → Motor local.',
+  engine_unreachable: 'O motor deixou de responder sobre esta música: {detail}',
+  import_failed: 'O motor terminou a música, mas o estúdio não a conseguiu passar para a biblioteca: {detail}',
+  adapter_missing: 'A LoRA {name} não está instalada; adicioná-la de novo na página LoRA.',
+  vocals_only_no_separator: '«Só a voz» precisa do separador de pistas: instalá-lo nas Ferramentas do estúdio.',
+  separator_unavailable: 'O separador de pistas não consegue correr neste computador: {detail}',
+  engine_refused: 'O motor não aceitou esta música: {detail}',
+  context_short: 'O estilo, a letra e a partitura ocupam {tokens} dos {context} tokens do modelo, por isso esta música pode durar {can_last} s, e foram pedidos {asked} s. Encurtar a música ou a letra.',
+  score_unsingable: 'A partitura que o modelo escreveu para a música {song} não pode ser cantada ({problem}). Tirar outra semente.',
+  score_unsingable_adapters: 'A partitura que o modelo escreveu para a música {song} não pode ser cantada ({problem}). Isto acontece com LoRAs acima dos seus limites na metade da partitura: baixar a força delas ou tirar outra semente.',
+  score_unsingable_strength: 'A partitura não pôde ser escrita: a força da LoRA na Composição é {strength}. Experimentar 1.0.',
+  not_audio: 'A placa gráfica calculou nesta música algo que não é som ({line}), por isso o motor parou-a em vez de gravar silêncio. Fazer a música de novo: uma nova tentativa costuma sair bem.',
+};
+
+const BY_LANGUAGE: Record<Language, ErrorTexts> = { en: EN, ru: RU, zh: ZH, ja: JA, ko: KO, pt: PT };
 
 // What an exit status of the engine means, by the service's key (song_errors.rs `EXIT_MEANINGS`), written before
 // "exit code" in the templates; `none` is a status without a meaning.
@@ -218,6 +256,7 @@ const EXIT_MEANINGS: Record<Language, Record<string, string>> = {
     out_of_memory: '컴퓨터 메모리 부족, ',
     none: '',
   },
+  pt: ptExitMeanings,
 };
 
 /** A failed song as the service sent it: its English text and, when the reason has a kind, a code with fields. */

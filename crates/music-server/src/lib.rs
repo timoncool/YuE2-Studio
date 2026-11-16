@@ -25,6 +25,7 @@ mod downloads;
 mod install_record;
 mod pin_sha;
 mod engine_runtime;
+mod engine_start_backoff;
 mod lyrics_db;
 mod mcp;
 mod lyrics_sync;
@@ -48,6 +49,11 @@ mod score;
 mod sizes;
 pub mod net;
 mod saving;
+mod export;
+mod song_midi;
+mod ableton;
+mod ableton_project;
+mod model_storage;
 mod skins;
 pub use saving::{set_save_dialog, SaveDialog};
 mod skill;
@@ -60,6 +66,7 @@ mod song_errors;
 mod retired;
 mod update_screen;
 mod acpp;
+mod agent_use;
 
 use song_errors::SongError;
 
@@ -159,6 +166,9 @@ struct AppState {
     separation_run: Arc<RwLock<Option<SeparationRun>>>,
     /// Songs made again after the card ran out of memory, by job, with the KV cache they were made again with.
     memory_retries: Arc<RwLock<HashMap<String, u32>>>,
+    /// Tracks of a lost attempt that went to the library while it ran, by the job that makes the songs again: that job
+    /// makes those tracks once more and leaves them out, so none is in the library twice.
+    tracks_kept: Arc<RwLock<HashMap<String, usize>>>,
     /// The KV cache the running engine was started with, and the one each job was sent to: a song lost to the card's
     /// memory steps down from the cache it was made with, not from one another lost song already stepped to.
     running_max_seq: Arc<RwLock<u32>>,
@@ -552,7 +562,13 @@ const NAR_CHUNK_STEP: u32 = 256;
 /// models loaded": the peak less the card's background and the stage's cache, measured on the card.
 const SET_RESIDENT_GIB: &[(&str, bool, f64)] = &[("Q8_0", false, 2.8), ("BF16", false, 4.6), ("Q8_0", true, 6.6), ("BF16", true, 9.6)];
 /// What the tracks of a request leave free on the card, for the driver and the peaks between two readings.
+/// Times the engine writes a song's score again from another seed when the one it wrote cannot be sung; it stops at
+/// eight, and its own default is two.
+const SCORE_REDRAWS: u64 = 5;
 const TRACKS_RESERVE_GIB: f64 = 1.0;
+/// What a card keeps free beside models that stay loaded: the desktop and a browser take from the same memory after
+/// the engine has started, and a card filled to the brim computes through the system's memory, many times slower.
+const KEEP_HEADROOM_GIB: f64 = 2.5;
 
 /// Songs the studio was closed on are started again, oldest first. The old
 /// job stays as `cancelled`, its message naming the job that took its place.
@@ -592,8 +608,15 @@ async fn resume_unfinished_jobs(state: AppState) {
         return;
     }
     for old in cut_off {
+        // tracks the cut-off job handed over while it ran are in the library: the job made again leaves them out
+        let kept = state.library.songs_of_music_job(&old.id);
+        let asked = tracks_asked(old.request.get("replay").unwrap_or(&old.request));
         let (resumed_as, message) = if old.attempt >= MAX_RESUMES {
             (None, format!("Cut off when the studio closed, and already started again {MAX_RESUMES} times; make it again by hand."))
+        } else if let Err(error) = &kept {
+            (None, format!("Cut off when the studio closed; the songs it had finished could not be counted, so it was not started again: {error:#}"))
+        } else if kept.as_ref().is_ok_and(|kept| *kept >= asked) {
+            (None, "Cut off when the studio closed; its songs were all in the library by then.".to_string())
         } else if let Some(replay) = old.request.get("replay") {
             match serde_json::from_value::<ReplayMusicJobRequest>(replay.clone()) {
                 Err(error) => (None, format!("Cut off when the studio closed; its request could not be read to start it again: {error}")),
@@ -619,6 +642,11 @@ async fn resume_unfinished_jobs(state: AppState) {
                 }
             }
         };
+        if let (Some(again), Ok(kept)) = (&resumed_as, &kept) {
+            if *kept > 0 {
+                state.tracks_kept.write().await.insert(again.clone(), *kept);
+            }
+        }
         if let Err(error) = state.library.cancel_cut_off_music_job(&old.id, resumed_as.as_deref(), &message) {
             eprintln!("[ERROR] a cut-off song could not be marked: {error:#}");
         }
@@ -670,6 +698,9 @@ struct EngineSubmitResponse {
 #[derive(Debug, Deserialize)]
 struct EngineJobResponse {
     status: String,
+    /// The tracks of a running job that are finished and can be fetched one by one; an engine before 4.1 names none.
+    #[serde(default)]
+    tracks_ready: usize,
 }
 
 struct EngineResultResponse {
@@ -844,18 +875,17 @@ enum KeepLoaded {
     No,
 }
 
-/// The saved switch of earlier settings reads as a choice: on is Yes, off is Auto.
+/// The saved switch of earlier settings reads as Auto either way: on, it kept the models on a card of any size.
 impl<'de> Deserialize<'de> for KeepLoaded {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         #[derive(Deserialize)]
         #[serde(untagged)]
         enum Saved {
-            Switch(bool),
+            Switch(#[allow(dead_code)] bool),
             Choice(String),
         }
         Ok(match Saved::deserialize(deserializer)? {
-            Saved::Switch(true) => KeepLoaded::Yes,
-            Saved::Switch(false) => KeepLoaded::Auto,
+            Saved::Switch(_) => KeepLoaded::Auto,
             Saved::Choice(word) => match word.as_str() {
                 "yes" => KeepLoaded::Yes,
                 "no" => KeepLoaded::No,
@@ -888,7 +918,7 @@ fn keep_decision(choice: KeepLoaded, on_card: bool, resident_gib: Option<f64>, k
         KeepLoaded::Auto => {
             let Some(resident) = resident_gib else { return decided(false, "unmeasured", None) };
             let Some(free) = free_gib else { return decided(false, "free_unknown", None) };
-            let need = resident + kv_gib * f64::from(tracks.max(1)) + TRACKS_RESERVE_GIB;
+            let need = resident + kv_gib * f64::from(tracks.max(1)) + TRACKS_RESERVE_GIB + KEEP_HEADROOM_GIB;
             if need <= free { decided(true, "fits", Some(need)) } else { decided(false, "does_not_fit", Some(need)) }
         }
     }
@@ -1219,7 +1249,7 @@ impl EngineOptions {
 /// restart would report a start that never becomes healthy - so it is refused
 /// while it is still a form field rather than a broken engine.
 fn studio_owned_flag(arguments: &[String]) -> Option<&str> {
-    const OWNED: [&str; 7] = ["--host", "--port", "--model", "--vae", "--companion", "--transcriber", "--adapters"];
+    const OWNED: [&str; 8] = ["--host", "--port", "--model", "--vae", "--vae-decoder", "--companion", "--transcriber", "--adapters"];
     arguments.iter().find_map(|argument| {
         let name = argument.split('=').next().unwrap_or(argument);
         OWNED.contains(&name).then_some(name)
@@ -1362,10 +1392,16 @@ struct OpenRouterResponse {
 /// in-process, so a release is a single executable rather than a launcher that
 /// has to start a second binary and keep it alive.
 pub async fn serve() -> anyhow::Result<()> {
+    music_core::process::runtime_libraries_from(engine_bundle_root());
+    let _ = SERVICE_RUNTIME.set(tokio::runtime::Handle::current());
     match studio_data_root() {
         Some(root) => {
             studio_log::log_to_file(&root);
             std::thread::spawn(move || install_record::sweep_aside(&root));
+            std::thread::spawn(export::sweep);
+            if let Some(root) = studio_data_root() {
+                std::thread::spawn(move || model_storage::sweep(&root));
+            }
         }
         None => studio_log!("[ERROR] the studio has no data folder; its log goes to the console only"),
     }
@@ -1439,6 +1475,7 @@ pub async fn serve() -> anyhow::Result<()> {
         acpp: acpp.clone(),
         separation_run: Arc::new(RwLock::new(None)),
         memory_retries: Arc::new(RwLock::new(HashMap::new())),
+        tracks_kept: Arc::new(RwLock::new(HashMap::new())),
         running_max_seq: Arc::new(RwLock::new(MODEL_CONTEXT)),
         job_max_seq: Arc::new(RwLock::new(HashMap::new())),
         kv_cache_running: Arc::new(RwLock::new(None)),
@@ -1663,6 +1700,8 @@ pub async fn serve() -> anyhow::Result<()> {
         .route("/v1/midi/transcribe", post(start_midi))
         .route("/v1/library/songs/{id}/midi", get(read_song_midi).put(write_song_midi).delete(delete_song_midi))
         .route("/v1/library/songs/{id}/midi/file", get(song_midi_file))
+        .route("/v1/library/songs/{id}/midi/parts", get(song_midi::list))
+        .route("/v1/library/songs/{id}/midi/parts/{part}", get(song_midi::file).post(song_midi::write))
         .route("/v1/training/datasets/{id}/items/{item}/files", get(dataset_song_files))
         .route("/v1/training/prepare/cancel", post(prepare::cancel))
         .route("/v1/training/datasets/{id}/take-as-is", post(prepare::take_as_is))
@@ -1692,6 +1731,16 @@ pub async fn serve() -> anyhow::Result<()> {
         .route("/v1/activity", get(read_activity))
         .route("/v1/cover-templates", get(read_cover_templates).put(write_cover_templates))
         .route("/v1/library/file-tags", get(read_file_tags).put(write_file_tags))
+        .route("/v1/storage", get(model_storage::status).put(model_storage::change))
+        .route("/v1/storage/pick", post(model_storage::pick))
+        .route("/v1/storage/cancel", post(model_storage::cancel))
+        .route("/v1/exports", post(export::start))
+        .route("/v1/exports/{id}", get(export::status).delete(export::forget))
+        .route("/v1/exports/{id}/cancel", post(export::cancel))
+        .route("/v1/exports/{id}/file", get(export::file))
+        .route("/v1/exports/live", post(ableton_project::start))
+        .route("/v1/exports/live/{id}", axum::routing::delete(ableton_project::forget))
+        .route("/v1/exports/live/{id}/file", get(ableton_project::file))
         .route("/v1/cover-templates/render", post(render_cover_template))
         .route("/v1/openrouter/completions", post(create_openrouter_completion))
         .route("/v1/library/songs", get(library_songs).post(create_library_song))
@@ -1723,6 +1772,7 @@ pub async fn serve() -> anyhow::Result<()> {
         .route("/setup/adopt", post(setup_adopt))
         .route("/v1/open-data-directory", post(open_data_directory))
         .route("/setup/select", post(setup_select))
+        .route("/setup/preset", post(setup_preset))
         .route("/setup/own-model", get(own_model_status).put(own_model_select))
         .route("/setup/own-model/reveal", post(own_model_reveal))
         .route("/setup/own-model/cancel", post(own_model_cancel))
@@ -1768,6 +1818,8 @@ pub async fn serve() -> anyhow::Result<()> {
         .route("/mcp/window/result", post(mcp::window_result))
         .route("/mcp/window/focus", post(mcp::window_focus))
         .fallback(remote::interface)
+        // inside the guard: a request it refused is nobody's use
+        .layer(axum::middleware::from_fn(agent_use::track))
         .layer(axum::middleware::from_fn(remote::guard))
         // Everything here is live state or a local file: nothing is worth a
         // browser cache, and Chrome holds a second request for a URL until a
@@ -1798,18 +1850,35 @@ pub async fn serve() -> anyhow::Result<()> {
             // a startup that is failing, and repeating "stopped answering" every
             // two seconds is what filled a whole log with one sentence.
             let mut was_running = false;
+            // Bound retries for persistent startup failures regardless of backend.
+            // A user-initiated /engine/restart remains independent of this loop.
+            let mut start_backoff = engine_start_backoff::EngineStartBackoff::default();
             loop {
                 let ready = state.model_manager.status(effective_install_target(&state).await).await.ready;
                 // an engine inside a long step does not answer /health in time; while it is still a
                 // running process with a job on it, it is at work, not gone
                 let running = state.music_server.health().await || engine_at_work(&state).await;
+                // A changed runtime or model selection can resolve a prior failure.
+                let retry_key = (
+                    state.engine_options.read().await.clone(),
+                    state.selected_profile_id.read().await.clone(),
+                    state.selected_component_ids.read().await.clone(),
+                    state.own_backbone.read().await.clone(),
+                );
+                start_backoff.observe(&retry_key);
+                if running {
+                    start_backoff.reset_failures();
+                }
                 // the card has one owner: a preparation or a training run
                 // holding it is left alone, and the engine comes back after
                 let preparing = state.prepare.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).as_ref().is_some_and(|job| !job.finished);
                 let card_taken = preparing || state.training.active_run().await.is_some();
                 // a restart under way elsewhere is left alone
                 let quiet = state.engine_use.try_write().ok();
-                if ready && !running && !card_taken && quiet.is_some() && !state.music_server.health().await {
+                if ready && !running && !card_taken && quiet.is_some()
+                    && start_backoff.allow(std::time::Instant::now())
+                    && !state.music_server.health().await
+                {
                     if was_running {
                         // It was answering and now it is not: the one line that
                         // explains a log which suddenly starts again from
@@ -1829,7 +1898,22 @@ pub async fn serve() -> anyhow::Result<()> {
                         }
                     }
                     let started = start_engine_again(&state).await;
+                    let retry = start_backoff.finish(std::time::Instant::now(), started.is_ok());
                     *state.engine_start_error.write().await = started.as_ref().err().cloned();
+                    match retry {
+                        engine_start_backoff::RetryOutcome::Success => {}
+                        engine_start_backoff::RetryOutcome::Wait(delay) => {
+                            music_engine::yue_server::note_in_log(&format!(
+                                "engine start failed; next automatic retry in {} seconds",
+                                delay.as_secs()
+                            ));
+                        }
+                        engine_start_backoff::RetryOutcome::Suspended => {
+                            music_engine::yue_server::note_in_log(
+                                "engine start failed repeatedly; it is now tried every five minutes, and at once when engine settings or the selected models change. Restart in Settings tries now."
+                            );
+                        }
+                    }
                     // Said and counted once per failure, not once every few
                     // seconds: a card with too little memory would otherwise
                     // fill the log, and the hub would count the time it lay down.
@@ -5619,7 +5703,8 @@ async fn update_engine_options(
     let _ = persist_studio_settings(&state).await;
 
     let mut restarted = false;
-    if changed && state.music_server.health().await {
+    // a song being made is not interrupted for a saved option: the value reaches the engine at its next start
+    if changed && !engine_at_work(&state).await && state.music_server.health().await {
         let _restart = state.engine_use.write().await;
         restart_engine(&state).await.map_err(|error| api_error(StatusCode::SERVICE_UNAVAILABLE, error))?;
         restarted = true;
@@ -5639,7 +5724,7 @@ async fn reset_fitted_max_seq(State(state): State<AppState>) -> Result<Json<Valu
     let removed = state.engine_options.write().await.fitted_max_seq.remove(&key).is_some();
     persist_studio_settings(&state).await.map_err(|error| api_error(StatusCode::INTERNAL_SERVER_ERROR, format!("the settings could not be saved: {error}")))?;
     let mut restarted = false;
-    if removed && state.music_server.health().await {
+    if removed && !engine_at_work(&state).await && state.music_server.health().await {
         let _restart = state.engine_use.write().await;
         restart_engine(&state).await.map_err(|error| api_error(StatusCode::SERVICE_UNAVAILABLE, error))?;
         restarted = true;
@@ -5648,6 +5733,10 @@ async fn reset_fitted_max_seq(State(state): State<AppState>) -> Result<Json<Valu
 }
 
 async fn restart_local_engine(State(state): State<AppState>) -> Result<Json<Value>, (StatusCode, Json<ApiError>)> {
+    // the button is obeyed; the song it ends is named in the log beside its last line
+    if engine_at_work(&state).await {
+        music_engine::yue_server::note_in_log(&format!("{RESTARTED_UNDER_A_SONG}; that song is lost"));
+    }
     let _restart = state.engine_use.write().await;
     restart_engine(&state).await.map_err(|error| api_error(StatusCode::SERVICE_UNAVAILABLE, error))?;
     Ok(Json(serde_json::json!({ "engine_id": PRIMARY_MUSIC_ENGINE_ID, "restarted": true })))
@@ -5679,6 +5768,20 @@ async fn pick_engine_executable() -> Result<Json<Value>, (StatusCode, Json<ApiEr
 async fn engine_at_work(state: &AppState) -> bool {
     let working = state.jobs.read().await.values().any(|job| matches!(job.status, MusicJobStatus::Running));
     working && state.engine.lock().await.as_mut().is_some_and(|engine| engine.process_alive())
+}
+
+/// Stops what holds the model files open - the engine this studio started and the writing assistant - so the files
+/// can be moved. Answers whether an engine was running, for the caller to start it again; the caller holds
+/// `engine_use`, so nothing starts one meanwhile.
+async fn stop_engine_for_files(state: &AppState) -> bool {
+    state.assistant_runtime.stop().await;
+    let mut supervisor = state.engine.lock().await;
+    let Some(engine) = supervisor.as_mut() else { return false };
+    let was_up = engine.process_alive();
+    if let Err(error) = tokio::task::block_in_place(|| engine.stop(std::time::Duration::from_secs(10))) {
+        studio_log!("[ERROR] the engine did not stop before its files were moved: {error}");
+    }
+    was_up
 }
 
 /// Starts the engine again with the saved options; an engine that does not start is counted for the hub by a reason
@@ -5852,6 +5955,9 @@ async fn start_engine_again(state: &AppState) -> Result<(), String> {
                 }
                 *supervisor = Some(engine);
                 *state.active_device.write().await = Some(device);
+                if let (Some(hub), Some(name)) = (&state.hub, hub_device(device)) {
+                    hub.computes_on(name);
+                }
                 if options.backend == music_engine::yue_server::ComputeBackend::Auto {
                     music_engine::yue_server::note_in_log(&format!("computing on {}", device_name(device)));
                 }
@@ -5922,6 +6028,17 @@ fn device_name(device: music_engine::yue_server::ComputeBackend) -> &'static str
     }
 }
 
+/// The device as the hub's report names backends; none for a choice that is not a device.
+fn hub_device(device: music_engine::yue_server::ComputeBackend) -> Option<&'static str> {
+    use music_engine::yue_server::ComputeBackend;
+    match device {
+        ComputeBackend::Auto => None,
+        ComputeBackend::Cuda => Some("cuda"),
+        ComputeBackend::Vulkan => Some("vulkan"),
+        ComputeBackend::Cpu => Some("cpu"),
+    }
+}
+
 /// The engine log since the last start, where the reason a run ended is.
 fn last_run_log() -> String {
     let tail = music_engine::yue_server::startup_log_tail(400);
@@ -5957,11 +6074,17 @@ fn previous_run(tail: &[String]) -> String {
     }
 }
 
+/// What the studio writes into the engine's log when the person restarts the engine under a song: the song lost
+/// with that engine was stopped by them, and is told and counted so.
+const RESTARTED_UNDER_A_SONG: &str = "the engine was restarted from the window while a song was being made";
+
 /// Why a song was lost with an engine that restarted during it, from the log
 /// of the run that ended.
 fn lost_job_reason(log: &str) -> SongError {
     let lowered = log.to_lowercase();
-    if describes_exhausted_memory(&lowered) {
+    if lowered.contains(RESTARTED_UNDER_A_SONG) {
+        SongError::LostRestarted
+    } else if describes_exhausted_memory(&lowered) {
         SongError::LostVram
     } else if describes_exhausted_ram(&lowered) {
         SongError::LostRam
@@ -6202,6 +6325,7 @@ async fn set_engine_models(state: &AppState) -> Result<music_engine::yue_server:
     Ok(music_engine::yue_server::YueModelFiles {
         backbone: root.join(&files.backbone),
         vae: root.join(&files.vae),
+        vae_decoder: files.vae_decoder.map(|name| root.join(name)),
         transcriber: files.transcriber.map(|name| root.join(name)),
         adapters: Some(adapters),
         companion: root.join(&files.companion),
@@ -6238,36 +6362,44 @@ fn own_model_files(folder: &std::path::Path) -> Vec<(String, u64)> {
 /// when the files it serves are not the ones now selected; an engine that is
 /// not running is left to the supervisor loop.
 async fn reload_engine_if_models_changed(state: &AppState) {
-    let Ok(wanted) = selected_engine_models(state).await else { return };
-    let current = {
-        let supervisor = state.engine.lock().await;
-        supervisor.as_ref().map(|engine| engine.config().models.clone())
-    };
-    let Some(current) = current else { return };
-    let same = |a: &std::path::Path, b: &std::path::Path| {
-        fs::canonicalize(a).ok().zip(fs::canonicalize(b).ok()).is_some_and(|(a, b)| a == b)
-    };
-    let unchanged = same(&current.backbone, &wanted.backbone)
-        && same(&current.vae, &wanted.vae)
-        && match (&current.transcriber, &wanted.transcriber) {
-            (Some(a), Some(b)) => same(a, b),
-            (None, None) => true,
-            _ => false,
-        }
-        && match (&current.adapters, &wanted.adapters) {
-            (Some(a), Some(b)) => same(a, b),
-            (None, None) => true,
-            _ => false,
-        };
-    if unchanged {
+    if engine_serves_selection(state).await != Some(false) {
         return;
     }
     let _restart = state.engine_use.write().await;
     wait_for_sent_songs(state).await;
+    // two changes made together ask for this at once: the second finds the engine already on the selection
+    if engine_serves_selection(state).await != Some(false) {
+        return;
+    }
     music_engine::yue_server::note_in_log("the selected model set changed; restarting the engine on it");
     if let Err(error) = restart_engine(state).await {
         eprintln!("the engine did not restart on the new model set: {error}");
     }
+}
+
+/// Whether the running engine serves the files now selected; none when no engine runs or the selection cannot be
+/// read.
+async fn engine_serves_selection(state: &AppState) -> Option<bool> {
+    let wanted = selected_engine_models(state).await.ok()?;
+    let current = {
+        let supervisor = state.engine.lock().await;
+        supervisor.as_ref().map(|engine| engine.config().models.clone())
+    }?;
+    let same = |a: &std::path::Path, b: &std::path::Path| {
+        fs::canonicalize(a).ok().zip(fs::canonicalize(b).ok()).is_some_and(|(a, b)| a == b)
+    };
+    let same_or_none = |a: &Option<PathBuf>, b: &Option<PathBuf>| match (a, b) {
+        (Some(a), Some(b)) => same(a, b),
+        (None, None) => true,
+        _ => false,
+    };
+    Some(
+        same(&current.backbone, &wanted.backbone)
+            && same(&current.vae, &wanted.vae)
+            && same_or_none(&current.vae_decoder, &wanted.vae_decoder)
+            && same_or_none(&current.transcriber, &wanted.transcriber)
+            && same_or_none(&current.adapters, &wanted.adapters),
+    )
 }
 
 /// Waits until the studio has taken every song it sent the engine: a restart
@@ -6600,6 +6732,26 @@ pub fn stop_engine() {
     }
 }
 
+/// The runtime the service runs on, for the shell's questions asked from a thread of its own.
+static SERVICE_RUNTIME: std::sync::OnceLock<tokio::runtime::Handle> = std::sync::OnceLock::new();
+
+/// How long ago an agent last used the studio - over MCP or its API, anything but the studio's
+/// own window - for the desktop shell, which stops a studio it started for an agent once nobody
+/// uses it. None while no agent has called since the service started.
+pub fn agent_quiet_for() -> Option<std::time::Duration> {
+    agent_use::quiet_for()
+}
+
+/// What the service in this process is still doing - songs, covers and karaoke, stems, MIDI,
+/// processing, restoring, a dataset's preparation, training, a download - for the desktop
+/// shell's idle stop. None when it could not say within `wait`, which is never idle. A studio
+/// whose service runs elsewhere, or failed to start, has nothing of its own at work. Asked from
+/// a thread of the shell's own: blocking on the service's runtime from inside it would panic.
+pub fn work_in_progress(wait: std::time::Duration) -> Option<Vec<&'static str>> {
+    let Some(runtime) = SERVICE_RUNTIME.get() else { return Some(Vec::new()) };
+    runtime.block_on(async { tokio::time::timeout(wait, mcp::at_work()).await.ok().flatten() })
+}
+
 pub(crate) fn studio_version() -> &'static str {
     STUDIO_VERSION.get().map(String::as_str).unwrap_or(env!("CARGO_PKG_VERSION"))
 }
@@ -6612,6 +6764,7 @@ fn hub_gpu(vendor: &str, vram_gb: f64, backend: &str, compute: Option<(u32, u32)
         vram_gb: studio_hub_client::Gpu::vram_bucket((vram_gb * 1_073_741_824.0) as u64),
         backend: backend.into(),
         compute: compute.filter(|_| vendor == "nvidia").and_then(|(major, minor)| studio_hub_client::Gpu::compute_capability(major, minor)),
+        active: None,
     }
 }
 
@@ -6796,6 +6949,12 @@ async fn compose_setup_status(state: &AppState, manager_status: model_manager::M
             Value::Bool(state.music_server.health().await),
         );
         fields.insert("engine_error".into(), serde_json::to_value(state.engine_start_error.read().await.clone()).unwrap_or(Value::Null));
+        // a card is there, yet the engine ended up on the processor: Auto went down its devices one by one
+        let fell = *state.active_device.read().await == Some(music_engine::yue_server::ComputeBackend::Cpu)
+            && state.engine_options.read().await.backend == music_engine::yue_server::ComputeBackend::Auto
+            && !hardware::hardware().on_processor;
+        fields.insert("engine_on_processor".into(), Value::Bool(fell));
+        fields.insert("preset".into(), if preset_in_use(state).await { Value::from("ruach") } else { Value::Null });
         fields.insert("engine_id".into(), Value::String(PRIMARY_MUSIC_ENGINE_ID.into()));
         fields.insert("trash_days".into(), Value::from(TRASH_DAYS));
         // whether the files a person downloads by hand are better taken from the mirror, as the studio's are
@@ -8241,7 +8400,7 @@ async fn assistant_write_stream(
             Ok(response) => response,
             Err(error) => {
                 request_log::failed("assistant", &model, &error.to_string());
-                emit(sender.clone(), serde_json::json!({ "error": format!("the assistant is unreachable: {error}") })).await;
+                emit(sender.clone(), serde_json::json!({ "error": format!("the assistant is unreachable: {error}. Its address and model are set in Settings - Models - Writing assistant") })).await;
                 return;
             }
         };
@@ -9456,6 +9615,77 @@ async fn setup_select(
     Ok(Json(serde_json::to_value(compose_setup_status(&state, manager_status).await).unwrap_or(Value::Null)))
 }
 
+#[derive(Debug, Deserialize)]
+struct SetupPresetRequest {
+    id: String,
+}
+
+/// Whether the studio runs as the Ruach Studio preset sets it: their decoder in the chosen set and their fine-tune,
+/// in either quantisation, singing in place of the set's model.
+async fn preset_in_use(state: &AppState) -> bool {
+    let decoder = state.selected_component_ids.read().await.as_ref().is_some_and(|ids| ids.iter().any(|id| id == model_manager::PRESET_DECODER));
+    let own = state.own_backbone.read().await.clone();
+    decoder
+        && own.is_some_and(|file| {
+            community::catalog().iter().any(|model| model.id == model_manager::PRESET_MODEL && model.files.iter().any(|entry| entry.asset.relative_path == file))
+        })
+}
+
+/// POST /setup/preset - a way of the studio others made, in one step. `ruach`: Ruach Studio's fine-tune sings in
+/// place of the set's model and their decoder turns the song into sound; the set chosen now keeps its other parts.
+/// What is not on disk is downloaded, and the engine starts on each part as it arrives.
+async fn setup_preset(State(state): State<AppState>, Json(request): Json<SetupPresetRequest>) -> Result<Json<Value>, (StatusCode, Json<ApiError>)> {
+    if request.id != "ruach" {
+        return Err(api_error(StatusCode::BAD_REQUEST, format!("unknown preset {}: ruach is the one there is", request.id)));
+    }
+    let picked = state.selected_component_ids.read().await.clone();
+    let profile = state.selected_profile_id.read().await.clone();
+    let base = match (picked, profile) {
+        (Some(ids), _) => ids,
+        (None, Some(profile)) => model_manager::profile_components(&profile),
+        (None, None) => return Err(api_error(StatusCode::CONFLICT, "no model set is selected; choose one in Settings - Models first".into())),
+    };
+    let ids = model_manager::with_decoder(&base, model_manager::PRESET_DECODER);
+    state.model_manager.installed_component_files(&ids).map_err(|error| api_error(StatusCode::CONFLICT, error.to_string()))?;
+    // nothing is changed while a download is under way: the preset is taken whole or not at all
+    let set_downloading = state.model_manager.status(None).await.active.is_some_and(|job| matches!(job.status, model_manager::DownloadStatus::Downloading));
+    if set_downloading || state.community_downloads.active().await.is_some_and(|progress| !progress.done) {
+        return Err(api_error(StatusCode::CONFLICT, "a model is downloading; wait for it or cancel it, then choose the preset".into()));
+    }
+    // the fine-tune first: it is the step that can be refused, and nothing else has changed yet
+    let _ = own_model_select(State(state.clone()), Json(OwnModelRequest { file: None, community: Some(model_manager::PRESET_MODEL.into()), quant: None })).await?;
+    let before = (state.selected_profile_id.read().await.clone(), state.selected_component_ids.read().await.clone());
+    *state.selected_profile_id.write().await = None;
+    *state.selected_component_ids.write().await = Some(ids.clone());
+    let mut applied = persist_studio_settings(&state)
+        .await
+        .map_err(|error| api_error(StatusCode::INTERNAL_SERVER_ERROR, format!("the choice was not saved: {error:#}")));
+    if applied.is_ok() && state.model_manager.decoder_to_fetch(None, Some(&ids)).is_some() {
+        applied = state
+            .model_manager
+            .install(model_manager::InstallRequest { profile_id: None, component_ids: ids })
+            .await
+            .map(|_| ())
+            .map_err(|error| api_error(StatusCode::CONFLICT, error.to_string()));
+    }
+    if let Err(refused) = applied {
+        // the set goes back as it was: the decoder is taken with the set or not at all
+        *state.selected_profile_id.write().await = before.0;
+        *state.selected_component_ids.write().await = before.1;
+        if let Err(error) = persist_studio_settings(&state).await {
+            studio_log!("[ERROR] the set chosen before the preset was not saved back: {error:#}");
+        }
+        return Err(refused);
+    }
+    {
+        let state = state.clone();
+        tokio::spawn(async move { reload_engine_if_models_changed(&state).await });
+    }
+    let target = effective_install_target(&state).await;
+    let manager_status = state.model_manager.status(target).await;
+    Ok(Json(serde_json::to_value(compose_setup_status(&state, manager_status).await).unwrap_or(Value::Null)))
+}
+
 /// The person's own YuE2 files in `models/yue2-cpp/own`, the one chosen, and whether that one is still there; the
 /// community models with each file's size, whether it is downloaded and how much an unfinished download of it left on
 /// disk, the quantisation the card takes, and the download under way.
@@ -9655,7 +9885,7 @@ fn update_catalogue(part: update_screen::Part) -> Vec<&'static downloads::Asset>
         Part::Training => training::pack().iter().collect(),
         Part::Listening => training::listen_pack().iter().collect(),
         Part::Audiocpp => acpp::BUILDS.into_iter().flat_map(acpp::assets).collect(),
-        Part::Assistant => Vec::new(),
+        Part::Assistant | Part::Models => Vec::new(),
     };
     let mut seen = std::collections::HashSet::new();
     assets.retain(|asset| seen.insert(asset.id));
@@ -9673,7 +9903,7 @@ fn update_downloader(state: &AppState, part: update_screen::Part) -> Option<(&do
         Part::Training => Some((state.training.downloader(), training::SCOPE)),
         Part::Listening => Some((state.training.downloader(), training::LISTEN_SCOPE)),
         Part::Audiocpp => Some((state.acpp.downloader(), "audiocpp")),
-        Part::Assistant => None,
+        Part::Assistant | Part::Models => None,
     }
 }
 
@@ -9718,7 +9948,13 @@ fn update_acpp_builds(
 
 /// This release's plan against the disk. It downloads and removes nothing; a file already today's pin byte for byte
 /// gets its install record on the way, as every status read writes it.
-fn update_plan_now(state: &AppState, separation: lyrics_sync::OnnxFlavour, options: &EngineOptions, karaoke: &lyrics_sync::LyricsSyncConfig) -> update_screen::Plan {
+fn update_plan_now(
+    state: &AppState,
+    separation: lyrics_sync::OnnxFlavour,
+    options: &EngineOptions,
+    karaoke: &lyrics_sync::LyricsSyncConfig,
+    decoder: Option<model_manager::MissingDecoder>,
+) -> update_screen::Plan {
     use update_screen::{Candidate, Part};
     let of = |part: Part, asset: &'static downloads::Asset, downloader: &downloads::Downloader, earlier: Option<String>| Candidate {
         part,
@@ -9726,7 +9962,7 @@ fn update_plan_now(state: &AppState, separation: lyrics_sync::OnnxFlavour, optio
         label: asset.label,
         model: asset.kind == downloads::AssetKind::Model,
         relative_path: asset.relative_path,
-        url: asset.url,
+        url: asset.url.to_string(),
         bytes: asset.bytes,
         downloaded: downloader.partial_bytes(asset),
         earlier,
@@ -9749,7 +9985,7 @@ fn update_plan_now(state: &AppState, separation: lyrics_sync::OnnxFlavour, optio
                 label: asset.label,
                 model: asset.kind == assistant_runtime::AssetKind::Model,
                 relative_path: asset.relative_path,
-                url: asset.url,
+                url: asset.url.to_string(),
                 bytes: asset.bytes,
                 downloaded: assistant.partial_bytes(asset),
                 earlier,
@@ -9759,6 +9995,20 @@ fn update_plan_now(state: &AppState, separation: lyrics_sync::OnnxFlavour, optio
     let data_root = update_data_root(state);
     let leftovers = retired::leftovers(data_root);
     let mut added = Vec::new();
+    // a set installed before its decoder was published decodes with the VAE's own until this arrives
+    if let Some(decoder) = decoder {
+        added.push(Candidate {
+            part: Part::Models,
+            id: decoder.id,
+            label: "YuE2-VAE-RS x3 decoder",
+            model: true,
+            relative_path: decoder.filename,
+            url: decoder.url,
+            bytes: decoder.bytes,
+            downloaded: decoder.partial,
+            earlier: None,
+        });
+    }
     let mut take = |part: Part, asset: &'static downloads::Asset, downloader: &downloads::Downloader| {
         if !downloader.is_installed(asset) && !updated.iter().chain(added.iter()).any(|row: &Candidate| row.id == asset.id) {
             added.push(of(part, asset, downloader, None));
@@ -9791,8 +10041,13 @@ async fn update_plan(state: &AppState) -> Result<update_screen::Plan, (StatusCod
     let separation = state.separation_config.read().await.runtime;
     let options = state.engine_options.read().await.clone();
     let karaoke = state.lyrics_sync_config.read().await.clone();
+    let picked = state.selected_component_ids.read().await.clone();
+    let profile = state.selected_profile_id.read().await.clone();
     let state = state.clone();
-    tokio::task::spawn_blocking(move || update_plan_now(&state, separation, &options, &karaoke))
+    tokio::task::spawn_blocking(move || {
+        let decoder = state.model_manager.decoder_to_fetch(profile.as_deref(), picked.as_deref());
+        update_plan_now(&state, separation, &options, &karaoke, decoder)
+    })
         .await
         .map_err(|error| api_error(StatusCode::INTERNAL_SERVER_ERROR, format!("the update plan was not read: {error}")))
 }
@@ -9802,6 +10057,7 @@ async fn update_job_now(state: &AppState) -> Option<update_screen::Job> {
     let mut job = state.update_job.read().await.clone()?;
     for row in job.rows_mut() {
         let arrived: u64 = match update_downloader(state, row.part) {
+            _ if row.part == update_screen::Part::Models => row.ids.iter().map(|id| state.model_manager.arrived_bytes(id)).sum(),
             Some((downloader, _)) => update_catalogue(row.part)
                 .into_iter()
                 .filter(|asset| row.ids.contains(&asset.id))
@@ -9887,6 +10143,11 @@ async fn run_update(state: &AppState, rows: &[update_screen::Row]) -> anyhow::Re
     for part in parts {
         let ids: Vec<&str> = rows.iter().filter(|row| row.part == part).flat_map(|row| row.ids.iter().copied()).collect();
         match (part, update_downloader(state, part)) {
+            (update_screen::Part::Models, _) => {
+                for id in &ids {
+                    state.model_manager.fetch_optional(id).await?;
+                }
+            }
             (update_screen::Part::Audiocpp, _) => {
                 let assets: Vec<&'static downloads::Asset> = update_catalogue(part).into_iter().filter(|asset| ids.contains(&asset.id)).collect();
                 state.acpp.downloader().install_all("audiocpp", &assets).await?;
@@ -10759,6 +11020,7 @@ fn spawn_job_watcher(state: AppState, job_id: String) {
                 eprintln!("[ERROR] the song's state could not be kept: {error:#}");
             }
         }
+        retry_within_context(&state, &job_id).await;
         retry_after_memory(&state, &job_id).await;
         state.job_max_seq.write().await.remove(&job_id);
     });
@@ -10778,6 +11040,38 @@ fn memory_retry_step(lost_vram: bool, already_retried: bool, card_busy: bool, se
 struct MemoryRetry {
     max_seq: u32,
     lower: bool,
+}
+
+/// The seconds a song can still be carried on by when `extra` were refused: the refusal names the seconds the KV cache
+/// holds (`can_last`) and the least it was asked to hold (`asked`: the song so far and three quarters of `extra`).
+/// `None` when less than two seconds fit.
+fn extension_that_fits(extra: f64, asked: f64, can_last: f64) -> Option<f64> {
+    let so_far = asked - extra * 0.75;
+    let fits = (can_last - 1.0 - so_far).floor();
+    (fits >= 2.0 && fits < extra).then_some(fits)
+}
+
+/// A song carried on further than the KV cache holds is carried on as far as it does: the engine refuses a minimum it
+/// cannot reach (`context_short`), and the song is asked for again with the seconds its refusal left room for.
+async fn retry_within_context(state: &AppState, job_id: &str) {
+    let refusal = state.jobs.read().await.get(job_id).filter(|job| matches!(job.status, MusicJobStatus::Failed) && job.code == Some("context_short")).and_then(|job| {
+        let params = job.params.as_ref()?;
+        Some((params.get("can_last")?.as_f64()?, params.get("asked")?.as_f64()?))
+    });
+    let Some((can_last, asked)) = refusal else { return };
+    let Ok(Some(stored)) = state.library.music_job(job_id) else { return };
+    let Some(mut request) = stored.request.get("replay").and_then(|replay| serde_json::from_value::<ReplayMusicJobRequest>(replay.clone()).ok()) else { return };
+    let Some(extra) = request.extend_seconds else { return };
+    let Some(fits) = extension_that_fits(extra, asked, can_last) else { return };
+    request.extend_seconds = Some(fits);
+    let Ok((_, Json(again))) = submit_replay_job(state.clone(), request, stored.attempt).await else { return };
+    music_engine::yue_server::note_in_log(&format!("the song is carried on by {fits:.0} s where {extra:.0} s were asked for: the KV cache holds no more (job {})", again.id));
+    // the refused attempt gives way to the one made again
+    state.jobs.write().await.remove(job_id);
+    state.job_max_seq.write().await.remove(job_id);
+    if let Err(error) = state.library.forget_music_job(job_id) {
+        eprintln!("[ERROR] the refused attempt could not be forgotten: {error:#}");
+    }
 }
 
 async fn retry_after_memory(state: &AppState, job_id: &str) {
@@ -10841,6 +11135,12 @@ async fn retry_after_memory(state: &AppState, job_id: &str) {
     };
     let Some(again) = again else { return };
     state.memory_retries.write().await.insert(again.clone(), retry.max_seq);
+    // tracks the lost attempt handed over while it ran stay in the library; the attempt made again leaves them out
+    let handed = state.jobs.read().await.get(job_id).map_or(0, |job| job.songs.len());
+    let kept = state.tracks_kept.write().await.remove(job_id).unwrap_or(0) + handed;
+    if kept > 0 {
+        state.tracks_kept.write().await.insert(again.clone(), kept);
+    }
     if let Some(hub) = &state.hub {
         hub.count("song_memory_retry", 1);
     }
@@ -10871,6 +11171,8 @@ async fn follow_job(state: &AppState, job_id: &str, started: &mut Option<Option<
     let (state, job_id) = (state.clone(), job_id.to_string());
     {
         let mut unreachable = 0u32;
+        // the tracks taken into the library while the job still runs
+        let mut early: Vec<CompletedSong> = Vec::new();
         loop {
             tokio::time::sleep(std::time::Duration::from_millis(1000)).await;
             let Some(existing) = state.jobs.read().await.get(&job_id).cloned() else { return };
@@ -10892,7 +11194,14 @@ async fn follow_job(state: &AppState, job_id: &str, started: &mut Option<Option<
                     unreachable += 1;
                     if forgotten || unreachable >= 60 {
                         if let Some(job) = state.jobs.write().await.get_mut(&job_id) {
-                            job.fail(if forgotten { lost_job_reason(&previous_run_log()) } else { SongError::EngineUnreachable(error.to_string()) });
+                            let reason = if forgotten { lost_job_reason(&previous_run_log()) } else { SongError::EngineUnreachable(error.to_string()) };
+                            // the person's own restart stopped it: a stopped song, not a failed one
+                            let stopped = matches!(reason, SongError::LostRestarted);
+                            job.fail(reason);
+                            if stopped {
+                                job.status = MusicJobStatus::Cancelled;
+                                job.phase = MusicJobPhase::Cancelled;
+                            }
                         }
                         return;
                     }
@@ -10902,22 +11211,45 @@ async fn follow_job(state: &AppState, job_id: &str, started: &mut Option<Option<
             if remote.status == "running" && started.is_none() {
                 *started = Some((!another_job_under_way(&state, &job_id).await).then(std::time::Instant::now));
             }
+            // a job of several tracks hands each one over as it is finished, so the first is heard while the rest are made
+            let asked = tracks_asked(&existing.generation_settings);
+            let kept = state.tracks_kept.read().await.get(&job_id).copied().unwrap_or(0);
+            if remote.status == "running" && asked > 1 && remote.tracks_ready > kept + early.len() {
+                match import_ready_track(&state, &existing, &job_id, kept + early.len(), asked).await {
+                    Ok(songs) => {
+                        if let Some(playlist) = existing.playlist_id.as_deref() {
+                            if let Err(error) = add_to_playlist(&state.library, playlist, songs.iter().map(|song| song.id.clone())) {
+                                studio_log!("[ERROR] a finished track of job {job_id} could not be added to the playlist: {error:#}");
+                            }
+                        }
+                        early.extend(songs);
+                        if let Some(job) = state.jobs.write().await.get_mut(&job_id).filter(|job| !matches!(job.status, MusicJobStatus::Cancelled)) {
+                            job.song = early.first().cloned();
+                            job.songs = early.clone();
+                        }
+                    }
+                    // the track stays with the engine and is taken with the rest when the job ends, where a failure is the job's
+                    Err(error) => studio_log!("[ERROR] a finished track of job {job_id} was not taken while the job runs: {error:#}"),
+                }
+            }
             if remote.status == "done" {
-                let imported = import_completed_result(&state, &existing, &job_id).await;
+                let imported = import_completed_result(&state, &existing, &job_id, kept + early.len()).await;
+                state.tracks_kept.write().await.remove(&job_id);
                 let mut jobs = state.jobs.write().await;
                 let Some(job) = jobs.get_mut(&job_id) else { return };
                 if matches!(job.status, MusicJobStatus::Cancelled) { return; }
                 match imported {
-                    Ok(songs) => {
+                    Ok(rest) => {
                         job.status = MusicJobStatus::Completed;
                         job.phase = MusicJobPhase::Completed;
-                        job.song = songs.first().cloned();
                         job.message = "The engine finished this job and its tracks were imported into the library.".into();
                         if let Some(playlist) = existing.playlist_id.as_deref() {
-                            if let Err(error) = add_to_playlist(&state.library, playlist, songs.iter().map(|song| song.id.clone())) {
+                            if let Err(error) = add_to_playlist(&state.library, playlist, rest.iter().map(|song| song.id.clone())) {
                                 job.message = format!("{} They could not be added to the playlist: {error:#}", job.message);
                             }
                         }
+                        let songs: Vec<CompletedSong> = early.iter().cloned().chain(rest).collect();
+                        job.song = songs.first().cloned();
                         job.songs = songs;
                     }
                     Err(error) => job.fail(SongError::ImportFailed(error.to_string())),
@@ -10943,9 +11275,29 @@ fn songs_seconds(songs: &[CompletedSong]) -> f64 {
     songs.iter().filter_map(|made| made.song.metadata.get("duration_seconds").and_then(Value::as_f64)).sum()
 }
 
-async fn import_completed_result(state: &AppState, job: &MusicJob, job_id: &str) -> anyhow::Result<Vec<CompletedSong>> {
+/// The tracks a request asks for: its songs times the variations of each.
+fn tracks_asked(settings: &Value) -> usize {
+    let of = |key: &str| settings.get(key).and_then(Value::as_u64).unwrap_or(1).max(1) as usize;
+    of("lm_batch_size") * of("synth_batch_size")
+}
+
+/// The finished job's tracks into the library, past the first `taken` that went there while it ran.
+async fn import_completed_result(state: &AppState, job: &MusicJob, job_id: &str, taken: usize) -> anyhow::Result<Vec<CompletedSong>> {
     let result = state.music_server.result(job_id).await?;
     let tracks = engine_result::parse_multipart_result(&result.content_type, &result.body)?;
+    let count = tracks.len();
+    import_tracks(state, job, job_id, tracks.into_iter().enumerate().skip(taken).collect(), count).await
+}
+
+/// One finished track of a job that still runs into the library, so it is heard while the rest are made.
+async fn import_ready_track(state: &AppState, job: &MusicJob, job_id: &str, index: usize, count: usize) -> anyhow::Result<Vec<CompletedSong>> {
+    let result = state.music_server.result_track(job_id, index).await?;
+    let tracks = engine_result::parse_multipart_result(&result.content_type, &result.body)?;
+    import_tracks(state, job, job_id, tracks.into_iter().map(|track| (index, track)).collect(), count).await
+}
+
+/// `tracks` carry their place among the `count` the job makes, which numbers the titles of more than one.
+async fn import_tracks(state: &AppState, job: &MusicJob, job_id: &str, tracks: Vec<(usize, engine_result::ResultTrack)>, count: usize) -> anyhow::Result<Vec<CompletedSong>> {
     // a song of the person's own model counts as the set `own`, its file named on the song only
     let own_model = state.own_backbone.read().await.clone();
     let kv_cache = *state.kv_cache_running.read().await;
@@ -10953,9 +11305,8 @@ async fn import_completed_result(state: &AppState, job: &MusicJob, job_id: &str)
     // The engine's defaults fill whatever the request left out, so a stored
     // track records every value it was made with, not only the ones typed.
     let engine_defaults = state.music_server.props().await.ok().and_then(|props| props.get("defaults").cloned());
-    let count = tracks.len();
-    let mut imported = Vec::with_capacity(count);
-    for (index, track) in tracks.into_iter().enumerate() {
+    let mut imported = Vec::with_capacity(tracks.len());
+    for (index, track) in tracks {
         let mut replay = track.replay_request;
         let style = replay.get("style").and_then(Value::as_str).unwrap_or_default().to_owned();
         let lyrics = replay.get("lyrics").and_then(Value::as_str).unwrap_or_default().to_owned();
@@ -11579,7 +11930,16 @@ impl EngineClient {
     }
 
     async fn result(&self, job_id: &str) -> anyhow::Result<EngineResultResponse> {
-        let response = self.send(self.http.get(self.url("/job")).query(&[("id", job_id), ("result", "1")]), true).await?;
+        self.result_of(&[("id", job_id), ("result", "1")]).await
+    }
+
+    /// One finished track of a job that still runs, in the form of the whole result.
+    async fn result_track(&self, job_id: &str, index: usize) -> anyhow::Result<EngineResultResponse> {
+        self.result_of(&[("id", job_id), ("result", "1"), ("track", &index.to_string())]).await
+    }
+
+    async fn result_of(&self, query: &[(&str, &str)]) -> anyhow::Result<EngineResultResponse> {
+        let response = self.send(self.http.get(self.url("/job")).query(query), true).await?;
         let status = response.status();
         if !status.is_success() {
             anyhow::bail!("yue-server returned {status}: {}", response.text().await?);
@@ -11904,6 +12264,9 @@ fn yue_request_from(request: &CreateMusicJobRequest, max_batch: u32) -> Result<V
     }
     if !request.adapters.is_empty() {
         body["adapters"] = Value::Array(adapter_fields(&request.adapters)?);
+        // with adapters the first scores are more often ones that cannot be sung: the engine writes the score again
+        // from another seed more times than it does by itself
+        body["plan_retries"] = Value::from(SCORE_REDRAWS);
     }
     Ok(body)
 }
@@ -12243,6 +12606,14 @@ mod tests {
         assert_eq!(lost_job_reason("[NAR] Step 3/16").code(), Some("lost_at_line"));
     }
 
+    /// The person's own restart of the engine is said so, whatever the engine was writing when it went.
+    #[test]
+    fn a_song_lost_to_the_persons_restart_is_stopped_not_failed() {
+        let log = format!("[NAR] Step 3/16\n[studio] {RESTARTED_UNDER_A_SONG}; that song is lost");
+        assert_eq!(lost_job_reason(&log).code(), Some("lost_restarted"));
+        assert_eq!(lost_job_reason("[NAR] Step 3/16").code(), Some("lost_at_line"));
+    }
+
     /// A file named as the catalogue's but of another build, and a GGUF of no
     /// set, are said with the reason; the one taken and other files are not.
     #[test]
@@ -12403,7 +12774,7 @@ mod tests {
         assert!(EngineOptions { auto_keeps: true, ..EngineOptions::default() }.to_engine(None).keep_loaded);
         assert!(!EngineOptions { keep_loaded: KeepLoaded::No, auto_keeps: true, ..EngineOptions::default() }.to_engine(None).keep_loaded);
         use serde_json::json;
-        for (saved, read) in [(json!(true), KeepLoaded::Yes), (json!(false), KeepLoaded::Auto), (json!("no"), KeepLoaded::No), (json!("auto"), KeepLoaded::Auto)] {
+        for (saved, read) in [(json!(true), KeepLoaded::Auto), (json!(false), KeepLoaded::Auto), (json!("yes"), KeepLoaded::Yes), (json!("no"), KeepLoaded::No), (json!("auto"), KeepLoaded::Auto)] {
             let options: EngineOptions = serde_json::from_value(json!({ "keep_loaded": saved })).unwrap();
             assert_eq!(options.keep_loaded, read, "{saved}");
         }
@@ -12422,6 +12793,11 @@ mod tests {
         assert!(roomy.keep && roomy.reason == "fits", "{roomy:?}");
         let tight = auto.keep_choice(Some(q8), true, Some(7.5));
         assert!(!tight.keep && tight.reason == "does_not_fit", "{tight:?}");
+        let bf16 = std::path::Path::new("YuE2-3B-BF16.gguf");
+        assert!(!auto.keep_choice(Some(q8), true, Some(11.3)).keep, "a 12 GB card is left its headroom");
+        assert!(auto.keep_choice(Some(q8), true, Some(15.3)).keep, "a 16 GB card keeps the Q8 set");
+        assert!(!auto.keep_choice(Some(bf16), true, Some(15.3)).keep, "a 16 GB card does not keep the BF16 set");
+        assert!(auto.keep_choice(Some(bf16), true, Some(22.5)).keep, "a 24 GB card keeps the BF16 set");
         let eight = EngineOptions { max_batch: Some(8), ..auto.clone() }.keep_choice(Some(q8), true, Some(22.0));
         assert!(!eight.keep, "eight tracks' caches: {eight:?}");
         assert_eq!(auto.keep_choice(Some(std::path::Path::new("YuE2-3B-Q5_K_M.gguf")), true, Some(22.0)).reason, "unmeasured");
@@ -12429,6 +12805,16 @@ mod tests {
         assert_eq!(auto.keep_choice(Some(q8), false, Some(64.0)).reason, "not_on_card");
         assert!(EngineOptions { keep_loaded: KeepLoaded::Yes, ..auto }.keep_choice(Some(q8), true, Some(1.0)).keep);
         assert!(roomy.line().contains("GB needed"), "{}", roomy.line());
+    }
+
+    /// A song of 240 s carried on by 20 s is refused at 255 s where the cache holds 254: 13 s of it fit. A song the
+    /// cache has no two seconds left for is not made again.
+    #[test]
+    fn a_song_carried_on_past_the_cache_is_carried_on_as_far_as_it_holds() {
+        assert_eq!(extension_that_fits(20.0, 255.0, 254.0), Some(13.0));
+        assert_eq!(extension_that_fits(30.0, 300.0, 299.0), Some(20.0));
+        assert_eq!(extension_that_fits(10.0, 250.0, 241.0), None);
+        assert_eq!(extension_that_fits(10.0, 100.0, 400.0), None, "a refusal that leaves room for all of it is not this one");
     }
 
     /// Kept models go a while after the last song, once a spell; before the first song there is nothing to unload.

@@ -24,8 +24,8 @@ export function partialOnDisk(components: ModelComponent[], missing: string[]): 
 
 /** Every runnable set has one of each. */
 export const REQUIRED_KINDS = ['backbone', 'vae'] as const;
-/** SheetSage2: without it the studio generates but cannot transcribe covers. */
-export const OPTIONAL_KINDS = ['transcriber'] as const;
+/** A decoder alone that decodes in place of the VAE's own; SheetSage2, without which the studio generates but cannot transcribe covers. */
+export const OPTIONAL_KINDS = ['vae-decoder', 'transcriber'] as const;
 export const COMPONENT_KINDS = [...REQUIRED_KINDS, ...OPTIONAL_KINDS] as const;
 /** In every set and never a choice: the decoder companion every render merges. */
 export const ALWAYS_KINDS = ['companion'] as const;
@@ -33,6 +33,7 @@ export const ALWAYS_KINDS = ['companion'] as const;
 const labels: Record<(typeof COMPONENT_KINDS)[number] | (typeof ALWAYS_KINDS)[number] | 'transcriber-base', string> = {
   backbone: 'Backbone',
   vae: 'VAE',
+  'vae-decoder': 'Decoder',
   transcriber: 'SheetSage2',
   'transcriber-base': 'MERT-v2',
   companion: 'Decoder companion',
@@ -43,6 +44,9 @@ export const componentKindLabel = (kind: string) => labels[kind as keyof typeof 
 export const isOptionalKind = (kind: string) => (OPTIONAL_KINDS as readonly string[]).includes(kind);
 
 export const componentPrecision = (component: ModelComponent) => {
+  // Ruach Studio's decoders are F32 like the set's own VAE, so they are told apart by name
+  const ruach = component.filename.match(/VAE-RS-x3_(v\d+)-F32\.gguf$/i)?.[1];
+  if (ruach) return `RS x3 ${ruach} · F32`;
   // the GGUF files end in -<ggml type>.gguf, the companion in _v<version>.safetensors
   const quant = component.filename.match(/-([A-Z0-9_]+)\.gguf$/i)?.[1];
   if (quant) return quant.toUpperCase();

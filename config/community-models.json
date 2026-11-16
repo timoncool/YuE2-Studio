@@ -11,7 +11,8 @@
         "ru": "Ruach Studio TW 2.0×0.75 (выбор авторов)",
         "zh": "Ruach Studio TW 2.0×0.75（作者推荐）",
         "ja": "Ruach Studio TW 2.0×0.75（作者のおすすめ）",
-        "ko": "Ruach Studio TW 2.0×0.75 (제작자 추천)"
+        "ko": "Ruach Studio TW 2.0×0.75 (제작자 추천)",
+        "pt": "Ruach Studio TW 2.0×0.75 (a escolha dos autores)"
       },
       "files": [
         { "quant": "Q8_0", "file": "YuE2-3B-RS-TW-2.0x0.75-Q8_0.gguf", "bytes": 3810233472, "sha256": "24d965f6f63656b55e5ff6f004627235b708293e2af9058feb162448197f83c4" },
@@ -23,7 +24,7 @@
       "author": "Ruach Studio",
       "page": "https://huggingface.co/goldhub/YuE2-RS-Finetunes",
       "license": "CC BY-NC-SA 4.0",
-      "name": { "en": "Ruach Studio TW 2.0×0.9", "ru": "Ruach Studio TW 2.0×0.9", "zh": "Ruach Studio TW 2.0×0.9", "ja": "Ruach Studio TW 2.0×0.9", "ko": "Ruach Studio TW 2.0×0.9" },
+      "name": { "en": "Ruach Studio TW 2.0×0.9", "ru": "Ruach Studio TW 2.0×0.9", "zh": "Ruach Studio TW 2.0×0.9", "ja": "Ruach Studio TW 2.0×0.9", "ko": "Ruach Studio TW 2.0×0.9", "pt": "Ruach Studio TW 2.0×0.9" },
       "files": [
         { "quant": "Q8_0", "file": "YuE2-3B-RS-TW-2.0x0.9-Q8_0.gguf", "bytes": 3810233472, "sha256": "68bf186aaa3277094c07112ed3f491f8527633feb6f6df9628de650236fef66c" },
         { "quant": "Q6_K", "file": "YuE2-3B-RS-TW-2.0x0.9-Q6_K.gguf", "bytes": 2943332480, "sha256": "96a56a99ded0c53f35a29e3690d56c052364f880d2fd2ebc603ccb5f00b8fc14" }
@@ -34,7 +35,7 @@
       "author": "Ruach Studio",
       "page": "https://huggingface.co/goldhub/YuE2-RS-Finetunes",
       "license": "CC BY-NC-SA 4.0",
-      "name": { "en": "Ruach Studio FW 0.7×0.75", "ru": "Ruach Studio FW 0.7×0.75", "zh": "Ruach Studio FW 0.7×0.75", "ja": "Ruach Studio FW 0.7×0.75", "ko": "Ruach Studio FW 0.7×0.75" },
+      "name": { "en": "Ruach Studio FW 0.7×0.75", "ru": "Ruach Studio FW 0.7×0.75", "zh": "Ruach Studio FW 0.7×0.75", "ja": "Ruach Studio FW 0.7×0.75", "ko": "Ruach Studio FW 0.7×0.75", "pt": "Ruach Studio FW 0.7×0.75" },
       "files": [
         { "quant": "Q8_0", "file": "YuE2-3B-RS-FW-0.7x0.75-Q8_0.gguf", "bytes": 3810233216, "sha256": "65c06120e2453005d66cf3bc1ac103bcb7d43c11e8902590d62870dfc3e267de" },
         { "quant": "Q6_K", "file": "YuE2-3B-RS-FW-0.7x0.75-Q6_K.gguf", "bytes": 2943332224, "sha256": "a582e7724c5bba6d732e1855f9a27210029111741348792845a1a6d0bfaa22de" }
@@ -45,7 +46,7 @@
       "author": "Ruach Studio",
       "page": "https://huggingface.co/goldhub/YuE2-RS-Finetunes",
       "license": "CC BY-NC-SA 4.0",
-      "name": { "en": "Ruach Studio FW 1.5×0.75", "ru": "Ruach Studio FW 1.5×0.75", "zh": "Ruach Studio FW 1.5×0.75", "ja": "Ruach Studio FW 1.5×0.75", "ko": "Ruach Studio FW 1.5×0.75" },
+      "name": { "en": "Ruach Studio FW 1.5×0.75", "ru": "Ruach Studio FW 1.5×0.75", "zh": "Ruach Studio FW 1.5×0.75", "ja": "Ruach Studio FW 1.5×0.75", "ko": "Ruach Studio FW 1.5×0.75", "pt": "Ruach Studio FW 1.5×0.75" },
       "files": [
         { "quant": "Q8_0", "file": "YuE2-3B-RS-FW-1.5x0.75-Q8_0.gguf", "bytes": 3810233216, "sha256": "3e94b552d2c11273e5808f64c66b21ec43b02d8cd09cc36475c8b3f518f70de5" },
         { "quant": "Q6_K", "file": "YuE2-3B-RS-FW-1.5x0.75-Q6_K.gguf", "bytes": 2943332224, "sha256": "849fb6a3383ba41002234e56e764572ecf90d57fa8aa59469550c6d0c1dda76b" }
@@ -56,7 +57,7 @@
       "author": "Ruach Studio",
       "page": "https://huggingface.co/goldhub/YuE2-RS-Finetunes",
       "license": "CC BY-NC-SA 4.0",
-      "name": { "en": "Ruach Studio FW 2.4×0.75", "ru": "Ruach Studio FW 2.4×0.75", "zh": "Ruach Studio FW 2.4×0.75", "ja": "Ruach Studio FW 2.4×0.75", "ko": "Ruach Studio FW 2.4×0.75" },
+      "name": { "en": "Ruach Studio FW 2.4×0.75", "ru": "Ruach Studio FW 2.4×0.75", "zh": "Ruach Studio FW 2.4×0.75", "ja": "Ruach Studio FW 2.4×0.75", "ko": "Ruach Studio FW 2.4×0.75", "pt": "Ruach Studio FW 2.4×0.75" },
       "files": [
         { "quant": "Q8_0", "file": "YuE2-3B-RS-FW-2.4x0.75-Q8_0.gguf", "bytes": 3810233216, "sha256": "25793826e9f28c8894b4f7c7f6d3ed54256cf1fcc1966030ac7b1b6a5918baf3" },
         { "quant": "Q6_K", "file": "YuE2-3B-RS-FW-2.4x0.75-Q6_K.gguf", "bytes": 2943332224, "sha256": "a7fd39079bdbae1b0b3960c63f8684585d33da60d06b27c0110ec5608c155487" }
@@ -67,7 +68,7 @@
       "author": "Ruach Studio",
       "page": "https://huggingface.co/goldhub/YuE2-RS-Finetunes",
       "license": "CC BY-NC-SA 4.0",
-      "name": { "en": "Ruach Studio FW 3.4×0.7", "ru": "Ruach Studio FW 3.4×0.7", "zh": "Ruach Studio FW 3.4×0.7", "ja": "Ruach Studio FW 3.4×0.7", "ko": "Ruach Studio FW 3.4×0.7" },
+      "name": { "en": "Ruach Studio FW 3.4×0.7", "ru": "Ruach Studio FW 3.4×0.7", "zh": "Ruach Studio FW 3.4×0.7", "ja": "Ruach Studio FW 3.4×0.7", "ko": "Ruach Studio FW 3.4×0.7", "pt": "Ruach Studio FW 3.4×0.7" },
       "files": [
         { "quant": "Q8_0", "file": "YuE2-3B-RS-FW-3.4x0.7-Q8_0.gguf", "bytes": 3810233184, "sha256": "e83e41fa07a499600a9dfbdb78fad23467218f96e4e55b227ea98e0abb9ca64b" },
         { "quant": "Q6_K", "file": "YuE2-3B-RS-FW-3.4x0.7-Q6_K.gguf", "bytes": 2943332192, "sha256": "4579c1cf271d730ed68da51af9936115df455b7e234e7f2b6643298d5cb66ead" }
@@ -78,7 +79,7 @@
       "author": "Ruach Studio",
       "page": "https://huggingface.co/goldhub/YuE2-RS-Finetunes",
       "license": "CC BY-NC-SA 4.0",
-      "name": { "en": "Ruach Studio FW 3.4×0.75", "ru": "Ruach Studio FW 3.4×0.75", "zh": "Ruach Studio FW 3.4×0.75", "ja": "Ruach Studio FW 3.4×0.75", "ko": "Ruach Studio FW 3.4×0.75" },
+      "name": { "en": "Ruach Studio FW 3.4×0.75", "ru": "Ruach Studio FW 3.4×0.75", "zh": "Ruach Studio FW 3.4×0.75", "ja": "Ruach Studio FW 3.4×0.75", "ko": "Ruach Studio FW 3.4×0.75", "pt": "Ruach Studio FW 3.4×0.75" },
       "files": [
         { "quant": "Q8_0", "file": "YuE2-3B-RS-FW-3.4x0.75-Q8_0.gguf", "bytes": 3810233216, "sha256": "d80abea0e40b691e5dae6da9291f4dcc6bdd1d7a08a66893d0537d42e44c6246" },
         { "quant": "Q6_K", "file": "YuE2-3B-RS-FW-3.4x0.75-Q6_K.gguf", "bytes": 2943332224, "sha256": "f65a01627ec895bc8ecb9e3c0b7467aad406a1c329816e24bda392652421bb6a" }
@@ -89,7 +90,7 @@
       "author": "Ruach Studio",
       "page": "https://huggingface.co/goldhub/YuE2-RS-Finetunes",
       "license": "CC BY-NC-SA 4.0",
-      "name": { "en": "Ruach Studio FW 4.0×0.65", "ru": "Ruach Studio FW 4.0×0.65", "zh": "Ruach Studio FW 4.0×0.65", "ja": "Ruach Studio FW 4.0×0.65", "ko": "Ruach Studio FW 4.0×0.65" },
+      "name": { "en": "Ruach Studio FW 4.0×0.65", "ru": "Ruach Studio FW 4.0×0.65", "zh": "Ruach Studio FW 4.0×0.65", "ja": "Ruach Studio FW 4.0×0.65", "ko": "Ruach Studio FW 4.0×0.65", "pt": "Ruach Studio FW 4.0×0.65" },
       "files": [
         { "quant": "Q8_0", "file": "YuE2-3B-RS-FW-4.0x0.65-Q8_0.gguf", "bytes": 3810233184, "sha256": "8fce54e7c3d91071d96ca12518c43a9f17399cdf81b64347634b588a154538a5" },
         { "quant": "Q6_K", "file": "YuE2-3B-RS-FW-4.0x0.65-Q6_K.gguf", "bytes": 2943332192, "sha256": "1b05410c227c36ff83e57249e3ecd7ecf50e9987410032689e830ca11b226a7b" }
@@ -100,10 +101,130 @@
       "author": "Ruach Studio",
       "page": "https://huggingface.co/goldhub/YuE2-RS-Finetunes",
       "license": "CC BY-NC-SA 4.0",
-      "name": { "en": "Ruach Studio FW 4.0×0.7", "ru": "Ruach Studio FW 4.0×0.7", "zh": "Ruach Studio FW 4.0×0.7", "ja": "Ruach Studio FW 4.0×0.7", "ko": "Ruach Studio FW 4.0×0.7" },
+      "name": { "en": "Ruach Studio FW 4.0×0.7", "ru": "Ruach Studio FW 4.0×0.7", "zh": "Ruach Studio FW 4.0×0.7", "ja": "Ruach Studio FW 4.0×0.7", "ko": "Ruach Studio FW 4.0×0.7", "pt": "Ruach Studio FW 4.0×0.7" },
       "files": [
         { "quant": "Q8_0", "file": "YuE2-3B-RS-FW-4.0x0.7-Q8_0.gguf", "bytes": 3810233184, "sha256": "6666c5c0a27f1a336253d21dbedfbd2f4aa464b96cb77ee61af8f03f8745e312" },
         { "quant": "Q6_K", "file": "YuE2-3B-RS-FW-4.0x0.7-Q6_K.gguf", "bytes": 2943332192, "sha256": "0d71f543560506a81ded5054c1aec4e9e8cc1637b097c24a4ea662bd67488a20" }
+      ]
+    },
+    {
+      "id": "rs-ira",
+      "author": "Ruach Studio",
+      "page": "https://huggingface.co/goldhub/YuE2-3B-Ruach_Studio-IRA-Merge",
+      "license": "CC BY-NC 4.0",
+      "repository": "goldhub/YuE2-3B-Ruach_Studio-IRA-Merge",
+      "revision": "17356b21966375be05fe6c0afe6adb80653177dd",
+      "name": {
+        "en": "Ruach Studio IRA (Instrumental and Real Audio built in)",
+        "ru": "Ruach Studio IRA (влиты «Инструментал» и Real Audio)",
+        "zh": "Ruach Studio IRA（已并入 Instrumental 和 Real Audio）",
+        "ja": "Ruach Studio IRA（Instrumental と Real Audio を統合済み）",
+        "ko": "Ruach Studio IRA (Instrumental과 Real Audio 내장)",
+        "pt": "Ruach Studio IRA (Instrumental e Real Audio incorporados)"
+      },
+      "files": [
+        { "quant": "Q8_0", "file": "YuE2-3B-IRA-Q8_0.gguf", "bytes": 3810232256, "sha256": "56d49ed83d9c151a8018dbe334e28481694136b97799e5cd8a4b31cd03f900a1" },
+        { "quant": "Q6_K", "file": "YuE2-3B-IRA-Q6_K.gguf", "bytes": 2943331264, "sha256": "6922d3df728678a1ae59634eaef3e9c6eec3e05f9ba11c2f4621098a7afc58a5" }
+      ]
+    },
+    {
+      "id": "rs-irae",
+      "author": "Ruach Studio",
+      "page": "https://huggingface.co/goldhub/YuE2-3B-Ruach_Studio-IRA-Merge",
+      "license": "CC BY-NC 4.0",
+      "repository": "goldhub/YuE2-3B-Ruach_Studio-IRA-Merge",
+      "revision": "17356b21966375be05fe6c0afe6adb80653177dd",
+      "name": {
+        "en": "Ruach Studio IRAE (IRA with Epic Trailer; the authors' pick of the three)",
+        "ru": "Ruach Studio IRAE (IRA с Epic Trailer; лучший из трёх по мнению авторов)",
+        "zh": "Ruach Studio IRAE（IRA 加 Epic Trailer；作者认为三者中最好）",
+        "ja": "Ruach Studio IRAE（IRA に Epic Trailer を追加。作者が 3 つの中で最良とするもの）",
+        "ko": "Ruach Studio IRAE (IRA에 Epic Trailer 추가, 제작자가 셋 중 최고로 꼽음)",
+        "pt": "Ruach Studio IRAE (IRA com Epic Trailer; o preferido dos autores entre os três)"
+      },
+      "files": [
+        { "quant": "Q8_0", "file": "YuE2-3B-IRAE-Q8_0.gguf", "bytes": 3810232384, "sha256": "0a4d3eebba7b9b9826e29482ba5b6aca417cdbde2df8ef3d5103a4ce95fa48a2" },
+        { "quant": "Q6_K", "file": "YuE2-3B-IRAE-Q6_K.gguf", "bytes": 2943331392, "sha256": "7afd4378dded6ce962081969f83ed04f4707b32419645e8abd658b75773c0be3" }
+      ]
+    },
+    {
+      "id": "rs-irae-v2",
+      "author": "Ruach Studio",
+      "page": "https://huggingface.co/goldhub/YuE2-3B-Ruach_Studio-IRA-Merge",
+      "license": "CC BY-NC 4.0",
+      "repository": "goldhub/YuE2-3B-Ruach_Studio-IRA-Merge",
+      "revision": "17356b21966375be05fe6c0afe6adb80653177dd",
+      "name": {
+        "en": "Ruach Studio IRAE v2 (Epic Trailer lighter; cleaner)",
+        "ru": "Ruach Studio IRAE v2 (Epic Trailer слабее; чище)",
+        "zh": "Ruach Studio IRAE v2（Epic Trailer 较弱；更干净）",
+        "ja": "Ruach Studio IRAE v2（Epic Trailer 弱め。よりクリーン）",
+        "ko": "Ruach Studio IRAE v2 (Epic Trailer 약하게, 더 깨끗함)",
+        "pt": "Ruach Studio IRAE v2 (Epic Trailer mais leve; mais limpo)"
+      },
+      "files": [
+        { "quant": "Q8_0", "file": "YuE2-3B-IRAEv2-Q8_0.gguf", "bytes": 3810232384, "sha256": "ee38dea1f44be85941f634a8b59c7a9b606d17a583738f346c3de9f4655a1740" },
+        { "quant": "Q6_K", "file": "YuE2-3B-IRAEv2-Q6_K.gguf", "bytes": 2943331392, "sha256": "8b70d1263c341f1428f82c2823572f141a99af04df275b47489b951004cbf2c9" }
+      ]
+    },
+    {
+      "id": "rs-irae-v3",
+      "author": "Ruach Studio",
+      "page": "https://huggingface.co/goldhub/YuE2-3B-Ruach_Studio-IRA-Merge",
+      "license": "CC BY-NC 4.0",
+      "repository": "goldhub/YuE2-3B-Ruach_Studio-IRA-Merge",
+      "revision": "17356b21966375be05fe6c0afe6adb80653177dd",
+      "name": {
+        "en": "Ruach Studio IRAE v3 (Epic Trailer stronger; at its best on instrumentals)",
+        "ru": "Ruach Studio IRAE v3 (Epic Trailer сильнее; лучше всего на инструменталах)",
+        "zh": "Ruach Studio IRAE v3（Epic Trailer 较强；最适合纯音乐）",
+        "ja": "Ruach Studio IRAE v3（Epic Trailer 強め。インストゥルメンタルに最適）",
+        "ko": "Ruach Studio IRAE v3 (Epic Trailer 강하게, 인스트루멘털에 가장 좋음)",
+        "pt": "Ruach Studio IRAE v3 (Epic Trailer mais forte; no seu melhor em instrumentais)"
+      },
+      "files": [
+        { "quant": "Q8_0", "file": "YuE2-3B-IRAEv3-Q8_0.gguf", "bytes": 3810232384, "sha256": "3300dcfcec27607ab3eaeeb7a1f068dfa9948b0fb5fd18ca1bc6a25b950bbe52" },
+        { "quant": "Q6_K", "file": "YuE2-3B-IRAEv3-Q6_K.gguf", "bytes": 2943331392, "sha256": "3e8d9d8dd29dac412724972c2b418db210cd5b49fc2def5355734b16aca82d41" }
+      ]
+    },
+    {
+      "id": "rs-irae-ir",
+      "author": "Ruach Studio",
+      "page": "https://huggingface.co/goldhub/YuE2-3B-Ruach_Studio-IRA-Merge",
+      "license": "CC BY-NC 4.0",
+      "repository": "goldhub/YuE2-3B-Ruach_Studio-IRA-Merge",
+      "revision": "17356b21966375be05fe6c0afe6adb80653177dd",
+      "name": {
+        "en": "Ruach Studio IRAE-IR (with Industrial Rock; experimental, for rock instrumentals, unstable on lyrics)",
+        "ru": "Ruach Studio IRAE-IR (с Industrial Rock; экспериментальная, для рок-инструменталов, слова нестабильны)",
+        "zh": "Ruach Studio IRAE-IR（含 Industrial Rock；实验性，适合摇滚纯音乐，唱词不稳定）",
+        "ja": "Ruach Studio IRAE-IR（Industrial Rock 入り。実験的、ロックのインスト向け、歌詞は不安定）",
+        "ko": "Ruach Studio IRAE-IR (Industrial Rock 포함, 실험적, 록 인스트루멘털용, 가사 불안정)",
+        "pt": "Ruach Studio IRAE-IR (com Industrial Rock; experimental, para instrumentais de rock, instável com letra)"
+      },
+      "files": [
+        { "quant": "Q8_0", "file": "YuE2-3B-IRAE-IR-Q8_0.gguf", "bytes": 3810232544, "sha256": "0359ac03291d7c652932fb0b03c3f62db1dad65d46c63e8cfb6069df6b134deb" },
+        { "quant": "Q6_K", "file": "YuE2-3B-IRAE-IR-Q6_K.gguf", "bytes": 2943331552, "sha256": "b022316196fbc7bb16bdc12e6ce1cd76f60dee75e0dac9fdaf7eaf6c9789ab00" }
+      ]
+    },
+    {
+      "id": "rs-irae-ir-v2",
+      "author": "Ruach Studio",
+      "page": "https://huggingface.co/goldhub/YuE2-3B-Ruach_Studio-IRA-Merge",
+      "license": "CC BY-NC 4.0",
+      "repository": "goldhub/YuE2-3B-Ruach_Studio-IRA-Merge",
+      "revision": "17356b21966375be05fe6c0afe6adb80653177dd",
+      "name": {
+        "en": "Ruach Studio IRAE-IR v2 (Industrial Rock lighter, for steadier words; experimental)",
+        "ru": "Ruach Studio IRAE-IR v2 (Industrial Rock слабее, ради более устойчивых слов; экспериментальная)",
+        "zh": "Ruach Studio IRAE-IR v2（Industrial Rock 较弱，唱词更稳；实验性）",
+        "ja": "Ruach Studio IRAE-IR v2（Industrial Rock 弱め、歌詞の安定を狙ったもの。実験的）",
+        "ko": "Ruach Studio IRAE-IR v2 (Industrial Rock 약하게, 가사 안정을 위한 버전, 실험적)",
+        "pt": "Ruach Studio IRAE-IR v2 (Industrial Rock mais leve, para palavras mais estáveis; experimental)"
+      },
+      "files": [
+        { "quant": "Q8_0", "file": "YuE2-3B-IRAE-IRv2-Q8_0.gguf", "bytes": 3810232544, "sha256": "287ab1c7739e28c9aa9f821df3944165e59ba4f973d6a5274cf8cdedc7ed5642" },
+        { "quant": "Q6_K", "file": "YuE2-3B-IRAE-IRv2-Q6_K.gguf", "bytes": 2943331552, "sha256": "94a32c67388ffb6496c7680f4af3c57d1a0ac5f16d4851efe5a1c10309912d91" }
       ]
     }
   ],

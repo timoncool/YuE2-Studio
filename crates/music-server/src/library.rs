@@ -690,6 +690,13 @@ impl Library {
         let jobs = statement.query_map([limit as i64], stored_job_row)?;
         Ok(jobs.collect::<rusqlite::Result<_>>()?)
     }
+
+
+    /// How many songs a job has put into the library, those in the trash among them: a job handed its tracks over
+    /// one by one, and each carries the job's id.
+    pub fn songs_of_music_job(&self, id: &str) -> Result<usize> {
+        Ok(self.all_songs()?.iter().filter(|song| song.metadata.get("job_id").and_then(serde_json::Value::as_str) == Some(id)).count())
+    }
 }
 
 fn stored_job_row(row: &rusqlite::Row) -> rusqlite::Result<StoredJob> {
@@ -756,5 +763,23 @@ mod stored_job_tests {
         reopened.cancel_cut_off_music_job("older", Some("again"), "started again").unwrap();
         let ids: Vec<String> = reopened.unfinished_music_jobs().unwrap().into_iter().map(|job| job.id).collect();
         assert_eq!(ids, ["newer"]);
+    }
+
+
+    #[test]
+    fn the_songs_a_job_put_into_the_library_are_counted_with_those_in_the_trash() {
+        let folder = tempfile::tempdir().unwrap();
+        let library = Library::open_at(folder.path().join("library.sqlite"), folder.path().join("media")).unwrap();
+        let song = |title: &str, job: &str| {
+            let input: SongInput = serde_json::from_value(serde_json::json!({ "title": title, "engine_id": "yue2-cpp", "metadata": { "job_id": job } })).unwrap();
+            library.create_song(input).unwrap()
+        };
+        song("first (1)", "batch");
+        let second = song("first (2)", "batch");
+        song("another", "other");
+        library.set_song_trashed(&second.id, true, None).unwrap();
+        assert_eq!(library.songs_of_music_job("batch").unwrap(), 2);
+        assert_eq!(library.songs_of_music_job("other").unwrap(), 1);
+        assert_eq!(library.songs_of_music_job("nobody").unwrap(), 0);
     }
 }
