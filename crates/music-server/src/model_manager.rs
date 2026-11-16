@@ -885,8 +885,18 @@ const PROFILE_SETS: [(&str, &str, [&str; 6]); 4] = [
     ("native", "Full native - BF16 backbone, original weights", ["backbone-bf16", "vae-f32", DECODER, "transcriber-f32", "mert-f32", COMPANION]),
 ];
 
+/// The sets as this machine takes them: the decoder is in a set where the card has the memory for it, and a smaller
+/// card, or a machine that computes on its processor, keeps the VAE's own decoder. Picked by hand, the decoder is
+/// taken on any machine.
 pub(crate) fn profiles() -> Vec<Profile> {
-    PROFILE_SETS.iter().map(|(id, label, ids)| profile(id, label, ids)).collect()
+    let decoder = crate::hardware::card_takes_decoder();
+    PROFILE_SETS
+        .iter()
+        .map(|(id, label, ids)| {
+            let ids: Vec<&'static str> = ids.iter().copied().filter(|id| decoder || *id != DECODER).collect();
+            profile(id, label, &ids)
+        })
+        .collect()
 }
 
 /// The bytes of a set's backbone and VAE, the weights that sit in memory while a song is made.
@@ -1141,6 +1151,23 @@ mod tests {
         let two: Vec<String> = ["backbone-q8", "vae-f32", "vae-rs-x3-v1", "vae-rs-x3-v2"].map(String::from).to_vec();
         assert!(resolve_install(InstallRequest { profile_id: None, component_ids: two }).is_err());
         let _ = fs::remove_dir_all(root);
+    }
+
+
+    /// On a card without the memory for the decoder the sets come without it and nothing offers it; picked by hand
+    /// it is taken all the same.
+    #[test]
+    fn a_small_card_keeps_the_vaes_own_decoder_unless_the_decoder_is_picked() {
+        crate::hardware::DECODER_IN_TESTS.with(|forced| forced.set(false));
+        assert!(profiles().iter().all(|profile| !profile.components.contains(&DECODER)));
+        let set = resolve_install(InstallRequest { profile_id: Some("light".into()), component_ids: vec![] }).unwrap();
+        assert!(set.components.iter().all(|component| component.kind != "vae-decoder"));
+        let picked: Vec<String> = ["backbone-q5", "vae-f32", DECODER].map(String::from).to_vec();
+        let own = resolve_install(InstallRequest { profile_id: None, component_ids: picked }).unwrap();
+        assert!(own.components.iter().any(|component| component.id == DECODER));
+        let whole: Vec<String> = ["backbone-q5", "vae-f32", "transcriber-q8", "mert-q8"].map(String::from).to_vec();
+        assert_eq!(profile_matching(&whole), Some("light"), "the set of a small card is the set without the decoder");
+        crate::hardware::DECODER_IN_TESTS.with(|forced| forced.set(true));
     }
 
     #[test]

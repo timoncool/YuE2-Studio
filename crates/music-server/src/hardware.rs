@@ -177,6 +177,36 @@ pub fn hardware() -> Hardware {
     probe().clone()
 }
 
+
+/// The card's memory from which Ruach Studio's decoder decodes by default. Its graph takes 4 GB of the card where the
+/// VAE's own takes 2.5 GB, and never less than 2 GB however small the tiles: a card sold as 8 GB has room for it, a
+/// smaller one keeps the VAE's own decoder.
+const DECODER_VRAM_GB: f64 = 7.5;
+
+#[cfg(test)]
+thread_local! {
+    /// What `card_takes_decoder` answers in a test, whatever card the machine running it has.
+    pub static DECODER_IN_TESTS: std::cell::Cell<bool> = const { std::cell::Cell::new(true) };
+}
+
+/// Whether the sets of this machine carry the decoder: the engine computes on CUDA, where the decoder was checked
+/// against its authors' reference, and the card has the memory. Vulkan, Metal and the processor keep the VAE's own.
+pub fn card_takes_decoder() -> bool {
+    #[cfg(test)]
+    {
+        DECODER_IN_TESTS.with(|forced| forced.get())
+    }
+    #[cfg(not(test))]
+    {
+        let hardware = hardware();
+        decoder_fits(hardware.cuda.is_some(), hardware.total_vram_gb)
+    }
+}
+
+fn decoder_fits(cuda: bool, total_vram_gb: f64) -> bool {
+    cuda && total_vram_gb >= DECODER_VRAM_GB
+}
+
 /// Whether songs are computed on the processor: no card, or built-in graphics below the smallest local set. An
 /// NVIDIA card nvidia-smi lists is where the engine computes on CUDA at any size; a Mac computes on Metal.
 fn computes_on_processor(nvidia: bool, total_vram_gb: f64) -> bool {
@@ -510,6 +540,16 @@ mod tests {
             assert_eq!(super::short_of_smallest_set(true, 6.0), None);
             assert_eq!(super::short_of_smallest_set(false, 0.0), None, "no card: that is said as the processor");
         }
+    }
+
+
+    /// Ruach Studio's decoder is in the sets of a CUDA card sold as 8 GB or more; a smaller card, and a card on Vulkan
+    /// or Metal, where the decoder was not checked, keep the VAE's own.
+    #[test]
+    fn the_decoder_is_in_the_sets_of_a_cuda_card_of_eight_gigabytes() {
+        assert!(super::decoder_fits(true, 7.99) && super::decoder_fits(true, 24.0));
+        assert!(!super::decoder_fits(true, 5.99), "a 6 GB card keeps the VAE's own decoder");
+        assert!(!super::decoder_fits(false, 16.0), "a card that does not compute on CUDA keeps it");
     }
 
     #[test]
