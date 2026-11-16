@@ -53,8 +53,9 @@ Code, save [docs/mcp-skill.md](docs/mcp-skill.md) as `~/.claude/skills/yue2-stud
 ## What you can do
 
 - **A player of its own** — a ten-band equalizer on Winamp's frequencies with its presets,
-  your own and .EQF files; a MilkDrop visualiser with hundreds of presets or a spectrum in ten
-  looks, over the studio, fullscreen or in its own window; and a Winamp mode that turns the whole
+  your own and .EQF files; a MilkDrop visualiser with hundreds of presets, a spectrum in ten
+  looks, a black hole with its disk of light that brightens and tilts with the song, or a flight
+  through a tunnel that jumps on the loud notes, over the studio, fullscreen or in its own window; and a Winamp mode that turns the whole
   window into a skinned Winamp 2 whose windows move apart, dock and resize — the original skin
   and ten more included, sharp at any scale, the Winamp Skin Museum one click away,
   Ctrl+M to switch. The song, its place and the equalizer carry over both ways.
@@ -62,9 +63,17 @@ Code, save [docs/mcp-skill.md](docs/mcp-skill.md) as `~/.claude/skills/yue2-stud
   saved where you say, in Windows' own Save dialog, and the Files panel shows each save.
 - **A proxy for the whole studio** — HTTP, HTTPS, SOCKS5 or SOCKS4, with a login: model
   downloads, Hugging Face, OpenRouter and updates go through it.
+- **Models on another disk** — the setup screen and Settings show where the downloads are kept
+  and how much room that disk has; one button moves the model sets, LoRAs, the stem separator,
+  karaoke, the assistant's models, the trainer and Audio to MIDI to another folder, leaving a link
+  so everything that shares them keeps working. Songs and datasets stay. One more button brings
+  them back.
 - **Full songs from a style and lyrics** — up to ten minutes, in the languages the model
   sings. In Russian a stress mark (the combining acute U+0301, Alt+0769 on Windows) after a
   vowel moves the sung stress to it, as Ruach Studio documents. On an RTX 4090 with the Q8_0 set a 3:38 song renders in about 46 seconds.
+- **Songs one by one** — ask for several songs at once and each lands in the library as soon as
+  it is finished, ready to play while the rest are still made; a stopped request keeps the songs
+  it finished.
 - **Read and edit the score** — the model writes its composition in ABC notation first; the
   studio engraves it as sheet music. Edit the notes, tempo or key and create again: the
   composition stays, the performance changes. Or switch to melody-only, or no score at all.
@@ -94,6 +103,9 @@ Code, save [docs/mcp-skill.md](docs/mcp-skill.md) as `~/.claude/skills/yue2-stud
 - **Word-level karaoke** — enhanced LRC with a timestamp on every word, aligned by Parakeet
   or Whisper. Your lyrics are kept; only the timing is borrowed.
 - **Six stems on the GPU** — drums, bass, other, vocals, guitar and piano with HT-Demucs.
+- **A stem mixer** — a song's stems play together on one transport over its waveform, each with
+  mute, solo, volume and pan, and a loop over a section: the drums with the bass alone, or the
+  band without the voice. The stem files stay as separated.
 - **Any track to MIDI** — a song, a stem or a processed take becomes multi-instrument MIDI
   (34 instrument groups and drums) with MuScriptor on the GPU, in the audio.cpp server.
   A piano roll fills in while it listens; play it against the original, mute or solo
@@ -112,6 +124,12 @@ Code, save [docs/mcp-skill.md](docs/mcp-skill.md) as `~/.claude/skills/yue2-stud
 - **LoRA** — LoRA and LoKr files for either half of the model, the composition or the
   sound, each with its own strength, picked in the create form. A catalogue of ready ones
   with their authors credited, and a search on Hugging Face that downloads what you pick.
+- **Ruach Studio's sound in one step** — the "Ruach Studio" preset in Settings - Models puts their
+  fine-tune in place of the set's model and their YuE2-VAE-RS x3 decoder in place of the VAE's
+  own, and downloads what is missing; the decoder alone can be chosen on any set. It keeps the
+  10-16 kHz band at the source's level and adds nothing above 20 kHz, at 4 GB of the card while it
+  decodes against 2.5 GB. Six more community models - Ruach Studio's IRA and IRAE merges - are
+  in the list of your own models, in Q8_0 and Q6_K.
 - **Train your own LoRA** — an optional tab on the LoRA page: songs of one artist or
   style become a LoRA on your own card with HOT-Step's trainer and its tuned recipe (LoKr,
   Prodigy, lyric timing from a forced aligner that also reads Cyrillic). Every setting of
@@ -144,6 +162,13 @@ Code, save [docs/mcp-skill.md](docs/mcp-skill.md) as `~/.claude/skills/yue2-stud
   it once, changing nothing on the way: lossless 24-bit FLAC by default (libFLAC, the reference
   encoder), MP3 with LAME when you choose it. Normalisation is a stage under Process, after
   mastering, never part of generation.
+- **Export for release** — from a song's menu: WAV in 16, 24 bits or 32-bit float, FLAC in 16 or
+  24, MP3 from 128 to 320 kbps, at its own rate or 44.1–96 kHz, brought on the way to a loudness
+  target: −14 LUFS for streaming, −16 for Apple Music and podcasts, −23 for broadcast, or your
+  own, under a true-peak ceiling. A report shows loudness and peak before and after; the song in
+  the library is untouched. The same window gives the song's MIDI - the whole score, or its lead,
+  voice line or chords alone - and an Ableton Live 12 project with the song, its stems and its
+  MIDI on their tracks.
 - **A library of plain files** — search, playlists, cover art from prompt templates, tracks
   exported with title, lyrics and cover in their own tags (Vorbis comments in a FLAC, ID3 in an
   MP3). Interface in English, Russian,
@@ -161,6 +186,10 @@ Code, save [docs/mcp-skill.md](docs/mcp-skill.md) as `~/.claude/skills/yue2-stud
   lyrics, text layers and effects, rendered to MP4 on your machine.
 - **Activity** — a log in the sidebar of every change a connected agent makes and every
   message the studio shows.
+- **No window when an agent works, a tray when you want it** — `--headless` starts the studio with
+  only a tray icon, and it stops by itself after ten idle minutes; `--stop` ends it when its
+  window is hidden and nothing is at work. "Keep running in the system tray when the window is
+  closed" hides the window instead of quitting, and a second launch brings up the one that runs.
 - **Likes, sorting and stems in order** — a like is kept with the song for every window and
   agent, every list sorts by date, title or length, and a song's stems fold under it.
 - **A song from a seed** — hum, play or write an opening, turn on "Continue the song from this
