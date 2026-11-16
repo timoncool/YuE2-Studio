@@ -48,7 +48,7 @@ const TARGETS: { id: string; lufs: number | null; ceiling: number }[] = [
 ];
 
 const CONTROL =
-  'w-full rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm text-zinc-900 outline-hidden focus:border-pink-500 dark:border-white/10 dark:bg-black/25 dark:text-white';
+  'w-full rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm text-zinc-900 outline-hidden focus:border-pink-500 aria-invalid:border-rose-500 dark:border-white/10 dark:bg-black/25 dark:text-white dark:aria-invalid:border-rose-500';
 const LABEL = 'mb-1 block text-[11px] font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400';
 
 const level = (value: number | null | undefined, unit: string) => (value === null || value === undefined || !Number.isFinite(value) ? '–' : `${value.toFixed(1)} ${unit}`);
@@ -106,11 +106,14 @@ export const ExportDialog: React.FC = () => {
     setSong(null);
   };
 
+  // a decimal comma is a decimal point; what is not a number is not sent
+  const decimal = (text: string) => (text.trim() === '' ? Number.NaN : Number(text.trim().replace(',', '.')));
+  const customOk = target !== 'custom' || (Number.isFinite(decimal(customLufs)) && Number.isFinite(decimal(customCeiling)));
   const chosen = TARGETS.find(entry => entry.id === target) ?? TARGETS[0];
   const loudness = chosen.lufs === null
     ? null
     : chosen.id === 'custom'
-      ? { target_lufs: Number(customLufs), ceiling_dbtp: Number(customCeiling) }
+      ? { target_lufs: decimal(customLufs), ceiling_dbtp: decimal(customCeiling) }
       : { target_lufs: chosen.lufs, ceiling_dbtp: chosen.ceiling };
 
   const start = async () => {
@@ -223,8 +226,8 @@ export const ExportDialog: React.FC = () => {
             </label>
             {target === 'custom' && (
               <>
-                <label className="block"><span className={LABEL}>{t('exportTargetLufs')}</span><input className={CONTROL} inputMode="decimal" value={customLufs} disabled={busy} onChange={event => setCustomLufs(event.target.value)} /></label>
-                <label className="block"><span className={LABEL}>{t('exportCeiling')}</span><input className={CONTROL} inputMode="decimal" value={customCeiling} disabled={busy} onChange={event => setCustomCeiling(event.target.value)} /></label>
+                <label className="block"><span className={LABEL}>{t('exportTargetLufs')}</span><input className={CONTROL} inputMode="decimal" value={customLufs} disabled={busy} aria-invalid={!Number.isFinite(decimal(customLufs))} onChange={event => setCustomLufs(event.target.value)} /></label>
+                <label className="block"><span className={LABEL}>{t('exportCeiling')}</span><input className={CONTROL} inputMode="decimal" value={customCeiling} disabled={busy} aria-invalid={!Number.isFinite(decimal(customCeiling))} onChange={event => setCustomCeiling(event.target.value)} /></label>
               </>
             )}
             <p className="col-span-2 text-[11px] leading-4 text-zinc-500">{t('exportHint')}</p>
@@ -279,7 +282,7 @@ export const ExportDialog: React.FC = () => {
               <button type="button" onClick={save} className="inline-flex items-center gap-1.5 rounded-lg bg-linear-to-r from-orange-500 to-pink-600 px-4 py-2 text-xs font-bold text-white"><Download size={13} />{t('exportSave')}</button>
             </>
           ) : (
-            <button type="button" disabled={busy} onClick={() => void start()} className="inline-flex items-center gap-1.5 rounded-lg bg-linear-to-r from-orange-500 to-pink-600 px-4 py-2 text-xs font-bold text-white disabled:opacity-50">
+            <button type="button" disabled={busy || !customOk} onClick={() => void start()} className="inline-flex items-center gap-1.5 rounded-lg bg-linear-to-r from-orange-500 to-pink-600 px-4 py-2 text-xs font-bold text-white disabled:opacity-50">
               {busy && <Loader2 size={13} className="animate-spin" />}{t('exportStart')}
             </button>
           )}

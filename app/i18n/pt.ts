@@ -1111,7 +1111,7 @@ export const pt = {
     peakClipLabel: 'Corte de picos',
     captionStyle: 'Estilo',
     trackIdea: 'Ideia da faixa',
-    studioTools: 'Ferramentas do estúdio',
+    studioTools: 'Ferramentas',
     importAudioTab: 'Importar',
     importAudioTitle: 'Importar áudio para a biblioteca',
     importAudioHint: 'MP3, WAV, FLAC, Ogg, M4A, AAC, AIFF, CAF, MKA. Largar os ficheiros aqui, ou escolhê-los.',

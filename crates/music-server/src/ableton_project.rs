@@ -116,7 +116,7 @@ fn read_me(contents: &Contents, files: &[(String, String)], left_off: &[String])
     text.push_str(
         "\nWhat the files are\n\
          - Master: the song as generated, byte for byte.\n\
-         - (separated): stems made from the mix by the HT-Demucs model. Each is the model's estimate of that part,\n\
+         - (separated): stems made from the mix by the studio's stem separator. Each is the model's estimate of that part,\n\
            not an original recording; parts bleed into each other.\n\
          - (from score): the notes of the score the song was generated with - what the model was asked to play.\n\
            How closely the recording follows them is not measured. The MIDI tracks have no instrument: add one in Live.\n\
@@ -125,10 +125,40 @@ fn read_me(contents: &Contents, files: &[(String, String)], left_off: &[String])
     text
 }
 
-/// An audio file as Live's clip: its length in frames and rate from decoding it.
+/// A file's length in frames and its rate from its header, in the formats that keep them there (WAV, FLAC).
+fn header_length(path: &Path) -> Option<(u64, u32)> {
+    let extension = path.extension()?.to_str()?.to_ascii_lowercase();
+    match extension.as_str() {
+        "wav" => {
+            let reader = hound::WavReader::open(path).ok()?;
+            Some((u64::from(reader.duration()), reader.spec().sample_rate))
+        }
+        "flac" => {
+            use std::io::Read;
+            let mut head = [0u8; 26];
+            std::fs::File::open(path).ok()?.read_exact(&mut head).ok()?;
+            if &head[..4] != b"fLaC" || head[4] & 0x7f != 0 {
+                return None;
+            }
+            // STREAMINFO: 20 bits of rate, 3 of channels, 5 of depth, 36 of total samples
+            let packed = u64::from_be_bytes(head[18..26].try_into().ok()?);
+            let (rate, frames) = ((packed >> 44) as u32, packed & 0xF_FFFF_FFFF);
+            (rate > 0 && frames > 0).then_some((frames, rate))
+        }
+        _ => None,
+    }
+}
+
+/// An audio file as Live's clip: its length in frames and rate from its header, or from decoding it where the
+/// header does not say.
 fn audio_clip(name: &str, relative_path: String, path: &Path) -> Result<AudioClip> {
-    let audio = crate::audio_pcm::decode_stereo(path)?;
-    let (frames, sample_rate) = (audio.frames() as u64, audio.rate);
+    let (frames, sample_rate) = match header_length(path) {
+        Some(length) => length,
+        None => {
+            let audio = crate::audio_pcm::decode_stereo(path)?;
+            (audio.frames() as u64, audio.rate)
+        }
+    };
     let meta = std::fs::metadata(path).with_context(|| format!("read {}", path.display()))?;
     let modified = meta.modified().ok().and_then(|time| time.duration_since(std::time::UNIX_EPOCH).ok()).map_or(0, |since| since.as_secs());
     Ok(AudioClip { name: name.into(), relative_path, frames, sample_rate, file_size: meta.len(), modified })
@@ -371,7 +401,7 @@ pub async fn file(UrlPath(id): UrlPath<String>, request: Request) -> Result<axum
     response.headers_mut().insert(header::CONTENT_TYPE, HeaderValue::from_static("application/zip"));
     if let Some(name) = path.file_name().and_then(|value| value.to_str()) {
         let ascii: String = name.chars().map(|c| if c.is_ascii() && c != '"' { c } else { '_' }).collect();
-        if let Ok(value) = HeaderValue::from_str(&format!("attachment; filename=\"{ascii}\"")) {
+        if let Ok(value) = HeaderValue::from_str(&format!("attachment; filename=\"{ascii}\"; filename*=UTF-8''{}", crate::mcp::segment(name))) {
             response.headers_mut().insert(header::CONTENT_DISPOSITION, value);
         }
     }
@@ -492,5 +522,23 @@ mod tests {
     fn without_a_score_the_read_me_says_the_tempo_is_not_the_songs() {
         let contents = Contents { title: "x".into(), bpm: 120.0, meter: (4, 4), mix: PathBuf::from("m.wav"), stems: vec![], midi: vec![], tempo_from_score: false };
         assert!(read_me(&contents, &[], &[]).contains("not the song's"));
+    }
+
+
+    #[test]
+    fn a_files_length_is_read_from_its_header_and_is_what_decoding_gives() {
+        let folder = tempfile::tempdir().unwrap();
+        let audio = audio_post::Stereo::new(vec![0.25; 12_345], vec![-0.25; 12_345], 44_100);
+        let wav = folder.path().join("stem.wav");
+        crate::audio_pcm::write_wav_f32(&wav, &audio).unwrap();
+        let flac = folder.path().join("master.flac");
+        std::fs::write(&flac, audio_post::encode::flac(&audio).unwrap()).unwrap();
+        for path in [&wav, &flac] {
+            let decoded = crate::audio_pcm::decode_stereo(path).unwrap();
+            assert_eq!(header_length(path), Some((decoded.frames() as u64, decoded.rate)), "{}", path.display());
+            let clip = audio_clip("clip", "Samples/Imported/clip".into(), path).unwrap();
+            assert_eq!((clip.frames, clip.sample_rate), (12_345, 44_100));
+        }
+        assert_eq!(header_length(&folder.path().join("song.mp3")), None, "a format without it in the header is decoded");
     }
 }

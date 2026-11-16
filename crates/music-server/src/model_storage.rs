@@ -338,6 +338,34 @@ fn move_back(data_root: &Path, name: &str, target: &Path, cancel: &AtomicBool, t
     Ok(())
 }
 
+
+/// Moves a folder kept at `old` straight to `home` and points its link there, without a copy through the data
+/// folder's disk. The link leads to `old` until the folder is whole at the new place, so a move that is cut off or
+/// fails leaves the studio reading the folder where it has been.
+fn move_across(data_root: &Path, name: &str, old: &Path, home: &Path, cancel: &AtomicBool, tell: &mut dyn FnMut(u64)) -> Result<()> {
+    let place = data_root.join(name);
+    let target = home.join(name);
+    let copied = carry(old, &target, cancel, tell)?;
+    let relinked = remove_link(&place)
+        .with_context(|| format!("remove the link at {}", place.display()))
+        .and_then(|()| make_link(&target, &place).with_context(|| format!("link {} to {}", place.display(), target.display())));
+    if let Err(error) = relinked {
+        if copied {
+            let _ = fs::remove_dir_all(&target);
+        } else {
+            let _ = fs::rename(&target, old);
+        }
+        if link_target(&place).is_none() && !place.exists() {
+            let _ = make_link(old, &place);
+        }
+        return Err(error);
+    }
+    if copied {
+        fs::remove_dir_all(old).with_context(|| format!("the folder moved, but its old copy at {} could not be removed", old.display()))?;
+    }
+    Ok(())
+}
+
 /// Moves the download folders into `home`, or back into the data folder when `home` is none. A folder that cannot
 /// move stays where it is and says why; the others still move. `tell` hears the folder at work, the bytes copied of
 /// it and its size.
@@ -363,8 +391,7 @@ pub fn relocate(data_root: &Path, home: Option<&Path>, cancel: &AtomicBool, mut 
         let mut progress = |done: u64| tell(name, done, bytes);
         let outcome = match (home, &linked) {
             (Some(home), None) => move_out(data_root, name, home, cancel, &mut progress),
-            // from one chosen folder to another: back first, then out, so a failure leaves it in the data folder
-            (Some(home), Some(target)) => move_back(data_root, name, target, cancel, &mut progress).and_then(|()| move_out(data_root, name, home, cancel, &mut progress)),
+            (Some(home), Some(target)) => move_across(data_root, name, target, home, cancel, &mut progress),
             (None, Some(target)) => move_back(data_root, name, target, cancel, &mut progress),
             (None, None) => Ok(()),
         };
@@ -382,6 +409,9 @@ pub fn sweep(data_root: &Path) {
         let aside = sibling(&place, LEAVING);
         if aside.is_dir() && link_target(&place).is_some() {
             let _ = fs::remove_dir_all(&aside);
+        } else if aside.is_dir() && !place.exists() {
+            // cut off after the folder was set aside and before its link was made: the folder comes back
+            let _ = fs::rename(&aside, &place);
         }
         let arriving = sibling(&place, STAGED);
         if !arriving.is_dir() {
@@ -504,7 +534,7 @@ pub async fn change(State(state): State<AppState>, Json(change): Json<Change>) -
     if !at_work.is_empty() {
         return Err(api_error(StatusCode::CONFLICT, format!("the studio is at work ({}); move the models when it is done", at_work.join(", "))));
     }
-    if download_running(&root) {
+    if crate::chunked::downloading() || download_running(&root) {
         return Err(api_error(StatusCode::CONFLICT, "a download is running; move the models when it is done or cancelled".into()));
     }
     let home = match change.directory.as_deref().map(str::trim).filter(|directory| !directory.is_empty()) {
@@ -658,6 +688,37 @@ mod tests {
         sweep(&data);
         assert!(link_target(&data.join("models")).is_none() && !arriving.exists());
         assert_eq!(fs::read(data.join("models/yue2-cpp/backbone.gguf")).unwrap(), b"weights");
+        fs::remove_dir_all(root).ok();
+    }
+
+
+    #[test]
+    fn a_folder_goes_from_one_chosen_place_straight_to_another() {
+        let (root, data) = data("across");
+        let first = check_place(&data, &root.join("disk one")).unwrap();
+        let second = check_place(&data, &root.join("disk two")).unwrap();
+        relocate(&data, Some(&first), &quiet(), |_, _, _| {});
+
+        let moved = relocate(&data, Some(&second), &quiet(), |_, _, _| {});
+        assert!(moved.iter().all(|folder| folder.error.is_none()), "{moved:?}");
+        assert_eq!(link_target(&data.join("models")), Some(second.join("models")));
+        assert_eq!(fs::read(data.join("models/yue2-cpp/backbone.gguf")).unwrap(), b"weights");
+        assert!(!first.join("models").exists(), "nothing of it stays at the place it left");
+        assert!(!sibling(&data.join("models"), STAGED).exists(), "and nothing passed through the data folder");
+        assert_eq!(storage(&data).chosen.as_deref(), Some(second.display().to_string().as_str()));
+        fs::remove_dir_all(root).ok();
+    }
+
+    #[test]
+    fn a_folder_set_aside_when_the_move_was_cut_off_comes_back_at_the_next_start() {
+        let (root, data) = data("aside");
+        let place = data.join("models");
+        fs::rename(&place, sibling(&place, LEAVING)).unwrap();
+        assert!(!place.exists());
+        sweep(&data);
+        assert!(link_target(&place).is_none());
+        assert_eq!(fs::read(place.join("yue2-cpp/backbone.gguf")).unwrap(), b"weights");
+        assert!(!sibling(&place, LEAVING).exists());
         fs::remove_dir_all(root).ok();
     }
 

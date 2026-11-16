@@ -545,7 +545,7 @@ pub async fn file(UrlPath(id): UrlPath<String>, request: Request) -> Result<axum
     let mut response = crate::serve_audio_file(&path, request).await;
     if let Some(name) = path.file_name().and_then(|value| value.to_str()) {
         let ascii: String = name.chars().map(|c| if c.is_ascii() && c != '"' { c } else { '_' }).collect();
-        if let Ok(value) = HeaderValue::from_str(&format!("attachment; filename=\"{ascii}\"")) {
+        if let Ok(value) = HeaderValue::from_str(&format!("attachment; filename=\"{ascii}\"; filename*=UTF-8''{}", crate::mcp::segment(name))) {
             response.headers_mut().insert(header::CONTENT_DISPOSITION, value);
         }
     }

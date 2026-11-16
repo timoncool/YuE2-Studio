@@ -1155,7 +1155,8 @@ pub fn run() {
             // maximised state window-state restores into it wait, hidden, for the first show: tao moves and sizes a
             // hidden window without showing it, and on Windows keeps a maximise for the show (it calls
             // ShowWindow(SW_MAXIMIZE) only on a visible window), so the restore needs no deferring.
-            let window = if launch.headless { window.visible(false).focused(false) } else { window };
+            // `--stop` with nothing running ends right after this: its window never comes up either
+            let window = if launch.headless || launch.stop { window.visible(false).focused(false) } else { window };
             // WebView2 leaves a microphone request with no answer and no prompt: the window's own bundled page
             // (tauri.localhost on Windows, tauri://localhost elsewhere) - recording in the audio editor - waited for ever
             let window = window.on_permission_request(|webview, kind| match kind {

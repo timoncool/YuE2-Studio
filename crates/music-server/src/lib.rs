@@ -9652,19 +9652,31 @@ async fn setup_preset(State(state): State<AppState>, Json(request): Json<SetupPr
     if set_downloading || state.community_downloads.active().await.is_some_and(|progress| !progress.done) {
         return Err(api_error(StatusCode::CONFLICT, "a model is downloading; wait for it or cancel it, then choose the preset".into()));
     }
+    // the fine-tune first: it is the step that can be refused, and nothing else has changed yet
+    let _ = own_model_select(State(state.clone()), Json(OwnModelRequest { file: None, community: Some(model_manager::PRESET_MODEL.into()), quant: None })).await?;
+    let before = (state.selected_profile_id.read().await.clone(), state.selected_component_ids.read().await.clone());
     *state.selected_profile_id.write().await = None;
     *state.selected_component_ids.write().await = Some(ids.clone());
-    persist_studio_settings(&state)
+    let mut applied = persist_studio_settings(&state)
         .await
-        .map_err(|error| api_error(StatusCode::INTERNAL_SERVER_ERROR, format!("the choice was not saved: {error:#}")))?;
-    if state.model_manager.decoder_to_fetch(None, Some(&ids)).is_some() {
-        state
+        .map_err(|error| api_error(StatusCode::INTERNAL_SERVER_ERROR, format!("the choice was not saved: {error:#}")));
+    if applied.is_ok() && state.model_manager.decoder_to_fetch(None, Some(&ids)).is_some() {
+        applied = state
             .model_manager
             .install(model_manager::InstallRequest { profile_id: None, component_ids: ids })
             .await
-            .map_err(|error| api_error(StatusCode::CONFLICT, error.to_string()))?;
+            .map(|_| ())
+            .map_err(|error| api_error(StatusCode::CONFLICT, error.to_string()));
     }
-    let _ = own_model_select(State(state.clone()), Json(OwnModelRequest { file: None, community: Some(model_manager::PRESET_MODEL.into()), quant: None })).await?;
+    if let Err(refused) = applied {
+        // the set goes back as it was: the decoder is taken with the set or not at all
+        *state.selected_profile_id.write().await = before.0;
+        *state.selected_component_ids.write().await = before.1;
+        if let Err(error) = persist_studio_settings(&state).await {
+            studio_log!("[ERROR] the set chosen before the preset was not saved back: {error:#}");
+        }
+        return Err(refused);
+    }
     {
         let state = state.clone();
         tokio::spawn(async move { reload_engine_if_models_changed(&state).await });
