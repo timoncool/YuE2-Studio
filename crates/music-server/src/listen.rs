@@ -207,6 +207,7 @@ pub fn hear_batch(
         command.env("CUDA_VISIBLE_DEVICES", "-1");
     }
     quiet(&mut command);
+    let started_as = format!("{command:?}");
     let mut child = command.spawn().with_context(|| format!("start {}", exe.display()))?;
     let stderr = child.stderr.take().context("the captioner's messages")?;
 
@@ -239,6 +240,17 @@ pub fn hear_batch(
     if !status.success() && (tail.is_empty() || music_core::process::exited_on_exception(status.code())) {
         if let Some(fault) = music_core::process::fault_of(pid, std::time::Duration::from_secs(5)) {
             tail = if tail.is_empty() { fault.to_string() } else { format!("{tail} | {fault}") };
+        }
+    }
+    // a captioner that failed leaves its whole run in the studio's log, which a report carries: how it was started,
+    // every line it wrote, how it ended
+    if !status.success() || reported.iter().any(|seen| !seen) {
+        studio_log!("[ERROR] the captioner ended with {status}, {} of {} songs described, {} lines of its own; started as {started_as}", reported.iter().filter(|seen| **seen).count(), reported.len(), log.len());
+        for line in &log {
+            studio_log!("[captioner] {line}");
+        }
+        if log.is_empty() {
+            studio_log!("[captioner] it wrote nothing before it ended{}", if tail.is_empty() { ", and Windows kept no record of a fault" } else { "" });
         }
     }
     for (index, seen) in reported.iter().enumerate() {

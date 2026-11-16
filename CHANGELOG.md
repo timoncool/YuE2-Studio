@@ -3,7 +3,7 @@
 What changed, newest first. Dates are release dates; the studio is versioned by its
 Windows build.
 
-## 2026-11-15 — 4.0.1
+## 2026-11-16 — 4.1.0
 
 ### Added
 
@@ -19,6 +19,8 @@ Windows build.
 ### Fixed
 
 - **The engine starts on computers whose processor has AVX-512 that the system keeps switched off** ([#237](https://github.com/timoncool/YuE2-Studio/issues/237), [#215](https://github.com/timoncool/YuE2-Studio/issues/215)): the engine chose its processor library by what the processor reports alone, and on such a computer the first AVX-512 instruction closed it at start with 0xc000001d. It now asks the system as well and takes the AVX2 library there.
+- **A dataset whose lyrics are in Cyrillic, Chinese or any script but Latin is prepared for training with its words**: HOT-Step's preparation took such lyrics for an instrumental. The training tools, the captioner and the VST host are built from HOT-Step 75923e70 now; a studio that has the earlier tools is offered the new ones once, on the update screen.
+- **A failed "Describe by ear" leaves its whole run in the studio's log** ([#204](https://github.com/timoncool/YuE2-Studio/issues/204)): how the captioner was started, every line it wrote and how it ended go to `logs/yue2-studio.log`, which a problem report carries; before, a captioner that fell without a word and without a Windows record left nothing to go by.
 - **A recording longer than about four and a half minutes is transcribed into a score** ([#259](https://github.com/timoncool/YuE2-Studio/issues/259), found and explained by anatomix59-bit): the engine refused a request body over 100 MiB, which the 32-bit WAV of such a track exceeds, and the studio said "413 Payload Too Large". The engine now takes a body of 2 GiB.
 - **An engine that cannot start is no longer started again every two seconds**: the starts are 5, 15, 30 and 60 seconds apart, then five minutes apart, and at once when the engine settings or the chosen models change; the log says it once and no longer fills with the same failure. From [pull request #256](https://github.com/timoncool/YuE2-Studio/pull/256) by AIwork4me.
 - **"Keep models loaded: Auto" leaves the card its headroom** ([#238](https://github.com/timoncool/YuE2-Studio/issues/238), [#235](https://github.com/timoncool/YuE2-Studio/issues/235)): Auto kept the models on a card they only just fitted, and whatever reached the card after the start - the desktop, a browser - pushed the next song into the system's memory, where it runs many times slower and may run out. Auto now keeps the models only where 2.5 GB stay free beside them: a 12 GB card loads them for each song, as before 4.0.0, a 16 GB card keeps the Q8 set and not the BF16 one, a 24 GB card keeps either. The switch saved by a version before 4.0.0 reads as Auto, not as Yes.
