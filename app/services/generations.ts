@@ -378,7 +378,8 @@ export function useGenerations({ enabled, notify, onFinished }: GenerationOption
       setCards(prev => {
         const running = prev.filter(entry => entry.isGenerating && entry.jobId);
         if (running.length === 0) return prev;
-        const active = running.reduce((oldest, entry) => (entry.createdAt < oldest.createdAt ? entry : oldest));
+        // of a job's cards the lowest one shows the work: the song being made takes that card's row
+        const active = running.reduce((oldest, entry) => (entry.createdAt <= oldest.createdAt ? entry : oldest));
         return prev.map(entry => {
           if (!entry.isGenerating || !entry.jobId) return entry;
           if (entry.id === active.id) {
