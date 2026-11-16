@@ -1756,6 +1756,7 @@ pub async fn serve() -> anyhow::Result<()> {
         .route("/setup/adopt", post(setup_adopt))
         .route("/v1/open-data-directory", post(open_data_directory))
         .route("/setup/select", post(setup_select))
+        .route("/setup/preset", post(setup_preset))
         .route("/setup/own-model", get(own_model_status).put(own_model_select))
         .route("/setup/own-model/reveal", post(own_model_reveal))
         .route("/setup/own-model/cancel", post(own_model_cancel))
@@ -9585,6 +9586,49 @@ async fn setup_select(
     }
     let _ = persist_studio_settings(&state).await;
     // the songs already sent are finished on the set they were sent to first
+    {
+        let state = state.clone();
+        tokio::spawn(async move { reload_engine_if_models_changed(&state).await });
+    }
+    let target = effective_install_target(&state).await;
+    let manager_status = state.model_manager.status(target).await;
+    Ok(Json(serde_json::to_value(compose_setup_status(&state, manager_status).await).unwrap_or(Value::Null)))
+}
+
+#[derive(Debug, Deserialize)]
+struct SetupPresetRequest {
+    id: String,
+}
+
+/// POST /setup/preset - a way of the studio others made, in one step. `ruach`: Ruach Studio's fine-tune sings in
+/// place of the set's model and their decoder turns the song into sound; the set chosen now keeps its other parts.
+/// What is not on disk is downloaded, and the engine starts on each part as it arrives.
+async fn setup_preset(State(state): State<AppState>, Json(request): Json<SetupPresetRequest>) -> Result<Json<Value>, (StatusCode, Json<ApiError>)> {
+    if request.id != "ruach" {
+        return Err(api_error(StatusCode::BAD_REQUEST, format!("unknown preset {}: ruach is the one there is", request.id)));
+    }
+    let picked = state.selected_component_ids.read().await.clone();
+    let profile = state.selected_profile_id.read().await.clone();
+    let base = match (picked, profile) {
+        (Some(ids), _) => ids,
+        (None, Some(profile)) => model_manager::profile_components(&profile),
+        (None, None) => return Err(api_error(StatusCode::CONFLICT, "no model set is selected; choose one in Settings - Models first".into())),
+    };
+    let ids = model_manager::with_decoder(&base, model_manager::PRESET_DECODER);
+    state.model_manager.installed_component_files(&ids).map_err(|error| api_error(StatusCode::CONFLICT, error.to_string()))?;
+    *state.selected_profile_id.write().await = None;
+    *state.selected_component_ids.write().await = Some(ids.clone());
+    persist_studio_settings(&state)
+        .await
+        .map_err(|error| api_error(StatusCode::INTERNAL_SERVER_ERROR, format!("the choice was not saved: {error:#}")))?;
+    if state.model_manager.decoder_to_fetch(None, Some(&ids)).is_some() {
+        state
+            .model_manager
+            .install(model_manager::InstallRequest { profile_id: None, component_ids: ids })
+            .await
+            .map_err(|error| api_error(StatusCode::CONFLICT, error.to_string()))?;
+    }
+    let _ = own_model_select(State(state.clone()), Json(OwnModelRequest { file: None, community: Some(model_manager::PRESET_MODEL.into()), quant: None })).await?;
     {
         let state = state.clone();
         tokio::spawn(async move { reload_engine_if_models_changed(&state).await });

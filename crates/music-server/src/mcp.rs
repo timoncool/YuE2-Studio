@@ -502,6 +502,7 @@ const JOURNAL: &[(&str, &str, &str)] = &[
     ("recogniser_remove", "deleted", "model"),
     ("midi_remove", "deleted", "model"),
     ("models_select", "updated", "settings"),
+    ("models_preset", "updated", "settings"),
     ("models_own_select", "updated", "settings"),
     ("models_own_cancel", "cancelled", "download"),
     ("models_own_discard", "deleted", "download"),
@@ -1057,6 +1058,12 @@ fn tools() -> &'static [Tool] {
                 description: "Use an installed model set (profile_id) or a custom mix of components (component_ids) for generation.",
                 schema: || object(json!({ "profile_id": { "type": "string" }, "component_ids": { "type": "array", "items": { "type": "string" } } }), &[]),
                 call: |args| post("/setup/select".into(), args.clone()),
+            },
+            Tool {
+                name: "models_preset",
+                description: "Set the studio up the way others made it, in one step. id ruach: Ruach Studio's fine-tune (TW 2.0x0.75, the quantisation the card takes) sings in place of the set's model and their YuE2-VAE-RS x3 decoder turns the song into sound; the set chosen now keeps its VAE, transcriber and the rest. What is not on disk is downloaded (models_status and models_own_list show the progress) and the engine starts on each part as it arrives. The decoder takes about 4 GB of the card while it decodes, the VAE's own 2.5 GB. To go back: models_select with a set's profile_id, and models_own_select with no file.",
+                schema: || object(json!({ "id": { "type": "string", "enum": ["ruach"] } }), &["id"]),
+                call: |args| post("/setup/preset".into(), args.clone()),
             },
             Tool {
                 name: "models_own_list",

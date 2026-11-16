@@ -862,6 +862,21 @@ pub fn profile_components(profile_id: &str) -> Vec<String> {
     PROFILE_SETS.iter().find(|set| set.0 == profile_id).map(|set| set.2.iter().map(|id| id.to_string()).collect()).unwrap_or_default()
 }
 
+
+/// The decoder and the community fine-tune of the "Ruach Studio" preset: their v1 decoder, their own default, and
+/// the fine-tune they call their choice.
+pub const PRESET_DECODER: &str = "vae-rs-x3-v1";
+pub const PRESET_MODEL: &str = "rs-tw-2.0x0.75";
+
+/// `ids` with `decoder` as their one decoder: any other decoder among them gives way to it.
+pub fn with_decoder(ids: &[String], decoder: &str) -> Vec<String> {
+    let catalog = components();
+    let is_decoder = |id: &str| catalog.iter().any(|component| component.id == id && component.kind == "vae-decoder");
+    let mut ids: Vec<String> = ids.iter().filter(|id| !is_decoder(id)).cloned().collect();
+    ids.push(decoder.to_string());
+    ids
+}
+
 /// The declared set whose components are exactly these, whatever order they
 /// arrive in: picking every component of a set by hand is choosing that set.
 pub fn profile_matching(component_ids: &[String]) -> Option<&'static str> {
@@ -875,28 +890,15 @@ pub fn profile_matching(component_ids: &[String]) -> Option<&'static str> {
     })
 }
 
-/// Ruach Studio's decoder of every set: v1, the steadier of the two releases and their own default.
-const DECODER: &str = "vae-rs-x3-v1";
-
-const PROFILE_SETS: [(&str, &str, [&str; 6]); 4] = [
-    ("light", "Light - Q5_K_M backbone (6 GB cards)", ["backbone-q5", "vae-f32", DECODER, "transcriber-q8", "mert-q8", COMPANION]),
-    ("balanced", "Balanced - Q6_K backbone", ["backbone-q6", "vae-f32", DECODER, "transcriber-q8", "mert-q8", COMPANION]),
-    ("quality-q8", "Quality - Q8_0 backbone, near lossless", ["backbone-q8", "vae-f32", DECODER, "transcriber-q8", "mert-q8", COMPANION]),
-    ("native", "Full native - BF16 backbone, original weights", ["backbone-bf16", "vae-f32", DECODER, "transcriber-f32", "mert-f32", COMPANION]),
+const PROFILE_SETS: [(&str, &str, [&str; 5]); 4] = [
+    ("light", "Light - Q5_K_M backbone (6 GB cards)", ["backbone-q5", "vae-f32", "transcriber-q8", "mert-q8", COMPANION]),
+    ("balanced", "Balanced - Q6_K backbone", ["backbone-q6", "vae-f32", "transcriber-q8", "mert-q8", COMPANION]),
+    ("quality-q8", "Quality - Q8_0 backbone, near lossless", ["backbone-q8", "vae-f32", "transcriber-q8", "mert-q8", COMPANION]),
+    ("native", "Full native - BF16 backbone, original weights", ["backbone-bf16", "vae-f32", "transcriber-f32", "mert-f32", COMPANION]),
 ];
 
-/// The sets as this machine takes them: the decoder is in a set where the card has the memory for it, and a smaller
-/// card, or a machine that computes on its processor, keeps the VAE's own decoder. Picked by hand, the decoder is
-/// taken on any machine.
 pub(crate) fn profiles() -> Vec<Profile> {
-    let decoder = crate::hardware::card_takes_decoder();
-    PROFILE_SETS
-        .iter()
-        .map(|(id, label, ids)| {
-            let ids: Vec<&'static str> = ids.iter().copied().filter(|id| decoder || *id != DECODER).collect();
-            profile(id, label, &ids)
-        })
-        .collect()
+    PROFILE_SETS.iter().map(|(id, label, ids)| profile(id, label, ids)).collect()
 }
 
 /// The bytes of a set's backbone and VAE, the weights that sit in memory while a song is made.
@@ -1024,10 +1026,10 @@ mod tests {
     #[test]
     fn a_hand_picked_set_equal_to_a_declared_one_is_that_set() {
         let ids = |list: &[&str]| list.iter().map(|id| id.to_string()).collect::<Vec<_>>();
-        assert_eq!(profile_matching(&ids(&["transcriber-f32", "mert-f32", "backbone-bf16", "vae-f32", DECODER])), Some("native"));
-        assert_eq!(profile_matching(&ids(&["transcriber-f32", "mert-f32", DECODER, "backbone-bf16", "vae-f32", COMPANION])), Some("native"));
-        assert_eq!(profile_matching(&ids(&["backbone-q8", "vae-f32", DECODER, "transcriber-q8", "mert-q8"])), Some("quality-q8"));
-        assert_eq!(profile_matching(&ids(&["backbone-q8", "vae-f32", "transcriber-q8", "mert-q8"])), None, "a set picked without the decoder is the person's own");
+        assert_eq!(profile_matching(&ids(&["transcriber-f32", "mert-f32", "backbone-bf16", "vae-f32"])), Some("native"));
+        assert_eq!(profile_matching(&ids(&["transcriber-f32", "mert-f32", "backbone-bf16", "vae-f32", COMPANION])), Some("native"));
+        assert_eq!(profile_matching(&ids(&["backbone-q8", "vae-f32", "transcriber-q8", "mert-q8"])), Some("quality-q8"));
+        assert_eq!(profile_matching(&ids(&["backbone-q8", "vae-f32", "vae-rs-x3-v1", "transcriber-q8", "mert-q8"])), None, "a set picked with a decoder is the person's own");
         assert_eq!(profile_matching(&ids(&["backbone-q8", "vae-f32"])), None);
         assert_eq!(profile_matching(&ids(&["backbone-q8", "vae-f32", "transcriber-f32"])), None);
     }
@@ -1115,7 +1117,8 @@ mod tests {
     }
 
 
-    /// A set installed before its decoder was published runs on the VAE's own decoder, and names the decoder once it is on disk.
+    /// The sets decode with the VAE's own decoder. A set picked with Ruach Studio's decoder runs on the VAE's own until
+    /// the decoder is on disk, is offered it meanwhile, and names it once it is there.
     #[test]
     fn a_set_without_its_decoder_on_disk_decodes_with_the_vae_and_takes_the_decoder_when_it_arrives() {
         let root = std::env::temp_dir().join(format!("yue2-decoder-{}", uuid::Uuid::now_v7()));
@@ -1131,44 +1134,49 @@ mod tests {
         for component in components().iter().filter(|component| ["backbone-q8", "vae-f32", COMPANION].contains(&component.id)) {
             fs::File::create(root.join(component.filename)).unwrap().set_len(component.bytes).unwrap();
         }
-        let files = manager.installed_profile_files("quality-q8").unwrap();
+        assert!(profiles().iter().all(|profile| !profile.components.iter().any(|id| id.starts_with("vae-rs"))), "no set carries the decoder");
+        assert_eq!(manager.installed_profile_files("quality-q8").unwrap().vae_decoder, None);
+        assert!(manager.decoder_to_fetch(Some("quality-q8"), None).is_none(), "a set is not offered a decoder nobody picked");
+
+        let with_decoder: Vec<String> = ["backbone-q8", "vae-f32", "vae-rs-x3-v1"].map(String::from).to_vec();
+        let files = manager.installed_component_files(&with_decoder).unwrap();
         assert_eq!((files.vae.as_str(), files.vae_decoder), ("YuE2-Vae-F32.gguf", None));
-        let status = status_snapshot(root.clone(), None, Some(InstallRequest { profile_id: Some("quality-q8".into()), component_ids: vec![] }));
-        assert!(status.ready && status.download_pending > 0);
-        let offered = manager.decoder_to_fetch(Some("quality-q8"), None).expect("the set's decoder is offered");
-        assert_eq!((offered.id, offered.bytes, offered.partial), (DECODER, 803056768, 0));
-        assert!(manager.decoder_to_fetch(Some("light"), None).is_none(), "a set that is not on disk is not offered its decoder alone");
-        let decoder = components().into_iter().find(|component| component.id == DECODER).unwrap();
+        let offered = manager.decoder_to_fetch(None, Some(&with_decoder)).expect("the picked decoder is offered");
+        assert_eq!((offered.id, offered.bytes, offered.partial), ("vae-rs-x3-v1", 803056768, 0));
+        let on_light: Vec<String> = ["backbone-q5", "vae-f32", "vae-rs-x3-v1"].map(String::from).to_vec();
+        assert!(manager.decoder_to_fetch(None, Some(&on_light)).is_none(), "a set that is not on disk is not offered its decoder alone");
+
+        let decoder = components().into_iter().find(|component| component.id == "vae-rs-x3-v1").unwrap();
         assert_eq!(decoder.kind, "vae-decoder");
         fs::create_dir_all(root.join(decoder.filename).parent().unwrap()).unwrap();
         fs::File::create(root.join(decoder.filename)).unwrap().set_len(decoder.bytes).unwrap();
-        assert_eq!(manager.installed_profile_files("quality-q8").unwrap().vae_decoder.as_deref(), Some(decoder.filename));
+        assert_eq!(manager.installed_component_files(&with_decoder).unwrap().vae_decoder.as_deref(), Some(decoder.filename));
+        assert!(manager.decoder_to_fetch(None, Some(&with_decoder)).is_none());
+        assert_eq!(manager.arrived_bytes("vae-rs-x3-v1"), decoder.bytes);
         // a hand-picked set without a decoder stays without one, and two decoders are not a set
         let picked: Vec<String> = ["backbone-q8", "vae-f32"].map(String::from).to_vec();
         assert_eq!(manager.installed_component_files(&picked).unwrap().vae_decoder, None);
-        assert!(manager.decoder_to_fetch(None, Some(&picked)).is_none() && manager.decoder_to_fetch(Some("quality-q8"), None).is_none());
-        assert_eq!(manager.arrived_bytes(DECODER), decoder.bytes);
         let two: Vec<String> = ["backbone-q8", "vae-f32", "vae-rs-x3-v1", "vae-rs-x3-v2"].map(String::from).to_vec();
         assert!(resolve_install(InstallRequest { profile_id: None, component_ids: two }).is_err());
         let _ = fs::remove_dir_all(root);
     }
 
 
-    /// On a card without the memory for the decoder the sets come without it and nothing offers it; picked by hand
-    /// it is taken all the same.
+    /// The Ruach Studio preset keeps the chosen set and puts its decoder beside the VAE, in place of any other decoder.
     #[test]
-    fn a_small_card_keeps_the_vaes_own_decoder_unless_the_decoder_is_picked() {
-        crate::hardware::DECODER_IN_TESTS.with(|forced| forced.set(false));
-        assert!(profiles().iter().all(|profile| !profile.components.contains(&DECODER)));
-        let set = resolve_install(InstallRequest { profile_id: Some("light".into()), component_ids: vec![] }).unwrap();
-        assert!(set.components.iter().all(|component| component.kind != "vae-decoder"));
-        let picked: Vec<String> = ["backbone-q5", "vae-f32", DECODER].map(String::from).to_vec();
-        let own = resolve_install(InstallRequest { profile_id: None, component_ids: picked }).unwrap();
-        assert!(own.components.iter().any(|component| component.id == DECODER));
-        let whole: Vec<String> = ["backbone-q5", "vae-f32", "transcriber-q8", "mert-q8"].map(String::from).to_vec();
-        assert_eq!(profile_matching(&whole), Some("light"), "the set of a small card is the set without the decoder");
-        crate::hardware::DECODER_IN_TESTS.with(|forced| forced.set(true));
+    fn the_preset_puts_its_decoder_beside_the_chosen_set() {
+        let ids = |list: &[&str]| list.iter().map(|id| id.to_string()).collect::<Vec<_>>();
+        let set = profile_components("quality-q8");
+        let with = with_decoder(&set, PRESET_DECODER);
+        assert_eq!(with.len(), set.len() + 1);
+        assert!(resolve_install(InstallRequest { profile_id: None, component_ids: with.clone() }).is_ok());
+        assert_eq!(with_decoder(&with, PRESET_DECODER), with, "applied twice it is the same set");
+        let other = with_decoder(&ids(&["backbone-q5", "vae-f32", "vae-rs-x3-v2"]), PRESET_DECODER);
+        assert_eq!(other, ids(&["backbone-q5", "vae-f32", "vae-rs-x3-v1"]));
+        assert!(components().iter().any(|component| component.id == PRESET_DECODER && component.kind == "vae-decoder"));
+        assert!(crate::community::catalog().iter().any(|model| model.id == PRESET_MODEL), "the preset's fine-tune is in the community catalog");
     }
+
 
     #[test]
     fn the_single_file_transcriber_is_cleared_and_a_head_goes_with_its_mert() {
