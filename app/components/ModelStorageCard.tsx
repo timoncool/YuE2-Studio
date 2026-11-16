@@ -91,6 +91,7 @@ export const ModelStorageCard: React.FC = () => {
     const body = await answer(await fetch(apiUrl('/v1/storage'), { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ directory }) }));
     setPicked(null);
     setMove(body.move as Move);
+    if ((body.move as Move).running !== true) await load();
   });
 
   const stop = () => guarded(async () => {
