@@ -186,6 +186,9 @@ pub async fn start(
     if state.prepare.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).as_ref().is_some_and(|running| !running.finished) {
         return Err(api_error(StatusCode::CONFLICT, "songs are already being prepared; wait for them or stop it".into()));
     }
+    if crate::no_song_rendering(&state).await.is_err() {
+        return Err(api_error(StatusCode::CONFLICT, "a song is being made on the card; prepare songs once it is done".into()));
+    }
     // the agent writes after the preparation, so training cannot follow it
     if request.writer == Writer::Agent && request.train.is_some() {
         return Err(api_error(StatusCode::BAD_REQUEST, "with writer agent the songs are written after the preparation; start the training once they are, not with train".into()));
@@ -342,6 +345,9 @@ async fn describe_style_of(state: &AppState, audio: std::path::PathBuf, lyrics: 
     state.lyrics_sync.bind_ort().map_err(|error| api_error(StatusCode::CONFLICT, format!("{error:#}")))?;
     if state.training.active_run().await.is_some() || state.prepare.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).as_ref().is_some_and(|job| !job.finished) {
         return Err(api_error(StatusCode::CONFLICT, "the card is training or preparing songs; describe once it is free".into()));
+    }
+    if crate::no_song_rendering(state).await.is_err() {
+        return Err(api_error(StatusCode::CONFLICT, "a song is being made on the card; describe once it is done".into()));
     }
 
     let hooks = crate::card_hooks(state).await;
