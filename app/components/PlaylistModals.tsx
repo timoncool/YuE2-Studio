@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { createPortal } from 'react-dom';
-import { X, Plus, Music } from 'lucide-react';
+import { X, Plus, Music, Disc3 } from 'lucide-react';
 import { Playlist } from '../types';
 import { useI18n } from '../context/I18nContext';
 
@@ -88,9 +88,10 @@ interface AddToPlaylistModalProps {
   playlists: Playlist[];
   onSelect: (playlistId: string) => void;
   onCreateNew?: () => void;
+  onCreateNewAlbum?: () => void;
 }
 
-export const AddToPlaylistModal: React.FC<AddToPlaylistModalProps> = ({ isOpen, onClose, playlists, onSelect, onCreateNew }) => {
+export const AddToPlaylistModal: React.FC<AddToPlaylistModalProps> = ({ isOpen, onClose, playlists, onSelect, onCreateNew, onCreateNewAlbum }) => {
   const { t, songCount } = useI18n();
   if (!isOpen) return null;
 
@@ -98,7 +99,7 @@ export const AddToPlaylistModal: React.FC<AddToPlaylistModalProps> = ({ isOpen, 
     <div className="fixed inset-0 z-60 flex items-center justify-center bg-black/50 dark:bg-black/80 backdrop-blur-xs p-4">
       <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-white/10 rounded-xl w-full max-w-sm p-6 shadow-2xl animate-in fade-in zoom-in-95 duration-200">
         <div className="flex justify-between items-center mb-4">
-          <h2 className="text-lg font-bold text-zinc-900 dark:text-white">{t('addToPlaylist')}</h2>
+          <h2 className="text-lg font-bold text-zinc-900 dark:text-white">{t('addToCollection')}</h2>
           <button onClick={onClose} className="text-zinc-400 hover:text-zinc-900 dark:hover:text-white">
             <X size={20} />
           </button>
@@ -117,6 +118,12 @@ export const AddToPlaylistModal: React.FC<AddToPlaylistModalProps> = ({ isOpen, 
           </div>
         </button>
 
+        {onCreateNewAlbum && (
+          <button type="button" onClick={onCreateNewAlbum} className="mb-3 flex w-full items-center gap-3 rounded-lg border border-dashed border-zinc-300 p-3 text-left transition-colors hover:bg-zinc-100 dark:border-white/20 dark:hover:bg-white/5">
+            <div className="flex h-10 w-10 items-center justify-center rounded-sm bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-white/70"><Disc3 size={20} /></div>
+            <span className="font-semibold text-zinc-700 dark:text-white/90">{t('createAlbum')}</span>
+          </button>
+        )}
         <div className="h-px bg-zinc-100 dark:bg-white/10 my-2"></div>
 
         <div className="space-y-1 max-h-60 overflow-y-auto custom-scrollbar">
@@ -143,7 +150,7 @@ export const AddToPlaylistModal: React.FC<AddToPlaylistModalProps> = ({ isOpen, 
                 </div>
                 <div className="text-left overflow-hidden">
                   <div className="font-medium text-zinc-900 dark:text-white truncate">{playlist.name}</div>
-                  <div className="text-xs text-zinc-500">{songCount(playlist.song_count || playlist.songIds?.length || 0)}</div>
+                  <div className="text-xs text-zinc-500">{playlist.kind === 'album' ? t('album') : t('playlist')} · {songCount(playlist.song_count || playlist.songIds?.length || 0)}</div>
                 </div>
               </button>
             ))
