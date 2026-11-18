@@ -323,6 +323,7 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
              )}
              {playlistMenu && (
                  <PlaylistMenu
+                     kind={playlistMenu.playlist.kind}
                      at={playlistMenu.at}
                      empty={playable(playlistMenu.playlist).length === 0}
                      onClose={() => setPlaylistMenu(null)}
