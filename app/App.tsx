@@ -344,6 +344,7 @@ function AppContent() {
 
   // Modals
   const [isCreatePlaylistModalOpen, setIsCreatePlaylistModalOpen] = useState(false);
+  const [creatingCollectionKind, setCreatingCollectionKind] = useState<'playlist' | 'album'>('playlist');
   const [isAddToPlaylistModalOpen, setIsAddToPlaylistModalOpen] = useState(false);
   const [songsToAddToPlaylist, setSongsToAddToPlaylist] = useState<Song[]>([]);
 
@@ -1223,9 +1224,9 @@ function AppContent() {
     });
   };
 
-  const createPlaylist = async (name: string, description: string) => {
+  const createPlaylist = async (name: string, description: string, kind: 'playlist' | 'album' = 'playlist') => {
     try {
-      const playlist = await createNativePlaylist(name, description, songsToAddToPlaylist.map(song => song.id));
+      const playlist = await createNativePlaylist(name, description, kind === 'album' ? [] : songsToAddToPlaylist.map(song => song.id), kind);
       updateLibraryPlaylists(prev => [playlist, ...prev]);
       setSongsToAddToPlaylist([]);
       showToast(t('playlistCreated'));
@@ -1405,6 +1406,12 @@ function AppContent() {
             isPlaying={isPlaying}
             onCreatePlaylist={() => {
               setSongsToAddToPlaylist([]);
+              setCreatingCollectionKind('playlist');
+              setIsCreatePlaylistModalOpen(true);
+            }}
+            onCreateAlbum={() => {
+              setSongsToAddToPlaylist([]);
+              setCreatingCollectionKind('album');
               setIsCreatePlaylistModalOpen(true);
             }}
             onSelectPlaylist={(p) => handleNavigateToPlaylist(p.id)}
@@ -1687,7 +1694,8 @@ function AppContent() {
       <CreatePlaylistModal
         isOpen={isCreatePlaylistModalOpen}
         onClose={() => setIsCreatePlaylistModalOpen(false)}
-        onCreate={createPlaylist}
+        kind={creatingCollectionKind}
+        onCreate={(name, description) => createPlaylist(name, description, creatingCollectionKind)}
       />
       <AddToPlaylistModal
         isOpen={isAddToPlaylistModalOpen}
@@ -1696,6 +1704,7 @@ function AppContent() {
         onSelect={addSongToPlaylist}
         onCreateNew={() => {
           setIsAddToPlaylistModalOpen(false);
+          setCreatingCollectionKind('playlist');
           setIsCreatePlaylistModalOpen(true);
         }}
       />
