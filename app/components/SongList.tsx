@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
-import { Song } from '../types';
+import { Song, Playlist } from '../types';
 import { Play, MoreHorizontal, Heart, ListPlus, Pause, Search, Filter, Check, Loader2, Share2, Video, Info, Clock, Timer, ImagePlus, Pencil, Clapperboard, ListMusic, Trash2, Piano, Download, ListStart, ListEnd, Rows3, Rows4, Sparkles, FileAudio, GitBranch, Mic2, Layers } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useI18n } from '../context/I18nContext';
@@ -31,6 +31,8 @@ interface SongListProps {
     onSelect: (song: Song) => void;
     /** The whole library, where a song's stems are found when the list holds the song alone. */
     librarySongs?: Song[];
+    /** Every native playlist and album, for the Unassigned filter. */
+    collections?: Playlist[];
     /** The playlist the list shows, when it is not the whole library. */
     scopeName?: string;
     /** The library is still being read: an empty list is not an answer yet. */
@@ -71,7 +73,7 @@ interface SongListProps {
 
 
 // Define Filter Types
-type FilterType = 'liked' | 'made' | 'imported' | 'derived' | 'karaoke' | 'versions' | 'generating';
+type FilterType = 'liked' | 'made' | 'imported' | 'derived' | 'karaoke' | 'versions' | 'generating' | 'unassigned';
 /** Where a song came from: these filters add up, the others narrow. */
 const SOURCE_FILTERS: FilterType[] = ['made', 'imported', 'derived'];
 const isImported = (song: Song) => song.ditModel === 'imported-audio';
@@ -147,6 +149,7 @@ export const SongList: React.FC<SongListProps> = ({
     onPlay,
     onSelect,
     librarySongs,
+    collections = [],
     scopeName,
     loading = false,
     onToggleLike,
@@ -188,8 +191,8 @@ export const SongList: React.FC<SongListProps> = ({
     const [searchQuery, setSearchQuery] = useState('');
     const [activeFilters, setActiveFilters] = useState<Set<FilterType>>(new Set());
     const [isFilterOpen, setIsFilterOpen] = useState(false);
-    // Library rows show Suno-style checkboxes immediately; no extra mode switch required.
-    const [isSelecting, setIsSelecting] = useState(Boolean(onDeleteMany));
+    // Selection begins only when a checkbox is clicked (or Select is pressed).
+    const [isSelecting, setIsSelecting] = useState(false);
     const [cancelStage, setCancelStage] = useState<'cancel' | 'reset'>('cancel');
     // Reset cancel stage when no jobs left
     useEffect(() => { if (activeJobCount === 0) setCancelStage('cancel'); }, [activeJobCount]);
@@ -203,7 +206,8 @@ export const SongList: React.FC<SongListProps> = ({
         { id: 'liked', label: t('liked'), icon: <Heart size={16} /> },
         { id: 'karaoke', label: t('filterKaraoke'), icon: <Mic2 size={16} /> },
         { id: 'versions', label: t('filterVersions'), icon: <Layers size={16} /> },
-        { id: 'generating', label: t('generatingStatus'), icon: <Loader2 size={16} /> }
+        { id: 'generating', label: t('generatingStatus'), icon: <Loader2 size={16} /> },
+        { id: 'unassigned', label: t('unassignedFilter'), icon: <ListMusic size={16} /> }
     ];
 
     // Close filter dropdown when clicking outside
@@ -266,6 +270,8 @@ export const SongList: React.FC<SongListProps> = ({
 
     const words = useMemo(() => searchWords(searchQuery), [searchQuery]);
 
+    const assignedIds = useMemo(() => new Set(collections.flatMap(collection => collection.songIds ?? [])), [collections]);
+
     const filteredSongs = useMemo(() => {
         return songs.filter(song => {
             // 1. Search Logic
@@ -283,10 +289,11 @@ export const SongList: React.FC<SongListProps> = ({
             if (activeFilters.has('karaoke') && !song.lrcContent) return false;
             if (activeFilters.has('versions') && !(song.audioVersions?.length)) return false;
             if (activeFilters.has('generating') && !song.isGenerating) return false;
+            if (activeFilters.has('unassigned') && assignedIds.has(song.id)) return false;
 
             return true;
         });
-    }, [songs, words, activeFilters, likedSongIds]);
+    }, [songs, words, activeFilters, likedSongIds, assignedIds]);
 
     const filteredUploads = useMemo(() => {
         if (activeFilters.size > 0) return [];
@@ -368,7 +375,7 @@ export const SongList: React.FC<SongListProps> = ({
     };
     // Escape leaves the selection, Ctrl+A marks every row, as in a file manager
     useEffect(() => {
-        if (!isSelecting) return undefined;
+        if (!isSelecting && selectedIds.size === 0) return undefined;
         const key = (event: KeyboardEvent) => {
             const target = event.target as HTMLElement | null;
             if (target && (target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName))) return;
@@ -383,7 +390,7 @@ export const SongList: React.FC<SongListProps> = ({
         };
         window.addEventListener('keydown', key);
         return () => window.removeEventListener('keydown', key);
-    }, [isSelecting, selectableSongs]); // eslint-disable-line react-hooks/exhaustive-deps
+    }, [isSelecting, selectedIds.size, selectableSongs]); // eslint-disable-line react-hooks/exhaustive-deps
 
     const [downloading, setDownloading] = useState(false);
     const downloadSelected = async () => {
@@ -407,7 +414,8 @@ export const SongList: React.FC<SongListProps> = ({
             nested={nested}
             isCurrent={currentSong?.id === song.id}
             isSelected={selectedSong?.id === song.id}
-            isSelectionMode={isSelecting}
+            isSelectionMode={Boolean(onDeleteMany)}
+            revealCheckboxes={isSelecting}
             compact={density === 'compact'}
             isChecked={selectedIds.has(song.id)}
             isLiked={likedSongIds.has(song.id)}
@@ -415,7 +423,7 @@ export const SongList: React.FC<SongListProps> = ({
             isOwner={ownsSong(user, song)}
             onPlay={play}
             onSelect={() => onSelect(song)}
-            onRowClick={isSelecting && !isCard(song) ? (range) => toggleSelected(song, range) : undefined}
+            // Clicking the song body always opens its details, even after selecting other songs.
             onOpenOriginal={(() => {
                 const original = song.derived ? songsById.get(song.derived.from) : undefined;
                 return original ? () => onSelect(original) : undefined;
@@ -583,7 +591,7 @@ export const SongList: React.FC<SongListProps> = ({
                     )}
                 </div>
 
-                {isSelecting && selectedSongs.length > 0 && (
+                {selectedSongs.length > 0 && (
                         <div className="sticky top-0 z-30 -mt-4 mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-zinc-200 bg-zinc-50/95 px-4 py-3 shadow-lg backdrop-blur-sm dark:border-white/10 dark:bg-zinc-900/95">
                             <div className="flex items-center gap-3 text-sm text-zinc-600 dark:text-zinc-300" role="status">
                                 {selectedSongs.length} {t('nSelected')}
@@ -769,6 +777,7 @@ interface SongItemProps {
     isCurrent: boolean;
     isSelected: boolean;
     isSelectionMode: boolean;
+    revealCheckboxes?: boolean;
     /** One line per song: small cover, title, length and the main actions. */
     compact?: boolean;
     isChecked: boolean;
@@ -802,6 +811,7 @@ export const SongItem: React.FC<SongItemProps> = ({
     isCurrent,
     isSelected,
     isSelectionMode,
+    revealCheckboxes = false,
     compact = false,
     isChecked,
     isLiked,
@@ -916,7 +926,7 @@ export const SongItem: React.FC<SongItemProps> = ({
                         e.stopPropagation();
                         onToggleSelect(e.shiftKey);
                     }}
-                    className={`w-5 h-5 rounded border flex items-center justify-center transition-colors ${isChecked
+                    className={`w-5 h-5 shrink-0 rounded border flex items-center justify-center transition-all ${isChecked || revealCheckboxes ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100'} ${isChecked
                             ? 'bg-pink-600 border-pink-600 text-white'
                             : 'border-zinc-300 dark:border-zinc-600 text-transparent hover:border-zinc-400 dark:hover:border-zinc-500'
                         } ${isCard(song) ? 'opacity-40 cursor-not-allowed' : ''}`}
@@ -991,13 +1001,7 @@ export const SongItem: React.FC<SongItemProps> = ({
                             />
                         ) : (
                             <h3
-                                className={`min-w-0 font-bold truncate ${compact ? 'text-sm' : 'text-lg'} ${isCurrent ? 'text-pink-600 dark:text-pink-500' : 'text-zinc-900 dark:text-white'} ${isOwner && !song.isGenerating ? 'cursor-pointer hover:underline' : ''}`}
-                                onClick={(e) => {
-                                    if (isOwner && !song.isGenerating) {
-                                        e.stopPropagation();
-                                        startEditingTitle();
-                                    }
-                                }}
+                                className={`min-w-0 font-bold truncate ${compact ? 'text-sm' : 'text-lg'} ${isCurrent ? 'text-pink-600 dark:text-pink-500' : 'text-zinc-900 dark:text-white'}`}
                             >
                                 {song.title || (song.isGenerating ? (song.queuePosition ? t('queued') || "Queued..." : (t(song.stage as TranslationKey) || song.stage || t('creating') || "Creating...")) : t('untitled') || "Untitled")}
                             </h3>
