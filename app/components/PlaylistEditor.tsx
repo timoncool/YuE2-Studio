@@ -183,7 +183,7 @@ export interface PlaylistMenuActions {
 }
 
 /** What a playlist offers from its "..." button and from a right click. */
-export const PlaylistMenu: React.FC<{ at: { x: number; y: number } | null; empty: boolean; actions: PlaylistMenuActions; onClose: () => void }> = ({ at, empty, actions, onClose }) => {
+export const PlaylistMenu: React.FC<{ at: { x: number; y: number } | null; empty: boolean; actions: PlaylistMenuActions; onClose: () => void; kind?: Playlist['kind'] }> = ({ at, empty, actions, onClose, kind }) => {
   const { t } = useI18n();
   const menu = useRef<HTMLDivElement>(null);
   const [spot, setSpot] = useState<{ left: number; top: number } | null>(null);
@@ -245,8 +245,8 @@ export const PlaylistMenu: React.FC<{ at: { x: number; y: number } | null; empty
       {item(<ListStart size={14} />, t('playNextMenu'), () => actions.queue(true), { disabled: empty })}
       {item(<ListEnd size={14} />, t('addToQueueMenu'), () => actions.queue(false), { disabled: empty })}
       <div className="mx-2 my-1 h-px bg-white/10" />
-      {item(<Pencil size={14} />, t('editPlaylistDetails'), actions.edit)}
-      {item(<Trash2 size={14} />, t('deletePlaylist'), actions.remove, { danger: true })}
+      {item(<Pencil size={14} />, kind === 'album' ? t('editAlbum') : t('editPlaylistDetails'), actions.edit)}
+      {item(<Trash2 size={14} />, kind === 'album' ? t('deleteAlbum') : t('deletePlaylist'), actions.remove, { danger: true })}
     </div>,
     document.body,
   );
