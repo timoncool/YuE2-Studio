@@ -60,7 +60,7 @@ jobs:
           $ErrorActionPreference = 'Stop'
           $headers = @{ Authorization = "Bearer $env:GH_TOKEN"; 'User-Agent' = 'YuE2-fork-builder'; Accept = 'application/vnd.github+json' }
           $release = Invoke-RestMethod -Uri 'https://api.github.com/repos/timoncool/YuE2-Studio/releases/latest' -Headers $headers
-          $asset = $release.assets | Where-Object { $_.name -match 'portable.*windows.*x64\\.zip$' } | Select-Object -First 1
+          $asset = $release.assets | Where-Object { $_.name -match 'portable.*windows.*x64\.zip$' } | Select-Object -First 1
           if (-not $asset) { throw 'Upstream portable Windows x64 ZIP was not found in latest release' }
           Write-Host "Staging native runtime from upstream $($release.tag_name): $($asset.name)"
           $zip = Join-Path $env:RUNNER_TEMP 'upstream-portable.zip'
