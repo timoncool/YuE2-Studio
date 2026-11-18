@@ -1,0 +1,138 @@
+name: Build Windows portable EXE
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-portable-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  windows-portable:
+    runs-on: windows-latest
+    timeout-minutes: 120
+    steps:
+      - name: Check out fork
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: |
+            app/package-lock.json
+            desktop/package-lock.json
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust builds
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            . -> target
+            desktop/src-tauri -> target
+
+      - name: Install JavaScript dependencies
+        shell: pwsh
+        run: |
+          npm --prefix app ci --no-audit --no-fund
+          if ($LASTEXITCODE -ne 0) { throw 'App npm install failed' }
+          npm --prefix desktop ci --no-audit --no-fund
+          if ($LASTEXITCODE -ne 0) { throw 'Desktop npm install failed' }
+
+      # Reuse the upstream precompiled native engine rather than requiring CUDA,
+      # Vulkan SDK and a signing key on GitHub's hosted Windows runner.
+      # This is a fork-specific portable build, not an upstream-signed release.
+      - name: Stage native engine from upstream portable release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $headers = @{ Authorization = "Bearer $env:GH_TOKEN"; 'User-Agent' = 'YuE2-fork-builder'; Accept = 'application/vnd.github+json' }
+          $release = Invoke-RestMethod -Uri 'https://api.github.com/repos/timoncool/YuE2-Studio/releases/latest' -Headers $headers
+          $asset = $release.assets | Where-Object { $_.name -match 'portable.*windows.*x64\\.zip$' } | Select-Object -First 1
+          if (-not $asset) { throw 'Upstream portable Windows x64 ZIP was not found in latest release' }
+          Write-Host "Staging native runtime from upstream $($release.tag_name): $($asset.name)"
+          $zip = Join-Path $env:RUNNER_TEMP 'upstream-portable.zip'
+          Invoke-WebRequest -Uri $asset.browser_download_url -OutFile $zip
+          $extract = Join-Path $env:RUNNER_TEMP 'upstream-portable'
+          Expand-Archive -LiteralPath $zip -DestinationPath $extract -Force
+          foreach ($name in @('yue2-cpp', 'vst-host')) {
+            $source = Get-ChildItem -Path $extract -Directory -Recurse | Where-Object { $_.Name -eq $name -and $_.Parent.Name -eq 'resources' } | Select-Object -First 1
+            if (-not $source) { throw "Missing native runtime directory: $name" }
+            $target = Join-Path 'desktop/src-tauri/resources' $name
+            New-Item -ItemType Directory -Force -Path (Split-Path $target) | Out-Null
+            Copy-Item -LiteralPath $source.FullName -Destination $target -Recurse -Force
+          }
+          if (-not (Test-Path 'desktop/src-tauri/resources/yue2-cpp/yue-server.exe')) { throw 'yue-server.exe not found' }
+
+      - name: Test and build frontend
+        shell: pwsh
+        run: |
+          npm --prefix app run test
+          if ($LASTEXITCODE -ne 0) { throw 'Frontend tests failed' }
+          npm --prefix app run build
+          if ($LASTEXITCODE -ne 0) { throw 'Frontend build failed' }
+
+      - name: Compile modified Tauri desktop EXE (unsigned)
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $override = @{
+            bundle = @{
+              createUpdaterArtifacts = $false
+              resources = @{
+                'resources/yue2-cpp' = 'resources/yue2-cpp'
+                'resources/vst-host' = 'resources/vst-host'
+              }
+            }
+            plugins = @{ updater = @{ endpoints = @() } }
+          }
+          $config = Join-Path (Resolve-Path 'desktop/src-tauri').Path 'tauri.ci.conf.json'
+          $override | ConvertTo-Json -Depth 8 | Set-Content -Path $config -Encoding utf8
+          Push-Location desktop
+          try {
+            npx tauri build --no-bundle --config $config
+            if ($LASTEXITCODE -ne 0) { throw "Tauri build failed: $LASTEXITCODE" }
+          } finally {
+            Pop-Location
+            Remove-Item $config -Force -ErrorAction SilentlyContinue
+          }
+
+      - name: Package portable Windows ZIP
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $version = (Get-Content 'desktop/src-tauri/tauri.conf.json' -Raw | ConvertFrom-Json).version
+          $binary = (Get-Content 'desktop/src-tauri/tauri.conf.json' -Raw | ConvertFrom-Json).mainBinaryName
+          $root = Join-Path $env:RUNNER_TEMP "YuE2-Studio-$version-portable"
+          New-Item -ItemType Directory -Force -Path $root | Out-Null
+          $exe = Join-Path 'desktop/src-tauri/target/release' "$binary.exe"
+          if (-not (Test-Path $exe)) { throw "Built EXE missing: $exe" }
+          Copy-Item $exe $root
+          New-Item -ItemType Directory -Force -Path (Join-Path $root 'resources') | Out-Null
+          Copy-Item 'desktop/src-tauri/resources/yue2-cpp' (Join-Path $root 'resources/yue2-cpp') -Recurse
+          Copy-Item 'desktop/src-tauri/resources/vst-host' (Join-Path $root 'resources/vst-host') -Recurse
+          New-Item -ItemType File -Force -Path (Join-Path $root 'portable.flag') | Out-Null
+          $archive = Join-Path $env:GITHUB_WORKSPACE "YuE2-Studio-$version-portable-windows-x64.zip"
+          Compress-Archive -Path "$root/*" -DestinationPath $archive -Force
+          "PORTABLE_ZIP=$archive" >> $env:GITHUB_ENV
+
+      - name: Upload downloadable portable build
+        uses: actions/upload-artifact@v4
+        with:
+          name: YuE2-Studio-Windows-Portable
+          path: ${{ env.PORTABLE_ZIP }}
+          if-no-files-found: error
+          retention-days: 14
+          compression-level: 0
