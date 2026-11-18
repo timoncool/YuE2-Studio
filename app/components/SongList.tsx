@@ -550,7 +550,7 @@ export const SongList: React.FC<SongListProps> = ({
                                     : 'bg-zinc-100 dark:bg-suno-panel hover:bg-zinc-200 dark:hover:bg-white/5 border-zinc-200 dark:border-white/10 text-zinc-700 dark:text-white'
                                 }`}
                         >
-                            {isSelecting ? 'Hide checkboxes' : t('select')}
+                            {isSelecting ? t('hideCheckboxes') : t('select')}
                         </button>
 
                         {activeJobCount > 0 && onCancelAll && (
@@ -922,6 +922,7 @@ export const SongItem: React.FC<SongItemProps> = ({
                         } ${isCard(song) ? 'opacity-40 cursor-not-allowed' : ''}`}
                     disabled={isCard(song)}
                     aria-pressed={isChecked}
+                    aria-label={`${isChecked ? 'Deselect' : 'Select'} ${song.title}`}
                 >
                     <Check size={12} strokeWidth={3} className={isChecked ? 'text-white' : 'text-transparent'} />
                 </button>
