@@ -8,9 +8,10 @@ interface CreatePlaylistModalProps {
   isOpen: boolean;
   onClose: () => void;
   onCreate: (name: string, description: string) => void;
+  kind?: 'playlist' | 'album';
 }
 
-export const CreatePlaylistModal: React.FC<CreatePlaylistModalProps> = ({ isOpen, onClose, onCreate }) => {
+export const CreatePlaylistModal: React.FC<CreatePlaylistModalProps> = ({ isOpen, onClose, onCreate, kind = 'playlist' }) => {
   const { t } = useI18n();
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
@@ -32,7 +33,7 @@ export const CreatePlaylistModal: React.FC<CreatePlaylistModalProps> = ({ isOpen
     <div className="fixed inset-0 z-60 flex items-center justify-center bg-black/50 dark:bg-black/80 backdrop-blur-xs p-4">
       <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-white/10 rounded-xl w-full max-w-md p-6 shadow-2xl animate-in fade-in zoom-in-95 duration-200">
         <div className="flex justify-between items-center mb-6">
-          <h2 className="text-xl font-bold text-zinc-900 dark:text-white">{t('createPlaylist')}</h2>
+          <h2 className="text-xl font-bold text-zinc-900 dark:text-white">{kind === 'album' ? 'Create album' : t('createPlaylist')}</h2>
           <button onClick={onClose} className="text-zinc-400 hover:text-zinc-900 dark:hover:text-white">
             <X size={20} />
           </button>
@@ -45,7 +46,7 @@ export const CreatePlaylistModal: React.FC<CreatePlaylistModalProps> = ({ isOpen
               value={name}
               onChange={(e) => setName(e.target.value)}
               className="w-full bg-zinc-50 dark:bg-black/50 border border-zinc-200 dark:border-white/10 rounded-lg p-3 text-zinc-900 dark:text-white focus:outline-hidden focus:border-pink-500 focus:ring-1 focus:ring-pink-500 placeholder-zinc-400 dark:placeholder-zinc-600"
-              placeholder={t('playlistNamePlaceholder')}
+              placeholder={kind === 'album' ? 'My new album' : t('playlistNamePlaceholder')}
               autoFocus
             />
           </div>
