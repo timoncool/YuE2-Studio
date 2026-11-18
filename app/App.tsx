@@ -886,6 +886,9 @@ function AppContent() {
   // Handle Playback Rate
   useEffect(() => {
     if (audioRef.current) {
+      // Natural tape-style speed: faster playback raises pitch, slower lowers it.
+      // The browser's default pitch-preservation time stretch sounds harsh on music.
+      audioRef.current.preservesPitch = false;
       audioRef.current.playbackRate = playbackRate;
     }
   }, [playbackRate]);
