@@ -344,6 +344,7 @@ function AppContent() {
 
   // Modals
   const [isCreatePlaylistModalOpen, setIsCreatePlaylistModalOpen] = useState(false);
+  const [creatingCollectionKind, setCreatingCollectionKind] = useState<'playlist' | 'album'>('playlist');
   const [isAddToPlaylistModalOpen, setIsAddToPlaylistModalOpen] = useState(false);
   const [songsToAddToPlaylist, setSongsToAddToPlaylist] = useState<Song[]>([]);
 
@@ -885,6 +886,9 @@ function AppContent() {
   // Handle Playback Rate
   useEffect(() => {
     if (audioRef.current) {
+      // Natural tape-style speed: faster playback raises pitch, slower lowers it.
+      // The browser's default pitch-preservation time stretch sounds harsh on music.
+      audioRef.current.preservesPitch = false;
       audioRef.current.playbackRate = playbackRate;
     }
   }, [playbackRate]);
@@ -1223,9 +1227,9 @@ function AppContent() {
     });
   };
 
-  const createPlaylist = async (name: string, description: string) => {
+  const createPlaylist = async (name: string, description: string, kind: 'playlist' | 'album' = 'playlist') => {
     try {
-      const playlist = await createNativePlaylist(name, description, songsToAddToPlaylist.map(song => song.id));
+      const playlist = await createNativePlaylist(name, description, songsToAddToPlaylist.map(song => song.id), kind);
       updateLibraryPlaylists(prev => [playlist, ...prev]);
       setSongsToAddToPlaylist([]);
       showToast(t('playlistCreated'));
@@ -1405,6 +1409,12 @@ function AppContent() {
             isPlaying={isPlaying}
             onCreatePlaylist={() => {
               setSongsToAddToPlaylist([]);
+              setCreatingCollectionKind('playlist');
+              setIsCreatePlaylistModalOpen(true);
+            }}
+            onCreateAlbum={() => {
+              setSongsToAddToPlaylist([]);
+              setCreatingCollectionKind('album');
               setIsCreatePlaylistModalOpen(true);
             }}
             onSelectPlaylist={(p) => handleNavigateToPlaylist(p.id)}
@@ -1514,6 +1524,7 @@ function AppContent() {
                 scopeName={createScope?.name}
                 loading={libraryRead.isPending}
                 librarySongs={librarySongs}
+                collections={playlists}
                 currentSong={currentSong}
                 selectedSong={selectedSong}
                 likedSongIds={likedSongIds}
@@ -1687,7 +1698,8 @@ function AppContent() {
       <CreatePlaylistModal
         isOpen={isCreatePlaylistModalOpen}
         onClose={() => setIsCreatePlaylistModalOpen(false)}
-        onCreate={createPlaylist}
+        kind={creatingCollectionKind}
+        onCreate={(name, description) => createPlaylist(name, description, creatingCollectionKind)}
       />
       <AddToPlaylistModal
         isOpen={isAddToPlaylistModalOpen}
@@ -1696,6 +1708,12 @@ function AppContent() {
         onSelect={addSongToPlaylist}
         onCreateNew={() => {
           setIsAddToPlaylistModalOpen(false);
+          setCreatingCollectionKind('playlist');
+          setIsCreatePlaylistModalOpen(true);
+        }}
+        onCreateNewAlbum={() => {
+          setIsAddToPlaylistModalOpen(false);
+          setCreatingCollectionKind('album');
           setIsCreatePlaylistModalOpen(true);
         }}
       />
