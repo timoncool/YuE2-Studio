@@ -188,7 +188,8 @@ export const SongList: React.FC<SongListProps> = ({
     const [searchQuery, setSearchQuery] = useState('');
     const [activeFilters, setActiveFilters] = useState<Set<FilterType>>(new Set());
     const [isFilterOpen, setIsFilterOpen] = useState(false);
-    const [isSelecting, setIsSelecting] = useState(false);
+    // Library rows show Suno-style checkboxes immediately; no extra mode switch required.
+    const [isSelecting, setIsSelecting] = useState(Boolean(onDeleteMany));
     const [cancelStage, setCancelStage] = useState<'cancel' | 'reset'>('cancel');
     // Reset cancel stage when no jobs left
     useEffect(() => { if (activeJobCount === 0) setCancelStage('cancel'); }, [activeJobCount]);
@@ -549,7 +550,7 @@ export const SongList: React.FC<SongListProps> = ({
                                     : 'bg-zinc-100 dark:bg-suno-panel hover:bg-zinc-200 dark:hover:bg-white/5 border-zinc-200 dark:border-white/10 text-zinc-700 dark:text-white'
                                 }`}
                         >
-                            {t('select')}
+                            {isSelecting ? 'Hide checkboxes' : t('select')}
                         </button>
 
                         {activeJobCount > 0 && onCancelAll && (
@@ -582,7 +583,7 @@ export const SongList: React.FC<SongListProps> = ({
                     )}
                 </div>
 
-                {isSelecting && (
+                {isSelecting && selectedSongs.length > 0 && (
                         <div className="sticky top-0 z-30 -mt-4 mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-zinc-200 bg-zinc-50/95 px-4 py-3 shadow-lg backdrop-blur-sm dark:border-white/10 dark:bg-zinc-900/95">
                             <div className="flex items-center gap-3 text-sm text-zinc-600 dark:text-zinc-300" role="status">
                                 {selectedSongs.length} {t('nSelected')}
@@ -673,8 +674,9 @@ export const SongList: React.FC<SongListProps> = ({
                                 <button
                                     onClick={() => {
                                         if (!selectedSongs.length) return;
+                                        // Keep the checkmarks until the user confirms deletion.
+                                        // Cancelling the confirmation should not throw away their selection.
                                         onDeleteMany?.(selectedSongs);
-                                        leaveSelection();
                                     }}
                                     className={`px-3 py-1.5 rounded-lg text-xs font-semibold border ${selectedSongs.length
                                             ? 'border-red-500 text-red-600 hover:bg-red-50 dark:hover:bg-red-500/10'
@@ -682,7 +684,7 @@ export const SongList: React.FC<SongListProps> = ({
                                         }`}
                                     disabled={!selectedSongs.length}
                                 >
-                                    {t('delete')}
+                                    <Trash2 size={13} className="inline mr-1" />{t('delete')} ({selectedSongs.length})
                                 </button>
                             </div>
                         </div>
