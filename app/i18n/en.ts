@@ -830,6 +830,7 @@ export const en = {
     albums: 'Albums',
     album: 'Album',
     createAlbum: 'Create album',
+    addToCollection: 'Add to playlist or album',
     editAlbum: 'Edit album',
     deleteAlbum: 'Delete album',
     deleteAlbumConfirm: 'Delete this album? Its songs will remain in your library.',
