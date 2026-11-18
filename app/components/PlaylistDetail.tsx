@@ -165,7 +165,7 @@ export const PlaylistDetail: React.FC<PlaylistDetailProps> = ({ playlistId, onBa
                 </button>
 
                 <div className="min-w-0 flex-1 space-y-2 md:space-y-4 text-center md:text-left">
-                    <span className="text-xs font-bold tracking-wider uppercase text-white/80">{t('playlist')}</span>
+                    <span className="text-xs font-bold tracking-wider uppercase text-white/80">{playlist.kind === 'album' ? 'Album' : t('playlist')}</span>
                     <h1>
                         <button
                             type="button"
@@ -230,7 +230,7 @@ export const PlaylistDetail: React.FC<PlaylistDetailProps> = ({ playlistId, onBa
                 <button
                     onClick={() => setConfirmDelete(true)}
                     className="p-2 text-zinc-400 transition-colors hover:text-red-500"
-                    {...named(t('deletePlaylist'))}
+                    {...named(playlist.kind === 'album' ? 'Delete album' : t('deletePlaylist'))}
                 >
                     <Trash2 size={20} />
                 </button>
@@ -454,8 +454,8 @@ export const PlaylistDetail: React.FC<PlaylistDetailProps> = ({ playlistId, onBa
             <PlaylistEditModal playlist={editing} onClose={() => setEditing(null)} onError={onError} />
             <ConfirmDialog
                 isOpen={confirmDelete}
-                title={t('deletePlaylist')}
-                message={t('deletePlaylistConfirm')}
+                title={playlist.kind === 'album' ? 'Delete album' : t('deletePlaylist')}
+                message={playlist.kind === 'album' ? 'Delete this album? The songs will stay in your library.' : t('deletePlaylistConfirm')}
                 confirmLabel={t('deletePlaylist')}
                 onConfirm={() => void handleDeletePlaylist()}
                 onCancel={() => setConfirmDelete(false)}
