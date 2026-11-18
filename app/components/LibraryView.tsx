@@ -197,7 +197,7 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
                 <h1 className="min-w-0 truncate text-2xl font-bold text-zinc-900 dark:text-white sm:text-3xl">{t('yourLibrary')}</h1>
                 <div className="flex flex-wrap items-center gap-2">
                   <button type="button" onClick={onCreateAlbum} className="flex items-center gap-2 rounded-full border border-zinc-300 px-4 py-2 font-medium text-zinc-900 hover:bg-zinc-100 dark:border-white/15 dark:text-white dark:hover:bg-white/10">
-                    <Disc3 size={18} /><span>New album</span>
+                    <Disc3 size={18} /><span>{t('newAlbum')}</span>
                   </button>
                   <button type="button" onClick={onCreatePlaylist} className="flex items-center gap-2 rounded-full bg-zinc-900 px-4 py-2 font-medium text-white shadow-lg shadow-zinc-900/10 transition-colors hover:bg-zinc-800 dark:bg-zinc-800 dark:shadow-none dark:hover:bg-zinc-700">
                     <Plus size={18} /><span>{t('newPlaylist')}</span>
@@ -210,7 +210,7 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
                  {tabButton('all', t('allSongs'), songsInLibrary)}
                  {tabButton('liked', t('likedTab'), likedSongs.length)}
                  {tabButton('playlists', t('playlists'), ordinaryPlaylists.length)}
-                  {tabButton('albums', 'Albums', albums.length)}
+                  {tabButton('albums', t('albums'), albums.length)}
                  {tabButton('import', t('importAudioTab'))}
                  {tabButton('trash', t('trashTab'))}
              </div>
@@ -262,9 +262,9 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
              {activeTab === 'albums' && albums.length === 0 && (
                   <div className="flex flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-zinc-200 bg-zinc-50 px-6 py-16 text-center dark:border-white/5 dark:bg-white/2">
                       <Disc3 size={32} className="text-zinc-400" />
-                      <p className="font-bold text-zinc-900 dark:text-white">No albums yet</p>
-                      <p className="max-w-sm text-center text-sm text-zinc-500">Create an album, then add songs and arrange their track order.</p>
-                      <button type="button" onClick={onCreateAlbum} className="mt-2 rounded-full bg-zinc-900 px-4 py-2 text-sm font-bold text-white dark:bg-white dark:text-black">Create album</button>
+                      <p className="font-bold text-zinc-900 dark:text-white">{t('albumsEmptyTitle')}</p>
+                      <p className="max-w-sm text-center text-sm text-zinc-500">{t('albumsEmptyHint')}</p>
+                      <button type="button" onClick={onCreateAlbum} className="mt-2 rounded-full bg-zinc-900 px-4 py-2 text-sm font-bold text-white dark:bg-white dark:text-black">{t('createAlbum')}</button>
                   </div>
               )}
               {(activeTab === 'playlists' || activeTab === 'albums') && visibleCollections.length > 0 && (
