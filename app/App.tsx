@@ -1229,7 +1229,7 @@ function AppContent() {
 
   const createPlaylist = async (name: string, description: string, kind: 'playlist' | 'album' = 'playlist') => {
     try {
-      const playlist = await createNativePlaylist(name, description, kind === 'album' ? [] : songsToAddToPlaylist.map(song => song.id), kind);
+      const playlist = await createNativePlaylist(name, description, songsToAddToPlaylist.map(song => song.id), kind);
       updateLibraryPlaylists(prev => [playlist, ...prev]);
       setSongsToAddToPlaylist([]);
       showToast(t('playlistCreated'));
@@ -1708,6 +1708,11 @@ function AppContent() {
         onCreateNew={() => {
           setIsAddToPlaylistModalOpen(false);
           setCreatingCollectionKind('playlist');
+          setIsCreatePlaylistModalOpen(true);
+        }}
+        onCreateNewAlbum={() => {
+          setIsAddToPlaylistModalOpen(false);
+          setCreatingCollectionKind('album');
           setIsCreatePlaylistModalOpen(true);
         }}
       />
