@@ -1,6 +1,6 @@
 import React, { useMemo, useRef, useState } from 'react';
 import { Song, Playlist } from '../types';
-import { Heart, Plus, Play, Upload, Loader2, MoreHorizontal, ListMusic } from 'lucide-react';
+import { Heart, Plus, Play, Upload, Loader2, MoreHorizontal, ListMusic, Disc3 } from 'lucide-react';
 import { useI18n } from '../context/I18nContext';
 import { AUDIO_ACCEPT } from '../services/audioFiles';
 import { useSongActions } from '../context/SongActionsContext';
@@ -17,13 +17,13 @@ import { SONG_ORDERS, type SongOrder } from '../services/songOrder';
 /** The liked songs are read from the latest like first. */
 const LIKED_ORDERS: SongOrder[] = ['likedNewest', ...SONG_ORDERS];
 
-type LibraryTab = 'all' | 'playlists' | 'liked' | 'import' | 'trash';
+type LibraryTab = 'all' | 'playlists' | 'albums' | 'liked' | 'import' | 'trash';
 const TAB_KEY = 'studio.library.tab';
 /** The tab last open: coming back from a playlist lands on the playlists. */
 function readTab(): LibraryTab {
   try {
     const kept = window.sessionStorage.getItem(TAB_KEY);
-    return kept === 'playlists' || kept === 'liked' || kept === 'import' || kept === 'trash' ? kept : 'all';
+    return kept === 'playlists' || kept === 'albums' || kept === 'liked' || kept === 'import' || kept === 'trash' ? kept : 'all';
   } catch {
     return 'all';
   }
@@ -47,6 +47,7 @@ interface LibraryViewProps {
   currentSong: Song | null;
   isPlaying: boolean;
   onCreatePlaylist: () => void;
+  onCreateAlbum: () => void;
   onSelectPlaylist: (playlist: Playlist) => void;
   /** Plays a playlist's songs from the first given, the playlist named as the queue's source. */
   onPlayPlaylist: (playlist: Playlist, songs: Song[]) => void;
@@ -77,6 +78,7 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
     currentSong,
     isPlaying,
     onCreatePlaylist,
+    onCreateAlbum,
     onSelectPlaylist,
     onPlayPlaylist,
     onError,
@@ -103,6 +105,9 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
     const [playlistMenu, setPlaylistMenu] = useState<{ playlist: Playlist; at: { x: number; y: number } } | null>(null);
     const [editing, setEditing] = useState<Playlist | null>(null);
     const [deleting, setDeleting] = useState<Playlist | null>(null);
+    const albums = playlists.filter(playlist => playlist.kind === 'album');
+    const ordinaryPlaylists = playlists.filter(playlist => playlist.kind !== 'album');
+    const visibleCollections = activeTab === 'albums' ? albums : ordinaryPlaylists;
     const playable = (playlist: Playlist) => playlistSongs(playlist, allSongs).filter(song => song.audioUrl && !song.isGenerating);
     const removePlaylist = async (playlist: Playlist) => {
         setDeleting(null);
@@ -190,20 +195,22 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
         <div className="min-w-0 flex-1 overflow-y-auto bg-white p-4 pb-32 transition-colors duration-300 dark:bg-black sm:p-6 lg:p-10">
              <div className="mb-8 flex flex-col items-start justify-between gap-3 sm:flex-row sm:items-center">
                 <h1 className="min-w-0 truncate text-2xl font-bold text-zinc-900 dark:text-white sm:text-3xl">{t('yourLibrary')}</h1>
-                <button 
-                    onClick={onCreatePlaylist}
-                    className="flex items-center gap-2 bg-zinc-900 dark:bg-zinc-800 hover:bg-zinc-800 dark:hover:bg-zinc-700 text-white px-4 py-2 rounded-full font-medium transition-colors shadow-lg shadow-zinc-900/10 dark:shadow-none"
-                >
-                    <Plus size={18} />
-                    <span>{t('newPlaylist')}</span>
-                </button>
+                <div className="flex flex-wrap items-center gap-2">
+                  <button type="button" onClick={onCreateAlbum} className="flex items-center gap-2 rounded-full border border-zinc-300 px-4 py-2 font-medium text-zinc-900 hover:bg-zinc-100 dark:border-white/15 dark:text-white dark:hover:bg-white/10">
+                    <Disc3 size={18} /><span>New album</span>
+                  </button>
+                  <button type="button" onClick={onCreatePlaylist} className="flex items-center gap-2 rounded-full bg-zinc-900 px-4 py-2 font-medium text-white shadow-lg shadow-zinc-900/10 transition-colors hover:bg-zinc-800 dark:bg-zinc-800 dark:shadow-none dark:hover:bg-zinc-700">
+                    <Plus size={18} /><span>{t('newPlaylist')}</span>
+                  </button>
+                </div>
              </div>
 
              {/* Tabs, and the order of the list they show */}
              <div role="tablist" className="mb-8 flex min-w-0 flex-wrap items-center gap-x-5 gap-y-1 border-b border-zinc-200 pb-1 dark:border-white/10">
                  {tabButton('all', t('allSongs'), songsInLibrary)}
                  {tabButton('liked', t('likedTab'), likedSongs.length)}
-                 {tabButton('playlists', t('playlists'), playlists.length)}
+                 {tabButton('playlists', t('playlists'), ordinaryPlaylists.length)}
+                  {tabButton('albums', 'Albums', albums.length)}
                  {tabButton('import', t('importAudioTab'))}
                  {tabButton('trash', t('trashTab'))}
              </div>
@@ -244,7 +251,7 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
                     {songList(likedSongs, 'liked', LIKED_ORDERS, 'likedNewest')}
                  </div>
              )}
-             {activeTab === 'playlists' && playlists.length === 0 && (
+             {activeTab === 'playlists' && ordinaryPlaylists.length === 0 && (
                  <div className="flex flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-zinc-200 bg-zinc-50 px-6 py-16 text-center dark:border-white/5 dark:bg-white/2">
                      <div className="flex h-16 w-16 items-center justify-center rounded-full bg-zinc-100 dark:bg-white/5"><ListMusic size={30} className="text-zinc-400" /></div>
                      <p className="font-bold text-zinc-900 dark:text-white">{t('playlistsEmptyTitle')}</p>
@@ -252,9 +259,17 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
                      <button type="button" onClick={onCreatePlaylist} className="mt-2 flex items-center gap-2 rounded-full bg-zinc-900 px-4 py-2 text-sm font-bold text-white dark:bg-white dark:text-black"><Plus size={16} />{t('createPlaylist')}</button>
                  </div>
              )}
-             {activeTab === 'playlists' && playlists.length > 0 && (
+             {activeTab === 'albums' && albums.length === 0 && (
+                  <div className="flex flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-zinc-200 bg-zinc-50 px-6 py-16 text-center dark:border-white/5 dark:bg-white/2">
+                      <Disc3 size={32} className="text-zinc-400" />
+                      <p className="font-bold text-zinc-900 dark:text-white">No albums yet</p>
+                      <p className="max-w-sm text-center text-sm text-zinc-500">Create an album, then add songs and arrange their track order.</p>
+                      <button type="button" onClick={onCreateAlbum} className="mt-2 rounded-full bg-zinc-900 px-4 py-2 text-sm font-bold text-white dark:bg-white dark:text-black">Create album</button>
+                  </div>
+              )}
+              {(activeTab === 'playlists' || activeTab === 'albums') && visibleCollections.length > 0 && (
                  <div className="grid grid-cols-1 gap-4 min-[440px]:grid-cols-2 sm:gap-6 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
-                     {playlists.map((playlist) => {
+                     {visibleCollections.map((playlist) => {
                          const songs = playlistSongs(playlist, allSongs);
                          const ready = playable(playlist);
                          return (
