@@ -2,7 +2,7 @@ name: Build Windows portable EXE
 
 on:
   push:
-    branches: [main]
+    branches: [main, feature/library-albums-bulk-delete-pitch]
   workflow_dispatch:
 
 permissions:
