@@ -56,26 +56,30 @@ export const PlaylistDetail: React.FC<PlaylistDetailProps> = ({ playlistId, onBa
     const [query, setQuery] = useState('');
 
     // the order is shown at once and kept by the library; when it refuses, the list goes back
-    const saveSongs = async (songIds: string[]) => {
-        if (!playlist) return;
+    const saveSongs = async (songIds: string[]): Promise<boolean> => {
+        if (!playlist) return false;
         const before = playlist;
         updateLibraryPlaylists(lists => lists.map(entry => (entry.id === before.id ? { ...entry, songIds, song_count: songIds.length } : entry)));
         try {
             const updated = await updateNativePlaylist(before.id, before, songIds);
             updateLibraryPlaylists(lists => lists.map(entry => (entry.id === updated.id ? updated : entry)));
+            return true;
         } catch (error) {
             updateLibraryPlaylists(lists => lists.map(entry => (entry.id === before.id ? before : entry)));
             onError(error instanceof Error ? error.message : String(error));
+            return false;
         }
     };
 
     const removeSong = (song: Song) => {
         if (!playlist) return;
         const ids = songs.map(entry => entry.id);
-        void saveSongs(ids.filter(id => id !== song.id));
-        notify(t('removedFromPlaylist').replace('{title}', song.title).replace('{name}', playlist.name), 'success', {
-            label: t('undo'),
-            onClick: () => void saveSongs(ids),
+        void saveSongs(ids.filter(id => id !== song.id)).then(saved => {
+            if (!saved) return;
+            notify(t('removedFromPlaylist').replace('{title}', song.title).replace('{name}', playlist.name), 'success', {
+                label: t('undo'),
+                onClick: () => void saveSongs(ids),
+            });
         });
     };
 
@@ -450,13 +454,19 @@ export const PlaylistDetail: React.FC<PlaylistDetailProps> = ({ playlistId, onBa
             </div>
 
             <PlaylistMenu at={menuAt} empty={!playable.length} actions={menuActions} onClose={() => setMenuAt(null)} />
-            {songMenu && <SongDropdownMenu song={songMenu.song} isOpen at={songMenu.at} onClose={() => setSongMenu(null)} />}
+            {songMenu && (
+                <SongDropdownMenu song={songMenu.song} isOpen at={songMenu.at}
+                    onClose={() => setSongMenu(null)}
+                    onRemoveFromCollection={() => removeSong(songMenu.song)}
+                    removeFromCollectionLabel={playlist.kind === 'album' ? t('removeFromAlbum') : t('removeFromPlaylist')}
+                />
+            )}
             <PlaylistEditModal playlist={editing} onClose={() => setEditing(null)} onError={onError} />
             <ConfirmDialog
                 isOpen={confirmDelete}
-                title={playlist.kind === 'album' ? 'Delete album' : t('deletePlaylist')}
+                title={playlist.kind === 'album' ? t('deleteAlbum') : t('deletePlaylist')}
                 message={playlist.kind === 'album' ? t('deleteAlbumConfirm') : t('deletePlaylistConfirm')}
-                confirmLabel={t('deletePlaylist')}
+                confirmLabel={playlist.kind === 'album' ? t('deleteAlbum') : t('deletePlaylist')}
                 onConfirm={() => void handleDeletePlaylist()}
                 onCancel={() => setConfirmDelete(false)}
             />
