@@ -1524,6 +1524,7 @@ function AppContent() {
                 scopeName={createScope?.name}
                 loading={libraryRead.isPending}
                 librarySongs={librarySongs}
+                collections={playlists}
                 currentSong={currentSong}
                 selectedSong={selectedSong}
                 likedSongIds={likedSongIds}
