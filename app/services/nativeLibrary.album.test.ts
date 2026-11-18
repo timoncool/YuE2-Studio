@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { ALBUM_DESCRIPTION_PREFIX, createNativePlaylist, mapNativePlaylist, updateNativePlaylist } from './nativeLibrary';
+import { ALBUM_DESCRIPTION_PREFIX, COLLECTION_DESCRIPTION_PREFIX, encodeCollectionDescription, createNativePlaylist, mapNativePlaylist, updateNativePlaylist } from './nativeLibrary';
 
 const raw = {
   id: 'collection-1',
@@ -46,4 +46,25 @@ describe('album collections in the native library', () => {
       `${ALBUM_DESCRIPTION_PREFIX}First record`,
     ]);
   });
+  it('persists custom cover artwork for albums and playlists without breaking older records', () => {
+    const image = 'data:image/jpeg;base64,YWJj';
+    const albumData = encodeCollectionDescription({ kind: 'album', description: 'A concept record', coverUrl: image });
+    const playlistData = encodeCollectionDescription({ description: 'A mix', coverUrl: image });
+    expect(albumData?.startsWith(COLLECTION_DESCRIPTION_PREFIX)).toBe(true);
+    expect(playlistData?.startsWith(COLLECTION_DESCRIPTION_PREFIX)).toBe(true);
+
+    const album = mapNativePlaylist({ ...raw, description: albumData });
+    expect(album.kind).toBe('album');
+    expect(album.coverUrl).toBe(image);
+    expect(album.description).toBe('A concept record');
+
+    const playlist = mapNativePlaylist({ ...raw, description: playlistData });
+    expect(playlist.kind).toBeUndefined();
+    expect(playlist.coverUrl).toBe(image);
+    expect(playlist.description).toBe('A mix');
+
+    expect(encodeCollectionDescription({ ...album, coverUrl: undefined })).toBe(ALBUM_DESCRIPTION_PREFIX + 'A concept record');
+    expect(mapNativePlaylist({ ...raw, description: 'Plain playlist' }).description).toBe('Plain playlist');
+  });
+
 });
