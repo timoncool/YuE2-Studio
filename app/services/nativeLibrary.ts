@@ -122,11 +122,17 @@ export async function loadNativeLibrarySongs(): Promise<Song[]> {
   return songs.map(mapNativeLibrarySong);
 }
 
+/** Stored in the native playlist description so albums survive restarts and backups without a schema migration. */
+export const ALBUM_DESCRIPTION_PREFIX = '[YuE2-Studio:album:v1]\\n'.replace('\\n', '\n');
+
 export function mapNativePlaylist(playlist: NativePlaylist): import('../types').Playlist {
+  const rawDescription = playlist.description || '';
+  const isAlbum = rawDescription.startsWith(ALBUM_DESCRIPTION_PREFIX);
   return {
+    ...(isAlbum ? { kind: 'album' as const } : {}),
     id: playlist.id,
     name: playlist.name,
-    description: playlist.description || undefined,
+    description: (isAlbum ? rawDescription.slice(ALBUM_DESCRIPTION_PREFIX.length) : rawDescription) || undefined,
     songIds: playlist.song_ids,
     created_at: playlist.created_at,
     song_count: playlist.song_ids.length,
@@ -148,10 +154,10 @@ export async function getNativePlaylist(id: string): Promise<import('../types').
   return mapNativePlaylist(await response.json());
 }
 
-export async function createNativePlaylist(name: string, description: string, songIds: string[] = []): Promise<import('../types').Playlist> {
+export async function createNativePlaylist(name: string, description: string, songIds: string[] = [], kind: 'playlist' | 'album' = 'playlist'): Promise<import('../types').Playlist> {
   const response = await fetch('/v1/library/playlists', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name, description: description || null, song_ids: songIds }),
+    body: JSON.stringify({ name, description: (kind === 'album' ? `${ALBUM_DESCRIPTION_PREFIX}${description}` : description) || null, song_ids: songIds }),
   });
   if (!response.ok) throw new Error(`Native playlist creation failed (${response.status})`);
   return mapNativePlaylist(await response.json());
@@ -160,7 +166,7 @@ export async function createNativePlaylist(name: string, description: string, so
 export async function updateNativePlaylist(id: string, playlist: import('../types').Playlist, songIds = playlist.songIds || []): Promise<import('../types').Playlist> {
   const response = await fetch(`/v1/library/playlists/${encodeURIComponent(id)}`, {
     method: 'PUT', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name: playlist.name, description: playlist.description || null, song_ids: songIds }),
+    body: JSON.stringify({ name: playlist.name, description: (playlist.kind === 'album' ? `${ALBUM_DESCRIPTION_PREFIX}${playlist.description || ''}` : playlist.description) || null, song_ids: songIds }),
   });
   if (!response.ok) throw new Error(`Native playlist update failed (${response.status})`);
   return mapNativePlaylist(await response.json());
