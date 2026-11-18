@@ -154,6 +154,7 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
             embedded
             songs={songs}
             librarySongs={allSongs}
+            collections={playlists}
             currentSong={currentSong}
             selectedSong={selectedSong}
             likedSongIds={likedSongIds}
