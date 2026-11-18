@@ -87,7 +87,7 @@ export const PlaylistEditModal: React.FC<{ playlist: Playlist | null; onClose: (
     <div className="fixed inset-0 z-60 flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs dark:bg-black/80" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
       <div role="dialog" aria-modal="true" aria-labelledby="playlist-edit-title" className="w-full max-w-md rounded-xl border border-zinc-200 bg-white p-6 shadow-2xl animate-in fade-in zoom-in-95 duration-200 dark:border-white/10 dark:bg-zinc-900">
         <div className="mb-6 flex items-center justify-between">
-          <h2 id="playlist-edit-title" className="text-xl font-bold text-zinc-900 dark:text-white">{t('editPlaylistDetails')}</h2>
+          <h2 id="playlist-edit-title" className="text-xl font-bold text-zinc-900 dark:text-white">{playlist.kind === 'album' ? 'Edit album' : t('editPlaylistDetails')}</h2>
           <button type="button" onClick={onClose} aria-label={t('close')} className="text-zinc-400 hover:text-zinc-900 dark:hover:text-white">
             <X size={20} />
           </button>
