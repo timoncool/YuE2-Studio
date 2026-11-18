@@ -363,7 +363,7 @@ export const PlaylistDetail: React.FC<PlaylistDetailProps> = ({ playlistId, onBa
                                                 e.stopPropagation();
                                                 removeSong(song);
                                             }}
-                                            {...named(t('removeFromPlaylist'))}
+                                            {...named(playlist.kind === 'album' ? t('removeFromAlbum') : t('removeFromPlaylist'))}
                                             className="p-2 text-zinc-500 transition-opacity hover:text-white md:p-0 md:opacity-0 md:group-hover:opacity-100 md:focus-visible:opacity-100"
                                         >
                                             <Trash2 size={16} />
@@ -453,7 +453,7 @@ export const PlaylistDetail: React.FC<PlaylistDetailProps> = ({ playlistId, onBa
                 </div>
             </div>
 
-            <PlaylistMenu at={menuAt} empty={!playable.length} actions={menuActions} onClose={() => setMenuAt(null)} />
+            <PlaylistMenu kind={playlist.kind} at={menuAt} empty={!playable.length} actions={menuActions} onClose={() => setMenuAt(null)} />
             {songMenu && (
                 <SongDropdownMenu song={songMenu.song} isOpen at={songMenu.at}
                     onClose={() => setSongMenu(null)}
