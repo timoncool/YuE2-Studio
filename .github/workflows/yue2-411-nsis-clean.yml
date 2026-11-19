@@ -1,0 +1,155 @@
+name: YuE2 Studio 4.1.1 NSIS QA
+'on':
+  push:
+    branches: ['qa/yue2-411-nsis-clean']
+
+permissions:
+  contents: read
+
+jobs:
+  fetch:
+    if: github.repository == 'timoncool/YuE2-Studio' && !github.event.deleted
+    name: Fetch pinned draft
+    # GitHub requires push access to see an unpublished release.
+    permissions: {contents: write}
+    runs-on: windows-2022
+    timeout-minutes: 12
+    outputs:
+      artifact-name: yue2-411-qa-${{ github.run_attempt }}
+    steps:
+      - name: Fetch fixed release assets
+        shell: pwsh
+        env:
+          RUNNER_ENVIRONMENT: ${{ runner.environment }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Set-StrictMode -Version Latest
+          if ($env:GITHUB_ACTIONS -cne 'true' -or $env:RUNNER_ENVIRONMENT -cne 'github-hosted') {
+            throw 'Refusing to run outside GitHub-hosted Actions.'
+          }
+          $root = Join-Path (Resolve-Path -LiteralPath $env:RUNNER_TEMP).Path 'yue2-411-qa'
+          if (Test-Path -LiteralPath $root) { throw "QA destination already exists: $root" }
+          $json = gh release view v4.1.1 --repo timoncool/YuE2-Studio --json isDraft,tagName,targetCommitish
+          if ($LASTEXITCODE -ne 0) { throw "gh release view failed ($LASTEXITCODE)" }
+          $release = ($json -join "`n") | ConvertFrom-Json
+          if ($release.isDraft -isnot [bool] -or !$release.isDraft -or
+              $release.tagName -cne 'v4.1.1' -or
+              $release.targetCommitish -cne '5b1482ce8aac1401077ce6b09ae816119145a5c4') {
+            throw 'Refusing downloads: expected the exact v4.1.1 draft and release commit.'
+          }
+          New-Item -ItemType Directory -Path $root | Out-Null
+          function Download([string]$tag, [string]$asset) {
+            gh release download $tag --repo timoncool/YuE2-Studio --pattern $asset --dir $root
+            if ($LASTEXITCODE -ne 0) { throw "gh failed ($LASTEXITCODE): $tag / $asset" }
+          }
+          Download 'v4.1.1' 'YuE2.Studio_4.1.1_x64-setup.exe'
+          Download 'v4.1.1' 'YuE2.Studio_4.1.1_x64-setup.exe.sig'
+          Download 'v4.1.1' 'latest.json'
+
+      - name: Stage QA assets for this run only
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: yue2-411-qa-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/yue2-411-qa/
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 1
+
+  nsis:
+    needs: fetch
+    if: github.repository == 'timoncool/YuE2-Studio' && !github.event.deleted
+    name: NSIS / ${{ matrix.mode }}
+    permissions: {contents: read}
+    runs-on: windows-2022
+    timeout-minutes: 12
+    strategy:
+      fail-fast: false
+      matrix:
+        mode: [clean]
+    defaults:
+      run:
+        shell: pwsh
+    env:
+      QA_MODE: ${{ matrix.mode }}
+    steps:
+      - name: Require a fresh hosted artifact destination
+        env:
+          RUNNER_ENVIRONMENT: ${{ runner.environment }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if ($env:GITHUB_ACTIONS -cne 'true' -or $env:RUNNER_ENVIRONMENT -cne 'github-hosted') {
+            throw 'Refusing to run outside GitHub-hosted Actions.'
+          }
+          $root = Join-Path (Resolve-Path -LiteralPath $env:RUNNER_TEMP).Path 'yue2-411-qa'
+          if (Test-Path -LiteralPath $root) { throw "QA destination already exists: $root" }
+
+      - name: Download staged assets from this run
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: ${{ needs.fetch.outputs.artifact-name }}
+          path: ${{ runner.temp }}/yue2-411-qa
+
+      - name: Verify release, install silently, inspect installed state
+        env:
+          RUNNER_ENVIRONMENT: ${{ runner.environment }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Set-StrictMode -Version Latest
+          if ($env:GITHUB_ACTIONS -cne 'true' -or $env:RUNNER_ENVIRONMENT -cne 'github-hosted') {
+            throw 'Refusing to run outside GitHub-hosted Actions.'
+          }
+          $root = Join-Path (Resolve-Path -LiteralPath $env:RUNNER_TEMP).Path 'yue2-411-qa'
+          $install = Join-Path $root 'YuE2 Studio QA'
+          $default = Join-Path $env:LOCALAPPDATA 'YuE2 Studio'
+          $uninstall = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\YuE2 Studio'
+          $exe = Join-Path $install 'YuE2-Studio.exe'
+          function Evidence([string]$line) { Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Value $line }
+          function RequireAbsent([string]$path) {
+            if (Test-Path -LiteralPath $path) { throw "Expected absent: $path" }
+          }
+          function VerifyHash([string]$path, [string]$expected) {
+            $actual = (Get-FileHash -Algorithm SHA256 -LiteralPath $path).Hash
+            if ($actual -ne $expected) { throw "SHA256 mismatch for $path ($actual)" }
+            Evidence "- SHA256 verified: $(Split-Path -Leaf $path) = $actual"
+          }
+          function CheckVersion([string]$expected) {
+            $info = (Get-Item -LiteralPath $exe).VersionInfo
+            $actual = '{0}.{1}.{2}.{3}' -f $info.FileMajorPart,$info.FileMinorPart,$info.FileBuildPart,$info.FilePrivatePart
+            if ($actual -cne "$expected.0") { throw "$exe has PE file version $actual, expected $expected.0" }
+            Evidence "- Installed PE version: $actual at $exe"
+          }
+          function InstallNsis([string]$setup, [string]$arguments) {
+            $proc = Start-Process -Wait -PassThru -FilePath $setup -ArgumentList $arguments
+            if ($proc.ExitCode -ne 0) { throw "NSIS failed ($($proc.ExitCode)): $setup" }
+          }
+
+          Evidence "### YuE2 Studio NSIS / $env:QA_MODE (installer and disk state only; no UI launch)"
+          foreach ($path in $install,$default,$uninstall) { RequireAbsent $path }
+          $name = 'YuE2.Studio_4.1.1_x64-setup.exe'
+          $new = Join-Path $root $name
+          VerifyHash $new '72da656cb407d4c8d4afd7bac4a897b47ac7ebeeff9c81300327b0421590a41f'
+          $manifest = Get-Content -Raw -LiteralPath (Join-Path $root 'latest.json') | ConvertFrom-Json
+          $sig = (Get-Content -Raw -LiteralPath "$new.sig").TrimEnd("`r","`n")
+          if (!$sig -or $manifest.version -cne '4.1.1') { throw 'Missing signature or wrong manifest version' }
+          $url = "https://github.com/timoncool/YuE2-Studio/releases/download/v4.1.1/$name"
+          foreach ($key in 'windows-x86_64','windows-x86_64-nsis') {
+            $entry = $manifest.platforms.$key
+            if ($entry.url -cne $url -or $entry.signature -cne $sig) { throw "Bad updater entry: $key" }
+            Evidence "- ${key}: exact v4.1.1 URL and signature text match (not cryptographic verification)."
+          }
+
+          InstallNsis $new "/S /D=$install"
+          CheckVersion '4.1.1'
+          RequireAbsent (Join-Path $install 'portable.flag')
+          RequireAbsent $default
+          $record = Get-ItemProperty -LiteralPath $uninstall
+          if ($record.DisplayVersion -cne '4.1.1' -or $record.InstallLocation.Trim('"') -ne $install) {
+            throw 'Unexpected HKCU uninstall version or location'
+          }
+          Evidence "- HKCU DisplayVersion = $($record.DisplayVersion); InstallLocation = $install; default folder and portable.flag absent."
+
+          foreach ($leaf in 'resources\yue2-cpp\yue-server.exe','resources\yue2-cpp\ggml.dll','resourcesst-hostst-host.exe') {
+            $file = Get-Item -LiteralPath (Join-Path $install $leaf)
+            if ($file.PSIsContainer -or $file.Length -le 0) { throw "Missing payload: $leaf" }
+          }
