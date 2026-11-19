@@ -12,10 +12,10 @@ jobs:
     runs-on: macos-15
     timeout-minutes: 20
     env:
-      VERSION: "4.1.0"
+      VERSION: "4.1.1"
       APP: "YuE2 Studio"
-      DMG: "YuE2-Studio-4.1.0-macos-arm64.dmg"
-      BUILD_RUN: "43940246685"
+      DMG: "YuE2-Studio-4.1.1-macos-arm64.dmg"
+      BUILD_RUN: "44569788005"
       PORT: "8791"
       GH_TOKEN: ${{ github.token }}
     steps:
