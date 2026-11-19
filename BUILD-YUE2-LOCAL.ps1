@@ -19,6 +19,13 @@ try {
     foreach ($tool in @('node.exe','npm.cmd','cargo.exe','rustc.exe','git.exe')) {
         if (-not (Get-Command $tool -ErrorAction SilentlyContinue)) { throw "Missing command: $tool" }
     }
+    # The launcher initializes VS's x64 developer tools first. Refuse to waste
+    # time re-installing npm packages if the Windows linker is still missing.
+    $linker = Get-Command 'link.exe' -ErrorAction SilentlyContinue
+    if (-not $linker) {
+        throw 'MSVC link.exe is not on PATH. Start BUILD-YUE2-LOCAL.bat (not .ps1 directly). If it still fails, repair Desktop development with C++ in Visual Studio Installer.'
+    }
+    Write-Host "MSVC linker: $($linker.Source)" -ForegroundColor Green
     $branch = (& git branch --show-current).Trim()
     Write-Host "Current Git branch: $branch" -ForegroundColor Yellow
     # All DJ changes now live on the fork's main branch: validate the files, not the branch name.
