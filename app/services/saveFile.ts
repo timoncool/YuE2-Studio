@@ -72,7 +72,12 @@ export async function saveFile(name: string, source: SaveSource): Promise<void> 
     const body = 'url' in source
       ? { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url: source.url }) }
       : { headers: { 'Content-Type': 'application/octet-stream' }, body: source.blob };
-    await answer(await fetch(apiUrl(`/v1/files/save/${encodeURIComponent(id)}`), { method: 'POST', ...body }));
+    const result = await answer(await fetch(apiUrl(`/v1/files/save/${encodeURIComponent(id)}`), { method: 'POST', ...body }));
+    // A successful save must explicitly report completion; without this the
+    // Files panel can remain in "saving" forever on installations where the
+    // backend does not emit a separate completed progress event.
+    const size = 'blob' in source ? source.blob.size : Number(result.written ?? result.total ?? 0);
+    tell({ id, name: String(place.name ?? name), path: String(place.path), state: 'done', written: size || undefined, total: size || undefined });
   } catch (problem) {
     tell({ id, name, state: 'error', error: problem instanceof Error ? problem.message : String(problem) });
   }
