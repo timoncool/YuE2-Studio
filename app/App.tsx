@@ -122,6 +122,7 @@ import { StudioToolsPanel } from './components/StudioToolsPanel';
 import { AdaptersPage } from './components/AdaptersPage';
 import { PlayerExtras } from './components/player/PlayerExtras';
 import { registerPlayer } from './services/audioGraph';
+import { resetLibraryTempoForNewTrack } from './services/playerTempo';
 import { serveVisualizerFeed } from './services/visualizerFeed';
 import { winampControl, winampOn } from './services/winamp';
 import { notePlayed } from './services/playHistory';
@@ -868,6 +869,10 @@ function AppContent() {
       currentSongIdRef.current = currentSong.id;
       audio.src = currentSong.audioUrl;
       audio.load();
+      // Switching tracks resets Chromium's audio rate to normal. Reset the
+      // control state too, or the library displays the OLD rate while the
+      // new track is actually playing at 1.00x.
+      resetLibraryTempoForNewTrack(audio, setPlaybackRate);
       if (isPlaying) playAudio();
     } else {
       if (isPlaying) playAudio();
