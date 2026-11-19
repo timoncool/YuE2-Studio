@@ -3,6 +3,9 @@ export type DjSeparationEngine = 'htdemucs' | 'roformer';
 export interface DjSeparationStatus {
   ready: boolean;
   engine: DjSeparationEngine;
+  /** Native engine readiness is reported independently for both DJ install buttons. */
+  engines?: Record<DjSeparationEngine, { ready: boolean }>;
+  download?: { asset_id: string; scope?: string; downloaded_bytes: number; total_bytes: number; done: boolean; error: string | null } | null;
   settings: {
     engine?: DjSeparationEngine;
     stems: string[];
@@ -34,6 +37,24 @@ export async function readDjNativeStems(songId: string): Promise<string[]> {
   return Array.isArray(body.stems) ? body.stems : [];
 }
 
+/** True only when the native backend confirms this exact engine is installed. */
+export function djEngineReady(status: DjSeparationStatus | null, engine: DjSeparationEngine): boolean {
+  return Boolean(status?.engines?.[engine]?.ready);
+}
+
+/** One click installs the selected engine's model and required native runtime. */
+export async function installDjSeparationEngine(engine: DjSeparationEngine): Promise<void> {
+  const response = await fetch('/v1/separation/runtime/install', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ asset_id: engine }),
+  });
+  if (!response.ok) {
+    const body: { error?: string } | null = await response.json().catch(() => null);
+    throw new Error(body?.error || 'Could not start the ' + engine + ' download (' + response.status + ')');
+  }
+}
+
 export function djStemsForEngine(engine: DjSeparationEngine): string[] {
   return engine === 'roformer'
     ? ['vocals', 'instrumental']
@@ -51,9 +72,9 @@ export async function startDjSeparation(songId: string, engine: DjSeparationEngi
   });
   if (!settingsResponse.ok) throw new Error('Cannot configure the native separator.');
   const readiness = await readDjSeparationStatus();
-  if (!readiness.ready) {
+  if (!djEngineReady(readiness, engine)) {
     const name = engine === 'roformer' ? 'Mel-Band RoFormer' : 'HT-Demucs';
-    throw new Error(name + ' is not installed. Open Settings > Models > Stems, install the model/runtime, then try again.');
+    throw new Error(name + ' is not ready. Use its Install button in Live Stem Control first.');
   }
   const response = await fetch('/v1/library/songs/' + encodeURIComponent(songId) + '/stems', { method: 'POST' });
   if (!response.ok) {

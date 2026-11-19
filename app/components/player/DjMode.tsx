@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Play, Pause, SkipBack, Repeat, RotateCcw, Headphones, Search, X,
-  AudioLines, FolderOpen, Circle, Waves, ListMusic, RotateCcw as ResetIcon,
+  AudioLines, FolderOpen, Circle, Waves, ListMusic,
 } from 'lucide-react';
 import type { Playlist, Song } from '../../types';
 import { trackCoverUrl } from '../../services/playerPanels';
@@ -9,7 +9,7 @@ import { stemOf } from '../../services/songStems';
 import { saveFile } from '../../services/saveFile';
 import { DjMixer, type DjDeck, type DjDeckSnapshot } from '../../services/djMixer';
 import { DjStemControls } from './DjStemControls';
-import { readDjNativeStems, readDjSeparationStatus, startDjSeparation, type DjSeparationEngine, type DjSeparationStatus } from '../../services/djSeparation';
+import { readDjNativeStems, readDjSeparationStatus, startDjSeparation, installDjSeparationEngine, djEngineReady, type DjSeparationEngine, type DjSeparationStatus } from '../../services/djSeparation';
 
 type DeckIndex = 0 | 1;
 type BrowserSource = 'all' | 'unassigned' | 'liked' | 'stems' | `collection:${string}`;
@@ -87,8 +87,8 @@ const JogWheel: React.FC<{ deck: DjDeck; side: 'A' | 'B'; color: string }> = ({ 
   }, [deck]);
   return (
     <div className="flex flex-col items-center gap-1.5">
-      <div className="relative h-[218px] w-[240px] shrink-0 rounded-xl border border-zinc-600/70 bg-[linear-gradient(145deg,#34363b,#141519_52%,#2b2d33)] p-3 shadow-[inset_0_2px_2px_#ffffff18,0_9px_25px_#000a]">
-        <span className="absolute left-3 top-2 text-[9px] font-bold tracking-[0.22em] text-zinc-400">YuE2 • TURNTABLE {side}</span>
+      <div className="relative h-[344px] w-[360px] shrink-0 rounded-xl border border-zinc-600/70 bg-[linear-gradient(145deg,#34363b,#141519_52%,#2b2d33)] p-3 shadow-[inset_0_2px_2px_#ffffff18,0_9px_25px_#000a]">
+        <span className="absolute left-4 top-2 text-[11px] font-bold tracking-[0.22em] text-zinc-400">YuE2 • TURNTABLE {side}</span>
         <span className="absolute bottom-3 left-3 h-2 w-2 rounded-full border border-zinc-600 bg-zinc-900 shadow-[0_0_2px_#fff5]" />
         <span className="absolute right-3 top-3 h-2 w-2 rounded-full border border-zinc-600 bg-zinc-900 shadow-[0_0_2px_#fff5]" />
         <div
@@ -123,9 +123,9 @@ const JogWheel: React.FC<{ deck: DjDeck; side: 'A' | 'B'; color: string }> = ({ 
           }}
           onPointerCancel={() => { previous.current = null; deck.endScratch(); }}
           onLostPointerCapture={() => { previous.current = null; deck.endScratch(); }}
-          className="absolute left-2 top-5 grid h-[192px] w-[192px] touch-none cursor-grab select-none place-items-center rounded-full border-[3px] border-zinc-500 bg-zinc-950 shadow-[0_0_0_3px_#0b0c0f,0_0_0_5px_#444650,0_9px_18px_#000c] active:cursor-grabbing"
+          className="absolute left-3 top-7 grid h-[306px] w-[306px] touch-none cursor-grab select-none place-items-center rounded-full border-[3px] border-zinc-500 bg-zinc-950 shadow-[0_0_0_3px_#0b0c0f,0_0_0_5px_#444650,0_9px_18px_#000c] active:cursor-grabbing"
         >
-          <div ref={record} className="pointer-events-none relative h-[180px] w-[180px] rounded-full border-[6px] border-[#202125] shadow-[inset_0_0_12px_#000,0_2px_5px_#000]" style={{
+          <div ref={record} className="pointer-events-none relative h-[294px] w-[294px] rounded-full border-[6px] border-[#202125] shadow-[inset_0_0_12px_#000,0_2px_5px_#000]" style={{
             background: 'repeating-radial-gradient(circle at center,#26282c 0px,#141518 2px,#222428 3px,#101114 5px,#191a1d 6px)'
           }}>
             <div className="absolute inset-0 rounded-full" style={{
@@ -134,15 +134,15 @@ const JogWheel: React.FC<{ deck: DjDeck; side: 'A' | 'B'; color: string }> = ({ 
               maskImage: 'radial-gradient(transparent 0 43%,black 46% 49%,transparent 52%)'
             }} />
             <div className="absolute inset-[27%] grid place-items-center rounded-full border-[5px] border-zinc-950 shadow-[0_0_0_1px_#9998,0_0_0_4px_#111]" style={{ background: `linear-gradient(145deg,${color},#111827 80%)` }}>
-              <div className="text-center text-[11px] font-black italic tracking-tight text-white drop-shadow-md">YuE2 DJ</div>
-              <span className="absolute bottom-2 text-[7px] font-bold tracking-[0.2em] text-white/70">33⅓ RPM</span>
+              <div className="text-center text-[19px] font-black italic tracking-tight text-white drop-shadow-md">YuE2 DJ</div>
+              <span className="absolute bottom-3 text-[10px] font-bold tracking-[0.2em] text-white/70">33⅓ RPM</span>
             </div>
             <span className="absolute left-1/2 top-1/2 h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-zinc-500 bg-slate-100 shadow-md" />
             <span className="absolute left-1/2 top-1 h-1 w-2 -translate-x-1/2 rounded-sm bg-white/80" />
           </div>
         </div>
         {/* Tonearm and cartridge stay fixed while the record spins. */}
-        <svg className="pointer-events-none absolute right-1 top-6 h-[180px] w-[84px] drop-shadow-[1px_2px_2px_#000]" viewBox="0 0 84 180" aria-hidden="true">
+        <svg className="pointer-events-none absolute right-1 top-9 h-[252px] w-[118px] drop-shadow-[1px_2px_2px_#000]" viewBox="0 0 84 180" aria-hidden="true">
           <circle cx="66" cy="15" r="14" fill="#1b1e23" stroke="#7a7d83" strokeWidth="3"/>
           <circle cx="66" cy="15" r="5" fill="#a1a5ae"/>
           <path d="M66 15 L69 61 Q69 74 62 89 L22 143" fill="none" stroke="#25272e" strokeWidth="10" strokeLinecap="round"/>
@@ -150,7 +150,7 @@ const JogWheel: React.FC<{ deck: DjDeck; side: 'A' | 'B'; color: string }> = ({ 
           <path d="M20 135 L10 154" stroke="#eef2f7" strokeWidth="8" strokeLinecap="round"/>
           <path d="M10 153 L7 164" stroke="#171a1f" strokeWidth="6" strokeLinecap="round"/>
         </svg>
-        <div className="absolute bottom-2 right-2 rounded border border-white/10 bg-black/70 px-1.5 py-0.5 text-[9px] font-bold" style={{color}}>{deck.state.scratching ? 'SCRATCH' : deck.state.playing ? 'ON AIR' : 'STOP'}</div>
+        <div className="absolute bottom-3 right-3 rounded border border-white/10 bg-black/70 px-1.5 py-0.5 text-[9px] font-bold" style={{color}}>{deck.state.scratching ? 'SCRATCH' : deck.state.playing ? 'ON AIR' : 'STOP'}</div>
       </div>
       <span className="text-center text-[10px] text-zinc-400">{deck.state.scratching ? (deck.state.scratchReady ? 'Scratching • forward / reverse' : 'Preparing scratch audio…') : 'Grab vinyl to scratch • left/right to nudge'}</span>
     </div>
@@ -163,17 +163,22 @@ const PitchFader: React.FC<{ deck: DjDeck; side: 'A' | 'B'; color: string }> = (
   const low = 1 - range / 100;
   const high = 1 + range / 100;
   return (
-    <div className="flex w-[94px] shrink-0 flex-col items-center gap-1 rounded-lg border border-zinc-700 bg-[#1b1c20] px-2 py-2">
-      <span className="text-[10px] font-black tracking-wider text-zinc-200">PITCH</span>
-      <span className="rounded border border-white/10 bg-black px-2 py-1 font-mono text-xs tabular-nums" style={{color}}>{percentage >= 0 ? '+' : ''}{percentage.toFixed(1)}%</span>
+    <div className="flex w-[118px] shrink-0 flex-col items-center gap-1 rounded-lg border border-zinc-700 bg-[#1b1c20] px-2 py-2">
+      <span className="text-[11px] font-black tracking-wider text-zinc-200">PITCH / TEMPO</span>
+      <div className="w-full rounded-md border border-white/10 bg-black px-1 py-1.5 text-center font-mono tabular-nums shadow-inner">
+        <div className="text-base font-black" style={{color}}>{percentage >= 0 ? '+' : ''}{percentage.toFixed(1)}%</div>
+        <div className="mt-0.5 border-t border-white/10 pt-1 text-sm font-bold text-white" aria-label={`Deck ${side} current tempo in BPM`}>
+          {deck.state.bpm ? (deck.state.bpm * deck.state.rate).toFixed(1) : '—'} <span className="text-[10px] text-zinc-500">BPM</span>
+        </div>
+      </div>
       <div className="flex items-center gap-2">
-        <div className="flex h-[144px] flex-col justify-between text-[9px] text-zinc-400"><span>+{range}</span><span>0</span><span>−{range}</span></div>
+        <div className="flex h-[184px] flex-col justify-between text-[10px] text-zinc-400"><span>+{range}</span><span>0</span><span>−{range}</span></div>
         <input type="range" min={low} max={high} step="0.001" value={Math.min(high, Math.max(low, deck.state.rate))}
           onChange={event => deck.rate(Number(event.target.value))}
           onDoubleClick={() => deck.rate(1)}
           aria-label={`Vertical pitch fader deck ${side}`}
           className="cursor-pointer accent-slate-200"
-          style={{writingMode:'vertical-lr',direction:'rtl',height:144,width:25}} />
+          style={{writingMode:'vertical-lr',direction:'rtl',height:184,width:28}} />
       </div>
       <div className="flex w-full gap-1">
         <button type="button" className={`${button} flex-1 px-1 py-0.5`} onClick={() => deck.rate(Math.max(0.25, deck.state.rate - 0.001))} aria-label="Decrease pitch">−</button>
@@ -201,8 +206,11 @@ const DjDeckPanel: React.FC<{
   mixer: DjMixer; index: DeckIndex; library: Song[]; onSelect: (song: Song) => void;
   onLoad: (index: DeckIndex, song: Song) => void; onTap: (index: DeckIndex) => void;
   separation: DjSeparationStatus | null;
+  installingEngine: DjSeparationEngine | null;
+  actionBusy: boolean;
+  onInstall: (engine: DjSeparationEngine) => void;
   onSeparate: (index: DeckIndex, engine: DjSeparationEngine) => void;
-}> = ({ mixer, index, library, onSelect, onLoad, onTap, separation, onSeparate }) => {
+}> = ({ mixer, index, library, onSelect, onLoad, onTap, separation, installingEngine, actionBusy, onInstall, onSeparate }) => {
   const deck = mixer.decks[index];
   const state: DjDeckSnapshot = deck.state;
   const side = index === 0 ? 'A' : 'B';
@@ -257,16 +265,15 @@ const DjDeckPanel: React.FC<{
       <div className="mt-3 flex flex-wrap items-center justify-center gap-3 rounded-xl border border-white/5 bg-black/20 p-2">
         <JogWheel deck={deck} side={side} color={color} />
         <PitchFader deck={deck} side={side} color={color} />
-        <div className="flex min-w-[110px] max-w-[150px] flex-1 flex-col gap-3">
-          <div className="flex flex-col gap-1 rounded-md border border-white/10 bg-black/40 p-2 text-xs">
-            <span className="text-[10px] font-bold text-zinc-400">TEMPO / BPM</span>
-            <span className="font-mono text-lg font-black text-white">{state.bpm ? (state.bpm * state.rate).toFixed(1) : '—'}</span>
+        <div className="flex min-w-[118px] max-w-[160px] flex-1 flex-col justify-center gap-4">
+          <div className="flex flex-col gap-2 rounded-md border border-white/10 bg-black/25 p-2">
+            <span className="text-[10px] font-bold tracking-wider text-zinc-400">BEAT CONTROL</span>
+            <span className="font-mono text-xs tabular-nums text-zinc-200">Original: {state.bpm?.toFixed(1) ?? '—'} BPM</span>
             <button className={button} type="button" onClick={() => onTap(index)}>TAP BPM</button>
-            <button className={button} type="button" onClick={() => deck.rate(1)}><ResetIcon size={12} className="inline" /> RESET TEMPO</button>
-            <span className="text-[10px] text-zinc-400">{(12 * Math.log2(state.rate)).toFixed(1)} semitones · pitch follows speed</span>
+            <span className="text-[10px] leading-4 text-zinc-500">{(12 * Math.log2(state.rate)).toFixed(1)} semitones · pitch follows speed</span>
           </div>
-          <div>
-            <div className="mb-1 flex items-center justify-between text-[10px] font-semibold text-zinc-400">
+          <div className="rounded-md border border-white/10 bg-black/25 p-2">
+            <div className="mb-2 flex items-center justify-between gap-2 text-[10px] font-semibold text-zinc-400">
               <span>DECK GAIN</span>
               <button type="button" className="text-sky-300 hover:text-white" onClick={() => mixer.gain(index, 1)}>RESET</button>
             </div>
@@ -308,7 +315,8 @@ const DjDeckPanel: React.FC<{
         <button className={`${button} ${state.looping ? 'border-fuchsia-500 bg-fuchsia-500/20' : ''}`} type="button"
           disabled={!state.song} onClick={() => deck.toggleLoop()}><Repeat size={13} className="inline" /> {state.looping ? 'ON' : 'OFF'}</button>
       </div>
-      <DjStemControls deck={deck} side={side} separation={separation} onSeparate={engine => onSeparate(index, engine)} />
+      <DjStemControls deck={deck} side={side} separation={separation} installing={installingEngine}
+        actionBusy={actionBusy} onInstall={onInstall} onSeparate={engine => onSeparate(index, engine)} />
       {state.error && <p role="alert" className="mt-2 rounded-md bg-rose-500/10 p-2 text-xs text-rose-300">{state.error}</p>}
       {state.song && <button className="mt-2 text-xs text-zinc-400 underline hover:text-white" type="button" onClick={() => onSelect(state.song!)}>Show track details</button>}
     </section>
@@ -335,6 +343,8 @@ export const DjMode: React.FC<{
   const [taps, setTaps] = useState<Record<number, number[]>>({});
   const [separation, setSeparation] = useState<DjSeparationStatus | null>(null);
   const [separationBusy, setSeparationBusy] = useState(false);
+  const [installingEngine, setInstallingEngine] = useState<DjSeparationEngine | null>(null);
+  const installingRef = useRef<DjSeparationEngine | null>(null);
   const completedRun = useRef('');
   const startedHere = useRef<string | null>(null);
   const tick = useRef<() => void>(() => {});
@@ -376,6 +386,17 @@ export const DjMode: React.FC<{
         const status = await readDjSeparationStatus();
         if (!active) return;
         setSeparation(status);
+        const installing = installingRef.current;
+        if (installing) {
+          if (djEngineReady(status, installing)) {
+            installingRef.current = null;
+            setInstallingEngine(null);
+          } else if (status.download?.scope === 'separation' && status.download.done && status.download.error) {
+            installingRef.current = null;
+            setInstallingEngine(null);
+            setError('Stem engine download failed: ' + status.download.error);
+          }
+        }
         const run = status.run;
         if (run?.done && !run.error && run.stems?.length) {
           const signature = run.song_id + ':' + run.started_ms;
@@ -433,8 +454,31 @@ export const DjMode: React.FC<{
       .catch(() => undefined);
   };
 
+  /** Install the missing model AND native runtime with the same endpoint as Settings > Models. */
+  const install = async (engine: DjSeparationEngine) => {
+    if (separationBusy || installingRef.current) return;
+    setSeparationBusy(true);
+    setError(null);
+    installingRef.current = engine;
+    setInstallingEngine(engine);
+    try {
+      await installDjSeparationEngine(engine);
+      setSeparation(await readDjSeparationStatus());
+    } catch (problem) {
+      installingRef.current = null;
+      setInstallingEngine(null);
+      setError(problem instanceof Error ? problem.message : String(problem));
+    } finally {
+      setSeparationBusy(false);
+    }
+  };
+
   const separate = async (index: DeckIndex, engine: DjSeparationEngine) => {
-    if (!mixer || separationBusy) return;
+    if (!mixer || separationBusy || installingRef.current) return;
+    if (!djEngineReady(separation, engine)) {
+      setError('The separation engine is not installed yet. Use its Install button in Live Stem Control.');
+      return;
+    }
     const song = mixer.decks[index].state.song;
     if (!song || stemOf(song) !== null) return;
     setSeparationBusy(true);
@@ -523,14 +567,16 @@ export const DjMode: React.FC<{
         {mixer ? (
           <div className="mx-auto flex max-w-[1850px] flex-col gap-3 px-3 py-3">
             <div className="flex items-stretch gap-3 overflow-x-auto">
-              <DjDeckPanel mixer={mixer} index={0} library={libraryPlayable} onSelect={setSelected} onLoad={load} onTap={tap} separation={separation} onSeparate={separate} />
+              <DjDeckPanel mixer={mixer} index={0} library={libraryPlayable} onSelect={setSelected} onLoad={load} onTap={tap}
+                separation={separation} installingEngine={installingEngine} actionBusy={separationBusy} onInstall={install} onSeparate={separate} />
               <div className="flex w-24 shrink-0 flex-col items-center justify-center gap-5 rounded-xl border border-white/10 bg-zinc-900 px-2">
                 <Headphones className="text-zinc-400" size={24} />
                 <span className="text-[11px] font-bold uppercase tracking-wider text-zinc-400">MIX</span>
                 <div className="h-32 w-1 rounded-full bg-linear-to-b from-blue-500 via-fuchsia-500 to-rose-500" aria-hidden />
                 <button type="button" className={button} onClick={() => mixer.setCrossfade(0.5)}>CENTER</button>
               </div>
-              <DjDeckPanel mixer={mixer} index={1} library={libraryPlayable} onSelect={setSelected} onLoad={load} onTap={tap} separation={separation} onSeparate={separate} />
+              <DjDeckPanel mixer={mixer} index={1} library={libraryPlayable} onSelect={setSelected} onLoad={load} onTap={tap}
+                separation={separation} installingEngine={installingEngine} actionBusy={separationBusy} onInstall={install} onSeparate={separate} />
             </div>
             <div className="flex flex-wrap items-center justify-center gap-3 rounded-lg border border-white/10 bg-[#202126] p-3">
               <span className="font-black text-blue-400">A</span>

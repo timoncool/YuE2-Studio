@@ -2631,6 +2631,12 @@ async fn separation_status(State(state): State<AppState>) -> Json<Value> {
         },
         "engine": engine,
         "stems": engine_stems(engine),
+        // Both DJ buttons need engine-specific readiness *before* being clicked.
+        // The selected engine's top-level ready flag is not enough for this.
+        "engines": {
+            "htdemucs": { "ready": htdemucs_installed(&state, runtime_choice) },
+            "roformer": { "ready": state.separator.roformer_installed(roformer_on_card(&state, runtime_choice)) },
+        },
         // Either downloader may be the busy one: the model has its own, audio.cpp's server comes through its own.
         "download": separation_download_progress(
             state.separator.downloader().active().await,
