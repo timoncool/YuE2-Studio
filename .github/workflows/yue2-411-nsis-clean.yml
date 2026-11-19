@@ -149,7 +149,7 @@ jobs:
           }
           Evidence "- HKCU DisplayVersion = $($record.DisplayVersion); InstallLocation = $install; default folder and portable.flag absent."
 
-          foreach ($leaf in 'resources\yue2-cpp\yue-server.exe','resources\yue2-cpp\ggml.dll','resourcesst-hostst-host.exe') {
+          foreach ($leaf in 'resources\yue2-cpp\yue-server.exe','resources\yue2-cpp\ggml.dll','resources\vst-host\vst-host.exe') {
             $file = Get-Item -LiteralPath (Join-Path $install $leaf)
             if ($file.PSIsContainer -or $file.Length -le 0) { throw "Missing payload: $leaf" }
           }
