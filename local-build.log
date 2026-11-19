@@ -1,0 +1,21 @@
+﻿**********************
+Windows PowerShell transcript start
+Start time: 20261119012433
+Username: CLEVO-PD70\DEVELOPMENT STATION
+RunAs User: CLEVO-PD70\DEVELOPMENT STATION
+Configuration Name: 
+Machine: CLEVO-PD70 (Microsoft Windows NT 10.0.19045.0)
+Host Application: powershell.exe -NoProfile -ExecutionPolicy Bypass -File D:\GITHUB\YUE2 STUDIO\YuE2-Studio\BUILD-YUE2-LOCAL.ps1
+Process ID: 27792
+PSVersion: 5.1.19041.6456
+PSEdition: Desktop
+PSCompatibleVersions: 1.0, 2.0, 3.0, 4.0, 5.0, 5.1.19041.6456
+BuildVersion: 10.0.19041.6456
+CLRVersion: 4.0.30319.42000
+WSManStackVersion: 3.0
+PSRemotingProtocolVersion: 2.3
+SerializationVersion: 1.1.0.1
+**********************
+YuE2 Studio - LOCAL Windows Portable Builder
+Repository: D:\GITHUB\YUE2 STUDIO\YuE2-Studio
+Current Git branch: main
