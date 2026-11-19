@@ -127,7 +127,9 @@ import { serveVisualizerFeed } from './services/visualizerFeed';
 import { winampControl, winampOn } from './services/winamp';
 import { notePlayed } from './services/playHistory';
 import { deleteQuestion } from './services/deleteQuestion';
-import { createNativePlaylist, deleteNativeSong, moveStoredLikes, restoreTrashedSong, setNativeSongLiked, updateNativePlaylist } from './services/nativeLibrary';
+import { createNativePlaylist, deleteNativeSong, moveStoredLikes, reorderNativeAlbums, restoreTrashedSong, setNativeSongLiked, updateNativePlaylist } from './services/nativeLibrary';
+import { collectionToastKey } from './services/collectionToasts';
+import { moveAlbum } from './services/albumOrder';
 import { foldStems } from './services/songStems';
 import { noteStudioMessage } from './services/journal';
 import { JournalPanel } from './components/JournalPanel';
@@ -273,6 +275,7 @@ function AppContent() {
   const libraryRead = useLibrarySongs();
   const librarySongs = libraryRead.data ?? NO_SONGS;
   const playlists = useLibraryPlaylists().data ?? NO_PLAYLISTS;
+  const pickerAlbumOrderBusy = useRef(false);
   // the like is kept with the song, so every window and the agent see one mark
   const likedSongIds = useMemo(() => new Set(librarySongs.filter(song => song.liked).map(song => song.id)), [librarySongs]);
   const likedSongs = useMemo(() => librarySongs.filter(song => song.liked), [librarySongs]);
@@ -1238,10 +1241,10 @@ function AppContent() {
       const playlist = await createNativePlaylist(name, description, songsToAddToPlaylist.map(song => song.id), kind);
       updateLibraryPlaylists(prev => [playlist, ...prev]);
       setSongsToAddToPlaylist([]);
-      showToast(t('playlistCreated'));
+      showToast(t(collectionToastKey(kind, 'created')));
     } catch (error) {
-      console.error('Create playlist error:', error);
-      showToast(t('failedToCreatePlaylist'), 'error');
+      console.error('Create collection error:', error);
+      showToast(t(collectionToastKey(kind, 'createFailed')), 'error');
     }
   };
 
@@ -1267,6 +1270,25 @@ function AppContent() {
   const openAddToPlaylistModal = (chosen: Song | Song[]) => openAddToCollectionModal(chosen, 'playlist');
   const openAddToAlbumModal = (chosen: Song | Song[]) => openAddToCollectionModal(chosen, 'album');
 
+  /** Dragging albums in the Add to Album chooser persists the exact same
+   * ordering as dragging the cards in Library > Albums. */
+  const reorderAlbumsInPicker = async (fromId: string, toId: string): Promise<void> => {
+    if (pickerAlbumOrderBusy.current) return;
+    const sorted = moveAlbum(playlists, fromId, toId);
+    if (sorted === playlists) return;
+    pickerAlbumOrderBusy.current = true;
+    updateLibraryPlaylists(() => sorted);
+    try {
+      const saved = await reorderNativeAlbums(sorted.filter(item => item.kind === 'album').map(item => item.id));
+      updateLibraryPlaylists(() => saved);
+    } catch (error) {
+      updateLibraryPlaylists(() => playlists);
+      showToast(error instanceof Error ? error.message : String(error), 'error');
+    } finally {
+      pickerAlbumOrderBusy.current = false;
+    }
+  };
+
   const addSongToPlaylist = async (playlistId: string) => {
     if (songsToAddToPlaylist.length === 0) return;
     try {
@@ -1279,9 +1301,13 @@ function AppContent() {
         updateLibraryPlaylists(prev => prev.map(item => item.id === updated.id ? updated : item));
       }
       const already = songsToAddToPlaylist.length - fresh.length;
+      const isAlbum = playlist.kind === 'album';
+      const kind = isAlbum ? 'album' : 'playlist';
       const added = fresh.length === 0
-        ? t(songsToAddToPlaylist.length === 1 ? 'songAlreadyInPlaylist' : 'songsAlreadyInPlaylist').replace('{name}', playlist.name)
-        : t('songsAddedToNamedPlaylist').replace('{count}', String(fresh.length)).replace('{name}', playlist.name);
+        ? t(collectionToastKey(kind, songsToAddToPlaylist.length === 1 ? 'alreadyOne' : 'alreadyMany'))
+            .replace('{name}', playlist.name)
+        : t(collectionToastKey(kind, 'added'))
+            .replace('{count}', String(fresh.length)).replace('{name}', playlist.name);
       showToast(already && fresh.length ? `${added} ${t('songsAlreadyThere').replace('{count}', String(already))}` : added, fresh.length ? 'success' : 'info', {
         label: t('openPlaylist'),
         onClick: () => handleNavigateToPlaylist(playlist.id),
@@ -1728,6 +1754,7 @@ function AppContent() {
           setCreatingCollectionKind('album');
           setIsCreatePlaylistModalOpen(true);
         }}
+        onReorderAlbums={reorderAlbumsInPicker}
       />
       <FilesPanel />
       <Toast

@@ -179,6 +179,22 @@ export async function loadNativePlaylists(): Promise<import('../types').Playlist
   return playlists.map(mapNativePlaylist);
 }
 
+/** Save the exact album order in the native library so all screens and future
+ * launches agree, rather than keeping a browser-only preference. */
+export async function reorderNativeAlbums(ids: string[]): Promise<import('../types').Playlist[]> {
+  const response = await fetch('/v1/library/albums/order', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ids }),
+  });
+  if (!response.ok) {
+    const body: { error?: string } | null = await response.json().catch(() => null);
+    throw new Error(body?.error || `Album order could not be saved (${response.status})`);
+  }
+  const playlists: NativePlaylist[] = await response.json();
+  return playlists.map(mapNativePlaylist);
+}
+
 export async function getNativePlaylist(id: string): Promise<import('../types').Playlist | null> {
   const response = await fetch(`/v1/library/playlists/${encodeURIComponent(id)}`);
   if (response.status === 404) return null;

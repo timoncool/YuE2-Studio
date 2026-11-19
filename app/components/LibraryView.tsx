@@ -1,10 +1,11 @@
 import React, { useMemo, useRef, useState } from 'react';
 import { Song, Playlist } from '../types';
-import { Heart, Plus, Play, Upload, Loader2, MoreHorizontal, ListMusic, Disc3 } from 'lucide-react';
+import { Heart, Plus, Play, Upload, Loader2, MoreHorizontal, ListMusic, Disc3, GripVertical, ArrowLeft, ArrowRight } from 'lucide-react';
 import { useI18n } from '../context/I18nContext';
 import { AUDIO_ACCEPT } from '../services/audioFiles';
 import { useSongActions } from '../context/SongActionsContext';
-import { deleteNativePlaylist } from '../services/nativeLibrary';
+import { deleteNativePlaylist, reorderNativeAlbums } from '../services/nativeLibrary';
+import { moveAlbum } from '../services/albumOrder';
 import { updateLibraryPlaylists } from '../services/studioQueries';
 import { named } from '../services/accessibleName';
 import { ConfirmDialog } from './ConfirmDialog';
@@ -108,6 +109,31 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
     const albums = playlists.filter(playlist => playlist.kind === 'album');
     const ordinaryPlaylists = playlists.filter(playlist => playlist.kind !== 'album');
     const visibleCollections = activeTab === 'albums' ? albums : ordinaryPlaylists;
+    const [draggingAlbum, setDraggingAlbum] = useState<string | null>(null);
+    const [overAlbum, setOverAlbum] = useState<string | null>(null);
+    const [savingAlbumOrder, setSavingAlbumOrder] = useState(false);
+    const albumOrderBusy = useRef(false);
+    /** Optimistic shared-cache update makes the album picker match immediately. */
+    const reorderAlbum = async (source: string, target: string) => {
+        if (albumOrderBusy.current) return;
+        const sorted = moveAlbum(playlists, source, target);
+        if (sorted === playlists) return;
+        albumOrderBusy.current = true;
+        setSavingAlbumOrder(true);
+        updateLibraryPlaylists(() => sorted);
+        try {
+            const persisted = await reorderNativeAlbums(sorted.filter(item => item.kind === 'album').map(item => item.id));
+            updateLibraryPlaylists(() => persisted);
+        } catch (error) {
+            updateLibraryPlaylists(() => playlists);
+            onError(error instanceof Error ? error.message : String(error));
+        } finally {
+            albumOrderBusy.current = false;
+            setSavingAlbumOrder(false);
+            setDraggingAlbum(null);
+            setOverAlbum(null);
+        }
+    };
     const playable = (playlist: Playlist) => playlistSongs(playlist, allSongs).filter(song => song.audioUrl && !song.isGenerating);
     const removePlaylist = async (playlist: Playlist) => {
         setDeleting(null);
@@ -197,8 +223,8 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
              <div className="mb-8 flex flex-col items-start justify-between gap-3 sm:flex-row sm:items-center">
                 <h1 className="min-w-0 truncate text-2xl font-bold text-zinc-900 dark:text-white sm:text-3xl">{t('yourLibrary')}</h1>
                 <div className="flex flex-wrap items-center gap-2">
-                  <button type="button" onClick={onCreateAlbum} className="flex items-center gap-2 rounded-full border border-zinc-300 px-4 py-2 font-medium text-zinc-900 hover:bg-zinc-100 dark:border-white/15 dark:text-white dark:hover:bg-white/10">
-                    <Disc3 size={18} /><span>{t('newAlbum')}</span>
+                  <button type="button" onClick={onCreateAlbum} className="flex items-center gap-2 rounded-full bg-zinc-900 px-4 py-2 font-medium text-white shadow-lg shadow-zinc-900/10 transition-colors hover:bg-zinc-800 dark:bg-zinc-800 dark:shadow-none dark:hover:bg-zinc-700">
+                    <Plus size={18} /><span>{t('newAlbum')}</span>
                   </button>
                   <button type="button" onClick={onCreatePlaylist} className="flex items-center gap-2 rounded-full bg-zinc-900 px-4 py-2 font-medium text-white shadow-lg shadow-zinc-900/10 transition-colors hover:bg-zinc-800 dark:bg-zinc-800 dark:shadow-none dark:hover:bg-zinc-700">
                     <Plus size={18} /><span>{t('newPlaylist')}</span>
@@ -273,17 +299,58 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
                      {visibleCollections.map((playlist) => {
                          const songs = playlistSongs(playlist, allSongs);
                          const ready = playable(playlist);
+                         const albumIndex = activeTab === 'albums' ? albums.findIndex(item => item.id === playlist.id) : -1;
                          return (
                          <div
                              key={playlist.id}
                              data-mcp-context={`playlist ${playlist.id}: ${playlist.name}`}
-                             className="group relative cursor-pointer rounded-lg border border-zinc-200 bg-white p-4 transition-all hover:border-zinc-300 hover:shadow-lg dark:border-white/5 dark:bg-zinc-900/40 dark:hover:border-white/10 dark:hover:bg-zinc-900"
+                             className={`group relative rounded-lg border border-zinc-200 bg-white p-4 transition-all hover:border-zinc-300 hover:shadow-lg dark:border-white/5 dark:bg-zinc-900/40 dark:hover:border-white/10 dark:hover:bg-zinc-900 ${activeTab === 'albums' ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer'} ${draggingAlbum === playlist.id ? 'opacity-40' : ''} ${overAlbum === playlist.id && draggingAlbum !== playlist.id ? 'ring-2 ring-pink-500' : ''}`}
+                             draggable={activeTab === 'albums' && !savingAlbumOrder}
+                             onDragStart={event => {
+                                 if (activeTab !== 'albums') return;
+                                 event.dataTransfer.effectAllowed = 'move';
+                                 event.dataTransfer.setData('text/plain', playlist.id);
+                                 setDraggingAlbum(playlist.id);
+                             }}
+                             onDragOver={event => {
+                                 if (activeTab !== 'albums' || !draggingAlbum || savingAlbumOrder) return;
+                                 event.preventDefault();
+                                 event.dataTransfer.dropEffect = 'move';
+                                 if (playlist.id !== draggingAlbum) setOverAlbum(playlist.id);
+                             }}
+                             onDrop={event => {
+                                 if (activeTab !== 'albums' || !draggingAlbum) return;
+                                 event.preventDefault();
+                                 void reorderAlbum(draggingAlbum, playlist.id);
+                                 setOverAlbum(null);
+                                 setDraggingAlbum(null);
+                             }}
+                             onDragEnd={() => { setDraggingAlbum(null); setOverAlbum(null); }}
                              onClick={() => onSelectPlaylist(playlist)}
                              onContextMenu={(event) => {
                                  event.preventDefault();
                                  setPlaylistMenu({ playlist, at: { x: event.clientX, y: event.clientY } });
                              }}
                          >
+                             {activeTab === 'albums' && (
+                                 <div className="absolute left-5 top-5 z-10 flex items-center gap-1 rounded-md bg-black/75 p-1 text-white opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100" title={t('dragAlbumToReorder')}>
+                                     <GripVertical size={16} aria-hidden="true" />
+                                     <button type="button" disabled={savingAlbumOrder || albumIndex <= 0}
+                                         aria-label={`${t('moveAlbumEarlier')}: ${playlist.name}`}
+                                         title={t('moveAlbumEarlier')}
+                                         className="rounded p-1 hover:bg-white/20 disabled:opacity-30"
+                                         onClick={event => { event.stopPropagation(); if (albumIndex > 0) void reorderAlbum(playlist.id, albums[albumIndex - 1].id); }}>
+                                         <ArrowLeft size={15} />
+                                     </button>
+                                     <button type="button" disabled={savingAlbumOrder || albumIndex >= albums.length - 1}
+                                         aria-label={`${t('moveAlbumLater')}: ${playlist.name}`}
+                                         title={t('moveAlbumLater')}
+                                         className="rounded p-1 hover:bg-white/20 disabled:opacity-30"
+                                         onClick={event => { event.stopPropagation(); if (albumIndex < albums.length - 1) void reorderAlbum(playlist.id, albums[albumIndex + 1].id); }}>
+                                         <ArrowRight size={15} />
+                                     </button>
+                                 </div>
+                             )}
                              <div className="relative mb-4 aspect-square overflow-hidden rounded-md bg-zinc-100 dark:bg-zinc-800">
                                  <PlaylistCover playlist={playlist} songs={songs} className="h-full w-full" />
                                  {ready.length > 0 && (

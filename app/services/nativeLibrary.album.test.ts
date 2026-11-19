@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { ALBUM_DESCRIPTION_PREFIX, COLLECTION_DESCRIPTION_PREFIX, encodeCollectionDescription, createNativePlaylist, mapNativePlaylist, updateNativePlaylist } from './nativeLibrary';
+import { ALBUM_DESCRIPTION_PREFIX, COLLECTION_DESCRIPTION_PREFIX, encodeCollectionDescription, createNativePlaylist, mapNativePlaylist, reorderNativeAlbums, updateNativePlaylist } from './nativeLibrary';
 
 const raw = {
   id: 'collection-1',
@@ -46,6 +46,27 @@ describe('album collections in the native library', () => {
       `${ALBUM_DESCRIPTION_PREFIX}First record`,
     ]);
   });
+  it('saves the exact order to the native album endpoint and reuses the server order', async () => {
+    const writes: Array<{ url: string; ids: string[]; method?: string }> = [];
+    vi.stubGlobal('fetch', vi.fn(async (url: string, options: RequestInit) => {
+      writes.push({ url, ids: JSON.parse(String(options.body)).ids as string[], method: options.method });
+      return new Response(JSON.stringify([
+        { ...raw, id: 'c', name: 'Third', description: ALBUM_DESCRIPTION_PREFIX },
+        { ...raw, id: 'a', name: 'First', description: ALBUM_DESCRIPTION_PREFIX },
+        { ...raw, id: 'b', name: 'Second', description: ALBUM_DESCRIPTION_PREFIX },
+      ]), { status: 200 });
+    }));
+    const albums = await reorderNativeAlbums(['c', 'a', 'b']);
+    expect(writes).toEqual([{ url: '/v1/library/albums/order', ids: ['c', 'a', 'b'], method: 'PUT' }]);
+    expect(albums.map(item => item.id)).toEqual(['c', 'a', 'b']);
+    expect(albums.every(item => item.kind === 'album')).toBe(true);
+  });
+
+  it('surfaces stale album-order conflicts instead of silently losing changes', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ error: 'Albums changed; refresh the library' }), { status: 409 })));
+    await expect(reorderNativeAlbums(['a'])).rejects.toThrow('Albums changed');
+  });
+
   it('persists custom cover artwork for albums and playlists without breaking older records', () => {
     const image = 'data:image/jpeg;base64,YWJj';
     const albumData = encodeCollectionDescription({ kind: 'album', description: 'A concept record', coverUrl: image });

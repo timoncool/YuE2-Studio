@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { createPortal } from 'react-dom';
-import { X, Plus, Music, Disc3 } from 'lucide-react';
+import { X, Plus, Music, GripVertical } from 'lucide-react';
 import { Playlist } from '../types';
 import { useI18n } from '../context/I18nContext';
 
@@ -89,6 +89,7 @@ interface AddToPlaylistModalProps {
   onSelect: (playlistId: string) => void;
   onCreateNew?: () => void;
   onCreateNewAlbum?: () => void;
+  onReorderAlbums?: (fromId: string, toId: string) => Promise<void>;
   /** Choose only the requested collection type, not a mixed playlist/album list. */
   kind?: 'playlist' | 'album' | 'all';
 }
@@ -99,8 +100,11 @@ export function collectionsForAdding(playlists: Playlist[], kind: 'playlist' | '
   return playlists.filter(playlist => kind === 'all' || (kind === 'album' ? playlist.kind === 'album' : playlist.kind !== 'album'));
 }
 
-export const AddToPlaylistModal: React.FC<AddToPlaylistModalProps> = ({ isOpen, onClose, playlists, onSelect, onCreateNew, onCreateNewAlbum, kind = 'all' }) => {
+export const AddToPlaylistModal: React.FC<AddToPlaylistModalProps> = ({ isOpen, onClose, playlists, onSelect, onCreateNew, onCreateNewAlbum, onReorderAlbums, kind = 'all' }) => {
   const { t, songCount } = useI18n();
+  const [draggedAlbum, setDraggedAlbum] = useState<string | null>(null);
+  const [hoverAlbum, setHoverAlbum] = useState<string | null>(null);
+  const [savingAlbumOrder, setSavingAlbumOrder] = useState(false);
   if (!isOpen) return null;
   const choices = collectionsForAdding(playlists, kind);
 
@@ -129,7 +133,7 @@ export const AddToPlaylistModal: React.FC<AddToPlaylistModalProps> = ({ isOpen, 
 
         {kind !== 'playlist' && onCreateNewAlbum && (
           <button type="button" onClick={onCreateNewAlbum} className="mb-3 flex w-full items-center gap-3 rounded-lg border border-dashed border-zinc-300 p-3 text-left transition-colors hover:bg-zinc-100 dark:border-white/20 dark:hover:bg-white/5">
-            <div className="flex h-10 w-10 items-center justify-center rounded-sm bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-white/70"><Disc3 size={20} /></div>
+            <div className="flex h-10 w-10 items-center justify-center rounded-sm bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-white/70"><Plus size={20} /></div>
             <span className="font-semibold text-zinc-700 dark:text-white/90">{t('createAlbum')}</span>
           </button>
         )}
@@ -144,11 +148,36 @@ export const AddToPlaylistModal: React.FC<AddToPlaylistModalProps> = ({ isOpen, 
             choices.map(playlist => (
               <button
                 key={playlist.id}
+                draggable={kind === 'album' && Boolean(onReorderAlbums) && !savingAlbumOrder}
+                onDragStart={event => {
+                  if (kind !== 'album') return;
+                  event.dataTransfer.effectAllowed = 'move';
+                  event.dataTransfer.setData('text/plain', playlist.id);
+                  setDraggedAlbum(playlist.id);
+                }}
+                onDragOver={event => {
+                  if (kind !== 'album' || !draggedAlbum || savingAlbumOrder) return;
+                  event.preventDefault();
+                  event.dataTransfer.dropEffect = 'move';
+                  setHoverAlbum(playlist.id);
+                }}
+                onDrop={event => {
+                  if (kind !== 'album' || !draggedAlbum || !onReorderAlbums) return;
+                  event.preventDefault();
+                  const from = draggedAlbum;
+                  setDraggedAlbum(null);
+                  setHoverAlbum(null);
+                  if (from === playlist.id) return;
+                  setSavingAlbumOrder(true);
+                  void onReorderAlbums(from, playlist.id).finally(() => setSavingAlbumOrder(false));
+                }}
+                onDragEnd={() => { setDraggedAlbum(null); setHoverAlbum(null); }}
                 onClick={() => {
+                  if (savingAlbumOrder) return;
                   onSelect(playlist.id);
                   onClose();
                 }}
-                className="w-full flex items-center gap-3 p-3 rounded-lg hover:bg-zinc-100 dark:hover:bg-white/5 transition-colors group"
+                className={`group flex w-full items-center gap-3 rounded-lg p-3 transition-colors hover:bg-zinc-100 dark:hover:bg-white/5 ${kind === 'album' ? 'cursor-grab active:cursor-grabbing' : ''} ${draggedAlbum === playlist.id ? 'opacity-40' : ''} ${hoverAlbum === playlist.id && draggedAlbum !== playlist.id ? 'ring-2 ring-pink-500' : ''}`}
               >
                 <div className="w-10 h-10 bg-zinc-200 dark:bg-zinc-800 rounded-sm flex items-center justify-center text-zinc-500 group-hover:text-zinc-900 dark:group-hover:text-white shrink-0 overflow-hidden">
                   {playlist.coverUrl ? (
@@ -161,6 +190,7 @@ export const AddToPlaylistModal: React.FC<AddToPlaylistModalProps> = ({ isOpen, 
                   <div className="font-medium text-zinc-900 dark:text-white truncate">{playlist.name}</div>
                   <div className="text-xs text-zinc-500">{playlist.kind === 'album' ? t('album') : t('playlist')} · {songCount(playlist.song_count || playlist.songIds?.length || 0)}</div>
                 </div>
+                {kind === 'album' && <GripVertical size={17} className="ml-auto shrink-0 text-zinc-400" aria-label={t('dragAlbumToReorder')} />}
               </button>
             ))
           )}
