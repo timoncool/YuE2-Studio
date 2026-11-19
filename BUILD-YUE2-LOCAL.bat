@@ -3,19 +3,35 @@ setlocal EnableExtensions
 cd /d "%~dp0"
 title YuE2 Studio - Local Portable Builder
 
-rem Rust's Windows MSVC target needs link.exe and the Windows SDK in PATH.
-rem The normal Windows command prompt does not initialize these automatically.
-set "VSWHERE=%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe"
-if not exist "%VSWHERE%" goto :missing_cpp
+rem Visual Studio's MSVC linker is usually installed, but not on PATH in a
+rem normal cmd.exe window. Prefer standard install locations; never rely on
+rem FOR /F command-substitution quoting to find the user's Build Tools.
+set "VSDEVCMD="
 
-set "VSROOT="
-for /f "usebackq delims=" %%I in (`"%VSWHERE%" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath`) do set "VSROOT=%%I"
-if not defined VSROOT goto :missing_cpp
+for %%Y in (2022 2026 2019) do (
+  for %%E in (BuildTools Community Professional Enterprise) do (
+    if not defined VSDEVCMD if exist "%ProgramFiles(x86)%\Microsoft Visual Studio\%%Y\%%E\Common7\Tools\VsDevCmd.bat" (
+      set "VSDEVCMD=%ProgramFiles(x86)%\Microsoft Visual Studio\%%Y\%%E\Common7\Tools\VsDevCmd.bat"
+    )
+  )
+)
 
-set "VSDEVCMD=%VSROOT%\Common7\Tools\VsDevCmd.bat"
-if not exist "%VSDEVCMD%" goto :missing_cpp
+rem Other editions may live under Program Files rather than Program Files (x86).
+if not defined VSDEVCMD (
+  for %%Y in (2022 2026 2019) do (
+    for %%E in (BuildTools Community Professional Enterprise) do (
+      if not defined VSDEVCMD if exist "%ProgramFiles%\Microsoft Visual Studio\%%Y\%%E\Common7\Tools\VsDevCmd.bat" (
+        set "VSDEVCMD=%ProgramFiles%\Microsoft Visual Studio\%%Y\%%E\Common7\Tools\VsDevCmd.bat"
+      )
+    )
+  )
+)
 
-echo [YuE2] Activating Visual Studio 2022 x64 C++ build tools...
+if not defined VSDEVCMD goto :missing_vs
+
+echo [YuE2] Found Visual Studio C++ environment:
+echo         "%VSDEVCMD%"
+echo [YuE2] Activating MSVC x64 tools...
 call "%VSDEVCMD%" -no_logo -arch=x64 -host_arch=x64
 if errorlevel 1 goto :init_failed
 
@@ -28,27 +44,31 @@ echo.
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0BUILD-YUE2-LOCAL.ps1"
 exit /b %ERRORLEVEL%
 
-:missing_cpp
+:missing_vs
 echo.
-echo [ERROR] Visual Studio C++ Build Tools were not detected.
-echo Open Visual Studio Installer and install "Desktop development with C++".
-echo Required component: MSVC v143 x64/x86 build tools.
+echo [ERROR] Could not locate VsDevCmd.bat in a standard Visual Studio folder.
+echo Your previous checks detected Build Tools at:
+echo   C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools
+echo.
+echo Check whether this file exists:
+echo   C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\Common7\Tools\VsDevCmd.bat
+echo If it was installed elsewhere, open the Visual Studio Installer to view its location.
 echo.
 pause
 exit /b 1
 
 :init_failed
 echo.
-echo [ERROR] Visual Studio's x64 developer environment could not initialize.
-echo Try repairing the C++ workload using Visual Studio Installer.
+echo [ERROR] Visual Studio's x64 developer environment did not initialize.
+echo Check that the Desktop development with C++ workload is installed.
 echo.
 pause
 exit /b 1
 
 :missing_linker
 echo.
-echo [ERROR] MSVC link.exe is still unavailable after activating the C++ tools.
-echo In Visual Studio Installer, check MSVC v143 x64/x86 build tools.
+echo [ERROR] Visual Studio was found, but link.exe is still missing.
+echo In Visual Studio Installer, modify Build Tools and enable MSVC v143 x64/x86 build tools.
 echo.
 pause
 exit /b 1
