@@ -3,6 +3,12 @@
 What changed, newest first. Dates are release dates; the studio is versioned by its
 Windows build.
 
+## 2026-11-19 — 4.1.1
+
+### Fixed
+
+- **ONNX Runtime downloads** now use the studio mirror because the old links returned 404. Existing valid installations do not need to download ONNX Runtime again.
+
 ## 2026-11-16 — 4.1.0
 
 ### Added
