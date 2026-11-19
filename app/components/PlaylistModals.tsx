@@ -89,24 +89,33 @@ interface AddToPlaylistModalProps {
   onSelect: (playlistId: string) => void;
   onCreateNew?: () => void;
   onCreateNewAlbum?: () => void;
+  /** Choose only the requested collection type, not a mixed playlist/album list. */
+  kind?: 'playlist' | 'album' | 'all';
 }
 
-export const AddToPlaylistModal: React.FC<AddToPlaylistModalProps> = ({ isOpen, onClose, playlists, onSelect, onCreateNew, onCreateNewAlbum }) => {
+/** Playlists and albums share storage, but choosing one in the context menu
+ * must not show unrelated collections. */
+export function collectionsForAdding(playlists: Playlist[], kind: 'playlist' | 'album' | 'all'): Playlist[] {
+  return playlists.filter(playlist => kind === 'all' || (kind === 'album' ? playlist.kind === 'album' : playlist.kind !== 'album'));
+}
+
+export const AddToPlaylistModal: React.FC<AddToPlaylistModalProps> = ({ isOpen, onClose, playlists, onSelect, onCreateNew, onCreateNewAlbum, kind = 'all' }) => {
   const { t, songCount } = useI18n();
   if (!isOpen) return null;
+  const choices = collectionsForAdding(playlists, kind);
 
   return (
     <div className="fixed inset-0 z-60 flex items-center justify-center bg-black/50 dark:bg-black/80 backdrop-blur-xs p-4">
       <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-white/10 rounded-xl w-full max-w-sm p-6 shadow-2xl animate-in fade-in zoom-in-95 duration-200">
         <div className="flex justify-between items-center mb-4">
-          <h2 className="text-lg font-bold text-zinc-900 dark:text-white">{t('addToCollection')}</h2>
+          <h2 className="text-lg font-bold text-zinc-900 dark:text-white">{kind === 'album' ? t('addToAlbum') : kind === 'playlist' ? t('addToPlaylist') : t('addToCollection')}</h2>
           <button onClick={onClose} className="text-zinc-400 hover:text-zinc-900 dark:hover:text-white">
             <X size={20} />
           </button>
         </div>
 
         {/* Create New Button - Always visible at top */}
-        <button
+        {kind !== 'album' && <button
           onClick={onCreateNew}
           className="w-full flex items-center gap-3 p-3 rounded-lg hover:bg-zinc-100 dark:hover:bg-white/5 transition-colors group mb-3 border border-dashed border-zinc-300 dark:border-white/20 hover:border-zinc-400 dark:hover:border-white/40"
         >
@@ -116,9 +125,9 @@ export const AddToPlaylistModal: React.FC<AddToPlaylistModalProps> = ({ isOpen, 
           <div className="text-left">
             <div className="font-semibold text-zinc-700 dark:text-white/90 group-hover:text-zinc-900 dark:group-hover:text-white">{t('createNewPlaylist')}</div>
           </div>
-        </button>
+        </button>}
 
-        {onCreateNewAlbum && (
+        {kind !== 'playlist' && onCreateNewAlbum && (
           <button type="button" onClick={onCreateNewAlbum} className="mb-3 flex w-full items-center gap-3 rounded-lg border border-dashed border-zinc-300 p-3 text-left transition-colors hover:bg-zinc-100 dark:border-white/20 dark:hover:bg-white/5">
             <div className="flex h-10 w-10 items-center justify-center rounded-sm bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-white/70"><Disc3 size={20} /></div>
             <span className="font-semibold text-zinc-700 dark:text-white/90">{t('createAlbum')}</span>
@@ -127,12 +136,12 @@ export const AddToPlaylistModal: React.FC<AddToPlaylistModalProps> = ({ isOpen, 
         <div className="h-px bg-zinc-100 dark:bg-white/10 my-2"></div>
 
         <div className="space-y-1 max-h-60 overflow-y-auto custom-scrollbar">
-          {playlists.length === 0 ? (
+          {choices.length === 0 ? (
             <div className="text-center py-6 text-zinc-500 text-sm italic">
-              {t('noExistingPlaylists')}
+              {kind === 'album' ? t('albumsEmptyTitle') : t('noExistingPlaylists')}
             </div>
           ) : (
-            playlists.map(playlist => (
+            choices.map(playlist => (
               <button
                 key={playlist.id}
                 onClick={() => {

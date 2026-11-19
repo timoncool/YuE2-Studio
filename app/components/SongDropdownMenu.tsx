@@ -16,6 +16,7 @@ import {
     Layers,
     Repeat,
     ListPlus,
+    Disc3,
     ListMinus,
     ListStart,
     ListEnd,
@@ -359,6 +360,11 @@ export const SongDropdownMenu: React.FC<SongDropdownMenuProps> = ({
                 icon={<ListPlus size={14} />}
                 label={t('addToPlaylist')}
                 onClick={() => handleAction(() => actions.addToPlaylist?.(song))}
+            />
+            <MenuItem
+                icon={<Disc3 size={14} />}
+                label={t('addToAlbum')}
+                onClick={() => handleAction(() => actions.addToAlbum?.(song))}
             />
             <MenuItem
                 icon={<Download size={14} />}

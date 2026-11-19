@@ -347,6 +347,7 @@ function AppContent() {
   const [isCreatePlaylistModalOpen, setIsCreatePlaylistModalOpen] = useState(false);
   const [creatingCollectionKind, setCreatingCollectionKind] = useState<'playlist' | 'album'>('playlist');
   const [isAddToPlaylistModalOpen, setIsAddToPlaylistModalOpen] = useState(false);
+  const [addCollectionKind, setAddCollectionKind] = useState<'playlist' | 'album'>('playlist');
   const [songsToAddToPlaylist, setSongsToAddToPlaylist] = useState<Song[]>([]);
 
   // Video Modal
@@ -1258,10 +1259,13 @@ function AppContent() {
     }
   };
 
-  const openAddToPlaylistModal = (chosen: Song | Song[]) => {
+  const openAddToCollectionModal = (chosen: Song | Song[], kind: 'playlist' | 'album') => {
     setSongsToAddToPlaylist(Array.isArray(chosen) ? chosen : [chosen]);
+    setAddCollectionKind(kind);
     setIsAddToPlaylistModalOpen(true);
   };
+  const openAddToPlaylistModal = (chosen: Song | Song[]) => openAddToCollectionModal(chosen, 'playlist');
+  const openAddToAlbumModal = (chosen: Song | Song[]) => openAddToCollectionModal(chosen, 'album');
 
   const addSongToPlaylist = async (playlistId: string) => {
     if (songsToAddToPlaylist.length === 0) return;
@@ -1581,6 +1585,7 @@ function AppContent() {
     replay: handleNativeReplay,
     exportVideo: setSongForVideo,
     addToPlaylist: openAddToPlaylistModal,
+    addToAlbum: openAddToAlbumModal,
     remove: handleDeleteSong,
     update: handleSongUpdate,
     queue: queueFromWindow,
@@ -1590,6 +1595,7 @@ function AppContent() {
     replay: song => songActionsLatest.current.replay(song),
     exportVideo: song => songActionsLatest.current.exportVideo(song),
     addToPlaylist: song => songActionsLatest.current.addToPlaylist(song),
+    addToAlbum: song => songActionsLatest.current.addToAlbum(song),
     remove: song => songActionsLatest.current.remove(song),
     update: song => songActionsLatest.current.update(song),
     queue: (songs, next) => songActionsLatest.current.queue(songs, next),
@@ -1710,6 +1716,7 @@ function AppContent() {
         isOpen={isAddToPlaylistModalOpen}
         onClose={() => setIsAddToPlaylistModalOpen(false)}
         playlists={playlists}
+        kind={addCollectionKind}
         onSelect={addSongToPlaylist}
         onCreateNew={() => {
           setIsAddToPlaylistModalOpen(false);

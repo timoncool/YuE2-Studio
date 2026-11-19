@@ -7,7 +7,7 @@ import { minTokensCutsTheSongOff } from '../services/samplingLimits';
 import { foldedAfter, keepFolded, keptFolded } from '../services/createFold';
 import {
   AlertTriangle, AudioLines, ChevronDown, CircleAlert, Dices, Ear, Eye, EyeOff, FileMusic, FolderOpen, Loader2,
-  Grid2x2, Guitar, ListChecks, Music2, Pause, Piano, Play, RotateCcw, Save, Sparkles, Square, Tags, Upload, Wand2, Settings2, X,
+  Grid2x2, Guitar, ListChecks, Music2, Pause, Piano, Play, Power, RotateCcw, Save, Sparkles, Square, Tags, Upload, Wand2, Settings2, X,
 } from 'lucide-react';
 import { AudioWaveform } from './AudioWaveform';
 import type { Playlist, Song, YueCot, YueHarmony, YueOutputFormat, YueRequest, YueSampling } from '../types';
@@ -38,6 +38,7 @@ import { writerInstruction } from '../services/songWriting';
 import { songWritingStrings } from '../i18n/songWriting';
 import { NumberField } from './NumberField';
 import { explainCliFailure } from '../services/cliFailure';
+import { changeEnginePower, readEnginePower, type EnginePowerStatus } from '../services/enginePower';
 
 /**
  * The YuE2 request form.
@@ -466,6 +467,41 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
   const setupQuery = useSetupStatus<SetupStatus>();
   const setup = setupQuery.isError ? null : setupQuery.data ?? null;
   const serviceDown = setupQuery.isError;
+  const [enginePower, setEnginePower] = useState<EnginePowerStatus | null>(null);
+  const [powerBusy, setPowerBusy] = useState(false);
+  const [powerError, setPowerError] = useState<string | null>(null);
+  // An engine that is manually paused must remain stopped until Start is
+  // clicked, even while the rest of the Studio keeps polling its setup status.
+  useEffect(() => {
+    let mounted = true;
+    const refresh = async () => {
+      try {
+        const status = await readEnginePower();
+        if (mounted) setEnginePower(status);
+      } catch {
+        if (mounted) setEnginePower(null);
+      }
+    };
+    void refresh();
+    const timer = window.setInterval(() => { void refresh(); }, 3500);
+    return () => { mounted = false; window.clearInterval(timer); };
+  }, []);
+
+  const toggleEnginePower = async () => {
+    if (!enginePower || powerBusy) return;
+    const run = enginePower.paused;
+    setPowerBusy(true);
+    setPowerError(null);
+    try {
+      const status = await changeEnginePower(run);
+      setEnginePower(status);
+      void setupQuery.refetch();
+    } catch (problem) {
+      setPowerError(problem instanceof Error ? problem.message : String(problem));
+    } finally {
+      setPowerBusy(false);
+    }
+  };
   const [catalog, setCatalog] = useState<EngineCatalog | null>(null);
   const assistantQuery = useAssistantStatus<{ available?: boolean }>();
   const assistantReady = !assistantQuery.isError && assistantQuery.data?.available === true;
@@ -543,7 +579,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
   const audioFile = useRef<HTMLInputElement | null>(null);
   const lyricsBox = useRef<HTMLTextAreaElement | null>(null);
 
-  const ready = setup?.ready === true && setup?.engine_ready === true;
+  const ready = setup?.ready === true && setup?.engine_ready === true && !enginePower?.paused;
   const defaults: EngineDefaults = catalog?.defaults ?? {};
   const placeholder = (key: string) => asText(defaults[key]);
   const maxBatch = Math.max(1, catalog?.max_batch ?? setup?.effective_max_batch ?? 1);
@@ -1330,16 +1366,37 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
               <h1 className="truncate text-base font-bold">{t('createMusic')}</h1>
               <p className="mt-0.5 truncate text-[11px] text-zinc-500 dark:text-zinc-400">{tt('localInferenceYue')}</p>
             </div>
-            <span className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-semibold ${ready ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-300' : 'bg-amber-500/10 text-amber-700 dark:text-amber-300'}`}>
-              <span className={`mr-1 inline-block h-1.5 w-1.5 rounded-full ${ready ? 'bg-emerald-500' : 'bg-amber-500'}`} />
-              {serviceDown ? t('serviceUnavailable') : ready ? t('engineReady') : t('profileRequired')}
-            </span>
+            <div className="flex shrink-0 items-center gap-1.5">
+              <span className={`rounded-full px-2.5 py-1 text-[10px] font-semibold ${ready ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-300' : enginePower?.paused ? 'bg-slate-500/10 text-slate-600 dark:text-slate-300' : 'bg-amber-500/10 text-amber-700 dark:text-amber-300'}`}>
+                <span className={`mr-1 inline-block h-1.5 w-1.5 rounded-full ${ready ? 'bg-emerald-500' : enginePower?.paused ? 'bg-slate-400' : 'bg-amber-500'}`} />
+                {serviceDown ? t('serviceUnavailable') : enginePower?.paused ? t('enginePaused') : ready ? t('engineReady') : t('profileRequired')}
+              </span>
+              {setup?.ready && (enginePower?.paused || enginePower?.running) && !serviceDown && (
+                <button type="button"
+                  onClick={() => { void toggleEnginePower(); }}
+                  disabled={powerBusy}
+                  title={enginePower?.paused ? t('engineStartHint') : t('engineStopHint')}
+                  aria-label={enginePower?.paused ? t('startMusicEngine') : t('stopMusicEngine')}
+                  className="flex items-center gap-1 rounded-md border border-zinc-300 px-2 py-1 text-[10px] font-semibold text-zinc-700 hover:border-pink-500 hover:text-pink-600 disabled:opacity-50 dark:border-white/20 dark:text-zinc-200 dark:hover:text-pink-300"
+                >
+                  {powerBusy ? <Loader2 size={12} className="animate-spin" /> : <Power size={12} />}
+                  {powerBusy ? (enginePower?.paused ? t('engineStarting') : t('engineStopping')) : enginePower?.paused ? t('startMusicEngine') : t('stopMusicEngine')}
+                </button>
+              )}
+            </div>
           </div>
+
+          {powerError && <p role="alert" className="rounded-md border border-rose-500/30 bg-rose-500/5 px-3 py-2 text-xs text-rose-600 dark:text-rose-300">{powerError}</p>}
 
           {serviceDown ? (
             <div className="flex gap-2 rounded-xl border border-rose-500/30 bg-rose-500/10 p-3 text-xs leading-5 text-rose-700 dark:text-rose-200">
               <CircleAlert className="mt-0.5 shrink-0" size={15} />
               <div><b>{t('serviceUnavailable')}</b><br />{t('serviceUnavailableHint')}</div>
+            </div>
+          ) : enginePower?.paused ? (
+            <div className="flex items-start gap-2 rounded-lg border border-slate-500/20 bg-slate-500/5 p-3 text-xs text-zinc-600 dark:text-zinc-300">
+              <Power size={15} className="mt-0.5 shrink-0" />
+              <span>{t('enginePausedHint')}</span>
             </div>
           ) : !ready && (
             <div className="flex gap-2 rounded-xl border border-amber-500/25 bg-amber-500/10 p-3 text-xs leading-5 text-amber-800 dark:text-amber-200">

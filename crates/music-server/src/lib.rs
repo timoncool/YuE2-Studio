@@ -121,6 +121,8 @@ struct AppState {
     /// a restart empties the engine's job table, so no song may be sent while
     /// one is under way.
     engine_use: Arc<tokio::sync::RwLock<()>>,
+    /// Per-session manual pause. The watchdog must not undo the user's choice.
+    engine_manually_paused: Arc<std::sync::atomic::AtomicBool>,
     engine_options: Arc<RwLock<EngineOptions>>,
     /// Devices that failed under Auto in this session - the engine did not
     /// start on them, or died with a CUDA or Vulkan error - and the one the
@@ -1512,6 +1514,7 @@ pub async fn serve() -> anyhow::Result<()> {
         library: library::Library::open_default()?,
         engine: Arc::new(tokio::sync::Mutex::new(None)),
         engine_use: Arc::new(tokio::sync::RwLock::new(())),
+        engine_manually_paused: Arc::new(std::sync::atomic::AtomicBool::new(false)),
         engine_options: Arc::new(RwLock::new(persisted.as_ref().map(|settings| settings.engine_options.clone().migrated()).unwrap_or_default())),
         engine_runtime: Arc::new(engine_runtime::EngineRuntime::new(&engine_bundle_root(), &studio_data_root().unwrap_or_else(|| std::path::PathBuf::from(".")))),
         failed_devices: Arc::new(RwLock::new(Vec::new())),
@@ -1592,6 +1595,7 @@ pub async fn serve() -> anyhow::Result<()> {
         .route("/engine/options/fitted", axum::routing::delete(reset_fitted_max_seq))
         .route("/engine/pick-executable", post(pick_engine_executable))
         .route("/engine/restart", post(restart_local_engine))
+        .route("/engine/power", get(engine_power).post(set_engine_power))
         .route("/v1/engine/logs", get(engine_logs))
         .route("/v1/diagnostics", get(diagnostics::get))
         .route("/v1/diagnostics/report", post(diagnostics::make_report))
@@ -1875,7 +1879,12 @@ pub async fn serve() -> anyhow::Result<()> {
                 let card_taken = preparing || state.training.active_run().await.is_some();
                 // a restart under way elsewhere is left alone
                 let quiet = state.engine_use.try_write().ok();
-                if ready && !running && !card_taken && quiet.is_some()
+                if automatic_engine_start_allowed(
+                    ready,
+                    running,
+                    card_taken,
+                    state.engine_manually_paused.load(std::sync::atomic::Ordering::SeqCst),
+                ) && quiet.is_some()
                     && start_backoff.allow(std::time::Instant::now())
                     && !state.music_server.health().await
                 {
@@ -5738,7 +5747,70 @@ async fn reset_fitted_max_seq(State(state): State<AppState>) -> Result<Json<Valu
     Ok(Json(serde_json::json!({ "reset": removed, "engine_restarted": restarted })))
 }
 
+/// An explicit manual pause takes priority over automatic crash recovery.
+fn automatic_engine_start_allowed(ready: bool, running: bool, card_taken: bool, paused: bool) -> bool {
+    ready && !running && !card_taken && !paused
+}
+
+/// A manual stop releases the music engine's GPU allocations. The library and
+/// HTML audio player keep working because they are not part of yue-server.
+#[derive(Debug, Deserialize)]
+struct EnginePowerRequest { running: bool }
+
+async fn engine_power(State(state): State<AppState>) -> Json<Value> {
+    let paused = state.engine_manually_paused.load(std::sync::atomic::Ordering::SeqCst);
+    let running = state.engine.lock().await.as_mut().is_some_and(|engine| engine.process_alive());
+    Json(serde_json::json!({ "paused": paused, "running": running }))
+}
+
+async fn set_engine_power(
+    State(state): State<AppState>,
+    Json(request): Json<EnginePowerRequest>,
+) -> Result<Json<Value>, (StatusCode, Json<ApiError>)> {
+    // Songs take this lock for reading while dispatching; a manual stop has
+    // exclusive access so another song cannot begin during shutdown.
+    let _guard = state.engine_use.write().await;
+    if request.running {
+        if !state.engine_manually_paused.load(std::sync::atomic::Ordering::SeqCst) {
+            return Ok(Json(serde_json::json!({ "paused": false, "running": state.music_server.health().await })));
+        }
+        if !state.model_manager.status(effective_install_target(&state).await).await.ready {
+            return Err(api_error(StatusCode::CONFLICT, "Select or install a complete music model set before starting the engine".into()));
+        }
+        state.engine_manually_paused.store(false, std::sync::atomic::Ordering::SeqCst);
+        if let Err(error) = restart_engine(&state).await {
+            state.engine_manually_paused.store(true, std::sync::atomic::Ordering::SeqCst);
+            return Err(api_error(StatusCode::SERVICE_UNAVAILABLE, error));
+        }
+        music_engine::yue_server::note_in_log("the music generation engine was started from the Create page");
+    } else {
+        let jobs_active = state.jobs.read().await.values().any(|job| {
+            matches!(job.status, MusicJobStatus::Queued | MusicJobStatus::Running)
+        });
+        if jobs_active || state.training.active_run().await.is_some() {
+            return Err(api_error(StatusCode::CONFLICT, "A song or training job is still running. Finish it before stopping the engine".into()));
+        }
+        let mut supervisor = state.engine.lock().await;
+        if supervisor.is_none() && state.music_server.health().await {
+            return Err(api_error(StatusCode::CONFLICT, "Another program owns this engine process; YuE2 cannot stop it".into()));
+        }
+        state.engine_manually_paused.store(true, std::sync::atomic::Ordering::SeqCst);
+        if let Some(engine) = supervisor.as_mut() {
+            if let Err(error) = tokio::task::block_in_place(|| engine.stop(std::time::Duration::from_secs(10))) {
+                state.engine_manually_paused.store(false, std::sync::atomic::Ordering::SeqCst);
+                return Err(api_error(StatusCode::SERVICE_UNAVAILABLE, format!("Could not stop the engine: {error}")));
+            }
+        }
+        drop(supervisor);
+        *state.engine_idle_since.lock().unwrap_or_else(std::sync::PoisonError::into_inner) = None;
+        *state.keep_decision.write().await = None;
+        music_engine::yue_server::note_in_log("the music generation engine was stopped manually to release GPU memory");
+    }
+    Ok(Json(serde_json::json!({ "paused": !request.running, "running": request.running })))
+}
+
 async fn restart_local_engine(State(state): State<AppState>) -> Result<Json<Value>, (StatusCode, Json<ApiError>)> {
+    state.engine_manually_paused.store(false, std::sync::atomic::Ordering::SeqCst);
     // the button is obeyed; the song it ends is named in the log beside its last line
     if engine_at_work(&state).await {
         music_engine::yue_server::note_in_log(&format!("{RESTARTED_UNDER_A_SONG}; that song is lost"));
@@ -6368,6 +6440,7 @@ fn own_model_files(folder: &std::path::Path) -> Vec<(String, u64)> {
 /// when the files it serves are not the ones now selected; an engine that is
 /// not running is left to the supervisor loop.
 async fn reload_engine_if_models_changed(state: &AppState) {
+    if state.engine_manually_paused.load(std::sync::atomic::Ordering::SeqCst) { return; }
     if engine_serves_selection(state).await != Some(false) {
         return;
     }
@@ -13797,5 +13870,19 @@ mod tests {
             assert!(allowed.is_match(set), "{set} is not a set id the hub takes");
         }
         std::fs::remove_dir_all(&data).ok();
+    }
+}
+
+#[cfg(test)]
+mod manual_engine_power_tests {
+    use super::automatic_engine_start_allowed;
+
+    #[test]
+    fn watchdog_respects_manual_gpu_engine_pause() {
+        assert!(automatic_engine_start_allowed(true, false, false, false));
+        assert!(!automatic_engine_start_allowed(true, false, false, true));
+        assert!(!automatic_engine_start_allowed(false, false, false, false));
+        assert!(!automatic_engine_start_allowed(true, true, false, false));
+        assert!(!automatic_engine_start_allowed(true, false, true, false));
     }
 }
