@@ -70,7 +70,7 @@ mod agent_use;
 
 use song_errors::SongError;
 
-use std::{collections::HashMap, env, fs, net::SocketAddr, path::PathBuf, sync::Arc};
+use std::{collections::{HashMap, HashSet}, env, fs, net::SocketAddr, path::PathBuf, sync::Arc};
 use anyhow::Context;
 use futures_util::StreamExt;
 
@@ -5252,27 +5252,24 @@ async fn update_library_song(State(state):State<AppState>,Path(id):Path<String>,
     }
     Ok(Json(song))
 }
-/// Puts a song in the bin with the songs made from it (its stems and the
-/// like); the bin keeps them for `TRASH_DAYS` days, Restore brings them back.
+/// Every generated song is an independent record with its own audio and
+/// cover file. A derivation's "from" is provenance, never a deletion cascade:
+/// a bad short original must not take its good extended re-render with it.
+fn trash_song_only(library: &library::Library, id: &str) -> anyhow::Result<()> {
+    library.set_song_trashed(id, true, None)?.context("Song not found")?;
+    Ok(())
+}
+
+/// Moves just the chosen song to the bin. Covers, replay/extended versions,
+/// processing results and separated stems stay independently playable.
 async fn delete_library_song(State(state): State<AppState>, Path(id): Path<String>) -> Result<Json<Value>, (StatusCode, Json<ApiError>)> {
     let internal = |e: anyhow::Error| api_error(StatusCode::INTERNAL_SERVER_ERROR, e.to_string());
     let song = state.library.get_song(&id).map_err(internal)?.ok_or_else(|| api_error(StatusCode::NOT_FOUND, "Song not found".into()))?;
     if library::is_trashed(&song) {
         return Ok(Json(serde_json::json!({ "deleted": true, "trashed": true, "with": 0 })));
     }
-    let made_from: Vec<String> = state
-        .library
-        .list_songs()
-        .map_err(internal)?
-        .into_iter()
-        .filter(|other| derived_from(other).is_some_and(|(from, _)| from == id))
-        .map(|other| other.id)
-        .collect();
-    state.library.set_song_trashed(&id, true, None).map_err(internal)?;
-    for other in &made_from {
-        state.library.set_song_trashed(other, true, Some(&id)).map_err(internal)?;
-    }
-    Ok(Json(serde_json::json!({ "deleted": true, "trashed": true, "with": made_from.len() })))
+    trash_song_only(&state.library, &id).map_err(internal)?;
+    Ok(Json(serde_json::json!({ "deleted": true, "trashed": true, "with": 0 })))
 }
 
 /// How long the bin keeps a song before it goes for good.
@@ -5380,41 +5377,52 @@ fn purge_old_trash(state: &AppState) {
     }
 }
 
-/// Removes a song of the bin and the songs that went there with it from the
-/// library, their files sent to the system's recycle bin first.
+/// Permanently removes only the chosen song. Linked tracks are NOT owned
+/// by their source: each cover, extended re-render and stem is a library song.
 fn delete_for_good(state: &AppState, id: &str) -> anyhow::Result<()> {
     delete_songs_for_good(&state.library, id, |song| song_files(state, song), |path| trash::delete(path).map_err(|error| error.to_string()))
 }
 
-/// A file the recycle bin does not take (a Linux desktop without one, a
-/// network drive) keeps the songs in the studio's bin and is named, with the
-/// files the recycle bin did take before it, which are restored from there.
+/// A file the system's recycle bin refuses keeps this song in the studio's
+/// bin. Never recycle a file still referenced by any other song, even when
+/// an imported/older record happens to share an audio or artwork path.
 fn delete_songs_for_good(
     library: &library::Library,
     id: &str,
     files: impl Fn(&library::Song) -> Vec<std::path::PathBuf>,
     recycle: impl Fn(&std::path::Path) -> Result<(), String>,
 ) -> anyhow::Result<()> {
-    let mut songs: Vec<library::Song> = library.trashed_songs()?.into_iter().filter(|song| library::trashed_with(song) == Some(id)).collect();
-    if let Some(song) = library.get_song(id)? {
-        songs.push(song);
-    }
+    // Undo any cascading trash markers left by old YuE2 versions before the
+    // original leaves the bin permanently. Those derived tracks were never
+    // deleted by the person individually.
+    library.recover_legacy_cascaded_songs()?;
+    let song = library.get_song(id)?.context("Song not found")?;
+    anyhow::ensure!(library::is_trashed(&song), "only a song in the bin can be deleted for good");
+
+    let shared: HashSet<PathBuf> = library.list_songs()?.into_iter()
+        .chain(library.trashed_songs()?)
+        .filter(|other| other.id != id)
+        .flat_map(|other| files(&other))
+        .filter_map(|path| path.canonicalize().ok())
+        .collect();
+
     let (mut recycled, mut refused) = (Vec::new(), Vec::new());
-    for song in &songs {
-        for path in files(song).into_iter().filter(|path| path.exists()) {
-            match recycle(&path) {
-                Ok(()) => recycled.push(plain_path(&path)),
-                Err(error) => refused.push(format!("{}: {error}", plain_path(&path))),
-            }
+    let mut seen = HashSet::new();
+    for path in files(&song).into_iter().filter(|path| path.exists()) {
+        let normalized = path.canonicalize().unwrap_or_else(|_| path.clone());
+        if shared.contains(&normalized) || !seen.insert(normalized) {
+            continue;
+        }
+        match recycle(&path) {
+            Ok(()) => recycled.push(plain_path(&path)),
+            Err(error) => refused.push(format!("{}: {error}", plain_path(&path))),
         }
     }
     if !refused.is_empty() {
         let taken = if recycled.is_empty() { "none of its files went there".to_string() } else { format!("these are in the system's recycle bin already and come back from there: {}", recycled.join("; ")) };
         anyhow::bail!("the system's recycle bin did not take these files, so the song stays in the studio's bin: {}; {taken}", refused.join("; "));
     }
-    for song in &songs {
-        library.delete_song(&song.id)?;
-    }
+    library.delete_song(id)?;
     Ok(())
 }
 
@@ -13473,19 +13481,116 @@ mod tests {
         std::fs::create_dir_all(&root).unwrap();
         let file = root.join("harbour.flac");
         std::fs::write(&file, b"fLaC").unwrap();
-        let files = |_: &library::Song| vec![file.clone()];
+        let files = |candidate: &library::Song| if candidate.id == song { vec![file.clone()] } else { vec![] };
 
         let refused = delete_songs_for_good(&library, &song, files, |_| Err("no recycle bin on this desktop".into())).unwrap_err();
         assert!(format!("{refused:#}").contains("no recycle bin on this desktop"), "{refused:#}");
         assert!(file.exists(), "a file the recycle bin refused is not deleted past it");
-        assert_eq!(library.trashed_songs().unwrap().len(), 2, "the song and its stem stay in the studio's bin");
+        assert_eq!(library.trashed_songs().unwrap().len(), 1, "only the chosen song stays in the bin; its old auto-trashed stem is rescued");
+        assert!(!library::is_trashed(&library.get_song(&stem).unwrap().unwrap()));
 
         let recycled = std::cell::RefCell::new(Vec::new());
         delete_songs_for_good(&library, &song, files, |path| { recycled.borrow_mut().push(path.to_path_buf()); Ok(()) }).unwrap();
-        assert!(library.get_song(&song).unwrap().is_none() && library.get_song(&stem).unwrap().is_none());
+        assert!(library.get_song(&song).unwrap().is_none());
+        assert!(library.get_song(&stem).unwrap().is_some(), "the stem remains its own song");
         assert!(!recycled.borrow().is_empty());
         drop(library);
         let _ = std::fs::remove_dir_all(&root);
+    }
+
+
+    /// A short source's improved extension is its own fully stored audio and
+    /// cover. Sending the source to the bin, then permanently deleting it,
+    /// must not hide or recycle any of the finished versions.
+    #[test]
+    fn deleting_original_preserves_extended_rerender_and_cover_tracks() {
+        let root = std::env::temp_dir().join(format!("yue2-independent-renders-{}", uuid::Uuid::now_v7().simple()));
+        let library = library::Library::open_at(root.join("library.sqlite"), root.join("media")).unwrap();
+        let make = |title: &str, derived: Value| {
+            library.import_generated_song(library::GeneratedSongInput {
+                title: Some(title.into()), metadata: derived, caption: "doo-wop".into(),
+                lyrics: "sha la la".into(), generation_settings: Value::Null,
+                replay_request: Some(serde_json::json!({"semantic_tokens":"1,2,3"})),
+                audio_codes: Some(serde_json::json!("1,2,3")), engine_id: "yue2".into(),
+                profile_id: None, source: "local_generation".into(),
+                audio_extension: "mp3", audio: b"ID3fake-audio".to_vec(),
+            }).unwrap().song
+        };
+        let source = make("OOF on the roof · cut short", Value::Null);
+        let extended = make("OOF on the roof · extended", serde_json::json!({"derived":{"from":source.id,"tool":"replay"}}));
+        let cover = make("OOF on the roof · cover", serde_json::json!({"derived":{"from":source.id,"tool":"cover"}}));
+        let original_art = [0x89, b'P', b'N', b'G', 0x0D, 0x0A, 0x1A, 0x0A, 1, 2, 3];
+        library.store_song_cover(&source.id, &original_art, "image/png").unwrap();
+        library.store_song_cover(&extended.id, &original_art, "image/png").unwrap();
+        library.store_song_cover(&cover.id, &original_art, "image/png").unwrap();
+        let extended_audio = library.media_path_for_song(&extended).unwrap();
+        let cover_audio = library.media_path_for_song(&cover).unwrap();
+        let extended_art = library.cover_path_for_song(&extended).unwrap().0;
+        let cover_art = library.cover_path_for_song(&cover).unwrap().0;
+
+        trash_song_only(&library, &source.id).unwrap();
+        let shown: HashSet<String> = library.list_songs().unwrap().into_iter().map(|song| song.id).collect();
+        assert!(!shown.contains(&source.id));
+        assert!(shown.contains(&extended.id) && shown.contains(&cover.id), "finished versions stay in the library");
+        assert!(extended_audio.exists() && cover_audio.exists());
+        assert!(extended_art.exists() && cover_art.exists());
+
+        let recycled = std::cell::RefCell::new(Vec::new());
+        delete_songs_for_good(
+            &library,
+            &source.id,
+            |song| {
+                let mut owned: Vec<PathBuf> = library.media_path_for_song(song).into_iter().collect();
+                if let Some((art, _)) = library.cover_path_for_song(song) { owned.push(art); }
+                owned
+            },
+            |path| {
+                recycled.borrow_mut().push(path.to_path_buf());
+                std::fs::remove_file(path).map_err(|error| error.to_string())
+            },
+        ).unwrap();
+
+        assert!(library.get_song(&source.id).unwrap().is_none());
+        for track in [&extended, &cover] {
+            let kept = library.get_song(&track.id).unwrap().expect("derived song still has a record");
+            assert_eq!(kept.metadata.pointer("/derived/from").and_then(Value::as_str), Some(source.id.as_str()));
+            assert!(!library::is_trashed(&kept));
+        }
+        assert!(extended_audio.exists() && cover_audio.exists());
+        assert!(extended_art.exists() && cover_art.exists());
+        assert!(recycled.borrow().iter().all(|file| file != &extended_audio && file != &cover_audio && file != &extended_art && file != &cover_art));
+        drop(library);
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// Older libraries and imported tracks can share a filename. Even then,
+    /// removing one record must never recycle the other record's only audio.
+    #[test]
+    fn a_shared_audio_file_stays_while_another_song_references_it() {
+        let root = std::env::temp_dir().join(format!("yue2-shared-song-file-{}", uuid::Uuid::now_v7().simple()));
+        let library = library::Library::open_at(root.join("library.sqlite"), root.join("media")).unwrap();
+        std::fs::create_dir_all(library.media_dir()).unwrap();
+        let audio = library.media_dir().join("shared.flac");
+        std::fs::write(&audio, b"fLaC").unwrap();
+        let make = |title: &str| library.create_song(library::SongInput {
+            title: title.into(), audio_path: Some(audio.to_string_lossy().into_owned()),
+            caption: String::new(), lyrics: String::new(), metadata: Value::Null,
+            generation_settings: Value::Null, engine_id: "manual".into(), profile_id: None,
+            replay_request: None, audio_codes: None, source: "manual".into(),
+        }).unwrap().id;
+        let original = make("Discard"); let keeper = make("Keep");
+        trash_song_only(&library, &original).unwrap();
+        let recycled = std::cell::Cell::new(0usize);
+        delete_songs_for_good(&library, &original,
+            |song| library.media_path_for_song(song).into_iter().collect(),
+            |path| { recycled.set(recycled.get()+1); std::fs::remove_file(path).map_err(|e|e.to_string()) },
+        ).unwrap();
+        assert!(library.get_song(&original).unwrap().is_none());
+        assert!(library.get_song(&keeper).unwrap().is_some());
+        assert!(audio.exists(), "shared file is still referenced and must not be recycled");
+        assert_eq!(recycled.get(), 0);
+        drop(library);
+        let _ = std::fs::remove_dir_all(root);
     }
 
     /// The recycle bin takes the first file and refuses the second: the refusal names both - the one to get back
