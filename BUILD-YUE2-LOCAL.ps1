@@ -21,9 +21,9 @@ try {
     }
     $branch = (& git branch --show-current).Trim()
     Write-Host "Current Git branch: $branch" -ForegroundColor Yellow
-    if ($branch -ne 'feature/dj-mode-and-download-popup') {
-        $reply = Read-Host 'This is NOT the DJ-mode feature branch. Continue anyway? (y/N)'
-        if ($reply -notmatch '^[Yy]$') { throw 'Cancelled. Switch to feature/dj-mode-and-download-popup in GitHub Desktop first.' }
+    # All DJ changes now live on the fork's main branch: validate the files, not the branch name.
+    if (-not (Test-Path -LiteralPath (Join-Path $root 'app\components\player\DjMode.tsx'))) {
+        throw 'DJ mode source is missing. Fetch and pull your fork main in GitHub Desktop.'
     }
     Run 'npm.cmd' @('--prefix','app','ci','--no-audit','--no-fund')
     Run 'npm.cmd' @('--prefix','desktop','ci','--no-audit','--no-fund')

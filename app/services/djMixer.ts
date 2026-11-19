@@ -1,5 +1,6 @@
 import type { Song } from '../types';
 import { stemOf } from './songStems';
+import { apiUrl } from './apiBase';
 
 /** Web Audio mixing uses equal-power crossfades so the middle does not fall silent. */
 export function crossfadeGains(value: number): [number, number] {
@@ -46,7 +47,6 @@ export interface DjDeckSnapshot {
   error: string | null;
 }
 interface StemVoice {
-  song: Song;
   audio: HTMLAudioElement;
   source: MediaElementAudioSourceNode;
   gain: GainNode;
@@ -79,6 +79,7 @@ export class DjDeck {
   private scratchRequest: AbortController | null = null;
   private scratchPromise: Promise<void> | null = null;
   private scratchPrevious = 0;
+  private scratchLastAt = -1;
   private scratchSources: AudioBufferSourceNode[] = [];
   private disposed = false;
   private playingRequested = false;
@@ -169,17 +170,11 @@ export class DjDeck {
     this.scratchRequest = null;
     this.scratchPromise = null;
     this.scratchBuffer = null;
+    this.scratchLastAt = -1;
     this.playingRequested = false;
     this.audio.pause();
     this.stopStems();
-    for (const voice of this.stemVoices) {
-      voice.audio.pause();
-      voice.audio.removeAttribute('src');
-      voice.audio.load();
-      voice.source.disconnect();
-      voice.gain.disconnect();
-    }
-    this.stemVoices = [];
+    this.clearStemVoices();
     this.audio.src = song.audioUrl;
     this.audio.load();
     this.audio.playbackRate = 1;
@@ -203,13 +198,76 @@ export class DjDeck {
       gain.gain.value = 0;
       source.connect(gain).connect(this.input);
       const state: DjStem = { id: stem.id, label: stemOf(stem) ?? 'other', level: 1, mute: false, solo: false };
-      this.stemVoices.push({ song: stem, audio, source, gain, state });
+      this.stemVoices.push({ audio, source, gain, state });
     }
     this.state.stems = this.stemVoices.map(voice => ({ ...voice.state }));
     this.changed();
     // Prepare scratch audio in the background as soon as the track is loaded.
     // Playback starts independently; the platter becomes scratch-ready when decoding finishes.
     void this.prepareScratch();
+  }
+
+
+  /** Reuse the native separator's files immediately, without needing a DJ-mode restart.
+   * Their source track stays on the deck: the main clock remains the transport.
+   */
+  attachNativeStems(songId: string, names: string[], force = false): void {
+    if (this.state.song?.id !== songId) return;
+    const allowed = new Set(['vocals', 'instrumental', 'drums', 'bass', 'guitar', 'piano', 'other']);
+    const stems = [...new Set(names.filter(name => allowed.has(name)))];
+    if (!stems.length) return;
+    const loaded = this.state.stems.map(stem => stem.label).sort();
+    if (!force && loaded.length === stems.length && loaded.every((label, i) => label === [...stems].sort()[i])) return;
+    const enabled = this.state.stemMode;
+    if (enabled) this.setStemMode(false);
+    this.clearStemVoices();
+    for (const name of stems) {
+      const audio = new Audio();
+      audio.src = apiUrl(`/v1/library/songs/${encodeURIComponent(songId)}/stems/${encodeURIComponent(name)}`);
+      audio.crossOrigin = 'anonymous';
+      audio.preload = 'metadata';
+      audio.preservesPitch = false;
+      audio.playbackRate = this.state.rate;
+      const source = this.ctx.createMediaElementSource(audio);
+      const gain = this.ctx.createGain();
+      gain.gain.value = 0;
+      source.connect(gain).connect(this.input);
+      this.stemVoices.push({ audio, source, gain,
+        state: { id: `${songId}:${name}`, label: name, level: 1, mute: false, solo: false } });
+    }
+    this.state.stems = this.stemVoices.map(voice => ({ ...voice.state }));
+    this.changed();
+    if (enabled) this.setStemMode(true);
+  }
+
+  /** The named buttons are actual separated audio, not EQ-only approximations. */
+  stemPreset(preset: 'original' | 'all' | 'vocals' | 'instrumental' | 'bass' | 'drums'): boolean {
+    if (preset === 'original') { this.setStemMode(false); return true; }
+    if (!this.stemVoices.length) return false;
+    const available = this.stemVoices.some(voice => voice.state.label === preset);
+    if (preset !== 'all' && preset !== 'instrumental' && !available) return false;
+    if (preset === 'instrumental' && !this.stemVoices.some(voice => voice.state.label !== 'vocals')) return false;
+    for (const voice of this.stemVoices) {
+      const name = voice.state.label;
+      const selected = preset === 'all' || (preset === 'instrumental' ? name !== 'vocals' : name === preset);
+      voice.state = { ...voice.state, mute: !selected, solo: false };
+    }
+    this.state.stems = this.stemVoices.map(voice => ({ ...voice.state }));
+    this.setStemMode(true);
+    this.applyStemLevels();
+    this.changed();
+    return true;
+  }
+
+  private clearStemVoices(): void {
+    for (const voice of this.stemVoices) {
+      voice.audio.pause();
+      voice.audio.removeAttribute('src');
+      voice.audio.load();
+      voice.source.disconnect();
+      voice.gain.disconnect();
+    }
+    this.stemVoices = [];
   }
 
   async play(): Promise<void> {
@@ -402,6 +460,7 @@ export class DjDeck {
     if (!this.state.song) return;
     this.state.scratching = true;
     this.scratchPrevious = this.state.time;
+    this.scratchLastAt = -1;
     this.audio.pause();
     this.stopStems();
     void this.ctx.resume();
@@ -410,34 +469,51 @@ export class DjDeck {
   }
 
   scratch(deltaSeconds: number): void {
-    if (!this.state.scratching || !this.state.song) return;
+    if (!this.state.scratching || !this.state.song || !Number.isFinite(deltaSeconds)) return;
     const position = clamped(this.scratchPrevious + deltaSeconds, 0, this.state.duration || Number.MAX_SAFE_INTEGER);
     this.scratchPrevious = position;
-    this.seek(position);
+    // Track the stylus position without repeatedly seeking every stem's media element.
+    this.audio.currentTime = position;
+    this.state.time = position;
+    this.changed();
     const decoded = this.scratchBuffer;
-    if (!decoded) return;
+    if (!decoded || Math.abs(deltaSeconds) < 0.0005) return;
+
+    // Bounded, overlapping windowed grains are smoother than one full sample
+    // for every pointer event; a reversed window provides backwards scratching.
+    const now = this.ctx.currentTime;
+    if (this.scratchLastAt >= 0 && now - this.scratchLastAt < 0.028) return;
+    this.scratchLastAt = now;
+    const lengthSeconds = 0.09;
+    const frames = Math.min(decoded.length, Math.max(128, Math.round(decoded.sampleRate * lengthSeconds)));
+    if (decoded.length < 128) return;
     const backwards = deltaSeconds < 0;
-    const frames = Math.min(Math.round(decoded.sampleRate * 0.065), decoded.length);
     const start = Math.max(0, Math.min(decoded.length - frames, Math.round(position * decoded.sampleRate) - (backwards ? frames : 0)));
     const grain = this.ctx.createBuffer(decoded.numberOfChannels, frames, decoded.sampleRate);
     for (let channel = 0; channel < decoded.numberOfChannels; channel++) {
-      const source = decoded.getChannelData(channel);
-      const dest = grain.getChannelData(channel);
-      for (let i = 0; i < frames; i++) dest[i] = source[start + (backwards ? frames - 1 - i : i)] ?? 0;
+      const original = decoded.getChannelData(channel);
+      const target = grain.getChannelData(channel);
+      for (let frame = 0; frame < frames; frame++) {
+        target[frame] = original[start + (backwards ? frames - 1 - frame : frame)];
+      }
     }
     const source = this.ctx.createBufferSource();
     const envelope = this.ctx.createGain();
-    const now = this.ctx.currentTime;
-    envelope.gain.setValueAtTime(0, now);
-    envelope.gain.linearRampToValueAtTime(0.7, now + 0.007);
-    envelope.gain.setValueAtTime(0.7, now + 0.035);
-    envelope.gain.linearRampToValueAtTime(0, now + 0.065);
     source.buffer = grain;
+    const duration = frames / decoded.sampleRate;
+    envelope.gain.setValueAtTime(0, now);
+    envelope.gain.linearRampToValueAtTime(0.45, now + Math.min(0.014, duration / 4));
+    envelope.gain.setValueAtTime(0.45, now + duration * 0.62);
+    envelope.gain.linearRampToValueAtTime(0, now + duration);
     source.connect(envelope).connect(this.input);
-    source.onended = () => { source.disconnect(); envelope.disconnect(); this.scratchSources = this.scratchSources.filter(entry => entry !== source); };
+    source.onended = () => {
+      source.disconnect();
+      envelope.disconnect();
+      this.scratchSources = this.scratchSources.filter(entry => entry !== source);
+    };
     this.scratchSources.push(source);
     source.start(now);
-    source.stop(now + 0.066);
+    source.stop(now + duration);
   }
 
   endScratch(): void {
@@ -454,13 +530,7 @@ export class DjDeck {
     this.pause();
     this.audio.removeAttribute('src');
     this.audio.load();
-    for (const voice of this.stemVoices) {
-      voice.audio.pause();
-      voice.audio.removeAttribute('src');
-      voice.audio.load();
-      voice.source.disconnect();
-      voice.gain.disconnect();
-    }
+    this.clearStemVoices();
     for (const source of this.scratchSources) { try { source.stop(); } catch { /* already stopped */ } }
     this.mainSource.disconnect();
     this.mainGain.disconnect();

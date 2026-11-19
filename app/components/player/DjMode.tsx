@@ -1,13 +1,15 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Disc3, Play, Pause, SkipBack, Repeat, RotateCcw, Headphones, Search, X,
-  AudioLines, FolderOpen, Circle, Waves, ListMusic,
+  Play, Pause, SkipBack, Repeat, RotateCcw, Headphones, Search, X,
+  AudioLines, FolderOpen, Circle, Waves, ListMusic, RotateCcw as ResetIcon,
 } from 'lucide-react';
 import type { Playlist, Song } from '../../types';
 import { trackCoverUrl } from '../../services/playerPanels';
 import { stemOf } from '../../services/songStems';
 import { saveFile } from '../../services/saveFile';
 import { DjMixer, type DjDeck, type DjDeckSnapshot } from '../../services/djMixer';
+import { DjStemControls } from './DjStemControls';
+import { readDjNativeStems, readDjSeparationStatus, startDjSeparation, type DjSeparationEngine, type DjSeparationStatus } from '../../services/djSeparation';
 
 type DeckIndex = 0 | 1;
 type BrowserSource = 'all' | 'unassigned' | 'liked' | 'stems' | `collection:${string}`;
@@ -22,7 +24,7 @@ const wrapAngle = (angle: number): number => angle > Math.PI ? angle - 2 * Math.
 const DJ_MIME = 'application/x-yue2-dj-song';
 
 const button = 'rounded-md border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-semibold text-zinc-200 transition hover:border-white/25 hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-35';
-const slider = 'h-1.5 w-full cursor-pointer accent-fuchsia-500';
+const slider = 'h-1.5 w-full cursor-pointer accent-sky-400';
 
 const MixerMeter: React.FC<{ deck: DjDeck; color: string }> = ({ deck, color }) => {
   const canvas = useRef<HTMLCanvasElement | null>(null);
@@ -55,73 +57,152 @@ const MixerMeter: React.FC<{ deck: DjDeck; color: string }> = ({ deck, color }) 
   return <canvas ref={canvas} width={500} height={58} className="h-14 w-full rounded-lg bg-black/70" aria-label="Live deck audio spectrum" />;
 };
 
+
+/** 33 1/3 RPM turntable face. The stationary arm is decorative; the record is
+ * the actual scratching surface, with motor rotation driven at animation-frame
+ * rate instead of waiting for HTMLMediaElement timeupdate events.
+ */
 const JogWheel: React.FC<{ deck: DjDeck; side: 'A' | 'B'; color: string }> = ({ deck, side, color }) => {
   const previous = useRef<number | null>(null);
+  const record = useRef<HTMLDivElement | null>(null);
+  const rotation = useRef(0);
   const at = (event: React.PointerEvent<HTMLDivElement>) => {
     const bounds = event.currentTarget.getBoundingClientRect();
     return Math.atan2(event.clientY - bounds.top - bounds.height / 2, event.clientX - bounds.left - bounds.width / 2);
   };
+  useEffect(() => {
+    let frame = 0;
+    let last = performance.now();
+    const spin = (now: number) => {
+      const elapsed = Math.min(0.08, (now - last) / 1000);
+      last = now;
+      if (deck.state.playing && !deck.state.scratching) {
+        rotation.current = (rotation.current + elapsed * 200 * deck.state.rate) % 360;
+      }
+      if (record.current) record.current.style.transform = `rotate(${rotation.current}deg)`;
+      frame = requestAnimationFrame(spin);
+    };
+    frame = requestAnimationFrame(spin);
+    return () => cancelAnimationFrame(frame);
+  }, [deck]);
   return (
-    <div className="flex flex-col items-center gap-2">
-      <div
-        role="slider" tabIndex={0} aria-label={`Scratch deck ${side}`} aria-valuemin={0} aria-valuemax={Math.max(1, deck.state.duration)}
-        aria-valuenow={Math.min(deck.state.duration || 1, deck.state.time)}
-        onKeyDown={event => {
-          if (event.key === 'ArrowLeft') { event.preventDefault(); deck.seek(deck.state.time - 0.1); }
-          if (event.key === 'ArrowRight') { event.preventDefault(); deck.seek(deck.state.time + 0.1); }
-        }}
-        onPointerDown={event => {
-          if (!deck.state.song) return;
-          event.preventDefault();
-          event.currentTarget.setPointerCapture(event.pointerId);
-          previous.current = at(event);
-          deck.startScratch();
-        }}
-        onPointerMove={event => {
-          if (previous.current === null) return;
-          const angle = at(event);
-          const delta = wrapAngle(angle - previous.current);
-          previous.current = angle;
-          deck.scratch(delta / (Math.PI * 2) * 1.8);
-        }}
-        onPointerUp={event => {
-          if (previous.current !== null) {
-            previous.current = null;
-            if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
-            deck.endScratch();
-          }
-        }}
-        onPointerCancel={() => { previous.current = null; deck.endScratch(); }}
-        onLostPointerCapture={() => { previous.current = null; deck.endScratch(); }}
-        className="relative flex h-40 w-40 cursor-grab touch-none select-none items-center justify-center rounded-full border-[9px] border-zinc-700 bg-[repeating-radial-gradient(circle,#26272b_0px,#26272b_3px,#141518_5px,#141518_7px)] shadow-[0_0_0_4px_#08080b,0_10px_35px_#000] active:cursor-grabbing sm:h-48 sm:w-48"
-      >
-        <div className="absolute inset-3 animate-spin rounded-full border-2 border-dotted border-white/20"
-          style={{ animationPlayState: deck.state.playing && !deck.state.scratching ? 'running' : 'paused', animationDuration: `${Math.max(0.5, 2.2 / deck.state.rate)}s` }} />
-        <div className="relative flex h-[60%] w-[60%] items-center justify-center rounded-full border-4 border-zinc-900 bg-zinc-950 shadow-inner">
-          {deck.state.song
-            ? <img className="h-full w-full rounded-full object-cover opacity-90 pointer-events-none" alt="" src={trackCoverUrl(deck.state.song)} />
-            : <Disc3 className="text-zinc-500" size={36} />}
-          <span className="absolute h-3 w-3 rounded-full border-2 border-zinc-700 bg-white" />
+    <div className="flex flex-col items-center gap-1.5">
+      <div className="relative h-[218px] w-[240px] shrink-0 rounded-xl border border-zinc-600/70 bg-[linear-gradient(145deg,#34363b,#141519_52%,#2b2d33)] p-3 shadow-[inset_0_2px_2px_#ffffff18,0_9px_25px_#000a]">
+        <span className="absolute left-3 top-2 text-[9px] font-bold tracking-[0.22em] text-zinc-400">YuE2 • TURNTABLE {side}</span>
+        <span className="absolute bottom-3 left-3 h-2 w-2 rounded-full border border-zinc-600 bg-zinc-900 shadow-[0_0_2px_#fff5]" />
+        <span className="absolute right-3 top-3 h-2 w-2 rounded-full border border-zinc-600 bg-zinc-900 shadow-[0_0_2px_#fff5]" />
+        <div
+          role="slider" tabIndex={0} aria-label={`Scratch deck ${side}`}
+          aria-valuemin={0} aria-valuemax={Math.max(1, deck.state.duration)}
+          aria-valuenow={Math.min(deck.state.duration || 1, deck.state.time)}
+          onKeyDown={event => {
+            if (event.key === 'ArrowLeft') { event.preventDefault(); deck.seek(deck.state.time - 0.1); }
+            if (event.key === 'ArrowRight') { event.preventDefault(); deck.seek(deck.state.time + 0.1); }
+          }}
+          onPointerDown={event => {
+            if (!deck.state.song) return;
+            event.preventDefault();
+            event.currentTarget.setPointerCapture(event.pointerId);
+            previous.current = at(event);
+            deck.startScratch();
+          }}
+          onPointerMove={event => {
+            if (previous.current === null) return;
+            const angle = at(event);
+            const delta = wrapAngle(angle - previous.current);
+            previous.current = angle;
+            rotation.current += delta * 180 / Math.PI;
+            deck.scratch(delta / (Math.PI * 2) * 1.8);
+          }}
+          onPointerUp={event => {
+            if (previous.current !== null) {
+              previous.current = null;
+              if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+              deck.endScratch();
+            }
+          }}
+          onPointerCancel={() => { previous.current = null; deck.endScratch(); }}
+          onLostPointerCapture={() => { previous.current = null; deck.endScratch(); }}
+          className="absolute left-2 top-5 grid h-[192px] w-[192px] touch-none cursor-grab select-none place-items-center rounded-full border-[3px] border-zinc-500 bg-zinc-950 shadow-[0_0_0_3px_#0b0c0f,0_0_0_5px_#444650,0_9px_18px_#000c] active:cursor-grabbing"
+        >
+          <div ref={record} className="pointer-events-none relative h-[180px] w-[180px] rounded-full border-[6px] border-[#202125] shadow-[inset_0_0_12px_#000,0_2px_5px_#000]" style={{
+            background: 'repeating-radial-gradient(circle at center,#26282c 0px,#141518 2px,#222428 3px,#101114 5px,#191a1d 6px)'
+          }}>
+            <div className="absolute inset-0 rounded-full" style={{
+              background: 'repeating-conic-gradient(from 0deg,#cdd2dc90 0deg 0.85deg,transparent 0.85deg 5deg)',
+              WebkitMaskImage: 'radial-gradient(transparent 0 43%,black 46% 49%,transparent 52%)',
+              maskImage: 'radial-gradient(transparent 0 43%,black 46% 49%,transparent 52%)'
+            }} />
+            <div className="absolute inset-[27%] grid place-items-center rounded-full border-[5px] border-zinc-950 shadow-[0_0_0_1px_#9998,0_0_0_4px_#111]" style={{ background: `linear-gradient(145deg,${color},#111827 80%)` }}>
+              <div className="text-center text-[11px] font-black italic tracking-tight text-white drop-shadow-md">YuE2 DJ</div>
+              <span className="absolute bottom-2 text-[7px] font-bold tracking-[0.2em] text-white/70">33⅓ RPM</span>
+            </div>
+            <span className="absolute left-1/2 top-1/2 h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-zinc-500 bg-slate-100 shadow-md" />
+            <span className="absolute left-1/2 top-1 h-1 w-2 -translate-x-1/2 rounded-sm bg-white/80" />
+          </div>
         </div>
-        <div className="absolute -bottom-1 rounded-full px-3 py-0.5 text-[10px] font-bold text-white" style={{ background: color }}>DECK {side}</div>
+        {/* Tonearm and cartridge stay fixed while the record spins. */}
+        <svg className="pointer-events-none absolute right-1 top-6 h-[180px] w-[84px] drop-shadow-[1px_2px_2px_#000]" viewBox="0 0 84 180" aria-hidden="true">
+          <circle cx="66" cy="15" r="14" fill="#1b1e23" stroke="#7a7d83" strokeWidth="3"/>
+          <circle cx="66" cy="15" r="5" fill="#a1a5ae"/>
+          <path d="M66 15 L69 61 Q69 74 62 89 L22 143" fill="none" stroke="#25272e" strokeWidth="10" strokeLinecap="round"/>
+          <path d="M66 15 L69 61 Q69 74 62 89 L22 143" fill="none" stroke="#adb3bb" strokeWidth="5" strokeLinecap="round"/>
+          <path d="M20 135 L10 154" stroke="#eef2f7" strokeWidth="8" strokeLinecap="round"/>
+          <path d="M10 153 L7 164" stroke="#171a1f" strokeWidth="6" strokeLinecap="round"/>
+        </svg>
+        <div className="absolute bottom-2 right-2 rounded border border-white/10 bg-black/70 px-1.5 py-0.5 text-[9px] font-bold" style={{color}}>{deck.state.scratching ? 'SCRATCH' : deck.state.playing ? 'ON AIR' : 'STOP'}</div>
       </div>
-      <span className="text-[10px] text-zinc-400">{deck.state.scratching ? (deck.state.scratchReady ? 'Scratching' : 'Loading scratch audio…') : 'Drag platter to scratch · ← / → nudge'}</span>
+      <span className="text-center text-[10px] text-zinc-400">{deck.state.scratching ? (deck.state.scratchReady ? 'Scratching • forward / reverse' : 'Preparing scratch audio…') : 'Grab vinyl to scratch • left/right to nudge'}</span>
+    </div>
+  );
+};
+
+const PitchFader: React.FC<{ deck: DjDeck; side: 'A' | 'B'; color: string }> = ({ deck, side, color }) => {
+  const [range, setRange] = useState(16);
+  const percentage = (deck.state.rate - 1) * 100;
+  const low = 1 - range / 100;
+  const high = 1 + range / 100;
+  return (
+    <div className="flex w-[94px] shrink-0 flex-col items-center gap-1 rounded-lg border border-zinc-700 bg-[#1b1c20] px-2 py-2">
+      <span className="text-[10px] font-black tracking-wider text-zinc-200">PITCH</span>
+      <span className="rounded border border-white/10 bg-black px-2 py-1 font-mono text-xs tabular-nums" style={{color}}>{percentage >= 0 ? '+' : ''}{percentage.toFixed(1)}%</span>
+      <div className="flex items-center gap-2">
+        <div className="flex h-[144px] flex-col justify-between text-[9px] text-zinc-400"><span>+{range}</span><span>0</span><span>−{range}</span></div>
+        <input type="range" min={low} max={high} step="0.001" value={Math.min(high, Math.max(low, deck.state.rate))}
+          onChange={event => deck.rate(Number(event.target.value))}
+          onDoubleClick={() => deck.rate(1)}
+          aria-label={`Vertical pitch fader deck ${side}`}
+          className="cursor-pointer accent-slate-200"
+          style={{writingMode:'vertical-lr',direction:'rtl',height:144,width:25}} />
+      </div>
+      <div className="flex w-full gap-1">
+        <button type="button" className={`${button} flex-1 px-1 py-0.5`} onClick={() => deck.rate(Math.max(0.25, deck.state.rate - 0.001))} aria-label="Decrease pitch">−</button>
+        <button type="button" className={`${button} flex-1 px-1 py-0.5`} onClick={() => deck.rate(Math.min(2, deck.state.rate + 0.001))} aria-label="Increase pitch">+</button>
+      </div>
+      <button type="button" className={`${button} w-full px-1 py-1 text-[10px]`} onClick={() => deck.rate(1)} title="Reset pitch and tempo">RESET</button>
+      <button type="button" className="text-[9px] font-bold text-zinc-500 hover:text-white" onClick={() => setRange(value => value === 8 ? 16 : value === 16 ? 50 : 8)} title="Switch pitch fader range">±{range}%</button>
     </div>
   );
 };
 
 const EqSlider: React.FC<{ label: string; value: number; onChange: (value: number) => void }> = ({ label, value, onChange }) => (
-  <label className="flex min-w-0 flex-col gap-1 text-[10px] font-semibold uppercase text-zinc-400">
-    <span className="flex justify-between gap-2"><span>{label}</span><span className="tabular-nums text-zinc-200">{value > 0 ? '+' : ''}{value} dB</span></span>
+  <div className="flex min-w-0 flex-col gap-1 text-[10px] font-semibold uppercase text-zinc-400">
+    <div className="flex items-center justify-between gap-2"><span>{label}</span>
+      <div className="flex items-center gap-2"><span className="tabular-nums text-zinc-200">{value > 0 ? '+' : ''}{value} dB</span>
+        <button type="button" onClick={() => onChange(0)} className="rounded border border-white/10 px-1 text-zinc-400 hover:bg-white/10 hover:text-white" title={`Reset ${label} EQ`} aria-label={`Reset ${label} EQ`}>↺</button>
+      </div>
+    </div>
     <input className={slider} type="range" min="-18" max="12" step="1" value={value} onChange={event => onChange(Number(event.target.value))}
       onDoubleClick={() => onChange(0)} aria-label={`${label} EQ`} />
-  </label>
+  </div>
 );
 
 const DjDeckPanel: React.FC<{
   mixer: DjMixer; index: DeckIndex; library: Song[]; onSelect: (song: Song) => void;
   onLoad: (index: DeckIndex, song: Song) => void; onTap: (index: DeckIndex) => void;
-}> = ({ mixer, index, library, onSelect, onLoad, onTap }) => {
+  separation: DjSeparationStatus | null;
+  onSeparate: (index: DeckIndex, engine: DjSeparationEngine) => void;
+}> = ({ mixer, index, library, onSelect, onLoad, onTap, separation, onSeparate }) => {
   const deck = mixer.decks[index];
   const state: DjDeckSnapshot = deck.state;
   const side = index === 0 ? 'A' : 'B';
@@ -173,37 +254,36 @@ const DjDeckPanel: React.FC<{
         <button type="button" disabled={!state.song} onClick={() => { if (!mixer.sync(index)) onTap(index); }} className={button} title="Match tempo to the opposite deck; if BPM is unknown, tap this track's beat first">SYNC</button>
         <button type="button" disabled={!state.song} onClick={() => deck.seek(0)} className={button} title="Back to start"><RotateCcw size={14} /></button>
       </div>
-      <div className="mt-3 grid grid-cols-[minmax(140px,1fr)_minmax(130px,1fr)] gap-4">
+      <div className="mt-3 flex flex-wrap items-center justify-center gap-3 rounded-xl border border-white/5 bg-black/20 p-2">
         <JogWheel deck={deck} side={side} color={color} />
-        <div className="flex min-w-0 flex-col justify-center gap-2">
-          <div className="flex items-center justify-between text-xs">
-            <span className="text-zinc-400">BPM</span>
-            <span className="font-mono font-bold text-white">{state.bpm ? (state.bpm * state.rate).toFixed(1) : '—'}</span>
-            <button className={button} type="button" onClick={() => onTap(index)}>TAP</button>
+        <PitchFader deck={deck} side={side} color={color} />
+        <div className="flex min-w-[110px] max-w-[150px] flex-1 flex-col gap-3">
+          <div className="flex flex-col gap-1 rounded-md border border-white/10 bg-black/40 p-2 text-xs">
+            <span className="text-[10px] font-bold text-zinc-400">TEMPO / BPM</span>
+            <span className="font-mono text-lg font-black text-white">{state.bpm ? (state.bpm * state.rate).toFixed(1) : '—'}</span>
+            <button className={button} type="button" onClick={() => onTap(index)}>TAP BPM</button>
+            <button className={button} type="button" onClick={() => deck.rate(1)}><ResetIcon size={12} className="inline" /> RESET TEMPO</button>
+            <span className="text-[10px] text-zinc-400">{(12 * Math.log2(state.rate)).toFixed(1)} semitones · pitch follows speed</span>
           </div>
-          <label className="text-[10px] font-bold uppercase text-zinc-400">Tempo + pitch · {pct(state.rate)}</label>
-          <input className={slider} type="range" min="0.25" max="2" step="0.01" value={state.rate} aria-label={`Tempo and pitch deck ${side}`}
-            onChange={event => deck.rate(Number(event.target.value))} onDoubleClick={() => deck.rate(1)} />
-          <div className="flex items-center justify-between">
-            <button className={button} type="button" onClick={() => deck.rate(Math.max(0.25, state.rate - 0.01))}>−</button>
-            <button className={button} type="button" onClick={() => deck.rate(1)}>1.00×</button>
-            <button className={button} type="button" onClick={() => deck.rate(Math.min(2, state.rate + 0.01))}>+</button>
+          <div>
+            <div className="mb-1 flex items-center justify-between text-[10px] font-semibold text-zinc-400">
+              <span>DECK GAIN</span>
+              <button type="button" className="text-sky-300 hover:text-white" onClick={() => mixer.gain(index, 1)}>RESET</button>
+            </div>
+            <input className={slider} type="range" min="0" max="1.5" step="0.01" value={state.level}
+              onChange={event => mixer.gain(index, Number(event.target.value))} aria-label={`Deck ${side} gain`} />
           </div>
-          <span className="text-[10px] text-zinc-400">{(12 * Math.log2(state.rate)).toFixed(1)} semitones · pitch follows tempo</span>
-          <label className="mt-1 text-[10px] font-bold uppercase text-zinc-400">Deck gain · {pct(state.level / 1.5)}</label>
-          <input className={slider} type="range" min="0" max="1.5" step="0.01" value={state.level}
-            onChange={event => mixer.gain(index, Number(event.target.value))} aria-label={`Deck ${side} gain`} />
         </div>
       </div>
       <div className="mt-4 grid grid-cols-3 gap-3 rounded-lg bg-black/30 p-3">
         <EqSlider label="Low" value={state.eq[0]} onChange={value => deck.equalizer(0, value)} />
         <EqSlider label="Mid" value={state.eq[1]} onChange={value => deck.equalizer(1, value)} />
         <EqSlider label="High" value={state.eq[2]} onChange={value => deck.equalizer(2, value)} />
-        <label className="col-span-2 text-[10px] text-zinc-400">Filter · {Math.round(state.filter * 100)}
+        <label className="col-span-2 text-[10px] text-zinc-400"><span className="flex justify-between">Filter · {Math.round(state.filter * 100)} <button type="button" className="text-sky-300 hover:text-white" onClick={() => deck.filter(0)}>RESET</button></span>
           <input className={slider} type="range" min="-1" max="1" step="0.01" value={state.filter}
             onChange={event => deck.filter(Number(event.target.value))} onDoubleClick={() => deck.filter(0)} aria-label={`Deck ${side} filter`} />
         </label>
-        <label className="text-[10px] text-zinc-400">Echo · {pct(state.echo)}
+        <label className="text-[10px] text-zinc-400"><span className="flex justify-between">Echo · {pct(state.echo)} <button type="button" className="text-sky-300 hover:text-white" onClick={() => deck.echo(0)}>RESET</button></span>
           <input className={slider} type="range" min="0" max="1" step="0.01" value={state.echo}
             onChange={event => deck.echo(Number(event.target.value))} onDoubleClick={() => deck.echo(0)} aria-label={`Deck ${side} echo`} />
         </label>
@@ -228,26 +308,7 @@ const DjDeckPanel: React.FC<{
         <button className={`${button} ${state.looping ? 'border-fuchsia-500 bg-fuchsia-500/20' : ''}`} type="button"
           disabled={!state.song} onClick={() => deck.toggleLoop()}><Repeat size={13} className="inline" /> {state.looping ? 'ON' : 'OFF'}</button>
       </div>
-      {state.stems.length > 0 && (
-        <div className="mt-3 rounded-lg border border-white/10 bg-black/25 p-2">
-          <label className="flex cursor-pointer items-center gap-2 text-xs font-semibold text-zinc-200">
-            <input type="checkbox" className="accent-fuchsia-500" checked={state.stemMode} onChange={event => deck.setStemMode(event.target.checked)} />
-            <AudioLines size={13} /> STEM DECK ({state.stems.length}) — individual channels
-          </label>
-          {state.stemMode && <div className="mt-2 space-y-1.5">
-            {state.stems.map(stem => (
-              <div key={stem.id} className="flex items-center gap-2 text-[11px]">
-                <span className="w-20 truncate uppercase text-zinc-400">{stem.label}</span>
-                <button type="button" className={`${button} px-2 py-0.5 ${stem.mute ? 'bg-rose-500/30 text-rose-200' : ''}`} onClick={() => deck.updateStem(stem.id, { mute: !stem.mute })}>M</button>
-                <button type="button" className={`${button} px-2 py-0.5 ${stem.solo ? 'bg-fuchsia-500/30 text-fuchsia-200' : ''}`} onClick={() => deck.updateStem(stem.id, { solo: !stem.solo })}>S</button>
-                <input className={slider} type="range" min="0" max="1.5" step="0.01" value={stem.level} aria-label={`Deck ${side} ${stem.label} stem volume`}
-                  onChange={event => deck.updateStem(stem.id, { level: Number(event.target.value) })} />
-                <span className="w-9 text-right tabular-nums text-zinc-400">{Math.round(stem.level * 100)}%</span>
-              </div>
-            ))}
-          </div>}
-        </div>
-      )}
+      <DjStemControls deck={deck} side={side} separation={separation} onSeparate={engine => onSeparate(index, engine)} />
       {state.error && <p role="alert" className="mt-2 rounded-md bg-rose-500/10 p-2 text-xs text-rose-300">{state.error}</p>}
       {state.song && <button className="mt-2 text-xs text-zinc-400 underline hover:text-white" type="button" onClick={() => onSelect(state.song!)}>Show track details</button>}
     </section>
@@ -272,6 +333,10 @@ export const DjMode: React.FC<{
   const [expandedStems, setExpandedStems] = useState<Set<string>>(new Set());
   const [error, setError] = useState<string | null>(null);
   const [taps, setTaps] = useState<Record<number, number[]>>({});
+  const [separation, setSeparation] = useState<DjSeparationStatus | null>(null);
+  const [separationBusy, setSeparationBusy] = useState(false);
+  const completedRun = useRef('');
+  const startedHere = useRef<string | null>(null);
   const tick = useRef<() => void>(() => {});
   const leaveFromKeyboard = useRef<() => void>(() => {});
   tick.current = () => setRevision(value => value + 1);
@@ -279,7 +344,12 @@ export const DjMode: React.FC<{
   useEffect(() => {
     const created = new DjMixer(() => tick.current());
     setMixer(created);
-    if (initialSong?.audioUrl) created.decks[0].load(initialSong, library);
+    if (initialSong?.audioUrl) {
+      created.decks[0].load(initialSong, library);
+      if (stemOf(initialSong) === null) void readDjNativeStems(initialSong.id)
+        .then(names => created.decks[0].attachNativeStems(initialSong.id, names))
+        .catch(() => undefined);
+    }
     return () => created.dispose();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -296,6 +366,37 @@ export const DjMode: React.FC<{
     window.addEventListener('keydown', key);
     return () => window.removeEventListener('keydown', key);
   }, [mixer, onClose]);
+
+  // Refresh native separator progress without interrupting either playing deck.
+  useEffect(() => {
+    if (!mixer) return;
+    let active = true;
+    const refresh = async () => {
+      try {
+        const status = await readDjSeparationStatus();
+        if (!active) return;
+        setSeparation(status);
+        const run = status.run;
+        if (run?.done && !run.error && run.stems?.length) {
+          const signature = run.song_id + ':' + run.started_ms;
+          if (completedRun.current !== signature) {
+            completedRun.current = signature;
+            for (const deck of mixer.decks) {
+              if (deck.state.song?.id === run.song_id) {
+                deck.attachNativeStems(run.song_id, run.stems, true);
+                if (startedHere.current === run.song_id) deck.stemPreset('all');
+              }
+            }
+            startedHere.current = null;
+            window.dispatchEvent(new Event('yue:library-changed'));
+          }
+        }
+      } catch { /* Separation can be unavailable while DJ playback continues. */ }
+    };
+    void refresh();
+    const timer = window.setInterval(() => { void refresh(); }, 1500);
+    return () => { active = false; window.clearInterval(timer); };
+  }, [mixer]);
 
   const libraryPlayable = useMemo(() => library.filter(song => song.audioUrl && !song.isGenerating && song.stage !== 'failed' && song.stage !== 'cancelled'), [library]);
   const idsInCollections = useMemo(() => new Set(playlists.flatMap(list => list.songIds || [])), [playlists]);
@@ -327,6 +428,29 @@ export const DjMode: React.FC<{
   const load = (index: DeckIndex, song: Song) => {
     mixer?.decks[index].load(song, libraryPlayable);
     setSelected(song);
+    if (stemOf(song) === null) void readDjNativeStems(song.id)
+      .then(names => mixer?.decks[index].attachNativeStems(song.id, names))
+      .catch(() => undefined);
+  };
+
+  const separate = async (index: DeckIndex, engine: DjSeparationEngine) => {
+    if (!mixer || separationBusy) return;
+    const song = mixer.decks[index].state.song;
+    if (!song || stemOf(song) !== null) return;
+    setSeparationBusy(true);
+    setError(null);
+    try {
+      const existing = await readDjNativeStems(song.id);
+      if ((existing.length || mixer.decks[index].state.stems.length) &&
+        !window.confirm('Replace existing separated stems? The original recording stays intact.')) return;
+      await startDjSeparation(song.id, engine);
+      startedHere.current = song.id;
+      setSeparation(await readDjSeparationStatus());
+    } catch (problem) {
+      setError(problem instanceof Error ? problem.message : String(problem));
+    } finally {
+      setSeparationBusy(false);
+    }
   };
   const tap = (index: DeckIndex) => {
     if (!mixer) return;
@@ -399,14 +523,14 @@ export const DjMode: React.FC<{
         {mixer ? (
           <div className="mx-auto flex max-w-[1850px] flex-col gap-3 px-3 py-3">
             <div className="flex items-stretch gap-3 overflow-x-auto">
-              <DjDeckPanel mixer={mixer} index={0} library={libraryPlayable} onSelect={setSelected} onLoad={load} onTap={tap} />
+              <DjDeckPanel mixer={mixer} index={0} library={libraryPlayable} onSelect={setSelected} onLoad={load} onTap={tap} separation={separation} onSeparate={separate} />
               <div className="flex w-24 shrink-0 flex-col items-center justify-center gap-5 rounded-xl border border-white/10 bg-zinc-900 px-2">
                 <Headphones className="text-zinc-400" size={24} />
                 <span className="text-[11px] font-bold uppercase tracking-wider text-zinc-400">MIX</span>
                 <div className="h-32 w-1 rounded-full bg-linear-to-b from-blue-500 via-fuchsia-500 to-rose-500" aria-hidden />
                 <button type="button" className={button} onClick={() => mixer.setCrossfade(0.5)}>CENTER</button>
               </div>
-              <DjDeckPanel mixer={mixer} index={1} library={libraryPlayable} onSelect={setSelected} onLoad={load} onTap={tap} />
+              <DjDeckPanel mixer={mixer} index={1} library={libraryPlayable} onSelect={setSelected} onLoad={load} onTap={tap} separation={separation} onSeparate={separate} />
             </div>
             <div className="flex flex-wrap items-center justify-center gap-3 rounded-lg border border-white/10 bg-[#202126] p-3">
               <span className="font-black text-blue-400">A</span>
