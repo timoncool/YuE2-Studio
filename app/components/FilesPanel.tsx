@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Check, FolderDown, FolderOpen, Loader2, Minimize2, Move, X } from 'lucide-react';
+import { Check, FolderDown, FolderOpen, Loader2, Move, X } from 'lucide-react';
 import { useI18n } from '../context/I18nContext';
 import { onSaving, revealSaved, type SavingFile } from '../services/saveFile';
 import { dockSlot, useFloatable } from '../services/useFloatable';
@@ -24,14 +24,40 @@ export const FilesPanel: React.FC = () => {
   const [, redraw] = useState(0);
   const panel = useFloatable('files', { x: window.innerWidth - 360, y: 64 });
   const shown = useRef(0);
+  const expiration = useRef(new Map<string, number>());
+  const dismiss = () => {
+    expiration.current.forEach((timer) => window.clearTimeout(timer));
+    expiration.current.clear();
+    shown.current = 0;
+    setFiles([]);
+    panel.dock();
+  };
 
-  useEffect(() => onSaving((change) => {
-    setFiles((current) => {
-      const known = current.find((file) => file.id === change.id);
-      if (!known) return change.name ? [{ state: 'saving', ...change } as SavingFile, ...current] : current;
-      return current.map((file) => (file.id === change.id ? { ...file, ...change } : file));
+  useEffect(() => {
+    const stop = onSaving((change) => {
+      const previous = expiration.current.get(change.id);
+      if (previous !== undefined) window.clearTimeout(previous);
+      expiration.current.delete(change.id);
+      setFiles((current) => {
+        const known = current.find((file) => file.id === change.id);
+        if (!known) return change.name ? [{ state: 'saving', ...change } as SavingFile, ...current] : current;
+        return current.map((file) => (file.id === change.id ? { ...file, ...change } : file));
+      });
+      // Completed downloads show for just two seconds. Errors remain readable until dismissed.
+      if (change.state === 'done') {
+        const timer = window.setTimeout(() => {
+          expiration.current.delete(change.id);
+          setFiles((current) => current.filter((file) => file.id !== change.id));
+        }, 2000);
+        expiration.current.set(change.id, timer);
+      }
     });
-  }), []);
+    return () => {
+      stop();
+      expiration.current.forEach((timer) => window.clearTimeout(timer));
+      expiration.current.clear();
+    };
+  }, []);
 
   // the sidebar's slot exists once the sidebar has drawn
   useEffect(() => { redraw((n) => n + 1); }, []);
@@ -41,6 +67,10 @@ export const FilesPanel: React.FC = () => {
     if (shown.current === 0 && files.length > 0 && !panel.floating) panel.pop();
     shown.current = files.length;
   }, [files.length]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (files.length === 0 && panel.floating) panel.dock();
+  }, [files.length, panel.floating]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!files.length) return null;
   const busy = files.filter((file) => file.state === 'saving').length;
@@ -74,8 +104,8 @@ export const FilesPanel: React.FC = () => {
             <Move size={12} />
             {t('filesTitle')}
           </span>
-          <button type="button" onClick={panel.dock} title={t('filesDock')} className="text-zinc-400 hover:text-zinc-900 dark:hover:text-white">
-            <Minimize2 size={14} />
+          <button type="button" onClick={dismiss} title={t('close')} aria-label={t('close')} className="text-zinc-400 hover:text-zinc-900 dark:hover:text-white">
+            <X size={16} />
           </button>
         </div>
         <div className="max-h-[calc(var(--vh)*52)] space-y-1.5 overflow-y-auto p-2">
