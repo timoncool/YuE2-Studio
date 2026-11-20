@@ -34,6 +34,160 @@ async fn native_minimax_generation_records_the_encoded_mp3_bitrate() {
     exercise_generation(Some("mp3")).await;
 }
 
+#[tokio::test]
+async fn audio_cpp_minimax_music3_generates_and_saves_q8_provenance() {
+    use base64::Engine as _;
+    let root = tempfile::tempdir().unwrap();
+    let engine = build_engine(root.path()).await;
+    let data = root.path().join("data");
+    let model = data.join("audiocpp/models/minimax_music3");
+    fs::create_dir_all(model.join("config")).unwrap();
+    fs::create_dir_all(model.join("tokenizer")).unwrap();
+    for file in [
+        "config.json",
+        "config/language_model.json",
+        "config/rvq_depth_decoder.json",
+        "config/condition_encoder.json",
+        "config/transformer.json",
+        "config/vocoder.json",
+        "tokenizer/tokenizer.json",
+        "tokenizer/tokenizer_config.json",
+    ] {
+        fs::write(model.join(file), b"{}").unwrap();
+    }
+    let weights = [
+        "language_model_q8_0.gguf",
+        "rvq_depth_decoder_q8_0.gguf",
+        "transformer_q8_0.gguf",
+        "condition_encoder.gguf",
+        "vocoder.gguf",
+    ];
+    let wav = fs::read(root.path().join("fixture.wav")).unwrap();
+    let encoded = base64::engine::general_purpose::STANDARD.encode(wav);
+    fs::write(
+        root.path().join("audio-cpp-response.json"),
+        json!({"audio": encoded}).to_string(),
+    )
+    .unwrap();
+    let port = free_port().await;
+    let mut studio = Command::new(env!("CARGO_BIN_EXE_music-server"))
+        .env("YUE_STUDIO_PORT", port.to_string())
+        .env("YUE_ENGINE_BIN", root.path().join("absent-yue-server"))
+        .env("YUE_STUDIO_DATA_ROOT", &data)
+        .env("YUE_AUDIOCPP_SERVER", &engine)
+        .env("TIMONCOOL_SHARED_DIR", root.path().join("registry"))
+        .env("DO_NOT_TRACK", "1")
+        .kill_on_drop(true)
+        .spawn()
+        .unwrap();
+    let http = Client::builder()
+        .no_proxy()
+        .timeout(Duration::from_secs(10))
+        .build()
+        .unwrap();
+    let url = format!("http://127.0.0.1:{port}");
+    let catalog = format!("{url}/v1/music/audio-cpp/models");
+    let initial = timeout(Duration::from_secs(30), async {
+        loop {
+            if let Ok(response) = http.get(&catalog).send().await {
+                break response
+                    .error_for_status()
+                    .unwrap()
+                    .json::<Value>()
+                    .await
+                    .unwrap();
+            }
+            sleep(Duration::from_millis(50)).await;
+        }
+    })
+    .await
+    .unwrap();
+    assert_eq!(initial["models"][0]["ready"], false);
+    assert!(
+        initial["models"][0]["missing"]
+            .as_array()
+            .unwrap()
+            .contains(&json!(weights[0]))
+    );
+    for name in weights {
+        let mut gguf = vec![0; 32];
+        gguf[..4].copy_from_slice(b"GGUF");
+        fs::write(model.join(name), gguf).unwrap();
+    }
+    let ready: Value = http
+        .get(&catalog)
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(ready["models"][0]["id"], "minimax_music3");
+    assert_eq!(ready["models"][0]["profile_id"], "quality-q8");
+    assert_eq!(ready["models"][0]["ready"], true);
+    let endpoint = format!("{url}/v1/music/jobs");
+    let request = json!({
+        "music_source": {"kind":"audio_cpp","model":"minimax_music3"},
+        "style":"Soft folk guitar", "lyrics":"[verse] Morning comes",
+        "duration_seconds":3.2, "steps":2, "seed":424242
+    });
+    let accepted = http.post(&endpoint).json(&request).send().await.unwrap();
+    assert_eq!(accepted.status(), StatusCode::ACCEPTED);
+    let id = accepted.json::<Value>().await.unwrap()["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let completed = timeout(Duration::from_secs(20), async {
+        loop {
+            let job: Value = http
+                .get(format!("{endpoint}/{id}"))
+                .send()
+                .await
+                .unwrap()
+                .json()
+                .await
+                .unwrap();
+            match job["status"].as_str() {
+                Some("completed") => break job,
+                Some("queued" | "running") => sleep(Duration::from_millis(50)).await,
+                _ => panic!("audio.cpp generation did not complete: {job}"),
+            }
+        }
+    })
+    .await
+    .unwrap();
+    let track = &completed["songs"][0];
+    let song = &track["song"];
+    assert_eq!(song["engine_id"], "audio.cpp");
+    assert_eq!(song["profile_id"], "quality-q8");
+    assert_eq!(song["generation_settings"]["family"], "minimax_music3");
+    assert_eq!(
+        song["generation_settings"]["weight_files"]["minimax_music3.language_model_gguf"],
+        "language_model_q8_0.gguf"
+    );
+    assert_eq!(song["generation_settings"]["seed"], 424242);
+    assert_eq!(song["metadata"]["output_format"], "flac");
+    let media = http
+        .get(format!("{url}{}", track["audio_url"].as_str().unwrap()))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .bytes()
+        .await
+        .unwrap();
+    assert_eq!(&media[..4], b"fLaC");
+    let sent: Value =
+        serde_json::from_slice(&fs::read(root.path().join("audio-cpp-submitted.json")).unwrap())
+            .unwrap();
+    assert_eq!(sent["model"], "minimax_music3");
+    assert_eq!(sent["request"]["duration_seconds"], 3.2);
+    assert_eq!(sent["request"]["num_inference_steps"], 2);
+    assert_eq!(sent["request"]["lyrics"], "[verse] Morning comes");
+    studio.kill().await.unwrap();
+}
+
 async fn exercise_generation(format: Option<&str>) {
     let root = tempfile::tempdir().unwrap();
     let engine = build_engine(root.path()).await;

@@ -1544,10 +1544,11 @@ fn tools() -> &'static [Tool] {
                 schema: || object(json!({
                     "ace": { "type": "object", "description": "ACE-Step generation settings, including guidance_scale, think, source_song_id and reference_song_id." },
                     "music_source": {
-                        "description": "Select local YuE2, an installed profile from ace_music_profiles or minimax_music_profiles, or a cloud model with music_generation capability from openrouter_catalog. OpenRouter submits a paid request to the selected model.",
+                        "description": "Select local YuE2, a native profile from ace_music_profiles or minimax_music_profiles, an audio.cpp model from audio_cpp_music_models, or a cloud model with music_generation capability from openrouter_catalog. OpenRouter submits a paid request to the selected model.",
                         "oneOf": [
                             { "type": "object", "properties": { "kind": { "const": "local" } }, "required": ["kind"] },
                             { "type": "object", "properties": { "kind": { "const": "native" }, "engine": { "enum": ["acestep-cpp", "minimaxmusic-cpp"] }, "model": { "type": "string", "minLength": 1 } }, "required": ["kind", "engine", "model"] },
+                            { "type": "object", "properties": { "kind": { "const": "audio_cpp" }, "model": { "type": "string", "minLength": 1 } }, "required": ["kind", "model"] },
                             { "type": "object", "properties": { "kind": { "const": "openrouter" }, "model": { "type": "string", "minLength": 1 } }, "required": ["kind", "model"] }
                         ]
                     },
@@ -2038,6 +2039,12 @@ fn tools() -> &'static [Tool] {
                 description: "List native MiniMax Music 3 profiles, installed weights, and missing model files.",
                 schema: nothing,
                 call: |_| get("/v1/music/native/minimaxmusic-cpp/profiles".into()),
+            },
+            Tool {
+                name: "audio_cpp_music_models",
+                description: "List audio.cpp music models, their weight profile and whether the runtime and model files are ready.",
+                schema: nothing,
+                call: |_| get("/v1/music/audio-cpp/models".into()),
             },
             Tool {
                 name: "engine_logs",
