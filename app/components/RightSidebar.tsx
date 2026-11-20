@@ -861,6 +861,7 @@ const SongScore: React.FC<{ song: Song }> = ({ song }) => {
                     <ScoreView
                         abc={abc}
                         title={song.title}
+                        lyrics={song.lyrics}
                         onEdit={() => window.dispatchEvent(new CustomEvent('yue:use-score', {
                             detail: { abc, cot: cot === 'melody' || cot === 'full' ? cot : 'full', lyrics: song.lyrics, title: song.title, edit: true },
                         }))}

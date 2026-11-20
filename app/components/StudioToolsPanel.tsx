@@ -17,6 +17,7 @@ import type { TranslationKey } from '../i18n/translations';
 import { stemOf } from '../services/songStems';
 import { derivedBy, libraryFailure, restoredOf, shownSongs, toolsSongOnOpen, type ToolRun } from '../services/toolsSong';
 import { RestoreTool } from './RestoreTool';
+import { RvcVoiceCatalog } from './RvcVoiceCatalog';
 import { ConfirmDialog } from './ConfirmDialog';
 import { MidiTool } from './midi/MidiTool';
 import { MidiEditor } from './midi/MidiEditor';
@@ -482,6 +483,8 @@ export function StudioToolsPanel({ initialSongId }: { initialSongId?: string | n
           card={CARD}
           onDone={() => void loadSongs()}
         />
+
+        <RvcVoiceCatalog card={CARD} control={CONTROL} />
 
         {/* Audio to MIDI, on the track chosen above. */}
         <MidiTool songId={songId} songTitle={songs.find(song => song.id === songId)?.title ?? ''} card={CARD} />

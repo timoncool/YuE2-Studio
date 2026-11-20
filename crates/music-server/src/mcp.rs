@@ -494,6 +494,7 @@ const JOURNAL: &[(&str, &str, &str)] = &[
     ("lora_install_catalog", "installed", "lora"),
     ("lora_install_hf", "installed", "lora"),
     ("lora_import_files", "installed", "lora"),
+    ("rvc_voice_import", "installed", "rvc_voice"),
     ("lora_import_folder", "installed", "lora"),
     ("lora_update", "updated", "lora"),
     ("lora_delete", "deleted", "lora"),
@@ -2452,6 +2453,29 @@ fn tools() -> &'static [Tool] {
                 description: "Open a VST3 plugin's own window for the user to set it; state_id keeps its settings for the chain.",
                 schema: || object(json!({ "path": { "type": "string" }, "state_id": { "type": "string" } }), &["path"]),
                 call: |args| post("/v1/processing/vst/editor".into(), args.clone()),
+            },
+            Tool {
+                name: "rvc_voices_list",
+                description: "List local RVC voices and their optional retrieval indexes.",
+                schema: nothing,
+                call: |_| get("/v1/rvc/voices".into()),
+            },
+            Tool {
+                name: "rvc_voice_import",
+                description: "Import a local RVC inference checkpoint and an optional FAISS retrieval index into the voice catalog.",
+                schema: || object(json!({
+                    "model_path": { "type": "string", "description": "The exported inference .pth or .pt file" },
+                    "index_path": { "type": "string", "description": "Optional filled FAISS .index file" },
+                }), &["model_path"]),
+                call: |args| {
+                    let model = PathBuf::from(text(args, "model_path")?);
+                    let mut files = vec![("model".into(), model.clone(), file_name(&model))];
+                    if let Some(path) = args.get("index_path").and_then(Value::as_str) {
+                        let index = PathBuf::from(path);
+                        files.push(("index".into(), index.clone(), file_name(&index)));
+                    }
+                    Ok(Call { method: Method::POST, path: "/v1/rvc/voices/import".into(), payload: Payload::Form { fields: Vec::new(), files } })
+                },
             },
             Tool {
                 name: "lora_import_folder",
