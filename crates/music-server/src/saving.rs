@@ -167,42 +167,35 @@ pub async fn write(Path(id): Path<String>, headers: HeaderMap, body: Body) -> Re
     }
 }
 
-/// Into a `.part` beside the target, renamed when whole: a cancelled or
-/// broken save never leaves half a file under the name the user chose.
+/// Publish a complete export in one rename. Each save owns its temporary file,
+/// even when two dialogs picked the same destination.
 async fn copy<S>(id: &str, path: &std::path::Path, mut chunks: S, total: Option<u64>) -> Result<u64, String>
 where
     S: futures_util::Stream<Item = std::io::Result<axum::body::Bytes>> + Unpin,
 {
-    let part = path.with_extension(format!("{}.part", path.extension().map(|extension| extension.to_string_lossy()).unwrap_or_default()));
-    let mut file = tokio::fs::File::create(&part).await.map_err(|error| format!("{} cannot be written: {error}", path.display()))?;
+    let folder = path.parent().filter(|folder| !folder.as_os_str().is_empty()).unwrap_or_else(|| std::path::Path::new("."));
+    let write_error = |error: std::io::Error| format!("{} cannot be written: {error}", path.display());
+    let (file, part) = tempfile::NamedTempFile::new_in(folder).map_err(write_error)?.into_parts();
+    let mut file = tokio::fs::File::from_std(file);
     let mut written = 0u64;
     let mut told = std::time::Instant::now();
     while let Some(chunk) = chunks.next().await {
-        let chunk = match chunk {
-            Ok(chunk) => chunk,
-            Err(error) => {
-                drop(file);
-                let _ = tokio::fs::remove_file(&part).await;
-                return Err(format!("the file stopped arriving: {error}"));
-            }
-        };
-        if let Err(error) = file.write_all(&chunk).await {
-            drop(file);
-            let _ = tokio::fs::remove_file(&part).await;
-            return Err(format!("{} cannot be written: {error}", path.display()));
-        }
+        let chunk = chunk.map_err(|error| format!("the file stopped arriving: {error}"))?;
+        file.write_all(&chunk).await.map_err(write_error)?;
         written += chunk.len() as u64;
         if told.elapsed() >= std::time::Duration::from_millis(250) {
             told = std::time::Instant::now();
             tell(id, json!({ "written": written, "total": total }));
         }
     }
-    file.flush().await.map_err(|error| format!("{} cannot be written: {error}", path.display()))?;
-    drop(file);
-    if let Err(error) = tokio::fs::rename(&part, path).await {
-        let _ = tokio::fs::remove_file(&part).await;
-        return Err(format!("{} cannot be put in place: {error}", path.display()));
+    if let Some(expected) = total {
+        if written != expected {
+            return Err(format!("received {written} bytes of the expected {expected}"));
+        }
     }
+    file.flush().await.map_err(write_error)?;
+    drop(file);
+    part.persist(path).map_err(|error| format!("{} cannot be put in place: {error}", path.display()))?;
     Ok(written)
 }
 
@@ -275,6 +268,50 @@ fn file_uri(path: &std::path::Path) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn concurrent_exports_to_one_path_each_publish_their_own_bytes() {
+        use axum::body::Bytes;
+        use futures_util::stream;
+        let folder = tempfile::tempdir().unwrap();
+        let target = folder.path().join("track.wav");
+        let (started, first_chunk) = tokio::sync::oneshot::channel();
+        let (resume, second_done) = tokio::sync::oneshot::channel();
+        let slow = stream::iter([Ok(Bytes::from_static(b"first "))]).chain(stream::once(async {
+            started.send(()).unwrap();
+            second_done.await.unwrap();
+            Ok(Bytes::from_static(b"take"))
+        })).boxed();
+        let fast = async {
+            first_chunk.await.unwrap();
+            let data = stream::iter([Ok(Bytes::from_static(b"second"))]);
+            let result = copy("fast", &target, data, None).await;
+            let visible = std::fs::read(&target);
+            resume.send(()).unwrap();
+            assert_eq!(result.unwrap(), 6);
+            assert_eq!(visible.unwrap(), b"second");
+        };
+        let (written, ()) = tokio::join!(copy("slow", &target, slow, None), fast);
+        assert_eq!(written.unwrap(), 10);
+        assert_eq!(std::fs::read(&target).unwrap(), b"first take");
+    }
+
+    #[tokio::test]
+    async fn an_incomplete_export_preserves_the_previous_file_and_its_neighbours() {
+        use axum::body::Bytes;
+        let folder = tempfile::tempdir().unwrap();
+        let target = folder.path().join("дубль.wav");
+        let neighbour = folder.path().join("дубль.wav.part");
+        std::fs::write(&target, b"original").unwrap();
+        std::fs::write(&neighbour, b"another file").unwrap();
+        let chunks = || futures_util::stream::iter([Ok(Bytes::from_static(b"take"))]);
+        assert!(copy("short", &target, chunks(), Some(8)).await.is_err());
+        assert_eq!(std::fs::read(&target).unwrap(), b"original");
+        assert_eq!(copy("complete", &target, chunks(), Some(4)).await.unwrap(), 4);
+        assert_eq!(std::fs::read(&target).unwrap(), b"take");
+        assert_eq!(std::fs::read(&neighbour).unwrap(), b"another file");
+        assert_eq!(folder.path().read_dir().unwrap().count(), 2);
+    }
 
     #[test]
     fn only_this_studios_own_files_are_read() {
