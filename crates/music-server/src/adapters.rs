@@ -286,6 +286,14 @@ impl AdapterLibrary {
         Ok(self.root.join(id))
     }
 
+    /// Reserve an independent folder, cleaned up if the files or metadata cannot be saved.
+    fn new_import(&self, name: &str) -> Result<(String, tempfile::TempDir)> {
+        fs::create_dir_all(&self.root)?;
+        let folder = tempfile::Builder::new().prefix(&format!("{}-", slug(name))).rand_bytes(12).tempdir_in(&self.root)?;
+        let id = folder.path().file_name().context("missing adapter folder name")?.to_string_lossy().into_owned();
+        Ok((id, folder))
+    }
+
     fn read_meta(&self, id: &str) -> Option<AdapterMeta> {
         let text = fs::read_to_string(self.folder(id).ok()?.join(META)).ok()?;
         serde_json::from_str(&text).ok()
@@ -454,9 +462,8 @@ impl AdapterLibrary {
         if files.is_empty() {
             bail!("the checkpoint has no adapter files");
         }
-        let id = format!("{}-{}", slug(name), &uuid::Uuid::now_v7().simple().to_string()[..8]);
-        let folder = self.folder(&id)?;
-        fs::create_dir_all(&folder)?;
+        let (id, reserved) = self.new_import(name)?;
+        let folder = reserved.path();
         for file in files {
             let name = file.file_name().context("an adapter file without a name")?;
             fs::copy(file, folder.join(name)).with_context(|| format!("copy {}", file.display()))?;
@@ -478,6 +485,7 @@ impl AdapterLibrary {
             created_at: now(),
         };
         self.write_meta(&meta)?;
+        reserved.keep();
         Ok(meta)
     }
 
@@ -489,9 +497,8 @@ impl AdapterLibrary {
         if weights.is_empty() {
             bail!("an adapter needs at least one .safetensors file");
         }
-        let id = format!("{}-{}", slug(name), &uuid::Uuid::now_v7().simple().to_string()[..8]);
-        let folder = self.folder(&id)?;
-        fs::create_dir_all(&folder)?;
+        let (id, reserved) = self.new_import(name)?;
+        let folder = reserved.path();
         let mut trigger = None;
         for (file, bytes) in &files {
             let file_name = Path::new(file).file_name().and_then(|value| value.to_str()).context("upload without a name")?;
@@ -523,21 +530,31 @@ impl AdapterLibrary {
             created_at: now(),
         };
         self.write_meta(&meta)?;
+        reserved.keep();
         Ok(meta)
     }
 
-/// The adapter already holding these files, by name, size and time of change: a hard link and a copy of a
-    /// file both keep them, so a folder taken twice gives its LoRAs once.
+    /// Recognize the same linked files without re-reading weights. For independent
+    /// copies, matching size and contents distinguish them from a different checkpoint.
     pub fn imported_from(&self, files: &[PathBuf]) -> Option<AdapterMeta> {
-        let same = |a: &Path, b: &Path| match (fs::metadata(a), fs::metadata(b)) {
-            (Ok(a), Ok(b)) => a.len() == b.len() && a.modified().ok() == b.modified().ok(),
-            _ => false,
+        let same = |a: &Path, b: &Path| {
+            if same_file::is_same_file(a, b).unwrap_or(false) { return true; }
+            let (Ok(left), Ok(right)) = (fs::metadata(a), fs::metadata(b)) else { return false };
+            if left.len() != right.len() { return false; }
+            matches!((crate::install_record::sha256_of(a), crate::install_record::sha256_of(b)),
+                     (Ok(left), Ok(right)) if left == right)
         };
         let weights: Vec<&PathBuf> = files.iter().filter(|file| file.file_name().is_some_and(|name| name != "lora.json")).collect();
+        if weights.is_empty() { return None; }
         let entries = fs::read_dir(&self.root).ok()?;
         entries.flatten().find_map(|entry| {
             let id = entry.file_name().to_str()?.to_owned();
             let meta = self.read_meta(&id).filter(|meta| meta.engine == self.engine)?;
+            let components = fs::read_dir(entry.path()).ok()?.flatten().filter(|file| {
+                let path = file.path();
+                path.extension().is_some_and(|ext| ext == "safetensors") || file.file_name() == "adapter_config.json"
+            }).count();
+            if components != weights.len() { return None; }
             weights.iter().all(|file| file.file_name().is_some_and(|name| same(file, &entry.path().join(name)))).then_some(meta)
         })
     }
@@ -549,28 +566,24 @@ impl AdapterLibrary {
         if !files.iter().any(|file| file.extension().is_some_and(|extension| extension == "safetensors")) {
             bail!("an adapter needs at least one .safetensors file");
         }
-        let id = format!("{}-{}", slug(name), &uuid::Uuid::now_v7().simple().to_string()[..8]);
-        let folder = self.folder(&id)?;
-        fs::create_dir_all(&folder)?;
+        let (id, reserved) = self.new_import(name)?;
+        let folder = reserved.path();
         let mut copied = false;
         let mut trigger = None;
-        let placed = files.iter().try_for_each(|file| -> Result<()> {
+        for file in files {
             let file_name = file.file_name().and_then(|value| value.to_str()).context("a file without a name")?;
             if file_name == "lora.json" {
                 trigger = fs::read(file).ok().and_then(|bytes| serde_json::from_slice::<Value>(&bytes).ok()).and_then(|value| value.get("trigger").and_then(Value::as_str).map(str::to_owned));
-                return Ok(());
+                continue;
             }
             let target = folder.join(file_name);
             if fs::hard_link(file, &target).is_err() {
-                fs::copy(file, &target).with_context(|| format!("copy {}", file.display()))?;
+                // A second source with the same basename must never overwrite the first hard link.
+                let mut destination = fs::File::create_new(&target)?;
+                std::io::copy(&mut fs::File::open(file)?, &mut destination)
+                    .with_context(|| format!("copy {}", file.display()))?;
                 copied = true;
             }
-            Ok(())
-        });
-        if let Err(error) = placed {
-            // the folder holds only this attempt's links and copies; the user's files stay where they are
-            fs::remove_dir_all(&folder).ok();
-            return Err(error);
         }
         let meta = AdapterMeta {
             id,
@@ -589,6 +602,7 @@ impl AdapterLibrary {
             created_at: now(),
         };
         self.write_meta(&meta)?;
+        reserved.keep();
         Ok((meta, copied))
     }
 
@@ -1220,6 +1234,38 @@ mod tests {
         ids.sort();
         ids.dedup();
         assert_eq!(ids.len(), entries.len(), "catalogue ids repeat");
+    }
+
+    #[test]
+    fn two_imports_named_alike_keep_independent_weights() {
+        let root = tempfile::tempdir().unwrap();
+        let library = AdapterLibrary::new(root.path(), "yue2");
+        let upload = |bytes| library.import("voice", vec![("voice.safetensors".into(), vec![bytes])], Origin::Imported).unwrap();
+        let a = upload(1);
+        let b = upload(2);
+        assert_ne!(a.id, b.id);
+        assert_eq!(fs::read(library.root().join(a.id).join("voice.safetensors")).unwrap(), [1]);
+        assert_eq!(fs::read(library.root().join(b.id).join("voice.safetensors")).unwrap(), [2]);
+    }
+
+    #[test]
+    fn same_size_and_timestamp_do_not_merge_different_checkpoint_weights() {
+        let root = tempfile::tempdir().unwrap();
+        let library = AdapterLibrary::new(root.path(), "yue2");
+        let a = root.path().join("voice.safetensors");
+        let folder = root.path().join("other");
+        fs::create_dir(&folder).unwrap();
+        let b = folder.join("voice.safetensors");
+        fs::write(&a, [1]).unwrap();
+        fs::write(&b, [2]).unwrap();
+        let stamp = a.metadata().unwrap().modified().unwrap();
+        fs::File::options().write(true).open(&b).unwrap().set_modified(stamp).unwrap();
+        library.import_linked("voice", std::slice::from_ref(&a), Origin::Imported).unwrap();
+        assert!(library.imported_from(std::slice::from_ref(&b)).is_none());
+        assert!(library.import_linked("collision", &[a.clone(), b.clone()], Origin::Imported).is_err());
+        assert_eq!(fs::read(&a).unwrap(), [1]);
+        assert_eq!(fs::read(&b).unwrap(), [2]);
+        assert_eq!(fs::read_dir(library.root()).unwrap().count(), 1);
     }
 
     #[test]
