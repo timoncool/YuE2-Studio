@@ -264,3 +264,44 @@ fn transfer(to: &Library, folder: &Path) -> Result<Value> {
         Ok(json!({"added":added,"already_imported":song_ids.len()-added,"playlists_added":added_lists,"playlists_already_imported":list_ids.len()-added_lists}))
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn retry_publishes_all_rows_together_and_keeps_user_edits() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let source = temp.path().join("old");
+        let destination = temp.path().join("new");
+        let old = Library::open_at(source.join("library.sqlite"), source.join("media"))?;
+        let new = Library::open_at(
+            destination.join("library.sqlite"),
+            destination.join("media"),
+        )?;
+        fs::create_dir_all(old.media_dir())?;
+        old.legacy_transaction(|tx| {
+            for (id, created) in [("a", "2"), ("b", "1")] {
+                tx.execute("INSERT INTO songs VALUES(?,?,?,'','','{}','{}','acestep-cpp',NULL,NULL,NULL,'native',?,?)",
+                    params![id,id,format!("{id}.wav"),created,created])?;
+            }
+            Ok(())
+        })?;
+        fs::write(old.media_dir().join("a.wav"), b"first")?;
+        assert!(transfer(&new, &source)
+            .unwrap_err()
+            .to_string()
+            .contains("b.wav"));
+        assert!(new.list_songs()?.is_empty());
+        fs::write(old.media_dir().join("b.wav"), b"second")?;
+        assert_eq!(transfer(&new, &source)?["added"], 2);
+        let song = new.list_songs()?.remove(0);
+        new.rename_song(&song.id, "Edited in YuE2")?;
+        let repeat = transfer(&new, &source)?;
+        assert_eq!(repeat["already_imported"], 2);
+        assert_eq!(new.get_song(&song.id)?.unwrap().title, "Edited in YuE2");
+        assert_eq!(fs::read_dir(new.media_dir())?.count(), 2);
+        assert!(transfer(&new, &destination).is_err());
+        Ok(())
+    }
+}
