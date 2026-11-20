@@ -155,7 +155,7 @@ connected and the address to paste.
    `training_pack_cancel` for the trainer or `training_listen_pack_cancel` for the listening pack.
 2. `dataset_create` with the artist's name (the trigger word is made from it), then
    `dataset_add_folder` with the folder.
-3. `dataset_prepare` with `lyrics: missing, style: missing, writer: agent`, then
+3. `dataset_prepare` with `lyrics: missing, style: missing, writer: agent` (add `skip_asr: true` to use lyrics lookup without speech recognition), then
    `studio_wait until: preparation`. The studio finds the lyrics in LRCLIB, QQ Music and
    Kugou, recognises only what they miss with CrisperWhisper, and listens to every song with
    MOSS-Music, measuring the tempo. It leaves the writing to you.

@@ -2341,6 +2341,7 @@ export const pt = {
     trainingStage_align: 'Tempos da letra',
     trainingStage_scores: 'Partituras',
     trainingStage_prepare: 'Preparação',
+    trainingFillWithoutAsr: 'Preencher sem reconhecimento de voz',
     trainingStage_train: 'Treino',
     trainingStatus_running: 'Em curso',
     trainingStatus_done: 'Concluído',
