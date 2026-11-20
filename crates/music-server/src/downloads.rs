@@ -498,15 +498,20 @@ impl Downloader {
     /// succeeded, the files arrived, and the interface redrew the same row with
     /// the same download button. That is what "the button does nothing" was.
     pub async fn install_all(&self, scope: &str, assets: &[&'static Asset]) -> Result<()> {
-        self.install_set(scope, assets, None).await
+        self.install_with_hint(scope, assets, &mut None).await
+    }
+
+    pub(crate) async fn install_with_hint(&self, scope: &str, assets: &[&'static Asset], hint: &mut Option<ManualArchive>) -> Result<()> {
+        self.install_set(scope, assets, None, hint).await
     }
 
     pub(crate) async fn install_local_archive(&self, scope: &str, asset: &'static Asset, source: &Path) -> Result<()> {
         anyhow::ensure!(release_archive_name(asset).is_some(), "this component has no pinned runtime archive");
-        self.install_set(scope, &[asset], Some(source)).await
+        self.install_set(scope, &[asset], Some(source), &mut None).await
     }
 
-    async fn install_set(&self, scope: &str, assets: &[&'static Asset], source: Option<&Path>) -> Result<()> {
+    async fn install_set(&self, scope: &str, assets: &[&'static Asset], source: Option<&Path>, hint: &mut Option<ManualArchive>) -> Result<()> {
+        *hint = None;
         const AT_ONCE: usize = 4;
         let pending: Vec<&'static Asset> = assets.iter().copied().filter(|asset| !self.is_installed(asset)).collect();
         if pending.is_empty() {
@@ -592,10 +597,11 @@ impl Downloader {
                 None => Ok(()),
             },
         };
+        *hint = manual_archive.filter(|_| !self.cancel.load(std::sync::atomic::Ordering::Relaxed));
         if let Some(active) = self.progress.lock().await.as_mut() {
             active.done = true;
             active.error = outcome.as_ref().err().map(|error| error.to_string());
-            active.manual_archive = manual_archive.filter(|_| !self.cancel.load(std::sync::atomic::Ordering::Relaxed));
+            active.manual_archive = hint.clone();
             if outcome.is_ok() {
                 active.downloaded_bytes = total;
             }

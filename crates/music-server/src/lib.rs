@@ -10477,7 +10477,7 @@ async fn setup_update_apply(State(state): State<AppState>) -> Result<Json<Value>
         if job.as_ref().is_some_and(|job| job.status == update_screen::JobStatus::Running) {
             return Err(api_error(StatusCode::CONFLICT, "the update is already running".into()));
         }
-        job.replace(update_screen::Job { status: update_screen::JobStatus::Running, error: None, updated: Vec::new(), added: Vec::new() })
+        job.replace(update_screen::Job { status: update_screen::JobStatus::Running, error: None, manual_archive: None, updated: Vec::new(), added: Vec::new() })
     };
     let plan = match update_plan(&state).await {
         Ok(plan) => plan,
@@ -10491,15 +10491,17 @@ async fn setup_update_apply(State(state): State<AppState>) -> Result<Json<Value>
     }
     let rows: Vec<update_screen::Row> = plan.updated.iter().chain(&plan.added).cloned().collect();
     *state.update_job.write().await =
-        Some(update_screen::Job { status: update_screen::JobStatus::Running, error: None, updated: plan.updated.clone(), added: plan.added.clone() });
+        Some(update_screen::Job { status: update_screen::JobStatus::Running, error: None, manual_archive: None, updated: plan.updated.clone(), added: plan.added.clone() });
     let background = state.clone();
     tokio::spawn(async move {
-        let outcome = run_update(&background, &rows).await;
+        let mut manual_archive = None;
+        let outcome = run_update(&background, &rows, &mut manual_archive).await;
         if let Err(error) = &outcome {
             eprintln!("[ERROR] the update did not finish: {error:#}");
         }
         if let Some(job) = background.update_job.write().await.as_mut() {
             job.status = if outcome.is_ok() { update_screen::JobStatus::Done } else { update_screen::JobStatus::Failed };
+            job.manual_archive = manual_archive;
             job.error = outcome.err().map(|error| format!("{error:#}"));
         }
     });
@@ -10509,7 +10511,7 @@ async fn setup_update_apply(State(state): State<AppState>) -> Result<Json<Value>
 
 /// The downloads of `rows`, part after part (audio.cpp's server with the CUDA libraries its build needs), then the
 /// leftovers whose replacement is in place.
-async fn run_update(state: &AppState, rows: &[update_screen::Row]) -> anyhow::Result<()> {
+async fn run_update(state: &AppState, rows: &[update_screen::Row], hint: &mut Option<downloads::ManualArchive>) -> anyhow::Result<()> {
     let separation = state.separation_config.read().await.runtime;
     let options = state.engine_options.read().await.clone();
     let karaoke = state.lyrics_sync_config.read().await.clone();
@@ -10530,7 +10532,7 @@ async fn run_update(state: &AppState, rows: &[update_screen::Row]) -> anyhow::Re
             }
             (update_screen::Part::Audiocpp, _) => {
                 let assets: Vec<&'static downloads::Asset> = update_catalogue(part).into_iter().filter(|asset| ids.contains(&asset.id)).collect();
-                state.acpp.downloader().install_all("audiocpp", &assets).await?;
+                state.acpp.downloader().install_with_hint("audiocpp", &assets, hint).await?;
                 // the CUDA 13 build runs on the engine's cuBLAS 13, which the engine's downloader keeps
                 for (build, scope) in update_acpp_builds(state, &retired::leftovers(&data_root), separation, &options, &karaoke) {
                     install_acpp(state, build, scope).await?;
@@ -10538,7 +10540,7 @@ async fn run_update(state: &AppState, rows: &[update_screen::Row]) -> anyhow::Re
             }
             (_, Some((downloader, scope))) => {
                 let assets: Vec<&'static downloads::Asset> = update_catalogue(part).into_iter().filter(|asset| ids.contains(&asset.id)).collect();
-                downloader.install_all(scope, &assets).await?;
+                downloader.install_with_hint(scope, &assets, hint).await?;
             }
             (_, None) => state.assistant_runtime.install_all(&ids.iter().map(|id| id.to_string()).collect::<Vec<_>>()).await?,
         }
