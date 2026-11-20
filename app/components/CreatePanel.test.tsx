@@ -1,7 +1,9 @@
 import React, { Activity, act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Song, YueRequest } from '../types';
+import { useGenerations } from '../services/generations';
 
 const composeScore = vi.fn();
 const transcribe = vi.fn();
@@ -15,7 +17,9 @@ vi.mock('../services/karaoke', async original => ({
 }));
 
 vi.mock('../context/I18nContext', () => ({ useI18n: () => ({ language: 'en', t: (key: string) => key }) }));
-vi.mock('../services/studioQueries', () => ({
+vi.mock('../services/studioQueries', async original => ({
+  ...await original<typeof import('../services/studioQueries')>(),
+  useLibrarySongs: () => ({ data: [] }),
   SELF_READ: {},
   libraryChanged: vi.fn(),
   useActivity: () => ({ data: [] }),
@@ -74,10 +78,10 @@ afterEach(() => {
 
 const flush = () => act(async () => { await new Promise(resolve => setTimeout(resolve, 0)); });
 
-function panel(props: Pick<React.ComponentProps<typeof CreatePanel>, 'musicEngine' | 'onMusicEngineChange'> & { initialData?: { song: Song; timestamp: number } | null; visible?: boolean; request?: React.ComponentProps<typeof CreatePanel>['request'] }) {
+function panel(props: Pick<React.ComponentProps<typeof CreatePanel>, 'musicEngine' | 'onMusicEngineChange'> & { initialData?: { song: Song; timestamp: number } | null; visible?: boolean; request?: React.ComponentProps<typeof CreatePanel>['request']; onGenerate?: (request: YueRequest) => void }) {
   return (
     <Activity mode={props.visible === false ? 'hidden' : 'visible'}>
-      <CreatePanel musicEngine={props.musicEngine} onMusicEngineChange={props.onMusicEngineChange} onGenerate={request => sent.push(request)} isGenerating={false} request={props.request} initialData={props.initialData ?? null}
+      <CreatePanel musicEngine={props.musicEngine} onMusicEngineChange={props.onMusicEngineChange} onGenerate={props.onGenerate ?? (request => sent.push(request))} isGenerating={false} request={props.request} initialData={props.initialData ?? null}
         playlists={[]} onCreatePlaylist={async () => null} playlistId="" onChoosePlaylist={() => undefined} />
     </Activity>
   );
@@ -149,7 +153,7 @@ it('keeps settings by native engine and profile and submits the selected pair', 
   click(create());
   expect(sent.at(-1)).toEqual({
     music_source: { kind: 'native', engine: 'minimaxmusic-cpp', model: 'balanced' },
-    style: 'folk', lyrics: 'shared words', duration_seconds: 36, lm_seed: 4,
+    style: 'folk', lyrics: 'shared words', duration_seconds: 36, lm_seed: 4, output_format: 'flac',
   });
   select('quality');
   expect(number('Duration (seconds)').value).toBe('');
@@ -179,6 +183,67 @@ it('keeps settings by native engine and profile and submits the selected pair', 
   expect(number('Language model seed').value).toBe('4');
   await setup('local');
   expect(field('textarea[aria-label="scoreCardTitle"]')!.value).toBe(score);
+});
+
+it('posts the remembered MiniMax output format and keeps it out of ACE requests', async () => {
+  vi.stubGlobal('EventSource', class { close() {} });
+  const profiles = ['balanced', 'quality'].map(id => ({ id, label: id, ready: true, missing: [], total_bytes: 1 }));
+  const posted: YueRequest[] = [];
+  vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+    const engine = url.match(/^\/v1\/music\/native\/([^/]+)\/profiles$/)?.[1];
+    if (engine) return Response.json({ engine, engine_installed: true, profiles });
+    if (url === '/v1/music/jobs' && init?.method === 'POST') {
+      posted.push(JSON.parse(String(init.body)));
+      return Response.json({ id: `job-${posted.length}`, status: 'completed', songs: [] });
+    }
+    return Response.json([]);
+  }));
+  localStorage.setItem('studio.createDraft', JSON.stringify({ style: 'folk' }));
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  function Editor({ engine }: { engine: 'minimaxmusic-cpp' | 'acestep-cpp' }) {
+    const { generate } = useGenerations({ enabled: false, notify: () => {}, onFinished: () => {} });
+    return panel({ musicEngine: engine, onGenerate: generate });
+  }
+  const setup = async (engine: 'minimaxmusic-cpp' | 'acestep-cpp') => {
+    act(() => root.render(<QueryClientProvider client={client}><Editor engine={engine} /></QueryClientProvider>));
+    await flush();
+  };
+  const choose = (select: HTMLSelectElement, value: string) => act(() => {
+    select.value = value;
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  const model = () => host.querySelector<HTMLSelectElement>('select[aria-label="Local model"]')!;
+  const format = () => Array.from(host.querySelectorAll('label')).find(label => label.textContent?.startsWith('outputFormat'))?.querySelector('select');
+  const submit = async () => { click(buttonNamed('create')!); await flush(); };
+
+  await setup('minimaxmusic-cpp');
+  choose(model(), 'balanced');
+  expect(format()?.value).toBe('flac');
+  await submit();
+  choose(format()!, 'wav32');
+  await submit();
+  choose(model(), 'quality');
+  expect(format()?.value).toBe('flac');
+  choose(format()!, 'mp3');
+  await submit();
+  await setup('acestep-cpp');
+  choose(model(), 'balanced');
+  expect(format()).toBeUndefined();
+  await submit();
+  await setup('minimaxmusic-cpp');
+  expect(model().value).toBe('quality');
+  expect(format()?.value).toBe('mp3');
+  choose(model(), 'balanced');
+  expect(format()?.value).toBe('wav32');
+  await submit();
+
+  expect(posted.map(({ music_source, output_format }) => [music_source, output_format])).toEqual([
+    [{ kind: 'native', engine: 'minimaxmusic-cpp', model: 'balanced' }, 'flac'],
+    [{ kind: 'native', engine: 'minimaxmusic-cpp', model: 'balanced' }, 'wav32'],
+    [{ kind: 'native', engine: 'minimaxmusic-cpp', model: 'quality' }, 'mp3'],
+    [{ kind: 'native', engine: 'acestep-cpp', model: 'balanced' }, undefined],
+    [{ kind: 'native', engine: 'minimaxmusic-cpp', model: 'balanced' }, 'wav32'],
+  ]);
 });
 
 it.each([
