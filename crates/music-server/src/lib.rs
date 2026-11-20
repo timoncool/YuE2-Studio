@@ -14,6 +14,7 @@ mod cover_prompt;
 mod providers;
 mod openrouter_stream;
 mod native_minimax;
+mod native_music_jobs;
 mod assistant;
 mod song_tokenizer;
 mod assistant_runtime;
@@ -105,6 +106,8 @@ const PROGRAM_ID: &str = "yue2";
 struct AppState {
     configuration: Arc<RwLock<StudioConfiguration>>,
     jobs: Arc<RwLock<HashMap<String, MusicJob>>>,
+    minimax: Arc<native_minimax::Runtime>,
+    minimax_cancellations: Arc<RwLock<HashMap<String, native_music_jobs::CancelSender>>>,
     openrouter_music_stops: Arc<RwLock<HashMap<String, Arc<tokio::sync::Notify>>>>,
     music_server: EngineClient,
     /// The engine's log, followed for the service's life: its recent lines and
@@ -356,6 +359,7 @@ struct CreateMusicJobRequest {
 #[serde(tag = "kind", rename_all = "snake_case")]
 enum MusicSource {
     Local,
+    Native { engine: String, model: String },
     #[serde(rename = "openrouter")]
     OpenRouter { model: String },
 }
@@ -1480,6 +1484,8 @@ pub async fn serve_on_port(port: u16) -> anyhow::Result<()> {
             persisted.as_ref().map(|settings| settings.configuration.clone()).unwrap_or_else(initial_configuration),
         ))),
         jobs: Arc::new(RwLock::new(HashMap::new())),
+        minimax: Arc::default(),
+        minimax_cancellations: Arc::default(),
         openrouter_music_stops: Arc::new(RwLock::new(HashMap::new())),
         music_server,
         engine_log,
@@ -10965,12 +10971,14 @@ async fn run_openrouter_music_generation(
 #[derive(Debug, PartialEq)]
 enum MusicDestination {
     Local(String),
+    Native { engine: String, model: String },
     OpenRouter(Option<String>),
     Unconfigured,
 }
 
 fn music_destination(source: Option<&MusicSource>, config: &StudioConfiguration) -> MusicDestination {
     match source {
+        Some(MusicSource::Native { engine, model }) => MusicDestination::Native { engine: engine.clone(), model: model.clone() },
         Some(MusicSource::Local) => MusicDestination::Local(PRIMARY_MUSIC_ENGINE_ID.to_owned()),
         Some(MusicSource::OpenRouter { model }) => MusicDestination::OpenRouter(Some(model.clone())),
         None => {
@@ -10996,6 +11004,13 @@ async fn submit_music_job(state: AppState, mut request: CreateMusicJobRequest, a
                 return (StatusCode::CONFLICT, Json(failed_request_job(request, "openrouter".into(), reason)));
             }
             return create_openrouter_music_job(state, request, model).await;
+        }
+        MusicDestination::Native { engine, model } => {
+            if retry_engine.is_some_and(|old| old != engine) || engine != native_minimax::ENGINE_ID {
+                let reason = format!("Cannot dispatch the saved request to native engine {engine}.");
+                return (StatusCode::CONFLICT, Json(failed_request_job(request, engine, reason)));
+            }
+            return native_music_jobs::submit_minimax(state, request, model, attempt).await;
         }
         MusicDestination::Local(engine) => engine,
         MusicDestination::Unconfigured => {
@@ -12135,6 +12150,9 @@ async fn cancel_music_job(
         .get(&job_id)
         .cloned()
         .ok_or_else(|| api_error(StatusCode::NOT_FOUND, "Music job was not found.".into()))?;
+    if existing.engine_id == native_minimax::ENGINE_ID {
+        return native_music_jobs::cancel_minimax(&state, existing).await;
+    }
     if existing.engine_id == "openrouter" {
         let mut jobs = state.jobs.write().await;
         let job = jobs.get_mut(&job_id).ok_or_else(|| api_error(StatusCode::NOT_FOUND, "Music job was not found.".into()))?;

@@ -1543,9 +1543,10 @@ fn tools() -> &'static [Tool] {
                 description: "Generate a song locally or with an explicitly selected OpenRouter music model. Local synthesis parameters apply only to YuE2. style: one English sentence (language, genre, vocal, instruments, mood, production, 'N BPM'). lyrics: sections tagged [Verse 1], [Chorus], [Bridge]... one per line, blank line between sections; empty for an instrumental. abc: a score to sing (from score_compose or an edited one), else the model writes its own. cot: full (melody and chords), melody, or off. adapters: installed LoRA ids with strengths per slot (see lora_list). Returns a job; poll song_job_get until completed, the song then is in the library.",
                 schema: || object(json!({
                     "music_source": {
-                        "description": "Use local YuE2 or select a model with music_generation capability from openrouter_catalog. OpenRouter submits a paid request to the selected model.",
+                        "description": "Select local YuE2, an installed native MiniMax profile from minimax_music_profiles, or a cloud model with music_generation capability from openrouter_catalog. OpenRouter submits a paid request to the selected model.",
                         "oneOf": [
                             { "type": "object", "properties": { "kind": { "const": "local" } }, "required": ["kind"] },
+                            { "type": "object", "properties": { "kind": { "const": "native" }, "engine": { "enum": ["minimaxmusic-cpp"] }, "model": { "type": "string", "minLength": 1 } }, "required": ["kind", "engine", "model"] },
                             { "type": "object", "properties": { "kind": { "const": "openrouter" }, "model": { "type": "string", "minLength": 1 } }, "required": ["kind", "model"] }
                         ]
                     },
@@ -2024,6 +2025,12 @@ fn tools() -> &'static [Tool] {
                 description: "Delete downloaded model files by component id (see models_catalog), and what a stopped download of them left (partial_bytes in models_catalog): the next download of that component starts from the beginning.",
                 schema: || object(json!({ "ids": { "type": "array", "items": { "type": "string" } } }), &["ids"]),
                 call: |args| post("/setup/remove".into(), args.clone()),
+            },
+            Tool {
+                name: "minimax_music_profiles",
+                description: "List native MiniMax Music 3 profiles, installed weights, and missing model files.",
+                schema: nothing,
+                call: |_| get("/v1/music/native/minimaxmusic-cpp/profiles".into()),
             },
             Tool {
                 name: "engine_logs",
