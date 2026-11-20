@@ -379,6 +379,7 @@ pub struct RuntimeStatus {
     pub server_path: Option<String>,
     pub installed_models: Vec<String>,
     pub running_model: Option<String>,
+    pub loading_model: Option<String>,
     pub base_url: Option<String>,
     pub assets: Vec<AssetStatus>,
     pub active_download: Option<DownloadProgress>,
@@ -407,10 +408,16 @@ pub struct AssistantRuntime {
 struct RuntimeState {
     download: Option<DownloadProgress>,
     server: Option<RunningServer>,
+    generation: u64,
 }
 
 struct RunningServer {
     child: Child,
+    model_path: PathBuf,
+    binary: PathBuf,
+    context_size: u32,
+    reasoning: String,
+    ready: bool,
     model_id: String,
     base_url: String,
 }
@@ -616,8 +623,9 @@ impl AssistantRuntime {
             ready: server_path.is_some() && !models.is_empty(),
             server_path: server_path.map(|path| path.display().to_string()),
             installed_models: models.iter().map(|asset| asset.id.to_string()).collect(),
-            running_model: state.server.as_ref().map(|server| server.model_id.clone()),
-            base_url: state.server.as_ref().map(|server| server.base_url.clone()),
+            running_model: state.server.as_ref().filter(|server| server.ready).map(|server| server.model_id.clone()),
+            loading_model: state.server.as_ref().filter(|server| !server.ready).map(|server| server.model_id.clone()),
+            base_url: state.server.as_ref().filter(|server| server.ready).map(|server| server.base_url.clone()),
             assets: ASSETS
                 .iter()
                 .map(|asset| AssetStatus {
@@ -820,10 +828,17 @@ impl AssistantRuntime {
             .server_binary()
             .ok_or_else(|| anyhow!("the llama.cpp runtime is not installed yet"))?;
 
+        let reasoning = reasoning.unwrap_or("").trim();
         let mut state = self.state.lock().await;
         if let Some(server) = state.server.as_mut() {
-            if server.model_id == model_id && server.is_alive() {
-                return Ok(server.base_url.clone());
+            if server.model_path == model_path && server.binary == binary && server.context_size == context_size
+                && server.reasoning == reasoning && server.is_alive()
+            {
+                let base_url = server.base_url.clone();
+                if server.ready { return Ok(base_url); }
+                let generation = state.generation;
+                drop(state);
+                return self.wait_ready(base_url, generation).await;
             }
         }
         state.server = None;
@@ -870,7 +885,7 @@ impl AssistantRuntime {
         // The same setting the cloud path sends as `reasoning.effort`, in the
         // terms this server understands: whether to think at all, and for how
         // many tokens.
-        match reasoning.map(str::trim).unwrap_or("") {
+        match reasoning {
             "" | "off" | "none" => {
                 command.arg("--reasoning").arg("off");
             }
@@ -894,35 +909,43 @@ impl AssistantRuntime {
             .with_context(|| format!("start llama-server {}", binary.display()))?;
         music_core::process::adopt(&child);
         let base_url = format!("http://127.0.0.1:{port}/v1");
-        let server = RunningServer { child, model_id: model_id.clone(), base_url: base_url.clone() };
-        state.server = Some(server);
+        state.generation += 1;
+        let generation = state.generation;
+        state.server = Some(RunningServer {
+            child, model_path, binary, context_size, reasoning: reasoning.to_owned(), ready: false, model_id, base_url: base_url.clone(),
+        });
         drop(state);
+        self.wait_ready(base_url, generation).await
+    }
+
+    async fn wait_ready(&self, base_url: String, generation: u64) -> Result<String> {
 
         // Loading several gigabytes into VRAM is not instant.
-        let health = format!("http://127.0.0.1:{port}/health");
+        let health = format!("{}/health", base_url.trim_end_matches("/v1"));
         let deadline = Instant::now() + Duration::from_secs(300);
         while Instant::now() < deadline {
-            if self.http.get(&health).timeout(Duration::from_secs(2)).send().await.is_ok_and(|response| response.status().is_success()) {
+            let healthy = self.http.get(&health).timeout(Duration::from_secs(2)).send().await.is_ok_and(|response| response.status().is_success());
+            let mut state = self.state.lock().await;
+            if state.generation != generation { bail!("the writing assistant model changed while it was loading"); }
+            let Some(server) = state.server.as_mut() else { bail!("the writing assistant was stopped while it was loading"); };
+            if !server.is_alive() {
+                state.server = None;
+                bail!("llama-server exited before it became ready:\n{}", self.log_tail());
+            }
+            if healthy {
+                server.ready = true;
+                drop(state);
                 match self.device_lines() {
                     Ok(lines) => lines.iter().for_each(|line| eprintln!("[assistant] {line}")),
                     Err(error) => eprintln!("[ERROR] the assistant's log {} could not be read: {error}", self.log_path().display()),
                 }
                 return Ok(base_url);
             }
-            {
-                let mut state = self.state.lock().await;
-                let Some(server) = state.server.as_mut() else {
-                    bail!("the writing assistant was stopped while it was loading");
-                };
-                if server.child.try_wait().ok().flatten().is_some() {
-                    state.server = None;
-                    drop(state);
-                    bail!("llama-server exited before it became ready:\n{}", self.log_tail());
-                }
-            }
+            drop(state);
             tokio::time::sleep(Duration::from_millis(400)).await;
         }
-        self.stop().await;
+        let mut state = self.state.lock().await;
+        if state.generation == generation && state.server.as_ref().is_some_and(|server| !server.ready) { state.server = None; }
         bail!("llama-server did not become ready in time")
     }
 

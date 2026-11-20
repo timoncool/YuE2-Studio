@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { assistantStatusChanged } from '../services/studioQueries';
+import { assistantStatusChanged, useAssistantRuntime } from '../services/studioQueries';
 import { Check, Loader2, Square } from 'lucide-react';
 import { useI18n } from '../context/I18nContext';
 import { AgentPanel } from './AgentPanel';
@@ -22,6 +22,7 @@ import { loadNativeOpenRouterCatalog, refreshNativeOpenRouterCatalog, type Nativ
 
 interface RuntimeStatus {
   running_model?: string | null;
+  loading_model?: string | null;
   /** This Linux's glibc and the one the CUDA build of llama.cpp needs, when the card runs the Vulkan build instead. */
   llama_note?: { glibc: string; need: string } | null;
   active_download?: { error?: string | null } | null;
@@ -41,7 +42,7 @@ export const AssistantExtras: React.FC<{ engine: string }> = ({ engine }) => {
   const [localKeySet, setLocalKeySet] = useState(false);
   const [openRouterModel, setOpenRouterModel] = useState('');
   const [managedPath, setManagedPath] = useState('');
-  const [runtime, setRuntime] = useState<RuntimeStatus | null>(null);
+  const { data: runtime, refetch: loadRuntime } = useAssistantRuntime<RuntimeStatus>(engine === 'managed');
   const [catalog, setCatalog] = useState<NativeOpenRouterModel[]>([]);
   const [busy, setBusy] = useState<'save' | 'catalog' | null>(null);
   const [message, setMessage] = useState<{ tone: 'ok' | 'error'; text: string } | null>(null);
@@ -140,13 +141,6 @@ export const AssistantExtras: React.FC<{ engine: string }> = ({ engine }) => {
       setMessage({ tone: 'error', text: reason instanceof Error ? reason.message : String(reason) });
     }
   };
-
-  const loadRuntime = React.useCallback(async () => {
-    const response = await fetch('/v1/assistant/runtime');
-    if (response.ok) setRuntime(await response.json());
-  }, []);
-
-  useEffect(() => { void loadRuntime().catch(() => undefined); }, [loadRuntime]);
 
   const stopSidecar = async () => {
     await fetch('/v1/assistant/runtime/stop', { method: 'POST' }).catch(() => undefined);
@@ -323,7 +317,12 @@ export const AssistantExtras: React.FC<{ engine: string }> = ({ engine }) => {
             {t('save')}
           </button>
         )}
-        {runtime?.running_model && (
+        {runtime?.loading_model && (
+          <span role="status" className="inline-flex items-center gap-2 text-xs">
+            <Loader2 size={13} className="animate-spin" /> {t('starting')} {runtime.loading_model}
+          </span>
+        )}
+        {(runtime?.running_model || runtime?.loading_model) && (
           <button
             type="button"
             onClick={() => void stopSidecar()}

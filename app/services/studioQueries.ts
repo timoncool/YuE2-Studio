@@ -73,6 +73,10 @@ export function useAssistantStatus<T extends object>() {
   return useQuery({ queryKey: assistantStatusKey, queryFn: () => readJson<T>('/v1/assistant/status'), refetchInterval: 5_000 });
 }
 
+export function useAssistantRuntime<T extends object>(watch: boolean) {
+  return useQuery({ queryKey: ['assistant-runtime'], queryFn: () => readJson<T>('/v1/assistant/runtime'), refetchInterval: watch ? 2_000 : false });
+}
+
 export function assistantStatusChanged(): void {
   void queryClient.invalidateQueries({ queryKey: assistantStatusKey });
 }
