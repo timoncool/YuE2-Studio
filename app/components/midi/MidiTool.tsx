@@ -207,6 +207,9 @@ export const MidiTool: React.FC<{ songId: string; songTitle: string; card: strin
         {download && !running && (
           <p className="mt-2 text-[11px] tabular-nums text-zinc-500">
             {t('midiDownloading')} {gigabytes(download.downloaded_bytes)} / {gigabytes(download.total_bytes)}
+            <button type="button" disabled={busy} onClick={() => void post('/v1/midi/cancel', {})} className="ml-2 font-semibold text-pink-600 hover:underline disabled:opacity-50">
+              {t('cancelDownload')}
+            </button>
           </p>
         )}
       </div>
