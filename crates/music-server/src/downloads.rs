@@ -482,6 +482,15 @@ impl Downloader {
     /// succeeded, the files arrived, and the interface redrew the same row with
     /// the same download button. That is what "the button does nothing" was.
     pub async fn install_all(&self, scope: &str, assets: &[&'static Asset]) -> Result<()> {
+        self.install_set(scope, assets, None).await
+    }
+
+    pub(crate) async fn install_local_archive(&self, scope: &str, asset: &'static Asset, source: &Path) -> Result<()> {
+        anyhow::ensure!(release_archive_name(asset).is_some(), "this component has no pinned runtime archive");
+        self.install_set(scope, &[asset], Some(source)).await
+    }
+
+    async fn install_set(&self, scope: &str, assets: &[&'static Asset], source: Option<&Path>) -> Result<()> {
         const AT_ONCE: usize = 4;
         let pending: Vec<&'static Asset> = assets.iter().copied().filter(|asset| !self.is_installed(asset)).collect();
         if pending.is_empty() {
@@ -538,7 +547,15 @@ impl Downloader {
                 .collect();
             let reporter = self.publish_sum(finished, total, cells.clone());
             let outcomes =
-                futures_util::future::join_all(batch.iter().zip(&cells).map(|(asset, cell)| self.fetch_now(asset, cell))).await;
+                futures_util::future::join_all(batch.iter().zip(&cells).map(|(asset, cell)| async move {
+                    match source {
+                        Some(archive) => {
+                            let into = (!asset.pick.is_empty() || asset.unzip_into.is_some()).then(|| self.picked_into(asset));
+                            settle_apart(asset, archive.to_owned(), self.record_of(asset), self.root.clone(), into).await
+                        }
+                        None => self.fetch_now(asset, cell).await,
+                    }
+                })).await;
             reporter.abort();
             finished += batch.iter().map(|asset| asset.bytes).sum::<u64>();
             if let Some((asset, error)) = batch.iter().zip(outcomes).find_map(|(asset, result)| result.err().map(|error| (*asset, error))) {
@@ -729,7 +746,7 @@ async fn fetch(
     outcome.map(|()| target.to_path_buf())
 }
 
-fn release_archive_name(asset: &Asset) -> Option<&'static str> {
+pub(crate) fn release_archive_name(asset: &Asset) -> Option<&'static str> {
     if asset.kind != AssetKind::Runtime || (asset.unzip_into.is_none() && asset.pick.is_empty()) || crate::pin_sha::sha256(asset.url).is_none() {
         return None;
     }
@@ -1058,6 +1075,10 @@ async fn settle_apart(asset: &'static Asset, target: PathBuf, record: PathBuf, r
         let sha256 = crate::pin_sha::check(asset.url, &target)?;
         replace_earlier(&record, &root, &target)?;
         let files = match unpack_into {
+            Some(folder) if !asset.pick.is_empty() => {
+                fs::create_dir_all(&folder)?;
+                extract_named_local(&target, asset.pick, &folder)?
+            }
             Some(folder) => extract_archive(&target, &folder)?,
             None => vec![target.clone()],
         };
