@@ -89,6 +89,7 @@ async fn exports_same_title_originals_and_reports_the_failing_song() -> anyhow::
     assert_eq!(
         archive
             .file_names()
+            .filter_map(Result::ok)
             .filter(|name| name.ends_with("/audio.wav"))
             .count(),
         2
