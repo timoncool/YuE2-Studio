@@ -9561,13 +9561,13 @@ fn adoptable_sources(components: &[model_manager::Component], root: &std::path::
         .iter()
         .filter_map(|component| {
             let sized = |path: &std::path::Path| std::fs::metadata(path).map(|meta| meta.is_file() && meta.len() == component.bytes).unwrap_or(false);
-            if sized(&root.join(component.filename)) {
+            if sized(&root.join(component.filename)) && model_manager::verified_file(&root.join(component.filename), component).unwrap_or(false) {
                 return None;
             }
             entries
                 .iter()
-                .find(|path| path.file_name().is_some_and(|name| name == component.filename) && sized(path))
-                .or_else(|| entries.iter().filter(|path| sized(path)).find(|path| model_manager::verified_file(path, component).unwrap_or(false)))
+                .find(|path| path.file_name().is_some_and(|name| name == component.filename) && sized(path) && model_manager::verified_file(path, component).unwrap_or(false))
+                .or_else(|| entries.iter().filter(|path| path.file_name().is_some_and(|name| name != component.filename) && sized(path)).find(|path| model_manager::verified_file(path, component).unwrap_or(false)))
                 .map(|source| (component.clone(), source.clone()))
         })
         .collect()
@@ -9587,6 +9587,11 @@ fn adopt_refusals(components: &[model_manager::Component], root: &std::path::Pat
             let size = std::fs::metadata(path).ok()?.len();
             match components.iter().find(|component| component.filename == name) {
                 Some(component) => {
+                    if size == component.bytes {
+                        return (!model_manager::verified_file(path, component).unwrap_or(false)).then(|| {
+                            serde_json::json!({ "file": name, "kind": "copy", "error": "SHA-256 mismatch", "expected_sha256": component.sha256 })
+                        });
+                    }
                     let installed = std::fs::metadata(root.join(component.filename)).is_ok_and(|meta| meta.len() == component.bytes);
                     (!installed && size != component.bytes).then(|| {
                         serde_json::json!({ "file": name, "kind": "size", "size": size, "needs": component.bytes, "repository": component.repository, "revision": component.revision })
@@ -9602,7 +9607,7 @@ fn adopt_refusals(components: &[model_manager::Component], root: &std::path::Pat
 /// folder hierarchy differs from this studio's. Multiple versions may share a name.
 fn adopt_optional_file(source: &std::path::Path, target: &std::path::Path, sha: &str) -> std::io::Result<bool> {
     if target.exists() {
-        if source.canonicalize()? == target.canonicalize()? || install_record::sha256_of(target).is_ok_and(|value| value == sha) {
+        if same_file::is_same_file(source, target)? || install_record::sha256_of(target).is_ok_and(|value| value == sha) {
             return Ok(false);
         }
         return Err(std::io::Error::new(std::io::ErrorKind::InvalidData, format!("SHA-256 mismatch in the installed file: {}", target.display())));
@@ -9638,9 +9643,6 @@ async fn setup_adopt(State(state): State<AppState>, body: axum::body::Bytes) -> 
     };
 
     let _ = std::fs::create_dir_all(&models_root);
-    let mut adopted: Vec<String> = Vec::new();
-    // a copy is a second set of gigabytes on disk; the window says which files took one
-    let mut copied: Vec<Value> = Vec::new();
     std::fs::read_dir(&folder).map_err(|error| api_error(StatusCode::BAD_REQUEST, error.to_string()))?;
     // Model sets are often kept one component per folder, so the picked
     // folder is searched with its subfolders.
@@ -9652,10 +9654,11 @@ async fn setup_adopt(State(state): State<AppState>, body: axum::body::Bytes) -> 
     let components = catalog.components.clone();
     let root = models_root.clone();
     let optional_state = state.clone();
-    let (found, mut refused, mut optional_ids) = tokio::task::spawn_blocking(move || {
+    let (adopted, copied, refused) = tokio::task::spawn_blocking(move || {
         let found = adoptable_sources(&components, &root, &entries);
         let mut taken: Vec<std::path::PathBuf> = found.iter().map(|(_, source)| source.clone()).collect();
-        let mut optional_ids = Vec::new();
+        let mut adopted = Vec::new();
+        let mut copied = Vec::new();
         let mut by_name = std::collections::HashMap::<std::ffi::OsString, Vec<(&'static str, &'static str, std::path::PathBuf)>>::new();
         let mut errors = Vec::new();
         let mut checked = std::collections::HashSet::new();
@@ -9687,7 +9690,10 @@ async fn setup_adopt(State(state): State<AppState>, body: axum::body::Bytes) -> 
                     if *sha != digest { continue; }
                     matched = true;
                     if adopt_optional_file(source, target, sha)? {
-                        optional_ids.push((*id).to_owned());
+                        adopted.push((*id).to_owned());
+                        if !same_file::is_same_file(source, target)? {
+                            copied.push(serde_json::json!({ "id": id, "bytes": std::fs::metadata(target)?.len() }));
+                        }
                     }
                 }
                 anyhow::ensure!(matched, "SHA-256 does not match a catalogued version of this file");
@@ -9698,28 +9704,30 @@ async fn setup_adopt(State(state): State<AppState>, body: axum::body::Bytes) -> 
             }
         }
         errors.extend(adopt_refusals(&components, &root, &entries, &taken));
-        (found, errors, optional_ids)
+        for (component, source) in found {
+            let target = root.join(component.filename);
+            let result = (|| -> anyhow::Result<()> {
+                let staging = tempfile::tempdir_in(&root)?;
+                let checked = staging.path().join(component.filename);
+                let copied_bytes = if std::fs::hard_link(&source, &checked).is_err() {
+                    Some(std::fs::copy(&source, &checked)?)
+                } else { None };
+                anyhow::ensure!(model_manager::verified_file(&checked, &component)?, "SHA-256 mismatch");
+                std::fs::rename(&checked, &target)?;
+                adopted.push(component.id.to_owned());
+                if let Some(bytes) = copied_bytes {
+                    copied.push(serde_json::json!({ "id": component.id, "bytes": bytes }));
+                }
+                Ok(())
+            })();
+            if let Err(error) = result {
+                errors.push(serde_json::json!({ "file": component.filename, "kind": "copy", "error": error.to_string() }));
+            }
+        }
+        (adopted, copied, errors)
     })
     .await
     .map_err(|error| api_error(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?;
-    adopted.append(&mut optional_ids);
-    for (component, source) in &found {
-        let target = models_root.join(component.filename);
-        // a file of the earlier release under this name gives way to the one found
-        let _ = std::fs::remove_file(&target);
-        // A hard link costs nothing and keeps one copy on disk; a folder on
-        // another drive cannot have one, so that falls back to a copy.
-        if std::fs::hard_link(source, &target).is_err() {
-            match std::fs::copy(source, &target) {
-                Ok(bytes) => copied.push(serde_json::json!({ "id": component.id, "bytes": bytes })),
-                Err(error) => {
-                    refused.push(serde_json::json!({ "file": component.filename, "kind": "copy", "error": error.to_string() }));
-                    continue;
-                }
-            }
-        }
-        adopted.push(component.id.to_string());
-    }
 
     let target = effective_install_target(&state).await;
     let status = state.model_manager.status(target).await;
@@ -13055,6 +13063,8 @@ mod tests {
         let turbo = component("turbo", "turbo.gguf", b"turbo weights");
         let merge = component("merge", "merge.gguf", b"merge weights");
         std::fs::write(folder.path().join("renamed.gguf"), b"turbo weights").unwrap();
+        std::fs::write(folder.path().join("merge.gguf"), b"wrong weights").unwrap();
+        std::fs::write(models.path().join("turbo.gguf"), b"stale weights").unwrap();
         let found = adoptable_sources(&[turbo, merge], models.path(), &adoptable_files(folder.path(), ADOPT_FOLDER_DEPTH));
         assert_eq!(found.iter().map(|(component, _)| component.id).collect::<Vec<_>>(), ["turbo"]);
     }

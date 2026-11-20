@@ -1700,6 +1700,7 @@ export const zh = {
     removeDownloaded: '删除已下载的文件并释放磁盘空间',
     dataFolder: '工作室保存的全部内容',
     openFolder: '打开文件夹',
+    checkingExistingModels: '正在检查所选文件夹中的文件…',
     adoptTaken: '从文件夹取用了 {count} 个文件。',
     adoptCopied: '另一块磁盘无法共享，因此已复制：多占用 {size}。',
     adoptMissing: '仍需下载：{files}。',
