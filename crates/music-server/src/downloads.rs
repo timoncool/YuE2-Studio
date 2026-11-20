@@ -748,6 +748,34 @@ fn check_staged_archive(url: &str, archive: &Path) -> Result<String> {
     Ok(sha256)
 }
 
+/// ONNX releases may be unreachable from networks that cannot connect to GitHub at all (#276).
+/// Only offer these mirrors for known, hash-pinned release files. Installation still checks the original pin.
+fn onnx_mirrors(url: &str) -> Option<[String; 2]> {
+    let name = url.strip_prefix("https://github.com/timoncool/onnxruntime/releases/download/v1.31.1/")?;
+    crate::pin_sha::sha256(url)?;
+    Some([
+        format!("https://dl.photoprism.app/onnx/runtime/v1.31.1/{name}"),
+        format!("https://registry.npmmirror.com/-/binary/onnxruntime/v1.31.1/{name}"),
+    ])
+}
+
+async fn unless_cancelled<T>(cancel: &std::sync::atomic::AtomicBool, work: impl std::future::Future<Output = Result<T>>) -> Result<T> {
+    tokio::select! {
+        biased;
+        _ = async {
+            while !cancel.load(std::sync::atomic::Ordering::Relaxed) {
+                tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+            }
+        } => bail!("cancelled"),
+        result = work => result,
+    }
+}
+
+fn try_another_onnx_source(error: &anyhow::Error) -> bool {
+    matches!(failure_code(error), "network" | "http_status" | "rate_limited" | "size_mismatch" | "hash_mismatch")
+        || error.chain().any(|cause| cause.downcast_ref::<reqwest::Error>().is_some_and(|error| error.is_body() || error.is_decode() || error.is_request() || error.is_timeout()))
+}
+
 /// `fetch` once nothing lies at `target`: from another program that has the file, or downloaded into `.part`.
 async fn fetch_absent(
     http: &reqwest::Client,
@@ -759,9 +787,47 @@ async fn fetch_absent(
     // How big it is and whether it can be fetched in pieces, asked of the
     // server rather than assumed - both answers come from one ranged byte.
     let url = crate::net::model_url(asset.url);
-    let (plan, url) = crate::chunked::probe(http, &url).await?;
+    if let Some([photoprism, npmmirror]) = onnx_mirrors(asset.url) {
+        return fetch_onnx_sources(http, asset, target, progress, cancel, [url, photoprism, npmmirror]).await;
+    }
+    fetch_from(http, asset, target, progress, cancel, &url, false).await
+}
+
+async fn fetch_onnx_sources(
+    http: &reqwest::Client,
+    asset: &Asset,
+    target: &Path,
+    progress: &Arc<Mutex<Option<DownloadProgress>>>,
+    cancel: Arc<std::sync::atomic::AtomicBool>,
+    sources: [String; 3],
+) -> Result<()> {
+    let mut failures = Vec::new();
+    for source in &sources {
+        match fetch_from(http, asset, target, progress, cancel.clone(), source, true).await {
+            Ok(()) => return Ok(()),
+            Err(_) if cancel.load(std::sync::atomic::Ordering::Relaxed) => bail!("cancelled"),
+            Err(error) if !try_another_onnx_source(&error) => return Err(error),
+            Err(error) => failures.push(format!("{source}: {error:#}")),
+        }
+    }
+    bail!("{}", failures.join(" | "))
+}
+
+async fn fetch_from(
+    http: &reqwest::Client,
+    asset: &Asset,
+    target: &Path,
+    progress: &Arc<Mutex<Option<DownloadProgress>>>,
+    cancel: Arc<std::sync::atomic::AtomicBool>,
+    source: &str,
+    is_onnx: bool,
+) -> Result<()> {
+    let probe = crate::chunked::probe(http, source);
+    let (plan, url) = if is_onnx { unless_cancelled(&cancel, probe).await? } else { probe.await? };
     if plan.total > 0 {
-        crate::sizes::learn(asset.url, plan.total);
+        if !is_onnx {
+            crate::sizes::learn(asset.url, plan.total);
+        }
         // another program of timoncool's has it: taken from there, by copy too when it is on another drive
         let (to, total, pinned) = (target.to_path_buf(), plan.total, asset.url);
         let taken = tokio::task::spawn_blocking(move || {
@@ -797,7 +863,13 @@ async fn fetch_absent(
             }
         })
     };
-    let outcome = crate::chunked::fetch(http, &url, &part, plan, written.clone(), cancel).await;
+    let outcome = if is_onnx {
+        // A failed range stops its sibling workers, independently of the user's cancel flag.
+        let attempt_stop = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        unless_cancelled(&cancel, crate::chunked::fetch(http, &url, &part, plan, written.clone(), attempt_stop)).await
+    } else {
+        crate::chunked::fetch(http, &url, &part, plan, written.clone(), cancel.clone()).await
+    };
     reporter.abort();
     outcome?;
     if let Some(active) = progress.lock().await.as_mut() {
@@ -807,6 +879,14 @@ async fn fetch_absent(
     let size = fs::metadata(&part)?.len();
     if plan.total > 0 && size != plan.total {
         bail!("{} has {size} bytes, the server said {}", asset.label, plan.total);
+    }
+    if is_onnx {
+        let (original, staged) = (asset.url, part.clone());
+        tokio::task::spawn_blocking(move || crate::pin_sha::check(original, &staged)).await??;
+        crate::sizes::learn(asset.url, size);
+        if cancel.load(std::sync::atomic::Ordering::Relaxed) {
+            bail!("cancelled");
+        }
     }
     fs::rename(&part, target).with_context(|| format!("publish {}", target.display()))?;
     Ok(())
@@ -1277,6 +1357,111 @@ pub fn failure_code(error: &anyhow::Error) -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    const ONNX_FIXTURE_PIN: &str = "https://github.com/timoncool/onnxruntime/releases/download/v1.31.1/onnxruntime-win-x64-1.31.1.zip";
+
+    async fn onnx_fixture(app: axum::Router) -> (String, tokio::task::JoinHandle<()>) {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let base = format!("http://{}", listener.local_addr().unwrap());
+        let server = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+        (base, server)
+    }
+
+    #[tokio::test]
+    async fn onnx_switches_source_when_the_body_breaks_after_a_successful_probe() {
+        use axum::{body::{Body, Bytes}, http::{HeaderMap, Response}};
+        let app = axum::Router::new()
+            .route("/broken", axum::routing::get(|headers: HeaderMap| async move {
+                if headers.contains_key("range") {
+                    return Response::new(Body::from("archive"));
+                }
+                let body = futures_util::stream::unfold(false, |first_sent| async move {
+                    if first_sent {
+                        tokio::time::sleep(std::time::Duration::from_millis(25)).await;
+                        Some((Err(io::Error::from(io::ErrorKind::ConnectionReset)), true))
+                    } else {
+                        Some((Ok(Bytes::from_static(b"arch")), true))
+                    }
+                });
+                Response::builder().header("content-length", 7).body(Body::from_stream(body)).unwrap()
+            }))
+            .route("/copy", axum::routing::get(|| async { "archive" }));
+        let (base, server) = onnx_fixture(app).await;
+        let root = tempfile::tempdir().unwrap();
+        let target = root.path().join("test.zip");
+        let http = reqwest::Client::builder().no_proxy().build().unwrap();
+        let cancel = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        fetch_onnx_sources(&http, &asset(), &target, &Arc::new(Mutex::new(None)), cancel.clone(),
+            [format!("{base}/broken"), format!("{base}/copy"), format!("{base}/unused")]).await.unwrap();
+        assert_eq!(fs::read(&target).unwrap(), b"archive");
+        assert!(!cancel.load(std::sync::atomic::Ordering::Relaxed));
+        assert!(!target.with_extension("part").exists());
+        server.abort();
+    }
+
+    #[tokio::test]
+    async fn onnx_cancelled_after_probe_never_starts_a_mirror() {
+        use axum::{body::{Body, Bytes}, http::{HeaderMap, Response}};
+        use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+        let body_started = Arc::new(tokio::sync::Notify::new());
+        let mirror_hits = Arc::new(AtomicUsize::new(0));
+        let app = axum::Router::new()
+            .route("/stall", axum::routing::get({
+                let body_started = body_started.clone();
+                move |headers: HeaderMap| async move {
+                    if headers.contains_key("range") {
+                        return Response::new(Body::from("archive"));
+                    }
+                    body_started.notify_one();
+                    let body = futures_util::stream::pending::<std::result::Result<Bytes, io::Error>>();
+                    Response::builder().header("content-length", 7).body(Body::from_stream(body)).unwrap()
+                }
+            }))
+            .route("/mirror", axum::routing::get({
+                let mirror_hits = mirror_hits.clone();
+                move || async move {
+                    mirror_hits.fetch_add(1, Ordering::Relaxed);
+                    "archive"
+                }
+            }));
+        let (base, server) = onnx_fixture(app).await;
+        let root = tempfile::tempdir().unwrap();
+        let target = root.path().join("test.zip");
+        let http = reqwest::Client::builder().no_proxy().build().unwrap();
+        let cancel = Arc::new(AtomicBool::new(false));
+        let progress = Arc::new(Mutex::new(None));
+        let asset = asset();
+        let download = fetch_onnx_sources(&http, &asset, &target, &progress, cancel.clone(),
+            [format!("{base}/stall"), format!("{base}/mirror"), format!("{base}/mirror")]);
+        let (outcome, ()) = tokio::time::timeout(std::time::Duration::from_secs(3), async {
+            tokio::join!(download, async {
+                body_started.notified().await;
+                cancel.store(true, Ordering::Relaxed);
+            })
+        }).await.unwrap();
+        assert_eq!(outcome.unwrap_err().to_string(), "cancelled");
+        assert_eq!(mirror_hits.load(Ordering::Relaxed), 0);
+        assert!(!target.exists());
+        server.abort();
+    }
+
+    #[tokio::test]
+    async fn onnx_rejects_wrong_sha_before_publishing_and_uses_only_pinned_mirrors() {
+        assert!(onnx_mirrors(ONNX_FIXTURE_PIN).is_some());
+        assert!(onnx_mirrors(&ONNX_FIXTURE_PIN.replace("win-x64", "unlisted")).is_none());
+        let app = axum::Router::new().route("/copy", axum::routing::get(|| async { "archive" }));
+        let (base, server) = onnx_fixture(app).await;
+        let root = tempfile::tempdir().unwrap();
+        let target = root.path().join("test.zip");
+        let http = reqwest::Client::builder().no_proxy().build().unwrap();
+        let entry = Asset { url: ONNX_FIXTURE_PIN, ..asset() };
+        let error = fetch_onnx_sources(&http, &entry, &target, &Arc::new(Mutex::new(None)),
+            Arc::new(std::sync::atomic::AtomicBool::new(false)), std::array::from_fn(|_| format!("{base}/copy"))).await.unwrap_err();
+        assert_eq!(failure_code(&error), "hash_mismatch");
+        assert!(!target.exists());
+        assert!(!target.with_extension("part").exists());
+        server.abort();
+    }
 
     fn asset() -> Asset {
         Asset {
