@@ -93,39 +93,63 @@ pub struct InstalledProfile {
 
 pub struct Installation {
     executable: Option<PathBuf>,
-    models_root: PathBuf,
+    model_roots: Vec<PathBuf>,
     data_root: PathBuf,
 }
 
 pub fn installation(data_root: &Path) -> Installation {
-    let data_root = data_root.to_owned();
-    let executable = match std::env::var_os("ACE_ENGINE_BIN") {
-        Some(path) => {
-            let path = PathBuf::from(path);
-            usable_executable(&path).then_some(path)
-        }
-        None => {
-            let managed = data_root.join("engines").join(ENGINE_ID);
-            let packaged = crate::engine_bundle_root().with_file_name(ENGINE_ID);
-            std::env::var_os("ACE_ENGINE_ROOT")
-                .map(PathBuf::from)
-                .map_or_else(
-                    || {
-                        [managed, packaged]
-                            .iter()
-                            .find_map(|root| find_executable(root))
-                    },
-                    |root| find_executable(&root),
-                )
-        }
+    let neighbors = studio_hub_client::neighbors::others(data_root);
+    installation_from(
+        data_root,
+        crate::engine_bundle_root().with_file_name(ENGINE_ID),
+        std::env::var_os("ACE_ENGINE_BIN").map(PathBuf::from),
+        std::env::var_os("ACE_ENGINE_ROOT").map(PathBuf::from),
+        std::env::var_os("ACE_MODELS_ROOT").map(PathBuf::from),
+        &neighbors,
+    )
+}
+
+fn installation_from(
+    data_root: &Path,
+    packaged: PathBuf,
+    engine_bin: Option<PathBuf>,
+    engine_root: Option<PathBuf>,
+    models_root: Option<PathBuf>,
+    neighbors: &[studio_hub_client::neighbors::Neighbor],
+) -> Installation {
+    let registered = neighbors
+        .iter()
+        .filter(|entry| entry.app == "ace")
+        .map(|entry| entry.data_dir.as_path());
+    let managed = data_root.join("engines").join(ENGINE_ID);
+    let executable = match (engine_bin, engine_root) {
+        (Some(path), _) => usable_executable(&path).then_some(path),
+        (None, Some(root)) => find_executable(&root),
+        (None, None) => [managed, packaged]
+            .iter()
+            .find_map(|root| find_executable(root))
+            .or_else(|| {
+                registered
+                    .clone()
+                    .filter_map(Path::parent)
+                    .find_map(|install| {
+                        // The released Studio stores ace-server under resources/engine
+                        // beside its portable data folder.
+                        find_executable(&install.join("resources").join("engine"))
+                    })
+            }),
     };
-    let models_root = std::env::var_os("ACE_MODELS_ROOT")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| data_root.join("models").join(ENGINE_ID));
+    let model_roots = match models_root {
+        Some(root) => vec![root],
+        None => std::iter::once(data_root)
+            .chain(registered)
+            .map(|root| root.join("models").join(ENGINE_ID))
+            .collect(),
+    };
     Installation {
         executable,
-        models_root,
-        data_root,
+        model_roots,
+        data_root: data_root.into(),
     }
 }
 
@@ -159,8 +183,29 @@ impl Installation {
     pub fn profiles(&self) -> Vec<InstalledProfile> {
         PROFILES
             .iter()
-            .map(|profile| profile.status(&self.models_root))
+            .map(|profile| self.profile_root(profile).1)
             .collect()
+    }
+
+    fn profile_root(&self, profile: &Profile) -> (&Path, InstalledProfile) {
+        // Choose a complete profile from a single installation. Incomplete
+        // candidates are useful for reporting the fewest still-missing files.
+        let mut candidates = self
+            .model_roots
+            .iter()
+            .map(|root| (root.as_path(), profile.status(root)));
+        let mut best = candidates
+            .next()
+            .expect("there is always a managed or explicit model directory");
+        for candidate in candidates {
+            if best.1.ready {
+                break;
+            }
+            if candidate.1.missing.len() < best.1.missing.len() {
+                best = candidate;
+            }
+        }
+        best
     }
 
     pub fn launch(&self, profile_id: &str) -> Result<Launch> {
@@ -178,7 +223,7 @@ impl Installation {
                     self.data_root.join("engines").join(ENGINE_ID).display()
                 )
             })?;
-        let models_root = profile.prepare_directory(&self.models_root)?;
+        let models_root = profile.prepare_directory(self.profile_root(profile).0)?;
         let adapters = self.data_root.join("adapters").join(ENGINE_ID);
         Ok(Launch {
             executable: executable.clone(),
@@ -375,5 +420,96 @@ mod tests {
         assert_eq!(fs::read(first.join("encoder.gguf")).unwrap(), b"old");
         assert_eq!(fs::read(second.join("encoder.gguf")).unwrap(), b"new");
         fs::remove_dir_all(&root).unwrap();
+    }
+}
+
+#[cfg(test)]
+mod discovery_tests {
+    use super::*;
+    use studio_hub_client::neighbors::Neighbor;
+
+    #[test]
+    fn registered_portable_ace_keeps_weights_beside_their_source_volume() {
+        let tempfile = std::env::temp_dir().join(format!("ace-discovery-{}", uuid::Uuid::now_v7()));
+        let own = tempfile.join("new/data");
+        let portable = tempfile.join("portable");
+        let data = portable.join("data");
+        let source = data.join("models").join(ENGINE_ID);
+        let bundled = portable.join("resources/engine");
+        let engine_name = if cfg!(windows) {
+            "ace-server.exe"
+        } else {
+            "ace-server"
+        };
+        fs::create_dir_all(&source).unwrap();
+        fs::create_dir_all(&bundled).unwrap();
+        fs::write(bundled.join(engine_name), b"fixture").unwrap();
+        let neighbor = Neighbor {
+            app: "ace".into(),
+            version: "3.7.0".into(),
+            data_dir: data,
+            seen: 1,
+        };
+        let profile = Profile {
+            id: "portable",
+            label: "Portable",
+            weights: [
+                Weight {
+                    name: "dit.gguf",
+                    bytes: 3,
+                },
+                Weight {
+                    name: "lm.gguf",
+                    bytes: 3,
+                },
+                Weight {
+                    name: "encoder.gguf",
+                    bytes: 3,
+                },
+                Weight {
+                    name: "vae.gguf",
+                    bytes: 3,
+                },
+            ],
+        };
+        for weight in profile.weights {
+            fs::write(source.join(weight.name), b"abc").unwrap();
+        }
+        let empty_package = tempfile.join("missing-package");
+        let discover = |bin, root| {
+            installation_from(
+                &own,
+                empty_package.clone(),
+                bin,
+                None,
+                root,
+                std::slice::from_ref(&neighbor),
+            )
+        };
+        let installed = discover(None, None);
+        assert_eq!(installed.executable.unwrap(), bundled.join(engine_name));
+        let installed = discover(None, None);
+        assert_eq!(installed.profile_root(&profile).0, source);
+        assert!(installed.profile_root(&profile).1.ready);
+        assert!(profile
+            .prepare_directory(installed.profile_root(&profile).0)
+            .unwrap()
+            .starts_with(source.canonicalize().unwrap()));
+
+        let own_models = own.join("models").join(ENGINE_ID);
+        fs::create_dir_all(&own_models).unwrap();
+        for weight in profile.weights {
+            fs::write(own_models.join(weight.name), b"xyz").unwrap();
+        }
+        assert_eq!(discover(None, None).profile_root(&profile).0, own_models);
+        let explicit_missing = tempfile.join("explicit-missing");
+        let explicit = discover(
+            Some(explicit_missing.clone()),
+            Some(explicit_missing.clone()),
+        );
+        assert!(!explicit.engine_installed());
+        assert_eq!(explicit.profile_root(&profile).0, explicit_missing);
+        assert!(!explicit.profile_root(&profile).1.ready);
+        fs::remove_dir_all(tempfile).unwrap();
     }
 }
