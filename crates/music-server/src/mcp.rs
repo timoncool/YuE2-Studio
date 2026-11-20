@@ -452,6 +452,7 @@ const JOURNAL: &[(&str, &str, &str)] = &[
     ("library_import_audio", "imported", "song"),
     ("library_version_select", "updated", "song"),
     ("library_version_delete", "deleted", "version"),
+    ("album_reorder", "updated", "library"),
     ("playlist_create", "created", "playlist"),
     ("playlist_update", "updated", "playlist"),
     ("playlist_delete", "deleted", "playlist"),
