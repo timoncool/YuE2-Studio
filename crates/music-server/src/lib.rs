@@ -5815,15 +5815,14 @@ async fn engine_at_work(state: &AppState) -> bool {
     (working || score_at_work(state).await) && state.engine.lock().await.as_mut().is_some_and(|engine| engine.process_alive())
 }
 
-/// Stops what holds the model files open - the engine this studio started and the writing assistant - so the files
-/// can be moved. Answers whether an engine was running, for the caller to start it again; the caller holds
-/// `engine_use`, so nothing starts one meanwhile.
-async fn stop_engine_for_files(state: &AppState) -> Result<bool, String> {
+/// Stops the local engine and assistant under the caller's exclusive engine-use lock.
+/// Returns whether the caller should restore the engine afterwards.
+async fn stop_engine_and_assistant(state: &AppState) -> Result<bool, String> {
     let was_running = {
         let mut supervisor = state.engine.lock().await;
         match supervisor.as_mut() {
             Some(engine) => tokio::task::block_in_place(|| engine.stop(std::time::Duration::from_secs(10)))
-                .map_err(|error| format!("could not stop the engine before moving models: {error:#}"))?
+                .map_err(|error| format!("could not stop the local engine: {error:#}"))?
                 .was_running,
             None => false,
         }

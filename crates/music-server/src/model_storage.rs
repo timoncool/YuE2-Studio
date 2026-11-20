@@ -563,7 +563,7 @@ pub async fn change(State(state): State<AppState>, Json(change): Json<Change>) -
     }
     tokio::spawn(async move {
         let _held = held;
-        let engine_was_up = match crate::stop_engine_for_files(&state).await {
+        let engine_was_up = match crate::stop_engine_and_assistant(&state).await {
             Ok(was_up) => was_up,
             Err(error) => {
                 job().lock().unwrap_or_else(std::sync::PoisonError::into_inner).0 = Move { error: Some(error), ..Move::default() };

@@ -306,20 +306,20 @@ pub async fn describe_song_style(State(state): State<AppState>, Path(song_id): P
         .ok_or_else(|| api_error(StatusCode::NOT_FOUND, format!("no library song {song_id}")))?;
     crate::refuse_trashed(&song)?;
     let audio = state.library.media_path_for_song(&song).ok_or_else(|| api_error(StatusCode::BAD_REQUEST, format!("{} has no audio", song.title)))?;
-    describe_style_of(&state, audio, &song.lyrics).await
+    describe_style_of(state, audio, song.lyrics).await
 }
 
 /// The style of a recording the cover form took from disk (`audio` part), by
 /// ear as for a library song; `lyrics` are the form's words.
 pub async fn describe_recording_style(State(state): State<AppState>, mut multipart: axum::extract::Multipart) -> Result<Json<serde_json::Value>, (StatusCode, Json<ApiError>)> {
-    let mut audio: Option<(Vec<u8>, String)> = None;
+    let mut audio = None;
     let mut lyrics = String::new();
     while let Some(field) = multipart.next_field().await.map_err(|error| api_error(StatusCode::BAD_REQUEST, error.to_string()))? {
         match field.name().unwrap_or_default() {
             "audio" => {
                 let name = field.file_name().unwrap_or("recording.wav").to_owned();
                 let bytes = field.bytes().await.map_err(|error| api_error(StatusCode::BAD_REQUEST, error.to_string()))?;
-                audio = Some((bytes.to_vec(), name));
+                audio = Some((bytes, name));
             }
             "lyrics" => lyrics = field.text().await.map_err(|error| api_error(StatusCode::BAD_REQUEST, error.to_string()))?,
             _ => {}
@@ -330,14 +330,22 @@ pub async fn describe_recording_style(State(state): State<AppState>, mut multipa
         return Err(api_error(StatusCode::BAD_REQUEST, "The audio is empty.".into()));
     }
     let extension = std::path::Path::new(&name).extension().and_then(|value| value.to_str()).unwrap_or("wav").to_ascii_lowercase();
-    let path = std::env::temp_dir().join(format!("yue2-describe-{}.{extension}", uuid::Uuid::new_v4().simple()));
-    tokio::fs::write(&path, &bytes).await.map_err(|error| api_error(StatusCode::INTERNAL_SERVER_ERROR, format!("write {}: {error}", path.display())))?;
-    let described = describe_style_of(&state, path.clone(), &lyrics).await;
-    let _ = tokio::fs::remove_file(&path).await;
-    described
+    let path = tempfile::Builder::new().prefix("yue2-describe-").suffix(&format!(".{extension}")).tempfile()
+        .map_err(|error| api_error(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?.into_temp_path();
+    tokio::fs::write(&path, bytes).await.map_err(|error| api_error(StatusCode::INTERNAL_SERVER_ERROR, format!("write {}: {error}", path.display())))?;
+    describe_style_of(state, path, lyrics).await
 }
 
-async fn describe_style_of(state: &AppState, audio: std::path::PathBuf, lyrics: &str) -> Result<Json<serde_json::Value>, (StatusCode, Json<ApiError>)> {
+async fn describe_style_of(state: AppState, audio: impl AsRef<std::path::Path> + Send + 'static, lyrics: String) -> Result<Json<serde_json::Value>, (StatusCode, Json<ApiError>)> {
+    let exclusive = state.engine_use.clone().try_write_owned()
+        .map_err(|_| api_error(StatusCode::CONFLICT, "the engine is busy; describe once it is free".into()))?;
+    // A disconnected window must not release the engine while the blocking captioner is still running.
+    tokio::spawn(async move {
+        hear_style(&state, audio.as_ref().to_owned(), &lyrics, exclusive).await
+    }).await.map_err(|error| api_error(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?
+}
+
+async fn hear_style(state: &AppState, audio: std::path::PathBuf, lyrics: &str, exclusive: tokio::sync::OwnedRwLockWriteGuard<()>) -> Result<Json<serde_json::Value>, (StatusCode, Json<ApiError>)> {
     if !state.training.listen_ready() {
         return Err(api_error(StatusCode::CONFLICT, "auto-describe (MOSS-Music) is not installed; install it on the training page".into()));
     }
@@ -350,9 +358,12 @@ async fn describe_style_of(state: &AppState, audio: std::path::PathBuf, lyrics: 
         return Err(api_error(StatusCode::CONFLICT, "a song is being made on the card; describe once it is done".into()));
     }
 
-    let hooks = crate::card_hooks(state).await;
-    (hooks.take)().await;
-    crate::release_assistant_unless_kept(state).await;
+    let restart = if crate::models_kept(state).await {
+        crate::stop_engine_and_assistant(state).await.map_err(|error| api_error(StatusCode::INTERNAL_SERVER_ERROR, error))?
+    } else {
+        crate::free_the_card_for_the_engine(state).await;
+        false
+    };
     let hearing = listen::hearing(&crate::hardware::hardware(), crate::processor_chosen(state).await);
     let heard = async {
         if hearing.on_card && crate::hardware::hardware().card_cuda == Some(crate::hardware::CudaBuild::Cuda13) {
@@ -371,7 +382,10 @@ async fn describe_style_of(state: &AppState, audio: std::path::PathBuf, lyrics: 
         .await?
     }
     .await;
-    (hooks.give_back)().await;
+    if restart {
+        crate::restart_engine(state).await.map_err(|error| api_error(StatusCode::BAD_GATEWAY, error))?;
+    }
+    drop(exclusive);
     let (heard, facts) = heard.map_err(|error| api_error(StatusCode::BAD_GATEWAY, format!("{error:#}")))?;
 
     let note = training::HeardNote { genre: heard.genre.clone(), caption: heard.caption.clone(), bpm: facts.bpm };
