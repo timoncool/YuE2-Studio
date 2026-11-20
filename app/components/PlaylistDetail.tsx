@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { Song } from '../services/api';
 import { useI18n } from '../context/I18nContext';
-import { ArrowLeft, Play, Pause, MoreHorizontal, Clock, Shuffle, Trash2, Pencil, GripVertical, Plus, Search, Check, ListMusic } from 'lucide-react';
+import { ArrowLeft, Play, Pause, MoreHorizontal, Clock, Shuffle, Trash2, Pencil, GripVertical, Plus, Search, Check, ListMusic, Info } from 'lucide-react';
 import { deleteNativePlaylist, parseDuration, updateNativePlaylist } from '../services/nativeLibrary';
 import { updateLibraryPlaylists, useLibraryPlaylists, useLibrarySongs } from '../services/studioQueries';
 import { named } from '../services/accessibleName';
@@ -351,6 +351,17 @@ export const PlaylistDetail: React.FC<PlaylistDetailProps> = ({ playlistId, onBa
 
                                     <div className="flex items-center justify-end gap-3 md:gap-4">
                                         <span className="hidden md:inline font-mono text-xs">{song.duration || '0:00'}</span>
+                                        <button
+                                            type="button"
+                                            onClick={(event) => {
+                                                event.stopPropagation();
+                                                onSelect(song);
+                                            }}
+                                            {...named(t('songDetails'))}
+                                            className="p-2 text-zinc-500 transition-colors hover:text-white focus-visible:text-white md:p-0"
+                                        >
+                                            <Info size={16} />
+                                        </button>
                                         <button
                                             onClick={(e) => {
                                                 e.stopPropagation();
