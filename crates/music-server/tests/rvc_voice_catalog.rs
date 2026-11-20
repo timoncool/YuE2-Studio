@@ -8,7 +8,7 @@ use reqwest::{
     multipart::{Form, Part},
     Client, StatusCode,
 };
-use serde_json::Value;
+use serde_json::{json, Value};
 use tokio::{
     net::TcpListener,
     process::Command,
@@ -142,6 +142,45 @@ async fn imports_rvc_checkpoint_and_optional_index_through_the_catalog() {
         fs::read(indexed_files.join("retrieval.index")).unwrap(),
         index(768)
     );
+    let model = root.path().join("my-rvc-v2.pt");
+    let retrieval = root.path().join("v2.index");
+    fs::write(&model, checkpoint()).unwrap();
+    fs::write(&retrieval, index(768)).unwrap();
+    let rpc = |id, name, args: Value| {
+        client
+            .post(format!("{base}/mcp"))
+            .header("Accept", "application/json, text/event-stream")
+            .json(&json!({"jsonrpc":"2.0","id":id,"method":"tools/call",
+                "params":{"name":name,"arguments":args}}))
+    };
+    let tool_import = rpc(
+        1,
+        "rvc_voice_import",
+        json!({"model_path":model, "index_path":retrieval}),
+    )
+    .send()
+    .await
+    .unwrap()
+    .json::<Value>()
+    .await
+    .unwrap();
+    assert_eq!(
+        tool_import["result"]["structuredContent"], indexed,
+        "{tool_import}"
+    );
+    let tool_list = rpc(2, "rvc_voices_list", json!({}))
+        .send()
+        .await
+        .unwrap()
+        .json::<Value>()
+        .await
+        .unwrap();
+    assert_eq!(
+        tool_list["result"]["structuredContent"],
+        json!(list),
+        "{tool_list}"
+    );
+
     assert_eq!(fs::read_dir(&catalog).unwrap().count(), 2);
     studio.kill().await.unwrap();
 }
