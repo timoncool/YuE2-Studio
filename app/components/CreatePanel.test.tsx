@@ -5,6 +5,11 @@ import type { Song, YueRequest } from '../types';
 
 const composeScore = vi.fn();
 const instrumentalScore = vi.fn();
+const recogniseLyrics = vi.fn();
+vi.mock('../services/karaoke', async original => ({
+  ...(await original<typeof import('../services/karaoke')>()),
+  recogniseLyrics: (...args: unknown[]) => recogniseLyrics(...args),
+}));
 
 vi.mock('../context/I18nContext', () => ({ useI18n: () => ({ language: 'en', t: (key: string) => key }) }));
 vi.mock('../services/studioQueries', () => ({
@@ -15,7 +20,7 @@ vi.mock('../services/studioQueries', () => ({
   useSetupStatus: () => ({ isError: false, data: { ready: true, engine_ready: true } }),
 }));
 vi.mock('../services/mcpBridge', () => ({ useBridgeCommand: () => undefined }));
-vi.mock('../services/transcription', () => ({ composeScore: (...args: unknown[]) => composeScore(...args), composePlans: vi.fn(), transcribe: vi.fn() }));
+vi.mock('../services/transcription', () => ({ composeScore: (...args: unknown[]) => composeScore(...args), composePlans: vi.fn(), transcribe: vi.fn(async () => 'X:1\nK:C\nC') }));
 vi.mock('../services/scoreApi', () => ({
   instrumentalScore: (abc: string) => instrumentalScore(abc),
   failed: (answer: { error?: string }) => typeof answer?.error === 'string',
@@ -62,10 +67,10 @@ afterEach(() => {
 
 const flush = () => act(async () => { await new Promise(resolve => setTimeout(resolve, 0)); });
 
-function panel(props: { initialData?: { song: Song; timestamp: number } | null; visible?: boolean }) {
+function panel(props: { initialData?: { song: Song; timestamp: number } | null; visible?: boolean; request?: React.ComponentProps<typeof CreatePanel>['request'] }) {
   return (
     <Activity mode={props.visible === false ? 'hidden' : 'visible'}>
-      <CreatePanel onGenerate={request => sent.push(request)} isGenerating={false} initialData={props.initialData ?? null}
+      <CreatePanel onGenerate={request => sent.push(request)} isGenerating={false} request={props.request} initialData={props.initialData ?? null}
         playlists={[]} onCreatePlaylist={async () => null} playlistId="" onChoosePlaylist={() => undefined} />
     </Activity>
   );
@@ -112,6 +117,22 @@ describe('an instrumental (#217)', () => {
     expect(sent[0].cot).toBe('off');
     expect(sent[0].abc).toBeUndefined();
     expect(sent[0].semantic_tokens).toBeUndefined();
+  });
+});
+
+describe('lyrics from a cover recording', () => {
+  it('keeps text edited while recognition is running', async () => {
+    const song = { id: 'cover', title: 'Cover', lyrics: '' } as Song;
+    act(() => root.render(panel({ request: { id: 7, kind: 'transcribe', song, melodyOnly: true } })));
+    await flush();
+    let finish!: (words: string) => void;
+    recogniseLyrics.mockImplementationOnce(() => new Promise<string>(resolve => { finish = resolve; }));
+    click(buttonNamed('recogniseFromSource')!);
+    expect(recogniseLyrics).toHaveBeenCalledWith({ songId: 'cover' });
+    const lyrics = field('textarea[aria-label="lyrics"]')!;
+    type(lyrics, 'my newer lyrics');
+    await act(async () => finish('older recognition result'));
+    expect(lyrics.value).toBe('my newer lyrics');
   });
 });
 

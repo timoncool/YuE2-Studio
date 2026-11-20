@@ -1046,14 +1046,22 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
   // source and the style is written from that.
   const [hearingLyrics, setHearingLyrics] = useState(false);
   const [confirmHearLyrics, setConfirmHearLyrics] = useState(false);
+  const recognitionRevision = useRef(0);
+  React.useLayoutEffect(() => {
+    return () => { recognitionRevision.current += 1; };
+  }, [coverSongId, coverFile, lyrics, mode]);
+  useEffect(() => { setConfirmHearLyrics(false); }, [coverSongId, coverFile, mode]);
   /** The karaoke recogniser hears what the cover's source sings; the lyrics take it, to be edited. */
   const hearLyrics = async () => {
     if ((!coverSongId && !coverFile) || hearingLyrics) return;
+    const revision = recognitionRevision.current;
     setHearingLyrics(true);
     setError(null);
     try {
-      setLyrics(await recogniseLyrics(coverSongId ? { songId: coverSongId } : { file: coverFile! }));
+      const words = await recogniseLyrics(coverSongId ? { songId: coverSongId } : { file: coverFile! });
+      if (recognitionRevision.current === revision) setLyrics(words);
     } catch (reason) {
+      if (recognitionRevision.current !== revision) return;
       const message = reason instanceof Error ? reason.message : String(reason);
       setError(karaokeReason(t, message) ?? message);
     } finally {
@@ -1479,6 +1487,24 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
                 {transcribing !== null ? `${tt('transcribing')} · ${transcribing}` : tt('coverPickRecording')}
               </button>
               <p className="mt-2 text-[11px] leading-4 text-zinc-500">{tt('coverFromLibraryHint')}</p>
+              {(coverFile || coverSongId) && (
+                <button type="button" disabled={hearingLyrics} aria-busy={hearingLyrics}
+                  onClick={() => (lyrics.trim() ? setConfirmHearLyrics(true) : void hearLyrics())}
+                  className="mt-2 inline-flex items-center gap-2 rounded-md border border-zinc-200 px-2 py-1 text-xs disabled:opacity-50 dark:border-white/10"
+                  title={t('recogniseFromSourceHint')}
+                >
+                  {hearingLyrics ? <Loader2 size={14} className="animate-spin" /> : <Ear size={14} />}
+                  {t('recogniseFromSource')}
+                </button>
+              )}
+              <ConfirmDialog
+                isOpen={confirmHearLyrics}
+                title={t('recogniseFromSource')}
+                message={t('recogniseFromSourceReplace')}
+                confirmLabel={t('recogniseFromSource')}
+                onConfirm={() => { setConfirmHearLyrics(false); void hearLyrics(); }}
+                onCancel={() => setConfirmHearLyrics(false)}
+              />
               {coverAudio && (
                 <div className="mt-3 flex items-center gap-3 rounded-lg border border-zinc-100 bg-zinc-50 p-2 dark:border-white/5 dark:bg-white/3">
                   <audio
@@ -1709,18 +1735,6 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
                 <button type="button" onClick={() => (assistantReady ? void askAssistant('lyrics') : openAssistantSetup())} disabled={assistantReady && (assisting !== null)} className={ICON} title={assistantReady ? t('writeLyrics') : t('setUpAssistant')}>
                   {assisting === 'lyrics' ? <Loader2 size={14} className="animate-spin" /> : <Wand2 size={14} className="text-pink-500" />}
                 </button>
-                {mode === 'cover' && (coverSongId || coverFile) && (
-                  <button
-                    type="button"
-                    onClick={() => (lyrics.trim() ? setConfirmHearLyrics(true) : void hearLyrics())}
-                    disabled={hearingLyrics}
-                    className={ICON}
-                    aria-label={t('recogniseFromSource')}
-                    title={t('recogniseFromSourceHint')}
-                  >
-                    {hearingLyrics ? <Loader2 size={14} className="animate-spin" /> : <Ear size={14} />}
-                  </button>
-                )}
                 <button type="button" onClick={() => setLyrics('')} className={ICON} title={t('resetPrompt')}><RotateCcw size={14} /></button>
               </>
             }
@@ -1739,14 +1753,6 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
               placeholder={'[Verse 1]\n…\n\n[Chorus]\n…'}
               aria-label={t('lyrics')}
               className={`${CONTROL} resize-none overflow-y-auto font-mono text-xs leading-5 custom-scrollbar`}
-            />
-            <ConfirmDialog
-              isOpen={confirmHearLyrics}
-              title={t('recogniseFromSource')}
-              message={t('recogniseFromSourceReplace')}
-              confirmLabel={t('recogniseFromSource')}
-              onConfirm={() => { setConfirmHearLyrics(false); void hearLyrics(); }}
-              onCancel={() => setConfirmHearLyrics(false)}
             />
             {resingFrom && (
               <div className="mt-2 rounded-lg border border-pink-500/25 bg-pink-500/5 p-2 text-[11px] leading-5 text-zinc-600 dark:text-zinc-300">
