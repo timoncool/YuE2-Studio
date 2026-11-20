@@ -9669,21 +9669,26 @@ async fn setup_adopt(State(state): State<AppState>, body: axum::body::Bytes) -> 
         let mut optional_ids = Vec::new();
         let mut optional_names = std::collections::HashSet::new();
         let mut errors = Vec::new();
+        let mut checked = std::collections::HashSet::new();
+        let mut verify = |id: &str, url: &str, target: std::path::PathBuf| {
+            let Some(sha) = pin_sha::sha256(url) else { return };
+            if !checked.insert(target.clone()) { return; }
+            if let Some(name) = target.file_name() { optional_names.insert(name.to_owned()); }
+            match adopt_optional_model(&entries, &target, sha) {
+                Ok(Some(_)) => optional_ids.push(id.to_owned()),
+                Ok(None) => {}
+                Err(error) => errors.push(serde_json::json!({ "file": target, "kind": "copy", "error": error.to_string() })),
+            }
+        };
+        for asset in assistant_runtime::ASSETS.iter().filter(|asset| asset.kind == assistant_runtime::AssetKind::Model) {
+            verify(asset.id, asset.url, optional_state.assistant_runtime.path_of(asset));
+        }
         use update_screen::Part;
         for part in [Part::Karaoke, Part::Separation, Part::Midi, Part::Training, Part::Listening] {
             let Some((downloader, _)) = update_downloader(&optional_state, part) else { continue };
             for asset in update_catalogue(part) {
                 if asset.kind != downloads::AssetKind::Model { continue; }
-                let Some(sha) = pin_sha::sha256(asset.url) else { continue };
-                let target = downloader.path_of(asset);
-                if let Some(name) = target.file_name() { optional_names.insert(name.to_owned()); }
-                match adopt_optional_model(&entries, &target, sha) {
-                    Ok(Some(_)) => {
-                        optional_ids.push(asset.id.to_owned());
-                    }
-                    Ok(None) => {}
-                    Err(error) => errors.push(serde_json::json!({ "file": asset.relative_path, "kind": "copy", "error": error.to_string() })),
-                }
+                verify(asset.id, asset.url, downloader.path_of(asset));
             }
         }
         taken.extend(entries.iter().filter(|path| path.file_name().is_some_and(|name| optional_names.contains(name))).cloned());

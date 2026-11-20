@@ -448,7 +448,7 @@ impl AssistantRuntime {
         }
     }
 
-    fn path_of(&self, asset: &Asset) -> PathBuf {
+    pub(crate) fn path_of(&self, asset: &Asset) -> PathBuf {
         self.root.join(asset.relative_path)
     }
 
