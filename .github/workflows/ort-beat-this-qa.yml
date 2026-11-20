@@ -1,0 +1,37 @@
+name: YuE2 ONNX Beat This Windows and Linux
+on:
+  push:
+    branches: [qa/ort-132-beat-this-20261120]
+permissions:
+  contents: read
+jobs:
+  beat-this:
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [windows-latest, ubuntu-latest]
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 50
+    env:
+      RUSTUP_TOOLCHAIN: stable
+      CARGO_TERM_COLOR: never
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install Linux build libraries
+        if: runner.os == 'Linux'
+        run: sudo apt-get update -q && sudo apt-get install -y -q --no-install-recommends libwayland-dev cmake
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: ort-beat-this
+      - name: Measure the published song with both ORT versions
+        run: python scripts/qa-ort-beat-this.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ort-beat-this-${{ runner.os }}
+          path: |
+            ${{ runner.temp }}/ort-beat-this/results.json
+            ${{ runner.temp }}/ort-beat-this/*.log
