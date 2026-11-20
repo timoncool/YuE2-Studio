@@ -6431,6 +6431,7 @@ async fn engine_serves_selection(state: &AppState) -> Option<bool> {
     };
     Some(
         same(&current.backbone, &wanted.backbone)
+            && same(&current.companion, &wanted.companion)
             && same(&current.vae, &wanted.vae)
             && same_or_none(&current.vae_decoder, &wanted.vae_decoder)
             && same_or_none(&current.transcriber, &wanted.transcriber)
@@ -7015,10 +7016,14 @@ async fn compose_setup_status(state: &AppState, manager_status: model_manager::M
         (None, None) => false,
     };
     if let Value::Object(ref mut fields) = status {
-        fields.insert(
-            "engine_ready".into(),
-            Value::Bool(state.music_server.health().await),
-        );
+        let engine_ready = state.music_server.health().await;
+        let matches_selection = if engine_ready && selected_set_ready {
+            engine_serves_selection(state).await
+        } else {
+            None
+        };
+        fields.insert("engine_ready".into(), Value::Bool(engine_ready));
+        fields.insert("selection_matches_engine".into(), serde_json::json!(matches_selection));
         fields.insert("engine_error".into(), serde_json::to_value(state.engine_start_error.read().await.clone()).unwrap_or(Value::Null));
         // a card is there, yet the engine ended up on the processor: Auto went down its devices one by one
         let fell = *state.active_device.read().await == Some(music_engine::yue_server::ComputeBackend::Cpu)

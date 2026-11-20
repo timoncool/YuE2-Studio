@@ -1,6 +1,7 @@
 /** Strings of the card that says where the studio's downloads are kept and moves them to another disk. Engine-neutral. */
 
 const en = {
+  switchProfileHint: 'Switching to the selected model. Songs already sent to the engine finish first.',
   storageTitle: 'Where the models are kept',
   storageHint: 'The model sets, LoRAs and the other downloads can live on another disk. The studio moves them there and leaves a link where they were, so everything keeps working; your songs, datasets and training runs stay where they are.',
   storageSpace: '{free} free of {total} on this disk · the downloads take {used}',
@@ -30,6 +31,7 @@ const en = {
 type Strings = typeof en;
 
 const ru: Strings = {
+  switchProfileHint: 'Переключаемся на выбранную модель. Сначала движок завершит уже отправленные ему песни.',
   storageTitle: 'Где лежат модели',
   storageHint: 'Наборы моделей, LoRA и остальные закачки можно держать на другом диске. Студия переносит их туда и оставляет на прежнем месте ссылку, поэтому всё продолжает работать; ваши песни, датасеты и прогоны обучения остаются на месте.',
   storageSpace: 'Свободно {free} из {total} на этом диске · закачки занимают {used}',
@@ -57,6 +59,7 @@ const ru: Strings = {
 };
 
 const zh: Strings = {
+  switchProfileHint: '正在切换到所选模型。引擎会先完成已提交的歌曲。',
   storageTitle: '模型存放位置',
   storageHint: '模型套装、LoRA 和其他下载内容可以放在另一个磁盘上。工作室会把它们移过去，并在原处留下一个链接，所以一切照常工作；你的歌曲、数据集和训练记录留在原处。',
   storageSpace: '此磁盘可用 {free}，共 {total} · 下载内容占用 {used}',
@@ -84,6 +87,7 @@ const zh: Strings = {
 };
 
 const ja: Strings = {
+  switchProfileHint: '選択したモデルに切り替えています。送信済みの曲は先に処理されます。',
   storageTitle: 'モデルの保存場所',
   storageHint: 'モデルセット、LoRA、その他のダウンロードは別のディスクに置けます。スタジオがそこへ移し、元の場所にはリンクを残すので、すべてこれまでどおり動きます。曲、データセット、学習の記録はそのままです。',
   storageSpace: 'このディスクの空き {free} / {total} · ダウンロードは {used}',
@@ -111,6 +115,7 @@ const ja: Strings = {
 };
 
 const ko: Strings = {
+  switchProfileHint: '선택한 모델로 전환 중입니다. 엔진에 이미 보낸 곡을 먼저 완료합니다.',
   storageTitle: '모델 보관 위치',
   storageHint: '모델 세트, LoRA, 그 밖의 다운로드는 다른 디스크에 둘 수 있습니다. 스튜디오가 그곳으로 옮기고 원래 자리에는 링크를 남기므로 모든 것이 그대로 동작합니다. 곡, 데이터셋, 학습 기록은 그대로 있습니다.',
   storageSpace: '이 디스크 여유 {free} / {total} · 다운로드가 {used} 사용',
@@ -138,6 +143,7 @@ const ko: Strings = {
 };
 
 const pt: Strings = {
+  switchProfileHint: 'A mudar para o modelo selecionado. O motor termina primeiro as músicas já enviadas.',
   storageTitle: 'Onde ficam os modelos',
   storageHint: 'Os conjuntos de modelos, as LoRAs e as outras transferências podem ficar noutro disco. O estúdio move-os para lá e deixa uma ligação onde estavam, por isso tudo continua a funcionar; as suas músicas, conjuntos de dados e treinos ficam onde estão.',
   storageSpace: '{free} livres de {total} neste disco · as transferências ocupam {used}',

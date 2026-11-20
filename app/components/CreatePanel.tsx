@@ -83,6 +83,8 @@ type SetupStatus = SetupChoice & {
   ready?: boolean;
   profile_files?: ProfileFiles | null;
   engine_ready?: boolean;
+  selection_matches_engine?: boolean | null;
+  engine_error?: string | null;
   effective_max_batch?: number;
   hardware?: { gpuName?: string; totalVramGb?: number; recommended?: string };
 };
@@ -543,7 +545,11 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
   const audioFile = useRef<HTMLInputElement | null>(null);
   const lyricsBox = useRef<HTMLTextAreaElement | null>(null);
 
-  const ready = setup?.ready === true && setup?.engine_ready === true;
+  const ready = !serviceDown && setup?.ready === true && setup.engine_ready === true && setup.selection_matches_engine !== false;
+  const unavailableTitle = !setup ? t('modelLoading') : !setup.ready ? t('profileRequired')
+    : setup.engine_error ? t('localGenerationUnavailable') : t('engineStartingTitle');
+  const unavailableHint = !setup ? t('modelLoading') : !setup.ready ? t('downloadProfileFirst')
+    : setup.engine_error || (setup.selection_matches_engine === false ? t('switchProfileHint') : t('engineStartingHint'));
   const defaults: EngineDefaults = catalog?.defaults ?? {};
   const placeholder = (key: string) => asText(defaults[key]);
   const maxBatch = Math.max(1, catalog?.max_batch ?? setup?.effective_max_batch ?? 1);
@@ -589,12 +595,16 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
   }, [assisting]);
 
 
+  const selectionKey = JSON.stringify([setup?.selected_profile_id, setup?.selected_component_ids, setup?.own_model]);
   useEffect(() => {
-    void fetch('/v1/local-models/music', { headers: SELF_READ })
+    if (!ready) { setCatalog(null); return; }
+    const controller = new AbortController();
+    void fetch('/v1/local-models/music', { headers: SELF_READ, signal: controller.signal })
       .then(response => (response.ok ? response.json() : Promise.reject(new Error())))
-      .then((body: { catalog?: EngineCatalog }) => setCatalog(body.catalog ?? null))
-      .catch(() => setCatalog(null));
-  }, [setup?.engine_ready, setup?.selected_profile_id]);
+      .then((body: { catalog?: EngineCatalog }) => { if (!controller.signal.aborted) setCatalog(body.catalog ?? null); })
+      .catch(() => { if (!controller.signal.aborted) setCatalog(null); });
+    return () => controller.abort();
+  }, [ready, selectionKey]);
 
 
   /** Fills the form from a stored request: a reused track, a file, an example. */
@@ -861,7 +871,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
 
   /** The score the model writes from the form's style and lyrics, nothing sung. */
   const writeScoreAlone = (signal: AbortSignal) => {
-    if (!ready) throw new Error(t('downloadProfileFirst'));
+    if (!ready) throw new Error(unavailableHint);
     if (!style.trim() && !lyrics.trim()) throw new Error(tt('styleOrLyricsRequired'));
     const pinned = randomizeSeed ? undefined : numberOrUndefined(lmSeed);
     return composeScore({
@@ -877,7 +887,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
 
   /** Writes the score alone, so it can be read and edited before a song is sung from it. */
   const runComposition = async () => {
-    if (!ready) { setError(t('downloadProfileFirst')); return; }
+    if (!ready) { setError(unavailableHint); return; }
     if (!style.trim() && !lyrics.trim()) { setError(tt('styleOrLyricsRequired')); return; }
     setError(null);
     setComposing(true);
@@ -1167,6 +1177,11 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
       window.removeEventListener('yue:generation-failed', stop);
     };
   }, []);
+  useEffect(() => {
+    foreverRequest.current = null;
+    setForever(false);
+  }, [selectionKey]);
+
   const generate = (request: YueRequest) => {
     if (forever) foreverRequest.current = { ...request };
     onGenerate(request);
@@ -1175,10 +1190,10 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
   useEffect(() => {
     if (!forever) { foreverRequest.current = null; return; }
     const snapshot = foreverRequest.current;
-    if (!snapshot || activeJobCount >= 2) return;
+    if (!ready || !snapshot || activeJobCount >= 2) return;
     onGenerate({ ...snapshot, lm_seed: Math.floor(Math.random() * 0x100000000), seed: Math.floor(Math.random() * 0x100000000) });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [forever, activeJobCount]);
+  }, [forever, activeJobCount, ready]);
 
   /** An instrumental: the score - the form's, or one written now - with its voice moved to the
    *  instrument, and the lyrics' section tags without their words, so nothing is left to sing. */
@@ -1217,7 +1232,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
   };
 
   const submit = () => {
-    if (!ready) { setError(t('downloadProfileFirst')); return; }
+    if (!ready) { setError(unavailableHint); return; }
     if (!style.trim() && !lyrics.trim() && !semanticTokens.trim()) { setError(tt('styleOrLyricsRequired')); return; }
     setError(null);
     if (instrumental) { void createInstrumental(); return; }
@@ -1330,7 +1345,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
             </div>
             <span className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-semibold ${ready ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-300' : 'bg-amber-500/10 text-amber-700 dark:text-amber-300'}`}>
               <span className={`mr-1 inline-block h-1.5 w-1.5 rounded-full ${ready ? 'bg-emerald-500' : 'bg-amber-500'}`} />
-              {serviceDown ? t('serviceUnavailable') : ready ? t('engineReady') : t('profileRequired')}
+              {serviceDown ? t('serviceUnavailable') : ready ? t('engineReady') : unavailableTitle}
             </span>
           </div>
 
@@ -1342,7 +1357,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
           ) : !ready && (
             <div className="flex gap-2 rounded-xl border border-amber-500/25 bg-amber-500/10 p-3 text-xs leading-5 text-amber-800 dark:text-amber-200">
               <CircleAlert className="mt-0.5 shrink-0" size={15} />
-              <div><b>{t('localGenerationUnavailable')}</b><br />{t('downloadProfileFirst')}</div>
+              <div><b>{t('localGenerationUnavailable')}</b><br />{unavailableHint}</div>
             </div>
           )}
 
