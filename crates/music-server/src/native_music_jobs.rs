@@ -278,7 +278,8 @@ async fn submit(
     tokio::spawn(async move {
         let _lease = lease;
         let outcome = watch(&state, &job, &profile, &client, &remote, rx).await;
-        if !matches!(outcome, Ok(Some(_))) {
+        let completed = matches!(outcome, Ok(Some(_)));
+        if !completed {
             state.minimax.stop().await;
         }
         let mut jobs = state.jobs.write().await;
@@ -298,11 +299,6 @@ async fn submit(
                 active.status = MusicJobStatus::Completed;
                 active.phase = MusicJobPhase::Completed;
                 active.message = "MiniMax music was saved to the library.".into();
-                // Only the watcher completes an import. Reading a job never counts it again.
-                if let Some(hub) = &state.hub {
-                    hub.count("songs", 1);
-                    hub.count("song_done", 1);
-                }
             }
             Ok(None) => stop_on_request(active),
             Err(error) => {
@@ -321,6 +317,18 @@ async fn submit(
         drop(_lease);
         drop(jobs);
         state.minimax_cancellations.write().await.remove(&job.id);
+        // Only this watcher completes an import. The Hub writes its local
+        // state synchronously, so do it after releasing the jobs and engine locks.
+        if completed && let Some(hub) = state.hub.clone() {
+            if let Err(error) = tokio::task::spawn_blocking(move || {
+                hub.count("songs", 1);
+                hub.count("song_done", 1);
+            })
+            .await
+            {
+                studio_log!("[ERROR] recording MiniMax completion: {error}");
+            }
+        }
     });
     (StatusCode::ACCEPTED, Json(accepted))
 }

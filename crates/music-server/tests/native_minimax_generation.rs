@@ -163,7 +163,7 @@ async fn exercise_generation(format: Option<&str>) {
     let job_url = format!("{jobs}/{id}");
     let job = wait_status(&http, &job_url, "completed").await;
     let hub_path = data.join("studio-hub.json");
-    assert_completed_song_counts(&hub_path, 1);
+    wait_for_completed_song_counts(&hub_path, 1).await;
     for _ in 0..3 {
         let polled = json_response(http.get(&job_url)).await;
         assert_eq!(polled["status"], "completed");
@@ -246,7 +246,7 @@ async fn exercise_generation(format: Option<&str>) {
     .await;
     let replay_id = replay["id"].as_str().unwrap();
     let rendered = wait_status(&http, &format!("{jobs}/{replay_id}"), "completed").await;
-    assert_completed_song_counts(&hub_path, 2);
+    wait_for_completed_song_counts(&hub_path, 2).await;
     let take = &rendered["song"]["song"];
     assert_ne!(take["id"], song["id"]);
     assert_eq!(take["profile_id"], song["profile_id"]);
@@ -298,6 +298,28 @@ async fn exercise_generation(format: Option<&str>) {
     assert_eq!(library.as_array().unwrap().len(), 2);
     assert_completed_song_counts(&hub_path, 2);
     studio.kill().await.unwrap();
+}
+
+async fn wait_for_completed_song_counts(path: &Path, expected: u64) {
+    timeout(Duration::from_secs(3), async {
+        loop {
+            let hub: Value = serde_json::from_slice(&fs::read(path).unwrap()).unwrap();
+            let (songs, done) = (
+                hub["totals"]["songs"].as_u64().unwrap_or_default(),
+                hub["totals"]["song_done"].as_u64().unwrap_or_default(),
+            );
+            assert!(
+                songs <= expected && done <= expected,
+                "duplicate song completion: {songs}/{done}"
+            );
+            if songs == expected && done == expected {
+                break;
+            }
+            sleep(Duration::from_millis(25)).await;
+        }
+    })
+    .await
+    .expect("MiniMax completion must be counted");
 }
 
 fn assert_completed_song_counts(path: &Path, expected: u64) {
