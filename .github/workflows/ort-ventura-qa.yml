@@ -33,9 +33,30 @@ jobs:
           export QA_ORT_ARCHIVE="$PWD/scripts/qa-ort-ventura/onnxruntime-osx-arm64-ventura-1.32.0.tgz"
           cargo test --locked -p music-server --lib unpack_ventura_candidate -- --exact | tee "$RUNNER_TEMP/unpack.log"
           grep -F '1 passed' "$RUNNER_TEMP/unpack.log"
-          export ORT_DYLIB_PATH="$QA_ORT_DIRECTORY/libonnxruntime.dylib"
           export AUDIO_FACTS_MODELS="$RUNNER_TEMP/tempo-model"
           export AUDIO_FACTS_SONGS="$PWD/docs/samples/babushka-na-diskoteke.mp3"
-          cargo test --locked -p music-server --lib audio_facts::tests::measures_real_songs -- --exact --ignored --nocapture | tee "$RUNNER_TEMP/tempo.log"
-          grep -E 'mp3: [1-9][0-9]* BPM' "$RUNNER_TEMP/tempo.log"
-          grep -F '1 passed' "$RUNNER_TEMP/tempo.log"
+          for version in 1.31.1 1.32.0; do
+            name=onnxruntime-osx-arm64-$version
+            if [ "$version" = 1.31.1 ]; then
+              url=https://github.com/timoncool/onnxruntime/releases/download/v$version/$name.tgz
+              sha=2e1344a1926ee50eb25b38153cb6992c3567515aef0e677a1a520a1798896d6f
+            else
+              url=https://registry.npmmirror.com/-/binary/onnxruntime/v$version/$name.tgz
+              sha=8ddca23f532b9d4fbb279ba9b08dab6c0ac94fdc9aec2eb44a1db7049216c043
+            fi
+            curl -fLsS --retry 3 "$url" -o "$RUNNER_TEMP/$name.tgz"
+            echo "$sha  $RUNNER_TEMP/$name.tgz" | shasum -a 256 -c -
+            tar -xzf "$RUNNER_TEMP/$name.tgz" -C "$RUNNER_TEMP"
+          done
+          sysctl -n machdep.cpu.brand_string hw.ncpu hw.memsize
+          for build in native-1.31.1 native-1.32.0 ventura-1.32.0; do
+            case "$build" in
+              ventura-*) export ORT_DYLIB_PATH="$QA_ORT_DIRECTORY/libonnxruntime.dylib" ;;
+              *) export ORT_DYLIB_PATH="$RUNNER_TEMP/onnxruntime-osx-arm64-${build#native-}/lib/libonnxruntime.dylib" ;;
+            esac
+            echo "Measuring $build"
+            shasum -a 256 "$ORT_DYLIB_PATH"
+            /usr/bin/time -l cargo test --locked -p music-server --lib audio_facts::tests::measures_real_songs -- --exact --ignored --nocapture 2>&1 | tee "$RUNNER_TEMP/$build.log"
+            grep -E 'mp3: [1-9][0-9]* BPM' "$RUNNER_TEMP/$build.log"
+            grep -F '1 passed' "$RUNNER_TEMP/$build.log"
+          done
