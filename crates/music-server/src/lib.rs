@@ -2257,16 +2257,7 @@ fn stems_into_library(state: &AppState, song_id: &str, stems: &[String], model: 
         cover_like(state, &original, &song.id)?;
         added.push(song.id);
     }
-    let mut kept = Vec::new();
-    for old in replaced {
-        let files = song_files(state, &old);
-        state.library.delete_song(&old.id)?;
-        for path in files {
-            if let Err(error) = std::fs::remove_file(&path) {
-                kept.push(format!("{}: {error}", path.display()));
-            }
-        }
-    }
+    let kept = remove_replaced_tracks(state, &replaced)?;
     let problem = (!kept.is_empty()).then(|| format!("the new stems are in the library, but files of the old ones could not be removed: {}", kept.join("; ")));
     Ok((added, problem))
 }
@@ -4344,16 +4335,7 @@ fn restored_into_library(state: &AppState, source: &RestoreSource, audio: Vec<u8
     };
     cover_like(state, original, &song.id)?;
     let replaced: Vec<library::Song> = state.library.list_songs()?.into_iter().filter(|old| old.id != song.id && derived_from(old) == Some((original.id.as_str(), "restore"))).collect();
-    let mut kept = Vec::new();
-    for old in replaced {
-        let files = song_files(state, &old);
-        state.library.delete_song(&old.id)?;
-        for path in files {
-            if let Err(error) = std::fs::remove_file(&path) {
-                kept.push(format!("{}: {error}", path.display()));
-            }
-        }
-    }
+    let kept = remove_replaced_tracks(state, &replaced)?;
     let problem = (!kept.is_empty()).then(|| format!("the restored track is in the library, but files of the earlier one could not be removed: {}", kept.join("; ")));
     Ok((song.id, problem))
 }
@@ -5448,27 +5430,33 @@ fn delete_songs_for_good(
     library.purge_trashed_group(id, |songs, keep| recycle_unshared_files(songs, keep, files, recycle))
 }
 
+fn remove_replaced_tracks(state: &AppState, replaced: &[library::Song]) -> anyhow::Result<Vec<String>> {
+    if replaced.is_empty() {
+        return Ok(Vec::new());
+    }
+    let mut kept = Vec::new();
+    state.library.delete_replaced_songs(replaced, |songs, survivors| {
+        for path in unshared_song_files(songs, survivors, |song| song_files(state, song))? {
+            if let Err(error) = std::fs::remove_file(&path) {
+                kept.push(format!("{}: {error}", path.display()));
+            }
+        }
+        Ok(())
+    })?;
+    Ok(kept)
+}
+
 fn recycle_unshared_files(
     songs: &[library::Song],
     keep: &[library::Song],
     files: impl Fn(&library::Song) -> Vec<PathBuf>,
     recycle: impl Fn(&std::path::Path) -> Result<(), String>,
 ) -> anyhow::Result<()> {
-    // A surviving record can reference the same media, even while it is in the bin.
-    let mut protected: std::collections::HashSet<_> = keep.iter().flat_map(&files)
-        .filter(|path| path.exists())
-        .map(|path| path.canonicalize())
-        .collect::<std::io::Result<_>>()?;
     let (mut recycled, mut refused) = (Vec::new(), Vec::new());
-    for song in songs {
-        for path in files(song).into_iter().filter(|path| path.exists()) {
-            if !protected.insert(path.canonicalize()?) {
-                continue;
-            }
-            match recycle(&path) {
-                Ok(()) => recycled.push(plain_path(&path)),
-                Err(error) => refused.push(format!("{}: {error}", plain_path(&path))),
-            }
+    for path in unshared_song_files(songs, keep, files)? {
+        match recycle(&path) {
+            Ok(()) => recycled.push(plain_path(&path)),
+            Err(error) => refused.push(format!("{}: {error}", plain_path(&path))),
         }
     }
     if !refused.is_empty() {
@@ -5476,6 +5464,28 @@ fn recycle_unshared_files(
         anyhow::bail!("the system's recycle bin did not take these files, so the song stays in the studio's bin: {}; {taken}", refused.join("; "));
     }
     Ok(())
+}
+
+fn unshared_song_files(
+    songs: &[library::Song],
+    keep: &[library::Song],
+    files: impl Fn(&library::Song) -> Vec<PathBuf>,
+) -> anyhow::Result<Vec<PathBuf>> {
+    // A surviving record can reference the same media, even while it is in the bin.
+    let mut protected: std::collections::HashSet<_> = keep.iter().flat_map(&files)
+        .filter(|path| path.exists())
+        .map(|path| path.canonicalize())
+        .collect::<std::io::Result<_>>()?;
+    let mut unshared = Vec::new();
+    for song in songs {
+        for path in files(song).into_iter().filter(|path| path.exists()) {
+            if !protected.insert(path.canonicalize()?) {
+                continue;
+            }
+            unshared.push(path);
+        }
+    }
+    Ok(unshared)
 }
 
 /// The files in the media folder that belong to one song: its audio, its
