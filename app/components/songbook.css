@@ -1,0 +1,74 @@
+.songbook-line {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  margin-block: 0.75rem;
+  break-inside: avoid;
+}
+
+.songbook-cell {
+  display: grid;
+  grid-template-rows: minmax(1.25em, auto);
+  grid-auto-rows: minmax(1.25em, auto);
+  min-inline-size: 1.2em;
+}
+
+.songbook-cell strong {
+  white-space: nowrap;
+}
+
+.songbook-short-note {
+  text-decoration: underline;
+  text-underline-offset: 0.15em;
+}
+
+.songbook-short-note-2,
+.songbook-short-note-3 {
+  text-decoration-style: double;
+}
+
+.songbook-shape {
+  break-inside: avoid;
+}
+
+@media print {
+  @page songbook {
+    size: A4 portrait;
+    margin: 14mm;
+  }
+
+  body:has(> .studio-songbook[open]) > :not(.studio-songbook[open]),
+  .studio-songbook .songbook-controls {
+    display: none !important;
+  }
+
+  body:has(> .studio-songbook[open]),
+  .studio-songbook[open],
+  .studio-songbook .songbook-paper {
+    position: static;
+    inset: auto;
+    inline-size: auto;
+    block-size: auto;
+    max-inline-size: none;
+    max-block-size: none;
+    overflow: visible;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    background: white;
+    color: black;
+    box-shadow: none;
+  }
+
+  .studio-songbook[open] {
+    page: songbook;
+  }
+
+  .studio-songbook[open]::backdrop {
+    display: none;
+  }
+
+  .studio-songbook strong {
+    color: black;
+  }
+}

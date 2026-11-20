@@ -2079,7 +2079,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
               <>
                 {showNotation && abc.trim() && (
                   <div className="mt-3 max-h-80 overflow-auto rounded-lg border border-zinc-200 bg-white p-2 dark:border-white/10 custom-scrollbar">
-                    <ScoreView abc={abc} onChange={setAbc} onEdit={composing ? undefined : () => setEditorOpen(true)} />
+                    <ScoreView abc={abc} title={name} lyrics={lyrics} onChange={setAbc} onEdit={composing ? undefined : () => setEditorOpen(true)} />
                   </div>
                 )}
                 <AutoTextarea
