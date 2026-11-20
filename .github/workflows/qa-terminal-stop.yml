@@ -1,0 +1,33 @@
+name: YuE2 Windows portable terminal stop
+on:
+  push:
+    branches: [qa/release-terminal-stop]
+permissions:
+  contents: read
+jobs:
+  stop:
+    if: github.repository == 'timoncool/YuE2-Studio' && !github.event.deleted
+    runs-on: windows-2022
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Run both terminal stop scenarios on the published portable
+        shell: pwsh
+        run: |
+          python scripts/qa-windows-terminal-stop.py `
+            --version 4.1.1 `
+            --url https://github.com/timoncool/YuE2-Studio/releases/download/v4.1.1/YuE2-Studio-4.1.1-portable-windows-x64.zip `
+            --bytes 366811682 `
+            --sha256 312f26d5554f33a15576f778145d9a400d4ca226ac9fdc999d367c6b275b1276 `
+            --evidence "$env:RUNNER_TEMP/yue2-terminal-stop"
+          exit $LASTEXITCODE
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: yue2-terminal-stop
+          path: |
+            ${{ runner.temp }}/yue2-terminal-stop/results.json
+            ${{ runner.temp }}/yue2-terminal-stop/*.log
