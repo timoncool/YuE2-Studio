@@ -23,7 +23,7 @@ interface NativeProfiles {
 
 const STORAGE = 'studio.nativeMusicProfiles';
 type Control = 'duration_seconds' | 'steps' | 'seed' | 'lm_seed' | 'guidance_scale';
-type Settings = Partial<Record<Control, string>>;
+type Settings = Partial<Record<Control | 'output_format', string>>;
 type Preferences = {
   selected: Partial<Record<NativeMusicEngine, string>>;
   settings: Record<string, Settings>;
@@ -54,9 +54,14 @@ export function nativeGenerationSettings(engine: NativeMusicEngine, settings: Se
     ...(duration === undefined ? {} : { duration_seconds: duration }),
     ...(steps === undefined ? {} : { steps }),
     ...(seed === undefined ? {} : { seed }),
+    ...(engine === 'minimaxmusic-cpp' ? { output_format: miniMaxOutputFormat(settings.output_format) } : {}),
     ...(engine === 'minimaxmusic-cpp' && lmSeed !== undefined ? { lm_seed: lmSeed } : {}),
     ...(engine === 'acestep-cpp' && guidance !== undefined ? { ace: { guidance_scale: guidance } } : {}),
   };
+}
+
+export function miniMaxOutputFormat(value: unknown): NonNullable<YueRequest['output_format']> {
+  return value === 'mp3' || value === 'wav32' ? value : 'flac';
 }
 
 export function useNativeMusicProfiles(engine: NativeMusicEngine | undefined) {
@@ -106,7 +111,10 @@ export function useNativeMusicProfiles(engine: NativeMusicEngine | undefined) {
       number('duration_seconds', saved.duration_seconds ?? saved.duration);
       number('steps', saved.steps ?? saved.inference_steps);
       number('seed', saved.seed);
-      if (source === 'minimaxmusic-cpp') number('lm_seed', saved.lm_seed);
+      if (source === 'minimaxmusic-cpp') {
+        number('lm_seed', saved.lm_seed);
+        controls.output_format = miniMaxOutputFormat(saved.output_format);
+      }
       if (source === 'acestep-cpp') number('guidance_scale', saved.guidance_scale);
       update({
         selected: { ...preferences.selected, [source]: id },
@@ -116,7 +124,7 @@ export function useNativeMusicProfiles(engine: NativeMusicEngine | undefined) {
     select: (id: string) => {
       if (engine) update({ ...preferences, selected: { ...preferences.selected, [engine]: id } });
     },
-    set: (key: Control, value: string) => {
+    set: (key: keyof Settings, value: string) => {
       if (pair) update({ ...preferences, settings: { ...preferences.settings, [pair]: { ...preferences.settings[pair], [key]: value } } });
     },
   };

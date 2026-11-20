@@ -40,7 +40,7 @@ import { NumberField } from './NumberField';
 import { explainCliFailure } from '../services/cliFailure';
 import { loadNativeOpenRouterCatalog, modelsForCapability, refreshNativeOpenRouterCatalog, type NativeOpenRouterModel } from '../services/nativeOpenRouter';
 import { musicSourceStrings, nativeMusicSourceStrings } from '../i18n/musicSource';
-import { isMusicEngine, isNativeMusicEngine, nativeEngines, nativeGenerationSettings, useNativeMusicProfiles } from '../services/nativeMusicProfiles';
+import { isMusicEngine, isNativeMusicEngine, miniMaxOutputFormat, nativeEngines, nativeGenerationSettings, useNativeMusicProfiles } from '../services/nativeMusicProfiles';
 
 /**
  * The YuE2 request form.
@@ -1586,6 +1586,17 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
                           onChange={event => native.set(key, event.target.value)} />
                       </label>
                     ))}
+                    {nativeEngine === 'minimaxmusic-cpp' && (
+                      <label className="space-y-1 text-xs">
+                        <span>{t('outputFormat')}</span>
+                        <select className={CONTROL} value={miniMaxOutputFormat(native.settings.output_format)}
+                          onChange={event => native.set('output_format', event.target.value)}>
+                          <option value="flac">FLAC</option>
+                          <option value="mp3">MP3</option>
+                          <option value="wav32">WAV (32-bit float)</option>
+                        </select>
+                      </label>
+                    )}
                   </div>
                 </Card>
               )}
