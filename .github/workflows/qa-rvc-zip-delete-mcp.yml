@@ -1,0 +1,28 @@
+name: RVC raw and ZIP install and remove MCP smoke
+
+on:
+  push:
+    branches: [qa/rvc-zip-delete-mcp]
+
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 22
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          fetch-depth: 2
+      - uses: Swatinem/rust-cache@v2
+      - name: Build Studio service
+        run: cargo build --locked -p music-server --bin music-server
+      - name: Install raw and ZIP voices, record progress, and remove
+        run: python scripts/qa-rvc-zip-delete-mcp.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: rvc-zip-delete-mcp
+          path: rvc-zip-delete-mcp.json
+          retention-days: 7
