@@ -1,6 +1,49 @@
-import { describe, expect, it } from 'vitest';
+import { act, createElement } from 'react';
+import { createRoot } from 'react-dom/client';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { describe, expect, it, vi } from 'vitest';
+import { I18nProvider } from '../context/I18nContext';
 import type { Song } from '../types';
-import { followsLocalProgress, keepingDeleted, rowsFor, rowTaken, stillWaiting } from './generations';
+import { useGenerations, followsLocalProgress, keepingDeleted, rowsFor, rowTaken, stillWaiting } from './generations';
+
+it.each([true, false])('cancels an unacknowledged request when the job ID arrives (accepted=%s)', async accepted => {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const root = createRoot(document.createElement('div'));
+  const notify = vi.fn();
+  let release!: (response: Response) => void;
+  const submitted = new Promise<Response>(resolve => { release = resolve; });
+  const job = { id: 'cloud-job', engine_id: 'openrouter', submitted_at: 1, status: 'running', generation_settings: {} };
+  const fetcher = vi.fn(async (path: string, init?: RequestInit) => {
+    if (path === '/v1/music/jobs' && init?.method === 'POST') return submitted;
+    if (path === '/v1/music/jobs/cloud-job' && init?.method === 'POST') {
+      return accepted ? Response.json({ ...job, status: 'cancelled' }) : new Response(null, { status: 503 });
+    }
+    return Response.json([]);
+  });
+  vi.stubGlobal('fetch', fetcher);
+  vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+  let studio!: ReturnType<typeof useGenerations>;
+  function Editor() {
+    studio = useGenerations({ enabled: false, notify, onFinished: () => {} });
+    return null;
+  }
+  try {
+    await act(async () => root.render(createElement(QueryClientProvider, { client },
+      createElement(I18nProvider, { children: createElement(Editor) }))));
+    let generation!: Promise<void>;
+    act(() => { generation = studio.generate({ style: 'piano', lyrics: '', music_source: { kind: 'openrouter', model: 'test/music' } }); });
+    await act(async () => studio.cancelAll());
+    expect(studio.isGenerating).toBe(true);
+    await act(async () => { release(Response.json(job)); await generation; });
+    expect(fetcher).toHaveBeenCalledWith('/v1/music/jobs/cloud-job', { method: 'POST' });
+    expect(studio.isGenerating).toBe(!accepted);
+    if (!accepted) expect(notify).toHaveBeenCalledWith(expect.stringContaining('503'), 'error');
+  } finally {
+    act(() => root.unmount());
+    client.clear();
+    vi.unstubAllGlobals();
+  }
+});
 
 it('keeps cloud jobs and finished cards out of native progress updates', () => {
   const running = { jobId: 'job', isGenerating: true };
