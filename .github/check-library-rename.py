@@ -88,6 +88,26 @@ try:
                 assert sent.value.request.post_data_json=={"title":title}
                 check(title)
                 print(which,title,"verified database, provenance, seeds and embedded WAV title",flush=True)
+            def window_tool(name, arguments):
+                reply=http("/mcp",{"jsonrpc":"2.0","id":7,"method":"tools/call",
+                                   "params":{"name":name,"arguments":arguments}},"POST")["result"]
+                assert not reply.get("isError"), reply
+                return reply["content"][0]["text"]
+
+            def verify_page(title):
+                page.get_by_role("dialog").get_by_role("heading",name=title,exact=True).wait_for()
+                report=window_tool("ui_read_page",{})
+                assert report.splitlines()[0]=="Page: "+title,report[:400]
+
+            window_tool("ui_open_settings",{"section":"interface"})
+            verify_page("Appearance")
+            page.get_by_role("dialog").get_by_role("navigation").get_by_role("button",name="Account",exact=False).click()
+            verify_page("Account")
+            window_tool("ui_open_settings",{"section":"interface"})
+            verify_page("Appearance")
+            window_tool("ui_open_settings",{"section":"models"})
+            verify_page("Models")
+            print("Verified rendered headings and MCP after Appearance -> manual Account -> MCP Appearance -> Models",flush=True)
     finally:
         vite.terminate()
         vite.wait(timeout=20)
