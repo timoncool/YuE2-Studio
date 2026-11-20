@@ -1228,6 +1228,7 @@ export const zh = {
     legacyLibrarySize: '媒体文件：{size} · 所需空间：{required}',
     legacyLibraryFree: '可用空间：{size}',
     legacyLibraryNoSpace: '目标磁盘空间不足。',
+    legacyLibraryFound: '此电脑上找到的曲库：',
     legacyLibraryTitle: 'ACE-Step 或 MiniMax 曲库',
     legacyLibraryChoose: '选择旧版 Studio 文件夹',
     legacyLibraryOpening: '正在打开曲库…',

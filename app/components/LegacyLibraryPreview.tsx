@@ -17,7 +17,8 @@ interface Preview {
   playlists: { id: string; name: string; song_ids: string[] }[];
 }
 
-export function LegacyLibraryPreview() {
+export interface LegacySource { studio: string; path: string; version: string }
+export function LegacyLibraryPreview({ sources = [] }: { sources?: LegacySource[] }) {
   const { t, songCount, language } = useI18n();
   function formatSize(bytes: number) {
     const units = ['byte', 'kilobyte', 'megabyte', 'gigabyte', 'terabyte'] as const;
@@ -29,12 +30,12 @@ export function LegacyLibraryPreview() {
   const [copying, setCopying] = useState(false);
   const [summary, setSummary] = useState('');
   const [error, setError] = useState('');
-  async function chooseFolder() {
+  async function chooseFolder(path?: string) {
     setBusy(true);
     setError('');
     try {
       const response = await fetch('/v1/library/migration/preview', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pick: true }),
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(path ? { path } : { pick: true }),
       });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || response.statusText);
@@ -82,6 +83,11 @@ export function LegacyLibraryPreview() {
 
   return <section className="mb-4 rounded-2xl border border-zinc-300 p-4 dark:border-white/15">
     <h3 className="text-sm font-semibold">{t('legacyLibraryTitle')}</h3>
+    {sources.length > 0 && <ul className="mt-2 space-y-1">{sources.map(source =>
+      <li key={source.path}><button type="button" disabled={busy || copying} onClick={() => void chooseFolder(source.path)}
+        className="max-w-full rounded-lg border border-zinc-300 px-3 py-2 text-left text-sm dark:border-white/20">
+        <strong>{source.studio} {source.version}</strong><span className="ml-2 break-all text-xs">{source.path}</span>
+      </button></li>)}</ul>}
     <button type="button" disabled={busy || copying} onClick={() => void chooseFolder()}
       className="mt-2 inline-flex items-center gap-2 rounded-lg border border-zinc-300 px-3 py-2 text-sm disabled:opacity-60 dark:border-white/20">
       {busy ? <Loader2 size={15} className="animate-spin" /> : <FolderOpen size={15} />}

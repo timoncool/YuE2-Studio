@@ -16,6 +16,41 @@ pub(super) enum Source {
     Picker { pick: bool },
 }
 
+pub(super) async fn sources(
+    axum::extract::State(state): axum::extract::State<crate::AppState>,
+) -> Result<Json<Value>, (StatusCode, Json<ApiError>)> {
+    let own = state
+        .library
+        .media_dir()
+        .parent()
+        .map(Path::to_owned)
+        .unwrap_or_default();
+    tokio::task::spawn_blocking(move || {
+        let mut seen = std::collections::HashSet::new();
+        if let Ok(root) = own.canonicalize() {
+            seen.insert(root);
+        }
+        let mut sources = Vec::new();
+        for n in studio_hub_client::neighbors::others(&own) {
+            let title = match n.app.as_str() {
+                "ace" => "ACE-Step Studio",
+                "minimax" => "MiniMax Music3 Studio",
+                _ => continue,
+            };
+            if n.data_dir.join("library.sqlite").is_file()
+                && n.data_dir
+                    .canonicalize()
+                    .is_ok_and(|root| seen.insert(root))
+            {
+                sources.push(json!({"studio": title, "path": n.data_dir, "version": n.version}));
+            }
+        }
+        Json(json!({"sources": sources}))
+    })
+    .await
+    .map_err(|error| api_error(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))
+}
+
 pub(super) async fn preview(
     axum::extract::State(state): axum::extract::State<crate::AppState>,
     Json(source): Json<Source>,

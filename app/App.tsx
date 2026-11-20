@@ -4,6 +4,7 @@ import { CreatePanel, type CreateRequest } from './components/CreatePanel';
 import { SongList } from './components/SongList';
 import { RightSidebar } from './components/RightSidebar';
 import { Player } from './components/Player';
+import type { LegacySource } from './components/LegacyLibraryPreview';
 import { LibraryView } from './components/LibraryView';
 import { CreatePlaylistModal, AddToPlaylistModal } from './components/PlaylistModals';
 import { CoverRegenModal } from './components/CoverRegenModal';
@@ -272,6 +273,24 @@ function AppContent() {
   });
 
   // Navigation State - default to create view
+  const [legacySources, setLegacySources] = useState<LegacySource[]>([]);
+  const [migrationOffer, setMigrationOffer] = useState(false);
+  useEffect(() => {
+    if (!setupQuery.isSuccess) return;
+    const controller = new AbortController();
+    void fetch('/v1/library/migration/sources', { signal: controller.signal }).then(async response => {
+      if (!response.ok) return;
+      const { sources } = await response.json();
+      if (controller.signal.aborted || !Array.isArray(sources)) return;
+      setLegacySources(sources);
+      if (sources.length && !localStorage.getItem('studio.legacyLibraryOfferSeen')) setMigrationOffer(true);
+    }).catch(() => { /* A portable library can still be chosen manually. */ });
+    return () => controller.abort();
+  }, [setupQuery.isSuccess]);
+  const closeMigrationOffer = () => {
+    setMigrationOffer(false);
+    try { localStorage.setItem('studio.legacyLibraryOfferSeen', '1'); } catch { /* Private window. */ }
+  };
   const [currentView, setCurrentView] = useState<View>('create');
 
   // Content State: the library is the service's, read through the query cache
@@ -1414,6 +1433,7 @@ function AppContent() {
         return (
           <div className="relative flex h-full min-h-0 min-w-0 w-full overflow-hidden">
           <LibraryView
+            legacySources={legacySources}
             allSongs={librarySongs}
             likedSongs={likedSongs}
             playlists={playlists}
@@ -1601,6 +1621,16 @@ function AppContent() {
   return (
     <SongActionsProvider value={songActions}>
     <div className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden bg-white dark:bg-suno text-zinc-900 dark:text-white font-sans antialiased selection:bg-pink-500/30 transition-colors duration-300">
+      {migrationOffer && currentView === 'create' && <aside className="flex flex-wrap items-center gap-3 border-b border-zinc-200 px-4 py-2 text-sm dark:border-white/15">
+        <span>{t('legacyLibraryFound')} {Array.from(new Set(legacySources.map(source => source.studio))).join(', ')}</span>
+        <button type="button" className="font-semibold underline" onClick={() => {
+          try { sessionStorage.setItem('studio.library.tab', 'import'); } catch { /* Private window. */ }
+          closeMigrationOffer();
+          setCurrentView('library');
+          window.history.pushState({}, '', '/library');
+        }}>{t('importAudioTab')}</button>
+        <button type="button" className="ml-auto" onClick={closeMigrationOffer}>{t('dismiss')}</button>
+      </aside>}
       <HubBars items={hubItems} elapsed={hubElapsed} view={hubSection} closed={hubClosed} onClosed={closeHubNotice} />
       {hubPopup && <HubPopup item={hubPopup} onClose={() => closeHubNotice(hubPopup.id)} onOpen={openHubTarget} />}
       <ShellPrompts />
