@@ -6938,7 +6938,14 @@ fn load_studio_settings(path: &PathBuf) -> Option<PersistedStudioSettings> {
 }
 
 async fn persist_studio_settings(state: &AppState) -> anyhow::Result<()> {
-    let settings = PersistedStudioSettings {
+    write_studio_settings(state, None).await
+}
+
+// All saves share the same temporary file. Serialize the snapshot and rename together.
+async fn write_studio_settings(state: &AppState, selection: Option<SetupSelectRequest>) -> anyhow::Result<()> {
+    static WRITING: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+    let _writing = WRITING.lock().await;
+    let mut settings = PersistedStudioSettings {
         engine_options: state.engine_options.read().await.clone(),
         assistant: state.assistant.read().await.clone(),
         lyrics_sync: state.lyrics_sync_config.read().await.clone(),
@@ -6955,10 +6962,20 @@ async fn persist_studio_settings(state: &AppState) -> anyhow::Result<()> {
         proxy: Some(net::current()),
         network: Some(remote::current()),
     };
+    if let Some(choice) = &selection {
+        settings.selected_profile_id.clone_from(&choice.profile_id);
+        settings.selected_component_ids.clone_from(&choice.component_ids);
+    }
     if let Some(parent) = state.settings_path.parent() { fs::create_dir_all(parent)?; }
     let temporary = state.settings_path.with_extension("json.part");
     fs::write(&temporary, serde_json::to_vec_pretty(&settings)?)?;
     fs::rename(temporary, &state.settings_path)?;
+    if let Some(choice) = selection {
+        let mut profile = state.selected_profile_id.write().await;
+        let mut components = state.selected_component_ids.write().await;
+        *profile = choice.profile_id;
+        *components = choice.component_ids;
+    }
     mcp::announce("settings");
     Ok(())
 }
@@ -9629,13 +9646,14 @@ async fn setup_select(
     Json(request): Json<SetupSelectRequest>,
 ) -> Result<Json<Value>, (StatusCode, Json<ApiError>)> {
     let matched = request.component_ids.as_deref().and_then(model_manager::profile_matching).map(str::to_owned);
-    if let Some(profile_id) = request.profile_id.clone().filter(|value| !value.trim().is_empty()).or(matched) {
+    let selection = if let Some(profile_id) = request.profile_id.filter(|value| !value.trim().is_empty()).or(matched) {
         let known = state.model_manager.catalog().profiles.iter().any(|profile| profile.id == profile_id);
         if !known {
             return Err(api_error(StatusCode::BAD_REQUEST, format!("unknown profile {profile_id}")));
         }
-        *state.selected_profile_id.write().await = Some(profile_id);
-        *state.selected_component_ids.write().await = None;
+        state.model_manager.installed_profile_files(&profile_id)
+            .map_err(|error| api_error(StatusCode::BAD_REQUEST, error.to_string()))?;
+        SetupSelectRequest { profile_id: Some(profile_id), component_ids: None }
     } else {
         let ids = request.component_ids.unwrap_or_default();
         if ids.is_empty() {
@@ -9645,10 +9663,10 @@ async fn setup_select(
             .model_manager
             .installed_component_files(&ids)
             .map_err(|error| api_error(StatusCode::BAD_REQUEST, error.to_string()))?;
-        *state.selected_profile_id.write().await = None;
-        *state.selected_component_ids.write().await = Some(ids);
-    }
-    let _ = persist_studio_settings(&state).await;
+        SetupSelectRequest { profile_id: None, component_ids: Some(ids) }
+    };
+    write_studio_settings(&state, Some(selection)).await
+        .map_err(|error| api_error(StatusCode::INTERNAL_SERVER_ERROR, format!("the choice was not saved: {error:#}")))?;
     // the songs already sent are finished on the set they were sent to first
     {
         let state = state.clone();
