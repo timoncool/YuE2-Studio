@@ -143,6 +143,16 @@ export function useNativeMusicProfiles(engine: NativeMusicEngine | undefined) {
           : preferences.settings,
       });
     },
+    resetSettings: () => {
+      if (pending) {
+        setLegacyAce(undefined);
+        return;
+      }
+      if (!pair || !preferences.settings[pair]) return;
+      const settings = { ...preferences.settings };
+      delete settings[pair];
+      update({ ...preferences, settings });
+    },
     set: (key: keyof Settings, value: string) => {
       if (pending) setLegacyAce({ ...pending, settings: { ...pending.settings, [key]: value } });
       else if (pair) update({ ...preferences, settings: { ...preferences.settings, [pair]: { ...preferences.settings[pair], [key]: value } } });

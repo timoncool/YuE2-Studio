@@ -1586,6 +1586,7 @@ export const zh = {
     savePrompt: '保存',
     examplePrompt: '示例',
     resetPrompt: '重置',
+    resetCreateForm: '重置创作表单',
     promptFileInvalid: '该文件不是有效的提示文件。',
     promptBudget: '提示预算',
     promptBudgetShort: '描述 + 歌词',
