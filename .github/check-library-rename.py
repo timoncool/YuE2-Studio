@@ -111,6 +111,30 @@ try:
             browser=playwright.chromium.launch(channel="msedge",headless=True)
             page=browser.new_page(viewport={"width":1600,"height":900},locale="en-US")
             page.goto(ui,wait_until="domcontentloaded")
+            page.get_by_title("Studio tools",exact=True).first.click()
+            panel=page.locator("section").filter(has=page.get_by_role("button",name="Processor",exact=True)).first
+            device=panel.get_by_role("button",name="Auto",exact=True)
+            install_button=panel.get_by_role("button",name="Download",exact=False)
+            from playwright.sync_api import expect
+            expect(install_button).to_be_enabled()
+            pending=[]
+            page.route("**/v1/separation/settings",lambda route:pending.append(route) if route.request.method=="PUT" else route.continue_())
+            with page.expect_request(lambda r:r.method=="PUT" and r.url.endswith("/v1/separation/settings")):
+                device.click()
+            expect(install_button).to_be_disabled()
+            expect(device).to_be_disabled()
+            assert len(pending)==1
+            pending.pop().fulfill(status=503,json={"error":"QA settings unavailable"})
+            expect(page.get_by_text("QA settings unavailable",exact=True)).to_be_visible()
+            expect(install_button).to_be_enabled()
+            assert http("/v1/separation/settings")["runtime"]=="cpu"
+            page.unroute("**/v1/separation/settings")
+            with page.expect_response(lambda r:r.request.method=="PUT" and r.url.endswith("/v1/separation/settings")) as saved:
+                device.click()
+            assert saved.value.ok
+            expect(install_button).to_be_enabled()
+            assert http("/v1/separation/settings")["runtime"]=="auto"
+            print("Verified pending, failed and successful device changes in the rendered stems tool",flush=True)
             page.get_by_title("Library",exact=True).first.click()
             for which,title in (("list","List title"),("details","Details title")):
                 if which=="details": page.get_by_role("button",name="Song Details",exact=True).click()
