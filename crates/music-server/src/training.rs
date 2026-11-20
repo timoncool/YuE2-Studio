@@ -560,6 +560,31 @@ fn joint_checkpoint_paths(mut stage: yue_train::TrainingStage) -> Result<yue_tra
     Ok(stage)
 }
 
+/// The trainer prints the file error before a short stage summary. Keep both for the run card.
+#[derive(Default)]
+struct TrainerFailure {
+    file_error: Option<String>,
+    summary: String,
+}
+
+impl TrainerFailure {
+    fn observe(&mut self, line: &str) {
+        if line.starts_with("[STWrite]") {
+            self.file_error = Some(line.to_owned());
+        } else if line.contains("FATAL") || line.to_ascii_lowercase().contains("error") || line.starts_with("ace-train ") && line.contains("failed") {
+            self.summary = line.to_owned();
+        }
+    }
+
+    fn message(self) -> String {
+        match self.file_error {
+            Some(detail) if self.summary.is_empty() => detail,
+            Some(detail) => format!("{detail} | {}", self.summary),
+            None => self.summary,
+        }
+    }
+}
+
 fn new_id() -> String {
     uuid::Uuid::now_v7().simple().to_string()
 }
@@ -1455,9 +1480,10 @@ impl Training {
             for stream in [Box::new(stdout) as Box<dyn tokio::io::AsyncRead + Unpin + Send>, Box::new(stderr)] {
                 let lines_out = lines_out.clone();
                 tokio::spawn(async move {
-                    let mut lines = BufReader::new(stream).lines();
-                    while let Ok(Some(line)) = lines.next_line().await {
-                        if lines_out.send(line).is_err() {
+                    let mut lines = BufReader::new(stream).split(b'\n');
+                    while let Ok(Some(bytes)) = lines.next_segment().await {
+                        let bytes = bytes.strip_suffix(b"\r").unwrap_or(&bytes);
+                        if lines_out.send(String::from_utf8_lossy(bytes).into_owned()).is_err() {
                             break;
                         }
                     }
@@ -1467,7 +1493,7 @@ impl Training {
             *self.step_stages.lock().unwrap_or_else(|poisoned| poisoned.into_inner()) = yue_train::StepStages::default();
             self.f32_path.store(false, std::sync::atomic::Ordering::Relaxed);
             let pid = child.id();
-            let mut last_error = String::new();
+            let mut failure = TrainerFailure::default();
             let status = loop {
                 tokio::select! {
                     line = lines_in.recv() => match line {
@@ -1486,8 +1512,8 @@ impl Training {
                                 self.step_stages.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).started(step, stage, unix_millis());
                             } else if yue_train::takes_f32_path(&line) {
                                 self.f32_path.store(true, std::sync::atomic::Ordering::Relaxed);
-                            } else if line.contains("FATAL") || line.to_ascii_lowercase().contains("error") {
-                                last_error = line;
+                            } else {
+                                failure.observe(&line);
                             }
                         }
                         None => break child.wait().await?,
@@ -1499,6 +1525,7 @@ impl Training {
                 }
             };
             if !status.success() {
+                let mut last_error = failure.message();
                 if last_error.contains("GGML_BACKEND=CUDA0 not found") {
                     bail!("{} stopped: the trainer's CUDA did not load on the graphics card, and training does not run on the processor; it needs NVIDIA driver {} or newer", stage.id, crate::hardware::CUDA13_DRIVER);
                 }
@@ -1857,6 +1884,16 @@ mod tests {
         assert!(!output.exists(), "only the trainer creates its output directory");
         assert_eq!(output.file_name().unwrap(), "output-next");
         assert_eq!(std::fs::read(source).unwrap(), b"state");
+    }
+
+    #[test]
+    fn checkpoint_write_reason_survives_the_last_trainer_line() {
+        let mut failure = TrainerFailure::default();
+        failure.observe("[STWrite] cannot open C:/Studio/data/adapter.safetensors for writing: Permission denied");
+        failure.observe("ace-train yue2-joint-train: checkpoint publication failed");
+        let message = failure.message();
+        assert!(message.contains("adapter.safetensors for writing: Permission denied"));
+        assert!(message.ends_with("checkpoint publication failed"));
     }
 
     #[test]
