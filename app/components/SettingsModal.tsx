@@ -32,24 +32,29 @@ import { setUiScale, storedUiScale, UI_SCALE_EVENT, UI_SCALE_MAX, UI_SCALE_MIN, 
 /// The assistant and the karaoke recogniser are not sections of their own: they
 /// are set up where they are installed, on the models page. Having both was one
 /// capability drawn twice, and the two drawings disagreed.
-type SectionId = 'account' | 'models' | 'engine' | 'cloud' | 'agent' | 'covers' | 'interface' | 'privacy' | 'about';
+const sectionIds = ['account', 'models', 'engine', 'cloud', 'agent', 'covers', 'interface', 'privacy', 'about'] as const;
+type SectionId = typeof sectionIds[number];
+
+export function isSettingsTarget(value: unknown): value is string {
+  return typeof value === 'string' && sectionIds.some(id => id === value.split(':', 1)[0]);
+}
 
 const INPUT =
   'w-full rounded-lg border-2 border-zinc-300 bg-white px-4 py-2.5 text-sm font-medium text-zinc-900 outline-hidden focus:border-indigo-500 dark:border-zinc-700 dark:bg-zinc-800 dark:text-white';
 
 interface SettingsModalProps {
   isOpen: boolean;
-  /// Which page to land on, when the caller has one in mind.
-  initialSection?: string | null;
+  target: string;
+  onNavigate: (section: SectionId) => void;
   onClose: () => void;
   theme: 'light' | 'dark';
   onToggleTheme: () => void;
 }
 
-export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, initialSection, onClose, theme, onToggleTheme }) => {
+export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, target, onNavigate, onClose, theme, onToggleTheme }) => {
   const { user, setDisplayName } = useAuth();
   const { t, language, setLanguage } = useI18n();
-  const [section, setSection] = useState<SectionId>('account');
+  const [section, focus] = target.split(':');
   const [modelsVisited, setModelsVisited] = useState(false);
   const modelSelection = useRef<SetupSelection>(null);
   const [savingModels, setSavingModels] = useState(false);
@@ -59,19 +64,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, initialSec
   }, [isOpen, section]);
   const reportFacts = useSetupStatus<ReportFacts>().data;
   const [reporting, setReporting] = useState(false);
-  /// A part of the page to open at, after a colon: `models:assistant`.
-  const [focus, setFocus] = useState<string | null>(null);
-  // Opened from somewhere with a page in mind - the profile line, say.
-  useEffect(() => {
-    // Only a section that exists. Two of them were removed - the assistant and
-    // karaoke are set up where they are installed now - and a button still
-    // pointed at one, which silently opened whatever was first instead.
-    const [page, part] = (initialSection ?? '').split(':');
-    if (page && sections.some((entry) => entry.id === page)) {
-      setSection(page as SectionId);
-      setFocus(part || null);
-    }
-  }, [initialSection]);
   const [showLangInfo, setShowLangInfo] = useState(false);
   const langInfoRef = useRef<HTMLDivElement>(null);
 
@@ -107,7 +99,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, initialSec
     setSavingModels(true);
     try {
       if (!modelSelection.current || await modelSelection.current.saveSelection()) onClose();
-      else setSection('models');
+      else onNavigate('models');
     } finally {
       setSavingModels(false);
     }
@@ -116,6 +108,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, initialSec
   return (
     <div className="fixed inset-0 z-60 flex items-center justify-center bg-black/50 p-4" onClick={close}>
       <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="settings-page-title"
         className="flex h-[calc(var(--vh)*85)] w-full max-w-4xl overflow-hidden rounded-2xl bg-white shadow-2xl dark:bg-zinc-900"
         onClick={(event) => event.stopPropagation()}
       >
@@ -126,7 +121,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, initialSec
               <button
                 key={entry.id}
                 type="button"
-                onClick={() => setSection(entry.id)}
+                onClick={() => onNavigate(entry.id)}
                 className={`flex w-full items-start gap-2.5 rounded-lg px-2.5 py-2 text-left transition-colors ${
                   section === entry.id
                     ? 'bg-white text-zinc-900 shadow-xs dark:bg-zinc-800 dark:text-white'
@@ -146,7 +141,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, initialSec
         <div className="flex min-w-0 flex-1 flex-col">
           <div className="flex items-center justify-between border-b border-zinc-200 px-6 py-4 dark:border-white/5">
             <div className="min-w-0">
-              <h3 className="truncate text-lg font-bold text-zinc-900 dark:text-white">{active.label}</h3>
+              <h3 id="settings-page-title" className="truncate text-lg font-bold text-zinc-900 dark:text-white">{active.label}</h3>
               <p className="truncate text-xs text-zinc-500 dark:text-zinc-400">{active.hint}</p>
             </div>
             <button onClick={close} disabled={savingModels} className="rounded-full p-2 transition-colors hover:bg-zinc-100 dark:hover:bg-white/5">
@@ -160,7 +155,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, initialSec
               <button
                 key={entry.id}
                 type="button"
-                onClick={() => setSection(entry.id)}
+                onClick={() => onNavigate(entry.id)}
                 className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-semibold ${section === entry.id ? 'bg-zinc-900 text-white dark:bg-white dark:text-black' : 'bg-zinc-100 text-zinc-600 dark:bg-white/5 dark:text-zinc-300'}`}
               >
                 {entry.label}

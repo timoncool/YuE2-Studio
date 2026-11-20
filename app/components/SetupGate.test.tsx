@@ -132,7 +132,14 @@ describe('saving a model set from Settings', () => {
     host = document.createElement('div');
     document.body.append(host);
     root = createRoot(host);
-    await act(async () => root.render(<SettingsModal isOpen initialSection="models" onClose={close} theme="light" onToggleTheme={() => {}} />));
+    function SettingsWindow() {
+      const [target, setTarget] = React.useState('models');
+      return <>
+        <button onClick={() => setTarget('models')}>Open models from the window bridge</button>
+        <SettingsModal isOpen target={target} onNavigate={setTarget} onClose={close} theme="light" onToggleTheme={() => {}} />
+      </>;
+    }
+    await act(async () => root.render(<SettingsWindow />));
     return close;
   }
 
@@ -142,6 +149,17 @@ describe('saving a model set from Settings', () => {
     await act(async () => target!.click());
   }
   const mutations = () => calls.filter(({ url }) => url === '/setup/select' || url === '/setup/download');
+
+  it('returns to the requested page after a manual tab change and retains model edits', async () => {
+    await mountSettings();
+    await press('Next set');
+    await press('account');
+    expect(host.querySelector('h3')?.textContent).toBe('account');
+    await press('Open models from the window bridge');
+    expect(host.querySelector('h3')?.textContent).toBe('modelsSection');
+    await press('done');
+    expect(JSON.parse(mutations()[0].init?.body as string)).toEqual({ component_ids: next });
+  });
 
   it('waits for the selection to save before closing, even after changing tabs', async () => {
     const close = await mountSettings();

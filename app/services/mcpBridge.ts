@@ -120,9 +120,13 @@ function openDialog(): Element | null {
 /// A control inside a song row names the song it belongs to.
 function readPage(): string {
   const lines: string[] = [];
-  const title = document.querySelector('h1, h2')?.textContent?.trim();
-  if (title) lines.push(`Page: ${title}`);
   const dialog = openDialog();
+  const scopeForTitle = dialog ?? document.querySelector('main') ?? document.body;
+  const labelledBy = dialog?.getAttribute('aria-labelledby');
+  const title = (labelledBy && document.getElementById(labelledBy)?.textContent?.trim())
+    || dialog?.getAttribute('aria-label')
+    || Array.from(scopeForTitle.querySelectorAll('h1, h2, h3')).find(visible)?.textContent?.trim();
+  if (title) lines.push(`Page: ${title}`);
   if (dialog) lines.push('A dialog is open; its controls are listed first, then the page behind it.');
   const scope = dialog ? [dialog, document.body] : [document.body];
   const seen = new Set<Element>();
