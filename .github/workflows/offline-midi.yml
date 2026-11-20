@@ -27,11 +27,10 @@ jobs:
           done
           curl -fsSL --retry 3 https://github.com/timoncool/audio.cpp/releases/download/server-31cb1a4a/audiocpp-server-linux-cpu-x64.tar.gz -o released.tgz
           echo 'c8a6746c616711b3543a776c04e2de21a9d84cd1a2a522470e467a55f4032401  released.tgz' | sha256sum -c
-          tar -xzf released.tgz -C released
+          mv released.tgz "$RUNNER_TEMP/old/data/audiocpp-server-linux-cpu-x64.tar.gz"
       - name: Migrate Small and transcribe through the Studio API without a network interface
         run: |
-          exe=$(find "$PWD/released" -name audiocpp_server -type f)
-          sudo env RUNNER_TEMP="$RUNNER_TEMP" QA_MIDI_SOURCE="$RUNNER_TEMP/old/data" QA_PIANO_WAV="$PWD/piano.wav" YUE_AUDIOCPP_SERVER="$exe" unshare -n bash -ec 'ip link set lo up; ip -br link; python3 .github/check_offline_midi.py target/debug/music-server'
+          sudo env RUNNER_TEMP="$RUNNER_TEMP" QA_MIDI_SOURCE="$RUNNER_TEMP/old/data" QA_PIANO_WAV="$PWD/piano.wav" unshare -n bash -ec 'ip link set lo up; ip -br link; python3 .github/check_offline_midi.py target/debug/music-server'
   windows:
     runs-on: windows-2022
     timeout-minutes: 35
