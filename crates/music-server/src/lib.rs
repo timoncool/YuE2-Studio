@@ -2,6 +2,7 @@
 pub mod studio_log;
 mod adapters;
 mod community;
+mod component_catalogue;
 mod diagnostics;
 mod problem;
 mod processing;

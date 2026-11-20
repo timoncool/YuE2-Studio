@@ -805,14 +805,8 @@ fn check_staged_archive(url: &str, archive: &Path) -> Result<String> {
 /// ONNX releases may be unreachable from networks that cannot connect to GitHub at all (#276).
 /// Only offer these mirrors for known, hash-pinned release files. Installation still checks the original pin.
 fn onnx_sources(url: &str) -> Option<&'static [String]> {
-    #[derive(Deserialize)]
-    struct Catalogue { archives: std::collections::BTreeMap<String, Archive> }
-    #[derive(Deserialize)]
-    struct Archive { sources: Vec<String> }
-    static CATALOGUE: std::sync::OnceLock<Catalogue> = std::sync::OnceLock::new();
     let digest = crate::pin_sha::sha256(url)?;
-    let catalogue = CATALOGUE.get_or_init(|| serde_json::from_str(include_str!("../../../distribution/components/catalog.json")).expect("valid bundled component catalogue"));
-    catalogue.archives.get(digest).map(|archive| archive.sources.as_slice())
+    crate::component_catalogue::bundled().sources(digest)
 }
 
 async fn unless_cancelled<T>(cancel: &std::sync::atomic::AtomicBool, work: impl std::future::Future<Output = Result<T>>) -> Result<T> {
