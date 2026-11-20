@@ -101,6 +101,7 @@ pub fn cuda_unavailable_reason(hardware: &Hardware) -> String {
     match (hardware.compute_capability, hardware.driver_major) {
         (Some(compute), _) if compute < CUDA12_OLDEST => format!("compute capability {}.{} is older than the 5.2 the CUDA 12 build starts at", compute.0, compute.1),
         (Some(_), Some(driver)) if driver < CUDA12_DRIVER => format!("driver {driver} is older than the {CUDA12_DRIVER} CUDA 12 needs"),
+        (Some(compute), _) if !engine_has_cuda_image(compute) => format!("the packaged engine has no CUDA image for compute capability {}.{}", compute.0, compute.1),
         _ => "nvidia-smi did not report the card's compute capability and driver".into(),
     }
 }
@@ -126,10 +127,16 @@ pub fn accumulates_in_fp16() -> bool {
     probe().compute_capability.is_some_and(|compute| compute < (8, 0))
 }
 
-/// The CUDA build of the engine a card and driver that run `card` compute on: either build on Windows and Linux, the
-/// same table on both; none on a Mac, which has Metal.
-fn engine_cuda(card: Option<CudaBuild>) -> Option<CudaBuild> {
-    if cfg!(target_os = "macos") { None } else { card }
+/// The universal Windows and Linux packages contain cubins, without forward-compatible PTX.
+fn engine_has_cuda_image(compute: (u32, u32)) -> bool {
+    // Generic images also run on higher minor revisions of the same major. sm_120a is specific to 12.0.
+    matches!(compute, (5, 2..) | (6..=9, _) | (12, 0))
+}
+
+fn engine_cuda(device: Option<((u32, u32), u32)>) -> Option<CudaBuild> {
+    let (compute, driver) = device?;
+    if cfg!(target_os = "macos") || !engine_has_cuda_image(compute) { return None; }
+    cuda_build(compute, driver)
 }
 
 /// `nvidia-smi` costs tens of milliseconds and the setup screen polls status
@@ -149,9 +156,9 @@ fn probe() -> &'static Hardware {
             },
         };
         let device = if nvidia { nvidia_cuda_device() } else { None };
-        let runs_cuda = device.and_then(|(compute, driver)| cuda_build(compute, driver)).is_some();
-        let cuda = engine_cuda(device.and_then(|(compute, driver)| cuda_build(compute, driver)));
         let card_cuda = device.and_then(|(compute, driver)| cuda_build(compute, driver));
+        let runs_cuda = card_cuda.is_some();
+        let cuda = engine_cuda(device);
         let compute_capability = device.map(|(compute, _)| compute);
         let driver_major = device.map(|(_, driver)| driver);
         let vulkan = gpu_name.is_some() && cuda.is_none() && !cfg!(target_os = "macos");
@@ -559,13 +566,18 @@ mod tests {
 
     #[test]
     fn the_engine_computes_on_the_cuda_build_this_platform_ships() {
-        use super::{engine_cuda, CudaBuild};
-        assert_eq!(engine_cuda(None), None, "no NVIDIA card, or a driver that runs neither build: Vulkan");
-        if cfg!(target_os = "macos") {
-            assert_eq!(engine_cuda(Some(CudaBuild::Cuda13)), None, "a Mac computes on Metal");
-        } else {
-            assert_eq!(engine_cuda(Some(CudaBuild::Cuda13)), Some(CudaBuild::Cuda13), "Turing and newer, driver 580 or newer");
-            assert_eq!(engine_cuda(Some(CudaBuild::Cuda12)), Some(CudaBuild::Cuda12), "Maxwell to Volta and GTX 16, driver 525 or newer");
+        use super::{cuda_build, engine_cuda, CudaBuild};
+        assert_eq!(engine_cuda(None), None);
+        for compute in [(10, 0), (10, 3), (11, 0), (12, 1), (13, 0)] {
+            assert_eq!(cuda_build(compute, 590), Some(CudaBuild::Cuda13));
+            assert_eq!(engine_cuda(Some((compute, 590))), None);
+        }
+        for (compute, driver, build) in [
+            ((5, 2), 560, CudaBuild::Cuda12), ((6, 1), 581, CudaBuild::Cuda12),
+            ((7, 2), 581, CudaBuild::Cuda12), ((7, 5), 581, CudaBuild::Cuda13),
+            ((8, 7), 590, CudaBuild::Cuda13), ((12, 0), 590, CudaBuild::Cuda13),
+        ] {
+            assert_eq!(engine_cuda(Some((compute, driver))), (!cfg!(target_os = "macos")).then_some(build));
         }
     }
 
