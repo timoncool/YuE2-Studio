@@ -13,4 +13,3 @@ export async function responseJson<T>(response: Response): Promise<T> {
   const body = await response.json().catch(() => null);
   throw new Error(body?.error ?? `HTTP ${response.status}`);
 }
-
