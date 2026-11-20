@@ -61,6 +61,44 @@ try:
     with concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool:
         list(pool.map(lambda i:http(route+"/title",{"title":f"Take {i}"},"PUT"),range(8)))
     check(http(route)["title"])
+    # Exercise the install button's endpoint with an existing RoFormer weight and no runtime.
+    import hashlib
+    expected_archive=3006666
+    http("/v1/separation/settings",dict(engine="roformer",runtime="cpu",stems=["vocals","instrumental"]),"PUT")
+    status=lambda:http("/v1/separation/status")
+    before=status()
+    assert before["missing_bytes"]==251707744+expected_archive and not before["model"]["installed"],before
+    weight=root/"separation/models/bsroformer/voc_fv6-Q8_0.gguf"
+    weight.parent.mkdir(parents=True,exist_ok=True)
+    subprocess.run(["curl.exe","-fsSL","--retry","3","https://huggingface.co/chenmozhijin/BSRoformer-GGUF/resolve/df802a6773d25ba6ef785ff619daa3e510503168/GaboxR67/MelBandRoformers/melbandroformers/vocals/voc_fv6-Q8_0.gguf","-o",str(weight)],check=True)
+    with weight.open("rb") as fp:
+        assert hashlib.file_digest(fp,"sha256").hexdigest()=="2cd84c9f24513749b0cb1a6ab3e3be5c5e2f7d0e8533e50512c1f394d2828a73"
+    partial=status()
+    assert partial["model"]["installed"] and not partial["runtime_installed"] and partial["missing_bytes"]==expected_archive,partial
+    assert http("/v1/separation/install",{},"POST")["started"]
+    deadline=time.monotonic()+160
+    while time.monotonic()<deadline:
+        installed=status()
+        if installed["ready"]:break
+        assert not (installed.get("download") or {}).get("error"),installed
+        time.sleep(.5)
+    assert installed["runtime_installed"] and not installed["missing_bytes"],installed
+    assert http(route+"/stems",{},"POST")["started"]
+    deadline=time.monotonic()+180
+    while time.monotonic()<deadline:
+        result=http(route+"/stems")
+        if (result.get("run") or {}).get("done"):break
+        time.sleep(.5)
+    assert set(result["stems"])=={"vocals","instrumental"},result
+    assert {x["stem"] for x in result["library_songs"]}==set(result["stems"]),result
+    for stem in result["stems"]:
+        with urlopen(api+route+"/stems/"+stem,timeout=8) as res:
+            with wave.open(__import__("io").BytesIO(res.read())) as wav:
+                assert wav.getnchannels()==2 and wav.getframerate()==44100 and wav.getnframes()>80000
+    http("/v1/separation/settings",dict(engine="htdemucs",runtime="cpu",stems=["vocals"]),"PUT")
+    other=status()
+    assert not other["model"]["installed"] and not other["runtime_installed"] and not other["ready"],other
+    print(json.dumps(dict(roformer_missing_before=before["missing_bytes"],with_model=partial["missing_bytes"],after=installed["missing_bytes"],stems=result["stems"],htdemucs_ready=other["ready"])),flush=True)
     result=http("/mcp",{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"library_song_rename",
                 "arguments":{"song_id":row["id"],"title":"MCP title"}}},"POST")
     assert not result["result"].get("isError"),result
