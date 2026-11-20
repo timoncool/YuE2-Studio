@@ -290,11 +290,11 @@ pub const ASSETS: &[Asset] = &[
     #[cfg(windows)]
     Asset {
         id: "onnxruntime",
-        label: "ONNX Runtime 1.31.1",
+        label: "ONNX Runtime 1.32.0",
         kind: AssetKind::Runtime,
-        url: "https://github.com/timoncool/onnxruntime/releases/download/v1.31.1/onnxruntime-win-x64-1.31.1.zip",
+        url: "https://github.com/timoncool/onnxruntime/releases/download/v1.32.0/onnxruntime-win-x64-1.32.0.zip",
         relative_path: "runtime/onnxruntime.zip",
-        bytes: 82_929_944,
+        bytes: 96_945_131,
         unzip_into: Some("onnx"),
         marker: "onnxruntime.dll",
         pick: &[],
@@ -304,11 +304,11 @@ pub const ASSETS: &[Asset] = &[
     #[cfg(target_os = "macos")]
     Asset {
         id: "onnxruntime",
-        label: "ONNX Runtime 1.31.1",
+        label: "ONNX Runtime 1.32.0",
         kind: AssetKind::Runtime,
-        url: "https://github.com/timoncool/onnxruntime/releases/download/v1.31.1/onnxruntime-osx-arm64-1.31.1.tgz",
+        url: "https://github.com/timoncool/onnxruntime/releases/download/v1.32.0/onnxruntime-osx-arm64-ventura-1.32.0.tgz",
         relative_path: "runtime/onnxruntime.tgz",
-        bytes: 36_936_435,
+        bytes: 12_312_541,
         unzip_into: Some("onnx"),
         marker: "libonnxruntime",
         pick: &[],
@@ -318,11 +318,11 @@ pub const ASSETS: &[Asset] = &[
     #[cfg(target_os = "linux")]
     Asset {
         id: "onnxruntime",
-        label: "ONNX Runtime 1.31.1",
+        label: "ONNX Runtime 1.32.0",
         kind: AssetKind::Runtime,
-        url: "https://github.com/timoncool/onnxruntime/releases/download/v1.31.1/onnxruntime-linux-x64-1.31.1.tgz",
+        url: "https://github.com/timoncool/onnxruntime/releases/download/v1.32.0/onnxruntime-linux-x64-1.32.0.tgz",
         relative_path: "runtime/onnxruntime.tgz",
-        bytes: 11_413_655,
+        bytes: 13_425_244,
         unzip_into: Some("onnx"),
         marker: "libonnxruntime.so",
         pick: &[],
@@ -1415,7 +1415,7 @@ mod tests {
     const CUFFT_BUILD: &str = "11.4.1.4";
     const CUDNN_BUILD: &str = "9.25.0.15";
     const CURAND_BUILD: &str = "10.3.10.19";
-    const ONNXRUNTIME_BUILD: &str = "v1.31.1";
+    const ONNXRUNTIME_BUILD: &str = "v1.32.0";
     const ONNXRUNTIME_DIRECTML_BUILD: &str = "onnxruntime.directml/1.24.4/";
     const DIRECTML_BUILD: &str = "ai.directml/1.15.4/";
 
