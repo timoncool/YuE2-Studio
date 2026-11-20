@@ -42,6 +42,7 @@ export const ru = {
     journalKind_dataset: 'датасет',
     journalKind_training: 'обучение',
     journalKind_lora: 'LoRA',
+    journalKind_rvc_voice: 'голос RVC',
     journalKind_download: 'загрузка',
     journalKind_model: 'модель',
     journalKind_settings: 'настройки',

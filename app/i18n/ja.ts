@@ -42,6 +42,7 @@ export const ja = {
   journalKind_dataset: 'データセット',
   journalKind_training: '学習',
   journalKind_lora: 'LoRA',
+  journalKind_rvc_voice: 'RVC 音声',
   journalKind_download: 'ダウンロード',
   journalKind_model: 'モデル',
   journalKind_settings: '設定',

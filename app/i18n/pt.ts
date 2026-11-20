@@ -41,6 +41,7 @@ export const pt = {
     journalKind_dataset: 'conjunto de dados',
     journalKind_training: 'treino',
     journalKind_lora: 'LoRA',
+    journalKind_rvc_voice: 'voz RVC',
     journalKind_download: 'transferência',
     journalKind_model: 'modelo',
     journalKind_settings: 'definições',

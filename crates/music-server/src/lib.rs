@@ -47,6 +47,7 @@ mod gpu_memory;
 mod chunked;
 mod separation;
 mod restore;
+mod rvc_voices;
 mod midi;
 mod midi_edit;
 mod score;
@@ -1649,6 +1650,8 @@ pub async fn serve_on_port(port: u16) -> anyhow::Result<()> {
     let app = Router::new()
         .route("/health", get(health))
         .route("/v1/capabilities", get(capabilities))
+        .route("/v1/rvc/voices", get(rvc_voices::list))
+        .route("/v1/rvc/voices/import", post(rvc_voices::import).layer(DefaultBodyLimit::max(rvc_voices::UPLOAD_LIMIT)))
         .route("/v1/configuration", get(configuration).put(update_configuration))
         .route("/engine/options", get(engine_options).put(update_engine_options))
         .route("/engine/options/fitted", axum::routing::delete(reset_fitted_max_seq))

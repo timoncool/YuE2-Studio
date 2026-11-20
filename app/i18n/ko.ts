@@ -42,6 +42,7 @@ export const ko = {
     journalKind_dataset: '데이터셋',
     journalKind_training: '학습',
     journalKind_lora: 'LoRA',
+    journalKind_rvc_voice: 'RVC 음성',
     journalKind_download: '다운로드',
     journalKind_model: '모델',
     journalKind_settings: '설정',
