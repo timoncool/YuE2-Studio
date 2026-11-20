@@ -9610,7 +9610,14 @@ fn adopt_optional_file(source: &std::path::Path, target: &std::path::Path, sha: 
         if same_file::is_same_file(source, target)? || install_record::sha256_of(target).is_ok_and(|value| value == sha) {
             return Ok(false);
         }
-        return Err(std::io::Error::new(std::io::ErrorKind::InvalidData, format!("SHA-256 mismatch in the installed file: {}", target.display())));
+        // An older build may have the same name. Keep it usable until its
+        // replacement has been staged and verified on the destination volume.
+        let parent = target.parent().ok_or_else(|| std::io::Error::other("component file has no parent directory"))?;
+        let staging = tempfile::tempdir_in(parent)?;
+        let checked = staging.path().join("verified");
+        studio_hub_client::neighbors::take_file(source, &checked, true, |file| install_record::sha256_of(file).is_ok_and(|value| value == sha))?;
+        std::fs::rename(checked, target)?;
+        return Ok(true);
     }
     studio_hub_client::neighbors::take_file(source, target, true, |file| install_record::sha256_of(file).is_ok_and(|value| value == sha))?;
     Ok(true)
@@ -13178,8 +13185,11 @@ mod tests {
         assert_eq!(std::fs::read(&second).unwrap(), b"new");
         std::fs::remove_file(&target).unwrap();
         std::fs::write(&target, b"bad").unwrap();
-        assert!(adopt_optional_file(&second, &target, &sha).is_err());
+        assert!(adopt_optional_file(&first, &target, &sha).is_err());
         assert_eq!(std::fs::read(&target).unwrap(), b"bad");
+        assert!(adopt_optional_file(&second, &target, &sha).unwrap());
+        assert_eq!(std::fs::read(&target).unwrap(), b"new");
+        assert_eq!(std::fs::read(&first).unwrap(), b"old");
     }
 
     #[test]
