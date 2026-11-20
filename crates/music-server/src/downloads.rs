@@ -1003,7 +1003,7 @@ async fn download_and_extract_named(
         let archive = destination.join(format!("{}.part-archive", asset.id));
         let url = crate::net::model_url(asset.url);
         let mirror = crate::engine_runtime::archive_mirror(asset.url);
-        let (plan, url) = crate::chunked::probe_with_mirror(http, &url, mirror).await?;
+        let (plan, url) = unless_cancelled(&cancel, crate::chunked::probe_with_mirror(http, &url, mirror)).await?;
         let written = Arc::new(std::sync::atomic::AtomicU64::new(0));
         let reporter = {
             let (written, progress) = (written.clone(), progress.clone());
@@ -1017,7 +1017,8 @@ async fn download_and_extract_named(
                 }
             })
         };
-        let outcome = crate::chunked::fetch(http, &url, &archive, plan, written, cancel).await;
+        let attempt_stop = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let outcome = unless_cancelled(&cancel, crate::chunked::fetch(http, &url, &archive, plan, written, attempt_stop)).await;
         reporter.abort();
         outcome?;
         archive
@@ -1692,6 +1693,38 @@ mod tests {
         assert!(!holds_todays(false, runtime.url, &file).await, "an unpinned runtime is never taken as today's by its name");
         assert!(holds_todays(true, runtime.url, &file).await, "a model counts by its file");
         fs::remove_dir_all(&root).ok();
+    }
+
+    #[tokio::test]
+    async fn a_runtime_with_selected_libraries_can_cancel_a_stalled_probe() {
+        let stalled = Arc::new(tokio::sync::Notify::new());
+        let app = axum::Router::new().route("/libraries.zip", axum::routing::get({
+            let stalled = stalled.clone();
+            move || async move { stalled.notify_one(); std::future::pending::<String>().await }
+        }));
+        let (base, server) = onnx_fixture(app).await;
+        let pack = Box::leak(Box::new(Asset {
+            url: Box::leak(format!("{base}/libraries.zip").into_boxed_str()),
+            pick: &["library.dll"],
+            ..asset()
+        }));
+        let temp = tempfile::tempdir().unwrap();
+        let mut downloader = Downloader::new(temp.path().to_owned());
+        downloader.http = reqwest::Client::builder().no_proxy().build().unwrap();
+        tokio::time::timeout(std::time::Duration::from_secs(5), async {
+            downloader.install("training", pack).await.unwrap();
+            stalled.notified().await;
+            assert!(downloader.cancel_for("training").await);
+            loop {
+                let progress = downloader.active_for("training").await.unwrap();
+                if progress.done {
+                    assert_eq!(progress.error.as_deref(), Some("cancelled"));
+                    break;
+                }
+                tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+            }
+        }).await.expect("cancel should interrupt the archive probe");
+        server.abort();
     }
 
     #[tokio::test]
