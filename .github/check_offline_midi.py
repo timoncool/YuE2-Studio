@@ -28,7 +28,10 @@ shared=root/"registry"
 shared.mkdir()
 # Nothing registers this library as another Studio. Only the folder picker knows it.
 (broken/relative/"config.json").rename(old/"config.json")
-expected=["muscriptor-small-config","muscriptor-small-model"]
+expected=["muscriptor-small-config","muscriptor-small-model","llama-cpu"]
+llama_archive=old/("llama-b12556-bin-win-cpu-x64.zip" if os.name=="nt" else "llama-cpu.tar.gz")
+llama_sha="98882a3ca45688ffa585c3adba49213ca90c5b2dbbf1bc2af41ac437a0987d17" if os.name=="nt" else "1a573b6089d29c9048eefe8497dd40cac4115400f223d33f2a71e506bf6d5b18"
+assert digest(llama_archive)==llama_sha
 if os.name=="nt":
     import io,zipfile
     url="https://files.pythonhosted.org/packages/59/df/e7c3a360be4f7b93cee39271b792669baeb3846c58a4df6dfcf187a7ffab/nvidia_cuda_runtime_cu12-12.9.79-py3-none-win_amd64.whl"
@@ -73,6 +76,9 @@ with log.open("wb") as stream:
             installed_dll=studio/"audiocpp/runtime/audiocpp-cuda12/cudart64_12.dll"
             assert digest(installed_dll)=="760c38928bbe5759f7b31ed6692599eb7ec83cedd5702e84c2b72028a89837e1"
         assert digest(archive)==archive_sha
+        assert digest(llama_archive)==llama_sha
+        assistant=call("/v1/assistant/runtime")
+        assert next(row["installed"] for row in assistant["assets"] if row["id"]=="llama-cpu"),assistant
         status=call("/v1/midi")
         installed=next(x["installed"] for x in status["sizes"] if x["id"]=="small")
         assert installed,status

@@ -27,6 +27,7 @@ jobs:
           done
           curl -fsSL --retry 3 https://github.com/timoncool/audio.cpp/releases/download/server-31cb1a4a/audiocpp-server-linux-cpu-x64.tar.gz -o released.tgz
           echo 'c8a6746c616711b3543a776c04e2de21a9d84cd1a2a522470e467a55f4032401  released.tgz' | sha256sum -c
+          curl -fLsS --retry 3 https://github.com/ggml-org/llama.cpp/releases/download/b12556/llama-b12556-bin-ubuntu-x64.tar.gz -o "$RUNNER_TEMP/old/data/llama-cpu.tar.gz"
           mv released.tgz "$RUNNER_TEMP/old/data/audiocpp-server-linux-cpu-x64.tar.gz"
       - name: Migrate Small and transcribe through the Studio API without a network interface
         run: |
@@ -48,5 +49,7 @@ jobs:
             curl.exe --fail --location --retry 3 "https://huggingface.co/cocktailpeanut/muscriptor-small/resolve/31a8f75d6a8b5383fd71ad1371dc1620389ab722/$file" --output (Join-Path $models $file)
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           }
+          curl.exe --fail --location --retry 3 https://github.com/ggml-org/llama.cpp/releases/download/b12556/llama-b12556-bin-win-cpu-x64.zip --output (Join-Path $env:QA_MIDI_SOURCE 'llama-b12556-bin-win-cpu-x64.zip')
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           $env:PYTHONUTF8 = '1'
           python .github/check_offline_midi.py target/debug/music-server.exe --verify-files
