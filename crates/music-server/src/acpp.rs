@@ -23,24 +23,23 @@ pub fn muscriptor_id(size: &str) -> String {
 /// How long a start may take before the server answers `/health` (it loads no model at start).
 const READY_WITHIN: Duration = Duration::from_secs(60);
 
-/// The build of the server a device choice runs: `cpu`; `gpu`, the card (its CUDA build: 13, else 12.9; Vulkan on a
-/// card of another make); or `auto`: the card when there is one, else the processor. An NVIDIA card runs Vulkan only
-/// when it runs neither CUDA build and Auto falls to the processor then. A Mac on Apple silicon has one program, Metal
-/// and the processor in it. An error when the card is asked for and there is none it runs on.
+/// The packaged audio.cpp CUDA modules target the same architectures as YuE2's native modules.
+/// Auto uses the processor on NVIDIA when no packaged CUDA image fits. An explicit GPU
+/// request can use the Vulkan package on a card with a newer, unsupported architecture.
 pub fn build_for(choice: &str) -> Result<Build> {
     if let Some(mac) = Build::for_this_mac() {
         return Ok(mac);
     }
     let hardware = crate::hardware::hardware();
-    let card = match hardware.card_cuda {
+    let card = match hardware.cuda {
         Some(crate::hardware::CudaBuild::Cuda13) => Some(Build::Cuda13),
         Some(crate::hardware::CudaBuild::Cuda12) => Some(Build::Cuda12),
-        None if hardware.gpu_name.is_some() && !hardware.nvidia => Some(Build::Vulkan),
+        None if hardware.gpu_name.is_some() && (!hardware.nvidia || (choice == "gpu" && hardware.card_cuda.is_some())) => Some(Build::Vulkan),
         None => None,
     };
     match choice {
         "cpu" => Ok(Build::Cpu),
-        "gpu" | "cuda" => card.ok_or_else(|| anyhow!("there is no graphics card here audio.cpp computes on (an NVIDIA card needs a driver that runs CUDA 12.9 or 13); choose Auto or the processor")),
+        "gpu" | "cuda" => card.ok_or_else(|| anyhow!("the selected GPU runtime is unavailable for this card and driver; choose Auto or the processor")),
         _ => Ok(card.unwrap_or(Build::Cpu)),
     }
 }
