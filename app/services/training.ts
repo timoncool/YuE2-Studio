@@ -212,6 +212,7 @@ export type Fill = 'none' | 'missing' | 'all';
 export interface PrepareRequest {
   items?: string[];
   lyrics: Fill;
+  skip_asr?: boolean;
   style: Fill;
   language?: string;
   /** Start this run once every song is ready. */

@@ -53,6 +53,9 @@ pub struct PrepareRequest {
     pub items: Option<Vec<String>>,
     #[serde(default)]
     pub lyrics: Fill,
+    /// Look up missing lyrics without separating vocals or using a recogniser.
+    #[serde(default)]
+    pub skip_asr: bool,
     #[serde(default)]
     pub style: Fill,
     /// The language sung, when the user knows it.
@@ -90,6 +93,8 @@ struct Job {
     dataset: String,
     items: Option<Vec<String>>,
     lyrics: bool,
+    #[serde(default)]
+    skip_asr: bool,
     style: bool,
     language: Option<String>,
     train: Option<TrainAfter>,
@@ -199,11 +204,12 @@ pub async fn start(
         return Err(api_error(StatusCode::BAD_REQUEST, "no songs to prepare".into()));
     }
     // "again" sends the songs back to the start of the step
-    state.training.reset_states(&id, &chosen, request.lyrics == Fill::All, request.style == Fill::All).map_err(crate::training_error)?;
+    state.training.reset_states(&id, &chosen, request.lyrics == Fill::All && !request.skip_asr, request.style == Fill::All).map_err(crate::training_error)?;
     let job = Job {
         dataset: id,
         items: request.items,
         lyrics: request.lyrics != Fill::None,
+        skip_asr: request.skip_asr,
         style: request.style != Fill::None,
         language: request.language,
         train: request.train,
@@ -535,8 +541,10 @@ async fn run(state: &AppState, job: &Job) -> anyhow::Result<()> {
     settle_pending(&state.training, job, &shared, can_listen, Passed::Nothing);
 
     // Binds the machine's ONNX Runtime before anything loads a session
-    if let Err(error) = state.lyrics_sync.bind_ort() {
-        eprintln!("[ERROR] preparation runs without ONNX Runtime: {error:#}");
+    if !job.skip_asr || job.style && can_listen {
+        if let Err(error) = state.lyrics_sync.bind_ort() {
+            eprintln!("[ERROR] preparation runs without ONNX Runtime: {error:#}");
+        }
     }
 
     // One model on the card at a time: Whisper, then MOSS, then the assistant
@@ -580,6 +588,10 @@ async fn run(state: &AppState, job: &Job) -> anyhow::Result<()> {
     .await;
     crate::release_assistant_unless_kept(state).await;
     outcome
+}
+
+fn needs_recogniser(job: &Job, item: &training::DatasetItem) -> bool {
+    !job.skip_asr && item.lyrics_state == training::LyricsState::Wanted
 }
 
 /// The lyrics: the databases first, then vocals and Whisper for what none of
@@ -671,6 +683,7 @@ async fn lyrics_branch(state: &AppState, job: &Job, lyric_items: &[&training::Da
     // Russian as Ukrainian or Belarusian
     let language = job.language.clone().or_else(|| sung_language(sheets.iter().map(|(_, text)| text.as_str())).map(str::to_string));
     let mut transcripts: Vec<(String, String)> = Vec::new();
+    lyric_items.retain(|item| needs_recogniser(job, item));
     if !lyric_items.is_empty() {
         let config = state.lyrics_sync_config.read().await.clone();
         if !config.available() || matches!(config.provider, lyrics_sync::AsrProvider::None) {
@@ -1175,7 +1188,7 @@ mod tests {
     #[test]
     fn a_song_leaves_the_queue_once_its_steps_are_behind() {
         use training::{LyricsState as L, StyleState as S};
-        let job = Job { dataset: "d".into(), items: None, lyrics: true, style: true, language: None, train: None, writer: Writer::Studio };
+        let job = Job { dataset: "d".into(), items: None, lyrics: true, skip_asr: false, style: true, language: None, train: None, writer: Writer::Studio };
         // found lyrics wait for the writing, whatever else is done
         assert!(has_work(&song(L::Found, S::Done), &job, true, Passed::Listening));
         assert!(!has_work(&song(L::Found, S::Done), &job, true, Passed::Writing));
@@ -1188,6 +1201,30 @@ mod tests {
         // a lyrics-only job leaves the style alone
         let lyrics_only = Job { style: false, ..job.clone() };
         assert!(!has_work(&song(L::Done, S::Heard), &lyrics_only, true, Passed::Nothing));
+    }
+
+    #[test]
+    fn mixed_dataset_can_use_lyrics_found_without_sending_missing_items_to_asr() {
+        use training::{LyricsState as L, StyleState as S};
+        let saved = serde_json::json!({
+            "dataset": "d", "items": null, "lyrics": true, "style": false,
+            "language": null, "train": null, "writer": "studio"
+        });
+        let original: Job = serde_json::from_value(saved).unwrap();
+        assert!(!original.skip_asr);
+        let skip = Job { skip_asr: true, ..original.clone() };
+        let ready = song(L::Done, S::Done);
+        let found = song(L::Found, S::Done);
+        let missing = song(L::Wanted, S::Done);
+        let mixed = [&ready, &found, &missing];
+        assert_eq!(mixed.into_iter().filter(|item| needs_recogniser(&original, item)).count(), 1);
+        assert!(!mixed.into_iter().any(|item| needs_recogniser(&skip, item)));
+        assert!(has_work(&missing, &skip, false, Passed::Nothing)); // database lookup still runs
+        assert!(has_work(&found, &skip, false, Passed::Lyrics)); // found lyrics can be laid out
+        assert!(!has_work(&ready, &skip, false, Passed::Nothing));
+        assert!(!has_work(&missing, &skip, false, Passed::Lyrics));
+        let resumed: Job = serde_json::from_value(serde_json::to_value(&skip).unwrap()).unwrap();
+        assert!(resumed.skip_asr);
     }
 
     #[test]
