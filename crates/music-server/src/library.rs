@@ -23,13 +23,23 @@ pub struct ImportedSong { pub song: Song, pub audio_filename: String }
 /// How many of the latest journal lines are kept, and read.
 pub const JOURNAL_KEPT:i64=500;
 #[derive(Debug, Clone, Serialize, Deserialize)] pub struct JournalEntry { #[serde(default)] pub id:i64, #[serde(default)] pub at:String, pub source:String, #[serde(default)] pub tone:String, #[serde(default)] pub verb:String, #[serde(default)] pub kind:String, #[serde(default)] pub target:String, #[serde(default)] pub text:String }
+/// Albums share playlist storage but use either the original album marker
+/// or the new collection envelope with cover artwork.
+pub(crate) fn is_album_description(value:Option<&str>)->bool{
+ let Some(raw)=value else{return false};
+ if raw.starts_with("[YuE2-Studio:album:v1]\n"){return true;}
+ raw.strip_prefix("[YuE2-Studio:collection:v2]\n")
+  .and_then(|json|serde_json::from_str::<serde_json::Value>(json).ok())
+  .and_then(|document|document.get("kind").and_then(serde_json::Value::as_str).map(|kind|kind=="album"))
+  .unwrap_or(false)
+}
 #[derive(Debug, Clone, Deserialize)] pub struct PlaylistInput { pub name:String, pub description:Option<String>, #[serde(default)] pub song_ids:Vec<String> }
 fn manual_source()->String{"manual".into()}
 
 /// Playable length measured from the audio itself.
 ///
-/// The engine's replay request is sparse — a 60-second track omits the
-/// `duration` field because 60 is the default — so the only dependable source
+/// The engine's replay request is sparse вЂ” a 60-second track omits the
+/// `duration` field because 60 is the default вЂ” so the only dependable source
 /// for a library row is the rendered file. WAV is read from its header; an MP3
 /// the studio rendered at a declared constant bitrate from that bitrate; any
 /// other file, an imported MP3 among them, from its own frames and headers.
@@ -126,6 +136,7 @@ impl Library {
              AND json_extract(metadata_json,'$.deleted_with')=json_extract(metadata_json,'$.derived.from')
              AND json_type(metadata_json,'$.derived.tool')='text'
              AND json_extract(metadata_json,'$.derived.tool') NOT IN ('','stems')", [])?;
+  c.execute_batch("CREATE TABLE IF NOT EXISTS album_order(playlist_id TEXT PRIMARY KEY REFERENCES playlists(id) ON DELETE CASCADE, position INTEGER NOT NULL);")?;
   c.execute_batch("CREATE TABLE IF NOT EXISTS legacy_ids(source TEXT NOT NULL,kind TEXT NOT NULL,old_id TEXT NOT NULL,new_id TEXT NOT NULL UNIQUE,imported INTEGER NOT NULL DEFAULT 0,PRIMARY KEY(source,kind,old_id))")?;
   Ok(Self{connection:Arc::new(Mutex::new(c)),media_dir})}
  pub(super) fn legacy_song_mappings(&self, source: &str) -> Result<std::collections::HashMap<String,(String,bool)>> {
@@ -478,7 +489,46 @@ impl Library {
     Ok(())
  }
  fn save_song(&self,s:&Song)->Result<()> {self.connection.lock().unwrap().execute("INSERT INTO songs VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET title=excluded.title,audio_path=excluded.audio_path,caption=excluded.caption,lyrics=excluded.lyrics,metadata_json=excluded.metadata_json,generation_settings_json=excluded.generation_settings_json,engine_id=excluded.engine_id,profile_id=excluded.profile_id,replay_request_json=excluded.replay_request_json,audio_codes_json=excluded.audio_codes_json,source=excluded.source,updated_at=excluded.updated_at",params![s.id,s.title,s.audio_path,s.caption,s.lyrics,s.metadata.to_string(),s.generation_settings.to_string(),s.engine_id,s.profile_id,s.replay_request.as_ref().map(|v|v.to_string()),s.audio_codes.as_ref().map(|v|v.to_string()),s.source,s.created_at,s.updated_at])?;crate::mcp::announce("library");Ok(())}
- pub fn list_playlists(&self)->Result<Vec<Playlist>>{let c=self.connection.lock().unwrap();let mut s=c.prepare("SELECT id,name,description,created_at,updated_at FROM playlists ORDER BY created_at DESC")?;Ok(s.query_map([],|r|playlist(&c,r))?.collect::<rusqlite::Result<_>>()?)}
+ pub fn list_playlists(&self)->Result<Vec<Playlist>>{
+  let c=self.connection.lock().unwrap();
+  Self::read_playlists(&c)
+ }
+ pub(crate) fn read_playlists(c: &Connection) -> Result<Vec<Playlist>> {
+  let ranked: bool = c.query_row("SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='album_order')", [], |row| row.get(0))?;
+  let sql = if ranked {
+   "SELECT p.id,p.name,p.description,p.created_at,p.updated_at FROM playlists p LEFT JOIN album_order o ON o.playlist_id=p.id ORDER BY o.position IS NULL, o.position, p.created_at DESC, p.id DESC"
+  } else {
+   "SELECT id,name,description,created_at,updated_at FROM playlists ORDER BY created_at DESC,id DESC"
+  };
+  let mut stmt = c.prepare(sql)?;
+  Ok(stmt.query_map([], |row| playlist(c, row))?.collect::<rusqlite::Result<_>>()?)
+ }
+ /// Reorders the complete album set atomically. The library and Add to Album
+ /// share the same returned order, including after a portable-app restart.
+ pub fn reorder_albums(&self, ids:&[String])->Result<Vec<Playlist>>{
+  use std::collections::HashSet;
+  let mut c=self.connection.lock().unwrap();
+  let tx=c.transaction()?;
+  let existing:Vec<(String,Option<String>)>={
+   let mut stmt=tx.prepare("SELECT id,description FROM playlists")?;
+   let rows=stmt.query_map([],|row|Ok((row.get(0)?,row.get(1)?)))?;
+   rows.collect::<rusqlite::Result<_>>()?
+  };
+  let albums:HashSet<String>=existing.into_iter()
+   .filter(|(_,description)|is_album_description(description.as_deref()))
+   .map(|(id,_)|id).collect();
+  let proposed:HashSet<String>=ids.iter().cloned().collect();
+  anyhow::ensure!(ids.len()==proposed.len() && proposed==albums,
+   "Albums changed while sorting. Refresh the library and try again.");
+  tx.execute("DELETE FROM album_order",[])?;
+  for (position,id) in ids.iter().enumerate(){
+   tx.execute("INSERT INTO album_order(playlist_id,position) VALUES(?1,?2)",params![id,position as i64])?;
+  }
+  tx.commit()?;
+  drop(c);
+  crate::mcp::announce("library");
+  self.list_playlists()
+ }
  pub fn get_playlist(&self,id:&str)->Result<Option<Playlist>>{let c=self.connection.lock().unwrap();c.query_row("SELECT id,name,description,created_at,updated_at FROM playlists WHERE id=?",[id],|r|playlist(&c,r)).optional().map_err(Into::into)}
  pub fn create_playlist(&self,input:PlaylistInput)->Result<Playlist>{let now=now();let p=Playlist{id:uuid::Uuid::now_v7().to_string(),name:input.name,description:input.description,song_ids:input.song_ids,created_at:now.clone(),updated_at:now};self.save_playlist(&p)?;Ok(p)}
  pub fn update_playlist(&self,id:&str,input:PlaylistInput)->Result<Option<Playlist>>{let Some(mut playlist)=self.get_playlist(id)? else{return Ok(None)};playlist.name=input.name;playlist.description=input.description;playlist.song_ids=input.song_ids;playlist.updated_at=now();self.save_playlist(&playlist)?;Ok(Some(playlist))}
@@ -540,7 +590,47 @@ pub fn is_trashed(song:&Song)->bool{song.metadata.get("deleted_at").is_some()}
 pub fn trashed_at(song:&Song)->u64{song.metadata.get("deleted_at").and_then(serde_json::Value::as_str).and_then(|at|at.parse().ok()).unwrap_or(0)}
 /// The song whose deletion took this one to the bin with it.
 pub fn trashed_with(song:&Song)->Option<&str>{song.metadata.get("deleted_with").and_then(serde_json::Value::as_str)}
-#[cfg(test)]mod tests{use super::*;#[test]fn a_structured_caption_does_not_become_a_title_of_headings(){
+#[cfg(test)]mod tests{use super::*;#[test]
+fn albums_can_be_reordered_across_restarts_without_changing_tracklists() {
+ let root=std::env::temp_dir().join(format!("yue2-album-order-{}",uuid::Uuid::now_v7().simple()));
+ let path=root.join("library.sqlite");
+ let media=root.join("media");
+ let db=Library::open_at(path.clone(),media.clone()).unwrap();
+ let make=|name:&str,description:Option<String>|db.create_playlist(PlaylistInput {
+  name:name.into(),description,song_ids:vec![]
+ }).unwrap();
+ let a=make("Rain",Some("[YuE2-Studio:album:v1]\n".into()));
+ let b=make("Swing",Some(format!("[YuE2-Studio:collection:v2]\n{}",serde_json::json!({
+  "kind":"album","description":"","coverUrl":"data:image/png;base64,YWJj"
+ }))));
+ let c=make("Lo-fi",Some("[YuE2-Studio:album:v1]\n".into()));
+ let ordinary=make("My playlist",None);
+ assert!(is_album_description(a.description.as_deref()));
+ assert!(is_album_description(b.description.as_deref()));
+ assert!(!is_album_description(ordinary.description.as_deref()));
+ let ids=vec![a.id.clone(),c.id.clone(),b.id.clone()];
+ let listed=db.reorder_albums(&ids).unwrap();
+ let albums:Vec<String>=listed.iter().filter(|p|is_album_description(p.description.as_deref()))
+  .map(|p|p.id.clone()).collect();
+ assert_eq!(albums,ids);
+ assert_eq!(listed.iter().filter(|p|p.id==ordinary.id).count(),1);
+ assert!(db.reorder_albums(&[a.id.clone(),c.id.clone()]).is_err(),"partial reorder must not erase an album's place");
+ assert!(db.reorder_albums(&[a.id.clone(),a.id.clone(),b.id.clone()]).is_err(),"duplicate ids must not change the order");
+ assert!(db.reorder_albums(&[ordinary.id.clone(),c.id.clone(),b.id.clone()]).is_err(),"playlist must not enter album order");
+ db.update_playlist(&c.id,PlaylistInput{name:"Lo-fi chill".into(),description:c.description.clone(),song_ids:vec![]}).unwrap();
+ drop(db);
+ let opened=Library::open_at(path,media).unwrap();
+ let after:Vec<String>=opened.list_playlists().unwrap().into_iter()
+  .filter(|p|is_album_description(p.description.as_deref()))
+  .map(|p|p.id).collect();
+ assert_eq!(after,ids,"both library cards and album picker should get this persisted order");
+ opened.delete_playlist(&c.id).unwrap();
+ assert_eq!(opened.list_playlists().unwrap().into_iter().filter(|p|is_album_description(p.description.as_deref())).count(),2);
+ drop(opened);
+ let _=fs::remove_dir_all(root);
+}
+
+#[test]fn a_structured_caption_does_not_become_a_title_of_headings(){
   let caption="Global Metadata
 Basic Attributes: bpm is 118. key is F# minor, and scale is minor. Darkwave, Synth-pop. Global Emotional Progression: haunting.";
   assert_eq!(generated_title(caption),"Darkwave, Synth-pop");
@@ -743,7 +833,7 @@ mod edit_tests {
         let root = std::env::temp_dir().join(format!("library-bin-{}", uuid::Uuid::now_v7().simple()));
         let db = Library::open_at(root.join("library.sqlite"), root.join("media")).unwrap();
         let song = |title: &str| db.create_song(SongInput { title: title.into(), audio_path: None, caption: String::new(), lyrics: String::new(), metadata: serde_json::json!({ "lrc": "[00:01.00] la" }), generation_settings: serde_json::Value::Null, engine_id: "manual".into(), profile_id: None, replay_request: None, audio_codes: None, source: "manual".into() }).unwrap().id;
-        let (kept, binned, stem) = (song("kept"), song("binned"), song("binned · vocals"));
+        let (kept, binned, stem) = (song("kept"), song("binned"), song("binned В· vocals"));
         db.set_song_liked(&binned, true).unwrap();
         db.set_song_trashed(&binned, true, None).unwrap();
         db.set_song_trashed(&stem, true, Some(&binned)).unwrap();
@@ -770,8 +860,8 @@ mod edit_tests {
         let db = Library::open_at(root.join("library.sqlite"), root.join("media")).unwrap();
         let song = |title: &str, metadata: serde_json::Value| db.create_song(SongInput { title: title.into(), audio_path: None, caption: String::new(), lyrics: String::new(), metadata, generation_settings: serde_json::Value::Null, engine_id: "manual".into(), profile_id: None, replay_request: None, audio_codes: None, source: "manual".into() }).unwrap().id;
         let night = song("Night", serde_json::json!({}));
-        let vocals = song("Night · vocals", serde_json::json!({ "derived": { "from": night, "from_title": "Night", "tool": "stems", "settings": { "stem": "vocals" } } }));
-        let cover = song("Night · cover", serde_json::json!({ "derived": { "from": night, "from_title": "Night", "tool": "cover" } }));
+        let vocals = song("Night В· vocals", serde_json::json!({ "derived": { "from": night, "from_title": "Night", "tool": "stems", "settings": { "stem": "vocals" } } }));
+        let cover = song("Night В· cover", serde_json::json!({ "derived": { "from": night, "from_title": "Night", "tool": "cover" } }));
         let png = [0x89, b'P', b'N', b'G', 0x0D, 0x0A, 0x1A, 0x0A, 1, 2, 3];
         db.store_song_cover(&night, &png, "image/png").unwrap();
         let stem = db.get_song(&vocals).unwrap().unwrap();

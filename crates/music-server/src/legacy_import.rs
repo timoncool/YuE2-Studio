@@ -266,11 +266,7 @@ fn transfer(to: &Library, folder: &Path) -> Result<Value> {
         .map(|s| (s["id"].as_str().unwrap(), s))
         .collect();
     let mut songs = Library::read_songs(&db)?;
-    let mut stmt =
-        db.prepare("SELECT id,name,description,created_at,updated_at FROM playlists ORDER BY id")?;
-    let playlists = stmt
-        .query_map([], |row| library::playlist(&db, row))?
-        .collect::<rusqlite::Result<Vec<_>>>()?;
+    let playlists = Library::read_playlists(&db)?;
     let source = root.to_str().context("Unsupported library path")?;
     let space = media_space(&view, &to.legacy_song_mappings(source)?, to.media_dir())?;
     if let Some(free) = space.available_bytes {
@@ -314,10 +310,27 @@ fn transfer(to: &Library, folder: &Path) -> Result<Value> {
             added+=1;
         }
         let mut added_lists=0;
+        let mut next_album_position = None;
         for list in playlists {
             let new_id=&list_ids[&list.id].id;
             if !claim(tx,new_id)? {continue;}
+            let album = library::is_album_description(list.description.as_deref());
+            if album && next_album_position.is_none() {
+                let mut next: i64 = tx.query_row("SELECT COALESCE(MAX(position),-1)+1 FROM album_order", [], |row| row.get(0))?;
+                for existing in Library::read_playlists(tx)? {
+                    if library::is_album_description(existing.description.as_deref()) {
+                        next += tx.execute("INSERT OR IGNORE INTO album_order(playlist_id,position) VALUES(?,?)", params![existing.id,next])? as i64;
+                    }
+                }
+                next_album_position = Some(next);
+            }
             tx.execute("INSERT INTO playlists(id,name,description,created_at,updated_at) VALUES(?,?,?,?,?)",params![new_id,list.name,list.description,list.created_at,list.updated_at])?;
+            if album {
+                if let Some(position) = next_album_position.as_mut() {
+                    tx.execute("INSERT INTO album_order(playlist_id,position) VALUES(?,?)", params![new_id,*position])?;
+                    *position += 1;
+                }
+            }
             for (position,old_id) in list.song_ids.iter().enumerate(){
                 let song=song_ids.get(old_id).context("Playlist refers to a missing song")?;
                 tx.execute("INSERT INTO playlist_songs(playlist_id,song_id,position) VALUES(?,?,?)",params![new_id,song.id,i64::try_from(position)?])?;
@@ -331,6 +344,30 @@ fn transfer(to: &Library, folder: &Path) -> Result<Value> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn album_import_appends_in_source_order_and_preserves_subsequent_edits() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let source = temp.path().join("old");
+        let dest = temp.path().join("new");
+        let old = Library::open_at(source.join("library.sqlite"), source.join("media"))?;
+        let new = Library::open_at(dest.join("library.sqlite"), dest.join("media"))?;
+        let create = |db: &Library, name: &str| db.create_playlist(library::PlaylistInput {
+            name: name.into(), description: Some("[YuE2-Studio:album:v1]\n".into()), song_ids: vec![],
+        });
+        let original = create(&new, "Existing")?;
+        let a = create(&old, "A")?;
+        let b = create(&old, "B")?;
+        old.reorder_albums(&[a.id, b.id])?;
+        transfer(&new, &source)?;
+        let albums = new.list_playlists()?;
+        assert_eq!(albums.iter().map(|p|p.name.as_str()).collect::<Vec<_>>(), ["Existing", "A", "B"]);
+        let edited = vec![albums[2].id.clone(), original.id, albums[1].id.clone()];
+        new.reorder_albums(&edited)?;
+        transfer(&new, &source)?;
+        assert_eq!(new.list_playlists()?.into_iter().map(|p|p.id).collect::<Vec<_>>(), edited);
+        Ok(())
+    }
 
     #[test]
     fn retry_publishes_all_rows_together_and_keeps_user_edits() -> Result<()> {
