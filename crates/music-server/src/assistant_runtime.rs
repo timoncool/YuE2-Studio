@@ -573,13 +573,14 @@ impl AssistantRuntime {
         if downloaded != target {
             fs::rename(downloaded, target).with_context(|| format!("publish {}", target.display()))?;
         }
-        Self::record_install(asset, target, target, root, &sha256)
+        Self::record_install(asset, target, target, root, &sha256, false)
     }
 
-    fn record_install(asset: &Asset, source: &Path, target: &Path, root: &Path, sha256: &str) -> Result<()> {
+    fn record_install(asset: &Asset, source: &Path, target: &Path, root: &Path, sha256: &str, keep_archive: bool) -> Result<()> {
         let record = crate::install_record::record_path(target);
         crate::downloads::replace_earlier(&record, root, source)?;
         let files = match asset.unzip_into {
+            Some(flavour) if keep_archive => crate::downloads::unpack_archive(source, &root.join("runtime").join(flavour))?,
             Some(flavour) => crate::downloads::extract_archive(source, &root.join("runtime").join(flavour))?,
             None => vec![target.to_path_buf()],
         };
@@ -744,7 +745,7 @@ impl AssistantRuntime {
                 let (root, source, asset) = (self.root.clone(), source.to_owned(), *asset);
                 tokio::task::spawn_blocking(move || {
                     let sha = crate::pin_sha::check(asset.url, &source)?;
-                    Self::record_install(asset, &source, &target, &root, &sha)
+                    Self::record_install(asset, &source, &target, &root, &sha, true)
                 }).await.map_err(anyhow::Error::from).and_then(|outcome| outcome)
             } else {
                 match download_asset(&self.http, asset, &target, &self.state, base, self.cancel.clone()).await {

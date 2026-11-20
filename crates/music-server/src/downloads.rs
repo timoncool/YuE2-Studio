@@ -551,7 +551,7 @@ impl Downloader {
                     match source {
                         Some(archive) => {
                             let into = (!asset.pick.is_empty() || asset.unzip_into.is_some()).then(|| self.picked_into(asset));
-                            settle_apart(asset, archive.to_owned(), self.record_of(asset), self.root.clone(), into).await
+                            settle_apart(asset, archive.to_owned(), self.record_of(asset), self.root.clone(), into, true).await
                         }
                         None => self.fetch_now(asset, cell).await,
                     }
@@ -630,7 +630,7 @@ impl Downloader {
             return crate::install_record::write(&record, asset.url, &sha256, &files, &self.root);
         }
         let target = fetch(&self.http, asset, &target, cell, self.cancel.clone()).await?;
-        settle_apart(asset, target, record, self.root.clone(), asset.unzip_into.map(|flavour| self.runtime_dir(flavour))).await
+        settle_apart(asset, target, record, self.root.clone(), asset.unzip_into.map(|flavour| self.runtime_dir(flavour)), false).await
     }
 
     /// Starts one download in the background. Only one runs at a time, and an
@@ -687,7 +687,7 @@ impl Downloader {
                 return;
             }
             let outcome = match fetch(&http, asset, &target, &progress, cancel).await {
-                Ok(archive) => settle_apart(asset, archive, record, root, asset.unzip_into.map(|flavour| runtime_root.join(flavour))).await,
+                Ok(archive) => settle_apart(asset, archive, record, root, asset.unzip_into.map(|flavour| runtime_root.join(flavour)), false).await,
                 Err(error) => Err(error),
             };
             let mut guard = progress.lock().await;
@@ -1070,7 +1070,7 @@ pub(crate) fn replace_earlier(record: &Path, root: &Path, kept: &Path) -> Result
 
 /// What follows the download of one file, off the async workers since it hashes the whole file: checked against its
 /// pin, the earlier pin's files gone, unpacked into `unpack_into` when it is an archive, made executable and recorded.
-async fn settle_apart(asset: &'static Asset, target: PathBuf, record: PathBuf, root: PathBuf, unpack_into: Option<PathBuf>) -> Result<()> {
+async fn settle_apart(asset: &'static Asset, target: PathBuf, record: PathBuf, root: PathBuf, unpack_into: Option<PathBuf>, keep_archive: bool) -> Result<()> {
     tokio::task::spawn_blocking(move || {
         let sha256 = crate::pin_sha::check(asset.url, &target)?;
         replace_earlier(&record, &root, &target)?;
@@ -1079,6 +1079,7 @@ async fn settle_apart(asset: &'static Asset, target: PathBuf, record: PathBuf, r
                 fs::create_dir_all(&folder)?;
                 extract_named_local(&target, asset.pick, &folder)?
             }
+            Some(folder) if keep_archive => unpack_archive(&target, &folder)?,
             Some(folder) => extract_archive(&target, &folder)?,
             None => vec![target.clone()],
         };
@@ -1205,6 +1206,13 @@ pub fn make_programs_executable(marker: &str, files: &[PathBuf]) -> Result<()> {
 /// `destination` because the releases nest their binaries one or two
 /// directories deep.
 pub fn extract_archive(archive: &Path, destination: &Path) -> Result<Vec<PathBuf>> {
+    let files = unpack_archive(archive, destination)?;
+    fs::remove_file(archive).ok();
+    Ok(files)
+}
+
+/// Extract directly from a user-owned archive, which stays in its library.
+pub(crate) fn unpack_archive(archive: &Path, destination: &Path) -> Result<Vec<PathBuf>> {
     // Packages ship every architecture they support; only this one belongs
     // here, and flattening the rest would overwrite it with an ARM build.
     const FOREIGN: [&str; 4] = ["arm64", "win-x86", if cfg!(windows) { "linux" } else { "win-x64" }, "osx"];
@@ -1281,7 +1289,6 @@ pub fn extract_archive(archive: &Path, destination: &Path) -> Result<Vec<PathBuf
             }
         }
     }
-    fs::remove_file(archive).ok();
     written.sort();
     written.dedup();
     Ok(written)
