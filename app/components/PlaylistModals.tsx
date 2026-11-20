@@ -3,6 +3,8 @@ import { createPortal } from 'react-dom';
 import { X, Plus, Music, GripVertical } from 'lucide-react';
 import { Playlist } from '../types';
 import { useI18n } from '../context/I18nContext';
+import { useLibrarySongs, useLibraryTrashedSongs } from '../services/studioQueries';
+import { collectionSongAvailability } from './PlaylistEditor';
 
 interface CreatePlaylistModalProps {
   isOpen: boolean;
@@ -105,6 +107,8 @@ export const AddToPlaylistModal: React.FC<AddToPlaylistModalProps> = ({ isOpen, 
   const [draggedAlbum, setDraggedAlbum] = useState<string | null>(null);
   const [hoverAlbum, setHoverAlbum] = useState<string | null>(null);
   const [savingAlbumOrder, setSavingAlbumOrder] = useState(false);
+  const library = useLibrarySongs();
+  const bin = useLibraryTrashedSongs(isOpen);
   if (!isOpen) return null;
   const choices = collectionsForAdding(playlists, kind);
 
@@ -145,7 +149,9 @@ export const AddToPlaylistModal: React.FC<AddToPlaylistModalProps> = ({ isOpen, 
               {kind === 'album' ? t('albumsEmptyTitle') : t('noExistingPlaylists')}
             </div>
           ) : (
-            choices.map(playlist => (
+            choices.map(playlist => {
+              const availability = collectionSongAvailability(playlist, library.data ?? [], bin.data?.songs ?? []);
+              return (
               <button
                 key={playlist.id}
                 draggable={kind === 'album' && Boolean(onReorderAlbums) && !savingAlbumOrder}
@@ -188,11 +194,16 @@ export const AddToPlaylistModal: React.FC<AddToPlaylistModalProps> = ({ isOpen, 
                 </div>
                 <div className="text-left overflow-hidden">
                   <div className="font-medium text-zinc-900 dark:text-white truncate">{playlist.name}</div>
-                  <div className="text-xs text-zinc-500">{playlist.kind === 'album' ? t('album') : t('playlist')} · {songCount(playlist.song_count || playlist.songIds?.length || 0)}</div>
+                  <div className="text-xs text-zinc-500">
+                    {playlist.kind === 'album' ? t('album') : t('playlist')} · {library.isSuccess ? songCount(availability.active.length) : '…'}
+                    {bin.isSuccess && availability.inBin.length > 0 && <span className="text-amber-400"> · {t('collectionInBin').replace('{count}', String(availability.inBin.length))}</span>}
+                    {bin.isSuccess && availability.missingIds.length > 0 && <span className="text-amber-400"> · {t('collectionMissing').replace('{count}', String(availability.missingIds.length))}</span>}
+                  </div>
                 </div>
                 {kind === 'album' && <GripVertical size={17} className="ml-auto shrink-0 text-zinc-400" aria-label={t('dragAlbumToReorder')} />}
               </button>
-            ))
+              );
+            })
           )}
         </div>
       </div>

@@ -27,6 +27,8 @@ vi.mock('../context/I18nContext', () => ({
 }));
 vi.mock('../context/SongActionsContext', () => ({ useSongActions: () => ({}) }));
 vi.mock('../services/studioQueries', () => ({
+    libraryChanged: vi.fn(),
+    useLibraryTrashedSongs: () => ({ data: { songs: [], days: 30 }, isPending: false, isSuccess: true, isError: false }),
     useLibraryPlaylists: () => ({ data: [collection], isPending: false }),
     useLibrarySongs: () => ({ data: [song], isPending: false }),
     updateLibraryPlaylists: vi.fn(),
@@ -35,6 +37,7 @@ vi.mock('../services/nativeLibrary', () => ({
     parseDuration: () => 213,
     updateNativePlaylist: vi.fn(),
     deleteNativePlaylist: vi.fn(),
+    restoreTrashedSong: vi.fn(async () => undefined),
 }));
 vi.mock('./AlbumCover', () => ({ SongCover: () => <div>Song cover</div> }));
 vi.mock('./PlaylistEditor', () => ({
@@ -43,6 +46,12 @@ vi.mock('./PlaylistEditor', () => ({
     PlaylistMenu: () => null,
     playlistLength: () => '3 minutes',
     playlistSongs: (playlist: Playlist, songs: Song[]) => songs.filter(item => playlist.songIds?.includes(item.id)),
+    collectionSongAvailability: (playlist: Playlist, songs: Song[]) => ({
+        active: songs.filter(item => playlist.songIds?.includes(item.id)),
+        inBin: [],
+        missingIds: [],
+    }),
+    reorderVisibleCollectionSongs: vi.fn(),
 }));
 vi.mock('./SongDropdownMenu', () => ({ SongDropdownMenu: () => null }));
 vi.mock('./ConfirmDialog', () => ({ ConfirmDialog: () => null }));

@@ -2,6 +2,7 @@ import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { X, Play, Pencil, Trash2, ListStart, ListEnd, Shuffle, Upload, ImageOff } from 'lucide-react';
 import type { Playlist, Song } from '../types';
+import type { TrashedSong } from '../services/nativeLibrary';
 import { useI18n } from '../context/I18nContext';
 import { AlbumCover, SongCover } from './AlbumCover';
 import { updateNativePlaylist } from '../services/nativeLibrary';
@@ -11,6 +12,37 @@ import { updateLibraryPlaylists } from '../services/studioQueries';
 export function playlistSongs(playlist: Playlist, library: Song[]): Song[] {
   const byId = new Map(library.map((song) => [song.id, song]));
   return (playlist.songIds ?? []).flatMap((id) => (byId.has(id) ? [byId.get(id)!] : []));
+}
+
+/** Match saved collection memberships against active tracks and recoverable Bin records.
+ * A song in the Bin retains its album membership so restoring it brings it back
+ * to its original position. Never overwrite songIds with the filtered active list. */
+export function collectionSongAvailability(playlist: Playlist, library: Song[], bin: TrashedSong[] = []) {
+  const active = playlistSongs(playlist, library);
+  const activeIds = new Set(active.map(song => song.id));
+  const binById = new Map(bin.map(entry => [entry.song.id, entry]));
+  const inBin: TrashedSong[] = [];
+  const missingIds: string[] = [];
+  for (const id of playlist.songIds ?? []) {
+    if (activeIds.has(id)) continue;
+    const found = binById.get(id);
+    if (found) inBin.push(found);
+    else missingIds.push(id);
+  }
+  return { active, inBin, missingIds };
+}
+
+/** Reorder only the visible tracks while preserving the Bin/missing IDs at
+ * their existing positions. The hidden tracks must survive every list edit. */
+export function reorderVisibleCollectionSongs(allIds: string[], visibleIds: string[], songId: string, to: number): string[] | null {
+  const from = visibleIds.indexOf(songId);
+  if (from < 0 || to === from || to === from + 1) return null;
+  const nextVisible = [...visibleIds];
+  nextVisible.splice(from, 1);
+  nextVisible.splice(to > from ? to - 1 : to, 0, songId);
+  const visibleSet = new Set(visibleIds);
+  let offset = 0;
+  return allIds.map(id => visibleSet.has(id) ? nextVisible[offset++] : id);
 }
 
 /** "1 h 12 min", "4 min 05 s", "58 s": a playlist's length, never rounded down to nothing. */

@@ -1,16 +1,16 @@
 import React, { useMemo, useState } from 'react';
 import { Song } from '../services/api';
 import { useI18n } from '../context/I18nContext';
-import { ArrowLeft, Play, Pause, MoreHorizontal, Clock, Shuffle, Trash2, Pencil, GripVertical, Plus, Search, Check, ListMusic, Info } from 'lucide-react';
-import { deleteNativePlaylist, parseDuration, updateNativePlaylist } from '../services/nativeLibrary';
-import { updateLibraryPlaylists, useLibraryPlaylists, useLibrarySongs } from '../services/studioQueries';
+import { ArrowLeft, Play, Pause, MoreHorizontal, Clock, Shuffle, Trash2, Pencil, GripVertical, Plus, Search, Check, ListMusic, Info, RotateCcw, Loader2 } from 'lucide-react';
+import { deleteNativePlaylist, parseDuration, restoreTrashedSong, updateNativePlaylist } from '../services/nativeLibrary';
+import { libraryChanged, updateLibraryPlaylists, useLibraryPlaylists, useLibrarySongs, useLibraryTrashedSongs } from '../services/studioQueries';
 import { named } from '../services/accessibleName';
 import { captionSummary } from '../services/examples';
 import { useSongActions } from '../context/SongActionsContext';
 import { SongCover } from './AlbumCover';
 import { ConfirmDialog } from './ConfirmDialog';
 import { SongDropdownMenu } from './SongDropdownMenu';
-import { PlaylistCover, PlaylistEditModal, PlaylistMenu, playlistLength, playlistSongs } from './PlaylistEditor';
+import { collectionSongAvailability, reorderVisibleCollectionSongs, PlaylistCover, PlaylistEditModal, PlaylistMenu, playlistLength } from './PlaylistEditor';
 import type { Playlist } from '../types';
 import type { ToastType } from './Toast';
 
@@ -43,9 +43,15 @@ export const PlaylistDetail: React.FC<PlaylistDetailProps> = ({ playlistId, onBa
     // the library's own reads: a change made anywhere, a deletion included, shows here at once
     const playlists = useLibraryPlaylists();
     const library = useLibrarySongs();
+    const bin = useLibraryTrashedSongs();
     const playlist = playlists.data?.find(entry => entry.id === playlistId) ?? null;
     const loading = playlists.isPending || library.isPending;
-    const songs = useMemo(() => (playlist ? playlistSongs(playlist, library.data ?? []) : []), [playlist, library.data]);
+    const availability = useMemo(
+        () => collectionSongAvailability(playlist ?? { id: '', name: '' }, library.data ?? [], bin.data?.songs ?? []),
+        [playlist, library.data, bin.data],
+    );
+    const songs = availability.active;
+    const [restoringId, setRestoringId] = useState<string | null>(null);
     const [confirmDelete, setConfirmDelete] = useState(false);
     const [editing, setEditing] = useState<Playlist | null>(null);
     const [menuAt, setMenuAt] = useState<{ x: number; y: number } | null>(null);
@@ -73,7 +79,9 @@ export const PlaylistDetail: React.FC<PlaylistDetailProps> = ({ playlistId, onBa
 
     const removeSong = (song: Song) => {
         if (!playlist) return;
-        const ids = songs.map(entry => entry.id);
+        // Use the full stored list, including songs in the Bin. Removing one
+        // visible track must never silently detach other, restorable tracks.
+        const ids = [...(playlist.songIds ?? [])];
         void saveSongs(ids.filter(id => id !== song.id)).then(saved => {
             if (!saved) return;
             notify(t('removedFromPlaylist').replace('{title}', song.title).replace('{name}', playlist.name), 'success', {
@@ -84,19 +92,31 @@ export const PlaylistDetail: React.FC<PlaylistDetailProps> = ({ playlistId, onBa
     };
 
     const moveSong = (songId: string, to: number) => {
-        const ids = songs.map(entry => entry.id);
-        const from = ids.indexOf(songId);
-        if (from < 0 || to === from || to === from + 1) return;
-        ids.splice(from, 1);
-        ids.splice(to > from ? to - 1 : to, 0, songId);
-        void saveSongs(ids);
+        if (!playlist) return;
+        const ids = reorderVisibleCollectionSongs(
+            playlist.songIds ?? [], songs.map(entry => entry.id), songId, to,
+        );
+        if (ids) void saveSongs(ids);
     };
 
     const addSong = (song: Song) => {
-        if (!playlist || songs.some(entry => entry.id === song.id)) return;
-        // the search stays open while songs are being picked
+        if (!playlist || playlist.songIds?.includes(song.id)) return;
+        // Keep all stored memberships, even when some songs are in the Bin.
         setAdding(true);
-        void saveSongs([...songs.map(entry => entry.id), song.id]);
+        void saveSongs([...(playlist.songIds ?? []), song.id]);
+    };
+
+    const restoreFromBin = async (song: Song) => {
+        setRestoringId(song.id);
+        try {
+            await restoreTrashedSong(song.id);
+            libraryChanged();
+            notify(t('trashRestored').replace('{title}', song.title), 'success');
+        } catch (error) {
+            onError(error instanceof Error ? error.message : String(error));
+        } finally {
+            setRestoringId(null);
+        }
     };
 
     const handleDeletePlaylist = async () => {
@@ -185,6 +205,9 @@ export const PlaylistDetail: React.FC<PlaylistDetailProps> = ({ playlistId, onBa
                     )}
                     <div className="flex items-center justify-center md:justify-start gap-2 text-sm text-white font-medium flex-wrap">
                         <span>{songCount(songs.length)}</span>
+                        {availability.inBin.length > 0 && bin.isSuccess && (
+                            <span className="text-amber-300">{t('collectionInBin').replace('{count}', String(availability.inBin.length))}</span>
+                        )}
                         {seconds > 0 && (
                             <>
                                 <span className="w-1 h-1 rounded-full bg-white/50"></span>
@@ -398,9 +421,41 @@ export const PlaylistDetail: React.FC<PlaylistDetailProps> = ({ playlistId, onBa
                     </ol>
                     </div>
 
+                    {/* Keep Bin memberships visible and recoverable, without treating them as playable songs. */}
+                    {bin.isSuccess && (availability.inBin.length > 0 || availability.missingIds.length > 0) && (
+                        <section className="mt-6 rounded-lg border border-amber-500/25 bg-amber-500/5 p-4" aria-label={t('collectionBinTitle')}>
+                            <h2 className="font-semibold text-amber-100">{t('collectionBinTitle')}</h2>
+                            {availability.inBin.length > 0 && (
+                                <p className="mt-1 text-xs text-zinc-400">{t('collectionBinHint')}</p>
+                            )}
+                            <ul className="mt-3 space-y-2">
+                                {availability.inBin.map(entry => (
+                                    <li key={entry.song.id} className="flex items-center gap-3 rounded-md bg-black/30 px-3 py-2">
+                                        <div className="min-w-0 flex-1 truncate text-sm text-white">{entry.song.title}</div>
+                                        <button
+                                            type="button"
+                                            onClick={() => void restoreFromBin(entry.song)}
+                                            disabled={restoringId !== null}
+                                            className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-white/20 px-3 py-1 text-xs text-white hover:bg-white/10 disabled:opacity-50"
+                                        >
+                                            {restoringId === entry.song.id ? <Loader2 size={13} className="animate-spin" /> : <RotateCcw size={13} />}
+                                            {t('trashRestore')}
+                                        </button>
+                                    </li>
+                                ))}
+                            </ul>
+                            {availability.missingIds.length > 0 && (
+                                <p className="mt-3 text-xs text-amber-200">{t('collectionMissing').replace('{count}', String(availability.missingIds.length))}</p>
+                            )}
+                        </section>
+                    )}
+                    {bin.isError && (
+                        <p className="mt-4 text-xs text-amber-300">{t('collectionBinCheckFailed')}</p>
+                    )}
+
                     {/* songs to add, found right here: an empty playlist opens with it */}
                     <section className="mt-8 border-t border-white/10 pt-6" aria-labelledby="playlist-add-title">
-                        {songs.length === 0 && (
+                        {songs.length === 0 && availability.inBin.length === 0 && (
                             <div className="mb-6 flex flex-col items-center gap-2 text-center text-zinc-400">
                                 <ListMusic size={36} className="text-zinc-500" />
                                 <p className="font-medium text-white">{t('playlistEmptyTitle')}</p>

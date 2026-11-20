@@ -6,10 +6,10 @@ import { AUDIO_ACCEPT } from '../services/audioFiles';
 import { useSongActions } from '../context/SongActionsContext';
 import { deleteNativePlaylist, reorderNativeAlbums } from '../services/nativeLibrary';
 import { moveAlbum } from '../services/albumOrder';
-import { updateLibraryPlaylists } from '../services/studioQueries';
+import { updateLibraryPlaylists, useLibraryTrashedSongs } from '../services/studioQueries';
 import { named } from '../services/accessibleName';
 import { ConfirmDialog } from './ConfirmDialog';
-import { PlaylistCover, PlaylistEditModal, PlaylistMenu, playlistSongs } from './PlaylistEditor';
+import { collectionSongAvailability, PlaylistCover, PlaylistEditModal, PlaylistMenu, playlistSongs } from './PlaylistEditor';
 import { isCard, SongList } from './SongList';
 import { foldStems } from '../services/songStems';
 import { LibraryTrash } from './LibraryTrash';
@@ -109,6 +109,7 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
     const albums = playlists.filter(playlist => playlist.kind === 'album');
     const ordinaryPlaylists = playlists.filter(playlist => playlist.kind !== 'album');
     const visibleCollections = activeTab === 'albums' ? albums : ordinaryPlaylists;
+    const bin = useLibraryTrashedSongs(activeTab === 'playlists' || activeTab === 'albums');
     const [draggingAlbum, setDraggingAlbum] = useState<string | null>(null);
     const [overAlbum, setOverAlbum] = useState<string | null>(null);
     const [savingAlbumOrder, setSavingAlbumOrder] = useState(false);
@@ -297,7 +298,8 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
               {(activeTab === 'playlists' || activeTab === 'albums') && visibleCollections.length > 0 && (
                  <div className="grid grid-cols-1 gap-4 min-[440px]:grid-cols-2 sm:gap-6 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
                      {visibleCollections.map((playlist) => {
-                         const songs = playlistSongs(playlist, allSongs);
+                         const availability = collectionSongAvailability(playlist, allSongs, bin.data?.songs ?? []);
+                         const songs = availability.active;
                          const ready = playable(playlist);
                          const albumIndex = activeTab === 'albums' ? albums.findIndex(item => item.id === playlist.id) : -1;
                          return (
@@ -368,6 +370,12 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
                                  <div className="min-w-0">
                                      <h3 className="truncate font-bold text-zinc-900 dark:text-white">{playlist.name}</h3>
                                      <p className="line-clamp-2 text-sm text-zinc-500 dark:text-zinc-400">{playlist.description || songCount(songs.length)}</p>
+                                     {bin.isSuccess && availability.inBin.length > 0 && (
+                                         <p className="text-xs text-amber-500">{t('collectionInBin').replace('{count}', String(availability.inBin.length))}</p>
+                                     )}
+                                     {bin.isSuccess && availability.missingIds.length > 0 && (
+                                         <p className="text-xs text-amber-500">{t('collectionMissing').replace('{count}', String(availability.missingIds.length))}</p>
+                                     )}
                                  </div>
                                  <button
                                      type="button"
