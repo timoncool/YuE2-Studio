@@ -112,7 +112,30 @@ def run(work, binary, archive, certificate, tls_key):
 
             first = install_runtime()
             assert first["error"] and ("/removed.tgz", 404) in requested, (first, requested)
-            publish(2, "current.tgz")
+            timestamp = origin / "timestamp.json"
+            old_timestamp = timestamp.read_bytes()
+            publish(2, "also-removed.tgz")
+            missing = install_runtime()
+            assert missing["error"] and ("/also-removed.tgz", 404) in requested, (missing, requested)
+
+            # Replay the original, correctly signed timestamp after accepting version 2.
+            timestamp.write_bytes(old_timestamp)
+            requested.clear()
+            replay = install_runtime()
+            assert replay["error"] and ("/timestamp.json", 200) in requested, (replay, requested)
+            assert not any(path == "/removed.tgz" for path, _ in requested), requested
+
+            publish(3, "unsigned.tgz")
+            targets = json.loads((origin / "3.targets.json").read_bytes())
+            digest = targets["signed"]["targets"]["mirrors.json"]["hashes"]["sha256"]
+            manifest = origin / "targets" / (digest + ".mirrors.json")
+            manifest.write_bytes(manifest.read_bytes().replace(b"unsigned.tgz", b"tampered.tgz"))
+            requested.clear()
+            corrupt = install_runtime()
+            assert corrupt["error"] and ("/targets/" + manifest.name, 200) in requested, (corrupt, requested)
+            assert not any(path == "/tampered.tgz" for path, _ in requested), requested
+
+            publish(4, "current.tgz")
             second = install_runtime()
             assert not second["error"], second
             assert ("/current.tgz", 200) in requested, requested
