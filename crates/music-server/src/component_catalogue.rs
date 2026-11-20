@@ -1,4 +1,4 @@
-use anyhow::{ensure, Context, Result};
+use anyhow::{Context, Result, ensure};
 use serde::Deserialize;
 use std::collections::{BTreeMap, HashSet};
 use std::sync::OnceLock;
@@ -98,6 +98,68 @@ pub(crate) fn bundled() -> &'static Catalogue {
         ))
         .expect("valid bundled component catalogue")
     })
+}
+
+/// Read trust anchors only from files installed alongside the executable.
+/// The writable data directory holds tough's rollback protection across restarts.
+pub(crate) async fn channel_sources(digest: &str) -> Result<Option<Vec<String>>> {
+    use futures_util::TryStreamExt;
+    use tough::{RepositoryLoader, TargetName};
+
+    let executable = std::env::current_exe()?;
+    let channel = executable
+        .parent()
+        .context("missing installation folder")?
+        .join("component-channel");
+    let root = match tokio::fs::read(channel.join("root.json")).await {
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        result => result.context("read installed channel root")?,
+    };
+    let endpoint = tokio::fs::read_to_string(channel.join("url.txt")).await?;
+    let base = reqwest::Url::parse(endpoint.trim())?;
+    ensure!(
+        base.scheme() == "https"
+            && base.host_str().is_some()
+            && base.username().is_empty()
+            && base.password().is_none()
+            && base.fragment().is_none()
+            && base.query().is_none()
+            && base.path().ends_with('/'),
+        "invalid channel endpoint"
+    );
+    let store = crate::studio_data_root()
+        .context("missing studio data folder")?
+        .join("component-channel");
+    tokio::fs::create_dir_all(&store).await?;
+    let lock = std::fs::File::options()
+        .create(true)
+        .truncate(false)
+        .write(true)
+        .open(store.join("refresh.lock"))?;
+    fs2::FileExt::try_lock_exclusive(&lock).context("component channel is refreshing")?;
+    let repo = RepositoryLoader::new(&root, base.clone(), base.join("targets/")?)
+        .datastore(store)
+        .load()
+        .await?;
+    let stream = repo
+        .read_target(&TargetName::new("mirrors.json")?)
+        .await?
+        .context("missing mirrors.json")?;
+    futures_util::pin_mut!(stream);
+    let mut bytes = Vec::new();
+    while let Some(chunk) = stream.try_next().await? {
+        ensure!(
+            chunk.len() <= 1024 * 1024 - bytes.len(),
+            "mirror catalogue exceeds 1 MiB"
+        );
+        bytes.extend_from_slice(&chunk);
+    }
+    let catalogue = Catalogue::parse(&bytes)?;
+    ensure!(
+        catalogue.revision >= bundled().revision,
+        "channel predates bundled catalogue"
+    );
+    Ok(catalogue.sources(digest).map(<[String]>::to_vec))
 }
 
 #[cfg(test)]

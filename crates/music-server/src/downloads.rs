@@ -868,7 +868,17 @@ async fn fetch_absent(
     // How big it is and whether it can be fetched in pieces, asked of the
     // server rather than assumed - both answers come from one ranged byte.
     let url = crate::net::model_url(asset.url);
-    if let Some(sources) = onnx_sources(asset.url) {
+    if let Some(fallback) = onnx_sources(asset.url) {
+        let digest = crate::pin_sha::sha256(asset.url).expect("ONNX mirror lists require a pinned digest");
+        let refresh = tokio::time::timeout(std::time::Duration::from_secs(12), crate::component_catalogue::channel_sources(digest));
+        let mut sources = match unless_cancelled(&cancel, async { Ok(refresh.await) }).await? {
+            Ok(Ok(sources)) => sources.unwrap_or_default(),
+            Ok(Err(error)) => { eprintln!("Component mirror refresh failed: {error}"); Vec::new() }
+            Err(_) => { eprintln!("Component mirror refresh timed out"); Vec::new() }
+        };
+        for source in fallback {
+            if !sources.contains(source) { sources.push(source.clone()); }
+        }
         let sources: Vec<_> = sources.iter().map(|source| crate::net::model_url(source)).collect();
         return fetch_onnx_sources(http, asset, target, progress, cancel, sources).await;
     }
