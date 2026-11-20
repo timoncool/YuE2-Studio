@@ -8,7 +8,9 @@ import { trackCoverUrl } from '../../services/playerPanels';
 import { stemOf } from '../../services/songStems';
 import { saveFile } from '../../services/saveFile';
 import { DjMixer, type DjDeck, type DjDeckSnapshot } from '../../services/djMixer';
+import { semitonesFromPlaybackRate } from '../../services/playbackTempo';
 import { DjStemControls } from './DjStemControls';
+import { DjPitchFader } from './DjPitchFader';
 import { readDjNativeStems, readDjSeparationStatus, startDjSeparation, installDjSeparationEngine, djEngineReady, type DjSeparationEngine, type DjSeparationStatus } from '../../services/djSeparation';
 
 type DeckIndex = 0 | 1;
@@ -157,39 +159,6 @@ const JogWheel: React.FC<{ deck: DjDeck; side: 'A' | 'B'; color: string }> = ({ 
   );
 };
 
-const PitchFader: React.FC<{ deck: DjDeck; side: 'A' | 'B'; color: string }> = ({ deck, side, color }) => {
-  const [range, setRange] = useState(16);
-  const percentage = (deck.state.rate - 1) * 100;
-  const low = 1 - range / 100;
-  const high = 1 + range / 100;
-  return (
-    <div className="flex w-[118px] shrink-0 flex-col items-center gap-1 rounded-lg border border-zinc-700 bg-[#1b1c20] px-2 py-2">
-      <span className="text-[11px] font-black tracking-wider text-zinc-200">PITCH / TEMPO</span>
-      <div className="w-full rounded-md border border-white/10 bg-black px-1 py-1.5 text-center font-mono tabular-nums shadow-inner">
-        <div className="text-base font-black" style={{color}}>{percentage >= 0 ? '+' : ''}{percentage.toFixed(1)}%</div>
-        <div className="mt-0.5 border-t border-white/10 pt-1 text-sm font-bold text-white" aria-label={`Deck ${side} current tempo in BPM`}>
-          {deck.state.bpm ? (deck.state.bpm * deck.state.rate).toFixed(1) : '—'} <span className="text-[10px] text-zinc-500">BPM</span>
-        </div>
-      </div>
-      <div className="flex items-center gap-2">
-        <div className="flex h-[184px] flex-col justify-between text-[10px] text-zinc-400"><span>+{range}</span><span>0</span><span>−{range}</span></div>
-        <input type="range" min={low} max={high} step="0.001" value={Math.min(high, Math.max(low, deck.state.rate))}
-          onChange={event => deck.rate(Number(event.target.value))}
-          onDoubleClick={() => deck.rate(1)}
-          aria-label={`Vertical pitch fader deck ${side}`}
-          className="cursor-pointer accent-slate-200"
-          style={{writingMode:'vertical-lr',direction:'rtl',height:184,width:28}} />
-      </div>
-      <div className="flex w-full gap-1">
-        <button type="button" className={`${button} flex-1 px-1 py-0.5`} onClick={() => deck.rate(Math.max(0.25, deck.state.rate - 0.001))} aria-label="Decrease pitch">−</button>
-        <button type="button" className={`${button} flex-1 px-1 py-0.5`} onClick={() => deck.rate(Math.min(2, deck.state.rate + 0.001))} aria-label="Increase pitch">+</button>
-      </div>
-      <button type="button" className={`${button} w-full px-1 py-1 text-[10px]`} onClick={() => deck.rate(1)} title="Reset pitch and tempo">RESET</button>
-      <button type="button" className="text-[9px] font-bold text-zinc-500 hover:text-white" onClick={() => setRange(value => value === 8 ? 16 : value === 16 ? 50 : 8)} title="Switch pitch fader range">±{range}%</button>
-    </div>
-  );
-};
-
 const EqSlider: React.FC<{ label: string; value: number; onChange: (value: number) => void }> = ({ label, value, onChange }) => (
   <div className="flex min-w-0 flex-col gap-1 text-[10px] font-semibold uppercase text-zinc-400">
     <div className="flex items-center justify-between gap-2"><span>{label}</span>
@@ -264,13 +233,13 @@ const DjDeckPanel: React.FC<{
       </div>
       <div className="mt-3 flex flex-wrap items-center justify-center gap-3 rounded-xl border border-white/5 bg-black/20 p-2">
         <JogWheel deck={deck} side={side} color={color} />
-        <PitchFader deck={deck} side={side} color={color} />
+        <DjPitchFader deck={deck} side={side} color={color} />
         <div className="flex min-w-[118px] max-w-[160px] flex-1 flex-col justify-center gap-4">
           <div className="flex flex-col gap-2 rounded-md border border-white/10 bg-black/25 p-2">
             <span className="text-[10px] font-bold tracking-wider text-zinc-400">BEAT CONTROL</span>
             <span className="font-mono text-xs tabular-nums text-zinc-200">Original: {state.bpm?.toFixed(1) ?? '—'} BPM</span>
             <button className={button} type="button" onClick={() => onTap(index)}>TAP BPM</button>
-            <span className="text-[10px] leading-4 text-zinc-500">{(12 * Math.log2(state.rate)).toFixed(1)} semitones · pitch follows speed</span>
+            <span className="text-[10px] leading-4 text-zinc-500">{semitonesFromPlaybackRate(state.rate).toFixed(1)} semitones · pitch follows speed</span>
           </div>
           <div className="rounded-md border border-white/10 bg-black/25 p-2">
             <div className="mb-2 flex items-center justify-between gap-2 text-[10px] font-semibold text-zinc-400">

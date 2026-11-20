@@ -1,5 +1,6 @@
 import React, { useMemo, useRef, useState, useEffect } from 'react';
 import { useKaraokeStatus } from '../services/studioQueries';
+import { MAX_PLAYBACK_RATE, MIN_PLAYBACK_RATE, PLAYBACK_RATE_PRESETS, semitonesFromPlaybackRate } from '../services/playbackTempo';
 import { TRACK_ARTIST } from '../services/studio';
 import { Song } from '../types';
 import { Play, Pause, SkipBack, SkipForward, Repeat, Shuffle, Download, Heart, MoreVertical, Volume2, VolumeX, Maximize2, Repeat1, CircleStop, ChevronDown, ChevronUp } from 'lucide-react';
@@ -36,7 +37,7 @@ interface PlayerProps {
     onPlayFirst?: () => void;
 }
 
-const RATE_PRESETS = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
+
 
 /** Unlike the browser's time-stretch playback, this control couples rate and pitch.
  * App.tsx sets audio.preservesPitch=false for the same playbackRate value.
@@ -64,7 +65,7 @@ const SpeedPitchControl: React.FC<{
         };
     }, [open]);
     const rounded = Math.round(rate * 100) / 100;
-    const semitones = 12 * Math.log2(rate);
+    const semitones = semitonesFromPlaybackRate(rate);
     return (
         <div className="relative hidden lg:block" ref={ref}>
             <button type="button" onClick={() => setOpen(!open)} aria-expanded={open}
@@ -82,11 +83,11 @@ const SpeedPitchControl: React.FC<{
                         <strong>{Math.round(rate * 100)}%</strong>
                         <span className="text-xs text-zinc-500 dark:text-zinc-400">{semitones >= 0 ? '+' : ''}{semitones.toFixed(1)} st</span>
                     </div>
-                    <input type="range" min="0.25" max="2" step="0.01" value={rate}
+                    <input type="range" min={MIN_PLAYBACK_RATE} max={MAX_PLAYBACK_RATE} step="0.01" value={rate}
                         aria-label={t('speedPitchTitle')} onChange={event => onRateChange(Number(event.target.value))}
                         className="mb-3 w-full cursor-pointer accent-pink-500" />
                     <div className="grid grid-cols-4 gap-1.5">
-                        {RATE_PRESETS.map(preset => (
+                        {PLAYBACK_RATE_PRESETS.map(preset => (
                             <button type="button" key={preset} onClick={() => onRateChange(preset)}
                                 aria-pressed={Math.abs(rate - preset) < 0.005}
                                 className={`rounded-md px-1 py-2 text-center font-mono text-[11px] transition-colors ${Math.abs(rate - preset) < 0.005

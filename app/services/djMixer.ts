@@ -1,6 +1,7 @@
 import type { Song } from '../types';
 import { stemOf } from './songStems';
 import { apiUrl } from './apiBase';
+import { MAX_PLAYBACK_RATE, MIN_PLAYBACK_RATE } from './playbackTempo';
 
 /** Web Audio mixing uses equal-power crossfades so the middle does not fall silent. */
 export function crossfadeGains(value: number): [number, number] {
@@ -8,7 +9,7 @@ export function crossfadeGains(value: number): [number, number] {
   return [Math.cos(x * Math.PI / 2), Math.sin(x * Math.PI / 2)];
 }
 export function rateForSync(sourceBpm: number, targetBpm: number, targetRate: number): number {
-  return Math.max(0.25, Math.min(2, targetBpm * targetRate / sourceBpm));
+  return Math.max(MIN_PLAYBACK_RATE, Math.min(MAX_PLAYBACK_RATE, targetBpm * targetRate / sourceBpm));
 }
 export function songBpm(song: Song | null): number | null {
   if (!song) return null;
@@ -52,7 +53,6 @@ interface StemVoice {
   gain: GainNode;
   state: DjStem;
 }
-const MAX_RATE = 2;
 const clamped = (value: number, min: number, max: number) => Math.max(min, Math.min(max, Number.isFinite(value) ? value : min));
 
 /**
@@ -325,7 +325,7 @@ export class DjDeck {
   }
 
   rate(rate: number): void {
-    const next = clamped(rate, 0.25, MAX_RATE);
+    const next = clamped(rate, MIN_PLAYBACK_RATE, MAX_PLAYBACK_RATE);
     this.state.rate = next;
     this.audio.playbackRate = next;
     this.audio.preservesPitch = false;
