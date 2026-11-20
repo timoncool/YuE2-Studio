@@ -66,7 +66,17 @@ async fn report_of(state: &AppState, request: ProblemRequest) -> Result<ProblemR
 /// The engine log's last lines without the text of any song, keys masked; the hub client cleans paths, addresses and
 /// ids before it leaves.
 fn engine_log_tail(state: &AppState) -> String {
-    let lines = state.engine_log.lines().unwrap_or_else(|| music_engine::yue_server::startup_log_tail(LOG_LINES));
+    let disk = music_engine::yue_server::startup_log_tail(LOG_LINES);
+    let lines = match state.engine_log.lines() {
+        Some(mut live) => {
+            // After a restart the new process's SSE ring omits the supervisor's crash record.
+            if let Some(fault) = disk.iter().rev().find(|line| line.starts_with("[studio] engine crash: faulting module ")) {
+                live.push(fault.clone());
+            }
+            live
+        }
+        None => disk,
+    };
     let lines = without_request_text(&lines);
     let tail = &lines[lines.len().saturating_sub(LOG_LINES)..];
     crate::studio_log::masked(&tail.join("\n"))

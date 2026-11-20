@@ -611,10 +611,7 @@ impl YueServerSupervisor {
             return Ok(StopOutcome { was_running: false, graceful: true });
         };
         if let Some(status) = child.try_wait().context("inspect yue-server child")? {
-            note_in_log(&format!(
-                "the engine had already exited: {status}{}",
-                status.code().map(|code| format!(" (0x{:x})", code as u32)).unwrap_or_default()
-            ));
+            note_child_exit("the engine had already exited", child.id(), status);
             self.child = None;
             return Ok(StopOutcome { was_running: false, graceful: true });
         }
@@ -646,10 +643,7 @@ impl YueServerSupervisor {
     fn clear_exited_child(&mut self) -> Result<()> {
         if let Some(child) = self.child.as_mut() {
             if let Some(status) = child.try_wait().context("inspect yue-server child")? {
-                note_in_log(&format!(
-                    "the previous engine had exited: {status}{}",
-                    status.code().map(|code| format!(" (0x{:x})", code as u32)).unwrap_or_default()
-                ));
+                note_child_exit("the previous engine had exited", child.id(), status);
                 self.child = None;
             }
         }
@@ -814,6 +808,17 @@ fn fatal_of_this_start() -> Option<String> {
     let line = since.lines().rev().find(|line| line.contains("FATAL"))?;
     let words: Vec<&str> = line.split_whitespace().map(|word| if word.contains('\\') || word.contains('/') { "<path>" } else { word }).collect();
     Some(words.join(" "))
+}
+
+fn note_child_exit(message: &str, pid: u32, status: std::process::ExitStatus) {
+    let code = status.code();
+    let hex = code.map(|value| format!(" (0x{:x})", value as u32)).unwrap_or_default();
+    note_in_log(&format!("{message}: {status}{hex}"));
+    if music_core::process::exited_on_exception(code) {
+        if let Some(fault) = music_core::process::fault_of(pid, Duration::from_secs(1)) {
+            note_in_log(&format!("engine crash: {fault}"));
+        }
+    }
 }
 
 /// Writes one line of the studio's own into the engine log, so a reader can
