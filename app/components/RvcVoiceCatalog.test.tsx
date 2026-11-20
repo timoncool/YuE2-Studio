@@ -192,6 +192,12 @@ it('finds Radio Tapok by source label and combines vocal, model, sample-rate and
     }
     expect(details.textContent).toContain('Unclassified Voice');
     expect(details.textContent).toContain('Голос 音楽 80');
+    act(() => {
+      valueSetter.call(search, 'голос 音楽');
+      search.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    expect(details.querySelectorAll('li')).toHaveLength(40);
+    expect(details.textContent).toContain('Showing 40 of 81 voices');
   } finally {
     act(() => root.unmount());
     host.remove();
