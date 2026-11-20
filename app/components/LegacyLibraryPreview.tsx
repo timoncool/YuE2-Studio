@@ -12,6 +12,7 @@ interface LegacySong {
 
 interface Preview {
   path: string;
+  studio?: string;
   space: { total_bytes: number; required_bytes: number; available_bytes: number | null };
   songs: LegacySong[];
   playlists: { id: string; name: string; song_ids: string[] }[];
@@ -26,11 +27,12 @@ export function LegacyLibraryPreview({ sources = [] }: { sources?: LegacySource[
     return new Intl.NumberFormat(language, { style: 'unit', unit: units[i], maximumFractionDigits: 2 }).format(bytes / 1000 ** i);
   }
   const [preview, setPreview] = useState<Preview | null>(null);
+  const [sourceName, setSourceName] = useState('');
   const [busy, setBusy] = useState(false);
   const [copying, setCopying] = useState(false);
   const [summary, setSummary] = useState('');
   const [error, setError] = useState('');
-  async function chooseFolder(path?: string) {
+  async function chooseFolder(path?: string, registeredName?: string) {
     setBusy(true);
     setError('');
     try {
@@ -40,7 +42,11 @@ export function LegacyLibraryPreview({ sources = [] }: { sources?: LegacySource[
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || response.statusText);
       if (!result.cancelled) {
-        setPreview(result);
+        const library = result as Preview;
+        const folder = library.path.split(/[\\/]/).filter(Boolean);
+        const folderName = folder.at(-1)?.toLowerCase() === 'data' ? folder.at(-2) : folder.at(-1);
+        setSourceName(registeredName || library.studio || folderName || library.path);
+        setPreview(library);
         setSummary('');
       }
     } catch (reason) {
@@ -84,7 +90,7 @@ export function LegacyLibraryPreview({ sources = [] }: { sources?: LegacySource[
   return <section className="mb-4 rounded-2xl border border-zinc-300 p-4 dark:border-white/15">
     <h3 className="text-sm font-semibold">{t('legacyLibraryTitle')}</h3>
     {sources.length > 0 && <ul className="mt-2 space-y-1">{sources.map(source =>
-      <li key={source.path}><button type="button" disabled={busy || copying} onClick={() => void chooseFolder(source.path)}
+      <li key={source.path}><button type="button" disabled={busy || copying} onClick={() => void chooseFolder(source.path, source.studio)}
         className="max-w-full rounded-lg border border-zinc-300 px-3 py-2 text-left text-sm dark:border-white/20">
         <strong>{source.studio} {source.version}</strong><span className="ml-2 break-all text-xs">{source.path}</span>
       </button></li>)}</ul>}
@@ -95,7 +101,7 @@ export function LegacyLibraryPreview({ sources = [] }: { sources?: LegacySource[
     </button>
     {error && <p role="alert" className="mt-2 text-sm text-rose-600 dark:text-rose-300">{error}</p>}
     {preview && <div className="mt-3 space-y-2 text-sm">
-      <p role="status" className="break-all">{preview.path} · {songCount(preview.songs.length)} · {t('playlists')} ({preview.playlists.length})</p>
+      <p role="status" className="break-all"><strong>{sourceName}</strong> · {preview.path} · {songCount(preview.songs.length)} · {t('playlists')} ({preview.playlists.length})</p>
       <p className="text-xs">{t('legacyLibrarySize').replace('{size}', formatSize(preview.space.total_bytes)).replace('{required}', formatSize(preview.space.required_bytes))}
         {preview.space.available_bytes !== null && <> · {t('legacyLibraryFree').replace('{size}', formatSize(preview.space.available_bytes))}</>}
       </p>

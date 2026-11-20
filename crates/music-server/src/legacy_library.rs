@@ -101,6 +101,15 @@ fn inspect(folder: &Path, destination: &crate::library::Library) -> Result<Value
     let root = source_root(folder)?;
     let db = open_source(&root)?;
     let mut view = manifest(&root, &db)?;
+    if let Some(install) = root.parent().filter(|_| root.ends_with("data")) {
+        let ace = install.join("ACE-Step-Studio.exe").is_file();
+        let minimax = install.join("MiniMax-Music3-Studio.exe").is_file();
+        match (ace, minimax) {
+            (true, false) => view["studio"] = json!("ACE-Step Studio"),
+            (false, true) => view["studio"] = json!("MiniMax Music3 Studio"),
+            _ => {}
+        }
+    }
     let mappings =
         destination.legacy_song_mappings(root.to_str().context("Unsupported library path")?)?;
     let space = write::media_space(&view, &mappings, destination.media_dir())?;
@@ -223,7 +232,10 @@ mod tests {
         let library =
             crate::library::Library::open_at(dest.join("library.sqlite"), dest.join("media"))
                 .unwrap();
+        assert!(inspect(&root, &library).unwrap().get("studio").is_none());
+        std::fs::write(temp.path().join("MiniMax-Music3-Studio.exe"), []).unwrap();
         let result = inspect(temp.path(), &library).unwrap();
+        assert_eq!(result["studio"], "MiniMax Music3 Studio");
         assert_eq!(result["songs"], inspect(&root, &library).unwrap()["songs"]);
         assert_eq!(result["space"]["required_bytes"], 5 + 11 + 5 + 8);
         assert_eq!(result["playlists"][0]["song_ids"], json!(["s", "p"]));
