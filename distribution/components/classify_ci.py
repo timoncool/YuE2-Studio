@@ -35,21 +35,22 @@ def check_change(base):
         return False
     if subprocess.run(["git", "cat-file", "-e", base + "^{commit}"], capture_output=True).returncode:
         return False
-    paths = git("diff", "--no-renames", "--name-only", "-z", base, "HEAD")
-    if paths != CATALOGUE.as_posix().encode() + b"\0":
+    paths = git("diff", "--no-renames", "--name-only", "-z", base, "HEAD").split(b"\0")[:-1]
+    if CATALOGUE.as_posix().encode() not in paths:
         return False
-    # Only rerouting existing archives qualifies for the lightweight path.
+    after = read_catalogue(CATALOGUE)
+    command = [sys.executable, str(VERIFIER), str(CATALOGUE), "--fetch"]
     with tempfile.TemporaryDirectory() as tmp:
         previous = Path(tmp) / "previous.json"
-        previous.write_bytes(git("show", f"{base}:{CATALOGUE.as_posix()}"))
-        before, after = read_catalogue(previous), read_catalogue(CATALOGUE)
-        if before["archives"].keys() != after["archives"].keys():
-            return False
-        subprocess.run(
-            [sys.executable, str(VERIFIER), str(CATALOGUE),
-             "--previous", str(previous), "--fetch"], check=True,
-        )
-    return True
+        old = subprocess.run(["git", "show", f"{base}:{CATALOGUE.as_posix()}"], capture_output=True)
+        same_archives = False
+        if old.returncode == 0:
+            previous.write_bytes(old.stdout)
+            same_archives = read_catalogue(previous)["archives"].keys() == after["archives"].keys()
+            command.extend(["--previous", str(previous)])
+        # Mixed code and catalogue changes must pass both the network check and the builds.
+        subprocess.run(command, check=True)
+    return len(paths) == 1 and same_archives
 
 
 if __name__ == "__main__":

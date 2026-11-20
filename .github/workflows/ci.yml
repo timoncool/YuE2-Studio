@@ -33,7 +33,7 @@ jobs:
 
   service:
     needs: changes
-    if: ${{ always() && (needs.changes.result != 'success' || needs.changes.outputs.mirrors_only != 'true') }}
+    if: ${{ needs.changes.outputs.mirrors_only != 'true' }}
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v7.0.1
@@ -49,7 +49,7 @@ jobs:
   # the Windows one, so the runner's own stable toolchain is taken
   service-linux:
     needs: changes
-    if: ${{ always() && (needs.changes.result != 'success' || needs.changes.outputs.mirrors_only != 'true') }}
+    if: ${{ needs.changes.outputs.mirrors_only != 'true' }}
     runs-on: ubuntu-latest
     env:
       RUSTUP_TOOLCHAIN: stable
@@ -65,7 +65,7 @@ jobs:
 
   interface:
     needs: changes
-    if: ${{ always() && (needs.changes.result != 'success' || needs.changes.outputs.mirrors_only != 'true') }}
+    if: ${{ needs.changes.outputs.mirrors_only != 'true' }}
     runs-on: ubuntu-latest
     defaults:
       run:
