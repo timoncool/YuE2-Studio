@@ -54,6 +54,13 @@ def check_change(base):
 
 
 if __name__ == "__main__":
-    mirrors_only = check_change(base_commit())
+    base = base_commit()
+    mirrors_only = check_change(base)
+    channel_inputs = ["crates/music-server/src/component_catalogue.rs", "crates/music-server/src/downloads.rs",
+                      "distribution/components/test_installed_channel.py", "distribution/components/check_installed_channel.sh"]
+    channel_changed = not base or subprocess.run(
+        ["git", "diff", "--quiet", base, "HEAD", "--", *channel_inputs]
+    ).returncode != 0
     with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
         print(f"mirrors_only={str(mirrors_only).lower()}", file=output)
+        print(f"channel_changed={str(channel_changed).lower()}", file=output)
