@@ -224,6 +224,7 @@ function AppContent() {
     return () => { stopped = true; window.clearTimeout(timer); };
   }, []);
   // A track sent here from a menu's "separate into stems".
+  const [focusRvc, setFocusRvc] = useState(false);
   const [stemsSongId, setStemsSongId] = useState<string | null>(null);
   // Which of the three situations the studio is in. It starts unknown, and
   // unknown must not look like "nothing is installed": showing the download
@@ -247,6 +248,7 @@ function AppContent() {
   }, [setupQuery.data, setupQuery.isError]);
   useEffect(() => {
     const open = (event: Event) => {
+      setFocusRvc(event.type === 'yue:open-rvc');
       setStemsSongId((event as CustomEvent<string>).detail);
       setCurrentView('tools');
     };
@@ -265,11 +267,13 @@ function AppContent() {
       if (song) setSongToProcess(song);
     };
     window.addEventListener('yue:open-stems', open);
+    window.addEventListener('yue:open-rvc', open);
     window.addEventListener('yue:open-settings', openSettings);
     window.addEventListener('yue:navigate', navigate);
     window.addEventListener('yue:process-song', process);
     return () => {
       window.removeEventListener('yue:open-stems', open);
+      window.removeEventListener('yue:open-rvc', open);
       window.removeEventListener('yue:open-settings', openSettings);
       window.removeEventListener('yue:navigate', navigate);
       window.removeEventListener('yue:process-song', process);
@@ -1440,7 +1444,7 @@ function AppContent() {
   const renderContent = (view: typeof currentView = currentView) => {
     switch (view) {
       case 'tools':
-        return <StudioToolsPanel initialSongId={stemsSongId} />;
+        return <StudioToolsPanel initialSongId={stemsSongId} focusRvc={focusRvc} onRvcFocused={() => setFocusRvc(false)} />;
 
       case 'adapters':
         return <AdaptersPage />;

@@ -67,7 +67,7 @@ const CONTROL =
 
 const megabytes = (bytes: number) => `${(bytes / 1024 / 1024).toFixed(0)} MB`;
 
-export function StudioToolsPanel({ initialSongId }: { initialSongId?: string | null } = {}): React.ReactElement {
+export function StudioToolsPanel({ initialSongId, focusRvc, onRvcFocused }: { initialSongId?: string | null; focusRvc?: boolean; onRvcFocused?: () => void } = {}): React.ReactElement {
   const { t } = useI18n();
 
   const [songs, setSongs] = useState<NativeLibrarySong[]>([]);
@@ -76,6 +76,13 @@ export function StudioToolsPanel({ initialSongId }: { initialSongId?: string | n
   const [status, setStatus] = useState<SeparationStatus | null>(null);
   const [stems, setStems] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
+  const rvcSection = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (focusRvc && rvcSection.current) {
+      rvcSection.current.focus();
+      onRvcFocused?.();
+    }
+  }, [focusRvc, onRvcFocused]);
   const settingsRevision = useRef(0);
   // separating again replaces the stems the song has: asked first
   const [confirmReplace, setConfirmReplace] = useState(false);
@@ -484,7 +491,9 @@ export function StudioToolsPanel({ initialSongId }: { initialSongId?: string | n
           onDone={() => void loadSongs()}
         />
 
-        <RvcVoiceCatalog card={CARD} control={CONTROL} />
+        <div ref={rvcSection} tabIndex={-1} className="scroll-m-4 rounded-lg focus-visible:outline-2 focus-visible:outline-pink-500">
+          <RvcVoiceCatalog card={CARD} control={CONTROL} />
+        </div>
 
         {/* Audio to MIDI, on the track chosen above. */}
         <MidiTool songId={songId} songTitle={songs.find(song => song.id === songId)?.title ?? ''} card={CARD} />
