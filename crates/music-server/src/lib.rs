@@ -4812,8 +4812,15 @@ async fn tag_stored_song(state: &AppState, song_id: &str) {
     // one file rewrite at a time: a setting switched twice, the start's pass and a saved note all tag the same files
     static TAGGING: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
     let _one = TAGGING.lock().await;
-    // reading the cover and rewriting the file are blocking file work
+    // Reading the cover and rewriting the file are blocking file work.
+    let library = state.library.clone();
+    let song_id = song_id.to_owned();
     let written = tokio::task::spawn_blocking(move || {
+        // Two takes can point at one recording. Their individual titles, lyrics
+        // and covers belong in the library until each has a file of its own.
+        if library.audio_has_other_owner(&song_id, &audio_path)? {
+            return Ok(());
+        }
         let cover = cover_file.and_then(|(path, media_type)| std::fs::read(path).ok().map(|bytes| (media_type, bytes)));
         tagging::write_tags(&audio_path, &tagging::TrackTags { cover, ..tags })
     })

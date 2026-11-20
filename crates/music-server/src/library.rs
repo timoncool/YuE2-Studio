@@ -312,6 +312,21 @@ impl Library {
   by_name.starts_with(&root).then_some(by_name)
  }
  pub fn media_path_for_song(&self,song:&Song)->Option<PathBuf>{self.resolve_media(song.audio_path.as_ref()?)}
+ /// Another library row, including one in the bin, may play this same file.
+ /// Portable libraries also resolve obsolete stored paths by their filename.
+ pub fn audio_has_other_owner(&self, song_id: &str, path: &Path) -> Result<bool> {
+  let Some(name) = path.file_name().and_then(|value| value.to_str()) else { return Ok(true) };
+  let connection = self.connection.lock().unwrap();
+  let mut statement = connection.prepare(
+   "SELECT DISTINCT audio_path FROM songs WHERE id <> ?1 AND
+    substr(audio_path, -length(?2)) = ?2 COLLATE NOCASE"
+  )?;
+  let paths = statement.query_map(params![song_id, name], |row| row.get::<_, String>(0))?;
+  for stored in paths {
+   if self.resolve_media(&stored?).as_deref() == Some(path) { return Ok(true) }
+  }
+  Ok(false)
+ }
  /// Stores karaoke timings with the track. They live in the metadata rather
  /// than a column of their own so an existing library needs no migration, and
  /// a track without them is simply a track nobody has timed yet.
@@ -472,6 +487,29 @@ Basic Attributes: bpm is 118. key is F# minor, and scale is minor. Darkwave, Syn
   assert_eq!(generated_title(caption),"Darkwave, Synth-pop");
   assert_eq!(generated_title("Bright uplifting synth-pop, punchy drums"),"Bright uplifting synth-pop, punchy drums");
  }
+#[test]
+fn tags_respect_shared_audio_after_a_portable_move_and_while_in_trash() {
+    let root = tempfile::tempdir().unwrap();
+    let media = root.path().join("media");
+    std::fs::create_dir_all(media.join("alternate")).unwrap();
+    let recording = media.join("same.wav");
+    std::fs::write(&recording, b"shared").unwrap();
+    let library = Library::open_at(root.path().join("library.sqlite"), media.clone()).unwrap();
+    let make = |path: PathBuf| {
+        library.create_song(serde_json::from_value(serde_json::json!({
+            "title": "Take", "engine_id": "manual", "audio_path": path
+        })).unwrap()).unwrap()
+    };
+    let first = make(recording.clone());
+    let path = library.media_path_for_song(&first).unwrap();
+    std::fs::write(media.join("alternate/same.wav"), b"independent").unwrap();
+    make(media.join("alternate/same.wav"));
+    assert!(!library.audio_has_other_owner(&first.id, &path).unwrap());
+    let moved = make(root.path().join("old-install/same.wav"));
+    library.set_song_trashed(&moved.id, true, None).unwrap();
+    assert!(library.audio_has_other_owner(&first.id, &path).unwrap());
+}
+
 #[test]
 fn reopening_restores_only_independent_versions_auto_trashed_with_their_source() {
     let root = env::temp_dir().join(format!("yue2-legacy-bin-{}", uuid::Uuid::now_v7()));
