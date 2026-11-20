@@ -106,6 +106,41 @@ with log.open("wb") as stream:
                 assert digest(target)==sha and target.samefile(old/relative/name),name
         assert (old/"config.json").read_bytes()==b"x"*124
         print(json.dumps({"adopted":result["adopted"], "duplicate":result["refused"], "second_pass":again["adopted"], "installed":installed, "source_sha256":files}),flush=True)
+        config=studio/relative/"config.json"
+        config.unlink()
+        config.write_bytes(b"X"*len((old/relative/"config.json").read_bytes()))
+        repaired=call("/setup/adopt",{"path":str(old)})
+        assert repaired["adopted"]==["muscriptor-small-config"] and digest(config)==files["config.json"],repaired
+        assert config.samefile(old/relative/"config.json")
+        print("Verified repair of a same-size damaged installed model config",flush=True)
+        import http.client
+        from shutil import copyfile
+        archived=root/"assistant only"
+        archived.mkdir()
+        copyfile(llama_archive,archived/llama_archive.name)
+        runtime=studio/"assistant/runtime"
+        executable=runtime/"cpu"/("llama-server.exe" if os.name=="nt" else "llama-server")
+        assert executable.is_file(),executable
+        executable.rename(root/"old executable")
+        client=http.client.HTTPConnection("127.0.0.1",port,timeout=60)
+        client.request("POST","/setup/adopt",json.dumps({"path":str(archived)}),{"Content-Type":"application/json"})
+        mark=runtime/("llama-cpu.zip.json.installing" if os.name=="nt" else "llama-cpu.tar.gz.json.installing")
+        limit=time.monotonic()+60
+        while not mark.exists():
+            assert time.monotonic()<limit,mark
+            time.sleep(.002)
+        client.close()
+        while mark.exists() or not executable.exists():
+            assert time.monotonic()<limit,"extractor stayed busy after HTTP disconnect"
+            time.sleep(.025)
+        for _ in range(100):
+            assistant=call("/v1/assistant/runtime")
+            progress=assistant.get("active_download") or {}
+            if progress.get("done") and not progress.get("error"): break
+            time.sleep(.05)
+        assert progress.get("done") and not progress.get("error"),assistant
+        assert digest(archived/llama_archive.name)==llama_sha
+        print("Closed HTTP during real assistant extraction; record and download progress reached done",flush=True)
         if "--verify-files" in sys.argv:
             sys.exit(0)
         pcm=Path(os.environ["QA_PIANO_WAV"]).resolve()
