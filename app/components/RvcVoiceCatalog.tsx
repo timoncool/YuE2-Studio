@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { useI18n } from '../context/I18nContext';
 import { rvcVoiceStrings } from '../i18n/rvcVoices';
 import { responseJson, type Voice, voiceName } from '../services/rvcVoices';
@@ -17,6 +17,8 @@ export function RvcVoiceCatalog({ card, control }: { card: string; control: stri
   const modelInput = useRef<HTMLInputElement>(null);
   const indexInput = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
+  const modelHelpId = useId();
+  const indexHelpId = useId();
   const [catalogRequest, setCatalogRequest] = useState(0);
   const [error, setError] = useState<string | null>(null);
 
@@ -80,16 +82,22 @@ export function RvcVoiceCatalog({ card, control }: { card: string; control: stri
         </select>
       </label>
       <div className="mt-3 grid gap-2 sm:grid-cols-2">
-        <label className="space-y-1 text-xs">
-          <span>{labels.model}</span>
-          <input ref={modelInput} className={control} type="file" accept=".pth,.pt" disabled={busy}
-            onChange={event => setModel(event.target.files?.[0])} />
-        </label>
-        <label className="space-y-1 text-xs">
-          <span>{labels.index}</span>
-          <input ref={indexInput} className={control} type="file" accept=".index" disabled={busy}
-            onChange={event => setIndex(event.target.files?.[0])} />
-        </label>
+        <div className="space-y-1 text-xs">
+          <label className="block space-y-1">
+            <span>{labels.model}</span>
+            <input ref={modelInput} className={control} type="file" accept=".pth,.pt" disabled={busy} aria-describedby={modelHelpId}
+              onChange={event => setModel(event.target.files?.[0])} />
+          </label>
+          <p id={modelHelpId} className="text-zinc-600 dark:text-zinc-300">{labels.modelHelp}</p>
+        </div>
+        <div className="space-y-1 text-xs">
+          <label className="block space-y-1">
+            <span>{labels.index}</span>
+            <input ref={indexInput} className={control} type="file" accept=".index" disabled={busy} aria-describedby={indexHelpId}
+              onChange={event => setIndex(event.target.files?.[0])} />
+          </label>
+          <p id={indexHelpId} className="text-zinc-600 dark:text-zinc-300">{labels.indexHelp}</p>
+        </div>
       </div>
       <button type="button" onClick={() => void importVoice()} disabled={!model || busy || !voices}
         className="mt-3 rounded-lg border border-zinc-200 px-3 py-2 text-xs enabled:hover:border-pink-500 disabled:opacity-50 dark:border-white/10">

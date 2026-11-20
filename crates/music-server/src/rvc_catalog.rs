@@ -6,6 +6,7 @@ use tokio::io::AsyncWriteExt;
 
 use crate::{
     api_error, net,
+    rvc_catalog_progress::{self, Installation, Stage},
     rvc_voices::{self, ApiFailure, StagedFile, Voice, VoiceOrigin},
     update_data_root, AppState,
 };
@@ -191,6 +192,8 @@ pub(super) async fn install(
         })?;
     let root = update_data_root(&state).join("rvc/voices");
     let local_id = voice.local_id().map_err(rvc_voices::internal)?;
+    let id = voice.id.clone();
+    let _installation = Installation::begin(&id)?;
     let installed = tokio::task::spawn_blocking({
         let root = root.clone();
         move || rvc_voices::read_voice(&root, &local_id)
@@ -212,17 +215,29 @@ async fn install_catalog_voice(
     let stage = rvc_voices::new_stage(&root).await?;
     let transfer_error =
         |error: anyhow::Error| api_error(StatusCode::BAD_GATEWAY, error.to_string());
-    let model = download(client, &voice.weights, &stage.path().join("voice.pth"))
+    let model_path = stage.path().join("voice.pth");
+    rvc_catalog_progress::downloading(
+        &voice.id,
+        Stage::DownloadingWeights,
+        &model_path,
+        voice.weights.size,
+    );
+    let model = download(client, &voice.weights, &model_path)
         .await
         .map_err(transfer_error)?;
     let index = match &voice.index {
-        Some(file) => Some(
-            download(client, file, &stage.path().join("retrieval.index"))
-                .await
-                .map_err(transfer_error)?,
-        ),
+        Some(file) => {
+            let path = stage.path().join("retrieval.index");
+            rvc_catalog_progress::downloading(&voice.id, Stage::DownloadingIndex, &path, file.size);
+            Some(
+                download(client, file, &path)
+                    .await
+                    .map_err(transfer_error)?,
+            )
+        }
         None => None,
     };
+    rvc_catalog_progress::verifying(&voice.id);
     rvc_voices::install_staged(root, stage, model, index, Some(voice.origin())).await
 }
 

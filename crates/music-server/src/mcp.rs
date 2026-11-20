@@ -236,6 +236,36 @@ fn midi_note_page(mut song: Value, offset: Option<u64>) -> Value {
     }
 }
 
+fn rvc_catalog_match(voice: &Value, args: &Value) -> bool {
+    let metadata = &voice["metadata"];
+    if let Some(query) = args["query"].as_str().filter(|query| !query.trim().is_empty()) {
+        let mut text = voice["name"].as_str().unwrap_or_default().to_lowercase();
+        for label in metadata["source_labels"].as_array().into_iter().flatten().filter_map(Value::as_str) {
+            text.push(' ');
+            text.push_str(&label.to_lowercase());
+        }
+        if !query.to_lowercase().split_whitespace().all(|term| text.contains(term)) {
+            return false;
+        }
+    }
+    for key in ["vocal_style", "rvc_version"] {
+        if let Some(value) = args[key].as_str().filter(|value| !value.trim().is_empty()) {
+            let matches = metadata[key].as_str().is_some_and(|actual| actual.to_lowercase() == value.trim().to_lowercase())
+                || metadata[key].as_u64().is_some_and(|actual| actual.to_string() == value.trim());
+            if !matches {
+                return false;
+            }
+        }
+    }
+    if let Some(rate) = args["sample_rate_hz"].as_u64() {
+        if metadata["sample_rate_hz"].as_u64() != Some(rate) {
+            return false;
+        }
+    }
+    let has_index = voice["has_index"].as_bool().unwrap_or(!voice["index"].is_null());
+    args["has_index"].as_bool().is_none_or(|requested| requested == has_index)
+}
+
 /// What an agent is answered: the parts it acts on, unless it asked for
 /// every field with response_format detailed.
 fn shape(name: &str, args: &Value, value: Value) -> Value {
@@ -243,7 +273,8 @@ fn shape(name: &str, args: &Value, value: Value) -> Value {
     match name {
         "training_status" if !detailed => compact_training(&value),
         "rvc_catalog_list" => {
-            let entries = value.as_array().map_or(&[][..], Vec::as_slice);
+            let entries: Vec<_> = value.as_array().into_iter().flatten()
+                .filter(|voice| rvc_catalog_match(voice, args)).collect();
             let offset = args["offset"].as_u64().unwrap_or(0).min(entries.len() as u64) as usize;
             let end = (offset + 20).min(entries.len());
             json!({
@@ -2473,8 +2504,21 @@ fn tools() -> &'static [Tool] {
             Tool {
                 name: "rvc_catalog_list",
                 description: "List up to 20 curated RVC voices, license terms and installed local IDs. Pass next_offset as offset for the next page.",
-                schema: || object(json!({ "offset": { "type": "integer", "minimum": 0 } }), &[]),
+                schema: || object(json!({
+                    "offset": { "type": "integer", "minimum": 0 },
+                    "query": { "type": "string", "description": "Case-insensitive words in the name or source labels" },
+                    "vocal_style": { "type": "string", "description": "Exact style tag such as high" },
+                    "rvc_version": { "type": "string", "description": "Exact version such as v2" },
+                    "sample_rate_hz": { "type": "integer", "minimum": 1 },
+                    "has_index": { "type": "boolean" },
+                }), &[]),
                 call: |_| get("/v1/rvc/catalog".into()),
+            },
+            Tool {
+                name: "rvc_catalog_progress_get",
+                description: "Read preparation, file download and verification progress for a catalog voice being installed.",
+                schema: || id_only("id", "the ID from rvc_catalog_list"),
+                call: |args| get(format!("/v1/rvc/catalog/progress/{}", segment(&text(args, "id")?))),
             },
             Tool {
                 name: "rvc_catalog_install",
@@ -3435,6 +3479,21 @@ mod tests {
             assert_eq!(schema["type"], "object", "{} has no object schema", tool.name);
             assert!(!tool.description.is_empty(), "{} has no description", tool.name);
         }
+    }
+
+    #[test]
+    fn catalog_filters_radio_tapok_before_paging() {
+        let source: Value = serde_json::from_str(include_str!("../../../config/rvc-voice-catalog.json")).unwrap();
+        let args = json!({"query": "Radio Tapok", "vocal_style": "high", "rvc_version": "v2",
+            "sample_rate_hz": 40000, "has_index": true});
+        let filtered = shape("rvc_catalog_list", &args, source["voices"].clone());
+        assert_eq!(filtered["total"], 1);
+        assert_eq!(filtered["next_offset"], Value::Null);
+        assert_eq!(filtered["voices"][0]["id"], "rvc-50ea3d733073550ef6f7");
+        let legacy = json!({"name":"Legacy", "metadata":null, "index":null});
+        assert!(rvc_catalog_match(&legacy, &json!({})));
+        assert!(rvc_catalog_match(&legacy, &json!({"has_index":false})));
+        assert!(!rvc_catalog_match(&legacy, &json!({"vocal_style":"high"})));
     }
 
     #[test]
