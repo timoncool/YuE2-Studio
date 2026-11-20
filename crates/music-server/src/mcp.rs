@@ -520,6 +520,7 @@ const JOURNAL: &[(&str, &str, &str)] = &[
     ("separator_cancel_download", "cancelled", "download"),
     ("recogniser_cancel_download", "cancelled", "download"),
     ("lora_cancel_download", "cancelled", "download"),
+    ("library_migration_import", "imported", "library"),
     ("models_adopt", "installed", "model"),
     ("models_remove", "deleted", "model"),
     ("restore_remove", "deleted", "model"),
@@ -1048,6 +1049,12 @@ fn tools() -> &'static [Tool] {
                 description: "Download a model set (profile_id from models_catalog) or single components (ids). Resumes what is partly there.",
                 schema: || object(json!({ "profile_id": { "type": "string" }, "ids": { "type": "array", "items": { "type": "string" } } }), &[]),
                 call: |args| post("/setup/download".into(), args.clone()),
+            },
+            Tool {
+                name: "library_migration_import",
+                description: "Copy the songs, related files and playlists from the selected old Studio folder into this library. Safe to retry after a preview.",
+                schema: || id_only("path", "Old Studio installation or data folder"),
+                call: |args| post("/v1/library/migration/import".into(), json!({ "path": text(args, "path")? })),
             },
             Tool {
                 name: "library_migration_preview",

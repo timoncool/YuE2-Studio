@@ -32,23 +32,42 @@ pub(super) async fn preview(
         result["path"] = json!(folder);
         Ok::<_, anyhow::Error>(result)
     })
-        .await
-        .map_err(|error| api_error(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?
-        .map(Json)
-        .map_err(|error| api_error(StatusCode::BAD_REQUEST, format!("{error:#}")))
+    .await
+    .map_err(|error| api_error(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?
+    .map(Json)
+    .map_err(|error| api_error(StatusCode::BAD_REQUEST, format!("{error:#}")))
 }
 
-fn inspect(folder: &Path) -> Result<Value> {
+fn source_root(folder: &Path) -> Result<PathBuf> {
     anyhow::ensure!(folder.is_absolute(), "Choose an absolute Studio folder");
-    let root = [folder.to_owned(), folder.join("data")]
+    [folder.to_owned(), folder.join("data")]
         .into_iter()
         .find(|path| path.join("library.sqlite").is_file())
-        .context("No library.sqlite in the selected folder or its data folder")?;
+        .context("No library.sqlite in the selected folder or its data folder")?
+        .canonicalize()
+        .context("Resolve Studio data directory")
+}
+
+#[path = "legacy_import.rs"]
+mod write;
+pub(super) use write::import;
+
+fn open_source(root: &Path) -> Result<Connection> {
     let db = Connection::open_with_flags(
         root.join("library.sqlite"),
         OpenFlags::SQLITE_OPEN_READ_ONLY,
     )?;
     db.execute_batch("PRAGMA trusted_schema=OFF; BEGIN")?;
+    Ok(db)
+}
+
+fn inspect(folder: &Path) -> Result<Value> {
+    let root = source_root(folder)?;
+    let db = open_source(&root)?;
+    manifest(&root, &db)
+}
+
+fn manifest(root: &Path, db: &Connection) -> Result<Value> {
     let media = root.join("media");
     let mut files = HashSet::new();
     match std::fs::read_dir(media) {
