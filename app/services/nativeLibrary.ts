@@ -49,6 +49,7 @@ export function nativeMusicEngineName(id: string | undefined): string {
   switch (id) {
     case 'acestep-cpp': return 'ACE-Step';
     case 'minimaxmusic-cpp': return 'MiniMax Music 3';
+    case 'audio.cpp': return 'audio.cpp';
     default: return 'YuE2';
   }
 }

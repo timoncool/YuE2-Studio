@@ -6,7 +6,7 @@ import { deleteNativePlaylist, parseDuration, updateNativePlaylist } from '../se
 import { updateLibraryPlaylists, useLibraryPlaylists, useLibrarySongs } from '../services/studioQueries';
 import { named } from '../services/accessibleName';
 import { captionSummary } from '../services/examples';
-import { useSongActions } from '../context/SongActionsContext';
+import { SongActionsProvider, useSongActions } from '../context/SongActionsContext';
 import { SongCover } from './AlbumCover';
 import { ConfirmDialog } from './ConfirmDialog';
 import { SongDropdownMenu } from './SongDropdownMenu';
@@ -18,6 +18,8 @@ interface PlaylistDetailProps {
     playlistId: string;
     onBack: () => void;
     onPlaySong: (song: Song, list?: Song[]) => void;
+    onCreateHere: () => void;
+    onReuseHere: (song: Song) => void;
     onSelect: (song: Song) => void;
     /** What the player holds, so its row says so. */
     currentSong: Song | null;
@@ -37,7 +39,7 @@ function shuffled<T>(items: T[]): T[] {
     return copy;
 }
 
-export const PlaylistDetail: React.FC<PlaylistDetailProps> = ({ playlistId, onBack, onPlaySong, onSelect, currentSong, isPlaying, notify, onError }) => {
+export const PlaylistDetail: React.FC<PlaylistDetailProps> = ({ playlistId, onBack, onPlaySong, onCreateHere, onReuseHere, onSelect, currentSong, isPlaying, notify, onError }) => {
     const { t, songCount, language } = useI18n();
     const actions = useSongActions();
     // the library's own reads: a change made anywhere, a deletion included, shows here at once
@@ -205,6 +207,12 @@ export const PlaylistDetail: React.FC<PlaylistDetailProps> = ({ playlistId, onBa
                     className="p-2 text-zinc-300 transition-colors hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
                 >
                     <Shuffle size={22} />
+                </button>
+                <button type="button" onClick={onCreateHere}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-white/15 px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-white/10"
+                >
+                    <Plus size={16} />
+                    {t('create')}
                 </button>
                 <button
                     onClick={() => setEditing(playlist)}
@@ -458,7 +466,11 @@ export const PlaylistDetail: React.FC<PlaylistDetailProps> = ({ playlistId, onBa
             </div>
 
             <PlaylistMenu at={menuAt} empty={!playable.length} actions={menuActions} onClose={() => setMenuAt(null)} />
-            {songMenu && <SongDropdownMenu song={songMenu.song} isOpen at={songMenu.at} onClose={() => setSongMenu(null)} />}
+            {songMenu && (
+                <SongActionsProvider value={{ ...actions, reusePrompt: onReuseHere }}>
+                    <SongDropdownMenu song={songMenu.song} isOpen at={songMenu.at} onClose={() => setSongMenu(null)} />
+                </SongActionsProvider>
+            )}
             <PlaylistEditModal playlist={editing} onClose={() => setEditing(null)} onError={onError} />
             <ConfirmDialog
                 isOpen={confirmDelete}

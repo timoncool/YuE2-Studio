@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { useI18n } from '../context/I18nContext';
 import { rvcVoiceStrings } from '../i18n/rvcVoices';
-import { responseJson, type Voice } from '../services/rvcVoices';
+import { poll } from '../services/poll';
+import { responseJson, type Voice, voiceName } from '../services/rvcVoices';
 
 const URL = '/v1/rvc/catalog';
 const PAGE_SIZE = 40;
@@ -28,6 +29,11 @@ interface CatalogVoice {
 const metadataFields = ['vocal_style', 'rvc_version', 'sample_rate_hz'] as const;
 type MetadataField = typeof metadataFields[number];
 type Filters = Partial<Record<MetadataField | 'index', string>>;
+interface InstallProgress {
+  stage: 'preparing' | 'downloading_weights' | 'downloading_index' | 'verifying';
+  downloaded_bytes: number;
+  total_bytes: number;
+}
 
 export function RvcCuratedVoices({ onInstalled, onChoose, disabled, installedIds }: {
   installedIds: ReadonlySet<string>;
@@ -42,6 +48,8 @@ export function RvcCuratedVoices({ onInstalled, onChoose, disabled, installedIds
   const [request, setRequest] = useState(0);
   const [installing, setInstalling] = useState<string>();
   const [error, setError] = useState<string>();
+  const [progress, setProgress] = useState<InstallProgress | null>(null);
+  const [installedName, setInstalledName] = useState<string>();
   const [search, setSearch] = useState('');
   const [filters, setFilters] = useState<Filters>({});
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
@@ -61,8 +69,25 @@ export function RvcCuratedVoices({ onInstalled, onChoose, disabled, installedIds
     return () => controller.abort();
   }, [open, request]);
 
+  useEffect(() => {
+    if (!installing) return;
+    const controller = new AbortController();
+    const stop = poll(async () => {
+      try {
+        const reply = await fetch(`${URL}/progress/${encodeURIComponent(installing)}`, { signal: controller.signal });
+        const next = await responseJson<InstallProgress | null>(reply);
+        if (next && !controller.signal.aborted) setProgress(next);
+      } catch {
+        // The install request reports the final result. A missed progress sample can be retried.
+      }
+    }, 350);
+    return () => { controller.abort(); stop(); };
+  }, [installing]);
+
   async function install(id: string) {
     setInstalling(id);
+    setProgress(null);
+    setInstalledName(undefined);
     setError(undefined);
     try {
       const voice = await responseJson<Voice>(await fetch(`${URL}/install`, {
@@ -70,8 +95,9 @@ export function RvcCuratedVoices({ onInstalled, onChoose, disabled, installedIds
       }));
       setCatalog(current => current?.map(item => item.id === id ? { ...item, installed_id: voice.id } : item) ?? null);
       onInstalled(voice);
+      setInstalledName(voiceName(voice));
     } catch (failure) {
-      setError(failure instanceof Error ? failure.message : String(failure));
+      setError(`${labels.installFailed} ${failure instanceof Error ? failure.message : String(failure)}`);
     } finally {
       setInstalling(undefined);
     }
@@ -86,6 +112,13 @@ export function RvcCuratedVoices({ onInstalled, onChoose, disabled, installedIds
   });
   const visible = matches.slice(0, visibleCount);
   const filterActive = terms.length > 0 || Object.values(filters).some(Boolean);
+  const stageLabels = {
+    preparing: labels.preparing,
+    downloading_weights: labels.fetchingWeights,
+    downloading_index: labels.fetchingIndex,
+    verifying: labels.verifying,
+  };
+  const activeStage = installing ? stageLabels[progress?.stage ?? 'preparing'] : undefined;
   const filterLabels = {
     vocal_style: labels.vocalStyle,
     rvc_version: labels.rvcVersion,
@@ -101,6 +134,16 @@ export function RvcCuratedVoices({ onInstalled, onChoose, disabled, installedIds
           {!catalog && !error && <p role="status">{labels.loading}</p>}
           {catalog?.length === 0 && <p>{labels.empty}</p>}
           {error && <p role="alert" className="break-words text-rose-600 dark:text-rose-300">{error}</p>}
+          {activeStage && (
+            <div className="mb-2 space-y-1">
+              <p role="status">{activeStage}</p>
+              {progress && progress.total_bytes > 0 && (
+                <progress aria-label={activeStage} className="w-full accent-pink-500"
+                  value={progress.downloaded_bytes} max={progress.total_bytes} />
+              )}
+            </div>
+          )}
+          {!installing && installedName && <p role="status">{labels.installDone.replace('{voice}', installedName)}</p>}
           {!catalog && error && (
             <button type="button" className="text-pink-600 underline dark:text-pink-300"
               onClick={() => { setError(undefined); setRequest(value => value + 1); }}>{labels.retry}</button>

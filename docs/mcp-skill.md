@@ -97,6 +97,8 @@ connected and the address to paste.
   lists the score's parts (score, lead, voice, chords) and the track's own MIDI, and
   `library_song_midi_part_write` writes one into a folder. `song_export_live` writes the
   song as an Ableton Live 12 project: the song, its stems and its MIDI on tracks, zipped.
+  `song_export_zip` takes library `song_ids` and returns a temporary local download
+  URL for the original audio, prompts, lyrics, settings and available ABC and MIDI.
 - **You write, not the studio's assistant.** The studio has a small local model (Gemma)
   for users without an agent. You write better: read `writing_guide` and
   `writing_examples` first and write the style, lyrics and scores yourself. Use
@@ -113,6 +115,11 @@ Check `engine_installed`, then select a profile with `ready: true`. Pass its ID 
 to `acestep-cpp` or `minimaxmusic-cpp`. MiniMax takes a caption in `style` and
 the song text in `lyrics`. ACE-specific settings go in `ace`. Poll `song_job_get`
 with the ID returned by `song_create`. Use `song_job_cancel` to stop the job.
+
+For MiniMax Music3 through audio.cpp, call `audio_cpp_music_models` and check that
+`minimax_music3` is ready. Pass `"music_source": {"kind":"audio_cpp","model":"minimax_music3"}`
+to `song_create` with `style`, `lyrics`, and an optional nonnegative `seed`.
+The job uses the installed `quality-q8` profile and returns its library song.
 
 For an OpenRouter generation, read `openrouter_catalog` and select an ID whose
 `capabilities` include `music_generation`. Pass that exact ID as
@@ -281,7 +288,7 @@ move around. Check the result with `ui_screenshot`.
 - **processing**: `processing_start`, `processing_get`, `processing_keep`, `processing_discard`, `processing_set_reference`.
 - **vst**: `vst_list`, `vst_scan`, `vst_open_editor`.
 - **lora**: `lora_list`, `lora_install_catalog`, `lora_search_hf`, `lora_hf_files`, `lora_install_hf`, `lora_update`, `lora_delete`, `lora_import_folder` (every LoRA of a folder, linked without a copy), `lora_import_files`, `lora_cancel_download`, `lora_export_comfyui` (a trained LoRA as one file for ComfyUI's native YuE2).
-- **RVC voices**: `rvc_voices_list` lists the voices installed in Studio Tools. `rvc_voice_import` takes an exported inference checkpoint at `model_path` and an optional filled FAISS `index_path`. `rvc_catalog_list` shows up to 20 curated voices with source and license. Continue with `offset` set to the returned `next_offset`. `rvc_catalog_install` verifies and installs the chosen ID. `rvc_voice_remove` removes a voice and any index by its installed ID, keeping rendered songs.
+- **RVC voices**: `rvc_voices_list` lists the voices installed in Studio Tools. `rvc_voice_import` takes an exported inference checkpoint at `model_path` and an optional filled FAISS `index_path`. `rvc_catalog_list` shows up to 20 curated voices with source and license. Filter by `query` (name and source labels), `vocal_style`, `rvc_version`, `sample_rate_hz`, and `has_index`; `total` counts the matching voices. Continue with the same filters and `offset` set to the returned `next_offset`. `rvc_catalog_install` verifies and installs the chosen ID. `rvc_catalog_progress_get` follows the active transfer or verification. `rvc_voice_remove` removes a voice and any index by its installed ID, keeping rendered songs.
 - **dataset**: `dataset_import_folder`, `dataset_reveal`, `dataset_song_files`, `dataset_prepare_train_after`, `dataset_get`, `dataset_create`, `dataset_add_folder`, `dataset_add_library_songs`, `dataset_update`, `dataset_delete`, `dataset_song_update`, `dataset_song_delete`, `lyrics_syllables` (each sung line with its syllables, as the score counts them), `lyrics_find`, `dataset_prepare`, `dataset_take_as_is` (no assistant: found lyrics and heard styles kept as they are), `dataset_prepare_cancel`.
 - **training**: `training_pack_cancel`, `training_status`, `training_pack_install`, `training_listen_pack_install`, `training_listen_pack_cancel`, `training_start`, `training_continue`, `training_cancel`, `training_checkpoint_install`, `training_run_delete`.
 - **ui**: `ui_screenshot`, `ui_read_page`, `ui_click`, `ui_type`, `ui_select`, `ui_press_key`, `ui_scroll`, `ui_navigate`, `ui_open_settings`, `ui_notify`, `ui_console`.

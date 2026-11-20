@@ -236,6 +236,36 @@ fn midi_note_page(mut song: Value, offset: Option<u64>) -> Value {
     }
 }
 
+fn rvc_catalog_match(voice: &Value, args: &Value) -> bool {
+    let metadata = &voice["metadata"];
+    if let Some(query) = args["query"].as_str().filter(|query| !query.trim().is_empty()) {
+        let mut text = voice["name"].as_str().unwrap_or_default().to_lowercase();
+        for label in metadata["source_labels"].as_array().into_iter().flatten().filter_map(Value::as_str) {
+            text.push(' ');
+            text.push_str(&label.to_lowercase());
+        }
+        if !query.to_lowercase().split_whitespace().all(|term| text.contains(term)) {
+            return false;
+        }
+    }
+    for key in ["vocal_style", "rvc_version"] {
+        if let Some(value) = args[key].as_str().filter(|value| !value.trim().is_empty()) {
+            let matches = metadata[key].as_str().is_some_and(|actual| actual.to_lowercase() == value.trim().to_lowercase())
+                || metadata[key].as_u64().is_some_and(|actual| actual.to_string() == value.trim());
+            if !matches {
+                return false;
+            }
+        }
+    }
+    if let Some(rate) = args["sample_rate_hz"].as_u64() {
+        if metadata["sample_rate_hz"].as_u64() != Some(rate) {
+            return false;
+        }
+    }
+    let has_index = voice["has_index"].as_bool().unwrap_or(!voice["index"].is_null());
+    args["has_index"].as_bool().is_none_or(|requested| requested == has_index)
+}
+
 /// What an agent is answered: the parts it acts on, unless it asked for
 /// every field with response_format detailed.
 fn shape(name: &str, args: &Value, value: Value) -> Value {
@@ -243,7 +273,8 @@ fn shape(name: &str, args: &Value, value: Value) -> Value {
     match name {
         "training_status" if !detailed => compact_training(&value),
         "rvc_catalog_list" => {
-            let entries = value.as_array().map_or(&[][..], Vec::as_slice);
+            let entries: Vec<_> = value.as_array().into_iter().flatten()
+                .filter(|voice| rvc_catalog_match(voice, args)).collect();
             let offset = args["offset"].as_u64().unwrap_or(0).min(entries.len() as u64) as usize;
             let end = (offset + 20).min(entries.len());
             json!({
@@ -421,7 +452,7 @@ fn annotations(name: &str) -> Value {
     // a verb that changes something outweighs a noun that reads
     const CHANGES: &[&str] = &["install", "import", "remove", "delete", "refresh", "create", "update", "start", "cancel", "select", "download", "apply", "restart"];
     // reads whose names the rules above miss: create_form names the create page
-    const READ_NAMES: &[&str] = &["lyrics_syllables", "assistant_cli_agents", "system_gpus", "cover_scenes", "cover_photos_search", "video_backgrounds_search", "network_proxy_test", "journal_read", "score_to_midi", "score_instrumental", "score_vocal_octave", "score_from_midi", "score_mark", "lyrics_find", "cover_prompt_render", "studio_wait", "engine_presets_get", "assistant_requests_wait", "ui_console", "song_defaults", "create_form_get", "library_liked", "score_chord_bed", "song_tokenize", "score_match_sections", "models_update_plan", "problem_preview", "library_migration_preview"];
+    const READ_NAMES: &[&str] = &["lyrics_syllables", "assistant_cli_agents", "system_gpus", "cover_scenes", "cover_photos_search", "video_backgrounds_search", "network_proxy_test", "journal_read", "score_to_midi", "score_instrumental", "score_vocal_octave", "score_from_midi", "score_mark", "lyrics_find", "cover_prompt_render", "studio_wait", "engine_presets_get", "assistant_requests_wait", "ui_console", "song_defaults", "create_form_get", "library_liked", "score_chord_bed", "song_tokenize", "score_match_sections", "models_update_plan", "problem_preview", "library_migration_preview", "audio_cpp_music_models"];
     // writes over what was stored, so the earlier content is gone: a client asks first
     const OVERWRITES: &[&str] = &["library_song_rename", "library_song_update", "playlist_update", "album_reorder", "dataset_update", "dataset_song_update", "dataset_prepare", "lora_update", "stems_split", "restore_start", "karaoke_make", "midi_transcribe", "cover_draw", "cover_set_from_file", "openrouter_set_key", "models_update_apply"];
     let changes = CHANGES.iter().any(|verb| name.split('_').any(|word| word == *verb));
@@ -1559,10 +1590,11 @@ fn tools() -> &'static [Tool] {
                 schema: || object(json!({
                     "ace": { "type": "object", "description": "ACE-Step generation settings, including guidance_scale, think, source_song_id and reference_song_id." },
                     "music_source": {
-                        "description": "Select local YuE2, an installed profile from ace_music_profiles or minimax_music_profiles, or a cloud model with music_generation capability from openrouter_catalog. OpenRouter submits a paid request to the selected model.",
+                        "description": "Select local YuE2, a native profile from ace_music_profiles or minimax_music_profiles, an audio.cpp model from audio_cpp_music_models, or a cloud model with music_generation capability from openrouter_catalog. OpenRouter submits a paid request to the selected model.",
                         "oneOf": [
                             { "type": "object", "properties": { "kind": { "const": "local" } }, "required": ["kind"] },
                             { "type": "object", "properties": { "kind": { "const": "native" }, "engine": { "enum": ["acestep-cpp", "minimaxmusic-cpp"] }, "model": { "type": "string", "minLength": 1 } }, "required": ["kind", "engine", "model"] },
+                            { "type": "object", "properties": { "kind": { "const": "audio_cpp" }, "model": { "type": "string", "minLength": 1 } }, "required": ["kind", "model"] },
                             { "type": "object", "properties": { "kind": { "const": "openrouter" }, "model": { "type": "string", "minLength": 1 } }, "required": ["kind", "model"] }
                         ]
                     },
@@ -2055,6 +2087,12 @@ fn tools() -> &'static [Tool] {
                 call: |_| get("/v1/music/native/minimaxmusic-cpp/profiles".into()),
             },
             Tool {
+                name: "audio_cpp_music_models",
+                description: "List audio.cpp music models, their weight profile and whether the runtime and model files are ready.",
+                schema: nothing,
+                call: |_| get("/v1/music/audio-cpp/models".into()),
+            },
+            Tool {
                 name: "engine_logs",
                 description: "The music engine's recent log, for when a song fails or the engine will not start.",
                 schema: nothing,
@@ -2319,6 +2357,12 @@ fn tools() -> &'static [Tool] {
                 call: |args| post("/v1/exports/live".into(), args.clone()),
             },
             Tool {
+                name: "song_export_zip",
+                description: "Prepare a ZIP for selected library tracks with original audio, lyrics, prompts, settings and available ABC and MIDI. Answers with the file name and the local HTTP download path.",
+                schema: || object(json!({ "song_ids": { "type": "array", "items": { "type": "string" }, "minItems": 1 } }), &["song_ids"]),
+                call: |args| post("/v1/exports/tracks".into(), args.clone()),
+            },
+            Tool {
                 name: "library_song_midi_files",
                 description: "The MIDI a library song has for a DAW, each file named for where its notes come from. score: the score the song was generated with - its tempo, meter and key, and the parts with notes: score (the whole of it), lead, voice, chords; a song made without a score has none. own: the track's own MIDI, transcribed from the recording (an estimate) or edited in the MIDI editor.",
                 schema: || id_only("song_id", "library song id"),
@@ -2464,8 +2508,21 @@ fn tools() -> &'static [Tool] {
             Tool {
                 name: "rvc_catalog_list",
                 description: "List up to 20 curated RVC voices, license terms and installed local IDs. Pass next_offset as offset for the next page.",
-                schema: || object(json!({ "offset": { "type": "integer", "minimum": 0 } }), &[]),
+                schema: || object(json!({
+                    "offset": { "type": "integer", "minimum": 0 },
+                    "query": { "type": "string", "description": "Case-insensitive words in the name or source labels" },
+                    "vocal_style": { "type": "string", "description": "Exact style tag such as high" },
+                    "rvc_version": { "type": "string", "description": "Exact version such as v2" },
+                    "sample_rate_hz": { "type": "integer", "minimum": 1 },
+                    "has_index": { "type": "boolean" },
+                }), &[]),
                 call: |_| get("/v1/rvc/catalog".into()),
+            },
+            Tool {
+                name: "rvc_catalog_progress_get",
+                description: "Read preparation, file download and verification progress for a catalog voice being installed.",
+                schema: || id_only("id", "the ID from rvc_catalog_list"),
+                call: |args| get(format!("/v1/rvc/catalog/progress/{}", segment(&text(args, "id")?))),
             },
             Tool {
                 name: "rvc_catalog_install",
@@ -3435,6 +3492,21 @@ mod tests {
     }
 
     #[test]
+    fn catalog_filters_radio_tapok_before_paging() {
+        let source: Value = serde_json::from_str(include_str!("../../../config/rvc-voice-catalog.json")).unwrap();
+        let args = json!({"query": "Radio Tapok", "vocal_style": "high", "rvc_version": "v2",
+            "sample_rate_hz": 40000, "has_index": true});
+        let filtered = shape("rvc_catalog_list", &args, source["voices"].clone());
+        assert_eq!(filtered["total"], 1);
+        assert_eq!(filtered["next_offset"], Value::Null);
+        assert_eq!(filtered["voices"][0]["id"], "rvc-50ea3d733073550ef6f7");
+        let legacy = json!({"name":"Legacy", "metadata":null, "index":null});
+        assert!(rvc_catalog_match(&legacy, &json!({})));
+        assert!(rvc_catalog_match(&legacy, &json!({"has_index":false})));
+        assert!(!rvc_catalog_match(&legacy, &json!({"vocal_style":"high"})));
+    }
+
+    #[test]
     fn curated_voice_pages_keep_total_and_unicode_names() {
         let list = json!((0..103).map(|id| json!({
             "id": id, "name": format!("Голос 音楽 {id}"),
@@ -3573,6 +3645,8 @@ mod tests {
             "assistant_request_answer",
             "library_song_describe_style",
             "recording_describe_style",
+            // A temporary download is staged without changing the library.
+            "song_export_zip",
             // the journal itself
             "journal_clear",
             "journal_remove",
@@ -3682,6 +3756,7 @@ mod tests {
         ("GET", "/v1/exports/{id}/file", "the window's Save dialog reads an export from here: song_export writes into the folder the agent names and song_export_get answers the path"),
         ("GET", "/v1/library/songs/{id}/midi/parts/{part}", "the window's Save dialog reads a part's MIDI from here: library_song_midi_part_write writes it into the folder the agent names"),
         ("GET", "/v1/exports/live/{id}/file", "the window's Save dialog reads a Live project from here: song_export_live writes it into the folder the agent names"),
+        ("GET", "/v1/exports/tracks/{id}/file", "binary ZIP download; song_export_zip prepares it and answers its URL"),
         ("DELETE", "/v1/exports/live/{id}", "the window lets go of a Live project it did not save: an agent's project is a file in its own folder"),
         ("DELETE", "/v1/exports/{id}", "the window lets go of an export it did not save: an agent's export is a file in its own folder"),
         ("GET", "/v1/skins", "the page's Winamp reads its skins here: winamp_skins asks the window for the same list"),

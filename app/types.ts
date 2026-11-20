@@ -131,7 +131,8 @@ export type YueCot = 'full' | 'melody' | 'off';
 export type YueOutputFormat = 'flac' | 'mp3' | 'wav32';
 
 export type NativeMusicEngine = 'minimaxmusic-cpp' | 'acestep-cpp';
-export type MusicEngine = 'local' | 'openrouter' | NativeMusicEngine;
+export type ProfileMusicEngine = NativeMusicEngine | 'audio.cpp';
+export type MusicEngine = 'local' | 'openrouter' | ProfileMusicEngine;
 
 /**
  * A YuE2 request as `/v1/music/jobs` accepts it. Field names are the engine's
@@ -139,7 +140,7 @@ export type MusicEngine = 'local' | 'openrouter' | NativeMusicEngine;
  */
 export interface YueRequest {
   /** Capture the editor's selection with the job so later switches cannot reroute it. */
-  music_source?: { kind: 'local' } | { kind: 'openrouter'; model: string } | { kind: 'native'; engine: NativeMusicEngine; model: string };
+  music_source?: { kind: 'local' } | { kind: 'openrouter' | 'audio_cpp'; model: string } | { kind: 'native'; engine: NativeMusicEngine; model: string };
   ace?: { guidance_scale?: number };
   /** Style tags or a short style prompt, verbatim under `[Tags]`. */
   style: string;
