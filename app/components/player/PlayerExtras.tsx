@@ -212,7 +212,8 @@ export const PlayerExtras: React.FC<Props> = ({ queue, currentSong, currentTime,
 
   // ---------------------------------------------------------------- the Winamp mode
   const winampReport = () => {
-    if (winampControl()) return winampControl()!.state();
+    const control = winampControl();
+    if (winampOn() && control) return control.state();
     const settings = winampSettings();
     return { on: false, skin: settings.skin, random_skin: settings.random, double_size: settings.doubleSize, always_on_top: settings.alwaysOnTop, scale: settings.scale, skip_menu: settings.skipMenu };
   };
