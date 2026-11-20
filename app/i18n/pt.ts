@@ -2244,7 +2244,7 @@ export const pt = {
     trainingIntro: 'Juntar músicas de um artista ou estilo e o estúdio treina uma LoRA que soa como elas, na sua própria placa. A LoRA pronta aparece na página LoRA.',
     trainingGuideOpen: 'Guia de treino',
     trainingListenTitle: 'Descrever músicas automaticamente (opcional)',
-    trainingListenIntro: 'Um modelo ouve cada música e escreve o estilo sozinho: género, voz, instrumentos, ambiente. O tempo é medido a partir da gravação. {size}, descarregado uma vez.',
+    trainingListenIntro: 'Um modelo ouve cada música e escreve o estilo sozinho: género, voz, instrumentos, ambiente. O tempo é medido a partir da gravação. Falta descarregar {size}.',
     trainingSetupTitle: 'O que o treino precisa',
     trainingSetupNeeds: 'Uma placa NVIDIA RTX série 30 ou mais recente (precisa de BF16), cerca de {vram} GB de memória de vídeo e {size} no disco. Fazer músicas não precisa de nada disto; só é descarregado se quiser treinar.',
     trainingNeedsNvidia: 'O treino só corre numa placa NVIDIA: o treinador não tem caminho para placas AMD ou Intel, e no processador um treino demoraria dias. Os ficheiros de treino não são oferecidos neste computador.',

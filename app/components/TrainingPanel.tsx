@@ -33,7 +33,7 @@ import {
   deleteRun,
   describeItem,
   fetchTraining,
-  gigabytes,
+  downloadSize,
   importDataset,
   installCheckpoint,
   installListenPack,
@@ -209,7 +209,7 @@ const PackCard: React.FC<{ state: TrainingState; onError: (message: string) => v
   return (
     <section className={CARD}>
       <p className="flex items-center gap-2 text-sm font-semibold text-zinc-900 dark:text-white"><Download size={16} className="text-pink-500" />{t('trainingSetupTitle')}</p>
-      <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-300">{t('trainingSetupNeeds').replace('{size}', gigabytes(total)).replace('{vram}', String(state.min_vram_gb))}</p>
+      <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-300">{t('trainingSetupNeeds').replace('{size}', downloadSize(total)).replace('{vram}', String(state.min_vram_gb))}</p>
       {!state.card_trains && (
         <p role="note" className="mt-2 text-sm text-amber-700 dark:text-amber-300">
           {state.card_needs === 'driver' ? t('trainingNeedsDriver').replace('{driver}', String(state.trainer_driver ?? '')) : t('trainingNeedsNvidia')}
@@ -219,7 +219,7 @@ const PackCard: React.FC<{ state: TrainingState; onError: (message: string) => v
         {state.pack.map(file => (
           <li key={file.id} className="flex items-center justify-between gap-3 text-xs text-zinc-700 dark:text-zinc-200">
             <span className="flex items-center gap-2">{file.installed ? <Check size={13} className="text-emerald-500" /> : <Square size={13} className="text-zinc-400" />}{file.label}</span>
-            <span className="tabular-nums text-zinc-500">{gigabytes(file.bytes)}</span>
+            <span className="tabular-nums text-zinc-500">{downloadSize(file.bytes)}</span>
           </li>
         ))}
       </ul>
@@ -227,7 +227,7 @@ const PackCard: React.FC<{ state: TrainingState; onError: (message: string) => v
         <div className="mt-3">
           <div className="flex items-center justify-between text-xs text-zinc-500">
             <span className="inline-flex items-center gap-1.5"><Loader2 size={13} className="animate-spin text-pink-500" />{percent.toFixed(1)}%</span>
-            <span className="tabular-nums">{gigabytes(download.downloaded_bytes)} / {gigabytes(download.total_bytes)}</span>
+            <span className="tabular-nums">{downloadSize(download.downloaded_bytes)} / {downloadSize(download.total_bytes)}</span>
           </div>
           <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-zinc-200 dark:bg-white/10">
             <div className="h-full bg-linear-to-r from-orange-500 to-pink-600 transition-[width]" style={{ width: `${percent}%` }} />
@@ -237,7 +237,7 @@ const PackCard: React.FC<{ state: TrainingState; onError: (message: string) => v
       ) : (
         missing > 0 && state.card_trains && (
           <button type="button" onClick={() => void installTrainingPack().then(onChanged).catch(problem => onError(errorText(problem)))} className={`${PRIMARY} mt-3`}>
-            <Download size={15} />{t('trainingDownload')} · {gigabytes(missing)}
+            <Download size={15} />{t('trainingDownload')} · {downloadSize(missing)}
           </button>
         )
       )}
@@ -256,19 +256,18 @@ const ListenCard: React.FC<{ state: TrainingState; onError: (message: string) =>
   const { t } = useStrings();
   const listen = state.listen;
   if (!listen || listen.ready) return null;
-  const total = listen.pack.reduce((sum, file) => sum + file.bytes, 0);
   const missing = listen.pack.filter(file => !file.installed).reduce((sum, file) => sum + file.bytes, 0);
   const download = listen.download && !listen.download.done ? listen.download : null;
   const percent = download ? Math.min(100, (100 * download.downloaded_bytes) / Math.max(1, download.total_bytes)) : 0;
   return (
     <section className={CARD}>
       <p className="flex items-center gap-2 text-sm font-semibold text-zinc-900 dark:text-white"><Headphones size={16} className="text-pink-500" />{t('trainingListenTitle')}</p>
-      <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-300">{t('trainingListenIntro').replace('{size}', gigabytes(total))}</p>
+      <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-300">{t('trainingListenIntro').replace('{size}', downloadSize(missing))}</p>
       <ul className="mt-3 space-y-1.5">
         {listen.pack.map(file => (
           <li key={file.id} className="flex items-center justify-between gap-3 text-xs text-zinc-700 dark:text-zinc-200">
             <span className="flex items-center gap-2">{file.installed ? <Check size={13} className="text-emerald-500" /> : <Square size={13} className="text-zinc-400" />}{file.label}</span>
-            <span className="tabular-nums text-zinc-500">{gigabytes(file.bytes)}</span>
+            <span className="tabular-nums text-zinc-500">{downloadSize(file.bytes)}</span>
           </li>
         ))}
       </ul>
@@ -276,7 +275,7 @@ const ListenCard: React.FC<{ state: TrainingState; onError: (message: string) =>
         <div className="mt-3">
           <div className="flex items-center justify-between text-xs text-zinc-500">
             <span className="inline-flex items-center gap-1.5"><Loader2 size={13} className="animate-spin text-pink-500" />{percent.toFixed(1)}%</span>
-            <span className="tabular-nums">{gigabytes(download.downloaded_bytes)} / {gigabytes(download.total_bytes)}</span>
+            <span className="tabular-nums">{downloadSize(download.downloaded_bytes)} / {downloadSize(download.total_bytes)}</span>
           </div>
           <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-zinc-200 dark:bg-white/10">
             <div className="h-full bg-linear-to-r from-orange-500 to-pink-600 transition-[width]" style={{ width: `${percent}%` }} />
@@ -285,7 +284,7 @@ const ListenCard: React.FC<{ state: TrainingState; onError: (message: string) =>
         </div>
       ) : (
         <button type="button" onClick={() => void installListenPack().then(onChanged).catch(problem => onError(errorText(problem)))} className={`${OUTLINE} mt-3`}>
-          <Download size={14} />{t('trainingDownload')} · {gigabytes(missing)}
+          <Download size={14} />{t('trainingDownload')} · {downloadSize(missing)}
         </button>
       )}
       {listen.download?.done && listen.download.error && listen.download.error !== 'cancelled' && (

@@ -194,7 +194,12 @@ export const deleteRun = (id: string) => call<void>(`/v1/training/runs/${id}`, {
 export const installCheckpoint = (id: string, step: number, name?: string) =>
   call<{ id: string }>(`/v1/training/runs/${id}/checkpoints/${step}/install`, json('POST', { name }));
 
-export const gigabytes = (bytes: number) => `${(bytes / 1024 ** 3).toFixed(1)} GB`;
+export function downloadSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 ** 2) return `${Math.round(bytes / 1024)} KB`;
+  if (bytes < 1024 ** 3) return `${Math.round(bytes / 1024 ** 2)} MB`;
+  return `${(bytes / 1024 ** 3).toFixed(1)} GB`;
+}
 export const clock = (seconds: number) => `${Math.floor(seconds / 60)}:${String(Math.floor(seconds % 60)).padStart(2, '0')}`;
 
 /** Has the writing assistant write a song's structured caption, for engines that train on one. */
