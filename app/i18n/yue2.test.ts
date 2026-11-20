@@ -21,8 +21,8 @@ describe('YuE2 strings', () => {
   });
 });
 
-/** The About page names the sibling studios on purpose: the MiniMax one is one of them. */
-const SIBLING_STUDIOS = new Set(['studioMiniMax']);
+/** About and library migration identify the MiniMax Studio installation by name. */
+const SIBLING_STUDIOS = new Set(['studioMiniMax', 'legacyLibraryTitle']);
 
 describe('merged interface strings', () => {
   it('nothing the interface shows names the forked-from model', async () => {
