@@ -9598,6 +9598,25 @@ fn adopt_refusals(components: &[model_manager::Component], root: &std::path::Pat
         .collect()
 }
 
+/// Adopt a pinned optional model from a chosen library, including libraries whose
+/// folder hierarchy differs from this studio's. Multiple versions may share a name.
+fn adopt_optional_model<'a>(entries: &'a [std::path::PathBuf], target: &std::path::Path, sha: &str) -> std::io::Result<Option<&'a std::path::PathBuf>> {
+    if target.exists() {
+        return Ok(None);
+    }
+    let mut last_error = None;
+    for source in entries.iter().filter(|source| source.file_name() == target.file_name()) {
+        match studio_hub_client::neighbors::take_file(source, target, true, |file| install_record::sha256_of(file).is_ok_and(|value| value == sha)) {
+            Ok(()) => return Ok(Some(source)),
+            Err(error) => last_error = Some(error),
+        }
+    }
+    match last_error {
+        Some(error) => Err(error),
+        None => Ok(None),
+    }
+}
+
 /// Takes models the user already has instead of downloading them again.
 ///
 /// Anyone who has run yue2.cpp by hand already has these weights on disk, and
@@ -9638,14 +9657,37 @@ async fn setup_adopt(State(state): State<AppState>, body: axum::body::Bytes) -> 
 
     let components = catalog.components.clone();
     let root = models_root.clone();
-    let (found, mut refused) = tokio::task::spawn_blocking(move || {
+    let optional_state = state.clone();
+    let (found, mut refused, mut optional_ids) = tokio::task::spawn_blocking(move || {
         let found = adoptable_sources(&components, &root, &entries);
-        let taken: Vec<std::path::PathBuf> = found.iter().map(|(_, source)| source.clone()).collect();
-        let refused = adopt_refusals(&components, &root, &entries, &taken);
-        (found, refused)
+        let mut taken: Vec<std::path::PathBuf> = found.iter().map(|(_, source)| source.clone()).collect();
+        let mut optional_ids = Vec::new();
+        let mut optional_names = std::collections::HashSet::new();
+        let mut errors = Vec::new();
+        use update_screen::Part;
+        for part in [Part::Karaoke, Part::Separation, Part::Midi, Part::Training, Part::Listening] {
+            let Some((downloader, _)) = update_downloader(&optional_state, part) else { continue };
+            for asset in update_catalogue(part) {
+                if asset.kind != downloads::AssetKind::Model { continue; }
+                let Some(sha) = pin_sha::sha256(asset.url) else { continue };
+                let target = downloader.path_of(asset);
+                if let Some(name) = target.file_name() { optional_names.insert(name.to_owned()); }
+                match adopt_optional_model(&entries, &target, sha) {
+                    Ok(Some(_)) => {
+                        optional_ids.push(asset.id.to_owned());
+                    }
+                    Ok(None) => {}
+                    Err(error) => errors.push(serde_json::json!({ "file": asset.relative_path, "kind": "copy", "error": error.to_string() })),
+                }
+            }
+        }
+        taken.extend(entries.iter().filter(|path| path.file_name().is_some_and(|name| optional_names.contains(name))).cloned());
+        errors.extend(adopt_refusals(&components, &root, &entries, &taken));
+        (found, errors, optional_ids)
     })
     .await
     .map_err(|error| api_error(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?;
+    adopted.append(&mut optional_ids);
     for (component, source) in &found {
         let target = models_root.join(component.filename);
         // a file of the earlier release under this name gives way to the one found
@@ -13000,6 +13042,28 @@ mod tests {
         std::fs::write(folder.path().join("renamed.gguf"), b"turbo weights").unwrap();
         let found = adoptable_sources(&[turbo, merge], models.path(), &adoptable_files(folder.path(), ADOPT_FOLDER_DEPTH));
         assert_eq!(found.iter().map(|(component, _)| component.id).collect::<Vec<_>>(), ["turbo"]);
+    }
+
+    #[test]
+    fn adopting_optional_weights_checks_duplicates_and_preserves_the_library() {
+        let folder = tempfile::tempdir().unwrap();
+        let dest = tempfile::tempdir().unwrap();
+        let name = "model.gguf";
+        let first = folder.path().join("old").join(name);
+        let second = folder.path().join("current").join(name);
+        for file in [&first, &second] { std::fs::create_dir_all(file.parent().unwrap()).unwrap(); }
+        std::fs::write(&first, b"old").unwrap();
+        std::fs::write(&second, b"new").unwrap();
+        let sha = install_record::sha256_of(&second).unwrap();
+        let target = dest.path().join("models").join(name);
+        assert!(adopt_optional_model(std::slice::from_ref(&first), &target, &sha).is_err());
+        assert!(!target.exists());
+        let candidates = vec![first.clone(), second.clone()];
+        assert_eq!(adopt_optional_model(&candidates, &target, &sha).unwrap(), Some(&second));
+        assert_eq!(std::fs::read(&target).unwrap(), b"new");
+        assert_eq!(adopt_optional_model(&candidates, &target, &sha).unwrap(), None);
+        assert_eq!(std::fs::read(&first).unwrap(), b"old");
+        assert_eq!(std::fs::read(&second).unwrap(), b"new");
     }
 
     #[test]
