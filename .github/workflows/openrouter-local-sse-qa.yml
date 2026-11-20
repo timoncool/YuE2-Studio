@@ -1,0 +1,14 @@
+name: OpenRouter music service local SSE
+on: push
+permissions:
+  contents: read
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: Swatinem/rust-cache@v2
+      - name: Build standalone debug service
+        run: cargo build --locked -p music-server
+      - name: Exercise music job, library and replay protection
+        run: python qa/openrouter-service-sse.py target/debug/music-server.exe

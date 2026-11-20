@@ -1,0 +1,115 @@
+import base64, http.server, io, json, math, os, pathlib, socket, struct, subprocess, sys, tempfile, threading, time, urllib.error, urllib.request, wave
+
+exe = pathlib.Path(sys.argv[1]).resolve()
+model = "fixture/sse-music"
+wav_buffer = io.BytesIO()
+with wave.open(wav_buffer, "wb") as audio:
+    audio.setparams((1, 2, 8000, 0, "NONE", "not compressed"))
+    audio.writeframes(b"".join(struct.pack("<h", int(3000 * math.sin(n * math.pi * 440 / 4000))) for n in range(8000)))
+wav = wav_buffer.getvalue()
+encoded = base64.b64encode(wav).decode()
+calls = []
+
+class Provider(http.server.BaseHTTPRequestHandler):
+    def do_POST(self):
+        assert self.path.endswith("/chat/completions"), self.path
+        assert self.headers["Authorization"] == "Bearer fixture-only"
+        body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+        calls.append(body)
+        self.send_response(200)
+        self.send_header("Content-Type", "text/event-stream")
+        self.end_headers()
+        for chunk in (encoded[:51], encoded[51:]):
+            event = {"choices": [{"delta": {"audio": {"data": chunk}}}]}
+            self.wfile.write(f"data: {json.dumps(event)}\r\n\r\n".encode())
+            self.wfile.flush()
+        if "incomplete case" not in body["messages"][0]["content"]:
+            self.wfile.write(b"data: [DONE]\r\n\r\n")
+
+def unused_port():
+    with socket.socket() as listener:
+        listener.bind(("127.0.0.1",0))
+        return listener.getsockname()[1]
+
+with tempfile.TemporaryDirectory(prefix="yue-openrouter-") as profile, http.server.ThreadingHTTPServer(("127.0.0.1",0), Provider) as upstream:
+    root=pathlib.Path(profile)
+    threading.Thread(target=upstream.serve_forever,daemon=True).start()
+    (root/"openrouter-catalog.json").write_text(json.dumps({"models":[{"id":model,"name":"Fixture music","input_modalities":["text"],"output_modalities":["audio"],"supported_parameters":[],"capabilities":["music_generation"]}]}),encoding="utf8")
+    port=unused_port()
+    env=dict(os.environ,YUE_STUDIO_DATA_ROOT=profile,YUE_STUDIO_PORT=str(port),YUE_ENGINE_PORT=str(unused_port()),
+             YUE2_QA_OPENROUTER_PORT=str(upstream.server_port),OPENROUTER_API_KEY="fixture-only")
+    client=urllib.request.build_opener(urllib.request.ProxyHandler({}))
+    def request(path,payload=None):
+        url=f"http://127.0.0.1:{port}"+path
+        req=urllib.request.Request(url,data=json.dumps(payload).encode() if payload is not None else None,
+                                   headers={"Content-Type":"application/json"})
+        try:
+            with client.open(req,timeout=8) as r: return r.status,r.read()
+        except urllib.error.HTTPError as e: return e.code,e.read()
+    def run_service():
+        log=(root/"service.log").open("ab")
+        proc=subprocess.Popen([str(exe)],env=env,stdout=log,stderr=subprocess.STDOUT)
+        try:
+            for _ in range(180):
+                assert proc.poll() is None,proc.returncode
+                try:
+                    if request("/health")[0]==200: return proc
+                except OSError: pass
+                time.sleep(.25)
+            raise TimeoutError("service health")
+        except BaseException:
+            proc.terminate()
+            proc.wait()
+            raise
+        finally:
+            log.close()
+    def finish(job):
+        for _ in range(120):
+            code,data=request("/v1/music/jobs/"+job)
+            assert code==200,data
+            payload=json.loads(data)
+            if payload["status"] in ("completed","failed"): return payload
+            time.sleep(.1)
+        raise TimeoutError("music job")
+    proc=run_service()
+    try:
+        body={"music_source":{"kind":"openrouter","model":model},"title":"Fixture song","style":"soft piano",
+              "lyrics":"A local response sings","client_ref":"fixture-client","duration_seconds":6,"seed":42}
+        code,data=request("/v1/music/jobs",body)
+        submitted=json.loads(data)
+        assert code==202 and submitted["dispatch"]=="open_router" and submitted["client_ref"]=="fixture-client",(code,submitted)
+        complete=finish(submitted["id"])
+        assert complete["status"]=="completed",complete
+        song=complete["song"]["song"]
+        song_id=song["id"]
+        assert song["title"]=="Fixture song" and song["caption"]=="soft piano" and song["lyrics"]==body["lyrics"],song
+        assert song["generation_settings"]["request"]["seed"]==42 and song["generation_settings"]["model"]==model,song
+        assert song["engine_id"]=="openrouter" and not song.get("replay_request") and not song.get("audio_codes"),song
+        assert not song["generation_settings"].get("api_key"),song
+        assert calls[0]["model"]==model and calls[0]["stream"] is True,calls
+        assert "soft piano" in calls[0]["messages"][0]["content"] and body["lyrics"] in calls[0]["messages"][0]["content"],calls
+        assert request(complete["song"]["audio_url"])==(200,wav)
+        code,data=request("/v1/music/replay",{"song_id":song_id})
+        assert code==400 and "no replay request" in data.decode(),(code,data)
+        code,data=request("/v1/music/jobs",dict(body,semantic_tokens="1,2,3"))
+        assert code==400 and len(calls)==1,(code,data,calls)
+        code,data=request("/v1/music/jobs",dict(body,style="incomplete case"))
+        assert code==202,(code,data)
+        failed=finish(json.loads(data)["id"])
+        assert failed["status"]=="failed" and not failed.get("song") and "[DONE]" in failed["message"],failed
+        assert len(calls)==2,calls
+    finally:
+        proc.terminate()
+        proc.wait(timeout=15)
+    proc=run_service()
+    try:
+        code,data=request("/v1/library/songs/"+song_id)
+        assert code==200 and json.loads(data)["id"]==song_id,(code,data)
+        assert request(complete["song"]["audio_url"])==(200,wav)
+        assert len(calls)==2,calls
+        print(json.dumps({"status":"pass","http_calls":len(calls),"library_song":song_id,"wav_bytes":len(wav),
+                          "restart_persisted":True,"incomplete_failed":True,"replay_rejected":True,
+                          "explicit_model":model},indent=2))
+    finally:
+        proc.terminate()
+        proc.wait(timeout=15)
