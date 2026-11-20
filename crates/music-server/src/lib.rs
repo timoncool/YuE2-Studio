@@ -9616,6 +9616,33 @@ fn adopt_optional_file(source: &std::path::Path, target: &std::path::Path, sha: 
     Ok(true)
 }
 
+#[derive(Clone, Copy)]
+enum LibraryArchive {
+    Assistant(&'static assistant_runtime::Asset),
+    Component(update_screen::Part, &'static downloads::Asset),
+}
+
+impl LibraryArchive {
+    fn id(self) -> &'static str {
+        match self { Self::Assistant(asset) => asset.id, Self::Component(_, asset) => asset.id }
+    }
+
+    async fn install(self, state: &AppState, source: &std::path::Path) -> anyhow::Result<bool> {
+        match self {
+            Self::Assistant(asset) => {
+                if state.assistant_runtime.is_installed(asset) { return Ok(false); }
+                state.assistant_runtime.install_local_archive(asset, source).await?;
+            }
+            Self::Component(part, asset) => {
+                let (downloader, scope) = update_downloader(state, part).ok_or_else(|| anyhow::anyhow!("missing installer for {}", asset.id))?;
+                if downloader.is_installed(asset) { return Ok(false); }
+                downloader.install_local_archive(scope, asset, source).await?;
+            }
+        }
+        Ok(true)
+    }
+}
+
 /// Takes models the user already has instead of downloading them again.
 ///
 /// Anyone who has run yue2.cpp by hand already has these weights on disk, and
@@ -9662,7 +9689,7 @@ async fn setup_adopt(State(state): State<AppState>, body: axum::body::Bytes) -> 
         let mut copied = Vec::new();
         let mut by_name = std::collections::HashMap::<std::ffi::OsString, Vec<(&'static str, &'static str, std::path::PathBuf)>>::new();
         let mut errors = Vec::new();
-        let mut archives_by_name = std::collections::HashMap::<std::ffi::OsString, Vec<(update_screen::Part, &'static downloads::Asset)>>::new();
+        let mut archives_by_name = std::collections::HashMap::<std::ffi::OsString, Vec<(LibraryArchive, &'static str, std::path::PathBuf)>>::new();
         let mut pending_archives = Vec::new();
         let mut archive_targets = std::collections::HashSet::new();
         let mut checked = std::collections::HashSet::new();
@@ -9673,8 +9700,23 @@ async fn setup_adopt(State(state): State<AppState>, body: axum::body::Bytes) -> 
                 by_name.entry(name.to_owned()).or_default().push((id, sha, target));
             }
         };
-        for asset in assistant_runtime::ASSETS.iter().filter(|asset| asset.kind == assistant_runtime::AssetKind::Model) {
-            register(asset.id, pin_sha::sha256(asset.url), optional_state.assistant_runtime.path_of(asset));
+        let mut register_archive = |archive: LibraryArchive, url: &'static str, target: std::path::PathBuf, release_name: &str| {
+            let Some(sha) = pin_sha::sha256(url) else { return };
+            let mut names = vec![std::ffi::OsString::from(release_name)];
+            if let Some(name) = target.file_name().filter(|name| *name != release_name) { names.push(name.to_owned()); }
+            for name in names {
+                archives_by_name.entry(name).or_default().push((archive, sha, target.clone()));
+            }
+        };
+        for asset in assistant_runtime::ASSETS {
+            let target = optional_state.assistant_runtime.path_of(asset);
+            if asset.kind == assistant_runtime::AssetKind::Model {
+                register(asset.id, pin_sha::sha256(asset.url), target);
+            } else if asset.unzip_into.is_some() {
+                if let Some(name) = asset.url.rsplit('/').next() {
+                    register_archive(LibraryArchive::Assistant(asset), asset.url, target, name);
+                }
+            }
         }
         use update_screen::Part;
         for part in [Part::Karaoke, Part::Separation, Part::Midi, Part::Training, Part::Listening, Part::Audiocpp, Part::Engine] {
@@ -9685,12 +9727,7 @@ async fn setup_adopt(State(state): State<AppState>, body: axum::body::Bytes) -> 
                     register(asset.id, pin_sha::sha256(asset.url), downloader.path_of(asset));
                 }
                 if let Some(release_name) = downloads::release_archive_name(asset) {
-                    let target = downloader.path_of(asset);
-                    let mut names = vec![std::ffi::OsString::from(release_name)];
-                    if let Some(name) = target.file_name().filter(|name| *name != release_name) { names.push(name.to_owned()); }
-                    for name in names {
-                        archives_by_name.entry(name).or_default().push((part, asset));
-                    }
+                    register_archive(LibraryArchive::Component(part, asset), asset.url, downloader.path_of(asset), release_name);
                 }
                 for entry in asset.pick {
                     let name = downloads::picked_file_name(entry);
@@ -9707,13 +9744,11 @@ async fn setup_adopt(State(state): State<AppState>, body: axum::body::Bytes) -> 
             let result = (|| -> anyhow::Result<()> {
                 let digest = install_record::sha256_of(source)?;
                 let mut matched = false;
-                for &(part, asset) in archives {
-                    if pin_sha::sha256(asset.url) == Some(digest.as_str()) {
+                for (archive, sha, target) in archives {
+                    if *sha == digest {
                         matched = true;
-                        if let Some((downloader, _)) = update_downloader(&optional_state, part) {
-                            if archive_targets.insert((downloader.path_of(asset), asset.url)) {
-                                pending_archives.push((part, asset, source.clone()));
-                            }
+                        if archive_targets.insert((target.clone(), *sha)) {
+                            pending_archives.push((*archive, source.clone()));
                         }
                     }
                 }
@@ -9762,13 +9797,11 @@ async fn setup_adopt(State(state): State<AppState>, body: axum::body::Bytes) -> 
     .await
     .map_err(|error| api_error(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?;
 
-    for (part, asset, source) in archives {
-        let Some((downloader, scope)) = update_downloader(&state, part) else { continue };
-        let was_installed = downloader.is_installed(asset);
-        match downloader.install_local_archive(scope, asset, &source).await {
-            Ok(()) => {
+    for (archive, source) in archives {
+        match archive.install(&state, &source).await {
+            Ok(installed_now) => {
                 verified_optional += 1;
-                if !was_installed { adopted.push(asset.id.to_owned()); }
+                if installed_now { adopted.push(archive.id().to_owned()); }
             }
             Err(error) => refused.push(serde_json::json!({ "file": source, "kind": "copy", "error": format!("{error:#}") })),
         }

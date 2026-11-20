@@ -573,14 +573,18 @@ impl AssistantRuntime {
         if downloaded != target {
             fs::rename(downloaded, target).with_context(|| format!("publish {}", target.display()))?;
         }
+        Self::record_install(asset, target, target, root, &sha256)
+    }
+
+    fn record_install(asset: &Asset, source: &Path, target: &Path, root: &Path, sha256: &str) -> Result<()> {
         let record = crate::install_record::record_path(target);
-        crate::downloads::replace_earlier(&record, root, target)?;
+        crate::downloads::replace_earlier(&record, root, source)?;
         let files = match asset.unzip_into {
-            Some(flavour) => crate::downloads::extract_archive(target, &root.join("runtime").join(flavour))?,
+            Some(flavour) => crate::downloads::extract_archive(source, &root.join("runtime").join(flavour))?,
             None => vec![target.to_path_buf()],
         };
         crate::downloads::make_programs_executable(asset.marker, &files)?;
-        crate::install_record::write(&record, asset.url, &sha256, &files, root)
+        crate::install_record::write(&record, asset.url, sha256, &files, root)
     }
 
     /// The files of the asset are on disk, whichever pin put them there.
@@ -699,6 +703,15 @@ impl AssistantRuntime {
         for id in ids {
             assets.push(asset(id).ok_or_else(|| anyhow!("unknown assistant asset: {id}"))?);
         }
+        self.install_set(assets, None).await
+    }
+
+    pub(crate) async fn install_local_archive(&self, asset: &'static Asset, source: &Path) -> Result<()> {
+        anyhow::ensure!(asset.unzip_into.is_some() && crate::pin_sha::sha256(asset.url).is_some(), "assistant runtime has no pinned archive");
+        self.install_set(vec![asset], Some(source)).await
+    }
+
+    async fn install_set(&self, assets: Vec<&'static Asset>, source: Option<&Path>) -> Result<()> {
         let pending: Vec<&'static Asset> = assets.into_iter().filter(|asset| !self.is_installed(asset)).collect();
         if pending.is_empty() {
             return Ok(());
@@ -727,9 +740,17 @@ impl AssistantRuntime {
         let mut failure = None;
         for asset in &pending {
             let target = self.path_of(asset);
-            let outcome = match download_asset(&self.http, asset, &target, &self.state, base, self.cancel.clone()).await {
-                Ok(downloaded) => finish_apart(asset, downloaded, &target, &self.root).await,
-                Err(error) => Err(error),
+            let outcome = if let Some(source) = source {
+                let (root, source, asset) = (self.root.clone(), source.to_owned(), *asset);
+                tokio::task::spawn_blocking(move || {
+                    let sha = crate::pin_sha::check(asset.url, &source)?;
+                    Self::record_install(asset, &source, &target, &root, &sha)
+                }).await.map_err(anyhow::Error::from).and_then(|outcome| outcome)
+            } else {
+                match download_asset(&self.http, asset, &target, &self.state, base, self.cancel.clone()).await {
+                    Ok(downloaded) => finish_apart(asset, downloaded, &target, &self.root).await,
+                    Err(error) => Err(error),
+                }
             };
             if let Err(error) = outcome {
                 failure = Some(error);
