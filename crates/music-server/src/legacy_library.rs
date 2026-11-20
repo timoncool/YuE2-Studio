@@ -10,14 +10,28 @@ use serde_json::{json, Value};
 use crate::{api_error, ApiError};
 
 #[derive(Deserialize)]
-pub(super) struct Source {
-    path: PathBuf,
+#[serde(untagged)]
+pub(super) enum Source {
+    Folder { path: PathBuf },
+    Picker { pick: bool },
 }
 
 pub(super) async fn preview(
     Json(source): Json<Source>,
 ) -> Result<Json<Value>, (StatusCode, Json<ApiError>)> {
-    tokio::task::spawn_blocking(move || inspect(&source.path))
+    tokio::task::spawn_blocking(move || {
+        let folder = match source {
+            Source::Folder { path } => path,
+            Source::Picker { pick: true } => match rfd::FileDialog::new().pick_folder() {
+                Some(folder) => folder,
+                None => return Ok(json!({"cancelled": true})),
+            },
+            Source::Picker { pick: false } => anyhow::bail!("Choose a Studio folder"),
+        };
+        let mut result = inspect(&folder)?;
+        result["path"] = json!(folder);
+        Ok::<_, anyhow::Error>(result)
+    })
         .await
         .map_err(|error| api_error(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?
         .map(Json)

@@ -11,6 +11,7 @@ import { ConfirmDialog } from './ConfirmDialog';
 import { PlaylistCover, PlaylistEditModal, PlaylistMenu, playlistSongs } from './PlaylistEditor';
 import { isCard, SongList } from './SongList';
 import { foldStems } from '../services/songStems';
+import { LegacyLibraryPreview } from './LegacyLibraryPreview';
 import { LibraryTrash } from './LibraryTrash';
 import { SONG_ORDERS, type SongOrder } from '../services/songOrder';
 
@@ -328,6 +329,7 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
                  onConfirm={() => deleting && void removePlaylist(deleting)}
                  onCancel={() => setDeleting(null)}
              />
+             {activeTab === 'import' && <LegacyLibraryPreview />}
              {activeTab === 'import' && (
                  <div
                      onDragOver={(event) => event.preventDefault()}
