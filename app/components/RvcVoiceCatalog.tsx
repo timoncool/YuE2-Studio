@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useI18n } from '../context/I18nContext';
 import { rvcVoiceStrings } from '../i18n/rvcVoices';
-import { responseJson, type Voice } from '../services/rvcVoices';
+import { responseJson, type Voice, voiceName } from '../services/rvcVoices';
 import { RvcCuratedVoices } from './RvcCuratedVoices';
 
 const URL = '/v1/rvc/voices';
@@ -35,7 +35,7 @@ export function RvcVoiceCatalog({ card, control }: { card: string; control: stri
 
   function acceptVoice(voice: Voice) {
     setVoices(current => [...(current ?? []).filter(item => item.id !== voice.id), voice]
-      .sort((a, b) => a.model_name.localeCompare(b.model_name)));
+      .sort((a, b) => voiceName(a).localeCompare(voiceName(b), language)));
     choose(voice.id);
   }
 
@@ -70,7 +70,7 @@ export function RvcVoiceCatalog({ card, control }: { card: string; control: stri
           onChange={event => choose(event.target.value)}>
           <option value="">{labels.none}</option>
           {voices?.map(item => (
-            <option key={item.id} value={item.id}>{item.model_name}{item.version ? ` · v${item.version}` : ''}{item.index_name ? ` · ${item.index_name}` : ''}</option>
+            <option key={item.id} value={item.id}>{voiceName(item)}{item.version ? ` · v${item.version}` : ''}{item.index_name ? ` · ${item.index_name}` : ''}</option>
           ))}
         </select>
       </label>

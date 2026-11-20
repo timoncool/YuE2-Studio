@@ -29,6 +29,7 @@ pub(super) struct Voice {
 #[derive(Serialize, Deserialize)]
 pub(super) struct VoiceOrigin {
     pub(super) catalog_id: String,
+    pub(super) name: String,
     pub(super) source_repo: String,
     pub(super) revision: String,
     pub(super) source_url: String,

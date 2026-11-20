@@ -65,6 +65,7 @@ impl CatalogVoice {
     fn origin(&self) -> VoiceOrigin {
         VoiceOrigin {
             catalog_id: self.id.clone(),
+            name: self.name.clone(),
             source_repo: self.source_repo.clone(),
             revision: self.revision.clone(),
             source_url: self.source_url.clone(),
@@ -281,6 +282,14 @@ mod tests {
         assert!(indexed.index.is_some());
         assert!(plain.index.is_none());
         assert_ne!(indexed.local_id().unwrap(), plain.local_id().unwrap());
+        let tapok = entries
+            .iter()
+            .find(|voice| voice.id == "rvc-50ea3d733073550ef6f7")
+            .unwrap();
+        let metadata = tapok.metadata.as_ref().unwrap();
+        assert_eq!(metadata["vocal_style"], "high");
+        assert_eq!(metadata["sample_rate_hz"], 40000);
+        assert_eq!(metadata["source_labels"][0], "Radio Tapok");
         assert!(parse_manifest(r#"{"schema_version":2,"voices":[]}"#).is_err());
     }
 
@@ -345,6 +354,7 @@ mod tests {
         )
         .unwrap();
         assert_eq!(provenance["origin"]["catalog_id"], "example");
+        assert_eq!(provenance["origin"]["name"], "Example");
         server.abort();
     }
 }

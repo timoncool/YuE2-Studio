@@ -17,6 +17,17 @@
         "url": "https://huggingface.co/licyk/rvc-model/resolve/ad931ef3dc18f2d63ef81ecafddd498a111c8ecd/voices/guanguanV1/guanguanV1.index",
         "sha256": "d04454f009988ad7e3d830d3d8870b3d107978738e2e3b10bd415038ed882cac",
         "size": 33496795
+      },
+      "metadata": {
+        "source_labels": [],
+        "vocal_style": null,
+        "rvc_version": null,
+        "sample_rate_hz": 40000,
+        "pitch_guidance": true,
+        "training_info": "",
+        "training_epochs": null,
+        "index_dimensions": 256,
+        "index_vectors": 31647
       }
     },
     {
@@ -35,6 +46,17 @@
         "url": "https://huggingface.co/licyk/rvc-model/resolve/ad931ef3dc18f2d63ef81ecafddd498a111c8ecd/voices/keruanV1/keruanV1.index",
         "sha256": "8e8d2000be4c6dce12102fe417e03ac13c338328da424e33a8e71d94eb1b3380",
         "size": 41683651
+      },
+      "metadata": {
+        "source_labels": [],
+        "vocal_style": null,
+        "rvc_version": null,
+        "sample_rate_hz": 40000,
+        "pitch_guidance": true,
+        "training_info": "",
+        "training_epochs": null,
+        "index_dimensions": 256,
+        "index_vectors": 39382
       }
     },
     {
@@ -53,6 +75,17 @@
         "url": "https://huggingface.co/licyk/rvc-model/resolve/ad931ef3dc18f2d63ef81ecafddd498a111c8ecd/voices/kikiV1/kikiV1.index",
         "sha256": "5f20e83f2e232f2077fed5a064bc92865899e2330a1ff10f2c54b2bae834c647",
         "size": 58956235
+      },
+      "metadata": {
+        "source_labels": [],
+        "vocal_style": null,
+        "rvc_version": null,
+        "sample_rate_hz": 40000,
+        "pitch_guidance": true,
+        "training_info": "",
+        "training_epochs": null,
+        "index_dimensions": 256,
+        "index_vectors": 55700
       }
     },
     {
@@ -67,7 +100,16 @@
         "sha256": "88ad512ce774a929972ed27650aa80687fbe220ecdc20809a164c65dca4a408c",
         "size": 57551491
       },
-      "index": null
+      "index": null,
+      "metadata": {
+        "source_labels": [],
+        "vocal_style": null,
+        "rvc_version": "v2",
+        "sample_rate_hz": 48000,
+        "pitch_guidance": true,
+        "training_info": "300epoch",
+        "training_epochs": 300
+      }
     },
     {
       "id": "rvc-c957d999a39ab2c787a1",
@@ -85,6 +127,17 @@
         "url": "https://huggingface.co/licyk/rvc-model/resolve/ad931ef3dc18f2d63ef81ecafddd498a111c8ecd/voices/zhanzhanv2-xi/zhanzhanv2-xi.index",
         "sha256": "91f14f20f342f7585d050e6df96e4b451761608e7a483e8454c9490cced67eee",
         "size": 250792219
+      },
+      "metadata": {
+        "source_labels": [],
+        "vocal_style": null,
+        "rvc_version": "v2",
+        "sample_rate_hz": 40000,
+        "pitch_guidance": true,
+        "training_info": "500epoch",
+        "training_epochs": 500,
+        "index_dimensions": 768,
+        "index_vectors": 79391
       }
     },
     {
@@ -103,6 +156,17 @@
         "url": "https://huggingface.co/chaye741/RVC-Voice-Models/resolve/acfd9f836ca1fc862a594bc303cfccee8d565e94/indices/%E4%B8%81%E7%9C%9F.index",
         "sha256": "4fb5b11ea777cfc732ec7ad28354b4a2cfa4c01461d10ece4bf2829dc8a9117b",
         "size": 31588619
+      },
+      "metadata": {
+        "source_labels": [],
+        "vocal_style": null,
+        "rvc_version": "v1",
+        "sample_rate_hz": 40000,
+        "pitch_guidance": true,
+        "training_info": "50epoch",
+        "training_epochs": 50,
+        "index_dimensions": 768,
+        "index_vectors": 10000
       }
     },
     {
@@ -121,6 +185,17 @@
         "url": "https://huggingface.co/chaye741/RVC-Voice-Models/resolve/acfd9f836ca1fc862a594bc303cfccee8d565e94/indices/%E5%8D%A1%E9%80%9A-%E6%87%92%E7%BE%8A%E7%BE%8A.index",
         "sha256": "ba5bacc12de2fc60021583de10a9a255d2ccce98a0eab973f74a0c3570b0e2c1",
         "size": 137124819
+      },
+      "metadata": {
+        "source_labels": [],
+        "vocal_style": null,
+        "rvc_version": "v2",
+        "sample_rate_hz": 48000,
+        "pitch_guidance": true,
+        "training_info": "100epoch",
+        "training_epochs": 100,
+        "index_dimensions": 768,
+        "index_vectors": 43408
       }
     },
     {
@@ -139,6 +214,17 @@
         "url": "https://huggingface.co/chaye741/RVC-Voice-Models/resolve/acfd9f836ca1fc862a594bc303cfccee8d565e94/indices/%E5%8D%A1%E9%80%9A-%E6%9B%BC%E6%B3%A2.index",
         "sha256": "3b8772d0d21efe8b27a99d093014e21b874479d725b06f3b987ab1fb1aac7a5f",
         "size": 141362899
+      },
+      "metadata": {
+        "source_labels": [],
+        "vocal_style": null,
+        "rvc_version": "v2",
+        "sample_rate_hz": 40000,
+        "pitch_guidance": true,
+        "training_info": "100epoch",
+        "training_epochs": 100,
+        "index_dimensions": 768,
+        "index_vectors": 44750
       }
     },
     {
@@ -157,6 +243,17 @@
         "url": "https://huggingface.co/chaye741/RVC-Voice-Models/resolve/acfd9f836ca1fc862a594bc303cfccee8d565e94/indices/%E5%8D%A2%E6%9C%AC%E4%BC%9F.index",
         "sha256": "9576023ac4bf294823f74728fda290eee225f1feb800f202d4676bc2d8232e0d",
         "size": 37739347
+      },
+      "metadata": {
+        "source_labels": [],
+        "vocal_style": null,
+        "rvc_version": "v2",
+        "sample_rate_hz": 40000,
+        "pitch_guidance": true,
+        "training_info": "20epoch",
+        "training_epochs": 20,
+        "index_dimensions": 256,
+        "index_vectors": 35655
       }
     },
     {
@@ -175,6 +272,17 @@
         "url": "https://huggingface.co/chaye741/RVC-Voice-Models/resolve/acfd9f836ca1fc862a594bc303cfccee8d565e94/indices/%E5%A5%A5%E5%B7%B4%E9%A9%AC.index",
         "sha256": "31bf2b051bd9397a1cfc20f8a961cbc1e6fe04c917471752593492e45f2e46c0",
         "size": 49212379
+      },
+      "metadata": {
+        "source_labels": [],
+        "vocal_style": null,
+        "rvc_version": "v2",
+        "sample_rate_hz": 48000,
+        "pitch_guidance": true,
+        "training_info": "1000epoch",
+        "training_epochs": 1000,
+        "index_dimensions": 768,
+        "index_vectors": 15579
       }
     },
     {
@@ -193,6 +301,17 @@
         "url": "https://huggingface.co/chaye741/RVC-Voice-Models/resolve/acfd9f836ca1fc862a594bc303cfccee8d565e94/indices/%E5%A5%B3%E5%A3%B0-OI.index",
         "sha256": "d04454f009988ad7e3d830d3d8870b3d107978738e2e3b10bd415038ed882cac",
         "size": 33496795
+      },
+      "metadata": {
+        "source_labels": [],
+        "vocal_style": null,
+        "rvc_version": "v2",
+        "sample_rate_hz": 48000,
+        "pitch_guidance": true,
+        "training_info": "",
+        "training_epochs": null,
+        "index_dimensions": 256,
+        "index_vectors": 31647
       }
     },
     {
@@ -211,6 +330,17 @@
         "url": "https://huggingface.co/chaye741/RVC-Voice-Models/resolve/acfd9f836ca1fc862a594bc303cfccee8d565e94/indices/%E5%A5%B3%E5%A3%B0-%E4%BA%91%E5%84%BF%E9%9D%92%E6%98%A5.index",
         "sha256": "dd9425c32d385c22e1e0845d4989b2c8e88f6f10b384de67c6811f8094dd0a81",
         "size": 459782539
+      },
+      "metadata": {
+        "source_labels": [],
+        "vocal_style": null,
+        "rvc_version": "v2",
+        "sample_rate_hz": 48000,
+        "pitch_guidance": true,
+        "training_info": "",
+        "training_epochs": null,
+        "index_dimensions": 768,
+        "index_vectors": 145548
       }
     },
     {
@@ -229,6 +359,17 @@
         "url": "https://huggingface.co/chaye741/RVC-Voice-Models/resolve/acfd9f836ca1fc862a594bc303cfccee8d565e94/indices/%E5%A5%B3%E5%A3%B0-%E4%BD%A9%E4%BD%A9.index",
         "sha256": "d04454f009988ad7e3d830d3d8870b3d107978738e2e3b10bd415038ed882cac",
         "size": 33496795
+      },
+      "metadata": {
+        "source_labels": [],
+        "vocal_style": null,
+        "rvc_version": "v2",
+        "sample_rate_hz": 48000,
+        "pitch_guidance": true,
+        "training_info": "",
+        "training_epochs": null,
+        "index_dimensions": 256,
+        "index_vectors": 31647
       }
     },
     {
@@ -247,6 +388,17 @@
         "url": "https://huggingface.co/chaye741/RVC-Voice-Models/resolve/acfd9f836ca1fc862a594bc303cfccee8d565e94/indices/%E5%A5%B3%E5%A3%B0-%E5%8C%97%E6%9E%81%E6%98%9F.index",
         "sha256": "0e8136bd1d761631ee2b53a921dcee86e7b9f966282e67a0d4ad6de86ed92a42",
         "size": 321127099
+      },
+      "metadata": {
+        "source_labels": [],
+        "vocal_style": null,
+        "rvc_version": "v2",
+        "sample_rate_hz": 48000,
+        "pitch_guidance": true,
+        "training_info": "",
+        "training_epochs": null,
+        "index_dimensions": 768,
+        "index_vectors": 101656
       }
     },
     {
@@ -265,6 +417,17 @@
         "url": "https://huggingface.co/chaye741/RVC-Voice-Models/resolve/acfd9f836ca1fc862a594bc303cfccee8d565e94/indices/%E5%A5%B3%E5%A3%B0-%E5%8F%AF%E5%8F%AF.index",
         "sha256": "ac6ce0ca740d271582a28136659b32a2fb2f9b788cafd26537f13b47666c8c7c",
         "size": 198182739
+      },
+      "metadata": {
+        "source_labels": [],
+        "vocal_style": null,
+        "rvc_version": "v2",
+        "sample_rate_hz": 40000,
+        "pitch_guidance": true,
+        "training_info": "",
+        "training_epochs": null,
+        "index_dimensions": 768,
+        "index_vectors": 62737
       }
     },
     {
@@ -283,6 +446,17 @@
         "url": "https://huggingface.co/chaye741/RVC-Voice-Models/resolve/acfd9f836ca1fc862a594bc303cfccee8d565e94/indices/%E5%A5%B3%E5%A3%B0-%E5%90%88%E9%9B%86.index",
         "sha256": "3bdced30c23c9b71786efdd747096f35786b5b7a3a60a1176f12634779c54b3d",
         "size": 447776699
+      },
+      "metadata": {
+        "source_labels": [],
+        "vocal_style": null,
+        "rvc_version": "v2",
+        "sample_rate_hz": 40000,
+        "pitch_guidance": true,
+        "training_info": "",
+        "training_epochs": null,
+        "index_dimensions": 768,
+        "index_vectors": 141748
       }
     },
     {
@@ -301,6 +475,17 @@
         "url": "https://huggingface.co/chaye741/RVC-Voice-Models/resolve/acfd9f836ca1fc862a594bc303cfccee8d565e94/indices/%E5%A5%B3%E5%A3%B0-%E5%A9%89%E5%BF%83.index",
         "sha256": "534b0fbee93d7b48f00a18b33b1c878589b722011a65517705bd2c72eaaacfb3",
         "size": 196769019
+      },
+      "metadata": {
+        "source_labels": [],
+        "vocal_style": null,
+        "rvc_version": "v2",
+        "sample_rate_hz": 48000,
+        "pitch_guidance": true,
+        "training_info": "8282",
+        "training_epochs": null,
+        "index_dimensions": 768,
+        "index_vectors": 62289
       }
     },
     {
@@ -319,6 +504,17 @@
         "url": "https://huggingface.co/chaye741/RVC-Voice-Models/resolve/acfd9f836ca1fc862a594bc303cfccee8d565e94/indices/%E5%A5%B3%E5%A3%B0-%E5%AD%A6%E5%A7%90.index",
         "sha256": "50c2fc234bf0dfef2cd83ca3354314c3fe103660149462b2c0c32bd18943fc8d",
         "size": 130595219
+      },
+      "metadata": {
+        "source_labels": [],
+        "vocal_style": null,
+        "rvc_version": "v2",
+        "sample_rate_hz": 40000,
+        "pitch_guidance": true,
+        "training_info": "200epoch",
+        "training_epochs": 200,
+        "index_dimensions": 768,
+        "index_vectors": 41341
       }
     },
     {
@@ -337,6 +533,17 @@
         "url": "https://huggingface.co/chaye741/RVC-Voice-Models/resolve/acfd9f836ca1fc862a594bc303cfccee8d565e94/indices/%E5%A5%B3%E5%A3%B0-%E5%B0%8F%E7%A7%8B%E5%B0%91%E7%BE%BD.index",
         "sha256": "7af2f2666b8598549d13d3c45ea69c1c6280ab9ef7a7f6948b31e7893b6901c1",
         "size": 196769019
+      },
+      "metadata": {
+        "source_labels": [],
+        "vocal_style": null,
+        "rvc_version": "v2",
+        "sample_rate_hz": 48000,
+        "pitch_guidance": true,
+        "training_info": "200epoch",
+        "training_epochs": 200,
+        "index_dimensions": 768,
+        "index_vectors": 62289
       }
     },
     {
@@ -355,6 +562,17 @@
         "url": "https://huggingface.co/chaye741/RVC-Voice-Models/resolve/acfd9f836ca1fc862a594bc303cfccee8d565e94/indices/%E5%A5%B3%E5%A3%B0-%E7%9F%B3%E6%A6%B4.index",
         "sha256": "d04454f009988ad7e3d830d3d8870b3d107978738e2e3b10bd415038ed882cac",
         "size": 33496795
+      },
+      "metadata": {
+        "source_labels": [],
+        "vocal_style": null,
+        "rvc_version": "v2",
+        "sample_rate_hz": 40000,
+        "pitch_guidance": true,
+        "training_info": "",
+        "training_epochs": null,
+        "index_dimensions": 256,
+        "index_vectors": 31647
       }
     },
     {
@@ -373,6 +591,17 @@
         "url": "https://huggingface.co/chaye741/RVC-Voice-Models/resolve/acfd9f836ca1fc862a594bc303cfccee8d565e94/indices/%E5%A5%B3%E5%A3%B0-%E8%8B%8F%E8%8B%8F%E5%B0%91%E6%B4%9B.index",
         "sha256": "9a762e64e29e2b02e2b6e7408d5233b83611ebdb3801a1da0174412800289acc",
         "size": 73310299
+      },
+      "metadata": {
+        "source_labels": [],
+        "vocal_style": null,
+        "rvc_version": "v2",
+        "sample_rate_hz": 48000,
+        "pitch_guidance": true,
+        "training_info": "550epoch",
+        "training_epochs": 550,
+        "index_dimensions": 768,
+        "index_vectors": 23207
       }
     },
     {
@@ -391,6 +620,17 @@
         "url": "https://huggingface.co/chaye741/RVC-Voice-Models/resolve/acfd9f836ca1fc862a594bc303cfccee8d565e94/indices/%E5%A5%B3%E5%A3%B0-%E8%8D%89%E8%8E%93.index",
         "sha256": "50c2fc234bf0dfef2cd83ca3354314c3fe103660149462b2c0c32bd18943fc8d",
         "size": 130595219
+      },
+      "metadata": {
+        "source_labels": [],
+        "vocal_style": null,
+        "rvc_version": "v2",
+        "sample_rate_hz": 48000,
+        "pitch_guidance": true,
+        "training_info": "350epoch",
+        "training_epochs": 350,
+        "index_dimensions": 768,
+        "index_vectors": 41341
       }
     },
     {
@@ -409,6 +649,17 @@
         "url": "https://huggingface.co/chaye741/RVC-Voice-Models/resolve/acfd9f836ca1fc862a594bc303cfccee8d565e94/indices/%E5%A5%B3%E5%A3%B0-%E8%AF%97%E9%9F%B5.index",
         "sha256": "2dd979b637dc708252966da41de696ea198869f8b86e7fc26675ef8bfde63e02",
         "size": 171359019
+      },
+      "metadata": {
+        "source_labels": [],
+        "vocal_style": null,
+        "rvc_version": "v2",
+        "sample_rate_hz": 48000,
+        "pitch_guidance": true,
+        "training_info": "300epoch",
+        "training_epochs": 300,
+        "index_dimensions": 768,
+        "index_vectors": 54246
       }
     },
     {
@@ -427,6 +678,17 @@
         "url": "https://huggingface.co/chaye741/RVC-Voice-Models/resolve/acfd9f836ca1fc862a594bc303cfccee8d565e94/indices/%E5%A5%B3%E5%A3%B0-%E9%9B%85%E7%90%B3%E5%BE%A1%E5%A7%90.index",
         "sha256": "e03bcab3631db4a2ed9c512b488f00ac8574c8df960a4bf19a715b6e43b55ffd",
         "size": 202482419
+      },
+      "metadata": {
+        "source_labels": [],
+        "vocal_style": null,
+        "rvc_version": "v2",
+        "sample_rate_hz": 48000,
+        "pitch_guidance": true,
+        "training_info": "200epoch",
+        "training_epochs": 200,
+        "index_dimensions": 768,
+        "index_vectors": 64098
       }
     },
     {
@@ -445,6 +707,17 @@
         "url": "https://huggingface.co/chaye741/RVC-Voice-Models/resolve/acfd9f836ca1fc862a594bc303cfccee8d565e94/indices/%E7%89%B9%E6%9C%97%E6%99%AE.index",
         "sha256": "43de4ee0998ea5f6bd39a5a3c9245462f44e62be011cab468da337b91f51af5a",
         "size": 552884779
+      },
+      "metadata": {
+        "source_labels": [],
+        "vocal_style": null,
+        "rvc_version": "v2",
+        "sample_rate_hz": 48000,
+        "pitch_guidance": true,
+        "training_info": "200epoch",
+        "training_epochs": 200,
+        "index_dimensions": 768,
+        "index_vectors": 175021
       }
     },
     {
@@ -463,6 +736,17 @@
         "url": "https://huggingface.co/chaye741/RVC-Voice-Models/resolve/acfd9f836ca1fc862a594bc303cfccee8d565e94/indices/%E7%94%B7%E5%A3%B0-01%E5%8F%B7.index",
         "sha256": "0a75d12132405feae19ba8683e805b96c23cc244d24d441485b10bbe21691213",
         "size": 358903299
+      },
+      "metadata": {
+        "source_labels": [],
+        "vocal_style": null,
+        "rvc_version": "v2",
+        "sample_rate_hz": 40000,
+        "pitch_guidance": true,
+        "training_info": "",
+        "training_epochs": null,
+        "index_dimensions": 768,
+        "index_vectors": 113614
       }
     },
     {
@@ -481,6 +765,17 @@
         "url": "https://huggingface.co/chaye741/RVC-Voice-Models/resolve/acfd9f836ca1fc862a594bc303cfccee8d565e94/indices/%E7%94%B7%E5%A3%B0-02%E5%8F%B7.index",
         "sha256": "5e788746f225e325c56394b1628f389b2245ccc0b23911b4a547e2dae484ca55",
         "size": 91497699
+      },
+      "metadata": {
+        "source_labels": [],
+        "vocal_style": null,
+        "rvc_version": "v2",
+        "sample_rate_hz": 40000,
+        "pitch_guidance": true,
+        "training_info": "150epoch",
+        "training_epochs": 150,
+        "index_dimensions": 768,
+        "index_vectors": 28965
       }
     },
     {
@@ -499,6 +794,17 @@
         "url": "https://huggingface.co/chaye741/RVC-Voice-Models/resolve/acfd9f836ca1fc862a594bc303cfccee8d565e94/indices/%E7%94%B7%E5%A3%B0-03%E5%8F%B7.index",
         "sha256": "428566b6da9b56d35438bfbaf6769e638827fa0724fbf67b567e3acac582877a",
         "size": 35534099
+      },
+      "metadata": {
+        "source_labels": [],
+        "vocal_style": null,
+        "rvc_version": "v2",
+        "sample_rate_hz": 40000,
+        "pitch_guidance": true,
+        "training_info": "200epoch",
+        "training_epochs": 200,
+        "index_dimensions": 768,
+        "index_vectors": 11249
       }
     },
     {
@@ -517,6 +823,17 @@
         "url": "https://huggingface.co/chaye741/RVC-Voice-Models/resolve/acfd9f836ca1fc862a594bc303cfccee8d565e94/indices/%E7%94%B7%E5%A3%B0-04%E5%8F%B7.index",
         "sha256": "dea8c74de4feb79a30a7fdf4415dc0fd22aad7127353856e5159577750f2c800",
         "size": 31588619
+      },
+      "metadata": {
+        "source_labels": [],
+        "vocal_style": null,
+        "rvc_version": "v2",
+        "sample_rate_hz": 40000,
+        "pitch_guidance": true,
+        "training_info": "",
+        "training_epochs": null,
+        "index_dimensions": 768,
+        "index_vectors": 10000
       }
     },
     {
@@ -535,6 +852,17 @@
         "url": "https://huggingface.co/chaye741/RVC-Voice-Models/resolve/acfd9f836ca1fc862a594bc303cfccee8d565e94/indices/%E7%94%B7%E5%A3%B0-06%E5%8F%B7.index",
         "sha256": "8fe466612c657d9bf132bb22a19bf54ff3efc4e5f0451f1b1c24f2a09a418476",
         "size": 52405099
+      },
+      "metadata": {
+        "source_labels": [],
+        "vocal_style": null,
+        "rvc_version": null,
+        "sample_rate_hz": 40000,
+        "pitch_guidance": true,
+        "training_info": "150epoch",
+        "training_epochs": 150,
+        "index_dimensions": 256,
+        "index_vectors": 49511
       }
     },
     {
@@ -553,6 +881,17 @@
         "url": "https://huggingface.co/chaye741/RVC-Voice-Models/resolve/acfd9f836ca1fc862a594bc303cfccee8d565e94/indices/%E7%94%B7%E5%A3%B0-07%E5%8F%B7.index",
         "sha256": "da04c5ea22fd01997b4d442f6a4fb839f51dc663d7ed23633814e75f3459bc92",
         "size": 574429379
+      },
+      "metadata": {
+        "source_labels": [],
+        "vocal_style": null,
+        "rvc_version": "v2",
+        "sample_rate_hz": 40000,
+        "pitch_guidance": true,
+        "training_info": "500epoch",
+        "training_epochs": 500,
+        "index_dimensions": 768,
+        "index_vectors": 181841
       }
     },
     {
@@ -571,6 +910,17 @@
         "url": "https://huggingface.co/chaye741/RVC-Voice-Models/resolve/acfd9f836ca1fc862a594bc303cfccee8d565e94/indices/%E7%94%B7%E5%A3%B0-08%E5%8F%B7.index",
         "sha256": "995a92e823cc9b340f87a9e6b9dcab5725609ca6d711347cecd79e8c843b27d8",
         "size": 33418363
+      },
+      "metadata": {
+        "source_labels": [],
+        "vocal_style": null,
+        "rvc_version": null,
+        "sample_rate_hz": 40000,
+        "pitch_guidance": true,
+        "training_info": "20epoch",
+        "training_epochs": 20,
+        "index_dimensions": 256,
+        "index_vectors": 31573
       }
     },
     {
@@ -589,6 +939,17 @@
         "url": "https://huggingface.co/chaye741/RVC-Voice-Models/resolve/acfd9f836ca1fc862a594bc303cfccee8d565e94/indices/%E7%94%B7%E5%A3%B0-09%E5%8F%B7.index",
         "sha256": "c8dcafe8a5fa312a7744a9cf97e1d17f6ca169f05e693287512a2a9af2da8061",
         "size": 40471051
+      },
+      "metadata": {
+        "source_labels": [],
+        "vocal_style": null,
+        "rvc_version": "v1",
+        "sample_rate_hz": 40000,
+        "pitch_guidance": true,
+        "training_info": "80epoch",
+        "training_epochs": 80,
+        "index_dimensions": 256,
+        "index_vectors": 38236
       }
     },
     {
@@ -607,6 +968,17 @@
         "url": "https://huggingface.co/chaye741/RVC-Voice-Models/resolve/acfd9f836ca1fc862a594bc303cfccee8d565e94/indices/%E7%94%B7%E5%A3%B0-10%E5%8F%B7.index",
         "sha256": "01f11d059fa6bac3cfe6cfdf468f4a0dbcec74302fa6e0f274a47e569f3d48f4",
         "size": 480800459
+      },
+      "metadata": {
+        "source_labels": [],
+        "vocal_style": null,
+        "rvc_version": "v2",
+        "sample_rate_hz": 40000,
+        "pitch_guidance": true,
+        "training_info": "",
+        "training_epochs": null,
+        "index_dimensions": 768,
+        "index_vectors": 152202
       }
     },
     {
@@ -625,6 +997,17 @@
         "url": "https://huggingface.co/chaye741/RVC-Voice-Models/resolve/acfd9f836ca1fc862a594bc303cfccee8d565e94/indices/%E7%94%B7%E5%A3%B0-%E7%83%9F%E5%97%93.index",
         "sha256": "c6836299e7762c54792343ef2298b615e3c1b5969954f2ec786538d6524ecac6",
         "size": 94643827
+      },
+      "metadata": {
+        "source_labels": [],
+        "vocal_style": null,
+        "rvc_version": "v1",
+        "sample_rate_hz": 40000,
+        "pitch_guidance": true,
+        "training_info": "200epoch",
+        "training_epochs": 200,
+        "index_dimensions": 256,
+        "index_vectors": 89417
       }
     },
     {
@@ -643,6 +1026,17 @@
         "url": "https://huggingface.co/chaye741/RVC-Voice-Models/resolve/acfd9f836ca1fc862a594bc303cfccee8d565e94/indices/%E7%94%B7%E5%A3%B0-%E7%94%B7%E7%A5%9E.index",
         "sha256": "c836eb9f9e48cd8ef8c4c7de8fed7782a443331318d61c368637fa3b4aa9f0be",
         "size": 63950083
+      },
+      "metadata": {
+        "source_labels": [],
+        "vocal_style": null,
+        "rvc_version": null,
+        "sample_rate_hz": 40000,
+        "pitch_guidance": true,
+        "training_info": "1000epoch",
+        "training_epochs": 1000,
+        "index_dimensions": 256,
+        "index_vectors": 60418
       }
     },
     {
@@ -661,6 +1055,17 @@
         "url": "https://huggingface.co/chaye741/RVC-Voice-Models/resolve/acfd9f836ca1fc862a594bc303cfccee8d565e94/indices/%E7%94%B7%E5%A3%B0-%E9%9D%92%E5%B9%B4.index",
         "sha256": "3e3d681410582544415f132c42c0baeca5b4b594521c5a563b1b3b29dc876b5e",
         "size": 32931259
+      },
+      "metadata": {
+        "source_labels": [],
+        "vocal_style": null,
+        "rvc_version": null,
+        "sample_rate_hz": 40000,
+        "pitch_guidance": true,
+        "training_info": "600epoch",
+        "training_epochs": 600,
+        "index_dimensions": 256,
+        "index_vectors": 31113
       }
     },
     {
@@ -679,7 +1084,1314 @@
         "url": "https://huggingface.co/chaye741/RVC-Voice-Models/resolve/acfd9f836ca1fc862a594bc303cfccee8d565e94/indices/%E7%94%B7%E5%A3%B0-%E9%9D%92%E5%B9%B4%E7%98%A6%E5%BC%B1.index",
         "sha256": "0c62e0855a92cf210d5fb53b32053495ae535686d0e2f6c95cc4b1a3e38b22ce",
         "size": 119875195
+      },
+      "metadata": {
+        "source_labels": [],
+        "vocal_style": null,
+        "rvc_version": "v1",
+        "sample_rate_hz": 40000,
+        "pitch_guidance": true,
+        "training_info": "",
+        "training_epochs": null,
+        "index_dimensions": 256,
+        "index_vectors": 113255
       }
+    },
+    {
+      "id": "rvc-91430d2c0ae106a59e37",
+      "name": "Agressor [General] E-1300",
+      "metadata": {
+        "source_labels": [
+          "General"
+        ],
+        "rvc_version": "v2",
+        "pitch_guidance": true,
+        "sample_rate_hz": 40000,
+        "training_info": "950epoch",
+        "index_dimensions": 768,
+        "index_vectors": 52513,
+        "training_epochs": 950,
+        "vocal_style": "general"
+      },
+      "index": {
+        "size": 165885859,
+        "sha256": "0a705a39365a9f81dcf454347f5dbd29dc24062b7df7cea70ee855a8eb44593d",
+        "url": "https://huggingface.co/nerualdreming/YuE2-Studio-RVC-Voices/resolve/b85d99228032e40f10ebfc32fc213d26afb9504f/voices/91430d2c0ae106a59e37/voice.index"
+      },
+      "weights": {
+        "size": 55233918,
+        "sha256": "91430d2c0ae106a59e37726bf2a38ab59974954eaf65958d9ad446fe495c2e73",
+        "url": "https://huggingface.co/nerualdreming/YuE2-Studio-RVC-Voices/resolve/b85d99228032e40f10ebfc32fc213d26afb9504f/voices/91430d2c0ae106a59e37/voice.pth"
+      },
+      "source_repo": "nerualdreming/YuE2-Studio-RVC-Voices",
+      "source_url": "https://huggingface.co/nerualdreming/YuE2-Studio-RVC-Voices/tree/b85d99228032e40f10ebfc32fc213d26afb9504f",
+      "revision": "b85d99228032e40f10ebfc32fc213d26afb9504f",
+      "license": null
+    },
+    {
+      "id": "rvc-08a9400787116aaa3e6a",
+      "name": "Alena ivanova [X] (General) E-1400",
+      "metadata": {
+        "source_labels": [
+          "X",
+          "General"
+        ],
+        "rvc_version": "v2",
+        "pitch_guidance": true,
+        "sample_rate_hz": 40000,
+        "training_info": "1400epoch",
+        "index_dimensions": 768,
+        "index_vectors": 34499,
+        "training_epochs": 1400,
+        "vocal_style": "general"
+      },
+      "index": {
+        "size": 108979779,
+        "sha256": "e231c33e37cdab87c514e32bb74bcc10a7e7f6ba5dc1cfb00e7c548c325a9211",
+        "url": "https://huggingface.co/nerualdreming/YuE2-Studio-RVC-Voices/resolve/b85d99228032e40f10ebfc32fc213d26afb9504f/voices/08a9400787116aaa3e6a/voice.index"
+      },
+      "weights": {
+        "size": 55235365,
+        "sha256": "08a9400787116aaa3e6afded62429e303be6ebd227a9556e085133a216d98bb1",
+        "url": "https://huggingface.co/nerualdreming/YuE2-Studio-RVC-Voices/resolve/b85d99228032e40f10ebfc32fc213d26afb9504f/voices/08a9400787116aaa3e6a/voice.pth"
+      },
+      "source_repo": "nerualdreming/YuE2-Studio-RVC-Voices",
+      "source_url": "https://huggingface.co/nerualdreming/YuE2-Studio-RVC-Voices/tree/b85d99228032e40f10ebfc32fc213d26afb9504f",
+      "revision": "b85d99228032e40f10ebfc32fc213d26afb9504f",
+      "license": null
+    },
+    {
+      "id": "rvc-91cace7ff31c1098e9f3",
+      "name": "Alexsandr Novikov E-900",
+      "metadata": {
+        "source_labels": [],
+        "rvc_version": "v2",
+        "pitch_guidance": true,
+        "sample_rate_hz": 40000,
+        "training_info": "900epoch",
+        "index_dimensions": 768,
+        "index_vectors": 55508,
+        "training_epochs": 900,
+        "vocal_style": null
+      },
+      "index": {
+        "size": 175347619,
+        "sha256": "dc753517fc1faf4bb9f8c83dba8d393a80c71f112ed31f21fa7e44e2d17cef5b",
+        "url": "https://huggingface.co/nerualdreming/YuE2-Studio-RVC-Voices/resolve/b85d99228032e40f10ebfc32fc213d26afb9504f/voices/91cace7ff31c1098e9f3/voice.index"
+      },
+      "weights": {
+        "size": 55234840,
+        "sha256": "91cace7ff31c1098e9f31c2acd91eec6aab701df9b8e4f596be9b46613e8cfd7",
+        "url": "https://huggingface.co/nerualdreming/YuE2-Studio-RVC-Voices/resolve/b85d99228032e40f10ebfc32fc213d26afb9504f/voices/91cace7ff31c1098e9f3/voice.pth"
+      },
+      "source_repo": "nerualdreming/YuE2-Studio-RVC-Voices",
+      "source_url": "https://huggingface.co/nerualdreming/YuE2-Studio-RVC-Voices/tree/b85d99228032e40f10ebfc32fc213d26afb9504f",
+      "revision": "b85d99228032e40f10ebfc32fc213d26afb9504f",
+      "license": null
+    },
+    {
+      "id": "rvc-c1962b14488efa134ac6",
+      "name": "Alkasar [Anastasia Skobaneva] E-1200",
+      "metadata": {
+        "source_labels": [
+          "Anastasia Skobaneva"
+        ],
+        "rvc_version": "v2",
+        "pitch_guidance": true,
+        "sample_rate_hz": 40000,
+        "training_info": "1200epoch",
+        "index_dimensions": 768,
+        "index_vectors": 54814,
+        "training_epochs": 1200,
+        "vocal_style": null
+      },
+      "index": {
+        "size": 173154659,
+        "sha256": "855a56f55fa1030a9027af8cb7269959e40eda7eff5600588d8035f63ea9ec14",
+        "url": "https://huggingface.co/nerualdreming/YuE2-Studio-RVC-Voices/resolve/b85d99228032e40f10ebfc32fc213d26afb9504f/voices/c1962b14488efa134ac6/voice.index"
+      },
+      "weights": {
+        "size": 55239975,
+        "sha256": "c1962b14488efa134ac644d50c63029980599b24c06174e82f55718307269b27",
+        "url": "https://huggingface.co/nerualdreming/YuE2-Studio-RVC-Voices/resolve/b85d99228032e40f10ebfc32fc213d26afb9504f/voices/c1962b14488efa134ac6/voice.pth"
+      },
+      "source_repo": "nerualdreming/YuE2-Studio-RVC-Voices",
+      "source_url": "https://huggingface.co/nerualdreming/YuE2-Studio-RVC-Voices/tree/b85d99228032e40f10ebfc32fc213d26afb9504f",
+      "revision": "b85d99228032e40f10ebfc32fc213d26afb9504f",
+      "license": null
+    },
+    {
+      "id": "rvc-80bceafd34a2f4b55598",
+      "name": "Anastasiya Ivanova [Grechka] (General) E-x",
+      "metadata": {
+        "source_labels": [
+          "Grechka",
+          "General"
+        ],
+        "rvc_version": "v2",
+        "pitch_guidance": true,
+        "sample_rate_hz": 40000,
+        "training_info": "300epoch",
+        "index_dimensions": 768,
+        "index_vectors": 88689,
+        "training_epochs": 300,
+        "vocal_style": "general"
+      },
+      "index": {
+        "size": 280166179,
+        "sha256": "fd2830777147e1e71efdeee54bd883001a306bc41445bf0b7ac18443470a8f46",
+        "url": "https://huggingface.co/nerualdreming/YuE2-Studio-RVC-Voices/resolve/b85d99228032e40f10ebfc32fc213d26afb9504f/voices/80bceafd34a2f4b55598/voice.index"
+      },
+      "weights": {
+        "size": 55222703,
+        "sha256": "80bceafd34a2f4b55598349136922231e18e97a6dd39c47ff1e3b56bab1e0328",
+        "url": "https://huggingface.co/nerualdreming/YuE2-Studio-RVC-Voices/resolve/b85d99228032e40f10ebfc32fc213d26afb9504f/voices/80bceafd34a2f4b55598/voice.pth"
+      },
+      "source_repo": "nerualdreming/YuE2-Studio-RVC-Voices",
+      "source_url": "https://huggingface.co/nerualdreming/YuE2-Studio-RVC-Voices/tree/b85d99228032e40f10ebfc32fc213d26afb9504f",
+      "revision": "b85d99228032e40f10ebfc32fc213d26afb9504f",
+      "license": null
+    },
+    {
+      "id": "rvc-9b1cc6b18f6511748104",
+      "name": "Arina Mindaleva (Few!) E-3500",
+      "metadata": {
+        "source_labels": [
+          "Few!"
+        ],
+        "rvc_version": "v2",
+        "pitch_guidance": true,
+        "sample_rate_hz": 40000,
+        "training_info": "3500epoch",
+        "index_dimensions": 768,
+        "index_vectors": 8104,
+        "training_epochs": 3500,
+        "vocal_style": null
+      },
+      "index": {
+        "size": 25598019,
+        "sha256": "1791e49b2e5edb9e1019e25a13f5f5ecf1b1d862ad0ec614cd8ddd1f6e53d737",
+        "url": "https://huggingface.co/nerualdreming/YuE2-Studio-RVC-Voices/resolve/b85d99228032e40f10ebfc32fc213d26afb9504f/voices/9b1cc6b18f6511748104/voice.index"
+      },
+      "weights": {
+        "size": 55236287,
+        "sha256": "9b1cc6b18f651174810494ee2020b64decb44cd271505dd54eedd0d0b5f4a8a1",
+        "url": "https://huggingface.co/nerualdreming/YuE2-Studio-RVC-Voices/resolve/b85d99228032e40f10ebfc32fc213d26afb9504f/voices/9b1cc6b18f6511748104/voice.pth"
+      },
+      "source_repo": "nerualdreming/YuE2-Studio-RVC-Voices",
+      "source_url": "https://huggingface.co/nerualdreming/YuE2-Studio-RVC-Voices/tree/b85d99228032e40f10ebfc32fc213d26afb9504f",
+      "revision": "b85d99228032e40f10ebfc32fc213d26afb9504f",
+      "license": null
+    },
+    {
+      "id": "rvc-5927185df43b5750a46d",
+      "name": "Chili [Massacre] (General) E-3150",
+      "metadata": {
+        "source_labels": [
+          "Massacre",
+          "General"
+        ],
+        "rvc_version": "v2",
+        "pitch_guidance": true,
+        "sample_rate_hz": 40000,
+        "training_info": "350epoch",
+        "index_dimensions": 768,
+        "index_vectors": 25590,
+        "training_epochs": 350,
+        "vocal_style": "general"
+      },
+      "index": {
+        "size": 80837819,
+        "sha256": "411a949904f60eef3089976aa81d8005c06e6bfa496e4ce0885f2df81300322f",
+        "url": "https://huggingface.co/nerualdreming/YuE2-Studio-RVC-Voices/resolve/b85d99228032e40f10ebfc32fc213d26afb9504f/voices/5927185df43b5750a46d/voice.index"
+      },
+      "weights": {
+        "size": 55235826,
+        "sha256": "5927185df43b5750a46d422f75dd445a8cf99310e8a7dbf13393fe3f640f3569",
+        "url": "https://huggingface.co/nerualdreming/YuE2-Studio-RVC-Voices/resolve/b85d99228032e40f10ebfc32fc213d26afb9504f/voices/5927185df43b5750a46d/voice.pth"
+      },
+      "source_repo": "nerualdreming/YuE2-Studio-RVC-Voices",
+      "source_url": "https://huggingface.co/nerualdreming/YuE2-Studio-RVC-Voices/tree/b85d99228032e40f10ebfc32fc213d26afb9504f",
+      "revision": "b85d99228032e40f10ebfc32fc213d26afb9504f",
+      "license": null
+    },
+    {
+      "id": "rvc-ff03c4e20b91495eec58",
+      "name": "Crack Calvados",
+      "metadata": {
+        "source_labels": [],
+        "rvc_version": "v2",
+        "pitch_guidance": true,
+        "sample_rate_hz": 40000,
+        "training_info": "2200epoch",
+        "index_dimensions": 768,
+        "index_vectors": 18829,
+        "training_epochs": 2200,
+        "vocal_style": null
+      },
+      "index": {
+        "size": 59478019,
+        "sha256": "77f2fe08ba0929db39a6faac4a0fb868a88197c3d4b6683c5f678da7cb474d82",
+        "url": "https://huggingface.co/nerualdreming/YuE2-Studio-RVC-Voices/resolve/b85d99228032e40f10ebfc32fc213d26afb9504f/voices/ff03c4e20b91495eec58/voice.index"
+      },
+      "weights": {
+        "size": 55232996,
+        "sha256": "ff03c4e20b91495eec580a25a7132e10182b303e000f8705e59b819fa61903b2",
+        "url": "https://huggingface.co/nerualdreming/YuE2-Studio-RVC-Voices/resolve/b85d99228032e40f10ebfc32fc213d26afb9504f/voices/ff03c4e20b91495eec58/voice.pth"
+      },
+      "source_repo": "nerualdreming/YuE2-Studio-RVC-Voices",
+      "source_url": "https://huggingface.co/nerualdreming/YuE2-Studio-RVC-Voices/tree/b85d99228032e40f10ebfc32fc213d26afb9504f",
+      "revision": "b85d99228032e40f10ebfc32fc213d26afb9504f",
+      "license": null
+    },
+    {
+      "id": "rvc-4dd604916410b7831fbf",
+      "name": "Dagaz (General) E-x",
+      "metadata": {
+        "source_labels": [
+          "General"
+        ],
+        "rvc_version": "v2",
+        "pitch_guidance": true,
+        "sample_rate_hz": 40000,
+        "training_info": "500epoch",
+        "index_dimensions": 768,
+        "index_vectors": 164293,
+        "training_epochs": 500,
+        "vocal_style": "general"
+      },
+      "index": {
+        "size": 518995539,
+        "sha256": "a4fad50e0bf78fc8f84996a1a6ba9a6657d32b362a67dcc78295e762e576b979",
+        "url": "https://huggingface.co/nerualdreming/YuE2-Studio-RVC-Voices/resolve/b85d99228032e40f10ebfc32fc213d26afb9504f/voices/4dd604916410b7831fbf/voice.index"
+      },
+      "weights": {
+        "size": 55232535,
+        "sha256": "4dd604916410b7831fbfc44121478e237709ee999f3eb20c60bc3581ef02f399",
+        "url": "https://huggingface.co/nerualdreming/YuE2-Studio-RVC-Voices/resolve/b85d99228032e40f10ebfc32fc213d26afb9504f/voices/4dd604916410b7831fbf/voice.pth"
+      },
+      "source_repo": "nerualdreming/YuE2-Studio-RVC-Voices",
+      "source_url": "https://huggingface.co/nerualdreming/YuE2-Studio-RVC-Voices/tree/b85d99228032e40f10ebfc32fc213d26afb9504f",
+      "revision": "b85d99228032e40f10ebfc32fc213d26afb9504f",
+      "license": null
+    },
+    {
+      "id": "rvc-3b3531280fe2e2e942fa",
+      "name": "Denis Gerasimov [Kolovrat] E- 800",
+      "metadata": {
+        "source_labels": [
+          "Kolovrat"
+        ],
+        "rvc_version": "v2",
+        "pitch_guidance": true,
+        "sample_rate_hz": 40000,
+        "training_info": "800epoch",
+        "index_dimensions": 768,
+        "index_vectors": 92667,
+        "training_epochs": 800,
+        "vocal_style": null
+      },
+      "index": {
+        "size": 292732579,
+        "sha256": "425a2afd408b6be0c3434a3b48fe8ea925e0423c7b9136c12645ef60eae295ea",
+        "url": "https://huggingface.co/nerualdreming/YuE2-Studio-RVC-Voices/resolve/b85d99228032e40f10ebfc32fc213d26afb9504f/voices/3b3531280fe2e2e942fa/voice.index"
+      },
+      "weights": {
+        "size": 55236748,
+        "sha256": "3b3531280fe2e2e942faae993dcc5f1ec5901921127bed0db37a47e4f3663f1a",
+        "url": "https://huggingface.co/nerualdreming/YuE2-Studio-RVC-Voices/resolve/b85d99228032e40f10ebfc32fc213d26afb9504f/voices/3b3531280fe2e2e942fa/voice.pth"
+      },
+      "source_repo": "nerualdreming/YuE2-Studio-RVC-Voices",
+      "source_url": "https://huggingface.co/nerualdreming/YuE2-Studio-RVC-Voices/tree/b85d99228032e40f10ebfc32fc213d26afb9504f",
+      "revision": "b85d99228032e40f10ebfc32fc213d26afb9504f",
+      "license": null
+    },
+    {
+      "id": "rvc-f7c64dacf4ccf3189465",
+      "name": "Denver [Amatory] (Clean) E-900",
+      "metadata": {
+        "source_labels": [
+          "Amatory",
+          "Clean"
+        ],
+        "rvc_version": "v2",
+        "pitch_guidance": true,
+        "sample_rate_hz": 40000,
+        "training_info": "950epoch",
+        "index_dimensions": 768,
+        "index_vectors": 39702,
+        "training_epochs": 950,
+        "vocal_style": "clean"
+      },
+      "index": {
+        "size": 125417739,
+        "sha256": "0575069c96a7a554478122d5d6da7869b83adec0cf81e296fe8f223e887d399a",
+        "url": "https://huggingface.co/nerualdreming/YuE2-Studio-RVC-Voices/resolve/b85d99228032e40f10ebfc32fc213d26afb9504f/voices/f7c64dacf4ccf3189465/voice.index"
+      },
+      "weights": {
+        "size": 55232996,
+        "sha256": "f7c64dacf4ccf3189465d9024bc929c377c09aec4a2fc960906cea6835f7edb1",
+        "url": "https://huggingface.co/nerualdreming/YuE2-Studio-RVC-Voices/resolve/b85d99228032e40f10ebfc32fc213d26afb9504f/voices/f7c64dacf4ccf3189465/voice.pth"
+      },
+      "source_repo": "nerualdreming/YuE2-Studio-RVC-Voices",
+      "source_url": "https://huggingface.co/nerualdreming/YuE2-Studio-RVC-Voices/tree/b85d99228032e40f10ebfc32fc213d26afb9504f",
+      "revision": "b85d99228032e40f10ebfc32fc213d26afb9504f",
+      "license": null
+    },
+    {
+      "id": "rvc-73685fba631bcbbe8af7",
+      "name": "Denver [Amatory] (Growl) E-2000",
+      "metadata": {
+        "source_labels": [
+          "Amatory",
+          "Growl"
+        ],
+        "rvc_version": "v2",
+        "pitch_guidance": true,
+        "sample_rate_hz": 40000,
+        "training_info": "2250epoch",
+        "index_dimensions": 768,
+        "index_vectors": 21430,
+        "training_epochs": 2250,
+        "vocal_style": "growl"
+      },
+      "index": {
+        "size": 67695459,
+        "sha256": "c51f95171c52ab7ec779154ff5f057b57c5cd985f35b2905bd50cbee1aeb5e0b",
+        "url": "https://huggingface.co/nerualdreming/YuE2-Studio-RVC-Voices/resolve/b85d99228032e40f10ebfc32fc213d26afb9504f/voices/73685fba631bcbbe8af7/voice.index"
+      },
+      "weights": {
+        "size": 55233918,
+        "sha256": "73685fba631bcbbe8af78341776e283eaf01737dd500df40fd86a4b9e563e2cb",
+        "url": "https://huggingface.co/nerualdreming/YuE2-Studio-RVC-Voices/resolve/b85d99228032e40f10ebfc32fc213d26afb9504f/voices/73685fba631bcbbe8af7/voice.pth"
+      },
+      "source_repo": "nerualdreming/YuE2-Studio-RVC-Voices",
+      "source_url": "https://huggingface.co/nerualdreming/YuE2-Studio-RVC-Voices/tree/b85d99228032e40f10ebfc32fc213d26afb9504f",
+      "revision": "b85d99228032e40f10ebfc32fc213d26afb9504f",
+      "license": null
+    },
+    {
+      "id": "rvc-22902bd0778fd6c06128",
+      "name": "Evgenij Egorov [Epidemia] (X) E-600",
+      "metadata": {
+        "source_labels": [
+          "Epidemia",
+          "X"
+        ],
+        "rvc_version": "v2",
+        "pitch_guidance": true,
+        "sample_rate_hz": 40000,
+        "training_info": "600epoch",
+        "index_dimensions": 768,
+        "index_vectors": 16769,
+        "training_epochs": 600,
+        "vocal_style": null
+      },
+      "index": {
+        "size": 52969979,
+        "sha256": "772afdace8dbfd49508ecc5e95ac79722e1e214ff7a354f40afe39fbe8c0a584",
+        "url": "https://huggingface.co/nerualdreming/YuE2-Studio-RVC-Voices/resolve/b85d99228032e40f10ebfc32fc213d26afb9504f/voices/22902bd0778fd6c06128/voice.index"
+      },
+      "weights": {
+        "size": 55228783,
+        "sha256": "22902bd0778fd6c06128c81398e018176f85144292a6eec8a3d7c611516976d0",
+        "url": "https://huggingface.co/nerualdreming/YuE2-Studio-RVC-Voices/resolve/b85d99228032e40f10ebfc32fc213d26afb9504f/voices/22902bd0778fd6c06128/voice.pth"
+      },
+      "source_repo": "nerualdreming/YuE2-Studio-RVC-Voices",
+      "source_url": "https://huggingface.co/nerualdreming/YuE2-Studio-RVC-Voices/tree/b85d99228032e40f10ebfc32fc213d26afb9504f",
+      "revision": "b85d99228032e40f10ebfc32fc213d26afb9504f",
+      "license": null
+    },
+    {
+      "id": "rvc-f0303bcf765088e45fcf",
+      "name": "Honor [Mariusz Szczerski] (General)",
+      "metadata": {
+        "source_labels": [
+          "Mariusz Szczerski",
+          "General"
+        ],
+        "rvc_version": "v2",
+        "pitch_guidance": true,
+        "sample_rate_hz": 40000,
+        "training_info": "950epoch",
+        "index_dimensions": 768,
+        "index_vectors": 48901,
+        "training_epochs": 950,
+        "vocal_style": "general"
+      },
+      "index": {
+        "size": 154474459,
+        "sha256": "444dadd31b2bbe86109cc9a235f40243433aab57b625b5460b248607c1d7aa8f",
+        "url": "https://huggingface.co/nerualdreming/YuE2-Studio-RVC-Voices/resolve/b85d99228032e40f10ebfc32fc213d26afb9504f/voices/f0303bcf765088e45fcf/voice.index"
+      },
+      "weights": {
+        "size": 55237670,
+        "sha256": "f0303bcf765088e45fcfe6a8f58f0560feca3f7b71dea7b72c2046d9dd36c3c6",
+        "url": "https://huggingface.co/nerualdreming/YuE2-Studio-RVC-Voices/resolve/b85d99228032e40f10ebfc32fc213d26afb9504f/voices/f0303bcf765088e45fcf/voice.pth"
+      },
+      "source_repo": "nerualdreming/YuE2-Studio-RVC-Voices",
+      "source_url": "https://huggingface.co/nerualdreming/YuE2-Studio-RVC-Voices/tree/b85d99228032e40f10ebfc32fc213d26afb9504f",
+      "revision": "b85d99228032e40f10ebfc32fc213d26afb9504f",
+      "license": null
+    },
+    {
+      "id": "rvc-a836d29e981d8af312d4",
+      "name": "Julia Volkova [Tatu] {General} E-x",
+      "metadata": {
+        "source_labels": [
+          "Tatu",
+          "General"
+        ],
+        "rvc_version": null,
+        "pitch_guidance": true,
+        "sample_rate_hz": 40000,
+        "training_info": "1000epoch",
+        "index_dimensions": 256,
+        "index_vectors": 33444,
+        "training_epochs": 1000,
+        "vocal_style": "general"
+      },
+      "index": {
+        "size": 35398771,
+        "sha256": "0601d5caf891ba22bd44648fe97da12ca1f88c325dd8c926418ba43e320306a4",
+        "url": "https://huggingface.co/nerualdreming/YuE2-Studio-RVC-Voices/resolve/b85d99228032e40f10ebfc32fc213d26afb9504f/voices/a836d29e981d8af312d4/voice.index"
+      },
+      "weights": {
+        "size": 55026095,
+        "sha256": "a836d29e981d8af312d40ff5ba9b162c5fb0fbc8d25a4395999b0f2a6904e13e",
+        "url": "https://huggingface.co/nerualdreming/YuE2-Studio-RVC-Voices/resolve/b85d99228032e40f10ebfc32fc213d26afb9504f/voices/a836d29e981d8af312d4/voice.pth"
+      },
+      "source_repo": "nerualdreming/YuE2-Studio-RVC-Voices",
+      "source_url": "https://huggingface.co/nerualdreming/YuE2-Studio-RVC-Voices/tree/b85d99228032e40f10ebfc32fc213d26afb9504f",
+      "revision": "b85d99228032e40f10ebfc32fc213d26afb9504f",
+      "license": null
+    },
+    {
+      "id": "rvc-f7c927f50cc7dafa01f3",
+      "name": "Juta [Anna Osipova] (Low) E-1200",
+      "metadata": {
+        "source_labels": [
+          "Anna Osipova",
+          "Low"
+        ],
+        "rvc_version": "v2",
+        "pitch_guidance": true,
+        "sample_rate_hz": 40000,
+        "training_info": "1200epoch",
+        "index_dimensions": 768,
+        "index_vectors": 56233,
+        "training_epochs": 1200,
+        "vocal_style": "low"
+      },
+      "index": {
+        "size": 177636059,
+        "sha256": "4984f532c58a0d742f649faa8bd9cd5aafb7086fe70788374263920b93e3544c",
+        "url": "https://huggingface.co/nerualdreming/YuE2-Studio-RVC-Voices/resolve/b85d99228032e40f10ebfc32fc213d26afb9504f/voices/f7c927f50cc7dafa01f3/voice.index"
+      },
+      "weights": {
+        "size": 55237209,
+        "sha256": "f7c927f50cc7dafa01f33e9f8841b107d16d1f13a5601340a036d1914870d8e2",
+        "url": "https://huggingface.co/nerualdreming/YuE2-Studio-RVC-Voices/resolve/b85d99228032e40f10ebfc32fc213d26afb9504f/voices/f7c927f50cc7dafa01f3/voice.pth"
+      },
+      "source_repo": "nerualdreming/YuE2-Studio-RVC-Voices",
+      "source_url": "https://huggingface.co/nerualdreming/YuE2-Studio-RVC-Voices/tree/b85d99228032e40f10ebfc32fc213d26afb9504f",
+      "revision": "b85d99228032e40f10ebfc32fc213d26afb9504f",
+      "license": null
+    },
+    {
+      "id": "rvc-36d947ce26d9c217cfe3",
+      "name": "Juta [Anna Osipova] (Power) E-1800",
+      "metadata": {
+        "source_labels": [
+          "Anna Osipova",
+          "Power"
+        ],
+        "rvc_version": "v2",
+        "pitch_guidance": true,
+        "sample_rate_hz": 40000,
+        "training_info": "1800epoch",
+        "index_dimensions": 768,
+        "index_vectors": 35553,
+        "training_epochs": 1800,
+        "vocal_style": "power"
+      },
+      "index": {
+        "size": 112309259,
+        "sha256": "0ae98986adc8b3f61bccc80908eaa85dc5bec3209494b17739b7516c187823d4",
+        "url": "https://huggingface.co/nerualdreming/YuE2-Studio-RVC-Voices/resolve/b85d99228032e40f10ebfc32fc213d26afb9504f/voices/36d947ce26d9c217cfe3/voice.index"
+      },
+      "weights": {
+        "size": 55240897,
+        "sha256": "36d947ce26d9c217cfe3146c21b68fcd66789d0e911260322fbdb4f602fb011d",
+        "url": "https://huggingface.co/nerualdreming/YuE2-Studio-RVC-Voices/resolve/b85d99228032e40f10ebfc32fc213d26afb9504f/voices/36d947ce26d9c217cfe3/voice.pth"
+      },
+      "source_repo": "nerualdreming/YuE2-Studio-RVC-Voices",
+      "source_url": "https://huggingface.co/nerualdreming/YuE2-Studio-RVC-Voices/tree/b85d99228032e40f10ebfc32fc213d26afb9504f",
+      "revision": "b85d99228032e40f10ebfc32fc213d26afb9504f",
+      "license": null
+    },
+    {
+      "id": "rvc-ad80ae0ef33eab80b8d0",
+      "name": "Landser (Choir)",
+      "metadata": {
+        "source_labels": [
+          "Choir"
+        ],
+        "rvc_version": "v2",
+        "pitch_guidance": true,
+        "sample_rate_hz": 40000,
+        "training_info": "2250epoch",
+        "index_dimensions": 768,
+        "index_vectors": 5118,
+        "training_epochs": 2250,
+        "vocal_style": "choir"
+      },
+      "index": {
+        "size": 16167059,
+        "sha256": "e86dd9cf9d8319677e43ceb5058d10b63a39a450f83d0b680ca476b7a07b0504",
+        "url": "https://huggingface.co/nerualdreming/YuE2-Studio-RVC-Voices/resolve/b85d99228032e40f10ebfc32fc213d26afb9504f/voices/ad80ae0ef33eab80b8d0/voice.index"
+      },
+      "weights": {
+        "size": 55235826,
+        "sha256": "ad80ae0ef33eab80b8d0659e1a3551881d415f781500d76334d32e9b40f871d7",
+        "url": "https://huggingface.co/nerualdreming/YuE2-Studio-RVC-Voices/resolve/b85d99228032e40f10ebfc32fc213d26afb9504f/voices/ad80ae0ef33eab80b8d0/voice.pth"
+      },
+      "source_repo": "nerualdreming/YuE2-Studio-RVC-Voices",
+      "source_url": "https://huggingface.co/nerualdreming/YuE2-Studio-RVC-Voices/tree/b85d99228032e40f10ebfc32fc213d26afb9504f",
+      "revision": "b85d99228032e40f10ebfc32fc213d26afb9504f",
+      "license": null
+    },
+    {
+      "id": "rvc-02383adbc3b9060f66a0",
+      "name": "Maksim Batay [YouTube]",
+      "metadata": {
+        "source_labels": [
+          "YouTube"
+        ],
+        "rvc_version": "v2",
+        "pitch_guidance": true,
+        "sample_rate_hz": 40000,
+        "training_info": "1400epoch",
+        "index_dimensions": 768,
+        "index_vectors": 36302,
+        "training_epochs": 1400,
+        "vocal_style": null
+      },
+      "index": {
+        "size": 114674699,
+        "sha256": "f9fc60f06814497964523b90f9d5d76cb3d90ef1b3d47f5237bdc9123a093f6d",
+        "url": "https://huggingface.co/nerualdreming/YuE2-Studio-RVC-Voices/resolve/b85d99228032e40f10ebfc32fc213d26afb9504f/voices/02383adbc3b9060f66a0/voice.index"
+      },
+      "weights": {
+        "size": 55234379,
+        "sha256": "02383adbc3b9060f66a0aa47c27f842a93f02103305a617227e5ff50489804f0",
+        "url": "https://huggingface.co/nerualdreming/YuE2-Studio-RVC-Voices/resolve/b85d99228032e40f10ebfc32fc213d26afb9504f/voices/02383adbc3b9060f66a0/voice.pth"
+      },
+      "source_repo": "nerualdreming/YuE2-Studio-RVC-Voices",
+      "source_url": "https://huggingface.co/nerualdreming/YuE2-Studio-RVC-Voices/tree/b85d99228032e40f10ebfc32fc213d26afb9504f",
+      "revision": "b85d99228032e40f10ebfc32fc213d26afb9504f",
+      "license": null
+    },
+    {
+      "id": "rvc-774bba710e34015d0c24",
+      "name": "Maria Grin 1 (Few!)",
+      "metadata": {
+        "source_labels": [
+          "Few!"
+        ],
+        "rvc_version": "v2",
+        "pitch_guidance": true,
+        "sample_rate_hz": 40000,
+        "training_info": "3000epoch",
+        "index_dimensions": 768,
+        "index_vectors": 12063,
+        "training_epochs": 3000,
+        "vocal_style": null
+      },
+      "index": {
+        "size": 38105899,
+        "sha256": "a00ef3c77893d872bddf4135c27e075cb1c490383524af6719acee952daeafc8",
+        "url": "https://huggingface.co/nerualdreming/YuE2-Studio-RVC-Voices/resolve/b85d99228032e40f10ebfc32fc213d26afb9504f/voices/774bba710e34015d0c24/voice.index"
+      },
+      "weights": {
+        "size": 55229244,
+        "sha256": "774bba710e34015d0c24fb93cf5b7b944229ddc071128396850acaa3524fd7f0",
+        "url": "https://huggingface.co/nerualdreming/YuE2-Studio-RVC-Voices/resolve/b85d99228032e40f10ebfc32fc213d26afb9504f/voices/774bba710e34015d0c24/voice.pth"
+      },
+      "source_repo": "nerualdreming/YuE2-Studio-RVC-Voices",
+      "source_url": "https://huggingface.co/nerualdreming/YuE2-Studio-RVC-Voices/tree/b85d99228032e40f10ebfc32fc213d26afb9504f",
+      "revision": "b85d99228032e40f10ebfc32fc213d26afb9504f",
+      "license": null
+    },
+    {
+      "id": "rvc-1d0bb5aa8b087d365d63",
+      "name": "Nik Chernikov [Ravanna] (Drive)",
+      "metadata": {
+        "source_labels": [
+          "Ravanna",
+          "Drive"
+        ],
+        "rvc_version": "v2",
+        "pitch_guidance": true,
+        "sample_rate_hz": 40000,
+        "training_info": "2250epoch",
+        "index_dimensions": 768,
+        "index_vectors": 26711,
+        "training_epochs": 2250,
+        "vocal_style": "drive"
+      },
+      "index": {
+        "size": 84376739,
+        "sha256": "f9cdc83f6cd6be8bd69c34e581ea15996a7a81492f377f943a294094dbce949e",
+        "url": "https://huggingface.co/nerualdreming/YuE2-Studio-RVC-Voices/resolve/b85d99228032e40f10ebfc32fc213d26afb9504f/voices/1d0bb5aa8b087d365d63/voice.index"
+      },
+      "weights": {
+        "size": 55232535,
+        "sha256": "1d0bb5aa8b087d365d6315d9093ca14bce89ec57e990c5c0b724b5fc88939651",
+        "url": "https://huggingface.co/nerualdreming/YuE2-Studio-RVC-Voices/resolve/b85d99228032e40f10ebfc32fc213d26afb9504f/voices/1d0bb5aa8b087d365d63/voice.pth"
+      },
+      "source_repo": "nerualdreming/YuE2-Studio-RVC-Voices",
+      "source_url": "https://huggingface.co/nerualdreming/YuE2-Studio-RVC-Voices/tree/b85d99228032e40f10ebfc32fc213d26afb9504f",
+      "revision": "b85d99228032e40f10ebfc32fc213d26afb9504f",
+      "license": null
+    },
+    {
+      "id": "rvc-5c72b2f2447908b9df55",
+      "name": "Oleg Abramov [Radio Tapok] (Drive)",
+      "metadata": {
+        "source_labels": [
+          "Radio Tapok",
+          "Drive"
+        ],
+        "rvc_version": "v2",
+        "pitch_guidance": true,
+        "sample_rate_hz": 40000,
+        "training_info": "950epoch",
+        "index_dimensions": 768,
+        "index_vectors": 56493,
+        "training_epochs": 950,
+        "vocal_style": "drive"
+      },
+      "index": {
+        "size": 178458419,
+        "sha256": "54a26b60317830f8c61f890d99287c4ea67d862330214b83fb86a354ed317366",
+        "url": "https://huggingface.co/nerualdreming/YuE2-Studio-RVC-Voices/resolve/b85d99228032e40f10ebfc32fc213d26afb9504f/voices/5c72b2f2447908b9df55/voice.index"
+      },
+      "weights": {
+        "size": 55235826,
+        "sha256": "5c72b2f2447908b9df55a80e7601671b9f356f68d3cbfb1b71dd6545c464fb37",
+        "url": "https://huggingface.co/nerualdreming/YuE2-Studio-RVC-Voices/resolve/b85d99228032e40f10ebfc32fc213d26afb9504f/voices/5c72b2f2447908b9df55/voice.pth"
+      },
+      "source_repo": "nerualdreming/YuE2-Studio-RVC-Voices",
+      "source_url": "https://huggingface.co/nerualdreming/YuE2-Studio-RVC-Voices/tree/b85d99228032e40f10ebfc32fc213d26afb9504f",
+      "revision": "b85d99228032e40f10ebfc32fc213d26afb9504f",
+      "license": null
+    },
+    {
+      "id": "rvc-50ea3d733073550ef6f7",
+      "name": "Oleg Abramov [Radio Tapok] (High) E-2250",
+      "metadata": {
+        "source_labels": [
+          "Radio Tapok",
+          "High"
+        ],
+        "rvc_version": "v2",
+        "pitch_guidance": true,
+        "sample_rate_hz": 40000,
+        "training_info": "2250epoch",
+        "index_dimensions": 768,
+        "index_vectors": 5207,
+        "training_epochs": 2250,
+        "vocal_style": "high"
+      },
+      "index": {
+        "size": 16447339,
+        "sha256": "cb8464f67510f54b6a70c40f059940accd27033f1822a37b58d69a1918680714",
+        "url": "https://huggingface.co/nerualdreming/YuE2-Studio-RVC-Voices/resolve/b85d99228032e40f10ebfc32fc213d26afb9504f/voices/50ea3d733073550ef6f7/voice.index"
+      },
+      "weights": {
+        "size": 55237670,
+        "sha256": "50ea3d733073550ef6f74fa9db59d41a90e1b5ff4ccbe958dfce2c11b2975c20",
+        "url": "https://huggingface.co/nerualdreming/YuE2-Studio-RVC-Voices/resolve/b85d99228032e40f10ebfc32fc213d26afb9504f/voices/50ea3d733073550ef6f7/voice.pth"
+      },
+      "source_repo": "nerualdreming/YuE2-Studio-RVC-Voices",
+      "source_url": "https://huggingface.co/nerualdreming/YuE2-Studio-RVC-Voices/tree/b85d99228032e40f10ebfc32fc213d26afb9504f",
+      "revision": "b85d99228032e40f10ebfc32fc213d26afb9504f",
+      "license": null
+    },
+    {
+      "id": "rvc-3329eb096e2b8b6b68ac",
+      "name": "Oleg Abramov [Radio Tapok] (Low) E-2200",
+      "metadata": {
+        "source_labels": [
+          "Radio Tapok",
+          "Low"
+        ],
+        "rvc_version": "v2",
+        "pitch_guidance": true,
+        "sample_rate_hz": 40000,
+        "training_info": "2200epoch",
+        "index_dimensions": null,
+        "index_vectors": null,
+        "training_epochs": 2200,
+        "vocal_style": "low"
+      },
+      "index": {
+        "size": 38047379,
+        "sha256": "bff4232cff023e3c0479e7ee1f6da52ca818811d0e352662751045243c19ea81",
+        "url": "https://huggingface.co/nerualdreming/YuE2-Studio-RVC-Voices/resolve/b85d99228032e40f10ebfc32fc213d26afb9504f/voices/3329eb096e2b8b6b68ac/voice.index"
+      },
+      "weights": {
+        "size": 55235826,
+        "sha256": "3329eb096e2b8b6b68ac2644952cf713ae7992d14d02821011bb0dafa3505616",
+        "url": "https://huggingface.co/nerualdreming/YuE2-Studio-RVC-Voices/resolve/b85d99228032e40f10ebfc32fc213d26afb9504f/voices/3329eb096e2b8b6b68ac/voice.pth"
+      },
+      "source_repo": "nerualdreming/YuE2-Studio-RVC-Voices",
+      "source_url": "https://huggingface.co/nerualdreming/YuE2-Studio-RVC-Voices/tree/b85d99228032e40f10ebfc32fc213d26afb9504f",
+      "revision": "b85d99228032e40f10ebfc32fc213d26afb9504f",
+      "license": null
+    },
+    {
+      "id": "rvc-68defb0bb9e89c1ac2b0",
+      "name": "Oleg Jilyakov [Catharsis] (General) E-1900",
+      "metadata": {
+        "source_labels": [
+          "Catharsis",
+          "General"
+        ],
+        "rvc_version": "v2",
+        "pitch_guidance": true,
+        "sample_rate_hz": 40000,
+        "training_info": "1950epoch",
+        "index_dimensions": 768,
+        "index_vectors": 35226,
+        "training_epochs": 1950,
+        "vocal_style": "general"
+      },
+      "index": {
+        "size": 111277459,
+        "sha256": "e1e771431f605b1a8c05e35cff094741c673a8f203a20c2874e815e9699767f1",
+        "url": "https://huggingface.co/nerualdreming/YuE2-Studio-RVC-Voices/resolve/b85d99228032e40f10ebfc32fc213d26afb9504f/voices/68defb0bb9e89c1ac2b0/voice.index"
+      },
+      "weights": {
+        "size": 55239975,
+        "sha256": "68defb0bb9e89c1ac2b0d02704930a6b3599ac04a8ff708b3920a4435de01f80",
+        "url": "https://huggingface.co/nerualdreming/YuE2-Studio-RVC-Voices/resolve/b85d99228032e40f10ebfc32fc213d26afb9504f/voices/68defb0bb9e89c1ac2b0/voice.pth"
+      },
+      "source_repo": "nerualdreming/YuE2-Studio-RVC-Voices",
+      "source_url": "https://huggingface.co/nerualdreming/YuE2-Studio-RVC-Voices/tree/b85d99228032e40f10ebfc32fc213d26afb9504f",
+      "revision": "b85d99228032e40f10ebfc32fc213d26afb9504f",
+      "license": null
+    },
+    {
+      "id": "rvc-abfe993f09ef4576744f",
+      "name": "Olga Neistovaja [Rychagi Mashin] (few!) E-4800",
+      "metadata": {
+        "source_labels": [
+          "Rychagi Mashin",
+          "few!"
+        ],
+        "rvc_version": "v2",
+        "pitch_guidance": true,
+        "sample_rate_hz": 40000,
+        "training_info": "4800epoch",
+        "index_dimensions": 768,
+        "index_vectors": 3774,
+        "training_epochs": 4800,
+        "vocal_style": null
+      },
+      "index": {
+        "size": 11919739,
+        "sha256": "b9b01514c7ab3271e06ea0a0576ef68e0480b941d6681da21bd57a19e4ad8b83",
+        "url": "https://huggingface.co/nerualdreming/YuE2-Studio-RVC-Voices/resolve/b85d99228032e40f10ebfc32fc213d26afb9504f/voices/abfe993f09ef4576744f/voice.index"
+      },
+      "weights": {
+        "size": 55236287,
+        "sha256": "abfe993f09ef4576744f853490280b419e79dd3bea60571c8bb3080a8ae9c2fe",
+        "url": "https://huggingface.co/nerualdreming/YuE2-Studio-RVC-Voices/resolve/b85d99228032e40f10ebfc32fc213d26afb9504f/voices/abfe993f09ef4576744f/voice.pth"
+      },
+      "source_repo": "nerualdreming/YuE2-Studio-RVC-Voices",
+      "source_url": "https://huggingface.co/nerualdreming/YuE2-Studio-RVC-Voices/tree/b85d99228032e40f10ebfc32fc213d26afb9504f",
+      "revision": "b85d99228032e40f10ebfc32fc213d26afb9504f",
+      "license": null
+    },
+    {
+      "id": "rvc-e3aea85b7f5ee8961b76",
+      "name": "Serafim Sidorin [Mykka] (High) E-x",
+      "metadata": {
+        "source_labels": [
+          "Mykka",
+          "High"
+        ],
+        "rvc_version": "v2",
+        "pitch_guidance": true,
+        "sample_rate_hz": 40000,
+        "training_info": "2250epoch",
+        "index_dimensions": 768,
+        "index_vectors": 15306,
+        "training_epochs": 2250,
+        "vocal_style": "high"
+      },
+      "index": {
+        "size": 48349979,
+        "sha256": "462fd08f8e2673f7b75ceb48a98b3b1d260b6c589739e37d02044f1f5f00ad95",
+        "url": "https://huggingface.co/nerualdreming/YuE2-Studio-RVC-Voices/resolve/b85d99228032e40f10ebfc32fc213d26afb9504f/voices/e3aea85b7f5ee8961b76/voice.index"
+      },
+      "weights": {
+        "size": 55233457,
+        "sha256": "e3aea85b7f5ee8961b76b691ae4e75ddf0c03a84c0ecc565704edb6ffe683865",
+        "url": "https://huggingface.co/nerualdreming/YuE2-Studio-RVC-Voices/resolve/b85d99228032e40f10ebfc32fc213d26afb9504f/voices/e3aea85b7f5ee8961b76/voice.pth"
+      },
+      "source_repo": "nerualdreming/YuE2-Studio-RVC-Voices",
+      "source_url": "https://huggingface.co/nerualdreming/YuE2-Studio-RVC-Voices/tree/b85d99228032e40f10ebfc32fc213d26afb9504f",
+      "revision": "b85d99228032e40f10ebfc32fc213d26afb9504f",
+      "license": null
+    },
+    {
+      "id": "rvc-8d10da81dfcf4f98915c",
+      "name": "Serafim Sidorin [Mykka] (Low) E-x",
+      "metadata": {
+        "source_labels": [
+          "Mykka",
+          "Low"
+        ],
+        "rvc_version": "v2",
+        "pitch_guidance": true,
+        "sample_rate_hz": 40000,
+        "training_info": "650epoch",
+        "index_dimensions": 768,
+        "index_vectors": 41378,
+        "training_epochs": 650,
+        "vocal_style": "low"
+      },
+      "index": {
+        "size": 130709179,
+        "sha256": "134a1da5d8a7400651307006c35020017cd4f0fb619ce780dc70ffc680d963c5",
+        "url": "https://huggingface.co/nerualdreming/YuE2-Studio-RVC-Voices/resolve/b85d99228032e40f10ebfc32fc213d26afb9504f/voices/8d10da81dfcf4f98915c/voice.index"
+      },
+      "weights": {
+        "size": 55232535,
+        "sha256": "8d10da81dfcf4f98915c854463c1a98f4198c1081b42fce53d9c40cb8f63bf7a",
+        "url": "https://huggingface.co/nerualdreming/YuE2-Studio-RVC-Voices/resolve/b85d99228032e40f10ebfc32fc213d26afb9504f/voices/8d10da81dfcf4f98915c/voice.pth"
+      },
+      "source_repo": "nerualdreming/YuE2-Studio-RVC-Voices",
+      "source_url": "https://huggingface.co/nerualdreming/YuE2-Studio-RVC-Voices/tree/b85d99228032e40f10ebfc32fc213d26afb9504f",
+      "revision": "b85d99228032e40f10ebfc32fc213d26afb9504f",
+      "license": null
+    },
+    {
+      "id": "rvc-e17b5ad94f7917b6b87e",
+      "name": "Sergey Sorokin [G-Doska] (Low) E-3000",
+      "metadata": {
+        "source_labels": [
+          "G-Doska",
+          "Low"
+        ],
+        "rvc_version": "v2",
+        "pitch_guidance": true,
+        "sample_rate_hz": 40000,
+        "training_info": "1500epoch",
+        "index_dimensions": 768,
+        "index_vectors": 5027,
+        "training_epochs": 1500,
+        "vocal_style": "low"
+      },
+      "index": {
+        "size": 15877539,
+        "sha256": "b1991a0ff9ffa7f94248d85331e7556981a31b76f51ff2300a7c47a1e41f5b58",
+        "url": "https://huggingface.co/nerualdreming/YuE2-Studio-RVC-Voices/resolve/b85d99228032e40f10ebfc32fc213d26afb9504f/voices/e17b5ad94f7917b6b87e/voice.index"
+      },
+      "weights": {
+        "size": 55233918,
+        "sha256": "e17b5ad94f7917b6b87efd3a6d4a10d5c8e40f42b36719ea81c6d109b015856e",
+        "url": "https://huggingface.co/nerualdreming/YuE2-Studio-RVC-Voices/resolve/b85d99228032e40f10ebfc32fc213d26afb9504f/voices/e17b5ad94f7917b6b87e/voice.pth"
+      },
+      "source_repo": "nerualdreming/YuE2-Studio-RVC-Voices",
+      "source_url": "https://huggingface.co/nerualdreming/YuE2-Studio-RVC-Voices/tree/b85d99228032e40f10ebfc32fc213d26afb9504f",
+      "revision": "b85d99228032e40f10ebfc32fc213d26afb9504f",
+      "license": null
+    },
+    {
+      "id": "rvc-123ee92fd3818181a8ad",
+      "name": "Sergey Sorokin[G-Doska] (High) E-800",
+      "metadata": {
+        "source_labels": [
+          "G-Doska",
+          "High"
+        ],
+        "rvc_version": "v2",
+        "pitch_guidance": true,
+        "sample_rate_hz": 40000,
+        "training_info": "800epoch",
+        "index_dimensions": 768,
+        "index_vectors": 90866,
+        "training_epochs": 800,
+        "vocal_style": "high"
+      },
+      "index": {
+        "size": 287040739,
+        "sha256": "913bfa5c7522a3b73bede0da74994ac86ff9c1af86eb16e828d03b8a1ec78c14",
+        "url": "https://huggingface.co/nerualdreming/YuE2-Studio-RVC-Voices/resolve/b85d99228032e40f10ebfc32fc213d26afb9504f/voices/123ee92fd3818181a8ad/voice.index"
+      },
+      "weights": {
+        "size": 55233457,
+        "sha256": "123ee92fd3818181a8ade2f59cb9076edff964c7401b63a165a2d5b8133cd014",
+        "url": "https://huggingface.co/nerualdreming/YuE2-Studio-RVC-Voices/resolve/b85d99228032e40f10ebfc32fc213d26afb9504f/voices/123ee92fd3818181a8ad/voice.pth"
+      },
+      "source_repo": "nerualdreming/YuE2-Studio-RVC-Voices",
+      "source_url": "https://huggingface.co/nerualdreming/YuE2-Studio-RVC-Voices/tree/b85d99228032e40f10ebfc32fc213d26afb9504f",
+      "revision": "b85d99228032e40f10ebfc32fc213d26afb9504f",
+      "license": null
+    },
+    {
+      "id": "rvc-6d7c19da0eea8ced0767",
+      "name": "Skat [Drakon] (Low) [-12!] E-800",
+      "metadata": {
+        "source_labels": [
+          "Drakon",
+          "Low",
+          "-12!"
+        ],
+        "rvc_version": "v2",
+        "pitch_guidance": true,
+        "sample_rate_hz": 40000,
+        "training_info": "800epoch",
+        "index_dimensions": 768,
+        "index_vectors": 35846,
+        "training_epochs": 800,
+        "vocal_style": "low"
+      },
+      "index": {
+        "size": 113236339,
+        "sha256": "9ef0d45f09ad96f56066bc050202058c760d5cb6440c640eac55161383151bce",
+        "url": "https://huggingface.co/nerualdreming/YuE2-Studio-RVC-Voices/resolve/b85d99228032e40f10ebfc32fc213d26afb9504f/voices/6d7c19da0eea8ced0767/voice.index"
+      },
+      "weights": {
+        "size": 55232535,
+        "sha256": "6d7c19da0eea8ced0767e0af2ba09fff7ec9e62c3ea6ee400007b70ec7ea78c9",
+        "url": "https://huggingface.co/nerualdreming/YuE2-Studio-RVC-Voices/resolve/b85d99228032e40f10ebfc32fc213d26afb9504f/voices/6d7c19da0eea8ced0767/voice.pth"
+      },
+      "source_repo": "nerualdreming/YuE2-Studio-RVC-Voices",
+      "source_url": "https://huggingface.co/nerualdreming/YuE2-Studio-RVC-Voices/tree/b85d99228032e40f10ebfc32fc213d26afb9504f",
+      "revision": "b85d99228032e40f10ebfc32fc213d26afb9504f",
+      "license": null
+    },
+    {
+      "id": "rvc-8890ae3196227804d0e9",
+      "name": "Till Lindemann [Rammstein] (General) E-900",
+      "metadata": {
+        "source_labels": [
+          "Rammstein",
+          "General"
+        ],
+        "rvc_version": "v2",
+        "pitch_guidance": true,
+        "sample_rate_hz": 40000,
+        "training_info": "950epoch",
+        "index_dimensions": 768,
+        "index_vectors": 47107,
+        "training_epochs": 950,
+        "vocal_style": "general"
+      },
+      "index": {
+        "size": 148807259,
+        "sha256": "857af199ace3c76e7aa46b9f2d98e5d4cdf9ad08dce021c1868a68e11b54659c",
+        "url": "https://huggingface.co/nerualdreming/YuE2-Studio-RVC-Voices/resolve/b85d99228032e40f10ebfc32fc213d26afb9504f/voices/8890ae3196227804d0e9/voice.index"
+      },
+      "weights": {
+        "size": 55233918,
+        "sha256": "8890ae3196227804d0e9274cacce57a1f39e64a96bd808554912829c3aeb6f8a",
+        "url": "https://huggingface.co/nerualdreming/YuE2-Studio-RVC-Voices/resolve/b85d99228032e40f10ebfc32fc213d26afb9504f/voices/8890ae3196227804d0e9/voice.pth"
+      },
+      "source_repo": "nerualdreming/YuE2-Studio-RVC-Voices",
+      "source_url": "https://huggingface.co/nerualdreming/YuE2-Studio-RVC-Voices/tree/b85d99228032e40f10ebfc32fc213d26afb9504f",
+      "revision": "b85d99228032e40f10ebfc32fc213d26afb9504f",
+      "license": null
+    },
+    {
+      "id": "rvc-d1e28dee1f30ebb23c6e",
+      "name": "Till Lindemann [Rammstein] (Power) E-2250",
+      "metadata": {
+        "source_labels": [
+          "Rammstein",
+          "Power"
+        ],
+        "rvc_version": "v2",
+        "pitch_guidance": true,
+        "sample_rate_hz": 40000,
+        "training_info": "2250epoch",
+        "index_dimensions": 768,
+        "index_vectors": 6277,
+        "training_epochs": 2250,
+        "vocal_style": "power"
+      },
+      "index": {
+        "size": 19826099,
+        "sha256": "f3f4cd252606bb0ced1abcd962b22f913191068f23c0920db3041a0943b858d2",
+        "url": "https://huggingface.co/nerualdreming/YuE2-Studio-RVC-Voices/resolve/b85d99228032e40f10ebfc32fc213d26afb9504f/voices/d1e28dee1f30ebb23c6e/voice.index"
+      },
+      "weights": {
+        "size": 55239975,
+        "sha256": "d1e28dee1f30ebb23c6ed64a56ea07bafcb8d55691546fb59a6da9150deaf2da",
+        "url": "https://huggingface.co/nerualdreming/YuE2-Studio-RVC-Voices/resolve/b85d99228032e40f10ebfc32fc213d26afb9504f/voices/d1e28dee1f30ebb23c6e/voice.pth"
+      },
+      "source_repo": "nerualdreming/YuE2-Studio-RVC-Voices",
+      "source_url": "https://huggingface.co/nerualdreming/YuE2-Studio-RVC-Voices/tree/b85d99228032e40f10ebfc32fc213d26afb9504f",
+      "revision": "b85d99228032e40f10ebfc32fc213d26afb9504f",
+      "license": null
+    },
+    {
+      "id": "rvc-45cfd60998087e9c53b1",
+      "name": "Valirij Kipelov [Aria] X",
+      "metadata": {
+        "source_labels": [
+          "Aria"
+        ],
+        "rvc_version": "v2",
+        "pitch_guidance": true,
+        "sample_rate_hz": 40000,
+        "training_info": "200epoch",
+        "index_dimensions": 768,
+        "index_vectors": 35950,
+        "training_epochs": 200,
+        "vocal_style": null
+      },
+      "index": {
+        "size": 113562819,
+        "sha256": "e700efd62d204dea6c692809716f6d6ef54c2065564a1d61c3f66821138597c3",
+        "url": "https://huggingface.co/nerualdreming/YuE2-Studio-RVC-Voices/resolve/b85d99228032e40f10ebfc32fc213d26afb9504f/voices/45cfd60998087e9c53b1/voice.index"
+      },
+      "weights": {
+        "size": 55223136,
+        "sha256": "45cfd60998087e9c53b1a9119e2f0b9cee6a564b25bcd7b61699448c51793551",
+        "url": "https://huggingface.co/nerualdreming/YuE2-Studio-RVC-Voices/resolve/b85d99228032e40f10ebfc32fc213d26afb9504f/voices/45cfd60998087e9c53b1/voice.pth"
+      },
+      "source_repo": "nerualdreming/YuE2-Studio-RVC-Voices",
+      "source_url": "https://huggingface.co/nerualdreming/YuE2-Studio-RVC-Voices/tree/b85d99228032e40f10ebfc32fc213d26afb9504f",
+      "revision": "b85d99228032e40f10ebfc32fc213d26afb9504f",
+      "license": null
+    },
+    {
+      "id": "rvc-ba9e5dac45ddd5aed45d",
+      "name": "Viktor Sudakov [CG Bros]",
+      "metadata": {
+        "source_labels": [
+          "CG Bros"
+        ],
+        "rvc_version": "v2",
+        "pitch_guidance": true,
+        "sample_rate_hz": 40000,
+        "training_info": "800epoch",
+        "index_dimensions": 768,
+        "index_vectors": 89586,
+        "training_epochs": 800,
+        "vocal_style": null
+      },
+      "index": {
+        "size": 282999779,
+        "sha256": "95aea2cc497959197c3e6f9c330ae874644f231b6a1b0ac8f110ccebbda42824",
+        "url": "https://huggingface.co/nerualdreming/YuE2-Studio-RVC-Voices/resolve/b85d99228032e40f10ebfc32fc213d26afb9504f/voices/ba9e5dac45ddd5aed45d/voice.index"
+      },
+      "weights": {
+        "size": 55233457,
+        "sha256": "ba9e5dac45ddd5aed45d5fb57e4f5ba17222a69bc822269cefc36fa31f149503",
+        "url": "https://huggingface.co/nerualdreming/YuE2-Studio-RVC-Voices/resolve/b85d99228032e40f10ebfc32fc213d26afb9504f/voices/ba9e5dac45ddd5aed45d/voice.pth"
+      },
+      "source_repo": "nerualdreming/YuE2-Studio-RVC-Voices",
+      "source_url": "https://huggingface.co/nerualdreming/YuE2-Studio-RVC-Voices/tree/b85d99228032e40f10ebfc32fc213d26afb9504f",
+      "revision": "b85d99228032e40f10ebfc32fc213d26afb9504f",
+      "license": null
+    },
+    {
+      "id": "rvc-f3bc5e908579969c050c",
+      "name": "Vladimi Krivenko [Karusel] (Low)",
+      "metadata": {
+        "source_labels": [
+          "Karusel",
+          "Low"
+        ],
+        "rvc_version": "v2",
+        "pitch_guidance": true,
+        "sample_rate_hz": 40000,
+        "training_info": "1200epoch",
+        "index_dimensions": 768,
+        "index_vectors": 22540,
+        "training_epochs": 1200,
+        "vocal_style": "low"
+      },
+      "index": {
+        "size": 71200499,
+        "sha256": "cc2070d4305556d11c4a9bf11097c7d2803c2777930950b6dfbe96772d9a4da9",
+        "url": "https://huggingface.co/nerualdreming/YuE2-Studio-RVC-Voices/resolve/b85d99228032e40f10ebfc32fc213d26afb9504f/voices/f3bc5e908579969c050c/voice.index"
+      },
+      "weights": {
+        "size": 55242741,
+        "sha256": "f3bc5e908579969c050ce16b5a0909620e65d54503e57c10e1908ff2bb52c61b",
+        "url": "https://huggingface.co/nerualdreming/YuE2-Studio-RVC-Voices/resolve/b85d99228032e40f10ebfc32fc213d26afb9504f/voices/f3bc5e908579969c050c/voice.pth"
+      },
+      "source_repo": "nerualdreming/YuE2-Studio-RVC-Voices",
+      "source_url": "https://huggingface.co/nerualdreming/YuE2-Studio-RVC-Voices/tree/b85d99228032e40f10ebfc32fc213d26afb9504f",
+      "revision": "b85d99228032e40f10ebfc32fc213d26afb9504f",
+      "license": null
+    },
+    {
+      "id": "rvc-296e44123b1b8e061cda",
+      "name": "Vladimir Krivenko [Karusel] (General)",
+      "metadata": {
+        "source_labels": [
+          "Karusel",
+          "General"
+        ],
+        "rvc_version": "v2",
+        "pitch_guidance": true,
+        "sample_rate_hz": 40000,
+        "training_info": "300epoch",
+        "index_dimensions": 768,
+        "index_vectors": 81622,
+        "training_epochs": 300,
+        "vocal_style": "general"
+      },
+      "index": {
+        "size": 257839259,
+        "sha256": "7ce69271034b026a62fdae63cdc19a7e3f22cab0afad669a78d549b7654d2900",
+        "url": "https://huggingface.co/nerualdreming/YuE2-Studio-RVC-Voices/resolve/b85d99228032e40f10ebfc32fc213d26afb9504f/voices/296e44123b1b8e061cda/voice.index"
+      },
+      "weights": {
+        "size": 55223136,
+        "sha256": "296e44123b1b8e061cda0529b3c14b38dd638d66d13fea3945c0a11645e1b1e6",
+        "url": "https://huggingface.co/nerualdreming/YuE2-Studio-RVC-Voices/resolve/b85d99228032e40f10ebfc32fc213d26afb9504f/voices/296e44123b1b8e061cda/voice.pth"
+      },
+      "source_repo": "nerualdreming/YuE2-Studio-RVC-Voices",
+      "source_url": "https://huggingface.co/nerualdreming/YuE2-Studio-RVC-Voices/tree/b85d99228032e40f10ebfc32fc213d26afb9504f",
+      "revision": "b85d99228032e40f10ebfc32fc213d26afb9504f",
+      "license": null
+    },
+    {
+      "id": "rvc-e896fa6c6a1552426fb3",
+      "name": "Vladimir Krivenko [Karusel] (Power)",
+      "metadata": {
+        "source_labels": [
+          "Karusel",
+          "Power"
+        ],
+        "rvc_version": "v2",
+        "pitch_guidance": true,
+        "sample_rate_hz": 40000,
+        "training_info": "4200epoch",
+        "index_dimensions": 768,
+        "index_vectors": 13972,
+        "training_epochs": 4200,
+        "vocal_style": "power"
+      },
+      "index": {
+        "size": 44136539,
+        "sha256": "408c880a8914605b73494c18d7d5edf23167c6cf06674125a56797b3ee0dfcff",
+        "url": "https://huggingface.co/nerualdreming/YuE2-Studio-RVC-Voices/resolve/b85d99228032e40f10ebfc32fc213d26afb9504f/voices/e896fa6c6a1552426fb3/voice.index"
+      },
+      "weights": {
+        "size": 55241819,
+        "sha256": "e896fa6c6a1552426fb3b32809ece980f872870813adc629436b7bccf1fdc347",
+        "url": "https://huggingface.co/nerualdreming/YuE2-Studio-RVC-Voices/resolve/b85d99228032e40f10ebfc32fc213d26afb9504f/voices/e896fa6c6a1552426fb3/voice.pth"
+      },
+      "source_repo": "nerualdreming/YuE2-Studio-RVC-Voices",
+      "source_url": "https://huggingface.co/nerualdreming/YuE2-Studio-RVC-Voices/tree/b85d99228032e40f10ebfc32fc213d26afb9504f",
+      "revision": "b85d99228032e40f10ebfc32fc213d26afb9504f",
+      "license": null
+    },
+    {
+      "id": "rvc-ab98dfb7f9fd125f3c8b",
+      "name": "Vorovajki [Jana Pavlova] E-1000",
+      "metadata": {
+        "source_labels": [
+          "Jana Pavlova"
+        ],
+        "rvc_version": "v2",
+        "pitch_guidance": true,
+        "sample_rate_hz": 40000,
+        "training_info": "1000epoch",
+        "index_dimensions": 768,
+        "index_vectors": 71099,
+        "training_epochs": 1000,
+        "vocal_style": null
+      },
+      "index": {
+        "size": 224599899,
+        "sha256": "5ac66c82dd47ec4d34a0ccb5e4fb02a903ccbcb94d1a8b842f64f17819774695",
+        "url": "https://huggingface.co/nerualdreming/YuE2-Studio-RVC-Voices/resolve/b85d99228032e40f10ebfc32fc213d26afb9504f/voices/ab98dfb7f9fd125f3c8b/voice.index"
+      },
+      "weights": {
+        "size": 55240390,
+        "sha256": "ab98dfb7f9fd125f3c8b39e7f6a322146d792e2ebf7adeba02739d85b14e1ee3",
+        "url": "https://huggingface.co/nerualdreming/YuE2-Studio-RVC-Voices/resolve/b85d99228032e40f10ebfc32fc213d26afb9504f/voices/ab98dfb7f9fd125f3c8b/voice.pth"
+      },
+      "source_repo": "nerualdreming/YuE2-Studio-RVC-Voices",
+      "source_url": "https://huggingface.co/nerualdreming/YuE2-Studio-RVC-Voices/tree/b85d99228032e40f10ebfc32fc213d26afb9504f",
+      "revision": "b85d99228032e40f10ebfc32fc213d26afb9504f",
+      "license": null
+    },
+    {
+      "id": "rvc-2d10c70b0ff79523decf",
+      "name": "Wesselski [Eisbrecher] (Electro) E-900",
+      "metadata": {
+        "source_labels": [
+          "Eisbrecher",
+          "Electro"
+        ],
+        "rvc_version": "v2",
+        "pitch_guidance": true,
+        "sample_rate_hz": 40000,
+        "training_info": "950epoch",
+        "index_dimensions": 768,
+        "index_vectors": 56342,
+        "training_epochs": 950,
+        "vocal_style": "electro"
+      },
+      "index": {
+        "size": 177981019,
+        "sha256": "0a85c7fcf2788b27b0f5c1dcda624d736987d2bfd772593c4ebd30c0faae66ac",
+        "url": "https://huggingface.co/nerualdreming/YuE2-Studio-RVC-Voices/resolve/b85d99228032e40f10ebfc32fc213d26afb9504f/voices/2d10c70b0ff79523decf/voice.index"
+      },
+      "weights": {
+        "size": 55237670,
+        "sha256": "2d10c70b0ff79523decf3699fc30b70b09418e37a6f9c3bfb596ab1d6d6c8fc5",
+        "url": "https://huggingface.co/nerualdreming/YuE2-Studio-RVC-Voices/resolve/b85d99228032e40f10ebfc32fc213d26afb9504f/voices/2d10c70b0ff79523decf/voice.pth"
+      },
+      "source_repo": "nerualdreming/YuE2-Studio-RVC-Voices",
+      "source_url": "https://huggingface.co/nerualdreming/YuE2-Studio-RVC-Voices/tree/b85d99228032e40f10ebfc32fc213d26afb9504f",
+      "revision": "b85d99228032e40f10ebfc32fc213d26afb9504f",
+      "license": null
+    },
+    {
+      "id": "rvc-50a525f424ff54feb7d7",
+      "name": "Wesselski [Eisbrecher] (Live) E-50",
+      "metadata": {
+        "source_labels": [
+          "Eisbrecher",
+          "Live"
+        ],
+        "rvc_version": "v2",
+        "pitch_guidance": true,
+        "sample_rate_hz": 40000,
+        "training_info": "50epoch",
+        "index_dimensions": 768,
+        "index_vectors": 168989,
+        "training_epochs": 50,
+        "vocal_style": "live"
+      },
+      "index": {
+        "size": 533831899,
+        "sha256": "8c7c9e213754454f06dcfa7aa6aca071e1d95a2b8955586c20d102e9d16b5073",
+        "url": "https://huggingface.co/nerualdreming/YuE2-Studio-RVC-Voices/resolve/b85d99228032e40f10ebfc32fc213d26afb9504f/voices/50a525f424ff54feb7d7/voice.index"
+      },
+      "weights": {
+        "size": 55235301,
+        "sha256": "50a525f424ff54feb7d77c85a014d3ba999a185e3aef4cc31a0a6851a7c93d87",
+        "url": "https://huggingface.co/nerualdreming/YuE2-Studio-RVC-Voices/resolve/b85d99228032e40f10ebfc32fc213d26afb9504f/voices/50a525f424ff54feb7d7/voice.pth"
+      },
+      "source_repo": "nerualdreming/YuE2-Studio-RVC-Voices",
+      "source_url": "https://huggingface.co/nerualdreming/YuE2-Studio-RVC-Voices/tree/b85d99228032e40f10ebfc32fc213d26afb9504f",
+      "revision": "b85d99228032e40f10ebfc32fc213d26afb9504f",
+      "license": null
     }
   ]
 }

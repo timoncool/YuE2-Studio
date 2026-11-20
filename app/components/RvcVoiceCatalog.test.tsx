@@ -91,7 +91,7 @@ it('lists curated voices and installs the selected ID into the local catalog', a
   const entry = { id: 'curated-one', name: 'Example Voice', source_repo: 'owner/voices',
     source_url: 'https://huggingface.co/owner/voices', license: null, weights: { size: 15_000_000 },
     index: null, installed_id: null };
-  const voice = { id: 'installed-id', model_name: 'voice.pth', index_name: null, version: 2 };
+  const voice = { id: 'installed-id', model_name: 'voice.pth', index_name: null, version: 2, origin: { name: entry.name } };
   const request = vi.fn(async (url: string, _options?: RequestInit) => {
     if (url.endsWith('/catalog/install')) return Response.json(voice);
     if (url.endsWith('/catalog')) return Response.json([entry]);
@@ -120,6 +120,7 @@ it('lists curated voices and installs the selected ID into the local catalog', a
     const [, options] = request.mock.calls.find(([url]) => url.endsWith('/catalog/install'))!;
     expect(JSON.parse(String(options?.body))).toEqual({ id: entry.id });
     expect(host.querySelector('select')!.value).toBe(voice.id);
+    expect(host.querySelector('select')!.selectedOptions[0]?.textContent).toContain(entry.name);
     expect(install.disabled).toBe(true);
     expect(install.textContent).toBe('Installed');
   } finally {
