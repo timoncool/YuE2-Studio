@@ -148,7 +148,7 @@ fn parse_manifest(source: &str) -> anyhow::Result<Vec<CatalogVoice>> {
         );
         let prefix = format!("{repo}/resolve/{revision}/");
         anyhow::ensure!(
-            voice.weights.is_some() ^ voice.archive.is_some()
+            (voice.weights.is_some() ^ voice.archive.is_some())
                 && (voice.archive.is_none() || voice.index.is_none()),
             "Use either pinned raw RVC files or one pinned ZIP."
         );
@@ -247,6 +247,14 @@ pub(super) async fn install(
             )
         })?;
     let root = update_data_root(&state).join("rvc/voices");
+    install_catalog_voice(root, &net::download_client(), voice).await
+}
+
+async fn install_catalog_voice(
+    root: PathBuf,
+    client: &reqwest::Client,
+    voice: CatalogVoice,
+) -> Result<(StatusCode, Json<Voice>), ApiFailure> {
     let local_id = voice.local_id().map_err(rvc_voices::internal)?;
     let installed = tokio::task::spawn_blocking({
         let root = root.clone();
@@ -257,14 +265,6 @@ pub(super) async fn install(
     if let Some(installed) = installed {
         return Ok((StatusCode::OK, Json(installed)));
     }
-    install_catalog_voice(root, &net::download_client(), voice).await
-}
-
-async fn install_catalog_voice(
-    root: PathBuf,
-    client: &reqwest::Client,
-    voice: CatalogVoice,
-) -> Result<(StatusCode, Json<Voice>), ApiFailure> {
     let stage = rvc_voices::new_stage(&root).await?;
     let transfer_error =
         |error: anyhow::Error| api_error(StatusCode::BAD_GATEWAY, error.to_string());
@@ -470,6 +470,20 @@ mod tests {
             ("extra.index", &index),
         ]);
         let missing = build_zip(&[("nested/voice.pth", &model)]);
+        let mut duplicate = build_zip(&[
+            ("voice.pth", &model),
+            ("extra.pth", &model),
+            ("retrieval.index", &index),
+        ]);
+        let duplicate_names: Vec<_> = duplicate
+            .windows(9)
+            .enumerate()
+            .filter_map(|(offset, name)| (name == b"extra.pth").then_some(offset))
+            .collect();
+        assert_eq!(duplicate_names.len(), 2);
+        for offset in duplicate_names {
+            duplicate[offset..offset + 9].copy_from_slice(b"voice.pth");
+        }
         let valid = build_zip(&[
             ("nested/voice.pth", &model),
             ("other/retrieval.index", &index),
@@ -480,6 +494,7 @@ mod tests {
         bad_crc[index_payload] ^= 1;
         let variants = [
             (ambiguous, digest(&index), Some("exactly one")),
+            (duplicate, digest(&index), Some("duplicate entries")),
             (missing, digest(&index), Some("exactly one")),
             (b"this is not a ZIP".to_vec(), digest(&index), None),
             (bad_crc, digest(&index), None),
@@ -503,7 +518,7 @@ mod tests {
         let root = tempfile::tempdir().unwrap();
         let client = reqwest::Client::builder().no_proxy().build().unwrap();
         for (position, (payload, index_sha256, expected_error)) in variants.iter().enumerate() {
-            let voice = CatalogVoice {
+            let make_voice = || CatalogVoice {
                 id: "zip-fixture".into(),
                 name: "ZIP fixture".into(),
                 source_repo: "owner/voices".into(),
@@ -523,8 +538,9 @@ mod tests {
                 }),
                 metadata: None,
             };
-            let id = voice.local_id().unwrap();
-            let outcome = install_catalog_voice(root.path().to_path_buf(), &client, voice).await;
+            let id = make_voice().local_id().unwrap();
+            let outcome =
+                install_catalog_voice(root.path().to_path_buf(), &client, make_voice()).await;
             if position + 1 < variants.len() {
                 let (status, Json(error)) = outcome.err().expect("invalid ZIP rejected");
                 assert_eq!(status, StatusCode::BAD_GATEWAY);
@@ -541,6 +557,16 @@ mod tests {
                 assert_eq!(std::fs::read(dir.join("retrieval.index")).unwrap(), index);
                 assert_eq!(std::fs::read_dir(&dir).unwrap().count(), 3);
                 assert!(rvc_voices::read_voice(root.path(), &id).is_some());
+
+                server.abort();
+                let (repeat, Json(previous)) =
+                    install_catalog_voice(root.path().to_path_buf(), &client, make_voice())
+                        .await
+                        .ok()
+                        .expect("repeat without a download source");
+                assert_eq!(repeat, StatusCode::OK);
+                assert_eq!(previous.id, id);
+                assert_eq!(std::fs::read_dir(root.path()).unwrap().count(), 1);
             }
         }
         server.abort();

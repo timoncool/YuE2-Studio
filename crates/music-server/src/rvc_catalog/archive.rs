@@ -1,6 +1,6 @@
 use std::{
     fs::{self, File},
-    io::{self, Read, Write},
+    io::{Read, Seek, SeekFrom, Write},
     path::Path,
 };
 
@@ -21,6 +21,11 @@ pub(super) fn unpack(
         archive.len() <= MAX_ENTRIES,
         "RVC ZIP has too many entries."
     );
+    check_central_entry_count(
+        archive_path,
+        archive.central_directory_start(),
+        archive.len(),
+    )?;
     let mut weights = None;
     let mut index = None;
     let mut size = 0u64;
@@ -94,6 +99,32 @@ pub(super) fn unpack(
     ))
 }
 
+// zip's filename map keeps the last entry under a repeated name. Count the
+// physical central-directory records as well, so those entries cannot hide.
+fn check_central_entry_count(path: &Path, offset: u64, expected: usize) -> anyhow::Result<()> {
+    let mut directory = File::open(path)?;
+    directory.seek(SeekFrom::Start(offset))?;
+    let mut marker = [0u8; 4];
+    for _ in 0..expected {
+        directory.read_exact(&mut marker)?;
+        anyhow::ensure!(&marker == b"PK\x01\x02", "Invalid RVC ZIP directory.");
+        let mut header = [0u8; 42];
+        directory.read_exact(&mut header)?;
+        // ZIP central-directory filename, extra and comment lengths.
+        let trailing = [24, 26, 28]
+            .into_iter()
+            .map(|at| i64::from(u16::from_le_bytes([header[at], header[at + 1]])))
+            .sum();
+        directory.seek(SeekFrom::Current(trailing))?;
+    }
+    directory.read_exact(&mut marker)?;
+    anyhow::ensure!(
+        &marker != b"PK\x01\x02",
+        "RVC ZIP contains duplicate entries."
+    );
+    Ok(())
+}
+
 fn write_verified(
     mut input: zip::read::ZipFile<'_, File>,
     path: &Path,
@@ -111,13 +142,7 @@ fn write_verified(
             break;
         }
         copied += count as u64;
-        if copied > size {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                "RVC ZIP entry exceeds its declared size.",
-            )
-            .into());
-        }
+        anyhow::ensure!(copied <= size, "RVC ZIP entry exceeds its declared size.");
         hash.update(&chunk[..count]);
         output.write_all(&chunk[..count])?;
     }
