@@ -106,14 +106,19 @@ pub fn cuda_unavailable_reason(hardware: &Hardware) -> String {
     }
 }
 
-/// The NVIDIA card a CUDA failure happened on, in the words a report needs to
-/// tell a missing architecture from an old driver:
-/// `NVIDIA GeForce GTX 1050, compute 6.1, driver 581, cuda12 build`.
+/// The card, in the words a report needs: on NVIDIA, the card a CUDA failure
+/// happened on with its architecture and driver (`NVIDIA GeForce GTX 1050,
+/// compute 6.1, driver 581, cuda12 build`); on a Vulkan card, the card the
+/// engine computes on and the memory it was found to have (`Intel Arc B580,
+/// Vulkan, 12.0 GB`).
 pub fn describe_card(hardware: &Hardware) -> Option<String> {
-    if !hardware.nvidia {
-        return None;
-    }
     let name = hardware.gpu_name.as_deref()?;
+    if !hardware.nvidia {
+        return Some(match hardware.total_vram_gb {
+            gib if gib > 0.0 => format!("{name}, Vulkan, {gib:.1} GB"),
+            _ => format!("{name}, Vulkan, memory size not published by its driver"),
+        });
+    }
     let compute = hardware.compute_capability.map_or("unknown".to_string(), |(major, minor)| format!("{major}.{minor}"));
     let driver = hardware.driver_major.map_or("unknown".to_string(), |major| major.to_string());
     let build = hardware.cuda.map_or("no CUDA", CudaBuild::folder);
@@ -444,8 +449,11 @@ struct LinuxCard {
 
 /// The first DRM card that is a PCI device, with the dedicated memory it
 /// reports. Only the proprietary AMD driver publishes `mem_info_vram_total`;
-/// where it is absent the size stays 0.0, which recommends the lightest set
-/// rather than guessing at one that may not fit.
+/// where it is absent the size is asked of Vulkan, which is where the engine
+/// reads it too - Intel's `xe` driver publishes nothing at all, and without this
+/// a working Intel card looked like a machine with no card. A card whose size
+/// neither tells keeps 0.0, which recommends the lightest set rather than
+/// guessing at one that may not fit.
 #[cfg(not(any(windows, target_os = "macos")))]
 fn linux_card() -> Option<LinuxCard> {
     let mut cards: Vec<PathBuf> = std::fs::read_dir("/sys/class/drm")
@@ -468,7 +476,9 @@ fn linux_card() -> Option<LinuxCard> {
         let device_id = read("device").unwrap_or_default();
         let vram_gb = read("mem_info_vram_total")
             .and_then(|bytes| bytes.parse::<f64>().ok())
-            .map_or(0.0, |bytes| bytes / 1024.0 / 1024.0 / 1024.0);
+            .map(|bytes| bytes / 1024.0 / 1024.0 / 1024.0)
+            .or_else(|| crate::vulkan_mem::device_memory_gb(&vendor_id, &device_id))
+            .unwrap_or(0.0);
         Some(LinuxCard { vendor_id, device_id, vram_gb })
     })
 }
@@ -729,6 +739,37 @@ mod tests {
         assert_eq!(asked.get(), 1, "a failed answer is kept too");
         remembered(&slot, std::time::Duration::ZERO, ask);
         assert_eq!(asked.get(), 2, "an answer past its life is asked again");
+    }
+
+    #[cfg(not(windows))]
+    #[test]
+    fn a_vulkan_card_is_described_with_the_memory_its_driver_publishes() {
+        // A card the engine computes on is named from its PCI identity, and on
+        // Linux sized by Vulkan when the kernel publishes nothing (Intel's xe
+        // driver): that size is what recommends a set and keeps a working card
+        // from reading as a processor-only machine.
+        let card = Hardware {
+            gpu_name: Some("Intel Arc B580".into()),
+            total_vram_gb: 11.93,
+            total_ram_gb: 32.0,
+            nvidia: false,
+            cuda: None,
+            runs_cuda: false,
+            card_cuda: None,
+            compute_capability: None,
+            driver_major: None,
+            recommended: Some("quality-q8"),
+            vulkan: true,
+            on_processor: false,
+            short_of_smallest_set: None,
+        };
+        assert_eq!(describe_card(&card).as_deref(), Some("Intel Arc B580, Vulkan, 11.9 GB"));
+        // A card nothing sizes still appears in a report, saying so, instead of
+        // reading as no card at all.
+        let unsized_card = Hardware { total_vram_gb: 0.0, ..card.clone() };
+        assert_eq!(describe_card(&unsized_card).as_deref(), Some("Intel Arc B580, Vulkan, memory size not published by its driver"));
+        let no_card = Hardware { gpu_name: None, ..card };
+        assert_eq!(describe_card(&no_card), None);
     }
 
     #[cfg(not(windows))]

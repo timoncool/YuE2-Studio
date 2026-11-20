@@ -51,6 +51,9 @@ mod request_log;
 mod resources;
 #[cfg(windows)]
 mod gpu_memory;
+// The video memory of an Intel card on Linux, whose driver publishes none.
+#[cfg(not(any(windows, target_os = "macos")))]
+mod vulkan_mem;
 mod chunked;
 mod separation;
 mod restore;
