@@ -1865,7 +1865,7 @@ mod tests {
         let output = run.join("output");
         let partial = output.join(".checkpoint-step20.tmp");
         std::fs::create_dir_all(&partial).unwrap();
-        std::fs::write(partial.join("optimizer.resume"), b"state").unwrap();
+        std::fs::write(partial.join("optimizer.resume"), include_bytes!("../../music-engine/tests/fixtures/optimizer-v1.resume")).unwrap();
         assert!(yue_train::resume_point(&run).is_none(), "an unpublished checkpoint cannot be resumed");
         std::fs::rename(partial, output.join("checkpoint-step20")).unwrap();
         let (step, resume) = yue_train::resume_point(&run).unwrap();

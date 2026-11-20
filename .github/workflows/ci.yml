@@ -20,6 +20,8 @@ jobs:
     steps:
       - uses: actions/checkout@v7.0.1
       - uses: Swatinem/rust-cache@v2
+      - name: YuE2 training and checkpoints
+        run: cargo test --locked -p music-engine --lib yue_train::tests
       - name: Service tests
         run: cargo test -p music-server --locked
 
@@ -34,6 +36,8 @@ jobs:
       - name: System libraries (the file dialog's Wayland, FLAC's CMake)
         run: sudo apt-get update -q && sudo apt-get install -y -q --no-install-recommends libwayland-dev cmake
       - uses: Swatinem/rust-cache@v2
+      - name: YuE2 training and checkpoints
+        run: cargo test --locked -p music-engine --lib yue_train::tests
       - name: Service tests
         run: cargo test -p music-server --locked
 

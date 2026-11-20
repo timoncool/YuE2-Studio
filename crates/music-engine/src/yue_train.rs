@@ -442,13 +442,30 @@ pub fn continuation_stage(models: &Path, companion: &Path, run: &Path, recipe: &
 /// The checkpoint a run can be continued from: the latest one that kept its
 /// optimizer state, with that state's file.
 pub fn resume_point(run: &Path) -> Option<(u32, PathBuf)> {
-    checkpoint_dirs(run)
-        .into_iter()
-        .filter_map(|(step, dir)| {
-            let state = dir.join("optimizer.resume");
-            state.is_file().then_some((step, state))
-        })
-        .max_by_key(|(step, _)| *step)
+    let mut checkpoints = checkpoint_dirs(run);
+    checkpoints.sort_by(|(step_a, dir_a), (step_b, dir_b)| step_b.cmp(step_a)
+        .then_with(|| newest(&dir_b.join("optimizer.resume")).cmp(&newest(&dir_a.join("optimizer.resume")))));
+    checkpoints.into_iter().find_map(|(step, dir)| {
+        let state = dir.join("optimizer.resume");
+        complete_resume_file(&state).then_some((step, state))
+    })
+}
+
+/// HOT-Step's v1–v3 resume records share a 44-byte header. Catch incomplete
+/// writes here without reading gigabytes of moments; the trainer checks the checksum.
+fn complete_resume_file(path: &Path) -> bool {
+    use std::io::Read;
+    let Ok(mut file) = std::fs::File::open(path) else { return false };
+    let mut header = [0u8; 44];
+    if file.read_exact(&mut header).is_err() || &header[..8] != b"Y2RSUME1" {
+        return false;
+    }
+    let version = u32::from_le_bytes(header[8..12].try_into().unwrap());
+    let payload = u64::from_le_bytes(header[12..20].try_into().unwrap());
+    let metadata = u64::from_le_bytes(header[20..28].try_into().unwrap());
+    (1..=3).contains(&version) && (1..=(16u64 << 30)).contains(&payload) && metadata <= (16 << 20)
+        && header[20..28] == header[36..44]
+        && file.metadata().is_ok_and(|info| info.len() == 44 + metadata + payload)
 }
 
 /// Every `checkpoint-step<N>` folder of a run: the first training writes into
@@ -730,12 +747,16 @@ mod tests {
             let dir = run.join(output).join(format!("checkpoint-step{step}"));
             std::fs::create_dir_all(&dir).unwrap();
             if state {
-                std::fs::write(dir.join("optimizer.resume"), b"state").unwrap();
+                std::fs::write(dir.join("optimizer.resume"), include_bytes!("../tests/fixtures/optimizer-v1.resume")).unwrap();
             }
             for file in ["native-ar.safetensors", "native-nar.safetensors"] {
                 std::fs::write(dir.join(file), b"w").unwrap();
             }
         }
+        let broken = run.join("output-2/checkpoint-step950");
+        std::fs::create_dir_all(&broken).unwrap();
+        let state = include_bytes!("../tests/fixtures/optimizer-v1.resume");
+        std::fs::write(broken.join("optimizer.resume"), &state[..state.len() - 1]).unwrap();
         let (step, state) = resume_point(&run).unwrap();
         assert_eq!(step, 900);
         assert!(state.ends_with("output-2/checkpoint-step900/optimizer.resume"));
@@ -749,7 +770,8 @@ mod tests {
         let run = scratch("joint-names");
         let dir = run.join("output").join("checkpoint-step200");
         std::fs::create_dir_all(&dir).unwrap();
-        for name in ["adapter.safetensors", "anm_yue2_joint_ar_step200.safetensors", "anm_yue2_joint_nar_step200.safetensors", "optimizer.resume"] {
+        std::fs::write(dir.join("optimizer.resume"), include_bytes!("../tests/fixtures/optimizer-v1.resume")).unwrap();
+        for name in ["adapter.safetensors", "anm_yue2_joint_ar_step200.safetensors", "anm_yue2_joint_nar_step200.safetensors"] {
             std::fs::write(dir.join(name), name.as_bytes()).unwrap();
         }
         let found = checkpoints(&run);
