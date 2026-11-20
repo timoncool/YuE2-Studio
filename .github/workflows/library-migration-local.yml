@@ -15,3 +15,30 @@ jobs:
           path: target/debug/music-server.exe
           if-no-files-found: error
           retention-days: 1
+  desktop:
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: desktop/src-tauri -> target
+      - run: npm --prefix app ci --no-audit --no-fund
+      - run: npm --prefix desktop ci --no-audit --no-fund
+      - name: Build the desktop binary with its embedded production interface
+        working-directory: desktop
+        run: npm run build
+      - name: Stage the portable shell
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path migration-portable
+          Copy-Item -LiteralPath desktop/src-tauri/target/release/YuE2-Studio.exe -Destination migration-portable
+          New-Item -ItemType File -Path migration-portable/portable.flag
+      - uses: actions/upload-artifact@v4
+        with:
+          name: migration-portable-shell
+          path: migration-portable/
+          if-no-files-found: error
+          retention-days: 1
