@@ -126,7 +126,14 @@ impl Library {
              AND json_extract(metadata_json,'$.deleted_with')=json_extract(metadata_json,'$.derived.from')
              AND json_type(metadata_json,'$.derived.tool')='text'
              AND json_extract(metadata_json,'$.derived.tool') NOT IN ('','stems')", [])?;
+  c.execute_batch("CREATE TABLE IF NOT EXISTS legacy_ids(source TEXT NOT NULL,kind TEXT NOT NULL,old_id TEXT NOT NULL,new_id TEXT NOT NULL UNIQUE,imported INTEGER NOT NULL DEFAULT 0,PRIMARY KEY(source,kind,old_id))")?;
   Ok(Self{connection:Arc::new(Mutex::new(c)),media_dir})}
+ pub(super) fn legacy_song_mappings(&self, source: &str) -> Result<std::collections::HashMap<String,(String,bool)>> {
+    let connection = self.connection.lock().unwrap();
+    let mut stmt = connection.prepare("SELECT old_id,new_id,imported FROM legacy_ids WHERE source=? AND kind='song'")?;
+    let rows = stmt.query_map([source], |row| Ok((row.get(0)?, (row.get(1)?,row.get(2)?))))?;
+    Ok(rows.collect::<rusqlite::Result<_>>()?)
+ }
  /// Every song but those in the bin.
  pub fn list_songs(&self)->Result<Vec<Song>>{Ok(self.all_songs()?.into_iter().filter(|song|!is_trashed(song)).collect())}
  /// The songs in the bin, the latest deleted first.

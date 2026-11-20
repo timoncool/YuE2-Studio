@@ -12,12 +12,18 @@ interface LegacySong {
 
 interface Preview {
   path: string;
+  space: { total_bytes: number; required_bytes: number; available_bytes: number | null };
   songs: LegacySong[];
   playlists: { id: string; name: string; song_ids: string[] }[];
 }
 
 export function LegacyLibraryPreview() {
-  const { t, songCount } = useI18n();
+  const { t, songCount, language } = useI18n();
+  function formatSize(bytes: number) {
+    const units = ['byte', 'kilobyte', 'megabyte', 'gigabyte', 'terabyte'] as const;
+    const i = Math.min(units.length - 1, Math.floor(Math.log10(Math.max(1, bytes)) / 3));
+    return new Intl.NumberFormat(language, { style: 'unit', unit: units[i], maximumFractionDigits: 2 }).format(bytes / 1000 ** i);
+  }
   const [preview, setPreview] = useState<Preview | null>(null);
   const [busy, setBusy] = useState(false);
   const [copying, setCopying] = useState(false);
@@ -58,6 +64,15 @@ export function LegacyLibraryPreview() {
         .replace('{lists}', String(result.playlists_added)).replace('{knownLists}', String(result.playlists_already_imported)));
       libraryChanged();
       playlistsChanged();
+      // Refresh the free-space figure after the actual copy. The result of the copy
+      // stays visible even if the source folder is disconnected immediately after.
+      setPreview({ ...preview, space: { ...preview.space, required_bytes: 0, available_bytes: null } });
+      try {
+        const refreshed = await fetch('/v1/library/migration/preview', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path: preview.path }),
+        });
+        if (refreshed.ok) setPreview(await refreshed.json());
+      } catch { /* The import already completed. */ }
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : String(reason));
     } finally {
@@ -75,7 +90,12 @@ export function LegacyLibraryPreview() {
     {error && <p role="alert" className="mt-2 text-sm text-rose-600 dark:text-rose-300">{error}</p>}
     {preview && <div className="mt-3 space-y-2 text-sm">
       <p role="status" className="break-all">{preview.path} · {songCount(preview.songs.length)} · {t('playlists')} ({preview.playlists.length})</p>
-      <button type="button" disabled={busy || copying || (!preview.songs.length && !preview.playlists.length)} onClick={() => void importLibrary()}
+      <p className="text-xs">{t('legacyLibrarySize').replace('{size}', formatSize(preview.space.total_bytes)).replace('{required}', formatSize(preview.space.required_bytes))}
+        {preview.space.available_bytes !== null && <> · {t('legacyLibraryFree').replace('{size}', formatSize(preview.space.available_bytes))}</>}
+      </p>
+      {preview.space.available_bytes !== null && preview.space.required_bytes > preview.space.available_bytes &&
+        <p role="alert" className="text-amber-700 dark:text-amber-300">{t('legacyLibraryNoSpace')}</p>}
+      <button type="button" disabled={busy || copying || (preview.space.available_bytes !== null && preview.space.required_bytes > preview.space.available_bytes) || (!preview.songs.length && !preview.playlists.length)} onClick={() => void importLibrary()}
         className="inline-flex items-center gap-2 rounded-lg bg-orange-600 px-3 py-2 font-semibold text-white disabled:opacity-50">
         {copying && <Loader2 size={15} className="animate-spin" />}
         {t(copying ? 'legacyLibraryCopying' : 'legacyLibraryCopy')}

@@ -22,7 +22,7 @@ it('keeps the current preview when a second folder selection is cancelled', asyn
     expect(button.disabled).toBe(true);
     expect(request.mock.calls[0][1].body).toBe('{"pick":true}');
     await act(async () => finish(Response.json({
-      path: 'X:/old', songs: [{ id: '1', title: 'Bass', files: [], missing: [{ kind: 'audio', name: 'bass.wav' }] }],
+      path: 'X:/old', space: { total_bytes: 10, required_bytes: 10, available_bytes: 100 }, songs: [{ id: '1', title: 'Bass', files: [], missing: [{ kind: 'audio', name: 'bass.wav' }] }],
       playlists: [{ id: 'one', name: 'Set list', song_ids: ['1'] }],
     })));
     expect(host.textContent).toContain('bass.wav');
@@ -35,7 +35,7 @@ it('keeps the current preview when a second folder selection is cancelled', asyn
     request.mockResolvedValueOnce(Response.json({ added: 1, already_imported: 0, playlists_added: 1, playlists_already_imported: 0 }));
     const copy = host.querySelectorAll('button')[1];
     await act(async () => copy.click());
-    expect(request.mock.lastCall).toEqual(['/v1/library/migration/import', expect.objectContaining({
+    expect(request.mock.calls).toContainEqual(['/v1/library/migration/import', expect.objectContaining({
       method: 'POST', body: JSON.stringify({ path: 'X:/old' }),
     })]);
     expect(host.textContent).toContain('legacyLibraryResult');

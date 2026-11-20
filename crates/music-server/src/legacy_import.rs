@@ -114,6 +114,76 @@ fn remap_reference(value: &mut Value, pointer: &str, ids: &Ids) -> Result<()> {
     Ok(())
 }
 
+fn destination_name(old_id: &str, id: &str, name: &str, kind: Option<&str>) -> Result<String> {
+    let extension = Path::new(name)
+        .extension()
+        .and_then(|s| s.to_str())
+        .unwrap_or("");
+    anyhow::ensure!(
+        extension.chars().all(|c| c.is_ascii_alphanumeric()),
+        "Unsupported extension: {name}"
+    );
+    let new_name = match kind {
+        Some("stem" | "midi" | "midi_metadata" | "latent") => format!(
+            "{}{}",
+            id,
+            name.strip_prefix(old_id).context("Invalid sidecar name")?
+        ),
+        _ => {
+            let hash: String = Sha256::digest(name.as_bytes())
+                .iter()
+                .map(|byte| format!("{byte:02x}"))
+                .collect();
+            format!("{id}-{hash}.{extension}")
+        }
+    };
+    Ok(new_name)
+}
+
+#[derive(serde::Serialize)]
+pub(super) struct MediaSpace {
+    total_bytes: u64,
+    required_bytes: u64,
+    available_bytes: Option<u64>,
+}
+
+pub(super) fn media_space(
+    view: &Value,
+    mappings: &HashMap<String, (String, bool)>,
+    destination: &Path,
+) -> Result<MediaSpace> {
+    let volume = destination.ancestors().find(|path| path.exists());
+    let mut space = MediaSpace {
+        total_bytes: 0,
+        required_bytes: 0,
+        available_bytes: volume.and_then(|path| fs2::available_space(path).ok()),
+    };
+    for song in view["songs"].as_array().context("Missing songs")? {
+        let old = song["id"].as_str().context("Missing song ID")?;
+        let mapping = mappings.get(old);
+        let mut counted = std::collections::HashSet::new();
+        for file in song["files"].as_array().context("Missing files")? {
+            let name = file["name"].as_str().context("Missing filename")?;
+            // The active take and the original may point to the same file.
+            let key = destination_name(
+                old,
+                mapping.map_or("new", |(id, _)| id.as_str()),
+                name,
+                file["kind"].as_str(),
+            )?;
+            if !counted.insert(key.clone()) {
+                continue;
+            }
+            let bytes = file["bytes"].as_u64().context("Missing file size")?;
+            space.total_bytes += bytes;
+            if !mapping.is_some_and(|(_, done)| *done || destination.join(&key).is_file()) {
+                space.required_bytes += bytes;
+            }
+        }
+    }
+    Ok(space)
+}
+
 fn prepare_song(
     song: &mut Song,
     item: &Value,
@@ -134,29 +204,7 @@ fn prepare_song(
     let mut names = HashMap::new();
     for file in item["files"].as_array().context("Missing file inventory")? {
         let name = file["name"].as_str().context("Missing filename")?;
-        let extension = Path::new(name)
-            .extension()
-            .and_then(|s| s.to_str())
-            .unwrap_or("");
-        anyhow::ensure!(
-            extension.chars().all(|c| c.is_ascii_alphanumeric()),
-            "Unsupported extension: {name}"
-        );
-        let new_name = match file["kind"].as_str() {
-            Some("stem" | "midi" | "midi_metadata" | "latent") => format!(
-                "{}{}",
-                id,
-                name.strip_prefix(&song.id)
-                    .context("Invalid sidecar name")?
-            ),
-            _ => {
-                let hash: String = Sha256::digest(name.as_bytes())
-                    .iter()
-                    .map(|byte| format!("{byte:02x}"))
-                    .collect();
-                format!("{id}-{hash}.{extension}")
-            }
-        };
+        let new_name = destination_name(&song.id, id, name, file["kind"].as_str())?;
         install(&source_media.join(name), &destination.join(&new_name))
             .with_context(|| format!("{}: {name}", song.title))?;
         names.insert(name.to_owned(), new_name);
@@ -224,10 +272,25 @@ fn transfer(to: &Library, folder: &Path) -> Result<Value> {
         .query_map([], |row| library::playlist(&db, row))?
         .collect::<rusqlite::Result<Vec<_>>>()?;
     let source = root.to_str().context("Unsupported library path")?;
-    let (song_ids,list_ids)=to.legacy_transaction(|tx|{
-        tx.execute_batch("CREATE TABLE IF NOT EXISTS legacy_ids(source TEXT NOT NULL,kind TEXT NOT NULL,old_id TEXT NOT NULL,new_id TEXT NOT NULL UNIQUE,imported INTEGER NOT NULL DEFAULT 0,PRIMARY KEY(source,kind,old_id))")?;
-        Ok((reserve(tx,source,"song",songs.iter().map(|s|s.id.clone()))?,
-            reserve(tx,source,"playlist",playlists.iter().map(|p|p.id.clone()))?))
+    let space = media_space(&view, &to.legacy_song_mappings(source)?, to.media_dir())?;
+    if let Some(free) = space.available_bytes {
+        anyhow::ensure!(
+            space.required_bytes <= free,
+            "Not enough disk space: {} bytes required, {} available",
+            space.required_bytes,
+            free
+        );
+    }
+    let (song_ids, list_ids) = to.legacy_transaction(|tx| {
+        Ok((
+            reserve(tx, source, "song", songs.iter().map(|s| s.id.clone()))?,
+            reserve(
+                tx,
+                source,
+                "playlist",
+                playlists.iter().map(|p| p.id.clone()),
+            )?,
+        ))
     })?;
     fs::create_dir_all(to.media_dir())?;
     let source_media = root.join("media");
@@ -297,6 +360,9 @@ mod tests {
         assert_eq!(transfer(&new, &source)?["added"], 2);
         let song = new.list_songs()?.remove(0);
         new.rename_song(&song.id, "Edited in YuE2")?;
+        let preview = super::super::inspect(&source, &new)?;
+        assert_eq!(preview["space"]["required_bytes"], 0);
+        assert_eq!(preview["space"]["total_bytes"], 11);
         let repeat = transfer(&new, &source)?;
         assert_eq!(repeat["already_imported"], 2);
         assert_eq!(new.get_song(&song.id)?.unwrap().title, "Edited in YuE2");
