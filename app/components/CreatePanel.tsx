@@ -607,8 +607,27 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
   }, [ready, selectionKey]);
 
 
+  const coverRead = useRef<AbortController | null>(null);
+  const cancelCoverRead = useCallback(() => {
+    coverRead.current?.abort();
+    coverRead.current = null;
+    setTranscribing(null);
+    setMidiCover(null);
+  }, []);
+  const beginCoverRead = () => {
+    cancelCoverRead();
+    const read = new AbortController();
+    coverRead.current = read;
+    return read.signal;
+  };
+  const selectMode = (next: typeof mode) => {
+    if (next !== 'cover') cancelCoverRead();
+    setMode(next);
+  };
+
   /** Fills the form from a stored request: a reused track, a file, an example. */
   const applyRequest = useCallback((request: Record<string, unknown>, title?: string) => {
+    cancelCoverRead();
     setResingFrom(null);
     instrumentalChange.current = null;
     if (title !== undefined) { setName(title); setNameFilled(title.trim() !== ''); }
@@ -644,7 +663,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
     if (request.output_format === 'mp3' || request.output_format === 'flac' || request.output_format === 'wav32') setFormat(request.output_format);
     if (Array.isArray(request.adapters)) setAdapters(usesFromSettings(request));
     setError(null);
-  }, []);
+  }, [cancelCoverRead]);
 
   // Create is kept in a React Activity: showing it again reruns this effect with the same Reuse, which would put the
   // song's request back over what was edited since; each Reuse is applied once, by its timestamp
@@ -705,10 +724,12 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
       if (song.lyrics?.trim()) setLyrics(current => (current.trim() ? current : song.lyrics));
       setMode('cover');
       setError(null);
+      const signal = beginCoverRead();
       trackMidiBase64(song.id)
-        .then(data => setMidiCover({ name: `${song.title}.mid`, data }))
-        .catch(reason => setError(reason instanceof Error ? reason.message : String(reason)));
+        .then(data => { if (!signal.aborted) setMidiCover({ name: `${song.title}.mid`, data }); })
+        .catch(reason => { if (!signal.aborted) setError(reason instanceof Error ? reason.message : String(reason)); });
     } else {
+      cancelCoverRead();
       // a score from elsewhere: a transcribed library track, an edited plan
       setAbc(request.abc.trimEnd());
       if (request.cot) setCot(request.cot);
@@ -726,6 +747,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
   }, [request]);
 
   const reset = () => {
+    cancelCoverRead();
     setResingFrom(null);
     instrumentalChange.current = null;
     setName(''); setStyle(''); setLyrics(''); setAbc(''); setCot(''); setContinueScore(false);
@@ -830,7 +852,9 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
   };
 
   const openScore = async (file: File) => {
+    const signal = beginCoverRead();
     const text = await file.text();
+    if (signal.aborted) return;
     if (!/K:/.test(text)) { setError(tt('scoreFileInvalid')); return; }
     setAbc(text.trimEnd());
     setError(null);
@@ -854,18 +878,20 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
   /** Reads a recording into a score with SheetSage2, for a cover. */
   const runTranscription = async (source: { file?: File; songId?: string }, melodyOnly: boolean) => {
     setError(null);
+    const signal = beginCoverRead();
     setTranscribing(source.file?.name ?? source.songId ?? '');
     try {
-      const score = await transcribe(source, melodyOnly);
+      const score = await transcribe(source, melodyOnly, signal);
+      if (signal.aborted) return;
       setAbc(score.trimEnd());
       // The model card: covers take a melody-only score in melody mode.
       setCot(melodyOnly ? 'melody' : 'full');
       setSemanticTokens('');
       setShowNotation(true);
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : String(reason));
+      if (!signal.aborted) setError(reason instanceof Error ? reason.message : String(reason));
     } finally {
-      setTranscribing(null);
+      if (!signal.aborted) setTranscribing(null);
     }
   };
 
@@ -1315,7 +1341,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
     }
     if ('adapters' in fields && !Array.isArray(fields.adapters)) throw new Error('adapters is a list of {id, scales}.');
     for (const [key, value] of Object.entries(fields)) {
-      if (key === 'mode') setMode(value as 'studio' | 'simple' | 'cover');
+      if (key === 'mode') selectMode(value as 'studio' | 'simple' | 'cover');
       else if (key === 'randomize_seed') setRandomizeSeed(Boolean(value));
       else if (key === 'adapters') setAdapters(value as AdapterUse[]);
       else formFields[key][1](value == null ? '' : String(value));
@@ -1376,7 +1402,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
                 type="button"
                 role="tab"
                 aria-selected={mode === value}
-                onClick={() => setMode(value)}
+                onClick={() => selectMode(value)}
                 className={`flex-1 rounded-md py-1.5 text-xs font-semibold transition-all ${mode === value ? 'bg-white text-black shadow-xs dark:bg-zinc-800 dark:text-white' : 'text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-300'}`}
               >
                 {value === 'studio' ? t('studioMode') : value === 'cover' ? tt('coverMode') : t('simpleMode')}
@@ -1461,14 +1487,17 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
                 onChange={event => {
                   const file = event.target.files?.[0];
                   event.target.value = '';
-                  if (file && isMidiFile(file.name)) {
+                  if (!file) return;
+                  if (isMidiFile(file.name)) {
+                    const signal = beginCoverRead();
                     void file.arrayBuffer().then(buffer => {
+                      if (signal.aborted) return;
                       const bytes = new Uint8Array(buffer);
                       let raw = '';
                       for (let index = 0; index < bytes.length; index += 0x8000) raw += String.fromCharCode(...bytes.subarray(index, index + 0x8000));
                       setMidiCover({ name: file.name, data: btoa(raw) });
-                    });
-                  } else if (file) {
+                    }).catch(reason => { if (!signal.aborted) setError(reason instanceof Error ? reason.message : String(reason)); });
+                  } else {
                     setCoverSource(file.name);
                     setCoverSongId(null);
                     setCoverFile(file);
@@ -1788,7 +1817,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
                 </button>
                 <button type="button" onClick={() => scoreFile.current?.click()} className={ICON} title={tt('openScore')}><FolderOpen size={14} /></button>
                 <button type="button" onClick={() => abc.trim() && download(`${safeName()}.abc`, `${abc.trim()}\n`, 'text/vnd.abc')} disabled={!abc.trim()} className={ICON} title={tt('saveScore')}><Save size={14} /></button>
-                <button type="button" onClick={() => { setAbc(''); setContinueScore(false); }} disabled={!abc} className={ICON} title={tt('clearScore')}><X size={14} /></button>
+                <button type="button" onClick={() => { cancelCoverRead(); setAbc(''); setContinueScore(false); }} disabled={!abc} className={ICON} title={tt('clearScore')}><X size={14} /></button>
                 <input
                   ref={scoreFile}
                   type="file"
@@ -1827,7 +1856,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
                   value={abc}
                   minRows={5}
                   maxRows={14}
-                  onChange={event => setAbc(event.target.value)}
+                  onChange={event => { cancelCoverRead(); setAbc(event.target.value); }}
                   placeholder={tt('scorePlaceholder')}
                   aria-label={tt('scoreCardTitle')}
                   spellCheck={false}
@@ -2251,6 +2280,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
             lyrics: lyrics.trim(),
             cot: effectiveCot,
             onApply: (value, words) => {
+              cancelCoverRead();
               setAbc(value);
               if (words !== null) setLyrics(current => (current.trim() ? current : words));
               setSemanticTokens('');

@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Song, YueRequest } from '../types';
 
 const composeScore = vi.fn();
+const transcribe = vi.fn();
 const instrumentalScore = vi.fn();
 const recogniseLyrics = vi.fn();
 vi.mock('../services/karaoke', async original => ({
@@ -20,7 +21,7 @@ vi.mock('../services/studioQueries', () => ({
   useSetupStatus: () => ({ isError: false, data: { ready: true, engine_ready: true } }),
 }));
 vi.mock('../services/mcpBridge', () => ({ useBridgeCommand: () => undefined }));
-vi.mock('../services/transcription', () => ({ composeScore: (...args: unknown[]) => composeScore(...args), composePlans: vi.fn(), transcribe: vi.fn(async () => 'X:1\nK:C\nC') }));
+vi.mock('../services/transcription', () => ({ composeScore: (...args: unknown[]) => composeScore(...args), composePlans: vi.fn(), transcribe: (...args: unknown[]) => transcribe(...args) }));
 vi.mock('../services/scoreApi', () => ({
   instrumentalScore: (abc: string) => instrumentalScore(abc),
   failed: (answer: { error?: string }) => typeof answer?.error === 'string',
@@ -52,6 +53,7 @@ beforeEach(() => {
   sent.length = 0;
   localStorage.clear();
   composeScore.mockReset();
+  transcribe.mockReset().mockResolvedValue('X:1\nK:C\nC');
   instrumentalScore.mockReset();
   vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({}), { status: 200 })));
   host = document.createElement('div');
@@ -117,6 +119,24 @@ describe('an instrumental (#217)', () => {
     expect(sent[0].cot).toBe('off');
     expect(sent[0].abc).toBeUndefined();
     expect(sent[0].semantic_tokens).toBeUndefined();
+  });
+});
+
+describe('selecting a second cover source', () => {
+  it('keeps the second score when the first recording finishes last', async () => {
+    const first = { id: 'a', title: 'A', lyrics: '' } as Song;
+    const second = { id: 'b', title: 'B', lyrics: '' } as Song;
+    let finishFirst!: (score: string) => void;
+    transcribe.mockImplementationOnce(() => new Promise<string>(resolve => { finishFirst = resolve; }));
+    act(() => root.render(panel({ request: { id: 1, kind: 'transcribe', song: first, melodyOnly: true } })));
+    await flush();
+    const firstSignal = transcribe.mock.calls[0][2] as AbortSignal;
+    transcribe.mockResolvedValueOnce('X:2\nK:D\nD');
+    act(() => root.render(panel({ request: { id: 2, kind: 'transcribe', song: second, melodyOnly: true } })));
+    await flush();
+    expect(firstSignal.aborted).toBe(true);
+    await act(async () => finishFirst('X:1\nK:C\nC'));
+    expect([...host.querySelectorAll('textarea')].map(area => area.value)).toContain('X:2\nK:D\nD');
   });
 });
 

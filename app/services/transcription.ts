@@ -23,18 +23,20 @@ async function awaitScore(route: string, submitted: Response, signal?: AbortSign
   const job = (await submitted.json().catch(() => ({}))) as Partial<ScoreJob>;
   if (!submitted.ok || !job.id) throw new Error(job.error || `the engine refused the job (${submitted.status})`);
   const url = `${route}/${encodeURIComponent(job.id)}`;
-  for (;;) {
-    await new Promise(resolve => window.setTimeout(resolve, POLL_MS));
-    if (signal?.aborted) {
-      await fetch(url, { method: 'POST' }).catch(() => undefined);
-      throw new DOMException('cancelled', 'AbortError');
+  try {
+    for (;;) {
+      await new Promise(resolve => window.setTimeout(resolve, POLL_MS));
+      signal?.throwIfAborted();
+      const response = await fetch(url, { signal });
+      const state = (await response.json().catch(() => ({}))) as Partial<ScoreJob>;
+      signal?.throwIfAborted();
+      if (!response.ok) throw new Error(state.error || `job status failed (${response.status})`);
+      if (state.status === 'done' && state.abc) return state as ScoreJob;
+      if (state.status === 'failed') throw new Error(state.error || 'the engine could not write this score');
+      if (state.status === 'cancelled') throw new DOMException('cancelled', 'AbortError');
     }
-    const response = await fetch(url, { signal });
-    const state = (await response.json().catch(() => ({}))) as Partial<ScoreJob>;
-    if (!response.ok) throw new Error(state.error || `job status failed (${response.status})`);
-    if (state.status === 'done' && state.abc) return state as ScoreJob;
-    if (state.status === 'failed') throw new Error(state.error || 'the engine could not write this score');
-    if (state.status === 'cancelled') throw new DOMException('cancelled', 'AbortError');
+  } finally {
+    if (signal?.aborted) await fetch(url, { method: 'POST' }).catch(() => undefined);
   }
 }
 

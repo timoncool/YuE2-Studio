@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { afterEach, expect, it, vi } from 'vitest';
-import { composePlans } from './transcription';
+import { composePlans, transcribe } from './transcription';
 
 afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); });
 
@@ -21,6 +21,23 @@ it('marks every plan against the submitted words despite edits while planning', 
   const plans = await pending;
   expect(bodies).toEqual(['first', 'second'].map(abc => ({ abc, style: 'Russian vocals', lyrics: '[Verse]\nOld words', cot: 'full', keep: false })));
   expect(plans).toEqual([{ abc: 'first\n%yue2-words 0123456789abcdef', lm_seed: 7 }, { abc: 'second\n%yue2-words 0123456789abcdef', lm_seed: 8 }]);
+});
+
+it('stops the submitted job when cancellation interrupts its status request', async () => {
+  vi.useFakeTimers();
+  const controller = new AbortController();
+  const calls: string[] = [];
+  vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+    calls.push(`${init?.method ?? 'GET'} ${url}`);
+    if (url === '/v1/transcriptions') return new Response(JSON.stringify({ id: 'old-source' }));
+    if (init?.method === 'POST') return new Response('{}');
+    controller.abort();
+    throw new DOMException('aborted', 'AbortError');
+  }));
+  const stopped = expect(transcribe({ songId: 'first' }, true, controller.signal)).rejects.toMatchObject({ name: 'AbortError' });
+  await vi.advanceTimersByTimeAsync(1000);
+  await stopped;
+  expect(calls).toEqual(['POST /v1/transcriptions', 'GET /v1/transcriptions/old-source', 'POST /v1/transcriptions/old-source']);
 });
 
 it('never offers an unmarked plan when provenance marking fails', async () => {
