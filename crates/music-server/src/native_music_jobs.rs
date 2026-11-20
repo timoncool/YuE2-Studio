@@ -10,6 +10,153 @@ pub(super) async fn submit_minimax(
     profile: String,
     attempt: u32,
 ) -> (StatusCode, Json<MusicJob>) {
+    submit(state, request, profile, attempt, None).await
+}
+
+struct Replay {
+    body: Value,
+    derived: Value,
+    request: ReplayMusicJobRequest,
+}
+
+pub(super) async fn replay(
+    state: AppState,
+    song: library::Song,
+    mut request: ReplayMusicJobRequest,
+    attempt: u32,
+) -> Result<(StatusCode, Json<MusicJob>), (StatusCode, Json<ApiError>)> {
+    if attempt == 0 {
+        refuse_trashed(&song)?;
+    }
+    request.song_id = Some(song.id.clone());
+    let (profile, render, replay) = replay_inputs(&song, request)
+        .map_err(|error| api_error(StatusCode::BAD_REQUEST, error.to_string()))?;
+    Ok(submit(state, render, profile, attempt, Some(replay)).await)
+}
+
+fn replay_inputs(
+    song: &library::Song,
+    request: ReplayMusicJobRequest,
+) -> anyhow::Result<(String, CreateMusicJobRequest, Replay)> {
+    anyhow::ensure!(
+        song.engine_id == native_minimax::ENGINE_ID,
+        "This song is not a native MiniMax take"
+    );
+    anyhow::ensure!(
+        request.solver.is_none() && request.extend_seconds.is_none(),
+        "MiniMax replay does not support a custom solver or extending the saved audio codes"
+    );
+    anyhow::ensure!(
+        request.synth_batch_size.is_none_or(|size| size == 1),
+        "MiniMax replay currently renders one take"
+    );
+    let saved = song
+        .replay_request
+        .as_ref()
+        .filter(|value| value.is_object())
+        .context("The MiniMax song has no stored replay request")?;
+    let profile = native_minimax::saved_profile(song.profile_id.as_deref(), saved)?.to_owned();
+    let codes = saved["audio_codes"]
+        .as_str()
+        .or_else(|| song.audio_codes.as_ref().and_then(Value::as_str))
+        .filter(|codes| !codes.trim().is_empty())
+        .context("The MiniMax song has no stored audio codes")?;
+    let unsigned = |key| {
+        saved[key]
+            .as_u64()
+            .and_then(|value| u32::try_from(value).ok())
+    };
+    let steps = request.steps.or_else(|| unsigned("steps")).unwrap_or(30);
+    anyhow::ensure!(steps >= 2, "MiniMax needs at least two inference steps");
+    // Never draw a fresh seed implicitly: repeat the original acoustic take.
+    let seed = request
+        .seed
+        .or_else(|| saved["seed"].as_i64().filter(|seed| *seed != -1))
+        .or_else(|| {
+            song.generation_settings["seed"]
+                .as_i64()
+                .filter(|seed| *seed != -1)
+        })
+        .context("The MiniMax song has no stored acoustic seed")?;
+    let text = |key, fallback: &str| {
+        saved[key]
+            .as_str()
+            .filter(|s| !s.trim().is_empty())
+            .unwrap_or(fallback)
+            .to_owned()
+    };
+    let caption = text("caption", &song.caption);
+    let lyrics = text("lyrics", &song.lyrics);
+    anyhow::ensure!(
+        !caption.trim().is_empty() && !lyrics.trim().is_empty(),
+        "The MiniMax replay needs a style and lyrics"
+    );
+    let duration = saved["duration"]
+        .as_f64()
+        .or_else(|| song.generation_settings["duration_seconds"].as_f64());
+    let mut body = serde_json::json!({"caption":caption,"lyrics":lyrics,"steps":steps,"seed":seed,"audio_codes":codes});
+    if let Some(duration) = duration.filter(|value| *value > 0.0) {
+        body["duration"] = Value::from(duration);
+    }
+    for field in ["lm_seed", "dit_cfg", "flow_shift", "peak_clip", "adapters"] {
+        if let Some(value) = saved.get(field) {
+            body[field] = value.clone();
+        }
+    }
+    let render = CreateMusicJobRequest {
+        music_source: Some(MusicSource::Native {
+            engine: native_minimax::ENGINE_ID.into(),
+            model: profile.clone(),
+        }),
+        client_ref: request.client_ref.clone(),
+        title: request
+            .title
+            .as_deref()
+            .map(str::trim)
+            .filter(|title| !title.is_empty())
+            .map(str::to_owned)
+            .or_else(|| Some(song.title.clone())),
+        cover_prompt: song.metadata["cover_prompt"].as_str().map(str::to_owned),
+        style: caption,
+        lyrics,
+        steps: Some(steps),
+        seed: Some(seed),
+        lm_seed: saved["lm_seed"].as_i64(),
+        duration_seconds: duration,
+        output_format: request
+            .output_format
+            .clone()
+            .or_else(|| saved["output_format"].as_str().map(str::to_owned)),
+        mp3_bitrate: request.mp3_bitrate.or_else(|| unsigned("mp3_bitrate")),
+        fade_in: saved["fade_in"].as_f64().map(|value| value as f32),
+        fade_out: saved["fade_out"].as_f64().map(|value| value as f32),
+        ..Default::default()
+    };
+    let derived = derivation(
+        song,
+        "replay",
+        serde_json::json!({
+            "steps":request.steps, "seed":request.seed,"output_format":request.output_format,"mp3_bitrate":request.mp3_bitrate,
+        }),
+    );
+    Ok((
+        profile,
+        render,
+        Replay {
+            body,
+            derived,
+            request,
+        },
+    ))
+}
+
+async fn submit(
+    state: AppState,
+    request: CreateMusicJobRequest,
+    profile: String,
+    attempt: u32,
+    replay: Option<Replay>,
+) -> (StatusCode, Json<MusicJob>) {
     let engine = native_minimax::ENGINE_ID;
     let reject = |status, reason: String| {
         (
@@ -62,7 +209,11 @@ pub(super) async fn submit_minimax(
         seed: request.seed,
         lm_seed: request.lm_seed,
     };
-    let remote = match client.submit(&profile, &input).await {
+    let submitted = match &replay {
+        Some(replay) => client.submit_replay(&profile, replay.body.clone()).await,
+        None => client.submit(&profile, &input).await,
+    };
+    let remote = match submitted {
         Ok(id) => id,
         Err(error) => return reject(StatusCode::BAD_REQUEST, format!("{error:#}")),
     };
@@ -76,7 +227,7 @@ pub(super) async fn submit_minimax(
         ));
     }
     let job = MusicJob {
-        derived: None,
+        derived: replay.as_ref().map(|replay| replay.derived.clone()),
         id: format!("minimax-{}", uuid_suffix()),
         client_ref: request.client_ref.clone(),
         submitted_at: unix_millis(),
@@ -92,7 +243,12 @@ pub(super) async fn submit_minimax(
         generation_settings: settings,
         song: None,
         songs: vec![],
-        message: "Submitted to MiniMax.".into(),
+        message: if replay.is_some() {
+            "Submitted MiniMax replay with saved audio codes."
+        } else {
+            "Submitted to MiniMax."
+        }
+        .into(),
         code: None,
         params: None,
         playlist_id: request.playlist_id.clone(),
@@ -100,10 +256,13 @@ pub(super) async fn submit_minimax(
         card_memory_short: false,
         tracks_asked: None,
     };
-    if let Err(error) =
-        state
-            .library
-            .save_music_job(&stored_job(&job, serde_json::json!(request), attempt))
+    let stored_request = match replay {
+        Some(replay) => serde_json::json!({"replay":replay.request}),
+        None => serde_json::json!(request),
+    };
+    if let Err(error) = state
+        .library
+        .save_music_job(&stored_job(&job, stored_request, attempt))
     {
         let _ = client.cancel(&remote).await;
         return reject(StatusCode::INTERNAL_SERVER_ERROR, error.to_string());
@@ -259,7 +418,7 @@ async fn watch(
         }
     }
     let imported = state.library.import_generated_song(library::GeneratedSongInput {
-        title: job.title.clone(), metadata: serde_json::json!({"duration_seconds":output.duration,"job_id":job.id,"cover_prompt":job.cover_prompt,"output_format":format}),
+        title: job.title.clone(), metadata: serde_json::json!({"duration_seconds":output.duration,"job_id":job.id,"cover_prompt":job.cover_prompt,"output_format":format,"derived":job.derived}),
         caption: replay["caption"].as_str().unwrap_or(&job.style).to_owned(),
         lyrics: replay["lyrics"].as_str().unwrap_or(&job.lyrics).to_owned(),
         generation_settings: settings, replay_request: Some(replay), audio_codes: Some(codes),
@@ -372,4 +531,54 @@ pub(super) async fn cancel_minimax(
         ));
     }
     Ok(Json(current))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn minimax_replays_the_original_acoustic_seed_or_overrides_it_without_changing_codes() {
+        let codes = "1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16";
+        let song: library::Song = serde_json::from_value(serde_json::json!({
+            "id":"original", "title":"Original", "audio_path":"original.wav",
+            "caption":"folk", "lyrics":"[verse]\nEarly morning", "source":"local_generation",
+            "engine_id":native_minimax::ENGINE_ID,"profile_id":"minimal",
+            "metadata":{},"generation_settings":{"music_source":{"kind":"native","engine":native_minimax::ENGINE_ID,"model":"minimal"}},
+            "created_at":"0","updated_at":"0","audio_codes":codes,
+            "replay_request":{"audio_codes":codes,"seed":42,"lm_seed":17,"steps":4,"duration":3.2,"dit_cfg":2.0,
+                "output_format":"flac","fade_out":0.25}
+        })).unwrap();
+        let request: ReplayMusicJobRequest =
+            serde_json::from_value(serde_json::json!({"song_id":"original"})).unwrap();
+        let (profile, render, original) = replay_inputs(&song, request.clone()).unwrap();
+        let (_, rerender, changed) = replay_inputs(
+            &song,
+            ReplayMusicJobRequest {
+                seed: Some(43),
+                ..request
+            },
+        )
+        .unwrap();
+
+        assert_eq!(profile, "minimal");
+        assert_eq!(render.seed, Some(42));
+        assert_eq!(rerender.seed, Some(43));
+        assert_eq!(original.body["seed"], 42);
+        assert_eq!(changed.body["seed"], 43);
+        assert_eq!(original.body["audio_codes"], codes);
+        assert_eq!(changed.body["audio_codes"], codes);
+        assert_eq!(changed.body["dit_cfg"], 2.0);
+        assert_eq!(changed.body["lm_seed"], 17);
+        assert_eq!(changed.derived["from"], "original");
+        assert_eq!(changed.derived["tool"], "replay");
+        assert_eq!(changed.derived["settings"]["seed"], 43);
+        assert_eq!(
+            serde_json::to_value(rerender.music_source).unwrap(),
+            song.generation_settings["music_source"]
+        );
+        assert_eq!(rerender.output_format.as_deref(), Some("flac"));
+        assert_eq!(rerender.fade_out, Some(0.25));
+        assert_eq!(song.replay_request.as_ref().unwrap()["seed"], 42);
+    }
 }
