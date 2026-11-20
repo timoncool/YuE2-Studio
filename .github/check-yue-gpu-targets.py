@@ -46,7 +46,18 @@ for compute,card,engine in [("8.9","cuda13","cuda13"),("12.0","cuda13","cuda13")
             assert hw["runsCuda"] and hw["cardCuda"]==card,hw
             expected=card if old else engine
             assert hw["cuda"]==expected and hw["vulkan"]==(expected is None),hw
-            print(json.dumps(dict(compute=compute,card=hw["cardCuda"],engine=hw["cuda"],vulkan=hw["vulkan"])),flush=True)
+            def get(route):
+                with urlopen(f"http://127.0.0.1:{api_port}"+route,timeout=15) as r:return json.load(r)
+            midi=get("/v1/midi")
+            runtime=get("/v1/midi/runtime")
+            stems=get("/v1/separation/status")
+            wanted=engine or "cpu"
+            assert midi["runtime_build"]==wanted and midi["error"] is None,midi
+            servers=[a["label"] for a in runtime["assets"] if a["label"].startswith("audio.cpp server")]
+            assert servers==["audio.cpp server ("+wanted.capitalize()+")"],servers
+            assert stems["card"]==("cuda" if engine else "vulkan"),stems["card"]
+            print(json.dumps(dict(compute=compute,card=hw["cardCuda"],engine=hw["cuda"],vulkan=hw["vulkan"],
+                                  midi_build=midi["runtime_build"],midi_server=servers[0],stem_gpu=stems["card"])),flush=True)
         finally:
             proc.terminate()
             proc.wait(timeout=10)
