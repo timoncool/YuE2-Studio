@@ -357,6 +357,20 @@ its data in `~/.local/share/yue2-studio` (`$XDG_DATA_HOME`).
 
 ## How fast is it
 
+### Engine benchmarks
+
+Historical measurements from the 4.0.0 development builds on Windows 11, Ryzen 9 9950X3D and RTX 4090 24 GB with CUDA 13:
+
+| Model and engine | Workload | Wall time | Audio seconds per second | Peak GPU memory |
+| --- | --- | ---: | ---: | ---: |
+| YuE2 · yue2.cpp · Q8_0 | 60 s song, Flash Attention | 20.0 s | 3.0× | 5,045 MiB |
+| YuE2 · yue2.cpp · Q8_0 | 240 s song, Flash Attention | 54.4 s | 4.4× | 6,500 MiB |
+| MiniMax Music3 · minimaxmusic.cpp · Q8_0 | 30 s song, 30 steps, CFG 1.5 | 33.0 s | 0.9× | — |
+
+ACE-Step's native 2B turbo Q8_0 took 21.5 ms per DiT step on warm runs. Its roughly 8.1 GiB peak occurred during VAE decoding. This timing covers one stage of synthesis. A dash indicates an unrecorded measurement.
+
+### Speed reported by installations
+
 How long a 3-minute song takes, by graphics card. These are averages from what YuE2 Studio installations reported
 over 30 days (version 3.8, loading the models included; people run different model sets, so yours can differ).
 

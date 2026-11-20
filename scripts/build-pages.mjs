@@ -114,6 +114,19 @@ ${SAMPLES.slice(6).map(sampleCard).join('\n')}
     .map(([title, body], index) => `      <li><b><span class="num">${index + 1}</span>${escape(title.replace(/\s*[—-]\s*$/, ''))}</b><span>${escape(capital(body))}</span></li>`)
     .join('\n');
 
+  const headings = {
+    en: ['Engine benchmarks', '4.0.0 development builds', 'Model and engine', 'Audio', 'Time', 'Speed', 'Peak VRAM'],
+    ru: ['Замеры движков', 'Тестовые сборки 4.0.0', 'Модель и движок', 'Аудио', 'Время', 'Скорость', 'Пик VRAM'],
+    zh: ['引擎性能测试', '4.0.0 开发版本', '模型与引擎', '音频时长', '耗时', '速度', '峰值显存'],
+    ja: ['エンジン別ベンチマーク', '4.0.0 開発ビルド', 'モデルとエンジン', '音声の長さ', '所要時間', '速度', '最大 VRAM'],
+    ko: ['엔진 벤치마크', '4.0.0 개발 빌드', '모델 및 엔진', '오디오 길이', '소요 시간', '속도', '최대 VRAM'],
+    pt: ['Desempenho dos motores', 'Versões de desenvolvimento 4.0.0', 'Modelo e motor', 'Áudio', 'Tempo', 'Velocidade', 'Pico de VRAM'],
+  }[lang];
+  const baseline = [
+    ['YuE2 · yue2.cpp · Q8_0 · Flash Attention', '60 s', '20.0 s', '3.0×', '5045 MiB'],
+    ['YuE2 · yue2.cpp · Q8_0 · Flash Attention', '240 s', '54.4 s', '4.4×', '6500 MiB'],
+    ['MiniMax Music3 · minimaxmusic.cpp · Q8_0 · 30 steps · CFG 1.5', '30 s', '33.0 s', '0.9×', '—'],
+  ];
   const sp = STUDIO.speed?.[lang];
   const speed = sp ? `  <section id="speed">
     <h2>${escape(sp.title)}</h2>
@@ -125,6 +138,12 @@ ${sp.rows.map((row) => `          <tr>${row.map((cell) => `<td>${escape(cell)}</
           </tbody>
         </table></div>
     <p class="note">${escape(sp.note)}</p>
+    <h3 id="engine-benchmarks">${escape(headings[0])}</h3>
+    <p>${escape(headings[1])} · Windows 11 · Ryzen 9 9950X3D · RTX 4090 24 GB · CUDA 13</p>
+    <div class="scroll"><table>
+      <thead><tr>${headings.slice(2).map(label => `<th>${escape(label)}</th>`).join('')}</tr></thead>
+      <tbody>${baseline.map(row => `<tr>${row.map(cell => `<td>${escape(cell)}</td>`).join('')}</tr>`).join('\n')}</tbody>
+    </table></div>
   </section>
 
 ` : '';
