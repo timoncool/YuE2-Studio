@@ -3714,6 +3714,7 @@ async fn start_training(State(state): State<AppState>, Json(input): Json<StartTr
 /// could not compute on the card.
 async fn start_training_run(state: &AppState, dataset: &str, name: &str, recipe: training::Recipe) -> Result<training::Run, String> {
     trainer_ready(state)?;
+    let _exclusive = state.engine_use.try_write().map_err(|_| "the engine is in use; start training once it is idle".to_owned())?;
     no_song_rendering(state).await?;
     let models = set_engine_models(state).await?;
     state
@@ -3844,6 +3845,7 @@ struct ContinueTraining {
 
 /// Trains a finished or stopped run further from its latest checkpoint.
 async fn continue_training(State(state): State<AppState>, Path(id): Path<String>, Json(input): Json<ContinueTraining>) -> Result<Json<training::Run>, (StatusCode, Json<ApiError>)> {
+    let _exclusive = state.engine_use.try_write().map_err(|_| api_error(StatusCode::CONFLICT, "the engine is in use; continue training once it is idle".into()))?;
     card_free_for_training(&state).await.map_err(|reason| api_error(StatusCode::CONFLICT, reason))?;
     let companion = set_engine_models(&state).await.map_err(|reason| api_error(StatusCode::CONFLICT, reason))?.companion;
     state
@@ -10535,6 +10537,7 @@ async fn submit_music_job(state: AppState, mut request: CreateMusicJobRequest, a
         return (StatusCode::ACCEPTED, Json(job));
     }
 
+    let _using = state.engine_use.read().await;
     if state.training.active_run().await.is_some() {
         return (StatusCode::CONFLICT, Json(failed_request_job(request, engine_id, SongError::TrainingOnCard)));
     }
@@ -10595,7 +10598,6 @@ async fn submit_music_job(state: AppState, mut request: CreateMusicJobRequest, a
         None => None,
     };
     let stored_request = serde_json::to_value(&request).unwrap_or(Value::Null);
-    let _using = state.engine_use.read().await;
     match state.music_server.submit(engine_submission(&body)).await {
         Ok(remote) => {
             let job = MusicJob {
@@ -10671,6 +10673,7 @@ async fn submit_replay_job(state: AppState, request: ReplayMusicJobRequest, atte
         (None, Some(replay)) => replay.clone(),
         (None, None) => return Err(api_error(StatusCode::BAD_REQUEST, "Provide song_id or replay_request.".into())),
     };
+    let _using = state.engine_use.read().await;
     if state.training.active_run().await.is_some() {
         return Err(api_error(StatusCode::CONFLICT, "a training run has the card; re-render once it finishes or is stopped".into()));
     }
@@ -10682,7 +10685,6 @@ async fn submit_replay_job(state: AppState, request: ReplayMusicJobRequest, atte
     }
     let style = body.get("style").and_then(Value::as_str).unwrap_or_default().to_owned();
     let lyrics = body.get("lyrics").and_then(Value::as_str).unwrap_or_default().to_owned();
-    let _using = state.engine_use.read().await;
     let remote = state
         .music_server
         .submit(engine_submission(&body))

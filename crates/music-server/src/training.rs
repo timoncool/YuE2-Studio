@@ -1293,8 +1293,7 @@ impl Training {
                 Ok(true) => training.work(&trainer, libraries.as_deref(), &run_dir, &run_id, stages, cancel).await,
                 other => other,
             };
-            training.settle(&run_id, outcome).await;
-            (card.give_back)().await;
+            training.settle(&run_id, outcome, (card.give_back)()).await;
         });
         Ok(run)
     }
@@ -1358,14 +1357,16 @@ impl Training {
         tokio::spawn(async move {
             (card.take)().await;
             let outcome = training.work(&trainer, libraries.as_deref(), &run_dir, &run_id, vec![stage], cancel).await;
-            training.settle(&run_id, outcome).await;
-            (card.give_back)().await;
+            training.settle(&run_id, outcome, (card.give_back)()).await;
         });
         Ok(run)
     }
 
     /// Records how a run ended and lets the next one start.
-    async fn settle(&self, run_id: &str, outcome: Result<bool>) {
+    async fn settle(&self, run_id: &str, outcome: Result<bool>, restore_engine: impl std::future::Future<Output = ()>) {
+        // Restoring the engine can restart its process. Keep the card reserved
+        // until then so a song submitted after training survives that restart.
+        restore_engine.await;
         if let Some(ended) = self.ended.get() {
             match &outcome {
                 Ok(true) => ended(Ok(()), false),
@@ -1894,6 +1895,19 @@ mod tests {
         let message = failure.message();
         assert!(message.contains("adapter.safetensors for writing: Permission denied"));
         assert!(message.ends_with("checkpoint publication failed"));
+    }
+
+    #[tokio::test]
+    async fn the_card_stays_reserved_until_the_engine_is_restored() {
+        let root = tempfile::tempdir().unwrap();
+        let training = Training::new(root.path(), "yue2");
+        for outcome in [Ok(true), Ok(false), Err(anyhow::anyhow!("trainer exited"))] {
+            *training.active.write().await = Some(Active { run_id: "test".into(), cancel: Default::default() });
+            training.settle("test", outcome, async {
+                assert_eq!(training.active_run().await.as_deref(), Some("test"));
+            }).await;
+            assert!(training.active_run().await.is_none());
+        }
     }
 
     #[test]
