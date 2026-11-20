@@ -25,6 +25,7 @@ import {
   cancelPrepare,
   cancelRun,
   continueRun,
+  cancelListenPack,
   cancelTrainingPack,
   clock,
   createDataset,
@@ -280,7 +281,7 @@ const ListenCard: React.FC<{ state: TrainingState; onError: (message: string) =>
           <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-zinc-200 dark:bg-white/10">
             <div className="h-full bg-linear-to-r from-orange-500 to-pink-600 transition-[width]" style={{ width: `${percent}%` }} />
           </div>
-          <button type="button" onClick={() => void cancelTrainingPack().then(onChanged)} className={`${OUTLINE} mt-3`}><X size={13} />{t('adaptersCancel')}</button>
+          <button type="button" onClick={() => void cancelListenPack().then(onChanged).catch(problem => onError(errorText(problem)))} className={`${OUTLINE} mt-3`}><X size={13} />{t('adaptersCancel')}</button>
         </div>
       ) : (
         <button type="button" onClick={() => void installListenPack().then(onChanged).catch(problem => onError(errorText(problem)))} className={`${OUTLINE} mt-3`}>

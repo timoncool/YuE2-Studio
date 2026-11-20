@@ -260,11 +260,15 @@ impl EngineRuntime {
 
     /// Fetches whatever is missing and waits for it.
     pub async fn install_missing(&self, cuda: Option<CudaBuild>) -> Result<()> {
+        self.install_missing_for(cuda, "engine").await
+    }
+
+    pub async fn install_missing_for(&self, cuda: Option<CudaBuild>, scope: &str) -> Result<()> {
         let absent = self.vc_runtime_missing();
         if !absent.is_empty() {
             bail!("the engine bundle is incomplete: {} missing beside yue-server.exe; reinstall the studio", absent.join(", "));
         }
-        self.downloader.install_all("engine", &self.missing(cuda)).await
+        self.downloader.install_all(scope, &self.missing(cuda)).await
     }
 }
 

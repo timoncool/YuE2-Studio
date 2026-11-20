@@ -116,6 +116,7 @@ pub struct Downloader {
     runtime_root: PathBuf,
     http: reqwest::Client,
     progress: Arc<Mutex<Option<DownloadProgress>>>,
+    rejected: Arc<Mutex<std::collections::HashMap<String, DownloadProgress>>>,
     /// Raised to stop whatever is downloading. What has already arrived stays
     /// on disk with its manifest, so pressing this is a pause as much as a
     /// cancel: the next attempt carries on from the last finished piece.
@@ -136,6 +137,7 @@ impl Downloader {
             runtime_root,
             http: crate::net::download_client(),
             progress: Arc::new(Mutex::new(None)),
+            rejected: Default::default(),
             cancel: Arc::new(std::sync::atomic::AtomicBool::new(false)),
         }
     }
@@ -423,13 +425,18 @@ impl Downloader {
 
     /// The running download, but only if this panel started it.
     pub async fn active_for(&self, scope: &str) -> Option<DownloadProgress> {
-        self.active().await.filter(|progress| progress.scope.as_deref() == Some(scope))
+        let active = self.progress.lock().await;
+        if let Some(ours) = active.as_ref().filter(|progress| progress.scope.as_deref() == Some(scope)) {
+            return Some(ours.clone());
+        }
+        self.rejected.lock().await.get(scope).cloned()
     }
 
     /// Stops the running download only when the panel of `scope` started it: a downloader two panels share (audio.cpp's
     /// server carries the stems and Audio to MIDI) keeps the other panel's download going.
     pub async fn cancel_for(&self, scope: &str) -> bool {
-        let ours = self.active_for(scope).await.is_some_and(|progress| !progress.done);
+        let active = self.progress.lock().await;
+        let ours = active.as_ref().is_some_and(|progress| !progress.done && progress.scope.as_deref() == Some(scope));
         if ours {
             self.cancel();
         }
@@ -451,7 +458,14 @@ impl Downloader {
         });
         failed.done = true;
         failed.error = Some(error);
-        *progress = Some(failed);
+        if let Some(running) = progress.as_ref().filter(|active| !active.done) {
+            // A rejected request cannot finish the transfer which still owns the downloader.
+            if running.scope.as_deref() != Some(scope) {
+                self.rejected.lock().await.insert(scope.to_owned(), failed);
+            }
+        } else {
+            *progress = Some(failed);
+        }
     }
 
     /// Installs a whole set, several files at a time.
@@ -480,6 +494,7 @@ impl Downloader {
         if progress.as_ref().is_some_and(|active| !active.done && active.error.is_none()) {
             bail!("another download is already running");
         }
+        self.rejected.lock().await.remove(scope);
         self.cancel.store(false, std::sync::atomic::Ordering::Relaxed);
         // A set of one is that one file, as far as anyone watching is
         // concerned; only a real set needs a name of its own.
@@ -610,6 +625,7 @@ impl Downloader {
             if progress.as_ref().is_some_and(|active| !active.done && active.error.is_none()) {
                 bail!("another download is already running");
             }
+            self.cancel.store(false, std::sync::atomic::Ordering::Relaxed);
             *progress = Some(DownloadProgress {
                 asset_id: asset.id.to_string(),
                 scope: None,
@@ -621,7 +637,6 @@ impl Downloader {
             });
         }
 
-        self.cancel.store(false, std::sync::atomic::Ordering::Relaxed);
         let target = self.path_of(asset);
         let record = self.record_of(asset);
         let root = self.root.clone();
@@ -1640,6 +1655,25 @@ mod tests {
     }
 
     #[cfg(windows)]
+    #[tokio::test]
+    async fn rejecting_a_second_panel_keeps_the_first_transfer_cancellable() {
+        let temp = tempfile::tempdir().unwrap();
+        let downloader = Downloader::new(temp.path().to_owned());
+        *downloader.progress.lock().await = Some(DownloadProgress {
+            asset_id: "onnxruntime".into(), scope: Some("karaoke".into()), downloaded_bytes: 17,
+            total_bytes: 100, done: false, error: None, manual_archive: None,
+        });
+        for scope in ["listen", "karaoke"] {
+            downloader.fail(scope, "another download is already running".into()).await;
+        }
+        let first = downloader.active_for("karaoke").await.unwrap();
+        assert!(!first.done && first.error.is_none());
+        assert_eq!(first.downloaded_bytes, 17);
+        assert!(downloader.active_for("listen").await.unwrap().error.is_some());
+        assert!(!downloader.cancel_for("listen").await);
+        assert!(downloader.cancel_for("karaoke").await);
+    }
+
     #[tokio::test]
     async fn a_wrong_manually_placed_runtime_archive_is_rejected_before_download() {
         let root = tempfile::tempdir().unwrap();

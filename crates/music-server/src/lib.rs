@@ -1742,6 +1742,7 @@ pub async fn serve_on_port(port: u16) -> anyhow::Result<()> {
         .route("/v1/score/mark", post(score::api::mark))
         .route("/v1/training/prepare/train-after", post(prepare::set_train_after))
         .route("/v1/training/listen/install", post(install_listen_pack))
+        .route("/v1/training/listen/cancel", post(cancel_listen_pack))
         .route("/v1/training/runs", post(start_training))
         .route("/v1/training/runs/{id}/cancel", post(cancel_training))
         .route("/v1/training/runs/{id}/continue", post(continue_training))
@@ -2373,7 +2374,7 @@ async fn separation_assets(State(state): State<AppState>) -> Json<Value> {
         "error": build.err().map(|error| error.to_string()),
         "active_download": separation_download_progress(
             state.separator.downloader().active_for("separation").await,
-            state.acpp.downloader().active_for("separation").await,
+            acpp_download(&state, "separation").await,
         ),
         // Not an error and not a stall: the file server is asking us to wait.
         "waiting_for_server": crate::chunked::waiting_for_server(),
@@ -2424,9 +2425,20 @@ fn separation_build(runtime: lyrics_sync::OnnxFlavour) -> anyhow::Result<acpp_se
 async fn install_acpp(state: &AppState, build: acpp_server::asset::Build, scope: &str) -> anyhow::Result<()> {
     state.acpp.downloader().install_all(scope, &state.acpp.missing(build)).await?;
     if let Some(cuda) = shared_cuda(build) {
-        state.engine_runtime.install_missing(Some(cuda)).await?;
+        state.engine_runtime.install_missing_for(Some(cuda), scope).await?;
     }
     Ok(())
+}
+
+async fn acpp_download(state: &AppState, scope: &str) -> Option<downloads::DownloadProgress> {
+    separation_download_progress(
+        state.acpp.downloader().active_for(scope).await,
+        state.engine_runtime.downloader().active_for(scope).await,
+    )
+}
+
+async fn cancel_acpp_download(state: &AppState, scope: &str) -> bool {
+    state.acpp.downloader().cancel_for(scope).await | state.engine_runtime.downloader().cancel_for(scope).await
 }
 
 /// The engine's CUDA build whose libraries audio.cpp's server of `build` loads: cuBLAS 13 on Windows for the CUDA 13
@@ -2457,14 +2469,14 @@ fn htdemucs_installed(state: &AppState, runtime: lyrics_sync::OnnxFlavour) -> bo
 /// Two panels can be downloading at once, and until this existed the only way
 /// to stop one of them was to close the studio.
 async fn cancel_separation_download(State(state): State<AppState>) -> Json<Value> {
-    state.separator.downloader().cancel();
-    state.acpp.downloader().cancel_for("separation").await;
+    state.separator.downloader().cancel_for("separation").await;
+    cancel_acpp_download(&state, "separation").await;
     Json(serde_json::json!({ "cancelled": true }))
 }
 
 async fn cancel_karaoke_download(State(state): State<AppState>) -> Json<Value> {
-    state.lyrics_sync.downloader().cancel();
-    state.acpp.downloader().cancel_for("karaoke").await;
+    state.lyrics_sync.downloader().cancel_for("karaoke").await;
+    cancel_acpp_download(&state, "karaoke").await;
     Json(serde_json::json!({ "cancelled": true }))
 }
 
@@ -2662,7 +2674,7 @@ async fn separation_status(State(state): State<AppState>) -> Json<Value> {
         // Either downloader may be the busy one: the model has its own, audio.cpp's server comes through its own.
         "download": separation_download_progress(
             state.separator.downloader().active_for("separation").await,
-            state.acpp.downloader().active_for("separation").await,
+            acpp_download(&state, "separation").await,
         ),
         "settings": config,
         "run": with_elapsed(serde_json::to_value(state.separation_run.read().await.clone()).unwrap_or(Value::Null)),
@@ -3219,7 +3231,7 @@ async fn vocal_separator(state: &AppState) -> Option<Arc<dyn training::VocalSepa
 
 /// Everything the separator still lacks, through the same downloaders the
 /// separator's own panel uses: HT-Demucs's model and audio.cpp's server of the build its device setting runs.
-async fn install_separator(state: &AppState) {
+async fn install_training_separator(state: &AppState) {
     let wanted = state.separation_config.read().await.runtime;
     let build = match separation_build(wanted) {
         Ok(build) => build,
@@ -3230,12 +3242,12 @@ async fn install_separator(state: &AppState) {
     };
     let separator = state.separator.clone();
     if !separator.is_installed() {
-        if let Err(error) = separator.downloader().install_all("separation", &[&separation::MODEL]).await {
+        if let Err(error) = separator.downloader().install_all(training::SCOPE, &[&separation::MODEL]).await {
             eprintln!("[ERROR] the separator model could not be installed: {error:#}");
             return;
         }
     }
-    if let Err(error) = install_acpp(state, build, "separation").await {
+    if let Err(error) = install_acpp(state, build, training::SCOPE).await {
         eprintln!("[ERROR] audio.cpp's server could not be installed for the separator: {error:#}");
     }
 }
@@ -3336,10 +3348,10 @@ async fn training_pack_files(state: &AppState) -> (Vec<Value>, bool) {
 /// or the separator's, whose files come through their own downloaders.
 async fn training_pack_download(state: &AppState) -> Option<downloads::DownloadProgress> {
     let separator_download = separation_download_progress(
-        state.separator.downloader().active_for("separation").await,
-        state.acpp.downloader().active_for("separation").await,
+        state.separator.downloader().active_for(training::SCOPE).await,
+        state.acpp.downloader().active_for(training::SCOPE).await,
     );
-    let cublas_download = state.engine_runtime.downloader().active_for("engine").await;
+    let cublas_download = state.engine_runtime.downloader().active_for(training::SCOPE).await;
     match state.training.downloader().active_for(training::SCOPE).await {
         Some(active) if !active.done => Some(active),
         other => match cublas_download {
@@ -3433,7 +3445,7 @@ async fn midi_runtime(State(state): State<AppState>) -> Json<Value> {
             "files": server.len(),
         },
         "error": build.err().map(|error| error.to_string()),
-        "active_download": separation_download_progress(state.midi.downloader().active().await, state.acpp.downloader().active_for("midi").await),
+        "active_download": separation_download_progress(state.midi.downloader().active().await, acpp_download(&state, "midi").await),
         "chosen_model": preferred_midi_size(&state),
     }))
 }
@@ -3457,11 +3469,11 @@ async fn install_training_pack(State(state): State<AppState>) -> Result<Json<Val
             eprintln!("[ERROR] training pack: {error:#}");
             return;
         }
-        if let Err(error) = background.engine_runtime.install_missing(Some(hardware::CudaBuild::Cuda13)).await {
+        if let Err(error) = background.engine_runtime.install_missing_for(Some(hardware::CudaBuild::Cuda13), training::SCOPE).await {
             eprintln!("[ERROR] cuBLAS for the trainer: {error:#}");
             return;
         }
-        install_separator(&background).await;
+        install_training_separator(&background).await;
     });
     Ok(Json(serde_json::json!({ "started": true })))
 }
@@ -3489,11 +3501,16 @@ async fn install_listen_pack(State(state): State<AppState>) -> Json<Value> {
 }
 
 async fn cancel_training_pack(State(state): State<AppState>) -> Json<Value> {
-    state.training.downloader().cancel();
-    state.separator.downloader().cancel();
-    state.acpp.downloader().cancel();
-    state.lyrics_sync.downloader().cancel();
-    Json(serde_json::json!({ "cancelled": true }))
+    let stopped = state.training.downloader().cancel_for(training::SCOPE).await
+        | state.separator.downloader().cancel_for(training::SCOPE).await
+        | cancel_acpp_download(&state, training::SCOPE).await;
+    Json(serde_json::json!({ "cancelled": stopped }))
+}
+
+async fn cancel_listen_pack(State(state): State<AppState>) -> Json<Value> {
+    let stopped = state.training.downloader().cancel_for(training::LISTEN_SCOPE).await
+        | state.lyrics_sync.downloader().cancel_for(training::LISTEN_SCOPE).await;
+    Json(serde_json::json!({ "cancelled": stopped }))
 }
 
 #[derive(Debug, Deserialize)]
@@ -4094,7 +4111,7 @@ struct RestoreRequest {
 /// The download Apollo's restoration waits for: the model comes first and its finished record stays; the server
 /// downloading after it is the one to show.
 async fn restore_download(state: &AppState) -> Option<downloads::DownloadProgress> {
-    match (state.separator.downloader().active_for("restore").await, state.acpp.downloader().active_for("restore").await) {
+    match (state.separator.downloader().active_for("restore").await, acpp_download(&state, "restore").await) {
         (Some(model), Some(server)) if model.done && !server.done => Some(server),
         (model, server) => model.or(server),
     }
@@ -4187,7 +4204,7 @@ async fn remove_restore_model(State(state): State<AppState>) -> Result<Json<Valu
 async fn cancel_restore(State(state): State<AppState>) -> Json<Value> {
     state.restore_stop.store(true, std::sync::atomic::Ordering::Relaxed);
     state.separator.downloader().cancel_for("restore").await;
-    state.acpp.downloader().cancel_for("restore").await;
+    cancel_acpp_download(&state, "restore").await;
     Json(serde_json::json!({ "cancelled": true }))
 }
 
@@ -7135,7 +7152,7 @@ async fn compose_setup_status(state: &AppState, manager_status: model_manager::M
             "engine_runtime".into(),
             serde_json::json!({
                 "ready": state.engine_runtime.is_ready(runtime_cuda),
-                "downloading": runtime_active.is_some(),
+                "downloading": runtime_active.as_ref().is_some_and(|active| !active.done),
                 "downloaded_bytes": runtime_active.as_ref().map(|progress| progress.downloaded_bytes).unwrap_or(0),
                 "total_bytes": runtime_total,
                 "error": runtime_active.and_then(|progress| progress.error),
@@ -7664,7 +7681,7 @@ async fn karaoke_status(State(state): State<AppState>) -> Json<Value> {
                 }
             }
             progress["ready"] = Value::Bool(installed && progress["ready"] == true);
-            let download = separation_download_progress(status.active_download.clone(), state.acpp.downloader().active_for("karaoke").await);
+            let download = separation_download_progress(status.active_download.clone(), acpp_download(&state, "karaoke").await);
             fields.insert("active_download".into(), serde_json::json!(download));
         }
         // the files above belong to the local recogniser; OpenRouter needs only the key
@@ -7807,7 +7824,7 @@ async fn karaoke_install(
         tokio::spawn(async move {
             if let Some(build) = server {
                 if let Err(error) = install_acpp(&installed_state, build, "karaoke").await {
-                    if !installed_state.acpp.downloader().active_for("karaoke").await.is_some_and(|progress| progress.error.is_some()) {
+                    if !installed_acpp_download(&state, "karaoke").await.is_some_and(|progress| progress.error.is_some()) {
                         // A shared CUDA library can fail after the audio.cpp archive was installed successfully.
                         sync.downloader().fail("karaoke", format!("{error:#}")).await;
                     }
@@ -8969,7 +8986,7 @@ async fn midi_status(State(state): State<AppState>) -> Json<Value> {
         "tool_installed": build.as_ref().is_ok_and(|build| state.midi.server_installed(*build)),
         "sizes": sizes,
         "default_size": preferred_midi_size(&state),
-        "download": separation_download_progress(state.midi.downloader().active().await, state.acpp.downloader().active_for("midi").await),
+        "download": separation_download_progress(state.midi.downloader().active().await, acpp_download(&state, "midi").await),
         "run": run,
         "error": build.err().map(|error| error.to_string()),
         "license": "MuScriptor by Kyutai & Mirelo (arXiv:2607.08168): code MIT, weights CC BY-NC 4.0 - non-commercial use. Run by audio.cpp.",
@@ -9021,7 +9038,7 @@ async fn cancel_midi(State(state): State<AppState>) -> Json<Value> {
     state.midi_stop.0.store(true, std::sync::atomic::Ordering::Relaxed);
     state.midi_stop.1.notify_waiters();
     state.midi.downloader().cancel();
-    state.acpp.downloader().cancel_for("midi").await;
+    cancel_acpp_download(&state, "midi").await;
     Json(serde_json::json!({ "cancelled": true }))
 }
 

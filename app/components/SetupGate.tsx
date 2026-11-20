@@ -1429,7 +1429,7 @@ export const SetupGate: React.FC<{
                 purpose={t('hubListenPurpose')}
                 statusUrl="/v1/training/listen/runtime"
                 installUrl="/v1/training/listen/install"
-                cancelUrl="/v1/training/pack/cancel"
+                cancelUrl="/v1/training/listen/cancel"
                 engines={LISTEN_ENGINES}
               />
             )}
