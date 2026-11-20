@@ -94,6 +94,7 @@ pub struct InstalledProfile {
 pub struct Installation {
     executable: Option<PathBuf>,
     model_roots: Vec<PathBuf>,
+    legacy_adapters: Vec<(PathBuf, PathBuf)>,
     data_root: PathBuf,
 }
 
@@ -139,6 +140,10 @@ fn installation_from(
                     })
             }),
     };
+    let legacy_adapters = registered
+        .clone()
+        .map(|root| (root.join("models").join(ENGINE_ID), root.join("adapters")))
+        .collect();
     let model_roots = match models_root {
         Some(root) => vec![root],
         None => std::iter::once(data_root)
@@ -149,6 +154,7 @@ fn installation_from(
     Installation {
         executable,
         model_roots,
+        legacy_adapters,
         data_root: data_root.into(),
     }
 }
@@ -213,7 +219,7 @@ impl Installation {
             .iter()
             .find(|profile| profile.id == profile_id)
             .with_context(|| format!("unknown ACE-Step profile {profile_id}"))?;
-        self.launch_profile(profile)
+        self.launch_profile(profile, None)
     }
 
     pub fn launch_replay(&self, profile_id: &str, replay: &serde_json::Value) -> Result<Launch> {
@@ -230,7 +236,7 @@ impl Installation {
                     .and_then(serde_json::Value::as_str)
                     .is_none_or(|name| name == profile.weights[*index].name)
             }) {
-                return self.launch_profile(profile);
+                return self.launch_profile(profile, Some(replay));
             }
         }
 
@@ -265,10 +271,84 @@ impl Installation {
                 profile.weights[2] = encoders[0];
             }
         }
-        self.launch_profile(&profile)
+        self.launch_profile(&profile, Some(replay))
     }
 
-    fn launch_profile(&self, profile: &Profile) -> Result<Launch> {
+    fn adapter_root(
+        &self,
+        models: &Path,
+        replay: Option<&serde_json::Value>,
+    ) -> Result<Option<PathBuf>> {
+        use serde_json::Value;
+
+        fn contains_adapter(directory: &Path, name: &str) -> bool {
+            let path = directory.join(name);
+            if name.ends_with(".safetensors") && path.is_file() {
+                return true;
+            }
+            if path.join("adapter_model.safetensors").is_file()
+                || path.join("lokr_weights.safetensors").is_file()
+            {
+                return true;
+            }
+            path.join("adapter_config.json").is_file()
+                && fs::read_dir(path).is_ok_and(|files| {
+                    files.filter_map(std::result::Result::ok).any(|file| {
+                        file.path()
+                            .extension()
+                            .is_some_and(|extension| extension == "safetensors")
+                            && file.path().is_file()
+                    })
+                })
+        }
+
+        let own = self.data_root.join("adapters").join(ENGINE_ID);
+        let source_dir = self
+            .legacy_adapters
+            .iter()
+            .find(|(root, _)| root == models)
+            .map(|(_, path)| path);
+        let Some(replay) = replay else {
+            return Ok(if own.is_dir() {
+                Some(own)
+            } else {
+                source_dir.filter(|path| path.is_dir()).cloned()
+            });
+        };
+        let required: Vec<_> = [replay.get("adapter"), replay.get("lm_adapter")]
+            .into_iter()
+            .flatten()
+            .chain(
+                replay["adapters"]
+                    .as_array()
+                    .into_iter()
+                    .flatten()
+                    .filter_map(|entry| entry.get("name")),
+            )
+            .filter_map(Value::as_str)
+            .filter(|name| !name.is_empty())
+            .collect();
+        if required.is_empty() {
+            return Ok(None);
+        }
+        for name in &required {
+            anyhow::ensure!(
+                Path::new(name).file_name().and_then(|path| path.to_str()) == Some(*name),
+                "invalid ACE-Step adapter name {name}"
+            );
+        }
+        source_dir.into_iter().chain(std::iter::once(&own))
+            .chain(self.legacy_adapters.iter().map(|(_, folder)| folder))
+            .find(|folder| required.iter().all(|name| contains_adapter(folder, name)))
+            .cloned().map(Some)
+            .with_context(|| format!("the ACE-Step replay needs these adapters together in one adapter directory: {}", required.join(", ")))
+    }
+
+    fn launch_profile(
+        &self,
+        profile: &Profile,
+        replay: Option<&serde_json::Value>,
+    ) -> Result<Launch> {
         let executable = self
             .executable
             .as_ref()
@@ -279,12 +359,13 @@ impl Installation {
                     self.data_root.join("engines").join(ENGINE_ID).display()
                 )
             })?;
-        let models_root = profile.prepare_directory(self.profile_root(profile).0)?;
-        let adapters = self.data_root.join("adapters").join(ENGINE_ID);
+        let (source, _) = self.profile_root(profile);
+        let adapters_root = self.adapter_root(source, replay)?;
+        let models_root = profile.prepare_directory(source)?;
         Ok(Launch {
             executable: executable.clone(),
             models_root,
-            adapters_root: adapters.is_dir().then_some(adapters),
+            adapters_root,
             device: std::env::var("ACE_DEVICE")
                 .ok()
                 .filter(|value| !value.trim().is_empty()),
@@ -547,6 +628,19 @@ mod discovery_tests {
         let installed = discover(None, None);
         assert_eq!(installed.profile_root(&profile).0, source);
         assert!(installed.profile_root(&profile).1.ready);
+        let adapters = portable.join("data/adapters");
+        let packaged_adapter = adapters.join("saved-lora");
+        fs::create_dir_all(&packaged_adapter).unwrap();
+        fs::write(packaged_adapter.join("adapter_config.json"), b"{}").unwrap();
+        fs::write(packaged_adapter.join("saved-lora.safetensors"), b"fixture").unwrap();
+        let replay = serde_json::json!({"adapters":[{"name":"saved-lora","scale":1}]});
+        assert_eq!(
+            installed.adapter_root(&source, Some(&replay)).unwrap(),
+            Some(adapters)
+        );
+        assert!(installed
+            .adapter_root(&source, Some(&serde_json::json!({"adapter":"missing"})))
+            .is_err());
         assert!(profile
             .prepare_directory(installed.profile_root(&profile).0)
             .unwrap()
