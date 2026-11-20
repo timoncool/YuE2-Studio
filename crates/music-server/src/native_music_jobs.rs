@@ -313,6 +313,7 @@ async fn submit(
         ) {
             studio_log!("[ERROR] saving MiniMax job state: {error:#}");
         }
+        drop(_lease);
         drop(jobs);
         state.minimax_cancellations.write().await.remove(&job.id);
     });

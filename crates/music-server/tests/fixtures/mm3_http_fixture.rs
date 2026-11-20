@@ -62,28 +62,29 @@ fn handle(mut client: TcpStream, count: &mut u32) -> std::io::Result<()> {
                 format!(r#"{{"id":"{count}"}}"#).into_bytes(),
             )
         }
-        ("GET", "/job?id=1") => (
+        ("GET", "/job?id=1" | "/job?id=2") => (
             "200 OK",
             "application/json",
             br#"{"status":"done"}"#.to_vec(),
         ),
-        ("GET", "/job?id=2") => (
+        ("GET", "/job?id=3") => (
             "200 OK",
             "application/json",
             br#"{"status":"running"}"#.to_vec(),
         ),
-        ("POST", "/job?id=2&cancel=1") => {
-            fs::write("cancelled", "2")?;
+        ("POST", "/job?id=3&cancel=1") => {
+            fs::write("cancelled", "3")?;
             (
                 "200 OK",
                 "application/json",
                 br#"{"status":"cancelled"}"#.to_vec(),
             )
         }
-        ("GET", "/job?id=1&result=1") => {
-            fs::write("fetched", "1")?;
+        ("GET", "/job?id=1&result=1" | "/job?id=2&result=1") => {
+            let replay = path == "/job?id=2&result=1";
+            fs::write("fetched", if replay { "2" } else { "1" })?;
             let mut response =
-                b"--fixture\r\nContent-Type: application/json\r\n\r\n{\"audio_codes\":\"1,2,3\",\"seed\":42}\r\n--fixture\r\nContent-Type: audio/wav\r\n\r\n".to_vec();
+                format!("--fixture\r\nContent-Type: application/json\r\n\r\n{{\"audio_codes\":\"1,2,3\",\"seed\":{}}}\r\n--fixture\r\nContent-Type: audio/wav\r\n\r\n", if replay { 43 } else { 42 }).into_bytes();
             response.extend(fs::read("fixture.wav")?);
             response.extend(b"\r\n--fixture--\r\n");
             ("200 OK", "multipart/mixed; boundary=fixture", response)

@@ -227,6 +227,33 @@ async fn exercise_generation(format: Option<&str>) {
     assert_eq!(submitted["lm_model"], MODELS[0].0);
     assert_eq!(submitted["output_format"], "wav32");
 
+    let replay = rpc(
+        mcp_request(),
+        5,
+        "song_replay",
+        json!({"song_id":song["id"],"seed":43,"output_format":"wav32"}),
+    )
+    .await;
+    let replay_id = replay["id"].as_str().unwrap();
+    let rendered = wait_status(&http, &format!("{jobs}/{replay_id}"), "completed").await;
+    let take = &rendered["song"]["song"];
+    assert_ne!(take["id"], song["id"]);
+    assert_eq!(take["profile_id"], song["profile_id"]);
+    assert_eq!(take["engine_id"], ENGINE);
+    assert_eq!(take["metadata"]["derived"]["from"], song["id"]);
+    assert_eq!(
+        take["replay_request"]["audio_codes"],
+        song["replay_request"]["audio_codes"]
+    );
+    let replay_body: Value =
+        serde_json::from_slice(&fs::read(root.path().join("submitted-2.json")).unwrap()).unwrap();
+    assert_eq!(
+        replay_body["audio_codes"],
+        song["replay_request"]["audio_codes"]
+    );
+    assert_eq!(replay_body["seed"], 43);
+    assert_eq!(replay_body["dit_model"], submitted["dit_model"]);
+
     let second = timeout(Duration::from_secs(10), async {
         loop {
             let response = http.post(&jobs).json(&request).send().await.unwrap();
@@ -243,18 +270,21 @@ async fn exercise_generation(format: Option<&str>) {
     wait_status(&http, &format!("{jobs}/{id}"), "running").await;
     rpc(mcp_request(), 4, "song_job_cancel", json!({"job_id":id})).await;
     let cancelled = wait_status(&http, &format!("{jobs}/{id}"), "cancelled").await;
-    assert!(cancelled.get("songs").is_none(), "empty take lists are omitted");
+    assert!(
+        cancelled.get("songs").is_none(),
+        "empty take lists are omitted"
+    );
     assert!(cancelled["song"].is_null());
     assert_eq!(
         fs::read_to_string(root.path().join("cancelled")).unwrap(),
-        "2"
+        "3"
     );
     assert_eq!(
         fs::read_to_string(root.path().join("fetched")).unwrap(),
-        "1"
+        "2"
     );
     let library = json_response(http.get(format!("{url}/v1/library/songs"))).await;
-    assert_eq!(library.as_array().unwrap().len(), 1);
+    assert_eq!(library.as_array().unwrap().len(), 2);
     studio.kill().await.unwrap();
 }
 

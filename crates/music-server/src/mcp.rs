@@ -1605,7 +1605,7 @@ fn tools() -> &'static [Tool] {
             Tool {
                 name: "song_replay",
                 description: "Render a library song again from its saved audio codes, bit for bit or with other steps, a new sound seed, a batch of variations, or another format - without composing again.",
-                schema: || object(json!({ "song_id": { "type": "string" }, "steps": { "type": "integer" }, "solver": { "type": "string", "enum": ["midpoint", "ab2"] }, "seed": { "type": "integer" }, "synth_batch_size": { "type": "integer" }, "output_format": { "type": "string", "enum": ["flac", "mp3"] }, "title": { "type": "string" } }), &["song_id"]),
+                schema: || object(json!({ "song_id": { "type": "string" }, "steps": { "type": "integer" }, "solver": { "type": "string", "enum": ["midpoint", "ab2"] }, "seed": { "type": "integer" }, "synth_batch_size": { "type": "integer" }, "output_format": { "type": "string", "enum": ["flac", "mp3", "wav32"] }, "title": { "type": "string" } }), &["song_id"]),
                 call: |args| post("/v1/music/replay".into(), args.clone()),
             },
             Tool {
