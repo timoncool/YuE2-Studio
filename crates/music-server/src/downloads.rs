@@ -191,7 +191,17 @@ impl Downloader {
         if crate::install_record::under_way(record) {
             return false;
         }
-        let files: Vec<PathBuf> = if !asset.pick.is_empty() {
+        let libraries = crate::pin_sha::runtime_libraries(asset.url);
+        let files: Vec<PathBuf> = if !libraries.is_empty() {
+            let destination = self.picked_into(asset);
+            let mut files = Vec::new();
+            for &(name, sha) in libraries {
+                let path = destination.join(name);
+                if !crate::pin_sha::holds(&path, sha) { return false; }
+                files.push(path);
+            }
+            files
+        } else if !asset.pick.is_empty() {
             let destination = self.picked_into(asset);
             let mut files = Vec::new();
             for entry in asset.pick {
@@ -245,6 +255,7 @@ impl Downloader {
         if asset.kind == AssetKind::Model {
             return true;
         }
+        if !crate::pin_sha::runtime_libraries(asset.url).is_empty() { return false; }
         let key = if asset.pick.is_empty() && asset.unzip_into.is_none() {
             Some((self.path_of(asset), asset.bytes))
         } else {
@@ -261,6 +272,11 @@ impl Downloader {
 
     /// The files of the asset are on disk, whichever pin put them there.
     fn present(&self, asset: &Asset) -> bool {
+        let libraries = crate::pin_sha::runtime_libraries(asset.url);
+        if !libraries.is_empty() {
+            let destination = self.picked_into(asset);
+            return libraries.iter().all(|(name, _)| destination.join(name).is_file());
+        }
         if !asset.pick.is_empty() {
             let destination = self.picked_into(asset);
             return asset.pick.iter().all(|name| destination.join(picked_file_name(name)).is_file());

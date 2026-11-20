@@ -143,6 +143,17 @@ pub fn picked(url: &str, name: &str) -> Option<&'static str> {
     PICKED.iter().find(|(package, file, _)| *package == url && *file == name).map(|(_, _, sha256)| *sha256)
 }
 
+/// Libraries required to run a fully unpacked archive without downloading it again.
+pub(crate) fn runtime_libraries(url: &str) -> &'static [(&'static str, &'static str)] {
+    match url {
+        "https://github.com/timoncool/onnxruntime/releases/download/v1.32.0/onnxruntime-win-x64-1.32.0.zip" => &[
+            ("onnxruntime.dll", "348c3d29d6995eee37e3451825eaddb7ea7400be3afda6ca2286b12bc775f042"),
+            ("onnxruntime_providers_shared.dll", "6caf57ac07c9cf72fb4e73c5bb0fe156f02dd60bbbd7385530c9a5654f10f950"),
+        ],
+        _ => &[],
+    }
+}
+
 /// Whether `path` holds the bytes of `sha256`. A file is hashed once for its size and modification time, since the
 /// models page asks every second.
 pub fn holds(path: &Path, sha256: &str) -> bool {
