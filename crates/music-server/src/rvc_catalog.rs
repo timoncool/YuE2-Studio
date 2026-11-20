@@ -9,6 +9,7 @@ mod archive;
 
 use crate::{
     api_error, net,
+    rvc_catalog_progress::{self, Installation, Stage},
     rvc_voices::{self, ApiFailure, StagedFile, Voice, VoiceOrigin},
     update_data_root, AppState,
 };
@@ -256,6 +257,8 @@ async fn install_catalog_voice(
     voice: CatalogVoice,
 ) -> Result<(StatusCode, Json<Voice>), ApiFailure> {
     let local_id = voice.local_id().map_err(rvc_voices::internal)?;
+    let id = voice.id.clone();
+    let _installation = Installation::begin(&id)?;
     let installed = tokio::task::spawn_blocking({
         let root = root.clone();
         move || rvc_voices::read_voice(&root, &local_id)
@@ -270,9 +273,16 @@ async fn install_catalog_voice(
         |error: anyhow::Error| api_error(StatusCode::BAD_GATEWAY, error.to_string());
     if let Some(source) = &voice.archive {
         let archive_path = stage.path().join("voice.zip");
+        rvc_catalog_progress::downloading(
+            &voice.id,
+            Stage::DownloadingArchive,
+            &archive_path,
+            source.file.size,
+        );
         download(client, &source.file, &archive_path)
             .await
             .map_err(transfer_error)?;
+        rvc_catalog_progress::verifying(&voice.id);
         let weights_hash = parse_hash(&source.weights_sha256).map_err(rvc_voices::internal)?;
         let index_hash = parse_hash(&source.index_sha256).map_err(rvc_voices::internal)?;
         let (stage, weights, index) = tokio::task::spawn_blocking(move || {
@@ -291,17 +301,29 @@ async fn install_catalog_voice(
         .as_ref()
         .context("Missing RVC weights.")
         .map_err(rvc_voices::internal)?;
-    let model = download(client, weights, &stage.path().join("voice.pth"))
+    let model_path = stage.path().join("voice.pth");
+    rvc_catalog_progress::downloading(
+        &voice.id,
+        Stage::DownloadingWeights,
+        &model_path,
+        weights.size,
+    );
+    let model = download(client, weights, &model_path)
         .await
         .map_err(transfer_error)?;
     let index = match &voice.index {
-        Some(file) => Some(
-            download(client, file, &stage.path().join("retrieval.index"))
-                .await
-                .map_err(transfer_error)?,
-        ),
+        Some(file) => {
+            let path = stage.path().join("retrieval.index");
+            rvc_catalog_progress::downloading(&voice.id, Stage::DownloadingIndex, &path, file.size);
+            Some(
+                download(client, file, &path)
+                    .await
+                    .map_err(transfer_error)?,
+            )
+        }
         None => None,
     };
+    rvc_catalog_progress::verifying(&voice.id);
     rvc_voices::install_staged(root, stage, model, index, Some(voice.origin())).await
 }
 
@@ -509,13 +531,26 @@ mod tests {
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let base_url = format!("http://{}", listener.local_addr().unwrap());
         let mut router = axum::Router::new();
+        let requested = std::sync::Arc::new(tokio::sync::Notify::new());
+        let release = std::sync::Arc::new(tokio::sync::Notify::new());
+        let valid_position = variants.len() - 1;
         for (position, (payload, _, _)) in variants.iter().enumerate() {
+            let requested = requested.clone();
+            let release = release.clone();
             let payload = payload.clone();
             router = router.route(
                 &format!("/{position}.zip"),
                 axum::routing::get(move || {
                     let payload = payload.clone();
-                    async move { payload }
+                    let requested = requested.clone();
+                    let release = release.clone();
+                    async move {
+                        if position == valid_position {
+                            requested.notify_one();
+                            release.notified().await;
+                        }
+                        payload
+                    }
                 }),
             );
         }
@@ -544,8 +579,32 @@ mod tests {
                 metadata: None,
             };
             let id = make_voice().local_id().unwrap();
-            let outcome =
-                install_catalog_voice(root.path().to_path_buf(), &client, make_voice()).await;
+            let install = install_catalog_voice(root.path().to_path_buf(), &client, make_voice());
+            let outcome = if position == valid_position {
+                let check_progress = async {
+                    tokio::time::timeout(std::time::Duration::from_secs(5), requested.notified())
+                        .await
+                        .expect("ZIP download starts");
+                    let progress =
+                        rvc_catalog_progress::get(axum::extract::Path("zip-fixture".into()))
+                            .await
+                            .0;
+                    let progress = serde_json::to_value(progress).unwrap();
+                    release.notify_one();
+                    assert_eq!(progress["stage"], "downloading_archive");
+                    assert_eq!(progress["total_bytes"], payload.len() as u64);
+                };
+                let (outcome, ()) = tokio::join!(install, check_progress);
+                assert!(
+                    rvc_catalog_progress::get(axum::extract::Path("zip-fixture".into()))
+                        .await
+                        .0
+                        .is_none()
+                );
+                outcome
+            } else {
+                install.await
+            };
             if position + 1 < variants.len() {
                 let (status, Json(error)) = outcome.err().expect("invalid ZIP rejected");
                 assert_eq!(status, StatusCode::BAD_GATEWAY);

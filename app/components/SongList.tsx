@@ -17,6 +17,7 @@ import { exactMoment, relativeMoment } from '../services/dates';
 import { compareBy, SONG_ORDERS, useListOrder, type SongOrder } from '../services/songOrder';
 import { onPlayHistory } from '../services/playHistory';
 import { downloadSongAudio } from '../services/songDownload';
+import { saveTrackZip } from '../services/trackZip';
 import { nameMatches, searchWords, songMatches } from '../services/songSearch';
 
 interface SongListProps {
@@ -385,10 +386,11 @@ export const SongList: React.FC<SongListProps> = ({
     }, [isSelecting, selectableSongs]); // eslint-disable-line react-hooks/exhaustive-deps
 
     const [downloading, setDownloading] = useState(false);
-    const downloadSelected = async () => {
+    const downloadSelected = async (zip = false) => {
         setDownloading(true);
         try {
-            for (const song of selectedSongs.filter(entry => entry.audioUrl)) await downloadSongAudio(song);
+            if (zip) await saveTrackZip(selectedSongs.map(song => song.id));
+            else for (const song of selectedSongs.filter(entry => entry.audioUrl)) await downloadSongAudio(song);
         } catch (error) {
             console.error('Download failed:', error);
             window.alert(error instanceof Error ? error.message : String(error));
@@ -637,6 +639,14 @@ export const SongList: React.FC<SongListProps> = ({
                                 >
                                     {downloading ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}
                                     {t('download')}
+                                </button>
+                                <button
+                                    onClick={() => void downloadSelected(true)}
+                                    disabled={!selectedSongs.length || downloading}
+                                    className="flex items-center gap-1.5 rounded-lg border border-zinc-300 px-3 py-1.5 text-xs font-semibold text-zinc-700 hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-40 dark:border-white/20 dark:text-zinc-200 dark:hover:bg-white/10"
+                                >
+                                    <Download size={14} />
+                                    {t('exportMenu')} ZIP
                                 </button>
                                 {onAddManyToPlaylist && (
                                     <button

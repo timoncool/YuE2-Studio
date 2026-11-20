@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react';
 import { useI18n } from '../context/I18nContext';
 import { rvcVoiceStrings } from '../i18n/rvcVoices';
-import { responseJson, type Voice } from '../services/rvcVoices';
+import { poll } from '../services/poll';
+import { responseJson, type Voice, voiceName } from '../services/rvcVoices';
 
 const URL = '/v1/rvc/catalog';
+const PAGE_SIZE = 40;
 
 interface CatalogVoice {
   id: string;
@@ -27,8 +29,17 @@ interface CatalogVoice {
 const metadataFields = ['vocal_style', 'rvc_version', 'sample_rate_hz'] as const;
 type MetadataField = typeof metadataFields[number];
 type Filters = Partial<Record<MetadataField | 'index', string>>;
+interface InstallProgress {
+  stage: 'preparing' | 'downloading_weights' | 'downloading_archive' | 'downloading_index' | 'verifying';
+  downloaded_bytes: number;
+  total_bytes: number;
+}
 
-export function RvcCuratedVoices({ onInstalled, disabled }: { onInstalled: (voice: Voice) => void; disabled: boolean }) {
+export function RvcCuratedVoices({ onInstalled, onChoose, disabled }: {
+  onInstalled: (voice: Voice) => void;
+  onChoose: (id: string) => void;
+  disabled: boolean;
+}) {
   const { language } = useI18n();
   const labels = rvcVoiceStrings[language];
   const [open, setOpen] = useState(false);
@@ -36,8 +47,17 @@ export function RvcCuratedVoices({ onInstalled, disabled }: { onInstalled: (voic
   const [request, setRequest] = useState(0);
   const [installing, setInstalling] = useState<string>();
   const [error, setError] = useState<string>();
+  const [progress, setProgress] = useState<InstallProgress | null>(null);
+  const [installedName, setInstalledName] = useState<string>();
   const [search, setSearch] = useState('');
   const [filters, setFilters] = useState<Filters>({});
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
+  const sizeFormat = new Intl.NumberFormat(language, { style: 'unit', unit: 'megabyte', maximumFractionDigits: 1 });
+
+  function setFilter(field: MetadataField | 'index', value: string) {
+    setFilters(current => ({ ...current, [field]: value }));
+    setVisibleCount(PAGE_SIZE);
+  }
 
   useEffect(() => {
     if (!open) return;
@@ -48,8 +68,25 @@ export function RvcCuratedVoices({ onInstalled, disabled }: { onInstalled: (voic
     return () => controller.abort();
   }, [open, request]);
 
+  useEffect(() => {
+    if (!installing) return;
+    const controller = new AbortController();
+    const stop = poll(async () => {
+      try {
+        const reply = await fetch(`${URL}/progress/${encodeURIComponent(installing)}`, { signal: controller.signal });
+        const next = await responseJson<InstallProgress | null>(reply);
+        if (next && !controller.signal.aborted) setProgress(next);
+      } catch {
+        // The install request reports the final result. A missed progress sample can be retried.
+      }
+    }, 350);
+    return () => { controller.abort(); stop(); };
+  }, [installing]);
+
   async function install(id: string) {
     setInstalling(id);
+    setProgress(null);
+    setInstalledName(undefined);
     setError(undefined);
     try {
       const voice = await responseJson<Voice>(await fetch(`${URL}/install`, {
@@ -57,8 +94,9 @@ export function RvcCuratedVoices({ onInstalled, disabled }: { onInstalled: (voic
       }));
       setCatalog(current => current?.map(item => item.id === id ? { ...item, installed_id: voice.id } : item) ?? null);
       onInstalled(voice);
+      setInstalledName(voiceName(voice));
     } catch (failure) {
-      setError(failure instanceof Error ? failure.message : String(failure));
+      setError(`${labels.installFailed} ${failure instanceof Error ? failure.message : String(failure)}`);
     } finally {
       setInstalling(undefined);
     }
@@ -71,7 +109,16 @@ export function RvcCuratedVoices({ onInstalled, disabled }: { onInstalled: (voic
       && metadataFields.every(field => !filters[field] || String(voice.metadata?.[field] ?? '') === filters[field])
       && (!filters.index || ((voice.has_index ?? !!voice.index) ? 'present' : 'absent') === filters.index);
   });
+  const visible = matches.slice(0, visibleCount);
   const filterActive = terms.length > 0 || Object.values(filters).some(Boolean);
+  const stageLabels = {
+    preparing: labels.preparing,
+    downloading_weights: labels.fetchingWeights,
+    downloading_archive: labels.fetchingArchive,
+    downloading_index: labels.fetchingIndex,
+    verifying: labels.verifying,
+  };
+  const activeStage = installing ? stageLabels[progress?.stage ?? 'preparing'] : undefined;
   const filterLabels = {
     vocal_style: labels.vocalStyle,
     rvc_version: labels.rvcVersion,
@@ -87,6 +134,16 @@ export function RvcCuratedVoices({ onInstalled, disabled }: { onInstalled: (voic
           {!catalog && !error && <p role="status">{labels.loading}</p>}
           {catalog?.length === 0 && <p>{labels.empty}</p>}
           {error && <p role="alert" className="break-words text-rose-600 dark:text-rose-300">{error}</p>}
+          {activeStage && (
+            <div className="mb-2 space-y-1">
+              <p role="status">{activeStage}</p>
+              {progress && progress.total_bytes > 0 && (
+                <progress aria-label={activeStage} className="w-full accent-pink-500"
+                  value={progress.downloaded_bytes} max={progress.total_bytes} />
+              )}
+            </div>
+          )}
+          {!installing && installedName && <p role="status">{labels.installDone.replace('{voice}', installedName)}</p>}
           {!catalog && error && (
             <button type="button" className="text-pink-600 underline dark:text-pink-300"
               onClick={() => { setError(undefined); setRequest(value => value + 1); }}>{labels.retry}</button>
@@ -96,7 +153,7 @@ export function RvcCuratedVoices({ onInstalled, disabled }: { onInstalled: (voic
               <div className="mb-2 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
                 <label className="block space-y-1 sm:col-span-2 lg:col-span-4">
                   <span>{labels.search}</span>
-                  <input type="search" value={search} onChange={event => setSearch(event.target.value)}
+                  <input type="search" value={search} onChange={event => { setSearch(event.target.value); setVisibleCount(PAGE_SIZE); }}
                     className="w-full rounded border border-zinc-200 px-2 py-1 dark:border-white/10" />
                 </label>
                 {metadataFields.map(field => {
@@ -109,7 +166,7 @@ export function RvcCuratedVoices({ onInstalled, disabled }: { onInstalled: (voic
                       <span>{filterLabels[field]}</span>
                       <select value={filters[field] ?? ''} disabled={options.length === 0}
                         className="w-full rounded border border-zinc-200 px-2 py-1 dark:border-white/10"
-                        onChange={event => setFilters(current => ({ ...current, [field]: event.target.value }))}>
+                        onChange={event => setFilter(field, event.target.value)}>
                         <option value="">{labels.all}</option>
                         {options.map(value => <option key={value} value={value}>{field === 'sample_rate_hz' ? `${value} Hz` : value}</option>)}
                       </select>
@@ -119,7 +176,7 @@ export function RvcCuratedVoices({ onInstalled, disabled }: { onInstalled: (voic
                 <label className="block space-y-1">
                   <span>{labels.retrieval}</span>
                   <select value={filters.index ?? ''} className="w-full rounded border border-zinc-200 px-2 py-1 dark:border-white/10"
-                    onChange={event => setFilters(current => ({ ...current, index: event.target.value }))}>
+                    onChange={event => setFilter('index', event.target.value)}>
                     <option value="">{labels.all}</option>
                     <option value="present">{labels.withIndex}</option>
                     <option value="absent">{labels.withoutIndex}</option>
@@ -128,11 +185,15 @@ export function RvcCuratedVoices({ onInstalled, disabled }: { onInstalled: (voic
               </div>
               {filterActive && (
                 <button type="button" className="mb-2 text-pink-600 underline dark:text-pink-300"
-                  onClick={() => { setSearch(''); setFilters({}); }}>{labels.clear}</button>
+                  onClick={() => { setSearch(''); setFilters({}); setVisibleCount(PAGE_SIZE); }}>{labels.clear}</button>
               )}
-              {matches.length === 0 && <p role="status">{labels.noMatch}</p>}
+              <p role="status" className="mb-1 text-zinc-600 dark:text-zinc-300">
+                {matches.length === 0 ? labels.noMatch : labels.resultCount
+                  .replace('{visible}', visible.length.toLocaleString(language))
+                  .replace('{total}', matches.length.toLocaleString(language))}
+              </p>
               <ul className="max-h-80 divide-y divide-zinc-200 overflow-auto dark:divide-white/10">
-              {matches.map(voice => {
+              {visible.map(voice => {
                 const size = (voice.download_bytes ?? ((voice.weights?.size ?? 0) + (voice.index?.size ?? 0))) / 1_000_000;
                 return (
                   <li key={voice.id} className="flex flex-wrap items-center justify-between gap-2 py-2">
@@ -141,18 +202,23 @@ export function RvcCuratedVoices({ onInstalled, disabled }: { onInstalled: (voic
                       <p className="mt-1 text-zinc-600 dark:text-zinc-300">
                         <a href={voice.source_url} target="_blank" rel="noreferrer" className="underline">{voice.source_repo}</a>
                         {' · '}{voice.license ?? labels.licenseUnknown}{' · '}
-                        {new Intl.NumberFormat(language, { style: 'unit', unit: 'megabyte', maximumFractionDigits: 1 }).format(size)}
+                        {sizeFormat.format(size)}
                       </p>
                     </div>
-                    <button type="button" disabled={disabled || Boolean(installing) || !!voice.installed_id}
-                      aria-label={`${labels.install} ${voice.name}`} onClick={() => void install(voice.id)}
+                    <button type="button" disabled={disabled || Boolean(installing)}
+                      aria-label={`${voice.installed_id ? labels.selectInstalled : labels.install} ${voice.name}`}
+                      onClick={() => voice.installed_id ? onChoose(voice.installed_id) : void install(voice.id)}
                       className="rounded-lg border border-zinc-200 px-3 py-2 enabled:hover:border-pink-500 disabled:opacity-50 dark:border-white/10">
-                      {voice.installed_id ? labels.installed : installing === voice.id ? labels.installing : labels.install}
+                      {voice.installed_id ? labels.selectInstalled : installing === voice.id ? labels.installing : labels.install}
                     </button>
                   </li>
                 );
               })}
               </ul>
+              {visible.length < matches.length && (
+                <button type="button" className="mt-2 text-pink-600 underline dark:text-pink-300"
+                  onClick={() => setVisibleCount(count => count + PAGE_SIZE)}>{labels.showMore}</button>
+              )}
             </>
           )}
         </div>

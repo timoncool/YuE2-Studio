@@ -3,19 +3,24 @@ import { createRoot } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { describe, expect, it, vi } from 'vitest';
 import { I18nProvider } from '../context/I18nContext';
-import type { Song } from '../types';
+import type { Song, YueRequest } from '../types';
 import { useGenerations, followsLocalProgress, keepingDeleted, rowsFor, rowTaken, stillWaiting } from './generations';
 
-it.each([true, false])('cancels an unacknowledged request when the job ID arrives (accepted=%s)', async accepted => {
+it.each([
+  { accepted: true, engine: 'openrouter', source: { kind: 'openrouter', model: 'test/music' } },
+  { accepted: false, engine: 'openrouter', source: { kind: 'openrouter', model: 'test/music' } },
+  { accepted: true, engine: 'audio.cpp', source: { kind: 'audio_cpp', model: 'minimax_music3' } },
+] satisfies { accepted: boolean; engine: string; source: YueRequest['music_source'] }[])(
+  'labels a $engine card before acknowledgement and cancels when the job ID arrives', async ({ accepted, engine, source }) => {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const root = createRoot(document.createElement('div'));
   const notify = vi.fn();
   let release!: (response: Response) => void;
   const submitted = new Promise<Response>(resolve => { release = resolve; });
-  const job = { id: 'cloud-job', engine_id: 'openrouter', submitted_at: 1, status: 'running', generation_settings: {} };
+  const job = { id: 'fixture-job', engine_id: engine, submitted_at: 1, status: 'running', generation_settings: {} };
   const fetcher = vi.fn(async (path: string, init?: RequestInit) => {
     if (path === '/v1/music/jobs' && init?.method === 'POST') return submitted;
-    if (path === '/v1/music/jobs/cloud-job' && init?.method === 'POST') {
+    if (path === '/v1/music/jobs/fixture-job' && init?.method === 'POST') {
       return accepted ? Response.json({ ...job, status: 'cancelled' }) : new Response(null, { status: 503 });
     }
     return Response.json([]);
@@ -31,11 +36,12 @@ it.each([true, false])('cancels an unacknowledged request when the job ID arrive
     await act(async () => root.render(createElement(QueryClientProvider, { client },
       createElement(I18nProvider, { children: createElement(Editor) }))));
     let generation!: Promise<void>;
-    act(() => { generation = studio.generate({ style: 'piano', lyrics: '', music_source: { kind: 'openrouter', model: 'test/music' } }); });
+    act(() => { generation = studio.generate({ style: 'piano', lyrics: 'verse', music_source: source }); });
+    expect(studio.songs[0]).toMatchObject({ ditModel: engine, isGenerating: true, stage: 'stageGeneratingTrack' });
     await act(async () => studio.cancelAll());
     expect(studio.isGenerating).toBe(true);
     await act(async () => { release(Response.json(job)); await generation; });
-    expect(fetcher).toHaveBeenCalledWith('/v1/music/jobs/cloud-job', { method: 'POST' });
+    expect(fetcher).toHaveBeenCalledWith('/v1/music/jobs/fixture-job', { method: 'POST' });
     expect(studio.isGenerating).toBe(!accepted);
     if (!accepted) expect(notify).toHaveBeenCalledWith(expect.stringContaining('503'), 'error');
   } finally {
@@ -45,10 +51,11 @@ it.each([true, false])('cancels an unacknowledged request when the job ID arrive
   }
 });
 
-it('keeps cloud jobs and finished cards out of native progress updates', () => {
+it('keeps cloud, audio.cpp and finished cards out of native progress updates', () => {
   const running = { jobId: 'job', isGenerating: true };
   expect(followsLocalProgress(song('native', running))).toBe(true);
   expect(followsLocalProgress(song('cloud', { ...running, ditModel: 'openrouter' }))).toBe(false);
+  expect(followsLocalProgress(song('music3', { ...running, ditModel: 'audio.cpp' }))).toBe(false);
   expect(followsLocalProgress(song('done', { ...running, isGenerating: false }))).toBe(false);
 });
 

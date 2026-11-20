@@ -462,14 +462,14 @@ async fn watch(
     }))
 }
 
-struct ShapedOutput {
-    audio: Vec<u8>,
-    extension: &'static str,
-    duration: f64,
-    fades: (f32, f32),
+pub(super) struct ShapedOutput {
+    pub(super) audio: Vec<u8>,
+    pub(super) extension: &'static str,
+    pub(super) duration: f64,
+    pub(super) fades: (f32, f32),
 }
 
-fn shape_output(
+pub(super) fn shape_output(
     audio: Vec<u8>,
     format: &str,
     bitrate: Option<u32>,

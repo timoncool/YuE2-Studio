@@ -5,6 +5,7 @@ import { useI18n } from '../context/I18nContext';
 import type { TranslationKey } from '../i18n/translations';
 import { apiUrl } from '../services/apiBase';
 import { saveFile } from '../services/saveFile';
+import { saveTrackZip } from '../services/trackZip';
 import { SongMidiFiles } from './SongMidiFiles';
 import { AbletonProject } from './AbletonProject';
 
@@ -67,6 +68,7 @@ export const ExportDialog: React.FC = () => {
   const [customCeiling, setCustomCeiling] = useState('-1');
   const [job, setJob] = useState<Job | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [savingZip, setSavingZip] = useState(false);
   const poll = useRef<number | null>(null);
   const held = useRef<string | null>(null);
 
@@ -98,6 +100,18 @@ export const ExportDialog: React.FC = () => {
   }, [format, depth, rate]);
 
   if (!song) return null;
+
+  const exportZip = async () => {
+    setSavingZip(true);
+    setError(null);
+    try {
+      await saveTrackZip([song.id]);
+    } catch (error) {
+      setError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setSavingZip(false);
+    }
+  };
 
   const busy = job !== null && !job.done;
   const close = () => {
@@ -276,6 +290,11 @@ export const ExportDialog: React.FC = () => {
         {error && <p className="mt-3 text-xs text-rose-600 dark:text-rose-300">{error}</p>}
 
         <div className="mt-5 flex justify-end gap-2">
+          <button type="button" disabled={savingZip || busy} onClick={() => void exportZip()}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-200 px-3 py-2 text-xs font-semibold text-zinc-700 disabled:opacity-50 dark:border-white/10 dark:text-zinc-200">
+            {savingZip ? <Loader2 size={13} className="animate-spin" /> : <Download size={13} />}
+            {t('exportMenu')} ZIP
+          </button>
           {report ? (
             <>
               <button type="button" onClick={again} className="rounded-lg border border-zinc-200 px-3 py-2 text-xs font-semibold text-zinc-700 dark:border-white/10 dark:text-zinc-200">{t('exportAgain')}</button>
