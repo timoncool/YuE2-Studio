@@ -1463,10 +1463,7 @@ function AppContent() {
             onDeleteMany={handleDeleteSongs}
             onMidiMany={transcribeManyToMidi}
             selectedSong={selectedSong}
-            onSelect={(s) => {
-              setSelectedSong(s);
-              setShowRightSidebar(true);
-            }}
+            onSelect={handleShowDetails}
             onShowDetails={toggleLibraryDetails}
             onOpenCoverRegen={openCoverRegen}
             detailsSongId={(hasSidePanel ? showRightSidebar : showMobileDetails) ? selectedSong?.id ?? null : null}
@@ -1479,19 +1476,21 @@ function AppContent() {
       case 'playlist':
         if (!viewingPlaylistId) return null;
         return (
-          <PlaylistDetail
-            playlistId={viewingPlaylistId}
-            onBack={handleBackFromPlaylist}
-            onPlaySong={playFromPlaylist(viewingPlaylistId)}
-            currentSong={currentSong}
-            isPlaying={isPlaying}
-            notify={showToast}
-            onSelect={(s) => {
-              setSelectedSong(s);
-              setShowRightSidebar(true);
-            }}
-            onError={message => showToast(message, 'error')}
-          />
+          <div className="relative flex h-full min-h-0 min-w-0 w-full overflow-hidden">
+            <div className="min-w-0 flex-1 overflow-hidden">
+              <PlaylistDetail
+                playlistId={viewingPlaylistId}
+                onBack={handleBackFromPlaylist}
+                onPlaySong={playFromPlaylist(viewingPlaylistId)}
+                currentSong={currentSong}
+                isPlaying={isPlaying}
+                notify={showToast}
+                onSelect={handleShowDetails}
+                onError={message => showToast(message, 'error')}
+              />
+            </div>
+            {sidePanel}
+          </div>
         );
 
       case 'search':
@@ -1811,7 +1810,7 @@ function AppContent() {
 
       {/* Mobile Details Modal */}
       {showMobileDetails && selectedShown && (
-        <div className={`fixed inset-0 z-60 flex justify-end ${currentView === 'create' || currentView === 'library' ? 'xl:hidden' : ''}`}>
+        <div className={`fixed inset-0 z-60 flex justify-end ${currentView === 'create' || currentView === 'library' || currentView === 'playlist' ? 'xl:hidden' : ''}`}>
           <div
             className="absolute inset-0 bg-black/60 backdrop-blur-xs animate-in fade-in"
             onClick={() => setShowMobileDetails(false)}

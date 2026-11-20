@@ -223,11 +223,11 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
              <div className="mb-8 flex flex-col items-start justify-between gap-3 sm:flex-row sm:items-center">
                 <h1 className="min-w-0 truncate text-2xl font-bold text-zinc-900 dark:text-white sm:text-3xl">{t('yourLibrary')}</h1>
                 <div className="flex flex-wrap items-center gap-2">
-                  <button type="button" onClick={onCreateAlbum} className="flex items-center gap-2 rounded-full bg-zinc-900 px-4 py-2 font-medium text-white shadow-lg shadow-zinc-900/10 transition-colors hover:bg-zinc-800 dark:bg-zinc-800 dark:shadow-none dark:hover:bg-zinc-700">
-                    <Plus size={18} /><span>{t('newAlbum')}</span>
-                  </button>
                   <button type="button" onClick={onCreatePlaylist} className="flex items-center gap-2 rounded-full bg-zinc-900 px-4 py-2 font-medium text-white shadow-lg shadow-zinc-900/10 transition-colors hover:bg-zinc-800 dark:bg-zinc-800 dark:shadow-none dark:hover:bg-zinc-700">
                     <Plus size={18} /><span>{t('newPlaylist')}</span>
+                  </button>
+                  <button type="button" onClick={onCreateAlbum} className="flex items-center gap-2 rounded-full bg-zinc-900 px-4 py-2 font-medium text-white shadow-lg shadow-zinc-900/10 transition-colors hover:bg-zinc-800 dark:bg-zinc-800 dark:shadow-none dark:hover:bg-zinc-700">
+                    <Plus size={18} /><span>{t('newAlbum')}</span>
                   </button>
                 </div>
              </div>
