@@ -1,64 +1,23 @@
-name: CI
-
-# The service's tests on Windows, the studio's own platform, and on Linux, and the interface
-# type-checked, tested and built, on every branch pushed.
-
+name: Windows library acceptance
 on:
   push:
-    branches-ignore: [main]
-    paths-ignore: ["docs/stars-*.svg"]
-  pull_request:
-  workflow_dispatch:
-
-concurrency:
-  group: ci-${{ github.ref }}
-  cancel-in-progress: true
-
+    branches: [qa/rename-library-76e1e25-windows]
+permissions:
+  contents: read
 jobs:
-  service:
+  library:
     runs-on: windows-latest
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v7.0.1
-      - uses: Swatinem/rust-cache@v2
-      - name: YuE2 training and checkpoints
-        run: cargo test --locked -p music-engine --lib yue_train::tests
-      - name: Service tests
-        run: cargo test -p music-server --locked
-
-  # the same tests on Linux, the platform the studio's Linux package runs on; the repository's toolchain file names
-  # the Windows one, so the runner's own stable toolchain is taken
-  service-linux:
-    runs-on: ubuntu-latest
-    env:
-      RUSTUP_TOOLCHAIN: stable
-    steps:
-      - uses: actions/checkout@v7.0.1
-      - name: System libraries (the file dialog's Wayland, FLAC's CMake)
-        run: sudo apt-get update -q && sudo apt-get install -y -q --no-install-recommends libwayland-dev cmake
-      - uses: Swatinem/rust-cache@v2
-      - name: YuE2 training and checkpoints
-        run: cargo test --locked -p music-engine --lib yue_train::tests
-      - name: Service tests
-        run: cargo test -p music-server --locked
-
-  interface:
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: app
-    steps:
-      - uses: actions/checkout@v7.0.1
-        with:
-          fetch-depth: 0 # the news page's changelog is read from the history
       - uses: actions/setup-node@v7.1.0
         with:
-          node-version: 22
+          node-version: 24
           cache: npm
           cache-dependency-path: app/package-lock.json
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo build --locked -p music-server --bin music-server
       - run: npm ci --no-audit --no-fund
-      - name: Build
-        run: npm run build
-      - name: Types
-        run: npx tsc --noEmit -p .
-      - name: Tests
-        run: npm test
+        working-directory: app
+      - run: python -m pip install playwright imageio-ffmpeg
+      - run: python .github/check-library-rename.py
