@@ -5819,7 +5819,9 @@ async fn stop_engine_for_files(state: &AppState) -> bool {
 /// Starts the engine again with the saved options; an engine that does not start is counted for the hub by a reason
 /// that names no path on the computer.
 async fn restart_engine(state: &AppState) -> Result<(), String> {
+    *state.engine_start_error.write().await = None;
     let started = start_engine_again(state).await;
+    *state.engine_start_error.write().await = started.as_ref().err().cloned();
     if let Err(error) = &started {
         count_engine_failure(state, error);
     }
@@ -6416,11 +6418,15 @@ async fn reload_engine_if_models_changed(state: &AppState) {
 /// Whether the running engine serves the files now selected; none when no engine runs or the selection cannot be
 /// read.
 async fn engine_serves_selection(state: &AppState) -> Option<bool> {
-    let wanted = selected_engine_models(state).await.ok()?;
     let current = {
         let supervisor = state.engine.lock().await;
         supervisor.as_ref().map(|engine| engine.config().models.clone())
     }?;
+    selection_matches_files(state, &current).await
+}
+
+async fn selection_matches_files(state: &AppState, current: &music_engine::yue_server::YueModelFiles) -> Option<bool> {
+    let wanted = selected_engine_models(state).await.ok()?;
     let same = |a: &std::path::Path, b: &std::path::Path| {
         fs::canonicalize(a).ok().zip(fs::canonicalize(b).ok()).is_some_and(|(a, b)| a == b)
     };
@@ -7018,7 +7024,13 @@ async fn compose_setup_status(state: &AppState, manager_status: model_manager::M
     if let Value::Object(ref mut fields) = status {
         let engine_ready = state.music_server.health().await;
         let matches_selection = if engine_ready && selected_set_ready {
-            engine_serves_selection(state).await
+            // Restart holds this mutex while the weights load. Status polling must remain responsive.
+            let current = state.engine.try_lock().map(|guard| guard.as_ref().map(|engine| engine.config().models.clone()));
+            match current {
+                Ok(Some(files)) => Some(selection_matches_files(state, &files).await.unwrap_or(false)),
+                Ok(None) => None, // An externally managed engine can serve this port.
+                Err(_) => Some(false),
+            }
         } else {
             None
         };
