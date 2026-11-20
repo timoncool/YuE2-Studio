@@ -78,6 +78,8 @@ async fn exercise_generation(format: Option<&str>) {
         .env("YUE_MINIMAX_MM_SERVER_BIN", &engine)
         .env("YUE_MINIMAX_MODELS_ROOT", &models)
         .env("TIMONCOOL_SHARED_DIR", root.path().join("registry"))
+        .env("DO_NOT_TRACK", "1")
+        .env("STUDIO_HUB_URL", format!("{url}/fixture-hub"))
         .kill_on_drop(true);
     let mut studio = studio.spawn().unwrap();
 
@@ -158,7 +160,15 @@ async fn exercise_generation(format: Option<&str>) {
     }
     let accepted = rpc(mcp_request(), 3, "song_create", request.clone()).await;
     let id = accepted["id"].as_str().unwrap();
-    let job = wait_status(&http, &format!("{jobs}/{id}"), "completed").await;
+    let job_url = format!("{jobs}/{id}");
+    let job = wait_status(&http, &job_url, "completed").await;
+    let hub_path = data.join("studio-hub.json");
+    wait_for_completed_song_counts(&hub_path, 1).await;
+    for _ in 0..3 {
+        let polled = json_response(http.get(&job_url)).await;
+        assert_eq!(polled["status"], "completed");
+    }
+    assert_completed_song_counts(&hub_path, 1);
     assert_eq!(job["engine_id"], ENGINE);
     assert_eq!(job["songs"].as_array().unwrap().len(), 1);
     let song = &job["songs"][0]["song"];
@@ -236,6 +246,7 @@ async fn exercise_generation(format: Option<&str>) {
     .await;
     let replay_id = replay["id"].as_str().unwrap();
     let rendered = wait_status(&http, &format!("{jobs}/{replay_id}"), "completed").await;
+    wait_for_completed_song_counts(&hub_path, 2).await;
     let take = &rendered["song"]["song"];
     assert_ne!(take["id"], song["id"]);
     assert_eq!(take["profile_id"], song["profile_id"]);
@@ -285,7 +296,36 @@ async fn exercise_generation(format: Option<&str>) {
     );
     let library = json_response(http.get(format!("{url}/v1/library/songs"))).await;
     assert_eq!(library.as_array().unwrap().len(), 2);
+    assert_completed_song_counts(&hub_path, 2);
     studio.kill().await.unwrap();
+}
+
+async fn wait_for_completed_song_counts(path: &Path, expected: u64) {
+    timeout(Duration::from_secs(3), async {
+        loop {
+            let hub: Value = serde_json::from_slice(&fs::read(path).unwrap()).unwrap();
+            let (songs, done) = (
+                hub["totals"]["songs"].as_u64().unwrap_or_default(),
+                hub["totals"]["song_done"].as_u64().unwrap_or_default(),
+            );
+            assert!(
+                songs <= expected && done <= expected,
+                "duplicate song completion: {songs}/{done}"
+            );
+            if songs == expected && done == expected {
+                break;
+            }
+            sleep(Duration::from_millis(25)).await;
+        }
+    })
+    .await
+    .expect("MiniMax completion must be counted");
+}
+
+fn assert_completed_song_counts(path: &Path, expected: u64) {
+    let hub: Value = serde_json::from_slice(&fs::read(path).unwrap()).unwrap();
+    assert_eq!(hub["totals"]["songs"], expected);
+    assert_eq!(hub["totals"]["song_done"], expected);
 }
 
 async fn free_port() -> u16 {
