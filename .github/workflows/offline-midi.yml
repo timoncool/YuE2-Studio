@@ -1,0 +1,14 @@
+name: Reuse MIDI model from another Studio while offline
+on:
+  push:
+    branches: [qa/offline-midi-reuse]
+permissions:
+  contents: read
+jobs:
+  install:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo build --locked -p music-server --bin music-server
+      - run: python .github/check_offline_midi.py target/debug/music-server.exe
