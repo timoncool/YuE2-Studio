@@ -33,6 +33,7 @@ export const ReplayModal: React.FC<ReplayModalProps> = ({ song, clientRef, onClo
     typeof settings[key] === 'number' ? (settings[key] as number) : fallback;
 
   const native = isNativeMusicEngine(song.ditModel);
+  const supportsVariations = song.ditModel !== 'minimaxmusic-cpp';
   const minimumSteps = song.ditModel === 'minimaxmusic-cpp' ? 2 : 1;
   const originalSteps = settings.inference_steps ?? settings.steps;
   const [steps, setSteps] = useState<number | ''>(typeof originalSteps === 'number' ? originalSteps : native ? '' : 32);
@@ -66,7 +67,7 @@ export const ReplayModal: React.FC<ReplayModalProps> = ({ song, clientRef, onClo
           client_ref: clientRef,
           steps: steps === '' ? undefined : steps,
           seed: parsedSeed,
-          synth_batch_size: native ? undefined : variations,
+          synth_batch_size: supportsVariations ? variations : undefined,
           output_format: format,
           mp3_bitrate: format === 'mp3' ? bitrate : undefined,
           extend_seconds: extend > 0 ? extend : undefined,
@@ -104,7 +105,7 @@ export const ReplayModal: React.FC<ReplayModalProps> = ({ song, clientRef, onClo
               <span className="mb-1.5 block">{t('flowSteps')}</span>
               <input type="number" min={minimumSteps} max={200} value={steps} onChange={event => setSteps(event.target.value === '' ? '' : Math.max(minimumSteps, Number(event.target.value)))} className={CONTROL} />
             </label>
-            {!native && <label className="block text-xs font-medium text-zinc-600 dark:text-zinc-300">
+            {supportsVariations && <label className="block text-xs font-medium text-zinc-600 dark:text-zinc-300">
               <span className="mb-1.5 block">{t('variationsPerRender')}</span>
               <input type="number" min={1} max={9} value={variations} onChange={event => setVariations(Math.min(9, Math.max(1, Number(event.target.value) || 1)))} className={CONTROL} />
             </label>}
