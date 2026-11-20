@@ -2,7 +2,8 @@ import React, { useState } from 'react';
 import { AlertTriangle, Loader2, Repeat, X } from 'lucide-react';
 import { Song } from '../types';
 import { useI18n } from '../context/I18nContext';
-import { parseDuration } from '../services/nativeLibrary';
+import { nativeMusicEngineName, parseDuration } from '../services/nativeLibrary';
+import { isNativeMusicEngine } from '../services/nativeMusicProfiles';
 
 /**
  * Deterministic re-render.
@@ -31,7 +32,10 @@ export const ReplayModal: React.FC<ReplayModalProps> = ({ song, clientRef, onClo
   const numberOr = (key: string, fallback: number) =>
     typeof settings[key] === 'number' ? (settings[key] as number) : fallback;
 
-  const [steps, setSteps] = useState<number>(numberOr('steps', 32));
+  const native = isNativeMusicEngine(song.ditModel);
+  const minimumSteps = song.ditModel === 'minimaxmusic-cpp' ? 2 : 1;
+  const originalSteps = settings.inference_steps ?? settings.steps;
+  const [steps, setSteps] = useState<number | ''>(typeof originalSteps === 'number' ? originalSteps : native ? '' : 32);
   const [variations, setVariations] = useState<number>(1);
   // Empty keeps the track's own sound seed exactly as the service stored it:
   // the engine draws 64-bit seeds, which a JavaScript number cannot hold.
@@ -60,16 +64,16 @@ export const ReplayModal: React.FC<ReplayModalProps> = ({ song, clientRef, onClo
         body: JSON.stringify({
           song_id: song.id,
           client_ref: clientRef,
-          steps,
+          steps: steps === '' ? undefined : steps,
           seed: parsedSeed,
-          synth_batch_size: variations,
+          synth_batch_size: native ? undefined : variations,
           output_format: format,
           mp3_bitrate: format === 'mp3' ? bitrate : undefined,
           extend_seconds: extend > 0 ? extend : undefined,
         }),
       });
       const body = await response.json().catch(() => null);
-      if (!response.ok) throw new Error(body?.error || `Re-render failed (${response.status})`);
+      if (!response.ok) throw new Error(body?.error || body?.message || `Re-render failed (${response.status})`);
       onQueued(body.id);
       onClose();
     } catch (reason) {
@@ -93,17 +97,17 @@ export const ReplayModal: React.FC<ReplayModalProps> = ({ song, clientRef, onClo
 
         <div className="space-y-3 p-5">
           <p className="truncate text-sm font-semibold text-zinc-900 dark:text-white">{song.title}</p>
-          <p className="text-xs leading-5 text-zinc-500 dark:text-zinc-400">{t('replayHint')}</p>
+          <p className="text-xs leading-5 text-zinc-500 dark:text-zinc-400">{native ? nativeMusicEngineName(song.ditModel) : t('replayHint')}</p>
 
           <div className="grid grid-cols-2 gap-3">
             <label className="block text-xs font-medium text-zinc-600 dark:text-zinc-300">
               <span className="mb-1.5 block">{t('flowSteps')}</span>
-              <input type="number" min={1} max={200} value={steps} onChange={event => setSteps(Math.max(1, Number(event.target.value) || 1))} className={CONTROL} />
+              <input type="number" min={minimumSteps} max={200} value={steps} onChange={event => setSteps(event.target.value === '' ? '' : Math.max(minimumSteps, Number(event.target.value)))} className={CONTROL} />
             </label>
-            <label className="block text-xs font-medium text-zinc-600 dark:text-zinc-300">
+            {!native && <label className="block text-xs font-medium text-zinc-600 dark:text-zinc-300">
               <span className="mb-1.5 block">{t('variationsPerRender')}</span>
               <input type="number" min={1} max={9} value={variations} onChange={event => setVariations(Math.min(9, Math.max(1, Number(event.target.value) || 1)))} className={CONTROL} />
-            </label>
+            </label>}
             <label className="block text-xs font-medium text-zinc-600 dark:text-zinc-300">
               <span className="mb-1.5 block">{t('noiseSeed')}</span>
               <input inputMode="numeric" value={seed} placeholder={originalSeed || '-1'} onChange={event => setSeed(event.target.value)} className={CONTROL} />
@@ -116,13 +120,13 @@ export const ReplayModal: React.FC<ReplayModalProps> = ({ song, clientRef, onClo
                 <option value="wav32">WAV (32-bit float)</option>
               </select>
             </label>
-            <label className="col-span-2 block text-xs font-medium text-zinc-600 dark:text-zinc-300">
+            {!native && <label className="col-span-2 block text-xs font-medium text-zinc-600 dark:text-zinc-300">
               <span className="mb-1.5 block">{t('replayExtend')}</span>
               <select value={extend} onChange={event => setExtend(Number(event.target.value))} className={CONTROL}>
                 {[0, 15, 30, 60, 90, 120].filter(seconds => seconds <= room).map(seconds => <option key={seconds} value={seconds}>{seconds === 0 ? t('replayExtendNone') : `+${seconds} s`}</option>)}
               </select>
               {extend > 0 && <span className="mt-1 block text-[11px] leading-4 text-zinc-500">{t('replayExtendHint')}</span>}
-            </label>
+            </label>}
             {format === 'mp3' && (
               <label className="block text-xs font-medium text-zinc-600 dark:text-zinc-300">
                 <span className="mb-1.5 block">{t('mp3Bitrate')}</span>
