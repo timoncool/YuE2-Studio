@@ -11057,6 +11057,10 @@ async fn submit_music_job(state: AppState, mut request: CreateMusicJobRequest, a
     }
 
     let _using = state.engine_use.read().await;
+    if let Err(error) = state.ace_runtime.stop().await {
+        return (StatusCode::CONFLICT, Json(failed_request_job(request, engine_id, error.to_string())));
+    }
+    state.minimax.stop().await;
     if state.training.active_run().await.is_some() {
         return (StatusCode::CONFLICT, Json(failed_request_job(request, engine_id, SongError::TrainingOnCard)));
     }
@@ -14050,10 +14054,12 @@ mod tests {
     fn automatic_recovery_requires_the_jobs_original_local_engine() {
         assert!(check_retry_engine(PRIMARY_MUSIC_ENGINE_ID, PRIMARY_MUSIC_ENGINE_ID).is_ok());
         assert!(check_retry_engine(native_minimax::ENGINE_ID, native_minimax::ENGINE_ID).is_ok());
+        assert!(check_retry_engine(ace::ENGINE_ID, ace::ENGINE_ID).is_ok());
         for (original, selected) in [
             (PRIMARY_MUSIC_ENGINE_ID, "unconfigured"),
             ("acestep-cpp", PRIMARY_MUSIC_ENGINE_ID),
-            ("acestep-cpp", "acestep-cpp"),
+            ("openrouter", "openrouter"),
+            ("unknown", "unknown"),
         ] {
             assert!(check_retry_engine(original, selected).is_err());
         }

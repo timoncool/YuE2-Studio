@@ -37,6 +37,10 @@ pub(super) async fn submit_minimax(
             "Studio data folder is unavailable.".into(),
         );
     };
+    if let Err(error) = state.ace_runtime.stop().await {
+        return reject(StatusCode::CONFLICT, format!("ACE-Step is busy: {error:#}"));
+    }
+    evict_kept_models(&state, "before MiniMax generation").await;
     let client = match state.minimax.start(&profile, &root).await {
         Ok(client) => client,
         Err(error) => return reject(StatusCode::SERVICE_UNAVAILABLE, format!("{error:#}")),

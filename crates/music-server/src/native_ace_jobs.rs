@@ -79,6 +79,8 @@ pub(super) async fn submit(
             }
         }
     }
+    state.minimax.stop().await;
+    evict_kept_models(&state, "before ACE-Step generation").await;
     let client = match state.ace_runtime.start(launch).await {
         Ok(client) => client,
         Err(error) => return reject(StatusCode::SERVICE_UNAVAILABLE, format!("{error:#}")),

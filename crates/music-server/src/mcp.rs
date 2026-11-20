@@ -408,7 +408,7 @@ async fn wait_for(args: &Value) -> Result<Value, String> {
 
 /// MCP tool annotations, from what each tool does.
 fn annotations(name: &str) -> Value {
-    const READS: &[&str] = &["_get", "_status", "_list", "_catalog", "_files", "_logs", "_log", "_runtime", "_local_models", "_hf_files", "_search_hf", "_capabilities", "_system", "_state", "_read_page", "_screenshot"];
+    const READS: &[&str] = &["_get", "_status", "_list", "_catalog", "_profiles", "_files", "_logs", "_log", "_runtime", "_local_models", "_hf_files", "_search_hf", "_capabilities", "_system", "_state", "_read_page", "_screenshot"];
     // a verb that changes something outweighs a noun that reads
     const CHANGES: &[&str] = &["install", "import", "remove", "delete", "refresh", "create", "update", "start", "cancel", "select", "download", "apply", "restart"];
     // reads whose names the rules above miss: create_form names the create page
@@ -1540,7 +1540,7 @@ fn tools() -> &'static [Tool] {
             // ---------------------------------------------------------------- songs
             Tool {
                 name: "song_create",
-                description: "Generate a song locally or with an explicitly selected OpenRouter music model. Local synthesis parameters apply only to YuE2. style: one English sentence (language, genre, vocal, instruments, mood, production, 'N BPM'). lyrics: sections tagged [Verse 1], [Chorus], [Bridge]... one per line, blank line between sections; empty for an instrumental. abc: a score to sing (from score_compose or an edited one), else the model writes its own. cot: full (melody and chords), melody, or off. adapters: installed LoRA ids with strengths per slot (see lora_list). Returns a job; poll song_job_get until completed, the song then is in the library.",
+                description: "Generate a song with YuE2, native ACE-Step, native MiniMax, or an explicitly selected OpenRouter music model. YuE2 uses the ABC score. Native engines use their own profile and supported controls. style: one English sentence (language, genre, vocal, instruments, mood, production, 'N BPM'). lyrics: sections tagged [Verse 1], [Chorus], [Bridge]... one per line, blank line between sections; empty for an instrumental. abc: a score to sing (from score_compose or an edited one), else the model writes its own. cot: full (melody and chords), melody, or off. adapters: installed LoRA ids with strengths per slot (see lora_list). Returns a job; poll song_job_get until completed, the song then is in the library.",
                 schema: || object(json!({
                     "ace": { "type": "object", "description": "ACE-Step generation settings, including guidance_scale, think, source_song_id and reference_song_id." },
                     "music_source": {
@@ -1577,7 +1577,7 @@ fn tools() -> &'static [Tool] {
                     "abc_sampling": { "type": "object", "description": "temperature, top_p, top_k, repetition_penalty, penalty_window, min_tokens, max_tokens", "properties": { "temperature": { "type": "number" }, "top_p": { "type": "number" }, "top_k": { "type": "integer" }, "repetition_penalty": { "type": "number" }, "penalty_window": { "type": "integer" }, "min_tokens": { "type": "integer" }, "max_tokens": { "type": "integer" } } },
                     "semantic_sampling": { "type": "object", "description": "temperature, top_p, top_k, repetition_penalty, penalty_window, min_tokens, max_tokens", "properties": { "temperature": { "type": "number" }, "top_p": { "type": "number" }, "top_k": { "type": "integer" }, "repetition_penalty": { "type": "number" }, "penalty_window": { "type": "integer" }, "min_tokens": { "type": "integer" }, "max_tokens": { "type": "integer" } } },
                     "mp3_bitrate": { "type": "integer" },
-                    "output_format": { "type": "string", "enum": ["flac", "mp3"], "description": "how the song is kept: lossless FLAC (default), or MP3 at mp3_bitrate" },
+                    "output_format": { "type": "string", "enum": ["flac", "mp3", "wav32"], "description": "how the song is kept: lossless FLAC, 32-bit WAV, or MP3 at mp3_bitrate" },
                     "cover_prompt": { "type": "string", "description": "what the cover should show; it is drawn only when an image model is set up (settings_get, covers), else the song has no cover" },
                     "cover_of": { "type": "string", "description": "for a cover: the library song whose melody abc came from (score_transcribe of it); the new song names it as the track it was made from" },
                     "adapters": { "type": "array", "items": { "type": "object", "properties": { "id": { "type": "string" }, "scales": { "type": "object", "description": "slot -> strength, e.g. {\"ar\": 1, \"nar\": 1}; left out, the LoRA's own strengths, else 1 on each slot it touches" } }, "required": ["id"] } }

@@ -107,6 +107,13 @@ connected and the address to paste.
 ## Choosing the music engine
 
 For local YuE2, pass `"music_source": {"kind": "local"}` to `song_create`.
+For a native ACE-Step or MiniMax song, call `ace_music_profiles` or `minimax_music_profiles`.
+Check `engine_installed`, then select a profile with `ready: true`. Pass its ID as
+`music_source.model`, use `music_source.kind = "native"`, and set `music_source.engine`
+to `acestep-cpp` or `minimaxmusic-cpp`. MiniMax takes a caption in `style` and
+the song text in `lyrics`. ACE-specific settings go in `ace`. Poll `song_job_get`
+with the ID returned by `song_create`. Use `song_job_cancel` to stop the job.
+
 For an OpenRouter generation, read `openrouter_catalog` and select an ID whose
 `capabilities` include `music_generation`. Pass that exact ID as
 `music_source.model`, with `music_source.kind` set to `openrouter`.
