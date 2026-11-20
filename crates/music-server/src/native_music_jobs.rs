@@ -66,7 +66,15 @@ fn replay_inputs(
             .as_u64()
             .and_then(|value| u32::try_from(value).ok())
     };
-    let steps = request.steps.or_else(|| unsigned("steps")).unwrap_or(30);
+    let steps = request
+        .steps
+        .or_else(|| unsigned("steps"))
+        .or_else(|| {
+            song.generation_settings["steps"]
+                .as_u64()
+                .and_then(|steps| u32::try_from(steps).ok())
+        })
+        .unwrap_or(30);
     anyhow::ensure!(steps >= 2, "MiniMax needs at least two inference steps");
     // Never draw a fresh seed implicitly: repeat the original acoustic take.
     let seed = request
@@ -554,7 +562,7 @@ mod tests {
     #[test]
     fn minimax_replays_the_original_acoustic_seed_or_overrides_it_without_changing_codes() {
         let codes = "1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16";
-        let song: library::Song = serde_json::from_value(serde_json::json!({
+        let mut song: library::Song = serde_json::from_value(serde_json::json!({
             "id":"original", "title":"Original", "audio_path":"original.wav",
             "caption":"folk", "lyrics":"[verse]\nEarly morning", "source":"local_generation",
             "engine_id":native_minimax::ENGINE_ID,"profile_id":"minimal",
@@ -570,7 +578,7 @@ mod tests {
             &song,
             ReplayMusicJobRequest {
                 seed: Some(43),
-                ..request
+                ..request.clone()
             },
         )
         .unwrap();
@@ -594,5 +602,26 @@ mod tests {
         assert_eq!(rerender.output_format.as_deref(), Some("flac"));
         assert_eq!(rerender.fade_out, Some(0.25));
         assert_eq!(song.replay_request.as_ref().unwrap()["seed"], 42);
+
+        // Legacy takes may store the step count only in generation_settings.
+        song.generation_settings["steps"] = serde_json::json!(12);
+        song.replay_request
+            .as_mut()
+            .unwrap()
+            .as_object_mut()
+            .unwrap()
+            .remove("steps");
+        let (_, render, replay) = replay_inputs(&song, request.clone()).unwrap();
+        assert_eq!(render.steps, Some(12));
+        assert_eq!(replay.body["steps"], 12);
+        let (_, _, replay) = replay_inputs(
+            &song,
+            ReplayMusicJobRequest {
+                steps: Some(8),
+                ..request
+            },
+        )
+        .unwrap();
+        assert_eq!(replay.body["steps"], 8);
     }
 }
