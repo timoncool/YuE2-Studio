@@ -15,6 +15,7 @@ jobs:
     env:
       RUSTUP_TOOLCHAIN: stable
       CARGO_TERM_COLOR: never
+      QA_ORT_NATIVE_ONLY: '1'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -26,7 +27,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           shared-key: ort-beat-this
-      - name: Measure the published song with both ORT versions
+      - name: Measure the published song with the native ORT 1.32.0 archive
         run: python scripts/qa-ort-beat-this.py
       - uses: actions/upload-artifact@v4
         if: always()

@@ -39,6 +39,25 @@ platforms = {
     },
 }
 
+native_archives = {
+    "Windows": (
+        [
+            "https://dl.photoprism.app/onnx/runtime/v1.32.0/onnxruntime-win-x64-1.32.0.zip",
+            "https://registry.npmmirror.com/-/binary/onnxruntime/v1.32.0/onnxruntime-win-x64-1.32.0.zip",
+        ],
+        "aaa1d04fcf86bd31e84b90bc0cbde80e632bd0720dcc5d8ba05c4fe45c09d127", 96945131,
+        "348c3d29d6995eee37e3451825eaddb7ea7400be3afda6ca2286b12bc775f042",
+    ),
+    "Linux": (
+        [
+            "https://dl.photoprism.app/onnx/runtime/v1.32.0/onnxruntime-linux-x64-1.32.0.tgz",
+            "https://registry.npmmirror.com/-/binary/onnxruntime/v1.32.0/onnxruntime-linux-x64-1.32.0.tgz",
+        ],
+        "bb169b7e374731730d2ae406fb39de7be4b315f413a9132efe896261c31bb503", 13425244,
+        "4213d6d8c42ac4754865849cb139d31fc39127db6a326babf90bbc81a6eb52fc",
+    ),
+}
+
 def sha256(path):
     with path.open("rb") as file:
         return hashlib.file_digest(file, "sha256").hexdigest()
@@ -98,12 +117,33 @@ song_sha = "e4afe83c474c2d86158c420227158de4e47cb013ca021cc9ba02e6e45a1291a7"
 if sha256(song) != song_sha:
     raise RuntimeError("Published song fixture differs")
 results = []
-for version, (url, expected, names) in platforms[os_name].items():
+native_only = os.environ.get("QA_ORT_NATIVE_ONLY") == "1"
+packages = platforms[os_name]
+if native_only:
+    urls, archive_sha, archive_bytes, native_library_sha = native_archives[os_name]
+    packages = {"1.32.0": (urls[0], archive_sha, packages["1.32.0"][2])}
+
+for version, (url, expected, names) in packages.items():
     archive = root / url.rsplit("/", 1)[1]
-    download(url, archive, expected)
+    if native_only:
+        for source in urls:
+            try:
+                download(source, archive, expected)
+                if archive.stat().st_size != archive_bytes:
+                    raise RuntimeError("Native archive size differs")
+                url = source
+                break
+            except (OSError, RuntimeError) as error:
+                print(f"Mirror {source}: {error}", flush=True)
+        else:
+            raise RuntimeError("Native package unavailable from checked mirrors")
+    else:
+        download(url, archive, expected)
     libs = root / version
     install(archive, libs, names)
     library = libs / names[0]
+    if native_only and sha256(library) != native_library_sha:
+        raise RuntimeError("Unpacked native ORT library differs from the checked archive")
     directory = os.add_dll_directory(str(libs)) if os_name == "Windows" else None
     try:
         actual = reported_ort_version(library)
@@ -128,7 +168,7 @@ for version, (url, expected, names) in platforms[os_name].items():
         raise RuntimeError(f"Beat This fixture failed on {os_name} with ORT {version}")
     results.append({
         "version": actual, "api": 31, "bpm": float(bpm_match[1]), "measure_seconds": float(bpm_match[2]),
-        "archive": archive.name, "archive_sha256": expected, "library_sha256": sha256(library),
+        "archive": archive.name, "archive_url": url, "archive_size": archive.stat().st_size, "archive_sha256": expected, "library_sha256": sha256(library),
     })
 report = {"os": os_name, "release": platform.release(), "architecture": platform.machine(),
           "song_sha256": song_sha, "beat_this_sha256": model_sha, "results": results}
