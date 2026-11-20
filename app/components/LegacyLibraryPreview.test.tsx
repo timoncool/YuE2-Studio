@@ -32,6 +32,13 @@ it('keeps the current preview when a second folder selection is cancelled', asyn
     expect(host.textContent).toContain('X:/old');
     expect(host.querySelector('[role="alert"]')).toBeNull();
     expect(button.disabled).toBe(false);
+    request.mockResolvedValueOnce(Response.json({ added: 1, already_imported: 0, playlists_added: 1, playlists_already_imported: 0 }));
+    const copy = host.querySelectorAll('button')[1];
+    await act(async () => copy.click());
+    expect(request.mock.lastCall).toEqual(['/v1/library/migration/import', expect.objectContaining({
+      method: 'POST', body: JSON.stringify({ path: 'X:/old' }),
+    })]);
+    expect(host.textContent).toContain('legacyLibraryResult');
   } finally {
     act(() => root.unmount());
     vi.unstubAllGlobals();
