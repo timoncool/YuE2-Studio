@@ -1,0 +1,28 @@
+name: RVC Radio Tapok filter MCP smoke
+
+on:
+  push:
+    branches: [qa/rvc-hf-published-mcp]
+
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 22
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          fetch-depth: 2
+      - uses: Swatinem/rust-cache@v2
+      - name: Build Studio service
+        run: cargo build --locked -p music-server --bin music-server
+      - name: Find Radio Tapok High in one RVC MCP request
+        run: python scripts/qa-rvc-published-mcp.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: rvc-filtered-mcp
+          path: rvc-filtered-mcp.json
+          retention-days: 7
