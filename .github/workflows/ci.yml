@@ -24,6 +24,8 @@ jobs:
         run: cargo test --locked -p music-engine --lib yue_train::tests
       - name: Service tests
         run: cargo test -p music-server --locked
+      - name: OpenRouter music service against local SSE
+        run: python scripts/test-openrouter-music.py target/debug/music-server.exe
 
   # the same tests on Linux, the platform the studio's Linux package runs on; the repository's toolchain file names
   # the Windows one, so the runner's own stable toolchain is taken
