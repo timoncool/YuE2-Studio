@@ -71,11 +71,7 @@ fn claim(tx: &Transaction, id: &str) -> Result<bool> {
     )? == 1)
 }
 
-fn digest(path: &Path) -> Result<Vec<u8>> {
-    let mut hash = Sha256::new();
-    io::copy(&mut fs::File::open(path)?, &mut hash)?;
-    Ok(hash.finalize().to_vec())
-}
+use crate::install_record::sha256_of as digest;
 
 // A retry can find a complete file from an interrupted import. A partially copied file never
 // occupies the final name, and a user edit or a different file is never overwritten.
@@ -153,7 +149,13 @@ fn prepare_song(
                 name.strip_prefix(&song.id)
                     .context("Invalid sidecar name")?
             ),
-            _ => format!("{id}-{:x}.{extension}", Sha256::digest(name.as_bytes())),
+            _ => {
+                let hash: String = Sha256::digest(name.as_bytes())
+                    .iter()
+                    .map(|byte| format!("{byte:02x}"))
+                    .collect();
+                format!("{id}-{hash}.{extension}")
+            }
         };
         install(&source_media.join(name), &destination.join(&new_name))
             .with_context(|| format!("{}: {name}", song.title))?;
@@ -255,7 +257,7 @@ fn transfer(to: &Library, folder: &Path) -> Result<Value> {
             tx.execute("INSERT INTO playlists(id,name,description,created_at,updated_at) VALUES(?,?,?,?,?)",params![new_id,list.name,list.description,list.created_at,list.updated_at])?;
             for (position,old_id) in list.song_ids.iter().enumerate(){
                 let song=song_ids.get(old_id).context("Playlist refers to a missing song")?;
-                tx.execute("INSERT INTO playlist_songs(playlist_id,song_id,position) VALUES(?,?,?)",params![new_id,song.id,position])?;
+                tx.execute("INSERT INTO playlist_songs(playlist_id,song_id,position) VALUES(?,?,?)",params![new_id,song.id,i64::try_from(position)?])?;
             }
             added_lists+=1;
         }
