@@ -1490,6 +1490,15 @@ function AppContent() {
                 playlistId={viewingPlaylistId}
                 onBack={handleBackFromPlaylist}
                 onPlaySong={playFromPlaylist(viewingPlaylistId)}
+                onCreateHere={() => {
+                  chooseCreatePlaylist(viewingPlaylistId);
+                  setCurrentView('create');
+                  setMobileShowList(false);
+                }}
+                onReuseHere={song => {
+                  chooseCreatePlaylist(viewingPlaylistId);
+                  handleReuse(song);
+                }}
                 currentSong={currentSong}
                 isPlaying={isPlaying}
                 notify={showToast}
