@@ -1659,6 +1659,7 @@ pub async fn serve_on_port(port: u16) -> anyhow::Result<()> {
         .route("/health", get(health))
         .route("/v1/capabilities", get(capabilities))
         .route("/v1/rvc/voices", get(rvc_voices::list))
+        .route("/v1/rvc/voices/{id}", axum::routing::delete(rvc_voices::remove))
         .route("/v1/rvc/catalog", get(rvc_catalog::list))
         .route("/v1/rvc/catalog/install", post(rvc_catalog::install))
         .route("/v1/rvc/catalog/progress/{id}", get(rvc_catalog_progress::get))

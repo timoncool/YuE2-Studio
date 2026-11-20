@@ -461,7 +461,7 @@ fn annotations(name: &str) -> Value {
     // what reaches the internet: OpenRouter, Hugging Face, the lyric databases and every download
     let open_world = name.starts_with("openrouter_") || name == "problem_report" || name.contains("_hf") || name == "lyrics_find" || name == "models_download" || name == "models_update_apply" || name == "lora_install_catalog" || name.ends_with("_install") && name != "training_checkpoint_install";
     let title = name.replace('_', " ");
-    json!({ "title": title, "readOnlyHint": read_only, "destructiveHint": destructive, "idempotentHint": read_only || name.ends_with("_set") || name.contains("_select"), "openWorldHint": open_world })
+    json!({ "title": title, "readOnlyHint": read_only, "destructiveHint": destructive, "idempotentHint": read_only || name.ends_with("_set") || name.contains("_select") || name == "rvc_voice_remove", "openWorldHint": open_world })
 }
 
 /// What an agent's change goes into the journal as: what was done and to what kind
@@ -535,6 +535,7 @@ const JOURNAL: &[(&str, &str, &str)] = &[
     ("lora_install_hf", "installed", "lora"),
     ("lora_import_files", "installed", "lora"),
     ("rvc_voice_import", "installed", "rvc_voice"),
+    ("rvc_voice_remove", "deleted", "rvc_voice"),
     ("rvc_catalog_install", "installed", "rvc_voice"),
     ("lora_import_folder", "installed", "lora"),
     ("lora_update", "updated", "lora"),
@@ -686,6 +687,9 @@ fn change_target(kind: &str, args: &Value, before: &str, reply: &str) -> String 
 
 /// Writes an agent's change into the studio's journal, where the person reads it.
 async fn journal_change(name: &str, args: &Value, before: &str, reply: &str) {
+    if name == "rvc_voice_remove" && serde_json::from_str::<Value>(reply).is_ok_and(|result| result["removed"] == false) {
+        return;
+    }
     let Some((verb, kind)) = journal_facts(name, args) else { return };
     let line = json!({ "source": "agent", "verb": verb, "kind": kind, "target": change_target(kind, args, before, reply) });
     let written = match send(Method::POST, "/v1/journal".into(), line) {
@@ -2531,6 +2535,12 @@ fn tools() -> &'static [Tool] {
                 description: "List local RVC voices and their optional retrieval indexes.",
                 schema: nothing,
                 call: |_| get("/v1/rvc/voices".into()),
+            },
+            Tool {
+                name: "rvc_voice_remove",
+                description: "Remove the installed RVC checkpoint and its retrieval index. Keeps existing songs and rendered audio.",
+                schema: || id_only("id", "the installed ID from rvc_voices_list"),
+                call: |args| send(Method::DELETE, format!("/v1/rvc/voices/{}", segment(&text(args, "id")?)), json!({})),
             },
             Tool {
                 name: "rvc_voice_import",
