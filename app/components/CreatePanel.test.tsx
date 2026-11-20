@@ -313,6 +313,17 @@ it('asks for an explicit profile when a migrated ACE take used custom weights', 
     style: 'synthwave', lyrics: 'verse', duration_seconds: 120, steps: 8, seed: 1234,
     ace: { guidance_scale: 2.5 },
   });
+
+  act(() => root.render(panel({ musicEngine: engine, initialData: { song, timestamp: 2 } })));
+  await flush();
+  expect(profile.value).toBe('');
+  expect(host.textContent).toContain(models[0]);
+  click(host.querySelector('button[aria-label="resetCreateForm"]')!);
+  expect(profile.value).toBe('native');
+  expect(host.textContent).not.toContain(models[0]);
+  expect(duration.value).toBe('120');
+  expect(field('textarea[aria-label="lyrics"]')!.value).toBe('');
+  expect(sent).toHaveLength(1);
 });
 
 describe('an instrumental (#217)', () => {

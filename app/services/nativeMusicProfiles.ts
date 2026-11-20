@@ -144,6 +144,10 @@ export function useNativeMusicProfiles(engine: NativeMusicEngine | undefined) {
       });
     },
     resetSettings: () => {
+      if (pending) {
+        setLegacyAce(undefined);
+        return;
+      }
       if (!pair || !preferences.settings[pair]) return;
       const settings = { ...preferences.settings };
       delete settings[pair];
