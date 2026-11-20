@@ -4788,6 +4788,9 @@ async fn library_cover(State(state): State<AppState>, Path(id): Path<String>) ->
 /// Failure is logged and never fails the request: an untagged track still
 /// plays, a lost one does not.
 async fn tag_stored_song(state: &AppState, song_id: &str) {
+    // Read the current library values only when this writer can use the file.
+    static TAGGING: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+    let writer = TAGGING.lock().await;
     let Ok(Some(song)) = state.library.get_song(song_id) else { return };
     // `audio_path` is a full path, not a filename: resolve it the way playback
     // does, or tagging silently skips every track.
@@ -4812,13 +4815,12 @@ async fn tag_stored_song(state: &AppState, song_id: &str) {
         settings: own.then(|| tagging::settings_json(PROGRAM_ID, &song.engine_id, &song.generation_settings)).flatten(),
     };
     let shown = audio_path.display().to_string();
-    // one file rewrite at a time: a setting switched twice, the start's pass and a saved note all tag the same files
-    static TAGGING: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
-    let _one = TAGGING.lock().await;
     // Reading the cover and rewriting the file are blocking file work.
     let library = state.library.clone();
     let song_id = song_id.to_owned();
     let written = tokio::task::spawn_blocking(move || {
+        // The rewrite can outlive the HTTP request that started it.
+        let _writer = writer;
         // Two takes can point at one recording. Their individual titles, lyrics
         // and covers belong in the library until each has a file of its own.
         if library.audio_has_other_owner(&song_id, &audio_path)? {
