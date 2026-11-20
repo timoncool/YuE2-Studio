@@ -5748,13 +5748,7 @@ async fn update_engine_options(
     };
     let _ = persist_studio_settings(&state).await;
 
-    let mut restarted = false;
-    // a song being made is not interrupted for a saved option: the value reaches the engine at its next start
-    if changed && !engine_at_work(&state).await && state.music_server.health().await {
-        let _restart = state.engine_use.write().await;
-        restart_engine(&state).await.map_err(|error| api_error(StatusCode::SERVICE_UNAVAILABLE, error))?;
-        restarted = true;
-    }
+    let restarted = changed && restart_idle_engine(&state).await.map_err(|error| api_error(StatusCode::SERVICE_UNAVAILABLE, error))?;
     Ok(Json(serde_json::json!({
         "options": request,
         "effective_max_batch": request.effective_max_batch(),
@@ -5769,13 +5763,18 @@ async fn reset_fitted_max_seq(State(state): State<AppState>) -> Result<Json<Valu
     let key = EngineOptions::fitted_key(&models.backbone);
     let removed = state.engine_options.write().await.fitted_max_seq.remove(&key).is_some();
     persist_studio_settings(&state).await.map_err(|error| api_error(StatusCode::INTERNAL_SERVER_ERROR, format!("the settings could not be saved: {error}")))?;
-    let mut restarted = false;
-    if removed && !engine_at_work(&state).await && state.music_server.health().await {
-        let _restart = state.engine_use.write().await;
-        restart_engine(&state).await.map_err(|error| api_error(StatusCode::SERVICE_UNAVAILABLE, error))?;
-        restarted = true;
-    }
+    let restarted = removed && restart_idle_engine(&state).await.map_err(|error| api_error(StatusCode::SERVICE_UNAVAILABLE, error))?;
     Ok(Json(serde_json::json!({ "reset": removed, "engine_restarted": restarted })))
+}
+
+/// Saved settings apply at the next launch if the engine already has work.
+async fn restart_idle_engine(state: &AppState) -> Result<bool, String> {
+    if engine_at_work(state).await { return Ok(false); }
+    let _restart = state.engine_use.write().await;
+    // A submitter may have handed a song to the engine while we waited.
+    if engine_at_work(state).await || !state.music_server.health().await { return Ok(false); }
+    restart_engine(state).await?;
+    Ok(true)
 }
 
 async fn restart_local_engine(State(state): State<AppState>) -> Result<Json<Value>, (StatusCode, Json<ApiError>)> {
@@ -5812,7 +5811,7 @@ async fn pick_engine_executable() -> Result<Json<Value>, (StatusCode, Json<ApiEr
 
 /// A job is running and the engine the studio started is still a running process.
 async fn engine_at_work(state: &AppState) -> bool {
-    let working = state.jobs.read().await.values().any(|job| matches!(job.status, MusicJobStatus::Running));
+    let working = state.jobs.read().await.values().any(song_in_engine);
     (working || score_at_work(state).await) && state.engine.lock().await.as_mut().is_some_and(|engine| engine.process_alive())
 }
 
@@ -6459,18 +6458,17 @@ async fn selection_matches_files(state: &AppState, current: &music_engine::yue_s
     )
 }
 
+fn song_in_engine(job: &MusicJob) -> bool {
+    matches!(job.dispatch, MusicJobDispatch::Local) && matches!(job.status, MusicJobStatus::Queued | MusicJobStatus::Running)
+}
+
 /// Waits until the studio has taken every song it sent the engine: a restart
 /// empties the engine's job table, its queue and the results not yet fetched.
 /// An engine that is gone has nothing left to finish; one inside a long step
 /// answers late but is still at work.
 async fn wait_for_sent_songs(state: &AppState) {
     loop {
-        let in_flight = state
-            .jobs
-            .read()
-            .await
-            .values()
-            .any(|job| matches!(job.dispatch, MusicJobDispatch::Local) && matches!(job.status, MusicJobStatus::Queued | MusicJobStatus::Running));
+        let in_flight = state.jobs.read().await.values().any(song_in_engine);
         let alive = state.music_server.health().await || state.engine.lock().await.as_mut().is_some_and(|engine| engine.process_alive());
         if !in_flight || !alive {
             return;
@@ -12819,6 +12817,19 @@ mod tests {
         assert!(in_media_folder(&media, &track));
         assert!(!in_media_folder(&media, &root.path().join("outside.mp3")));
         assert!(!in_media_folder(&media, &media.join("missing.mp3")));
+    }
+
+    #[test]
+    fn a_submitted_song_is_at_risk_from_restart_before_its_first_poll() {
+        let request = serde_json::from_value(serde_json::json!({"style": "piano", "lyrics": "[verse]"})).unwrap();
+        let mut job = queued_not_configured_job(request, "yue2-cpp".into());
+        assert!(!song_in_engine(&job));
+        job.dispatch = MusicJobDispatch::Local;
+        assert!(song_in_engine(&job));
+        job.status = MusicJobStatus::Running;
+        assert!(song_in_engine(&job));
+        job.status = MusicJobStatus::Completed;
+        assert!(!song_in_engine(&job));
     }
 
     #[test]
