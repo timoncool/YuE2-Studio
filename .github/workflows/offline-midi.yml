@@ -10,6 +10,8 @@ jobs:
     timeout-minutes: 35
     steps:
       - uses: actions/checkout@v7
+      - name: Install service and piano dependencies
+        run: sudo apt-get update -qq && sudo apt-get install -y --no-install-recommends libwayland-dev cmake fluidsynth fluid-soundfont-gm
       - uses: Swatinem/rust-cache@v2
       - run: cargo build --locked -p music-server --bin music-server
       - name: Stage the previous Studio model, CPU package and piano
