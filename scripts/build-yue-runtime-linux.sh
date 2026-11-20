@@ -6,7 +6,8 @@
 # ($ORIGIN), wherever the package puts them.
 set -euo pipefail
 
-output="${1:?usage: build-yue-runtime-linux.sh OUTPUT_DIRECTORY}"
+destination="$(realpath -m "${1:?usage: build-yue-runtime-linux.sh OUTPUT_DIRECTORY}")"
+[[ "$destination" != / ]] || { echo "[ERROR] runtime output must be a dedicated directory" >&2; exit 1; }
 root="$(cd "$(dirname "$0")/.." && pwd)"
 repository="$(sed -n 's/.*"repository": "\(.*\)".*/\1/p' "$root/engines/yue2-cpp-source.json")"
 commit="$(sed -n 's/.*"commit": "\(.*\)".*/\1/p' "$root/engines/yue2-cpp-source.json")"
@@ -15,7 +16,7 @@ worktree="$build_root/yue2-engine"
 cuda_profile="${YUE_CUDA_PROFILE:-universal}"
 case "$cuda_profile" in
     universal) ;;
-    sm89) output="${output%/}/dev-sm89" ;;
+    sm89) destination="$destination-dev-sm89" ;;
     *) echo "[ERROR] YUE_CUDA_PROFILE must be universal or sm89" >&2; exit 1 ;;
 esac
 
@@ -113,6 +114,10 @@ build_cuda() {
     patchelf --set-rpath '$ORIGIN:$ORIGIN/..' "$output/cuda$major/libggml-cuda.so"
 }
 
+mkdir -p "$(dirname "$destination")"
+output=$(mktemp -d "$(dirname "$destination")/.yue2-runtime.XXXXXXXX")
+trap 'rm -rf -- "$output"' EXIT
+
 if [ ! -d "$worktree/.git" ]; then
     git clone "$repository" "$worktree"
 fi
@@ -179,4 +184,12 @@ for binary in "$output"/yue-server "$output"/lib*.so* "$output"/cuda13/*.so* "$o
         exit 1
     fi
 done
-echo "yue-server ($commit) built into $output"
+# Publish only after validation. A reused destination can contain obsolete GPU modules.
+mkdir -p "$destination"
+rm -f -- "$destination/runtime.json" "$destination"/libggml-cuda.so* "$destination"/libggml-hip.so*
+rm -rf -- "$destination/cuda12" "$destination/cuda13" "$destination/dev-sm89"
+for item in "$output"/*; do
+    [[ "$item" == "$output/runtime.json" ]] || cp -a -- "$item" "$destination/"
+done
+mv -- "$output/runtime.json" "$destination/runtime.json"
+echo "yue-server ($commit) built into $destination"
