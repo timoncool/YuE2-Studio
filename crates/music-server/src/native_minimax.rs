@@ -1,0 +1,860 @@
+use std::{
+    env, fs,
+    net::{Ipv4Addr, TcpListener},
+    path::{Path, PathBuf},
+    process::{Child, Command, Stdio},
+    time::Duration,
+};
+
+use tokio::sync::Mutex;
+
+use anyhow::{Context, Result, bail};
+use serde::{Deserialize, Serialize};
+use serde_json::{Value, json};
+
+use crate::{EngineClient, engine_result, hardware};
+
+pub(crate) const ENGINE_ID: &str = "minimaxmusic-cpp";
+
+#[derive(Debug, Serialize)]
+pub(crate) struct Profile {
+    pub id: &'static str,
+    pub label: &'static str,
+    pub total_bytes: u64,
+    pub requires_cuda13: bool,
+    #[serde(skip)]
+    files: [&'static str; 5],
+    #[serde(skip)]
+    sizes: [u64; 5],
+}
+
+#[derive(Debug, Serialize)]
+pub(crate) struct ProfileStatus {
+    #[serde(flatten)]
+    pub profile: &'static Profile,
+    pub ready: bool,
+    pub missing: Vec<&'static str>,
+}
+
+#[cfg(test)]
+const ROLES: [&str; 5] = ["lm", "depth", "cond", "dit", "vae"];
+const FIELDS: [&str; 5] = [
+    "lm_model",
+    "depth_model",
+    "cond_model",
+    "dit_model",
+    "vae_model",
+];
+
+// IDs and filenames match the published MiniMax Studio catalogue.
+pub(crate) const PROFILES: &[Profile] = &[
+    Profile {
+        id: "minimal",
+        label: "Minimal - Q3_K_M / Q4_K_M / Q3_K_M (8 GB cards)",
+        total_bytes: 6540010752,
+        requires_cuda13: false,
+        files: [
+            "mm3-lm-Q3_K_M.gguf",
+            "mm3-depth-Q4_K_M.gguf",
+            "MiniMax-Music3-condition_encoder-F32.gguf",
+            "mm3-dit-Q3_K_M.gguf",
+            "MiniMax-Music3-vocoder-F32.gguf",
+        ],
+        sizes: [4589971808, 404836256, 100672192, 1138427712, 306102784],
+    },
+    Profile {
+        id: "recommended-light",
+        label: "Light - Q4_K_M / Q4_K_M / Q4_K_S (speed / low VRAM)",
+        total_bytes: 7713891584,
+        requires_cuda13: false,
+        files: [
+            "mm3-lm-Q4_K_M.gguf",
+            "mm3-depth-Q4_K_M.gguf",
+            "MiniMax-Music3-condition_encoder-F32.gguf",
+            "mm3-dit-Q4_K_S.gguf",
+            "MiniMax-Music3-vocoder-F32.gguf",
+        ],
+        sizes: [5512456544, 404836256, 100672192, 1389823808, 306102784],
+    },
+    Profile {
+        id: "balanced",
+        label: "Balanced - Q6_K / Q8_0 / Q5_K_M",
+        total_bytes: 9834362240,
+        requires_cuda13: false,
+        files: [
+            "MiniMax-Music3-language_model-Q6_K.gguf",
+            "MiniMax-Music3-rvq_depth_decoder-Q8_0.gguf",
+            "MiniMax-Music3-condition_encoder-F32.gguf",
+            "MiniMax-Music3-transformer-Q5_K_M.gguf",
+            "MiniMax-Music3-vocoder-F32.gguf",
+        ],
+        sizes: [7048279328, 686513600, 100672192, 1692794336, 306102784],
+    },
+    Profile {
+        id: "quality-q8",
+        label: "Recommended - Quality Q8_0",
+        total_bytes: 12822947200,
+        requires_cuda13: false,
+        files: [
+            "MiniMax-Music3-language_model-Q8_0.gguf",
+            "MiniMax-Music3-rvq_depth_decoder-Q8_0.gguf",
+            "MiniMax-Music3-condition_encoder-F32.gguf",
+            "MiniMax-Music3-transformer-Q8_0.gguf",
+            "MiniMax-Music3-vocoder-F32.gguf",
+        ],
+        sizes: [9127257376, 686513600, 100672192, 2602401248, 306102784],
+    },
+    Profile {
+        id: "quality-lm-nvfp4",
+        label: "Quality, LM in NVFP4 - NVFP4 LM, Q8_0 depth decoder and DiT (CUDA 13 build; recommended on an RTX 50, which computes NVFP4 on its tensor cores)",
+        total_bytes: 9351911872,
+        requires_cuda13: true,
+        files: [
+            "mm3-lm-NVFP4.gguf",
+            "MiniMax-Music3-rvq_depth_decoder-Q8_0.gguf",
+            "MiniMax-Music3-condition_encoder-F32.gguf",
+            "MiniMax-Music3-transformer-Q8_0.gguf",
+            "MiniMax-Music3-vocoder-F32.gguf",
+        ],
+        sizes: [5656222048, 686513600, 100672192, 2602401248, 306102784],
+    },
+    Profile {
+        id: "quality-nvfp4",
+        label: "NVFP4 - LM, depth and DiT in NVFP4 (CUDA 13 build; an RTX 50 computes it on its tensor cores)",
+        total_bytes: 7848275200,
+        requires_cuda13: true,
+        files: [
+            "mm3-lm-NVFP4.gguf",
+            "mm3-depth-NVFP4.gguf",
+            "MiniMax-Music3-condition_encoder-F32.gguf",
+            "mm3-dit-NVFP4.gguf",
+            "MiniMax-Music3-vocoder-F32.gguf",
+        ],
+        sizes: [5656222048, 401493920, 100672192, 1383784256, 306102784],
+    },
+    Profile {
+        id: "native",
+        label: "Full native - BF16 / F32 original weights",
+        total_bytes: 28600781952,
+        requires_cuda13: false,
+        files: [
+            "MiniMax-Music3-language_model-BF16.gguf",
+            "MiniMax-Music3-rvq_depth_decoder-BF16.gguf",
+            "MiniMax-Music3-condition_encoder-F32.gguf",
+            "MiniMax-Music3-transformer-F32.gguf",
+            "MiniMax-Music3-vocoder-F32.gguf",
+        ],
+        sizes: [17174297792, 1292053888, 100672192, 9727655296, 306102784],
+    },
+];
+
+#[derive(Debug, Deserialize)]
+struct Props {
+    models: ModelBuckets,
+}
+
+#[derive(Debug, Deserialize)]
+struct ModelBuckets {
+    lm: Vec<String>,
+    depth: Vec<String>,
+    cond: Vec<String>,
+    dit: Vec<String>,
+    vae: Vec<String>,
+}
+
+impl Profile {
+    fn status_on_disk(&'static self, roots: &[PathBuf]) -> ProfileStatus {
+        let missing = roots
+            .iter()
+            .map(|root| self.missing_at(root))
+            .min_by_key(Vec::len)
+            .unwrap_or_else(|| self.files.to_vec());
+        ProfileStatus {
+            profile: self,
+            ready: missing.is_empty(),
+            missing,
+        }
+    }
+
+    fn missing_at(&self, root: &Path) -> Vec<&'static str> {
+        self.files
+            .into_iter()
+            .zip(self.sizes)
+            .filter_map(|(file, expected)| {
+                let exists = fs::metadata(root.join(file))
+                    .is_ok_and(|entry| entry.is_file() && entry.len() == expected);
+                (!exists).then_some(file)
+            })
+            .collect()
+    }
+}
+
+impl Props {
+    fn profile_status(&self, profile: &'static Profile) -> ProfileStatus {
+        let buckets = [
+            &self.models.lm,
+            &self.models.depth,
+            &self.models.cond,
+            &self.models.dit,
+            &self.models.vae,
+        ];
+        let missing: Vec<_> = profile
+            .files
+            .iter()
+            .zip(buckets)
+            .filter_map(|(&file, bucket)| {
+                (!bucket.iter().any(|candidate| candidate == file)).then_some(file)
+            })
+            .collect();
+        ProfileStatus {
+            profile,
+            ready: missing.is_empty(),
+            missing,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Default)]
+pub(crate) struct SongRequest<'a> {
+    pub caption: &'a str,
+    pub lyrics: &'a str,
+    pub duration_seconds: Option<f64>,
+    pub steps: Option<u32>,
+    pub seed: Option<i64>,
+    pub lm_seed: Option<i64>,
+}
+
+fn request_body(profile: &Profile, request: &SongRequest<'_>) -> Result<Value> {
+    if request.caption.trim().is_empty() || request.lyrics.trim().is_empty() {
+        bail!("MiniMax requires both a style description and lyrics");
+    }
+    let duration = request.duration_seconds.unwrap_or(60.0);
+    if !duration.is_finite() || duration <= 0.0 {
+        bail!("MiniMax duration must be greater than zero");
+    }
+    let steps = request.steps.unwrap_or(30);
+    if steps < 2 {
+        bail!("MiniMax needs at least two inference steps");
+    }
+    let mut body = json!({
+        "caption": request.caption,
+        "lyrics": request.lyrics,
+        "duration": duration,
+        "steps": steps,
+        "lm_batch_size": 1,
+        "synth_batch_size": 1,
+        // Match the standalone studio: keep unencoded audio for the library importer.
+        "output_format": "wav32",
+    });
+    if let Some(seed) = request.seed {
+        body["seed"] = json!(seed);
+    }
+    if let Some(seed) = request.lm_seed {
+        body["lm_seed"] = json!(seed);
+    }
+    for (field, file) in FIELDS.into_iter().zip(profile.files) {
+        body[field] = json!(file);
+    }
+    Ok(body)
+}
+
+#[derive(Clone)]
+pub(crate) struct Client(EngineClient);
+
+impl Client {
+    /// Explicit loopback listener chosen by the MiniMax supervisor.
+    pub(crate) fn new(port: u16) -> Result<Self> {
+        let http = reqwest::Client::builder()
+            .no_proxy()
+            .redirect(reqwest::redirect::Policy::none())
+            .pool_max_idle_per_host(0)
+            .connect_timeout(Duration::from_secs(3))
+            .timeout(Duration::from_secs(30))
+            .build()?;
+        Ok(Self(EngineClient {
+            base_url: format!("http://127.0.0.1:{port}"),
+            http,
+            health_cache: Default::default(),
+        }))
+    }
+
+    async fn props(&self) -> Result<Props> {
+        serde_json::from_value(self.0.props().await?)
+            .context("MiniMax server did not return its model buckets")
+    }
+
+    pub(crate) async fn profiles(&self) -> Result<Vec<ProfileStatus>> {
+        let props = self.props().await?;
+        Ok(PROFILES
+            .iter()
+            .map(|profile| props.profile_status(profile))
+            .collect())
+    }
+
+    pub(crate) async fn submit(
+        &self,
+        profile_id: &str,
+        request: &SongRequest<'_>,
+    ) -> Result<String> {
+        let profile = PROFILES
+            .iter()
+            .find(|profile| profile.id == profile_id)
+            .with_context(|| format!("unknown MiniMax profile {profile_id}"))?;
+        let body = request_body(profile, request)?;
+        let status = self.props().await?.profile_status(profile);
+        if !status.ready {
+            bail!(
+                "MiniMax profile {profile_id} is missing {}",
+                status.missing.join(", ")
+            );
+        }
+        let id = self.0.submit(body).await?.id;
+        if id.is_empty() {
+            bail!("MiniMax server returned an empty job id");
+        }
+        Ok(id)
+    }
+
+    pub(crate) async fn status(&self, job_id: &str) -> Result<String> {
+        Ok(self.0.job(job_id).await?.status)
+    }
+
+    pub(crate) async fn cancel(&self, job_id: &str) -> Result<String> {
+        Ok(self.0.cancel(job_id).await?.status)
+    }
+
+    pub(crate) async fn result(&self, job_id: &str) -> Result<Vec<engine_result::ResultTrack>> {
+        let result = self.0.result(job_id).await?;
+        let tracks = engine_result::parse_multipart_result(&result.content_type, &result.body)?;
+        for track in &tracks {
+            engine_result::audio_extension(&track.audio_content_type)?;
+            if track.audio.is_empty() {
+                bail!("MiniMax returned an empty audio track");
+            }
+        }
+        Ok(tracks)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use axum::{
+        Json, Router,
+        extract::Query,
+        http::header,
+        routing::{get, post},
+    };
+    use std::{
+        collections::HashMap,
+        sync::{Arc, Mutex},
+    };
+
+    #[test]
+    fn minimax_missing_engine_and_truncated_profile_are_rejected_before_start() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path();
+        let mut installation = Installation {
+            executable: None,
+            roots: vec![path.to_path_buf()],
+            runtime_dirs: vec![],
+        };
+        let profile = &PROFILES[0];
+        assert!(!installation.engine_installed());
+        assert!(
+            installation
+                .for_profile(profile)
+                .unwrap_err()
+                .to_string()
+                .contains("mm-server is missing")
+        );
+        let executable = path.join("mm-server");
+        let shown_file = path.join(profile.files[0]);
+        fs::write(&executable, []).unwrap();
+        fs::write(shown_file, b"GGUF").unwrap();
+        installation.executable = Some(executable);
+        assert!(installation.engine_installed());
+        assert_eq!(installation.profiles()[0].missing, profile.files);
+        assert!(
+            installation
+                .for_profile(profile)
+                .unwrap_err()
+                .to_string()
+                .contains("profile minimal is incomplete")
+        );
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn minimax_fixture_child() {
+        let Ok(port) = env::var("YUE_MINIMAX_TEST_CHILD_PORT") else {
+            return;
+        };
+        let listener = tokio::net::TcpListener::bind(format!("127.0.0.1:{port}"))
+            .await
+            .unwrap();
+        let app = Router::new()
+            .route("/health", get(|| async { "ok" }))
+            .route(
+                "/props",
+                get(|| async {
+                    Json(json!({"models": {"lm":[],"depth":[],"cond":[],"dit":[],"vae":[]}}))
+                }),
+            );
+        axum::serve(listener, app).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn minimax_starts_and_stops_an_owned_http_process() {
+        let listener = TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let mut command = Command::new(env::current_exe().unwrap());
+        command
+            .args([
+                "--exact",
+                "native_minimax::tests::minimax_fixture_child",
+                "--nocapture",
+            ])
+            .env("YUE_MINIMAX_TEST_CHILD_PORT", port.to_string())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null());
+        drop(listener);
+        let mut child = Running::spawn(command, port).unwrap();
+        child.wait_ready(Duration::from_secs(10)).await.unwrap();
+        let runtime = Runtime::default();
+        *runtime.running.lock().await = Some(child);
+        assert!(runtime.healthy().await);
+        runtime.stop().await;
+        assert!(!runtime.healthy().await);
+        assert!(TcpListener::bind((Ipv4Addr::LOCALHOST, port)).is_ok());
+    }
+
+    #[tokio::test]
+    async fn minimax_profile_dispatches_the_five_weight_files_and_returns_native_result() {
+        let profile = &PROFILES[0];
+        let props = json!({"models": ROLES.into_iter().zip(profile.files)
+            .map(|(role, filename)| (role.to_owned(), json!([filename])))
+            .collect::<serde_json::Map<_, _>>()});
+        let seen = Arc::new(Mutex::new(Vec::<Value>::new()));
+        let synth = {
+            let seen = seen.clone();
+            move |Json(body): Json<Value>| async move {
+                seen.lock().unwrap().push(body);
+                Json(json!({"id": "fixture"}))
+            }
+        };
+        let app = Router::new()
+            .route("/props", get(move || async move { Json(props) }))
+            .route("/synth", post(synth))
+            .route("/job", get(|Query(query): Query<HashMap<String, String>>| async move {
+                assert_eq!(query["id"], "fixture");
+                if query.contains_key("result") {
+                    ([(header::CONTENT_TYPE, "multipart/mixed; boundary=fixture")],
+                     "--fixture\r\nContent-Type: application/json\r\n\r\n{\"seed\":42}\r\n--fixture\r\nContent-Type: audio/wav\r\n\r\naudio\r\n--fixture--\r\n")
+                } else {
+                    ([(header::CONTENT_TYPE, "application/json")], r#"{"status":"done"}"#)
+                }
+            }).post(|Query(query): Query<HashMap<String, String>>| async move {
+                assert_eq!(query["id"], "fixture");
+                assert_eq!(query["cancel"], "1");
+                Json(json!({"status": "cancelled"}))
+            }));
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let client = Client::new(listener.local_addr().unwrap().port()).unwrap();
+        let server = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+        let profiles = client.profiles().await.unwrap();
+        assert!(profiles[0].ready);
+        assert!(!profiles[1].ready);
+
+        let request = SongRequest {
+            caption: "folk",
+            lyrics: "[verse]\nThe morning light",
+            duration_seconds: Some(3.2),
+            steps: Some(2),
+            seed: Some(42),
+            ..Default::default()
+        };
+        assert!(client.submit("not-a-profile", &request).await.is_err());
+        assert!(
+            client
+                .submit(profiles[1].profile.id, &request)
+                .await
+                .is_err()
+        );
+        assert!(
+            client
+                .submit(
+                    profile.id,
+                    &SongRequest {
+                        lyrics: "",
+                        ..request.clone()
+                    }
+                )
+                .await
+                .is_err()
+        );
+        let id = client.submit(profile.id, &request).await.unwrap();
+        assert_eq!(client.status(&id).await.unwrap(), "done");
+        assert_eq!(client.cancel(&id).await.unwrap(), "cancelled");
+        let result = client.result(&id).await.unwrap();
+        assert_eq!(result[0].audio, b"audio");
+        assert_eq!(result[0].replay_request["seed"], 42);
+        let requests = seen.lock().unwrap();
+        assert_eq!(requests.len(), 1);
+        assert_eq!(requests[0]["output_format"], "wav32");
+        for (field, file) in FIELDS.into_iter().zip(profile.files) {
+            assert_eq!(requests[0][field], file);
+        }
+        server.abort();
+    }
+}
+
+/// An AppState can keep one of these. The caller holds the shared music-engine
+/// lease through polling and import, so a backend switch waits for that job.
+#[derive(Default)]
+pub(crate) struct Runtime {
+    running: Mutex<Option<Running>>,
+}
+
+impl Runtime {
+    /// Search the current installation and the old registered MiniMax
+    /// installations. Merely reading the catalogue never starts a process.
+    pub(crate) fn installation(data_root: &Path) -> Installation {
+        Installation::discover(data_root)
+    }
+
+    pub(crate) async fn start(&self, profile_id: &str, data_root: &Path) -> Result<Client> {
+        let profile = PROFILES
+            .iter()
+            .find(|profile| profile.id == profile_id)
+            .with_context(|| format!("unknown MiniMax profile {profile_id}"))?;
+        let install = Self::installation(data_root);
+        let launch = install.for_profile(profile)?;
+
+        let mut running = self.running.lock().await;
+        if let Some(current) = running.as_mut() {
+            if current.launch.as_ref() == Some(&launch) && current.child.try_wait()?.is_none() {
+                // A long decode may briefly delay HTTP. Let the caller surface
+                // the health failure; never spawn over an owned live process.
+                if current.client.0.health().await {
+                    return Ok(current.client.clone());
+                }
+                bail!("The MiniMax process is running but its health endpoint did not respond");
+            }
+            running.take();
+        }
+
+        let listener = TcpListener::bind((Ipv4Addr::LOCALHOST, 0))
+            .context("reserve a loopback port for MiniMax")?;
+        let port = listener.local_addr()?.port();
+        let command = launch.command(port, data_root)?;
+        drop(listener);
+        let mut current = Running::spawn(command, port)?;
+        current
+            .wait_ready(Duration::from_secs(30))
+            .await
+            .with_context(|| {
+                format!(
+                    "MiniMax did not start. See {}",
+                    data_root.join("minimax-engine.log").display()
+                )
+            })?;
+        current.launch = Some(launch);
+        let client = current.client.clone();
+        *running = Some(current);
+        Ok(client)
+    }
+
+    /// Only checks the loopback listener of our own child.
+    pub(crate) async fn healthy(&self) -> bool {
+        let mut running = self.running.lock().await;
+        let Some(current) = running.as_mut() else {
+            return false;
+        };
+        matches!(current.child.try_wait(), Ok(None)) && current.client.0.health().await
+    }
+
+    pub(crate) async fn stop(&self) {
+        self.running.lock().await.take();
+    }
+}
+
+/// Same resource and model-folder conventions as the native MiniMax manager.
+/// An explicit override is authoritative, even if its target is missing.
+pub(crate) struct Installation {
+    executable: Option<PathBuf>,
+    roots: Vec<PathBuf>,
+    runtime_dirs: Vec<PathBuf>,
+}
+
+impl Installation {
+    fn discover(data_root: &Path) -> Self {
+        let neighbors: Vec<_> = studio_hub_client::neighbors::others(data_root)
+            .into_iter()
+            .filter(|entry| entry.app == "minimax")
+            .collect();
+        let data_dirs: Vec<_> = std::iter::once(data_root.to_path_buf())
+            .chain(neighbors.into_iter().map(|entry| entry.data_dir))
+            .collect();
+        let mut binaries = Vec::new();
+        if let Ok(current) = env::current_exe() {
+            if let Some(parent) = current.parent() {
+                binaries.push(parent.join("resources/minimaxmusic-cpp"));
+                if let Some(bundle) = parent.parent() {
+                    binaries.push(bundle.join("Resources/resources/minimaxmusic-cpp"));
+                    binaries.push(bundle.join("lib/YuE2 Studio/resources/minimaxmusic-cpp"));
+                }
+            }
+        }
+        for root in &data_dirs {
+            if let Some(parent) = root.parent() {
+                binaries.push(parent.join("resources/minimaxmusic-cpp"));
+            }
+        }
+        if cfg!(target_os = "linux") {
+            binaries.push(PathBuf::from(
+                "/usr/lib/MiniMax Music3 Studio/resources/minimaxmusic-cpp",
+            ));
+        }
+        if cfg!(target_os = "macos") {
+            binaries.push(PathBuf::from("/Applications/MiniMax Music3 Studio.app/Contents/Resources/resources/minimaxmusic-cpp"));
+        }
+        for key in ["ProgramFiles", "LOCALAPPDATA"] {
+            if cfg!(windows) {
+                if let Some(root) = env::var_os(key) {
+                    let mut root = PathBuf::from(root);
+                    if key == "LOCALAPPDATA" {
+                        root.push("Programs");
+                    }
+                    binaries.push(root.join("MiniMax Music3 Studio/resources/minimaxmusic-cpp"));
+                }
+            }
+        }
+        let bundle = env::var_os("MINIMAX_MM_SERVER_ROOT").map(PathBuf::from);
+        let name = if cfg!(windows) {
+            "mm-server.exe"
+        } else {
+            "mm-server"
+        };
+        let executable = override_path("YUE_MINIMAX_MM_SERVER_BIN", "MINIMAX_MM_SERVER_BIN")
+            .or_else(|| match &bundle {
+                Some(dir) => Some(dir.join(name)),
+                None => binaries
+                    .into_iter()
+                    .map(|dir| dir.join(name))
+                    .find(|file| file.is_file()),
+            });
+        let roots = override_path("YUE_MINIMAX_MODELS_ROOT", "MINIMAX_MUSIC_MODELS_ROOT")
+            .map(|root| vec![root])
+            .unwrap_or_else(|| {
+                data_dirs
+                    .iter()
+                    .map(|dir| dir.join("models").join(ENGINE_ID))
+                    .chain(
+                        executable
+                            .as_deref()
+                            .and_then(Path::parent)
+                            .map(|dir| dir.join("models")),
+                    )
+                    .collect()
+            });
+        let runtime_dirs = data_dirs
+            .iter()
+            .map(|dir| {
+                let runtime = dir.join("engine-runtime");
+                if cfg!(target_os = "linux") {
+                    runtime.join("cuda")
+                } else {
+                    runtime
+                }
+            })
+            .collect();
+        Self {
+            executable,
+            roots,
+            runtime_dirs,
+        }
+    }
+
+    pub(crate) fn engine_installed(&self) -> bool {
+        self.executable.as_ref().is_some_and(|file| file.is_file())
+    }
+
+    pub(crate) fn profiles(&self) -> Vec<ProfileStatus> {
+        PROFILES
+            .iter()
+            .map(|profile| profile.status_on_disk(&self.roots))
+            .collect()
+    }
+
+    fn for_profile(&self, profile: &'static Profile) -> Result<Launch> {
+        let executable = self.executable.as_ref().filter(|file| file.is_file())
+            .context("MiniMax mm-server is missing. Install MiniMax Music3 Studio or set YUE_MINIMAX_MM_SERVER_BIN to its executable.")?;
+        let models_root = self
+            .roots
+            .iter()
+            .find(|root| profile.missing_at(root).is_empty())
+            .with_context(|| {
+                format!(
+                    "MiniMax profile {} is incomplete: {}",
+                    profile.id,
+                    profile.status_on_disk(&self.roots).missing.join(", ")
+                )
+            })?;
+        Ok(Launch {
+            executable: fs::canonicalize(executable)
+                .context("resolve the installed MiniMax engine")?,
+            models_root: fs::canonicalize(models_root)
+                .context("resolve the installed MiniMax model folder")?,
+            runtime_dirs: self.runtime_dirs.clone(),
+        })
+    }
+}
+
+fn override_path(primary: &str, legacy: &str) -> Option<PathBuf> {
+    env::var_os(primary)
+        .or_else(|| env::var_os(legacy))
+        .map(PathBuf::from)
+}
+
+#[derive(Debug, PartialEq, Eq)]
+struct Launch {
+    executable: PathBuf,
+    models_root: PathBuf,
+    runtime_dirs: Vec<PathBuf>,
+}
+
+impl Launch {
+    fn command(&self, port: u16, data_root: &Path) -> Result<Command> {
+        let folder = self
+            .executable
+            .parent()
+            .context("MiniMax engine has no containing folder")?;
+        let mut command = Command::new(&self.executable);
+        command
+            .current_dir(folder)
+            .arg("--models")
+            .arg(&self.models_root)
+            .args([
+                "--host",
+                "127.0.0.1",
+                "--port",
+                &port.to_string(),
+                "--max-batch",
+                "1",
+            ])
+            .env_remove("MM3_CUDA_BACKEND")
+            .stdin(Stdio::null());
+        let machine = hardware::hardware();
+        if machine.nvidia && !cfg!(target_os = "macos") {
+            let compute = machine
+                .compute_capability
+                .context("Could not read the NVIDIA card for MiniMax")?;
+            let driver = machine
+                .driver_major
+                .context("Could not read the NVIDIA driver for MiniMax")?;
+            let build = hardware::cuda_build(compute, driver).with_context(|| {
+                format!(
+                    "MiniMax CUDA is unavailable: {}",
+                    hardware::cuda_unavailable_reason(&machine)
+                )
+            })?;
+            let library = if cfg!(windows) {
+                "ggml-cuda.dll"
+            } else {
+                "libggml-cuda.so"
+            };
+            let backend = folder.join(build.folder()).join(library);
+            if backend.is_file() {
+                command.env("MM3_CUDA_BACKEND", backend);
+            } else if !folder.join(library).is_file() {
+                bail!(
+                    "MiniMax {} backend is missing from {}",
+                    build.folder(),
+                    folder.display()
+                );
+            }
+            command.args(["--device", "CUDA0"]);
+            if hardware::accumulates_in_fp16() {
+                command.arg("--clamp-fp16");
+            }
+        }
+
+        // Use the engine bundle and its installed runtime before inherited
+        // search paths, without borrowing the YuE2 AppImage libraries.
+        dub_core::proc::outside_appimage(&mut command);
+        let mut dirs = vec![folder.to_path_buf()];
+        dirs.extend(self.runtime_dirs.iter().filter(|dir| dir.is_dir()).cloned());
+        if cfg!(target_os = "linux") {
+            command.env("LD_LIBRARY_PATH", env::join_paths(dirs)?);
+        } else if cfg!(windows) {
+            if let Some(path) = env::var_os("PATH") {
+                dirs.extend(env::split_paths(&path));
+            }
+            command.env("PATH", env::join_paths(dirs)?);
+        }
+
+        #[cfg(windows)]
+        {
+            use std::os::windows::process::CommandExt;
+            command.creation_flags(0x0800_0000);
+        }
+        fs::create_dir_all(data_root)?;
+        let log = fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(data_root.join("minimax-engine.log"))?;
+        command
+            .stdout(Stdio::from(log.try_clone()?))
+            .stderr(Stdio::from(log));
+        Ok(command)
+    }
+}
+
+struct Running {
+    child: Child,
+    client: Client,
+    launch: Option<Launch>,
+}
+
+impl Running {
+    fn spawn(command: Command, port: u16) -> Result<Self> {
+        let client = Client::new(port)?;
+        let child = music_core::process::spawn_dying_with_parent(command)
+            .context("start MiniMax mm-server")?;
+        music_core::process::adopt(&child);
+        Ok(Self {
+            child,
+            client,
+            launch: None,
+        })
+    }
+
+    async fn wait_ready(&mut self, timeout: Duration) -> Result<()> {
+        tokio::time::timeout(timeout, async {
+            loop {
+                if let Some(status) = self.child.try_wait()? {
+                    bail!("MiniMax mm-server exited with {status}");
+                }
+                if self.client.0.health().await {
+                    self.client.props().await?;
+                    if let Some(status) = self.child.try_wait()? {
+                        bail!("MiniMax mm-server exited with {status}");
+                    }
+                    return Ok(());
+                }
+                tokio::time::sleep(Duration::from_millis(100)).await;
+            }
+        })
+        .await
+        .context("waiting for the MiniMax loopback listener timed out")?
+    }
+}
+
+impl Drop for Running {
+    fn drop(&mut self) {
+        if matches!(self.child.try_wait(), Ok(None)) {
+            let _ = self.child.kill();
+            let _ = self.child.wait();
+        }
+    }
+}

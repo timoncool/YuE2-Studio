@@ -13,6 +13,7 @@ mod cover_art;
 mod cover_prompt;
 mod providers;
 mod openrouter_stream;
+mod native_minimax;
 mod assistant;
 mod song_tokenizer;
 mod assistant_runtime;
