@@ -3040,7 +3040,7 @@ async fn keep_processing(
         .and_then(|name| processing::workspace_file(&media, name))
         .ok_or_else(|| api_error(StatusCode::NOT_FOUND, "the preview file is gone".into()))?;
     let extension = preview.extension().and_then(|extension| extension.to_str()).unwrap_or("flac").to_owned();
-    let filename = format!("{}-v{}-{}.{extension}", run.song_id, &uuid::Uuid::now_v7().simple().to_string()[..8], run.stages.join("-"));
+    let filename = format!("{}-v{}-{}.{extension}", run.song_id, run.id, run.stages.join("-"));
     let stored = media.join(&filename);
     std::fs::rename(&preview, &stored).map_err(|error| api_error(StatusCode::INTERNAL_SERVER_ERROR, format!("store the version: {error}")))?;
     let reference_title = match &run.request.master {
