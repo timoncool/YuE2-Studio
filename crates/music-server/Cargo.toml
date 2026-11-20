@@ -13,7 +13,8 @@ name = "music-server"
 path = "src/main.rs"
 
 [dependencies]
-tough = { version = "0.24", features = ["http"] }
+async-trait = "0.1"
+tough = "0.24"
 anyhow.workspace = true
 # A song deleted for good sends its files to the system's recycle bin, as Dub Studio does with a project.
 trash = "5"

@@ -1876,6 +1876,7 @@ version = "0.1.0"
 dependencies = [
  "acpp-server",
  "anyhow",
+ "async-trait",
  "audio-post",
  "axum",
  "base64 0.23.1",
@@ -3631,9 +3632,7 @@ dependencies = [
  "olpc-cjson",
  "pem",
  "percent-encoding",
- "reqwest",
  "rustls",
- "rustls-platform-verifier",
  "serde",
  "serde_json",
  "serde_plain",

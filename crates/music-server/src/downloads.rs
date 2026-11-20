@@ -870,7 +870,7 @@ async fn fetch_absent(
     let url = crate::net::model_url(asset.url);
     if let Some(fallback) = onnx_sources(asset.url) {
         let digest = crate::pin_sha::sha256(asset.url).expect("ONNX mirror lists require a pinned digest");
-        let refresh = tokio::time::timeout(std::time::Duration::from_secs(12), crate::component_catalogue::channel_sources(digest));
+        let refresh = tokio::time::timeout(std::time::Duration::from_secs(12), crate::component_catalogue::channel_sources(http, digest));
         let mut sources = match unless_cancelled(&cancel, async { Ok(refresh.await) }).await? {
             Ok(Ok(sources)) => sources.unwrap_or_default(),
             Ok(Err(error)) => { eprintln!("Component mirror refresh failed: {error}"); Vec::new() }
