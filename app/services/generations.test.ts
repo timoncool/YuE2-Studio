@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import type { Song } from '../types';
-import { keepingDeleted, rowsFor, rowTaken, stillWaiting } from './generations';
+import { followsLocalProgress, keepingDeleted, rowsFor, rowTaken, stillWaiting } from './generations';
+
+it('keeps cloud jobs and finished cards out of native progress updates', () => {
+  const running = { jobId: 'job', isGenerating: true };
+  expect(followsLocalProgress(song('native', running))).toBe(true);
+  expect(followsLocalProgress(song('cloud', { ...running, ditModel: 'openrouter' }))).toBe(false);
+  expect(followsLocalProgress(song('done', { ...running, isGenerating: false }))).toBe(false);
+});
 
 const song = (id: string, fields: Partial<Song> = {}): Song => ({
   id,

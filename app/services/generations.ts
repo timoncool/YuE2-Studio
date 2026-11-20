@@ -44,6 +44,7 @@ interface CardFields {
   style?: string;
   lyrics?: string;
   jobId?: string;
+  engineId?: string;
   createdAt?: Date;
   /** The playlist the songs go into. */
   playlistId?: string;
@@ -67,6 +68,7 @@ function card(id: string, fields: CardFields): Song {
   return {
     id,
     jobId: fields.jobId,
+    ditModel: fields.engineId,
     playlistId: fields.playlistId,
     title: fields.title,
     style: fields.style ?? '',
@@ -75,9 +77,14 @@ function card(id: string, fields: CardFields): Song {
     duration: '--:--',
     createdAt: fields.createdAt ?? new Date(),
     isGenerating: true,
-    stage: 'stageWaitingInQueue',
-    tags: ['yue2'],
+    stage: fields.engineId === 'openrouter' ? 'stageGeneratingTrack' : 'stageWaitingInQueue',
+    tags: fields.engineId === 'openrouter' ? ['OpenRouter'] : ['yue2'],
   };
+}
+
+/** The progress stream belongs to the local engine and carries no job IDs. */
+export function followsLocalProgress(entry: Song): boolean {
+  return Boolean(entry.isGenerating && entry.jobId && entry.ditModel !== 'openrouter');
 }
 
 /** The tracks a job makes: its songs times the variations of each. */
@@ -121,10 +128,11 @@ export function keepingDeleted(made: Map<string, Song[]>, known: ReadonlyMap<str
   return made;
 }
 
-/** Asks the engine to stop a job; a refusal is told, the card is already marked. */
-async function stopJob(jobId: string): Promise<void> {
+/** The job may have finished while the stop request was in flight. */
+async function stopJob(jobId: string): Promise<YueJob> {
   const response = await fetch(`/v1/music/jobs/${encodeURIComponent(jobId)}`, { method: 'POST' });
   if (!response.ok) throw new Error(`The engine did not stop the job (${response.status})`);
+  return response.json();
 }
 
 /** "Without stopping" sends the same request again: one that failed would fail on every round. */
@@ -199,7 +207,7 @@ export function useGenerations({ enabled, notify, onFinished }: GenerationOption
   // of several tracks gets a card for each, under the one the request began as.
   const follow = useCallback((cardId: string, job: YueJob) => {
     const rows = rowsFor(cardId, tracksOf(job));
-    setCards(prev => prev.flatMap(entry => (entry.id === cardId ? rows.map(id => ({ ...entry, id, jobId: job.id, createdAt: new Date(job.submitted_at) })) : [entry])));
+    setCards(prev => prev.flatMap(entry => (entry.id === cardId ? rows.map(id => ({ ...entry, id, jobId: job.id, ditModel: job.engine_id, createdAt: new Date(job.submitted_at) })) : [entry])));
     setRowsOfJob(prev => (prev.has(job.id) ? prev : new Map(prev).set(job.id, rows)));
   }, []);
 
@@ -340,6 +348,7 @@ export function useGenerations({ enabled, notify, onFinished }: GenerationOption
           style: job.style,
           lyrics: job.lyrics,
           jobId: job.id,
+          engineId: job.engine_id,
           createdAt: new Date(job.submitted_at),
           playlistId: job.playlist_id,
         }))),
@@ -367,7 +376,7 @@ export function useGenerations({ enabled, notify, onFinished }: GenerationOption
 
   // The engine renders one job at a time in the order they came, so the
   // oldest running card is the one its progress belongs to.
-  const making = following > 0;
+  const making = waiting.some(followsLocalProgress);
   const stageClock = useRef<StageClock | null>(null);
   useEffect(() => {
     if (!making) return;
@@ -376,12 +385,12 @@ export function useGenerations({ enabled, notify, onFinished }: GenerationOption
       const stage = STAGE_LABEL[progress.stage];
       const detail = stageDetail(progress.detail, progress.stage, stageClock);
       setCards(prev => {
-        const running = prev.filter(entry => entry.isGenerating && entry.jobId);
+        const running = prev.filter(followsLocalProgress);
         if (running.length === 0) return prev;
         // of a job's cards the lowest one shows the work: the song being made takes that card's row
         const active = running.reduce((oldest, entry) => (entry.createdAt <= oldest.createdAt ? entry : oldest));
         return prev.map(entry => {
-          if (!entry.isGenerating || !entry.jobId) return entry;
+          if (!followsLocalProgress(entry)) return entry;
           if (entry.id === active.id) {
             return entry.progress === progress.fraction && entry.stage === stage && entry.stageDetail === detail ? entry : { ...entry, progress: progress.fraction, stage, stageDetail: detail };
           }
@@ -393,7 +402,7 @@ export function useGenerations({ enabled, notify, onFinished }: GenerationOption
 
   const generate = useCallback(async (request: YueRequest) => {
     const id = `temp_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`;
-    setCards(prev => [card(id, { title: request.title?.trim() || t('generating'), style: request.style, lyrics: request.lyrics, playlistId: request.playlist_id }), ...prev]);
+    setCards(prev => [card(id, { title: request.title?.trim() || t('generating'), style: request.style, lyrics: request.lyrics, playlistId: request.playlist_id, engineId: request.music_source?.kind === 'openrouter' ? 'openrouter' : undefined }), ...prev]);
     try {
       const response = await fetch('/v1/music/jobs', {
         method: 'POST',
@@ -428,6 +437,16 @@ export function useGenerations({ enabled, notify, onFinished }: GenerationOption
   }, []);
 
   const cancel = useCallback(async (jobId: string) => {
+    try {
+      const job = await stopJob(jobId);
+      if (job.status !== 'cancelled') {
+        void queryClient.invalidateQueries({ queryKey: activeJobsKey });
+        return;
+      }
+    } catch (error) {
+      notify(error instanceof Error ? error.message : String(error), 'error');
+      return;
+    }
     stopped.current.add(jobId);
     // a stopped job of several tracks is one stopped card: the tracks it finished are songs already
     setCards(prev => {
@@ -439,11 +458,6 @@ export function useGenerations({ enabled, notify, onFinished }: GenerationOption
         return [{ ...entry, isGenerating: false, stage: 'cancelled' }];
       });
     });
-    try {
-      await stopJob(jobId);
-    } catch (error) {
-      notify(error instanceof Error ? error.message : String(error), 'error');
-    }
   }, [notify]);
 
   /** Drops a cancelled card, stopping its job if it still runs. */

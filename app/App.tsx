@@ -469,7 +469,7 @@ function AppContent() {
   // The songs being made: their cards, the jobs they follow, and the row each
   // hands to the song it becomes.
   const generations = useGenerations({
-    enabled: nativeSetupReady,
+    enabled: nativeModels !== 'offline' && (nativeSetupReady || enteredCloudEditor),
     notify: (message, type) => showToast(message, type),
     onFinished: (cardId, made) => {
       // a card that was open in the details stays open as the song it became

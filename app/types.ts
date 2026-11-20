@@ -215,6 +215,7 @@ export interface YueJobSong {
 
 export interface YueJob {
   id: string;
+  engine_id?: string;
   /** The mark this window gave the request; an agent's job has none. */
   client_ref?: string;
   /** When the service took the request, in Unix milliseconds. */
