@@ -9729,6 +9729,9 @@ async fn setup_adopt(State(state): State<AppState>, body: axum::body::Bytes) -> 
                 if let Some(release_name) = downloads::release_archive_name(asset) {
                     register_archive(LibraryArchive::Component(part, asset), asset.url, downloader.path_of(asset), release_name);
                 }
+                for &(name, sha) in pin_sha::runtime_libraries(asset.url) {
+                    register(asset.id, Some(sha), downloader.picked_into(asset).join(name));
+                }
                 for entry in asset.pick {
                     let name = downloads::picked_file_name(entry);
                     register(asset.id, pin_sha::picked(asset.url, name), downloader.picked_into(asset).join(name));
