@@ -5818,15 +5818,18 @@ async fn engine_at_work(state: &AppState) -> bool {
 /// Stops what holds the model files open - the engine this studio started and the writing assistant - so the files
 /// can be moved. Answers whether an engine was running, for the caller to start it again; the caller holds
 /// `engine_use`, so nothing starts one meanwhile.
-async fn stop_engine_for_files(state: &AppState) -> bool {
+async fn stop_engine_for_files(state: &AppState) -> Result<bool, String> {
+    let was_running = {
+        let mut supervisor = state.engine.lock().await;
+        match supervisor.as_mut() {
+            Some(engine) => tokio::task::block_in_place(|| engine.stop(std::time::Duration::from_secs(10)))
+                .map_err(|error| format!("could not stop the engine before moving models: {error:#}"))?
+                .was_running,
+            None => false,
+        }
+    };
     state.assistant_runtime.stop().await;
-    let mut supervisor = state.engine.lock().await;
-    let Some(engine) = supervisor.as_mut() else { return false };
-    let was_up = engine.process_alive();
-    if let Err(error) = tokio::task::block_in_place(|| engine.stop(std::time::Duration::from_secs(10))) {
-        studio_log!("[ERROR] the engine did not stop before its files were moved: {error}");
-    }
-    was_up
+    Ok(was_running)
 }
 
 /// Starts the engine again with the saved options; an engine that does not start is counted for the hub by a reason

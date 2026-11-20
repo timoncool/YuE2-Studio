@@ -465,6 +465,7 @@ pub struct Move {
     pub total_bytes: u64,
     /// What each folder came to, once the move has ended.
     pub moved: Vec<Moved>,
+    pub error: Option<String>,
     /// Why the engine did not start again afterwards.
     pub engine_error: Option<String>,
 }
@@ -546,6 +547,13 @@ pub async fn change(State(state): State<AppState>, Json(change): Json<Change>) -
         None => None,
     };
     let cancel = std::sync::Arc::new(AtomicBool::new(false));
+    // A submission may have started while the destination was being checked.
+    let held = state.engine_use.clone().try_write_owned().map_err(|_| {
+        api_error(StatusCode::CONFLICT, "the engine is in use; move the models when it is idle".into())
+    })?;
+    if crate::engine_at_work(&state).await {
+        return Err(api_error(StatusCode::CONFLICT, "the engine is making music; move the models when it is done".into()));
+    }
     {
         let mut slot = job().lock().unwrap_or_else(std::sync::PoisonError::into_inner);
         if slot.0.running {
@@ -554,8 +562,14 @@ pub async fn change(State(state): State<AppState>, Json(change): Json<Change>) -
         *slot = (Move { running: true, ..Move::default() }, cancel.clone());
     }
     tokio::spawn(async move {
-        let _held = state.engine_use.write().await;
-        let engine_was_up = crate::stop_engine_for_files(&state).await;
+        let _held = held;
+        let engine_was_up = match crate::stop_engine_for_files(&state).await {
+            Ok(was_up) => was_up,
+            Err(error) => {
+                job().lock().unwrap_or_else(std::sync::PoisonError::into_inner).0 = Move { error: Some(error), ..Move::default() };
+                return;
+            }
+        };
         let work = tokio::task::spawn_blocking(move || {
             relocate(&root, home.as_deref(), &cancel, |folder, done, total| {
                 let mut job = job().lock().unwrap_or_else(std::sync::PoisonError::into_inner);
@@ -567,7 +581,10 @@ pub async fn change(State(state): State<AppState>, Json(change): Json<Change>) -
         .await;
         let engine_error = if engine_was_up { crate::restart_engine(&state).await.err() } else { None };
         let mut job = job().lock().unwrap_or_else(std::sync::PoisonError::into_inner);
-        job.0 = Move { running: false, moved: work.unwrap_or_default(), engine_error, ..Move::default() };
+        job.0 = match work {
+            Ok(moved) => Move { moved, engine_error, ..Move::default() },
+            Err(error) => Move { error: Some(format!("model relocation was interrupted: {error}")), engine_error, ..Move::default() },
+        };
     });
     Ok(Json(json!({ "move": job_now() })))
 }

@@ -21,6 +21,7 @@ interface Move {
   done_bytes: number;
   total_bytes: number;
   moved: Moved[];
+  error: string | null;
   engine_error: string | null;
 }
 interface Picked { path: string; directory: string; free_bytes: number; copy_bytes: number }
@@ -162,6 +163,7 @@ export const ModelStorageCard: React.FC = () => {
       {!running && stayed.map(folder => (
         <p key={folder.name} className="mt-1 break-words text-amber-700 dark:text-amber-300">{t('storageStayed').replace('{folder}', folderName(folder.name)).replace('{error}', folder.error ?? '')}</p>
       ))}
+      {!running && move?.error && <p role="alert" className="mt-1 break-words text-rose-600 dark:text-rose-300">{move.error}</p>}
       {!running && move?.engine_error && <p className="mt-1 break-words text-rose-600 dark:text-rose-300">{t('storageEngine').replace('{error}', move.engine_error)}</p>}
       {error && <p className="mt-2 break-words text-rose-600 dark:text-rose-300">{error}</p>}
     </section>
