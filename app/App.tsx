@@ -19,7 +19,7 @@ import { libraryChanged, queryClient, updateLibraryPlaylists, updateLibrarySongs
 import { useGenerations } from './services/generations';
 import { isSettingsTarget, SettingsModal } from './components/SettingsModal';
 import { Song, View, Playlist, type MusicEngine } from './types';
-import { isMusicEngine, isNativeMusicEngine, nativeEngines } from './services/nativeMusicProfiles';
+import { isMusicEngine, isProfileMusicEngine, profileMusicEngines } from './services/nativeMusicProfiles';
 // Resizable panel hook
 const PANEL_MAX_SHARE = 0.4;
 const CREATE_MAX_SHARE = 0.7;
@@ -616,7 +616,7 @@ function AppContent() {
   const handleReuse = (song: Song) => {
     if (song.ditModel === 'openrouter') chooseMusicEngine('openrouter');
     else if (song.ditModel === 'yue2-cpp') chooseMusicEngine('local');
-    else if (isNativeMusicEngine(song.ditModel)) chooseMusicEngine(song.ditModel);
+    else if (isProfileMusicEngine(song.ditModel)) chooseMusicEngine(song.ditModel);
     setReuseData({ song, timestamp: Date.now() });
     setCurrentView('create');
     setMobileShowList(false);
@@ -1545,7 +1545,7 @@ function AppContent() {
                     className="rounded-lg px-3 py-2 text-sm font-medium text-pink-600 hover:underline dark:text-pink-400">
                     {t('lmProvider.useOpenRouter')}
                   </button>
-                  {Object.entries(nativeEngines).map(([engine, label]) => (
+                  {Object.entries(profileMusicEngines).map(([engine, label]) => (
                     <button key={engine} type="button" onClick={() => { if (isMusicEngine(engine)) chooseMusicEngine(engine); }}
                       className="rounded-lg px-3 py-2 text-sm font-medium text-pink-600 hover:underline dark:text-pink-400">
                       {label}
