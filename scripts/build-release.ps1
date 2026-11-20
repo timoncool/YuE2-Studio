@@ -42,6 +42,17 @@ foreach ($name in 'TAURI_SIGNING_PRIVATE_KEY', 'TAURI_UPDATER_PUBKEY', 'TAURI_SI
     }
 }
 
+function Test-UniversalEngineStage($Root, $Stamp) {
+    foreach ($backend in 'cuda12', 'cuda13') {
+        if ($Stamp.cuda_builds -notcontains $backend) { return $false }
+        if (-not (Test-Path -LiteralPath (Join-Path $Root "$backend/ggml-cuda.dll") -PathType Leaf)) { return $false }
+    }
+    foreach ($file in 'yue-server.exe', 'ggml-vulkan.dll', 'ggml-cpu-x64.dll', 'ggml.dll', 'ggml-base.dll', 'msvcp140.dll', 'msvcp140_1.dll', 'vcruntime140.dll', 'vcruntime140_1.dll', 'vcomp140.dll') {
+        if (-not (Test-Path -LiteralPath (Join-Path $Root $file) -PathType Leaf)) { return $false }
+    }
+    return $true
+}
+
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $desktopRoot = Join-Path $repoRoot 'desktop'
 $tauriRoot = Join-Path $desktopRoot 'src-tauri'
@@ -61,11 +72,18 @@ try {
     # for this backend: a CUDA build of ggml is the slow part of a release.
     $stampPath = Join-Path $engineResourceRoot 'runtime.json'
     $stamp = if (Test-Path $stampPath) { Get-Content -Raw $stampPath | ConvertFrom-Json } else { $null }
-    $stagedIsCurrent = $stamp -and $stamp.commit -eq $engineSource.commit -and $stamp.backend -eq $RuntimeBackend -and $stamp.cuda_architecture -eq 'universal' -and ($RuntimeBackend -ne 'all' -or @($stamp.cuda_builds).Count -eq 2) -and (Test-Path (Join-Path $engineResourceRoot 'yue-server.exe'))
+    $stagedIsCurrent = $stamp -and $stamp.commit -eq $engineSource.commit -and $stamp.backend -eq $RuntimeBackend -and $stamp.cuda_architecture -eq 'universal' -and ($RuntimeBackend -ne 'all' -or (Test-UniversalEngineStage $engineResourceRoot $stamp)) -and (Test-Path (Join-Path $engineResourceRoot 'yue-server.exe'))
     if (-not $stagedIsCurrent) {
         & (Join-Path $PSScriptRoot 'build-yue-runtime.ps1') -OutputDirectory $engineResourceRoot -RuntimeBackend $RuntimeBackend -CudaArchitecture universal -Cuda12Root $Cuda12Root
         if (-not $?) { throw "The nested build script failed; release packaging stopped." }
         if ($LASTEXITCODE -ne 0) { throw "the engine runtime build failed with exit code $LASTEXITCODE" }
+    }
+
+    if ($RuntimeBackend -eq 'all' -and -not $stagedIsCurrent) {
+        $builtStamp = Get-Content -Raw -LiteralPath $stampPath -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop
+        if (-not (Test-UniversalEngineStage $engineResourceRoot $builtStamp)) {
+            throw 'The universal engine is missing runtime files. Release packaging stopped.'
+        }
     }
 
     # The VST host follows the trainer's HOT-Step commit; rebuilt only when that moves.
