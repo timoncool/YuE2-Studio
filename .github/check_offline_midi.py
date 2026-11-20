@@ -28,6 +28,17 @@ shared=root/"registry"
 shared.mkdir()
 # Nothing registers this library as another Studio. Only the folder picker knows it.
 (broken/relative/"config.json").rename(old/"config.json")
+expected=["muscriptor-small-config","muscriptor-small-model"]
+if os.name=="nt":
+    import io,zipfile
+    url="https://files.pythonhosted.org/packages/59/df/e7c3a360be4f7b93cee39271b792669baeb3846c58a4df6dfcf187a7ffab/nvidia_cuda_runtime_cu12-12.9.79-py3-none-win_amd64.whl"
+    with urlopen(url,timeout=120) as response: wheel=response.read()
+    assert hashlib.sha256(wheel).hexdigest()=="8e018af8fa02363876860388bd10ccb89eb9ab8fb0aa749aaf58430a9f7c4891"
+    with zipfile.ZipFile(io.BytesIO(wheel)) as package:
+        dll=old/"cudart64_12.dll"
+        dll.write_bytes(package.read(next(n for n in package.namelist() if n.endswith("/"+dll.name))))
+    assert digest(dll)=="760c38928bbe5759f7b31ed6692599eb7ec83cedd5702e84c2b72028a89837e1"
+    expected.append("audiocpp-nvidia_cuda_runtime_cu12")
 studio=root/"YuE2"
 studio.mkdir()
 def free_port():
@@ -52,10 +63,13 @@ with log.open("wb") as stream:
                 break
             except OSError:time.sleep(.2)
         result=call("/setup/adopt", {"path":str(old)})
-        assert sorted(result["adopted"])==["muscriptor-small-config","muscriptor-small-model"],result
+        assert sorted(result["adopted"])==sorted(expected),result
         assert [Path(row["file"]).resolve() for row in result["refused"]]==[(old/"config.json").resolve()],result["refused"]
         again=call("/setup/adopt", {"path":str(old)})
-        assert again["adopted"]==[],again
+        assert again["adopted"]==[] and again["verified_optional"]==len(expected),again
+        if os.name=="nt":
+            installed_dll=studio/"audiocpp/runtime/audiocpp-cuda12/cudart64_12.dll"
+            assert installed_dll.samefile(dll) and digest(installed_dll)==digest(dll)
         status=call("/v1/midi")
         installed=next(x["installed"] for x in status["sizes"] if x["id"]=="small")
         assert installed,status
