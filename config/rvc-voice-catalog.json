@@ -25396,6 +25396,32 @@
         "pitch_guidance": true,
         "training_epochs": 1000
       }
+    },
+    {
+      "id": "rvc-arkandash-faruzan-jp-v2",
+      "name": "Faruzan (Japanese)",
+      "source_repo": "ArkanDash/rvc-genshin-impact",
+      "revision": "f120a90b21dc31a3f14ed64732b96aea755a96d6",
+      "source_url": "https://huggingface.co/ArkanDash/rvc-genshin-impact/tree/f120a90b21dc31a3f14ed64732b96aea755a96d6",
+      "license": "MIT",
+      "archive": {
+        "url": "https://huggingface.co/ArkanDash/rvc-genshin-impact/resolve/f120a90b21dc31a3f14ed64732b96aea755a96d6/prezipped/v2/faruzan-jp%20100%20epochs%2048k%20v2.zip",
+        "sha256": "fc822f84fc1fe1abaa09b813c1a91a4a200b8d24b6f6a68c7804258fd06b4fd9",
+        "size": 81435258,
+        "weights_sha256": "57164f27f40b4566d5d2e801dc6b89fce48c76354ca8af15e9c600901442f795",
+        "index_sha256": "de4875ecdb7a22a8f54ea1fe897edf8b147eb0dfc9372f104b6706e0ab338c14"
+      },
+      "metadata": {
+        "source_labels": [
+          "Genshin Impact",
+          "Japanese"
+        ],
+        "rvc_version": "v2",
+        "sample_rate_hz": 48000,
+        "training_epochs": 100,
+        "index_dimensions": 768,
+        "index_vectors": 10000
+      }
     }
   ]
 }

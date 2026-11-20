@@ -13,6 +13,7 @@ use crate::{api_error, rvc_voices::ApiFailure};
 pub(super) enum Stage {
     Preparing,
     DownloadingWeights,
+    DownloadingArchive,
     DownloadingIndex,
     Verifying,
 }

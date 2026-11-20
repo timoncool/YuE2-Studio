@@ -30,7 +30,7 @@ const metadataFields = ['vocal_style', 'rvc_version', 'sample_rate_hz'] as const
 type MetadataField = typeof metadataFields[number];
 type Filters = Partial<Record<MetadataField | 'index', string>>;
 interface InstallProgress {
-  stage: 'preparing' | 'downloading_weights' | 'downloading_index' | 'verifying';
+  stage: 'preparing' | 'downloading_weights' | 'downloading_archive' | 'downloading_index' | 'verifying';
   downloaded_bytes: number;
   total_bytes: number;
 }
@@ -114,6 +114,7 @@ export function RvcCuratedVoices({ onInstalled, onChoose, disabled }: {
   const stageLabels = {
     preparing: labels.preparing,
     downloading_weights: labels.fetchingWeights,
+    downloading_archive: labels.fetchingArchive,
     downloading_index: labels.fetchingIndex,
     verifying: labels.verifying,
   };
