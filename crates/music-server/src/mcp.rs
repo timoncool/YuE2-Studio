@@ -2304,6 +2304,12 @@ fn tools() -> &'static [Tool] {
                 call: |args| post("/v1/exports/live".into(), args.clone()),
             },
             Tool {
+                name: "song_export_zip",
+                description: "Prepare a ZIP for selected library tracks with original audio, lyrics, prompts, settings and available ABC and MIDI. Answers with the file name and the local HTTP download path.",
+                schema: || object(json!({ "song_ids": { "type": "array", "items": { "type": "string" }, "minItems": 1 } }), &["song_ids"]),
+                call: |args| post("/v1/exports/tracks".into(), args.clone()),
+            },
+            Tool {
                 name: "library_song_midi_files",
                 description: "The MIDI a library song has for a DAW, each file named for where its notes come from. score: the score the song was generated with - its tempo, meter and key, and the parts with notes: score (the whole of it), lead, voice, chords; a song made without a score has none. own: the track's own MIDI, transcribed from the recording (an estimate) or edited in the MIDI editor.",
                 schema: || id_only("song_id", "library song id"),
@@ -3612,6 +3618,7 @@ mod tests {
         ("GET", "/v1/exports/{id}/file", "the window's Save dialog reads an export from here: song_export writes into the folder the agent names and song_export_get answers the path"),
         ("GET", "/v1/library/songs/{id}/midi/parts/{part}", "the window's Save dialog reads a part's MIDI from here: library_song_midi_part_write writes it into the folder the agent names"),
         ("GET", "/v1/exports/live/{id}/file", "the window's Save dialog reads a Live project from here: song_export_live writes it into the folder the agent names"),
+        ("GET", "/v1/exports/tracks/{id}/file", "binary ZIP download; song_export_zip prepares it and answers its URL"),
         ("DELETE", "/v1/exports/live/{id}", "the window lets go of a Live project it did not save: an agent's project is a file in its own folder"),
         ("DELETE", "/v1/exports/{id}", "the window lets go of an export it did not save: an agent's export is a file in its own folder"),
         ("GET", "/v1/skins", "the page's Winamp reads its skins here: winamp_skins asks the window for the same list"),
