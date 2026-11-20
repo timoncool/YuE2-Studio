@@ -354,6 +354,7 @@ struct CreateMusicJobRequest {
 #[serde(tag = "kind", rename_all = "snake_case")]
 enum MusicSource {
     Local,
+    #[serde(rename = "openrouter")]
     OpenRouter { model: String },
 }
 
