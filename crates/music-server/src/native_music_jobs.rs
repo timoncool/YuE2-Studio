@@ -298,6 +298,11 @@ async fn submit(
                 active.status = MusicJobStatus::Completed;
                 active.phase = MusicJobPhase::Completed;
                 active.message = "MiniMax music was saved to the library.".into();
+                // Only the watcher completes an import. Reading a job never counts it again.
+                if let Some(hub) = &state.hub {
+                    hub.count("songs", 1);
+                    hub.count("song_done", 1);
+                }
             }
             Ok(None) => stop_on_request(active),
             Err(error) => {
