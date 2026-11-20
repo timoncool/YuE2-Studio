@@ -23,6 +23,7 @@ const PANEL_MAX_SHARE = 0.4;
 const CREATE_MAX_SHARE = 0.7;
 /** What the song list keeps beside the create form, however wide the form is drawn. */
 const LIST_MIN_WIDTH = 280;
+const PANEL_DIVIDER_WIDTH = 5;
 const PANEL_KEY_STEP = 16;
 
 /** A side panel the user sizes by dragging its edge, with the arrow keys once
@@ -37,6 +38,7 @@ function useResizablePanel(key: string, defaultWidth: number, min: number, max: 
   const [limit, setLimit] = React.useState(limitNow);
   React.useEffect(() => {
     const onResize = () => setLimit(limitNow());
+    onResize();
     window.addEventListener('resize', onResize);
     return () => window.removeEventListener('resize', onResize);
   }, [limitNow]);
@@ -94,7 +96,8 @@ function useResizablePanel(key: string, defaultWidth: number, min: number, max: 
         localStorage.removeItem(`panel-${key}`);
       }}
       onKeyDown={onKeyDown}
-      className="hidden md:flex w-[5px] shrink-0 items-center justify-center cursor-col-resize group z-20 relative bg-zinc-200/50 dark:bg-zinc-800 hover:bg-pink-500/30 focus-visible:bg-pink-500/40 focus-visible:outline-hidden transition-colors"
+      style={{ width: PANEL_DIVIDER_WIDTH }}
+      className="hidden md:flex shrink-0 items-center justify-center cursor-col-resize group z-20 relative bg-zinc-200/50 dark:bg-zinc-800 hover:bg-pink-500/30 focus-visible:bg-pink-500/40 focus-visible:outline-hidden transition-colors"
     >
       <div className="w-[3px] h-10 rounded-full bg-zinc-400/30 dark:bg-zinc-600/50 group-hover:bg-pink-500 group-focus-visible:bg-pink-500 transition-colors" />
     </div>
@@ -174,7 +177,18 @@ function AppContent() {
 
   // Auth
   const { user } = useAuth();
-  const leftPanel = useResizablePanel('create', 420, 320, 1600, 'left', t('createMusic'), CREATE_MAX_SHARE);
+  const [createArea, setCreateArea] = useState<HTMLDivElement | null>(null);
+  const [areaWidth, setAreaWidth] = useState<number | null>(null);
+  React.useLayoutEffect(() => {
+    if (!createArea) return;
+    const measure = () => setAreaWidth(createArea.clientWidth);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(createArea);
+    return () => observer.disconnect();
+  }, [createArea]);
+  const createMax = areaWidth === null ? 1600 : Math.max(0, Math.min(1600, areaWidth - LIST_MIN_WIDTH - PANEL_DIVIDER_WIDTH));
+  const leftPanel = useResizablePanel('create', 420, Math.min(320, createMax), createMax, 'left', t('createMusic'), CREATE_MAX_SHARE);
   const rightPanel = useResizablePanel('details', 400, 320, 1200, 'right', t('songDetails'));
   const [nativeSetupReady, setNativeSetupReady] = useState(false);
   // a release that changed what the studio downloads shows its update screen once, before the studio
@@ -1482,13 +1496,14 @@ function AppContent() {
         }
         return (
           <div className="relative flex h-full min-h-0 min-w-0 w-full overflow-hidden">
+            <div ref={setCreateArea} className="flex min-w-0 flex-1">
             {/* Create Panel */}
             <div
               className={`
                 ${mobileShowList ? 'hidden md:block' : 'w-full'}
                 md:block min-h-0 min-w-0 shrink-0 h-full bg-zinc-50 dark:bg-suno-panel relative z-10 transition-colors duration-300
               `}
-              style={window.innerWidth >= 768 ? { width: leftPanel.width, maxWidth: `calc(100% - ${LIST_MIN_WIDTH}px)` } : undefined}
+              style={window.innerWidth >= 768 ? { width: leftPanel.width, maxWidth: `calc(100% - ${LIST_MIN_WIDTH + PANEL_DIVIDER_WIDTH}px)` } : undefined}
             >
               <CreatePanel
                 onGenerate={generations.generate}
@@ -1540,6 +1555,7 @@ function AppContent() {
               />
             </div>
 
+            </div>
             {sidePanel}
 
             {/* Mobile Toggle Button */}
