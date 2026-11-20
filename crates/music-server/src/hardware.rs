@@ -650,7 +650,7 @@ mod tests {
         assert_eq!(vram, 16.0);
     }
 
-    #[cfg(not(windows))]
+    #[cfg(not(any(windows, target_os = "macos")))]
     #[test]
     fn a_linux_card_is_named_from_its_vendor_when_lspci_is_silent() {
         // No device id resolves through lspci, so the vendor carries the name.
@@ -664,7 +664,7 @@ mod tests {
         assert_eq!(linux_card_name("8086", "ffff").split(' ').next(), Some("Intel"));
     }
 
-    #[cfg(not(windows))]
+    #[cfg(not(any(windows, target_os = "macos")))]
     #[test]
     fn an_lspci_line_keeps_the_adapter_name_and_drops_the_class_and_ids() {
         // The real shape of `lspci -nn` on this machine, with a decoy line
