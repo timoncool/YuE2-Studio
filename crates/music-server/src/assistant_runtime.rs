@@ -568,8 +568,11 @@ impl AssistantRuntime {
 
     /// Fetched, checked, then what an earlier pin put down goes, and today's is extracted and recorded: the record
     /// makes it count as today's pin.
-    fn finish(asset: &Asset, target: &Path, root: &Path) -> Result<()> {
-        let sha256 = crate::pin_sha::check(asset.url, target)?;
+    fn finish(asset: &Asset, downloaded: &Path, target: &Path, root: &Path) -> Result<()> {
+        let sha256 = crate::pin_sha::check(asset.url, downloaded)?;
+        if downloaded != target {
+            fs::rename(downloaded, target).with_context(|| format!("publish {}", target.display()))?;
+        }
         let record = crate::install_record::record_path(target);
         crate::downloads::replace_earlier(&record, root, target)?;
         let files = match asset.unzip_into {
@@ -701,13 +704,13 @@ impl AssistantRuntime {
             return Ok(());
         }
 
-        self.cancel.store(false, std::sync::atomic::Ordering::Relaxed);
         let total: u64 = pending.iter().map(|asset| asset.bytes).sum();
         {
             let mut state = self.state.lock().await;
             if state.download.as_ref().is_some_and(|progress| !progress.done && progress.error.is_none()) {
                 bail!("another assistant download is already running");
             }
+            self.cancel.store(false, std::sync::atomic::Ordering::Relaxed);
             state.download = Some(DownloadProgress {
                 asset_id: if pending.len() == 1 { pending[0].id.to_string() } else { crate::downloads::SET.to_string() },
                 downloaded_bytes: 0,
@@ -725,7 +728,7 @@ impl AssistantRuntime {
         for asset in &pending {
             let target = self.path_of(asset);
             let outcome = match download_asset(&self.http, asset, &target, &self.state, base, self.cancel.clone()).await {
-                Ok(()) => finish_apart(asset, &target, &self.root).await,
+                Ok(downloaded) => finish_apart(asset, downloaded, &target, &self.root).await,
                 Err(error) => Err(error),
             };
             if let Err(error) = outcome {
@@ -739,7 +742,6 @@ impl AssistantRuntime {
         }
 
         let outcome = match failure {
-            Some(_) if self.cancel.load(std::sync::atomic::Ordering::Relaxed) => Err(anyhow!("cancelled")),
             Some(error) => Err(error),
             None => Ok(()),
         };
@@ -762,6 +764,7 @@ impl AssistantRuntime {
             if state.download.as_ref().is_some_and(|progress| !progress.done && progress.error.is_none()) {
                 bail!("another assistant download is already running");
             }
+            self.cancel.store(false, std::sync::atomic::Ordering::Relaxed);
             state.download = Some(DownloadProgress {
                 asset_id: asset.id.to_string(),
                 downloaded_bytes: self.partial_bytes(asset),
@@ -775,9 +778,10 @@ impl AssistantRuntime {
         let http = self.http.clone();
         let state = self.state.clone();
         let root = self.root.clone();
+        let cancel = self.cancel.clone();
         tokio::spawn(async move {
-            let outcome = match download_asset(&http, asset, &target, &state, 0, Arc::new(std::sync::atomic::AtomicBool::new(false))).await {
-                Ok(()) => finish_apart(asset, &target, &root).await,
+            let outcome = match download_asset(&http, asset, &target, &state, 0, cancel).await {
+                Ok(downloaded) => finish_apart(asset, downloaded, &target, &root).await,
                 Err(error) => Err(error),
             };
             if let Some(progress) = state.lock().await.download.as_mut() {
@@ -977,7 +981,8 @@ async fn download_asset(
     state: &Arc<Mutex<RuntimeState>>,
     base: u64,
     cancel: Arc<std::sync::atomic::AtomicBool>,
-) -> Result<()> {
+) -> Result<PathBuf> {
+    if cancel.load(std::sync::atomic::Ordering::Relaxed) { bail!("cancelled"); }
     if let Some(parent) = target.parent() {
         fs::create_dir_all(parent).with_context(|| format!("create {}", parent.display()))?;
     }
@@ -988,7 +993,7 @@ async fn download_asset(
         _ => pinned_size && crate::downloads::holds_todays(false, asset.url, target).await,
     };
     if todays {
-        return Ok(());
+        return Ok(target.to_path_buf());
     }
 
     let url = crate::net::model_url(asset.url);
@@ -1022,14 +1027,13 @@ async fn download_asset(
     if plan.total > 0 && size != plan.total {
         bail!("{} has {size} bytes, the server said {}", asset.label, plan.total);
     }
-    fs::rename(&part, target).with_context(|| format!("publish {}", target.display()))?;
-    Ok(())
+    Ok(part)
 }
 
 /// `AssistantRuntime::finish` off the async workers: it hashes the whole download, gigabytes for a model.
-async fn finish_apart(asset: &'static Asset, target: &Path, root: &Path) -> Result<()> {
+async fn finish_apart(asset: &'static Asset, downloaded: PathBuf, target: &Path, root: &Path) -> Result<()> {
     let (target, root) = (target.to_path_buf(), root.to_path_buf());
-    tokio::task::spawn_blocking(move || AssistantRuntime::finish(asset, &target, &root)).await.map_err(|error| anyhow!("the download's check stopped: {error}"))?
+    tokio::task::spawn_blocking(move || AssistantRuntime::finish(asset, &downloaded, &target, &root)).await.map_err(|error| anyhow!("the download's check stopped: {error}"))?
 }
 
 fn free_port() -> Result<u16> {
@@ -1063,6 +1067,22 @@ mod tests {
         }
         assert_eq!(flavour_for(None, Some((2, 35))), None);
         assert_eq!(flavour_for(Some("vulkan"), Some((2, 35))), Some("vulkan"));
+    }
+
+    #[test]
+    fn rejecting_a_corrupt_assistant_download_preserves_the_previous_file() {
+        let root = tempfile::tempdir().unwrap();
+        let model = ASSETS.iter().find(|asset| asset.kind == AssetKind::Model).unwrap();
+        let target = root.path().join(model.relative_path);
+        fs::create_dir_all(target.parent().unwrap()).unwrap();
+        fs::write(&target, b"previous model").unwrap();
+        let part = target.with_extension("part");
+        fs::write(&part, b"invalid replacement").unwrap();
+
+        let error = AssistantRuntime::finish(model, &part, &target, root.path()).unwrap_err();
+        assert!(error.to_string().contains("SHA-256"));
+        assert_eq!(fs::read(&target).unwrap(), b"previous model");
+        assert!(!part.exists());
     }
 
     /// llama.cpp is pinned to one build so a working setup keeps working.
