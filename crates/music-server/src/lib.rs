@@ -6568,34 +6568,33 @@ async fn wait_for_sent_songs(state: &AppState) {
     }
 }
 
-async fn openrouter_catalog(State(state): State<AppState>) -> Json<Value> {
+async fn openrouter_catalog(State(state): State<AppState>) -> Result<Json<Value>, (StatusCode, Json<ApiError>)> {
     // Fetch it if this process has not yet: an empty answer here made every
     // capability read "no model in the refreshed catalog", which is a lie -
     // the catalog had simply never been read.
-    let catalog = catalog_for(&state).await.ok();
+    let catalog = catalog_for(&state).await.map_err(|error| api_error(StatusCode::BAD_GATEWAY, error))?;
     let refreshed_at = state.openrouter_catalog.read().await.refreshed_at.clone();
     // What the studio would pick for each capability if the user picks
     // nothing. The panel shows these as the selection, so adding a key is
     // enough to start rather than the beginning of a shopping trip.
-    let suggested = catalog.as_ref().map(|catalog| {
-        serde_json::json!({
-            "speech_to_text": providers::openrouter::suggested_model(catalog, Capability::SpeechToText),
-            "prompt_enhancement": providers::openrouter::suggested_model(catalog, Capability::PromptEnhancement),
-            "cover_art": providers::openrouter::suggested_model(catalog, Capability::CoverArt),
-        })
+    let suggested = serde_json::json!({
+        "speech_to_text": providers::openrouter::suggested_model(&catalog, Capability::SpeechToText),
+        "prompt_enhancement": providers::openrouter::suggested_model(&catalog, Capability::PromptEnhancement),
+        "cover_art": providers::openrouter::suggested_model(&catalog, Capability::CoverArt),
     });
-    Json(serde_json::json!({
-        "models": catalog.map(|catalog| catalog.models),
+    Ok(Json(serde_json::json!({
+        "models": catalog.models,
         "refreshed_at": refreshed_at,
         "suggested": suggested,
-    }))
+    })))
 }
 
 
 
 /// Where the provider catalog is kept between runs.
 fn openrouter_catalog_path() -> Option<PathBuf> {
-    studio_data_root().map(|root| root.join("openrouter-catalog.json"))
+    // Version 1 stored derived capabilities before music generation was recognized.
+    studio_data_root().map(|root| root.join("openrouter-catalog-v2.json"))
 }
 
 /// Reads the catalog saved by the last refresh. Nothing here touches the
