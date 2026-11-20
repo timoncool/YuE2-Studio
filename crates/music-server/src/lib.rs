@@ -1640,6 +1640,7 @@ pub async fn serve_on_port(port: u16) -> anyhow::Result<()> {
         .route("/engine/pick-executable", post(pick_engine_executable))
         .route("/engine/restart", post(restart_local_engine))
         .route("/v1/music/native/minimaxmusic-cpp/profiles", get(minimax_music_profiles))
+        .route("/v1/music/native/acestep-cpp/profiles", get(ace_music_profiles))
         .route("/v1/engine/logs", get(engine_logs))
         .route("/v1/diagnostics", get(diagnostics::get))
         .route("/v1/diagnostics/report", post(diagnostics::make_report))
@@ -7222,16 +7223,23 @@ fn is_portable_installation() -> bool {
         .is_some_and(|marker| marker.is_file())
 }
 
+async fn ace_music_profiles() -> Result<Json<Value>, (StatusCode, Json<ApiError>)> {
+    native_profile_catalog(|root| {
+        let installed = ace::installation(root);
+        serde_json::json!({"engine":"acestep-cpp","engine_installed":installed.engine_installed(),"profiles":installed.profiles()})
+    }).await
+}
+
 async fn minimax_music_profiles() -> Result<Json<Value>, (StatusCode, Json<ApiError>)> {
+    native_profile_catalog(|root| {
+        let installed = native_minimax::Runtime::installation(root);
+        serde_json::json!({"engine":native_minimax::ENGINE_ID,"engine_installed":installed.engine_installed(),"profiles":installed.profiles()})
+    }).await
+}
+
+async fn native_profile_catalog(read: fn(&std::path::Path) -> Value) -> Result<Json<Value>, (StatusCode, Json<ApiError>)> {
     let root = studio_data_root().ok_or_else(|| api_error(StatusCode::SERVICE_UNAVAILABLE, "Studio data folder is unavailable".into()))?;
-    let catalog = tokio::task::spawn_blocking(move || {
-        let installed = native_minimax::Runtime::installation(&root);
-        serde_json::json!({
-            "engine": native_minimax::ENGINE_ID,
-            "engine_installed": installed.engine_installed(),
-            "profiles": installed.profiles(),
-        })
-    }).await.map_err(|error| api_error(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?;
+    let catalog = tokio::task::spawn_blocking(move || read(&root)).await.map_err(|error| api_error(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?;
     Ok(Json(catalog))
 }
 

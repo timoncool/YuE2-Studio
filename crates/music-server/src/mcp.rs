@@ -2027,6 +2027,12 @@ fn tools() -> &'static [Tool] {
                 call: |args| post("/setup/remove".into(), args.clone()),
             },
             Tool {
+                name: "ace_music_profiles",
+                description: "List native ACE-Step profiles, installed weights, and missing model files.",
+                schema: nothing,
+                call: |_| get("/v1/music/native/acestep-cpp/profiles".into()),
+            },
+            Tool {
                 name: "minimax_music_profiles",
                 description: "List native MiniMax Music 3 profiles, installed weights, and missing model files.",
                 schema: nothing,
