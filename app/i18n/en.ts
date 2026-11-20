@@ -42,6 +42,7 @@ export const en = {
     journalKind_dataset: 'dataset',
     journalKind_training: 'training',
     journalKind_lora: 'LoRA',
+    journalKind_rvc_voice: 'RVC voice',
     journalKind_download: 'download',
     journalKind_model: 'model',
     journalKind_settings: 'settings',

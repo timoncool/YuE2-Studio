@@ -42,6 +42,7 @@ export const zh = {
     journalKind_dataset: '数据集',
     journalKind_training: '训练',
     journalKind_lora: 'LoRA',
+    journalKind_rvc_voice: 'RVC 声音',
     journalKind_download: '下载',
     journalKind_model: '模型',
     journalKind_settings: '设置',
