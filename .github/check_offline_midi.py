@@ -34,6 +34,14 @@ llama_sha="98882a3ca45688ffa585c3adba49213ca90c5b2dbbf1bc2af41ac437a0987d17" if 
 assert digest(llama_archive)==llama_sha
 if os.name=="nt":
     import io,zipfile
+    ort_url="https://github.com/timoncool/onnxruntime/releases/download/v1.32.0/onnxruntime-win-x64-1.32.0.zip"
+    with urlopen(ort_url,timeout=120) as response: ort_zip=response.read()
+    assert hashlib.sha256(ort_zip).hexdigest()=="aaa1d04fcf86bd31e84b90bc0cbde80e632bd0720dcc5d8ba05c4fe45c09d127"
+    with zipfile.ZipFile(io.BytesIO(ort_zip)) as z:
+        main, provider="onnxruntime.dll","onnxruntime_providers_shared.dll"
+        (old/main).write_bytes(z.read(next(n for n in z.namelist() if n.endswith("/"+main))))
+        provider_bytes=z.read(next(n for n in z.namelist() if n.endswith("/"+provider)))
+    expected.append("onnxruntime")
     url="https://files.pythonhosted.org/packages/59/df/e7c3a360be4f7b93cee39271b792669baeb3846c58a4df6dfcf187a7ffab/nvidia_cuda_runtime_cu12-12.9.79-py3-none-win_amd64.whl"
     with urlopen(url,timeout=120) as response: wheel=response.read()
     assert hashlib.sha256(wheel).hexdigest()=="8e018af8fa02363876860388bd10ccb89eb9ab8fb0aa749aaf58430a9f7c4891"
@@ -70,6 +78,15 @@ with log.open("wb") as stream:
         result=call("/setup/adopt", {"path":str(old)})
         assert sorted(result["adopted"])==sorted(expected),result
         assert [Path(row["file"]).resolve() for row in result["refused"]]==[(old/"config.json").resolve()],result["refused"]
+        if os.name=="nt":
+            def ort_installed():
+                return next(row["installed"] for row in call("/v1/karaoke/status")["assets"] if row["id"]=="onnxruntime")
+            assert not ort_installed()
+            (old/provider).write_bytes(provider_bytes)
+            completed=call("/setup/adopt", {"path":str(old)})
+            assert completed["adopted"]==["onnxruntime"] and ort_installed(),completed
+            expected.append("onnxruntime")
+            print("Both unpacked ONNX Runtime 1.32 DLLs verified; incomplete pair stayed unavailable",flush=True)
         again=call("/setup/adopt", {"path":str(old)})
         assert again["adopted"]==[] and again["verified_optional"]==len(expected),again
         if os.name=="nt":
