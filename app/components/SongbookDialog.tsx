@@ -25,8 +25,8 @@ function NumberedNote({ number, duration }: { number: string; duration?: number 
 }
 
 function Shape({ frets, chord }: { frets: number[]; chord: string }) {
-  const first = Math.min(9, ...frets.filter(fret => fret > 0));
-  const base = Math.max(1, first);
+  const held = frets.filter(fret => fret > 0);
+  const base = held.length ? Math.min(...held) : 1;
   const name = frets.map(fret => fret < 0 ? '×' : fret).join(' ');
   const width = 28 + 10 * (frets.length - 1);
   return (

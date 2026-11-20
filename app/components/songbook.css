@@ -35,6 +35,7 @@
   @page songbook {
     size: A4 portrait;
     margin: 14mm;
+    background: white;
   }
 
   body:has(> .studio-songbook[open]) > :not(.studio-songbook[open]),
@@ -42,6 +43,7 @@
     display: none !important;
   }
 
+  html:has(body > .studio-songbook[open]),
   body:has(> .studio-songbook[open]),
   .studio-songbook[open],
   .studio-songbook .songbook-paper {
@@ -57,10 +59,11 @@
     border: 0;
     background: white;
     color: black;
+    color-scheme: light;
     box-shadow: none;
   }
 
-  .studio-songbook[open] {
+  body:has(> .studio-songbook[open]) {
     page: songbook;
   }
 
