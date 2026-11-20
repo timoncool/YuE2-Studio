@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
@@ -17,6 +17,7 @@ pub(super) enum Source {
 }
 
 pub(super) async fn preview(
+    axum::extract::State(state): axum::extract::State<crate::AppState>,
     Json(source): Json<Source>,
 ) -> Result<Json<Value>, (StatusCode, Json<ApiError>)> {
     tokio::task::spawn_blocking(move || {
@@ -28,7 +29,7 @@ pub(super) async fn preview(
             },
             Source::Picker { pick: false } => anyhow::bail!("Choose a Studio folder"),
         };
-        let mut result = inspect(&folder)?;
+        let mut result = inspect(&folder, &state.library)?;
         result["path"] = json!(folder);
         Ok::<_, anyhow::Error>(result)
     })
@@ -61,21 +62,29 @@ fn open_source(root: &Path) -> Result<Connection> {
     Ok(db)
 }
 
-fn inspect(folder: &Path) -> Result<Value> {
+fn inspect(folder: &Path, destination: &crate::library::Library) -> Result<Value> {
     let root = source_root(folder)?;
     let db = open_source(&root)?;
-    manifest(&root, &db)
+    let mut view = manifest(&root, &db)?;
+    let mappings =
+        destination.legacy_song_mappings(root.to_str().context("Unsupported library path")?)?;
+    let space = write::media_space(&view, &mappings, destination.media_dir())?;
+    view["space"] = serde_json::to_value(space)?;
+    Ok(view)
 }
 
 fn manifest(root: &Path, db: &Connection) -> Result<Value> {
     let media = root.join("media");
-    let mut files = HashSet::new();
+    let mut files = HashMap::new();
     match std::fs::read_dir(media) {
         Ok(entries) => {
             for entry in entries {
                 let entry = entry?;
                 if entry.file_type()?.is_file() {
-                    files.insert(entry.file_name().to_string_lossy().into_owned());
+                    files.insert(
+                        entry.file_name().to_string_lossy().into_owned(),
+                        entry.metadata()?.len(),
+                    );
                 }
             }
         }
@@ -94,8 +103,8 @@ fn manifest(root: &Path, db: &Connection) -> Result<Value> {
         let mut available = Vec::new();
         let mut missing = Vec::new();
         let mut check = |kind: &str, name: &str, required: bool| {
-            if files.contains(name) {
-                available.push(json!({"kind": kind, "name": name}));
+            if let Some(bytes) = files.get(name) {
+                available.push(json!({"kind": kind, "name": name, "bytes": bytes}));
             } else if required {
                 missing.push(json!({"kind": kind, "name": name}));
             }
@@ -175,15 +184,20 @@ mod tests {
             std::fs::write(media.join(file), file).unwrap();
         }
         let original = std::fs::read(&path).unwrap();
-        let result = inspect(temp.path()).unwrap();
-        assert_eq!(result, inspect(&root).unwrap());
+        let dest = temp.path().join("destination");
+        let library =
+            crate::library::Library::open_at(dest.join("library.sqlite"), dest.join("media"))
+                .unwrap();
+        let result = inspect(temp.path(), &library).unwrap();
+        assert_eq!(result["songs"], inspect(&root, &library).unwrap()["songs"]);
+        assert_eq!(result["space"]["required_bytes"], 5 + 11 + 5 + 8);
         assert_eq!(result["playlists"][0]["song_ids"], json!(["s", "p"]));
         assert_eq!(result["songs"][0]["missing"][0]["name"], "p.jpg");
         assert_eq!(result["songs"][0]["files"][1]["name"], "p-drums.wav");
         assert_eq!(result["songs"][1]["files"][0]["name"], "s.wav");
         assert_eq!(
             result["songs"][1]["files"][1],
-            json!({"kind": "original", "name": "orig.wav"})
+            json!({"kind": "original", "name": "orig.wav", "bytes": 8})
         );
         assert_eq!(result["songs"][1]["missing"][0]["name"], "absent.wav");
         assert_eq!(original, std::fs::read(&path).unwrap());
