@@ -28,6 +28,7 @@ export const ko = {
     journalVerb_exported: '내보냄',
     journalVerb_liked: '좋아요 표시',
     journalVerb_unliked: '좋아요 취소',
+    journalKind_library: '라이브러리',
     journalKind_song: '곡',
     journalKind_generation: '생성',
     journalKind_version: '버전',

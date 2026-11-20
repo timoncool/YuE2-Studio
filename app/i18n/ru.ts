@@ -28,6 +28,7 @@ export const ru = {
     journalVerb_exported: 'Выгружено',
     journalVerb_liked: 'Отмечено «Нравится»',
     journalVerb_unliked: 'Снято «Нравится»',
+    journalKind_library: 'библиотека',
     journalKind_song: 'песня',
     journalKind_generation: 'генерация',
     journalKind_version: 'версия',

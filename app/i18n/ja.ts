@@ -28,6 +28,7 @@ export const ja = {
   journalVerb_exported: 'エクスポート',
   journalVerb_liked: 'いいね',
   journalVerb_unliked: 'いいねを取り消し',
+  journalKind_library: 'ライブラリ',
   journalKind_song: '曲',
   journalKind_generation: '生成',
   journalKind_version: 'バージョン',

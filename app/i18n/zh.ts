@@ -28,6 +28,7 @@ export const zh = {
     journalVerb_exported: '已导出',
     journalVerb_liked: '已喜欢',
     journalVerb_unliked: '已取消喜欢',
+    journalKind_library: '曲库',
     journalKind_song: '歌曲',
     journalKind_generation: '生成',
     journalKind_version: '版本',

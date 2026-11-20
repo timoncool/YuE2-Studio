@@ -27,6 +27,7 @@ export const pt = {
     journalVerb_exported: 'Exportado',
     journalVerb_liked: 'Gosto',
     journalVerb_unliked: 'Gosto retirado',
+    journalKind_library: 'biblioteca',
     journalKind_song: 'música',
     journalKind_generation: 'geração',
     journalKind_version: 'versão',

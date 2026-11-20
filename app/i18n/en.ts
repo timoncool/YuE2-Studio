@@ -28,6 +28,7 @@ export const en = {
     journalVerb_exported: 'Exported',
     journalVerb_liked: 'Liked',
     journalVerb_unliked: 'Like taken back',
+    journalKind_library: 'library',
     journalKind_song: 'song',
     journalKind_generation: 'generation',
     journalKind_version: 'version',
