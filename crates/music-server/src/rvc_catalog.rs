@@ -463,7 +463,12 @@ mod tests {
         index[8..16].copy_from_slice(&1u64.to_le_bytes());
         index[32] = 1;
         index[33] = 1;
-        let digest = |bytes: &[u8]| format!("{:x}", Sha256::digest(bytes));
+        let digest = |bytes: &[u8]| {
+            Sha256::digest(bytes)
+                .iter()
+                .map(|byte| format!("{byte:02x}"))
+                .collect::<String>()
+        };
         let ambiguous = build_zip(&[
             ("nested/voice.pth", &model),
             ("retrieval.index", &index),
