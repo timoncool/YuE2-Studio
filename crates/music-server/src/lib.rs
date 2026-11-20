@@ -14,6 +14,7 @@ mod cover_prompt;
 mod providers;
 mod openrouter_stream;
 mod native_minimax;
+mod audio_cpp_music;
 mod native_music_jobs;
 mod native_ace_jobs;
 mod assistant;
@@ -114,6 +115,7 @@ struct AppState {
     ace_cancellations: Arc<RwLock<HashMap<String, native_ace_jobs::CancelSender>>>,
     minimax: Arc<native_minimax::Runtime>,
     minimax_cancellations: Arc<RwLock<HashMap<String, native_music_jobs::CancelSender>>>,
+    audio_cpp_music_stops: Arc<RwLock<HashMap<String, Arc<std::sync::atomic::AtomicBool>>>>,
     openrouter_music_stops: Arc<RwLock<HashMap<String, Arc<tokio::sync::Notify>>>>,
     music_server: EngineClient,
     /// The engine's log, followed for the service's life: its recent lines and
@@ -368,6 +370,7 @@ struct CreateMusicJobRequest {
 enum MusicSource {
     Local,
     Native { engine: String, model: String },
+    AudioCpp { model: String },
     #[serde(rename = "openrouter")]
     OpenRouter { model: String },
 }
@@ -1504,6 +1507,7 @@ pub async fn serve_on_port(port: u16) -> anyhow::Result<()> {
         ace_cancellations: Arc::default(),
         minimax: Arc::default(),
         minimax_cancellations: Arc::default(),
+        audio_cpp_music_stops: Arc::default(),
         openrouter_music_stops: Arc::new(RwLock::new(HashMap::new())),
         music_server,
         engine_log,
@@ -1863,6 +1867,7 @@ pub async fn serve_on_port(port: u16) -> anyhow::Result<()> {
         .route("/setup/update/seen", post(setup_update_seen))
         .route("/v1/local-models/music", get(local_music_model_catalog))
         .route("/v1/music/jobs", post(create_music_job).get(list_active_music_jobs))
+        .route("/v1/music/audio-cpp/models", get(audio_cpp_music::models))
         .route("/v1/music/replay", post(replay_music_job))
         .route("/v1/transcriptions", post(create_transcription))
         .route("/v1/transcriptions/{job_id}", get(score_job_status).post(cancel_score_job))
@@ -11002,6 +11007,7 @@ async fn run_openrouter_music_generation(
 
 #[derive(Debug, PartialEq)]
 enum MusicDestination {
+    AudioCpp(String),
     Local(String),
     Native { engine: String, model: String },
     OpenRouter(Option<String>),
@@ -11010,6 +11016,7 @@ enum MusicDestination {
 
 fn music_destination(source: Option<&MusicSource>, config: &StudioConfiguration) -> MusicDestination {
     match source {
+        Some(MusicSource::AudioCpp { model }) => MusicDestination::AudioCpp(model.clone()),
         Some(MusicSource::Native { engine, model }) => MusicDestination::Native { engine: engine.clone(), model: model.clone() },
         Some(MusicSource::Local) => MusicDestination::Local(PRIMARY_MUSIC_ENGINE_ID.to_owned()),
         Some(MusicSource::OpenRouter { model }) => MusicDestination::OpenRouter(Some(model.clone())),
@@ -11030,6 +11037,12 @@ fn music_destination(source: Option<&MusicSource>, config: &StudioConfiguration)
 async fn submit_music_job(state: AppState, mut request: CreateMusicJobRequest, attempt: u32, retry_engine: Option<&str>) -> (StatusCode, Json<MusicJob>) {
     let destination = music_destination(request.music_source.as_ref(), &*state.configuration.read().await);
     let engine_id = match destination {
+        MusicDestination::AudioCpp(model) => {
+            if let Some(original) = retry_engine && let Err(reason) = check_retry_engine(original, audio_cpp_music::ENGINE) {
+                return (StatusCode::CONFLICT, Json(failed_request_job(request, audio_cpp_music::ENGINE.into(), reason)));
+            }
+            return audio_cpp_music::submit(state, request, model, attempt).await;
+        }
         MusicDestination::OpenRouter(model) => {
             if let Some(original) = retry_engine {
                 let reason = format!("The saved job used {original}, but it cannot resume with the current engine (openrouter).");
@@ -12206,6 +12219,9 @@ async fn cancel_music_job(
     if existing.engine_id == native_minimax::ENGINE_ID {
         return native_music_jobs::cancel_minimax(&state, existing).await;
     }
+    if existing.engine_id == audio_cpp_music::ENGINE {
+        return audio_cpp_music::cancel(&state, &job_id).await;
+    }
     if existing.engine_id == "openrouter" {
         let mut jobs = state.jobs.write().await;
         let job = jobs.get_mut(&job_id).ok_or_else(|| api_error(StatusCode::NOT_FOUND, "Music job was not found.".into()))?;
@@ -12844,13 +12860,17 @@ fn check_saved_job_source(library: &library::Library, original: &str, request: &
             .ok_or_else(|| format!("The saved replay source {id} is missing."))?;
         return check_retry_engine(original, &song.engine_id);
     }
-    let selected = request.pointer("/music_source/engine").and_then(Value::as_str).unwrap_or(PRIMARY_MUSIC_ENGINE_ID);
+    let selected = if request.pointer("/music_source/kind").and_then(Value::as_str) == Some("audio_cpp") {
+        audio_cpp_music::ENGINE
+    } else {
+        request.pointer("/music_source/engine").and_then(Value::as_str).unwrap_or(PRIMARY_MUSIC_ENGINE_ID)
+    };
     check_retry_engine(original, selected)
 }
 
 /// An automatic retry must reach the same local engine that accepted the saved job.
 fn check_retry_engine(original: &str, selected: &str) -> Result<(), String> {
-    if matches!(original, PRIMARY_MUSIC_ENGINE_ID | native_minimax::ENGINE_ID | "acestep-cpp") && original == selected {
+    if matches!(original, PRIMARY_MUSIC_ENGINE_ID | native_minimax::ENGINE_ID | "acestep-cpp" | audio_cpp_music::ENGINE) && original == selected {
         Ok(())
     } else {
         Err(format!("The saved job used {original}, but it cannot resume with the current engine ({selected})."))
