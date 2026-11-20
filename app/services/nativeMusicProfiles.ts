@@ -66,6 +66,7 @@ export function miniMaxOutputFormat(value: unknown): NonNullable<YueRequest['out
 
 export function useNativeMusicProfiles(engine: NativeMusicEngine | undefined) {
   const [preferences, setPreferences] = useState(loadPreferences);
+  const [legacyAce, setLegacyAce] = useState<{ models: string[]; settings: Settings }>();
   const [refreshCount, setRefreshCount] = useState(0);
   const [response, setResponse] = useState<{ engine: NativeMusicEngine; data?: NativeProfiles; error?: boolean }>();
   useEffect(() => {
@@ -88,7 +89,8 @@ export function useNativeMusicProfiles(engine: NativeMusicEngine | undefined) {
   const result = response?.engine === engine ? response : undefined;
   const profiles = result?.data?.profiles ?? [];
   const remembered = engine ? preferences.selected[engine] : undefined;
-  const profile = profiles.find(entry => entry.id === remembered);
+  const pending = engine === 'acestep-cpp' ? legacyAce : undefined;
+  const profile = pending ? undefined : profiles.find(entry => entry.id === remembered);
   const pair = profile && engine ? JSON.stringify([engine, profile.id]) : undefined;
   const update = (next: Preferences) => {
     setPreferences(next);
@@ -101,7 +103,8 @@ export function useNativeMusicProfiles(engine: NativeMusicEngine | undefined) {
     loading: Boolean(engine && !result),
     installed: result?.data?.engine_installed === true,
     ready: result?.data?.engine_installed === true && profile?.ready === true,
-    settings: pair ? preferences.settings[pair] ?? {} : {},
+    originalModels: pending?.models,
+    settings: pending?.settings ?? (pair ? preferences.settings[pair] ?? {} : {}),
     refresh: () => { setResponse(undefined); setRefreshCount(count => count + 1); },
     restore: (source: NativeMusicEngine, id: string, saved: Record<string, unknown>) => {
       const controls: Settings = {};
@@ -115,17 +118,34 @@ export function useNativeMusicProfiles(engine: NativeMusicEngine | undefined) {
         number('lm_seed', saved.lm_seed);
         controls.output_format = miniMaxOutputFormat(saved.output_format);
       }
-      if (source === 'acestep-cpp') number('guidance_scale', saved.guidance_scale);
+      if (source === 'acestep-cpp') {
+        number('guidance_scale', saved.guidance_scale);
+        const models = [saved.synth_model, saved.lm_model, saved.vae]
+          .filter((value): value is string => typeof value === 'string' && Boolean(value.trim()));
+        if (!id && models.length) {
+          setLegacyAce({ models, settings: controls });
+          return;
+        }
+      }
+      setLegacyAce(undefined);
       update({
         selected: { ...preferences.selected, [source]: id },
         settings: id ? { ...preferences.settings, [JSON.stringify([source, id])]: controls } : preferences.settings,
       });
     },
     select: (id: string) => {
-      if (engine) update({ ...preferences, selected: { ...preferences.selected, [engine]: id } });
+      if (!engine || (pending && !id)) return;
+      if (pending) setLegacyAce(undefined);
+      update({
+        selected: { ...preferences.selected, [engine]: id },
+        settings: pending
+          ? { ...preferences.settings, [JSON.stringify([engine, id])]: pending.settings }
+          : preferences.settings,
+      });
     },
     set: (key: keyof Settings, value: string) => {
-      if (pair) update({ ...preferences, settings: { ...preferences.settings, [pair]: { ...preferences.settings[pair], [key]: value } } });
+      if (pending) setLegacyAce({ ...pending, settings: { ...pending.settings, [key]: value } });
+      else if (pair) update({ ...preferences, settings: { ...preferences.settings, [pair]: { ...preferences.settings[pair], [key]: value } } });
     },
   };
 }

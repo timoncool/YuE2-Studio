@@ -1521,6 +1521,12 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
                     {native.error && <p role="alert" className="text-xs">{nativeStrings.error}</p>}
                     {!native.loading && !native.error && !native.installed && <p role="status" className="text-xs">{nativeStrings.engineMissing}</p>}
                     {!native.loading && !native.error && native.profiles.length === 0 && native.installed && <p className="text-xs">{nativeStrings.empty}</p>}
+                    {native.originalModels && (
+                      <div className="space-y-1 text-xs" role="status">
+                        <p>{nativeStrings.chooseLegacyProfile}</p>
+                        <ul className="break-all">{native.originalModels.map(model => <li key={model}>{model}</li>)}</ul>
+                      </div>
+                    )}
                     {native.profiles.length > 0 && (
                       <select aria-label={nativeStrings.model} className={CONTROL} value={native.profile?.id ?? ''}
                         onChange={event => native.select(event.target.value)}>
@@ -1575,7 +1581,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
                   aria-label={t('lyrics')} />
               </Card>
               {nativeEngine && abc.trim() && <p role="status" className="text-xs text-zinc-500">{nativeStrings.scoreKept}</p>}
-              {nativeEngine && native.profile && (
+              {nativeEngine && (native.profile || native.originalModels) && (
                 <Card title={nativeStrings.settings}>
                   <div className="grid grid-cols-2 gap-2">
                     {nativeControls.map(([key, label]) => (
