@@ -1,0 +1,44 @@
+name: OpenRouter isolated Windows window
+on: push
+permissions:
+  contents: read
+jobs:
+  desktop:
+    runs-on: windows-latest
+    env:
+      VITE_STUDIO_API_BASE: http://127.0.0.1:18791
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v7.1.0
+        with:
+          node-version: 22
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: desktop/src-tauri -> target
+      - run: npm ci --prefix app --no-audit --no-fund
+      - run: npm ci --prefix desktop --no-audit --no-fund
+      - name: Isolate the QA application identity and service port
+        shell: pwsh
+        run: |
+          $configPath = 'desktop/src-tauri/tauri.conf.json'
+          $cfg = Get-Content $configPath -Raw | ConvertFrom-Json
+          $cfg.identifier = 'com.timoncool.yue2-openrouter-window-qa'
+          $cfg.productName = 'YuE2 OpenRouter QA'
+          $cfg.app.windows[0].title = 'YuE2 OpenRouter QA'
+          $cfg.app.windows[0] | Add-Member -NotePropertyName focus -NotePropertyValue $false
+          $cfg | ConvertTo-Json -Depth 80 | Set-Content -Encoding utf8 $configPath
+          $shellPath = 'desktop/src-tauri/src/lib.rs'
+          $source = Get-Content $shellPath -Raw
+          $old = 'const SERVER_PORT: u16 = music_server::DEFAULT_STUDIO_PORT;'
+          if (!$source.Contains($old)) { throw 'The isolation patch no longer applies.' }
+          $source.Replace($old, 'const SERVER_PORT: u16 = 18791;') | Set-Content -Encoding utf8 $shellPath
+      - name: Build the isolated desktop
+        working-directory: desktop
+        run: npm exec tauri build -- --debug --no-bundle
+      - uses: actions/upload-artifact@v4
+        with:
+          name: yue2-openrouter-desktop-qa
+          path: desktop/src-tauri/target/debug/YuE2-Studio.exe
+          if-no-files-found: error
