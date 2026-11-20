@@ -1,8 +1,11 @@
+use anyhow::Context;
 use axum::{extract::State, http::StatusCode, Json};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::path::{Path, PathBuf};
 use tokio::io::AsyncWriteExt;
+
+mod archive;
 
 use crate::{
     api_error, net,
@@ -26,8 +29,11 @@ struct CatalogVoice {
     source_url: String,
     revision: String,
     license: Option<String>,
-    weights: RemoteFile,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    weights: Option<RemoteFile>,
     index: Option<RemoteFile>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    archive: Option<RemoteArchive>,
     metadata: Option<serde_json::Value>,
 }
 
@@ -38,17 +44,29 @@ struct RemoteFile {
     size: u64,
 }
 
+#[derive(Deserialize, Serialize)]
+struct RemoteArchive {
+    #[serde(flatten)]
+    file: RemoteFile,
+    weights_sha256: String,
+    index_sha256: String,
+}
+
+fn parse_hash(sha256: &str) -> anyhow::Result<[u8; 32]> {
+    anyhow::ensure!(
+        sha256.len() == 64 && sha256.bytes().all(|byte| byte.is_ascii_hexdigit()),
+        "Invalid SHA-256."
+    );
+    let mut hash = [0; 32];
+    for (offset, byte) in hash.iter_mut().enumerate() {
+        *byte = u8::from_str_radix(&sha256[offset * 2..offset * 2 + 2], 16)?;
+    }
+    Ok(hash)
+}
+
 impl RemoteFile {
     fn hash(&self) -> anyhow::Result<[u8; 32]> {
-        anyhow::ensure!(
-            self.sha256.len() == 64 && self.sha256.bytes().all(|byte| byte.is_ascii_hexdigit()),
-            "Invalid SHA-256."
-        );
-        let mut hash = [0; 32];
-        for (offset, byte) in hash.iter_mut().enumerate() {
-            *byte = u8::from_str_radix(&self.sha256[offset * 2..offset * 2 + 2], 16)?;
-        }
-        Ok(hash)
+        parse_hash(&self.sha256)
     }
 
     fn name(&self) -> &str {
@@ -58,8 +76,29 @@ impl RemoteFile {
 
 impl CatalogVoice {
     fn local_id(&self) -> anyhow::Result<String> {
+        if let Some(archive) = &self.archive {
+            return Ok(rvc_voices::voice_id(
+                &parse_hash(&archive.weights_sha256)?,
+                Some(&parse_hash(&archive.index_sha256)?),
+            ));
+        }
+        let weights = self.weights.as_ref().context("Missing RVC weights.")?;
         let index = self.index.as_ref().map(RemoteFile::hash).transpose()?;
-        Ok(rvc_voices::voice_id(&self.weights.hash()?, index.as_ref()))
+        Ok(rvc_voices::voice_id(&weights.hash()?, index.as_ref()))
+    }
+
+    fn download_bytes(&self) -> u64 {
+        if let Some(archive) = &self.archive {
+            return archive.file.size;
+        }
+        self.weights
+            .as_ref()
+            .map_or(0, |file| file.size)
+            .saturating_add(self.index.as_ref().map_or(0, |file| file.size))
+    }
+
+    fn has_index(&self) -> bool {
+        self.archive.is_some() || self.index.is_some()
     }
 
     fn origin(&self) -> VoiceOrigin {
@@ -108,36 +147,50 @@ fn parse_manifest(source: &str) -> anyhow::Result<Vec<CatalogVoice>> {
             "Invalid RVC catalog source URL."
         );
         let prefix = format!("{repo}/resolve/{revision}/");
-        let index_size = voice.index.as_ref().map_or(0, |file| file.size);
         anyhow::ensure!(
-            voice.weights.size.saturating_add(index_size) <= rvc_voices::UPLOAD_LIMIT as u64,
+            voice.weights.is_some() ^ voice.archive.is_some()
+                && (voice.archive.is_none() || voice.index.is_none()),
+            "Use either pinned raw RVC files or one pinned ZIP."
+        );
+        anyhow::ensure!(
+            voice.download_bytes() <= rvc_voices::UPLOAD_LIMIT as u64,
             "RVC catalog files exceed the voice size limit."
         );
-        for (file, extensions) in [(&voice.weights, [".pth", ".pt"].as_slice())]
-            .into_iter()
-            .chain(
-                voice
-                    .index
-                    .as_ref()
-                    .map(|file| (file, [".index"].as_slice())),
-            )
-        {
-            let url = reqwest::Url::parse(&file.url)?;
-            anyhow::ensure!(
-                file.url.starts_with(&prefix)
-                    && url.query().is_none()
-                    && url.fragment().is_none()
-                    && url.path().ends_with(file.name())
-                    && extensions
-                        .iter()
-                        .any(|ext| file.name().to_ascii_lowercase().ends_with(ext))
-                    && file.size > 0,
-                "Invalid pinned RVC file."
-            );
-            file.hash()?;
+        if let Some(archive) = &voice.archive {
+            validate_remote_file(&archive.file, &prefix, &[".zip"])?;
+            parse_hash(&archive.weights_sha256)?;
+            parse_hash(&archive.index_sha256)?;
+        }
+        if let Some(weights) = &voice.weights {
+            validate_remote_file(weights, &prefix, &[".pth", ".pt"])?;
+        }
+        if let Some(index) = &voice.index {
+            validate_remote_file(index, &prefix, &[".index"])?;
         }
     }
     Ok(manifest.voices)
+}
+
+fn validate_remote_file(
+    file: &RemoteFile,
+    prefix: &str,
+    extensions: &[&str],
+) -> anyhow::Result<()> {
+    let url = reqwest::Url::parse(&file.url)?;
+    anyhow::ensure!(
+        file.url.starts_with(prefix)
+            && url.query().is_none()
+            && url.fragment().is_none()
+            && url.path().starts_with(reqwest::Url::parse(prefix)?.path())
+            && url.path().ends_with(file.name())
+            && extensions
+                .iter()
+                .any(|ext| file.name().to_ascii_lowercase().ends_with(ext))
+            && file.size > 0,
+        "Invalid pinned RVC file."
+    );
+    file.hash()?;
+    Ok(())
 }
 
 #[derive(Serialize)]
@@ -145,6 +198,8 @@ pub(super) struct ListedVoice {
     #[serde(flatten)]
     voice: CatalogVoice,
     installed_id: Option<String>,
+    download_bytes: u64,
+    has_index: bool,
 }
 
 pub(super) async fn list(
@@ -158,6 +213,8 @@ pub(super) async fn list(
                 let installed_id =
                     rvc_voices::read_voice(&root, &voice.local_id()?).map(|installed| installed.id);
                 Ok(ListedVoice {
+                    download_bytes: voice.download_bytes(),
+                    has_index: voice.has_index(),
                     voice,
                     installed_id,
                 })
@@ -200,8 +257,7 @@ pub(super) async fn install(
     if let Some(installed) = installed {
         return Ok((StatusCode::OK, Json(installed)));
     }
-    let client = net::download_client();
-    install_catalog_voice(root, &client, voice).await
+    install_catalog_voice(root, &net::download_client(), voice).await
 }
 
 async fn install_catalog_voice(
@@ -212,7 +268,30 @@ async fn install_catalog_voice(
     let stage = rvc_voices::new_stage(&root).await?;
     let transfer_error =
         |error: anyhow::Error| api_error(StatusCode::BAD_GATEWAY, error.to_string());
-    let model = download(client, &voice.weights, &stage.path().join("voice.pth"))
+    if let Some(source) = &voice.archive {
+        let archive_path = stage.path().join("voice.zip");
+        download(client, &source.file, &archive_path)
+            .await
+            .map_err(transfer_error)?;
+        let weights_hash = parse_hash(&source.weights_sha256).map_err(rvc_voices::internal)?;
+        let index_hash = parse_hash(&source.index_sha256).map_err(rvc_voices::internal)?;
+        let (stage, weights, index) = tokio::task::spawn_blocking(move || {
+            let (weights, index) =
+                archive::unpack(&archive_path, stage.path(), weights_hash, index_hash)?;
+            Ok::<_, anyhow::Error>((stage, weights, index))
+        })
+        .await
+        .map_err(rvc_voices::internal)?
+        .map_err(transfer_error)?;
+        return rvc_voices::install_staged(root, stage, weights, Some(index), Some(voice.origin()))
+            .await;
+    }
+    let weights = voice
+        .weights
+        .as_ref()
+        .context("Missing RVC weights.")
+        .map_err(rvc_voices::internal)?;
+    let model = download(client, weights, &stage.path().join("voice.pth"))
         .await
         .map_err(transfer_error)?;
     let index = match &voice.index {
@@ -331,12 +410,13 @@ mod tests {
             source_url: "https://huggingface.co/owner/voices".into(),
             revision: "a".repeat(40),
             license: None,
-            weights: RemoteFile {
+            weights: Some(RemoteFile {
                 url: endpoint.clone(),
                 size,
                 sha256: hash,
-            },
+            }),
             index: None,
+            archive: None,
             metadata: None,
         };
         let bad = install_catalog_voice(root.clone(), &client, voice("a".repeat(64))).await;
@@ -355,6 +435,114 @@ mod tests {
         .unwrap();
         assert_eq!(provenance["origin"]["catalog_id"], "example");
         assert_eq!(provenance["origin"]["name"], "Example");
+        server.abort();
+    }
+
+    #[tokio::test]
+    async fn zip_install_is_atomic_on_ambiguous_corrupt_and_mismatched_archives() {
+        let options = zip::write::SimpleFileOptions::default()
+            .compression_method(zip::CompressionMethod::Stored);
+        let build_zip = |files: &[(&str, &[u8])]| {
+            let mut writer = zip::ZipWriter::new(Cursor::new(Vec::new()));
+            for (name, bytes) in files {
+                writer.start_file(*name, options).unwrap();
+                writer.write_all(bytes).unwrap();
+            }
+            writer.finish().unwrap().into_inner()
+        };
+        let model = build_zip(&[
+            (
+                "archive/data.pkl",
+                b"enc_p.emb_phone.weight emb_g.weight dec.ups.0.weight",
+            ),
+            ("archive/data/0", b"tensor"),
+        ]);
+        let mut index = vec![0u8; 37 + 768 * 4];
+        index[..4].copy_from_slice(b"IwFl");
+        index[4..8].copy_from_slice(&768u32.to_le_bytes());
+        index[8..16].copy_from_slice(&1u64.to_le_bytes());
+        index[32] = 1;
+        index[33] = 1;
+        let digest = |bytes: &[u8]| format!("{:x}", Sha256::digest(bytes));
+        let ambiguous = build_zip(&[
+            ("nested/voice.pth", &model),
+            ("retrieval.index", &index),
+            ("extra.index", &index),
+        ]);
+        let missing = build_zip(&[("nested/voice.pth", &model)]);
+        let valid = build_zip(&[
+            ("nested/voice.pth", &model),
+            ("other/retrieval.index", &index),
+            ("README.txt", b"model card"),
+        ]);
+        let mut bad_crc = valid.clone();
+        let index_payload = bad_crc.windows(4).position(|part| part == b"IwFl").unwrap();
+        bad_crc[index_payload] ^= 1;
+        let variants = [
+            (ambiguous, digest(&index), Some("exactly one")),
+            (missing, digest(&index), Some("exactly one")),
+            (b"this is not a ZIP".to_vec(), digest(&index), None),
+            (bad_crc, digest(&index), None),
+            (valid.clone(), "0".repeat(64), Some("SHA-256")),
+            (valid, digest(&index), None),
+        ];
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let base_url = format!("http://{}", listener.local_addr().unwrap());
+        let mut router = axum::Router::new();
+        for (position, (payload, _, _)) in variants.iter().enumerate() {
+            let payload = payload.clone();
+            router = router.route(
+                &format!("/{position}.zip"),
+                axum::routing::get(move || {
+                    let payload = payload.clone();
+                    async move { payload }
+                }),
+            );
+        }
+        let server = tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
+        let root = tempfile::tempdir().unwrap();
+        let client = reqwest::Client::builder().no_proxy().build().unwrap();
+        for (position, (payload, index_sha256, expected_error)) in variants.iter().enumerate() {
+            let voice = CatalogVoice {
+                id: "zip-fixture".into(),
+                name: "ZIP fixture".into(),
+                source_repo: "owner/voices".into(),
+                source_url: "https://huggingface.co/owner/voices".into(),
+                revision: "a".repeat(40),
+                license: None,
+                weights: None,
+                index: None,
+                archive: Some(RemoteArchive {
+                    file: RemoteFile {
+                        url: format!("{base_url}/{position}.zip"),
+                        size: payload.len() as u64,
+                        sha256: digest(payload),
+                    },
+                    weights_sha256: digest(&model),
+                    index_sha256: index_sha256.clone(),
+                }),
+                metadata: None,
+            };
+            let id = voice.local_id().unwrap();
+            let outcome = install_catalog_voice(root.path().to_path_buf(), &client, voice).await;
+            if position + 1 < variants.len() {
+                let (status, Json(error)) = outcome.err().expect("invalid ZIP rejected");
+                assert_eq!(status, StatusCode::BAD_GATEWAY);
+                if let Some(message) = expected_error {
+                    assert!(error.error.contains(message), "{}", error.error);
+                }
+                assert_eq!(std::fs::read_dir(root.path()).unwrap().count(), 0);
+            } else {
+                let (status, Json(installed)) = outcome.ok().expect("install ZIP");
+                assert_eq!(status, StatusCode::CREATED);
+                assert_eq!(installed.id, id);
+                let dir = root.path().join(&id);
+                assert_eq!(std::fs::read(dir.join("voice.pth")).unwrap(), model);
+                assert_eq!(std::fs::read(dir.join("retrieval.index")).unwrap(), index);
+                assert_eq!(std::fs::read_dir(&dir).unwrap().count(), 3);
+                assert!(rvc_voices::read_voice(root.path(), &id).is_some());
+            }
+        }
         server.abort();
     }
 }
