@@ -383,8 +383,12 @@ fn point_ort_at(runtime: &Path) {
     unsafe { std::env::set_var("ORT_DYLIB_PATH", runtime) };
     #[cfg(windows)]
     if let Some(directory) = runtime.parent() {
-        let existing = std::env::var("PATH").unwrap_or_default();
-        unsafe { std::env::set_var("PATH", format!("{};{existing}", directory.display())) };
+        let existing = std::env::var_os("PATH").unwrap_or_default();
+        if let Some(path) = crate::path_with_first(directory, &existing) {
+            if path != existing {
+                unsafe { std::env::set_var("PATH", path) };
+            }
+        }
     }
 }
 
