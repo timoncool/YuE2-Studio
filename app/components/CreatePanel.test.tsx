@@ -897,3 +897,49 @@ it('reuses a Stable Audio 3 text prompt and its sampler and guidance controls', 
     cfg_scale: 2, output_format: 'wav32', stable_audio,
   });
 });
+
+describe('Auto max duration', () => {
+  const autoButton = () => buttonNamed('maxDurationAuto');
+  // an instrumental with No score goes straight to onGenerate, with no score to compose first
+  const createOne = async () => {
+    click(buttonNamed('cotOff')!);
+    click(buttonNamed('createInstrumental')!);
+    await flush();
+  };
+  const startInstrumental = async () => {
+    act(() => root.render(panel({})));
+    await flush();
+    type(field('textarea')!, 'calm folk, acoustic guitar');
+    click(host.querySelector<HTMLInputElement>('input[type="checkbox"]')!);
+    await flush();
+  };
+
+  it('is where a new studio starts, and sends no ceiling: the song ends where the model ends it', async () => {
+    await startInstrumental();
+    expect(autoButton()?.getAttribute('aria-pressed')).toBe('true');
+    await createOne();
+    expect(sent).toHaveLength(1);
+    expect(sent[0].duration_seconds).toBeUndefined();
+  });
+
+  it('switched off sends the seconds again and is kept for the next song', async () => {
+    await startInstrumental();
+    click(autoButton()!);
+    await flush();
+    expect(autoButton()?.getAttribute('aria-pressed')).toBe('false');
+    await createOne();
+    expect(sent[0].duration_seconds).toBe(130);
+    expect(localStorage.getItem('studio.createDuration')).toBe('130');
+    click(autoButton()!);
+    await flush();
+    expect(localStorage.getItem('studio.createDuration')).toBe('auto');
+  });
+
+  it('keeps seconds a user chose before Auto existed', async () => {
+    localStorage.setItem('studio.createDuration', '240');
+    await startInstrumental();
+    expect(autoButton()?.getAttribute('aria-pressed')).toBe('false');
+    await createOne();
+    expect(sent[0].duration_seconds).toBe(240);
+  });
+});

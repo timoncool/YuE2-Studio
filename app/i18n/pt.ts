@@ -1938,6 +1938,8 @@ export const pt = {
     scoreEditPlaceholder: 'Rearmonizar o refrão com acordes de fado, manter a melodia',
     scoreEditApply: 'Aplicar',
     maxDurationHintYue: 'Um teto, não um objetivo: o modelo termina a música quando a música termina.',
+    maxDurationAuto: 'Auto: o tempo que a música durar',
+    maxDurationAutoHint: 'Não é enviado nenhum teto: o modelo planeia a música e termina-a onde o plano termina, dentro de todo o orçamento do motor. Desligue o Auto para definir um teto à mão.',
     flowSteps: 'Passos de flow matching',
     songsPerRequest: 'Músicas por pedido',
     generateForever: 'Sem parar',
