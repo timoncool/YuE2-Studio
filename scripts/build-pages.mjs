@@ -127,6 +127,18 @@ ${SAMPLES.slice(6).map(sampleCard).join('\n')}
     ['YuE2 · yue2.cpp · Q8_0 · Flash Attention', '240 s', '54.4 s', '4.4×', '6500 MiB'],
     ['MiniMax Music3 · minimaxmusic.cpp · Q8_0 · 30 steps · CFG 1.5', '30 s', '33.0 s', '0.9×', '—'],
   ];
+  const aceColumns = {
+    en: ['Backend', 'Start to first WAV', 'Warm median (3 runs)', 'Warm speed', 'Peak VRAM (whole GPU)', 'Peak process-tree RAM'],
+    ru: ['Бэкенд', 'От запуска до WAV', 'Медиана 3 прогретых запросов', 'Скорость после прогрева', 'Пик VRAM всей карты', 'Пик ОЗУ дерева процессов'],
+    zh: ['后端', '启动至首个 WAV', '预热后中位数（3 次）', '预热后速度', '整卡峰值显存', '进程树峰值内存'],
+    ja: ['バックエンド', '起動から最初の WAV まで', 'ウォーム時の中央値（3 回）', 'ウォーム時の速度', 'GPU 全体の最大 VRAM', 'プロセスツリーの最大 RAM'],
+    ko: ['백엔드', '시작부터 첫 WAV까지', '예열 후 중앙값 (3회)', '예열 후 속도', 'GPU 전체 최대 VRAM', '프로세스 트리 최대 RAM'],
+    pt: ['Backend', 'Do início ao primeiro WAV', 'Mediana após aquecimento (3 execuções)', 'Velocidade após aquecimento', 'Pico de VRAM da placa', 'Pico de RAM da árvore de processos'],
+  }[lang];
+  const aceRows = [
+    ['CUDA 13', '6.813 s', '0.474 s', '63.3×', '12.00 GiB', '1.97 GiB'],
+    ['Vulkan', '19.063 s', '0.507 s', '59.2×', '12.42 GiB', '2.66 GiB'],
+  ];
   const sp = STUDIO.speed?.[lang];
   const speed = sp ? `  <section id="speed">
     <h2>${escape(sp.title)}</h2>
@@ -143,6 +155,12 @@ ${sp.rows.map((row) => `          <tr>${row.map((cell) => `<td>${escape(cell)}</
     <div class="scroll"><table>
       <thead><tr>${headings.slice(2).map(label => `<th>${escape(label)}</th>`).join('')}</tr></thead>
       <tbody>${baseline.map(row => `<tr>${row.map(cell => `<td>${escape(cell)}</td>`).join('')}</tr>`).join('\n')}</tbody>
+    </table></div>
+    <h3>ACE-Step Studio 4.0.2 · acestep.cpp 9eb75e8</h3>
+    <p>Windows · RTX 4090 · 617.42 · Turbo Q8_0 · 30 s · Euler × 8</p>
+    <div class="scroll"><table>
+      <thead><tr>${aceColumns.map(label => `<th>${escape(label)}</th>`).join('')}</tr></thead>
+      <tbody>${aceRows.map(row => `<tr>${row.map(cell => `<td>${escape(cell)}</td>`).join('')}</tr>`).join('\n')}</tbody>
     </table></div>
   </section>
 
