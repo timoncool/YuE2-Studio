@@ -10,7 +10,7 @@ import { useSongActions } from '../context/SongActionsContext';
 import { SongCover } from './AlbumCover';
 import { ConfirmDialog } from './ConfirmDialog';
 import { SongDropdownMenu } from './SongDropdownMenu';
-import { PlaylistCover, PlaylistEditModal, PlaylistMenu, playlistLength, playlistSongs } from './PlaylistEditor';
+import { PlaylistCover, PlaylistEditModal, PlaylistMenu, playlistLength, playlistSongs, reorderVisibleCollectionSongs } from './PlaylistEditor';
 import type { Playlist } from '../types';
 import type { ToastType } from './Toast';
 
@@ -71,7 +71,7 @@ export const PlaylistDetail: React.FC<PlaylistDetailProps> = ({ playlistId, onBa
 
     const removeSong = (song: Song) => {
         if (!playlist) return;
-        const ids = songs.map(entry => entry.id);
+        const ids = playlist.songIds ?? [];
         void saveSongs(ids.filter(id => id !== song.id));
         notify(t('removedFromPlaylist').replace('{title}', song.title).replace('{name}', playlist.name), 'success', {
             label: t('undo'),
@@ -80,19 +80,16 @@ export const PlaylistDetail: React.FC<PlaylistDetailProps> = ({ playlistId, onBa
     };
 
     const moveSong = (songId: string, to: number) => {
-        const ids = songs.map(entry => entry.id);
-        const from = ids.indexOf(songId);
-        if (from < 0 || to === from || to === from + 1) return;
-        ids.splice(from, 1);
-        ids.splice(to > from ? to - 1 : to, 0, songId);
-        void saveSongs(ids);
+        if (!playlist) return;
+        const ids = reorderVisibleCollectionSongs(playlist.songIds ?? [], songs.map(entry => entry.id), songId, to);
+        if (ids) void saveSongs(ids);
     };
 
     const addSong = (song: Song) => {
-        if (!playlist || songs.some(entry => entry.id === song.id)) return;
+        if (!playlist || playlist.songIds?.includes(song.id)) return;
         // the search stays open while songs are being picked
         setAdding(true);
-        void saveSongs([...songs.map(entry => entry.id), song.id]);
+        void saveSongs([...(playlist.songIds ?? []), song.id]);
     };
 
     const handleDeletePlaylist = async () => {

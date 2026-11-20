@@ -13,6 +13,18 @@ export function playlistSongs(playlist: Playlist, library: Song[]): Song[] {
   return (playlist.songIds ?? []).flatMap((id) => (byId.has(id) ? [byId.get(id)!] : []));
 }
 
+/** Keep a temporarily hidden membership in its original slot when visible tracks are reordered. */
+export function reorderVisibleCollectionSongs(allIds: string[], visibleIds: string[], songId: string, to: number): string[] | null {
+  const from = visibleIds.indexOf(songId);
+  if (from < 0 || to === from || to === from + 1) return null;
+  const nextVisible = [...visibleIds];
+  nextVisible.splice(from, 1);
+  nextVisible.splice(to > from ? to - 1 : to, 0, songId);
+  const visibleSet = new Set(visibleIds);
+  let offset = 0;
+  return allIds.map(id => visibleSet.has(id) ? nextVisible[offset++] : id);
+}
+
 /** "1 h 12 min", "4 min 05 s", "58 s": a playlist's length, never rounded down to nothing. */
 export function playlistLength(seconds: number, t: (key: 'hoursShort' | 'minutesShort' | 'secondsShort') => string): string {
   const total = Math.round(seconds);
