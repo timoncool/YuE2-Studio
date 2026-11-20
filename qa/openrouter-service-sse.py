@@ -46,7 +46,7 @@ def unused_port():
 with tempfile.TemporaryDirectory(prefix="yue-openrouter-") as profile, http.server.ThreadingHTTPServer(("127.0.0.1",0), Provider) as upstream:
     root=pathlib.Path(profile)
     threading.Thread(target=upstream.serve_forever,daemon=True).start()
-    (root/"openrouter-catalog.json").write_text(json.dumps({"models":[{"id":model,"name":"Fixture music","input_modalities":["text"],"output_modalities":["audio"],"supported_parameters":[],"capabilities":["music_generation"]}]}),encoding="utf8")
+    (root/"openrouter-catalog-v2.json").write_text(json.dumps({"models":[{"id":model,"name":"Fixture music","input_modalities":["text"],"output_modalities":["audio"],"supported_parameters":[],"capabilities":["music_generation"]}]}),encoding="utf8")
     port=unused_port()
     env=dict(os.environ,YUE_STUDIO_DATA_ROOT=profile,YUE_STUDIO_PORT=str(port),YUE_ENGINE_PORT=str(unused_port()),
              YUE2_QA_OPENROUTER_PORT=str(upstream.server_port),OPENROUTER_API_KEY="must-not-send-to-fixture")
@@ -137,3 +137,4 @@ with tempfile.TemporaryDirectory(prefix="yue-openrouter-") as profile, http.serv
     finally:
         proc.terminate()
         proc.wait(timeout=15)
+
