@@ -141,8 +141,6 @@ fn remove_installed(root: &Path, id: &str) -> Result<bool, ApiFailure> {
             Ok(false)
         };
     }
-    #[cfg(windows)]
-    let delete_handles = open_for_delete(&target)?;
     let retired = tempfile::Builder::new()
         .prefix(".removed-")
         .tempdir_in(root)
@@ -151,8 +149,6 @@ fn remove_installed(root: &Path, id: &str) -> Result<bool, ApiFailure> {
     // A concurrent reinstall publishes to the old path, outside this temporary folder.
     match fs::rename(&target, retired.path().join("voice")) {
         Ok(()) => {
-            #[cfg(windows)]
-            drop(delete_handles);
             if let Err(error) = retired.close() {
                 eprintln!("[RVC] Could not clean up removed voice {id}: {error}");
             }
@@ -161,26 +157,6 @@ fn remove_installed(root: &Path, id: &str) -> Result<bool, ApiFailure> {
         Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(false),
         Err(error) => Err(internal(error)),
     }
-}
-
-#[cfg(windows)]
-fn open_for_delete(folder: &Path) -> Result<Vec<File>, ApiFailure> {
-    use std::os::windows::fs::OpenOptionsExt;
-    const DELETE_ACCESS: u32 = 0x0001_0000;
-    const SHARE_READ_WRITE_DELETE: u32 = 0x0000_0007;
-    let mut handles = Vec::new();
-    for name in ["voice.pth", "retrieval.index", MANIFEST] {
-        match fs::OpenOptions::new()
-            .access_mode(DELETE_ACCESS)
-            .share_mode(SHARE_READ_WRITE_DELETE)
-            .open(folder.join(name))
-        {
-            Ok(file) => handles.push(file),
-            Err(error) if error.kind() == io::ErrorKind::NotFound && name == "retrieval.index" => {}
-            Err(error) => return Err(internal(error)),
-        }
-    }
-    Ok(handles)
 }
 
 pub(super) fn internal(error: impl std::fmt::Display) -> ApiFailure {
