@@ -1866,7 +1866,8 @@ mod tests {
         let output = run.join("output");
         let partial = output.join(".checkpoint-step20.tmp");
         std::fs::create_dir_all(&partial).unwrap();
-        std::fs::write(partial.join("optimizer.resume"), include_bytes!("../../music-engine/tests/fixtures/optimizer-v1.resume")).unwrap();
+        let optimizer = include_bytes!("../../music-engine/tests/fixtures/optimizer-v1.resume");
+        std::fs::write(partial.join("optimizer.resume"), optimizer).unwrap();
         assert!(yue_train::resume_point(&run).is_none(), "an unpublished checkpoint cannot be resumed");
         std::fs::rename(partial, output.join("checkpoint-step20")).unwrap();
         let (step, resume) = yue_train::resume_point(&run).unwrap();
@@ -1884,7 +1885,7 @@ mod tests {
         }
         assert!(!output.exists(), "only the trainer creates its output directory");
         assert_eq!(output.file_name().unwrap(), "output-next");
-        assert_eq!(std::fs::read(source).unwrap(), b"state");
+        assert_eq!(std::fs::read(source).unwrap(), optimizer.as_slice());
     }
 
     #[test]
