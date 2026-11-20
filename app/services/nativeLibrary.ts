@@ -108,11 +108,49 @@ export async function loadNativeLibrarySongs(): Promise<Song[]> {
   return songs.map(mapNativeLibrarySong);
 }
 
+/** Stored in the native playlist description so albums survive restarts and backups without a schema migration. */
+export const ALBUM_DESCRIPTION_PREFIX = '[YuE2-Studio:album:v1]\\n'.replace('\\n', '\n');
+/** Backwards-compatible envelope for collection artwork and metadata. */
+export const COLLECTION_DESCRIPTION_PREFIX = '[YuE2-Studio:collection:v2]\\n'.replace('\\n', '\n');
+
+export function encodeCollectionDescription(collection: Pick<import('../types').Playlist, 'kind' | 'description' | 'coverUrl'>): string | null {
+  const description = collection.description ?? '';
+  if (collection.coverUrl) {
+    return COLLECTION_DESCRIPTION_PREFIX + JSON.stringify({
+      kind: collection.kind === 'album' ? 'album' : 'playlist',
+      description,
+      coverUrl: collection.coverUrl,
+    });
+  }
+  return collection.kind === 'album' ? ALBUM_DESCRIPTION_PREFIX + description : description || null;
+}
+
 export function mapNativePlaylist(playlist: NativePlaylist): import('../types').Playlist {
+  const rawDescription = playlist.description || '';
+  let description = rawDescription;
+  let kind: 'album' | 'playlist' = 'playlist';
+  let coverUrl: string | undefined;
+  if (rawDescription.startsWith(COLLECTION_DESCRIPTION_PREFIX)) {
+    try {
+      const decoded: unknown = JSON.parse(rawDescription.slice(COLLECTION_DESCRIPTION_PREFIX.length));
+      if (!decoded || typeof decoded !== 'object') throw new Error('Invalid collection details');
+      const details = decoded as Record<string, unknown>;
+      description = typeof details.description === 'string' ? details.description : '';
+      kind = details.kind === 'album' ? 'album' : 'playlist';
+      if (typeof details.coverUrl === 'string' && /^data:image\/(jpeg|png|webp);base64,/.test(details.coverUrl)) coverUrl = details.coverUrl;
+    } catch {
+      description = rawDescription;
+    }
+  } else if (rawDescription.startsWith(ALBUM_DESCRIPTION_PREFIX)) {
+    kind = 'album';
+    description = rawDescription.slice(ALBUM_DESCRIPTION_PREFIX.length);
+  }
   return {
+    ...(kind === 'album' ? { kind } : {}),
+    ...(coverUrl ? { coverUrl } : {}),
     id: playlist.id,
     name: playlist.name,
-    description: playlist.description || undefined,
+    description: description || undefined,
     songIds: playlist.song_ids,
     created_at: playlist.created_at,
     song_count: playlist.song_ids.length,
@@ -127,6 +165,22 @@ export async function loadNativePlaylists(): Promise<import('../types').Playlist
   return playlists.map(mapNativePlaylist);
 }
 
+/** Save the exact album order in the native library so all screens and future
+ * launches agree, rather than keeping a browser-only preference. */
+export async function reorderNativeAlbums(ids: string[]): Promise<import('../types').Playlist[]> {
+  const response = await fetch('/v1/library/albums/order', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ids }),
+  });
+  if (!response.ok) {
+    const body: { error?: string } | null = await response.json().catch(() => null);
+    throw new Error(body?.error || `Album order could not be saved (${response.status})`);
+  }
+  const playlists: NativePlaylist[] = await response.json();
+  return playlists.map(mapNativePlaylist);
+}
+
 export async function getNativePlaylist(id: string): Promise<import('../types').Playlist | null> {
   const response = await fetch(`/v1/library/playlists/${encodeURIComponent(id)}`);
   if (response.status === 404) return null;
@@ -134,10 +188,10 @@ export async function getNativePlaylist(id: string): Promise<import('../types').
   return mapNativePlaylist(await response.json());
 }
 
-export async function createNativePlaylist(name: string, description: string, songIds: string[] = []): Promise<import('../types').Playlist> {
+export async function createNativePlaylist(name: string, description: string, songIds: string[] = [], kind: 'playlist' | 'album' = 'playlist'): Promise<import('../types').Playlist> {
   const response = await fetch('/v1/library/playlists', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name, description: description || null, song_ids: songIds }),
+    body: JSON.stringify({ name, description: encodeCollectionDescription({ description, kind }), song_ids: songIds }),
   });
   if (!response.ok) throw new Error(`Native playlist creation failed (${response.status})`);
   return mapNativePlaylist(await response.json());
@@ -146,7 +200,7 @@ export async function createNativePlaylist(name: string, description: string, so
 export async function updateNativePlaylist(id: string, playlist: import('../types').Playlist, songIds = playlist.songIds || []): Promise<import('../types').Playlist> {
   const response = await fetch(`/v1/library/playlists/${encodeURIComponent(id)}`, {
     method: 'PUT', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name: playlist.name, description: playlist.description || null, song_ids: songIds }),
+    body: JSON.stringify({ name: playlist.name, description: encodeCollectionDescription(playlist), song_ids: songIds }),
   });
   if (!response.ok) throw new Error(`Native playlist update failed (${response.status})`);
   return mapNativePlaylist(await response.json());

@@ -76,6 +76,8 @@ export interface SongVersion {
 }
 
 export interface Playlist {
+  /** Albums share the native ordered-collection backend with playlists. */
+  kind?: 'playlist' | 'album';
   id: string;
   name: string;
   description?: string;

@@ -414,7 +414,7 @@ fn annotations(name: &str) -> Value {
     // reads whose names the rules above miss: create_form names the create page
     const READ_NAMES: &[&str] = &["lyrics_syllables", "assistant_cli_agents", "system_gpus", "cover_scenes", "cover_photos_search", "video_backgrounds_search", "network_proxy_test", "journal_read", "score_to_midi", "score_instrumental", "score_vocal_octave", "score_from_midi", "score_mark", "lyrics_find", "cover_prompt_render", "studio_wait", "engine_presets_get", "assistant_requests_wait", "ui_console", "song_defaults", "create_form_get", "library_liked", "score_chord_bed", "song_tokenize", "score_match_sections", "models_update_plan", "problem_preview", "library_migration_preview"];
     // writes over what was stored, so the earlier content is gone: a client asks first
-    const OVERWRITES: &[&str] = &["library_song_rename", "library_song_update", "playlist_update", "dataset_update", "dataset_song_update", "dataset_prepare", "lora_update", "stems_split", "restore_start", "karaoke_make", "midi_transcribe", "cover_draw", "cover_set_from_file", "openrouter_set_key", "models_update_apply"];
+    const OVERWRITES: &[&str] = &["library_song_rename", "library_song_update", "playlist_update", "album_reorder", "dataset_update", "dataset_song_update", "dataset_prepare", "lora_update", "stems_split", "restore_start", "karaoke_make", "midi_transcribe", "cover_draw", "cover_set_from_file", "openrouter_set_key", "models_update_apply"];
     let changes = CHANGES.iter().any(|verb| name.split('_').any(|word| word == *verb));
     let read_only = READ_NAMES.contains(&name) || !changes && (READS.iter().any(|part| name.ends_with(part) || name.contains(&format!("{part}_"))) || name.starts_with("writing_"));
     let destructive = name.ends_with("_delete") || name.ends_with("_remove") || name == "processing_discard" || name.ends_with("_cancel") || name.contains("_cancel_") || OVERWRITES.contains(&name);
@@ -1801,6 +1801,12 @@ fn tools() -> &'static [Tool] {
                 description: "The library's playlists.",
                 schema: nothing,
                 call: |_| get("/v1/library/playlists".into()),
+            },
+            Tool {
+                name: "album_reorder",
+                description: "Save the display order of all library albums. Supply every album ID exactly once.",
+                schema: || object(json!({ "ids": { "type": "array", "items": { "type": "string" }, "uniqueItems": true } }), &["ids"]),
+                call: |args| send(Method::PUT, "/v1/library/albums/order".into(), args.clone()),
             },
             Tool {
                 name: "playlist_create",

@@ -1792,6 +1792,7 @@ pub async fn serve_on_port(port: u16) -> anyhow::Result<()> {
         .route("/v1/library/songs/{id}/cover/photo", post(choose_cover_photo))
         .route("/v1/library/songs/{id}/cover/pattern", post(choose_cover_pattern))
         .route("/v1/library/playlists", get(library_playlists).post(create_library_playlist))
+        .route("/v1/library/albums/order", axum::routing::put(reorder_library_albums))
         .route("/v1/library/playlists/{id}", get(library_playlist).put(update_library_playlist).delete(delete_library_playlist))
         .route("/setup/status", get(setup_status))
         .route("/setup/catalog", get(setup_catalog))
@@ -5545,6 +5546,16 @@ fn song_files(state: &AppState, song: &library::Song) -> Vec<PathBuf> {
 fn in_media_folder(media: &std::path::Path, path: &std::path::Path) -> bool {
     let (Ok(root), Ok(file)) = (media.canonicalize(), path.canonicalize()) else { return false };
     file.is_file() && file.parent() == Some(root.as_path())
+}
+#[derive(Debug, Deserialize)]
+struct AlbumOrderInput { ids: Vec<String> }
+
+/// Reordering an album changes display order, not album membership or songs.
+async fn reorder_library_albums(
+ State(state):State<AppState>, Json(input):Json<AlbumOrderInput>
+)->Result<Json<Vec<library::Playlist>>,(StatusCode,Json<ApiError>)>{
+ state.library.reorder_albums(&input.ids).map(Json)
+  .map_err(|error|api_error(StatusCode::CONFLICT,error.to_string()))
 }
 async fn library_playlists(State(state):State<AppState>)->Result<Json<Vec<library::Playlist>>,(StatusCode,Json<ApiError>)>{state.library.list_playlists().map(Json).map_err(|e|api_error(StatusCode::INTERNAL_SERVER_ERROR,e.to_string()))}
 async fn create_library_playlist(State(state):State<AppState>,Json(input):Json<library::PlaylistInput>)->Result<(StatusCode,Json<library::Playlist>),(StatusCode,Json<ApiError>)>{state.library.create_playlist(input).map(|p|(StatusCode::CREATED,Json(p))).map_err(|e|api_error(StatusCode::BAD_REQUEST,e.to_string()))}

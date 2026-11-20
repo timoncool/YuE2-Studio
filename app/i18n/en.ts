@@ -1928,6 +1928,12 @@ export const en = {
     likeSelected: "Like",
     hoursShort: "h",
     minutesShort: "min",
+
+    editAlbum: 'Edit album',
+    deleteAlbum: 'Delete album',
+    uploadCollectionCover: 'Upload cover image',
+    removeCollectionCover: 'Remove image',
+    collectionCoverHint: 'JPG, PNG or WebP, max 8 MB',
     editPlaylistDetails: "Edit details",
     shufflePlay: "Shuffle play",
     removedFromPlaylist: "«{title}» removed from «{name}»",
