@@ -1,12 +1,14 @@
 import React, { useEffect, useRef, useState } from 'react';
 import abcjs from 'abcjs';
-import { ArrowDown, ArrowUp, Download, FileText, Guitar, Pause, Pencil, Play } from 'lucide-react';
+import { ArrowDown, ArrowUp, BookOpen, Download, FileText, Guitar, Pause, Pencil, Play } from 'lucide-react';
 import { useI18n } from '../context/I18nContext';
 import { MidiSynth, type PlayNote } from './midi/midiSynth';
 import { cueIndex, scoreCues, scoreNotes, type Cue } from '../services/scorePlayback';
 import { saveFile } from '../services/saveFile';
 import { failed as refusedScore, instrumentalScore, vocalOctave } from '../services/scoreApi';
 import { engravedScore } from '../services/scoreEngraving';
+import { SongbookDialog } from './SongbookDialog';
+import { songbookStrings } from '../i18n/songbook';
 
 const NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 /** A MIDI pitch as a note name with its octave: 60 is C4. */
@@ -22,8 +24,9 @@ const noteName = (pitch: number) => `${NOTE_NAMES[((pitch % 12) + 12) % 12]}${Ma
  * It can be heard and saved as MIDI too: the notes abcjs reads from the score
  * play on the studio's own MIDI voices, so no sound font is downloaded.
  */
-export const ScoreView: React.FC<{ abc: string; className?: string; title?: string; onChange?: (abc: string) => void; onEdit?: () => void }> = ({ abc, className, title, onChange, onEdit }) => {
-  const { t } = useI18n();
+export const ScoreView: React.FC<{ abc: string; className?: string; title?: string; lyrics?: string; onChange?: (abc: string) => void; onEdit?: () => void }> = ({ abc, className, title, lyrics, onChange, onEdit }) => {
+  const { t, language } = useI18n();
+  const [songbook, setSongbook] = useState(false);
   const host = useRef<HTMLDivElement | null>(null);
   const tune = useRef<abcjs.TuneObject | null>(null);
   const synth = useRef<MidiSynth | null>(null);
@@ -236,6 +239,7 @@ export const ScoreView: React.FC<{ abc: string; className?: string; title?: stri
   const button = 'inline-flex items-center gap-1 rounded-md border border-zinc-200 px-2 py-1 text-[11px] font-medium text-zinc-600 transition-colors hover:border-pink-400 hover:text-pink-600';
   return (
     <div className={className}>
+      {songbook && <SongbookDialog abc={abc} title={title} lyrics={lyrics} onClose={() => setSongbook(false)} />}
       {!failed && (
         <div className="sticky top-0 z-10 mb-1 flex flex-wrap items-center gap-1.5 bg-white py-0.5">
           <button type="button" onClick={listen} className={button} title={t('scoreListenHint')}>
@@ -258,6 +262,9 @@ export const ScoreView: React.FC<{ abc: string; className?: string; title?: stri
               <Pencil size={12} />{t('scoreEdit')}
             </button>
           )}
+          <button type="button" onClick={() => setSongbook(true)} className={button}>
+            <BookOpen size={12} />{songbookStrings[language].title}
+          </button>
           <button type="button" onClick={() => void saveMidi()} className={button}>
             <Download size={12} />MIDI
           </button>
