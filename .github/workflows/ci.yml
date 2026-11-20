@@ -19,6 +19,7 @@ jobs:
           cache-dependency-path: app/package-lock.json
       - uses: Swatinem/rust-cache@v2
       - run: cargo build --locked -p music-server --bin music-server
+      - run: python .github/check-yue-gpu-targets.py target/debug/music-server.exe
       - run: npm ci --no-audit --no-fund
         working-directory: app
       - run: npm run predev
