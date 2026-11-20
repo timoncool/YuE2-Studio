@@ -39,9 +39,10 @@ import { WorkProgress } from './WorkProgress';
 interface SeparationStatus {
   model: { label: string; bytes: number; installed: boolean; note: string };
   runtime_installed: boolean;
+  missing_bytes?: number;
   ready: boolean;
   stems: string[];
-  download: { downloaded_bytes: number; total_bytes: number; done: boolean } | null;
+  download: { downloaded_bytes: number; total_bytes: number; done: boolean; error?: string | null } | null;
   /** The card audio.cpp separates on: CUDA on an NVIDIA card that runs it, Vulkan on another make, Metal on a Mac. */
   card: 'cuda' | 'vulkan' | 'metal' | null;
   card_runtime_installed: boolean;
@@ -164,8 +165,18 @@ export function StudioToolsPanel({ initialSongId }: { initialSongId?: string | n
   const install = async () => {
     setBusy(true);
     setError(null);
-    await fetch('/v1/separation/install', { method: 'POST' }).catch(() => undefined);
-    setBusy(false);
+    try {
+      const response = await fetch('/v1/separation/install', { method: 'POST' });
+      if (!response.ok) {
+        const body = await response.json().catch(() => null);
+        throw new Error(body?.error || `${t('error')} (${response.status})`);
+      }
+      await refresh();
+    } catch (problem) {
+      setError(problem instanceof Error ? problem.message : String(problem));
+    } finally {
+      setBusy(false);
+    }
   };
 
   // a stem is a part of a song already: there is nothing in it to separate
@@ -354,7 +365,7 @@ export function StudioToolsPanel({ initialSongId }: { initialSongId?: string | n
             </button>
             {chosenIsStem && <p className="mt-2 text-xs leading-5 text-zinc-500 dark:text-zinc-400">{t('stemOfStem')}</p>}
             {/* the model is in place and the server it runs in is not (missing or of an earlier release): why Split waits */}
-            {status && status.model.installed && !status.ready && (
+            {status && status.engine !== 'roformer' && status.model.installed && !status.ready && (
               <p className="mt-2 text-xs leading-5 text-amber-600 dark:text-amber-300">
                 {t('updateWhyAudiocppServer')} ·{' '}
                 <button type="button" onClick={() => window.dispatchEvent(new CustomEvent('yue:open-settings', { detail: 'models' }))} className="underline underline-offset-2">
@@ -372,11 +383,12 @@ export function StudioToolsPanel({ initialSongId }: { initialSongId?: string | n
             />
           </div>
 
-          {status && !status.model.installed && (
+          {status && !status.ready && (
             <div className="mt-3 rounded-lg border border-zinc-200 p-3 dark:border-white/10">
               <p className="text-xs leading-5 text-zinc-600 dark:text-zinc-300">
                 {status.model.label} · {megabytes(status.model.bytes)} — {status.model.note}
               </p>
+              {download?.error && <p role="alert" className="mt-2 text-xs text-rose-600">{download.error}</p>}
               {download && !download.done ? (
                 <div className="mt-2">
                   <div className="h-1.5 overflow-hidden rounded-full bg-zinc-200 dark:bg-black/30">
@@ -396,7 +408,7 @@ export function StudioToolsPanel({ initialSongId }: { initialSongId?: string | n
                   disabled={busy}
                   className="mt-2 inline-flex items-center gap-2 rounded-lg bg-zinc-900 px-3 py-1.5 text-xs font-bold text-white disabled:opacity-50 dark:bg-white dark:text-zinc-900"
                 >
-                  <Download size={13} /> {t('stemsInstallModel')}
+                  <Download size={13} /> {t('download')}{status.missing_bytes ? ` · ${megabytes(status.missing_bytes)}` : ''}
                 </button>
               )}
             </div>

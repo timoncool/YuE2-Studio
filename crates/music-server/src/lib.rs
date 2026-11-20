@@ -2400,6 +2400,7 @@ fn separation_install_choice(asset_id: &str, config: &separation::SeparationConf
     use lyrics_sync::OnnxFlavour;
     use separation::Engine;
     match asset_id {
+        "selected" => Some((config.engine, config.runtime)),
         "htdemucs" => Some((Engine::Htdemucs, config.runtime)),
         "roformer" => Some((Engine::Roformer, config.runtime)),
         "auto" | "cuda" => Some((config.engine, OnnxFlavour::Auto)),
@@ -2614,24 +2615,43 @@ async fn write_separation_settings(
 }
 
 async fn separation_status(State(state): State<AppState>) -> Json<Value> {
-    let (engine, runtime_choice) = { let config = state.separation_config.read().await; (config.engine, config.runtime) };
-    // the card HT-Demucs takes on this machine (audio.cpp's CUDA build, Vulkan on a card of another make, Metal on a
-    // Mac), none without one, and whether its server is installed
-    let card_build = separation_build(lyrics_sync::OnnxFlavour::Cuda).ok().filter(|build| acpp::on_card(*build));
-    let card = card_build.map(|build| match build.backend() {
-        acpp_server::Backend::Cuda => "cuda",
-        acpp_server::Backend::Vulkan => "vulkan",
-        _ => "metal",
-    });
-    let model = match engine {
-        separation::Engine::Roformer => &separation::ROFORMER_MODEL,
-        separation::Engine::Htdemucs => &separation::MODEL,
+    let config = state.separation_config.read().await.clone();
+    let engine = config.engine;
+    let (model, server_installed, runtime_missing_bytes, card, card_installed, card_missing_bytes) = match engine {
+        separation::Engine::Htdemucs => {
+            let gpu = separation_build(lyrics_sync::OnnxFlavour::Cuda).ok().filter(|build| acpp::on_card(*build));
+            let card = gpu.map(|build| match build.backend() {
+                acpp_server::Backend::Cuda => "cuda",
+                acpp_server::Backend::Vulkan => "vulkan",
+                _ => "metal",
+            });
+            let selected = separation_build(config.runtime).ok();
+            (&separation::MODEL, selected.is_some_and(|build| state.acpp.installed(build)),
+                selected.map_or(0, |build| acpp_missing_bytes(&state, build)), card, gpu.is_some_and(|build| state.acpp.installed(build)), gpu.map_or(0, |build| acpp_missing_bytes(&state, build)))
+        }
+        separation::Engine::Roformer => {
+            use separation::RoformerBuild;
+            let build = separation::machine_roformer_build(true);
+            let card = match build {
+                RoformerBuild::Cuda12 | RoformerBuild::Cuda13 => Some("cuda"),
+                RoformerBuild::Vulkan => Some("vulkan"),
+                RoformerBuild::Cpu if cfg!(all(target_os = "macos", target_arch = "aarch64")) => Some("metal"),
+                RoformerBuild::Cpu => None,
+            };
+            let available = card.is_some() && separation::roformer_asset(build).is_some();
+            let missing = separation::roformer_asset(build).filter(|asset| !state.separator.downloader().is_installed(asset)).map_or(0, |asset| asset.bytes);
+            let shared: u64 = match build {
+                RoformerBuild::Cuda12 | RoformerBuild::Cuda13 => state.engine_runtime.missing(hardware::hardware().card_cuda).iter().map(|asset| asset.bytes).sum(),
+                _ => 0,
+            };
+            let gpu = roformer_on_card(&state, config.runtime);
+            let selected_bytes = separation::Separator::roformer_engine(gpu).filter(|asset| !state.separator.downloader().is_installed(asset)).map_or(0, |asset| asset.bytes);
+            (&separation::ROFORMER_MODEL, state.separator.roformer_runtime_installed(gpu), selected_bytes,
+                card.filter(|_| available), available && shared == 0 && state.separator.roformer_runtime_installed(true),
+                if available { missing + shared } else { 0 })
+        }
     };
-    let model_installed = match engine {
-        separation::Engine::Roformer => state.separator.roformer_installed(roformer_on_card(&state, runtime_choice)),
-        separation::Engine::Htdemucs => state.separator.is_installed(),
-    };
-    let server_installed = separation_build(runtime_choice).is_ok_and(|build| state.acpp.installed(build));
+    let model_installed = state.separator.downloader().is_installed(model);
     Json(serde_json::json!({
         "model": {
             "id": model.id,
@@ -2642,23 +2662,18 @@ async fn separation_status(State(state): State<AppState>) -> Json<Value> {
         },
         "runtime_installed": server_installed,
         "card": card,
-        "card_runtime_installed": match engine {
-            separation::Engine::Roformer => roformer_on_card(&state, lyrics_sync::OnnxFlavour::Auto),
-            separation::Engine::Htdemucs => card_build.is_some_and(|build| state.acpp.installed(build)),
-        },
-        "card_missing_bytes": card_build.map(|build| acpp_missing_bytes(&state, build)).unwrap_or(0),
-        "ready": match engine {
-            separation::Engine::Roformer => state.separator.roformer_installed(roformer_on_card(&state, runtime_choice)),
-            separation::Engine::Htdemucs => htdemucs_installed(&state, runtime_choice),
-        },
+        "card_runtime_installed": card_installed,
+        "card_missing_bytes": card_missing_bytes,
+        "missing_bytes": runtime_missing_bytes + if model_installed { 0 } else { model.bytes },
+        "ready": model_installed && server_installed,
         "engine": engine,
         "stems": engine_stems(engine),
         // Either downloader may be the busy one: the model has its own, audio.cpp's server comes through its own.
         "download": separation_download_progress(
-            state.separator.downloader().active().await,
-            state.acpp.downloader().active().await,
+            state.separator.downloader().active_for("separation").await,
+            state.acpp.downloader().active_for("separation").await,
         ),
-        "settings": state.separation_config.read().await.clone(),
+        "settings": config,
         "run": with_elapsed(serde_json::to_value(state.separation_run.read().await.clone()).unwrap_or(Value::Null)),
     }))
 }
@@ -2666,17 +2681,7 @@ async fn separation_status(State(state): State<AppState>) -> Json<Value> {
 /// Fetches the separation model. Nothing here downloads on its own; this is the
 /// button, and it also brings the runtime if karaoke has not already.
 async fn install_separation_model(State(state): State<AppState>) -> Result<Json<Value>, (StatusCode, Json<ApiError>)> {
-    let separator = state.separator.clone();
-    let sync = state.lyrics_sync.clone();
-    tokio::spawn(async move {
-        if sync.onnxruntime_library().is_none() {
-            if let Some(runtime) = lyrics_sync::asset("onnxruntime") {
-                let _ = sync.downloader().install(runtime).await;
-            }
-        }
-        let _ = separator.downloader().install(&separation::MODEL).await;
-    });
-    Ok(Json(serde_json::json!({ "started": true })))
+    install_separation_asset(State(state), Json(InstallSeparationAssetRequest { asset_id: "selected".into() })).await
 }
 
 /// The adapter page: the parts of the model an adapter can change, the
@@ -3951,8 +3956,9 @@ async fn start_separation(
     if state.separation_run.read().await.as_ref().is_some_and(|run| !run.done) {
         return Err(api_error(StatusCode::CONFLICT, "a track is already being separated".into()));
     }
-    let wanted_runtime = state.separation_config.read().await.runtime;
-    let engine = state.separation_config.read().await.engine;
+    let config = state.separation_config.read().await.clone();
+    let wanted_runtime = config.runtime;
+    let engine = config.engine;
     // audio.cpp's server of the chosen device is HT-Demucs's; Mel-Band RoFormer runs its own engine
     let build = separation_build(wanted_runtime);
     if engine == separation::Engine::Htdemucs {
@@ -3976,7 +3982,6 @@ async fn start_separation(
         Some(SeparationRun { song_id: id.clone(), progress: 0.0, started_ms: unix_millis(), done: false, error: None, stems: vec![], used_gpu: None, library_songs: vec![] });
 
     let model = state.separator.model_path();
-    let config = state.separation_config.read().await.clone();
     let wanted = config.stems.clone();
     let background = state.clone();
     let song_id = id.clone();
