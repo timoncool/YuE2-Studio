@@ -730,8 +730,14 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
     appliedReuse.current = initialData.timestamp;
     const song = initialData.song;
     const settings = (song.generationParams ?? {}) as Record<string, unknown>;
-    if (song.ditModel === 'openrouter') {
-      changeMusicModel(typeof settings.model === 'string' ? settings.model : '');
+    if (isNativeMusicEngine(song.ditModel) || song.ditModel === 'openrouter') {
+      if (isNativeMusicEngine(song.ditModel)) {
+        const source = settings.music_source as YueRequest['music_source'] | undefined;
+        const profile = source?.kind === 'native' && source.engine === song.ditModel ? source.model : song.lmModel;
+        native.restore(song.ditModel, profile ?? '', settings);
+      } else {
+        changeMusicModel(typeof settings.model === 'string' ? settings.model : '');
+      }
       setStyle(song.style);
       setLyrics(song.lyrics);
       setName(song.title || '');
@@ -744,7 +750,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
     // A song made without LoRA reuses without it, whatever was picked before.
     setAdapters(usesFromSettings(settings));
     setMode('studio');
-  }, [initialData, applyRequest, changeMusicModel]);
+  }, [initialData, applyRequest, changeMusicModel, native.restore]);
 
   useEffect(() => {
     setCoverPlaying(false);

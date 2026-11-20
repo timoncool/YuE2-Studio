@@ -181,7 +181,8 @@ async fn native_minimax_generation_imports_wav_and_cancel_imports_nothing() {
     wait_status(&http, &format!("{jobs}/{id}"), "running").await;
     rpc(mcp_request(), 4, "song_job_cancel", json!({"job_id":id})).await;
     let cancelled = wait_status(&http, &format!("{jobs}/{id}"), "cancelled").await;
-    assert_eq!(cancelled["songs"], json!([]));
+    assert!(cancelled.get("songs").is_none(), "empty take lists are omitted");
+    assert!(cancelled["song"].is_null());
     assert_eq!(
         fs::read_to_string(root.path().join("cancelled")).unwrap(),
         "2"

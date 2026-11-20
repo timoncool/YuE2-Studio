@@ -98,6 +98,21 @@ export function useNativeMusicProfiles(engine: NativeMusicEngine | undefined) {
     ready: result?.data?.engine_installed === true && profile?.ready === true,
     settings: pair ? preferences.settings[pair] ?? {} : {},
     refresh: () => { setResponse(undefined); setRefreshCount(count => count + 1); },
+    restore: (source: NativeMusicEngine, id: string, saved: Record<string, unknown>) => {
+      const controls: Settings = {};
+      const number = (key: Control, raw: unknown) => {
+        if (typeof raw === 'number' && Number.isFinite(raw)) controls[key] = String(raw);
+      };
+      number('duration_seconds', saved.duration_seconds ?? saved.duration);
+      number('steps', saved.steps ?? saved.inference_steps);
+      number('seed', saved.seed);
+      if (source === 'minimaxmusic-cpp') number('lm_seed', saved.lm_seed);
+      if (source === 'acestep-cpp') number('guidance_scale', saved.guidance_scale);
+      update({
+        selected: { ...preferences.selected, [source]: id },
+        settings: id ? { ...preferences.settings, [JSON.stringify([source, id])]: controls } : preferences.settings,
+      });
+    },
     select: (id: string) => {
       if (engine) update({ ...preferences, selected: { ...preferences.selected, [engine]: id } });
     },

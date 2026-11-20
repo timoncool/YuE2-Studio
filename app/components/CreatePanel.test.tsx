@@ -181,6 +181,21 @@ it('keeps settings by native engine and profile and submits the selected pair', 
   expect(field('textarea[aria-label="scoreCardTitle"]')!.value).toBe(score);
 });
 
+it.each([
+  { engine: 'acestep-cpp' as const, settings: { duration: 18, inference_steps: 7, guidance_scale: 2.5 }, extra: { ace: { guidance_scale: 2.5 } } },
+  { engine: 'minimaxmusic-cpp' as const, settings: { duration: 18, steps: 7, lm_seed: 55 }, extra: { lm_seed: 55 } },
+])('reuses the original profile and settings of a migrated $engine take', async ({ engine, settings, extra }) => {
+  const song = { title: 'Old take', style: 'folk', lyrics: 'verse', ditModel: engine, lmModel: 'original', generationParams: { ...settings, seed: 42 } } as Song;
+  vi.stubGlobal('fetch', vi.fn(async () => Response.json({ engine, engine_installed: true,
+    profiles: [{ id: 'original', label: 'Original', ready: true, total_bytes: 1, missing: [] }] })));
+  act(() => root.render(panel({ musicEngine: engine, initialData: { song, timestamp: 1 } })));
+  await flush();
+  expect(host.querySelector<HTMLSelectElement>('select[aria-label="Local model"]')!.value).toBe('original');
+  click(buttonNamed('create')!);
+  expect(sent.at(-1)).toMatchObject({ music_source: { kind: 'native', engine, model: 'original' },
+    style: 'folk', lyrics: 'verse', duration_seconds: 18, steps: 7, seed: 42, ...extra });
+});
+
 describe('an instrumental (#217)', () => {
   it('keeps a score written for one submission out of the form and writes a new one for the next', async () => {
     act(() => root.render(panel({})));
