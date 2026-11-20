@@ -155,6 +155,7 @@ const json = (method: string, body: unknown): RequestInit => ({
 
 export const fetchTraining = () => call<TrainingState>('/v1/training', { headers: SELF_READ });
 export const installTrainingPack = () => call<void>('/v1/training/pack/install', { method: 'POST' });
+export const cancelListenPack = () => call<void>('/v1/training/listen/cancel', { method: 'POST' });
 export const installListenPack = () => call<void>('/v1/training/listen/install', { method: 'POST' });
 export const cancelTrainingPack = () => call<void>('/v1/training/pack/cancel', { method: 'POST' });
 
