@@ -1,4 +1,4 @@
-export type OpenRouterCapability = 'speech_to_text' | 'cover_art';
+export type OpenRouterCapability = 'speech_to_text' | 'cover_art' | 'music_generation';
 
 export interface NativeOpenRouterModel {
   id: string;
