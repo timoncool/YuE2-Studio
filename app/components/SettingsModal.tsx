@@ -6,7 +6,7 @@ import { useI18n } from '../context/I18nContext';
 import { LANGUAGE_NAMES, type Language } from '../i18n/translations';
 import { ProviderSettings } from './ProviderSettings';
 import { EngineSettings } from './EngineSettings';
-import { SetupGate } from './SetupGate';
+import { SetupGate, type SetupSelection } from './SetupGate';
 import { CoverTemplateSettings } from './CoverTemplateSettings';
 import { AgentPanel } from './AgentPanel';
 import { FileTagSettings } from './FileTagSettings';
@@ -50,6 +50,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, initialSec
   const { user, setDisplayName } = useAuth();
   const { t, language, setLanguage } = useI18n();
   const [section, setSection] = useState<SectionId>('account');
+  const [modelsVisited, setModelsVisited] = useState(false);
+  const modelSelection = useRef<SetupSelection>(null);
+  const [savingModels, setSavingModels] = useState(false);
+  useEffect(() => {
+    if (!isOpen) setModelsVisited(false);
+    else if (section === 'models') setModelsVisited(true);
+  }, [isOpen, section]);
   const reportFacts = useSetupStatus<ReportFacts>().data;
   const [reporting, setReporting] = useState(false);
   /// A part of the page to open at, after a colon: `models:assistant`.
@@ -92,9 +99,22 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, initialSec
   ];
 
   const active = sections.find((entry) => entry.id === section) ?? sections[0];
+  const close = () => {
+    if (!savingModels) onClose();
+  };
+  const done = async () => {
+    if (savingModels) return;
+    setSavingModels(true);
+    try {
+      if (!modelSelection.current || await modelSelection.current.saveSelection()) onClose();
+      else setSection('models');
+    } finally {
+      setSavingModels(false);
+    }
+  };
 
   return (
-    <div className="fixed inset-0 z-60 flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
+    <div className="fixed inset-0 z-60 flex items-center justify-center bg-black/50 p-4" onClick={close}>
       <div
         className="flex h-[calc(var(--vh)*85)] w-full max-w-4xl overflow-hidden rounded-2xl bg-white shadow-2xl dark:bg-zinc-900"
         onClick={(event) => event.stopPropagation()}
@@ -129,7 +149,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, initialSec
               <h3 className="truncate text-lg font-bold text-zinc-900 dark:text-white">{active.label}</h3>
               <p className="truncate text-xs text-zinc-500 dark:text-zinc-400">{active.hint}</p>
             </div>
-            <button onClick={onClose} className="rounded-full p-2 transition-colors hover:bg-zinc-100 dark:hover:bg-white/5">
+            <button onClick={close} disabled={savingModels} className="rounded-full p-2 transition-colors hover:bg-zinc-100 dark:hover:bg-white/5">
               <X size={20} className="text-zinc-500" />
             </button>
           </div>
@@ -160,7 +180,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, initialSec
             {/* The same chooser as the first run, because it is the same
                 decision - only now nothing is waiting on it. */}
             {section === 'covers' && <CoverTemplateSettings />}
-            {section === 'models' && <div className="-m-6"><SetupGate mode="settings" focus={focus} /></div>}
+            {(section === 'models' || modelsVisited) && (
+              <div className="-m-6" hidden={section !== 'models'}>
+                <SetupGate mode="settings" focus={focus} selectionRef={modelSelection} />
+              </div>
+            )}
             {section === 'engine' && <EngineSettings />}
             {section === 'cloud' && <ProviderSettings />}
             {section === 'agent' && <AgentPanel />}
@@ -255,7 +279,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, initialSec
           </div>
 
           <div className="flex justify-end border-t border-zinc-200 px-6 py-4 dark:border-white/5">
-            <button onClick={onClose} className="rounded-lg bg-zinc-900 px-6 py-2 font-semibold text-white transition-colors hover:bg-zinc-800 dark:bg-white dark:text-black dark:hover:bg-zinc-200">
+            <button onClick={() => void done()} disabled={savingModels} className="rounded-lg bg-zinc-900 px-6 py-2 font-semibold text-white transition-colors hover:bg-zinc-800 dark:bg-white dark:text-black dark:hover:bg-zinc-200">
               {t('done')}
             </button>
           </div>

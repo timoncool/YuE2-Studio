@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import { openRouterSettingsChanged, SELF_READ } from '../services/studioQueries';
 import { Check, ChevronDown, Download, FolderDown, FolderOpen, Loader2, Play, Square, Trash2, X } from 'lucide-react';
 import { useI18n } from '../context/I18nContext';
@@ -768,7 +768,14 @@ const LISTEN_ENGINES: EngineChoice[] = [{ id: 'moss-music', label: 'MOSS-Music',
 const MIDI_ENGINES: EngineChoice[] = [{ id: 'muscriptor', label: 'MuScriptor', devicePicker: false }];
 const RESTORE_ENGINES: EngineChoice[] = [{ id: 'apollo', label: 'Apollo', devicePicker: false }];
 
-export const SetupGate: React.FC<{ onReady?: () => void; mode?: 'first-run' | 'settings'; focus?: string | null }> =({ onReady, mode = 'first-run', focus = null }) => {
+export type SetupSelection = { saveSelection: () => Promise<boolean> };
+
+export const SetupGate: React.FC<{
+  onReady?: () => void;
+  mode?: 'first-run' | 'settings';
+  focus?: string | null;
+  selectionRef?: React.Ref<SetupSelection>;
+}> = ({ onReady, mode = 'first-run', focus = null, selectionRef }) => {
   const { t, language } = useI18n();
   const tt = t as unknown as (key: string) => string;
   const assistantEngines = useMemo<EngineChoice[]>(() => [
@@ -784,6 +791,9 @@ export const SetupGate: React.FC<{ onReady?: () => void; mode?: 'first-run' | 's
   const [catalog, setCatalog] = useState<Catalog | null>(null);
   const [updateOpen, setUpdateOpen] = useState(false);
   const [choice, setChoice] = useState<Record<string, string>>({});
+  const choiceEdited = useRef(false);
+  const pendingSelection = useRef<Promise<boolean> | null>(null);
+  const [savingSelection, setSavingSelection] = useState(false);
   const chosenValues = useMemo(() => Object.values(choice).filter((id): id is string => typeof id === 'string' && id.length > 0), [choice]);
   const [error, setError] = useState<string | null>(null);
   // what taking the user's own model folder did: files taken, copies made, what is still missing
@@ -879,17 +889,46 @@ export const SetupGate: React.FC<{ onReady?: () => void; mode?: 'first-run' | 's
   const chosenKey = useMemo(() => (chosenIds ? [...chosenIds].sort().join('|') : ''), [chosenIds]);
   const canApply = Boolean(chosenIds) && missing.length === 0 && chosenKey !== persisted;
 
-  const apply = async () => {
-    if (!chosenIds) return;
+  const apply = () => {
+    if (pendingSelection.current) return pendingSelection.current;
+    if (!canApply || !chosenIds) return Promise.resolve(false);
     setError(null);
-    const response = await fetch('/setup/select', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ component_ids: chosenIds }),
+    setSavingSelection(true);
+    const save = (async () => {
+      try {
+        const response = await fetch('/setup/select', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ component_ids: chosenIds }),
+        });
+        if (!response.ok) throw new Error(await errorMessage(response));
+        choiceEdited.current = false;
+        await refresh().catch(() => undefined);
+        return true;
+      } catch (problem) {
+        setError(problem instanceof Error ? problem.message : String(problem));
+        return false;
+      }
+    })();
+    pendingSelection.current = save;
+    void save.finally(() => {
+      pendingSelection.current = null;
+      setSavingSelection(false);
     });
-    if (!response.ok) setError(await errorMessage(response));
-    else await refresh().catch(() => undefined);
+    return save;
   };
+
+  useImperativeHandle(selectionRef, () => ({
+    async saveSelection() {
+      if (pendingSelection.current) return pendingSelection.current;
+      if (!choiceEdited.current || chosenKey === persisted) return true;
+      if (!chosenIds || missing.length > 0) {
+        setError(t(chosenIds ? 'downloadSelectedProfile' : 'chooseComponent'));
+        return false;
+      }
+      return apply();
+    },
+  }));
 
   // The request takes about a second to answer, and for that second the button
   // looked untouched: people pressed it again and could not tell which press
@@ -965,7 +1004,7 @@ export const SetupGate: React.FC<{ onReady?: () => void; mode?: 'first-run' | 's
         )}
 
         {(error || (active?.status === 'failed' && active.error)) && (
-          <div className="mt-5 flex gap-2 rounded-xl border border-rose-300 bg-rose-50 px-4 py-3 text-sm text-rose-700 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-200">
+          <div role="alert" className="mt-5 flex gap-2 rounded-xl border border-rose-300 bg-rose-50 px-4 py-3 text-sm text-rose-700 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-200">
             <X size={16} className="mt-0.5 shrink-0" /><span className="min-w-0 break-words">{error || active?.error}</span>
           </div>
         )}
@@ -1039,8 +1078,11 @@ export const SetupGate: React.FC<{ onReady?: () => void; mode?: 'first-run' | 's
                             const component = catalog?.components.find((entry) => entry.id === id);
                             if (component) picked[component.kind] = component.id;
                           }
+                          choiceEdited.current = true;
+                          setError(null);
                           setChoice(picked);
                         }}
+                        disabled={savingSelection}
                         className={`block w-full rounded-xl border p-3 text-left transition-colors ${
                           active ? 'border-pink-400 bg-pink-500/10' : 'border-zinc-200 hover:border-pink-300 dark:border-white/10'
                         }`}
@@ -1123,8 +1165,13 @@ export const SetupGate: React.FC<{ onReady?: () => void; mode?: 'first-run' | 's
                     <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">{componentKindLabel(group.kind)}</span>
                     <select
                       value={selectedId}
-                      onChange={(event) => setChoice((current) => ({ ...current, [group.kind]: event.target.value }))}
-                      disabled={active?.status === 'downloading'}
+                      onChange={(event) => {
+                        choiceEdited.current = true;
+                        setError(null);
+                        const id = event.target.value;
+                        setChoice((current) => ({ ...current, [group.kind]: id }));
+                      }}
+                      disabled={savingSelection || active?.status === 'downloading'}
                       className="w-full rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm text-zinc-900 focus:border-pink-500 focus:outline-hidden disabled:opacity-50 dark:border-white/10 dark:bg-black/20 dark:text-white"
                     >
                       <option value="">{group.optional ? t(group.kind === 'vae-decoder' ? 'ownDecoder' : 'noTranscriber') : t('chooseComponent')}</option>
@@ -1286,6 +1333,7 @@ export const SetupGate: React.FC<{ onReady?: () => void; mode?: 'first-run' | 's
             <button
               type="button"
               onClick={() => void apply()}
+              disabled={savingSelection}
               className="inline-flex items-center gap-2 rounded-xl border border-pink-400 px-4 py-2.5 text-sm font-semibold text-pink-600 hover:bg-pink-500/10 dark:border-pink-500/40 dark:text-pink-300"
             >
               <Check size={15} />{t('applySelection')}

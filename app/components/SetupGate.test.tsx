@@ -2,9 +2,15 @@ import React, { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { OptionalGroup, WHERE_IT_RUNS } from './SetupGate';
+import { SettingsModal } from './SettingsModal';
 
 vi.mock('../context/I18nContext', () => ({ useI18n: () => ({ t: (key: string) => key }) }));
-vi.mock('../services/studioQueries', () => ({ openRouterSettingsChanged: vi.fn(), SELF_READ: { 'x-hub-skip': '1' } }));
+vi.mock('../context/AuthContext', () => ({ useAuth: () => ({ user: { username: 'test' }, setDisplayName: vi.fn() }) }));
+vi.mock('../services/studioQueries', () => ({ openRouterSettingsChanged: vi.fn(), useSetupStatus: () => ({}), SELF_READ: { 'x-hub-skip': '1' } }));
+vi.mock('./EngineSettings', () => ({ EngineSettings: () => null }));
+vi.mock('./ModelPreset', () => ({ ModelPreset: () => null }));
+vi.mock('./ModelStorageCard', () => ({ ModelStorageCard: () => null }));
+vi.mock('./OwnModelPanel', () => ({ OwnModelPanel: () => null }));
 vi.mock('./AssistantSettings', () => ({ AssistantExtras: () => null }));
 vi.mock('./KaraokeSettings', () => ({ KaraokeExtras: () => null }));
 vi.mock('./HubTelemetryPreview', () => ({ HubTelemetryPreview: () => null }));
@@ -84,6 +90,101 @@ afterEach(() => {
   host?.remove();
   vi.useRealTimers();
   vi.unstubAllGlobals();
+});
+
+describe('saving a model set from Settings', () => {
+  const previous = ['backbone-q8', 'vae-f32'];
+  const next = ['backbone-q6', 'vae-f32'];
+  const profiles = [
+    { id: 'previous', label: 'Previous set', components: previous, installable: true, total_bytes: 2 },
+    { id: 'next', label: 'Next set', components: next, installable: true, total_bytes: 2 },
+  ];
+  const catalog = {
+    engine_id: 'yue2-cpp',
+    recommended_profile_id: 'next',
+    profiles,
+    components: [
+      { id: 'backbone-q8', kind: 'backbone', filename: 'YuE2-Q8_0.gguf', bytes: 1 },
+      { id: 'backbone-q6', kind: 'backbone', filename: 'YuE2-Q6_K.gguf', bytes: 1 },
+      { id: 'vae-f32', kind: 'vae', filename: 'Vae-F32.gguf', bytes: 1 },
+    ],
+  };
+
+  async function mountSettings({ installed = true, selected = true } = {}) {
+    const close = vi.fn();
+    calls = [];
+    save = async () => response({});
+    vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+      calls.push({ url, init });
+      if (url === '/setup/status') return response({
+        ready: selected,
+        engine_ready: true,
+        first_run: false,
+        recommended_profile_id: 'next',
+        active: null,
+        installed_components: installed ? [...previous, next[0]] : previous,
+        selected_component_ids: selected ? previous : [],
+      });
+      if (url === '/setup/catalog') return response(catalog);
+      if (url === '/setup/select') return save();
+      return response({});
+    }));
+    host = document.createElement('div');
+    document.body.append(host);
+    root = createRoot(host);
+    await act(async () => root.render(<SettingsModal isOpen initialSection="models" onClose={close} theme="light" onToggleTheme={() => {}} />));
+    return close;
+  }
+
+  async function press(label: string) {
+    const target = Array.from(host.querySelectorAll('button')).find(element => element.textContent?.includes(label));
+    expect(target).toBeDefined();
+    await act(async () => target!.click());
+  }
+  const mutations = () => calls.filter(({ url }) => url === '/setup/select' || url === '/setup/download');
+
+  it('waits for the selection to save before closing, even after changing tabs', async () => {
+    const close = await mountSettings();
+    const pending = deferred<Response>();
+    save = () => pending.promise;
+    await press('Next set');
+    await press('account');
+    await press('done');
+    expect(mutations()).toHaveLength(1);
+    const [{ url, init }] = mutations();
+    expect(url).toBe('/setup/select');
+    expect(init?.method).toBe('POST');
+    expect(JSON.parse(init?.body as string)).toEqual({ component_ids: next });
+    expect(close).not.toHaveBeenCalled();
+    await act(async () => pending.resolve(response({})));
+    expect(close).toHaveBeenCalledOnce();
+  });
+
+  it('leaves Settings open and preserves the error when selection fails', async () => {
+    const close = await mountSettings();
+    save = async () => response({ error: 'Cannot save selection' }, 409);
+    await press('Next set');
+    await press('done');
+    expect(host.querySelector('[role="alert"]')?.textContent).toBe('Cannot save selection');
+    expect(close).not.toHaveBeenCalled();
+    expect(mutations().map(({ url }) => url)).toEqual(['/setup/select']);
+  });
+
+  it('leaves an edited set with missing weights open without starting a download', async () => {
+    const close = await mountSettings({ installed: false });
+    await press('Next set');
+    await press('done');
+    expect(host.querySelector('[role="alert"]')?.textContent).toBe('downloadSelectedProfile');
+    expect(close).not.toHaveBeenCalled();
+    expect(mutations()).toEqual([]);
+  });
+
+  it('closes without persisting a prefilled recommendation that the user did not choose', async () => {
+    const close = await mountSettings({ selected: false });
+    await press('done');
+    expect(close).toHaveBeenCalledOnce();
+    expect(mutations()).toEqual([]);
+  });
 });
 
 describe('optional capability readiness', () => {
