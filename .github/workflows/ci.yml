@@ -23,5 +23,5 @@ jobs:
         working-directory: app
       - run: npm run predev
         working-directory: app
-      - run: python -m pip install playwright imageio-ffmpeg
+      - run: python -m pip install playwright imageio-ffmpeg requests
       - run: python .github/check-library-rename.py

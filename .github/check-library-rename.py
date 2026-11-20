@@ -1,3 +1,5 @@
+from check_takes import check_takes
+from check_adapters import check_adapter_import
 import array
 import concurrent.futures
 import json
@@ -42,7 +44,7 @@ def embedded():
 audio=root/"media"/"qa.wav"
 with wave.open(str(audio),"wb") as wav:
     wav.setparams((1,2,24000,0,"NONE","not compressed"))
-    wav.writeframes(array.array("h",(int(2000*math.sin(i*2*math.pi*220/24000)) for i in range(48000))).tobytes())
+    wav.writeframes(array.array("h",(int((24000 if i%2003<4 else 2000)*math.sin(i*2*math.pi*220/24000)) for i in range(48000))).tobytes())
 server=subprocess.Popen([str(repo/"target/debug/music-server.exe")],cwd=root,env=env)
 try:
     wait(api+"/health",server)
@@ -75,6 +77,8 @@ try:
             for which,title in (("list","List title"),("details","Details title")):
                 if which=="details": page.get_by_role("button",name="Song Details",exact=True).click()
                 button=page.get_by_title("Rename song",exact=True)
+                if which=="details":
+                    page.wait_for_function("""()=>[...document.querySelectorAll('button[title="Rename song"]')].filter(el=>el.offsetWidth).length>=2""")
                 (button.first if which=="list" else button.last).click()
                 edit=page.locator("input:focus")
                 edit.fill(title)
@@ -87,6 +91,13 @@ try:
     finally:
         vite.terminate()
         vite.wait(timeout=20)
+    import shutil
+    take_file=audio.with_name("processing.wav")
+    shutil.copyfile(audio,take_file)
+    check_adapter_import(api,root,root,False)
+    result=check_takes(api,take_file,False)
+    assert result["versions"][0][2]!=result["versions"][1][2],result
+    print(json.dumps(result),flush=True)
 finally:
     server.terminate()
     server.wait(timeout=20)
