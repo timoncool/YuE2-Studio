@@ -9600,26 +9600,15 @@ fn adopt_refusals(components: &[model_manager::Component], root: &std::path::Pat
 
 /// Adopt a pinned optional model from a chosen library, including libraries whose
 /// folder hierarchy differs from this studio's. Multiple versions may share a name.
-fn adopt_optional_model<'a>(entries: &'a [std::path::PathBuf], target: &std::path::Path, sha: &str) -> std::io::Result<Option<&'a std::path::PathBuf>> {
-    let mut candidates = entries.iter().filter(|source| source.file_name() == target.file_name()).peekable();
-    if candidates.peek().is_none() { return Ok(None); }
+fn adopt_optional_file(source: &std::path::Path, target: &std::path::Path, sha: &str) -> std::io::Result<bool> {
     if target.exists() {
-        if install_record::sha256_of(target).is_ok_and(|value| value == sha) {
-            return Ok(None);
+        if source.canonicalize()? == target.canonicalize()? || install_record::sha256_of(target).is_ok_and(|value| value == sha) {
+            return Ok(false);
         }
         return Err(std::io::Error::new(std::io::ErrorKind::InvalidData, format!("SHA-256 mismatch in the installed file: {}", target.display())));
     }
-    let mut last_error = None;
-    for source in candidates {
-        match studio_hub_client::neighbors::take_file(source, target, true, |file| install_record::sha256_of(file).is_ok_and(|value| value == sha)) {
-            Ok(()) => return Ok(Some(source)),
-            Err(error) => last_error = Some(error),
-        }
-    }
-    match last_error {
-        Some(error) => Err(error),
-        None => Ok(None),
-    }
+    studio_hub_client::neighbors::take_file(source, target, true, |file| install_record::sha256_of(file).is_ok_and(|value| value == sha))?;
+    Ok(true)
 }
 
 /// Takes models the user already has instead of downloading them again.
@@ -9667,31 +9656,47 @@ async fn setup_adopt(State(state): State<AppState>, body: axum::body::Bytes) -> 
         let found = adoptable_sources(&components, &root, &entries);
         let mut taken: Vec<std::path::PathBuf> = found.iter().map(|(_, source)| source.clone()).collect();
         let mut optional_ids = Vec::new();
-        let mut optional_names = std::collections::HashSet::new();
+        let mut by_name = std::collections::HashMap::<std::ffi::OsString, Vec<(&'static str, &'static str, std::path::PathBuf)>>::new();
         let mut errors = Vec::new();
         let mut checked = std::collections::HashSet::new();
-        let mut verify = |id: &str, url: &str, target: std::path::PathBuf| {
+        let mut register = |id: &'static str, url: &str, target: std::path::PathBuf| {
             let Some(sha) = pin_sha::sha256(url) else { return };
-            if !checked.insert(target.clone()) { return; }
-            if let Some(name) = target.file_name() { optional_names.insert(name.to_owned()); }
-            match adopt_optional_model(&entries, &target, sha) {
-                Ok(Some(_)) => optional_ids.push(id.to_owned()),
-                Ok(None) => {}
-                Err(error) => errors.push(serde_json::json!({ "file": target, "kind": "copy", "error": error.to_string() })),
+            let Some(name) = target.file_name() else { return };
+            if checked.insert(target.clone()) {
+                by_name.entry(name.to_owned()).or_default().push((id, sha, target));
             }
         };
         for asset in assistant_runtime::ASSETS.iter().filter(|asset| asset.kind == assistant_runtime::AssetKind::Model) {
-            verify(asset.id, asset.url, optional_state.assistant_runtime.path_of(asset));
+            register(asset.id, asset.url, optional_state.assistant_runtime.path_of(asset));
         }
         use update_screen::Part;
         for part in [Part::Karaoke, Part::Separation, Part::Midi, Part::Training, Part::Listening] {
             let Some((downloader, _)) = update_downloader(&optional_state, part) else { continue };
             for asset in update_catalogue(part) {
                 if asset.kind != downloads::AssetKind::Model { continue; }
-                verify(asset.id, asset.url, downloader.path_of(asset));
+                register(asset.id, asset.url, downloader.path_of(asset));
             }
         }
-        taken.extend(entries.iter().filter(|path| path.file_name().is_some_and(|name| optional_names.contains(name))).cloned());
+        for source in &entries {
+            let Some(candidates) = source.file_name().and_then(|name| by_name.get(name)) else { continue };
+            taken.push(source.clone());
+            let result = (|| -> anyhow::Result<()> {
+                let digest = install_record::sha256_of(source)?;
+                let mut matched = false;
+                for (id, sha, target) in candidates {
+                    if *sha != digest { continue; }
+                    matched = true;
+                    if adopt_optional_file(source, target, sha)? {
+                        optional_ids.push((*id).to_owned());
+                    }
+                }
+                anyhow::ensure!(matched, "SHA-256 does not match a catalogued version of this file");
+                Ok(())
+            })();
+            if let Err(error) = result {
+                errors.push(serde_json::json!({ "file": source, "kind": "copy", "error": error.to_string() }));
+            }
+        }
         errors.extend(adopt_refusals(&components, &root, &entries, &taken));
         (found, errors, optional_ids)
     })
@@ -13066,17 +13071,16 @@ mod tests {
         std::fs::write(&second, b"new").unwrap();
         let sha = install_record::sha256_of(&second).unwrap();
         let target = dest.path().join("models").join(name);
-        assert!(adopt_optional_model(std::slice::from_ref(&first), &target, &sha).is_err());
+        assert!(adopt_optional_file(&first, &target, &sha).is_err());
         assert!(!target.exists());
-        let candidates = vec![first.clone(), second.clone()];
-        assert_eq!(adopt_optional_model(&candidates, &target, &sha).unwrap(), Some(&second));
+        assert!(adopt_optional_file(&second, &target, &sha).unwrap());
         assert_eq!(std::fs::read(&target).unwrap(), b"new");
-        assert_eq!(adopt_optional_model(&candidates, &target, &sha).unwrap(), None);
+        assert!(!adopt_optional_file(&second, &target, &sha).unwrap());
         assert_eq!(std::fs::read(&first).unwrap(), b"old");
         assert_eq!(std::fs::read(&second).unwrap(), b"new");
         std::fs::remove_file(&target).unwrap();
         std::fs::write(&target, b"bad").unwrap();
-        assert!(adopt_optional_model(&candidates, &target, &sha).is_err());
+        assert!(adopt_optional_file(&second, &target, &sha).is_err());
         assert_eq!(std::fs::read(&target).unwrap(), b"bad");
     }
 
