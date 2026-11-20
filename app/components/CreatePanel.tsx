@@ -41,7 +41,7 @@ import { explainCliFailure } from '../services/cliFailure';
 import { loadNativeOpenRouterCatalog, modelsForCapability, refreshNativeOpenRouterCatalog, type NativeOpenRouterModel } from '../services/nativeOpenRouter';
 import { musicSourceStrings } from '../i18n/musicSource';
 import { generationPauseStrings } from '../i18n/generationPause';
-import { afterGenerationPause, generationPauseMs, type GenerationPauseMode } from '../services/generationPause';
+import { afterGenerationPause, formatGenerationCountdown, generationPauseMs, type GenerationPauseMode } from '../services/generationPause';
 
 /**
  * The YuE2 request form.
@@ -1203,6 +1203,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
   const [forever, setForever] = useState(false);
   const foreverRequest = useRef<YueRequest | null>(null);
   const cancelPause = useRef<(() => void) | null>(null);
+  const [pauseSeconds, setPauseSeconds] = useState<number | null>(null);
   const [pauseMode, setPauseMode] = useState<GenerationPauseMode>('none');
   const [pauseMinutes, setPauseMinutes] = useState('1');
   const [pauseMinimum, setPauseMinimum] = useState('1');
@@ -1319,12 +1320,14 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
     const wait = generationPauseMs(pauseMode, pauseStart, pauseEnd);
     if (wait === null) return;
     const cancel = afterGenerationPause(wait, () => {
+      setPauseSeconds(null);
       if (foreverRequest.current === snapshot) repeat(snapshot);
-    });
+    }, setPauseSeconds);
     cancelPause.current = cancel;
     return () => {
       cancel();
       if (cancelPause.current === cancel) cancelPause.current = null;
+      setPauseSeconds(null);
     };
   }, [forever, ready, cloud, queueBusy, pauseMode, pauseStart, pauseEnd]);
 
@@ -2456,6 +2459,16 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
               )}
               {pauseMode !== 'none' && <span>{pauseText.unit}</span>}
               {!validPause && <span role="alert" className="text-red-600 dark:text-red-400">{pauseText.invalid}</span>}
+              {pauseSeconds !== null && !queueBusy && (
+                <div className="flex w-full items-center justify-between gap-2">
+                  <span role="timer" className="tabular-nums">
+                    {pauseText.countdown.replace('{time}', formatGenerationCountdown(pauseSeconds))}
+                  </span>
+                  <button type="button" onClick={stopForever} className="rounded border border-zinc-200 px-2 py-1 dark:border-white/20">
+                    {pauseText.cancel}
+                  </button>
+                </div>
+              )}
             </div>
           )}
         </div>
