@@ -121,8 +121,8 @@ it('lists curated voices and installs the selected ID into the local catalog', a
     expect(JSON.parse(String(options?.body))).toEqual({ id: entry.id });
     expect(host.querySelector('select')!.value).toBe(voice.id);
     expect(host.querySelector('select')!.selectedOptions[0]?.textContent).toContain(entry.name);
-    expect(install.disabled).toBe(true);
-    expect(install.textContent).toBe('Installed');
+    expect(install.disabled).toBe(false);
+    expect(install.textContent).toBe('Select');
   } finally {
     act(() => root.unmount());
     host.remove();
@@ -183,7 +183,13 @@ it('finds Radio Tapok by source label and combines vocal, model, sample-rate and
     expect(details.textContent).toContain('No voices match these filters.');
     const clear = [...details.querySelectorAll('button')].find(button => button.textContent === 'Clear filters')!;
     act(() => { clear.dispatchEvent(new MouseEvent('click', { bubbles: true })); });
-    expect(details.querySelectorAll('li')).toHaveLength(84);
+    expect(details.querySelectorAll('li')).toHaveLength(40);
+    expect(details.textContent).toContain('Showing 40 of 84 voices');
+    for (const expected of [80, 84]) {
+      const more = [...details.querySelectorAll('button')].find(button => button.textContent === 'Show more')!;
+      act(() => { more.dispatchEvent(new MouseEvent('click', { bubbles: true })); });
+      expect(details.querySelectorAll('li')).toHaveLength(expected);
+    }
     expect(details.textContent).toContain('Unclassified Voice');
     expect(details.textContent).toContain('Голос 音楽 80');
   } finally {

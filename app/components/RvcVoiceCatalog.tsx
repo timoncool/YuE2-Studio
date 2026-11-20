@@ -33,6 +33,11 @@ export function RvcVoiceCatalog({ card, control }: { card: string; control: stri
     localStorage.setItem(STORAGE, id);
   }
 
+  function chooseInstalled(id: string) {
+    choose(id);
+    if (!voices?.some(voice => voice.id === id)) setCatalogRequest(request => request + 1);
+  }
+
   function acceptVoice(voice: Voice) {
     setVoices(current => [...(current ?? []).filter(item => item.id !== voice.id), voice]
       .sort((a, b) => voiceName(a).localeCompare(voiceName(b), language)));
@@ -97,7 +102,7 @@ export function RvcVoiceCatalog({ card, control }: { card: string; control: stri
           {labels.retry}
         </button>
       )}
-      <RvcCuratedVoices onInstalled={acceptVoice} disabled={!voices || busy} />
+      <RvcCuratedVoices onInstalled={acceptVoice} onChoose={chooseInstalled} disabled={!voices || busy} />
     </section>
   );
 }
