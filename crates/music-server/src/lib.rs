@@ -11301,7 +11301,7 @@ async fn follow_job(state: &AppState, job_id: &str, started: &mut Option<Option<
                     // job the engine answers it does not know was lost with
                     // the process that had it, and the log of that process
                     // says why.
-                    let forgotten = error.to_string().starts_with("yue-server returned 404");
+                    let forgotten = engine_http_status(&error) == Some(StatusCode::NOT_FOUND);
                     unreachable += 1;
                     if forgotten || unreachable >= 60 {
                         if let Some(job) = state.jobs.write().await.get_mut(&job_id) {
@@ -12019,7 +12019,16 @@ async fn read_engine_score(engine: &EngineClient, id: &str) -> Result<ScoreJob, 
     let mut job = ScoreJob { status: remote.status, ..ScoreJob::running(id.into()) };
     match job.status.as_str() {
         "done" => {
-            let result = engine.result(id).await.map_err(|error| (StatusCode::BAD_GATEWAY, error.to_string()))?;
+            // The worker may finish before a transient transport error interrupts delivery of its result.
+            // A later read can still fetch the score from the native job table.
+            let result = engine.result(id).await.map_err(|error| {
+                let status = match engine_http_status(&error) {
+                    Some(StatusCode::NOT_FOUND) => StatusCode::NOT_FOUND,
+                    Some(status) if status.is_client_error() => StatusCode::BAD_GATEWAY,
+                    _ => StatusCode::SERVICE_UNAVAILABLE,
+                };
+                (status, error.to_string())
+            })?;
             let (abc, lm_seed) = score_from_result(&result.content_type, &result.body).map_err(|error| (StatusCode::BAD_GATEWAY, error))?;
             job.abc = Some(abc);
             job.lm_seed = lm_seed;
@@ -12058,6 +12067,24 @@ async fn cancel_score_job(
             Err(api_error(StatusCode::SERVICE_UNAVAILABLE, error.to_string()))
         }
     }
+}
+
+async fn engine_http_error(response: reqwest::Response) -> anyhow::Error {
+    let status = response.status();
+    let cause = response.error_for_status_ref().err();
+    let body = response.text().await.unwrap_or_default();
+    let detail = serde_json::from_str::<Value>(&body).ok()
+        .and_then(|json| json.get("error").and_then(Value::as_str).map(str::to_owned))
+        .unwrap_or(body);
+    let message = format!("yue-server returned {status}: {detail}");
+    match cause {
+        Some(cause) => anyhow::Error::new(cause).context(message),
+        None => anyhow::anyhow!(message),
+    }
+}
+
+fn engine_http_status(error: &anyhow::Error) -> Option<StatusCode> {
+    error.downcast_ref::<reqwest::Error>().and_then(reqwest::Error::status)
 }
 
 impl EngineClient {
@@ -12169,25 +12196,18 @@ impl EngineClient {
 
     async fn result_of(&self, query: &[(&str, &str)]) -> anyhow::Result<EngineResultResponse> {
         let response = self.send(self.http.get(self.url("/job")).query(query), true).await?;
-        let status = response.status();
-        if !status.is_success() {
-            anyhow::bail!("yue-server returned {status}: {}", response.text().await?);
+        if !response.status().is_success() {
+            return Err(engine_http_error(response).await);
         }
         let content_type = response.headers().get(reqwest::header::CONTENT_TYPE).and_then(|value| value.to_str().ok()).unwrap_or("").to_owned();
         Ok(EngineResultResponse { content_type, body: response.bytes().await?.to_vec() })
     }
 
     async fn json_response<T: serde::de::DeserializeOwned>(&self, response: reqwest::Response) -> anyhow::Result<T> {
-        let status = response.status();
-        let body = response.text().await?;
-        if !status.is_success() {
-            let message = serde_json::from_str::<Value>(&body)
-                .ok()
-                .and_then(|value| value.get("error").and_then(Value::as_str).map(str::to_owned))
-                .unwrap_or(body);
-            anyhow::bail!("yue-server returned {status}: {message}");
+        if !response.status().is_success() {
+            return Err(engine_http_error(response).await);
         }
-        Ok(serde_json::from_str(&body)?)
+        Ok(serde_json::from_str(&response.text().await?)?)
     }
 
     fn url(&self, path: &str) -> String {
@@ -13044,6 +13064,44 @@ mod tests {
         assert_eq!(extension_that_fits(30.0, 300.0, 299.0), Some(20.0));
         assert_eq!(extension_that_fits(10.0, 250.0, 241.0), None);
         assert_eq!(extension_that_fits(10.0, 100.0, 400.0), None, "a refusal that leaves room for all of it is not this one");
+    }
+
+    #[tokio::test]
+    async fn score_result_can_be_read_again_after_a_transient_engine_error() {
+        use std::sync::atomic::{AtomicBool, Ordering};
+
+        let first = Arc::new(AtomicBool::new(true));
+        let app = Router::new().route("/job", get(move |uri: axum::http::Uri| {
+            let first = first.clone();
+            async move {
+                let query = uri.query().unwrap_or_default();
+                if query.contains("id=missing") {
+                    return (StatusCode::NOT_FOUND, Json(serde_json::json!({ "error": "job not found" })));
+                }
+                if !query.contains("result=1") {
+                    return (StatusCode::OK, Json(serde_json::json!({ "status": "done" })));
+                }
+                if first.swap(false, Ordering::SeqCst) {
+                    return (StatusCode::SERVICE_UNAVAILABLE, Json(serde_json::json!({ "error": "temporarily unavailable" })));
+                }
+                (StatusCode::OK, Json(serde_json::json!({ "abc": "X:1\nK:C\nCDEF|" })))
+            }
+        }));
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let engine = EngineClient {
+            base_url: format!("http://{}", listener.local_addr().unwrap()),
+            http: reqwest::Client::builder().no_proxy().build().unwrap(),
+            health_cache: Default::default(),
+        };
+        let server = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+        let failure = read_engine_score(&engine, "score").await.unwrap_err();
+        assert_eq!(failure.0, StatusCode::SERVICE_UNAVAILABLE);
+        assert!(failure.1.contains("temporarily unavailable"));
+        assert_eq!(read_engine_score(&engine, "score").await.unwrap().abc.as_deref(), Some("X:1\nK:C\nCDEF|"));
+        let missing = engine.job("missing").await.unwrap_err();
+        assert_eq!(engine_http_status(&missing), Some(StatusCode::NOT_FOUND));
+        assert!(missing.to_string().contains("job not found"));
+        server.abort();
     }
 
     #[tokio::test]
