@@ -10787,6 +10787,9 @@ async fn create_openrouter_music_job(
     let rejected = |reason: String| {
         (StatusCode::BAD_REQUEST, Json(failed_request_job(request.clone(), "openrouter".into(), reason)))
     };
+    if request.style.trim().is_empty() && request.lyrics.trim().is_empty() {
+        return rejected("Write a style or lyrics before starting cloud music generation.".into());
+    }
     if request.semantic_tokens.is_some() || request.cover_of.is_some() {
         return rejected("OpenRouter music accepts a new song, without YuE2 replay tokens or a cover source.".into());
     }
@@ -10871,10 +10874,8 @@ async fn run_openrouter_music_generation(
             sse.extend_from_slice(&chunk);
         }
         let audio = openrouter_stream::decode_audio_sse(&sse)?;
-        if audio.get(..4) != Some(b"RIFF") || audio.get(8..12) != Some(b"WAVE") {
-            anyhow::bail!("OpenRouter music stream did not return WAV audio");
-        }
-        Ok::<_, anyhow::Error>(audio)
+        let duration = openrouter_stream::wav_duration(&audio)?;
+        Ok::<_, anyhow::Error>((audio, duration))
     };
     let audio = tokio::select! {
         biased;
@@ -10892,8 +10893,7 @@ async fn run_openrouter_music_generation(
     if !matches!(job.status, MusicJobStatus::Running) {
         return;
     }
-    let outcome = audio.and_then(|audio| {
-        let duration = library::audio_duration_seconds(&audio, "wav", None);
+    let outcome = audio.and_then(|(audio, duration)| {
         let imported = state.library.import_generated_song(library::GeneratedSongInput {
             title: job.title.clone(),
             metadata: serde_json::json!({"duration_seconds": duration, "cover_prompt": job.cover_prompt, "job_id": job_id}),
@@ -10923,9 +10923,7 @@ async fn run_openrouter_music_generation(
     match outcome {
         Ok((song, duration)) => {
             let song_id = song.id.clone();
-            if let Some(duration) = duration {
-                job.duration_seconds = duration;
-            }
+            job.duration_seconds = duration;
             job.status = MusicJobStatus::Completed;
             job.phase = MusicJobPhase::Completed;
             job.song = Some(song.clone());

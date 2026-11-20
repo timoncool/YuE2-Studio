@@ -28,6 +28,22 @@ pub fn decode_audio_sse(body: &[u8]) -> Result<Vec<u8>> {
     STANDARD.decode(encoded).context("OpenRouter delta.audio.data is not valid base64")
 }
 
+/// Validate the full PCM payload before publishing a library song. A correct
+/// header can still declare more frames than the provider actually delivered.
+pub fn wav_duration(audio: &[u8]) -> Result<f64> {
+    let mut reader = hound::WavReader::new(audio).context("invalid OpenRouter WAV header")?;
+    let spec = reader.spec();
+    if spec.sample_rate == 0 || reader.duration() == 0 {
+        bail!("OpenRouter returned an empty WAV or invalid sample rate");
+    }
+    let duration = f64::from(reader.duration()) / f64::from(spec.sample_rate);
+    match spec.sample_format {
+        hound::SampleFormat::Int => reader.samples::<i32>().try_for_each(|sample| sample.map(drop)),
+        hound::SampleFormat::Float => reader.samples::<f32>().try_for_each(|sample| sample.map(drop)),
+    }.context("invalid OpenRouter WAV samples")?;
+    Ok(duration)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -47,6 +63,18 @@ mod tests {
             );
             assert!(decode_audio_sse(body.as_bytes()).unwrap_err().to_string().contains("generation failed"));
         }
+    }
+    #[test]
+    fn requires_complete_nonempty_wav_frames() {
+        let mut audio = std::io::Cursor::new(Vec::new());
+        let spec = hound::WavSpec { channels: 1, sample_rate: 8000, bits_per_sample: 16, sample_format: hound::SampleFormat::Int };
+        let mut writer = hound::WavWriter::new(&mut audio, spec).unwrap();
+        writer.write_sample(1_i16).unwrap();
+        writer.finalize().unwrap();
+        let complete = audio.into_inner();
+        assert_eq!(wav_duration(&complete).unwrap(), 1.0 / 8000.0);
+        assert!(wav_duration(&complete[..complete.len()-1]).is_err());
+        assert!(wav_duration(b"RIFF\x04\0\0\0WAVE").is_err());
     }
     #[test]
     fn rejects_incomplete_streams() { assert!(decode_audio_sse(b"data: {}\n").is_err()); }
