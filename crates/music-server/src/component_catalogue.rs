@@ -7,12 +7,39 @@ use std::sync::OnceLock;
 pub(crate) struct Catalogue {
     schema: u32,
     revision: u64,
+    #[serde(deserialize_with = "unique_archives")]
     archives: BTreeMap<String, Archive>,
 }
 
 #[derive(Deserialize)]
 struct Archive {
     sources: Vec<String>,
+}
+
+fn unique_archives<'de, D>(deserializer: D) -> Result<BTreeMap<String, Archive>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    struct Archives;
+    impl<'de> serde::de::Visitor<'de> for Archives {
+        type Value = BTreeMap<String, Archive>;
+        fn expecting(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            formatter.write_str("an archive map with distinct SHA-256 keys")
+        }
+        fn visit_map<M: serde::de::MapAccess<'de>>(
+            self,
+            mut map: M,
+        ) -> Result<Self::Value, M::Error> {
+            let mut archives = BTreeMap::new();
+            while let Some((digest, archive)) = map.next_entry()? {
+                if archives.insert(digest, archive).is_some() {
+                    return Err(serde::de::Error::custom("duplicate archive SHA-256"));
+                }
+            }
+            Ok(archives)
+        }
+    }
+    deserializer.deserialize_map(Archives)
 }
 
 impl Catalogue {
@@ -76,6 +103,19 @@ pub(crate) fn bundled() -> &'static Catalogue {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn duplicate_archive_cannot_replace_a_source_list() {
+        let entry = format!(
+            r#""{}":{{"sources":["https://mirror.example/file"]}}"#,
+            "a".repeat(64)
+        );
+        let json = format!(r#"{{"schema":1,"revision":1,"archives":{{{entry},{entry}}}}}"#);
+        assert!(
+            format!("{:#}", Catalogue::parse(json.as_bytes()).err().unwrap())
+                .contains("duplicate archive SHA-256")
+        );
+    }
 
     #[test]
     fn validates_the_whole_revision_before_returning_any_sources() {
