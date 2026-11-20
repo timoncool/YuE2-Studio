@@ -9610,7 +9610,14 @@ fn adopt_optional_file(source: &std::path::Path, target: &std::path::Path, sha: 
         if same_file::is_same_file(source, target)? || install_record::sha256_of(target).is_ok_and(|value| value == sha) {
             return Ok(false);
         }
-        return Err(std::io::Error::new(std::io::ErrorKind::InvalidData, format!("SHA-256 mismatch in the installed file: {}", target.display())));
+        // An older build may have the same name. Keep it usable until its
+        // replacement has been staged and verified on the destination volume.
+        let parent = target.parent().ok_or_else(|| std::io::Error::other("component file has no parent directory"))?;
+        let staging = tempfile::tempdir_in(parent)?;
+        let checked = staging.path().join("verified");
+        studio_hub_client::neighbors::take_file(source, &checked, true, |file| install_record::sha256_of(file).is_ok_and(|value| value == sha))?;
+        std::fs::rename(checked, target)?;
+        return Ok(true);
     }
     studio_hub_client::neighbors::take_file(source, target, true, |file| install_record::sha256_of(file).is_ok_and(|value| value == sha))?;
     Ok(true)
@@ -9653,7 +9660,6 @@ async fn setup_adopt(State(state): State<AppState>, body: axum::body::Bytes) -> 
     let Some(models_root) = studio_data_root().map(|root| root.join("models").join(model_manager::ENGINE_ID)) else {
         return Err(api_error(StatusCode::INTERNAL_SERVER_ERROR, "the studio has no data directory".into()));
     };
-    let catalog = state.model_manager.catalog();
     // a folder an agent names is taken as it is; the window asks the user
     let named = serde_json::from_slice::<Value>(&body).ok().and_then(|value| value.get("path").and_then(Value::as_str).map(std::path::PathBuf::from));
     let picked = match named {
@@ -9669,7 +9675,15 @@ async fn setup_adopt(State(state): State<AppState>, body: axum::body::Bytes) -> 
         return Ok(Json(serde_json::json!({ "picked": false, "adopted": [] })));
     };
 
-    let _ = std::fs::create_dir_all(&models_root);
+    // Installation owns its progress until the last archive is recorded, even if
+    // the settings window closes and drops this HTTP request during extraction.
+    tokio::spawn(adopt_library(state, folder, models_root)).await
+        .map_err(|error| api_error(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?
+}
+
+async fn adopt_library(state: AppState, folder: PathBuf, models_root: PathBuf) -> Result<Json<Value>, (StatusCode, Json<ApiError>)> {
+    let catalog = state.model_manager.catalog();
+    std::fs::create_dir_all(&models_root).map_err(|error| api_error(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?;
     std::fs::read_dir(&folder).map_err(|error| api_error(StatusCode::BAD_REQUEST, error.to_string()))?;
     // Model sets are often kept one component per folder, so the picked
     // folder is searched with its subfolders.
@@ -13171,8 +13185,11 @@ mod tests {
         assert_eq!(std::fs::read(&second).unwrap(), b"new");
         std::fs::remove_file(&target).unwrap();
         std::fs::write(&target, b"bad").unwrap();
-        assert!(adopt_optional_file(&second, &target, &sha).is_err());
+        assert!(adopt_optional_file(&first, &target, &sha).is_err());
         assert_eq!(std::fs::read(&target).unwrap(), b"bad");
+        assert!(adopt_optional_file(&second, &target, &sha).unwrap());
+        assert_eq!(std::fs::read(&target).unwrap(), b"new");
+        assert_eq!(std::fs::read(&first).unwrap(), b"old");
     }
 
     #[test]
