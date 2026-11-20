@@ -10816,7 +10816,7 @@ async fn create_openrouter_music_job(
         style: request.style.clone(),
         lyrics: request.lyrics.clone(),
         duration_seconds: request.duration_seconds.unwrap_or_default(),
-        generation_settings: serde_json::json!({"model": model, "request": request}),
+        generation_settings: serde_json::json!({"model": model, "model_name": catalog.models.iter().find(|entry| entry.id == model).map(|entry| &entry.name), "request": request}),
         song: None,
         songs: Vec::new(),
         message: "OpenRouter music generation started.".into(),

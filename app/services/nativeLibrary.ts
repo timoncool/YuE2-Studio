@@ -49,6 +49,13 @@ export function cloudMusicModel(song: Song): string | undefined {
   return song.ditModel === 'openrouter' && typeof model === 'string' && model.trim() ? model : undefined;
 }
 
+/** Save the provider's spelling with each take; older library records have only the ID. */
+export function cloudMusicModelName(song: Song): string | undefined {
+  if (song.ditModel !== 'openrouter') return undefined;
+  const name = song.generationParams?.model_name;
+  return typeof name === 'string' && name.trim() ? name : cloudMusicModel(song);
+}
+
 export function mapNativeLibrarySong(song: NativeLibrarySong): Song {
   const metadata = song.metadata ?? {};
   const tags = Array.isArray(metadata.tags) ? metadata.tags.filter((tag): tag is string => typeof tag === 'string') : [];

@@ -40,12 +40,16 @@ function item(isCurrent: boolean, isPlaying: boolean, onPlay: () => void, track 
   );
 }
 
-it('shows the music provider and recorded model on a cloud take', () => {
+it.each([
+  ['Studio Song Pro', 'Studio Song Pro'],
+  [undefined, 'provider/song-model'],
+])('shows the recorded cloud model name with a fallback for older takes (%s)', (name, shown) => {
   act(() => root.render(item(false, false, vi.fn(), {
-    ...song, ditModel: 'openrouter', generationParams: { model: 'provider/song-model' },
+    ...song, ditModel: 'openrouter', generationParams: { model: 'provider/song-model', model_name: name },
   })));
   expect(host.textContent).toContain('OpenRouter');
-  expect(host.textContent).toContain('provider/song-model');
+  expect(host.textContent).toContain(shown);
+  expect(host.querySelector('[title="provider/song-model"]')).not.toBeNull();
   expect(host.textContent).not.toContain('YuE2');
 });
 
