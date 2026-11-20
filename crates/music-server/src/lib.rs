@@ -9654,7 +9654,7 @@ async fn setup_adopt(State(state): State<AppState>, body: axum::body::Bytes) -> 
     let components = catalog.components.clone();
     let root = models_root.clone();
     let optional_state = state.clone();
-    let (adopted, copied, refused, verified_optional) = tokio::task::spawn_blocking(move || {
+    let (mut adopted, copied, mut refused, mut verified_optional, archives) = tokio::task::spawn_blocking(move || {
         let found = adoptable_sources(&components, &root, &entries);
         let mut taken: Vec<std::path::PathBuf> = found.iter().map(|(_, source)| source.clone()).collect();
         let mut adopted = Vec::new();
@@ -9662,6 +9662,9 @@ async fn setup_adopt(State(state): State<AppState>, body: axum::body::Bytes) -> 
         let mut copied = Vec::new();
         let mut by_name = std::collections::HashMap::<std::ffi::OsString, Vec<(&'static str, &'static str, std::path::PathBuf)>>::new();
         let mut errors = Vec::new();
+        let mut archives_by_name = std::collections::HashMap::<std::ffi::OsString, Vec<(update_screen::Part, &'static downloads::Asset)>>::new();
+        let mut pending_archives = Vec::new();
+        let mut archive_targets = std::collections::HashSet::new();
         let mut checked = std::collections::HashSet::new();
         let mut register = |id: &'static str, digest: Option<&'static str>, target: std::path::PathBuf| {
             let Some(sha) = digest else { return };
@@ -9681,6 +9684,14 @@ async fn setup_adopt(State(state): State<AppState>, body: axum::body::Bytes) -> 
                 if asset.pick.is_empty() && asset.unzip_into.is_none() {
                     register(asset.id, pin_sha::sha256(asset.url), downloader.path_of(asset));
                 }
+                if let Some(release_name) = downloads::release_archive_name(asset) {
+                    let target = downloader.path_of(asset);
+                    let mut names = vec![std::ffi::OsString::from(release_name)];
+                    if let Some(name) = target.file_name().filter(|name| *name != release_name) { names.push(name.to_owned()); }
+                    for name in names {
+                        archives_by_name.entry(name).or_default().push((part, asset));
+                    }
+                }
                 for entry in asset.pick {
                     let name = downloads::picked_file_name(entry);
                     register(asset.id, pin_sha::picked(asset.url, name), downloader.picked_into(asset).join(name));
@@ -9688,12 +9699,25 @@ async fn setup_adopt(State(state): State<AppState>, body: axum::body::Bytes) -> 
             }
         }
         for source in &entries {
-            let Some(candidates) = source.file_name().and_then(|name| by_name.get(name)) else { continue };
+            let Some(name) = source.file_name() else { continue };
+            let files = by_name.get(name).map(Vec::as_slice).unwrap_or_default();
+            let archives = archives_by_name.get(name).map(Vec::as_slice).unwrap_or_default();
+            if files.is_empty() && archives.is_empty() { continue; }
             taken.push(source.clone());
             let result = (|| -> anyhow::Result<()> {
                 let digest = install_record::sha256_of(source)?;
                 let mut matched = false;
-                for (id, sha, target) in candidates {
+                for &(part, asset) in archives {
+                    if pin_sha::sha256(asset.url) == Some(digest.as_str()) {
+                        matched = true;
+                        if let Some((downloader, _)) = update_downloader(&optional_state, part) {
+                            if archive_targets.insert((downloader.path_of(asset), asset.url)) {
+                                pending_archives.push((part, asset, source.clone()));
+                            }
+                        }
+                    }
+                }
+                for (id, sha, target) in files {
                     if *sha != digest { continue; }
                     matched = true;
                     let placed = adopt_optional_file(source, target, sha)?;
@@ -9733,11 +9757,22 @@ async fn setup_adopt(State(state): State<AppState>, body: axum::body::Bytes) -> 
                 errors.push(serde_json::json!({ "file": component.filename, "kind": "copy", "error": error.to_string() }));
             }
         }
-        (adopted, copied, errors, verified_optional.len())
+        (adopted, copied, errors, verified_optional.len(), pending_archives)
     })
     .await
     .map_err(|error| api_error(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?;
 
+    for (part, asset, source) in archives {
+        let Some((downloader, scope)) = update_downloader(&state, part) else { continue };
+        let was_installed = downloader.is_installed(asset);
+        match downloader.install_local_archive(scope, asset, &source).await {
+            Ok(()) => {
+                verified_optional += 1;
+                if !was_installed { adopted.push(asset.id.to_owned()); }
+            }
+            Err(error) => refused.push(serde_json::json!({ "file": source, "kind": "copy", "error": format!("{error:#}") })),
+        }
+    }
     let target = effective_install_target(&state).await;
     let status = state.model_manager.status(target).await;
     Ok(Json(serde_json::json!({
