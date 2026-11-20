@@ -736,10 +736,9 @@ const SongsStep: React.FC<{
 };
 
 /** Step two: what will be trained, checked, and the button that starts it. */
-const TrainStep: React.FC<{ state: TrainingState; dataset: Dataset; job: PrepareStatus | null; onBack: () => void; onStarted: () => void; onChanged: (dataset: Dataset) => void; onRefresh: () => void; onError: (message: string) => void }> = ({ state, dataset, job, onBack, onStarted, onChanged, onRefresh, onError }) => {
+const TrainStep: React.FC<{ state: TrainingState; recipe: Recipe; setRecipe: (recipe: Recipe) => void; dataset: Dataset; job: PrepareStatus | null; onBack: () => void; onStarted: () => void; onChanged: (dataset: Dataset) => void; onRefresh: () => void; onError: (message: string) => void }> = ({ state, recipe, setRecipe, dataset, job, onBack, onStarted, onChanged, onRefresh, onError }) => {
   const { t, songs } = useStrings();
   const [advanced, setAdvanced] = useState(false);
-  const [recipe, setRecipe] = useState<Recipe | null>(null);
   const [starting, setStarting] = useState(false);
   const unsung = dataset.items.filter(item => item.lyrics_state === 'wanted').length;
   const unlaid = dataset.items.filter(item => item.lyrics_state === 'found').length;
@@ -751,12 +750,11 @@ const TrainStep: React.FC<{ state: TrainingState; dataset: Dataset; job: Prepare
   const preparing = Boolean(job && !job.finished);
   const blocker = !dataset.items.length ? t('trainingNeedSongs') : lyricsProblem ? lyricsProblem : preparing ? t('trainingWaitPrepare') : state.active ? t('trainingBusy') : null;
   // only the previous recipe's lyric timing reads separated vocals
-  const chosen = recipe ?? state.recipe_defaults;
-  const packReady = state.pack_ready && (state.separator_ready || String(chosen.preset) !== 'tuned' || chosen.lyric_timing !== true);
+  const packReady = state.pack_ready && (state.separator_ready || String(recipe.preset) !== 'tuned' || recipe.lyric_timing !== true);
   const start = async () => {
     setStarting(true);
     try {
-      await startRun(dataset.id, dataset.name, recipe ?? state.recipe_defaults);
+      await startRun(dataset.id, dataset.name, recipe);
       onStarted();
     } catch (problem) {
       onError(errorText(problem));
@@ -794,19 +792,19 @@ const TrainStep: React.FC<{ state: TrainingState; dataset: Dataset; job: Prepare
             <Check size={13} />{t('trainingTakeAsIs')}
           </button>
         )}
-        <RecipeForm recipe={recipe ?? state.recipe_defaults} defaults={state.recipe_defaults} fields={state.recipe_fields} onChange={setRecipe} only={['stop']} />
-        {(recipe ?? state.recipe_defaults).stop === 'epochs' && (
+        <RecipeForm recipe={recipe} defaults={state.recipe_defaults} fields={state.recipe_fields} onChange={setRecipe} only={['stop']} />
+        {recipe.stop === 'epochs' && (
           <p className={HINT}>
             {t('trainingEpochSteps')
-              .replace('{epochs}', String((recipe ?? state.recipe_defaults).epochs))
+              .replace('{epochs}', String(recipe.epochs))
               .replace('{songs}', String(dataset.items.length))
-              .replace('{steps}', String(Number((recipe ?? state.recipe_defaults).epochs) * dataset.items.length))}
+              .replace('{steps}', String(Number(recipe.epochs) * dataset.items.length))}
           </p>
         )}
         <button type="button" onClick={() => setAdvanced(value => !value)} className="mt-4 inline-flex items-center gap-1 text-xs font-semibold text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200" aria-expanded={advanced}>
           <ChevronDown size={13} className={`transition-transform ${advanced ? 'rotate-180' : ''}`} />{t('trainingAdvanced')}
         </button>
-        {advanced && <RecipeForm recipe={recipe ?? state.recipe_defaults} defaults={state.recipe_defaults} fields={state.recipe_fields} onChange={setRecipe} except={['stop']} />}
+        {advanced && <RecipeForm recipe={recipe} defaults={state.recipe_defaults} fields={state.recipe_fields} onChange={setRecipe} except={['stop']} />}
       </section>
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-zinc-200 bg-white/90 p-3 dark:border-white/10 dark:bg-zinc-950/90">
         <button type="button" onClick={onBack} className={OUTLINE}><ChevronLeft size={14} />{t('trainingBackSongs')}</button>
@@ -1077,6 +1075,7 @@ export const TrainingPanel: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [openId, setOpenId] = useState<string | null>(null);
   const [step, setStep] = useState<Step>('songs');
+  const [recipes, setRecipes] = useState<Record<string, Recipe>>({});
   const [adding, setAdding] = useState<{ done: number; total: number } | null>(null);
   const [importing, setImporting] = useState(false);
   const [deleting, setDeleting] = useState<{ kind: 'dataset' | 'run'; id: string } | null>(null);
@@ -1170,7 +1169,7 @@ export const TrainingPanel: React.FC = () => {
   const trainAfter = async (on: boolean) => {
     if (!dataset || !state) return;
     try {
-      await setTrainAfter(on ? { name: dataset.name, recipe: state.recipe_defaults } : null);
+      await setTrainAfter(on ? { name: dataset.name, recipe: recipes[dataset.id] ?? state.recipe_defaults } : null);
       await refresh();
     } catch (problem) {
       setError(errorText(problem));
@@ -1263,7 +1262,7 @@ export const TrainingPanel: React.FC = () => {
           onError={setError}
         />
       )}
-      {dataset && step === 'train' && <TrainStep state={state} dataset={dataset} job={job} onBack={() => setStep('songs')} onStarted={() => { setStep('result'); void refresh(); }} onChanged={replace} onRefresh={() => void refresh()} onError={setError} />}
+      {dataset && step === 'train' && <TrainStep state={state} recipe={recipes[dataset.id] ?? state.recipe_defaults} setRecipe={next => setRecipes(current => ({ ...current, [dataset.id]: next }))} dataset={dataset} job={job} onBack={() => setStep('songs')} onStarted={() => { setStep('result'); void refresh(); }} onChanged={replace} onRefresh={() => void refresh()} onError={setError} />}
       {dataset && step === 'result' && (
         <div className="space-y-3">
           {runs.length === 0 && <p className="text-sm text-zinc-500">{t('trainingNoRuns')}</p>}
