@@ -12,6 +12,13 @@ pub fn decode_audio_sse(body: &[u8]) -> Result<Vec<u8>> {
         let data = data.trim_start();
         if data == "[DONE]" { saw_done = true; break; }
         let event: serde_json::Value = serde_json::from_str(data).context("invalid JSON event in OpenRouter music stream")?;
+        if event.get("error").is_some_and(|error| !error.is_null())
+            || event.pointer("/choices/0/finish_reason").and_then(serde_json::Value::as_str) == Some("error")
+        {
+            let message = event.pointer("/error/message").and_then(serde_json::Value::as_str)
+                .unwrap_or("the provider stopped before completing the audio");
+            bail!("OpenRouter music generation failed: {message}");
+        }
         if let Some(chunk) = event.pointer("/choices/0/delta/audio/data").and_then(serde_json::Value::as_str) {
             encoded.push_str(chunk);
         }
@@ -28,6 +35,18 @@ mod tests {
     fn joins_audio_data_across_sse_events() {
         let body = b"data: {\"choices\":[{\"delta\":{\"audio\":{\"data\":\"SU\"}}}]}\n\ndata: {\"choices\":[{\"delta\":{\"audio\":{\"data\":\"Qz\"}}}]}\n\ndata: [DONE]\n";
         assert_eq!(decode_audio_sse(body).unwrap(), b"ID3");
+    }
+    #[test]
+    fn rejects_provider_failure_after_audio() {
+        for failure in [
+            r#"{"error":{"message":"stream interrupted"}}"#,
+            r#"{"choices":[{"finish_reason":"error"}]}"#,
+        ] {
+            let body = format!(
+                "data: {{\"choices\":[{{\"delta\":{{\"audio\":{{\"data\":\"UklGRg==\"}}}}}}]}}\n\ndata: {failure}\n\ndata: [DONE]\n"
+            );
+            assert!(decode_audio_sse(body.as_bytes()).unwrap_err().to_string().contains("generation failed"));
+        }
     }
     #[test]
     fn rejects_incomplete_streams() { assert!(decode_audio_sse(b"data: {}\n").is_err()); }
