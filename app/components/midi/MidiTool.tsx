@@ -7,6 +7,7 @@ import { apiUrl } from '../../services/apiBase';
 import { MidiEditor } from './MidiEditor';
 import { MidiPlayer, type HeardNote } from './MidiPlayer';
 import { WorkProgress } from '../WorkProgress';
+import { ManualRuntimeArchive, type RuntimeArchive } from '../ManualDownloads';
 
 /**
  * Audio to MIDI on the tools page, for the track chosen there: a song, a
@@ -48,7 +49,7 @@ interface MidiStatus {
   tool_installed: boolean;
   sizes: MidiSize[];
   default_size: MidiSize['id'];
-  download: { downloaded_bytes: number; total_bytes: number; done: boolean; error: string | null } | null;
+  download: { downloaded_bytes: number; total_bytes: number; done: boolean; error: string | null; manual_archive?: RuntimeArchive | null } | null;
   run: MidiRun | null;
   license: string;
 }
@@ -199,6 +200,10 @@ export const MidiTool: React.FC<{ songId: string; songTitle: string; card: strin
             </button>
           </p>
         )}
+        {missing > 0 && status?.download?.error && <>
+          <p role="alert" className="mt-2 text-xs text-rose-600">{status.download.error}</p>
+          <ManualRuntimeArchive archive={status.download.manual_archive} retryLabel={t('midiInstallNow')} />
+        </>}
         {download && !running && (
           <p className="mt-2 text-[11px] tabular-nums text-zinc-500">
             {t('midiDownloading')} {gigabytes(download.downloaded_bytes)} / {gigabytes(download.total_bytes)}

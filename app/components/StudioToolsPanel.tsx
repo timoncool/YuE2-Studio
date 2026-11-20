@@ -21,6 +21,7 @@ import { ConfirmDialog } from './ConfirmDialog';
 import { MidiTool } from './midi/MidiTool';
 import { MidiEditor } from './midi/MidiEditor';
 import { WorkProgress } from './WorkProgress';
+import { ManualRuntimeArchive, type RuntimeArchive } from './ManualDownloads';
 
 /**
  * Studio tools.
@@ -42,7 +43,7 @@ interface SeparationStatus {
   missing_bytes?: number;
   ready: boolean;
   stems: string[];
-  download: { downloaded_bytes: number; total_bytes: number; done: boolean; error?: string | null } | null;
+  download: { downloaded_bytes: number; total_bytes: number; done: boolean; error?: string | null; manual_archive?: RuntimeArchive | null } | null;
   /** The card audio.cpp separates on: CUDA on an NVIDIA card that runs it, Vulkan on another make, Metal on a Mac. */
   card: 'cuda' | 'vulkan' | 'metal' | null;
   card_runtime_installed: boolean;
@@ -414,7 +415,10 @@ export function StudioToolsPanel({ initialSongId }: { initialSongId?: string | n
               <p className="text-xs leading-5 text-zinc-600 dark:text-zinc-300">
                 {status.model.label} · {megabytes(status.model.bytes)} — {status.model.note}
               </p>
-              {download?.error && <p role="alert" className="mt-2 text-xs text-rose-600">{download.error}</p>}
+              {download?.error && <>
+                <p role="alert" className="mt-2 text-xs text-rose-600">{download.error}</p>
+                <ManualRuntimeArchive archive={download.manual_archive} />
+              </>}
               {download && !download.done ? (
                 <div className="mt-2">
                   <div className="h-1.5 overflow-hidden rounded-full bg-zinc-200 dark:bg-black/30">

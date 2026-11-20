@@ -6,6 +6,7 @@ import { saveFile } from '../services/saveFile';
 import { SELF_READ } from '../services/studioQueries';
 import { audioFormatFor, base64For } from '../services/nativeOpenRouter';
 import { ConfirmDialog } from './ConfirmDialog';
+import { ManualRuntimeArchive, type RuntimeArchive } from './ManualDownloads';
 import { StemPlayer } from './StemPlayer';
 import { WorkProgress } from './WorkProgress';
 
@@ -31,7 +32,7 @@ export interface RestoreStatus {
   ready: boolean;
   missing_bytes: number;
   error: string | null;
-  download: { downloaded_bytes: number; total_bytes: number; done: boolean; error: string | null } | null;
+  download: { downloaded_bytes: number; total_bytes: number; done: boolean; error: string | null; manual_archive?: RuntimeArchive | null } | null;
   run: RestoreRun | null;
 }
 
@@ -164,6 +165,10 @@ export const RestoreTool: React.FC<{
           <p className="text-xs leading-5 text-zinc-600 dark:text-zinc-300">
             {status.model.label} · {megabytes(status.missing_bytes)}
           </p>
+          {status.download?.error && <>
+            <p role="alert" className="mt-2 text-xs text-rose-600">{status.download.error}</p>
+            <ManualRuntimeArchive archive={status.download.manual_archive} retryLabel={t('restoreInstall').replace('{size}', megabytes(status.missing_bytes))} />
+          </>}
           {download ? (
             <div className="mt-2 flex items-center gap-2">
               <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-zinc-200 dark:bg-black/30">
