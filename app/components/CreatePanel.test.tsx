@@ -123,6 +123,31 @@ describe('an instrumental (#217)', () => {
 });
 
 describe('selecting a second cover source', () => {
+  it('keeps the edited style while a newer description is pending', async () => {
+    const song = { id: 'cover', title: 'Cover', lyrics: '' } as Song;
+    act(() => root.render(panel({ request: { id: 1, kind: 'transcribe', song, melodyOnly: true } })));
+    await flush();
+    const replies: ((response: Response) => void)[] = [];
+    const signals: AbortSignal[] = [];
+    vi.mocked(fetch).mockImplementation(async (url, options) => {
+      if (!String(url).endsWith('/describe-style')) return Response.json({});
+      signals.push(options!.signal!);
+      return new Promise(resolve => replies.push(resolve));
+    });
+    const button = buttonNamed('describeByEar')!;
+    const style = field('textarea[aria-label="styleCardTitle"]')!;
+    click(button);
+    type(style, 'my edited style');
+    expect(signals[0].aborted).toBe(true);
+    click(button);
+    await act(async () => replies[0](Response.json({ style: 'stale result' })));
+    expect(style.value).toBe('my edited style');
+    expect(button.disabled).toBe(true);
+    await act(async () => replies[1](Response.json({ style: 'new result' })));
+    expect(style.value).toBe('new result');
+    expect(button.disabled).toBe(false);
+  });
+
   it('keeps the second score when the first recording finishes last', async () => {
     const first = { id: 'a', title: 'A', lyrics: '' } as Song;
     const second = { id: 'b', title: 'B', lyrics: '' } as Song;

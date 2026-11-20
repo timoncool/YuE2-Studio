@@ -1096,27 +1096,41 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
   };
 
   const [describing, setDescribing] = useState(false);
+  const descriptionRun = useRef<AbortController | null>(null);
+  React.useLayoutEffect(() => {
+    setDescribing(false);
+    return () => {
+      descriptionRun.current?.abort();
+      descriptionRun.current = null;
+    };
+  }, [coverSongId, coverFile, mode, lyrics, style]);
   const describeByEar = async () => {
-    if (!coverSongId && !coverFile) return;
+    if (descriptionRun.current || (!coverSongId && !coverFile)) return;
+    const run = new AbortController();
+    descriptionRun.current = run;
     setDescribing(true);
     setError(null);
     try {
       let response: Response;
       if (coverSongId) {
-        response = await fetch(`/v1/library/songs/${encodeURIComponent(coverSongId)}/describe-style`, { method: 'POST' });
+        response = await fetch(`/v1/library/songs/${encodeURIComponent(coverSongId)}/describe-style`, { method: 'POST', signal: run.signal });
       } else {
         const form = new FormData();
         form.append('audio', coverFile!, coverFile!.name);
         form.append('lyrics', lyrics);
-        response = await fetch('/v1/describe-style', { method: 'POST', body: form });
+        response = await fetch('/v1/describe-style', { method: 'POST', body: form, signal: run.signal });
       }
       const body = await response.json().catch(() => null);
+      if (run.signal.aborted) return;
       if (!response.ok || typeof body?.style !== 'string') throw new Error(body?.error || `HTTP ${response.status}`);
       setStyle(body.style);
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : String(reason));
+      if (!run.signal.aborted) setError(reason instanceof Error ? reason.message : String(reason));
     } finally {
-      setDescribing(false);
+      if (descriptionRun.current === run) {
+        descriptionRun.current = null;
+        setDescribing(false);
+      }
     }
   };
 
