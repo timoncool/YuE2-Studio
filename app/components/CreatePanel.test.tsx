@@ -249,6 +249,27 @@ describe('OpenRouter music creation', () => {
     expect(sent[1]).toMatchObject({ music_source: { kind: 'local' }, style: 'ambient soul, soft piano', steps: 47 });
   });
 
+  it('reuses the saved cloud model and requires a new choice when that model disappears', async () => {
+    configured = true;
+    vi.mocked(fetch).mockImplementation(async url =>
+      String(url) === '/v1/openrouter/catalog' ? catalog() : Response.json({}));
+    const song = { ditModel: 'openrouter', title: 'Take', style: 'piano', lyrics: 'verse',
+      generationParams: { model: 'test/music' } } as Song;
+    const show = (song: Song, timestamp: number) => act(() => root.render(panel({
+      musicEngine: 'openrouter', initialData: { song, timestamp },
+    })));
+    show(song, 1);
+    await flush();
+    expect(select('OpenRouter music model').value).toBe('test/music');
+    expect(sent).toHaveLength(0);
+    click(create());
+    expect(sent[0]).toMatchObject({ style: 'piano', lyrics: 'verse', music_source: { model: 'test/music' } });
+    show({ ...song, generationParams: { model: 'retired/model' } }, 2);
+    await flush();
+    expect(select('OpenRouter music model').value).toBe('');
+    expect(create().disabled).toBe(true);
+  });
+
   it('reports missing credentials, catalogue errors and an empty refreshed catalogue', async () => {
     const engineChange = vi.fn();
     act(() => root.render(panel({ musicEngine: 'openrouter', onMusicEngineChange: engineChange })));

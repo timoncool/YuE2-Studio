@@ -611,6 +611,8 @@ function AppContent() {
 
   // Reuse Handler
   const handleReuse = (song: Song) => {
+    if (song.ditModel === 'openrouter') chooseMusicEngine('openrouter');
+    else if (song.ditModel === 'yue2-cpp') chooseMusicEngine('local');
     setReuseData({ song, timestamp: Date.now() });
     setCurrentView('create');
     setMobileShowList(false);

@@ -437,10 +437,10 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
   }, [cloud, configured, catalogAttempt]);
   const musicModels = musicCatalog.state === 'ready' ? musicCatalog.models : [];
   const selectedMusicModel = !provider.isError && configured ? musicModels.find(model => model.id === musicModelId) : undefined;
-  const changeMusicModel = (model: string) => {
+  const changeMusicModel = useCallback((model: string) => {
     setMusicModelId(model);
     try { window.localStorage.setItem('yue:openrouter-music-model', model); } catch { /* kept until a reload */ }
-  };
+  }, []);
   const requestCatalogRefresh = () => {
     refreshCatalog.current = true;
     setCatalogAttempt(attempt => attempt + 1);
@@ -715,11 +715,21 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
     appliedReuse.current = initialData.timestamp;
     const song = initialData.song;
     const settings = (song.generationParams ?? {}) as Record<string, unknown>;
+    if (song.ditModel === 'openrouter') {
+      changeMusicModel(typeof settings.model === 'string' ? settings.model : '');
+      setStyle(song.style);
+      setLyrics(song.lyrics);
+      setName(song.title || '');
+      setNameFilled(Boolean(song.title?.trim()));
+      setError(null);
+      setMode('studio');
+      return;
+    }
     applyRequest({ style: song.style, lyrics: song.lyrics, ...settings }, song.title || '');
     // A song made without LoRA reuses without it, whatever was picked before.
     setAdapters(usesFromSettings(settings));
     setMode('studio');
-  }, [initialData, applyRequest]);
+  }, [initialData, applyRequest, changeMusicModel]);
 
   useEffect(() => {
     setCoverPlaying(false);
