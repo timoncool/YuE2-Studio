@@ -1,14 +1,30 @@
-name: Reuse MIDI model from another Studio while offline
+name: Transcribe with migrated weights and loopback-only networking
 on:
   push:
-    branches: [qa/offline-midi-reuse]
+    branches: [qa/offline-midi-playback]
 permissions:
   contents: read
 jobs:
   install:
-    runs-on: windows-latest
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
     steps:
       - uses: actions/checkout@v7
       - uses: Swatinem/rust-cache@v2
       - run: cargo build --locked -p music-server --bin music-server
-      - run: python .github/check_offline_midi.py target/debug/music-server.exe
+      - name: Stage the previous Studio model, CPU package and piano
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends fluidsynth fluid-soundfont-gm
+          python3 .github/render_piano.py
+          mkdir -p "$RUNNER_TEMP/old/data/midi/models/muscriptor-small" released
+          for f in config.json model.safetensors; do
+            curl -fsSL --retry 3 "https://huggingface.co/cocktailpeanut/muscriptor-small/resolve/31a8f75d6a8b5383fd71ad1371dc1620389ab722/$f" -o "$RUNNER_TEMP/old/data/midi/models/muscriptor-small/$f"
+          done
+          curl -fsSL --retry 3 https://github.com/timoncool/audio.cpp/releases/download/server-31cb1a4a/audiocpp-server-linux-cpu-x64.tar.gz -o released.tgz
+          echo 'c8a6746c616711b3543a776c04e2de21a9d84cd1a2a522470e467a55f4032401  released.tgz' | sha256sum -c
+          tar -xzf released.tgz -C released
+      - name: Migrate Small and transcribe through the Studio API without a network interface
+        run: |
+          exe=$(find "$PWD/released" -name audiocpp_server -type f)
+          sudo env RUNNER_TEMP="$RUNNER_TEMP" QA_MIDI_SOURCE="$RUNNER_TEMP/old/data" QA_PIANO_WAV="$PWD/piano.wav" YUE_AUDIOCPP_SERVER="$exe" unshare -n bash -ec 'ip link set lo up; ip -br link; python3 .github/check_offline_midi.py target/debug/music-server'

@@ -12,7 +12,7 @@ from urllib.request import Request,urlopen
 legacy="--legacy" in sys.argv
 exe=Path(sys.argv[1]).resolve()
 root=Path(tempfile.mkdtemp(dir=os.environ.get("RUNNER_TEMP") or "F:/AI/hf-work/music-round-2026-11-20"))
-old=Path(sys.argv[2]).resolve() if legacy else root/"MiniMax"/"data"
+old=Path(os.environ["QA_MIDI_SOURCE"]).resolve()
 relative=Path("midi/models/muscriptor-small")
 files={"config.json":"3008fc481e4a1cd978e337eb3759260c270892204db5039235ac939e1f42aeb2",
        "model.safetensors":"bbd482c786b895cf7d8f44185073d951adae2ebb8a66f82ca84cd1f84569549c"}
@@ -20,9 +20,6 @@ def digest(path):
     with path.open("rb") as stream: return hashlib.file_digest(stream,"sha256").hexdigest()
 for name,sha in files.items():
     source=old/relative/name
-    if not legacy:
-        source.parent.mkdir(parents=True,exist_ok=True)
-        subprocess.run(["curl","-fsSL","--retry","3","https://huggingface.co/cocktailpeanut/muscriptor-small/resolve/31a8f75d6a8b5383fd71ad1371dc1620389ab722/"+name,"-o",str(source)],check=True)
     assert digest(source)==sha
 broken=root/"wrong"
 (broken/relative).mkdir(parents=True)
@@ -67,6 +64,23 @@ with log.open("wb") as stream:
             if not legacy:
                 assert digest(target)==sha and target.samefile(old/relative/name),name
         assert (broken/relative/"config.json").read_bytes()==b"x"*124
+        pcm=Path(os.environ["QA_PIANO_WAV"]).resolve()
+        start=call("/v1/midi/transcribe",dict(path=str(pcm),size="small"))
+        assert start["started"],start
+        deadline=time.monotonic()+240
+        while time.monotonic()<deadline:
+            run=call("/v1/midi")["run"]
+            if run and run["done"]: break
+            time.sleep(.5)
+        assert run["done"] and not run["error"],run
+        midi=Path(run["file"])
+        assert midi.read_bytes().startswith(b"MThd"),midi
+        pairs=json.loads(Path(str(midi)+".json").read_text())["notes"]
+        assert [n["pitch"] for n in pairs]==[60,64,67,72],pairs[:10]
+        assert all(n["instrument"]=="acoustic_piano" for n in pairs)
+        assert all(abs(n["start"]-t)<.05 for n,t in zip(pairs,[.26,1.26,2.25,3.25]))
+        print(json.dumps(dict(offline_notes=pairs, wav_sha256=digest(pcm),midi_sha256=digest(midi))),flush=True)
+
         print(json.dumps(dict(legacy=legacy,installed=installed,source_hashes=files,profile=str(root))))
     finally:
         proc.terminate()
