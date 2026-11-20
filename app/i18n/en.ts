@@ -1591,6 +1591,7 @@ export const en = {
     savePrompt: 'Save',
     examplePrompt: 'Example',
     resetPrompt: 'Reset',
+    resetCreateForm: 'Reset creation form',
     promptFileInvalid: 'That file is not a valid prompt.',
     promptBudget: 'Prompt budget',
     promptBudgetShort: 'caption + lyrics',

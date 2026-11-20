@@ -1590,6 +1590,7 @@ export const ru = {
     savePrompt: 'Сохранить',
     examplePrompt: 'Пример',
     resetPrompt: 'Сбросить',
+    resetCreateForm: 'Сбросить форму создания',
     promptFileInvalid: 'Это не корректный файл промпта.',
     promptBudget: 'Бюджет промпта',
     promptBudgetShort: 'описание + текст',
