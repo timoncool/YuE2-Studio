@@ -57,6 +57,7 @@ mod model_storage;
 mod skins;
 pub use saving::{set_save_dialog, SaveDialog};
 mod skill;
+mod legacy_library;
 mod library;
 mod engine_result;
 mod progress;
@@ -1766,6 +1767,7 @@ pub async fn serve_on_port(port: u16) -> anyhow::Result<()> {
         .route("/v1/exports/live/{id}/file", get(ableton_project::file))
         .route("/v1/cover-templates/render", post(render_cover_template))
         .route("/v1/openrouter/completions", post(create_openrouter_completion))
+        .route("/v1/library/migration/preview", post(legacy_library::preview))
         .route("/v1/library/songs", get(library_songs).post(create_library_song))
         .route("/v1/library/import", post(import_library_audio))
         .route("/v1/library/songs/{id}/title", axum::routing::put(rename_library_song))

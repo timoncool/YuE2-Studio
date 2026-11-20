@@ -1050,6 +1050,12 @@ fn tools() -> &'static [Tool] {
                 call: |args| post("/setup/download".into(), args.clone()),
             },
             Tool {
+                name: "library_migration_preview",
+                description: "Inspect an ACE-Step or MiniMax installation or data folder for songs, playlists and local media available for migration.",
+                schema: || id_only("path", "Old Studio installation or data folder"),
+                call: |args| post("/v1/library/migration/preview".into(), json!({ "path": text(args, "path")? })),
+            },
+            Tool {
                 name: "models_adopt",
                 description: "Take model files already on this computer instead of downloading them: every file of the catalogue found in the folder (by name, else by exact size) is linked into the studio's models. models_status shows the result.",
                 schema: || id_only("path", "folder with the model files"),
