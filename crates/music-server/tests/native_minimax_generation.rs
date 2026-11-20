@@ -1,0 +1,310 @@
+use std::{fs, io::Cursor, path::Path, time::Duration};
+
+use reqwest::{Client, RequestBuilder, StatusCode};
+use serde_json::{Value, json};
+use tokio::{
+    net::TcpListener,
+    process::Command,
+    time::{sleep, timeout},
+};
+
+const ENGINE: &str = "minimaxmusic-cpp";
+const MODELS: [(&str, u64); 5] = [
+    ("mm3-lm-Q3_K_M.gguf", 4589971808),
+    ("mm3-depth-Q4_K_M.gguf", 404836256),
+    ("MiniMax-Music3-condition_encoder-F32.gguf", 100672192),
+    ("mm3-dit-Q3_K_M.gguf", 1138427712),
+    ("MiniMax-Music3-vocoder-F32.gguf", 306102784),
+];
+
+#[tokio::test]
+async fn native_minimax_generation_imports_wav_and_cancel_imports_nothing() {
+    let root = tempfile::tempdir().unwrap();
+    let engine = build_engine(root.path()).await;
+    let models = root.path().join("weights");
+    fs::create_dir(&models).unwrap();
+    for (file, length) in MODELS {
+        let path = models.join(file);
+        let file = fs::File::create(&path).unwrap();
+        // The service inspects lengths when discovering an existing installation.
+        // The fixture never reads model contents or allocates weight buffers.
+        #[cfg(windows)]
+        {
+            let output = Command::new("fsutil")
+                .args(["sparse", "setflag"])
+                .arg(&path)
+                .output()
+                .await
+                .unwrap();
+            assert!(
+                output.status.success(),
+                "creating a sparse fixture: {:?}",
+                output
+            );
+        }
+        file.set_len(length).unwrap();
+    }
+    let data = root.path().join("data");
+    fs::create_dir(&data).unwrap();
+    let (port, engine_port) = (free_port().await, free_port().await);
+    let url = format!("http://127.0.0.1:{port}");
+    let http = Client::builder()
+        .no_proxy()
+        .timeout(Duration::from_secs(20))
+        .build()
+        .unwrap();
+    let mut studio = Command::new(env!("CARGO_BIN_EXE_music-server"));
+    studio
+        .env("YUE_STUDIO_PORT", port.to_string())
+        .env("YUE_ENGINE_PORT", engine_port.to_string())
+        .env("YUE_STUDIO_DATA_ROOT", &data)
+        .env("YUE_ENGINE_BIN", root.path().join("absent-yue-server"))
+        .env("YUE_MINIMAX_MM_SERVER_BIN", &engine)
+        .env("YUE_MINIMAX_MODELS_ROOT", &models)
+        .env("TIMONCOOL_SHARED_DIR", root.path().join("registry"))
+        .kill_on_drop(true);
+    let mut studio = studio.spawn().unwrap();
+
+    let profile_url = format!("{url}/v1/music/native/{ENGINE}/profiles");
+    let catalog = timeout(Duration::from_secs(30), async {
+        loop {
+            if let Ok(response) = http.get(&profile_url).send().await {
+                break response
+                    .error_for_status()
+                    .unwrap()
+                    .json::<Value>()
+                    .await
+                    .unwrap();
+            }
+            sleep(Duration::from_millis(50)).await;
+        }
+    })
+    .await
+    .unwrap();
+    assert_eq!(catalog["engine"], ENGINE);
+    assert_eq!(catalog["engine_installed"], true);
+    let entries = catalog["profiles"].as_array().unwrap();
+    assert_eq!(entries[0]["id"], "minimal");
+    assert_eq!(entries[0]["ready"], true);
+    assert_eq!(entries[0]["missing"], json!([]));
+    assert_eq!(entries[1]["ready"], false);
+    assert!(!root.path().join("submitted-1.json").exists());
+
+    let rpc_url = format!("{url}/mcp");
+    let initial = http
+        .post(&rpc_url)
+        .header("Accept", "application/json, text/event-stream")
+        .json(
+            &json!({"jsonrpc":"2.0","id":1,"method":"initialize","params":{
+                "protocolVersion":"2025-03-26","capabilities":{},
+                "clientInfo":{"name":"native-minimax-test","version":"1"},
+            }}),
+        )
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap();
+    let session = initial.headers().get("Mcp-Session-Id").cloned();
+    let mcp_request = || {
+        let request = http
+            .post(&rpc_url)
+            .header("Accept", "application/json, text/event-stream");
+        match &session {
+            Some(session) => request.header("Mcp-Session-Id", session.clone()),
+            None => request,
+        }
+    };
+    mcp_request()
+        .json(&json!({"jsonrpc":"2.0","method":"notifications/initialized"}))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap();
+    let tools = rpc(mcp_request(), 2, "minimax_music_profiles", json!({})).await;
+    assert_eq!(tools["engine"], ENGINE);
+    assert_eq!(tools["profiles"][0]["id"], "minimal");
+
+    let jobs = format!("{url}/v1/music/jobs");
+    let request = json!({"music_source":{"kind":"native","engine":ENGINE,"model":"minimal"},
+        "style":"Folk with close acoustic guitar","lyrics":"[verse]\nEarly morning",
+        "title":"MiniMax fixture","duration_seconds":3.2,"seed":42,"steps":2});
+    let accepted = rpc(mcp_request(), 3, "song_create", request.clone()).await;
+    let id = accepted["id"].as_str().unwrap();
+    let job = wait_status(&http, &format!("{jobs}/{id}"), "completed").await;
+    assert_eq!(job["engine_id"], ENGINE);
+    assert_eq!(job["songs"].as_array().unwrap().len(), 1);
+    let song = &job["songs"][0]["song"];
+    assert_eq!(song["engine_id"], ENGINE);
+    assert_eq!(song["profile_id"], "minimal");
+    assert_eq!(
+        song["generation_settings"]["music_source"],
+        request["music_source"]
+    );
+    assert_eq!(song["replay_request"]["audio_codes"], "1,2,3");
+    let audio = job["songs"][0]["audio_url"].as_str().unwrap();
+    let wav = http
+        .get(format!("{url}{audio}"))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .bytes()
+        .await
+        .unwrap();
+    let mut reader = hound::WavReader::new(Cursor::new(wav)).unwrap();
+    assert_eq!(reader.spec().sample_rate, 8_000);
+    assert_eq!(reader.spec().channels, 2);
+    let pcm: Vec<i16> = reader.samples::<i16>().map(Result::unwrap).collect();
+    assert_eq!(pcm, vec![1_024, -1_024, 2_048, -2_048]);
+    let submitted: Value =
+        serde_json::from_slice(&fs::read(root.path().join("submitted-1.json")).unwrap()).unwrap();
+    assert_eq!(submitted["caption"], request["style"]);
+    assert_eq!(submitted["lm_model"], MODELS[0].0);
+    assert_eq!(submitted["output_format"], "wav32");
+
+    let second = timeout(Duration::from_secs(10), async {
+        loop {
+            let response = http.post(&jobs).json(&request).send().await.unwrap();
+            if response.status() != StatusCode::CONFLICT {
+                assert_eq!(response.status(), StatusCode::ACCEPTED);
+                break response.json::<Value>().await.unwrap();
+            }
+            sleep(Duration::from_millis(50)).await;
+        }
+    })
+    .await
+    .unwrap();
+    let id = second["id"].as_str().unwrap();
+    wait_status(&http, &format!("{jobs}/{id}"), "running").await;
+    rpc(mcp_request(), 4, "song_job_cancel", json!({"job_id":id})).await;
+    let cancelled = wait_status(&http, &format!("{jobs}/{id}"), "cancelled").await;
+    assert_eq!(cancelled["songs"], json!([]));
+    assert_eq!(
+        fs::read_to_string(root.path().join("cancelled")).unwrap(),
+        "2"
+    );
+    assert_eq!(
+        fs::read_to_string(root.path().join("fetched")).unwrap(),
+        "1"
+    );
+    let library = json_response(http.get(format!("{url}/v1/library/songs"))).await;
+    assert_eq!(library.as_array().unwrap().len(), 1);
+    studio.kill().await.unwrap();
+}
+
+async fn free_port() -> u16 {
+    TcpListener::bind(("127.0.0.1", 0))
+        .await
+        .unwrap()
+        .local_addr()
+        .unwrap()
+        .port()
+}
+
+async fn json_response(request: RequestBuilder) -> Value {
+    request
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap()
+}
+
+async fn wait_status(http: &Client, url: &str, expected: &str) -> Value {
+    timeout(Duration::from_secs(15), async {
+        loop {
+            let job = json_response(http.get(url)).await;
+            if job["status"] == expected {
+                return job;
+            }
+            assert!(job["status"] != "failed", "{job}");
+            sleep(Duration::from_millis(50)).await;
+        }
+    })
+    .await
+    .unwrap_or_else(|_| panic!("timed out waiting for {expected} at {url}"))
+}
+
+async fn rpc(request: RequestBuilder, id: u32, name: &str, arguments: Value) -> Value {
+    let body = request
+        .json(&json!({"jsonrpc":"2.0","id":id,"method":"tools/call",
+        "params":{"name":name,"arguments":arguments}}))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .text()
+        .await
+        .unwrap();
+    let line = body
+        .lines()
+        .find_map(|line| line.strip_prefix("data: "))
+        .unwrap_or(&body);
+    let response: Value = serde_json::from_str(line).unwrap();
+    let reply = &response["result"];
+    assert!(
+        response.get("error").is_none() && reply["isError"] != true,
+        "{response}"
+    );
+    reply.get("structuredContent").cloned().unwrap_or_else(|| {
+        serde_json::from_str(reply["content"][0]["text"].as_str().unwrap()).unwrap()
+    })
+}
+
+async fn build_engine(root: &Path) -> std::path::PathBuf {
+    fs::write(
+        root.join("fixture.rs"),
+        include_str!("fixtures/mm3_http_fixture.rs"),
+    )
+    .unwrap();
+    let binary = root.join(format!("mm-server{}", std::env::consts::EXE_SUFFIX));
+    let compiler = std::env::var_os("RUSTC").unwrap_or_else(|| "rustc".into());
+    let output = Command::new(compiler)
+        .arg(root.join("fixture.rs"))
+        .arg("-o")
+        .arg(&binary)
+        .output()
+        .await
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    for cuda in ["cuda12", "cuda13"] {
+        let directory = root.join(cuda);
+        fs::create_dir(&directory).unwrap();
+        fs::write(
+            directory.join(if cfg!(windows) {
+                "ggml-cuda.dll"
+            } else {
+                "libggml-cuda.so"
+            }),
+            [],
+        )
+        .unwrap();
+    }
+    let path = root.join("fixture.wav");
+    let mut writer = hound::WavWriter::create(
+        path,
+        hound::WavSpec {
+            channels: 2,
+            sample_rate: 8_000,
+            bits_per_sample: 16,
+            sample_format: hound::SampleFormat::Int,
+        },
+    )
+    .unwrap();
+    for sample in [1_024_i16, -1_024, 2_048, -2_048] {
+        writer.write_sample(sample).unwrap();
+    }
+    writer.finalize().unwrap();
+    binary
+}
