@@ -79,6 +79,13 @@ with tempfile.TemporaryDirectory(prefix="yue-openrouter-") as profile, http.serv
         response=rpc("tools/call",{"name":name,"arguments":args},rid)
         assert not response.get("isError"),response
         return response.get("structuredContent") or json.loads(response["content"][0]["text"])
+    def assert_played_wav(url):
+        code,served=request(url)
+        assert code==200,(code,served[:100],url)
+        # The studio writes metadata tags to its copy of the audio.
+        with wave.open(io.BytesIO(wav)) as original, wave.open(io.BytesIO(served)) as playback:
+            assert playback.getparams()==original.getparams(),playback.getparams()
+            assert playback.readframes(8000)==original.readframes(8000)
     def run_service():
         log=(root/"service.log").open("ab")
         proc=subprocess.Popen([str(exe)],env=env,stdout=log,stderr=subprocess.STDOUT)
@@ -129,7 +136,7 @@ with tempfile.TemporaryDirectory(prefix="yue-openrouter-") as profile, http.serv
         assert not song["generation_settings"].get("api_key"),song
         assert calls[0]["model"]==model and calls[0]["stream"] is True,calls
         assert "soft piano" in calls[0]["messages"][0]["content"] and body["lyrics"] in calls[0]["messages"][0]["content"],calls
-        assert request(complete["song"]["audio_url"])==(200,wav)
+        assert_played_wav(complete["song"]["audio_url"])
         code,data=request("/v1/music/replay",{"song_id":song_id})
         assert code==400 and "no replay request" in data.decode(),(code,data)
         code,data=request("/v1/music/jobs",dict(body,semantic_tokens="1,2,3"))
@@ -157,7 +164,7 @@ with tempfile.TemporaryDirectory(prefix="yue-openrouter-") as profile, http.serv
     try:
         code,data=request("/v1/library/songs/"+song_id)
         assert code==200 and json.loads(data)["id"]==song_id,(code,data)
-        assert request(complete["song"]["audio_url"])==(200,wav)
+        assert_played_wav(complete["song"]["audio_url"])
         assert len(calls)==3,calls
         print(json.dumps({"status":"pass","http_calls":len(calls),"library_song":song_id,"wav_bytes":len(wav),
                           "restart_persisted":True,"incomplete_failed":True,"replay_rejected":True,
