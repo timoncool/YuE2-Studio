@@ -22,6 +22,7 @@ it('opens the curated catalog from Studio Tools and chooses an installed RVC voi
       return Response.json(list);
     }
     if (url === '/v1/library/songs') return Response.json([]);
+    if (url === '/v1/separation/status' || url === '/v1/midi') return Response.json({ run: null });
     return Response.json(null);
   });
   vi.stubGlobal('fetch', fetchStudio);
@@ -46,7 +47,7 @@ it('opens the curated catalog from Studio Tools and chooses an installed RVC voi
     });
     await flush();
     expect(details.querySelectorAll('li')).toHaveLength(40);
-    expect(details.textContent).toContain('Showing 40 of 863 voices');
+    expect(details.textContent).toContain(`Showing 40 of ${bundled.voices.length.toLocaleString('en')} voices`);
     const search = details.querySelector<HTMLInputElement>('input[type="search"]')!;
     const setValue = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(search), 'value')!.set!;
     act(() => {
