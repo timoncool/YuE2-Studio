@@ -1705,6 +1705,7 @@ export const en = {
     removeDownloaded: 'Delete the downloaded files and free the disk',
     dataFolder: 'Everything the studio keeps',
     openFolder: 'Open folder',
+    checkingExistingModels: 'Checking files in the selected folder…',
     adoptTaken: 'Taken from the folder: {count} files.',
     adoptCopied: 'Another drive could not share them, so they were copied: {size} more on disk.',
     adoptMissing: 'Still to download: {files}.',

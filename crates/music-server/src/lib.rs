@@ -2581,7 +2581,7 @@ async fn install_separation_asset(
         state
             .separator
             .downloader()
-            .install(&separation::MODEL)
+            .install("separation", &separation::MODEL)
             .await
             .map_err(|error| api_error(StatusCode::CONFLICT, error.to_string()))?;
     } else if let Some(asset) = [acpp_server::asset::Build::Cuda13, acpp_server::asset::Build::Cuda12, acpp_server::asset::Build::Vulkan, acpp_server::asset::Build::Cpu, acpp_server::asset::Build::Metal]
@@ -2589,7 +2589,7 @@ async fn install_separation_asset(
         .flat_map(acpp::assets)
         .find(|asset| asset.id == request.asset_id)
     {
-        state.acpp.downloader().install(asset).await.map_err(|error| api_error(StatusCode::CONFLICT, error.to_string()))?;
+        state.acpp.downloader().install("separation", asset).await.map_err(|error| api_error(StatusCode::CONFLICT, error.to_string()))?;
     } else {
         return Err(api_error(StatusCode::BAD_REQUEST, format!("unknown asset {}", request.asset_id)));
     }
@@ -4509,7 +4509,7 @@ async fn ensure_local_recogniser_named(state: &AppState, config: &lyrics_sync::L
 
     note_activity(state, song_id, title, "karaoke", "running", Some("karaoke.downloading".into())).await;
     for asset in missing {
-        if let Err(error) = state.lyrics_sync.downloader().install(asset).await {
+        if let Err(error) = state.lyrics_sync.downloader().install("karaoke", asset).await {
             eprintln!("could not fetch the karaoke model {}: {error}", asset.id);
             note_activity(state, song_id, title, "karaoke", "failed", Some(format!("{error:#}"))).await;
             return false;
@@ -7858,7 +7858,7 @@ async fn karaoke_install(
     state
         .lyrics_sync
         .downloader()
-        .install(asset)
+        .install("karaoke", asset)
         .await
         .map_err(|error| api_error(StatusCode::CONFLICT, error.to_string()))?;
     Ok(Json(state.lyrics_sync.status(&config).await))
@@ -9561,13 +9561,13 @@ fn adoptable_sources(components: &[model_manager::Component], root: &std::path::
         .iter()
         .filter_map(|component| {
             let sized = |path: &std::path::Path| std::fs::metadata(path).map(|meta| meta.is_file() && meta.len() == component.bytes).unwrap_or(false);
-            if sized(&root.join(component.filename)) {
+            if sized(&root.join(component.filename)) && model_manager::verified_file(&root.join(component.filename), component).unwrap_or(false) {
                 return None;
             }
             entries
                 .iter()
-                .find(|path| path.file_name().is_some_and(|name| name == component.filename) && sized(path))
-                .or_else(|| entries.iter().filter(|path| sized(path)).find(|path| model_manager::verified_file(path, component).unwrap_or(false)))
+                .find(|path| path.file_name().is_some_and(|name| name == component.filename) && sized(path) && model_manager::verified_file(path, component).unwrap_or(false))
+                .or_else(|| entries.iter().filter(|path| path.file_name().is_some_and(|name| name != component.filename) && sized(path)).find(|path| model_manager::verified_file(path, component).unwrap_or(false)))
                 .map(|source| (component.clone(), source.clone()))
         })
         .collect()
@@ -9587,6 +9587,11 @@ fn adopt_refusals(components: &[model_manager::Component], root: &std::path::Pat
             let size = std::fs::metadata(path).ok()?.len();
             match components.iter().find(|component| component.filename == name) {
                 Some(component) => {
+                    if size == component.bytes {
+                        return (!model_manager::verified_file(path, component).unwrap_or(false)).then(|| {
+                            serde_json::json!({ "file": name, "kind": "copy", "error": "SHA-256 mismatch", "expected_sha256": component.sha256 })
+                        });
+                    }
                     let installed = std::fs::metadata(root.join(component.filename)).is_ok_and(|meta| meta.len() == component.bytes);
                     (!installed && size != component.bytes).then(|| {
                         serde_json::json!({ "file": name, "kind": "size", "size": size, "needs": component.bytes, "repository": component.repository, "revision": component.revision })
@@ -9596,6 +9601,19 @@ fn adopt_refusals(components: &[model_manager::Component], root: &std::path::Pat
             }
         })
         .collect()
+}
+
+/// Adopt a pinned optional model from a chosen library, including libraries whose
+/// folder hierarchy differs from this studio's. Multiple versions may share a name.
+fn adopt_optional_file(source: &std::path::Path, target: &std::path::Path, sha: &str) -> std::io::Result<bool> {
+    if target.exists() {
+        if same_file::is_same_file(source, target)? || install_record::sha256_of(target).is_ok_and(|value| value == sha) {
+            return Ok(false);
+        }
+        return Err(std::io::Error::new(std::io::ErrorKind::InvalidData, format!("SHA-256 mismatch in the installed file: {}", target.display())));
+    }
+    studio_hub_client::neighbors::take_file(source, target, true, |file| install_record::sha256_of(file).is_ok_and(|value| value == sha))?;
+    Ok(true)
 }
 
 /// Takes models the user already has instead of downloading them again.
@@ -9625,9 +9643,6 @@ async fn setup_adopt(State(state): State<AppState>, body: axum::body::Bytes) -> 
     };
 
     let _ = std::fs::create_dir_all(&models_root);
-    let mut adopted: Vec<String> = Vec::new();
-    // a copy is a second set of gigabytes on disk; the window says which files took one
-    let mut copied: Vec<Value> = Vec::new();
     std::fs::read_dir(&folder).map_err(|error| api_error(StatusCode::BAD_REQUEST, error.to_string()))?;
     // Model sets are often kept one component per folder, so the picked
     // folder is searched with its subfolders.
@@ -9638,31 +9653,81 @@ async fn setup_adopt(State(state): State<AppState>, body: axum::body::Bytes) -> 
 
     let components = catalog.components.clone();
     let root = models_root.clone();
-    let (found, mut refused) = tokio::task::spawn_blocking(move || {
+    let optional_state = state.clone();
+    let (adopted, copied, refused) = tokio::task::spawn_blocking(move || {
         let found = adoptable_sources(&components, &root, &entries);
-        let taken: Vec<std::path::PathBuf> = found.iter().map(|(_, source)| source.clone()).collect();
-        let refused = adopt_refusals(&components, &root, &entries, &taken);
-        (found, refused)
+        let mut taken: Vec<std::path::PathBuf> = found.iter().map(|(_, source)| source.clone()).collect();
+        let mut adopted = Vec::new();
+        let mut copied = Vec::new();
+        let mut by_name = std::collections::HashMap::<std::ffi::OsString, Vec<(&'static str, &'static str, std::path::PathBuf)>>::new();
+        let mut errors = Vec::new();
+        let mut checked = std::collections::HashSet::new();
+        let mut register = |id: &'static str, url: &str, target: std::path::PathBuf| {
+            let Some(sha) = pin_sha::sha256(url) else { return };
+            let Some(name) = target.file_name() else { return };
+            if checked.insert(target.clone()) {
+                by_name.entry(name.to_owned()).or_default().push((id, sha, target));
+            }
+        };
+        for asset in assistant_runtime::ASSETS.iter().filter(|asset| asset.kind == assistant_runtime::AssetKind::Model) {
+            register(asset.id, asset.url, optional_state.assistant_runtime.path_of(asset));
+        }
+        use update_screen::Part;
+        for part in [Part::Karaoke, Part::Separation, Part::Midi, Part::Training, Part::Listening] {
+            let Some((downloader, _)) = update_downloader(&optional_state, part) else { continue };
+            for asset in update_catalogue(part) {
+                if asset.kind != downloads::AssetKind::Model { continue; }
+                register(asset.id, asset.url, downloader.path_of(asset));
+            }
+        }
+        for source in &entries {
+            let Some(candidates) = source.file_name().and_then(|name| by_name.get(name)) else { continue };
+            taken.push(source.clone());
+            let result = (|| -> anyhow::Result<()> {
+                let digest = install_record::sha256_of(source)?;
+                let mut matched = false;
+                for (id, sha, target) in candidates {
+                    if *sha != digest { continue; }
+                    matched = true;
+                    if adopt_optional_file(source, target, sha)? {
+                        adopted.push((*id).to_owned());
+                        if !same_file::is_same_file(source, target)? {
+                            copied.push(serde_json::json!({ "id": id, "bytes": std::fs::metadata(target)?.len() }));
+                        }
+                    }
+                }
+                anyhow::ensure!(matched, "SHA-256 does not match a catalogued version of this file");
+                Ok(())
+            })();
+            if let Err(error) = result {
+                errors.push(serde_json::json!({ "file": source, "kind": "copy", "error": error.to_string() }));
+            }
+        }
+        errors.extend(adopt_refusals(&components, &root, &entries, &taken));
+        for (component, source) in found {
+            let target = root.join(component.filename);
+            let result = (|| -> anyhow::Result<()> {
+                let staging = tempfile::tempdir_in(&root)?;
+                let checked = staging.path().join(component.filename);
+                let copied_bytes = if std::fs::hard_link(&source, &checked).is_err() {
+                    Some(std::fs::copy(&source, &checked)?)
+                } else { None };
+                anyhow::ensure!(model_manager::verified_file(&checked, &component)?, "SHA-256 mismatch");
+                std::fs::rename(&checked, &target)?;
+                adopted.push(component.id.to_owned());
+                if let Some(bytes) = copied_bytes {
+                    copied.push(serde_json::json!({ "id": component.id, "bytes": bytes }));
+                }
+                Ok(())
+            })();
+            if let Err(error) = result {
+                errors.push(serde_json::json!({ "file": component.filename, "kind": "copy", "error": error.to_string() }));
+            }
+        }
+        (adopted, copied, errors)
     })
     .await
     .map_err(|error| api_error(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?;
-    for (component, source) in &found {
-        let target = models_root.join(component.filename);
-        // a file of the earlier release under this name gives way to the one found
-        let _ = std::fs::remove_file(&target);
-        // A hard link costs nothing and keeps one copy on disk; a folder on
-        // another drive cannot have one, so that falls back to a copy.
-        if std::fs::hard_link(source, &target).is_err() {
-            match std::fs::copy(source, &target) {
-                Ok(bytes) => copied.push(serde_json::json!({ "id": component.id, "bytes": bytes })),
-                Err(error) => {
-                    refused.push(serde_json::json!({ "file": component.filename, "kind": "copy", "error": error.to_string() }));
-                    continue;
-                }
-            }
-        }
-        adopted.push(component.id.to_string());
-    }
 
     let target = effective_install_target(&state).await;
     let status = state.model_manager.status(target).await;
@@ -12998,8 +13063,35 @@ mod tests {
         let turbo = component("turbo", "turbo.gguf", b"turbo weights");
         let merge = component("merge", "merge.gguf", b"merge weights");
         std::fs::write(folder.path().join("renamed.gguf"), b"turbo weights").unwrap();
+        std::fs::write(folder.path().join("merge.gguf"), b"wrong weights").unwrap();
+        std::fs::write(models.path().join("turbo.gguf"), b"stale weights").unwrap();
         let found = adoptable_sources(&[turbo, merge], models.path(), &adoptable_files(folder.path(), ADOPT_FOLDER_DEPTH));
         assert_eq!(found.iter().map(|(component, _)| component.id).collect::<Vec<_>>(), ["turbo"]);
+    }
+
+    #[test]
+    fn adopting_optional_weights_checks_duplicates_and_preserves_the_library() {
+        let folder = tempfile::tempdir().unwrap();
+        let dest = tempfile::tempdir().unwrap();
+        let name = "model.gguf";
+        let first = folder.path().join("old").join(name);
+        let second = folder.path().join("current").join(name);
+        for file in [&first, &second] { std::fs::create_dir_all(file.parent().unwrap()).unwrap(); }
+        std::fs::write(&first, b"old").unwrap();
+        std::fs::write(&second, b"new").unwrap();
+        let sha = install_record::sha256_of(&second).unwrap();
+        let target = dest.path().join("models").join(name);
+        assert!(adopt_optional_file(&first, &target, &sha).is_err());
+        assert!(!target.exists());
+        assert!(adopt_optional_file(&second, &target, &sha).unwrap());
+        assert_eq!(std::fs::read(&target).unwrap(), b"new");
+        assert!(!adopt_optional_file(&second, &target, &sha).unwrap());
+        assert_eq!(std::fs::read(&first).unwrap(), b"old");
+        assert_eq!(std::fs::read(&second).unwrap(), b"new");
+        std::fs::remove_file(&target).unwrap();
+        std::fs::write(&target, b"bad").unwrap();
+        assert!(adopt_optional_file(&second, &target, &sha).is_err());
+        assert_eq!(std::fs::read(&target).unwrap(), b"bad");
     }
 
     #[test]

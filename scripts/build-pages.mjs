@@ -127,6 +127,26 @@ ${SAMPLES.slice(6).map(sampleCard).join('\n')}
     ['YuE2 · yue2.cpp · Q8_0 · Flash Attention', '240 s', '54.4 s', '4.4×', '6500 MiB'],
     ['MiniMax Music3 · minimaxmusic.cpp · Q8_0 · 30 steps · CFG 1.5', '30 s', '33.0 s', '0.9×', '—'],
   ];
+  const aceColumns = {
+    en: ['Backend', 'Start to first WAV', 'Warm median (3 runs)', 'Warm speed', 'Peak VRAM (whole GPU)', 'Peak process-tree RAM'],
+    ru: ['Бэкенд', 'От запуска до WAV', 'Медиана 3 прогретых запросов', 'Скорость после прогрева', 'Пик VRAM всей карты', 'Пик ОЗУ дерева процессов'],
+    zh: ['后端', '启动至首个 WAV', '预热后中位数（3 次）', '预热后速度', '整卡峰值显存', '进程树峰值内存'],
+    ja: ['バックエンド', '起動から最初の WAV まで', 'ウォーム時の中央値（3 回）', 'ウォーム時の速度', 'GPU 全体の最大 VRAM', 'プロセスツリーの最大 RAM'],
+    ko: ['백엔드', '시작부터 첫 WAV까지', '예열 후 중앙값 (3회)', '예열 후 속도', 'GPU 전체 최대 VRAM', '프로세스 트리 최대 RAM'],
+    pt: ['Backend', 'Do início ao primeiro WAV', 'Mediana após aquecimento (3 execuções)', 'Velocidade após aquecimento', 'Pico de VRAM da placa', 'Pico de RAM da árvore de processos'],
+  }[lang];
+  const aceAudioNote = {
+    en: 'For seed 42, both WAVs contain 30.0 s of stereo audio at 48 kHz. Measured in 100 ms windows across both channels, the last 5.3 s on CUDA and 5.0 s on Vulkan stay below −60 dBFS RMS. The speed column uses the full WAV duration.',
+    ru: 'При seed 42 оба WAV содержат 30,0 с стереозвука при 48 кГц. В окнах по 100 мс уровень RMS по обоим каналам держится ниже −60 dBFS последние 5,3 с на CUDA и 5,0 с на Vulkan. Скорость рассчитана по полной длине WAV.',
+    zh: '种子为 42 时，两份 WAV 均为 30.0 秒、48 kHz 的立体声。按 100 毫秒窗口计算双声道 RMS，CUDA 的最后 5.3 秒和 Vulkan 的最后 5.0 秒均低于 −60 dBFS。速度按 WAV 的完整时长计算。',
+    ja: 'シード 42 で生成した WAV はどちらも 48 kHz のステレオで、長さは 30.0 秒です。両チャンネルを合わせて 100 ミリ秒ごとに求めた RMS は、CUDA では最後の 5.3 秒、Vulkan では最後の 5.0 秒で −60 dBFS を下回りました。速度は WAV 全体の長さから算出しています。',
+    ko: '시드 42에서 두 WAV 모두 48 kHz 스테레오로 30.0초입니다. 두 채널을 함께 100 ms 단위로 측정한 RMS는 CUDA에서 마지막 5.3초, Vulkan에서 마지막 5.0초 동안 −60 dBFS 미만이었습니다. 속도는 WAV 전체 길이로 계산했습니다.',
+    pt: 'Com a semente 42, ambos os WAVs têm 30,0 s de áudio estéreo a 48 kHz. Em janelas de 100 ms, o nível RMS dos dois canais fica abaixo de −60 dBFS nos últimos 5,3 s com CUDA e 5,0 s com Vulkan. A velocidade usa a duração total do WAV.',
+  }[lang];
+  const aceRows = [
+    ['CUDA 13', '6.813 s', '0.474 s', '63.3×', '12.00 GiB', '1.97 GiB'],
+    ['Vulkan', '19.063 s', '0.507 s', '59.2×', '12.42 GiB', '2.66 GiB'],
+  ];
   const sp = STUDIO.speed?.[lang];
   const speed = sp ? `  <section id="speed">
     <h2>${escape(sp.title)}</h2>
@@ -144,6 +164,13 @@ ${sp.rows.map((row) => `          <tr>${row.map((cell) => `<td>${escape(cell)}</
       <thead><tr>${headings.slice(2).map(label => `<th>${escape(label)}</th>`).join('')}</tr></thead>
       <tbody>${baseline.map(row => `<tr>${row.map(cell => `<td>${escape(cell)}</td>`).join('')}</tr>`).join('\n')}</tbody>
     </table></div>
+    <h3>ACE-Step Studio 4.0.2 · acestep.cpp 9eb75e8</h3>
+    <p>Windows · RTX 4090 · 617.42 · Turbo Q8_0 · 30 s · Euler × 8</p>
+    <div class="scroll"><table>
+      <thead><tr>${aceColumns.map(label => `<th>${escape(label)}</th>`).join('')}</tr></thead>
+      <tbody>${aceRows.map(row => `<tr>${row.map(cell => `<td>${escape(cell)}</td>`).join('')}</tr>`).join('\n')}</tbody>
+    </table></div>
+    <p class="note">${escape(aceAudioNote)}</p>
   </section>
 
 ` : '';

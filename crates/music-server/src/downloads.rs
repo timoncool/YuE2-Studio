@@ -618,17 +618,18 @@ impl Downloader {
 
     /// Starts one download in the background. Only one runs at a time, and an
     /// interrupted file resumes from what is already on disk.
-    pub async fn install(&self, asset: &'static Asset) -> Result<()> {
+    pub async fn install(&self, scope: &str, asset: &'static Asset) -> Result<()> {
         refuse_foreign_runtime(asset)?;
         {
             let mut progress = self.progress.lock().await;
             if progress.as_ref().is_some_and(|active| !active.done && active.error.is_none()) {
                 bail!("another download is already running");
             }
+            self.rejected.lock().await.remove(scope);
             self.cancel.store(false, std::sync::atomic::Ordering::Relaxed);
             *progress = Some(DownloadProgress {
                 asset_id: asset.id.to_string(),
-                scope: None,
+                scope: Some(scope.to_owned()),
                 downloaded_bytes: self.partial_bytes(asset),
                 total_bytes: asset.bytes,
                 done: false,
@@ -794,6 +795,27 @@ fn try_another_onnx_source(error: &anyhow::Error) -> bool {
         || error.chain().any(|cause| cause.downcast_ref::<reqwest::Error>().is_some_and(|error| error.is_body() || error.is_decode() || error.is_request() || error.is_timeout()))
 }
 
+/// A neighbouring studio can have the same model under the same relative path, even
+/// in folders (such as midi/models) excluded from the general file search.
+fn take_model_from_installations(asset: &Asset, target: &Path, own_root: &Path, neighbors: &[studio_hub_client::neighbors::Neighbor]) -> bool {
+    let Ok(relative) = target.strip_prefix(own_root) else { return false };
+    if !relative.components().all(|part| matches!(part, std::path::Component::Normal(_))) {
+        return false;
+    }
+    for neighbor in neighbors {
+        let source = neighbor.data_dir.join(relative);
+        if !source.is_file() { continue; }
+        match studio_hub_client::neighbors::take_file(&source, target, true, |staged| crate::pin_sha::accepts(asset.url, staged)) {
+            Ok(()) => {
+                note_taken(asset.id, target, &neighbor.app);
+                return true;
+            }
+            Err(error) => report_take_failure(target, &neighbor.app, &error),
+        }
+    }
+    false
+}
+
 /// `fetch` once nothing lies at `target`: from another program that has the file, or downloaded into `.part`.
 async fn fetch_absent(
     http: &reqwest::Client,
@@ -802,6 +824,16 @@ async fn fetch_absent(
     progress: &Arc<Mutex<Option<DownloadProgress>>>,
     cancel: Arc<std::sync::atomic::AtomicBool>,
 ) -> Result<()> {
+    if asset.kind == AssetKind::Model && asset.pick.is_empty() && asset.unzip_into.is_none() && crate::pin_sha::sha256(asset.url).is_some() {
+        if let Some(own_root) = crate::studio_data_root() {
+            let (asset, target) = (*asset, target.to_owned());
+            let taken = tokio::task::spawn_blocking(move || {
+                let neighbors = studio_hub_client::neighbors::others(&own_root);
+                take_model_from_installations(&asset, &target, &own_root, &neighbors)
+            }).await?;
+            if taken { return Ok(()); }
+        }
+    }
     // How big it is and whether it can be fetched in pieces, asked of the
     // server rather than assumed - both answers come from one ranged byte.
     let url = crate::net::model_url(asset.url);
@@ -971,7 +1003,7 @@ async fn download_and_extract_named(
         let archive = destination.join(format!("{}.part-archive", asset.id));
         let url = crate::net::model_url(asset.url);
         let mirror = crate::engine_runtime::archive_mirror(asset.url);
-        let (plan, url) = crate::chunked::probe_with_mirror(http, &url, mirror).await?;
+        let (plan, url) = unless_cancelled(&cancel, crate::chunked::probe_with_mirror(http, &url, mirror)).await?;
         let written = Arc::new(std::sync::atomic::AtomicU64::new(0));
         let reporter = {
             let (written, progress) = (written.clone(), progress.clone());
@@ -985,7 +1017,8 @@ async fn download_and_extract_named(
                 }
             })
         };
-        let outcome = crate::chunked::fetch(http, &url, &archive, plan, written, cancel).await;
+        let attempt_stop = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let outcome = unless_cancelled(&cancel, crate::chunked::fetch(http, &url, &archive, plan, written, attempt_stop)).await;
         reporter.abort();
         outcome?;
         archive
@@ -1660,6 +1693,73 @@ mod tests {
         assert!(!holds_todays(false, runtime.url, &file).await, "an unpinned runtime is never taken as today's by its name");
         assert!(holds_todays(true, runtime.url, &file).await, "a model counts by its file");
         fs::remove_dir_all(&root).ok();
+    }
+
+    #[tokio::test]
+    async fn a_runtime_with_selected_libraries_can_cancel_a_stalled_probe() {
+        let stalled = Arc::new(tokio::sync::Notify::new());
+        let app = axum::Router::new().route("/libraries.zip", axum::routing::get({
+            let stalled = stalled.clone();
+            move || async move { stalled.notify_one(); std::future::pending::<String>().await }
+        }));
+        let (base, server) = onnx_fixture(app).await;
+        let pack = Box::leak(Box::new(Asset {
+            url: Box::leak(format!("{base}/libraries.zip").into_boxed_str()),
+            pick: &["library.dll"],
+            ..asset()
+        }));
+        let temp = tempfile::tempdir().unwrap();
+        let mut downloader = Downloader::new(temp.path().to_owned());
+        downloader.http = reqwest::Client::builder().no_proxy().build().unwrap();
+        tokio::time::timeout(std::time::Duration::from_secs(5), async {
+            downloader.install("training", pack).await.unwrap();
+            stalled.notified().await;
+            assert!(downloader.cancel_for("training").await);
+            loop {
+                let progress = downloader.active_for("training").await.unwrap();
+                if progress.done {
+                    assert_eq!(progress.error.as_deref(), Some("cancelled"));
+                    break;
+                }
+                tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+            }
+        }).await.expect("cancel should interrupt the archive probe");
+        server.abort();
+    }
+
+    #[tokio::test]
+    async fn a_single_karaoke_file_is_visible_and_retriable_after_a_stalled_probe() {
+        use std::sync::atomic::{AtomicBool, Ordering};
+        let stalled = Arc::new(tokio::sync::Notify::new());
+        let ready = Arc::new(AtomicBool::new(false));
+        let app = axum::Router::new().route("/model", axum::routing::get({
+            let (stalled, ready) = (stalled.clone(), ready.clone());
+            move || async move {
+                if !ready.load(Ordering::Relaxed) {
+                    stalled.notify_one();
+                    return std::future::pending().await;
+                }
+                "archive"
+            }
+        }));
+        let (base, server) = onnx_fixture(app).await;
+        let model = Box::leak(Box::new(Asset { url: Box::leak(format!("{base}/model").into_boxed_str()), bytes: 7, ..asset() }));
+        let temp = tempfile::tempdir().unwrap();
+        let mut downloader = Downloader::new(temp.path().to_owned());
+        downloader.http = reqwest::Client::builder().no_proxy().build().unwrap();
+        tokio::time::timeout(std::time::Duration::from_secs(10), async {
+            downloader.install("karaoke", model).await.unwrap();
+            stalled.notified().await;
+            assert_eq!(downloader.active_for("karaoke").await.unwrap().asset_id, model.id);
+            assert!(!downloader.cancel_for("listen").await);
+            assert!(downloader.cancel_for("karaoke").await);
+            while !downloader.active_for("karaoke").await.unwrap().done { tokio::time::sleep(std::time::Duration::from_millis(10)).await; }
+            ready.store(true, Ordering::Relaxed);
+            downloader.install("karaoke", model).await.unwrap();
+            while !downloader.active_for("karaoke").await.unwrap().done { tokio::time::sleep(std::time::Duration::from_millis(10)).await; }
+            assert_eq!(std::fs::read(downloader.path_of(model)).unwrap(), b"archive");
+        }).await.expect("single file did not finish after retry");
+        server.abort();
     }
 
     #[tokio::test]

@@ -369,6 +369,17 @@ Historical measurements from the 4.0.0 development builds on Windows 11, Ryzen 9
 
 ACE-Step's native 2B turbo Q8_0 took 21.5 ms per DiT step on warm runs. Its roughly 8.1 GiB peak occurred during VAE decoding. This timing covers one stage of synthesis. A dash indicates an unrecorded measurement.
 
+**ACE-Step Studio 4.0.2, native acestep.cpp `9eb75e8`.** On Windows with an RTX 4090 (driver 617.42), each run generated 30 seconds of instrumental audio using Turbo Q8_0, eight Euler steps and seed 42.
+
+| Backend | Start server to first WAV | Warm request (median of 3) | Audio seconds per second, warm | Peak GPU memory (whole card) | Peak process-tree RAM |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| CUDA 13 | 6.813 s | 0.474 s | 63.3× | 12.00 GiB | 1.97 GiB |
+| Vulkan | 19.063 s | 0.507 s | 59.2× | 12.42 GiB | 2.66 GiB |
+
+Memory was sampled every 200 ms. Peak GPU usage rose 9.56 GiB on CUDA and 9.99 GiB on Vulkan above the desktop baseline. Windows file caching was enabled. These measurements use the published ACE-Step Studio engine.
+
+For seed 42, both WAVs contain 30.0 s of stereo audio at 48 kHz. Measured in 100 ms windows across both channels, the last 5.3 s on CUDA and 5.0 s on Vulkan stay below −60 dBFS RMS. The speed column uses the full WAV duration.
+
 ### Speed reported by installations
 
 How long a 3-minute song takes, by graphics card. These are averages from what YuE2 Studio installations reported

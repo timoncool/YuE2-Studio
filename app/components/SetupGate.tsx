@@ -132,6 +132,7 @@ type EngineChoice = { id: string; label: string; device?: boolean; byAddress?: b
  * installed and removed by one button.
  */
 export const OptionalGroup: React.FC<{
+  libraryRevision?: number;
   title: string;
   purpose: string;
   statusUrl: string;
@@ -161,7 +162,7 @@ export const OptionalGroup: React.FC<{
   focused?: boolean;
   /** Why the page was sent here, shown on top when it was. */
   focusNote?: string;
-}> = ({ title, purpose, statusUrl, installUrl, removeUrl, engines, settingsUrl, serverField, cancelUrl, embedded, children, focused, focusNote }) => {
+}> = ({ libraryRevision = 0, title, purpose, statusUrl, installUrl, removeUrl, engines, settingsUrl, serverField, cancelUrl, embedded, children, focused, focusNote }) => {
   const { t } = useI18n();
   const box = useRef<HTMLDivElement>(null);
   const [status, setStatus] = useState<OptionalStatus | null>(null);
@@ -195,6 +196,18 @@ export const OptionalGroup: React.FC<{
   const modelRead = useRef(false);
   const statusGeneration = useRef(0);
   // the engines by their ids: a list made anew by the page with the same engines does not start the reads again
+  const cancelDownload = async () => {
+    if (!cancelUrl) return;
+    setFailed(null);
+    try {
+      const response = await fetch(cancelUrl, { method: 'POST' });
+      if (!response.ok) throw new Error(await errorMessage(response));
+      setStarting(false);
+      await load();
+    } catch (error) {
+      setFailed(error instanceof Error ? error.message : String(error));
+    }
+  };
   const engineIds = (engines ?? []).map((choice) => choice.id).join('\n');
   const load = useCallback(async () => {
     const generation = statusGeneration.current;
@@ -246,7 +259,10 @@ export const OptionalGroup: React.FC<{
       .catch((error: Error) => setFailed(error.message));
   };
 
-  useEffect(() => { void load().catch(() => undefined); }, [load]);
+  useEffect(() => {
+    statusGeneration.current++;
+    void load().catch(() => undefined);
+  }, [load, libraryRevision]);
 
   useEffect(() => {
     if (!open || !engines?.some((choice) => choice.device === false)) return;
@@ -519,13 +535,7 @@ export const OptionalGroup: React.FC<{
                         {cancelUrl && (
                           <button
                             type="button"
-                            onClick={() => {
-                              setFailed(null);
-                              setStarting(false);
-                              void fetch(cancelUrl, { method: 'POST' })
-                                .then(() => load())
-                                .catch((error: Error) => setFailed(error.message));
-                            }}
+                            onClick={() => void cancelDownload()}
                             title={t('cancelDownload')}
                             className="shrink-0 rounded-md border border-zinc-300 p-1.5 text-zinc-500 transition-colors hover:border-rose-400 hover:bg-rose-500/10 hover:text-rose-600 dark:border-white/15 dark:text-zinc-400"
                           >
@@ -654,6 +664,12 @@ export const OptionalGroup: React.FC<{
                       >
                         {active ? <Loader2 size={13} className="animate-spin" /> : <Download size={13} />}
                         {active ? `${percent}%` : t('download')}
+                      </button>
+                    )}
+                    {active && cancelUrl && (
+                      <button type="button" onClick={() => void cancelDownload()} title={t('cancelDownload')} aria-label={t('cancelDownload')}
+                        className="rounded-md border border-zinc-300 p-1.5 text-zinc-500 hover:text-rose-600 dark:border-white/15">
+                        <Square size={13} />
                       </button>
                     )}
                   </div>
@@ -799,6 +815,8 @@ export const SetupGate: React.FC<{
   const chosenValues = useMemo(() => Object.values(choice).filter((id): id is string => typeof id === 'string' && id.length > 0), [choice]);
   const [error, setError] = useState<string | null>(null);
   // what taking the user's own model folder did: files taken, copies made, what is still missing
+  const [libraryRevision, setLibraryRevision] = useState(0);
+  const [adopting, setAdopting] = useState(false);
   const [adoptNote, setAdoptNote] = useState<string | null>(null);
   const [adoptRefused, setAdoptRefused] = useState<AdoptRefusal[]>([]);
   // the training page's packs are listed here too, with everything else the studio downloads
@@ -1254,11 +1272,17 @@ export const SetupGate: React.FC<{
                     line and a disk. */}
                 <button
                   type="button"
+                  disabled={adopting}
+                  aria-busy={adopting}
                   onClick={() => {
+                    setAdopting(true);
+                    setAdoptNote(null);
+                    setAdoptRefused([]);
                     void fetch('/setup/adopt', { method: 'POST' })
                       .then(async (response) => (response.ok ? response.json() : Promise.reject(new Error(await errorMessage(response)))))
                       .then(async (body: { picked?: boolean; adopted?: string[]; copied?: { id: string; bytes: number }[]; refused?: AdoptRefusal[] } | null) => {
                         if (!body?.picked) return;
+                        setLibraryRevision((revision) => revision + 1);
                         setAdoptRefused(body.refused ?? []);
                         const next = await refresh();
                         const wanted = chosenIds ?? chosenValues;
@@ -1270,14 +1294,15 @@ export const SetupGate: React.FC<{
                           missing.length > 0 ? t('adoptMissing').replace('{files}', missing.map((component) => `${component.filename} (${bytes(component.bytes)})`).join(', ')) : '',
                         ].filter(Boolean).join(' '));
                       })
-                      .catch((reason) => setError(reason instanceof Error ? reason.message : String(reason)));
+                      .catch((reason) => setError(reason instanceof Error ? reason.message : String(reason)))
+                      .finally(() => setAdopting(false));
                   }}
                   className="ml-2 mt-2 inline-flex items-center gap-1 rounded-lg border border-zinc-300 px-2 py-1 text-[11px] font-medium text-zinc-600 hover:border-pink-400 hover:text-pink-600 dark:border-white/15 dark:text-zinc-300"
                 >
-                  <FolderDown size={13} />
-                  {t('useExistingModels')}
+                  {adopting ? <Loader2 size={13} className="animate-spin" /> : <FolderDown size={13} />}
+                  {t(adopting ? 'checkingExistingModels' : 'useExistingModels')}
                 </button>
-                {adoptNote && <p className="mt-2 text-[11px] leading-4 text-zinc-600 dark:text-zinc-300">{adoptNote}</p>}
+                {adoptNote && <p role="status" className="mt-2 text-[11px] leading-4 text-zinc-600 dark:text-zinc-300">{adoptNote}</p>}
                 {adoptRefused.map((refusal) => (
                   <p key={refusal.file} className="mt-1 break-all text-[11px] leading-4 text-amber-600 dark:text-amber-300">
                     <span className="font-mono">{refusal.file}</span> — {refusal.kind === 'size'
@@ -1370,6 +1395,7 @@ export const SetupGate: React.FC<{
           <p className="mt-1 text-xs leading-5 text-zinc-500 dark:text-zinc-400">{t('optionalExtrasHint')}</p>
           <div className="mt-3 space-y-3">
             <OptionalGroup
+              libraryRevision={libraryRevision}
               focused={focus === 'assistant'}
               focusNote={t('assistantWandNeedsIt')}
               title={t('assistantSection')}
@@ -1390,6 +1416,7 @@ export const SetupGate: React.FC<{
               )}
             </OptionalGroup>
             <OptionalGroup
+              libraryRevision={libraryRevision}
               title={t('stemsTitle')}
               purpose={t('separationSectionHint')}
               statusUrl="/v1/separation/runtime"
@@ -1400,6 +1427,7 @@ export const SetupGate: React.FC<{
               engines={SEPARATION_ENGINES}
             />
             <OptionalGroup
+              libraryRevision={libraryRevision}
               title={t('karaokeSection')}
               purpose={t('karaokeOptionalPurpose')}
               statusUrl="/v1/karaoke/status"
@@ -1415,6 +1443,7 @@ export const SetupGate: React.FC<{
                 where they are used and listed here with the rest. */}
             {mode === 'settings' && trainingInfo?.card_trains && (
               <OptionalGroup
+                libraryRevision={libraryRevision}
                 title={t('hubPartTraining')}
                 purpose={t('hubTrainingPurpose')}
                 statusUrl="/v1/training/pack/runtime"
@@ -1425,6 +1454,7 @@ export const SetupGate: React.FC<{
             )}
             {mode === 'settings' && (
               <OptionalGroup
+                libraryRevision={libraryRevision}
                 title={t('hubPartListen')}
                 purpose={t('hubListenPurpose')}
                 statusUrl="/v1/training/listen/runtime"
@@ -1435,6 +1465,7 @@ export const SetupGate: React.FC<{
             )}
             {mode === 'settings' && (
               <OptionalGroup
+                libraryRevision={libraryRevision}
                 title={t('midiTitle')}
                 purpose={t('hubMidiPurpose')}
                 statusUrl="/v1/midi/runtime"
@@ -1446,6 +1477,7 @@ export const SetupGate: React.FC<{
             )}
             {mode === 'settings' && (
               <OptionalGroup
+                libraryRevision={libraryRevision}
                 title={t('restoreTitle')}
                 purpose={t('restorePurpose')}
                 statusUrl="/v1/restore/runtime"

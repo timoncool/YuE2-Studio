@@ -151,7 +151,8 @@ connected and the address to paste.
 **A LoRA from a folder of songs, written by you**
 
 1. `training_status`. If the trainer or the listening pack is missing:
-   `training_pack_install`, `training_listen_pack_install`.
+   `training_pack_install`, `training_listen_pack_install`. To stop a download, use
+   `training_pack_cancel` for the trainer or `training_listen_pack_cancel` for the listening pack.
 2. `dataset_create` with the artist's name (the trigger word is made from it), then
    `dataset_add_folder` with the folder.
 3. `dataset_prepare` with `lyrics: missing, style: missing, writer: agent`, then
@@ -257,7 +258,7 @@ move around. Check the result with `ui_screenshot`.
 - **vst**: `vst_list`, `vst_scan`, `vst_open_editor`.
 - **lora**: `lora_list`, `lora_install_catalog`, `lora_search_hf`, `lora_hf_files`, `lora_install_hf`, `lora_update`, `lora_delete`, `lora_import_folder` (every LoRA of a folder, linked without a copy), `lora_import_files`, `lora_cancel_download`, `lora_export_comfyui` (a trained LoRA as one file for ComfyUI's native YuE2).
 - **dataset**: `dataset_import_folder`, `dataset_reveal`, `dataset_song_files`, `dataset_prepare_train_after`, `dataset_get`, `dataset_create`, `dataset_add_folder`, `dataset_add_library_songs`, `dataset_update`, `dataset_delete`, `dataset_song_update`, `dataset_song_delete`, `lyrics_syllables` (each sung line with its syllables, as the score counts them), `lyrics_find`, `dataset_prepare`, `dataset_take_as_is` (no assistant: found lyrics and heard styles kept as they are), `dataset_prepare_cancel`.
-- **training**: `training_pack_cancel`, `training_status`, `training_pack_install`, `training_listen_pack_install`, `training_start`, `training_continue`, `training_cancel`, `training_checkpoint_install`, `training_run_delete`.
+- **training**: `training_pack_cancel`, `training_status`, `training_pack_install`, `training_listen_pack_install`, `training_listen_pack_cancel`, `training_start`, `training_continue`, `training_cancel`, `training_checkpoint_install`, `training_run_delete`.
 - **ui**: `ui_screenshot`, `ui_read_page`, `ui_click`, `ui_type`, `ui_select`, `ui_press_key`, `ui_scroll`, `ui_navigate`, `ui_open_settings`, `ui_notify`, `ui_console`.
 - **create form**: `create_form_get`, `create_form_set`, `create_form_submit`.
 - **player**: `player_state`, `player_play`, `player_pause`, `player_seek`, `player_next`, `player_previous`, `player_queue_add`, `player_set` (repeat none, all, one, or stop after the track).

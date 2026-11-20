@@ -1595,6 +1595,7 @@ export const pt = {
     removeDownloaded: 'Eliminar os ficheiros descarregados e libertar o disco',
     dataFolder: 'Tudo o que o estúdio guarda',
     openFolder: 'Abrir pasta',
+    checkingExistingModels: 'A verificar os ficheiros na pasta selecionada…',
     adoptTaken: 'Aproveitados da pasta: {count} ficheiros.',
     adoptCopied: 'Noutro disco não era possível partilhá-los, por isso foram copiados: mais {size} no disco.',
     adoptMissing: 'Ainda por descarregar: {files}.',
