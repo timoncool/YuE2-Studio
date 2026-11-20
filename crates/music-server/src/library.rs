@@ -201,15 +201,59 @@ impl Library {
  pub fn get_song(&self,id:&str)->Result<Option<Song>>{Self::read_song(&self.connection.lock().unwrap(),id)}
  fn read_song(c:&Connection,id:&str)->Result<Option<Song>>{Ok(c.query_row("SELECT id,title,audio_path,caption,lyrics,metadata_json,generation_settings_json,engine_id,profile_id,replay_request_json,audio_codes_json,source,created_at,updated_at FROM songs WHERE id=?",[id],row_song).optional()?)}
  pub fn create_song(&self,input:SongInput)->Result<Song>{let now=now();let song=Song{id:uuid::Uuid::now_v7().to_string(),title:input.title,audio_path:input.audio_path,caption:input.caption,lyrics:input.lyrics,metadata:input.metadata,generation_settings:input.generation_settings,engine_id:input.engine_id,profile_id:input.profile_id,replay_request:input.replay_request,audio_codes:input.audio_codes,source:input.source,created_at:now.clone(),updated_at:now};self.save_song(&song)?;Ok(song)}
- pub fn import_generated_song(&self,input:GeneratedSongInput)->Result<ImportedSong>{
-  if input.audio.is_empty(){anyhow::bail!("cannot import an empty audio result")}
-  fs::create_dir_all(&self.media_dir).with_context(||format!("create media directory {}",self.media_dir.display()))?;
-  let id=uuid::Uuid::now_v7().to_string();let filename=format!("{id}.{}",input.audio_extension);let target=self.media_dir.join(&filename);let temporary=self.media_dir.join(format!("{filename}.part"));
-  {let mut file=fs::OpenOptions::new().create_new(true).write(true).open(&temporary)?;use std::io::Write;file.write_all(&input.audio)?;file.sync_all()?;}
-  fs::rename(&temporary,&target).with_context(||format!("publish generated audio {}",target.display()))?;
-  let now=now();let title=input.title.map(|t|t.trim().to_owned()).filter(|t|!t.is_empty()).unwrap_or_else(||generated_title(&input.caption));let song=Song{id,title,audio_path:Some(target.display().to_string()),caption:input.caption,lyrics:input.lyrics,metadata:input.metadata,generation_settings:input.generation_settings,engine_id:input.engine_id,profile_id:input.profile_id,replay_request:input.replay_request,audio_codes:input.audio_codes,source:input.source,created_at:now.clone(),updated_at:now};
-  if let Err(error)=self.save_song(&song){let _=fs::remove_file(&target);return Err(error.context("store generated song record"));}
-  Ok(ImportedSong{song,audio_filename:filename})
+ pub fn import_generated_song(&self, input: GeneratedSongInput) -> Result<ImportedSong> {
+    self.import_generated_song_with_latent(input, None)
+ }
+
+ pub(crate) fn import_generated_song_with_latent(
+    &self,
+    input: GeneratedSongInput,
+    latent: Option<&[u8]>,
+ ) -> Result<ImportedSong> {
+    fn publish(path: &Path, bytes: &[u8]) -> Result<()> {
+        use std::io::Write;
+        let temporary = path.with_file_name(format!("{}.part", path.file_name().unwrap().to_string_lossy()));
+        let mut file = fs::OpenOptions::new().create_new(true).write(true).open(&temporary)?;
+        let written = file.write_all(bytes).and_then(|()| file.sync_all());
+        drop(file);
+        let published = written.and_then(|()| fs::rename(&temporary, path));
+        if published.is_err() {
+            let _ = fs::remove_file(&temporary);
+        }
+        published.with_context(|| format!("publish generated media {}", path.display()))
+    }
+
+    anyhow::ensure!(!input.audio.is_empty(), "cannot import an empty audio result");
+    fs::create_dir_all(&self.media_dir)
+        .with_context(|| format!("create media directory {}", self.media_dir.display()))?;
+    let id = uuid::Uuid::now_v7().to_string();
+    let filename = format!("{id}.{}", input.audio_extension);
+    let target = self.media_dir.join(&filename);
+    let sidecar = self.media_dir.join(format!("{id}.latent"));
+    publish(&target, &input.audio)?;
+    let result = (|| {
+        if let Some(latent) = latent {
+            publish(&sidecar, latent)?;
+        }
+        let now = now();
+        let title = input.title.map(|value| value.trim().to_owned()).filter(|value| !value.is_empty())
+            .unwrap_or_else(|| generated_title(&input.caption));
+        let song = Song {
+            id, title, audio_path: Some(target.display().to_string()), caption: input.caption,
+            lyrics: input.lyrics, metadata: input.metadata, generation_settings: input.generation_settings,
+            engine_id: input.engine_id, profile_id: input.profile_id, replay_request: input.replay_request,
+            audio_codes: input.audio_codes, source: input.source, created_at: now.clone(), updated_at: now,
+        };
+        self.save_song(&song).context("store generated song record")?;
+        Ok(ImportedSong { song, audio_filename: filename })
+    })();
+    if result.is_err() {
+        let _ = fs::remove_file(&target);
+        if latent.is_some() {
+            let _ = fs::remove_file(&sidecar);
+        }
+    }
+    result
  }
  pub fn import_audio_song(&self,input:AudioImportInput)->Result<ImportedSong>{
   if input.audio.is_empty(){anyhow::bail!("cannot import an empty audio file")}
