@@ -22,9 +22,10 @@ it('keeps the current preview when a second folder selection is cancelled', asyn
     expect(button.disabled).toBe(true);
     expect(request.mock.calls[0][1].body).toBe('{"pick":true}');
     await act(async () => finish(Response.json({
-      path: 'X:/old', space: { total_bytes: 10, required_bytes: 10, available_bytes: 100 }, songs: [{ id: '1', title: 'Bass', files: [], missing: [{ kind: 'audio', name: 'bass.wav' }] }],
+      path: 'X:/old', studio: 'MiniMax Music3 Studio', space: { total_bytes: 10, required_bytes: 10, available_bytes: 100 }, songs: [{ id: '1', engine_id: 'minimaxmusic-cpp', title: 'Bass', files: [], missing: [{ kind: 'audio', name: 'bass.wav' }] }],
       playlists: [{ id: 'one', name: 'Set list', song_ids: ['1'] }],
     })));
+    expect(host.querySelector('[role="status"]')?.textContent).toContain('MiniMax Music3 Studio');
     expect(host.textContent).toContain('bass.wav');
     expect(host.textContent).toContain('Set list');
     request.mockResolvedValueOnce(Response.json({ cancelled: true }));
