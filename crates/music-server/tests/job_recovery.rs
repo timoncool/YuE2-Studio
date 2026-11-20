@@ -78,7 +78,7 @@ async fn reopening_with_a_cloud_provider_keeps_the_original_request_without_a_ph
     studio.kill().await.unwrap();
     assert!(replacement.is_none(), "{message}");
     assert!(
-        message.contains("yue2-cpp") && message.contains("unconfigured"),
+        message.contains("yue2-cpp") && message.contains("openrouter"),
         "{message}"
     );
     assert_eq!(
