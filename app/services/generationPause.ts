@@ -16,14 +16,25 @@ export function generationPauseMs(mode: GenerationPauseMode, from: string, to: s
 }
 
 /** A long pause must not overflow the host timer and start the next job immediately. */
-export function afterGenerationPause(duration: number, next: () => void): () => void {
+export function afterGenerationPause(duration: number, next: () => void, update?: (seconds: number) => void): () => void {
   const deadline = performance.now() + duration;
-  let timer: ReturnType<typeof setTimeout>;
+  const schedule = (remaining: number): ReturnType<typeof setTimeout> => {
+    const seconds = Math.ceil(remaining / 1000);
+    if (remaining > 0) update?.(seconds);
+    // Schedule the next displayed second from the same deadline that sends the job.
+    const tick = update ? remaining - Math.max(0, seconds - 1) * 1000 : maxTimeout;
+    return setTimeout(advance, Math.min(remaining, tick, maxTimeout));
+  };
   const advance = () => {
     const remaining = Math.ceil(deadline - performance.now());
     if (remaining <= 0) next();
-    else timer = setTimeout(advance, Math.min(remaining, maxTimeout));
+    else timer = schedule(remaining);
   };
-  timer = setTimeout(advance, Math.min(duration, maxTimeout));
+  let timer = schedule(duration);
   return () => clearTimeout(timer);
+}
+
+export function formatGenerationCountdown(seconds: number): string {
+  const minutes = Math.floor(seconds / 60);
+  return `${minutes}:${String(seconds % 60).padStart(2, '0')}`;
 }

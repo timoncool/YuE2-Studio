@@ -172,6 +172,22 @@ describe('pauses between repeated generations (#261)', () => {
     cancel();
   });
 
+  it('shows the remaining pause and cancels it from the countdown', () => {
+    choosePause('fixed');
+    click(buttonNamed('create')!);
+    expect(host.querySelector('[role="timer"]')).toBeNull();
+    renderQueue(false);
+    expect(host.querySelector('[role="timer"]')?.textContent).toBe('Next generation in 1:00');
+    advance(1_000);
+    expect(host.querySelector('[role="timer"]')?.textContent).toBe('Next generation in 0:59');
+
+    click(buttonNamed('Cancel next generation')!);
+    expect(host.querySelector('[role="timer"]')).toBeNull();
+    expect(buttonNamed('Cancel next generation')).toBeUndefined();
+    advance(60_000);
+    expect(sent).toHaveLength(1);
+  });
+
   it('clears a pending repeat when Without stopping is switched off', () => {
     choosePause('fixed');
     click(buttonNamed('create')!);
