@@ -1,3 +1,5 @@
+from contextlib import contextmanager
+
 import base64, hashlib, http.server, io, json, math, os, pathlib, socket, struct, subprocess, sys, tempfile, threading, time, urllib.error, urllib.request, wave
 
 exe = pathlib.Path(sys.argv[1]).resolve()
@@ -49,9 +51,22 @@ def unused_port():
         listener.bind(("127.0.0.1",0))
         return listener.getsockname()[1]
 
-with tempfile.TemporaryDirectory(prefix="yue-openrouter-") as profile, http.server.ThreadingHTTPServer(("127.0.0.1",0), Provider) as upstream:
+@contextmanager
+def local_provider():
+    with http.server.ThreadingHTTPServer(("127.0.0.1", 0), Provider) as server:
+        # server_close waits for request handlers once the accept loop has stopped.
+        server.daemon_threads = False
+        listener = threading.Thread(target=server.serve_forever, name="music-fixture")
+        listener.start()
+        try:
+            yield server
+        finally:
+            server.shutdown()
+            listener.join()
+
+
+with tempfile.TemporaryDirectory(prefix="yue-openrouter-") as profile, local_provider() as upstream:
     root=pathlib.Path(profile)
-    threading.Thread(target=upstream.serve_forever,daemon=True).start()
     (root/"openrouter-catalog-v2.json").write_text(json.dumps({"models":[{"id":model,"name":model_name,"input_modalities":["text"],"output_modalities":["audio"],"supported_parameters":[],"capabilities":["music_generation"]}]}),encoding="utf8")
     port=unused_port()
     # Only this child process gets the disposable Studio profile and credentials.
