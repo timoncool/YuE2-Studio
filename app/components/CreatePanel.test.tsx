@@ -92,6 +92,25 @@ const type = (element: HTMLTextAreaElement | HTMLInputElement, value: string) =>
 const click = (element: Element) => act(() => { element.dispatchEvent(new MouseEvent('click', { bubbles: true })); });
 const buttonNamed = (text: string) => [...host.querySelectorAll('button')].find(button => button.textContent?.includes(text));
 
+it('keeps an edited score across a cloud session and reopening the native form', async () => {
+  localStorage.setItem('studio.createDraft', JSON.stringify({ style: 'folk', lyrics: 'verse' }));
+  act(() => root.render(panel({ musicEngine: 'local' })));
+  await flush();
+  const score = 'X:1\nK:C\nC D E F|';
+  type(field('textarea[aria-label="scoreCardTitle"]')!, score);
+  click(buttonNamed('cotMelody')!);
+  act(() => root.render(panel({ musicEngine: 'openrouter' })));
+  await flush();
+  act(() => root.unmount());
+  root = createRoot(host);
+  act(() => root.render(panel({ musicEngine: 'local' })));
+  await flush();
+  expect(field('textarea[aria-label="scoreCardTitle"]')!.value).toBe(score);
+  expect(JSON.parse(localStorage.getItem('studio.createDraft')!)).toMatchObject({ style: 'folk', lyrics: 'verse', abc: score, cot: 'melody' });
+  click(host.querySelector('button[title="resetPrompt"]')!);
+  expect(JSON.parse(localStorage.getItem('studio.createDraft')!)).toMatchObject({ style: '', lyrics: '', abc: '', cot: '', continueScore: '' });
+});
+
 describe('an instrumental (#217)', () => {
   it('keeps a score written for one submission out of the form and writes a new one for the next', async () => {
     act(() => root.render(panel({})));
