@@ -145,6 +145,14 @@ impl Library {
     let rows = stmt.query_map([source], |row| Ok((row.get(0)?, (row.get(1)?,row.get(2)?))))?;
     Ok(rows.collect::<rusqlite::Result<_>>()?)
  }
+ pub(super) fn resolve_legacy_song_reference(&self, owner: &str, old_reference: &str) -> Result<Option<String>> {
+    let connection = self.connection.lock().unwrap();
+    Ok(connection.query_row(
+        "SELECT reference.new_id FROM legacy_ids origin JOIN legacy_ids reference ON reference.source=origin.source
+         WHERE origin.kind='song' AND origin.new_id=?1 AND reference.kind='song' AND reference.old_id=?2 AND reference.imported=1",
+        params![owner, old_reference], |row| row.get(0),
+    ).optional()?)
+ }
  /// Every song but those in the bin.
  pub fn list_songs(&self)->Result<Vec<Song>>{Ok(self.all_songs()?.into_iter().filter(|song|!is_trashed(song)).collect())}
  /// The songs in the bin, the latest deleted first.

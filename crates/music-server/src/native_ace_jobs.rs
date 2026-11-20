@@ -23,6 +23,21 @@ pub(super) async fn submit(
     profile: String,
     attempt: u32,
 ) -> (StatusCode, Json<MusicJob>) {
+    submit_inner(state, request, profile, attempt, None).await
+}
+
+struct ReplayOrigin {
+    song: library::Song,
+    request: ReplayMusicJobRequest,
+}
+
+async fn submit_inner(
+    state: AppState,
+    request: CreateMusicJobRequest,
+    profile: String,
+    attempt: u32,
+    replay: Option<ReplayOrigin>,
+) -> (StatusCode, Json<MusicJob>) {
     let reject = |status, reason: String| {
         (
             status,
@@ -51,7 +66,7 @@ pub(super) async fn submit(
     if options.source_song_id.is_none() {
         options.source_song_id = request.cover_of.clone();
     }
-    let input = match engine_request(&request, &options) {
+    let input = match engine_request(&request, &options, replay.is_some()) {
         Ok(input) => input,
         Err(error) => return reject(StatusCode::BAD_REQUEST, format!("{error:#}")),
     };
@@ -62,7 +77,12 @@ pub(super) async fn submit(
         );
     };
     let catalogue = ace::installation(&root);
-    let launch = match catalogue.launch(&profile) {
+    let resolved = if replay.is_some() {
+        catalogue.launch_replay(&profile, &input)
+    } else {
+        catalogue.launch(&profile)
+    };
+    let launch = match resolved {
         Ok(launch) => launch,
         Err(error) => return reject(StatusCode::SERVICE_UNAVAILABLE, format!("{error:#}")),
     };
@@ -84,7 +104,10 @@ pub(super) async fn submit(
         Err(error) => return reject(StatusCode::SERVICE_UNAVAILABLE, format!("{error:#}")),
     };
     let job = MusicJob {
-        derived: None,
+        derived: replay.as_ref().map(|replay| derivation(&replay.song, "replay",
+            json!({"steps":replay.request.steps, "seed":replay.request.seed,
+                "solver":replay.request.solver, "synth_batch_size":replay.request.synth_batch_size,
+                "output_format":replay.request.output_format, "mp3_bitrate":replay.request.mp3_bitrate}))),
         id: format!("ace-{}", uuid_suffix()),
         client_ref: request.client_ref.clone(),
         submitted_at: unix_millis(),
@@ -113,9 +136,13 @@ pub(super) async fn submit(
         card_memory_short: false,
         tracks_asked: None,
     };
+    let saved_request = match replay {
+        Some(replay) => json!({"replay": replay.request, "music_source": request.music_source}),
+        None => json!(request),
+    };
     if let Err(error) = state
         .library
-        .save_music_job(&stored_job(&job, json!(request), attempt))
+        .save_music_job(&stored_job(&job, saved_request, attempt))
     {
         return reject(StatusCode::INTERNAL_SERVER_ERROR, error.to_string());
     }
@@ -162,7 +189,11 @@ pub(super) async fn submit(
     (StatusCode::ACCEPTED, Json(accepted))
 }
 
-fn engine_request(request: &CreateMusicJobRequest, options: &AceOptions) -> anyhow::Result<Value> {
+fn engine_request(
+    request: &CreateMusicJobRequest,
+    options: &AceOptions,
+    replay: bool,
+) -> anyhow::Result<Value> {
     let mut fields = options.fields.clone();
     for (key, value) in [
         ("caption", json!(request.style)),
@@ -208,8 +239,174 @@ fn engine_request(request: &CreateMusicJobRequest, options: &AceOptions) -> anyh
         !ace::needs_source(task) || options.source_song_id.is_some(),
         "ACE-Step task {task} needs a library source song"
     );
-    anyhow::ensure!(!ace::base_model_only(task), "ACE-Step task {task} needs a base DiT, and the installed catalogue profiles use turbo DiTs");
+    anyhow::ensure!(
+        !ace::base_model_only(task)
+            || (replay
+                && input["synth_model"]
+                    .as_str()
+                    .is_some_and(|name| name.contains("-base-"))),
+        "ACE-Step task {task} needs the original base DiT"
+    );
     Ok(input)
+}
+
+pub(super) async fn replay(
+    state: AppState,
+    song: library::Song,
+    mut request: ReplayMusicJobRequest,
+    attempt: u32,
+) -> Result<(StatusCode, Json<MusicJob>), (StatusCode, Json<ApiError>)> {
+    let (profile, create) = replay_request(&state.library, &song, &request)
+        .map_err(|error| api_error(StatusCode::BAD_REQUEST, format!("{error:#}")))?;
+    request.song_id = Some(song.id.clone());
+    request.replay_request = None;
+    Ok(submit_inner(
+        state,
+        create,
+        profile,
+        attempt,
+        Some(ReplayOrigin { song, request }),
+    )
+    .await)
+}
+
+fn replay_request(
+    library: &library::Library,
+    song: &library::Song,
+    overrides: &ReplayMusicJobRequest,
+) -> anyhow::Result<(String, CreateMusicJobRequest)> {
+    anyhow::ensure!(
+        song.engine_id == ace::ENGINE_ID,
+        "the source track was not made by ACE-Step"
+    );
+    anyhow::ensure!(
+        overrides.extend_seconds.is_none(),
+        "ACE-Step replay does not support extend_seconds"
+    );
+    if let Some(steps) = overrides.steps {
+        anyhow::ensure!(steps > 0, "steps must be at least 1");
+    }
+    if let Some(takes) = overrides.synth_batch_size {
+        anyhow::ensure!(
+            (1..=ace::MAX_TAKES as u32).contains(&takes),
+            "synth_batch_size must be between 1 and {}",
+            ace::MAX_TAKES
+        );
+    }
+
+    let mut fields = song
+        .replay_request
+        .as_ref()
+        .and_then(Value::as_object)
+        .cloned()
+        .context("the track has no ACE-Step replay record")?;
+    let take_link =
+        |fields: &mut Map<String, Value>, key: &str| -> anyhow::Result<Option<String>> {
+            let value = fields
+                .remove(key)
+                .or_else(|| song.generation_settings.get(key).cloned());
+            let Some(id) = value
+                .as_ref()
+                .and_then(Value::as_str)
+                .filter(|id| !id.is_empty())
+            else {
+                return Ok(None);
+            };
+            Ok(Some(
+                library
+                    .resolve_legacy_song_reference(&song.id, id)?
+                    .unwrap_or_else(|| id.into()),
+            ))
+        };
+    let source = take_link(&mut fields, "source_song_id")?;
+    let reference = take_link(&mut fields, "reference_song_id")?;
+    let fade_in = fields
+        .remove("fade_in")
+        .or_else(|| song.generation_settings.get("fade_in").cloned());
+    let fade_out = fields
+        .remove("fade_out")
+        .or_else(|| song.generation_settings.get("fade_out").cloned());
+    if fields
+        .get("audio_codes")
+        .and_then(Value::as_str)
+        .is_none_or(|codes| codes.trim().is_empty())
+    {
+        if let Some(codes) = song
+            .audio_codes
+            .as_ref()
+            .and_then(Value::as_str)
+            .filter(|codes| !codes.trim().is_empty())
+        {
+            fields.insert("audio_codes".into(), json!(codes));
+        }
+    }
+    if fields
+        .get("duration")
+        .and_then(Value::as_f64)
+        .is_none_or(|seconds| seconds <= 0.0)
+    {
+        if let Some(duration) = song
+            .metadata
+            .get("duration_seconds")
+            .filter(|value| value.as_f64().is_some_and(|seconds| seconds > 0.0))
+        {
+            fields.insert("duration".into(), duration.clone());
+        }
+    }
+    fields.insert("lm_batch_size".into(), json!(1));
+    for (key, value) in [
+        ("inference_steps", json!(overrides.steps)),
+        ("seed", json!(overrides.seed)),
+        ("solver", json!(overrides.solver)),
+        ("synth_batch_size", json!(overrides.synth_batch_size)),
+        ("output_format", json!(overrides.output_format)),
+        ("mp3_bitrate", json!(overrides.mp3_bitrate)),
+    ] {
+        if !value.is_null() {
+            fields.insert(key.into(), value);
+        }
+    }
+    if fields
+        .get("task_type")
+        .and_then(Value::as_str)
+        .unwrap_or("text2music")
+        == "text2music"
+        && fields
+            .get("audio_codes")
+            .and_then(Value::as_str)
+            .is_none_or(|codes| codes.trim().is_empty())
+    {
+        anyhow::ensure!(
+            fields
+                .get("duration")
+                .and_then(Value::as_f64)
+                .is_some_and(|seconds| seconds > 0.0),
+            "ACE-Step replay without audio codes needs the original duration"
+        );
+    }
+
+    let profile = song
+        .profile_id
+        .clone()
+        .unwrap_or_else(|| "legacy-replay".into());
+    let options = AceOptions {
+        think: Some(false),
+        source_song_id: source,
+        reference_song_id: reference,
+        fields,
+    };
+    let create: CreateMusicJobRequest = serde_json::from_value(json!({
+        "music_source":{"kind":"native","engine":ace::ENGINE_ID,"model":profile},
+        "ace":options,
+        "client_ref":overrides.client_ref,
+        "style":song.caption,
+        "lyrics":song.lyrics,
+        "title":overrides.title.as_deref().filter(|title| !title.trim().is_empty()).unwrap_or(&song.title),
+        "fade_in":fade_in,
+        "fade_out":fade_out,
+    }))?;
+    engine_request(&create, &options, true)?;
+    Ok((profile, create))
 }
 
 async fn watch(
@@ -285,7 +482,14 @@ async fn watch(
     if cancel_between_steps(&mut rx) {
         return Ok(None);
     }
-    let requests = ace::synth_requests(plan);
+    let mut requests = ace::synth_requests(plan);
+    if job.derived.is_some() {
+        if let Some(clip) = input.get("peak_clip") {
+            for request in &mut requests {
+                request["peak_clip"] = clip.clone();
+            }
+        }
+    }
     running(state, &job.id, "ACE-Step is rendering the song.").await;
     let remote = client.submit_synth(&requests, sources).await?;
     if !wait_for_job(client, &remote, &mut rx).await? {
@@ -469,7 +673,7 @@ fn import_take(
     settings["music_source"] = job.generation_settings["music_source"].clone();
     let imported = library.import_generated_song_with_latent(library::GeneratedSongInput {
         title: job.title.clone(),
-        metadata: json!({"duration_seconds": duration, "job_id": job.id, "cover_prompt": job.cover_prompt}),
+        metadata: json!({"duration_seconds": duration, "job_id": job.id, "cover_prompt": job.cover_prompt, "derived": job.derived}),
         caption: replay["caption"].as_str().unwrap_or(&job.style).into(),
         lyrics: replay["lyrics"].as_str().unwrap_or(&job.lyrics).into(),
         generation_settings: settings,
@@ -554,6 +758,58 @@ mod tests {
         assert_eq!(result.await.unwrap(), Ok(()));
         assert!(polled_after_cancel.load(Ordering::SeqCst));
         server.abort();
+    }
+
+    #[test]
+    fn legacy_ace_replays_preserve_model_codes_and_remapped_links() {
+        let root = std::env::temp_dir().join(format!("ace-replay-{}", uuid::Uuid::now_v7()));
+        let library =
+            library::Library::open_at(root.join("library.sqlite"), root.join("media")).unwrap();
+        let song = library
+            .create_song(
+                serde_json::from_value(json!({
+                    "title":"original", "caption":"style", "lyrics":"lyrics",
+                    "engine_id":"acestep-cpp", "metadata":{"duration_seconds":10},
+                    "audio_codes":"7,8,9",
+                    "replay_request":{
+                        "task_type":"repaint", "synth_model":"acestep-v15-xl-sft-Q4_K_M.gguf",
+                        "lm_model":"acestep-5Hz-lm-4B-BF16.gguf", "vae":"vae-BF16.gguf",
+                        "source_song_id":"old-source", "reference_song_id":"old-reference",
+                        "repainting_start":2, "repainting_end":4, "lm_seed":9,
+                        "seed":1, "fade_in":0.2, "inference_steps":10, "peak_clip":10
+                    }
+                }))
+                .unwrap(),
+            )
+            .unwrap();
+        library.legacy_transaction(|tx| {
+            tx.execute("INSERT INTO legacy_ids VALUES ('F:/portable','song','old-original',?1,1)", [&song.id])?;
+            tx.execute("INSERT INTO legacy_ids VALUES ('F:/portable','song','old-source','current-source',1)", [])?;
+            tx.execute("INSERT INTO legacy_ids VALUES ('F:/portable','song','old-reference','current-reference',1)", [])?;
+            Ok(())
+        }).unwrap();
+        let options = serde_json::from_value(json!({
+            "steps":6, "seed":123, "output_format":"wav32", "synth_batch_size":2, "solver":"euler", "title":"override"
+        })).unwrap();
+        let (profile, request) = replay_request(&library, &song, &options).unwrap();
+        assert_eq!(profile, "legacy-replay");
+        assert_eq!(request.title.as_deref(), Some("override"));
+        assert_eq!(request.fade_in, Some(0.2));
+        let ace = request.ace.unwrap();
+        assert_eq!(ace.think, Some(false));
+        assert_eq!(ace.source_song_id.as_deref(), Some("current-source"));
+        assert_eq!(ace.reference_song_id.as_deref(), Some("current-reference"));
+        assert_eq!(ace.fields["audio_codes"], "7,8,9");
+        assert_eq!(ace.fields["synth_model"], "acestep-v15-xl-sft-Q4_K_M.gguf");
+        assert_eq!(ace.fields["repainting_start"], 2);
+        assert_eq!(ace.fields["lm_seed"], 9);
+        assert_eq!(ace.fields["inference_steps"], 6);
+        assert_eq!(ace.fields["seed"], 123);
+        assert_eq!(ace.fields["output_format"], "wav32");
+        assert_eq!(ace.fields["synth_batch_size"], 2);
+        assert_eq!(ace.fields["peak_clip"], 10);
+        drop(library);
+        std::fs::remove_dir_all(root).unwrap();
     }
 
     #[test]

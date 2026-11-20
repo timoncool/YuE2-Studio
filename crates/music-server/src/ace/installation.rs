@@ -213,6 +213,62 @@ impl Installation {
             .iter()
             .find(|profile| profile.id == profile_id)
             .with_context(|| format!("unknown ACE-Step profile {profile_id}"))?;
+        self.launch_profile(profile)
+    }
+
+    pub fn launch_replay(&self, profile_id: &str, replay: &serde_json::Value) -> Result<Launch> {
+        let declared = PROFILES.iter().find(|profile| profile.id == profile_id);
+        let slots = [
+            ("synth_model", "dit", 0),
+            ("lm_model", "lm", 1),
+            ("vae", "vae", 3),
+        ];
+        if let Some(profile) = declared {
+            if slots.iter().all(|(key, _, index)| {
+                replay
+                    .get(key)
+                    .and_then(serde_json::Value::as_str)
+                    .is_none_or(|name| name == profile.weights[*index].name)
+            }) {
+                return self.launch_profile(profile);
+            }
+        }
+
+        let resolve = |(key, kind, index): (&str, &str, usize)| -> Result<Weight> {
+            match replay.get(key).and_then(serde_json::Value::as_str) {
+                Some(name) => released_replay_weight(kind, name)
+                    .with_context(|| format!("ACE-Step replay model {name} is not in the released {kind} catalogue")),
+                None => declared.map(|profile| profile.weights[index])
+                    .with_context(|| format!("ACE-Step replay needs the original {key} filename or a recorded profile")),
+            }
+        };
+        let dit = resolve(slots[0])?;
+        let lm = resolve(slots[1])?;
+        let vae = resolve(slots[2])?;
+        // Older custom sets did not record the text encoder in their replay.
+        // The released studio accepts either pinned encoder; prefer the one
+        // named by a stored profile, otherwise look for the BF16 file first.
+        let encoders =
+            if declared.is_some_and(|profile| profile.weights[2].name == TE_QWEN3_0_6B_Q8.name) {
+                [TE_QWEN3_0_6B_Q8, TE_QWEN3_0_6B_BF16]
+            } else {
+                [TE_QWEN3_0_6B_BF16, TE_QWEN3_0_6B_Q8]
+            };
+        let mut profile = Profile {
+            id: "legacy-replay",
+            label: "ACE-Step replay",
+            weights: [dit, lm, encoders[0], vae],
+        };
+        if declared.is_none() && !self.profile_root(&profile).1.ready {
+            profile.weights[2] = encoders[1];
+            if !self.profile_root(&profile).1.ready {
+                profile.weights[2] = encoders[0];
+            }
+        }
+        self.launch_profile(&profile)
+    }
+
+    fn launch_profile(&self, profile: &Profile) -> Result<Launch> {
         let executable = self
             .executable
             .as_ref()
@@ -512,4 +568,199 @@ mod discovery_tests {
         assert!(!explicit.profile_root(&profile).1.ready);
         fs::remove_dir_all(tempfile).unwrap();
     }
+}
+
+// Additional variants from the released ACE-Step Studio 318cc0ad catalogue.
+// Legacy custom sets store their concrete model filenames in the replay.
+fn released_replay_weight(kind: &str, name: &str) -> Option<Weight> {
+    let index = match kind {
+        "dit" => 0,
+        "lm" => 1,
+        "vae" => 3,
+        _ => return None,
+    };
+    if let Some(weight) = PROFILES
+        .iter()
+        .map(|profile| profile.weights[index])
+        .find(|weight| weight.name == name)
+    {
+        return Some(weight);
+    }
+    let extra: &[(&str, u64)] = match kind {
+        "dit" => &[
+            ("acestep-v15-base-BF16.gguf", 4_791_642_016),
+            ("acestep-v15-base-Q4_K_M.gguf", 1_445_710_208),
+            ("acestep-v15-base-Q5_K_M.gguf", 1_700_140_160),
+            ("acestep-v15-base-Q6_K.gguf", 1_970_472_000),
+            ("acestep-v15-base-Q8_0.gguf", 2_549_527_936),
+            ("acestep-v15-sft-BF16.gguf", 4_791_642_016),
+            ("acestep-v15-sft-Q4_K_M.gguf", 1_445_710_208),
+            ("acestep-v15-sft-Q5_K_M.gguf", 1_700_140_160),
+            ("acestep-v15-sft-Q6_K.gguf", 1_970_472_000),
+            ("acestep-v15-sft-Q8_0.gguf", 2_549_527_936),
+            ("acestep-v15-sftturbo50-BF16.gguf", 4_791_642_016),
+            ("acestep-v15-sftturbo50-Q8_0.gguf", 2_549_527_936),
+            ("acestep-v15-turbo-BF16.gguf", 4_791_642_080),
+            ("acestep-v15-turbo-Q5_K_M.gguf", 1_700_140_224),
+            ("acestep-v15-turbo-Q6_K.gguf", 1_970_472_064),
+            ("acestep-v15-turbo-Q8_0.gguf", 2_549_528_000),
+            ("acestep-v15-turbo-continuous-BF16.gguf", 4_791_642_080),
+            ("acestep-v15-turbo-continuous-Q4_K_M.gguf", 1_445_710_240),
+            ("acestep-v15-turbo-continuous-Q5_K_M.gguf", 1_700_140_192),
+            ("acestep-v15-turbo-continuous-Q6_K.gguf", 1_970_472_032),
+            ("acestep-v15-turbo-continuous-Q8_0.gguf", 2_549_527_968),
+            ("acestep-v15-turbo-shift1-BF16.gguf", 4_791_642_048),
+            ("acestep-v15-turbo-shift1-Q4_K_M.gguf", 1_445_710_240),
+            ("acestep-v15-turbo-shift1-Q5_K_M.gguf", 1_700_140_192),
+            ("acestep-v15-turbo-shift1-Q6_K.gguf", 1_970_472_032),
+            ("acestep-v15-turbo-shift1-Q8_0.gguf", 2_549_527_968),
+            ("acestep-v15-turbo-shift3-BF16.gguf", 4_791_642_048),
+            ("acestep-v15-turbo-shift3-Q4_K_M.gguf", 1_445_710_240),
+            ("acestep-v15-turbo-shift3-Q5_K_M.gguf", 1_700_140_192),
+            ("acestep-v15-turbo-shift3-Q6_K.gguf", 1_970_472_032),
+            ("acestep-v15-turbo-shift3-Q8_0.gguf", 2_549_527_968),
+            ("acestep-v15-xl-base-BF16.gguf", 9_978_530_784),
+            ("acestep-v15-xl-base-Q4_K_M.gguf", 2_989_922_656),
+            ("acestep-v15-xl-base-Q5_K_M.gguf", 3_527_566_432),
+            ("acestep-v15-xl-base-Q6_K.gguf", 4_098_812_960),
+            ("acestep-v15-xl-base-Q8_0.gguf", 5_305_828_704),
+            ("acestep-v15-xl-sft-BF16.gguf", 9_978_530_784),
+            ("acestep-v15-xl-sft-Q4_K_M.gguf", 2_989_922_656),
+            ("acestep-v15-xl-sft-Q5_K_M.gguf", 3_527_566_432),
+            ("acestep-v15-xl-sft-Q6_K.gguf", 4_098_812_960),
+            ("acestep-v15-xl-sft-Q8_0.gguf", 5_305_828_704),
+            ("acestep-v15-xl-sftturbo50-BF16.gguf", 9_978_530_816),
+            ("acestep-v15-xl-sftturbo50-Q4_K_M.gguf", 2_989_922_720),
+            ("acestep-v15-xl-sftturbo50-Q5_K_M.gguf", 3_527_566_496),
+            ("acestep-v15-xl-sftturbo50-Q6_K.gguf", 4_098_813_024),
+            ("acestep-v15-xl-sftturbo50-Q8_0.gguf", 5_305_828_768),
+            ("acestep-v15-xl-turbo-Q5_K_M.gguf", 3_527_566_464),
+            (
+                "acestep-v15-merge-base-sft-xl-ta-0.5-BF16.gguf",
+                9_978_530_784,
+            ),
+            (
+                "acestep-v15-merge-base-sft-xl-ta-0.5-Q4_K_M.gguf",
+                2_989_922_688,
+            ),
+            (
+                "acestep-v15-merge-base-sft-xl-ta-0.5-Q5_K_M.gguf",
+                3_527_566_464,
+            ),
+            (
+                "acestep-v15-merge-base-sft-xl-ta-0.5-Q6_K.gguf",
+                4_098_812_992,
+            ),
+            (
+                "acestep-v15-merge-base-sft-xl-ta-0.5-Q8_0.gguf",
+                5_305_828_736,
+            ),
+            (
+                "acestep-v15-merge-base-turbo-xl-ta-0.5-BF16.gguf",
+                9_978_530_784,
+            ),
+            (
+                "acestep-v15-merge-base-turbo-xl-ta-0.5-Q4_K_M.gguf",
+                2_989_922_688,
+            ),
+            (
+                "acestep-v15-merge-base-turbo-xl-ta-0.5-Q5_K_M.gguf",
+                3_527_566_464,
+            ),
+            (
+                "acestep-v15-merge-base-turbo-xl-ta-0.5-Q6_K.gguf",
+                4_098_812_992,
+            ),
+            (
+                "acestep-v15-merge-base-turbo-xl-ta-0.5-Q8_0.gguf",
+                5_305_828_736,
+            ),
+            (
+                "acestep-v15-merge-sft-turbo-xl-ta-0.3-BF16.gguf",
+                9_978_530_784,
+            ),
+            (
+                "acestep-v15-merge-sft-turbo-xl-ta-0.3-Q4_K_M.gguf",
+                2_989_922_688,
+            ),
+            (
+                "acestep-v15-merge-sft-turbo-xl-ta-0.3-Q5_K_M.gguf",
+                3_527_566_464,
+            ),
+            (
+                "acestep-v15-merge-sft-turbo-xl-ta-0.3-Q6_K.gguf",
+                4_098_812_992,
+            ),
+            (
+                "acestep-v15-merge-sft-turbo-xl-ta-0.3-Q8_0.gguf",
+                5_305_828_736,
+            ),
+            (
+                "acestep-v15-merge-sft-turbo-xl-ta-0.7-BF16.gguf",
+                9_978_530_784,
+            ),
+            (
+                "acestep-v15-merge-sft-turbo-xl-ta-0.7-Q4_K_M.gguf",
+                2_989_922_688,
+            ),
+            (
+                "acestep-v15-merge-sft-turbo-xl-ta-0.7-Q5_K_M.gguf",
+                3_527_566_464,
+            ),
+            (
+                "acestep-v15-merge-sft-turbo-xl-ta-0.7-Q6_K.gguf",
+                4_098_812_992,
+            ),
+            (
+                "acestep-v15-merge-sft-turbo-xl-ta-0.7-Q8_0.gguf",
+                5_305_828_736,
+            ),
+            ("acestep-v15-base-MXFP4.gguf", 1_281_885_888),
+            (
+                "acestep-v15-merge-base-turbo-xl-ta-0.5-MXFP4.gguf",
+                2_660_726_464,
+            ),
+            (
+                "acestep-v15-merge-sft-turbo-xl-ta-0.3-MXFP4.gguf",
+                2_660_726_464,
+            ),
+            (
+                "acestep-v15-merge-sft-turbo-xl-ta-0.7-MXFP4.gguf",
+                2_660_726_464,
+            ),
+            ("acestep-v15-sft-MXFP4.gguf", 1_281_885_888),
+            ("acestep-v15-sftturbo50-MXFP4.gguf", 1_281_885_888),
+            ("acestep-v15-turbo-MXFP4.gguf", 1_281_885_952),
+            ("acestep-v15-turbo-continuous-MXFP4.gguf", 1_281_885_920),
+            ("acestep-v15-turbo-shift1-MXFP4.gguf", 1_281_885_920),
+            ("acestep-v15-turbo-shift3-MXFP4.gguf", 1_281_885_920),
+            ("acestep-v15-xl-base-MXFP4.gguf", 2_660_726_432),
+            ("acestep-v15-xl-sft-MXFP4.gguf", 2_660_726_432),
+            ("acestep-v15-xl-sftturbo50-MXFP4.gguf", 2_660_726_496),
+            ("acestep_1.5_xl_turbo_regrind_v1-Q4_K_M.gguf", 2_989_922_688),
+            ("acestep_1.5_xl_turbo_regrind_v1-Q6_K.gguf", 4_098_812_992),
+            ("acestep_1.5_xl_turbo_regrind_v1-Q8_0.gguf", 5_305_828_736),
+        ],
+        "lm" => &[
+            ("acestep-5Hz-lm-0.6B-BF16.gguf", 1_331_108_128),
+            ("acestep-5Hz-lm-1.7B-BF16.gguf", 3_713_827_104),
+            ("acestep-5Hz-lm-4B-Q5_K_M.gguf", 3_025_965_984),
+            ("acestep-5Hz-lm-4B-Q6_K.gguf", 3_442_713_504),
+        ],
+        "vae" => &[
+            ("scragvae-BF16.gguf", 337_420_928),
+            ("acestep_1.5_vae_Regrind_V10b-BF16.gguf", 337_420_960),
+            (
+                "acestep_1.5_vae_Regrind_V10b_blend50-BF16.gguf",
+                337_420_928,
+            ),
+            ("acestep_1.5_vae_Regrind_V9b-BF16.gguf", 337_420_928),
+            ("acestep_1.5_vae_Regrind_V9b_blend50-BF16.gguf", 337_420_928),
+        ],
+        _ => return None,
+    };
+    extra
+        .iter()
+        .find(|(filename, _)| *filename == name)
+        .map(|&(name, bytes)| Weight { name, bytes })
 }
