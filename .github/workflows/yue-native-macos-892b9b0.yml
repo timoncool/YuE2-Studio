@@ -1,0 +1,55 @@
+name: YuE2 892b9b0 macOS Metal runtime QA
+on: push
+permissions:
+  contents: read
+jobs:
+  metal:
+    runs-on: macos-15
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - name: Build native runtime with the release recipe
+        shell: bash
+        run: |
+          set -euo pipefail
+          revision=892b9b0311512a1c45e42d6403881d17a991b87c
+          python3 -c 'import json,pathlib,sys; p=pathlib.Path("engines/yue2-cpp-source.json"); d=json.loads(p.read_text()); d["commit"]=sys.argv[1]; p.write_text(json.dumps(d,indent=2)+"\n")' "$revision"
+          export YUE_ENGINE_BUILD_ROOT="$RUNNER_TEMP/yue-engine-qa"
+          mkdir -p "$YUE_ENGINE_BUILD_ROOT" out
+          bash scripts/build-yue-runtime.sh "$RUNNER_TEMP/stage"
+          test "$(git -C "$YUE_ENGINE_BUILD_ROOT/yue2-engine" rev-parse HEAD)" = "$revision"
+          tar -C "$RUNNER_TEMP/stage" -czf "out/yue2-cpp-892b9b0-macos-arm64-metal.tar.gz" .
+      - name: Verify extracted executable and libraries
+        shell: bash
+        run: |
+          set -euo pipefail
+          unpacked="$(mktemp -d)"
+          archive="$PWD/out/yue2-cpp-892b9b0-macos-arm64-metal.tar.gz"
+          tar -xzf "$archive" -C "$unpacked"
+          (
+            cd "$unpacked"
+            for item in yue-server *.dylib; do
+              test -e "$item"
+              test "$(lipo -archs "$item")" = arm64
+              file "$item"
+              otool -L "$item"
+            done
+            metal="$(find . -type f -name 'libggml-metal*.dylib' -print -quit)"
+            test -n "$metal"
+            otool -L "$metal" | grep '/Metal.framework/'
+            clearenv="$(mktemp -d)"
+            cd "$clearenv"
+            status=0
+            env -u DYLD_LIBRARY_PATH -u DYLD_FALLBACK_LIBRARY_PATH DYLD_PRINT_LIBRARIES=1 "$unpacked/yue-server" --help >help.log 2>&1 || status=$?
+            cat help.log
+            [[ "$status" == 0 || "$status" == 1 ]]
+            grep -F 'yue2.cpp 892b9b0' help.log
+            grep -F "$unpacked/libggml" help.log
+          ) >out/verification.log 2>&1 || { cat out/verification.log; exit 1; }
+          cat out/verification.log
+          (cd out && shasum -a 256 *.tar.gz > SHA256SUMS && cat SHA256SUMS)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: yue-native-892b9b0-macos-arm64-metal
+          path: out/
+          if-no-files-found: error
