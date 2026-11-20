@@ -56,9 +56,12 @@ def visible_windows(pid):
             title = ctypes.create_unicode_buffer(512)
             user32.GetWindowTextW(hwnd, title, len(title))
             rect = wintypes.RECT()
-            if user32.GetWindowRect(hwnd, ctypes.byref(rect)) and rect.right > rect.left and rect.bottom > rect.top:
-                found.append({"handle": f"0x{hwnd:x}", "title": title.value,
-                              "width": rect.right - rect.left, "height": rect.bottom - rect.top})
+            if user32.GetWindowRect(hwnd, ctypes.byref(rect)):
+                width, height = rect.right - rect.left, rect.bottom - rect.top
+                # The single-instance broker and the event pump also have 16×16 windows.
+                if width >= 256 and height >= 160:
+                    found.append({"handle": f"0x{hwnd:x}", "title": title.value,
+                                  "width": width, "height": height})
         return True
 
     user32.EnumWindows(collect, 0)
