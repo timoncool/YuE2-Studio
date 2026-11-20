@@ -1228,6 +1228,7 @@ export const ko = {
     legacyLibrarySize: '미디어: {size} · 복사에 필요한 공간: {required}',
     legacyLibraryFree: '사용 가능: {size}',
     legacyLibraryNoSpace: '대상 드라이브에 공간이 부족합니다.',
+    legacyLibraryFound: '이 컴퓨터에서 찾은 라이브러리:',
     legacyLibraryTitle: 'ACE-Step 또는 MiniMax 라이브러리',
     legacyLibraryChoose: '이전 Studio 폴더 선택',
     legacyLibraryOpening: '라이브러리를 여는 중…',

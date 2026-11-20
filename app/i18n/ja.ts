@@ -1226,6 +1226,7 @@ export const ja = {
   legacyLibrarySize: 'メディア：{size} · 必要な空き容量：{required}',
   legacyLibraryFree: '空き容量：{size}',
   legacyLibraryNoSpace: 'コピー先の空き容量が不足しています。',
+  legacyLibraryFound: 'このコンピューターで見つかったライブラリ：',
   legacyLibraryTitle: 'ACE-Step または MiniMax のライブラリ',
   legacyLibraryChoose: '以前の Studio のフォルダーを選択',
   legacyLibraryOpening: 'ライブラリを開いています…',

@@ -1232,6 +1232,7 @@ export const ru = {
     legacyLibrarySize: 'Медиафайлы: {size} · Требуется для копирования: {required}',
     legacyLibraryFree: 'Свободно: {size}',
     legacyLibraryNoSpace: 'На диске назначения недостаточно места.',
+    legacyLibraryFound: 'На этом компьютере найдены библиотеки:',
     legacyLibraryTitle: 'Библиотека ACE-Step или MiniMax',
     legacyLibraryChoose: 'Выбрать папку старой студии',
     legacyLibraryOpening: 'Открываем библиотеку…',

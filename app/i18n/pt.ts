@@ -1119,6 +1119,7 @@ export const pt = {
     legacyLibrarySize: 'Mídia: {size} · Espaço necessário: {required}',
     legacyLibraryFree: 'Disponível: {size}',
     legacyLibraryNoSpace: 'Não há espaço suficiente no disco de destino.',
+    legacyLibraryFound: 'Bibliotecas encontradas neste computador:',
     legacyLibraryTitle: 'Biblioteca do ACE-Step ou MiniMax',
     legacyLibraryChoose: 'Escolher pasta do Studio antigo',
     legacyLibraryOpening: 'Abrindo a biblioteca…',

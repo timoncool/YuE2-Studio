@@ -11,7 +11,7 @@ import { ConfirmDialog } from './ConfirmDialog';
 import { PlaylistCover, PlaylistEditModal, PlaylistMenu, playlistSongs } from './PlaylistEditor';
 import { isCard, SongList } from './SongList';
 import { foldStems } from '../services/songStems';
-import { LegacyLibraryPreview } from './LegacyLibraryPreview';
+import { LegacyLibraryPreview, type LegacySource } from './LegacyLibraryPreview';
 import { LibraryTrash } from './LibraryTrash';
 import { SONG_ORDERS, type SongOrder } from '../services/songOrder';
 
@@ -40,6 +40,7 @@ function shuffled<T>(items: T[]): T[] {
 }
 
 interface LibraryViewProps {
+  legacySources?: LegacySource[];
   allSongs: Song[];
   likedSongs: Song[];
   playlists: Playlist[];
@@ -71,6 +72,7 @@ interface LibraryViewProps {
 }
 
 export const LibraryView: React.FC<LibraryViewProps> = ({ 
+    legacySources,
     allSongs,
     likedSongs, 
     playlists, 
@@ -329,7 +331,7 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
                  onConfirm={() => deleting && void removePlaylist(deleting)}
                  onCancel={() => setDeleting(null)}
              />
-             {activeTab === 'import' && <LegacyLibraryPreview />}
+             {activeTab === 'import' && <LegacyLibraryPreview sources={legacySources} />}
              {activeTab === 'import' && (
                  <div
                      onDragOver={(event) => event.preventDefault()}

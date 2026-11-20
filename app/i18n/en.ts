@@ -1233,6 +1233,7 @@ export const en = {
     legacyLibrarySize: 'Media: {size} · Space needed: {required}',
     legacyLibraryFree: 'Available: {size}',
     legacyLibraryNoSpace: 'There is not enough space on the destination drive.',
+    legacyLibraryFound: 'Libraries found on this computer:',
     legacyLibraryTitle: 'ACE-Step or MiniMax library',
     legacyLibraryChoose: 'Choose old Studio folder',
     legacyLibraryOpening: 'Opening library…',
