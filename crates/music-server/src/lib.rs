@@ -9653,7 +9653,6 @@ async fn setup_adopt(State(state): State<AppState>, body: axum::body::Bytes) -> 
     let Some(models_root) = studio_data_root().map(|root| root.join("models").join(model_manager::ENGINE_ID)) else {
         return Err(api_error(StatusCode::INTERNAL_SERVER_ERROR, "the studio has no data directory".into()));
     };
-    let catalog = state.model_manager.catalog();
     // a folder an agent names is taken as it is; the window asks the user
     let named = serde_json::from_slice::<Value>(&body).ok().and_then(|value| value.get("path").and_then(Value::as_str).map(std::path::PathBuf::from));
     let picked = match named {
@@ -9669,7 +9668,15 @@ async fn setup_adopt(State(state): State<AppState>, body: axum::body::Bytes) -> 
         return Ok(Json(serde_json::json!({ "picked": false, "adopted": [] })));
     };
 
-    let _ = std::fs::create_dir_all(&models_root);
+    // Installation owns its progress until the last archive is recorded, even if
+    // the settings window closes and drops this HTTP request during extraction.
+    tokio::spawn(adopt_library(state, folder, models_root)).await
+        .map_err(|error| api_error(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?
+}
+
+async fn adopt_library(state: AppState, folder: PathBuf, models_root: PathBuf) -> Result<Json<Value>, (StatusCode, Json<ApiError>)> {
+    let catalog = state.model_manager.catalog();
+    std::fs::create_dir_all(&models_root).map_err(|error| api_error(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?;
     std::fs::read_dir(&folder).map_err(|error| api_error(StatusCode::BAD_REQUEST, error.to_string()))?;
     // Model sets are often kept one component per folder, so the picked
     // folder is searched with its subfolders.
