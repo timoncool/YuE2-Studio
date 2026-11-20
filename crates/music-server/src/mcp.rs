@@ -3509,6 +3509,8 @@ mod tests {
             "assistant_request_answer",
             "library_song_describe_style",
             "recording_describe_style",
+            // A temporary download is staged without changing the library.
+            "song_export_zip",
             // the journal itself
             "journal_clear",
             "journal_remove",
