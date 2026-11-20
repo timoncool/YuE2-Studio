@@ -579,8 +579,11 @@ pub async fn fetch(
                 }
                 let Some((start, end, have)) = ({ let mut queue = queue.lock().unwrap(); queue.pop_front() }) else { return };
                 if let Err(error) = piece(&http, &current, &file, start, end, have, &written, &stop, &manifest).await {
-                    stop.store(true, Ordering::Relaxed);
-                    *failure.lock().unwrap() = Some(error.to_string());
+                    let mut first_failure = failure.lock().unwrap();
+                    if first_failure.is_none() {
+                        *first_failure = Some(error.to_string());
+                        stop.store(true, Ordering::Relaxed);
+                    }
                     return;
                 }
             }
