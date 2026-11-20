@@ -97,6 +97,8 @@ connected and the address to paste.
   lists the score's parts (score, lead, voice, chords) and the track's own MIDI, and
   `library_song_midi_part_write` writes one into a folder. `song_export_live` writes the
   song as an Ableton Live 12 project: the song, its stems and its MIDI on tracks, zipped.
+  `song_export_zip` takes library `song_ids` and returns a temporary local download
+  URL for the original audio, prompts, lyrics, settings and available ABC and MIDI.
 - **You write, not the studio's assistant.** The studio has a small local model (Gemma)
   for users without an agent. You write better: read `writing_guide` and
   `writing_examples` first and write the style, lyrics and scores yourself. Use
