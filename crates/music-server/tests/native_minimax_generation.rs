@@ -131,6 +131,11 @@ async fn audio_cpp_minimax_music3_generates_and_saves_q8_provenance() {
         "style":"Soft folk guitar", "lyrics":"[verse] Morning comes",
         "duration_seconds":3.2, "steps":2, "seed":424242
     });
+    let mut h3 = request.clone();
+    h3["music_source"]["model"] = json!("minimax_h3");
+    let rejected = http.post(&endpoint).json(&h3).send().await.unwrap();
+    assert_eq!(rejected.status(), StatusCode::BAD_REQUEST);
+    assert!(!root.path().join("audio-cpp-submitted.json").exists());
     let accepted = http.post(&endpoint).json(&request).send().await.unwrap();
     assert_eq!(accepted.status(), StatusCode::ACCEPTED);
     let id = accepted.json::<Value>().await.unwrap()["id"]
@@ -161,6 +166,7 @@ async fn audio_cpp_minimax_music3_generates_and_saves_q8_provenance() {
     assert_eq!(song["engine_id"], "audio.cpp");
     assert_eq!(song["profile_id"], "quality-q8");
     assert_eq!(song["generation_settings"]["family"], "minimax_music3");
+    assert_eq!(song["generation_settings"]["quantization"], "Q8_0");
     assert_eq!(
         song["generation_settings"]["weight_files"]["minimax_music3.language_model_gguf"],
         "language_model_q8_0.gguf"

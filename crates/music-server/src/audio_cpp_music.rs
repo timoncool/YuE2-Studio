@@ -10,6 +10,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 pub(super) const ENGINE: &str = "audio.cpp";
 const FAMILY: &str = "minimax_music3";
 const PROFILE: &str = "quality-q8";
+const QUANTIZATION: &str = "Q8_0";
 const WEIGHTS: [(&str, &str); 3] = [
     (
         "minimax_music3.language_model_gguf",
@@ -111,7 +112,7 @@ pub(super) async fn models(State(state): State<AppState>) -> Json<Value> {
     Json(serde_json::json!({
         "engine": ENGINE,
         "models": [{"id": FAMILY, "name": "MiniMax Music3", "profile_id": PROFILE,
-            "quantization": "Q8_0", "ready": missing.is_empty(), "missing": missing,
+            "quantization": QUANTIZATION, "status": "experimental", "ready": missing.is_empty(), "missing": missing,
             "requires": ["style", "lyrics"], "output_formats": ["flac", "mp3", "wav32"]}]
     }))
 }
@@ -256,7 +257,8 @@ pub(super) async fn submit(
         lyrics: request.lyrics.clone(),
         duration_seconds: body["duration_seconds"].as_f64().unwrap_or_default(),
         generation_settings: serde_json::json!({
-            "music_source": request.music_source, "family": FAMILY, "profile_id": PROFILE, "weight_files": weights(),
+            "music_source": request.music_source, "family": FAMILY, "profile_id": PROFILE,
+            "quantization": QUANTIZATION, "weight_files": weights(), "shared_weight_files": SHARED_WEIGHTS,
             "backend": build.backend(), "duration_seconds": body["duration_seconds"], "steps": body["num_inference_steps"],
             "seed": body["seed"], "guidance_scale": body.get("guidance_scale"), "output_format": format,
             "mp3_bitrate": bitrate, "fade_in": request.fade_in.unwrap_or_default().max(0.0),
@@ -292,6 +294,7 @@ pub(super) async fn submit(
         let acpp = state.acpp.clone();
         let settings = job.generation_settings.clone();
         let outcome = tokio::task::spawn_blocking(move || {
+            anyhow::ensure!(!stop.load(Ordering::SeqCst), "stopped");
             acpp.with_server(
                 build,
                 entry(path),

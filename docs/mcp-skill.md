@@ -114,6 +114,11 @@ to `acestep-cpp` or `minimaxmusic-cpp`. MiniMax takes a caption in `style` and
 the song text in `lyrics`. ACE-specific settings go in `ace`. Poll `song_job_get`
 with the ID returned by `song_create`. Use `song_job_cancel` to stop the job.
 
+For MiniMax Music3 through audio.cpp, call `audio_cpp_music_models` and check that
+`minimax_music3` is ready. Pass `"music_source": {"kind":"audio_cpp","model":"minimax_music3"}`
+to `song_create` with `style`, `lyrics`, and an optional nonnegative `seed`.
+The job uses the installed `quality-q8` profile and returns its library song.
+
 For an OpenRouter generation, read `openrouter_catalog` and select an ID whose
 `capabilities` include `music_generation`. Pass that exact ID as
 `music_source.model`, with `music_source.kind` set to `openrouter`.
