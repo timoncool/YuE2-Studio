@@ -19,6 +19,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       mirrors_only: ${{ steps.classify.outputs.mirrors_only }}
+      channel_changed: ${{ steps.classify.outputs.channel_changed }}
     steps:
       - uses: actions/checkout@v7.0.1
         with:
@@ -62,6 +63,10 @@ jobs:
         run: cargo test --locked -p music-engine --lib yue_train::tests
       - name: Service tests
         run: cargo test -p music-server --locked
+
+      - name: Install ONNX through two signed mirror revisions
+        if: needs.changes.outputs.channel_changed == 'true'
+        run: bash distribution/components/check_installed_channel.sh target/debug/music-server
 
   interface:
     needs: changes
