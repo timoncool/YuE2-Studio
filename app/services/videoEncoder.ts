@@ -1,4 +1,4 @@
-import { ArrayBufferTarget, Muxer } from 'mp4-muxer';
+import { BufferTarget, EncodedPacket, EncodedVideoPacketSource, Mp4OutputFormat, Output } from 'mediabunny';
 
 /**
  * Hardware H.264 encoding for the video studio.
@@ -95,31 +95,56 @@ export async function createHardwareEncoder(options: EncoderOptions): Promise<Ha
   }
   if (!config) return null;
 
-  const target = new ArrayBufferTarget();
-  const muxer = new Muxer({
-    target,
-    video: { codec: 'avc', width, height, frameRate: fps },
-    fastStart: 'in-memory',
-  });
+  const target = new BufferTarget();
+  const output = new Output({ target, format: new Mp4OutputFormat({ fastStart: 'in-memory' }) });
+  const video = new EncodedVideoPacketSource('avc');
+  output.addVideoTrack(video, { frameRate: fps });
 
   let failure: unknown = null;
+  let packets = Promise.resolve();
+  let closed = false;
   const encoder = new VideoEncoderClass({
-    output: (chunk, meta) => muxer.addVideoChunk(chunk, meta),
-    error: (error) => { failure = error; },
+    output: (chunk, meta) => {
+      // WebCodecs supplies chunks in decode order. Drain the asynchronous writes in that order.
+      packets = packets.then(async () => {
+        if (!closed && !failure) await video.add(EncodedPacket.fromEncodedChunk(chunk), meta);
+      }).catch((error) => { failure ??= error; });
+    },
+    error: (error) => { failure ??= error; },
   });
-  encoder.configure(config);
+
+  const close = () => {
+    if (closed) return;
+    closed = true;
+    try { encoder.close(); } catch { /* already closed */ }
+    if (output.state !== 'finalized') void output.cancel().catch(() => undefined);
+  };
+
+  const checkState = () => {
+    if (failure) throw failure;
+    if (closed) throw new DOMException('The video encoder was closed.', 'AbortError');
+  };
+
+  try {
+    encoder.configure(config);
+    await output.start();
+  } catch (error) {
+    close();
+    throw error;
+  }
 
   const keyFrameEvery = Math.max(1, Math.round(fps * KEYFRAME_SECONDS));
 
   return {
     kind,
     async encode(canvas, frameIndex) {
-      if (failure) throw failure;
+      await packets;
+      checkState();
       // Wait rather than pile frames up in graphics memory.
       const queueWaitStarted = performance.now();
       while (encoder.encodeQueueSize > QUEUE_LIMIT) {
         await new Promise((resolve) => setTimeout(resolve, 8));
-        if (failure) throw failure;
+        checkState();
         if (performance.now() - queueWaitStarted >= QUEUE_WAIT_TIMEOUT_MS) {
           throw new Error('The video encoder stopped processing frames.');
         }
@@ -137,15 +162,21 @@ export async function createHardwareEncoder(options: EncoderOptions): Promise<Ha
       }
     },
     async finish() {
-      await encoder.flush();
-      if (failure) throw failure;
-      muxer.finalize();
-      encoder.close();
-      return new Uint8Array(target.buffer);
+      try {
+        checkState();
+        await encoder.flush();
+        await packets;
+        checkState();
+        await output.finalize();
+        const buffer = target.buffer;
+        if (!buffer?.byteLength) throw new Error('The encoder produced an empty file.');
+        checkState();
+        return new Uint8Array(buffer);
+      } finally {
+        close();
+      }
     },
-    close() {
-      try { encoder.close(); } catch { /* already closed */ }
-    },
+    close,
   };
 }
 

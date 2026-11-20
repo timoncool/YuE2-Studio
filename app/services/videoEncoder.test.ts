@@ -31,4 +31,28 @@ describe('createHardwareEncoder', () => {
       vi.unstubAllGlobals();
     }
   });
+  it('closes once and refuses to finish a canceled export', async () => {
+    const close = vi.fn();
+    class TestEncoder {
+      static async isConfigSupported() {
+        return { supported: true };
+      }
+
+      configure() {}
+      close = close;
+    }
+
+    vi.stubGlobal('VideoEncoder', TestEncoder);
+    vi.stubGlobal('VideoFrame', class {});
+    try {
+      const encoder = await createHardwareEncoder({ width: 640, height: 480, fps: 30 });
+      expect(encoder).not.toBeNull();
+      encoder!.close();
+      encoder!.close();
+      await expect(encoder!.finish()).rejects.toMatchObject({ name: 'AbortError' });
+      expect(close).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
 });
