@@ -369,6 +369,19 @@ Historical measurements from the 4.0.0 development builds on Windows 11, Ryzen 9
 
 ACE-Step's native 2B turbo Q8_0 took 21.5 ms per DiT step on warm runs. Its roughly 8.1 GiB peak occurred during VAE decoding. This timing covers one stage of synthesis. A dash indicates an unrecorded measurement.
 
+**YuE2, native yue2.cpp `892b9b0`.** Windows 11 (build 26100), Ryzen 9 9950X3D and RTX 4090 24 GB (driver 617.42). All runs used YuE2 3B Q8_0, the F32 VAE, NAR companion v9 and seed 1221. Replay used 100 fixed semantic tokens and two synthesis steps. Text to song started from style and lyrics and used 32 synthesis steps.
+
+| Workload | Backend | Start to first WAV (s) | Warm median (s) | Peak GPU (GiB) | Above GPU baseline (GiB) | Peak process-tree RSS (GiB) |
+| --- | --- | ---: | ---: | ---: | ---: | ---: |
+| Semantic replay (3.999 s) | CUDA 13 · cuBLAS 13.10.0.20 | 6.516 | 0.172 | 6.88 | 4.51 | 3.40 |
+| Semantic replay (3.999 s) | CUDA 12 · cuBLAS 12.9.2.10 | 4.969 | 0.125 | 6.88 | 4.50 | 3.45 |
+| Semantic replay (3.999 s) | Vulkan | 13.766 | 0.252 | 6.54 | 4.17 | 3.82 |
+| Semantic replay (3.999 s) | CPU | 16.234 | 3.503 | — | — | 6.41 |
+| Text to song (29.999 s) | CUDA 13 · cuBLAS 13.10.0.20 | 8.813 | 4.759 | 8.13 | 5.75 | 3.37 |
+| Text to song (29.999 s) | Vulkan | 16.609 | 5.861 | 8.19 | 5.81 | 3.08 |
+
+Cold time includes server startup and the first request through receipt of the encoded WAV. Warm time is the median of three requests with the models kept loaded. Memory was sampled every 200 ms during startup and the first request. GPU peak is for the whole RTX 4090. The increase uses the reading before server launch as the baseline. CPU runs report process-tree RSS alone.
+
 **ACE-Step Studio 4.0.2, native acestep.cpp `9eb75e8`.** On Windows with an RTX 4090 (driver 617.42), each run generated 30 seconds of instrumental audio using Turbo Q8_0, eight Euler steps and seed 42.
 
 | Backend | Start server to first WAV | Warm request (median of 3) | Audio seconds per second, warm | Peak GPU memory (whole card) | Peak process-tree RAM |

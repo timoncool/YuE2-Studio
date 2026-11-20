@@ -481,6 +481,20 @@ footer p { margin: 0 0 8px; }
 <tr><td>YuE2 · yue2.cpp · Q8_0 · Flash Attention</td><td>240 s</td><td>54.4 s</td><td>4.4×</td><td>6500 MiB</td></tr>
 <tr><td>MiniMax Music3 · minimaxmusic.cpp · Q8_0 · 30 steps · CFG 1.5</td><td>30 s</td><td>33.0 s</td><td>0.9×</td><td>—</td></tr></tbody>
     </table></div>
+    <h3>YuE2 · native yue2.cpp 892b9b0</h3>
+    <p>Windows 11 (build 26100), Ryzen 9 9950X3D and RTX 4090 24 GB (driver 617.42). All runs used YuE2 3B Q8_0, the F32 VAE, NAR companion v9 and seed 1221. Replay used 100 fixed semantic tokens and two synthesis steps. Text to song started from style and lyrics and used 32 synthesis steps.</p>
+    <div class="scroll"><table>
+      <thead><tr><th>Workload</th><th>Backend</th><th>Start to first WAV (s)</th><th>Warm median (s)</th><th>Peak GPU (GiB)</th><th>Above GPU baseline (GiB)</th><th>Peak process-tree RSS (GiB)</th></tr></thead>
+      <tbody>
+        <tr><td>Semantic replay (3.999 s)</td><td>CUDA 13 · cuBLAS 13.10.0.20</td><td>6.516</td><td>0.172</td><td>6.88</td><td>4.51</td><td>3.40</td></tr>
+        <tr><td>Semantic replay (3.999 s)</td><td>CUDA 12 · cuBLAS 12.9.2.10</td><td>4.969</td><td>0.125</td><td>6.88</td><td>4.50</td><td>3.45</td></tr>
+        <tr><td>Semantic replay (3.999 s)</td><td>Vulkan</td><td>13.766</td><td>0.252</td><td>6.54</td><td>4.17</td><td>3.82</td></tr>
+        <tr><td>Semantic replay (3.999 s)</td><td>CPU</td><td>16.234</td><td>3.503</td><td>—</td><td>—</td><td>6.41</td></tr>
+        <tr><td>Text to song (29.999 s)</td><td>CUDA 13 · cuBLAS 13.10.0.20</td><td>8.813</td><td>4.759</td><td>8.13</td><td>5.75</td><td>3.37</td></tr>
+        <tr><td>Text to song (29.999 s)</td><td>Vulkan</td><td>16.609</td><td>5.861</td><td>8.19</td><td>5.81</td><td>3.08</td></tr>
+      </tbody>
+    </table></div>
+    <p class="note">Cold time includes server startup and the first request through receipt of the encoded WAV. Warm time is the median of three requests with the models kept loaded. Memory was sampled every 200 ms during startup and the first request. GPU peak is for the whole RTX 4090. The increase uses the reading before server launch as the baseline. CPU runs report process-tree RSS alone.</p>
     <h3>ACE-Step Studio 4.0.2 · acestep.cpp 9eb75e8</h3>
     <p>Windows · RTX 4090 · 617.42 · Turbo Q8_0 · 30 s · Euler × 8</p>
     <div class="scroll"><table>
