@@ -206,8 +206,11 @@ impl Separator {
     /// Mel-Band RoFormer can run: its model, the engine build for the card or the processor, and for a CUDA build the
     /// libraries that build loads.
     pub fn roformer_installed(&self, gpu: bool) -> bool {
-        self.downloader.is_installed(&ROFORMER_MODEL)
-            && Self::roformer_engine(gpu).is_some_and(|engine| self.downloader.is_installed(engine))
+        self.downloader.is_installed(&ROFORMER_MODEL) && self.roformer_runtime_installed(gpu)
+    }
+
+    pub fn roformer_runtime_installed(&self, gpu: bool) -> bool {
+        Self::roformer_engine(gpu).is_some_and(|engine| self.downloader.is_installed(engine))
             && (!gpu || self.cuda_libraries_found())
     }
 
