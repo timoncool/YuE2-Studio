@@ -10579,13 +10579,14 @@ async fn capabilities(State(state): State<AppState>) -> Json<CapabilitiesRespons
     let assistant = state.assistant.read().await.clone();
     let assistant_installed = assistant.available();
     let cli_agents = tokio::task::spawn_blocking(providers::cli_agent::detect).await.unwrap_or_default();
+    let catalog = state.openrouter_catalog.read().await.catalog.clone().or_else(load_cached_catalog);
     Json(CapabilitiesResponse {
-        engines: capability_engines_with(primary_installed, parakeet_installed, whisper_installed, assistant_installed, &cli_agents),
+        engines: capability_engines_with(primary_installed, parakeet_installed, whisper_installed, assistant_installed, &cli_agents, catalog.as_ref()),
     })
 }
 
 fn capability_engines(primary_installed: bool) -> Vec<EngineDescriptor> {
-    capability_engines_with(primary_installed, false, false, false, &[])
+    capability_engines_with(primary_installed, false, false, false, &[], None)
 }
 
 /// The engines the studio can offer, including the local ones it only has when
@@ -10598,12 +10599,16 @@ fn capability_engines_with(
     whisper_installed: bool,
     assistant_installed: bool,
     cli_agents: &[providers::cli_agent::Detected],
+    catalog: Option<&providers::openrouter::CapabilityCatalog>,
 ) -> Vec<EngineDescriptor> {
-    let openrouter_capabilities = vec![
+    let mut openrouter_capabilities = vec![
         Capability::SpeechToText,
         Capability::PromptEnhancement,
         Capability::CoverArt,
     ];
+    if catalog.is_some_and(|catalog| catalog.models_for(Capability::MusicGeneration).next().is_some()) {
+        openrouter_capabilities.push(Capability::MusicGeneration);
+    }
     let mut engines = vec![
         EngineDescriptor {
             id: PRIMARY_MUSIC_ENGINE_ID.into(),
@@ -14512,9 +14517,13 @@ mod tests {
     }
 
     #[test]
-    fn capabilities_use_the_engines_envelope_and_music_stays_local() {
-        let after_refresh = CapabilitiesResponse { engines: capability_engines(false) };
-        assert!(!after_refresh.engines.iter().find(|engine| engine.id == "openrouter").unwrap().capabilities.contains(&Capability::MusicGeneration));
+    fn cloud_music_is_advertised_only_with_a_music_model_in_the_catalog() {
+        let has_music = |engines: &[EngineDescriptor]| engines.iter().find(|engine| engine.id == "openrouter")
+            .unwrap().capabilities.contains(&Capability::MusicGeneration);
+        assert!(!has_music(&capability_engines(false)));
+        let catalog = providers::openrouter::CapabilityCatalog::parse(r#"{"data":[{"id":"test/song","name":"Song generator","description":"Music generation","architecture":{"input_modalities":["text"],"output_modalities":["audio"]}}]}"#).unwrap();
+        let after_refresh = CapabilitiesResponse { engines: capability_engines_with(false, false, false, false, &[], Some(&catalog)) };
+        assert!(has_music(&after_refresh.engines));
         // The music engine, two recognisers, the local assistant and
         // OpenRouter: everything listed is something the studio can actually do.
         assert_eq!(serde_json::to_value(after_refresh).unwrap()["engines"].as_array().unwrap().len(), 5);
@@ -14540,7 +14549,7 @@ mod tests {
                 features: Vec::new(),
             },
         ];
-        let engines = capability_engines_with(false, false, false, false, &detected);
+        let engines = capability_engines_with(false, false, false, false, &detected, None);
         assert_eq!(engines.len(), 7);
         let claude = engines.iter().find(|engine| engine.id == "cli-claude").expect("the detected CLI is listed");
         assert_eq!(claude.display_name, "Claude Code (agent CLI)");

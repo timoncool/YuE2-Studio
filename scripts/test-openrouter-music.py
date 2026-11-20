@@ -174,6 +174,10 @@ with tempfile.TemporaryDirectory(prefix="yue-openrouter-") as profile, http.serv
         song_create=next(tool for tool in tools if tool["name"]=="song_create")
         sources=song_create["inputSchema"]["properties"]["music_source"]["oneOf"]
         assert {source["properties"]["kind"]["const"] for source in sources}=={"local","openrouter"},sources
+        status, data = request("/v1/capabilities")
+        assert status == 200, (status, data)
+        provider = next(engine for engine in json.loads(data)["engines"] if engine["id"] == "openrouter")
+        assert "music_generation" in provider["capabilities"], provider
         catalog=tool("openrouter_catalog",{},3)
         assert any(item["id"]==model and "music_generation" in item["capabilities"] for item in catalog["models"]),catalog
         submitted=tool("song_create",dict(body,response_format="detailed"),4)
