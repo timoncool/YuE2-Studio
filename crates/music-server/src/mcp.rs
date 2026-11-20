@@ -3425,6 +3425,20 @@ mod tests {
     }
 
     #[test]
+    fn curated_voice_pages_keep_total_and_unicode_names() {
+        let list = json!((0..103).map(|id| json!({
+            "id": id, "name": format!("Голос 音楽 {id}"),
+        })).collect::<Vec<_>>());
+        let page = shape("rvc_catalog_list", &json!({"offset": 80}), list.clone());
+        assert_eq!(page["total"], 103);
+        assert_eq!(page["next_offset"], 100);
+        assert_eq!(page["voices"][0]["name"], "Голос 音楽 80");
+        let last = shape("rvc_catalog_list", &json!({"offset": 100}), list);
+        assert_eq!(last["voices"].as_array().unwrap().len(), 3);
+        assert_eq!(last["next_offset"], Value::Null);
+    }
+
+    #[test]
     fn a_tool_turns_its_arguments_into_its_route() {
         let find = |name: &str| tools().iter().find(|tool| tool.name == name).expect("the tool");
         let call = (find("dataset_song_update").call)(&json!({ "dataset_id": "d 1", "song_id": "s", "lyrics": "[Verse 1]" })).unwrap();

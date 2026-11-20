@@ -141,6 +141,7 @@ it('finds Radio Tapok by source label and combines vocal, model, sample-rate and
     { ...voice, id: 'low', name: 'Tapok Studio', index: null,
       metadata: { source_labels: ['Radio Tapok'], vocal_style: 'low', rvc_version: 'v1', sample_rate_hz: 48000 } },
     { ...voice, id: 'legacy', name: 'Unclassified Voice', index: null, metadata: null },
+    ...Array.from({ length: 81 }, (_, offset) => ({ ...voice, id: `extra-${offset}`, name: `Голос 音楽 ${offset}`, index: null })),
   ];
   const request = vi.fn(async (url: string) => Response.json(url.endsWith('/catalog') ? list : []));
   vi.stubGlobal('fetch', request);
@@ -181,8 +182,9 @@ it('finds Radio Tapok by source label and combines vocal, model, sample-rate and
     expect(details.textContent).toContain('No voices match these filters.');
     const clear = [...details.querySelectorAll('button')].find(button => button.textContent === 'Clear filters')!;
     act(() => { clear.dispatchEvent(new MouseEvent('click', { bubbles: true })); });
-    expect(details.querySelectorAll('li')).toHaveLength(3);
+    expect(details.querySelectorAll('li')).toHaveLength(84);
     expect(details.textContent).toContain('Unclassified Voice');
+    expect(details.textContent).toContain('Голос 音楽 80');
   } finally {
     act(() => root.unmount());
     host.remove();
