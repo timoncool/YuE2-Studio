@@ -201,6 +201,18 @@ describe('optional capability readiness', () => {
     expect(host.querySelector('a[href="' + url + '"]')).not.toBeNull();
     expect(button('download')).not.toBeNull();
   });
+  it('offers retry immediately when the accepted download fails before the first poll', async () => {
+    await mount();
+    install = async () => {
+      status.active_download = { done: true, error: 'invalid certificate' };
+      return response({ started: true });
+    };
+    await start();
+    expect(host.textContent).toContain('invalid certificate');
+    expect(button('download')).not.toBeNull();
+    expect(button('cancelDownload')).toBeNull();
+  });
+
   it('shows only the captioner download size when MOSS weights already exist', async () => {
     const weights = 5_188_223_648;
     const captioner = 4_268_241;

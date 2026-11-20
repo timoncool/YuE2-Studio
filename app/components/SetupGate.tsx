@@ -547,7 +547,9 @@ export const OptionalGroup: React.FC<{
                             })
                               .then(async (response) => {
                                 if (!response.ok) { setStarting(false); setFailed(await errorMessage(response)); }
-                                return load();
+                                const refreshed = await load();
+                                // A local archive check or TLS failure can finish before the first progress poll.
+                                if (refreshed?.active_download?.done) setStarting(false);
                               })
                               .catch((error: Error) => { setStarting(false); setFailed(error.message); });
                           }}

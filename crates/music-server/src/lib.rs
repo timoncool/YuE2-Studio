@@ -2465,6 +2465,7 @@ async fn cancel_separation_download(State(state): State<AppState>) -> Json<Value
 
 async fn cancel_karaoke_download(State(state): State<AppState>) -> Json<Value> {
     state.lyrics_sync.downloader().cancel();
+    state.acpp.downloader().cancel_for("karaoke").await;
     Json(serde_json::json!({ "cancelled": true }))
 }
 
@@ -7598,6 +7599,19 @@ async fn karaoke_status(State(state): State<AppState>) -> Json<Value> {
         let mut progress = set_progress(state.lyrics_sync.downloader(), &set);
         // the chosen model's files are part of this set, so the window adds nothing to it
         progress["with_model"] = Value::Bool(true);
+        if config.provider == lyrics_sync::AsrProvider::Whisper {
+            let runtime = acpp::build_for_runtime(config.runtime);
+            let installed = runtime.as_ref().is_ok_and(|build| state.acpp.installed(*build));
+            if let Ok(build) = runtime {
+                let runtime_files = set_progress(state.acpp.downloader(), &acpp::assets(build));
+                for key in ["bytes", "installed_bytes", "files"] {
+                    progress[key] = Value::from(progress[key].as_u64().unwrap_or_default() + runtime_files[key].as_u64().unwrap_or_default());
+                }
+            }
+            progress["ready"] = Value::Bool(installed && progress["ready"] == true);
+            let download = separation_download_progress(status.active_download.clone(), state.acpp.downloader().active_for("karaoke").await);
+            fields.insert("active_download".into(), serde_json::json!(download));
+        }
         // the files above belong to the local recogniser; OpenRouter needs only the key
         if config.provider == lyrics_sync::AsrProvider::OpenRouter {
             progress["ready"] = Value::Bool(credentials::openrouter_source().is_some());
@@ -7730,10 +7744,18 @@ async fn karaoke_install(
             _ => None,
         };
         // CrisperWhisper runs in audio.cpp's server, which the tools share and download into their own folder
-        let server = (recogniser == Some(lyrics_sync::AsrProvider::Whisper)).then(|| acpp::build_for_runtime(config.runtime).ok()).flatten();
+        let server = if recogniser == Some(lyrics_sync::AsrProvider::Whisper) {
+            Some(acpp::build_for_runtime(config.runtime).map_err(|error| api_error(StatusCode::BAD_REQUEST, error.to_string()))?)
+        } else {
+            None
+        };
         tokio::spawn(async move {
             if let Some(build) = server {
                 if let Err(error) = install_acpp(&installed_state, build, "karaoke").await {
+                    if !installed_state.acpp.downloader().active_for("karaoke").await.is_some_and(|progress| progress.error.is_some()) {
+                        // A shared CUDA library can fail after the audio.cpp archive was installed successfully.
+                        sync.downloader().fail("karaoke", format!("{error:#}")).await;
+                    }
                     eprintln!("audio.cpp's server for CrisperWhisper could not be installed: {error:#}");
                     return;
                 }
