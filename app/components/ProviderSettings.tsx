@@ -8,9 +8,8 @@ import { ProxySettings } from './ProxySettings';
 /**
  * Provider matrix.
  *
- * Each capability is configured on its own: cover art, transcription and the
- * writing assistant can each go to OpenRouter, while music is always generated
- * locally by YuE2. Two rules keep this honest:
+ * Music provider and model are selected per job in the generation editor.
+ * Cover art, transcription and the writing assistant have separate settings.
  *
  *   * a capability can only be set to a provider that actually implements it —
  *     local engines come from `/v1/capabilities`, cloud models from the live
@@ -278,9 +277,8 @@ export const ProviderSettings: React.FC = () => {
         <h4 className="flex items-center gap-2 text-sm font-semibold text-zinc-900 dark:text-white">
           <Cpu size={16} className="text-pink-500" /> {t('capabilitiesSection')}
         </h4>
-        {/* Cover art only. Music is always YuE2 on this machine; where the
-            writing assistant and the karaoke recogniser run is chosen where
-            they are installed, on the models page. */}
+        {/* The generation editor owns music selection. The models page owns
+            the writing assistant and karaoke recogniser. */}
         {selections.filter(selection => selection.capability === 'cover_art').map(selection => {
           const local = localEnginesFor(selection.capability);
           const cloud = cloudModelsFor(selection.capability);
