@@ -92,6 +92,95 @@ const type = (element: HTMLTextAreaElement | HTMLInputElement, value: string) =>
 const click = (element: Element) => act(() => { element.dispatchEvent(new MouseEvent('click', { bubbles: true })); });
 const buttonNamed = (text: string) => [...host.querySelectorAll('button')].find(button => button.textContent?.includes(text));
 
+it('keeps an edited score across a cloud session and reopening the native form', async () => {
+  localStorage.setItem('studio.createDraft', JSON.stringify({ style: 'folk', lyrics: 'verse' }));
+  act(() => root.render(panel({ musicEngine: 'local' })));
+  await flush();
+  const score = 'X:1\nK:C\nC D E F|';
+  type(field('textarea[aria-label="scoreCardTitle"]')!, score);
+  click(buttonNamed('cotMelody')!);
+  act(() => root.render(panel({ musicEngine: 'openrouter' })));
+  await flush();
+  act(() => root.unmount());
+  root = createRoot(host);
+  act(() => root.render(panel({ musicEngine: 'local' })));
+  await flush();
+  expect(field('textarea[aria-label="scoreCardTitle"]')!.value).toBe(score);
+  expect(JSON.parse(localStorage.getItem('studio.createDraft')!)).toMatchObject({ style: 'folk', lyrics: 'verse', abc: score, cot: 'melody' });
+  click(host.querySelector('button[title="resetPrompt"]')!);
+  expect(JSON.parse(localStorage.getItem('studio.createDraft')!)).toMatchObject({ style: '', lyrics: '', abc: '', cot: '', continueScore: '' });
+});
+
+it('keeps settings by native engine and profile and submits the selected pair', async () => {
+  const score = 'X:1\nK:C\nC D E F|';
+  localStorage.setItem('studio.createDraft', JSON.stringify({ style: 'folk', lyrics: 'shared words', abc: score }));
+  const profiles = [
+    { id: 'balanced', label: 'Balanced', total_bytes: 10, ready: true, missing: [] },
+    { id: 'quality', label: 'Quality', total_bytes: 15, ready: true, missing: [] },
+    { id: 'missing', label: 'Missing weights', total_bytes: 20, ready: false, missing: ['model.gguf'] },
+  ];
+  let aceInstalled = false;
+  vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+    const engine = url.match(/^\/v1\/music\/native\/([^/]+)\/profiles$/)?.[1];
+    return Response.json(engine ? {
+      engine, engine_installed: engine === 'minimaxmusic-cpp' || aceInstalled, profiles,
+    } : {});
+  }));
+  const setup = async (engine: NonNullable<React.ComponentProps<typeof CreatePanel>['musicEngine']>) => {
+    act(() => root.render(panel({ musicEngine: engine })));
+    await flush();
+  };
+  const select = (name: string) => act(() => {
+    const model = host.querySelector<HTMLSelectElement>('select[aria-label="Local model"]')!;
+    model.value = name;
+    model.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  const number = (label: string) =>
+    [...host.querySelectorAll('label')].find(node => node.textContent?.trim() === label)!.querySelector('input')!;
+  const create = () => buttonNamed('create') as HTMLButtonElement;
+  await setup('minimaxmusic-cpp');
+  select('missing');
+  expect(create().disabled).toBe(true);
+  expect(host.textContent).toContain('model.gguf');
+  select('balanced');
+  type(number('Duration (seconds)'), '36');
+  type(number('Language model seed'), '4');
+  expect(host.textContent).toContain('The draft keeps your ABC score.');
+  click(create());
+  expect(sent.at(-1)).toEqual({
+    music_source: { kind: 'native', engine: 'minimaxmusic-cpp', model: 'balanced' },
+    style: 'folk', lyrics: 'shared words', duration_seconds: 36, lm_seed: 4,
+  });
+  select('quality');
+  expect(number('Duration (seconds)').value).toBe('');
+  type(number('Duration (seconds)'), '48');
+  await setup('acestep-cpp');
+  select('balanced');
+  expect(host.textContent).toContain('This engine is not installed.');
+  expect(create().disabled).toBe(true);
+  aceInstalled = true;
+  click(buttonNamed('Refresh models')!);
+  await flush();
+  expect(number('Duration (seconds)').value).toBe('');
+  type(number('CFG'), '2.5');
+  type(number('Steps'), '8');
+  click(create());
+  expect(sent.at(-1)).toEqual({
+    music_source: { kind: 'native', engine: 'acestep-cpp', model: 'balanced' },
+    style: 'folk', lyrics: 'shared words', steps: 8, ace: { guidance_scale: 2.5 },
+  });
+
+  act(() => root.unmount());
+  root = createRoot(host);
+  await setup('minimaxmusic-cpp');
+  expect(number('Duration (seconds)').value).toBe('48');
+  select('balanced');
+  expect(number('Duration (seconds)').value).toBe('36');
+  expect(number('Language model seed').value).toBe('4');
+  await setup('local');
+  expect(field('textarea[aria-label="scoreCardTitle"]')!.value).toBe(score);
+});
+
 describe('an instrumental (#217)', () => {
   it('keeps a score written for one submission out of the form and writes a new one for the next', async () => {
     act(() => root.render(panel({})));

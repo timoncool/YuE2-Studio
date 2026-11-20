@@ -42,3 +42,42 @@ export const musicSourceStrings = {
     openResources: 'Instalar modelos locais',
   },
 };
+
+export const nativeMusicSourceStrings = {
+  en: {
+    model: 'Local model', loading: 'Checking model availability…', error: 'Could not check model availability.',
+    engineMissing: 'This engine is not installed.', empty: 'No profiles are available.', unavailable: 'Unavailable',
+    settings: 'Generation settings', default: 'Engine default', duration: 'Duration (seconds)', steps: 'Steps',
+    seed: 'Seed', lmSeed: 'Language model seed', scoreKept: 'The draft keeps your ABC score. This model does not use it.',
+  },
+  ru: {
+    model: 'Локальная модель', loading: 'Проверяем доступность моделей…', error: 'Не удалось проверить доступность моделей.',
+    engineMissing: 'Этот движок не установлен.', empty: 'Нет доступных профилей.', unavailable: 'Недоступна',
+    settings: 'Настройки генерации', default: 'По умолчанию в движке', duration: 'Длительность (с)', steps: 'Шаги',
+    seed: 'Сид', lmSeed: 'Сид языковой модели', scoreKept: 'Партитура ABC сохранена в черновике. Эта модель её не использует.',
+  },
+  zh: {
+    model: '本地模型', loading: '正在检查模型是否可用…', error: '无法检查模型是否可用。',
+    engineMissing: '尚未安装此引擎。', empty: '没有可用的配置。', unavailable: '不可用',
+    settings: '生成设置', default: '引擎默认值', duration: '时长（秒）', steps: '步数',
+    seed: '种子', lmSeed: '语言模型种子', scoreKept: 'ABC 乐谱保留在草稿中。此模型不使用它。',
+  },
+  ja: {
+    model: 'ローカルモデル', loading: 'モデルの利用可否を確認中…', error: 'モデルの利用可否を確認できませんでした。',
+    engineMissing: 'このエンジンはインストールされていません。', empty: '利用できるプロファイルがありません。', unavailable: '利用不可',
+    settings: '生成設定', default: 'エンジンの既定値', duration: '長さ（秒）', steps: 'ステップ',
+    seed: 'シード', lmSeed: '言語モデルのシード', scoreKept: 'ABC 楽譜は下書きに残ります。このモデルは楽譜を使いません。',
+  },
+  ko: {
+    model: '로컬 모델', loading: '모델 사용 가능 여부를 확인하는 중…', error: '모델 사용 가능 여부를 확인하지 못했습니다.',
+    engineMissing: '이 엔진이 설치되지 않았습니다.', empty: '사용할 수 있는 프로필이 없습니다.', unavailable: '사용 불가',
+    settings: '생성 설정', default: '엔진 기본값', duration: '길이(초)', steps: '단계',
+    seed: '시드', lmSeed: '언어 모델 시드', scoreKept: 'ABC 악보는 초안에 저장됩니다. 이 모델은 악보를 사용하지 않습니다.',
+  },
+  pt: {
+    model: 'Modelo local', loading: 'Verificando a disponibilidade dos modelos…', error: 'Não foi possível verificar a disponibilidade dos modelos.',
+    engineMissing: 'Este motor não está instalado.', empty: 'Nenhum perfil disponível.', unavailable: 'Indisponível',
+    settings: 'Configurações de geração', default: 'Padrão do motor', duration: 'Duração (segundos)', steps: 'Etapas',
+    seed: 'Semente', lmSeed: 'Semente do modelo de linguagem', scoreKept: 'A partitura ABC fica no rascunho. Este modelo não a utiliza.',
+  },
+};

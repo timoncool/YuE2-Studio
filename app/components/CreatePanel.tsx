@@ -10,7 +10,7 @@ import {
   Grid2x2, Guitar, ListChecks, Music2, Pause, Piano, Play, RotateCcw, Save, Sparkles, Square, Tags, Upload, Wand2, Settings2, X,
 } from 'lucide-react';
 import { AudioWaveform } from './AudioWaveform';
-import type { Playlist, Song, YueCot, YueHarmony, YueOutputFormat, YueRequest, YueSampling } from '../types';
+import type { MusicEngine, Playlist, Song, YueCot, YueHarmony, YueOutputFormat, YueRequest, YueSampling } from '../types';
 import { useI18n } from '../context/I18nContext';
 import { AUDIO_ACCEPT } from '../services/audioFiles';
 import { saveFile } from '../services/saveFile';
@@ -39,7 +39,8 @@ import { songWritingStrings } from '../i18n/songWriting';
 import { NumberField } from './NumberField';
 import { explainCliFailure } from '../services/cliFailure';
 import { loadNativeOpenRouterCatalog, modelsForCapability, refreshNativeOpenRouterCatalog, type NativeOpenRouterModel } from '../services/nativeOpenRouter';
-import { musicSourceStrings } from '../i18n/musicSource';
+import { musicSourceStrings, nativeMusicSourceStrings } from '../i18n/musicSource';
+import { isMusicEngine, isNativeMusicEngine, nativeEngines, nativeGenerationSettings, useNativeMusicProfiles } from '../services/nativeMusicProfiles';
 
 /**
  * The YuE2 request form.
@@ -63,8 +64,8 @@ export type CreateRequest =
 
 interface CreatePanelProps {
   onGenerate: (request: YueRequest) => void;
-  musicEngine?: 'local' | 'openrouter';
-  onMusicEngineChange?: (engine: 'local' | 'openrouter') => void;
+  musicEngine?: MusicEngine;
+  onMusicEngineChange?: (engine: MusicEngine) => void;
   isGenerating: boolean;
   activeJobCount?: number;
   initialData?: { song: Song; timestamp: number } | null;
@@ -409,6 +410,18 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
   const tt = t as unknown as (key: string) => string;
   const musicStrings = musicSourceStrings[language];
   const cloud = musicEngine === 'openrouter';
+  const nativeEngine = isNativeMusicEngine(musicEngine) ? musicEngine : undefined;
+  const native = useNativeMusicProfiles(nativeEngine);
+  const nativeStrings = nativeMusicSourceStrings[language];
+  const yue = musicEngine === 'local';
+  const nativeControls = [
+    ['duration_seconds', nativeStrings.duration],
+    ['steps', nativeStrings.steps],
+    ['seed', nativeStrings.seed],
+    nativeEngine === 'minimaxmusic-cpp'
+      ? (['lm_seed', nativeStrings.lmSeed] as const)
+      : (['guidance_scale', 'CFG'] as const),
+  ] as const;
   const provider = useOpenRouterSettings<{ configured: boolean }>();
   const configured = provider.data?.configured === true;
   const [musicModelId, setMusicModelId] = useState(() => {
@@ -446,19 +459,22 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
     setCatalogAttempt(attempt => attempt + 1);
   };
 
-  const [name, setName] = useState(() => keptDraft().name ?? '');
+  const [draft] = useState(keptDraft);
+  const [name, setName] = useState(() => keptText(draft, 'name'));
   // a name the form was filled with (an example, a reused song, the assistant) goes with one song; a typed one stays
-  const [nameFilled, setNameFilled] = useState(() => keptDraft().nameFilled === '1');
+  const [nameFilled, setNameFilled] = useState(() => draft.nameFilled === '1');
   const nameNow = useRef(name);
   nameNow.current = name;
   const typeName = (value: string) => { setName(value); setNameFilled(false); };
-  const [style, setStyle] = useState(() => keptDraft().style ?? '');
-  const [lyrics, setLyrics] = useState(() => keptDraft().lyrics ?? '');
+  const [style, setStyle] = useState(() => keptText(draft, 'style'));
+  const [lyrics, setLyrics] = useState(() => keptText(draft, 'lyrics'));
+  const [abc, setAbc] = useState(() => keptText(draft, 'abc'));
+  const [cot, setCot] = useState<YueCot | ''>(() =>
+    draft.cot === 'off' || draft.cot === 'melody' || draft.cot === 'full' ? draft.cot : '');
+  const [continueScore, setContinueScore] = useState(() => draft.continueScore === '1');
   useEffect(() => {
-    try { window.localStorage.setItem(DRAFT_KEY, JSON.stringify({ name, style, lyrics, nameFilled: nameFilled ? '1' : '' })); } catch { /* kept until a reload */ }
-  }, [name, style, lyrics, nameFilled]);
-  const [abc, setAbc] = useState('');
-  const [cot, setCot] = useState<YueCot | ''>('');
+    try { window.localStorage.setItem(DRAFT_KEY, JSON.stringify({ name, style, lyrics, abc, cot, continueScore: continueScore ? '1' : '', nameFilled: nameFilled ? '1' : '' })); } catch { /* kept until a reload */ }
+  }, [name, style, lyrics, abc, cot, continueScore, nameFilled]);
   const [showNotation, setShowNotation] = useState(true);
 
   // Strings, so an empty field can mean "engine default".
@@ -557,7 +573,6 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
   const [selectedPlan, setSelectedPlan] = useState(0);
   const composeRun = useRef<AbortController | null>(null);
   const [editorOpen, setEditorOpen] = useState(false);
-  const [continueScore, setContinueScore] = useState(false);
   const [bedOpen, setBedOpen] = useState(false);
   const [bedBpm, setBedBpm] = useState('100');
   const [bedKey, setBedKey] = useState('C');
@@ -1291,10 +1306,10 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
   useEffect(() => {
     if (!forever) { foreverRequest.current = null; return; }
     const snapshot = foreverRequest.current;
-    if (cloud || !ready || !snapshot || activeJobCount >= 2) return;
+    if (!yue || !ready || !snapshot || activeJobCount >= 2) return;
     onGenerate({ ...snapshot, lm_seed: Math.floor(Math.random() * 0x100000000), seed: Math.floor(Math.random() * 0x100000000) });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [forever, activeJobCount, ready, cloud]);
+  }, [forever, activeJobCount, ready, yue]);
 
   /** An instrumental: the score - the form's, or one written now - with its voice moved to the
    *  instrument, and the lyrics' section tags without their words, so nothing is left to sing. */
@@ -1333,6 +1348,20 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
   };
 
   const submit = () => {
+    if (nativeEngine) {
+      if (!native.ready || !native.profile) return;
+      if (!style.trim() && !lyrics.trim()) { setError(tt('styleOrLyricsRequired')); return; }
+      setError(null);
+      generate({
+        music_source: { kind: 'native', engine: nativeEngine, model: native.profile.id },
+        style: finishedStyle(style),
+        lyrics: lyrics.replace(/\r\n?/g, '\n').trim(),
+        ...(name.trim() ? { title: name.trim() } : {}),
+        ...(chosenPlaylist ? { playlist_id: chosenPlaylist } : {}),
+        ...nativeGenerationSettings(nativeEngine, native.settings),
+      });
+      return;
+    }
     if (cloud) {
       if (!selectedMusicModel) return;
       if (!style.trim() && !lyrics.trim()) { setError(tt('styleOrLyricsRequired')); return; }
@@ -1455,9 +1484,9 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
           <div className="flex items-center justify-between gap-3">
             <div className="min-w-0">
               <h1 className="truncate text-base font-bold">{t('createMusic')}</h1>
-              <p className="mt-0.5 truncate text-[11px] text-zinc-500 dark:text-zinc-400">{cloud ? 'OpenRouter' : tt('localInferenceYue')}</p>
+              <p className="mt-0.5 truncate text-[11px] text-zinc-500 dark:text-zinc-400">{nativeEngine ? nativeEngines[nativeEngine] : cloud ? 'OpenRouter' : tt('localInferenceYue')}</p>
             </div>
-            {!cloud && <span className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-semibold ${ready ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-300' : 'bg-amber-500/10 text-amber-700 dark:text-amber-300'}`}>
+            {yue && <span className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-semibold ${ready ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-300' : 'bg-amber-500/10 text-amber-700 dark:text-amber-300'}`}>
               <span className={`mr-1 inline-block h-1.5 w-1.5 rounded-full ${ready ? 'bg-emerald-500' : 'bg-amber-500'}`} />
               {serviceDown ? t('serviceUnavailable') : ready ? t('engineReady') : unavailableTitle}
             </span>}
@@ -1467,18 +1496,41 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
             <label className="flex items-center gap-2 text-xs font-medium">
               <span className="shrink-0">{musicStrings.engine}</span>
               <select className={CONTROL} value={musicEngine} onChange={event => {
-                onMusicEngineChange(event.target.value === 'openrouter' ? 'openrouter' : 'local');
+                if (isMusicEngine(event.target.value)) onMusicEngineChange(event.target.value);
                 setError(null);
                 setTakeChoiceOpen(false);
               }}>
                 <option value="local">{musicStrings.local}</option>
+                {Object.entries(nativeEngines).map(([engine, label]) => <option key={engine} value={engine}>{label}</option>)}
                 <option value="openrouter">OpenRouter</option>
               </select>
             </label>
           )}
-          {cloud ? (
+          {!yue ? (
             <>
-              <Card title={musicStrings.model}>
+              {nativeEngine ? (
+                <Card title={nativeStrings.model}>
+                  <div className="space-y-2">
+                    {native.loading && <p role="status" className="text-xs">{nativeStrings.loading}</p>}
+                    {native.error && <p role="alert" className="text-xs">{nativeStrings.error}</p>}
+                    {!native.loading && !native.error && !native.installed && <p role="status" className="text-xs">{nativeStrings.engineMissing}</p>}
+                    {!native.loading && !native.error && native.profiles.length === 0 && native.installed && <p className="text-xs">{nativeStrings.empty}</p>}
+                    {native.profiles.length > 0 && (
+                      <select aria-label={nativeStrings.model} className={CONTROL} value={native.profile?.id ?? ''}
+                        onChange={event => native.select(event.target.value)}>
+                        <option value="">{musicStrings.choose}</option>
+                        {native.profiles.map(profile => <option key={profile.id} value={profile.id}>{profile.label}{(!native.installed || !profile.ready) ? ` — ${nativeStrings.unavailable}` : ''}</option>)}
+                      </select>
+                    )}
+                    {native.profile && !native.ready && <p role="status" className="text-xs">
+                      {nativeStrings.unavailable}{native.profile.missing?.length ? ` · ${native.profile.missing.join(', ')}` : ''}
+                    </p>}
+                    <button type="button" className="text-xs text-pink-600 underline dark:text-pink-300" onClick={native.refresh}>
+                      {musicStrings.refresh}
+                    </button>
+                  </div>
+                </Card>
+              ) : <Card title={musicStrings.model}>
                 {provider.isError ? <p role="alert" className="text-xs">{musicStrings.catalogError}</p>
                   : provider.isPending ? <p role="status" className="text-xs">{musicStrings.loading}</p>
                     : !configured ? (
@@ -1505,7 +1557,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
                         </button>
                       </div>
                     )}
-              </Card>
+              </Card>}
               <Card title={tt('styleCardTitle')}>
                 <input value={name} onChange={event => typeName(event.target.value)} placeholder={t('untitled')}
                   aria-label={t('untitled')} className={CONTROL + ' mb-2'} />
@@ -1516,6 +1568,21 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
                 <AutoTextarea className={CONTROL} value={lyrics} onChange={event => setLyrics(event.target.value)}
                   aria-label={t('lyrics')} />
               </Card>
+              {nativeEngine && abc.trim() && <p role="status" className="text-xs text-zinc-500">{nativeStrings.scoreKept}</p>}
+              {nativeEngine && native.profile && (
+                <Card title={nativeStrings.settings}>
+                  <div className="grid grid-cols-2 gap-2">
+                    {nativeControls.map(([key, label]) => (
+                      <label key={key} className="space-y-1 text-xs">
+                        <span>{label}</span>
+                        <input type="number" step={key === 'duration_seconds' || key === 'guidance_scale' ? 'any' : 1}
+                          className={CONTROL} value={native.settings[key] ?? ''} placeholder={nativeStrings.default}
+                          onChange={event => native.set(key, event.target.value)} />
+                      </label>
+                    ))}
+                  </div>
+                </Card>
+              )}
             </>
           ) : <>
           {serviceDown ? (
@@ -2358,7 +2425,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
       </div>
 
       <footer className="shrink-0 border-t border-zinc-200 bg-zinc-50/95 p-4 backdrop-blur-sm dark:border-white/5 dark:bg-suno-panel/95">
-        {!cloud && takeChoiceOpen && (
+        {yue && takeChoiceOpen && (
           <div role="dialog" aria-label={tt('takeTitle')} className="mb-3 rounded-xl border border-pink-300/50 bg-pink-50 p-3 text-xs leading-5 text-zinc-700 dark:border-pink-500/25 dark:bg-pink-500/10 dark:text-zinc-200">
             <p className="font-semibold text-zinc-900 dark:text-white">{tt('takeTitle')}</p>
             <p className="mt-1">{tt('takeBody')}</p>
@@ -2382,7 +2449,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
           onClose={() => setNewPlaylistOpen(false)}
           onCreate={(name, description) => void onCreatePlaylist(name, description).then(playlist => { if (playlist) choosePlaylist(playlist.id); })}
         />
-        {!cloud && <>
+        {yue && <>
         <label className="mb-2 flex cursor-pointer items-start gap-2 rounded-lg border border-zinc-200 px-3 py-2 text-xs dark:border-white/10">
           <input type="checkbox" checked={instrumental} onChange={event => void switchInstrumental(event.target.checked)} className="mt-0.5 h-4 w-4 accent-pink-500" />
           <span className="min-w-0">
@@ -2405,15 +2472,15 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
         <button
           type="button"
           onClick={submit}
-          disabled={cloud && !selectedMusicModel}
+          disabled={cloud ? !selectedMusicModel : nativeEngine ? !native.ready : false}
           className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-linear-to-r from-orange-500 to-pink-600 text-base font-bold text-white shadow-lg transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
         >
-          {isGenerating ? <Square size={18} /> : !cloud && instrumental ? <Guitar size={18} /> : <Sparkles size={18} />}
-          {!cloud && composing && instrumental ? tt('composingScore') : !cloud && instrumental ? tt('createInstrumental') : t('create')}
+          {isGenerating ? <Square size={18} /> : yue && instrumental ? <Guitar size={18} /> : <Sparkles size={18} />}
+          {yue && composing && instrumental ? tt('composingScore') : yue && instrumental ? tt('createInstrumental') : t('create')}
           {activeJobCount > 0 && <span className="rounded-full bg-white/20 px-2 py-0.5 text-xs">{activeJobCount}</span>}
         </button>
       </footer>
-      {!cloud && editorOpen && (
+      {yue && editorOpen && (
         <MidiEditor
           source={{
             kind: 'score',
@@ -2434,7 +2501,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
           onClose={() => setEditorOpen(false)}
         />
       )}
-      {!cloud && midiCover && (
+      {yue && midiCover && (
         <MidiImportDialog
           chordsWanted={!coverMelodyOnly}
           initial={midiCover}
