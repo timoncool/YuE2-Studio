@@ -48,3 +48,41 @@ it('imports paired RVC files and selects the resulting catalog entry', async () 
     vi.unstubAllGlobals();
   }
 });
+
+it('retries a failed catalog request and restores the selected voice on remount', async () => {
+  const voice = { id: 'selected', model_name: 'Saved.pth', index_name: null, version: 1 };
+  const request = vi.fn<() => Promise<Response>>()
+    .mockResolvedValueOnce(Response.json({ error: 'Catalog unavailable' }, { status: 503 }))
+    .mockImplementation(async () => Response.json([voice]));
+  vi.stubGlobal('fetch', request);
+  vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+  const host = document.createElement('div');
+  document.body.append(host);
+  let root = createRoot(host);
+  try {
+    act(() => root.render(<RvcVoiceCatalog card="" control="" />));
+    await flush();
+    expect(host.querySelector('[role="alert"]')?.textContent).toBe('Catalog unavailable');
+    const retry = [...host.querySelectorAll('button')].find(button => button.textContent === 'Retry loading voices')!;
+    act(() => { retry.dispatchEvent(new MouseEvent('click', { bubbles: true })); });
+    await flush();
+    expect(host.querySelector('[role="alert"]')).toBeNull();
+    const select = host.querySelector('select')!;
+    expect(select.disabled).toBe(false);
+    act(() => {
+      select.value = voice.id;
+      select.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    act(() => root.unmount());
+    root = createRoot(host);
+    act(() => root.render(<RvcVoiceCatalog card="" control="" />));
+    await flush();
+    expect(host.querySelector('select')!.value).toBe(voice.id);
+    expect(request).toHaveBeenCalledTimes(3);
+  } finally {
+    act(() => root.unmount());
+    host.remove();
+    localStorage.removeItem('studio.rvc.voiceId');
+    vi.unstubAllGlobals();
+  }
+});

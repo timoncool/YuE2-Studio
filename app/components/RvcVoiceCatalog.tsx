@@ -28,15 +28,16 @@ export function RvcVoiceCatalog({ card, control }: { card: string; control: stri
   const modelInput = useRef<HTMLInputElement>(null);
   const indexInput = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
+  const [catalogRequest, setCatalogRequest] = useState(0);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     const controller = new AbortController();
     void fetch(URL, { signal: controller.signal }).then(responseJson<Voice[]>)
-      .then(list => setVoices(list))
+      .then(list => { if (!controller.signal.aborted) setVoices(list); })
       .catch((failure: Error) => { if (!controller.signal.aborted) setError(failure.message); });
     return () => controller.abort();
-  }, []);
+  }, [catalogRequest]);
 
   function choose(id: string) {
     setSelected(id);
@@ -97,6 +98,12 @@ export function RvcVoiceCatalog({ card, control }: { card: string; control: stri
         {busy ? labels.importing : labels.import}
       </button>
       {error && <p role="alert" className="mt-2 break-words text-xs text-rose-600 dark:text-rose-300">{error}</p>}
+      {!voices && error && (
+        <button type="button" className="mt-2 text-xs text-pink-600 underline dark:text-pink-300"
+          onClick={() => { setError(null); setCatalogRequest(request => request + 1); }}>
+          {labels.retry}
+        </button>
+      )}
     </section>
   );
 }
