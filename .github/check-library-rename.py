@@ -103,6 +103,27 @@ try:
     shutil.copyfile(audio,artwork_file)
     artwork=runpy.run_path(str(repo/".github/check-yue-locked-cover.py"))
     print(json.dumps(artwork["exercise"](api,artwork_file,False)),flush=True)
+    # Mirror a legacy MIDI sidecar shape without publishing a user's transcription.
+    mid=audio.parent/(row["id"]+".mid")
+    mid.write_bytes(bytes.fromhex("4d546864000000060000000100604d54726b0000000c00903c5060803c0000ff2f00"))
+    notes=[dict(start=i/10,end=(i+1)/10,pitch=60+i%12,instrument="acoustic_piano") for i in range(4179)]
+    Path(str(mid)+".json").write_text(json.dumps(dict(size="medium",made_at="1",instruments=["acoustic_piano"],notes=notes)))
+    args=dict(song_id=row["id"],response_format="detailed")
+    reconstructed=[]
+    pages=0
+    while len(reconstructed)<len(notes):
+        answer=http("/mcp",{"jsonrpc":"2.0","id":10,"method":"tools/call","params":{"name":"midi_get","arguments":args}},"POST")["result"]
+        page=answer["structuredContent"]
+        assert json.loads(answer["content"][0]["text"])==page
+        assert page["offset"]==len(reconstructed) and page["notes_count"]==len(notes) and page["notes"]
+        reconstructed.extend(page["notes"])
+        pages+=1
+        if len(reconstructed)<len(notes): assert page["next_offset"]==len(reconstructed)
+        else: assert page["next_offset"] is None
+        args=dict(song_id=row["id"],offset=page["next_offset"])
+    assert reconstructed==notes
+    print(json.dumps(dict(midi_pages=pages,notes=len(notes))),flush=True)
+
 finally:
     server.terminate()
     server.wait(timeout=20)
