@@ -1542,11 +1542,12 @@ fn tools() -> &'static [Tool] {
                 name: "song_create",
                 description: "Generate a song locally or with an explicitly selected OpenRouter music model. Local synthesis parameters apply only to YuE2. style: one English sentence (language, genre, vocal, instruments, mood, production, 'N BPM'). lyrics: sections tagged [Verse 1], [Chorus], [Bridge]... one per line, blank line between sections; empty for an instrumental. abc: a score to sing (from score_compose or an edited one), else the model writes its own. cot: full (melody and chords), melody, or off. adapters: installed LoRA ids with strengths per slot (see lora_list). Returns a job; poll song_job_get until completed, the song then is in the library.",
                 schema: || object(json!({
+                    "ace": { "type": "object", "description": "ACE-Step generation settings, including guidance_scale, think, source_song_id and reference_song_id." },
                     "music_source": {
-                        "description": "Select local YuE2, an installed native MiniMax profile from minimax_music_profiles, or a cloud model with music_generation capability from openrouter_catalog. OpenRouter submits a paid request to the selected model.",
+                        "description": "Select local YuE2, an installed profile from ace_music_profiles or minimax_music_profiles, or a cloud model with music_generation capability from openrouter_catalog. OpenRouter submits a paid request to the selected model.",
                         "oneOf": [
                             { "type": "object", "properties": { "kind": { "const": "local" } }, "required": ["kind"] },
-                            { "type": "object", "properties": { "kind": { "const": "native" }, "engine": { "enum": ["minimaxmusic-cpp"] }, "model": { "type": "string", "minLength": 1 } }, "required": ["kind", "engine", "model"] },
+                            { "type": "object", "properties": { "kind": { "const": "native" }, "engine": { "enum": ["acestep-cpp", "minimaxmusic-cpp"] }, "model": { "type": "string", "minLength": 1 } }, "required": ["kind", "engine", "model"] },
                             { "type": "object", "properties": { "kind": { "const": "openrouter" }, "model": { "type": "string", "minLength": 1 } }, "required": ["kind", "model"] }
                         ]
                     },

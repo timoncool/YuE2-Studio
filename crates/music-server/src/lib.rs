@@ -15,6 +15,7 @@ mod providers;
 mod openrouter_stream;
 mod native_minimax;
 mod native_music_jobs;
+mod native_ace_jobs;
 mod assistant;
 mod song_tokenizer;
 mod assistant_runtime;
@@ -106,6 +107,8 @@ const PROGRAM_ID: &str = "yue2";
 struct AppState {
     configuration: Arc<RwLock<StudioConfiguration>>,
     jobs: Arc<RwLock<HashMap<String, MusicJob>>>,
+    ace_runtime: Arc<ace::Runtime>,
+    ace_cancellations: Arc<RwLock<HashMap<String, native_ace_jobs::CancelSender>>>,
     minimax: Arc<native_minimax::Runtime>,
     minimax_cancellations: Arc<RwLock<HashMap<String, native_music_jobs::CancelSender>>>,
     openrouter_music_stops: Arc<RwLock<HashMap<String, Arc<tokio::sync::Notify>>>>,
@@ -289,6 +292,8 @@ impl SamplingPreset {
 struct CreateMusicJobRequest {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     music_source: Option<MusicSource>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    ace: Option<native_ace_jobs::AceOptions>,
     /// The window's own mark for this request, handed back on the job so the
     /// window knows the job as its own before the response reaches it.
     client_ref: Option<String>,
@@ -1493,6 +1498,8 @@ pub async fn serve_on_port(port: u16) -> anyhow::Result<()> {
             persisted.as_ref().map(|settings| settings.configuration.clone()).unwrap_or_else(initial_configuration),
         ))),
         jobs: Arc::new(RwLock::new(HashMap::new())),
+        ace_runtime: Arc::default(),
+        ace_cancellations: Arc::default(),
         minimax: Arc::default(),
         minimax_cancellations: Arc::default(),
         openrouter_music_stops: Arc::new(RwLock::new(HashMap::new())),
@@ -11023,11 +11030,15 @@ async fn submit_music_job(state: AppState, mut request: CreateMusicJobRequest, a
             return create_openrouter_music_job(state, request, model).await;
         }
         MusicDestination::Native { engine, model } => {
-            if retry_engine.is_some_and(|old| old != engine) || engine != native_minimax::ENGINE_ID {
+            if retry_engine.is_some_and(|old| old != engine) {
                 let reason = format!("Cannot dispatch the saved request to native engine {engine}.");
                 return (StatusCode::CONFLICT, Json(failed_request_job(request, engine, reason)));
             }
-            return native_music_jobs::submit_minimax(state, request, model, attempt).await;
+            return match engine.as_str() {
+                "acestep-cpp" => native_ace_jobs::submit(state, request, model, attempt).await,
+                native_minimax::ENGINE_ID => native_music_jobs::submit_minimax(state, request, model, attempt).await,
+                _ => (StatusCode::BAD_REQUEST, Json(failed_request_job(request, engine.clone(), format!("Unknown native engine {engine}.")))),
+            };
         }
         MusicDestination::Local(engine) => engine,
         MusicDestination::Unconfigured => {
@@ -12167,6 +12178,9 @@ async fn cancel_music_job(
         .get(&job_id)
         .cloned()
         .ok_or_else(|| api_error(StatusCode::NOT_FOUND, "Music job was not found.".into()))?;
+    if existing.engine_id == "acestep-cpp" {
+        return native_ace_jobs::cancel(&state, existing).await;
+    }
     if existing.engine_id == native_minimax::ENGINE_ID {
         return native_music_jobs::cancel_minimax(&state, existing).await;
     }
@@ -12804,7 +12818,7 @@ fn sanitize_persisted_configuration(mut configuration: StudioConfiguration) -> S
 
 /// An automatic retry must reach the same local engine that accepted the saved job.
 fn check_retry_engine(original: &str, selected: &str) -> Result<(), String> {
-    if matches!(original, PRIMARY_MUSIC_ENGINE_ID | native_minimax::ENGINE_ID) && original == selected {
+    if matches!(original, PRIMARY_MUSIC_ENGINE_ID | native_minimax::ENGINE_ID | "acestep-cpp") && original == selected {
         Ok(())
     } else {
         Err(format!("The saved job used {original}, but it cannot resume with the current engine ({selected})."))
