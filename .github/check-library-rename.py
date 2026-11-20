@@ -161,6 +161,21 @@ try:
                 report=window_tool("ui_read_page",{})
                 assert report.splitlines()[0]=="Page: "+title,report[:400]
 
+            page.keyboard.press("Control+m")
+            expect(page.locator("#main-window")).to_be_visible(timeout=30000)
+            expect(page.locator("#equalizer-window")).to_be_visible()
+            expect(page.locator("#playlist-window")).to_be_visible()
+            bands=[-4,-3,-2,-1,0,1,2,3,4,5]
+            state=json.loads(window_tool("winamp_set",dict(equalizer=dict(on=True,bands=bands),volume=.42)))
+            assert state["on"] and state["playlist"]>0 and state["equalizer"]["on"],state
+            assert abs(state["volume"]-.42)<.02,state
+            assert max(abs(a-b) for a,b in zip(state["equalizer"]["bands"],bands,strict=True))<.5,state
+            closed=json.loads(window_tool("winamp_set",{"on":False}))
+            expect(page.locator("#main-window")).to_have_count(0)
+            assert not json.loads(window_tool("winamp_get",{}))["on"]
+            assert not closed["on"],closed
+            print(json.dumps(dict(winamp_playlist=state["playlist"],winamp_volume=state["volume"],winamp_bands=state["equalizer"]["bands"],winamp_exit=closed)),flush=True)
+
             window_tool("ui_open_settings",{"section":"interface"})
             verify_page("Appearance")
             page.get_by_role("dialog").get_by_role("navigation").get_by_role("button",name="Account",exact=False).click()
