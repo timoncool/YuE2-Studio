@@ -208,6 +208,25 @@ try:
             verify_page("Appearance")
             window_tool("ui_open_settings",{"section":"models"})
             verify_page("Models")
+            import requests
+            library=root/"existing library"
+            library.mkdir()
+            config_url="https://huggingface.co/cocktailpeanut/muscriptor-small/resolve/31a8f75d6a8b5383fd71ad1371dc1620389ab722/config.json"
+            config=requests.get(config_url,timeout=45)
+            config.raise_for_status()
+            (library/"config.json").write_bytes(config.content)
+            pending=[]
+            page.route("**/setup/adopt",lambda route:pending.append(route))
+            adopt=page.get_by_role("dialog").get_by_role("button",name="Use models I already have",exact=True)
+            adopt.click()
+            busy=page.get_by_role("button",name="Checking files in the selected folder…")
+            expect(busy).to_be_disabled()
+            expect(busy).to_have_attribute("aria-busy","true")
+            with page.expect_response(lambda response:response.url.endswith("/v1/midi/runtime") and response.ok):
+                pending[0].continue_(post_data=json.dumps({"path":str(library)}),headers={"Content-Type":"application/json"})
+            expect(adopt).to_be_enabled()
+            expect(page.get_by_role("status").filter(has_text="Taken from the folder: 1 files.")).to_be_visible()
+            print("Verified live library picker, visible in-progress state, recognized MIDI config and refreshed component panel",flush=True)
             print("Verified rendered headings and MCP after Appearance -> manual Account -> MCP Appearance -> Models",flush=True)
     finally:
         vite.terminate()
