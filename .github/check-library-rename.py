@@ -243,6 +243,28 @@ try:
     assert media_digest(survivor["id"])==original_hash
     print(json.dumps(dict(shared_vocal_preserved=original_hash,replaced_stems=sorted(new))),flush=True)
 
+    import base64, struct, zlib
+    def png(rgb):
+        def chunk(kind,data):
+            return struct.pack(">I",len(data))+kind+data+struct.pack(">I",zlib.crc32(kind+data))
+        return (b"\x89PNG\r\n\x1a\n"+chunk(b"IHDR",struct.pack(">IIBBBBB",1,1,8,2,0,0,0))
+                +chunk(b"IDAT",zlib.compress(b"\x00"+bytes(rgb)))+chunk(b"IEND",b""))
+    def store_artwork(song_id, data):
+        return http("/v1/library/songs/"+song_id+"/cover",
+                    dict(media_type="image/png",image_base64=base64.b64encode(data).decode()),"PUT")
+    def read_artwork(song_id):
+        with urlopen(api+"/v1/library/songs/"+song_id+"/cover",timeout=10) as response:
+            return response.read()
+    red,blue=png((255,0,0)),png((0,0,255))
+    first=http("/v1/library/songs",dict(title="Original artwork",engine_id="manual",source="external_import"),"POST")
+    stored=store_artwork(first["id"],red)
+    other=http("/v1/library/songs",dict(title="Shared legacy artwork",engine_id="manual",source="external_import",
+        metadata=stored["metadata"]),"POST")
+    store_artwork(first["id"],blue)
+    assert read_artwork(other["id"])==red
+    assert read_artwork(first["id"])==blue
+    print(json.dumps(dict(shared_cover_preserved=hashlib.sha256(red).hexdigest(),changed_cover=hashlib.sha256(blue).hexdigest())),flush=True)
+
 finally:
     server.terminate()
     server.wait(timeout=20)
