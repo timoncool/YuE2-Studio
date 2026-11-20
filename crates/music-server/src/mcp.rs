@@ -412,7 +412,7 @@ fn annotations(name: &str) -> Value {
     // a verb that changes something outweighs a noun that reads
     const CHANGES: &[&str] = &["install", "import", "remove", "delete", "refresh", "create", "update", "start", "cancel", "select", "download", "apply", "restart"];
     // reads whose names the rules above miss: create_form names the create page
-    const READ_NAMES: &[&str] = &["lyrics_syllables", "assistant_cli_agents", "system_gpus", "cover_scenes", "cover_photos_search", "video_backgrounds_search", "network_proxy_test", "journal_read", "score_to_midi", "score_instrumental", "score_vocal_octave", "score_from_midi", "score_mark", "lyrics_find", "cover_prompt_render", "studio_wait", "engine_presets_get", "assistant_requests_wait", "ui_console", "song_defaults", "create_form_get", "library_liked", "score_chord_bed", "song_tokenize", "score_match_sections", "models_update_plan", "problem_preview", "library_migration_preview"];
+    const READ_NAMES: &[&str] = &["lyrics_syllables", "assistant_cli_agents", "system_gpus", "cover_scenes", "cover_photos_search", "video_backgrounds_search", "network_proxy_test", "journal_read", "score_to_midi", "score_instrumental", "score_vocal_octave", "score_from_midi", "score_mark", "lyrics_find", "cover_prompt_render", "studio_wait", "engine_presets_get", "assistant_requests_wait", "ui_console", "song_defaults", "create_form_get", "library_liked", "score_chord_bed", "song_tokenize", "score_match_sections", "models_update_plan", "problem_preview", "library_migration_preview", "audio_cpp_music_models"];
     // writes over what was stored, so the earlier content is gone: a client asks first
     const OVERWRITES: &[&str] = &["library_song_rename", "library_song_update", "playlist_update", "album_reorder", "dataset_update", "dataset_song_update", "dataset_prepare", "lora_update", "stems_split", "restore_start", "karaoke_make", "midi_transcribe", "cover_draw", "cover_set_from_file", "openrouter_set_key", "models_update_apply"];
     let changes = CHANGES.iter().any(|verb| name.split('_').any(|word| word == *verb));
@@ -1545,10 +1545,11 @@ fn tools() -> &'static [Tool] {
                 schema: || object(json!({
                     "ace": { "type": "object", "description": "ACE-Step generation settings, including guidance_scale, think, source_song_id and reference_song_id." },
                     "music_source": {
-                        "description": "Select local YuE2, an installed profile from ace_music_profiles or minimax_music_profiles, or a cloud model with music_generation capability from openrouter_catalog. OpenRouter submits a paid request to the selected model.",
+                        "description": "Select local YuE2, a native profile from ace_music_profiles or minimax_music_profiles, an audio.cpp model from audio_cpp_music_models, or a cloud model with music_generation capability from openrouter_catalog. OpenRouter submits a paid request to the selected model.",
                         "oneOf": [
                             { "type": "object", "properties": { "kind": { "const": "local" } }, "required": ["kind"] },
                             { "type": "object", "properties": { "kind": { "const": "native" }, "engine": { "enum": ["acestep-cpp", "minimaxmusic-cpp"] }, "model": { "type": "string", "minLength": 1 } }, "required": ["kind", "engine", "model"] },
+                            { "type": "object", "properties": { "kind": { "const": "audio_cpp" }, "model": { "type": "string", "minLength": 1 } }, "required": ["kind", "model"] },
                             { "type": "object", "properties": { "kind": { "const": "openrouter" }, "model": { "type": "string", "minLength": 1 } }, "required": ["kind", "model"] }
                         ]
                     },
@@ -2039,6 +2040,12 @@ fn tools() -> &'static [Tool] {
                 description: "List native MiniMax Music 3 profiles, installed weights, and missing model files.",
                 schema: nothing,
                 call: |_| get("/v1/music/native/minimaxmusic-cpp/profiles".into()),
+            },
+            Tool {
+                name: "audio_cpp_music_models",
+                description: "List audio.cpp music models, their weight profile and whether the runtime and model files are ready.",
+                schema: nothing,
+                call: |_| get("/v1/music/audio-cpp/models".into()),
             },
             Tool {
                 name: "engine_logs",

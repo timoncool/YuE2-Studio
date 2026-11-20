@@ -6,9 +6,23 @@ use std::{
 
 fn main() {
     let args: Vec<_> = env::args().collect();
-    let port = args.windows(2).find(|pair| pair[0] == "--port").unwrap()[1]
-        .parse::<u16>()
-        .unwrap();
+    let port = if let Some(pair) = args.windows(2).find(|pair| pair[0] == "--config") {
+        let config = fs::read_to_string(&pair[1]).unwrap();
+        config
+            .split_once(r#""port":"#)
+            .unwrap()
+            .1
+            .trim_start()
+            .split(|c: char| !c.is_ascii_digit())
+            .next()
+            .unwrap()
+            .parse::<u16>()
+            .unwrap()
+    } else {
+        args.windows(2).find(|pair| pair[0] == "--port").unwrap()[1]
+            .parse::<u16>()
+            .unwrap()
+    };
     let address = ("127.0.0.1", port);
     let listener = TcpListener::bind(address).unwrap();
     let mut count = 0;
@@ -44,6 +58,22 @@ fn handle(mut client: TcpStream, count: &mut u32) -> std::io::Result<()> {
     input.read_exact(&mut body)?;
     let (status, mime, bytes) = match (method, path) {
         ("GET", "/health") => ("200 OK", "application/json", b"{}".to_vec()),
+        ("POST", "/v1/tasks/run") => {
+            fs::write("audio-cpp-submitted.json", body)?;
+            (
+                "200 OK",
+                "application/json",
+                fs::read("audio-cpp-response.json")?,
+            )
+        }
+        ("POST", "/v1/tasks/unload_models") => {
+            fs::write("audio-cpp-unloaded.json", body)?;
+            (
+                "200 OK",
+                "application/json",
+                br#"{"unloaded":["minimax_music3"],"not_found":[]}"#.to_vec(),
+            )
+        }
         ("GET", "/props") => (
             "200 OK",
             "application/json",
