@@ -9,6 +9,8 @@ with wave.open(wav_buffer, "wb") as audio:
 wav = wav_buffer.getvalue()
 encoded = base64.b64encode(wav).decode()
 calls = []
+slow_started = threading.Event()
+slow_disconnected = threading.Event()
 
 class Provider(http.server.BaseHTTPRequestHandler):
     def do_POST(self):
@@ -23,6 +25,16 @@ class Provider(http.server.BaseHTTPRequestHandler):
             event = {"choices": [{"delta": {"audio": {"data": chunk}}}]}
             self.wfile.write(f"data: {json.dumps(event)}\r\n\r\n".encode())
             self.wfile.flush()
+        if "slow case" in body["messages"][0]["content"]:
+            slow_started.set()
+            try:
+                for _ in range(100):
+                    self.wfile.write(b": waiting " + b"x" * 32768 + b"\r\n\r\n")
+                    self.wfile.flush()
+                    time.sleep(.05)
+            except OSError:
+                slow_disconnected.set()
+                return
         if "incomplete case" not in body["messages"][0]["content"]:
             self.wfile.write(b"data: [DONE]\r\n\r\n")
 
@@ -37,7 +49,7 @@ with tempfile.TemporaryDirectory(prefix="yue-openrouter-") as profile, http.serv
     (root/"openrouter-catalog.json").write_text(json.dumps({"models":[{"id":model,"name":"Fixture music","input_modalities":["text"],"output_modalities":["audio"],"supported_parameters":[],"capabilities":["music_generation"]}]}),encoding="utf8")
     port=unused_port()
     env=dict(os.environ,YUE_STUDIO_DATA_ROOT=profile,YUE_STUDIO_PORT=str(port),YUE_ENGINE_PORT=str(unused_port()),
-             YUE2_QA_OPENROUTER_PORT=str(upstream.server_port),OPENROUTER_API_KEY="fixture-only")
+             YUE2_QA_OPENROUTER_PORT=str(upstream.server_port),OPENROUTER_API_KEY="must-not-send-to-fixture")
     client=urllib.request.build_opener(urllib.request.ProxyHandler({}))
     def request(path,payload=None):
         url=f"http://127.0.0.1:{port}"+path
@@ -82,6 +94,7 @@ with tempfile.TemporaryDirectory(prefix="yue-openrouter-") as profile, http.serv
         assert complete["status"]=="completed",complete
         song=complete["song"]["song"]
         song_id=song["id"]
+        assert complete["duration_seconds"]==1.0 and song["metadata"]["duration_seconds"]==1.0,complete
         assert song["title"]=="Fixture song" and song["caption"]=="soft piano" and song["lyrics"]==body["lyrics"],song
         assert song["generation_settings"]["request"]["seed"]==42 and song["generation_settings"]["model"]==model,song
         assert song["engine_id"]=="openrouter" and not song.get("replay_request") and not song.get("audio_codes"),song
@@ -98,6 +111,17 @@ with tempfile.TemporaryDirectory(prefix="yue-openrouter-") as profile, http.serv
         failed=finish(json.loads(data)["id"])
         assert failed["status"]=="failed" and not failed.get("song") and "[DONE]" in failed["message"],failed
         assert len(calls)==2,calls
+        code,data=request("/v1/music/jobs",dict(body,title="Must not be stored",style="slow case"))
+        assert code==202,(code,data)
+        slow_job=json.loads(data)["id"]
+        assert slow_started.wait(5),"provider never started its stream"
+        code,data=request("/v1/music/jobs/"+slow_job,{})
+        assert code==200 and json.loads(data)["status"]=="cancelled",(code,data)
+        assert slow_disconnected.wait(5),"cancel did not close the upstream HTTP connection"
+        code,data=request("/v1/music/jobs/"+slow_job)
+        assert code==200 and json.loads(data)["status"]=="cancelled" and not json.loads(data).get("song"),(code,data)
+        code,data=request("/v1/library/songs")
+        assert code==200 and len(json.loads(data))==1,(code,data)
     finally:
         proc.terminate()
         proc.wait(timeout=15)
@@ -106,10 +130,10 @@ with tempfile.TemporaryDirectory(prefix="yue-openrouter-") as profile, http.serv
         code,data=request("/v1/library/songs/"+song_id)
         assert code==200 and json.loads(data)["id"]==song_id,(code,data)
         assert request(complete["song"]["audio_url"])==(200,wav)
-        assert len(calls)==2,calls
+        assert len(calls)==3,calls
         print(json.dumps({"status":"pass","http_calls":len(calls),"library_song":song_id,"wav_bytes":len(wav),
                           "restart_persisted":True,"incomplete_failed":True,"replay_rejected":True,
-                          "explicit_model":model},indent=2))
+                          "explicit_model":model,"upstream_disconnected_on_cancel":True,"cancel_no_import":True},indent=2))
     finally:
         proc.terminate()
         proc.wait(timeout=15)
