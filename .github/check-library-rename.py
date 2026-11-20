@@ -147,7 +147,7 @@ try:
                     for size in body["sizes"]:
                         size.update(installed=False,missing_bytes=100)
                 pattern="**"+endpoint
-                page.route(pattern,lambda route,body=body:route.fulfill(json=body))
+                page.route(pattern,lambda route:route.fulfill(json=body))
                 expect(page.get_by_role("alert").filter(has_text="QA certificate failure: "+tool)).to_be_visible()
                 expect(page.get_by_role("link",name=url,exact=True)).to_have_attribute("href",url)
                 expect(page.get_by_text(path,exact=True)).to_be_visible()
