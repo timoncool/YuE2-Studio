@@ -1,0 +1,39 @@
+name: Beat This CPU memory on macOS
+on:
+  push:
+    branches: [qa/ort-mac-memory]
+permissions:
+  contents: read
+jobs:
+  measure:
+    runs-on: macos-15
+    timeout-minutes: 90
+    env:
+      RUSTUP_TOOLCHAIN: stable
+      CARGO_TERM_COLOR: never
+    steps:
+      - uses: actions/checkout@v4
+      - uses: Swatinem/rust-cache@v2
+      - name: Compare CPU session settings
+        run: |
+          set -euo pipefail
+          name=onnxruntime-osx-arm64-ventura-1.32.0.tgz
+          curl -fsSL --retry 3 "https://github.com/timoncool/onnxruntime/releases/download/v1.32.0/$name" -o "$RUNNER_TEMP/$name"
+          echo "ac878e088ace714688c184d8e3e1030b088af1f02a0abbd756af3e022ed38595  $RUNNER_TEMP/$name" | shasum -a 256 -c -
+          export QA_ORT_ARCHIVE="$RUNNER_TEMP/$name" QA_ORT_DIRECTORY="$RUNNER_TEMP/runtime"
+          export AUDIO_FACTS_MODELS="$RUNNER_TEMP/weights" AUDIO_FACTS_SONGS="$PWD/docs/samples/babushka-na-diskoteke.mp3"
+          mkdir -p "$AUDIO_FACTS_MODELS"
+          curl -fsSL --retry 3 'https://raw.githubusercontent.com/mosynthkey/beat_this_cpp/07ab790a9ec2eda8093d52d249e3ec4f0510ee72/onnx/beat_this.onnx' -o "$AUDIO_FACTS_MODELS/beat_this.onnx"
+          echo "c5c1466e08abdb03fdeb50668a06f244b787d564c212490482231a9cfbe9ccbd  $AUDIO_FACTS_MODELS/beat_this.onnx" | shasum -a 256 -c -
+          cargo test --locked -p music-server --lib --no-run --message-format=json > "$RUNNER_TEMP/build.jsonl"
+          testbin=$(jq -rs '[.[]|select(.reason=="compiler-artifact" and .target.name=="music_server" and .executable!=null)|.executable]|unique|if length==1 then .[0] else error("expected one test executable") end' "$RUNNER_TEMP/build.jsonl")
+          "$testbin" unpack_ventura_candidate --exact | tee "$RUNNER_TEMP/unpack.log"
+          grep -F '1 passed' "$RUNNER_TEMP/unpack.log"
+          export ORT_DYLIB_PATH="$QA_ORT_DIRECTORY/libonnxruntime.dylib"
+          for profile in default no-arena no-arena-2-threads; do
+            export QA_BEAT_MEMORY="$profile"
+            echo "Measuring $profile"
+            /usr/bin/time -l "$testbin" audio_facts::tests::measures_real_songs --exact --ignored --nocapture 2>&1 | tee "$RUNNER_TEMP/$profile.log"
+            grep -F '120 BPM' "$RUNNER_TEMP/$profile.log"
+            grep -F 'maximum resident set size' "$RUNNER_TEMP/$profile.log"
+          done

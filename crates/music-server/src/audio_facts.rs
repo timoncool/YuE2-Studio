@@ -62,7 +62,17 @@ pub fn decode(audio: &Path) -> Result<Vec<f32>> {
 
 fn session(model: &Path) -> Result<Session> {
     let environment = dub_core::runtime::ort_env().map_err(|error| anyhow::anyhow!(error))?;
-    Session::builder(&environment).context("prepare an ONNX session")?.commit_from_file(model).with_context(|| format!("load {}", model.display()))
+    let mut builder = Session::builder(&environment).context("prepare an ONNX session")?;
+    if let Ok(profile) = std::env::var("QA_BEAT_MEMORY") {
+        if profile == "no-arena" || profile == "no-arena-2-threads" {
+            builder = builder.with_execution_providers([ort::ep::CPU::default().with_arena_allocator(false).build()])
+                .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+        }
+        if profile == "no-arena-2-threads" {
+            builder = builder.with_intra_threads(2).map_err(|error| anyhow::anyhow!(error.to_string()))?;
+        }
+    }
+    builder.commit_from_file(model).with_context(|| format!("load {}", model.display()))
 }
 
 // ---- tempo ----------------------------------------------------------------
