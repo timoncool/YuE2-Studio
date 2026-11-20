@@ -57,6 +57,7 @@ mod export;
 mod song_midi;
 mod ableton;
 mod ableton_project;
+mod track_zip;
 mod model_storage;
 mod skins;
 pub use saving::{set_save_dialog, SaveDialog};
@@ -1806,6 +1807,8 @@ pub async fn serve_on_port(port: u16) -> anyhow::Result<()> {
         .route("/v1/exports/live", post(ableton_project::start))
         .route("/v1/exports/live/{id}", axum::routing::delete(ableton_project::forget))
         .route("/v1/exports/live/{id}/file", get(ableton_project::file))
+        .route("/v1/exports/tracks", post(track_zip::start))
+        .route("/v1/exports/tracks/{id}/file", get(track_zip::download))
         .route("/v1/cover-templates/render", post(render_cover_template))
         .route("/v1/openrouter/completions", post(create_openrouter_completion))
         .route("/v1/library/migration/sources", get(legacy_library::sources))
