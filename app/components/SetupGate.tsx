@@ -811,6 +811,7 @@ export const SetupGate: React.FC<{
   const chosenValues = useMemo(() => Object.values(choice).filter((id): id is string => typeof id === 'string' && id.length > 0), [choice]);
   const [error, setError] = useState<string | null>(null);
   // what taking the user's own model folder did: files taken, copies made, what is still missing
+  const [adopting, setAdopting] = useState(false);
   const [adoptNote, setAdoptNote] = useState<string | null>(null);
   const [adoptRefused, setAdoptRefused] = useState<AdoptRefusal[]>([]);
   // the training page's packs are listed here too, with everything else the studio downloads
@@ -1266,7 +1267,12 @@ export const SetupGate: React.FC<{
                     line and a disk. */}
                 <button
                   type="button"
+                  disabled={adopting}
+                  aria-busy={adopting}
                   onClick={() => {
+                    setAdopting(true);
+                    setAdoptNote(null);
+                    setAdoptRefused([]);
                     void fetch('/setup/adopt', { method: 'POST' })
                       .then(async (response) => (response.ok ? response.json() : Promise.reject(new Error(await errorMessage(response)))))
                       .then(async (body: { picked?: boolean; adopted?: string[]; copied?: { id: string; bytes: number }[]; refused?: AdoptRefusal[] } | null) => {
@@ -1282,14 +1288,15 @@ export const SetupGate: React.FC<{
                           missing.length > 0 ? t('adoptMissing').replace('{files}', missing.map((component) => `${component.filename} (${bytes(component.bytes)})`).join(', ')) : '',
                         ].filter(Boolean).join(' '));
                       })
-                      .catch((reason) => setError(reason instanceof Error ? reason.message : String(reason)));
+                      .catch((reason) => setError(reason instanceof Error ? reason.message : String(reason)))
+                      .finally(() => setAdopting(false));
                   }}
                   className="ml-2 mt-2 inline-flex items-center gap-1 rounded-lg border border-zinc-300 px-2 py-1 text-[11px] font-medium text-zinc-600 hover:border-pink-400 hover:text-pink-600 dark:border-white/15 dark:text-zinc-300"
                 >
-                  <FolderDown size={13} />
-                  {t('useExistingModels')}
+                  {adopting ? <Loader2 size={13} className="animate-spin" /> : <FolderDown size={13} />}
+                  {t(adopting ? 'checkingExistingModels' : 'useExistingModels')}
                 </button>
-                {adoptNote && <p className="mt-2 text-[11px] leading-4 text-zinc-600 dark:text-zinc-300">{adoptNote}</p>}
+                {adoptNote && <p role="status" className="mt-2 text-[11px] leading-4 text-zinc-600 dark:text-zinc-300">{adoptNote}</p>}
                 {adoptRefused.map((refusal) => (
                   <p key={refusal.file} className="mt-1 break-all text-[11px] leading-4 text-amber-600 dark:text-amber-300">
                     <span className="font-mono">{refusal.file}</span> — {refusal.kind === 'size'
