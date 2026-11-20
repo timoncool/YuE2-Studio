@@ -1706,6 +1706,7 @@ export const en = {
     dataFolder: 'Everything the studio keeps',
     openFolder: 'Open folder',
     checkingExistingModels: 'Checking files in the selected folder…',
+    adoptVerifiedOptional: 'Optional component files verified: {count}.',
     adoptTaken: 'Taken from the folder: {count} files.',
     adoptCopied: 'Another drive could not share them, so they were copied: {size} more on disk.',
     adoptMissing: 'Still to download: {files}.',

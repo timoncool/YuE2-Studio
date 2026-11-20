@@ -87,6 +87,31 @@ fn legacy_ort_pin(record: &InstallRecord, url: &str) -> bool {
         && crate::pin_sha::sha256(url).is_some_and(|hash| hash == record.sha256)
 }
 
+/// The training and MIDI tools share a sibling directory named hotstep. Older
+/// records stored its absolute path, which still points to the previous Studio
+/// after moving or copying a portable installation.
+fn shared_tools(root: &Path) -> Option<PathBuf> {
+    match root.file_name()?.to_str()? {
+        "training" | "midi" => Some(root.parent()?.join("hotstep")),
+        _ => None,
+    }
+}
+
+fn recorded_path(root: &Path, stored: &str) -> Option<PathBuf> {
+    use std::path::Component;
+    let path = Path::new(stored);
+    let plain = |path: &Path| !path.as_os_str().is_empty() && path.components().all(|part| matches!(part, Component::Normal(_)));
+    if plain(path) { return Some(root.join(path)); }
+    let shared = shared_tools(root)?;
+    let suffix = if path.is_absolute() {
+        let legacy = path.ancestors().find(|ancestor| ancestor.file_name().is_some_and(|name| name == "hotstep"))?;
+        path.strip_prefix(legacy).ok()?
+    } else {
+        path.strip_prefix("../hotstep").ok()?
+    };
+    plain(suffix).then(|| shared.join(suffix))
+}
+
 /// Whether the record at `record` says `url` was installed and every file it
 /// put under `root` is there at its size. None when there is no record; false
 /// while an install is under way or was cut off (`begin`), record or not.
@@ -98,7 +123,7 @@ pub fn matches(record: &Path, url: &str, root: &Path) -> Option<bool> {
     Some(
         (parsed.url == url || legacy_ort_pin(&parsed, url))
             && !parsed.files.is_empty()
-            && parsed.files.iter().all(|file| fs::metadata(root.join(&file.path)).is_ok_and(|meta| meta.is_file() && meta.len() == file.size)),
+            && parsed.files.iter().all(|file| recorded_path(root, &file.path).and_then(|path| fs::metadata(path).ok()).is_some_and(|meta| meta.is_file() && meta.len() == file.size)),
     )
 }
 
@@ -137,7 +162,13 @@ pub fn write(record: &Path, url: &str, sha256: &str, files: &[PathBuf], root: &P
         .iter()
         .map(|path| {
             let size = fs::metadata(path).with_context(|| format!("measure {}", path.display()))?.len();
-            let relative = path.strip_prefix(root).unwrap_or(path).to_string_lossy().replace('\\', "/");
+            let relative = if let Ok(relative) = path.strip_prefix(root) {
+                relative.to_path_buf()
+            } else {
+                let shared = shared_tools(root).context("installed file is outside its component directory")?;
+                Path::new("../hotstep").join(path.strip_prefix(shared).context("installed file is outside shared HOT-Step tools")?)
+            };
+            let relative = relative.to_string_lossy().replace('\\', "/");
             Ok(RecordedFile { path: relative, size })
         })
         .collect::<Result<Vec<_>>>()?;
@@ -161,7 +192,7 @@ fn remove_if_there(path: &Path) -> Result<()> {
 pub fn remove_earlier(record: &Path, root: &Path, kept: &Path) -> Result<()> {
     if let Some(parsed) = read(record) {
         for file in &parsed.files {
-            let path = root.join(&file.path);
+            let Some(path) = recorded_path(root, &file.path) else { continue };
             if path != kept {
                 if let Err(error) = remove_if_there(&path) {
                     set_aside(&path).with_context(|| format!("{error:#}"))?;
@@ -240,6 +271,34 @@ pub fn sha256_of(path: &Path) -> Result<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn shared_tools_records_follow_the_portable_and_leave_the_original_alone() {
+        let disk = tempfile::tempdir().unwrap();
+        let old = disk.path().join("Studio 4");
+        let new = disk.path().join("Studio 5");
+        for base in [&old, &new] {
+            fs::create_dir_all(base.join("training")).unwrap();
+            fs::create_dir_all(base.join("hotstep/build")).unwrap();
+            fs::write(base.join("hotstep/build/tool"), b"tool").unwrap();
+        }
+        let old_file = old.join("hotstep/build/tool");
+        let record = new.join("training/package.json");
+        let root = new.join("training");
+        let new_file = new.join("hotstep/build/tool");
+        write(&record, "url", "", std::slice::from_ref(&new_file), &root).unwrap();
+        let mut saved = read(&record).unwrap();
+        assert_eq!(saved.files[0].path, "../hotstep/build/tool");
+        assert_eq!(matches(&record, "url", &root), Some(true));
+        saved.files[0].path = old_file.to_string_lossy().to_string();
+        fs::write(&record, serde_json::to_vec(&saved).unwrap()).unwrap();
+        assert_eq!(matches(&record, "url", &root), Some(true));
+        fs::write(&new_file, b"changed").unwrap();
+        assert_eq!(matches(&record, "url", &root), Some(false));
+        remove_earlier(&record, &root, &root.join("package.zip")).unwrap();
+        assert!(!new_file.exists());
+        assert_eq!(fs::read(old_file).unwrap(), b"tool");
+    }
 
     fn scratch(name: &str) -> PathBuf {
         let dir = std::env::temp_dir().join(format!("install-record-{name}-{}", std::process::id()));

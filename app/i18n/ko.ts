@@ -1701,6 +1701,7 @@ export const ko = {
     dataFolder: '스튜디오가 보관하는 모든 것',
     openFolder: '폴더 열기',
     checkingExistingModels: '선택한 폴더의 파일 확인 중…',
+    adoptVerifiedOptional: '검증된 선택 구성 요소 파일 수: {count}개.',
     adoptTaken: '폴더에서 파일 {count}개를 가져왔습니다.',
     adoptCopied: '다른 드라이브와는 공유할 수 없어 복사했습니다. 디스크를 {size} 더 사용합니다.',
     adoptMissing: '아직 받아야 할 파일: {files}.',

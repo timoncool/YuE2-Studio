@@ -9654,30 +9654,37 @@ async fn setup_adopt(State(state): State<AppState>, body: axum::body::Bytes) -> 
     let components = catalog.components.clone();
     let root = models_root.clone();
     let optional_state = state.clone();
-    let (adopted, copied, refused) = tokio::task::spawn_blocking(move || {
+    let (adopted, copied, refused, verified_optional) = tokio::task::spawn_blocking(move || {
         let found = adoptable_sources(&components, &root, &entries);
         let mut taken: Vec<std::path::PathBuf> = found.iter().map(|(_, source)| source.clone()).collect();
         let mut adopted = Vec::new();
+        let mut verified_optional = std::collections::HashSet::new();
         let mut copied = Vec::new();
         let mut by_name = std::collections::HashMap::<std::ffi::OsString, Vec<(&'static str, &'static str, std::path::PathBuf)>>::new();
         let mut errors = Vec::new();
         let mut checked = std::collections::HashSet::new();
-        let mut register = |id: &'static str, url: &str, target: std::path::PathBuf| {
-            let Some(sha) = pin_sha::sha256(url) else { return };
+        let mut register = |id: &'static str, digest: Option<&'static str>, target: std::path::PathBuf| {
+            let Some(sha) = digest else { return };
             let Some(name) = target.file_name() else { return };
-            if checked.insert(target.clone()) {
+            if checked.insert((target.clone(), sha)) {
                 by_name.entry(name.to_owned()).or_default().push((id, sha, target));
             }
         };
         for asset in assistant_runtime::ASSETS.iter().filter(|asset| asset.kind == assistant_runtime::AssetKind::Model) {
-            register(asset.id, asset.url, optional_state.assistant_runtime.path_of(asset));
+            register(asset.id, pin_sha::sha256(asset.url), optional_state.assistant_runtime.path_of(asset));
         }
         use update_screen::Part;
-        for part in [Part::Karaoke, Part::Separation, Part::Midi, Part::Training, Part::Listening] {
+        for part in [Part::Karaoke, Part::Separation, Part::Midi, Part::Training, Part::Listening, Part::Audiocpp, Part::Engine] {
             let Some((downloader, _)) = update_downloader(&optional_state, part) else { continue };
             for asset in update_catalogue(part) {
-                if asset.kind != downloads::AssetKind::Model { continue; }
-                register(asset.id, asset.url, downloader.path_of(asset));
+                if !cfg!(windows) && asset.is_windows_runtime() { continue; }
+                if asset.pick.is_empty() && asset.unzip_into.is_none() {
+                    register(asset.id, pin_sha::sha256(asset.url), downloader.path_of(asset));
+                }
+                for entry in asset.pick {
+                    let name = downloads::picked_file_name(entry);
+                    register(asset.id, pin_sha::picked(asset.url, name), downloader.picked_into(asset).join(name));
+                }
             }
         }
         for source in &entries {
@@ -9689,7 +9696,9 @@ async fn setup_adopt(State(state): State<AppState>, body: axum::body::Bytes) -> 
                 for (id, sha, target) in candidates {
                     if *sha != digest { continue; }
                     matched = true;
-                    if adopt_optional_file(source, target, sha)? {
+                    let placed = adopt_optional_file(source, target, sha)?;
+                    verified_optional.insert(target.clone());
+                    if placed {
                         adopted.push((*id).to_owned());
                         if !same_file::is_same_file(source, target)? {
                             copied.push(serde_json::json!({ "id": id, "bytes": std::fs::metadata(target)?.len() }));
@@ -9724,7 +9733,7 @@ async fn setup_adopt(State(state): State<AppState>, body: axum::body::Bytes) -> 
                 errors.push(serde_json::json!({ "file": component.filename, "kind": "copy", "error": error.to_string() }));
             }
         }
-        (adopted, copied, errors)
+        (adopted, copied, errors, verified_optional.len())
     })
     .await
     .map_err(|error| api_error(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?;
@@ -9734,6 +9743,7 @@ async fn setup_adopt(State(state): State<AppState>, body: axum::body::Bytes) -> 
     Ok(Json(serde_json::json!({
         "picked": true,
         "folder": folder.display().to_string(),
+        "verified_optional": verified_optional,
         "adopted": adopted,
         "copied": copied,
         "refused": refused,
