@@ -5256,8 +5256,8 @@ async fn update_library_song(State(state):State<AppState>,Path(id):Path<String>,
     }
     Ok(Json(song))
 }
-/// Puts a song in the bin with the songs made from it (its stems and the
-/// like); the bin keeps them for `TRASH_DAYS` days, Restore brings them back.
+/// The delete confirmation includes this song and its stems. Other versions
+/// keep their own places in the library even when their source is trashed.
 async fn delete_library_song(State(state): State<AppState>, Path(id): Path<String>) -> Result<Json<Value>, (StatusCode, Json<ApiError>)> {
     let internal = |e: anyhow::Error| api_error(StatusCode::INTERNAL_SERVER_ERROR, e.to_string());
     let song = state.library.get_song(&id).map_err(internal)?.ok_or_else(|| api_error(StatusCode::NOT_FOUND, "Song not found".into()))?;
@@ -5269,7 +5269,7 @@ async fn delete_library_song(State(state): State<AppState>, Path(id): Path<Strin
         .list_songs()
         .map_err(internal)?
         .into_iter()
-        .filter(|other| derived_from(other).is_some_and(|(from, _)| from == id))
+        .filter(|other| derived_from(other) == Some((id.as_str(), "stems")))
         .map(|other| other.id)
         .collect();
     state.library.set_song_trashed(&id, true, None).map_err(internal)?;
@@ -5399,13 +5399,26 @@ fn delete_songs_for_good(
     files: impl Fn(&library::Song) -> Vec<std::path::PathBuf>,
     recycle: impl Fn(&std::path::Path) -> Result<(), String>,
 ) -> anyhow::Result<()> {
-    let mut songs: Vec<library::Song> = library.trashed_songs()?.into_iter().filter(|song| library::trashed_with(song) == Some(id)).collect();
-    if let Some(song) = library.get_song(id)? {
-        songs.push(song);
-    }
+    library.purge_trashed_group(id, |songs, keep| recycle_unshared_files(songs, keep, files, recycle))
+}
+
+fn recycle_unshared_files(
+    songs: &[library::Song],
+    keep: &[library::Song],
+    files: impl Fn(&library::Song) -> Vec<PathBuf>,
+    recycle: impl Fn(&std::path::Path) -> Result<(), String>,
+) -> anyhow::Result<()> {
+    // A surviving record can reference the same media, even while it is in the bin.
+    let mut protected: std::collections::HashSet<_> = keep.iter().flat_map(&files)
+        .filter(|path| path.exists())
+        .map(|path| path.canonicalize())
+        .collect::<std::io::Result<_>>()?;
     let (mut recycled, mut refused) = (Vec::new(), Vec::new());
-    for song in &songs {
+    for song in songs {
         for path in files(song).into_iter().filter(|path| path.exists()) {
+            if !protected.insert(path.canonicalize()?) {
+                continue;
+            }
             match recycle(&path) {
                 Ok(()) => recycled.push(plain_path(&path)),
                 Err(error) => refused.push(format!("{}: {error}", plain_path(&path))),
@@ -5415,9 +5428,6 @@ fn delete_songs_for_good(
     if !refused.is_empty() {
         let taken = if recycled.is_empty() { "none of its files went there".to_string() } else { format!("these are in the system's recycle bin already and come back from there: {}", recycled.join("; ")) };
         anyhow::bail!("the system's recycle bin did not take these files, so the song stays in the studio's bin: {}; {taken}", refused.join("; "));
-    }
-    for song in &songs {
-        library.delete_song(&song.id)?;
     }
     Ok(())
 }
@@ -13653,6 +13663,41 @@ mod tests {
         assert!(!recycled.borrow().is_empty());
         drop(library);
         let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn purge_preserves_media_referenced_by_a_live_or_separately_trashed_song() {
+        let root = std::env::temp_dir().join(format!("yue2-shared-media-{}", uuid::Uuid::now_v7()));
+        let library = library::Library::open_at(root.join("library.sqlite"), root.join("media")).unwrap();
+        std::fs::create_dir_all(library.media_dir()).unwrap();
+        let audio = library.media_dir().join("shared.flac");
+        std::fs::write(&audio, b"fLaC").unwrap();
+        let make = |title: &str| library.create_song(library::SongInput {
+            title: title.into(), audio_path: Some(audio.to_string_lossy().into_owned()),
+            caption: String::new(), lyrics: String::new(), metadata: Value::Null,
+            generation_settings: Value::Null, engine_id: "manual".into(), profile_id: None,
+            replay_request: None, audio_codes: None, source: "manual".into(),
+        }).unwrap().id;
+        let first = make("First take");
+        let second = make("Second take");
+        let last = make("Last take");
+        let purge = |id: &str| delete_songs_for_good(&library, id,
+            |song| library.media_path_for_song(song).into_iter().collect(),
+            |path| std::fs::remove_file(path).map_err(|e| e.to_string()),
+        ).unwrap();
+
+        library.set_song_trashed(&first, true, None).unwrap();
+        purge(&first);
+        let survivor = library.get_song(&second).unwrap().unwrap();
+        assert_eq!(std::fs::read(library.media_path_for_song(&survivor).unwrap()).unwrap(), b"fLaC");
+        library.set_song_trashed(&second, true, None).unwrap();
+        library.set_song_trashed(&last, true, None).unwrap();
+        purge(&second);
+        assert!(audio.is_file());
+        purge(&last);
+        assert!(!audio.exists());
+        drop(library);
+        std::fs::remove_dir_all(root).unwrap();
     }
 
     /// The recycle bin takes the first file and refuses the second: the refusal names both - the one to get back
