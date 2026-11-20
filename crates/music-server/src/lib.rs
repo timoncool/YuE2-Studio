@@ -3071,7 +3071,10 @@ async fn keep_processing(
             audio_codes: None,
             source: "processing".into(),
         })?;
-        cover_like(&state, &original, &song.id)?;
+        // The library has committed the audio path. Artwork is optional from this point on.
+        if let Err(error) = cover_like(&state, &original, &song.id) {
+            eprintln!("[WARN] processing: saved version {} without copying the cover from {}: {error:#}", song.id, original.id);
+        }
         Ok(song)
     })()
     .map_err(|error| api_error(StatusCode::INTERNAL_SERVER_ERROR, format!("{error:#}")));
