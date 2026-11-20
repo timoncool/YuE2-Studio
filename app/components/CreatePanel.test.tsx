@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Song, YueRequest } from '../types';
 import { useGenerations } from '../services/generations';
+import { afterGenerationPause } from '../services/generationPause';
 
 const composeScore = vi.fn();
 const transcribe = vi.fn();
@@ -47,7 +48,10 @@ vi.mock('./ScoreView', () => ({ ScoreView: () => null }));
 vi.mock('./midi/MidiEditor', () => ({ MidiEditor: () => null }));
 vi.mock('./MidiImportDialog', () => ({ MidiImportDialog: () => null }));
 vi.mock('./PlaylistModals', () => ({ CreatePlaylistModal: () => null }));
-vi.mock('./SlideToEnable', () => ({ SlideToEnable: () => null }));
+vi.mock('./SlideToEnable', () => ({
+  SlideToEnable: ({ on, onChange, offLabel, stopLabel }: { on: boolean; onChange: (on: boolean) => void; offLabel: string; stopLabel: string }) =>
+    <button onClick={() => onChange(!on)}>{on ? stopLabel : offLabel}</button>,
+}));
 
 const { CreatePanel } = await import('./CreatePanel');
 
@@ -78,10 +82,10 @@ afterEach(() => {
 
 const flush = () => act(async () => { await new Promise(resolve => setTimeout(resolve, 0)); });
 
-function panel(props: Pick<React.ComponentProps<typeof CreatePanel>, 'musicEngine' | 'onMusicEngineChange' | 'activeJobCount'> & { initialData?: { song: Song; timestamp: number } | null; visible?: boolean; request?: React.ComponentProps<typeof CreatePanel>['request']; onGenerate?: (request: YueRequest) => void }) {
+function panel(props: Pick<React.ComponentProps<typeof CreatePanel>, 'musicEngine' | 'onMusicEngineChange' | 'activeJobCount' | 'queueBusy'> & { initialData?: { song: Song; timestamp: number } | null; visible?: boolean; request?: React.ComponentProps<typeof CreatePanel>['request']; onGenerate?: (request: YueRequest) => void }) {
   return (
     <Activity mode={props.visible === false ? 'hidden' : 'visible'}>
-      <CreatePanel musicEngine={props.musicEngine} onMusicEngineChange={props.onMusicEngineChange} onGenerate={props.onGenerate ?? (request => sent.push(request))} isGenerating={Boolean(props.activeJobCount)} activeJobCount={props.activeJobCount} request={props.request} initialData={props.initialData ?? null}
+      <CreatePanel musicEngine={props.musicEngine} onMusicEngineChange={props.onMusicEngineChange} onGenerate={props.onGenerate ?? (request => sent.push(request))} isGenerating={Boolean(props.activeJobCount)} queueBusy={props.queueBusy} activeJobCount={props.activeJobCount} request={props.request} initialData={props.initialData ?? null}
         playlists={[]} onCreatePlaylist={async () => null} playlistId="" onChoosePlaylist={() => undefined} />
     </Activity>
   );
@@ -95,6 +99,88 @@ const type = (element: HTMLTextAreaElement | HTMLInputElement, value: string) =>
 });
 const click = (element: Element) => act(() => { element.dispatchEvent(new MouseEvent('click', { bubbles: true })); });
 const buttonNamed = (text: string) => [...host.querySelectorAll('button')].find(button => button.textContent?.includes(text));
+
+describe('pauses between repeated generations (#261)', () => {
+  const renderQueue = (queueBusy: boolean, activeJobCount = 0) =>
+    act(() => root.render(panel({ queueBusy, activeJobCount })));
+  const choosePause = (value: string) => act(() => {
+    const select = [...host.querySelectorAll('select')].find(element => element.closest('label')?.textContent?.includes('Pause between generations'))!;
+    select.value = value;
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  const advance = (ms: number) => act(() => { vi.advanceTimersByTime(ms); });
+
+  beforeEach(async () => {
+    renderQueue(true, 2);
+    await flush();
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'performance'] });
+    type(field('textarea')!, 'calm folk');
+    click(buttonNamed('generateForeverSlide')!);
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
+  it('keeps the original no-pause behavior by default', () => {
+    click(buttonNamed('create')!);
+    expect(sent).toHaveLength(1);
+    renderQueue(false);
+    expect(sent).toHaveLength(2);
+  });
+
+  it('counts a fixed interval only after the queue is actually empty', () => {
+    choosePause('fixed');
+    click(buttonNamed('create')!);
+    renderQueue(true);
+    advance(5 * 60_000);
+    expect(sent).toHaveLength(1);
+    renderQueue(false);
+    advance(59_999);
+    expect(sent).toHaveLength(1);
+    advance(1);
+    expect(sent).toHaveLength(2);
+    expect(sent[1].style).toBe(sent[0].style);
+  });
+
+  it('samples a random interval and clears a pending repeat on Cancel all', () => {
+    vi.spyOn(Math, 'random').mockReturnValue(0.5);
+    choosePause('random');
+    click(buttonNamed('create')!);
+    renderQueue(false);
+    advance(119_999);
+    expect(sent).toHaveLength(1);
+    advance(1);
+    expect(sent).toHaveLength(2);
+
+    renderQueue(true);
+    renderQueue(false);
+    act(() => window.dispatchEvent(new CustomEvent('yue:cancel-all')));
+    advance(180_000);
+    expect(sent).toHaveLength(2);
+  });
+
+  it('does not turn a longer-than-browser-timeout pause into an immediate repeat', () => {
+    const callback = vi.fn();
+    const cancel = afterGenerationPause(2_147_483_647 + 1000, callback);
+    advance(2_147_483_647);
+    expect(callback).not.toHaveBeenCalled();
+    advance(999);
+    expect(callback).not.toHaveBeenCalled();
+    advance(1);
+    expect(callback).toHaveBeenCalledTimes(1);
+    cancel();
+  });
+
+  it('clears a pending repeat when Without stopping is switched off', () => {
+    choosePause('fixed');
+    click(buttonNamed('create')!);
+    renderQueue(false);
+    click(buttonNamed('generateForeverStop')!);
+    advance(60_000);
+    expect(sent).toHaveLength(1);
+  });
+});
 
 it('keeps an edited score across a cloud session and reopening the native form', async () => {
   localStorage.setItem('studio.createDraft', JSON.stringify({ style: 'folk', lyrics: 'verse' }));

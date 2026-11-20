@@ -652,6 +652,7 @@ const SongsStep: React.FC<{
           <MoreMenu
             items={[
               { label: t('trainingAddLibrary'), icon: <Library size={14} />, onClick: () => setPicking(true), disabled: Boolean(adding) },
+              { label: t('trainingFillWithoutAsr'), icon: <Wand2 size={14} />, onClick: () => onPrepare({ lyrics: 'missing', style: 'missing', skip_asr: true }), disabled: jobBusy },
               { label: t('trainingAutofillAll'), icon: <Mic2 size={14} />, onClick: () => onPrepare({ lyrics: 'all', style: 'missing' }), disabled: jobBusy },
               ...(listenReady ? [{ label: t('trainingListenAll'), icon: <Headphones size={14} />, onClick: () => onPrepare({ lyrics: 'missing', style: 'all' }), disabled: jobBusy }] : []),
               ...(state.item_style === 'caption' && !listenReady ? [{ label: t('trainingDescribeAll'), icon: <Wand2 size={14} />, onClick: () => void describe(dataset.items.map(item => item.id)), disabled: describing.length > 0 }] : []),

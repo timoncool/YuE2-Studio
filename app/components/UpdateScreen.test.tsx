@@ -19,6 +19,19 @@ afterEach(() => {
 });
 
 describe('UpdatePlanView', () => {
+  it('shows the exact recovery archive and local destination from the failed update', async () => {
+    const archive = { url: 'https://example.org/releases/onnx.zip', path: 'D:/portable/tools/onnx.zip' };
+    const plan = { version: '4.1.1', updated: [], added: [], retired: [], download: 0, freed: 0, show: true };
+    const job = { status: 'failed', error: 'connection timed out', manual_archive: archive, updated: [], added: [] };
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, json: async () => ({ plan, job }) })));
+    host = document.createElement('div');
+    document.body.append(host);
+    root = createRoot(host);
+    await act(async () => root.render(<UpdatePlanView />));
+    expect(host.querySelector('a')?.getAttribute('href')).toBe(archive.url);
+    expect(host.querySelector('code')?.textContent).toBe(archive.path);
+  });
+
   it('asks for the plan again only after the last answer, not on a timer over a slow one', async () => {
     vi.useFakeTimers();
     const plan = { version: '3.9.0', updated: [], added: [], retired: [], download: 0, freed: 0, show: true };

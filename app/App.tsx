@@ -1582,6 +1582,7 @@ function AppContent() {
                 onGenerate={generations.generate}
                 isGenerating={generations.isGenerating}
                 activeJobCount={generations.activeJobCount}
+                queueBusy={generations.queueBusy}
                 initialData={reuseData}
                 request={createRequest}
                 playlists={playlists}

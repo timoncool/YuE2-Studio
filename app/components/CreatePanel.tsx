@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useEffectEvent, useMemo, useRef, useState } from 'react';
 import { libraryChanged, SELF_READ, useActivity, useAssistantStatus, useOpenRouterSettings, useSetupStatus, type ActivityEntry } from '../services/studioQueries';
 import { hasSungLines, karaokeReason, recogniseLyrics } from '../services/karaoke';
 import { ConfirmDialog } from './ConfirmDialog';
@@ -41,6 +41,8 @@ import { explainCliFailure } from '../services/cliFailure';
 import { loadNativeOpenRouterCatalog, modelsForCapability, refreshNativeOpenRouterCatalog, type NativeOpenRouterModel } from '../services/nativeOpenRouter';
 import { musicSourceStrings, nativeMusicSourceStrings } from '../i18n/musicSource';
 import { audioCppMiniMax, isMusicEngine, isProfileMusicEngine, miniMaxOutputFormat, profileMusicEngines, nativeGenerationSettings, useNativeMusicProfiles } from '../services/nativeMusicProfiles';
+import { generationPauseStrings } from '../i18n/generationPause';
+import { afterGenerationPause, generationPauseMs, type GenerationPauseMode } from '../services/generationPause';
 
 /**
  * The YuE2 request form.
@@ -68,6 +70,7 @@ interface CreatePanelProps {
   onMusicEngineChange?: (engine: MusicEngine) => void;
   isGenerating: boolean;
   activeJobCount?: number;
+  queueBusy?: boolean;
   initialData?: { song: Song; timestamp: number } | null;
   request?: CreateRequest | null;
   playlists: Playlist[];
@@ -404,7 +407,7 @@ const LYRIC_LANGUAGES: { code: string; native: string; name: string }[] = [
   { code: 'ko', native: '한국어', name: 'Korean' },
 ];
 
-export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngine = 'local', onMusicEngineChange, isGenerating, activeJobCount = 0, initialData, request, playlists, onCreatePlaylist, playlistId, onChoosePlaylist }) => {
+export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngine = 'local', onMusicEngineChange, isGenerating, activeJobCount = 0, queueBusy = isGenerating || activeJobCount > 0, initialData, request, playlists, onCreatePlaylist, playlistId, onChoosePlaylist }) => {
   const { t, language } = useI18n();
   const writingText = songWritingStrings[language];
   const tt = t as unknown as (key: string) => string;
@@ -1247,6 +1250,15 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
   // snapshot, so editing the form meanwhile does not change the next songs.
   const [forever, setForever] = useState(false);
   const foreverRequest = useRef<YueRequest | null>(null);
+  const cancelPause = useRef<(() => void) | null>(null);
+  const [pauseMode, setPauseMode] = useState<GenerationPauseMode>('none');
+  const [pauseMinutes, setPauseMinutes] = useState('1');
+  const [pauseMinimum, setPauseMinimum] = useState('1');
+  const [pauseMaximum, setPauseMaximum] = useState('3');
+  const pauseText = generationPauseStrings[language];
+  const pauseStart = pauseMode === 'fixed' ? pauseMinutes : pauseMinimum;
+  const pauseEnd = pauseMode === 'fixed' ? pauseMinutes : pauseMaximum;
+  const validPause = generationPauseMs(pauseMode, pauseStart, pauseEnd, () => 0) !== null;
   // the voice of the score becomes rests before anything is sung, so the model plays without singing
   const [instrumental, setInstrumental] = useState(false);
   // the model was trained to sing: the Instrumental LoRA is what keeps it from it, so the switch takes it along
@@ -1319,32 +1331,50 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
       if (latest()) setInstrumentalLoraLoading(false);
     }
   };
-  useEffect(() => {
-    const stop = () => setForever(false);
-    window.addEventListener('yue:cancel-all', stop);
-    window.addEventListener('yue:generation-failed', stop);
-    return () => {
-      window.removeEventListener('yue:cancel-all', stop);
-      window.removeEventListener('yue:generation-failed', stop);
-    };
-  }, []);
-  useEffect(() => {
+  const stopForever = useCallback(() => {
+    cancelPause.current?.();
     foreverRequest.current = null;
     setForever(false);
-  }, [selectionKey, musicEngine]);
+  }, []);
+  useEffect(() => {
+    window.addEventListener('yue:cancel-all', stopForever);
+    window.addEventListener('yue:generation-failed', stopForever);
+    return () => {
+      window.removeEventListener('yue:cancel-all', stopForever);
+      window.removeEventListener('yue:generation-failed', stopForever);
+    };
+  }, [stopForever]);
+  useEffect(stopForever, [stopForever, selectionKey, musicEngine]);
 
   const generate = (request: YueRequest) => {
+    cancelPause.current?.();
     if (forever) foreverRequest.current = { ...request };
     onGenerate(request);
     if (nameFilled) { setName(''); setNameFilled(false); }
   };
-  useEffect(() => {
-    if (!forever) { foreverRequest.current = null; return; }
-    const snapshot = foreverRequest.current;
-    if (!yue || !ready || !snapshot || activeJobCount >= 2) return;
+  const repeat = useEffectEvent((snapshot: YueRequest) => {
     onGenerate({ ...snapshot, lm_seed: Math.floor(Math.random() * 0x100000000), seed: Math.floor(Math.random() * 0x100000000) });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [forever, activeJobCount, ready, yue]);
+  });
+  useEffect(() => {
+    const snapshot = foreverRequest.current;
+    if (!forever || !yue || !ready || !snapshot || pauseMode !== 'none' || activeJobCount >= 2) return;
+    repeat(snapshot);
+  }, [forever, activeJobCount, ready, yue, pauseMode]);
+
+  useEffect(() => {
+    const snapshot = foreverRequest.current;
+    if (!forever || !yue || !ready || !snapshot || pauseMode === 'none' || queueBusy) return;
+    const wait = generationPauseMs(pauseMode, pauseStart, pauseEnd);
+    if (wait === null) return;
+    const cancel = afterGenerationPause(wait, () => {
+      if (foreverRequest.current === snapshot) repeat(snapshot);
+    });
+    cancelPause.current = cancel;
+    return () => {
+      cancel();
+      if (cancelPause.current === cancel) cancelPause.current = null;
+    };
+  }, [forever, ready, yue, queueBusy, pauseMode, pauseStart, pauseEnd]);
 
   /** An instrumental: the score - the form's, or one written now - with its voice moved to the
    *  instrument, and the lyrics' section tags without their words, so nothing is left to sing. */
@@ -2524,11 +2554,37 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
         <div className="mb-2">
           <SlideToEnable
             on={forever}
-            onChange={setForever}
+            onChange={enabled => enabled ? setForever(true) : stopForever()}
             offLabel={tt('generateForeverSlide')}
             stopLabel={tt('generateForeverStop')}
             title={tt('generateForeverHint')}
           />
+          {forever && (
+            <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
+              <label className="flex items-center gap-2">
+                {pauseText.label}
+                <select value={pauseMode} onChange={event => setPauseMode(event.target.value as GenerationPauseMode)}
+                  className="rounded border border-zinc-200 bg-zinc-50 px-1.5 py-1 dark:border-white/20 dark:bg-zinc-800">
+                  <option value="none">{pauseText.none}</option>
+                  <option value="fixed">{pauseText.fixed}</option>
+                  <option value="random">{pauseText.random}</option>
+                </select>
+              </label>
+              {pauseMode !== 'none' && (
+                <input aria-label={pauseMode === 'fixed' ? pauseText.minutes : pauseText.minimum}
+                  type="number" min="0" step="any" value={pauseStart}
+                  onChange={event => (pauseMode === 'fixed' ? setPauseMinutes : setPauseMinimum)(event.target.value)}
+                  className="w-20 rounded border border-zinc-200 bg-transparent px-1.5 py-1 dark:border-white/20" />
+              )}
+              {pauseMode === 'random' && (
+                <input aria-label={pauseText.maximum} type="number" min="0" step="any" value={pauseEnd}
+                  onChange={event => setPauseMaximum(event.target.value)}
+                  className="w-20 rounded border border-zinc-200 bg-transparent px-1.5 py-1 dark:border-white/20" />
+              )}
+              {pauseMode !== 'none' && <span>{pauseText.unit}</span>}
+              {!validPause && <span role="alert" className="text-red-600 dark:text-red-400">{pauseText.invalid}</span>}
+            </div>
+          )}
         </div>
         </>}
         <button

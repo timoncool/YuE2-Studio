@@ -498,15 +498,20 @@ impl Downloader {
     /// succeeded, the files arrived, and the interface redrew the same row with
     /// the same download button. That is what "the button does nothing" was.
     pub async fn install_all(&self, scope: &str, assets: &[&'static Asset]) -> Result<()> {
-        self.install_set(scope, assets, None).await
+        self.install_with_hint(scope, assets, &mut None).await
+    }
+
+    pub(crate) async fn install_with_hint(&self, scope: &str, assets: &[&'static Asset], hint: &mut Option<ManualArchive>) -> Result<()> {
+        self.install_set(scope, assets, None, hint).await
     }
 
     pub(crate) async fn install_local_archive(&self, scope: &str, asset: &'static Asset, source: &Path) -> Result<()> {
         anyhow::ensure!(release_archive_name(asset).is_some(), "this component has no pinned runtime archive");
-        self.install_set(scope, &[asset], Some(source)).await
+        self.install_set(scope, &[asset], Some(source), &mut None).await
     }
 
-    async fn install_set(&self, scope: &str, assets: &[&'static Asset], source: Option<&Path>) -> Result<()> {
+    async fn install_set(&self, scope: &str, assets: &[&'static Asset], source: Option<&Path>, hint: &mut Option<ManualArchive>) -> Result<()> {
+        *hint = None;
         const AT_ONCE: usize = 4;
         let pending: Vec<&'static Asset> = assets.iter().copied().filter(|asset| !self.is_installed(asset)).collect();
         if pending.is_empty() {
@@ -592,10 +597,11 @@ impl Downloader {
                 None => Ok(()),
             },
         };
+        *hint = manual_archive.filter(|_| !self.cancel.load(std::sync::atomic::Ordering::Relaxed));
         if let Some(active) = self.progress.lock().await.as_mut() {
             active.done = true;
             active.error = outcome.as_ref().err().map(|error| error.to_string());
-            active.manual_archive = manual_archive.filter(|_| !self.cancel.load(std::sync::atomic::Ordering::Relaxed));
+            active.manual_archive = hint.clone();
             if outcome.is_ok() {
                 active.downloaded_bytes = total;
             }
@@ -798,17 +804,9 @@ fn check_staged_archive(url: &str, archive: &Path) -> Result<String> {
 
 /// ONNX releases may be unreachable from networks that cannot connect to GitHub at all (#276).
 /// Only offer these mirrors for known, hash-pinned release files. Installation still checks the original pin.
-fn onnx_mirrors(url: &str) -> Option<[String; 2]> {
-    let release = url.strip_prefix("https://github.com/timoncool/onnxruntime/releases/download/")?;
-    crate::pin_sha::sha256(url)?;
-    // Mirrors carry upstream archives. The studio's Ventura build has its own libraries and digest.
-    if release.ends_with("/onnxruntime-osx-arm64-ventura-1.32.0.tgz") {
-        return None;
-    }
-    Some([
-        format!("https://dl.photoprism.app/onnx/runtime/{release}"),
-        format!("https://registry.npmmirror.com/-/binary/onnxruntime/{release}"),
-    ])
+fn onnx_sources(url: &str) -> Option<&'static [String]> {
+    let digest = crate::pin_sha::sha256(url)?;
+    crate::component_catalogue::bundled().sources(digest)
 }
 
 async fn unless_cancelled<T>(cancel: &std::sync::atomic::AtomicBool, work: impl std::future::Future<Output = Result<T>>) -> Result<T> {
@@ -870,8 +868,19 @@ async fn fetch_absent(
     // How big it is and whether it can be fetched in pieces, asked of the
     // server rather than assumed - both answers come from one ranged byte.
     let url = crate::net::model_url(asset.url);
-    if let Some([photoprism, npmmirror]) = onnx_mirrors(asset.url) {
-        return fetch_onnx_sources(http, asset, target, progress, cancel, [url, photoprism, npmmirror]).await;
+    if let Some(fallback) = onnx_sources(asset.url) {
+        let digest = crate::pin_sha::sha256(asset.url).expect("ONNX mirror lists require a pinned digest");
+        let refresh = tokio::time::timeout(std::time::Duration::from_secs(12), crate::component_catalogue::channel_sources(http, digest));
+        let mut sources = match unless_cancelled(&cancel, async { Ok(refresh.await) }).await? {
+            Ok(Ok(sources)) => sources.unwrap_or_default(),
+            Ok(Err(error)) => { eprintln!("Component mirror refresh failed: {error}"); Vec::new() }
+            Err(_) => { eprintln!("Component mirror refresh timed out"); Vec::new() }
+        };
+        for source in fallback {
+            if !sources.contains(source) { sources.push(source.clone()); }
+        }
+        let sources: Vec<_> = sources.iter().map(|source| crate::net::model_url(source)).collect();
+        return fetch_onnx_sources(http, asset, target, progress, cancel, sources).await;
     }
     fetch_from(http, asset, target, progress, cancel, &url, false).await
 }
@@ -882,10 +891,10 @@ async fn fetch_onnx_sources(
     target: &Path,
     progress: &Arc<Mutex<Option<DownloadProgress>>>,
     cancel: Arc<std::sync::atomic::AtomicBool>,
-    sources: [String; 3],
+    sources: impl AsRef<[String]>,
 ) -> Result<()> {
     let mut failures = Vec::new();
-    for source in &sources {
+    for source in sources.as_ref() {
         match fetch_from(http, asset, target, progress, cancel.clone(), source, true).await {
             Ok(()) => return Ok(()),
             Err(_) if cancel.load(std::sync::atomic::Ordering::Relaxed) => bail!("cancelled"),
@@ -1581,8 +1590,8 @@ mod tests {
 
     #[tokio::test]
     async fn onnx_rejects_wrong_sha_before_publishing_and_uses_only_pinned_mirrors() {
-        assert!(onnx_mirrors(ONNX_FIXTURE_PIN).is_some());
-        assert!(onnx_mirrors(&ONNX_FIXTURE_PIN.replace("win-x64", "unlisted")).is_none());
+        assert!(onnx_sources(ONNX_FIXTURE_PIN).is_some());
+        assert!(onnx_sources(&ONNX_FIXTURE_PIN.replace("win-x64", "unlisted")).is_none());
         let app = axum::Router::new().route("/copy", axum::routing::get(|| async { "archive" }));
         let (base, server) = onnx_fixture(app).await;
         let root = tempfile::tempdir().unwrap();
@@ -1590,7 +1599,7 @@ mod tests {
         let http = reqwest::Client::builder().no_proxy().build().unwrap();
         let entry = Asset { url: ONNX_FIXTURE_PIN, ..asset() };
         let error = fetch_onnx_sources(&http, &entry, &target, &Arc::new(Mutex::new(None)),
-            Arc::new(std::sync::atomic::AtomicBool::new(false)), std::array::from_fn(|_| format!("{base}/copy"))).await.unwrap_err();
+            Arc::new(std::sync::atomic::AtomicBool::new(false)), vec![format!("{base}/copy"); 3]).await.unwrap_err();
         assert_eq!(failure_code(&error), "hash_mismatch");
         assert!(!target.exists());
         assert!(!target.with_extension("part").exists());
@@ -1885,9 +1894,10 @@ mod tests {
         assert_eq!(hint.url, asset.url);
         assert!(manual_archive_hint(asset, &target, &anyhow::anyhow!("invalid archive")).is_none());
         if cfg!(target_os = "macos") {
-            assert!(onnx_mirrors(asset.url).is_none());
+            assert_eq!(onnx_sources(asset.url).unwrap(), &[asset.url]);
         } else {
-            let mirrors = onnx_mirrors(asset.url).unwrap();
+            let mirrors = onnx_sources(asset.url).unwrap();
+            assert_eq!(mirrors.len(), 3);
             assert!(mirrors.iter().all(|url| url.ends_with(asset.url.split("/download/").nth(1).unwrap())));
         }
     }

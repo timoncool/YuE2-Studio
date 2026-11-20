@@ -15,7 +15,26 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      mirrors_only: ${{ steps.classify.outputs.mirrors_only }}
+      channel_changed: ${{ steps.classify.outputs.channel_changed }}
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          fetch-depth: 0
+      - id: classify
+        name: Check whether only component mirrors changed
+        env:
+          PUSH_BASE: ${{ github.event.before }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: python3 distribution/components/classify_ci.py
+
   service:
+    needs: changes
+    if: ${{ needs.changes.outputs.mirrors_only != 'true' }}
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v7.0.1
@@ -30,6 +49,8 @@ jobs:
   # the same tests on Linux, the platform the studio's Linux package runs on; the repository's toolchain file names
   # the Windows one, so the runner's own stable toolchain is taken
   service-linux:
+    needs: changes
+    if: ${{ needs.changes.outputs.mirrors_only != 'true' }}
     runs-on: ubuntu-latest
     env:
       RUSTUP_TOOLCHAIN: stable
@@ -43,7 +64,13 @@ jobs:
       - name: Service tests
         run: cargo test -p music-server --locked
 
+      - name: Install ONNX through two signed mirror revisions
+        if: needs.changes.outputs.channel_changed == 'true'
+        run: bash distribution/components/check_installed_channel.sh target/debug/music-server
+
   interface:
+    needs: changes
+    if: ${{ needs.changes.outputs.mirrors_only != 'true' }}
     runs-on: ubuntu-latest
     defaults:
       run:

@@ -2703,6 +2703,7 @@ fn tools() -> &'static [Tool] {
                     "dataset_id": { "type": "string" },
                     "items": { "type": "array", "items": { "type": "string" } },
                     "lyrics": { "type": "string", "enum": ["none", "missing", "all"] },
+                    "skip_asr": { "type": "boolean", "description": "Look up missing lyrics and keep existing text. Skip vocal separation and speech recognition for songs the databases miss." },
                     "style": { "type": "string", "enum": ["none", "missing", "all"] },
                     "language": { "type": "string", "description": "sung language code when known, e.g. ru" },
                     "train": { "type": "object", "description": "not with writer agent: start the training once you have written the songs", "properties": { "name": { "type": "string" }, "recipe": { "type": "object" } } },
