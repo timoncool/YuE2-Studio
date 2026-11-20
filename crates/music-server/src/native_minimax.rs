@@ -148,6 +148,34 @@ pub(crate) const PROFILES: &[Profile] = &[
     },
 ];
 
+/// Resolve the original files of a saved take, including older imports
+/// whose profile ID was absent but whose full set of filenames was saved.
+pub(crate) fn saved_profile(id: Option<&str>, replay: &Value) -> Result<&'static str> {
+    if let Some(profile) = PROFILES.iter().find(|profile| Some(profile.id) == id) {
+        for (field, file) in FIELDS.into_iter().zip(profile.files) {
+            if let Some(saved) = replay.get(field) {
+                if saved.as_str() != Some(file) {
+                    bail!(
+                        "MiniMax replay uses a different {field} from profile {}",
+                        profile.id
+                    );
+                }
+            }
+        }
+        return Ok(profile.id);
+    }
+    PROFILES
+        .iter()
+        .find(|profile| {
+            FIELDS
+                .into_iter()
+                .zip(profile.files)
+                .all(|(field, file)| replay[field].as_str() == Some(file))
+        })
+        .map(|profile| profile.id)
+        .context("The original MiniMax model files do not match an available profile")
+}
+
 #[derive(Debug, Deserialize)]
 struct Props {
     models: ModelBuckets,
@@ -300,11 +328,38 @@ impl Client {
             .iter()
             .find(|profile| profile.id == profile_id)
             .with_context(|| format!("unknown MiniMax profile {profile_id}"))?;
-        let body = request_body(profile, request)?;
+        self.submit_profile(profile, request_body(profile, request)?)
+            .await
+    }
+
+    /// Render a saved semantic stream. The original profile binds model
+    /// filenames even when a replay originating in an older Studio omitted them.
+    pub(crate) async fn submit_replay(&self, profile_id: &str, mut body: Value) -> Result<String> {
+        let profile = PROFILES
+            .iter()
+            .find(|profile| profile.id == profile_id)
+            .with_context(|| format!("unknown MiniMax profile {profile_id}"))?;
+        anyhow::ensure!(
+            body["audio_codes"]
+                .as_str()
+                .is_some_and(|codes| !codes.trim().is_empty()),
+            "MiniMax replay has no audio codes"
+        );
+        for (field, file) in FIELDS.into_iter().zip(profile.files) {
+            body[field] = json!(file);
+        }
+        body["lm_batch_size"] = json!(1);
+        body["synth_batch_size"] = json!(1);
+        body["output_format"] = json!("wav32");
+        self.submit_profile(profile, body).await
+    }
+
+    async fn submit_profile(&self, profile: &'static Profile, body: Value) -> Result<String> {
         let status = self.props().await?.profile_status(profile);
         if !status.ready {
             bail!(
-                "MiniMax profile {profile_id} is missing {}",
+                "MiniMax profile {} is missing {}",
+                profile.id,
                 status.missing.join(", ")
             );
         }
@@ -498,8 +553,24 @@ mod tests {
         let result = client.result(&id).await.unwrap();
         assert_eq!(result[0].audio, b"audio");
         assert_eq!(result[0].replay_request["seed"], 42);
+        let codes = "1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16";
+        for seed in [42, 43] {
+            client
+                .submit_replay(
+                    profile.id,
+                    json!({"caption":"folk","lyrics":"verse","audio_codes":codes,"seed":seed}),
+                )
+                .await
+                .unwrap();
+        }
         let requests = seen.lock().unwrap();
-        assert_eq!(requests.len(), 1);
+        assert_eq!(requests.len(), 3);
+        assert_eq!(requests[1]["audio_codes"], codes);
+        assert_eq!(requests[2]["audio_codes"], codes);
+        assert_eq!(requests[1]["seed"], 42);
+        assert_eq!(requests[2]["seed"], 43);
+        assert_eq!(requests[2]["dit_model"], profile.files[3]);
+        assert_eq!(requests[2]["output_format"], "wav32");
         assert_eq!(requests[0]["output_format"], "wav32");
         for (field, file) in FIELDS.into_iter().zip(profile.files) {
             assert_eq!(requests[0][field], file);
