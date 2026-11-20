@@ -16,7 +16,9 @@ use serde_json::{Map, Value};
 
 use crate::engine_result;
 
+mod installation;
 mod runtime;
+pub use installation::{installation, InstalledProfile, ENGINE_ID};
 pub use runtime::{Launch, Runtime};
 
 /// Every field `AceRequest` reads. Anything else a page sends is refused, so a
