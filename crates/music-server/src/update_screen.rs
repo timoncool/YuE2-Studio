@@ -275,6 +275,7 @@ pub fn mark_seen(data_root: &Path, version: &str) -> Result<(), String> {
 #[derive(Clone, Debug, Serialize)]
 pub struct Job {
     pub status: JobStatus,
+    pub manual_archive: Option<crate::downloads::ManualArchive>,
     pub error: Option<String>,
     /// The plan's rows as they were when the button was pressed, with what is still to download.
     pub updated: Vec<Row>,

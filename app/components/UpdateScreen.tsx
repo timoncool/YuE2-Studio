@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ArrowRight, Check, Download, Loader2, RotateCw, X } from 'lucide-react';
 import { useI18n } from '../context/I18nContext';
+import { ManualRuntimeArchive, type RuntimeArchive } from './ManualDownloads';
 import { poll } from '../services/poll';
 import { SELF_READ } from '../services/studioQueries';
 import type { TranslationKey } from '../i18n/translations';
@@ -8,7 +9,7 @@ import type { TranslationKey } from '../i18n/translations';
 type Row = { id: string; part: string; ids: string[]; name: string; from: string | null; to: string; bytes: number; download: number; reason_code: string; reason: string };
 type Gone = { what: string; name: string; paths: string[]; size: number; reason_code: string; reason: string };
 export type UpdatePlan = { version: string; updated: Row[]; added: Row[]; retired: Gone[]; download: number; freed: number; show: boolean };
-type UpdateJob = { status: 'running' | 'done' | 'failed'; error: string | null; updated: Row[]; added: Row[] };
+type UpdateJob = { status: 'running' | 'done' | 'failed'; error: string | null; manual_archive?: RuntimeArchive | null; updated: Row[]; added: Row[] };
 type UpdateAnswer = { plan: UpdatePlan; job: UpdateJob | null; restart_to_apply?: boolean };
 
 /** The window's words for the reasons of the release's table of changes, by their codes. */
@@ -127,7 +128,11 @@ export const UpdatePlanView: React.FC<{ onDone?: () => void; onLater?: () => voi
       )}
       {job?.status === 'failed' && (
         <div className="flex gap-2 rounded-xl border border-rose-300 bg-rose-50 px-4 py-3 text-sm text-rose-700 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-200">
-          <X size={16} className="mt-0.5 shrink-0" />{t('updateFailed').replace('{error}', job.error ?? '')}
+          <X size={16} className="mt-0.5 shrink-0" />
+          <div className="min-w-0 space-y-2">
+            <p>{t('updateFailed').replace('{error}', job.error ?? '')}</p>
+            <ManualRuntimeArchive archive={job.manual_archive} retryLabel={t('updateApply')} />
+          </div>
         </div>
       )}
       {job?.status === 'done' && empty && (
