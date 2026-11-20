@@ -193,8 +193,8 @@ pub struct Project {
     pub left_off: Vec<String>,
 }
 
-/// The project as a zip at `target`: the set, the audio, the MIDI and a read-me.
-pub fn write_project(contents: &Contents, target: &Path) -> Result<Project> {
+/// Writes the complete project under an unused name in the chosen folder.
+fn write_project(contents: &Contents, folder: &Path) -> Result<(PathBuf, Project)> {
     let title = safe(&contents.title);
     let root = format!("{title} Project");
     let mut files: Vec<(String, String)> = Vec::new();
@@ -232,11 +232,10 @@ pub fn write_project(contents: &Contents, target: &Path) -> Result<Project> {
     let set = ableton::build(ableton::LIVE_12_TEMPLATE, &SetPlan { bpm: contents.bpm, meter: contents.meter, midi: midi_tracks, audio: audio_tracks })?;
     let audio_files: Vec<(String, PathBuf)> = audio_files.into_iter().map(|(_, _, name, path)| (name, path)).collect();
 
-    let partial = target.with_extension("zip.part");
+    let partial = tempfile::NamedTempFile::new_in(folder).with_context(|| format!("create a project in {}", folder.display()))?;
     let mut listed = Vec::new();
-    let written = (|| -> Result<()> {
-        let file = std::fs::File::create(&partial).with_context(|| format!("create {}", partial.display()))?;
-        let mut zip = zip::ZipWriter::new(std::io::BufWriter::new(file));
+    {
+        let mut zip = zip::ZipWriter::new(std::io::BufWriter::new(partial.as_file()));
         let stored = zip::write::SimpleFileOptions::default().compression_method(zip::CompressionMethod::Stored).large_file(true);
         let deflated = zip::write::SimpleFileOptions::default().compression_method(zip::CompressionMethod::Deflated);
         let mut add = |zip: &mut zip::ZipWriter<_>, name: String, options, bytes: &mut dyn std::io::Read| -> Result<()> {
@@ -256,13 +255,22 @@ pub fn write_project(contents: &Contents, target: &Path) -> Result<Project> {
         }
         add(&mut zip, "READ ME.txt".into(), deflated, &mut read_me(contents, &files, &left_off).as_bytes())?;
         zip.finish()?.flush()?;
-        std::fs::rename(&partial, target).with_context(|| format!("publish {}", target.display()))
-    })();
-    if let Err(error) = written {
-        let _ = std::fs::remove_file(&partial);
-        return Err(error);
     }
-    Ok(Project { files: listed, tracks: files.into_iter().map(|(track, _)| track).collect(), left_off })
+    let mut part = partial.into_temp_path();
+    let mut sequence = 1u64;
+    let target = loop {
+        let name = if sequence == 1 { format!("{root}.zip") } else { format!("{root} ({sequence}).zip") };
+        let destination = folder.join(name);
+        match part.persist_noclobber(&destination) {
+            Ok(()) => break destination,
+            Err(error) if error.error.kind() == std::io::ErrorKind::AlreadyExists || destination.is_dir() => {
+                part = error.path;
+                sequence += 1;
+            }
+            Err(error) => return Err(error.error).with_context(|| format!("publish {}", destination.display())),
+        }
+    };
+    Ok((target, Project { files: listed, tracks: files.into_iter().map(|(track, _)| track).collect(), left_off }))
 }
 
 fn made() -> &'static Mutex<HashMap<String, PathBuf>> {
@@ -330,15 +338,8 @@ async fn package(parts: Parts, named: Option<PathBuf>) -> Result<Value, String> 
         None => crate::studio_data_root().map(|root| root.join("exports")).ok_or("the studio has no data folder")?,
     };
     std::fs::create_dir_all(&folder).map_err(|error| format!("create {}: {error}", folder.display()))?;
-    // a new name every time: an earlier project is never overwritten
-    let base = format!("{} Project", safe(&contents.title));
-    let target = (1..)
-        .map(|n| folder.join(if n == 1 { format!("{base}.zip") } else { format!("{base} ({n}).zip") }))
-        .find(|path| !path.exists())
-        .expect("a free name");
-    let written = target.clone();
     let summary = (contents.stems.len(), contents.midi.len(), contents.tempo_from_score, contents.bpm, contents.meter);
-    let project = tokio::task::spawn_blocking(move || write_project(&contents, &written))
+    let (target, project) = tokio::task::spawn_blocking(move || write_project(&contents, &folder))
         .await
         .map_err(|error| error.to_string())?
         .map_err(|error| format!("{error:#}"))?;
@@ -415,8 +416,8 @@ mod tests {
 
     #[test]
     fn a_project_holds_the_set_the_files_and_a_read_me() {
-        let dir = std::env::temp_dir().join(format!("ableton-project-{}", std::process::id()));
-        std::fs::create_dir_all(&dir).unwrap();
+        let temp = tempfile::tempdir().unwrap();
+        let dir = temp.path();
         let wav = |path: &Path, frames: u32| {
             let spec = hound::WavSpec { channels: 2, sample_rate: 48_000, bits_per_sample: 16, sample_format: hound::SampleFormat::Int };
             let mut writer = hound::WavWriter::create(path, spec).unwrap();
@@ -445,8 +446,20 @@ mod tests {
             midi: vec![("Lead (from score)".into(), "Night_ drive - Lead (from score).mid".into(), lead)],
             tempo_from_score: true,
         };
-        let target = dir.join("out.zip");
-        let project = write_project(&contents, &target).unwrap();
+        let original = dir.join("Night_ drive Project.zip");
+        std::fs::write(&original, b"earlier export").unwrap();
+        let (first, second) = std::thread::scope(|scope| {
+            let other = scope.spawn(|| write_project(&contents, dir).unwrap());
+            let first = write_project(&contents, dir).unwrap();
+            (first, other.join().unwrap())
+        });
+        let (target, project) = first;
+        assert_ne!(target, second.0);
+        let mut names = [target.clone(), second.0.clone()];
+        names.sort();
+        assert_eq!(names, [dir.join("Night_ drive Project (2).zip"), dir.join("Night_ drive Project (3).zip")]);
+        assert_eq!(std::fs::read(&original).unwrap(), b"earlier export");
+        assert!(zip::ZipArchive::new(std::fs::File::open(second.0).unwrap()).is_ok());
         assert_eq!(project.tracks, ["Master", "Drums (separated)", "Lead (from score)"], "the master always has a track");
         assert!(project.left_off.is_empty());
         assert_eq!(project.files, [
@@ -499,7 +512,12 @@ mod tests {
         assert!(readme.contains("switched off"));
         assert!(readme.contains("not an original recording"));
         assert!(!target.with_extension("zip.part").exists());
-        std::fs::remove_dir_all(&dir).ok();
+        drop(archive);
+        std::fs::remove_file(&contents.mix).unwrap();
+        let files_before = std::fs::read_dir(dir).unwrap().count();
+        assert!(write_project(&contents, dir).is_err());
+        assert_eq!(std::fs::read_dir(dir).unwrap().count(), files_before);
+        assert_eq!(std::fs::read(&original).unwrap(), b"earlier export");
     }
 
     #[test]
