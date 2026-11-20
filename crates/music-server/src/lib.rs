@@ -1412,6 +1412,10 @@ pub async fn serve_on_port(port: u16) -> anyhow::Result<()> {
     // Claim the port before starting background workers. A bind retry must not start another supervisor.
     let listener = tokio::net::TcpListener::bind(address).await
         .with_context(|| format!("listen on {address}"))?;
+    // Minimal Linux installations (including AppImage hosts) can lack the system trust store.
+    // Report that through the startup dialog before any background service constructs an HTTP client.
+    #[cfg(target_os = "linux")]
+    net::builder().build().context("initialize HTTPS: check that ca-certificates is installed and the system CA bundle is readable")?;
     music_core::process::runtime_libraries_from(engine_bundle_root());
     let _ = SERVICE_RUNTIME.set(tokio::runtime::Handle::current());
     match studio_data_root() {
