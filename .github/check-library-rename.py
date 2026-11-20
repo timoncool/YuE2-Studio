@@ -221,6 +221,28 @@ try:
     assert reconstructed==notes
     print(json.dumps(dict(midi_pages=pages,notes=len(notes))),flush=True)
 
+    # A legacy take and a generated stem can point at the same media file.
+    old={s["stem"]:s["song_id"] for s in http(route+"/stems")["library_songs"]}
+    old_vocal=http("/v1/library/songs/"+old["vocals"])
+    survivor=http("/v1/library/songs",dict(title="Imported vocal take",source="external_import",
+        audio_path=old_vocal["audio_path"], engine_id="manual"),"POST")
+    def media_digest(song_id):
+        with urlopen(api+"/v1/library/media/"+song_id,timeout=10) as response:
+            return hashlib.sha256(response.read()).hexdigest()
+    original_hash=media_digest(survivor["id"])
+    http("/v1/separation/settings",dict(engine="roformer",runtime="cpu",stems=["vocals","instrumental"]),"PUT")
+    assert http(route+"/stems",{},"POST")["started"]
+    deadline=time.monotonic()+180
+    while time.monotonic()<deadline:
+        rerun=http(route+"/stems")
+        if (rerun.get("run") or {}).get("done"):break
+        time.sleep(.5)
+    assert not rerun["run"].get("error"),rerun
+    new={s["stem"]:s["song_id"] for s in rerun["library_songs"]}
+    assert new.keys()==old.keys() and set(new.values()).isdisjoint(old.values()),rerun
+    assert media_digest(survivor["id"])==original_hash
+    print(json.dumps(dict(shared_vocal_preserved=original_hash,replaced_stems=sorted(new))),flush=True)
+
 finally:
     server.terminate()
     server.wait(timeout=20)
