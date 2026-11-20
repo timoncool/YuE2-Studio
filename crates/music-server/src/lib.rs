@@ -8950,6 +8950,7 @@ async fn midi_status(State(state): State<AppState>) -> Json<Value> {
         with_elapsed(value)
     });
     Json(serde_json::json!({
+        "runtime_build": build.as_ref().ok(),
         "tool_installed": build.as_ref().is_ok_and(|build| state.midi.server_installed(*build)),
         "sizes": sizes,
         "default_size": preferred_midi_size(&state),

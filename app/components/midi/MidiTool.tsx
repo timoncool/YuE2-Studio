@@ -41,7 +41,10 @@ interface MidiRun {
   batch: { done: number; total: number; queued: string[]; failed: string[] } | null;
 }
 
+const runtimeLabels = { cpu: 'CPU', cuda12: 'CUDA 12', cuda13: 'CUDA 13', metal: 'Metal', vulkan: 'Vulkan' };
+
 interface MidiStatus {
+  runtime_build?: keyof typeof runtimeLabels | null;
   tool_installed: boolean;
   sizes: MidiSize[];
   default_size: MidiSize['id'];
@@ -167,6 +170,7 @@ export const MidiTool: React.FC<{ songId: string; songTitle: string; card: strin
     <section ref={cardRef} className={card}>
       <div className="flex items-center gap-2 text-sm font-semibold text-zinc-900 dark:text-white">
         <Piano size={17} className="text-pink-500" /> {t('midiTitle')}
+        {status?.runtime_build && <span className="font-normal text-zinc-500">· {runtimeLabels[status.runtime_build]}</span>}
       </div>
       <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-300">{t('midiHint')}</p>
 
