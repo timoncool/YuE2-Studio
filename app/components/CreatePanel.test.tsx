@@ -78,10 +78,10 @@ afterEach(() => {
 
 const flush = () => act(async () => { await new Promise(resolve => setTimeout(resolve, 0)); });
 
-function panel(props: Pick<React.ComponentProps<typeof CreatePanel>, 'musicEngine' | 'onMusicEngineChange'> & { initialData?: { song: Song; timestamp: number } | null; visible?: boolean; request?: React.ComponentProps<typeof CreatePanel>['request']; onGenerate?: (request: YueRequest) => void }) {
+function panel(props: Pick<React.ComponentProps<typeof CreatePanel>, 'musicEngine' | 'onMusicEngineChange' | 'activeJobCount'> & { initialData?: { song: Song; timestamp: number } | null; visible?: boolean; request?: React.ComponentProps<typeof CreatePanel>['request']; onGenerate?: (request: YueRequest) => void }) {
   return (
     <Activity mode={props.visible === false ? 'hidden' : 'visible'}>
-      <CreatePanel musicEngine={props.musicEngine} onMusicEngineChange={props.onMusicEngineChange} onGenerate={props.onGenerate ?? (request => sent.push(request))} isGenerating={false} request={props.request} initialData={props.initialData ?? null}
+      <CreatePanel musicEngine={props.musicEngine} onMusicEngineChange={props.onMusicEngineChange} onGenerate={props.onGenerate ?? (request => sent.push(request))} isGenerating={Boolean(props.activeJobCount)} activeJobCount={props.activeJobCount} request={props.request} initialData={props.initialData ?? null}
         playlists={[]} onCreatePlaylist={async () => null} playlistId="" onChoosePlaylist={() => undefined} />
     </Activity>
   );
@@ -183,6 +183,24 @@ it('keeps settings by native engine and profile and submits the selected pair', 
   expect(number('Language model seed').value).toBe('4');
   await setup('local');
   expect(field('textarea[aria-label="scoreCardTitle"]')!.value).toBe(score);
+
+  act(() => root.render(panel({ musicEngine: 'minimaxmusic-cpp', activeJobCount: 2 })));
+  await flush();
+  expect(create().textContent).toContain('2');
+  click(host.querySelector('button[aria-label="resetCreateForm"]')!);
+  expect(create().textContent).toContain('2');
+  expect(number('Duration (seconds)').value).toBe('');
+  expect(number('Language model seed').value).toBe('');
+  expect(host.querySelector<HTMLSelectElement>('select[aria-label="Local model"]')!.value).toBe('balanced');
+  expect(field('textarea[aria-label="lyrics"]')!.value).toBe('');
+  expect(sent).toHaveLength(2);
+
+  select('quality');
+  expect(number('Duration (seconds)').value).toBe('48');
+  await setup('acestep-cpp');
+  expect(number('Steps').value).toBe('8');
+  await setup('local');
+  expect(field('textarea[aria-label="scoreCardTitle"]')!.value).toBe('');
 });
 
 it('posts the remembered MiniMax output format and keeps it out of ACE requests', async () => {
@@ -259,6 +277,53 @@ it.each([
   click(buttonNamed('create')!);
   expect(sent.at(-1)).toMatchObject({ music_source: { kind: 'native', engine, model: 'original' },
     style: 'folk', lyrics: 'verse', duration_seconds: 18, steps: 7, seed: 42, ...extra });
+});
+
+it('asks for an explicit profile when a migrated ACE take used custom weights', async () => {
+  const engine = 'acestep-cpp';
+  const models = ['acestep-v15-xl-sft-Q4_K_M.gguf', 'acestep-5Hz-lm-4B-BF16.gguf', 'vae-BF16.gguf'];
+  const song = { title: 'Old ACE take', style: 'synthwave', lyrics: 'verse', ditModel: engine, generationParams: {
+    synth_model: models[0], lm_model: models[1], vae: models[2],
+    duration: 120, inference_steps: 8, seed: 1234, guidance_scale: 2.5,
+  } } as Song;
+  localStorage.setItem('studio.nativeMusicProfiles', JSON.stringify({ selected: { [engine]: 'native' }, settings: {} }));
+  vi.stubGlobal('fetch', vi.fn(async () => Response.json({ engine, engine_installed: true,
+    profiles: [{ id: 'native', label: 'XL Turbo', ready: true, total_bytes: 1, missing: [] }] })));
+  act(() => root.render(panel({ musicEngine: engine, initialData: { song, timestamp: 1 } })));
+  await flush();
+
+  const profile = host.querySelector<HTMLSelectElement>('select[aria-label="Local model"]')!;
+  const generate = buttonNamed('create') as HTMLButtonElement;
+  expect(profile.value).toBe('');
+  expect(generate.disabled).toBe(true);
+  expect(host.textContent).toContain('Choose a profile to create a new take.');
+  for (const model of models) expect(host.textContent).toContain(model);
+  const duration = [...host.querySelectorAll('label')].find(label => label.textContent === 'Duration (seconds)')!.querySelector('input')!;
+  expect(duration.value).toBe('120');
+
+  act(() => {
+    profile.value = 'native';
+    profile.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  expect(generate.disabled).toBe(false);
+  expect(host.textContent).not.toContain(models[0]);
+  click(generate);
+  expect(sent.at(-1)).toMatchObject({
+    music_source: { kind: 'native', engine, model: 'native' },
+    style: 'synthwave', lyrics: 'verse', duration_seconds: 120, steps: 8, seed: 1234,
+    ace: { guidance_scale: 2.5 },
+  });
+
+  act(() => root.render(panel({ musicEngine: engine, initialData: { song, timestamp: 2 } })));
+  await flush();
+  expect(profile.value).toBe('');
+  expect(host.textContent).toContain(models[0]);
+  click(host.querySelector('button[aria-label="resetCreateForm"]')!);
+  expect(profile.value).toBe('native');
+  expect(host.textContent).not.toContain(models[0]);
+  expect(duration.value).toBe('120');
+  expect(field('textarea[aria-label="lyrics"]')!.value).toBe('');
+  expect(sent).toHaveLength(1);
 });
 
 describe('an instrumental (#217)', () => {

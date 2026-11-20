@@ -1587,6 +1587,7 @@ export const ja = {
     savePrompt: '保存',
     examplePrompt: '例',
     resetPrompt: 'リセット',
+    resetCreateForm: '作成フォームをリセット',
     promptFileInvalid: '有効なプロンプトファイルではありません。',
     promptBudget: 'プロンプト予算',
     promptBudgetShort: '説明 + 歌詞',

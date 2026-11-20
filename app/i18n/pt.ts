@@ -1482,6 +1482,7 @@ export const pt = {
     savePrompt: 'Guardar',
     examplePrompt: 'Exemplo',
     resetPrompt: 'Repor',
+    resetCreateForm: 'Repor formulário de criação',
     promptFileInvalid: 'Esse ficheiro não é um prompt válido.',
     promptBudget: 'Limite do prompt',
     promptBudgetShort: 'descrição + letra',

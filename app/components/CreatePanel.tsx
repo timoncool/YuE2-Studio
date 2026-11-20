@@ -819,16 +819,43 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [request]);
 
-  const reset = () => {
+  const clearDraft = () => {
     cancelCoverRead();
     setResingFrom(null);
-    instrumentalChange.current = null;
-    setName(''); setStyle(''); setLyrics(''); setAbc(''); setCot(''); setContinueScore(false);
+    typeName('');
+    setStyle(''); setLyrics(''); setAbc(''); setCot(''); setContinueScore(false);
     setPlans([]); setSelectedPlan(0);
+    setError(null);
+  };
+
+  const reset = () => {
+    clearDraft();
+    instrumentalChange.current = null;
     resetParameters(true);
     setCoverPrompt('');
     setAdapters([]);
-    setError(null);
+  };
+
+  const resetCreation = () => {
+    clearDraft();
+    setTakeChoiceOpen(false);
+    if (nativeEngine) native.resetSettings();
+    if (!yue) return;
+
+    instrumentalRun.current += 1;
+    instrumentalChange.current = null;
+    setInstrumental(false);
+    setInstrumentalLoraLoading(false);
+    setCoverPrompt('');
+    setAdapters([]);
+    setFadeIn(''); setFadeOut('');
+    setCoverSource(''); setCoverSongId(null); setCoverAudio(null); setCoverFile(null);
+    setCoverPlaying(false); setCoverTime(0); setCoverDuration(0); setCoverMelodyOnly(true);
+    if (audioFile.current) audioFile.current.value = '';
+    setAssistInstruction(''); setWriterLanguage(''); setWriterLines(''); setWriterExtra('');
+    setScoreInstruction(''); setPlanCount('1');
+    setBedBpm('100'); setBedKey('C'); setBedMeter('4/4'); setBedWritten(null);
+    resetParameters();
   };
 
   /** The settings back to their defaults; `keepChoices` (a new prompt) leaves the length and the file format the
@@ -1492,10 +1519,16 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
               <h1 className="truncate text-base font-bold">{t('createMusic')}</h1>
               <p className="mt-0.5 truncate text-[11px] text-zinc-500 dark:text-zinc-400">{nativeEngine ? nativeEngines[nativeEngine] : cloud ? 'OpenRouter' : tt('localInferenceYue')}</p>
             </div>
-            {yue && <span className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-semibold ${ready ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-300' : 'bg-amber-500/10 text-amber-700 dark:text-amber-300'}`}>
-              <span className={`mr-1 inline-block h-1.5 w-1.5 rounded-full ${ready ? 'bg-emerald-500' : 'bg-amber-500'}`} />
-              {serviceDown ? t('serviceUnavailable') : ready ? t('engineReady') : unavailableTitle}
-            </span>}
+            <div className="flex shrink-0 items-center gap-2">
+              {yue && <span className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-semibold ${ready ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-300' : 'bg-amber-500/10 text-amber-700 dark:text-amber-300'}`}>
+                <span className={`mr-1 inline-block h-1.5 w-1.5 rounded-full ${ready ? 'bg-emerald-500' : 'bg-amber-500'}`} />
+                {serviceDown ? t('serviceUnavailable') : ready ? t('engineReady') : unavailableTitle}
+              </span>}
+              <button type="button" onClick={resetCreation} className={ICON} title={t('resetCreateForm')}
+                aria-label={t('resetCreateForm')} disabled={Boolean(assisting || composing || describing || hearingLyrics || bedBusy || matchingSections)}>
+                <RotateCcw size={16} />
+              </button>
+            </div>
           </div>
 
           {onMusicEngineChange && (
@@ -1521,6 +1554,12 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
                     {native.error && <p role="alert" className="text-xs">{nativeStrings.error}</p>}
                     {!native.loading && !native.error && !native.installed && <p role="status" className="text-xs">{nativeStrings.engineMissing}</p>}
                     {!native.loading && !native.error && native.profiles.length === 0 && native.installed && <p className="text-xs">{nativeStrings.empty}</p>}
+                    {native.originalModels && (
+                      <div className="space-y-1 text-xs" role="status">
+                        <p>{nativeStrings.chooseLegacyProfile}</p>
+                        <ul className="break-all">{native.originalModels.map(model => <li key={model}>{model}</li>)}</ul>
+                      </div>
+                    )}
                     {native.profiles.length > 0 && (
                       <select aria-label={nativeStrings.model} className={CONTROL} value={native.profile?.id ?? ''}
                         onChange={event => native.select(event.target.value)}>
@@ -1575,7 +1614,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
                   aria-label={t('lyrics')} />
               </Card>
               {nativeEngine && abc.trim() && <p role="status" className="text-xs text-zinc-500">{nativeStrings.scoreKept}</p>}
-              {nativeEngine && native.profile && (
+              {nativeEngine && (native.profile || native.originalModels) && (
                 <Card title={nativeStrings.settings}>
                   <div className="grid grid-cols-2 gap-2">
                     {nativeControls.map(([key, label]) => (
@@ -2073,7 +2112,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
               <>
                 {showNotation && abc.trim() && (
                   <div className="mt-3 max-h-80 overflow-auto rounded-lg border border-zinc-200 bg-white p-2 dark:border-white/10 custom-scrollbar">
-                    <ScoreView abc={abc} onChange={setAbc} onEdit={composing ? undefined : () => setEditorOpen(true)} />
+                    <ScoreView abc={abc} title={name} lyrics={lyrics} onChange={setAbc} onEdit={composing ? undefined : () => setEditorOpen(true)} />
                   </div>
                 )}
                 <AutoTextarea

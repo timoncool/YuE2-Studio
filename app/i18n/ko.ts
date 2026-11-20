@@ -1587,6 +1587,7 @@ export const ko = {
     savePrompt: '저장',
     examplePrompt: '예시',
     resetPrompt: '초기화',
+    resetCreateForm: '만들기 양식 초기화',
     promptFileInvalid: '올바른 프롬프트 파일이 아닙니다.',
     promptBudget: '프롬프트 예산',
     promptBudgetShort: '설명 + 가사',
