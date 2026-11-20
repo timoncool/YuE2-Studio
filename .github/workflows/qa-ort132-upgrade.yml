@@ -1,0 +1,63 @@
+name: YuE2 runtime upgrade
+on:
+  push:
+    branches: [qa/ort132-installer]
+permissions:
+  contents: read
+jobs:
+  upgrade:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            package: win-x64
+            ext: zip
+          - os: ubuntu-latest
+            package: linux-x64
+            ext: tgz
+          - os: macos-15
+            package: osx-arm64
+            ext: tgz
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 75
+    env:
+      RUSTUP_TOOLCHAIN: stable
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: Swatinem/rust-cache@v2
+      - if: runner.os == 'Linux'
+        run: sudo apt-get update -q && sudo apt-get install -y -q --no-install-recommends libwayland-dev cmake
+      - uses: actions/setup-python@v5
+        if: runner.os == 'macOS'
+        with:
+          python-version: '3.12'
+      - name: Prepare the previous and new installer inputs
+        env:
+          PACKAGE: ${{ matrix.package }}
+          EXT: ${{ matrix.ext }}
+        run: |
+          set -euo pipefail
+          mkdir fixtures
+          old=onnxruntime-$PACKAGE-1.31.1.$EXT
+          curl -fLsS --retry 3 "https://github.com/timoncool/onnxruntime/releases/download/v1.31.1/$old" -o "fixtures/$old"
+          if [ "$RUNNER_OS" = macOS ]; then
+            git fetch --depth 1 origin 8c8ff0d5bd728cbddf45cc614cd727857bfe45ad
+            git checkout FETCH_HEAD -- scripts/qa-ort-ventura
+            python -m pip install zstandard
+            python scripts/qa-ort-ventura/package.py
+            mv scripts/qa-ort-ventura/onnxruntime-osx-arm64-ventura-1.32.0.tgz fixtures/
+          else
+            new=onnxruntime-$PACKAGE-1.32.0.$EXT
+            curl -fLsS --retry 3 "https://dl.photoprism.app/onnx/runtime/v1.32.0/$new" -o "fixtures/$new"
+          fi
+      - name: Upgrade an installed runtime and recover from a broken download
+        run: |
+          set -euo pipefail
+          export YUE2_ORT_ARCHIVES="$PWD/fixtures"
+          if [ "$RUNNER_OS" = Windows ]; then export YUE2_ORT_ARCHIVES="$(cygpath -w "$PWD/fixtures")"; fi
+          cargo test --locked -p music-server --lib downloads::tests::upgrade_onnx_from_the_previous_studio_release -- --exact --ignored --nocapture | tee upgrade.log
+          grep -F '1 passed' upgrade.log
