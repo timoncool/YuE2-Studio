@@ -4,7 +4,7 @@ import { useKaraokeStatus } from '../services/studioQueries';
 import { TRACK_ARTIST } from '../services/studio';
 import { Song } from '../types';
 import { Heart, Share2, Play, Pause, MoreHorizontal, X, Copy, Wand2, MoreVertical, Download, Repeat, Video, Music, Link as LinkIcon, Sparkles, Globe, Lock, Trash2, Edit3, Layers, ChevronDown, ClipboardCopy, Braces, ImagePlus, Loader2, Mic2, FileMusic, Clapperboard } from 'lucide-react';
-import { mapNativeLibrarySong, setNativeSongNote, updateNativeSong } from '../services/nativeLibrary';
+import { mapNativeLibrarySong, setNativeSongNote, renameNativeSong } from '../services/nativeLibrary';
 import { pendingNotes } from '../services/generations';
 import { useAuth } from '../context/AuthContext';
 import { useI18n } from '../context/I18nContext';
@@ -185,7 +185,7 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({ song, onClose, onOpe
         setIsSavingTitle(true);
         setTitleError(null);
         try {
-            const updated = await updateNativeSong(song, { title: trimmed });
+            const updated = await renameNativeSong(song.id, trimmed);
             onSongUpdate?.(updated);
             setIsEditingTitle(false);
         } catch (err) {

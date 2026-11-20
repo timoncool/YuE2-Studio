@@ -416,6 +416,15 @@ impl Library {
   self.save_song(&song)?;
   Ok(Some((song,file)))
  }
+ pub fn rename_song(&self, id: &str, title: &str) -> Result<Option<Song>> {
+     let connection = self.connection.lock().unwrap();
+     Ok(connection.query_row(
+         "UPDATE songs SET title=?1, updated_at=?2 WHERE id=?3 RETURNING
+          id,title,audio_path,caption,lyrics,metadata_json,generation_settings_json,engine_id,
+          profile_id,replay_request_json,audio_codes_json,source,created_at,updated_at",
+         params![title, now(), id], row_song,
+     ).optional()?)
+ }
  pub fn update_song(&self,id:&str,input:SongInput)->Result<Option<Song>>{let Some(mut song)=self.get_song(id)? else{return Ok(None)};song.title=input.title;if input.audio_path.is_some(){song.audio_path=input.audio_path};song.caption=input.caption;song.lyrics=input.lyrics;song.metadata=merged_metadata(&song.metadata,input.metadata);song.generation_settings=input.generation_settings;song.engine_id=input.engine_id;song.profile_id=input.profile_id;if input.replay_request.is_some(){song.replay_request=input.replay_request};if input.audio_codes.is_some(){song.audio_codes=input.audio_codes};song.source=input.source;song.updated_at=now();self.save_song(&song)?;Ok(Some(song))}
  pub fn delete_song(&self,id:&str)->Result<bool>{let gone=self.connection.lock().unwrap().execute("DELETE FROM songs WHERE id=?",[id])?>0;if gone{crate::mcp::announce("library")}Ok(gone)}
  fn save_song(&self,s:&Song)->Result<()> {self.connection.lock().unwrap().execute("INSERT INTO songs VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET title=excluded.title,audio_path=excluded.audio_path,caption=excluded.caption,lyrics=excluded.lyrics,metadata_json=excluded.metadata_json,generation_settings_json=excluded.generation_settings_json,engine_id=excluded.engine_id,profile_id=excluded.profile_id,replay_request_json=excluded.replay_request_json,audio_codes_json=excluded.audio_codes_json,source=excluded.source,updated_at=excluded.updated_at",params![s.id,s.title,s.audio_path,s.caption,s.lyrics,s.metadata.to_string(),s.generation_settings.to_string(),s.engine_id,s.profile_id,s.replay_request.as_ref().map(|v|v.to_string()),s.audio_codes.as_ref().map(|v|v.to_string()),s.source,s.created_at,s.updated_at])?;crate::mcp::announce("library");Ok(())}
@@ -603,6 +612,30 @@ mod edit_tests {
         let merged = merged_metadata(&serde_json::json!({ "liked": true, "liked_at": "100", "karaoke": { "file": "k.json" } }), serde_json::Value::Null);
         assert_eq!(merged["liked"], true, "an edit with no metadata leaves it as it is");
         assert_eq!(merged["karaoke"]["file"], "k.json");
+    }
+
+    #[test]
+    fn renaming_an_import_keeps_the_source_and_exact_generation_parameters() {
+        let root = tempfile::tempdir().unwrap();
+        let db = Library::open_at(root.path().join("library.sqlite"), root.path().join("media")).unwrap();
+        let settings = serde_json::json!({"seed": 9007199254740993_i64, "lm_seed": i64::MAX});
+        let song = db.create_song(SongInput {
+            title: "Old".into(), audio_path: Some("take.wav".into()), caption: "Original style".into(),
+            lyrics: "Original words".into(), metadata: serde_json::json!({"tags":["live"]}),
+            generation_settings: settings.clone(), engine_id: "ace-step".into(), profile_id: Some("q8".into()),
+            replay_request: Some(settings.clone()), audio_codes: Some(serde_json::json!([4,5])), source: "import".into(),
+        }).unwrap();
+        let renamed = db.rename_song(&song.id, "New").unwrap().unwrap();
+        assert_eq!(renamed.title, "New");
+        let stored = db.get_song(&song.id).unwrap().unwrap();
+        assert_eq!(stored.source, song.source);
+        assert_eq!(stored.generation_settings, settings);
+        assert_eq!(stored.replay_request, song.replay_request);
+        assert_eq!(stored.audio_codes, song.audio_codes);
+        assert_eq!(stored.profile_id, song.profile_id);
+        assert_eq!(stored.engine_id, song.engine_id);
+        assert_eq!(stored.metadata, song.metadata);
+        assert!(db.rename_song("missing", "New").unwrap().is_none());
     }
 
     #[test]

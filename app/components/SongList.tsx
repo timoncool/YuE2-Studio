@@ -6,7 +6,7 @@ import { useI18n } from '../context/I18nContext';
 import type { TranslationKey } from '../i18n/translations';
 import { SongDropdownMenu } from './SongDropdownMenu';
 import { SongCover } from './AlbumCover';
-import { updateNativeSong } from '../services/nativeLibrary';
+import { renameNativeSong } from '../services/nativeLibrary';
 import { ownsSong, SongActionsProvider, useSongActions } from '../context/SongActionsContext';
 import { captionSummary } from '../services/examples';
 import { named } from '../services/accessibleName';
@@ -853,7 +853,7 @@ export const SongItem: React.FC<SongItemProps> = ({
         }
 
         try {
-            const updated = await updateNativeSong(song, { title: editedTitle.trim() });
+            const updated = await renameNativeSong(song.id, editedTitle.trim());
             setIsEditingTitle(false);
             onSongUpdate?.(updated);
         } catch (error) {

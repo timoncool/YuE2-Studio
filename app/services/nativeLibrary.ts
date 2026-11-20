@@ -26,20 +26,6 @@ interface NativePlaylist {
   updated_at: string;
 }
 
-export interface NativeSongUpdate {
-  title: string;
-  audio_path?: string | null;
-  caption?: string;
-  lyrics?: string;
-  metadata?: Record<string, unknown> | null;
-  generation_settings?: Record<string, unknown> | null;
-  engine_id?: string;
-  profile_id?: string | null;
-  replay_request?: Record<string, unknown> | null;
-  audio_codes?: unknown;
-  source?: string;
-}
-
 function nativeDate(value: string): Date {
   const epochSeconds = Number(value);
   return Number.isFinite(epochSeconds) && epochSeconds > 0 ? new Date(epochSeconds * 1000) : new Date(value);
@@ -171,24 +157,12 @@ export async function deleteNativePlaylist(id: string): Promise<void> {
   if (!response.ok) throw new Error(`Native playlist deletion failed (${response.status})`);
 }
 
-export async function updateNativeSong(existing: Song, update: Partial<NativeSongUpdate>): Promise<Song> {
-  const response = await fetch(`/v1/library/songs/${encodeURIComponent(existing.id)}`, {
+export async function renameNativeSong(id: string, title: string): Promise<Song> {
+  const response = await fetch(`/v1/library/songs/${encodeURIComponent(id)}/title`, {
     method: 'PUT', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      title: update.title ?? existing.title,
-      audio_path: existing.audioUrl ? undefined : null,
-      caption: update.caption ?? existing.style,
-      lyrics: update.lyrics ?? existing.lyrics,
-      metadata: update.metadata ?? { tags: existing.tags, duration: parseDuration(existing.duration), bpm: existing.bpm, keyScale: existing.keyScale, timeSignature: existing.timeSignature },
-      generation_settings: update.generation_settings ?? existing.generationParams ?? {},
-      engine_id: update.engine_id ?? existing.ditModel ?? 'minimaxmusic-cpp',
-      profile_id: update.profile_id ?? existing.lmModel ?? null,
-      replay_request: update.replay_request ?? null,
-      audio_codes: update.audio_codes ?? null,
-      source: update.source ?? 'local_generation',
-    }),
+    body: JSON.stringify({ title }),
   });
-  if (!response.ok) throw new Error(`Native song update failed (${response.status})`);
+  if (!response.ok) throw new Error(`Native song rename failed (${response.status})`);
   return mapNativeLibrarySong(await response.json());
 }
 

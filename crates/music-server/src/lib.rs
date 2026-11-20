@@ -1767,6 +1767,7 @@ pub async fn serve_on_port(port: u16) -> anyhow::Result<()> {
         .route("/v1/openrouter/completions", post(create_openrouter_completion))
         .route("/v1/library/songs", get(library_songs).post(create_library_song))
         .route("/v1/library/import", post(import_library_audio))
+        .route("/v1/library/songs/{id}/title", axum::routing::put(rename_library_song))
         .route("/v1/library/songs/{id}", get(library_song).put(update_library_song).delete(delete_library_song))
         .route("/v1/library/trash", get(library_trash).delete(empty_library_trash))
         .route("/v1/library/trash/{id}", axum::routing::delete(delete_trashed_song))
@@ -5255,12 +5256,32 @@ async fn update_library_song(State(state):State<AppState>,Path(id):Path<String>,
     let before = state.library.get_song(&id).ok().flatten().map(|song| (song.caption, song.lyrics, song.title));
     let song = state.library.update_song(&id,input).map_err(|e|api_error(StatusCode::BAD_REQUEST,e.to_string()))?.ok_or_else(||api_error(StatusCode::NOT_FOUND,"Song not found".into()))?;
     let texts_changed = before.as_ref() != Some(&(song.caption.clone(), song.lyrics.clone(), song.title.clone()));
+    after_song_edit(&state, &id, texts_changed).await;
+    Ok(Json(song))
+}
+
+#[derive(Deserialize)]
+struct SongTitle { title: String }
+
+async fn rename_library_song(State(state): State<AppState>, Path(id): Path<String>, Json(input): Json<SongTitle>) -> Result<Json<library::Song>, (StatusCode, Json<ApiError>)> {
+    let title = input.title.trim();
+    if title.is_empty() {
+        return Err(api_error(StatusCode::BAD_REQUEST, "Song title is empty".into()));
+    }
+    let song = state.library.rename_song(&id, title)
+        .map_err(|error| api_error(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?
+        .ok_or_else(|| api_error(StatusCode::NOT_FOUND, "Song not found".into()))?;
+    after_song_edit(&state, &id, true).await;
+    Ok(Json(song))
+}
+
+async fn after_song_edit(state: &AppState, id: &str, texts_changed: bool) {
     // A rename is a title change, and the file carries the title.
-    tag_stored_song(&state, &id).await;
+    tag_stored_song(state, id).await;
     // a unique pattern is drawn from the style and the words: a new one of either draws it again, the stems' too
     if texts_changed && state.cover_look.read().await.unique {
         let state = state.clone();
-        let id = id.clone();
+        let id = id.to_owned();
         tokio::spawn(async move {
             let stems: Vec<String> = state.library.list_songs().map(|songs| songs.into_iter().filter(|song| derived_from(song) == Some((id.as_str(), "stems"))).map(|song| song.id).collect()).unwrap_or_default();
             for song_id in std::iter::once(id.clone()).chain(stems) {
@@ -5270,7 +5291,6 @@ async fn update_library_song(State(state):State<AppState>,Path(id):Path<String>,
             }
         });
     }
-    Ok(Json(song))
 }
 /// The delete confirmation includes this song and its stems. Other versions
 /// keep their own places in the library even when their source is trashed.
