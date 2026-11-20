@@ -10946,41 +10946,54 @@ async fn run_openrouter_music_generation(
     }
 }
 
+#[derive(Debug, PartialEq)]
+enum MusicDestination {
+    Local(String),
+    OpenRouter(Option<String>),
+    Unconfigured,
+}
+
+fn music_destination(source: Option<&MusicSource>, config: &StudioConfiguration) -> MusicDestination {
+    match source {
+        Some(MusicSource::Local) => MusicDestination::Local(PRIMARY_MUSIC_ENGINE_ID.to_owned()),
+        Some(MusicSource::OpenRouter { model }) => MusicDestination::OpenRouter(Some(model.clone())),
+        None => {
+            let selection = config.selections.iter().find(|s| s.capability == Capability::MusicGeneration);
+            match selection {
+                Some(s) if s.mode == ExecutionMode::OpenRouter => MusicDestination::OpenRouter(s.cloud_model.clone()),
+                Some(s) if s.mode == ExecutionMode::Local => s.local_engine.clone()
+                    .map(MusicDestination::Local).unwrap_or(MusicDestination::Unconfigured),
+                _ => MusicDestination::Unconfigured,
+            }
+        }
+    }
+}
+
 /// Sends a request to the engine and keeps it; `attempt` counts the times it
 /// was started again after the studio closed on it.
 async fn submit_music_job(state: AppState, mut request: CreateMusicJobRequest, attempt: u32, retry_engine: Option<&str>) -> (StatusCode, Json<MusicJob>) {
-    let (cloud_model, local_engine) = {
-        let configuration = state.configuration.read().await;
-        let local_engine = selected_local_music_engine(&configuration);
-        let cloud_model = match &request.music_source {
-            Some(MusicSource::OpenRouter { model }) => Some(Some(model.clone())),
-            Some(MusicSource::Local) => None,
-            None => configuration.selections.iter()
-                .find(|selection| selection.capability == Capability::MusicGeneration && selection.mode == ExecutionMode::OpenRouter)
-                .map(|selection| selection.cloud_model.clone()),
-        };
-        (cloud_model, local_engine)
-    };
-    if let Some(model) = cloud_model {
-        if let Some(original) = retry_engine {
-            let reason = format!("The saved job used {original}, but it cannot resume with the current engine (openrouter).");
-            return (StatusCode::CONFLICT, Json(failed_request_job(request, "openrouter".into(), reason)));
+    let destination = music_destination(request.music_source.as_ref(), &*state.configuration.read().await);
+    let engine_id = match destination {
+        MusicDestination::OpenRouter(model) => {
+            if let Some(original) = retry_engine {
+                let reason = format!("The saved job used {original}, but it cannot resume with the current engine (openrouter).");
+                return (StatusCode::CONFLICT, Json(failed_request_job(request, "openrouter".into(), reason)));
+            }
+            return create_openrouter_music_job(state, request, model).await;
         }
-        return create_openrouter_music_job(state, request, model).await;
-    }
-    let engine_id = local_engine.unwrap_or_else(|| match request.music_source {
-        Some(MusicSource::Local) => PRIMARY_MUSIC_ENGINE_ID.into(),
-        _ => "unconfigured".into(),
-    });
+        MusicDestination::Local(engine) => engine,
+        MusicDestination::Unconfigured => {
+            return (StatusCode::CONFLICT, Json(failed_request_job(request, "unconfigured".into(), "Select a music engine before starting a song.".to_string())));
+        }
+    };
     if let Some(original) = retry_engine {
         if let Err(reason) = check_retry_engine(original, &engine_id) {
             return (StatusCode::CONFLICT, Json(failed_request_job(request, engine_id, reason)));
         }
     }
     if engine_id != PRIMARY_MUSIC_ENGINE_ID {
-        let job = queued_not_configured_job(request, engine_id);
-        state.jobs.write().await.insert(job.id.clone(), job.clone());
-        return (StatusCode::ACCEPTED, Json(job));
+        let reason = format!("The configured music engine {engine_id} is unavailable.");
+        return (StatusCode::CONFLICT, Json(failed_request_job(request, engine_id, reason)));
     }
 
     let _using = state.engine_use.read().await;
@@ -13078,6 +13091,7 @@ fn insert_optional<T: Serialize>(body: &mut Value, key: &str, value: Option<T>) 
     }
 }
 
+#[cfg(test)]
 fn queued_not_configured_job(request: CreateMusicJobRequest, engine_id: String) -> MusicJob {
     MusicJob {
         derived: None,
@@ -13951,6 +13965,19 @@ mod tests {
             selected_local_music_engine(&initial_configuration()).as_deref(),
             Some(PRIMARY_MUSIC_ENGINE_ID)
         );
+    }
+
+    #[test]
+    fn explicit_music_source_wins_over_the_configured_engine() {
+        let mut config = initial_configuration();
+        let selection = config.selections.iter_mut().find(|s| s.capability == Capability::MusicGeneration).unwrap();
+        selection.local_engine = Some("acestep-cpp".into());
+        assert_eq!(music_destination(None, &config), MusicDestination::Local("acestep-cpp".into()));
+        assert_eq!(music_destination(Some(&MusicSource::Local), &config), MusicDestination::Local(PRIMARY_MUSIC_ENGINE_ID.into()));
+        let source = MusicSource::OpenRouter { model: "provider/song".into() };
+        assert_eq!(music_destination(Some(&source), &config), MusicDestination::OpenRouter(Some("provider/song".into())));
+        config.selections.clear();
+        assert_eq!(music_destination(None, &config), MusicDestination::Unconfigured);
     }
 
     #[test]
