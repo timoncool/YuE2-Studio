@@ -618,6 +618,8 @@ async fn resume_unfinished_jobs(state: AppState) {
             (None, format!("Cut off when the studio closed; the songs it had finished could not be counted, so it was not started again: {error:#}"))
         } else if kept.as_ref().is_ok_and(|kept| *kept >= asked) {
             (None, "Cut off when the studio closed; its songs were all in the library by then.".to_string())
+        } else if let Err(reason) = check_retry_engine(&old.engine_id, PRIMARY_MUSIC_ENGINE_ID) {
+            (None, reason)
         } else if let Some(replay) = old.request.get("replay") {
             match serde_json::from_value::<ReplayMusicJobRequest>(replay.clone()) {
                 Err(error) => (None, format!("Cut off when the studio closed; its request could not be read to start it again: {error}")),
@@ -634,7 +636,7 @@ async fn resume_unfinished_jobs(state: AppState) {
                 Err(error) => (None, format!("Cut off when the studio closed; its request could not be read to start it again: {error}")),
                 Ok(mut request) => {
                     request.client_ref = None;
-                    let (status, Json(job)) = submit_music_job(state.clone(), request, old.attempt + 1).await;
+                    let (status, Json(job)) = submit_music_job(state.clone(), request, old.attempt + 1, Some(&old.engine_id)).await;
                     if status == StatusCode::ACCEPTED {
                         (Some(job.id.clone()), format!("Cut off when the studio closed; started again as {}.", job.id))
                     } else {
@@ -10712,7 +10714,7 @@ async fn create_music_job(
     State(state): State<AppState>,
     Json(request): Json<CreateMusicJobRequest>,
 ) -> (StatusCode, Json<MusicJob>) {
-    submit_music_job(state, request, 0).await
+    submit_music_job(state, request, 0, None).await
 }
 
 /// The engine log's line of the KV cache a start runs with, and why, in numbers where Auto weighed them.
@@ -10761,9 +10763,14 @@ fn cover_source(library: &library::Library, id: &str, resumed: bool) -> Result<l
 
 /// Sends a request to the engine and keeps it; `attempt` counts the times it
 /// was started again after the studio closed on it.
-async fn submit_music_job(state: AppState, mut request: CreateMusicJobRequest, attempt: u32) -> (StatusCode, Json<MusicJob>) {
+async fn submit_music_job(state: AppState, mut request: CreateMusicJobRequest, attempt: u32, retry_engine: Option<&str>) -> (StatusCode, Json<MusicJob>) {
     let engine_id = selected_local_music_engine(&*state.configuration.read().await)
         .unwrap_or_else(|| "unconfigured".into());
+    if let Some(original) = retry_engine {
+        if let Err(reason) = check_retry_engine(original, &engine_id) {
+            return (StatusCode::CONFLICT, Json(failed_request_job(request, engine_id, reason)));
+        }
+    }
     if engine_id != PRIMARY_MUSIC_ENGINE_ID {
         let job = queued_not_configured_job(request, engine_id);
         state.jobs.write().await.insert(job.id.clone(), job.clone());
@@ -11120,7 +11127,7 @@ async fn make_again_at_score_strength(State(state): State<AppState>, Path(job_id
         return Err(api_error(StatusCode::CONFLICT, "this song had no LoRA on the score half".into()));
     }
     request.client_ref = None;
-    Ok(submit_music_job(state, request, 0).await)
+    Ok(submit_music_job(state, request, 0, None).await)
 }
 
 /// POST /v1/music/jobs/{job_id}/again - a song the card computed something other than sound on, made again with the
@@ -11134,7 +11141,7 @@ async fn make_again(State(state): State<AppState>, Path(job_id): Path<String>) -
     let mut request: CreateMusicJobRequest = serde_json::from_value(stored.request)
         .map_err(|error| api_error(StatusCode::CONFLICT, format!("this job's request cannot be made again: {error}")))?;
     request.client_ref = None;
-    Ok(submit_music_job(state, request, 0).await)
+    Ok(submit_music_job(state, request, 0, None).await)
 }
 
 async fn list_active_music_jobs(State(state): State<AppState>) -> Json<Vec<MusicJob>> {
@@ -11483,7 +11490,7 @@ async fn retry_after_memory(state: &AppState, job_id: &str) {
     } else {
         match serde_json::from_value::<CreateMusicJobRequest>(stored.request.clone()) {
             Ok(request) => {
-                let (status, Json(job)) = submit_music_job(state.clone(), request, stored.attempt).await;
+                let (status, Json(job)) = submit_music_job(state.clone(), request, stored.attempt, Some(&stored.engine_id)).await;
                 (status == StatusCode::ACCEPTED).then_some(job.id)
             }
             Err(error) => {
@@ -12509,6 +12516,15 @@ fn sanitize_persisted_configuration(mut configuration: StudioConfiguration) -> S
         }
     }
     configuration
+}
+
+/// An automatic retry must reach the same local engine that accepted the saved job.
+fn check_retry_engine(original: &str, selected: &str) -> Result<(), String> {
+    if original == PRIMARY_MUSIC_ENGINE_ID && original == selected {
+        Ok(())
+    } else {
+        Err(format!("The saved job used {original}, but it cannot resume with the current engine ({selected})."))
+    }
 }
 
 fn selected_local_music_engine(configuration: &StudioConfiguration) -> Option<String> {
@@ -13715,6 +13731,18 @@ mod tests {
             selected_local_music_engine(&initial_configuration()).as_deref(),
             Some(PRIMARY_MUSIC_ENGINE_ID)
         );
+    }
+
+    #[test]
+    fn automatic_recovery_requires_the_jobs_original_local_engine() {
+        assert!(check_retry_engine(PRIMARY_MUSIC_ENGINE_ID, PRIMARY_MUSIC_ENGINE_ID).is_ok());
+        for (original, selected) in [
+            (PRIMARY_MUSIC_ENGINE_ID, "unconfigured"),
+            ("acestep-cpp", PRIMARY_MUSIC_ENGINE_ID),
+            ("acestep-cpp", "acestep-cpp"),
+        ] {
+            assert!(check_retry_engine(original, selected).is_err());
+        }
     }
 
     fn sample_request() -> CreateMusicJobRequest {
