@@ -1701,6 +1701,7 @@ export const ja = {
     dataFolder: 'スタジオが持っているもの',
     openFolder: 'フォルダを開く',
     checkingExistingModels: '選択したフォルダーのファイルを確認中…',
+    adoptVerifiedOptional: '検証済みのオプションコンポーネントのファイル数：{count}。',
     adoptTaken: 'フォルダーから {count} 個のファイルを使いました。',
     adoptCopied: '別のドライブとは共有できないためコピーしました（ディスクを {size} 追加使用）。',
     adoptMissing: 'まだダウンロードが必要: {files}。',

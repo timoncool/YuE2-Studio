@@ -1596,6 +1596,7 @@ export const pt = {
     dataFolder: 'Tudo o que o estúdio guarda',
     openFolder: 'Abrir pasta',
     checkingExistingModels: 'A verificar os ficheiros na pasta selecionada…',
+    adoptVerifiedOptional: 'Ficheiros de componentes opcionais verificados: {count}.',
     adoptTaken: 'Aproveitados da pasta: {count} ficheiros.',
     adoptCopied: 'Noutro disco não era possível partilhá-los, por isso foram copiados: mais {size} no disco.',
     adoptMissing: 'Ainda por descarregar: {files}.',

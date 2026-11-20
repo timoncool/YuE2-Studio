@@ -29,7 +29,7 @@ use serde_json::{json, Value};
 use crate::{api_error, ApiError, AppState};
 
 /// The folders of the data folder that hold downloads, in the order they are shown and moved.
-pub const FOLDERS: &[&str] = &["models", "adapters", "separation", "karaoke", "audiocpp", "assistant", "hotstep", "midi", "training/models", "training/runtime"];
+pub const FOLDERS: &[&str] = &["models", "adapters", "separation", "karaoke", "audiocpp", "engine-runtime", "assistant", "hotstep", "midi", "training/models", "training/runtime"];
 
 /// The folder made inside the one a person picks, so the studio's folders never mix with what is there.
 const HOME: &str = "YuE2 Studio models";

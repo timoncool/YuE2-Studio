@@ -1705,6 +1705,7 @@ export const ru = {
     dataFolder: 'Что студия хранит у себя',
     openFolder: 'Открыть папку',
     checkingExistingModels: 'Проверяем файлы в выбранной папке…',
+    adoptVerifiedOptional: 'Проверено файлов дополнительных компонентов: {count}.',
     adoptTaken: 'Взято из папки файлов: {count}.',
     adoptCopied: 'С другого диска их нельзя связать, поэтому они скопированы: ещё {size} на диске.',
     adoptMissing: 'Ещё нужно скачать: {files}.',

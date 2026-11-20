@@ -1280,7 +1280,7 @@ export const SetupGate: React.FC<{
                     setAdoptRefused([]);
                     void fetch('/setup/adopt', { method: 'POST' })
                       .then(async (response) => (response.ok ? response.json() : Promise.reject(new Error(await errorMessage(response)))))
-                      .then(async (body: { picked?: boolean; adopted?: string[]; copied?: { id: string; bytes: number }[]; refused?: AdoptRefusal[] } | null) => {
+                      .then(async (body: { picked?: boolean; adopted?: string[]; verified_optional?: number; copied?: { id: string; bytes: number }[]; refused?: AdoptRefusal[] } | null) => {
                         if (!body?.picked) return;
                         setLibraryRevision((revision) => revision + 1);
                         setAdoptRefused(body.refused ?? []);
@@ -1290,6 +1290,7 @@ export const SetupGate: React.FC<{
                         const copiedBytes = (body.copied ?? []).reduce((sum, file) => sum + file.bytes, 0);
                         setAdoptNote([
                           t('adoptTaken').replace('{count}', String(body.adopted?.length ?? 0)),
+                          body.verified_optional ? t('adoptVerifiedOptional').replace('{count}', String(body.verified_optional)) : '',
                           copiedBytes > 0 ? t('adoptCopied').replace('{size}', bytes(copiedBytes)) : '',
                           missing.length > 0 ? t('adoptMissing').replace('{files}', missing.map((component) => `${component.filename} (${bytes(component.bytes)})`).join(', ')) : '',
                         ].filter(Boolean).join(' '));
