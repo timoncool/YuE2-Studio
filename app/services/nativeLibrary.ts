@@ -44,6 +44,15 @@ function stringMetadata(metadata: Record<string, unknown> | null | undefined, ke
 /** The one user of this desktop studio; every song in its library is theirs. */
 export const LOCAL_USER_ID = 'local-studio';
 
+/** Engine IDs persisted by the standalone studios survive library migration. */
+export function nativeMusicEngineName(id: string | undefined): string {
+  switch (id) {
+    case 'acestep-cpp': return 'ACE-Step';
+    case 'minimaxmusic-cpp': return 'MiniMax Music 3';
+    default: return 'YuE2';
+  }
+}
+
 export function cloudMusicModel(song: Song): string | undefined {
   const model = song.generationParams?.model;
   return song.ditModel === 'openrouter' && typeof model === 'string' && model.trim() ? model : undefined;

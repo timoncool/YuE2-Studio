@@ -4859,12 +4859,13 @@ async fn tag_stored_song(state: &AppState, song_id: &str) {
         title: song.title.clone(),
         album: "YuE2 Studio".to_string(),
         // The engine is the performer here; the studio is the label.
-        artist: if song.engine_id == "openrouter" {
-            song.generation_settings.get("model").and_then(Value::as_str)
-                .filter(|id| !id.is_empty()).unwrap_or("OpenRouter").to_string()
-        } else {
-            "YuE2".to_string()
-        },
+        artist: match song.engine_id.as_str() {
+            "openrouter" => song.generation_settings.get("model").and_then(Value::as_str)
+                .filter(|id| !id.is_empty()).unwrap_or("OpenRouter"),
+            "acestep-cpp" => "ACE-Step",
+            "minimaxmusic-cpp" => "MiniMax Music 3",
+            _ => "YuE2",
+        }.to_string(),
         genre: tagging::genre_from_caption(&song.caption),
         lyrics: Some(song.lyrics.clone()).filter(|value| !value.trim().is_empty()),
         bpm: tagging::bpm_from_caption(&song.caption),

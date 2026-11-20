@@ -53,6 +53,15 @@ it.each([
   expect(host.textContent).not.toContain('YuE2');
 });
 
+it.each([
+  ['acestep-cpp', 'ACE-Step'],
+  ['minimaxmusic-cpp', 'MiniMax Music 3'],
+])('displays the original engine on a migrated %s take', (ditModel, label) => {
+  act(() => root.render(item(false, false, vi.fn(), { ...song, ditModel, lmModel: 'balanced' })));
+  expect(host.textContent).toContain(label);
+  expect(host.textContent).not.toContain('YuE2');
+});
+
 describe('the play control of a song row (YuE2 Studio #171)', () => {
   it('is a button named by the song, pressed while it plays, that starts the song from the keyboard', () => {
     const onPlay = vi.fn();

@@ -6,7 +6,7 @@ import { useI18n } from '../context/I18nContext';
 import type { TranslationKey } from '../i18n/translations';
 import { SongDropdownMenu } from './SongDropdownMenu';
 import { SongCover } from './AlbumCover';
-import { cloudMusicModel, cloudMusicModelName, renameNativeSong } from '../services/nativeLibrary';
+import { cloudMusicModel, cloudMusicModelName, nativeMusicEngineName, renameNativeSong } from '../services/nativeLibrary';
 import { ownsSong, SongActionsProvider, useSongActions } from '../context/SongActionsContext';
 import { captionSummary } from '../services/examples';
 import { named } from '../services/accessibleName';
@@ -99,7 +99,7 @@ const PROFILE_BADGE: Record<string, string> = {
 const getProfileBadge = (song: Song): string => {
     if (song.ditModel === 'openrouter') return 'OpenRouter';
     if (song.ditModel === 'imported-audio') return 'Import';
-    return song.lmModel ? PROFILE_BADGE[song.lmModel] ?? song.lmModel : 'YuE2';
+    return song.lmModel ? PROFILE_BADGE[song.lmModel] ?? song.lmModel : nativeMusicEngineName(song.ditModel);
 };
 
 const createDragPreview = (element: HTMLElement) => {
@@ -1050,7 +1050,7 @@ export const SongItem: React.FC<SongItemProps> = ({
                     </div>
                     <div className={`flex items-center gap-2 text-xs text-zinc-500 dark:text-zinc-400 ${compact ? 'hidden' : 'h-5'}`}>
                         <span className="truncate">{song.ditModel === 'openrouter' ? cloudMusicModelName(song) || 'OpenRouter'
-                          : song.ditModel === 'imported-audio' ? t('importedAudio') : 'YuE2'}</span>
+                          : song.ditModel === 'imported-audio' ? t('importedAudio') : nativeMusicEngineName(song.ditModel)}</span>
                         {song.nativeReplayAvailable && <span title={t('replayAvailable')} className="rounded-sm bg-zinc-200/70 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide dark:bg-white/10">replay</span>}
                         {song.cutShort && (song.cutShort === 'length' && song.nativeReplayAvailable && songActions.replay ? (
                             <button
