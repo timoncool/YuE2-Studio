@@ -446,19 +446,22 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
     setCatalogAttempt(attempt => attempt + 1);
   };
 
-  const [name, setName] = useState(() => keptDraft().name ?? '');
+  const [draft] = useState(keptDraft);
+  const [name, setName] = useState(() => keptText(draft, 'name'));
   // a name the form was filled with (an example, a reused song, the assistant) goes with one song; a typed one stays
-  const [nameFilled, setNameFilled] = useState(() => keptDraft().nameFilled === '1');
+  const [nameFilled, setNameFilled] = useState(() => draft.nameFilled === '1');
   const nameNow = useRef(name);
   nameNow.current = name;
   const typeName = (value: string) => { setName(value); setNameFilled(false); };
-  const [style, setStyle] = useState(() => keptDraft().style ?? '');
-  const [lyrics, setLyrics] = useState(() => keptDraft().lyrics ?? '');
+  const [style, setStyle] = useState(() => keptText(draft, 'style'));
+  const [lyrics, setLyrics] = useState(() => keptText(draft, 'lyrics'));
+  const [abc, setAbc] = useState(() => keptText(draft, 'abc'));
+  const [cot, setCot] = useState<YueCot | ''>(() =>
+    draft.cot === 'off' || draft.cot === 'melody' || draft.cot === 'full' ? draft.cot : '');
+  const [continueScore, setContinueScore] = useState(() => draft.continueScore === '1');
   useEffect(() => {
-    try { window.localStorage.setItem(DRAFT_KEY, JSON.stringify({ name, style, lyrics, nameFilled: nameFilled ? '1' : '' })); } catch { /* kept until a reload */ }
-  }, [name, style, lyrics, nameFilled]);
-  const [abc, setAbc] = useState('');
-  const [cot, setCot] = useState<YueCot | ''>('');
+    try { window.localStorage.setItem(DRAFT_KEY, JSON.stringify({ name, style, lyrics, abc, cot, continueScore: continueScore ? '1' : '', nameFilled: nameFilled ? '1' : '' })); } catch { /* kept until a reload */ }
+  }, [name, style, lyrics, abc, cot, continueScore, nameFilled]);
   const [showNotation, setShowNotation] = useState(true);
 
   // Strings, so an empty field can mean "engine default".
@@ -557,7 +560,6 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
   const [selectedPlan, setSelectedPlan] = useState(0);
   const composeRun = useRef<AbortController | null>(null);
   const [editorOpen, setEditorOpen] = useState(false);
-  const [continueScore, setContinueScore] = useState(false);
   const [bedOpen, setBedOpen] = useState(false);
   const [bedBpm, setBedBpm] = useState('100');
   const [bedKey, setBedKey] = useState('C');
