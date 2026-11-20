@@ -10678,7 +10678,14 @@ async fn free_the_card_for_the_engine(state: &AppState) {
 /// gone; the studio saw only a refused connection, and told the user to
 /// download models that were already on disk.
 fn engine_failure_reason(job_id: &str) -> Option<SongError> {
-    let tail = music_engine::yue_server::startup_log_tail(80).join("\n").to_lowercase();
+    let log = music_engine::yue_server::startup_log_tail(JOB_LOG_LINES);
+    score_or_song_failure(&log, job_id)
+}
+
+fn score_or_song_failure(log: &[String], job_id: &str) -> Option<SongError> {
+    let lines = engine_job_lines(log, job_id);
+    let diagnostics: Vec<_> = lines.iter().filter(|line| !line.trim_start().starts_with('"')).map(String::as_str).collect();
+    let tail = diagnostics.join("\n").to_lowercase();
     if describes_exhausted_memory(&tail) {
         return Some(SongError::LoadVram);
     }
@@ -10687,31 +10694,38 @@ fn engine_failure_reason(job_id: &str) -> Option<SongError> {
     }
     // the engine's log file, not the window's last lines: a song with LoRA logs
     // hundreds of lines and pushes its own start out of those
-    first_fatal(&music_engine::yue_server::startup_log_tail(JOB_LOG_LINES), job_id).map(SongError::from_fatal)
+    first_fatal(lines).map(SongError::from_fatal)
 }
 
 /// How far back in the engine's log a failed job's own start is looked for.
 const JOB_LOG_LINES: usize = 20_000;
 
-/// What the engine said when it gave this job up: the first FATAL line after the
-/// job's own start, without the stage tag. The lines after it are its consequences.
-fn first_fatal(lines: &[String], job_id: &str) -> Option<String> {
-    let start = format!("Job {job_id}");
-    let from = lines.iter().rposition(|line| line.contains(&start))?;
-    lines[from..].iter().find_map(|line| line.split_once("FATAL:").map(|(_, why)| why.trim().to_string())).filter(|why| !why.is_empty())
+/// Diagnostics belong to the job whose request precedes them in the engine log.
+fn engine_job_lines<'a>(log: &'a [String], job_id: &str) -> &'a [String] {
+    fn started_job(line: &str) -> Option<&str> {
+        let message = line.strip_prefix("[Server] ")?;
+        for prefix in ["Job ", "Transcribe job ", "Tokenize job ", "VAE encode job ", "VAE decode job "] {
+            if let Some((id, detail)) = message.strip_prefix(prefix).and_then(|s| s.split_once(": ")) {
+                if id.bytes().all(|c| c.is_ascii_hexdigit()) && (prefix != "Job " || detail.starts_with('{')) {
+                    return Some(id);
+                }
+            }
+        }
+        None
+    }
+    let Some(start) = log.iter().rposition(|line| started_job(line) == Some(job_id)) else { return &[] };
+    let rest = &log[start + 1..];
+    let end = rest.iter().position(|line| started_job(line).is_some() || line.starts_with("[studio] ---- starting ") || line.starts_with("[Server] yue-server ")).unwrap_or(rest.len());
+    &rest[..end]
 }
 
-/// How many times the engine computed a velocity of the acoustic stage again on this job, after one came out with
-/// values that are not numbers: its `[NAR] Check FAILED velocity …` lines after the job's own start.
+fn first_fatal(lines: &[String]) -> Option<String> {
+    lines.iter().filter(|line| !line.trim_start().starts_with('"')).filter_map(|line| line.split_once("FATAL:")).map(|(_, why)| why.trim())
+        .find(|why| !why.is_empty()).map(str::to_owned)
+}
+
 fn velocity_retries(lines: &[String], job_id: &str) -> usize {
-    let start = format!("Job {job_id}");
-    let Some(from) = lines.iter().rposition(|line| line.contains(&start)) else { return 0 };
-    // up to the next job's start: a song queued behind this one may already be at work
-    lines[from + 1..]
-        .iter()
-        .take_while(|line| !(line.contains("Job ") && !line.contains(&start)))
-        .filter(|line| line.contains("[NAR] Check FAILED velocity"))
-        .count()
+    engine_job_lines(lines, job_id).iter().filter(|line| line.starts_with("[NAR] Check FAILED velocity")).count()
 }
 
 /// Whether a lowercased log says the card ran out of room.
@@ -12442,7 +12456,11 @@ async fn watch_score_job(state: AppState, id: String, using: tokio::sync::OwnedR
                     errors = 0;
                     last_answer = std::time::Instant::now();
                 }
-                Ok(Err((StatusCode::NOT_FOUND | StatusCode::BAD_GATEWAY, error))) => break failed_score(&id, error),
+                Ok(Err((StatusCode::NOT_FOUND, error))) => {
+                    let reason = engine_failure_reason(&id).map_or(error, |reason| reason.to_string());
+                    break failed_score(&id, reason);
+                }
+                Ok(Err((StatusCode::BAD_GATEWAY, error))) => break failed_score(&id, error),
                 result => {
                     errors += 1;
                     let alive = state.engine.try_lock().map_or(true, |mut engine| engine.as_mut().is_some_and(|engine| engine.process_alive()));
@@ -14252,18 +14270,33 @@ mod tests {
     #[test]
     fn a_failed_job_names_the_engines_reason() {
         let lines: Vec<String> = ["[Pipeline] FATAL: an earlier job's reason", "[Server] Job abc: {", "[AR] Semantic 10/9000", "[Pipeline] FATAL: the prompt and the score take 9700 of the model's 24576 tokens, so a song can last 595 s and 600 s were asked for", "[Server] job failed"].iter().map(|line| line.to_string()).collect();
-        assert_eq!(first_fatal(&lines, "abc").unwrap(), "the prompt and the score take 9700 of the model's 24576 tokens, so a song can last 595 s and 600 s were asked for");
-        assert!(first_fatal(&lines[..2], "abc").is_none());
-        assert!(first_fatal(&lines, "other").is_none());
+        assert_eq!(first_fatal(engine_job_lines(&lines, "abc")).unwrap(), "the prompt and the score take 9700 of the model's 24576 tokens, so a song can last 595 s and 600 s were asked for");
+        assert!(first_fatal(engine_job_lines(&lines[..2], "abc")).is_none());
+        assert!(first_fatal(engine_job_lines(&lines, "other")).is_none());
+    }
+
+    #[test]
+    fn job_diagnostics_stop_at_the_next_request_and_survive_track_notifications() {
+        let lines = [
+            "[Server] Job a: {",
+            "[NAR] Check FAILED velocity",
+            r#"  "lyrics": "FATAL: out of memory","#,
+            "[Server] Job a: track 1 ready",
+            "[Server] Transcribe job b: 30.0 s of audio, melody",
+            "[Pipeline] FATAL: out of memory",
+        ].map(String::from);
+        assert!(score_or_song_failure(&lines, "a").is_none());
+        assert!(matches!(score_or_song_failure(&lines, "b"), Some(SongError::LoadVram)));
+        assert_eq!(velocity_retries(&lines, "a"), 1);
     }
 
     /// The velocities computed again are counted from the job's own start, so an earlier song's are not.
     #[test]
     fn the_velocities_computed_again_are_counted_for_their_own_job() {
         let lines: Vec<String> = [
-            "Job a started",
+            "[Server] Job a: {",
             "[NAR] Check FAILED velocity at step 3, evaluation 5, attempt 1: 96000 values, 96000 NaN, 0 Inf, 0.0% zeros, sum|x| 0",
-            "Job b started",
+            "[Server] Job b: {",
             "[NAR] Check FAILED velocity at step 10, evaluation 21, attempt 1: 96000 values, 96000 NaN, 0 Inf, 0.0% zeros, sum|x| 0",
             "[NAR] Check FAILED velocity at step 10, evaluation 21, attempt 2: 96000 values, 96000 NaN, 0 Inf, 0.0% zeros, sum|x| 0",
             "[NAR] Check solved latents: 96000 values, 0 NaN, 0 Inf, 0.0% zeros, sum|x| 75770.3",
