@@ -719,7 +719,7 @@ fn release_archive_alias(asset: &Asset, target: &Path) -> Option<PathBuf> {
         return None;
     }
     let filename = asset.url.rsplit('/').next()?;
-    if ![".zip", ".tar.gz", ".tar.xz", ".whl"].iter().any(|suffix| filename.ends_with(suffix)) {
+    if ![".zip", ".tgz", ".tar.gz", ".tar.xz", ".whl"].iter().any(|suffix| filename.ends_with(suffix)) {
         return None;
     }
     let alias = target.with_file_name(filename);
@@ -751,11 +751,15 @@ fn check_staged_archive(url: &str, archive: &Path) -> Result<String> {
 /// ONNX releases may be unreachable from networks that cannot connect to GitHub at all (#276).
 /// Only offer these mirrors for known, hash-pinned release files. Installation still checks the original pin.
 fn onnx_mirrors(url: &str) -> Option<[String; 2]> {
-    let name = url.strip_prefix("https://github.com/timoncool/onnxruntime/releases/download/v1.31.1/")?;
+    let release = url.strip_prefix("https://github.com/timoncool/onnxruntime/releases/download/")?;
     crate::pin_sha::sha256(url)?;
+    // Mirrors carry upstream archives. The studio's Ventura build has its own libraries and digest.
+    if release.ends_with("/onnxruntime-osx-arm64-ventura-1.32.0.tgz") {
+        return None;
+    }
     Some([
-        format!("https://dl.photoprism.app/onnx/runtime/v1.31.1/{name}"),
-        format!("https://registry.npmmirror.com/-/binary/onnxruntime/v1.31.1/{name}"),
+        format!("https://dl.photoprism.app/onnx/runtime/{release}"),
+        format!("https://registry.npmmirror.com/-/binary/onnxruntime/{release}"),
     ])
 }
 
@@ -1654,6 +1658,47 @@ mod tests {
             assert_eq!(record.url, asset.url);
             assert_eq!(Some(record.sha256.as_str()), crate::pin_sha::sha256(asset.url));
         }
+    }
+
+    #[tokio::test]
+    #[ignore = "requires the released and candidate archives under YUE2_ORT_ARCHIVES"]
+    async fn upgrade_onnx_from_the_previous_studio_release() {
+        let fixtures = PathBuf::from(std::env::var_os("YUE2_ORT_ARCHIVES").expect("archive fixture folder"));
+        let root = tempfile::tempdir().unwrap();
+        let sync = crate::lyrics_sync::LyricsSync::new(root.path());
+        let downloader = sync.downloader();
+        let current = crate::lyrics_sync::asset("onnxruntime").unwrap();
+        #[cfg(windows)]
+        let (previous_url, previous_bytes) = ("https://github.com/timoncool/onnxruntime/releases/download/v1.31.1/onnxruntime-win-x64-1.31.1.zip", 82_929_944);
+        #[cfg(target_os = "linux")]
+        let (previous_url, previous_bytes) = ("https://github.com/timoncool/onnxruntime/releases/download/v1.31.1/onnxruntime-linux-x64-1.31.1.tgz", 11_413_655);
+        #[cfg(target_os = "macos")]
+        let (previous_url, previous_bytes) = ("https://github.com/timoncool/onnxruntime/releases/download/v1.31.1/onnxruntime-osx-arm64-1.31.1.tgz", 36_936_435);
+        let previous: &'static Asset = Box::leak(Box::new(Asset { url: previous_url, bytes: previous_bytes, ..*current }));
+        let place = |asset: &Asset| {
+            let name = asset.url.rsplit('/').next().unwrap();
+            let path = downloader.path_of(asset).with_file_name(name);
+            fs::create_dir_all(path.parent().unwrap()).unwrap();
+            fs::copy(fixtures.join(name), &path).unwrap();
+            path
+        };
+        place(previous);
+        downloader.install_all("upgrade", &[previous]).await.unwrap();
+        assert!(downloader.is_installed(previous));
+        assert_eq!(downloader.earlier(current), Some(Some(previous_url.to_string())));
+        let wrong = downloader.path_of(current).with_file_name(current.url.rsplit('/').next().unwrap());
+        fs::write(&wrong, b"incomplete new archive").unwrap();
+        assert!(downloader.install_all("upgrade", &[current]).await.is_err());
+        assert!(downloader.is_installed(previous));
+        place(current);
+        downloader.install_all("upgrade", &[current]).await.unwrap();
+        assert!(downloader.is_installed(current));
+        assert!(!downloader.is_installed(previous));
+        assert!(sync.onnxruntime_library().unwrap().is_file());
+        let record = crate::install_record::read(&downloader.record_of(current)).unwrap();
+        assert_eq!(record.url, current.url);
+        assert_eq!(Some(record.sha256.as_str()), crate::pin_sha::sha256(current.url));
+        downloader.install_all("upgrade", &[current]).await.unwrap();
     }
 
     /// An install cut off after the archive's key file was unpacked and before
