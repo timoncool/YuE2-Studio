@@ -70,6 +70,20 @@ fn inspect(folder: &Path) -> Result<Value> {
         if let Some(path) = row.get::<_, Option<String>>(3)? {
             check("audio", path.rsplit(['/', '\\']).next().unwrap_or(""), true);
         }
+        if let Some(original) = metadata["original_audio_path"].as_str() {
+            check(
+                "original",
+                original.rsplit(['/', '\\']).next().unwrap_or(""),
+                true,
+            );
+        }
+        if let Some(versions) = metadata["audio_versions"].as_array() {
+            for version in versions {
+                if let Some(name) = version["file"].as_str() {
+                    check("version", name, true);
+                }
+            }
+        }
         if let Some(name) = metadata["cover_filename"].as_str() {
             check("cover", name, true);
         }
@@ -118,13 +132,13 @@ mod tests {
         let db = Connection::open(&path).unwrap();
         db.execute_batch(r#"CREATE TABLE songs(id,title,engine_id,audio_path,metadata_json,created_at);
             INSERT INTO songs VALUES ('p','Parent','minimax','C:\old\media\p.mp3','{"cover_filename":"p.jpg"}',2),
-            ('s','Drums','stems','/old/media/s.wav','{}',1);
+            ('s','Drums','stems','/old/media/s.wav','{"original_audio_path":"C:\\old\\media\\orig.wav","audio_versions":[{"file":"absent.wav"}]}',1);
             CREATE TABLE playlists(id,name,created_at);
             INSERT INTO playlists VALUES ('list','Mix',1);
             CREATE TABLE playlist_songs(playlist_id,song_id,position);
             INSERT INTO playlist_songs VALUES ('list','p',2),('list','s',1);"#).unwrap();
         drop(db);
-        for file in ["p.mp3", "p-drums.wav", "s.wav"] {
+        for file in ["p.mp3", "p-drums.wav", "s.wav", "orig.wav"] {
             std::fs::write(media.join(file), file).unwrap();
         }
         let original = std::fs::read(&path).unwrap();
@@ -134,6 +148,11 @@ mod tests {
         assert_eq!(result["songs"][0]["missing"][0]["name"], "p.jpg");
         assert_eq!(result["songs"][0]["files"][1]["name"], "p-drums.wav");
         assert_eq!(result["songs"][1]["files"][0]["name"], "s.wav");
+        assert_eq!(
+            result["songs"][1]["files"][1],
+            json!({"kind": "original", "name": "orig.wav"})
+        );
+        assert_eq!(result["songs"][1]["missing"][0]["name"], "absent.wav");
         assert_eq!(original, std::fs::read(&path).unwrap());
     }
 }
