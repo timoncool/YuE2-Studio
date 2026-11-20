@@ -149,7 +149,11 @@ pub(super) async fn import(
             content.update(hash);
             name
         });
-        let id = format!("{:x}", content.finalize());
+        let id = content
+            .finalize()
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect();
         let voice = Voice {
             id,
             model_name,
@@ -189,7 +193,8 @@ fn checkpoint_version(path: &Path) -> anyhow::Result<Option<u8>> {
             entry.compression() == zip::CompressionMethod::Stored,
             "Use an uncompressed PyTorch RVC checkpoint."
         );
-        if entry.name().ends_with("/data.pkl") || entry.name() == "data.pkl" {
+        let name = entry.name()?;
+        if name.ends_with("/data.pkl") || name == "data.pkl" {
             anyhow::ensure!(
                 metadata.is_none() && entry.size() <= PICKLE_LIMIT,
                 "Invalid RVC checkpoint metadata."
@@ -201,9 +206,7 @@ fn checkpoint_version(path: &Path) -> anyhow::Result<Option<u8>> {
                 "Invalid RVC checkpoint metadata."
             );
             metadata = Some(bytes);
-        } else if (entry.name().contains("/data/") || entry.name().starts_with("data/"))
-            && entry.size() > 0
-        {
+        } else if (name.contains("/data/") || name.starts_with("data/")) && entry.size() > 0 {
             has_storage = true;
         }
     }
