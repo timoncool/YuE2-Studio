@@ -135,6 +135,24 @@ try:
             expect(install_button).to_be_enabled()
             assert http("/v1/separation/settings")["runtime"]=="auto"
             print("Verified pending, failed and successful device changes in the rendered stems tool",flush=True)
+            for tool,endpoint in (("stems","/v1/separation/status"),("restoration","/v1/restore"),("midi","/v1/midi")):
+                body=http(endpoint)
+                url="https://github.com/timoncool/audio.cpp/releases/download/qa/"+tool+".zip"
+                path=str(root/"runtime"/(tool+".zip"))
+                body["download"]=dict(done=True,downloaded_bytes=0,total_bytes=100,error="QA certificate failure: "+tool,
+                                      manual_archive=dict(url=url,path=path))
+                body["ready"]=False
+                if tool=="midi":
+                    body["tool_installed"]=False
+                    for size in body["sizes"]:
+                        size.update(installed=False,missing_bytes=100)
+                pattern="**"+endpoint
+                page.route(pattern,lambda route,body=body:route.fulfill(json=body))
+                expect(page.get_by_role("alert").filter(has_text="QA certificate failure: "+tool)).to_be_visible()
+                expect(page.get_by_role("link",name=url,exact=True)).to_have_attribute("href",url)
+                expect(page.get_by_text(path,exact=True)).to_be_visible()
+                page.unroute(pattern)
+            print("Verified archive address and local recovery path for simulated TLS failures in all three tools",flush=True)
             page.get_by_title("Library",exact=True).first.click()
             for which,title in (("list","List title"),("details","Details title")):
                 if which=="details": page.get_by_role("button",name="Song Details",exact=True).click()
