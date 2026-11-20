@@ -872,7 +872,7 @@ async fn fetch_from(
     is_onnx: bool,
 ) -> Result<()> {
     let probe = crate::chunked::probe(http, source);
-    let (plan, url) = if is_onnx { unless_cancelled(&cancel, probe).await? } else { probe.await? };
+    let (plan, url) = unless_cancelled(&cancel, probe).await?;
     if plan.total > 0 {
         if !is_onnx {
             crate::sizes::learn(asset.url, plan.total);
@@ -912,13 +912,9 @@ async fn fetch_from(
             }
         })
     };
-    let outcome = if is_onnx {
-        // A failed range stops its sibling workers, independently of the user's cancel flag.
-        let attempt_stop = Arc::new(std::sync::atomic::AtomicBool::new(false));
-        unless_cancelled(&cancel, crate::chunked::fetch(http, &url, &part, plan, written.clone(), attempt_stop)).await
-    } else {
-        crate::chunked::fetch(http, &url, &part, plan, written.clone(), cancel.clone()).await
-    };
+    // A broken range stops its siblings without marking the whole download as cancelled by the user.
+    let attempt_stop = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let outcome = unless_cancelled(&cancel, crate::chunked::fetch(http, &url, &part, plan, written.clone(), attempt_stop)).await;
     reporter.abort();
     outcome?;
     if let Some(active) = progress.lock().await.as_mut() {
@@ -1446,6 +1442,49 @@ mod tests {
         assert!(!cancel.load(std::sync::atomic::Ordering::Relaxed));
         assert!(!target.with_extension("part").exists());
         server.abort();
+    }
+
+    #[tokio::test]
+    async fn an_optional_model_stalled_at_zero_can_be_cancelled_and_retried() {
+        use axum::{body::{Body, Bytes}, http::{HeaderMap, Response}};
+        use std::sync::atomic::{AtomicBool, Ordering};
+        for stall_probe in [true, false] {
+            let stalled = Arc::new(tokio::sync::Notify::new());
+            let app = axum::Router::new()
+                .route("/stall", axum::routing::get({
+                    let stalled = stalled.clone();
+                    move |headers: HeaderMap| async move {
+                        if stall_probe {
+                            stalled.notify_one();
+                            return std::future::pending().await;
+                        }
+                        if headers.contains_key("range") { return Response::new(Body::from("archive")); }
+                        stalled.notify_one();
+                        let body = futures_util::stream::pending::<std::result::Result<Bytes, io::Error>>();
+                        Response::builder().header("content-length", 7).body(Body::from_stream(body)).unwrap()
+                    }
+                }))
+                .route("/ready", axum::routing::get(|| async { "archive" }));
+            let (base, server) = onnx_fixture(app).await;
+            let root = tempfile::tempdir().unwrap();
+            let target = root.path().join("model.bin");
+            let cancel = Arc::new(AtomicBool::new(false));
+            let http = reqwest::Client::builder().no_proxy().build().unwrap();
+            let progress = Arc::new(Mutex::new(None));
+            let model = asset();
+            let url = format!("{base}/stall");
+            let (result, ()) = tokio::time::timeout(std::time::Duration::from_secs(5), async {
+                tokio::join!(fetch_from(&http, &model, &target, &progress, cancel.clone(), &url, false), async {
+                    stalled.notified().await;
+                    cancel.store(true, Ordering::Relaxed);
+                })
+            }).await.expect("cancel should interrupt a pending HTTP operation");
+            assert_eq!(result.unwrap_err().to_string(), "cancelled");
+            cancel.store(false, Ordering::Relaxed);
+            fetch_from(&http, &model, &target, &progress, cancel, &format!("{base}/ready"), false).await.unwrap();
+            assert_eq!(std::fs::read(&target).unwrap(), b"archive");
+            server.abort();
+        }
     }
 
     #[tokio::test]
