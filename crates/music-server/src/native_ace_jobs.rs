@@ -97,7 +97,12 @@ pub(super) async fn submit(
         style: request.style.clone(),
         lyrics: request.lyrics.clone(),
         duration_seconds: input["duration"].as_f64().unwrap_or_default(),
-        generation_settings: json!({"music_source": request.music_source, "ace": input}),
+        generation_settings: json!({
+            "music_source": request.music_source,
+            "ace": input,
+            "fade_in": request.fade_in,
+            "fade_out": request.fade_out,
+        }),
         song: None,
         songs: Vec::new(),
         message: "Submitted to ACE-Step.".into(),
@@ -411,17 +416,24 @@ fn import_take(
             && take.latent.len() <= 15_000 * 256,
         "ACE-Step returned an invalid f32 latent"
     );
-    let wanted = input["output_format"].as_str().unwrap_or("wav32");
+    let wanted = output_format(input);
     let bitrate = input["mp3_bitrate"]
         .as_u64()
         .and_then(|rate| u32::try_from(rate).ok())
-        .unwrap_or(192);
-    if extension == "wav" && matches!(wanted, "flac" | "mp3") {
-        let stereo = audio_pcm::decode_stereo_bytes(bytes, extension)?;
-        (bytes, extension) = if wanted == "mp3" {
-            (audio_post::encode::mp3(&stereo, bitrate)?, "mp3")
-        } else {
-            (audio_post::encode::flac(&stereo)?, "flac")
+        .unwrap_or(DEFAULT_MP3_KBPS);
+    let fade_in = job.generation_settings["fade_in"]
+        .as_f64()
+        .unwrap_or_default() as f32;
+    let fade_out = job.generation_settings["fade_out"]
+        .as_f64()
+        .unwrap_or_default() as f32;
+    if extension == "wav" && (wanted != "wav32" || fade_in > 0.0 || fade_out > 0.0) {
+        let mut stereo = audio_pcm::decode_stereo_bytes(bytes, extension)?;
+        audio_post::encode::fade(&mut stereo, fade_in, fade_out);
+        (bytes, extension) = match wanted {
+            "mp3" => (audio_post::encode::mp3(&stereo, bitrate)?, "mp3"),
+            "wav32" => (audio_pcm::wav_f32_bytes(&stereo)?, "wav"),
+            _ => (audio_post::encode::flac(&stereo)?, "flac"),
         };
     }
     replay["output_format"] = json!(if extension == "wav" {
@@ -431,6 +443,12 @@ fn import_take(
     });
     if extension == "mp3" {
         replay["mp3_bitrate"] = json!(audio_post::encode::mp3_bitrate(bitrate));
+    } else if let Some(fields) = replay.as_object_mut() {
+        fields.remove("mp3_bitrate");
+    }
+    if fade_in > 0.0 || fade_out > 0.0 {
+        replay["fade_in"] = json!(fade_in);
+        replay["fade_out"] = json!(fade_out);
     }
     let audio_codes = replay
         .get("audio_codes")
