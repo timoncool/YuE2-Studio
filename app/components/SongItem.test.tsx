@@ -30,15 +30,24 @@ afterEach(() => {
 
 const song = { id: 's1', title: 'Neon nights', style: 'synth-pop', lyrics: '', tags: [], duration: '1:00', audioUrl: '/a.flac', createdAt: new Date(0) } as unknown as Song;
 
-function item(isCurrent: boolean, isPlaying: boolean, onPlay: () => void) {
+function item(isCurrent: boolean, isPlaying: boolean, onPlay: () => void, track = song) {
   const noop = () => undefined;
   return (
     <QueryClientProvider client={queries}>
-      <SongItem song={song} isCurrent={isCurrent} isSelected={false} isSelectionMode={false} isChecked={false} isLiked={false}
+      <SongItem song={track} isCurrent={isCurrent} isSelected={false} isSelectionMode={false} isChecked={false} isLiked={false}
         isPlaying={isPlaying} isOwner={false} onPlay={onPlay} onSelect={noop} onToggleSelect={noop} onToggleLike={noop} onAddToPlaylist={noop} />
     </QueryClientProvider>
   );
 }
+
+it('shows the music provider and recorded model on a cloud take', () => {
+  act(() => root.render(item(false, false, vi.fn(), {
+    ...song, ditModel: 'openrouter', generationParams: { model: 'provider/song-model' },
+  })));
+  expect(host.textContent).toContain('OpenRouter');
+  expect(host.textContent).toContain('provider/song-model');
+  expect(host.textContent).not.toContain('YuE2');
+});
 
 describe('the play control of a song row (YuE2 Studio #171)', () => {
   it('is a button named by the song, pressed while it plays, that starts the song from the keyboard', () => {

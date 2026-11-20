@@ -4,7 +4,8 @@ import { useKaraokeStatus } from '../services/studioQueries';
 import { TRACK_ARTIST } from '../services/studio';
 import { Song } from '../types';
 import { Heart, Share2, Play, Pause, MoreHorizontal, X, Copy, Wand2, MoreVertical, Download, Repeat, Video, Music, Link as LinkIcon, Sparkles, Globe, Lock, Trash2, Edit3, Layers, ChevronDown, ClipboardCopy, Braces, ImagePlus, Loader2, Mic2, FileMusic, Clapperboard } from 'lucide-react';
-import { mapNativeLibrarySong, setNativeSongNote, renameNativeSong } from '../services/nativeLibrary';
+import { musicSourceStrings } from '../i18n/musicSource';
+import { cloudMusicModel, mapNativeLibrarySong, setNativeSongNote, renameNativeSong } from '../services/nativeLibrary';
 import { pendingNotes } from '../services/generations';
 import { useAuth } from '../context/AuthContext';
 import { useI18n } from '../context/I18nContext';
@@ -614,6 +615,7 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({ song, onClose, onOpe
                         if (!song.generationParams) return null;
                         const cotLabel: Record<string, string> = { full: t('cotFull'), melody: t('cotMelody'), off: t('cotOff') };
                         const paramRows: [string, string | number | undefined][] = [
+                            [musicSourceStrings[language].model, cloudMusicModel(song)],
                             [t('profile'), song.lmModel || undefined],
                             [(t as unknown as (key: string) => string)('ownModelRow'), typeof p.own_model === 'string' ? p.own_model : undefined],
                             [(t as unknown as (key: string) => string)('kvCacheRow'), typeof p.kv_cache === 'string' ? p.kv_cache.toUpperCase() : undefined],

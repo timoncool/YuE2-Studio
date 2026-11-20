@@ -44,6 +44,11 @@ function stringMetadata(metadata: Record<string, unknown> | null | undefined, ke
 /** The one user of this desktop studio; every song in its library is theirs. */
 export const LOCAL_USER_ID = 'local-studio';
 
+export function cloudMusicModel(song: Song): string | undefined {
+  const model = song.generationParams?.model;
+  return song.ditModel === 'openrouter' && typeof model === 'string' && model.trim() ? model : undefined;
+}
+
 export function mapNativeLibrarySong(song: NativeLibrarySong): Song {
   const metadata = song.metadata ?? {};
   const tags = Array.isArray(metadata.tags) ? metadata.tags.filter((tag): tag is string => typeof tag === 'string') : [];
