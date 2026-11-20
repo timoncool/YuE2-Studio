@@ -44,6 +44,7 @@ interface CardFields {
   style?: string;
   lyrics?: string;
   jobId?: string;
+  engineId?: string;
   createdAt?: Date;
   /** The playlist the songs go into. */
   playlistId?: string;
@@ -67,6 +68,7 @@ function card(id: string, fields: CardFields): Song {
   return {
     id,
     jobId: fields.jobId,
+    ditModel: fields.engineId,
     playlistId: fields.playlistId,
     title: fields.title,
     style: fields.style ?? '',
@@ -75,9 +77,14 @@ function card(id: string, fields: CardFields): Song {
     duration: '--:--',
     createdAt: fields.createdAt ?? new Date(),
     isGenerating: true,
-    stage: 'stageWaitingInQueue',
-    tags: ['yue2'],
+    stage: fields.engineId === 'openrouter' ? 'stageGeneratingTrack' : 'stageWaitingInQueue',
+    tags: fields.engineId === 'openrouter' ? ['OpenRouter'] : ['yue2'],
   };
+}
+
+/** The progress stream belongs to the local engine and carries no job IDs. */
+export function followsLocalProgress(entry: Song): boolean {
+  return Boolean(entry.isGenerating && entry.jobId && entry.ditModel !== 'openrouter');
 }
 
 /** The tracks a job makes: its songs times the variations of each. */
@@ -121,10 +128,11 @@ export function keepingDeleted(made: Map<string, Song[]>, known: ReadonlyMap<str
   return made;
 }
 
-/** Asks the engine to stop a job; a refusal is told, the card is already marked. */
-async function stopJob(jobId: string): Promise<void> {
+/** The job may have finished while the stop request was in flight. */
+async function stopJob(jobId: string): Promise<YueJob> {
   const response = await fetch(`/v1/music/jobs/${encodeURIComponent(jobId)}`, { method: 'POST' });
   if (!response.ok) throw new Error(`The engine did not stop the job (${response.status})`);
+  return response.json();
 }
 
 /** "Without stopping" sends the same request again: one that failed would fail on every round. */
@@ -154,6 +162,7 @@ export function useGenerations({ enabled, notify, onFinished }: GenerationOption
   // jobs this window stopped: a read of the running jobs sent before the stop
   // landed still lists them, and they must not come back as cards
   const stopped = useRef(new Set<string>());
+  const stopOnAcceptance = useRef(new Set<string>());
   const cardsNow = useRef(cards);
   useEffect(() => {
     cardsNow.current = cards;
@@ -199,7 +208,7 @@ export function useGenerations({ enabled, notify, onFinished }: GenerationOption
   // of several tracks gets a card for each, under the one the request began as.
   const follow = useCallback((cardId: string, job: YueJob) => {
     const rows = rowsFor(cardId, tracksOf(job));
-    setCards(prev => prev.flatMap(entry => (entry.id === cardId ? rows.map(id => ({ ...entry, id, jobId: job.id, createdAt: new Date(job.submitted_at) })) : [entry])));
+    setCards(prev => prev.flatMap(entry => (entry.id === cardId ? rows.map(id => ({ ...entry, id, jobId: job.id, ditModel: job.engine_id, createdAt: new Date(job.submitted_at) })) : [entry])));
     setRowsOfJob(prev => (prev.has(job.id) ? prev : new Map(prev).set(job.id, rows)));
   }, []);
 
@@ -340,6 +349,7 @@ export function useGenerations({ enabled, notify, onFinished }: GenerationOption
           style: job.style,
           lyrics: job.lyrics,
           jobId: job.id,
+          engineId: job.engine_id,
           createdAt: new Date(job.submitted_at),
           playlistId: job.playlist_id,
         }))),
@@ -367,7 +377,7 @@ export function useGenerations({ enabled, notify, onFinished }: GenerationOption
 
   // The engine renders one job at a time in the order they came, so the
   // oldest running card is the one its progress belongs to.
-  const making = following > 0;
+  const making = waiting.some(followsLocalProgress);
   const stageClock = useRef<StageClock | null>(null);
   useEffect(() => {
     if (!making) return;
@@ -376,12 +386,12 @@ export function useGenerations({ enabled, notify, onFinished }: GenerationOption
       const stage = STAGE_LABEL[progress.stage];
       const detail = stageDetail(progress.detail, progress.stage, stageClock);
       setCards(prev => {
-        const running = prev.filter(entry => entry.isGenerating && entry.jobId);
+        const running = prev.filter(followsLocalProgress);
         if (running.length === 0) return prev;
         // of a job's cards the lowest one shows the work: the song being made takes that card's row
         const active = running.reduce((oldest, entry) => (entry.createdAt <= oldest.createdAt ? entry : oldest));
         return prev.map(entry => {
-          if (!entry.isGenerating || !entry.jobId) return entry;
+          if (!followsLocalProgress(entry)) return entry;
           if (entry.id === active.id) {
             return entry.progress === progress.fraction && entry.stage === stage && entry.stageDetail === detail ? entry : { ...entry, progress: progress.fraction, stage, stageDetail: detail };
           }
@@ -391,43 +401,17 @@ export function useGenerations({ enabled, notify, onFinished }: GenerationOption
     });
   }, [making]);
 
-  const generate = useCallback(async (request: YueRequest) => {
-    const id = `temp_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`;
-    setCards(prev => [card(id, { title: request.title?.trim() || t('generating'), style: request.style, lyrics: request.lyrics, playlistId: request.playlist_id }), ...prev]);
+  const cancel = useCallback(async (jobId: string) => {
     try {
-      const response = await fetch('/v1/music/jobs', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...request, client_ref: id }),
-      });
-      const job = (await response.json().catch(() => null)) as (YueJob & { error?: string }) | null;
-      if (!response.ok || !job || job.status === 'failed') {
-        throw new Error((job && songErrorText(job, language)) || job?.error || `The engine rejected this request (${response.status})`);
-      }
-      follow(id, job);
-      if (job.tracks_asked) notify(t('tracksForCardHint').replace('{asked}', String(job.tracks_asked)), 'info');
-      if (job.laid) {
-        notify(t('scoreLaidToast').replace('{seconds}', String(Math.round(job.laid.seconds))), 'info');
-        const crowded = job.laid.crowded;
-        if (crowded) notify(crowded.ratio > 1 ? t('scoreCrowdedNotes').replace('{ratio}', crowded.ratio.toFixed(1)) : t('scoreCrowdedWords'), 'info');
+      const job = await stopJob(jobId);
+      if (job.status !== 'cancelled') {
+        void queryClient.invalidateQueries({ queryKey: activeJobsKey });
+        return;
       }
     } catch (error) {
-      remove(id);
-      generationFailed();
-      notify(error instanceof Error ? error.message : t('generationFailed'), 'error');
+      notify(error instanceof Error ? error.message : String(error), 'error');
+      return;
     }
-  }, [follow, remove, notify, t, language]);
-
-  /** A job sent from elsewhere in this window (a re-render) gets its card. */
-  const track = useCallback((jobId: string, fields: CardFields) => {
-    const id = `replay_${jobId}`;
-    setCards(prev => (prev.some(entry => entry.jobId === jobId)
-      ? prev.map(entry => (entry.jobId === jobId ? { ...entry, title: fields.title, style: fields.style ?? entry.style, lyrics: fields.lyrics ?? entry.lyrics } : entry))
-      : [card(id, { ...fields, jobId }), ...prev]));
-    setRowsOfJob(prev => (prev.has(jobId) ? prev : new Map(prev).set(jobId, [id])));
-  }, []);
-
-  const cancel = useCallback(async (jobId: string) => {
     stopped.current.add(jobId);
     // a stopped job of several tracks is one stopped card: the tracks it finished are songs already
     setCards(prev => {
@@ -439,12 +423,48 @@ export function useGenerations({ enabled, notify, onFinished }: GenerationOption
         return [{ ...entry, isGenerating: false, stage: 'cancelled' }];
       });
     });
-    try {
-      await stopJob(jobId);
-    } catch (error) {
-      notify(error instanceof Error ? error.message : String(error), 'error');
-    }
   }, [notify]);
+
+  const generate = useCallback(async (request: YueRequest) => {
+    const id = `temp_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`;
+    setCards(prev => [card(id, { title: request.title?.trim() || t('generating'), style: request.style, lyrics: request.lyrics, playlistId: request.playlist_id, engineId: request.music_source?.kind === 'openrouter' ? 'openrouter' : undefined }), ...prev]);
+    try {
+      const response = await fetch('/v1/music/jobs', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...request, client_ref: id }),
+      });
+      const job = (await response.json().catch(() => null)) as (YueJob & { error?: string }) | null;
+      if (!response.ok || !job || job.status === 'failed') {
+        throw new Error((job && songErrorText(job, language)) || job?.error || `The engine rejected this request (${response.status})`);
+      }
+      follow(id, job);
+      if (stopOnAcceptance.current.delete(id)) {
+        await cancel(job.id);
+        return;
+      }
+      if (job.tracks_asked) notify(t('tracksForCardHint').replace('{asked}', String(job.tracks_asked)), 'info');
+      if (job.laid) {
+        notify(t('scoreLaidToast').replace('{seconds}', String(Math.round(job.laid.seconds))), 'info');
+        const crowded = job.laid.crowded;
+        if (crowded) notify(crowded.ratio > 1 ? t('scoreCrowdedNotes').replace('{ratio}', crowded.ratio.toFixed(1)) : t('scoreCrowdedWords'), 'info');
+      }
+    } catch (error) {
+      remove(id);
+      generationFailed();
+      notify(error instanceof Error ? error.message : t('generationFailed'), 'error');
+    }
+    finally { stopOnAcceptance.current.delete(id); }
+  }, [follow, remove, notify, t, language, cancel]);
+
+  /** A job sent from elsewhere in this window (a re-render) gets its card. */
+  const track = useCallback((jobId: string, fields: CardFields) => {
+    const id = `replay_${jobId}`;
+    setCards(prev => (prev.some(entry => entry.jobId === jobId)
+      ? prev.map(entry => (entry.jobId === jobId ? { ...entry, title: fields.title, style: fields.style ?? entry.style, lyrics: fields.lyrics ?? entry.lyrics } : entry))
+      : [card(id, { ...fields, jobId }), ...prev]));
+    setRowsOfJob(prev => (prev.has(jobId) ? prev : new Map(prev).set(jobId, [id])));
+  }, []);
 
   /** Drops a cancelled card, stopping its job if it still runs. */
   const reset = useCallback(async (key: string) => {
@@ -492,8 +512,9 @@ export function useGenerations({ enabled, notify, onFinished }: GenerationOption
     const making = cardsNow.current.filter(entry => entry.isGenerating);
     const mine = making.flatMap(entry => (entry.jobId ? [entry.jobId] : []));
     const marks = new Set(making.map(entry => entry.id));
-    mine.forEach(id => stopped.current.add(id));
-    setCards(prev => prev.filter(entry => !entry.isGenerating));
+    for (const entry of making) {
+      if (!entry.jobId) stopOnAcceptance.current.add(entry.id);
+    }
     // The service's list: a request whose answer is still on its way back has
     // no job id here, but the service knows it by this window's mark.
     let listed: YueJob[] = [];
@@ -504,12 +525,9 @@ export function useGenerations({ enabled, notify, onFinished }: GenerationOption
     }
     const ours = listed.filter(job => everything || (job.client_ref && marks.has(job.client_ref)));
     const ids = [...new Set([...mine, ...ours.map(job => job.id)])];
-    ids.forEach(id => stopped.current.add(id));
-    const results = await Promise.allSettled(ids.map(stopJob));
-    const refused = results.find((result): result is PromiseRejectedResult => result.status === 'rejected');
-    if (refused) notify(refused.reason instanceof Error ? refused.reason.message : String(refused.reason), 'error');
+    await Promise.all(ids.map(cancel));
     void queryClient.invalidateQueries({ queryKey: activeJobsKey });
-  }, [notify]);
+  }, [cancel, notify]);
 
   // The list for the create page: the cards, then the library; a song of a
   // job is drawn in the row of the card it took the place of. The first song

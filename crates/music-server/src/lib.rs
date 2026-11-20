@@ -12,6 +12,7 @@ mod tagging;
 mod cover_art;
 mod cover_prompt;
 mod providers;
+mod openrouter_stream;
 mod assistant;
 mod song_tokenizer;
 mod assistant_runtime;
@@ -102,6 +103,7 @@ const PROGRAM_ID: &str = "yue2";
 struct AppState {
     configuration: Arc<RwLock<StudioConfiguration>>,
     jobs: Arc<RwLock<HashMap<String, MusicJob>>>,
+    openrouter_music_stops: Arc<RwLock<HashMap<String, Arc<tokio::sync::Notify>>>>,
     music_server: EngineClient,
     /// The engine's log, followed for the service's life: its recent lines and
     /// the running job's progress.
@@ -280,6 +282,8 @@ impl SamplingPreset {
 /// out are the engine's protocol defaults.
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
 struct CreateMusicJobRequest {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    music_source: Option<MusicSource>,
     /// The window's own mark for this request, handed back on the job so the
     /// window knows the job as its own before the response reaches it.
     client_ref: Option<String>,
@@ -346,6 +350,14 @@ struct CreateMusicJobRequest {
     cover_of: Option<String>,
 }
 
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+enum MusicSource {
+    Local,
+    #[serde(rename = "openrouter")]
+    OpenRouter { model: String },
+}
+
 /// One adapter of a request: its folder and a strength per engine slot. A slot
 /// left out is not changed.
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
@@ -386,6 +398,7 @@ enum MusicJobStatus {
 enum MusicJobDispatch {
     NotConfigured,
     Local,
+    OpenRouter,
     Cancelled,
 }
 
@@ -1465,6 +1478,7 @@ pub async fn serve_on_port(port: u16) -> anyhow::Result<()> {
             persisted.as_ref().map(|settings| settings.configuration.clone()).unwrap_or_else(initial_configuration),
         ))),
         jobs: Arc::new(RwLock::new(HashMap::new())),
+        openrouter_music_stops: Arc::new(RwLock::new(HashMap::new())),
         music_server,
         engine_log,
         model_manager,
@@ -4819,7 +4833,12 @@ async fn tag_stored_song(state: &AppState, song_id: &str) {
         title: song.title.clone(),
         album: "YuE2 Studio".to_string(),
         // The engine is the performer here; the studio is the label.
-        artist: "YuE2".to_string(),
+        artist: if song.engine_id == "openrouter" {
+            song.generation_settings.get("model").and_then(Value::as_str)
+                .filter(|id| !id.is_empty()).unwrap_or("OpenRouter").to_string()
+        } else {
+            "YuE2".to_string()
+        },
         genre: tagging::genre_from_caption(&song.caption),
         lyrics: Some(song.lyrics.clone()).filter(|value| !value.trim().is_empty()),
         bpm: tagging::bpm_from_caption(&song.caption),
@@ -6555,34 +6574,33 @@ async fn wait_for_sent_songs(state: &AppState) {
     }
 }
 
-async fn openrouter_catalog(State(state): State<AppState>) -> Json<Value> {
+async fn openrouter_catalog(State(state): State<AppState>) -> Result<Json<Value>, (StatusCode, Json<ApiError>)> {
     // Fetch it if this process has not yet: an empty answer here made every
     // capability read "no model in the refreshed catalog", which is a lie -
     // the catalog had simply never been read.
-    let catalog = catalog_for(&state).await.ok();
+    let catalog = catalog_for(&state).await.map_err(|error| api_error(StatusCode::BAD_GATEWAY, error))?;
     let refreshed_at = state.openrouter_catalog.read().await.refreshed_at.clone();
     // What the studio would pick for each capability if the user picks
     // nothing. The panel shows these as the selection, so adding a key is
     // enough to start rather than the beginning of a shopping trip.
-    let suggested = catalog.as_ref().map(|catalog| {
-        serde_json::json!({
-            "speech_to_text": providers::openrouter::suggested_model(catalog, Capability::SpeechToText),
-            "prompt_enhancement": providers::openrouter::suggested_model(catalog, Capability::PromptEnhancement),
-            "cover_art": providers::openrouter::suggested_model(catalog, Capability::CoverArt),
-        })
+    let suggested = serde_json::json!({
+        "speech_to_text": providers::openrouter::suggested_model(&catalog, Capability::SpeechToText),
+        "prompt_enhancement": providers::openrouter::suggested_model(&catalog, Capability::PromptEnhancement),
+        "cover_art": providers::openrouter::suggested_model(&catalog, Capability::CoverArt),
     });
-    Json(serde_json::json!({
-        "models": catalog.map(|catalog| catalog.models),
+    Ok(Json(serde_json::json!({
+        "models": catalog.models,
         "refreshed_at": refreshed_at,
         "suggested": suggested,
-    }))
+    })))
 }
 
 
 
 /// Where the provider catalog is kept between runs.
 fn openrouter_catalog_path() -> Option<PathBuf> {
-    studio_data_root().map(|root| root.join("openrouter-catalog.json"))
+    // Version 1 stored derived capabilities before music generation was recognized.
+    studio_data_root().map(|root| root.join("openrouter-catalog-v2.json"))
 }
 
 /// Reads the catalog saved by the last refresh. Nothing here touches the
@@ -10561,13 +10579,14 @@ async fn capabilities(State(state): State<AppState>) -> Json<CapabilitiesRespons
     let assistant = state.assistant.read().await.clone();
     let assistant_installed = assistant.available();
     let cli_agents = tokio::task::spawn_blocking(providers::cli_agent::detect).await.unwrap_or_default();
+    let catalog = state.openrouter_catalog.read().await.catalog.clone().or_else(load_cached_catalog);
     Json(CapabilitiesResponse {
-        engines: capability_engines_with(primary_installed, parakeet_installed, whisper_installed, assistant_installed, &cli_agents),
+        engines: capability_engines_with(primary_installed, parakeet_installed, whisper_installed, assistant_installed, &cli_agents, catalog.as_ref()),
     })
 }
 
 fn capability_engines(primary_installed: bool) -> Vec<EngineDescriptor> {
-    capability_engines_with(primary_installed, false, false, false, &[])
+    capability_engines_with(primary_installed, false, false, false, &[], None)
 }
 
 /// The engines the studio can offer, including the local ones it only has when
@@ -10580,12 +10599,16 @@ fn capability_engines_with(
     whisper_installed: bool,
     assistant_installed: bool,
     cli_agents: &[providers::cli_agent::Detected],
+    catalog: Option<&providers::openrouter::CapabilityCatalog>,
 ) -> Vec<EngineDescriptor> {
-    let openrouter_capabilities = vec![
+    let mut openrouter_capabilities = vec![
         Capability::SpeechToText,
         Capability::PromptEnhancement,
         Capability::CoverArt,
     ];
+    if catalog.is_some_and(|catalog| catalog.models_for(Capability::MusicGeneration).next().is_some()) {
+        openrouter_capabilities.push(Capability::MusicGeneration);
+    }
     let mut engines = vec![
         EngineDescriptor {
             id: PRIMARY_MUSIC_ENGINE_ID.into(),
@@ -10761,11 +10784,194 @@ fn cover_source(library: &library::Library, id: &str, resumed: bool) -> Result<l
     }
 }
 
+async fn create_openrouter_music_job(
+    state: AppState,
+    request: CreateMusicJobRequest,
+    model_id: Option<String>,
+) -> (StatusCode, Json<MusicJob>) {
+    let rejected = |reason: String| {
+        (StatusCode::BAD_REQUEST, Json(failed_request_job(request.clone(), "openrouter".into(), reason)))
+    };
+    if request.style.trim().is_empty() && request.lyrics.trim().is_empty() {
+        return rejected("Write a style or lyrics before starting cloud music generation.".into());
+    }
+    if request.semantic_tokens.is_some() || request.cover_of.is_some() {
+        return rejected("OpenRouter music accepts a new song, without YuE2 replay tokens or a cover source.".into());
+    }
+    let Some(model) = model_id.as_deref().map(str::trim).filter(|model| !model.is_empty()) else {
+        return rejected("Select an OpenRouter music model before starting cloud generation.".into());
+    };
+    let catalog = state.openrouter_catalog.read().await.catalog.clone().or_else(load_cached_catalog);
+    let Some(catalog) = catalog else {
+        return rejected("Refresh the OpenRouter catalog before starting cloud music generation.".into());
+    };
+    let prompt = format!("Music style:\n{}\n\nLyrics:\n{}", request.style.trim(), request.lyrics.trim());
+    let stream = match providers::openrouter::music_stream_request_for(&catalog, model, &prompt) {
+        Ok(stream) => stream,
+        Err(error) => return rejected(error.to_string()),
+    };
+    let job = MusicJob {
+        derived: None,
+        id: format!("openrouter-{}", uuid_suffix()),
+        client_ref: request.client_ref.clone(),
+        submitted_at: unix_millis(),
+        engine_id: "openrouter".into(),
+        cover_prompt: request.cover_prompt.clone(),
+        title: Some(titled(&request, &state.adapters)),
+        status: MusicJobStatus::Running,
+        dispatch: MusicJobDispatch::OpenRouter,
+        phase: MusicJobPhase::Running,
+        style: request.style.clone(),
+        lyrics: request.lyrics.clone(),
+        duration_seconds: request.duration_seconds.unwrap_or_default(),
+        generation_settings: serde_json::json!({"model": model, "model_name": catalog.models.iter().find(|entry| entry.id == model).map(|entry| &entry.name), "request": request}),
+        song: None,
+        songs: Vec::new(),
+        message: "OpenRouter music generation started.".into(),
+        code: None,
+        params: None,
+        playlist_id: request.playlist_id.clone(),
+        laid: None,
+        card_memory_short: false,
+        tracks_asked: None,
+    };
+    let stop = Arc::new(tokio::sync::Notify::new());
+    state.openrouter_music_stops.write().await.insert(job.id.clone(), stop.clone());
+    state.jobs.write().await.insert(job.id.clone(), job.clone());
+    let job_id = job.id.clone();
+    // Cloud jobs stay out of the native retry journal so a restart cannot repeat a paid request.
+    tokio::spawn(async move { run_openrouter_music_generation(state, job_id, stream, stop).await });
+    (StatusCode::ACCEPTED, Json(job))
+}
+
+fn openrouter_music_endpoint<'a>(path: &str, api_key: &'a str) -> (String, &'a str) {
+    // A debug-built service can exercise the complete HTTP path against a local fixture.
+    #[cfg(debug_assertions)]
+    if let Some(port) = std::env::var("YUE2_QA_OPENROUTER_PORT").ok().and_then(|port| port.parse::<u16>().ok()) {
+        return (format!("http://127.0.0.1:{port}{path}"), "fixture-only");
+    }
+    (format!("{}{path}", providers::openrouter::API_BASE_URL), api_key)
+}
+
+async fn run_openrouter_music_generation(
+    state: AppState,
+    job_id: String,
+    stream_request: providers::openrouter::OpenRouterMusicStreamRequest,
+    stop: Arc<tokio::sync::Notify>,
+) {
+    let download = async {
+        let (url, key) = openrouter_music_endpoint(stream_request.request.path, &stream_request.api_key);
+        let client = net::client();
+        let response = client
+            .post(url)
+            .bearer_auth(key)
+            .json(&stream_request.request.body)
+            .send().await?
+            .error_for_status()?;
+        let mut stream = response.bytes_stream();
+        let mut sse = Vec::new();
+        const MAX_STREAM_BYTES: usize = 128 * 1024 * 1024;
+        while let Some(chunk) = stream.next().await {
+            let chunk = chunk?;
+            if chunk.len() > MAX_STREAM_BYTES.saturating_sub(sse.len()) {
+                anyhow::bail!("OpenRouter music stream is too large");
+            }
+            sse.extend_from_slice(&chunk);
+        }
+        let audio = openrouter_stream::decode_audio_sse(&sse)?;
+        let duration = openrouter_stream::wav_duration(&audio)?;
+        Ok::<_, anyhow::Error>((audio, duration))
+    };
+    let audio = tokio::select! {
+        biased;
+        _ = stop.notified() => {
+            state.openrouter_music_stops.write().await.remove(&job_id);
+            return;
+        }
+        audio = download => audio,
+    };
+    state.openrouter_music_stops.write().await.remove(&job_id);
+    // Hold the job lock for the import and terminal state together, so cancellation
+    // either wins before touching the library or observes the completed song.
+    let mut jobs = state.jobs.write().await;
+    let Some(job) = jobs.get_mut(&job_id) else { return };
+    if !matches!(job.status, MusicJobStatus::Running) {
+        return;
+    }
+    let outcome = audio.and_then(|(audio, duration)| {
+        let imported = state.library.import_generated_song(library::GeneratedSongInput {
+            title: job.title.clone(),
+            metadata: serde_json::json!({"duration_seconds": duration, "cover_prompt": job.cover_prompt, "job_id": job_id}),
+            caption: job.style.clone(),
+            lyrics: job.lyrics.clone(),
+            generation_settings: job.generation_settings.clone(),
+            replay_request: None,
+            audio_codes: None,
+            engine_id: job.engine_id.clone(),
+            profile_id: None,
+            source: "openrouter_generation".into(),
+            audio_extension: "wav",
+            audio,
+        })?;
+        let id = imported.song.id.clone();
+        if let Some(playlist_id) = &job.playlist_id {
+            if let Err(error) = add_to_playlist(&state.library, playlist_id, std::iter::once(id.clone())) {
+                studio_log!("[ERROR] the OpenRouter song could not be added to its playlist: {error:#}");
+            }
+        }
+        Ok((CompletedSong {
+            audio_url: format!("/v1/library/media/{id}"),
+            id,
+            song: imported.song,
+        }, duration))
+    });
+    match outcome {
+        Ok((song, duration)) => {
+            let song_id = song.id.clone();
+            job.duration_seconds = duration;
+            job.status = MusicJobStatus::Completed;
+            job.phase = MusicJobPhase::Completed;
+            job.song = Some(song.clone());
+            job.songs = vec![song];
+            job.message = "OpenRouter music was saved to the library.".into();
+            drop(jobs);
+            tag_stored_song(&state, &song_id).await;
+            after_import(&state, &song_id);
+        }
+        Err(error) => {
+            job.status = MusicJobStatus::Failed;
+            job.phase = MusicJobPhase::Failed;
+            job.message = format!("OpenRouter music generation failed: {error}");
+        }
+    }
+}
+
 /// Sends a request to the engine and keeps it; `attempt` counts the times it
 /// was started again after the studio closed on it.
 async fn submit_music_job(state: AppState, mut request: CreateMusicJobRequest, attempt: u32, retry_engine: Option<&str>) -> (StatusCode, Json<MusicJob>) {
-    let engine_id = selected_local_music_engine(&*state.configuration.read().await)
-        .unwrap_or_else(|| "unconfigured".into());
+    let (cloud_model, local_engine) = {
+        let configuration = state.configuration.read().await;
+        let local_engine = selected_local_music_engine(&configuration);
+        let cloud_model = match &request.music_source {
+            Some(MusicSource::OpenRouter { model }) => Some(Some(model.clone())),
+            Some(MusicSource::Local) => None,
+            None => configuration.selections.iter()
+                .find(|selection| selection.capability == Capability::MusicGeneration && selection.mode == ExecutionMode::OpenRouter)
+                .map(|selection| selection.cloud_model.clone()),
+        };
+        (cloud_model, local_engine)
+    };
+    if let Some(model) = cloud_model {
+        if let Some(original) = retry_engine {
+            let reason = format!("The saved job used {original}, but it cannot resume with the current engine (openrouter).");
+            return (StatusCode::CONFLICT, Json(failed_request_job(request, "openrouter".into(), reason)));
+        }
+        return create_openrouter_music_job(state, request, model).await;
+    }
+    let engine_id = local_engine.unwrap_or_else(|| match request.music_source {
+        Some(MusicSource::Local) => PRIMARY_MUSIC_ENGINE_ID.into(),
+        _ => "unconfigured".into(),
+    });
     if let Some(original) = retry_engine {
         if let Err(reason) = check_retry_engine(original, &engine_id) {
             return (StatusCode::CONFLICT, Json(failed_request_job(request, engine_id, reason)));
@@ -11900,6 +12106,20 @@ async fn cancel_music_job(
         .get(&job_id)
         .cloned()
         .ok_or_else(|| api_error(StatusCode::NOT_FOUND, "Music job was not found.".into()))?;
+    if existing.engine_id == "openrouter" {
+        let mut jobs = state.jobs.write().await;
+        let job = jobs.get_mut(&job_id).ok_or_else(|| api_error(StatusCode::NOT_FOUND, "Music job was not found.".into()))?;
+        if matches!(job.status, MusicJobStatus::Running) {
+            job.status = MusicJobStatus::Cancelled;
+            job.phase = MusicJobPhase::Cancelled;
+            job.dispatch = MusicJobDispatch::Cancelled;
+            job.message = "OpenRouter music generation cancelled.".into();
+            if let Some(stop) = state.openrouter_music_stops.read().await.get(&job_id) {
+                stop.notify_one();
+            }
+        }
+        return Ok(Json(job.clone()));
+    }
     if existing.engine_id != PRIMARY_MUSIC_ENGINE_ID {
         return Err(api_error(
             StatusCode::NOT_IMPLEMENTED,
@@ -14297,9 +14517,13 @@ mod tests {
     }
 
     #[test]
-    fn capabilities_use_the_engines_envelope_and_music_stays_local() {
-        let after_refresh = CapabilitiesResponse { engines: capability_engines(false) };
-        assert!(!after_refresh.engines.iter().find(|engine| engine.id == "openrouter").unwrap().capabilities.contains(&Capability::MusicGeneration));
+    fn cloud_music_is_advertised_only_with_a_music_model_in_the_catalog() {
+        let has_music = |engines: &[EngineDescriptor]| engines.iter().find(|engine| engine.id == "openrouter")
+            .unwrap().capabilities.contains(&Capability::MusicGeneration);
+        assert!(!has_music(&capability_engines(false)));
+        let catalog = providers::openrouter::CapabilityCatalog::parse(r#"{"data":[{"id":"test/song","name":"Song generator","description":"Music generation","architecture":{"input_modalities":["text"],"output_modalities":["audio"]}}]}"#).unwrap();
+        let after_refresh = CapabilitiesResponse { engines: capability_engines_with(false, false, false, false, &[], Some(&catalog)) };
+        assert!(has_music(&after_refresh.engines));
         // The music engine, two recognisers, the local assistant and
         // OpenRouter: everything listed is something the studio can actually do.
         assert_eq!(serde_json::to_value(after_refresh).unwrap()["engines"].as_array().unwrap().len(), 5);
@@ -14325,7 +14549,7 @@ mod tests {
                 features: Vec::new(),
             },
         ];
-        let engines = capability_engines_with(false, false, false, false, &detected);
+        let engines = capability_engines_with(false, false, false, false, &detected, None);
         assert_eq!(engines.len(), 7);
         let claude = engines.iter().find(|engine| engine.id == "cli-claude").expect("the detected CLI is listed");
         assert_eq!(claude.display_name, "Claude Code (agent CLI)");

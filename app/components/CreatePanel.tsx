@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { libraryChanged, SELF_READ, useActivity, useAssistantStatus, useSetupStatus, type ActivityEntry } from '../services/studioQueries';
+import { libraryChanged, SELF_READ, useActivity, useAssistantStatus, useOpenRouterSettings, useSetupStatus, type ActivityEntry } from '../services/studioQueries';
 import { hasSungLines, karaokeReason, recogniseLyrics } from '../services/karaoke';
 import { ConfirmDialog } from './ConfirmDialog';
 import { clampDurationToKept } from '../services/createDuration';
@@ -38,6 +38,8 @@ import { writerInstruction } from '../services/songWriting';
 import { songWritingStrings } from '../i18n/songWriting';
 import { NumberField } from './NumberField';
 import { explainCliFailure } from '../services/cliFailure';
+import { loadNativeOpenRouterCatalog, modelsForCapability, refreshNativeOpenRouterCatalog, type NativeOpenRouterModel } from '../services/nativeOpenRouter';
+import { musicSourceStrings } from '../i18n/musicSource';
 
 /**
  * The YuE2 request form.
@@ -61,6 +63,8 @@ export type CreateRequest =
 
 interface CreatePanelProps {
   onGenerate: (request: YueRequest) => void;
+  musicEngine?: 'local' | 'openrouter';
+  onMusicEngineChange?: (engine: 'local' | 'openrouter') => void;
   isGenerating: boolean;
   activeJobCount?: number;
   initialData?: { song: Song; timestamp: number } | null;
@@ -399,10 +403,48 @@ const LYRIC_LANGUAGES: { code: string; native: string; name: string }[] = [
   { code: 'ko', native: '한국어', name: 'Korean' },
 ];
 
-export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerating, activeJobCount = 0, initialData, request, playlists, onCreatePlaylist, playlistId, onChoosePlaylist }) => {
+export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngine = 'local', onMusicEngineChange, isGenerating, activeJobCount = 0, initialData, request, playlists, onCreatePlaylist, playlistId, onChoosePlaylist }) => {
   const { t, language } = useI18n();
   const writingText = songWritingStrings[language];
   const tt = t as unknown as (key: string) => string;
+  const musicStrings = musicSourceStrings[language];
+  const cloud = musicEngine === 'openrouter';
+  const provider = useOpenRouterSettings<{ configured: boolean }>();
+  const configured = provider.data?.configured === true;
+  const [musicModelId, setMusicModelId] = useState(() => {
+    try { return window.localStorage.getItem('yue:openrouter-music-model') ?? ''; } catch { return ''; }
+  });
+  const [musicCatalog, setMusicCatalog] = useState<
+    { state: 'idle' | 'loading' | 'error' } | { state: 'ready'; models: NativeOpenRouterModel[] }
+  >({ state: 'idle' });
+  const [catalogAttempt, setCatalogAttempt] = useState(0);
+  const refreshCatalog = useRef(false);
+  useEffect(() => {
+    if (!cloud || !configured) {
+      setMusicCatalog({ state: 'idle' });
+      return;
+    }
+    let active = true;
+    setMusicCatalog({ state: 'loading' });
+    const read = refreshCatalog.current ? refreshNativeOpenRouterCatalog : loadNativeOpenRouterCatalog;
+    refreshCatalog.current = false;
+    void read().then(models => {
+      if (active) setMusicCatalog({ state: 'ready', models: modelsForCapability(models, 'music_generation') });
+    }, () => {
+      if (active) setMusicCatalog({ state: 'error' });
+    });
+    return () => { active = false; };
+  }, [cloud, configured, catalogAttempt]);
+  const musicModels = musicCatalog.state === 'ready' ? musicCatalog.models : [];
+  const selectedMusicModel = !provider.isError && configured ? musicModels.find(model => model.id === musicModelId) : undefined;
+  const changeMusicModel = useCallback((model: string) => {
+    setMusicModelId(model);
+    try { window.localStorage.setItem('yue:openrouter-music-model', model); } catch { /* kept until a reload */ }
+  }, []);
+  const requestCatalogRefresh = () => {
+    refreshCatalog.current = true;
+    setCatalogAttempt(attempt => attempt + 1);
+  };
 
   const [name, setName] = useState(() => keptDraft().name ?? '');
   // a name the form was filled with (an example, a reused song, the assistant) goes with one song; a typed one stays
@@ -673,11 +715,21 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
     appliedReuse.current = initialData.timestamp;
     const song = initialData.song;
     const settings = (song.generationParams ?? {}) as Record<string, unknown>;
+    if (song.ditModel === 'openrouter') {
+      changeMusicModel(typeof settings.model === 'string' ? settings.model : '');
+      setStyle(song.style);
+      setLyrics(song.lyrics);
+      setName(song.title || '');
+      setNameFilled(Boolean(song.title?.trim()));
+      setError(null);
+      setMode('studio');
+      return;
+    }
     applyRequest({ style: song.style, lyrics: song.lyrics, ...settings }, song.title || '');
     // A song made without LoRA reuses without it, whatever was picked before.
     setAdapters(usesFromSettings(settings));
     setMode('studio');
-  }, [initialData, applyRequest]);
+  }, [initialData, applyRequest, changeMusicModel]);
 
   useEffect(() => {
     setCoverPlaying(false);
@@ -783,6 +835,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
       lyrics: lyrics.replace(/\r\n?/g, '\n').trim(),
       output_format: format,
     };
+    if (!forFile) request.music_source = { kind: 'local' };
     if (abc.trim() && effectiveCot !== 'off') request.abc = abc.trim();
     if (abc.trim() && effectiveCot !== 'off' && !semanticTokens.trim() && Number(transpose) !== 0) request.transpose = Number(transpose);
     if (abc.trim() && effectiveCot !== 'off' && !lyricTiming) request.lyric_timing = false;
@@ -1228,7 +1281,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
   useEffect(() => {
     foreverRequest.current = null;
     setForever(false);
-  }, [selectionKey]);
+  }, [selectionKey, musicEngine]);
 
   const generate = (request: YueRequest) => {
     if (forever) foreverRequest.current = { ...request };
@@ -1238,10 +1291,10 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
   useEffect(() => {
     if (!forever) { foreverRequest.current = null; return; }
     const snapshot = foreverRequest.current;
-    if (!ready || !snapshot || activeJobCount >= 2) return;
+    if (cloud || !ready || !snapshot || activeJobCount >= 2) return;
     onGenerate({ ...snapshot, lm_seed: Math.floor(Math.random() * 0x100000000), seed: Math.floor(Math.random() * 0x100000000) });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [forever, activeJobCount, ready]);
+  }, [forever, activeJobCount, ready, cloud]);
 
   /** An instrumental: the score - the form's, or one written now - with its voice moved to the
    *  instrument, and the lyrics' section tags without their words, so nothing is left to sing. */
@@ -1280,6 +1333,19 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
   };
 
   const submit = () => {
+    if (cloud) {
+      if (!selectedMusicModel) return;
+      if (!style.trim() && !lyrics.trim()) { setError(tt('styleOrLyricsRequired')); return; }
+      setError(null);
+      generate({
+        music_source: { kind: 'openrouter', model: selectedMusicModel.id },
+        style: finishedStyle(style),
+        lyrics: lyrics.replace(/\r\n?/g, '\n').trim(),
+        ...(name.trim() ? { title: name.trim() } : {}),
+        ...(chosenPlaylist ? { playlist_id: chosenPlaylist } : {}),
+      });
+      return;
+    }
     if (!ready) { setError(unavailableHint); return; }
     if (!style.trim() && !lyrics.trim() && !semanticTokens.trim()) { setError(tt('styleOrLyricsRequired')); return; }
     setError(null);
@@ -1389,14 +1455,69 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
           <div className="flex items-center justify-between gap-3">
             <div className="min-w-0">
               <h1 className="truncate text-base font-bold">{t('createMusic')}</h1>
-              <p className="mt-0.5 truncate text-[11px] text-zinc-500 dark:text-zinc-400">{tt('localInferenceYue')}</p>
+              <p className="mt-0.5 truncate text-[11px] text-zinc-500 dark:text-zinc-400">{cloud ? 'OpenRouter' : tt('localInferenceYue')}</p>
             </div>
-            <span className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-semibold ${ready ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-300' : 'bg-amber-500/10 text-amber-700 dark:text-amber-300'}`}>
+            {!cloud && <span className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-semibold ${ready ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-300' : 'bg-amber-500/10 text-amber-700 dark:text-amber-300'}`}>
               <span className={`mr-1 inline-block h-1.5 w-1.5 rounded-full ${ready ? 'bg-emerald-500' : 'bg-amber-500'}`} />
               {serviceDown ? t('serviceUnavailable') : ready ? t('engineReady') : unavailableTitle}
-            </span>
+            </span>}
           </div>
 
+          {onMusicEngineChange && (
+            <label className="flex items-center gap-2 text-xs font-medium">
+              <span className="shrink-0">{musicStrings.engine}</span>
+              <select className={CONTROL} value={musicEngine} onChange={event => {
+                onMusicEngineChange(event.target.value === 'openrouter' ? 'openrouter' : 'local');
+                setError(null);
+                setTakeChoiceOpen(false);
+              }}>
+                <option value="local">{musicStrings.local}</option>
+                <option value="openrouter">OpenRouter</option>
+              </select>
+            </label>
+          )}
+          {cloud ? (
+            <>
+              <Card title={musicStrings.model}>
+                {provider.isError ? <p role="alert" className="text-xs">{musicStrings.catalogError}</p>
+                  : provider.isPending ? <p role="status" className="text-xs">{musicStrings.loading}</p>
+                    : !configured ? (
+                      <div className="space-y-2 text-xs">
+                        <p>{musicStrings.keyMissing}</p>
+                        <button type="button" className="text-pink-600 underline dark:text-pink-300"
+                          onClick={() => window.dispatchEvent(new CustomEvent('yue:open-settings', { detail: 'cloud' }))}>
+                          {musicStrings.openCloudSettings}
+                        </button>
+                      </div>
+                    ) : musicCatalog.state === 'idle' || musicCatalog.state === 'loading' ? (
+                      <p role="status" className="text-xs">{musicStrings.loading}</p>
+                    ) : (
+                      <div className="space-y-2">
+                        {musicCatalog.state === 'error' ? <p role="alert" className="text-xs">{musicStrings.catalogError}</p>
+                          : musicModels.length === 0 ? <p role="status" className="text-xs">{musicStrings.empty}</p>
+                            : <select aria-label={musicStrings.model} className={CONTROL}
+                                value={selectedMusicModel?.id ?? ''} onChange={event => changeMusicModel(event.target.value)}>
+                                <option value="">{musicStrings.choose}</option>
+                                {musicModels.map(model => <option key={model.id} value={model.id}>{model.name || model.id}</option>)}
+                              </select>}
+                        <button type="button" onClick={requestCatalogRefresh} className="text-xs text-pink-600 underline dark:text-pink-300">
+                          {musicStrings.refresh}
+                        </button>
+                      </div>
+                    )}
+              </Card>
+              <Card title={tt('styleCardTitle')}>
+                <input value={name} onChange={event => typeName(event.target.value)} placeholder={t('untitled')}
+                  aria-label={t('untitled')} className={CONTROL + ' mb-2'} />
+                <AutoTextarea className={CONTROL} value={style} onChange={event => setStyle(event.target.value)}
+                  placeholder={tt('stylePlaceholder')} aria-label={tt('styleCardTitle')} />
+              </Card>
+              <Card title={t('lyrics')}>
+                <AutoTextarea className={CONTROL} value={lyrics} onChange={event => setLyrics(event.target.value)}
+                  aria-label={t('lyrics')} />
+              </Card>
+            </>
+          ) : <>
           {serviceDown ? (
             <div className="flex gap-2 rounded-xl border border-rose-500/30 bg-rose-500/10 p-3 text-xs leading-5 text-rose-700 dark:text-rose-200">
               <CircleAlert className="mt-0.5 shrink-0" size={15} />
@@ -1405,7 +1526,12 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
           ) : !ready && (
             <div className="flex gap-2 rounded-xl border border-amber-500/25 bg-amber-500/10 p-3 text-xs leading-5 text-amber-800 dark:text-amber-200">
               <CircleAlert className="mt-0.5 shrink-0" size={15} />
-              <div><b>{t('localGenerationUnavailable')}</b><br />{unavailableHint}</div>
+              <div><b>{t('localGenerationUnavailable')}</b><br />{unavailableHint}
+                {setup?.ready === false && <><br /><button type="button" className="font-semibold underline"
+                  onClick={() => window.dispatchEvent(new CustomEvent('yue:open-settings', { detail: 'models' }))}>
+                  {musicStrings.openResources}
+                </button></>}
+              </div>
             </div>
           )}
 
@@ -2226,12 +2352,13 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
               {setLabel(t, { id: setup.hardware.recommended, label: PROFILE_LABEL[setup.hardware.recommended] ?? setup.hardware.recommended })}
             </p>
           )}
+          </>}
           {error && <div ref={errorBox} role="alert" className="rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-xs leading-5 text-red-700 dark:text-red-200">{error}</div>}
         </div>
       </div>
 
       <footer className="shrink-0 border-t border-zinc-200 bg-zinc-50/95 p-4 backdrop-blur-sm dark:border-white/5 dark:bg-suno-panel/95">
-        {takeChoiceOpen && (
+        {!cloud && takeChoiceOpen && (
           <div role="dialog" aria-label={tt('takeTitle')} className="mb-3 rounded-xl border border-pink-300/50 bg-pink-50 p-3 text-xs leading-5 text-zinc-700 dark:border-pink-500/25 dark:bg-pink-500/10 dark:text-zinc-200">
             <p className="font-semibold text-zinc-900 dark:text-white">{tt('takeTitle')}</p>
             <p className="mt-1">{tt('takeBody')}</p>
@@ -2255,6 +2382,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
           onClose={() => setNewPlaylistOpen(false)}
           onCreate={(name, description) => void onCreatePlaylist(name, description).then(playlist => { if (playlist) choosePlaylist(playlist.id); })}
         />
+        {!cloud && <>
         <label className="mb-2 flex cursor-pointer items-start gap-2 rounded-lg border border-zinc-200 px-3 py-2 text-xs dark:border-white/10">
           <input type="checkbox" checked={instrumental} onChange={event => void switchInstrumental(event.target.checked)} className="mt-0.5 h-4 w-4 accent-pink-500" />
           <span className="min-w-0">
@@ -2273,17 +2401,19 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
             title={tt('generateForeverHint')}
           />
         </div>
+        </>}
         <button
           type="button"
           onClick={submit}
+          disabled={cloud && !selectedMusicModel}
           className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-linear-to-r from-orange-500 to-pink-600 text-base font-bold text-white shadow-lg transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
         >
-          {isGenerating ? <Square size={18} /> : instrumental ? <Guitar size={18} /> : <Sparkles size={18} />}
-          {composing && instrumental ? tt('composingScore') : instrumental ? tt('createInstrumental') : t('create')}
+          {isGenerating ? <Square size={18} /> : !cloud && instrumental ? <Guitar size={18} /> : <Sparkles size={18} />}
+          {!cloud && composing && instrumental ? tt('composingScore') : !cloud && instrumental ? tt('createInstrumental') : t('create')}
           {activeJobCount > 0 && <span className="rounded-full bg-white/20 px-2 py-0.5 text-xs">{activeJobCount}</span>}
         </button>
       </footer>
-      {editorOpen && (
+      {!cloud && editorOpen && (
         <MidiEditor
           source={{
             kind: 'score',
@@ -2304,7 +2434,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
           onClose={() => setEditorOpen(false)}
         />
       )}
-      {midiCover && (
+      {!cloud && midiCover && (
         <MidiImportDialog
           chordsWanted={!coverMelodyOnly}
           initial={midiCover}

@@ -135,6 +135,8 @@ export type YueOutputFormat = 'flac' | 'mp3' | 'wav32';
  * own (`Yue2Request` in yue2.cpp); anything left out is the engine default.
  */
 export interface YueRequest {
+  /** Capture the editor's selection with the job so later switches cannot reroute it. */
+  music_source?: { kind: 'local' } | { kind: 'openrouter'; model: string };
   /** Style tags or a short style prompt, verbatim under `[Tags]`. */
   style: string;
   /** Lyrics with section tags, verbatim under `[Lyrics]`. */
@@ -213,6 +215,7 @@ export interface YueJobSong {
 
 export interface YueJob {
   id: string;
+  engine_id?: string;
   /** The mark this window gave the request; an agent's job has none. */
   client_ref?: string;
   /** When the service took the request, in Unix milliseconds. */

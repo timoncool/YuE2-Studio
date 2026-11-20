@@ -7,6 +7,8 @@ const composeScore = vi.fn();
 const transcribe = vi.fn();
 const instrumentalScore = vi.fn();
 const recogniseLyrics = vi.fn();
+let ready = true;
+let configured = false;
 vi.mock('../services/karaoke', async original => ({
   ...(await original<typeof import('../services/karaoke')>()),
   recogniseLyrics: (...args: unknown[]) => recogniseLyrics(...args),
@@ -18,7 +20,8 @@ vi.mock('../services/studioQueries', () => ({
   libraryChanged: vi.fn(),
   useActivity: () => ({ data: [] }),
   useAssistantStatus: () => ({ data: null }),
-  useSetupStatus: () => ({ isError: false, data: { ready: true, engine_ready: true } }),
+  useSetupStatus: () => ({ isError: false, data: { ready, engine_ready: ready } }),
+  useOpenRouterSettings: () => ({ data: { configured } }),
 }));
 vi.mock('../services/mcpBridge', () => ({ useBridgeCommand: () => undefined }));
 vi.mock('../services/transcription', () => ({ composeScore: (...args: unknown[]) => composeScore(...args), composePlans: vi.fn(), transcribe: (...args: unknown[]) => transcribe(...args) }));
@@ -51,6 +54,8 @@ const sent: YueRequest[] = [];
 
 beforeEach(() => {
   sent.length = 0;
+  ready = true;
+  configured = false;
   localStorage.clear();
   composeScore.mockReset();
   transcribe.mockReset().mockResolvedValue('X:1\nK:C\nC');
@@ -69,10 +74,10 @@ afterEach(() => {
 
 const flush = () => act(async () => { await new Promise(resolve => setTimeout(resolve, 0)); });
 
-function panel(props: { initialData?: { song: Song; timestamp: number } | null; visible?: boolean; request?: React.ComponentProps<typeof CreatePanel>['request'] }) {
+function panel(props: Pick<React.ComponentProps<typeof CreatePanel>, 'musicEngine' | 'onMusicEngineChange'> & { initialData?: { song: Song; timestamp: number } | null; visible?: boolean; request?: React.ComponentProps<typeof CreatePanel>['request'] }) {
   return (
     <Activity mode={props.visible === false ? 'hidden' : 'visible'}>
-      <CreatePanel onGenerate={request => sent.push(request)} isGenerating={false} request={props.request} initialData={props.initialData ?? null}
+      <CreatePanel musicEngine={props.musicEngine} onMusicEngineChange={props.onMusicEngineChange} onGenerate={request => sent.push(request)} isGenerating={false} request={props.request} initialData={props.initialData ?? null}
         playlists={[]} onCreatePlaylist={async () => null} playlistId="" onChoosePlaylist={() => undefined} />
     </Activity>
   );
@@ -198,5 +203,91 @@ describe('Reuse prompt (#216)', () => {
     act(() => root.render(panel({ initialData: { song, timestamp: 2 } })));
     await flush();
     expect(lyrics()?.value).toContain('first words');
+  });
+});
+
+describe('OpenRouter music creation', () => {
+  const catalog = () => Response.json({ models: [
+    { id: 'test/music', name: 'Music test model', capabilities: ['music_generation'] },
+    { id: 'test/asr', name: 'Speech-only test model', capabilities: ['speech_to_text'] },
+  ] });
+  const select = (label: string) => [...host.querySelectorAll('select')]
+    .find(control => control.getAttribute('aria-label') === label || control.closest('label')?.textContent?.startsWith(label))!;
+  const choose = (control: HTMLSelectElement, value: string) => act(() => {
+    control.value = value;
+    control.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  const create = () => [...host.querySelectorAll('button')].find(button => button.textContent?.trim() === 'create')!;
+
+  it('submits the selected music model without local weights and preserves local settings when switching back', async () => {
+    ready = false;
+    configured = true;
+    localStorage.setItem('studio.createSettings', JSON.stringify({ steps: '47' }));
+    vi.mocked(fetch).mockImplementation(async url =>
+      String(url) === '/v1/openrouter/catalog' ? catalog() : Response.json({}));
+    const engineChange = vi.fn();
+    act(() => root.render(panel({ musicEngine: 'local', onMusicEngineChange: engineChange })));
+    await flush();
+    expect(buttonNamed('Install local models')).toBeDefined();
+    choose(select('Music engine'), 'openrouter');
+    expect(engineChange).toHaveBeenCalledWith('openrouter');
+
+    act(() => root.render(panel({ musicEngine: 'openrouter', onMusicEngineChange: engineChange })));
+    await flush();
+    expect(host.textContent).not.toContain('Speech-only test model');
+    expect(create().disabled).toBe(true);
+    choose(select('OpenRouter music model'), 'test/music');
+    expect(localStorage.getItem('yue:openrouter-music-model')).toBe('test/music');
+    type(field('textarea[aria-label="styleCardTitle"]')!, 'ambient soul, soft piano');
+    click(create());
+    expect(sent).toEqual([{ style: 'ambient soul, soft piano', lyrics: '', music_source: { kind: 'openrouter', model: 'test/music' } }]);
+
+    ready = true;
+    act(() => root.render(panel({ musicEngine: 'local', onMusicEngineChange: engineChange })));
+    await flush();
+    click(create());
+    expect(sent[1]).toMatchObject({ music_source: { kind: 'local' }, style: 'ambient soul, soft piano', steps: 47 });
+  });
+
+  it('reuses the saved cloud model and requires a new choice when that model disappears', async () => {
+    configured = true;
+    vi.mocked(fetch).mockImplementation(async url =>
+      String(url) === '/v1/openrouter/catalog' ? catalog() : Response.json({}));
+    const song = { ditModel: 'openrouter', title: 'Take', style: 'piano', lyrics: 'verse',
+      generationParams: { model: 'test/music' } } as Song;
+    const show = (song: Song, timestamp: number) => act(() => root.render(panel({
+      musicEngine: 'openrouter', initialData: { song, timestamp },
+    })));
+    show(song, 1);
+    await flush();
+    expect(select('OpenRouter music model').value).toBe('test/music');
+    expect(sent).toHaveLength(0);
+    click(create());
+    expect(sent[0]).toMatchObject({ style: 'piano', lyrics: 'verse', music_source: { model: 'test/music' } });
+    show({ ...song, generationParams: { model: 'retired/model' } }, 2);
+    await flush();
+    expect(select('OpenRouter music model').value).toBe('');
+    expect(create().disabled).toBe(true);
+  });
+
+  it('reports missing credentials, catalogue errors and an empty refreshed catalogue', async () => {
+    const engineChange = vi.fn();
+    act(() => root.render(panel({ musicEngine: 'openrouter', onMusicEngineChange: engineChange })));
+    await flush();
+    expect(buttonNamed('Open cloud settings')).toBeDefined();
+    expect(create().disabled).toBe(true);
+    expect(vi.mocked(fetch).mock.calls.some(([url]) => String(url) === '/v1/openrouter/catalog')).toBe(false);
+
+    configured = true;
+    vi.mocked(fetch).mockImplementation(async url =>
+      String(url) === '/v1/openrouter/catalog' ? Response.json({ error: 'offline' }, { status: 503 }) : Response.json({ models: [] }));
+    act(() => root.render(panel({ musicEngine: 'openrouter', onMusicEngineChange: engineChange })));
+    await flush();
+    expect(host.textContent).toContain('Could not load OpenRouter music models.');
+    click(buttonNamed('Refresh models')!);
+    await flush();
+    expect(vi.mocked(fetch)).toHaveBeenCalledWith('/v1/openrouter/catalog/refresh', expect.objectContaining({ method: 'POST' }));
+    expect(host.textContent).toContain('No OpenRouter music models are available.');
+    expect(create().disabled).toBe(true);
   });
 });

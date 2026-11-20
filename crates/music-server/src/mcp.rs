@@ -1540,8 +1540,15 @@ fn tools() -> &'static [Tool] {
             // ---------------------------------------------------------------- songs
             Tool {
                 name: "song_create",
-                description: "Generate a song with YuE2. style: one English sentence (language, genre, vocal, instruments, mood, production, 'N BPM'). lyrics: sections tagged [Verse 1], [Chorus], [Bridge]... one per line, blank line between sections; empty for an instrumental. abc: a score to sing (from score_compose or an edited one), else the model writes its own. cot: full (melody and chords), melody, or off. adapters: installed LoRA ids with strengths per slot (see lora_list). Returns a job; poll song_job_get until completed, the song then is in the library.",
+                description: "Generate a song locally or with an explicitly selected OpenRouter music model. Local synthesis parameters apply only to YuE2. style: one English sentence (language, genre, vocal, instruments, mood, production, 'N BPM'). lyrics: sections tagged [Verse 1], [Chorus], [Bridge]... one per line, blank line between sections; empty for an instrumental. abc: a score to sing (from score_compose or an edited one), else the model writes its own. cot: full (melody and chords), melody, or off. adapters: installed LoRA ids with strengths per slot (see lora_list). Returns a job; poll song_job_get until completed, the song then is in the library.",
                 schema: || object(json!({
+                    "music_source": {
+                        "description": "Use local YuE2 or select a model with music_generation capability from openrouter_catalog. OpenRouter submits a paid request to the selected model.",
+                        "oneOf": [
+                            { "type": "object", "properties": { "kind": { "const": "local" } }, "required": ["kind"] },
+                            { "type": "object", "properties": { "kind": { "const": "openrouter" }, "model": { "type": "string", "minLength": 1 } }, "required": ["kind", "model"] }
+                        ]
+                    },
                     "style": { "type": "string" },
                     "lyrics": { "type": "string" },
                     "title": { "type": "string" },
