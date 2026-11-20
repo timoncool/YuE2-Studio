@@ -494,6 +494,7 @@ const JOURNAL: &[(&str, &str, &str)] = &[
     ("lora_install_catalog", "installed", "lora"),
     ("lora_install_hf", "installed", "lora"),
     ("lora_import_files", "installed", "lora"),
+    ("rvc_voice_import", "installed", "rvc_voice"),
     ("lora_import_folder", "installed", "lora"),
     ("lora_update", "updated", "lora"),
     ("lora_delete", "deleted", "lora"),
