@@ -9601,11 +9601,16 @@ fn adopt_refusals(components: &[model_manager::Component], root: &std::path::Pat
 /// Adopt a pinned optional model from a chosen library, including libraries whose
 /// folder hierarchy differs from this studio's. Multiple versions may share a name.
 fn adopt_optional_model<'a>(entries: &'a [std::path::PathBuf], target: &std::path::Path, sha: &str) -> std::io::Result<Option<&'a std::path::PathBuf>> {
+    let mut candidates = entries.iter().filter(|source| source.file_name() == target.file_name()).peekable();
+    if candidates.peek().is_none() { return Ok(None); }
     if target.exists() {
-        return Ok(None);
+        if install_record::sha256_of(target).is_ok_and(|value| value == sha) {
+            return Ok(None);
+        }
+        return Err(std::io::Error::new(std::io::ErrorKind::InvalidData, format!("SHA-256 mismatch in the installed file: {}", target.display())));
     }
     let mut last_error = None;
-    for source in entries.iter().filter(|source| source.file_name() == target.file_name()) {
+    for source in candidates {
         match studio_hub_client::neighbors::take_file(source, target, true, |file| install_record::sha256_of(file).is_ok_and(|value| value == sha)) {
             Ok(()) => return Ok(Some(source)),
             Err(error) => last_error = Some(error),
@@ -13064,6 +13069,10 @@ mod tests {
         assert_eq!(adopt_optional_model(&candidates, &target, &sha).unwrap(), None);
         assert_eq!(std::fs::read(&first).unwrap(), b"old");
         assert_eq!(std::fs::read(&second).unwrap(), b"new");
+        std::fs::remove_file(&target).unwrap();
+        std::fs::write(&target, b"bad").unwrap();
+        assert!(adopt_optional_model(&candidates, &target, &sha).is_err());
+        assert_eq!(std::fs::read(&target).unwrap(), b"bad");
     }
 
     #[test]
