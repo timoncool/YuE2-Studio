@@ -60,6 +60,7 @@ pub use saving::{set_save_dialog, SaveDialog};
 mod skill;
 mod legacy_library;
 mod library;
+mod ace;
 mod engine_result;
 mod progress;
 mod engine_log;
