@@ -88,6 +88,7 @@ with tempfile.TemporaryDirectory(prefix="yue-openrouter-") as profile, http.serv
         body={"music_source":{"kind":"openrouter","model":model},"title":"Fixture song","style":"soft piano",
               "lyrics":"A local response sings","client_ref":"fixture-client","duration_seconds":6,"seed":42}
         code,data=request("/v1/music/jobs",body)
+        assert code==202,(code,data)
         submitted=json.loads(data)
         assert code==202 and submitted["dispatch"]=="open_router" and submitted["client_ref"]=="fixture-client",(code,submitted)
         complete=finish(submitted["id"])
@@ -137,4 +138,5 @@ with tempfile.TemporaryDirectory(prefix="yue-openrouter-") as profile, http.serv
     finally:
         proc.terminate()
         proc.wait(timeout=15)
+
 
