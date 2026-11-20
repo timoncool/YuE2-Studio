@@ -488,6 +488,7 @@ footer p { margin: 0 0 8px; }
       <tbody><tr><td>CUDA 13</td><td>6.813 s</td><td>0.474 s</td><td>63.3×</td><td>12.00 GiB</td><td>1.97 GiB</td></tr>
 <tr><td>Vulkan</td><td>19.063 s</td><td>0.507 s</td><td>59.2×</td><td>12.42 GiB</td><td>2.66 GiB</td></tr></tbody>
     </table></div>
+    <p class="note">种子为 42 时，两份 WAV 均为 30.0 秒、48 kHz 的立体声。按 100 毫秒窗口计算双声道 RMS，CUDA 的最后 5.3 秒和 Vulkan 的最后 5.0 秒均低于 −60 dBFS。速度按 WAV 的完整时长计算。</p>
   </section>
 
   <section id="start">

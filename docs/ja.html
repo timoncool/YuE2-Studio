@@ -488,6 +488,7 @@ footer p { margin: 0 0 8px; }
       <tbody><tr><td>CUDA 13</td><td>6.813 s</td><td>0.474 s</td><td>63.3×</td><td>12.00 GiB</td><td>1.97 GiB</td></tr>
 <tr><td>Vulkan</td><td>19.063 s</td><td>0.507 s</td><td>59.2×</td><td>12.42 GiB</td><td>2.66 GiB</td></tr></tbody>
     </table></div>
+    <p class="note">シード 42 で生成した WAV はどちらも 48 kHz のステレオで、長さは 30.0 秒です。両チャンネルを合わせて 100 ミリ秒ごとに求めた RMS は、CUDA では最後の 5.3 秒、Vulkan では最後の 5.0 秒で −60 dBFS を下回りました。速度は WAV 全体の長さから算出しています。</p>
   </section>
 
   <section id="start">

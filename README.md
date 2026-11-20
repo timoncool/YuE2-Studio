@@ -378,6 +378,8 @@ ACE-Step's native 2B turbo Q8_0 took 21.5 ms per DiT step on warm runs. Its roug
 
 Memory was sampled every 200 ms. Peak GPU usage rose 9.56 GiB on CUDA and 9.99 GiB on Vulkan above the desktop baseline. Windows file caching was enabled. These measurements use the published ACE-Step Studio engine.
 
+For seed 42, both WAVs contain 30.0 s of stereo audio at 48 kHz. Measured in 100 ms windows across both channels, the last 5.3 s on CUDA and 5.0 s on Vulkan stay below −60 dBFS RMS. The speed column uses the full WAV duration.
+
 ### Speed reported by installations
 
 How long a 3-minute song takes, by graphics card. These are averages from what YuE2 Studio installations reported
