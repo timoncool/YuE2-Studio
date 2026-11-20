@@ -47,7 +47,7 @@ function Test-UniversalEngineStage($Root, $Stamp) {
         if ($Stamp.cuda_builds -notcontains $backend) { return $false }
         if (-not (Test-Path -LiteralPath (Join-Path $Root "$backend/ggml-cuda.dll") -PathType Leaf)) { return $false }
     }
-    foreach ($file in 'yue-server.exe', 'ggml-vulkan.dll', 'ggml-cpu-x64.dll', 'ggml.dll', 'ggml-base.dll', 'msvcp140.dll', 'msvcp140_1.dll', 'vcruntime140.dll', 'vcruntime140_1.dll', 'vcomp140.dll') {
+    foreach ($file in 'yue-server.exe', 'cudart64_12.dll', 'ggml-vulkan.dll', 'ggml-cpu-x64.dll', 'ggml.dll', 'ggml-base.dll', 'msvcp140.dll', 'msvcp140_1.dll', 'vcruntime140.dll', 'vcruntime140_1.dll', 'vcomp140.dll') {
         if (-not (Test-Path -LiteralPath (Join-Path $Root $file) -PathType Leaf)) { return $false }
     }
     return $true
