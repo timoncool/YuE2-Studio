@@ -98,6 +98,11 @@ try:
     result=check_takes(api,take_file,False)
     assert result["versions"][0][2]!=result["versions"][1][2],result
     print(json.dumps(result),flush=True)
+    import runpy
+    artwork_file=audio.with_name("artwork.wav")
+    shutil.copyfile(audio,artwork_file)
+    artwork=runpy.run_path(str(repo/".github/check-yue-locked-cover.py"))
+    print(json.dumps(artwork["exercise"](api,artwork_file,False)),flush=True)
 finally:
     server.terminate()
     server.wait(timeout=20)
