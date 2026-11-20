@@ -219,7 +219,7 @@ try:
             page.route("**/setup/adopt",lambda route:pending.append(route))
             adopt=page.get_by_role("dialog").get_by_role("button",name="Use models I already have",exact=True)
             adopt.click()
-            busy=page.get_by_role("button",name="Checking files in the selected folder…")
+            busy=page.get_by_role("button",name="Checking files in the selected folder\u2026")
             expect(busy).to_be_disabled()
             expect(busy).to_have_attribute("aria-busy","true")
             with page.expect_response(lambda response:response.url.endswith("/v1/midi/runtime") and response.ok):
