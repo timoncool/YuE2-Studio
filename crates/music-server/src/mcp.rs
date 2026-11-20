@@ -1057,6 +1057,12 @@ fn tools() -> &'static [Tool] {
                 call: |args| post("/v1/library/migration/import".into(), json!({ "path": text(args, "path")? })),
             },
             Tool {
+                name: "library_migration_sources_list",
+                description: "List locally registered ACE-Step and MiniMax Studio libraries available for migration.",
+                schema: nothing,
+                call: |_| get("/v1/library/migration/sources".into()),
+            },
+            Tool {
                 name: "library_migration_preview",
                 description: "Inspect an ACE-Step or MiniMax installation or data folder for songs, playlists and local media available for migration.",
                 schema: || id_only("path", "Old Studio installation or data folder"),
