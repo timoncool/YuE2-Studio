@@ -151,7 +151,13 @@ try:
                 expect(page.get_by_role("alert").filter(has_text="QA certificate failure: "+tool)).to_be_visible()
                 expect(page.get_by_role("link",name=url,exact=True)).to_have_attribute("href",url)
                 expect(page.get_by_text(path,exact=True)).to_be_visible()
+                body["download"].update(done=False,error=None,manual_archive=None)
+                cancel_url={"stems":"/v1/separation/runtime/cancel","midi":"/v1/midi/cancel","restoration":"/v1/restore/cancel"}[tool]
+                with page.expect_response(lambda response:response.request.method=="POST" and response.url==api+cancel_url) as stopped:
+                    page.get_by_role("button",name="Cancel download",exact=True).click()
+                assert stopped.value.ok
                 page.unroute(pattern)
+                expect(page.get_by_role("button",name="Cancel download",exact=True)).to_have_count(0)
             print("Verified archive address and local recovery path for simulated TLS failures in all three tools",flush=True)
             page.get_by_title("Library",exact=True).first.click()
             for which,title in (("list","List title"),("details","Details title")):
