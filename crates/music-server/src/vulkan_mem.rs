@@ -27,14 +27,11 @@ type GetPhysicalDeviceProperties = unsafe extern "C" fn(VkPhysicalDevice, *mut c
 type GetPhysicalDeviceMemoryProperties = unsafe extern "C" fn(VkPhysicalDevice, *mut MemoryProperties);
 
 const VK_SUCCESS: i32 = 0;
-const VK_STRUCTURE_TYPE_APPLICATION_INFO: i32 = 0;
 const VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO: i32 = 1;
-const VK_API_VERSION_1_0: u32 = 1 << 22;
 const VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU: i32 = 2;
 const VK_MEMORY_HEAP_DEVICE_LOCAL_BIT: u32 = 1;
 const VK_MAX_MEMORY_TYPES: usize = 32;
 const VK_MAX_MEMORY_HEAPS: usize = 16;
-const VK_MAX_PHYSICAL_DEVICE_NAME_SIZE: usize = 256;
 /// `sizeof(VkPhysicalDeviceProperties)` is 824; the buffer is larger so that no
 /// driver, whatever it appends to the struct, can write past it.
 const PROPERTIES_BYTES: usize = 1024;
@@ -42,22 +39,11 @@ const PROPERTIES_BYTES: usize = 1024;
 const GIB: f64 = (1u64 << 30) as f64;
 
 #[repr(C)]
-struct ApplicationInfo {
-    s_type: i32,
-    p_next: *const c_void,
-    application_name: *const c_char,
-    application_version: u32,
-    engine_name: *const c_char,
-    engine_version: u32,
-    api_version: u32,
-}
-
-#[repr(C)]
 struct InstanceCreateInfo {
     s_type: i32,
     p_next: *const c_void,
     flags: u32,
-    application_info: *const ApplicationInfo,
+    application_info: *const c_void,
     enabled_layer_count: u32,
     enabled_layer_names: *const *const c_char,
     enabled_extension_count: u32,
@@ -65,7 +51,8 @@ struct InstanceCreateInfo {
 }
 
 /// The leading fields of `VkPhysicalDeviceProperties`: the identity of the
-/// card, before the limits a struct this size is not worth spelling out.
+/// card, before the name and the limits a struct this size is not worth
+/// spelling out.
 #[repr(C)]
 struct PropertiesHead {
     api_version: u32,
@@ -73,7 +60,6 @@ struct PropertiesHead {
     vendor_id: u32,
     device_id: u32,
     device_type: i32,
-    device_name: [c_char; VK_MAX_PHYSICAL_DEVICE_NAME_SIZE],
 }
 
 #[repr(C)]
@@ -137,11 +123,12 @@ struct Candidate {
     bytes: u64,
 }
 
-/// The card the kernel named. A card that is not among the devices Vulkan lists
-/// is not another card's size: the answer is none, so a machine whose first DRM
-/// card is built-in graphics never borrows the size of a discrete card beside it.
-fn pick(candidates: &[Candidate], vendor: u32, device: u32) -> Option<u64> {
-    candidates.iter().find(|candidate| candidate.vendor == vendor && candidate.device == device).map(|candidate| candidate.bytes)
+/// The card the kernel named, by its place in the list Vulkan gave. A card that
+/// is not among the devices Vulkan lists is not another card's size: the answer
+/// is none, so a machine whose first DRM card is built-in graphics never borrows
+/// the size of a discrete card beside it.
+fn pick(candidates: &[Candidate], vendor: u32, device: u32) -> Option<usize> {
+    candidates.iter().position(|candidate| candidate.vendor == vendor && candidate.device == device)
 }
 
 fn probe(vendor: u32, device: u32) -> Option<u64> {
@@ -156,20 +143,12 @@ fn probe(vendor: u32, device: u32) -> Option<u64> {
         let properties = *library.get::<GetPhysicalDeviceProperties>(b"vkGetPhysicalDeviceProperties").ok()?;
         let memory_properties = *library.get::<GetPhysicalDeviceMemoryProperties>(b"vkGetPhysicalDeviceMemoryProperties").ok()?;
 
-        let application = ApplicationInfo {
-            s_type: VK_STRUCTURE_TYPE_APPLICATION_INFO,
-            p_next: ptr::null(),
-            application_name: ptr::null(),
-            application_version: 0,
-            engine_name: ptr::null(),
-            engine_version: 0,
-            api_version: VK_API_VERSION_1_0,
-        };
+        // A null `pApplicationInfo` is allowed, and nothing here needs a name.
         let info = InstanceCreateInfo {
             s_type: VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
             p_next: ptr::null(),
             flags: 0,
-            application_info: &application,
+            application_info: ptr::null(),
             enabled_layer_count: 0,
             enabled_layer_names: ptr::null(),
             enabled_extension_count: 0,
@@ -204,12 +183,11 @@ fn probe(vendor: u32, device: u32) -> Option<u64> {
             let mut memory: MemoryProperties = std::mem::zeroed();
             memory_properties(device_handle, &mut memory);
             let bytes = device_local_bytes(&memory);
-            if bytes == 0 {
-                continue;
+            if bytes > 0 {
+                candidates.push(Candidate { vendor: head.vendor_id, device: head.device_id, bytes });
             }
-            candidates.push(Candidate { vendor: head.vendor_id, device: head.device_id, bytes });
         }
-        pick(&candidates, vendor, device)
+        pick(&candidates, vendor, device).map(|index| candidates[index].bytes)
     }
 }
 
@@ -262,8 +240,8 @@ mod tests {
             Candidate { vendor: 0x1002, device: 0x73bf, bytes: 16 << 30 },
             Candidate { vendor: 0x8086, device: 0xe20b, bytes: 12 << 30 },
         ];
-        assert_eq!(pick(&candidates, 0x8086, 0xe20b), Some(12 << 30));
-        assert_eq!(pick(&candidates, 0x1002, 0x73bf), Some(16 << 30));
+        assert_eq!(pick(&candidates, 0x8086, 0xe20b), Some(1));
+        assert_eq!(pick(&candidates, 0x1002, 0x73bf), Some(0));
         assert_eq!(pick(&candidates, 0x8086, 0x1234), None, "a card Vulkan does not list is not another card's memory");
     }
 

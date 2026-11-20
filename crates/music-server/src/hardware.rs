@@ -456,6 +456,21 @@ struct LinuxCard {
 /// guessing at one that may not fit.
 #[cfg(not(any(windows, target_os = "macos")))]
 fn linux_card() -> Option<LinuxCard> {
+    let (device, vendor_id, device_id) = first_drm_card()?;
+    let vram_gb = std::fs::read_to_string(device.join("mem_info_vram_total"))
+        .ok()
+        .and_then(|bytes| bytes.trim().parse::<f64>().ok())
+        .map(|bytes| bytes / 1024.0 / 1024.0 / 1024.0)
+        .or_else(|| crate::vulkan_mem::device_memory_gb(&vendor_id, &device_id))
+        .unwrap_or(0.0);
+    Some(LinuxCard { vendor_id, device_id, vram_gb })
+}
+
+/// The first DRM card that is a PCI device: its `/sys` device folder and the ids
+/// the kernel gives it. The size files live in that folder; the ids also name the
+/// card to Vulkan, which is where a size the kernel does not publish is asked for.
+#[cfg(not(any(windows, target_os = "macos")))]
+fn first_drm_card() -> Option<(PathBuf, String, String)> {
     let mut cards: Vec<PathBuf> = std::fs::read_dir("/sys/class/drm")
         .ok()?
         .flatten()
@@ -474,13 +489,22 @@ fn linux_card() -> Option<LinuxCard> {
         };
         let vendor_id = read("vendor")?;
         let device_id = read("device").unwrap_or_default();
-        let vram_gb = read("mem_info_vram_total")
-            .and_then(|bytes| bytes.parse::<f64>().ok())
-            .map(|bytes| bytes / 1024.0 / 1024.0 / 1024.0)
-            .or_else(|| crate::vulkan_mem::device_memory_gb(&vendor_id, &device_id))
-            .unwrap_or(0.0);
-        Some(LinuxCard { vendor_id, device_id, vram_gb })
+        Some((device, vendor_id, device_id))
     })
+}
+
+/// The PCI address of the card the kernel names (`0000:04:00.0`), as the DRM
+/// `fdinfo` blocks write it; none on the platforms that name no card.
+#[cfg(any(windows, target_os = "macos"))]
+pub fn card_pci_address() -> Option<String> {
+    None
+}
+
+#[cfg(not(any(windows, target_os = "macos")))]
+pub fn card_pci_address() -> Option<String> {
+    let (device, _, _) = first_drm_card()?;
+    let uevent = std::fs::read_to_string(device.join("uevent")).ok()?;
+    uevent.lines().find_map(|line| line.strip_prefix("PCI_SLOT_NAME=").map(|address| address.trim().to_owned()))
 }
 
 /// `lspci` names the card as a person would; without it the vendor still names
