@@ -1405,6 +1405,13 @@ pub async fn serve_on_port(port: u16) -> anyhow::Result<()> {
     if *STUDIO_PORT.get_or_init(|| port) != port {
         anyhow::bail!("this process already hosts the studio on port {}", listen_port());
     }
+    let settings_path = studio_settings_path();
+    let persisted = load_studio_settings(&settings_path);
+    let (bind_to, network_keyed) = remote::start(persisted.as_ref().and_then(|settings| settings.network.clone()));
+    let address = SocketAddr::from((bind_to, port));
+    // Claim the port before starting background workers. A bind retry must not start another supervisor.
+    let listener = tokio::net::TcpListener::bind(address).await
+        .with_context(|| format!("listen on {address}"))?;
     music_core::process::runtime_libraries_from(engine_bundle_root());
     let _ = SERVICE_RUNTIME.set(tokio::runtime::Handle::current());
     match studio_data_root() {
@@ -1419,14 +1426,11 @@ pub async fn serve_on_port(port: u16) -> anyhow::Result<()> {
         None => studio_log!("[ERROR] the studio has no data folder; its log goes to the console only"),
     }
     put_the_engine_folder_on_path();
-    let settings_path = studio_settings_path();
-    let persisted = load_studio_settings(&settings_path);
     let proxy = persisted.as_ref().and_then(|settings| settings.proxy.clone()).unwrap_or_default();
     if let Err(error) = proxy.clone().validated() {
         eprintln!("[ERROR] the saved proxy cannot be used, requests go straight out until it is fixed in Settings: {error:#}");
     }
     net::set(proxy);
-    let (bind_to, network_keyed) = remote::start(persisted.as_ref().and_then(|settings| settings.network.clone()));
     let model_manager = ModelManager::from_environment()?;
     let community_downloads = Arc::new(downloads::Downloader::new(model_manager.models_directory().join("own")));
     let persisted_components = persisted
@@ -1945,8 +1949,6 @@ pub async fn serve_on_port(port: u16) -> anyhow::Result<()> {
         });
     }
 
-    let address = SocketAddr::from((bind_to, port));
-    let listener = tokio::net::TcpListener::bind(address).await?;
     println!("music-server listening on http://{address}");
     axum::serve(listener, app.into_make_service_with_connect_info::<SocketAddr>())
         .with_graceful_shutdown(shutdown())

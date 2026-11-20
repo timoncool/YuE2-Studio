@@ -1,6 +1,7 @@
 /** Strings of what the desktop shell asks through the window: quitting while a song is made, an update. Engine-neutral. */
 
 const en = {
+  shellRestartStudio: 'Restart YuE2 Studio',
   shellQuitTitle: 'Quit the studio?',
   shellQuitMessage: 'A song is being made. Quitting stops it.',
   shellQuitConfirm: 'Quit',
@@ -19,6 +20,7 @@ const en = {
 type Strings = typeof en;
 
 const ru: Strings = {
+  shellRestartStudio: 'Перезапустить YuE2 Studio',
   shellQuitTitle: 'Выйти из студии?',
   shellQuitMessage: 'Сейчас создаётся песня. Выход её остановит.',
   shellQuitConfirm: 'Выйти',
@@ -35,6 +37,7 @@ const ru: Strings = {
 };
 
 const zh: Strings = {
+  shellRestartStudio: '重启 YuE2 Studio',
   shellQuitTitle: '退出工作室？',
   shellQuitMessage: '正在生成歌曲。退出会停止生成。',
   shellQuitConfirm: '退出',
@@ -51,6 +54,7 @@ const zh: Strings = {
 };
 
 const ja: Strings = {
+  shellRestartStudio: 'YuE2 Studio を再起動',
   shellQuitTitle: 'スタジオを終了しますか？',
   shellQuitMessage: '曲を生成中です。終了すると生成は止まります。',
   shellQuitConfirm: '終了',
@@ -67,6 +71,7 @@ const ja: Strings = {
 };
 
 const ko: Strings = {
+  shellRestartStudio: 'YuE2 Studio 다시 시작',
   shellQuitTitle: '스튜디오를 종료할까요?',
   shellQuitMessage: '노래를 만드는 중입니다. 종료하면 생성이 멈춥니다.',
   shellQuitConfirm: '종료',

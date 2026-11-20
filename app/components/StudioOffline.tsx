@@ -1,5 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { PlugZap, RefreshCw } from 'lucide-react';
+import { invoke } from '@tauri-apps/api/core';
+import { isDesktop } from '../services/externalLinks';
 import { useI18n } from '../context/I18nContext';
 
 /**
@@ -18,6 +20,27 @@ export const StudioOffline: React.FC = () => {
   const { t } = useI18n();
   const [seconds, setSeconds] = useState(0);
   const [checking, setChecking] = useState(false);
+  const [error, setError] = useState('');
+  const desktop = isDesktop();
+  const retry = async () => {
+    setChecking(true);
+    setError('');
+    try {
+      if (desktop) {
+        await invoke('restart_offline_studio');
+      } else {
+        const response = await fetch('/health');
+        if (!response.ok) return;
+        const health = await response.json();
+        if (health?.music_engine?.id !== 'yue2-cpp' || health?.status !== 'ok') return;
+      }
+      window.location.reload();
+    } catch (reason) {
+      if (desktop) setError(String(reason));
+    } finally {
+      setChecking(false);
+    }
+  };
 
   useEffect(() => {
     const started = Date.now();
@@ -36,18 +59,14 @@ export const StudioOffline: React.FC = () => {
         <p className="mt-2 text-xs tabular-nums text-zinc-400">{t('studioOfflineRetrying')} · {seconds} s</p>
         <button
           type="button"
-          onClick={() => {
-            setChecking(true);
-            void fetch('/health')
-              .then((response) => { if (response.ok) window.location.reload(); })
-              .catch(() => undefined)
-              .finally(() => setChecking(false));
-          }}
+          disabled={checking}
+          onClick={() => void retry()}
           className="mt-5 inline-flex items-center gap-2 rounded-xl border border-zinc-300 px-4 py-2.5 text-sm font-semibold text-zinc-700 hover:border-pink-400 hover:text-pink-600 dark:border-white/15 dark:text-zinc-200"
         >
           <RefreshCw size={15} className={checking ? 'animate-spin' : undefined} />
-          {t('studioOfflineRetry')}
+          {desktop ? t('shellRestartStudio') : t('studioOfflineRetry')}
         </button>
+        {error && <p role="alert" className="mt-3 break-words text-sm text-rose-600 dark:text-rose-300">{error}</p>}
       </div>
     </div>
   );

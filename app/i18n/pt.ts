@@ -1359,6 +1359,7 @@ export const pt = {
     studioOfflineBody: 'Esta janela está aberta, mas o serviço do estúdio não responde: foi fechado ou parou. Abrir de novo o YuE2 Studio e esta página volta sozinha.',
     studioOfflineRetrying: 'A tentar ligar de novo',
     studioOfflineRetry: 'Tentar agora',
+    shellRestartStudio: 'Reiniciar o YuE2 Studio',
     resourcesTitle: 'Modelos e quantizações',
     resourcesSubtitle: 'Que quantização corre em cada papel e o que já está no disco. Mudar para um conjunto instalado reinicia o motor com ele.',
     applySelection: 'Usar este conjunto',

@@ -211,16 +211,11 @@ fn start_service() -> Result<(), String> {
         ServiceReadiness::NotListening => {}
     }
 
-    std::thread::Builder::new()
+    let worker = std::thread::Builder::new()
         .name("music-server".into())
         .spawn(|| {
-            let runtime = match tokio::runtime::Builder::new_multi_thread().enable_all().build() {
-                Ok(runtime) => runtime,
-                Err(error) => {
-                    eprintln!("could not create the studio service runtime: {error}");
-                    return;
-                }
-            };
+            let runtime = tokio::runtime::Builder::new_multi_thread().enable_all().build()
+                .map_err(|error| format!("could not create the studio service runtime: {error}"))?;
             // Closing the studio and opening it again leaves the previous
             // process holding the port for a moment. Giving up on the first
             // refusal left the window on a browser error page with no way back
@@ -228,27 +223,51 @@ fn start_service() -> Result<(), String> {
             let deadline = Instant::now() + Duration::from_secs(20);
             loop {
                 match runtime.block_on(music_server::serve_on_port(SERVER_PORT)) {
-                    Ok(()) => return,
-                    Err(error) if Instant::now() < deadline => {
+                    Ok(()) => return Ok(()),
+                    Err(error) if Instant::now() < deadline && error.downcast_ref::<std::io::Error>()
+                        .is_some_and(|cause| cause.kind() == std::io::ErrorKind::AddrInUse) => {
                         eprintln!("studio service could not start yet: {error}");
                         std::thread::sleep(Duration::from_millis(400));
                     }
                     Err(error) => {
-                        eprintln!("studio service stopped: {error}");
-                        return;
+                        music_server::studio_log!("studio service stopped: {error:#}");
+                        return Err(format!("The YuE2 Studio service could not run: {error:#}"));
                     }
                 }
             }
         })
         .map_err(|error| format!("could not start the studio service thread: {error}"))?;
 
-    if wait_until_ready(Duration::from_secs(30)) {
-        Ok(())
-    } else {
-        match service_readiness(SERVER_PORT) {
-            ServiceReadiness::YuE2 => Ok(()),
-            ServiceReadiness::UnknownListener => Err(occupied_service_port(SERVER_PORT)),
-            ServiceReadiness::NotListening => Err(format!("The studio service did not start on 127.0.0.1:{SERVER_PORT}.")),
+    let deadline = Instant::now() + Duration::from_secs(30);
+    loop {
+        if service_is_ready() {
+            return Ok(());
+        }
+        if worker.is_finished() {
+            return match worker.join() {
+                Ok(Err(error)) => Err(error),
+                Ok(Ok(())) => Err("The YuE2 Studio service stopped during startup.".into()),
+                Err(_) => Err("The YuE2 Studio service thread panicked during startup.".into()),
+            };
+        }
+        if Instant::now() >= deadline {
+            return Err(format!("The YuE2 Studio service has not answered on 127.0.0.1:{SERVER_PORT} within 30 seconds."));
+        }
+        std::thread::sleep(Duration::from_millis(120));
+    }
+}
+
+/// The offline window can recover a stopped embedded service by restarting its owning process.
+#[tauri::command]
+async fn restart_offline_studio(app: tauri::AppHandle) -> Result<(), String> {
+    let ready = tauri::async_runtime::spawn_blocking(|| service_readiness(SERVER_PORT)).await
+        .map_err(|error| error.to_string())?;
+    match ready {
+        ServiceReadiness::YuE2 => Ok(()),
+        ServiceReadiness::UnknownListener => Err(occupied_service_port(SERVER_PORT)),
+        ServiceReadiness::NotListening => {
+            app.request_restart();
+            Ok(())
         }
     }
 }
@@ -1140,6 +1159,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             open_visualizer_window,
             open_audio_editor_window,
+            restart_offline_studio,
             set_window_region,
             quit_prompt_shown,
             quit_prompt_cancelled,
