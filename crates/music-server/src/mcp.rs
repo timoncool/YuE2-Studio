@@ -213,6 +213,29 @@ fn compact_loras(loras: &Value) -> Value {
     json!({ "installed": installed, "catalog": catalog, "slots": loras["slots"], "download": loras["download"], "installing": loras["installing"] })
 }
 
+/// Keep a short detailed MIDI response intact. Large transcriptions use offsets
+/// so the protocol's text and structured results describe the same complete page.
+fn midi_note_page(mut song: Value, offset: Option<u64>) -> Value {
+    if offset.is_none() && serde_json::to_string_pretty(&song).is_ok_and(|text| text.len() <= LIMIT) {
+        return song;
+    }
+    let Some(Value::Array(notes)) = song.as_object_mut().and_then(|fields| fields.remove("notes")) else { return song };
+    let total = notes.len();
+    let start = usize::try_from(offset.unwrap_or(0)).unwrap_or(usize::MAX).min(total);
+    let mut count = (total - start).min(256);
+    song["notes_count"] = total.into();
+    song["offset"] = start.into();
+    loop {
+        let end = start + count;
+        song["notes"] = Value::Array(notes[start..end].to_vec());
+        song["next_offset"] = if end < total { end.into() } else { Value::Null };
+        if count <= 1 || serde_json::to_string_pretty(&song).is_ok_and(|text| text.len() <= LIMIT) {
+            return song;
+        }
+        count /= 2;
+    }
+}
+
 /// What an agent is answered: the parts it acts on, unless it asked for
 /// every field with response_format detailed.
 fn shape(name: &str, args: &Value, value: Value) -> Value {
@@ -223,7 +246,8 @@ fn shape(name: &str, args: &Value, value: Value) -> Value {
         "song_jobs_list" if !detailed => Value::Array(value.as_array().into_iter().flatten().map(compact_job).collect()),
         "library_song_get" if !detailed => compact_song(&value),
         "lora_list" if !detailed => compact_loras(&value),
-        "midi_get" if !detailed => {
+        "midi_get" if detailed || args.get("offset").is_some() => midi_note_page(value, args.get("offset").and_then(Value::as_u64)),
+        "midi_get" => {
             let mut value = value;
             let notes = value.as_object_mut().and_then(|fields| fields.remove("notes")).and_then(|notes| notes.as_array().map(Vec::len)).unwrap_or(0);
             value["notes_count"] = notes.into();
@@ -1859,8 +1883,8 @@ fn tools() -> &'static [Tool] {
             },
             Tool {
                 name: "midi_get",
-                description: "A library track's MIDI: the file on this computer, the model size, when it was made, its instruments and how many notes. response_format detailed adds every note (pitch, start and end in seconds, instrument).",
-                schema: || object(json!({ "song_id": { "type": "string" }, "response_format": { "type": "string", "enum": ["concise", "detailed"], "description": "detailed gives every note" } }), &["song_id"]),
+                description: "A library track's MIDI: the file on this computer, the model size, when it was made, its instruments and how many notes. response_format detailed returns notes with pitch, start, end and instrument. For a long track, pass next_offset as offset to read the next page.",
+                schema: || object(json!({ "song_id": { "type": "string" }, "response_format": { "type": "string", "enum": ["concise", "detailed"], "description": "include notes" }, "offset": { "type": "integer", "minimum": 0, "description": "next_offset from the previous page of notes" } }), &["song_id"]),
                 call: |args| get(format!("/v1/library/songs/{}/midi", segment(&text(args, "song_id")?))),
             },
             Tool {
@@ -3201,6 +3225,33 @@ const INSTRUCTIONS: &str = "You drive YuE2 Studio on this computer. Every tool r
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn long_midi_transcriptions_round_trip_through_structured_and_text_results() {
+        let notes: Vec<_> = (0..4179).map(|index| json!({"start": index, "end": index + 1, "pitch": 60, "instrument": "acoustic_piano"})).collect();
+        let song = json!({"song_id": "recording", "notes": notes});
+        let mut args = json!({"response_format": "detailed"});
+        let mut collected = Vec::new();
+        while collected.len() < notes.len() {
+            let page = shape("midi_get", &args, song.clone());
+            let bytes = axum::body::to_bytes(tool_json(json!(1), page).into_body(), usize::MAX).await.unwrap();
+            let reply: Value = serde_json::from_slice(&bytes).unwrap();
+            let data = &reply["result"]["structuredContent"];
+            assert_eq!(serde_json::from_str::<Value>(reply["result"]["content"][0]["text"].as_str().unwrap()).unwrap(), *data);
+            assert_eq!(data["offset"], collected.len());
+            assert_eq!(data["notes_count"], notes.len());
+            let batch = data["notes"].as_array().unwrap();
+            assert!(!batch.is_empty());
+            collected.extend_from_slice(batch);
+            if collected.len() < notes.len() { assert_eq!(data["next_offset"], collected.len()); }
+            else { assert!(data["next_offset"].is_null()); }
+            args = json!({"offset": data["next_offset"]});
+        }
+        assert_eq!(collected, notes);
+        let short = json!({"notes":[{"pitch": 72}]});
+        assert_eq!(shape("midi_get", &json!({"response_format":"detailed"}), short.clone()), short);
+        assert_eq!(shape("midi_get", &json!({"offset":u64::MAX}), short)["notes"], json!([]));
+    }
 
     #[tokio::test]
     async fn a_command_to_a_window_that_closed_fails_at_once() {
