@@ -1,0 +1,685 @@
+{
+  "schema_version": 1,
+  "voices": [
+    {
+      "id": "rvc-5a4920ef7b8c28be41db",
+      "name": "guanguanV1",
+      "source_repo": "licyk/rvc-model",
+      "revision": "ad931ef3dc18f2d63ef81ecafddd498a111c8ecd",
+      "source_url": "https://huggingface.co/licyk/rvc-model/tree/ad931ef3dc18f2d63ef81ecafddd498a111c8ecd",
+      "license": "MIT with the RVC authors' research-use condition (LICENSE-RVC.txt)",
+      "weights": {
+        "url": "https://huggingface.co/licyk/rvc-model/resolve/ad931ef3dc18f2d63ef81ecafddd498a111c8ecd/voices/guanguanV1/guanguanV1.pth",
+        "sha256": "5a4920ef7b8c28be41dbd3afe2bd8cc852bccc5da82ac0590afb2a160ca81bb2",
+        "size": 55024402
+      },
+      "index": {
+        "url": "https://huggingface.co/licyk/rvc-model/resolve/ad931ef3dc18f2d63ef81ecafddd498a111c8ecd/voices/guanguanV1/guanguanV1.index",
+        "sha256": "d04454f009988ad7e3d830d3d8870b3d107978738e2e3b10bd415038ed882cac",
+        "size": 33496795
+      }
+    },
+    {
+      "id": "rvc-9b3808d83e99b7c7b01c",
+      "name": "keruanV1",
+      "source_repo": "licyk/rvc-model",
+      "revision": "ad931ef3dc18f2d63ef81ecafddd498a111c8ecd",
+      "source_url": "https://huggingface.co/licyk/rvc-model/tree/ad931ef3dc18f2d63ef81ecafddd498a111c8ecd",
+      "license": "MIT with the RVC authors' research-use condition (LICENSE-RVC.txt)",
+      "weights": {
+        "url": "https://huggingface.co/licyk/rvc-model/resolve/ad931ef3dc18f2d63ef81ecafddd498a111c8ecd/voices/keruanV1/keruanV1.pth",
+        "sha256": "9b3808d83e99b7c7b01cc1e33cee79ab8f1ebed08708b72066917465ea336e56",
+        "size": 55024861
+      },
+      "index": {
+        "url": "https://huggingface.co/licyk/rvc-model/resolve/ad931ef3dc18f2d63ef81ecafddd498a111c8ecd/voices/keruanV1/keruanV1.index",
+        "sha256": "8e8d2000be4c6dce12102fe417e03ac13c338328da424e33a8e71d94eb1b3380",
+        "size": 41683651
+      }
+    },
+    {
+      "id": "rvc-fb48c0a982317073c343",
+      "name": "kikiV1",
+      "source_repo": "licyk/rvc-model",
+      "revision": "ad931ef3dc18f2d63ef81ecafddd498a111c8ecd",
+      "source_url": "https://huggingface.co/licyk/rvc-model/tree/ad931ef3dc18f2d63ef81ecafddd498a111c8ecd",
+      "license": "MIT with the RVC authors' research-use condition (LICENSE-RVC.txt)",
+      "weights": {
+        "url": "https://huggingface.co/licyk/rvc-model/resolve/ad931ef3dc18f2d63ef81ecafddd498a111c8ecd/voices/kikiV1/kikiV1.pth",
+        "sha256": "fb48c0a982317073c343e440e0c88337c3c605908429d81d420ea123bc83b5b5",
+        "size": 55025320
+      },
+      "index": {
+        "url": "https://huggingface.co/licyk/rvc-model/resolve/ad931ef3dc18f2d63ef81ecafddd498a111c8ecd/voices/kikiV1/kikiV1.index",
+        "sha256": "5f20e83f2e232f2077fed5a064bc92865899e2330a1ff10f2c54b2bae834c647",
+        "size": 58956235
+      }
+    },
+    {
+      "id": "rvc-88ad512ce774a929972e",
+      "name": "youzhanv2-xi",
+      "source_repo": "licyk/rvc-model",
+      "revision": "ad931ef3dc18f2d63ef81ecafddd498a111c8ecd",
+      "source_url": "https://huggingface.co/licyk/rvc-model/tree/ad931ef3dc18f2d63ef81ecafddd498a111c8ecd",
+      "license": "MIT with the RVC authors' research-use condition (LICENSE-RVC.txt)",
+      "weights": {
+        "url": "https://huggingface.co/licyk/rvc-model/resolve/ad931ef3dc18f2d63ef81ecafddd498a111c8ecd/voices/youzhanv2-xi/youzhanv2-xi.pth",
+        "sha256": "88ad512ce774a929972ed27650aa80687fbe220ecdc20809a164c65dca4a408c",
+        "size": 57551491
+      },
+      "index": null
+    },
+    {
+      "id": "rvc-c957d999a39ab2c787a1",
+      "name": "zhanzhanv2-xi",
+      "source_repo": "licyk/rvc-model",
+      "revision": "ad931ef3dc18f2d63ef81ecafddd498a111c8ecd",
+      "source_url": "https://huggingface.co/licyk/rvc-model/tree/ad931ef3dc18f2d63ef81ecafddd498a111c8ecd",
+      "license": "MIT with the RVC authors' research-use condition (LICENSE-RVC.txt)",
+      "weights": {
+        "url": "https://huggingface.co/licyk/rvc-model/resolve/ad931ef3dc18f2d63ef81ecafddd498a111c8ecd/voices/zhanzhanv2-xi/zhanzhanv2-xi.pth",
+        "sha256": "c957d999a39ab2c787a15f2105934176c536288625cacfc239b8fd416ffc766c",
+        "size": 55222703
+      },
+      "index": {
+        "url": "https://huggingface.co/licyk/rvc-model/resolve/ad931ef3dc18f2d63ef81ecafddd498a111c8ecd/voices/zhanzhanv2-xi/zhanzhanv2-xi.index",
+        "sha256": "91f14f20f342f7585d050e6df96e4b451761608e7a483e8454c9490cced67eee",
+        "size": 250792219
+      }
+    },
+    {
+      "id": "rvc-434d7468264b16411807",
+      "name": "丁真",
+      "source_repo": "chaye741/RVC-Voice-Models",
+      "revision": "acfd9f836ca1fc862a594bc303cfccee8d565e94",
+      "source_url": "https://huggingface.co/chaye741/RVC-Voice-Models/tree/acfd9f836ca1fc862a594bc303cfccee8d565e94",
+      "license": null,
+      "weights": {
+        "url": "https://huggingface.co/chaye741/RVC-Voice-Models/resolve/acfd9f836ca1fc862a594bc303cfccee8d565e94/weights/%E4%B8%81%E7%9C%9F.pth",
+        "sha256": "434d7468264b1641180724152003426b34d1fa418392095c07360702577c9165",
+        "size": 55027130
+      },
+      "index": {
+        "url": "https://huggingface.co/chaye741/RVC-Voice-Models/resolve/acfd9f836ca1fc862a594bc303cfccee8d565e94/indices/%E4%B8%81%E7%9C%9F.index",
+        "sha256": "4fb5b11ea777cfc732ec7ad28354b4a2cfa4c01461d10ece4bf2829dc8a9117b",
+        "size": 31588619
+      }
+    },
+    {
+      "id": "rvc-3fd05ed32974a8b158bb",
+      "name": "卡通-懒羊羊",
+      "source_repo": "chaye741/RVC-Voice-Models",
+      "revision": "acfd9f836ca1fc862a594bc303cfccee8d565e94",
+      "source_url": "https://huggingface.co/chaye741/RVC-Voice-Models/tree/acfd9f836ca1fc862a594bc303cfccee8d565e94",
+      "license": null,
+      "weights": {
+        "url": "https://huggingface.co/chaye741/RVC-Voice-Models/resolve/acfd9f836ca1fc862a594bc303cfccee8d565e94/weights/%E5%8D%A1%E9%80%9A-%E6%87%92%E7%BE%8A%E7%BE%8A.pth",
+        "sha256": "3fd05ed32974a8b158bb61b15852cfec594fcbbd6d8bfe172b18a1a0263183bf",
+        "size": 57575716
+      },
+      "index": {
+        "url": "https://huggingface.co/chaye741/RVC-Voice-Models/resolve/acfd9f836ca1fc862a594bc303cfccee8d565e94/indices/%E5%8D%A1%E9%80%9A-%E6%87%92%E7%BE%8A%E7%BE%8A.index",
+        "sha256": "ba5bacc12de2fc60021583de10a9a255d2ccce98a0eab973f74a0c3570b0e2c1",
+        "size": 137124819
+      }
+    },
+    {
+      "id": "rvc-f3707958b534264b00f8",
+      "name": "卡通-曼波",
+      "source_repo": "chaye741/RVC-Voice-Models",
+      "revision": "acfd9f836ca1fc862a594bc303cfccee8d565e94",
+      "source_url": "https://huggingface.co/chaye741/RVC-Voice-Models/tree/acfd9f836ca1fc862a594bc303cfccee8d565e94",
+      "license": null,
+      "weights": {
+        "url": "https://huggingface.co/chaye741/RVC-Voice-Models/resolve/acfd9f836ca1fc862a594bc303cfccee8d565e94/weights/%E5%8D%A1%E9%80%9A-%E6%9B%BC%E6%B3%A2.pth",
+        "sha256": "f3707958b534264b00f8867e0f91bce5f4dbfd02c42267bea9e0c57affee6c62",
+        "size": 55222703
+      },
+      "index": {
+        "url": "https://huggingface.co/chaye741/RVC-Voice-Models/resolve/acfd9f836ca1fc862a594bc303cfccee8d565e94/indices/%E5%8D%A1%E9%80%9A-%E6%9B%BC%E6%B3%A2.index",
+        "sha256": "3b8772d0d21efe8b27a99d093014e21b874479d725b06f3b987ab1fb1aac7a5f",
+        "size": 141362899
+      }
+    },
+    {
+      "id": "rvc-4e9e65236336de589b11",
+      "name": "卢本伟",
+      "source_repo": "chaye741/RVC-Voice-Models",
+      "revision": "acfd9f836ca1fc862a594bc303cfccee8d565e94",
+      "source_url": "https://huggingface.co/chaye741/RVC-Voice-Models/tree/acfd9f836ca1fc862a594bc303cfccee8d565e94",
+      "license": null,
+      "weights": {
+        "url": "https://huggingface.co/chaye741/RVC-Voice-Models/resolve/acfd9f836ca1fc862a594bc303cfccee8d565e94/weights/%E5%8D%A2%E6%9C%AC%E4%BC%9F.pth",
+        "sha256": "4e9e65236336de589b116320123a695cb224ae1bf29d1b41332098661d390e87",
+        "size": 55222703
+      },
+      "index": {
+        "url": "https://huggingface.co/chaye741/RVC-Voice-Models/resolve/acfd9f836ca1fc862a594bc303cfccee8d565e94/indices/%E5%8D%A2%E6%9C%AC%E4%BC%9F.index",
+        "sha256": "9576023ac4bf294823f74728fda290eee225f1feb800f202d4676bc2d8232e0d",
+        "size": 37739347
+      }
+    },
+    {
+      "id": "rvc-5aa2391250798d0788f2",
+      "name": "奥巴马",
+      "source_repo": "chaye741/RVC-Voice-Models",
+      "revision": "acfd9f836ca1fc862a594bc303cfccee8d565e94",
+      "source_url": "https://huggingface.co/chaye741/RVC-Voice-Models/tree/acfd9f836ca1fc862a594bc303cfccee8d565e94",
+      "license": null,
+      "weights": {
+        "url": "https://huggingface.co/chaye741/RVC-Voice-Models/resolve/acfd9f836ca1fc862a594bc303cfccee8d565e94/weights/%E5%A5%A5%E5%B7%B4%E9%A9%AC.pth",
+        "sha256": "5aa2391250798d0788f23a6c864b762a48387a57467b3ebfb893c78d8f79aa6d",
+        "size": 57581999
+      },
+      "index": {
+        "url": "https://huggingface.co/chaye741/RVC-Voice-Models/resolve/acfd9f836ca1fc862a594bc303cfccee8d565e94/indices/%E5%A5%A5%E5%B7%B4%E9%A9%AC.index",
+        "sha256": "31bf2b051bd9397a1cfc20f8a961cbc1e6fe04c917471752593492e45f2e46c0",
+        "size": 49212379
+      }
+    },
+    {
+      "id": "rvc-e6a934e8b48bb3890fd6",
+      "name": "女声-OI",
+      "source_repo": "chaye741/RVC-Voice-Models",
+      "revision": "acfd9f836ca1fc862a594bc303cfccee8d565e94",
+      "source_url": "https://huggingface.co/chaye741/RVC-Voice-Models/tree/acfd9f836ca1fc862a594bc303cfccee8d565e94",
+      "license": null,
+      "weights": {
+        "url": "https://huggingface.co/chaye741/RVC-Voice-Models/resolve/acfd9f836ca1fc862a594bc303cfccee8d565e94/weights/%E5%A5%B3%E5%A3%B0-OI.pth",
+        "sha256": "e6a934e8b48bb3890fd6f0fc9941e151dac7047cf58cf0e4a4452c55be373afc",
+        "size": 57546137
+      },
+      "index": {
+        "url": "https://huggingface.co/chaye741/RVC-Voice-Models/resolve/acfd9f836ca1fc862a594bc303cfccee8d565e94/indices/%E5%A5%B3%E5%A3%B0-OI.index",
+        "sha256": "d04454f009988ad7e3d830d3d8870b3d107978738e2e3b10bd415038ed882cac",
+        "size": 33496795
+      }
+    },
+    {
+      "id": "rvc-cbd7dd0f07fe7b6e8097",
+      "name": "女声-云儿青春",
+      "source_repo": "chaye741/RVC-Voice-Models",
+      "revision": "acfd9f836ca1fc862a594bc303cfccee8d565e94",
+      "source_url": "https://huggingface.co/chaye741/RVC-Voice-Models/tree/acfd9f836ca1fc862a594bc303cfccee8d565e94",
+      "license": null,
+      "weights": {
+        "url": "https://huggingface.co/chaye741/RVC-Voice-Models/resolve/acfd9f836ca1fc862a594bc303cfccee8d565e94/weights/%E5%A5%B3%E5%A3%B0-%E4%BA%91%E5%84%BF%E9%9D%92%E6%98%A5.pth",
+        "sha256": "cbd7dd0f07fe7b6e809760a52525b48d63464b577e44962269cd0e1224931ee1",
+        "size": 57576634
+      },
+      "index": {
+        "url": "https://huggingface.co/chaye741/RVC-Voice-Models/resolve/acfd9f836ca1fc862a594bc303cfccee8d565e94/indices/%E5%A5%B3%E5%A3%B0-%E4%BA%91%E5%84%BF%E9%9D%92%E6%98%A5.index",
+        "sha256": "dd9425c32d385c22e1e0845d4989b2c8e88f6f10b384de67c6811f8094dd0a81",
+        "size": 459782539
+      }
+    },
+    {
+      "id": "rvc-c31ca48af3bdae56bec2",
+      "name": "女声-佩佩",
+      "source_repo": "chaye741/RVC-Voice-Models",
+      "revision": "acfd9f836ca1fc862a594bc303cfccee8d565e94",
+      "source_url": "https://huggingface.co/chaye741/RVC-Voice-Models/tree/acfd9f836ca1fc862a594bc303cfccee8d565e94",
+      "license": null,
+      "weights": {
+        "url": "https://huggingface.co/chaye741/RVC-Voice-Models/resolve/acfd9f836ca1fc862a594bc303cfccee8d565e94/weights/%E5%A5%B3%E5%A3%B0-%E4%BD%A9%E4%BD%A9.pth",
+        "sha256": "c31ca48af3bdae56bec23fff35532d1ca2efc8c4fa6eb506084bc744a2ab797a",
+        "size": 57546137
+      },
+      "index": {
+        "url": "https://huggingface.co/chaye741/RVC-Voice-Models/resolve/acfd9f836ca1fc862a594bc303cfccee8d565e94/indices/%E5%A5%B3%E5%A3%B0-%E4%BD%A9%E4%BD%A9.index",
+        "sha256": "d04454f009988ad7e3d830d3d8870b3d107978738e2e3b10bd415038ed882cac",
+        "size": 33496795
+      }
+    },
+    {
+      "id": "rvc-e79dead9ee9a7c16b5b4",
+      "name": "女声-北极星",
+      "source_repo": "chaye741/RVC-Voice-Models",
+      "revision": "acfd9f836ca1fc862a594bc303cfccee8d565e94",
+      "source_url": "https://huggingface.co/chaye741/RVC-Voice-Models/tree/acfd9f836ca1fc862a594bc303cfccee8d565e94",
+      "license": null,
+      "weights": {
+        "url": "https://huggingface.co/chaye741/RVC-Voice-Models/resolve/acfd9f836ca1fc862a594bc303cfccee8d565e94/weights/%E5%A5%B3%E5%A3%B0-%E5%8C%97%E6%9E%81%E6%98%9F.pth",
+        "sha256": "e79dead9ee9a7c16b5b4ad85afcc29277810c8c4bcaf76d4d8d76bbf503d2050",
+        "size": 57545678
+      },
+      "index": {
+        "url": "https://huggingface.co/chaye741/RVC-Voice-Models/resolve/acfd9f836ca1fc862a594bc303cfccee8d565e94/indices/%E5%A5%B3%E5%A3%B0-%E5%8C%97%E6%9E%81%E6%98%9F.index",
+        "sha256": "0e8136bd1d761631ee2b53a921dcee86e7b9f966282e67a0d4ad6de86ed92a42",
+        "size": 321127099
+      }
+    },
+    {
+      "id": "rvc-d6dc199263333d019d30",
+      "name": "女声-可可",
+      "source_repo": "chaye741/RVC-Voice-Models",
+      "revision": "acfd9f836ca1fc862a594bc303cfccee8d565e94",
+      "source_url": "https://huggingface.co/chaye741/RVC-Voice-Models/tree/acfd9f836ca1fc862a594bc303cfccee8d565e94",
+      "license": null,
+      "weights": {
+        "url": "https://huggingface.co/chaye741/RVC-Voice-Models/resolve/acfd9f836ca1fc862a594bc303cfccee8d565e94/weights/%E5%A5%B3%E5%A3%B0-%E5%8F%AF%E5%8F%AF.pth",
+        "sha256": "d6dc199263333d019d303a2ea5ef0f9f58e468f2e0890d56aedaa5605ad67b15",
+        "size": 55185795
+      },
+      "index": {
+        "url": "https://huggingface.co/chaye741/RVC-Voice-Models/resolve/acfd9f836ca1fc862a594bc303cfccee8d565e94/indices/%E5%A5%B3%E5%A3%B0-%E5%8F%AF%E5%8F%AF.index",
+        "sha256": "ac6ce0ca740d271582a28136659b32a2fb2f9b788cafd26537f13b47666c8c7c",
+        "size": 198182739
+      }
+    },
+    {
+      "id": "rvc-fd73f74dcaad5028da59",
+      "name": "女声-合集",
+      "source_repo": "chaye741/RVC-Voice-Models",
+      "revision": "acfd9f836ca1fc862a594bc303cfccee8d565e94",
+      "source_url": "https://huggingface.co/chaye741/RVC-Voice-Models/tree/acfd9f836ca1fc862a594bc303cfccee8d565e94",
+      "license": null,
+      "weights": {
+        "url": "https://huggingface.co/chaye741/RVC-Voice-Models/resolve/acfd9f836ca1fc862a594bc303cfccee8d565e94/weights/%E5%A5%B3%E5%A3%B0-%E5%90%88%E9%9B%86.pth",
+        "sha256": "fd73f74dcaad5028da599eb3034eb354f513154ef8f19142ebe7187f31a4585e",
+        "size": 55185336
+      },
+      "index": {
+        "url": "https://huggingface.co/chaye741/RVC-Voice-Models/resolve/acfd9f836ca1fc862a594bc303cfccee8d565e94/indices/%E5%A5%B3%E5%A3%B0-%E5%90%88%E9%9B%86.index",
+        "sha256": "3bdced30c23c9b71786efdd747096f35786b5b7a3a60a1176f12634779c54b3d",
+        "size": 447776699
+      }
+    },
+    {
+      "id": "rvc-45cd23e85a97d6c1ac4b",
+      "name": "女声-婉心",
+      "source_repo": "chaye741/RVC-Voice-Models",
+      "revision": "acfd9f836ca1fc862a594bc303cfccee8d565e94",
+      "source_url": "https://huggingface.co/chaye741/RVC-Voice-Models/tree/acfd9f836ca1fc862a594bc303cfccee8d565e94",
+      "license": null,
+      "weights": {
+        "url": "https://huggingface.co/chaye741/RVC-Voice-Models/resolve/acfd9f836ca1fc862a594bc303cfccee8d565e94/weights/%E5%A5%B3%E5%A3%B0-%E5%A9%89%E5%BF%83.pth",
+        "sha256": "45cd23e85a97d6c1ac4bd4c67c681d03d1c2532d7b5fcb41a32bebaa53cd2ddb",
+        "size": 57545678
+      },
+      "index": {
+        "url": "https://huggingface.co/chaye741/RVC-Voice-Models/resolve/acfd9f836ca1fc862a594bc303cfccee8d565e94/indices/%E5%A5%B3%E5%A3%B0-%E5%A9%89%E5%BF%83.index",
+        "sha256": "534b0fbee93d7b48f00a18b33b1c878589b722011a65517705bd2c72eaaacfb3",
+        "size": 196769019
+      }
+    },
+    {
+      "id": "rvc-2c0e642947641c2da4bf",
+      "name": "女声-学姐",
+      "source_repo": "chaye741/RVC-Voice-Models",
+      "revision": "acfd9f836ca1fc862a594bc303cfccee8d565e94",
+      "source_url": "https://huggingface.co/chaye741/RVC-Voice-Models/tree/acfd9f836ca1fc862a594bc303cfccee8d565e94",
+      "license": null,
+      "weights": {
+        "url": "https://huggingface.co/chaye741/RVC-Voice-Models/resolve/acfd9f836ca1fc862a594bc303cfccee8d565e94/weights/%E5%A5%B3%E5%A3%B0-%E5%AD%A6%E5%A7%90.pth",
+        "sha256": "2c0e642947641c2da4bf6b8a4d0c9b0bbe6d42d7b490efdb3ff6413aeb5b0d33",
+        "size": 55224197
+      },
+      "index": {
+        "url": "https://huggingface.co/chaye741/RVC-Voice-Models/resolve/acfd9f836ca1fc862a594bc303cfccee8d565e94/indices/%E5%A5%B3%E5%A3%B0-%E5%AD%A6%E5%A7%90.index",
+        "sha256": "50c2fc234bf0dfef2cd83ca3354314c3fe103660149462b2c0c32bd18943fc8d",
+        "size": 130595219
+      }
+    },
+    {
+      "id": "rvc-91f970ea6a584df486e0",
+      "name": "女声-小秋少羽",
+      "source_repo": "chaye741/RVC-Voice-Models",
+      "revision": "acfd9f836ca1fc862a594bc303cfccee8d565e94",
+      "source_url": "https://huggingface.co/chaye741/RVC-Voice-Models/tree/acfd9f836ca1fc862a594bc303cfccee8d565e94",
+      "license": null,
+      "weights": {
+        "url": "https://huggingface.co/chaye741/RVC-Voice-Models/resolve/acfd9f836ca1fc862a594bc303cfccee8d565e94/weights/%E5%A5%B3%E5%A3%B0-%E5%B0%8F%E7%A7%8B%E5%B0%91%E7%BE%BD.pth",
+        "sha256": "91f970ea6a584df486e0c1cdac8c62ef6538a4f3c6751ff2a01dac4ef070dd41",
+        "size": 57587624
+      },
+      "index": {
+        "url": "https://huggingface.co/chaye741/RVC-Voice-Models/resolve/acfd9f836ca1fc862a594bc303cfccee8d565e94/indices/%E5%A5%B3%E5%A3%B0-%E5%B0%8F%E7%A7%8B%E5%B0%91%E7%BE%BD.index",
+        "sha256": "7af2f2666b8598549d13d3c45ea69c1c6280ab9ef7a7f6948b31e7893b6901c1",
+        "size": 196769019
+      }
+    },
+    {
+      "id": "rvc-64fc94433fc1aa889fff",
+      "name": "女声-石榴",
+      "source_repo": "chaye741/RVC-Voice-Models",
+      "revision": "acfd9f836ca1fc862a594bc303cfccee8d565e94",
+      "source_url": "https://huggingface.co/chaye741/RVC-Voice-Models/tree/acfd9f836ca1fc862a594bc303cfccee8d565e94",
+      "license": null,
+      "weights": {
+        "url": "https://huggingface.co/chaye741/RVC-Voice-Models/resolve/acfd9f836ca1fc862a594bc303cfccee8d565e94/weights/%E5%A5%B3%E5%A3%B0-%E7%9F%B3%E6%A6%B4.pth",
+        "sha256": "64fc94433fc1aa889fff532c8a903fb30e504cff82345344c17c420a709427aa",
+        "size": 55218256
+      },
+      "index": {
+        "url": "https://huggingface.co/chaye741/RVC-Voice-Models/resolve/acfd9f836ca1fc862a594bc303cfccee8d565e94/indices/%E5%A5%B3%E5%A3%B0-%E7%9F%B3%E6%A6%B4.index",
+        "sha256": "d04454f009988ad7e3d830d3d8870b3d107978738e2e3b10bd415038ed882cac",
+        "size": 33496795
+      }
+    },
+    {
+      "id": "rvc-a773894f0cb2d86abc2a",
+      "name": "女声-苏苏少洛",
+      "source_repo": "chaye741/RVC-Voice-Models",
+      "revision": "acfd9f836ca1fc862a594bc303cfccee8d565e94",
+      "source_url": "https://huggingface.co/chaye741/RVC-Voice-Models/tree/acfd9f836ca1fc862a594bc303cfccee8d565e94",
+      "license": null,
+      "weights": {
+        "url": "https://huggingface.co/chaye741/RVC-Voice-Models/resolve/acfd9f836ca1fc862a594bc303cfccee8d565e94/weights/%E5%A5%B3%E5%A3%B0-%E8%8B%8F%E8%8B%8F%E5%B0%91%E6%B4%9B.pth",
+        "sha256": "a773894f0cb2d86abc2a63f0093c36ab2f993b209d9fa4e3521bc6178a86aaec",
+        "size": 57587624
+      },
+      "index": {
+        "url": "https://huggingface.co/chaye741/RVC-Voice-Models/resolve/acfd9f836ca1fc862a594bc303cfccee8d565e94/indices/%E5%A5%B3%E5%A3%B0-%E8%8B%8F%E8%8B%8F%E5%B0%91%E6%B4%9B.index",
+        "sha256": "9a762e64e29e2b02e2b6e7408d5233b83611ebdb3801a1da0174412800289acc",
+        "size": 73310299
+      }
+    },
+    {
+      "id": "rvc-b75943f97832e5e66cd7",
+      "name": "女声-草莓",
+      "source_repo": "chaye741/RVC-Voice-Models",
+      "revision": "acfd9f836ca1fc862a594bc303cfccee8d565e94",
+      "source_url": "https://huggingface.co/chaye741/RVC-Voice-Models/tree/acfd9f836ca1fc862a594bc303cfccee8d565e94",
+      "license": null,
+      "weights": {
+        "url": "https://huggingface.co/chaye741/RVC-Voice-Models/resolve/acfd9f836ca1fc862a594bc303cfccee8d565e94/weights/%E5%A5%B3%E5%A3%B0-%E8%8D%89%E8%8E%93.pth",
+        "sha256": "b75943f97832e5e66cd7ded6c54bb1407c704c4553c0e8aa171f17a6cb0a4eea",
+        "size": 57587624
+      },
+      "index": {
+        "url": "https://huggingface.co/chaye741/RVC-Voice-Models/resolve/acfd9f836ca1fc862a594bc303cfccee8d565e94/indices/%E5%A5%B3%E5%A3%B0-%E8%8D%89%E8%8E%93.index",
+        "sha256": "50c2fc234bf0dfef2cd83ca3354314c3fe103660149462b2c0c32bd18943fc8d",
+        "size": 130595219
+      }
+    },
+    {
+      "id": "rvc-eb1e60505fb505d52102",
+      "name": "女声-诗韵",
+      "source_repo": "chaye741/RVC-Voice-Models",
+      "revision": "acfd9f836ca1fc862a594bc303cfccee8d565e94",
+      "source_url": "https://huggingface.co/chaye741/RVC-Voice-Models/tree/acfd9f836ca1fc862a594bc303cfccee8d565e94",
+      "license": null,
+      "weights": {
+        "url": "https://huggingface.co/chaye741/RVC-Voice-Models/resolve/acfd9f836ca1fc862a594bc303cfccee8d565e94/weights/%E5%A5%B3%E5%A3%B0-%E8%AF%97%E9%9F%B5.pth",
+        "sha256": "eb1e60505fb505d52102497d209ea453ba76ce25007ba1b69b5b987afd5e9d0c",
+        "size": 57552473
+      },
+      "index": {
+        "url": "https://huggingface.co/chaye741/RVC-Voice-Models/resolve/acfd9f836ca1fc862a594bc303cfccee8d565e94/indices/%E5%A5%B3%E5%A3%B0-%E8%AF%97%E9%9F%B5.index",
+        "sha256": "2dd979b637dc708252966da41de696ea198869f8b86e7fc26675ef8bfde63e02",
+        "size": 171359019
+      }
+    },
+    {
+      "id": "rvc-c162802b00ee29ef5f2e",
+      "name": "女声-雅琳御姐",
+      "source_repo": "chaye741/RVC-Voice-Models",
+      "revision": "acfd9f836ca1fc862a594bc303cfccee8d565e94",
+      "source_url": "https://huggingface.co/chaye741/RVC-Voice-Models/tree/acfd9f836ca1fc862a594bc303cfccee8d565e94",
+      "license": null,
+      "weights": {
+        "url": "https://huggingface.co/chaye741/RVC-Voice-Models/resolve/acfd9f836ca1fc862a594bc303cfccee8d565e94/weights/%E5%A5%B3%E5%A3%B0-%E9%9B%85%E7%90%B3%E5%BE%A1%E5%A7%90.pth",
+        "sha256": "c162802b00ee29ef5f2ed3595fa200495fe11e8e336fc5ce1cc4a320aca05541",
+        "size": 57581999
+      },
+      "index": {
+        "url": "https://huggingface.co/chaye741/RVC-Voice-Models/resolve/acfd9f836ca1fc862a594bc303cfccee8d565e94/indices/%E5%A5%B3%E5%A3%B0-%E9%9B%85%E7%90%B3%E5%BE%A1%E5%A7%90.index",
+        "sha256": "e03bcab3631db4a2ed9c512b488f00ac8574c8df960a4bf19a715b6e43b55ffd",
+        "size": 202482419
+      }
+    },
+    {
+      "id": "rvc-658a70ca205bbe568d32",
+      "name": "特朗普",
+      "source_repo": "chaye741/RVC-Voice-Models",
+      "revision": "acfd9f836ca1fc862a594bc303cfccee8d565e94",
+      "source_url": "https://huggingface.co/chaye741/RVC-Voice-Models/tree/acfd9f836ca1fc862a594bc303cfccee8d565e94",
+      "license": null,
+      "weights": {
+        "url": "https://huggingface.co/chaye741/RVC-Voice-Models/resolve/acfd9f836ca1fc862a594bc303cfccee8d565e94/weights/%E7%89%B9%E6%9C%97%E6%99%AE.pth",
+        "sha256": "658a70ca205bbe568d32be29e969098de5d271b6184721ac26022bd860c1b267",
+        "size": 57551491
+      },
+      "index": {
+        "url": "https://huggingface.co/chaye741/RVC-Voice-Models/resolve/acfd9f836ca1fc862a594bc303cfccee8d565e94/indices/%E7%89%B9%E6%9C%97%E6%99%AE.index",
+        "sha256": "43de4ee0998ea5f6bd39a5a3c9245462f44e62be011cab468da337b91f51af5a",
+        "size": 552884779
+      }
+    },
+    {
+      "id": "rvc-4b5ec5c952355cb90328",
+      "name": "男声-01号",
+      "source_repo": "chaye741/RVC-Voice-Models",
+      "revision": "acfd9f836ca1fc862a594bc303cfccee8d565e94",
+      "source_url": "https://huggingface.co/chaye741/RVC-Voice-Models/tree/acfd9f836ca1fc862a594bc303cfccee8d565e94",
+      "license": null,
+      "weights": {
+        "url": "https://huggingface.co/chaye741/RVC-Voice-Models/resolve/acfd9f836ca1fc862a594bc303cfccee8d565e94/weights/%E7%94%B7%E5%A3%B0-01%E5%8F%B7.pth",
+        "sha256": "4b5ec5c952355cb903280b5d904ad9d6e04d84d2da2a3f7afca61b866884ad47",
+        "size": 55221469
+      },
+      "index": {
+        "url": "https://huggingface.co/chaye741/RVC-Voice-Models/resolve/acfd9f836ca1fc862a594bc303cfccee8d565e94/indices/%E7%94%B7%E5%A3%B0-01%E5%8F%B7.index",
+        "sha256": "0a75d12132405feae19ba8683e805b96c23cc244d24d441485b10bbe21691213",
+        "size": 358903299
+      }
+    },
+    {
+      "id": "rvc-b321836029fb360a56d8",
+      "name": "男声-02号",
+      "source_repo": "chaye741/RVC-Voice-Models",
+      "revision": "acfd9f836ca1fc862a594bc303cfccee8d565e94",
+      "source_url": "https://huggingface.co/chaye741/RVC-Voice-Models/tree/acfd9f836ca1fc862a594bc303cfccee8d565e94",
+      "license": null,
+      "weights": {
+        "url": "https://huggingface.co/chaye741/RVC-Voice-Models/resolve/acfd9f836ca1fc862a594bc303cfccee8d565e94/weights/%E7%94%B7%E5%A3%B0-02%E5%8F%B7.pth",
+        "sha256": "b321836029fb360a56d8beec586c1e6f416e030539165419915e4c432866571f",
+        "size": 55225574
+      },
+      "index": {
+        "url": "https://huggingface.co/chaye741/RVC-Voice-Models/resolve/acfd9f836ca1fc862a594bc303cfccee8d565e94/indices/%E7%94%B7%E5%A3%B0-02%E5%8F%B7.index",
+        "sha256": "5e788746f225e325c56394b1628f389b2245ccc0b23911b4a547e2dae484ca55",
+        "size": 91497699
+      }
+    },
+    {
+      "id": "rvc-f1dd07e57a7e1ea22fba",
+      "name": "男声-03号",
+      "source_repo": "chaye741/RVC-Voice-Models",
+      "revision": "acfd9f836ca1fc862a594bc303cfccee8d565e94",
+      "source_url": "https://huggingface.co/chaye741/RVC-Voice-Models/tree/acfd9f836ca1fc862a594bc303cfccee8d565e94",
+      "license": null,
+      "weights": {
+        "url": "https://huggingface.co/chaye741/RVC-Voice-Models/resolve/acfd9f836ca1fc862a594bc303cfccee8d565e94/weights/%E7%94%B7%E5%A3%B0-03%E5%8F%B7.pth",
+        "sha256": "f1dd07e57a7e1ea22fba97a1bef433c8aaf4274a26a07066d14f9f170b09e421",
+        "size": 55225115
+      },
+      "index": {
+        "url": "https://huggingface.co/chaye741/RVC-Voice-Models/resolve/acfd9f836ca1fc862a594bc303cfccee8d565e94/indices/%E7%94%B7%E5%A3%B0-03%E5%8F%B7.index",
+        "sha256": "428566b6da9b56d35438bfbaf6769e638827fa0724fbf67b567e3acac582877a",
+        "size": 35534099
+      }
+    },
+    {
+      "id": "rvc-1faa527d2f92bcc79ba5",
+      "name": "男声-04号",
+      "source_repo": "chaye741/RVC-Voice-Models",
+      "revision": "acfd9f836ca1fc862a594bc303cfccee8d565e94",
+      "source_url": "https://huggingface.co/chaye741/RVC-Voice-Models/tree/acfd9f836ca1fc862a594bc303cfccee8d565e94",
+      "license": null,
+      "weights": {
+        "url": "https://huggingface.co/chaye741/RVC-Voice-Models/resolve/acfd9f836ca1fc862a594bc303cfccee8d565e94/weights/%E7%94%B7%E5%A3%B0-04%E5%8F%B7.pth",
+        "sha256": "1faa527d2f92bcc79ba58b90e4a4a9298f889e18d36397c02770f11ab8e2d4d8",
+        "size": 55219174
+      },
+      "index": {
+        "url": "https://huggingface.co/chaye741/RVC-Voice-Models/resolve/acfd9f836ca1fc862a594bc303cfccee8d565e94/indices/%E7%94%B7%E5%A3%B0-04%E5%8F%B7.index",
+        "sha256": "dea8c74de4feb79a30a7fdf4415dc0fd22aad7127353856e5159577750f2c800",
+        "size": 31588619
+      }
+    },
+    {
+      "id": "rvc-43fe5f6cb222e53295a8",
+      "name": "男声-06号",
+      "source_repo": "chaye741/RVC-Voice-Models",
+      "revision": "acfd9f836ca1fc862a594bc303cfccee8d565e94",
+      "source_url": "https://huggingface.co/chaye741/RVC-Voice-Models/tree/acfd9f836ca1fc862a594bc303cfccee8d565e94",
+      "license": null,
+      "weights": {
+        "url": "https://huggingface.co/chaye741/RVC-Voice-Models/resolve/acfd9f836ca1fc862a594bc303cfccee8d565e94/weights/%E7%94%B7%E5%A3%B0-06%E5%8F%B7.pth",
+        "sha256": "43fe5f6cb222e53295a8ba80a3507596bf573f25a7013a178e131c5db2cfc430",
+        "size": 55019812
+      },
+      "index": {
+        "url": "https://huggingface.co/chaye741/RVC-Voice-Models/resolve/acfd9f836ca1fc862a594bc303cfccee8d565e94/indices/%E7%94%B7%E5%A3%B0-06%E5%8F%B7.index",
+        "sha256": "8fe466612c657d9bf132bb22a19bf54ff3efc4e5f0451f1b1c24f2a09a418476",
+        "size": 52405099
+      }
+    },
+    {
+      "id": "rvc-d9ae2d8c5526097e4f68",
+      "name": "男声-07号",
+      "source_repo": "chaye741/RVC-Voice-Models",
+      "revision": "acfd9f836ca1fc862a594bc303cfccee8d565e94",
+      "source_url": "https://huggingface.co/chaye741/RVC-Voice-Models/tree/acfd9f836ca1fc862a594bc303cfccee8d565e94",
+      "license": null,
+      "weights": {
+        "url": "https://huggingface.co/chaye741/RVC-Voice-Models/resolve/acfd9f836ca1fc862a594bc303cfccee8d565e94/weights/%E7%94%B7%E5%A3%B0-07%E5%8F%B7.pth",
+        "sha256": "d9ae2d8c5526097e4f68295f6fa11654c24c3a71d4acb1cf37e8a2a06d6ec65e",
+        "size": 55192195
+      },
+      "index": {
+        "url": "https://huggingface.co/chaye741/RVC-Voice-Models/resolve/acfd9f836ca1fc862a594bc303cfccee8d565e94/indices/%E7%94%B7%E5%A3%B0-07%E5%8F%B7.index",
+        "sha256": "da04c5ea22fd01997b4d442f6a4fb839f51dc663d7ed23633814e75f3459bc92",
+        "size": 574429379
+      }
+    },
+    {
+      "id": "rvc-c511e652918b84bcff1d",
+      "name": "男声-08号",
+      "source_repo": "chaye741/RVC-Voice-Models",
+      "revision": "acfd9f836ca1fc862a594bc303cfccee8d565e94",
+      "source_url": "https://huggingface.co/chaye741/RVC-Voice-Models/tree/acfd9f836ca1fc862a594bc303cfccee8d565e94",
+      "license": null,
+      "weights": {
+        "url": "https://huggingface.co/chaye741/RVC-Voice-Models/resolve/acfd9f836ca1fc862a594bc303cfccee8d565e94/weights/%E7%94%B7%E5%A3%B0-08%E5%8F%B7.pth",
+        "sha256": "c511e652918b84bcff1deb6279d92e8a5680da02db709c3d68992ec11378ba3d",
+        "size": 55019812
+      },
+      "index": {
+        "url": "https://huggingface.co/chaye741/RVC-Voice-Models/resolve/acfd9f836ca1fc862a594bc303cfccee8d565e94/indices/%E7%94%B7%E5%A3%B0-08%E5%8F%B7.index",
+        "sha256": "995a92e823cc9b340f87a9e6b9dcab5725609ca6d711347cecd79e8c843b27d8",
+        "size": 33418363
+      }
+    },
+    {
+      "id": "rvc-d849c8344b68053994c5",
+      "name": "男声-09号",
+      "source_repo": "chaye741/RVC-Voice-Models",
+      "revision": "acfd9f836ca1fc862a594bc303cfccee8d565e94",
+      "source_url": "https://huggingface.co/chaye741/RVC-Voice-Models/tree/acfd9f836ca1fc862a594bc303cfccee8d565e94",
+      "license": null,
+      "weights": {
+        "url": "https://huggingface.co/chaye741/RVC-Voice-Models/resolve/acfd9f836ca1fc862a594bc303cfccee8d565e94/weights/%E7%94%B7%E5%A3%B0-09%E5%8F%B7.pth",
+        "sha256": "d849c8344b68053994c53d78521c3f50543c53317a5c7a7ed895a396cf1f8308",
+        "size": 54996174
+      },
+      "index": {
+        "url": "https://huggingface.co/chaye741/RVC-Voice-Models/resolve/acfd9f836ca1fc862a594bc303cfccee8d565e94/indices/%E7%94%B7%E5%A3%B0-09%E5%8F%B7.index",
+        "sha256": "c8dcafe8a5fa312a7744a9cf97e1d17f6ca169f05e693287512a2a9af2da8061",
+        "size": 40471051
+      }
+    },
+    {
+      "id": "rvc-24008efc861d0f2cc526",
+      "name": "男声-10号",
+      "source_repo": "chaye741/RVC-Voice-Models",
+      "revision": "acfd9f836ca1fc862a594bc303cfccee8d565e94",
+      "source_url": "https://huggingface.co/chaye741/RVC-Voice-Models/tree/acfd9f836ca1fc862a594bc303cfccee8d565e94",
+      "license": null,
+      "weights": {
+        "url": "https://huggingface.co/chaye741/RVC-Voice-Models/resolve/acfd9f836ca1fc862a594bc303cfccee8d565e94/weights/%E7%94%B7%E5%A3%B0-10%E5%8F%B7.pth",
+        "sha256": "24008efc861d0f2cc526870d7c5e5ea2c84bf6a871676bb4004991151432e34e",
+        "size": 55220092
+      },
+      "index": {
+        "url": "https://huggingface.co/chaye741/RVC-Voice-Models/resolve/acfd9f836ca1fc862a594bc303cfccee8d565e94/indices/%E7%94%B7%E5%A3%B0-10%E5%8F%B7.index",
+        "sha256": "01f11d059fa6bac3cfe6cfdf468f4a0dbcec74302fa6e0f274a47e569f3d48f4",
+        "size": 480800459
+      }
+    },
+    {
+      "id": "rvc-878e8fae0f1d7be4e4a4",
+      "name": "男声-烟嗓",
+      "source_repo": "chaye741/RVC-Voice-Models",
+      "revision": "acfd9f836ca1fc862a594bc303cfccee8d565e94",
+      "source_url": "https://huggingface.co/chaye741/RVC-Voice-Models/tree/acfd9f836ca1fc862a594bc303cfccee8d565e94",
+      "license": null,
+      "weights": {
+        "url": "https://huggingface.co/chaye741/RVC-Voice-Models/resolve/acfd9f836ca1fc862a594bc303cfccee8d565e94/weights/%E7%94%B7%E5%A3%B0-%E7%83%9F%E5%97%93.pth",
+        "sha256": "878e8fae0f1d7be4e4a41763ed3d0555d9af0c538f33da1255e736137e7a40a8",
+        "size": 55028966
+      },
+      "index": {
+        "url": "https://huggingface.co/chaye741/RVC-Voice-Models/resolve/acfd9f836ca1fc862a594bc303cfccee8d565e94/indices/%E7%94%B7%E5%A3%B0-%E7%83%9F%E5%97%93.index",
+        "sha256": "c6836299e7762c54792343ef2298b615e3c1b5969954f2ec786538d6524ecac6",
+        "size": 94643827
+      }
+    },
+    {
+      "id": "rvc-15cd2650f58de726f9e8",
+      "name": "男声-男神",
+      "source_repo": "chaye741/RVC-Voice-Models",
+      "revision": "acfd9f836ca1fc862a594bc303cfccee8d565e94",
+      "source_url": "https://huggingface.co/chaye741/RVC-Voice-Models/tree/acfd9f836ca1fc862a594bc303cfccee8d565e94",
+      "license": null,
+      "weights": {
+        "url": "https://huggingface.co/chaye741/RVC-Voice-Models/resolve/acfd9f836ca1fc862a594bc303cfccee8d565e94/weights/%E7%94%B7%E5%A3%B0-%E7%94%B7%E7%A5%9E.pth",
+        "sha256": "15cd2650f58de726f9e8e4d8b043a7bd8f9213185487d84b08e58d5fbcf9a4c2",
+        "size": 54996174
+      },
+      "index": {
+        "url": "https://huggingface.co/chaye741/RVC-Voice-Models/resolve/acfd9f836ca1fc862a594bc303cfccee8d565e94/indices/%E7%94%B7%E5%A3%B0-%E7%94%B7%E7%A5%9E.index",
+        "sha256": "c836eb9f9e48cd8ef8c4c7de8fed7782a443331318d61c368637fa3b4aa9f0be",
+        "size": 63950083
+      }
+    },
+    {
+      "id": "rvc-d40f4dcb7667a5c27fc2",
+      "name": "男声-青年",
+      "source_repo": "chaye741/RVC-Voice-Models",
+      "revision": "acfd9f836ca1fc862a594bc303cfccee8d565e94",
+      "source_url": "https://huggingface.co/chaye741/RVC-Voice-Models/tree/acfd9f836ca1fc862a594bc303cfccee8d565e94",
+      "license": null,
+      "weights": {
+        "url": "https://huggingface.co/chaye741/RVC-Voice-Models/resolve/acfd9f836ca1fc862a594bc303cfccee8d565e94/weights/%E7%94%B7%E5%A3%B0-%E9%9D%92%E5%B9%B4.pth",
+        "sha256": "d40f4dcb7667a5c27fc270937eeab30bb768ec60409fa411a48fe89ed6d64a37",
+        "size": 54996633
+      },
+      "index": {
+        "url": "https://huggingface.co/chaye741/RVC-Voice-Models/resolve/acfd9f836ca1fc862a594bc303cfccee8d565e94/indices/%E7%94%B7%E5%A3%B0-%E9%9D%92%E5%B9%B4.index",
+        "sha256": "3e3d681410582544415f132c42c0baeca5b4b594521c5a563b1b3b29dc876b5e",
+        "size": 32931259
+      }
+    },
+    {
+      "id": "rvc-0647284d3c67bb24cda3",
+      "name": "男声-青年瘦弱",
+      "source_repo": "chaye741/RVC-Voice-Models",
+      "revision": "acfd9f836ca1fc862a594bc303cfccee8d565e94",
+      "source_url": "https://huggingface.co/chaye741/RVC-Voice-Models/tree/acfd9f836ca1fc862a594bc303cfccee8d565e94",
+      "license": null,
+      "weights": {
+        "url": "https://huggingface.co/chaye741/RVC-Voice-Models/resolve/acfd9f836ca1fc862a594bc303cfccee8d565e94/weights/%E7%94%B7%E5%A3%B0-%E9%9D%92%E5%B9%B4%E7%98%A6%E5%BC%B1.pth",
+        "sha256": "0647284d3c67bb24cda3c0548573f561bc78b6a141bf480724afba73ec7607f7",
+        "size": 55020730
+      },
+      "index": {
+        "url": "https://huggingface.co/chaye741/RVC-Voice-Models/resolve/acfd9f836ca1fc862a594bc303cfccee8d565e94/indices/%E7%94%B7%E5%A3%B0-%E9%9D%92%E5%B9%B4%E7%98%A6%E5%BC%B1.index",
+        "sha256": "0c62e0855a92cf210d5fb53b32053495ae535686d0e2f6c95cc4b1a3e38b22ce",
+        "size": 119875195
+      }
+    }
+  ]
+}

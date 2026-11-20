@@ -1,22 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import { useI18n } from '../context/I18nContext';
 import { rvcVoiceStrings } from '../i18n/rvcVoices';
+import { responseJson, type Voice } from '../services/rvcVoices';
+import { RvcCuratedVoices } from './RvcCuratedVoices';
 
 const URL = '/v1/rvc/voices';
 const STORAGE = 'studio.rvc.voiceId';
-
-interface Voice {
-  id: string;
-  model_name: string;
-  index_name: string | null;
-  version: number | null;
-}
-
-async function responseJson<T>(response: Response): Promise<T> {
-  if (response.ok) return response.json() as Promise<T>;
-  const body = await response.json().catch(() => null);
-  throw new Error(body?.error ?? `HTTP ${response.status}`);
-}
 
 export function RvcVoiceCatalog({ card, control }: { card: string; control: string }) {
   const { language } = useI18n();
@@ -44,6 +33,12 @@ export function RvcVoiceCatalog({ card, control }: { card: string; control: stri
     localStorage.setItem(STORAGE, id);
   }
 
+  function acceptVoice(voice: Voice) {
+    setVoices(current => [...(current ?? []).filter(item => item.id !== voice.id), voice]
+      .sort((a, b) => a.model_name.localeCompare(b.model_name)));
+    choose(voice.id);
+  }
+
   async function importVoice() {
     if (!model || busy) return;
     setBusy(true);
@@ -53,9 +48,7 @@ export function RvcVoiceCatalog({ card, control }: { card: string; control: stri
       form.append('model', model);
       if (index) form.append('index', index);
       const voice = await responseJson<Voice>(await fetch(`${URL}/import`, { method: 'POST', body: form }));
-      setVoices(current => [...(current ?? []).filter(item => item.id !== voice.id), voice]
-        .sort((a, b) => a.model_name.localeCompare(b.model_name)));
-      choose(voice.id);
+      acceptVoice(voice);
       setModel(undefined);
       setIndex(undefined);
       if (modelInput.current) modelInput.current.value = '';
@@ -104,6 +97,7 @@ export function RvcVoiceCatalog({ card, control }: { card: string; control: stri
           {labels.retry}
         </button>
       )}
+      <RvcCuratedVoices onInstalled={acceptVoice} disabled={!voices || busy} />
     </section>
   );
 }

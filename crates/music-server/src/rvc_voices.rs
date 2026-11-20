@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::fs::{self, File};
 use std::io::{self, Read};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use tokio::io::AsyncWriteExt;
 
 use crate::{api_error, update_data_root, ApiError, AppState};
@@ -14,14 +14,53 @@ pub(super) const UPLOAD_LIMIT: usize = 2 * 1024 * 1024 * 1024;
 const PICKLE_LIMIT: u64 = 4 * 1024 * 1024;
 const MANIFEST: &str = "voice.json";
 
-type ApiFailure = (StatusCode, Json<ApiError>);
+pub(super) type ApiFailure = (StatusCode, Json<ApiError>);
 
 #[derive(Deserialize, Serialize)]
 pub(super) struct Voice {
-    id: String,
+    pub(super) id: String,
     model_name: String,
     index_name: Option<String>,
     version: Option<u8>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    origin: Option<VoiceOrigin>,
+}
+
+#[derive(Serialize, Deserialize)]
+pub(super) struct VoiceOrigin {
+    pub(super) catalog_id: String,
+    pub(super) source_repo: String,
+    pub(super) revision: String,
+    pub(super) source_url: String,
+    pub(super) license: Option<String>,
+}
+
+pub(super) struct StagedFile {
+    pub(super) name: String,
+    pub(super) hash: [u8; 32],
+}
+
+pub(super) fn voice_id(model: &[u8; 32], index: Option<&[u8; 32]>) -> String {
+    let mut content = Sha256::new();
+    content.update(model);
+    if let Some(index) = index {
+        content.update(index);
+    }
+    content
+        .finalize()
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect()
+}
+
+pub(super) fn read_voice(root: &Path, id: &str) -> Option<Voice> {
+    let path = root.join(id);
+    let file = File::open(path.join(MANIFEST)).ok()?;
+    let voice = serde_json::from_reader::<_, Voice>(file).ok()?;
+    (voice.id == id
+        && path.join("voice.pth").is_file()
+        && (voice.index_name.is_none() || path.join("retrieval.index").is_file()))
+    .then_some(voice)
 }
 
 fn stored(root: &Path) -> io::Result<Vec<Voice>> {
@@ -33,22 +72,10 @@ fn stored(root: &Path) -> io::Result<Vec<Voice>> {
     let mut voices = Vec::new();
     for folder in folders {
         let folder = folder?;
-        let id = folder.file_name();
-        if !folder.file_type()?.is_dir() || id.len() != 64 {
-            continue;
-        }
-        let path = folder.path();
-        let Ok(file) = File::open(path.join(MANIFEST)) else {
-            continue;
-        };
-        let Ok(voice) = serde_json::from_reader::<_, Voice>(file) else {
-            continue;
-        };
-        if id == voice.id.as_str()
-            && path.join("voice.pth").is_file()
-            && (voice.index_name.is_none() || path.join("retrieval.index").is_file())
-        {
-            voices.push(voice);
+        let name = folder.file_name();
+        let Some(id) = name.to_str() else { continue };
+        if folder.file_type()?.is_dir() && id.len() == 64 {
+            voices.extend(read_voice(root, id));
         }
     }
     voices.sort_by(|a, b| a.model_name.cmp(&b.model_name).then(a.id.cmp(&b.id)));
@@ -64,11 +91,11 @@ pub(super) async fn list(State(state): State<AppState>) -> Result<Json<Vec<Voice
         .map_err(internal)
 }
 
-fn internal(error: impl std::fmt::Display) -> ApiFailure {
+pub(super) fn internal(error: impl std::fmt::Display) -> ApiFailure {
     api_error(StatusCode::INTERNAL_SERVER_ERROR, error.to_string())
 }
 
-fn invalid(error: impl std::fmt::Display) -> ApiFailure {
+pub(super) fn invalid(error: impl std::fmt::Display) -> ApiFailure {
     api_error(StatusCode::BAD_REQUEST, error.to_string())
 }
 
@@ -102,11 +129,7 @@ pub(super) async fn import(
     mut multipart: Multipart,
 ) -> Result<(StatusCode, Json<Voice>), ApiFailure> {
     let root = update_data_root(&state).join("rvc/voices");
-    tokio::fs::create_dir_all(&root).await.map_err(internal)?;
-    let stage = tempfile::Builder::new()
-        .prefix(".import-")
-        .tempdir_in(&root)
-        .map_err(internal)?;
+    let stage = new_stage(&root).await?;
     let mut model = None;
     let mut index = None;
     while let Some(mut field) = multipart.next_field().await.map_err(invalid)? {
@@ -134,31 +157,46 @@ pub(super) async fn import(
             file.write_all(&chunk).await.map_err(internal)?;
         }
         file.flush().await.map_err(internal)?;
-        *part = Some((name, hash.finalize()));
+        *part = Some(StagedFile {
+            name,
+            hash: hash
+                .finalize()
+                .as_slice()
+                .try_into()
+                .expect("32-byte SHA-256 digest"),
+        });
     }
-    let (model_name, model_hash) =
-        model.ok_or_else(|| invalid("Select an RVC voice checkpoint."))?;
+    let model = model.ok_or_else(|| invalid("Select an RVC voice checkpoint."))?;
+    install_staged(root, stage, model, index, None).await
+}
+
+pub(super) async fn new_stage(root: &Path) -> Result<tempfile::TempDir, ApiFailure> {
+    tokio::fs::create_dir_all(root).await.map_err(internal)?;
+    tempfile::Builder::new()
+        .prefix(".import-")
+        .tempdir_in(root)
+        .map_err(internal)
+}
+
+pub(super) async fn install_staged(
+    root: PathBuf,
+    stage: tempfile::TempDir,
+    model: StagedFile,
+    index: Option<StagedFile>,
+    origin: Option<VoiceOrigin>,
+) -> Result<(StatusCode, Json<Voice>), ApiFailure> {
     tokio::task::spawn_blocking(move || {
         let version = checkpoint_version(&stage.path().join("voice.pth")).map_err(invalid)?;
         if index.is_some() {
             validate_index(&stage.path().join("retrieval.index"), version).map_err(invalid)?;
         }
-        let mut content = Sha256::new();
-        content.update(model_hash);
-        let index_name = index.map(|(name, hash)| {
-            content.update(hash);
-            name
-        });
-        let id = content
-            .finalize()
-            .iter()
-            .map(|byte| format!("{byte:02x}"))
-            .collect();
+        let id = voice_id(&model.hash, index.as_ref().map(|file| &file.hash));
         let voice = Voice {
             id,
-            model_name,
-            index_name,
+            model_name: model.name,
+            index_name: index.map(|file| file.name),
             version,
+            origin,
         };
         let target = root.join(&voice.id);
         serde_json::to_writer(
@@ -166,13 +204,11 @@ pub(super) async fn import(
             &voice,
         )
         .map_err(internal)?;
-        match fs::rename(stage.path(), &target) {
+        match fs::rename(stage.path(), target) {
             Ok(()) => Ok((StatusCode::CREATED, Json(voice))),
             Err(rename_error) => {
-                let Ok(file) = File::open(target.join(MANIFEST)) else {
-                    return Err(internal(rename_error));
-                };
-                let existing = serde_json::from_reader(file).map_err(internal)?;
+                let existing =
+                    read_voice(&root, &voice.id).ok_or_else(|| internal(rename_error))?;
                 Ok((StatusCode::OK, Json(existing)))
             }
         }

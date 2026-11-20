@@ -495,6 +495,7 @@ const JOURNAL: &[(&str, &str, &str)] = &[
     ("lora_install_hf", "installed", "lora"),
     ("lora_import_files", "installed", "lora"),
     ("rvc_voice_import", "installed", "rvc_voice"),
+    ("rvc_catalog_install", "installed", "rvc_voice"),
     ("lora_import_folder", "installed", "lora"),
     ("lora_update", "updated", "lora"),
     ("lora_delete", "deleted", "lora"),
@@ -2446,6 +2447,18 @@ fn tools() -> &'static [Tool] {
                 description: "Open a VST3 plugin's own window for the user to set it; state_id keeps its settings for the chain.",
                 schema: || object(json!({ "path": { "type": "string" }, "state_id": { "type": "string" } }), &["path"]),
                 call: |args| post("/v1/processing/vst/editor".into(), args.clone()),
+            },
+            Tool {
+                name: "rvc_catalog_list",
+                description: "List curated RVC voices, license terms, and the local IDs of installed entries.",
+                schema: nothing,
+                call: |_| get("/v1/rvc/catalog".into()),
+            },
+            Tool {
+                name: "rvc_catalog_install",
+                description: "Download and verify a voice from the curated RVC catalog by its ID.",
+                schema: || id_only("id", "the ID from rvc_catalog_list"),
+                call: |args| post("/v1/rvc/catalog/install".into(), json!({ "id": text(args, "id")? })),
             },
             Tool {
                 name: "rvc_voices_list",
