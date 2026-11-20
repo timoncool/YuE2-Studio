@@ -1,22 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import { useI18n } from '../context/I18nContext';
 import { rvcVoiceStrings } from '../i18n/rvcVoices';
+import { responseJson, type Voice, voiceName } from '../services/rvcVoices';
+import { RvcCuratedVoices } from './RvcCuratedVoices';
 
 const URL = '/v1/rvc/voices';
 const STORAGE = 'studio.rvc.voiceId';
-
-interface Voice {
-  id: string;
-  model_name: string;
-  index_name: string | null;
-  version: number | null;
-}
-
-async function responseJson<T>(response: Response): Promise<T> {
-  if (response.ok) return response.json() as Promise<T>;
-  const body = await response.json().catch(() => null);
-  throw new Error(body?.error ?? `HTTP ${response.status}`);
-}
 
 export function RvcVoiceCatalog({ card, control }: { card: string; control: string }) {
   const { language } = useI18n();
@@ -44,6 +33,17 @@ export function RvcVoiceCatalog({ card, control }: { card: string; control: stri
     localStorage.setItem(STORAGE, id);
   }
 
+  function chooseInstalled(id: string) {
+    choose(id);
+    if (!voices?.some(voice => voice.id === id)) setCatalogRequest(request => request + 1);
+  }
+
+  function acceptVoice(voice: Voice) {
+    setVoices(current => [...(current ?? []).filter(item => item.id !== voice.id), voice]
+      .sort((a, b) => voiceName(a).localeCompare(voiceName(b), language)));
+    choose(voice.id);
+  }
+
   async function importVoice() {
     if (!model || busy) return;
     setBusy(true);
@@ -53,9 +53,7 @@ export function RvcVoiceCatalog({ card, control }: { card: string; control: stri
       form.append('model', model);
       if (index) form.append('index', index);
       const voice = await responseJson<Voice>(await fetch(`${URL}/import`, { method: 'POST', body: form }));
-      setVoices(current => [...(current ?? []).filter(item => item.id !== voice.id), voice]
-        .sort((a, b) => a.model_name.localeCompare(b.model_name)));
-      choose(voice.id);
+      acceptVoice(voice);
       setModel(undefined);
       setIndex(undefined);
       if (modelInput.current) modelInput.current.value = '';
@@ -77,7 +75,7 @@ export function RvcVoiceCatalog({ card, control }: { card: string; control: stri
           onChange={event => choose(event.target.value)}>
           <option value="">{labels.none}</option>
           {voices?.map(item => (
-            <option key={item.id} value={item.id}>{item.model_name}{item.version ? ` · v${item.version}` : ''}{item.index_name ? ` · ${item.index_name}` : ''}</option>
+            <option key={item.id} value={item.id}>{voiceName(item)}{item.version ? ` · v${item.version}` : ''}{item.index_name ? ` · ${item.index_name}` : ''}</option>
           ))}
         </select>
       </label>
@@ -104,6 +102,7 @@ export function RvcVoiceCatalog({ card, control }: { card: string; control: stri
           {labels.retry}
         </button>
       )}
+      <RvcCuratedVoices onInstalled={acceptVoice} onChoose={chooseInstalled} disabled={!voices || busy} />
     </section>
   );
 }

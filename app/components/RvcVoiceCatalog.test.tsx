@@ -86,3 +86,121 @@ it('retries a failed catalog request and restores the selected voice on remount'
     vi.unstubAllGlobals();
   }
 });
+
+it('lists curated voices and installs the selected ID into the local catalog', async () => {
+  const entry = { id: 'curated-one', name: 'Example Voice', source_repo: 'owner/voices',
+    source_url: 'https://huggingface.co/owner/voices', license: null, weights: { size: 15_000_000 },
+    index: null, installed_id: null };
+  const voice = { id: 'installed-id', model_name: 'voice.pth', index_name: null, version: 2, origin: { name: entry.name } };
+  const request = vi.fn(async (url: string, _options?: RequestInit) => {
+    if (url.endsWith('/catalog/install')) return Response.json(voice);
+    if (url.endsWith('/catalog')) return Response.json([entry]);
+    return Response.json([]);
+  });
+  vi.stubGlobal('fetch', request);
+  vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+  const host = document.createElement('div');
+  document.body.append(host);
+  const root = createRoot(host);
+  try {
+    act(() => root.render(<RvcVoiceCatalog card="" control="" />));
+    await flush();
+    const details = host.querySelector('details')!;
+    act(() => {
+      details.open = true;
+      details.dispatchEvent(new Event('toggle', { bubbles: true }));
+    });
+    await flush();
+    expect(details.textContent).toContain('License unspecified');
+    expect(details.querySelector('a')?.href).toBe(entry.source_url);
+    const install = details.querySelector('button')!;
+    expect(install.disabled).toBe(false);
+    act(() => { install.dispatchEvent(new MouseEvent('click', { bubbles: true })); });
+    await flush();
+    const [, options] = request.mock.calls.find(([url]) => url.endsWith('/catalog/install'))!;
+    expect(JSON.parse(String(options?.body))).toEqual({ id: entry.id });
+    expect(host.querySelector('select')!.value).toBe(voice.id);
+    expect(host.querySelector('select')!.selectedOptions[0]?.textContent).toContain(entry.name);
+    expect(install.disabled).toBe(false);
+    expect(install.textContent).toBe('Select');
+  } finally {
+    act(() => root.unmount());
+    host.remove();
+    localStorage.removeItem('studio.rvc.voiceId');
+    vi.unstubAllGlobals();
+  }
+});
+
+it('finds Radio Tapok by source label and combines vocal, model, sample-rate and index filters', async () => {
+  const voice = { id: 'voice', name: 'Acoustic Singer', source_repo: 'owner/voices',
+    source_url: 'https://huggingface.co/owner/voices', license: null, weights: { size: 15_000_000 },
+    installed_id: null };
+  const list = [
+    { ...voice, id: 'high', name: 'Tapok Concert', weights: undefined, has_index: true, download_bytes: 23_000_000,
+      metadata: { source_labels: ['Radio Tapok'], vocal_style: 'high', rvc_version: 'v2', sample_rate_hz: 40000 } },
+    { ...voice, id: 'low', name: 'Tapok Studio', index: null,
+      metadata: { source_labels: ['Radio Tapok'], vocal_style: 'low', rvc_version: 'v1', sample_rate_hz: 48000 } },
+    { ...voice, id: 'legacy', name: 'Unclassified Voice', index: null, metadata: null },
+    ...Array.from({ length: 81 }, (_, offset) => ({ ...voice, id: `extra-${offset}`, name: `Голос 音楽 ${offset}`, index: null })),
+  ];
+  const request = vi.fn(async (url: string) => Response.json(url.endsWith('/catalog') ? list : []));
+  vi.stubGlobal('fetch', request);
+  vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+  const host = document.createElement('div');
+  document.body.append(host);
+  const root = createRoot(host);
+  try {
+    act(() => root.render(<RvcVoiceCatalog card="" control="" />));
+    await flush();
+    const details = host.querySelector('details')!;
+    act(() => {
+      details.open = true;
+      details.dispatchEvent(new Event('toggle', { bubbles: true }));
+    });
+    await flush();
+    const search = details.querySelector<HTMLInputElement>('input[type="search"]')!;
+    const valueSetter = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(search), 'value')!.set!;
+    act(() => {
+      valueSetter.call(search, 'Radio Tapok');
+      search.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    expect(details.querySelectorAll('li')).toHaveLength(2);
+    const [style, version, sampleRate, index] = details.querySelectorAll('select');
+    function pick(input: HTMLSelectElement, value: string) {
+      act(() => {
+        input.value = value;
+        input.dispatchEvent(new Event('change', { bubbles: true }));
+      });
+    }
+    pick(style, 'high');
+    pick(version, 'v2');
+    pick(sampleRate, '40000');
+    pick(index, 'present');
+    expect(details.querySelectorAll('li')).toHaveLength(1);
+    expect(details.querySelector('li')?.textContent).toContain('Tapok Concert');
+    expect(details.querySelector('li')?.textContent).toContain('23 MB');
+    pick(index, 'absent');
+    expect(details.textContent).toContain('No voices match these filters.');
+    const clear = [...details.querySelectorAll('button')].find(button => button.textContent === 'Clear filters')!;
+    act(() => { clear.dispatchEvent(new MouseEvent('click', { bubbles: true })); });
+    expect(details.querySelectorAll('li')).toHaveLength(40);
+    expect(details.textContent).toContain('Showing 40 of 84 voices');
+    for (const expected of [80, 84]) {
+      const more = [...details.querySelectorAll('button')].find(button => button.textContent === 'Show more')!;
+      act(() => { more.dispatchEvent(new MouseEvent('click', { bubbles: true })); });
+      expect(details.querySelectorAll('li')).toHaveLength(expected);
+    }
+    expect(details.textContent).toContain('Unclassified Voice');
+    expect(details.textContent).toContain('Голос 音楽 80');
+    act(() => {
+      valueSetter.call(search, 'голос 音楽');
+      search.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    expect(details.querySelectorAll('li')).toHaveLength(40);
+    expect(details.textContent).toContain('Showing 40 of 81 voices');
+  } finally {
+    act(() => root.unmount());
+    host.remove();
+    vi.unstubAllGlobals();
+  }
+});

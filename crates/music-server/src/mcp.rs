@@ -242,6 +242,15 @@ fn shape(name: &str, args: &Value, value: Value) -> Value {
     let detailed = args.get("response_format").and_then(Value::as_str) == Some("detailed");
     match name {
         "training_status" if !detailed => compact_training(&value),
+        "rvc_catalog_list" => {
+            let entries = value.as_array().map_or(&[][..], Vec::as_slice);
+            let offset = args["offset"].as_u64().unwrap_or(0).min(entries.len() as u64) as usize;
+            let end = (offset + 20).min(entries.len());
+            json!({
+                "total": entries.len(), "offset": offset, "voices": &entries[offset..end],
+                "next_offset": (end < entries.len()).then_some(end),
+            })
+        },
         "song_create" | "song_job_get" | "song_replay" if !detailed => compact_job(&value),
         "song_jobs_list" if !detailed => Value::Array(value.as_array().into_iter().flatten().map(compact_job).collect()),
         "library_song_get" if !detailed => compact_song(&value),
@@ -495,6 +504,7 @@ const JOURNAL: &[(&str, &str, &str)] = &[
     ("lora_install_hf", "installed", "lora"),
     ("lora_import_files", "installed", "lora"),
     ("rvc_voice_import", "installed", "rvc_voice"),
+    ("rvc_catalog_install", "installed", "rvc_voice"),
     ("lora_import_folder", "installed", "lora"),
     ("lora_update", "updated", "lora"),
     ("lora_delete", "deleted", "lora"),
@@ -2455,6 +2465,18 @@ fn tools() -> &'static [Tool] {
                 call: |args| post("/v1/processing/vst/editor".into(), args.clone()),
             },
             Tool {
+                name: "rvc_catalog_list",
+                description: "List up to 20 curated RVC voices, license terms and installed local IDs. Pass next_offset as offset for the next page.",
+                schema: || object(json!({ "offset": { "type": "integer", "minimum": 0 } }), &[]),
+                call: |_| get("/v1/rvc/catalog".into()),
+            },
+            Tool {
+                name: "rvc_catalog_install",
+                description: "Download and verify a voice from the curated RVC catalog by its ID.",
+                schema: || id_only("id", "the ID from rvc_catalog_list"),
+                call: |args| post("/v1/rvc/catalog/install".into(), json!({ "id": text(args, "id")? })),
+            },
+            Tool {
                 name: "rvc_voices_list",
                 description: "List local RVC voices and their optional retrieval indexes.",
                 schema: nothing,
@@ -3407,6 +3429,20 @@ mod tests {
             assert_eq!(schema["type"], "object", "{} has no object schema", tool.name);
             assert!(!tool.description.is_empty(), "{} has no description", tool.name);
         }
+    }
+
+    #[test]
+    fn curated_voice_pages_keep_total_and_unicode_names() {
+        let list = json!((0..103).map(|id| json!({
+            "id": id, "name": format!("Голос 音楽 {id}"),
+        })).collect::<Vec<_>>());
+        let page = shape("rvc_catalog_list", &json!({"offset": 80}), list.clone());
+        assert_eq!(page["total"], 103);
+        assert_eq!(page["next_offset"], 100);
+        assert_eq!(page["voices"][0]["name"], "Голос 音楽 80");
+        let last = shape("rvc_catalog_list", &json!({"offset": 100}), list);
+        assert_eq!(last["voices"].as_array().unwrap().len(), 3);
+        assert_eq!(last["next_offset"], Value::Null);
     }
 
     #[test]
