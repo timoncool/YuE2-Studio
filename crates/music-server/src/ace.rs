@@ -794,7 +794,7 @@ impl AceClient {
             .context("the engine's job answer has no status")
     }
 
-    pub async fn cancel(&self, job: &str) -> Result<()> {
+    pub async fn cancel_status(&self, job: &str) -> Result<String> {
         let response = self
             .send(
                 self.http
@@ -809,7 +809,12 @@ impl AceClient {
                 response.status()
             );
         }
-        Ok(())
+        json_of(response)
+            .await?
+            .get("status")
+            .and_then(Value::as_str)
+            .map(str::to_owned)
+            .context("the ACE-Step cancellation response has no status")
     }
 
     /// Unloads every model no job holds (`POST /evict`); they load again with the next song. The megabytes freed.
