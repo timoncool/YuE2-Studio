@@ -65,6 +65,9 @@ with log.open("wb") as stream:
             if not legacy:
                 assert digest(target)==sha and target.samefile(old/relative/name),name
         assert (old/"config.json").read_bytes()==b"x"*124
+        print(json.dumps({"adopted":result["adopted"], "duplicate":result["refused"], "second_pass":again["adopted"], "installed":installed, "source_sha256":files}),flush=True)
+        if "--verify-files" in sys.argv:
+            sys.exit(0)
         pcm=Path(os.environ["QA_PIANO_WAV"]).resolve()
         start=call("/v1/midi/transcribe",dict(path=str(pcm),size="small"))
         assert start["started"],start
