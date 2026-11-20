@@ -132,6 +132,7 @@ type EngineChoice = { id: string; label: string; device?: boolean; byAddress?: b
  * installed and removed by one button.
  */
 export const OptionalGroup: React.FC<{
+  libraryRevision?: number;
   title: string;
   purpose: string;
   statusUrl: string;
@@ -161,7 +162,7 @@ export const OptionalGroup: React.FC<{
   focused?: boolean;
   /** Why the page was sent here, shown on top when it was. */
   focusNote?: string;
-}> = ({ title, purpose, statusUrl, installUrl, removeUrl, engines, settingsUrl, serverField, cancelUrl, embedded, children, focused, focusNote }) => {
+}> = ({ libraryRevision = 0, title, purpose, statusUrl, installUrl, removeUrl, engines, settingsUrl, serverField, cancelUrl, embedded, children, focused, focusNote }) => {
   const { t } = useI18n();
   const box = useRef<HTMLDivElement>(null);
   const [status, setStatus] = useState<OptionalStatus | null>(null);
@@ -258,7 +259,10 @@ export const OptionalGroup: React.FC<{
       .catch((error: Error) => setFailed(error.message));
   };
 
-  useEffect(() => { void load().catch(() => undefined); }, [load]);
+  useEffect(() => {
+    statusGeneration.current++;
+    void load().catch(() => undefined);
+  }, [load, libraryRevision]);
 
   useEffect(() => {
     if (!open || !engines?.some((choice) => choice.device === false)) return;
@@ -811,6 +815,7 @@ export const SetupGate: React.FC<{
   const chosenValues = useMemo(() => Object.values(choice).filter((id): id is string => typeof id === 'string' && id.length > 0), [choice]);
   const [error, setError] = useState<string | null>(null);
   // what taking the user's own model folder did: files taken, copies made, what is still missing
+  const [libraryRevision, setLibraryRevision] = useState(0);
   const [adopting, setAdopting] = useState(false);
   const [adoptNote, setAdoptNote] = useState<string | null>(null);
   const [adoptRefused, setAdoptRefused] = useState<AdoptRefusal[]>([]);
@@ -1277,6 +1282,7 @@ export const SetupGate: React.FC<{
                       .then(async (response) => (response.ok ? response.json() : Promise.reject(new Error(await errorMessage(response)))))
                       .then(async (body: { picked?: boolean; adopted?: string[]; copied?: { id: string; bytes: number }[]; refused?: AdoptRefusal[] } | null) => {
                         if (!body?.picked) return;
+                        setLibraryRevision((revision) => revision + 1);
                         setAdoptRefused(body.refused ?? []);
                         const next = await refresh();
                         const wanted = chosenIds ?? chosenValues;
@@ -1389,6 +1395,7 @@ export const SetupGate: React.FC<{
           <p className="mt-1 text-xs leading-5 text-zinc-500 dark:text-zinc-400">{t('optionalExtrasHint')}</p>
           <div className="mt-3 space-y-3">
             <OptionalGroup
+              libraryRevision={libraryRevision}
               focused={focus === 'assistant'}
               focusNote={t('assistantWandNeedsIt')}
               title={t('assistantSection')}
@@ -1409,6 +1416,7 @@ export const SetupGate: React.FC<{
               )}
             </OptionalGroup>
             <OptionalGroup
+              libraryRevision={libraryRevision}
               title={t('stemsTitle')}
               purpose={t('separationSectionHint')}
               statusUrl="/v1/separation/runtime"
@@ -1419,6 +1427,7 @@ export const SetupGate: React.FC<{
               engines={SEPARATION_ENGINES}
             />
             <OptionalGroup
+              libraryRevision={libraryRevision}
               title={t('karaokeSection')}
               purpose={t('karaokeOptionalPurpose')}
               statusUrl="/v1/karaoke/status"
@@ -1434,6 +1443,7 @@ export const SetupGate: React.FC<{
                 where they are used and listed here with the rest. */}
             {mode === 'settings' && trainingInfo?.card_trains && (
               <OptionalGroup
+                libraryRevision={libraryRevision}
                 title={t('hubPartTraining')}
                 purpose={t('hubTrainingPurpose')}
                 statusUrl="/v1/training/pack/runtime"
@@ -1444,6 +1454,7 @@ export const SetupGate: React.FC<{
             )}
             {mode === 'settings' && (
               <OptionalGroup
+                libraryRevision={libraryRevision}
                 title={t('hubPartListen')}
                 purpose={t('hubListenPurpose')}
                 statusUrl="/v1/training/listen/runtime"
@@ -1454,6 +1465,7 @@ export const SetupGate: React.FC<{
             )}
             {mode === 'settings' && (
               <OptionalGroup
+                libraryRevision={libraryRevision}
                 title={t('midiTitle')}
                 purpose={t('hubMidiPurpose')}
                 statusUrl="/v1/midi/runtime"
@@ -1465,6 +1477,7 @@ export const SetupGate: React.FC<{
             )}
             {mode === 'settings' && (
               <OptionalGroup
+                libraryRevision={libraryRevision}
                 title={t('restoreTitle')}
                 purpose={t('restorePurpose')}
                 statusUrl="/v1/restore/runtime"
