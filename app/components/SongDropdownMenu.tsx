@@ -6,6 +6,7 @@ import { Song } from '../types';
 import { useI18n } from '../context/I18nContext';
 import { openAudioEditor } from '../services/audioEditor';
 import { downloadSongAudio } from '../services/songDownload';
+import { rvcVoiceStrings } from '../i18n/rvcVoices';
 import { openMidi, openStems } from '../services/openStems';
 import { useAuth } from '../context/AuthContext';
 import { ownsSong, useSongActions } from '../context/SongActionsContext';
@@ -122,7 +123,7 @@ export const SongDropdownMenu: React.FC<SongDropdownMenuProps> = ({
     direction = 'down',
     at,
 }) => {
-    const { t } = useI18n();
+    const { t, language } = useI18n();
     const { user } = useAuth();
     const actions = useSongActions();
     const isOwner = ownsSong(user, song);
@@ -277,6 +278,11 @@ export const SongDropdownMenu: React.FC<SongDropdownMenuProps> = ({
                         icon={<Wand2 size={14} />}
                         label={t('processMenu')}
                         onClick={() => handleAction(() => window.dispatchEvent(new CustomEvent('yue:process-song', { detail: song })))}
+                    />
+                    <MenuItem
+                        icon={<Mic2 size={14} />}
+                        label={rvcVoiceStrings[language].title}
+                        onClick={() => handleAction(() => window.dispatchEvent(new CustomEvent('yue:open-rvc', { detail: song.id })))}
                     />
                     <MenuItem
                         icon={<Piano size={14} />}
