@@ -58,6 +58,27 @@ with tempfile.TemporaryDirectory(prefix="yue-openrouter-") as profile, http.serv
         try:
             with client.open(req,timeout=8) as r: return r.status,r.read()
         except urllib.error.HTTPError as e: return e.code,e.read()
+    mcp_headers={"Content-Type":"application/json","Accept":"application/json, text/event-stream"}
+    def rpc(method,params,rid=None):
+        body={"jsonrpc":"2.0","method":method,"params":params}
+        if rid is not None:
+            body["id"]=rid
+        req=urllib.request.Request(f"http://127.0.0.1:{port}/mcp",data=json.dumps(body).encode(),headers=mcp_headers)
+        with client.open(req,timeout=12) as response:
+            raw=response.read().decode()
+            if response.headers.get("Mcp-Session-Id"):
+                mcp_headers["Mcp-Session-Id"]=response.headers["Mcp-Session-Id"]
+        if not raw.strip():
+            return {}
+        if raw.startswith(("event:","data:")):
+            raw=next(line[6:] for line in raw.splitlines() if line.startswith("data: "))
+        message=json.loads(raw)
+        assert "error" not in message,message
+        return message["result"]
+    def tool(name,args,rid):
+        response=rpc("tools/call",{"name":name,"arguments":args},rid)
+        assert not response.get("isError"),response
+        return response.get("structuredContent") or json.loads(response["content"][0]["text"])
     def run_service():
         log=(root/"service.log").open("ab")
         proc=subprocess.Popen([str(exe)],env=env,stdout=log,stderr=subprocess.STDOUT)
@@ -87,10 +108,16 @@ with tempfile.TemporaryDirectory(prefix="yue-openrouter-") as profile, http.serv
     try:
         body={"music_source":{"kind":"openrouter","model":model},"title":"Fixture song","style":"soft piano",
               "lyrics":"A local response sings","client_ref":"fixture-client","duration_seconds":6,"seed":42}
-        code,data=request("/v1/music/jobs",body)
-        assert code==202,(code,data)
-        submitted=json.loads(data)
-        assert code==202 and submitted["dispatch"]=="open_router" and submitted["client_ref"]=="fixture-client",(code,submitted)
+        rpc("initialize",{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"openrouter-sse-qa","version":"1"}},1)
+        rpc("notifications/initialized",{})
+        tools=rpc("tools/list",{},2)["tools"]
+        song_create=next(tool for tool in tools if tool["name"]=="song_create")
+        sources=song_create["inputSchema"]["properties"]["music_source"]["oneOf"]
+        assert {source["properties"]["kind"]["const"] for source in sources}=={"local","openrouter"},sources
+        catalog=tool("openrouter_catalog",{},3)
+        assert any(item["id"]==model and "music_generation" in item["capabilities"] for item in catalog["models"]),catalog
+        submitted=tool("song_create",dict(body,response_format="detailed"),4)
+        assert submitted["dispatch"]=="open_router" and submitted["client_ref"]=="fixture-client",submitted
         complete=finish(submitted["id"])
         assert complete["status"]=="completed",complete
         song=complete["song"]["song"]
@@ -134,7 +161,7 @@ with tempfile.TemporaryDirectory(prefix="yue-openrouter-") as profile, http.serv
         assert len(calls)==3,calls
         print(json.dumps({"status":"pass","http_calls":len(calls),"library_song":song_id,"wav_bytes":len(wav),
                           "restart_persisted":True,"incomplete_failed":True,"replay_rejected":True,
-                          "explicit_model":model,"upstream_disconnected_on_cancel":True,"cancel_no_import":True},indent=2))
+                          "explicit_model":model,"upstream_disconnected_on_cancel":True,"cancel_no_import":True,"mcp_tools_list":True,"mcp_catalog":True,"mcp_song_create":True},indent=2))
     finally:
         proc.terminate()
         proc.wait(timeout=15)
