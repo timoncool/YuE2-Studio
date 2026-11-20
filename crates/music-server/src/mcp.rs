@@ -507,6 +507,7 @@ const JOURNAL: &[(&str, &str, &str)] = &[
     ("models_update_apply", "started", "download"),
     ("training_pack_install", "started", "download"),
     ("training_listen_pack_install", "started", "download"),
+    ("training_listen_pack_cancel", "cancelled", "download"),
     ("assistant_model_install", "started", "download"),
     ("separator_install", "started", "download"),
     ("separator_runtime_install", "started", "download"),
@@ -2474,6 +2475,12 @@ fn tools() -> &'static [Tool] {
                 description: "Download the trainer and its weights (needed once before training).",
                 schema: nothing,
                 call: |_| post("/v1/training/pack/install".into(), json!({})),
+            },
+            Tool {
+                name: "training_listen_pack_cancel",
+                description: "Stop the listening pack download, including its ONNX runtime.",
+                schema: nothing,
+                call: |_| post("/v1/training/listen/cancel".into(), json!({})),
             },
             Tool {
                 name: "training_listen_pack_install",

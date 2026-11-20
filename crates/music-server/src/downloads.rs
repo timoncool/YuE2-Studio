@@ -1471,7 +1471,7 @@ mod tests {
             let cancel = Arc::new(AtomicBool::new(false));
             let http = reqwest::Client::builder().no_proxy().build().unwrap();
             let progress = Arc::new(Mutex::new(None));
-            let model = asset();
+            let model = Asset { url: "https://example.invalid/stall-retry.fixture", ..asset() };
             let url = format!("{base}/stall");
             let (result, ()) = tokio::time::timeout(std::time::Duration::from_secs(5), async {
                 tokio::join!(fetch_from(&http, &model, &target, &progress, cancel.clone(), &url, false), async {
@@ -1693,7 +1693,6 @@ mod tests {
         fs::remove_dir_all(&root).ok();
     }
 
-    #[cfg(windows)]
     #[tokio::test]
     async fn rejecting_a_second_panel_keeps_the_first_transfer_cancellable() {
         let temp = tempfile::tempdir().unwrap();
@@ -1713,6 +1712,7 @@ mod tests {
         assert!(downloader.cancel_for("karaoke").await);
     }
 
+    #[cfg(windows)]
     #[tokio::test]
     async fn a_wrong_manually_placed_runtime_archive_is_rejected_before_download() {
         let root = tempfile::tempdir().unwrap();
