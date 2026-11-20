@@ -117,10 +117,10 @@ struct AppState {
     library: library::Library,
     /// Owned local engine process, when this service started one.
     engine: Arc<tokio::sync::Mutex<Option<music_engine::yue_server::YueServerSupervisor>>>,
-    /// Held to read by a song being sent to the engine, to write by a restart:
-    /// a restart empties the engine's job table, so no song may be sent while
-    /// one is under way.
+    /// A restart holds this for writing because it clears the engine's job table.
+    /// Songs hold it while being submitted, scores through terminal result collection.
     engine_use: Arc<tokio::sync::RwLock<()>>,
+    score_jobs: Arc<RwLock<std::collections::VecDeque<ScoreJob>>>,
     engine_options: Arc<RwLock<EngineOptions>>,
     /// Devices that failed under Auto in this session - the engine did not
     /// start on them, or died with a CUDA or Vulkan error - and the one the
@@ -825,9 +825,9 @@ struct EngineOptions {
     #[serde(skip_serializing)]
     disable_flash_attention: bool,
     clamp_fp16: bool,
-    /// The NVIDIA card, by its nvidia-smi index, that every CUDA process of
-    /// the studio computes on. None: the first. Taken at the studio's start.
-    gpu: Option<u32>,
+    /// The NVIDIA card that every CUDA process of the studio uses after restart.
+    /// Older settings store its nvidia-smi index. New settings store its UUID.
+    gpu: Option<hardware::GpuChoice>,
     /// Every other launch flag, as the line it was typed on. It reaches the
     /// engine last, so it can also override one of the flags above - and it
     /// restarts the engine like they do, because the engine reads it once at
@@ -1391,7 +1391,20 @@ struct OpenRouterResponse {
 /// This is a library entry point on purpose: the desktop application hosts it
 /// in-process, so a release is a single executable rather than a launcher that
 /// has to start a second binary and keep it alive.
+/// The packaged window uses this port for its loopback API.
+pub const DEFAULT_STUDIO_PORT: u16 = 8791;
+static STUDIO_PORT: std::sync::OnceLock<u16> = std::sync::OnceLock::new();
+
+/// Standalone service entry point. Developers can run it on a separate port.
 pub async fn serve() -> anyhow::Result<()> {
+    serve_on_port(standalone_studio_port(env::var("YUE_STUDIO_PORT").ok().as_deref())).await
+}
+
+/// Hosts the service on the port selected by its caller.
+pub async fn serve_on_port(port: u16) -> anyhow::Result<()> {
+    if *STUDIO_PORT.get_or_init(|| port) != port {
+        anyhow::bail!("this process already hosts the studio on port {}", listen_port());
+    }
     music_core::process::runtime_libraries_from(engine_bundle_root());
     let _ = SERVICE_RUNTIME.set(tokio::runtime::Handle::current());
     match studio_data_root() {
@@ -1512,6 +1525,7 @@ pub async fn serve() -> anyhow::Result<()> {
         library: library::Library::open_default()?,
         engine: Arc::new(tokio::sync::Mutex::new(None)),
         engine_use: Arc::new(tokio::sync::RwLock::new(())),
+        score_jobs: Arc::new(RwLock::new(std::collections::VecDeque::new())),
         engine_options: Arc::new(RwLock::new(persisted.as_ref().map(|settings| settings.engine_options.clone().migrated()).unwrap_or_default())),
         engine_runtime: Arc::new(engine_runtime::EngineRuntime::new(&engine_bundle_root(), &studio_data_root().unwrap_or_else(|| std::path::PathBuf::from(".")))),
         failed_devices: Arc::new(RwLock::new(Vec::new())),
@@ -1931,7 +1945,7 @@ pub async fn serve() -> anyhow::Result<()> {
         });
     }
 
-    let address = SocketAddr::from((bind_to, listen_port()));
+    let address = SocketAddr::from((bind_to, port));
     let listener = tokio::net::TcpListener::bind(address).await?;
     println!("music-server listening on http://{address}");
     axum::serve(listener, app.into_make_service_with_connect_info::<SocketAddr>())
@@ -3712,6 +3726,7 @@ async fn card_hooks(state: &AppState) -> training::CardHooks {
             Box::pin(async move {
                 free_the_card_for_the_engine(&take_state).await;
                 if keep_loaded {
+                    let _restart = take_state.engine_use.write().await;
                     if let Some(engine) = take_state.engine.lock().await.as_mut() {
                         if let Err(error) = tokio::task::block_in_place(|| engine.stop(std::time::Duration::from_secs(10))) {
                             eprintln!("[ERROR] stopping the engine for training: {error}");
@@ -3723,6 +3738,7 @@ async fn card_hooks(state: &AppState) -> training::CardHooks {
         give_back: Box::new(move || {
             Box::pin(async move {
                 if keep_loaded {
+                    let _restart = back_state.engine_use.write().await;
                     if let Err(error) = restart_engine(&back_state).await {
                         eprintln!("[ERROR] starting the engine after training: {error}");
                     }
@@ -3738,6 +3754,9 @@ async fn no_song_rendering(state: &AppState) -> Result<(), String> {
     let rendering = state.jobs.read().await.values().any(|job| matches!(job.status, MusicJobStatus::Queued | MusicJobStatus::Running));
     if rendering {
         return Err("a song is being made; train once it is done".into());
+    }
+    if score_at_work(state).await {
+        return Err("a score is being written; wait for it or cancel it first".into());
     }
     Ok(())
 }
@@ -5666,6 +5685,9 @@ async fn update_engine_options(
     Json(mut request): Json<EngineOptions>,
 ) -> Result<Json<Value>, (StatusCode, Json<ApiError>)> {
     request = request.migrated();
+    if matches!(request.gpu.as_ref(), Some(hardware::GpuChoice::Uuid(uuid)) if !hardware::valid_gpu_uuid(uuid)) {
+        return Err(api_error(StatusCode::BAD_REQUEST, "gpu must be an NVIDIA GPU UUID or a legacy GPU index".into()));
+    }
     if request.max_batch.is_some_and(|value| value == 0 || value > 8) {
         return Err(api_error(StatusCode::BAD_REQUEST, "max_batch must be between 1 and 8".into()));
     }
@@ -5733,11 +5755,11 @@ async fn reset_fitted_max_seq(State(state): State<AppState>) -> Result<Json<Valu
 }
 
 async fn restart_local_engine(State(state): State<AppState>) -> Result<Json<Value>, (StatusCode, Json<ApiError>)> {
-    // the button is obeyed; the song it ends is named in the log beside its last line
+    let _restart = state.engine_use.write().await;
+    // The button waits for a score's result. A song it ends is named in the log.
     if engine_at_work(&state).await {
         music_engine::yue_server::note_in_log(&format!("{RESTARTED_UNDER_A_SONG}; that song is lost"));
     }
-    let _restart = state.engine_use.write().await;
     restart_engine(&state).await.map_err(|error| api_error(StatusCode::SERVICE_UNAVAILABLE, error))?;
     Ok(Json(serde_json::json!({ "engine_id": PRIMARY_MUSIC_ENGINE_ID, "restarted": true })))
 }
@@ -5767,7 +5789,7 @@ async fn pick_engine_executable() -> Result<Json<Value>, (StatusCode, Json<ApiEr
 /// A job is running and the engine the studio started is still a running process.
 async fn engine_at_work(state: &AppState) -> bool {
     let working = state.jobs.read().await.values().any(|job| matches!(job.status, MusicJobStatus::Running));
-    working && state.engine.lock().await.as_mut().is_some_and(|engine| engine.process_alive())
+    (working || score_at_work(state).await) && state.engine.lock().await.as_mut().is_some_and(|engine| engine.process_alive())
 }
 
 /// Stops what holds the model files open - the engine this studio started and the writing assistant - so the files
@@ -5874,7 +5896,7 @@ async fn start_engine_again(state: &AppState) -> Result<(), String> {
         return Err("CUDA was chosen, but this card or its driver runs neither CUDA build of the engine: it needs an NVIDIA card from the GTX 900 series on and driver 525 or newer. Update the NVIDIA driver, or choose Vulkan in Settings.".into());
     }
     // nvidia-smi is a process of its own: asked off the async workers, and only for a chosen card
-    let chosen_card = options.gpu;
+    let chosen_card = options.gpu.as_ref();
     if chosen_card.is_some() {
         let cards = tokio::task::spawn_blocking(hardware::nvidia_cards)
             .await
@@ -6001,19 +6023,23 @@ async fn start_engine_again(state: &AppState) -> Result<(), String> {
 /// Why the engine cannot start on the card the settings name: a card that is not in this computer would leave CUDA
 /// with no device at all, and the engine would go to the processor without a word. Only nvidia-smi's own list says a
 /// card is gone: without an answer (`None`) the engine starts as it did before a card could be chosen.
-fn missing_chosen_card(chosen: Option<u32>, cards: Option<&[(u32, String, f64)]>) -> Option<String> {
-    let index = chosen?;
+fn missing_chosen_card(chosen: Option<&hardware::GpuChoice>, cards: Option<&[hardware::NvidiaCard]>) -> Option<String> {
+    let chosen = chosen?;
     let cards = cards?;
-    if cards.iter().any(|(number, ..)| *number == index) {
+    if chosen.card(cards).is_some() {
         return None;
     }
+    let identity = match chosen {
+        hardware::GpuChoice::LegacyIndex(index) => format!("number {index}"),
+        hardware::GpuChoice::Uuid(uuid) => uuid.clone(),
+    };
     let present = if cards.is_empty() {
         "nvidia-smi lists no NVIDIA card".to_string()
     } else {
-        format!("nvidia-smi lists {}", cards.iter().map(|(number, name, _)| format!("{number}: {name}")).collect::<Vec<_>>().join(", "))
+        format!("nvidia-smi lists {}", cards.iter().map(|card| format!("{}: {}", card.index, card.name)).collect::<Vec<_>>().join(", "))
     };
     Some(format!(
-        "the graphics card chosen in Settings - Local engine (number {index}) is not in this computer ({present}); choose another card or Auto there"
+        "the graphics card chosen in Settings - Local engine ({identity}) is not in this computer ({present}); choose another card or Auto there"
     ))
 }
 
@@ -6678,10 +6704,13 @@ async fn create_openrouter_completion(
         .map_err(|error| api_error(StatusCode::BAD_GATEWAY, format!("OpenRouter completion failed: {error}")))
 }
 
-/// The loopback port the studio serves on. Overridable for development, so a
-/// second instance can run beside a released one.
+/// The active service port, used by diagnostics and requests back to this service.
 fn listen_port() -> u16 {
-    env::var("YUE_STUDIO_PORT").ok().and_then(|value| value.parse().ok()).unwrap_or(8791)
+    STUDIO_PORT.get().copied().unwrap_or_else(|| standalone_studio_port(env::var("YUE_STUDIO_PORT").ok().as_deref()))
+}
+
+fn standalone_studio_port(configured: Option<&str>) -> u16 {
+    configured.and_then(|value| value.parse().ok()).unwrap_or(DEFAULT_STUDIO_PORT)
 }
 
 fn chrono_like_timestamp() -> String { std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|value| value.as_secs().to_string()).unwrap_or_default() }
@@ -6848,39 +6877,54 @@ pub fn studio_data_root() -> Option<PathBuf> {
     None
 }
 
-/// Points every CUDA process of the studio - the engine, the trainer, the
-/// assistant, the captioner, and ONNX Runtime inside the service - at the card
-/// chosen in the engine settings, numbered as nvidia-smi numbers them. Called
-/// by the desktop shell and the standalone service before anything starts.
+/// Points every CUDA process of the studio at the physical card chosen in
+/// Settings. Called by the desktop shell and standalone service before CUDA starts.
 pub fn apply_saved_gpu() {
-    let Some(index) = load_studio_settings(&studio_settings_path()).and_then(|settings| settings.engine_options.gpu) else { return };
-    // a chosen card that is not in the computer is not pointed at: CUDA would see no card at all, and the engine start
-    // says why (`missing_chosen_card`)
-    if missing_chosen_card(Some(index), hardware::nvidia_cards().as_deref()).is_some() {
-        return;
-    }
+    let Some(chosen) = load_studio_settings(&studio_settings_path()).and_then(|settings| settings.engine_options.gpu) else { return };
+    let cards = hardware::nvidia_cards();
+    let Some(uuid) = chosen.cuda_mask(cards.as_deref()) else { return };
     // SAFETY: called first thing in the process, before the service and its
     // runtimes read the environment; on Windows the variables are set through
     // SetEnvironmentVariableW, which is thread safe.
     unsafe {
         env::set_var("CUDA_DEVICE_ORDER", "PCI_BUS_ID");
-        env::set_var("CUDA_VISIBLE_DEVICES", index.to_string());
+        env::set_var("CUDA_VISIBLE_DEVICES", uuid);
     }
 }
 
 /// The NVIDIA cards nvidia-smi lists, and which one the studio runs on.
 async fn system_gpus(State(state): State<AppState>) -> Json<Value> {
-    let answer = tokio::task::spawn_blocking(hardware::nvidia_cards).await.unwrap_or_default();
-    let chosen = state.engine_options.read().await.gpu;
-    let running = env::var("CUDA_VISIBLE_DEVICES").ok().and_then(|value| value.trim().parse::<u32>().ok());
-    Json(serde_json::json!({
-        // null: nvidia-smi did not answer, so no card can be told apart
-        "cards": answer.as_ref().map(|cards| cards.iter().map(|(index, name, gigabytes)| serde_json::json!({ "index": index, "name": name, "memory_gb": gigabytes })).collect::<Vec<_>>()),
-        "chosen": chosen,
-        "running": running,
-        // the chosen card is not in the computer: why the engine does not start until another is chosen
-        "chosen_missing": missing_chosen_card(chosen, answer.as_deref()),
-    }))
+    let cards = tokio::task::spawn_blocking(hardware::nvidia_cards).await.unwrap_or_default();
+    let chosen = state.engine_options.read().await.gpu.clone();
+    let running = hardware::cuda_visible_device()
+        .map(|device| device.parse::<u32>().map_or(hardware::GpuChoice::Uuid(device), hardware::GpuChoice::LegacyIndex));
+    Json(system_gpu_status(cards.as_deref(), chosen.as_ref(), running.as_ref()))
+}
+
+fn system_gpu_status(
+    cards: Option<&[hardware::NvidiaCard]>,
+    chosen: Option<&hardware::GpuChoice>,
+    running: Option<&hardware::GpuChoice>,
+) -> Value {
+    use hardware::GpuChoice;
+
+    let index = |choice: Option<&GpuChoice>| match choice? {
+        GpuChoice::LegacyIndex(index) => Some(*index),
+        choice @ GpuChoice::Uuid(_) => choice.card(cards?).map(|card| card.index),
+    };
+    let uuid = |choice: Option<&GpuChoice>| match choice? {
+        GpuChoice::Uuid(uuid) => Some(uuid.clone()),
+        choice @ GpuChoice::LegacyIndex(_) => choice.card(cards?).map(|card| card.uuid.clone()),
+    };
+
+    serde_json::json!({
+        "cards": cards,
+        "chosen": index(chosen),
+        "running": index(running),
+        "chosen_uuid": uuid(chosen),
+        "running_uuid": uuid(running),
+        "chosen_missing": missing_chosen_card(chosen, cards),
+    })
 }
 
 /// The saved proxy, for the desktop shell to hand the window's browser before
@@ -11610,10 +11654,12 @@ async fn local_music_model_catalog(
 
 /// A job whose answer is a score: a transcription of a recording, or a
 /// composition from a style and lyrics.
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 struct ScoreJob {
     id: String,
     status: String,
+    #[serde(skip)]
+    finished_at: Option<std::time::Instant>,
     #[serde(skip_serializing_if = "Option::is_none")]
     abc: Option<String>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
@@ -11627,11 +11673,11 @@ struct ScoreJob {
 
 impl ScoreJob {
     fn running(id: String) -> Self {
-        Self { id, status: "running".into(), abc: None, plans: vec![], lm_seed: None, error: None }
+        Self { id, status: "running".into(), finished_at: None, abc: None, plans: vec![], lm_seed: None, error: None }
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 struct ScorePlan { abc: String, lm_seed: Option<i64> }
 
 #[derive(Debug, Deserialize)]
@@ -11703,12 +11749,13 @@ async fn compose_score(
     let maximum = track_limit(&state).await;
     if request.lm_batch_size.unwrap_or(1) > maximum { return Err(api_error(StatusCode::BAD_REQUEST, format!("lm_batch_size exceeds the configured song limit {maximum}"))); }
     let body = compose_request_from(&request).map_err(|error| api_error(StatusCode::BAD_REQUEST, error))?;
+    let using = start_score_on_engine(&state).await?;
     let remote = state
         .music_server
         .submit(body)
         .await
         .map_err(|error| api_error(StatusCode::SERVICE_UNAVAILABLE, format!("the engine refused the composition: {error}")))?;
-    Ok((StatusCode::ACCEPTED, Json(ScoreJob::running(remote.id))))
+    Ok((StatusCode::ACCEPTED, Json(watch_score_job(state, remote.id, using).await)))
 }
 
 /// Reads a recording into the ABC score a cover takes as its `abc`. The audio
@@ -11762,12 +11809,13 @@ async fn create_transcription(
         .await
         .map_err(|error| api_error(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?
         .map_err(|error| api_error(StatusCode::BAD_REQUEST, format!("{error:#}")))?;
+    let using = start_score_on_engine(&state).await?;
     let remote = state
         .music_server
         .transcribe(bytes, name, melody_only)
         .await
         .map_err(|error| api_error(StatusCode::SERVICE_UNAVAILABLE, format!("the engine refused the transcription: {error}")))?;
-    Ok((StatusCode::ACCEPTED, Json(ScoreJob::running(remote.id))))
+    Ok((StatusCode::ACCEPTED, Json(watch_score_job(state, remote.id, using).await)))
 }
 
 /// A recording as the engine's reader takes it: WAV and MP3 go as they are,
@@ -11811,32 +11859,138 @@ fn plans_from_result(content_type: &str, body: &[u8]) -> Result<Vec<ScorePlan>, 
     }).collect()
 }
 
+async fn score_at_work(state: &AppState) -> bool {
+    state.score_jobs.read().await.iter().any(|job| job.status == "running")
+}
+
+async fn start_score_on_engine(state: &AppState) -> Result<tokio::sync::OwnedRwLockReadGuard<()>, (StatusCode, Json<ApiError>)> {
+    let using = state.engine_use.clone().read_owned().await;
+    let preparing = state.prepare.lock().unwrap_or_else(std::sync::PoisonError::into_inner).as_ref().is_some_and(|job| !job.finished);
+    if preparing || state.training.active_run().await.is_some() {
+        return Err(api_error(StatusCode::CONFLICT, "the card is training or preparing songs; write the score once it is free".into()));
+    }
+    Ok(using)
+}
+
+/// Hold the engine's job table until we fetch and retain the terminal result, even when the client stops polling.
+async fn watch_score_job(state: AppState, id: String, using: tokio::sync::OwnedRwLockReadGuard<()>) -> ScoreJob {
+    let scores = state.score_jobs.clone();
+    let submitted = ScoreJob::running(id.clone());
+    track_engine_score(scores, submitted, using, async move {
+        let mut errors = 0;
+        let mut last_answer = std::time::Instant::now();
+        loop {
+            match tokio::time::timeout(std::time::Duration::from_secs(5), read_engine_score(&state.music_server, &id)).await {
+                Ok(Ok(job)) if job.status != "running" => break job,
+                Ok(Ok(_)) => {
+                    errors = 0;
+                    last_answer = std::time::Instant::now();
+                }
+                Ok(Err((StatusCode::NOT_FOUND | StatusCode::BAD_GATEWAY, error))) => break failed_score(&id, error),
+                result => {
+                    errors += 1;
+                    let alive = state.engine.try_lock().map_or(true, |mut engine| engine.as_mut().is_some_and(|engine| engine.process_alive()));
+                    if score_connection_lost(errors, alive, last_answer.elapsed()) {
+                        let error = match result {
+                            Ok(Err((_, error))) => error,
+                            _ => "The engine stopped answering while writing the score.".into(),
+                        };
+                        break failed_score(&id, error);
+                    }
+                }
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+        }
+    }).await
+}
+
+/// A responsive worker can run indefinitely. When HTTP stops answering, a
+/// live process gets a grace period before the score releases the restart lock.
+fn score_connection_lost(errors: u32, process_alive: bool, unanswered: std::time::Duration) -> bool {
+    errors >= 3 && (!process_alive || unanswered >= std::time::Duration::from_secs(30))
+}
+
+async fn track_engine_score(
+    scores: Arc<RwLock<std::collections::VecDeque<ScoreJob>>>,
+    submitted: ScoreJob,
+    using: tokio::sync::OwnedRwLockReadGuard<()>,
+    finish: impl std::future::Future<Output = ScoreJob> + Send + 'static,
+) -> ScoreJob {
+    scores.write().await.push_back(submitted.clone());
+    tokio::spawn(async move {
+        let mut finished = finish.await;
+        finished.finished_at = Some(std::time::Instant::now());
+        let mut jobs = scores.write().await;
+        jobs.retain(|job| job.id != finished.id && score_still_cached(job));
+        jobs.push_back(finished);
+        // Match the native engine's cache of 32 finished jobs; never evict a running score.
+        if jobs.iter().filter(|job| job.status != "running").count() > 32 {
+            if let Some(oldest) = jobs.iter().position(|job| job.status != "running") {
+                jobs.remove(oldest);
+            }
+        }
+        drop(jobs);
+        drop(using);
+    });
+    submitted
+}
+
+/// Keep scores for a late UI poll, including after the native engine restarts.
+const SCORE_CACHE_TTL: std::time::Duration = std::time::Duration::from_secs(30 * 60);
+
+fn score_still_cached(job: &ScoreJob) -> bool {
+    job.finished_at.is_none_or(|finished| finished.elapsed() < SCORE_CACHE_TTL)
+}
+
+fn failed_score(id: &str, error: String) -> ScoreJob {
+    ScoreJob { status: "failed".into(), error: Some(error), ..ScoreJob::running(id.into()) }
+}
+
+async fn read_engine_score(engine: &EngineClient, id: &str) -> Result<ScoreJob, (StatusCode, String)> {
+    let remote = engine.score_status(id).await.map_err(|error| (StatusCode::SERVICE_UNAVAILABLE, error.to_string()))?
+        .ok_or_else(|| (StatusCode::NOT_FOUND, "The engine lost this score job.".into()))?;
+    let mut job = ScoreJob { status: remote.status, ..ScoreJob::running(id.into()) };
+    match job.status.as_str() {
+        "done" => {
+            let result = engine.result(id).await.map_err(|error| (StatusCode::BAD_GATEWAY, error.to_string()))?;
+            let (abc, lm_seed) = score_from_result(&result.content_type, &result.body).map_err(|error| (StatusCode::BAD_GATEWAY, error))?;
+            job.abc = Some(abc);
+            job.lm_seed = lm_seed;
+            job.plans = plans_from_result(&result.content_type, &result.body).map_err(|error| (StatusCode::BAD_GATEWAY, error))?;
+        }
+        "failed" => job.error = Some(engine_failure_reason(id).map_or_else(|| "The engine could not write this score.".into(), |reason| reason.to_string())),
+        _ => {}
+    }
+    Ok(job)
+}
+
 async fn score_job_status(
     State(state): State<AppState>,
     Path(job_id): Path<String>,
 ) -> Result<Json<ScoreJob>, (StatusCode, Json<ApiError>)> {
-    let remote = state.music_server.job(&job_id).await.map_err(|error| api_error(StatusCode::SERVICE_UNAVAILABLE, error.to_string()))?;
-    let mut job = ScoreJob { status: remote.status.clone(), ..ScoreJob::running(job_id.clone()) };
-    match remote.status.as_str() {
-        "done" => {
-            let result = state.music_server.result(&job_id).await.map_err(|error| api_error(StatusCode::SERVICE_UNAVAILABLE, error.to_string()))?;
-            let (abc, lm_seed) = score_from_result(&result.content_type, &result.body).map_err(|error| api_error(StatusCode::BAD_GATEWAY, error))?;
-            job.abc = Some(abc);
-            job.lm_seed = lm_seed;
-            job.plans = plans_from_result(&result.content_type, &result.body).map_err(|error| api_error(StatusCode::BAD_GATEWAY, error))?;
-        }
-        "failed" => job.error = Some(engine_failure_reason(&job_id).map_or_else(|| "The engine could not write this score.".into(), |reason| reason.to_string())),
-        _ => {}
+    if let Some(job) = state.score_jobs.read().await.iter().find(|job| job.id == job_id && score_still_cached(job)).cloned() {
+        return Ok(Json(job));
     }
-    Ok(Json(job))
+    read_engine_score(&state.music_server, &job_id).await.map(Json).map_err(|(status, error)| api_error(status, error))
 }
 
 async fn cancel_score_job(
     State(state): State<AppState>,
     Path(job_id): Path<String>,
 ) -> Result<Json<ScoreJob>, (StatusCode, Json<ApiError>)> {
-    let remote = state.music_server.cancel(&job_id).await.map_err(|error| api_error(StatusCode::SERVICE_UNAVAILABLE, error.to_string()))?;
-    Ok(Json(ScoreJob { status: remote.status, ..ScoreJob::running(job_id) }))
+    if let Some(job) = state.score_jobs.read().await.iter().find(|job| job.id == job_id && job.status != "running" && score_still_cached(job)).cloned() {
+        return Ok(Json(job));
+    }
+    // Cancel only requests that the worker stop. Keep the lease until it actually reports a terminal status.
+    match state.music_server.cancel(&job_id).await {
+        Ok(remote) => Ok(Json(ScoreJob { status: remote.status, ..ScoreJob::running(job_id) })),
+        Err(error) => {
+            if let Some(job) = state.score_jobs.read().await.iter().find(|job| job.id == job_id && job.status != "running" && score_still_cached(job)).cloned() {
+                return Ok(Json(job));
+            }
+            Err(api_error(StatusCode::SERVICE_UNAVAILABLE, error.to_string()))
+        }
+    }
 }
 
 impl EngineClient {
@@ -11917,6 +12071,14 @@ impl EngineClient {
 
     async fn job(&self, job_id: &str) -> anyhow::Result<EngineJobResponse> {
         self.json_response(self.send(self.http.get(self.url("/job")).query(&[("id", job_id)]), true).await?).await
+    }
+
+    async fn score_status(&self, job_id: &str) -> anyhow::Result<Option<EngineJobResponse>> {
+        let response = self.send(self.http.get(self.url("/job")).query(&[("id", job_id)]), true).await?;
+        if response.status() == StatusCode::NOT_FOUND {
+            return Ok(None);
+        }
+        self.json_response(response).await.map(Some)
     }
 
     async fn cancel(&self, job_id: &str) -> anyhow::Result<EngineJobResponse> {
@@ -12474,7 +12636,7 @@ mod tests {
     fn separation_test_download(id: &str, done: bool, error: Option<&str>) -> downloads::DownloadProgress {
         downloads::DownloadProgress {
             asset_id: id.into(), scope: Some("separation".into()), downloaded_bytes: 42, total_bytes: 100,
-            done, error: error.map(str::to_owned),
+            done, error: error.map(str::to_owned), manual_archive: None,
         }
     }
 
@@ -12817,6 +12979,68 @@ mod tests {
         assert_eq!(extension_that_fits(10.0, 100.0, 400.0), None, "a refusal that leaves room for all of it is not this one");
     }
 
+    #[tokio::test]
+    async fn score_holds_engine_through_completion_or_acknowledged_cancellation() {
+        for terminal in ["done", "cancelled", "failed"] {
+            let engine = Arc::new(RwLock::new(()));
+            let scores = Arc::new(RwLock::new(std::collections::VecDeque::new()));
+            let (confirmed, worker) = tokio::sync::oneshot::channel();
+            let reply = track_engine_score(scores.clone(), ScoreJob::running("score".into()), engine.clone().read_owned().await, async move {
+                // Cancel accepts a request immediately, then acknowledges it after the native worker stops.
+                worker.await.unwrap()
+            }).await;
+            assert_eq!(reply.status, "running");
+            assert!(engine.try_write().is_err(), "restarting now would lose the engine's score ID");
+            // The window no longer owns the response and never polls the job.
+            drop(reply);
+            let abc = (terminal == "done").then(|| "X:1\nK:C\nC".to_string());
+            let job = if terminal == "failed" {
+                failed_score("score", "The engine stopped answering while writing the score.".into())
+            } else {
+                ScoreJob { status: terminal.into(), abc: abc.clone(), ..ScoreJob::running("score".into()) }
+            };
+            confirmed.send(job).unwrap();
+            let _restart = engine.write().await;
+            let jobs = scores.read().await;
+            assert_eq!(jobs[0].status, terminal);
+            assert_eq!(jobs[0].abc, abc, "the result is available before a restart can clear the native job table");
+            assert!(score_still_cached(&jobs[0]));
+            let mut expired = jobs[0].clone();
+            expired.finished_at = Some(std::time::Instant::now() - SCORE_CACHE_TTL);
+            assert!(!score_still_cached(&expired));
+        }
+    }
+
+    #[tokio::test]
+    async fn a_live_but_unresponsive_score_releases_the_engine_for_recovery() {
+        use std::time::Duration;
+
+        let engine = Arc::new(RwLock::new(()));
+        let scores = Arc::new(RwLock::new(std::collections::VecDeque::new()));
+        let (poll, mut worker) = tokio::sync::mpsc::channel::<(u32, Duration)>(4);
+        let (checked, mut decision) = tokio::sync::mpsc::channel(4);
+        track_engine_score(scores.clone(), ScoreJob::running("score".into()), engine.clone().read_owned().await, async move {
+            while let Some((errors, unanswered)) = worker.recv().await {
+                let lost = score_connection_lost(errors, true, unanswered);
+                checked.send(lost).await.unwrap();
+                if lost {
+                    return failed_score("score", "The engine stopped answering while writing the score.".into());
+                }
+            }
+            unreachable!("the fixture sends a sustained transport failure");
+        }).await;
+        for (errors, unanswered) in [(0, 0), (3, 29), (0, 0), (2, 10)] {
+            poll.send((errors, Duration::from_secs(unanswered))).await.unwrap();
+            assert_eq!(decision.recv().await, Some(false));
+            assert!(engine.try_write().is_err(), "a responsive worker or a short interruption must keep the lock");
+        }
+        poll.send((6, Duration::from_secs(30))).await.unwrap();
+        assert_eq!(decision.recv().await, Some(true));
+        let _restart = tokio::time::timeout(Duration::from_secs(1), engine.write()).await.unwrap();
+        assert_eq!(scores.read().await[0].status, "failed");
+        assert!(score_connection_lost(3, false, Duration::ZERO), "a dead process needs no grace period");
+    }
+
     /// Kept models go a while after the last song, once a spell; before the first song there is nothing to unload.
     #[test]
     fn kept_models_go_only_a_while_after_a_song() {
@@ -13030,13 +13254,17 @@ mod tests {
 
     #[test]
     fn a_chosen_card_that_is_not_there_is_said_not_left_to_the_processor() {
-        let cards = vec![(0, "NVIDIA GeForce RTX 4090".to_string(), 24.0)];
+        use hardware::GpuChoice::LegacyIndex;
+        let cards = vec![hardware::NvidiaCard {
+            index: 0, uuid: "GPU-00000000-0000-0000-0000-000000000001".into(),
+            name: "NVIDIA GeForce RTX 4090".into(), memory_gb: 24.0,
+        }];
         assert_eq!(missing_chosen_card(None, Some(&cards)), None);
-        assert_eq!(missing_chosen_card(Some(0), Some(&cards)), None);
-        let missing = missing_chosen_card(Some(1), Some(&cards)).expect("card 1 is not there");
+        assert_eq!(missing_chosen_card(Some(&LegacyIndex(0)), Some(&cards)), None);
+        let missing = missing_chosen_card(Some(&LegacyIndex(1)), Some(&cards)).expect("card 1 is not there");
         assert!(missing.contains("number 1") && missing.contains("0: NVIDIA GeForce RTX 4090"), "{missing}");
-        assert!(missing_chosen_card(Some(0), Some(&[])).expect("no card at all").contains("lists no NVIDIA card"));
-        assert_eq!(missing_chosen_card(Some(7), None), None, "nvidia-smi did not answer: the card is not called gone");
+        assert!(missing_chosen_card(Some(&LegacyIndex(0)), Some(&[])).expect("no card at all").contains("lists no NVIDIA card"));
+        assert_eq!(missing_chosen_card(Some(&LegacyIndex(7)), None), None, "nvidia-smi did not answer: the card is not called gone");
         assert_eq!(engine_failure_code(&missing), "chosen card not present");
     }
 

@@ -102,7 +102,7 @@ async fn report(state: &AppState) -> Value {
         "os": format!("{} ({})", sysinfo::System::long_os_version().or_else(|_| sysinfo::System::name()).unwrap_or_else(|_| std::env::consts::OS.to_string()), std::env::consts::ARCH),
         "gpu": gpu,
         // null: nvidia-smi did not answer
-        "cards": cards.map(|cards| cards.into_iter().map(|(index, name, vram_gb)| json!({ "index": index, "name": name, "vram_gb": vram_gb })).collect::<Vec<_>>()),
+        "cards": cards.map(|cards| cards.into_iter().map(|card| json!({ "index": card.index, "name": card.name, "vram_gb": card.memory_gb })).collect::<Vec<_>>()),
         "memory": { "ram_used_mb": resources.ram_used_mb, "ram_total_mb": resources.ram_total_mb, "vram": resources.gpus.iter().map(|gpu| json!({ "name": gpu.name, "used_mb": gpu.vram_used_mb, "total_mb": gpu.vram_total_mb })).collect::<Vec<_>>() },
         "engine_device": serde_json::to_value(*state.active_device.read().await).unwrap_or(Value::Null),
         "engine_options": serde_json::to_value(state.engine_options.read().await.clone()).unwrap_or(Value::Null),

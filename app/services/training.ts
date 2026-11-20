@@ -122,12 +122,12 @@ export interface TrainingState {
   trainer_driver?: number;
   /** What a song's style field holds for this engine: a short style, or a structured caption. */
   item_style: 'style' | 'caption';
-  download: { downloaded_bytes: number; total_bytes: number; done: boolean; error?: string | null } | null;
+  download: { downloaded_bytes: number; total_bytes: number; done: boolean; error?: string | null; manual_archive?: RuntimeArchive } | null;
   /** The optional pack that describes songs by ear. */
   listen?: {
     pack: PackFile[];
     ready: boolean;
-    download: { downloaded_bytes: number; total_bytes: number; done: boolean; error?: string | null } | null;
+    download: { downloaded_bytes: number; total_bytes: number; done: boolean; error?: string | null; manual_archive?: RuntimeArchive } | null;
   };
   /** The dataset preparation in progress or the last one. */
   prepare: PrepareStatus | null;
@@ -136,6 +136,7 @@ export interface TrainingState {
   active: string | null;
 }
 
+import type { RuntimeArchive } from '../components/ManualDownloads';
 import { SELF_READ } from './studioQueries';
 
 async function call<T>(url: string, init?: RequestInit): Promise<T> {

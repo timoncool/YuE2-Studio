@@ -13,7 +13,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-const SERVER_PORT: u16 = 8791;
+const SERVER_PORT: u16 = music_server::DEFAULT_STUDIO_PORT;
 const RELEASES_URL: &str = "https://github.com/timoncool/YuE2-Studio/releases/latest";
 const STUDIO_DATA_DIRECTORY: &str = "YuE2 Studio";
 
@@ -132,9 +132,33 @@ fn configure_studio_runtime_paths() {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ServiceReadiness {
+    NotListening,
+    YuE2,
+    UnknownListener,
+}
+
+fn service_readiness(port: u16) -> ServiceReadiness {
+    match service_call_at(port, "GET", "/health", Duration::from_secs(1)) {
+        Ok((200, body)) if is_yue2_health(&body) => ServiceReadiness::YuE2,
+        Err(false) => ServiceReadiness::NotListening,
+        _ => ServiceReadiness::UnknownListener,
+    }
+}
+
+fn is_yue2_health(body: &str) -> bool {
+    serde_json::from_str::<serde_json::Value>(body).is_ok_and(|health|
+        health["status"] == "ok" && health["runtime"] == "native" && health["music_engine"]["id"] == "yue2-cpp"
+    )
+}
+
 fn service_is_ready() -> bool {
-    let address = SocketAddrV4::new(Ipv4Addr::LOCALHOST, SERVER_PORT);
-    TcpStream::connect_timeout(&address.into(), Duration::from_millis(150)).is_ok()
+    service_readiness(SERVER_PORT) == ServiceReadiness::YuE2
+}
+
+fn occupied_service_port(port: u16) -> String {
+    format!("YuE2 Studio could not use 127.0.0.1:{port}. A process is listening there but is not responding as YuE2 Studio. Close the application using that port, then reopen YuE2 Studio.")
 }
 
 fn wait_until_ready(timeout: Duration) -> bool {
@@ -181,8 +205,10 @@ fn directory_is_writable(path: &std::path::Path) -> bool {
 /// closed. The service is started on its own runtime thread and the window
 /// only opens once it answers on loopback.
 fn start_service() -> Result<(), String> {
-    if service_is_ready() {
-        return Ok(());
+    match service_readiness(SERVER_PORT) {
+        ServiceReadiness::YuE2 => return Ok(()),
+        ServiceReadiness::UnknownListener => return Err(occupied_service_port(SERVER_PORT)),
+        ServiceReadiness::NotListening => {}
     }
 
     std::thread::Builder::new()
@@ -201,7 +227,7 @@ fn start_service() -> Result<(), String> {
             // except restarting the application.
             let deadline = Instant::now() + Duration::from_secs(20);
             loop {
-                match runtime.block_on(music_server::serve()) {
+                match runtime.block_on(music_server::serve_on_port(SERVER_PORT)) {
                     Ok(()) => return,
                     Err(error) if Instant::now() < deadline => {
                         eprintln!("studio service could not start yet: {error}");
@@ -219,25 +245,41 @@ fn start_service() -> Result<(), String> {
     if wait_until_ready(Duration::from_secs(30)) {
         Ok(())
     } else {
-        Err(format!("the studio service did not become ready on 127.0.0.1:{SERVER_PORT}"))
+        match service_readiness(SERVER_PORT) {
+            ServiceReadiness::YuE2 => Ok(()),
+            ServiceReadiness::UnknownListener => Err(occupied_service_port(SERVER_PORT)),
+            ServiceReadiness::NotListening => Err(format!("The studio service did not start on 127.0.0.1:{SERVER_PORT}.")),
+        }
     }
 }
 
 /// One request to the studio's own service: its body; `Err(true)` when it took
 /// the request and gave nothing readable back, `Err(false)` when nothing listens.
 fn service_call(method: &str, path: &str, wait: Duration) -> Result<String, bool> {
+    service_call_at(SERVER_PORT, method, path, wait).map(|(_, body)| body)
+}
+
+fn service_call_at(port: u16, method: &str, path: &str, wait: Duration) -> Result<(u16, String), bool> {
     use std::io::{Read, Write};
-    let address = SocketAddrV4::new(Ipv4Addr::LOCALHOST, SERVER_PORT);
+    let address = SocketAddrV4::new(Ipv4Addr::LOCALHOST, port);
     let Ok(mut stream) = TcpStream::connect_timeout(&address.into(), Duration::from_millis(500)) else {
         return Err(false);
     };
     let _ = stream.set_read_timeout(Some(wait));
-    let request = format!("{method} {path} HTTP/1.0\r\nHost: 127.0.0.1:{SERVER_PORT}\r\nContent-Length: 0\r\n\r\n");
+    let _ = stream.set_write_timeout(Some(wait));
+    let request = format!("{method} {path} HTTP/1.0\r\nHost: 127.0.0.1:{port}\r\nContent-Length: 0\r\n\r\n");
+    stream.write_all(request.as_bytes()).map_err(|_| true)?;
     let mut response = String::new();
-    if stream.write_all(request.as_bytes()).is_err() || stream.read_to_string(&mut response).is_err() {
-        return Err(true);
-    }
-    response.split("\r\n\r\n").nth(1).map(str::to_owned).ok_or(true)
+    let read = if path == "/health" {
+        stream.take(16 * 1024).read_to_string(&mut response)
+    } else {
+        stream.read_to_string(&mut response)
+    };
+    read.map_err(|_| true)?;
+    let (headers, body) = response.split_once("\r\n\r\n").ok_or(true)?;
+    let status = headers.lines().next().and_then(|line| line.split_whitespace().nth(1))
+        .and_then(|status| status.parse().ok()).ok_or(true)?;
+    Ok((status, body.to_owned()))
 }
 
 /// The songs queued or being made, by job id; `None` when the service could not say in `wait`.
@@ -1261,7 +1303,11 @@ pub fn run() {
         return;
     }
     if let Err(error) = start_service() {
-        eprintln!("failed to start the studio service: {error}");
+        music_server::studio_log!("failed to start the studio service: {error}");
+        if !launch.headless {
+            use tauri_plugin_dialog::{DialogExt, MessageDialogKind};
+            app.dialog().message(error).title("YuE2 Studio could not start").kind(MessageDialogKind::Error).show(|_| {});
+        }
     }
 
     app.run(|app, event| {
@@ -1314,6 +1360,38 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn readiness_recognizes_an_existing_yue2_service_and_rejects_other_listeners() {
+        use std::io::{BufRead, BufReader, Write};
+        use std::net::TcpListener;
+
+        for (status, body, expected) in [
+            ("200 OK", r#"{"status":"ok","runtime":"native","music_engine":{"id":"yue2-cpp","reachable":false}}"#, ServiceReadiness::YuE2),
+            ("200 OK", r#"{"status":"ok","runtime":"native","music_engine":{"id":"minimaxmusic-cpp"}}"#, ServiceReadiness::UnknownListener),
+            ("404 Not Found", "not a studio", ServiceReadiness::UnknownListener),
+        ] {
+            let listener = TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).unwrap();
+            let port = listener.local_addr().unwrap().port();
+            let peer = std::thread::spawn(move || {
+                let (mut stream, _) = listener.accept().unwrap();
+                let mut request = BufReader::new(&mut stream);
+                let mut line = String::new();
+                request.read_line(&mut line).unwrap();
+                assert_eq!(line, "GET /health HTTP/1.0\r\n");
+                loop {
+                    line.clear();
+                    if request.read_line(&mut line).unwrap() == 0 || line == "\r\n" { break; }
+                }
+                write!(stream, "HTTP/1.0 {status}\r\nContent-Length: {}\r\n\r\n{body}", body.len()).unwrap();
+            });
+            assert_eq!(service_readiness(port), expected);
+            peer.join().unwrap();
+        }
+        let message = occupied_service_port(SERVER_PORT);
+        assert!(message.contains(&format!("127.0.0.1:{SERVER_PORT}")));
+        assert!(message.contains("Close the application using that port"));
+    }
 
     #[test]
     fn the_close_button_hides_with_the_setting_on_or_for_the_agent_and_only_with_the_tray_there() {

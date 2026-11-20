@@ -10,6 +10,80 @@
   "version": 1,
   "adapters": [
     {
+      "id": "yue2-jpop-t4",
+      "engine": "yue2-cpp",
+      "kind": "style",
+      "author": "storagejuju",
+      "page": "https://huggingface.co/storagejuju/yue2-jpop-t4-lora",
+      "likes": 5,
+      "trigger": "jpstyle26",
+      "name": {
+        "en": "J-pop T4",
+        "ru": "J-pop T4",
+        "zh": "日系流行 T4",
+        "ja": "J-POP T4",
+        "ko": "J-pop T4",
+        "pt": "J-pop T4"
+      },
+      "description": {
+        "en": "Shapes the sound toward modern Japanese pop. Include jpstyle26 in the style description. Non-commercial use only (CC BY-NC 4.0).",
+        "ru": "Придаёт звучанию черты современной японской поп-музыки. Добавьте jpstyle26 в описание стиля. Только для некоммерческого использования (CC BY-NC 4.0).",
+        "zh": "让声音更接近现代日本流行音乐。在风格描述中加入 jpstyle26。仅限非商业用途（CC BY-NC 4.0）。",
+        "ja": "現代のJ-POPらしいサウンドに寄せます。スタイルの説明に jpstyle26 を入れてください。非商用利用のみ（CC BY-NC 4.0）。",
+        "ko": "현대 일본 팝에 가까운 사운드를 만듭니다. 스타일 설명에 jpstyle26을 넣으세요. 비상업적 용도로만 사용할 수 있습니다(CC BY-NC 4.0).",
+        "pt": "Aproxima o som do pop japonês moderno. Inclua jpstyle26 na descrição do estilo. Apenas para uso não comercial (CC BY-NC 4.0)."
+      },
+      "scales": {
+        "nar": 1
+      },
+      "files": [
+        {
+          "url": "https://huggingface.co/storagejuju/yue2-jpop-t4-lora/resolve/16c181c15cf7d06b1b570a149624b1e78724baa6/yue2_jpop_t4.safetensors",
+          "file": "yue2_jpop_t4.safetensors",
+          "bytes": 106474864
+        }
+      ]
+    },
+    {
+      "id": "yue2-ethio-music",
+      "engine": "yue2-cpp",
+      "kind": "composition",
+      "author": "Behailut",
+      "page": "https://huggingface.co/Behailut/Ethio-Music-YuE2",
+      "likes": 3,
+      "name": {
+        "en": "Ethiopian Music",
+        "ru": "Эфиопская музыка",
+        "zh": "埃塞俄比亚音乐",
+        "ja": "エチオピア音楽",
+        "ko": "에티오피아 음악",
+        "pt": "Música etíope"
+      },
+      "description": {
+        "en": "Ethiopian kiñit modes, rhythms in 6/8 and 4/4, and Amharic lyrics. Use a kiñit ABC score and name its scale degrees in the style description. Non-commercial use only (CC BY-NC 4.0).",
+        "ru": "Эфиопские лады kiñit, ритмы 6/8 и 4/4 и тексты на амхарском. Используйте ABC-партитуру в выбранном ладу и укажите его ступени в описании стиля. Только для некоммерческого использования (CC BY-NC 4.0).",
+        "zh": "支持埃塞俄比亚 kiñit 调式、6/8 和 4/4 节奏及阿姆哈拉语歌词。请使用对应调式的 ABC 乐谱，并在风格描述中注明音阶级数。仅限非商业用途（CC BY-NC 4.0）。",
+        "ja": "エチオピアのkiñit旋法、6/8拍子と4/4拍子、アムハラ語の歌詞に対応します。kiñitのABC楽譜を使い、スタイルの説明に音階の度数を記載してください。非商用利用のみ（CC BY-NC 4.0）。",
+        "ko": "에티오피아 kiñit 선법, 6/8과 4/4 리듬, 암하라어 가사를 지원합니다. kiñit ABC 악보를 사용하고 스타일 설명에 음계의 도수를 적으세요. 비상업적 용도로만 사용할 수 있습니다(CC BY-NC 4.0).",
+        "pt": "Modos kiñit etíopes, ritmos em 6/8 e 4/4 e letras em amárico. Use uma partitura ABC no modo kiñit e indique os graus da escala na descrição do estilo. Apenas para uso não comercial (CC BY-NC 4.0)."
+      },
+      "scales": {
+        "ar": 1
+      },
+      "files": [
+        {
+          "url": "https://huggingface.co/Behailut/Ethio-Music-YuE2/resolve/941d9d0da9a59dc6d2896f5b1aadddabec37d2ee/ethio-music-yue2-ar-lora-r64.safetensors",
+          "file": "ethio-music-yue2-ar-lora-r64.safetensors",
+          "bytes": 278962344
+        },
+        {
+          "url": "https://huggingface.co/Behailut/Ethio-Music-YuE2/resolve/941d9d0da9a59dc6d2896f5b1aadddabec37d2ee/adapter_config.json",
+          "file": "adapter_config.json",
+          "bytes": 1144
+        }
+      ]
+    },
+    {
       "id": "yue2-instrumental",
       "engine": "yue2-cpp",
       "kind": "composition",

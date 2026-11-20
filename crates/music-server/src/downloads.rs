@@ -97,6 +97,14 @@ pub struct DownloadProgress {
     pub total_bytes: u64,
     pub done: bool,
     pub error: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub manual_archive: Option<ManualArchive>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct ManualArchive {
+    url: &'static str,
+    path: PathBuf,
 }
 
 /// Owns one capability's download directory.
@@ -439,6 +447,7 @@ impl Downloader {
             total_bytes: 0,
             done: true,
             error: None,
+            manual_archive: None,
         });
         failed.done = true;
         failed.error = Some(error);
@@ -477,7 +486,7 @@ impl Downloader {
         let asset_id = if pending.len() == 1 { pending[0].id.to_string() } else { SET.to_string() };
         // the panel learns the outcome of a set from here alone
         if let Err(error) = pending.iter().try_for_each(|asset| refuse_foreign_runtime(asset)) {
-            *progress = Some(DownloadProgress { asset_id, scope: Some(scope.to_string()), downloaded_bytes: 0, total_bytes: total, done: true, error: Some(error.to_string()) });
+            *progress = Some(DownloadProgress { asset_id, scope: Some(scope.to_string()), downloaded_bytes: 0, total_bytes: total, done: true, error: Some(error.to_string()), manual_archive: None });
             return Err(error);
         }
         *progress = Some(DownloadProgress {
@@ -487,11 +496,13 @@ impl Downloader {
             total_bytes: total,
             done: false,
             error: None,
+            manual_archive: None,
         });
         drop(progress);
 
         let mut finished = 0u64;
         let mut failure = None;
+        let mut manual_archive = None;
         for batch in pending.chunks(AT_ONCE) {
             // One cell per download, summed by the reporter below: four
             // downloads writing to one counter is what made the bar jump
@@ -506,6 +517,7 @@ impl Downloader {
                         total_bytes: asset.bytes,
                         done: false,
                         error: None,
+                        manual_archive: None,
                     })))
                 })
                 .collect();
@@ -514,7 +526,8 @@ impl Downloader {
                 futures_util::future::join_all(batch.iter().zip(&cells).map(|(asset, cell)| self.fetch_now(asset, cell))).await;
             reporter.abort();
             finished += batch.iter().map(|asset| asset.bytes).sum::<u64>();
-            if let Some(error) = outcomes.into_iter().find_map(Result::err) {
+            if let Some((asset, error)) = batch.iter().zip(outcomes).find_map(|(asset, result)| result.err().map(|error| (*asset, error))) {
+                manual_archive = manual_archive_hint(asset, &self.path_of(asset), &error);
                 failure = Some(error);
                 break;
             }
@@ -534,6 +547,7 @@ impl Downloader {
         if let Some(active) = self.progress.lock().await.as_mut() {
             active.done = true;
             active.error = outcome.as_ref().err().map(|error| error.to_string());
+            active.manual_archive = manual_archive.filter(|_| !self.cancel.load(std::sync::atomic::Ordering::Relaxed));
             if outcome.is_ok() {
                 active.downloaded_bytes = total;
             }
@@ -568,6 +582,7 @@ impl Downloader {
     /// given rather than the downloader's own, because several of these run at
     /// the same time.
     async fn fetch_now(&self, asset: &'static Asset, cell: &Arc<Mutex<Option<DownloadProgress>>>) -> Result<()> {
+        let target = self.path_of(asset);
         let record = self.record_of(asset);
         if !asset.pick.is_empty() {
             // The whole archive over the resumable downloader, then the wanted
@@ -578,12 +593,11 @@ impl Downloader {
             // minute timeout. NVIDIA's cuBLAS archive is almost all the two
             // libraries anyway - nineteen megabytes of difference bought a
             // download that survives a bad line.
-            let (sha256, files) = download_and_extract_named(&self.http, asset, &self.picked_into(asset), cell, self.cancel.clone(), &record, &self.root).await?;
+            let (sha256, files) = download_and_extract_named(&self.http, asset, &target, &self.picked_into(asset), cell, self.cancel.clone(), &record, &self.root).await?;
             make_programs_executable(asset.marker, &files)?;
             return crate::install_record::write(&record, asset.url, &sha256, &files, &self.root);
         }
-        let target = self.path_of(asset);
-        fetch(&self.http, asset, &target, cell, self.cancel.clone()).await?;
+        let target = fetch(&self.http, asset, &target, cell, self.cancel.clone()).await?;
         settle_apart(asset, target, record, self.root.clone(), asset.unzip_into.map(|flavour| self.runtime_dir(flavour))).await
     }
 
@@ -603,6 +617,7 @@ impl Downloader {
                 total_bytes: asset.bytes,
                 done: false,
                 error: None,
+                manual_archive: None,
             });
         }
 
@@ -624,7 +639,7 @@ impl Downloader {
                     Some(flavour) => runtime_root.join(flavour),
                     None => root.clone(),
                 };
-                let outcome = download_and_extract_named(&http, asset, &destination, &progress, cancel, &record, &root)
+                let outcome = download_and_extract_named(&http, asset, &target, &destination, &progress, cancel, &record, &root)
                     .await
                     .and_then(|(sha256, files)| {
                         make_programs_executable(asset.marker, &files)?;
@@ -633,19 +648,22 @@ impl Downloader {
                 let mut guard = progress.lock().await;
                 if let Some(active) = guard.as_mut() {
                     active.done = true;
+                    active.manual_archive = outcome.as_ref().err().and_then(|error| manual_archive_hint(asset, &target, error));
                     active.error = outcome.err().map(|error| error.to_string());
                 }
                 return;
             }
             let outcome = match fetch(&http, asset, &target, &progress, cancel).await {
-                Ok(()) => settle_apart(asset, target, record, root, asset.unzip_into.map(|flavour| runtime_root.join(flavour))).await,
+                Ok(archive) => settle_apart(asset, archive, record, root, asset.unzip_into.map(|flavour| runtime_root.join(flavour))).await,
                 Err(error) => Err(error),
             };
             let mut guard = progress.lock().await;
+            let manual_archive = outcome.as_ref().err().and_then(|error| manual_archive_hint(asset, &target, error));
             let error = outcome.err().map(|error| error.to_string());
             if let Some(active) = guard.as_mut() {
                 active.done = true;
                 active.error = error;
+                active.manual_archive = manual_archive;
             }
         });
         Ok(())
@@ -658,12 +676,17 @@ async fn fetch(
     target: &Path,
     progress: &Arc<Mutex<Option<DownloadProgress>>>,
     cancel: Arc<std::sync::atomic::AtomicBool>,
-) -> Result<()> {
+) -> Result<PathBuf> {
     if let Some(parent) = target.parent() {
         fs::create_dir_all(parent).with_context(|| format!("create {}", parent.display()))?;
     }
     if holds_todays(asset.kind == AssetKind::Model, asset.url, target).await {
-        return Ok(());
+        return Ok(target.to_path_buf());
+    }
+    if let Some(archive) = release_archive_alias(asset, target).filter(|path| path.is_file()) {
+        let (url, local) = (asset.url, archive.clone());
+        tokio::task::spawn_blocking(move || check_staged_archive(url, &local)).await??;
+        return Ok(archive);
     }
     // an earlier pin's file of this name waits beside it, and comes back when today's does not arrive
     let earlier = PathBuf::from(format!("{}.earlier", target.display()));
@@ -687,7 +710,42 @@ async fn fetch(
             }
         }
     }
-    outcome
+    outcome.map(|()| target.to_path_buf())
+}
+
+/// Recognize an archive saved under its release filename beside the studio's download path.
+fn release_archive_alias(asset: &Asset, target: &Path) -> Option<PathBuf> {
+    if asset.kind != AssetKind::Runtime || (asset.unzip_into.is_none() && asset.pick.is_empty()) || crate::pin_sha::sha256(asset.url).is_none() {
+        return None;
+    }
+    let filename = asset.url.rsplit('/').next()?;
+    if ![".zip", ".tar.gz", ".tar.xz", ".whl"].iter().any(|suffix| filename.ends_with(suffix)) {
+        return None;
+    }
+    let alias = target.with_file_name(filename);
+    (alias != target).then_some(alias)
+}
+
+fn manual_archive_hint(asset: &Asset, target: &Path, error: &anyhow::Error) -> Option<ManualArchive> {
+    if !asset.is_windows_runtime()
+        || !asset.url.starts_with("https://")
+        || !asset.url.ends_with(".zip")
+        || (asset.unzip_into.is_none() && asset.pick.is_empty())
+        || crate::pin_sha::sha256(asset.url).is_none()
+        || !matches!(failure_code(error), "network" | "proxy" | "http_status" | "rate_limited")
+    {
+        return None;
+    }
+    let path = release_archive_alias(asset, target).unwrap_or_else(|| target.to_path_buf());
+    Some(ManualArchive { url: asset.url, path })
+}
+
+fn check_staged_archive(url: &str, archive: &Path) -> Result<String> {
+    let sha256 = crate::install_record::sha256_of(archive)?;
+    if crate::pin_sha::sha256(url) != Some(sha256.as_str()) {
+        bail!("{} does not match the SHA-256 of the archive for this version: {url}", archive.display());
+    }
+    Ok(sha256)
 }
 
 /// `fetch` once nothing lies at `target`: from another program that has the file, or downloaded into `.part`.
@@ -802,6 +860,7 @@ pub(crate) fn taken_all() -> std::collections::BTreeMap<String, Taken> {
 async fn download_and_extract_named(
     http: &reqwest::Client,
     asset: &'static Asset,
+    target: &Path,
     destination: &Path,
     progress: &Arc<Mutex<Option<DownloadProgress>>>,
     cancel: Arc<std::sync::atomic::AtomicBool>,
@@ -809,35 +868,50 @@ async fn download_and_extract_named(
     root: &Path,
 ) -> Result<(String, Vec<PathBuf>)> {
     fs::create_dir_all(destination).with_context(|| format!("create {}", destination.display()))?;
-    let archive = destination.join(format!("{}.part-archive", asset.id));
-    let url = crate::net::model_url(asset.url);
-    let (plan, url) = crate::chunked::probe(http, &url).await?;
-    let written = Arc::new(std::sync::atomic::AtomicU64::new(0));
-    let reporter = {
-        let (written, progress) = (written.clone(), progress.clone());
-        tokio::spawn(async move {
-            loop {
-                let value = written.load(std::sync::atomic::Ordering::Relaxed);
-                if let Some(active) = progress.lock().await.as_mut() {
-                    active.downloaded_bytes = value;
+    let alias = release_archive_alias(asset, target).filter(|path| path.is_file());
+    let target = if target.is_file() { target } else { alias.as_deref().unwrap_or(target) };
+    let staged = target.is_file() && crate::pin_sha::sha256(asset.url).is_some();
+    let archive = if staged {
+        target.to_path_buf()
+    } else {
+        let archive = destination.join(format!("{}.part-archive", asset.id));
+        let url = crate::net::model_url(asset.url);
+        let mirror = crate::engine_runtime::archive_mirror(asset.url);
+        let (plan, url) = crate::chunked::probe_with_mirror(http, &url, mirror).await?;
+        let written = Arc::new(std::sync::atomic::AtomicU64::new(0));
+        let reporter = {
+            let (written, progress) = (written.clone(), progress.clone());
+            tokio::spawn(async move {
+                loop {
+                    let value = written.load(std::sync::atomic::Ordering::Relaxed);
+                    if let Some(active) = progress.lock().await.as_mut() {
+                        active.downloaded_bytes = value;
+                    }
+                    tokio::time::sleep(std::time::Duration::from_millis(300)).await;
                 }
-                tokio::time::sleep(std::time::Duration::from_millis(300)).await;
-            }
-        })
+            })
+        };
+        let outcome = crate::chunked::fetch(http, &url, &archive, plan, written, cancel).await;
+        reporter.abort();
+        outcome?;
+        archive
     };
-    let outcome = crate::chunked::fetch(http, &url, &archive, plan, written, cancel).await;
-    reporter.abort();
-    outcome?;
     let (archive_path, wanted, destination, pinned) = (archive.clone(), asset.pick, destination.to_path_buf(), asset.url);
     let (record, root) = (record.to_path_buf(), root.to_path_buf());
     let extracted = tokio::task::spawn_blocking(move || -> Result<(String, Vec<PathBuf>)> {
-        let sha256 = crate::pin_sha::check(pinned, &archive_path)?;
+        let sha256 = if staged {
+            check_staged_archive(pinned, &archive_path)?
+        } else {
+            crate::pin_sha::check(pinned, &archive_path)?
+        };
         replace_earlier(&record, &root, &archive_path)?;
         Ok((sha256, extract_named_local(&archive_path, wanted, &destination)?))
     })
     .await
     .map_err(|error| anyhow::anyhow!("extraction task failed: {error}"))?;
-    fs::remove_file(&archive).ok();
+    if !staged {
+        fs::remove_file(&archive).ok();
+    }
     extracted
 }
 
@@ -1312,6 +1386,21 @@ mod tests {
         fs::remove_dir_all(&root).ok();
     }
 
+    #[cfg(windows)]
+    #[test]
+    fn only_network_failures_of_supported_zip_assets_offer_manual_install() {
+        let root = tempfile::tempdir().unwrap();
+        let sync = crate::lyrics_sync::LyricsSync::new(root.path());
+        let transcribe = crate::lyrics_sync::asset("transcribe-engine").unwrap();
+        let target = sync.downloader().path_of(transcribe);
+        let certificate = anyhow::anyhow!("could not start {}: invalid certificate", transcribe.url);
+        let hint = manual_archive_hint(transcribe, &target, &certificate).unwrap();
+        assert_eq!(hint.url, transcribe.url);
+        assert_eq!(hint.path, root.path().join("karaoke/runtime/transcribe-windows-cuda13-x64.zip"));
+        assert!(manual_archive_hint(transcribe, &target, &anyhow::anyhow!("extraction failed")).is_none());
+        assert!(manual_archive_hint(&asset(), &target, &certificate).is_none());
+    }
+
     /// A download that does not arrive leaves an earlier pin's file where it was, and one that arrives takes its
     /// place; a runtime whose file already holds today's pin by its hash is not fetched again.
     #[tokio::test]
@@ -1329,6 +1418,57 @@ mod tests {
         assert!(!holds_todays(false, runtime.url, &file).await, "an unpinned runtime is never taken as today's by its name");
         assert!(holds_todays(true, runtime.url, &file).await, "a model counts by its file");
         fs::remove_dir_all(&root).ok();
+    }
+
+    #[cfg(windows)]
+    #[tokio::test]
+    async fn a_wrong_manually_placed_runtime_archive_is_rejected_before_download() {
+        let root = tempfile::tempdir().unwrap();
+        let sync = crate::lyrics_sync::LyricsSync::new(root.path());
+        let transcribe = crate::lyrics_sync::asset("transcribe-engine").unwrap();
+        let target = sync.downloader().path_of(transcribe);
+        let placed = target.with_file_name("transcribe-windows-cuda13-x64.zip");
+        fs::create_dir_all(placed.parent().unwrap()).unwrap();
+        fs::write(&placed, b"archive from another release").unwrap();
+        let error = sync.downloader().install_all("karaoke", &[transcribe]).await.unwrap_err();
+        assert!(format!("{error:#}").contains("does not match the SHA-256"));
+        assert!(placed.is_file());
+        assert!(!sync.downloader().is_installed(transcribe));
+
+        let training = crate::training::Training::new(root.path(), "yue2");
+        let caption = crate::training::listen_pack().iter().find(|asset| asset.id == "ace-caption").unwrap();
+        let placed = training.downloader().path_of(caption);
+        fs::create_dir_all(placed.parent().unwrap()).unwrap();
+        fs::write(&placed, b"archive from another release").unwrap();
+        let error = training.downloader().install_all("listen", &[caption]).await.unwrap_err();
+        assert!(format!("{error:#}").contains("does not match the SHA-256"));
+        assert!(placed.is_file());
+        assert!(!training.downloader().is_installed(caption));
+    }
+
+    #[cfg(windows)]
+    #[tokio::test]
+    #[ignore = "needs the three pinned Windows ZIPs under YUE2_MANUAL_ARCHIVES"]
+    async fn the_three_published_windows_archives_install_from_disk() {
+        let fixtures = PathBuf::from(std::env::var_os("YUE2_MANUAL_ARCHIVES").expect("archive fixture folder"));
+        let root = tempfile::tempdir().unwrap();
+        let sync = crate::lyrics_sync::LyricsSync::new(root.path());
+        let training = crate::training::Training::new(root.path(), "yue2");
+        let caption = crate::training::listen_pack().iter().find(|asset| asset.id == "ace-caption").unwrap();
+        let trainer = crate::training::pack().iter().find(|asset| asset.id == "music-train").unwrap();
+        let transcribe = crate::lyrics_sync::asset("transcribe-engine").unwrap();
+        for (downloader, asset) in [(sync.downloader(), transcribe), (training.downloader(), caption), (training.downloader(), trainer)] {
+            let name = asset.url.rsplit('/').next().unwrap();
+            let placed = downloader.path_of(asset).with_file_name(name);
+            fs::create_dir_all(placed.parent().unwrap()).unwrap();
+            fs::copy(fixtures.join(name), placed).unwrap();
+            assert!(!downloader.is_installed(asset));
+            downloader.install_all("manual-archive", &[asset]).await.unwrap();
+            assert!(downloader.is_installed(asset));
+            let record = crate::install_record::read(&downloader.record_of(asset)).unwrap();
+            assert_eq!(record.url, asset.url);
+            assert_eq!(Some(record.sha256.as_str()), crate::pin_sha::sha256(asset.url));
+        }
     }
 
     /// An install cut off after the archive's key file was unpacked and before

@@ -30,7 +30,7 @@ function deferred<T>() {
   return { promise, resolve };
 }
 
-async function mount(ready = false, modelInstalled = true, withSet = true) {
+async function mount(ready = false, modelInstalled = true, withSet = true, pack?: Record<string, unknown>) {
   calls = [];
   install = async () => response({ started: true });
   save = async () => response({});
@@ -43,6 +43,7 @@ async function mount(ready = false, modelInstalled = true, withSet = true) {
       { id: 'native-runtime', label: 'Native runtime', kind: 'runtime', bytes: 10, installed: false },
     ],
     ...(withSet ? { set: { ready } } : {}),
+    ...pack,
   };
   vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
     calls.push({ url, init });
@@ -86,6 +87,33 @@ afterEach(() => {
 });
 
 describe('optional capability readiness', () => {
+  it('keeps the network error and shows the pinned archive and its exact local path', async () => {
+    const url = 'https://github.com/timoncool/transcribe.cpp/releases/download/engine-0.2.1/transcribe-windows-cuda13-x64.zip';
+    const path = 'D:\\Studio Data\\karaoke\\runtime\\transcribe-windows-cuda13-x64.zip';
+    const error = 'Connection failed: invalid certificate';
+    await mount(false, true, true, {
+      active_download: { done: true, error, manual_archive: { url, path } },
+    });
+    expect(host.textContent).toContain(error);
+    expect(host.textContent).toContain(path);
+    expect(host.textContent).toContain('manualRuntimeHint');
+    expect(host.querySelector('a[href="' + url + '"]')).not.toBeNull();
+    expect(button('download')).not.toBeNull();
+  });
+  it('shows only the captioner download size when MOSS weights already exist', async () => {
+    const weights = 5_188_223_648;
+    const captioner = 4_268_241;
+    await mount(false, true, true, {
+      assets: [
+        { id: 'moss-lm-q4', label: 'MOSS-Music 8B', kind: 'runtime', bytes: weights, installed: true },
+        { id: 'ace-caption', label: 'Captioner', kind: 'runtime', bytes: captioner, installed: false },
+      ],
+      set: { bytes: weights + captioner, installed_bytes: weights, ready: false, files: 2 },
+    });
+    expect(host.textContent).toContain('download · 4 MB');
+    expect(host.textContent).not.toContain('4.8 GB');
+  });
+
   it('does not mistake installed weights for a usable native runtime', async () => {
     await mount();
     expectReady(false);

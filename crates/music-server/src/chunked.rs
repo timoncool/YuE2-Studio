@@ -355,12 +355,24 @@ async fn probe_once(http: &reqwest::Client, url: &str) -> Result<(Plan, String)>
         }
     }
     if response.status().is_client_error() {
-        return Err(Refused(format!("{url} answered {}", response.status())).into());
+        return Err(Refused { status: response.status(), url: url.to_owned() }.into());
     }
     if !response.status().is_success() {
         bail!("{url} answered {}", response.status());
     }
     Ok((Plan { total: response.content_length().unwrap_or(0), ranged: false }, resolved))
+}
+
+/// Retry a forbidden origin on an explicitly configured mirror.
+pub(crate) async fn probe_with_mirror(http: &reqwest::Client, url: &str, mirror: Option<&str>) -> Result<(Plan, String)> {
+    match (probe(http, url).await, mirror) {
+        (Err(error), Some(mirror))
+            if error.downcast_ref::<Refused>().is_some_and(|refused| refused.status == reqwest::StatusCode::FORBIDDEN) =>
+        {
+            probe(http, mirror).await.with_context(|| format!("primary download failed: {error:#}"))
+        }
+        (result, _) => result,
+    }
 }
 
 /// A signed address ran out under a piece: the first piece to meet it resolves
@@ -379,11 +391,14 @@ async fn refresh(http: &reqwest::Client, current: &tokio::sync::Mutex<String>, f
 
 /// A server that said no (a 4xx; "too many requests" is waited out in `send`): asking again gets the same answer.
 #[derive(Debug)]
-struct Refused(String);
+struct Refused {
+    status: reqwest::StatusCode,
+    url: String,
+}
 
 impl std::fmt::Display for Refused {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(&self.0)
+        write!(f, "{} answered {}", self.url, self.status)
     }
 }
 
@@ -911,6 +926,30 @@ mod tests {
 
     fn body_of(length: usize) -> Arc<Vec<u8>> {
         Arc::new((0..length).map(|i| (i * 31 + i / 7) as u8).collect())
+    }
+
+    #[tokio::test]
+    async fn only_a_forbidden_origin_uses_the_configured_mirror() {
+        let app = axum::Router::new()
+            .route("/forbidden", axum::routing::get(|| async { reqwest::StatusCode::FORBIDDEN }))
+            .route("/missing", axum::routing::get(|| async { reqwest::StatusCode::NOT_FOUND }));
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        tokio::spawn(async move { axum::serve(listener, app).await.ok() });
+        let http = reqwest::Client::builder().no_proxy().build().unwrap();
+        let body = body_of(12_345);
+        let (mirror, requests) = hub_with_cdn(body, None).await;
+        let forbidden = format!("http://{address}/forbidden");
+        let missing = format!("http://{address}/missing");
+
+        assert!(probe_with_mirror(&http, &forbidden, None).await.unwrap_err().is::<Refused>());
+        assert!(probe_with_mirror(&http, &missing, Some(&mirror)).await.unwrap_err().is::<Refused>());
+        assert_eq!(requests.load(Ordering::SeqCst), 0);
+
+        let (plan, resolved) = probe_with_mirror(&http, &forbidden, Some(&mirror)).await.unwrap();
+        assert!(plan.ranged && plan.total == 12_345);
+        assert!(resolved.contains("/cdn/model.gguf?token=1"), "{resolved}");
+        assert_eq!(requests.load(Ordering::SeqCst), 1);
     }
 
     /// #249: a file is one request to `/resolve/`; its pieces come from the address the redirect led to.

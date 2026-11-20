@@ -77,8 +77,8 @@ interface EngineOptions {
   flash_attention: FlashAttention;
   kv_cache: KvCache;
   clamp_fp16: boolean;
-  /** The NVIDIA card by nvidia-smi index; null: the first. Taken at the studio's start. */
-  gpu?: number | null;
+  /** NVIDIA GPU UUID, or a legacy nvidia-smi index. Applied at studio startup. */
+  gpu?: string | number | null;
   /** Any other launch flag, as one line. It reaches the engine after the flags above. */
   extra_args: string;
   /** A hand-built engine (yue2.cpp) to run instead of the bundled one; null: the bundled engine. */
@@ -213,7 +213,7 @@ export const EngineSettings: React.FC = () => {
       const response = await fetch('/engine/options', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(options),
+        body: JSON.stringify({ ...options, gpu: selectedCard?.uuid ?? options.gpu }),
       });
       const body = await response.json().catch(() => null);
       if (!response.ok) throw new Error(body?.error || `Saving the engine options failed (${response.status})`);
@@ -261,12 +261,16 @@ export const EngineSettings: React.FC = () => {
   };
 
   // With two cards or more, which one the studio computes on
-  const [cards, setCards] = useState<{ cards: { index: number; name: string; memory_gb: number }[] | null; running: number | null } | null>(null);
+  const [cards, setCards] = useState<{ cards: { index: number; uuid: string; name: string; memory_gb: number }[] | null; running: number | null; running_uuid?: string | null } | null>(null);
   useEffect(() => {
     void fetch('/v1/system/gpus', { headers: SELF_READ }).then(response => (response.ok ? response.json() : null)).then(setCards).catch(() => undefined);
   }, []);
-  const runningCard = cards?.running ?? null;
-  const chosenCard = options.gpu ?? null;
+  const cardIdentity = (value?: string | number | null) =>
+    typeof value === 'number' ? cards?.cards?.find(card => card.index === value)?.uuid ?? String(value) : value ?? null;
+  const runningCard = cards?.running_uuid ?? cardIdentity(cards?.running);
+  const chosenCard = cardIdentity(options.gpu);
+  const selectedCard = cards?.cards?.find(card => card.uuid === chosenCard);
+  const cardMissing = chosenCard !== null && !selectedCard;
 
   const numberField = (key: NumberKey, label: string, placeholder: string, hint: string, min: number, max: number, step: number) => (
     <label className="block text-xs font-medium text-zinc-600 dark:text-zinc-300">
@@ -320,19 +324,19 @@ export const EngineSettings: React.FC = () => {
         {setup?.engine_on_processor && <span className="mt-2 block text-xs leading-5 text-amber-700 dark:text-amber-300">{tt('engineOnProcessorHint')}</span>}
       </div>
 
-      {cards?.cards && (cards.cards.length > 1 || (chosenCard !== null && !cards.cards.some(card => card.index === chosenCard))) && (
+      {cards?.cards && (cards.cards.length > 1 || cardMissing) && (
         <label className="block rounded-xl border border-zinc-200 p-3 dark:border-white/10">
           <span className="block text-sm font-medium text-zinc-800 dark:text-zinc-100">{t('gpuChoice')}</span>
           <select
             value={chosenCard === null ? '' : String(chosenCard)}
-            onChange={event => setOptions(current => ({ ...current, gpu: event.target.value === '' ? null : Number(event.target.value) }))}
+            onChange={event => setOptions(current => ({ ...current, gpu: event.target.value || null }))}
             className={`${CONTROL} mt-2`}
           >
             <option value="">{t('gpuChoiceFirst')}</option>
-            {chosenCard !== null && !cards.cards.some(card => card.index === chosenCard) && <option value={String(chosenCard)}>{t('gpuChoiceMissing').replace('{index}', String(chosenCard))}</option>}
-            {cards.cards.map(card => <option key={card.index} value={card.index}>{`${card.index}: ${card.name} · ${card.memory_gb.toFixed(0)} GB`}</option>)}
+            {cardMissing && <option value={String(chosenCard)}>{t('gpuChoiceMissing').replace('{index}', String(chosenCard))}</option>}
+            {cards.cards.map(card => <option key={card.uuid} value={card.uuid}>{`${card.index}: ${card.name} · ${card.memory_gb.toFixed(0)} GB`}</option>)}
           </select>
-          {chosenCard !== null && !cards.cards.some(card => card.index === chosenCard) ? (
+          {cardMissing ? (
             <span className="mt-2 block text-xs leading-5 text-amber-600 dark:text-amber-300">{t('gpuChoiceGone').replace('{index}', String(chosenCard))}</span>
           ) : (
             <span className="mt-2 block text-xs leading-5 text-zinc-500 dark:text-zinc-400">

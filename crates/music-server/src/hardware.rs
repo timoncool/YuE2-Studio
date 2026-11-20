@@ -5,7 +5,7 @@
 use std::path::PathBuf;
 use std::{process::Command, sync::OnceLock};
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use sysinfo::System;
 
 /// Bytes in the gigabyte memory is counted in: a "32 GB" computer has 32 × 2³⁰ bytes, not 32 × 10⁹.
@@ -252,12 +252,46 @@ fn quiet(program: &str) -> Command {
     command
 }
 
-/// The card the studio was pointed at (`apply_saved_gpu`), as nvidia-smi's
-/// `-i` takes it: the same PCI order CUDA_DEVICE_ORDER=PCI_BUS_ID gives CUDA.
+/// The explicitly selected device, as nvidia-smi's -i takes it.
 pub(crate) fn chosen_card() -> Vec<String> {
-    match std::env::var("CUDA_VISIBLE_DEVICES").ok().and_then(|value| value.trim().parse::<u32>().ok()) {
-        Some(index) => vec!["-i".into(), index.to_string()],
-        None => Vec::new(),
+    cuda_visible_device()
+        .map_or_else(Vec::new, |device| vec!["-i".into(), device])
+}
+
+pub(crate) fn cuda_visible_device() -> Option<String> {
+    let value = std::env::var("CUDA_VISIBLE_DEVICES").ok()?;
+    let device = value.trim();
+    (valid_gpu_uuid(device) || device.parse::<u32>().is_ok()).then(|| device.to_string())
+}
+
+pub(crate) fn valid_gpu_uuid(value: &str) -> bool {
+    value.strip_prefix("GPU-").is_some_and(|uuid| uuid::Uuid::parse_str(uuid).is_ok())
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(untagged)]
+pub(crate) enum GpuChoice {
+    LegacyIndex(u32),
+    Uuid(String),
+}
+
+impl GpuChoice {
+    pub(crate) fn card<'a>(&self, cards: &'a [NvidiaCard]) -> Option<&'a NvidiaCard> {
+        cards.iter().find(|card| match self {
+            Self::LegacyIndex(index) => *index == card.index,
+            Self::Uuid(uuid) => uuid.eq_ignore_ascii_case(&card.uuid),
+        })
+    }
+
+    /// The NVML index from an older setting is resolved before it reaches CUDA.
+    pub(crate) fn cuda_mask<'a>(&'a self, cards: Option<&'a [NvidiaCard]>) -> Option<&'a str> {
+        match cards {
+            Some(cards) => self.card(cards).map(|card| card.uuid.as_str()),
+            None => match self {
+                Self::Uuid(uuid) if valid_gpu_uuid(uuid) => Some(uuid),
+                _ => None,
+            },
+        }
     }
 }
 
@@ -269,8 +303,16 @@ pub fn nvidia_cards() -> Option<Cards> {
     remembered(&LAST, CARDS_FRESH, ask_nvidia_smi_for_cards)
 }
 
-/// NVIDIA cards: nvidia-smi index, name and memory in GB.
-pub type Cards = Vec<(u32, String, f64)>;
+/// NVIDIA cards reported by nvidia-smi.
+pub type Cards = Vec<NvidiaCard>;
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct NvidiaCard {
+    pub index: u32,
+    pub uuid: String,
+    pub name: String,
+    pub memory_gb: f64,
+}
 
 const CARDS_FRESH: std::time::Duration = std::time::Duration::from_secs(30);
 
@@ -285,7 +327,7 @@ fn remembered<T: Clone>(slot: &std::sync::Mutex<Option<(std::time::Instant, T)>>
 }
 
 fn ask_nvidia_smi_for_cards() -> Option<Cards> {
-    let output = quiet("nvidia-smi").args(["--query-gpu=index,name,memory.total", "--format=csv,noheader,nounits"]).output().ok()?;
+    let output = quiet("nvidia-smi").args(["--query-gpu=index,uuid,name,memory.total", "--format=csv,noheader,nounits"]).output().ok()?;
     if !output.status.success() {
         return None;
     }
@@ -297,9 +339,10 @@ fn parse_cards(csv: &str) -> Cards {
         .filter_map(|line| {
             let mut fields = line.split(',').map(str::trim);
             let index = fields.next()?.parse().ok()?;
+            let uuid = fields.next()?;
             let name = fields.next()?.to_string();
-            let memory = fields.next()?.parse::<f64>().ok()? / 1024.0;
-            Some((index, name, memory))
+            let memory_gb = fields.next()?.parse::<f64>().ok()? / 1024.0;
+            valid_gpu_uuid(uuid).then(|| NvidiaCard { index, uuid: uuid.to_string(), name, memory_gb })
         })
         .collect()
 }
@@ -645,9 +688,20 @@ mod tests {
     }
 
     #[test]
-    fn the_card_list_reads_nvidia_smi_lines() {
-        let cards = parse_cards("0, NVIDIA GeForce RTX 4090, 24564\n1, NVIDIA GeForce RTX 3060, 12288\n");
-        assert_eq!(cards, vec![(0, "NVIDIA GeForce RTX 4090".to_string(), 24564.0 / 1024.0), (1, "NVIDIA GeForce RTX 3060".to_string(), 12.0)]);
+    fn a_saved_card_uses_its_uuid_when_cuda_and_nvml_have_opposite_orders() {
+        let low_pci = "GPU-00000000-0000-0000-0000-000000000001";
+        let high_pci = "GPU-00000000-0000-0000-0000-000000000002";
+        // NVML calls the card at the higher PCI address 0. CUDA's PCI order would call it 1.
+        let cards = parse_cards(&format!("0, {high_pci}, NVIDIA GeForce RTX 4090, 24564\n1, {low_pci}, NVIDIA GeForce RTX 3060, 12288\n"));
+        assert_eq!(cards[0].name, "NVIDIA GeForce RTX 4090");
+        assert_eq!(cards[1].memory_gb, 12.0);
+        let old_setting: GpuChoice = serde_json::from_str("1").unwrap();
+        assert_eq!(old_setting.cuda_mask(Some(&cards)), Some(low_pci));
+        let new_setting: GpuChoice = serde_json::from_str(&format!("\"{low_pci}\"")).unwrap();
+        let reordered = parse_cards(&format!("0, {low_pci}, NVIDIA GeForce RTX 3060, 12288\n1, {high_pci}, NVIDIA GeForce RTX 4090, 24564\n"));
+        assert_eq!(new_setting.cuda_mask(Some(&reordered)), Some(low_pci));
+        assert_eq!(new_setting.cuda_mask(Some(&cards[..1])), None);
+        assert_eq!(old_setting.cuda_mask(None), None);
     }
 
     #[test]

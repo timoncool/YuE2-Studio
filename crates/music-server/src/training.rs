@@ -529,6 +529,37 @@ fn now() -> String {
     std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs().to_string()).unwrap_or_default()
 }
 
+/// The trainer adds staging directories and temporary filenames to the output path.
+#[cfg(windows)]
+fn joint_checkpoint_paths(mut stage: yue_train::TrainingStage) -> Result<yue_train::TrainingStage> {
+    use std::ffi::OsStr;
+
+    if stage.args.first().map(|arg| arg.as_os_str()) != Some(OsStr::new("yue2-joint-train")) {
+        return Ok(stage);
+    }
+    let mut args = stage.args.iter_mut();
+    while let Some(flag) = args.next() {
+        let output = flag == "--output";
+        if !output && flag != "--resume" {
+            continue;
+        }
+        let value = args.next().context("the trainer is missing its checkpoint path")?;
+        let path = Path::new(value);
+        // Canonicalize the existing parent of a new output directory; the trainer
+        // requires the output itself to be absent. For resume, the file already exists.
+        let extended = if output {
+            let parent = path.parent().filter(|parent| !parent.as_os_str().is_empty()).unwrap_or_else(|| Path::new("."));
+            let folder = path.file_name().context("the training output has no directory name")?;
+            std::fs::canonicalize(parent).map(|parent| parent.join(folder))
+        } else {
+            std::fs::canonicalize(path)
+        }
+        .with_context(|| format!("resolve the trainer's checkpoint path {}", path.display()))?;
+        *value = extended.into_os_string();
+    }
+    Ok(stage)
+}
+
 fn new_id() -> String {
     uuid::Uuid::now_v7().simple().to_string()
 }
@@ -1381,6 +1412,8 @@ impl Training {
         use tokio::io::AsyncWriteExt;
         let mut log = tokio::fs::OpenOptions::new().create(true).append(true).open(run_dir.join("run.log")).await?;
         for stage in stages {
+            #[cfg(windows)]
+            let stage = joint_checkpoint_paths(stage)?;
             {
                 {
                     let _edit = self.edits.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
@@ -1765,6 +1798,65 @@ mod tests {
         left.sort();
         assert_eq!(left, ["hotstep-tools-new", "hotstep-tools-new-midi-cpu", "hotstep-tools-new-midi-cuda12"]);
         std::fs::remove_dir_all(&root).ok();
+    }
+
+    #[tokio::test]
+    #[cfg(windows)]
+    async fn upgrading_the_captioner_does_not_download_moss_again() {
+        let root = tempfile::tempdir().unwrap();
+        let training = Training::new(root.path(), "yue2");
+        let old_engine = tools_root(root.path()).join("hotstep-tools-2ef93a1c");
+        std::fs::create_dir_all(&old_engine).unwrap();
+        std::fs::write(old_engine.join(CAPTIONER), b"previous captioner").unwrap();
+        // The fixed model paths outlive the versioned captioner. A nonempty
+        // file represents a completed model download in this fixture.
+        for asset in listen_pack().iter().filter(|asset| asset.kind == AssetKind::Model) {
+            let path = training.downloader.path_of(asset);
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            std::fs::write(path, b"previous weights").unwrap();
+        }
+        let missing: Vec<_> = training.listen_files().filter(|asset| !training.listen_installed(asset)).map(|asset| asset.id).collect();
+        assert_eq!(missing, ["ace-caption"]);
+
+        let captioner = training.downloader.runtime_dir(trainer_folder()).join(CAPTIONER);
+        std::fs::create_dir_all(captioner.parent().unwrap()).unwrap();
+        std::fs::write(captioner, b"current captioner").unwrap();
+        drop(training);
+
+        let restarted = Training::new(root.path(), "yue2");
+        assert!(restarted.listen_ready());
+        assert!(restarted.listen_status().iter().all(|file| file["installed"].as_bool() == Some(true)));
+        assert!(restarted.install_listen().await.is_ok());
+        assert!(restarted.downloader.active_for(LISTEN_SCOPE).await.is_none());
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn a_deep_joint_run_passes_extended_checkpoint_and_resume_paths() {
+        let root = tempfile::tempdir().unwrap();
+        let run = root.path().join("a".repeat(100)).join("b".repeat(100)).join("training").join("runs").join("c".repeat(32));
+        let output = run.join("output");
+        let partial = output.join(".checkpoint-step20.tmp");
+        std::fs::create_dir_all(&partial).unwrap();
+        std::fs::write(partial.join("optimizer.resume"), b"state").unwrap();
+        assert!(yue_train::resume_point(&run).is_none(), "an unpublished checkpoint cannot be resumed");
+        std::fs::rename(partial, output.join("checkpoint-step20")).unwrap();
+        let (step, resume) = yue_train::resume_point(&run).unwrap();
+        assert_eq!(step, 20);
+
+        let fresh = run.join("output-next");
+        let stage = yue_train::continuation_stage(&run, &run.join("companion"), &run, &yue_train::Recipe::default(), &fresh, &resume);
+        let stage = joint_checkpoint_paths(stage).unwrap();
+        let argument = |name: &str| stage.args.windows(2).find(|pair| pair[0] == name).map(|pair| Path::new(&pair[1])).unwrap();
+        let output = argument("--output");
+        let source = argument("--resume");
+        for path in [output, source] {
+            assert!(path.to_string_lossy().starts_with(r"\\?\"));
+            assert!(path.to_string_lossy().len() > 260);
+        }
+        assert!(!output.exists(), "only the trainer creates its output directory");
+        assert_eq!(output.file_name().unwrap(), "output-next");
+        assert_eq!(std::fs::read(source).unwrap(), b"state");
     }
 
     #[test]

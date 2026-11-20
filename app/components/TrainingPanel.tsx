@@ -6,6 +6,7 @@ import { poll } from '../services/poll';
 import { AUDIO_ACCEPT } from '../services/audioFiles';
 import { karaokeReason } from '../services/karaoke';
 import { ConfirmDialog } from './ConfirmDialog';
+import { ManualRuntimeArchive } from './ManualDownloads';
 import { StemPlayer } from './StemPlayer';
 import { TrainingGuide } from './TrainingGuide';
 import {
@@ -241,7 +242,10 @@ const PackCard: React.FC<{ state: TrainingState; onError: (message: string) => v
         )
       )}
       {state.download?.done && state.download.error && state.download.error !== 'cancelled' && (
-        <p role="alert" className="mt-3 text-xs text-rose-600 dark:text-rose-300">{state.download.error}</p>
+        <>
+          <p role="alert" className="mt-3 text-xs text-rose-600 dark:text-rose-300">{state.download.error}</p>
+          <ManualRuntimeArchive archive={state.download.manual_archive} retryLabel={t('trainingDownload')} />
+        </>
       )}
     </section>
   );
@@ -285,7 +289,10 @@ const ListenCard: React.FC<{ state: TrainingState; onError: (message: string) =>
         </button>
       )}
       {listen.download?.done && listen.download.error && listen.download.error !== 'cancelled' && (
-        <p role="alert" className="mt-3 text-xs text-rose-600 dark:text-rose-300">{listen.download.error}</p>
+        <>
+          <p role="alert" className="mt-3 text-xs text-rose-600 dark:text-rose-300">{listen.download.error}</p>
+          <ManualRuntimeArchive archive={listen.download.manual_archive} retryLabel={t('trainingDownload')} />
+        </>
       )}
     </section>
   );

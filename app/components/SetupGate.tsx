@@ -4,7 +4,7 @@ import { Check, ChevronDown, Download, FolderDown, FolderOpen, Loader2, Play, Sq
 import { useI18n } from '../context/I18nContext';
 import { poll } from '../services/poll';
 import { DevicePicker, type Device } from './DevicePicker';
-import { ManualDownloads } from './ManualDownloads';
+import { ManualDownloads, ManualRuntimeArchive, type RuntimeArchive } from './ManualDownloads';
 import { UpdatePlanView } from './UpdateScreen';
 import { ModelPreset } from './ModelPreset';
 import { MirrorOffer } from './MirrorOffer';
@@ -96,7 +96,7 @@ type OptionalStatus = {
   /// used to add up every file in the group and show whichever download the
   /// shared counter happened to hold.
   set?: SetProgress;
-  active_download?: { asset_id: string; downloaded_bytes: number; total_bytes: number; done: boolean; error?: string | null } | null;
+  active_download?: { asset_id: string; downloaded_bytes: number; total_bytes: number; done: boolean; error?: string | null; manual_archive?: RuntimeArchive } | null;
 };
 
 const bytes = (value: number) => (value < 1024 ** 3 ? `${Math.round(value / 1024 ** 2)} MB` : `${(value / 1024 ** 3).toFixed(1)} GB`);
@@ -415,6 +415,7 @@ export const OptionalGroup: React.FC<{
               const modelBytes = status?.set?.with_model ? 0 : chosenAsset?.variant_bytes ?? chosenAsset?.bytes ?? 0;
               const setBytes = (status?.set?.bytes ?? 0) + modelBytes;
               const haveBytes = (status?.set?.installed_bytes ?? 0) + (chosenAsset?.installed ? modelBytes : 0);
+              const missingBytes = Math.max(0, setBytes - haveBytes);
               // While a download runs, progress is that download - the server
               // reports a whole set as one figure. Between downloads it is what
               // is on disk out of what this engine needs. Reading only the
@@ -438,7 +439,9 @@ export const OptionalGroup: React.FC<{
                         {engines.find((choice) => choice.id === engine)?.label}
                       </div>
                       <div className="truncate text-[10px] tabular-nums text-zinc-500 dark:text-zinc-400">
-                        {bytes(setBytes)}{ready ? ` · ${t('installed')}` : ` · ${t('notInstalledSuffix')}`}
+                        {ready ? `${bytes(setBytes)} · ${t('installed')}`
+                          : haveBytes > 0 && missingBytes > 0 ? `${t('download')} · ${bytes(missingBytes)}`
+                            : `${bytes(setBytes)} · ${t('notInstalledSuffix')}`}
                       </div>
                     </div>
                     {models.length > 1 && (
@@ -666,7 +669,12 @@ export const OptionalGroup: React.FC<{
           )}
           {typeof children === 'function' ? (children as (engine: string) => React.ReactNode)(engine) : children}
           {failed && <p className="text-xs text-rose-600 dark:text-rose-300">{failed}</p>}
-          {status?.active_download?.error && <p className="text-xs text-rose-600 dark:text-rose-300">{status.active_download.error}</p>}
+          {status?.active_download?.error && (
+            <>
+              <p className="text-xs text-rose-600 dark:text-rose-300">{status.active_download.error}</p>
+              <ManualRuntimeArchive archive={status.active_download.manual_archive} />
+            </>
+          )}
         </div>
       )}
     </div>

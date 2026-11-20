@@ -2,6 +2,24 @@ import React, { useState } from 'react';
 import { Check, Copy } from 'lucide-react';
 import { useI18n } from '../context/I18nContext';
 
+export type RuntimeArchive = { url: string; path: string };
+
+export const ManualRuntimeArchive: React.FC<{ archive?: RuntimeArchive | null; retryLabel?: string }> = ({ archive, retryLabel }) => {
+  const { t } = useI18n();
+  if (!archive) return null;
+  return (
+    <div className="space-y-1 rounded-lg border border-zinc-200 p-3 text-[11px] leading-5 dark:border-white/10">
+      <p className="text-zinc-700 dark:text-zinc-200">{t('manualRuntimeHint').replace('{retry}', retryLabel ?? t('download'))}</p>
+      <Address label={new URL(archive.url).hostname} url={archive.url} />
+      <div className="flex items-start gap-2">
+        <span className="w-24 shrink-0 text-zinc-500 dark:text-zinc-400">{t('manualFolder')}</span>
+        <code className="min-w-0 flex-1 break-all">{archive.path}</code>
+        <CopyButton value={archive.path} />
+      </div>
+    </div>
+  );
+};
+
 /** One model file as the catalogue names it, with its pinned addresses. */
 export type ManualFile = { id: string; filename: string; bytes: number; url?: string; mirror_url?: string };
 

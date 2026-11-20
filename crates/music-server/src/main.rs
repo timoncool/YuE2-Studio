@@ -1,6 +1,6 @@
 //! Standalone entry point for the studio service.
 //!
-//! The desktop application embeds `music_server::serve` directly; this binary
+//! The desktop application embeds `music_server::serve_on_port` directly; this binary
 //! exists for development and for headless use.
 
 fn main() -> anyhow::Result<()> {

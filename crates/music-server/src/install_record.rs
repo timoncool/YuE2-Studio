@@ -37,12 +37,12 @@ pub struct RecordedFile {
 /// archive that tells its version apart, relative to where the archive
 /// unpacks or picks into, and that file's size in the archive of the pin.
 const KEY_FILES: &[(&str, &str, u64)] = &[
-    ("https://github.com/ggml-org/llama.cpp/releases/download/b12248/llama-b12248-bin-win-cuda-13.5-x64.zip", "ggml-cuda.dll", 160_740_864),
-    ("https://github.com/ggml-org/llama.cpp/releases/download/b12248/llama-b12248-bin-win-cuda-12.4-x64.zip", "ggml-cuda.dll", 614_017_024),
-    ("https://github.com/ggml-org/llama.cpp/releases/download/b12248/llama-b12248-bin-win-vulkan-x64.zip", "ggml-vulkan.dll", 42_011_136),
-    ("https://github.com/ggml-org/llama.cpp/releases/download/b12248/llama-b12248-bin-win-cpu-x64.zip", "ggml-cpu-haswell.dll", 1_465_856),
+    ("https://github.com/ggml-org/llama.cpp/releases/download/b12556/llama-b12556-bin-win-cuda-13.5-x64.zip", "ggml-cuda.dll", 220_921_856),
+    ("https://github.com/ggml-org/llama.cpp/releases/download/b12556/llama-b12556-bin-win-cuda-12.4-x64.zip", "ggml-cuda.dll", 789_349_376),
+    ("https://github.com/ggml-org/llama.cpp/releases/download/b12556/llama-b12556-bin-win-vulkan-x64.zip", "ggml-vulkan.dll", 44_831_232),
+    ("https://github.com/ggml-org/llama.cpp/releases/download/b12556/llama-b12556-bin-win-cpu-x64.zip", "ggml-cpu-haswell.dll", 1_503_232),
     ("https://github.com/timoncool/onnxruntime/releases/download/v1.31.1/onnxruntime-win-x64-1.31.1.zip", "onnxruntime.dll", 17_253_728),
-    ("https://github.com/ggml-org/llama.cpp/releases/download/b12248/cudart-llama-bin-win-cuda-13.5-x64.zip", "cublasLt64_13.dll", 499_102_832),
+    ("https://github.com/ggml-org/llama.cpp/releases/download/b12556/cudart-llama-bin-win-cuda-13.5-x64.zip", "cublasLt64_13.dll", 499_102_832),
     ("https://github.com/ggml-org/llama.cpp/releases/download/b11236/cudart-llama-bin-win-cuda-12.4-x64.zip", "cudart64_12.dll", 553_984),
     ("https://developer.download.nvidia.com/compute/cuda/redist/libcublas/windows-x86_64/libcublas-windows-x86_64-13.5.1.27-archive.zip", "cublasLt64_13.dll", 460_301_424),
     ("https://developer.download.nvidia.com/compute/cuda/redist/libcublas/windows-x86_64/libcublas-windows-x86_64-12.9.1.4-archive.zip", "cublasLt64_12.dll", 668_669_952),
@@ -314,12 +314,12 @@ mod tests {
         assert!(missing.is_empty(), "pinned archives without a key file: {missing:#?}");
     }
 
-    /// The key file of the pin that replaces 3.7.0's: llama.cpp b11236 left on disk without a record is not taken
-    /// for b12248.
+    /// A Windows CUDA 13 install of b12248 cannot be adopted as b12556 without a record.
     #[test]
-    fn a_3_7_0_runtime_without_a_record_is_not_taken_for_todays_pin() {
-        let (_, llama) = key_file("https://github.com/ggml-org/llama.cpp/releases/download/b12248/llama-b12248-bin-win-cuda-13.5-x64.zip").unwrap();
-        assert_ne!(llama, 8_917_504, "b11236's llama-server-impl.dll");
+    fn the_previous_llama_runtime_without_a_record_is_not_taken_for_todays_pin() {
+        let (file, size) = key_file("https://github.com/ggml-org/llama.cpp/releases/download/b12556/llama-b12556-bin-win-cuda-13.5-x64.zip").unwrap();
+        assert_eq!(file, "ggml-cuda.dll");
+        assert_ne!(size, 160_740_864, "b12248's ggml-cuda.dll");
     }
 
     /// No two pinned archives share a key: a key file at its size names one build, so another build unpacked in its

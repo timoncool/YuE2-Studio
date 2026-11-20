@@ -433,6 +433,23 @@ fails and the installer says so. Install WebView2 from Microsoft's standalone in
 [Evergreen Standalone x64](https://go.microsoft.com/fwlink/p/?LinkId=2124701), then run the
 studio's installer again.
 
+### Install Windows runtime archives manually
+
+If a runtime download fails, open the studio data folder from Settings. Download the
+exact archive from the URL in the error and leave its original filename and contents intact.
+
+| Feature | Where to put the archive, relative to the data folder |
+| --- | --- |
+| Karaoke timeline / transcribe.cpp | `karaoke/runtime/`, for example `transcribe-windows-cuda13-x64.zip` |
+| Style by ear / MOSS-Music | `training/ace-caption-windows-x64.zip` |
+| LoRA training | `training/hotstep-tools-cuda-windows-x64.zip` |
+| audio.cpp | `audiocpp/runtime/`, for example `audiocpp-server-win-cuda13-x64.zip` |
+
+Press **Download** again for the same feature. The studio checks the archive against
+the SHA-256 pinned for this release, extracts it and records the installation. It
+downloads other missing dependencies separately. When setting up both training and
+style by ear, install the full training runtime first. It includes the matching captioner.
+
 ## Drive it from an agent (MCP)
 
 While the studio is open it serves MCP at `http://127.0.0.1:8791/mcp`: an agent such as

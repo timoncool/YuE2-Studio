@@ -77,6 +77,13 @@ const CUBLAS12: Asset = Asset {
     note: "The linear algebra of the engine's CUDA 12 backend, for cards CUDA 13 dropped and older drivers.",
 };
 
+/// NVIDIA serves the same pinned Windows CUDA 12 archive from both domains.
+pub(crate) fn archive_mirror(url: &str) -> Option<&'static str> {
+    (url == CUBLAS12.url).then_some(
+        "https://developer.download.nvidia.cn/compute/cuda/redist/libcublas/windows-x86_64/libcublas-windows-x86_64-12.9.1.4-archive.zip",
+    )
+}
+
 /// The cuBLAS a CUDA build loads.
 pub fn cublas_asset(build: CudaBuild) -> &'static Asset {
     match build {
