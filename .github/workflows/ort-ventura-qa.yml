@@ -1,0 +1,41 @@
+name: YuE2 ONNX arm64 compatibility
+on:
+  push:
+    branches: [qa/ort-ventura-20261120]
+permissions:
+  contents: read
+jobs:
+  native:
+    runs-on: macos-15
+    timeout-minutes: 80
+    env:
+      RUSTUP_TOOLCHAIN: stable
+      CARGO_TERM_COLOR: never
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: Swatinem/rust-cache@v2
+      - name: Prepare the runtime and published Beat This model
+        run: |
+          set -eu
+          test "$(uname -m)" = arm64
+          python -m pip install zstandard
+          python scripts/qa-ort-ventura/package.py
+          mkdir -p "$RUNNER_TEMP/tempo-model"
+          curl -fLsS --retry 3 -o "$RUNNER_TEMP/tempo-model/beat_this.onnx" 'https://raw.githubusercontent.com/mosynthkey/beat_this_cpp/07ab790a9ec2eda8093d52d249e3ec4f0510ee72/onnx/beat_this.onnx'
+          echo "c5c1466e08abdb03fdeb50668a06f244b787d564c212490482231a9cfbe9ccbd  $RUNNER_TEMP/tempo-model/beat_this.onnx" | shasum -a 256 -c -
+      - name: Install with YuE2 and measure a released studio sample
+        run: |
+          set -euo pipefail
+          export QA_ORT_DIRECTORY="$RUNNER_TEMP/ort-installed"
+          export QA_ORT_ARCHIVE="$PWD/scripts/qa-ort-ventura/onnxruntime-osx-arm64-ventura-1.32.0.tgz"
+          cargo test --locked -p music-server --lib unpack_ventura_candidate -- --exact | tee "$RUNNER_TEMP/unpack.log"
+          grep -F '1 passed' "$RUNNER_TEMP/unpack.log"
+          export ORT_DYLIB_PATH="$QA_ORT_DIRECTORY/libonnxruntime.dylib"
+          export AUDIO_FACTS_MODELS="$RUNNER_TEMP/tempo-model"
+          export AUDIO_FACTS_SONGS="$PWD/docs/samples/babushka-na-diskoteke.mp3"
+          cargo test --locked -p music-server --lib audio_facts::tests::measures_real_songs -- --exact --ignored --nocapture | tee "$RUNNER_TEMP/tempo.log"
+          grep -E 'mp3: [1-9][0-9]* BPM' "$RUNNER_TEMP/tempo.log"
+          grep -F '1 passed' "$RUNNER_TEMP/tempo.log"

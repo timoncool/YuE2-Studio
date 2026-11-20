@@ -13793,3 +13793,13 @@ mod tests {
         std::fs::remove_dir_all(&data).ok();
     }
 }
+
+#[cfg(all(test, target_os = "macos"))]
+#[test]
+fn unpack_ventura_candidate() {
+    let directory = std::path::PathBuf::from(std::env::var_os("QA_ORT_DIRECTORY").unwrap());
+    let archive = std::path::PathBuf::from(std::env::var_os("QA_ORT_ARCHIVE").unwrap());
+    let paths = downloads::extract_archive(&archive, &directory).expect("install the runtime");
+    assert!(paths.contains(&directory.join("libonnxruntime.dylib")));
+    assert!(directory.join("ONNX_RUNTIME_LICENSES").is_file());
+}

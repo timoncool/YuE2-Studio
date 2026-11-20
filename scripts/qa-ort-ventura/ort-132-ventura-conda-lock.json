@@ -1,0 +1,66 @@
+[
+  {
+    "name": "onnxruntime-cpp",
+    "url": "https://conda.anaconda.org/conda-forge/osx-arm64/onnxruntime-cpp-1.32.0-h5ec3d96_0_cpu.conda",
+    "build": "h5ec3d96_0_cpu",
+    "sha256": "c31511d1c4abd8690d36e2f78f6650092ed2a13b2321a2bd0e6c4106aaede30f",
+    "size": 7852182,
+    "license": "MIT AND BSL-1.0"
+  },
+  {
+    "name": "libabseil",
+    "url": "https://conda.anaconda.org/conda-forge/osx-arm64/libabseil-20260817.0-cxx17_h08226d7_2.conda",
+    "build": "cxx17_h08226d7_2",
+    "sha256": "38aa78938c0d4e19a6fdab2b808b9a5ccc4f22902e93a4cf5d8b516fd21bdb17",
+    "size": 1301595,
+    "license": "Apache-2.0"
+  },
+  {
+    "name": "libprotobuf",
+    "url": "https://conda.anaconda.org/conda-forge/osx-arm64/libprotobuf-7.35.1-hcde48f4_4.conda",
+    "build": "hcde48f4_4",
+    "sha256": "f7bd21200cb5943a05f41abfc4c68cfcfe216eebd160ff1af8022073780b5e0f",
+    "size": 2923531,
+    "license": "BSD-3-Clause"
+  },
+  {
+    "name": "libcoremltools",
+    "url": "https://conda.anaconda.org/conda-forge/osx-arm64/libcoremltools-9.0-h4842918_5.conda",
+    "build": "h4842918_5",
+    "sha256": "98cf9df467667152a357bfe0824e06ff6cb53487998cc88ba36e44b391f29329",
+    "size": 1022920,
+    "license": "BSD-3-Clause"
+  },
+  {
+    "name": "libcxx",
+    "url": "https://conda.anaconda.org/conda-forge/osx-arm64/libcxx-23.1.6-hc645fd0_0.conda",
+    "build": "hc645fd0_0",
+    "sha256": "822b2a88313977594230b7be745324e4c50293a35cf9244bb19ecc9c2c385288",
+    "size": 566632,
+    "license": "Apache-2.0 WITH LLVM-exception"
+  },
+  {
+    "name": "libre2-11",
+    "url": "https://conda.anaconda.org/conda-forge/osx-arm64/libre2-11-2025.11.05-he907333_4.conda",
+    "build": "he907333_4",
+    "sha256": "ab409c96ba918bbb1f3db9488a9edb4a17c305b88611edb163940c30615bcecf",
+    "size": 165572,
+    "license": "BSD-3-Clause"
+  },
+  {
+    "name": "re2",
+    "url": "https://conda.anaconda.org/conda-forge/osx-arm64/re2-2025.11.05-hb8e9f31_4.conda",
+    "build": "hb8e9f31_4",
+    "sha256": "406f5df67b9821cedc0f45e666b5bd4495fbb5cf894f1dc91eca63ec9aee2ef9",
+    "size": 27578,
+    "license": "BSD-3-Clause"
+  },
+  {
+    "name": "libzlib",
+    "url": "https://conda.anaconda.org/conda-forge/osx-arm64/libzlib-1.3.2-h8088a28_3.conda",
+    "build": "h8088a28_3",
+    "sha256": "a18fa5d5bac452401459f966cf0d872224e8080c4ff93c77e168d43ab42ef9d7",
+    "size": 47822,
+    "license": "Zlib"
+  }
+]

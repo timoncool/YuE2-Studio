@@ -1,0 +1,832 @@
+{
+  "platform": "osx-arm64",
+  "dlls": {
+    "libonnxruntime.1.32.0.dylib": {
+      "minos": [
+        12,
+        0,
+        0
+      ],
+      "sha256": "6e35c3683801b79f07d91e4239fdd02d1d9761b1f944d5f62d2f40e858a6e1ac",
+      "non_system_dependencies": [
+        "@rpath/libprotobuf.35.1.0.dylib",
+        "@rpath/libre2.11.dylib",
+        "@rpath/libcoremltools.dylib",
+        "@rpath/libabsl_raw_hash_set.2608.0.0.dylib",
+        "@rpath/libabsl_log_internal_check_op.2608.0.0.dylib",
+        "@rpath/libabsl_log_internal_message.2608.0.0.dylib",
+        "@rpath/libabsl_hash.2608.0.0.dylib",
+        "@rpath/libabsl_throw_delegate.2608.0.0.dylib",
+        "@rpath/libc++.1.dylib"
+      ]
+    },
+    "libc++.1.0.dylib": {
+      "minos": [
+        11,
+        0,
+        0
+      ],
+      "sha256": "04c6cf586bc838c10d8dd1c85157b4424cbcf65147798a063cc198d9083b01db",
+      "non_system_dependencies": []
+    },
+    "libabsl_throw_delegate.2608.0.0.dylib": {
+      "minos": [
+        11,
+        0,
+        0
+      ],
+      "sha256": "119606967953a85a12b5d693a2879e37109324bcbb34f41b3440e8e9ba946c38",
+      "non_system_dependencies": [
+        "@rpath/libc++.1.dylib"
+      ]
+    },
+    "libabsl_hash.2608.0.0.dylib": {
+      "minos": [
+        11,
+        0,
+        0
+      ],
+      "sha256": "b0d0ba13a14d72231074a10a5c79aad995086ce9d978d99449b491c0b6e97433",
+      "non_system_dependencies": [
+        "@rpath/libabsl_city.2608.0.0.dylib"
+      ]
+    },
+    "libabsl_city.2608.0.0.dylib": {
+      "minos": [
+        11,
+        0,
+        0
+      ],
+      "sha256": "f08c51b3710f579f9fed5c37e433bcd716e1b9704676d51ed31cc119edb46f77",
+      "non_system_dependencies": []
+    },
+    "libabsl_log_internal_message.2608.0.0.dylib": {
+      "minos": [
+        11,
+        0,
+        0
+      ],
+      "sha256": "439945e5a56d87b04e44b4cd9e65c5579c98364343410a09da5865452865210d",
+      "non_system_dependencies": [
+        "@rpath/libabsl_examine_stack.2608.0.0.dylib",
+        "@rpath/libabsl_log_internal_format.2608.0.0.dylib",
+        "@rpath/libabsl_log_internal_nullguard.2608.0.0.dylib",
+        "@rpath/libabsl_log_internal_structured_proto.2608.0.0.dylib",
+        "@rpath/libabsl_strerror.2608.0.0.dylib",
+        "@rpath/libabsl_log_internal_log_sink_set.2608.0.0.dylib",
+        "@rpath/libabsl_log_internal_globals.2608.0.0.dylib",
+        "@rpath/libabsl_log_globals.2608.0.0.dylib",
+        "@rpath/libabsl_log_internal_proto.2608.0.0.dylib",
+        "@rpath/libabsl_time.2608.0.0.dylib",
+        "@rpath/libabsl_strings_internal.2608.0.0.dylib",
+        "@rpath/libabsl_throw_delegate.2608.0.0.dylib",
+        "@rpath/libabsl_base.2608.0.0.dylib",
+        "@rpath/libabsl_raw_logging_internal.2608.0.0.dylib",
+        "@rpath/libc++.1.dylib"
+      ]
+    },
+    "libabsl_raw_logging_internal.2608.0.0.dylib": {
+      "minos": [
+        11,
+        0,
+        0
+      ],
+      "sha256": "b47464a74e8cafefb8b6474046790dc6eb3e551a8fd4e0d2519c8ec1056e70ae",
+      "non_system_dependencies": [
+        "@rpath/libc++.1.dylib"
+      ]
+    },
+    "libabsl_base.2608.0.0.dylib": {
+      "minos": [
+        11,
+        0,
+        0
+      ],
+      "sha256": "17268a73e4973104feae9d2d957266bae6ad22eb2d8f0223abc5ea6aa0e4d787",
+      "non_system_dependencies": [
+        "@rpath/libabsl_raw_logging_internal.2608.0.0.dylib",
+        "@rpath/libabsl_spinlock_wait.2608.0.0.dylib",
+        "@rpath/libc++.1.dylib"
+      ]
+    },
+    "libabsl_spinlock_wait.2608.0.0.dylib": {
+      "minos": [
+        11,
+        0,
+        0
+      ],
+      "sha256": "6d77d3e533a3b3dd63b42044c9dd2da152c91c6e2a3ee41a91ff98ae74846da1",
+      "non_system_dependencies": [
+        "@rpath/libc++.1.dylib"
+      ]
+    },
+    "libabsl_strings_internal.2608.0.0.dylib": {
+      "minos": [
+        11,
+        0,
+        0
+      ],
+      "sha256": "dd4899647ed408f171f9772ecabd93908a8ee296436fc9b1f7f58d4272b7ae4e",
+      "non_system_dependencies": [
+        "@rpath/libabsl_raw_logging_internal.2608.0.0.dylib",
+        "@rpath/libc++.1.dylib"
+      ]
+    },
+    "libabsl_time.2608.0.0.dylib": {
+      "minos": [
+        11,
+        0,
+        0
+      ],
+      "sha256": "5bd99b9071c601c234e1d3c1993a3faa414a84decdbe3296cf7c7701366ea37b",
+      "non_system_dependencies": [
+        "@rpath/libabsl_strings.2608.0.0.dylib",
+        "@rpath/libabsl_time_zone.2608.0.0.dylib",
+        "@rpath/libc++.1.dylib"
+      ]
+    },
+    "libabsl_time_zone.2608.0.0.dylib": {
+      "minos": [
+        11,
+        0,
+        0
+      ],
+      "sha256": "f74f2bb49b5c9cc0d74c9cf458c2a1527df102e010d73dddb96a1f617754760a",
+      "non_system_dependencies": [
+        "@rpath/libc++.1.dylib"
+      ]
+    },
+    "libabsl_strings.2608.0.0.dylib": {
+      "minos": [
+        11,
+        0,
+        0
+      ],
+      "sha256": "9592c0cc4e08b3cb9a9ab92365081773c1c4cc6e66f3d0a38befb9c7551fe8e7",
+      "non_system_dependencies": [
+        "@rpath/libabsl_strings_internal.2608.0.0.dylib",
+        "@rpath/libabsl_throw_delegate.2608.0.0.dylib",
+        "@rpath/libabsl_raw_logging_internal.2608.0.0.dylib",
+        "@rpath/libc++.1.dylib"
+      ]
+    },
+    "libabsl_log_internal_proto.2608.0.0.dylib": {
+      "minos": [
+        11,
+        0,
+        0
+      ],
+      "sha256": "8acd001f6c21f7d61e3617c01e269110d7a3620ea4375fc499b36b6132c05d3a",
+      "non_system_dependencies": []
+    },
+    "libabsl_log_globals.2608.0.0.dylib": {
+      "minos": [
+        11,
+        0,
+        0
+      ],
+      "sha256": "f1aafef7ccbffaa498320d8f2d79d5ac69466840aef1dc3327a92607abd889ca",
+      "non_system_dependencies": [
+        "@rpath/libabsl_hash.2608.0.0.dylib",
+        "@rpath/libabsl_raw_logging_internal.2608.0.0.dylib",
+        "@rpath/libc++.1.dylib"
+      ]
+    },
+    "libabsl_log_internal_globals.2608.0.0.dylib": {
+      "minos": [
+        11,
+        0,
+        0
+      ],
+      "sha256": "d2e1a0d0d1be4a86852236799c5be6b863ea36b28a13edd40f9620f44408742d",
+      "non_system_dependencies": [
+        "@rpath/libabsl_raw_logging_internal.2608.0.0.dylib",
+        "@rpath/libc++.1.dylib"
+      ]
+    },
+    "libabsl_log_internal_log_sink_set.2608.0.0.dylib": {
+      "minos": [
+        11,
+        0,
+        0
+      ],
+      "sha256": "96adc3e082ee031bf783027299bcb0054daee41294459c1c5a372a6e606ca67b",
+      "non_system_dependencies": [
+        "@rpath/libabsl_log_internal_globals.2608.0.0.dylib",
+        "@rpath/libabsl_log_globals.2608.0.0.dylib",
+        "@rpath/libabsl_log_sink.2608.0.0.dylib",
+        "@rpath/libabsl_synchronization.2608.0.0.dylib",
+        "@rpath/libabsl_base.2608.0.0.dylib",
+        "@rpath/libabsl_raw_logging_internal.2608.0.0.dylib",
+        "@rpath/libabsl_spinlock_wait.2608.0.0.dylib",
+        "@rpath/libc++.1.dylib"
+      ]
+    },
+    "libabsl_synchronization.2608.0.0.dylib": {
+      "minos": [
+        11,
+        0,
+        0
+      ],
+      "sha256": "888216229b1fb2e643e63b293ca550e9913d88c69f7d9d8b136dc2327b929173",
+      "non_system_dependencies": [
+        "@rpath/libabsl_kernel_timeout_internal.2608.0.0.dylib",
+        "@rpath/libabsl_stacktrace.2608.0.0.dylib",
+        "@rpath/libabsl_time.2608.0.0.dylib",
+        "@rpath/libabsl_tracing_internal.2608.0.0.dylib",
+        "@rpath/libabsl_malloc_internal.2608.0.0.dylib",
+        "@rpath/libabsl_base.2608.0.0.dylib",
+        "@rpath/libabsl_raw_logging_internal.2608.0.0.dylib",
+        "@rpath/libabsl_spinlock_wait.2608.0.0.dylib",
+        "@rpath/libc++.1.dylib"
+      ]
+    },
+    "libabsl_malloc_internal.2608.0.0.dylib": {
+      "minos": [
+        11,
+        0,
+        0
+      ],
+      "sha256": "f9dd868b6973119dc71508207251d2df2a48d8a60a53a7059dba6748fdec8d2e",
+      "non_system_dependencies": [
+        "@rpath/libabsl_base.2608.0.0.dylib",
+        "@rpath/libabsl_raw_logging_internal.2608.0.0.dylib",
+        "@rpath/libabsl_spinlock_wait.2608.0.0.dylib",
+        "@rpath/libc++.1.dylib"
+      ]
+    },
+    "libabsl_tracing_internal.2608.0.0.dylib": {
+      "minos": [
+        11,
+        0,
+        0
+      ],
+      "sha256": "aaab323d4cd62a684ad54dcc2122d2ab4af5c0acd836d8a2c661aff339562a87",
+      "non_system_dependencies": []
+    },
+    "libabsl_stacktrace.2608.0.0.dylib": {
+      "minos": [
+        11,
+        0,
+        0
+      ],
+      "sha256": "6ea5f897a404c021c3afceef830bcaaf039ad5b3c70bd60c5397ae5c81752bf1",
+      "non_system_dependencies": []
+    },
+    "libabsl_kernel_timeout_internal.2608.0.0.dylib": {
+      "minos": [
+        11,
+        0,
+        0
+      ],
+      "sha256": "ce6d87f6bebf97f05d8fc33842e4379cb0b878d6999d8f12c54dace8bc450f93",
+      "non_system_dependencies": [
+        "@rpath/libabsl_time.2608.0.0.dylib",
+        "@rpath/libabsl_raw_logging_internal.2608.0.0.dylib",
+        "@rpath/libc++.1.dylib"
+      ]
+    },
+    "libabsl_log_sink.2608.0.0.dylib": {
+      "minos": [
+        11,
+        0,
+        0
+      ],
+      "sha256": "81bb922c83707d8f57690dcab91cfc4e9fa2f5c960a1c8df253fda7931f27dd7",
+      "non_system_dependencies": [
+        "@rpath/libc++.1.dylib"
+      ]
+    },
+    "libabsl_strerror.2608.0.0.dylib": {
+      "minos": [
+        11,
+        0,
+        0
+      ],
+      "sha256": "1e18efb0fb3323e5f738f04683321f5172cd50648a8c5c03fd83e4d3091ee637",
+      "non_system_dependencies": [
+        "@rpath/libc++.1.dylib"
+      ]
+    },
+    "libabsl_log_internal_structured_proto.2608.0.0.dylib": {
+      "minos": [
+        11,
+        0,
+        0
+      ],
+      "sha256": "212950db2de47ff397a72262543ef20d8631cad80c2f08e3bb3ab2b4a166ec2e",
+      "non_system_dependencies": [
+        "@rpath/libabsl_log_internal_proto.2608.0.0.dylib",
+        "@rpath/libc++.1.dylib"
+      ]
+    },
+    "libabsl_log_internal_nullguard.2608.0.0.dylib": {
+      "minos": [
+        11,
+        0,
+        0
+      ],
+      "sha256": "7e6c2517beebbbfb0527cd1d3fcc1c92c254d59640355975483c8a5f530ebcfe",
+      "non_system_dependencies": []
+    },
+    "libabsl_log_internal_format.2608.0.0.dylib": {
+      "minos": [
+        11,
+        0,
+        0
+      ],
+      "sha256": "c9a6ecf34a1c2d88e3abbfb3b274de98071a492a0342c9b356545c40dcfa3f27",
+      "non_system_dependencies": [
+        "@rpath/libabsl_log_internal_globals.2608.0.0.dylib",
+        "@rpath/libabsl_time.2608.0.0.dylib",
+        "@rpath/libabsl_str_format_internal.2608.0.0.dylib",
+        "@rpath/libabsl_strings.2608.0.0.dylib"
+      ]
+    },
+    "libabsl_str_format_internal.2608.0.0.dylib": {
+      "minos": [
+        11,
+        0,
+        0
+      ],
+      "sha256": "a3e64568bd66d80963d50869206e35e30311040b2f94b0a163f4b4a83da10af0",
+      "non_system_dependencies": [
+        "@rpath/libabsl_strings.2608.0.0.dylib",
+        "@rpath/libabsl_int128.2608.0.0.dylib",
+        "@rpath/libabsl_strings_internal.2608.0.0.dylib",
+        "@rpath/libc++.1.dylib"
+      ]
+    },
+    "libabsl_int128.2608.0.0.dylib": {
+      "minos": [
+        11,
+        0,
+        0
+      ],
+      "sha256": "f661c7df59d30d47a975ffa42c81f4ba19bbd102d0d7de9721c6a163dc3fd12d",
+      "non_system_dependencies": [
+        "@rpath/libc++.1.dylib"
+      ]
+    },
+    "libabsl_examine_stack.2608.0.0.dylib": {
+      "minos": [
+        11,
+        0,
+        0
+      ],
+      "sha256": "901ba819932dbd6a43a7b520b7acec702563a11bbfbd3b80ac7a84021f21103a",
+      "non_system_dependencies": [
+        "@rpath/libabsl_stacktrace.2608.0.0.dylib",
+        "@rpath/libabsl_symbolize.2608.0.0.dylib"
+      ]
+    },
+    "libabsl_symbolize.2608.0.0.dylib": {
+      "minos": [
+        11,
+        0,
+        0
+      ],
+      "sha256": "4c156b9d026737356f0c133607edc535c6e7c16ca82645ff20bf537f80c2be13",
+      "non_system_dependencies": [
+        "@rpath/libabsl_demangle_internal.2608.0.0.dylib",
+        "@rpath/libabsl_malloc_internal.2608.0.0.dylib",
+        "@rpath/libc++.1.dylib"
+      ]
+    },
+    "libabsl_demangle_internal.2608.0.0.dylib": {
+      "minos": [
+        11,
+        0,
+        0
+      ],
+      "sha256": "16ab773d532c0ec77ced116182b8cfc5d7baa6d7b657160580500c1afcd047f8",
+      "non_system_dependencies": [
+        "@rpath/libabsl_demangle_rust.2608.0.0.dylib",
+        "@rpath/libc++.1.dylib"
+      ]
+    },
+    "libabsl_demangle_rust.2608.0.0.dylib": {
+      "minos": [
+        11,
+        0,
+        0
+      ],
+      "sha256": "987e164dcd114a52e36a2147dddc34c1e7fbf6bafbc169bd0cb31ff88300100c",
+      "non_system_dependencies": [
+        "@rpath/libabsl_decode_rust_punycode.2608.0.0.dylib"
+      ]
+    },
+    "libabsl_decode_rust_punycode.2608.0.0.dylib": {
+      "minos": [
+        11,
+        0,
+        0
+      ],
+      "sha256": "babd73816a7567f56023a32bb1ce7b26b79ec16161160d63dd0b9c5ecf7c72d4",
+      "non_system_dependencies": [
+        "@rpath/libabsl_utf8_for_code_point.2608.0.0.dylib"
+      ]
+    },
+    "libabsl_utf8_for_code_point.2608.0.0.dylib": {
+      "minos": [
+        11,
+        0,
+        0
+      ],
+      "sha256": "d50fb301e9a888942af9b20e8624f609e66cbd6670c4714cc6d7d96efcd1e47f",
+      "non_system_dependencies": []
+    },
+    "libabsl_log_internal_check_op.2608.0.0.dylib": {
+      "minos": [
+        11,
+        0,
+        0
+      ],
+      "sha256": "ab40496b364412c4379223240d331bb4000e348ffcd3bac6be64852e31b7d863",
+      "non_system_dependencies": [
+        "@rpath/libabsl_leak_check.2608.0.0.dylib",
+        "@rpath/libabsl_log_internal_nullguard.2608.0.0.dylib",
+        "@rpath/libabsl_strings.2608.0.0.dylib",
+        "@rpath/libc++.1.dylib"
+      ]
+    },
+    "libabsl_leak_check.2608.0.0.dylib": {
+      "minos": [
+        11,
+        0,
+        0
+      ],
+      "sha256": "a045cdc6fb7b057be3f419b403767c44160c5cbf1445e19c602b8a5d5ad018ac",
+      "non_system_dependencies": []
+    },
+    "libabsl_raw_hash_set.2608.0.0.dylib": {
+      "minos": [
+        11,
+        0,
+        0
+      ],
+      "sha256": "f4979132e108aa52679f9881ce394e0ee82c92085e0194d16de4d89f764974f7",
+      "non_system_dependencies": [
+        "@rpath/libabsl_hashtablez_sampler.2608.0.0.dylib",
+        "@rpath/libabsl_hash.2608.0.0.dylib",
+        "@rpath/libabsl_raw_logging_internal.2608.0.0.dylib",
+        "@rpath/libc++.1.dylib"
+      ]
+    },
+    "libabsl_hashtablez_sampler.2608.0.0.dylib": {
+      "minos": [
+        11,
+        0,
+        0
+      ],
+      "sha256": "aa53d8ddd645e9ba3b6924158f52a8c61db7c085b3cf70b11938dc7da72077bb",
+      "non_system_dependencies": [
+        "@rpath/libabsl_synchronization.2608.0.0.dylib",
+        "@rpath/libabsl_time.2608.0.0.dylib",
+        "@rpath/libabsl_stacktrace.2608.0.0.dylib",
+        "@rpath/libabsl_raw_logging_internal.2608.0.0.dylib",
+        "@rpath/libc++.1.dylib"
+      ]
+    },
+    "libcoremltools.dylib": {
+      "minos": [
+        12,
+        0,
+        0
+      ],
+      "sha256": "00587d8a2a58b2df47fa487638d525b13d2668d37951ce8895ad943d6870a50d",
+      "non_system_dependencies": [
+        "@rpath/libprotobuf.35.1.0.dylib",
+        "@rpath/libabsl_log_internal_message.2608.0.0.dylib",
+        "@rpath/libabsl_hash.2608.0.0.dylib",
+        "@rpath/libc++.1.dylib"
+      ]
+    },
+    "libprotobuf.35.1.0.dylib": {
+      "minos": [
+        12,
+        0,
+        0
+      ],
+      "sha256": "e2f76c2f93d44964464d8e19f66f2b9c6051ae3283155282c52af0256f81eea5",
+      "non_system_dependencies": [
+        "@rpath/libz.1.dylib",
+        "@rpath/libabsl_die_if_null.2608.0.0.dylib",
+        "@rpath/libabsl_statusor.2608.0.0.dylib",
+        "@rpath/libutf8_validity.35.1.0.dylib",
+        "@rpath/libabsl_log_internal_check_op.2608.0.0.dylib",
+        "@rpath/libabsl_log_internal_conditions.2608.0.0.dylib",
+        "@rpath/libabsl_log_internal_message.2608.0.0.dylib",
+        "@rpath/libabsl_log_internal_nullguard.2608.0.0.dylib",
+        "@rpath/libabsl_raw_hash_set.2608.0.0.dylib",
+        "@rpath/libabsl_status.2608.0.0.dylib",
+        "@rpath/libabsl_cord.2608.0.0.dylib",
+        "@rpath/libabsl_cordz_info.2608.0.0.dylib",
+        "@rpath/libabsl_cord_internal.2608.0.0.dylib",
+        "@rpath/libabsl_hash.2608.0.0.dylib",
+        "@rpath/libabsl_synchronization.2608.0.0.dylib",
+        "@rpath/libabsl_time.2608.0.0.dylib",
+        "@rpath/libabsl_time_zone.2608.0.0.dylib",
+        "@rpath/libabsl_str_format_internal.2608.0.0.dylib",
+        "@rpath/libabsl_strings.2608.0.0.dylib",
+        "@rpath/libabsl_base.2608.0.0.dylib",
+        "@rpath/libabsl_spinlock_wait.2608.0.0.dylib",
+        "@rpath/libc++.1.dylib"
+      ]
+    },
+    "libabsl_cord_internal.2608.0.0.dylib": {
+      "minos": [
+        11,
+        0,
+        0
+      ],
+      "sha256": "070dc270e28cac86b08a3ced6549110ea9a463aa01bd45cc087865156804d6aa",
+      "non_system_dependencies": [
+        "@rpath/libabsl_crc_cord_state.2608.0.0.dylib",
+        "@rpath/libabsl_strings.2608.0.0.dylib",
+        "@rpath/libabsl_raw_logging_internal.2608.0.0.dylib",
+        "@rpath/libc++.1.dylib"
+      ]
+    },
+    "libabsl_crc_cord_state.2608.0.0.dylib": {
+      "minos": [
+        11,
+        0,
+        0
+      ],
+      "sha256": "a713f768f27d13f2e38554aac7c1963d212674f0a1c81cf00ee58af5423bad6b",
+      "non_system_dependencies": [
+        "@rpath/libabsl_crc32c.2608.0.0.dylib",
+        "@rpath/libc++.1.dylib"
+      ]
+    },
+    "libabsl_crc32c.2608.0.0.dylib": {
+      "minos": [
+        11,
+        0,
+        0
+      ],
+      "sha256": "c677f9101afdc4d188f3c3a9fba06986c692e01bb7c3156b725bcff7f7ebaba6",
+      "non_system_dependencies": [
+        "@rpath/libabsl_crc_internal.2608.0.0.dylib",
+        "@rpath/libabsl_base_cpu_detect.2608.0.0.dylib",
+        "@rpath/libc++.1.dylib"
+      ]
+    },
+    "libabsl_base_cpu_detect.2608.0.0.dylib": {
+      "minos": [
+        11,
+        0,
+        0
+      ],
+      "sha256": "35fe3eae3070d90fb61c35b9d7c8dc64aa92cd0d5c66e550e127bd536f2fe2d4",
+      "non_system_dependencies": [
+        "@rpath/libc++.1.dylib"
+      ]
+    },
+    "libabsl_crc_internal.2608.0.0.dylib": {
+      "minos": [
+        11,
+        0,
+        0
+      ],
+      "sha256": "77adc3367a84810c3947b644d0ee52759951df05fe45c2266adcd2c35450eb5a",
+      "non_system_dependencies": [
+        "@rpath/libabsl_base_cpu_detect.2608.0.0.dylib",
+        "@rpath/libc++.1.dylib"
+      ]
+    },
+    "libabsl_cordz_info.2608.0.0.dylib": {
+      "minos": [
+        11,
+        0,
+        0
+      ],
+      "sha256": "b93f7ce6dd540b84df375b7dc372dcf1cb67a6dff875ce13cb2fb62af77d33e1",
+      "non_system_dependencies": [
+        "@rpath/libabsl_cord_internal.2608.0.0.dylib",
+        "@rpath/libabsl_cordz_handle.2608.0.0.dylib",
+        "@rpath/libabsl_synchronization.2608.0.0.dylib",
+        "@rpath/libabsl_stacktrace.2608.0.0.dylib",
+        "@rpath/libabsl_time.2608.0.0.dylib",
+        "@rpath/libc++.1.dylib"
+      ]
+    },
+    "libabsl_cordz_handle.2608.0.0.dylib": {
+      "minos": [
+        11,
+        0,
+        0
+      ],
+      "sha256": "753fd94c5d99977a2ab99aff978e5bf4b2597ab7b1708ebf6927fb6068c44bc6",
+      "non_system_dependencies": [
+        "@rpath/libabsl_synchronization.2608.0.0.dylib",
+        "@rpath/libc++.1.dylib"
+      ]
+    },
+    "libabsl_cord.2608.0.0.dylib": {
+      "minos": [
+        11,
+        0,
+        0
+      ],
+      "sha256": "60d677f968e47f0731d751174a41c2ac1a3b576544694888eac384f4278b7726",
+      "non_system_dependencies": [
+        "@rpath/libabsl_cordz_info.2608.0.0.dylib",
+        "@rpath/libabsl_cord_internal.2608.0.0.dylib",
+        "@rpath/libabsl_crc_cord_state.2608.0.0.dylib",
+        "@rpath/libabsl_strings.2608.0.0.dylib",
+        "@rpath/libabsl_throw_delegate.2608.0.0.dylib",
+        "@rpath/libabsl_raw_logging_internal.2608.0.0.dylib",
+        "@rpath/libc++.1.dylib"
+      ]
+    },
+    "libabsl_status.2608.0.0.dylib": {
+      "minos": [
+        11,
+        0,
+        0
+      ],
+      "sha256": "6ea6f4f8196baf216d3c144dee80738e70141eaaa4887bf447aa7a679a1124d2",
+      "non_system_dependencies": [
+        "@rpath/libabsl_cord.2608.0.0.dylib",
+        "@rpath/libabsl_leak_check.2608.0.0.dylib",
+        "@rpath/libabsl_strerror.2608.0.0.dylib",
+        "@rpath/libabsl_cordz_info.2608.0.0.dylib",
+        "@rpath/libabsl_cord_internal.2608.0.0.dylib",
+        "@rpath/libabsl_hash.2608.0.0.dylib",
+        "@rpath/libabsl_strings.2608.0.0.dylib",
+        "@rpath/libabsl_throw_delegate.2608.0.0.dylib",
+        "@rpath/libc++.1.dylib"
+      ]
+    },
+    "libabsl_log_internal_conditions.2608.0.0.dylib": {
+      "minos": [
+        11,
+        0,
+        0
+      ],
+      "sha256": "15ebfd07192b13faea1a5d15cfcee4f2a94fb5f10d8b61b3f715457134427cfc",
+      "non_system_dependencies": [
+        "@rpath/libabsl_base.2608.0.0.dylib"
+      ]
+    },
+    "libutf8_validity.35.1.0.dylib": {
+      "minos": [
+        12,
+        0,
+        0
+      ],
+      "sha256": "710a12de0dcfc4146bdcd102f074bb8eec9aab46944ac94351da576447738c1f",
+      "non_system_dependencies": []
+    },
+    "libabsl_statusor.2608.0.0.dylib": {
+      "minos": [
+        11,
+        0,
+        0
+      ],
+      "sha256": "3c564c0a535017d494d70329ebace35c5ddaf2ed684522b1182981d966344bd0",
+      "non_system_dependencies": [
+        "@rpath/libabsl_status.2608.0.0.dylib",
+        "@rpath/libabsl_strings.2608.0.0.dylib",
+        "@rpath/libabsl_base.2608.0.0.dylib",
+        "@rpath/libabsl_raw_logging_internal.2608.0.0.dylib",
+        "@rpath/libabsl_spinlock_wait.2608.0.0.dylib",
+        "@rpath/libc++.1.dylib"
+      ]
+    },
+    "libabsl_die_if_null.2608.0.0.dylib": {
+      "minos": [
+        11,
+        0,
+        0
+      ],
+      "sha256": "0a9c5a8306bcce822fda22d3cad54d361762adf36d3bfa799a43b5f3f9697a57",
+      "non_system_dependencies": [
+        "@rpath/libabsl_log_internal_message.2608.0.0.dylib",
+        "@rpath/libabsl_strings.2608.0.0.dylib",
+        "@rpath/libc++.1.dylib"
+      ]
+    },
+    "libz.1.3.2.dylib": {
+      "minos": [
+        11,
+        0,
+        0
+      ],
+      "sha256": "8020844faf07e3a0a3058cf2eb8cc859ee3981297cdb3f3620db0714e2813b77",
+      "non_system_dependencies": []
+    },
+    "libre2.11.dylib": {
+      "minos": [
+        12,
+        0,
+        0
+      ],
+      "sha256": "d6664e6591772e3f44e46a0506a5c3bd6b7ff67f1fbc7346daf4245021ae2771",
+      "non_system_dependencies": [
+        "@rpath/libabsl_log_internal_message.2608.0.0.dylib",
+        "@rpath/libabsl_raw_hash_set.2608.0.0.dylib",
+        "@rpath/libabsl_str_format_internal.2608.0.0.dylib",
+        "@rpath/libabsl_hash.2608.0.0.dylib",
+        "@rpath/libabsl_synchronization.2608.0.0.dylib",
+        "@rpath/libabsl_strings.2608.0.0.dylib",
+        "@rpath/libabsl_throw_delegate.2608.0.0.dylib",
+        "@rpath/libabsl_base.2608.0.0.dylib",
+        "@rpath/libabsl_spinlock_wait.2608.0.0.dylib",
+        "@rpath/libc++.1.dylib"
+      ]
+    }
+  },
+  "aliases": {
+    "libonnxruntime.1.dylib": "libonnxruntime.1.32.0.dylib",
+    "libabsl_examine_stack.dylib": "libabsl_examine_stack.2608.0.0.dylib",
+    "libabsl_crc_internal.dylib": "libabsl_crc_internal.2608.0.0.dylib",
+    "libabsl_malloc_internal.dylib": "libabsl_malloc_internal.2608.0.0.dylib",
+    "libabsl_log_internal_proto.dylib": "libabsl_log_internal_proto.2608.0.0.dylib",
+    "libabsl_cordz_info.dylib": "libabsl_cordz_info.2608.0.0.dylib",
+    "libabsl_base_cpu_detect.dylib": "libabsl_base_cpu_detect.2608.0.0.dylib",
+    "libabsl_log_internal_conditions.dylib": "libabsl_log_internal_conditions.2608.0.0.dylib",
+    "libabsl_log_internal_log_sink_set.dylib": "libabsl_log_internal_log_sink_set.2608.0.0.dylib",
+    "libabsl_str_format_internal.dylib": "libabsl_str_format_internal.2608.0.0.dylib",
+    "libabsl_log_internal_check_op.dylib": "libabsl_log_internal_check_op.2608.0.0.dylib",
+    "libabsl_synchronization.dylib": "libabsl_synchronization.2608.0.0.dylib",
+    "libabsl_log_globals.dylib": "libabsl_log_globals.2608.0.0.dylib",
+    "libabsl_log_sink.dylib": "libabsl_log_sink.2608.0.0.dylib",
+    "libabsl_stacktrace.dylib": "libabsl_stacktrace.2608.0.0.dylib",
+    "libabsl_demangle_internal.dylib": "libabsl_demangle_internal.2608.0.0.dylib",
+    "libabsl_strings_internal.dylib": "libabsl_strings_internal.2608.0.0.dylib",
+    "libabsl_raw_logging_internal.dylib": "libabsl_raw_logging_internal.2608.0.0.dylib",
+    "libabsl_time_zone.dylib": "libabsl_time_zone.2608.0.0.dylib",
+    "libabsl_cordz_handle.dylib": "libabsl_cordz_handle.2608.0.0.dylib",
+    "libabsl_symbolize.dylib": "libabsl_symbolize.2608.0.0.dylib",
+    "libabsl_strerror.dylib": "libabsl_strerror.2608.0.0.dylib",
+    "libabsl_spinlock_wait.dylib": "libabsl_spinlock_wait.2608.0.0.dylib",
+    "libabsl_hash.dylib": "libabsl_hash.2608.0.0.dylib",
+    "libabsl_log_internal_structured_proto.dylib": "libabsl_log_internal_structured_proto.2608.0.0.dylib",
+    "libabsl_base.dylib": "libabsl_base.2608.0.0.dylib",
+    "libabsl_demangle_rust.dylib": "libabsl_demangle_rust.2608.0.0.dylib",
+    "libabsl_log_internal_globals.dylib": "libabsl_log_internal_globals.2608.0.0.dylib",
+    "libabsl_cord.dylib": "libabsl_cord.2608.0.0.dylib",
+    "libabsl_log_internal_format.dylib": "libabsl_log_internal_format.2608.0.0.dylib",
+    "libabsl_time.dylib": "libabsl_time.2608.0.0.dylib",
+    "libabsl_hashtablez_sampler.dylib": "libabsl_hashtablez_sampler.2608.0.0.dylib",
+    "libabsl_city.dylib": "libabsl_city.2608.0.0.dylib",
+    "libabsl_decode_rust_punycode.dylib": "libabsl_decode_rust_punycode.2608.0.0.dylib",
+    "libabsl_raw_hash_set.dylib": "libabsl_raw_hash_set.2608.0.0.dylib",
+    "libabsl_kernel_timeout_internal.dylib": "libabsl_kernel_timeout_internal.2608.0.0.dylib",
+    "libabsl_strings.dylib": "libabsl_strings.2608.0.0.dylib",
+    "libabsl_crc32c.dylib": "libabsl_crc32c.2608.0.0.dylib",
+    "libabsl_log_internal_message.dylib": "libabsl_log_internal_message.2608.0.0.dylib",
+    "libabsl_throw_delegate.dylib": "libabsl_throw_delegate.2608.0.0.dylib",
+    "libabsl_log_internal_nullguard.dylib": "libabsl_log_internal_nullguard.2608.0.0.dylib",
+    "libabsl_statusor.dylib": "libabsl_statusor.2608.0.0.dylib",
+    "libabsl_leak_check.dylib": "libabsl_leak_check.2608.0.0.dylib",
+    "libabsl_utf8_for_code_point.dylib": "libabsl_utf8_for_code_point.2608.0.0.dylib",
+    "libabsl_int128.dylib": "libabsl_int128.2608.0.0.dylib",
+    "libabsl_tracing_internal.dylib": "libabsl_tracing_internal.2608.0.0.dylib",
+    "libabsl_status.dylib": "libabsl_status.2608.0.0.dylib",
+    "libabsl_crc_cord_state.dylib": "libabsl_crc_cord_state.2608.0.0.dylib",
+    "libabsl_die_if_null.dylib": "libabsl_die_if_null.2608.0.0.dylib",
+    "libabsl_cord_internal.dylib": "libabsl_cord_internal.2608.0.0.dylib",
+    "libutf8_validity.dylib": "libutf8_validity.35.1.0.dylib",
+    "libprotobuf.dylib": "libprotobuf.35.1.0.dylib",
+    "libc++.dylib": "libc++.1.0.dylib",
+    "libc++.1.dylib": "libc++.1.0.dylib",
+    "libz.1.dylib": "libz.1.3.2.dylib"
+  },
+  "licenses": {
+    "onnxruntime-cpp": [
+      "info/licenses/LICENSE",
+      "info/licenses/build-ci/Release/_deps/eigen3-src/COPYING.MPL2",
+      "info/licenses/build-ci/Release/_deps/flatbuffers-src/LICENSE",
+      "info/licenses/build-ci/Release/_deps/fp16-src/LICENSE",
+      "info/licenses/build-ci/Release/_deps/gsl-src/LICENSE",
+      "info/licenses/build-ci/Release/_deps/onnx-src/LICENSE",
+      "info/licenses/build-ci/Release/_deps/psimd-src/LICENSE",
+      "info/licenses/build-ci/Release/_deps/pytorch_cpuinfo-src/LICENSE"
+    ],
+    "libabseil": [
+      "info/licenses/LICENSE"
+    ],
+    "libprotobuf": [
+      "info/licenses/LICENSE"
+    ],
+    "libcoremltools": [
+      "info/licenses/LICENSE.txt"
+    ],
+    "libcxx": [
+      "info/licenses/libcxx/LICENSE.TXT"
+    ],
+    "libre2-11": [
+      "info/licenses/LICENSE"
+    ],
+    "re2": [
+      "info/licenses/LICENSE"
+    ],
+    "libzlib": [
+      "info/licenses/LICENSE"
+    ]
+  }
+}
