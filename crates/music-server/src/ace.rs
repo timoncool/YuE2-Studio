@@ -982,6 +982,64 @@ mod tests {
     }
     use serde_json::json;
 
+    #[test]
+    fn only_ace_sidecars_become_source_or_reference_latents() {
+        use crate::library::{GeneratedSongInput, Library};
+        let root = std::env::temp_dir().join(format!("ace-source-format-{}", uuid::Uuid::now_v7()));
+        let library = Library::open_at(root.join("library.sqlite"), root.join("media")).unwrap();
+        let pcm = audio_post::Stereo::new(vec![0.1; 480], vec![0.2; 480], 48_000);
+        let audio = crate::audio_pcm::wav24_bytes(&pcm).unwrap();
+        let latent = 1.0f32.to_le_bytes().repeat(64);
+        let song = |engine: &str, sidecar: Option<&[u8]>| {
+            library
+                .import_generated_song_with_latent(
+                    GeneratedSongInput {
+                        title: Some("Format fixture".into()),
+                        metadata: Value::Null,
+                        caption: String::new(),
+                        lyrics: String::new(),
+                        generation_settings: Value::Null,
+                        replay_request: None,
+                        audio_codes: None,
+                        engine_id: engine.into(),
+                        profile_id: None,
+                        source: "local_generation".into(),
+                        audio_extension: "wav",
+                        audio: audio.clone(),
+                    },
+                    sidecar,
+                )
+                .unwrap()
+                .song
+                .id
+        };
+        let ace = song("acestep-cpp", Some(&latent));
+        let yue = song("yue2-cpp", Some(&latent));
+        let minimax = song("minimaxmusic-cpp", Some(&latent));
+        let damaged = song("acestep-cpp", Some(b"short"));
+        let audio_only = song("acestep-cpp", None);
+
+        for other in [&yue, &minimax, &damaged, &audio_only] {
+            let inputs = Sources::from_library(&library, Some(&ace), Some(other)).unwrap();
+            assert_eq!(inputs.src_latents.as_deref(), Some(latent.as_slice()));
+            assert!(inputs.ref_latents.is_none());
+            assert!(inputs
+                .src_audio
+                .as_deref()
+                .is_some_and(|wav| wav.starts_with(b"RIFF")));
+            assert!(inputs
+                .ref_audio
+                .as_deref()
+                .is_some_and(|wav| wav.starts_with(b"RIFF")));
+
+            let swapped = Sources::from_library(&library, Some(other), Some(&ace)).unwrap();
+            assert!(swapped.src_latents.is_none());
+            assert_eq!(swapped.ref_latents.as_deref(), Some(latent.as_slice()));
+        }
+        drop(library);
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
     #[tokio::test]
     async fn cover_round_trips_audio_and_latent_on_ace_http_contract() {
         use axum::{
