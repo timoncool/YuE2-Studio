@@ -65,6 +65,7 @@ function takePendingNote(cardId: string, made: Song[], onError: (message: string
 }
 
 function card(id: string, fields: CardFields): Song {
+  const direct = fields.engineId === 'openrouter' || fields.engineId === 'audio.cpp';
   return {
     id,
     jobId: fields.jobId,
@@ -77,14 +78,14 @@ function card(id: string, fields: CardFields): Song {
     duration: '--:--',
     createdAt: fields.createdAt ?? new Date(),
     isGenerating: true,
-    stage: fields.engineId === 'openrouter' ? 'stageGeneratingTrack' : 'stageWaitingInQueue',
-    tags: fields.engineId === 'openrouter' ? ['OpenRouter'] : ['yue2'],
+    stage: direct ? 'stageGeneratingTrack' : 'stageWaitingInQueue',
+    tags: fields.engineId === 'openrouter' ? ['OpenRouter'] : fields.engineId === 'audio.cpp' ? ['audio.cpp'] : ['yue2'],
   };
 }
 
 /** The progress stream belongs to the local engine and carries no job IDs. */
 export function followsLocalProgress(entry: Song): boolean {
-  return Boolean(entry.isGenerating && entry.jobId && entry.ditModel !== 'openrouter');
+  return Boolean(entry.isGenerating && entry.jobId && entry.ditModel !== 'openrouter' && entry.ditModel !== 'audio.cpp');
 }
 
 /** The tracks a job makes: its songs times the variations of each. */
@@ -427,7 +428,11 @@ export function useGenerations({ enabled, notify, onFinished }: GenerationOption
 
   const generate = useCallback(async (request: YueRequest) => {
     const id = `temp_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`;
-    setCards(prev => [card(id, { title: request.title?.trim() || t('generating'), style: request.style, lyrics: request.lyrics, playlistId: request.playlist_id, engineId: request.music_source?.kind === 'openrouter' ? 'openrouter' : request.music_source?.kind === 'native' ? request.music_source.engine : undefined }), ...prev]);
+    const source = request.music_source;
+    const engineId = source?.kind === 'audio_cpp' ? 'audio.cpp'
+      : source?.kind === 'openrouter' ? 'openrouter'
+      : source?.kind === 'native' ? source.engine : undefined;
+    setCards(prev => [card(id, { title: request.title?.trim() || t('generating'), style: request.style, lyrics: request.lyrics, playlistId: request.playlist_id, engineId }), ...prev]);
     try {
       const response = await fetch('/v1/music/jobs', {
         method: 'POST',

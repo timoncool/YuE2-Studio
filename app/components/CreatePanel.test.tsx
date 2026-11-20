@@ -279,6 +279,57 @@ it.each([
     style: 'folk', lyrics: 'verse', duration_seconds: 18, steps: 7, seed: 42, ...extra });
 });
 
+it('chooses MiniMax Music3 through audio.cpp and reuses the saved seed and format', async () => {
+  let ready = false;
+  const fetcher = vi.fn(async (url: string) => Response.json(url === '/v1/music/audio-cpp/models' ? {
+    engine: 'audio.cpp',
+    models: [{ id: 'minimax_music3', profile_id: 'quality-q8', quantization: 'Q8_0', ready,
+      missing: ready ? [] : ['language_model_q8_0.gguf'] }],
+  } : {}));
+  vi.stubGlobal('fetch', fetcher);
+  function Editor() {
+    const [engine, setEngine] = React.useState<NonNullable<React.ComponentProps<typeof CreatePanel>['musicEngine']>>('local');
+    return panel({ musicEngine: engine, onMusicEngineChange: setEngine });
+  }
+  act(() => root.render(<Editor />));
+  await flush();
+  const option = host.querySelector<HTMLOptionElement>('option[value="audio.cpp"]')!;
+  expect(option.textContent).toContain('MiniMax Music3 · audio.cpp');
+  const engineSelect = option.parentElement as HTMLSelectElement;
+  const choose = (select: HTMLSelectElement, value: string) => act(() => {
+    select.value = value;
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  choose(engineSelect, 'audio.cpp');
+  await flush();
+  const generate = () => buttonNamed('create') as HTMLButtonElement;
+  expect(generate().disabled).toBe(true);
+  expect(host.textContent).toContain('language_model_q8_0.gguf');
+  ready = true;
+  click(buttonNamed('Refresh models')!);
+  await flush();
+  expect(generate().disabled).toBe(false);
+  expect(host.textContent).toContain('quality-q8 · Q8_0');
+
+  const song = { title: 'Music3 take', style: 'folk', lyrics: '[verse] Good morning',
+    ditModel: 'audio.cpp', lmModel: 'quality-q8', nativeReplayAvailable: false,
+    generationParams: { music_source: { kind: 'audio_cpp', model: 'minimax_music3' },
+      seed: 424242, duration_seconds: 18, steps: 7, guidance_scale: 2.5, output_format: 'mp3' },
+  } as Song;
+  act(() => root.render(panel({ musicEngine: 'audio.cpp', initialData: { song, timestamp: 1 } })));
+  await flush();
+  const label = (name: string) => [...host.querySelectorAll('label')].find(node => node.textContent?.startsWith(name))!;
+  expect(label('Seed').querySelector('input')?.value).toBe('424242');
+  expect(label('outputFormat').querySelector('select')?.value).toBe('mp3');
+  expect(host.textContent).not.toContain('Language model seed');
+  click(generate());
+  expect(sent.at(-1)).toEqual({
+    music_source: { kind: 'audio_cpp', model: 'minimax_music3' }, style: 'folk',
+    lyrics: '[verse] Good morning', title: 'Music3 take',
+    seed: 424242, duration_seconds: 18, steps: 7, cfg_scale: 2.5, output_format: 'mp3',
+  });
+});
+
 it('asks for an explicit profile when a migrated ACE take used custom weights', async () => {
   const engine = 'acestep-cpp';
   const models = ['acestep-v15-xl-sft-Q4_K_M.gguf', 'acestep-5Hz-lm-4B-BF16.gguf', 'vae-BF16.gguf'];

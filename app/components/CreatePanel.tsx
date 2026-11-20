@@ -40,7 +40,7 @@ import { NumberField } from './NumberField';
 import { explainCliFailure } from '../services/cliFailure';
 import { loadNativeOpenRouterCatalog, modelsForCapability, refreshNativeOpenRouterCatalog, type NativeOpenRouterModel } from '../services/nativeOpenRouter';
 import { musicSourceStrings, nativeMusicSourceStrings } from '../i18n/musicSource';
-import { isMusicEngine, isNativeMusicEngine, miniMaxOutputFormat, nativeEngines, nativeGenerationSettings, useNativeMusicProfiles } from '../services/nativeMusicProfiles';
+import { audioCppMiniMax, isMusicEngine, isProfileMusicEngine, miniMaxOutputFormat, profileMusicEngines, nativeGenerationSettings, useNativeMusicProfiles } from '../services/nativeMusicProfiles';
 
 /**
  * The YuE2 request form.
@@ -410,7 +410,8 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
   const tt = t as unknown as (key: string) => string;
   const musicStrings = musicSourceStrings[language];
   const cloud = musicEngine === 'openrouter';
-  const nativeEngine = isNativeMusicEngine(musicEngine) ? musicEngine : undefined;
+  const nativeEngine = isProfileMusicEngine(musicEngine) ? musicEngine : undefined;
+  const audioCpp = nativeEngine === 'audio.cpp';
   const native = useNativeMusicProfiles(nativeEngine);
   const nativeStrings = nativeMusicSourceStrings[language];
   const yue = musicEngine === 'local';
@@ -730,10 +731,11 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
     appliedReuse.current = initialData.timestamp;
     const song = initialData.song;
     const settings = (song.generationParams ?? {}) as Record<string, unknown>;
-    if (isNativeMusicEngine(song.ditModel) || song.ditModel === 'openrouter') {
-      if (isNativeMusicEngine(song.ditModel)) {
+    if (isProfileMusicEngine(song.ditModel) || song.ditModel === 'openrouter') {
+      if (isProfileMusicEngine(song.ditModel)) {
         const source = settings.music_source as YueRequest['music_source'] | undefined;
-        const profile = source?.kind === 'native' && source.engine === song.ditModel ? source.model : song.lmModel;
+        const profile = song.ditModel === 'audio.cpp' ? audioCppMiniMax
+          : source?.kind === 'native' && source.engine === song.ditModel ? source.model : song.lmModel;
         native.restore(song.ditModel, profile ?? '', settings);
       } else {
         changeMusicModel(typeof settings.model === 'string' ? settings.model : '');
@@ -1383,10 +1385,13 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
   const submit = () => {
     if (nativeEngine) {
       if (!native.ready || !native.profile) return;
+      if (audioCpp && (!style.trim() || !lyrics.trim())) { setError(nativeStrings.styleAndLyricsRequired); return; }
       if (!style.trim() && !lyrics.trim()) { setError(tt('styleOrLyricsRequired')); return; }
       setError(null);
       generate({
-        music_source: { kind: 'native', engine: nativeEngine, model: native.profile.id },
+        music_source: nativeEngine === 'audio.cpp'
+          ? { kind: 'audio_cpp', model: native.profile.id }
+          : { kind: 'native', engine: nativeEngine, model: native.profile.id },
         style: finishedStyle(style),
         lyrics: lyrics.replace(/\r\n?/g, '\n').trim(),
         ...(name.trim() ? { title: name.trim() } : {}),
@@ -1517,7 +1522,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
           <div className="flex items-center justify-between gap-3">
             <div className="min-w-0">
               <h1 className="truncate text-base font-bold">{t('createMusic')}</h1>
-              <p className="mt-0.5 truncate text-[11px] text-zinc-500 dark:text-zinc-400">{nativeEngine ? nativeEngines[nativeEngine] : cloud ? 'OpenRouter' : tt('localInferenceYue')}</p>
+              <p className="mt-0.5 truncate text-[11px] text-zinc-500 dark:text-zinc-400">{nativeEngine ? profileMusicEngines[nativeEngine] : cloud ? 'OpenRouter' : tt('localInferenceYue')}</p>
             </div>
             <div className="flex shrink-0 items-center gap-2">
               {yue && <span className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-semibold ${ready ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-300' : 'bg-amber-500/10 text-amber-700 dark:text-amber-300'}`}>
@@ -1540,7 +1545,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
                 setTakeChoiceOpen(false);
               }}>
                 <option value="local">{musicStrings.local}</option>
-                {Object.entries(nativeEngines).map(([engine, label]) => <option key={engine} value={engine}>{label}</option>)}
+                {Object.entries(profileMusicEngines).map(([engine, label]) => <option key={engine} value={engine}>{label}</option>)}
                 <option value="openrouter">OpenRouter</option>
               </select>
             </label>
@@ -1560,7 +1565,8 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
                         <ul className="break-all">{native.originalModels.map(model => <li key={model}>{model}</li>)}</ul>
                       </div>
                     )}
-                    {native.profiles.length > 0 && (
+                    {audioCpp && native.profile && <p className="text-xs">{native.profile.label}</p>}
+                    {!audioCpp && native.profiles.length > 0 && (
                       <select aria-label={nativeStrings.model} className={CONTROL} value={native.profile?.id ?? ''}
                         onChange={event => native.select(event.target.value)}>
                         <option value="">{musicStrings.choose}</option>
@@ -1625,7 +1631,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
                           onChange={event => native.set(key, event.target.value)} />
                       </label>
                     ))}
-                    {nativeEngine === 'minimaxmusic-cpp' && (
+                    {nativeEngine !== 'acestep-cpp' && (
                       <label className="space-y-1 text-xs">
                         <span>{t('outputFormat')}</span>
                         <select className={CONTROL} value={miniMaxOutputFormat(native.settings.output_format)}
