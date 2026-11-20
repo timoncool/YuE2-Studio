@@ -136,7 +136,7 @@ it('finds Radio Tapok by source label and combines vocal, model, sample-rate and
     source_url: 'https://huggingface.co/owner/voices', license: null, weights: { size: 15_000_000 },
     installed_id: null };
   const list = [
-    { ...voice, id: 'high', name: 'Tapok Concert', index: { size: 8_000_000 },
+    { ...voice, id: 'high', name: 'Tapok Concert', weights: undefined, has_index: true, download_bytes: 23_000_000,
       metadata: { source_labels: ['Radio Tapok'], vocal_style: 'high', rvc_version: 'v2', sample_rate_hz: 40000 } },
     { ...voice, id: 'low', name: 'Tapok Studio', index: null,
       metadata: { source_labels: ['Radio Tapok'], vocal_style: 'low', rvc_version: 'v1', sample_rate_hz: 48000 } },
@@ -178,6 +178,7 @@ it('finds Radio Tapok by source label and combines vocal, model, sample-rate and
     pick(index, 'present');
     expect(details.querySelectorAll('li')).toHaveLength(1);
     expect(details.querySelector('li')?.textContent).toContain('Tapok Concert');
+    expect(details.querySelector('li')?.textContent).toContain('23 MB');
     pick(index, 'absent');
     expect(details.textContent).toContain('No voices match these filters.');
     const clear = [...details.querySelectorAll('button')].find(button => button.textContent === 'Clear filters')!;

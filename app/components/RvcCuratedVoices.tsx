@@ -11,8 +11,10 @@ interface CatalogVoice {
   source_repo: string;
   source_url: string;
   license: string | null;
-  weights: { size: number };
-  index: { size: number } | null;
+  weights?: { size: number };
+  index?: { size: number } | null;
+  download_bytes?: number;
+  has_index?: boolean;
   installed_id: string | null;
   metadata?: {
     source_labels?: string[] | null;
@@ -67,7 +69,7 @@ export function RvcCuratedVoices({ onInstalled, disabled }: { onInstalled: (voic
     const searchable = [voice.name, ...(voice.metadata?.source_labels ?? [])].join(' ').toLocaleLowerCase(language);
     return terms.every(term => searchable.includes(term))
       && metadataFields.every(field => !filters[field] || String(voice.metadata?.[field] ?? '') === filters[field])
-      && (!filters.index || (voice.index ? 'present' : 'absent') === filters.index);
+      && (!filters.index || ((voice.has_index ?? !!voice.index) ? 'present' : 'absent') === filters.index);
   });
   const filterActive = terms.length > 0 || Object.values(filters).some(Boolean);
   const filterLabels = {
@@ -131,7 +133,7 @@ export function RvcCuratedVoices({ onInstalled, disabled }: { onInstalled: (voic
               {matches.length === 0 && <p role="status">{labels.noMatch}</p>}
               <ul className="max-h-80 divide-y divide-zinc-200 overflow-auto dark:divide-white/10">
               {matches.map(voice => {
-                const size = (voice.weights.size + (voice.index?.size ?? 0)) / 1_000_000;
+                const size = (voice.download_bytes ?? ((voice.weights?.size ?? 0) + (voice.index?.size ?? 0))) / 1_000_000;
                 return (
                   <li key={voice.id} className="flex flex-wrap items-center justify-between gap-2 py-2">
                     <div className="min-w-0">
