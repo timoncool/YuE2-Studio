@@ -22,7 +22,8 @@ it('opens the curated catalog from Studio Tools and chooses an installed RVC voi
       return Response.json(list);
     }
     if (url === '/v1/library/songs') return Response.json([]);
-    if (url === '/v1/separation/status' || url === '/v1/midi') return Response.json({ run: null });
+    if (url === '/v1/separation/status') return Response.json({ run: null, model: { installed: false }, stems: [] });
+    if (url === '/v1/midi') return Response.json({ run: null, sizes: [] });
     return Response.json(null);
   });
   vi.stubGlobal('fetch', fetchStudio);
