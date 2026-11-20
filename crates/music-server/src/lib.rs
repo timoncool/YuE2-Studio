@@ -615,19 +615,27 @@ async fn resume_unfinished_jobs(state: AppState) {
     };
     // the engine is started with the service and takes a while to answer; if
     // it never does, the songs stay as they are for the next start
-    let mut ready = false;
-    for _ in 0..90 {
-        if state.music_server.props().await.is_ok() {
-            ready = true;
-            break;
-        }
-        tokio::time::sleep(std::time::Duration::from_secs(2)).await;
-    }
-    if !ready {
-        eprintln!("[ERROR] the engine did not answer; {} cut-off song(s) were not started again", cut_off.len());
-        return;
-    }
+    let mut cut_off = cut_off;
+    cut_off.sort_by_key(|job| job.engine_id == PRIMARY_MUSIC_ENGINE_ID);
+    let mut yue_ready = None;
     for old in cut_off {
+        if old.engine_id == PRIMARY_MUSIC_ENGINE_ID {
+            if yue_ready.is_none() {
+                let mut ready = false;
+                for _ in 0..90 {
+                    if state.music_server.props().await.is_ok() {
+                        ready = true;
+                        break;
+                    }
+                    tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+                }
+                yue_ready = Some(ready);
+            }
+            if yue_ready == Some(false) {
+                eprintln!("[ERROR] YuE2 did not answer; leaving its interrupted jobs for the next start");
+                break;
+            }
+        }
         // tracks the cut-off job handed over while it ran are in the library: the job made again leaves them out
         let kept = state.library.songs_of_music_job(&old.id);
         let asked = tracks_asked(old.request.get("replay").unwrap_or(&old.request));
@@ -637,7 +645,8 @@ async fn resume_unfinished_jobs(state: AppState) {
             (None, format!("Cut off when the studio closed; the songs it had finished could not be counted, so it was not started again: {error:#}"))
         } else if kept.as_ref().is_ok_and(|kept| *kept >= asked) {
             (None, "Cut off when the studio closed; its songs were all in the library by then.".to_string())
-        } else if let Err(reason) = check_retry_engine(&old.engine_id, PRIMARY_MUSIC_ENGINE_ID) {
+        } else if let Err(reason) = check_retry_engine(&old.engine_id, old.request.pointer("/music_source/engine")
+            .and_then(Value::as_str).unwrap_or(PRIMARY_MUSIC_ENGINE_ID)) {
             (None, reason)
         } else if let Some(replay) = old.request.get("replay") {
             match serde_json::from_value::<ReplayMusicJobRequest>(replay.clone()) {
@@ -12795,7 +12804,7 @@ fn sanitize_persisted_configuration(mut configuration: StudioConfiguration) -> S
 
 /// An automatic retry must reach the same local engine that accepted the saved job.
 fn check_retry_engine(original: &str, selected: &str) -> Result<(), String> {
-    if original == PRIMARY_MUSIC_ENGINE_ID && original == selected {
+    if matches!(original, PRIMARY_MUSIC_ENGINE_ID | native_minimax::ENGINE_ID) && original == selected {
         Ok(())
     } else {
         Err(format!("The saved job used {original}, but it cannot resume with the current engine ({selected})."))
@@ -14025,6 +14034,7 @@ mod tests {
     #[test]
     fn automatic_recovery_requires_the_jobs_original_local_engine() {
         assert!(check_retry_engine(PRIMARY_MUSIC_ENGINE_ID, PRIMARY_MUSIC_ENGINE_ID).is_ok());
+        assert!(check_retry_engine(native_minimax::ENGINE_ID, native_minimax::ENGINE_ID).is_ok());
         for (original, selected) in [
             (PRIMARY_MUSIC_ENGINE_ID, "unconfigured"),
             ("acestep-cpp", PRIMARY_MUSIC_ENGINE_ID),
