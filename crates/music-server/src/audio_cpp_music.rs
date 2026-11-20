@@ -303,9 +303,14 @@ pub(super) async fn submit(
                     anyhow::ensure!(!stop.load(Ordering::SeqCst), "stopped");
                     // A disconnected JSON client still leaves the shared server running.
                     // Hold its lease until the answer so tools cannot replace it mid-task.
-                    let reply = server.run_task(FAMILY, body, &AtomicBool::new(false))?;
+                    let reply = server.run_task(FAMILY, body, &AtomicBool::new(false));
+                    // The shared server retains models indefinitely. Release only
+                    // Music3 before another music engine can claim the card.
+                    if let Err(error) = server.unload(&[FAMILY]) {
+                        studio_log!("[ERROR] unloading audio.cpp MiniMax Music3: {error:#}");
+                    }
                     anyhow::ensure!(!stop.load(Ordering::SeqCst), "stopped");
-                    shape(&reply, &settings)
+                    shape(&reply?, &settings)
                 },
             )
         })

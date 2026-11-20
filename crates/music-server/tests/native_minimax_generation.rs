@@ -191,6 +191,10 @@ async fn audio_cpp_minimax_music3_generates_and_saves_q8_provenance() {
     assert_eq!(sent["request"]["duration_seconds"], 3.2);
     assert_eq!(sent["request"]["num_inference_steps"], 2);
     assert_eq!(sent["request"]["lyrics"], "[verse] Morning comes");
+    let unloaded: Value =
+        serde_json::from_slice(&fs::read(root.path().join("audio-cpp-unloaded.json")).unwrap())
+            .unwrap();
+    assert_eq!(unloaded["model_ids"], json!(["minimax_music3"]));
     studio.kill().await.unwrap();
 }
 

@@ -66,6 +66,14 @@ fn handle(mut client: TcpStream, count: &mut u32) -> std::io::Result<()> {
                 fs::read("audio-cpp-response.json")?,
             )
         }
+        ("POST", "/v1/tasks/unload_models") => {
+            fs::write("audio-cpp-unloaded.json", body)?;
+            (
+                "200 OK",
+                "application/json",
+                br#"{"unloaded":["minimax_music3"],"not_found":[]}"#.to_vec(),
+            )
+        }
         ("GET", "/props") => (
             "200 OK",
             "application/json",
