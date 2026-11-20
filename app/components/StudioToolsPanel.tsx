@@ -74,6 +74,7 @@ export function StudioToolsPanel({ initialSongId }: { initialSongId?: string | n
   const [status, setStatus] = useState<SeparationStatus | null>(null);
   const [stems, setStems] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
+  const settingsRevision = useRef(0);
   // separating again replaces the stems the song has: asked first
   const [confirmReplace, setConfirmReplace] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -141,7 +142,11 @@ export function StudioToolsPanel({ initialSongId }: { initialSongId?: string | n
 
   // The separation state, and which stems the chosen track already has.
   const refresh = useCallback(async () => {
-    const separation: SeparationStatus = await fetch('/v1/separation/status', { headers: SELF_READ }).then(response => response.json());
+    const revision = settingsRevision.current;
+    const response = await fetch('/v1/separation/status', { headers: SELF_READ });
+    if (!response.ok) throw new Error(libraryFailure(response.status, await response.text()));
+    const separation: SeparationStatus = await response.json();
+    if (revision !== settingsRevision.current) return;
     setStatus(separation);
     if (songId) {
       const body = await fetch(`/v1/library/songs/${encodeURIComponent(songId)}/stems`, { headers: SELF_READ }).then(response => response.json());
@@ -154,12 +159,26 @@ export function StudioToolsPanel({ initialSongId }: { initialSongId?: string | n
   }, [refresh]);
 
   const saveSettings = async (next: SeparationStatus['settings']) => {
-    setStatus(current => (current ? { ...current, settings: next } : current));
-    await fetch('/v1/separation/settings', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(next),
-    }).catch(() => undefined);
+    setBusy(true);
+    setError(null);
+    try {
+      const response = await fetch('/v1/separation/settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(next),
+      });
+      if (!response.ok) {
+        const body = await response.json().catch(() => null);
+        throw new Error(body?.error || `${t('error')} (${response.status})`);
+      }
+      settingsRevision.current += 1;
+      setStatus(null);
+      await refresh();
+    } catch (problem) {
+      setError(problem instanceof Error ? problem.message : String(problem));
+    } finally {
+      setBusy(false);
+    }
   };
 
   const install = async () => {
@@ -189,12 +208,18 @@ export function StudioToolsPanel({ initialSongId }: { initialSongId?: string | n
     if (!songId) return;
     setBusy(true);
     setError(null);
-    const response = await fetch(`/v1/library/songs/${encodeURIComponent(songId)}/stems`, { method: 'POST' });
-    if (!response.ok) {
-      const body = await response.json().catch(() => null);
-      setError(body?.error || `Separation could not start (${response.status})`);
+    try {
+      const response = await fetch(`/v1/library/songs/${encodeURIComponent(songId)}/stems`, { method: 'POST' });
+      if (!response.ok) {
+        const body = await response.json().catch(() => null);
+        throw new Error(body?.error || `Separation could not start (${response.status})`);
+      }
+      await refresh();
+    } catch (problem) {
+      setError(problem instanceof Error ? problem.message : String(problem));
+    } finally {
+      setBusy(false);
     }
-    setBusy(false);
   };
 
   const transcribe = async () => {
@@ -312,6 +337,7 @@ export function StudioToolsPanel({ initialSongId }: { initialSongId?: string | n
                     <button
                       key={stem}
                       type="button"
+                      disabled={busy || running}
                       onClick={() => {
                         const next = chosen ? settings.stems.filter(name => name !== stem) : [...settings.stems, stem];
                         void saveSettings({ ...settings, stems: next });
@@ -336,13 +362,13 @@ export function StudioToolsPanel({ initialSongId }: { initialSongId?: string | n
                 which is listed with the other optional downloads. */}
             <div className="mt-3">
               <p className="text-[11px] font-bold uppercase tracking-wide text-zinc-500">{t('separationRuntime')}</p>
-              <div className="mt-2">
+              <fieldset className="mt-2" disabled={busy || running || !status}>
                 <DevicePicker
                   value={settings.runtime}
                   onChange={choice => void saveSettings({ ...settings, runtime: choice })}
                   cardAvailable={Boolean(status?.card && status?.card_runtime_installed)}
                 />
-              </div>
+              </fieldset>
               {/* Where a capability is installed is one place: the models
                   panel. This tool used to install the card runtime itself, with
                   its own button and its own progress, and disagree with it. */}
