@@ -104,6 +104,19 @@ connected and the address to paste.
   `assistant_sections` tags lyrics the user wrote with their sections without changing a
   word - the tag button of the create form.
 
+## Choosing the music engine
+
+For local YuE2, pass `"music_source": {"kind": "local"}` to `song_create`.
+For an OpenRouter generation, read `openrouter_catalog` and select an ID whose
+`capabilities` include `music_generation`. Pass that exact ID as
+`music_source.model`, with `music_source.kind` set to `openrouter`.
+The studio sends the style and lyrics to that model using the configured account.
+Submitting the job can incur a charge. Local weights are optional for this path.
+
+Use `song_job_get` to follow the returned job ID or `song_job_cancel` to stop
+receiving its output. A completed job returns the library song and its audio URL.
+Local score, sampling and LoRA controls apply to local generation.
+
 ## What YuE2 reads - read `writing_guide` for the full rules
 
 - **style**: one English sentence in this order - language, genre with its era, vocal
