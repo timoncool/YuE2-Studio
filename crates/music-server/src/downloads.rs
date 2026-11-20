@@ -1705,7 +1705,9 @@ mod tests {
         fs::write(&wrong, b"incomplete new archive").unwrap();
         assert!(downloader.install_all("upgrade", &[current]).await.is_err());
         assert!(downloader.is_installed(previous));
-        place(current);
+        // Remove the truncated local override. The ordinary downloader must
+        // now obtain the current package over HTTPS and verify its pinned SHA.
+        if wrong.exists() { fs::remove_file(&wrong).unwrap(); }
         downloader.install_all("upgrade", &[current]).await.unwrap();
         assert!(downloader.is_installed(current));
         assert!(!downloader.is_installed(previous));
@@ -1714,6 +1716,13 @@ mod tests {
         assert_eq!(record.url, current.url);
         assert_eq!(Some(record.sha256.as_str()), crate::pin_sha::sha256(current.url));
         downloader.install_all("upgrade", &[current]).await.unwrap();
+
+        let clean_root = tempfile::tempdir().unwrap();
+        let clean = crate::lyrics_sync::LyricsSync::new(clean_root.path());
+        clean.downloader().install_all("fresh", &[current]).await.unwrap();
+        assert!(clean.onnxruntime_library().unwrap().is_file());
+        let fresh_record = crate::install_record::read(&clean.downloader().record_of(current)).unwrap();
+        assert_eq!(fresh_record.sha256, record.sha256);
     }
 
     /// An install cut off after the archive's key file was unpacked and before
