@@ -779,6 +779,27 @@ fn try_another_onnx_source(error: &anyhow::Error) -> bool {
         || error.chain().any(|cause| cause.downcast_ref::<reqwest::Error>().is_some_and(|error| error.is_body() || error.is_decode() || error.is_request() || error.is_timeout()))
 }
 
+/// A neighbouring studio can have the same model under the same relative path, even
+/// in folders (such as midi/models) excluded from the general file search.
+fn take_model_from_installations(asset: &Asset, target: &Path, own_root: &Path, neighbors: &[studio_hub_client::neighbors::Neighbor]) -> bool {
+    let Ok(relative) = target.strip_prefix(own_root) else { return false };
+    if !relative.components().all(|part| matches!(part, std::path::Component::Normal(_))) {
+        return false;
+    }
+    for neighbor in neighbors {
+        let source = neighbor.data_dir.join(relative);
+        if !source.is_file() { continue; }
+        match studio_hub_client::neighbors::take_file(&source, target, true, |staged| crate::pin_sha::accepts(asset.url, staged)) {
+            Ok(()) => {
+                note_taken(asset.id, target, &neighbor.app);
+                return true;
+            }
+            Err(error) => report_take_failure(target, &neighbor.app, &error),
+        }
+    }
+    false
+}
+
 /// `fetch` once nothing lies at `target`: from another program that has the file, or downloaded into `.part`.
 async fn fetch_absent(
     http: &reqwest::Client,
@@ -787,6 +808,16 @@ async fn fetch_absent(
     progress: &Arc<Mutex<Option<DownloadProgress>>>,
     cancel: Arc<std::sync::atomic::AtomicBool>,
 ) -> Result<()> {
+    if asset.kind == AssetKind::Model && asset.pick.is_empty() && asset.unzip_into.is_none() && crate::pin_sha::sha256(asset.url).is_some() {
+        if let Some(own_root) = crate::studio_data_root() {
+            let (asset, target) = (*asset, target.to_owned());
+            let taken = tokio::task::spawn_blocking(move || {
+                let neighbors = studio_hub_client::neighbors::others(&own_root);
+                take_model_from_installations(&asset, &target, &own_root, &neighbors)
+            }).await?;
+            if taken { return Ok(()); }
+        }
+    }
     // How big it is and whether it can be fetched in pieces, asked of the
     // server rather than assumed - both answers come from one ranged byte.
     let url = crate::net::model_url(asset.url);
