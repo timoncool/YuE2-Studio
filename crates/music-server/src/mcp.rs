@@ -242,6 +242,15 @@ fn shape(name: &str, args: &Value, value: Value) -> Value {
     let detailed = args.get("response_format").and_then(Value::as_str) == Some("detailed");
     match name {
         "training_status" if !detailed => compact_training(&value),
+        "rvc_catalog_list" => {
+            let entries = value.as_array().map_or(&[][..], Vec::as_slice);
+            let offset = args["offset"].as_u64().unwrap_or(0).min(entries.len() as u64) as usize;
+            let end = (offset + 20).min(entries.len());
+            json!({
+                "total": entries.len(), "offset": offset, "voices": &entries[offset..end],
+                "next_offset": (end < entries.len()).then_some(end),
+            })
+        },
         "song_create" | "song_job_get" | "song_replay" if !detailed => compact_job(&value),
         "song_jobs_list" if !detailed => Value::Array(value.as_array().into_iter().flatten().map(compact_job).collect()),
         "library_song_get" if !detailed => compact_song(&value),
@@ -2450,8 +2459,8 @@ fn tools() -> &'static [Tool] {
             },
             Tool {
                 name: "rvc_catalog_list",
-                description: "List curated RVC voices, license terms, and the local IDs of installed entries.",
-                schema: nothing,
+                description: "List up to 20 curated RVC voices, license terms and installed local IDs. Pass next_offset as offset for the next page.",
+                schema: || object(json!({ "offset": { "type": "integer", "minimum": 0 } }), &[]),
                 call: |_| get("/v1/rvc/catalog".into()),
             },
             Tool {
