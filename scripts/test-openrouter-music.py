@@ -22,7 +22,12 @@ class Provider(http.server.BaseHTTPRequestHandler):
         self.send_response(200)
         self.send_header("Content-Type", "text/event-stream")
         self.end_headers()
-        for chunk in (encoded[:51], encoded[51:]):
+        content=body["messages"][0]["content"]
+        malformed="broken wave case" in content
+        wire=base64.b64encode(b"RIFF\x04\x00\x00\x00WAVE").decode() if malformed else encoded
+        for chunk in (wire[:51], wire[51:]):
+            if not chunk:
+                continue
             event = {"choices": [{"delta": {"audio": {"data": chunk}}}]}
             self.wfile.write(f"data: {json.dumps(event)}\r\n\r\n".encode())
             self.wfile.flush()
@@ -195,6 +200,13 @@ with tempfile.TemporaryDirectory(prefix="yue-openrouter-") as profile, http.serv
         failed=finish(json.loads(data)["id"])
         assert failed["status"]=="failed" and not failed.get("song") and "[DONE]" in failed["message"],failed
         assert len(calls)==2,calls
+        code,data=request("/v1/music/jobs",dict(body,style="  ",lyrics="\n"))
+        assert code==400 and len(calls)==2,(code,data,calls)
+        code,data=request("/v1/music/jobs",dict(body,title="Broken WAV",style="broken wave case"))
+        assert code==202,(code,data)
+        failed=finish(json.loads(data)["id"])
+        assert failed["status"]=="failed" and not failed.get("song"),failed
+        assert len(calls)==3,calls
         code,data=request("/v1/music/jobs",dict(body,title="Must not be stored",style="slow case"))
         assert code==202,(code,data)
         slow_job=json.loads(data)["id"]
@@ -217,10 +229,10 @@ with tempfile.TemporaryDirectory(prefix="yue-openrouter-") as profile, http.serv
         assert restored["id"]==song_id and restored["generation_settings"]["model_name"]==model_name,restored
         assert restored["generation_settings"]["model"]==model,restored
         assert assert_played_wav(complete["song"]["audio_url"])==pcm_sha256
-        assert len(calls)==3,calls
+        assert len(calls)==4,calls
         print(json.dumps({"status":"pass","http_calls":len(calls),"library_song":song_id,"wav_bytes":len(wav),
                           "restart_persisted":True,"incomplete_failed":True,"replay_rejected":True,
-                          "explicit_model":model,"upstream_disconnected_on_cancel":True,"cancel_no_import":True,"mcp_tools_list":True,"mcp_catalog":True,"mcp_song_create":True,"model_name":model_name,"id3_artist":model,"pcm_sha256":pcm_sha256},indent=2))
+                          "explicit_model":model,"upstream_disconnected_on_cancel":True,"cancel_no_import":True,"mcp_tools_list":True,"mcp_catalog":True,"mcp_song_create":True,"model_name":model_name,"id3_artist":model,"pcm_sha256":pcm_sha256,"empty_prompt_rejected":True,"malformed_wav_rejected":True},indent=2))
     finally:
         proc.terminate()
         proc.wait(timeout=15)
