@@ -173,7 +173,8 @@ impl Library {
     Ok(())
  }
  fn read_songs(c: &Connection)->Result<Vec<Song>>{let mut s=c.prepare("SELECT id,title,audio_path,caption,lyrics,metadata_json,generation_settings_json,engine_id,profile_id,replay_request_json,audio_codes_json,source,created_at,updated_at FROM songs ORDER BY created_at DESC, id DESC")?;Ok(s.query_map([],row_song)?.collect::<rusqlite::Result<_>>()?)}
- pub fn get_song(&self,id:&str)->Result<Option<Song>>{let c=self.connection.lock().unwrap();Ok(c.query_row("SELECT id,title,audio_path,caption,lyrics,metadata_json,generation_settings_json,engine_id,profile_id,replay_request_json,audio_codes_json,source,created_at,updated_at FROM songs WHERE id=?",[id],row_song).optional()?)}
+ pub fn get_song(&self,id:&str)->Result<Option<Song>>{Self::read_song(&self.connection.lock().unwrap(),id)}
+ fn read_song(c:&Connection,id:&str)->Result<Option<Song>>{Ok(c.query_row("SELECT id,title,audio_path,caption,lyrics,metadata_json,generation_settings_json,engine_id,profile_id,replay_request_json,audio_codes_json,source,created_at,updated_at FROM songs WHERE id=?",[id],row_song).optional()?)}
  pub fn create_song(&self,input:SongInput)->Result<Song>{let now=now();let song=Song{id:uuid::Uuid::now_v7().to_string(),title:input.title,audio_path:input.audio_path,caption:input.caption,lyrics:input.lyrics,metadata:input.metadata,generation_settings:input.generation_settings,engine_id:input.engine_id,profile_id:input.profile_id,replay_request:input.replay_request,audio_codes:input.audio_codes,source:input.source,created_at:now.clone(),updated_at:now};self.save_song(&song)?;Ok(song)}
  pub fn import_generated_song(&self,input:GeneratedSongInput)->Result<ImportedSong>{
   if input.audio.is_empty(){anyhow::bail!("cannot import an empty audio result")}
@@ -242,24 +243,29 @@ impl Library {
    "image/png"=>"png","image/jpeg"|"image/jpg"=>"jpg","image/webp"=>"webp",
    other=>anyhow::bail!("unsupported cover media type '{other}'; use PNG, JPEG or WebP"),
   };
-  let Some(mut song)=self.get_song(id)? else{anyhow::bail!("song not found")};
-  fs::create_dir_all(&self.media_dir).with_context(||format!("create media directory {}",self.media_dir.display()))?;
-  let filename=format!("{id}-cover.{extension}");
-  let target=self.media_dir.join(&filename);
-  let temporary=self.media_dir.join(format!("{filename}.part"));
-  {let mut file=fs::OpenOptions::new().create(true).write(true).truncate(true).open(&temporary)?;use std::io::Write;file.write_all(image)?;file.sync_all()?;}
-  fs::rename(&temporary,&target).with_context(||format!("publish cover {}",target.display()))?;
-  let previous=song.metadata.get("cover_filename").and_then(|v|v.as_str()).map(str::to_owned);
-  if song.metadata.is_null(){song.metadata=serde_json::json!({})}
-  if let Some(fields)=song.metadata.as_object_mut(){
-   fields.insert("cover_filename".into(),serde_json::Value::String(filename.clone()));
-   fields.insert("cover_media_type".into(),serde_json::Value::String(format!("image/{}",if extension=="jpg"{"jpeg"}else{extension})));
-   match placeholder{Some(look)=>{fields.insert("cover_placeholder".into(),serde_json::Value::String(look.to_owned()));}None=>{fields.remove("cover_placeholder");}}
-   match source{Some(page)=>{fields.insert("cover_source".into(),serde_json::Value::String(page.to_owned()));}None=>{fields.remove("cover_source");}}
-  }
-  song.updated_at=now();
-  if let Err(error)=self.save_song(&song){let _=fs::remove_file(&target);return Err(error.context("store song cover record"))}
-  if let Some(previous)=previous.filter(|previous|previous!=&filename){let _=fs::remove_file(self.media_dir.join(previous));}
+  fs::create_dir_all(&self.media_dir)?;
+  // No row can see a partly written image. Each edit owns its new file until the database commits.
+  let mut image_file = tempfile::Builder::new().prefix("cover-").suffix(&format!(".{extension}")).tempfile_in(&self.media_dir)?;
+  std::io::Write::write_all(&mut image_file, image)?;
+  image_file.as_file().sync_all()?;
+  let (_, target) = image_file.keep()?;
+  let filename = target.file_name().and_then(|name| name.to_str()).context("read new cover filename")?;
+  let stored = self.edit_cover(id, |fields| {
+      fields.insert("cover_filename".into(), filename.into());
+      fields.insert("cover_media_type".into(), format!("image/{}", if extension == "jpg" { "jpeg" } else { extension }).into());
+      if let Some(look) = placeholder { fields.insert("cover_placeholder".into(), look.into()); }
+      else { fields.remove("cover_placeholder"); }
+      if let Some(page) = source { fields.insert("cover_source".into(), page.into()); }
+      else { fields.remove("cover_source"); }
+      true
+  });
+  let song = match stored {
+      Ok(Some(song)) => song,
+      result => {
+          let _ = fs::remove_file(target);
+          return Err(result.err().unwrap_or_else(|| anyhow::anyhow!("cover was not stored")));
+      }
+  };
   // a stem wears its song's cover: a new one reaches the stems separated from it
   let separated=|other:&Song|other.metadata.pointer("/derived/tool").and_then(|v|v.as_str())==Some("stems")&&other.metadata.pointer("/derived/from").and_then(|v|v.as_str())==Some(id);
   for stem in self.list_songs()?.into_iter().filter(separated){
@@ -269,16 +275,33 @@ impl Library {
  }
  /// Takes a placeholder back out of a track. A cover of its own stays.
  pub fn remove_placeholder_cover(&self,id:&str)->Result<Option<Song>>{
-  let Some(mut song)=self.get_song(id)? else{anyhow::bail!("song not found")};
-  if song.metadata.get("cover_placeholder").is_none(){return Ok(None)}
-  let filename=song.metadata.get("cover_filename").and_then(|v|v.as_str()).map(str::to_owned);
-  if let Some(fields)=song.metadata.as_object_mut(){
-   for key in ["cover_filename","cover_media_type","cover_placeholder","cover_source"]{fields.remove(key);}
-  }
-  song.updated_at=now();
-  self.save_song(&song).context("take the placeholder cover out of the record")?;
-  if let Some(filename)=filename{let _=fs::remove_file(self.media_dir.join(filename));}
-  Ok(Some(song))
+  self.edit_cover(id, |fields| {
+      if !fields.contains_key("cover_placeholder") { return false; }
+      for key in ["cover_filename", "cover_media_type", "cover_placeholder", "cover_source"] { fields.remove(key); }
+      true
+  })
+ }
+ fn edit_cover(&self, id: &str, edit: impl FnOnce(&mut serde_json::Map<String, serde_json::Value>) -> bool) -> Result<Option<Song>> {
+    let mut connection = self.connection.lock().unwrap();
+    let tx = connection.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
+    let mut song = Self::read_song(&tx, id)?.context("song not found")?;
+    let previous = song.metadata.get("cover_filename").and_then(|v| v.as_str()).map(str::to_owned);
+    if !song.metadata.is_object() { song.metadata = serde_json::json!({}); }
+    if !edit(song.metadata.as_object_mut().unwrap()) { return Ok(None); }
+    song.updated_at = now();
+    tx.execute("UPDATE songs SET metadata_json=?, updated_at=? WHERE id=?", params![song.metadata.to_string(), song.updated_at, id])?;
+    let mut unused = None;
+    if let Some(previous) = previous {
+        let shared: bool = tx.query_row("SELECT EXISTS(SELECT 1 FROM songs WHERE CASE WHEN json_valid(metadata_json) THEN json_extract(metadata_json,'$.cover_filename') END = ? COLLATE NOCASE)", [&previous], |row| row.get(0))?;
+        if !shared { unused = self.media_file(&previous); }
+    }
+    tx.commit()?;
+    if let Some(path) = unused {
+        if let Err(error) = fs::remove_file(&path) { eprintln!("[WARN] could not remove previous cover {}: {error}", path.display()); }
+    }
+    drop(connection);
+    crate::mcp::announce("library");
+    Ok(Some(song))
  }
  pub fn cover_path_for_song(&self,song:&Song)->Option<(PathBuf,String)>{
   let filename=song.metadata.get("cover_filename")?.as_str()?;
@@ -625,6 +648,29 @@ mod edit_tests {
         let merged = merged_metadata(&serde_json::json!({ "liked": true, "liked_at": "100", "karaoke": { "file": "k.json" } }), serde_json::Value::Null);
         assert_eq!(merged["liked"], true, "an edit with no metadata leaves it as it is");
         assert_eq!(merged["karaoke"]["file"], "k.json");
+    }
+
+    #[test]
+    fn replacing_a_shared_cover_keeps_the_other_tracks_artwork_even_in_the_bin() {
+        let root = tempfile::tempdir().unwrap();
+        let db = Library::open_at(root.path().join("library.sqlite"), root.path().join("media")).unwrap();
+        let create = |metadata| db.create_song(serde_json::from_value(serde_json::json!({
+            "title":"Take", "metadata":metadata, "engine_id":"manual", "source":"external_import"
+        })).unwrap()).unwrap();
+        let first = create(serde_json::json!({}));
+        let first = db.store_placeholder_cover(&first.id, b"first", "image/png", "wave", Some("credit")).unwrap();
+        let shared = db.cover_path_for_song(&first).unwrap().0;
+        let other = create(first.metadata.clone());
+        db.set_song_trashed(&other.id, true, None).unwrap();
+        let edited = db.store_song_cover(&first.id, b"second", "image/png").unwrap();
+        let new_file = db.cover_path_for_song(&edited).unwrap().0;
+        assert_ne!(shared, new_file);
+        assert_eq!(fs::read(&shared).unwrap(), b"first");
+        assert_eq!(fs::read(&new_file).unwrap(), b"second");
+        db.remove_placeholder_cover(&other.id).unwrap().unwrap();
+        assert!(!shared.exists());
+        assert!(db.remove_placeholder_cover(&first.id).unwrap().is_none());
+        assert_eq!(fs::read(new_file).unwrap(), b"second");
     }
 
     #[test]
