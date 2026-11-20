@@ -7,6 +7,8 @@ permissions:
 jobs:
   install:
     runs-on: ubuntu-24.04
+    env:
+      RUSTUP_TOOLCHAIN: stable
     timeout-minutes: 35
     steps:
       - uses: actions/checkout@v7
