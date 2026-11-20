@@ -47,7 +47,10 @@ export const StemMixer: React.FC<Props> = ({ stems, urlFor, mixUrl, label, onDow
   const elements = useRef(new Map<string, HTMLAudioElement>());
   const graph = useRef<Graph | null>(null);
   const [channels, setChannels] = useState<Record<string, StemChannel>>(() => Object.fromEntries(stems.map(stem => [stem, freshChannel()])));
-  const [playing, setPlaying] = useState(false);
+  const [transport, setTransport] = useState<'paused' | 'starting' | 'playing'>('paused');
+  const [playError, setPlayError] = useState('');
+  const attempt = useRef(0);
+  const playing = transport === 'playing';
   const [position, setPosition] = useState(0);
   const [length, setLength] = useState(0);
   const [loop, setLoop] = useState<LoopRegion>({ on: false, start: 0, end: 0 });
@@ -110,7 +113,10 @@ export const StemMixer: React.FC<Props> = ({ stems, urlFor, mixUrl, label, onDow
           }
         }
         setPosition(lead.currentTime);
-        if (lead.ended) setPlaying(false);
+        if (lead.ended) {
+          for (const element of elements.current.values()) element.pause();
+          setTransport('paused');
+        }
       }
       frame = requestAnimationFrame(tick);
     };
@@ -120,25 +126,50 @@ export const StemMixer: React.FC<Props> = ({ stems, urlFor, mixUrl, label, onDow
 
   // stop everything on the way out
   useEffect(() => () => {
+    attempt.current++;
     for (const element of elements.current.values()) element.pause();
     graph.current?.release();
     void graph.current?.context.close();
   }, []);
 
   const toggle = async () => {
-    const all = [...elements.current.values()];
-    if (playing) {
-      all.forEach(element => element.pause());
-      setPlaying(false);
+    const id = ++attempt.current;
+    const tracks = [...elements.current.entries()];
+    const pauseAll = () => tracks.forEach(([, element]) => element.pause());
+    if (transport !== 'paused') {
+      pauseAll();
+      setTransport('paused');
       return;
     }
-    const built = ensureGraph();
-    await built.context.resume();
-    const lead = master();
-    const at = loopRef.current?.on ? (loopJump(lead?.currentTime ?? 0, loopRef.current) ?? lead?.currentTime ?? 0) : lead?.currentTime ?? 0;
-    all.forEach(element => { element.currentTime = at; });
-    await Promise.all(all.map(element => element.play().catch(() => undefined)));
-    setPlaying(true);
+    setPlayError('');
+    setTransport('starting');
+    try {
+      const built = ensureGraph();
+      await built.context.resume();
+      if (id !== attempt.current) return;
+      const time = master()?.currentTime ?? 0;
+      const at = loopJump(time, loopRef.current) ?? time;
+      await Promise.all(tracks.map(async ([stem, element]) => {
+        try {
+          if (element.error) {
+            const source = new URL(urlFor(stem), document.baseURI);
+            source.searchParams.set('retry', String(id));
+            element.src = source.href;
+            element.load();
+          }
+          element.currentTime = at;
+          await element.play();
+        } catch (error) {
+          throw new Error(`${label(stem)}: ${error instanceof Error ? error.message : String(error)}`);
+        }
+      }));
+      if (id === attempt.current) setTransport('playing');
+    } catch (error) {
+      if (id !== attempt.current) return;
+      pauseAll();
+      setPlayError(error instanceof Error ? error.message : String(error));
+      setTransport('paused');
+    }
   };
 
   const seek = (share: number) => {
@@ -152,18 +183,21 @@ export const StemMixer: React.FC<Props> = ({ stems, urlFor, mixUrl, label, onDow
     setChannels(current => ({ ...current, [stem]: { ...(current[stem] ?? freshChannel()), ...change } }));
 
   const shownLoop = loopRef.current;
+  const transportLabel = t(transport === 'starting' ? 'cancel' : playing ? 'stemMixPause' : 'stemMixPlay');
 
   return (
     <div className="space-y-2" data-testid="stem-mixer">
+      {playError && <p role="alert" className="text-sm text-red-600 dark:text-red-400">{t('error')}: {playError}</p>}
+      {transport === 'starting' && <p role="status" className="text-sm">{t('starting')}</p>}
       <div className="flex items-center gap-3 rounded-lg border border-zinc-200 px-3 py-2 dark:border-white/10">
         <button
           type="button"
           onClick={() => void toggle()}
           className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-linear-to-r from-orange-500 to-pink-600 text-white"
-          aria-label={t(playing ? 'stemMixPause' : 'stemMixPlay')}
-          title={t(playing ? 'stemMixPause' : 'stemMixPlay')}
+          aria-label={transportLabel}
+          title={transportLabel}
         >
-          {playing ? <Pause size={15} /> : <Play size={15} className="ml-0.5" />}
+          {transport !== 'paused' ? <Pause size={15} /> : <Play size={15} className="ml-0.5" />}
         </button>
         <span className="w-14 shrink-0 text-right text-[11px] tabular-nums text-zinc-500" data-testid="stem-position">{clock(position)}</span>
         <div className="relative min-w-0 flex-1">

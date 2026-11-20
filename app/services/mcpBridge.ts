@@ -240,9 +240,10 @@ const builtIn: Record<string, Handler> = {
   async click(args) {
     const element = find(args);
     element.scrollIntoView({ block: 'center' });
+    const clicked = label(element) || element.tagName.toLowerCase();
     element.click();
     await settle();
-    return { text: `Clicked ${label(element) || element.tagName.toLowerCase()}.` };
+    return { text: `Clicked ${clicked}.` };
   },
   async type(args) {
     const element = find(args);
