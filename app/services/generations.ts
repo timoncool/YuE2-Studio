@@ -544,6 +544,7 @@ export function useGenerations({ enabled, notify, onFinished }: GenerationOption
   return {
     songs,
     activeJobCount: following,
+    queueBusy: cards.some(entry => entry.isGenerating) || (jobs.data?.length ?? 0) > 0,
     isGenerating: waiting.some(entry => entry.isGenerating),
     generate,
     track,
