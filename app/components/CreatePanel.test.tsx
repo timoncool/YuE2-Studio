@@ -261,6 +261,42 @@ it.each([
     style: 'folk', lyrics: 'verse', duration_seconds: 18, steps: 7, seed: 42, ...extra });
 });
 
+it('asks for an explicit profile when a migrated ACE take used custom weights', async () => {
+  const engine = 'acestep-cpp';
+  const models = ['acestep-v15-xl-sft-Q4_K_M.gguf', 'acestep-5Hz-lm-4B-BF16.gguf', 'vae-BF16.gguf'];
+  const song = { title: 'Old ACE take', style: 'synthwave', lyrics: 'verse', ditModel: engine, generationParams: {
+    synth_model: models[0], lm_model: models[1], vae: models[2],
+    duration: 120, inference_steps: 8, seed: 1234, guidance_scale: 2.5,
+  } } as Song;
+  localStorage.setItem('studio.nativeMusicProfiles', JSON.stringify({ selected: { [engine]: 'native' }, settings: {} }));
+  vi.stubGlobal('fetch', vi.fn(async () => Response.json({ engine, engine_installed: true,
+    profiles: [{ id: 'native', label: 'XL Turbo', ready: true, total_bytes: 1, missing: [] }] })));
+  act(() => root.render(panel({ musicEngine: engine, initialData: { song, timestamp: 1 } })));
+  await flush();
+
+  const profile = host.querySelector<HTMLSelectElement>('select[aria-label="Local model"]')!;
+  const generate = buttonNamed('create') as HTMLButtonElement;
+  expect(profile.value).toBe('');
+  expect(generate.disabled).toBe(true);
+  expect(host.textContent).toContain('Choose a profile to create a new take.');
+  for (const model of models) expect(host.textContent).toContain(model);
+  const duration = [...host.querySelectorAll('label')].find(label => label.textContent === 'Duration (seconds)')!.querySelector('input')!;
+  expect(duration.value).toBe('120');
+
+  act(() => {
+    profile.value = 'native';
+    profile.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  expect(generate.disabled).toBe(false);
+  expect(host.textContent).not.toContain(models[0]);
+  click(generate);
+  expect(sent.at(-1)).toMatchObject({
+    music_source: { kind: 'native', engine, model: 'native' },
+    style: 'synthwave', lyrics: 'verse', duration_seconds: 120, steps: 8, seed: 1234,
+    ace: { guidance_scale: 2.5 },
+  });
+});
+
 describe('an instrumental (#217)', () => {
   it('keeps a score written for one submission out of the form and writes a new one for the next', async () => {
     act(() => root.render(panel({})));
