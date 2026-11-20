@@ -618,17 +618,18 @@ impl Downloader {
 
     /// Starts one download in the background. Only one runs at a time, and an
     /// interrupted file resumes from what is already on disk.
-    pub async fn install(&self, asset: &'static Asset) -> Result<()> {
+    pub async fn install(&self, scope: &str, asset: &'static Asset) -> Result<()> {
         refuse_foreign_runtime(asset)?;
         {
             let mut progress = self.progress.lock().await;
             if progress.as_ref().is_some_and(|active| !active.done && active.error.is_none()) {
                 bail!("another download is already running");
             }
+            self.rejected.lock().await.remove(scope);
             self.cancel.store(false, std::sync::atomic::Ordering::Relaxed);
             *progress = Some(DownloadProgress {
                 asset_id: asset.id.to_string(),
-                scope: None,
+                scope: Some(scope.to_owned()),
                 downloaded_bytes: self.partial_bytes(asset),
                 total_bytes: asset.bytes,
                 done: false,
@@ -1691,6 +1692,41 @@ mod tests {
         assert!(!holds_todays(false, runtime.url, &file).await, "an unpinned runtime is never taken as today's by its name");
         assert!(holds_todays(true, runtime.url, &file).await, "a model counts by its file");
         fs::remove_dir_all(&root).ok();
+    }
+
+    #[tokio::test]
+    async fn a_single_karaoke_file_is_visible_and_retriable_after_a_stalled_probe() {
+        use std::sync::atomic::{AtomicBool, Ordering};
+        let stalled = Arc::new(tokio::sync::Notify::new());
+        let ready = Arc::new(AtomicBool::new(false));
+        let app = axum::Router::new().route("/model", axum::routing::get({
+            let (stalled, ready) = (stalled.clone(), ready.clone());
+            move || async move {
+                if !ready.load(Ordering::Relaxed) {
+                    stalled.notify_one();
+                    return std::future::pending().await;
+                }
+                "archive"
+            }
+        }));
+        let (base, server) = onnx_fixture(app).await;
+        let model = Box::leak(Box::new(Asset { url: Box::leak(format!("{base}/model").into_boxed_str()), bytes: 7, ..asset() }));
+        let temp = tempfile::tempdir().unwrap();
+        let mut downloader = Downloader::new(temp.path().to_owned());
+        downloader.http = reqwest::Client::builder().no_proxy().build().unwrap();
+        tokio::time::timeout(std::time::Duration::from_secs(10), async {
+            downloader.install("karaoke", model).await.unwrap();
+            stalled.notified().await;
+            assert_eq!(downloader.active_for("karaoke").await.unwrap().asset_id, model.id);
+            assert!(!downloader.cancel_for("listen").await);
+            assert!(downloader.cancel_for("karaoke").await);
+            while !downloader.active_for("karaoke").await.unwrap().done { tokio::time::sleep(std::time::Duration::from_millis(10)).await; }
+            ready.store(true, Ordering::Relaxed);
+            downloader.install("karaoke", model).await.unwrap();
+            while !downloader.active_for("karaoke").await.unwrap().done { tokio::time::sleep(std::time::Duration::from_millis(10)).await; }
+            assert_eq!(std::fs::read(downloader.path_of(model)).unwrap(), b"archive");
+        }).await.expect("single file did not finish after retry");
+        server.abort();
     }
 
     #[tokio::test]

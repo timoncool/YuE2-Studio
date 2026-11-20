@@ -2581,7 +2581,7 @@ async fn install_separation_asset(
         state
             .separator
             .downloader()
-            .install(&separation::MODEL)
+            .install("separation", &separation::MODEL)
             .await
             .map_err(|error| api_error(StatusCode::CONFLICT, error.to_string()))?;
     } else if let Some(asset) = [acpp_server::asset::Build::Cuda13, acpp_server::asset::Build::Cuda12, acpp_server::asset::Build::Vulkan, acpp_server::asset::Build::Cpu, acpp_server::asset::Build::Metal]
@@ -2589,7 +2589,7 @@ async fn install_separation_asset(
         .flat_map(acpp::assets)
         .find(|asset| asset.id == request.asset_id)
     {
-        state.acpp.downloader().install(asset).await.map_err(|error| api_error(StatusCode::CONFLICT, error.to_string()))?;
+        state.acpp.downloader().install("separation", asset).await.map_err(|error| api_error(StatusCode::CONFLICT, error.to_string()))?;
     } else {
         return Err(api_error(StatusCode::BAD_REQUEST, format!("unknown asset {}", request.asset_id)));
     }
@@ -4509,7 +4509,7 @@ async fn ensure_local_recogniser_named(state: &AppState, config: &lyrics_sync::L
 
     note_activity(state, song_id, title, "karaoke", "running", Some("karaoke.downloading".into())).await;
     for asset in missing {
-        if let Err(error) = state.lyrics_sync.downloader().install(asset).await {
+        if let Err(error) = state.lyrics_sync.downloader().install("karaoke", asset).await {
             eprintln!("could not fetch the karaoke model {}: {error}", asset.id);
             note_activity(state, song_id, title, "karaoke", "failed", Some(format!("{error:#}"))).await;
             return false;
@@ -7858,7 +7858,7 @@ async fn karaoke_install(
     state
         .lyrics_sync
         .downloader()
-        .install(asset)
+        .install("karaoke", asset)
         .await
         .map_err(|error| api_error(StatusCode::CONFLICT, error.to_string()))?;
     Ok(Json(state.lyrics_sync.status(&config).await))

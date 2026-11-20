@@ -195,6 +195,18 @@ export const OptionalGroup: React.FC<{
   const modelRead = useRef(false);
   const statusGeneration = useRef(0);
   // the engines by their ids: a list made anew by the page with the same engines does not start the reads again
+  const cancelDownload = async () => {
+    if (!cancelUrl) return;
+    setFailed(null);
+    try {
+      const response = await fetch(cancelUrl, { method: 'POST' });
+      if (!response.ok) throw new Error(await errorMessage(response));
+      setStarting(false);
+      await load();
+    } catch (error) {
+      setFailed(error instanceof Error ? error.message : String(error));
+    }
+  };
   const engineIds = (engines ?? []).map((choice) => choice.id).join('\n');
   const load = useCallback(async () => {
     const generation = statusGeneration.current;
@@ -519,13 +531,7 @@ export const OptionalGroup: React.FC<{
                         {cancelUrl && (
                           <button
                             type="button"
-                            onClick={() => {
-                              setFailed(null);
-                              setStarting(false);
-                              void fetch(cancelUrl, { method: 'POST' })
-                                .then(() => load())
-                                .catch((error: Error) => setFailed(error.message));
-                            }}
+                            onClick={() => void cancelDownload()}
                             title={t('cancelDownload')}
                             className="shrink-0 rounded-md border border-zinc-300 p-1.5 text-zinc-500 transition-colors hover:border-rose-400 hover:bg-rose-500/10 hover:text-rose-600 dark:border-white/15 dark:text-zinc-400"
                           >
@@ -654,6 +660,12 @@ export const OptionalGroup: React.FC<{
                       >
                         {active ? <Loader2 size={13} className="animate-spin" /> : <Download size={13} />}
                         {active ? `${percent}%` : t('download')}
+                      </button>
+                    )}
+                    {active && cancelUrl && (
+                      <button type="button" onClick={() => void cancelDownload()} title={t('cancelDownload')} aria-label={t('cancelDownload')}
+                        className="rounded-md border border-zinc-300 p-1.5 text-zinc-500 hover:text-rose-600 dark:border-white/15">
+                        <Square size={13} />
                       </button>
                     )}
                   </div>
