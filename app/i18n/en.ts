@@ -1714,7 +1714,7 @@ export const en = {
     manualTitle: 'Download by hand ({count})',
     manualHint: 'If the download from the studio does not get through, download these files from their addresses and put them into the folder below; the studio sees them at once. The addresses are the pinned versions: a file of the same name from the repository\'s latest revision can be another build, and the studio does not take it.',
     manualSize: '{bytes} bytes',
-    manualRuntimeHint: "Download this ZIP from the official address and save it at the path below without extracting or renaming it. Then click “{retry}” again.",
+    manualRuntimeHint: "Download this archive from the official address and save it at the path below without extracting or renaming it. Then click “{retry}” again.",
     manualFolder: 'Put into',
     manualCopyFailed: 'Not copied - select the text',
     mirrorOfferTitle: 'Hugging Face does not answer',

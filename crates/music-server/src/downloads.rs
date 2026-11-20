@@ -713,8 +713,7 @@ async fn fetch(
     outcome.map(|()| target.to_path_buf())
 }
 
-/// Recognize an archive saved under its release filename beside the studio's download path.
-fn release_archive_alias(asset: &Asset, target: &Path) -> Option<PathBuf> {
+fn release_archive_name(asset: &Asset) -> Option<&'static str> {
     if asset.kind != AssetKind::Runtime || (asset.unzip_into.is_none() && asset.pick.is_empty()) || crate::pin_sha::sha256(asset.url).is_none() {
         return None;
     }
@@ -722,22 +721,22 @@ fn release_archive_alias(asset: &Asset, target: &Path) -> Option<PathBuf> {
     if ![".zip", ".tgz", ".tar.gz", ".tar.xz", ".whl"].iter().any(|suffix| filename.ends_with(suffix)) {
         return None;
     }
-    let alias = target.with_file_name(filename);
+    Some(filename)
+}
+
+/// Recognize an archive saved under its release filename beside the studio's download path.
+fn release_archive_alias(asset: &Asset, target: &Path) -> Option<PathBuf> {
+    let alias = target.with_file_name(release_archive_name(asset)?);
     (alias != target).then_some(alias)
 }
 
 fn manual_archive_hint(asset: &Asset, target: &Path, error: &anyhow::Error) -> Option<ManualArchive> {
-    if !asset.is_windows_runtime()
-        || !asset.url.starts_with("https://")
-        || !asset.url.ends_with(".zip")
-        || (asset.unzip_into.is_none() && asset.pick.is_empty())
-        || crate::pin_sha::sha256(asset.url).is_none()
+    if !asset.url.starts_with("https://")
         || !matches!(failure_code(error), "network" | "proxy" | "http_status" | "rate_limited")
     {
         return None;
     }
-    let path = release_archive_alias(asset, target).unwrap_or_else(|| target.to_path_buf());
-    Some(ManualArchive { url: asset.url, path })
+    Some(ManualArchive { url: asset.url, path: target.with_file_name(release_archive_name(asset)?) })
 }
 
 fn check_staged_archive(url: &str, archive: &Path) -> Result<String> {
@@ -1657,6 +1656,22 @@ mod tests {
             let record = crate::install_record::read(&downloader.record_of(asset)).unwrap();
             assert_eq!(record.url, asset.url);
             assert_eq!(Some(record.sha256.as_str()), crate::pin_sha::sha256(asset.url));
+        }
+    }
+
+    #[test]
+    fn onnx_network_failure_shows_the_same_archive_path_the_installer_reads() {
+        let asset = crate::lyrics_sync::asset("onnxruntime").unwrap();
+        let target = Path::new("studio-data").join(asset.relative_path);
+        let hint = manual_archive_hint(asset, &target, &anyhow::anyhow!("could not start download: invalid certificate")).unwrap();
+        assert_eq!(Some(hint.path), release_archive_alias(asset, &target));
+        assert_eq!(hint.url, asset.url);
+        assert!(manual_archive_hint(asset, &target, &anyhow::anyhow!("invalid archive")).is_none());
+        if cfg!(target_os = "macos") {
+            assert!(onnx_mirrors(asset.url).is_none());
+        } else {
+            let mirrors = onnx_mirrors(asset.url).unwrap();
+            assert!(mirrors.iter().all(|url| url.ends_with(asset.url.split("/download/").nth(1).unwrap())));
         }
     }
 

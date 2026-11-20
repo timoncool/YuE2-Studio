@@ -1709,7 +1709,7 @@ export const ko = {
     manualTitle: '직접 다운로드 ({count})',
     manualHint: '스튜디오의 다운로드가 되지 않으면 이 파일들을 주소에서 내려받아 아래 폴더에 넣으세요. 스튜디오가 바로 인식합니다. 주소는 고정된 버전입니다. 저장소 최신 리비전의 같은 이름 파일은 다른 빌드일 수 있으며, 스튜디오는 그것을 쓰지 않습니다.',
     manualSize: '{bytes}바이트',
-    manualRuntimeHint: "공식 주소에서 ZIP을 받아 압축을 풀거나 이름을 바꾸지 말고 아래 경로에 저장한 다음 “{retry}”을 다시 누르세요.",
+    manualRuntimeHint: "공식 주소에서 압축 파일을 받아 압축을 풀거나 이름을 바꾸지 말고 아래 경로에 저장한 다음 “{retry}”을 다시 누르세요.",
     manualFolder: '넣을 곳',
     manualCopyFailed: '복사하지 못했습니다. 텍스트를 선택하세요',
     mirrorOfferTitle: 'Hugging Face가 응답하지 않습니다',

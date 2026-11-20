@@ -1604,7 +1604,7 @@ export const pt = {
     manualTitle: 'Descarregar à mão ({count})',
     manualHint: 'Se a transferência a partir do estúdio não passar, descarregar estes ficheiros dos seus endereços e pô-los na pasta abaixo; o estúdio vê-os de imediato. Os endereços são as versões fixas: um ficheiro com o mesmo nome da revisão mais recente do repositório pode ser outra versão, e o estúdio não o aceita.',
     manualSize: '{bytes} bytes',
-    manualRuntimeHint: "Descarregue o ZIP pelo endereço oficial e guarde-o no caminho abaixo, sem o extrair nem mudar o nome. Depois, clique novamente em “{retry}”.",
+    manualRuntimeHint: "Descarregue o ficheiro comprimido pelo endereço oficial e guarde-o no caminho abaixo, sem o extrair nem mudar o nome. Depois, clique novamente em “{retry}”.",
     manualFolder: 'Colocar em',
     manualCopyFailed: 'Não copiado — selecionar o texto',
     mirrorOfferTitle: 'O Hugging Face não responde',

@@ -1709,7 +1709,7 @@ export const zh = {
     manualTitle: '手动下载（{count}）',
     manualHint: '如果工作室内的下载无法完成，请按下面的地址下载这些文件，并放到下方的文件夹中，工作室会立即识别。这些地址指向固定版本：仓库最新版本中同名的文件可能是另一个版本，工作室不会采用。',
     manualSize: '{bytes} 字节',
-    manualRuntimeHint: "请从官方链接下载此 ZIP 压缩包，按下方路径原名保存，无需解压。然后再次点击“{retry}”。",
+    manualRuntimeHint: "请从官方链接下载此压缩包，按下方路径原名保存，无需解压。然后再次点击“{retry}”。",
     manualFolder: '放到',
     manualCopyFailed: '未能复制，请手动选中文本',
     mirrorOfferTitle: 'Hugging Face 无响应',
