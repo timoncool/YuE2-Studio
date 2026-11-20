@@ -1,4 +1,4 @@
-use axum::extract::{Multipart, State};
+use axum::extract::{Multipart, Path as RoutePath, State};
 use axum::http::StatusCode;
 use axum::Json;
 use serde::{Deserialize, Serialize};
@@ -90,6 +90,73 @@ pub(super) async fn list(State(state): State<AppState>) -> Result<Json<Vec<Voice
         .map_err(internal)?
         .map(Json)
         .map_err(internal)
+}
+
+#[derive(Serialize)]
+pub(super) struct RemoveVoice {
+    id: String,
+    removed: bool,
+}
+
+pub(super) async fn remove(
+    State(state): State<AppState>,
+    RoutePath(id): RoutePath<String>,
+) -> Result<Json<RemoveVoice>, ApiFailure> {
+    if id.len() != 64
+        || !id
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+    {
+        return Err(invalid("Choose an installed RVC voice ID."));
+    }
+    let root = update_data_root(&state).join("rvc/voices");
+    tokio::task::spawn_blocking(move || {
+        let removed = remove_installed(&root, &id)?;
+        Ok(Json(RemoveVoice { id, removed }))
+    })
+    .await
+    .map_err(internal)?
+}
+
+fn remove_installed(root: &Path, id: &str) -> Result<bool, ApiFailure> {
+    let target = root.join(id);
+    match fs::symlink_metadata(&target) {
+        Ok(metadata) if metadata.is_dir() => {}
+        Ok(_) => {
+            return Err(api_error(
+                StatusCode::CONFLICT,
+                "The installed RVC voice folder is invalid.".into(),
+            ))
+        }
+        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(false),
+        Err(error) => return Err(internal(error)),
+    }
+    if read_voice(root, id).is_none() {
+        return if target.try_exists().map_err(internal)? {
+            Err(api_error(
+                StatusCode::CONFLICT,
+                "The installed RVC voice folder is incomplete.".into(),
+            ))
+        } else {
+            Ok(false)
+        };
+    }
+    let retired = tempfile::Builder::new()
+        .prefix(".removed-")
+        .tempdir_in(root)
+        .map_err(internal)?;
+    // The manifest, weights and index leave the installed store together.
+    // A concurrent reinstall publishes to the old path, outside this temporary folder.
+    match fs::rename(&target, retired.path().join("voice")) {
+        Ok(()) => {
+            if let Err(error) = retired.close() {
+                eprintln!("[RVC] Could not clean up removed voice {id}: {error}");
+            }
+            Ok(true)
+        }
+        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(false),
+        Err(error) => Err(internal(error)),
+    }
 }
 
 pub(super) fn internal(error: impl std::fmt::Display) -> ApiFailure {
@@ -310,4 +377,79 @@ fn validate_index(path: &Path, version: Option<u8>) -> anyhow::Result<()> {
         "The retrieval index dimension does not match the RVC voice version."
     );
     Ok(())
+}
+
+#[cfg(test)]
+mod removal_tests {
+    use super::*;
+    use std::io::Write;
+
+    #[tokio::test]
+    async fn removal_preserves_songs_and_the_pair_can_be_installed_again() {
+        let profile = tempfile::tempdir().unwrap();
+        let root = profile.path().join("rvc/voices");
+        let audio = profile.path().join("finished.wav");
+        fs::write(&audio, b"rendered audio").unwrap();
+        let weights_data = {
+            let mut writer = zip::ZipWriter::new(std::io::Cursor::new(Vec::new()));
+            let options = zip::write::SimpleFileOptions::default()
+                .compression_method(zip::CompressionMethod::Stored);
+            writer.start_file("archive/data.pkl", options).unwrap();
+            writer
+                .write_all(b"enc_p.emb_phone.weight emb_g.weight dec.ups.0.weight")
+                .unwrap();
+            writer.start_file("archive/data/0", options).unwrap();
+            writer.write_all(b"tensor").unwrap();
+            writer.finish().unwrap().into_inner()
+        };
+        let mut index_data = vec![0; 37 + 256 * 4];
+        index_data[..4].copy_from_slice(b"IwFl");
+        index_data[4..8].copy_from_slice(&256u32.to_le_bytes());
+        index_data[8..16].copy_from_slice(&1u64.to_le_bytes());
+        index_data[32] = 1;
+        index_data[33] = 1;
+        let first_id = voice_id(
+            &Sha256::digest(&weights_data).into(),
+            Some(&Sha256::digest(&index_data).into()),
+        );
+        for _ in 0..2 {
+            let stage = new_stage(&root).await.ok().unwrap();
+            fs::write(stage.path().join("voice.pth"), &weights_data).unwrap();
+            fs::write(stage.path().join("retrieval.index"), &index_data).unwrap();
+            let weights = StagedFile {
+                name: "voice.pth".into(),
+                hash: Sha256::digest(&weights_data).into(),
+            };
+            let index = StagedFile {
+                name: "voice.index".into(),
+                hash: Sha256::digest(&index_data).into(),
+            };
+            let (status, Json(installed)) =
+                install_staged(root.clone(), stage, weights, Some(index), None)
+                    .await
+                    .ok()
+                    .unwrap();
+            assert_eq!(status, StatusCode::CREATED);
+            assert_eq!(installed.id, first_id);
+            assert_eq!(stored(&root).unwrap().len(), 1);
+            assert!(remove_installed(&root, &first_id).ok().unwrap());
+            assert!(!remove_installed(&root, &first_id).ok().unwrap());
+            assert_eq!(fs::read_dir(&root).unwrap().count(), 0);
+            assert_eq!(fs::read(&audio).unwrap(), b"rendered audio");
+        }
+    }
+
+    #[test]
+    fn invalid_voice_folder_is_retained_on_error() {
+        let root = tempfile::tempdir().unwrap();
+        let id = "1".repeat(64);
+        let folder = root.path().join(&id);
+        fs::create_dir(&folder).unwrap();
+        fs::write(folder.join("voice.pth"), b"checkpoint").unwrap();
+        fs::write(folder.join("retrieval.index"), b"index").unwrap();
+        let (status, _) = remove_installed(root.path(), &id).err().unwrap();
+        assert_eq!(status, StatusCode::CONFLICT);
+        assert_eq!(fs::read(folder.join("voice.pth")).unwrap(), b"checkpoint");
+        assert_eq!(fs::read(folder.join("retrieval.index")).unwrap(), b"index");
+    }
 }

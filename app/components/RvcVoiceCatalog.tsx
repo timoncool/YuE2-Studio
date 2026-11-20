@@ -2,6 +2,7 @@ import { useEffect, useId, useRef, useState } from 'react';
 import { useI18n } from '../context/I18nContext';
 import { rvcVoiceStrings } from '../i18n/rvcVoices';
 import { responseJson, type Voice, voiceName } from '../services/rvcVoices';
+import { ConfirmDialog } from './ConfirmDialog';
 import { RvcCuratedVoices } from './RvcCuratedVoices';
 
 const URL = '/v1/rvc/voices';
@@ -17,6 +18,7 @@ export function RvcVoiceCatalog({ card, control }: { card: string; control: stri
   const modelInput = useRef<HTMLInputElement>(null);
   const indexInput = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
+  const [removing, setRemoving] = useState<Voice | null>(null);
   const modelHelpId = useId();
   const indexHelpId = useId();
   const [catalogRequest, setCatalogRequest] = useState(0);
@@ -67,6 +69,22 @@ export function RvcVoiceCatalog({ card, control }: { card: string; control: stri
     }
   }
 
+  async function removeVoice(voice: Voice) {
+    setRemoving(null);
+    setBusy(true);
+    setError(null);
+    try {
+      await responseJson(await fetch(`${URL}/${encodeURIComponent(voice.id)}`, { method: 'DELETE' }));
+      setVoices(current => current?.filter(item => item.id !== voice.id) ?? null);
+      setSelected(current => current === voice.id ? '' : current);
+      if (localStorage.getItem(STORAGE) === voice.id) localStorage.removeItem(STORAGE);
+    } catch (failure) {
+      setError(failure instanceof Error ? failure.message : String(failure));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   const voice = voices?.find(item => item.id === selected);
   return (
     <section className={card} aria-label={labels.title}>
@@ -103,6 +121,13 @@ export function RvcVoiceCatalog({ card, control }: { card: string; control: stri
         className="mt-3 rounded-lg border border-zinc-200 px-3 py-2 text-xs enabled:hover:border-pink-500 disabled:opacity-50 dark:border-white/10">
         {busy ? labels.importing : labels.import}
       </button>
+      {voice && <button type="button" disabled={busy} onClick={() => setRemoving(voice)}
+        className="mt-3 ml-2 rounded-lg border border-rose-300 px-3 py-2 text-xs text-rose-700 disabled:opacity-50 dark:border-rose-400/40 dark:text-rose-300">
+        {labels.remove}
+      </button>}
+      {removing && <ConfirmDialog isOpen title={labels.remove} confirmLabel={labels.remove}
+        message={labels.confirmRemove.replace('{name}', () => voiceName(removing))}
+        onConfirm={() => void removeVoice(removing)} onCancel={() => setRemoving(null)} />}
       {error && <p role="alert" className="mt-2 break-words text-xs text-rose-600 dark:text-rose-300">{error}</p>}
       {!voices && error && (
         <button type="button" className="mt-2 text-xs text-pink-600 underline dark:text-pink-300"
@@ -110,7 +135,8 @@ export function RvcVoiceCatalog({ card, control }: { card: string; control: stri
           {labels.retry}
         </button>
       )}
-      <RvcCuratedVoices onInstalled={acceptVoice} onChoose={chooseInstalled} disabled={!voices || busy} />
+      <RvcCuratedVoices onInstalled={acceptVoice} onChoose={chooseInstalled} disabled={!voices || busy}
+        installedIds={new Set(voices?.map(item => item.id))} />
     </section>
   );
 }

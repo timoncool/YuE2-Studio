@@ -3,7 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { expect, it, vi } from 'vitest';
 import { RvcVoiceCatalog } from './RvcVoiceCatalog';
 
-vi.mock('../context/I18nContext', () => ({ useI18n: () => ({ language: 'en' }) }));
+vi.mock('../context/I18nContext', () => ({ useI18n: () => ({ language: 'en', t: (key: string) => key }) }));
 
 const flush = () => act(async () => { await new Promise(resolve => setTimeout(resolve, 0)); });
 
@@ -205,6 +205,62 @@ it('finds Radio Tapok by source label and combines vocal, model, sample-rate and
   } finally {
     act(() => root.unmount());
     host.remove();
+    vi.unstubAllGlobals();
+  }
+});
+
+it('keeps the selected voice on delete error and offers reinstall after success', async () => {
+  const voice = { id: 'local-id', model_name: 'Singer.pth', index_name: 'Singer.index', version: 2 };
+  const entry = { id: 'curated-id', name: 'Singer', source_repo: 'owner/repo', license: 'MIT',
+    source_url: 'https://huggingface.co/owner/repo', installed_id: voice.id, download_bytes: 1000, has_index: true };
+  let fail = true;
+  const request = vi.fn(async (url: string, init?: RequestInit) => {
+    if (init?.method === 'DELETE') {
+      return fail ? Response.json({ error: 'Voice files are locked' }, { status: 500 })
+        : Response.json({ id: voice.id, removed: true });
+    }
+    if (url.endsWith('/catalog/install')) return Response.json(voice, { status: 201 });
+    if (url.endsWith('/catalog')) return Response.json([entry]);
+    return Response.json([voice]);
+  });
+  vi.stubGlobal('fetch', request);
+  vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+  localStorage.setItem('studio.rvc.voiceId', voice.id);
+  const host = document.createElement('div');
+  document.body.append(host);
+  const root = createRoot(host);
+  try {
+    act(() => root.render(<RvcVoiceCatalog card="" control="" />));
+    await flush();
+    const details = host.querySelector('details')!;
+    act(() => { details.open = true; details.dispatchEvent(new Event('toggle', { bubbles: true })); });
+    await flush();
+    expect(host.querySelector('button[aria-label="Select Singer"]')).not.toBeNull();
+    const remove = () => {
+      const buttons = () => Array.from(host.querySelectorAll('button')).filter(button => button.textContent === 'Remove voice');
+      act(() => buttons()[0].click());
+      act(() => buttons()[1].click());
+    };
+    remove();
+    await flush();
+    expect(host.querySelector('[role="alert"]')?.textContent).toBe('Voice files are locked');
+    expect(host.querySelector('select')!.value).toBe(voice.id);
+    expect(localStorage.getItem('studio.rvc.voiceId')).toBe(voice.id);
+    fail = false;
+    remove();
+    await flush();
+    expect(host.querySelector('[role="alert"]')).toBeNull();
+    expect(host.querySelector('select')!.value).toBe('');
+    expect(localStorage.getItem('studio.rvc.voiceId')).toBeNull();
+    act(() => host.querySelector<HTMLButtonElement>('button[aria-label="Install Singer"]')!.click());
+    await flush();
+    expect(host.querySelector('select')!.value).toBe(voice.id);
+    expect(request.mock.calls.filter(([, init]) => init?.method === 'DELETE').map(([url]) => url))
+      .toEqual(['/v1/rvc/voices/local-id', '/v1/rvc/voices/local-id']);
+  } finally {
+    act(() => root.unmount());
+    host.remove();
+    localStorage.removeItem('studio.rvc.voiceId');
     vi.unstubAllGlobals();
   }
 });
