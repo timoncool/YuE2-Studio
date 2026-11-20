@@ -16,7 +16,7 @@ import { apiUrl } from './services/apiBase';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { libraryChanged, queryClient, updateLibraryPlaylists, updateLibrarySongs, useLibraryPlaylists, useLibrarySongs, useSetupStatus } from './services/studioQueries';
 import { useGenerations } from './services/generations';
-import { SettingsModal } from './components/SettingsModal';
+import { isSettingsTarget, SettingsModal } from './components/SettingsModal';
 import { Song, View, Playlist } from './types';
 // Resizable panel hook
 const PANEL_MAX_SHARE = 0.4;
@@ -237,7 +237,8 @@ function AppContent() {
       setCurrentView('tools');
     };
     const openSettings = (event: Event) => {
-      setSettingsSection((event as CustomEvent<string>).detail);
+      const target = (event as CustomEvent<unknown>).detail;
+      if (isSettingsTarget(target)) setSettingsSection(target);
       setShowSettingsModal(true);
     };
     // A page asked for by another page, the LoRA card sending the user to its library.
@@ -373,8 +374,7 @@ function AppContent() {
 
   // Settings Modal
   const [showSettingsModal, setShowSettingsModal] = useState(false);
-  // Which settings page to land on, when something asks for a particular one.
-  const [settingsSection, setSettingsSection] = useState<string | null>(null);
+  const [settingsSection, setSettingsSection] = useState('account');
 
   // Profile View
 
@@ -488,7 +488,7 @@ function AppContent() {
       window.history.pushState({}, '', '/news');
       return;
     }
-    setSettingsSection(target === 'models' ? 'models' : target === 'update' ? 'about' : null);
+    if (target === 'models' || target === 'update') setSettingsSection(target === 'models' ? 'models' : 'about');
     setShowSettingsModal(true);
   };
   useEffect(() => {
@@ -1027,7 +1027,10 @@ function AppContent() {
     return { text: 'Shown.' };
   });
   useBridgeCommand('open_settings', ({ section }) => {
-    setSettingsSection(typeof section === 'string' ? section : null);
+    if (section != null) {
+      if (!isSettingsTarget(section)) throw new Error(`Unknown settings section: ${String(section)}`);
+      setSettingsSection(section);
+    }
     setShowSettingsModal(true);
     return { text: 'Settings are open.' };
   });
@@ -1762,8 +1765,9 @@ function AppContent() {
       <ExportDialog />
       <SettingsModal
         isOpen={showSettingsModal}
-        initialSection={settingsSection}
-        onClose={() => { setShowSettingsModal(false); setSettingsSection(null); }}
+        target={settingsSection}
+        onNavigate={setSettingsSection}
+        onClose={() => setShowSettingsModal(false)}
         theme={theme}
         onToggleTheme={toggleTheme}
       />
