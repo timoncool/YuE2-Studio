@@ -9,6 +9,8 @@ use tokio::{
 };
 
 const ENGINE: &str = "minimaxmusic-cpp";
+const SAMPLE_RATE: u32 = 44_100;
+const FRAMES: u32 = 512;
 const MODELS: [(&str, u64); 5] = [
     ("mm3-lm-Q3_K_M.gguf", 4589971808),
     ("mm3-depth-Q4_K_M.gguf", 404836256),
@@ -18,7 +20,21 @@ const MODELS: [(&str, u64); 5] = [
 ];
 
 #[tokio::test]
-async fn native_minimax_generation_imports_wav_and_cancel_imports_nothing() {
+async fn native_minimax_generation_imports_explicit_wav_with_fades_and_cancels() {
+    exercise_generation(Some("wav32")).await;
+}
+
+#[tokio::test]
+async fn native_minimax_generation_defaults_to_flac() {
+    exercise_generation(None).await;
+}
+
+#[tokio::test]
+async fn native_minimax_generation_records_the_encoded_mp3_bitrate() {
+    exercise_generation(Some("mp3")).await;
+}
+
+async fn exercise_generation(format: Option<&str>) {
     let root = tempfile::tempdir().unwrap();
     let engine = build_engine(root.path()).await;
     let models = root.path().join("weights");
@@ -127,9 +143,19 @@ async fn native_minimax_generation_imports_wav_and_cancel_imports_nothing() {
     assert_eq!(tools["profiles"][0]["id"], "minimal");
 
     let jobs = format!("{url}/v1/music/jobs");
-    let request = json!({"music_source":{"kind":"native","engine":ENGINE,"model":"minimal"},
+    let mut request = json!({"music_source":{"kind":"native","engine":ENGINE,"model":"minimal"},
         "style":"Folk with close acoustic guitar","lyrics":"[verse]\nEarly morning",
         "title":"MiniMax fixture","duration_seconds":3.2,"seed":42,"steps":2});
+    if let Some(format) = format {
+        request["output_format"] = json!(format);
+    }
+    if format == Some("wav32") {
+        request["fade_in"] = json!(0.001);
+        request["fade_out"] = json!(0.002);
+    }
+    if format == Some("mp3") {
+        request["mp3_bitrate"] = json!(161);
+    }
     let accepted = rpc(mcp_request(), 3, "song_create", request.clone()).await;
     let id = accepted["id"].as_str().unwrap();
     let job = wait_status(&http, &format!("{jobs}/{id}"), "completed").await;
@@ -144,7 +170,7 @@ async fn native_minimax_generation_imports_wav_and_cancel_imports_nothing() {
     );
     assert_eq!(song["replay_request"]["audio_codes"], "1,2,3");
     let audio = job["songs"][0]["audio_url"].as_str().unwrap();
-    let wav = http
+    let audio = http
         .get(format!("{url}{audio}"))
         .send()
         .await
@@ -154,11 +180,47 @@ async fn native_minimax_generation_imports_wav_and_cancel_imports_nothing() {
         .bytes()
         .await
         .unwrap();
-    let mut reader = hound::WavReader::new(Cursor::new(wav)).unwrap();
-    assert_eq!(reader.spec().sample_rate, 8_000);
-    assert_eq!(reader.spec().channels, 2);
-    let pcm: Vec<i16> = reader.samples::<i16>().map(Result::unwrap).collect();
-    assert_eq!(pcm, vec![1_024, -1_024, 2_048, -2_048]);
+    let effective = format.unwrap_or("flac");
+    assert_eq!(song["generation_settings"]["output_format"], effective);
+    assert_eq!(song["replay_request"]["output_format"], effective);
+    assert_eq!(song["metadata"]["output_format"], effective);
+    match effective {
+        "wav32" => {
+            assert!(song["audio_path"].as_str().unwrap().ends_with(".wav"));
+            let mut reader = hound::WavReader::new(Cursor::new(audio)).unwrap();
+            assert_eq!(reader.spec().sample_rate, SAMPLE_RATE);
+            assert_eq!(reader.spec().channels, 2);
+            assert_eq!(reader.spec().sample_format, hound::SampleFormat::Float);
+            assert_eq!(reader.duration(), FRAMES);
+            let pcm: Vec<f32> = reader.samples::<f32>().map(Result::unwrap).collect();
+            assert_eq!(&pcm[..2], &[0.0, 0.0]);
+            assert_eq!(&pcm[256..258], &[0.125, -0.125]);
+            assert_eq!(&pcm[pcm.len() - 2..], &[0.0, 0.0]);
+            for record in [&song["generation_settings"], &song["replay_request"]] {
+                assert!(
+                    (record["fade_in"].as_f64().unwrap() - 44.0 / f64::from(SAMPLE_RATE)).abs()
+                        < 1e-9
+                );
+                assert!(
+                    (record["fade_out"].as_f64().unwrap() - 88.0 / f64::from(SAMPLE_RATE)).abs()
+                        < 1e-9
+                );
+            }
+        }
+        "mp3" => {
+            assert!(song["audio_path"].as_str().unwrap().ends_with(".mp3"));
+            assert!(audio.starts_with(b"ID3") || audio.starts_with(&[0xff, 0xfb]));
+            assert_eq!(song["generation_settings"]["mp3_bitrate"], 160);
+            assert_eq!(song["replay_request"]["mp3_bitrate"], 160);
+        }
+        _ => {
+            assert!(song["audio_path"].as_str().unwrap().ends_with(".flac"));
+            assert!(audio.starts_with(b"fLaC"));
+            assert!(song["generation_settings"].get("mp3_bitrate").is_none());
+            assert_eq!(song["generation_settings"]["fade_in"], 0.0);
+            assert_eq!(song["replay_request"]["fade_out"], 0.0);
+        }
+    }
     let submitted: Value =
         serde_json::from_slice(&fs::read(root.path().join("submitted-1.json")).unwrap()).unwrap();
     assert_eq!(submitted["caption"], request["style"]);
@@ -297,14 +359,15 @@ async fn build_engine(root: &Path) -> std::path::PathBuf {
         path,
         hound::WavSpec {
             channels: 2,
-            sample_rate: 8_000,
-            bits_per_sample: 16,
-            sample_format: hound::SampleFormat::Int,
+            sample_rate: SAMPLE_RATE,
+            bits_per_sample: 32,
+            sample_format: hound::SampleFormat::Float,
         },
     )
     .unwrap();
-    for sample in [1_024_i16, -1_024, 2_048, -2_048] {
-        writer.write_sample(sample).unwrap();
+    for _ in 0..FRAMES {
+        writer.write_sample(0.125_f32).unwrap();
+        writer.write_sample(-0.125_f32).unwrap();
     }
     writer.finalize().unwrap();
     binary
