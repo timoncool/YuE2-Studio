@@ -7824,7 +7824,7 @@ async fn karaoke_install(
         tokio::spawn(async move {
             if let Some(build) = server {
                 if let Err(error) = install_acpp(&installed_state, build, "karaoke").await {
-                    if !installed_acpp_download(&state, "karaoke").await.is_some_and(|progress| progress.error.is_some()) {
+                    if !acpp_download(&installed_state, "karaoke").await.is_some_and(|progress| progress.error.is_some()) {
                         // A shared CUDA library can fail after the audio.cpp archive was installed successfully.
                         sync.downloader().fail("karaoke", format!("{error:#}")).await;
                     }
