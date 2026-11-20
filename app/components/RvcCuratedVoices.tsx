@@ -29,7 +29,8 @@ const metadataFields = ['vocal_style', 'rvc_version', 'sample_rate_hz'] as const
 type MetadataField = typeof metadataFields[number];
 type Filters = Partial<Record<MetadataField | 'index', string>>;
 
-export function RvcCuratedVoices({ onInstalled, onChoose, disabled }: {
+export function RvcCuratedVoices({ onInstalled, onChoose, disabled, installedIds }: {
+  installedIds: ReadonlySet<string>;
   onInstalled: (voice: Voice) => void;
   onChoose: (id: string) => void;
   disabled: boolean;
@@ -150,6 +151,7 @@ export function RvcCuratedVoices({ onInstalled, onChoose, disabled }: {
               </p>
               <ul className="max-h-80 divide-y divide-zinc-200 overflow-auto dark:divide-white/10">
               {visible.map(voice => {
+                const installedId = voice.installed_id && installedIds.has(voice.installed_id) ? voice.installed_id : null;
                 const size = (voice.download_bytes ?? ((voice.weights?.size ?? 0) + (voice.index?.size ?? 0))) / 1_000_000;
                 return (
                   <li key={voice.id} className="flex flex-wrap items-center justify-between gap-2 py-2">
@@ -162,10 +164,10 @@ export function RvcCuratedVoices({ onInstalled, onChoose, disabled }: {
                       </p>
                     </div>
                     <button type="button" disabled={disabled || Boolean(installing)}
-                      aria-label={`${voice.installed_id ? labels.selectInstalled : labels.install} ${voice.name}`}
-                      onClick={() => voice.installed_id ? onChoose(voice.installed_id) : void install(voice.id)}
+                      aria-label={`${installedId ? labels.selectInstalled : labels.install} ${voice.name}`}
+                      onClick={() => installedId ? onChoose(installedId) : void install(voice.id)}
                       className="rounded-lg border border-zinc-200 px-3 py-2 enabled:hover:border-pink-500 disabled:opacity-50 dark:border-white/10">
-                      {voice.installed_id ? labels.selectInstalled : installing === voice.id ? labels.installing : labels.install}
+                      {installedId ? labels.selectInstalled : installing === voice.id ? labels.installing : labels.install}
                     </button>
                   </li>
                 );
