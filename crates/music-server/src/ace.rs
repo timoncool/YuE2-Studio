@@ -77,6 +77,7 @@ pub const REQUEST_FIELDS: &[&str] = &[
     "cfg_mp_iterations",
     "lm_mode",
     "output_format",
+    "peak_clip",
     "synth_model",
     "lm_model",
     "vae",
