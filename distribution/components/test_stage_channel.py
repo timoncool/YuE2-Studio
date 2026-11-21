@@ -151,19 +151,20 @@ class Publication(unittest.TestCase):
 
                 catalogue = work / f"reviewed-{version}.json"
                 catalogue.write_bytes(reviewed.read_bytes() + b" " * version)
-                target = TargetFile.from_data("mirrors.json", catalogue.read_bytes(), ["sha256"])
-                name = target.hashes["sha256"] + ".mirrors.json"
-                (targets / name).write_bytes(catalogue.read_bytes())
                 voice_file = work / f"voices-{version}.json"
-                voice_data = json.dumps({"schema_version": 1, "voices": [
+                voice_file.write_bytes(json.dumps({"schema_version": 1, "voices": [
                     dict(voice, name=f"Rotation fixture {version}"),
-                ]}).encode()
-                voice_file.write_bytes(voice_data)
-                voice_target = TargetFile.from_data("rvc-voice-catalog.json", voice_data, ["sha256"])
-                (targets / (voice_target.hashes["sha256"] + ".rvc-voice-catalog.json")).write_bytes(voice_data)
-                signed = sign(Targets(version=version, expires=expiry, targets={
-                    "mirrors.json": target, "rvc-voice-catalog.json": voice_target,
-                }), keys["targets"])
+                ]}).encode())
+                engines = work / f"engines-{version}.json"
+                engines.write_bytes(b'{"schema":1,"engines":[]}' + b" " * version)
+                specifications = {}
+                for name, path in (("mirrors.json", catalogue), ("rvc-voice-catalog.json", voice_file),
+                                   ("music-engine-catalog.json", engines)):
+                    data = path.read_bytes()
+                    target = TargetFile.from_data(name, data, ["sha256"])
+                    (targets / (target.hashes["sha256"] + "." + name)).write_bytes(data)
+                    specifications[name] = target
+                signed = sign(Targets(version=version, expires=expiry, targets=specifications), keys["targets"])
                 (metadata / f"{version}.targets.json").write_bytes(signed)
                 snapshot = sign(Snapshot(version=version, expires=expiry, meta={
                     "targets.json": MetaFile.from_data(version, signed, ["sha256"]),
@@ -174,7 +175,8 @@ class Publication(unittest.TestCase):
                     snapshot_meta=MetaFile.from_data(version, snapshot, ["sha256"]),
                 ), keys["timestamp"]))
                 site = work / f"release-{version}"
-                stage_channel(anchor, metadata, targets, catalogue, voice_file, site, previous_site=previous)
+                stage_channel(anchor, metadata, targets, catalogue, voice_file, site,
+                              previous_site=previous, engines=engines)
                 return site, anchor, keys["root"], catalogue
 
             first, bootstrap1, old_key, catalogue1 = publish(1)
@@ -186,7 +188,8 @@ class Publication(unittest.TestCase):
             rejected = work / "rejected"
             with self.assertRaises(UnsignedMetadataError):
                 stage_channel(disconnected, work / "meta-2", work / "targets-2",
-                              catalogue2, work / "voices-2.json", rejected, previous_site=first)
+                              catalogue2, work / "voices-2.json", rejected,
+                              previous_site=first, engines=work / "engines-2.json")
             self.assertFalse(rejected.exists())
 
             pointer = work / "current"
@@ -226,6 +229,7 @@ class Publication(unittest.TestCase):
                     cached = updater("profile", bootstrap1)
                     cached.refresh()
                     old_info = cached.get_targetinfo("mirrors.json")
+                    old_engines = cached.get_targetinfo("music-engine-catalog.json")
                     if studio_binary:
                         with installed_catalogue(work / "existing", bootstrap1, base) as refresh:
                             refresh("Rotation fixture 1")
@@ -240,6 +244,8 @@ class Publication(unittest.TestCase):
                             self.assertEqual(old_response.read(), (first / path).read_bytes())
                     saved_old = Path(cached.download_target(old_info, str(work / "inflight")))
                     self.assertEqual(saved_old.read_bytes(), catalogue1.read_bytes())
+                    saved_engines = Path(cached.download_target(old_engines, str(work / "old-engines")))
+                    self.assertEqual(saved_engines.read_bytes(), (work / "engines-1.json").read_bytes())
                     for client in (updater("profile"), updater("old-installed", bootstrap1),
                                    updater("new-installed", bootstrap2)):
                         client.refresh()
