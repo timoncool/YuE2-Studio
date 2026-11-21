@@ -16,6 +16,8 @@ import {
     Layers,
     Repeat,
     ListPlus,
+    Disc3,
+    ListMinus,
     ListStart,
     ListEnd,
     Download,
@@ -40,6 +42,8 @@ interface SongDropdownMenuProps {
     direction?: 'up' | 'down';
     /** Opened by a right click: the menu stands at the pointer, kept inside the window. */
     at?: { x: number; y: number };
+    onRemoveFromCollection?: () => void;
+    removeFromCollectionLabel?: string;
 }
 
 /** The space between a menu and its button: mt-2 / mb-2. */
@@ -121,6 +125,8 @@ export const SongDropdownMenu: React.FC<SongDropdownMenuProps> = ({
     position = 'right',
     direction = 'down',
     at,
+    onRemoveFromCollection,
+    removeFromCollectionLabel,
 }) => {
     const { t } = useI18n();
     const { user } = useAuth();
@@ -356,6 +362,11 @@ export const SongDropdownMenu: React.FC<SongDropdownMenuProps> = ({
                 onClick={() => handleAction(() => actions.addToPlaylist?.(song))}
             />
             <MenuItem
+                icon={<Disc3 size={14} />}
+                label={t('addToAlbum')}
+                onClick={() => handleAction(() => actions.addToAlbum?.(song))}
+            />
+            <MenuItem
                 icon={<Download size={14} />}
                 label={t('download')}
                 onClick={handleDownload}
@@ -365,6 +376,17 @@ export const SongDropdownMenu: React.FC<SongDropdownMenuProps> = ({
                 label={t('exportMenu')}
                 onClick={() => handleAction(() => openExport(song))}
             />
+
+            {onRemoveFromCollection && (
+                <>
+                    <MenuDivider />
+                    <MenuItem
+                        icon={<ListMinus size={14} />}
+                        label={removeFromCollectionLabel || t('removeFromPlaylist')}
+                        onClick={() => handleAction(onRemoveFromCollection)}
+                    />
+                </>
+            )}
 
             {/* Owner-only Actions */}
             {isOwner && (

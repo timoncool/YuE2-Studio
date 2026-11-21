@@ -37,6 +37,8 @@ interface GenerationOptions {
   notify: Notify;
   /** A card became the songs its job made, the first of them in its row. */
   onFinished: (cardId: string, songs: Song[]) => void;
+  /** Fired once only after the job completes with songs, not on partial tracks or failures. */
+  onCompleted: (jobId: string, songs: Song[]) => void;
 }
 
 interface CardFields {
@@ -143,7 +145,7 @@ async function removeEnded(jobId: string): Promise<void> {
   }
 }
 
-export function useGenerations({ enabled, notify, onFinished }: GenerationOptions) {
+export function useGenerations({ enabled, notify, onFinished, onCompleted }: GenerationOptions) {
   const { t, language } = useI18n();
   const [cards, setCards] = useState<Song[]>([]);
   // job -> the rows its cards were drawn in, top to bottom; kept after the cards are gone, so the
@@ -296,6 +298,7 @@ export function useGenerations({ enabled, notify, onFinished }: GenerationOption
       playlistsChanged();
     }
     onFinished(finished.id, made);
+    onCompleted(job.id, made);
     notify(made.length > 1 ? `${made.length} ${t('tracksReady')}` : t('trackReady'), 'success');
   });
 

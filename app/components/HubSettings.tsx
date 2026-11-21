@@ -3,6 +3,7 @@ import { useI18n } from '../context/I18nContext';
 import { hubStateChanged, useHubState } from '../services/studioQueries';
 import { refreshHub, resetInstall, setTelemetry } from '../services/studioHub';
 import { HubTelemetryPreview } from './HubTelemetryPreview';
+import { useHubPromotions } from '../services/hubPreferences';
 
 /**
  * When the news were last fetched, the hub's address left out: the window never prints it. Before the first fetch,
@@ -18,6 +19,7 @@ export const HubSettings: React.FC = () => {
   const { t, language } = useI18n();
   const hub = useHubState(language);
   const [preview, setPreview] = useState(false);
+  const [showPromotions, setShowPromotions] = useHubPromotions();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const telemetry = hub.data?.telemetry;
@@ -33,6 +35,15 @@ export const HubSettings: React.FC = () => {
   };
   return (
     <div className="space-y-5 text-sm">
+      <section className="space-y-2">
+        <h3 className="font-semibold">{t('hubPromotionsTitle')}</h3>
+        <p className="text-zinc-500 dark:text-zinc-400">{t('hubPromotionsHint')}</p>
+        <label className="flex cursor-pointer items-center gap-3">
+          <input type="checkbox" className="h-4 w-4 accent-pink-500" checked={!showPromotions}
+            onChange={event => setShowPromotions(!event.target.checked)} />
+          <span>{t('hubPromotionsHide')}</span>
+        </label>
+      </section>
       <section className="space-y-3">
         <h3 className="font-semibold">{t('hubTelemetryTitle')}</h3>
         <p className="text-zinc-500 dark:text-zinc-400">{t('hubTelemetryWhy')}</p>

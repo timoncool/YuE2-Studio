@@ -30,3 +30,8 @@ desktop/src-tauri/tauri.release.conf.json
 *.password
 /target-check
 /_archive-*
+
+# Local one-click build results and machine-specific logs (never commit these).
+/LOCAL-BUILDS/
+/local-build.log
+/desktop/src-tauri/tauri.local-build.conf.json

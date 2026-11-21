@@ -16,6 +16,7 @@ import { apiUrl } from './services/apiBase';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { libraryChanged, queryClient, updateLibraryPlaylists, updateLibrarySongs, useLibraryPlaylists, useLibrarySongs, useSetupStatus } from './services/studioQueries';
 import { useGenerations } from './services/generations';
+import { sendCompletedSongsNotification } from './services/songNotifications';
 import { SettingsModal } from './components/SettingsModal';
 import { Song, View, Playlist } from './types';
 // Resizable panel hook
@@ -122,17 +123,21 @@ import { StudioToolsPanel } from './components/StudioToolsPanel';
 import { AdaptersPage } from './components/AdaptersPage';
 import { PlayerExtras } from './components/player/PlayerExtras';
 import { registerPlayer } from './services/audioGraph';
+import { resetLibraryTempoForNewTrack } from './services/playerTempo';
 import { serveVisualizerFeed } from './services/visualizerFeed';
 import { winampControl, winampOn } from './services/winamp';
 import { notePlayed } from './services/playHistory';
 import { deleteQuestion } from './services/deleteQuestion';
-import { createNativePlaylist, deleteNativeSong, moveStoredLikes, restoreTrashedSong, setNativeSongLiked, updateNativePlaylist } from './services/nativeLibrary';
+import { createNativePlaylist, deleteNativeSong, moveStoredLikes, reorderNativeAlbums, restoreTrashedSong, setNativeSongLiked, updateNativePlaylist } from './services/nativeLibrary';
+import { collectionToastKey } from './services/collectionToasts';
+import { moveAlbum } from './services/albumOrder';
 import { foldStems } from './services/songStems';
 import { noteStudioMessage } from './services/journal';
 import { JournalPanel } from './components/JournalPanel';
 import { hubStateChanged, useActivity, useHubState } from './services/studioQueries';
 import { hubView, setTelemetry, showsNow, type HubButton } from './services/studioHub';
 import { HubBars } from './components/HubBars';
+import { filterHubPromotions, useHubPromotions } from './services/hubPreferences';
 import { ShellPrompts } from './components/ShellPrompts';
 import { HubPopup } from './components/HubPopup';
 import { applyUiScale, scaleForKey, setUiScale, storedUiScale, UI_SCALE_EVENT } from './services/uiScale';
@@ -272,6 +277,7 @@ function AppContent() {
   const libraryRead = useLibrarySongs();
   const librarySongs = libraryRead.data ?? NO_SONGS;
   const playlists = useLibraryPlaylists().data ?? NO_PLAYLISTS;
+  const pickerAlbumOrderBusy = useRef(false);
   // the like is kept with the song, so every window and the agent see one mark
   const likedSongIds = useMemo(() => new Set(librarySongs.filter(song => song.liked).map(song => song.id)), [librarySongs]);
   const likedSongs = useMemo(() => librarySongs.filter(song => song.liked), [librarySongs]);
@@ -344,7 +350,9 @@ function AppContent() {
 
   // Modals
   const [isCreatePlaylistModalOpen, setIsCreatePlaylistModalOpen] = useState(false);
+  const [creatingCollectionKind, setCreatingCollectionKind] = useState<'playlist' | 'album'>('playlist');
   const [isAddToPlaylistModalOpen, setIsAddToPlaylistModalOpen] = useState(false);
+  const [addCollectionKind, setAddCollectionKind] = useState<'playlist' | 'album'>('playlist');
   const [songsToAddToPlaylist, setSongsToAddToPlaylist] = useState<Song[]>([]);
 
   // Video Modal
@@ -433,12 +441,21 @@ function AppContent() {
       setSelectedSong(current => (current?.id === cardId ? made[0] : current));
       if (window.innerWidth < 768) setMobileShowList(true);
     },
+    onCompleted: (_jobId, made) => {
+      // One Windows OS notification per completed job; never for progress, failure or cancellation.
+      void sendCompletedSongsNotification(made, {
+        single: t('shellSongReadyOne'),
+        multiple: t('shellSongsReadyMany'),
+        untitled: t('untitled'),
+      });
+    },
   });
   // Anonymous statistics are on by default: the start screen's checkbox decides on a first run, and an install that
   // updated past that screen keeps the default until it is unchecked in Settings.
   const hub = useHubState(language);
-  // every kind of the hub's notices shows to everyone; the service decides which fit this launch
-  const hubItems = nativeSetupReady && hub.data ? hub.data.items : [];
+  const [showPromotions] = useHubPromotions();
+  // The News page is unaffected; only unsolicited bars/popups are suppressed.
+  const hubItems = nativeSetupReady && hub.data ? filterHubPromotions(hub.data.items, showPromotions) : [];
   const activity = useActivity();
   // a popup waits until nothing is being made: no song or re-render, no cover or timings in progress
   const making = generations.isGenerating || generations.activeJobCount > 0 || (activity.data ?? []).some(entry => entry.state === 'running');
@@ -867,6 +884,10 @@ function AppContent() {
       currentSongIdRef.current = currentSong.id;
       audio.src = currentSong.audioUrl;
       audio.load();
+      // Switching tracks resets Chromium's audio rate to normal. Reset the
+      // control state too, or the library displays the OLD rate while the
+      // new track is actually playing at 1.00x.
+      resetLibraryTempoForNewTrack(audio, setPlaybackRate);
       if (isPlaying) playAudio();
     } else {
       if (isPlaying) playAudio();
@@ -885,6 +906,9 @@ function AppContent() {
   // Handle Playback Rate
   useEffect(() => {
     if (audioRef.current) {
+      // Natural tape-style speed: faster playback raises pitch, slower lowers it.
+      // The browser's default pitch-preservation time stretch sounds harsh on music.
+      audioRef.current.preservesPitch = false;
       audioRef.current.playbackRate = playbackRate;
     }
   }, [playbackRate]);
@@ -1223,15 +1247,15 @@ function AppContent() {
     });
   };
 
-  const createPlaylist = async (name: string, description: string) => {
+  const createPlaylist = async (name: string, description: string, kind: 'playlist' | 'album' = 'playlist') => {
     try {
-      const playlist = await createNativePlaylist(name, description, songsToAddToPlaylist.map(song => song.id));
+      const playlist = await createNativePlaylist(name, description, songsToAddToPlaylist.map(song => song.id), kind);
       updateLibraryPlaylists(prev => [playlist, ...prev]);
       setSongsToAddToPlaylist([]);
-      showToast(t('playlistCreated'));
+      showToast(t(collectionToastKey(kind, 'created')));
     } catch (error) {
-      console.error('Create playlist error:', error);
-      showToast(t('failedToCreatePlaylist'), 'error');
+      console.error('Create collection error:', error);
+      showToast(t(collectionToastKey(kind, 'createFailed')), 'error');
     }
   };
 
@@ -1249,9 +1273,31 @@ function AppContent() {
     }
   };
 
-  const openAddToPlaylistModal = (chosen: Song | Song[]) => {
+  const openAddToCollectionModal = (chosen: Song | Song[], kind: 'playlist' | 'album') => {
     setSongsToAddToPlaylist(Array.isArray(chosen) ? chosen : [chosen]);
+    setAddCollectionKind(kind);
     setIsAddToPlaylistModalOpen(true);
+  };
+  const openAddToPlaylistModal = (chosen: Song | Song[]) => openAddToCollectionModal(chosen, 'playlist');
+  const openAddToAlbumModal = (chosen: Song | Song[]) => openAddToCollectionModal(chosen, 'album');
+
+  /** Dragging albums in the Add to Album chooser persists the exact same
+   * ordering as dragging the cards in Library > Albums. */
+  const reorderAlbumsInPicker = async (fromId: string, toId: string): Promise<void> => {
+    if (pickerAlbumOrderBusy.current) return;
+    const sorted = moveAlbum(playlists, fromId, toId);
+    if (sorted === playlists) return;
+    pickerAlbumOrderBusy.current = true;
+    updateLibraryPlaylists(() => sorted);
+    try {
+      const saved = await reorderNativeAlbums(sorted.filter(item => item.kind === 'album').map(item => item.id));
+      updateLibraryPlaylists(() => saved);
+    } catch (error) {
+      updateLibraryPlaylists(() => playlists);
+      showToast(error instanceof Error ? error.message : String(error), 'error');
+    } finally {
+      pickerAlbumOrderBusy.current = false;
+    }
   };
 
   const addSongToPlaylist = async (playlistId: string) => {
@@ -1266,9 +1312,13 @@ function AppContent() {
         updateLibraryPlaylists(prev => prev.map(item => item.id === updated.id ? updated : item));
       }
       const already = songsToAddToPlaylist.length - fresh.length;
+      const isAlbum = playlist.kind === 'album';
+      const kind = isAlbum ? 'album' : 'playlist';
       const added = fresh.length === 0
-        ? t(songsToAddToPlaylist.length === 1 ? 'songAlreadyInPlaylist' : 'songsAlreadyInPlaylist').replace('{name}', playlist.name)
-        : t('songsAddedToNamedPlaylist').replace('{count}', String(fresh.length)).replace('{name}', playlist.name);
+        ? t(collectionToastKey(kind, songsToAddToPlaylist.length === 1 ? 'alreadyOne' : 'alreadyMany'))
+            .replace('{name}', playlist.name)
+        : t(collectionToastKey(kind, 'added'))
+            .replace('{count}', String(fresh.length)).replace('{name}', playlist.name);
       showToast(already && fresh.length ? `${added} ${t('songsAlreadyThere').replace('{count}', String(already))}` : added, fresh.length ? 'success' : 'info', {
         label: t('openPlaylist'),
         onClick: () => handleNavigateToPlaylist(playlist.id),
@@ -1405,6 +1455,12 @@ function AppContent() {
             isPlaying={isPlaying}
             onCreatePlaylist={() => {
               setSongsToAddToPlaylist([]);
+              setCreatingCollectionKind('playlist');
+              setIsCreatePlaylistModalOpen(true);
+            }}
+            onCreateAlbum={() => {
+              setSongsToAddToPlaylist([]);
+              setCreatingCollectionKind('album');
               setIsCreatePlaylistModalOpen(true);
             }}
             onSelectPlaylist={(p) => handleNavigateToPlaylist(p.id)}
@@ -1418,10 +1474,7 @@ function AppContent() {
             onDeleteMany={handleDeleteSongs}
             onMidiMany={transcribeManyToMidi}
             selectedSong={selectedSong}
-            onSelect={(s) => {
-              setSelectedSong(s);
-              setShowRightSidebar(true);
-            }}
+            onSelect={handleShowDetails}
             onShowDetails={toggleLibraryDetails}
             onOpenCoverRegen={openCoverRegen}
             detailsSongId={(hasSidePanel ? showRightSidebar : showMobileDetails) ? selectedSong?.id ?? null : null}
@@ -1434,19 +1487,25 @@ function AppContent() {
       case 'playlist':
         if (!viewingPlaylistId) return null;
         return (
-          <PlaylistDetail
-            playlistId={viewingPlaylistId}
-            onBack={handleBackFromPlaylist}
-            onPlaySong={playFromPlaylist(viewingPlaylistId)}
-            currentSong={currentSong}
-            isPlaying={isPlaying}
-            notify={showToast}
-            onSelect={(s) => {
-              setSelectedSong(s);
-              setShowRightSidebar(true);
-            }}
-            onError={message => showToast(message, 'error')}
-          />
+          <div className="relative flex h-full min-h-0 min-w-0 w-full overflow-hidden">
+            <div className="min-w-0 flex-1 overflow-hidden">
+              <PlaylistDetail
+                playlistId={viewingPlaylistId}
+                onBack={handleBackFromPlaylist}
+                onPlaySong={playFromPlaylist(viewingPlaylistId)}
+                currentSong={currentSong}
+                isPlaying={isPlaying}
+                notify={showToast}
+                onSelect={handleShowDetails}
+                selectedSong={selectedSong}
+                onToggleLike={toggleLike}
+                onOpenCoverRegen={openCoverRegen}
+                onSongUpdate={handleSongUpdate}
+                onError={message => showToast(message, 'error')}
+              />
+            </div>
+            {sidePanel}
+          </div>
         );
 
       case 'search':
@@ -1514,6 +1573,7 @@ function AppContent() {
                 scopeName={createScope?.name}
                 loading={libraryRead.isPending}
                 librarySongs={librarySongs}
+                collections={playlists}
                 currentSong={currentSong}
                 selectedSong={selectedSong}
                 likedSongIds={likedSongIds}
@@ -1565,6 +1625,7 @@ function AppContent() {
     replay: handleNativeReplay,
     exportVideo: setSongForVideo,
     addToPlaylist: openAddToPlaylistModal,
+    addToAlbum: openAddToAlbumModal,
     remove: handleDeleteSong,
     update: handleSongUpdate,
     queue: queueFromWindow,
@@ -1574,6 +1635,7 @@ function AppContent() {
     replay: song => songActionsLatest.current.replay(song),
     exportVideo: song => songActionsLatest.current.exportVideo(song),
     addToPlaylist: song => songActionsLatest.current.addToPlaylist(song),
+    addToAlbum: song => songActionsLatest.current.addToAlbum(song),
     remove: song => songActionsLatest.current.remove(song),
     update: song => songActionsLatest.current.update(song),
     queue: (songs, next) => songActionsLatest.current.queue(songs, next),
@@ -1687,17 +1749,26 @@ function AppContent() {
       <CreatePlaylistModal
         isOpen={isCreatePlaylistModalOpen}
         onClose={() => setIsCreatePlaylistModalOpen(false)}
-        onCreate={createPlaylist}
+        kind={creatingCollectionKind}
+        onCreate={(name, description) => createPlaylist(name, description, creatingCollectionKind)}
       />
       <AddToPlaylistModal
         isOpen={isAddToPlaylistModalOpen}
         onClose={() => setIsAddToPlaylistModalOpen(false)}
         playlists={playlists}
+        kind={addCollectionKind}
         onSelect={addSongToPlaylist}
         onCreateNew={() => {
           setIsAddToPlaylistModalOpen(false);
+          setCreatingCollectionKind('playlist');
           setIsCreatePlaylistModalOpen(true);
         }}
+        onCreateNewAlbum={() => {
+          setIsAddToPlaylistModalOpen(false);
+          setCreatingCollectionKind('album');
+          setIsCreatePlaylistModalOpen(true);
+        }}
+        onReorderAlbums={reorderAlbumsInPicker}
       />
       <FilesPanel />
       <Toast
@@ -1754,7 +1825,7 @@ function AppContent() {
 
       {/* Mobile Details Modal */}
       {showMobileDetails && selectedShown && (
-        <div className={`fixed inset-0 z-60 flex justify-end ${currentView === 'create' || currentView === 'library' ? 'xl:hidden' : ''}`}>
+        <div className={`fixed inset-0 z-60 flex justify-end ${currentView === 'create' || currentView === 'library' || currentView === 'playlist' ? 'xl:hidden' : ''}`}>
           <div
             className="absolute inset-0 bg-black/60 backdrop-blur-xs animate-in fade-in"
             onClick={() => setShowMobileDetails(false)}

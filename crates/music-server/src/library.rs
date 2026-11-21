@@ -23,6 +23,16 @@ pub struct ImportedSong { pub song: Song, pub audio_filename: String }
 /// How many of the latest journal lines are kept, and read.
 pub const JOURNAL_KEPT:i64=500;
 #[derive(Debug, Clone, Serialize, Deserialize)] pub struct JournalEntry { #[serde(default)] pub id:i64, #[serde(default)] pub at:String, pub source:String, #[serde(default)] pub tone:String, #[serde(default)] pub verb:String, #[serde(default)] pub kind:String, #[serde(default)] pub target:String, #[serde(default)] pub text:String }
+/// Albums share playlist storage but use either the original album marker
+/// or the new collection envelope with cover artwork.
+fn is_album_description(value:Option<&str>)->bool{
+ let Some(raw)=value else{return false};
+ if raw.starts_with("[YuE2-Studio:album:v1]\n"){return true;}
+ raw.strip_prefix("[YuE2-Studio:collection:v2]\n")
+  .and_then(|json|serde_json::from_str::<serde_json::Value>(json).ok())
+  .and_then(|document|document.get("kind").and_then(serde_json::Value::as_str).map(|kind|kind=="album"))
+  .unwrap_or(false)
+}
 #[derive(Debug, Clone, Deserialize)] pub struct PlaylistInput { pub name:String, pub description:Option<String>, #[serde(default)] pub song_ids:Vec<String> }
 fn manual_source()->String{"manual".into()}
 
@@ -115,8 +125,14 @@ impl Library {
     /// separately used to put the database under `<cwd>/data` whenever the
     /// service was started outside the desktop shell, so the same install
     /// showed two different libraries depending on how it was launched.
-    pub fn open_default()->Result<Self>{let root=crate::studio_data_root().unwrap_or_else(||env::current_dir().unwrap_or_else(|_|PathBuf::from(".")).join("data"));Self::open_at(root.join("library.sqlite"),root.join("media"))}
- pub fn open_at(db_path:PathBuf,media_dir:PathBuf)->Result<Self>{if let Some(p)=db_path.parent(){fs::create_dir_all(p)?};let c=Connection::open(db_path)?;c.execute_batch("PRAGMA foreign_keys=ON; CREATE TABLE IF NOT EXISTS songs(id TEXT PRIMARY KEY,title TEXT NOT NULL,audio_path TEXT,caption TEXT NOT NULL,lyrics TEXT NOT NULL,metadata_json TEXT NOT NULL,generation_settings_json TEXT NOT NULL,engine_id TEXT NOT NULL,profile_id TEXT,replay_request_json TEXT,audio_codes_json TEXT,source TEXT NOT NULL,created_at TEXT NOT NULL,updated_at TEXT NOT NULL); CREATE TABLE IF NOT EXISTS playlists(id TEXT PRIMARY KEY,name TEXT NOT NULL,description TEXT,created_at TEXT NOT NULL,updated_at TEXT NOT NULL); CREATE TABLE IF NOT EXISTS playlist_songs(playlist_id TEXT NOT NULL REFERENCES playlists(id) ON DELETE CASCADE,song_id TEXT NOT NULL REFERENCES songs(id) ON DELETE CASCADE,position INTEGER NOT NULL,PRIMARY KEY(playlist_id,song_id)); CREATE TABLE IF NOT EXISTS music_jobs(id TEXT PRIMARY KEY,submitted_at INTEGER NOT NULL,engine_id TEXT NOT NULL,title TEXT,style TEXT NOT NULL,lyrics TEXT NOT NULL,duration_seconds REAL NOT NULL,playlist_id TEXT,generation_settings_json TEXT NOT NULL,request_json TEXT NOT NULL,status TEXT NOT NULL,message TEXT NOT NULL DEFAULT '',attempt INTEGER NOT NULL DEFAULT 0,resumed_as TEXT); CREATE TABLE IF NOT EXISTS journal(id INTEGER PRIMARY KEY AUTOINCREMENT,at TEXT NOT NULL,source TEXT NOT NULL,tone TEXT NOT NULL DEFAULT '',verb TEXT NOT NULL DEFAULT '',kind TEXT NOT NULL DEFAULT '',target TEXT NOT NULL DEFAULT '',text TEXT NOT NULL DEFAULT '');")?;Ok(Self{connection:Arc::new(Mutex::new(c)),media_dir})}
+    pub fn open_default()->Result<Self>{let root=crate::studio_data_root().unwrap_or_else(||env::current_dir().unwrap_or_else(|_|PathBuf::from(".")).join("data"));let music=crate::music_storage::activate(&root)?;Self::open_at(music.join("library.sqlite"),music.join("media"))}
+ pub fn open_at(db_path:PathBuf,media_dir:PathBuf)->Result<Self>{if let Some(p)=db_path.parent(){fs::create_dir_all(p)?};let c=Connection::open(db_path)?;c.execute_batch("PRAGMA foreign_keys=ON; CREATE TABLE IF NOT EXISTS songs(id TEXT PRIMARY KEY,title TEXT NOT NULL,audio_path TEXT,caption TEXT NOT NULL,lyrics TEXT NOT NULL,metadata_json TEXT NOT NULL,generation_settings_json TEXT NOT NULL,engine_id TEXT NOT NULL,profile_id TEXT,replay_request_json TEXT,audio_codes_json TEXT,source TEXT NOT NULL,created_at TEXT NOT NULL,updated_at TEXT NOT NULL); CREATE TABLE IF NOT EXISTS playlists(id TEXT PRIMARY KEY,name TEXT NOT NULL,description TEXT,created_at TEXT NOT NULL,updated_at TEXT NOT NULL); CREATE TABLE IF NOT EXISTS playlist_songs(playlist_id TEXT NOT NULL REFERENCES playlists(id) ON DELETE CASCADE,song_id TEXT NOT NULL REFERENCES songs(id) ON DELETE CASCADE,position INTEGER NOT NULL,PRIMARY KEY(playlist_id,song_id)); CREATE TABLE IF NOT EXISTS music_jobs(id TEXT PRIMARY KEY,submitted_at INTEGER NOT NULL,engine_id TEXT NOT NULL,title TEXT,style TEXT NOT NULL,lyrics TEXT NOT NULL,duration_seconds REAL NOT NULL,playlist_id TEXT,generation_settings_json TEXT NOT NULL,request_json TEXT NOT NULL,status TEXT NOT NULL,message TEXT NOT NULL DEFAULT '',attempt INTEGER NOT NULL DEFAULT 0,resumed_as TEXT); CREATE TABLE IF NOT EXISTS journal(id INTEGER PRIMARY KEY AUTOINCREMENT,at TEXT NOT NULL,source TEXT NOT NULL,tone TEXT NOT NULL DEFAULT '',verb TEXT NOT NULL DEFAULT '',kind TEXT NOT NULL DEFAULT '',target TEXT NOT NULL DEFAULT '',text TEXT NOT NULL DEFAULT '');")?;
+  // Persistent manual album ranking without modifying legacy playlists columns.
+  c.execute_batch("CREATE TABLE IF NOT EXISTS album_order(playlist_id TEXT PRIMARY KEY REFERENCES playlists(id) ON DELETE CASCADE, position INTEGER NOT NULL);")?;
+  let library=Self{connection:Arc::new(Mutex::new(c)),media_dir};
+  let recovered=library.recover_legacy_cascaded_songs()?;
+  if recovered>0 { eprintln!("[library] restored {recovered} independently saved versions from the old automatic-delete behaviour"); }
+  Ok(library)}
  /// Every song but those in the bin.
  pub fn list_songs(&self)->Result<Vec<Song>>{Ok(self.all_songs()?.into_iter().filter(|song|!is_trashed(song)).collect())}
  /// The songs in the bin, the latest deleted first.
@@ -141,6 +157,18 @@ impl Library {
   self.save_song(&song)?;
   crate::mcp::announce("library");
   Ok(Some(song))
+ }
+ /// Older versions put every track made from a song in the bin when that
+ /// source was deleted. Each rendered version has its own audio and artwork;
+ /// restore anything marked deleted_with once on startup so existing libraries
+ /// do not silently lose those versions when the 30-day bin is purged.
+ /// A manually trashed track has no deleted_with marker and stays trashed.
+ pub fn recover_legacy_cascaded_songs(&self)->Result<usize>{
+  let victims:Vec<String>=self.trashed_songs()?.into_iter()
+   .filter(|song|trashed_with(song).is_some())
+   .map(|song|song.id).collect();
+  for id in &victims {self.set_song_trashed(id,false,None)?;}
+  Ok(victims.len())
  }
  fn all_songs(&self)->Result<Vec<Song>>{let c=self.connection.lock().unwrap();let mut s=c.prepare("SELECT id,title,audio_path,caption,lyrics,metadata_json,generation_settings_json,engine_id,profile_id,replay_request_json,audio_codes_json,source,created_at,updated_at FROM songs ORDER BY created_at DESC, id DESC")?;Ok(s.query_map([],row_song)?.collect::<rusqlite::Result<_>>()?)}
  pub fn get_song(&self,id:&str)->Result<Option<Song>>{let c=self.connection.lock().unwrap();Ok(c.query_row("SELECT id,title,audio_path,caption,lyrics,metadata_json,generation_settings_json,engine_id,profile_id,replay_request_json,audio_codes_json,source,created_at,updated_at FROM songs WHERE id=?",[id],row_song).optional()?)}
@@ -374,7 +402,37 @@ impl Library {
  pub fn update_song(&self,id:&str,input:SongInput)->Result<Option<Song>>{let Some(mut song)=self.get_song(id)? else{return Ok(None)};song.title=input.title;if input.audio_path.is_some(){song.audio_path=input.audio_path};song.caption=input.caption;song.lyrics=input.lyrics;song.metadata=merged_metadata(&song.metadata,input.metadata);song.generation_settings=input.generation_settings;song.engine_id=input.engine_id;song.profile_id=input.profile_id;if input.replay_request.is_some(){song.replay_request=input.replay_request};if input.audio_codes.is_some(){song.audio_codes=input.audio_codes};song.source=input.source;song.updated_at=now();self.save_song(&song)?;Ok(Some(song))}
  pub fn delete_song(&self,id:&str)->Result<bool>{let gone=self.connection.lock().unwrap().execute("DELETE FROM songs WHERE id=?",[id])?>0;if gone{crate::mcp::announce("library")}Ok(gone)}
  fn save_song(&self,s:&Song)->Result<()> {self.connection.lock().unwrap().execute("INSERT INTO songs VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET title=excluded.title,audio_path=excluded.audio_path,caption=excluded.caption,lyrics=excluded.lyrics,metadata_json=excluded.metadata_json,generation_settings_json=excluded.generation_settings_json,engine_id=excluded.engine_id,profile_id=excluded.profile_id,replay_request_json=excluded.replay_request_json,audio_codes_json=excluded.audio_codes_json,source=excluded.source,updated_at=excluded.updated_at",params![s.id,s.title,s.audio_path,s.caption,s.lyrics,s.metadata.to_string(),s.generation_settings.to_string(),s.engine_id,s.profile_id,s.replay_request.as_ref().map(|v|v.to_string()),s.audio_codes.as_ref().map(|v|v.to_string()),s.source,s.created_at,s.updated_at])?;crate::mcp::announce("library");Ok(())}
- pub fn list_playlists(&self)->Result<Vec<Playlist>>{let c=self.connection.lock().unwrap();let mut s=c.prepare("SELECT id,name,description,created_at,updated_at FROM playlists ORDER BY created_at DESC")?;Ok(s.query_map([],|r|playlist(&c,r))?.collect::<rusqlite::Result<_>>()?)}
+ pub fn list_playlists(&self)->Result<Vec<Playlist>>{
+  let c=self.connection.lock().unwrap();
+  let mut s=c.prepare("SELECT p.id,p.name,p.description,p.created_at,p.updated_at FROM playlists p LEFT JOIN album_order o ON o.playlist_id=p.id ORDER BY CASE WHEN o.position IS NULL THEN 1 ELSE 0 END, o.position ASC, p.created_at DESC, p.id DESC")?;
+  Ok(s.query_map([],|r|playlist(&c,r))?.collect::<rusqlite::Result<_>>()?)
+ }
+ /// Reorders the complete album set atomically. The library and Add to Album
+ /// share the same returned order, including after a portable-app restart.
+ pub fn reorder_albums(&self, ids:&[String])->Result<Vec<Playlist>>{
+  use std::collections::HashSet;
+  let mut c=self.connection.lock().unwrap();
+  let tx=c.transaction()?;
+  let existing:Vec<(String,Option<String>)>={
+   let mut stmt=tx.prepare("SELECT id,description FROM playlists")?;
+   let rows=stmt.query_map([],|row|Ok((row.get(0)?,row.get(1)?)))?;
+   rows.collect::<rusqlite::Result<_>>()?
+  };
+  let albums:HashSet<String>=existing.into_iter()
+   .filter(|(_,description)|is_album_description(description.as_deref()))
+   .map(|(id,_)|id).collect();
+  let proposed:HashSet<String>=ids.iter().cloned().collect();
+  anyhow::ensure!(ids.len()==proposed.len() && proposed==albums,
+   "Albums changed while sorting. Refresh the library and try again.");
+  tx.execute("DELETE FROM album_order",[])?;
+  for (position,id) in ids.iter().enumerate(){
+   tx.execute("INSERT INTO album_order(playlist_id,position) VALUES(?1,?2)",params![id,position as i64])?;
+  }
+  tx.commit()?;
+  drop(c);
+  crate::mcp::announce("library");
+  self.list_playlists()
+ }
  pub fn get_playlist(&self,id:&str)->Result<Option<Playlist>>{let c=self.connection.lock().unwrap();c.query_row("SELECT id,name,description,created_at,updated_at FROM playlists WHERE id=?",[id],|r|playlist(&c,r)).optional().map_err(Into::into)}
  pub fn create_playlist(&self,input:PlaylistInput)->Result<Playlist>{let now=now();let p=Playlist{id:uuid::Uuid::now_v7().to_string(),name:input.name,description:input.description,song_ids:input.song_ids,created_at:now.clone(),updated_at:now};self.save_playlist(&p)?;Ok(p)}
  pub fn update_playlist(&self,id:&str,input:PlaylistInput)->Result<Option<Playlist>>{let Some(mut playlist)=self.get_playlist(id)? else{return Ok(None)};playlist.name=input.name;playlist.description=input.description;playlist.song_ids=input.song_ids;playlist.updated_at=now();self.save_playlist(&playlist)?;Ok(Some(playlist))}
@@ -442,7 +500,88 @@ Basic Attributes: bpm is 118. key is F# minor, and scale is minor. Darkwave, Syn
   assert_eq!(generated_title(caption),"Darkwave, Synth-pop");
   assert_eq!(generated_title("Bright uplifting synth-pop, punchy drums"),"Bright uplifting synth-pop, punchy drums");
  }
+
+#[test]
+fn reopening_old_library_recovers_versions_auto_trashed_with_the_original() {
+    let root=std::env::temp_dir().join(format!("yue2-legacy-cascade-recovery-{}",uuid::Uuid::now_v7().simple()));
+    let path=root.join("library.sqlite");
+    let media=root.join("media");
+    let db=Library::open_at(path.clone(),media.clone()).unwrap();
+    let make=|title:&str,metadata:serde_json::Value| {
+        db.create_song(SongInput {
+            title:title.into(),audio_path:None,caption:String::new(),lyrics:String::new(),
+            metadata,generation_settings:serde_json::Value::Null,engine_id:"manual".into(),
+            profile_id:None,replay_request:None,audio_codes:None,source:"manual".into()
+        }).unwrap().id
+    };
+    let source=make("Cut short",serde_json::json!({}));
+    let replay=make("Extended mix",serde_json::json!({"derived":{"from":source,"tool":"replay"}}));
+    let cover=make("New cover",serde_json::json!({"derived":{"from":source,"tool":"cover"}}));
+    let stems=make("Vocals",serde_json::json!({"derived":{"from":source,"tool":"stems"}}));
+    let intentionally_deleted=make("A different unwanted song",serde_json::json!({}));
+    db.set_song_trashed(&source,true,None).unwrap();
+    for id in [&replay,&cover,&stems] {
+        db.set_song_trashed(id,true,Some(&source)).unwrap();
+    }
+    db.set_song_trashed(&intentionally_deleted,true,None).unwrap();
+    drop(db);
+
+    // Opening an existing portable library with the fix restores only songs
+    // accidentally binned by the previous cascading-delete behaviour.
+    let upgraded=Library::open_at(path,media).unwrap();
+    let active:std::collections::HashSet<String>=upgraded.list_songs().unwrap().into_iter().map(|song|song.id).collect();
+    for id in [&replay,&cover,&stems] {
+        assert!(active.contains(id),"independent track {id} should be restored");
+        let record=upgraded.get_song(id).unwrap().unwrap();
+        assert_eq!(record.metadata.pointer("/derived/from").and_then(serde_json::Value::as_str),Some(source.as_str()),"provenance is preserved");
+        assert!(record.metadata.get("deleted_with").is_none());
+    }
+    let remaining_bin:std::collections::HashSet<String>=upgraded.trashed_songs().unwrap().into_iter().map(|song|song.id).collect();
+    assert_eq!(remaining_bin,std::collections::HashSet::from([source,intentionally_deleted]),"only actual deletions remain in the bin");
+    drop(upgraded);
+    let _=fs::remove_dir_all(root);
+}
 #[test]fn imports_audio_and_full_provenance_atomically(){let root=std::env::temp_dir().join(format!("yue2-library-test-{}",uuid::Uuid::now_v7()));let db=Library::open_at(root.join("library.sqlite"),root.join("media")).unwrap();let result=db.import_generated_song(GeneratedSongInput{title:None,metadata:serde_json::Value::Null,caption:"c".into(),lyrics:"l".into(),generation_settings:serde_json::json!({"seed":1}),replay_request:Some(serde_json::json!({"audio_codes":"1,2,3,4,5,6,7,8","seed":1})),audio_codes:Some(serde_json::json!("1,2,3,4,5,6,7,8")),engine_id:"mm".into(),profile_id:Some("recommended-light".into()),source:"local_generation".into(),audio_extension:"mp3",audio:b"ID3".to_vec()}).unwrap();assert_eq!(db.get_song(&result.song.id).unwrap().unwrap().audio_codes,Some(serde_json::json!("1,2,3,4,5,6,7,8")));assert_eq!(fs::read(db.media_file(&result.audio_filename).unwrap()).unwrap(),b"ID3");drop(db);fs::remove_dir_all(&root).unwrap();}
+#[test]
+fn albums_can_be_reordered_across_restarts_without_changing_tracklists() {
+ let root=std::env::temp_dir().join(format!("yue2-album-order-{}",uuid::Uuid::now_v7().simple()));
+ let path=root.join("library.sqlite");
+ let media=root.join("media");
+ let db=Library::open_at(path.clone(),media.clone()).unwrap();
+ let make=|name:&str,description:Option<String>|db.create_playlist(PlaylistInput {
+  name:name.into(),description,song_ids:vec![]
+ }).unwrap();
+ let a=make("Rain",Some("[YuE2-Studio:album:v1]\n".into()));
+ let b=make("Swing",Some(format!("[YuE2-Studio:collection:v2]\n{}",serde_json::json!({
+  "kind":"album","description":"","coverUrl":"data:image/png;base64,YWJj"
+ }))));
+ let c=make("Lo-fi",Some("[YuE2-Studio:album:v1]\n".into()));
+ let ordinary=make("My playlist",None);
+ assert!(is_album_description(a.description.as_deref()));
+ assert!(is_album_description(b.description.as_deref()));
+ assert!(!is_album_description(ordinary.description.as_deref()));
+ let ids=vec![a.id.clone(),c.id.clone(),b.id.clone()];
+ let listed=db.reorder_albums(&ids).unwrap();
+ let albums:Vec<String>=listed.iter().filter(|p|is_album_description(p.description.as_deref()))
+  .map(|p|p.id.clone()).collect();
+ assert_eq!(albums,ids);
+ assert_eq!(listed.iter().filter(|p|p.id==ordinary.id).count(),1);
+ assert!(db.reorder_albums(&[a.id.clone(),c.id.clone()]).is_err(),"partial reorder must not erase an album's place");
+ assert!(db.reorder_albums(&[a.id.clone(),a.id.clone(),b.id.clone()]).is_err(),"duplicate ids must not change the order");
+ assert!(db.reorder_albums(&[ordinary.id.clone(),c.id.clone(),b.id.clone()]).is_err(),"playlist must not enter album order");
+ db.update_playlist(&c.id,PlaylistInput{name:"Lo-fi chill".into(),description:c.description.clone(),song_ids:vec![]}).unwrap();
+ drop(db);
+ let opened=Library::open_at(path,media).unwrap();
+ let after:Vec<String>=opened.list_playlists().unwrap().into_iter()
+  .filter(|p|is_album_description(p.description.as_deref()))
+  .map(|p|p.id).collect();
+ assert_eq!(after,ids,"both library cards and album picker should get this persisted order");
+ opened.delete_playlist(&c.id).unwrap();
+ assert_eq!(opened.list_playlists().unwrap().into_iter().filter(|p|is_album_description(p.description.as_deref())).count(),2);
+ drop(opened);
+ let _=fs::remove_dir_all(root);
+}
+
 #[test]fn playlist_can_be_read_updated_and_deleted(){let root=std::env::temp_dir().join(format!("yue2-playlist-test-{}",uuid::Uuid::now_v7()));let db=Library::open_at(root.join("library.sqlite"),root.join("media")).unwrap();let song_a=db.create_song(SongInput{title:"A".into(),audio_path:None,caption:String::new(),lyrics:String::new(),metadata:serde_json::Value::Null,generation_settings:serde_json::Value::Null,engine_id:"manual".into(),profile_id:None,replay_request:None,audio_codes:None,source:"manual".into()}).unwrap().id;let song_b=db.create_song(SongInput{title:"B".into(),audio_path:None,caption:String::new(),lyrics:String::new(),metadata:serde_json::Value::Null,generation_settings:serde_json::Value::Null,engine_id:"manual".into(),profile_id:None,replay_request:None,audio_codes:None,source:"manual".into()}).unwrap().id;let created=db.create_playlist(PlaylistInput{name:"Drafts".into(),description:None,song_ids:vec![song_a]}).unwrap();let updated=db.update_playlist(&created.id,PlaylistInput{name:"Finished".into(),description:Some("native".into()),song_ids:vec![song_b.clone()]}).unwrap().unwrap();assert_eq!(updated.name,"Finished");assert_eq!(db.get_playlist(&created.id).unwrap().unwrap().song_ids,vec![song_b]);assert!(db.delete_playlist(&created.id).unwrap());assert!(db.get_playlist(&created.id).unwrap().is_none());drop(db);fs::remove_dir_all(&root).unwrap();}
 #[test]fn measures_wav_duration_from_the_header_and_mp3_from_its_bitrate(){
  // 1 second of 44.1 kHz stereo 16-bit PCM.

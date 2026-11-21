@@ -1,16 +1,17 @@
 import React, { useMemo, useState } from 'react';
 import { Song } from '../services/api';
 import { useI18n } from '../context/I18nContext';
-import { ArrowLeft, Play, Pause, MoreHorizontal, Clock, Shuffle, Trash2, Pencil, GripVertical, Plus, Search, Check, ListMusic } from 'lucide-react';
-import { deleteNativePlaylist, parseDuration, updateNativePlaylist } from '../services/nativeLibrary';
-import { updateLibraryPlaylists, useLibraryPlaylists, useLibrarySongs } from '../services/studioQueries';
+import { ArrowLeft, Play, Pause, MoreHorizontal, Shuffle, Trash2, Pencil, GripVertical, Plus, Search, Check, ListMusic, RotateCcw, Loader2, Rows3, Rows4 } from 'lucide-react';
+import { deleteNativePlaylist, parseDuration, restoreTrashedSong, updateNativePlaylist } from '../services/nativeLibrary';
+import { libraryChanged, updateLibraryPlaylists, useLibraryPlaylists, useLibrarySongs, useLibraryTrashedSongs } from '../services/studioQueries';
 import { named } from '../services/accessibleName';
 import { captionSummary } from '../services/examples';
-import { useSongActions } from '../context/SongActionsContext';
+import { ownsSong, useSongActions } from '../context/SongActionsContext';
+import { useAuth } from '../context/AuthContext';
+import { DENSITY_KEY, readDensity, SongItem, type Density } from './SongList';
 import { SongCover } from './AlbumCover';
 import { ConfirmDialog } from './ConfirmDialog';
-import { SongDropdownMenu } from './SongDropdownMenu';
-import { PlaylistCover, PlaylistEditModal, PlaylistMenu, playlistLength, playlistSongs } from './PlaylistEditor';
+import { collectionSongAvailability, reorderVisibleCollectionSongs, PlaylistCover, PlaylistEditModal, PlaylistMenu, playlistLength } from './PlaylistEditor';
 import type { Playlist } from '../types';
 import type { ToastType } from './Toast';
 
@@ -19,6 +20,10 @@ interface PlaylistDetailProps {
     onBack: () => void;
     onPlaySong: (song: Song, list?: Song[]) => void;
     onSelect: (song: Song) => void;
+    selectedSong?: Song | null;
+    onToggleLike?: (id: string) => void;
+    onOpenCoverRegen?: (song: Song) => void;
+    onSongUpdate?: (song: Song) => void;
     /** What the player holds, so its row says so. */
     currentSong: Song | null;
     isPlaying: boolean;
@@ -37,62 +42,92 @@ function shuffled<T>(items: T[]): T[] {
     return copy;
 }
 
-export const PlaylistDetail: React.FC<PlaylistDetailProps> = ({ playlistId, onBack, onPlaySong, onSelect, currentSong, isPlaying, notify, onError }) => {
-    const { t, songCount, language } = useI18n();
+export const PlaylistDetail: React.FC<PlaylistDetailProps> = ({ playlistId, onBack, onPlaySong, onSelect, selectedSong, onToggleLike, onOpenCoverRegen, onSongUpdate, currentSong, isPlaying, notify, onError }) => {
+    const { t, songCount } = useI18n();
     const actions = useSongActions();
+    const { user } = useAuth();
+    const [density, setDensity] = useState<Density>(readDensity);
+    const toggleDensity = () => {
+        const next = density === 'compact' ? 'comfortable' : 'compact';
+        setDensity(next);
+        try { window.localStorage.setItem(DENSITY_KEY, next); } catch { /* visual choice lasts this session */ }
+    };
     // the library's own reads: a change made anywhere, a deletion included, shows here at once
     const playlists = useLibraryPlaylists();
     const library = useLibrarySongs();
+    const bin = useLibraryTrashedSongs();
     const playlist = playlists.data?.find(entry => entry.id === playlistId) ?? null;
     const loading = playlists.isPending || library.isPending;
-    const songs = useMemo(() => (playlist ? playlistSongs(playlist, library.data ?? []) : []), [playlist, library.data]);
+    const availability = useMemo(
+        () => collectionSongAvailability(playlist ?? { id: '', name: '' }, library.data ?? [], bin.data?.songs ?? []),
+        [playlist, library.data, bin.data],
+    );
+    const songs = availability.active;
+    const [restoringId, setRestoringId] = useState<string | null>(null);
     const [confirmDelete, setConfirmDelete] = useState(false);
     const [editing, setEditing] = useState<Playlist | null>(null);
     const [menuAt, setMenuAt] = useState<{ x: number; y: number } | null>(null);
-    const [songMenu, setSongMenu] = useState<{ song: Song; at: { x: number; y: number } } | null>(null);
     const [dragId, setDragId] = useState<string | null>(null);
     const [dropAt, setDropAt] = useState<number | null>(null);
     const [adding, setAdding] = useState<boolean | null>(null);
     const [query, setQuery] = useState('');
 
     // the order is shown at once and kept by the library; when it refuses, the list goes back
-    const saveSongs = async (songIds: string[]) => {
-        if (!playlist) return;
+    const saveSongs = async (songIds: string[]): Promise<boolean> => {
+        if (!playlist) return false;
         const before = playlist;
         updateLibraryPlaylists(lists => lists.map(entry => (entry.id === before.id ? { ...entry, songIds, song_count: songIds.length } : entry)));
         try {
             const updated = await updateNativePlaylist(before.id, before, songIds);
             updateLibraryPlaylists(lists => lists.map(entry => (entry.id === updated.id ? updated : entry)));
+            return true;
         } catch (error) {
             updateLibraryPlaylists(lists => lists.map(entry => (entry.id === before.id ? before : entry)));
             onError(error instanceof Error ? error.message : String(error));
+            return false;
         }
     };
 
     const removeSong = (song: Song) => {
         if (!playlist) return;
-        const ids = songs.map(entry => entry.id);
-        void saveSongs(ids.filter(id => id !== song.id));
-        notify(t('removedFromPlaylist').replace('{title}', song.title).replace('{name}', playlist.name), 'success', {
-            label: t('undo'),
-            onClick: () => void saveSongs(ids),
+        // Use the full stored list, including songs in the Bin. Removing one
+        // visible track must never silently detach other, restorable tracks.
+        const ids = [...(playlist.songIds ?? [])];
+        void saveSongs(ids.filter(id => id !== song.id)).then(saved => {
+            if (!saved) return;
+            notify(t('removedFromPlaylist').replace('{title}', song.title).replace('{name}', playlist.name), 'success', {
+                label: t('undo'),
+                onClick: () => void saveSongs(ids),
+            });
         });
     };
 
     const moveSong = (songId: string, to: number) => {
-        const ids = songs.map(entry => entry.id);
-        const from = ids.indexOf(songId);
-        if (from < 0 || to === from || to === from + 1) return;
-        ids.splice(from, 1);
-        ids.splice(to > from ? to - 1 : to, 0, songId);
-        void saveSongs(ids);
+        if (!playlist) return;
+        const ids = reorderVisibleCollectionSongs(
+            playlist.songIds ?? [], songs.map(entry => entry.id), songId, to,
+        );
+        if (ids) void saveSongs(ids);
     };
 
     const addSong = (song: Song) => {
-        if (!playlist || songs.some(entry => entry.id === song.id)) return;
-        // the search stays open while songs are being picked
+        if (!playlist || playlist.songIds?.includes(song.id)) return;
+        // Keep all stored memberships, even when some songs are in the Bin.
         setAdding(true);
-        void saveSongs([...songs.map(entry => entry.id), song.id]);
+        void saveSongs([...(playlist.songIds ?? []), song.id]);
+    };
+
+    const restoreFromBin = async (song: Song) => {
+        setRestoringId(song.id);
+        try {
+            await restoreTrashedSong(song.id);
+            libraryChanged();
+            notify(t('trashRestored').replace('{title}', song.title), 'success');
+        } catch (error) {
+            onError(error instanceof Error ? error.message : String(error));
+        } finally {
+            setRestoringId(null);
+        }
     };
 
     const handleDeletePlaylist = async () => {
@@ -165,7 +200,7 @@ export const PlaylistDetail: React.FC<PlaylistDetailProps> = ({ playlistId, onBa
                 </button>
 
                 <div className="min-w-0 flex-1 space-y-2 md:space-y-4 text-center md:text-left">
-                    <span className="text-xs font-bold tracking-wider uppercase text-white/80">{t('playlist')}</span>
+                    <span className="text-xs font-bold tracking-wider uppercase text-white/80">{playlist.kind === 'album' ? t('album') : t('playlist')}</span>
                     <h1>
                         <button
                             type="button"
@@ -181,6 +216,9 @@ export const PlaylistDetail: React.FC<PlaylistDetailProps> = ({ playlistId, onBa
                     )}
                     <div className="flex items-center justify-center md:justify-start gap-2 text-sm text-white font-medium flex-wrap">
                         <span>{songCount(songs.length)}</span>
+                        {availability.inBin.length > 0 && bin.isSuccess && (
+                            <span className="text-amber-300">{t('collectionInBin').replace('{count}', String(availability.inBin.length))}</span>
+                        )}
                         {seconds > 0 && (
                             <>
                                 <span className="w-1 h-1 rounded-full bg-white/50"></span>
@@ -227,10 +265,18 @@ export const PlaylistDetail: React.FC<PlaylistDetailProps> = ({ playlistId, onBa
                 >
                     <MoreHorizontal size={22} />
                 </button>
+                <button type="button"
+                    onClick={toggleDensity}
+                    aria-pressed={density === 'compact'}
+                    {...named(density === 'compact' ? t('listComfortable') : t('listCompact'))}
+                    className="rounded-lg p-2 text-zinc-300 transition-colors hover:bg-white/10 hover:text-white"
+                >
+                    {density === 'compact' ? <Rows3 size={20} /> : <Rows4 size={20} />}
+                </button>
                 <button
                     onClick={() => setConfirmDelete(true)}
                     className="p-2 text-zinc-400 transition-colors hover:text-red-500"
-                    {...named(t('deletePlaylist'))}
+                    {...named(playlist.kind === 'album' ? t('deleteAlbum') : t('deletePlaylist'))}
                 >
                     <Trash2 size={20} />
                 </button>
@@ -239,18 +285,6 @@ export const PlaylistDetail: React.FC<PlaylistDetailProps> = ({ playlistId, onBa
             {/* Song List */}
             <div className="flex-1 overflow-y-auto bg-black/40">
                 <div className="px-2 md:px-8 py-2 md:py-4 pb-24 lg:pb-32">
-                    <div>
-                    {songs.length > 0 && (
-                        <div className="hidden md:grid grid-cols-[16px_16px_4fr_3fr_2fr_minmax(96px,1fr)] gap-4 px-4 py-2 border-b border-white/10 text-sm font-medium text-zinc-400 mb-2 sticky top-0 bg-[#121212] z-10">
-                            <span></span>
-                            <span>#</span>
-                            <span>{t('title')}</span>
-                            <span>{t('style')}</span>
-                            <span>{t('created')}</span>
-                            <span className="text-right"><Clock size={16} className="inline" /></span>
-                        </div>
-                    )}
-
                     <ol className="space-y-1" onDragLeave={(event) => { if (event.currentTarget === event.target) setDropAt(null); }}>
                         {songs.map((song, index) => {
                             const current = currentSong?.id === song.id;
@@ -263,129 +297,118 @@ export const PlaylistDetail: React.FC<PlaylistDetailProps> = ({ playlistId, onBa
                                     onDragOver={(event) => {
                                         if (!dragId) return;
                                         event.preventDefault();
-                                        const box = event.currentTarget.getBoundingClientRect();
-                                        setDropAt(event.clientY < box.top + box.height / 2 ? index : index + 1);
+                                        const bounds = event.currentTarget.getBoundingClientRect();
+                                        setDropAt(event.clientY < bounds.top + bounds.height / 2 ? index : index + 1);
                                     }}
                                     onDrop={(event) => {
+                                        if (!dragId) return;
                                         event.preventDefault();
-                                        if (dragId && dropAt !== null) moveSong(dragId, dropAt);
+                                        if (dropAt !== null) moveSong(dragId, dropAt);
                                         setDragId(null);
                                         setDropAt(null);
                                     }}
                                     onKeyDown={(event) => {
+                                        if (event.target !== event.currentTarget && (event.target as HTMLElement).closest('input, textarea, button')) return;
                                         if (event.altKey && (event.key === 'ArrowUp' || event.key === 'ArrowDown')) {
                                             event.preventDefault();
                                             moveSong(song.id, event.key === 'ArrowUp' ? index - 1 : index + 2);
-                                        } else if (event.key === 'Enter') {
+                                        } else if (event.target === event.currentTarget && event.key === 'Enter') {
+                                            event.preventDefault();
                                             onSelect(song);
-                                            onPlaySong(song, playable);
-                                        } else if (event.key === 'Delete') {
-                                            removeSong(song);
                                         }
                                     }}
-                                    onContextMenu={(event) => {
-                                        event.preventDefault();
-                                        setSongMenu({ song, at: { x: event.clientX, y: event.clientY } });
-                                    }}
-                                    className={`group relative flex md:grid md:grid-cols-[16px_16px_4fr_3fr_2fr_minmax(96px,1fr)] gap-3 md:gap-4 px-2 md:px-4 py-3 rounded-md items-center transition-colors text-sm cursor-pointer outline-hidden focus-visible:ring-2 focus-visible:ring-pink-500 ${current ? 'bg-white/10 text-white' : 'text-zinc-400 hover:bg-white/10 hover:text-white'} ${dragId === song.id ? 'opacity-40' : ''}`}
-                                    onClick={() => {
-                                        onSelect(song);
-                                        onPlaySong(song, playable);
-                                    }}
+                                    className={`group relative flex items-center gap-1 rounded-md outline-hidden focus-visible:ring-2 focus-visible:ring-pink-500 ${dragId === song.id ? 'opacity-40' : ''}`}
                                 >
-                                    {dropAt === index && <span className="pointer-events-none absolute -top-0.5 left-0 right-0 h-0.5 rounded-full bg-green-500" />}
-                                    {dropAt === index + 1 && index === songs.length - 1 && <span className="pointer-events-none absolute -bottom-0.5 left-0 right-0 h-0.5 rounded-full bg-green-500" />}
-
+                                    {dropAt === index && <span className="pointer-events-none absolute -top-0.5 left-0 right-0 z-10 h-0.5 bg-green-500" />}
+                                    {dropAt === index + 1 && index === songs.length - 1 && <span className="pointer-events-none absolute -bottom-0.5 left-0 right-0 z-10 h-0.5 bg-green-500" />}
                                     <span
                                         draggable
-                                        onDragStart={(event) => {
+                                        tabIndex={0}
+                                        onDragStart={event => {
                                             event.dataTransfer.effectAllowed = 'move';
                                             event.dataTransfer.setData('text/plain', song.id);
                                             setDragId(song.id);
                                         }}
-                                        onDragEnd={() => {
-                                            setDragId(null);
-                                            setDropAt(null);
-                                        }}
-                                        onClick={(event) => event.stopPropagation()}
+                                        onDragEnd={() => { setDragId(null); setDropAt(null); }}
+                                        onClick={event => event.stopPropagation()}
                                         title={t('dragToReorder')}
-                                        className="hidden md:block cursor-grab text-zinc-600 opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100 active:cursor-grabbing"
+                                        aria-label={t('dragToReorder')}
+                                        className="shrink-0 cursor-grab rounded p-1 text-zinc-500 hover:text-white"
                                     >
                                         <GripVertical size={16} />
                                     </span>
-
-                                    <span className={`hidden md:block tabular-nums ${current ? 'text-green-500' : 'group-hover:text-white'}`}>
-                                        {current && isPlaying ? (
-                                            <span className="flex h-4 items-end gap-0.5" aria-label={t('nowPlaying')}>
-                                                <span className="w-0.5 bg-green-500 music-bar-anim" style={{ animationDelay: '0s' }} />
-                                                <span className="w-0.5 bg-green-500 music-bar-anim" style={{ animationDelay: '0.2s' }} />
-                                                <span className="w-0.5 bg-green-500 music-bar-anim" style={{ animationDelay: '0.4s' }} />
-                                            </span>
-                                        ) : index + 1}
-                                    </span>
-
-                                    <div className="flex items-center gap-3 overflow-hidden flex-1 md:flex-none">
-                                        <div className="w-12 h-12 md:w-10 md:h-10 rounded-sm bg-zinc-800 shrink-0 overflow-hidden relative group/img">
-                                            <SongCover song={song} size="full" className="w-full h-full" />
-                                            <button
-                                                onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    onPlaySong(song, playable);
-                                                }}
-                                                {...named(t('play'))}
-                                                className="absolute inset-0 bg-black/50 flex md:hidden group-hover/img:flex items-center justify-center text-white"
-                                            >
-                                                <Play size={16} fill="white" />
-                                            </button>
-                                        </div>
-                                        <div className="flex flex-col truncate min-w-0">
-                                            <span className={`font-medium truncate ${current ? 'text-green-500' : 'text-white'}`}>{song.title}</span>
-                                            <span className="text-xs text-zinc-500 group-hover:text-zinc-400 truncate md:hidden">
-                                                {song.duration || '0:00'}
-                                            </span>
-                                        </div>
+                                    <div className="min-w-0 flex-1">
+                                        <SongItem
+                                            song={song}
+                                            isCurrent={current}
+                                            isSelected={selectedSong?.id === song.id}
+                                            isSelectionMode={false}
+                                            compact={density === 'compact'}
+                                            isChecked={false}
+                                            isLiked={Boolean(song.liked)}
+                                            isPlaying={isPlaying}
+                                            isOwner={ownsSong(user, song)}
+                                            onPlay={() => onPlaySong(song, playable)}
+                                            onSelect={() => onSelect(song)}
+                                            onToggleSelect={() => {}}
+                                            onToggleLike={() => onToggleLike?.(song.id)}
+                                            onAddToPlaylist={() => actions.addToPlaylist?.(song)}
+                                            onOpenCoverRegen={() => onOpenCoverRegen?.(song)}
+                                            onShowDetails={() => onSelect(song)}
+                                            detailsOpen={selectedSong?.id === song.id}
+                                            onSongUpdate={onSongUpdate}
+                                            onRemoveFromCollection={() => removeSong(song)}
+                                            removeFromCollectionLabel={playlist.kind === 'album' ? t('removeFromAlbum') : t('removeFromPlaylist')}
+                                        />
                                     </div>
-
-                                    <span className="hidden md:block truncate" title={song.style}>{captionSummary(song.style)}</span>
-
-                                    <span className="hidden md:block">
-                                        {song.createdAt.toLocaleDateString(language)}
-                                    </span>
-
-                                    <div className="flex items-center justify-end gap-3 md:gap-4">
-                                        <span className="hidden md:inline font-mono text-xs">{song.duration || '0:00'}</span>
-                                        <button
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                removeSong(song);
-                                            }}
-                                            {...named(t('removeFromPlaylist'))}
-                                            className="p-2 text-zinc-500 transition-opacity hover:text-white md:p-0 md:opacity-0 md:group-hover:opacity-100 md:focus-visible:opacity-100"
-                                        >
-                                            <Trash2 size={16} />
-                                        </button>
-                                        <button
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                const box = e.currentTarget.getBoundingClientRect();
-                                                setSongMenu({ song, at: { x: box.right - 208, y: box.bottom + 4 } });
-                                            }}
-                                            aria-haspopup="menu"
-                                            {...named(t('moreActions'))}
-                                            className="hidden text-zinc-500 transition-opacity hover:text-white md:block md:opacity-0 md:group-hover:opacity-100 md:focus-visible:opacity-100"
-                                        >
-                                            <MoreHorizontal size={16} />
-                                        </button>
-                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={() => removeSong(song)}
+                                        {...named(playlist.kind === 'album' ? t('removeFromAlbum') : t('removeFromPlaylist'))}
+                                        className="shrink-0 rounded p-2 text-zinc-500 hover:bg-red-500/10 hover:text-red-400"
+                                    >
+                                        <Trash2 size={16} />
+                                    </button>
                                 </li>
                             );
                         })}
                     </ol>
-                    </div>
+
+                    {/* Keep Bin memberships visible and recoverable, without treating them as playable songs. */}
+                    {bin.isSuccess && (availability.inBin.length > 0 || availability.missingIds.length > 0) && (
+                        <section className="mt-6 rounded-lg border border-amber-500/25 bg-amber-500/5 p-4" aria-label={t('collectionBinTitle')}>
+                            <h2 className="font-semibold text-amber-100">{t('collectionBinTitle')}</h2>
+                            {availability.inBin.length > 0 && (
+                                <p className="mt-1 text-xs text-zinc-400">{t('collectionBinHint')}</p>
+                            )}
+                            <ul className="mt-3 space-y-2">
+                                {availability.inBin.map(entry => (
+                                    <li key={entry.song.id} className="flex items-center gap-3 rounded-md bg-black/30 px-3 py-2">
+                                        <div className="min-w-0 flex-1 truncate text-sm text-white">{entry.song.title}</div>
+                                        <button
+                                            type="button"
+                                            onClick={() => void restoreFromBin(entry.song)}
+                                            disabled={restoringId !== null}
+                                            className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-white/20 px-3 py-1 text-xs text-white hover:bg-white/10 disabled:opacity-50"
+                                        >
+                                            {restoringId === entry.song.id ? <Loader2 size={13} className="animate-spin" /> : <RotateCcw size={13} />}
+                                            {t('trashRestore')}
+                                        </button>
+                                    </li>
+                                ))}
+                            </ul>
+                            {availability.missingIds.length > 0 && (
+                                <p className="mt-3 text-xs text-amber-200">{t('collectionMissing').replace('{count}', String(availability.missingIds.length))}</p>
+                            )}
+                        </section>
+                    )}
+                    {bin.isError && (
+                        <p className="mt-4 text-xs text-amber-300">{t('collectionBinCheckFailed')}</p>
+                    )}
 
                     {/* songs to add, found right here: an empty playlist opens with it */}
                     <section className="mt-8 border-t border-white/10 pt-6" aria-labelledby="playlist-add-title">
-                        {songs.length === 0 && (
+                        {songs.length === 0 && availability.inBin.length === 0 && (
                             <div className="mb-6 flex flex-col items-center gap-2 text-center text-zinc-400">
                                 <ListMusic size={36} className="text-zinc-500" />
                                 <p className="font-medium text-white">{t('playlistEmptyTitle')}</p>
@@ -449,14 +472,13 @@ export const PlaylistDetail: React.FC<PlaylistDetailProps> = ({ playlistId, onBa
                 </div>
             </div>
 
-            <PlaylistMenu at={menuAt} empty={!playable.length} actions={menuActions} onClose={() => setMenuAt(null)} />
-            {songMenu && <SongDropdownMenu song={songMenu.song} isOpen at={songMenu.at} onClose={() => setSongMenu(null)} />}
+            <PlaylistMenu kind={playlist.kind} at={menuAt} empty={!playable.length} actions={menuActions} onClose={() => setMenuAt(null)} />
             <PlaylistEditModal playlist={editing} onClose={() => setEditing(null)} onError={onError} />
             <ConfirmDialog
                 isOpen={confirmDelete}
-                title={t('deletePlaylist')}
-                message={t('deletePlaylistConfirm')}
-                confirmLabel={t('deletePlaylist')}
+                title={playlist.kind === 'album' ? t('deleteAlbum') : t('deletePlaylist')}
+                message={playlist.kind === 'album' ? t('deleteAlbumConfirm') : t('deletePlaylistConfirm')}
+                confirmLabel={playlist.kind === 'album' ? t('deleteAlbum') : t('deletePlaylist')}
                 onConfirm={() => void handleDeletePlaylist()}
                 onCancel={() => setConfirmDelete(false)}
             />
