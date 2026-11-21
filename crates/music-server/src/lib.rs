@@ -52,6 +52,7 @@ mod restore;
 mod rvc_voices;
 mod rvc_catalog;
 mod rvc_apply;
+mod rvc_fast;
 mod rvc_catalog_progress;
 mod midi;
 mod midi_edit;

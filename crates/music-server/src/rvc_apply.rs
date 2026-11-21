@@ -50,7 +50,7 @@ pub(super) async fn install(
 }
 
 async fn setup_status(state: &AppState) -> Value {
-    let native = fast_availability(update_data_root(state));
+    let native = fast_availability(update_data_root(state)).await;
     let build = selected_build(state).await.ok();
     let model_installed = model_ready(state);
     let audio_ready = build.is_some_and(|build| model_installed && state.acpp.installed(build));
@@ -83,8 +83,16 @@ fn effective_backend(requested: Backend, native_ready: bool, audio_ready: bool) 
     }
 }
 
-fn fast_availability(_data_root: &FsPath) -> Result<(), String> {
-    Err("vocal-fast-rs is unavailable in this Studio build.".into())
+async fn fast_availability(data_root: &FsPath) -> Result<(), String> {
+    if !cfg!(all(target_os = "windows", target_arch = "x86_64")) {
+        return Err(
+            "The vocal-fast-rs TensorRT-RTX route requires Windows x64 with an RTX card.".into(),
+        );
+    }
+    let data_root = data_root.to_path_buf();
+    tokio::task::spawn_blocking(move || rvc_fast::availability(&data_root))
+        .await
+        .map_err(|error| format!("The vocal-fast-rs readiness check stopped: {error}"))?
 }
 
 async fn selected_build(
@@ -177,7 +185,11 @@ pub(super) async fn apply(
             "The installed RVC voice was not found.".into(),
         )
     })?;
-    let native = fast_availability(update_data_root(&state));
+    let native = if request.backend == Backend::AudioCpp {
+        Err("audio.cpp was explicitly requested.".into())
+    } else {
+        fast_availability(update_data_root(&state)).await
+    };
     let audio_build = selected_build(&state)
         .await
         .ok()
@@ -212,7 +224,13 @@ pub(super) async fn apply(
         let index = voice.has_index().then(|| copy("retrieval.index")).transpose()?;
         let blend = if index.is_some() { request.retrieval_blend } else { 0.0 };
         let conversion = match effective {
-            Backend::VocalFastRs => anyhow::bail!("The vocal-fast-rs adapter is unavailable in this Studio build."),
+            Backend::VocalFastRs => rvc_fast::convert(update_data_root(&state), &rvc_fast::Request {
+                vocal: &vocal,
+                voice: &weights,
+                index: index.as_deref(),
+                semitone_shift: request.semitone_shift,
+                retrieval_blend: blend,
+            })?,
             Backend::AudioCpp => convert(&state.acpp, audio_build.context("audio.cpp runtime is unavailable")?, model,
                 &vocal, &weights, index.as_deref(), request.semitone_shift, blend)?,
             Backend::Auto => unreachable!("Auto resolves to a concrete RVC backend"),
@@ -325,8 +343,9 @@ fn add_aligned(mix: &mut audio_post::Stereo, stem: &audio_post::Stereo) -> anyho
     );
     for (output, input) in [(&mut mix.left, &stem.left), (&mut mix.right, &stem.right)] {
         for (destination, sample) in output.iter_mut().zip(input) {
-            anyhow::ensure!(sample.is_finite(), "A stem contains invalid audio samples.");
-            *destination += sample;
+            let mixed = *destination + sample;
+            anyhow::ensure!(mixed.is_finite(), "A stem contains invalid audio samples.");
+            *destination = mixed;
         }
     }
     Ok(())
