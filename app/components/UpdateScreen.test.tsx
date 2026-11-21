@@ -19,6 +19,134 @@ afterEach(() => {
 });
 
 describe('UpdatePlanView', () => {
+  it('keeps the signed update policy and installs only an explicitly selected installed-package update', async () => {
+    const plan = { version: '5.0.0', updated: [], added: [], retired: [], download: 0, freed: 0, show: false };
+    let mode = 'manual';
+    let updates = [
+      { kind: 'music-engines', id: 'engine-fixture', from_version: '1.0', to_version: '1.1', changed_bytes: 4096 },
+      { kind: 'music-models', id: 'model-fixture', from_version: '2.0', to_version: '2.1', changed_bytes: 2 ** 30 },
+    ];
+    const api = vi.fn(async (url: string, init?: RequestInit) => {
+      if (url === '/setup/update') return Response.json({ plan, job: null });
+      if (url === '/v1/components/updates') return Response.json({ mode, updates });
+      if (url === '/v1/components/packages/installed') return new Response(null, { status: 404 });
+      if (url === '/v1/components/updates/mode') {
+        expect(init?.method).toBe('POST');
+        mode = JSON.parse(String(init?.body)).mode;
+        return Response.json({ mode });
+      }
+      if (url === '/v1/components/music-engines/refresh') {
+        expect(init?.method).toBe('POST');
+        return Response.json({ source: 'signed', engines: [] });
+      }
+      if (url === '/v1/components/music-models/model-fixture/install') {
+        expect(init?.method).toBe('POST');
+        updates = updates.filter(update => update.id !== 'model-fixture');
+        return Response.json({ downloaded_bytes: 2 ** 30, reused_bytes: 0 });
+      }
+      throw new Error(url);
+    });
+    vi.stubGlobal('fetch', api);
+    host = document.createElement('div');
+    document.body.append(host);
+    root = createRoot(host);
+    await act(async () => root.render(<UpdatePlanView />));
+    const section = host.querySelector('section[aria-label="Signed component updates"]')!;
+    const select = section.querySelector('select')!;
+    expect(select.value).toBe('manual');
+    expect([...select.options].map(option => option.value)).toEqual(['manual', 'notify', 'auto']);
+    expect(section.textContent).toContain('4 KiB');
+    expect(section.textContent).toContain('1 GiB');
+    expect(api.mock.calls.some(([, init]) => init?.method === 'POST')).toBe(false);
+    for (const value of ['notify', 'auto']) {
+      await act(async () => {
+        select.value = value;
+        select.dispatchEvent(new Event('change', { bubbles: true }));
+      });
+      expect(select.value).toBe(value);
+    }
+    const click = async (button: Element) => {
+      await act(async () => button.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    };
+    await click([...section.querySelectorAll('button')].find(button => button.textContent === 'Check for updates')!);
+    await click(section.querySelector('[aria-label="Update model-fixture"]')!);
+    expect(section.querySelector('[aria-label="Update engine-fixture"]')).toBeTruthy();
+    expect(section.querySelector('[aria-label="Update model-fixture"]')).toBeNull();
+    expect(api.mock.calls.filter(([, init]) => init?.method === 'POST').map(([url]) => url)).toEqual([
+      '/v1/components/updates/mode',
+      '/v1/components/updates/mode',
+      '/v1/components/music-engines/refresh',
+      '/v1/components/music-models/model-fixture/install',
+    ]);
+    await act(async () => root.render(null));
+    await act(async () => root.render(<UpdatePlanView />));
+    expect(host.querySelector('section select')?.getAttribute('disabled')).toBeNull();
+    expect(host.querySelector<HTMLSelectElement>('section select')?.value).toBe('auto');
+  });
+
+  it('rolls back only the selected installed generation and displays its individual automatic pause', async () => {
+    const plan = { version: '5.0.0', updated: [], added: [], retired: [], download: 0, freed: 0, show: false };
+    let current = { kind: 'music-engines', id: 'worker', name: 'Test worker', version: '2',
+      generation: 'new-generation', previous_generation: 'old-generation', automatic_updates_paused: false };
+    const other = { kind: 'music-models', id: 'weights', name: 'Test weights', version: '1',
+      generation: 'weight-generation', previous_generation: null, automatic_updates_paused: false };
+    const updated = { ...current };
+    const api = vi.fn(async (url: string, init?: RequestInit) => {
+      if (url === '/setup/update') return Response.json({ plan, job: null });
+      if (url === '/v1/components/updates') return Response.json({
+        mode: 'auto', updates: current.automatic_updates_paused ? [
+          { kind: current.kind, id: current.id, from_version: '1', to_version: '2',
+            changed_bytes: 256, automatic_updates_paused: true },
+        ] : [],
+      });
+      if (url === '/v1/components/packages/installed') return Response.json({ packages: [current, other], errors: [] });
+      if (url === '/v1/components/packages/music-engines/worker/rollback') {
+        expect(init?.method).toBe('POST');
+        expect(JSON.parse(String(init?.body))).toEqual({ from_generation: 'new-generation', to_generation: 'old-generation' });
+        current = { ...current, version: '1', generation: 'old-generation',
+          previous_generation: 'new-generation', automatic_updates_paused: true };
+        return Response.json(current);
+      }
+      if (url === '/v1/components/music-engines/worker/install') {
+        expect(init?.method).toBe('POST');
+        current = updated;
+        return Response.json({ generation: current.generation });
+      }
+      throw new Error(url);
+    });
+    vi.stubGlobal('fetch', api);
+    host = document.createElement('div');
+    document.body.append(host);
+    root = createRoot(host);
+    await act(async () => root.render(<UpdatePlanView />));
+    const select = [...host.querySelectorAll('label')]
+      .find(label => label.textContent?.startsWith('Installed package'))!.querySelector('select')!;
+    const choose = async (value: string) => {
+      await act(async () => {
+        select.value = value;
+        select.dispatchEvent(new Event('change', { bubbles: true }));
+      });
+    };
+    const rollback = () => [...host.querySelectorAll('button')].find(button => button.textContent === 'Restore previous version');
+    expect(rollback()).toBeUndefined();
+    await choose('music-models/weights');
+    expect(rollback()).toBeUndefined();
+    await choose('music-engines/worker');
+    await act(async () => rollback()!.click());
+    expect(select.selectedOptions[0].text).toBe('Test worker · 1');
+    expect(host.querySelector('li')?.textContent).toContain('Automatic updates paused for this package');
+    expect(host.querySelector('li')?.textContent).toContain('256 B');
+    expect(host.querySelector('section select')?.getAttribute('disabled')).toBeNull();
+    expect(host.querySelector<HTMLSelectElement>('section select')?.value).toBe('auto');
+    await act(async () => host.querySelector<HTMLButtonElement>('[aria-label="Update worker"]')!.click());
+    expect(select.selectedOptions[0].text).toBe('Test worker · 2');
+    expect(host.textContent).not.toContain('Automatic updates paused for this package');
+    expect(api.mock.calls.filter(([, init]) => init?.method === 'POST').map(([url]) => url)).toEqual([
+      '/v1/components/packages/music-engines/worker/rollback',
+      '/v1/components/music-engines/worker/install',
+    ]);
+  });
+
   it('shows the exact recovery archive and local destination from the failed update', async () => {
     const archive = { url: 'https://example.org/releases/onnx.zip', path: 'D:/portable/tools/onnx.zip' };
     const plan = { version: '4.1.1', updated: [], added: [], retired: [], download: 0, freed: 0, show: true };

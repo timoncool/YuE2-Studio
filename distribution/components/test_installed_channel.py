@@ -388,8 +388,17 @@ def run_rvc(work, binary, certificate, tls_key, install_voice=False):
             finally:
                 hold_library.clear()
                 release_library.set()
+            # Mirror-only publication: both the running host and the engine manifest stay unchanged.
+            (origin / "music.dll").unlink()
+            (origin / "damaged.dll").write_bytes(b"?" * len(new_library))
+            (origin / "relocated.dll").write_bytes(new_library)
+            publish(8, {"schema": 1, "revision": 8, "archives": {
+                engine["files"][1]["sha256"]: {"sources": [url + "damaged.dll", url + "relocated.dll"]}
+            }}, "mirrors.json")
             request_paths.clear()
             second = tool("music_engine_package_install", args)
+            assert request_paths.index("/music.dll") < request_paths.index("/damaged.dll") < request_paths.index("/relocated.dll")
+            print("PASS unchanged signed engine manifest recovered from 404 and wrong bytes using a new mirror-only publication")
             assert second["downloaded_bytes"] == len(new_library) and second["reused_bytes"] == len(binary_bytes), second
             assert "/worker" not in request_paths and "/music.dll" in request_paths, request_paths
             assert second["generation"] != first["generation"]
@@ -399,7 +408,7 @@ def run_rvc(work, binary, certificate, tls_key, install_voice=False):
             model = {"id": "new-model", "name": "New model", "version": "1", "engines": [engine["id"]],
                      "files": [pinned("weights.bin", weight)]}
             sibling = dict(model, id="new-model-alt", name="Same weights, another model")
-            publish(8, {"schema": 1, "engines": [engine], "models": [model, sibling]}, "music-engine-catalog.json")
+            publish(9, {"schema": 1, "engines": [engine], "models": [model, sibling]}, "music-engine-catalog.json")
             refreshed = engine_catalogue(refresh=True)
             assert refreshed["models"] == [model, sibling] and refreshed["platform"] == engine["platform"]
             request_paths.clear()
@@ -411,6 +420,33 @@ def run_rvc(work, binary, certificate, tls_key, install_voice=False):
             model_args = {"engine": engine["id"], "model": model["id"]}
             assert tool("music_model_package_status", model_args)["generation"] == first_model["generation"]
             tool("music_model_package_status", dict(model_args, engine="incompatible-engine"), expected_error=True)
+            assert tool("music_package_updates_get") == {"mode": "manual", "updates": []}
+            new_weight = b"updated model weights"
+            (origin / "weights-v2.bin").write_bytes(new_weight)
+            next_model = dict(sibling, version="2", files=[pinned("weights-v2.bin", new_weight)])
+            optional = dict(next_model, id="optional-uninstalled")
+            publish(10, {"schema": 1, "engines": [engine], "models": [model, next_model, optional]}, "music-engine-catalog.json")
+            assert tool("music_package_updates_get")["updates"] == []
+            tool("music_package_update_mode_set", {"mode": "notify"})
+            def wait_until(check):
+                until = time.monotonic() + 40
+                while time.monotonic() < until:
+                    if check():
+                        return
+                    time.sleep(0.1)
+                raise AssertionError("component update policy timed out")
+            wait_until(lambda: bool(tool("music_package_updates_get")["updates"]))
+            assert tool("music_package_updates_get")["updates"] == [{
+                "kind": "music-models", "id": sibling["id"], "from_version": "1",
+                "to_version": "2", "changed_bytes": len(new_weight)
+            }]
+            sibling_args = dict(model_args, model=sibling["id"])
+            assert tool("music_model_package_status", sibling_args)["version"] == "1"
+            tool("music_package_update_mode_set", {"mode": "auto"})
+            wait_until(lambda: tool("music_model_package_status", sibling_args)["version"] == "2")
+            tool("music_model_package_status", dict(model_args, model=optional["id"]), expected_error=True)
+            tool("music_package_update_mode_set", {"mode": "manual"})
+            print("PASS manual stayed offline; notify listed one update; auto replaced only the installed model")
             print("PASS new model delivered without engine update; second model reused pinned weights offline")
             print("PASS independent library update, unchanged executable reused, failed update preserved prior generation")
             assert tool("rvc_catalog_list", {"has_index": False})["voices"][0]["name"] == signed_voice["name"]
@@ -442,6 +478,26 @@ def run_rvc(work, binary, certificate, tls_key, install_voice=False):
         tool("music_engine_package_status", args, expected_error=True)
         rogue.unlink()
         assert tool("music_engine_package_status", args)["version"] == "2"
+        installed = tool("music_engine_package_status", args)
+        rollback = dict(args, kind="music-engines", from_generation=installed["generation"],
+                        to_generation=installed["previous_generation"])
+        assert rollback["to_generation"] == first["generation"]
+        prior_lib, = [p for p in studio.rglob("music.dll") if p.parent.parent.name == first["generation"]]
+        prior_bytes = prior_lib.read_bytes()
+        prior_lib.write_bytes(b"?" * len(prior_bytes))
+        tool("music_package_rollback", rollback, expected_error=True)
+        assert tool("music_engine_package_status", args)["generation"] == second["generation"]
+        prior_lib.write_bytes(prior_bytes)
+        restored = tool("music_package_rollback", rollback)
+        assert restored["active"] == first["generation"] and restored["automatic_updates_paused"]
+        inventory = tool("music_installed_package_list")
+        assert len(inventory["packages"]) == 3 and inventory["errors"] == [], inventory
+        installed_engine = next(p for p in inventory["packages"] if p["kind"] == "music-engines")
+        assert installed_engine["previous_generation"] == second["generation"] and installed_engine["automatic_updates_paused"]
+        assert tool("music_package_rollback", rollback) == restored
+        assert tool("music_engine_package_status", args)["version"] == "1"
+        assert tool("music_package_updates_get")["updates"][0]["automatic_updates_paused"]
+        print("PASS offline rollback rejected damaged previous DLL and restored intact generation once")
         print("PASS signed engine discovery, incompatible schema rejected, offline restart, unexpected library rejected")
         cache = studio / "component-channel" / "rvc"
         snapshot = cache / (cache / "accepted").read_text()

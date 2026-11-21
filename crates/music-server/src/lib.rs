@@ -4,6 +4,11 @@ mod adapters;
 mod community;
 mod component_catalogue;
 mod engine_catalogue;
+mod signed_music_jobs;
+mod signed_music_protocol;
+mod signed_music_ace_example;
+#[doc(hidden)]
+pub use signed_music_ace_example::run_ace_adapter;
 mod diagnostics;
 mod problem;
 mod processing;
@@ -145,6 +150,7 @@ struct AppState {
     ace_cancellations: Arc<RwLock<HashMap<String, native_ace_jobs::CancelSender>>>,
     minimax: Arc<native_minimax::Runtime>,
     minimax_cancellations: Arc<RwLock<HashMap<String, native_music_jobs::CancelSender>>>,
+    signed_music_cancellations: Arc<RwLock<HashMap<String, signed_music_jobs::CancelSender>>>,
     hotstep_cover: Arc<downloads::Downloader>,
     hotstep_sa3_install: Arc<tokio::sync::Mutex<()>>,
     hotstep_sa3_train_install: Arc<tokio::sync::Mutex<()>>,
@@ -425,6 +431,14 @@ struct CreateMusicJobRequest {
 enum MusicSource {
     Local,
     Native { engine: String, model: String },
+    Signed {
+        engine: String,
+        model: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        generation: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        model_generation: Option<String>,
+    },
     AudioCpp { model: String },
     #[serde(rename = "openrouter")]
     OpenRouter { model: String },
@@ -1562,6 +1576,7 @@ pub async fn serve_on_port(port: u16) -> anyhow::Result<()> {
         ace_cancellations: Arc::default(),
         minimax: Arc::default(),
         minimax_cancellations: Arc::default(),
+        signed_music_cancellations: Arc::default(),
         hotstep_cover: Arc::new(downloads::Downloader::new(studio_data_root().unwrap_or_else(|| PathBuf::from(".")).join("hotstep"))),
         hotstep_sa3_install: Arc::default(),
         hotstep_sa3_train_install: Arc::default(),
@@ -1686,6 +1701,7 @@ pub async fn serve_on_port(port: u16) -> anyhow::Result<()> {
     }
     prepare::resume(&state);
     tokio::spawn(resume_unfinished_jobs(state.clone()));
+    tokio::spawn(engine_catalogue::install::updates::watch(state.clone()));
     spawn_idle_eviction(state.clone());
     {
         let state = state.clone();
@@ -1733,7 +1749,11 @@ pub async fn serve_on_port(port: u16) -> anyhow::Result<()> {
         .route("/v1/rvc/voices/{id}", axum::routing::delete(rvc_voices::remove))
         .route("/v1/components/music-engines", get(engine_catalogue::list))
         .route("/v1/components/music-engines/refresh", post(engine_catalogue::refresh))
+        .route("/v1/components/updates", get(engine_catalogue::install::updates::list))
+        .route("/v1/components/updates/mode", post(engine_catalogue::install::updates::set_mode))
         .route("/v1/components/packages/{kind}/{id}/progress", get(engine_catalogue::progress::status))
+        .route("/v1/components/packages/installed", get(engine_catalogue::install::inventory::list))
+        .route("/v1/components/packages/{kind}/{id}/rollback", post(engine_catalogue::install::rollback::apply))
         .route("/v1/components/packages/{kind}/{id}/cancel", post(engine_catalogue::progress::cancel))
         .route("/v1/components/music-models/{id}/install", post(engine_catalogue::install::install_model))
         .route("/v1/components/music-engines/{engine}/models/{model}/status", get(engine_catalogue::install::model_status))
@@ -5815,6 +5835,11 @@ fn preferred_take_counter(engine: &str, metadata: &Value) -> Option<&'static str
             "vocal-fast-rs" => Some("take_preferred_rvc_fast"),
             _ => None,
         },
+        _ if metadata.pointer("/signed_engine/protocol").and_then(Value::as_str) == Some(signed_music_protocol::NAME)
+            && metadata.pointer("/signed_engine/engine").and_then(Value::as_str) == Some(engine) =>
+        {
+            Some("take_preferred_signed_music")
+        }
         _ => None,
     }
 }
@@ -5829,6 +5854,9 @@ fn preferred_take_uses_only_known_effective_backends() {
     assert_eq!(preferred_take_counter("rvc", &Value::Null), None);
     assert_eq!(preferred_take_counter("user-supplied-name", &metadata), None);
     assert_eq!(preferred_take_counter("openrouter", &Value::Null), Some("take_preferred_openrouter"));
+    let signed = serde_json::json!({"signed_engine":{"protocol":"music-http-v1","engine":"fixture-ace-http","model":"private model"}});
+    assert_eq!(preferred_take_counter("fixture-ace-http", &signed), Some("take_preferred_signed_music"));
+    assert_eq!(preferred_take_counter("different-engine", &signed), None);
 }
 
 async fn select_library_playlist_preferred_take(
@@ -11311,6 +11339,7 @@ enum MusicDestination {
     AudioCpp(String),
     Local(String),
     Native { engine: String, model: String },
+    Signed { engine: String, model: String, generation: Option<String>, model_generation: Option<String> },
     OpenRouter(Option<String>),
     Unconfigured,
 }
@@ -11319,6 +11348,9 @@ fn music_destination(source: Option<&MusicSource>, config: &StudioConfiguration)
     match source {
         Some(MusicSource::AudioCpp { model }) => MusicDestination::AudioCpp(model.clone()),
         Some(MusicSource::Native { engine, model }) => MusicDestination::Native { engine: engine.clone(), model: model.clone() },
+        Some(MusicSource::Signed { engine, model, generation, model_generation }) => MusicDestination::Signed {
+            engine: engine.clone(), model: model.clone(), generation: generation.clone(), model_generation: model_generation.clone(),
+        },
         Some(MusicSource::Local) => MusicDestination::Local(PRIMARY_MUSIC_ENGINE_ID.to_owned()),
         Some(MusicSource::OpenRouter { model }) => MusicDestination::OpenRouter(Some(model.clone())),
         None => {
@@ -11347,6 +11379,12 @@ async fn submit_music_job(state: AppState, request: CreateMusicJobRequest, attem
 async fn dispatch_music_job(state: AppState, mut request: CreateMusicJobRequest, attempt: u32, retry_engine: Option<&str>) -> (StatusCode, Json<MusicJob>) {
     let destination = music_destination(request.music_source.as_ref(), &*state.configuration.read().await);
     let engine_id = match destination {
+        MusicDestination::Signed { engine, model, generation, model_generation } => {
+            if retry_engine.is_some_and(|original| original != engine || generation.is_none() || model_generation.is_none()) {
+                return (StatusCode::CONFLICT, Json(failed_request_job(request, engine, "The saved job has no matching signed engine generation.")));
+            }
+            return signed_music_jobs::submit(state, request, engine, model, generation, model_generation, attempt).await;
+        }
         MusicDestination::AudioCpp(model) => {
             if let Some(original) = retry_engine && let Err(reason) = check_retry_engine(original, audio_cpp_music::ENGINE) {
                 return (StatusCode::CONFLICT, Json(failed_request_job(request, audio_cpp_music::ENGINE.into(), reason)));
@@ -11522,6 +11560,9 @@ async fn submit_replay_job(state: AppState, request: ReplayMusicJobRequest, atte
                 .ok_or_else(|| api_error(StatusCode::NOT_FOUND, "Song not found.".into()))?;
             if attempt == 0 {
                 refuse_trashed(&song)?;
+            }
+            if song.replay_request.as_ref().is_some_and(|value| value.get("signed_engine").is_some()) {
+                return signed_music_jobs::replay(state, song, request, attempt).await;
             }
             match song.engine_id.as_str() {
                 ace::ENGINE_ID => return native_ace_jobs::replay(state, song, request, attempt).await,
@@ -12534,6 +12575,9 @@ async fn cancel_music_job(
         .get(&job_id)
         .cloned()
         .ok_or_else(|| api_error(StatusCode::NOT_FOUND, "Music job was not found.".into()))?;
+    if signed_music_jobs::is_job(&existing) {
+        return signed_music_jobs::cancel(&state, existing).await;
+    }
     if existing.engine_id == "acestep-cpp" {
         return native_ace_jobs::cancel(&state, existing).await;
     }
@@ -13206,7 +13250,22 @@ fn check_saved_job_source(library: &library::Library, original: &str, request: &
     if let Some(id) = request.pointer("/replay/song_id").and_then(Value::as_str) {
         let song = library.get_song(id).map_err(|error| error.to_string())?
             .ok_or_else(|| format!("The saved replay source {id} is missing."))?;
+        if let Some(identity) = song.replay_request.as_ref().and_then(|value| value.get("signed_engine"))
+            && original == song.engine_id && identity["engine"] == original && identity["generation"].is_string() && identity["model_generation"].is_string()
+        {
+            return Ok(());
+        }
         return check_retry_engine(original, &song.engine_id);
+    }
+    if request.pointer("/music_source/kind").and_then(Value::as_str) == Some("signed") {
+        return if request.pointer("/music_source/engine").and_then(Value::as_str) == Some(original)
+            && request.pointer("/music_source/generation").and_then(Value::as_str).is_some_and(|value| !value.is_empty())
+            && request.pointer("/music_source/model_generation").and_then(Value::as_str).is_some_and(|value| !value.is_empty())
+        {
+            Ok(())
+        } else {
+            Err("The saved job has no matching signed engine generation.".into())
+        };
     }
     let selected = if request.pointer("/music_source/kind").and_then(Value::as_str) == Some("audio_cpp") {
         audio_cpp_music::ENGINE
