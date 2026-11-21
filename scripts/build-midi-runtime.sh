@@ -7,6 +7,7 @@ set -euo pipefail
 
 output="${1:?usage: build-midi-runtime.sh OUTPUT_DIRECTORY}"
 root="$(cd "$(dirname "$0")/.." && pwd)"
+deployment_target="${MACOSX_DEPLOYMENT_TARGET:-$(node -p 'require(process.argv[1]).bundle.macOS.minimumSystemVersion' "$root/desktop/src-tauri/tauri.macos-release.conf.json")}"
 source_file="$root/engines/music-midi-source.json"
 repository="$(sed -n 's/.*"repository": "\(.*\)".*/\1/p' "$source_file")"
 commit="$(sed -n 's/.*"commit": "\(.*\)".*/\1/p' "$source_file")"
@@ -24,6 +25,7 @@ git -C "$worktree" submodule update --init engine/vendor/vst3sdk
 git -C "$worktree/engine/vendor/vst3sdk" submodule update --init base pluginterfaces public.sdk
 
 cmake -S "$worktree/engine" -B "$worktree/engine/build" -DCMAKE_BUILD_TYPE=Release \
+    -DCMAKE_OSX_DEPLOYMENT_TARGET="$deployment_target" \
     -DGGML_NATIVE=OFF -DGGML_CPU_ARM_ARCH=armv8.2-a+dotprod+fp16 -DGGML_LLAMAFILE=ON \
     -DCMAKE_BUILD_WITH_INSTALL_RPATH=ON -DCMAKE_INSTALL_RPATH=@executable_path \
     -DGGML_METAL=ON -DGGML_METAL_EMBED_LIBRARY=ON

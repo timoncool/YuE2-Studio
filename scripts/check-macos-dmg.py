@@ -1,5 +1,6 @@
 """Verify the collected Apple Silicon package without opening the UI or loading models."""
 
+import json
 import os
 from pathlib import Path
 import plistlib
@@ -15,13 +16,21 @@ DYLIB_LOAD_COMMANDS = {
     "LC_LOAD_UPWARD_DYLIB", "LC_LAZY_LOAD_DYLIB",
 }
 SYSTEM_PATHS = ("/usr/lib/", "/System/Library/")
+REPO = Path(__file__).resolve().parents[1]
 
 
 def checked_output(*command):
     return subprocess.check_output(command, text=True, timeout=30).strip()
 
 
-def check_macho(binary, app, executable_dir, checked, inherited_rpaths=(), *, exact_arm64=False):
+def macos_version(value):
+    if not re.fullmatch(r"\d+(?:\.\d+){1,2}", value):
+        raise ValueError(f"Invalid macOS version: {value}")
+    parts = tuple(map(int, value.split(".")))
+    return parts + (0,) * (3 - len(parts))
+
+
+def check_macho(binary, app, executable_dir, minimum, checked, inherited_rpaths=(), *, exact_arm64=False):
     resolved = binary.resolve(strict=True)
     if not resolved.is_relative_to(app):
         raise ValueError(f"Binary resolves outside the app: {binary}")
@@ -37,6 +46,7 @@ def check_macho(binary, app, executable_dir, checked, inherited_rpaths=(), *, ex
 
     rpaths, libraries = [], []
     command = None
+    minos = None
     for line in checked_output("otool", "-arch", "arm64", "-l", binary).splitlines():
         if match := re.fullmatch(r"\s*cmd (LC_\w+)", line):
             command = match[1]
@@ -45,6 +55,9 @@ def check_macho(binary, app, executable_dir, checked, inherited_rpaths=(), *, ex
                 rpaths.append(expand(match[1]))
             elif command in DYLIB_LOAD_COMMANDS:
                 libraries.append(match[1])
+        elif match := re.fullmatch(r"\s*(minos|version) (\d+(?:\.\d+){1,2})", line):
+            if (command, match[1]) in {("LC_BUILD_VERSION", "minos"), ("LC_VERSION_MIN_MACOSX", "version")}:
+                minos = match[2]
 
     rpaths = tuple(dict.fromkeys((*rpaths, *inherited_rpaths)))
     key = (resolved, binary.parent, executable_dir, rpaths)
@@ -55,6 +68,8 @@ def check_macho(binary, app, executable_dir, checked, inherited_rpaths=(), *, ex
     architectures = checked_output("lipo", "-archs", binary).split()
     if "arm64" not in architectures or (exact_arm64 and architectures != ["arm64"]):
         raise ValueError(f"Expected arm64 in {binary}, found: {architectures}")
+    if minos is None or macos_version(minos) > macos_version(minimum):
+        raise ValueError(f"{binary} has minOS {minos}; app declares macOS {minimum}")
     subprocess.run(["codesign", "--verify", "--strict", binary], check=True, timeout=30)
     for dependency in libraries:
         if dependency.startswith(SYSTEM_PATHS):
@@ -66,8 +81,8 @@ def check_macho(binary, app, executable_dir, checked, inherited_rpaths=(), *, ex
         packaged = next((path for path in candidates if path.is_file() and path.resolve().is_relative_to(app)), None)
         if packaged is None:
             raise ValueError(f"{binary} has an unresolved packaged dependency: {dependency}")
-        check_macho(packaged, app, executable_dir, checked, rpaths)
-    print(f"Verified arm64, signature and {len(libraries)} imports: {binary.relative_to(app)}", flush=True)
+        check_macho(packaged, app, executable_dir, minimum, checked, rpaths)
+    print(f"Verified arm64, minOS {minos}, signature and {len(libraries)} imports: {binary.relative_to(app)}", flush=True)
     return rpaths
 
 
@@ -88,7 +103,7 @@ def check_app(mount):
         raise ValueError(f"Expected one app in the mounted DMG, found: {apps}")
     app = apps[0].resolve()
     contents = app / "Contents"
-    checkout_bootstrap = Path(__file__).resolve().parents[1] / "distribution/channels/stable/bootstrap"
+    checkout_bootstrap = REPO / "distribution/channels/stable/bootstrap"
     packaged_bootstrap = contents / "Resources" / "component-channel"
     for name in ("root.json", "url.txt"):
         if (packaged_bootstrap / name).read_bytes() != (checkout_bootstrap / name).read_bytes():
@@ -96,10 +111,15 @@ def check_app(mount):
         print(f"Verified component-channel/{name} byte for byte", flush=True)
 
     with (contents / "Info.plist").open("rb") as metadata:
-        main = contents / "MacOS" / plistlib.load(metadata)["CFBundleExecutable"]
+        info = plistlib.load(metadata)
+    main = contents / "MacOS" / info["CFBundleExecutable"]
+    config = REPO / "desktop/src-tauri/tauri.macos-release.conf.json"
+    minimum = json.loads(config.read_text(encoding="utf-8"))["bundle"]["macOS"]["minimumSystemVersion"]
+    if macos_version(info["LSMinimumSystemVersion"]) != macos_version(minimum):
+        raise ValueError(f"Info.plist minimum macOS version differs from {minimum}")
     subprocess.run(["codesign", "--verify", "--deep", "--strict", "--verbose=2", app], check=True, timeout=30)
     checked = set()
-    check_macho(main, app, main.parent, checked, exact_arm64=True)
+    check_macho(main, app, main.parent, minimum, checked, exact_arm64=True)
 
     resources = contents / "Resources" / "resources"
     tools = (
@@ -109,7 +129,7 @@ def check_app(mount):
     )
     runtime_rpaths = {}
     for tool, status, usage in tools:
-        rpaths = check_macho(tool, app, tool.parent, checked, exact_arm64=True)
+        rpaths = check_macho(tool, app, tool.parent, minimum, checked, exact_arm64=True)
         runtime_rpaths.setdefault(tool.parent, rpaths)
         check_help(tool, status, usage)
     for directory, rpaths in runtime_rpaths.items():
@@ -117,7 +137,7 @@ def check_app(mount):
         if not libraries:
             raise ValueError(f"No packaged dylibs: {directory}")
         for library in sorted({path.resolve(strict=True) for path in libraries}):
-            check_macho(library, app, directory, checked, rpaths)
+            check_macho(library, app, directory, minimum, checked, rpaths)
 
 
 def interrupt(signum, _frame):
