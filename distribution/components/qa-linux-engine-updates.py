@@ -35,7 +35,7 @@ data = work / "data"
 data.mkdir(parents=True)
 (data / "openrouter-catalog-v2.json").write_text(json.dumps({"models":[
     {"id":cloud_model, "name":"Held cloud song", "input_modalities":["text"],
-     "output_modalities":["audio"], "capabilities":["music_generation"]}
+     "output_modalities":["audio"], "supported_parameters":[], "capabilities":["music_generation"]}
 ]}), encoding="utf8")
 origin = work / "origin"
 origin.mkdir(parents=True)
@@ -85,6 +85,17 @@ class Channel(SimpleHTTPRequestHandler):
         super().do_GET()
 
 class Provider(SimpleHTTPRequestHandler):
+    def do_GET(self):
+        assert self.path.startswith("/models"), self.path
+        body = json.dumps({"data":[{"id":cloud_model, "name":"Held cloud song",
+            "description":"Generate full-length songs from text.",
+            "architecture":{"input_modalities":["text"], "output_modalities":["audio"]}}]}).encode()
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
     def do_POST(self):
         assert self.path == "/chat/completions" and self.headers["Authorization"] == "Bearer fixture-only"
         request = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
@@ -301,6 +312,7 @@ try:
                 rollback = progress_args | {"from_generation":second["generation"], "to_generation":first["generation"]}
                 refused_rollback = tool("music_package_rollback", rollback, error=True)
                 assert "busy" in json.dumps(refused_rollback).lower() and status()["version"] == "2.0"
+                tool("openrouter_catalog_refresh")
                 cloud = tool("song_create", prompt | {"music_source":{"kind":"openrouter", "model":cloud_model}})
                 assert cloud_started.wait(8)
                 publish(5)
