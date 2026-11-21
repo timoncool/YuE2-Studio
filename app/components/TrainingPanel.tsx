@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { karaokeStatusChanged, useSystemResources } from '../services/studioQueries';
+import { karaokeStatusChanged, playlistsChanged, useSystemResources } from '../services/studioQueries';
 import { AlertTriangle, BookOpen, Check, CheckSquare, ChevronDown, Clock, ChevronLeft, ChevronRight, Cpu, Download, FolderInput, FolderOpen, FolderOutput, Headphones, Library, Loader2, Mic2, MoreHorizontal, Music, Play, Plus, RotateCcw, Search, Square, Trash2, UploadCloud, Wand2, X } from 'lucide-react';
 import { useI18n } from '../context/I18nContext';
 import { trainingAssetLabel } from '../i18n/trainingAssets';
@@ -1067,6 +1067,7 @@ const RunCard: React.FC<{ run: TrainingRun; onChanged: () => void; onError: (mes
     setPreparingTakes(true);
     try {
       const { playlist_id } = await listenCheckpoints(run.id);
+      await playlistsChanged();
       window.history.pushState({}, '', '/playlist/' + encodeURIComponent(playlist_id));
       window.dispatchEvent(new PopStateEvent('popstate'));
     } catch (problem) {
