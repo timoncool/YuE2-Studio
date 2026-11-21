@@ -640,6 +640,49 @@ mod tests {
     }
 
     #[test]
+    fn adapter_exports_tag_flac_and_mp3_without_changing_the_recording() {
+        use lofty::{file::TaggedFileExt, tag::Accessor};
+
+        let folder = tempfile::tempdir().unwrap();
+        let source = write_source(folder.path(), "source.wav", &tone(48_000, 0.5, 0.5), 16);
+        tagging::write_tags(&source, &tagging::TrackTags {
+            title: "Original title".into(),
+            artist: "Previous artist tag".into(),
+            comment: Some("Original comment".into()),
+            ..tagging::TrackTags::default()
+        }).unwrap();
+        let original_sha256 = sha256(&source).unwrap();
+        let original = crate::audio_pcm::decode_stereo(&source).unwrap();
+        let out = folder.path().join("out");
+        let provenance = json!({"model":"MiniMax Music3", "family":"minimax_music3"});
+        let artist = music_adapter_artist("hotstep", &provenance);
+        for settings in [settings(Format::Flac, None, Some(Depth::Int16)), settings(Format::Mp3, None, None)] {
+            let (file, report) = run(&source, &out, "Track", &settings, artist,
+                                     &AtomicBool::new(false), |_, _| {}).unwrap();
+            let tagged = lofty::read_from_path(&file).unwrap();
+            let tag = tagged.primary_tag().unwrap();
+            assert_eq!(tag.title().as_deref(), Some("Track"));
+            assert_eq!(tag.artist().as_deref(), Some("MiniMax Music3"));
+            assert_eq!(report.bytes, std::fs::metadata(&file).unwrap().len());
+            let decoded = crate::audio_pcm::decode_stereo(&file).unwrap();
+            let untagged = if settings.format == Format::Mp3 {
+                let (reference, _) = export(&source, &out, &settings);
+                Some(crate::audio_pcm::decode_stereo(&reference).unwrap())
+            } else {
+                None
+            };
+            let reference = untagged.as_ref().unwrap_or(&original);
+            assert_eq!(decoded.rate, reference.rate);
+            assert_eq!(decoded.left, reference.left);
+            assert_eq!(decoded.right, reference.right);
+        }
+        assert_eq!(sha256(&source).unwrap(), original_sha256);
+        let source_tags = tagging::read_tags(&std::fs::read(&source).unwrap());
+        assert_eq!(source_tags.title.as_deref(), Some("Original title"));
+        assert_eq!(source_tags.comment.as_deref(), Some("Original comment"));
+    }
+
+    #[test]
     fn every_file_is_written_at_the_rate_and_depth_asked_for() {
         let folder = tempfile::tempdir().unwrap();
         let source = write_source(folder.path(), "source.wav", &tone(48_000, 2.0, 0.5), 32);
