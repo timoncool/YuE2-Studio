@@ -1,7 +1,8 @@
 import React, { useCallback, useEffect, useEffectEvent, useMemo, useRef, useState } from 'react';
-import { libraryChanged, SELF_READ, useActivity, useAssistantStatus, useOpenRouterSettings, useSetupStatus, type ActivityEntry } from '../services/studioQueries';
+import { libraryChanged, SELF_READ, useActivity, useAssistantStatus, useOpenRouterSettings, useSetupStatus, setupStatusChanged, type ActivityEntry } from '../services/studioQueries';
 import { hasSungLines, karaokeReason, recogniseLyrics } from '../services/karaoke';
 import { ConfirmDialog } from './ConfirmDialog';
+import { enginePauseStrings } from '../i18n/enginePause';
 import { clampDurationToKept } from '../services/createDuration';
 import { minTokensCutsTheSongOff } from '../services/samplingLimits';
 import { foldedAfter, keepFolded, keptFolded } from '../services/createFold';
@@ -38,7 +39,8 @@ import { SongTextParts } from './SongTextParts';
 import { writerInstruction } from '../services/songWriting';
 import { songWritingStrings } from '../i18n/songWriting';
 import { MiDashengFields, miDashengModel, miDashengPromptReady, restoreMiDashengPrompt } from './MiDashengFields';
-import { HeartMuLaControls, emptyHeartMuLaDraft, heartMuLaDraft, heartMuLaOptions } from './HeartMuLaControls';
+import { HeartMuLaControls, AudioCppModelInstall, emptyHeartMuLaDraft, heartMuLaDraft, heartMuLaOptions } from './HeartMuLaControls';
+import { StableAudioControls, emptyStableAudioDraft, stableAudioDraft, stableAudioOptions, stableAudioPromptRequired } from './StableAudioControls';
 import { Vevo2SingingFields, vevo2SingingStrings, type Vevo2References } from './Vevo2SingingFields';
 import { NumberField } from './NumberField';
 import { explainCliFailure } from '../services/cliFailure';
@@ -95,6 +97,7 @@ type SetupStatus = SetupChoice & {
   ready?: boolean;
   profile_files?: ProfileFiles | null;
   engine_ready?: boolean;
+  engine_paused?: boolean;
   selection_matches_engine?: boolean | null;
   engine_error?: string | null;
   effective_max_batch?: number;
@@ -424,9 +427,11 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
   const miDasheng = audioFamily === miDashengModel;
   const [scene, setScene] = useState(() => restoreMiDashengPrompt(undefined));
   const heartMuLa = audioFamily === 'heartmula';
+  const stableAudio = audioFamily === 'stable_audio';
   const vevo2 = audioFamily === 'vevo2';
   const miniMaxH3 = audioFamily === 'minimax_h3';
   const [heartSettings, setHeartSettings] = useState(emptyHeartMuLaDraft);
+  const [stableSettings, setStableSettings] = useState(emptyStableAudioDraft);
   const [vevoReferences, setVevoReferences] = useState<Vevo2References>({ voice_song_id: '' });
   const nativeStrings = nativeMusicSourceStrings[language];
   const yue = musicEngine === 'local';
@@ -573,6 +578,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
   const [writerExtra, setWriterExtra] = useState('');
   const [scoreInstruction, setScoreInstruction] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [engineAction, setEngineAction] = useState(false);
   // the form scrolls above the Create button: a refusal at its foot is brought into view, or a click seems to do nothing
   const errorBox = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -619,10 +625,28 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
   const lyricsBox = useRef<HTMLTextAreaElement | null>(null);
 
   const ready = !serviceDown && setup?.ready === true && setup.engine_ready === true && setup.selection_matches_engine !== false;
-  const unavailableTitle = !setup ? t('modelLoading') : !setup.ready ? t('profileRequired')
+  const enginePaused = setup?.engine_paused === true;
+  const engineControl = enginePauseStrings[language];
+  const unavailableTitle = enginePaused ? engineControl.paused : !setup ? t('modelLoading') : !setup.ready ? t('profileRequired')
     : setup.engine_error ? t('localGenerationUnavailable') : t('engineStartingTitle');
-  const unavailableHint = !setup ? t('modelLoading') : !setup.ready ? t('downloadProfileFirst')
+  const unavailableHint = enginePaused ? engineControl.paused : !setup ? t('modelLoading') : !setup.ready ? t('downloadProfileFirst')
     : setup.engine_error || (setup.selection_matches_engine === false ? t('switchProfileHint') : t('engineStartingHint'));
+  const changeEnginePause = async () => {
+    setEngineAction(true);
+    setError(null);
+    try {
+      const response = await fetch(enginePaused ? '/engine/resume' : '/engine/pause', { method: 'POST' });
+      if (!response.ok) {
+        const body = await response.json().catch(() => null);
+        throw new Error(body?.error || engineControl.failed);
+      }
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : engineControl.failed);
+    } finally {
+      setupStatusChanged();
+      setEngineAction(false);
+    }
+  };
   const defaults: EngineDefaults = catalog?.defaults ?? {};
   const placeholder = (key: string) => asText(defaults[key]);
   const maxBatch = Math.max(1, catalog?.max_batch ?? setup?.effective_max_batch ?? 1);
@@ -753,6 +777,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
           : source?.kind === 'native' && source.engine === song.ditModel ? source.model : song.lmModel;
         if (profile === miDashengModel) setScene(restoreMiDashengPrompt(settings.midasheng));
         if (profile === 'heartmula') setHeartSettings(heartMuLaDraft(settings.heartmula as YueRequest['heartmula']));
+        if (profile === 'stable_audio') setStableSettings(stableAudioDraft(settings.stable_audio as YueRequest['stable_audio']));
         if (profile === 'vevo2') setVevoReferences((settings.vevo2 as YueRequest['vevo2']) ?? { voice_song_id: '' });
         native.restore(song.ditModel, profile ?? '', settings);
       } else {
@@ -1201,26 +1226,31 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
   // source and the style is written from that.
   const [hearingLyrics, setHearingLyrics] = useState(false);
   const [confirmHearLyrics, setConfirmHearLyrics] = useState(false);
-  const recognitionRevision = useRef(0);
+  const recognitionRun = useRef<symbol | null>(null);
   React.useLayoutEffect(() => {
-    return () => { recognitionRevision.current += 1; };
-  }, [coverSongId, coverFile, lyrics, mode]);
-  useEffect(() => { setConfirmHearLyrics(false); }, [coverSongId, coverFile, mode]);
+    setHearingLyrics(false);
+    setConfirmHearLyrics(false);
+    return () => { recognitionRun.current = null; };
+  }, [coverSongId, coverFile, lyrics, mode, musicEngine]);
   /** The karaoke recogniser hears what the cover's source sings; the lyrics take it, to be edited. */
   const hearLyrics = async () => {
-    if ((!coverSongId && !coverFile) || hearingLyrics) return;
-    const revision = recognitionRevision.current;
+    if ((!coverSongId && !coverFile) || recognitionRun.current) return;
+    const run = Symbol();
+    recognitionRun.current = run;
     setHearingLyrics(true);
     setError(null);
     try {
       const words = await recogniseLyrics(coverSongId ? { songId: coverSongId } : { file: coverFile! });
-      if (recognitionRevision.current === revision) setLyrics(words);
+      if (recognitionRun.current === run) setLyrics(words);
     } catch (reason) {
-      if (recognitionRevision.current !== revision) return;
+      if (recognitionRun.current !== run) return;
       const message = reason instanceof Error ? reason.message : String(reason);
       setError(karaokeReason(t, message) ?? message);
     } finally {
-      setHearingLyrics(false);
+      if (recognitionRun.current === run) {
+        recognitionRun.current = null;
+        setHearingLyrics(false);
+      }
     }
   };
 
@@ -1445,6 +1475,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
       if (vevo2 && (!lyrics.trim() || !vevoReferences.voice_song_id)) { setError(vevo2SingingStrings[language].required); return; }
       if (audioFamily === audioCppMiniMax && (!style.trim() || !lyrics.trim())) { setError(nativeStrings.styleAndLyricsRequired); return; }
       if (miniMaxH3 && !style.trim()) { setError(nativeStrings.h3PromptRequired); return; }
+      if (stableAudio && !style.trim()) { setError(stableAudioPromptRequired(language)); return; }
       if (!miniMaxH3 && !miDasheng && !style.trim() && !lyrics.trim()) { setError(tt('styleOrLyricsRequired')); return; }
       setError(null);
       generate({
@@ -1452,11 +1483,12 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
           ? { kind: 'audio_cpp', model: native.profile.id }
           : { kind: 'native', engine: nativeEngine, model: native.profile.id },
         style: miDasheng ? scene.caption || scene.music : vevo2 ? '' : finishedStyle(style),
-        lyrics: miDasheng ? scene.speech_text.trim() : miniMaxH3 ? '' : lyrics.replace(/\r\n?/g, '\n').trim(),
+        lyrics: miDasheng ? scene.speech_text.trim() : miniMaxH3 || stableAudio ? '' : lyrics.replace(/\r\n?/g, '\n').trim(),
         ...(name.trim() ? { title: name.trim() } : {}),
         ...(chosenPlaylist ? { playlist_id: chosenPlaylist } : {}),
         ...(miDasheng ? { midasheng: scene } : {}),
         ...(heartMuLa ? { heartmula: heartMuLaOptions(heartSettings) } : {}),
+        ...(stableAudio ? { stable_audio: stableAudioOptions(stableSettings) } : {}),
         ...(vevo2 ? { vevo2: vevoReferences } : {}),
         ...nativeGenerationSettings(nativeEngine, vevo2 ? { seed: native.settings.seed, output_format: native.settings.output_format } : miDasheng ? { ...native.settings, steps: undefined } : native.settings),
       });
@@ -1612,6 +1644,12 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
               </select>
             </label>
           )}
+          {yue && !serviceDown && setup?.ready && (
+            <button type="button" disabled={engineAction} onClick={() => void changeEnginePause()}
+              className="rounded border border-zinc-200 px-2 py-1 text-xs font-medium disabled:opacity-50 dark:border-white/20">
+              {enginePaused ? engineControl.resume : engineControl.pause}
+            </button>
+          )}
           {!yue ? (
             <>
               {nativeEngine ? (
@@ -1637,6 +1675,9 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
                     {native.profile && !native.ready && <p role="status" className="text-xs">
                       {nativeStrings.unavailable}{native.profile.missing?.length ? ` · ${native.profile.missing.join(', ')}` : ''}
                     </p>}
+                    {(heartMuLa || stableAudio) && native.profile?.installable && !native.ready &&
+                      <AudioCppModelInstall key={audioFamily} model={stableAudio ? 'stable_audio' : 'heartmula'} bytes={native.profile.total_bytes}
+                        licenseUrl={native.profile.license_url} language={language} onInstalled={native.refresh} />}
                     <button type="button" className="text-xs text-pink-600 underline dark:text-pink-300" onClick={native.refresh}>
                       {musicStrings.refresh}
                     </button>
@@ -1676,12 +1717,13 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
                 {!vevo2 && !miDasheng && <AutoTextarea className={CONTROL} value={style} onChange={event => setStyle(event.target.value)}
                   placeholder={tt('stylePlaceholder')} aria-label={tt('styleCardTitle')} />}
               </Card>
-              {miDasheng ? <MiDashengFields value={scene} onChange={setScene} /> : !miniMaxH3 && <Card title={t('lyrics')}>
+              {miDasheng ? <MiDashengFields value={scene} onChange={setScene} /> : !miniMaxH3 && !stableAudio && <Card title={t('lyrics')}>
                 <AutoTextarea className={CONTROL} value={lyrics} onChange={event => setLyrics(event.target.value)}
                   aria-label={t('lyrics')} />
               </Card>}
               {vevo2 && <Vevo2SingingFields value={vevoReferences} onChange={setVevoReferences} controlClassName={CONTROL} />}
               {heartMuLa && <HeartMuLaControls values={heartSettings} onChange={setHeartSettings} language={language} />}
+              {stableAudio && <StableAudioControls value={stableSettings} onChange={setStableSettings} language={language} />}
               {nativeEngine && abc.trim() && <p role="status" className="text-xs text-zinc-500">{nativeStrings.scoreKept}</p>}
               {nativeEngine && (native.profile || native.originalModels) && (
                 <Card title={nativeStrings.settings}>

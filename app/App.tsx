@@ -127,11 +127,14 @@ import { StudioToolsPanel } from './components/StudioToolsPanel';
 import { AdaptersPage } from './components/AdaptersPage';
 import { PlayerExtras } from './components/player/PlayerExtras';
 import { registerPlayer } from './services/audioGraph';
+import { loadLibraryTrack, setLibraryPlaybackRate } from './services/playerTempo';
 import { serveVisualizerFeed } from './services/visualizerFeed';
 import { winampControl, winampOn } from './services/winamp';
 import { notePlayed } from './services/playHistory';
+import { moveAlbum } from './services/albumOrder';
+import { collectionToastKey } from './services/collectionToasts';
 import { deleteQuestion } from './services/deleteQuestion';
-import { createNativePlaylist, deleteNativeSong, moveStoredLikes, restoreTrashedSong, setNativeSongLiked, updateNativePlaylist } from './services/nativeLibrary';
+import { createNativePlaylist, moveStoredLikes, reorderNativeAlbums, restoreTrashedSong, setNativeSongLiked, trashNativeSongs, updateNativePlaylist } from './services/nativeLibrary';
 import { foldStems } from './services/songStems';
 import { noteStudioMessage } from './services/journal';
 import { JournalPanel } from './components/JournalPanel';
@@ -231,7 +234,7 @@ function AppContent() {
   // page for a second on every launch is how a ready studio was made to look
   // like a bill.
   const [nativeModels, setNativeModels] = useState<'unknown' | 'missing' | 'installed' | 'offline'>('unknown');
-  const setupQuery = useSetupStatus<{ ready?: boolean; engine_ready?: boolean; trash_days?: number; kv_cache_notice?: { need_gib: number | null; free_gib: number | null } | null }>();
+  const setupQuery = useSetupStatus<{ ready?: boolean; engine_ready?: boolean; engine_paused?: boolean; trash_days?: number; kv_cache_notice?: { need_gib: number | null; free_gib: number | null } | null }>();
   useEffect(() => {
     // A service that does not answer is not an engine that is still coming
     // up: the application has been closed, and saying "starting" at a dead
@@ -396,6 +399,9 @@ function AppContent() {
   // Modals
   const [isCreatePlaylistModalOpen, setIsCreatePlaylistModalOpen] = useState(false);
   const [isAddToPlaylistModalOpen, setIsAddToPlaylistModalOpen] = useState(false);
+  const [creatingCollectionKind, setCreatingCollectionKind] = useState<'playlist' | 'album'>('playlist');
+  const [addCollectionKind, setAddCollectionKind] = useState<'playlist' | 'album'>('playlist');
+  const albumOrderBusy = useRef(false);
   const [songsToAddToPlaylist, setSongsToAddToPlaylist] = useState<Song[]>([]);
 
   // Video Modal
@@ -427,6 +433,10 @@ function AppContent() {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const selectedSongRef = useRef<Song | null>(null);
   const currentSongIdRef = useRef<string | null>(null);
+  const changePlaybackRate = useCallback((rate: number) => {
+    if (audioRef.current) setLibraryPlaybackRate(audioRef.current, rate);
+    setPlaybackRate(rate);
+  }, []);
   const pendingSeekRef = useRef<number | null>(null);
   const playNextRef = useRef<() => void>(() => {});
 
@@ -916,15 +926,15 @@ function AppContent() {
       }
     };
 
-    if (currentSongIdRef.current !== currentSong.id) {
+    const loaded = loadLibraryTrack(audio, currentSongIdRef.current, {
+      id: currentSong.id, audioUrl: currentSong.audioUrl,
+    });
+    if (loaded) {
       currentSongIdRef.current = currentSong.id;
-      audio.src = currentSong.audioUrl;
-      audio.load();
-      if (isPlaying) playAudio();
-    } else {
-      if (isPlaying) playAudio();
-      else audio.pause();
+      setPlaybackRate(1);
     }
+    if (isPlaying) playAudio();
+    else if (!loaded) audio.pause();
   }, [currentSong, isPlaying]);
 
   // Handle Volume
@@ -934,13 +944,6 @@ function AppContent() {
     }
     localStorage.setItem('volume', String(volume));
   }, [volume]);
-
-  // Handle Playback Rate
-  useEffect(() => {
-    if (audioRef.current) {
-      audioRef.current.playbackRate = playbackRate;
-    }
-  }, [playbackRate]);
 
   // a visualiser in its own window hears the player through this window
   useEffect(() => serveVisualizerFeed(), []);
@@ -1226,50 +1229,39 @@ function AppContent() {
       onConfirm: async () => {
         setConfirmDialog(null);
 
-        const idsToDelete = new Set(songsToDelete.map(song => song.id));
-        const succeeded: string[] = [];
-        const failed: string[] = [];
+        const { removed, restore, failed } = await trashNativeSongs(songsToDelete);
 
-        for (const song of songsToDelete) {
-          try {
-            await deleteNativeSong(song.id);
-            succeeded.push(song.id);
-          } catch (error) {
-            console.error('Failed to delete song:', error);
-            failed.push(song.id);
-          }
-        }
+        if (removed.size > 0) {
+          updateLibrarySongs(songs => songs.filter(song => !removed.has(song.id)));
 
-        if (succeeded.length > 0) {
-          updateLibrarySongs(songs => songs.filter(s => !idsToDelete.has(s.id) || failed.includes(s.id)));
-
-          if (selectedSong?.id && succeeded.includes(selectedSong.id)) {
+          if (selectedSong?.id && removed.has(selectedSong.id)) {
             setSelectedSong(null);
           }
 
-          if (currentSong?.id && succeeded.includes(currentSong.id)) {
+          if (currentSong?.id && removed.has(currentSong.id)) {
             setCurrentSong(null);
             setIsPlaying(false);
             if (audioRef.current) {
               audioRef.current.pause();
               audioRef.current.src = '';
+              currentSongIdRef.current = null;
             }
           }
 
-          setPlayQueue(prev => prev.filter(s => !idsToDelete.has(s.id) || failed.includes(s.id)));
+          setPlayQueue(prev => prev.filter(song => !removed.has(song.id)));
         }
 
         // what went to the bin comes back from the message, with its stems
-        const undo = {
+        const undo = restore.length > 0 ? {
           label: t('undo'),
           onClick: () => {
-            void Promise.all(succeeded.map(id => restoreTrashedSong(id)))
+            void Promise.all(restore.map(id => restoreTrashedSong(id)))
               .then(() => { libraryChanged(); showToast(t('songsRestored')); })
               .catch((error: unknown) => showToast(error instanceof Error ? error.message : String(error), 'error'));
           },
-        };
+        } : undefined;
         if (failed.length > 0) {
-          showToast(t('songsDeletedPartial').replace('{succeeded}', String(succeeded.length)).replace('{total}', String(songsToDelete.length)), 'error');
+          showToast(t('songsDeletedPartial').replace('{succeeded}', String(songsToDelete.length - failed.length)).replace('{total}', String(songsToDelete.length)), 'error', undo);
         } else if (isSingle) {
           showToast(t('songDeleted'), 'success', undo);
         } else {
@@ -1279,15 +1271,16 @@ function AppContent() {
     });
   };
 
-  const createPlaylist = async (name: string, description: string) => {
+  const createPlaylist = async (name: string, description: string, kind: 'playlist' | 'album') => {
     try {
-      const playlist = await createNativePlaylist(name, description, songsToAddToPlaylist.map(song => song.id));
-      updateLibraryPlaylists(prev => [playlist, ...prev]);
+      const playlist = await createNativePlaylist(name, description, songsToAddToPlaylist.map(song => song.id), kind);
+      if (kind === 'album') libraryChanged();
+      else updateLibraryPlaylists(prev => [playlist, ...prev]);
       setSongsToAddToPlaylist([]);
-      showToast(t('playlistCreated'));
+      showToast(t(collectionToastKey(kind, 'created')));
     } catch (error) {
-      console.error('Create playlist error:', error);
-      showToast(t('failedToCreatePlaylist'), 'error');
+      console.error('Create collection error:', error);
+      showToast(t(collectionToastKey(kind, 'createFailed')), 'error');
     }
   };
 
@@ -1305,9 +1298,35 @@ function AppContent() {
     }
   };
 
-  const openAddToPlaylistModal = (chosen: Song | Song[]) => {
+  const openAddToCollectionModal = (chosen: Song | Song[], kind: 'playlist' | 'album') => {
     setSongsToAddToPlaylist(Array.isArray(chosen) ? chosen : [chosen]);
+    setAddCollectionKind(kind);
     setIsAddToPlaylistModalOpen(true);
+  };
+  const openAddToPlaylistModal = (chosen: Song | Song[]) => openAddToCollectionModal(chosen, 'playlist');
+  const openAddToAlbumModal = (chosen: Song | Song[]) => openAddToCollectionModal(chosen, 'album');
+
+  const reorderAlbums = async (from: string, to: string) => {
+    if (albumOrderBusy.current) return;
+    const sorted = moveAlbum(playlists, from, to);
+    if (sorted === playlists) return;
+    albumOrderBusy.current = true;
+    try {
+      const persisted = await reorderNativeAlbums(sorted.filter(item => item.kind === 'album').map(item => item.id));
+      // Only apply order to the current rows; track list edits can arrive during the write.
+      updateLibraryPlaylists(current => {
+        const rank = new Map(persisted.filter(item => item.kind === 'album').map((item, index) => [item.id, index]));
+        const ordered = current.filter(item => item.kind === 'album')
+          .sort((left, right) => (rank.get(left.id) ?? rank.size) - (rank.get(right.id) ?? rank.size));
+        let index = 0;
+        return current.map(item => item.kind === 'album' ? ordered[index++] : item);
+      });
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : String(error), 'error');
+      libraryChanged();
+    } finally {
+      albumOrderBusy.current = false;
+    }
   };
 
   const addSongToPlaylist = async (playlistId: string) => {
@@ -1322,9 +1341,10 @@ function AppContent() {
         updateLibraryPlaylists(prev => prev.map(item => item.id === updated.id ? updated : item));
       }
       const already = songsToAddToPlaylist.length - fresh.length;
+      const kind = playlist.kind ?? 'playlist';
       const added = fresh.length === 0
-        ? t(songsToAddToPlaylist.length === 1 ? 'songAlreadyInPlaylist' : 'songsAlreadyInPlaylist').replace('{name}', playlist.name)
-        : t('songsAddedToNamedPlaylist').replace('{count}', String(fresh.length)).replace('{name}', playlist.name);
+        ? t(collectionToastKey(kind, songsToAddToPlaylist.length === 1 ? 'alreadyOne' : 'alreadyMany')).replace('{name}', playlist.name)
+        : t(collectionToastKey(kind, 'added')).replace('{count}', String(fresh.length)).replace('{name}', playlist.name);
       showToast(already && fresh.length ? `${added} ${t('songsAlreadyThere').replace('{count}', String(already))}` : added, fresh.length ? 'success' : 'info', {
         label: t('openPlaylist'),
         onClick: () => handleNavigateToPlaylist(playlist.id),
@@ -1462,8 +1482,15 @@ function AppContent() {
             isPlaying={isPlaying}
             onCreatePlaylist={() => {
               setSongsToAddToPlaylist([]);
+              setCreatingCollectionKind('playlist');
               setIsCreatePlaylistModalOpen(true);
             }}
+            onCreateAlbum={() => {
+              setSongsToAddToPlaylist([]);
+              setCreatingCollectionKind('album');
+              setIsCreatePlaylistModalOpen(true);
+            }}
+            onReorderAlbums={reorderAlbums}
             onSelectPlaylist={(p) => handleNavigateToPlaylist(p.id)}
             onPlayPlaylist={(p, songs) => playFromPlaylist(p.id)(songs[0], songs)}
             onError={message => showToast(message, 'error')}
@@ -1537,7 +1564,7 @@ function AppContent() {
         // look like it owed 26 GB.
         if (nativeModels === 'offline') return <StudioOffline />;
         if (updateShown) return <UpdateScreen onLeave={() => setUpdateShown(false)} />;
-        if (!nativeSetupReady && !enteredOtherEditor) {
+        if (!nativeSetupReady && !enteredOtherEditor && setupQuery.data?.engine_paused !== true) {
           // Until the studio has answered, and while the engine is coming up,
           // this is a wait - not a decision. The download page appears only
           // when components are genuinely missing.
@@ -1655,6 +1682,7 @@ function AppContent() {
     replay: handleNativeReplay,
     exportVideo: setSongForVideo,
     addToPlaylist: openAddToPlaylistModal,
+    addToAlbum: openAddToAlbumModal,
     remove: handleDeleteSong,
     update: handleSongUpdate,
     queue: queueFromWindow,
@@ -1664,6 +1692,7 @@ function AppContent() {
     replay: song => songActionsLatest.current.replay(song),
     exportVideo: song => songActionsLatest.current.exportVideo(song),
     addToPlaylist: song => songActionsLatest.current.addToPlaylist(song),
+    addToAlbum: song => songActionsLatest.current.addToAlbum(song),
     remove: song => songActionsLatest.current.remove(song),
     update: song => songActionsLatest.current.update(song),
     queue: (songs, next) => songActionsLatest.current.queue(songs, next),
@@ -1732,7 +1761,7 @@ function AppContent() {
         volume={volume}
         onVolumeChange={setVolume}
         playbackRate={playbackRate}
-        onPlaybackRateChange={setPlaybackRate}
+        onPlaybackRateChange={changePlaybackRate}
         audioRef={audioRef}
         isShuffle={isShuffle}
         onToggleShuffle={() => setIsShuffle(!isShuffle)}
@@ -1787,17 +1816,26 @@ function AppContent() {
       <CreatePlaylistModal
         isOpen={isCreatePlaylistModalOpen}
         onClose={() => setIsCreatePlaylistModalOpen(false)}
-        onCreate={createPlaylist}
+        kind={creatingCollectionKind}
+        onCreate={(name, description) => createPlaylist(name, description, creatingCollectionKind)}
       />
       <AddToPlaylistModal
         isOpen={isAddToPlaylistModalOpen}
         onClose={() => setIsAddToPlaylistModalOpen(false)}
         playlists={playlists}
+        kind={addCollectionKind}
         onSelect={addSongToPlaylist}
         onCreateNew={() => {
           setIsAddToPlaylistModalOpen(false);
+          setCreatingCollectionKind('playlist');
           setIsCreatePlaylistModalOpen(true);
         }}
+        onCreateNewAlbum={() => {
+          setIsAddToPlaylistModalOpen(false);
+          setCreatingCollectionKind('album');
+          setIsCreatePlaylistModalOpen(true);
+        }}
+        onReorderAlbums={reorderAlbums}
       />
       <FilesPanel />
       <Toast

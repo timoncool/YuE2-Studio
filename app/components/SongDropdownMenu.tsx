@@ -361,6 +361,12 @@ export const SongDropdownMenu: React.FC<SongDropdownMenuProps> = ({
                 label={t('addToPlaylist')}
                 onClick={() => handleAction(() => actions.addToPlaylist?.(song))}
             />
+            {actions.addToAlbum && <MenuItem
+                icon={<ListPlus size={16} />}
+                label={t('addToAlbum')}
+                onClick={() => handleAction(() => actions.addToAlbum?.(song))}
+            />}
+
             <MenuItem
                 icon={<Download size={14} />}
                 label={t('download')}

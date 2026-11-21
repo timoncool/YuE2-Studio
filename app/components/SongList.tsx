@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
-import { Song } from '../types';
+import { Playlist, Song } from '../types';
 import { Play, MoreHorizontal, Heart, ListPlus, Pause, Search, Filter, Check, Loader2, Share2, Video, Info, Clock, Timer, ImagePlus, Pencil, Clapperboard, ListMusic, Trash2, Piano, Download, ListStart, ListEnd, Rows3, Rows4, Sparkles, FileAudio, GitBranch, Mic2, Layers } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useI18n } from '../context/I18nContext';
@@ -32,6 +32,7 @@ interface SongListProps {
     onSelect: (song: Song) => void;
     /** The whole library, where a song's stems are found when the list holds the song alone. */
     librarySongs?: Song[];
+    collections?: Playlist[];
     /** The playlist the list shows, when it is not the whole library. */
     scopeName?: string;
     /** The library is still being read: an empty list is not an answer yet. */
@@ -72,7 +73,7 @@ interface SongListProps {
 
 
 // Define Filter Types
-type FilterType = 'liked' | 'made' | 'imported' | 'derived' | 'karaoke' | 'versions' | 'generating';
+type FilterType = 'liked' | 'made' | 'imported' | 'derived' | 'karaoke' | 'versions' | 'generating' | 'unassigned';
 /** Where a song came from: these filters add up, the others narrow. */
 const SOURCE_FILTERS: FilterType[] = ['made', 'imported', 'derived'];
 const isImported = (song: Song) => song.ditModel === 'imported-audio';
@@ -148,6 +149,7 @@ export const SongList: React.FC<SongListProps> = ({
     onPlay,
     onSelect,
     librarySongs,
+    collections,
     scopeName,
     loading = false,
     onToggleLike,
@@ -203,7 +205,8 @@ export const SongList: React.FC<SongListProps> = ({
         { id: 'liked', label: t('liked'), icon: <Heart size={16} /> },
         { id: 'karaoke', label: t('filterKaraoke'), icon: <Mic2 size={16} /> },
         { id: 'versions', label: t('filterVersions'), icon: <Layers size={16} /> },
-        { id: 'generating', label: t('generatingStatus'), icon: <Loader2 size={16} /> }
+        { id: 'generating', label: t('generatingStatus'), icon: <Loader2 size={16} /> },
+        ...(collections ? [{ id: 'unassigned' as const, label: t('unassignedFilter'), icon: <ListMusic size={16} /> }] : []),
     ];
 
     // Close filter dropdown when clicking outside
@@ -264,6 +267,7 @@ export const SongList: React.FC<SongListProps> = ({
         return next;
     });
 
+    const assignedIds = useMemo(() => new Set(collections?.flatMap(collection => collection.songIds ?? [])), [collections]);
     const words = useMemo(() => searchWords(searchQuery), [searchQuery]);
 
     const filteredSongs = useMemo(() => {
@@ -283,10 +287,11 @@ export const SongList: React.FC<SongListProps> = ({
             if (activeFilters.has('karaoke') && !song.lrcContent) return false;
             if (activeFilters.has('versions') && !(song.audioVersions?.length)) return false;
             if (activeFilters.has('generating') && !song.isGenerating) return false;
+            if (activeFilters.has('unassigned') && assignedIds.has(song.id)) return false;
 
             return true;
         });
-    }, [songs, words, activeFilters, likedSongIds]);
+    }, [songs, words, activeFilters, assignedIds, likedSongIds]);
 
     const filteredUploads = useMemo(() => {
         if (activeFilters.size > 0) return [];

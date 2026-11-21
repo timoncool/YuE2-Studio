@@ -76,7 +76,9 @@ async fn audio_cpp_minimax_music3_generates_and_saves_q8_provenance() {
         .env("YUE_STUDIO_DATA_ROOT", &data)
         .env("YUE_AUDIOCPP_SERVER", &engine)
         .env("TIMONCOOL_SHARED_DIR", root.path().join("registry"))
-        .env("DO_NOT_TRACK", "1")
+        .env("DO_NOT_TRACK", "0")
+        .env("STUDIO_TELEMETRY", "1")
+        .env("STUDIO_HUB_URL", format!("http://127.0.0.1:{port}/fixture-hub"))
         .kill_on_drop(true)
         .spawn()
         .unwrap();
@@ -136,6 +138,9 @@ async fn audio_cpp_minimax_music3_generates_and_saves_q8_provenance() {
     let rejected = http.post(&endpoint).json(&unknown).send().await.unwrap();
     assert_eq!(rejected.status(), StatusCode::BAD_REQUEST);
     assert!(!root.path().join("audio-cpp-submitted.json").exists());
+    http.post(format!("{url}/v1/hub/telemetry"))
+        .json(&json!({"enabled": true, "acknowledge": true}))
+        .send().await.unwrap().error_for_status().unwrap();
     let accepted = http.post(&endpoint).json(&request).send().await.unwrap();
     assert_eq!(accepted.status(), StatusCode::ACCEPTED);
     let id = accepted.json::<Value>().await.unwrap()["id"]
@@ -195,6 +200,25 @@ async fn audio_cpp_minimax_music3_generates_and_saves_q8_provenance() {
         serde_json::from_slice(&fs::read(root.path().join("audio-cpp-unloaded.json")).unwrap())
             .unwrap();
     assert_eq!(unloaded["model_ids"], json!(["minimax_music3"]));
+    let report = timeout(Duration::from_secs(5), async {
+        loop {
+            let preview: Value = http.get(format!("{url}/v1/hub/telemetry/preview"))
+                .send().await.unwrap().error_for_status().unwrap().json().await.unwrap();
+            if let Some(rows) = preview["report"]["speed"].as_array() {
+                if !rows.is_empty() {
+                    break preview["report"].clone();
+                }
+            }
+            sleep(Duration::from_millis(50)).await;
+        }
+    }).await.expect("saved audio.cpp song has a timing in the scheduled report");
+    assert_eq!(report["counts"]["songs"], 1);
+    assert_eq!(report["counts"]["song_done"], 1);
+    assert_eq!(report["model_sets"][0]["count"], 1);
+    let set = report["model_sets"][0]["set"].as_str().unwrap();
+    assert!(set.starts_with("audio.cpp.minimax_music3."));
+    assert_eq!(report["speed"][0]["set"], set);
+    assert_eq!(report["speed"][0]["kind"], "song");
     studio.kill().await.unwrap();
 }
 

@@ -16,6 +16,7 @@ export interface SongActions {
   replay?: (song: Song) => void;
   exportVideo?: (song: Song) => void;
   addToPlaylist?: (song: Song) => void;
+  addToAlbum?: (song: Song) => void;
   remove?: (song: Song) => void;
   update?: (song: Song) => void;
   /** Puts songs right after the one playing (next) or at the end of the queue. */
