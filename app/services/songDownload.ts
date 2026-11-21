@@ -1,5 +1,5 @@
 import type { Song } from '../types';
-import { saveFile } from './saveFile';
+import { saveFile, type SaveOutcome } from './saveFile';
 import { stemOf } from './songStems';
 import { librarySongsNow } from './studioQueries';
 
@@ -51,10 +51,10 @@ export function songFileName(song: Song, contentType: string): string {
 }
 
 /** Saves the track's audio as it plays now, where the user says. */
-export async function downloadSongAudio(song: Song): Promise<void> {
+export async function downloadSongAudio(song: Song): Promise<SaveOutcome | undefined> {
   if (!song.audioUrl) return;
   // the name carries the stored format, which only the file's own type tells
   const head = await fetch(song.audioUrl, { method: 'HEAD' });
   if (!head.ok) throw new Error(`HTTP ${head.status}`);
-  await saveFile(songFileName(song, head.headers.get('content-type') ?? ''), { url: song.audioUrl });
+  return saveFile(songFileName(song, head.headers.get('content-type') ?? ''), { url: song.audioUrl });
 }
