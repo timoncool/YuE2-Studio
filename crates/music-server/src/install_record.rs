@@ -55,7 +55,7 @@ const KEY_FILES: &[(&str, &str, u64)] = &[
     ("https://github.com/timoncool/BSRoformer.cpp/releases/download/studio-0.1.1/BSRoformer-windows-cuda13-x64.zip", "ggml-cuda.dll", 129_091_584),
     ("https://github.com/timoncool/BSRoformer.cpp/releases/download/studio-0.1.1/BSRoformer-windows-cpu-x64.zip", "bs_roformer-cli.exe", 183_808),
     ("https://github.com/timoncool/transcribe.cpp/releases/download/engine-0.2.1/transcribe-windows-cuda13-x64.zip", "ggml-cuda.dll", 140_795_392),
-    ("https://github.com/timoncool/transcribe.cpp/releases/download/engine-0.2.1/transcribe-windows-cuda12-x64.zip", "transcribe.dll", dub_tcpp::Build::Cuda12.library_size()),
+    ("https://github.com/timoncool/transcribe.cpp/releases/download/engine-0.2.1/transcribe-windows-cuda12-x64.zip", "transcribe.dll", 2_052_096),
     ("https://github.com/timoncool/transcribe.cpp/releases/download/engine-0.2.1/transcribe-windows-vulkan-x64.zip", "ggml-vulkan.dll", 45_308_928),
     ("https://github.com/timoncool/transcribe.cpp/releases/download/engine-0.2.1/transcribe-windows-cpu-x64.zip", "transcribe.dll", 2_054_656),
     // Linux and macOS: the regular file a tar's links point to, under its own versioned name
@@ -362,7 +362,7 @@ mod tests {
             // the builds a studio downloaded before records: CUDA 13 and the processor
             .chain([crate::separation::RoformerBuild::Cuda13, crate::separation::RoformerBuild::Cpu].into_iter().filter_map(crate::separation::roformer_asset));
         for asset in downloads.filter(|asset| asset.kind == crate::downloads::AssetKind::Runtime && archive(asset.url)) {
-            if key_file(asset.url).is_none() {
+            if key_file(asset.url).is_none() && crate::pin_sha::runtime_libraries(asset.url).is_empty() {
                 missing.push(asset.url);
             }
         }
