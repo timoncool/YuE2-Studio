@@ -9895,7 +9895,7 @@ async fn store_video(Query(query): Query<VideoName>, body: axum::body::Bytes) ->
         number += 1;
     }
     tokio::fs::write(&path, &body).await.map_err(|error| api_error(StatusCode::INTERNAL_SERVER_ERROR, format!("write {}: {error}", path.display())))?;
-    Ok(Json(serde_json::json!({ "path": plain_path(&path), "name": path.file_name() })))
+    Ok(Json(serde_json::json!({ "path": plain_path(&path), "name": path.file_name().and_then(|name| name.to_str()) })))
 }
 
 #[derive(Debug, Deserialize)]
