@@ -1,6 +1,6 @@
 import { QueryClient, useQuery } from '@tanstack/react-query';
 import type { Playlist, Song } from '../types';
-import { loadNativeLibrarySongs, loadNativePlaylists } from './nativeLibrary';
+import { listTrash, loadNativeLibrarySongs, loadNativePlaylists } from './nativeLibrary';
 
 /**
  * The window's shared reads of the studio service. What several screens show
@@ -182,6 +182,17 @@ export function useLibrarySongs() {
 
 export function useLibraryPlaylists() {
   return useQuery({ queryKey: libraryPlaylistsKey, queryFn: loadNativePlaylists, staleTime: Infinity });
+}
+
+/** Bin entries share the library's invalidation cycle, so a restored track
+ * updates collection counts and details without losing its saved membership. */
+export function useLibraryTrashedSongs(enabled = true) {
+  return useQuery({
+    queryKey: [...libraryKey, 'trash'],
+    queryFn: listTrash,
+    staleTime: Infinity,
+    enabled,
+  });
 }
 
 /** Something was written into the library: every screen showing it reads it again. */
