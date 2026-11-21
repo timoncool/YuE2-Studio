@@ -1,0 +1,20 @@
+name: Ableton score compatibility HTTP
+on:
+  push:
+    branches: [qa/ableton-score-fallback-http]
+jobs:
+  standalone-windows:
+    runs-on: windows-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo build --locked -p music-server
+      - run: |
+          New-Item -ItemType Directory evidence | Out-Null
+          python -B scripts/check-ableton-abc-http.py target/debug/music-server.exe evidence/ableton-abc-after.json --expect-fix
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: ableton-score-compatibility-http
+          path: evidence
