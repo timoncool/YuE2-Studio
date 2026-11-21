@@ -1982,6 +1982,27 @@ it('restores MiniMax Music3 through HOT-Step as a text and lyrics pair', async (
   expect(sent.at(-1)?.cover_of).toBeUndefined();
 });
 
+it('restores HOT-Step ACE-Step Turbo with text generation and its saved settings', async () => {
+  const model = 'hotstep-ace-step-1.5';
+  vi.stubGlobal('fetch', vi.fn(async () => Response.json({
+    engine: 'hotstep', engine_installed: true,
+    profiles: [{ id: model, label: 'ACE-Step 1.5 Turbo · HOT-Step', ready: true, missing: [] }],
+  })));
+  const music_source = { kind: 'native', engine: 'hotstep', model };
+  const song = {
+    title: 'ACE take', ditModel: 'hotstep', style: 'instrumental funk', lyrics: '[Instrumental]',
+    generationParams: { music_source, duration_seconds: 10, seed: 42, steps: 8 },
+  } as Song;
+  act(() => root.render(panel({ musicEngine: 'hotstep', initialData: { song, timestamp: 1 } })));
+  await flush();
+  expect(field('textarea[aria-label="lyrics"]')).not.toBeNull();
+  expect(host.textContent).not.toContain('Cover score');
+  click(buttonNamed('create')!);
+  expect(sent.at(-1)).toMatchObject({ music_source, style: 'instrumental funk', lyrics: '[Instrumental]',
+    duration_seconds: 10, seed: 42, steps: 8 });
+  expect(sent.at(-1)?.cover_of).toBeUndefined();
+});
+
 it('restores HOT-Step cover source and lead sheet from a saved take', async () => {
   vi.stubGlobal('fetch', vi.fn(async (url: string) => Response.json(url === '/v1/music/native/hotstep/profiles' ? {
     engine: 'hotstep', engine_installed: true,
