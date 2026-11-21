@@ -353,13 +353,32 @@ def check_lrc(root, pid):
     ui("click", ref=re.search(r"(e\d+) Song Details", row)[1])
     page = wait_page('button "Download LRC (Lyrics)"')
     (out/"lrc-details.txt").write_text(page, encoding="utf8")
-    click('button "Download LRC (Lyrics)"', page)
     destination = root/f"{title}.lrc"
+    script = pathlib.Path(__file__).with_name("observe-hosted-lrc.mjs")
+    observer = subprocess.Popen(["node", str(script), str(out), str(root)],
+                                stdin=subprocess.PIPE, cwd=out)
     try:
-        save_dialog_file(pid, destination)
-    except AssertionError:
-        (out/"lrc-console.txt").write_text(ui("console"), encoding="utf8")
-        raise
+        for _ in range(40):
+            if (out/"lrc-observer-ready").is_file():
+                break
+            assert observer.poll() is None, "The WebView observer exited"
+            time.sleep(.25)
+        else:
+            raise TimeoutError("The WebView observer did not initialize")
+        click('button "Download LRC (Lyrics)"', page)
+        try:
+            save_dialog_file(pid, destination)
+        except AssertionError:
+            if not destination.is_file():
+                (out/"lrc-console.txt").write_text(ui("console"), encoding="utf8")
+                raise
+    finally:
+        observer.stdin.close()
+        try:
+            observer.wait(timeout=4)
+        except subprocess.TimeoutExpired:
+            observer.terminate()
+            observer.wait(timeout=4)
     for _ in range(40):
         if destination.is_file() and destination.stat().st_size == len(expected.encode("utf8")):
             saved = destination.read_bytes()
@@ -545,6 +564,8 @@ with tempfile.TemporaryDirectory(prefix="studio-hosted-webview-") as directory:
         HOME=str(root/"user"), USERPROFILE=str(root/"user"), APPDATA=str(root/"roaming"),
         LOCALAPPDATA=str(root/"local"), DO_NOT_TRACK="1",
         WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS="--autoplay-policy=no-user-gesture-required --use-angle=swiftshader --enable-unsafe-swiftshader")
+    if args.suite == "lrc":
+        env["WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS"] += " --remote-debugging-port=9889"
     with (out/"service.log").open("wb") as log:
         process = subprocess.Popen([str(args.exe.resolve(strict=True))], env=env, stdout=log, stderr=log)
         try:

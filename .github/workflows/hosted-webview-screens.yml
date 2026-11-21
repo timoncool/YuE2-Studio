@@ -33,7 +33,7 @@ jobs:
           $digest = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData([Text.Encoding]::UTF8.GetBytes($inputs))).ToLowerInvariant()
           "digest=$digest" >> $env:GITHUB_OUTPUT
           "revision=$revision" >> $env:GITHUB_OUTPUT
-      - uses: actions/cache@v5
+      - uses: actions/cache/restore@v5
         id: shell-cache
         with:
           path: |
@@ -59,6 +59,13 @@ jobs:
           git switch --detach $env:GITHUB_SHA
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           exit $result
+      - uses: actions/cache/save@v5
+        if: steps.desktop-build.outcome == 'success'
+        with:
+          path: |
+            desktop/src-tauri/target/debug/YuE2-Studio.exe
+            desktop/src-tauri/target/debug/yue2-studio-desktop.exe
+          key: ${{ steps.shell-cache.outputs.cache-primary-key }}
       - name: Verify timed LRC export from the library
         if: always() && (steps.desktop-build.outcome == 'success' || steps.shell-cache.outputs.cache-hit == 'true')
         env:
