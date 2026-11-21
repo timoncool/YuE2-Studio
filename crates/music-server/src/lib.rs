@@ -13743,6 +13743,7 @@ async fn analyze_backing_tempo(State(state): State<AppState>, Json(request): Jso
             anyhow::ensure!(mono.iter().any(|sample| sample.abs() > 0.001), "The backing is too quiet to measure its beat.");
             let facts = audio_facts::Measurer::load(&models)?.measure_mono(&mono)?;
             anyhow::ensure!((40..=240).contains(&facts.bpm), "The measured tempo is outside the Chord bed range of 40–240 BPM.");
+            anyhow::ensure!(audio_facts::supports_backing_tempo(&mono, facts.bpm), "No regular pulse was confirmed in the backing. Enter the tempo manually if you know it.");
             Ok::<_, anyhow::Error>(facts.bpm)
         }).await?
     }.await;
