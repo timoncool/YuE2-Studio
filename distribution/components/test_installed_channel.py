@@ -388,8 +388,17 @@ def run_rvc(work, binary, certificate, tls_key, install_voice=False):
             finally:
                 hold_library.clear()
                 release_library.set()
+            # Mirror-only publication: both the running host and the engine manifest stay unchanged.
+            (origin / "music.dll").unlink()
+            (origin / "damaged.dll").write_bytes(b"?" * len(new_library))
+            (origin / "relocated.dll").write_bytes(new_library)
+            publish(8, {"schema": 1, "revision": 8, "archives": {
+                engine["files"][1]["sha256"]: {"sources": [url + "damaged.dll", url + "relocated.dll"]}
+            }}, "mirrors.json")
             request_paths.clear()
             second = tool("music_engine_package_install", args)
+            assert request_paths.index("/music.dll") < request_paths.index("/damaged.dll") < request_paths.index("/relocated.dll")
+            print("PASS unchanged signed engine manifest recovered from 404 and wrong bytes using a new mirror-only publication")
             assert second["downloaded_bytes"] == len(new_library) and second["reused_bytes"] == len(binary_bytes), second
             assert "/worker" not in request_paths and "/music.dll" in request_paths, request_paths
             assert second["generation"] != first["generation"]
@@ -399,7 +408,7 @@ def run_rvc(work, binary, certificate, tls_key, install_voice=False):
             model = {"id": "new-model", "name": "New model", "version": "1", "engines": [engine["id"]],
                      "files": [pinned("weights.bin", weight)]}
             sibling = dict(model, id="new-model-alt", name="Same weights, another model")
-            publish(8, {"schema": 1, "engines": [engine], "models": [model, sibling]}, "music-engine-catalog.json")
+            publish(9, {"schema": 1, "engines": [engine], "models": [model, sibling]}, "music-engine-catalog.json")
             refreshed = engine_catalogue(refresh=True)
             assert refreshed["models"] == [model, sibling] and refreshed["platform"] == engine["platform"]
             request_paths.clear()
@@ -416,7 +425,7 @@ def run_rvc(work, binary, certificate, tls_key, install_voice=False):
             (origin / "weights-v2.bin").write_bytes(new_weight)
             next_model = dict(sibling, version="2", files=[pinned("weights-v2.bin", new_weight)])
             optional = dict(next_model, id="optional-uninstalled")
-            publish(9, {"schema": 1, "engines": [engine], "models": [model, next_model, optional]}, "music-engine-catalog.json")
+            publish(10, {"schema": 1, "engines": [engine], "models": [model, next_model, optional]}, "music-engine-catalog.json")
             assert tool("music_package_updates_get")["updates"] == []
             tool("music_package_update_mode_set", {"mode": "notify"})
             def wait_until(check):
