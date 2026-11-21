@@ -3,7 +3,7 @@ use crate::downloads::{Asset, AssetKind, Downloader};
 use std::path::{Path, PathBuf};
 
 const RUNTIME_FOLDER: &str = "hotstep-1.5.2-cpu";
-pub(super) const REVISION: &str = "cdef1b0d67af";
+const REVISION: &str = "cdef1b0d67af";
 const WIN_URL: &str = "https://github.com/scragnog/HOT-Step-CPP/releases/download/v1.5.2/HOT-Step-CPP-v1.5.2-win-x64-cpu.zip";
 
 #[cfg(windows)]
@@ -121,6 +121,10 @@ pub(super) fn sha256(url: &str) -> Option<&'static str> {
 
 fn server_override() -> Option<std::ffi::OsString> {
     std::env::var_os("YUE_HOTSTEP_SERVER").filter(|path| !path.is_empty())
+}
+
+pub(super) fn managed_revision() -> Option<&'static str> {
+    (cfg!(windows) && server_override().is_none()).then_some(REVISION)
 }
 
 pub(super) fn server(downloader: &Downloader) -> Option<PathBuf> {

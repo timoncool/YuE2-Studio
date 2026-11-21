@@ -161,7 +161,7 @@ pub(super) async fn submit(
         duration_seconds: body["duration_s"].as_f64().unwrap_or_default(),
         generation_settings: serde_json::json!({
             "music_source":request.music_source, "family":"mulacover", "profile_id": PROFILE,
-            "quantization":"LM BF16 / Flow Q8_0", "runtime_revision": assets::REVISION,
+            "quantization":"LM BF16 / Flow Q8_0", "runtime_revision": assets::managed_revision(),
             "cover_of":source, "abc":abc, "roll_version":1, "roll_length":body["rolls"]["length"],
             "duration_seconds":body["duration_s"], "steps":body["codec_steps"], "seed":body["seed"],
             "guidance_scale":body["cfg_scale"], "output_format":format,
