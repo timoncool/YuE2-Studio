@@ -574,18 +574,18 @@ def seed_docs_libraries(root):
         (data / "media").mkdir(parents=True)
         with sqlite3.connect(data / "library.sqlite") as db:
             db.executescript("""
-                CREATE TABLE songs(id,title,audio_path,caption,lyrics,metadata_json,generation_settings_json,engine_id,profile_id,replay_request_json,audio_codes_json,source,created_at,updated_at);
-                CREATE TABLE playlists(id,name,created_at);
+                CREATE TABLE songs(id,title,audio_path,caption,lyrics,metadata_json,generation_settings_json,engine_id,profile_id,replay_request_json,audio_codes_json,source,created_at TEXT,updated_at TEXT);
+                CREATE TABLE playlists(id,name,description,created_at TEXT,updated_at TEXT);
                 CREATE TABLE playlist_songs(playlist_id,song_id,position);
             """)
-            db.execute("INSERT INTO playlists VALUES ('demo', 'Evening demos', 1795250000000)")
+            db.execute("INSERT INTO playlists VALUES ('demo', 'Evening demos', NULL, '1795250000', '1795250000')")
             for i, title in enumerate(titles):
                 song = f"{app}-{i}"
                 wav = f"{song}.wav"
                 with wave.open(str(data / "media" / wav), "wb") as stream:
                     stream.setparams((1, 2, 24000, 0, "NONE", "not compressed"))
                     stream.writeframes(b"".join(struct.pack("<h", int(3200 * math.sin(2 * math.pi * (220 + 110 * i) * j / 24000))) for j in range(24000)))
-                db.execute("INSERT INTO songs VALUES (?, ?, ?, 'Acoustic demo', '', '{}', '{}', ?, NULL, NULL, NULL, 'local_generation', 1795250000000, 1795250000000)", (song, title, wav, "acestep-cpp" if app == "ace" else "minimaxmusic-cpp"))
+                db.execute("INSERT INTO songs VALUES (?, ?, ?, 'Acoustic demo', '', '{}', '{}', ?, NULL, NULL, NULL, 'local_generation', '1795250000', '1795250000')", (song, title, wav, "acestep-cpp" if app == "ace" else "minimaxmusic-cpp"))
                 db.execute("INSERT INTO playlist_songs VALUES ('demo', ?, ?)", (song, i))
         studios.append(dict(app=app, version=version, data_dir=str(data), seen=int(time.time())))
     json_file(root / "shared/studios.json", dict(studios=studios))
@@ -609,20 +609,32 @@ def check_docs_engines():
     sources = json.loads(request("/v1/library/migration/sources"))["sources"]
     assert {source["studio"] for source in sources} == {"ACE-Step Studio", "MiniMax Music3 Studio"}, sources
     ui("navigate", view="library")
-    for name, title, label in [("ACE-Step Studio", "Evening Signals", "ace"), ("MiniMax Music3 Studio", "Coastal Lines", "minimax")]:
+    imported = set()
+    for name, titles, label in [
+        ("ACE-Step Studio", {"Evening Signals", "Paper Lanterns"}, "ace"),
+        ("MiniMax Music3 Studio", {"Coastal Lines", "Harbour Lights"}, "minimax"),
+    ]:
         import_tab = 'tab "Import"'
         page = wait_page(import_tab)
         if 'Choose old Studio folder' not in page:
             click(import_tab, page)
         page = wait_page('Choose old Studio folder', f'button "{name}')
         click(f'button "{name}', page)
-        page = wait_page(title, 'Copy library into YuE2')
+        page = wait_page(*sorted(titles), 'Copy library into YuE2')
         (out / f"import-{label}.txt").write_text(page, encoding="utf8")
         screenshot(f"import-{label}")
         click('button "Copy library into YuE2"', page)
-        wait_page("Songs added: 2")
+        imported.update(titles)
+        deadline = time.monotonic() + 20
+        while time.monotonic() < deadline:
+            songs = json.loads(request("/v1/library/songs"))
+            if {song["title"] for song in songs} == imported:
+                break
+            time.sleep(.25)
+        else:
+            raise AssertionError(f"Missing imported songs: {songs}\n{ui('read_page')}")
     json_file(out / "docs-engines.json", dict(executable_sha256=hashlib.file_digest(args.exe.open("rb"), "sha256").hexdigest(),
-                                               sources=sources, profile="isolated", imported_songs=4))
+                                               sources=sources, profile="isolated", imported_songs=sorted(imported)))
 
 
 def remove_profile(root, timeout=20):
