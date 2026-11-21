@@ -717,38 +717,68 @@ fn task(request: &CreateMusicJobRequest) -> anyhow::Result<Value> {
     Ok(body)
 }
 
+pub(super) fn supports_replay(song: &library::Song) -> bool {
+    song.engine_id == ENGINE
+        && matches!(song.generation_settings["family"].as_str(), Some(audio_cpp_heartmula::FAMILY | audio_cpp_yue2::FAMILY | audio_cpp_ace_step::FAMILY))
+}
+
+fn saved_replay_request(
+    song: &library::Song,
+    options: ReplayMusicJobRequest,
+    family: Family,
+) -> Result<CreateMusicJobRequest, String> {
+    if options.extend_seconds.is_some() || options.solver.is_some()
+        || options.synth_batch_size.is_some_and(|batch| batch != 1)
+    {
+        return Err(format!("{} replay supports seed, steps and output overrides.", family.name()));
+    }
+    let mut request: CreateMusicJobRequest =
+        serde_json::from_value(song.generation_settings.clone())
+            .map_err(|error| format!("Invalid saved {} settings: {error}", family.name()))?;
+    request.music_source = Some(MusicSource::AudioCpp { model: family.id().into() });
+    request.style = song.caption.clone();
+    request.lyrics = song.lyrics.clone();
+    request.title = options.title.or_else(|| Some(song.title.clone()));
+    request.client_ref = options.client_ref;
+    if matches!(family, Family::HeartMuLa) {
+        request.cfg_scale = song.generation_settings["guidance_scale"].as_f64();
+    }
+    request.cover_prompt = song.metadata["cover_prompt"].as_str().map(str::to_owned);
+    request.steps = options.steps.or(request.steps);
+    request.seed = options.seed.or(request.seed);
+    request.output_format = options.output_format.or(request.output_format);
+    request.mp3_bitrate = options.mp3_bitrate.or(request.mp3_bitrate);
+    Ok(request)
+}
+
+pub(super) async fn replay(
+    state: AppState,
+    song: library::Song,
+    options: ReplayMusicJobRequest,
+    attempt: u32,
+) -> Result<(StatusCode, Json<MusicJob>), (StatusCode, Json<ApiError>)> {
+    let family = song.generation_settings["family"].as_str().and_then(Family::parse)
+        .ok_or_else(|| api_error(StatusCode::BAD_REQUEST, "The saved audio.cpp family is unavailable.".into()))?;
+    let request = saved_replay_request(&song, options, family)
+        .map_err(|error| api_error(StatusCode::BAD_REQUEST, error))?;
+    Ok(submit_with_source(state, request, family.id().into(), attempt, Some(&song)).await)
+}
+
 pub(super) async fn submit(
     state: AppState,
     request: CreateMusicJobRequest,
     model: String,
     attempt: u32,
 ) -> (StatusCode, Json<MusicJob>) {
-    submit_from(state, request, model, attempt, None).await
+    submit_with_source(state, request, model, attempt, None).await
 }
 
-pub(super) async fn replay_text(
-    state: AppState, song: library::Song, options: ReplayMusicJobRequest, attempt: u32,
-) -> Result<(StatusCode, Json<MusicJob>), (StatusCode, Json<ApiError>)> {
-    if options.extend_seconds.is_some() || options.solver.is_some() || options.synth_batch_size.is_some() {
-        return Err(api_error(StatusCode::BAD_REQUEST, "This audio.cpp profile replays one whole song with its saved request.".into()));
-    }
-    let mut request: CreateMusicJobRequest = serde_json::from_value(song.generation_settings.clone())
-        .map_err(|err| api_error(StatusCode::BAD_REQUEST, format!("Invalid saved audio.cpp settings: {err}")))?;
-    request.style = song.caption.clone();
-    request.lyrics = song.lyrics.clone();
-    request.steps = options.steps.or(request.steps);
-    request.seed = options.seed.or(request.seed);
-    request.title = options.title.or_else(|| Some(song.title.clone()));
-    request.client_ref = options.client_ref;
-    request.output_format = options.output_format.or(request.output_format);
-    request.mp3_bitrate = options.mp3_bitrate.or(request.mp3_bitrate);
-    let family = song.generation_settings["family"].as_str().unwrap_or_default().to_owned();
-    Ok(submit_from(state, request, family, attempt, Some(&song)).await)
-}
-
-async fn submit_from(
-    state: AppState, request: CreateMusicJobRequest, model: String, attempt: u32,
-    original: Option<&library::Song>,
+async fn submit_with_source(
+    state: AppState,
+    request: CreateMusicJobRequest,
+    model: String,
+    attempt: u32,
+    source: Option<&library::Song>,
 ) -> (StatusCode, Json<MusicJob>) {
     let submitted = std::time::Instant::now();
     let reject = |status, reason| {
@@ -938,7 +968,7 @@ async fn submit_from(
     let job = MusicJob {
         derived: match &task {
             PreparedTask::Cover(cover) => Some(cover.derived.clone()),
-            _ => original.map(|song| derivation(song, "replay", serde_json::json!({"seed":request.seed, "steps":request.steps}))),
+            _ => source.map(|song| derivation(song, "replay", Value::Null)),
         },
         id: format!("audio-cpp-{}", uuid_suffix()),
         client_ref: request.client_ref.clone(),

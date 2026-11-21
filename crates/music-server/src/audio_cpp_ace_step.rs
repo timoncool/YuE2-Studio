@@ -29,13 +29,10 @@ pub(super) fn model_dir(root: &FsPath) -> PathBuf {
 
 pub(super) fn missing_files(directory: &FsPath) -> Vec<&'static str> {
     // The packed GGUF carries DiT, the embedding encoder and VAE together.
-    use std::io::Read;
-    let mut magic = [0; 4];
-    if fs::File::open(directory.join(FILE)).is_ok_and(|mut file| {
-        file.metadata().is_ok_and(|meta| meta.len() == ASSET.bytes)
-            && file.read_exact(&mut magic).is_ok()
-            && magic == *b"GGUF"
-    }) {
+    let path = directory.join(FILE);
+    if fs::metadata(&path).is_ok_and(|meta| meta.is_file() && meta.len() == ASSET.bytes)
+        && crate::pin_sha::holds(&path, SHA256)
+    {
         vec![]
     } else {
         vec![FILE]
