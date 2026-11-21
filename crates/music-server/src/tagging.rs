@@ -11,7 +11,9 @@
 //! request: if a tag cannot be written the audio is still the audio, and the
 //! caller says so in the log rather than losing the track.
 
-use std::path::Path;
+use std::{fs, path::Path};
+
+use anyhow::Context;
 
 use lofty::config::{ParseOptions, WriteOptions};
 use lofty::file::{FileType, TaggedFileExt};
@@ -163,9 +165,66 @@ fn lyrics_key(tag_type: lofty::tag::TagType) -> ItemKey {
     if tag_type == lofty::tag::TagType::Id3v2 { ItemKey::UnsyncLyrics } else { ItemKey::Lyrics }
 }
 
-/// Writes the tags onto an MP3, a FLAC or a WAV in place, replacing the tag that was there.
+/// Publish the entire tagged file at once. Lofty rewrites files using truncation,
+/// so editing the served file directly can leave an active HTTP response empty.
 pub fn write_tags(path: &Path, tags: &TrackTags) -> anyhow::Result<()> {
     let file_type = FileType::from_path(path).ok_or_else(|| anyhow::anyhow!("{} is not an audio file the studio tags", path.display()))?;
+    let destination = fs::canonicalize(path)?;
+    let parent = destination.parent().context("audio file has no parent directory")?;
+    let mut suffix = std::ffi::OsString::from(".");
+    suffix.push(path.extension().context("audio file has no extension")?);
+    let staged = tempfile::Builder::new().prefix(".studio-tag-").suffix(&suffix).tempfile_in(parent)?;
+    fs::copy(&destination, staged.path())?;
+    write_staged_tags(staged.path(), file_type, tags)?;
+    replace_tagged_audio(staged.path(), &destination)?;
+    Ok(())
+}
+
+#[cfg(not(windows))]
+fn replace_tagged_audio(staged: &Path, destination: &Path) -> std::io::Result<()> {
+    fs::rename(staged, destination)
+}
+
+#[cfg(windows)]
+fn replace_tagged_audio(staged: &Path, destination: &Path) -> std::io::Result<()> {
+    use std::{mem::size_of, os::windows::{ffi::OsStrExt, fs::OpenOptionsExt, io::AsRawHandle}};
+    use windows_sys::Win32::{
+        Foundation::{ERROR_INVALID_FUNCTION, ERROR_INVALID_PARAMETER, ERROR_NOT_SUPPORTED},
+        Storage::FileSystem::{DELETE, FILE_RENAME_INFO, FileRenameInfoEx, SetFileInformationByHandle},
+    };
+
+    // MS-FSCC 2.4.43: old handles stay valid while new opens see the replacement.
+    const REPLACE_EXISTING: u32 = 0x1;
+    const POSIX_SEMANTICS: u32 = 0x2;
+
+    let file = fs::OpenOptions::new().access_mode(DELETE).open(staged)?;
+    let mut name: Vec<u16> = destination.as_os_str().encode_wide().collect();
+    let name_bytes = (name.len() * size_of::<u16>()) as u32;
+    name.push(0);
+    let size = (std::mem::offset_of!(FILE_RENAME_INFO, FileName) + name.len() * size_of::<u16>())
+        .max(size_of::<FILE_RENAME_INFO>());
+    let mut buffer = vec![0usize; size.div_ceil(size_of::<usize>())];
+    let info = buffer.as_mut_ptr().cast::<FILE_RENAME_INFO>();
+    // The aligned, zeroed buffer includes the full flexible trailing UTF-16 name.
+    let renamed = unsafe {
+        (*info).Anonymous.Flags = REPLACE_EXISTING | POSIX_SEMANTICS;
+        (*info).FileNameLength = name_bytes;
+        std::ptr::copy_nonoverlapping(name.as_ptr(), std::ptr::addr_of_mut!((*info).FileName).cast(), name.len());
+        SetFileInformationByHandle(file.as_raw_handle(), FileRenameInfoEx, info.cast(), size as u32)
+    };
+    if renamed != 0 {
+        return Ok(());
+    }
+    let error = std::io::Error::last_os_error();
+    drop(file);
+    if matches!(error.raw_os_error().map(|value| value as u32), Some(ERROR_INVALID_FUNCTION | ERROR_INVALID_PARAMETER | ERROR_NOT_SUPPORTED)) {
+        // An older filesystem can still do a standard replacement when the track is idle.
+        return fs::rename(staged, destination);
+    }
+    Err(error)
+}
+
+fn write_staged_tags(path: &Path, file_type: FileType, tags: &TrackTags) -> anyhow::Result<()> {
     let mut tag = Tag::new(file_type.primary_tag_type());
     tag.set_title(tags.title.clone());
     if !tags.album.is_empty() {
@@ -374,6 +433,38 @@ mod tests {
             }
             let _ = std::fs::remove_file(path);
         }
+    }
+
+    #[test]
+    fn a_listener_keeps_the_complete_original_during_tag_replacement() {
+        use std::io::{Read, Seek, SeekFrom};
+
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("песня.wav");
+        let generated = sample("wav");
+        fs::copy(&generated, &path).unwrap();
+        fs::remove_file(generated).unwrap();
+        let original = fs::read(&path).unwrap();
+        let mut listener = fs::File::open(&path).unwrap();
+        listener.seek(SeekFrom::Start(12)).unwrap();
+        write_tags(&path, &TrackTags { title: "New title".into(), ..TrackTags::default() }).unwrap();
+        let mut tail = Vec::new();
+        listener.read_to_end(&mut tail).unwrap();
+        assert_eq!(tail, original[12..]);
+        let current = fs::read(&path).unwrap();
+        assert_eq!(read_tags(&current).title.as_deref(), Some("New title"));
+        assert_eq!(fs::read_dir(directory.path()).unwrap().count(), 1);
+    }
+
+    #[test]
+    fn a_failed_tag_write_keeps_the_original_bytes() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("invalid.wav");
+        let original = b"not a RIFF file";
+        fs::write(&path, original).unwrap();
+        assert!(write_tags(&path, &TrackTags { title: "Title".into(), ..TrackTags::default() }).is_err());
+        assert_eq!(fs::read(&path).unwrap(), original);
+        assert_eq!(fs::read_dir(directory.path()).unwrap().count(), 1);
     }
 
     #[test]
