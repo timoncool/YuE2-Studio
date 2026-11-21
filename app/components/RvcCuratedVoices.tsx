@@ -46,6 +46,8 @@ export function RvcCuratedVoices({ onInstalled, onChoose, disabled, installedIds
   const [open, setOpen] = useState(false);
   const [catalog, setCatalog] = useState<CatalogVoice[] | null>(null);
   const [request, setRequest] = useState(0);
+  const [refreshing, setRefreshing] = useState(false);
+  const [refreshed, setRefreshed] = useState(false);
   const [installing, setInstalling] = useState<string>();
   const [error, setError] = useState<string>();
   const [progress, setProgress] = useState<InstallProgress | null>(null);
@@ -83,6 +85,21 @@ export function RvcCuratedVoices({ onInstalled, onChoose, disabled, installedIds
     }, 350);
     return () => { controller.abort(); stop(); };
   }, [installing]);
+
+  async function refresh() {
+    setRefreshing(true);
+    setRefreshed(false);
+    setError(undefined);
+    try {
+      await responseJson(await fetch(`${URL}/refresh`, { method: 'POST' }));
+      setRequest(value => value + 1);
+      setRefreshed(true);
+    } catch (failure) {
+      setError(`${labels.refreshFailed} ${failure instanceof Error ? failure.message : String(failure)}`);
+    } finally {
+      setRefreshing(false);
+    }
+  }
 
   async function install(id: string) {
     setInstalling(id);
@@ -132,6 +149,11 @@ export function RvcCuratedVoices({ onInstalled, onChoose, disabled, installedIds
       <summary className="cursor-pointer text-sm font-semibold">{labels.curated}</summary>
       {open && (
         <div className="mt-2">
+          <button type="button" className="mb-2 text-pink-600 underline disabled:opacity-50 dark:text-pink-300"
+            disabled={refreshing || Boolean(installing)} onClick={() => void refresh()}>
+            {refreshing ? labels.refreshing : labels.refresh}
+          </button>
+          {refreshed && <p role="status">{labels.refreshed}</p>}
           {!catalog && !error && <p role="status">{labels.loading}</p>}
           {catalog?.length === 0 && <p>{labels.empty}</p>}
           {error && <p role="alert" className="break-words text-rose-600 dark:text-rose-300">{error}</p>}
@@ -207,7 +229,7 @@ export function RvcCuratedVoices({ onInstalled, onChoose, disabled, installedIds
                         {sizeFormat.format(size)}
                       </p>
                     </div>
-                    <button type="button" disabled={disabled || Boolean(installing)}
+                    <button type="button" disabled={disabled || refreshing || Boolean(installing)}
                       aria-label={`${installedId ? labels.selectInstalled : labels.install} ${voice.name}`}
                       onClick={() => installedId ? onChoose(installedId) : void install(voice.id)}
                       className="rounded-lg border border-zinc-200 px-3 py-2 enabled:hover:border-pink-500 disabled:opacity-50 dark:border-white/10">

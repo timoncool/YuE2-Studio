@@ -1,6 +1,7 @@
 use anyhow::{Context, Result, ensure};
 use serde::Deserialize;
 use std::collections::{BTreeMap, HashSet};
+use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 
 #[derive(Deserialize)]
@@ -133,25 +134,26 @@ impl tough::Transport for ChannelTransport {
     }
 }
 
-/// Read trust anchors only from files installed alongside the executable.
-/// The writable data directory holds tough's rollback protection across restarts.
-pub(crate) async fn channel_sources(
-    http: &reqwest::Client,
-    digest: &str,
-) -> Result<Option<Vec<String>>> {
-    use futures_util::TryStreamExt;
-    use tough::{RepositoryLoader, TargetName};
-
-    let executable = std::env::current_exe()?;
-    let channel = executable
+fn installed_channel() -> Result<PathBuf> {
+    Ok(std::env::current_exe()?
         .parent()
         .context("missing installation folder")?
-        .join("component-channel");
-    let root = match tokio::fs::read(channel.join("root.json")).await {
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
-        result => result.context("read installed channel root")?,
-    };
-    let endpoint = tokio::fs::read_to_string(channel.join("url.txt")).await?;
+        .join("component-channel"))
+}
+
+async fn installed_root() -> Result<Option<Vec<u8>>> {
+    match tokio::fs::read(installed_channel()?.join("root.json")).await {
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        result => result.map(Some).context("read installed channel root"),
+    }
+}
+
+async fn channel_repository(
+    http: &reqwest::Client,
+    root: &[u8],
+    store: &Path,
+) -> Result<tough::Repository> {
+    let endpoint = tokio::fs::read_to_string(installed_channel()?.join("url.txt")).await?;
     let base = reqwest::Url::parse(endpoint.trim())?;
     ensure!(
         base.scheme() == "https"
@@ -163,21 +165,45 @@ pub(crate) async fn channel_sources(
             && base.path().ends_with('/'),
         "invalid channel endpoint"
     );
-    let store = crate::studio_data_root()
-        .context("missing studio data folder")?
-        .join("component-channel");
-    tokio::fs::create_dir_all(&store).await?;
+    tokio::fs::create_dir_all(store).await?;
+    Ok(tough::RepositoryLoader::new(&root, base.clone(), base.join("targets/")?)
+        .transport(ChannelTransport(http.clone()))
+        .datastore(store)
+        .load()
+        .await?)
+}
+
+async fn lock_channel(store: &Path) -> Result<std::fs::File> {
+    tokio::fs::create_dir_all(store).await?;
     let lock = std::fs::File::options()
         .create(true)
         .truncate(false)
         .write(true)
         .open(store.join("refresh.lock"))?;
     fs2::FileExt::try_lock_exclusive(&lock).context("component channel is refreshing")?;
-    let repo = RepositoryLoader::new(&root, base.clone(), base.join("targets/")?)
-        .transport(ChannelTransport(http.clone()))
-        .datastore(store)
-        .load()
-        .await?;
+    Ok(lock)
+}
+
+fn channel_store() -> Result<PathBuf> {
+    Ok(crate::studio_data_root()
+        .context("missing studio data folder")?
+        .join("component-channel"))
+}
+
+/// Read trust anchors only from files installed alongside the executable.
+pub(crate) async fn channel_sources(
+    http: &reqwest::Client,
+    digest: &str,
+) -> Result<Option<Vec<String>>> {
+    use futures_util::TryStreamExt;
+    use tough::TargetName;
+
+    let Some(root) = installed_root().await? else {
+        return Ok(None);
+    };
+    let store = channel_store()?;
+    let _lock = lock_channel(&store).await?;
+    let repo = channel_repository(http, &root, &store).await?;
     let stream = repo
         .read_target(&TargetName::new("mirrors.json")?)
         .await?
@@ -197,6 +223,126 @@ pub(crate) async fn channel_sources(
         "channel predates bundled catalogue"
     );
     Ok(catalogue.sources(digest).map(<[String]>::to_vec))
+}
+
+const RVC_TARGET: &str = "rvc-voice-catalog.json";
+const RVC_LIMIT: usize = 8 * 1024 * 1024;
+
+async fn read_rvc_snapshot(
+    root: &[u8],
+    snapshot: &Path,
+    refreshing: Option<&tough::Repository>,
+) -> Result<Vec<u8>> {
+    use futures_util::TryStreamExt;
+    use tough::{ExpirationEnforcement, FilesystemTransport, RepositoryLoader, TargetName};
+
+    let base = |folder| {
+        reqwest::Url::from_directory_path(snapshot.join(folder))
+            .map_err(|_| anyhow::anyhow!("invalid RVC catalogue cache path"))
+    };
+    // Offline use rechecks signatures and target hashes. Only a refresh can accept new metadata.
+    let repo = RepositoryLoader::new(&root, base("metadata")?, base("targets")?)
+        .transport(FilesystemTransport)
+        .expiration_enforcement(ExpirationEnforcement::from(refreshing.is_some()))
+        .load()
+        .await?;
+    if let Some(online) = refreshing {
+        ensure!(
+            repo.root().signed.version == online.root().signed.version
+                && repo.timestamp().signed.version == online.timestamp().signed.version
+                && repo.snapshot().signed.version == online.snapshot().signed.version
+                && repo.targets().signed.version == online.targets().signed.version,
+            "component channel changed while caching the RVC catalogue"
+        );
+    }
+    let stream = repo
+        .read_target(&TargetName::new(RVC_TARGET)?)
+        .await?
+        .context("missing signed RVC catalogue")?;
+    futures_util::pin_mut!(stream);
+    let mut bytes = Vec::new();
+    while let Some(chunk) = stream.try_next().await? {
+        ensure!(chunk.len() <= RVC_LIMIT - bytes.len(), "RVC catalogue exceeds 8 MiB");
+        bytes.extend_from_slice(&chunk);
+    }
+    Ok(bytes)
+}
+
+fn rvc_snapshot_name(name: &str) -> bool {
+    name.strip_prefix("snapshot-").is_some_and(|suffix| {
+        suffix.len() == 6 && suffix.bytes().all(|byte| byte.is_ascii_alphanumeric())
+    })
+}
+
+pub(crate) async fn cached_rvc_catalogue() -> Result<Option<Vec<u8>>> {
+    let Some(root) = installed_root().await? else {
+        return Ok(None);
+    };
+    let store = channel_store()?.join("rvc");
+    let id = match tokio::fs::read_to_string(store.join("accepted")).await {
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        result => result?,
+    };
+    ensure!(rvc_snapshot_name(&id), "invalid RVC catalogue cache pointer");
+    Ok(Some(read_rvc_snapshot(&root, &store.join(id), None).await?))
+}
+
+pub(crate) async fn refresh_rvc_catalogue<T>(
+    http: &reqwest::Client,
+    validate: impl FnOnce(&[u8]) -> Result<T>,
+) -> Result<T> {
+    use std::io::Write;
+
+    let root = installed_root()
+        .await?
+        .context("component channel is not installed")?;
+    let channel = channel_store()?;
+    let _lock = lock_channel(&channel).await?;
+    let store = channel.join("rvc");
+    let repo = channel_repository(http, &root, &store.join("datastore")).await?;
+    let target = tough::TargetName::new(RVC_TARGET)?;
+    ensure!(
+        repo.targets().signed.find_target(&target, false)?.length <= RVC_LIMIT as u64,
+        "RVC catalogue exceeds 8 MiB"
+    );
+    let snapshot = tempfile::Builder::new()
+        .prefix("snapshot-")
+        .rand_bytes(6)
+        .tempdir_in(&store)?;
+    let id = snapshot
+        .path()
+        .file_name()
+        .and_then(|name| name.to_str())
+        .context("invalid RVC catalogue cache path")?;
+    repo.cache(
+        snapshot.path().join("metadata"),
+        snapshot.path().join("targets"),
+        Some(&[RVC_TARGET]),
+        true,
+    )
+    .await?;
+    let bytes = read_rvc_snapshot(&root, snapshot.path(), Some(&repo)).await?;
+    let result = validate(&bytes)?;
+    let pointer = store.join("accepted");
+    let previous = std::fs::read_to_string(&pointer).ok();
+    let mut next = tempfile::NamedTempFile::new_in(&store)?;
+    next.write_all(id.as_bytes())?;
+    next.as_file().sync_all()?;
+    next.persist(&pointer)?;
+    let id = id.to_owned();
+    let _ = snapshot.keep();
+
+    // Leave the previous generation available for list/install requests already reading it.
+    for entry in std::fs::read_dir(store).into_iter().flatten().flatten() {
+        let name = entry.file_name();
+        let Some(name) = name.to_str() else {
+            continue;
+        };
+        if name != id && previous.as_deref() != Some(name) && rvc_snapshot_name(name) {
+            let _ = std::fs::remove_dir_all(entry.path());
+        }
+    }
+    Ok(result)
 }
 
 #[cfg(test)]

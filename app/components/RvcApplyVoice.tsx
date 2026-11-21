@@ -4,7 +4,7 @@ import { rvcApplyStrings } from '../i18n/rvcApply';
 import { apiUrl } from '../services/apiBase';
 import { responseJson, type Voice } from '../services/rvcVoices';
 import { chooseLastRvcVoice, readRvcBackend, RVC_BACKEND_STORAGE, type RvcBackend } from '../services/rvcQuick';
-import { AudioComparison } from './AudioComparison';
+import { AudioCompare } from './AudioCompare';
 import { RvcNativeRuntime } from './RvcNativeRuntime';
 
 const URL = '/v1/rvc/apply';
@@ -189,8 +189,8 @@ export function RvcApplyVoice({ song, voice, control, onSaved }: {
             <>
               <p>{preview.start_seconds.toLocaleString(language)}–{preview.end_seconds.toLocaleString(language)} s · {preview.effective_backend}</p>
               {preview.fallback_reason && <p>{labels.fallbackReason} {preview.fallback_reason}</p>}
-              <AudioComparison key={preview.id} original={apiUrl(preview.before_url)} processed={apiUrl(preview.after_url)}
-                beforeLabel={labels.previewBefore} afterLabel={labels.previewAfter} />
+              <AudioCompare key={preview.id} original={apiUrl(preview.before_url)} processed={apiUrl(preview.after_url)}
+                labels={[labels.previewBefore, labels.previewAfter]} />
             </>
           )}
         </div>

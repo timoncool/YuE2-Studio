@@ -63,6 +63,8 @@ export type RunStatus = 'running' | 'done' | 'failed' | 'cancelled' | 'interrupt
 
 export interface TrainingRun {
   id: string;
+  engine?: string;
+  output_adapter?: string;
   dataset_id: string;
   dataset_name: string;
   name: string;
@@ -189,6 +191,20 @@ export const updateItem = (id: string, item: string, patch: Partial<Pick<Dataset
 export const deleteItem = (id: string, item: string) => call<Dataset>(`/v1/training/datasets/${id}/items/${item}`, { method: 'DELETE' });
 
 export const startRun = (datasetId: string, name: string, recipe: Recipe) => call<TrainingRun>('/v1/training/runs', json('POST', { dataset_id: datasetId, name, recipe }));
+export interface Sa3TrainingStatus {
+  cuda: boolean;
+  installable: boolean;
+  ready: boolean;
+  installing: boolean;
+  missing_bytes: number;
+  download?: { downloaded_bytes: number; total_bytes: number; error?: string; done: boolean };
+}
+
+export type Sa3TrainingSettings = { steps: number; rank: number; alpha: number; learning_rate: number; duration_seconds: number; seed: number };
+export const fetchSa3Training = () => call<Sa3TrainingStatus>('/v1/training/hotstep-sa3', { headers: SELF_READ });
+export const installSa3Training = () => call<unknown>('/v1/training/hotstep-sa3/install', { method: 'POST' });
+export const startSa3Training = (datasetId: string, name: string, settings: Sa3TrainingSettings) =>
+  call<TrainingRun>('/v1/training/hotstep-sa3', json('POST', { dataset_id: datasetId, name, settings }));
 export const cancelRun = (id: string) => call<void>(`/v1/training/runs/${id}/cancel`, { method: 'POST' });
 export const continueRun = (id: string, steps: number) => call<TrainingRun>(`/v1/training/runs/${id}/continue`, json('POST', { steps }));
 export const deleteRun = (id: string) => call<void>(`/v1/training/runs/${id}`, { method: 'DELETE' });

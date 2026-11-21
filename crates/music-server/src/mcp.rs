@@ -125,7 +125,7 @@ fn compact_run(run: &Value) -> Value {
         "steps_done": steps.len(), "step_limit": run["recipe"]["steps"], "preset": run["recipe"]["preset"], "songs_per_step": run["recipe"]["grad_accum"],
         "stop": if tuned { run["recipe"]["stop"].clone() } else { Value::Null }, "target_kl": if tuned { run["recipe"]["target_kl"].clone() } else { Value::Null },
         "last_step": last, "checkpoints": run["checkpoints"], "installed": run["installed"], "error": run["error"],
-        "step_stage": run["step_stage"],
+        "step_stage": run["step_stage"], "engine": run["engine"], "output_adapter": run["output_adapter"],
     })
 }
 
@@ -452,7 +452,7 @@ fn annotations(name: &str) -> Value {
     // a verb that changes something outweighs a noun that reads
     const CHANGES: &[&str] = &["install", "import", "remove", "delete", "refresh", "create", "update", "start", "cancel", "select", "download", "apply", "restart"];
     // reads whose names the rules above miss: create_form names the create page
-    const READ_NAMES: &[&str] = &["lyrics_syllables", "assistant_cli_agents", "system_gpus", "cover_scenes", "cover_photos_search", "video_backgrounds_search", "network_proxy_test", "journal_read", "score_to_midi", "score_instrumental", "score_vocal_octave", "score_from_midi", "score_mark", "lyrics_find", "cover_prompt_render", "studio_wait", "engine_presets_get", "assistant_requests_wait", "ui_console", "song_defaults", "create_form_get", "library_liked", "score_chord_bed", "song_tokenize", "score_match_sections", "models_update_plan", "problem_preview", "library_migration_preview", "audio_cpp_music_models", "hotstep_cover_profiles"];
+    const READ_NAMES: &[&str] = &["lyrics_syllables", "assistant_cli_agents", "system_gpus", "cover_scenes", "cover_photos_search", "video_backgrounds_search", "network_proxy_test", "journal_read", "score_to_midi", "score_instrumental", "score_vocal_octave", "score_from_midi", "score_mark", "lyrics_find", "cover_prompt_render", "studio_wait", "engine_presets_get", "assistant_requests_wait", "ui_console", "song_defaults", "create_form_get", "library_liked", "score_chord_bed", "song_tokenize", "score_match_sections", "models_update_plan", "problem_preview", "library_migration_preview", "audio_cpp_music_models", "hotstep_cover_profiles", "hotstep_sa3_training_status"];
     // writes over what was stored, so the earlier content is gone: a client asks first
     const OVERWRITES: &[&str] = &["library_song_rename", "library_song_update", "playlist_update", "album_reorder", "dataset_update", "dataset_song_update", "dataset_prepare", "lora_update", "stems_split", "restore_start", "karaoke_make", "midi_transcribe", "cover_draw", "cover_set_from_file", "openrouter_set_key", "models_update_apply"];
     let changes = CHANGES.iter().any(|verb| name.split('_').any(|word| word == *verb));
@@ -496,6 +496,7 @@ const JOURNAL: &[(&str, &str, &str)] = &[
     ("album_reorder", "updated", "library"),
     ("playlist_create", "created", "playlist"),
     ("playlist_update", "updated", "playlist"),
+    ("playlist_select_preferred_take", "updated", "playlist"),
     ("playlist_delete", "deleted", "playlist"),
     ("stems_split", "started", "stems"),
     ("karaoke_make", "started", "karaoke"),
@@ -528,6 +529,8 @@ const JOURNAL: &[(&str, &str, &str)] = &[
     ("dataset_prepare_train_after", "updated", "preparation"),
     ("dataset_prepare_cancel", "cancelled", "preparation"),
     ("training_start", "started", "training"),
+    ("hotstep_sa3_training_install", "started", "download"),
+    ("hotstep_sa3_training_start", "started", "training"),
     ("training_continue", "started", "training"),
     ("training_cancel", "cancelled", "training"),
     ("training_run_delete", "deleted", "training"),
@@ -537,6 +540,7 @@ const JOURNAL: &[(&str, &str, &str)] = &[
     ("lora_import_files", "installed", "lora"),
     ("rvc_voice_import", "installed", "rvc_voice"),
     ("rvc_voice_remove", "deleted", "rvc_voice"),
+    ("rvc_catalog_refresh", "refreshed", "rvc_catalog"),
     ("rvc_catalog_install", "installed", "rvc_voice"),
     ("rvc_apply_install", "installed", "model"),
     ("rvc_native_runtime_install", "started", "download"),
@@ -701,7 +705,12 @@ fn change_target(kind: &str, args: &Value, before: &str, reply: &str) -> String 
 
 /// Writes an agent's change into the studio's journal, where the person reads it.
 async fn journal_change(name: &str, args: &Value, before: &str, reply: &str) {
-    if name == "rvc_voice_remove" && serde_json::from_str::<Value>(reply).is_ok_and(|result| result["removed"] == false) {
+    let outcome_field = match name {
+        "rvc_voice_remove" => Some("removed"),
+        "playlist_select_preferred_take" => Some("changed"),
+        _ => None,
+    };
+    if outcome_field.is_some_and(|field| serde_json::from_str::<Value>(reply).is_ok_and(|result| result[field] == false)) {
         return;
     }
     let Some((verb, kind)) = journal_facts(name, args) else { return };
@@ -1957,6 +1966,15 @@ fn tools() -> &'static [Tool] {
                 call: |args| send(Method::PUT, format!("/v1/library/playlists/{}", segment(&text(args, "playlist_id")?)), body_without(args, &["playlist_id"])),
             },
             Tool {
+                name: "playlist_select_preferred_take",
+                description: "Mark a playable song already in this playlist as its preferred take. This keeps every take and the current playlist order. Read the saved choice with playlist_get.",
+                schema: || object(json!({
+                    "playlist_id": { "type": "string" },
+                    "song_id": { "type": "string" }
+                }), &["playlist_id", "song_id"]),
+                call: |args| send(Method::PUT, format!("/v1/library/playlists/{}/preferred-take", segment(&text(args, "playlist_id")?)), json!({ "song_id": text(args, "song_id")? })),
+            },
+            Tool {
                 name: "playlist_delete",
                 description: "Remove a playlist; its songs stay in the library.",
                 schema: || id_only("playlist_id", "playlist id"),
@@ -2635,6 +2653,12 @@ fn tools() -> &'static [Tool] {
                 call: |args| get(format!("/v1/rvc/catalog/progress/{}", segment(&text(args, "id")?))),
             },
             Tool {
+                name: "rvc_catalog_refresh",
+                description: "Update the curated RVC voices from the installed signed component channel. A failed update preserves the last accepted catalogue.",
+                schema: nothing,
+                call: |_| post("/v1/rvc/catalog/refresh".into(), json!({})),
+            },
+            Tool {
                 name: "rvc_catalog_install",
                 description: "Download and verify a voice from the curated RVC catalog by its ID.",
                 schema: || id_only("id", "the ID from rvc_catalog_list"),
@@ -2967,6 +2991,24 @@ fn tools() -> &'static [Tool] {
                 description: "Stop the preparation at work; every song keeps what it has.",
                 schema: nothing,
                 call: |_| post("/v1/training/prepare/cancel".into(), json!({})),
+            },
+            Tool {
+                name: "hotstep_sa3_training_status",
+                description: "Report CUDA readiness and download progress for HOT-Step Stable Audio 3 Medium training.",
+                schema: nothing,
+                call: |_| get("/v1/training/hotstep-sa3".into()),
+            },
+            Tool {
+                name: "hotstep_sa3_training_install",
+                description: "Download the pinned Stable Audio 3 Medium training base and native HOT-Step CUDA components.",
+                schema: nothing,
+                call: |_| post("/v1/training/hotstep-sa3/install".into(), json!({})),
+            },
+            Tool {
+                name: "hotstep_sa3_training_start",
+                description: "Train a native HOT-Step Stable Audio 3 Medium DoRA adapter from a prepared instrumental dataset. A finished adapter is available in the HOT-Step Create profile.",
+                schema: || object(json!({"dataset_id":{"type":"string"},"name":{"type":"string"},"settings":{"type":"object","properties":{"steps":{"type":"integer","minimum":1},"rank":{"type":"integer","minimum":1},"alpha":{"type":"number"},"learning_rate":{"type":"number"},"duration_seconds":{"type":"number","minimum":1,"maximum":384},"seed":{"type":"integer","minimum":0}}}}), &["dataset_id"]),
+                call: |args| post("/v1/training/hotstep-sa3".into(), args.clone()),
             },
             Tool {
                 name: "training_start",
