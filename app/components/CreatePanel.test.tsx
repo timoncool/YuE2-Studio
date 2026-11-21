@@ -503,6 +503,59 @@ it('shows the waiting pair without cancelling the song and keeps the selected Yu
   expect(sent[1]).toMatchObject({ music_source: { kind: 'local' }, adapters: [{ id: 'my-acoustic-lora', scales: { nar: 0.7 } }] });
 });
 
+it('shows the engine memory failure and returns to the working pair with the draft intact', async () => {
+  const oldPair = { kind: 'local' };
+  const failingPair = { kind: 'native', engine: 'minimaxmusic-cpp', model: 'minimal' };
+  const cancel = vi.fn(async () => {});
+  let status: Record<string, unknown> = { revision: 0, stage: 'idle', active: oldPair, elapsed_ms: 0 };
+  vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+    if (url === '/v1/music/pair') {
+      if (init?.method === 'POST') {
+        const { music_source } = JSON.parse(String(init.body));
+        status = music_source.kind === 'local'
+          ? { revision: 2, stage: 'ready', active: oldPair, requested: oldPair, elapsed_ms: 100 }
+          : { revision: 1, stage: 'error', active: oldPair, requested: failingPair, elapsed_ms: 600,
+              error: 'MiniMax ran out of GPU memory while loading. See minimax-engine.log' };
+      }
+      return Response.json(status);
+    }
+    if (url === '/v1/music/native/minimaxmusic-cpp/profiles') return Response.json({
+      engine: 'minimaxmusic-cpp', engine_installed: true,
+      profiles: [{ id: 'minimal', label: 'Minimal', ready: true, missing: [] }],
+    });
+    return Response.json({});
+  }));
+  function Editor() {
+    const [engine, setEngine] = React.useState<NonNullable<React.ComponentProps<typeof CreatePanel>['musicEngine']>>('local');
+    return panel({ musicEngine: engine, onMusicEngineChange: setEngine, onCancelJob: cancel });
+  }
+  act(() => root.render(<Editor />));
+  await flush();
+  act(() => { bridgeCommands.get('create_set')?.({ fields: { style: 'folk', lyrics: 'Keep this verse' } }); });
+  const model = [...host.querySelectorAll('label')]
+    .find(label => label.textContent?.startsWith('Model'))!.querySelector('select')!;
+  act(() => {
+    model.value = 'minimaxmusic-cpp';
+    model.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  await flush();
+  const profile = host.querySelector<HTMLSelectElement>('select[aria-label="Local model"]')!;
+  act(() => {
+    profile.value = 'minimal';
+    profile.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  await flush();
+  expect(host.querySelector('[role="alert"]')?.textContent).toContain('ran out of GPU memory');
+  expect(host.textContent).toContain('Active pair · YuE2');
+  expect(host.textContent).toContain('Requested pair · minimaxmusic-cpp · minimal');
+  expect((buttonNamed('create') as HTMLButtonElement).disabled).toBe(true);
+  expect(cancel).not.toHaveBeenCalled();
+  click(buttonNamed('Return to active pair')!);
+  await flush();
+  click(buttonNamed('create')!);
+  expect(sent[0]).toMatchObject({ music_source: oldPair, style: 'folk', lyrics: 'Keep this verse' });
+});
+
 it('submits the same MuLaCover reference after switching engines in either direction', async () => {
   const firstScore = 'X:1\nK:C\nCDEF|';
   const secondScore = 'X:1\nK:D\nDEFG|';
@@ -707,6 +760,8 @@ it('chooses MiniMax Music3 through audio.cpp and reuses the saved seed and forma
 it.each([
   ['heartmula', { heartmula: { top_k: 30, temperature: 0.9 } }, 'pop', ''],
   ['vevo2', { vevo2: { voice_song_id: 'original-take' } }, '', 'Words to sing'],
+  ['soulx_singer', { soulx: { reference_song_id: 'reference', reference_metadata: '[{}]', target_metadata: '[{}]', control: 'score' } }, '', ''],
+  ['soulx_singer_svc', { soulx: { reference_song_id: 'reference', source_song_id: 'vocals' } }, '', ''],
   ['midashenglm_gen', { duration_seconds: 5, midasheng: { caption: '', music: 'quiet piano', speech_text: '', speech_style: '', effects: '', environment: 'rain' } }, 'quiet piano', ''],
 ] as const)('restores and submits model-specific settings for %s', async (model, options, style, lyrics) => {
   vi.stubGlobal('fetch', vi.fn(async () => Response.json({ engine: 'audio.cpp', models: [
@@ -728,6 +783,39 @@ it.each([
       .toBe('The model rounds the limit to audio blocks and can finish sooner.');
   }
 });
+
+it('takes two aligned score files in SoulX-Singer and sends their contents', async () => {
+  const model = 'soulx_singer';
+  librarySongs = [{ id: 'reference', title: 'Singing reference', audioUrl: '/voice.wav' } as Song];
+  vi.stubGlobal('fetch', vi.fn(async () => Response.json({ engine: 'audio.cpp', models: [
+    { id: model, name: 'SoulX-Singer SVS', profile_id: 'quality-q8', quantization: 'Q8_0', ready: true, missing: [] },
+  ] })));
+  const song = { title: 'SoulX score', style: '', lyrics: '', ditModel: 'audio.cpp', generationParams: {
+    music_source: { kind: 'audio_cpp', model }, soulx: { reference_song_id: 'reference' },
+  } } as Song;
+  act(() => root.render(panel({ musicEngine: 'audio.cpp', initialData: { song, timestamp: 1 } })));
+  await flush();
+  expect(host.textContent).toContain('Pitch contour mode also needs F0 samples at 50 Hz.');
+  const fields = [...host.querySelectorAll<HTMLInputElement>('input[type=file]')];
+  expect(fields).toHaveLength(2);
+  const upload = async (input: HTMLInputElement, text: string) => {
+    const file = new File([text], 'score.json', { type: 'application/json' });
+    Object.defineProperty(file, 'text', { value: async () => text });
+    Object.defineProperty(input, 'files', { value: [file], configurable: true });
+    await act(async () => input.dispatchEvent(new Event('change', { bubbles: true })));
+  };
+  await upload(fields[0], '[]');
+  expect(host.textContent).toContain('Use an aligned vocals JSON file up to 256 KiB.');
+  const reference = '[{"phoneme":"AA","note_pitch":"60"}]';
+  const target = '[{"phoneme":"AA","note_pitch":"62"}]';
+  await upload(fields[0], reference);
+  await upload(fields[1], target);
+  click(buttonNamed('create')!);
+  expect(sent.at(-1)).toMatchObject({ music_source: { kind: 'audio_cpp', model }, soulx: {
+    reference_song_id: 'reference', reference_metadata: reference, target_metadata: target,
+  } });
+});
+
 it('restores a Magenta reference and submits either the available reference or text style', async () => {
   const model = 'magenta_realtime_2';
   librarySongs = [{ id: 'ref-take', title: 'Reference take', audioUrl: '/audio.wav' } as Song];
