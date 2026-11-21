@@ -5,7 +5,7 @@ from contextlib import contextmanager
 p = argparse.ArgumentParser()
 p.add_argument("exe", type=pathlib.Path)
 p.add_argument("output", type=pathlib.Path)
-p.add_argument("--suite", choices=["screens", "lrc", "eqf", "video", "dj"], default="screens")
+p.add_argument("--suite", choices=["screens", "lrc", "print", "eqf", "video", "dj"], default="screens")
 args = p.parse_args()
 out = args.output.resolve()
 out.mkdir(parents=True, exist_ok=True)
@@ -366,6 +366,9 @@ def check_lrc(root, pid, media=None):
                 raise AssertionError(f"{kind}: service did not acknowledge cancellation")
             assert not list(root.glob(target.name + "*"))
             json_file(out/f"{kind}-cancel.json", dict(response_ids=sorted(after-before), file_created=False))
+        if media == "print":
+            check_songbook_print(root, pid)
+            return
         if media:
             click('button "x icon"')
             if media == "eqf":
@@ -468,93 +471,6 @@ def check_lrc(root, pid, media=None):
             json_file(out/f"score-{extension}-export.json", dict(bytes=len(content),
                       sha256=hashlib.sha256(content).hexdigest(), cancelled_file_absent=True))
         json_file(out/"score.json", dict(bytes=score_file.stat().st_size, sha256=hashlib.sha256(score_file.read_bytes()).hexdigest()))
-        click('button "Songbook"')
-        wait_page('button "Print A4"')
-        (out/"click-print").touch()
-        pdf = root/"songbook.pdf"
-        # WebView2 may show its own print preview even with a default printer.
-        # Read the isolated runner's UIA tree and confirm the visible Print action.
-        print_dialog = r"""
-$ErrorActionPreference = 'Stop'
-Add-Type -AssemblyName UIAutomationClient, UIAutomationTypes
-$tree = [Windows.Automation.TreeScope]
-$all = [Windows.Automation.Condition]::TrueCondition
-$root = [Windows.Automation.AutomationElement]::RootElement
-$confirmed = $false
-$deadline = [DateTime]::UtcNow.AddSeconds(28)
-while ([DateTime]::UtcNow -lt $deadline -and !(Test-Path -LiteralPath $env:STUDIO_QA_PDF)) {
-  $ids = [Collections.Generic.HashSet[int]]::new()
-  [void]$ids.Add([int]$env:STUDIO_QA_PID)
-  $procs = @(Get-CimInstance Win32_Process)
-  do {
-    $count = $ids.Count
-    foreach ($p in $procs) {
-      if ($ids.Contains([int]$p.ParentProcessId)) { [void]$ids.Add([int]$p.ProcessId) }
-    }
-  } while ($count -ne $ids.Count)
-  foreach ($window in $root.FindAll($tree::Children,$all)) {
-    if (!$ids.Contains($window.Current.ProcessId) -and $window.Current.Name -notmatch '^(Print(ing)?|Save As|Save Print Output As)$') { continue }
-    $elements = $window.FindAll($tree::Descendants,$all)
-    $buttons = @($elements | Where-Object {
-      $_.Current.ControlType -eq [Windows.Automation.ControlType]::Button -and !$_.Current.IsOffscreen
-    })
-    Write-Output (@{window=$window.Current.Name;buttons=@($buttons | ForEach-Object {$_.Current.Name})} | ConvertTo-Json -Compress)
-    $confirm = $buttons | Where-Object {$_.Current.Name -eq 'Print' -and $_.Current.IsEnabled} | Select-Object -First 1
-    if ($confirmed) {
-      $name = $elements | Where-Object {
-        $_.Current.ControlType -eq [Windows.Automation.ControlType]::Edit -and
-        ($_.Current.AutomationId -in @('1001','1148') -or $_.Current.Name -match '^File name')
-      } | Select-Object -First 1
-      $save = $buttons | Where-Object {$_.Current.Name -eq 'Save' -and $_.Current.IsEnabled} | Select-Object -First 1
-      if ($name -and $save) {
-        $name.GetCurrentPattern([Windows.Automation.ValuePattern]::Pattern).SetValue($env:STUDIO_QA_PDF)
-        $save.GetCurrentPattern([Windows.Automation.InvokePattern]::Pattern).Invoke()
-        Write-Output 'Selected PDF output path'
-        exit 0
-      }
-    }
-    if ($confirm -and !$confirmed) {
-      if ($env:STUDIO_QA_PRINT_ACTION -eq 'cancel') {
-        $cancel = $buttons | Where-Object {$_.Current.Name -eq 'Cancel' -and $_.Current.IsEnabled} | Select-Object -First 1
-        if (!$cancel) { throw 'The print preview has no Cancel button' }
-        $cancel.GetCurrentPattern([Windows.Automation.InvokePattern]::Pattern).Invoke()
-        Write-Output 'Cancelled print preview'
-        exit 0
-      }
-      $confirm.GetCurrentPattern([Windows.Automation.InvokePattern]::Pattern).Invoke()
-      Write-Output 'Confirmed print'
-      $confirmed = $true
-    }
-  }
-  Start-Sleep -Milliseconds 500
-}
-"""
-        with (out/"print-dialog.txt").open("w", encoding="utf8") as log:
-            subprocess.run(["powershell", "-NoProfile", "-Command", print_dialog],
-                           env=dict(os.environ, STUDIO_QA_PDF=str(pdf), STUDIO_QA_PID=str(pid), STUDIO_QA_PRINT_ACTION="save"),
-                           stdout=log, stderr=subprocess.STDOUT, timeout=40, check=True)
-        for _ in range(150):
-            try:
-                printed = pdf.read_bytes()
-            except OSError:
-                printed = b""
-            if printed.startswith(b"%PDF-") and printed.rstrip().endswith(b"%%EOF"):
-                break
-            time.sleep(.2)
-        else:
-            raise AssertionError("Windows PDF printer did not complete the songbook")
-        (out/"songbook.pdf").write_bytes(printed)
-        json_file(out/"songbook-print.json", dict(bytes=len(printed), sha256=hashlib.sha256(printed).hexdigest()))
-        (out/"click-print").touch()
-        cancelled = root/"songbook-cancelled.pdf"
-        result = subprocess.run(["powershell", "-NoProfile", "-Command", print_dialog],
-                                env=dict(os.environ, STUDIO_QA_PDF=str(cancelled), STUDIO_QA_PID=str(pid),
-                                         STUDIO_QA_PRINT_ACTION="cancel"),
-                                capture_output=True, text=True, timeout=40, check=True)
-        (out/"print-cancel-dialog.txt").write_text(result.stdout + result.stderr, encoding="utf8")
-        assert "Cancelled print preview" in result.stdout and not cancelled.exists()
-        json_file(out/"songbook-print-cancel.json", dict(cancelled=True, file_created=False))
-        click('button "Close songbook"')
         click('button "x icon"')
         page = wait_page(predicate=lambda text: context in text and 'button "Download LRC (Lyrics)"' not in text)
         row = next(line for line in page.splitlines() if context in line)
@@ -609,6 +525,106 @@ while ([DateTime]::UtcNow -lt $deadline -and !(Test-Path -LiteralPath $env:STUDI
         except subprocess.TimeoutExpired:
             observer.terminate()
             observer.wait(timeout=4)
+
+
+def check_songbook_print(root, pid):
+    click('button "Songbook"')
+    wait_page('button "Print A4"')
+    pdf = root/"songbook.pdf"
+    # WebView2 may show its own print preview even with a default printer.
+    # Read the isolated runner's UIA tree and confirm the visible Print action.
+    print_dialog = r"""
+$ErrorActionPreference = 'Stop'
+Add-Type -AssemblyName UIAutomationClient, UIAutomationTypes, System.Windows.Forms
+$tree = [Windows.Automation.TreeScope]
+$all = [Windows.Automation.Condition]::TrueCondition
+$root = [Windows.Automation.AutomationElement]::RootElement
+$confirmed = $false
+$deadline = [DateTime]::UtcNow.AddSeconds(28)
+while ([DateTime]::UtcNow -lt $deadline -and !(Test-Path -LiteralPath $env:STUDIO_QA_PDF)) {
+  $ids = [Collections.Generic.HashSet[int]]::new()
+  [void]$ids.Add([int]$env:STUDIO_QA_PID)
+  $procs = @(Get-CimInstance Win32_Process)
+  do {
+    $count = $ids.Count
+    foreach ($p in $procs) {
+      if ($ids.Contains([int]$p.ParentProcessId)) { [void]$ids.Add([int]$p.ProcessId) }
+    }
+  } while ($count -ne $ids.Count)
+  foreach ($window in $root.FindAll($tree::Children,$all)) {
+    if (!$ids.Contains($window.Current.ProcessId) -and $window.Current.Name -notmatch '^(Print(ing)?|Save As|Save Print Output As)$') { continue }
+    $elements = $window.FindAll($tree::Descendants,$all)
+    $buttons = @($elements | Where-Object {
+      $_.Current.ControlType -eq [Windows.Automation.ControlType]::Button -and $_.Current.IsEnabled
+    })
+    $confirm = $buttons | Where-Object {$_.Current.Name -eq 'Print' -and !$_.Current.IsOffscreen} | Select-Object -First 1
+    if ($confirmed) {
+      $name = $elements | Where-Object {
+        $_.Current.ControlType -eq [Windows.Automation.ControlType]::Edit -and
+        ($_.Current.AutomationId -in @('1001','1148') -or $_.Current.Name -match '^File name')
+      } | Select-Object -First 1
+      $save = $buttons | Where-Object {
+        $_.Current.AutomationId -eq '1' -or $_.Current.Name -match '^&?Save$'
+      } | Select-Object -First 1
+      Write-Output (@{
+        window=$window.Current.Name;fileName=([bool]$name);save=([bool]$save)
+        buttons=@($buttons | ForEach-Object {"$($_.Current.AutomationId):$($_.Current.Name)"})
+      } | ConvertTo-Json -Compress)
+      if ($name) {
+        $name.GetCurrentPattern([Windows.Automation.ValuePattern]::Pattern).SetValue($env:STUDIO_QA_PDF)
+        if ($save) {
+          $save.GetCurrentPattern([Windows.Automation.InvokePattern]::Pattern).Invoke()
+        } else {
+          $name.SetFocus()
+          [Windows.Forms.SendKeys]::SendWait('{ENTER}')
+        }
+        Write-Output 'Selected PDF output path'
+        exit 0
+      }
+    }
+    if ($confirm -and !$confirmed) {
+      if ($env:STUDIO_QA_PRINT_ACTION -eq 'cancel') {
+        $cancel = $buttons | Where-Object {$_.Current.Name -eq 'Cancel'} | Select-Object -First 1
+        if (!$cancel) { throw 'The print preview has no Cancel button' }
+        $cancel.GetCurrentPattern([Windows.Automation.InvokePattern]::Pattern).Invoke()
+        Write-Output 'Cancelled print preview'
+        exit 0
+      }
+      $confirm.GetCurrentPattern([Windows.Automation.InvokePattern]::Pattern).Invoke()
+      Write-Output 'Confirmed print'
+      $confirmed = $true
+    }
+  }
+  Start-Sleep -Milliseconds 500
+}
+"""
+    (out/"click-print").touch()
+    cancelled = root/"songbook-cancelled.pdf"
+    result = subprocess.run(["powershell", "-NoProfile", "-Command", print_dialog],
+                            env=dict(os.environ, STUDIO_QA_PDF=str(cancelled), STUDIO_QA_PID=str(pid),
+                                     STUDIO_QA_PRINT_ACTION="cancel"),
+                            capture_output=True, text=True, timeout=40, check=True)
+    (out/"print-cancel-dialog.txt").write_text(result.stdout + result.stderr, encoding="utf8")
+    assert "Cancelled print preview" in result.stdout and not cancelled.exists()
+    json_file(out/"songbook-print-cancel.json", dict(cancelled=True, file_created=False))
+    (out/"click-print").touch()
+    with (out/"print-dialog.txt").open("w", encoding="utf8") as log:
+        subprocess.run(["powershell", "-NoProfile", "-Command", print_dialog],
+                       env=dict(os.environ, STUDIO_QA_PDF=str(pdf), STUDIO_QA_PID=str(pid), STUDIO_QA_PRINT_ACTION="save"),
+                       stdout=log, stderr=subprocess.STDOUT, timeout=40, check=True)
+    for _ in range(150):
+        try:
+            printed = pdf.read_bytes()
+        except OSError:
+            printed = b""
+        if printed.startswith(b"%PDF-") and printed.rstrip().endswith(b"%%EOF"):
+            break
+        time.sleep(.2)
+    else:
+        raise AssertionError("Windows PDF printer did not complete the songbook")
+    (out/"songbook.pdf").write_bytes(printed)
+    json_file(out/"songbook-print.json", dict(bytes=len(printed), sha256=hashlib.sha256(printed).hexdigest()))
+    click('button "Close songbook"')
 
 
 def check_eqf(root, pid, cancel_export, failed_save):
@@ -667,7 +683,11 @@ def check_media_exports(root, pid, media, cancel_export, failed_save):
             chunk(b"IDAT", zlib.compress((b"\x00" + b"\x20\x98\x56"*16)*16)) +
             chunk(b"IEND", b"")
         )
-        tool("video_open", song_id=song["id"])
+        ui("navigate", view="library")
+        context = f"song {song['id']}:"
+        page = wait_page(predicate=lambda page: any(context in line and "Create video" in line for line in page.splitlines()))
+        row = next(line for line in page.splitlines() if context in line)
+        ui("click", ref=re.search(r"(e\d+) Create video", row)[1])
         label = 'button "Render Video (MP4)"'
         wait_page(label)
         tool("video_set", config={"outputSize": 240, "aspectRatio": "1:1"},
@@ -690,10 +710,9 @@ def check_media_exports(root, pid, media, cancel_export, failed_save):
         ui("navigate", view="library")
         click('button "DJ mode"', wait_page(title, 'button "DJ mode"'))
         page = wait_page(title, 'button "Record mix"')
-        ready = [line for line in page.splitlines() if line.startswith("e") and f'button "{title}' in line]
-        assert ready, page
-        ui("click", ref=ready[0].split()[0])
-        click('button "LOAD A"')
+        ui("type", ref=control(page, '"Search DJ library"'), value=title)
+        only_match = wait_page(predicate=lambda page: page.count('button "A"') == 1 and 'button "B"' in page)
+        click('button "A"', only_match)
         click('button "Record mix"')
         play = wait_page(predicate=lambda page: any(
             'button "PLAY"' in line and "disabled" not in line for line in page.splitlines()))
@@ -925,7 +944,7 @@ with isolated_profile() as root:
         env.update(HOME=str(root/"user"), USERPROFILE=str(root/"user"), APPDATA=str(root/"roaming"),
                    LOCALAPPDATA=str(root/"local"))
     env["WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS"] += " --remote-debugging-port=9889"
-    if args.suite == "lrc":
+    if args.suite == "print":
         # Use Windows' native print output picker on the disposable hosted runner.
         printer_setup = """
 $ErrorActionPreference = 'Stop'
@@ -958,7 +977,7 @@ Get-Printer -Name 'Studio QA PDF' | Select-Object Name,DriverName,PortName | Con
                 clientInfo=dict(name="studio-hosted-webview", version="1")))
             rpc("notifications/initialized", {}, notify=True)
             wait_page(predicate=lambda page: "button" in page)
-            if args.suite in ("lrc", "eqf", "video", "dj"):
+            if args.suite in ("lrc", "print", "eqf", "video", "dj"):
                 check_lrc(root, process.pid, media=args.suite if args.suite != "lrc" else None)
             else:
                 check_screens(root, process.pid)

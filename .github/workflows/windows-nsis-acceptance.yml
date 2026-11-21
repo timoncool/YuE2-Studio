@@ -71,25 +71,7 @@ jobs:
         run: python scripts/windows-nsis-acceptance.py download ${{ matrix.scenario }}
       - name: Verify and exercise installed Studio
         run: python scripts/windows-nsis-acceptance.py verify ${{ matrix.scenario }}
-      - name: Exercise installed Windows screens through Studio MCP
-        id: installed-screens
-        if: matrix.scenario == 'clean'
-        env:
-          PYTHONUTF8: '1'
-          STUDIO_QA_REAL_SHELL_PROFILE: '1'
-        run: |
-          $exe = Join-Path $env:QA_DIR 'installed/YuE2-Studio.exe'
-          python -u scripts/test-hosted-webview-screens.py $exe (Join-Path $env:QA_DIR 'evidence/screens') --suite screens
-      - name: Exercise installed Native LRC Save As
-        if: always() && (steps.installed-screens.outcome == 'success' || steps.installed-screens.outcome == 'failure')
-        env:
-          PYTHONUTF8: '1'
-          STUDIO_QA_REAL_SHELL_PROFILE: '1'
-        run: |
-          $exe = Join-Path $env:QA_DIR 'installed/YuE2-Studio.exe'
-          python -u scripts/test-hosted-webview-screens.py $exe (Join-Path $env:QA_DIR 'evidence/native-lrc') --suite lrc
-      - name: Exercise installed EQF, video and DJ recording saves
-        if: always() && (steps.installed-screens.outcome == 'success' || steps.installed-screens.outcome == 'failure')
+      - name: Exercise remaining installed print, video and DJ saves
         env:
           PYTHONUTF8: '1'
           STUDIO_QA_REAL_SHELL_PROFILE: '1'
@@ -99,7 +81,7 @@ jobs:
           }
           $exe = Join-Path $env:QA_DIR 'installed/YuE2-Studio.exe'
           $failed = @()
-          foreach ($suite in 'eqf', 'video', 'dj') {
+          foreach ($suite in 'print', 'video', 'dj') {
             python -u scripts/test-hosted-webview-screens.py $exe (Join-Path $env:QA_DIR "evidence/$suite") --suite $suite
             if ($LASTEXITCODE -ne 0) { $failed += $suite }
           }
