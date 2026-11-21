@@ -3,12 +3,14 @@
 What changed, newest first. Dates are release dates; the studio is versioned by its
 Windows build.
 
-## Unreleased — 5.0.0
+## 2026-11-21 — 5.0.0
 
 ### Added
 
 - **Bring songs from ACE-Step Studio and MiniMax Music3 Studio into the YuE2 library.** Preview the source library before importing. Open an imported song to listen to the original and create a new take with its native engine. [Library import](https://github.com/timoncool/YuE2-Studio/pull/291)
 - **Choose the model and engine where you create the song.** The Create panel shows the requested pair, the active pair and what is still loading. For OpenRouter, choose a music model directly in the same panel. [Model selector](https://github.com/timoncool/YuE2-Studio/pull/389) · [Switching engines](https://github.com/timoncool/YuE2-Studio/pull/414)
+- **Update music engines separately from Studio.** On Windows, open Engines and Updates to install a signed ACE-Step or MiniMax runtime. You can leave the page while the download runs, return to check progress or cancel it. [Engine installation](https://github.com/timoncool/YuE2-Studio/pull/552)
+- **Find chords for a backing track.** Analyze a selected backing in Create, review the suggested key and chords, then choose whether to use them. The same analysis is available through Studio MCP. [Backing harmony](https://github.com/timoncool/YuE2-Studio/pull/549)
 - **Try another singing voice on an existing recording.** Search and filter the RVC voice catalogue, listen to a preview when the source provides one, and install a voice with its optional index. Compare the converted take with the source in your library. [Voice catalogue](https://github.com/timoncool/YuE2-Studio/pull/394) · [Compare takes](https://github.com/timoncool/YuE2-Studio/pull/364)
 - **Train a voice from your recordings on Windows with a compatible NVIDIA GPU.** Install the native trainer from Studio, train on your dataset and apply the saved voice to a song. If you stop after a checkpoint, you can still use that checkpoint. [Voice training](https://github.com/timoncool/YuE2-Studio/pull/408) · [Checkpoint recovery](https://github.com/timoncool/YuE2-Studio/pull/421)
 - **Play or print the song you wrote.** Open the songbook from the score, transpose the chords, set a capo or switch to numbered notation. Print an A4 lead sheet with lyrics and guitar or ukulele fingerings. [Songbook](https://github.com/timoncool/YuE2-Studio/pull/307) · [Printing](https://github.com/timoncool/YuE2-Studio/pull/314)
