@@ -10,6 +10,8 @@ jobs:
     steps:
       - uses: actions/checkout@v7.0.1
       - uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
       - name: Build the native service
         run: cargo build --locked -p music-server --bin music-server
       - name: Verify repeated concurrent retags and playback
