@@ -88,6 +88,14 @@ class FakeAudio extends EventTarget {
   removeAttribute() { this.src = ''; }
 }
 
+class FakeRecorder extends EventTarget {
+  static isTypeSupported() { return true; }
+  mimeType = 'audio/webm';
+  ondataavailable?: (event: { data: Blob }) => void;
+  start() { this.ondataavailable?.({ data: new Blob(['recorded mix']) }); }
+  stop() { this.dispatchEvent(new Event('stop')); }
+}
+
 function mixer() {
   vi.stubGlobal('Audio', FakeAudio);
   vi.stubGlobal('AudioContext', GraphContext);
@@ -98,10 +106,44 @@ function mixer() {
   const graph = mix.context as unknown as GraphContext;
   const deck = mix.decks[0];
   deck.load({ id: 'song', audioUrl: '/mix' } as Song, []);
-  return { deck, graph, media: graph.media[0] };
+  return { mix, deck, graph, media: graph.media[0] };
 }
 
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
+});
+
+it('starts one DJ recording when Record is pressed twice during audio resume', async () => {
+  vi.stubGlobal('MediaRecorder', FakeRecorder);
+  const start = vi.spyOn(FakeRecorder.prototype, 'start');
+  const { mix, graph } = mixer();
+  let resumeAudio!: () => void;
+  const resume = vi.spyOn(graph, 'resume').mockReturnValue(new Promise<void>(resolve => { resumeAudio = resolve; }));
+  const first = mix.startRecording();
+  const second = mix.startRecording();
+  expect(start).not.toHaveBeenCalled();
+
+  resumeAudio();
+  await Promise.all([first, second]);
+  expect(resume).toHaveBeenCalledTimes(1);
+  expect(start).toHaveBeenCalledTimes(1);
+  expect(mix.recording).toBe(true);
+  expect(await (await mix.stopRecording()).text()).toBe('recorded mix');
+});
+
+it('allows retry after the DJ context or recorder fails to start', async () => {
+  vi.stubGlobal('MediaRecorder', FakeRecorder);
+  vi.spyOn(FakeRecorder.prototype, 'start').mockImplementationOnce(() => { throw new Error('start failed'); });
+  const { mix, graph } = mixer();
+  vi.spyOn(graph, 'resume').mockRejectedValueOnce(new Error('resume failed'));
+
+  await expect(mix.startRecording()).rejects.toThrow('resume failed');
+  await expect(mix.startRecording()).rejects.toThrow('start failed');
+  expect(mix.recording).toBe(false);
+  await mix.startRecording();
+  expect(await (await mix.stopRecording()).text()).toBe('recorded mix');
+});
 
 it('refuses a too-short tail and loops valid points at the end of the track', async () => {
   const { deck, media } = mixer();
