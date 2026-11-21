@@ -20,7 +20,7 @@ type ModelStatus = { id: string; label?: string; name?: string; ready: boolean; 
 type ProfileStatus = {
   engine_installed: boolean;
   adapter_runtime_update?: boolean;
-  selected_executable?: { path: string; source: 'local' | 'managed' } | null;
+  selected_executable?: { path: string; source: 'local' | 'managed' | 'signed'; package?: { version: string } } | null;
   profiles?: ModelStatus[];
   models?: ModelStatus[];
 };
@@ -126,6 +126,8 @@ export function EnginesAndUpdates({ focus, onNavigate }: {
             {unsupported && <p className="text-sm">{t('engineUnavailable')}</p>}
             {profile?.selected_executable?.source === 'local' &&
               <p className="break-all text-xs">{localExecutable} · <code>{profile.selected_executable.path}</code></p>}
+            {profile?.selected_executable?.source === 'signed' &&
+              <p className="break-all text-xs">{managedPackage} · {profile.selected_executable.package?.version} · <code>{profile.selected_executable.path}</code></p>}
             {installedRevision && <p className="text-xs">{managedPackage} · {installed} · <code>{installedRevision.slice(0, 12)}</code></p>}
             {runtime?.revision && runtime.revision !== installedRevision &&
               <p className="text-xs">{t('download')} · <code>{runtime.revision.slice(0, 12)}</code></p>}

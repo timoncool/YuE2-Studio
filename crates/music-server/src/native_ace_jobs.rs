@@ -77,7 +77,19 @@ async fn submit_inner(
             "Studio data folder is unavailable.".into(),
         );
     };
-    let catalogue = ace::installation(&root);
+    let saved_runtime = replay
+        .as_ref()
+        .map(|replay| &replay.song.generation_settings["native_runtime"]);
+    let (catalogue, runtime) = match ace::resolve_installation(
+        &root,
+        saved_runtime,
+        engine_catalogue::install::Probe::Sha256,
+    )
+    .await
+    {
+        Ok(resolved) => resolved,
+        Err(error) => return reject(StatusCode::SERVICE_UNAVAILABLE, format!("{error:#}")),
+    };
     let resolved = if replay.is_some() {
         catalogue.launch_replay(&profile, &input)
     } else {
@@ -133,6 +145,7 @@ async fn submit_inner(
         duration_seconds: input["duration"].as_f64().unwrap_or_default(),
         generation_settings: json!({
             "music_source": request.music_source,
+            "native_runtime": runtime,
             "ace": input,
             "fade_in": request.fade_in,
             "fade_out": request.fade_out,
@@ -194,13 +207,17 @@ async fn submit_inner(
                 studio_log!("[ERROR] saving ACE-Step job state: {error:#}");
             }
             Some(native_music_jobs::SongReport::from_job(active))
-        } else { None };
+        } else {
+            None
+        };
         let elapsed = started.elapsed();
         drop(jobs);
         drop(_lease);
         state.ace_cancellations.write().await.remove(&job.id);
         if let Some(report) = report {
-            report.record(&state, ace::ENGINE_ID, "native.ace_step", elapsed).await;
+            report
+                .record(&state, ace::ENGINE_ID, "native.ace_step", elapsed)
+                .await;
         }
     });
     (StatusCode::ACCEPTED, Json(accepted))
@@ -688,6 +705,13 @@ fn import_take(
         .context("ACE-Step replay is not an object")?
         .remove("audio_codes");
     settings["music_source"] = job.generation_settings["music_source"].clone();
+    if let Some(runtime) = job
+        .generation_settings
+        .get("native_runtime")
+        .filter(|value| !value.is_null())
+    {
+        settings["native_runtime"] = runtime.clone();
+    }
     let imported = library.import_generated_song_with_latent(library::GeneratedSongInput {
         title: job.title.clone(),
         metadata: json!({"duration_seconds": duration, "job_id": job.id, "cover_prompt": job.cover_prompt, "derived": job.derived}),

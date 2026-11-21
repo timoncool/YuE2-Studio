@@ -18,7 +18,8 @@ use crate::engine_result;
 
 mod installation;
 mod runtime;
-pub use installation::{installation, InstalledProfile, ENGINE_ID};
+pub(crate) use installation::resolve_installation;
+pub use installation::{ENGINE_ID, InstalledProfile};
 pub use runtime::{Launch, Runtime};
 
 pub(super) fn adapter_names(request: &Value) -> impl Iterator<Item = &str> {

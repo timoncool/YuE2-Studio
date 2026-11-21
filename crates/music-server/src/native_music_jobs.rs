@@ -55,6 +55,7 @@ pub(super) async fn submit_minimax(
 
 struct Replay {
     body: Value,
+    runtime: Value,
     derived: Value,
     request: ReplayMusicJobRequest,
 }
@@ -192,6 +193,7 @@ fn replay_inputs(
         render,
         Replay {
             body,
+            runtime: song.generation_settings["native_runtime"].clone(),
             derived,
             request,
         },
@@ -242,14 +244,37 @@ async fn submit(
             "Studio data folder is unavailable.".into(),
         );
     };
-    if let Some(options) = request.minimax.as_ref().filter(|options| !options.adapters.is_empty()) {
-        let available = native_minimax::Runtime::installation(&root).native_adapters();
+    let (installation, runtime) = match native_minimax::Runtime::resolve_installation(
+        &root,
+        replay.as_ref().map(|replay| &replay.runtime),
+        engine_catalogue::install::Probe::Sha256,
+    )
+    .await
+    {
+        Ok(resolved) => resolved,
+        Err(error) => return reject(StatusCode::SERVICE_UNAVAILABLE, format!("{error:#}")),
+    };
+    if let Some(options) = request
+        .minimax
+        .as_ref()
+        .filter(|options| !options.adapters.is_empty())
+    {
+        let available = installation.native_adapters();
         for adapter in &options.adapters {
-            let compatible = available.iter().any(|entry| entry.meta.id == adapter.name
-                && (adapter.lm_scale == 0.0 || entry.meta.slots.iter().any(|slot| slot == "lm"))
-                && (adapter.dit_scale == 0.0 || entry.meta.slots.iter().any(|slot| slot == "dit")));
+            let compatible = available.iter().any(|entry| {
+                entry.meta.id == adapter.name
+                    && (adapter.lm_scale == 0.0 || entry.meta.slots.iter().any(|slot| slot == "lm"))
+                    && (adapter.dit_scale == 0.0
+                        || entry.meta.slots.iter().any(|slot| slot == "dit"))
+            });
             if !compatible {
-                return reject(StatusCode::BAD_REQUEST, format!("MiniMax adapter {} is unavailable for the requested slots", adapter.name));
+                return reject(
+                    StatusCode::BAD_REQUEST,
+                    format!(
+                        "MiniMax adapter {} is unavailable for the requested slots",
+                        adapter.name
+                    ),
+                );
             }
         }
     }
@@ -257,7 +282,11 @@ async fn submit(
         return reject(StatusCode::CONFLICT, format!("ACE-Step is busy: {error:#}"));
     }
     evict_kept_models(&state, "before MiniMax generation").await;
-    let client = match state.minimax.start(&profile, &root).await {
+    let client = match state
+        .minimax
+        .start_selected(&profile, &root, installation)
+        .await
+    {
         Ok(client) => client,
         Err(error) => return reject(StatusCode::SERVICE_UNAVAILABLE, format!("{error:#}")),
     };
@@ -282,9 +311,15 @@ async fn submit(
         "duration_seconds":request.duration_seconds.unwrap_or(60.0), "seed":request.seed, "lm_seed":request.lm_seed,
         "output_format":format, "fade_in":request.fade_in.unwrap_or(0.0).max(0.0),
         "fade_out":request.fade_out.unwrap_or(0.0).max(0.0)});
+    if let Some(runtime) = runtime {
+        settings["native_runtime"] = serde_json::json!(runtime);
+    }
     if let Some(sampling) = &request.minimax {
         if let Value::Object(parameters) = serde_json::json!(sampling) {
-            settings.as_object_mut().expect("MiniMax job settings object").extend(parameters);
+            settings
+                .as_object_mut()
+                .expect("MiniMax job settings object")
+                .extend(parameters);
         }
     }
     if format == "mp3" {

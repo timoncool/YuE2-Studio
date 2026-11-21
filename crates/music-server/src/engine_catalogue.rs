@@ -15,7 +15,11 @@ use crate::{ApiError, api_error, component_catalogue as channel, net};
 static UPDATES_REVISION: AtomicU64 = AtomicU64::new(0);
 
 pub(super) fn updates_revision() -> String {
-    format!("{}:{}", std::process::id(), UPDATES_REVISION.load(Ordering::Acquire))
+    format!(
+        "{}:{}",
+        std::process::id(),
+        UPDATES_REVISION.load(Ordering::Acquire)
+    )
 }
 
 fn note_updates_changed() {
@@ -39,6 +43,35 @@ struct EnginePackage {
     platform: String,
     executable: String,
     files: Vec<PackageFile>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    native_runtime: Option<NativeRuntimeDescriptor>,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+struct NativeRuntimeDescriptor {
+    api_version: u32,
+    executable: String,
+}
+
+impl EnginePackage {
+    fn compatible_native(&self) -> Option<&NativeRuntimeDescriptor> {
+        let native = self.native_runtime.as_ref()?;
+        let name = match self.id.as_str() {
+            crate::ace::ENGINE_ID => "ace-server",
+            crate::native_minimax::ENGINE_ID => "mm-server",
+            _ => return None,
+        };
+        let suffix = if self.platform.starts_with("windows-") {
+            ".exe"
+        } else {
+            ""
+        };
+        (self.protocol == "music-http-v1"
+            && native.api_version == 1
+            && native.executable == format!("{name}{suffix}")
+            && self.files.iter().any(|file| file.name == native.executable))
+        .then_some(native)
+    }
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -221,6 +254,33 @@ pub(super) async fn refresh() -> Result<Json<serde_json::Value>, Failure> {
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn first_party_runtime_descriptors_bind_the_stable_id_and_signed_native_executable() {
+        for (id, native) in [
+            (crate::ace::ENGINE_ID, "ace-server.exe"),
+            (crate::native_minimax::ENGINE_ID, "mm-server.exe"),
+        ] {
+            let file = |name: &str| json!({"name":name,"bytes":40,"sha256":"a".repeat(64),"url":format!("https://example.org/{name}")});
+            let mut package = json!({"id":id,"name":id,"version":"2","platform":"windows-x86_64",
+                "protocol":"music-http-v1","executable":"worker.exe","files":[file("worker.exe"),file(native)],
+                "native_runtime":{"api_version":1,"executable":native}});
+            let read = |entry: &serde_json::Value| {
+                parse(&serde_json::to_vec(&json!({"schema":1,"engines":[entry]})).unwrap()).unwrap()
+            };
+            assert_eq!(
+                read(&package).engines[0]
+                    .compatible_native()
+                    .unwrap()
+                    .executable,
+                native
+            );
+            package["native_runtime"]["api_version"] = json!(2);
+            assert!(read(&package).engines[0].compatible_native().is_none());
+            package["native_runtime"] = json!({"api_version":1,"executable":"worker.exe"});
+            assert!(read(&package).engines[0].compatible_native().is_none());
+        }
+    }
 
     #[test]
     fn signed_packages_can_name_new_engines_but_cannot_escape_their_install_directory() {
