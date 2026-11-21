@@ -1,0 +1,29 @@
+name: Windows service for chord bed acceptance
+on:
+  push:
+    branches: [qa/yue2-chord-bed-141-windows]
+permissions:
+  contents: read
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          ref: 23aafb1e19cfbf626db0db69d8ed676ac4989b99
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo build --locked -p music-server --bin music-server
+      - run: |
+          git rev-parse HEAD | Set-Content -Encoding utf8NoBOM revision.txt
+          (Get-FileHash target/debug/music-server.exe -Algorithm SHA256).Hash | Set-Content -Encoding utf8NoBOM music-server.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: chord-bed-141-studio-windows
+          retention-days: 2
+          path: |
+            target/debug/music-server.exe
+            music-server.sha256
+            revision.txt
+
+
