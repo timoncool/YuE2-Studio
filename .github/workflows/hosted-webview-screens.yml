@@ -66,7 +66,33 @@ jobs:
             desktop/src-tauri/target/debug/YuE2-Studio.exe
             desktop/src-tauri/target/debug/yue2-studio-desktop.exe
           key: ${{ steps.shell-cache.outputs.cache-primary-key }}
-      - name: Verify timed LRC export from the library
+      - name: Fetch and verify released Windows 4.1.1
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $folder = Join-Path $env:RUNNER_TEMP 'studio-4.1.1'
+          New-Item -ItemType Directory -Path $folder -Force | Out-Null
+          $name = 'YuE2-Studio-4.1.1-portable-windows-x64.zip'
+          gh release download v4.1.1 --repo timoncool/YuE2-Studio --pattern $name --dir $folder
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $zip = Join-Path $folder $name
+          $expected = '312f26d5554f33a15576f778145d9a400d4ca226ac9fdc999d367c6b275b1276'
+          if ((Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash -ne $expected) {
+            throw 'The 4.1.1 portable archive SHA-256 differs'
+          }
+          Expand-Archive -LiteralPath $zip -DestinationPath (Join-Path $folder 'app')
+          $desktop = Get-ChildItem (Join-Path $folder 'app') -Recurse -Filter 'YuE2-Studio.exe' | Select-Object -First 1
+          if (!$desktop) { throw 'The published 4.1.1 desktop executable is missing' }
+          "STUDIO_BASELINE_EXE=$($desktop.FullName)" >> $env:GITHUB_ENV
+      - name: Windows 4.1.1 native Save As
+        if: env.STUDIO_BASELINE_EXE != ''
+        env:
+          PYTHONUTF8: '1'
+          STUDIO_QA_NATIVE_PROBE: '1'
+        run: |
+          Get-FileHash -LiteralPath $env:STUDIO_BASELINE_EXE -Algorithm SHA256
+          python -u scripts/test-hosted-webview-screens.py $env:STUDIO_BASELINE_EXE artifacts/native-4.1.1 --suite lrc
+      - name: Windows 5.0 native Save As
         if: always() && (steps.desktop-build.outcome == 'success' || steps.shell-cache.outputs.cache-hit == 'true')
         env:
           PYTHONUTF8: '1'
@@ -75,17 +101,8 @@ jobs:
             Where-Object { $_.Name -in @('YuE2-Studio.exe', 'yue2-studio-desktop.exe') } |
             Select-Object -First 1
           if (!$desktop) { throw 'Studio executable missing' }
-          python -u scripts/test-hosted-webview-screens.py $desktop.FullName artifacts/lrc-browser --suite lrc-browser
-      - name: Exercise U3 routing in WebView2 through Studio MCP
-        if: always() && (steps.desktop-build.outcome == 'success' || steps.shell-cache.outputs.cache-hit == 'true')
-        env:
-          PYTHONUTF8: '1'
-        run: |
-          $desktop = Get-ChildItem desktop/src-tauri/target/debug -Filter '*.exe' |
-            Where-Object { $_.Name -in @('YuE2-Studio.exe', 'yue2-studio-desktop.exe') } |
-            Select-Object -First 1
-          if (!$desktop) { throw 'Studio executable missing' }
-          python -u scripts/test-hosted-webview-screens.py $desktop.FullName artifacts/u3 --suite u3
+          Get-FileHash -LiteralPath $desktop.FullName -Algorithm SHA256
+          python -u scripts/test-hosted-webview-screens.py $desktop.FullName artifacts/native-5.0 --suite lrc
       - uses: actions/upload-artifact@v7
         if: always()
         with:

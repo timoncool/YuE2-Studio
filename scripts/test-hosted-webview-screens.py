@@ -268,7 +268,7 @@ def u3_form(root):
     (out/"console.txt").write_text(ui("console"), encoding="utf8")
 
 
-def save_dialog_file(pid, path):
+def save_dialog_file(pid, path, output="save-dialog.json"):
     # UI Automation operates only on the isolated runner's native Save As dialog.
     script = r"""
 $ErrorActionPreference = 'Stop'
@@ -277,12 +277,39 @@ $root = [Windows.Automation.AutomationElement]::RootElement
 Add-Type @'
 using System;
 using System.Runtime.InteropServices;
+using System.Text;
 public static class StudioQaWindows {
   [DllImport("user32.dll")] public static extern IntPtr GetWindow(IntPtr window, uint command);
   [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr window, out uint pid);
+  [DllImport("user32.dll")] public static extern IntPtr GetProcessWindowStation();
+  [DllImport("user32.dll")] public static extern IntPtr GetThreadDesktop(uint threadId);
+  [DllImport("user32.dll", SetLastError=true)] public static extern IntPtr OpenInputDesktop(uint flags, bool inherit, uint access);
+  [DllImport("user32.dll")] public static extern bool CloseDesktop(IntPtr desktop);
+  [DllImport("user32.dll", CharSet=CharSet.Unicode, SetLastError=true)]
+  public static extern bool GetUserObjectInformation(IntPtr handle, int index, StringBuilder text, int bytes, out int needed);
+  public static string ObjectName(IntPtr handle) {
+    var text = new StringBuilder(256);
+    int needed;
+    return handle == IntPtr.Zero || !GetUserObjectInformation(handle, 2, text, text.Capacity * 2, out needed)
+      ? null : text.ToString();
+  }
 }
 '@
 $seen = @{}
+$windowThreads = @{}
+$desktop = [StudioQaWindows]::OpenInputDesktop(0,$false,1)
+$windowStation = [StudioQaWindows]::ObjectName([StudioQaWindows]::GetProcessWindowStation())
+$inputDesktop = [StudioQaWindows]::ObjectName($desktop)
+if ($desktop -ne [IntPtr]::Zero) { [void][StudioQaWindows]::CloseDesktop($desktop) }
+$runner = Get-Process -Id $PID
+$studio = Get-Process -Id ([int]$env:STUDIO_QA_PID)
+$station = @{station=$windowStation; desktop=$inputDesktop; runner=$runner.SessionId; studio=$studio.SessionId
+             explorer=@(Get-Process -Name explorer -ErrorAction SilentlyContinue | Select-Object Id,SessionId)
+             studioPid=$studio.Id}
+$station | ConvertTo-Json -Compress
+if (!$inputDesktop -or $windowStation -ne 'WinSta0' -or $runner.SessionId -ne $studio.SessionId) {
+   throw 'The studio and the locator must share the interactive Windows desktop'
+}
 $deadline = [DateTime]::UtcNow.AddSeconds(20)
 do {
   $windows = $root.FindAll([Windows.Automation.TreeScope]::Children,
@@ -297,6 +324,16 @@ do {
       if ($windowOwner -ne [int]$env:STUDIO_QA_PID) { continue }
     }
     $key = "$($current.ProcessId) $($current.ClassName) $($current.Name)"
+    if (!$windowThreads.ContainsKey($key) -and $current.NativeWindowHandle) {
+      $windowPid = [uint32]0
+      $thread = [StudioQaWindows]::GetWindowThreadProcessId([IntPtr]$current.NativeWindowHandle,[ref]$windowPid)
+      $windowThreads[$key] = @{
+        hwnd=$current.NativeWindowHandle
+        thread=$thread
+        desktop=[StudioQaWindows]::ObjectName([StudioQaWindows]::GetThreadDesktop($thread))
+        ownerHwnd=[StudioQaWindows]::GetWindow([IntPtr]$current.NativeWindowHandle,4).ToInt64()
+      }
+    }
     if ($current.ClassName -ne '#32770' -and $current.Name -notlike '*Save As*') {
       $seen[$key] = 'window'
       continue
@@ -320,20 +357,45 @@ do {
     $fields[0].GetCurrentPattern([Windows.Automation.ValuePattern]::Pattern).SetValue($env:STUDIO_QA_FILE)
     $name = $dialog.Current.Name
     $save[0].GetCurrentPattern([Windows.Automation.InvokePattern]::Pattern).Invoke()
-    $name
+    @{name=$name; windows=$windowThreads} | ConvertTo-Json -Depth 5 -Compress
     exit 0
   }
   Start-Sleep -Milliseconds 200
 } while ([DateTime]::UtcNow -lt $deadline)
-$seen | ConvertTo-Json -Compress
+@{controls=$seen; windows=$windowThreads} | ConvertTo-Json -Depth 5 -Compress
 throw 'The isolated Save As dialog did not expose a file name and Save button'
 """
     encoded = base64.b64encode(script.encode("utf-16-le")).decode("ascii")
     run = subprocess.run(["powershell.exe", "-NoProfile", "-STA", "-EncodedCommand", encoded],
                          env=dict(os.environ, STUDIO_QA_PID=str(pid), STUDIO_QA_FILE=str(path)),
                          capture_output=True, text=True, timeout=27)
-    json_file(out/"save-dialog.json", dict(code=run.returncode, stdout=run.stdout, stderr=run.stderr))
+    json_file(out/output, dict(code=run.returncode, stdout=run.stdout, stderr=run.stderr))
     assert run.returncode == 0, (run.stdout, run.stderr)
+
+
+def reference_save_picker(root):
+    target = root/"native-picker-reference.lrc"
+    script = r"""
+$ErrorActionPreference = 'Stop'
+Add-Type -AssemblyName System.Windows.Forms
+$picker = [Windows.Forms.SaveFileDialog]::new()
+$picker.Filter = 'LRC|*.lrc'
+$picker.InitialDirectory = [IO.Path]::GetDirectoryName($env:STUDIO_QA_FILE)
+$picker.FileName = [IO.Path]::GetFileName($env:STUDIO_QA_FILE)
+if ($picker.ShowDialog() -ne [Windows.Forms.DialogResult]::OK) { exit 2 }
+[IO.File]::WriteAllText($picker.FileName, 'native picker reference')
+"""
+    command = base64.b64encode(script.encode("utf-16-le")).decode("ascii")
+    reference = subprocess.Popen(["powershell.exe", "-NoProfile", "-STA", "-EncodedCommand", command],
+                                 env=dict(os.environ, STUDIO_QA_FILE=str(target)))
+    try:
+        save_dialog_file(reference.pid, target, "save-picker-reference.json")
+        assert reference.wait(timeout=8) == 0
+        assert target.read_text(encoding="utf8") == "native picker reference"
+    finally:
+        if reference.poll() is None:
+            reference.terminate()
+            reference.wait(timeout=5)
 
 
 def browser_download_lrc(root, song_id):
@@ -372,6 +434,11 @@ def verify_lrc_file(destination, expected, song_id, route):
 
 
 def check_lrc(root, pid):
+    if os.environ.get("STUDIO_QA_NATIVE_PROBE") == "1":
+        try:
+            reference_save_picker(root)
+        except (AssertionError, OSError, subprocess.TimeoutExpired) as failure:
+            json_file(out/"reference-picker-failure.json", {"error": repr(failure)})
     title = "Hosted LRC receipt"
     source = root/"source.wav"
     with wave.open(str(source), "wb") as audio:
