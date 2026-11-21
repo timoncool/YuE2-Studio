@@ -5,6 +5,38 @@ import { RvcBurnTraining } from './RvcBurnTraining';
 
 vi.mock('../context/I18nContext', () => ({ useI18n: () => ({ language: 'en', t: (key: string) => key }) }));
 
+it('refreshes instead of waiting for progress when setup starts no download', async () => {
+  vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+  let repaired = false;
+  vi.stubGlobal('fetch', vi.fn(async (_url: string, init?: RequestInit) => {
+    if (init?.method === 'POST') {
+      repaired = true;
+      return Response.json({ started: false });
+    }
+    return Response.json({
+      ready: repaired, cuda: true, missing: repaired ? [] : ['ONNX Runtime CPU libraries'],
+      installable: true, missing_bytes: repaired ? 0 : 80_000_000, download: null,
+    });
+  }));
+  const host = document.createElement('div');
+  const root = createRoot(host);
+  const dataset = { id: 'dataset', name: 'Voice', trigger: '', created_at: '0', items: [] };
+  const onError = vi.fn();
+  try {
+    await act(async () => root.render(<RvcBurnTraining dataset={dataset} busy={false} card="" control=""
+      primary="" onStarted={vi.fn()} onError={onError} />));
+    const install = [...host.querySelectorAll('button')].find(button => button.textContent?.includes('80'))!;
+    await act(async () => install.click());
+    expect(host.textContent).not.toContain('Installing');
+    expect(host.querySelector('progress')).toBeNull();
+    expect(install.isConnected).toBe(false);
+    expect(onError).not.toHaveBeenCalled();
+  } finally {
+    await act(async () => root.unmount());
+    vi.unstubAllGlobals();
+  }
+});
+
 it('downloads from the configured runtime source, shows progress after mounting, and cancels', async () => {
   vi.useFakeTimers();
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
