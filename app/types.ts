@@ -84,6 +84,7 @@ export interface Playlist {
   coverUrl?: string;
   cover_url?: string;
   songIds?: string[];
+  preferredSongId?: string;
   isPublic?: boolean;
   is_public?: boolean;
   user_id?: string;
