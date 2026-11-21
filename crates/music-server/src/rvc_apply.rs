@@ -263,10 +263,11 @@ pub(super) async fn apply_with(
         let cancelled = || quick.as_ref().is_some_and(|run| run.cancelled());
         let audio_cpp = || convert(&state.acpp, audio_build.context("audio.cpp runtime is unavailable")?,
             model, &vocal, &weights, index.as_deref(), request.semitone_shift, blend, &cancelled);
+        anyhow::ensure!(!cancelled(), "RVC conversion cancelled.");
         let native_convert = || rvc_fast::convert(update_data_root(&state), &rvc_fast::Request {
             vocal: &vocal, voice: &weights, index: index.as_deref(),
             semitone_shift: request.semitone_shift, retrieval_blend: blend,
-        });
+        }, &cancelled);
         let (conversion, effective, fallback_reason) = match effective {
             Backend::VocalFastRs => match native_convert() {
                 Ok(output) => (output, Backend::VocalFastRs, None),
@@ -329,7 +330,7 @@ fn convert(
     index: Option<&FsPath>,
     shift: i32,
     blend: f64,
-    cancelled: &impl Fn() -> bool,
+    cancelled: &(impl Fn() -> bool + Sync),
 ) -> anyhow::Result<audio_post::Stereo> {
     let mut options =
         json!({ "voice_model_path": weights, "semitone_shift": shift, "retrieval_blend": blend });

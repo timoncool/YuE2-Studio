@@ -4054,7 +4054,7 @@ async fn read_stem_audio(
 #[allow(clippy::too_many_arguments)]
 fn separate_song_audio(
     state: &AppState, song_id: &str, audio_path: &std::path::Path, engine: separation::Engine,
-    runtime: lyrics_sync::OnnxFlavour, roformer_gpu: bool, wanted: &[String], cancelled: &impl Fn() -> bool,
+    runtime: lyrics_sync::OnnxFlavour, roformer_gpu: bool, wanted: &[String], cancelled: &(impl Fn() -> bool + Sync),
 ) -> anyhow::Result<(Vec<String>, bool)> {
     anyhow::ensure!(!cancelled(), "Separation cancelled.");
     let audio = audio_pcm::decode_stereo_44k(audio_path)?;
@@ -13078,7 +13078,7 @@ fn drawn_seed() -> i64 {
 /// nothing changes its loudness on the way.
 fn engine_submission(body: &Value) -> Value {
     let mut engine = body.clone();
-    if let Some(fields) = engine.as_object_mut() { fields.remove("vocals_only"); fields.remove("score_edit"); fields.remove("fade_in"); fields.remove("fade_out"); }
+    if let Some(fields) = engine.as_object_mut() { fields.remove("vocals_only"); fields.remove("rvc_after"); fields.remove("score_edit"); fields.remove("fade_in"); fields.remove("fade_out"); }
     if let Some(fields) = engine.as_object_mut() {
         fields.insert("output_format".into(), Value::from("wav32"));
         fields.remove("mp3_bitrate");
