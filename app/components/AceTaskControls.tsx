@@ -12,6 +12,7 @@ export type AceCreateOptions = {
   repainting_start?: number;
   repainting_end?: number;
   guidance_scale?: number;
+  adapters?: { name: string; scale: number }[];
 };
 type AceTaskField = 'audio_cover_strength' | 'cover_noise_strength' | 'repainting_start' | 'repainting_end';
 export type AceTaskDraft = { task: string; source: string; reference: string } & Partial<Record<AceTaskField, string>>;
