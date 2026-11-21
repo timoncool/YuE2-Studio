@@ -759,7 +759,7 @@ impl Installation {
 
     fn for_profile(&self, profile: &'static Profile) -> Result<Launch> {
         let executable = self.executable.as_ref().filter(|file| file.is_file())
-            .context("MiniMax mm-server is missing. Install MiniMax Music3 Studio or set YUE_MINIMAX_MM_SERVER_BIN to its executable.")?;
+            .context("MiniMax mm-server is missing. Install the runtime in Create or set YUE_MINIMAX_MM_SERVER_BIN to its executable.")?;
         let models_root = self
             .roots
             .iter()

@@ -354,7 +354,7 @@ impl Installation {
             .filter(|path| usable_executable(path))
             .with_context(|| {
                 format!(
-                    "ACE-Step runtime is missing; expected ace-server under {} or ACE_ENGINE_BIN",
+                    "ACE-Step runtime is missing. Install it in Create or select an existing ace-server under {} or ACE_ENGINE_BIN",
                     self.data_root.join("engines").join(ENGINE_ID).display()
                 )
             })?;

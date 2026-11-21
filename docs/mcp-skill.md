@@ -114,6 +114,10 @@ Use `native_music_runtime_status` with `engine` set to `acestep-cpp` or
 `minimaxmusic-cpp` to check the pinned runtime. `native_music_runtime_install`
 starts an installation. Follow progress with the status tool and use
 `native_music_runtime_cancel` to stop an active download. Model weights are separate.
+For offline provisioning, launch Studio with `STUDIO_NATIVE_RUNTIME_CACHE` pointing
+to a directory containing the runtime-only archives under their original names.
+The same optional cache is verified during release builds. Studio checks the
+archive size, SHA-256, server, and both CUDA modules before activating the engine.
 Check `engine_installed`, then select a profile with `ready: true`. Pass its ID as
 `music_source.model`, use `music_source.kind = "native"`, and set `music_source.engine`
 to `acestep-cpp` or `minimaxmusic-cpp`. MiniMax takes a caption in `style` and

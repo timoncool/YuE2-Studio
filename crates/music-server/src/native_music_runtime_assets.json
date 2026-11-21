@@ -58,5 +58,40 @@
     "required": {
       "mm-server": "b8ad8411948b48ad83a027dca8e9840b70dc7b9e7afe303bec4ca97a2f85c5c0"
     }
+  },
+  {
+    "engine": "minimaxmusic-cpp",
+    "platform": "windows-x86_64",
+    "revision": "b79d37f46ae7fd359b3ad805f053385c7768b9cb",
+    "directory": "minimaxmusic-cpp-b79d37f46ae7",
+    "archive": "mm3-runtime-b79d37f-windows-universal-x64.zip",
+    "url": "https://github.com/timoncool/minimaxmusic.cpp/releases/download/studio-runtime-b79d37f46ae7/mm3-runtime-b79d37f-windows-universal-x64.zip",
+    "bytes": 489242062,
+    "sha256": "df9d8b4dcd91c6fc908425b0e08293a3e22f1fc46f75fe64394b333b67f67288",
+    "executable": "mm-server.exe",
+    "required": {
+      "mm-server.exe": "8b33bc52e7e5178ffe6b3e45979de36e27da1e2f12ccf7802778d6298b302d1a",
+      "ggml-vulkan.dll": "e91d85c66cf4ba45b09ab3fe6e2a1f8aa452476b0206c893912e8874b04b3a7b",
+      "ggml-cpu-x64.dll": "eef6fe6072feb2d85e4a80eea8df64fe74dc5067714051be600dd9ff7b1de2c0",
+      "cuda12/ggml-cuda.dll": "9b5b060195428e2800bb6a6f4a4fac2aa306618aa94602250e4d31aac6576833",
+      "cuda13/ggml-cuda.dll": "bb1019e3f347df267834797e5b05666fa25f9a6bb5c404617f73f05586984729"
+    }
+  },
+  {
+    "engine": "minimaxmusic-cpp",
+    "platform": "linux-x86_64",
+    "revision": "b79d37f46ae7fd359b3ad805f053385c7768b9cb",
+    "directory": "minimaxmusic-cpp-b79d37f46ae7",
+    "archive": "mm3-runtime-b79d37f-linux-x64.tar.gz",
+    "url": "https://github.com/timoncool/minimaxmusic.cpp/releases/download/studio-runtime-b79d37f46ae7/mm3-runtime-b79d37f-linux-x64.tar.gz",
+    "bytes": 496443280,
+    "sha256": "e1195be1bdc2dfa2d88fab565881193c38fe5a6132b3fd95745df2a877890520",
+    "executable": "mm-server",
+    "required": {
+      "mm-server": "af42fe542204731658bdc540f31e9c14b40a6f330e7bbf19b0d326a7d8653012",
+      "libggml-vulkan.so": "5a6c3bf77773bd826ad358df453536ef94d59e2268cdae4ec11e92a985c78bde",
+      "cuda12/libggml-cuda.so": "670a8f321163e6f87a4e191f091f76abf7ffd51d18ab987ee90f8bc1ea17d893",
+      "cuda13/libggml-cuda.so": "d5742a5b345556b6e696fe36425e460bcbd209864dd4eb450a0e1478f95dad9c"
+    }
   }
 ]
