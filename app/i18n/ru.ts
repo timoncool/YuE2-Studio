@@ -46,6 +46,7 @@ export const ru = {
     journalKind_rvc_voice: 'голос RVC',
     journalKind_music_engine_catalog: 'Каталог музыкальных движков', journalKind_music_engine: 'Музыкальный движок', journalKind_rvc_catalog: 'каталог голосов RVC',
     journalKind_download: 'загрузка',
+    journalKind_video: 'видео',
     journalKind_model: 'модель',
     journalKind_settings: 'настройки',
     journalKind_preparation: 'подготовка датасета',

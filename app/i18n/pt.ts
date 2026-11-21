@@ -45,6 +45,7 @@ export const pt = {
     journalKind_rvc_voice: 'voz RVC',
     journalKind_music_engine_catalog: 'Catálogo de motores de música', journalKind_music_engine: 'Motor de música', journalKind_rvc_catalog: 'catálogo de vozes RVC',
     journalKind_download: 'transferência',
+    journalKind_video: 'vídeo',
     journalKind_model: 'modelo',
     journalKind_settings: 'definições',
     journalKind_preparation: 'preparação do conjunto de dados',

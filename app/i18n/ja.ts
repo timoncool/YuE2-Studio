@@ -46,6 +46,7 @@ export const ja = {
   journalKind_rvc_voice: 'RVC 音声',
   journalKind_music_engine_catalog: '音楽エンジンカタログ', journalKind_music_engine: '音楽エンジン', journalKind_rvc_catalog: 'RVC 音声カタログ',
   journalKind_download: 'ダウンロード',
+  journalKind_video: '動画',
   journalKind_model: 'モデル',
   journalKind_settings: '設定',
   journalKind_preparation: 'データセットの準備',

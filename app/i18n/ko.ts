@@ -46,6 +46,7 @@ export const ko = {
     journalKind_rvc_voice: 'RVC 음성',
     journalKind_music_engine_catalog: '음악 엔진 카탈로그', journalKind_music_engine: '음악 엔진', journalKind_rvc_catalog: 'RVC 음성 카탈로그',
     journalKind_download: '다운로드',
+    journalKind_video: '동영상',
     journalKind_model: '모델',
     journalKind_settings: '설정',
     journalKind_preparation: '데이터셋 준비',
