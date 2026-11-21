@@ -11,16 +11,16 @@ const eventName = 'yue:signed-package-updates-changed';
 
 export const signedUpdateNoticeChanged = () => window.dispatchEvent(new Event(eventName));
 
-export function useSignedUpdateNotice(online: boolean, canShow: boolean, announce: () => void) {
+export function useSignedUpdateNotice(online: boolean, revision: string | undefined, canShow: boolean, announce: () => void) {
   const { data, refetch } = useQuery({
-    queryKey: ['signed-component-update-notice'],
+    queryKey: ['signed-component-update-notice', revision],
     queryFn: async ({ signal }): Promise<UpdateNoticeStatus | null> => {
       const response = await fetch('/v1/components/updates', { headers: SELF_READ, signal });
       return response.ok ? response.json() : null;
     },
     enabled: online,
-    refetchInterval: query => query.state.data?.mode === 'notify' ? 30_000 : false,
-    refetchOnWindowFocus: true,
+    staleTime: Infinity,
+    refetchOnWindowFocus: false,
   });
   const seen = useRef(new Set<string>());
   useEffect(() => {

@@ -15,7 +15,7 @@ it('announces newly found updates once in notify mode and keeps auto and empty c
   const announce = vi.fn();
   const client = new QueryClient();
   function Notice({ visible }: { visible: boolean }) {
-    useSignedUpdateNotice(true, visible, announce);
+    useSignedUpdateNotice(true, 'studio:0', visible, announce);
     return null;
   }
   const container = document.createElement('div');
@@ -55,6 +55,47 @@ it('announces newly found updates once in notify mode and keeps auto and empty c
   } finally {
     act(() => root.unmount());
     client.clear();
+    vi.unstubAllGlobals();
+  }
+});
+
+it('reads the plan once per server revision, even across many setup polls', async () => {
+  vi.useFakeTimers();
+  const packageUpdate = { kind: 'music-models', id: 'weights', from_version: '1', to_version: '2' };
+  let updates: typeof packageUpdate[] = [];
+  const fetcher = vi.fn(async () => Response.json({ mode: 'notify', updates }));
+  vi.stubGlobal('fetch', fetcher);
+  const announce = vi.fn();
+  const client = new QueryClient();
+  const host = document.createElement('div');
+  const root = createRoot(host);
+  function Notice({ revision }: { revision: string }) {
+    useSignedUpdateNotice(true, revision, true, announce);
+    return null;
+  }
+  const render = async (revision: string) => {
+    await act(async () => root.render(<QueryClientProvider client={client}><Notice revision={revision} /></QueryClientProvider>));
+    await act(async () => { await vi.advanceTimersByTimeAsync(5); });
+  };
+  try {
+    await render('studio:0');
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    for (let tick = 0; tick < 30; tick++) {
+      await act(async () => { await vi.advanceTimersByTimeAsync(2_000); });
+      await render('studio:0');
+    }
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    expect(announce).not.toHaveBeenCalled();
+    updates = [packageUpdate];
+    await render('studio:1');
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    expect(announce).toHaveBeenCalledTimes(1);
+    await render('studio:1');
+    expect(fetcher).toHaveBeenCalledTimes(2);
+  } finally {
+    act(() => root.unmount());
+    client.clear();
+    vi.useRealTimers();
     vi.unstubAllGlobals();
   }
 });

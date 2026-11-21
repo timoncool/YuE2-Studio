@@ -238,7 +238,7 @@ function AppContent() {
   // page for a second on every launch is how a ready studio was made to look
   // like a bill.
   const [nativeModels, setNativeModels] = useState<'unknown' | 'missing' | 'installed' | 'offline'>('unknown');
-  const setupQuery = useSetupStatus<{ ready?: boolean; engine_ready?: boolean; engine_paused?: boolean; trash_days?: number; kv_cache_notice?: { need_gib: number | null; free_gib: number | null } | null }>();
+  const setupQuery = useSetupStatus<{ ready?: boolean; engine_ready?: boolean; engine_paused?: boolean; signed_updates_revision?: string; trash_days?: number; kv_cache_notice?: { need_gib: number | null; free_gib: number | null } | null }>();
   useEffect(() => {
     // A service that does not answer is not an engine that is still coming
     // up: the application has been closed, and saying "starting" at a dead
@@ -468,7 +468,7 @@ function AppContent() {
     noteStudioMessage(message, type);
   };
 
-  useSignedUpdateNotice(setupQuery.isSuccess, !toast.isVisible && !showSettingsModal, () => {
+  useSignedUpdateNotice(setupQuery.isSuccess, setupQuery.data?.signed_updates_revision, !toast.isVisible && !showSettingsModal, () => {
     const text = signedUpdateStrings[language];
     showToast(text.notice, 'info', {
       label: text.openUpdates,

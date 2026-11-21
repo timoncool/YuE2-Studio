@@ -132,6 +132,7 @@ pub(crate) async fn set_mode(
         Ok(())
     };
     save().map_err(failure)?;
+    super::super::note_updates_changed();
     MODE_CHANGED.notify_one();
     Ok(Json(next))
 }
