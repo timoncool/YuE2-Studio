@@ -429,7 +429,7 @@ mod tests {
             scratch.path().join("media"),
         )
         .unwrap();
-        let wav = crate::audio_pcm::wav_f32_bytes(&crate::audio_post::Stereo::new(
+        let wav = crate::audio_pcm::wav_f32_bytes(&audio_post::Stereo::new(
             vec![0.25; 100],
             vec![0.5; 100],
             44_100,
