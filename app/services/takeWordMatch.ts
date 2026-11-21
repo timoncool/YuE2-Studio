@@ -6,19 +6,40 @@ export function sungWords(text: string): string[] {
 }
 
 /** Word error rate accounts for inserted, missing and substituted lyrics in order. */
-export function wordMatchPercent(reference: string[], transcript: string[]): number | null {
+export async function wordMatchPercent(
+  reference: string[], transcript: string[], obsolete?: () => boolean,
+): Promise<number | null> {
   if (!reference.length || !transcript.length) return null;
-  // Imported lyrics and recogniser output can be arbitrarily long. Keep the UI responsive.
-  if (reference.length * transcript.length > 4_000_000) return null;
-  let previous = Uint32Array.from({ length: transcript.length + 1 }, (_, i) => i);
-  let current = new Uint32Array(previous.length);
-  for (let i = 1; i <= reference.length; i++) {
-    current[0] = i;
-    for (let j = 1; j <= transcript.length; j++) {
-      current[j] = Math.min(previous[j] + 1, current[j - 1] + 1,
-        previous[j - 1] + Number(reference[i - 1] !== transcript[j - 1]));
-    }
-    [previous, current] = [current, previous];
+  const [rows, columns] = reference.length >= transcript.length ? [reference, transcript] : [transcript, reference];
+  let first = 0;
+  while (first < columns.length && rows[first] === columns[first]) first++;
+  let lastRow = rows.length;
+  let lastColumn = columns.length;
+  while (lastColumn > first && rows[lastRow - 1] === columns[lastColumn - 1]) {
+    lastRow--;
+    lastColumn--;
   }
-  return Math.max(0, Math.round(100 * (1 - previous[transcript.length] / reference.length)));
+  const width = lastColumn - first;
+  let distance = lastRow - first;
+  if (width) {
+    let previous = Uint32Array.from({ length: width + 1 }, (_, i) => i);
+    let current = new Uint32Array(width + 1);
+    let cells = 0;
+    for (let i = first; i < lastRow; i++) {
+      current[0] = i - first + 1;
+      for (let j = 1; j <= width; j++) {
+        current[j] = Math.min(previous[j] + 1, current[j - 1] + 1,
+          previous[j - 1] + Number(rows[i] !== columns[first + j - 1]));
+      }
+      [previous, current] = [current, previous];
+      cells += width;
+      if (cells >= 500_000) {
+        await new Promise<void>(resolve => setTimeout(resolve, 0));
+        if (obsolete?.()) return null;
+        cells = 0;
+      }
+    }
+    distance = previous[width];
+  }
+  return Math.max(0, Math.round(100 * (1 - distance / reference.length)));
 }

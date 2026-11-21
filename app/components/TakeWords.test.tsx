@@ -23,12 +23,15 @@ it('compares independent transcripts on demand and drops an obsolete pair before
     await act(async () => host.querySelector('button')!.click());
     expect(host.textContent).toContain('A: 100% · B: 67%');
     expect(recognise.mock.calls).toEqual([[{ songId: 'one' }], [{ songId: 'two' }]]);
+    recognise.mockRejectedValueOnce(new Error('karaoke.no-words')).mockResolvedValueOnce('come back home');
+    await act(async () => host.querySelector('button')!.click());
+    expect(host.textContent).toContain('A: No score · B: 100%');
     let finish!: (words: string) => void;
     recognise.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
     await act(async () => host.querySelector('button')!.click());
     await act(async () => root.render(<TakeWords key="ba" left={b} right={a} />));
     await act(async () => finish('come back home'));
-    expect(recognise).toHaveBeenCalledTimes(3);
+    expect(recognise).toHaveBeenCalledTimes(5);
     expect(host.textContent).not.toContain('100%');
   } finally {
     await act(async () => root.unmount());

@@ -41,7 +41,8 @@ export function TakeWords({ left, right }: { left: Song; right: Song }) {
           throw cause;
         });
         if (ticket !== request.current) return;
-        scores.push(wordMatchPercent(reference, sungWords(heard)));
+        scores.push(await wordMatchPercent(reference, sungWords(heard), () => ticket !== request.current));
+        if (ticket !== request.current) return;
       }
       setResult(scores);
     } catch (cause) {
