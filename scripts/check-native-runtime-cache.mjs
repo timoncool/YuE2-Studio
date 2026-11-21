@@ -11,7 +11,10 @@ if (cache) {
   const pins = JSON.parse(await readFile(new URL(
     '../crates/music-server/src/native_music_runtime_assets.json', import.meta.url,
   ), 'utf8'));
+  const verified = new Set();
   for (const pin of pins.filter(entry => entry.platform === platform)) {
+    if (verified.has(pin.engine)) continue;
+    verified.add(pin.engine);
     const path = join(cache, pin.archive);
     const info = await stat(path);
     if (!info.isFile() || info.size !== pin.bytes) throw new Error(`Invalid cache size for ${pin.archive}`);

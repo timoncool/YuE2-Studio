@@ -69,11 +69,15 @@ fn runtimes() -> &'static [Runtime] {
     })
 }
 
-fn selected(engine: &str) -> Option<&'static Runtime> {
+fn host_runtimes(engine: &str) -> impl Iterator<Item = &'static Runtime> + '_ {
     let platform = format!("{}-{}", std::env::consts::OS, std::env::consts::ARCH);
     runtimes()
         .iter()
-        .find(|runtime| runtime.pin.engine == engine && runtime.pin.platform == platform)
+        .filter(move |runtime| runtime.pin.engine == engine && runtime.pin.platform == platform)
+}
+
+fn selected(engine: &str) -> Option<&'static Runtime> {
+    host_runtimes(engine).next()
 }
 
 pub(super) fn sha256(url: &str) -> Option<&'static str> {
@@ -104,7 +108,10 @@ fn installed_by(downloader: &Downloader, runtime: &Runtime) -> Option<PathBuf> {
 }
 
 pub(super) fn installed(data_root: &FsPath, engine: &str) -> Option<PathBuf> {
-    installed_by(&downloader(data_root), selected(engine)?)
+    let downloader = downloader(data_root);
+    // Keep earlier pins in the table behind the current pin. An app upgrade
+    // can then run the previous verified install before the user downloads.
+    host_runtimes(engine).find_map(|runtime| installed_by(&downloader, runtime))
 }
 
 pub(super) fn cuda_build() -> Option<crate::hardware::CudaBuild> {
