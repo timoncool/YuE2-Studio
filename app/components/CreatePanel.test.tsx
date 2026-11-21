@@ -1271,6 +1271,32 @@ describe('OpenRouter music creation', () => {
   });
 });
 
+it('shows the manual MiniMax-H3 package and blocks Create when its weights are absent', async () => {
+  const manual_install = {
+    source_url: 'https://huggingface.co/audio-cpp/audio.cpp-gguf/tree/test/MiniMax-H3-Q4-GGUF',
+    license_url: 'https://huggingface.co/MiniMaxAI/MiniMax-H3/blob/main/LICENSE',
+    directory: 'audiocpp/models/MiniMax-H3-Q4-GGUF',
+  };
+  vi.stubGlobal('fetch', vi.fn(async () => Response.json({ engine: 'audio.cpp', models: [{
+    id: 'minimax_h3', name: 'MiniMax-H3', profile_id: 'minimax_h3_q4_k', quantization: 'Q4_K',
+    ready: false, missing: ['dit.gguf'], missing_bytes: 32_443_213_394, status: 'experimental', manual_install,
+  }] })));
+  const song = {
+    title: 'H3 take', ditModel: 'audio.cpp', style: 'funk groove',
+    generationParams: { music_source: { kind: 'audio_cpp', model: 'minimax_h3' } },
+  } as Song;
+  act(() => root.render(panel({ musicEngine: 'audio.cpp', initialData: { song, timestamp: 1 } })));
+  await flush();
+  expect(host.textContent).toContain('Experimental');
+  expect(host.textContent).toContain('30.22 GiB');
+  expect(host.textContent).toContain(manual_install.directory);
+  expect(host.textContent).toContain('dit.gguf');
+  expect(host.querySelector(`a[href="${manual_install.source_url}"]`)).not.toBeNull();
+  expect(host.querySelector(`a[href="${manual_install.license_url}"]`)).not.toBeNull();
+  expect(buttonNamed('create')?.disabled).toBe(true);
+  expect(sent).toHaveLength(0);
+});
+
 it('reuses the MiniMax-H3 prompt, duration, seed and format without a lyrics field', async () => {
   vi.stubGlobal('fetch', vi.fn(async () => Response.json({ engine: 'audio.cpp', models: [
     { id: 'minimax_h3', name: 'MiniMax-H3', profile_id: 'minimax_h3_q4_k', quantization: 'Q4_K', ready: true, missing: [] },
