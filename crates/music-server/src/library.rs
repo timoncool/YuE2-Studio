@@ -1284,7 +1284,7 @@ mod stored_job_tests {
         job.request = serde_json::json!({"client_ref":reference});
         library.save_music_job(&job).unwrap();
         let song = library.create_song(serde_json::from_value(serde_json::json!({
-            "title":"Base", "metadata":{"job_id":"job"}
+            "title":"Base", "engine_id":"yue2-cpp", "metadata":{"job_id":"job"}
         })).unwrap()).unwrap();
         library.update_playlist(playlist, PlaylistInput {
             name:"Audition".into(),description:None,song_ids:vec![song.id],
