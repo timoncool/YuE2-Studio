@@ -87,7 +87,8 @@ switch ($Build) {
             'sm_89' { '89-real' }
         }
         $flags = "-DGGML_CUDA=ON -DGGML_CUDA_NCCL=OFF `"-DCMAKE_CUDA_ARCHITECTURES=$architectures`""
-        $setup = "call `"$(Get-VcVars64)`" >nul"
+        # CUDA 13.3 cudafe++ fails with MSVC 14.52; use the same supported compiler as CUDA 12.9.
+        $setup = "call `"$(Get-VcVars64)`" -vcvars_ver=14.44 >nul"
         $tools = @($source.target, $midi.target, 'ace-caption')
         $buildDirectory = "build-tools-$CudaArchitecture"
     }
