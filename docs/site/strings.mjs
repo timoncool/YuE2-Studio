@@ -42,7 +42,7 @@ export const SAMPLES = [
 export const STRINGS = {
   en: {
     label: 'English',
-    title: 'YuE2 Studio — full songs with an editable score, on your own GPU',
+    title: 'YuE2 Studio — make music with YuE2, ACE-Step and MiniMax',
     description: 'Make songs with YuE2, ACE-Step and MiniMax in one studio. Bring your tracks and playlists into a shared library, compare takes and try another voice with RVC.',
     heroTitle: 'YuE2, ACE-Step and MiniMax in one music studio',
     heroLead: 'Choose a model and engine when you create a song. With YuE2 you can edit the score and render another take. Bring in songs and playlists from ACE-Step Studio or MiniMax Music3 Studio, play the originals and compare them with new takes. Local engines run on your computer. OpenRouter music models are also available.',
@@ -50,7 +50,7 @@ export const STRINGS = {
     ctaSource: 'Source on GitHub',
     ctaDonate: 'Support the project',
     ctaStats: 'Open stats',
-    ctaNote: 'Windows 10/11 x64 and a GPU with 6 GB of VRAM: NVIDIA (GTX 900 or newer) on CUDA; AMD and Intel on Vulkan are experimental. The models are downloaded from inside the studio when you decide to.',
+    ctaNote: 'Windows 10/11 x64. Download local models inside the studio. GPU support and memory requirements depend on the model and engine; see the GPU measurements below.',
     featuresTitle: 'What it does',
     featuresSub: 'Everything below runs on your machine unless you connect a cloud key yourself.',
     features: [
@@ -160,7 +160,7 @@ export const STRINGS = {
 
   ru: {
     label: 'Русский',
-    title: 'YuE2 Studio — целые песни с редактируемой партитурой на своей видеокарте',
+    title: 'YuE2 Studio — создание музыки с YuE2, ACE-Step и MiniMax',
     description: 'YuE2, ACE-Step и MiniMax в одной музыкальной студии. Переносите треки и плейлисты, сравнивайте дубли и пробуйте другие голоса через RVC.',
     heroTitle: 'YuE2, ACE-Step и MiniMax в одной музыкальной студии',
     heroLead: 'Выберите модель и движок при создании песни. В YuE2 можно поправить ноты и записать новый дубль по той же партитуре. Перенесите песни и плейлисты из ACE-Step Studio или MiniMax Music3 Studio, чтобы слушать оригиналы и сравнивать дубли в одной библиотеке. Локальные движки работают на вашем компьютере. Также доступны музыкальные модели OpenRouter.',
@@ -168,7 +168,7 @@ export const STRINGS = {
     ctaSource: 'Исходники на GitHub',
     ctaDonate: 'Поддержать проект',
     ctaStats: 'Открытая статистика',
-    ctaNote: 'Windows 10/11 x64 и видеокарта с 6 ГБ видеопамяти: NVIDIA (GTX 900 и новее) через CUDA; AMD и Intel через Vulkan — экспериментально. Модели скачиваются из самой студии, когда вы решите.',
+    ctaNote: 'Windows 10/11 x64. Локальные модели скачиваются из студии. Поддержка видеокарт и расход видеопамяти зависят от модели и движка. Замеры приведены ниже.',
     featuresTitle: 'Что умеет',
     featuresSub: 'Всё ниже работает на вашем компьютере, пока вы сами не подключите облачный ключ.',
     features: [
@@ -278,7 +278,7 @@ export const STRINGS = {
 
   zh: {
     label: '中文',
-    title: 'YuE2 Studio — 在你自己的显卡上生成带可编辑乐谱的完整歌曲',
+    title: 'YuE2 Studio — 使用 YuE2、ACE-Step 和 MiniMax 创作音乐',
     description: '在同一款音乐工作室中使用 YuE2、ACE-Step 和 MiniMax。导入曲目和播放列表，比较不同版本，并通过 RVC 尝试其他音色。',
     heroTitle: '一个音乐工作室，支持 YuE2、ACE-Step 和 MiniMax',
     heroLead: '创作歌曲时可以选择模型和引擎。使用 YuE2 时，可以编辑乐谱，再按同一份乐谱生成新版本。从 ACE-Step Studio 或 MiniMax Music3 Studio 导入歌曲和播放列表，在同一个音乐库中播放原曲并比较不同版本。本地引擎在你的电脑上运行，也可以选择 OpenRouter 的音乐模型。',
@@ -286,7 +286,7 @@ export const STRINGS = {
     ctaSource: 'GitHub 源代码',
     ctaDonate: '支持项目',
     ctaStats: '公开统计',
-    ctaNote: 'Windows 10/11 x64，显存 6 GB 以上的显卡：NVIDIA（GTX 900 或更新）使用 CUDA；AMD 和 Intel 通过 Vulkan 运行，属实验性质。模型在工作室内按你的决定下载。',
+    ctaNote: '支持 Windows 10/11 x64。在工作室内下载本地模型。支持的显卡和显存需求取决于模型和引擎，实测结果见下方。',
     featuresTitle: '功能',
     featuresSub: '除非你自己接入云端密钥，以下一切都在你的电脑上运行。',
     features: [
@@ -396,7 +396,7 @@ export const STRINGS = {
 
   ja: {
     label: '日本語',
-    title: 'YuE2 Studio — 編集できる楽譜つきのフルソングを自分の GPU で',
+    title: 'YuE2 Studio — YuE2、ACE-Step、MiniMax で音楽制作',
     description: 'YuE2、ACE-Step、MiniMax をひとつの音楽スタジオで。曲とプレイリストを取り込み、テイクを聴き比べ、RVC で別の歌声を試せます。',
     heroTitle: 'YuE2、ACE-Step、MiniMax をひとつの音楽スタジオで',
     heroLead: '曲を作るときにモデルとエンジンを選べます。YuE2 では楽譜を編集して、同じ譜面から別のテイクを作れます。ACE-Step Studio や MiniMax Music3 Studio の曲とプレイリストを取り込むと、元の曲と新しいテイクを同じライブラリで聴き比べられます。ローカルエンジンはお使いのパソコンで動作し、OpenRouter の音楽モデルも選べます。',
@@ -404,7 +404,7 @@ export const STRINGS = {
     ctaSource: 'GitHub のソース',
     ctaDonate: 'プロジェクトを支援',
     ctaStats: 'オープンな統計',
-    ctaNote: 'Windows 10/11 x64 と VRAM 6 GB 以上の GPU：NVIDIA（GTX 900 以降）は CUDA で動作。AMD と Intel の Vulkan は実験的です。モデルはスタジオ内から、あなたが決めたときにダウンロードされます。',
+    ctaNote: 'Windows 10/11 x64 対応。ローカルモデルはスタジオ内でダウンロードできます。対応 GPU と必要なメモリはモデルとエンジンによって異なります。下の実測値をご覧ください。',
     featuresTitle: 'できること',
     featuresSub: 'クラウドキーを自分で接続しない限り、以下はすべてあなたのマシンで動きます。',
     features: [
@@ -514,7 +514,7 @@ export const STRINGS = {
 
   ko: {
     label: '한국어',
-    title: 'YuE2 Studio — 편집 가능한 악보가 있는 완성곡을 내 GPU에서',
+    title: 'YuE2 Studio — YuE2, ACE-Step, MiniMax로 음악 만들기',
     description: 'YuE2, ACE-Step, MiniMax로 한 스튜디오에서 음악을 만드세요. 곡과 플레이리스트를 가져오고, 테이크를 비교하고, RVC로 다른 목소리를 들어 볼 수 있습니다.',
     heroTitle: '한 음악 스튜디오에서 만나는 YuE2, ACE-Step, MiniMax',
     heroLead: '곡을 만들 때 모델과 엔진을 선택하세요. YuE2에서는 악보를 수정한 다음 같은 악보로 새 테이크를 만들 수 있습니다. ACE-Step Studio나 MiniMax Music3 Studio에서 곡과 플레이리스트를 가져와 한 라이브러리에서 원곡과 새 테이크를 비교하세요. 로컬 엔진은 내 컴퓨터에서 실행되며 OpenRouter 음악 모델도 선택할 수 있습니다.',
@@ -522,7 +522,7 @@ export const STRINGS = {
     ctaSource: 'GitHub 소스',
     ctaDonate: '프로젝트 후원',
     ctaStats: '공개 통계',
-    ctaNote: 'Windows 10/11 x64와 VRAM 6 GB 이상의 그래픽카드: NVIDIA(GTX 900 이상)는 CUDA로 동작하며 AMD와 Intel의 Vulkan은 실험적입니다. 모델은 스튜디오 안에서 원할 때 내려받습니다.',
+    ctaNote: 'Windows 10/11 x64를 지원합니다. 로컬 모델은 스튜디오에서 내려받을 수 있습니다. 지원 GPU와 필요한 그래픽 메모리는 모델과 엔진에 따라 다릅니다. 아래 측정 결과를 참고하세요.',
     featuresTitle: '기능',
     featuresSub: '직접 클라우드 키를 연결하지 않는 한, 아래 모든 것은 내 컴퓨터에서 실행됩니다.',
     features: [
@@ -631,7 +631,7 @@ export const STRINGS = {
   },
   pt: {
     label: 'Português',
-    title: 'YuE2 Studio — músicas inteiras com partitura editável, na sua própria placa gráfica',
+    title: 'YuE2 Studio — crie música com YuE2, ACE-Step e MiniMax',
     description: 'Crie músicas com YuE2, ACE-Step e MiniMax num único estúdio. Importe faixas e listas de reprodução, compare versões e experimente outras vozes com RVC.',
     heroTitle: 'YuE2, ACE-Step e MiniMax num único estúdio de música',
     heroLead: 'Escolha o modelo e o motor ao criar uma música. Com o YuE2, pode editar a partitura e gerar outra versão. Importe músicas e listas de reprodução do ACE-Step Studio ou do MiniMax Music3 Studio para ouvir as gravações originais e comparar versões na mesma biblioteca. Os motores locais funcionam no seu computador. Também pode escolher modelos de música do OpenRouter.',
@@ -639,7 +639,7 @@ export const STRINGS = {
     ctaSource: 'Código no GitHub',
     ctaDonate: 'Apoiar o projeto',
     ctaStats: 'Estatísticas abertas',
-    ctaNote: 'Windows 10/11 x64 e uma placa gráfica com 6 GB de VRAM: NVIDIA (GTX 900 ou mais recente) em CUDA; AMD e Intel em Vulkan são experimentais. Os modelos são descarregados de dentro do estúdio quando o decidir.',
+    ctaNote: 'Windows 10/11 x64. Descarregue os modelos locais no estúdio. As placas gráficas compatíveis e a memória necessária dependem do modelo e do motor. Consulte as medições abaixo.',
     featuresTitle: 'O que faz',
     featuresSub: 'Tudo o que está abaixo corre na sua máquina, a não ser que ligue uma chave de nuvem.',
     features: [
