@@ -28,7 +28,8 @@ pub(super) async fn profiles(State(state): State<AppState>) -> Json<Value> {
         "profiles": [{"id": PROFILE, "label": "MuLaCover · HOT-Step · BF16", "ready": missing.is_empty(), "missing": missing},
             crate::hotstep_sa3::profile(&state, server).await, crate::hotstep_heartmula::profile(&state, server).await,
             hotstep_generation::profile(&state, server, Family::MiniMax).await,
-            hotstep_generation::profile(&state, server, Family::Ace).await]
+            hotstep_generation::profile(&state, server, Family::Ace).await,
+            hotstep_generation::profile(&state, server, Family::Yue).await]
     }))
 }
 
