@@ -223,6 +223,166 @@ async fn audio_cpp_minimax_music3_generates_and_saves_q8_provenance() {
 }
 
 #[tokio::test]
+async fn cancelled_audio_cpp_heartmula_worker_exits_before_the_next_song() {
+    use base64::Engine as _;
+    use std::io::Write;
+    use tokio::net::TcpStream;
+
+    let root = tempfile::tempdir().unwrap();
+    let engine = build_engine(root.path()).await;
+    let data = root.path().join("data");
+    let model = data.join("audiocpp/models/HeartMuLa-GGUF/heartmula-q8_0.gguf");
+    fs::create_dir_all(model.parent().unwrap()).unwrap();
+    let mut weights = fs::File::create(&model).unwrap();
+    #[cfg(windows)]
+    {
+        let sparse = Command::new("fsutil")
+            .args(["sparse", "setflag"])
+            .arg(&model)
+            .status()
+            .await
+            .unwrap();
+        assert!(sparse.success());
+    }
+    weights.write_all(b"GGUF").unwrap();
+    weights.set_len(7_659_762_592).unwrap();
+    drop(weights);
+
+    let wav = fs::read(root.path().join("fixture.wav")).unwrap();
+    let encoded = base64::engine::general_purpose::STANDARD.encode(wav);
+    fs::write(
+        root.path().join("audio-cpp-response.json"),
+        json!({"audio": encoded}).to_string(),
+    )
+    .unwrap();
+    fs::write(root.path().join("audio-cpp-hold-next"), b"").unwrap();
+
+    let port = free_port().await;
+    let http = Client::builder()
+        .no_proxy()
+        .timeout(Duration::from_secs(5))
+        .build()
+        .unwrap();
+    let url = format!("http://127.0.0.1:{port}");
+    let jobs = format!("{url}/v1/music/jobs");
+    let mut studio = Command::new(env!("CARGO_BIN_EXE_music-server"))
+        .env("YUE_STUDIO_PORT", port.to_string())
+        .env("YUE_ENGINE_BIN", root.path().join("absent-yue-server"))
+        .env("YUE_STUDIO_DATA_ROOT", &data)
+        .env("YUE_AUDIOCPP_SERVER", &engine)
+        .env("TIMONCOOL_SHARED_DIR", root.path().join("registry"))
+        .env("DO_NOT_TRACK", "1")
+        .kill_on_drop(true)
+        .spawn()
+        .unwrap();
+    timeout(Duration::from_secs(30), async {
+        while http.get(format!("{url}/health")).send().await.is_err() {
+            sleep(Duration::from_millis(50)).await;
+        }
+    })
+    .await
+    .unwrap();
+    let request = json!({
+        "music_source":{"kind":"audio_cpp","model":"heartmula"},
+        "title":"Cancelled fixture song", "style":"Soft piano", "duration_seconds":3.2,
+        "steps":2, "seed":42,
+    });
+    let first: Value = json_response(http.post(&jobs).json(&request)).await;
+    let id = first["id"].as_str().unwrap();
+    let worker: Value = timeout(Duration::from_secs(20), async {
+        loop {
+            if let Ok(bytes) = fs::read(root.path().join("audio-cpp-held-worker.json"))
+                && let Ok(ready) = serde_json::from_slice(&bytes)
+            {
+                break ready;
+            }
+            sleep(Duration::from_millis(50)).await;
+        }
+    })
+    .await
+    .unwrap();
+    let worker_port = worker["port"].as_u64().unwrap() as u16;
+    let sent: Value =
+        serde_json::from_slice(&fs::read(root.path().join("audio-cpp-submitted.json")).unwrap())
+            .unwrap();
+    assert_eq!(sent["model"], "heartmula");
+    assert_eq!(sent["request"]["options"]["tags"], "Soft piano");
+    assert!(TcpStream::connect(("127.0.0.1", worker_port)).await.is_ok());
+    assert_eq!(
+        http.post(&jobs)
+            .json(&request)
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::CONFLICT
+    );
+
+    let stopping: Value = json_response(http.post(format!("{jobs}/{id}"))).await;
+    assert_eq!(stopping["status"], "running");
+    assert!(
+        stopping["message"]
+            .as_str()
+            .unwrap()
+            .starts_with("Stopping")
+    );
+    let cancelled: Value = timeout(Duration::from_secs(5), async {
+        loop {
+            let job: Value = json_response(http.get(format!("{jobs}/{id}"))).await;
+            if job["status"] == "cancelled" {
+                break job;
+            }
+            assert_eq!(job["status"], "running");
+            sleep(Duration::from_millis(50)).await;
+        }
+    })
+    .await
+    .expect("cancellation released the engine without waiting for the held task");
+    assert!(cancelled["song"].is_null());
+    assert!(
+        TcpStream::connect(("127.0.0.1", worker_port))
+            .await
+            .is_err()
+    );
+    assert!(!root.path().join("audio-cpp-finished-hold").exists());
+
+    let mut retry = request;
+    retry["title"] = json!("Next fixture song");
+    let next: Value = json_response(http.post(&jobs).json(&retry)).await;
+    let id = next["id"].as_str().unwrap();
+    let completed: Value = timeout(Duration::from_secs(10), async {
+        loop {
+            let job: Value = json_response(http.get(format!("{jobs}/{id}"))).await;
+            if job["status"] == "completed" {
+                break job;
+            }
+            assert_eq!(job["status"], "running");
+            sleep(Duration::from_millis(50)).await;
+        }
+    })
+    .await
+    .unwrap();
+    let audio = completed["song"]["audio_url"].as_str().unwrap();
+    let media = http
+        .get(format!("{url}{audio}"))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .bytes()
+        .await
+        .unwrap();
+    assert_eq!(&media[..4], b"fLaC");
+    let new_pid: u64 = fs::read_to_string(root.path().join("audio-cpp-completed-worker.pid"))
+        .unwrap()
+        .parse()
+        .unwrap();
+    assert_ne!(Some(new_pid), worker["pid"].as_u64());
+    studio.kill().await.unwrap();
+}
+
+#[tokio::test]
 async fn audio_cpp_vevo2_rejects_truncated_weights_and_sings_with_a_local_bundle() {
     use base64::Engine as _;
     use reqwest::multipart::{Form, Part};

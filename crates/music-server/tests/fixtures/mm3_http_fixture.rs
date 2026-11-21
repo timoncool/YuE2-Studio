@@ -27,11 +27,11 @@ fn main() {
     let listener = TcpListener::bind(address).unwrap();
     let mut count = 0;
     for client in listener.incoming().flatten() {
-        let _ = handle(client, &mut count);
+        let _ = handle(client, &mut count, port);
     }
 }
 
-fn handle(mut client: TcpStream, count: &mut u32) -> std::io::Result<()> {
+fn handle(mut client: TcpStream, count: &mut u32, port: u16) -> std::io::Result<()> {
     let mut input = BufReader::new(&mut client);
     let mut request = String::new();
     input.read_line(&mut request)?;
@@ -60,6 +60,15 @@ fn handle(mut client: TcpStream, count: &mut u32) -> std::io::Result<()> {
         ("GET", "/health") => ("200 OK", "application/json", b"{}".to_vec()),
         ("POST", "/v1/tasks/run") => {
             fs::write("audio-cpp-submitted.json", body)?;
+            if fs::remove_file("audio-cpp-hold-next").is_ok() {
+                fs::write(
+                    "audio-cpp-held-worker.json",
+                    format!(r#"{{"pid":{},"port":{port}}}"#, std::process::id()),
+                )?;
+                std::thread::sleep(std::time::Duration::from_secs(20));
+                fs::write("audio-cpp-finished-hold", b"")?;
+            }
+            fs::write("audio-cpp-completed-worker.pid", std::process::id().to_string())?;
             (
                 "200 OK",
                 "application/json",

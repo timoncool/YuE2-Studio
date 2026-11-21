@@ -1,4 +1,4 @@
-//! Offline music tasks through the shared audio.cpp server.
+//! Offline music tasks through an audio.cpp process owned by music generation.
 use super::*;
 use acpp_server::asset::Build;
 use acpp_server::{Mode, ModelEntry};
@@ -80,7 +80,7 @@ impl Family {
         }
     }
 
-    fn dedicated(self) -> bool {
+    fn supports_weight_residency(self) -> bool {
         matches!(self, Self::Yue | Self::Ace)
     }
 
@@ -887,10 +887,8 @@ async fn submit_with_source(
         return reject(StatusCode::CONFLICT, format!("ACE-Step is busy: {error:#}"));
     }
     state.minimax.stop().await;
-    let keep_weights = matches!(state.engine_options.read().await.keep_loaded, KeepLoaded::Yes);
-    if !family.dedicated() {
-        state.acpp.evict_idle_card_music();
-    }
+    let keep_weights = family.supports_weight_residency()
+        && matches!(state.engine_options.read().await.keep_loaded, KeepLoaded::Yes);
     evict_native_kept_models(&state, "before audio.cpp music generation").await;
     let mut settings = serde_json::json!({
         "music_source": request.music_source, "family": family.id(), "profile_id": family.profile(),
@@ -1027,28 +1025,10 @@ async fn submit_with_source(
         let outcome = tokio::task::spawn_blocking(move || {
             anyhow::ensure!(!stop.load(Ordering::SeqCst), "stopped");
             let (body, _references) = task.into_request(&stop)?;
-            if family.dedicated() {
-                let reply = acpp.run_music(build, family.entry(path), body, &stop, keep_weights)?;
-                return shape(&reply, &settings);
-            }
-            acpp.stop_music();
-            acpp.with_server(
-                build,
-                family.entry(path),
-                &|| stop.load(Ordering::SeqCst),
-                |server| {
-                    anyhow::ensure!(!stop.load(Ordering::SeqCst), "stopped");
-                    // A disconnected JSON client still leaves the shared server running.
-                    // Hold its lease until the answer so tools cannot replace it mid-task.
-                    let reply = server.run_task(family.id(), body, &AtomicBool::new(false));
-                    // Release only this model before another engine can claim the card.
-                    if let Err(error) = server.unload(&[family.id()]) {
-                        studio_log!("[ERROR] unloading audio.cpp {}: {error:#}", family.name());
-                    }
-                    anyhow::ensure!(!stop.load(Ordering::SeqCst), "stopped");
-                    shape(&reply?, &settings)
-                },
-            )
+            // Cancelling the HTTP request alone would leave inference running.
+            // Only music uses this process, so it can be reaped without stopping tools.
+            let reply = acpp.run_music(build, family.entry(path), body, &stop, keep_weights)?;
+            shape(&reply, &settings)
         })
         .await
         .context("the audio.cpp worker stopped")
@@ -1249,9 +1229,7 @@ pub(super) async fn cancel(
         if let Some(stop) = state.audio_cpp_music_stops.read().await.get(id) {
             stop.store(true, Ordering::SeqCst);
         }
-        let dedicated = job.engine_id == ENGINE
-            && job.generation_settings["family"].as_str().and_then(Family::parse).is_some_and(Family::dedicated);
-        if dedicated {
+        if job.engine_id == ENGINE {
             job.message = "Stopping audio.cpp generation and releasing its engine.".into();
         } else {
             stop_on_request(job);
