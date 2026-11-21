@@ -667,10 +667,15 @@ while ([DateTime]::UtcNow -lt $deadline -and !(Test-Path -LiteralPath $env:STUDI
           $_.Current.ControlType -eq [Windows.Automation.ControlType]::Text -and !$_.Current.IsOffscreen
         } | ForEach-Object { $_.Current.Name })
         $readBack = if ($value) { $value.Current.Value }
-        if ((!$expand -or $expand.Current.ExpandCollapseState -eq 'Collapsed') -and
-            (@($readBack) + $selected + $shown | Where-Object { $_ -match '^A4($|[\s(])' })) {
+        if ($readBack -match '^A4($|[\s(])' -or
+            ((!$expand -or $expand.Current.ExpandCollapseState -eq 'Collapsed') -and
+            (@($selected) + $shown | Where-Object { $_ -match '^A4($|[\s(])' }))) {
           $paperSet = $true
           Write-Output (@{confirmedPaper='A4';value=$readBack;selected=$selected;shown=$shown} | ConvertTo-Json -Compress)
+          if ($destinations -notcontains 'Studio QA PDF') { throw 'Verified A4 on an unexpected printer' }
+          $confirm.GetCurrentPattern([Windows.Automation.InvokePattern]::Pattern).Invoke()
+          Write-Output 'Confirmed A4 print on Studio QA PDF'
+          $confirmed = $true
           break
         }
 
@@ -710,7 +715,6 @@ while ([DateTime]::UtcNow -lt $deadline -and !(Test-Path -LiteralPath $env:STUDI
               $paperChoiceInvoked = $true
             }
             if ($paperChoiceInvoked) {
-              if ($expand -and $expand.Current.ExpandCollapseState -eq 'Expanded') { $expand.Collapse() }
               Write-Output "Selected A4 option via UIA: $($a4.Current.ControlType.ProgrammaticName)"
               break
             }
@@ -720,7 +724,6 @@ while ([DateTime]::UtcNow -lt $deadline -and !(Test-Path -LiteralPath $env:STUDI
           Write-Output (@{popupRoots=@($popupRoots | ForEach-Object { "$($_.Current.ClassName):$($_.Current.Name)" });a4Options=@($a4Options | ForEach-Object {$_.Current.ControlType.ProgrammaticName});expanded="$($expand.Current.ExpandCollapseState)"} | ConvertTo-Json -Compress)
           $paper.SetFocus()
           [Windows.Forms.SendKeys]::SendWait('{HOME}a4')
-          if ($expand -and $expand.Current.ExpandCollapseState -eq 'Expanded') { $expand.Collapse() }
           Write-Output 'Tried A4 keyboard selection on the focused paper picker'
           $paperStrategy = 3
         }
