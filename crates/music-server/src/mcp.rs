@@ -1958,9 +1958,9 @@ fn tools() -> &'static [Tool] {
             },
             Tool {
                 name: "stems_split",
-                description: "Split a library song into stems with the chosen separator: six (drums, bass, other, vocals, guitar, piano) with HT-Demucs, or vocals and instrumental with Mel-Band RoFormer (separator_settings_get names it). Each stem becomes a track of the library made from the song (made_from, made_by stems), replacing the stems of an earlier split; stems_get names them. A stem is not split again: split the song it came from. Wait with studio_wait until stems.",
-                schema: || id_only("song_id", "library song id"),
-                call: |args| post(format!("/v1/library/songs/{}/stems", segment(&text(args, "song_id")?)), json!({})),
+                description: "Split a library song into stems with the chosen separator: six (drums, bass, other, vocals, guitar, piano) with HT-Demucs, or vocals and instrumental with Mel-Band RoFormer (separator_settings_get names it). Optionally select engine for just this split. Each stem becomes a track of the library made from the song (made_from, made_by stems), replacing the stems of an earlier split; stems_get names them. A stem is not split again: split the song it came from. Wait with studio_wait until stems.",
+                schema: || object(json!({ "song_id": { "type": "string" }, "engine": { "type": "string", "enum": ["htdemucs", "roformer"] } }), &["song_id"]),
+                call: |args| post(format!("/v1/library/songs/{}/stems", segment(&text(args, "song_id")?)), body_without(args, &["song_id"])),
             },
             Tool {
                 name: "stems_get",

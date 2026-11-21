@@ -2766,6 +2766,10 @@ async fn separation_status(State(state): State<AppState>) -> Json<Value> {
         "card_missing_bytes": card_missing_bytes,
         "missing_bytes": runtime_missing_bytes + if model_installed { 0 } else { model.bytes },
         "ready": model_installed && server_installed,
+        "engines": {
+            "htdemucs": { "ready": htdemucs_installed(&state, config.runtime) },
+            "roformer": { "ready": state.separator.roformer_installed(roformer_on_card(&state, config.runtime)) }
+        },
         "engine": engine,
         "stems": engine_stems(engine),
         // Either downloader may be the busy one: the model has its own, audio.cpp's server comes through its own.
@@ -4042,10 +4046,16 @@ async fn read_stem_audio(
     Ok(serve_audio_file(&path, request).await)
 }
 
-/// Separates one track into stems, in the background, reporting progress.
+#[derive(Deserialize)]
+struct SeparateTrackRequest {
+    engine: Option<separation::Engine>,
+}
+
+/// Separates one track into stems, optionally choosing an engine for this run.
 async fn start_separation(
     State(state): State<AppState>,
     Path(id): Path<String>,
+    request: Option<Json<SeparateTrackRequest>>,
 ) -> Result<Json<Value>, (StatusCode, Json<ApiError>)> {
     let song = state
         .library
@@ -4061,7 +4071,11 @@ async fn start_separation(
     if state.separation_run.read().await.as_ref().is_some_and(|run| !run.done) {
         return Err(api_error(StatusCode::CONFLICT, "a track is already being separated".into()));
     }
-    let config = state.separation_config.read().await.clone();
+    let mut config = state.separation_config.read().await.clone();
+    if let Some(engine) = request.and_then(|Json(request)| request.engine) {
+        config.engine = engine;
+        config.stems = engine_stems(engine).iter().map(|stem| (*stem).into()).collect();
+    }
     let wanted_runtime = config.runtime;
     let engine = config.engine;
     // audio.cpp's server of the chosen device is HT-Demucs's; Mel-Band RoFormer runs its own engine
@@ -4083,8 +4097,13 @@ async fn start_separation(
         .media_path_for_song(&song)
         .ok_or_else(|| api_error(StatusCode::BAD_REQUEST, "this track has no stored audio".into()))?;
 
-    *state.separation_run.write().await =
-        Some(SeparationRun { song_id: id.clone(), progress: 0.0, started_ms: unix_millis(), done: false, error: None, stems: vec![], used_gpu: None, library_songs: vec![] });
+    {
+        let mut run = state.separation_run.write().await;
+        if run.as_ref().is_some_and(|run| !run.done) {
+            return Err(api_error(StatusCode::CONFLICT, "a track is already being separated".into()));
+        }
+        *run = Some(SeparationRun { song_id: id.clone(), progress: 0.0, started_ms: unix_millis(), done: false, error: None, stems: vec![], used_gpu: None, library_songs: vec![] });
+    }
 
     let model = state.separator.model_path();
     let wanted = config.stems.clone();
