@@ -89,6 +89,7 @@ pub struct InstalledProfile {
     pub total_bytes: u64,
     pub ready: bool,
     pub missing: Vec<&'static str>,
+    pub native_adapters: Vec<crate::adapters::Installed>,
 }
 
 pub struct Installation {
@@ -180,6 +181,30 @@ fn find_executable(root: &Path) -> Option<PathBuf> {
     .find(|path| usable_executable(path))
 }
 
+fn contains_adapter(directory: &Path, name: &str) -> bool {
+    if name.starts_with('.') || name.contains(['/', '\\', ':']) || name.is_empty() {
+        return false;
+    }
+    let path = directory.join(name);
+    if name.ends_with(".safetensors") && path.is_file() {
+        return true;
+    }
+    if path.join("adapter_model.safetensors").is_file()
+        || path.join("lokr_weights.safetensors").is_file()
+    {
+        return true;
+    }
+    path.join("adapter_config.json").is_file()
+        && fs::read_dir(path).is_ok_and(|files| {
+            files.filter_map(std::result::Result::ok).any(|file| {
+                file.path()
+                    .extension()
+                    .is_some_and(|extension| extension == "safetensors")
+                    && file.path().is_file()
+            })
+        })
+}
+
 impl Installation {
     pub fn engine_installed(&self) -> bool {
         self.executable.as_deref().is_some_and(usable_executable)
@@ -188,8 +213,27 @@ impl Installation {
     pub fn profiles(&self) -> Vec<InstalledProfile> {
         PROFILES
             .iter()
-            .map(|profile| self.profile_root(profile).1)
+            .map(|profile| {
+                let (root, mut status) = self.profile_root(profile);
+                if status.ready && self.engine_installed() {
+                    status.native_adapters = self.profile_adapters(profile, root);
+                }
+                status
+            })
             .collect()
+    }
+
+    fn profile_adapters(&self, profile: &Profile, root: &Path) -> Vec<crate::adapters::Installed> {
+        let Ok(Some(adapters)) = self.adapter_root(root, None) else {
+            return Vec::new();
+        };
+        let family = if profile.weights[0].name.contains("-xl-") { "xl" } else { "2b" };
+        let library = crate::adapters::AdapterLibrary::at(adapters, ENGINE_ID);
+        library.installed(None).into_iter().filter(|entry| {
+            entry.meta.model.as_deref() == Some(family)
+                && entry.meta.slots.iter().any(|slot| slot == "dit")
+                && contains_adapter(library.root(), &entry.meta.id)
+        }).collect()
     }
 
     fn profile_root(&self, profile: &Profile) -> (&Path, InstalledProfile) {
@@ -279,27 +323,6 @@ impl Installation {
         replay: Option<&serde_json::Value>,
     ) -> Result<Option<PathBuf>> {
         use serde_json::Value;
-
-        fn contains_adapter(directory: &Path, name: &str) -> bool {
-            let path = directory.join(name);
-            if name.ends_with(".safetensors") && path.is_file() {
-                return true;
-            }
-            if path.join("adapter_model.safetensors").is_file()
-                || path.join("lokr_weights.safetensors").is_file()
-            {
-                return true;
-            }
-            path.join("adapter_config.json").is_file()
-                && fs::read_dir(path).is_ok_and(|files| {
-                    files.filter_map(std::result::Result::ok).any(|file| {
-                        file.path()
-                            .extension()
-                            .is_some_and(|extension| extension == "safetensors")
-                            && file.path().is_file()
-                    })
-                })
-        }
 
         let own = self.data_root.join("adapters").join(ENGINE_ID);
         let source_dir = self
@@ -401,6 +424,7 @@ impl Profile {
             total_bytes: self.weights.iter().map(|weight| weight.bytes).sum(),
             ready: missing.is_empty(),
             missing,
+            native_adapters: Vec::new(),
         }
     }
 
@@ -641,6 +665,18 @@ mod discovery_tests {
         fs::create_dir_all(&packaged_adapter).unwrap();
         fs::write(packaged_adapter.join("adapter_config.json"), b"{}").unwrap();
         fs::write(packaged_adapter.join("saved-lora.safetensors"), b"fixture").unwrap();
+        let manifest = |id, model| serde_json::json!({
+            "id": id, "engine": ENGINE_ID, "name": id, "model": model,
+            "slots": ["dit"], "origin": {"type": "imported"}
+        });
+        fs::write(packaged_adapter.join("adapter.json"), manifest("saved-lora", "2b").to_string()).unwrap();
+        let wrong_family = adapters.join("wrong-family");
+        fs::create_dir(&wrong_family).unwrap();
+        fs::write(wrong_family.join("adapter.json"), manifest("wrong-family", "xl").to_string()).unwrap();
+        fs::write(wrong_family.join("adapter_model.safetensors"), b"fixture").unwrap();
+        let available = installed.profile_adapters(&profile, &source);
+        assert_eq!(available.len(), 1);
+        assert_eq!(available[0].meta.id, "saved-lora");
         let replay = serde_json::json!({"adapters":[{"name":"saved-lora","scale":1}]});
         assert_eq!(
             installed.adapter_root(&source, Some(&replay)).unwrap(),

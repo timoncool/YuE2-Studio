@@ -591,6 +591,7 @@ const JOURNAL: &[(&str, &str, &str)] = &[
     ("separator_install", "started", "download"),
     ("separator_runtime_install", "started", "download"),
     ("hotstep_cover_install", "started", "download"),
+    ("hotstep_minimax_install", "started", "download"),
     ("hotstep_sa3_install", "started", "download"),
     ("mulacover_runtime_install", "started", "download"),
     ("vevo2_model_directory_set", "updated", "settings"),
@@ -1863,7 +1864,7 @@ fn tools() -> &'static [Tool] {
             },
             Tool {
                 name: "song_replay",
-                description: "Render a library song again. HOT-Step Stable Audio 3 uses the saved prompt, model and adapter, with optional steps, seed or format overrides. Engines with saved audio codes can resynthesize those codes directly.",
+                description: "Render a library song again. HOT-Step Stable Audio 3 and MiniMax Music3 use their saved generation parameters, with optional steps, seed or format overrides. Engines with saved audio codes can resynthesize those codes directly.",
                 schema: || object(json!({ "song_id": { "type": "string" }, "steps": { "type": "integer" }, "solver": { "type": "string", "enum": ["midpoint", "ab2"] }, "seed": { "type": "integer" }, "synth_batch_size": { "type": "integer" }, "output_format": { "type": "string", "enum": ["flac", "mp3", "wav32"] }, "title": { "type": "string" } }), &["song_id"]),
                 call: |args| post("/v1/music/replay".into(), args.clone()),
             },
@@ -2414,6 +2415,12 @@ fn tools() -> &'static [Tool] {
                 description: "Install the HOT-Step HeartMuLa 3B Q8_0 generation profile. Read progress in hotstep_cover_profiles.",
                 schema: nothing,
                 call: |_| post("/v1/music/native/hotstep/heartmula/install".into(), json!({})),
+            },
+            Tool {
+                name: "hotstep_minimax_install",
+                description: "Install the published HOT-Step runtime and experimental compact MiniMax Music3 weights. Read progress in hotstep_cover_profiles.",
+                schema: nothing,
+                call: |_| post("/v1/music/native/hotstep/minimax-music3/install".into(), json!({})),
             },
             Tool {
                 name: "hotstep_sa3_install",

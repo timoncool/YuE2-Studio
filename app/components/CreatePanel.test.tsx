@@ -45,7 +45,10 @@ vi.mock('../services/adapters', async (original) => ({
   installCatalogAdapters: vi.fn(),
   useAdapterLibrary: () => ({ installed: [], slots: [] }),
 }));
-vi.mock('./AdapterPicker', () => ({ AdapterPicker: () => null }));
+vi.mock('./AdapterPicker', async original => {
+  const { AdapterPicker } = await original<typeof import('./AdapterPicker')>();
+  return { AdapterPicker: (props: React.ComponentProps<typeof AdapterPicker>) => props.nativeLibrary ? <AdapterPicker {...props} /> : null };
+});
 vi.mock('./AudioWaveform', () => ({ AudioWaveform: () => null }));
 vi.mock('./ScoreView', () => ({ ScoreView: () => null }));
 vi.mock('./WindowAudioCapture', () => ({
@@ -464,6 +467,56 @@ it('creates native ACE covers and restores a migrated repaint with its source, r
     task_type: 'repaint', repainting_start: 2, repainting_end: 4, source_song_id: 'origin',
     reference_song_id: 'voice', guidance_scale: 3,
   } });
+});
+
+it('keeps compatible native ACE LoRA separate and restores its saved scale', async () => {
+  const xl = { id: 'ace-xl', name: 'ACE XL Synthwave', engine: 'acestep-cpp', kind: 'style',
+    trigger: 'xl-exact', slots: ['dit'], scales: { dit: 0.6 }, model: 'xl', origin: { type: 'imported' } };
+  vi.mocked(fetch).mockImplementation(async url => {
+    const engine = String(url).match(/\/v1\/music\/native\/([^/]+)\/profiles$/)?.[1];
+    if (!engine) return Response.json([]);
+    const profile = { id: 'balanced', label: 'Balanced', ready: true, missing: [], total_bytes: 1 };
+    return Response.json({ engine, engine_installed: true, profiles: [
+      { ...profile, native_adapters: engine === 'acestep-cpp' ? [xl] : [] },
+      { ...profile, id: 'minimal', label: 'Minimal', native_adapters: [] },
+    ] });
+  });
+  const show = async (engine: 'acestep-cpp' | 'minimaxmusic-cpp', initialData?: { song: Song; timestamp: number }) => {
+    act(() => root.render(panel({ musicEngine: engine, initialData })));
+    await flush();
+  };
+  const select = (profile: string) => act(() => {
+    const input = host.querySelector<HTMLSelectElement>('select[aria-label="Local model"]')!;
+    input.value = profile;
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  const create = () => buttonNamed('create') as HTMLButtonElement;
+  await show('acestep-cpp');
+  select('balanced');
+  await flush();
+  type(field('textarea[aria-label="styleCardTitle"]')!, 'bright folk');
+  click(buttonNamed('adaptersAdd')!);
+  click(buttonNamed('ACE XL Synthwave')!);
+  click(create());
+  expect(sent[0]).toMatchObject({ style: 'xl-exact, bright folk', ace: { adapters: [{ name: 'ace-xl', scale: 0.6 }] } });
+  select('minimal');
+  expect(create().disabled).toBe(true);
+  await show('minimaxmusic-cpp');
+  select('balanced');
+  await flush();
+  click(create());
+  expect(sent[1]?.ace).toBeUndefined();
+  expect(sent[1]?.style).toBe('bright folk');
+  await show('acestep-cpp');
+  select('balanced');
+  await flush();
+  expect(field('input[aria-label="ACE XL Synthwave"]')).toBeTruthy();
+
+  const saved = { ditModel: 'acestep-cpp', lmModel: 'balanced', title: 'Saved take',
+    style: 'bright folk', lyrics: 'verse', generationParams: { adapters: [{ name: 'ace-xl', scale: 0.35 }] } } as Song;
+  await show('acestep-cpp', { song: saved, timestamp: 1 });
+  click(create());
+  expect(sent[2]?.ace?.adapters).toEqual([{ name: 'ace-xl', scale: 0.35 }]);
 });
 
 it('posts the remembered MiniMax output format and keeps it out of ACE requests', async () => {
@@ -1857,6 +1910,27 @@ it('restores HeartMuLa lyrics and its trained HOT-Step adapter without cover req
     style: 'pop,piano', lyrics: 'We rise with the morning light', duration_seconds: 4, seed: 42, cfg_scale: 1.5,
     hotstep_heartmula,
   });
+});
+
+it('restores MiniMax Music3 through HOT-Step as a text and lyrics pair', async () => {
+  const model = 'hotstep-minimax-music3';
+  vi.stubGlobal('fetch', vi.fn(async () => Response.json({
+    engine: 'hotstep', engine_installed: true,
+    profiles: [{ id: model, label: 'MiniMax Music3 · HOT-Step', ready: true, missing: [] }],
+  })));
+  const music_source = { kind: 'native', engine: 'hotstep', model };
+  const song = {
+    title: 'MiniMax take', ditModel: 'hotstep', style: 'folk', lyrics: '[Verse] Morning',
+    generationParams: { music_source, duration_seconds: 3.2, seed: 42, steps: 2 },
+  } as Song;
+  act(() => root.render(panel({ musicEngine: 'hotstep', initialData: { song, timestamp: 1 } })));
+  await flush();
+  expect(field('textarea[aria-label="lyrics"]')).not.toBeNull();
+  expect(host.textContent).not.toContain('Cover score');
+  click(buttonNamed('create')!);
+  expect(sent.at(-1)).toMatchObject({ music_source, style: 'folk', lyrics: '[Verse] Morning',
+    duration_seconds: 3.2, seed: 42, steps: 2 });
+  expect(sent.at(-1)?.cover_of).toBeUndefined();
 });
 
 it('restores HOT-Step cover source and lead sheet from a saved take', async () => {

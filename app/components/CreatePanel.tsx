@@ -457,11 +457,13 @@ const SamplingGrid: React.FC<{ value: SamplingText; defaults?: YueSampling; onCh
 };
 
 const NO_ACTIVITY: ActivityEntry[] = [];
+const hotStepMiniMaxProfile = 'hotstep-minimax-music3';
 
 const linkedMusicFamilies = [
   { id: 'minimaxmusic-cpp', name: 'MiniMax Music3', pairs: [
     { engine: 'minimaxmusic-cpp', label: 'minimaxmusic.cpp' },
     { engine: 'audio.cpp', label: 'audio.cpp', profile: audioCppMiniMax },
+    { engine: 'hotstep', label: 'HOT-Step', profile: hotStepMiniMaxProfile },
   ] },
   { id: 'heartmula', name: 'HeartMuLa', pairs: [
     { engine: 'audio.cpp', label: 'audio.cpp', profile: 'heartmula' },
@@ -498,13 +500,19 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
   const packages = useSignedMusicSelection(Boolean(onMusicEngineChange) || signed, signed);
   const nativeEngine = isProfileMusicEngine(musicEngine) ? musicEngine : undefined;
   const [aceTask, setAceTask] = useState(newAceTask);
+  const [aceAdapters, setAceAdapters] = useState<AdapterUse[]>([]);
   const aceEngine = nativeEngine === 'acestep-cpp';
   const aceOptions = aceEngine ? aceTaskOptions(aceTask) : undefined;
-  const audioCpp = nativeEngine === 'audio.cpp';
   const native = useNativeMusicProfiles(nativeEngine, Boolean(onMusicEngineChange));
+  const installedAceAdapters = native.profile?.native_adapters ?? [];
+  const enabledAceAdapters = aceAdapters.filter(adapter => !adapter.disabled);
+  const aceAdaptersReady = enabledAceAdapters.every(adapter =>
+    installedAceAdapters.some(installed => installed.id === adapter.id && !installed.error));
+  const audioCpp = nativeEngine === 'audio.cpp';
   const hotstepSa3 = nativeEngine === 'hotstep' && native.profile?.id === hotStepSa3Profile;
   const hotstepHeart = nativeEngine === 'hotstep' && native.profile?.id === hotStepHeartmulaProfile;
-  const hotstep = nativeEngine === 'hotstep' && !hotstepSa3 && !hotstepHeart;
+  const hotstepMiniMax = nativeEngine === 'hotstep' && native.profile?.id === hotStepMiniMaxProfile;
+  const hotstep = nativeEngine === 'hotstep' && !hotstepSa3 && !hotstepHeart && !hotstepMiniMax;
   const [hotstepHeartDraft, setHotstepHeartDraft] = useState<HotStepSa3Draft>({});
   const [hotstepSa3Draft, setHotstepSa3Draft] = useState<HotStepSa3Draft>({});
   const [mulaCoverDraft, setMulaCoverDraft] = useState<HotStepCoverDraft>({ original: '', abc: '' });
@@ -982,7 +990,15 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
     const settings = (song.generationParams ?? {}) as Record<string, unknown>;
     if (isProfileMusicEngine(song.ditModel) || song.ditModel === 'openrouter') {
       if (isProfileMusicEngine(song.ditModel)) {
-        if (song.ditModel === 'acestep-cpp') setAceTask(restoreAceTask(settings));
+        if (song.ditModel === 'acestep-cpp') {
+          setAceTask(restoreAceTask(settings));
+          const saved = Array.isArray(settings.adapters) ? settings.adapters
+            : typeof settings.adapter === 'string' && settings.adapter
+              ? [{ name: settings.adapter, scale: settings.adapter_scale }]
+              : [];
+          setAceAdapters(usesFromSettings({ adapters: saved.map(entry =>
+            typeof entry?.scale === 'number' ? { ...entry, dit_scale: entry.scale } : entry) }));
+        }
         const source = settings.music_source as YueRequest['music_source'] | undefined;
         const profile = song.ditModel === 'audio.cpp' ? (source?.kind === 'audio_cpp' ? source.model : audioCppMiniMax)
           : source?.kind === 'native' && source.engine === song.ditModel ? source.model : song.lmModel;
@@ -998,7 +1014,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
         if (profile === 'vevo2') setVevoReferences((settings.vevo2 as YueRequest['vevo2']) ?? { voice_song_id: '' });
         if (profile === hotStepSa3Profile) setHotstepSa3Draft((settings.hotstep_sa3 as YueRequest['hotstep_sa3']) ?? {});
         if (profile === hotStepHeartmulaProfile) setHotstepHeartDraft((settings.hotstep_heartmula as YueRequest['hotstep_heartmula']) ?? {});
-        if (song.ditModel === 'hotstep' && profile !== hotStepSa3Profile && profile !== hotStepHeartmulaProfile) setMulaCoverDraft({
+        if (song.ditModel === 'hotstep' && profile !== hotStepSa3Profile && profile !== hotStepHeartmulaProfile && profile !== hotStepMiniMaxProfile) setMulaCoverDraft({
           original: typeof settings.cover_of === 'string' ? settings.cover_of : song.derived?.from ?? '',
           abc: typeof settings.abc === 'string' ? settings.abc : '',
         });
@@ -1739,7 +1755,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
       return;
     }
     if (nativeEngine) {
-      if (aceEngine && !aceOptions) return;
+      if (aceEngine && (!aceOptions || !aceAdaptersReady)) return;
       if (!native.ready || !native.profile || (mulaCover && !mulaCoverDraft.original) || (hotstep && (!mulaCoverDraft.original || !mulaCoverDraft.abc.trim()))) return;
       if (miDasheng && !miDashengPromptReady(scene)) return;
       if (soulx && (!soulxInputs.reference_song_id || (soulxConversion
@@ -1754,12 +1770,20 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
       if ((stableAudio || hotstepSa3) && !style.trim()) { setError(stableAudioPromptRequired(language)); return; }
       if (!hotstep && !magenta && !miDasheng && !miniMaxH3 && !mulaCover && !soulx && !style.trim() && !lyrics.trim()) { setError(tt('styleOrLyricsRequired')); return; }
       setError(null);
+      const aceAdapterOptions = aceEngine && enabledAceAdapters.length
+        ? enabledAceAdapters.map(adapter => ({ name: adapter.id, scale: adapter.scales.dit ?? 1 }))
+        : [];
+      const caption = finishedStyle(style);
+      const aceTriggers = aceAdapterOptions.flatMap(adapter => {
+        const trigger = installedAceAdapters.find(installed => installed.id === adapter.name)?.trigger?.trim();
+        return trigger && !caption.toLowerCase().includes(trigger.toLowerCase()) ? [trigger] : [];
+      });
       const settings = nativeGenerationSettings(nativeEngine, (vevo2 || soulx) ? { seed: native.settings.seed, output_format: native.settings.output_format } : miDasheng || magenta ? { ...native.settings, steps: undefined } : native.settings);
       generate({
         music_source: nativeEngine === 'audio.cpp'
           ? { kind: 'audio_cpp', model: native.profile.id }
           : { kind: 'native', engine: nativeEngine, model: native.profile.id },
-        style: miDasheng ? scene.caption || scene.music : (vevo2 || soulx) ? '' : finishedStyle(style),
+        style: miDasheng ? scene.caption || scene.music : (vevo2 || soulx) ? '' : [...new Set(aceTriggers), caption].filter(Boolean).join(', '),
         lyrics: miDasheng ? scene.speech_text.trim() : miniMaxH3 || stableAudio || hotstepSa3 || magenta || soulx ? '' : lyrics.replace(/\r\n?/g, '\n').trim(),
         ...(name.trim() ? { title: name.trim() } : {}),
         ...(chosenPlaylist ? { playlist_id: chosenPlaylist } : {}),
@@ -1774,7 +1798,9 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
         ...(vevo2 ? { vevo2: vevoReferences } : {}),
         ...(soulx ? { soulx: soulxConversion ? { reference_song_id: soulxInputs.reference_song_id, source_song_id: soulxInputs.source_song_id } : { reference_song_id: soulxInputs.reference_song_id, reference_metadata: soulxInputs.reference_metadata, target_metadata: soulxInputs.target_metadata, control: soulxInputs.control } } : {}),
         ...settings,
-        ...(aceOptions && Object.keys(aceOptions).length ? { ace: { ...settings.ace, ...aceOptions } } : {}),
+        ...(aceOptions && (Object.keys(aceOptions).length || aceAdapterOptions.length) ? {
+          ace: { ...settings.ace, ...aceOptions, ...(aceAdapterOptions.length ? { adapters: aceAdapterOptions } : {}) },
+        } : {}),
       });
       return;
     }
@@ -2073,6 +2099,9 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
                     {hotstepSa3 && native.profile?.installable && !native.ready &&
                       <AudioCppModelInstall key={hotStepSa3Profile} model={hotStepSa3Profile} bytes={native.profile.missing_bytes ?? 0}
                         licenseUrl="https://huggingface.co/scragnog/HOT-Step-CPP-StableStep" language={language} onInstalled={refreshNativeChoice} />}
+                    {hotstepMiniMax && native.profile?.installable && !native.ready &&
+                      <AudioCppModelInstall key={hotStepMiniMaxProfile} model={hotStepMiniMaxProfile} bytes={native.profile.missing_bytes ?? 0}
+                        licenseUrl={native.profile.license_url} language={language} onInstalled={refreshNativeChoice} />}
                     {(heartMuLa || stableAudio || soulx) && native.profile?.installable && !native.ready &&
                       <AudioCppModelInstall key={audioFamily} model={soulxConversion ? 'soulx_singer_svc' : soulx ? 'soulx_singer' : stableAudio ? 'stable_audio' : 'heartmula'} bytes={native.profile.total_bytes}
                         licenseUrl={native.profile.license_url} language={language} onInstalled={refreshNativeChoice} />}
@@ -2170,6 +2199,11 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
               {hotstep && <HotStepCoverFields draft={mulaCoverDraft} onChange={setMulaCoverDraft} ready={native.ready}
                 refresh={native.refresh} controlClassName={CONTROL} />}
               {aceEngine && <AceTaskControls value={aceTask} onChange={setAceTask} control={CONTROL} profileReady={native.ready} />}
+              {aceEngine && native.profile && <AdapterPicker
+                value={aceAdapters} onChange={setAceAdapters} iconClass={ICON}
+                nativeLibrary={{ installed: installedAceAdapters, slots: [{ id: 'dit', role: 'sound' }], model: null }}
+                frame={(title, icon, actions, body) => <Card title={title} icon={icon} actions={actions} fold="ace-lora">{body}</Card>}
+              />}
               {mulaCover && <MuLaCoverFields value={mulaCoverDraft.original}
                 onChange={(original, abc) => setMulaCoverDraft(previous => previous.original === original ? previous : { original, abc })}
                 onInstall={native.refresh}
@@ -3188,7 +3222,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
           type="button"
           onClick={submit}
           disabled={pair.blocked || (signed ? !packages.ready : cloud ? !selectedMusicModel || invalidParameters.length > 0 : nativeEngine
-            ? !native.ready || (aceEngine && !aceOptions) || (miDasheng && !miDashengPromptReady(scene)) || (magenta && !magentaReady) || (mulaCover && !mulaCoverDraft.original) || (hotstep && (!mulaCoverDraft.original || !mulaCoverDraft.abc.trim()))
+            ? !native.ready || (aceEngine && (!aceOptions || !aceAdaptersReady)) || (miDasheng && !miDashengPromptReady(scene)) || (magenta && !magentaReady) || (mulaCover && !mulaCoverDraft.original) || (hotstep && (!mulaCoverDraft.original || !mulaCoverDraft.abc.trim()))
             : yue && instrumental && instrumentalLoraLoading && !isGenerating)}
           className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-linear-to-r from-orange-500 to-pink-600 text-base font-bold text-white shadow-lg transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
         >
