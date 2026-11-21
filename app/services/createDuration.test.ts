@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { AUTO_DURATION, clampDurationToKept, durationAfterLoad, isAutoDuration, keptDurationText } from './createDuration';
+import { AUTO_DURATION, clampDurationToKept, durationAfterLoad, isAutoDuration, keptDurationText, scoreSeconds } from './createDuration';
 
 describe('clampDurationToKept (#184)', () => {
   it('keeps the saved maximum when a loaded request is shorter or absent', () => {
@@ -12,6 +12,14 @@ describe('clampDurationToKept (#184)', () => {
     expect(clampDurationToKept(300, 130)).toBe(300);
     expect(clampDurationToKept(240.6, 130)).toBe(241);
   });
+});
+
+it('estimates the written length through trailing and multimeasure rests on parallel voices', () => {
+  const header = 'X:1\nM:4/4\nL:1/16\nQ:1/4=96\nV:Vocal\nV:Ins\nK:Em\n';
+  expect(scoreSeconds(header + 'V:Vocal\nZ4|\nV:Ins\nC16|z16|z16|z16|')).toBe(10);
+  expect(scoreSeconds(header + 'V:Vocal\nZ84|\nV:Ins\n' + 'z16|'.repeat(84))).toBe(210);
+  expect(scoreSeconds('')).toBeUndefined();
+  expect(scoreSeconds('not a score')).toBeUndefined();
 });
 
 describe('Auto max duration', () => {

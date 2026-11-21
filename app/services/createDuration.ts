@@ -1,3 +1,5 @@
+import abcjs from 'abcjs';
+
 /** A max-duration loaded from a request (a reused track, an example, the
  *  writing assistant) never drops below the duration the user keeps for every
  *  new song (studio.createDuration); a longer one is honoured (#184). An absent
@@ -25,4 +27,19 @@ export function keptDurationText(stored: string | null, min: number, max: number
 export function durationAfterLoad(asked: number | undefined, kept: string, max: number): string {
   if (isAutoDuration(kept)) return AUTO_DURATION;
   return String(Math.min(max, clampDurationToKept(asked, Number(kept))));
+}
+
+/** The ABC clock includes trailing rests and takes the longest parallel voice. */
+export function scoreSeconds(abc: string): number | undefined {
+  if (!abc.trim()) return undefined;
+  try {
+    const tunes: abcjs.TuneObject[] = abcjs.parseOnly(abc);
+    const score = tunes[0];
+    if (tunes.length !== 1 || !score || score.warnings?.length) return undefined;
+    const { totalDuration, tempo } = score.setUpAudio({});
+    const seconds = totalDuration * 240 / tempo;
+    return seconds > 0 && Number.isFinite(seconds) ? seconds : undefined;
+  } catch {
+    return undefined;
+  }
 }
