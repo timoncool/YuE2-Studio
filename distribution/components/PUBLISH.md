@@ -14,10 +14,9 @@ The Studio expects the signed targets under `targets/` inside that directory.
    to download and check each changed mirror before signing. For the first
    publication omit `--previous` to verify all mirrors. Keep older archives
    available during rollout.
-2. Sign the catalogue in the project's TUF repository. The root installed
-   with the Studio is the input to staging. The signing process produces
-   consistent-snapshot metadata and hash-prefixed target files. Use the
-   repository's normal threshold, expiry, renewal and key-rotation process.
+2. Sign the catalogue with the project's TUF signer. For the initial Windows
+   signing setup and subsequent catalogue edits, use the local procedure
+   below. The reviewed public root is the input to staging.
 3. Install the release-side dependencies `tuf==7.0.1` and
    `securesystemslib[crypto]==1.6.0` in a Python virtual environment.
    Stage the signed update using the checkout of the currently published
@@ -77,5 +76,67 @@ publishing step without compiling the app. This uses disposable signing keys.
 The staged directory contains verified public files, and the production signing
 keys stay in the project's signing system.
 
+## Local Windows signer
+
+Use the dedicated release Windows account and its private local profile. Install
+the pinned dependencies from step 3 before invoking the signer. The provision
+command generates independent Ed25519 keys for root, targets, snapshot and
+timestamp, each with threshold 1. The same Windows account is the trust
+boundary for these four roles. It protects the encrypted store through Windows
+CurrentUser DPAPI. Keep the store outside the checkout, staging directories,
+shared folders and cloud sync. Tauri update signing uses its own keys.
+
+Run provisioning once for a new channel. An existing store path causes
+provisioning and recovery to fail. Back up the keys before embedding the root in
+any installer or making the first publication.
+
+```powershell
+$store = Join-Path $env:LOCALAPPDATA 'YuE2-Studio-TUF'
+$sign = 'distribution/components/sign_channel.py'
+python $sign --store $store provision
+python $sign --store $store backup --output E:/offline-backup/studio-tuf.backup
+```
+
+The backup is portable between Windows accounts and machines. It uses
+scrypt and authenticated AES-256-GCM. Supply a strong, randomly generated
+passphrase at the concealed prompt, and keep it separately from the offline
+archive. Retain a separate reviewed copy of the public `$store/root.json` and
+record its SHA-256. Pass only that public root to staging, and install it as the
+channel bootstrap after review. The store and backup are private release data.
+
+Sign the first candidate with `initial`. For subsequent updates, fetch the
+current deployed site again and use it as `--previous-site`. The signer verifies
+that site's signatures and signed snapshot chain against the store's root, then
+increments the three online role versions. Run staging against the same site.
+Concurrent publishers or stale copies of the site can cause conflicting
+metadata, so recheck the deployed timestamp before promotion as described in
+step 4. Use a new output directory for each candidate.
+
+```powershell
+python $sign --store $store initial --mirrors distribution/channels/stable/mirrors.json --output signed-initial
+python $sign --store $store update --mirrors distribution/channels/stable/mirrors.json --previous-site published --output signed-update
+```
+
+Pass `--voices` and `--engines` for applicable reviewed catalogues, including
+each previously published target. Point staging at the resulting
+`signed-*/metadata` and `signed-*/targets` directories. The signer uses
+7-day timestamps, 30-day snapshots, 90-day targets and a one-year root.
+Renew the timestamp with `update` before expiry even if no catalogue changed.
+The signer handles the initial root and updates under that root. Plan root
+renewal and rotation before root expiry through the separate TUF ceremony.
+
+On a replacement release machine, run `restore` into a new private LocalAppData
+path with the offline backup and reviewed public root:
+
+```powershell
+python $sign --store $store restore --backup E:/offline-backup/studio-tuf.backup --root reviewed-root.json
+```
+
+Restore validates the recovered keys against the reviewed root and seals them
+with the new Windows profile. Use the current deployed site for the next update.
+Run `python distribution/components/test_sign_channel.py` on Windows to exercise
+provisioning, staging versions 1 and 2, and staging version 3 from the recovered
+store with the same public root.
+
 See the [TUF repository maintenance manual](https://github.com/theupdateframework/tuf-on-ci/blob/main/docs/REPOSITORY-MAINTENANCE.md)
-for initial signer setup and rotation.
+for renewal and rotation.
