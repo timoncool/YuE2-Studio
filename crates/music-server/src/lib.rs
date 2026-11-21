@@ -20,6 +20,7 @@ mod audio_cpp_magenta;
 mod audio_cpp_midasheng;
 mod audio_cpp_minimax_h3;
 mod audio_cpp_music;
+mod audio_cpp_stable_audio;
 mod audio_cpp_vevo2;
 mod native_music_jobs;
 mod native_ace_jobs;
@@ -124,6 +125,7 @@ struct AppState {
     minimax_cancellations: Arc<RwLock<HashMap<String, native_music_jobs::CancelSender>>>,
     audio_cpp_music_stops: Arc<RwLock<HashMap<String, Arc<std::sync::atomic::AtomicBool>>>>,
     heartmula_install: Arc<tokio::sync::Mutex<()>>,
+    stable_audio_install: Arc<tokio::sync::Mutex<()>>,
     openrouter_music_stops: Arc<RwLock<HashMap<String, Arc<tokio::sync::Notify>>>>,
     music_server: EngineClient,
     /// The engine's log, followed for the service's life: its recent lines and
@@ -310,6 +312,8 @@ struct CreateMusicJobRequest {
     ace: Option<native_ace_jobs::AceOptions>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     heartmula: Option<audio_cpp_heartmula::HeartMuLaOptions>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    stable_audio: Option<audio_cpp_stable_audio::Options>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     midasheng: Option<audio_cpp_midasheng::MiDashengPrompt>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -1526,6 +1530,7 @@ pub async fn serve_on_port(port: u16) -> anyhow::Result<()> {
         minimax_cancellations: Arc::default(),
         audio_cpp_music_stops: Arc::default(),
         heartmula_install: Arc::default(),
+        stable_audio_install: Arc::default(),
         openrouter_music_stops: Arc::new(RwLock::new(HashMap::new())),
         music_server,
         engine_log,

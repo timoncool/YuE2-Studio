@@ -91,6 +91,9 @@ pub fn sha256(url: &str) -> Option<&'static str> {
     if url == crate::audio_cpp_heartmula::ASSET.url {
         return Some(crate::audio_cpp_heartmula::SHA256);
     }
+    if url == crate::audio_cpp_stable_audio::ASSET.url {
+        return Some(crate::audio_cpp_stable_audio::SHA256);
+    }
     if let Some((_, sha256)) = PINNED.iter().find(|(pinned, _)| *pinned == url) {
         return Some(sha256);
     }

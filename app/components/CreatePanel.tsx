@@ -40,7 +40,8 @@ import { writerInstruction } from '../services/songWriting';
 import { songWritingStrings } from '../i18n/songWriting';
 import { MagentaFields, magentaModel, restoreMagentaOptions } from './MagentaFields';
 import { MiDashengFields, miDashengModel, miDashengPromptReady, restoreMiDashengPrompt } from './MiDashengFields';
-import { HeartMuLaControls, HeartMuLaInstall, emptyHeartMuLaDraft, heartMuLaDraft, heartMuLaOptions } from './HeartMuLaControls';
+import { HeartMuLaControls, AudioCppModelInstall, emptyHeartMuLaDraft, heartMuLaDraft, heartMuLaOptions } from './HeartMuLaControls';
+import { StableAudioControls, emptyStableAudioDraft, stableAudioDraft, stableAudioOptions, stableAudioPromptRequired } from './StableAudioControls';
 import { Vevo2SingingFields, vevo2SingingStrings, type Vevo2References } from './Vevo2SingingFields';
 import { NumberField } from './NumberField';
 import { explainCliFailure } from '../services/cliFailure';
@@ -432,9 +433,11 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
   const magentaReference = magentaOptions.reference_song_id;
   const [scene, setScene] = useState(() => restoreMiDashengPrompt(undefined));
   const heartMuLa = audioFamily === 'heartmula';
+  const stableAudio = audioFamily === 'stable_audio';
   const vevo2 = audioFamily === 'vevo2';
   const miniMaxH3 = audioFamily === 'minimax_h3';
   const [heartSettings, setHeartSettings] = useState(emptyHeartMuLaDraft);
+  const [stableSettings, setStableSettings] = useState(emptyStableAudioDraft);
   const [vevoReferences, setVevoReferences] = useState<Vevo2References>({ voice_song_id: '' });
   const nativeStrings = nativeMusicSourceStrings[language];
   const yue = musicEngine === 'local';
@@ -782,6 +785,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
         if (profile === magentaModel) setMagentaOptions(restoreMagentaOptions(settings.magenta));
         if (profile === miDashengModel) setScene(restoreMiDashengPrompt(settings.midasheng));
         if (profile === 'heartmula') setHeartSettings(heartMuLaDraft(settings.heartmula as YueRequest['heartmula']));
+        if (profile === 'stable_audio') setStableSettings(stableAudioDraft(settings.stable_audio as YueRequest['stable_audio']));
         if (profile === 'vevo2') setVevoReferences((settings.vevo2 as YueRequest['vevo2']) ?? { voice_song_id: '' });
         native.restore(song.ditModel, profile ?? '', settings);
       } else {
@@ -1481,6 +1485,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
       if (audioFamily === audioCppMiniMax && (!style.trim() || !lyrics.trim())) { setError(nativeStrings.styleAndLyricsRequired); return; }
       if (magenta && !magentaReady) return;
       if (miniMaxH3 && !style.trim()) { setError(nativeStrings.h3PromptRequired); return; }
+      if (stableAudio && !style.trim()) { setError(stableAudioPromptRequired(language)); return; }
       if (!magenta && !miDasheng && !miniMaxH3 && !style.trim() && !lyrics.trim()) { setError(tt('styleOrLyricsRequired')); return; }
       setError(null);
       generate({
@@ -1488,12 +1493,13 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
           ? { kind: 'audio_cpp', model: native.profile.id }
           : { kind: 'native', engine: nativeEngine, model: native.profile.id },
         style: miDasheng ? scene.caption || scene.music : vevo2 ? '' : finishedStyle(style),
-        lyrics: magenta || miniMaxH3 ? '' : miDasheng ? scene.speech_text.trim() : lyrics.replace(/\r\n?/g, '\n').trim(),
+        lyrics: miDasheng ? scene.speech_text.trim() : miniMaxH3 || stableAudio || magenta ? '' : lyrics.replace(/\r\n?/g, '\n').trim(),
         ...(name.trim() ? { title: name.trim() } : {}),
         ...(chosenPlaylist ? { playlist_id: chosenPlaylist } : {}),
         ...(miDasheng ? { midasheng: scene } : {}),
         ...(magenta ? { magenta: magentaOptions } : {}),
         ...(heartMuLa ? { heartmula: heartMuLaOptions(heartSettings) } : {}),
+        ...(stableAudio ? { stable_audio: stableAudioOptions(stableSettings) } : {}),
         ...(vevo2 ? { vevo2: vevoReferences } : {}),
         ...nativeGenerationSettings(nativeEngine, vevo2 ? { seed: native.settings.seed, output_format: native.settings.output_format } : miDasheng || magenta ? { ...native.settings, steps: undefined } : native.settings),
       });
@@ -1680,8 +1686,9 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
                     {native.profile && !native.ready && <p role="status" className="text-xs">
                       {nativeStrings.unavailable}{native.profile.missing?.length ? ` · ${native.profile.missing.join(', ')}` : ''}
                     </p>}
-                    {heartMuLa && native.profile?.installable && !native.ready &&
-                      <HeartMuLaInstall bytes={native.profile.total_bytes} language={language} onInstalled={native.refresh} />}
+                    {(heartMuLa || stableAudio) && native.profile?.installable && !native.ready &&
+                      <AudioCppModelInstall key={audioFamily} model={stableAudio ? 'stable_audio' : 'heartmula'} bytes={native.profile.total_bytes}
+                        licenseUrl={native.profile.license_url} language={language} onInstalled={native.refresh} />}
                     <button type="button" className="text-xs text-pink-600 underline dark:text-pink-300" onClick={native.refresh}>
                       {musicStrings.refresh}
                     </button>
@@ -1721,13 +1728,14 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
                 {!vevo2 && !miDasheng && !(magenta && magentaReference) && <AutoTextarea className={CONTROL} value={style} onChange={event => setStyle(event.target.value)}
                   placeholder={tt('stylePlaceholder')} aria-label={tt('styleCardTitle')} />}
               </Card>
-              {miDasheng ? <MiDashengFields value={scene} onChange={setScene} /> : !magenta && !miniMaxH3 && <Card title={t('lyrics')}>
+              {miDasheng ? <MiDashengFields value={scene} onChange={setScene} /> : !magenta && !miniMaxH3 && !stableAudio && <Card title={t('lyrics')}>
                 <AutoTextarea className={CONTROL} value={lyrics} onChange={event => setLyrics(event.target.value)}
                   aria-label={t('lyrics')} />
               </Card>}
               {magenta && <MagentaFields value={magentaOptions} onChange={setMagentaOptions} tracks={magentaTracks} controlClassName={CONTROL} />}
               {vevo2 && <Vevo2SingingFields value={vevoReferences} onChange={setVevoReferences} controlClassName={CONTROL} />}
               {heartMuLa && <HeartMuLaControls values={heartSettings} onChange={setHeartSettings} language={language} />}
+              {stableAudio && <StableAudioControls value={stableSettings} onChange={setStableSettings} language={language} />}
               {nativeEngine && abc.trim() && <p role="status" className="text-xs text-zinc-500">{nativeStrings.scoreKept}</p>}
               {nativeEngine && (native.profile || native.originalModels) && (
                 <Card title={nativeStrings.settings}>

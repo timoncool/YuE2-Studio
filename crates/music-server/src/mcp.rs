@@ -1017,6 +1017,7 @@ fn id_only(name: &str, what: &str) -> Value {
 
 fn song_create_schema(mut properties: Value) -> Value {
     properties["heartmula"] = json!({"type":"object","description":"Native HeartMuLa sampling and codec settings.","properties":{"temperature":{"type":"number"},"top_k":{"type":"integer"},"codec_duration_sec":{"type":"number"},"codec_guidance_scale":{"type":"number"}}});
+    properties["stable_audio"] = json!({"type":"object","description":"Native Stable Audio 3 controls. Send the music prompt as style and leave lyrics empty.","properties":{"negative_prompt":{"type":"string"},"sampler_mode":{"enum":["pingpong","euler"]},"apg_scale":{"type":"number"},"duration_padding_sec":{"type":"number","minimum":0}}});
     properties["midasheng"] = json!({"type":"object","description":"MiDashengLM-Gen scene and sound layers.","properties":{"caption":{"type":"string"},"music":{"type":"string"},"speech_text":{"type":"string"},"speech_style":{"type":"string"},"effects":{"type":"string"},"environment":{"type":"string"}}});
     properties["magenta"] = json!({
         "type": "object", "description": "Magenta RealTime 2 instrumental style reference from the library.",
@@ -2152,7 +2153,7 @@ fn tools() -> &'static [Tool] {
             Tool {
                 name: "audio_cpp_music_model_install",
                 description: "Start installation of a managed audio.cpp music model. Poll audio_cpp_music_models for progress.",
-                schema: || object(json!({"model": {"type": "string", "enum": ["heartmula"]}}), &["model"]),
+                schema: || object(json!({"model": {"type": "string", "enum": ["heartmula", "stable_audio"]}}), &["model"]),
                 call: |args| post("/v1/music/audio-cpp/models/install".into(), args.clone()),
             },
             Tool {
