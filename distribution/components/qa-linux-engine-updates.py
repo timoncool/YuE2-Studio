@@ -1,15 +1,19 @@
 """Linux Studio release candidate acceptance through public HTTP/MCP."""
 import contextlib
+import base64
 import functools
 import hashlib
+import io
 import json
 import os
 import socket
 import ssl
+import struct
 import subprocess
 import sys
 import threading
 import time
+import wave
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
@@ -24,8 +28,15 @@ from test_signed_music_runtime import sign
 binary, work, cert, key = map(lambda p: Path(p).resolve(), sys.argv[1:5])
 strict = "--strict" in sys.argv[5:]
 engine, model = "qa-update-engine", "qa-update-model"
+peer = "qa-update-peer"
+cloud_model = "fixture/held-cloud-song"
 target_name = "music-engine-catalog.json"
 data = work / "data"
+data.mkdir(parents=True)
+(data / "openrouter-catalog-v2.json").write_text(json.dumps({"models":[
+    {"id":cloud_model, "name":"Held cloud song", "input_modalities":["text"],
+     "output_modalities":["audio"], "capabilities":["music_generation"]}
+]}), encoding="utf8")
 origin = work / "origin"
 origin.mkdir(parents=True)
 (origin / "targets").mkdir()
@@ -47,6 +58,8 @@ events = work / "workers.jsonl"
 gate = work / "finish-job"
 download_release = threading.Event()
 download_seen = threading.Event()
+cloud_started = threading.Event()
+finish_cloud = threading.Event()
 http_hits = []
 report, calls = {}, []
 
@@ -71,9 +84,26 @@ class Channel(SimpleHTTPRequestHandler):
             return
         super().do_GET()
 
+class Provider(SimpleHTTPRequestHandler):
+    def do_POST(self):
+        assert self.path == "/chat/completions" and self.headers["Authorization"] == "Bearer fixture-only"
+        request = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+        assert request["model"] == cloud_model, request
+        self.send_response(200)
+        self.send_header("Content-Type", "text/event-stream")
+        self.end_headers()
+        cloud_started.set()
+        assert finish_cloud.wait(30)
+        audio = io.BytesIO()
+        with wave.open(audio, "wb") as wav:
+            wav.setparams((1, 2, 8000, 0, "NONE", "not compressed"))
+            wav.writeframes(struct.pack("<hh", 2000, -2000) * 8000)
+        event = {"choices":[{"delta":{"audio":{"data":base64.b64encode(audio.getvalue()).decode()}}}]}
+        self.wfile.write(f"data: {json.dumps(event)}\r\n\r\ndata: [DONE]\r\n\r\n".encode())
+
 payloads = {version: template.replace("@VERSION@", f"{version}.0").replace("@GATE@", str(gate))
             .replace("@EVENTS@", str(events)).encode()
-            for version in range(1, 5)}
+            for version in range(1, 6)}
 for version, payload in payloads.items():
     (origin / str(version)).write_bytes(payload if version != 4 else b"x" * len(payload))
 weight = b"shared model bytes"
@@ -86,6 +116,10 @@ def publish(version):
     workers = [{"id": engine, "name": "QA engine", "platform": "linux-x86_64",
                 "version": f"{version}.0", "protocol": "music-http-v1", "executable": adapter,
                 "files": [pin(adapter, payloads[version], "slow" if version == 3 else str(version))]}]
+    peer_version = 2 if version == 5 else 1
+    workers.append({"id":peer, "name":"QA peer", "platform":"linux-x86_64",
+                    "version":f"{peer_version}.0", "protocol":"music-http-v1", "executable":adapter,
+                    "files":[pin(adapter, payloads[peer_version], str(peer_version))]})
     models = [{"id": model, "name": "QA model", "engines": [engine],
                "version": "1.0", "files": [pin("weight.bin", weight, "weight")]}]
     signed = json.dumps({"schema": 1, "engines": workers, "models": models}).encode()
@@ -108,6 +142,7 @@ def start(logname):
     env = dict(os.environ, YUE_STUDIO_PORT=str(port), YUE_STUDIO_DATA_ROOT=str(data),
                TIMONCOOL_SHARED_DIR=str(work / "shared"), DO_NOT_TRACK="1",
                STUDIO_HUB_URL="http://127.0.0.1:1", NO_PROXY="localhost,127.0.0.1",
+               OPENROUTER_API_KEY="fixture-only", YUE2_QA_OPENROUTER_PORT=str(provider_port),
                YUE_QA_CHANNEL_CA_FILE=os.environ["SSL_CERT_FILE"])
     def call(path, body=None, timeout=30):
         request = Request(f"http://127.0.0.1:{port}{path}", data=None if body is None else json.dumps(body).encode(),
@@ -170,7 +205,10 @@ def completed(tool, call, job, version):
             "worker": song["generation_settings"]["adapter_settings"], "wav_sha256": digest(wav)}
 
 try:
-    with ThreadingHTTPServer(("127.0.0.1", 0), functools.partial(Channel, directory=origin)) as origin_server:
+    with (ThreadingHTTPServer(("127.0.0.1", 0), functools.partial(Channel, directory=origin)) as origin_server,
+          ThreadingHTTPServer(("127.0.0.1", 0), Provider) as provider):
+        provider_port = provider.server_port
+        threading.Thread(target=provider.serve_forever, daemon=True).start()
         base = f"https://localhost:{origin_server.server_port}"
         tls = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
         tls.load_cert_chain(cert, key)
@@ -253,7 +291,48 @@ try:
             corrupt = tool("music_engine_package_install", id_arg, error=True)
             assert "integrity check failed" in json.dumps(corrupt).lower() and status()["version"] == "2.0", corrupt
             report.update({"cancel":abort, "corrupt":corrupt, "retained":status()})
+            if strict:
+                peer_first = tool("music_engine_package_install", {"id":peer})
+                gate.unlink()
+                previous_events = len(runs())
+                busy = tool("song_create", prompt | {"seed":50})
+                current_worker = await_until(runs, lambda log: len(log) > previous_events)[-1]
+                assert current_worker["version"] == "2.0"
+                rollback = progress_args | {"from_generation":second["generation"], "to_generation":first["generation"]}
+                refused_rollback = tool("music_package_rollback", rollback, error=True)
+                assert "busy" in json.dumps(refused_rollback).lower() and status()["version"] == "2.0"
+                cloud = tool("song_create", prompt | {"music_source":{"kind":"openrouter", "model":cloud_model}})
+                assert cloud_started.wait(8)
+                publish(5)
+                refresh()
+                pending = [(target, pool.submit(tool, "music_engine_package_install", {"id":target}))
+                           for target in (engine, peer)]
+                for target, future in pending:
+                    active = await_until(lambda: tool("music_package_progress", {"kind":"music-engines","id":target})["active"],
+                                         lambda p: p is not None and p["stage"] == "waiting_for_idle")
+                    assert not future.done() and active["downloaded_bytes"] > 0
+                queued_rollback = tool("music_package_rollback", rollback, error=True)
+                assert "installation is already running" in json.dumps(queued_rollback)
+                assert status()["version"] == "2.0"
+                assert tool("music_engine_package_status", {"id":peer})["generation"] == peer_first["generation"]
+                gate.touch()
+                b_during = completed(tool, call, busy, 2)
+                applied = {target:future.result(timeout=18) for target, future in pending}
+                assert status()["version"] == "5.0" and tool("music_engine_package_status", {"id":peer})["version"] == "2.0"
+                cloud_now = tool("song_job_get", {"job_id":cloud["id"], "response_format":"detailed"})
+                assert cloud_now["dispatch"] == "open_router" and cloud_now["status"] in ("queued","running"), cloud_now
+                restored = tool("music_package_rollback", progress_args
+                                | {"from_generation":applied[engine]["generation"], "to_generation":second["generation"]})
+                assert restored["active"] == second["generation"] and status()["version"] == "2.0"
+                finish_cloud.set()
+                cloud_done = await_until(lambda: tool("song_job_get", {"job_id":cloud["id"],"response_format":"detailed"}),
+                                         lambda j: j["status"] in ("completed","failed","cancelled"))
+                assert cloud_done["status"] == "completed", cloud_done
+                report["parallel_activation"] = {"before":b_during,"applied":applied,"cloud_during":cloud_now,
+                                                 "rollback_busy":refused_rollback,"rollback_waiting":queued_rollback,
+                                                 "restored":restored,"cloud_finished":cloud_done["status"]}
         origin_server.shutdown()
+        provider.shutdown()
     with start("offline.log") as (call, tool):
         assert json.loads(call(status_path))["version"] == "2.0"
         c = completed(tool, call, tool("song_create", prompt | {"seed":46}), 2)
