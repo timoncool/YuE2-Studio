@@ -1906,6 +1906,24 @@ describe('Auto max duration', () => {
   });
 });
 
+it('reuses a packed audio.cpp ACE-Step take without activating native ACE controls', async () => {
+  vi.stubGlobal('fetch', vi.fn(async () => Response.json({
+    engine: 'audio.cpp', engine_installed: true,
+    models: [{ id: 'ace_step', profile_id: 'ace-step-1.5-turbo-q8_0', quantization: 'Q8_0', ready: true, missing: [] }],
+  })));
+  const music_source = { kind: 'audio_cpp', model: 'ace_step' };
+  const song = {
+    title: 'ACE take', ditModel: 'audio.cpp', style: 'dry instrumental funk', lyrics: '[Instrumental]',
+    generationParams: { music_source, duration_seconds: 10, seed: 42, steps: 8, cfg_scale: 1 },
+  } as Song;
+  act(() => root.render(panel({ musicEngine: 'audio.cpp', initialData: { song, timestamp: 1 } })));
+  await flush();
+  click(buttonNamed('create')!);
+  expect(sent.at(-1)).toMatchObject({ music_source, style: song.style, lyrics: song.lyrics,
+    duration_seconds: 10, seed: 42, steps: 8 });
+  expect(sent.at(-1)?.ace).toBeUndefined();
+});
+
 it('reuses a packed YuE2 audio.cpp take with its score and token bounds', async () => {
   vi.stubGlobal('fetch', vi.fn(async () => Response.json({
     engine: 'audio.cpp', engine_installed: true,

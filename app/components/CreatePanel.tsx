@@ -460,6 +460,7 @@ const SamplingGrid: React.FC<{ value: SamplingText; defaults?: YueSampling; onCh
 const NO_ACTIVITY: ActivityEntry[] = [];
 const hotStepMiniMaxProfile = 'hotstep-minimax-music3';
 const audioCppYueProfile = 'yue2';
+const audioCppAceProfile = 'ace_step';
 const hotStepAceProfile = 'hotstep-ace-step-1.5';
 
 const linkedMusicFamilies = [
@@ -470,6 +471,7 @@ const linkedMusicFamilies = [
   { id: 'acestep-cpp', name: 'ACE-Step', pairs: [
     { engine: 'acestep-cpp', label: 'acestep.cpp' },
     { engine: 'hotstep', label: 'HOT-Step', profile: hotStepAceProfile },
+    { engine: 'audio.cpp', label: 'audio.cpp', profile: audioCppAceProfile },
   ] },
   { id: 'minimaxmusic-cpp', name: 'MiniMax Music3', pairs: [
     { engine: 'minimaxmusic-cpp', label: 'minimaxmusic.cpp' },
@@ -524,6 +526,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
     installedNativeAdapters.some(installed => installed.id === adapter.id && !installed.error));
   const audioCpp = nativeEngine === 'audio.cpp';
   const audioCppYue = audioCpp && native.profile?.id === audioCppYueProfile;
+  const audioCppAce = audioCpp && native.profile?.id === audioCppAceProfile;
   const hotstepSa3 = nativeEngine === 'hotstep' && native.profile?.id === hotStepSa3Profile;
   const hotstepHeart = nativeEngine === 'hotstep' && native.profile?.id === hotStepHeartmulaProfile;
   const hotstepMiniMax = nativeEngine === 'hotstep' && native.profile?.id === hotStepMiniMaxProfile;
@@ -2149,6 +2152,9 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
                         licenseUrl={native.profile.license_url} language={language} onInstalled={refreshNativeChoice} />}
                     {audioCppYue && native.profile?.installable && !native.ready &&
                       <AudioCppModelInstall key={audioCppYueProfile} model={audioCppYueProfile} bytes={native.profile.missing_bytes ?? 0}
+                        licenseUrl={native.profile.license_url} language={language} onInstalled={refreshNativeChoice} />}
+                    {audioCppAce && native.profile?.installable && !native.ready &&
+                      <AudioCppModelInstall key={audioCppAceProfile} model={audioCppAceProfile} bytes={native.profile.missing_bytes ?? 0}
                         licenseUrl={native.profile.license_url} language={language} onInstalled={refreshNativeChoice} />}
                     {hotstepAce && native.profile?.installable && !native.ready &&
                       <AudioCppModelInstall key={hotStepAceProfile} model={hotStepAceProfile} bytes={native.profile.missing_bytes ?? 0}
