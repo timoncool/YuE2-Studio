@@ -2,35 +2,38 @@ name: macos-window-check
 
 # The released .dmg on a Mac as a user gets it: mounted, the app started, its window opened, and the studio asked
 # through its MCP as an agent would - version, the open window, the first screen read back.
-# Runs only when the macos-window-check branch is pushed; the screenshot is kept for a day.
+# Runs only from this artifact acceptance branch.
 on:
   push:
-    branches: [macos-window-check]
+    branches: [qa/yue2-500-dmg-window]
+
+permissions:
+  actions: read
+  contents: read
 
 jobs:
   check:
     runs-on: macos-15
     timeout-minutes: 20
     env:
-      VERSION: "4.1.1"
+      VERSION: "5.0.0"
       APP: "YuE2 Studio"
-      DMG: "YuE2-Studio-4.1.1-macos-arm64.dmg"
-      BUILD_RUN: "44569788005"
+      DMG: "YuE2-Studio-5.0.0-macos-arm64.dmg"
+      BUILD_RUN: "44885352475"
+      BUILD_SHA: "9e50a4b0dc1240bf573ad19009eba5e59aaf17ab"
+      DMG_SHA256: "8aeff76ffde1d7a24dab053f7b7bb61d1bf9a014873d8fde4bfa425d108ec419"
       PORT: "8791"
       GH_TOKEN: ${{ github.token }}
     steps:
       - name: The dmg, mounted and copied out
         run: |
-          if [ -n "$BUILD_RUN" ]; then
-            gh run download "$BUILD_RUN" -R "$GITHUB_REPOSITORY" -n yue2-studio-macos-arm64 -D "$RUNNER_TEMP"
-          else
-            gh release download "v$VERSION" -R "$GITHUB_REPOSITORY" -p "$DMG" -D "$RUNNER_TEMP"
-          fi
-          shasum -a 256 "$RUNNER_TEMP/$DMG"
-          hdiutil attach -nobrowse -readonly -mountpoint /Volumes/studio "$RUNNER_TEMP/$DMG"
-          ls /Volumes/studio
-          cp -R "/Volumes/studio/$APP.app" "$RUNNER_TEMP/"
-          hdiutil detach /Volumes/studio
+          [ "$(gh run view "$BUILD_RUN" -R "$GITHUB_REPOSITORY" --json headSha --jq .headSha)" = "$BUILD_SHA" ]
+          gh run download "$BUILD_RUN" -R "$GITHUB_REPOSITORY" -n yue2-studio-macos-arm64 -D "$RUNNER_TEMP"
+          printf '%s  %s\n' "$DMG_SHA256" "$RUNNER_TEMP/$DMG" | shasum -a 256 -c -
+          hdiutil attach -nobrowse -noautoopen -readonly -mountpoint /Volumes/studio "$RUNNER_TEMP/$DMG"
+          trap 'hdiutil detach /Volumes/studio || hdiutil detach -force /Volumes/studio' EXIT
+          ditto "/Volumes/studio/$APP.app" "$RUNNER_TEMP/$APP.app"
+          codesign --verify --deep --strict "$RUNNER_TEMP/$APP.app"
           ls "$RUNNER_TEMP/$APP.app/Contents/MacOS"
           file "$RUNNER_TEMP/$APP.app/Contents/MacOS/"* | head -5
       - name: The app started, its service answers
@@ -44,8 +47,12 @@ jobs:
           done
           [ "$code" = 200 ] || { echo "[ERROR] no answer on $PORT"; tail -50 "$RUNNER_TEMP/run.log"; exit 1; }
           echo "[OK] the service answers on $PORT"
-      - name: Version, window and first screen through the MCP
+      - name: Version, window and screens through MCP
         run: |
+          set -euo pipefail
+          receipt="$RUNNER_TEMP/window-receipt"
+          mkdir -p "$receipt"
+          printf 'build_run=%s\nbuild_sha=%s\ndmg_sha256=%s\n' "$BUILD_RUN" "$BUILD_SHA" "$DMG_SHA256" > "$receipt/source.txt"
           u="http://127.0.0.1:$PORT/mcp"
           H=(-H "content-type: application/json" -H "accept: application/json, text/event-stream")
           init='{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"macos-window-check","version":"1"}}}'
@@ -56,20 +63,31 @@ jobs:
           sed 's/^data: //' init.txt | grep -oE '"version":"[0-9.]+"' | tail -1
           sed 's/^data: //' init.txt | grep -q "\"version\":\"$VERSION\"" || { echo "[ERROR] the studio is not $VERSION"; head -c 600 init.txt; exit 1; }
           call() { curl -s -m 60 "${H[@]}" "${S[@]}" -d "{\"jsonrpc\":\"2.0\",\"id\":9,\"method\":\"tools/call\",\"params\":{\"name\":\"$1\",\"arguments\":$2}}" "$u" | sed 's/^data: //' | grep -v '^event:' | grep -v '^$'; }
-          text() { node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{try{process.stdout.write(JSON.parse(s).result.content[0].text)}catch(e){process.stdout.write(s)}})"; }
+          text() { node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{const r=JSON.parse(s);if(r.error||r.result?.isError){console.error(s);process.exit(1)}process.stdout.write(r.result.content[0].text)})"; }
           for i in $(seq 1 30); do
             call studio_status '{}' | text > status.txt
             grep -q '"window_open": true' status.txt && break
             sleep 2
           done
           head -c 400 status.txt; echo
-          screencapture -x "$RUNNER_TEMP/shot-$VERSION.png" && ls -la "$RUNNER_TEMP/shot-$VERSION.png" || true
           grep -q '"window_open": true' status.txt || { echo "[ERROR] the window did not open"; exit 1; }
-          echo "[OK] window open"
-          call ui_read_page '{}' | text > page.txt
-          lines=$(wc -l < page.txt); echo "first screen: $lines lines"; head -12 page.txt
-          [ "$lines" -gt 5 ] || { echo "[ERROR] the first screen read back empty"; exit 1; }
-          echo "[OK] $APP $VERSION: window open, first screen read through the MCP"
+          cp status.txt init.txt "$receipt/"
+          call ui_read_page '{}' | text > "$receipt/start.txt"
+          [ "$(awk 'END {print NR}' "$receipt/start.txt")" -gt 5 ]
+          screencapture -x "$receipt/window.png"
+          test -s "$receipt/window.png"
+          for view in create library search playlist adapters tools news; do
+            call ui_navigate "{\"view\":\"$view\"}" | text > "$receipt/navigate-$view.txt"
+            call ui_read_page '{}' | text > "$receipt/$view.txt"
+            lines=$(awk 'END {print NR}' "$receipt/$view.txt")
+            printf '%s: %s lines\n' "$view" "$lines" | tee -a "$receipt/screens.txt"
+            [ "$lines" -gt 5 ]
+          done
+          if [ "$(shasum -a 256 "$receipt/"{create,library,search,playlist,adapters,tools,news}.txt | awk '{print $1}' | sort -u | wc -l)" -ne 7 ]; then
+            echo 'Expected seven distinct navigation screens' >&2
+            exit 1
+          fi
+          echo "[OK] $APP $VERSION: window open and seven pages read through MCP"
       - name: Without a window, and stopped by --stop
         run: |
           bin="$(ls "$RUNNER_TEMP/$APP.app/Contents/MacOS" | grep -i studio | head -1)"
@@ -94,7 +112,7 @@ jobs:
         if: always()
         with:
           name: macos-window-${{ env.VERSION }}
-          path: ${{ runner.temp }}/shot-*.png
+          path: ${{ runner.temp }}/window-receipt
           retention-days: 1
       - name: The app's log
         if: always()
