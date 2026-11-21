@@ -51,6 +51,8 @@ with (root / "studio.log").open("wb") as log:
     try:
         wait(lambda: mcp("studio_status").get("window_open"), 90)
         mcp("ui_navigate", {"view": "create"})
+        wait(lambda: "Use OpenRouter" in json.dumps(mcp("ui_read_page")))
+        mcp("ui_click", {"text": "Use OpenRouter"})
         mcp("create_form_set", {"fields": {"style": "Windows WebView folk", "lyrics": "Keep these words"}})
         mcp("ui_select", {"text": "Model", "value": "minimaxmusic-cpp"})
         mcp("ui_select", {"text": "Local model", "value": "minimal"})
