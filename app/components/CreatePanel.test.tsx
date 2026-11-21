@@ -2049,3 +2049,51 @@ it('restores HOT-Step cover source and lead sheet from a saved take', async () =
     abc, duration_seconds: 4, steps: 10, seed: 42, cfg_scale: 1.5, output_format: 'flac',
   });
 });
+
+it('restores a HOT-Step YuE2 score with its own sampling and no cover source', async () => {
+  const model = 'hotstep-yue2-q4-k-m';
+  vi.stubGlobal('fetch', vi.fn(async () => Response.json({
+    engine: 'hotstep', engine_installed: true,
+    profiles: [{ id: model, label: 'YuE2 · HOT-Step', ready: true, missing: [] }],
+  })));
+  const music_source = { kind: 'native', engine: 'hotstep', model };
+  const abc = 'X:1\nK:C\nCDEF|';
+  const song = {
+    title: 'YuE2 take', ditModel: 'hotstep', style: 'piano pop', lyrics: 'Hold the light',
+    generationParams: { music_source, abc, cot: 'melody', duration_seconds: 4, seed: 1221, steps: 2,
+      semantic_sampling: { min_tokens: 100, max_tokens: 100 } },
+  } as Song;
+  act(() => root.render(panel({ musicEngine: 'hotstep', initialData: { song, timestamp: 1 } })));
+  await flush();
+  expect(field('textarea[aria-label="scoreCardTitle"]')?.value).toBe(abc);
+  click(buttonNamed('create')!);
+  expect(sent.at(-1)).toMatchObject({ music_source, abc, cot: 'melody', steps: 2, seed: 1221,
+    semantic_sampling: { min_tokens: 100, max_tokens: 100 } });
+  expect(sent.at(-1)?.cover_of).toBeUndefined();
+});
+
+it('switches a YuE2 model from its local runtime and back using the engine selector', async () => {
+  vi.stubGlobal('fetch', vi.fn(async (url: string) => Response.json(url === '/v1/music/native/hotstep/profiles' ? {
+    engine: 'hotstep', engine_installed: true, profiles: [{ id: 'hotstep-yue2-q4-k-m', ready: true, missing: [] }],
+  } : {})));
+  function Editor() {
+    const [route, choose] = React.useState<NonNullable<React.ComponentProps<typeof CreatePanel>['musicEngine']>>('local');
+    return panel({ musicEngine: route, onMusicEngineChange: choose });
+  }
+  const selectEngine = () => [...host.querySelectorAll('label')]
+    .find(node => node.textContent?.startsWith('Music engine'))!.querySelector('select')!;
+  const choose = (value: string) => act(() => {
+    const input = selectEngine();
+    input.value = value;
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  act(() => root.render(<Editor />));
+  await flush();
+  expect(Array.from(selectEngine().options, option => option.value)).toEqual(['local', 'hotstep']);
+  choose('hotstep');
+  await flush();
+  expect(selectEngine().value).toBe('hotstep');
+  choose('local');
+  await flush();
+  expect(selectEngine().value).toBe('local');
+});
