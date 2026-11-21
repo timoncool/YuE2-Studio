@@ -218,7 +218,7 @@ Local score, sampling and LoRA controls apply to local generation.
   instrumental says `instrumental` where the language goes.
 - **lyrics**: sections tagged `[Intro]`, `[Verse 1]`, `[Pre-Chorus]`, `[Chorus]`,
   `[Bridge]`, `[Outro]`, one tag per line, a blank line between sections, about 2-3 sung
-  words per second. Preserve Russian `¸` and any existing stress marks. In YuE2 lyrics
+  words per second. Preserve Russian `Ñ‘` and any existing stress marks. In YuE2 lyrics
   a combining acute (U+0301) immediately after a vowel can suggest the intended stress.
   Compare the saved vocals when pronunciation matters.
 - **abc**: the score the model sings from, in YuE2's dialect (`writing_guide` topic
@@ -348,7 +348,7 @@ move around. Check the result with `ui_screenshot`.
 - **where the downloads are kept**: `storage_get` (the folder, the room on its disk, what each
   download folder takes), `storage_set` (move them to a folder on another disk, a link stays
   where they were; `directory: null` brings them back), `storage_cancel`.
-- **models**: `models_status`, `models_catalog`, `models_download`, `models_adopt` (files already on disk), `models_select`, `models_preset` (`ruach`: Ruach Studio's fine-tune and their YuE2-VAE-RS x3 decoder set up in one step), `models_own_list`, `models_own_select`, `models_own_cancel`, `models_own_discard` (what a stopped community download left), `models_own_remove` and `models_own_reveal` (your own YuE2 fine-tune in GGUF from `models/yue2-cpp/own` in place of the set's backbone, or a community model from the catalog, downloaded there first), `models_cancel_download`, `models_remove`, `models_update_plan` (what this release updates, adds and no longer needs, with the reasons: the update screen), `models_update_apply` (its button: downloads, then removes what former releases left), `models_update_later` (its «Later»).
+- **models**: `models_status`, `models_catalog`, `models_download`, `models_adopt` (files already on disk), `models_select`, `models_preset` (`ruach`: Ruach Studio's fine-tune and their YuE2-VAE-RS x3 decoder set up in one step), `models_own_list`, `models_own_select`, `models_own_cancel`, `models_own_discard` (what a stopped community download left), `models_own_remove` and `models_own_reveal` (your own YuE2 fine-tune in GGUF from `models/yue2-cpp/own` in place of the set's backbone, or a community model from the catalog, downloaded there first), `models_cancel_download`, `models_remove`, `models_update_plan` (what this release updates, adds and no longer needs, with the reasons: the update screen), `models_update_apply` (its button: downloads, then removes what former releases left), `models_update_later` (its Â«LaterÂ»).
 - **engine**: `engine_options_get`, `engine_options_set`, `engine_restart`, `engine_pause` (stops the Studio-managed YuE2 engine after active songs and scores finish or are cancelled, while library playback stays available), `engine_resume` (starts it again with the selected models and options), `engine_logs`, `diagnostics_get` (the diagnostics and their text for an issue), `diagnostics_report` (a bug-report zip in the data folder's reports), `problem_preview` (exactly what a report would send), `problem_report` (a problem reported without a GitHub account: Studio Hub's bot opens a public issue and answers its number and url; a refusal by code - field, rate, not_configured, busy, unreachable - means the GitHub form). After the card ran out of memory on a song the studio makes it once more with a smaller KV cache and keeps that step for the card (`in_effect.max_seq_reason` is `fitted`); `engine_fitted_cache_reset` goes back to the model's full context.
 - **song**: `song_defaults` (what a field left out becomes), `song_create` (playlist_id puts the made songs into a playlist), `song_job_get`, `song_jobs_list`, `song_job_cancel`, `song_replay`, `song_tokenize`, `song_job_dismiss` (an ended job's card off the page), `song_job_score_again` (a song failed with `score_unsingable_strength` made again with its LoRA at 1.0 on Composition), `song_job_again` (a song failed with `not_audio` made again with the same request).
 - **score**: `score_compose`, `score_chord_bed`, `score_job_get`, `score_job_cancel`, `score_transcribe`, `score_match_sections`, `score_to_midi` (base64 .mid), `score_instrumental` (the voice's melody to the instrument), `score_vocal_octave`, `score_from_midi` (a .mid path), `score_mark` (sections from style and lyrics).
@@ -356,7 +356,7 @@ move around. Check the result with `ui_screenshot`.
 - **assistant**: `assistant_requests_wait`, `assistant_request_answer` (when you are the assistant), `assistant_sections`, `assistant_write`, `assistant_status`, `assistant_set`, `assistant_local_models`, `assistant_cli_agents` (Claude Code, Codex, opencode, Antigravity, Muse Code: installed or how to install), `assistant_runtime`, `assistant_model_install`, `assistant_model_remove`, `assistant_cancel_download`, `assistant_start`, `assistant_stop`.
 - `library_migration_sources_list` returns the installed ACE-Step and MiniMax Studio libraries known to the shared local registry, with the path and version of each source.
 - `library_migration_import` copies songs, media and ordered playlists from the previewed `path`. Repeating it for the same source directory skips imported records and preserves edits made in YuE2.
-- `library_migration_preview` takes the absolute `path` of an ACE-Step or MiniMax Studio folder (or its `data` directory). It opens the old library read-only and returns songs with available and missing media, plus each playlist’s ordered song IDs.
+- `library_migration_preview` takes the absolute `path` of an ACE-Step or MiniMax Studio folder (or its `data` directory). It opens the old library read-only and returns songs with available and missing media, plus each playlistâ€™s ordered song IDs.
 - **library**: `library_songs_list` (since/until), `library_liked`, `library_song_like`, `library_song_get`, `library_song_rename` (set the title), `library_song_update`, `library_song_delete` (to the bin for 30 days, with its stems), `library_trash_list`, `library_trash_restore`, `library_trash_delete` (for good), `library_trash_empty`, `library_import_audio`, `library_file_tags_get`, `library_file_tags_set`, `library_song_files`, `library_version_select`, `library_version_delete`, `library_song_describe_style` (by ear, for a cover of a recording without one), `recording_describe_style` (the same for an audio file on disk), `library_song_note_set` (the song's note).
 - `album_reorder` saves the library album order. Pass `ids` containing every album ID exactly once. The track order within each album is preserved.
 - **playlist**: `playlist_list`, `playlist_create`, `playlist_update`, `playlist_delete`, `playlist_get`, `playlist_select_preferred_take` (records a member as `preferred_song_id`).
@@ -380,7 +380,7 @@ move around. Check the result with `ui_screenshot`.
 - **winamp**: `winamp_get`, `winamp_set`, `winamp_skins`, `winamp_skin_add`, `winamp_museum`.
 - **video**: `video_open`, `video_get`, `video_set`, `video_render`, `video_play`, `video_pause`, `video_seek`, `video_close`.
 - **openrouter**: `openrouter_status`, `openrouter_set_key`, `openrouter_catalog`, `openrouter_catalog_refresh`, `openrouter_log`, `openrouter_complete`, `openrouter_cover`, `openrouter_transcribe`.
-- **restore**: `restore_status`, `restore_start` (a track or a file compressed to MP3, restored with Apollo into a new track `<title> · restored`), `restore_install`, `restore_remove`, `restore_cancel`.
+- **restore**: `restore_status`, `restore_start` (a track or a file compressed to MP3, restored with Apollo into a new track `<title> Â· restored`), `restore_install`, `restore_remove`, `restore_cancel`.
 
 ## Restore a track after compression
 
@@ -390,7 +390,7 @@ move around. Check the result with `ui_screenshot`.
 2. `restore_start` with `song_id`, or `path` of any audio file. It removes the artefacts of MP3
    compression and gives 44.1 kHz in the source's channels.
 3. `studio_wait until: restore`; `restore_status` run.library_song names the new track,
-   `<title> · restored`, which plays, downloads and goes to the tools like any track. Restoring
+   `<title> Â· restored`, which plays, downloads and goes to the tools like any track. Restoring
    the same track again replaces it; `restore_cancel` stops the run.
 4. Apollo's weights are CC BY-SA 4.0.
 
