@@ -1,5 +1,7 @@
 export const signedUpdateStrings = {
   en: {
+    notice: 'Signed component updates are available.',
+    openUpdates: 'View updates',
     title: 'Signed component updates',
     mode: 'Update policy',
     manual: 'Manual checks',
@@ -16,6 +18,8 @@ export const signedUpdateStrings = {
     paused: 'Automatic updates paused for this package',
   },
   ru: {
+    notice: 'Доступны обновления подписанных компонентов.',
+    openUpdates: 'Посмотреть обновления',
     title: 'Обновления подписанных компонентов',
     mode: 'Режим обновлений',
     manual: 'Проверять вручную',
@@ -32,6 +36,8 @@ export const signedUpdateStrings = {
     paused: 'Автообновление этого пакета приостановлено',
   },
   zh: {
+    notice: '有可用的签名组件更新。',
+    openUpdates: '查看更新',
     title: '签名组件更新',
     mode: '更新策略',
     manual: '手动检查',
@@ -48,6 +54,8 @@ export const signedUpdateStrings = {
     paused: '此包的自动更新已暂停',
   },
   ja: {
+    notice: '署名付きコンポーネントの更新があります。',
+    openUpdates: '更新を表示',
     title: '署名付きコンポーネントの更新',
     mode: '更新方法',
     manual: '手動で確認',
@@ -64,6 +72,8 @@ export const signedUpdateStrings = {
     paused: 'このパッケージの自動更新は一時停止中です',
   },
   ko: {
+    notice: '서명된 구성 요소 업데이트가 있습니다.',
+    openUpdates: '업데이트 보기',
     title: '서명된 구성 요소 업데이트',
     mode: '업데이트 정책',
     manual: '수동으로 확인',
@@ -80,6 +90,8 @@ export const signedUpdateStrings = {
     paused: '이 패키지의 자동 업데이트가 일시 중지되었습니다',
   },
   pt: {
+    notice: 'Há atualizações de componentes assinados.',
+    openUpdates: 'Ver atualizações',
     title: 'Atualizações de componentes assinados',
     mode: 'Política de atualização',
     manual: 'Verificar manualmente',
