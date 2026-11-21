@@ -9,14 +9,8 @@ import { afterGenerationPause } from '../services/generationPause';
 const composeScore = vi.fn();
 const transcribe = vi.fn();
 const instrumentalScore = vi.fn();
-const recogniseLyrics = vi.fn();
 let ready = true;
 let configured = false;
-vi.mock('../services/karaoke', async original => ({
-  ...(await original<typeof import('../services/karaoke')>()),
-  recogniseLyrics: (...args: unknown[]) => recogniseLyrics(...args),
-}));
-
 vi.mock('../context/I18nContext', () => ({ useI18n: () => ({ language: 'en', t: (key: string) => key }) }));
 vi.mock('../services/studioQueries', async original => ({
   ...await original<typeof import('../services/studioQueries')>(),
@@ -601,20 +595,106 @@ describe('selecting a second cover source', () => {
 });
 
 describe('lyrics from a cover recording', () => {
-  it('keeps text edited while recognition is running', async () => {
-    const song = { id: 'cover', title: 'Cover', lyrics: '' } as Song;
-    act(() => root.render(panel({ request: { id: 7, kind: 'transcribe', song, melodyOnly: true } })));
+  const sourceButton = () => host.querySelector<HTMLButtonElement>('button[title="recogniseFromSourceHint"]')!;
+  const lyricsBox = () => field('textarea[aria-label="lyrics"]')!;
+  const requests = () => vi.mocked(fetch).mock.calls
+    .filter(([url]) => url === '/v1/lyrics/recognise')
+    .map(([, options]) => JSON.parse(options!.body as string));
+  const respond = (reply: (body: RequestInit) => Promise<Response>) =>
+    vi.mocked(fetch).mockImplementation(async (url, options) =>
+      url === '/v1/lyrics/recognise' ? reply(options!) : Response.json({}));
+  const cover = async (id: number, songId = 'cover') => {
+    const song = { id: songId, title: songId, lyrics: '' } as Song;
+    act(() => root.render(panel({ request: { id, kind: 'transcribe', song, melodyOnly: true } })));
     await flush();
-    let finish!: (words: string) => void;
-    recogniseLyrics.mockImplementationOnce(() => new Promise<string>(resolve => { finish = resolve; }));
-    click(buttonNamed('recogniseFromSource')!);
-    expect(recogniseLyrics).toHaveBeenCalledWith({ songId: 'cover' });
-    const lyrics = field('textarea[aria-label="lyrics"]')!;
-    type(lyrics, 'my newer lyrics');
-    await act(async () => finish('older recognition result'));
-    expect(lyrics.value).toBe('my newer lyrics');
+  };
+  const confirm = () => click([...host.querySelectorAll('button')].find(
+    button => button.textContent === 'recogniseFromSource' && button !== sourceButton(),
+  )!);
+
+  it('asks before replacing text, allows refusal, and reports a recogniser refusal', async () => {
+    await cover(7);
+    type(lyricsBox(), 'Words already in the form');
+    respond(async () => Response.json({ error: 'karaoke.no-recogniser' }, { status: 409 }));
+    click(sourceButton());
+    expect(requests()).toEqual([]);
+    click([...host.querySelectorAll('button')].find(button => button.textContent === 'cancel')!);
+    expect(requests()).toEqual([]);
+    expect(lyricsBox().value).toBe('Words already in the form');
+
+    click(sourceButton());
+    confirm();
+    await flush();
+    expect(requests()).toEqual([{ song_id: 'cover' }]);
+    expect(lyricsBox().value).toBe('Words already in the form');
+    expect(host.textContent).toContain('karaokeNoRecogniser');
+
+    respond(async () => Response.json({ text: 'Words from the library recording' }));
+    click(sourceButton());
+    confirm();
+    await flush();
+    expect(lyricsBox().value).toBe('Words from the library recording');
+  });
+
+  it('dismisses a pending replacement confirmation when the source changes', async () => {
+    await cover(12, 'first');
+    type(lyricsBox(), 'Words already in the form');
+    click(sourceButton());
+    expect(host.textContent).toContain('recogniseFromSourceReplace');
+
+    await cover(13, 'second');
+    expect(host.textContent).not.toContain('recogniseFromSourceReplace');
+    expect(requests()).toEqual([]);
+  });
+
+  it('sends the chosen audio file instead of the previous library track', async () => {
+    await cover(8);
+    const file = new File(['RIFF'], 'singing.wav', { type: 'audio/wav' });
+    const input = host.querySelector<HTMLInputElement>('input[type="file"][accept*=".wav"]')!;
+    act(() => {
+      Object.defineProperty(input, 'files', { value: [file], configurable: true });
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    await flush();
+    respond(async () => Response.json({ text: 'Words from the file' }));
+    click(sourceButton());
+    await flush();
+    expect(requests()).toEqual([{ audio_base64: 'UklGRg==', audio_format: 'wav', audio_name: 'singing.wav' }]);
+    expect(lyricsBox().value).toBe('Words from the file');
+  });
+
+  it('recognises a new source while the abandoned request finishes later', async () => {
+    const replies: ((response: Response) => void)[] = [];
+    respond(async () => new Promise(resolve => replies.push(resolve)));
+    await cover(9, 'first');
+    click(sourceButton());
+    expect(sourceButton().disabled).toBe(true);
+
+    await cover(10, 'second');
+    expect(sourceButton().disabled).toBe(false);
+    click(sourceButton());
+    expect(requests()).toEqual([{ song_id: 'first' }, { song_id: 'second' }]);
+    await act(async () => replies[0](Response.json({ error: 'karaoke.no-recogniser' }, { status: 409 })));
+    expect(host.textContent).not.toContain('karaokeNoRecogniser');
+    expect(sourceButton().disabled).toBe(true);
+    await act(async () => replies[1](Response.json({ text: 'Second recording' })));
+    expect(lyricsBox().value).toBe('Second recording');
+  });
+
+  it('keeps text edited while recognition is running', async () => {
+    await cover(11);
+    let finish!: (reply: Response) => void;
+    respond(async () => new Promise(resolve => { finish = resolve; }));
+    click(sourceButton());
+    expect(requests()).toEqual([{ song_id: 'cover' }]);
+    type(lyricsBox(), 'my newer lyrics');
+    expect(sourceButton().disabled).toBe(false);
+    await act(async () => finish(Response.json({ text: 'older recognition result' })));
+    expect(lyricsBox().value).toBe('my newer lyrics');
+    expect(sourceButton().disabled).toBe(false);
   });
 });
+
 
 describe('Reuse prompt (#216)', () => {
   const song = { id: 's', title: 'Song', style: 'pop', lyrics: '[verse]\nfirst words', generationParams: {} } as unknown as Song;
