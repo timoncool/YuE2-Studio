@@ -200,8 +200,8 @@ export function libraryChanged(): void {
   void queryClient.invalidateQueries({ queryKey: libraryKey });
 }
 
-export function playlistsChanged(): void {
-  void queryClient.invalidateQueries({ queryKey: libraryPlaylistsKey });
+export function playlistsChanged(): Promise<void> {
+  return queryClient.invalidateQueries({ queryKey: libraryPlaylistsKey });
 }
 
 /**
