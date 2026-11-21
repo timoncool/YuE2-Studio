@@ -1445,15 +1445,17 @@ impl Training {
         let run_dir = self.run_dir(&run_id)?;
         std::fs::create_dir_all(run_dir.join("rvc-output"))?;
         // Keep the files available if the dataset changes while the trainer
-        // reads them, and pass one directory instead of a long Windows command.
-        let inputs = tempfile::Builder::new().prefix("rvc-input-").tempdir_in(&run_dir)?;
-        for path in clips {
-            let target = inputs.path().join(path.file_name().expect("validated dataset filename"));
+        // reads them. Its CLI takes file arguments, relative to the run folder.
+        let inputs = tempfile::Builder::new().prefix("rvc-").tempdir_in(&run_dir)?;
+        let mut staged_clips = Vec::with_capacity(clips.len());
+        for (index, path) in clips.into_iter().enumerate() {
+            let target = inputs.path().join(format!("{index}.wav"));
             if std::fs::hard_link(&path, &target).is_err() {
                 std::fs::copy(&path, &target)?;
             }
+            staged_clips.push(target.strip_prefix(&run_dir)?.to_owned());
         }
-        let stage = runtime.training_stage(inputs.path(), &run_dir, &settings);
+        let stage = runtime.training_stage(staged_clips, &run_dir, &settings);
         let run = Run {
             id: run_id.clone(), engine: crate::rvc_burn::STAGE.into(),
             dataset_id: dataset.id, dataset_name: dataset.name.clone(),
