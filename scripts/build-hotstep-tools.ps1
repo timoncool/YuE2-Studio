@@ -153,6 +153,11 @@ foreach ($tool in $tools) {
 }
 Get-ChildItem -Path $binDirectory -Filter 'ggml*.dll' -File | Copy-Item -Destination $output -Force
 Copy-Item (Join-Path $worktree "$($source.source_dir)\LICENSE") (Join-Path $output 'LICENSE-HOT-Step.txt') -Force
+Copy-Item (Join-Path $ggml 'LICENSE') (Join-Path $output 'LICENSE-ggml.txt') -Force
+if ($Build -eq 'cuda13') {
+    $toolkitRoot = Split-Path -Parent (Split-Path -Parent (Get-Command nvcc -CommandType Application).Source)
+    Copy-Item (Join-Path $toolkitRoot 'LICENSE') (Join-Path $output 'CUDA-LICENSE.txt') -Force
+}
 
 $stamp = [pscustomobject]@{ commit = $source.commit; ggml_cpu_patch_sha256 = $cpuPatchHash; build = $Build; cuda_architecture = $CudaArchitecture; runtimes = @($tools | ForEach-Object { $shipped[$_] }) }
 [System.IO.File]::WriteAllText((Join-Path $output 'runtime.json'), ($stamp | ConvertTo-Json), (New-Object System.Text.UTF8Encoding($false)))
@@ -173,6 +178,7 @@ if ($Build -eq 'cuda13') {
     Copy-Item $caption $captioner -Force
     Get-ChildItem -Path $binDirectory -Filter 'ggml*.dll' -File | Where-Object { $_.Name -ne 'ggml-cuda.dll' } | Copy-Item -Destination $captioner -Force
     Copy-Item (Join-Path $worktree "$($source.source_dir)\LICENSE") (Join-Path $captioner 'LICENSE-HOT-Step.txt') -Force
+    Copy-Item (Join-Path $ggml 'LICENSE') (Join-Path $captioner 'LICENSE-ggml.txt') -Force
     Copy-Item (Join-Path $output 'runtime.json') $captioner
     $captionZip = Join-Path (Split-Path -Parent $output) $source.caption_asset
     if (Test-Path $captionZip) { Remove-Item -Force $captionZip }

@@ -8,7 +8,7 @@
   "macos_build": "scripts/build-midi-runtime.sh",
   "release_tag": "hotstep-tools-479cbeb8-xcr0",
   "asset": "hotstep-tools-479cbeb8-xcr0-cuda-windows-x64.zip",
-  "bytes": 125473679,
+  "bytes": 125490974,
   "cuda_architectures": "75-real;80-real;86-real;89-real;90-real;120a-real",
   "cuda12_asset": "hotstep-midi-cuda12-windows-x64.zip",
   "cuda12_bytes": 0,
