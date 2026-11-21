@@ -450,7 +450,8 @@ Add-Type -AssemblyName UIAutomationClient, UIAutomationTypes
 $tree = [Windows.Automation.TreeScope]
 $all = [Windows.Automation.Condition]::TrueCondition
 $root = [Windows.Automation.AutomationElement]::RootElement
-$deadline = [DateTime]::UtcNow.AddSeconds(22)
+$confirmed = $false
+$deadline = [DateTime]::UtcNow.AddSeconds(28)
 while ([DateTime]::UtcNow -lt $deadline -and !(Test-Path -LiteralPath $env:STUDIO_QA_PDF)) {
   $ids = [Collections.Generic.HashSet[int]]::new()
   [void]$ids.Add([int]$env:STUDIO_QA_PID)
@@ -462,17 +463,30 @@ while ([DateTime]::UtcNow -lt $deadline -and !(Test-Path -LiteralPath $env:STUDI
     }
   } while ($count -ne $ids.Count)
   foreach ($window in $root.FindAll($tree::Children,$all)) {
-    if (!$ids.Contains($window.Current.ProcessId) -and $window.Current.Name -notmatch '^Print(ing)?$') { continue }
+    if (!$ids.Contains($window.Current.ProcessId) -and $window.Current.Name -notmatch '^(Print(ing)?|Save As|Save Print Output As)$') { continue }
     $elements = $window.FindAll($tree::Descendants,$all)
     $buttons = @($elements | Where-Object {
       $_.Current.ControlType -eq [Windows.Automation.ControlType]::Button -and !$_.Current.IsOffscreen
     })
     Write-Output (@{window=$window.Current.Name;buttons=@($buttons | ForEach-Object {$_.Current.Name})} | ConvertTo-Json -Compress)
     $confirm = $buttons | Where-Object {$_.Current.Name -eq 'Print' -and $_.Current.IsEnabled} | Select-Object -First 1
-    if ($confirm) {
+    if ($confirmed) {
+      $name = $elements | Where-Object {
+        $_.Current.ControlType -eq [Windows.Automation.ControlType]::Edit -and
+        ($_.Current.AutomationId -in @('1001','1148') -or $_.Current.Name -match '^File name')
+      } | Select-Object -First 1
+      $save = $buttons | Where-Object {$_.Current.Name -eq 'Save' -and $_.Current.IsEnabled} | Select-Object -First 1
+      if ($name -and $save) {
+        $name.GetCurrentPattern([Windows.Automation.ValuePattern]::Pattern).SetValue($env:STUDIO_QA_PDF)
+        $save.GetCurrentPattern([Windows.Automation.InvokePattern]::Pattern).Invoke()
+        Write-Output 'Selected PDF output path'
+        exit 0
+      }
+    }
+    if ($confirm -and !$confirmed) {
       $confirm.GetCurrentPattern([Windows.Automation.InvokePattern]::Pattern).Invoke()
       Write-Output 'Confirmed print'
-      exit 0
+      $confirmed = $true
     }
   }
   Start-Sleep -Milliseconds 500
