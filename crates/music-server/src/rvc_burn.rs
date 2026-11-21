@@ -107,9 +107,13 @@ impl Runtime {
         if let Some(profile) = profile
             && !runtime.missing(training).is_empty()
         {
-            let mut managed = Self::from_folder(runtime.folder.join("runtime").join(profile.folder()));
-            managed.managed = Some((profile, downloads.clone()));
-            return managed;
+            let worker = runtime.folder.join("runtime").join(profile.folder());
+            return Self {
+                exe: worker.join("rvc.exe"),
+                ort: worker.join("onnxruntime.dll"),
+                managed: Some((profile, downloads.clone())),
+                ..runtime
+            };
         }
         runtime
     }
@@ -411,7 +415,7 @@ pub(super) async fn status(State(state): State<AppState>) -> Json<Value> {
         serde_json::json!(hardware::hardware().card_cuda.is_some() && missing.is_empty());
     result["conversion_ready"] = serde_json::json!(Runtime::discover(&state).ready(false).is_ok());
     result["missing"] = serde_json::json!(missing);
-    result["folder"] = serde_json::json!(runtime.folder);
+    result["folder"] = serde_json::json!(runtime.exe.parent().unwrap_or(&runtime.folder));
     result["cuda"] = serde_json::json!(hardware::hardware().card_cuda.is_some());
     Json(result)
 }
@@ -553,8 +557,13 @@ fn burn_setup_and_training_share_the_managed_path_for_a_stray_worker() {
     let profile = Some(rvc_burn_install::Profile::Cuda12);
 
     let runtime = Runtime::select(folder.clone(), None, profile, &downloader, true);
-    assert_eq!(runtime.folder, folder.join("runtime/cuda12"));
+    assert_eq!(runtime.folder, folder);
+    assert_eq!(runtime.exe, folder.join("runtime/cuda12/rvc.exe"));
+    assert_eq!(runtime.ort, folder.join("runtime/cuda12/onnxruntime.dll"));
     assert!(matches!(runtime.install_profile(), Ok(Some(rvc_burn_install::Profile::Cuda12))));
+    let arguments = runtime.common_args(data);
+    assert!(arguments.windows(2).any(|args| args[0] == "--content" && args[1].as_os_str() == folder.join(CONTENT).as_os_str()));
+    assert!(arguments.windows(2).any(|args| args[0] == "--rmvpe" && args[1].as_os_str() == folder.join(PITCH).as_os_str()));
 
     let explicit = Runtime::select(folder.clone(), Some(folder.clone()), profile, &downloader, true);
     assert_eq!(explicit.folder, folder);
