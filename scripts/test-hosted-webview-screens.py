@@ -620,7 +620,13 @@ while ([DateTime]::UtcNow -lt $deadline -and !(Test-Path -LiteralPath $env:STUDI
         if (!$settingsOpen) {
           $more = $buttons | Where-Object {$_.Current.Name -eq 'More settings'} | Select-Object -First 1
           if (!$more) { throw 'Print preview does not show More settings' }
-          $more.GetCurrentPattern([Windows.Automation.InvokePattern]::Pattern).Invoke()
+          $expand = $null
+          if ($more.TryGetCurrentPattern([Windows.Automation.ExpandCollapsePattern]::Pattern,[ref]$expand)) {
+            $expand.Expand()
+          } else {
+            $more.SetFocus()
+            [Windows.Forms.SendKeys]::SendWait(' ')
+          }
           $settingsOpen = $true
           break
         }
