@@ -1,4 +1,4 @@
-"""Validate the README and six Pages tables against the music GPU measurements."""
+"""Validate the benchmark guide and six Pages tables against the music GPU measurements."""
 
 import argparse
 import hashlib
@@ -272,14 +272,14 @@ def main():
                        f'{result["process_start_to_first_wav_s"]:.3f}', f'{result["warm_median_s"]:.3f}',
                        f'{peak["dedicated_bytes"]/GIB:.2f}', f'{peak["shared_bytes"]/GIB:.2f}'])
     radeon_section = "radeon-gpu-pair"
-    readme = ROOT / "README.md"
-    validate_table(readme, readme_rows(readme), rows, residency.values())
+    guide = ROOT / "guides/en/benchmarks.md"
+    validate_table(guide, readme_rows(guide), rows, residency.values())
     wsl = data["wsl2_linux"]
     if args.evidence_dir:
         verify_wsl_evidence(wsl["rows"], args.evidence_dir)
-    assert readme_rows(readme, "music-gpu-wsl") == wsl_rows(wsl)
-    assert readme_rows(readme, radeon_section) == radeon
-    assert len(native) == 2 and readme_rows(readme, "native-radeon-pair") == native
+    assert readme_rows(guide, "music-gpu-wsl") == wsl_rows(wsl)
+    assert readme_rows(guide, radeon_section) == radeon
+    assert len(native) == 2 and readme_rows(guide, "native-radeon-pair") == native
     for locale in LOCALES:
         page = ROOT / "docs" / f"{locale}.html"
         validate_table(page, site_rows(page), rows, residency.values(), decimal_comma=locale in {"ru", "pt"})
@@ -289,7 +289,7 @@ def main():
         native_rows = [[row[0], *[v.replace(".", ",") for v in row[1:]]] for row in native] if locale in {"ru", "pt"} else native
         assert site_rows(page, "native-radeon-pair") == native_rows, page
         assert data["radeon_pair"]["source_sha"][:8] in section(page, radeon_section), page
-    print(f"{len(rows)} Windows and {len(wsl['rows'])} WSL2 timing results, {len(residency)} residency results and both Radeon comparisons match the README and {len(LOCALES)} site pages.")
+    print(f"{len(rows)} Windows and {len(wsl['rows'])} WSL2 timing results, {len(residency)} residency results and both Radeon comparisons match the benchmark guide and {len(LOCALES)} site pages.")
 
 
 if __name__ == "__main__":
