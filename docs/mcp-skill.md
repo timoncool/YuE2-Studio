@@ -121,6 +121,13 @@ For MiniMax Music3 through audio.cpp, call `audio_cpp_music_models` and check th
 to `song_create` with `style`, `lyrics`, and an optional nonnegative `seed`.
 The job uses the installed `quality-q8` profile and returns its library song.
 
+For other ready audio.cpp families, pass the ID returned by the same catalog as
+`music_source.model`. HeartMuLa takes lyrics and style tags, with optional
+sampling and codec settings in `heartmula`. For MiDashengLM-Gen, use
+`midasheng` to describe the scene, music, speech, effects and environment.
+For Vevo2, pass the lyrics and a library song ID as `vevo2.voice_song_id`.
+Add `vevo2.melody_song_id` to condition the singing on a second library track.
+
 For an OpenRouter generation, read `openrouter_catalog` and select an ID whose
 `capabilities` include `music_generation`. Pass that exact ID as
 `music_source.model`, with `music_source.kind` set to `openrouter`.

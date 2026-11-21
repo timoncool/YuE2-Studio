@@ -141,6 +141,9 @@ export type MusicEngine = 'local' | 'openrouter' | ProfileMusicEngine;
 export interface YueRequest {
   /** Capture the editor's selection with the job so later switches cannot reroute it. */
   music_source?: { kind: 'local' } | { kind: 'openrouter' | 'audio_cpp'; model: string } | { kind: 'native'; engine: NativeMusicEngine; model: string };
+  midasheng?: import('./components/MiDashengFields').MiDashengPrompt;
+  heartmula?: import('./components/HeartMuLaControls').HeartMuLaOptions;
+  vevo2?: import('./components/Vevo2SingingFields').Vevo2References;
   ace?: { guidance_scale?: number };
   /** Style tags or a short style prompt, verbatim under `[Tags]`. */
   style: string;

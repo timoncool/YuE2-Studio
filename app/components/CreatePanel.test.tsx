@@ -458,6 +458,23 @@ it('chooses MiniMax Music3 through audio.cpp and reuses the saved seed and forma
   });
 });
 
+it.each([
+  ['heartmula', { heartmula: { top_k: 30, temperature: 0.9 } }, 'pop', ''],
+  ['vevo2', { vevo2: { voice_song_id: 'original-take' } }, '', 'Words to sing'],
+  ['midashenglm_gen', { midasheng: { caption: '', music: 'quiet piano', speech_text: '', speech_style: '', effects: '', environment: 'rain' } }, 'quiet piano', ''],
+] as const)('restores and submits model-specific settings for %s', async (model, options, style, lyrics) => {
+  vi.stubGlobal('fetch', vi.fn(async () => Response.json({ engine: 'audio.cpp', models: [
+    { id: model, name: model, profile_id: 'q8', quantization: 'Q8_0', ready: true, missing: [] },
+  ] })));
+  const song = {
+    title: 'Saved take', ditModel: 'audio.cpp', style, lyrics,
+    generationParams: { music_source: { kind: 'audio_cpp', model }, ...options },
+  } as Song;
+  act(() => root.render(panel({ musicEngine: 'audio.cpp', initialData: { song, timestamp: 1 } })));
+  await flush();
+  click(buttonNamed('create')!);
+  expect(sent.at(-1)).toMatchObject({ music_source: { kind: 'audio_cpp', model }, ...options });
+});
 it('asks for an explicit profile when a migrated ACE take used custom weights', async () => {
   const engine = 'acestep-cpp';
   const models = ['acestep-v15-xl-sft-Q4_K_M.gguf', 'acestep-5Hz-lm-4B-BF16.gguf', 'vae-BF16.gguf'];
