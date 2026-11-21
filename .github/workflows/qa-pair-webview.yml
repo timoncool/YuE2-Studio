@@ -14,13 +14,16 @@ jobs:
         with:
           node-version: 22
       - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: desktop/src-tauri
       - run: npm --prefix app ci
       - run: npm --prefix desktop ci
       - run: npm --prefix desktop run build
       - name: Exercise the native window through Studio MCP
         shell: pwsh
         run: |
-          $exe = Get-ChildItem target -Filter YuE2-Studio.exe -File -Recurse |
+          $outputs = @("desktop/src-tauri/target", "target") | Where-Object { Test-Path $_ }
+          $exe = Get-ChildItem $outputs -Filter YuE2-Studio.exe -File -Recurse |
             Where-Object { $_.DirectoryName -match '[\\/]release$' } | Select-Object -First 1
           if (-not $exe) { throw 'Tauri binary not found' }
           python scripts/check-pair-webview.py $exe.FullName
