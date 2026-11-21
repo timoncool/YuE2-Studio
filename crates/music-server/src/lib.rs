@@ -14,6 +14,7 @@ mod problem;
 mod processing;
 mod vst;
 mod training;
+mod checkpoint_listening;
 mod auto_title;
 mod tagging;
 mod cover_art;
@@ -52,6 +53,7 @@ mod assistant;
 mod song_tokenizer;
 mod assistant_runtime;
 mod audio_facts;
+mod backing_vocals;
 mod beat_dbn;
 mod listen;
 mod prepare;
@@ -153,6 +155,7 @@ const PROGRAM_ID: &str = "yue2";
 
 #[derive(Clone)]
 struct AppState {
+    checkpoint_listening: Arc<tokio::sync::Mutex<()>>,
     configuration: Arc<RwLock<StudioConfiguration>>,
     jobs: Arc<RwLock<HashMap<String, MusicJob>>>,
     ace_runtime: Arc<ace::Runtime>,
@@ -391,6 +394,8 @@ struct CreateMusicJobRequest {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     openrouter: Option<providers::openrouter::MusicOptions>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    minimax: Option<native_minimax::Sampling>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     ace: Option<native_ace_jobs::AceOptions>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     hotstep_sa3: Option<hotstep_sa3::Options>,
@@ -476,6 +481,8 @@ struct CreateMusicJobRequest {
     /// names it as the track it was made from.
     #[serde(default)]
     cover_of: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    backing_song_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
@@ -1625,6 +1632,7 @@ pub async fn serve_on_port(port: u16) -> anyhow::Result<()> {
             persisted.as_ref().map(|settings| settings.configuration.clone()).unwrap_or_else(initial_configuration),
         ))),
         jobs: Arc::new(RwLock::new(HashMap::new())),
+        checkpoint_listening: Arc::new(tokio::sync::Mutex::new(())),
         ace_runtime: Arc::default(),
         ace_cancellations: Arc::default(),
         minimax: Arc::default(),
@@ -1966,6 +1974,7 @@ pub async fn serve_on_port(port: u16) -> anyhow::Result<()> {
         .route("/v1/score/instrumental", post(score::api::instrumental))
         .route("/v1/score/vocal-octave", post(score::api::vocal_octave))
         .route("/v1/score/chord-bed", post(score::api::chord_bed))
+        .route("/v1/score/backing-tempo", post(analyze_backing_tempo))
         .route("/v1/score/sections", post(match_score_sections))
         .route("/v1/score/from-midi", post(score::api::from_midi))
         .route("/v1/song/tokenize", post(song_tokenizer::tokenize))
@@ -1985,6 +1994,7 @@ pub async fn serve_on_port(port: u16) -> anyhow::Result<()> {
         .route("/v1/training/runs/{id}/continue", post(continue_training))
         .route("/v1/training/runs/{id}", axum::routing::delete(delete_training_run))
         .route("/v1/training/runs/{id}/checkpoints/{step}/install", post(install_training_checkpoint))
+        .route("/v1/training/runs/{id}/checkpoints/listen", post(checkpoint_listening::listen))
         .route("/v1/library/songs/{id}/stems", get(read_stems).post(start_separation))
         .route("/v1/library/songs/{id}/stems/{stem}", get(read_stem_audio))
         .route("/v1/library/songs/{id}/cover/auto", post(draw_cover_now))
@@ -2363,6 +2373,8 @@ fn trashed_song_message(song: &library::Song) -> String {
 
 async fn library_media(State(state): State<AppState>, Path(song_id): Path<String>, request: Request) -> Result<axum::response::Response, (StatusCode, Json<ApiError>)> {
     let song = state.library.get_song(&song_id).map_err(|error| api_error(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?.ok_or_else(|| api_error(StatusCode::NOT_FOUND, "Song not found".into()))?;
+    // ServeFile opens the handle while preparing the response. Its body is read after this guard drops.
+    let _open = tagging::audio_open_guard().await;
     let path = state.library.media_path_for_song(&song).ok_or_else(|| api_error(StatusCode::NOT_FOUND, "Song audio is not available in the studio media library".into()))?;
     Ok(serve_audio_file(&path, request).await)
 }
@@ -6337,6 +6349,7 @@ async fn engine_options(State(state): State<AppState>) -> Json<Value> {
     let kv_cache_now = *state.kv_cache_running.read().await;
     Json(serde_json::json!({
         "options": options,
+        "platform": std::env::consts::OS,
         "in_effect": in_effect,
         "saved_max_seq": saved_max_seq,
         "effective_max_batch": options.effective_max_batch(),
@@ -11697,6 +11710,9 @@ async fn submit_music_job(state: AppState, request: CreateMusicJobRequest, attem
 
 async fn dispatch_music_job(state: AppState, mut request: CreateMusicJobRequest, attempt: u32, retry_engine: Option<&str>) -> (StatusCode, Json<MusicJob>) {
     let destination = music_destination(request.music_source.as_ref(), &*state.configuration.read().await);
+    if request.backing_song_id.is_some() && !matches!(&destination, MusicDestination::Local(engine) if engine == PRIMARY_MUSIC_ENGINE_ID) {
+        return (StatusCode::BAD_REQUEST, Json(failed_request_job(request, PRIMARY_MUSIC_ENGINE_ID.into(), "Singing over a backing track requires native YuE2.")));
+    }
     let engine_id = match destination {
         MusicDestination::Signed { engine, model, generation, model_generation } => {
             if retry_engine.is_some_and(|original| original != engine || generation.is_none() || model_generation.is_none()) {
@@ -11757,6 +11773,31 @@ async fn dispatch_music_job(state: AppState, mut request: CreateMusicJobRequest,
     if state.training.active_run().await.is_some() {
         return (StatusCode::CONFLICT, Json(failed_request_job(request, engine_id, SongError::TrainingOnCard)));
     }
+    let backing = match request.backing_song_id.as_deref() {
+        Some(id) => match backing_source(&state, id) {
+            Ok((original, path)) => {
+                let valid_score = request.abc.as_deref().and_then(score::chord_bed::read).is_some();
+                let has_words = request.lyrics.lines().any(|line| !line.trim().is_empty() && !line.trim().starts_with('['));
+                if !valid_score || !has_words || request.cot.as_deref() == Some("off") || request.semantic_tokens.is_some() || request.cover_of.is_some() {
+                    return (StatusCode::BAD_REQUEST, Json(failed_request_job(request, engine_id, "Select a Chord bed and enter lyrics so YuE2 can compose a new melody for this backing.")));
+                }
+                if request.transpose.unwrap_or_default() != 0 || request.rvc_after.is_some() {
+                    return (StatusCode::BAD_REQUEST, Json(failed_request_job(request, engine_id, "A backing mix keeps the original key and cannot run voice conversion after mixing.")));
+                }
+                let Some(duration) = audio_pcm::duration_seconds(&path) else {
+                    return (StatusCode::BAD_REQUEST, Json(failed_request_job(request, engine_id, "The backing track has no readable duration.")));
+                };
+                request.vocals_only = true;
+                request.output_format = Some("wav32".into());
+                request.fade_in = None;
+                request.fade_out = None;
+                request.duration_seconds = Some(duration);
+                Some(original)
+            }
+            Err(reason) => return (StatusCode::BAD_REQUEST, Json(failed_request_job(request, engine_id, reason))),
+        },
+        None => None,
+    };
     if request.vocals_only {
         let config = state.separation_config.read().await.clone();
         let ready = match config.engine {
@@ -11809,12 +11850,13 @@ async fn dispatch_music_job(state: AppState, mut request: CreateMusicJobRequest,
     if request.lyric_timing != Some(false) && !opening {
         lyric_schedule(&mut body);
     }
-    let derived = match request.cover_of.clone() {
-        Some(id) => match cover_source(&state.library, &id, attempt > 0) {
+    let derived = match (backing, request.cover_of.clone()) {
+        (Some(original), _) => Some(derivation(&original, "backing_vocals", Value::Null)),
+        (_, Some(id)) => match cover_source(&state.library, &id, attempt > 0) {
             Ok(original) => Some(derivation(&original, "cover", serde_json::json!({ "cot": request.cot, "style": request.style }))),
             Err((status, reason)) => return (status, Json(failed_request_job(request, engine_id, reason))),
         },
-        None => None,
+        _ => None,
     };
     let stored_request = serde_json::to_value(&request).unwrap_or(Value::Null);
     match state.music_server.submit(engine_submission(&body)).await {
@@ -11914,6 +11956,10 @@ async fn submit_replay_job(state: AppState, request: ReplayMusicJobRequest, atte
         return Err(api_error(StatusCode::CONFLICT, "a training run has the card; re-render once it finishes or is stopped".into()));
     }
     let mut body = prepare_replay_synthesis(replay, &request).map_err(|error| api_error(StatusCode::BAD_REQUEST, error))?;
+    let derived = if let Some(id) = body.get("backing_song_id").and_then(Value::as_str) {
+        let (source, _) = backing_source(&state, id).map_err(|reason| api_error(StatusCode::BAD_REQUEST, reason))?;
+        Some(derivation(&source, "backing_vocals", Value::Null))
+    } else { None };
     let continuing = body.get("continue_semantic_tokens").and_then(Value::as_bool) == Some(true);
     // the part composed on keeps to the score the way a new song does
     if continuing {
@@ -11928,7 +11974,7 @@ async fn submit_replay_job(state: AppState, request: ReplayMusicJobRequest, atte
         .map_err(|error| api_error(StatusCode::SERVICE_UNAVAILABLE, format!("the engine refused the job: {error}")))?;
     let title = request.title.clone().filter(|value| !value.trim().is_empty()).or(source_title);
     let mut job = MusicJob {
-        derived: None,
+        derived,
         cover_prompt: None,
         id: remote.id,
         client_ref: request.client_ref.clone(),
@@ -11974,6 +12020,13 @@ async fn submit_replay_job(state: AppState, request: ReplayMusicJobRequest, atte
 
 fn prepare_replay_synthesis(mut replay: Value, overrides: &ReplayMusicJobRequest) -> Result<Value, String> {
     let object = replay.as_object_mut().ok_or("replay_request must be a JSON object")?;
+    if object.get("backing_song_id").and_then(Value::as_str).is_some() {
+        if overrides.extend_seconds.is_some() || overrides.output_format.as_deref().is_some_and(|format| format != "wav32") {
+            return Err("A vocal replay keeps its backing, duration and WAV format.".into());
+        }
+        object.insert("vocals_only".into(), Value::Bool(true));
+        object.insert("output_format".into(), Value::String("wav32".into()));
+    }
     let tokens = object.get("semantic_tokens").and_then(Value::as_str).unwrap_or_default().to_owned();
     let tokens = tokens.as_str();
     validate_semantic_tokens(tokens)?;
@@ -12795,6 +12848,12 @@ async fn import_tracks(state: &AppState, job: &MusicJob, job_id: &str, tracks: V
             vocals_used_gpu = Some(used_gpu);
             extension = "wav";
             replay["vocals_only"] = Value::Bool(true);
+            if let Some(id) = job.generation_settings.get("backing_song_id").and_then(Value::as_str) {
+                let (_, backing) = backing_source(state, id).map_err(anyhow::Error::msg)?;
+                audio = tokio::task::spawn_blocking(move || backing_vocals::mix(&backing, audio))
+                    .await.context("the backing mix stopped")??;
+                replay["backing_song_id"] = Value::String(id.into());
+            }
         }
         // the engine's float output is kept at the level it came: lossless FLAC unless MP3 was asked for
         if extension == "wav" {
@@ -13664,9 +13723,44 @@ fn drawn_seed() -> i64 {
 /// What the engine is asked for: always its unencoded 32-bit float output, the
 /// model's own rate, precision and level, so a track is encoded once, here, and
 /// nothing changes its loudness on the way.
+fn backing_source(state: &AppState, id: &str) -> Result<(library::Song, PathBuf), String> {
+    let song = cover_source(&state.library, id, false).map_err(|(_, reason)| reason)?;
+    let path = state.library.media_path_for_song(&song)
+        .filter(|path| path.is_file())
+        .ok_or_else(|| "The backing has no audio in the library.".to_string())?;
+    Ok((song, path))
+}
+
+#[derive(Deserialize)]
+struct BackingTempoRequest {
+    song_id: String,
+}
+
+/// Measures the beat grid without guessing key, harmony or arrangement.
+async fn analyze_backing_tempo(State(state): State<AppState>, Json(request): Json<BackingTempoRequest>) -> Json<Value> {
+    let measured = async {
+        let (_, audio) = backing_source(&state, &request.song_id).map_err(anyhow::Error::msg)?;
+        let models = state.training.audio_facts_dir();
+        anyhow::ensure!(models.join(audio_facts::BEAT_MODEL).is_file(), "Install the listening pack to measure the backing tempo.");
+        state.lyrics_sync.bind_ort()?;
+        tokio::task::spawn_blocking(move || {
+            let mono = audio_facts::decode(&audio)?;
+            anyhow::ensure!(mono.iter().any(|sample| sample.abs() > 0.001), "The backing is too quiet to measure its beat.");
+            let facts = audio_facts::Measurer::load(&models)?.measure_mono(&mono)?;
+            anyhow::ensure!((40..=240).contains(&facts.bpm), "The measured tempo is outside the Chord bed range of 40–240 BPM.");
+            anyhow::ensure!(audio_facts::supports_backing_tempo(&mono, facts.bpm), "No regular pulse was confirmed in the backing. Enter the tempo manually if you know it.");
+            Ok::<_, anyhow::Error>(facts.bpm)
+        }).await?
+    }.await;
+    match measured {
+        Ok(bpm) => Json(serde_json::json!({"ok": true, "bpm": bpm, "method": "beat-this"})),
+        Err(error) => Json(serde_json::json!({"ok": false, "error": format!("{error:#}")})),
+    }
+}
+
 fn engine_submission(body: &Value) -> Value {
     let mut engine = body.clone();
-    if let Some(fields) = engine.as_object_mut() { fields.remove("vocals_only"); fields.remove("rvc_after"); fields.remove("score_edit"); fields.remove("fade_in"); fields.remove("fade_out"); }
+    if let Some(fields) = engine.as_object_mut() { fields.remove("vocals_only"); fields.remove("backing_song_id"); fields.remove("rvc_after"); fields.remove("score_edit"); fields.remove("fade_in"); fields.remove("fade_out"); }
     if let Some(fields) = engine.as_object_mut() {
         fields.insert("output_format".into(), Value::from("wav32"));
         fields.remove("mp3_bitrate");
@@ -13754,6 +13848,7 @@ fn yue_request_from(request: &CreateMusicJobRequest, max_batch: u32) -> Result<V
         "style": request.style,
         "lyrics": request.lyrics.replace("\r\n", "\n"),
     });
+    insert_optional(&mut body, "backing_song_id", request.backing_song_id.clone());
     if request.vocals_only {
         body["vocals_only"] = Value::Bool(true);
     }
@@ -14858,6 +14953,19 @@ mod tests {
             lyrics: "[Verse]\r\none line".into(),
             ..CreateMusicJobRequest::default()
         }
+    }
+
+    #[test]
+    fn backing_is_studio_provenance_and_is_excluded_from_native_engine_requests() {
+        let request = CreateMusicJobRequest { backing_song_id: Some("source".into()), vocals_only: true, ..sample_request() };
+        let body = yue_request_from(&request, 1).unwrap();
+        assert_eq!(body["backing_song_id"], "source");
+        assert!(engine_submission(&body).get("backing_song_id").is_none());
+        assert!(engine_submission(&body).get("vocals_only").is_none());
+        let replay = prepare_replay_synthesis(serde_json::json!({ "semantic_tokens": "1,2,3", "backing_song_id": "source" }), &replay_overrides()).unwrap();
+        assert_eq!(replay["backing_song_id"], "source");
+        assert_eq!(replay["output_format"], "wav32");
+        assert_eq!(replay["vocals_only"], true);
     }
 
     #[test]

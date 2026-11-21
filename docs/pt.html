@@ -165,6 +165,7 @@ details.more summary { cursor: pointer; color: var(--muted); font-weight: 600; m
 .answer ul { margin: 0; padding-left: 18px; display: grid; gap: 6px; }
 
 .scroll { overflow-x: auto; margin: 10px 0; }
+.benchmark-scroll:focus-visible { outline: 2px solid var(--pink); outline-offset: 3px; }
 table { border-collapse: collapse; width: 100%; font-size: 14px; }
 th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--line); }
 th { color: var(--muted); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
@@ -298,7 +299,7 @@ footer p { margin: 0 0 8px; }
       </article>
       <article class="tile">
         <h3>A sua própria LoRA</h3>
-        <figure class="shot"><img src="screenshots/pt-08-training.webp" alt="A sua própria LoRA treinada na placa: a perda e o desvio enquanto aprende, um checkpoint a cada 50 passos, um clique para a biblioteca." loading="lazy" width="1440" height="960" /></figure>
+        <figure class="shot"><img src="screenshots/pt-08-training.webp" alt="Configuração do treino de uma LoRA na placa gráfica." loading="lazy" width="1440" height="960" /></figure>
         <p>Músicas de um artista ou de um estilo tornam-se uma LoRA na sua placa, com o treinador e a receita do HOT-Step.</p>
       </article>
       <article class="tile">
@@ -308,7 +309,7 @@ footer p { margin: 0 0 8px; }
       </article>
       <article class="tile">
         <h3>Conduzido pelo seu agente (MCP)</h3>
-        <figure class="shot"><img src="screenshots/pt-11-agent.webp" alt="Ligar um agente por MCP: o endereço e as linhas a colar no Claude Code ou em qualquer outro cliente." loading="lazy" width="1440" height="960" /></figure>
+        <figure class="shot"><img src="screenshots/pt-11-agent.webp" alt="Painel Agente com as instruções para ligar um cliente por MCP." loading="lazy" width="1440" height="960" /></figure>
         <p>Ligue o Claude Code, o Claude Desktop ou o Cursor e o agente faz tudo o que o estúdio faz: escreve e cria músicas, enche um conjunto de dados e treina, desenha capas, corta clipes no editor de vídeo, toca músicas - e vê a janela e carrega nos seus botões.</p>
       </article>
     </div>
@@ -490,9 +491,9 @@ footer p { margin: 0 0 8px; }
     </table></div>
     <p class="note">Com a semente 42, ambos os WAVs têm 30,0 s de áudio estéreo a 48 kHz. Em janelas de 100 ms, o nível RMS dos dois canais fica abaixo de −60 dBFS nos últimos 5,3 s com CUDA e 5,0 s com Vulkan. A velocidade usa a duração total do WAV.</p>
 <!-- music-gpu-matrix:start -->
-    <h3>Motores de música na GPU · testes para a versão 5.0 e versões publicadas</h3>
+    <h3 id="music-gpu-matrix-title">Motores de música na GPU · testes para a versão 5.0 e versões publicadas</h3>
     <p class="note">Windows 11, RTX 4090, controlador 617.42. O arranque inclui o início do servidor até à primeira resposta WAV. A mediana aquecida usa três pedidos no mesmo servidor. Os picos no arranque incluem a VRAM da placa e o RSS da árvore de processos. Compare os resultados da mesma tarefa tendo em conta os pesos, o silêncio e as revisões. A VRAM antes do pedido aquecido é a mediana das três leituras da placa completa imediatamente antes dos pedidos. A VRAM WDDM e o RSS residentes são as medianas de três leituras da árvore de processos em repouso após um aquecimento nas versões publicadas com CUDA 13.</p>
-    <div class="scroll"><table>
+    <div class="scroll benchmark-scroll" role="region" aria-labelledby="music-gpu-matrix-title" tabindex="0"><table>
       <thead><tr><th scope="col">Modelo e motor</th><th scope="col">Backend</th><th scope="col">WAV (s)</th><th scope="col">Arranque (s)</th><th scope="col">Aquecido (s)</th><th scope="col">Áudio s/s</th><th scope="col">Pico / Δ VRAM (GiB)</th><th scope="col">VRAM antes do pedido aquecido (GiB)</th><th scope="col">Pico de RAM (GiB)</th><th scope="col">VRAM WDDM / RSS residentes (GiB)</th></tr></thead>
       <tbody>
       <tr><td>YuE2 · yue2.cpp 892b9b0 · 3B Q8_0 + F32 VAE; NAR v9 · 30 s · 32 steps</td><td>CUDA 13</td><td>29,999</td><td>9,735</td><td>5,166</td><td>5,81×</td><td>7,67 / +5,74</td><td>7,67</td><td>3,36</td><td>—</td></tr>
@@ -529,9 +530,9 @@ footer p { margin: 0 0 8px; }
     <p><a href="music-gpu-benchmarks.json">Execuções, SHA-256 e conjuntos de pesos</a></p>
 <!-- music-gpu-matrix:end -->
 <!-- radeon-gpu-pair:start -->
-    <h3>Stable Audio 3 Small Q8_0 · Radeon integrada</h3>
+    <h3 id="radeon-gpu-pair-title">Stable Audio 3 Small Q8_0 · Radeon integrada</h3>
     <p class="note">Windows, AMD Radeon Graphics (gfx1036, UMA). A mesma revisão de audio.cpp gerou 4 segundos em quatro passos com cada backend. A primeira execução é a fria e a aquecida é a mediana de três pedidos. Os picos WDDM de memória dedicada e partilhada foram amostrados a cada segundo. <code>audio.cpp 5e7273db</code></p>
-    <div class="scroll"><table>
+    <div class="scroll benchmark-scroll" role="group" aria-labelledby="radeon-gpu-pair-title" tabindex="0"><table>
       <thead><tr><th scope="col">Backend</th><th scope="col">Arranque (s)</th><th scope="col">Aquecido (s)</th><th scope="col">Pico WDDM dedicado (GiB)</th><th scope="col">Pico WDDM partilhado (GiB)</th></tr></thead>
       <tbody>
       <tr><td>HIP</td><td>4,609</td><td>2,953</td><td>1,39</td><td>0,04</td></tr>
@@ -540,9 +541,9 @@ footer p { margin: 0 0 8px; }
     </table></div>
 <!-- radeon-gpu-pair:end -->
 <!-- native-radeon-pair:start -->
-    <h3>YuE2-3B Q8_0 · Radeon gfx1036</h3>
+    <h3 id="native-radeon-pair-title">YuE2-3B Q8_0 · Radeon gfx1036</h3>
     <p class="note">Mesma música salva de 12 s, mesma Radeon integrada, quatro passos. O tempo a frio inclui a inicialização do processo. O tempo a quente é a mediana de três pedidos com os pesos em memória. Os picos WDDM foram medidos por processo nesta GPU.</p>
-    <div class="scroll"><table>
+    <div class="scroll benchmark-scroll" role="group" aria-labelledby="native-radeon-pair-title" tabindex="0"><table>
       <thead><tr><th scope="col">Backend</th><th scope="col">Arranque (s)</th><th scope="col">Aquecido (s)</th><th scope="col">Pico WDDM dedicado (GiB)</th><th scope="col">Pico WDDM partilhado (GiB)</th></tr></thead>
       <tbody>
       <tr><td>HIP 188d13b3</td><td>22,749</td><td>18,483</td><td>0,28</td><td>4,39</td></tr>

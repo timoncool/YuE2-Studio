@@ -9,18 +9,18 @@ import { apiUrl } from '../services/apiBase';
 import { SELF_READ } from '../services/studioQueries';
 import { activeVersionLabel } from '../services/songDownload';
 import { NumberField } from './NumberField';
+import { mapNativeLibrarySong } from '../services/nativeLibrary';
 
 /**
  * Processing a finished track: noise reduction, the Spectral Lifter, vocal
  * naturalising and mastering to a reference. The result is a preview heard
- * against the original, kept as a version of the track or thrown away; the
- * original never goes.
+ * against the original. The preview can be saved as a separate library take.
  */
 
 interface ProcessingModalProps {
   song: Song;
   onClose: () => void;
-  onKept: () => void;
+  onKept: (take: Song) => void;
 }
 
 interface Run {
@@ -304,8 +304,7 @@ export const ProcessingModal: React.FC<ProcessingModalProps> = ({ song, onClose,
       const body = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(body.error || `HTTP ${response.status}`);
       kept.current = true;
-      window.dispatchEvent(new CustomEvent('yue:toast', { detail: { message: t('processKept'), type: 'success' } }));
-      onKept();
+      onKept(mapNativeLibrarySong(body));
       onClose();
     } catch (problem) {
       setError(problem instanceof Error ? problem.message : String(problem));
