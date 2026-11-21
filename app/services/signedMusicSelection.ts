@@ -5,12 +5,13 @@ interface PackageFile {
   bytes: number;
 }
 
-interface EnginePackage {
+export interface EnginePackage {
   id: string;
   name: string;
   version: string;
   platform: string;
   protocol: string;
+  native_runtime?: { api_version: number };
   files: PackageFile[];
 }
 
@@ -22,7 +23,8 @@ interface ModelPackage {
   files: PackageFile[];
 }
 
-interface Catalogue {
+export interface Catalogue {
+  source?: string;
   platform: string;
   engines: EnginePackage[];
   models?: ModelPackage[];
@@ -48,7 +50,7 @@ interface PackageStatus {
   version: string;
 }
 
-interface PackageProgress {
+export interface PackageProgress {
   stage: 'verifying' | 'downloading' | 'activating';
   file?: string | null;
   total_bytes: number;
@@ -68,7 +70,7 @@ async function packagePresence(path: string, signal: AbortSignal): Promise<Packa
   return response.json();
 }
 
-async function post(path: string) {
+export async function postSignedPackage(path: string) {
   const response = await fetch(apiUrl(path), { method: 'POST' });
   if (!response.ok) {
     const error = await response.json().catch(() => undefined);
@@ -77,7 +79,7 @@ async function post(path: string) {
   return response;
 }
 
-const bytes = (files: PackageFile[]) => files.reduce((sum, file) => sum + file.bytes, 0);
+export const signedPackageBytes = (files: PackageFile[]) => files.reduce((sum, file) => sum + file.bytes, 0);
 
 export function useSignedMusicSelection(list: boolean, active: boolean) {
   const [selection, setSelection] = useState(preferences);
@@ -161,7 +163,7 @@ export function useSignedMusicSelection(list: boolean, active: boolean) {
       setRefreshingCatalogue(true);
       setCatalogueError(undefined);
       try {
-        const response = await post('/v1/components/music-engines/refresh');
+        const response = await postSignedPackage('/v1/components/music-engines/refresh');
         const body: Catalogue = await response.json();
         if (!Array.isArray(body.engines) || !body.platform) throw new Error('Invalid music engine catalogue');
         setCatalogue(body);
@@ -183,7 +185,7 @@ export function useSignedMusicSelection(list: boolean, active: boolean) {
       if (!ownTransfer || !progress || cancelPending || !run) return;
       setCancelPending(true);
       try {
-        const response = await post(`${ownTransfer.path}/cancel`);
+        const response = await postSignedPackage(`${ownTransfer.path}/cancel`);
         const answer: { cancel_requested?: boolean } = await response.json();
         if (answer.cancel_requested) run.cancelled = true;
         else if (operation.current === run) setCancelPending(false);
@@ -195,7 +197,7 @@ export function useSignedMusicSelection(list: boolean, active: boolean) {
     },
     error: status?.error ?? (installError?.key === key ? installError?.message : undefined),
     missingBytes: status && !status.error && engine && model
-      ? (needsEngine ? bytes(engine.files) : 0) + (needsModel ? bytes(model.files) : 0)
+      ? (needsEngine ? signedPackageBytes(engine.files) : 0) + (needsModel ? signedPackageBytes(model.files) : 0)
       : undefined,
     selectModel: (id: string) => save({ ...selection, model: id }),
     selectPair: (model: string, engine: string) => save({ model, engines: { ...selection.engines, [model]: engine } }),
@@ -211,7 +213,7 @@ export function useSignedMusicSelection(list: boolean, active: boolean) {
       const installPackage = (kind: 'music-engines' | 'music-models', id: string, path: string) => {
         setProgress(undefined);
         setTransfer({ key, path: `/v1/components/packages/${kind}/${encodeURIComponent(id)}` });
-        return post(`${path}/install`);
+        return postSignedPackage(`${path}/install`);
       };
       try {
         if (needsEngine) await installPackage('music-engines', engine.id, enginePath);
