@@ -2,8 +2,9 @@ import { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { expect, it, vi } from 'vitest';
 import { RvcApplyVoice } from './RvcApplyVoice';
+import { RvcNativeRuntime } from './RvcNativeRuntime';
 
-vi.mock('../context/I18nContext', () => ({ useI18n: () => ({ language: 'en' }) }));
+vi.mock('../context/I18nContext', () => ({ useI18n: () => ({ language: 'en', t: (key: string) => key }) }));
 const flush = () => act(async () => { await new Promise(resolve => setTimeout(resolve, 0)); });
 
 it('keeps explicit RVC backend selection and saves an audio.cpp take from the selected song', async () => {
@@ -52,6 +53,40 @@ it('keeps explicit RVC backend selection and saves an audio.cpp take from the se
     act(() => root.unmount());
     host.remove();
     localStorage.removeItem('studio.rvc.backend');
+    vi.unstubAllGlobals();
+  }
+});
+
+it('starts native runtime installation, reports progress, and refreshes conversion availability', async () => {
+  let installing = false;
+  let installed = false;
+  vi.useFakeTimers();
+  vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+  vi.stubGlobal('fetch', vi.fn(async (_url: string, init?: RequestInit) => {
+    if (init?.method === 'POST') {
+      installing = true;
+      return Response.json({ started: true }, { status: 202 });
+    }
+    return Response.json({
+      supported: true, installed, reason: null, missing_bytes: installed ? 0 : 200_000_000,
+      download: installing ? { downloaded_bytes: 50_000_000, total_bytes: 200_000_000, done: installed } : null,
+    });
+  }));
+  const host = document.createElement('div');
+  const root = createRoot(host);
+  const onInstalled = vi.fn();
+  try {
+    await act(async () => root.render(<RvcNativeRuntime onInstalled={onInstalled} disabled={false} />));
+    expect(host.querySelector('button')?.textContent).toContain('200');
+    await act(async () => host.querySelector('button')!.click());
+    expect(host.querySelector('progress')?.value).toBe(50_000_000);
+    installed = true;
+    await act(async () => vi.advanceTimersByTimeAsync(500));
+    expect(onInstalled).toHaveBeenCalledOnce();
+    expect(host.querySelector('button')).toBeNull();
+  } finally {
+    act(() => root.unmount());
+    vi.useRealTimers();
     vi.unstubAllGlobals();
   }
 });
