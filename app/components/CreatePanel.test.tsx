@@ -2145,3 +2145,91 @@ it('switches a YuE2 model from its local runtime and back using the engine selec
   await flush();
   expect(selectEngine().value).toBe('local');
 });
+
+const integratedPairs = [
+  { family: 'local', engine: 'local', dit: 'yue2-cpp', source: { kind: 'local' } },
+  { family: 'local', engine: 'audio.cpp', dit: 'audio.cpp', model: 'yue2', source: { kind: 'audio_cpp', model: 'yue2' } },
+  { family: 'local', engine: 'hotstep', dit: 'hotstep', model: 'hotstep-yue2-q4-k-m', source: { kind: 'native', engine: 'hotstep', model: 'hotstep-yue2-q4-k-m' } },
+  { family: 'acestep-cpp', engine: 'acestep-cpp', dit: 'acestep-cpp', model: 'original', source: { kind: 'native', engine: 'acestep-cpp', model: 'original' } },
+  { family: 'acestep-cpp', engine: 'audio.cpp', dit: 'audio.cpp', model: 'ace_step', source: { kind: 'audio_cpp', model: 'ace_step' } },
+  { family: 'acestep-cpp', engine: 'hotstep', dit: 'hotstep', model: 'hotstep-ace-step-1.5', source: { kind: 'native', engine: 'hotstep', model: 'hotstep-ace-step-1.5' } },
+] as const;
+
+it.each(integratedPairs)('integrated U3 Create and Reuse $family × $engine', async fixture => {
+  const calls: Array<YueRequest['music_source']> = [];
+  const titles = ['yue2', 'ace_step', 'hotstep-yue2-q4-k-m', 'hotstep-ace-step-1.5', 'original'];
+  const profiles = Object.fromEntries(titles.map(id => [id, { id, label: id, ready: true, missing: [] }]));
+  let status: Record<string, unknown> = { instance_id: 'u3', revision: 0, active: { kind: 'local' }, stage: 'idle', elapsed_ms: 0 };
+  vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+    if (url === '/v1/music/pair') {
+      if (init?.method === 'POST') {
+        const { music_source } = JSON.parse(String(init.body));
+        calls.push(music_source);
+        status = { ...status, revision: calls.length, requested: music_source, active: music_source, stage: 'ready' };
+      }
+      return Response.json(status);
+    }
+    if (url === '/v1/music/audio-cpp/models') return Response.json({ engine: 'audio.cpp', engine_installed: true, models: [profiles.yue2, profiles.ace_step] });
+    if (url === '/v1/music/native/hotstep/profiles') return Response.json({ engine: 'hotstep', engine_installed: true, profiles: [profiles['hotstep-yue2-q4-k-m'], profiles['hotstep-ace-step-1.5']] });
+    if (url.includes('/profiles')) return Response.json({ engine: 'acestep-cpp', engine_installed: true, profiles: [profiles.original] });
+    return Response.json({});
+  }));
+  type Engine = NonNullable<React.ComponentProps<typeof CreatePanel>['musicEngine']>;
+  let restore: (value: Song) => void = () => {};
+  function Editor() {
+    const [engine, setEngine] = React.useState<Engine>('local');
+    const [initialData, setInitialData] = React.useState<{song: Song; timestamp: number} | undefined>();
+    restore = song => {
+      setEngine(song.ditModel === 'yue2-cpp' ? 'local' : song.ditModel as Engine);
+      setInitialData({ song, timestamp: Date.now() });
+    };
+    return panel({ musicEngine: engine, onMusicEngineChange: setEngine, initialData });
+  }
+  const selector = (label: string) => [...host.querySelectorAll('label')].find(node => node.textContent?.startsWith(label))!.querySelector('select')!;
+  const choose = (label: string, value: string) => act(() => {
+    const input = selector(label);
+    input.value = value;
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  act(() => root.render(<Editor />));
+  await flush();
+  if (fixture.family !== 'local') {
+    choose('Model', fixture.family);
+    await flush();
+  }
+  expect([...selector('Music engine').options].map(option => option.value)).toEqual(
+    fixture.family === 'local' ? ['local','audio.cpp','hotstep'] : ['acestep-cpp','hotstep','audio.cpp'],
+  );
+  if (selector('Music engine').value !== fixture.engine) {
+    choose('Music engine', fixture.engine);
+    await flush();
+  }
+  if (fixture.engine === 'acestep-cpp') {
+    const profile = host.querySelector<HTMLSelectElement>('select[aria-label="Local model"]')!;
+    act(() => { profile.value = 'original'; profile.dispatchEvent(new Event('change', { bubbles: true })); });
+    await flush();
+  }
+  type(field('textarea[aria-label="styleCardTitle"]')!, 'warm piano pop');
+  type(field('textarea[aria-label="lyrics"]')!, 'The light is ours');
+  click(buttonNamed('create')!);
+  expect(sent.at(-1)).toMatchObject({ music_source: fixture.source, style: 'warm piano pop', lyrics: 'The light is ours' });
+  choose('Music engine', fixture.engine === 'hotstep' ? 'audio.cpp' : 'hotstep');
+  await flush();
+  const song = {
+    title: 'Saved U3 fixture', style: 'quiet guitar', lyrics: 'Keep the original words', ditModel: fixture.dit,
+    ...('model' in fixture ? { lmModel: fixture.model } : {}),
+    generationParams: { music_source: fixture.source, duration_seconds: 12, steps: 13, seed: 314, cfg_scale: 3.5,
+      ...(fixture.family === 'local' ? { abc: 'X:1\nK:C\nCDEF|', cot: 'melody' } : {}) },
+  } as Song;
+  act(() => restore(song));
+  await flush();
+  expect(selector('Music engine').value).toBe(fixture.engine);
+  expect(calls.at(-1)).toEqual(fixture.source);
+  click(buttonNamed('create')!);
+  expect(sent.at(-1)).toMatchObject({ music_source: fixture.source, style: song.style,
+    lyrics: song.lyrics, steps: 13, seed: 314,
+    ...(fixture.engine === 'local' ? {} : { duration_seconds: 12 }),
+    ...(fixture.family === 'local' ? { abc: 'X:1\nK:C\nCDEF|', cot: 'melody' } : {}),
+  });
+  if (fixture.engine === 'local') expect(sent.at(-1)?.duration_seconds).toBeUndefined();
+});

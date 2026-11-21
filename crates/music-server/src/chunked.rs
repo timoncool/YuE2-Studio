@@ -111,7 +111,12 @@ impl Drop for Fetching {
     }
 }
 
-/// Whether a file is being fetched right now.
+/// Holds the shutdown guard from the start of an install through its final status.
+pub(crate) fn track_download() -> impl Drop {
+    Fetching::start()
+}
+
+/// Whether a download or its installation is still in progress.
 pub fn downloading() -> bool {
     FETCHING.load(Ordering::Relaxed) > 0
 }

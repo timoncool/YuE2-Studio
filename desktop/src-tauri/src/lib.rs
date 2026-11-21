@@ -26,6 +26,10 @@ const STUDIO_DATA_DIRECTORY: &str = "YuE2 Studio";
 /// to choose either of those. Environment overrides remain authoritative for
 /// portable/development installations.
 fn studio_data_directory() -> PathBuf {
+    if let Some(root) = std::env::var_os("YUE_STUDIO_DATA_ROOT") {
+        return PathBuf::from(root);
+    }
+
     // A portable copy keeps everything it owns beside itself: models, the
     // library, media, logs and settings. Nothing is written into AppData, so
     // deleting the folder deletes the studio, and carrying the folder to
@@ -46,6 +50,10 @@ fn studio_data_directory() -> PathBuf {
         return beside_the_executable;
     }
 
+    profile_data_directory()
+}
+
+fn profile_data_directory() -> PathBuf {
     #[cfg(windows)]
     {
         if let Some(root) = std::env::var_os("LOCALAPPDATA").or_else(|| std::env::var_os("APPDATA")) {
@@ -83,11 +91,40 @@ fn keeps_everything_beside_itself() -> bool {
     studio_data_directory().starts_with(executable_directory())
 }
 
+/// Settings in an old default directory could have belonged to several forced
+/// profiles. Report possible manual recovery paths without opening those files.
+fn report_legacy_runtime_paths(data_root: &Path) {
+    let adjacent = executable_directory().join("data");
+    let profile = profile_data_directory();
+    for (old_root, duplicate) in [(&adjacent, false), (&profile, profile == adjacent)] {
+        if duplicate || old_root == data_root {
+            continue;
+        }
+        let settings = old_root.join("studio-settings.json");
+        if std::env::var_os("YUE_STUDIO_SETTINGS_PATH").is_none()
+            && !data_root.join("studio-settings.json").exists()
+            && settings.is_file()
+        {
+            eprintln!("[studio] To reuse verified legacy settings for this profile, set YUE_STUDIO_SETTINGS_PATH to {}", settings.display());
+        }
+        let models = old_root.join("models").join("yue2-cpp");
+        if std::env::var_os("YUE_MODELS_ROOT").is_none()
+            && !data_root.join("models").join("yue2-cpp").exists()
+            && models.is_dir()
+        {
+            eprintln!("[studio] To reuse verified legacy models for this profile, set YUE_MODELS_ROOT to {}", models.display());
+        }
+    }
+}
+
 /// Sets the same deterministic roots before the Axum bridge is spawned. Its
 /// environment is inherited by the bridge and the subsequently started native
 /// engine, so both always refer to one model library.
 fn configure_studio_runtime_paths() {
     let data_root = studio_data_directory();
+    if std::env::var_os("YUE_STUDIO_DATA_ROOT").is_some() {
+        report_legacy_runtime_paths(&data_root);
+    }
 
     // Temporary files count as leaving traces too: the engine, the downloader
     // and ffmpeg all write through the system temporary directory, and a
@@ -1388,6 +1425,48 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn desktop_runtime_paths_follow_data_root() {
+        const CASE: &str = "YUE2_QA_RUNTIME_PATHS_CASE";
+        const DATA: &str = "YUE_STUDIO_DATA_ROOT";
+        const MODELS: &str = "YUE_MODELS_ROOT";
+        const SETTINGS: &str = "YUE_STUDIO_SETTINGS_PATH";
+
+        // The shell configures process environment before starting the service.
+        // Check that real entry point in isolated test processes.
+        if std::env::var_os(CASE).is_some() {
+            let data = std::env::var_os(DATA).map(PathBuf::from).unwrap_or_else(studio_data_directory);
+            let models = std::env::var_os(MODELS).map(PathBuf::from)
+                .unwrap_or_else(|| data.join("models/yue2-cpp"));
+            let settings = std::env::var_os(SETTINGS).map(PathBuf::from)
+                .unwrap_or_else(|| data.join("studio-settings.json"));
+            configure_studio_runtime_paths();
+            for (name, expected) in [(DATA, data), (MODELS, models), (SETTINGS, settings)] {
+                assert_eq!(std::env::var_os(name).map(PathBuf::from), Some(expected), "{name}");
+            }
+            println!("Checked the configured desktop runtime paths");
+            return;
+        }
+
+        let test_root = std::env::temp_dir().join("Studio runtime path fixture");
+        for (data, individual) in [(false, false), (true, false), (true, true)] {
+            let mut child = std::process::Command::new(std::env::current_exe().unwrap());
+            child.args(["--exact", "tests::desktop_runtime_paths_follow_data_root", "--nocapture"])
+                .env(CASE, "1").env_remove(DATA).env_remove(MODELS).env_remove(SETTINGS);
+            if data {
+                child.env(DATA, test_root.join("profile"));
+            }
+            if individual {
+                child.env(MODELS, test_root.join("own models"));
+                child.env(SETTINGS, test_root.join("own settings.json"));
+            }
+            let output = child.output().unwrap();
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            assert!(output.status.success() && stdout.contains("Checked the configured desktop runtime paths"),
+                "{stdout}\n{}", String::from_utf8_lossy(&output.stderr));
+        }
+    }
 
     #[test]
     fn readiness_recognizes_an_existing_yue2_service_and_rejects_other_listeners() {

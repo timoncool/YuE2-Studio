@@ -45,15 +45,6 @@ jobs:
         run: brew list ninja >/dev/null 2>&1 || brew install ninja
       - name: Build
         run: bash scripts/build-release-macos.sh
-      - name: Engine starts
-        run: |
-          set -e
-          engine=desktop/src-tauri/resources/yue2-cpp/yue-server
-          "$engine" --help 2>&1 | head -n 5
-          midi=desktop/src-tauri/resources/music-midi/music-midi
-          "$midi" --help 2>&1 | head -n 5 || true
-          caption=desktop/src-tauri/resources/music-midi/music-caption
-          "$caption" --help 2>&1 | head -n 5 || true
       - name: Collect
         id: collect
         run: |
@@ -62,15 +53,22 @@ jobs:
           version="$(node -p "require('./desktop/src-tauri/tauri.conf.json').version")"
           product="$(node -p "require('./desktop/src-tauri/tauri.conf.json').productName")"
           dmg="$(node scripts/release-target-dir.mjs)/bundle/dmg/${product}_${version}_aarch64.dmg"
-          cp "$dmg" "out/YuE2-Studio-${version}-macos-arm64.dmg"
-          ls -la out
+          artifact="out/YuE2-Studio-${version}-macos-arm64.dmg"
+          cp "$dmg" "$artifact"
+          printf 'dmg=%s\n' "$artifact" >> "$GITHUB_OUTPUT"
+      - name: Verify packaged app from the mounted DMG
+        env:
+          DMG: ${{ steps.collect.outputs.dmg }}
+        run: python3 scripts/check-macos-dmg.py "$DMG"
       - uses: actions/upload-artifact@v4
         with:
           name: yue2-studio-macos-arm64
-          path: out/*
+          path: ${{ steps.collect.outputs.dmg }}
       - name: Attach to the release
         if: ${{ inputs.tag != '' }}
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release upload "${{ inputs.tag }}" out/* --clobber
+          RELEASE_TAG: ${{ inputs.tag }}
+          DMG: ${{ steps.collect.outputs.dmg }}
+        run: gh release upload "$RELEASE_TAG" "$DMG" --clobber
 

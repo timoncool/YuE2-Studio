@@ -7,6 +7,7 @@ set -euo pipefail
 
 output="${1:?usage: build-midi-runtime.sh OUTPUT_DIRECTORY}"
 root="$(cd "$(dirname "$0")/.." && pwd)"
+deployment_target="${MACOSX_DEPLOYMENT_TARGET:-$(node -p 'require(process.argv[1]).bundle.macOS.minimumSystemVersion' "$root/desktop/src-tauri/tauri.macos-release.conf.json")}"
 source_file="$root/engines/music-midi-source.json"
 repository="$(sed -n 's/.*"repository": "\(.*\)".*/\1/p' "$source_file")"
 commit="$(sed -n 's/.*"commit": "\(.*\)".*/\1/p' "$source_file")"
@@ -23,12 +24,28 @@ git -C "$worktree" submodule update --init --recursive engine/ggml
 git -C "$worktree" submodule update --init engine/vendor/vst3sdk
 git -C "$worktree/engine/vendor/vst3sdk" submodule update --init base pluginterfaces public.sdk
 
+# The pinned HOT-Step uses floating-point charconv in SheetSage and Lua plugin metadata.
+float_patch="$root/scripts/patches/hotstep-macos13-float-repr.patch"
+if ! git -C "$worktree" apply --reverse --check "$float_patch" 2>/dev/null; then
+    git -C "$worktree" apply "$float_patch"
+    trap 'git -C "$worktree" apply --reverse "$float_patch"' EXIT
+fi
+
 cmake -S "$worktree/engine" -B "$worktree/engine/build" -DCMAKE_BUILD_TYPE=Release \
+    -DCMAKE_OSX_DEPLOYMENT_TARGET="$deployment_target" \
+    -DCMAKE_PROJECT_TOP_LEVEL_INCLUDES="$root/scripts/macos-runtime-compat.cmake" \
     -DGGML_NATIVE=OFF -DGGML_CPU_ARM_ARCH=armv8.2-a+dotprod+fp16 -DGGML_LLAMAFILE=ON \
     -DCMAKE_BUILD_WITH_INSTALL_RPATH=ON -DCMAKE_INSTALL_RPATH=@executable_path \
     -DGGML_METAL=ON -DGGML_METAL_EMBED_LIBRARY=ON
 cmake --build "$worktree/engine/build" --config Release --target ace-midi ace-caption \
     -j "$(getconf _NPROCESSORS_ONLN)"
+
+clang++ -O2 -std=c++17 -mmacosx-version-min="$deployment_target" -I "$worktree/engine/src/yue2" \
+    -I "$worktree/engine/src" -I "$worktree/engine/vendor/luajit/src" \
+    "$root/scripts/check-macos-sheetsage-floats.cpp" "$worktree/engine/build/libyyjson.a" \
+    "$worktree/engine/build/luajit/src/libluajit.a" \
+    -o "$worktree/engine/build/check-macos-sheetsage-floats"
+"$worktree/engine/build/check-macos-sheetsage-floats"
 
 mkdir -p "$output"
 cp "$worktree/engine/build/ace-midi" "$output/music-midi"
