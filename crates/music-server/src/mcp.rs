@@ -525,6 +525,7 @@ const JOURNAL: &[(&str, &str, &str)] = &[
     ("processing_keep", "kept", "processing"),
     ("processing_discard", "discarded", "processing"),
     ("processing_set_reference", "updated", "processing"),
+    ("seed_vc_apply", "created", "song"),
     ("cover_draw", "started", "cover"),
     ("cover_set_from_file", "updated", "cover"),
     ("dataset_create", "created", "dataset"),
@@ -2923,6 +2924,20 @@ fn tools() -> &'static [Tool] {
                     "backend": { "type": "string", "enum": ["auto", "vocal-fast-rs", "vocal-fast-metal", "burn-cuda", "audio.cpp"] },
                 }), &["song_id", "voice_id", "start_seconds", "end_seconds"]),
                 call: |args| post("/v1/rvc/preview".into(), args.clone()),
+            },
+            Tool {
+                name: "seed_vc_status",
+                description: "Read Seed-VC model and audio.cpp runtime readiness for singing conversion.",
+                schema: nothing,
+                call: |_| get("/v1/seed-vc".into()),
+            },
+            Tool {
+                name: "seed_vc_apply",
+                description: "Replace a separated song's vocal timbre with Seed-VC using a 1–25 second voice sample. Upload it with processing_set_reference first and pass its upload_id. The original song stays and the result is a new take.",
+                schema: || object(json!({"song_id":{"type":"string"}, "upload_id":{"type":"string"}}), &["song_id","upload_id"]),
+                call: |args| post("/v1/seed-vc".into(), json!({
+                    "song_id": text(args, "song_id")?, "upload_id": text(args, "upload_id")?
+                })),
             },
             Tool {
                 name: "rvc_apply",

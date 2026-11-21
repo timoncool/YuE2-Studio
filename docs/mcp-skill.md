@@ -455,6 +455,14 @@ move around. Check the result with `ui_screenshot`.
 
 `rvc_catalog_list` reports `sample_audio_url` for a published source demo and null when none is recorded. Use `has_sample` to filter the same paginated results. Fetch the returned audio URL to play the verified demo before installing its voice.
 
+## Seed-VC vocal replacement
+
+Use `seed_vc_status` to find the model file and audio.cpp runtime status.
+With an already separated song, send your 1–25 second target voice sample
+through `processing_set_reference`. Pass its `upload_id` and the library song ID
+to `seed_vc_apply`. The new library take uses the original accompaniment and
+the source vocal's pauses. The original song is kept.
+
 ## RVC vocal audition
 
 Use `rvc_preview` with an installed voice, an already separated vocal and a 0.5–15 second interval. It returns temporary before and after WAV URLs with the same frames and rate. The preview gain applies to the comparison audio. Use `rvc_apply` to save a separate take.
