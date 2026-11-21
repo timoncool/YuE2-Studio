@@ -57,6 +57,17 @@ if __name__ == "__main__":
     publisher_files = {b"distribution/components/" + name for name in
                        [b"stage_channel.py", b"test_stage_channel.py", b"PUBLISH.md"]}
     publisher_only = bool(paths) and paths <= publisher_files
+    matrix_file = b"docs/music-gpu-benchmarks.json"
+    matrix_check = Path("scripts/check-music-gpu-benchmarks.py")
+    site_pages = {f"docs/{lang}.html".encode() for lang in ("index", "ru", "ja", "ko", "pt", "zh")}
+    matrix_files = site_pages | {
+        matrix_file, b"README.md", b"scripts/build-pages.mjs", matrix_check.as_posix().encode()
+    }
+    matrix_only = False
+    if paths & matrix_files and Path(os.fsdecode(matrix_file)).is_file() and matrix_check.is_file():
+        subprocess.run([sys.executable, str(matrix_check)], check=True)
+        # Only standalone website/documentation edits can dispense with compiling the app.
+        matrix_only = paths <= matrix_files
     publisher_test = not base or bool(paths & (publisher_files | {
         b"distribution/components/verify.py", b"distribution/components/test_installed_channel.py",
         b"distribution/channels/stable/mirrors.json", b".github/workflows/ci.yml"
@@ -79,7 +90,7 @@ if __name__ == "__main__":
     ).returncode != 0
     with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
         print(f"mirrors_only={str(mirrors_only).lower()}", file=output)
-        print(f"skip_build={str(mirrors_only or publisher_only).lower()}", file=output)
+        print(f"skip_build={str(mirrors_only or publisher_only or matrix_only).lower()}", file=output)
         print(f"publisher_test={str(publisher_test).lower()}", file=output)
         print(f"channel_changed={str(channel_changed).lower()}", file=output)
         print(f"macos_rvc_changed={str(macos_rvc_changed).lower()}", file=output)
