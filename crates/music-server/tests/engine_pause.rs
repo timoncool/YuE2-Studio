@@ -127,12 +127,39 @@ async fn active_generation_refuses_pause_while_saved_audio_remains_playable() {
         .unwrap()
         .error_for_status()
         .unwrap();
-    http.post(&pause)
+    let paused: Value = http
+        .post(format!("{url}/mcp"))
+        .header("Accept", "application/json, text/event-stream")
+        .json(&json!({"jsonrpc":"2.0","id":1,"method":"tools/call",
+            "params":{"name":"engine_pause","arguments":{}}}))
         .send()
         .await
         .unwrap()
         .error_for_status()
+        .unwrap()
+        .json()
+        .await
         .unwrap();
+    assert_eq!(
+        paused["result"]["structuredContent"]["engine_paused"], true,
+        "{paused}"
+    );
+    let journal: Vec<Value> = http
+        .get(format!("{url}/v1/journal"))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert!(
+        journal
+            .iter()
+            .any(|entry| entry["source"] == "agent" && entry["target"] == "YuE2 engine paused"),
+        "{journal:?}"
+    );
     for _ in 0..3 {
         let status: Value = http
             .get(format!("{url}/setup/status"))

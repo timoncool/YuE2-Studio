@@ -693,7 +693,12 @@ async fn journal_change(name: &str, args: &Value, before: &str, reply: &str) {
         return;
     }
     let Some((verb, kind)) = journal_facts(name, args) else { return };
-    let line = json!({ "source": "agent", "verb": verb, "kind": kind, "target": change_target(kind, args, before, reply) });
+    let target = match name {
+        "engine_pause" => "YuE2 engine paused".into(),
+        "engine_resume" => "YuE2 engine resumed".into(),
+        _ => change_target(kind, args, before, reply),
+    };
+    let line = json!({ "source": "agent", "verb": verb, "kind": kind, "target": target });
     let written = match send(Method::POST, "/v1/journal".into(), line) {
         Ok(call) => call_route(call).await,
         Err(problem) => Err(problem),
