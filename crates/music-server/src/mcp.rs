@@ -496,6 +496,7 @@ const JOURNAL: &[(&str, &str, &str)] = &[
     ("album_reorder", "updated", "library"),
     ("playlist_create", "created", "playlist"),
     ("playlist_update", "updated", "playlist"),
+    ("playlist_select_preferred_take", "updated", "playlist"),
     ("playlist_delete", "deleted", "playlist"),
     ("stems_split", "started", "stems"),
     ("karaoke_make", "started", "karaoke"),
@@ -702,7 +703,12 @@ fn change_target(kind: &str, args: &Value, before: &str, reply: &str) -> String 
 
 /// Writes an agent's change into the studio's journal, where the person reads it.
 async fn journal_change(name: &str, args: &Value, before: &str, reply: &str) {
-    if name == "rvc_voice_remove" && serde_json::from_str::<Value>(reply).is_ok_and(|result| result["removed"] == false) {
+    let outcome_field = match name {
+        "rvc_voice_remove" => Some("removed"),
+        "playlist_select_preferred_take" => Some("changed"),
+        _ => None,
+    };
+    if outcome_field.is_some_and(|field| serde_json::from_str::<Value>(reply).is_ok_and(|result| result[field] == false)) {
         return;
     }
     let Some((verb, kind)) = journal_facts(name, args) else { return };
@@ -1956,6 +1962,15 @@ fn tools() -> &'static [Tool] {
                 description: "Rename a playlist, change its description, or set its songs: song_ids is the whole list in its order, so it also reorders, adds and removes.",
                 schema: || object(json!({ "playlist_id": { "type": "string" }, "name": { "type": "string" }, "description": { "type": "string" }, "song_ids": { "type": "array", "items": { "type": "string" } } }), &["playlist_id", "name"]),
                 call: |args| send(Method::PUT, format!("/v1/library/playlists/{}", segment(&text(args, "playlist_id")?)), body_without(args, &["playlist_id"])),
+            },
+            Tool {
+                name: "playlist_select_preferred_take",
+                description: "Mark a playable song already in this playlist as its preferred take. This keeps every take and the current playlist order. Read the saved choice with playlist_get.",
+                schema: || object(json!({
+                    "playlist_id": { "type": "string" },
+                    "song_id": { "type": "string" }
+                }), &["playlist_id", "song_id"]),
+                call: |args| send(Method::PUT, format!("/v1/library/playlists/{}/preferred-take", segment(&text(args, "playlist_id")?)), json!({ "song_id": text(args, "song_id")? })),
             },
             Tool {
                 name: "playlist_delete",
