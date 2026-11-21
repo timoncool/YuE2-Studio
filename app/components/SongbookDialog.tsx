@@ -128,17 +128,25 @@ export function SongbookDialog({ abc, title, lyrics, onClose }: {
         {sheet?.key && <p className="mb-4 text-sm">{text.key} {sheet.key}{capo > 0 && ` · ${text.capo} ${capo}`}</p>}
         {!sheet?.lines.length && <p>{text.unavailable}</p>}
         {sheet?.approximate && <p className="mb-3 text-sm">{text.approximate}</p>}
-        {sheet?.lines.map((line, index) => (
-          <div key={index} className="songbook-line">
-            {line.filter(cell => numbered || cell.chords.length || cell.lyrics.some(Boolean)).map((cell, column) => (
-              <span key={column} className="songbook-cell">
-                <strong className="text-indigo-700 dark:text-indigo-300">{cell.chords.map(chord => chordName(chord, -capo)).join(' ')}</strong>
-                {numbered && <NumberedNote number={cell.number} duration={cell.duration} />}
-                {cell.lyrics.map((word, verse) => <span key={verse}>{word}</span>)}
-              </span>
-            ))}
-          </div>
-        ))}
+        {sheet?.lines.map((line, index) => {
+          const keyChanges = numbered && line.some(cell => cell.keyChange);
+          return (
+            <div key={index} className="songbook-line">
+              {line.filter(cell => numbered || cell.chords.length || cell.lyrics.some(Boolean)).map((cell, column) => (
+                <span key={column} className="songbook-cell">
+                  {keyChanges && (
+                    <span className="whitespace-nowrap text-xs font-semibold">
+                      {cell.keyChange && `${text.key} ${cell.keyChange}`}
+                    </span>
+                  )}
+                  <strong className="text-indigo-700 dark:text-indigo-300">{cell.chords.map(chord => chordName(chord, -capo)).join(' ')}</strong>
+                  {numbered && <NumberedNote number={cell.number} duration={cell.duration} />}
+                  {cell.lyrics.map((word, verse) => <span key={verse}>{word}</span>)}
+                </span>
+              ))}
+            </div>
+          );
+        })}
         {!containsWords && lyrics?.trim() && <section className="mt-4">
           <h3 className="font-semibold">{text.unaligned}</h3>
           <p className="whitespace-pre-wrap">{lyrics}</p>
