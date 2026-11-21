@@ -1738,16 +1738,18 @@ impl Training {
         for stage in stages {
             #[cfg(windows)]
             let stage = joint_checkpoint_paths(stage)?;
-            {
-                {
-                    let _edit = self.edits.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
-                    let mut run = self.run(run_id)?;
-                    run.stage = Some(stage.id.to_string());
-                    self.save_run(&run)?;
-                }
-            }
+            let signed_trainer = {
+                let _edit = self.edits.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+                let mut run = self.run(run_id)?;
+                run.stage = Some(stage.id.to_string());
+                self.save_run(&run)?;
+                run.trainer.is_some_and(|trainer| trainer.generation.is_some())
+            };
             log.write_all(format!("==== {}\n", stage.id).as_bytes()).await?;
-            music_core::process::runtime_beside(trainer);
+            // A signed generation declares its dependencies and is verified again on resume.
+            if !signed_trainer {
+                music_core::process::runtime_beside(trainer);
+            }
             let mut command = tokio::process::Command::new(trainer);
             if let Some(path) = music_core::process::own_libraries_first(trainer) {
                 command.env("LD_LIBRARY_PATH", path);
