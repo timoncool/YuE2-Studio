@@ -122,7 +122,12 @@ fn sdk_dir<'a>(worker: &std::path::Path, hashes: impl IntoIterator<Item = &'a st
         digest.update(hash.as_bytes());
         digest.update([0]);
     }
-    worker.join(format!("cuda-sdk-{:x}", digest.finalize()))
+    let hex: String = digest
+        .finalize()
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect();
+    worker.join(format!("cuda-sdk-{hex}"))
 }
 
 // NVRTC expects the combined SDK layout, including NVIDIA's separate header archives.
