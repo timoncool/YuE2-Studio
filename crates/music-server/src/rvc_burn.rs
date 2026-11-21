@@ -110,7 +110,7 @@ impl Runtime {
         Ok(())
     }
 
-    pub(super) fn environment(&self) -> Vec<(OsString, OsString)> {
+    pub(super) fn environment(&self, working_dir: &FsPath) -> Vec<(OsString, OsString)> {
         let path = std::env::join_paths(
             self.exe
                 .parent()
@@ -139,7 +139,10 @@ impl Runtime {
             })
             .filter(|sdk| sdk.is_dir())
         {
-            env.push(("CUDA_PATH".into(), sdk.into_os_string()));
+            env.push((
+                "CUDA_PATH".into(),
+                sdk_environment_path(&sdk, working_dir).into_os_string(),
+            ));
         }
         env
     }
@@ -217,7 +220,7 @@ impl Runtime {
                 &semitone_shift.to_string(),
             ])
             .args(self.common_args(stage))
-            .envs(self.environment())
+            .envs(self.environment(&self.folder))
             .current_dir(&self.folder)
             .stdin(Stdio::null())
             .stdout(Stdio::null())
@@ -254,6 +257,28 @@ impl Runtime {
             .context("RVC Burn returned no converted audio.")?;
         audio_pcm::decode_stereo(&path)
     }
+}
+
+// NVRTC interprets the byte strings of its include options using the Windows
+// ANSI API. An ASCII relative path keeps a Unicode profile folder in the
+// child process's wide-character working directory instead.
+fn sdk_environment_path(sdk: &FsPath, working_dir: &FsPath) -> PathBuf {
+    if cfg!(windows) && !sdk.as_os_str().as_encoded_bytes().is_ascii() {
+        for (parents, ancestor) in working_dir.ancestors().enumerate() {
+            if let Ok(rest) = sdk.strip_prefix(ancestor) {
+                let mut relative = PathBuf::from(".");
+                for _ in 0..parents {
+                    relative.push("..");
+                }
+                relative.push(rest);
+                if relative.as_os_str().as_encoded_bytes().is_ascii() {
+                    return relative;
+                }
+                break;
+            }
+        }
+    }
+    sdk.to_owned()
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -401,4 +426,21 @@ pub(super) fn progress(line: &str) -> Option<(u32, training::TrainingStepRecord)
             step_ms: None,
         },
     ))
+}
+
+#[cfg(all(test, windows))]
+#[test]
+fn nvrtc_uses_an_ascii_relative_include_root_for_a_unicode_profile() {
+    let studio = FsPath::new("studio/данные");
+    let sdk = studio.join("rvc/burn/runtime/cuda13/cuda-sdk-pinned");
+    let training = studio.join("training/runs/saved");
+    let convert = studio.join("rvc/burn");
+    assert_eq!(
+        sdk_environment_path(&sdk, &training),
+        PathBuf::from("./../../../rvc/burn/runtime/cuda13/cuda-sdk-pinned")
+    );
+    assert_eq!(
+        sdk_environment_path(&sdk, &convert),
+        PathBuf::from("./runtime/cuda13/cuda-sdk-pinned")
+    );
 }
