@@ -184,6 +184,7 @@ export const ko = {
     stageOpenRouterFinalizing: '모델 응답 파싱 중…',
     stageStartingTrack: '트랙 시작 중…',
     stageGeneratingTrack: '트랙 생성 중…',
+    stageEncodingTrack: '오디오 인코딩 중…',
     stageGeneratingCover: '커버 생성 중…',
     queued: '대기 중...',
     creating: '생성 중...',

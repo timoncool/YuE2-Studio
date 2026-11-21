@@ -567,6 +567,9 @@ enum MusicJobDispatch {
 enum MusicJobPhase {
     Queued,
     Running,
+    Preparing,
+    Synthesizing,
+    Encoding,
     ExtractingVocals,
     Completed,
     Failed,

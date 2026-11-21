@@ -999,14 +999,14 @@ async fn submit_with_source(
         title: Some(titled(&request, &state.adapters)),
         status: MusicJobStatus::Running,
         dispatch: MusicJobDispatch::Local,
-        phase: MusicJobPhase::Running,
+        phase: MusicJobPhase::Preparing,
         style: request.style.clone(),
         lyrics: request.lyrics.clone(),
         duration_seconds: settings["duration_seconds"].as_f64().unwrap_or_default(),
         generation_settings: settings,
         song: None,
         songs: vec![],
-        message: format!("{} is generating through audio.cpp.", family.name()),
+        message: format!("{} through audio.cpp.", family.name()),
         code: None,
         params: None,
         playlist_id: request.playlist_id.clone(),
@@ -1033,17 +1033,31 @@ async fn submit_with_source(
         let acpp = state.acpp.clone();
         let cancel = stop.clone();
         let settings = job.generation_settings.clone();
-        let outcome = tokio::task::spawn_blocking(move || {
+        let (phases, mut updates) = tokio::sync::mpsc::unbounded_channel();
+        let worker = tokio::task::spawn_blocking(move || {
             anyhow::ensure!(!stop.load(Ordering::SeqCst), "stopped");
             let (body, _references) = task.into_request(&stop)?;
             // Cancelling the HTTP request alone would leave inference running.
             // Only music uses this process, so it can be reaped without stopping tools.
-            let reply = acpp.run_music(build, family.entry(path), body, &stop, keep_weights)?;
+            let reply = acpp.run_music(build, family.entry(path), body, &stop, keep_weights, || {
+                let _ = phases.send(MusicJobPhase::Synthesizing);
+            })?;
+            let _ = phases.send(MusicJobPhase::Encoding);
             shape(&reply, &settings)
-        })
-        .await
-        .context("the audio.cpp worker stopped")
-        .and_then(|result| result);
+        });
+        let publish = async {
+            while let Some(phase) = updates.recv().await {
+                let mut jobs = state.jobs.write().await;
+                if let Some(current) = jobs.get_mut(&job.id)
+                    && matches!(current.status, MusicJobStatus::Running)
+                    && !cancel.load(Ordering::SeqCst)
+                {
+                    current.phase = phase;
+                }
+            }
+        };
+        let (outcome, ()) = tokio::join!(worker, publish);
+        let outcome = outcome.context("the audio.cpp worker stopped").and_then(|result| result);
         drop(lease);
         complete(
             &state,

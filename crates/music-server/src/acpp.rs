@@ -419,7 +419,10 @@ impl Acpp {
 
     /// Private to generation. Stopping one of these jobs can reap the process
     /// without touching the process that serves separation, MIDI and audio tools.
-    pub(super) fn run_music(&self, build: Build, model: ModelEntry, body: Value, stop: &AtomicBool, keep_weights: bool) -> Result<Value> {
+    pub(super) fn run_music(
+        &self, build: Build, model: ModelEntry, body: Value, stop: &AtomicBool,
+        keep_weights: bool, on_synthesis: impl FnOnce(),
+    ) -> Result<Value> {
         let mut music = self.music.lock().unwrap_or_else(|error| error.into_inner());
         self.music_evict.store(false, Ordering::SeqCst);
         anyhow::ensure!(!stop.load(Ordering::SeqCst), "stopped");
@@ -433,6 +436,7 @@ impl Acpp {
         }
         let server = music.as_ref().expect("The music server has started.");
         let reply = if stop.load(Ordering::SeqCst) { Err(AcppError::Cancelled) } else {
+            on_synthesis();
             server.run_task(&id, body, stop)
         };
         if matches!(reply, Err(AcppError::Cancelled)) || stop.load(Ordering::SeqCst) {

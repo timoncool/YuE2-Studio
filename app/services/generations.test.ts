@@ -51,6 +51,44 @@ it.each([
   }
 });
 
+it('shows the stages of the polled audio.cpp job on the same card', async () => {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const root = createRoot(document.createElement('div'));
+  const job: YueJob = {
+    id: 'audio-cpp-test', engine_id: 'audio.cpp', submitted_at: 1,
+    status: 'running', phase: 'preparing', message: 'HeartMuLa through audio.cpp.',
+    style: 'piano', lyrics: '', duration_seconds: 12, generation_settings: {},
+  };
+  vi.stubGlobal('fetch', async (path: string) => Response.json(path === '/v1/music/jobs' ? [job] : []));
+  vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+  let studio!: ReturnType<typeof useGenerations>;
+  function Editor() {
+    studio = useGenerations({ enabled: true, notify: vi.fn(), onFinished: () => {} });
+    return null;
+  }
+  try {
+    await act(async () => root.render(createElement(QueryClientProvider, { client },
+      createElement(I18nProvider, { children: createElement(Editor) }))));
+    await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)); });
+    expect(studio.songs[0]).toMatchObject({
+      id: 'restored_audio-cpp-test', isGenerating: true, stage: 'stageStartingTrack',
+    });
+    for (const [phase, stage] of [['synthesizing', 'stageGeneratingTrack'], ['encoding', 'stageEncodingTrack']]) {
+      job.phase = phase;
+      await act(async () => {
+        await client.refetchQueries({ queryKey: ['music', 'jobs'], exact: true });
+        await new Promise(resolve => setTimeout(resolve, 0));
+      });
+      expect(studio.songs[0]).toMatchObject({ id: 'restored_audio-cpp-test', isGenerating: true, stage });
+      expect(studio.songs[0].progress).toBeUndefined();
+    }
+  } finally {
+    act(() => root.unmount());
+    client.clear();
+    vi.unstubAllGlobals();
+  }
+});
+
 it('keeps cloud, audio.cpp and finished cards out of native progress updates', () => {
   const running = { jobId: 'job', isGenerating: true };
   expect(followsLocalProgress(song('native', { ...running, ditModel: 'yue2-cpp' }))).toBe(true);

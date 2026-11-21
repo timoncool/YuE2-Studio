@@ -288,6 +288,8 @@ async fn cancelled_audio_cpp_heartmula_worker_exits_before_the_next_song() {
         "steps":2, "seed":42,
     });
     let first: Value = json_response(http.post(&jobs).json(&request)).await;
+    assert_eq!(first["status"], "running");
+    assert_eq!(first["phase"], "preparing");
     let id = first["id"].as_str().unwrap();
     let worker: Value = timeout(Duration::from_secs(20), async {
         loop {
@@ -302,6 +304,16 @@ async fn cancelled_audio_cpp_heartmula_worker_exits_before_the_next_song() {
     .await
     .unwrap();
     let worker_port = worker["port"].as_u64().unwrap() as u16;
+    timeout(Duration::from_secs(5), async {
+        loop {
+            let progress: Value = json_response(http.get(format!("{jobs}/{id}"))).await;
+            assert_eq!(progress["status"], "running");
+            if progress["phase"] == "synthesizing" {
+                break;
+            }
+            sleep(Duration::from_millis(50)).await;
+        }
+    }).await.expect("audio.cpp must publish synthesis while its HTTP task is held");
     let sent: Value =
         serde_json::from_slice(&fs::read(root.path().join("audio-cpp-submitted.json")).unwrap())
             .unwrap();
