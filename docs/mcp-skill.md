@@ -121,10 +121,22 @@ For MiniMax Music3 through audio.cpp, call `audio_cpp_music_models` and check th
 to `song_create` with `style`, `lyrics`, and an optional nonnegative `seed`.
 The job uses the installed `quality-q8` profile and returns its library song.
 
+Use `audio_cpp_music_model_install` with `{"model":"heartmula"}` to start installing
+HeartMuLa. Poll `audio_cpp_music_models` for installation progress and readiness
+before creating a song.
+
 For other ready audio.cpp families, pass the ID returned by the same catalog as
 `music_source.model`. HeartMuLa takes lyrics and style tags, with optional
 sampling and codec settings in `heartmula`. For MiDashengLM-Gen, use
 `midasheng` to describe the scene, music, speech, effects and environment.
+For MiniMax-H3, select `minimax_h3` and supply one instrumental description in
+`style`. The audio-only route accepts `duration_seconds` from 1 to 20 (default 4),
+plus `steps`, `seed`, and `cfg_scale`. It uses the locally installed
+[MiniMax-H3 Q4_K GGUF bundle](https://huggingface.co/audio-cpp/audio.cpp-gguf/tree/main/MiniMax-H3-Q4-GGUF)
+under `audiocpp/models/MiniMax-H3-Q4-GGUF`. Review the
+[MiniMax H3 Community License](https://huggingface.co/MiniMaxAI/MiniMax-H3/blob/main/LICENSE)
+for its territorial and use terms.
+
 For Vevo2, pass the lyrics and a library song ID as `vevo2.voice_song_id`.
 Add `vevo2.melody_song_id` to condition the singing on a second library track.
 

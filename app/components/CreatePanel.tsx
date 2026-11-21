@@ -39,7 +39,7 @@ import { SongTextParts } from './SongTextParts';
 import { writerInstruction } from '../services/songWriting';
 import { songWritingStrings } from '../i18n/songWriting';
 import { MiDashengFields, miDashengModel, miDashengPromptReady, restoreMiDashengPrompt } from './MiDashengFields';
-import { HeartMuLaControls, emptyHeartMuLaDraft, heartMuLaDraft, heartMuLaOptions } from './HeartMuLaControls';
+import { HeartMuLaControls, HeartMuLaInstall, emptyHeartMuLaDraft, heartMuLaDraft, heartMuLaOptions } from './HeartMuLaControls';
 import { Vevo2SingingFields, vevo2SingingStrings, type Vevo2References } from './Vevo2SingingFields';
 import { NumberField } from './NumberField';
 import { explainCliFailure } from '../services/cliFailure';
@@ -427,6 +427,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
   const [scene, setScene] = useState(() => restoreMiDashengPrompt(undefined));
   const heartMuLa = audioFamily === 'heartmula';
   const vevo2 = audioFamily === 'vevo2';
+  const miniMaxH3 = audioFamily === 'minimax_h3';
   const [heartSettings, setHeartSettings] = useState(emptyHeartMuLaDraft);
   const [vevoReferences, setVevoReferences] = useState<Vevo2References>({ voice_song_id: '' });
   const nativeStrings = nativeMusicSourceStrings[language];
@@ -1221,26 +1222,31 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
   // source and the style is written from that.
   const [hearingLyrics, setHearingLyrics] = useState(false);
   const [confirmHearLyrics, setConfirmHearLyrics] = useState(false);
-  const recognitionRevision = useRef(0);
+  const recognitionRun = useRef<symbol | null>(null);
   React.useLayoutEffect(() => {
-    return () => { recognitionRevision.current += 1; };
-  }, [coverSongId, coverFile, lyrics, mode]);
-  useEffect(() => { setConfirmHearLyrics(false); }, [coverSongId, coverFile, mode]);
+    setHearingLyrics(false);
+    setConfirmHearLyrics(false);
+    return () => { recognitionRun.current = null; };
+  }, [coverSongId, coverFile, lyrics, mode, musicEngine]);
   /** The karaoke recogniser hears what the cover's source sings; the lyrics take it, to be edited. */
   const hearLyrics = async () => {
-    if ((!coverSongId && !coverFile) || hearingLyrics) return;
-    const revision = recognitionRevision.current;
+    if ((!coverSongId && !coverFile) || recognitionRun.current) return;
+    const run = Symbol();
+    recognitionRun.current = run;
     setHearingLyrics(true);
     setError(null);
     try {
       const words = await recogniseLyrics(coverSongId ? { songId: coverSongId } : { file: coverFile! });
-      if (recognitionRevision.current === revision) setLyrics(words);
+      if (recognitionRun.current === run) setLyrics(words);
     } catch (reason) {
-      if (recognitionRevision.current !== revision) return;
+      if (recognitionRun.current !== run) return;
       const message = reason instanceof Error ? reason.message : String(reason);
       setError(karaokeReason(t, message) ?? message);
     } finally {
-      setHearingLyrics(false);
+      if (recognitionRun.current === run) {
+        recognitionRun.current = null;
+        setHearingLyrics(false);
+      }
     }
   };
 
@@ -1464,14 +1470,15 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
       if (miDasheng && !miDashengPromptReady(scene)) return;
       if (vevo2 && (!lyrics.trim() || !vevoReferences.voice_song_id)) { setError(vevo2SingingStrings[language].required); return; }
       if (audioFamily === audioCppMiniMax && (!style.trim() || !lyrics.trim())) { setError(nativeStrings.styleAndLyricsRequired); return; }
-      if (!miDasheng && !style.trim() && !lyrics.trim()) { setError(tt('styleOrLyricsRequired')); return; }
+      if (miniMaxH3 && !style.trim()) { setError(nativeStrings.h3PromptRequired); return; }
+      if (!miniMaxH3 && !miDasheng && !style.trim() && !lyrics.trim()) { setError(tt('styleOrLyricsRequired')); return; }
       setError(null);
       generate({
         music_source: nativeEngine === 'audio.cpp'
           ? { kind: 'audio_cpp', model: native.profile.id }
           : { kind: 'native', engine: nativeEngine, model: native.profile.id },
         style: miDasheng ? scene.caption || scene.music : vevo2 ? '' : finishedStyle(style),
-        lyrics: miDasheng ? scene.speech_text.trim() : lyrics.replace(/\r\n?/g, '\n').trim(),
+        lyrics: miDasheng ? scene.speech_text.trim() : miniMaxH3 ? '' : lyrics.replace(/\r\n?/g, '\n').trim(),
         ...(name.trim() ? { title: name.trim() } : {}),
         ...(chosenPlaylist ? { playlist_id: chosenPlaylist } : {}),
         ...(miDasheng ? { midasheng: scene } : {}),
@@ -1662,6 +1669,8 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
                     {native.profile && !native.ready && <p role="status" className="text-xs">
                       {nativeStrings.unavailable}{native.profile.missing?.length ? ` · ${native.profile.missing.join(', ')}` : ''}
                     </p>}
+                    {heartMuLa && native.profile?.installable && !native.ready &&
+                      <HeartMuLaInstall bytes={native.profile.total_bytes} language={language} onInstalled={native.refresh} />}
                     <button type="button" className="text-xs text-pink-600 underline dark:text-pink-300" onClick={native.refresh}>
                       {musicStrings.refresh}
                     </button>
@@ -1701,7 +1710,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
                 {!vevo2 && !miDasheng && <AutoTextarea className={CONTROL} value={style} onChange={event => setStyle(event.target.value)}
                   placeholder={tt('stylePlaceholder')} aria-label={tt('styleCardTitle')} />}
               </Card>
-              {miDasheng ? <MiDashengFields value={scene} onChange={setScene} /> : <Card title={t('lyrics')}>
+              {miDasheng ? <MiDashengFields value={scene} onChange={setScene} /> : !miniMaxH3 && <Card title={t('lyrics')}>
                 <AutoTextarea className={CONTROL} value={lyrics} onChange={event => setLyrics(event.target.value)}
                   aria-label={t('lyrics')} />
               </Card>}
@@ -1715,7 +1724,10 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
                       <label key={key} className="space-y-1 text-xs">
                         <span>{label}</span>
                         <input type="number" step={key === 'duration_seconds' || key === 'guidance_scale' ? 'any' : 1}
-                          className={CONTROL} value={native.settings[key] ?? ''} placeholder={nativeStrings.default}
+                          min={miniMaxH3 && key === 'duration_seconds' ? 1 : undefined}
+                          max={miniMaxH3 && key === 'duration_seconds' ? 20 : undefined}
+                          className={CONTROL} value={native.settings[key] ?? ''}
+                          placeholder={miniMaxH3 && key === 'duration_seconds' ? '4' : nativeStrings.default}
                           onChange={event => native.set(key, event.target.value)} />
                       </label>
                     ))}

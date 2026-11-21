@@ -503,6 +503,18 @@ footer p { margin: 0 0 8px; }
 <tr><td>Vulkan</td><td>19.063 s</td><td>0.507 s</td><td>59.2×</td><td>12.42 GiB</td><td>2.66 GiB</td></tr></tbody>
     </table></div>
     <p class="note">For seed 42, both WAVs contain 30.0 s of stereo audio at 48 kHz. Measured in 100 ms windows across both channels, the last 5.3 s on CUDA and 5.0 s on Vulkan stay below −60 dBFS RMS. The speed column uses the full WAV duration.</p>
+    <h3>RVC voice conversion on GPU (5.0 development builds)</h3>
+    <p>Windows on one RTX 4090 24 GB, using the same voice checkpoint and FAISS index with a retrieval blend of 0.5. Each run converts an existing vocal to a new voice.</p>
+    <div class="scroll"><table>
+      <thead><tr><th>RVC backend</th><th>Input</th><th>First run, empty cache</th><th>Restart, saved cache</th><th>Warm request</th><th>Peak GPU memory</th></tr></thead>
+      <tbody>
+        <tr><td>vocal-fast-rs · TensorRT-RTX</td><td>4 s</td><td>21.046 s</td><td>1.694 s</td><td>64.83 ms</td><td>3.91 GiB</td></tr>
+        <tr><td>audio.cpp · CUDA</td><td>4 s</td><td>4.639 s</td><td>4.448 s</td><td>204.84 ms</td><td>4.09 GiB</td></tr>
+        <tr><td>vocal-fast-rs · TensorRT-RTX</td><td>30 s</td><td>24.258 s</td><td>2.009 s</td><td>279.29 ms</td><td>5.51 GiB</td></tr>
+        <tr><td>audio.cpp · CUDA</td><td>30 s</td><td>5.334 s</td><td>5.477 s</td><td>942.17 ms</td><td>6.83 GiB</td></tr>
+      </tbody>
+    </table></div>
+    <p class="note">Startup runs include process launch through the first saved WAV. Columns show medians of two empty-cache launches, three cached launches and three warm requests. Both warm paths use the same local HTTP client, from POST through writing the WAV. Peak memory is the median whole-card peak across three cached processes during warm conversion, including desktop usage. The engines search different numbers of FAISS lists; timing alone does not measure voice quality. <a href="rvc-gpu-benchmarks.json">Individual runs and build identifiers</a></p>
   </section>
 
   <section id="start">

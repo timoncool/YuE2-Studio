@@ -131,9 +131,9 @@ async fn audio_cpp_minimax_music3_generates_and_saves_q8_provenance() {
         "style":"Soft folk guitar", "lyrics":"[verse] Morning comes",
         "duration_seconds":3.2, "steps":2, "seed":424242
     });
-    let mut h3 = request.clone();
-    h3["music_source"]["model"] = json!("minimax_h3");
-    let rejected = http.post(&endpoint).json(&h3).send().await.unwrap();
+    let mut unknown = request.clone();
+    unknown["music_source"]["model"] = json!("unknown_model");
+    let rejected = http.post(&endpoint).json(&unknown).send().await.unwrap();
     assert_eq!(rejected.status(), StatusCode::BAD_REQUEST);
     assert!(!root.path().join("audio-cpp-submitted.json").exists());
     let accepted = http.post(&endpoint).json(&request).send().await.unwrap();

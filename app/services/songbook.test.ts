@@ -25,6 +25,21 @@ it('lays instrument chords over the timed vocal syllables of the existing score'
   expect(chordName('F#m7b5', 2)).toBe('G♯m7b5');
 });
 
+it('marks the local key changes that determine jianpu note numbers', () => {
+  const source = 'X:1\nM:4/4\nL:1/4\nK:C\nC D E G | [K:D] D E F A | [K:C] C D E G |';
+  const ordinary = buildSongbook(source, 0);
+  expect(ordinary.key).toBe('C');
+  expect(ordinary.lines.flat().map(cell => [cell.keyChange, cell.number])).toEqual([
+    [undefined, '1'], [undefined, '2'], [undefined, '3'], [undefined, '5'],
+    ['D', '1'], [undefined, '2'], [undefined, '3'], [undefined, '5'],
+    ['C', '1'], [undefined, '2'], [undefined, '3'], [undefined, '5'],
+  ]);
+  const transposed = buildSongbook(source, 2);
+  expect(transposed.key).toBe('D');
+  expect(transposed.lines.flat().flatMap(cell => cell.keyChange ?? [])).toEqual(['E', 'D']);
+  expect(transposed.lines.flat().map(cell => cell.number)).toEqual(ordinary.lines.flat().map(cell => cell.number));
+});
+
 it('places estimated plain lyrics only when every sung note has one syllable', () => {
   const page = buildSongbook(score.replace('w:Hel-lo beau-ty\n', ''), 0);
   expect(placeLyricSyllables(page.lines, estimateLyricSyllables('短歌词', 'zh'))).toBe(false);

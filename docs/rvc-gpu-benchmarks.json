@@ -1,0 +1,124 @@
+{
+  "gpu": "RTX 4090, 24 GiB",
+  "platform": "Windows",
+  "date": "2026-11-21",
+  "vocal_fast_commit": "18e9ee9827342dfdb933470eb43917931144bae1",
+  "audio_cpp_sha256": "AFC31EB6F6942C145BD2586E3238D0552FE9D42214F74E1B817426B9C984075C",
+  "voice_sha256": "5A4920EF7B8C28BE41DBD3AFE2BD8CC852BCCC5DA82AC0590AFB2A160CA81BB2",
+  "index_sha256": "D04454F009988AD7E3D830D3D8870B3D107978738E2E3B10BD415038ED882CAC",
+  "blend": 0.5,
+  "results": [
+    {
+      "backend": "vocal-fast-rs · TensorRT-RTX",
+      "clip_seconds": 4,
+      "cold_ms": [
+        20916,
+        21176
+      ],
+      "cached_start_ms": [
+        1694,
+        1672,
+        1703
+      ],
+      "warm_http_ms": [
+        64.8259,
+        64.13,
+        65.9723
+      ],
+      "baseline_mib": [
+        2021,
+        2137,
+        2076
+      ],
+      "resident_peak_mib": [
+        3955.0,
+        4006.0,
+        4000.0
+      ]
+    },
+    {
+      "backend": "audio.cpp · CUDA",
+      "clip_seconds": 4,
+      "cold_ms": [
+        4612,
+        4666
+      ],
+      "cached_start_ms": [
+        4396,
+        4624,
+        4448
+      ],
+      "warm_http_ms": [
+        235.8653,
+        189.8857,
+        204.8359
+      ],
+      "baseline_mib": [
+        2066,
+        2917,
+        2071
+      ],
+      "resident_peak_mib": [
+        4187.0,
+        4290.0,
+        4185.0
+      ]
+    },
+    {
+      "backend": "vocal-fast-rs · TensorRT-RTX",
+      "clip_seconds": 30,
+      "cold_ms": [
+        24654,
+        23861
+      ],
+      "cached_start_ms": [
+        2100,
+        1920,
+        2009
+      ],
+      "warm_http_ms": [
+        350.8915,
+        279.293,
+        255.7278
+      ],
+      "baseline_mib": [
+        2016,
+        2024,
+        2033
+      ],
+      "resident_peak_mib": [
+        5645.0,
+        5644.0,
+        5655.0
+      ]
+    },
+    {
+      "backend": "audio.cpp · CUDA",
+      "clip_seconds": 30,
+      "cold_ms": [
+        5256,
+        5411
+      ],
+      "cached_start_ms": [
+        5340,
+        5477,
+        5605
+      ],
+      "warm_http_ms": [
+        931.0766,
+        946.4679,
+        942.17
+      ],
+      "baseline_mib": [
+        2026,
+        2023,
+        2012
+      ],
+      "resident_peak_mib": [
+        6987.0,
+        6992.0,
+        7005.0
+      ]
+    }
+  ]
+}

@@ -1,6 +1,6 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { API_BASE } from './apiBase';
-import { mapNativeLibrarySong } from './nativeLibrary';
+import { mapNativeLibrarySong, trashNativeSongs } from './nativeLibrary';
 
 describe('mapNativeLibrarySong', () => {
   it('uses the native media route only when the library record has audio', () => {
@@ -43,4 +43,26 @@ describe('mapNativeLibrarySong', () => {
     expect(withoutAudio.audioUrl).toBeUndefined();
     expect(withoutAudio.nativeReplayAvailable).toBe(false);
   });
+});
+
+it('undoes the original group once and keeps independently selected takes separate', async () => {
+  const calls = vi.fn(async (url: string) => Response.json({
+    moved_ids: url.endsWith('/original') ? ['original', 'stem', 'hidden-stem'] : ['cover'],
+  }));
+  vi.stubGlobal('fetch', calls);
+  try {
+    const moved = await trashNativeSongs([
+      { id: 'stem', derived: { from: 'original', fromTitle: 'Original', tool: 'stems' } },
+      { id: 'original' },
+      { id: 'cover', derived: { from: 'original', fromTitle: 'Original', tool: 'cover' } },
+    ]);
+    expect(calls.mock.calls.map(([path]) => path)).toEqual([
+      '/v1/library/songs/original', '/v1/library/songs/cover',
+    ]);
+    expect(moved.removed).toEqual(new Set(['original', 'stem', 'hidden-stem', 'cover']));
+    expect(moved.restore).toEqual(['original', 'cover']);
+    expect(moved.failed).toEqual([]);
+  } finally {
+    vi.unstubAllGlobals();
+  }
 });
