@@ -137,10 +137,8 @@ impl Clip {
                 .all(|sample| sample.is_finite()),
             "The converted fragment contains invalid audio."
         );
-        let vocal_gain_db = rvc_apply::match_vocal_level(
-            audio_post::loudness::integrated(&self.source),
-            &mut after,
-        );
+        let vocal_gain_db =
+            match_playback_level(audio_post::loudness::integrated(&self.source), &mut after);
         let folder = tempfile::tempdir()?;
         for (side, audio) in [("before", &self.source), ("after", &after)] {
             std::fs::write(
@@ -166,6 +164,23 @@ impl Clip {
             "requested_backend": requested, "effective_backend": effective, "fallback_reason": fallback
         }))
     }
+}
+
+/// Loudness-match the temporary comparison audio by one constant gain.
+fn match_playback_level(target: Option<f64>, vocal: &mut audio_post::Stereo) -> f64 {
+    let (Some(target), Some(current)) = (target, audio_post::loudness::integrated(vocal)) else {
+        return 0.0;
+    };
+    // A nearly silent choice is a rest. Do not try to match its residual noise.
+    if target < -45.0 || current < -55.0 {
+        return 0.0;
+    }
+    let wanted = 10_f64.powf((target - current).clamp(-12.0, 12.0) / 20.0);
+    let gain = wanted.min(0.98 / f64::from(vocal.peak()));
+    for sample in vocal.left.iter_mut().chain(&mut vocal.right) {
+        *sample *= gain as f32;
+    }
+    20.0 * gain.log10()
 }
 
 pub(super) async fn preview(
@@ -230,6 +245,54 @@ mod tests {
             let wave =
                 audio_pcm::decode_stereo(&state[0].2.path().join(format!("{side}.wav"))).unwrap();
             assert_eq!(wave.frames(), 1300);
+        }
+    }
+
+    #[test]
+    fn matches_vocal_level_with_one_gain_and_keeps_rest_samples_quiet() {
+        let rate = 44_100_u32;
+        let source: Vec<_> = (0..rate * 2)
+            .map(|frame| {
+                if (rate / 2..rate).contains(&frame) {
+                    return 0.0;
+                }
+                (frame as f32 * 250.0 * std::f32::consts::TAU / rate as f32).sin() * 0.1
+            })
+            .collect();
+        let reference = audio_post::Stereo::new(source.clone(), source.clone(), rate);
+        let louder: Vec<_> = source.iter().map(|sample| sample * 2.0).collect();
+        let mut vocal = audio_post::Stereo::new(louder.clone(), louder, rate);
+        let target = audio_post::loudness::integrated(&reference);
+        let gain_db = match_playback_level(target, &mut vocal);
+        assert!((gain_db + 6.0206).abs() < 0.001);
+        assert!(
+            (target.unwrap() - audio_post::loudness::integrated(&vocal).unwrap()).abs() < 0.001
+        );
+        assert!(
+            vocal.left[(rate / 2) as usize..rate as usize]
+                .iter()
+                .all(|sample| *sample == 0.0)
+        );
+    }
+
+    #[test]
+    fn leaves_noise_unamplified_for_quiet_or_silent_fragments() {
+        let rate = 44_100_u32;
+        let signal = |amplitude| {
+            (0..rate)
+                .map(|frame| {
+                    (frame as f32 * 250.0 * std::f32::consts::TAU / rate as f32).sin() * amplitude
+                })
+                .collect::<Vec<f32>>()
+        };
+        let quiet = signal(0.002);
+        let reference = audio_post::Stereo::new(quiet.clone(), quiet, rate);
+        let noise = signal(0.0005);
+        for target in [audio_post::loudness::integrated(&reference), None] {
+            let mut output = audio_post::Stereo::new(noise.clone(), noise.clone(), rate);
+            assert_eq!(match_playback_level(target, &mut output), 0.0);
+            assert_eq!(output.left, noise);
+            assert_eq!(output.right, noise);
         }
     }
 
