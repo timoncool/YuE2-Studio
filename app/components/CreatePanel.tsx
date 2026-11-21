@@ -459,8 +459,13 @@ const SamplingGrid: React.FC<{ value: SamplingText; defaults?: YueSampling; onCh
 
 const NO_ACTIVITY: ActivityEntry[] = [];
 const hotStepMiniMaxProfile = 'hotstep-minimax-music3';
+const hotStepAceProfile = 'hotstep-ace-step-1.5';
 
 const linkedMusicFamilies = [
+  { id: 'acestep-cpp', name: 'ACE-Step', pairs: [
+    { engine: 'acestep-cpp', label: 'acestep.cpp' },
+    { engine: 'hotstep', label: 'HOT-Step', profile: hotStepAceProfile },
+  ] },
   { id: 'minimaxmusic-cpp', name: 'MiniMax Music3', pairs: [
     { engine: 'minimaxmusic-cpp', label: 'minimaxmusic.cpp' },
     { engine: 'audio.cpp', label: 'audio.cpp', profile: audioCppMiniMax },
@@ -516,7 +521,8 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
   const hotstepSa3 = nativeEngine === 'hotstep' && native.profile?.id === hotStepSa3Profile;
   const hotstepHeart = nativeEngine === 'hotstep' && native.profile?.id === hotStepHeartmulaProfile;
   const hotstepMiniMax = nativeEngine === 'hotstep' && native.profile?.id === hotStepMiniMaxProfile;
-  const hotstep = nativeEngine === 'hotstep' && !hotstepSa3 && !hotstepHeart && !hotstepMiniMax;
+  const hotstepAce = nativeEngine === 'hotstep' && native.profile?.id === hotStepAceProfile;
+  const hotstep = nativeEngine === 'hotstep' && !hotstepSa3 && !hotstepHeart && !hotstepMiniMax && !hotstepAce;
   const [hotstepHeartDraft, setHotstepHeartDraft] = useState<HotStepSa3Draft>({});
   const [hotstepSa3Draft, setHotstepSa3Draft] = useState<HotStepSa3Draft>({});
   const [mulaCoverDraft, setMulaCoverDraft] = useState<HotStepCoverDraft>({ original: '', abc: '' });
@@ -1030,7 +1036,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
         if (profile === 'vevo2') setVevoReferences((settings.vevo2 as YueRequest['vevo2']) ?? { voice_song_id: '' });
         if (profile === hotStepSa3Profile) setHotstepSa3Draft((settings.hotstep_sa3 as YueRequest['hotstep_sa3']) ?? {});
         if (profile === hotStepHeartmulaProfile) setHotstepHeartDraft((settings.hotstep_heartmula as YueRequest['hotstep_heartmula']) ?? {});
-        if (song.ditModel === 'hotstep' && profile !== hotStepSa3Profile && profile !== hotStepHeartmulaProfile && profile !== hotStepMiniMaxProfile) setMulaCoverDraft({
+        if (song.ditModel === 'hotstep' && profile !== hotStepSa3Profile && profile !== hotStepHeartmulaProfile && profile !== hotStepMiniMaxProfile && profile !== hotStepAceProfile) setMulaCoverDraft({
           original: typeof settings.cover_of === 'string' ? settings.cover_of : song.derived?.from ?? '',
           abc: typeof settings.abc === 'string' ? settings.abc : '',
         });
@@ -1987,7 +1993,6 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
                 <span className="shrink-0">{musicStrings.modelFamily}</span>
                 <select className={CONTROL} value={modelChoice} onChange={event => chooseModelFamily(event.target.value)}>
                   <option value="local">{musicStrings.local}</option>
-                  <option value="acestep-cpp">{profileMusicEngines['acestep-cpp']}</option>
                   {linkedMusicFamilies.map(family => <option key={family.id} value={family.id}>{family.name}</option>)}
                   {native.hotstepProfiles.filter(profile => !linkedMusicFamilies.some(family => family.pairs.some((pair: LinkedMusicPair) =>
                     pair.engine === 'hotstep' && 'profile' in pair && pair.profile === profile.id))).map(profile =>
@@ -2123,6 +2128,9 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
                         licenseUrl="https://huggingface.co/scragnog/HOT-Step-CPP-StableStep" language={language} onInstalled={refreshNativeChoice} />}
                     {hotstepMiniMax && native.profile?.installable && !native.ready &&
                       <AudioCppModelInstall key={hotStepMiniMaxProfile} model={hotStepMiniMaxProfile} bytes={native.profile.missing_bytes ?? 0}
+                        licenseUrl={native.profile.license_url} language={language} onInstalled={refreshNativeChoice} />}
+                    {hotstepAce && native.profile?.installable && !native.ready &&
+                      <AudioCppModelInstall key={hotStepAceProfile} model={hotStepAceProfile} bytes={native.profile.missing_bytes ?? 0}
                         licenseUrl={native.profile.license_url} language={language} onInstalled={refreshNativeChoice} />}
                     {(heartMuLa || stableAudio || soulx) && native.profile?.installable && !native.ready &&
                       <AudioCppModelInstall key={audioFamily} model={soulxConversion ? 'soulx_singer_svc' : soulx ? 'soulx_singer' : stableAudio ? 'stable_audio' : 'heartmula'} bytes={native.profile.total_bytes}
