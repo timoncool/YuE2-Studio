@@ -590,6 +590,7 @@ const JOURNAL: &[(&str, &str, &str)] = &[
     ("separator_install", "started", "download"),
     ("separator_runtime_install", "started", "download"),
     ("hotstep_cover_install", "started", "download"),
+    ("hotstep_minimax_install", "started", "download"),
     ("hotstep_sa3_install", "started", "download"),
     ("mulacover_runtime_install", "started", "download"),
     ("vevo2_model_directory_set", "updated", "settings"),
@@ -1852,7 +1853,7 @@ fn tools() -> &'static [Tool] {
             },
             Tool {
                 name: "song_replay",
-                description: "Render a library song again. HOT-Step Stable Audio 3 uses the saved prompt, model and adapter, with optional steps, seed or format overrides. Engines with saved audio codes can resynthesize those codes directly.",
+                description: "Render a library song again. HOT-Step Stable Audio 3 and MiniMax Music3 use their saved generation parameters, with optional steps, seed or format overrides. Engines with saved audio codes can resynthesize those codes directly.",
                 schema: || object(json!({ "song_id": { "type": "string" }, "steps": { "type": "integer" }, "solver": { "type": "string", "enum": ["midpoint", "ab2"] }, "seed": { "type": "integer" }, "synth_batch_size": { "type": "integer" }, "output_format": { "type": "string", "enum": ["flac", "mp3", "wav32"] }, "title": { "type": "string" } }), &["song_id"]),
                 call: |args| post("/v1/music/replay".into(), args.clone()),
             },
