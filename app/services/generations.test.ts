@@ -3,7 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { describe, expect, it, vi } from 'vitest';
 import { I18nProvider } from '../context/I18nContext';
-import type { Song, YueRequest } from '../types';
+import type { Song, YueJob, YueRequest } from '../types';
 import { useGenerations, followsLocalProgress, keepingDeleted, rowsFor, rowTaken, stillWaiting } from './generations';
 
 it.each([
@@ -53,7 +53,12 @@ it.each([
 
 it('keeps cloud, audio.cpp and finished cards out of native progress updates', () => {
   const running = { jobId: 'job', isGenerating: true };
-  expect(followsLocalProgress(song('native', running))).toBe(true);
+  expect(followsLocalProgress(song('native', { ...running, ditModel: 'yue2-cpp' }))).toBe(true);
+  for (const engine of ['hotstep', 'acestep-cpp', 'minimaxmusic-cpp', 'signed-custom']) {
+    expect(followsLocalProgress(song(engine, { ...running, ditModel: engine }))).toBe(false);
+  }
+  expect(followsLocalProgress(song('signed', { ...running, ditModel: 'yue2-cpp', jobId: 'signed-fixture' }))).toBe(false);
+  expect(followsLocalProgress(song('unknown', running))).toBe(false);
   expect(followsLocalProgress(song('cloud', { ...running, ditModel: 'openrouter' }))).toBe(false);
   expect(followsLocalProgress(song('music3', { ...running, ditModel: 'audio.cpp' }))).toBe(false);
   expect(followsLocalProgress(song('done', { ...running, isGenerating: false }))).toBe(false);
@@ -121,4 +126,68 @@ describe('the rows of a job of several tracks', () => {
     // a job whose songs are all deleted is still remembered
     expect(afterDelete.get('old')?.map(entry => entry.id)).toEqual(['x']);
   });
+});
+
+it('updates two jobs independently and keeps an in-flight stop out of the YuE2 log', async () => {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const root = createRoot(document.createElement('div'));
+  const native: YueJob = {
+    id: 'yue2-job', engine_id: 'yue2-cpp', submitted_at: 2, status: 'running', phase: 'running',
+    message: '', style: '', lyrics: '', duration_seconds: 4, generation_settings: {},
+  };
+  const other: YueJob = {
+    ...native, id: 'hotstep-job', engine_id: 'hotstep', submitted_at: 1, status: 'queued',
+    phase: 'queued', message: 'Waiting for HOT-Step',
+  };
+  let listed = [other, native];
+  let stop: YueJob = { ...other, status: 'running', message: 'Stopping HOT-Step' };
+  const sources: ProgressSource[] = [];
+  class ProgressSource {
+    onmessage?: (event: { data: string }) => void;
+    constructor() { sources.push(this); }
+    close() {}
+  }
+  vi.stubGlobal('EventSource', ProgressSource);
+  vi.stubGlobal('fetch', vi.fn(async (path: string, init?: RequestInit) => {
+    if (path === '/v1/music/jobs') return Response.json(listed);
+    if (path === '/v1/music/jobs/hotstep-job' && init?.method === 'POST') {
+      listed = stop.status === 'cancelled' ? [native] : [stop, native];
+      return Response.json(stop);
+    }
+    return Response.json([]);
+  }));
+  vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+  let studio!: ReturnType<typeof useGenerations>;
+  function Editor() {
+    studio = useGenerations({ enabled: true, notify: () => {}, onFinished: () => {} });
+    return null;
+  }
+  const row = (id: string) => studio.songs.find(entry => entry.jobId === id);
+  try {
+    await act(async () => root.render(createElement(QueryClientProvider, { client },
+      createElement(I18nProvider, { children: createElement(Editor) }))));
+    await act(async () => { await client.refetchQueries({ queryKey: ['music', 'jobs'] }); await new Promise(resolve => setTimeout(resolve, 10)); });
+    expect(row(other.id)).toMatchObject({ stage: 'stageWaitingInQueue', stageDetail: 'Waiting for HOT-Step' });
+    expect(sources).toHaveLength(1);
+    act(() => sources[0].onmessage?.({ data: JSON.stringify({ stage: 'semantic', fraction: .4, detail: '4/10' }) }));
+    expect(row(native.id)).toMatchObject({ progress: .4, stageDetail: '4/10' });
+    expect(row(other.id)).toMatchObject({ stage: 'stageWaitingInQueue', progress: undefined });
+
+    listed = [{ ...other, status: 'running', message: 'HOT-Step is rendering' }, native];
+    await act(async () => { await client.refetchQueries({ queryKey: ['music', 'jobs'] }); await new Promise(resolve => setTimeout(resolve, 10)); });
+    expect(row(other.id)).toMatchObject({ stage: 'stageGeneratingTrack', stageDetail: 'HOT-Step is rendering', progress: undefined });
+
+    await act(async () => studio.cancel(other.id));
+    expect(row(other.id)).toMatchObject({ isGenerating: true, stageDetail: 'Stopping HOT-Step' });
+    stop = { ...stop, status: 'cancelled' };
+    await act(async () => studio.cancel(other.id));
+    expect(row(other.id)).toMatchObject({ isGenerating: false, stage: 'cancelled', stageDetail: undefined });
+    act(() => sources[0].onmessage?.({ data: JSON.stringify({ stage: 'semantic', fraction: .5, detail: '5/10' }) }));
+    expect(row(native.id)).toMatchObject({ isGenerating: true, progress: .5 });
+    expect(row(other.id)).toMatchObject({ stage: 'cancelled', progress: undefined });
+  } finally {
+    act(() => root.unmount());
+    client.clear();
+    vi.unstubAllGlobals();
+  }
 });
