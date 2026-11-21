@@ -2,7 +2,7 @@
 use super::*;
 use acpp_server::{Mode, ModelEntry};
 use anyhow::ensure;
-use std::{io::Read, path::Path as FsPath};
+use std::path::Path as FsPath;
 
 pub(super) const FAMILY: &str = "yue2";
 pub(super) const PROFILE: &str = "yue2-3b-q8_0-nar-v9";
@@ -90,19 +90,35 @@ pub(super) fn missing_files(directory: &FsPath) -> Vec<&'static str> {
         .iter()
         .filter(|(asset, sha)| {
             let path = directory.join(asset.marker);
-            if !fs::metadata(&path).is_ok_and(|meta| meta.is_file() && meta.len() == asset.bytes) {
-                return true;
-            }
-            if asset.marker.ends_with(".gguf") {
-                let mut header = [0; 4];
-                return !fs::File::open(&path).is_ok_and(|mut file| {
-                    file.read_exact(&mut header).is_ok() && header == *b"GGUF"
-                });
-            }
-            asset.marker.starts_with("sidecars/") && !crate::pin_sha::holds(&path, sha)
+            !matches_pin(&path, asset.bytes, sha)
         })
         .map(|(asset, _)| asset.marker)
         .collect()
+}
+
+fn matches_pin(path: &FsPath, size: u64, sha: &str) -> bool {
+    fs::metadata(path).is_ok_and(|meta| meta.is_file() && meta.len() == size)
+        && crate::pin_sha::holds(path, sha)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn right_size_and_gguf_magic_do_not_adopt_corrupt_weights() {
+        let directory = tempfile::tempdir().unwrap();
+        let original = directory.path().join("original");
+        fs::write(&original, b"GGUFgood").unwrap();
+        let pin = crate::install_record::sha256_of(&original).unwrap();
+        let corrupt = directory.path().join("model.gguf");
+        fs::write(&corrupt, b"GGUFjunk").unwrap();
+        assert!(matches_pin(&original, 8, &pin));
+        assert!(!matches_pin(&corrupt, 8, &pin));
+        let companion = directory.path().join(NAR);
+        fs::write(&companion, b"bad data").unwrap();
+        assert!(!matches_pin(&companion, 8, &pin));
+    }
 }
 
 pub(super) fn catalog(root: Option<&FsPath>, runtime_ready: bool) -> Value {
