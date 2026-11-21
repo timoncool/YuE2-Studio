@@ -23,6 +23,7 @@ interface PlaylistDetailProps {
     onCreateHere: () => void;
     onReuseHere: (song: Song) => void;
     onSelect: (song: Song) => void;
+    onOpenLibraryTake: (song: Song) => void;
     /** What the player holds, so its row says so. */
     currentSong: Song | null;
     isPlaying: boolean;
@@ -41,7 +42,7 @@ function shuffled<T>(items: T[]): T[] {
     return copy;
 }
 
-export const PlaylistDetail: React.FC<PlaylistDetailProps> = ({ playlistId, onBack, onPlaySong, onCreateHere, onReuseHere, onSelect, currentSong, isPlaying, notify, onError }) => {
+export const PlaylistDetail: React.FC<PlaylistDetailProps> = ({ playlistId, onBack, onPlaySong, onCreateHere, onReuseHere, onSelect, onOpenLibraryTake, currentSong, isPlaying, notify, onError }) => {
     const { t, songCount, language } = useI18n();
     const actions = useSongActions();
     // the library's own reads: a change made anywhere, a deletion included, shows here at once
@@ -247,7 +248,7 @@ export const PlaylistDetail: React.FC<PlaylistDetailProps> = ({ playlistId, onBa
             {/* Song List */}
             <div className="flex-1 overflow-y-auto bg-black/40">
                 <div className="px-2 md:px-8 py-2 md:py-4 pb-24 lg:pb-32">
-                    <PlaylistTakeComparison key={playlist.id} playlist={playlist} songs={playable} playerIsPlaying={isPlaying} onError={onError} />
+                    <PlaylistTakeComparison key={playlist.id} playlist={playlist} songs={playable} playerIsPlaying={isPlaying} onOpenLibraryTake={onOpenLibraryTake} onError={onError} />
                     <div>
                     {songs.length > 0 && (
                         <div className="hidden md:grid grid-cols-[16px_16px_4fr_3fr_2fr_minmax(96px,1fr)] gap-4 px-4 py-2 border-b border-white/10 text-sm font-medium text-zinc-400 mb-2 sticky top-0 bg-[#121212] z-10">
