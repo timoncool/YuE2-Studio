@@ -11,6 +11,7 @@ const bridgeCommands = new Map<string, (args: Record<string, unknown>) => unknow
 const composeScore = vi.fn();
 const transcribe = vi.fn();
 const instrumentalScore = vi.fn();
+const backingTempo = vi.fn();
 let ready = true;
 let enginePaused = false;
 let configured = false;
@@ -35,6 +36,7 @@ vi.mock('../services/scoreApi', () => ({
   instrumentalScore: (abc: string) => instrumentalScore(abc),
   failed: (answer: { error?: string }) => typeof answer?.error === 'string',
   chordBed: vi.fn(),
+  backingTempo: (...args: unknown[]) => backingTempo(...args),
   matchSections: vi.fn(),
 }));
 vi.mock('../services/adapters', async (original) => ({
@@ -76,6 +78,7 @@ beforeEach(() => {
   composeScore.mockReset();
   transcribe.mockReset().mockResolvedValue('X:1\nK:C\nC');
   instrumentalScore.mockReset();
+  backingTempo.mockReset();
   vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({}), { status: 200 })));
   host = document.createElement('div');
   document.body.append(host);
@@ -119,6 +122,24 @@ it('sends the chosen library backing with the same score and words', async () =>
   click(buttonNamed('create')!);
   expect(sent[0]).toMatchObject({ backing_song_id: 'backing', abc, lyrics: 'one line' });
   expect(sent[0].cover_of).toBeUndefined();
+});
+
+it('applies a measured backing tempo only when confirmed', async () => {
+  backingTempo.mockResolvedValue({ ok: true, bpm: 121, method: 'beat-this' });
+  librarySongs = [{ id: 'backing', title: 'Instrumental recording', audioUrl: '/test.wav' } as Song];
+  act(() => root.render(panel({ request: { id: 1, kind: 'score', abc: 'X:1\nK:C\nC|', lyrics: 'one line' } })));
+  await flush();
+  click(buttonNamed('chordBed')!);
+  const select = host.querySelector<HTMLSelectElement>('select[aria-label="Sing over a library backing track"]')!;
+  act(() => { select.value = 'backing'; select.dispatchEvent(new Event('change', { bubbles: true })); });
+  const bpm = field('input[inputmode="numeric"]')!;
+  const previous = bpm.value;
+  click(buttonNamed('Measure backing tempo')!);
+  await flush();
+  expect(backingTempo).toHaveBeenCalledWith('backing');
+  expect(bpm.value).toBe(previous);
+  click(buttonNamed('Use 121 BPM')!);
+  expect(bpm.value).toBe('121');
 });
 
 it('queues the other five readings with exactly one score and one pair of seeds', async () => {
