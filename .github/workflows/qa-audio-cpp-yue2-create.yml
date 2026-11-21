@@ -1,0 +1,32 @@
+name: Windows service for audio.cpp YuE2 acceptance
+on:
+  push:
+    branches: [qa/audio-cpp-yue2-create-windows]
+permissions:
+  contents: read
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          ref: e8359376dab3eac77ff26546872cb8c853b0f3eb
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo build --locked -p music-server --bin music-server
+      - run: |
+          git rev-parse HEAD | Set-Content -Encoding utf8NoBOM revision.txt
+          (Get-FileHash target/debug/music-server.exe -Algorithm SHA256).Hash | Set-Content -Encoding utf8NoBOM music-server.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: audio-cpp-yue2-create-windows
+          retention-days: 2
+          path: |
+            target/debug/music-server.exe
+            music-server.sha256
+            revision.txt
+
+
+
+
+
