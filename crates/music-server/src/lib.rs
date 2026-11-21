@@ -8067,7 +8067,7 @@ async fn minimax_music_profiles() -> Result<Json<Value>, (StatusCode, Json<ApiEr
         serde_json::json!({
             "engine": native_minimax::ENGINE_ID,
             "engine_installed": installed.engine_installed(),
-            "selected_executable": native_music_runtime::selected_executable(root, native_minimax::ENGINE_ID, installed.executable()),
+            "selected_executable": native_executable_profile(&root, native_minimax::ENGINE_ID, installed.executable(), signed),
             "profiles": installed.profiles(),
         })
     }).await
