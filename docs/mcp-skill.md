@@ -200,6 +200,12 @@ Cancel with `training_cancel`. Install a saved checkpoint with
 `backend: "auto"` or `"burn-cuda"`. The stored voice uses Safetensors; legacy
 RVC voices continue to use their installed checkpoint and optional index.
 
+For YuE2 LoRA training, the detailed `training_status` response lists the
+bundled trainer and compatible signed trainers for this platform. Install a
+signed trainer with the normal engine component installer and pass its
+`trainer_id` to `training_start` to select it. A continuation uses the
+original trainer generation and optimizer format recorded in the run.
+
 For HeartMuLa adapter training, use `hotstep_heartmula_training_status`,
 `hotstep_heartmula_training_install` and `hotstep_heartmula_training_start`.
 Give each sample a style and add lyrics to vocal tracks. The training run

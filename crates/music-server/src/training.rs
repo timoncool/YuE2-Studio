@@ -251,6 +251,8 @@ pub struct Run {
     pub name: String,
     pub trigger: String,
     pub recipe: Recipe,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub trainer: Option<TrainerIdentity>,
     pub status: RunStatus,
     /// The stage working now, or the one that failed.
     pub stage: Option<String>,
@@ -278,6 +280,18 @@ pub struct Run {
     pub rvc_burn_settings: Option<crate::rvc_burn::Settings>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub rvc_voice_id: Option<String>,
+}
+
+pub(super) const BUILTIN_TRAINER: &str = "music-train-bundled";
+const YUE2_STATE_FORMAT: &str = "yue2-joint-state-v1";
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TrainerIdentity {
+    id: String,
+    version: String,
+    generation: Option<String>,
+    optimizer_format: String,
+    weights_revision: String,
 }
 
 /// The run trained on from the checkpoint at `from` up to `to` steps.
@@ -690,6 +704,59 @@ impl Training {
             .unwrap_or_else(|| self.downloader.runtime_dir(trainer_folder()).join(&trainer_source().shipped_as))
     }
 
+    /// The built-in trainer is the default for existing runs and recipes.
+    fn builtin_identity(&self, trainer: &Path) -> Result<TrainerIdentity> {
+        let version = if std::env::var_os("YUE_TRAIN_BIN").is_some() {
+            format!("local-{}", crate::install_record::sha256_of(trainer)?)
+        } else {
+            trainer_source().commit.clone()
+        };
+        Ok(TrainerIdentity {
+            id: BUILTIN_TRAINER.into(),
+            version,
+            generation: None,
+            optimizer_format: YUE2_STATE_FORMAT.into(),
+            weights_revision: yue_train::WEIGHTS_REVISION.into(),
+        })
+    }
+
+    async fn select_trainer(&self, id: Option<&str>, saved: Option<&TrainerIdentity>) -> Result<(PathBuf, TrainerIdentity)> {
+        if let Some(saved) = saved
+            && (saved.optimizer_format != YUE2_STATE_FORMAT || saved.weights_revision != yue_train::WEIGHTS_REVISION)
+        {
+            bail!("This checkpoint needs its original YuE2 training base and optimizer format.");
+        }
+        let choice = saved.map(|saved| saved.id.as_str()).or(id).unwrap_or(BUILTIN_TRAINER);
+        let (trainer, identity) = if choice == BUILTIN_TRAINER {
+            let path = self.trainer();
+            if !path.is_file() {
+                bail!("the trainer is not installed: {} is missing", path.display());
+            }
+            let identity = self.builtin_identity(&path)?;
+            (path, identity)
+        } else {
+            let data_root = self.root.parent().context("Studio data folder")?;
+            let generation = saved.and_then(|saved| saved.generation.as_deref());
+            let worker = crate::engine_catalogue::install::resolve_trainer(data_root, choice, generation).await?;
+            (
+                worker.executable,
+                TrainerIdentity {
+                    id: choice.into(), version: worker.version, generation: Some(worker.generation),
+                    optimizer_format: YUE2_STATE_FORMAT.into(), weights_revision: yue_train::WEIGHTS_REVISION.into(),
+                },
+            )
+        };
+        if let Some(saved) = saved
+            && (identity.version != saved.version || identity.generation != saved.generation)
+        {
+            bail!("Install the original trainer generation before continuing this checkpoint.");
+        }
+        if !self.weights_ready() {
+            bail!("the YuE2 training weights are not downloaded yet");
+        }
+        Ok((trainer, identity))
+    }
+
     pub fn models_dir(&self) -> PathBuf {
         self.root.join("models")
     }
@@ -802,6 +869,26 @@ impl Training {
             .iter()
             .map(|asset| serde_json::json!({ "id": asset.id, "label": asset.label, "bytes": asset.bytes, "installed": self.installed(asset) }))
             .collect()
+    }
+
+    pub(super) fn weights_ready(&self) -> bool {
+        pack().iter().filter(|asset| asset.id != "music-train").all(|asset| self.installed(asset))
+    }
+
+    pub(super) async fn trainer_choices(&self) -> Vec<serde_json::Value> {
+        let bundle = &pack()[0];
+        let mut choices = vec![serde_json::json!({
+            "id": BUILTIN_TRAINER,
+            "label": bundle.label,
+            "version": trainer_source().commit,
+            "installed": self.installed(bundle),
+            "bytes": bundle.bytes,
+        })];
+        if let Some(data_root) = self.root.parent() {
+            choices.extend(crate::engine_catalogue::install::trainer_choices(data_root).await
+                .into_iter().filter(|choice| choice["id"] != BUILTIN_TRAINER));
+        }
+        choices
     }
 
     pub fn pack_ready(&self) -> bool {
@@ -1230,15 +1317,10 @@ impl Training {
         dataset_id: &str,
         name: &str,
         recipe: Recipe,
+        trainer_id: Option<&str>,
         card: CardHooks,
     ) -> Result<Run> {
-        let trainer = self.trainer();
-        if !self.pack_ready() {
-            bail!("the training files are not downloaded yet");
-        }
-        if !trainer.is_file() {
-            bail!("the trainer is not installed: {} is missing", trainer.display());
-        }
+        let (trainer, trainer_identity) = self.select_trainer(trainer_id, None).await?;
         let dataset = self.dataset(dataset_id)?;
         if dataset.items.is_empty() {
             bail!("the dataset has no songs yet");
@@ -1282,6 +1364,7 @@ impl Training {
             name: if name.trim().is_empty() { dataset.name.clone() } else { name.trim().into() },
             trigger: dataset.trigger.clone(),
             recipe,
+            trainer: Some(trainer_identity),
             status: RunStatus::Running,
             stage: None,
             stages: inputs.recipe.lyric_timing.then_some(VOCALS_STAGE).into_iter().chain(stages.iter().map(|stage| stage.id)).map(str::to_string).collect(),
@@ -1364,6 +1447,7 @@ impl Training {
                 lyric_timing: false,
                 ..Recipe::default()
             },
+            trainer: None,
             status: RunStatus::Running,
             stage: Some("prepare".into()),
             stages: stage_names,
@@ -1463,6 +1547,7 @@ impl Training {
             trigger: String::new(),
             recipe: Recipe { preset:"rvc-burn".into(), stop:"epochs".into(), epochs:settings.epochs,
                 grad_accum:settings.batch_size, learning_rate:settings.learning_rate, steps:0, ..Recipe::default() },
+            trainer: None,
             status: RunStatus::Running, stage:Some(stage.id.into()), stages:vec![stage.id.into()],
             steps:vec![], error:None, created_at:now(), finished_at:None,
             installed:vec![], continuations:vec![], output_adapter:None, hotstep_sa3_settings:None,
@@ -1530,13 +1615,8 @@ impl Training {
     /// where they stopped. Stops by steps only - a likeness target would be
     /// judged on a window the resumed trainer starts empty.
     pub async fn continue_run(self: &Arc<Self>, libraries: Option<PathBuf>, companion: PathBuf, run_id: &str, steps: u32, card: CardHooks) -> Result<Run> {
-        let trainer = self.trainer();
-        if !self.pack_ready() {
-            bail!("the training files are not downloaded yet");
-        }
-        if !trainer.is_file() {
-            bail!("the trainer is not installed: {} is missing", trainer.display());
-        }
+        let saved = self.run(run_id)?;
+        let (trainer, trainer_identity) = self.select_trainer(None, saved.trainer.as_ref()).await?;
         let (from, state) = self.resume_point(run_id).map_err(|code| anyhow::anyhow!(refusal(code)))?;
         if steps <= from {
             bail!("set the steps above {from}, the checkpoint the run goes on from");
@@ -1555,6 +1635,7 @@ impl Training {
         let output = run_dir.join(format!("output-{}", new_id()));
         let stage = yue_train::continuation_stage(&self.models_dir(), &companion, &run_dir, &recipe, &output, &state);
         run.recipe = recipe;
+        run.trainer = Some(trainer_identity);
         run.status = RunStatus::Running;
         run.stage = None;
         run.stages = vec![stage.id.to_string()];
@@ -2176,6 +2257,7 @@ mod tests {
             name: "n".into(),
             trigger: "t".into(),
             recipe: Recipe::default(),
+            trainer: None,
             status: RunStatus::Running,
             stage: None,
             stages: Vec::new(),

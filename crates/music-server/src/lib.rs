@@ -3535,6 +3535,8 @@ async fn read_training(State(state): State<AppState>) -> Json<Value> {
     Json(serde_json::json!({
         "pack": pack,
         "pack_ready": training.pack_ready() && !trainer_cublas_missing(&state),
+        "trainer_weights_ready": training.weights_ready() && !trainer_cublas_missing(&state),
+        "trainers": training.trainer_choices().await,
         "separator_ready": separator_ready,
         "recipe_defaults": training::Recipe::default(),
         "recipe_fields": music_engine::yue_train::recipe_fields(),
@@ -3952,13 +3954,15 @@ struct StartTraining {
     #[serde(default)]
     name: String,
     recipe: training::Recipe,
+    #[serde(default)]
+    trainer_id: Option<String>,
 }
 
 /// Starts a run. It wants the whole card: refused while a song renders, and
 /// the writing assistant is let go first.
 async fn start_training(State(state): State<AppState>, Json(input): Json<StartTraining>) -> Result<Json<training::Run>, (StatusCode, Json<ApiError>)> {
     card_free_for_training(&state).await.map_err(|reason| api_error(StatusCode::CONFLICT, reason))?;
-    start_training_run(&state, &input.dataset_id, &input.name, input.recipe)
+    start_training_run(&state, &input.dataset_id, &input.name, input.recipe, input.trainer_id.as_deref())
         .await
         .map(Json)
         .map_err(|error| api_error(StatusCode::CONFLICT, error))
@@ -3966,14 +3970,14 @@ async fn start_training(State(state): State<AppState>, Json(input): Json<StartTr
 
 /// A run of `dataset`, refused while a song renders or where the trainer
 /// could not compute on the card.
-async fn start_training_run(state: &AppState, dataset: &str, name: &str, recipe: training::Recipe) -> Result<training::Run, String> {
+async fn start_training_run(state: &AppState, dataset: &str, name: &str, recipe: training::Recipe, trainer_id: Option<&str>) -> Result<training::Run, String> {
     trainer_ready(state)?;
     let _exclusive = state.engine_use.try_write().map_err(|_| "the engine is in use; start training once it is idle".to_owned())?;
     no_song_rendering(state).await?;
     let models = set_engine_models(state).await?;
     state
         .training
-        .start(Some(engine_bundle_root()), models.backbone, models.companion, vocal_separator(state).await, dataset, name, recipe, card_hooks(state).await)
+        .start(Some(engine_bundle_root()), models.backbone, models.companion, vocal_separator(state).await, dataset, name, recipe, trainer_id, card_hooks(state).await)
         .await
         .map_err(|error| format!("{error:#}"))
 }

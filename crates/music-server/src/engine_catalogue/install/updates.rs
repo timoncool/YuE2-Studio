@@ -107,7 +107,7 @@ async fn plan(root: &Path) -> Result<Plan> {
     let engines: Vec<_> = catalogue
         .engines
         .iter()
-        .filter(|engine| engine.platform == platform && engine.protocol == "music-http-v1")
+        .filter(|engine| engine.platform == platform && super::supported_protocol(&engine.protocol))
         .collect();
     for engine in &engines {
         updates.inspect(root, *engine, |p| &p.version).await;

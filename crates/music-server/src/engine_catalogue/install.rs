@@ -480,7 +480,34 @@ pub(crate) async fn resolve_generation(
     inspect_engine(data_root, id, generation, Probe::Sha256).await
 }
 
+pub(crate) const YUE2_TRAINER_PROTOCOL: &str = "yue2-train-v1";
+
+pub(super) fn supported_protocol(protocol: &str) -> bool {
+    matches!(protocol, "music-http-v1" | YUE2_TRAINER_PROTOCOL)
+}
+
 async fn inspect_engine(
+    data_root: &Path,
+    id: &str,
+    generation: Option<&str>,
+    probe: Probe,
+) -> Result<InstalledEngine> {
+    let engine = inspect_component(data_root, id, generation, probe).await?;
+    ensure!(engine.protocol == "music-http-v1", "incompatible engine protocol");
+    Ok(engine)
+}
+
+pub(crate) async fn resolve_trainer(
+    data_root: &Path,
+    id: &str,
+    generation: Option<&str>,
+) -> Result<InstalledEngine> {
+    let trainer = inspect_component(data_root, id, generation, Probe::Sha256).await?;
+    ensure!(trainer.protocol == YUE2_TRAINER_PROTOCOL, "incompatible YuE2 trainer protocol");
+    Ok(trainer)
+}
+
+async fn inspect_component(
     data_root: &Path,
     id: &str,
     generation: Option<&str>,
@@ -488,10 +515,7 @@ async fn inspect_engine(
 ) -> Result<InstalledEngine> {
     let (package, files, selected) =
         resolve_package::<EnginePackage>(data_root, id, generation, probe).await?;
-    ensure!(
-        package.protocol == "music-http-v1",
-        "incompatible engine protocol"
-    );
+    ensure!(supported_protocol(&package.protocol), "incompatible component protocol");
     Ok(InstalledEngine {
         executable: files.join(package.executable),
         generation: selected,
@@ -505,7 +529,7 @@ pub(crate) async fn status(
     RoutePath(id): RoutePath<String>,
     axum::extract::Query(query): axum::extract::Query<StatusQuery>,
 ) -> Result<Json<serde_json::Value>, Failure> {
-    let current = inspect_engine(update_data_root(&state), &id, None, query.probe)
+    let current = inspect_component(update_data_root(&state), &id, None, query.probe)
         .await
         .map_err(|error| api_error(StatusCode::CONFLICT, format!("{error:#}")))?;
     let selection = read_selection(
@@ -543,7 +567,7 @@ async fn update_engine(
                 "No signed engine package for this platform.".into(),
             )
         })?;
-    if package.protocol != "music-http-v1" {
+    if !supported_protocol(&package.protocol) {
         return Err(api_error(
             StatusCode::UNPROCESSABLE_ENTITY,
             "This engine needs a different Studio protocol.".into(),
@@ -614,6 +638,25 @@ async fn update_model(
     .await
     .map(Json)
     .map_err(|e| api_error(StatusCode::CONFLICT, format!("{e:#}")))
+}
+
+pub(crate) async fn trainer_choices(data_root: &Path) -> Vec<serde_json::Value> {
+    let Ok(catalog) = current_catalogue().await else { return Vec::new(); };
+    let platform = host_platform();
+    let mut choices = Vec::new();
+    for package in catalog.engines.into_iter().filter(|p| p.platform == platform && p.protocol == YUE2_TRAINER_PROTOCOL) {
+        let current = inspect_component(data_root, &package.id, None, Probe::Presence).await.ok()
+            .filter(|installed| installed.protocol == YUE2_TRAINER_PROTOCOL);
+        choices.push(serde_json::json!({
+            "id": package.id,
+            "label": package.name,
+            "version": package.version,
+            "installed": current.is_some(),
+            "installed_version": current.as_ref().map(|installed| &installed.version),
+            "bytes": package.files.iter().map(|file| file.bytes).sum::<u64>(),
+        }));
+    }
+    choices
 }
 
 async fn current_catalogue() -> Result<Catalogue, Failure> {
