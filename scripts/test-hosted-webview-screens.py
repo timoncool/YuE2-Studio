@@ -532,6 +532,7 @@ def check_songbook_print(root, pid):
     wait_page('button "Print A4"')
     file_port = os.environ.get("STUDIO_QA_FILE_PORT")
     pdf = pathlib.Path(file_port) if file_port else root/"songbook.pdf"
+    assert not pdf.exists(), "The print file port already contains an earlier document"
     # WebView2 may show its own print preview even with a default printer.
     # Read the isolated runner's UIA tree and confirm the visible Print action.
     print_dialog = r"""
