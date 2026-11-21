@@ -121,6 +121,7 @@ struct AppState {
     minimax: Arc<native_minimax::Runtime>,
     minimax_cancellations: Arc<RwLock<HashMap<String, native_music_jobs::CancelSender>>>,
     audio_cpp_music_stops: Arc<RwLock<HashMap<String, Arc<std::sync::atomic::AtomicBool>>>>,
+    heartmula_install: Arc<tokio::sync::Mutex<()>>,
     openrouter_music_stops: Arc<RwLock<HashMap<String, Arc<tokio::sync::Notify>>>>,
     music_server: EngineClient,
     /// The engine's log, followed for the service's life: its recent lines and
@@ -1519,6 +1520,7 @@ pub async fn serve_on_port(port: u16) -> anyhow::Result<()> {
         minimax: Arc::default(),
         minimax_cancellations: Arc::default(),
         audio_cpp_music_stops: Arc::default(),
+        heartmula_install: Arc::default(),
         openrouter_music_stops: Arc::new(RwLock::new(HashMap::new())),
         music_server,
         engine_log,

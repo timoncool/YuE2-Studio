@@ -8,6 +8,7 @@ use std::path::{Path as FsPath, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 
 pub(super) const ENGINE: &str = "audio.cpp";
+const HEARTMULA_INSTALL: &str = "audio-cpp-heartmula";
 const FAMILY: &str = "minimax_music3";
 const PROFILE: &str = "quality-q8";
 const QUANTIZATION: &str = "Q8_0";
@@ -241,15 +242,23 @@ pub(super) async fn models(State(state): State<AppState>) -> Json<Value> {
     let runtime_ready = build
         .as_ref()
         .is_ok_and(|build| state.acpp.exe(*build).is_file() && state.acpp.installed(*build));
-    let models = [
+    let mut models = [
         Family::MiniMax,
         Family::HeartMuLa,
         Family::MiDasheng,
         Family::Vevo2,
     ]
     .map(|family| family.catalog(root.as_deref(), runtime_ready));
+    if let Some(model) = models
+        .iter_mut()
+        .find(|model| model["id"] == audio_cpp_heartmula::FAMILY)
+    {
+        model["installing"] = Value::Bool(state.heartmula_install.try_lock().is_err());
+        model["download"] = serde_json::json!(acpp_download(&state, HEARTMULA_INSTALL).await);
+    }
     Json(serde_json::json!({
         "engine": ENGINE,
+        "engine_installed": runtime_ready,
         "models": models
     }))
 }
@@ -269,7 +278,6 @@ pub(super) async fn install(
             "This audio.cpp music model has no managed installation.".into(),
         ));
     }
-    let scope = "audio-cpp-heartmula";
     let build = build(&state)
         .await
         .map_err(|error| api_error(StatusCode::SERVICE_UNAVAILABLE, error.to_string()))?;
@@ -279,44 +287,75 @@ pub(super) async fn install(
             "Studio data folder is unavailable.".into(),
         )
     })?;
+    let Ok(lease) = state.heartmula_install.clone().try_lock_owned() else {
+        return Ok(Json(
+            serde_json::json!({"started": false, "installing": true}),
+        ));
+    };
+    tokio::spawn(async move {
+        let _lease = lease;
+        if let Err(error) = install_heartmula(&state, build, root).await {
+            state
+                .acpp
+                .downloader()
+                .fail(HEARTMULA_INSTALL, format!("{error:#}"))
+                .await;
+        }
+    });
+    Ok(Json(
+        serde_json::json!({"started": true, "installing": true}),
+    ))
+}
+
+async fn install_heartmula(state: &AppState, build: Build, root: PathBuf) -> anyhow::Result<()> {
     let asset = &audio_cpp_heartmula::ASSET;
     let downloader = state.acpp.downloader();
     let target = downloader.path_of(asset);
-    let weights_missing =
-        || !audio_cpp_heartmula::missing_files(&audio_cpp_heartmula::model_dir(&root)).is_empty();
-    if weights_missing() && target.exists() {
-        return Err(api_error(
-            StatusCode::CONFLICT,
-            format!(
-                "HeartMuLa weights at {} are incomplete. Move the existing file and retry installation.",
-                target.display()
-            ),
-        ));
-    }
+    tokio::task::spawn_blocking(move || repair_heartmula_file(&target)).await??;
     if !state.acpp.installed(build) {
-        install_acpp(&state, build, scope).await.map_err(|error| {
-            api_error(
-                StatusCode::BAD_GATEWAY,
-                format!("Installing audio.cpp runtime: {error:#}"),
-            )
-        })?;
+        install_acpp(state, build, HEARTMULA_INSTALL)
+            .await
+            .context("Installing audio.cpp runtime")?;
     }
     downloader
-        .install_all(scope, &[asset])
+        .install_all(HEARTMULA_INSTALL, &[asset])
         .await
-        .map_err(|error| {
-            api_error(
-                StatusCode::BAD_GATEWAY,
-                format!("Installing HeartMuLa weights: {error:#}"),
-            )
-        })?;
-    if weights_missing() || !state.acpp.exe(build).is_file() || !state.acpp.installed(build) {
-        return Err(api_error(
-            StatusCode::BAD_GATEWAY,
-            "HeartMuLa installation is incomplete.".into(),
-        ));
+        .context("Installing HeartMuLa weights")?;
+    anyhow::ensure!(
+        audio_cpp_heartmula::missing_files(&audio_cpp_heartmula::model_dir(&root)).is_empty()
+            && state.acpp.exe(build).is_file()
+            && state.acpp.installed(build),
+        "HeartMuLa installation is incomplete."
+    );
+    Ok(())
+}
+
+fn repair_heartmula_file(target: &FsPath) -> anyhow::Result<()> {
+    match std::fs::symlink_metadata(target) {
+        Ok(metadata) if metadata.is_file() => {
+            if metadata.len() != audio_cpp_heartmula::ASSET.bytes
+                || !crate::pin_sha::holds(target, audio_cpp_heartmula::SHA256)
+            {
+                // Keep the downloader's .part and its resume manifest.
+                std::fs::remove_file(target).with_context(|| {
+                    format!(
+                        "Replacing damaged HeartMuLa weights at {}",
+                        target.display()
+                    )
+                })?;
+            }
+        }
+        Ok(_) => anyhow::bail!(
+            "HeartMuLa installation expected a regular file at {}",
+            target.display()
+        ),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+        Err(error) => {
+            return Err(error)
+                .with_context(|| format!("Checking HeartMuLa weights at {}", target.display()));
+        }
     }
-    Ok(Json(serde_json::json!({"ready": true})))
+    Ok(())
 }
 
 fn minimax_catalog(root: Option<&FsPath>, runtime_ready: bool) -> Value {
@@ -337,6 +376,21 @@ fn minimax_catalog(root: Option<&FsPath>, runtime_ready: bool) -> Value {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn repairing_heartmula_preserves_download_resume_files() {
+        let dir = tempfile::tempdir().unwrap();
+        let target = dir.path().join("heartmula-q8_0.gguf");
+        let partial = target.with_extension("part");
+        let manifest = crate::chunked::manifest_path(&partial);
+        std::fs::write(&target, b"broken GGUF").unwrap();
+        std::fs::write(&partial, b"partial bytes").unwrap();
+        std::fs::write(&manifest, b"resume manifest").unwrap();
+        repair_heartmula_file(&target).unwrap();
+        assert!(!target.exists());
+        assert_eq!(std::fs::read(partial).unwrap(), b"partial bytes");
+        assert_eq!(std::fs::read(manifest).unwrap(), b"resume manifest");
+    }
 
     #[test]
     fn music_registry_keeps_native_task_and_model_profile() {

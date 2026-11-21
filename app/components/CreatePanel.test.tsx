@@ -408,7 +408,7 @@ it('chooses MiniMax Music3 through audio.cpp and reuses the saved seed and forma
       expect(init?.method).toBe('POST');
       expect(JSON.parse(String(init?.body))).toEqual({ model: 'heartmula' });
       heartMuLaReady = true;
-      return Response.json({ ready: true });
+      return Response.json({ started: true, installing: true });
     }
     return Response.json(url === '/v1/music/audio-cpp/models' ? {
     engine: 'audio.cpp',
