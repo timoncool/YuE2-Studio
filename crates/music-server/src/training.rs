@@ -272,6 +272,8 @@ pub struct Run {
     pub output_adapter: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub hotstep_sa3_settings: Option<crate::hotstep_sa3_training::Settings>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hotstep_heartmula_settings: Option<crate::hotstep_sa3_training::Settings>,
 }
 
 /// The run trained on from the checkpoint at `from` up to `to` steps.
@@ -1287,6 +1289,7 @@ impl Training {
             continuations: Vec::new(),
             output_adapter: None,
             hotstep_sa3_settings: None,
+            hotstep_heartmula_settings: None,
         };
         self.save_run(&run)?;
         let cancel = Arc::new(tokio::sync::Notify::new());
@@ -1365,7 +1368,8 @@ impl Training {
             installed: Vec::new(),
             continuations: Vec::new(),
             output_adapter: None,
-            hotstep_sa3_settings: Some(settings),
+            hotstep_sa3_settings: (!heart).then(|| settings.clone()),
+            hotstep_heartmula_settings: heart.then_some(settings),
         };
         self.save_run(&run)?;
         let cancel = Arc::new(tokio::sync::Notify::new());
@@ -2054,6 +2058,7 @@ mod tests {
             continuations: Vec::new(),
             output_adapter: None,
             hotstep_sa3_settings: None,
+            hotstep_heartmula_settings: None,
         };
         training.save_run(&run).unwrap();
         training.append_step("r1", record(3)).unwrap();
