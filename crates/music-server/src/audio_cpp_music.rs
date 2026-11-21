@@ -198,7 +198,9 @@ pub(super) fn registered_model_ready(model: &ModelEntry) -> Option<bool> {
     }
     let directory = match family {
         Family::MiniMax if model.task == "gen" => Some(model.path.as_path()),
-        Family::HeartMuLa | Family::MiDasheng | Family::Magenta | Family::MiniMaxH3 if model.task == "gen" => {
+        Family::HeartMuLa | Family::MiDasheng | Family::Magenta | Family::MiniMaxH3
+            if model.task == "gen" =>
+        {
             model.path.parent()
         }
         Family::Vevo2 if model.task == "tts" => model.path.parent(),
@@ -568,7 +570,7 @@ pub(super) async fn submit(
         .await
         .context("the audio.cpp worker stopped")
         .and_then(|result| result);
-        complete(&state, &job.id, family, outcome).await;
+        complete(&state, &job.id, family.name(), family.profile(), outcome).await;
         state.audio_cpp_music_stops.write().await.remove(&job.id);
     });
     (StatusCode::ACCEPTED, Json(accepted))
@@ -592,7 +594,7 @@ fn shape(reply: &Value, settings: &Value) -> anyhow::Result<native_music_jobs::S
 fn save(
     library: &library::Library,
     job: &MusicJob,
-    family: Family,
+    profile: &str,
     output: native_music_jobs::ShapedOutput,
 ) -> anyhow::Result<library::ImportedSong> {
     let mut settings = job.generation_settings.clone();
@@ -603,22 +605,23 @@ fn save(
         caption: job.style.clone(),
         lyrics: job.lyrics.clone(),
         metadata: serde_json::json!({"job_id": job.id, "duration_seconds": output.duration,
-            "output_format": settings["output_format"], "cover_prompt": job.cover_prompt}),
+            "output_format": settings["output_format"], "cover_prompt": job.cover_prompt, "derived": job.derived}),
         generation_settings: settings,
         replay_request: None,
         audio_codes: None,
-        engine_id: ENGINE.into(),
-        profile_id: Some(family.profile().into()),
+        engine_id: job.engine_id.clone(),
+        profile_id: Some(profile.into()),
         source: "local_generation".into(),
         audio_extension: output.extension,
         audio: output.audio,
     })
 }
 
-async fn complete(
+pub(super) async fn complete(
     state: &AppState,
     id: &str,
-    family: Family,
+    name: &str,
+    profile: &str,
     outcome: anyhow::Result<native_music_jobs::ShapedOutput>,
 ) {
     let mut jobs = state.jobs.write().await;
@@ -626,7 +629,7 @@ async fn complete(
     if !matches!(job.status, MusicJobStatus::Running) {
         return;
     }
-    let song_id = match outcome.and_then(|output| save(&state.library, job, family, output)) {
+    let song_id = match outcome.and_then(|output| save(&state.library, job, profile, output)) {
         Ok(imported) => {
             let id = imported.song.id.clone();
             if let Some(playlist) = &job.playlist_id
@@ -648,13 +651,13 @@ async fn complete(
             job.songs = vec![song];
             job.status = MusicJobStatus::Completed;
             job.phase = MusicJobPhase::Completed;
-            job.message = format!("{} song saved to the library.", family.name());
+            job.message = format!("{name} song saved to the library.");
             Some(id)
         }
         Err(error) => {
             job.status = MusicJobStatus::Failed;
             job.phase = MusicJobPhase::Failed;
-            job.message = format!("audio.cpp music generation failed: {error:#}");
+            job.message = format!("{name} music generation failed: {error:#}");
             None
         }
     };

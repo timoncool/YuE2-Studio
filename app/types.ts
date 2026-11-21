@@ -130,7 +130,7 @@ export interface YueHarmony {
 export type YueCot = 'full' | 'melody' | 'off';
 export type YueOutputFormat = 'flac' | 'mp3' | 'wav32';
 
-export type NativeMusicEngine = 'minimaxmusic-cpp' | 'acestep-cpp';
+export type NativeMusicEngine = 'minimaxmusic-cpp' | 'acestep-cpp' | 'hotstep';
 export type ProfileMusicEngine = NativeMusicEngine | 'audio.cpp';
 export type MusicEngine = 'local' | 'openrouter' | ProfileMusicEngine;
 

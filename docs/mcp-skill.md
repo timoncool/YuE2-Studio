@@ -133,6 +133,16 @@ under `audiocpp/models/MiniMax-H3-Q4-GGUF`. Review the
 [MiniMax H3 Community License](https://huggingface.co/MiniMaxAI/MiniMax-H3/blob/main/LICENSE)
 for its territorial and use terms.
 
+For a HOT-Step MuLaCover cover, check `hotstep_cover_profiles` and use
+`hotstep_cover_install` to install the Windows CPU runtime and its GGUF
+weights. The four codec and tokenizer files are shared with other HeartMuLa
+profiles. On other systems a compatible local `ace-server` can be configured
+with `YUE_HOTSTEP_SERVER`. Call `score_transcribe` with the original library song
+and retain both melody and chord symbols. Pass the approved `abc`, the
+original song ID as `cover_of`, and the native source
+`{"kind":"native","engine":"hotstep","model":"heartmula-mulacover"}`
+to `song_create`. Reuse restores the source and the exact score for the cover.
+
 For Vevo2, pass the lyrics and a library song ID as `vevo2.voice_song_id`.
 Add `vevo2.melody_song_id` to condition the singing on a second library track.
 

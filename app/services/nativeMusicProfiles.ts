@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react';
 import type { MusicEngine, NativeMusicEngine, ProfileMusicEngine, YueRequest } from '../types';
 
-export const nativeEngines = { 'minimaxmusic-cpp': 'MiniMax Music3', 'acestep-cpp': 'ACE-Step' } as const;
+export const nativeEngines = { 'minimaxmusic-cpp': 'MiniMax Music3', 'acestep-cpp': 'ACE-Step', hotstep: 'HOT-Step' } as const;
 export const profileMusicEngines = { ...nativeEngines, 'audio.cpp': 'audio.cpp' } as const;
 export const audioCppMiniMax = 'minimax_music3';
 export const isNativeMusicEngine = (value: unknown): value is NativeMusicEngine =>
-  value === 'minimaxmusic-cpp' || value === 'acestep-cpp';
+  value === 'minimaxmusic-cpp' || value === 'acestep-cpp' || value === 'hotstep';
 export const isProfileMusicEngine = (value: unknown): value is ProfileMusicEngine =>
   value === 'audio.cpp' || isNativeMusicEngine(value);
 export const isMusicEngine = (value: unknown): value is MusicEngine =>
@@ -61,7 +61,7 @@ export function nativeGenerationSettings(engine: ProfileMusicEngine, settings: S
     ...(engine !== 'acestep-cpp' ? { output_format: miniMaxOutputFormat(settings.output_format) } : {}),
     ...(engine === 'minimaxmusic-cpp' && lmSeed !== undefined ? { lm_seed: lmSeed } : {}),
     ...(engine === 'acestep-cpp' && guidance !== undefined ? { ace: { guidance_scale: guidance } } : {}),
-    ...(engine === 'audio.cpp' && guidance !== undefined ? { cfg_scale: guidance } : {}),
+    ...((engine === 'audio.cpp' || engine === 'hotstep') && guidance !== undefined ? { cfg_scale: guidance } : {}),
   };
 }
 
@@ -101,7 +101,7 @@ export function useNativeMusicProfiles(engine: ProfileMusicEngine | undefined) {
   }, [engine, refreshCount]);
   const result = response?.engine === engine ? response : undefined;
   const profiles = result?.data?.profiles ?? [];
-  const remembered = engine ? preferences.selected[engine] ?? (engine === 'audio.cpp' ? audioCppMiniMax : undefined) : undefined;
+  const remembered = engine ? preferences.selected[engine] ?? (engine === 'audio.cpp' ? audioCppMiniMax : engine === 'hotstep' ? 'heartmula-mulacover' : undefined) : undefined;
   const pending = engine === 'acestep-cpp' ? legacyAce : undefined;
   const profile = pending ? undefined : profiles.find(entry => entry.id === remembered);
   const pair = profile && engine ? JSON.stringify([engine, profile.id]) : undefined;
@@ -131,7 +131,7 @@ export function useNativeMusicProfiles(engine: ProfileMusicEngine | undefined) {
         number('lm_seed', saved.lm_seed);
         controls.output_format = miniMaxOutputFormat(saved.output_format);
       }
-      if (source === 'audio.cpp') {
+      if (source === 'audio.cpp' || source === 'hotstep') {
         number('guidance_scale', saved.guidance_scale);
         controls.output_format = miniMaxOutputFormat(saved.output_format);
       }
