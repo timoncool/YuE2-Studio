@@ -533,7 +533,7 @@ const JOURNAL: &[(&str, &str, &str)] = &[
     ("dataset_prepare_cancel", "cancelled", "preparation"),
     ("training_start", "started", "training"),
     ("rvc_training_start", "started", "training"),
-    ("rvc_training_install_voice", "installed", "rvc"),
+    ("rvc_training_install_voice", "installed", "rvc_voice"),
     ("hotstep_sa3_training_install", "started", "download"),
     ("hotstep_sa3_training_start", "started", "training"),
     ("hotstep_heartmula_training_start", "started", "training"),
