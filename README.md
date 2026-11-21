@@ -393,6 +393,19 @@ Memory was sampled every 200 ms. Peak GPU usage rose 9.56 GiB on CUDA and 9.99 G
 
 For seed 42, both WAVs contain 30.0 s of stereo audio at 48 kHz. Measured in 100 ms windows across both channels, the last 5.3 s on CUDA and 5.0 s on Vulkan stay below −60 dBFS RMS. The speed column uses the full WAV duration.
 
+**RVC voice conversion on GPU (5.0 development builds)**
+
+Windows on one RTX 4090 24 GB, using the same voice checkpoint and FAISS index with a retrieval blend of 0.5. Each run converts an existing vocal to a new voice.
+
+| RVC backend | Input | First run, empty cache | Restart, saved cache | Warm request | Peak GPU memory |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| vocal-fast-rs · TensorRT-RTX | 4 s | 21.046 s | 1.694 s | 64.83 ms | 3.91 GiB |
+| audio.cpp · CUDA | 4 s | 4.639 s | 4.448 s | 204.84 ms | 4.09 GiB |
+| vocal-fast-rs · TensorRT-RTX | 30 s | 24.258 s | 2.009 s | 279.29 ms | 5.51 GiB |
+| audio.cpp · CUDA | 30 s | 5.334 s | 5.477 s | 942.17 ms | 6.83 GiB |
+
+Startup runs include process launch through the first saved WAV. Columns show medians of two empty-cache launches, three cached launches and three warm requests. Both warm paths use the same local HTTP client, from POST through writing the WAV. Peak memory is the median whole-card peak across three cached processes during warm conversion, including desktop usage. The engines search different numbers of FAISS lists; timing alone does not measure voice quality. [Individual runs and build identifiers](docs/rvc-gpu-benchmarks.json)
+
 ### Speed reported by installations
 
 How long a 3-minute song takes, by graphics card. These are averages from what YuE2 Studio installations reported
