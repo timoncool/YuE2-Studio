@@ -1673,6 +1673,7 @@ export const ja = {
     midiDelete: 'MIDIを削除',
     midiStage_preparing: '準備中',
     midiStage_downloading: '変換ツールをダウンロード中',
+    midiStage_waiting_for_runtime: '共有 audio.cpp ランタイムのインストールを待機中',
     midiStage_reading: 'オーディオを読み込み中',
     midiStage_transcribing: '音符を聴き取り中',
     midiStage_done: '完了',

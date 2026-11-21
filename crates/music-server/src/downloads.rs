@@ -1973,6 +1973,91 @@ mod tests {
         assert!(downloader.cancel_for("karaoke").await);
     }
 
+    #[tokio::test]
+    async fn audio_cpp_runtime_shares_one_transfer_across_tools_and_cancels_by_scope() {
+        use acpp_server::asset::Build;
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        use tokio::sync::Notify;
+
+        for stop_owner in [false, true] {
+            let started = Arc::new(Notify::new());
+            let release = Arc::new(Notify::new());
+            let transfers = Arc::new(AtomicUsize::new(0));
+            let app = axum::Router::new().route("/runtime", axum::routing::get({
+                let (started, release, transfers) = (started.clone(), release.clone(), transfers.clone());
+                move |headers: axum::http::HeaderMap| async move {
+                    if !headers.contains_key("range") {
+                        transfers.fetch_add(1, Ordering::Relaxed);
+                        started.notify_one();
+                        release.notified().await;
+                    }
+                    "fixture"
+                }
+            }));
+            let (base, server) = onnx_fixture(app).await;
+            let root = tempfile::tempdir().unwrap();
+            let mut downloader = Downloader::new(root.path().to_owned());
+            downloader.http = reqwest::Client::builder().no_proxy().build().unwrap();
+            let runtime: &'static Asset = Box::leak(Box::new(Asset {
+                url: Box::leak(format!("{base}/runtime").into_boxed_str()),
+                bytes: 7,
+                ..asset()
+            }));
+            let assets = [runtime];
+            let installs = crate::acpp_install::RuntimeInstalls::default();
+            let midi_waiting = Notify::new();
+            let karaoke_waiting = Notify::new();
+
+            let (owner, (midi, karaoke)) = tokio::time::timeout(std::time::Duration::from_secs(10), async {
+                tokio::join!(
+                    installs.run(Build::Cpu, "separation", |_| downloader.install_all("separation", &assets), || async {}),
+                    async {
+                        started.notified().await;
+                        // Before coordination, this is the second tool's actual failure.
+                        let rejected = downloader.install_all("midi", &assets).await.unwrap_err();
+                        assert_eq!(rejected.to_string(), "another download is already running");
+                        let (midi, karaoke, ()) = tokio::join!(
+                            installs.run(Build::Cpu, "midi", |_| async { panic!("MIDI must share the transfer") },
+                                || async { midi_waiting.notify_one(); }),
+                            installs.run(Build::Cpu, "karaoke", |_| async { panic!("Karaoke must share the transfer") },
+                                || async { karaoke_waiting.notify_one(); }),
+                            async {
+                                midi_waiting.notified().await;
+                                karaoke_waiting.notified().await;
+                                assert_eq!(installs.waiting_on("midi").as_deref(), Some("separation"));
+                                assert!(installs.cancel("midi"));
+                                assert!(!downloader.cancel_for("midi").await);
+                                assert!(!downloader.active_for("separation").await.unwrap().done);
+                                if stop_owner {
+                                    assert!(installs.cancel("separation"));
+                                    assert!(downloader.cancel_for("separation").await);
+                                } else {
+                                    release.notify_one();
+                                }
+                            }
+                        );
+                        (midi, karaoke)
+                    }
+                )
+            }).await.expect("the owner and waiters did not settle");
+            assert_eq!(midi.unwrap_err().to_string(), "cancelled");
+            assert_eq!(installs.error_for("midi").as_deref(), Some("cancelled"));
+            assert_eq!(installs.waiting_on("midi"), None);
+            assert_eq!(transfers.load(Ordering::Relaxed), 1);
+            if stop_owner {
+                assert_eq!(owner.unwrap_err().to_string(), "cancelled");
+                assert_eq!(karaoke.unwrap_err().to_string(), "cancelled");
+                assert_eq!(installs.error_for("separation").as_deref(), Some("cancelled"));
+                assert!(!downloader.is_installed(runtime));
+            } else {
+                owner.unwrap();
+                karaoke.unwrap();
+                assert_eq!(std::fs::read(downloader.path_of(runtime)).unwrap(), b"fixture");
+            }
+            server.abort();
+        }
+    }
+
     #[cfg(windows)]
     #[tokio::test]
     async fn a_wrong_manually_placed_runtime_archive_is_rejected_before_download() {

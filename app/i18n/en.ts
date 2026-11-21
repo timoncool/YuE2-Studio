@@ -1678,6 +1678,7 @@ export const en = {
     midiDelete: 'Delete MIDI',
     midiStage_preparing: 'Getting ready',
     midiStage_downloading: 'Downloading the transcriber',
+    midiStage_waiting_for_runtime: 'Waiting for the shared audio.cpp runtime',
     midiStage_reading: 'Reading the audio',
     midiStage_transcribing: 'Listening for notes',
     midiStage_done: 'Done',
