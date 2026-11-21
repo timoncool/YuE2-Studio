@@ -559,6 +559,20 @@ footer p { margin: 0 0 8px; }
     </table></div>
     <p><a href="music-gpu-benchmarks.json">Runs, SHA-256 and weight profiles</a></p>
 <!-- music-gpu-matrix:end -->
+<!-- music-gpu-wsl:start -->
+    <h3 id="music-gpu-wsl-title">Native music engines · Linux in WSL2</h3>
+    <p class="note">RTX 4090, driver 617.42. Linux executables ran in WSL2 with model files on a Windows drive. Cold measures launch to receipt of the first WAV. Warm is the median of three requests to the same process. VRAM is sampled for the whole GPU and RSS for the Linux process tree.</p>
+    <div class="scroll benchmark-scroll" role="region" aria-labelledby="music-gpu-wsl-title" tabindex="0"><table>
+      <thead><tr><th scope="col">Model and engine</th><th scope="col">Backend</th><th scope="col">WAV (s)</th><th scope="col">Cold (s)</th><th scope="col">Warm (s)</th><th scope="col">VRAM peak / Δ (GiB)</th><th scope="col">Peak RAM (GiB)</th></tr></thead>
+      <tbody>
+      <tr><td>YuE2 · yue2.cpp 892b9b0 · 3B Q8_0 + F32 VAE; NAR v9 · 30 s · 32 steps</td><td>CUDA 13</td><td>29.999</td><td>31.134</td><td>5.491</td><td>7.32 / +5.79</td><td>3.51</td></tr>
+      <tr><td>YuE2 · yue2.cpp 892b9b0 · 3B Q8_0 + F32 VAE; NAR v9 · 100 tokens · 2 steps</td><td>CUDA 13</td><td>3.999</td><td>24.461</td><td>0.158</td><td>6.08 / +4.55</td><td>3.50</td></tr>
+      <tr><td>ACE-Step 1.5 · acestep.cpp 6e0e414 · Turbo Q8_0 + BF16 embedder/VAE · 30 s · 8 Euler steps</td><td>CUDA 13</td><td>30.000</td><td>20.569</td><td>0.318</td><td>9.37 / +7.85</td><td>2.20</td></tr>
+      <tr><td>MiniMax Music3 · minimaxmusic.cpp b79d37f · Minimal Q3_K_M / Q4_K_M + F32 vocoder · 3.2 s · 2 steps</td><td>CUDA 13</td><td>3.193</td><td>35.096</td><td>1.091</td><td>8.82 / +7.30</td><td>4.71</td></tr>
+      <tr><td>MiniMax Music3 · minimaxmusic.cpp b79d37f · Quality Q8_0 + F32 vocoder · 3.2 s · 2 steps</td><td>CUDA 13</td><td>3.193</td><td>65.319</td><td>1.697</td><td>14.67 / +13.13</td><td>8.95</td></tr>
+      </tbody>
+    </table></div>
+<!-- music-gpu-wsl:end -->
 <!-- radeon-gpu-pair:start -->
     <h3 id="radeon-gpu-pair-title">Stable Audio 3 Small Q8_0 · Radeon iGPU</h3>
     <p class="note">Windows, AMD Radeon Graphics (gfx1036, UMA). The same audio.cpp revision generated 4 seconds in four steps with each backend. Cold is the first run. Warm is the median of three requests. WDDM dedicated and shared columns show sampled peaks at one-second intervals. <code>audio.cpp 5e7273db</code></p>

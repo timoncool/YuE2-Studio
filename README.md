@@ -435,6 +435,20 @@ Each workload has its own fixed input and step count. YuE2 VAE precision differs
 [Individual runs, residency, SHA-256, exact weights and output checks](docs/music-gpu-benchmarks.json)
 <!-- music-gpu-matrix:end -->
 
+<!-- music-gpu-wsl:start -->
+#### Native music engines · Linux in WSL2
+
+RTX 4090, driver 617.42. The pinned Linux executables ran in WSL2 with weights on a Windows drive. Cold includes process launch through receipt of the first WAV. Warm is the median of three requests to the same process. Memory peaks cover whole-card VRAM and Linux process-tree RSS.
+
+| Model and engine | Backend | WAV (s) | Cold (s) | Warm (s) | VRAM peak / Δ (GiB) | Peak RAM (GiB) |
+| --- | --- | ---: | ---: | ---: | ---: | ---: |
+| YuE2 · yue2.cpp 892b9b0 · 3B Q8_0 + F32 VAE; NAR v9 · 30 s · 32 steps | CUDA 13 | 29.999 | 31.134 | 5.491 | 7.32 / +5.79 | 3.51 |
+| YuE2 · yue2.cpp 892b9b0 · 3B Q8_0 + F32 VAE; NAR v9 · 100 tokens · 2 steps | CUDA 13 | 3.999 | 24.461 | 0.158 | 6.08 / +4.55 | 3.50 |
+| ACE-Step 1.5 · acestep.cpp 6e0e414 · Turbo Q8_0 + BF16 embedder/VAE · 30 s · 8 Euler steps | CUDA 13 | 30.000 | 20.569 | 0.318 | 9.37 / +7.85 | 2.20 |
+| MiniMax Music3 · minimaxmusic.cpp b79d37f · Minimal Q3_K_M / Q4_K_M + F32 vocoder · 3.2 s · 2 steps | CUDA 13 | 3.193 | 35.096 | 1.091 | 8.82 / +7.30 | 4.71 |
+| MiniMax Music3 · minimaxmusic.cpp b79d37f · Quality Q8_0 + F32 vocoder · 3.2 s · 2 steps | CUDA 13 | 3.193 | 65.319 | 1.697 | 14.67 / +13.13 | 8.95 |
+<!-- music-gpu-wsl:end -->
+
 <!-- radeon-gpu-pair:start -->
 #### Stable Audio 3 Small Q8_0 · Radeon iGPU
 

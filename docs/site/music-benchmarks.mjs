@@ -29,6 +29,15 @@ export const RVC = `    <h3>RVC voice conversion on GPU (5.0 development builds)
     <p class="note">Startup runs include process launch through the first saved WAV. Columns show medians of two empty-cache launches, three cached launches and three warm requests. Both warm paths use the same local HTTP client, from POST through writing the WAV. Peak memory is the median whole-card peak across three cached processes during warm conversion, including desktop usage. The engines search different numbers of FAISS lists; timing alone does not measure voice quality. <a href="rvc-gpu-benchmarks.json">Individual runs and build identifiers</a></p>
 `;
 
+export const WSL_TEXT = {
+  en: ['Native music engines · Linux in WSL2', 'RTX 4090, driver 617.42. Linux executables ran in WSL2 with model files on a Windows drive. Cold measures launch to receipt of the first WAV. Warm is the median of three requests to the same process. VRAM is sampled for the whole GPU and RSS for the Linux process tree.'],
+  ru: ['Нативные музыкальные движки · Linux в WSL2', 'RTX 4090, драйвер 617.42. Linux-бинарники работали в WSL2, веса лежали на диске Windows. Холодный замер идёт от запуска до первого WAV. Прогретый — медиана трёх запросов тому же процессу. VRAM измерена для всей карты, RSS — для дерева процессов Linux.'],
+  pt: ['Motores de música nativos · Linux no WSL2', 'RTX 4090, controlador 617.42. Os executáveis Linux correram no WSL2 com os pesos num disco Windows. O tempo a frio vai do arranque ao primeiro WAV. O tempo aquecido é a mediana de três pedidos ao mesmo processo. VRAM da placa inteira e RSS da árvore de processos Linux.'],
+  zh: ['原生音乐引擎 · WSL2 中的 Linux', 'RTX 4090，驱动 617.42。Linux 程序在 WSL2 中运行，模型权重位于 Windows 磁盘。冷启动从进程启动计时至收到首个 WAV，预热结果取同一进程三次请求的中位数。显存按整卡采样，RSS 按 Linux 进程树采样。'],
+  ja: ['ネイティブ音楽エンジン · WSL2 上の Linux', 'RTX 4090、ドライバー 617.42。Linux 実行ファイルを WSL2 で動かし、重みは Windows ドライブに置きました。コールドは起動から最初の WAV 受信まで、ウォームは同じプロセスへの 3 リクエストの中央値です。VRAM は GPU 全体、RSS は Linux プロセスツリーを計測しました。'],
+  ko: ['네이티브 음악 엔진 · WSL2의 Linux', 'RTX 4090, 드라이버 617.42. Linux 실행 파일을 WSL2에서 실행하고 가중치는 Windows 드라이브에 두었습니다. 콜드는 실행부터 첫 WAV 수신까지, 웜은 같은 프로세스에 보낸 요청 3회의 중앙값입니다. VRAM은 GPU 전체, RSS는 Linux 프로세스 트리를 측정했습니다.'],
+};
+
 export const MATRIX_TEXT = {
   "en": {
     "title": "Music engine GPU matrix · 5.0 development and published builds",

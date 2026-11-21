@@ -533,6 +533,20 @@ footer p { margin: 0 0 8px; }
     </table></div>
     <p><a href="music-gpu-benchmarks.json">各次运行、SHA-256 和权重配置</a></p>
 <!-- music-gpu-matrix:end -->
+<!-- music-gpu-wsl:start -->
+    <h3 id="music-gpu-wsl-title">原生音乐引擎 · WSL2 中的 Linux</h3>
+    <p class="note">RTX 4090，驱动 617.42。Linux 程序在 WSL2 中运行，模型权重位于 Windows 磁盘。冷启动从进程启动计时至收到首个 WAV，预热结果取同一进程三次请求的中位数。显存按整卡采样，RSS 按 Linux 进程树采样。</p>
+    <div class="scroll benchmark-scroll" role="region" aria-labelledby="music-gpu-wsl-title" tabindex="0"><table>
+      <thead><tr><th scope="col">模型和引擎</th><th scope="col">后端</th><th scope="col">WAV（秒）</th><th scope="col">冷启动（秒）</th><th scope="col">预热后（秒）</th><th scope="col">显存峰值 / 增量（GiB）</th><th scope="col">内存峰值（GiB）</th></tr></thead>
+      <tbody>
+      <tr><td>YuE2 · yue2.cpp 892b9b0 · 3B Q8_0 + F32 VAE; NAR v9 · 30 s · 32 steps</td><td>CUDA 13</td><td>29.999</td><td>31.134</td><td>5.491</td><td>7.32 / +5.79</td><td>3.51</td></tr>
+      <tr><td>YuE2 · yue2.cpp 892b9b0 · 3B Q8_0 + F32 VAE; NAR v9 · 100 tokens · 2 steps</td><td>CUDA 13</td><td>3.999</td><td>24.461</td><td>0.158</td><td>6.08 / +4.55</td><td>3.50</td></tr>
+      <tr><td>ACE-Step 1.5 · acestep.cpp 6e0e414 · Turbo Q8_0 + BF16 embedder/VAE · 30 s · 8 Euler steps</td><td>CUDA 13</td><td>30.000</td><td>20.569</td><td>0.318</td><td>9.37 / +7.85</td><td>2.20</td></tr>
+      <tr><td>MiniMax Music3 · minimaxmusic.cpp b79d37f · Minimal Q3_K_M / Q4_K_M + F32 vocoder · 3.2 s · 2 steps</td><td>CUDA 13</td><td>3.193</td><td>35.096</td><td>1.091</td><td>8.82 / +7.30</td><td>4.71</td></tr>
+      <tr><td>MiniMax Music3 · minimaxmusic.cpp b79d37f · Quality Q8_0 + F32 vocoder · 3.2 s · 2 steps</td><td>CUDA 13</td><td>3.193</td><td>65.319</td><td>1.697</td><td>14.67 / +13.13</td><td>8.95</td></tr>
+      </tbody>
+    </table></div>
+<!-- music-gpu-wsl:end -->
 <!-- radeon-gpu-pair:start -->
     <h3 id="radeon-gpu-pair-title">Stable Audio 3 Small Q8_0 · Radeon 核显</h3>
     <p class="note">Windows，AMD Radeon Graphics（gfx1036，UMA）。同一 audio.cpp 版本在两个后端均用四步生成 4 秒音频。冷启动取首次运行，预热后取三次请求的中位数。WDDM 专用及共享内存峰值按一秒间隔采样。 <code>audio.cpp 5e7273db</code></p>
