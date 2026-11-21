@@ -73,7 +73,7 @@ def wave_shape(body):
 
 def run():
     binary = Path("target/debug/music-server.exe").resolve()
-    revision = subprocess.check_output(["git", "rev-parse", "2f96f229"], text=True).strip()
+    revision = subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
     studio, engine_port = port(), port()
     base = f"http://127.0.0.1:{studio}"
     with tempfile.TemporaryDirectory(prefix="yue-rvc-published-") as folder:
