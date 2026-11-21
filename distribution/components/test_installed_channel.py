@@ -411,6 +411,33 @@ def run_rvc(work, binary, certificate, tls_key, install_voice=False):
             model_args = {"engine": engine["id"], "model": model["id"]}
             assert tool("music_model_package_status", model_args)["generation"] == first_model["generation"]
             tool("music_model_package_status", dict(model_args, engine="incompatible-engine"), expected_error=True)
+            assert tool("music_package_updates_get") == {"mode": "manual", "updates": []}
+            new_weight = b"updated model weights"
+            (origin / "weights-v2.bin").write_bytes(new_weight)
+            next_model = dict(sibling, version="2", files=[pinned("weights-v2.bin", new_weight)])
+            optional = dict(next_model, id="optional-uninstalled")
+            publish(9, {"schema": 1, "engines": [engine], "models": [model, next_model, optional]}, "music-engine-catalog.json")
+            assert tool("music_package_updates_get")["updates"] == []
+            tool("music_package_update_mode_set", {"mode": "notify"})
+            def wait_until(check):
+                until = time.monotonic() + 40
+                while time.monotonic() < until:
+                    if check():
+                        return
+                    time.sleep(0.1)
+                raise AssertionError("component update policy timed out")
+            wait_until(lambda: bool(tool("music_package_updates_get")["updates"]))
+            assert tool("music_package_updates_get")["updates"] == [{
+                "kind": "music-models", "id": sibling["id"], "from_version": "1",
+                "to_version": "2", "changed_bytes": len(new_weight)
+            }]
+            sibling_args = dict(model_args, model=sibling["id"])
+            assert tool("music_model_package_status", sibling_args)["version"] == "1"
+            tool("music_package_update_mode_set", {"mode": "auto"})
+            wait_until(lambda: tool("music_model_package_status", sibling_args)["version"] == "2")
+            tool("music_model_package_status", dict(model_args, model=optional["id"]), expected_error=True)
+            tool("music_package_update_mode_set", {"mode": "manual"})
+            print("PASS manual stayed offline; notify listed one update; auto replaced only the installed model")
             print("PASS new model delivered without engine update; second model reused pinned weights offline")
             print("PASS independent library update, unchanged executable reused, failed update preserved prior generation")
             assert tool("rvc_catalog_list", {"has_index": False})["voices"][0]["name"] == signed_voice["name"]
