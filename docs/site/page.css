@@ -134,6 +134,7 @@ details.more summary { cursor: pointer; color: var(--muted); font-weight: 600; m
 .answer ul { margin: 0; padding-left: 18px; display: grid; gap: 6px; }
 
 .scroll { overflow-x: auto; margin: 10px 0; }
+.benchmark-scroll:focus-visible { outline: 2px solid var(--pink); outline-offset: 3px; }
 table { border-collapse: collapse; width: 100%; font-size: 14px; }
 th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--line); }
 th { color: var(--muted); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
