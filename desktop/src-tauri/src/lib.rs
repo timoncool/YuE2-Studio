@@ -1224,10 +1224,10 @@ pub fn run() {
             // access from the network is on
             let resolver = app.asset_resolver();
             music_server::set_asset_source(Box::new(move |path: &str| resolver.get(path.to_string()).map(|asset| (asset.bytes.to_vec(), asset.mime_type))));
-            // "Save as" for what the window saves: Windows' own dialog, over
-            // the studio's window, asked for by the service off the UI thread.
+            // The service asks for a native Save As dialog off the UI thread.
             let dialogs = app.handle().clone();
             music_server::set_save_dialog(Box::new(move |name: &str, start: Option<std::path::PathBuf>| {
+                #[cfg(not(windows))]
                 use tauri::Manager;
                 use tauri_plugin_dialog::DialogExt;
                 let mut dialog = dialogs.dialog().file().set_file_name(name);
@@ -1237,6 +1237,9 @@ pub fn run() {
                 if let Some(folder) = start {
                     dialog = dialog.set_directory(folder);
                 }
+                // Windows can stall before showing the Common Item Dialog when
+                // the WebView's top-level HWND is passed as its owner.
+                #[cfg(not(windows))]
                 if let Some(window) = dialogs.get_webview_window("main") {
                     dialog = dialog.set_parent(&window);
                 }
