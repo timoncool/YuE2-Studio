@@ -7,8 +7,9 @@
 //! Runs are the engine's: the recipe, the stages and the checkpoints come from
 //! the engine crate, and a finished checkpoint becomes an ordinary adapter.
 
+use std::fs;
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, OnceLock};
+use std::sync::{Arc, Mutex, OnceLock};
 
 use anyhow::{bail, Context, Result};
 use music_engine::yue_train::{self, TrainingStep};
@@ -253,6 +254,8 @@ pub struct Run {
     pub recipe: Recipe,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub trainer: Option<TrainerIdentity>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub training_base: Option<TrainingBaseIdentity>,
     pub status: RunStatus,
     /// The stage working now, or the one that failed.
     pub stage: Option<String>,
@@ -284,6 +287,100 @@ pub struct Run {
 
 pub(super) const BUILTIN_TRAINER: &str = "music-train-bundled";
 const YUE2_STATE_FORMAT: &str = "yue2-joint-state-v1";
+const STOCK_BASE: &str = "stock";
+const OWN_BASE_PREFIX: &str = "own:";
+pub(super) const BASE_SCOPE: &str = "training-base";
+const RUACH_TW_BASE: &str = "ruach-rs-tw-2.0x0.75";
+const RUACH_FW_BASE: &str = "ruach-rs-fw-2.4x0.75";
+
+static ALTERNATE_BASES: [(Asset, &str); 2] = [
+    (Asset {
+        id: RUACH_TW_BASE,
+        label: "Ruach RS-TW 2.0×0.75",
+        kind: AssetKind::Model,
+        url: "https://huggingface.co/goldhub/YuE2-RS-Finetunes/resolve/8ba3e2ce05ef2d8b712a832a1c7eb016e39931dd/comfyui/yue2_3b_RS-TW-2.0x0.75_int8_convrot.safetensors",
+        relative_path: "models/yue2_3b_RS-TW-2.0x0.75_int8_convrot.safetensors",
+        bytes: 3_960_939_304,
+        unzip_into: None,
+        marker: "",
+        pick: &[],
+        vram_gb: None,
+        note: "CC BY-NC-SA 4.0 · INT8 ConvRot",
+    }, "df6fe26462320cae9378520f163b0ce73292252ac9059dc24a530d95ee1782ab"),
+    (Asset {
+        id: RUACH_FW_BASE,
+        label: "Ruach RS-FW 2.4×0.75",
+        kind: AssetKind::Model,
+        url: "https://huggingface.co/goldhub/YuE2-RS-Finetunes/resolve/8ba3e2ce05ef2d8b712a832a1c7eb016e39931dd/comfyui/yue2_3b_RS-FW-2.4x0.75_int8_convrot.safetensors",
+        relative_path: "models/yue2_3b_RS-FW-2.4x0.75_int8_convrot.safetensors",
+        bytes: 3_960_939_152,
+        unzip_into: None,
+        marker: "",
+        pick: &[],
+        vram_gb: None,
+        note: "CC BY-NC-SA 4.0 · INT8 ConvRot",
+    }, "4dc75ef96b09cb14e652ebf8b0e2a4afb143ac5d60bec13ae2003d5ff43016c2"),
+];
+
+pub(super) fn base_asset_sha(url: &str) -> Option<&'static str> {
+    ALTERNATE_BASES.iter().find(|(asset, _)| asset.url == url).map(|(_, sha)| *sha)
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TrainingBaseIdentity {
+    pub id: String,
+    pub checkpoint_sha256: String,
+    pub companion_sha256: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub own_backbone_sha256: Option<String>,
+}
+
+impl TrainingBaseIdentity {
+    pub(super) fn matching_backbone(&self, sha: &str) -> bool {
+        if let Some(own) = &self.own_backbone_sha256 {
+            return own == sha;
+        }
+        match self.id.as_str() {
+            STOCK_BASE => crate::model_manager::stock_backbone_sha(sha),
+            RUACH_TW_BASE => matches!(sha,
+                "1795d9efd601a43b87c30ca16f0d31f96e66d60b5a96dafb6d640819855b2d86" |
+                "fed75c6ffe7c65e30e2a11b4002c7599d214cf514c9cd40db15456e8531da701" |
+                "24d965f6f63656b55e5ff6f004627235b708293e2af9058feb162448197f83c4"),
+            RUACH_FW_BASE => matches!(sha,
+                "18d109738b7d1254481926ffc183f3af269ff521ee207347930421a7a94c70c1" |
+                "a7fd39079bdbae1b0b3960c63f8684585d33da60d06b27c0110ec5608c155487" |
+                "25793826e9f28c8894b4f7c7f6d3ed54256cf1fcc1966030ac7b1b6a5918baf3"),
+            _ => false,
+        }
+    }
+}
+
+/// The active GGUF can be several GB. A stable selection is fingerprinted once.
+pub(super) fn generation_model_sha(path: &Path) -> Result<String> {
+    type Entry = (PathBuf, u64, std::time::SystemTime, String);
+    static CACHE: OnceLock<Mutex<Vec<Entry>>> = OnceLock::new();
+    let cache = CACHE.get_or_init(|| Mutex::new(Vec::new()));
+    let metadata = fs::metadata(path)?;
+    let modified = metadata.modified()?;
+    {
+        let entries = cache.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        if let Some((_, _, _, sha)) = entries.iter().find(|(file, len, time, _)| file == path && *len == metadata.len() && *time == modified) {
+            return Ok(sha.clone());
+        }
+    }
+    let sha = crate::install_record::sha256_of(path)?;
+    let after = fs::metadata(path)?;
+    if metadata.len() != after.len() || modified != after.modified()? {
+        bail!("A selected YuE2 model changed while it was being checked.");
+    }
+    let mut entries = cache.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+    entries.retain(|(file, ..)| file != path);
+    if entries.len() >= 4 {
+        entries.remove(0);
+    }
+    entries.push((path.to_owned(), metadata.len(), modified, sha.clone()));
+    Ok(sha)
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TrainerIdentity {
@@ -364,6 +461,9 @@ struct TrainerSource {
     caption_asset: String,
     /// Size of the captioner's archive in the same release.
     caption_bytes: u64,
+    cuda12_backend_tag: String,
+    cuda12_backend_asset: String,
+    cuda12_backend_bytes: u64,
 }
 
 fn trainer_source() -> &'static TrainerSource {
@@ -419,6 +519,49 @@ pub fn remove_older_tool_folders(downloader: &Downloader, current_folder: &str, 
 fn trainer_folder() -> &'static str {
     static FOLDER: OnceLock<String> = OnceLock::new();
     FOLDER.get_or_init(|| trainer_source().release_tag.clone())
+}
+
+pub(super) fn cuda12_backend() -> &'static Asset {
+    static BACKEND: OnceLock<Asset> = OnceLock::new();
+    BACKEND.get_or_init(|| {
+        let source = trainer_source();
+        Asset {
+            id: "music-train-cuda12",
+            label: "HOT-Step CUDA 12",
+            kind: AssetKind::Runtime,
+            url: Box::leak(format!("https://github.com/timoncool/YuE2-Studio/releases/download/{}/{}", source.cuda12_backend_tag, source.cuda12_backend_asset).into_boxed_str()),
+            relative_path: &source.cuda12_backend_asset,
+            bytes: source.cuda12_backend_bytes,
+            unzip_into: Some(&source.cuda12_backend_tag),
+            marker: "ggml-cuda.dll",
+            pick: &[],
+            vram_gb: None,
+            note: "",
+        }
+    })
+}
+
+fn stage_cuda12_trainer(base: &Path, backend: &Path, directory: &Path) -> Result<PathBuf> {
+    let root = base.parent().context("HOT-Step runtime folder")?;
+    let copy = |source: &Path, name: &std::ffi::OsStr| -> Result<()> {
+        let destination = directory.join(name);
+        if std::fs::hard_link(source, &destination).is_err() {
+            std::fs::copy(source, destination)?;
+        }
+        Ok(())
+    };
+    let name = base.file_name().context("HOT-Step executable filename")?;
+    copy(base, name)?;
+    for entry in std::fs::read_dir(root)? {
+        let entry = entry?;
+        let name = entry.file_name();
+        let dll = name.to_string_lossy();
+        if entry.file_type()?.is_file() && (matches!(&*dll, "ggml.dll" | "ggml-base.dll") || (dll.starts_with("ggml-cpu-") && dll.ends_with(".dll"))) {
+            copy(&entry.path(), &name)?;
+        }
+    }
+    copy(backend, std::ffi::OsStr::new("ggml-cuda.dll"))?;
+    Ok(directory.join(name))
 }
 
 /// Everything training needs: the trainer, released beside the studio, and
@@ -684,6 +827,7 @@ fn write_steps(dir: &Path, steps: &[TrainingStepRecord]) -> Result<()> {
 impl Training {
     pub fn new(data_root: &Path, engine: &str) -> Self {
         let root = data_root.join("training");
+        let _ = fs::create_dir_all(root.join("models/own"));
         let training = Self {
             downloader: Downloader::with_runtimes(root.clone(), tools_root(data_root)),
             root,
@@ -762,10 +906,138 @@ impl Training {
         {
             bail!("Install the original trainer generation before continuing this checkpoint.");
         }
-        if !self.weights_ready() {
-            bail!("the YuE2 training weights are not downloaded yet");
+        if !self.shared_weights_ready() {
+            bail!("the YuE2 shared training weights are not downloaded yet");
         }
         Ok((trainer, identity))
+    }
+
+    pub(super) fn training_base_asset(id: &str) -> Result<&'static Asset> {
+        if id == STOCK_BASE {
+            return pack().iter().find(|asset| asset.id == yue_train::TRAINING_FILES[0].id)
+                .context("stock training base");
+        }
+        ALTERNATE_BASES.iter().find(|(asset, _)| asset.id == id).map(|(asset, _)| asset)
+            .with_context(|| format!("Unknown YuE2 training base: {id}"))
+    }
+
+    pub(super) fn own_base_id(id: &str) -> bool {
+        id.starts_with(OWN_BASE_PREFIX)
+    }
+
+    pub(super) fn own_bases_directory(&self) -> PathBuf {
+        self.models_dir().join("own")
+    }
+
+    fn own_base_file(&self, id: &str) -> Result<PathBuf> {
+        let name = id.strip_prefix(OWN_BASE_PREFIX).context("not a custom training base")?;
+        let path = Path::new(name);
+        anyhow::ensure!(path.file_name() == Some(path.as_os_str())
+            && path.extension().is_some_and(|ext| ext.eq_ignore_ascii_case("safetensors")),
+            "invalid custom YuE2 training file name");
+        let file = self.own_bases_directory().join(path);
+        anyhow::ensure!(file.is_file(), "custom training base is missing: {}", file.display());
+        Ok(file)
+    }
+
+    pub(super) fn base_choices(&self) -> Vec<serde_json::Value> {
+        let mut choices: Vec<_> = std::iter::once(STOCK_BASE).chain(ALTERNATE_BASES.iter().map(|(asset, _)| asset.id))
+            .filter_map(|id| Self::training_base_asset(id).ok().map(|asset| (id, asset)))
+            .map(|(id, asset)| serde_json::json!({
+                "id": id, "label": asset.label, "bytes": asset.bytes,
+                "installed": self.installed(asset), "note": asset.note,
+            }))
+            .collect();
+        let mut own: Vec<_> = fs::read_dir(self.own_bases_directory()).into_iter().flatten().flatten()
+            .filter_map(|entry| {
+                let name = entry.file_name().into_string().ok()?;
+                let id = format!("{OWN_BASE_PREFIX}{name}");
+                let file = self.own_base_file(&id).ok()?;
+                let bytes = file.metadata().ok()?.len();
+                Some((name, id, bytes))
+            }).collect();
+        own.sort_unstable();
+        choices.extend(own.into_iter().map(|(label, id, bytes)| serde_json::json!({
+            "id": id, "label": label, "bytes": bytes, "installed": true, "note": "",
+        })));
+        choices
+    }
+
+    pub(super) fn validate_base_install(&self, id: &str) -> Result<()> {
+        if Self::own_base_id(id) {
+            self.own_base_file(id)?;
+        } else {
+            Self::training_base_asset(id)?;
+        }
+        Ok(())
+    }
+
+    pub(super) async fn install_base(&self, id: &str) -> Result<()> {
+        self.validate_base_install(id)?;
+        let asset = Self::training_base_asset(id).ok();
+        let missing: Vec<_> = pack().iter().filter(|file| file.id != yue_train::TRAINING_FILES[0].id)
+            .chain(asset)
+            .filter(|file| !self.installed(file))
+            .collect();
+        if !missing.is_empty() {
+            self.downloader.install_all(BASE_SCOPE, &missing).await?;
+        }
+        Ok(())
+    }
+
+    async fn resolve_training_base(
+        &self,
+        requested: Option<&str>,
+        saved: Option<&TrainingBaseIdentity>,
+        companion: &Path,
+        tokenizer: Option<&Path>,
+    ) -> Result<(PathBuf, TrainingBaseIdentity)> {
+        let id = saved.map(|value| value.id.as_str()).or(requested).unwrap_or(STOCK_BASE);
+        let custom = Self::own_base_id(id);
+        let (checkpoint, label, expected) = if custom {
+            let file = self.own_base_file(id)?;
+            let header = crate::adapters::local_header(&file).context("read the custom ConvRot header")?;
+            let meta = header.get("__metadata__");
+            anyhow::ensure!(meta.and_then(|value| value.get("yue2_format")).and_then(serde_json::Value::as_str) == Some("1")
+                && meta.and_then(|value| value.get("quantization")).and_then(serde_json::Value::as_str) == Some("convrot_int8")
+                && header.contains_key("model.diffusion_model.llm2vae.weight_scale"),
+                "the custom training base must be a YuE2 INT8 ConvRot Safetensors");
+            (file, id, None)
+        } else {
+            let asset = Self::training_base_asset(id)?;
+            if !self.installed(asset) {
+                bail!("Install the YuE2 training base `{}` before training.", asset.label);
+            }
+            let expected = if id == STOCK_BASE {
+                Some("96fe199377309001ed8cd26a944baeee8cc31a20ba7c36d1d3c0a7e1f4149db6")
+            } else {
+                base_asset_sha(asset.url)
+            };
+            (self.root.join(asset.relative_path), asset.label, expected)
+        };
+        let source = checkpoint.clone();
+        let decoder = companion.to_owned();
+        let active_own = if custom && saved.is_none() {
+            Some(tokenizer.context("select the paired custom YuE2 generation GGUF")?.to_owned())
+        } else {
+            None
+        };
+        let (checkpoint_sha256, companion_sha256, active_own_sha) = tokio::task::spawn_blocking(move || {
+            Ok::<_, anyhow::Error>((
+                crate::install_record::sha256_of(&source).context("hash the training checkpoint")?,
+                generation_model_sha(&decoder).context("hash the decoder companion")?,
+                active_own.as_deref().map(generation_model_sha).transpose()?,
+            ))
+        }).await??;
+        if expected.is_some_and(|expected| expected != checkpoint_sha256) {
+            bail!("The YuE2 training base `{label}` differs from its published SHA-256.");
+        }
+        let own_backbone_sha256 = saved.and_then(|original| original.own_backbone_sha256.clone()).or(active_own_sha);
+        let identity = TrainingBaseIdentity { id: id.into(), checkpoint_sha256, companion_sha256, own_backbone_sha256 };
+        if saved.is_some_and(|original| original != &identity) {
+            bail!("The checkpoint needs the original YuE2 training base and decoder companion to continue.");
+        }
+        Ok((checkpoint, identity))
     }
 
     pub fn models_dir(&self) -> PathBuf {
@@ -880,6 +1152,11 @@ impl Training {
             .iter()
             .map(|asset| serde_json::json!({ "id": asset.id, "label": asset.label, "bytes": asset.bytes, "installed": self.installed(asset) }))
             .collect()
+    }
+
+    pub(super) fn shared_weights_ready(&self) -> bool {
+        pack().iter().filter(|asset| asset.id != "music-train" && asset.id != yue_train::TRAINING_FILES[0].id)
+            .all(|asset| self.installed(asset))
     }
 
     pub(super) fn weights_ready(&self) -> bool {
@@ -1332,9 +1609,11 @@ impl Training {
         name: &str,
         recipe: Recipe,
         trainer_id: Option<&str>,
+        base_id: Option<&str>,
         card: CardHooks,
     ) -> Result<Run> {
         let (trainer, trainer_identity) = self.select_trainer(trainer_id, None).await?;
+        let (checkpoint, training_base) = self.resolve_training_base(base_id, None, &companion, Some(&tokenizer)).await?;
         let dataset = self.dataset(dataset_id)?;
         if dataset.items.is_empty() {
             bail!("the dataset has no songs yet");
@@ -1362,6 +1641,7 @@ impl Training {
         let inputs = yue_train::TrainingInputs {
             audio,
             models: self.models_dir(),
+            checkpoint,
             tokenizer,
             companion,
             run: run_dir.clone(),
@@ -1379,6 +1659,7 @@ impl Training {
             trigger: dataset.trigger.clone(),
             recipe,
             trainer: Some(trainer_identity),
+            training_base: Some(training_base),
             status: RunStatus::Running,
             stage: None,
             stages: inputs.recipe.lyric_timing.then_some(VOCALS_STAGE).into_iter().chain(stages.iter().map(|stage| stage.id)).map(str::to_string).collect(),
@@ -1462,6 +1743,7 @@ impl Training {
                 ..Recipe::default()
             },
             trainer: None,
+            training_base: None,
             status: RunStatus::Running,
             stage: Some("prepare".into()),
             stages: stage_names,
@@ -1562,6 +1844,7 @@ impl Training {
             recipe: Recipe { preset:"rvc-burn".into(), stop:"epochs".into(), epochs:settings.epochs,
                 grad_accum:settings.batch_size, learning_rate:settings.learning_rate, steps:0, ..Recipe::default() },
             trainer: None,
+            training_base: None,
             status: RunStatus::Running, stage:Some(stage.id.into()), stages:vec![stage.id.into()],
             steps:vec![], error:None, created_at:now(), finished_at:None,
             installed:vec![], continuations:vec![], output_adapter:None, hotstep_sa3_settings:None,
@@ -1631,6 +1914,7 @@ impl Training {
     pub async fn continue_run(self: &Arc<Self>, libraries: Option<PathBuf>, companion: PathBuf, run_id: &str, steps: u32, card: CardHooks) -> Result<Run> {
         let saved = self.run(run_id)?;
         let (trainer, trainer_identity) = self.select_trainer(None, saved.trainer.as_ref()).await?;
+        let (checkpoint, training_base) = self.resolve_training_base(None, saved.training_base.as_ref(), &companion, None).await?;
         let (from, state) = self.resume_point(run_id).map_err(|code| anyhow::anyhow!(refusal(code)))?;
         if steps <= from {
             bail!("set the steps above {from}, the checkpoint the run goes on from");
@@ -1647,9 +1931,10 @@ impl Training {
         recipe.target_kl = 0.0;
         recipe.stop = "kl".into();
         let output = run_dir.join(format!("output-{}", new_id()));
-        let stage = yue_train::continuation_stage(&self.models_dir(), &companion, &run_dir, &recipe, &output, &state);
+        let stage = yue_train::continuation_stage(&checkpoint, &companion, &run_dir, &recipe, &output, &state);
         run.recipe = recipe;
         run.trainer = Some(trainer_identity);
+        run.training_base = Some(training_base);
         run.status = RunStatus::Running;
         run.stage = None;
         run.stages = vec![stage.id.to_string()];
@@ -1760,6 +2045,20 @@ impl Training {
                 run.trainer.is_some_and(|trainer| trainer.generation.is_some())
             };
             log.write_all(format!("==== {}\n", stage.id).as_bytes()).await?;
+            let cuda12_runtime = (cfg!(windows) && !signed_trainer
+                && trainer == self.downloader.runtime_dir(trainer_folder()).join(&trainer_source().shipped_as)
+                && crate::trainer_cuda_build() == Some(crate::hardware::CudaBuild::Cuda12))
+                .then(|| -> Result<_> {
+                    let asset = cuda12_backend();
+                    if !self.downloader.is_installed(asset) {
+                        bail!("Install the HOT-Step CUDA 12 backend from the training pack");
+                    }
+                    let directory = tempfile::Builder::new().prefix("cuda12-trainer-").tempdir_in(run_dir)?;
+                    let backend = self.downloader.runtime_dir(&trainer_source().cuda12_backend_tag).join(asset.marker);
+                    let executable = stage_cuda12_trainer(trainer, &backend, directory.path())?;
+                    Ok((directory, executable))
+                }).transpose()?;
+            let trainer = cuda12_runtime.as_ref().map_or(trainer, |(_, executable)| executable.as_path());
             // A signed generation declares its dependencies and is verified again on resume.
             if !signed_trainer {
                 music_core::process::runtime_beside(trainer);
@@ -2147,6 +2446,35 @@ mod tests {
     use super::*;
 
     #[test]
+    fn independently_installed_bases_do_not_share_the_stock_path() {
+        let stock = Training::training_base_asset(STOCK_BASE).unwrap();
+        let tw = Training::training_base_asset(RUACH_TW_BASE).unwrap();
+        let fw = Training::training_base_asset(RUACH_FW_BASE).unwrap();
+        assert_ne!(stock.relative_path, tw.relative_path);
+        assert_ne!(tw.relative_path, fw.relative_path);
+        assert!(base_asset_sha(tw.url).is_some());
+        let identity = TrainingBaseIdentity {
+            id: RUACH_TW_BASE.into(),
+            checkpoint_sha256: base_asset_sha(tw.url).unwrap().into(),
+            companion_sha256: "decoder".into(),
+            own_backbone_sha256: None,
+        };
+        assert!(identity.matching_backbone("24d965f6f63656b55e5ff6f004627235b708293e2af9058feb162448197f83c4"));
+        assert!(!identity.matching_backbone("41121ce97786d7795a325bcf123ca196956c03bb252c9e75384cfc1f2fc19e6b"));
+        assert!(!identity.matching_backbone("25793826e9f28c8894b4f7c7f6d3ed54256cf1fcc1966030ac7b1b6a5918baf3"));
+    }
+
+    #[test]
+    fn own_base_identifiers_stay_in_the_training_folder() {
+        let root = tempfile::tempdir().unwrap();
+        let training = Training::new(root.path(), "yue2");
+        fs::write(training.own_bases_directory().join("local.safetensors"), b"fixture").unwrap();
+        assert!(training.own_base_file("own:local.safetensors").is_ok());
+        assert!(training.own_base_file("own:../local.safetensors").is_err());
+        assert!(training.own_base_file("own:local.gguf").is_err());
+    }
+
+    #[test]
     fn the_trainer_says_what_it_computes_on() {
         assert_eq!(trainer_device("x\n[Load] YuE2 backend: CUDA0 (shared)\nstep 1"), Some("CUDA0".into()));
         assert_eq!(trainer_device("[Load] VAE-Enc backend: CPU (CPU threads: 16)"), Some("CPU".into()));
@@ -2161,6 +2489,34 @@ mod tests {
 
     /// The trainer's cleanup keeps the transcriber's CUDA 12.9 and processor
     /// builds of today's release, and takes every folder of an earlier one.
+    #[test]
+    fn the_cuda12_trainer_stages_its_backend_without_changing_originals() {
+        let fixture = tempfile::tempdir().unwrap();
+        let original = fixture.path().join("original");
+        let staged = fixture.path().join("staged");
+        std::fs::create_dir(&original).unwrap();
+        std::fs::create_dir(&staged).unwrap();
+        for (name, bytes) in [
+            ("music-train.exe", "trainer"),
+            ("music-midi.exe", "midi"),
+            ("ggml.dll", "shared"),
+            ("ggml-base.dll", "base"),
+            ("ggml-cpu-x64.dll", "cpu"),
+            ("ggml-cuda.dll", "cuda13"),
+        ] {
+            std::fs::write(original.join(name), bytes).unwrap();
+        }
+        let backend = fixture.path().join("cuda12.dll");
+        std::fs::write(&backend, "cuda12").unwrap();
+
+        let executable = stage_cuda12_trainer(&original.join("music-train.exe"), &backend, &staged).unwrap();
+        assert_eq!(std::fs::read_to_string(executable).unwrap(), "trainer");
+        assert_eq!(std::fs::read_to_string(staged.join("ggml-cuda.dll")).unwrap(), "cuda12");
+        assert_eq!(std::fs::read_to_string(staged.join("ggml-cpu-x64.dll")).unwrap(), "cpu");
+        assert!(!staged.join("music-midi.exe").exists());
+        assert_eq!(std::fs::read_to_string(original.join("ggml-cuda.dll")).unwrap(), "cuda13");
+    }
+
     #[test]
     fn todays_tool_folders_stay_and_earlier_releases_go() {
         let root = std::env::temp_dir().join(format!("yue-tool-folders-{}", uuid::Uuid::now_v7()));
@@ -2259,7 +2615,7 @@ mod tests {
         assert_eq!(step, 20);
 
         let fresh = run.join("output-next");
-        let stage = yue_train::continuation_stage(&run, &run.join("companion"), &run, &yue_train::Recipe::default(), &fresh, &resume);
+        let stage = yue_train::continuation_stage(&run.join("base.safetensors"), &run.join("companion"), &run, &yue_train::Recipe::default(), &fresh, &resume);
         let stage = joint_checkpoint_paths(stage).unwrap();
         let argument = |name: &str| stage.args.windows(2).find(|pair| pair[0] == name).map(|pair| Path::new(&pair[1])).unwrap();
         let output = argument("--output");
@@ -2311,6 +2667,7 @@ mod tests {
             trigger: "t".into(),
             recipe: Recipe::default(),
             trainer: None,
+            training_base: None,
             status: RunStatus::Running,
             stage: None,
             stages: Vec::new(),

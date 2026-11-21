@@ -44,6 +44,8 @@ pub struct TrainAfter {
     #[serde(default)]
     pub name: String,
     pub recipe: training::Recipe,
+    #[serde(default)]
+    pub base_id: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -268,7 +270,7 @@ fn launch(state: &AppState, job: Job) -> anyhow::Result<PrepareStatus> {
         let train = background.prepare_train.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).take();
         if let (true, Writer::Studio, Some(train)) = (clean, job.writer, train) {
             stage(&shared, "training", Vec::new());
-            match crate::start_training_run(&background, &id, &train.name, train.recipe, None).await {
+            match crate::start_training_run(&background, &id, &train.name, train.recipe, None, train.base_id.as_deref()).await {
                 Ok(run) => update(&shared, |status| status.run = Some(run.id)),
                 Err(error) => fail(&shared, "", "training", error),
             }

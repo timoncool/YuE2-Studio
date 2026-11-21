@@ -313,16 +313,6 @@ fn shape(name: &str, args: &Value, value: Value) -> Value {
             value["slots"] = json!("not known yet: the engine reads them from the file; lora_list shows them");
             value
         }
-        "dataset_get" => {
-            let wanted = args.get("dataset_id").and_then(Value::as_str).unwrap_or_default();
-            let Some(dataset) = value["datasets"].as_array().into_iter().flatten().find(|dataset| dataset["id"] == wanted).cloned() else {
-                return json!({ "error": format!("No dataset {wanted}; training_status lists them.") });
-            };
-            match args.get("song_id").and_then(Value::as_str) {
-                Some(song) => dataset["items"].as_array().into_iter().flatten().find(|item| item["id"] == song).cloned().unwrap_or_else(|| json!({ "error": format!("No song {song} in the dataset.") })),
-                None => dataset,
-            }
-        }
         "library_songs_list" => {
             let query = args.get("query").and_then(Value::as_str).unwrap_or_default().to_lowercase();
             let bound = |name: &str, end: bool| match args.get(name).and_then(Value::as_str) {
@@ -463,7 +453,7 @@ fn annotations(name: &str) -> Value {
     // a verb that changes something outweighs a noun that reads
     const CHANGES: &[&str] = &["install", "import", "remove", "delete", "refresh", "create", "update", "start", "cancel", "select", "download", "apply", "restart"];
     // reads whose names the rules above miss: create_form names the create page
-    const READ_NAMES: &[&str] = &["music_package_updates_get", "music_package_progress", "lyrics_syllables", "assistant_cli_agents", "system_gpus", "cover_scenes", "cover_photos_search", "video_backgrounds_search", "network_proxy_test", "journal_read", "score_to_midi", "score_instrumental", "score_vocal_octave", "score_from_midi", "score_mark", "lyrics_find", "cover_prompt_render", "studio_wait", "engine_presets_get", "assistant_requests_wait", "ui_console", "song_defaults", "create_form_get", "library_liked", "score_chord_bed", "song_tokenize", "score_match_sections", "models_update_plan", "problem_preview", "library_migration_preview", "audio_cpp_music_models", "hotstep_cover_profiles", "hotstep_sa3_training_status", "hotstep_heartmula_training_status", "rvc_training_status"];
+    const READ_NAMES: &[&str] = &["engine_hip_status", "music_package_updates_get", "music_package_progress", "lyrics_syllables", "assistant_cli_agents", "system_gpus", "cover_scenes", "cover_photos_search", "video_backgrounds_search", "network_proxy_test", "journal_read", "score_to_midi", "score_instrumental", "score_vocal_octave", "score_from_midi", "score_mark", "lyrics_find", "cover_prompt_render", "studio_wait", "engine_presets_get", "assistant_requests_wait", "ui_console", "song_defaults", "create_form_get", "library_liked", "score_chord_bed", "song_tokenize", "score_match_sections", "models_update_plan", "problem_preview", "library_migration_preview", "audio_cpp_music_models", "hotstep_cover_profiles", "hotstep_sa3_training_status", "hotstep_heartmula_training_status", "rvc_training_status"];
     // writes over what was stored, so the earlier content is gone: a client asks first
     const OVERWRITES: &[&str] = &["library_song_rename", "library_song_update", "playlist_update", "album_reorder", "dataset_update", "dataset_song_update", "dataset_song_describe_style", "dataset_prepare", "lora_update", "stems_split", "restore_start", "karaoke_make", "midi_transcribe", "cover_draw", "cover_set_from_file", "openrouter_set_key", "models_update_apply"];
     let changes = CHANGES.iter().any(|verb| name.split('_').any(|word| word == *verb));
@@ -528,6 +518,7 @@ const JOURNAL: &[(&str, &str, &str)] = &[
     ("processing_keep", "kept", "processing"),
     ("processing_discard", "discarded", "processing"),
     ("processing_set_reference", "updated", "processing"),
+    ("seed_vc_apply", "created", "song"),
     ("cover_draw", "started", "cover"),
     ("cover_set_from_file", "updated", "cover"),
     ("dataset_create", "created", "dataset"),
@@ -622,6 +613,8 @@ const JOURNAL: &[(&str, &str, &str)] = &[
     ("midi_remove", "deleted", "model"),
     ("models_select", "updated", "settings"),
     ("music_pair_select", "updated", "settings"),
+    ("engine_hip_install", "started", "download"),
+    ("engine_hip_cancel", "cancelled", "download"),
     ("models_preset", "updated", "settings"),
     ("models_own_select", "updated", "settings"),
     ("models_own_cancel", "cancelled", "download"),
@@ -1093,6 +1086,11 @@ fn rvc_runtime_route(args: &Value) -> String {
 }
 
 fn song_create_schema(mut properties: Value) -> Value {
+    for stage in ["abc_sampling", "semantic_sampling"] {
+        let names: Vec<_> = crate::sampling_choices()[stage].as_object().unwrap().keys().collect();
+        let knobs = properties[stage].take();
+        properties[stage] = json!({"oneOf": [knobs, {"type": "string", "enum": names}]});
+    }
     properties["rvc_after"] = json!({
         "type": "object",
         "description": "After successful generation, save a separate RVC take with this voice and backend. Use rvc_quick_list for progress.",
@@ -1273,6 +1271,24 @@ fn tools() -> &'static [Tool] {
                 call: |args| post("/setup/adopt".into(), json!({ "path": text(args, "path")? })),
             },
             Tool {
+                name: "engine_hip_status",
+                description: "Read the optional Windows YuE2 HIP component, matched AMD gfx target, driver and installation progress.",
+                schema: nothing,
+                call: |_| get("/engine/hip".into()),
+            },
+            Tool {
+                name: "engine_hip_install",
+                description: "Download and verify the optional HIP component for the matching AMD GPU. This does not change the engine choice.",
+                schema: nothing,
+                call: |_| send(Method::POST, "/engine/hip".into(), json!({})),
+            },
+            Tool {
+                name: "engine_hip_cancel",
+                description: "Cancel the active YuE2 HIP component download.",
+                schema: nothing,
+                call: |_| send(Method::DELETE, "/engine/hip".into(), json!({})),
+            },
+            Tool {
                 name: "music_pair_status",
                 description: "Read the server-side music pair transition, including requested and active source, exact stage and elapsed time. Does not install files or start a song.",
                 schema: nothing,
@@ -1401,7 +1417,7 @@ fn tools() -> &'static [Tool] {
             },
             Tool {
                 name: "ui_read_page",
-                description: "Every visible control of the window, one per line: its ref (e12), kind, label and value. Refs are what ui_click, ui_type and ui_select take; read the page again after it changes.",
+                description: "Visible messages and controls of the window, one per line. Each control includes its ref (e12), kind, label and value. Refs are what ui_click, ui_type and ui_select take; read the page again after it changes.",
                 schema: nothing,
                 call: |args| window("read_page", args, 15),
             },
@@ -1488,7 +1504,7 @@ fn tools() -> &'static [Tool] {
             Tool {
                 name: "create_form_submit",
                 description: "Press Create on the create page: the song is made from the form as it stands. studio_wait until idle waits for it; create_form_get shows why the form refused, if it did.",
-                schema: nothing,
+                schema: || object(json!({ "variations": { "type": "boolean", "description": "Use the local YuE2 score and the same seeds for the alternate performance presets." } }), &[]),
                 call: |args| window("create_submit", args, 15),
             },
             // ---------------------------------------------------------------- the player
@@ -2965,6 +2981,20 @@ fn tools() -> &'static [Tool] {
                 call: |args| post("/v1/rvc/preview".into(), args.clone()),
             },
             Tool {
+                name: "seed_vc_status",
+                description: "Read Seed-VC model and audio.cpp runtime readiness for singing conversion.",
+                schema: nothing,
+                call: |_| get("/v1/seed-vc".into()),
+            },
+            Tool {
+                name: "seed_vc_apply",
+                description: "Replace a separated song's vocal timbre with Seed-VC using a 1–25 second voice sample. Upload it with processing_set_reference first and pass its upload_id. The original song stays and the result is a new take.",
+                schema: || object(json!({"song_id":{"type":"string"}, "upload_id":{"type":"string"}}), &["song_id","upload_id"]),
+                call: |args| post("/v1/seed-vc".into(), json!({
+                    "song_id": text(args, "song_id")?, "upload_id": text(args, "upload_id")?
+                })),
+            },
+            Tool {
                 name: "rvc_apply",
                 description: "Convert the separated vocal of a library song with an installed RVC voice, mix it with the existing accompaniment, and save a new song.",
                 schema: || object(json!({
@@ -3090,13 +3120,20 @@ fn tools() -> &'static [Tool] {
             },
             Tool {
                 name: "training_pack_cancel",
-                description: "Stop the trainer download at work.",
-                schema: nothing,
-                call: |_| post("/v1/training/pack/cancel".into(), json!({})),
+                description: "Stop the trainer download. Set training_base true for a separately selected base.",
+                schema: || object(json!({ "training_base": { "type": "boolean" } }), &[]),
+                call: |args| {
+                    let path = if args.get("training_base").and_then(Value::as_bool) == Some(true) {
+                        "/v1/training/bases/cancel"
+                    } else {
+                        "/v1/training/pack/cancel"
+                    };
+                    post(path.into(), json!({}))
+                },
             },
             Tool {
                 name: "dataset_prepare_train_after",
-                description: "For the preparation at work: start this training run once every song is ready (train: {name, recipe}), or not (train: null).",
+                description: "For the preparation at work: start this training run once every song is ready (train: {name, recipe, optional base_id}), or disable auto-start (train: null).",
                 schema: || object(json!({ "train": { "anyOf": [{ "type": "object" }, { "type": "null" }] } }), &[]),
                 call: |args| post("/v1/training/prepare/train-after".into(), args.clone()),
             },
@@ -3109,15 +3146,35 @@ fn tools() -> &'static [Tool] {
             },
             Tool {
                 name: "dataset_get",
-                description: "One dataset with every song: id, title, artist, lyrics, style, lyrics_state (wanted, found, done) and style_state (wanted, heard, done), lyrics_source, heard (what MOSS heard: genre, caption, bpm) and length. Give song_id for one song only.",
-                schema: || object(json!({ "dataset_id": { "type": "string" }, "song_id": { "type": "string" } }), &["dataset_id"]),
-                call: |_| get("/v1/training".into()),
+                description: "Read a dataset. Set page or page_size for a short page of titles, lengths and readiness, with total and has_more. Set response_format detailed for full rows on that page, or give song_id to read one complete song.",
+                schema: || object(json!({
+                    "dataset_id": { "type": "string" },
+                    "song_id": { "type": "string" },
+                    "page": { "type": "integer", "minimum": 1 },
+                    "page_size": { "type": "integer", "minimum": 1, "maximum": 100 },
+                    "response_format": { "type": "string", "enum": ["concise", "detailed"] },
+                }), &["dataset_id"]),
+                call: |args| {
+                    let mut path = format!("/v1/training/datasets/{}", segment(&text(args, "dataset_id")?));
+                    if let Some(song_id) = args.get("song_id").and_then(Value::as_str) {
+                        path.push_str(&format!("?song_id={}", segment(song_id)));
+                    } else if args.get("page").is_some() || args.get("page_size").is_some() {
+                        let page = args.get("page").and_then(Value::as_u64).unwrap_or(1).max(1);
+                        let size = args.get("page_size").and_then(Value::as_u64).unwrap_or(25).clamp(1, 100);
+                        let detailed = args["response_format"] == "detailed";
+                        path.push_str(&format!("?page={page}&page_size={size}&detailed={detailed}"));
+                    }
+                    get(path)
+                },
             },
             Tool {
                 name: "training_pack_install",
-                description: "Download the trainer and its weights (needed once before training).",
-                schema: nothing,
-                call: |_| post("/v1/training/pack/install".into(), json!({})),
+                description: "Download the standard trainer and its weights. With base_id, install a separate base listed by detailed training_status.",
+                schema: || object(json!({ "base_id": { "type": "string" } }), &[]),
+                call: |args| match args.get("base_id").and_then(Value::as_str) {
+                    Some(id) => post(format!("/v1/training/bases/{}/install", segment(id)), json!({})),
+                    None => post("/v1/training/pack/install".into(), json!({})),
+                },
             },
             Tool {
                 name: "training_listen_pack_cancel",
@@ -3317,7 +3374,7 @@ fn tools() -> &'static [Tool] {
             Tool {
                 name: "training_start",
                 description: "Train a LoRA on a dataset. recipe: the recipe from training_status (recipe_defaults) with your changes. preset picks the size: 'fast' (100 steps of 4 songs), 'balanced' (200 of 4, the default), 'thorough' (300 of 8) - the base-matched method, trained the way the base model was; or 'tuned', the previous recipe, with stop 'kl' and target_kl 1.4 or stop 'epochs' with epochs. Watch training_status; one run at a time, and it holds the card.",
-                schema: || object(json!({ "dataset_id": { "type": "string" }, "name": { "type": "string" }, "recipe": { "type": "object" }, "trainer_id": { "type": "string" } }), &["dataset_id", "recipe"]),
+                schema: || object(json!({ "dataset_id": { "type": "string" }, "name": { "type": "string" }, "recipe": { "type": "object" }, "trainer_id": { "type": "string" }, "base_id": { "type": "string" } }), &["dataset_id", "recipe"]),
                 call: |args| post("/v1/training/runs".into(), args.clone()),
             },
             Tool {
@@ -4404,6 +4461,10 @@ mod tests {
         };
         let base: serde_json::Map<String, Value> = properties.iter().map(|(name, property)| (name.clone(), sample(name, property))).collect();
         let mut all = vec![Value::Object(base.clone())];
+        if matches!(tool.name, "training_pack_install" | "training_pack_cancel") {
+            // Their optional arguments select the separate training-base routes.
+            all.push(json!({}));
+        }
         for (name, property) in &properties {
             for choice in property["enum"].as_array().into_iter().flatten().skip(1) {
                 let mut other = base.clone();

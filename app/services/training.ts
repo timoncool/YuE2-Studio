@@ -65,6 +65,7 @@ export interface TrainingRun {
   id: string;
   rvc_voice_id?: string;
   trainer?: { id: string; version: string; generation: string | null; optimizer_format: string; weights_revision: string };
+  training_base?: { id: string; checkpoint_sha256: string; companion_sha256: string };
   rvc_checkpoint_ready?: boolean;
   rvc_best_checkpoint?: { step: number; mel: number };
   engine?: string;
@@ -115,6 +116,10 @@ export interface TrainingState {
   pack: PackFile[];
   pack_ready: boolean;
   trainer_weights_ready?: boolean;
+  training_shared_weights_ready?: boolean;
+  training_bases?: { id: string; label: string; bytes: number; installed: boolean; note: string }[];
+  training_base_download?: TrainingState['download'];
+  training_own_base_folder?: string;
   trainers?: { id: string; label: string; version: string; bytes: number; installed: boolean; installed_version?: string | null }[];
   /** The vocal separator the previous recipe's lyric timing needs. */
   separator_ready: boolean;
@@ -125,7 +130,7 @@ export interface TrainingState {
   /** Whether this machine's card runs the trainer: an NVIDIA card whose driver runs CUDA 13. */
   card_trains: boolean;
   /** What the card lacks for the trainer: no CUDA card at all, or a driver or card that runs CUDA 12 only. */
-  card_needs?: 'nvidia' | 'driver' | null;
+  card_needs?: 'nvidia' | 'driver' | 'architecture' | null;
   /** The oldest NVIDIA driver the trainer's CUDA 13 runs on. */
   trainer_driver?: number;
   /** What a song's style field holds for this engine: a short style, or a structured caption. */
@@ -196,8 +201,12 @@ export const updateItem = (id: string, item: string, patch: Partial<Pick<Dataset
   call<Dataset>(`/v1/training/datasets/${id}/items/${item}`, json('PATCH', patch));
 export const deleteItem = (id: string, item: string) => call<Dataset>(`/v1/training/datasets/${id}/items/${item}`, { method: 'DELETE' });
 
-export const startRun = (datasetId: string, name: string, recipe: Recipe, trainerId?: string) =>
-  call<TrainingRun>('/v1/training/runs', json('POST', { dataset_id: datasetId, name, recipe, trainer_id: trainerId }));
+export const startRun = (datasetId: string, name: string, recipe: Recipe, trainerId?: string, baseId?: string) =>
+  call<TrainingRun>('/v1/training/runs', json('POST', { dataset_id: datasetId, name, recipe, trainer_id: trainerId, base_id: baseId }));
+export const installTrainingBase = (baseId: string) =>
+  call<{ started: boolean }>(`/v1/training/bases/${encodeURIComponent(baseId)}/install`, { method: 'POST' });
+export const cancelTrainingBase = () =>
+  call<{ cancelled: boolean }>('/v1/training/bases/cancel', { method: 'POST' });
 export const installSignedTrainer = (trainerId: string) =>
   call<unknown>(`/v1/components/music-engines/${encodeURIComponent(trainerId)}/install`, { method: 'POST' });
 export interface RvcBurnStatus {
@@ -287,7 +296,7 @@ export const prepareDataset = (id: string, request: PrepareRequest) => call<Prep
 export const takeAsIs = (id: string, items?: string[]) => call<Dataset>(`/v1/training/datasets/${id}/take-as-is`, json('POST', { items }));
 export const cancelPrepare = () => call<void>('/v1/training/prepare/cancel', { method: 'POST' });
 /** Starts this run once the preparation at work is done, or no run with null. */
-export const setTrainAfter = (train: { name: string; recipe: Recipe } | null) => call<void>('/v1/training/prepare/train-after', json('POST', { train }));
+export const setTrainAfter = (train: { name: string; recipe: Recipe; base_id?: string } | null) => call<void>('/v1/training/prepare/train-after', json('POST', { train }));
 
 /** A file picked or dropped, with the folder it came from inside what was chosen. */
 export interface PickedFile {
