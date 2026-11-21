@@ -766,24 +766,33 @@ fn joint_checkpoint_paths(mut stage: yue_train::TrainingStage) -> Result<yue_tra
     Ok(stage)
 }
 
-/// The trainer prints the file error before a short stage summary. Keep both for the run card.
+/// Keep the trainer's specific error when it also prints a generic failure footer.
 #[derive(Default)]
 struct TrainerFailure {
-    file_error: Option<String>,
+    detail: Option<String>,
+    cuda_error: Option<String>,
     summary: String,
 }
 
 impl TrainerFailure {
     fn observe(&mut self, line: &str) {
-        if line.starts_with("[STWrite]") {
-            self.file_error = Some(line.to_owned());
+        if line.starts_with("CUDA error:") {
+            self.cuda_error = Some(line.to_owned());
+        } else if line.starts_with("[STWrite]") || line.starts_with("YuE2 native preparation:") {
+            self.detail = Some(line.to_owned());
         } else if line.contains("FATAL") || line.to_ascii_lowercase().contains("error") || line.starts_with("ace-train ") && line.contains("failed") {
             self.summary = line.to_owned();
         }
     }
 
-    fn message(self) -> String {
-        match self.file_error {
+    fn message(self, operation: Option<yue_train::StepStageNow>) -> String {
+        if let Some(error) = self.cuda_error {
+            return match operation {
+                Some(operation) => format!("{error} | last reported operation: step {}, {}", operation.step, operation.stage),
+                None => error,
+            };
+        }
+        match self.detail {
             Some(detail) if self.summary.is_empty() => detail,
             Some(detail) => format!("{detail} | {}", self.summary),
             None => self.summary,
@@ -2219,7 +2228,8 @@ impl Training {
                 }
             };
             if !status.success() {
-                let mut last_error = failure.message();
+                let operation = self.step_stages.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).now(unix_millis());
+                let mut last_error = failure.message(operation);
                 if last_error.contains("GGML_BACKEND=CUDA0 not found") {
                     if matches!(stage.id, crate::hotstep_sa3_training::STAGE | crate::hotstep_sa3_training::HEART_STAGE | crate::hotstep_sa3_training::HEART_PREPARE) {
                         bail!("HOT-Step CUDA did not load; check the NVIDIA driver and the pinned CUDA 12 runtime.");
@@ -2771,9 +2781,29 @@ mod tests {
         let mut failure = TrainerFailure::default();
         failure.observe("[STWrite] cannot open C:/Studio/data/adapter.safetensors for writing: Permission denied");
         failure.observe("ace-train yue2-joint-train: checkpoint publication failed");
-        let message = failure.message();
+        let message = failure.message(None);
         assert!(message.contains("adapter.safetensors for writing: Permission denied"));
         assert!(message.ends_with("checkpoint publication failed"));
+    }
+
+    #[test]
+    fn cuda_failure_keeps_the_specific_reason_and_last_reported_operation() {
+        let mut failure = TrainerFailure::default();
+        failure.observe("CUDA error: an illegal instruction was encountered");
+        failure.observe("  current device: 0, in function ggml_cuda_kernel_launch at src/ggml-cuda/common.cuh:1728");
+        failure.observe("  cudaGetLastError()");
+        failure.observe("src/ggml-cuda/ggml-cuda.cu:117: CUDA error");
+        let mut stages = yue_train::StepStages::default();
+        stages.started(8, "AR transformer backward", 0);
+        assert_eq!(failure.message(stages.now(0)),
+            "CUDA error: an illegal instruction was encountered | last reported operation: step 8, AR transformer backward");
+    }
+
+    #[test]
+    fn native_preparation_keeps_the_raw_codec_validation_reason() {
+        let mut failure = TrainerFailure::default();
+        failure.observe("YuE2 native preparation: native semantic code outside raw codec range");
+        assert_eq!(failure.message(None), "YuE2 native preparation: native semantic code outside raw codec range");
     }
 
     #[tokio::test]
