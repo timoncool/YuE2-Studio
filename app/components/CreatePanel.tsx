@@ -1201,26 +1201,31 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
   // source and the style is written from that.
   const [hearingLyrics, setHearingLyrics] = useState(false);
   const [confirmHearLyrics, setConfirmHearLyrics] = useState(false);
-  const recognitionRevision = useRef(0);
+  const recognitionRun = useRef<symbol | null>(null);
   React.useLayoutEffect(() => {
-    return () => { recognitionRevision.current += 1; };
-  }, [coverSongId, coverFile, lyrics, mode]);
-  useEffect(() => { setConfirmHearLyrics(false); }, [coverSongId, coverFile, mode]);
+    setHearingLyrics(false);
+    setConfirmHearLyrics(false);
+    return () => { recognitionRun.current = null; };
+  }, [coverSongId, coverFile, lyrics, mode, musicEngine]);
   /** The karaoke recogniser hears what the cover's source sings; the lyrics take it, to be edited. */
   const hearLyrics = async () => {
-    if ((!coverSongId && !coverFile) || hearingLyrics) return;
-    const revision = recognitionRevision.current;
+    if ((!coverSongId && !coverFile) || recognitionRun.current) return;
+    const run = Symbol();
+    recognitionRun.current = run;
     setHearingLyrics(true);
     setError(null);
     try {
       const words = await recogniseLyrics(coverSongId ? { songId: coverSongId } : { file: coverFile! });
-      if (recognitionRevision.current === revision) setLyrics(words);
+      if (recognitionRun.current === run) setLyrics(words);
     } catch (reason) {
-      if (recognitionRevision.current !== revision) return;
+      if (recognitionRun.current !== run) return;
       const message = reason instanceof Error ? reason.message : String(reason);
       setError(karaokeReason(t, message) ?? message);
     } finally {
-      setHearingLyrics(false);
+      if (recognitionRun.current === run) {
+        recognitionRun.current = null;
+        setHearingLyrics(false);
+      }
     }
   };
 
