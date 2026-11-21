@@ -2727,10 +2727,11 @@ fn separation_build(runtime: lyrics_sync::OnnxFlavour) -> anyhow::Result<acpp_se
 async fn install_acpp(state: &AppState, build: acpp_server::asset::Build, scope: &str) -> anyhow::Result<()> {
     state.acpp.downloader().clear_finished(scope).await;
     state.acpp.installs.run(build, scope, |request| async move {
-        state.acpp.downloader().install_all(scope, &state.acpp.missing(build)).await?;
+        let cancelled = || request.cancelled();
+        state.acpp.downloader().install_all_with_cancel(scope, &state.acpp.missing(build), Some(&cancelled)).await?;
         request.check_cancelled()?;
         if let Some(cuda) = shared_cuda(build) {
-            state.engine_runtime.install_missing_for(Some(cuda), scope).await?;
+            state.engine_runtime.install_missing_with_cancel(Some(cuda), scope, Some(&cancelled)).await?;
         }
         request.check_cancelled()
     }, || async {

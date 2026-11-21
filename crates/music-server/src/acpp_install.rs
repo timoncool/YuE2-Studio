@@ -22,7 +22,14 @@ struct InstallState {
 struct Flight {
     build: Build,
     scope: String,
-    outcome: watch::Sender<Option<std::result::Result<(), String>>>,
+    outcome: watch::Sender<Option<InstallOutcome>>,
+}
+
+#[derive(Clone)]
+enum InstallOutcome {
+    Ready,
+    OwnerCancelled,
+    Failed(String),
 }
 
 pub(super) struct InstallRequest {
@@ -31,8 +38,12 @@ pub(super) struct InstallRequest {
 }
 
 impl InstallRequest {
+    pub(super) fn cancelled(&self) -> bool {
+        *self.cancelled.borrow()
+    }
+
     pub(super) fn check_cancelled(&self) -> Result<()> {
-        ensure!(!*self.cancelled.borrow(), "cancelled");
+        ensure!(!self.cancelled(), "cancelled");
         Ok(())
     }
 }
@@ -56,18 +67,18 @@ impl Drop for RequestGuard<'_> {
 struct Owner<'a> {
     queue: &'a RuntimeInstalls,
     flight: Arc<Flight>,
-    outcome: Option<std::result::Result<(), String>>,
+    outcome: Option<InstallOutcome>,
 }
 
 impl Drop for Owner<'_> {
     fn drop(&mut self) {
         let mut state = self.queue.state.lock().unwrap();
         state.active = None;
-        self.flight.outcome.send_replace(Some(
-            self.outcome
-                .take()
-                .unwrap_or_else(|| Err("audio.cpp runtime installation was interrupted".into())),
-        ));
+        self.flight
+            .outcome
+            .send_replace(Some(self.outcome.take().unwrap_or_else(|| {
+                InstallOutcome::Failed("audio.cpp runtime installation was interrupted".into())
+            })));
     }
 }
 
@@ -149,7 +160,11 @@ impl RuntimeInstalls {
                     Ok(()) => install(request.clone()).await,
                     Err(error) => Err(error),
                 };
-                owner.outcome = Some(outcome.as_ref().map(|_| ()).map_err(|error| format!("{error:#}")));
+                owner.outcome = Some(match &outcome {
+                    Ok(()) => InstallOutcome::Ready,
+                    Err(error) if request.cancelled() && error.to_string() == "cancelled" => InstallOutcome::OwnerCancelled,
+                    Err(error) => InstallOutcome::Failed(format!("{error:#}")),
+                });
                 return outcome;
             }
 
@@ -163,7 +178,13 @@ impl RuntimeInstalls {
                 result = outcome.wait_for(Option::is_some) => result?.clone().expect("completed installation"),
             };
             if flight.build == build {
-                return finished.map_err(anyhow::Error::msg);
+                match finished {
+                    InstallOutcome::Ready => return Ok(()),
+                    InstallOutcome::Failed(error) => return Err(anyhow!(error)),
+                    // The owner paused the transfer. A tool still waiting for the
+                    // same build can resume its partial files under its own scope.
+                    InstallOutcome::OwnerCancelled => {}
+                }
             }
             // The other build shares the downloader but uses different files.
             // Its slot has been released; re-evaluate what our build needs.
@@ -176,5 +197,65 @@ impl RuntimeInstalls {
                 .insert(scope.into(), format!("{error:#}"));
         }
         result
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::time::Duration;
+    use tokio::sync::Notify;
+
+    #[tokio::test]
+    async fn another_build_waits_for_the_downloader_but_keeps_its_own_result() {
+        let installs = RuntimeInstalls::default();
+        let cpu_started = Notify::new();
+        let vulkan_waiting = Notify::new();
+        let cpu_finished = AtomicBool::new(false);
+        let (cpu, vulkan) = tokio::time::timeout(Duration::from_secs(5), async {
+            tokio::join!(
+                installs.run(
+                    Build::Cpu,
+                    "separation",
+                    |_| async {
+                        cpu_started.notify_one();
+                        vulkan_waiting.notified().await;
+                        cpu_finished.store(true, Ordering::Relaxed);
+                        Err(anyhow!("CPU archive checksum differs"))
+                    },
+                    || async {}
+                ),
+                async {
+                    cpu_started.notified().await;
+                    installs
+                        .run(
+                            Build::Vulkan,
+                            "midi",
+                            |_| async {
+                                assert!(cpu_finished.load(Ordering::Relaxed));
+                                Ok(())
+                            },
+                            || async {
+                                assert_eq!(
+                                    installs.waiting_on("midi").as_deref(),
+                                    Some("separation")
+                                );
+                                vulkan_waiting.notify_one();
+                            },
+                        )
+                        .await
+                }
+            )
+        })
+        .await
+        .unwrap();
+        assert_eq!(cpu.unwrap_err().to_string(), "CPU archive checksum differs");
+        assert_eq!(
+            installs.error_for("separation").as_deref(),
+            Some("CPU archive checksum differs")
+        );
+        vulkan.unwrap();
+        assert_eq!(installs.error_for("midi"), None);
     }
 }
