@@ -65,9 +65,10 @@ def run(work, binary, archive, certificate, tls_key):
         (channel / "url.txt").write_text(base)
         threading.Thread(target=server.serve_forever, daemon=True).start()
 
-        def publish(revision, filename):
+        def publish(revision, filename, extra=None):
             name = "mirrors.json"
-            data = json.dumps({"schema": 1, "revision": revision, "archives": {DIGEST: {"sources": [base + filename]}}}).encode()
+            archives = {DIGEST: {"sources": [base + filename]}, **(extra or {})}
+            data = json.dumps({"schema": 1, "revision": revision, "archives": archives}).encode()
             target = TargetFile.from_data(name, data, ["sha256"])
             (origin / "targets" / (target.hashes["sha256"] + "." + name)).write_bytes(data)
             targets = sign(Targets(version=revision, expires=expires, targets={name: target}), keys["targets"])
@@ -97,18 +98,18 @@ def run(work, binary, archive, certificate, tls_key):
             else:
                 raise TimeoutError("service startup")
 
-            def install_runtime():
-                req = Request(url + "/v1/karaoke/install", b'{"asset_id":"onnxruntime"}', {"Content-Type": "application/json"})
+            def install_runtime(asset_id="onnxruntime"):
+                req = Request(url + "/v1/karaoke/install", json.dumps({"asset_id": asset_id}).encode(), {"Content-Type": "application/json"})
                 with http.open(req, timeout=180) as response:
                     json.load(response)
                 deadline = time.monotonic() + 180
                 while time.monotonic() < deadline:
                     with http.open(url + "/v1/karaoke/status", timeout=10) as response:
                         job = json.load(response).get("active_download")
-                    if job and job["asset_id"] == "onnxruntime" and job["done"]:
+                    if job and job["asset_id"] == asset_id and job["done"]:
                         return job
                     time.sleep(0.25)
-                raise TimeoutError("ONNX install job")
+                raise TimeoutError(f"install job {asset_id}")
 
             first = install_runtime()
             assert first["error"] and ("/removed.tgz", 404) in requested, (first, requested)
@@ -141,6 +142,19 @@ def run(work, binary, archive, certificate, tls_key):
             assert ("/current.tgz", 200) in requested, requested
             assert any(p.is_file() for p in data.rglob("libonnxruntime.so*"))
             print("PASS same service PID", proc.pid, "old URL 404 -> signed new URL -> installed ONNX", DIGEST)
+            # This component has a shipped content pin, but no shipped mirror catalogue entry.
+            config = archive.parent / "crisper-config.json"
+            config_sha = "9d823d0eacddfc5ee920fac73897abfd29fbecac7d9e49b5d8e7f0bd63a56144"
+            assert hashlib.sha256(config.read_bytes()).hexdigest() == config_sha
+            shutil.copyfile(config, origin / "relocated-config.json")
+            publish(5, "current.tgz", {config_sha: {"sources": [base + "relocated-config.json"]}})
+            requested.clear()
+            result = install_runtime("crisperwhisper-turbo-config")
+            assert not result["error"], result
+            assert ("/relocated-config.json", 200) in requested, requested
+            stored, = data.rglob("crisperwhisper2-turbo/config.json")
+            assert hashlib.sha256(stored.read_bytes()).hexdigest() == config_sha
+            print("PASS same service PID", proc.pid, "signed mirror for a previously unlisted pinned config", config_sha)
         finally:
             proc.terminate()
             proc.wait(timeout=20)
