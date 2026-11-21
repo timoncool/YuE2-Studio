@@ -59,9 +59,12 @@ it('marks the auditioned side as preferred and restores the badge from the libra
     await act(async () => button('Compare takes').click());
     const [a, b] = Array.from(host.querySelectorAll('audio'));
     expect(a.muted).toBe(true);
+    Object.defineProperty(a, 'readyState', { value: 1 });
+    b.currentTime = 3.25;
     await act(async () => button('A').click());
     expect(a.muted).toBe(false);
     expect(b.muted).toBe(true);
+    expect(a.currentTime).toBe(3.25);
     await act(async () => button('Mark as preferred take').click());
     expect(fetcher).toHaveBeenCalledWith('/v1/library/playlists/work/preferred-take', expect.objectContaining({
       method: 'PUT', body: JSON.stringify({ song_id: first.id }),
