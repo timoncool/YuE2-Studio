@@ -1,0 +1,27 @@
+name: Seed-VC Windows standalone
+
+on:
+  push:
+    branches: [qa/yue2-seed-vc]
+
+permissions:
+  contents: read
+
+jobs:
+  windows-standalone:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: Swatinem/rust-cache@v2
+      - name: Build standalone server
+        run: cargo build --locked -p music-server --bin music-server
+      - uses: actions/upload-artifact@v7
+        with:
+          name: seed-vc-standalone
+          path: target/debug/music-server.exe
+          retention-days: 2
+
+
+
+
