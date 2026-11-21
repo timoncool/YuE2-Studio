@@ -54,6 +54,7 @@ interface StemVoice {
   state: DjStem;
 }
 const clamped = (value: number, min: number, max: number) => Math.max(min, Math.min(max, Number.isFinite(value) ? value : min));
+const MIN_LOOP_SECONDS = 0.25;
 
 /**
  * Each deck has its own audio elements, EQ, filter, cue points, loops, stem mixer and
@@ -90,6 +91,7 @@ export class DjDeck {
   private stemVoices: StemVoice[] = [];
   private readonly changed: () => void;
   private scratchBuffer: AudioBuffer | null = null;
+  private readonly scratchStems = new Map<StemVoice, AudioBuffer>();
   private scratchRequest: AbortController | null = null;
   private scratchPromise: Promise<void> | null = null;
   private scratchPrevious = 0;
@@ -150,11 +152,18 @@ export class DjDeck {
     this.audio.addEventListener('loadedmetadata', () => {
       if (this.disposed) return;
       this.state.duration = Number.isFinite(this.audio.duration) ? this.audio.duration : 0;
-      if (!this.state.loopOut) this.state.loopOut = this.state.duration;
+      this.state.loopIn = Math.min(this.state.loopIn, this.state.duration);
+      this.state.loopOut = Math.min(this.state.loopOut || this.state.duration, this.state.duration);
+      if (!this.hasLoop()) this.state.looping = false;
       this.changed();
     });
     this.audio.addEventListener('timeupdate', () => this.updateTime());
     this.audio.addEventListener('ended', () => {
+      if (this.playingRequested && this.state.looping && this.hasLoop()) {
+        this.seek(this.state.loopIn);
+        void this.play();
+        return;
+      }
       this.playingRequested = false;
       this.state.playing = false;
       this.stopStems();
@@ -188,6 +197,7 @@ export class DjDeck {
     this.scratchRequest = null;
     this.scratchPromise = null;
     this.scratchBuffer = null;
+    this.stopScratchGrains();
     this.scratchLastAt = -1;
     this.playingRequested = false;
     this.audio.pause();
@@ -279,6 +289,7 @@ export class DjDeck {
   }
 
   private clearStemVoices(): void {
+    this.scratchStems.clear();
     for (const voice of this.stemVoices) {
       voice.audio.pause();
       voice.audio.removeAttribute('src');
@@ -404,10 +415,20 @@ export class DjDeck {
   setStemMode(enabled: boolean): void {
     if (!this.stemVoices.length) return;
     this.stemAttempt++;
-    this.state.stemMode = enabled;
+    if (this.state.stemMode !== enabled) {
+      this.stopScratchGrains();
+      this.scratchRequest?.abort();
+      this.scratchRequest = null;
+      this.scratchPromise = null;
+      this.state.stemMode = enabled;
+      this.state.scratchReady = enabled
+        ? this.stemVoices.every(voice => this.scratchStems.has(voice))
+        : this.scratchBuffer !== null;
+      if (this.state.scratching) void this.prepareScratch();
+    }
     this.mainGain.gain.setTargetAtTime(enabled ? 0 : 1, this.ctx.currentTime, 0.02);
     this.applyStemLevels();
-    if (enabled && this.playingRequested) void this.playStems();
+    if (enabled && this.playingRequested && !this.state.scratching) void this.playStems();
     else this.stopStems();
     this.changed();
   }
@@ -442,19 +463,26 @@ export class DjDeck {
     if (time !== null && time !== undefined) this.seek(time);
   }
   setLoopIn(): void {
-    this.state.loopIn = this.state.time;
-    if (this.state.loopOut <= this.state.loopIn) this.state.loopOut = Math.min(this.state.duration, this.state.loopIn + 4);
+    this.state.loopIn = clamped(this.state.time, 0, this.state.duration);
+    if (!this.hasLoop()) {
+      this.state.loopOut = Math.min(this.state.duration, this.state.loopIn + 4);
+      if (!this.hasLoop()) this.state.looping = false;
+    }
     this.changed();
   }
   setLoopOut(): void {
-    this.state.loopOut = Math.max(this.state.loopIn + 0.25, this.state.time);
-    this.state.looping = true;
+    this.state.loopOut = clamped(Math.max(this.state.loopIn + MIN_LOOP_SECONDS, this.state.time), this.state.loopIn, this.state.duration);
+    this.state.looping = this.hasLoop();
     this.changed();
   }
   toggleLoop(): void {
-    if (this.state.loopOut <= this.state.loopIn) return;
+    if (!this.hasLoop()) return;
     this.state.looping = !this.state.looping;
     this.changed();
+  }
+
+  private hasLoop(): boolean {
+    return this.state.loopOut >= this.state.loopIn + MIN_LOOP_SECONDS && this.state.loopOut <= this.state.duration;
   }
 
   /** The pitch bend wheel has no artificial sound-sample length limit.
@@ -463,29 +491,41 @@ export class DjDeck {
    */
   async prepareScratch(): Promise<void> {
     const url = this.state.song?.audioUrl;
-    if (!url || this.scratchBuffer || this.scratchPromise) return this.scratchPromise ?? Promise.resolve();
-    const id = this.loadingId;
+    if (!url || this.state.scratchReady || this.scratchPromise) return this.scratchPromise ?? Promise.resolve();
+    const stems = this.state.stemMode ? this.stemVoices : [];
     const request = new AbortController();
     this.scratchRequest = request;
     this.scratchPromise = (async () => {
       try {
-        const response = await fetch(url, { signal: request.signal });
-        if (!response.ok) throw new Error('Could not read audio for scratching.');
-        const raw = await response.arrayBuffer();
-        const decoded = await this.ctx.decodeAudioData(raw);
-        if (id === this.loadingId && !this.disposed) {
+        const decode = async (source: string) => {
+          const response = await fetch(source, { signal: request.signal });
+          if (!response.ok) throw new Error('Could not read audio for scratching.');
+          return this.ctx.decodeAudioData(await response.arrayBuffer());
+        };
+        if (stems.length) {
+          for (const voice of stems) {
+            if (this.scratchStems.has(voice)) continue;
+            const decoded = await decode(voice.audio.src);
+            if (request.signal.aborted) return;
+            this.scratchStems.set(voice, decoded);
+          }
+        } else {
+          const decoded = await decode(url);
+          if (request.signal.aborted) return;
           this.scratchBuffer = decoded;
-          this.state.scratchReady = true;
-          this.changed();
         }
+        this.state.scratchReady = true;
+        this.changed();
       } catch (error) {
         if (!request.signal.aborted) {
           this.state.error = error instanceof Error ? error.message : String(error);
           this.changed();
         }
       } finally {
-        if (this.scratchRequest === request) this.scratchRequest = null;
-        this.scratchPromise = null;
+        if (this.scratchRequest === request) {
+          this.scratchRequest = null;
+          this.scratchPromise = null;
+        }
       }
     })();
     await this.scratchPromise;
@@ -511,18 +551,28 @@ export class DjDeck {
     this.audio.currentTime = position;
     this.state.time = position;
     this.changed();
-    const decoded = this.scratchBuffer;
-    if (!decoded || Math.abs(deltaSeconds) < 0.0005) return;
+    if (!this.state.scratchReady || Math.abs(deltaSeconds) < 0.0005) return;
 
     // Bounded, overlapping windowed grains are smoother than one full sample
     // for every pointer event; a reversed window provides backwards scratching.
     const now = this.ctx.currentTime;
     if (this.scratchLastAt >= 0 && now - this.scratchLastAt < 0.028) return;
     this.scratchLastAt = now;
+    const backwards = deltaSeconds < 0;
+    if (this.state.stemMode) {
+      for (const voice of this.stemVoices) {
+        const decoded = this.scratchStems.get(voice);
+        if (decoded) this.playScratchGrain(decoded, voice.gain, position, backwards, now);
+      }
+    } else if (this.scratchBuffer) {
+      this.playScratchGrain(this.scratchBuffer, this.input, position, backwards, now);
+    }
+  }
+
+  private playScratchGrain(decoded: AudioBuffer, destination: AudioNode, position: number, backwards: boolean, now: number): void {
     const lengthSeconds = 0.09;
     const frames = Math.min(decoded.length, Math.max(128, Math.round(decoded.sampleRate * lengthSeconds)));
     if (decoded.length < 128) return;
-    const backwards = deltaSeconds < 0;
     const start = Math.max(0, Math.min(decoded.length - frames, Math.round(position * decoded.sampleRate) - (backwards ? frames : 0)));
     const grain = this.ctx.createBuffer(decoded.numberOfChannels, frames, decoded.sampleRate);
     for (let channel = 0; channel < decoded.numberOfChannels; channel++) {
@@ -540,7 +590,7 @@ export class DjDeck {
     envelope.gain.linearRampToValueAtTime(0.45, now + Math.min(0.014, duration / 4));
     envelope.gain.setValueAtTime(0.45, now + duration * 0.62);
     envelope.gain.linearRampToValueAtTime(0, now + duration);
-    source.connect(envelope).connect(this.input);
+    source.connect(envelope).connect(destination);
     source.onended = () => {
       source.disconnect();
       envelope.disconnect();
@@ -549,6 +599,14 @@ export class DjDeck {
     this.scratchSources.push(source);
     source.start(now);
     source.stop(now + duration);
+  }
+
+  private stopScratchGrains(): void {
+    for (const source of this.scratchSources) {
+      source.disconnect();
+      try { source.stop(); } catch { /* already stopped */ }
+    }
+    this.scratchSources = [];
   }
 
   endScratch(): void {
@@ -566,7 +624,7 @@ export class DjDeck {
     this.audio.removeAttribute('src');
     this.audio.load();
     this.clearStemVoices();
-    for (const source of this.scratchSources) { try { source.stop(); } catch { /* already stopped */ } }
+    this.stopScratchGrains();
     this.mainSource.disconnect();
     this.mainGain.disconnect();
     this.input.disconnect();
