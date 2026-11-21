@@ -24,6 +24,49 @@ struct Health {
     protocol: String,
     engine_id: String,
     version: String,
+    #[serde(default)]
+    compute_backend: ComputeBackend,
+}
+
+#[derive(Clone, Copy, Debug, Default, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub(super) enum ComputeBackend {
+    Cpu,
+    Cuda,
+    Vulkan,
+    Metal,
+    #[default]
+    #[serde(other)]
+    Unknown,
+}
+
+impl ComputeBackend {
+    pub fn report_name(self) -> &'static str {
+        match self {
+            Self::Cpu => "cpu",
+            Self::Cuda => "cuda",
+            Self::Vulkan => "vulkan",
+            Self::Metal => "metal",
+            Self::Unknown => "unknown",
+        }
+    }
+}
+
+#[cfg(test)]
+#[test]
+fn adapter_health_accepts_old_and_unrecognized_compute_backends() {
+    for (reported, expected) in [
+        (None, "unknown"),
+        (Some("cpu"), "cpu"),
+        (Some("foreign-driver"), "unknown"),
+    ] {
+        let mut body = serde_json::json!({"protocol":NAME, "engine_id":"fixture", "version":"1"});
+        if let Some(backend) = reported {
+            body["compute_backend"] = serde_json::json!(backend);
+        }
+        let health: Health = serde_json::from_value(body).unwrap();
+        assert_eq!(health.compute_backend.report_name(), expected);
+    }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -74,6 +117,7 @@ pub(super) struct Process {
     client: Client,
     base: String,
     secret: String,
+    pub compute_backend: ComputeBackend,
 }
 
 impl Process {
@@ -138,6 +182,7 @@ impl Process {
             client,
             base: format!("http://127.0.0.1:{port}"),
             secret,
+            compute_backend: ComputeBackend::Unknown,
         };
         let deadline = Instant::now() + Duration::from_secs(45);
         loop {
@@ -153,6 +198,7 @@ impl Process {
                             && health.version == version,
                         "Music adapter handshake does not match the verified package"
                     );
+                    process.compute_backend = health.compute_backend;
                     return Ok(process);
                 }
                 Ok(response) if response.status() != reqwest::StatusCode::SERVICE_UNAVAILABLE => {

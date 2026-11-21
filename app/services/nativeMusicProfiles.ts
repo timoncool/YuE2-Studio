@@ -12,12 +12,20 @@ export const isProfileMusicEngine = (value: unknown): value is ProfileMusicEngin
 export const isMusicEngine = (value: unknown): value is MusicEngine =>
   value === 'local' || value === 'openrouter' || value === 'signed' || isProfileMusicEngine(value);
 
+interface ManualModelInstall {
+  source_url: string;
+  license_url: string;
+  directory: string;
+}
+
 interface NativeProfile {
   id: string;
   label: string;
   total_bytes: number;
   missing_bytes?: number;
   adapters?: string[];
+  status?: string;
+  manual_install?: ManualModelInstall;
   installable?: boolean;
   license_url?: string;
   ready: boolean;
@@ -88,9 +96,10 @@ function useProfileCatalog(engine: ProfileMusicEngine | undefined, refreshCount:
         const body = await reply.json();
         const data: NativeProfiles = engine === 'audio.cpp' && body.engine === engine && Array.isArray(body.models)
           ? { engine, engine_installed: body.engine_installed !== false, profiles: body.models
-              .map((model: { id: string; name?: string; profile_id: string; quantization: string; ready: boolean; missing: string[]; bytes?: number; installable?: boolean; license_url?: string }) => ({
+              .map((model: { id: string; name?: string; profile_id: string; quantization: string; ready: boolean; missing: string[]; bytes?: number; missing_bytes?: number; status?: string; manual_install?: ManualModelInstall; installable?: boolean; license_url?: string }) => ({
                 id: model.id, label: [model.name ?? model.id, model.profile_id, model.quantization].filter(Boolean).join(' · '), total_bytes: model.bytes ?? 0,
-                ready: model.ready, missing: model.missing, installable: model.installable, license_url: model.license_url,
+                ready: model.ready, missing: model.missing, status: model.status, missing_bytes: model.missing_bytes,
+                manual_install: model.manual_install, installable: model.installable, license_url: model.license_url,
               })) }
           : body;
         if (data.engine !== engine || !Array.isArray(data.profiles)) throw new Error('Invalid native profile response');
