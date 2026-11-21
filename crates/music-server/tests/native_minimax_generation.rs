@@ -78,10 +78,7 @@ async fn audio_cpp_minimax_music3_generates_and_saves_q8_provenance() {
         .env("TIMONCOOL_SHARED_DIR", root.path().join("registry"))
         .env("DO_NOT_TRACK", "0")
         .env("STUDIO_TELEMETRY", "1")
-        .env(
-            "STUDIO_HUB_URL",
-            format!("http://127.0.0.1:{port}/fixture-hub"),
-        )
+        .env("STUDIO_HUB_URL", format!("http://127.0.0.1:{port}/fixture-hub"))
         .kill_on_drop(true)
         .spawn()
         .unwrap();
@@ -143,11 +140,7 @@ async fn audio_cpp_minimax_music3_generates_and_saves_q8_provenance() {
     assert!(!root.path().join("audio-cpp-submitted.json").exists());
     http.post(format!("{url}/v1/hub/telemetry"))
         .json(&json!({"enabled": true, "acknowledge": true}))
-        .send()
-        .await
-        .unwrap()
-        .error_for_status()
-        .unwrap();
+        .send().await.unwrap().error_for_status().unwrap();
     let accepted = http.post(&endpoint).json(&request).send().await.unwrap();
     assert_eq!(accepted.status(), StatusCode::ACCEPTED);
     let id = accepted.json::<Value>().await.unwrap()["id"]
@@ -209,16 +202,8 @@ async fn audio_cpp_minimax_music3_generates_and_saves_q8_provenance() {
     assert_eq!(unloaded["model_ids"], json!(["minimax_music3"]));
     let report = timeout(Duration::from_secs(5), async {
         loop {
-            let preview: Value = http
-                .get(format!("{url}/v1/hub/telemetry/preview"))
-                .send()
-                .await
-                .unwrap()
-                .error_for_status()
-                .unwrap()
-                .json()
-                .await
-                .unwrap();
+            let preview: Value = http.get(format!("{url}/v1/hub/telemetry/preview"))
+                .send().await.unwrap().error_for_status().unwrap().json().await.unwrap();
             if let Some(rows) = preview["report"]["speed"].as_array() {
                 if !rows.is_empty() {
                     break preview["report"].clone();
@@ -226,9 +211,7 @@ async fn audio_cpp_minimax_music3_generates_and_saves_q8_provenance() {
             }
             sleep(Duration::from_millis(50)).await;
         }
-    })
-    .await
-    .expect("saved audio.cpp song has a timing in the scheduled report");
+    }).await.expect("saved audio.cpp song has a timing in the scheduled report");
     assert_eq!(report["counts"]["songs"], 1);
     assert_eq!(report["counts"]["song_done"], 1);
     assert_eq!(report["model_sets"][0]["count"], 1);
@@ -620,11 +603,7 @@ async fn exercise_generation(format: Option<&str>) {
 
     http.post(format!("{url}/v1/hub/telemetry"))
         .json(&json!({"enabled":true,"acknowledge":true}))
-        .send()
-        .await
-        .unwrap()
-        .error_for_status()
-        .unwrap();
+        .send().await.unwrap().error_for_status().unwrap();
     let replay = rpc(
         mcp_request(),
         5,
@@ -637,32 +616,14 @@ async fn exercise_generation(format: Option<&str>) {
     wait_for_completed_song_counts(&hub_path, 2).await;
     timeout(Duration::from_secs(10), async {
         loop {
-            let preview: Value = http
-                .get(format!("{url}/v1/hub/telemetry/preview"))
-                .send()
-                .await
-                .unwrap()
-                .error_for_status()
-                .unwrap()
-                .json()
-                .await
-                .unwrap();
-            if preview["report"]["model_sets"]
-                .as_array()
-                .is_some_and(|sets| {
-                    sets.iter().any(|set| {
-                        set["set"] == "native.minimax_music3"
-                            && set["components"] == json!([ENGINE])
-                    })
-                })
-            {
-                break;
-            }
+            let preview: Value = http.get(format!("{url}/v1/hub/telemetry/preview"))
+                .send().await.unwrap().error_for_status().unwrap().json().await.unwrap();
+            if preview["report"]["model_sets"].as_array().is_some_and(|sets| sets.iter().any(|set|
+                set["set"] == "native.minimax_music3" && set["components"] == json!([ENGINE])
+            )) { break }
             sleep(Duration::from_millis(50)).await;
         }
-    })
-    .await
-    .expect("native MiniMax replay appears in the scheduled report");
+    }).await.expect("native MiniMax replay appears in the scheduled report");
     let take = &rendered["song"]["song"];
     assert_ne!(take["id"], song["id"]);
     assert_eq!(take["profile_id"], song["profile_id"]);
