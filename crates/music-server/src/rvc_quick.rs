@@ -429,6 +429,12 @@ mod tests {
             scratch.path().join("media"),
         )
         .unwrap();
+        let wav = crate::audio_pcm::wav_f32_bytes(&crate::audio_post::Stereo::new(
+            vec![0.25; 100],
+            vec![0.5; 100],
+            44_100,
+        ))
+        .unwrap();
         let import = |metadata| {
             library
                 .import_audio_song(AudioImportInput {
@@ -441,7 +447,7 @@ mod tests {
                     profile_id: None,
                     source: "rvc".into(),
                     audio_extension: "wav".into(),
-                    audio: b"fixture".to_vec(),
+                    audio: wav.clone(),
                 })
                 .unwrap()
                 .song
@@ -471,7 +477,7 @@ mod tests {
         assert_eq!(library.list_songs().unwrap().len(), 2);
         assert_eq!(
             std::fs::read(library.media_path_for_song(&source).unwrap()).unwrap(),
-            b"fixture"
+            wav
         );
     }
 }

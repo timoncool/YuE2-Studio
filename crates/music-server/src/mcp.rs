@@ -2660,6 +2660,12 @@ fn tools() -> &'static [Tool] {
                 call: |args| post("/v1/rvc/apply".into(), args.clone()),
             },
             Tool {
+                name: "rvc_voice_selection_get",
+                description: "Read the installed voice and backend remembered for the quick RVC library action.",
+                schema: nothing,
+                call: |_| get("/v1/rvc/selection".into()),
+            },
+            Tool {
                 name: "rvc_voice_select",
                 description: "Remember the installed RVC voice and backend used by the quick library action.",
                 schema: || object(json!({
