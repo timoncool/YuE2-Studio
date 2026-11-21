@@ -15,6 +15,16 @@ const en = {
   shellUpdateFailed: 'The update did not install: {error}',
   shellCloseToTray: 'Keep running in the system tray when the window is closed',
   shellCloseToTrayHint: 'Closing the window hides it; songs keep being made. Click the tray icon to bring it back, and quit from its menu.',
+  shellNotificationsSection: 'Notifications',
+  shellNotificationsSectionHint: 'Know when a song is ready',
+  shellNotificationsEnabled: 'Show Windows notifications when songs finish generating',
+  shellNotificationsWhy: 'Get a Windows desktop alert when a song or re-render finishes. The studio must be running (including hidden in the system tray). Windows notification settings and Do Not Disturb may suppress alerts. In-app messages are unaffected.',
+  shellNotificationsTest: 'Send a test notification',
+  shellNotificationsTestBody: 'YuE2 Studio notifications are working.',
+  shellNotificationsTestRequested: 'The alert was sent to Windows. Your notification settings determine whether it appears.',
+  shellNotificationsUnavailable: 'No Windows desktop notification was available. This feature requires the Windows YuE2 Studio app.',
+  shellSongReadyOne: '"{title}" is ready to listen to.',
+  shellSongsReadyMany: '{count} tracks are ready, including "{title}".',
 };
 
 type Strings = typeof en;
@@ -34,6 +44,16 @@ const ru: Strings = {
   shellUpdateFailed: 'Обновление не установилось: {error}',
   shellCloseToTray: 'Продолжать работу в системном трее при закрытии окна',
   shellCloseToTrayHint: 'Закрытие окна только прячет его, песни продолжают создаваться. Нажмите на значок в трее, чтобы вернуть окно, а выйти можно из его меню.',
+  shellNotificationsSection: 'Уведомления',
+  shellNotificationsSectionHint: 'Узнать, когда песня готова',
+  shellNotificationsEnabled: 'Показывать уведомления Windows о готовых песнях',
+  shellNotificationsWhy: 'Уведомление Windows появится после создания песни или повторного рендера. Студия должна работать, в том числе в трее. Режим «Не беспокоить» может скрыть уведомления.',
+  shellNotificationsTest: 'Отправить пробное уведомление',
+  shellNotificationsTestBody: 'Уведомления YuE2 Studio работают.',
+  shellNotificationsTestRequested: 'Запрос отправлен в Windows; показ зависит от её настроек.',
+  shellNotificationsUnavailable: 'Уведомления Windows недоступны. Требуется приложение YuE2 Studio для Windows.',
+  shellSongReadyOne: 'Песня «{title}» готова.',
+  shellSongsReadyMany: 'Готово треков: {count}, в том числе «{title}».',
 };
 
 const zh: Strings = {
@@ -51,6 +71,16 @@ const zh: Strings = {
   shellUpdateFailed: '更新未能安装：{error}',
   shellCloseToTray: '关闭窗口时继续在系统托盘中运行',
   shellCloseToTrayHint: '关闭窗口只会将其隐藏，歌曲会继续生成。点击托盘图标即可恢复窗口，并可从其菜单退出。',
+  shellNotificationsSection: '通知',
+  shellNotificationsSectionHint: '歌曲完成时提醒',
+  shellNotificationsEnabled: '歌曲生成完成时显示 Windows 通知',
+  shellNotificationsWhy: '歌曲生成或重新渲染完成时发送 Windows 桌面通知。程序必须保持运行（可在系统托盘中）。Windows 的免打扰设置可能隐藏通知。',
+  shellNotificationsTest: '发送测试通知',
+  shellNotificationsTestBody: 'YuE2 Studio 通知正常。',
+  shellNotificationsTestRequested: '已请求 Windows 显示通知；是否出现取决于系统设置。',
+  shellNotificationsUnavailable: '无法发送 Windows 通知。请使用 Windows 桌面版 YuE2 Studio。',
+  shellSongReadyOne: '歌曲“{title}”已完成。',
+  shellSongsReadyMany: '已完成 {count} 首歌曲，包括“{title}”。',
 };
 
 const ja: Strings = {
@@ -68,6 +98,16 @@ const ja: Strings = {
   shellUpdateFailed: 'アップデートをインストールできませんでした：{error}',
   shellCloseToTray: 'ウィンドウを閉じてもシステムトレイで動作し続ける',
   shellCloseToTrayHint: 'ウィンドウを閉じると非表示になるだけで、曲の生成は続きます。トレイのアイコンをクリックすると戻り、終了はそのメニューから行います。',
+  shellNotificationsSection: '通知',
+  shellNotificationsSectionHint: '曲の完成をお知らせ',
+  shellNotificationsEnabled: '曲の完成時に Windows 通知を表示',
+  shellNotificationsWhy: '曲の生成や再レンダリングが完了すると Windows に通知します。アプリを起動したままにしてください（トレイでも可）。通知は Windows の集中モードで抑制される場合があります。',
+  shellNotificationsTest: 'テスト通知を送る',
+  shellNotificationsTestBody: 'YuE2 Studio の通知テストです。',
+  shellNotificationsTestRequested: 'Windows に通知を送信しました。表示はシステム設定によります。',
+  shellNotificationsUnavailable: 'Windows 通知を利用できません。Windows 版 YuE2 Studio が必要です。',
+  shellSongReadyOne: '「{title}」が完成しました。',
+  shellSongsReadyMany: '{count} 曲が完成しました（「{title}」を含む）。',
 };
 
 const ko: Strings = {
@@ -85,6 +125,16 @@ const ko: Strings = {
   shellUpdateFailed: '업데이트를 설치하지 못했습니다: {error}',
   shellCloseToTray: '창을 닫아도 시스템 트레이에서 계속 실행',
   shellCloseToTrayHint: '창을 닫으면 숨겨질 뿐 노래 생성은 계속됩니다. 트레이 아이콘을 클릭하면 다시 열리고, 종료는 트레이 메뉴에서 합니다.',
+  shellNotificationsSection: '알림',
+  shellNotificationsSectionHint: '곡 완성 알림',
+  shellNotificationsEnabled: '곡 생성 완료 시 Windows 알림 표시',
+  shellNotificationsWhy: '곡 생성이나 재렌더링이 끝나면 Windows 알림을 보냅니다. 앱은 실행 중이어야 하며 트레이에 숨겨져 있어도 됩니다. 방해 금지 모드에서는 알림이 숨겨질 수 있습니다.',
+  shellNotificationsTest: '테스트 알림 보내기',
+  shellNotificationsTestBody: 'YuE2 Studio 알림 테스트입니다.',
+  shellNotificationsTestRequested: 'Windows로 알림을 보냈습니다. 표시 여부는 시스템 설정에 따릅니다.',
+  shellNotificationsUnavailable: 'Windows 알림을 사용할 수 없습니다. Windows용 YuE2 Studio가 필요합니다.',
+  shellSongReadyOne: '“{title}” 곡이 완성되었습니다.',
+  shellSongsReadyMany: '{count}곡이 완성되었습니다(“{title}” 포함).',
 };
 
 export const shellStrings = { en, ru, zh, ja, ko };

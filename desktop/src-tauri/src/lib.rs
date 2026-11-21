@@ -17,6 +17,8 @@ use std::{
     time::{Duration, Instant},
 };
 
+mod song_notifications;
+
 const SERVER_PORT: u16 = music_server::DEFAULT_STUDIO_PORT;
 const RELEASES_URL: &str = "https://github.com/timoncool/YuE2-Studio/releases/latest";
 const STUDIO_DATA_DIRECTORY: &str = "YuE2 Studio";
@@ -1211,6 +1213,7 @@ pub fn run() {
             quit_studio,
             close_to_tray,
             set_close_to_tray,
+            song_notifications::notify_song_ready,
             pending_update,
             install_update
         ]);
