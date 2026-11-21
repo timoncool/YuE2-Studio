@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { MusicEngine, NativeMusicEngine, ProfileMusicEngine, YueRequest } from '../types';
 import { apiUrl } from './apiBase';
+import type { InstalledAdapter } from './adapters';
 
 export const nativeEngines = { 'minimaxmusic-cpp': 'MiniMax Music3', 'acestep-cpp': 'ACE-Step', hotstep: 'HOT-Step' } as const;
 export const profileMusicEngines = { ...nativeEngines, 'audio.cpp': 'audio.cpp' } as const;
@@ -18,6 +19,7 @@ interface NativeProfile {
   total_bytes: number;
   missing_bytes?: number;
   adapters?: string[];
+  native_adapters?: InstalledAdapter[];
   status?: string;
   package_url?: string;
   model_directory?: string;

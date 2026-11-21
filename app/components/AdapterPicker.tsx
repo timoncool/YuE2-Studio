@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { AlertTriangle, Layers, Plus, X } from 'lucide-react';
 import { useI18n } from '../context/I18nContext';
-import { AdapterUse, InstalledAdapter, SCORE_STRENGTH_LIMIT, familyLabel, localized, scoreStrength, startingScales, useAdapterLibrary } from '../services/adapters';
+import { type AdapterLibrary, AdapterUse, InstalledAdapter, SCORE_STRENGTH_LIMIT, familyLabel, localized, scoreStrength, startingScales, useAdapterLibrary } from '../services/adapters';
 import { NumberField } from './NumberField';
 
 /**
@@ -14,16 +14,18 @@ interface AdapterPickerProps {
   value: AdapterUse[];
   onChange: (next: AdapterUse[]) => void;
   /** A picked adapter's trigger word goes into the style, a removed one comes out. */
-  onTrigger: (word: string, present: boolean) => void;
+  onTrigger?: (word: string, present: boolean) => void;
   /** Renders the card frame the rest of the form uses. */
   frame: (title: string, icon: React.ReactNode, actions: React.ReactNode, body: React.ReactNode) => React.ReactElement;
   iconClass: string;
+  nativeLibrary?: AdapterLibrary;
 }
 
-export const AdapterPicker: React.FC<AdapterPickerProps> = ({ value, onChange, onTrigger, frame, iconClass }) => {
+export const AdapterPicker: React.FC<AdapterPickerProps> = ({ value, onChange, onTrigger, frame, iconClass, nativeLibrary }) => {
   const { t, language } = useI18n();
   const tt = t as unknown as (key: string) => string;
-  const { installed, slots, model } = useAdapterLibrary();
+  const localLibrary = useAdapterLibrary(!nativeLibrary);
+  const { installed, slots, model } = nativeLibrary ?? localLibrary;
   /** An adapter made for the other size of the model, which the engine cannot merge. */
   const otherSize = (adapter?: InstalledAdapter) => Boolean(adapter?.model && adapter.model !== 'lm' && model && adapter.model !== model);
   const [choosing, setChoosing] = useState(false);
@@ -44,14 +46,14 @@ export const AdapterPicker: React.FC<AdapterPickerProps> = ({ value, onChange, o
   const add = (adapter: InstalledAdapter) => {
     setChoosing(false);
     onChange([...value, { id: adapter.id, scales: startingScales(adapter, slots) }]);
-    if (adapter.trigger) onTrigger(adapter.trigger, true);
+    if (adapter.trigger) onTrigger?.(adapter.trigger, true);
   };
 
   const remove = (id: string) => {
     onChange(value.filter(use => use.id !== id));
     const trigger = installed.find(adapter => adapter.id === id)?.trigger;
     if (trigger && !value.some(use => use.id !== id && installed.find(adapter => adapter.id === use.id)?.trigger === trigger)) {
-      onTrigger(trigger, false);
+      onTrigger?.(trigger, false);
     }
   };
 
@@ -60,7 +62,7 @@ export const AdapterPicker: React.FC<AdapterPickerProps> = ({ value, onChange, o
 
   const available = installed.filter(adapter => !adapter.error && !value.some(use => use.id === adapter.id));
 
-  const actions = (
+  const actions = nativeLibrary ? null : (
     <button type="button" onClick={openPage} className={iconClass} title={t('adaptersOpenPage')}>
       <Layers size={14} />
     </button>
@@ -138,9 +140,9 @@ export const AdapterPicker: React.FC<AdapterPickerProps> = ({ value, onChange, o
       {installed.length === 0 ? (
         <div className="flex flex-wrap items-center justify-between gap-2">
           <span className="text-[11px] text-zinc-500">{t('adaptersNoneInstalled')}</span>
-          <button type="button" onClick={openPage} className="text-xs font-semibold text-pink-600 hover:underline dark:text-pink-400">
+          {!nativeLibrary && <button type="button" onClick={openPage} className="text-xs font-semibold text-pink-600 hover:underline dark:text-pink-400">
             {t('adaptersOpenPage')}
-          </button>
+          </button>}
         </div>
       ) : (
         available.length > 0 && (

@@ -262,7 +262,7 @@ export function usesFromSettings(settings: Record<string, unknown>): AdapterUse[
 export const megabytes = (bytes: number) => `${Math.max(1, Math.round(bytes / 1024 / 1024))} MB`;
 
 /** Installed adapters and slots, kept current while the library changes. */
-type AdapterLibrary = { installed: InstalledAdapter[]; slots: AdapterSlot[]; model: DitFamily | null };
+export type AdapterLibrary = { installed: InstalledAdapter[]; slots: AdapterSlot[]; model: DitFamily | null };
 
 const adaptersKey = ['adapters'] as const;
 /** Until the list is read: one value, so a screen's effects do not re-run on every render. */
@@ -276,10 +276,11 @@ if (typeof window !== 'undefined') {
 
 /** The installed adapters and the engine's slots, read once for every screen that shows them. */
 
-export function useAdapterLibrary(): AdapterLibrary {
+export function useAdapterLibrary(enabled = true): AdapterLibrary {
   return useQuery({
     queryKey: adaptersKey,
     queryFn: fetchAdapters,
+    enabled,
     select: (state) => ({ installed: state.installed, slots: state.slots, model: state.model ?? null }),
   }).data ?? NO_ADAPTERS;
 }
