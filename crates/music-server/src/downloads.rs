@@ -183,7 +183,7 @@ impl Downloader {
             return true;
         }
         let record = self.record_of(asset);
-        if !crate::pin_sha::runtime_libraries(asset.url).is_empty() {
+        if crate::engine_runtime::is_shared_windows_cublas(asset) {
             return self.is_verified_install(asset) || self.holds_pinned_bytes(asset, &record);
         }
         match crate::install_record::matches(&record, asset.url, &self.root) {
@@ -219,9 +219,10 @@ impl Downloader {
                 if !crate::pin_sha::holds(&path, sha) { return false; }
                 files.push(path);
             }
-            // The same archive pin identifies the verified member set whether
-            // we downloaded the archive or adopted all of its pinned DLLs.
-            file_sha256 = crate::pin_sha::sha256(asset.url).unwrap_or_default();
+            if crate::engine_runtime::is_shared_windows_cublas(asset) {
+                // Keep the archive identity after verifying all of its pinned members.
+                file_sha256 = crate::pin_sha::sha256(asset.url).unwrap_or_default();
+            }
             files
         } else if !asset.pick.is_empty() {
             let destination = self.picked_into(asset);

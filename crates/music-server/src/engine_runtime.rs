@@ -77,6 +77,10 @@ const CUBLAS12: Asset = Asset {
     note: "The linear algebra of the engine's CUDA 12 backend, for cards CUDA 13 dropped and older drivers.",
 };
 
+pub(crate) fn is_shared_windows_cublas(asset: &Asset) -> bool {
+    asset.url == CUBLAS12.url || asset.url == CUBLAS13.url
+}
+
 /// NVIDIA serves the same pinned Windows CUDA 12 archive from both domains.
 pub(crate) fn archive_mirror(url: &str) -> Option<&'static str> {
     (url == CUBLAS12.url).then_some(
@@ -618,7 +622,11 @@ mod tests {
         for library in &unpacked {
             std::fs::write(library, b"x").unwrap();
         }
-        crate::install_record::write(&runtime.downloader().record_of(asset), asset.url, "", &unpacked, runtime.downloader().root()).unwrap();
+        let record = runtime.downloader().record_of(asset);
+        crate::install_record::write(&record, asset.url, "", &unpacked, runtime.downloader().root()).unwrap();
+        assert!(!runtime.downloader().is_installed(asset), "a size-only receipt needs member verification");
+        let archive_sha = crate::pin_sha::sha256(asset.url).unwrap();
+        crate::install_record::write(&record, asset.url, archive_sha, &unpacked, runtime.downloader().root()).unwrap();
         assert!(runtime.downloader().is_installed(asset));
         assert!(!runtime.missing(Some(CudaBuild::Cuda13)).iter().any(|missing| missing.id == asset.id));
         std::fs::remove_dir_all(&data).ok();
