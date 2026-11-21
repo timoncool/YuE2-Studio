@@ -1,3 +1,5 @@
+pub(crate) mod inventory;
+pub(crate) mod rollback;
 pub(crate) mod updates;
 
 use std::io::Write;
@@ -65,9 +67,11 @@ impl Package for ModelPackage {
 }
 
 #[derive(Default, Deserialize, Serialize)]
-struct Selection {
+pub(crate) struct Selection {
     active: String,
     previous: Option<String>,
+    #[serde(default)]
+    automatic_updates_paused: bool,
 }
 
 pub(super) fn host_platform() -> String {
@@ -134,7 +138,53 @@ async fn download(
     transfer: &super::progress::Transfer,
 ) -> Result<()> {
     transfer.stage("downloading", Some(&file.name));
-    let mut response = client.get(&file.url).send().await?.error_for_status()?;
+    let primary = net::model_url(&file.url);
+    let initial_bytes = transfer.downloaded_bytes();
+    let mut source = primary.clone();
+    let mut mirrors = None;
+    loop {
+        let scratch = tempfile::tempdir_in(path.parent().context("missing package directory")?)?;
+        let staged = scratch.path().join("part");
+        let result = download_from(file, &source, &staged, client, transfer).await;
+        match result {
+            Ok(()) => {
+                tokio::fs::rename(&staged, path).await?;
+                return Ok(());
+            }
+            Err(error) => {
+                // Local write errors, including a full disk, affect every mirror.
+                if error.downcast_ref::<reqwest::Error>().is_none()
+                    && error.downcast_ref::<std::io::Error>().is_some()
+                {
+                    return Err(error);
+                }
+                drop(scratch);
+                transfer.set_downloaded_bytes(initial_bytes);
+                if mirrors.is_none() {
+                    let mut urls = crate::downloads::mirror_sources(client, &file.sha256).await;
+                    urls.retain(|url| url != &primary);
+                    mirrors = Some(urls.into_iter());
+                }
+                match mirrors.as_mut().and_then(Iterator::next) {
+                    Some(next) => source = next,
+                    None => {
+                        return Err(error)
+                            .with_context(|| format!("no verified download for {}", file.name));
+                    }
+                }
+            }
+        }
+    }
+}
+
+async fn download_from(
+    file: &PackageFile,
+    source: &str,
+    path: &Path,
+    client: &reqwest::Client,
+    transfer: &super::progress::Transfer,
+) -> Result<()> {
+    let mut response = client.get(source).send().await?.error_for_status()?;
     let mut writer = tokio::fs::File::create_new(path).await?;
     let mut hash = Sha256::new();
     let mut bytes = 0u64;
@@ -199,7 +249,11 @@ async fn materialize_model_file(
     Ok(reused)
 }
 
-async fn install<P: Package>(root: &Path, package: &P) -> Result<serde_json::Value> {
+async fn install<P: Package>(
+    root: &Path,
+    package: &P,
+    automatic: bool,
+) -> Result<serde_json::Value> {
     let total = package
         .files()
         .iter()
@@ -210,7 +264,7 @@ async fn install<P: Package>(root: &Path, package: &P) -> Result<serde_json::Val
     tokio::select! {
         biased;
         _ = cancelled.changed() => anyhow::bail!("Package installation cancelled"),
-        result = stage_package(root, package, &job.transfer) => result,
+        result = stage_package(root, package, &job.transfer, automatic) => result,
     }
 }
 
@@ -218,6 +272,7 @@ async fn stage_package<P: Package>(
     root: &Path,
     package: &P,
     transfer: &super::progress::Transfer,
+    automatic: bool,
 ) -> Result<serde_json::Value> {
     let objects = root.with_file_name("music-model-objects");
     let root = root.join(package.id());
@@ -230,6 +285,12 @@ async fn stage_package<P: Package>(
     fs2::FileExt::try_lock_exclusive(&lock)
         .context("an installation is already running for this engine")?;
     let selected = read_selection(&root)?;
+    if automatic {
+        ensure!(
+            !selected.active.is_empty() && !selected.automatic_updates_paused,
+            "automatic updates paused for this package"
+        );
+    }
     let prior = root.join(&selected.active);
     let manifest = serde_json::to_vec(package)?;
     let same_manifest = !selected.active.is_empty()
@@ -320,6 +381,7 @@ async fn stage_package<P: Package>(
     let selection = Selection {
         active: generation.clone(),
         previous: (!selected.active.is_empty()).then_some(selected.active),
+        automatic_updates_paused: false,
     };
     let mut next = tempfile::NamedTempFile::new_in(&root)?;
     serde_json::to_writer(next.as_file_mut(), &selection)?;
@@ -434,14 +496,28 @@ pub(crate) async fn status(
     let current = inspect_engine(update_data_root(&state), &id, None, query.probe)
         .await
         .map_err(|error| api_error(StatusCode::CONFLICT, format!("{error:#}")))?;
+    let selection = read_selection(
+        &update_data_root(&state)
+            .join(EnginePackage::FOLDER)
+            .join(&id),
+    )
+    .map_err(|e| api_error(StatusCode::CONFLICT, format!("{e:#}")))?;
     Ok(Json(
-        serde_json::json!({"id": id,"generation":current.generation,"version":current.version,
+        serde_json::json!({"id": id,"previous_generation":selection.previous.filter(|_| selection.active == current.generation),"generation":current.generation,"version":current.version,
         "verification":query.probe,"protocol":current.protocol,"executable":current.executable.file_name().and_then(|name| name.to_str())}),
     ))
 }
 pub(crate) async fn install_selected(
     State(state): State<AppState>,
     RoutePath(id): RoutePath<String>,
+) -> Result<Json<serde_json::Value>, Failure> {
+    update_engine(&state, &id, false).await
+}
+
+async fn update_engine(
+    state: &AppState,
+    id: &str,
+    automatic: bool,
 ) -> Result<Json<serde_json::Value>, Failure> {
     let catalog = current_catalogue().await?;
     let platform = host_platform();
@@ -462,7 +538,7 @@ pub(crate) async fn install_selected(
         ));
     }
     let root = update_data_root(&state).join("music-engines");
-    install(&root, package)
+    install(&root, package, automatic)
         .await
         .map(Json)
         .map_err(|e| api_error(StatusCode::CONFLICT, format!("{e:#}")))
@@ -507,13 +583,25 @@ pub(crate) async fn install_model(
     State(state): State<AppState>,
     RoutePath(id): RoutePath<String>,
 ) -> Result<Json<serde_json::Value>, Failure> {
+    update_model(&state, &id, false).await
+}
+
+async fn update_model(
+    state: &AppState,
+    id: &str,
+    automatic: bool,
+) -> Result<Json<serde_json::Value>, Failure> {
     let catalog = current_catalogue().await?;
     let model = ModelPackage::select(catalog, &id)
         .map_err(|e| api_error(StatusCode::NOT_FOUND, e.to_string()))?;
-    install(&update_data_root(&state).join(ModelPackage::FOLDER), &model)
-        .await
-        .map(Json)
-        .map_err(|e| api_error(StatusCode::CONFLICT, format!("{e:#}")))
+    install(
+        &update_data_root(state).join(ModelPackage::FOLDER),
+        &model,
+        automatic,
+    )
+    .await
+    .map(Json)
+    .map_err(|e| api_error(StatusCode::CONFLICT, format!("{e:#}")))
 }
 
 async fn current_catalogue() -> Result<Catalogue, Failure> {
@@ -537,7 +625,13 @@ pub(crate) async fn model_status(
     let model = inspect_model(update_data_root(&state), &engine, &id, None, query.probe)
         .await
         .map_err(|e| api_error(StatusCode::CONFLICT, format!("{e:#}")))?;
+    let selection = read_selection(
+        &update_data_root(&state)
+            .join(ModelPackage::FOLDER)
+            .join(&id),
+    )
+    .map_err(|e| api_error(StatusCode::CONFLICT, format!("{e:#}")))?;
     Ok(Json(
-        serde_json::json!({"id":id,"engine":engine,"generation":model.generation,"version":model.version,"verification":query.probe}),
+        serde_json::json!({"id":id,"previous_generation":selection.previous.filter(|_| selection.active == model.generation),"engine":engine,"generation":model.generation,"version":model.version,"verification":query.probe}),
     ))
 }
