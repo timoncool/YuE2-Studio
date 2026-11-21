@@ -1622,6 +1622,7 @@ function AppContent() {
                 musicEngine={musicEngine}
                 onMusicEngineChange={chooseMusicEngine}
                 onGenerate={generations.generate}
+                onCancelJob={generations.cancel}
                 isGenerating={generations.isGenerating}
                 activeJobCount={generations.activeJobCount}
                 queueBusy={generations.queueBusy}

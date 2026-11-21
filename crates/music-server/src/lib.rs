@@ -7508,6 +7508,7 @@ async fn compose_setup_status(state: &AppState, manager_status: model_manager::M
         let paused = engine_is_paused(state);
         let engine_ready = !paused && state.music_server.health().await;
         fields.insert("engine_paused".into(), Value::Bool(paused));
+        fields.insert("music_pair_instance_id".into(), Value::String(music_pair::instance_id().into()));
         fields.insert("signed_updates_revision".into(), Value::String(engine_catalogue::updates_revision()));
         let matches_selection = if engine_ready && selected_set_ready {
             // Restart holds this mutex while the weights load. Status polling must remain responsive.
