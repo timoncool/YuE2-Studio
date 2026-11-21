@@ -108,6 +108,19 @@ const type = (element: HTMLTextAreaElement | HTMLInputElement, value: string) =>
 const click = (element: Element) => act(() => { element.dispatchEvent(new MouseEvent('click', { bubbles: true })); });
 const buttonNamed = (text: string) => [...host.querySelectorAll('button')].find(button => button.textContent?.includes(text));
 
+it('sends the chosen library backing with the same score and words', async () => {
+  const abc = 'X:1\nM:4/4\nL:1/16\nQ:1/4=120\nK:C\nV: Vocal\n"C"z16|';
+  librarySongs = [{ id: 'backing', title: 'Instrumental recording', audioUrl: '/test.wav' } as Song];
+  act(() => root.render(panel({ request: { id: 1, kind: 'score', abc, lyrics: 'one line' } })));
+  await flush();
+  click(buttonNamed('chordBed')!);
+  const select = host.querySelector<HTMLSelectElement>('select[aria-label="Sing over a library backing track"]')!;
+  act(() => { select.value = 'backing'; select.dispatchEvent(new Event('change', { bubbles: true })); });
+  click(buttonNamed('create')!);
+  expect(sent[0]).toMatchObject({ backing_song_id: 'backing', abc, lyrics: 'one line' });
+  expect(sent[0].cover_of).toBeUndefined();
+});
+
 it('queues the other five readings with exactly one score and one pair of seeds', async () => {
   const abc = 'X:1\nK:C\nCDEF|';
   act(() => root.render(panel({ request: { id: 1, kind: 'score', abc, lyrics: 'one line' } })));

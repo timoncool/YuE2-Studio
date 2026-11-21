@@ -781,6 +781,14 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
   const composeRun = useRef<AbortController | null>(null);
   const [editorOpen, setEditorOpen] = useState(false);
   const [bedOpen, setBedOpen] = useState(false);
+  const [backingSongId, setBackingSongId] = useState('');
+  const backingSongs = useLibrarySongs(bedOpen && musicEngine === 'local');
+  const backingTracks = (backingSongs.data ?? []).filter(song => song.audioUrl && !song.isGenerating);
+  const backingLabel = {
+    en: 'Sing over a library backing track', ru: 'Спеть поверх аккомпанемента из библиотеки',
+    pt: 'Cantar sobre um acompanhamento da biblioteca', zh: '在曲库伴奏上演唱',
+    ja: 'ライブラリの伴奏に歌を重ねる', ko: '라이브러리 반주에 노래 얹기',
+  }[language];
   const [bedBpm, setBedBpm] = useState('100');
   const [bedKey, setBedKey] = useState('C');
   const [bedMeter, setBedMeter] = useState('4/4');
@@ -937,6 +945,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
     setContinueScore(request.abc_continue === true);
     setTranspose(asText(request.transpose) || '0');
     setVocalsOnly(request.vocals_only === true);
+    setBackingSongId(typeof request.backing_song_id === 'string' ? request.backing_song_id : '');
     setFadeIn(request.fade_in ? asText(request.fade_in) : '');
     setFadeOut(request.fade_out ? asText(request.fade_out) : '');
     setLyricTiming(request.lyric_timing !== false);
@@ -1111,6 +1120,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
     setAbcSampling(emptySampling()); setSemanticSampling(emptySampling()); setHarmony(emptyHarmony());
     setMp3Bitrate('320');
     setTranspose('0'); setVocalsOnly(false); setLyricTiming(true); setRealaudio('auto');
+    setBackingSongId('');
   };
 
   const loadExample = (id?: string) => {
@@ -1161,6 +1171,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
     if (!forFile || pinned(seedValue)) request.seed = pinned(seedValue) ? seedValue : randomSeed();
     if (semanticTokens.trim()) request.semantic_tokens = semanticTokens.trim();
     if (!forFile && mode === 'cover' && coverSongId && request.abc) request.cover_of = coverSongId;
+    if (musicEngine === 'local' && mode !== 'cover' && backingSongId) request.backing_song_id = backingSongId;
     const abcPreset = samplingFrom(abcSampling);
     if (abcPreset) request.abc_sampling = abcPreset;
     const semanticPreset = samplingFrom(semanticSampling);
@@ -2694,6 +2705,14 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
                 {bedOpen && (
                   <div className="mt-2 rounded-lg border border-zinc-100 p-2 dark:border-white/5">
                     <p className="mb-2 text-[11px] leading-4 text-zinc-500">{tt('chordBedHint')}</p>
+                    {musicEngine === 'local' && mode !== 'cover' && (
+                      <Field label={backingLabel}>
+                        <select aria-label={backingLabel} value={backingSongId} onChange={event => setBackingSongId(event.target.value)} className={CONTROL}>
+                          <option value="">—</option>
+                          {backingTracks.map(song => <option key={song.id} value={song.id}>{song.title}</option>)}
+                        </select>
+                      </Field>
+                    )}
                     <div className="grid grid-cols-3 gap-2">
                       <Field label={tt('chordBedTempo')}>
                         <input value={bedBpm} onChange={event => setBedBpm(event.target.value)} inputMode="numeric" className={CONTROL} />

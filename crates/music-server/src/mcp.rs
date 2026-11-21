@@ -1095,6 +1095,7 @@ fn rvc_runtime_route(args: &Value) -> String {
 }
 
 fn song_create_schema(mut properties: Value) -> Value {
+    properties["backing_song_id"] = json!({"type":"string","description":"Instrumental library song to use unchanged as the backing. Requires native YuE2, a matching Chord bed in abc, lyrics, and a ready vocal separator. Returns a mixed WAV."});
     for stage in ["abc_sampling", "semantic_sampling"] {
         let names: Vec<_> = crate::sampling_choices()[stage].as_object().unwrap().keys().collect();
         let knobs = properties[stage].take();
