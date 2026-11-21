@@ -1,4 +1,4 @@
-//! MiniMax Music3's offline audio.cpp task through the shared server.
+//! Offline music tasks through the shared audio.cpp server.
 use super::*;
 use acpp_server::asset::Build;
 use acpp_server::{Mode, ModelEntry};
@@ -36,6 +36,144 @@ const CONFIGS: [&str; 8] = [
     "tokenizer/tokenizer.json",
     "tokenizer/tokenizer_config.json",
 ];
+
+#[derive(Clone, Copy)]
+enum Family {
+    MiniMax,
+    HeartMuLa,
+    MiDasheng,
+    Vevo2,
+}
+
+impl Family {
+    fn parse(id: &str) -> Option<Self> {
+        match id {
+            FAMILY => Some(Self::MiniMax),
+            audio_cpp_heartmula::FAMILY => Some(Self::HeartMuLa),
+            audio_cpp_midasheng::FAMILY => Some(Self::MiDasheng),
+            audio_cpp_vevo2::FAMILY => Some(Self::Vevo2),
+            _ => None,
+        }
+    }
+
+    fn id(self) -> &'static str {
+        match self {
+            Self::MiniMax => FAMILY,
+            Self::HeartMuLa => audio_cpp_heartmula::FAMILY,
+            Self::MiDasheng => audio_cpp_midasheng::FAMILY,
+            Self::Vevo2 => audio_cpp_vevo2::FAMILY,
+        }
+    }
+
+    fn name(self) -> &'static str {
+        match self {
+            Self::MiniMax => "MiniMax Music3",
+            Self::HeartMuLa => "HeartMuLa",
+            Self::MiDasheng => "MiDashengLM-Gen",
+            Self::Vevo2 => audio_cpp_vevo2::NAME,
+        }
+    }
+
+    fn profile(self) -> &'static str {
+        match self {
+            Self::MiniMax => PROFILE,
+            Self::HeartMuLa => audio_cpp_heartmula::PROFILE,
+            Self::MiDasheng => audio_cpp_midasheng::PROFILE,
+            Self::Vevo2 => audio_cpp_vevo2::PROFILE,
+        }
+    }
+
+    fn directory(self, root: &FsPath) -> PathBuf {
+        match self {
+            Self::MiniMax => model_dir(root),
+            Self::HeartMuLa => audio_cpp_heartmula::model_dir(root),
+            Self::MiDasheng => audio_cpp_midasheng::model_dir(root),
+            Self::Vevo2 => audio_cpp_vevo2::model_dir(root),
+        }
+    }
+
+    fn missing(self, path: &FsPath) -> Vec<&'static str> {
+        match self {
+            Self::MiniMax => missing_files(path),
+            Self::HeartMuLa => audio_cpp_heartmula::missing_files(path),
+            Self::MiDasheng => audio_cpp_midasheng::missing_files(path),
+            Self::Vevo2 => audio_cpp_vevo2::missing_files(path),
+        }
+    }
+
+    fn entry(self, path: PathBuf) -> ModelEntry {
+        match self {
+            Self::MiniMax => entry(path),
+            Self::HeartMuLa => audio_cpp_heartmula::entry(path),
+            Self::MiDasheng => audio_cpp_midasheng::entry(path),
+            Self::Vevo2 => audio_cpp_vevo2::entry(path),
+        }
+    }
+
+    fn task(
+        self,
+        request: &CreateMusicJobRequest,
+        library: &library::Library,
+    ) -> anyhow::Result<PreparedTask> {
+        match self {
+            Self::MiniMax => task(request).map(PreparedTask::Json),
+            Self::HeartMuLa => audio_cpp_heartmula::task(request).map(PreparedTask::Json),
+            Self::MiDasheng => audio_cpp_midasheng::task(request).map(PreparedTask::Json),
+            Self::Vevo2 => audio_cpp_vevo2::task(request, library).map(PreparedTask::Singing),
+        }
+    }
+
+    fn catalog(self, root: Option<&FsPath>, runtime_ready: bool) -> Value {
+        match self {
+            Self::MiniMax => minimax_catalog(root, runtime_ready),
+            Self::HeartMuLa => audio_cpp_heartmula::catalog(root, runtime_ready),
+            Self::MiDasheng => match root {
+                Some(root) => audio_cpp_midasheng::catalog(&self.directory(root), runtime_ready),
+                None => {
+                    let mut row = audio_cpp_midasheng::catalog(FsPath::new(""), runtime_ready);
+                    row["ready"] = Value::Bool(false);
+                    row["missing"] = serde_json::json!(if runtime_ready {
+                        vec!["Studio data folder"]
+                    } else {
+                        vec!["Studio data folder", "audio.cpp runtime"]
+                    });
+                    row
+                }
+            },
+            Self::Vevo2 => audio_cpp_vevo2::catalog(root, runtime_ready),
+        }
+    }
+}
+
+enum PreparedTask {
+    Json(Value),
+    Singing(audio_cpp_vevo2::SingingTask),
+}
+
+impl PreparedTask {
+    fn into_request(self) -> anyhow::Result<(Value, Option<tempfile::TempDir>)> {
+        match self {
+            Self::Json(body) => Ok((body, None)),
+            Self::Singing(task) => task
+                .into_request()
+                .map(|(body, directory)| (body, Some(directory))),
+        }
+    }
+}
+
+pub(super) fn registered_model_ready(model: &ModelEntry) -> Option<bool> {
+    let family = Family::parse(&model.family)?;
+    if model.id != family.id() || !matches!(model.mode, Mode::Offline) {
+        return None;
+    }
+    let directory = match family {
+        Family::MiniMax if model.task == "gen" => Some(model.path.as_path()),
+        Family::HeartMuLa | Family::MiDasheng if model.task == "gen" => model.path.parent(),
+        Family::Vevo2 if model.task == "tts" => model.path.parent(),
+        _ => return None,
+    };
+    Some(directory.is_some_and(|path| family.missing(path).is_empty()))
+}
 
 fn model_dir(root: &FsPath) -> PathBuf {
     root.join("audiocpp/models").join(FAMILY)
@@ -98,23 +236,57 @@ async fn build(state: &AppState) -> anyhow::Result<Build> {
 }
 
 pub(super) async fn models(State(state): State<AppState>) -> Json<Value> {
-    let mut missing = studio_data_root().map_or_else(
-        || vec!["Studio data folder"],
-        |root| missing_files(&model_dir(&root)),
-    );
+    let root = studio_data_root();
     let build = build(&state).await;
     let runtime_ready = build
         .as_ref()
         .is_ok_and(|build| state.acpp.exe(*build).is_file() && state.acpp.installed(*build));
+    Json(serde_json::json!({
+        "engine": ENGINE,
+        "models": [Family::MiniMax, Family::HeartMuLa, Family::MiDasheng, Family::Vevo2]
+            .map(|family| family.catalog(root.as_deref(), runtime_ready))
+    }))
+}
+
+fn minimax_catalog(root: Option<&FsPath>, runtime_ready: bool) -> Value {
+    let mut missing = root.map_or_else(
+        || vec!["Studio data folder"],
+        |root| missing_files(&model_dir(root)),
+    );
     if !runtime_ready {
         missing.push("audio.cpp runtime");
     }
-    Json(serde_json::json!({
-        "engine": ENGINE,
-        "models": [{"id": FAMILY, "name": "MiniMax Music3", "profile_id": PROFILE,
-            "quantization": QUANTIZATION, "status": "experimental", "ready": missing.is_empty(), "missing": missing,
-            "requires": ["style", "lyrics"], "output_formats": ["flac", "mp3", "wav32"]}]
-    }))
+    serde_json::json!({
+        "id": FAMILY, "name": "MiniMax Music3", "profile_id": PROFILE,
+        "quantization": QUANTIZATION, "status": "experimental", "ready": missing.is_empty(), "missing": missing,
+        "requires": ["style", "lyrics"], "output_formats": ["flac", "mp3", "wav32"]
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn music_registry_keeps_native_task_and_model_profile() {
+        let root = tempfile::tempdir().unwrap();
+        for (family, task) in [
+            (Family::MiniMax, "gen"),
+            (Family::HeartMuLa, "gen"),
+            (Family::MiDasheng, "gen"),
+            (Family::Vevo2, "tts"),
+        ] {
+            let row = family.catalog(Some(root.path()), true);
+            assert_eq!(row["id"], family.id());
+            assert_eq!(row["profile_id"], family.profile());
+            assert_eq!(row["ready"], false);
+            let entry = family.entry(family.directory(root.path()));
+            assert_eq!(entry.id, family.id());
+            assert_eq!(entry.task, task);
+            assert_eq!(registered_model_ready(&entry), Some(false));
+        }
+        assert!(Family::parse("minimax_h3").is_none());
+    }
 }
 
 fn task(request: &CreateMusicJobRequest) -> anyhow::Result<Value> {
@@ -174,14 +346,14 @@ pub(super) async fn submit(
             Json(failed_request_job(request.clone(), ENGINE.into(), reason)),
         )
     };
-    if model != FAMILY {
+    let Some(family) = Family::parse(&model) else {
         return reject(
             StatusCode::BAD_REQUEST,
             format!("Unknown audio.cpp music model {model}."),
         );
-    }
-    let body = match task(&request) {
-        Ok(body) => body,
+    };
+    let task = match family.task(&request, &state.library) {
+        Ok(task) => task,
         Err(error) => return reject(StatusCode::BAD_REQUEST, error.to_string()),
     };
     let format = request.output_format.as_deref().unwrap_or("flac");
@@ -201,13 +373,14 @@ pub(super) async fn submit(
             "Studio data folder is unavailable.".into(),
         );
     };
-    let path = model_dir(&root);
-    let missing = missing_files(&path);
+    let path = family.directory(&root);
+    let missing = family.missing(&path);
     if !missing.is_empty() {
         return reject(
             StatusCode::SERVICE_UNAVAILABLE,
             format!(
-                "MiniMax Music3 weights in {} are incomplete: {}.",
+                "{} weights in {} are incomplete: {}.",
+                family.name(),
                 path.display(),
                 missing.join(", ")
             ),
@@ -242,6 +415,31 @@ pub(super) async fn submit(
     }
     state.minimax.stop().await;
     evict_kept_models(&state, "before audio.cpp music generation").await;
+    let mut settings = serde_json::json!({
+        "music_source": request.music_source, "family": family.id(), "profile_id": family.profile(),
+        "quantization": QUANTIZATION, "backend": build.backend(),
+        "duration_seconds": request.duration_seconds, "steps": request.steps,
+        "seed": request.seed, "guidance_scale": request.cfg_scale,
+        "output_format": format, "mp3_bitrate": bitrate,
+        "fade_in": request.fade_in.unwrap_or_default().max(0.0),
+        "fade_out": request.fade_out.unwrap_or_default().max(0.0)
+    });
+    match (&family, &task) {
+        (Family::MiniMax, PreparedTask::Json(body)) => {
+            settings["weight_files"] = serde_json::json!(weights());
+            settings["shared_weight_files"] = serde_json::json!(SHARED_WEIGHTS);
+            settings["duration_seconds"] = body["duration_seconds"].clone();
+            settings["steps"] = body["num_inference_steps"].clone();
+            settings["seed"] = body["seed"].clone();
+        }
+        (Family::HeartMuLa, _) => settings["heartmula"] = serde_json::json!(request.heartmula),
+        (Family::MiDasheng, _) => settings["midasheng"] = serde_json::json!(request.midasheng),
+        (Family::Vevo2, _) => {
+            settings["route"] = Value::from(audio_cpp_vevo2::ROUTE);
+            settings["vevo2"] = serde_json::json!(request.vevo2);
+        }
+        _ => unreachable!(),
+    }
     let job = MusicJob {
         derived: None,
         id: format!("audio-cpp-{}", uuid_suffix()),
@@ -255,18 +453,11 @@ pub(super) async fn submit(
         phase: MusicJobPhase::Running,
         style: request.style.clone(),
         lyrics: request.lyrics.clone(),
-        duration_seconds: body["duration_seconds"].as_f64().unwrap_or_default(),
-        generation_settings: serde_json::json!({
-            "music_source": request.music_source, "family": FAMILY, "profile_id": PROFILE,
-            "quantization": QUANTIZATION, "weight_files": weights(), "shared_weight_files": SHARED_WEIGHTS,
-            "backend": build.backend(), "duration_seconds": body["duration_seconds"], "steps": body["num_inference_steps"],
-            "seed": body["seed"], "guidance_scale": body.get("guidance_scale"), "output_format": format,
-            "mp3_bitrate": bitrate, "fade_in": request.fade_in.unwrap_or_default().max(0.0),
-            "fade_out": request.fade_out.unwrap_or_default().max(0.0)
-        }),
+        duration_seconds: settings["duration_seconds"].as_f64().unwrap_or_default(),
+        generation_settings: settings,
         song: None,
         songs: vec![],
-        message: "MiniMax Music3 is generating through audio.cpp.".into(),
+        message: format!("{} is generating through audio.cpp.", family.name()),
         code: None,
         params: None,
         playlist_id: request.playlist_id.clone(),
@@ -295,19 +486,19 @@ pub(super) async fn submit(
         let settings = job.generation_settings.clone();
         let outcome = tokio::task::spawn_blocking(move || {
             anyhow::ensure!(!stop.load(Ordering::SeqCst), "stopped");
+            let (body, _references) = task.into_request()?;
             acpp.with_server(
                 build,
-                entry(path),
+                family.entry(path),
                 &|| stop.load(Ordering::SeqCst),
                 |server| {
                     anyhow::ensure!(!stop.load(Ordering::SeqCst), "stopped");
                     // A disconnected JSON client still leaves the shared server running.
                     // Hold its lease until the answer so tools cannot replace it mid-task.
-                    let reply = server.run_task(FAMILY, body, &AtomicBool::new(false));
-                    // The shared server retains models indefinitely. Release only
-                    // Music3 before another music engine can claim the card.
-                    if let Err(error) = server.unload(&[FAMILY]) {
-                        studio_log!("[ERROR] unloading audio.cpp MiniMax Music3: {error:#}");
+                    let reply = server.run_task(family.id(), body, &AtomicBool::new(false));
+                    // Release only this model before another engine can claim the card.
+                    if let Err(error) = server.unload(&[family.id()]) {
+                        studio_log!("[ERROR] unloading audio.cpp {}: {error:#}", family.name());
                     }
                     anyhow::ensure!(!stop.load(Ordering::SeqCst), "stopped");
                     shape(&reply?, &settings)
@@ -317,7 +508,7 @@ pub(super) async fn submit(
         .await
         .context("the audio.cpp worker stopped")
         .and_then(|result| result);
-        complete(&state, &job.id, outcome).await;
+        complete(&state, &job.id, family, outcome).await;
         state.audio_cpp_music_stops.write().await.remove(&job.id);
     });
     (StatusCode::ACCEPTED, Json(accepted))
@@ -327,7 +518,11 @@ fn shape(reply: &Value, settings: &Value) -> anyhow::Result<native_music_jobs::S
     let encoded = reply["audio"]
         .as_str()
         .context("audio.cpp returned no song audio")?;
-    let bytes = base64::engine::general_purpose::STANDARD.decode(encoded)?;
+    let payload = encoded
+        .strip_prefix("data:")
+        .and_then(|url| url.split_once(','))
+        .map_or(encoded, |(_, data)| data);
+    let bytes = base64::engine::general_purpose::STANDARD.decode(payload)?;
     let format = output_format(settings);
     let bitrate = settings["mp3_bitrate"].as_u64().map(|value| value as u32);
     let fade = |key| settings[key].as_f64().unwrap_or_default() as f32;
@@ -337,6 +532,7 @@ fn shape(reply: &Value, settings: &Value) -> anyhow::Result<native_music_jobs::S
 fn save(
     library: &library::Library,
     job: &MusicJob,
+    family: Family,
     output: native_music_jobs::ShapedOutput,
 ) -> anyhow::Result<library::ImportedSong> {
     let mut settings = job.generation_settings.clone();
@@ -352,7 +548,7 @@ fn save(
         replay_request: None,
         audio_codes: None,
         engine_id: ENGINE.into(),
-        profile_id: Some(PROFILE.into()),
+        profile_id: Some(family.profile().into()),
         source: "local_generation".into(),
         audio_extension: output.extension,
         audio: output.audio,
@@ -362,6 +558,7 @@ fn save(
 async fn complete(
     state: &AppState,
     id: &str,
+    family: Family,
     outcome: anyhow::Result<native_music_jobs::ShapedOutput>,
 ) {
     let mut jobs = state.jobs.write().await;
@@ -369,7 +566,7 @@ async fn complete(
     if !matches!(job.status, MusicJobStatus::Running) {
         return;
     }
-    let song_id = match outcome.and_then(|output| save(&state.library, job, output)) {
+    let song_id = match outcome.and_then(|output| save(&state.library, job, family, output)) {
         Ok(imported) => {
             let id = imported.song.id.clone();
             if let Some(playlist) = &job.playlist_id
@@ -391,7 +588,7 @@ async fn complete(
             job.songs = vec![song];
             job.status = MusicJobStatus::Completed;
             job.phase = MusicJobPhase::Completed;
-            job.message = "MiniMax Music3 song saved to the library.".into();
+            job.message = format!("{} song saved to the library.", family.name());
             Some(id)
         }
         Err(error) => {

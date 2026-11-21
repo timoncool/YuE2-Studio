@@ -240,11 +240,8 @@ impl Acpp {
         let complete = |path: &Path| path.is_file() || ["config.json", "model.safetensors"].iter().all(|file| path.join(file).is_file());
         let known = self.known.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
         let mut models: Vec<ModelEntry> = known.iter().filter(|model| {
-            if model.task == "gen" && model.family == "minimax_music3" {
-                crate::audio_cpp_music::missing_files(&model.path).is_empty()
-            } else {
-                complete(&model.path)
-            }
+            crate::audio_cpp_music::registered_model_ready(model)
+                .unwrap_or_else(|| complete(&model.path))
         }).cloned().collect();
         models.sort_by(|a, b| a.id.cmp(&b.id));
         models

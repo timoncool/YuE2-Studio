@@ -15,7 +15,10 @@ mod cover_prompt;
 mod providers;
 mod openrouter_stream;
 mod native_minimax;
+mod audio_cpp_heartmula;
+mod audio_cpp_midasheng;
 mod audio_cpp_music;
+mod audio_cpp_vevo2;
 mod native_music_jobs;
 mod native_ace_jobs;
 mod assistant;
@@ -301,6 +304,12 @@ struct CreateMusicJobRequest {
     music_source: Option<MusicSource>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     ace: Option<native_ace_jobs::AceOptions>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    heartmula: Option<audio_cpp_heartmula::HeartMuLaOptions>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    midasheng: Option<audio_cpp_midasheng::MiDashengPrompt>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    vevo2: Option<audio_cpp_vevo2::Options>,
     /// The window's own mark for this request, handed back on the job so the
     /// window knows the job as its own before the response reaches it.
     client_ref: Option<String>,
