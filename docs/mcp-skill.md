@@ -267,6 +267,13 @@ relative to the Studio data directory. When ready, use `sound_effect_create`
 with an English or Chinese description and optional `duration_seconds` from
 0.1 to 30. Follow `song_job_get` until it saves the result in the library.
 
+For ControlFoley video-to-audio, read `controlfoley_model_get` for the offline
+Q8 package and prerequisites. The Studio computer needs FFmpeg on its PATH.
+Use `controlfoley_video_import` with a local MP4, MOV, WebM or MKV. Pass the
+returned name to `controlfoley_create` and optionally add a sound description.
+Studio decodes up to the first 8 seconds and saves the generated audio separately
+in the library. Follow the job with `song_job_get` or cancel it with `song_job_cancel`.
+
 For an OpenRouter generation, read `openrouter_catalog` and select an ID whose
 `capabilities` include `music_generation`. Pass that exact ID as
 `music_source.model`, with `music_source.kind` set to `openrouter`.
