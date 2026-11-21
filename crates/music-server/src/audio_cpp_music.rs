@@ -873,10 +873,11 @@ async fn submit_with_source(
         return reject(StatusCode::CONFLICT, format!("ACE-Step is busy: {error:#}"));
     }
     state.minimax.stop().await;
-    // Keep explicit CPU residency separate from the accelerator budget and other audio.cpp tools.
-    let keep_weights = matches!(build, Build::Cpu)
-        && matches!(state.engine_options.read().await.keep_loaded, KeepLoaded::Yes);
-    evict_kept_models(&state, "before audio.cpp music generation").await;
+    let keep_weights = matches!(state.engine_options.read().await.keep_loaded, KeepLoaded::Yes);
+    if !family.dedicated() {
+        state.acpp.evict_idle_card_music();
+    }
+    evict_native_kept_models(&state, "before audio.cpp music generation").await;
     let mut settings = serde_json::json!({
         "music_source": request.music_source, "family": family.id(), "profile_id": family.profile(),
         "quantization": family.quantization(), "backend": build.backend(),

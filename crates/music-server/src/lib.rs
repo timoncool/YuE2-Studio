@@ -6367,6 +6367,12 @@ async fn engine_options(State(state): State<AppState>) -> Json<Value> {
     Json(serde_json::json!({
         "options": options,
         "platform": std::env::consts::OS,
+        "audio_cpp_keep_loaded": state.acpp.music_keep().map(|decision| serde_json::json!({
+            "keep_loaded": decision.keep,
+            "keep_loaded_reason": decision.reason,
+            "keep_loaded_need_gb": decision.need_gib,
+            "keep_loaded_free_gb": decision.free_gib,
+        })),
         "in_effect": in_effect,
         "saved_max_seq": saved_max_seq,
         "effective_max_batch": options.effective_max_batch(),
@@ -7032,6 +7038,11 @@ async fn models_kept(state: &AppState) -> bool {
 }
 
 async fn evict_kept_models(state: &AppState, before: &str) {
+    state.acpp.evict_idle_card_music();
+    evict_native_kept_models(state, before).await;
+}
+
+async fn evict_native_kept_models(state: &AppState, before: &str) {
     let holds = state.engine_idle_since.lock().unwrap_or_else(std::sync::PoisonError::into_inner).is_some();
     if !holds || !models_kept(state).await || !state.music_server.health().await {
         return;
