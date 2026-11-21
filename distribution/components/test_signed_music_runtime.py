@@ -64,20 +64,27 @@ def file_pins(files):
     ]
 
 
-def make_packages(work, adapter, native, models):
+def make_packages(work, adapter, native, models, updated_native, updated_vae):
     suffix = ".exe" if sys.platform == "win32" else ""
     exe_name = f"music-adapter{suffix}"
     expected_os = {"win32": "windows", "darwin": "macos", "linux": "linux"}[sys.platform]
     arch = {"amd64": "x86_64", "x86_64": "x86_64", "arm64": "aarch64", "aarch64": "aarch64"}[platform.machine().lower()]
-    engine_files = {
-        f"ace-server{suffix}": native / f"ace-server{suffix}",
-        exe_name: adapter,
-        **{file.name: file for file in native.iterdir()
-           if file.is_file() and (file.suffix in {".dll", ".dylib"} or ".so" in file.suffixes)
-           and "cuda" not in file.name.lower() and "cublas" not in file.name.lower()},
-    }
+    def native_files(directory):
+        return {
+            f"ace-server{suffix}": directory / f"ace-server{suffix}",
+            exe_name: adapter,
+            **{file.name: file for file in directory.iterdir()
+               if file.is_file() and (file.suffix in {".dll", ".dylib"} or ".so" in file.suffixes)
+               and "cuda" not in file.name.lower() and "cublas" not in file.name.lower()},
+        }
     weights = {file.name: file for file in models.glob("*.gguf")}
-    assert len(weights) == 3, "Provide only the three Turbo ACE GGUF files"
+    assert len(weights) == 3 and "vae-BF16.gguf" in weights, "Provide only the three Turbo ACE GGUF files"
+    engines = {1: native_files(native), 2: native_files(updated_native)}
+    models_by_version = {1: weights, 2: weights | {"vae-BF16.gguf": updated_vae}}
+    engine_pins = {version: file_pins(files) for version, files in engines.items()}
+    model_pins = {version: file_pins(files) for version, files in models_by_version.items()}
+    for name, versions in ((f"ace-server{suffix}", engine_pins), ("vae-BF16.gguf", model_pins)):
+        assert len({pin["sha256"] for pins in versions.values() for pin in pins if pin["name"] == name}) == 2, name
     keys = {name: CryptoSigner.generate_ed25519() for name in ["root", "snapshot", "timestamp", "targets"]}
     expires = datetime.now(timezone.utc) + timedelta(days=1)
     root = Root(expires=expires)
@@ -86,51 +93,65 @@ def make_packages(work, adapter, native, models):
     boot = work / "bin/component-channel"
     boot.mkdir(parents=True)
     (boot / "root.json").write_bytes(sign(root, keys["root"]))
-    all_pins = file_pins(engine_files), file_pins(weights)
     data = work / "data"
     engine_dir = data / "music-engines" / ENGINE
     model_dir = data / "music-models" / MODEL
 
     def publish(release):
-        version = f"{release}.0"
-        generation = f"generation-qa{release:04d}"
-        engine = {"id": ENGINE, "name": "Fixture ACE", "version": version,
+        engine_version = 1 if release == 1 else 2
+        model_version = 1 if release < 3 else 2
+        engine = {"id": ENGINE, "name": "Fixture ACE", "version": f"{engine_version}.0",
                   "platform": f"{expected_os}-{arch}", "protocol": "music-http-v1",
-                  "executable": exe_name, "files": all_pins[0]}
-        model = {"id": MODEL, "name": "Fixture ACE Turbo", "version": version,
-                 "engines": [ENGINE], "files": all_pins[1]}
+                  "executable": exe_name, "files": engine_pins[engine_version]}
+        model = {"id": MODEL, "name": "Fixture ACE Turbo", "version": f"{model_version}.0",
+                 "engines": [ENGINE], "files": model_pins[model_version]}
         encoded = json.dumps({"schema": 1, "engines": [engine], "models": [model]}).encode()
         target = TargetFile.from_data(TARGET, encoded, ["sha256"])
         targets = sign(Targets(version=release, expires=expires, targets={TARGET: target}), keys["targets"])
-        snapshot = sign(Snapshot(version=release, expires=expires,
+        snapshot_metadata = sign(Snapshot(version=release, expires=expires,
                                  meta={"targets.json": MetaFile.from_data(release, targets, ["sha256"])}), keys["snapshot"])
         timestamp = sign(Timestamp(version=release, expires=expires,
-                                   snapshot_meta=MetaFile.from_data(release, snapshot, ["sha256"])), keys["timestamp"])
-        for parent, package, sources in [(engine_dir, engine, engine_files), (model_dir, model, weights)]:
-            installed = parent / generation
-            (installed / "proof/metadata").mkdir(parents=True)
-            (installed / "proof/targets").mkdir()
-            (installed / "files").mkdir()
-            for name, contents in (("timestamp.json", timestamp), (f"{release}.snapshot.json", snapshot),
-                                   (f"{release}.targets.json", targets)):
-                (installed / "proof/metadata" / name).write_bytes(contents)
-            (installed / "proof/targets" / (target.hashes["sha256"] + "." + TARGET)).write_bytes(encoded)
+                                   snapshot_meta=MetaFile.from_data(release, snapshot_metadata, ["sha256"])), keys["timestamp"])
+        catalogue = data / "component-channel/music-engines"
+        snapshot_name = f"snapshot-{release:06d}"
+        snapshot = catalogue / snapshot_name
+        (snapshot / "metadata").mkdir(parents=True)
+        (snapshot / "targets").mkdir()
+        for name, contents in (("timestamp.json", timestamp), (f"{release}.snapshot.json", snapshot_metadata),
+                               (f"{release}.targets.json", targets)):
+            (snapshot / "metadata" / name).write_bytes(contents)
+        (snapshot / "targets" / (target.hashes["sha256"] + "." + TARGET)).write_bytes(encoded)
+        changed = [(engine_dir, engine, engines[engine_version], engine_version),
+                   (model_dir, model, models_by_version[model_version], model_version)]
+        if release == 2:
+            changed = changed[:1]
+        elif release == 3:
+            changed = changed[1:]
+        for parent, package, sources, version in changed:
+            installed = parent / f"generation-qa{version:04d}"
+            (installed / "files").mkdir(parents=True)
+            shutil.copytree(snapshot, installed / "proof")
             write(installed / "manifest.json", package)
             for name, source in sources.items():
-                hardlink_or_copy(source, installed / "files" / name)
-        return generation
+                if parent == model_dir:
+                    os.link(source, installed / "files" / name)
+                else:
+                    hardlink_or_copy(source, installed / "files" / name)
+        return snapshot_name
 
-    first, second = publish(1), publish(2)
-    catalogue = data / "component-channel/music-engines"
-    shutil.copytree(engine_dir / first / "proof", catalogue / "snapshot-signed")
-    (catalogue / "accepted").write_text("snapshot-signed", encoding="utf-8")
+    first, second = "generation-qa0001", "generation-qa0002"
+    accepted = data / "component-channel/music-engines/accepted"
+    snapshots = {release: publish(release) for release in (1, 2, 3)}
+    accepted.write_text(snapshots[1], encoding="utf-8")
     for folder in (engine_dir, model_dir):
         write(folder / "active.json", {"active": first})
-    return data, engine_dir, model_dir, first, second, exe_name, all_pins
+    return (data, engine_dir, model_dir, first, second, exe_name, engine_pins, model_pins, accepted,
+            snapshots, engines, models_by_version)
 
 
-def run(work, binary, adapter, native, models):
-    data, engine_dir, model_dir, first, second, exe_name, pins = make_packages(work, adapter, native, models)
+def run(work, binary, adapter, native, models, updated_native, updated_vae):
+    (data, engine_dir, model_dir, first, second, exe_name, engine_pins, model_pins, accepted,
+     snapshots, engines, models_by_version) = make_packages(work, adapter, native, models, updated_native, updated_vae)
     binary = Path(shutil.copy2(binary, work / "bin" / binary.name))
     with socket.socket() as listener:
         listener.bind(("127.0.0.1", 0))
@@ -188,6 +209,35 @@ def run(work, binary, adapter, native, models):
         assert 3.9 <= duration <= 4.1 and any(abs(sample) > .001 for sample, in struct.iter_unpack("<f", frames))
         return {"duration": duration, "sha256": digest(output), "pcm_sha256": hashlib.sha256(frames).hexdigest()}
 
+    def processes():
+        if sys.platform == "win32":
+            script = """Get-CimInstance Win32_Process -Filter "Name = 'music-adapter.exe' OR Name = 'ace-server.exe'" |
+                ForEach-Object { "$($_.ProcessId) $($_.ParentProcessId) $($_.Name)" }"""
+            command = ["powershell.exe", "-NoProfile", "-NonInteractive", "-Command", script]
+        else:
+            command = ["ps", "-eo", "pid=,ppid=,comm="]
+        return {int(pid): (int(parent), Path(name).stem.lower())
+                for pid, parent, name in (line.strip().split(maxsplit=2) for line in subprocess.check_output(
+                    command, text=True, timeout=10).splitlines() if line.strip())}
+
+    def activate(release, folder):
+        for path, value in ((accepted, snapshots[release]), (folder / "active.json", json.dumps(
+                {"active": second, "previous": first}))):
+            replacement = path.with_suffix(".next")
+            replacement.write_text(value, encoding="utf-8")
+            replacement.replace(path)
+
+    def assert_pair(engine_version, model_version):
+        catalogue = tool("music_engine_catalog_list", {})
+        assert catalogue["source"] == "signed" and catalogue["engines"][0]["id"] == ENGINE
+        assert catalogue["models"][0]["id"] == MODEL and ENGINE in catalogue["models"][0]["engines"]
+        assert catalogue["engines"][0]["version"] == f"{engine_version}.0"
+        assert catalogue["models"][0]["version"] == f"{model_version}.0"
+        engine_status = tool("music_engine_package_status", {"id": ENGINE})
+        model_status = tool("music_model_package_status", {"engine": ENGINE, "model": MODEL})
+        assert engine_status["generation"] == f"generation-qa{engine_version:04d}"
+        assert model_status["generation"] == f"generation-qa{model_version:04d}"
+
     source = {"kind": "signed", "engine": ENGINE, "model": MODEL}
     request = {"music_source": source, "style": "Instrumental funk groove, clean electric bass and dry drums",
                "lyrics": "[Instrumental]", "title": "Signed ACE control", "duration_seconds": 4,
@@ -210,11 +260,7 @@ def run(work, binary, adapter, native, models):
             names = {entry["name"] for entry in rpc_call("tools/list", {})["tools"]}
             assert {"song_create", "song_replay", "music_engine_catalog_list",
                     "music_engine_package_status", "music_model_package_status"} <= names
-            catalogue = tool("music_engine_catalog_list", {})
-            assert catalogue["source"] == "signed" and catalogue["engines"][0]["id"] == ENGINE
-            assert catalogue["models"][0]["id"] == MODEL and ENGINE in catalogue["models"][0]["engines"]
-            assert tool("music_engine_package_status", {"id": ENGINE})["generation"] == first
-            assert tool("music_model_package_status", {"engine": ENGINE, "model": MODEL})["generation"] == first
+            assert_pair(1, 1)
             original = complete(tool("song_create", request))
             before = json.loads(call(f"/v1/library/songs/{original}"))
             identity = before["metadata"]["signed_engine"]
@@ -224,8 +270,20 @@ def run(work, binary, adapter, native, models):
             assert before["replay_request"]["signed_engine"] == identity
             first_wav = download(original, "original")
 
-            for folder in (engine_dir, model_dir):
-                write(folder / "active.json", {"active": second, "previous": first})
+            publications = []
+            for release, folder, engine_version, model_version in (
+                    (2, engine_dir, 2, 1), (3, model_dir, 2, 2)):
+                activate(release, folder)
+                assert_pair(engine_version, model_version)
+                song_id = complete(tool("song_create", request | {"seed": 42 + release}))
+                song = json.loads(call(f"/v1/library/songs/{song_id}"))
+                selected = song["metadata"]["signed_engine"]
+                assert selected == identity | {
+                    "generation": f"generation-qa{engine_version:04d}", "version": f"{engine_version}.0",
+                    "model_generation": f"generation-qa{model_version:04d}", "model_version": f"{model_version}.0"}
+                assert song["replay_request"]["signed_engine"] == selected and server.poll() is None
+                publications.append({"release": release, "song": song_id, "identity": selected,
+                                     "audio": download(song_id, f"publication-{release}")})
             replay = complete(tool("song_replay", {"song_id": original, "seed": 43}))
             saved = json.loads(call(f"/v1/library/songs/{replay}"))
             assert replay != original and saved["metadata"]["signed_engine"] == identity
@@ -237,10 +295,27 @@ def run(work, binary, adapter, native, models):
             assert original_after["pcm_sha256"] == first_wav["pcm_sha256"]
             after = json.loads(call(f"/v1/library/songs/{original}"))
             assert after["replay_request"] == before["replay_request"] and after["metadata"]["signed_engine"] == identity
+            for publication in publications:
+                source_id = publication["song"]
+                release = publication["release"]
+                replay_id = complete(tool("song_replay", {"song_id": source_id, "seed": 50 + release}))
+                take = json.loads(call(f"/v1/library/songs/{replay_id}"))
+                assert replay_id != source_id and take["metadata"]["derived"]["from"] == source_id
+                assert take["replay_request"]["signed_engine"] == publication["identity"]
+                assert take["replay_request"]["payload"]["seed"] == 50 + release
+                replay_audio = download(replay_id, f"publication-{release}-replay")
+                assert replay_audio["pcm_sha256"] != publication["audio"]["pcm_sha256"]
+                publication["replay"] = {"song": replay_id, "audio": replay_audio}
 
             long_job = tool("song_create", request | {"duration_seconds": 45, "steps": 32})
+            workers = processes()
+            adapter_pid, = [pid for pid, (parent, name) in workers.items()
+                            if parent == server.pid and name == "music-adapter"]
+            native_pid, = [pid for pid, (parent, name) in workers.items()
+                           if parent == adapter_pid and name == "ace-server"]
             assert json.loads(call(f"/v1/music/jobs/{long_job['id']}", method="POST"))["status"] == "cancelled"
             assert json.loads(call(f"/v1/music/jobs/{long_job['id']}"))["status"] == "cancelled"
+            assert not {adapter_pid, native_pid}.intersection(processes())
 
             active_exe = engine_dir / second / "files" / exe_name
             corrupted = active_exe.with_name(f"changed-{exe_name}")
@@ -248,10 +323,14 @@ def run(work, binary, adapter, native, models):
             corrupted.replace(active_exe)
             refused = json.loads(call("/v1/music/jobs", request, expected=503))
             assert "failed verification" in refused["message"], refused
+            assert {version: file_pins(files) for version, files in engines.items()} == engine_pins
+            assert {version: file_pins(files) for version, files in models_by_version.items()} == model_pins
             write(work / "result.json", {"identity": identity, "original_song": original, "replay_song": replay,
                 "original": first_wav, "original_after_replay": original_after, "replay": second_wav,
-                "native_files": pins[0], "weights": pins[1],
-                "cancelled_job": long_job["id"], "tampered_executable": refused["message"]})
+                "publications": publications, "studio_pid": server.pid,
+                "native_files": engine_pins, "weights": model_pins,
+                "cancelled_job": long_job["id"], "stopped_pids": [adapter_pid, native_pid],
+                "tampered_executable": refused["message"]})
             print(work / "result.json")
         finally:
             write(work / "mcp.json", rpc)
@@ -262,9 +341,10 @@ def run(work, binary, adapter, native, models):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
-    for name in ["studio", "adapter", "ace_runtime", "weights", "output"]:
+    for name in ["studio", "adapter", "ace_runtime", "weights", "output", "updated_ace_runtime", "updated_vae"]:
         parser.add_argument(name, type=Path)
     arguments = parser.parse_args()
     arguments.output.mkdir()
     run(arguments.output.resolve(), arguments.studio.resolve(), arguments.adapter.resolve(),
-        arguments.ace_runtime.resolve(), arguments.weights.resolve())
+        arguments.ace_runtime.resolve(), arguments.weights.resolve(), arguments.updated_ace_runtime.resolve(),
+        arguments.updated_vae.resolve())
