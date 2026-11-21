@@ -447,6 +447,19 @@ Windows, AMD Radeon Graphics (gfx1036, UMA). The same `audio.cpp 5e7273db` revis
 [Individual runs and WAV hashes](docs/music-gpu-benchmarks.json)
 <!-- radeon-gpu-pair:end -->
 
+<!-- native-radeon-pair:start -->
+#### YuE2-3B Q8_0 · Radeon iGPU
+
+Same 12-second saved song and Radeon iGPU, four steps. Cold includes process startup. Warm is the median of three requests with weights resident. WDDM peaks are sampled per process on this adapter.
+
+| Backend | Cold (s) | Warm (s) | WDDM dedicated peak (GiB) | WDDM shared peak (GiB) |
+| --- | ---: | ---: | ---: | ---: |
+| HIP 188d13b3 | 22.749 | 18.483 | 0.28 | 4.39 |
+| Vulkan 892b9b03 | 30.923 | 24.438 | 1.82 | 2.59 |
+
+[Individual runs and WAV hashes](docs/music-gpu-benchmarks.json)
+<!-- native-radeon-pair:end -->
+
 **RVC voice conversion on GPU (5.0 development builds)**
 
 Windows on one RTX 4090 24 GB, using the same voice checkpoint and FAISS index with a retrieval blend of 0.5. Each run converts an existing vocal to a new voice.
