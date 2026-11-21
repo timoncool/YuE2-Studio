@@ -1889,6 +1889,7 @@ pub async fn serve_on_port(port: u16) -> anyhow::Result<()> {
         .route("/v1/library/playlists", get(library_playlists).post(create_library_playlist))
         .route("/v1/library/albums/order", axum::routing::put(reorder_library_albums))
         .route("/v1/library/playlists/{id}", get(library_playlist).put(update_library_playlist).delete(delete_library_playlist))
+        .route("/v1/library/playlists/{id}/preferred-take", axum::routing::put(select_library_playlist_preferred_take))
         .route("/setup/status", get(setup_status))
         .route("/setup/catalog", get(setup_catalog))
         .route("/setup/download", post(setup_download))
@@ -5671,6 +5672,27 @@ async fn reorder_library_albums(
 async fn library_playlists(State(state):State<AppState>)->Result<Json<Vec<library::Playlist>>,(StatusCode,Json<ApiError>)>{state.library.list_playlists().map(Json).map_err(|e|api_error(StatusCode::INTERNAL_SERVER_ERROR,e.to_string()))}
 async fn create_library_playlist(State(state):State<AppState>,Json(input):Json<library::PlaylistInput>)->Result<(StatusCode,Json<library::Playlist>),(StatusCode,Json<ApiError>)>{state.library.create_playlist(input).map(|p|(StatusCode::CREATED,Json(p))).map_err(|e|api_error(StatusCode::BAD_REQUEST,e.to_string()))}
 async fn library_playlist(State(state):State<AppState>,Path(id):Path<String>)->Result<Json<library::Playlist>,(StatusCode,Json<ApiError>)>{state.library.get_playlist(&id).map_err(|e|api_error(StatusCode::INTERNAL_SERVER_ERROR,e.to_string()))?.map(Json).ok_or_else(||api_error(StatusCode::NOT_FOUND,"Playlist not found".into()))}
+
+#[derive(Deserialize)]
+struct PreferredTakeRequest {
+    song_id: String,
+}
+
+async fn select_library_playlist_preferred_take(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    Json(input): Json<PreferredTakeRequest>,
+) -> Result<Json<serde_json::Value>, (StatusCode, Json<ApiError>)> {
+    match state.library.select_preferred_take(&id, &input.song_id)
+        .map_err(|error| api_error(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?
+    {
+        library::PreferredTakeSelection::Selected(selection) => Ok(Json(serde_json::json!({
+            "preferred_song_id": selection.song.id, "changed": selection.changed,
+        }))),
+        library::PreferredTakeSelection::PlaylistNotFound => Err(api_error(StatusCode::NOT_FOUND, "Playlist not found".into())),
+        library::PreferredTakeSelection::NotPlayableMember => Err(api_error(StatusCode::BAD_REQUEST, "The preferred take must be a playable song in this playlist.".into())),
+    }
+}
 async fn update_library_playlist(State(state):State<AppState>,Path(id):Path<String>,Json(input):Json<library::PlaylistInput>)->Result<Json<library::Playlist>,(StatusCode,Json<ApiError>)>{state.library.update_playlist(&id,input).map_err(|e|api_error(StatusCode::BAD_REQUEST,e.to_string()))?.map(Json).ok_or_else(||api_error(StatusCode::NOT_FOUND,"Playlist not found".into()))}
 async fn delete_library_playlist(State(state):State<AppState>,Path(id):Path<String>)->Result<StatusCode,(StatusCode,Json<ApiError>)>{if state.library.delete_playlist(&id).map_err(|e|api_error(StatusCode::INTERNAL_SERVER_ERROR,e.to_string()))?{Ok(StatusCode::NO_CONTENT)}else{Err(api_error(StatusCode::NOT_FOUND,"Playlist not found".into()))}}
 

@@ -1940,6 +1940,15 @@ fn tools() -> &'static [Tool] {
                 call: |args| send(Method::PUT, format!("/v1/library/playlists/{}", segment(&text(args, "playlist_id")?)), body_without(args, &["playlist_id"])),
             },
             Tool {
+                name: "playlist_select_preferred_take",
+                description: "Mark a playable song already in this playlist as its preferred take. This keeps every take and the current playlist order. Read the saved choice with playlist_get.",
+                schema: || object(json!({
+                    "playlist_id": { "type": "string" },
+                    "song_id": { "type": "string" }
+                }), &["playlist_id", "song_id"]),
+                call: |args| send(Method::PUT, format!("/v1/library/playlists/{}/preferred-take", segment(&text(args, "playlist_id")?)), json!({ "song_id": text(args, "song_id")? })),
+            },
+            Tool {
                 name: "playlist_delete",
                 description: "Remove a playlist; its songs stay in the library.",
                 schema: || id_only("playlist_id", "playlist id"),

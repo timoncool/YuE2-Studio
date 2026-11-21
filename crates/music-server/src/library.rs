@@ -16,7 +16,28 @@ pub struct GeneratedSongInput { pub title:Option<String>, pub metadata:serde_jso
 pub struct AudioImportInput { pub title:String, pub caption:String, pub lyrics:String, pub metadata:serde_json::Value, pub generation_settings:serde_json::Value, pub engine_id:String, pub profile_id:Option<String>, pub source:String, pub audio_extension:String, pub audio:Vec<u8> }
 #[derive(Debug, Clone, Serialize)]
 pub struct ImportedSong { pub song: Song, pub audio_filename: String }
-#[derive(Debug, Clone, Serialize, Deserialize)] pub struct Playlist { pub id:String, pub name:String, pub description:Option<String>, pub song_ids:Vec<String>, pub created_at:String, pub updated_at:String }
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Playlist {
+ pub id:String,
+ pub name:String,
+ pub description:Option<String>,
+ pub song_ids:Vec<String>,
+ #[serde(default, skip_serializing_if = "Option::is_none")]
+ pub preferred_song_id:Option<String>,
+ pub created_at:String,
+ pub updated_at:String,
+}
+
+pub struct PreferredTake {
+ pub song: Song,
+ pub changed: bool,
+}
+
+pub enum PreferredTakeSelection {
+ Selected(PreferredTake),
+ PlaylistNotFound,
+ NotPlayableMember,
+}
 /// A line of the studio's journal: a change an agent made - what was done, to what
 /// kind of thing and its name, put into words by the window in its language - or a
 /// message the studio showed, with its tone.
@@ -137,6 +158,10 @@ impl Library {
              AND json_type(metadata_json,'$.derived.tool')='text'
              AND json_extract(metadata_json,'$.derived.tool') NOT IN ('','stems')", [])?;
   c.execute_batch("CREATE TABLE IF NOT EXISTS album_order(playlist_id TEXT PRIMARY KEY REFERENCES playlists(id) ON DELETE CASCADE, position INTEGER NOT NULL);")?;
+  c.execute_batch("CREATE TABLE IF NOT EXISTS playlist_preferred_takes(
+    playlist_id TEXT PRIMARY KEY, song_id TEXT NOT NULL,
+    FOREIGN KEY(playlist_id,song_id) REFERENCES playlist_songs(playlist_id,song_id) ON DELETE CASCADE
+  );")?;
   c.execute_batch("CREATE TABLE IF NOT EXISTS legacy_ids(source TEXT NOT NULL,kind TEXT NOT NULL,old_id TEXT NOT NULL,new_id TEXT NOT NULL UNIQUE,imported INTEGER NOT NULL DEFAULT 0,PRIMARY KEY(source,kind,old_id))")?;
   Ok(Self{connection:Arc::new(Mutex::new(c)),media_dir})}
  pub(super) fn legacy_song_mappings(&self, source: &str) -> Result<std::collections::HashMap<String,(String,bool)>> {
@@ -547,12 +572,18 @@ impl Library {
  }
  pub(crate) fn read_playlists(c: &Connection) -> Result<Vec<Playlist>> {
   let ranked: bool = c.query_row("SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='album_order')", [], |row| row.get(0))?;
-  let sql = if ranked {
-   "SELECT p.id,p.name,p.description,p.created_at,p.updated_at FROM playlists p LEFT JOIN album_order o ON o.playlist_id=p.id ORDER BY o.position IS NULL, o.position, p.created_at DESC, p.id DESC"
+  let has_preferences: bool = c.query_row("SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='playlist_preferred_takes')", [], |row| row.get(0))?;
+  let choice = if has_preferences {
+   "(SELECT t.song_id FROM playlist_preferred_takes t WHERE t.playlist_id=p.id)"
   } else {
-   "SELECT id,name,description,created_at,updated_at FROM playlists ORDER BY created_at DESC,id DESC"
+   "NULL"
   };
-  let mut stmt = c.prepare(sql)?;
+  let order = if ranked {
+   "LEFT JOIN album_order o ON o.playlist_id=p.id ORDER BY o.position IS NULL, o.position, p.created_at DESC, p.id DESC"
+  } else {
+   "ORDER BY p.created_at DESC,p.id DESC"
+  };
+  let mut stmt = c.prepare(&format!("SELECT p.id,p.name,p.description,p.created_at,p.updated_at,{choice} FROM playlists p {order}"))?;
   Ok(stmt.query_map([], |row| playlist(c, row))?.collect::<rusqlite::Result<_>>()?)
  }
  /// Reorders the complete album set atomically. The library and Add to Album
@@ -581,11 +612,49 @@ impl Library {
   crate::mcp::announce("library");
   self.list_playlists()
  }
- pub fn get_playlist(&self,id:&str)->Result<Option<Playlist>>{let c=self.connection.lock().unwrap();c.query_row("SELECT id,name,description,created_at,updated_at FROM playlists WHERE id=?",[id],|r|playlist(&c,r)).optional().map_err(Into::into)}
- pub fn create_playlist(&self,input:PlaylistInput)->Result<Playlist>{let now=now();let p=Playlist{id:uuid::Uuid::now_v7().to_string(),name:input.name,description:input.description,song_ids:input.song_ids,created_at:now.clone(),updated_at:now};self.save_playlist(&p)?;Ok(p)}
- pub fn update_playlist(&self,id:&str,input:PlaylistInput)->Result<Option<Playlist>>{let Some(mut playlist)=self.get_playlist(id)? else{return Ok(None)};playlist.name=input.name;playlist.description=input.description;playlist.song_ids=input.song_ids;playlist.updated_at=now();self.save_playlist(&playlist)?;Ok(Some(playlist))}
+ pub fn get_playlist(&self,id:&str)->Result<Option<Playlist>>{let c=self.connection.lock().unwrap();c.query_row("SELECT p.id,p.name,p.description,p.created_at,p.updated_at,t.song_id FROM playlists p LEFT JOIN playlist_preferred_takes t ON t.playlist_id=p.id WHERE p.id=?",[id],|r|playlist(&c,r)).optional().map_err(Into::into)}
+ pub fn create_playlist(&self,input:PlaylistInput)->Result<Playlist>{let now=now();let mut p=Playlist{id:uuid::Uuid::now_v7().to_string(),name:input.name,description:input.description,song_ids:input.song_ids,preferred_song_id:None,created_at:now.clone(),updated_at:now};self.save_playlist(&mut p)?;Ok(p)}
+ pub fn update_playlist(&self,id:&str,input:PlaylistInput)->Result<Option<Playlist>>{let Some(mut playlist)=self.get_playlist(id)? else{return Ok(None)};playlist.name=input.name;playlist.description=input.description;playlist.song_ids=input.song_ids;playlist.updated_at=now();self.save_playlist(&mut playlist)?;Ok(Some(playlist))}
  pub fn delete_playlist(&self,id:&str)->Result<bool>{let gone=self.connection.lock().unwrap().execute("DELETE FROM playlists WHERE id=?",[id])?>0;if gone{crate::mcp::announce("library")}Ok(gone)}
- fn save_playlist(&self,p:&Playlist)->Result<()> {let mut c=self.connection.lock().unwrap();let tx=c.transaction()?;tx.execute("INSERT INTO playlists VALUES(?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET name=excluded.name,description=excluded.description,updated_at=excluded.updated_at",params![p.id,p.name,p.description,p.created_at,p.updated_at])?;tx.execute("DELETE FROM playlist_songs WHERE playlist_id=?",[&p.id])?;for(pos,id)in p.song_ids.iter().enumerate(){tx.execute("INSERT INTO playlist_songs VALUES(?,?,?)",params![p.id,id,pos as i64])?;}tx.commit()?;crate::mcp::announce("library");Ok(())}
+ fn save_playlist(&self,p:&mut Playlist)->Result<()> {
+  let mut c=self.connection.lock().unwrap();
+  let tx=c.transaction()?;
+  tx.execute("INSERT INTO playlists VALUES(?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET name=excluded.name,description=excluded.description,updated_at=excluded.updated_at",params![p.id,p.name,p.description,p.created_at,p.updated_at])?;
+  let preferred: Option<String> = tx.query_row("SELECT song_id FROM playlist_preferred_takes WHERE playlist_id=?", [&p.id], |row| row.get(0)).optional()?;
+  tx.execute("DELETE FROM playlist_songs WHERE playlist_id=?",[&p.id])?;
+  for(pos,id)in p.song_ids.iter().enumerate(){
+   tx.execute("INSERT INTO playlist_songs VALUES(?,?,?)",params![p.id,id,pos as i64])?;
+  }
+  p.preferred_song_id = preferred.filter(|id|p.song_ids.contains(id));
+  if let Some(id)=p.preferred_song_id.as_ref(){
+   tx.execute("INSERT INTO playlist_preferred_takes VALUES(?,?)",params![p.id,id])?;
+  }
+  tx.commit()?;
+  drop(c);
+  crate::mcp::announce("library");
+  Ok(())
+ }
+
+ pub fn select_preferred_take(&self, playlist_id:&str, song_id:&str)->Result<PreferredTakeSelection>{
+  let mut c=self.connection.lock().unwrap();
+  let tx=c.transaction()?;
+  let exists:bool=tx.query_row("SELECT EXISTS(SELECT 1 FROM playlists WHERE id=?)",[playlist_id],|row|row.get(0))?;
+  if !exists {return Ok(PreferredTakeSelection::PlaylistNotFound);}
+  let member:bool=tx.query_row("SELECT EXISTS(SELECT 1 FROM playlist_songs WHERE playlist_id=? AND song_id=?)",params![playlist_id,song_id],|row|row.get(0))?;
+  let song=if member {Self::read_song(&tx,song_id)?} else {None};
+  let Some(song)=song.filter(|song|song.audio_path.as_ref().is_some_and(|path|!path.is_empty()) && !is_trashed(song)) else{
+   return Ok(PreferredTakeSelection::NotPlayableMember);
+  };
+  let changed=tx.execute(
+   "INSERT INTO playlist_preferred_takes(playlist_id,song_id) VALUES(?1,?2)
+    ON CONFLICT(playlist_id) DO UPDATE SET song_id=excluded.song_id WHERE song_id<>excluded.song_id",
+   params![playlist_id,song_id],
+  )? > 0;
+  tx.commit()?;
+  drop(c);
+  if changed {crate::mcp::announce("library");}
+  Ok(PreferredTakeSelection::Selected(PreferredTake{song,changed}))
+ }
 
  /// Writes a line into the journal, keeping the latest ones: an older line
  /// goes as a new one comes.
@@ -650,7 +719,7 @@ fn row_song(r: &rusqlite::Row) -> rusqlite::Result<Song> {
         source: r.get(11)?, created_at: r.get(12)?, updated_at: r.get(13)?,
     })
 }
-fn json(s:String)->serde_json::Value{serde_json::from_str(&s).unwrap_or(serde_json::Value::Null)}pub(super) fn playlist(c:&Connection,r:&rusqlite::Row)->rusqlite::Result<Playlist>{let id:String=r.get(0)?;let mut q=c.prepare("SELECT song_id FROM playlist_songs WHERE playlist_id=? ORDER BY position")?;let song_ids=q.query_map([&id],|x|x.get(0))?.collect::<rusqlite::Result<_>>()?;Ok(Playlist{id,name:r.get(1)?,description:r.get(2)?,song_ids,created_at:r.get(3)?,updated_at:r.get(4)?})}fn now()->String{std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs().to_string()}
+fn json(s:String)->serde_json::Value{serde_json::from_str(&s).unwrap_or(serde_json::Value::Null)}pub(super) fn playlist(c:&Connection,r:&rusqlite::Row)->rusqlite::Result<Playlist>{let id:String=r.get(0)?;let mut q=c.prepare("SELECT song_id FROM playlist_songs WHERE playlist_id=? ORDER BY position")?;let song_ids=q.query_map([&id],|x|x.get(0))?.collect::<rusqlite::Result<_>>()?;Ok(Playlist{id,name:r.get(1)?,description:r.get(2)?,song_ids,preferred_song_id:r.get(5)?,created_at:r.get(3)?,updated_at:r.get(4)?})}fn now()->String{std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs().to_string()}
 
 /// Whether a song is in the studio's bin.
 pub fn is_trashed(song:&Song)->bool{song.metadata.get("deleted_at").is_some()}
