@@ -9,6 +9,20 @@ pub(super) const PROFILE: &str = "heartmula_q8_0";
 const WEIGHT_DIR: &str = "HeartMuLa-GGUF";
 const WEIGHT_FILE: &str = "heartmula-q8_0.gguf";
 const WEIGHT_BYTES: u64 = 7_659_762_592;
+pub(super) const ASSET: downloads::Asset = downloads::Asset {
+    id: PROFILE,
+    label: "HeartMuLa Q8_0",
+    kind: downloads::AssetKind::Model,
+    url: "https://huggingface.co/audio-cpp/audio.cpp-gguf/resolve/32c1ce1fea57a513eb9386aa62408d47b1cf7ab2/HeartMuLa-GGUF/heartmula-q8_0.gguf",
+    relative_path: "models/HeartMuLa-GGUF/heartmula-q8_0.gguf",
+    bytes: WEIGHT_BYTES,
+    unzip_into: None,
+    marker: WEIGHT_FILE,
+    pick: &[],
+    vram_gb: None,
+    note: "HeartMuLa music generation through audio.cpp.",
+};
+pub(super) const SHA256: &str = "5c3e42171ec012ba7420e3841e2a36e68e36177863b5e76793393afecd10cfbd";
 
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
 pub(super) struct HeartMuLaOptions {
@@ -47,7 +61,7 @@ pub(super) fn catalog(root: Option<&Path>, runtime_ready: bool) -> Value {
         "id": FAMILY, "name": "HeartMuLa", "profile_id": PROFILE, "quantization": "Q8_0",
         "status": "supported", "ready": missing.is_empty(), "missing": missing,
         "requires": [], "output_formats": ["flac", "mp3", "wav32"],
-        "bytes": WEIGHT_BYTES
+        "bytes": WEIGHT_BYTES, "installable": true
     })
 }
 
@@ -134,6 +148,18 @@ pub(super) fn task(request: &CreateMusicJobRequest) -> anyhow::Result<Value> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn heartmula_install_asset_lands_where_the_runtime_loads_it() {
+        let root = tempfile::tempdir().unwrap();
+        let dir = model_dir(root.path());
+        let downloader = downloads::Downloader::new(root.path().join("audiocpp"));
+        assert_eq!(downloader.path_of(&ASSET), entry(dir.clone()).path);
+        assert_eq!(crate::pin_sha::sha256(ASSET.url), Some(SHA256));
+        assert_eq!(catalog(Some(root.path()), true)["installable"], true);
+        assert!(!downloader.is_installed(&ASSET));
+        assert_eq!(missing_files(&dir), [WEIGHT_FILE]);
+    }
 
     #[test]
     fn requested_heartmula_controls_reach_the_native_music_payload() {

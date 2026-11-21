@@ -39,7 +39,7 @@ import { writerInstruction } from '../services/songWriting';
 import { songWritingStrings } from '../i18n/songWriting';
 import { MagentaFields, magentaModel, restoreMagentaOptions } from './MagentaFields';
 import { MiDashengFields, miDashengModel, miDashengPromptReady, restoreMiDashengPrompt } from './MiDashengFields';
-import { HeartMuLaControls, emptyHeartMuLaDraft, heartMuLaDraft, heartMuLaOptions } from './HeartMuLaControls';
+import { HeartMuLaControls, HeartMuLaInstall, emptyHeartMuLaDraft, heartMuLaDraft, heartMuLaOptions } from './HeartMuLaControls';
 import { MuLaCoverFields } from './MuLaCoverFields';
 import { Vevo2SingingFields, vevo2SingingStrings, type Vevo2References } from './Vevo2SingingFields';
 import { NumberField } from './NumberField';
@@ -1214,26 +1214,31 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
   // source and the style is written from that.
   const [hearingLyrics, setHearingLyrics] = useState(false);
   const [confirmHearLyrics, setConfirmHearLyrics] = useState(false);
-  const recognitionRevision = useRef(0);
+  const recognitionRun = useRef<symbol | null>(null);
   React.useLayoutEffect(() => {
-    return () => { recognitionRevision.current += 1; };
-  }, [coverSongId, coverFile, lyrics, mode]);
-  useEffect(() => { setConfirmHearLyrics(false); }, [coverSongId, coverFile, mode]);
+    setHearingLyrics(false);
+    setConfirmHearLyrics(false);
+    return () => { recognitionRun.current = null; };
+  }, [coverSongId, coverFile, lyrics, mode, musicEngine]);
   /** The karaoke recogniser hears what the cover's source sings; the lyrics take it, to be edited. */
   const hearLyrics = async () => {
-    if ((!coverSongId && !coverFile) || hearingLyrics) return;
-    const revision = recognitionRevision.current;
+    if ((!coverSongId && !coverFile) || recognitionRun.current) return;
+    const run = Symbol();
+    recognitionRun.current = run;
     setHearingLyrics(true);
     setError(null);
     try {
       const words = await recogniseLyrics(coverSongId ? { songId: coverSongId } : { file: coverFile! });
-      if (recognitionRevision.current === revision) setLyrics(words);
+      if (recognitionRun.current === run) setLyrics(words);
     } catch (reason) {
-      if (recognitionRevision.current !== revision) return;
+      if (recognitionRun.current !== run) return;
       const message = reason instanceof Error ? reason.message : String(reason);
       setError(karaokeReason(t, message) ?? message);
     } finally {
-      setHearingLyrics(false);
+      if (recognitionRun.current === run) {
+        recognitionRun.current = null;
+        setHearingLyrics(false);
+      }
     }
   };
 
@@ -1653,6 +1658,8 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
                     {native.profile && !native.ready && <p role="status" className="text-xs">
                       {nativeStrings.unavailable}{native.profile.missing?.length ? ` · ${native.profile.missing.join(', ')}` : ''}
                     </p>}
+                    {heartMuLa && native.profile?.installable && !native.ready &&
+                      <HeartMuLaInstall bytes={native.profile.total_bytes} language={language} onInstalled={native.refresh} />}
                     <button type="button" className="text-xs text-pink-600 underline dark:text-pink-300" onClick={native.refresh}>
                       {musicStrings.refresh}
                     </button>

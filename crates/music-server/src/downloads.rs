@@ -665,6 +665,16 @@ impl Downloader {
                 bail!("another download is already running");
             }
             self.rejected.lock().await.remove(scope);
+            // The archive is normally discarded after unpacking. A repeated
+            // setup request must also work offline after moving the data folder.
+            if asset.id == "onnxruntime" && self.is_installed(asset) {
+                *progress = Some(DownloadProgress {
+                    asset_id: asset.id.to_owned(), scope: Some(scope.to_owned()),
+                    downloaded_bytes: 0, total_bytes: 0, done: true,
+                    error: None, manual_archive: None,
+                });
+                return Ok(());
+            }
             self.cancel.store(false, std::sync::atomic::Ordering::Relaxed);
             *progress = Some(DownloadProgress {
                 asset_id: asset.id.to_string(),

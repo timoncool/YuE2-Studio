@@ -482,6 +482,7 @@ const JOURNAL: &[(&str, &str, &str)] = &[
     ("song_job_again", "started", "generation"),
     ("song_create", "started", "generation"),
     ("song_replay", "started", "generation"),
+    ("audio_cpp_music_model_install", "started", "download"),
     ("song_job_cancel", "cancelled", "generation"),
     ("library_song_rename", "updated", "song"),
     ("library_song_update", "updated", "song"),
@@ -2126,7 +2127,7 @@ fn tools() -> &'static [Tool] {
             },
             Tool {
                 name: "audio_cpp_music_models",
-                description: "List audio.cpp music models, their weight profile and whether the runtime and model files are ready.",
+                description: "List audio.cpp music models, installed weight profiles, runtime readiness and active installation progress.",
                 schema: nothing,
                 call: |_| get("/v1/music/audio-cpp/models".into()),
             },
@@ -2135,6 +2136,12 @@ fn tools() -> &'static [Tool] {
                 description: "Install the pinned SOXR runtime for MuLaCover on Windows. The local model catalog reports readiness afterwards. On Linux and macOS, use the system libsoxr package.",
                 schema: nothing,
                 call: |_| post("/v1/music/audio-cpp/mulacover/runtime".into(), json!({})),
+            },
+            Tool {
+                name: "audio_cpp_music_model_install",
+                description: "Start installation of a managed audio.cpp music model. Poll audio_cpp_music_models for progress.",
+                schema: || object(json!({"model": {"type": "string", "enum": ["heartmula"]}}), &["model"]),
+                call: |args| post("/v1/music/audio-cpp/models/install".into(), args.clone()),
             },
             Tool {
                 name: "engine_logs",
