@@ -7,12 +7,12 @@ const referenceIds = {
     'yue2-892b9b0-bench-Vulkan0-from-lyrics-30s-summary.json',
   ],
   'minimax-minimal': [
-    'mm3-b79d37f-bench-CUDA0-3.2s-summary.json',
-    'mm3-b79d37f-bench-Vulkan0-3.2s-summary.json',
+    'minimax-46c4c90-rtx-4090/timing-cuda13-minimal/mm3-46c4c90-bench-CUDA0-cublas-13.5.1.27-3.2s-summary.json',
+    'minimax-46c4c90-rtx-4090/timing-vulkan-minimal/mm3-46c4c90-bench-Vulkan0-3.2s-summary.json',
   ],
   'minimax-quality-q8': [
-    'mm3-b79d37f-bench-CUDA0-quality-q8-3.2s-summary.json',
-    'mm3-b79d37f-bench-Vulkan0-quality-q8-3.2s-summary.json',
+    'minimax-46c4c90-rtx-4090/timing-cuda13-quality/mm3-46c4c90-bench-CUDA0-quality-q8-cublas-13.5.1.27-3.2s-summary.json',
+    'minimax-46c4c90-rtx-4090/timing-vulkan-quality/mm3-46c4c90-bench-Vulkan0-quality-q8-3.2s-summary.json',
   ],
   'audio-cpp-minimax-q8': [
     'music-gpu-20261121a/minimax_music3-legacy-q8-cuda13/summary.json',
