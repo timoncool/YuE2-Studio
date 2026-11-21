@@ -1,5 +1,31 @@
 import { describe, expect, it } from 'vitest';
-import { cycleSection, editLyricLine, lyricSections, sectionText, setStyleRole, styleRole, toggleLetterCase, writerInstruction } from './songWriting';
+import { cycleSection, editLyricLine, lyricSections, sectionText, setStyleRole, styleLint, styleRole, toggleLetterCase, writerInstruction } from './songWriting';
+import { STYLE_GLOSSES, STYLE_SUGGESTIONS } from './styleSuggestions';
+import { styleAdvice } from '../i18n/styleAdvice';
+
+describe('YuE2 style advice', () => {
+  it('accepts every offered catalogue phrase including all translated suggestion keys', () => {
+    const phrases = new Set([...STYLE_SUGGESTIONS, ...Object.values(STYLE_GLOSSES).flatMap(gloss => [...gloss.keys()])]);
+    for (const phrase of phrases) expect(styleLint(phrase), phrase).toEqual([]);
+  });
+
+  it('keeps decades, meters, 808, musical texture and a complete descriptor prompt intact', () => {
+    const style = "English, 90s synth-pop, airy female vocals, 808 bass with warm piano and guitar in 3/4, 120 BPM";
+    expect(styleLint(style)).toEqual([]);
+  });
+
+  it('reports twelve localised suggestions without changing the text', () => {
+    const text = 'rock, pop, jazz, no drums, make it massive, in the style of X, 90 Hz, vocals\n[Chorus]';
+    const keys = new Set([
+      ...styleLint(text, styleAdvice.ru),
+      ...styleLint('massive'),
+      ...styleLint('piano, guitar, violin, cello, viola, banjo, harp'),
+    ].map(hint => hint.rule));
+    expect(keys.size).toBe(12);
+    expect(styleLint(text, styleAdvice.ru)).toContainEqual({rule:'negative', level:'advice', hint:styleAdvice.ru.negative});
+    expect(styleLint('  ')).toEqual([]);
+  });
+});
 
 describe('structured lyric editing', () => {
   it('preserves repeated choruses, custom tags and untagged opening words', () => {
