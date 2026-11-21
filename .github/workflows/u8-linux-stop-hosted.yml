@@ -1,0 +1,66 @@
+name: Linux terminal stop acceptance
+on:
+  push:
+    branches: [qa/u8-linux-stop-hosted]
+jobs:
+  stop:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    env:
+      GH_TOKEN: ${{ github.token }}
+      NO_AT_BRIDGE: 1
+      DO_NOT_TRACK: 1
+      YUE_STUDIO_PORT: 8791
+    steps:
+      - name: Install the published Studio package
+        run: |
+          gh release download v4.1.1 -R "$GITHUB_REPOSITORY" -p YuE2-Studio-4.1.1-linux-amd64.deb -D "$RUNNER_TEMP"
+          deb="$RUNNER_TEMP/YuE2-Studio-4.1.1-linux-amd64.deb"
+          sha256sum "$deb"
+          dpkg-deb -f "$deb" Package Version Depends
+          sudo apt-get update -q
+          sudo apt-get install -y --no-install-recommends "$deb" ca-certificates xvfb xauth dbus-x11 curl
+          app=$(dpkg-query -L "$(dpkg-deb -f "$deb" Package)" | awk '/^\/usr\/bin\/[^/]+$/ && tolower($0) ~ /studio/ { print }')
+          test -x "$app"
+          printf 'STUDIO_BIN=%s\n' "$app" >> "$GITHUB_ENV"
+      - name: Stop a hidden idle instance and protect the open window
+        run: |
+          set -euo pipefail
+          dbus-run-session -- xvfb-run -a bash -s <<'CHECK'
+          set -euo pipefail
+          export XDG_CONFIG_HOME="$RUNNER_TEMP/studio-config"
+          export XDG_DATA_HOME="$RUNNER_TEMP/studio-data"
+          export XDG_CACHE_HOME="$RUNNER_TEMP/studio-cache"
+          export YUE_STUDIO_DATA_ROOT="$RUNNER_TEMP/profile"
+          pid=
+          cleanup() { if [[ -n $pid ]] && kill -0 "$pid" 2>/dev/null; then kill -TERM "$pid"; fi; }
+          trap cleanup EXIT
+          ready() {
+            for _ in {1..80}; do
+              if curl -fsS --max-time 1 http://127.0.0.1:8791/health; then return; fi
+              if ! kill -0 "$pid" 2>/dev/null; then break; fi
+              sleep .25
+            done
+            cat "$RUNNER_TEMP/studio.log"
+            return 1
+          }
+          timeout 20 "$STUDIO_BIN" --stop
+          "$STUDIO_BIN" --headless >"$RUNNER_TEMP/studio.log" 2>&1 &
+          pid=$!
+          ready
+          timeout 20 "$STUDIO_BIN" --stop
+          for _ in {1..80}; do ! kill -0 "$pid" 2>/dev/null && break; sleep .25; done
+          ! kill -0 "$pid" 2>/dev/null
+          wait "$pid"
+          ! curl -fsS --max-time 1 http://127.0.0.1:8791/health
+          echo 'PASS hidden idle instance stopped'
+          "$STUDIO_BIN" >"$RUNNER_TEMP/studio.log" 2>&1 &
+          pid=$!
+          ready
+          timeout 20 "$STUDIO_BIN" --stop
+          for _ in {1..40}; do grep -F 'its window is in use' "$RUNNER_TEMP/studio.log" && break; sleep .25; done
+          grep -F 'its window is in use' "$RUNNER_TEMP/studio.log"
+          kill -0 "$pid"
+          curl -fsS --max-time 1 http://127.0.0.1:8791/health
+          echo 'PASS visible instance stayed alive'
+          CHECK
