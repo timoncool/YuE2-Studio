@@ -143,7 +143,9 @@ them in `song_create`.
 For other ready audio.cpp families, pass the ID returned by the same catalog as
 `music_source.model`. HeartMuLa takes lyrics and style tags, with optional
 sampling and codec settings in `heartmula`. For MiDashengLM-Gen, use
-`midasheng` to describe the scene, music, speech, effects and environment. Its
+`audio_cpp_music_models` for the manual Q8_0 file, original terms, destination,
+and bytes missing. Use `midasheng` to describe the scene, music, speech,
+effects and environment. Its
 `duration_seconds` is a budget. The model can finish early. The compact job
 shows `requested_duration_seconds` and, after completion, `effective_duration_seconds`.
 Read `generation_settings.duration_seconds` from the library to repeat the same
@@ -239,8 +241,9 @@ Conversion takes `soulx.source_song_id` for the source vocal recording and
 requires libsoxr. The installer handles libsoxr on Windows. On Linux and macOS
 use the system libsoxr package. Both modes save a separate song to the library.
 
-For Magenta RealTime 2, select `magenta_realtime_2` with the installed Small F16
-profile. Use `style` for a text description or `magenta.reference_song_id` for
+For Magenta RealTime 2, select `magenta_realtime_2` with the Small F16 profile.
+Use `audio_cpp_music_models` for the manual file, original terms, destination,
+and bytes missing. Use `style` for a text description or `magenta.reference_song_id` for
 a library track that supplies the musical style. Both modes generate an
 instrumental. The reference sets the style when supplied.
 

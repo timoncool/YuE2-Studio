@@ -1399,28 +1399,41 @@ describe('OpenRouter music creation', () => {
   });
 });
 
-it('shows the manual MiniMax-H3 package and blocks Create when its weights are absent', async () => {
-  const packageInfo = {
+it.each([
+  {
+    id: 'minimax_h3', name: 'MiniMax-H3', profile_id: 'minimax_h3_q4_k', quantization: 'Q4_K',
     package_url: 'https://huggingface.co/audio-cpp/audio.cpp-gguf/tree/test/MiniMax-H3-Q4-GGUF',
     license_url: 'https://huggingface.co/MiniMaxAI/MiniMax-H3/blob/main/LICENSE',
-    model_directory: 'audiocpp/models/MiniMax-H3-Q4-GGUF',
-  };
+    model_directory: 'audiocpp/models/MiniMax-H3-Q4-GGUF', file: 'dit.gguf', missing_bytes: 32_443_213_394, size: '30.22 GiB',
+  },
+  {
+    id: 'magenta_realtime_2', name: 'Magenta RealTime 2', profile_id: 'small-f16', quantization: 'F16',
+    package_url: 'https://huggingface.co/audio-cpp/Magenta-RealTime-2-GGUF/blob/16ebc99233e394fdb673ca1de94f1c81b560b5a0/magenta-rt2-small-f16.gguf',
+    license_url: 'https://huggingface.co/google/magenta-realtime-2#terms-of-use',
+    model_directory: 'audiocpp/models/magenta_realtime_2', file: 'magenta-rt2-small-f16.gguf', missing_bytes: 1_529_647_616, size: '1.42 GiB',
+  },
+  {
+    id: 'midashenglm_gen', name: 'MiDashengLM-Gen', profile_id: 'q8_0', quantization: 'Q8_0',
+    package_url: 'https://huggingface.co/audio-cpp/audio.cpp-gguf/blob/33120a4cfdf0d56786db934a03a093d4675de938/MiDashengLM-Gen-GGUF/midashenglm-gen-q8_0.gguf',
+    license_url: 'https://huggingface.co/mispeech/midashenglm-gen#license',
+    model_directory: 'audiocpp/models/midashenglm_gen', file: 'midashenglm-gen-q8_0.gguf', missing_bytes: 3_381_370_752, size: '3.15 GiB',
+  },
+])('shows the manual $name package and blocks Create with absent weights', async ({ file, size, ...model }) => {
   vi.stubGlobal('fetch', vi.fn(async () => Response.json({ engine: 'audio.cpp', models: [{
-    id: 'minimax_h3', name: 'MiniMax-H3', profile_id: 'minimax_h3_q4_k', quantization: 'Q4_K',
-    ready: false, missing: ['dit.gguf'], missing_bytes: 32_443_213_394, status: 'experimental', ...packageInfo,
+    ...model, ready: false, missing: [file], status: 'experimental',
   }] })));
   const song = {
-    title: 'H3 take', ditModel: 'audio.cpp', style: 'funk groove',
-    generationParams: { music_source: { kind: 'audio_cpp', model: 'minimax_h3' } },
+    title: 'Saved take', ditModel: 'audio.cpp', style: 'funk groove',
+    generationParams: { music_source: { kind: 'audio_cpp', model: model.id } },
   } as Song;
   act(() => root.render(panel({ musicEngine: 'audio.cpp', initialData: { song, timestamp: 1 } })));
   await flush();
   expect(host.textContent).toContain('Experimental');
-  expect(host.textContent).toContain('30.22 GiB');
-  expect(host.textContent).toContain(packageInfo.model_directory);
-  expect(host.textContent).toContain('dit.gguf');
-  expect(host.querySelector(`a[href="${packageInfo.package_url}"]`)).not.toBeNull();
-  expect(host.querySelector(`a[href="${packageInfo.license_url}"]`)).not.toBeNull();
+  expect(host.textContent).toContain(size);
+  expect(host.textContent).toContain(model.model_directory);
+  expect(host.textContent).toContain(file);
+  expect(host.querySelector(`a[href="${model.package_url}"]`)).not.toBeNull();
+  expect(host.querySelector(`a[href="${model.license_url}"]`)).not.toBeNull();
   expect(buttonNamed('create')?.disabled).toBe(true);
   expect(sent).toHaveLength(0);
 });
