@@ -142,6 +142,7 @@ export type MusicEngine = 'local' | 'openrouter' | ProfileMusicEngine;
 export interface YueRequest {
   rvc_after?: import('./services/rvcQuick').RvcSelection;
   /** Capture the editor's selection with the job so later switches cannot reroute it. */
+  hotstep_heartmula?: { adapter?: string; adapter_scale?: number };
   hotstep_sa3?: { sampler?: 'pingpong' | 'euler'; adapter?: string; adapter_scale?: number };
   music_source?: { kind: 'local' } | { kind: 'openrouter' | 'audio_cpp'; model: string } | { kind: 'native'; engine: NativeMusicEngine; model: string };
   midasheng?: import('./components/MiDashengFields').MiDashengPrompt;

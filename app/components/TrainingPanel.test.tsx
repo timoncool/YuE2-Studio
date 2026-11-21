@@ -55,23 +55,23 @@ it.each([false, true])('uses the selected recipe after revisiting songs (automat
     vi.unstubAllGlobals();
   }
 });
-it('starts HOT-Step SA3 training on an instrumental dataset with its native defaults', async () => {
+it.each(['sa3', 'heartmula'])('starts HOT-Step %s training with its native defaults', async target => {
   const state = {
     pack: [], pack_ready: false, card_trains: false, listen: { ready: true }, runs: [],
     recipe_defaults: { preset: 'balanced', seed: 42 }, recipe_fields: [],
     datasets: [{ id: 'instrumental-set', name: 'Instrumentals', items: [{
       id: 'track', source: 'track.wav', title: 'Track', seconds: 4, lyrics_state: 'instrumental',
-      style_state: 'done', instrumental: true, style: 'Steady piano',
+      style_state: 'done', instrumental: target === 'sa3', style: 'Steady piano', lyrics: target === 'heartmula' ? 'We rise with the morning light' : '',
     }] }],
   };
   const start = vi.fn();
   vi.stubGlobal('fetch', async (url: string, init?: RequestInit) => {
     if (url === '/v1/training') return Response.json(state);
-    if (url === '/v1/training/hotstep-sa3' && init?.method === 'POST') {
+    if (url === `/v1/training/hotstep-${target}` && init?.method === 'POST') {
       start(JSON.parse(String(init.body)));
       return Response.json({ id: 'run' });
     }
-    if (url === '/v1/training/hotstep-sa3') return Response.json({
+    if (url === `/v1/training/hotstep-${target}`) return Response.json({
       cuda: true, installable: true, ready: true, installing: false, missing_bytes: 0,
     });
     return Response.json({});
@@ -89,7 +89,7 @@ it('starts HOT-Step SA3 training on an instrumental dataset with its native defa
     await press('2 · trainingStepTrain');
     const engine = host.querySelector<HTMLSelectElement>('select:has(option[value="sa3"])')!;
     await act(async () => {
-      engine.value = 'sa3';
+      engine.value = target;
       engine.dispatchEvent(new Event('change', { bubbles: true }));
     });
     await press('trainingStart');
