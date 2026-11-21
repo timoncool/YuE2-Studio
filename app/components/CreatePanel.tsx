@@ -32,7 +32,7 @@ import { trackMidiBase64 } from '../services/midiEditor';
 import { composePlans, composeScore, transcribe, type ScorePlan } from '../services/transcription';
 import { bedLine, chordBed, failed, instrumentalScore, matchSections, type BedSection, type SectionProposal } from '../services/scoreApi';
 import { BackingTempo } from './BackingTempo';
-import { sectionTagsOnly } from '../services/instrumental';
+import { hasOnlySectionTags, sectionTagsOnly } from '../services/instrumental';
 import { lyricSyllables, syllableChangesOf, type SyllableChange } from '../services/syllables';
 import { profileLabel as setLabel, setupLabel, type SetupChoice } from '../services/modelCatalog';
 import { REQUEST_FILE_ACCEPT, parseRequestFile, requestFileTitle, serializeRequest, type RequestFileFormat } from '../services/requestFile';
@@ -995,7 +995,15 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
   const applyRequest = useCallback((request: Record<string, unknown>, title?: string) => {
     cancelCoverRead();
     setResingFrom(null);
+    instrumentalRun.current += 1;
     instrumentalChange.current = null;
+    const savedAdapters = usesFromSettings(request);
+    const keepInstrumental = request.instrumental_only === true ||
+      (request.instrumental_only === undefined && typeof request.lyrics === 'string' &&
+        hasOnlySectionTags(request.lyrics) && savedAdapters.some(adapter => adapter.id === INSTRUMENTAL_LORA));
+    setInstrumental(keepInstrumental);
+    setInstrumentalLoraLoading(false);
+    setInstrumentalAdapterPrepared(keepInstrumental);
     if (title !== undefined) { setName(title); setNameFilled(title.trim() !== ''); }
     if (typeof request.style === 'string') setStyle(request.style);
     if (typeof request.lyrics === 'string') setLyrics(request.lyrics);
@@ -1028,7 +1036,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
     setRealaudio(request.companion_scale === undefined ? 'auto' : request.companion_scale === 0 ? 'off' : 'on');
     if (request.mp3_bitrate !== undefined) setMp3Bitrate(asText(request.mp3_bitrate));
     if (request.output_format === 'mp3' || request.output_format === 'flac' || request.output_format === 'wav32') setFormat(request.output_format);
-    if (Array.isArray(request.adapters)) setAdapters(usesFromSettings(request));
+    if (Array.isArray(request.adapters)) setAdapters(savedAdapters);
     setError(null);
   }, [cancelCoverRead]);
 
@@ -1200,6 +1208,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
     instrumentalChange.current = null;
     setInstrumental(false);
     setInstrumentalLoraLoading(false);
+    setInstrumentalAdapterPrepared(false);
     setCoverPrompt('');
     setAdapters([]);
     setFadeIn(''); setFadeOut('');
@@ -1238,6 +1247,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
       lyrics: lyrics.replace(/\r\n?/g, '\n').trim(),
       output_format: format,
     };
+    if (instrumental) request.instrumental_only = true;
     if (!forFile) request.music_source = { kind: 'local' };
     if (abc.trim() && effectiveCot !== 'off') request.abc = abc.trim();
     if (abc.trim() && effectiveCot !== 'off' && !semanticTokens.trim() && Number(transpose) !== 0) request.transpose = Number(transpose);
@@ -1628,8 +1638,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
   const [instrumental, setInstrumental] = useState(false);
   // the model was trained to sing: the Instrumental LoRA is what keeps it from it, so the switch takes it along
   const [instrumentalLoraLoading, setInstrumentalLoraLoading] = useState(false);
-  const [instrumentalAdapterId, setInstrumentalAdapterId] = useState<string | null>(null);
-  const instrumentalAdapterReady = instrumentalAdapterId !== null && adapters.some(use => use.id === instrumentalAdapterId && !use.disabled);
+  const [instrumentalAdapterPrepared, setInstrumentalAdapterPrepared] = useState(false);
   // the latest press of the switch: a LoRA download outlives a click, and only the latest press acts on its result
   const instrumentalRun = useRef(0);
   useEffect(() => () => { instrumentalRun.current += 1; }, []);
@@ -1649,11 +1658,11 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
   }, [resingFrom, lyrics]);
   const switchInstrumental = async (on: boolean) => {
     setInstrumental(on);
+    setInstrumentalAdapterPrepared(false);
     const run = ++instrumentalRun.current;
     const latest = () => instrumentalRun.current === run;
     if (!on) {
       setInstrumentalLoraLoading(false);
-      setInstrumentalAdapterId(null);
       const change = instrumentalChange.current;
       instrumentalChange.current = null;
       if (change) {
@@ -1685,7 +1694,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
       }
       if (!latest()) return;
       const chosen = lora;
-      setInstrumentalAdapterId(chosen.id);
+      setInstrumentalAdapterPrepared(true);
       setAdapters(current => {
         const present = current.find(use => use.id === chosen.id);
         if (present && !present.disabled) return current;
@@ -1895,7 +1904,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
     if (!style.trim() && !lyrics.trim() && !semanticTokens.trim()) { setError(tt('styleOrLyricsRequired')); return; }
     setError(null);
     if (instrumental) {
-      if (!instrumentalAdapterReady) {
+      if (!instrumentalAdapterPrepared) {
         setError(tt(instrumentalLoraLoading ? 'instrumentalLoraLoading' : 'instrumentalLoraFailed'));
         return;
       }

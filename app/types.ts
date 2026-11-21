@@ -143,6 +143,7 @@ export type MusicEngine = 'local' | 'openrouter' | 'signed' | ProfileMusicEngine
  * own (`Yue2Request` in yue2.cpp); anything left out is the engine default.
  */
 export interface YueRequest {
+  instrumental_only?: boolean;
   rvc_after?: import('./services/rvcQuick').RvcSelection;
   openrouter?: import('./services/nativeOpenRouter').OpenRouterMusicOptions;
   minimax?: { lm_cfg?: number; lm_top_k?: number; dit_cfg?: number;
