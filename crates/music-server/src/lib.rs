@@ -14633,6 +14633,7 @@ mod tests {
 
     #[test]
     fn named_sampling_choices_replay_as_numeric_knobs() {
+        use serde_json::json;
         let input = json!({"style":"folk","lyrics":"one line","abc_sampling":"wild","semantic_sampling":"tight"});
         let request: CreateMusicJobRequest = serde_json::from_value(input.clone()).unwrap();
         let numeric = serde_json::to_value(request).unwrap();
