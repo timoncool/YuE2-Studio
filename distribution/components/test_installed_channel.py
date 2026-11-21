@@ -186,6 +186,9 @@ def run(work, binary, archive, certificate, tls_key):
             stored, = data.rglob("crisperwhisper2-turbo/config.json")
             assert hashlib.sha256(stored.read_bytes()).hexdigest() == config_sha
             print("PASS same service PID", proc.pid, "signed mirror for a previously unlisted pinned config", config_sha)
+            requested.clear()
+            reused = install_runtime()
+            assert not reused["error"] and not requested, (reused, requested)
             # Cut off the complete mirror host after a successful installation.
             server.shutdown()
             server.server_close()
