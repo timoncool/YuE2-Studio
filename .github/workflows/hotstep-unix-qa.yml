@@ -1,0 +1,70 @@
+name: HOT-Step platform component QA
+
+on:
+  push:
+    branches: ["music-round/hotstep-479cbeb8-unix-qa"]
+
+permissions:
+  contents: read
+
+jobs:
+  tools:
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-22.04, macos-15]
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-node@v7.1.0
+        with:
+          node-version: 22
+          package-manager-cache: false
+      - name: Build native tools from the component source pin
+        run: |
+          set -euo pipefail
+          if [[ "$RUNNER_OS" == Linux ]]; then
+            bash scripts/build-midi-runtime-linux.sh "$RUNNER_TEMP/hotstep-tools"
+          else
+            bash scripts/build-midi-runtime.sh "$RUNNER_TEMP/hotstep-tools"
+          fi
+      - name: Check architecture, dynamic loader and packaged help commands
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/hotstep-tools"
+          for tool in music-midi music-caption; do
+            usage="usage: ace-${tool#music-} --model"
+            file "$tool" | tee "$tool.file"
+            if [[ "$RUNNER_OS" == Linux ]]; then
+              grep -q 'ELF 64-bit.*x86-64' "$tool.file"
+              readelf -d "$tool" | tee "$tool.dynamic"
+              ldd "$tool" | tee "$tool.ldd"
+              ! grep -q 'not found' "$tool.ldd" || exit 1
+              readelf --version-info "$tool" >> "$tool.dynamic"
+            else
+              [[ "$(lipo -archs "$tool")" == arm64 ]]
+              otool -L "$tool" | tee "$tool.dynamic"
+              otool -l "$tool" >> "$tool.dynamic"
+            fi
+            status=0
+            "./$tool" --help > "$tool.help" 2>&1 || status=$?
+            cat "$tool.help"
+            [[ "$status" -eq 2 ]]
+            grep -q "^$usage" "$tool.help"
+          done
+          if [[ "$RUNNER_OS" == macOS ]]; then
+            for binary in music-midi music-caption *.dylib; do
+              [[ -L "$binary" ]] && continue
+              available=$(vtool -show-build -arch arm64 "$binary" | awk '/minos/{print $2}')
+              [[ -n "$available" ]]
+              awk -v actual="$available" 'BEGIN { split(actual,v,"."); exit (v[1]>13 || (v[1]==13 && v[2]>0)) }'
+            done
+          fi
+          shasum -a 256 music-midi music-caption | tee EXE-SHA256SUMS
+          tar -czf "$RUNNER_TEMP/hotstep-tools-$RUNNER_OS.tar.gz" .
+          shasum -a 256 "$RUNNER_TEMP/hotstep-tools-$RUNNER_OS.tar.gz"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: hotstep-tools-${{ matrix.runner }}
+          path: ${{ runner.temp }}/hotstep-tools-*.tar.gz
