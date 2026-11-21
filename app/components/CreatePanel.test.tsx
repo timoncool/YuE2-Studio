@@ -469,6 +469,29 @@ it('creates native ACE covers and restores a migrated repaint with its source, r
   } });
 });
 
+it('prepares the restored native profile when reusing a saved song', async () => {
+  const prepares: unknown[] = [];
+  vi.mocked(fetch).mockImplementation(async (url, init) => {
+    if (String(url) === '/v1/music/pair' && init?.method === 'POST') {
+      const { music_source } = JSON.parse(String(init.body));
+      prepares.push(music_source);
+      return Response.json({ revision: prepares.length, requested: music_source, stage: 'ready' });
+    }
+    if (String(url).endsWith('/acestep-cpp/profiles')) return Response.json({
+      engine: 'acestep-cpp', engine_installed: true,
+      profiles: [{ id: 'balanced', label: 'Balanced', ready: true, missing: [], total_bytes: 1 }],
+    });
+    return Response.json({});
+  });
+  const song = {
+    title: 'Old ACE take', style: 'acoustic folk', lyrics: '[Instrumental]',
+    ditModel: 'acestep-cpp', lmModel: 'balanced', generationParams: { duration: 12, seed: 314 },
+  } as Song;
+  act(() => root.render(panel({ musicEngine: 'acestep-cpp', onMusicEngineChange: vi.fn(), initialData: { song, timestamp: 1 } })));
+  await flush();
+  expect(prepares).toEqual([{ kind: 'native', engine: 'acestep-cpp', model: 'balanced' }]);
+});
+
 it('keeps compatible native ACE LoRA separate and restores its saved scale', async () => {
   const xl = { id: 'ace-xl', name: 'ACE XL Synthwave', engine: 'acestep-cpp', kind: 'style',
     trigger: 'xl-exact', slots: ['dit'], scales: { dit: 0.6 }, model: 'xl', origin: { type: 'imported' } };
