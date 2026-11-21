@@ -2370,6 +2370,8 @@ fn trashed_song_message(song: &library::Song) -> String {
 
 async fn library_media(State(state): State<AppState>, Path(song_id): Path<String>, request: Request) -> Result<axum::response::Response, (StatusCode, Json<ApiError>)> {
     let song = state.library.get_song(&song_id).map_err(|error| api_error(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?.ok_or_else(|| api_error(StatusCode::NOT_FOUND, "Song not found".into()))?;
+    // ServeFile opens the handle while preparing the response. Its body is read after this guard drops.
+    let _open = tagging::audio_open_guard().await;
     let path = state.library.media_path_for_song(&song).ok_or_else(|| api_error(StatusCode::NOT_FOUND, "Song audio is not available in the studio media library".into()))?;
     Ok(serve_audio_file(&path, request).await)
 }

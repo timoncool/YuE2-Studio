@@ -165,6 +165,15 @@ fn lyrics_key(tag_type: lofty::tag::TagType) -> ItemKey {
     if tag_type == lofty::tag::TagType::Id3v2 { ItemKey::UnsyncLyrics } else { ItemKey::Lyrics }
 }
 
+// On Windows canonicalizing a name asks its open handle for a final path,
+// which can become the deleted old name during replacement. Coordinate the
+// name lookup and open with the operation that publishes the staged file.
+static AUDIO_PUBLICATION: tokio::sync::RwLock<()> = tokio::sync::RwLock::const_new(());
+
+pub async fn audio_open_guard() -> tokio::sync::RwLockReadGuard<'static, ()> {
+    AUDIO_PUBLICATION.read().await
+}
+
 /// Publish the entire tagged file at once. Lofty rewrites files using truncation,
 /// so editing the served file directly can leave an active HTTP response empty.
 pub fn write_tags(path: &Path, tags: &TrackTags) -> anyhow::Result<()> {
@@ -176,6 +185,7 @@ pub fn write_tags(path: &Path, tags: &TrackTags) -> anyhow::Result<()> {
     let staged = tempfile::Builder::new().prefix(".studio-tag-").suffix(&suffix).tempfile_in(parent)?;
     fs::copy(&destination, staged.path())?;
     write_staged_tags(staged.path(), file_type, tags)?;
+    let _publish = AUDIO_PUBLICATION.blocking_write();
     replace_tagged_audio(staged.path(), &destination)?;
     Ok(())
 }
