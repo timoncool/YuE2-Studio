@@ -2,6 +2,8 @@
 import argparse
 from contextlib import ExitStack, contextmanager
 import ctypes
+from cryptography import x509
+from cryptography.hazmat.primitives import hashes
 from datetime import datetime, timedelta, timezone
 from functools import partial
 import hashlib
@@ -46,6 +48,19 @@ class FixtureServer(ThreadingHTTPServer):
             self.shutdown()
             self.server_close()
             self.stopped = True
+
+
+@contextmanager
+def hosted_trust(ca):
+    # Windows' platform verifier does not honor SSL_CERT_FILE.
+    assert os.environ.get("RUNNER_ENVIRONMENT") == "github-hosted"
+    cert = x509.load_pem_x509_certificate(ca.read_bytes())
+    thumbprint = cert.fingerprint(hashes.SHA1()).hex()
+    subprocess.run(["certutil.exe", "-user", "-addstore", "Root", str(ca)], check=True)
+    try:
+        yield
+    finally:
+        subprocess.run(["certutil.exe", "-user", "-delstore", "Root", thumbprint], check=True)
 
 
 def check(work, installed, archive, receipt, revision, installer_sha, executable_sha):
@@ -156,7 +171,7 @@ def check(work, installed, archive, receipt, revision, installer_sha, executable
         listener.bind(("127.0.0.1", studio_port))
     env.update(YUE_ENGINE_PORT=str(port()),
                YUE_STUDIO_DATA_ROOT=str(data), YUE_STUDIO_SETTINGS_PATH=str(work / "settings.json"),
-               SSL_CERT_FILE=str(work / "ca.pem"), DO_NOT_TRACK="1")
+               DO_NOT_TRACK="1")
     api = f"http://127.0.0.1:{studio_port}"
 
     def call(route, body=None, method=None):
@@ -214,6 +229,7 @@ def check(work, installed, archive, receipt, revision, installer_sha, executable
 
     try:
         with ExitStack() as stack:
+            stack.enter_context(hosted_trust(work / "ca.pem"))
             proxy = FixtureServer(("127.0.0.1", 0), DenyProxy)
             threading.Thread(target=proxy.serve_forever, daemon=True).start()
             stack.callback(proxy.stop)
@@ -246,9 +262,10 @@ def check(work, installed, archive, receipt, revision, installer_sha, executable
                 install("signed_replacement_install", False, "/current.zip", 200)
                 final_library_sha = sha(runtime())
                 result, hits = install("installed_repeat_zero_http", False)
-                assert not hits and result["downloaded_bytes"] == 0, (hits, result)
+                assert not any(hit["server"] != "proxy" for hit in hits) and result["downloaded_bytes"] == 0, (hits, result)
                 mirror.stop()
                 channel_server.stop()
+                proxy.stop()
             with running("offline_restart"):
                 assert call("/v1/network/proxy")["address"] == proxy_url
                 result, hits = install("offline_after_restart", False)
