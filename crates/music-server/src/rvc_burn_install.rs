@@ -297,6 +297,7 @@ mod tests {
         std::fs::create_dir_all(dll.parent().unwrap()).unwrap();
         std::fs::File::create(&dll).unwrap().set_len(size).unwrap();
         let record = downloader.record_of(asset);
+        std::fs::create_dir_all(record.parent().unwrap()).unwrap();
 
         assert!(!present(&downloader, asset));
         assert!(!record.exists(), "probing readiness must never adopt unverified bytes");
