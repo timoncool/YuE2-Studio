@@ -22,6 +22,10 @@ mod audio_cpp_minimax_h3;
 mod audio_cpp_mulacover;
 mod audio_cpp_music;
 mod hotstep_cover;
+mod hotstep_runtime;
+mod hotstep_sa3;
+mod hotstep_sa3_assets;
+mod hotstep_sa3_tokenizer;
 mod hotstep_cover_assets;
 mod hotstep_cover_rolls;
 mod audio_cpp_stable_audio;
@@ -322,6 +326,8 @@ struct CreateMusicJobRequest {
     music_source: Option<MusicSource>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     ace: Option<native_ace_jobs::AceOptions>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    hotstep_sa3: Option<hotstep_sa3::Options>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     heartmula: Option<audio_cpp_heartmula::HeartMuLaOptions>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -1918,6 +1924,7 @@ pub async fn serve_on_port(port: u16) -> anyhow::Result<()> {
         .route("/v1/music/audio-cpp/models", get(audio_cpp_music::models))
         .route("/v1/music/native/hotstep/profiles", get(hotstep_cover::profiles))
         .route("/v1/music/native/hotstep/install", post(hotstep_cover::install))
+        .route("/v1/music/native/hotstep/stable-audio-3/install", post(hotstep_sa3::install))
         .route("/v1/music/audio-cpp/mulacover/runtime", post(audio_cpp_mulacover::install_runtime))
         .route("/v1/music/audio-cpp/models/install", post(audio_cpp_music::install))
         .route("/v1/music/replay", post(replay_music_job))
@@ -11198,6 +11205,7 @@ async fn submit_music_job(state: AppState, mut request: CreateMusicJobRequest, a
             }
             return match engine.as_str() {
                 "acestep-cpp" => native_ace_jobs::submit(state, request, model, attempt).await,
+                hotstep_cover::ENGINE if model == hotstep_sa3::PROFILE => hotstep_sa3::submit(state, request, attempt).await,
                 hotstep_cover::ENGINE => hotstep_cover::submit(state, request, model, attempt).await,
                 native_minimax::ENGINE_ID => native_music_jobs::submit_minimax(state, request, model, attempt).await,
                 _ => (StatusCode::BAD_REQUEST, Json(failed_request_job(request, engine.clone(), format!("Unknown native engine {engine}.")))),
@@ -11355,6 +11363,7 @@ async fn submit_replay_job(state: AppState, request: ReplayMusicJobRequest, atte
             match song.engine_id.as_str() {
                 ace::ENGINE_ID => return native_ace_jobs::replay(state, song, request, attempt).await,
                 native_minimax::ENGINE_ID => return native_music_jobs::replay(state, song, request, attempt).await,
+                hotstep_cover::ENGINE if song.generation_settings["profile_id"] == hotstep_sa3::PROFILE => return hotstep_sa3::replay(state, song, request, attempt).await,
                 PRIMARY_MUSIC_ENGINE_ID => {},
                 _ if song.replay_request.is_none() => return Err(api_error(StatusCode::BAD_REQUEST, "This track has no replay request.".into())),
                 _ => return Err(api_error(StatusCode::BAD_REQUEST, format!("Re-rendering is unavailable for engine {}.", song.engine_id))),

@@ -155,11 +155,15 @@ pub(super) fn missing(downloader: &Downloader) -> Vec<&'static Asset> {
                 .is_ok_and(|file| file.is_file() && file.len() == asset.bytes)
         })
         .collect();
-    #[cfg(windows)]
-    if server_override().is_none() && !downloader.is_installed(&WIN) {
-        missing.push(&WIN);
-    }
+    missing.extend(missing_runtime(downloader));
     missing
+}
+
+pub(super) fn missing_runtime(downloader: &Downloader) -> Option<&'static Asset> {
+    #[cfg(windows)]
+    { (server_override().is_none() && !downloader.is_installed(&WIN)).then_some(&WIN) }
+    #[cfg(not(windows))]
+    { let _ = downloader; None }
 }
 
 pub(super) fn ready(downloader: &Downloader) -> bool {

@@ -24,7 +24,7 @@ pub(super) async fn profiles(State(state): State<AppState>) -> Json<Value> {
     }
     Json(serde_json::json!({
         "engine": ENGINE, "engine_installed": server,
-        "profiles": [{"id": PROFILE, "label": "MuLaCover · HOT-Step · BF16", "ready": missing.is_empty(), "missing": missing}]
+        "profiles": [{"id": PROFILE, "label": "MuLaCover · HOT-Step · BF16", "ready": missing.is_empty(), "missing": missing}, crate::hotstep_sa3::profile(&downloader, server)]
     }))
 }
 
@@ -212,12 +212,7 @@ pub(super) async fn submit(
     (StatusCode::ACCEPTED, Json(accepted))
 }
 
-async fn json_response(reply: reqwest::Response) -> anyhow::Result<Value> {
-    let status = reply.status();
-    let body = reply.json::<Value>().await?;
-    anyhow::ensure!(status.is_success(), "HOT-Step HTTP {status}: {body}");
-    Ok(body)
-}
+use crate::hotstep_runtime::json_response;
 
 async fn render(
     exe: &std::path::Path,
@@ -225,58 +220,13 @@ async fn render(
     request: Value,
     stop: &AtomicBool,
 ) -> anyhow::Result<Vec<u8>> {
-    let socket = std::net::TcpListener::bind(("127.0.0.1", 0))?;
-    let port = socket.local_addr()?.port();
-    drop(socket);
-    let mut cmd = tokio::process::Command::new(exe);
-    cmd.arg("--models")
-        .arg(models)
-        .args(["--host", "127.0.0.1", "--port", &port.to_string()]);
-    if let Some(dir) = exe.parent() {
-        cmd.current_dir(dir);
-    }
-    #[cfg(windows)]
-    {
-        use std::os::windows::process::CommandExt as _;
-        cmd.as_std_mut().creation_flags(0x0800_0000);
-    }
-    let mut child = cmd
-        .kill_on_drop(true)
-        .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
-        .spawn()
-        .context("Start HOT-Step")?;
-    let http = reqwest::Client::builder()
-        .no_proxy()
-        .timeout(Duration::from_secs(30))
-        .build()?;
-    let url = format!("http://127.0.0.1:{port}");
-    let started = tokio::time::Instant::now();
-    loop {
-        anyhow::ensure!(!stop.load(Ordering::SeqCst), "Stopped.");
-        if let Some(status) = child.try_wait()? {
-            anyhow::bail!("HOT-Step exited while starting ({status}).");
-        }
-        if let Ok(reply) = http
-            .get(format!("{url}/heartmula/props"))
-            .timeout(Duration::from_secs(1))
-            .send()
-            .await
-        {
-            let props = json_response(reply).await?;
-            anyhow::ensure!(
-                props["cover_ready"] == true,
-                "HOT-Step cannot render covers: {}",
-                props["cover_error"]
-            );
-            break;
-        }
-        anyhow::ensure!(
-            started.elapsed() < Duration::from_secs(60),
-            "HOT-Step did not start within a minute."
-        );
-        tokio::time::sleep(Duration::from_millis(250)).await;
-    }
+    let (_child, http, url, props) =
+        crate::hotstep_runtime::start(exe, models, "/heartmula/props", stop).await?;
+    anyhow::ensure!(
+        props["cover_ready"] == true,
+        "HOT-Step cannot render covers: {}",
+        props["cover_error"]
+    );
     let accepted = json_response(
         http.post(format!("{url}/heartmula/cover?format=wav16"))
             .json(&request)
