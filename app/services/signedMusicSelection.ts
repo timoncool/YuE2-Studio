@@ -198,6 +198,7 @@ export function useSignedMusicSelection(list: boolean, active: boolean) {
       ? (needsEngine ? bytes(engine.files) : 0) + (needsModel ? bytes(model.files) : 0)
       : undefined,
     selectModel: (id: string) => save({ ...selection, model: id }),
+    selectPair: (model: string, engine: string) => save({ model, engines: { ...selection.engines, [model]: engine } }),
     selectEngine: (id: string) => {
       if (engines.some(engine => engine.id === id)) save({ ...selection, engines: { ...selection.engines, [selection.model]: id } });
     },

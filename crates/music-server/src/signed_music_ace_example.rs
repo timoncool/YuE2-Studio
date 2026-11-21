@@ -76,7 +76,8 @@ pub async fn run_ace_adapter() -> Result<()> {
         .await?;
     let state = Adapter {
         client,
-        identity: json!({"protocol":protocol::NAME,"engine_id":engine,"version":version}),
+        identity: json!({"protocol":protocol::NAME,"engine_id":engine,"version":version,
+                        "compute_backend":if cuda { "unknown" } else { "cpu" }}),
         token: format!("Bearer {token}"),
         submitted: Arc::default(),
     };

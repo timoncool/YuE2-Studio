@@ -4,12 +4,23 @@ pub(super) mod install;
 pub(super) mod progress;
 
 use std::collections::HashSet;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use anyhow::{Context, Result, ensure};
 use axum::{Json, http::StatusCode};
 use serde::{Deserialize, Serialize};
 
 use crate::{ApiError, api_error, component_catalogue as channel, net};
+
+static UPDATES_REVISION: AtomicU64 = AtomicU64::new(0);
+
+pub(super) fn updates_revision() -> String {
+    format!("{}:{}", std::process::id(), UPDATES_REVISION.load(Ordering::Acquire))
+}
+
+fn note_updates_changed() {
+    UPDATES_REVISION.fetch_add(1, Ordering::Release);
+}
 
 #[derive(Debug, Deserialize, Serialize)]
 struct Catalogue {
@@ -200,6 +211,7 @@ pub(super) async fn refresh() -> Result<Json<serde_json::Value>, Failure> {
             )
         })?
         .map_err(|error| api_error(StatusCode::BAD_GATEWAY, format!("{error:#}")))?;
+    note_updates_changed();
     Ok(Json(
         serde_json::json!({"source":"signed","platform":install::host_platform(),"engines":catalog.engines,"models":catalog.models}),
     ))

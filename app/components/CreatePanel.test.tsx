@@ -90,10 +90,10 @@ afterEach(() => {
 
 const flush = () => act(async () => { await new Promise(resolve => setTimeout(resolve, 0)); });
 
-function panel(props: Pick<React.ComponentProps<typeof CreatePanel>, 'musicEngine' | 'onMusicEngineChange' | 'activeJobCount' | 'queueBusy'> & { initialData?: { song: Song; timestamp: number } | null; visible?: boolean; request?: React.ComponentProps<typeof CreatePanel>['request']; onGenerate?: (request: YueRequest) => void }) {
+function panel(props: Pick<React.ComponentProps<typeof CreatePanel>, 'musicEngine' | 'onMusicEngineChange' | 'onCancelJob' | 'activeJobCount' | 'queueBusy'> & { initialData?: { song: Song; timestamp: number } | null; visible?: boolean; request?: React.ComponentProps<typeof CreatePanel>['request']; onGenerate?: (request: YueRequest) => void }) {
   return (
     <Activity mode={props.visible === false ? 'hidden' : 'visible'}>
-      <CreatePanel musicEngine={props.musicEngine} onMusicEngineChange={props.onMusicEngineChange} onGenerate={props.onGenerate ?? (request => sent.push(request))} isGenerating={Boolean(props.activeJobCount)} queueBusy={props.queueBusy} activeJobCount={props.activeJobCount} request={props.request} initialData={props.initialData ?? null}
+      <CreatePanel musicEngine={props.musicEngine} onMusicEngineChange={props.onMusicEngineChange} onCancelJob={props.onCancelJob} onGenerate={props.onGenerate ?? (request => sent.push(request))} isGenerating={Boolean(props.activeJobCount)} queueBusy={props.queueBusy} activeJobCount={props.activeJobCount} request={props.request} initialData={props.initialData ?? null}
         playlists={[]} onCreatePlaylist={async () => null} playlistId="" onChoosePlaylist={() => undefined} />
     </Activity>
   );
@@ -433,6 +433,127 @@ it.each([
   click(buttonNamed('create')!);
   expect(sent.at(-1)).toMatchObject({ music_source: { kind: 'native', engine, model: 'original' },
     style: 'folk', lyrics: 'verse', duration_seconds: 18, steps: 7, seed: 42, ...extra });
+});
+
+it('shows the waiting pair without cancelling the song and keeps the selected YuE2 LoRA through the change', async () => {
+  const source = { kind: 'native', engine: 'minimaxmusic-cpp', model: 'quality-q8' };
+  const previous = { kind: 'local' };
+  let status: Record<string, unknown> = { revision: 0, requested: null, active: previous, stage: 'idle', elapsed_ms: 0 };
+  const pairRequests: Record<string, unknown>[] = [];
+  const cancel = vi.fn(async (jobId: string) => {
+    expect(jobId).toBe('holding-song');
+    status = { revision: 1, requested: source, active: source, stage: 'ready', elapsed_ms: 1000, load_on_create: true };
+  });
+  vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+    if (url === '/v1/music/pair') {
+      if (init?.method === 'POST') {
+        const body = JSON.parse(String(init.body));
+        pairRequests.push(body);
+        status = body.music_source.kind === 'local'
+          ? { revision: 2, requested: previous, active: previous, stage: 'ready', elapsed_ms: 500 }
+          : { revision: 1, requested: source, active: previous, stage: 'waiting_for_generation', elapsed_ms: 1200, waiting_job_id: 'holding-song' };
+      }
+      return Response.json(status);
+    }
+    if (url === '/v1/music/native/minimaxmusic-cpp/profiles') return Response.json({
+      engine: 'minimaxmusic-cpp', engine_installed: true,
+      profiles: [{ id: 'quality-q8', label: 'Quality', ready: true, missing: [] }],
+    });
+    return Response.json({});
+  }));
+  function Editor() {
+    const [engine, setEngine] = React.useState<NonNullable<React.ComponentProps<typeof CreatePanel>['musicEngine']>>('local');
+    return panel({ musicEngine: engine, onMusicEngineChange: setEngine, onCancelJob: cancel });
+  }
+  const choose = (select: HTMLSelectElement, value: string) => act(() => {
+    select.value = value;
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  act(() => root.render(<Editor />));
+  await flush();
+  expect(pairRequests).toHaveLength(0);
+  act(() => { bridgeCommands.get('create_set')?.({ fields: { style: 'folk', lyrics: 'Light',
+    adapters: [{ id: 'my-acoustic-lora', scales: { nar: 0.7 } }] } }); });
+  const model = [...host.querySelectorAll('label')]
+    .find(label => label.textContent?.startsWith('Model'))!.querySelector('select')!;
+  choose(model, 'minimaxmusic-cpp');
+  await flush();
+  choose(host.querySelector('select[aria-label="Local model"]')!, 'quality-q8');
+  await flush();
+  expect(pairRequests).toHaveLength(1);
+  expect(pairRequests[0]).toMatchObject({ music_source: source, sequence: expect.any(Number), client_id: expect.any(String) });
+  expect(host.textContent).toContain('Waiting for the active song');
+  expect(host.textContent).toContain('Active pair · YuE2');
+  expect(host.textContent).toContain('Requested pair · minimaxmusic-cpp · quality-q8');
+  expect(host.textContent).toContain('my-acoustic-lora');
+  expect((buttonNamed('create') as HTMLButtonElement).disabled).toBe(true);
+  expect(cancel).not.toHaveBeenCalled();
+  click(buttonNamed('Cancel the active song')!);
+  await act(async () => { await new Promise(resolve => setTimeout(resolve, 450)); });
+  expect(cancel).toHaveBeenCalledOnce();
+  expect(host.textContent).toContain('Ready to load when you create');
+  click(buttonNamed('create')!);
+  expect(sent[0]).toMatchObject({ music_source: source, style: 'folk' });
+  expect(sent[0]).not.toHaveProperty('adapters');
+  choose(model, 'local');
+  await flush();
+  expect(pairRequests[1].client_id).toBe(pairRequests[0].client_id);
+  expect(Number(pairRequests[1].sequence)).toBeGreaterThan(Number(pairRequests[0].sequence));
+  click(buttonNamed('create')!);
+  expect(sent[1]).toMatchObject({ music_source: { kind: 'local' }, adapters: [{ id: 'my-acoustic-lora', scales: { nar: 0.7 } }] });
+});
+
+it('submits the same MuLaCover reference after switching engines in either direction', async () => {
+  const firstScore = 'X:1\nK:C\nCDEF|';
+  const secondScore = 'X:1\nK:D\nDEFG|';
+  librarySongs = [
+    { id: 'first-recording', title: 'First', audioUrl: '/first.wav', generationParams: { abc: firstScore } },
+    { id: 'second-recording', title: 'Second', audioUrl: '/second.wav', generationParams: { abc: secondScore } },
+  ] as Song[];
+  vi.stubGlobal('fetch', vi.fn(async (url: string) => Response.json(url === '/v1/music/audio-cpp/models' ? {
+    engine: 'audio.cpp', engine_installed: true, models: [{ id: 'mulacover', ready: true, missing: [] }],
+  } : url === '/v1/music/native/hotstep/profiles' ? {
+    engine: 'hotstep', engine_installed: true,
+    profiles: [{ id: 'heartmula-mulacover', label: 'MuLaCover', ready: true, missing: [] }],
+  } : {})));
+  function Editor() {
+    const [route, choose] = React.useState<NonNullable<React.ComponentProps<typeof CreatePanel>['musicEngine']>>('local');
+    return panel({ musicEngine: route, onMusicEngineChange: choose });
+  }
+  const select = (label: string) => [...host.querySelectorAll('label')]
+    .find(node => node.textContent?.startsWith(label))!.querySelector('select')!;
+  const choose = (label: string, value: string) => act(() => {
+    const input = select(label);
+    input.value = value;
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  act(() => root.render(<Editor />));
+  await flush();
+  choose('Model', 'mulacover');
+  await flush();
+  choose('Original song', 'first-recording');
+  click(buttonNamed('create')!);
+  expect(sent[0]).toMatchObject({ music_source: { kind: 'audio_cpp', model: 'mulacover' }, cover_of: 'first-recording' });
+  expect(sent[0]).not.toHaveProperty('abc');
+  choose('Music engine', 'hotstep');
+  await flush();
+  expect(select('Original song').value).toBe('first-recording');
+  click(buttonNamed('create')!);
+  expect(sent[1]).toMatchObject({
+    music_source: { kind: 'native', engine: 'hotstep', model: 'heartmula-mulacover' }, cover_of: 'first-recording', abc: firstScore,
+  });
+  choose('Original song', 'second-recording');
+  choose('Music engine', 'audio.cpp');
+  await flush();
+  expect(select('Original song').value).toBe('second-recording');
+  expect(host.textContent).toContain('The draft keeps your ABC score.');
+  click(buttonNamed('create')!);
+  expect(sent[2]).toMatchObject({ music_source: { kind: 'audio_cpp', model: 'mulacover' }, cover_of: 'second-recording' });
+  expect(sent[2]).not.toHaveProperty('abc');
+  choose('Music engine', 'hotstep');
+  await flush();
+  click(buttonNamed('create')!);
+  expect(sent[3]).toMatchObject({ cover_of: 'second-recording', abc: secondScore });
 });
 
 it('keeps focus, the song draft and pair settings when switching the MiniMax Music3 engine', async () => {

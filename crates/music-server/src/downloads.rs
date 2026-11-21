@@ -911,29 +911,31 @@ async fn fetch_absent(
     } else {
         None
     };
-    let refresh = tokio::time::timeout(std::time::Duration::from_secs(12), crate::component_catalogue::channel_sources(http, digest));
-    let mut sources = match unless_cancelled(&cancel, async { Ok(refresh.await) }).await? {
-        Ok(Ok(sources)) => sources.unwrap_or_default(),
-        Ok(Err(error)) => { eprintln!("Component mirror refresh failed: {error}"); Vec::new() }
-        Err(_) => { eprintln!("Component mirror refresh timed out"); Vec::new() }
-    };
-    for source in bundled.unwrap_or_default() {
-        if !sources.contains(source) { sources.push(source.clone()); }
-    }
-    let mut candidates = Vec::new();
-    for source in sources {
-        let mapped = crate::net::model_url(&source);
-        if !(primary_failure.is_some() && mapped == url) && !candidates.contains(&mapped) {
-            candidates.push(mapped);
-        }
-    }
+    let mut candidates = unless_cancelled(&cancel, async { Ok(mirror_sources(http, digest).await) }).await?;
     if let Some(error) = primary_failure {
+        candidates.retain(|candidate| candidate != &url);
         if candidates.is_empty() { return Err(error); }
         return fetch_mirrors(http, asset, target, progress, cancel, candidates).await
             .with_context(|| format!("primary download failed: {error:#}; component mirrors also failed"));
     }
     fetch_mirrors(http, asset, target, progress, cancel, candidates).await
 }
+pub(crate) async fn mirror_sources(http: &reqwest::Client, digest: &str) -> Vec<String> {
+    let refresh = crate::component_catalogue::channel_sources(http, digest);
+    let mut sources = match tokio::time::timeout(std::time::Duration::from_secs(12), refresh).await {
+        Ok(Ok(sources)) => sources.unwrap_or_default(),
+        Ok(Err(error)) => { eprintln!("Component mirror refresh failed: {error}"); Vec::new() }
+        Err(_) => { eprintln!("Component mirror refresh timed out"); Vec::new() }
+    };
+    sources.extend_from_slice(crate::component_catalogue::bundled().sources(digest).unwrap_or_default());
+    let mut candidates = Vec::new();
+    for source in sources {
+        let mapped = crate::net::model_url(&source);
+        if !candidates.contains(&mapped) { candidates.push(mapped); }
+    }
+    candidates
+}
+
 async fn fetch_mirrors(
     http: &reqwest::Client,
     asset: &Asset,

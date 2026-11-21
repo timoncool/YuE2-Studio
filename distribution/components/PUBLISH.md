@@ -37,7 +37,12 @@ The Studio expects the signed targets under `targets/` inside that directory.
    that file under the exact target name `music-engine-catalog.json`. Its
    package `files` entries give the HTTPS URL, byte count and SHA-256 for each
    executable, library or model included in the package. Upload those assets
-   before signing the catalogue. Each staged catalogue must match the reviewed
+   before signing the catalogue. Before promotion, staging fetches each new or
+   changed package URL once per distinct byte count and SHA-256, checking the
+   full response. Engine and model entries can share identical artifacts. Pins
+   carried forward from the preceding published catalogue need no new transfer.
+   A missing or corrupt new artifact aborts staging before the site is promoted.
+   Each staged catalogue must match the reviewed
    source byte for byte, including JSON whitespace.
 
    For a mirror-only release, keep all already published catalogue declarations
@@ -47,7 +52,10 @@ The Studio expects the signed targets under `targets/` inside that directory.
    published, omit its signed target and the `--engines` argument. Studio
    starts from its packaged engine profiles, and the engine catalogue list
    reads a previously verified local cache or returns an empty extension list.
-   A network fetch occurs only on explicit catalogue refresh.
+   Manual mode refreshes the catalogue on request. Notify and Auto also refresh it
+   on startup, after a mode change and daily while Studio is running. Only Auto
+   installs updates in the background, and only for packages already installed.
+   Restoring a previous generation pauses automatic replacement of that package.
 
 4. Promote the staged directory in one versioned deployment. Staging retains
    the previous publication's numbered roots, numbered roles and hash-prefixed

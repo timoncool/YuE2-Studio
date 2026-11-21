@@ -76,6 +76,7 @@ function musicGpuMatrix(lang) {
       number(row.cold_seconds, 3), number(row.warm_median_seconds, 3),
       `${number(row.warm_audio_seconds_per_second, 2)}×`,
       `${peak} / ${delta >= 0 ? '+' : ''}${number(delta, 2)}`,
+      number(row.warm_pre_request_vram_bytes / gib, 2),
       number(row.cold_rss_peak_bytes / gib, 2),
     ];
     return `      <tr>${cells.map((cell) => `<td>${escape(cell)}</td>`).join('')}</tr>`;

@@ -455,7 +455,7 @@ fn annotations(name: &str) -> Value {
     // a verb that changes something outweighs a noun that reads
     const CHANGES: &[&str] = &["install", "import", "remove", "delete", "refresh", "create", "update", "start", "cancel", "select", "download", "apply", "restart"];
     // reads whose names the rules above miss: create_form names the create page
-    const READ_NAMES: &[&str] = &["music_package_progress", "lyrics_syllables", "assistant_cli_agents", "system_gpus", "cover_scenes", "cover_photos_search", "video_backgrounds_search", "network_proxy_test", "journal_read", "score_to_midi", "score_instrumental", "score_vocal_octave", "score_from_midi", "score_mark", "lyrics_find", "cover_prompt_render", "studio_wait", "engine_presets_get", "assistant_requests_wait", "ui_console", "song_defaults", "create_form_get", "library_liked", "score_chord_bed", "song_tokenize", "score_match_sections", "models_update_plan", "problem_preview", "library_migration_preview", "audio_cpp_music_models", "hotstep_cover_profiles", "hotstep_sa3_training_status", "hotstep_heartmula_training_status", "rvc_training_status"];
+    const READ_NAMES: &[&str] = &["music_package_updates_get", "music_package_progress", "lyrics_syllables", "assistant_cli_agents", "system_gpus", "cover_scenes", "cover_photos_search", "video_backgrounds_search", "network_proxy_test", "journal_read", "score_to_midi", "score_instrumental", "score_vocal_octave", "score_from_midi", "score_mark", "lyrics_find", "cover_prompt_render", "studio_wait", "engine_presets_get", "assistant_requests_wait", "ui_console", "song_defaults", "create_form_get", "library_liked", "score_chord_bed", "song_tokenize", "score_match_sections", "models_update_plan", "problem_preview", "library_migration_preview", "audio_cpp_music_models", "hotstep_cover_profiles", "hotstep_sa3_training_status", "hotstep_heartmula_training_status", "rvc_training_status"];
     // writes over what was stored, so the earlier content is gone: a client asks first
     const OVERWRITES: &[&str] = &["library_song_rename", "library_song_update", "playlist_update", "album_reorder", "dataset_update", "dataset_song_update", "dataset_song_describe_style", "dataset_prepare", "lora_update", "stems_split", "restore_start", "karaoke_make", "midi_transcribe", "cover_draw", "cover_set_from_file", "openrouter_set_key", "models_update_apply"];
     let changes = CHANGES.iter().any(|verb| name.split('_').any(|word| word == *verb));
@@ -549,9 +549,11 @@ const JOURNAL: &[(&str, &str, &str)] = &[
     ("lora_import_files", "installed", "lora"),
     ("rvc_voice_import", "installed", "rvc_voice"),
     ("rvc_voice_remove", "deleted", "rvc_voice"),
+    ("music_package_rollback", "updated", "settings"),
     ("music_package_cancel", "cancelled", "download"),
     ("music_model_package_install", "installed", "model"),
     ("music_engine_package_install", "installed", "music_engine"),
+    ("music_package_update_mode_set", "updated", "settings"),
     ("music_engine_catalog_refresh", "refreshed", "music_engine_catalog"),
     ("rvc_catalog_refresh", "refreshed", "rvc_catalog"),
     ("rvc_catalog_install", "installed", "rvc_voice"),
@@ -602,6 +604,7 @@ const JOURNAL: &[(&str, &str, &str)] = &[
     ("recogniser_remove", "deleted", "model"),
     ("midi_remove", "deleted", "model"),
     ("models_select", "updated", "settings"),
+    ("music_pair_select", "updated", "settings"),
     ("models_preset", "updated", "settings"),
     ("models_own_select", "updated", "settings"),
     ("models_own_cancel", "cancelled", "download"),
@@ -1239,6 +1242,18 @@ fn tools() -> &'static [Tool] {
                 description: "Take model files already on this computer instead of downloading them: every file of the catalogue found in the folder (by name, else by exact size) is linked into the studio's models. models_status shows the result.",
                 schema: || id_only("path", "folder with the model files"),
                 call: |args| post("/setup/adopt".into(), json!({ "path": text(args, "path")? })),
+            },
+            Tool {
+                name: "music_pair_status",
+                description: "Read the server-side music pair transition, including requested and active source, exact stage and elapsed time. Does not install files or start a song.",
+                schema: nothing,
+                call: |_| get("/v1/music/pair".into()),
+            },
+            Tool {
+                name: "music_pair_select",
+                description: "Prepare a music source using the same music_source object as song_create. Waits for active generation and does not download missing files. Read music_pair_status for progress.",
+                schema: || object(json!({"music_source":{"type":"object"},"client_id":{"type":"string"},"sequence":{"type":"integer","minimum":0}}), &["music_source"]),
+                call: |args| post("/v1/music/pair".into(), args.clone()),
             },
             Tool {
                 name: "models_update_plan",
@@ -2704,10 +2719,34 @@ fn tools() -> &'static [Tool] {
                 call: |args| get(format!("/v1/rvc/catalog/progress/{}", segment(&text(args, "id")?))),
             },
             Tool {
+                name: "music_package_updates_get",
+                description: "Read the installed packages with independent updates available and the background update policy.",
+                schema: nothing,
+                call: |_| get("/v1/components/updates".into()),
+            },
+            Tool {
+                name: "music_package_update_mode_set",
+                description: "Set the policy for installed packages. Manual checks on request, notify refreshes the catalogue, auto updates installed packages.",
+                schema: || object(json!({"mode":{"type":"string","enum":["manual","notify","auto"]}}), &["mode"]),
+                call: |args| post("/v1/components/updates/mode".into(), args.clone()),
+            },
+            Tool {
                 name: "music_package_progress",
                 description: "Read the current file, transfer stage, reused and downloaded bytes for one signed package.",
                 schema: || object(json!({"kind":{"type":"string","enum":["music-engines","music-models"]},"id":{"type":"string"}}), &["kind","id"]),
                 call: |args| get(format!("/v1/components/packages/{}/{}/progress", segment(&text(args,"kind")?),segment(&text(args,"id")?))),
+            },
+            Tool {
+                name: "music_installed_package_list",
+                description: "Read installed music packages and their retained generations from local signed metadata, including packages removed from the online catalogue.",
+                schema: nothing,
+                call: |_| get("/v1/components/packages/installed".into()),
+            },
+            Tool {
+                name: "music_package_rollback",
+                description: "Restore the previous installed generation after a full offline integrity check. Pass the active and previous generation IDs from package status.",
+                schema: || object(json!({"kind":{"type":"string","enum":["music-engines","music-models"]},"id":{"type":"string"},"from_generation":{"type":"string"},"to_generation":{"type":"string"}}), &["kind","id","from_generation","to_generation"]),
+                call: |args| post(format!("/v1/components/packages/{}/{}/rollback",segment(&text(args,"kind")?),segment(&text(args,"id")?)),args.clone()),
             },
             Tool {
                 name: "music_package_cancel",

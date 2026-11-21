@@ -76,9 +76,19 @@ if __name__ == "__main__":
         b"distribution/components/verify.py", b"distribution/components/test_installed_channel.py",
         b"distribution/channels/stable/mirrors.json", b".github/workflows/ci.yml"
     }))
-    channel_inputs = ["crates/music-server/src/component_catalogue.rs", "crates/music-server/src/engine_catalogue.rs", "crates/music-server/src/downloads.rs",
-                      "distribution/components/test_installed_channel.py", "distribution/components/check_installed_channel.sh",
-                      "distribution/components/check_offline_onnx.sh"]
+    channel_inputs = [
+        "crates/music-server/src/component_catalogue.rs",
+        "crates/music-server/src/engine_catalogue.rs",
+        "crates/music-server/src/engine_catalogue/",
+        "crates/music-server/src/downloads.rs",
+        "crates/music-server/src/install_record.rs",
+        "distribution/channels/stable/bootstrap/",
+        "distribution/components/test_installed_channel.py",
+        "distribution/components/check_installed_channel.sh",
+        "distribution/components/check_offline_onnx.sh",
+        "distribution/components/classify_ci.py",
+        ".github/workflows/ci.yml",
+    ]
     channel_changed = not base or subprocess.run(
         ["git", "diff", "--quiet", base, "HEAD", "--", *channel_inputs]
     ).returncode != 0

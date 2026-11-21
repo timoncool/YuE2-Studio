@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { OptionalGroup, WHERE_IT_RUNS } from './SetupGate';
 import { SettingsModal } from './SettingsModal';
 
-vi.mock('../context/I18nContext', () => ({ useI18n: () => ({ t: (key: string) => key }) }));
+vi.mock('../context/I18nContext', () => ({ useI18n: () => ({ t: (key: string) => key, language: 'en' }) }));
 vi.mock('../context/AuthContext', () => ({ useAuth: () => ({ user: { username: 'test' }, setDisplayName: vi.fn() }) }));
 vi.mock('../services/studioQueries', () => ({ openRouterSettingsChanged: vi.fn(), useSetupStatus: () => ({}), SELF_READ: { 'x-hub-skip': '1' } }));
 vi.mock('./EngineSettings', () => ({ EngineSettings: () => null }));
@@ -110,7 +110,7 @@ describe('saving a model set from Settings', () => {
     ],
   };
 
-  async function mountSettings({ installed = true, selected = true } = {}) {
+  async function mountSettings({ installed = true, selected = true, initialTarget = 'models' } = {}) {
     const close = vi.fn();
     calls = [];
     save = async () => response({});
@@ -126,6 +126,7 @@ describe('saving a model set from Settings', () => {
         selected_component_ids: selected ? previous : [],
       });
       if (url === '/setup/catalog') return response(catalog);
+      if (url === '/v1/components/updates') return response({ mode: 'notify', updates: [] });
       if (url === '/setup/select') return save();
       return response({});
     }));
@@ -133,7 +134,7 @@ describe('saving a model set from Settings', () => {
     document.body.append(host);
     root = createRoot(host);
     function SettingsWindow() {
-      const [target, setTarget] = React.useState('models');
+      const [target, setTarget] = React.useState(initialTarget);
       return <>
         <button onClick={() => setTarget('models')}>Open models from the window bridge</button>
         <SettingsModal isOpen target={target} onNavigate={setTarget} onClose={close} theme="light" onToggleTheme={() => {}} />
@@ -149,6 +150,14 @@ describe('saving a model set from Settings', () => {
     await act(async () => target!.click());
   }
   const mutations = () => calls.filter(({ url }) => url === '/setup/select' || url === '/setup/download');
+
+  it('opens the component update panel for the notification action target', async () => {
+    await mountSettings({ initialTarget: 'models:component-updates' });
+    const panel = [...host.querySelectorAll('details')]
+      .find(detail => detail.querySelector('summary')?.textContent?.includes('updateSettingsEntry'));
+    expect(panel?.open).toBe(true);
+    expect(panel?.querySelector('section[aria-label="Signed component updates"]')).toBeTruthy();
+  });
 
   it('returns to the requested page after a manual tab change and retains model edits', async () => {
     await mountSettings();

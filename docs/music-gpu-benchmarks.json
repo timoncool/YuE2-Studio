@@ -3,7 +3,7 @@
     "host": "Windows 11 build 26100 · Ryzen 9 9950X3D · RTX 4090 24 GB · driver 617.42",
     "cold": "server process launch through receipt of first encoded WAV; on-disk model cache retained",
     "warm": "median of three requests to the same process through receipt of encoded WAV",
-    "memory": "200 ms sampling; whole RTX 4090 including desktop; process tree summed RSS; pre-launch GPU reading when recorded",
+    "memory": "200 ms sampling; whole RTX 4090 including desktop; process tree summed RSS; pre-launch GPU reading when recorded. Warm pre-request VRAM is the median of three whole-card readings immediately before warm requests",
     "quality": "PCM16 RMS and trailing windows below -60 dBFS; these are level and duration checks, not a listening study",
     "groups": {
       "YuE2": "Text-to-song uses the same style, words, seed and 32 steps. The audio.cpp request fixes 750 semantic tokens. Replay supplies the same 100 semantic tokens and two steps to both engines. Native VAE is F32 and audio.cpp VAE is F16 in both workloads.",
@@ -89,7 +89,8 @@
       "driver": "617.42",
       "memory_sample_interval_ms": 200,
       "retention": "keep-loaded",
-      "summary_id": "yue2-892b9b0-bench-CUDA0-from-lyrics-cublas-13.10.0.20-30s-summary.json"
+      "summary_id": "yue2-892b9b0-bench-CUDA0-from-lyrics-cublas-13.10.0.20-30s-summary.json",
+      "warm_pre_request_vram_bytes": 8724455424
     },
     {
       "family": "YuE2",
@@ -161,7 +162,8 @@
       "driver": "617.42",
       "memory_sample_interval_ms": 200,
       "retention": "keep-loaded",
-      "summary_id": "yue2-892b9b0-bench-Vulkan0-from-lyrics-30s-summary.json"
+      "summary_id": "yue2-892b9b0-bench-Vulkan0-from-lyrics-30s-summary.json",
+      "warm_pre_request_vram_bytes": 9521262592
     },
     {
       "family": "YuE2",
@@ -227,7 +229,8 @@
       "driver": "617.42",
       "memory_sample_interval_ms": 200,
       "retention": "lazy first load; reused process and session",
-      "summary_id": "acpp-41242418-yue2-matrix-cuda13-from-lyrics-30s-summary.json"
+      "summary_id": "acpp-41242418-yue2-matrix-cuda13-from-lyrics-30s-summary.json",
+      "warm_pre_request_vram_bytes": 3397517312
     },
     {
       "family": "YuE2",
@@ -298,7 +301,8 @@
       "driver": "617.42",
       "memory_sample_interval_ms": 200,
       "retention": "lazy first load; reused process and session",
-      "summary_id": "music-gpu-20261121a/yue2-from-lyrics-30s-vulkan/summary.json"
+      "summary_id": "music-gpu-20261121a/yue2-from-lyrics-30s-vulkan/summary.json",
+      "warm_pre_request_vram_bytes": 2728361984
     },
     {
       "family": "YuE2",
@@ -376,7 +380,8 @@
       "driver": "617.42",
       "memory_sample_interval_ms": 200,
       "retention": "keep-loaded",
-      "summary_id": "yue2-892b9b0-bench-CUDA0-cublas-13.10.0.20-summary.json"
+      "summary_id": "yue2-892b9b0-bench-CUDA0-cublas-13.10.0.20-summary.json",
+      "warm_pre_request_vram_bytes": 7389454336
     },
     {
       "family": "YuE2",
@@ -442,7 +447,8 @@
       "driver": "617.42",
       "memory_sample_interval_ms": 200,
       "retention": "lazy first load; reused process and session",
-      "summary_id": "acpp-41242418-yue2-matrix-cuda13-replay-summary.json"
+      "summary_id": "acpp-41242418-yue2-matrix-cuda13-replay-summary.json",
+      "warm_pre_request_vram_bytes": 3248070656
     },
     {
       "family": "YuE2",
@@ -522,7 +528,8 @@
       "driver": "617.42",
       "memory_sample_interval_ms": 200,
       "retention": "keep-loaded",
-      "summary_id": "yue2-892b9b0-bench-CUDA0-cublas-12.9.2.10-summary.json"
+      "summary_id": "yue2-892b9b0-bench-CUDA0-cublas-12.9.2.10-summary.json",
+      "warm_pre_request_vram_bytes": 7389585408
     },
     {
       "family": "YuE2",
@@ -588,7 +595,8 @@
       "driver": "617.42",
       "memory_sample_interval_ms": 200,
       "retention": "lazy first load; reused process and session",
-      "summary_id": "acpp-41242418-yue2-matrix-cuda12-replay-summary.json"
+      "summary_id": "acpp-41242418-yue2-matrix-cuda12-replay-summary.json",
+      "warm_pre_request_vram_bytes": 3253379072
     },
     {
       "family": "YuE2",
@@ -660,7 +668,8 @@
       "driver": "617.42",
       "memory_sample_interval_ms": 200,
       "retention": "keep-loaded",
-      "summary_id": "yue2-892b9b0-bench-Vulkan0-summary.json"
+      "summary_id": "yue2-892b9b0-bench-Vulkan0-summary.json",
+      "warm_pre_request_vram_bytes": 7025717248
     },
     {
       "family": "YuE2",
@@ -726,7 +735,8 @@
       "driver": "617.42",
       "memory_sample_interval_ms": 200,
       "retention": "lazy first load; reused process and session",
-      "summary_id": "acpp-41242418-yue2-matrix-vulkan-replay-summary.json"
+      "summary_id": "acpp-41242418-yue2-matrix-vulkan-replay-summary.json",
+      "warm_pre_request_vram_bytes": 3098046464
     },
     {
       "family": "ACE-Step 1.5",
@@ -804,7 +814,8 @@
       "driver": "617.42",
       "memory_sample_interval_ms": 200,
       "retention": "keep-loaded",
-      "summary_id": "ace-6e0e414-bench-CUDA0-30s-summary.json"
+      "summary_id": "ace-6e0e414-bench-CUDA0-30s-summary.json",
+      "warm_pre_request_vram_bytes": 10463424512
     },
     {
       "family": "ACE-Step 1.5",
@@ -876,7 +887,8 @@
       "driver": "617.42",
       "memory_sample_interval_ms": 200,
       "retention": "keep-loaded",
-      "summary_id": "ace-6e0e414-bench-Vulkan0-30s-summary.json"
+      "summary_id": "ace-6e0e414-bench-Vulkan0-30s-summary.json",
+      "warm_pre_request_vram_bytes": 9206726656
     },
     {
       "family": "ACE-Step 1.5",
@@ -943,7 +955,8 @@
       "driver": "617.42",
       "memory_sample_interval_ms": 200,
       "retention": "lazy first load; reused process and session",
-      "summary_id": "music-gpu-20261121a/ace_step-matrix-30-cuda13/summary.json"
+      "summary_id": "music-gpu-20261121a/ace_step-matrix-30-cuda13/summary.json",
+      "warm_pre_request_vram_bytes": 11252183040
     },
     {
       "family": "ACE-Step 1.5",
@@ -1008,7 +1021,8 @@
       "driver": "617.42",
       "memory_sample_interval_ms": 200,
       "retention": "lazy first load; reused process and session",
-      "summary_id": "music-gpu-20261121a/ace_step-matrix-30-vulkan/summary.json"
+      "summary_id": "music-gpu-20261121a/ace_step-matrix-30-vulkan/summary.json",
+      "warm_pre_request_vram_bytes": 10978459648
     },
     {
       "family": "MiniMax Music3",
@@ -1088,7 +1102,8 @@
       "driver": "617.42",
       "memory_sample_interval_ms": 200,
       "retention": "keep-loaded",
-      "summary_id": "mm3-f476b0e-bench-CUDA0-3.2s-summary.json"
+      "summary_id": "mm3-f476b0e-bench-CUDA0-3.2s-summary.json",
+      "warm_pre_request_vram_bytes": 10009489408
     },
     {
       "family": "MiniMax Music3",
@@ -1168,7 +1183,8 @@
       "driver": "617.42",
       "memory_sample_interval_ms": 200,
       "retention": "keep-loaded",
-      "summary_id": "mm3-f476b0e-bench-CUDA0-quality-q8-3.2s-summary.json"
+      "summary_id": "mm3-f476b0e-bench-CUDA0-quality-q8-3.2s-summary.json",
+      "warm_pre_request_vram_bytes": 16296603648
     },
     {
       "family": "MiniMax Music3",
@@ -1242,7 +1258,8 @@
       "driver": "617.42",
       "memory_sample_interval_ms": 200,
       "retention": "keep-loaded",
-      "summary_id": "mm3-f476b0e-bench-Vulkan0-3.2s-summary.json"
+      "summary_id": "mm3-f476b0e-bench-Vulkan0-3.2s-summary.json",
+      "warm_pre_request_vram_bytes": 9624387584
     },
     {
       "family": "MiniMax Music3",
@@ -1316,7 +1333,8 @@
       "driver": "617.42",
       "memory_sample_interval_ms": 200,
       "retention": "keep-loaded",
-      "summary_id": "mm3-f476b0e-bench-Vulkan0-quality-q8-3.2s-summary.json"
+      "summary_id": "mm3-f476b0e-bench-Vulkan0-quality-q8-3.2s-summary.json",
+      "warm_pre_request_vram_bytes": 16036888576
     },
     {
       "family": "MiniMax Music3",
@@ -1395,7 +1413,8 @@
       "driver": "617.42",
       "memory_sample_interval_ms": 200,
       "retention": "lazy first load; reused process and session",
-      "summary_id": "music-gpu-20261121a/minimax_music3-legacy-q8-cuda13/summary.json"
+      "summary_id": "music-gpu-20261121a/minimax_music3-legacy-q8-cuda13/summary.json",
+      "warm_pre_request_vram_bytes": 2649567232
     },
     {
       "family": "MiniMax Music3",
@@ -1472,7 +1491,8 @@
       "driver": "617.42",
       "memory_sample_interval_ms": 200,
       "retention": "lazy first load; reused process and session",
-      "summary_id": "music-gpu-20261121a/minimax_music3-legacy-q8-vulkan/summary.json"
+      "summary_id": "music-gpu-20261121a/minimax_music3-legacy-q8-vulkan/summary.json",
+      "warm_pre_request_vram_bytes": 2569502720
     },
     {
       "family": "Stable Audio 3",
@@ -1546,7 +1566,8 @@
       "driver": "617.42",
       "memory_sample_interval_ms": 200,
       "retention": "keep-loaded",
-      "summary_id": "music-gpu-20261121a/hotstep-sa3-cuda12.8/summary.json"
+      "summary_id": "music-gpu-20261121a/hotstep-sa3-cuda12.8/summary.json",
+      "warm_pre_request_vram_bytes": 9984585728
     },
     {
       "family": "Stable Audio 3",
@@ -1614,7 +1635,8 @@
       "driver": "617.42",
       "memory_sample_interval_ms": 200,
       "retention": "lazy first load; reused process and session",
-      "summary_id": "music-gpu-20261121a/stable_audio-cuda12/summary.json"
+      "summary_id": "music-gpu-20261121a/stable_audio-cuda12/summary.json",
+      "warm_pre_request_vram_bytes": 3807457280
     },
     {
       "family": "Stable Audio 3",
@@ -1681,7 +1703,8 @@
       "driver": "617.42",
       "memory_sample_interval_ms": 200,
       "retention": "lazy first load; reused process and session",
-      "summary_id": "music-gpu-20261121a/stable_audio-cuda13/summary.json"
+      "summary_id": "music-gpu-20261121a/stable_audio-cuda13/summary.json",
+      "warm_pre_request_vram_bytes": 3803164672
     }
   ]
 }
