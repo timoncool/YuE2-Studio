@@ -46,9 +46,9 @@ jobs:
           $directory = New-Item -ItemType Directory -Path $env:QA_DIR
           $package = 'YuE2.Studio_5.0.0_x64-setup.exe'
           $pinned = [ordered]@{
-            'YuE2.Studio_5.0.0_x64-setup.exe' = '85c8420eaa44e65eca603f4f3451c7b14726545e6466664b13818b993325b512'
-            'YuE2.Studio_5.0.0_x64-setup.exe.sig' = '5f6c633ba9019e0ecc4d375e18e64fa8535e0ac160c8ce6d6e00a017b86f0d1f'
-            'windows-rc-receipt.json' = 'ce6a0ba4d9e91035ae9d2f3dc034c6f22911ec7b853e2edbdfd21dba0f2a30a7'
+            'YuE2.Studio_5.0.0_x64-setup.exe' = '5ab138470a9861891f6c53d71bbfefcb667d583b6fa3dc13e80718f347ce2d81'
+            'YuE2.Studio_5.0.0_x64-setup.exe.sig' = '99313d9f1ebfbd90abd4a84890ff7a719dc2b3597f98687dac5fc9cbd0a798cc'
+            'windows-rc-receipt.json' = '12bcc795b7d1db36523e9fd76389b1f02939bfc30e099a0fd10564bbd3531fa8'
           }
           $evidence = [ordered]@{ release_id = $draft.id; assets = [ordered]@{} }
           foreach ($name in $pinned.Keys) {
@@ -64,7 +64,7 @@ jobs:
             $evidence.assets[$name] = [ordered]@{ id = $asset.id; bytes = $asset.size; sha256 = $actual }
           }
           $receipt = Get-Content -LiteralPath (Join-Path $directory.FullName 'windows-rc-receipt.json') -Raw | ConvertFrom-Json
-          if ($receipt.revision -cne '2a9bde22843bdf23a96632bf7b1f8e0d0b0b9f87') { throw 'Unexpected source revision in staging receipt' }
+          if ($receipt.revision -cne '34b3fe4676683fffe90229f4bd396524ef0d5967') { throw 'Unexpected source revision in staging receipt' }
           if ($receipt.installer_sha256 -ine $evidence.assets[$package].sha256) { throw 'Installer SHA-256 does not match the staging receipt' }
           $evidence | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath (Join-Path $directory.FullName 'draft.json')
       - name: Download public verification tooling and baseline
