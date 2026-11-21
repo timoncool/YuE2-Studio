@@ -7161,7 +7161,7 @@ async fn catalog_for(state: &AppState) -> Result<providers::openrouter::Capabili
         let client = client.clone();
         async move {
             client
-                .get(format!("{}{}", providers::openrouter::API_BASE_URL, path))
+                .get(openrouter_music_endpoint(path, "").0)
                 .send()
                 .await?
                 .error_for_status()?
@@ -7189,7 +7189,7 @@ async fn refresh_openrouter_catalog(State(state): State<AppState>) -> Result<Jso
         let client = client.clone();
         async move {
             client
-                .get(format!("{}{}", providers::openrouter::API_BASE_URL, path))
+                .get(openrouter_music_endpoint(path, "").0)
                 .send()
                 .await?
                 .error_for_status()?

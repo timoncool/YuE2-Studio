@@ -1426,7 +1426,7 @@ fn tools() -> &'static [Tool] {
             },
             Tool {
                 name: "ui_read_page",
-                description: "Every visible control of the window, one per line: its ref (e12), kind, label and value. Refs are what ui_click, ui_type and ui_select take; read the page again after it changes.",
+                description: "Visible messages and controls of the window, one per line. Each control includes its ref (e12), kind, label and value. Refs are what ui_click, ui_type and ui_select take; read the page again after it changes.",
                 schema: nothing,
                 call: |args| window("read_page", args, 15),
             },
