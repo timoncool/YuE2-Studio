@@ -4,32 +4,47 @@ use tokenizers::{Tokenizer, TruncationParams};
 
 const TOKEN_COUNT: usize = 256;
 
+pub(super) struct Sa3Tokenizer {
+    tokenizer: Tokenizer,
+    pad: u32,
+}
+
+impl Sa3Tokenizer {
+    pub(super) fn load(models: &Path) -> Result<Self> {
+        let path = models.join("onnx/sa3/tokenizer.json");
+        let mut tokenizer = Tokenizer::from_file(&path)
+            .map_err(anyhow::Error::msg)
+            .with_context(|| format!("Read HOT-Step SA3 tokenizer at {}", path.display()))?;
+        tokenizer
+            .with_truncation(Some(TruncationParams {
+                max_length: TOKEN_COUNT,
+                ..Default::default()
+            }))
+            .map_err(anyhow::Error::msg)?;
+        tokenizer.with_padding(None);
+        let pad = tokenizer
+            .token_to_id("<pad>")
+            .context("HOT-Step SA3 tokenizer has no <pad> token")?;
+        Ok(Self { tokenizer, pad })
+    }
+
+    pub(super) fn encode(&self, prompt: &str) -> Result<(Vec<u32>, usize)> {
+        let encoding = self
+            .tokenizer
+            .encode(prompt, true)
+            .map_err(anyhow::Error::msg)?;
+        let count = encoding.len();
+        anyhow::ensure!(count > 0, "HOT-Step SA3 requires a nonempty prompt");
+        let mut tokens = encoding.get_ids().to_vec();
+        tokens.resize(TOKEN_COUNT, self.pad);
+        Ok((tokens, count))
+    }
+}
+
 pub(super) fn encode(models: &Path, prompt: &str) -> Result<(String, usize)> {
-    let path = models.join("onnx/sa3/tokenizer.json");
-    let mut tokenizer = Tokenizer::from_file(&path)
-        .map_err(anyhow::Error::msg)
-        .with_context(|| format!("Read HOT-Step SA3 tokenizer at {}", path.display()))?;
-    tokenizer
-        .with_truncation(Some(TruncationParams {
-            max_length: TOKEN_COUNT,
-            ..Default::default()
-        }))
-        .map_err(anyhow::Error::msg)?;
-    tokenizer.with_padding(None);
-    let pad = tokenizer
-        .token_to_id("<pad>")
-        .context("HOT-Step SA3 tokenizer has no <pad> token")?;
-    let encoding = tokenizer.encode(prompt, true).map_err(anyhow::Error::msg)?;
-    let count = encoding.len();
-    anyhow::ensure!(count > 0, "HOT-Step SA3 requires a nonempty prompt");
-    let mut tokens = encoding.get_ids().to_vec();
-    tokens.resize(TOKEN_COUNT, pad);
+    let (ids, count) = Sa3Tokenizer::load(models)?.encode(prompt)?;
     Ok((
-        tokens
-            .iter()
-            .map(u32::to_string)
-            .collect::<Vec<_>>()
-            .join(","),
+        ids.iter().map(u32::to_string).collect::<Vec<_>>().join(","),
         count,
     ))
 }

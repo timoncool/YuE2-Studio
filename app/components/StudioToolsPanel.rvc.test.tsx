@@ -13,11 +13,20 @@ it('opens the curated catalog from Studio Tools and chooses an installed RVC voi
   const drive = bundled.voices.find(voice => voice.id === 'rvc-5c72b2f2447908b9df55')!;
   const installed = { id: 'installed-tapok', model_name: 'voice.pth', index_name: 'voice.index',
     version: 2, origin: { name: high.name } };
-  const fetchStudio = vi.fn(async (url: string) => {
+  let refreshes = 0;
+  const updatedName = `${high.name} (updated)`;
+  const fetchStudio = vi.fn(async (url: string, init?: RequestInit) => {
+    if (url === '/v1/rvc/catalog/refresh') {
+      expect(init?.method).toBe('POST');
+      refreshes += 1;
+      return refreshes === 1 ? Response.json({ voices: bundled.voices.length, source: 'signed' })
+        : Response.json({ error: 'Offline' }, { status: 503 });
+    }
     if (url === '/v1/rvc/voices') return Response.json([installed]);
     if (url === '/v1/rvc/catalog') {
       const list = bundled.voices.map(voice => ({
         ...voice, installed_id: voice.id === high.id ? installed.id : null,
+        name: refreshes && voice.id === high.id ? updatedName : voice.name,
       }));
       return Response.json(list);
     }
@@ -73,6 +82,17 @@ it('opens the curated catalog from Studio Tools and chooses an installed RVC voi
     expect(installedSelect.selectedOptions[0]?.textContent).toContain(high.name);
     expect(localStorage.getItem('studio.rvc.voiceId')).toBe(installed.id);
     expect(fetchStudio.mock.calls.some(([path]) => path === '/v1/rvc/catalog/install')).toBe(false);
+    const refresh = [...details.querySelectorAll('button')].find(button => button.textContent === 'Update catalog')!;
+    act(() => refresh.click());
+    await flush();
+    expect(details.textContent).toContain('Catalog updated');
+    expect(details.querySelectorAll('li')).toHaveLength(1);
+    expect(details.textContent).toContain(updatedName);
+    act(() => refresh.click());
+    await flush();
+    expect(details.querySelector('[role=alert]')?.textContent).toContain('Could not update the catalog.');
+    expect(details.querySelectorAll('li')).toHaveLength(1);
+    expect(details.textContent).toContain(updatedName);
   } finally {
     act(() => root.unmount());
     query.clear();

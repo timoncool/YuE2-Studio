@@ -30,6 +30,57 @@ const { PlaylistDetail } = await import('./PlaylistDetail');
 const { RightSidebar } = await import('./RightSidebar');
 const { SongActionsProvider } = await import('../context/SongActionsContext');
 
+vi.mock('./AudioWaveform', () => ({ AudioWaveform: () => null }));
+
+it('marks the auditioned side as preferred and restores the badge from the library read', async () => {
+  const first = { id: 'first', title: 'Same title', tags: [], createdAt: new Date(0), style: '', duration: '0:10', audioUrl: '/v1/library/media/one.wav' } as Song;
+  const second = { ...first, id: 'second', audioUrl: '/v1/library/media/two.wav' };
+  const stored = { id: 'work', name: 'Drafts', song_ids: [first.id, second.id] };
+  reads.songs = [first, second];
+  reads.playlists = [{ id: 'work', name: 'Drafts', songIds: stored.song_ids }];
+  const fetcher = vi.fn(async (url: string, init?: RequestInit) => {
+    if (init?.method === 'PUT') return Response.json({ preferred_song_id: 'first', changed: true });
+    return Response.json([{ ...stored, preferred_song_id: 'first' }]);
+  });
+  vi.stubGlobal('fetch', fetcher);
+  vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+  const host = document.createElement('div');
+  const root = createRoot(host);
+  const noOp = () => {};
+  const render = (key: string) => act(() => root.render(
+    <PlaylistDetail key={key} playlistId="work" onBack={noOp} onPlaySong={noOp} onCreateHere={noOp}
+      onReuseHere={noOp} onSelect={noOp} currentSong={null} isPlaying={false} notify={noOp} onError={noOp} />,
+  ));
+  const button = (label: string) => Array.from(host.querySelectorAll('button'))
+    .find(element => element.textContent?.trim() === label)!;
+  const row = (id: string) => host.querySelector(`[data-mcp-context="song ${id}: Same title"]`)!;
+  try {
+    render('before');
+    await act(async () => button('Compare takes').click());
+    const [a, b] = Array.from(host.querySelectorAll('audio'));
+    expect(a.muted).toBe(true);
+    Object.defineProperty(a, 'readyState', { value: 1 });
+    b.currentTime = 3.25;
+    await act(async () => button('A').click());
+    expect(a.muted).toBe(false);
+    expect(b.muted).toBe(true);
+    expect(a.currentTime).toBe(3.25);
+    await act(async () => button('Mark as preferred take').click());
+    expect(fetcher).toHaveBeenCalledWith('/v1/library/playlists/work/preferred-take', expect.objectContaining({
+      method: 'PUT', body: JSON.stringify({ song_id: first.id }),
+    }));
+    const { loadNativePlaylists } = await import('../services/nativeLibrary');
+    reads.playlists = await loadNativePlaylists();
+    render('reopened');
+    expect(row(first.id).textContent).toContain('Preferred take');
+    expect(row(second.id).textContent).not.toContain('Preferred take');
+    expect(reads.playlists[0].songIds).toEqual([first.id, second.id]);
+  } finally {
+    act(() => root.unmount());
+    vi.unstubAllGlobals();
+  }
+});
+
 it('opens the selected take’s songbook in its workspace and only removes its membership', async () => {
   const take = (id: string): Song => ({
     id, title: 'Same title', style: 'Folk', lyrics: 'Verse', coverUrl: '', duration: '0:20',
