@@ -491,7 +491,7 @@ it('shows the waiting pair without cancelling the song and keeps the selected Yu
   click(buttonNamed('Cancel the active song')!);
   await act(async () => { await new Promise(resolve => setTimeout(resolve, 450)); });
   expect(cancel).toHaveBeenCalledOnce();
-  expect(host.textContent).toContain('Ready to load when you create');
+  expect(host.textContent).toContain('Ready to create. Weights load as needed');
   click(buttonNamed('create')!);
   expect(sent[0]).toMatchObject({ music_source: source, style: 'folk' });
   expect(sent[0]).not.toHaveProperty('adapters');
@@ -501,6 +501,59 @@ it('shows the waiting pair without cancelling the song and keeps the selected Yu
   expect(Number(pairRequests[1].sequence)).toBeGreaterThan(Number(pairRequests[0].sequence));
   click(buttonNamed('create')!);
   expect(sent[1]).toMatchObject({ music_source: { kind: 'local' }, adapters: [{ id: 'my-acoustic-lora', scales: { nar: 0.7 } }] });
+});
+
+it('shows the engine memory failure and returns to the working pair with the draft intact', async () => {
+  const oldPair = { kind: 'local' };
+  const failingPair = { kind: 'native', engine: 'minimaxmusic-cpp', model: 'minimal' };
+  const cancel = vi.fn(async () => {});
+  let status: Record<string, unknown> = { revision: 0, stage: 'idle', active: oldPair, elapsed_ms: 0 };
+  vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+    if (url === '/v1/music/pair') {
+      if (init?.method === 'POST') {
+        const { music_source } = JSON.parse(String(init.body));
+        status = music_source.kind === 'local'
+          ? { revision: 2, stage: 'ready', active: oldPair, requested: oldPair, elapsed_ms: 100 }
+          : { revision: 1, stage: 'error', active: oldPair, requested: failingPair, elapsed_ms: 600,
+              error: 'MiniMax ran out of GPU memory while loading. See minimax-engine.log' };
+      }
+      return Response.json(status);
+    }
+    if (url === '/v1/music/native/minimaxmusic-cpp/profiles') return Response.json({
+      engine: 'minimaxmusic-cpp', engine_installed: true,
+      profiles: [{ id: 'minimal', label: 'Minimal', ready: true, missing: [] }],
+    });
+    return Response.json({});
+  }));
+  function Editor() {
+    const [engine, setEngine] = React.useState<NonNullable<React.ComponentProps<typeof CreatePanel>['musicEngine']>>('local');
+    return panel({ musicEngine: engine, onMusicEngineChange: setEngine, onCancelJob: cancel });
+  }
+  act(() => root.render(<Editor />));
+  await flush();
+  act(() => { bridgeCommands.get('create_set')?.({ fields: { style: 'folk', lyrics: 'Keep this verse' } }); });
+  const model = [...host.querySelectorAll('label')]
+    .find(label => label.textContent?.startsWith('Model'))!.querySelector('select')!;
+  act(() => {
+    model.value = 'minimaxmusic-cpp';
+    model.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  await flush();
+  const profile = host.querySelector<HTMLSelectElement>('select[aria-label="Local model"]')!;
+  act(() => {
+    profile.value = 'minimal';
+    profile.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  await flush();
+  expect(host.querySelector('[role="alert"]')?.textContent).toContain('ran out of GPU memory');
+  expect(host.textContent).toContain('Active pair · YuE2');
+  expect(host.textContent).toContain('Requested pair · minimaxmusic-cpp · minimal');
+  expect((buttonNamed('create') as HTMLButtonElement).disabled).toBe(true);
+  expect(cancel).not.toHaveBeenCalled();
+  click(buttonNamed('Return to active pair')!);
+  await flush();
+  click(buttonNamed('create')!);
+  expect(sent[0]).toMatchObject({ music_source: oldPair, style: 'folk', lyrics: 'Keep this verse' });
 });
 
 it('submits the same MuLaCover reference after switching engines in either direction', async () => {
@@ -1346,28 +1399,41 @@ describe('OpenRouter music creation', () => {
   });
 });
 
-it('shows the manual MiniMax-H3 package and blocks Create when its weights are absent', async () => {
-  const packageInfo = {
+it.each([
+  {
+    id: 'minimax_h3', name: 'MiniMax-H3', profile_id: 'minimax_h3_q4_k', quantization: 'Q4_K',
     package_url: 'https://huggingface.co/audio-cpp/audio.cpp-gguf/tree/test/MiniMax-H3-Q4-GGUF',
     license_url: 'https://huggingface.co/MiniMaxAI/MiniMax-H3/blob/main/LICENSE',
-    model_directory: 'audiocpp/models/MiniMax-H3-Q4-GGUF',
-  };
+    model_directory: 'audiocpp/models/MiniMax-H3-Q4-GGUF', file: 'dit.gguf', missing_bytes: 32_443_213_394, size: '30.22 GiB',
+  },
+  {
+    id: 'magenta_realtime_2', name: 'Magenta RealTime 2', profile_id: 'small-f16', quantization: 'F16',
+    package_url: 'https://huggingface.co/audio-cpp/Magenta-RealTime-2-GGUF/blob/16ebc99233e394fdb673ca1de94f1c81b560b5a0/magenta-rt2-small-f16.gguf',
+    license_url: 'https://huggingface.co/google/magenta-realtime-2#terms-of-use',
+    model_directory: 'audiocpp/models/magenta_realtime_2', file: 'magenta-rt2-small-f16.gguf', missing_bytes: 1_529_647_616, size: '1.42 GiB',
+  },
+  {
+    id: 'midashenglm_gen', name: 'MiDashengLM-Gen', profile_id: 'q8_0', quantization: 'Q8_0',
+    package_url: 'https://huggingface.co/audio-cpp/audio.cpp-gguf/blob/33120a4cfdf0d56786db934a03a093d4675de938/MiDashengLM-Gen-GGUF/midashenglm-gen-q8_0.gguf',
+    license_url: 'https://huggingface.co/mispeech/midashenglm-gen#license',
+    model_directory: 'audiocpp/models/midashenglm_gen', file: 'midashenglm-gen-q8_0.gguf', missing_bytes: 3_381_370_752, size: '3.15 GiB',
+  },
+])('shows the manual $name package and blocks Create with absent weights', async ({ file, size, ...model }) => {
   vi.stubGlobal('fetch', vi.fn(async () => Response.json({ engine: 'audio.cpp', models: [{
-    id: 'minimax_h3', name: 'MiniMax-H3', profile_id: 'minimax_h3_q4_k', quantization: 'Q4_K',
-    ready: false, missing: ['dit.gguf'], missing_bytes: 32_443_213_394, status: 'experimental', ...packageInfo,
+    ...model, ready: false, missing: [file], status: 'experimental',
   }] })));
   const song = {
-    title: 'H3 take', ditModel: 'audio.cpp', style: 'funk groove',
-    generationParams: { music_source: { kind: 'audio_cpp', model: 'minimax_h3' } },
+    title: 'Saved take', ditModel: 'audio.cpp', style: 'funk groove',
+    generationParams: { music_source: { kind: 'audio_cpp', model: model.id } },
   } as Song;
   act(() => root.render(panel({ musicEngine: 'audio.cpp', initialData: { song, timestamp: 1 } })));
   await flush();
   expect(host.textContent).toContain('Experimental');
-  expect(host.textContent).toContain('30.22 GiB');
-  expect(host.textContent).toContain(packageInfo.model_directory);
-  expect(host.textContent).toContain('dit.gguf');
-  expect(host.querySelector(`a[href="${packageInfo.package_url}"]`)).not.toBeNull();
-  expect(host.querySelector(`a[href="${packageInfo.license_url}"]`)).not.toBeNull();
+  expect(host.textContent).toContain(size);
+  expect(host.textContent).toContain(model.model_directory);
+  expect(host.textContent).toContain(file);
+  expect(host.querySelector(`a[href="${model.package_url}"]`)).not.toBeNull();
+  expect(host.querySelector(`a[href="${model.license_url}"]`)).not.toBeNull();
   expect(buttonNamed('create')?.disabled).toBe(true);
   expect(sent).toHaveLength(0);
 });

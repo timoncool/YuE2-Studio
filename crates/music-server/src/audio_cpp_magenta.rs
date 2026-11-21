@@ -3,13 +3,16 @@ use crate::{CreateMusicJobRequest, audio_pcm, library};
 use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
-use std::io::Read;
 use std::path::{Path, PathBuf};
 
 pub(super) const FAMILY: &str = "magenta_realtime_2";
 pub(super) const PROFILE: &str = "small-f16";
 pub(super) const QUANTIZATION: &str = "F16";
 const FILE: &str = "magenta-rt2-small-f16.gguf";
+const FILE_BYTES: u64 = 1_529_647_616;
+const DIRECTORY: &str = "audiocpp/models/magenta_realtime_2";
+const PACKAGE: &str = "https://huggingface.co/audio-cpp/Magenta-RealTime-2-GGUF/blob/16ebc99233e394fdb673ca1de94f1c81b560b5a0/magenta-rt2-small-f16.gguf";
+const LICENSE: &str = "https://huggingface.co/google/magenta-realtime-2#terms-of-use";
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 #[serde(default, deny_unknown_fields)]
@@ -19,16 +22,11 @@ pub(super) struct MagentaOptions {
 }
 
 pub(super) fn model_dir(root: &Path) -> PathBuf {
-    root.join("audiocpp/models").join(FAMILY)
+    root.join(DIRECTORY)
 }
 
 pub(super) fn missing_files(dir: &Path) -> Vec<&'static str> {
-    let mut magic = [0; 4];
-    if std::fs::File::open(dir.join(FILE)).is_ok_and(|mut model| {
-        model.metadata().is_ok_and(|info| info.len() > 24)
-            && model.read_exact(&mut magic).is_ok()
-            && &magic == b"GGUF"
-    }) {
+    if crate::audio_cpp_music::matches_gguf_package(&dir.join(FILE), FILE_BYTES, 928, 16) {
         vec![]
     } else {
         vec![FILE]
@@ -40,6 +38,7 @@ pub(super) fn catalog(root: Option<&Path>, runtime_ready: bool) -> Value {
         || vec!["Studio data folder"],
         |root| missing_files(&model_dir(root)),
     );
+    let missing_bytes = if missing.is_empty() { 0 } else { FILE_BYTES };
     if !runtime_ready {
         missing.push("audio.cpp runtime");
     }
@@ -47,6 +46,8 @@ pub(super) fn catalog(root: Option<&Path>, runtime_ready: bool) -> Value {
         "id": FAMILY, "name": "Magenta RealTime 2", "profile_id": PROFILE,
         "quantization": QUANTIZATION, "status": "experimental", "ready": missing.is_empty(),
         "missing": missing, "requires": [], "output_formats": ["flac", "mp3", "wav32"],
+        "bytes": FILE_BYTES, "missing_bytes": missing_bytes, "model_directory": DIRECTORY,
+        "package_url": PACKAGE, "license_url": LICENSE,
     })
 }
 

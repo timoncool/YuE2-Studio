@@ -3,14 +3,15 @@ use super::CreateMusicJobRequest;
 use anyhow::{Result, ensure};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
-use std::{
-    io::Read,
-    path::{Path, PathBuf},
-};
+use std::path::{Path, PathBuf};
 
 pub(super) const FAMILY: &str = "midashenglm_gen";
 pub(super) const PROFILE: &str = "q8_0";
 const FILE: &str = "midashenglm-gen-q8_0.gguf";
+const FILE_BYTES: u64 = 3_381_370_752;
+const DIRECTORY: &str = "audiocpp/models/midashenglm_gen";
+const PACKAGE: &str = "https://huggingface.co/audio-cpp/audio.cpp-gguf/blob/33120a4cfdf0d56786db934a03a093d4675de938/MiDashengLM-Gen-GGUF/midashenglm-gen-q8_0.gguf";
+const LICENSE: &str = "https://huggingface.co/mispeech/midashenglm-gen#license";
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 #[serde(default, deny_unknown_fields)]
@@ -24,24 +25,23 @@ pub(super) struct MiDashengPrompt {
 }
 
 pub(super) fn model_dir(root: &Path) -> PathBuf {
-    root.join("audiocpp/models").join(FAMILY)
+    root.join(DIRECTORY)
 }
 
 pub(super) fn missing_files(path: &Path) -> Vec<&'static str> {
-    let mut magic = [0; 4];
-    if std::fs::File::open(path.join(FILE)).is_ok_and(|mut model| {
-        model.metadata().is_ok_and(|info| info.len() > 24)
-            && model.read_exact(&mut magic).is_ok()
-            && &magic == b"GGUF"
-    }) {
+    if crate::audio_cpp_music::matches_gguf_package(&path.join(FILE), FILE_BYTES, 637, 16) {
         vec![]
     } else {
         vec![FILE]
     }
 }
 
-pub(super) fn catalog(path: &Path, runtime_ready: bool) -> Value {
-    let mut missing = missing_files(path);
+pub(super) fn catalog(root: Option<&Path>, runtime_ready: bool) -> Value {
+    let mut missing = root.map_or_else(
+        || vec!["Studio data folder"],
+        |root| missing_files(&model_dir(root)),
+    );
+    let missing_bytes = if missing.is_empty() { 0 } else { FILE_BYTES };
     if !runtime_ready {
         missing.push("audio.cpp runtime");
     }
@@ -50,6 +50,8 @@ pub(super) fn catalog(path: &Path, runtime_ready: bool) -> Value {
         "quantization": "Q8_0", "status": "experimental", "ready": missing.is_empty(),
         "missing": missing, "requires": ["midasheng"], "output_formats": ["flac", "mp3", "wav32"],
         "duration_seconds": { "kind": "budget", "allows_early_stop": true },
+        "bytes": FILE_BYTES, "missing_bytes": missing_bytes, "model_directory": DIRECTORY,
+        "package_url": PACKAGE, "license_url": LICENSE,
     })
 }
 
