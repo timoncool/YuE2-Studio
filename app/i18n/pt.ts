@@ -2131,7 +2131,7 @@ export const pt = {
     ownModelEmpty: 'Ainda não há nenhum ficheiro .gguf na pasta.',
     ownModelMissing: '{file} já não está na pasta: o motor não arranca até voltar ou até ser escolhido Não usar.',
     ownModelRow: 'Modelo próprio',
-    trainingOnSetModel: 'As músicas são feitas no seu próprio modelo {file}; o treino e a preparação do conjunto de dados correm no modelo do conjunto.',
+    trainingOnSetModel: 'Criar usa o seu modelo {file}. Selecione o checkpoint correspondente em Base de treinamento.',
     songInTheBin: '"{title}" está no lixo. Recuperar em Biblioteca → Lixo para trabalhar com ela.',
     karaokeNoWords: 'Não se ouviram palavras cantadas nesta faixa, por isso não há nada para acertar. A voz pode estar demasiado escondida ou pouco clara, ou a faixa pode ser instrumental.',
     karaokeNoTimings: 'O reconhecedor na nuvem respondeu sem palavras com tempos, por isso não há nada para sincronizar. Escolher em Definições - Fornecedores um modelo do OpenRouter que devolva tempos (a família Whisper), ou um reconhecedor neste computador.',
