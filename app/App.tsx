@@ -1489,7 +1489,7 @@ function AppContent() {
     switch (view) {
       case 'tools':
         return <StudioToolsPanel initialSongId={stemsSongId} focusRvc={focusRvc} onRvcFocused={() => setFocusRvc(false)}
-          onGenerateFoley={generations.generate} generationBusy={generations.queueBusy} />;
+          onGenerateEffect={generations.generate} generationBusy={generations.queueBusy} />;
 
       case 'adapters':
         return <AdaptersPage />;

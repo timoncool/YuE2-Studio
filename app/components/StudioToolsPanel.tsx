@@ -14,6 +14,7 @@ import { StemMixer } from './StemMixer';
 import { mapNativeLibrarySong } from '../services/nativeLibrary';
 import type { NativeLibrarySong, YueRequest } from '../types';
 import { ControlFoleyTool } from './ControlFoleyTool';
+import { SoundEffectsTool } from './SoundEffectsTool';
 import type { TranslationKey } from '../i18n/translations';
 import { stemOf } from '../services/songStems';
 import { derivedBy, libraryFailure, restoredOf, shownSongs, toolsSongOnOpen, type ToolRun } from '../services/toolsSong';
@@ -68,11 +69,11 @@ const CONTROL =
 
 const megabytes = (bytes: number) => `${(bytes / 1024 / 1024).toFixed(0)} MB`;
 
-export function StudioToolsPanel({ initialSongId, focusRvc, onRvcFocused, onGenerateFoley, generationBusy }: {
+export function StudioToolsPanel({ initialSongId, focusRvc, onRvcFocused, onGenerateEffect, generationBusy }: {
   initialSongId?: string | null;
   focusRvc?: boolean;
   onRvcFocused?: () => void;
-  onGenerateFoley?: (request: YueRequest) => void;
+  onGenerateEffect?: (request: YueRequest) => void;
   generationBusy?: boolean;
 } = {}): React.ReactElement {
   const { t } = useI18n();
@@ -488,7 +489,7 @@ export function StudioToolsPanel({ initialSongId, focusRvc, onRvcFocused, onGene
           )}
         </section>
 
-        {onGenerateFoley && <ControlFoleyTool card={CARD} control={CONTROL} busy={Boolean(generationBusy)} onGenerate={onGenerateFoley} />}
+        {onGenerateEffect && <ControlFoleyTool card={CARD} control={CONTROL} busy={Boolean(generationBusy)} onGenerate={onGenerateEffect} />}
 
         {/* Restore after compression, on the track chosen above or a file. */}
         <RestoreTool
@@ -505,6 +506,8 @@ export function StudioToolsPanel({ initialSongId, focusRvc, onRvcFocused, onGene
             song={songId ? { id: songId, title: songs.find(song => song.id === songId)?.title ?? '', stems } : undefined}
             onSaved={() => void loadSongs()} />
         </div>
+
+        {onGenerateEffect && <SoundEffectsTool card={CARD} control={CONTROL} busy={Boolean(generationBusy)} onGenerate={onGenerateEffect} />}
 
         {/* Audio to MIDI, on the track chosen above. */}
         <MidiTool songId={songId} songTitle={songs.find(song => song.id === songId)?.title ?? ''} card={CARD} />

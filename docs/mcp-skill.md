@@ -202,6 +202,12 @@ Cancel with `training_cancel`. Install a saved checkpoint with
 `backend: "auto"` or `"burn-cuda"`. The stored voice uses Safetensors; legacy
 RVC voices continue to use their installed checkpoint and optional index.
 
+For YuE2 LoRA training, the detailed `training_status` response lists the
+bundled trainer and compatible signed trainers for this platform. Install a
+signed trainer with the normal engine component installer and pass its
+`trainer_id` to `training_start` to select it. A continuation uses the
+original trainer generation and optimizer format recorded in the run.
+
 For HeartMuLa adapter training, use `hotstep_heartmula_training_status`,
 `hotstep_heartmula_training_install` and `hotstep_heartmula_training_start`.
 Give each sample a style and add lyrics to vocal tracks. The training run
@@ -246,6 +252,12 @@ Use `audio_cpp_music_models` for the manual file, original terms, destination,
 and bytes missing. Use `style` for a text description or `magenta.reference_song_id` for
 a library track that supplies the musical style. Both modes generate an
 instrumental. The reference sets the style when supplied.
+
+For sound effects, read `sound_effect_model_get`. It lists the local audio.cpp
+runtime, the MOSS-SoundEffect v2 Q8_0 file, its source and terms, and the path
+relative to the Studio data directory. When ready, use `sound_effect_create`
+with an English or Chinese description and optional `duration_seconds` from
+0.1 to 30. Follow `song_job_get` until it saves the result in the library.
 
 For ControlFoley video-to-audio, read `controlfoley_model_get` for the offline
 Q8 package and prerequisites. The Studio computer needs FFmpeg on its PATH.
