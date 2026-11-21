@@ -108,6 +108,25 @@ const type = (element: HTMLTextAreaElement | HTMLInputElement, value: string) =>
 const click = (element: Element) => act(() => { element.dispatchEvent(new MouseEvent('click', { bubbles: true })); });
 const buttonNamed = (text: string) => [...host.querySelectorAll('button')].find(button => button.textContent?.includes(text));
 
+it('queues the other five readings with exactly one score and one pair of seeds', async () => {
+  const abc = 'X:1\nK:C\nCDEF|';
+  act(() => root.render(panel({ request: { id: 1, kind: 'score', abc, lyrics: 'one line' } })));
+  await flush();
+  const select = [...host.querySelectorAll('select')].find(box => [...box.options].some(option => option.value === 'tight'))!;
+  act(() => { select.value = 'tight'; select.dispatchEvent(new Event('change', { bubbles: true })); });
+  const button = buttonNamed('Create variations (5)')!;
+  expect(button.disabled).toBe(false);
+  click(button);
+  expect(sent).toHaveLength(5);
+  expect(new Set(sent.map(request => request.seed)).size).toBe(1);
+  expect(new Set(sent.map(request => request.lm_seed)).size).toBe(1);
+  expect(new Set(sent.map(request => JSON.stringify(request.semantic_sampling))).size).toBe(5);
+  for (const request of sent) {
+    expect(request).toMatchObject({ abc, abc_continue: false, lm_batch_size: 1, synth_batch_size: 1 });
+    expect(request.semantic_sampling?.temperature).not.toBe(0.8);
+  }
+});
+
 it('uses explicit controls for the YuE2 engine and follows the shared paused state', async () => {
   act(() => root.render(panel({})));
   click(buttonNamed('Pause YuE2 engine')!);

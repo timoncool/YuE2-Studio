@@ -1095,6 +1095,11 @@ fn rvc_runtime_route(args: &Value) -> String {
 }
 
 fn song_create_schema(mut properties: Value) -> Value {
+    for stage in ["abc_sampling", "semantic_sampling"] {
+        let names: Vec<_> = crate::sampling_choices()[stage].as_object().unwrap().keys().collect();
+        let knobs = properties[stage].take();
+        properties[stage] = json!({"oneOf": [knobs, {"type": "string", "enum": names}]});
+    }
     properties["rvc_after"] = json!({
         "type": "object",
         "description": "After successful generation, save a separate RVC take with this voice and backend. Use rvc_quick_list for progress.",
@@ -1508,7 +1513,7 @@ fn tools() -> &'static [Tool] {
             Tool {
                 name: "create_form_submit",
                 description: "Press Create on the create page: the song is made from the form as it stands. studio_wait until idle waits for it; create_form_get shows why the form refused, if it did.",
-                schema: nothing,
+                schema: || object(json!({ "variations": { "type": "boolean", "description": "Use the local YuE2 score and the same seeds for the alternate performance presets." } }), &[]),
                 call: |args| window("create_submit", args, 15),
             },
             // ---------------------------------------------------------------- the player
