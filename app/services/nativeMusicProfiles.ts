@@ -18,6 +18,9 @@ interface NativeProfile {
   total_bytes: number;
   missing_bytes?: number;
   adapters?: string[];
+  status?: string;
+  package_url?: string;
+  model_directory?: string;
   installable?: boolean;
   license_url?: string;
   ready: boolean;
@@ -88,9 +91,11 @@ function useProfileCatalog(engine: ProfileMusicEngine | undefined, refreshCount:
         const body = await reply.json();
         const data: NativeProfiles = engine === 'audio.cpp' && body.engine === engine && Array.isArray(body.models)
           ? { engine, engine_installed: body.engine_installed !== false, profiles: body.models
-              .map((model: { id: string; name?: string; profile_id: string; quantization: string; ready: boolean; missing: string[]; bytes?: number; installable?: boolean; license_url?: string }) => ({
+              .map((model: { id: string; name?: string; profile_id: string; quantization: string; ready: boolean; missing: string[]; bytes?: number; missing_bytes?: number; status?: string; package_url?: string; model_directory?: string; installable?: boolean; license_url?: string }) => ({
                 id: model.id, label: [model.name ?? model.id, model.profile_id, model.quantization].filter(Boolean).join(' · '), total_bytes: model.bytes ?? 0,
-                ready: model.ready, missing: model.missing, installable: model.installable, license_url: model.license_url,
+                ready: model.ready, missing: model.missing, status: model.status, missing_bytes: model.missing_bytes,
+                package_url: model.package_url, model_directory: model.model_directory,
+                installable: model.installable, license_url: model.license_url,
               })) }
           : body;
         if (data.engine !== engine || !Array.isArray(data.profiles)) throw new Error('Invalid native profile response');

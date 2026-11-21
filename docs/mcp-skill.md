@@ -143,7 +143,11 @@ them in `song_create`.
 For other ready audio.cpp families, pass the ID returned by the same catalog as
 `music_source.model`. HeartMuLa takes lyrics and style tags, with optional
 sampling and codec settings in `heartmula`. For MiDashengLM-Gen, use
-`midasheng` to describe the scene, music, speech, effects and environment.
+`midasheng` to describe the scene, music, speech, effects and environment. Its
+`duration_seconds` is a budget. The model can finish early. The compact job
+shows `requested_duration_seconds` and, after completion, `effective_duration_seconds`.
+Read `generation_settings.duration_seconds` from the library to repeat the same
+budget and `metadata.duration_seconds` for the saved audio length.
 For MiniMax-H3, select `minimax_h3` and supply one instrumental description in
 `style`. The audio-only route accepts `duration_seconds` from 1 to 20 (default 4),
 plus `steps`, `seed`, and `cfg_scale`. It uses the locally installed
@@ -185,8 +189,10 @@ and check `hotstep_cover_profiles`. Call `song_create` with native engine
 `hotstep`, model `heartmula-3b-q8_0`, `style` and optional `lyrics`. A
 `hotstep_heartmula` object can select the installed adapter and its strength.
 
-For a locally prepared [RVC Burn CUDA runtime](rvc-burn-runtime.md), check `rvc_training_status`.
-Use `dataset_create` and `dataset_add_folder` to add isolated voice recordings.
+Check `rvc_training_status` for the [RVC Burn CUDA runtime](rvc-burn-runtime.md).
+On supported hardware, `rvc_training_install_runtime` downloads the pinned
+components. Watch transfer progress in `rvc_training_status` and cancel a
+transfer with `rvc_training_runtime_cancel`. Use `dataset_create` and `dataset_add_folder` to add isolated voice recordings.
 Run `rvc_training_start` with the dataset ID and optional epochs, batch size
 and learning rate. `training_status` shows losses and the best checkpoint.
 Cancel with `training_cancel`. Install a saved checkpoint with

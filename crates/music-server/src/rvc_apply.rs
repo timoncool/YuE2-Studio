@@ -68,7 +68,7 @@ async fn setup_status(state: &AppState) -> Value {
             + if model_installed { 0 } else { MODEL.bytes }
     });
     let effective = effective_backend(Backend::Auto, native_ready, audio_ready);
-    let burn = crate::rvc_burn::Runtime::discover(update_data_root(state)).ready(false);
+    let burn = crate::rvc_burn::Runtime::discover(state).ready(false);
     json!({
         "effective_backend": effective,
         "backends": {
@@ -214,7 +214,7 @@ pub(super) async fn process_request(
         )
     })?;
     let burn = (voice.format == rvc_voices::VoiceFormat::BurnSafetensors)
-        .then(|| crate::rvc_burn::Runtime::discover(update_data_root(&state)));
+        .then(|| crate::rvc_burn::Runtime::discover(&state));
     if burn.is_some() && !matches!(request.backend, Backend::Auto | Backend::BurnCuda) {
         return Err(rvc_voices::invalid("A trained Safetensors voice needs the RVC Burn backend."));
     }

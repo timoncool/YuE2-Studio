@@ -153,12 +153,19 @@ fn compact_job(job: &Value) -> Value {
         songs.push(json!({ "id": job["song"]["id"], "title": job["song"]["song"]["title"] }));
     }
     let settings = &job["generation_settings"];
-    json!({
+    let mut short = json!({
         "id": job["id"], "title": job["title"], "status": job["status"], "phase": job["phase"], "message": job["message"],
         "duration_seconds": job["duration_seconds"], "seed": settings["seed"], "lm_seed": settings["lm_seed"],
         "adapters": settings["adapters"], "songs": songs,
         "tracks": settings["lm_batch_size"], "tracks_asked": job["tracks_asked"], "card_memory_short": job["card_memory_short"].as_bool().unwrap_or(false),
-    })
+    });
+    if settings["family"] == crate::audio_cpp_midasheng::FAMILY {
+        short["requested_duration_seconds"] = settings["duration_seconds"].clone();
+        if job["status"] == "completed" {
+            short["effective_duration_seconds"] = job["duration_seconds"].clone();
+        }
+    }
+    short
 }
 
 /// A library song without what only a re-render reads: its audio codes and
@@ -462,7 +469,7 @@ fn annotations(name: &str) -> Value {
     let read_only = READ_NAMES.contains(&name) || !changes && (READS.iter().any(|part| name.ends_with(part) || name.contains(&format!("{part}_"))) || name.starts_with("writing_"));
     let destructive = name.ends_with("_delete") || name.ends_with("_remove") || name == "processing_discard" || name.ends_with("_cancel") || name.contains("_cancel_") || OVERWRITES.contains(&name);
     // what reaches the internet: OpenRouter, Hugging Face, the lyric databases and every download
-    let open_world = name.starts_with("openrouter_") || name == "problem_report" || name.contains("_hf") || name == "lyrics_find" || name == "models_download" || name == "models_update_apply" || name == "lora_install_catalog" || name.ends_with("_install") && name != "training_checkpoint_install";
+    let open_world = name.starts_with("openrouter_") || name == "problem_report" || name.contains("_hf") || name == "lyrics_find" || name == "models_download" || name == "models_update_apply" || name == "lora_install_catalog" || name == "rvc_training_install_runtime" || name.ends_with("_install") && name != "training_checkpoint_install";
     let title = name.replace('_', " ");
     json!({ "title": title, "readOnlyHint": read_only, "destructiveHint": destructive, "idempotentHint": read_only || name.ends_with("_set") || name.contains("_select") || name == "rvc_voice_remove", "openWorldHint": open_world })
 }
@@ -535,6 +542,8 @@ const JOURNAL: &[(&str, &str, &str)] = &[
     ("training_start", "started", "training"),
     ("rvc_training_start", "started", "training"),
     ("rvc_training_install_voice", "installed", "rvc_voice"),
+    ("rvc_training_install_runtime", "started", "download"),
+    ("rvc_training_runtime_cancel", "cancelled", "download"),
     ("hotstep_sa3_training_install", "started", "download"),
     ("hotstep_sa3_training_start", "started", "training"),
     ("hotstep_heartmula_training_start", "started", "training"),
@@ -1758,7 +1767,7 @@ fn tools() -> &'static [Tool] {
                     "fade_out": { "type": "number", "minimum": 0, "description": "seconds the studio fades the made song out over at its end; 0 or absent leaves the end as sung" },
                     "playlist_id": { "type": "string", "description": "a playlist (see playlist_list) the made songs are added to" },
                     "cot": { "type": "string", "enum": ["full", "melody", "off"] },
-                    "duration_seconds": { "type": "number", "description": "In seconds. For local YuE2, this caps generation. Omit it to use the checkpoint budget and let the song end naturally." },
+                    "duration_seconds": { "type": "number", "description": "In seconds. For local YuE2, this caps generation. For MiDashengLM-Gen, it sets the budget and the model can finish earlier. Omit it to use the checkpoint budget." },
                     "seed": { "type": "integer" },
                     "lm_seed": { "type": "integer" },
                     "steps": { "type": "integer" },
@@ -2245,7 +2254,7 @@ fn tools() -> &'static [Tool] {
             },
             Tool {
                 name: "audio_cpp_music_models",
-                description: "List audio.cpp music models, installed weight profiles, runtime readiness and active installation progress.",
+                description: "List audio.cpp music models with experimental status, runtime readiness and installation progress. Manual profiles include the weight source, license, data-root-relative directory and missing bytes.",
                 schema: nothing,
                 call: |_| get("/v1/music/audio-cpp/models".into()),
             },
@@ -3185,6 +3194,18 @@ fn tools() -> &'static [Tool] {
                 call: |args| post("/v1/training/rvc-burn".into(), args.clone()),
             },
             Tool {
+                name: "rvc_training_install_runtime",
+                description: "Download and verify the pinned RVC Burn CUDA trainer and its resources. Follow the transfer in rvc_training_status.",
+                schema: nothing,
+                call: |_| post("/v1/training/rvc-burn/setup".into(), json!({})),
+            },
+            Tool {
+                name: "rvc_training_runtime_cancel",
+                description: "Cancel the current RVC Burn component download.",
+                schema: nothing,
+                call: |_| Ok(Call { method: Method::DELETE, path: "/v1/training/rvc-burn/setup".into(), payload: Payload::None }),
+            },
+            Tool {
                 name: "rvc_training_install_voice",
                 description: "Install a saved native RVC Burn training checkpoint in the voice catalogue. Use the returned ID with rvc_apply.",
                 schema: || id_only("run_id", "RVC Burn run ID"),
@@ -3976,6 +3997,25 @@ mod tests {
         let files = folder_files(&root.path().join("Artist"), song_file, "audio").unwrap();
         let names: Vec<&str> = files.iter().map(|(_, _, name)| name.as_str()).collect();
         assert_eq!(names, ["Artist/2020 - Album/01. Song.flac", "Artist/2020 - Album/01. Song.lrc"]);
+    }
+
+    #[test]
+    fn midasheng_job_distinguishes_its_requested_budget_from_audio_duration() {
+        let mut job = json!({
+            "status": "running",
+            "duration_seconds": 5.0,
+            "generation_settings": { "family": "midashenglm_gen", "duration_seconds": 5.0 },
+        });
+        let running = compact_job(&job);
+        assert_eq!(running["requested_duration_seconds"], 5.0);
+        assert!(running.get("effective_duration_seconds").is_none());
+
+        job["status"] = json!("completed");
+        job["duration_seconds"] = json!(1.0);
+        let completed = compact_job(&job);
+        assert_eq!(completed["requested_duration_seconds"], 5.0);
+        assert_eq!(completed["effective_duration_seconds"], 1.0);
+        assert_eq!(completed["duration_seconds"], 1.0);
     }
 
     #[test]

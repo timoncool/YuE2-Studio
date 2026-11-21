@@ -11,20 +11,91 @@ const BASE_D: &str = "f0D48k.pth";
 pub(super) const STAGE: &str = "rvc-burn";
 pub(super) const CHECKPOINT: &str = "rvc-output/voice.safetensors";
 
+const SAVED_BEST: &str = "rvc-output/studio-checkpoints";
+
+pub(super) fn best_report(line: &str) -> Option<(u32, f64)> {
+    let (_, report) = line.split_once("best mel ")?;
+    let (mel, step) = report.strip_suffix(") saved")?.split_once(" (step ")?;
+    let mel: f64 = mel.parse().ok()?;
+    mel.is_finite().then_some((step.parse().ok()?, mel))
+}
+
+pub(super) fn best_snapshot(run: &FsPath) -> Option<PathBuf> {
+    let root = run.join(SAVED_BEST);
+    std::fs::read_dir(root)
+        .ok()?
+        .filter_map(Result::ok)
+        .filter_map(|entry| {
+            let step = entry.file_name().to_str()?.parse::<u32>().ok()?;
+            let path = entry.path();
+            (path.join("voice.safetensors").is_file() && path.join("best.json").is_file())
+                .then_some((step, path))
+        })
+        .max_by_key(|(step, _)| *step)
+        .map(|(_, path)| path)
+}
+
+// The pinned CLI overwrites its best file in place. Keep an independent
+// complete generation so stopping during the next write cannot destroy it.
+pub(super) fn snapshot_best(run: &FsPath, step: u32, mel: f64) -> anyhow::Result<()> {
+    let source = run.join("rvc-output/checkpoint/voice.best.safetensors");
+    let output = run.join(SAVED_BEST);
+    std::fs::create_dir_all(&output)?;
+    let destination = output.join(step.to_string());
+    if destination.is_dir() {
+        return Ok(());
+    }
+    let previous = best_snapshot(run);
+    let stage = tempfile::tempdir_in(&output)?;
+    let voice = stage.path().join("voice.safetensors");
+    let before = std::fs::metadata(&source)?;
+    std::fs::copy(&source, &voice)?;
+    let after = std::fs::metadata(&source)?;
+    ensure!(
+        before.len() == after.len() && before.modified()? == after.modified()?,
+        "RVC replaced the source checkpoint while it was being saved."
+    );
+    rvc_voices::validate_burn_voice(&voice)?;
+    std::fs::write(
+        stage.path().join("best.json"),
+        serde_json::to_vec(&serde_json::json!({ "step": step, "mel": mel }))?,
+    )?;
+    std::fs::rename(stage.path(), destination)?;
+    if let Some(previous) = previous
+        && let Err(error) = std::fs::remove_dir_all(&previous)
+    {
+        studio_log!(
+            "Could not remove older RVC checkpoint {}: {error}",
+            previous.display()
+        );
+    }
+    Ok(())
+}
+
 #[derive(Clone)]
 pub(super) struct Runtime {
     folder: PathBuf,
     pub(super) exe: PathBuf,
     ort: PathBuf,
+    managed: Option<(rvc_burn_install::Profile, Arc<downloads::Downloader>)>,
 }
 
 impl Runtime {
-    pub(super) fn discover(data: &FsPath) -> Self {
-        let folder = std::env::var_os("YUE_RVC_BURN_ROOT")
-            .filter(|value| !value.is_empty())
-            .map(PathBuf::from)
-            .unwrap_or_else(|| data.join("rvc/burn"));
-        Self::from_folder(folder)
+    pub(super) fn discover(state: &AppState) -> Self {
+        let override_path = std::env::var_os("YUE_RVC_BURN_ROOT").filter(|value| !value.is_empty());
+        if let Some(folder) = override_path {
+            return Self::from_folder(folder.into());
+        }
+        let mut runtime = Self::from_folder(update_data_root(state).join("rvc/burn"));
+        if !runtime.exe.is_file()
+            && let Ok(profile) = rvc_burn_install::selected()
+        {
+            let folder = runtime.folder.join("runtime").join(profile.folder());
+            runtime.exe = folder.join("rvc.exe");
+            runtime.ort = folder.join("onnxruntime.dll");
+            runtime.managed = Some((profile, state.rvc_burn_downloads.clone()));
+        }
+        runtime
     }
 
     pub(super) fn from_folder(folder: PathBuf) -> Self {
@@ -34,10 +105,22 @@ impl Runtime {
         } else {
             "libonnxruntime.so"
         });
-        Self { folder, exe, ort }
+        Self {
+            folder,
+            exe,
+            ort,
+            managed: None,
+        }
     }
 
     fn missing(&self, training: bool) -> Vec<String> {
+        if let Some((profile, downloads)) = &self.managed {
+            return profile
+                .assets(training)
+                .filter(|asset| !rvc_burn_install::present(downloads, asset))
+                .map(|asset| asset.label.to_owned())
+                .collect();
+        }
         let mut paths = vec![(&self.exe, None), (&self.ort, None)];
         let candidates = [
             (CONTENT, 377_655_729),
@@ -80,20 +163,49 @@ impl Runtime {
         Ok(())
     }
 
-    pub(super) fn environment(&self) -> Vec<(OsString, OsString)> {
+    fn prepare_sdk(&self) -> anyhow::Result<()> {
+        music_core::process::runtime_beside(&self.exe);
+        if let Some((profile, downloader)) = &self.managed {
+            rvc_burn_install::prepare_sdk(*profile, downloader)?;
+        }
+        Ok(())
+    }
+
+    pub(super) fn environment(&self, working_dir: &FsPath) -> Vec<(OsString, OsString)> {
         let path = std::env::join_paths(
-            std::iter::once(self.folder.clone()).chain(
-                std::env::var_os("PATH")
-                    .iter()
-                    .flat_map(std::env::split_paths),
-            ),
+            self.exe
+                .parent()
+                .map(FsPath::to_path_buf)
+                .into_iter()
+                .chain(
+                    std::env::var_os("PATH")
+                        .iter()
+                        .flat_map(std::env::split_paths),
+                ),
         )
         .unwrap_or_default();
-        vec![
+        let mut env = vec![
             ("PATH".into(), path),
             ("ORT_DYLIB_PATH".into(), self.ort.clone().into_os_string()),
             ("RUST_LOG".into(), "info".into()),
-        ]
+        ];
+        if let Some(sdk) = self
+            .exe
+            .parent()
+            .map(|folder| {
+                rvc_burn_install::Profile::from_folder(folder)
+                    .map(|profile| profile.sdk_dir(folder))
+                    .filter(|sdk| sdk.is_dir())
+                    .unwrap_or_else(|| folder.join("cuda-sdk"))
+            })
+            .filter(|sdk| sdk.is_dir())
+        {
+            env.push((
+                "CUDA_PATH".into(),
+                sdk_environment_path(&sdk, working_dir).into_os_string(),
+            ));
+        }
+        env
     }
 
     fn common_args(&self, local: &FsPath) -> Vec<OsString> {
@@ -150,6 +262,7 @@ impl Runtime {
         semitone_shift: i32,
         cancelled: impl Fn() -> bool,
     ) -> anyhow::Result<audio_post::Stereo> {
+        self.prepare_sdk()?;
         let output = stage.join("converted");
         std::fs::create_dir(&output)?;
         let stderr = stage.join("rvc-convert.log");
@@ -168,7 +281,7 @@ impl Runtime {
                 &semitone_shift.to_string(),
             ])
             .args(self.common_args(stage))
-            .envs(self.environment())
+            .envs(self.environment(&self.folder))
             .current_dir(&self.folder)
             .stdin(Stdio::null())
             .stdout(Stdio::null())
@@ -207,6 +320,28 @@ impl Runtime {
     }
 }
 
+// NVRTC interprets the byte strings of its include options using the Windows
+// ANSI API. An ASCII relative path keeps a Unicode profile folder in the
+// child process's wide-character working directory instead.
+fn sdk_environment_path(sdk: &FsPath, working_dir: &FsPath) -> PathBuf {
+    if cfg!(windows) && !sdk.as_os_str().as_encoded_bytes().is_ascii() {
+        for (parents, ancestor) in working_dir.ancestors().enumerate() {
+            if let Ok(rest) = sdk.strip_prefix(ancestor) {
+                let mut relative = PathBuf::from(".");
+                for _ in 0..parents {
+                    relative.push("..");
+                }
+                relative.push(rest);
+                if relative.as_os_str().as_encoded_bytes().is_ascii() {
+                    return relative;
+                }
+                break;
+            }
+        }
+    }
+    sdk.to_owned()
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Settings {
@@ -235,11 +370,16 @@ pub(super) struct Start {
 }
 
 pub(super) async fn status(State(state): State<AppState>) -> Json<Value> {
-    let runtime = Runtime::discover(update_data_root(&state));
-    Json(serde_json::json!({
-        "ready":runtime.ready(true).is_ok(), "conversion_ready":runtime.ready(false).is_ok(),
-        "missing":runtime.missing(true),"folder":runtime.folder,"cuda":hardware::hardware().card_cuda.is_some()
-    }))
+    let runtime = Runtime::discover(&state);
+    let mut result = rvc_burn_install::status(&state).await;
+    let missing = runtime.missing(true);
+    result["ready"] =
+        serde_json::json!(hardware::hardware().card_cuda.is_some() && missing.is_empty());
+    result["conversion_ready"] = serde_json::json!(runtime.ready(false).is_ok());
+    result["missing"] = serde_json::json!(missing);
+    result["folder"] = serde_json::json!(runtime.folder);
+    result["cuda"] = serde_json::json!(hardware::hardware().card_cuda.is_some());
+    Json(result)
 }
 
 pub(super) async fn start(
@@ -256,7 +396,7 @@ pub(super) async fn start(
         ));
     }
     let outcome = async {
-        let runtime = Runtime::discover(update_data_root(&state));
+        let runtime = Runtime::discover(&state);
         runtime.ready(true)?;
         let _lease = state
             .engine_use
@@ -278,6 +418,8 @@ pub(super) async fn start(
                 .is_some_and(|job| !job.finished),
             "Wait until dataset preparation ends."
         );
+        let sdk_runtime = runtime.clone();
+        tokio::task::spawn_blocking(move || sdk_runtime.prepare_sdk()).await??;
         state.ace_runtime.stop().await?;
         state.minimax.stop().await;
         evict_kept_models(&state, "before RVC Burn training").await;
@@ -345,4 +487,56 @@ pub(super) fn progress(line: &str) -> Option<(u32, training::TrainingStepRecord)
             step_ms: None,
         },
     ))
+}
+
+#[cfg(all(test, windows))]
+#[test]
+fn nvrtc_uses_an_ascii_relative_include_root_for_a_unicode_profile() {
+    let studio = FsPath::new("studio/данные");
+    let sdk = studio.join("rvc/burn/runtime/cuda13/cuda-sdk-pinned");
+    let training = studio.join("training/runs/saved");
+    let convert = studio.join("rvc/burn");
+    assert_eq!(
+        sdk_environment_path(&sdk, &training),
+        PathBuf::from("./../../../rvc/burn/runtime/cuda13/cuda-sdk-pinned")
+    );
+    assert_eq!(
+        sdk_environment_path(&sdk, &convert),
+        PathBuf::from("./runtime/cuda13/cuda-sdk-pinned")
+    );
+}
+
+#[cfg(test)]
+#[test]
+fn interrupted_best_write_keeps_the_preceding_completed_checkpoint() {
+    let run = tempfile::tempdir().unwrap();
+    let raw = run
+        .path()
+        .join("rvc-output/checkpoint/voice.best.safetensors");
+    std::fs::create_dir_all(raw.parent().unwrap()).unwrap();
+    let header = serde_json::to_vec(&serde_json::json!({
+        "__metadata__": {"producer": "burn"},
+        "enc_p.emb_phone.weight": {"shape": [768], "data_offsets": [0, 1]},
+        "emb_g.weight": {"data_offsets": [1, 2]},
+        "dec.conv_post.weight": {"data_offsets": [2, 3]},
+    }))
+    .unwrap();
+    let mut checkpoint = (header.len() as u64).to_le_bytes().to_vec();
+    checkpoint.extend(header);
+    checkpoint.extend([0x0a, 0x0b, 0x0c]);
+    std::fs::write(&raw, &checkpoint).unwrap();
+    assert_eq!(
+        best_report("00:42 INFO best mel 45.500 (step 2) saved"),
+        Some((2, 45.5))
+    );
+    snapshot_best(run.path(), 2, 45.5).unwrap();
+    let previous = best_snapshot(run.path()).unwrap();
+
+    std::fs::write(&raw, &checkpoint[..checkpoint.len() - 2]).unwrap();
+    assert!(snapshot_best(run.path(), 3, 42.0).is_err());
+    assert_eq!(best_snapshot(run.path()).unwrap(), previous);
+    assert_eq!(
+        std::fs::read(previous.join("voice.safetensors")).unwrap(),
+        checkpoint
+    );
 }

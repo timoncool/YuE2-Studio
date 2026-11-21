@@ -1,0 +1,158 @@
+{
+  "worker12": {
+    "label": "RVC Burn CUDA 12",
+    "url": "https://github.com/timoncool/YuE2-Studio/releases/download/rvc-burn-tools-0639605/rvc-burn-cuda12-windows-x64.zip",
+    "file": "rvc-burn-cuda12-windows-x64.zip",
+    "bytes": 14913968,
+    "sha256": "79e27b181844fa2d3a76436cd5dd1473afa138dbaef475834993958fdf13d39e",
+    "pick": [
+      "rvc.exe",
+      "COPYING"
+    ]
+  },
+  "worker13": {
+    "label": "RVC Burn CUDA 13",
+    "url": "https://github.com/timoncool/YuE2-Studio/releases/download/rvc-burn-tools-0639605/rvc-burn-cuda13-windows-x64.zip",
+    "file": "rvc-burn-cuda13-windows-x64.zip",
+    "bytes": 14914052,
+    "sha256": "26d17286ae5ecbc754ac7193ca5c87d864411d70c5cbe1a0c13a68e22383da4b",
+    "pick": [
+      "rvc.exe",
+      "COPYING"
+    ]
+  },
+  "cudart12": {
+    "label": "NVIDIA CUDART headers 12.9.79",
+    "url": "https://developer.download.nvidia.com/compute/cuda/redist/cuda_cudart/windows-x86_64/cuda_cudart-windows-x86_64-12.9.79-archive.zip",
+    "file": "cuda_cudart-windows-x86_64-12.9.79-archive.zip",
+    "bytes": 3521238,
+    "sha256": "179e9c43b0735ffe67207b3da556eb5a0c50f3047961882b7657d3b822d34ef8",
+    "pick": [],
+    "headers": true
+  },
+  "crt12": {
+    "label": "NVIDIA NVCC headers 12.9.86",
+    "url": "https://developer.download.nvidia.com/compute/cuda/redist/cuda_nvcc/windows-x86_64/cuda_nvcc-windows-x86_64-12.9.86-archive.zip",
+    "file": "cuda_nvcc-windows-x86_64-12.9.86-archive.zip",
+    "bytes": 126917884,
+    "sha256": "227b109663b5e57d2718bcabb24a4ba0d9d4e52d958e327dc476f7c28691be85",
+    "pick": [],
+    "headers": true
+  },
+  "cccl12": {
+    "label": "NVIDIA CCCL headers 12.9.27",
+    "url": "https://developer.download.nvidia.com/compute/cuda/redist/cuda_cccl/windows-x86_64/cuda_cccl-windows-x86_64-12.9.27-archive.zip",
+    "file": "cuda_cccl-windows-x86_64-12.9.27-archive.zip",
+    "bytes": 3127658,
+    "sha256": "17aaa7c6b8f94a417d8f3261780b7e34b9cbdfab7513bce86768623b06aa28b5",
+    "pick": [],
+    "headers": true
+  },
+  "cudart13": {
+    "label": "NVIDIA CUDART headers 13.3.29",
+    "url": "https://developer.download.nvidia.com/compute/cuda/redist/cuda_cudart/windows-x86_64/cuda_cudart-windows-x86_64-13.3.29-archive.zip",
+    "file": "cuda_cudart-windows-x86_64-13.3.29-archive.zip",
+    "bytes": 2589792,
+    "sha256": "1feb7dd266813ffe8dbc24e115183a5ac35a4795c8d34aca0df85ab616b64d9c",
+    "pick": [],
+    "headers": true
+  },
+  "crt13": {
+    "label": "NVIDIA CRT headers 13.3.33",
+    "url": "https://developer.download.nvidia.com/compute/cuda/redist/cuda_crt/windows-x86_64/cuda_crt-windows-x86_64-13.3.33-archive.zip",
+    "file": "cuda_crt-windows-x86_64-13.3.33-archive.zip",
+    "bytes": 163110,
+    "sha256": "752c528281a06a0ddf89237d760ffd6acde1b9cd59efc35803c2591127ef55f0",
+    "pick": [],
+    "headers": true
+  },
+  "cccl13": {
+    "label": "NVIDIA CCCL headers 13.3.3.3.1",
+    "url": "https://developer.download.nvidia.com/compute/cuda/redist/cccl/windows-x86_64/cccl-windows-x86_64-13.3.3.3.1-archive.zip",
+    "file": "cccl-windows-x86_64-13.3.3.3.1-archive.zip",
+    "bytes": 3544189,
+    "sha256": "607dcfca31da168171fbdae5b7096ade646c4c2b1e0ff2899077dde0ccbdd6fb",
+    "pick": [],
+    "headers": true
+  },
+  "content": {
+    "label": "ContentVec acoustic features",
+    "url": "https://huggingface.co/NaruseMioShirakana/MoeSS-SUBModel/resolve/3ff2e37e161ebcb3c4711e7ec870472342260842/vec-768-layer-12.onnx",
+    "file": "vec-768-layer-12.onnx",
+    "bytes": 377655729,
+    "sha256": "b3886e7dff1495cda514f94f4680a7b1261e05d6929f5c764cdb17934b413c2a",
+    "pick": []
+  },
+  "pitch": {
+    "label": "RMVPE pitch estimation",
+    "url": "https://huggingface.co/lj1995/VoiceConversionWebUI/resolve/e6d0c1a17da07c33557852f9dfa2bd44cc75737d/rmvpe.onnx",
+    "file": "rmvpe.onnx",
+    "bytes": 361688443,
+    "sha256": "5370e71ac80af8b4b7c793d27efd51fd8bf962de3a7ede0766dac0befa3660fd",
+    "pick": []
+  },
+  "generator": {
+    "label": "RVC generator warm start",
+    "url": "https://huggingface.co/lj1995/VoiceConversionWebUI/resolve/e6d0c1a17da07c33557852f9dfa2bd44cc75737d/pretrained_v2/f0G48k.pth",
+    "file": "f0G48k.pth",
+    "bytes": 75465569,
+    "sha256": "b5d51f589cc3632d4eae36a315b4179397695042edc01d15312e1bddc2b764a4",
+    "pick": []
+  },
+  "discriminator": {
+    "label": "RVC discriminator warm start",
+    "url": "https://huggingface.co/lj1995/VoiceConversionWebUI/resolve/e6d0c1a17da07c33557852f9dfa2bd44cc75737d/pretrained_v2/f0D48k.pth",
+    "file": "f0D48k.pth",
+    "bytes": 142875703,
+    "sha256": "2269b73c7a4cf34da09aea99274dabf99b2ddb8a42cbfb065fb3c0aa9a2fc748",
+    "pick": []
+  },
+  "ffmpeg": {
+    "label": "FFmpeg shared libraries",
+    "url": "https://github.com/GyanD/codexffmpeg/releases/download/9.0.2/ffmpeg-9.0.2-full_build-shared.zip",
+    "file": "ffmpeg-9.0.2-full_build-shared.zip",
+    "bytes": 99899672,
+    "sha256": "8d31e162f1616e37aab3fa2db991b97e1b8dbeb1c8465fd81a81be16ff91b328",
+    "pick": [
+      "avcodec-63.dll",
+      "avdevice-63.dll",
+      "avfilter-12.dll",
+      "avformat-63.dll",
+      "avutil-61.dll",
+      "swresample-7.dll",
+      "swscale-10.dll"
+    ]
+  },
+  "ort": {
+    "label": "ONNX Runtime CPU libraries",
+    "url": "https://github.com/timoncool/onnxruntime/releases/download/v1.31.1/onnxruntime-win-x64-1.31.1.zip",
+    "file": "onnxruntime-win-x64-1.31.1.zip",
+    "bytes": 82929944,
+    "sha256": "5869e26bb25314375f2d5ef1877e3ea06b1543d6c710e6e4a1ec2f7177ab4b2c",
+    "pick": [
+      "onnxruntime.dll"
+    ]
+  },
+  "nvrtc12": {
+    "label": "NVIDIA Runtime Compilation 12.9",
+    "url": "https://developer.download.nvidia.com/compute/cuda/redist/cuda_nvrtc/windows-x86_64/cuda_nvrtc-windows-x86_64-12.9.86-archive.zip",
+    "file": "cuda_nvrtc-windows-x86_64-12.9.86-archive.zip",
+    "bytes": 314608748,
+    "sha256": "1aa0644fa53c8ca34cdc73db17bcc73530557bdd3f582c7bfdbd7916c8b48f65",
+    "pick": [
+      "nvrtc64_120_0.dll",
+      "nvrtc-builtins64_129.dll"
+    ]
+  },
+  "nvrtc13": {
+    "label": "NVIDIA Runtime Compilation 13.3",
+    "url": "https://developer.download.nvidia.com/compute/cuda/redist/cuda_nvrtc/windows-x86_64/cuda_nvrtc-windows-x86_64-13.3.33-archive.zip",
+    "file": "cuda_nvrtc-windows-x86_64-13.3.33-archive.zip",
+    "bytes": 312126196,
+    "sha256": "8519f678588610bf380ccaac130729aa1a624c407183e7ad9c319c19ecc63d2f",
+    "pick": [
+      "nvrtc64_130_0.dll",
+      "nvrtc-builtins64_133.dll"
+    ]
+  }
+}

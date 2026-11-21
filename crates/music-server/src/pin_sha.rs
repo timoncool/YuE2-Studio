@@ -111,7 +111,7 @@ pub fn sha256(url: &str) -> Option<&'static str> {
     if let Some(sha256) = crate::community::sha256(url) {
         return Some(sha256);
     }
-    if let Some(sha256) = crate::rvc_fast_install::sha256(url) {
+    if let Some(sha256) = crate::rvc_burn_install::sha256(url).or_else(|| crate::rvc_fast_install::sha256(url)) {
         return Some(sha256);
     }
     crate::acpp::BUILDS

@@ -52,7 +52,7 @@ import { Vevo2SingingFields, vevo2SingingStrings, type Vevo2References } from '.
 import { NumberField } from './NumberField';
 import { explainCliFailure } from '../services/cliFailure';
 import { loadNativeOpenRouterCatalog, modelsForCapability, refreshNativeOpenRouterCatalog, type NativeOpenRouterModel } from '../services/nativeOpenRouter';
-import { musicSourceStrings, nativeMusicSourceStrings } from '../i18n/musicSource';
+import { miDashengDurationStrings, musicSourceStrings, nativeMusicSourceStrings } from '../i18n/musicSource';
 import { useSignedMusicSelection } from '../services/signedMusicSelection';
 import { useMusicPair, type PairSource } from '../services/musicPair';
 import { musicPairStrings } from '../i18n/musicPair';
@@ -493,9 +493,11 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
   const [stableSettings, setStableSettings] = useState(emptyStableAudioDraft);
   const [vevoReferences, setVevoReferences] = useState<Vevo2References>({ voice_song_id: '' });
   const nativeStrings = nativeMusicSourceStrings[language];
+  const durationHintId = React.useId();
+  const miDashengDuration = miDashengDurationStrings[language];
   const yue = musicEngine === 'local';
   const nativeControls = [
-    ['duration_seconds', nativeStrings.duration],
+    ['duration_seconds', miDasheng ? miDashengDuration.limit : nativeStrings.duration],
     ['steps', nativeStrings.steps],
     ['seed', nativeStrings.seed],
     nativeEngine === 'minimaxmusic-cpp'
@@ -1941,6 +1943,17 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
                         {native.profiles.map(profile => <option key={profile.id} value={profile.id}>{profile.label}{(!native.installed || !profile.ready) ? ` — ${nativeStrings.unavailable}` : ''}</option>)}
                       </select>
                     )}
+                    {native.profile?.status === 'experimental' && <p className="text-xs">{nativeStrings.experimental}</p>}
+                    {native.profile?.package_url && native.profile.model_directory && (native.profile.missing_bytes ?? 0) > 0 && (
+                      <div className="space-y-1 text-xs">
+                        <p>{nativeStrings.manualWeights} · {new Intl.NumberFormat(language, { maximumFractionDigits: 2 }).format(
+                          (native.profile.missing_bytes ?? 0) / 2 ** 30
+                        )} GiB</p>
+                        <p>{nativeStrings.modelDirectory} <code>{native.profile.model_directory}</code></p>
+                        <a href={native.profile.package_url} target="_blank" rel="noreferrer" className="mr-2 underline">{nativeStrings.weightFiles}</a>
+                        {native.profile.license_url && <a href={native.profile.license_url} target="_blank" rel="noreferrer" className="underline">{nativeStrings.modelLicense}</a>}
+                      </div>
+                    )}
                     {native.profile && !native.ready && <p role="status" className="text-xs">
                       {nativeStrings.unavailable}{native.profile.missing?.length ? ` · ${native.profile.missing.join(', ')}` : ''}
                     </p>}
@@ -2049,6 +2062,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
                       <label key={key} className="space-y-1 text-xs">
                         <span>{label}</span>
                         <input type="number" step={key === 'duration_seconds' || key === 'guidance_scale' ? 'any' : 1}
+                          aria-describedby={miDasheng && key === 'duration_seconds' ? durationHintId : undefined}
                           min={miniMaxH3 && key === 'duration_seconds' ? 1 : undefined}
                           max={miniMaxH3 && key === 'duration_seconds' ? 20 : undefined}
                           className={CONTROL} value={native.settings[key] ?? ''}
@@ -2056,6 +2070,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
                           onChange={event => native.set(key, event.target.value)} />
                       </label>
                     ))}
+                    {miDasheng && <p id={durationHintId} className="col-span-2 text-xs text-zinc-500">{miDashengDuration.hint}</p>}
                     {nativeEngine !== 'acestep-cpp' && (
                       <label className="space-y-1 text-xs">
                         <span>{t('outputFormat')}</span>
