@@ -59,13 +59,14 @@ def site_rows(path):
     return parser.rows[1:]
 
 
-def expected_cells(row, decimal_comma):
+def expected_cells(row, resident, decimal_comma):
     seconds = row["runs"][0]["audio_seconds"]
     peak = row["cold_vram_peak_bytes"]
     delta = row["cold_vram_increase_bytes"]
     label = " · ".join((
         row["family"], f"{row['engine']} {row['revision']}", row["weight_profile"], row["workload"],
     ))
+    label = resident["label"] if resident else label
     numbers = [
         f"{seconds:.3f}",
         f"{row['cold_seconds']:.3f}",
@@ -74,17 +75,62 @@ def expected_cells(row, decimal_comma):
         f"{peak / GIB:.2f} / {delta / GIB:+.2f}",
         f"{row['warm_pre_request_vram_bytes'] / GIB:.2f}",
         f"{row['cold_rss_peak_bytes'] / GIB:.2f}",
+        resident_cell(resident),
     ]
     if decimal_comma:
         numbers = [value.replace(".", ",") for value in numbers]
     return [label, row["backend"], *numbers]
 
 
-def validate_table(path, observed, rows, decimal_comma=False):
-    assert len(observed) == len(rows), f"{path}: {len(observed)} rows, expected {len(rows)}"
-    for index, (actual, row) in enumerate(zip(observed, rows), 1):
-        expected = expected_cells(row, decimal_comma)
+def resident_cell(resident):
+    if resident is None:
+        return "—"
+    return f"{resident['dedicated_gpu_bytes'] / GIB:.2f} / {resident['rss_bytes'] / GIB:.2f}"
+
+
+def validate_table(path, observed, rows, residency, decimal_comma=False):
+    with_timing = {entry["timing_summary_id"]: entry for entry in residency if "timing_summary_id" in entry}
+    expected_rows = [
+        expected_cells(row, with_timing.get(row["summary_id"]), decimal_comma)
+        for row in rows
+    ]
+    for entry in residency:
+        if "timing_summary_id" not in entry:
+            numbers = [f"{entry['audio_seconds']:.3f}", *(["—"] * 6), resident_cell(entry)]
+            if decimal_comma:
+                numbers = [value.replace(".", ",") for value in numbers]
+            expected_rows.append([entry["label"], entry["backend"], *numbers])
+    assert len(observed) == len(expected_rows), f"{path}: {len(observed)} rows, expected {len(expected_rows)}"
+    for index, (actual, expected) in enumerate(zip(observed, expected_rows), 1):
         assert actual == expected, f"{path}: row {index}\nexpected {expected!r}\nfound    {actual!r}"
+
+
+def verify_residency(residency, rows, evidence_dir):
+    timings = {row["summary_id"]: row for row in rows}
+    assert len(residency) == 3
+    for revision, entry in residency.items():
+        assert revision in entry["label"] and entry["backend"] == "CUDA 13"
+        assert entry["dedicated_gpu_bytes"] > 0 and entry["rss_bytes"] > 0 and entry["audio_seconds"] > 0
+        for name in ("binary_sha256", "cuda_dll_sha256", "wav_sha256"):
+            assert SHA256.fullmatch(entry[name]), entry["label"]
+        if "timing_summary_id" in entry:
+            timing = timings[entry["timing_summary_id"]]
+            assert timing["binary_sha256"] == entry["binary_sha256"]
+            assert timing["backend"] == entry["backend"]
+            assert timing["revision"] == revision
+        if evidence_dir is not None:
+            receipt = evidence_dir / entry["receipt"]
+            raw = json.loads(receipt.read_bytes())
+            assert raw["published_engine"] == revision and raw["keep_loaded"] and raw["warmup_song_count"] == 1
+            assert raw["binary_sha256"] == entry["binary_sha256"]
+            assert raw["cuda_modules"]["ggml-cuda.dll"] == entry["cuda_dll_sha256"]
+            assert raw["warmup_audio_seconds"] == entry["audio_seconds"]
+            wav = receipt.with_name(receipt.name.replace("-resident.json", ".wav"))
+            assert hashlib.sha256(wav.read_bytes()).hexdigest() == entry["wav_sha256"]
+            samples = raw["samples"]
+            assert len(samples) == 3
+            assert entry["dedicated_gpu_bytes"] == median(sample["wddm_dedicated_gpu_bytes"] for sample in samples)
+            assert entry["rss_bytes"] == median(sample["rss_bytes"] for sample in samples)
 
 
 def verify_wav(evidence_dir, row):
@@ -135,14 +181,17 @@ def main():
     args = parser.parse_args()
     payload = (ROOT / "docs/music-gpu-benchmarks.json").read_text(encoding="utf-8")
     assert not re.search(r"[A-Za-z]:[/\\]|GPU-[a-f0-9-]{20}", payload), "Local paths or GPU UUID in public data"
-    rows = json.loads(payload)["rows"]
+    data = json.loads(payload)
+    rows = data["rows"]
+    residency = data["published_residency"]
+    verify_residency(residency, rows, args.evidence_dir)
     validate_data(rows, args.evidence_dir)
     readme = ROOT / "README.md"
-    validate_table(readme, readme_rows(readme), rows)
+    validate_table(readme, readme_rows(readme), rows, residency.values())
     for locale in LOCALES:
         page = ROOT / "docs" / f"{locale}.html"
-        validate_table(page, site_rows(page), rows, decimal_comma=locale in {"ru", "pt"})
-    print(f"{len(rows)} music GPU rows match the README and {len(LOCALES)} site pages.")
+        validate_table(page, site_rows(page), rows, residency.values(), decimal_comma=locale in {"ru", "pt"})
+    print(f"{len(rows)} timing results and {len(residency)} published residency results match the README and {len(LOCALES)} site pages.")
 
 
 if __name__ == "__main__":

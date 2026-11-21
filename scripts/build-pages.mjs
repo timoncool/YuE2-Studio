@@ -67,8 +67,14 @@ function musicGpuMatrix(lang) {
     const printed = value.toFixed(places);
     return lang === 'ru' || lang === 'pt' ? printed.replace('.', ',') : printed;
   };
+  const residency = Object.values(musicBenchmarks.published_residency);
+  const residentCell = (entry) => entry
+    ? `${number(entry.dedicated_gpu_bytes / gib, 2)} / ${number(entry.rss_bytes / gib, 2)}`
+    : '—';
+  const renderRow = (cells) => `      <tr>${cells.map((cell) => `<td>${escape(cell)}</td>`).join('')}</tr>`;
   const rows = musicBenchmarks.rows.map((row) => {
-    const label = [row.family, `${row.engine} ${row.revision}`, row.weight_profile, row.workload].join(' · ');
+    const resident = residency.find((entry) => entry.timing_summary_id === row.summary_id);
+    const label = resident?.label ?? [row.family, `${row.engine} ${row.revision}`, row.weight_profile, row.workload].join(' · ');
     const peak = number(row.cold_vram_peak_bytes / gib, 2);
     const delta = row.cold_vram_increase_bytes / gib;
     const cells = [
@@ -78,9 +84,14 @@ function musicGpuMatrix(lang) {
       `${peak} / ${delta >= 0 ? '+' : ''}${number(delta, 2)}`,
       number(row.warm_pre_request_vram_bytes / gib, 2),
       number(row.cold_rss_peak_bytes / gib, 2),
+      residentCell(resident),
     ];
-    return `      <tr>${cells.map((cell) => `<td>${escape(cell)}</td>`).join('')}</tr>`;
+    return renderRow(cells);
   });
+  for (const entry of residency.filter((item) => !item.timing_summary_id)) {
+    rows.push(renderRow([entry.label, entry.backend, number(entry.audio_seconds, 3),
+      '—', '—', '—', '—', '—', '—', residentCell(entry)]));
+  }
   return `<!-- music-gpu-matrix:start -->
     <h3>${escape(title)}</h3>
     <p class="note">${escape(note)}</p>

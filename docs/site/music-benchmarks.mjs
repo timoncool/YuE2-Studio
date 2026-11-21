@@ -31,8 +31,8 @@ export const RVC = `    <h3>RVC voice conversion on GPU (5.0 development builds)
 
 export const MATRIX_TEXT = {
   "en": {
-    "title": "Music engine GPU matrix · 5.0 development",
-    "note": "Windows 11, RTX 4090, driver 617.42. Cold includes server launch and the first WAV response. Warm is the median of three requests to the same server. Memory peaks are cold-run whole-card VRAM and process-tree RSS. Compare rows within each workload and check the weight profiles, silence and exact build before drawing a speed conclusion. Warm pre-request VRAM is the median reading for the whole card immediately before those three requests.",
+    "title": "Music engine GPU matrix · 5.0 development and published builds",
+    "note": "Windows 11, RTX 4090, driver 617.42. Cold includes server launch and the first WAV response. Warm is the median of three requests to the same server. Memory peaks are cold-run whole-card VRAM and process-tree RSS. Compare rows within each workload and check the weight profiles, silence and exact build before drawing a speed conclusion. Warm pre-request VRAM is the median reading for the whole card immediately before those three requests. Resident WDDM VRAM and RSS are medians of three idle process-tree samples after one warm-up on the published CUDA 13 builds.",
     "columns": [
       "Model and engine",
       "Backend",
@@ -42,13 +42,14 @@ export const MATRIX_TEXT = {
       "Warm audio s/s",
       "VRAM peak / Δ (GiB)",
       "Warm pre-request VRAM (GiB)",
-      "Peak RAM (GiB)"
+      "Peak RAM (GiB)",
+      "Resident WDDM VRAM / RSS (GiB)"
     ],
     "detail": "Runs, SHA-256 and weight profiles"
   },
   "ru": {
-    "title": "Музыкальные движки на GPU · тесты для 5.0",
-    "note": "Windows 11, RTX 4090, драйвер 617.42. Холодный замер включает запуск сервера и получение первого WAV. Прогретый — медиана трёх запросов к тому же серверу. Пики холодного прогона относятся ко всей карте и RSS дерева процессов. Сравнивайте строки одной задачи с учётом весов, тишины и ревизий. VRAM до прогретого запроса — медиана трёх показаний всей карты непосредственно перед этими запросами.",
+    "title": "Музыкальные движки на GPU · тесты для 5.0 и выпущенные сборки",
+    "note": "Windows 11, RTX 4090, драйвер 617.42. Холодный замер включает запуск сервера и получение первого WAV. Прогретый — медиана трёх запросов к тому же серверу. Пики холодного прогона относятся ко всей карте и RSS дерева процессов. Сравнивайте строки одной задачи с учётом весов, тишины и ревизий. VRAM до прогретого запроса — медиана трёх показаний всей карты непосредственно перед этими запросами. Резидентная VRAM WDDM и RSS — медианы трёх замеров дерева процессов в простое после одного прогрева опубликованных сборок CUDA 13.",
     "columns": [
       "Модель и движок",
       "Бэкенд",
@@ -58,13 +59,14 @@ export const MATRIX_TEXT = {
       "Аудиосекунд/с",
       "Пик / Δ VRAM (ГиБ)",
       "VRAM до прогретого запроса (ГиБ)",
-      "Пик RAM (ГиБ)"
+      "Пик RAM (ГиБ)",
+      "Резидентная VRAM WDDM / RSS (ГиБ)"
     ],
     "detail": "Замеры, SHA-256 и наборы весов"
   },
   "pt": {
-    "title": "Motores de música na GPU · testes para a versão 5.0",
-    "note": "Windows 11, RTX 4090, controlador 617.42. O arranque inclui o início do servidor até à primeira resposta WAV. A mediana aquecida usa três pedidos no mesmo servidor. Os picos no arranque incluem a VRAM da placa e o RSS da árvore de processos. Compare os resultados da mesma tarefa tendo em conta os pesos, o silêncio e as revisões. A VRAM antes do pedido aquecido é a mediana das três leituras da placa completa imediatamente antes dos pedidos.",
+    "title": "Motores de música na GPU · testes para a versão 5.0 e versões publicadas",
+    "note": "Windows 11, RTX 4090, controlador 617.42. O arranque inclui o início do servidor até à primeira resposta WAV. A mediana aquecida usa três pedidos no mesmo servidor. Os picos no arranque incluem a VRAM da placa e o RSS da árvore de processos. Compare os resultados da mesma tarefa tendo em conta os pesos, o silêncio e as revisões. A VRAM antes do pedido aquecido é a mediana das três leituras da placa completa imediatamente antes dos pedidos. A VRAM WDDM e o RSS residentes são as medianas de três leituras da árvore de processos em repouso após um aquecimento nas versões publicadas com CUDA 13.",
     "columns": [
       "Modelo e motor",
       "Backend",
@@ -74,13 +76,14 @@ export const MATRIX_TEXT = {
       "Áudio s/s",
       "Pico / Δ VRAM (GiB)",
       "VRAM antes do pedido aquecido (GiB)",
-      "Pico de RAM (GiB)"
+      "Pico de RAM (GiB)",
+      "VRAM WDDM / RSS residentes (GiB)"
     ],
     "detail": "Execuções, SHA-256 e conjuntos de pesos"
   },
   "zh": {
-    "title": "音乐引擎 GPU 测试矩阵 · 5.0 开发版",
-    "note": "Windows 11、RTX 4090、驱动 617.42。冷启动计时包含服务器启动至收到首个 WAV，预热后为同一服务器三次请求的中位数。内存数据为冷启动时整卡显存和进程树 RSS 峰值。比较同一任务时也需核对权重、静音段和构建版本。 热运行请求前显存为三次请求之前整张显卡显存读数的中位数。",
+    "title": "音乐引擎 GPU 测试矩阵 · 5.0 开发版与已发布版本",
+    "note": "Windows 11、RTX 4090、驱动 617.42。冷启动计时包含服务器启动至收到首个 WAV，预热后为同一服务器三次请求的中位数。内存数据为冷启动时整卡显存和进程树 RSS 峰值。比较同一任务时也需核对权重、静音段和构建版本。 热运行请求前显存为三次请求之前整张显卡显存读数的中位数。 驻留 WDDM 显存和 RSS 为已发布 CUDA 13 版本预热一次后，进程树空闲时三次测量的中位数。",
     "columns": [
       "模型和引擎",
       "后端",
@@ -90,13 +93,14 @@ export const MATRIX_TEXT = {
       "音频秒/秒",
       "显存峰值 / 增量（GiB）",
       "热运行请求前显存（GiB）",
-      "内存峰值（GiB）"
+      "内存峰值（GiB）",
+      "驻留 WDDM 显存 / RSS（GiB）"
     ],
     "detail": "各次运行、SHA-256 和权重配置"
   },
   "ja": {
-    "title": "音楽エンジンの GPU 比較 · 5.0 開発版",
-    "note": "Windows 11、RTX 4090、ドライバー 617.42。初回はサーバー起動から最初の WAV 受信までです。再実行は同じサーバーに送った 3 回の中央値です。メモリーは初回のカード全体とプロセスツリー RSS のピークです。同じ処理を比較し、重み、無音区間、リビジョンもご確認ください。 ウォームリクエスト前の VRAM は、各リクエストの直前に測定した GPU 全体の使用量の中央値です。",
+    "title": "音楽エンジンの GPU 比較 · 5.0 開発版と公開版",
+    "note": "Windows 11、RTX 4090、ドライバー 617.42。初回はサーバー起動から最初の WAV 受信までです。再実行は同じサーバーに送った 3 回の中央値です。メモリーは初回のカード全体とプロセスツリー RSS のピークです。同じ処理を比較し、重み、無音区間、リビジョンもご確認ください。 ウォームリクエスト前の VRAM は、各リクエストの直前に測定した GPU 全体の使用量の中央値です。 常駐 WDDM VRAM と RSS は、公開版の CUDA 13 で 1 回実行した後、アイドル状態のプロセスツリーを 3 回測定した中央値です。",
     "columns": [
       "モデルとエンジン",
       "バックエンド",
@@ -106,13 +110,14 @@ export const MATRIX_TEXT = {
       "音声秒/秒",
       "VRAM ピーク / 増分（GiB）",
       "ウォームリクエスト前の VRAM（GiB）",
-      "RAM ピーク（GiB）"
+      "RAM ピーク（GiB）",
+      "常駐 WDDM VRAM / RSS（GiB）"
     ],
     "detail": "個別の計測結果、SHA-256、重みの構成"
   },
   "ko": {
-    "title": "음악 엔진 GPU 비교 · 5.0 개발 빌드",
-    "note": "Windows 11, RTX 4090, 드라이버 617.42. 첫 실행은 서버 시작부터 첫 WAV 응답까지입니다. 재실행은 같은 서버에 보낸 3개 요청의 중앙값입니다. 메모리는 첫 실행의 전체 GPU 및 프로세스 트리 RSS 최대값입니다. 같은 작업에서 가중치, 무음 구간 및 빌드 버전을 확인하세요. 웜 요청 전 VRAM은 세 요청 직전에 측정한 전체 GPU 사용량의 중앙값입니다.",
+    "title": "음악 엔진 GPU 비교 · 5.0 개발 빌드와 출시 버전",
+    "note": "Windows 11, RTX 4090, 드라이버 617.42. 첫 실행은 서버 시작부터 첫 WAV 응답까지입니다. 재실행은 같은 서버에 보낸 3개 요청의 중앙값입니다. 메모리는 첫 실행의 전체 GPU 및 프로세스 트리 RSS 최대값입니다. 같은 작업에서 가중치, 무음 구간 및 빌드 버전을 확인하세요. 웜 요청 전 VRAM은 세 요청 직전에 측정한 전체 GPU 사용량의 중앙값입니다. 상주 WDDM VRAM과 RSS는 출시된 CUDA 13 빌드를 한 번 예열한 후 유휴 상태의 프로세스 트리에서 측정한 세 값의 중앙값입니다.",
     "columns": [
       "모델 및 엔진",
       "백엔드",
@@ -122,7 +127,8 @@ export const MATRIX_TEXT = {
       "오디오 초/초",
       "VRAM 최대 / 증가 (GiB)",
       "웜 요청 전 VRAM (GiB)",
-      "RAM 최대 (GiB)"
+      "RAM 최대 (GiB)",
+      "상주 WDDM VRAM / RSS (GiB)"
     ],
     "detail": "개별 실행, SHA-256 및 가중치 구성"
   }

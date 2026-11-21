@@ -397,39 +397,41 @@ Memory was sampled every 200 ms. Peak GPU usage rose 9.56 GiB on CUDA and 9.99 G
 For seed 42, both WAVs contain 30.0 s of stereo audio at 48 kHz. Measured in 100 ms windows across both channels, the last 5.3 s on CUDA and 5.0 s on Vulkan stay below −60 dBFS RMS. The speed column uses the full WAV duration.
 
 <!-- music-gpu-matrix:start -->
-### Music engine GPU matrix · 5.0 development
+### Music engine GPU matrix · 5.0 development and published builds
 
-Windows 11, RTX 4090, driver 617.42. Cold includes server launch and the first WAV response. Warm is the median of three requests to the same server. Memory peaks are cold-run whole-card VRAM and process-tree RSS. Warm pre-request VRAM is the median whole-card reading immediately before each of the three warm requests. Compare rows within each workload and check the weight profiles, silence and exact build before drawing a speed conclusion.
+Windows 11, RTX 4090, driver 617.42. Cold includes server launch and the first WAV response. Warm is the median of three requests to the same server. Memory peaks are cold-run whole-card VRAM and process-tree RSS. Warm pre-request VRAM is the median whole-card reading immediately before each of the three warm requests. Resident WDDM VRAM and RSS are medians of three idle process-tree samples after one warm-up on the published CUDA 13 builds. Compare rows within each workload and check the weight profiles, silence and exact build before drawing a speed conclusion.
 
-| Model and engine | Backend | WAV (s) | Cold (s) | Warm (s) | Warm audio s/s | VRAM peak / Δ (GiB) | Warm pre-request VRAM (GiB) | Peak RAM (GiB) |
-| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| YuE2 · yue2.cpp `892b9b0` · 3B Q8_0 + F32 VAE; NAR v9 · 30 s · 32 steps | CUDA 13 | 29.999 | 8.813 | 4.759 | 6.30× | 8.13 / +5.75 | 8.13 | 3.37 |
-| YuE2 · yue2.cpp `892b9b0` · 3B Q8_0 + F32 VAE; NAR v9 · 30 s · 32 steps | Vulkan | 29.999 | 16.609 | 5.861 | 5.12× | 8.19 / +5.81 | 8.87 | 3.08 |
-| YuE2 · audio.cpp `41242418` · 3B Q8_0 + F16 VAE; NAR v9 · 30 s · 32 steps | CUDA 13 | 29.999 | 16.807 | 7.441 | 4.03× | 7.02 / +4.68 | 3.16 | 6.24 |
-| YuE2 · audio.cpp `41242418` · 3B Q8_0 + F16 VAE; NAR v9 · 30 s · 32 steps | Vulkan | 29.999 | 28.258 | 10.286 | 2.92× | 6.44 / +4.51 | 2.54 | 6.85 |
-| YuE2 · yue2.cpp `892b9b0` · 3B Q8_0 + F32 VAE; NAR v9 · 100 tokens · 2 steps | CUDA 13 | 3.999 | 6.516 | 0.172 | 23.20× | 6.88 / +4.51 | 6.88 | 3.40 |
-| YuE2 · audio.cpp `41242418` · 3B Q8_0 + F16 VAE; NAR v9 · 100 tokens · 2 steps | CUDA 13 | 3.999 | 7.482 | 0.383 | 10.44× | 6.28 / +3.92 | 3.03 | 5.84 |
-| YuE2 · yue2.cpp `892b9b0` · 3B Q8_0 + F32 VAE; NAR v9 · 100 tokens · 2 steps | CUDA 12 | 3.999 | 4.969 | 0.125 | 31.95× | 6.88 / +4.50 | 6.88 | 3.45 |
-| YuE2 · audio.cpp `41242418` · 3B Q8_0 + F16 VAE; NAR v9 · 100 tokens · 2 steps | CUDA 12 | 3.999 | 7.869 | 0.420 | 9.52× | 6.46 / +4.10 | 3.03 | 5.76 |
-| YuE2 · yue2.cpp `892b9b0` · 3B Q8_0 + F32 VAE; NAR v9 · 100 tokens · 2 steps | Vulkan | 3.999 | 13.766 | 0.252 | 15.88× | 6.54 / +4.17 | 6.54 | 3.82 |
-| YuE2 · audio.cpp `41242418` · 3B Q8_0 + F16 VAE; NAR v9 · 100 tokens · 2 steps | Vulkan | 3.999 | 8.373 | 0.974 | 4.11× | 6.31 / +3.94 | 2.89 | 5.33 |
-| ACE-Step 1.5 · acestep.cpp `6e0e414` · Turbo Q8_0 + BF16 embedder/VAE · 30 s · 8 Euler steps | CUDA 13 | 30.000 | 6.234 | 0.392 | 76.51× | 9.73 / +7.80 | 9.74 | 2.11 |
-| ACE-Step 1.5 · acestep.cpp `6e0e414` · Turbo Q8_0 + BF16 embedder/VAE · 30 s · 8 Euler steps | Vulkan | 30.000 | 7.204 | 0.381 | 78.69× | 8.58 / +6.65 | 8.57 | 2.00 |
-| ACE-Step 1.5 · audio.cpp `41242418` · Turbo Q8_0, packed GGUF · 30 s · 8 Euler steps | CUDA 13 | 30.000 | 10.512 | 1.387 | 21.62× | 10.43 / +8.49 | 10.48 | 2.58 |
-| ACE-Step 1.5 · audio.cpp `41242418` · Turbo Q8_0, packed GGUF · 30 s · 8 Euler steps | Vulkan | 30.000 | 21.746 | 2.237 | 13.41× | 10.23 / +8.30 | 10.22 | 4.60 |
-| MiniMax Music3 · minimaxmusic.cpp `f476b0e` · Minimal Q3_K_M / Q4_K_M + F32 · 3.2 s · 2 steps | CUDA 13 | 3.193 | 7.312 | 1.257 | 2.54× | 9.32 / +7.38 | 9.32 | 4.56 |
-| MiniMax Music3 · minimaxmusic.cpp `f476b0e` · Quality Q8_0 + F32 vocoder · 3.2 s · 2 steps | CUDA 13 | 3.193 | 9.156 | 1.852 | 1.72× | 15.18 / +13.23 | 15.18 | 8.91 |
-| MiniMax Music3 · minimaxmusic.cpp `f476b0e` · Minimal Q3_K_M / Q4_K_M + F32 · 3.2 s · 2 steps | Vulkan | 3.193 | 7.343 | 1.987 | 1.61× | 8.96 / +7.03 | 8.96 | 4.33 |
-| MiniMax Music3 · minimaxmusic.cpp `f476b0e` · Quality Q8_0 + F32 vocoder · 3.2 s · 2 steps | Vulkan | 3.193 | 16.047 | 2.295 | 1.39× | 14.94 / +13.00 | 14.94 | 8.35 |
-| MiniMax Music3 · audio.cpp `41242418` · LM/depth/DiT Q8_0 · 3.2 s · 2 steps | CUDA 13 | 3.193 | 14.604 | 8.720 | 0.37× | 10.97 / +9.04 | 2.47 | 8.87 |
-| MiniMax Music3 · audio.cpp `41242418` · LM/depth/DiT Q8_0 · 3.2 s · 2 steps | Vulkan | 3.193 | 17.621 | 10.478 | 0.30× | 10.65 / +8.72 | 2.39 | 8.66 |
-| Stable Audio 3 · HOT-Step `cdef1b0d67af` · Medium BF16/F16 · 4 s · 4 steps | CUDA 12.8 | 4.000 | 6.737 | 0.254 | 15.72× | 9.30 / +7.37 | 9.30 | 2.82 |
-| Stable Audio 3 · audio.cpp `41242418` · Small Music Q8_0 · 4 s · 4 steps | CUDA 12 | 4.000 | 1.259 | 0.078 | 51.18× | 3.54 / +1.60 | 3.55 | 1.17 |
-| Stable Audio 3 · audio.cpp `41242418` · Small Music Q8_0 · 4 s · 4 steps | CUDA 13 | 4.000 | 1.893 | 0.071 | 56.00× | 3.53 / +1.60 | 3.54 | 1.18 |
+| Model and engine | Backend | WAV (s) | Cold (s) | Warm (s) | Warm audio s/s | VRAM peak / Δ (GiB) | Warm pre-request VRAM (GiB) | Peak RAM (GiB) | Resident WDDM VRAM / RSS (GiB) |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| YuE2 · yue2.cpp `892b9b0` · 3B Q8_0 + F32 VAE; NAR v9 · 30 s · 32 steps | CUDA 13 | 29.999 | 8.813 | 4.759 | 6.30× | 8.13 / +5.75 | 8.13 | 3.37 | — |
+| YuE2 · yue2.cpp `892b9b0` · 3B Q8_0 + F32 VAE; NAR v9 · 30 s · 32 steps | Vulkan | 29.999 | 16.609 | 5.861 | 5.12× | 8.19 / +5.81 | 8.87 | 3.08 | — |
+| YuE2 · audio.cpp `41242418` · 3B Q8_0 + F16 VAE; NAR v9 · 30 s · 32 steps | CUDA 13 | 29.999 | 16.807 | 7.441 | 4.03× | 7.02 / +4.68 | 3.16 | 6.24 | — |
+| YuE2 · audio.cpp `41242418` · 3B Q8_0 + F16 VAE; NAR v9 · 30 s · 32 steps | Vulkan | 29.999 | 28.258 | 10.286 | 2.92× | 6.44 / +4.51 | 2.54 | 6.85 | — |
+| YuE2 · yue2.cpp `892b9b0` · 3B Q8_0 + F32 VAE; NAR v9 · 100 tokens · 2 steps | CUDA 13 | 3.999 | 6.516 | 0.172 | 23.20× | 6.88 / +4.51 | 6.88 | 3.40 | — |
+| YuE2 · audio.cpp `41242418` · 3B Q8_0 + F16 VAE; NAR v9 · 100 tokens · 2 steps | CUDA 13 | 3.999 | 7.482 | 0.383 | 10.44× | 6.28 / +3.92 | 3.03 | 5.84 | — |
+| YuE2 · yue2.cpp `892b9b0` · 3B Q8_0 + F32 VAE; NAR v9 · 100 tokens · 2 steps | CUDA 12 | 3.999 | 4.969 | 0.125 | 31.95× | 6.88 / +4.50 | 6.88 | 3.45 | — |
+| YuE2 · audio.cpp `41242418` · 3B Q8_0 + F16 VAE; NAR v9 · 100 tokens · 2 steps | CUDA 12 | 3.999 | 7.869 | 0.420 | 9.52× | 6.46 / +4.10 | 3.03 | 5.76 | — |
+| YuE2 · yue2.cpp `892b9b0` · 3B Q8_0 + F32 VAE; NAR v9 · 100 tokens · 2 steps | Vulkan | 3.999 | 13.766 | 0.252 | 15.88× | 6.54 / +4.17 | 6.54 | 3.82 | — |
+| YuE2 · audio.cpp `41242418` · 3B Q8_0 + F16 VAE; NAR v9 · 100 tokens · 2 steps | Vulkan | 3.999 | 8.373 | 0.974 | 4.11× | 6.31 / +3.94 | 2.89 | 5.33 | — |
+| ACE-Step 1.5 · acestep.cpp `6e0e414` · Turbo Q8_0 + BF16 embedder/VAE · 30 s · 8 Euler steps | CUDA 13 | 30.000 | 6.234 | 0.392 | 76.51× | 9.73 / +7.80 | 9.74 | 2.11 | — |
+| ACE-Step 1.5 · acestep.cpp `6e0e414` · Turbo Q8_0 + BF16 embedder/VAE · 30 s · 8 Euler steps | Vulkan | 30.000 | 7.204 | 0.381 | 78.69× | 8.58 / +6.65 | 8.57 | 2.00 | — |
+| ACE-Step 1.5 · audio.cpp `41242418` · Turbo Q8_0, packed GGUF · 30 s · 8 Euler steps | CUDA 13 | 30.000 | 10.512 | 1.387 | 21.62× | 10.43 / +8.49 | 10.48 | 2.58 | — |
+| ACE-Step 1.5 · audio.cpp `41242418` · Turbo Q8_0, packed GGUF · 30 s · 8 Euler steps | Vulkan | 30.000 | 21.746 | 2.237 | 13.41× | 10.23 / +8.30 | 10.22 | 4.60 | — |
+| MiniMax Music3 Studio v4.0.3 · minimaxmusic.cpp `f476b0e` · Minimal Q3_K_M / Q4_K_M + F32 · 3.2 s · 2 steps | CUDA 13 | 3.193 | 7.312 | 1.257 | 2.54× | 9.32 / +7.38 | 9.32 | 4.56 | 7.39 / 0.89 |
+| MiniMax Music3 · minimaxmusic.cpp `f476b0e` · Quality Q8_0 + F32 vocoder · 3.2 s · 2 steps | CUDA 13 | 3.193 | 9.156 | 1.852 | 1.72× | 15.18 / +13.23 | 15.18 | 8.91 | — |
+| MiniMax Music3 · minimaxmusic.cpp `f476b0e` · Minimal Q3_K_M / Q4_K_M + F32 · 3.2 s · 2 steps | Vulkan | 3.193 | 7.343 | 1.987 | 1.61× | 8.96 / +7.03 | 8.96 | 4.33 | — |
+| MiniMax Music3 · minimaxmusic.cpp `f476b0e` · Quality Q8_0 + F32 vocoder · 3.2 s · 2 steps | Vulkan | 3.193 | 16.047 | 2.295 | 1.39× | 14.94 / +13.00 | 14.94 | 8.35 | — |
+| MiniMax Music3 · audio.cpp `41242418` · LM/depth/DiT Q8_0 · 3.2 s · 2 steps | CUDA 13 | 3.193 | 14.604 | 8.720 | 0.37× | 10.97 / +9.04 | 2.47 | 8.87 | — |
+| MiniMax Music3 · audio.cpp `41242418` · LM/depth/DiT Q8_0 · 3.2 s · 2 steps | Vulkan | 3.193 | 17.621 | 10.478 | 0.30× | 10.65 / +8.72 | 2.39 | 8.66 | — |
+| Stable Audio 3 · HOT-Step `cdef1b0d67af` · Medium BF16/F16 · 4 s · 4 steps | CUDA 12.8 | 4.000 | 6.737 | 0.254 | 15.72× | 9.30 / +7.37 | 9.30 | 2.82 | — |
+| Stable Audio 3 · audio.cpp `41242418` · Small Music Q8_0 · 4 s · 4 steps | CUDA 12 | 4.000 | 1.259 | 0.078 | 51.18× | 3.54 / +1.60 | 3.55 | 1.17 | — |
+| Stable Audio 3 · audio.cpp `41242418` · Small Music Q8_0 · 4 s · 4 steps | CUDA 13 | 4.000 | 1.893 | 0.071 | 56.00× | 3.53 / +1.60 | 3.54 | 1.18 | — |
+| YuE2 Studio v4.1.1 · yue2.cpp `67f59c1` · 3B Q8_0 + F32 VAE · 100 tokens · 2 steps | CUDA 13 | 3.999 | — | — | — | — | — | — | 4.61 / 0.65 |
+| ACE-Step Studio v4.0.2 · acestep.cpp `9eb75e8` · Turbo Q8_0 + BF16 embedder/VAE · 30 s · 8 Euler steps | CUDA 13 | 30.000 | — | — | — | — | — | — | 9.51 / 0.78 |
 
 Each workload has its own fixed input and step count. YuE2 VAE precision differs, and the audio.cpp text-to-song request fixes the semantic-token budget. The native ACE CUDA take ends with five quiet seconds. MiniMax Quality and audio.cpp Q8_0 share four weights and use different vocoders. Stable Audio 3 compares Medium BF16 to Small Q8_0. The native MiniMax rows use the published 4.0.3 engine. Final 5.0 package measurements require its release binaries.
 
-[Individual runs, SHA-256, exact weights and output checks](docs/music-gpu-benchmarks.json)
+[Individual runs, published residency, SHA-256, exact weights and output checks](docs/music-gpu-benchmarks.json)
 <!-- music-gpu-matrix:end -->
 
 **RVC voice conversion on GPU (5.0 development builds)**

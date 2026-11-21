@@ -10,7 +10,8 @@
       "ACE-Step 1.5": "Same prompt, seed 42, 30 s, eight Euler steps, CFG 1, shift 3 and 110 BPM. The native CUDA take has 5 s quiet at the end; the audio.cpp take has none. Model packing and audible outputs differ.",
       "MiniMax Music3": "Same prompt, lyrics, seed 424242, target 3.2 s and two steps. Native Quality and audio.cpp Q8_0 share LM, depth, DiT and conditioning weights, with different vocoders and runtime controls. Native Minimal uses lower quantization.",
       "Stable Audio 3": "Same prompt, seed 42, target 4 s and four steps. HOT-Step Medium and audio.cpp Small Music have different model sizes and precision."
-    }
+    },
+    "resident_memory": "Windows 11, RTX 4090, driver 617.42, CUDA 13. Median of three idle snapshots of the server process tree after one conditioning request with models kept loaded. WDDM Dedicated Usage is summed across adapters for the tree. RSS is the sum of resident system memory for the tree."
   },
   "rows": [
     {
@@ -1706,5 +1707,41 @@
       "summary_id": "music-gpu-20261121a/stable_audio-cuda13/summary.json",
       "warm_pre_request_vram_bytes": 3803164672
     }
-  ]
+  ],
+  "published_residency": {
+    "67f59c1": {
+      "label": "YuE2 Studio v4.1.1 · yue2.cpp 67f59c1 · 3B Q8_0 + F32 VAE · 100 tokens · 2 steps",
+      "backend": "CUDA 13",
+      "audio_seconds": 3.998666666666667,
+      "binary_sha256": "83b8bec4b65a64346835d3accba74428829ea519d535df7b0b5dba1134c5e000",
+      "cuda_dll_sha256": "2abeb24d7e1ee67d3d34a4f86da5d4210beb3f40f51a7f1b2288c2017cb2a967",
+      "wav_sha256": "6b5d88ba910f69a23ba27361a2ec3d765a0d45c6662d50dce9ace110118291d2",
+      "dedicated_gpu_bytes": 4951703552,
+      "rss_bytes": 699314176,
+      "receipt": "published-windows-engine-residency/yue2-67f59c1-bench-CUDA0-resident.json"
+    },
+    "9eb75e8": {
+      "label": "ACE-Step Studio v4.0.2 · acestep.cpp 9eb75e8 · Turbo Q8_0 + BF16 embedder/VAE · 30 s · 8 Euler steps",
+      "backend": "CUDA 13",
+      "audio_seconds": 30.0,
+      "binary_sha256": "c348690c34082bb35c106b608fab4a69ea834357b22c23a44b30cb0505be09de",
+      "cuda_dll_sha256": "c0e42793849a907e1936f6339e086a0f3e848e2417cc9af58f05201b1751f48e",
+      "wav_sha256": "df33cc99aa1d9cbea0b176dffc76f85708823c4a2a7a05e1720f9b04b4219b7e",
+      "dedicated_gpu_bytes": 10209296384,
+      "rss_bytes": 842551296,
+      "receipt": "published-windows-engine-residency/ace-9eb75e8-bench-CUDA0-published-ace-engine-resident-30s-resident.json"
+    },
+    "f476b0e": {
+      "label": "MiniMax Music3 Studio v4.0.3 · minimaxmusic.cpp f476b0e · Minimal Q3_K_M / Q4_K_M + F32 · 3.2 s · 2 steps",
+      "backend": "CUDA 13",
+      "audio_seconds": 3.1927437641723357,
+      "binary_sha256": "ef2283bc6d2be5ec2b56549cc1989add6939150270b67f90cef67a11f11ea522",
+      "cuda_dll_sha256": "f3dce0020d5dae584944d1371f6de3c318c83ffa6aa777d6c4b08a37af0c2312",
+      "wav_sha256": "d39e83b1e5f9c20c7a141f30703517b2fabe3eb34d3e15b9c48840091cfab54d",
+      "dedicated_gpu_bytes": 7933886464,
+      "rss_bytes": 952889344,
+      "receipt": "published-windows-engine-residency/mm3-f476b0e-bench-CUDA0-3.2s-resident.json",
+      "timing_summary_id": "mm3-f476b0e-bench-CUDA0-3.2s-summary.json"
+    }
+  }
 }
