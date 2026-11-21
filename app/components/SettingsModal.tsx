@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { BarChart3, Boxes, Bug, Cloud, Cpu, Image as ImageIcon, Info, Monitor, Plug, User as UserIcon, X } from 'lucide-react';
+import { BarChart3, Bell, Boxes, Bug, Cloud, Cpu, Image as ImageIcon, Info, Monitor, Plug, User as UserIcon, X } from 'lucide-react';
 import { SiGithub } from '@icons-pack/react-simple-icons';
 import { useAuth } from '../context/AuthContext';
 import { useI18n } from '../context/I18nContext';
@@ -10,6 +10,8 @@ import { SetupGate, type SetupSelection } from './SetupGate';
 import { CoverTemplateSettings } from './CoverTemplateSettings';
 import { AgentPanel } from './AgentPanel';
 import { FileTagSettings } from './FileTagSettings';
+import { supportsWindowsSongNotifications } from '../services/songNotifications';
+import { NotificationSettings } from './NotificationSettings';
 import { HubSettings } from './HubSettings';
 import { STUDIO_REPO_URL, STUDIO_SITE_URL, type ReportFacts } from '../services/issueReport';
 import { ProblemReportDialog } from './ProblemReportDialog';
@@ -32,11 +34,11 @@ import { setUiScale, storedUiScale, UI_SCALE_EVENT, UI_SCALE_MAX, UI_SCALE_MIN, 
 /// The assistant and the karaoke recogniser are not sections of their own: they
 /// are set up where they are installed, on the models page. Having both was one
 /// capability drawn twice, and the two drawings disagreed.
-const sectionIds = ['account', 'models', 'engine', 'cloud', 'agent', 'covers', 'interface', 'privacy', 'about'] as const;
+const sectionIds = ['account', 'models', 'engine', 'cloud', 'agent', 'covers', 'interface', 'privacy', 'notifications', 'about'] as const;
 type SectionId = typeof sectionIds[number];
 
 export function isSettingsTarget(value: unknown): value is string {
-  return typeof value === 'string' && sectionIds.some(id => id === value.split(':', 1)[0]);
+  return typeof value === 'string' && (value.split(':', 1)[0] !== 'notifications' || supportsWindowsSongNotifications()) && sectionIds.some(id => id === value.split(':', 1)[0]);
 }
 
 const INPUT =
@@ -87,6 +89,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, target, on
     { id: 'covers', label: t('coversSection'), hint: t('coversSectionHint'), icon: <ImageIcon size={16} /> },
     { id: 'interface', label: t('appearance'), hint: t('interfaceSectionHint'), icon: <Monitor size={16} /> },
     { id: 'privacy', label: t('privacySection'), hint: t('privacySectionHint'), icon: <BarChart3 size={16} /> },
+    ...(supportsWindowsSongNotifications() ? [{ id: 'notifications' as const, label: t('shellNotificationsSection'), hint: t('shellNotificationsSectionHint'), icon: <Bell size={16} /> }] : []),
     { id: 'about', label: t('about'), hint: t('aboutSectionHint'), icon: <Info size={16} /> },
   ];
 
@@ -184,6 +187,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, target, on
             {section === 'cloud' && <ProviderSettings />}
             {section === 'agent' && <AgentPanel />}
             {section === 'privacy' && <div className="space-y-8"><HubSettings /><FileTagSettings /></div>}
+            {section === 'notifications' && <NotificationSettings />}
 
             {section === 'interface' && (
               <div className="max-w-lg space-y-6">

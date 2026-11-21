@@ -22,6 +22,7 @@ import { useGenerations } from './services/generations';
 import { isSettingsTarget, SettingsModal } from './components/SettingsModal';
 import { Song, View, Playlist, type MusicEngine } from './types';
 import { isMusicEngine, isProfileMusicEngine, profileMusicEngines } from './services/nativeMusicProfiles';
+import { sendCompletedSongsNotification } from './services/songNotifications';
 // Resizable panel hook
 const PANEL_MAX_SHARE = 0.4;
 const CREATE_MAX_SHARE = 0.7;
@@ -509,6 +510,12 @@ function AppContent() {
       // a card that was open in the details stays open as the song it became
       setSelectedSong(current => (current?.id === cardId ? made[0] : current));
       if (window.innerWidth < 768) setMobileShowList(true);
+      // One Windows OS notification per completed job; never for progress, failure or cancellation.
+      void sendCompletedSongsNotification(made, {
+        single: t('shellSongReadyOne'),
+        multiple: t('shellSongsReadyMany'),
+        untitled: t('untitled'),
+      });
     },
   });
   // Anonymous statistics are on by default: the start screen's checkbox decides on a first run, and an install that
