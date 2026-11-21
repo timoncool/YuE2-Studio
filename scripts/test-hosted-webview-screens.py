@@ -1,11 +1,11 @@
 """Drive only the bundled Studio WebView on the isolated Windows runner."""
-import argparse, base64, ctypes, hashlib, json, os, pathlib, re, shutil, struct, subprocess, tempfile, time, urllib.request, wave, math
+import argparse, base64, ctypes, hashlib, json, os, pathlib, re, shutil, struct, subprocess, tempfile, time, urllib.request, wave, math, zlib
 from contextlib import contextmanager
 
 p = argparse.ArgumentParser()
 p.add_argument("exe", type=pathlib.Path)
 p.add_argument("output", type=pathlib.Path)
-p.add_argument("--suite", choices=["screens", "lrc"], default="screens")
+p.add_argument("--suite", choices=["screens", "lrc", "eqf", "video", "dj"], default="screens")
 args = p.parse_args()
 out = args.output.resolve()
 out.mkdir(parents=True, exist_ok=True)
@@ -284,7 +284,7 @@ def verify_lrc_file(destination, expected, song_id, route, receipt="lrc-file.jso
                                        timestamps=["00:00.50", "00:01.75"], name=destination.name, route=route))
 
 
-def check_lrc(root, pid):
+def check_lrc(root, pid, media=None):
     title = "Hosted LRC receipt"
     source = root/"source.wav"
     with wave.open(str(source), "wb") as audio:
@@ -343,6 +343,36 @@ def check_lrc(root, pid):
                 time.sleep(.2)
             raise AssertionError(f"No visible write error for {name}")
         seen_errors = set()
+        def cancel_export(label, kind, after_label=None):
+            def cancelled_replies():
+                try:
+                    events = json.loads((out/"lrc-webview-network.json").read_text(encoding="utf8"))
+                except (OSError, json.JSONDecodeError):
+                    return None
+                return {entry["id"] for entry in events if entry.get("responseBody")
+                        and json.loads(entry["responseBody"]).get("cancelled") is True}
+            before = cancelled_replies()
+            assert before is not None
+            click(label)
+            target = root/f"Отказ-{kind}"
+            save_dialog_file(pid, target, f"{kind}-cancel-dialog.json", action="cancel")
+            wait_page(after_label or label)
+            for _ in range(40):
+                after = cancelled_replies()
+                if after and after - before:
+                    break
+                time.sleep(.2)
+            else:
+                raise AssertionError(f"{kind}: service did not acknowledge cancellation")
+            assert not list(root.glob(target.name + "*"))
+            json_file(out/f"{kind}-cancel.json", dict(response_ids=sorted(after-before), file_created=False))
+        if media:
+            click('button "x icon"')
+            if media == "eqf":
+                check_eqf(root, pid, cancel_export, failed_save)
+            else:
+                check_media_exports(root, pid, media, cancel_export, failed_save)
+            return
         click('button "Download LRC (Lyrics)"', page)
         save_dialog_file(pid, destination)
         verify_lrc_file(destination, expected, song["id"], "desktop")
@@ -484,6 +514,13 @@ while ([DateTime]::UtcNow -lt $deadline -and !(Test-Path -LiteralPath $env:STUDI
       }
     }
     if ($confirm -and !$confirmed) {
+      if ($env:STUDIO_QA_PRINT_ACTION -eq 'cancel') {
+        $cancel = $buttons | Where-Object {$_.Current.Name -eq 'Cancel' -and $_.Current.IsEnabled} | Select-Object -First 1
+        if (!$cancel) { throw 'The print preview has no Cancel button' }
+        $cancel.GetCurrentPattern([Windows.Automation.InvokePattern]::Pattern).Invoke()
+        Write-Output 'Cancelled print preview'
+        exit 0
+      }
       $confirm.GetCurrentPattern([Windows.Automation.InvokePattern]::Pattern).Invoke()
       Write-Output 'Confirmed print'
       $confirmed = $true
@@ -494,7 +531,7 @@ while ([DateTime]::UtcNow -lt $deadline -and !(Test-Path -LiteralPath $env:STUDI
 """
         with (out/"print-dialog.txt").open("w", encoding="utf8") as log:
             subprocess.run(["powershell", "-NoProfile", "-Command", print_dialog],
-                           env=dict(os.environ, STUDIO_QA_PDF=str(pdf), STUDIO_QA_PID=str(pid)),
+                           env=dict(os.environ, STUDIO_QA_PDF=str(pdf), STUDIO_QA_PID=str(pid), STUDIO_QA_PRINT_ACTION="save"),
                            stdout=log, stderr=subprocess.STDOUT, timeout=40, check=True)
         for _ in range(150):
             try:
@@ -508,6 +545,15 @@ while ([DateTime]::UtcNow -lt $deadline -and !(Test-Path -LiteralPath $env:STUDI
             raise AssertionError("Windows PDF printer did not complete the songbook")
         (out/"songbook.pdf").write_bytes(printed)
         json_file(out/"songbook-print.json", dict(bytes=len(printed), sha256=hashlib.sha256(printed).hexdigest()))
+        (out/"click-print").touch()
+        cancelled = root/"songbook-cancelled.pdf"
+        result = subprocess.run(["powershell", "-NoProfile", "-Command", print_dialog],
+                                env=dict(os.environ, STUDIO_QA_PDF=str(cancelled), STUDIO_QA_PID=str(pid),
+                                         STUDIO_QA_PRINT_ACTION="cancel"),
+                                capture_output=True, text=True, timeout=40, check=True)
+        (out/"print-cancel-dialog.txt").write_text(result.stdout + result.stderr, encoding="utf8")
+        assert "Cancelled print preview" in result.stdout and not cancelled.exists()
+        json_file(out/"songbook-print-cancel.json", dict(cancelled=True, file_created=False))
         click('button "Close songbook"')
         click('button "x icon"')
         page = wait_page(predicate=lambda text: context in text and 'button "Download LRC (Lyrics)"' not in text)
@@ -516,29 +562,6 @@ while ([DateTime]::UtcNow -lt $deadline -and !(Test-Path -LiteralPath $env:STUDI
         page = wait_page(predicate=lambda value: any(context in line and " Export…" in line for line in value.splitlines()))
         row = next(line for line in page.splitlines() if context in line)
         ui("click", ref=re.search(r"(e\d+) Export…(?:,|$)", row)[1])
-        def cancel_export(label, kind):
-            def cancelled_replies():
-                try:
-                    events = json.loads((out/"lrc-webview-network.json").read_text(encoding="utf8"))
-                except (OSError, json.JSONDecodeError):
-                    return None
-                return {entry["id"] for entry in events if entry.get("responseBody")
-                        and json.loads(entry["responseBody"]).get("cancelled") is True}
-            before = cancelled_replies()
-            assert before is not None
-            click(label)
-            target = root/f"Отказ-{kind}"
-            save_dialog_file(pid, target, f"{kind}-cancel-dialog.json", action="cancel")
-            wait_page(label)
-            for _ in range(40):
-                after = cancelled_replies()
-                if after and after - before:
-                    break
-                time.sleep(.2)
-            else:
-                raise AssertionError(f"{kind}: service did not acknowledge cancellation")
-            assert not list(root.glob(target.name + "*"))
-            json_file(out/f"{kind}-cancel.json", dict(response_ids=sorted(after-before), file_created=False))
         for fmt in ("wav", "flac", "mp3"):
             wait_page('button "Export"')
             ui("select", text="Format", value=fmt)
@@ -579,21 +602,6 @@ while ([DateTime]::UtcNow -lt $deadline -and !(Test-Path -LiteralPath $env:STUDI
                 json_file(out/f"{kind}-archive.json", dict(members=members, bytes=target.stat().st_size))
             cancel_export(label, kind)
             failed_save(label, kind, "zip")
-        click('button "Close"')
-        tool("equalizer_set", enabled=True, bands={"310":3}, panel_open=True, preamp_db=-2)
-        eq_label = 'button "Export .EQF"'
-        click(eq_label)
-        eq_file = root/"Профиль.eqf"
-        save_dialog_file(pid, eq_file, "eqf-dialog.json")
-        for _ in range(50):
-            if eq_file.is_file() and eq_file.read_bytes().startswith(b"Winamp EQ library file"):
-                break
-            time.sleep(.2)
-        else:
-            raise AssertionError("Missing EQF preset header")
-        cancel_export(eq_label, "eqf")
-        failed_save(eq_label, "equalizer", "eqf")
-        json_file(out/"eqf.json", dict(bytes=eq_file.stat().st_size, sha256=hashlib.sha256(eq_file.read_bytes()).hexdigest()))
     finally:
         observer.stdin.close()
         try:
@@ -601,6 +609,124 @@ while ([DateTime]::UtcNow -lt $deadline -and !(Test-Path -LiteralPath $env:STUDI
         except subprocess.TimeoutExpired:
             observer.terminate()
             observer.wait(timeout=4)
+
+
+def check_eqf(root, pid, cancel_export, failed_save):
+    tool("equalizer_set", enabled=True, bands={"310":3}, panel_open=True, preamp_db=-2)
+    label = 'button "Export .EQF"'
+    click(label)
+    target = root/"Профиль.eqf"
+    save_dialog_file(pid, target, "eqf-dialog.json")
+    for _ in range(50):
+        if target.is_file() and target.read_bytes().startswith(b"Winamp EQ library file"):
+            break
+        time.sleep(.2)
+    else:
+        raise AssertionError("Missing EQF preset header")
+    cancel_export(label, "eqf")
+    failed_save(label, "equalizer", "eqf")
+    json_file(out/"eqf.json", dict(bytes=target.stat().st_size, sha256=hashlib.sha256(target.read_bytes()).hexdigest()))
+
+
+def check_media_exports(root, pid, media, cancel_export, failed_save):
+    title = "Hosted export tone"
+    source = root/"tone.wav"
+    with wave.open(str(source), "wb") as wav:
+        wav.setparams((1, 2, 24000, 0, "NONE", "not compressed"))
+        wav.writeframes(b"".join(
+            struct.pack("<h", round(12000*math.sin(2*math.pi*440*index/24000)))
+            for index in range(24000*(2 if media == "video" else 6))
+        ))
+    song = tool("library_import_audio", path=str(source), title=title)
+    stored = pathlib.Path(tool("library_song_files", song_id=song["id"])["audio"])
+    original = stored.read_bytes()
+
+    def saved(path):
+        for _ in range(80):
+            if path.is_file() and path.stat().st_size > 256:
+                return
+            time.sleep(.2)
+        raise AssertionError(f"No output at {path.name}")
+
+    def digest(path):
+        return hashlib.sha256(path.read_bytes()).hexdigest()
+
+    def probe(path):
+        return json.loads(subprocess.check_output([
+            "ffprobe", "-v", "error", "-show_streams", "-show_format", "-of", "json", str(path),
+        ], timeout=25))
+
+    if media == "video":
+        def chunk(kind, value):
+            data = kind + value
+            return struct.pack(">I", len(value)) + data + struct.pack(">I", zlib.crc32(data))
+        background = root/"video-layer.png"
+        background.write_bytes(
+            b"\x89PNG\r\n\x1a\n" +
+            chunk(b"IHDR", struct.pack(">IIBBBBB", 16, 16, 8, 2, 0, 0, 0)) +
+            chunk(b"IDAT", zlib.compress((b"\x00" + b"\x20\x98\x56"*16)*16)) +
+            chunk(b"IEND", b"")
+        )
+        tool("video_open", song_id=song["id"])
+        label = 'button "Render Video (MP4)"'
+        wait_page(label)
+        tool("video_set", config={"outputSize": 240, "aspectRatio": "1:1"},
+             background={"image_path": str(background)})
+        click(label)
+        target = root/"Клип.mp4"
+        save_dialog_file(pid, target, "video-mp4-dialog.json")
+        saved(target)
+        meta = probe(target)
+        video = next(stream for stream in meta["streams"] if stream["codec_type"] == "video")
+        audio = next(stream for stream in meta["streams"] if stream["codec_type"] == "audio")
+        assert (video["width"], video["height"], video["codec_name"], audio["codec_name"]) == (240, 240, "h264", "aac"), meta
+        assert 1.8 < float(meta["format"]["duration"]) < 2.2, meta["format"]
+        json_file(out/"video-mp4.json", dict(sha256=digest(target), bytes=target.stat().st_size,
+                  background_sha256=digest(background), codecs=["h264", "aac"],
+                  dimensions=[video["width"], video["height"]], duration=meta["format"]["duration"]))
+        cancel_export(label, "video-mp4")
+        failed_save(label, "video-mp4", "mp4")
+    else:
+        ui("navigate", view="library")
+        click('button "DJ mode"', wait_page(title, 'button "DJ mode"'))
+        page = wait_page(title, 'button "Record mix"')
+        ready = [line for line in page.splitlines() if line.startswith("e") and f'button "{title}' in line]
+        assert ready, page
+        ui("click", ref=ready[0].split()[0])
+        click('button "LOAD A"')
+        click('button "Record mix"')
+        play = wait_page(predicate=lambda page: any(
+            'button "PLAY"' in line and "disabled" not in line for line in page.splitlines()))
+        line = next(line for line in play.splitlines() if 'button "PLAY"' in line and "disabled" not in line)
+        ui("click", ref=line.split()[0])
+        wait_page('button "PAUSE"')
+        time.sleep(1.4)
+        finish = 'button "Stop & save recording"'
+        retry = 'button "Save recording"'
+        cancel_export(finish, "dj-recording", after_label=retry)
+        failed_save(retry, "dj-recording", "webm")
+        wait_page(retry, "The DJ mix could not be saved")
+        click(retry)
+        target = root/"Микс.webm"
+        save_dialog_file(pid, target, "dj-recording-dialog.json")
+        saved(target)
+        meta = probe(target)
+        audio, = [stream for stream in meta["streams"] if stream["codec_type"] == "audio"]
+        assert audio["codec_name"] == "opus", meta
+        pcm = subprocess.check_output([
+            "ffmpeg", "-v", "error", "-i", str(target), "-ac", "1", "-ar", "16000",
+            "-f", "s16le", "pipe:1",
+        ], timeout=25)
+        samples = [sample for sample, in struct.iter_unpack("<h", pcm)]
+        rms = math.sqrt(sum(sample*sample for sample in samples)/len(samples))
+        assert len(samples) > 16_000 and rms > 500, (len(samples), rms)
+        wait_page('button "Record mix"')
+        click('button "Back to Studio"')
+        json_file(out/"dj-recording.json", dict(sha256=digest(target), bytes=target.stat().st_size,
+                  codec=audio["codec_name"], duration=len(samples)/16_000, rms_pcm16=rms,
+                  saved_after_cancel_and_error=True))
+    assert stored.read_bytes() == original
+    json_file(out/"original-preserved.json", dict(song_id=song["id"], sha256=digest(stored)))
 
 
 def check_screens(root, pid):
@@ -800,16 +926,13 @@ with isolated_profile() as root:
                    LOCALAPPDATA=str(root/"local"))
     env["WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS"] += " --remote-debugging-port=9889"
     if args.suite == "lrc":
-        # This disposable hosted runner prints through the Windows spooler to an
-        # actual PDF file without opening a second file picker for the printer.
-        # Use the standard interactive print dialog to match the shipped application.
+        # Use Windows' native print output picker on the disposable hosted runner.
         printer_setup = """
 $ErrorActionPreference = 'Stop'
 Start-Service Spooler
 $driver = 'Microsoft Print To PDF'
 if (!(Get-PrinterDriver -Name $driver -ErrorAction SilentlyContinue)) { Add-PrinterDriver -Name $driver }
-Add-PrinterPort -Name $env:STUDIO_QA_PDF
-Add-Printer -Name 'Studio QA PDF' -PortName $env:STUDIO_QA_PDF -DriverName $driver
+Add-Printer -Name 'Studio QA PDF' -PortName 'PORTPROMPT:' -DriverName $driver
 Set-PrintConfiguration -PrinterName 'Studio QA PDF' -PaperSize A4
 (New-Object -ComObject WScript.Network).SetDefaultPrinter('Studio QA PDF')
 Get-Printer -Name 'Studio QA PDF' | Select-Object Name,DriverName,PortName | ConvertTo-Json
@@ -835,8 +958,8 @@ Get-Printer -Name 'Studio QA PDF' | Select-Object Name,DriverName,PortName | Con
                 clientInfo=dict(name="studio-hosted-webview", version="1")))
             rpc("notifications/initialized", {}, notify=True)
             wait_page(predicate=lambda page: "button" in page)
-            if args.suite == "lrc":
-                check_lrc(root, process.pid)
+            if args.suite in ("lrc", "eqf", "video", "dj"):
+                check_lrc(root, process.pid, media=args.suite if args.suite != "lrc" else None)
             else:
                 check_screens(root, process.pid)
         finally:
