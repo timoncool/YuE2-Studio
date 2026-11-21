@@ -268,7 +268,7 @@ fn launch(state: &AppState, job: Job) -> anyhow::Result<PrepareStatus> {
         let train = background.prepare_train.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).take();
         if let (true, Writer::Studio, Some(train)) = (clean, job.writer, train) {
             stage(&shared, "training", Vec::new());
-            match crate::start_training_run(&background, &id, &train.name, train.recipe).await {
+            match crate::start_training_run(&background, &id, &train.name, train.recipe, None).await {
                 Ok(run) => update(&shared, |status| status.run = Some(run.id)),
                 Err(error) => fail(&shared, "", "training", error),
             }

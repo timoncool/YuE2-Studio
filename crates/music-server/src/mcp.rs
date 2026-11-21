@@ -3221,7 +3221,7 @@ fn tools() -> &'static [Tool] {
             Tool {
                 name: "training_start",
                 description: "Train a LoRA on a dataset. recipe: the recipe from training_status (recipe_defaults) with your changes. preset picks the size: 'fast' (100 steps of 4 songs), 'balanced' (200 of 4, the default), 'thorough' (300 of 8) - the base-matched method, trained the way the base model was; or 'tuned', the previous recipe, with stop 'kl' and target_kl 1.4 or stop 'epochs' with epochs. Watch training_status; one run at a time, and it holds the card.",
-                schema: || object(json!({ "dataset_id": { "type": "string" }, "name": { "type": "string" }, "recipe": { "type": "object" } }), &["dataset_id", "recipe"]),
+                schema: || object(json!({ "dataset_id": { "type": "string" }, "name": { "type": "string" }, "recipe": { "type": "object" }, "trainer_id": { "type": "string" } }), &["dataset_id", "recipe"]),
                 call: |args| post("/v1/training/runs".into(), args.clone()),
             },
             Tool {
