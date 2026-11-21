@@ -2,18 +2,18 @@ import { useEffect, useId, useRef, useState } from 'react';
 import { useI18n } from '../context/I18nContext';
 import { rvcVoiceStrings } from '../i18n/rvcVoices';
 import { responseJson, type Voice, voiceName } from '../services/rvcVoices';
+import { chooseLastRvcVoice, clearLastRvcVoice, useLastRvcVoice } from '../services/rvcQuick';
 import { ConfirmDialog } from './ConfirmDialog';
 import { RvcCuratedVoices } from './RvcCuratedVoices';
 import { RvcApplyVoice, type RvcSourceSong } from './RvcApplyVoice';
 
 const URL = '/v1/rvc/voices';
-const STORAGE = 'studio.rvc.voiceId';
 
 export function RvcVoiceCatalog({ card, control, song, onSaved }: { card: string; control: string; song?: RvcSourceSong; onSaved?: () => void }) {
   const { language } = useI18n();
   const labels = rvcVoiceStrings[language];
   const [voices, setVoices] = useState<Voice[] | null>(null);
-  const [selected, setSelected] = useState(() => localStorage.getItem(STORAGE) ?? '');
+  const selected = useLastRvcVoice();
   const [model, setModel] = useState<File>();
   const [index, setIndex] = useState<File>();
   const modelInput = useRef<HTMLInputElement>(null);
@@ -34,8 +34,7 @@ export function RvcVoiceCatalog({ card, control, song, onSaved }: { card: string
   }, [catalogRequest]);
 
   function choose(id: string) {
-    setSelected(id);
-    localStorage.setItem(STORAGE, id);
+    chooseLastRvcVoice(id);
   }
 
   function chooseInstalled(id: string) {
@@ -77,8 +76,7 @@ export function RvcVoiceCatalog({ card, control, song, onSaved }: { card: string
     try {
       await responseJson(await fetch(`${URL}/${encodeURIComponent(voice.id)}`, { method: 'DELETE' }));
       setVoices(current => current?.filter(item => item.id !== voice.id) ?? null);
-      setSelected(current => current === voice.id ? '' : current);
-      if (localStorage.getItem(STORAGE) === voice.id) localStorage.removeItem(STORAGE);
+      clearLastRvcVoice(voice.id);
     } catch (failure) {
       setError(failure instanceof Error ? failure.message : String(failure));
     } finally {

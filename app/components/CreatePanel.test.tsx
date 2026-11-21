@@ -125,6 +125,20 @@ it('uses explicit controls for the YuE2 engine and follows the shared paused sta
   expect(buttonNamed('Resume YuE2 engine')).toBeUndefined();
 });
 
+it('snapshots the last voice only when an automatic RVC take is enabled', () => {
+  localStorage.setItem('studio.rvc.voiceId', 'installed-voice');
+  localStorage.setItem('studio.rvc.backend', 'audio.cpp');
+  act(() => root.render(panel({})));
+  type(field('textarea')!, 'calm folk');
+  click(buttonNamed('create')!);
+  expect(sent[0].rvc_after).toBeUndefined();
+
+  const option = [...host.querySelectorAll('label')].find(label => label.textContent?.includes('Make an RVC take after generation'));
+  act(() => { option?.querySelector('input')?.click(); });
+  click(buttonNamed('create')!);
+  expect(sent[1].rvc_after).toEqual({ voice_id: 'installed-voice', backend: 'audio.cpp' });
+});
+
 describe('pauses between repeated generations (#261)', () => {
   const renderQueue = (queueBusy: boolean, activeJobCount = 0) =>
     act(() => root.render(panel({ queueBusy, activeJobCount })));
@@ -1059,5 +1073,59 @@ describe('Auto max duration', () => {
     expect(sent).toHaveLength(2);
     expect(sent[0].duration_seconds).toBe(10);
     expect(sent[1]).not.toHaveProperty('duration_seconds');
+  });
+});
+
+it('restores a HOT-Step Stable Audio 3 take with its sampler and adapter without asking for a cover', async () => {
+  vi.stubGlobal('fetch', vi.fn(async () => Response.json({
+    engine: 'hotstep', engine_installed: true,
+    profiles: [
+      { id: 'heartmula-mulacover', label: 'MuLaCover · HOT-Step', ready: true, missing: [] },
+      { id: 'stable-audio-3-medium', label: 'Stable Audio 3 Medium · HOT-Step', ready: true, missing: [], adapters: ['trained'] },
+    ],
+  })));
+  const hotstep_sa3 = { sampler: 'euler', adapter: 'trained', adapter_scale: 0.75 };
+  const song = {
+    title: 'Stable take', ditModel: 'hotstep', style: 'instrumental piano', lyrics: 'Previous draft',
+    generationParams: {
+      music_source: { kind: 'native', engine: 'hotstep', model: 'stable-audio-3-medium' },
+      duration_seconds: 4, steps: 8, seed: 42, cfg_scale: 1.5, output_format: 'wav32', hotstep_sa3,
+    },
+  } as Song;
+  act(() => root.render(panel({ musicEngine: 'hotstep', initialData: { song, timestamp: 1 } })));
+  await flush();
+  expect(field('textarea[aria-label="lyrics"]')).toBeNull();
+  expect(host.textContent).not.toContain('Cover score');
+  expect([...host.querySelectorAll('label')].find(node => node.textContent?.startsWith('Sampler'))?.querySelector('select')?.value).toBe('euler');
+  click(buttonNamed('create')!);
+  expect(sent.at(-1)).toMatchObject({
+    music_source: { kind: 'native', engine: 'hotstep', model: 'stable-audio-3-medium' },
+    style: 'instrumental piano', lyrics: '', duration_seconds: 4, steps: 8, seed: 42, cfg_scale: 1.5,
+    output_format: 'wav32', hotstep_sa3,
+  });
+  expect(sent.at(-1)?.cover_of).toBeUndefined();
+});
+
+it('restores HOT-Step cover source and lead sheet from a saved take', async () => {
+  vi.stubGlobal('fetch', vi.fn(async (url: string) => Response.json(url === '/v1/music/native/hotstep/profiles' ? {
+    engine: 'hotstep', engine_installed: true,
+    profiles: [{ id: 'heartmula-mulacover', label: 'MuLaCover · HOT-Step · BF16', ready: true, missing: [] }],
+  } : {})));
+  const abc = 'X:1\nQ:1/4=120\nK:C\nV:Vocal\n|"C"C E G c|';
+  const song = {
+    title: 'HOT-Step cover', ditModel: 'hotstep', style: 'folk', lyrics: '[Verse] Morning',
+    generationParams: {
+      music_source: { kind: 'native', engine: 'hotstep', model: 'heartmula-mulacover' },
+      cover_of: 'recording-original', abc, duration_seconds: 4, seed: 42, steps: 10, guidance_scale: 1.5, output_format: 'flac',
+    },
+  } as Song;
+  act(() => root.render(panel({ musicEngine: 'hotstep', initialData: { song, timestamp: 1 } })));
+  await flush();
+  const score = [...host.querySelectorAll('textarea')].find(field => field.closest('label')?.textContent?.includes('Cover score'));
+  expect(score?.value).toBe(abc);
+  click(buttonNamed('create')!);
+  expect(sent.at(-1)).toMatchObject({
+    music_source: { kind: 'native', engine: 'hotstep', model: 'heartmula-mulacover' }, cover_of: 'recording-original',
+    abc, duration_seconds: 4, steps: 10, seed: 42, cfg_scale: 1.5, output_format: 'flac',
   });
 });

@@ -226,7 +226,9 @@ with tempfile.TemporaryDirectory(prefix="yue-openrouter-") as profile, local_pro
         failed=finish(json.loads(data)["id"])
         assert failed["status"]=="failed" and not failed.get("song"),failed
         assert len(calls)==3,calls
-        code,data=request("/v1/music/jobs",dict(body,title="Must not be stored",style="slow case"))
+        voice_id = "a" * 64
+        rvc_after = {"voice_id": voice_id, "backend": "audio.cpp"}
+        code,data=request("/v1/music/jobs",dict(body,title="Must not be stored",style="slow case",rvc_after=rvc_after))
         assert code==202,(code,data)
         slow_job=json.loads(data)["id"]
         assert slow_started.wait(5),"provider never started its stream"
@@ -247,6 +249,12 @@ with tempfile.TemporaryDirectory(prefix="yue-openrouter-") as profile, local_pro
             code,data=request("/v1/music/jobs/"+slow_job)
             assert code==200 and json.loads(data)["status"]=="running",(code,data)
 
+        voice_folder = root / "rvc" / "voices" / voice_id
+        voice_folder.mkdir(parents=True)
+        (voice_folder / "voice.pth").write_bytes(b"never dispatched to a backend")
+        (voice_folder / "voice.json").write_text(json.dumps({
+            "id": voice_id, "model_name": "fixture.pth", "index_name": None, "version": 2,
+        }), encoding="utf8")
         code,data=request("/v1/music/jobs/"+slow_job,{})
         assert code==200 and json.loads(data)["status"]=="cancelled",(code,data)
         assert slow_disconnected.wait(5),"cancel did not close the upstream HTTP connection"
@@ -254,6 +262,9 @@ with tempfile.TemporaryDirectory(prefix="yue-openrouter-") as profile, local_pro
         assert code==200 and json.loads(data)["status"]=="cancelled" and not json.loads(data).get("song"),(code,data)
         code,data=request("/v1/library/songs")
         assert code==200 and len(json.loads(data))==1,(code,data)
+        time.sleep(.35)
+        assert tool("rvc_quick_list", {}, 30) == [], "cancelled generation queued RVC"
+
     finally:
         proc.terminate()
         proc.wait(timeout=15)
@@ -266,6 +277,25 @@ with tempfile.TemporaryDirectory(prefix="yue-openrouter-") as profile, local_pro
         assert restored["generation_settings"]["model"]==model,restored
         assert assert_played_wav(complete["song"]["audio_url"])==pcm_sha256
         assert len(calls)==4,calls
+        mcp_headers.pop("Mcp-Session-Id", None)
+        rpc("initialize", {"protocolVersion": "2025-03-26", "capabilities": {}, "clientInfo": {"name": "rvc-after-qa", "version": "1"}}, 31)
+        rpc("notifications/initialized", {})
+        auto = tool("song_create", dict(body, title="RVC automatic fixture", rvc_after=rvc_after, response_format="detailed"), 31)
+        completed_auto = finish(auto["id"])
+        assert completed_auto["status"] == "completed", completed_auto
+        automatic_song = completed_auto["song"]["song"]["id"]
+        for i in range(100):
+            rows = tool("rvc_quick_list", {}, 100+i)
+            if rows and rows[0]["status"] == "failed":
+                break
+            time.sleep(.1)
+        else:
+            raise AssertionError("automatic RVC was not queued")
+        assert len(rows) == 1 and rows[0]["song_id"] == automatic_song, rows
+        assert rows[0]["voice_id"] == voice_id and rows[0]["backend"] == "audio.cpp", rows[0]
+        assert rows[0]["take"] is None and "Settings" in rows[0]["error"], rows[0]
+        assert assert_played_wav(completed_auto["song"]["audio_url"]) == pcm_sha256
+
         print(json.dumps({"status":"pass","http_calls":len(calls),"library_song":song_id,"wav_bytes":len(wav),
                           "restart_persisted":True,"incomplete_failed":True,"replay_rejected":True,
                           "explicit_model":model,"upstream_disconnected_on_cancel":True,"cancel_no_import":True,"mcp_tools_list":True,"mcp_catalog":True,"mcp_song_create":True,"model_name":model_name,"id3_artist":model,"pcm_sha256":pcm_sha256,"empty_prompt_rejected":True,"malformed_wav_rejected":True},indent=2))
