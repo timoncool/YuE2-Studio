@@ -1095,6 +1095,15 @@ fn rvc_runtime_route(args: &Value) -> String {
 }
 
 fn song_create_schema(mut properties: Value) -> Value {
+    properties["minimax"] = json!({
+        "type": "object", "additionalProperties": false,
+        "description": "Optional sampling controls for native MiniMax Music3.",
+        "properties": {
+            "lm_cfg": { "type": "number", "minimum": 0 },
+            "lm_top_k": { "type": "integer", "minimum": 1, "maximum": i32::MAX },
+            "dit_cfg": { "type": "number", "minimum": 0 }
+        }
+    });
     properties["openrouter"] = json!({
         "type": "object", "additionalProperties": false,
         "description": "Optional music settings advertised by the selected OpenRouter model. Omit fields to use provider defaults.",
