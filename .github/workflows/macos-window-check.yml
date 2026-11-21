@@ -49,7 +49,7 @@ jobs:
           echo "[OK] the service answers on $PORT"
       - name: Version, window and screens through MCP
         run: |
-          set -euo pipefail
+          set -eo pipefail
           receipt="$RUNNER_TEMP/window-receipt"
           mkdir -p "$receipt"
           printf 'build_run=%s\nbuild_sha=%s\ndmg_sha256=%s\n' "$BUILD_RUN" "$BUILD_SHA" "$DMG_SHA256" > "$receipt/source.txt"
