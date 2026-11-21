@@ -174,6 +174,11 @@ function readPage(): string {
       lines.push(parts.join(' '));
     }
   }
+  const messages = (dialog ?? document.body).querySelectorAll('[role="status"], [role="alert"]');
+  for (const message of messages) {
+    const text = message.textContent?.replace(/\s+/g, ' ').trim();
+    if (text && visible(message)) lines.push(`${message.getAttribute('role')} ${JSON.stringify(text.slice(0, 1000))}`);
+  }
   for (const [context, row] of rows) lines[row.at] = `${context}: ${row.parts.join(', ')}`;
   return lines.join('\n');
 }

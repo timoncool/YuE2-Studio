@@ -1,0 +1,32 @@
+name: OpenRouter WebView acceptance
+on:
+  push:
+    branches: [music-round/openrouter-webview-qa]
+  workflow_dispatch:
+
+jobs:
+  webview:
+    runs-on: windows-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: desktop/src-tauri -> target
+      - name: Install interface and Tauri dependencies
+        run: |
+          npm --prefix app ci
+          npm --prefix desktop ci
+      - name: Build bundled Windows desktop with loopback provider support
+        working-directory: desktop
+        run: npm run tauri -- build --debug --no-bundle
+      - name: Drive WebView2 through Studio MCP
+        run: |
+          $desktop = Get-ChildItem desktop/src-tauri/target/debug -Filter '*.exe' |
+            Where-Object { $_.Name -in @('YuE2-Studio.exe', 'yue2-studio-desktop.exe') } |
+            Select-Object -First 1
+          if (!$desktop) { throw 'Studio executable missing' }
+          python -u scripts/test-openrouter-music.py $desktop.FullName --webview

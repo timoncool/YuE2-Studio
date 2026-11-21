@@ -3,6 +3,9 @@ from contextlib import contextmanager
 import base64, hashlib, http.server, io, json, math, os, pathlib, socket, struct, subprocess, sys, tempfile, threading, time, urllib.error, urllib.request, wave
 
 exe = pathlib.Path(sys.argv[1]).resolve()
+webview = "--webview" in sys.argv
+catalog_phase = "error"
+allow_catalog_error = threading.Event()
 model = "fixture/sse-music"
 model_name = "Fixture music"
 peer_model = "fixture/sse-music-b"
@@ -20,6 +23,24 @@ natural_started = threading.Event()
 finish_naturally = threading.Event()
 
 class Provider(http.server.BaseHTTPRequestHandler):
+    def do_GET(self):
+        assert webview and self.path.startswith("/models"), self.path
+        if self.path == "/models" and catalog_phase == "error":
+            allow_catalog_error.wait(30)
+            self.send_error(503, "fixture catalog unavailable")
+            return
+        models = []
+        if self.path == "/models" and catalog_phase == "ready":
+            models = [
+                {"id": identifier, "name": name, "description": "Generate full-length songs from text.",
+                 "architecture": {"input_modalities": ["text"], "output_modalities": ["audio"]}}
+                for identifier, name in [(model, model_name), (peer_model, "Second fixture music model")]
+            ]
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.end_headers()
+        self.wfile.write(json.dumps({"data": models}).encode())
+
     def do_POST(self):
         assert self.path.endswith("/chat/completions"), self.path
         assert self.headers["Authorization"] == "Bearer fixture-only"
@@ -74,8 +95,9 @@ def local_provider():
 
 with tempfile.TemporaryDirectory(prefix="yue-openrouter-") as profile, local_provider() as upstream:
     root=pathlib.Path(profile)
-    (root/"openrouter-catalog-v2.json").write_text(json.dumps({"models":[{"id":identifier,"name":model_name,"input_modalities":["text"],"output_modalities":["audio"],"supported_parameters":[],"capabilities":["music_generation"]} for identifier in (model, peer_model, final_model)]}),encoding="utf8")
-    port=unused_port()
+    if not webview:
+        (root/"openrouter-catalog-v2.json").write_text(json.dumps({"models":[{"id":identifier,"name":model_name,"input_modalities":["text"],"output_modalities":["audio"],"supported_parameters":[],"capabilities":["music_generation"]} for identifier in (model, peer_model, final_model)]}),encoding="utf8")
+    port = 8791 if webview else unused_port()
     # Only this child process gets the disposable Studio profile and credentials.
     for folder in ("home", "appdata", "localappdata"):
         (root / folder).mkdir()
@@ -163,7 +185,7 @@ with tempfile.TemporaryDirectory(prefix="yue-openrouter-") as profile, local_pro
         raise AssertionError("The library WAV never acquired its ID3 artist")
     def run_service():
         log=(root/"service.log").open("ab")
-        proc=subprocess.Popen([str(exe)],env=env,stdout=log,stderr=subprocess.STDOUT)
+        proc=subprocess.Popen([str(exe), *(["--headless"] if webview else [])],env=env,stdout=log,stderr=subprocess.STDOUT)
         try:
             for _ in range(180):
                 assert proc.poll() is None,proc.returncode
@@ -186,8 +208,97 @@ with tempfile.TemporaryDirectory(prefix="yue-openrouter-") as profile, local_pro
             if payload["status"] in ("completed","failed"): return payload
             time.sleep(.1)
         raise TimeoutError("music job")
+    def check_webview():
+        global catalog_phase
+        rpc("initialize", {"protocolVersion": "2025-03-26", "capabilities": {},
+                           "clientInfo": {"name": "openrouter-webview-qa", "version": "1"}}, 1)
+        rpc("notifications/initialized", {})
+        next_id = 1
+
+        def ui(name, **args):
+            nonlocal next_id
+            next_id += 1
+            reply = rpc("tools/call", {"name": "ui_" + name, "arguments": args}, next_id)
+            assert not reply.get("isError"), reply
+            return reply["content"][0]["text"]
+
+        def wait_page(*strings):
+            last = ""
+            deadline = time.monotonic() + 35
+            while time.monotonic() < deadline:
+                try:
+                    last = ui("read_page")
+                    if all(string in last for string in strings):
+                        return last
+                except (AssertionError, OSError) as error:
+                    last = str(error)
+                time.sleep(.15)
+            raise AssertionError(f"Missing {strings!r} in WebView page:\n{last}")
+
+        def click_button(text, page):
+            line = next(line for line in page.splitlines() if f'button "{text}"' in line)
+            ui("click", ref=line.split()[0])
+
+        page = wait_page('button "Create"')
+        if 'button "Use OpenRouter"' in page:
+            click_button("Use OpenRouter", page)
+        elif 'select "Model"' not in page:
+            click_button("Create", page)
+        page = wait_page('select "Model"')
+        if 'select "Model" value="openrouter"' not in page:
+            ui("select", text="Model", value="openrouter")
+        wait_page('status "Loading OpenRouter models')
+        allow_catalog_error.set()
+        page = wait_page('alert "Could not load OpenRouter music models."', 'button "Refresh models"')
+        catalog_phase = "empty"
+        click_button("Refresh models", page)
+        page = wait_page('status "No OpenRouter music models are available."', 'button "Refresh models"')
+        assert 'button "Create" disabled' in page
+        catalog_phase = "ready"
+        click_button("Refresh models", page)
+        wait_page("cloud:" + model, "cloud:" + peer_model)
+        # Exercise changing an already suggested/selected model in the single Create form.
+        ui("select", text="Model", value="cloud:" + model)
+        ui("select", text="Model", value="cloud:" + peer_model)
+        tag = "OpenRouter WebView fixture song"
+        prompt = "Warm piano with a brushed snare"
+        ui("type", text="Untitled", value=tag)
+        ui("type", text="Style", value=prompt)
+        page = wait_page(f'value="cloud:{peer_model}"', f'value="{prompt}"')
+        # Sidebar Create is listed first. The submit button is inside the form.
+        submits = [line for line in page.splitlines() if line.endswith('button "Create"')]
+        assert len(submits) >= 2, page
+        ui("click", ref=submits[-1].split()[0])
+        deadline = time.monotonic() + 30
+        while time.monotonic() < deadline:
+            code, data = request("/v1/library/songs")
+            assert code == 200, data
+            songs = json.loads(data)
+            song = next((item for item in songs if item["title"] == tag), None)
+            if song:
+                break
+            time.sleep(.2)
+        else:
+            raise AssertionError(f"WebView song did not reach the library; upstream calls={calls!r}")
+        assert len(calls) == 1 and calls[0]["model"] == peer_model and calls[0]["stream"] is True, calls
+        assert song["engine_id"] == "openrouter" and song["generation_settings"]["model"] == peer_model, song
+        code, payload = request("/v1/library/media/" + song["id"])
+        assert code == 200, code
+        with wave.open(io.BytesIO(payload)) as playback, wave.open(io.BytesIO(wav)) as original:
+            pcm = playback.readframes(8000)
+            assert pcm == original.readframes(8000)
+        ui("select", text="Model", value="local")
+        wait_page('select "Model" value="local"', f'value="{prompt}"')
+        print(json.dumps({"transport": "Windows WebView2 and localhost SSE", "catalog": ["loading", "error",
+              "empty", "ready"], "model": peer_model, "library_id": song["id"],
+              "pcm_sha256": hashlib.sha256(pcm).hexdigest(), "local_draft_restored": True,
+              "paid_requests": 0}, indent=2))
+
     proc=run_service()
     try:
+        if webview:
+            check_webview()
+            sys.exit(0)
         body={"music_source":{"kind":"openrouter","model":model},"title":"Fixture song","style":"soft piano",
               "lyrics":"A local response sings","client_ref":"fixture-client","duration_seconds":6,"seed":42}
         rpc("initialize",{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"openrouter-sse-qa","version":"1"}},1)
