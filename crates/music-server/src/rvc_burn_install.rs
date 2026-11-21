@@ -5,22 +5,29 @@ const PINS: &str = include_str!("rvc_burn_assets.json");
 const SCOPE: &str = "rvc-burn-runtime";
 
 #[derive(Deserialize)]
-struct Pin {
-    label: &'static str,
-    url: &'static str,
-    file: &'static str,
+struct Pin<'a> {
+    label: &'a str,
+    url: &'a str,
+    file: &'a str,
     bytes: u64,
-    sha256: &'static str,
-    pick: Vec<&'static str>,
+    sha256: &'a str,
+    #[serde(borrow)]
+    pick: Vec<&'a str>,
+    #[serde(default)]
+    headers: bool,
 }
 
-fn pins() -> &'static std::collections::BTreeMap<&'static str, Pin> {
-    static PINS_LOCK: std::sync::OnceLock<std::collections::BTreeMap<&str, Pin>> = std::sync::OnceLock::new();
+fn pins() -> &'static std::collections::BTreeMap<&'static str, Pin<'static>> {
+    static PINS_LOCK: std::sync::OnceLock<std::collections::BTreeMap<&str, Pin<'static>>> =
+        std::sync::OnceLock::new();
     PINS_LOCK.get_or_init(|| serde_json::from_str(PINS).expect("valid Burn component pins"))
 }
 
 pub(super) fn sha256(url: &str) -> Option<&'static str> {
-    pins().values().find(|pin| pin.url == url).map(|pin| pin.sha256)
+    pins()
+        .values()
+        .find(|pin| pin.url == url)
+        .map(|pin| pin.sha256)
 }
 
 fn asset(key: &'static str, folder: Option<&'static str>) -> Asset {
@@ -30,9 +37,11 @@ fn asset(key: &'static str, folder: Option<&'static str>) -> Asset {
         label: pin.label,
         kind: AssetKind::Runtime,
         url: pin.url,
-        relative_path: folder.map_or(pin.file, |flavour| format!("packages/{flavour}/{}", pin.file).leak()),
+        relative_path: folder.map_or(pin.file, |flavour| {
+            format!("packages/{flavour}/{}", pin.file).leak()
+        }),
         bytes: pin.bytes,
-        unzip_into: folder,
+        unzip_into: folder.filter(|_| !pin.headers),
         marker: pin.pick.first().copied().unwrap_or(pin.file),
         pick: &pin.pick,
         vram_gb: None,
@@ -48,27 +57,91 @@ pub(super) enum Profile {
 
 impl Profile {
     pub(super) fn folder(self) -> &'static str {
-        match self { Self::Cuda12 => "cuda12", Self::Cuda13 => "cuda13" }
+        match self {
+            Self::Cuda12 => "cuda12",
+            Self::Cuda13 => "cuda13",
+        }
     }
 
-    fn runtime(self) -> &'static [Asset; 4] {
-        fn assets(profile: Profile, keys: [&'static str; 2]) -> [Asset; 4] {
-            let folder = Some(profile.folder());
-            [asset(keys[0], folder), asset(keys[1], folder), asset("ort", folder), asset("ffmpeg", folder)]
-        }
-        static CUDA12: std::sync::OnceLock<[Asset; 4]> = std::sync::OnceLock::new();
-        static CUDA13: std::sync::OnceLock<[Asset; 4]> = std::sync::OnceLock::new();
+    fn runtime(self) -> &'static [Asset; 7] {
+        static CUDA12: std::sync::OnceLock<[Asset; 7]> = std::sync::OnceLock::new();
+        static CUDA13: std::sync::OnceLock<[Asset; 7]> = std::sync::OnceLock::new();
+        let folder = Some(self.folder());
         match self {
-            Self::Cuda12 => CUDA12.get_or_init(|| assets(self, ["worker12", "nvrtc12"])),
-            Self::Cuda13 => CUDA13.get_or_init(|| assets(self, ["worker13", "nvrtc13"])),
+            Self::Cuda12 => CUDA12.get_or_init(|| {
+                [
+                    "worker12", "nvrtc12", "ort", "ffmpeg", "cudart12", "crt12", "cccl12",
+                ]
+                .map(|key| asset(key, folder))
+            }),
+            Self::Cuda13 => CUDA13.get_or_init(|| {
+                [
+                    "worker13", "nvrtc13", "ort", "ffmpeg", "cudart13", "crt13", "cccl13",
+                ]
+                .map(|key| asset(key, folder))
+            }),
         }
     }
 
     pub(super) fn assets(self, training: bool) -> impl Iterator<Item = &'static Asset> {
         static MODELS: std::sync::OnceLock<[Asset; 4]> = std::sync::OnceLock::new();
-        let models = MODELS.get_or_init(|| ["content", "pitch", "generator", "discriminator"].map(|key| asset(key, None)));
-        self.runtime().iter().chain(&models[..if training { 4 } else { 2 }])
+        let models = MODELS.get_or_init(|| {
+            ["content", "pitch", "generator", "discriminator"].map(|key| asset(key, None))
+        });
+        self.runtime()
+            .iter()
+            .chain(&models[..if training { 4 } else { 2 }])
     }
+}
+
+// CubeCL compiles kernels with NVRTC and expects one CUDA SDK layout, including
+// CUDA headers that NVIDIA publishes in separate redistributable archives.
+pub(super) fn prepare_sdk(profile: Profile, downloader: &Downloader) -> anyhow::Result<()> {
+    let worker = downloader.runtime_dir(profile.folder());
+    let sdk = worker.join("cuda-sdk");
+    let complete = |root: &std::path::Path| {
+        root.join("include/cuda_runtime.h").is_file()
+            && root.join("include/crt/host_config.h").is_file()
+            && (root.join("include/cuda/std/type_traits").is_file()
+                || root.join("include/cccl/cuda/std/type_traits").is_file())
+    };
+    if complete(&sdk) {
+        return Ok(());
+    }
+    let stage = tempfile::tempdir_in(&worker)?;
+    for asset in profile
+        .runtime()
+        .iter()
+        .filter(|asset| pins()[asset.id].headers)
+    {
+        use anyhow::Context as _;
+        let mut zip = zip::ZipArchive::new(std::fs::File::open(downloader.path_of(asset))?)
+            .with_context(|| format!("Read {}", asset.label))?;
+        for index in 0..zip.len() {
+            let mut entry = zip.by_index(index)?;
+            let Some(path) = entry.enclosed_name() else {
+                continue;
+            };
+            let relative: PathBuf = path.components().skip(1).collect();
+            if entry.is_dir() || !relative.starts_with("include") {
+                continue;
+            }
+            let path = stage.path().join(relative);
+            std::fs::create_dir_all(path.parent().context("CUDA header path")?)?;
+            std::io::copy(&mut entry, &mut std::fs::File::create(path)?)?;
+        }
+    }
+    anyhow::ensure!(
+        complete(stage.path()),
+        "The CUDA Runtime Compilation headers are incomplete.",
+    );
+    // Use a same-volume temporary directory so only a complete SDK becomes visible.
+    if sdk.is_dir() {
+        let old = tempfile::tempdir_in(&worker)?;
+        std::fs::rename(&sdk, old.path().join("cuda-sdk"))?;
+    }
+    std::fs::rename(stage.path(), sdk)?;
+    Ok(())
 }
 
 pub(super) fn selected() -> Result<Profile, &'static str> {
@@ -106,11 +179,15 @@ pub(super) async fn status(state: &AppState) -> Value {
     let profile = selected();
     let download = downloader.active_for(SCOPE).await;
     let missing_bytes = profile.as_ref().ok().map_or(0, |profile| {
-        profile.assets(true).filter(|asset| !present(downloader, asset))
-            .map(|asset| asset.bytes.saturating_sub(downloader.partial_bytes(asset))).sum()
+        profile
+            .assets(true)
+            .filter(|asset| !present(downloader, asset))
+            .map(|asset| asset.bytes.saturating_sub(downloader.partial_bytes(asset)))
+            .sum()
     });
     serde_json::json!({
         "installable": profile.is_ok(),
+        "profile": profile.as_ref().ok().map(|profile| profile.folder()),
         "missing_bytes": missing_bytes,
         "install_reason": profile.err(),
         "download": download,
@@ -123,8 +200,16 @@ pub(super) async fn start(State(state): State<AppState>) -> impl IntoResponse {
         Err(reason) => return api_error(StatusCode::CONFLICT, reason.to_owned()).into_response(),
     };
     let downloader = state.rvc_burn_downloads.clone();
-    if downloader.active_for(SCOPE).await.is_some_and(|progress| !progress.done) {
-        return (StatusCode::ACCEPTED, Json(serde_json::json!({ "started": true }))).into_response();
+    if downloader
+        .active_for(SCOPE)
+        .await
+        .is_some_and(|progress| !progress.done)
+    {
+        return (
+            StatusCode::ACCEPTED,
+            Json(serde_json::json!({ "started": true })),
+        )
+            .into_response();
     }
     downloader.clear_finished(SCOPE).await;
     tokio::spawn(async move {
@@ -133,7 +218,11 @@ pub(super) async fn start(State(state): State<AppState>) -> impl IntoResponse {
             studio_log!("RVC Burn install failed: {error:#}");
         }
     });
-    (StatusCode::ACCEPTED, Json(serde_json::json!({ "started": true }))).into_response()
+    (
+        StatusCode::ACCEPTED,
+        Json(serde_json::json!({ "started": true })),
+    )
+        .into_response()
 }
 
 pub(super) async fn cancel(State(state): State<AppState>) -> Json<Value> {

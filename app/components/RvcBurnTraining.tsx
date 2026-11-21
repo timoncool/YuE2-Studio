@@ -24,6 +24,7 @@ export function RvcBurnTraining({ dataset, busy, card, control, primary, onStart
   const [settings, setSettings] = useState<RvcBurnSettings>({ epochs: 5, batch_size: 4, learning_rate: 0.0001 });
   const [working, setWorking] = useState(false);
   const [installing, setInstalling] = useState(false);
+  const [starting, setStarting] = useState(false);
   const labels = rvcApplyStrings[language] ?? rvcApplyStrings.en;
   useEffect(() => {
     let active = true;
@@ -53,9 +54,10 @@ export function RvcBurnTraining({ dataset, busy, card, control, primary, onStart
     finally { setWorking(false); }
   }
   async function installRuntime() {
-    setInstalling(true);
-    try { await installRvcBurnRuntime(); }
-    catch (error) { setInstalling(false); onError(String(error)); }
+    setStarting(true);
+    try { await installRvcBurnRuntime(); setInstalling(true); }
+    catch (error) { onError(String(error)); }
+    finally { setStarting(false); }
   }
   async function cancelRuntime() {
     try { setStatus(await cancelRvcBurnRuntime()); }
@@ -80,9 +82,10 @@ export function RvcBurnTraining({ dataset, busy, card, control, primary, onStart
         <p role="status">{labels.installing}</p>
         {download && !download.done && download.total_bytes > 0 && <progress className="w-full accent-pink-500"
           value={Math.min(download.downloaded_bytes, download.total_bytes)} max={download.total_bytes} aria-label={labels.installing} />}
-        <button type="button" className={control} onClick={() => void cancelRuntime()}>{t('cancel')}</button>
+        {download && !download.done && <button type="button" className={control}
+          onClick={() => void cancelRuntime()}>{t('cancel')}</button>}
       </div>
-    ) : <button type="button" className={control + ' mt-3'} disabled={busy}
+    ) : <button type="button" className={control + ' mt-3'} disabled={busy || starting}
       onClick={() => void installRuntime()}>{labels.installNative} · {downloadSize}</button>)}
     {download?.error && <p role="alert">{download.error}</p>}
     <div className="mt-3 grid gap-3 sm:grid-cols-3">

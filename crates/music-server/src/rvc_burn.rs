@@ -26,7 +26,9 @@ impl Runtime {
             return Self::from_folder(folder.into());
         }
         let mut runtime = Self::from_folder(update_data_root(state).join("rvc/burn"));
-        if !runtime.exe.is_file() && let Ok(profile) = rvc_burn_install::selected() {
+        if !runtime.exe.is_file()
+            && let Ok(profile) = rvc_burn_install::selected()
+        {
             let folder = runtime.folder.join("runtime").join(profile.folder());
             runtime.exe = folder.join("rvc.exe");
             runtime.ort = folder.join("onnxruntime.dll");
@@ -42,14 +44,21 @@ impl Runtime {
         } else {
             "libonnxruntime.so"
         });
-        Self { folder, exe, ort, managed: None }
+        Self {
+            folder,
+            exe,
+            ort,
+            managed: None,
+        }
     }
 
     fn missing(&self, training: bool) -> Vec<String> {
         if let Some((profile, downloads)) = &self.managed {
-            return profile.assets(training)
+            return profile
+                .assets(training)
                 .filter(|asset| !rvc_burn_install::present(downloads, asset))
-                .map(|asset| asset.label.to_owned()).collect();
+                .map(|asset| asset.label.to_owned())
+                .collect();
         }
         let mut paths = vec![(&self.exe, None), (&self.ort, None)];
         let candidates = [
@@ -93,20 +102,40 @@ impl Runtime {
         Ok(())
     }
 
+    fn prepare_sdk(&self) -> anyhow::Result<()> {
+        if let Some((profile, downloader)) = &self.managed {
+            rvc_burn_install::prepare_sdk(*profile, downloader)?;
+        }
+        Ok(())
+    }
+
     pub(super) fn environment(&self) -> Vec<(OsString, OsString)> {
         let path = std::env::join_paths(
-            self.exe.parent().map(FsPath::to_path_buf).into_iter().chain(
-                std::env::var_os("PATH")
-                    .iter()
-                    .flat_map(std::env::split_paths),
-            ),
+            self.exe
+                .parent()
+                .map(FsPath::to_path_buf)
+                .into_iter()
+                .chain(
+                    std::env::var_os("PATH")
+                        .iter()
+                        .flat_map(std::env::split_paths),
+                ),
         )
         .unwrap_or_default();
-        vec![
+        let mut env = vec![
             ("PATH".into(), path),
             ("ORT_DYLIB_PATH".into(), self.ort.clone().into_os_string()),
             ("RUST_LOG".into(), "info".into()),
-        ]
+        ];
+        if let Some(sdk) = self
+            .exe
+            .parent()
+            .map(|folder| folder.join("cuda-sdk"))
+            .filter(|sdk| sdk.is_dir())
+        {
+            env.push(("CUDA_PATH".into(), sdk.into_os_string()));
+        }
+        env
     }
 
     fn common_args(&self, local: &FsPath) -> Vec<OsString> {
@@ -163,6 +192,7 @@ impl Runtime {
         semitone_shift: i32,
         cancelled: impl Fn() -> bool,
     ) -> anyhow::Result<audio_post::Stereo> {
+        self.prepare_sdk()?;
         let output = stage.join("converted");
         std::fs::create_dir(&output)?;
         let stderr = stage.join("rvc-convert.log");
@@ -251,7 +281,8 @@ pub(super) async fn status(State(state): State<AppState>) -> Json<Value> {
     let runtime = Runtime::discover(&state);
     let mut result = rvc_burn_install::status(&state).await;
     let missing = runtime.missing(true);
-    result["ready"] = serde_json::json!(hardware::hardware().card_cuda.is_some() && missing.is_empty());
+    result["ready"] =
+        serde_json::json!(hardware::hardware().card_cuda.is_some() && missing.is_empty());
     result["conversion_ready"] = serde_json::json!(runtime.ready(false).is_ok());
     result["missing"] = serde_json::json!(missing);
     result["folder"] = serde_json::json!(runtime.folder);
@@ -295,6 +326,8 @@ pub(super) async fn start(
                 .is_some_and(|job| !job.finished),
             "Wait until dataset preparation ends."
         );
+        let sdk_runtime = runtime.clone();
+        tokio::task::spawn_blocking(move || sdk_runtime.prepare_sdk()).await??;
         state.ace_runtime.stop().await?;
         state.minimax.stop().await;
         evict_kept_models(&state, "before RVC Burn training").await;
