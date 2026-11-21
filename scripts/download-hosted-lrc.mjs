@@ -67,11 +67,22 @@ try {
     }
     return false;
   })()`);
-  await retry(async () => {
-    if (await click('Library', 'document')) return true;
-    await click('Use OpenRouter', 'document');
-    return false;
-  }, 'Library was unavailable');
+  try {
+    await retry(async () => {
+      if (await click('Library', 'document')) return true;
+      await click('Use OpenRouter', 'document');
+      return false;
+    }, 'Library was unavailable');
+  } catch (problem) {
+    trace.push(await evaluate(`({
+      url: location.href, title: document.title, viewport: [innerWidth, innerHeight],
+      body: document.body?.innerText.slice(0, 2500),
+      buttons: [...document.querySelectorAll('button')].slice(0, 30)
+        .map(b => [b.getAttribute('aria-label'), b.title, b.innerText]),
+      scripts: [...document.scripts].map(s => s.src),
+    })`));
+    throw problem;
+  }
   trace.push({ clicked: 'Library' });
   const context = JSON.stringify(`[data-mcp-context^="song ${songId}:"]`);
   await retry(() => click('Song Details', `document.querySelector(${context})`), 'Details were unavailable');

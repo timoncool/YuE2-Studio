@@ -341,7 +341,7 @@ def browser_download_lrc(root, song_id):
                 if (prefix := os.environ.get(variable))
                 if (browser := pathlib.Path(prefix)/"Microsoft"/"Edge"/"Application"/"msedge.exe").is_file())
     browser = subprocess.Popen([str(edge), "--headless=new", "--disable-gpu", "--no-first-run",
-                                "--remote-debugging-port=9890", f"--user-data-dir={root/'browser'}",
+                                "--window-size=1440,960", "--remote-debugging-port=9890", f"--user-data-dir={root/'browser'}",
                                 base + "/"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     try:
         script = pathlib.Path(__file__).with_name("download-hosted-lrc.mjs")
