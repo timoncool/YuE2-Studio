@@ -408,7 +408,7 @@ impl Acpp {
 
     /// Private to generation. Stopping one of these jobs can reap the process
     /// without touching the process that serves separation, MIDI and audio tools.
-    pub(super) fn run_music(&self, build: Build, model: ModelEntry, body: Value, stop: &AtomicBool) -> Result<Value> {
+    pub(super) fn run_music(&self, build: Build, model: ModelEntry, body: Value, stop: &AtomicBool, keep_weights: bool) -> Result<Value> {
         let mut music = self.music.lock().unwrap_or_else(|error| error.into_inner());
         anyhow::ensure!(!stop.load(Ordering::SeqCst), "stopped");
         let id = model.id.clone();
@@ -428,7 +428,7 @@ impl Acpp {
             drop(music.take());
             bail!("stopped");
         }
-        if let Err(error) = server.unload(&[&id]) {
+        if (!keep_weights || reply.is_err()) && let Err(error) = server.unload(&[&id]) {
             eprintln!("[ERROR] unloading audio.cpp {id}: {error:#}");
             drop(music.take());
         }
