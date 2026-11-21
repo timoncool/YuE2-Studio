@@ -387,13 +387,9 @@ async fn stage_package<P: Package>(
     let mut next = tempfile::NamedTempFile::new_in(&root)?;
     serde_json::to_writer(next.as_file_mut(), &selection)?;
     next.as_file().sync_all()?;
-    // An installed generation stays selected until work on the shared device
-    // drains. The lease also orders activation against the next admission.
-    let _activation = if selection.previous.is_some() {
-        Some(wait_for_activation(state, transfer).await)
-    } else {
-        None
-    };
+    // A first signed install can replace a running built-in native runtime.
+    // The device lease orders every activation against generation admission.
+    let _activation = wait_for_activation(state, transfer).await;
     transfer.stage("activating", None);
     next.persist(root.join("active.json"))?;
     let _generation_path = stage.keep();
