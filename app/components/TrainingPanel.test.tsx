@@ -1,5 +1,6 @@
 import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { expect, it, vi } from 'vitest';
 import { TrainingPanel } from './TrainingPanel';
 
@@ -50,6 +51,64 @@ it.each([false, true])('uses the selected recipe after revisiting songs (automat
       await press('trainingStart');
       expect(requests.get('/v1/training/runs')).toEqual({ dataset_id: 'set', name: 'Test songs', recipe });
     }
+  } finally {
+    await act(async () => root.unmount());
+    vi.unstubAllGlobals();
+  }
+});
+
+it('displays Burn training progress and keeps a saved checkpoint installable after Stop', async () => {
+  const run = {
+    id: 'burn-run', engine: 'rvc-burn', dataset_id: 'voice-set', dataset_name: 'Isolated vocals',
+    name: 'My voice', trigger: '', status: 'running', stage: 'rvc-burn', stages: ['rvc-burn'],
+    recipe: { preset: 'rvc-burn', steps: 12 },
+    steps: [{ step: 2, loss: 48.5 }], checkpoints: [], installed: [],
+    rvc_best_checkpoint: { step: 1, mel: 48.5 }, rvc_checkpoint_ready: false, rvc_voice_id: null as string | null,
+  };
+  const state = {
+    pack: [], pack_ready: false, card_trains: true, listen: { ready: true }, recipe_defaults: {}, recipe_fields: [],
+    datasets: [{ id: 'voice-set', name: 'Isolated vocals', trigger: '', items: [] }],
+    runs: [run],
+  };
+  const actions: string[] = [];
+  vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+  vi.stubGlobal('fetch', async (url: string, init?: RequestInit) => {
+    if (init?.method === 'POST') {
+      actions.push(url);
+      if (url.endsWith('/cancel')) {
+        run.status = 'cancelled';
+        run.stage = '';
+        run.rvc_checkpoint_ready = true;
+        return Response.json({ cancelled: true });
+      }
+      if (url.endsWith('/install')) {
+        run.rvc_voice_id = 'installed-voice';
+        return Response.json({ id: run.rvc_voice_id });
+      }
+    }
+    return Response.json(url === '/v1/training' ? state : {});
+  });
+  const host = document.createElement('div');
+  const root = createRoot(host);
+  const button = (text: string) => [...host.querySelectorAll('button')].find(item => item.textContent?.includes(text));
+  const press = async (text: string) => {
+    const target = button(text);
+    expect(target?.disabled).toBe(false);
+    await act(async () => target!.click());
+  };
+  try {
+    const client = new QueryClient();
+    await act(async () => root.render(<QueryClientProvider client={client}><TrainingPanel /></QueryClientProvider>));
+    await press('Isolated vocals');
+    expect(host.textContent).toContain('trainingStep 2');
+    expect(host.textContent).toContain('Mel 48.500');
+    await press('trainingStop');
+    expect(actions).toContain('/v1/training/runs/burn-run/cancel');
+    expect(host.textContent).toContain('trainingStatus_cancelled');
+    expect(host.textContent).toContain('Mel 48.500');
+    await press('Install voice');
+    expect(actions).toContain('/v1/training/rvc-burn/burn-run/install');
+    expect(button('Voice in catalogue')?.disabled).toBe(true);
   } finally {
     await act(async () => root.unmount());
     vi.unstubAllGlobals();
