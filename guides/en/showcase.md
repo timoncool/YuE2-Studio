@@ -50,10 +50,12 @@ The same screens in the language you read: [Русский](https://timoncool.gi
 [Português](https://timoncool.github.io/YuE2-Studio/pt.html) — on the project page, or in
 [docs/screenshots](../../docs/screenshots).
 
+<a name="samples"></a>
+
 ## Samples
 
 Made in the released build on an RTX 4090 with the recommended BF16 set, nothing edited
-afterwards. Listen in the browser on the [project page](https://timoncool.github.io/YuE2-Studio/#samples)
+afterwards. Listen in the browser on the [project page](https://timoncool.github.io/YuE2-Studio/#listen)
 or download the MP3s from [docs/samples](../../docs/samples).
 
 | Song | How it was made | Style |
