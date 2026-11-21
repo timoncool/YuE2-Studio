@@ -464,6 +464,56 @@ pub(super) async fn cancel(State(state): State<AppState>) -> Json<Value> {
 mod tests {
     use super::*;
 
+    #[tokio::test]
+    #[ignore = "use distribution/components/test_hip_mirrors.py with the signed HTTPS fixture"]
+    async fn pinned_hip_installs_after_the_signed_mirror_changes() {
+        let fixture = PathBuf::from(std::env::var_os("YUE_HIP_MIRROR_QA").unwrap());
+        let mut runtime = Runtime::new(&fixture.join("studio"));
+        let port: u16 = fs::read_to_string(fixture.join("port"))
+            .unwrap()
+            .parse()
+            .unwrap();
+        let ca =
+            reqwest::Certificate::from_pem(&fs::read(fixture.join("ca.pem")).unwrap()).unwrap();
+        runtime.downloads = runtime.downloads.with_test_http(
+            reqwest::Client::builder()
+                .no_proxy()
+                .resolve(
+                    "github.com",
+                    std::net::SocketAddr::from(([127, 0, 0, 1], port)),
+                )
+                .tls_certs_only([ca])
+                .build()
+                .unwrap(),
+        );
+        let gfx1036 = package(Gfx::Gfx1036).unwrap();
+        let first = runtime
+            .downloads
+            .install_all(SCOPE, &[&gfx1036.asset])
+            .await;
+        assert!(first.unwrap_err().to_string().contains("404"));
+        assert!(runtime.installed(gfx1036).is_err());
+        fs::write(fixture.join("first-failed"), []).unwrap();
+        for _ in 0..200 {
+            if fixture.join("second-published").is_file() {
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        }
+        assert!(fixture.join("second-published").is_file());
+        runtime
+            .downloads
+            .install_all(SCOPE, &[&gfx1036.asset])
+            .await
+            .unwrap();
+        runtime.unpack(gfx1036).unwrap();
+        assert!(runtime.installed(gfx1036).unwrap().is_file());
+        let root = runtime.root(gfx1036);
+        let record = crate::install_record::read(&root.join("install.json")).unwrap();
+        assert_eq!(record.url, gfx1036.asset.url);
+        assert_eq!(record.sha256, gfx1036.sha256);
+    }
+
     fn adapter(pnp: &str) -> Adapter {
         Adapter {
             pnp_device_id: Some(pnp.into()),
