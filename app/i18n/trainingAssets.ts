@@ -10,6 +10,7 @@ const assets = {
   'yue2-lyric-aligner': 'aligner',
   'moss-audio': 'moss',
   'beat-this': 'tempo',
+  'vocal-separator': 'separator',
 } as const;
 
 type AssetTitle = typeof assets[keyof typeof assets];
@@ -25,6 +26,7 @@ const labels: Record<Language, Record<AssetTitle, string>> = {
     aligner: 'MMS forced aligner (lyric timing)',
     moss: 'MOSS-Music audio tower (F16)',
     tempo: 'Beat This! (tempo)',
+    separator: 'HT-Demucs 6 stems',
   },
   ru: {
     trainer: 'Тренер',
@@ -36,6 +38,7 @@ const labels: Record<Language, Record<AssetTitle, string>> = {
     aligner: 'Выравнивание текста песни MMS',
     moss: 'Аудиоэнкодер MOSS-Music (F16)',
     tempo: 'Распознавание темпа Beat This!',
+    separator: 'Разделение на 6 стемов HT-Demucs',
   },
   zh: {
     trainer: '训练器',
@@ -47,6 +50,7 @@ const labels: Record<Language, Record<AssetTitle, string>> = {
     aligner: 'MMS 歌词时间对齐',
     moss: 'MOSS-Music 音频编码器（F16）',
     tempo: 'Beat This! 速度识别',
+    separator: 'HT-Demucs 六轨人声伴奏分离',
   },
   ja: {
     trainer: 'トレーナー',
@@ -58,6 +62,7 @@ const labels: Record<Language, Record<AssetTitle, string>> = {
     aligner: 'MMS 歌詞のタイミング合わせ',
     moss: 'MOSS-Music 音声エンコーダー（F16）',
     tempo: 'Beat This! テンポ検出',
+    separator: 'HT-Demucs 6 ステム分離',
   },
   ko: {
     trainer: '학습 도구',
@@ -69,6 +74,7 @@ const labels: Record<Language, Record<AssetTitle, string>> = {
     aligner: 'MMS 가사 시간 정렬',
     moss: 'MOSS-Music 오디오 인코더 (F16)',
     tempo: 'Beat This! 템포 감지',
+    separator: 'HT-Demucs 6개 스템 분리',
   },
   pt: {
     trainer: 'Treinador',
@@ -80,6 +86,7 @@ const labels: Record<Language, Record<AssetTitle, string>> = {
     aligner: 'Alinhamento temporal da letra com MMS',
     moss: 'Codificador de áudio MOSS-Music (F16)',
     tempo: 'Deteção de tempo com Beat This!',
+    separator: 'Separação de 6 pistas HT-Demucs',
   },
 };
 
