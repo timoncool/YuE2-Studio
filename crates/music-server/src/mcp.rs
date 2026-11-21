@@ -125,7 +125,7 @@ fn compact_run(run: &Value) -> Value {
         "steps_done": steps.len(), "step_limit": run["recipe"]["steps"], "preset": run["recipe"]["preset"], "songs_per_step": run["recipe"]["grad_accum"],
         "stop": if tuned { run["recipe"]["stop"].clone() } else { Value::Null }, "target_kl": if tuned { run["recipe"]["target_kl"].clone() } else { Value::Null },
         "last_step": last, "checkpoints": run["checkpoints"], "installed": run["installed"], "error": run["error"],
-        "step_stage": run["step_stage"],
+        "step_stage": run["step_stage"], "engine": run["engine"], "output_adapter": run["output_adapter"],
     })
 }
 
