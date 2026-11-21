@@ -1803,6 +1803,7 @@ pub async fn serve_on_port(port: u16) -> anyhow::Result<()> {
         .route("/v1/training/datasets/{id}/files", post(upload_training_files).layer(DefaultBodyLimit::max(TRAINING_UPLOAD_LIMIT)))
         .route("/v1/training/datasets/{id}/items/{item}", axum::routing::patch(update_training_item).delete(delete_training_item))
         .route("/v1/training/datasets/{id}/items/{item}/audio", get(training_item_audio))
+        .route("/v1/training/datasets/{id}/items/{item}/describe", post(prepare::describe_dataset_item))
         .route("/v1/training/datasets/{id}/prepare", post(prepare::start))
         .route("/v1/lyrics/find", post(find_lyrics))
         .route("/v1/lyrics/syllables", post(lyric_syllables))
