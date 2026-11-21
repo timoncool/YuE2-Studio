@@ -1,7 +1,8 @@
 import React, { useCallback, useEffect, useEffectEvent, useMemo, useRef, useState } from 'react';
-import { libraryChanged, SELF_READ, useActivity, useAssistantStatus, useOpenRouterSettings, useSetupStatus, type ActivityEntry } from '../services/studioQueries';
+import { libraryChanged, SELF_READ, useActivity, useAssistantStatus, useOpenRouterSettings, useSetupStatus, setupStatusChanged, type ActivityEntry } from '../services/studioQueries';
 import { hasSungLines, karaokeReason, recogniseLyrics } from '../services/karaoke';
 import { ConfirmDialog } from './ConfirmDialog';
+import { enginePauseStrings } from '../i18n/enginePause';
 import { clampDurationToKept } from '../services/createDuration';
 import { minTokensCutsTheSongOff } from '../services/samplingLimits';
 import { foldedAfter, keepFolded, keptFolded } from '../services/createFold';
@@ -95,6 +96,7 @@ type SetupStatus = SetupChoice & {
   ready?: boolean;
   profile_files?: ProfileFiles | null;
   engine_ready?: boolean;
+  engine_paused?: boolean;
   selection_matches_engine?: boolean | null;
   engine_error?: string | null;
   effective_max_batch?: number;
@@ -573,6 +575,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
   const [writerExtra, setWriterExtra] = useState('');
   const [scoreInstruction, setScoreInstruction] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [engineAction, setEngineAction] = useState(false);
   // the form scrolls above the Create button: a refusal at its foot is brought into view, or a click seems to do nothing
   const errorBox = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -619,10 +622,28 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
   const lyricsBox = useRef<HTMLTextAreaElement | null>(null);
 
   const ready = !serviceDown && setup?.ready === true && setup.engine_ready === true && setup.selection_matches_engine !== false;
-  const unavailableTitle = !setup ? t('modelLoading') : !setup.ready ? t('profileRequired')
+  const enginePaused = setup?.engine_paused === true;
+  const engineControl = enginePauseStrings[language];
+  const unavailableTitle = enginePaused ? engineControl.paused : !setup ? t('modelLoading') : !setup.ready ? t('profileRequired')
     : setup.engine_error ? t('localGenerationUnavailable') : t('engineStartingTitle');
-  const unavailableHint = !setup ? t('modelLoading') : !setup.ready ? t('downloadProfileFirst')
+  const unavailableHint = enginePaused ? engineControl.paused : !setup ? t('modelLoading') : !setup.ready ? t('downloadProfileFirst')
     : setup.engine_error || (setup.selection_matches_engine === false ? t('switchProfileHint') : t('engineStartingHint'));
+  const changeEnginePause = async () => {
+    setEngineAction(true);
+    setError(null);
+    try {
+      const response = await fetch(enginePaused ? '/engine/resume' : '/engine/pause', { method: 'POST' });
+      if (!response.ok) {
+        const body = await response.json().catch(() => null);
+        throw new Error(body?.error || engineControl.failed);
+      }
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : engineControl.failed);
+    } finally {
+      setupStatusChanged();
+      setEngineAction(false);
+    }
+  };
   const defaults: EngineDefaults = catalog?.defaults ?? {};
   const placeholder = (key: string) => asText(defaults[key]);
   const maxBatch = Math.max(1, catalog?.max_batch ?? setup?.effective_max_batch ?? 1);
@@ -1616,6 +1637,12 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
                 <option value="openrouter">OpenRouter</option>
               </select>
             </label>
+          )}
+          {yue && !serviceDown && setup?.ready && (
+            <button type="button" disabled={engineAction} onClick={() => void changeEnginePause()}
+              className="rounded border border-zinc-200 px-2 py-1 text-xs font-medium disabled:opacity-50 dark:border-white/20">
+              {enginePaused ? engineControl.resume : engineControl.pause}
+            </button>
           )}
           {!yue ? (
             <>

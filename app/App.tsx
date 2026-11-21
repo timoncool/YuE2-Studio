@@ -231,7 +231,7 @@ function AppContent() {
   // page for a second on every launch is how a ready studio was made to look
   // like a bill.
   const [nativeModels, setNativeModels] = useState<'unknown' | 'missing' | 'installed' | 'offline'>('unknown');
-  const setupQuery = useSetupStatus<{ ready?: boolean; engine_ready?: boolean; trash_days?: number; kv_cache_notice?: { need_gib: number | null; free_gib: number | null } | null }>();
+  const setupQuery = useSetupStatus<{ ready?: boolean; engine_ready?: boolean; engine_paused?: boolean; trash_days?: number; kv_cache_notice?: { need_gib: number | null; free_gib: number | null } | null }>();
   useEffect(() => {
     // A service that does not answer is not an engine that is still coming
     // up: the application has been closed, and saying "starting" at a dead
@@ -1525,7 +1525,7 @@ function AppContent() {
         // look like it owed 26 GB.
         if (nativeModels === 'offline') return <StudioOffline />;
         if (updateShown) return <UpdateScreen onLeave={() => setUpdateShown(false)} />;
-        if (!nativeSetupReady && !enteredOtherEditor) {
+        if (!nativeSetupReady && !enteredOtherEditor && setupQuery.data?.engine_paused !== true) {
           // Until the studio has answered, and while the engine is coming up,
           // this is a wait - not a decision. The download page appears only
           // when components are genuinely missing.
