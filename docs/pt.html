@@ -536,6 +536,18 @@ footer p { margin: 0 0 8px; }
     </table></div>
 <!-- radeon-gpu-pair:end -->
 
+<!-- native-radeon-pair:start -->
+    <h3>YuE2-3B Q8_0 · Radeon gfx1036</h3>
+    <p class="note">Mesma música salva de 12 s, mesma Radeon integrada, quatro passos. O tempo a frio inclui a inicialização do processo. O tempo a quente é a mediana de três pedidos com os pesos em memória. Os picos WDDM foram medidos por processo nesta GPU.</p>
+    <div class="scroll"><table>
+      <thead><tr><th scope="col">Backend</th><th scope="col">Arranque (s)</th><th scope="col">Aquecido (s)</th><th scope="col">Pico WDDM dedicado (GiB)</th><th scope="col">Pico WDDM partilhado (GiB)</th></tr></thead>
+      <tbody>
+      <tr><td>HIP 188d13b3</td><td>22,749</td><td>18,483</td><td>0,28</td><td>4,39</td></tr>
+      <tr><td>Vulkan 892b9b03</td><td>30,923</td><td>24,438</td><td>1,82</td><td>2,59</td></tr>
+      </tbody>
+    </table></div>
+<!-- native-radeon-pair:end -->
+
   </section>
 
   <section id="start">

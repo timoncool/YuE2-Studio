@@ -1825,5 +1825,83 @@
         ]
       }
     ]
+  },
+  "native_radeon_pair": {
+    "card": "AMD Radeon Graphics gfx1036 (Windows UMA)",
+    "seconds": 11.998666666666667,
+    "seed": 721,
+    "steps": 4,
+    "model": "YuE2-3B-Q8_0 + YuE2-Vae-F32",
+    "fp16_clamp": true,
+    "keep_loaded": true,
+    "input_sha256": "b14df09344257d75173de09d2f554ed14981e5a32d6f1427c1681bf4f8ed8161",
+    "results": [
+      {
+        "backend": "HIP",
+        "revision": "188d13b3d619cc0fd13f47db9ff64e0bd815d577",
+        "process_start_to_first_wav_s": 22.749047299999802,
+        "warm_median_s": 18.482913100000587,
+        "wddm": {
+          "dedicated_bytes": 305758208,
+          "shared_bytes": 4713738240,
+          "samples": 101
+        },
+        "runs": [
+          {
+            "request_to_wav_s": 22.230372699996224,
+            "sha256": "c7e2b449839bec35bb4376f3ab2a66801680ae770566266772c22accc2176d41",
+            "rms_pcm16": 4576.201307324434
+          },
+          {
+            "request_to_wav_s": 18.82593220000126,
+            "sha256": "c7e2b449839bec35bb4376f3ab2a66801680ae770566266772c22accc2176d41",
+            "rms_pcm16": 4576.201307324434
+          },
+          {
+            "request_to_wav_s": 18.482913100000587,
+            "sha256": "c7e2b449839bec35bb4376f3ab2a66801680ae770566266772c22accc2176d41",
+            "rms_pcm16": 4576.201307324434
+          },
+          {
+            "request_to_wav_s": 18.467746099995566,
+            "sha256": "c7e2b449839bec35bb4376f3ab2a66801680ae770566266772c22accc2176d41",
+            "rms_pcm16": 4576.201307324434
+          }
+        ]
+      },
+      {
+        "backend": "Vulkan",
+        "revision": "892b9b0311512a1c45e42d6403881d17a991b87c",
+        "process_start_to_first_wav_s": 30.9231054999982,
+        "warm_median_s": 24.438130299997283,
+        "wddm": {
+          "dedicated_bytes": 1957871616,
+          "shared_bytes": 2776113152,
+          "samples": 135
+        },
+        "runs": [
+          {
+            "request_to_wav_s": 30.40311639999709,
+            "sha256": "a2b19766c85f61f37230a3a2afbc738679156021bcdf2ec033171969ccb9c68b",
+            "rms_pcm16": 4595.932598953961
+          },
+          {
+            "request_to_wav_s": 24.471306899999036,
+            "sha256": "a2b19766c85f61f37230a3a2afbc738679156021bcdf2ec033171969ccb9c68b",
+            "rms_pcm16": 4595.932598953961
+          },
+          {
+            "request_to_wav_s": 24.33128880000004,
+            "sha256": "a2b19766c85f61f37230a3a2afbc738679156021bcdf2ec033171969ccb9c68b",
+            "rms_pcm16": 4595.932598953961
+          },
+          {
+            "request_to_wav_s": 24.438130299997283,
+            "sha256": "a2b19766c85f61f37230a3a2afbc738679156021bcdf2ec033171969ccb9c68b",
+            "rms_pcm16": 4595.932598953961
+          }
+        ]
+      }
+    ]
   }
 }

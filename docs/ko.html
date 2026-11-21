@@ -536,6 +536,18 @@ footer p { margin: 0 0 8px; }
     </table></div>
 <!-- radeon-gpu-pair:end -->
 
+<!-- native-radeon-pair:start -->
+    <h3>YuE2-3B Q8_0 · Radeon gfx1036</h3>
+    <p class="note">같은 Radeon 내장 GPU에서 저장된 12초 곡을 4단계로 다시 생성했습니다. 콜드 측정에는 프로세스 시작 시간이 포함됩니다. 웜 측정은 가중치를 메모리에 유지한 세 요청의 중앙값입니다. WDDM 최댓값은 이 GPU에서 해당 프로세스의 메모리를 측정한 값입니다.</p>
+    <div class="scroll"><table>
+      <thead><tr><th scope="col">백엔드</th><th scope="col">첫 실행 (초)</th><th scope="col">재실행 (초)</th><th scope="col">WDDM 전용 피크 (GiB)</th><th scope="col">WDDM 공유 피크 (GiB)</th></tr></thead>
+      <tbody>
+      <tr><td>HIP 188d13b3</td><td>22.749</td><td>18.483</td><td>0.28</td><td>4.39</td></tr>
+      <tr><td>Vulkan 892b9b03</td><td>30.923</td><td>24.438</td><td>1.82</td><td>2.59</td></tr>
+      </tbody>
+    </table></div>
+<!-- native-radeon-pair:end -->
+
   </section>
 
   <section id="start">

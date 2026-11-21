@@ -536,6 +536,18 @@ footer p { margin: 0 0 8px; }
     </table></div>
 <!-- radeon-gpu-pair:end -->
 
+<!-- native-radeon-pair:start -->
+    <h3>YuE2-3B Q8_0 · Radeon gfx1036</h3>
+    <p class="note">同じ Radeon 内蔵 GPU で、保存した同じ 12 秒の曲を 4 ステップで再生成。コールド値はプロセス起動を含み、ウォーム値は重みを保持した状態での 3 回の中央値です。WDDM のピークはこの GPU 上のプロセス単位の測定値です。</p>
+    <div class="scroll"><table>
+      <thead><tr><th scope="col">バックエンド</th><th scope="col">初回（秒）</th><th scope="col">再実行（秒）</th><th scope="col">WDDM 専用ピーク（GiB）</th><th scope="col">WDDM 共有ピーク（GiB）</th></tr></thead>
+      <tbody>
+      <tr><td>HIP 188d13b3</td><td>22.749</td><td>18.483</td><td>0.28</td><td>4.39</td></tr>
+      <tr><td>Vulkan 892b9b03</td><td>30.923</td><td>24.438</td><td>1.82</td><td>2.59</td></tr>
+      </tbody>
+    </table></div>
+<!-- native-radeon-pair:end -->
+
   </section>
 
   <section id="start">
