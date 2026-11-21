@@ -55,10 +55,10 @@ def exercise(executable, root):
         port = listener.getsockname()[1]
     opener = build_opener(ProxyHandler({}))
 
-    def request(path, payload=None):
+    def request(path, payload=None, method=None):
         body = json.dumps(payload).encode("utf8") if payload is not None else None
         headers = {"Content-Type": "application/json", "Accept": "application/json, text/event-stream"}
-        with opener.open(Request(f"http://127.0.0.1:{port}{path}", data=body, headers=headers), timeout=20) as reply:
+        with opener.open(Request(f"http://127.0.0.1:{port}{path}", data=body, headers=headers, method=method), timeout=20) as reply:
             return json.load(reply)
 
     def tool(name, **arguments):
@@ -117,7 +117,25 @@ def exercise(executable, root):
             duplicate = tool("library_migration_import", **args)
             assert duplicate["added"] == duplicate["playlists_added"] == 0, duplicate
             assert snapshot(source) == before_retry
+            metadata_source = root / "metadata-only"
+            seed_source(metadata_source)
+            first = tool("library_migration_import", path=str(metadata_source),
+                         exclude=["audio", "covers", "stems", "karaoke", "playlists"])
+            assert first["added"] == 2 and first["errors"] == [], first
+            text_only = next(song for song in request("/v1/library/songs")
+                             if song["title"] == "Healthy" and song["id"] != healthy["id"])
+            assert text_only["audio_path"] is None, text_only
+            request(f"/v1/library/songs/{text_only['id']}/title", {"title": "Edited locally"}, method="PUT")
+            more = tool("library_migration_import", path=str(metadata_source),
+                        exclude=["covers", "stems", "karaoke", "playlists"])
+            assert more["added"] == 0 and more["updated"] == 1 and more["already_imported"] == 2, more
+            assert more["errors"][0]["file"] == "missing.wav", more
+            filled = request(f"/v1/library/songs/{text_only['id']}")
+            assert filled["title"] == "Edited locally" and filled["audio_path"], filled
+            with opener.open(f"http://127.0.0.1:{port}/v1/library/media/{text_only['id']}", timeout=10) as audio:
+                assert audio.read() == (metadata_source / "media" / "healthy.wav").read_bytes()
             print(json.dumps({"initial": initial, "after_repair": retry, "repeat": duplicate,
+                              "audio_backfill": more, "same_song_id_with_local_edit": True,
                               "playlist_preserved_order": True, "source_hashes_unchanged": True}))
         finally:
             if process.poll() is None:

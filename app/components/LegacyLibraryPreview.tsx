@@ -83,7 +83,8 @@ export function LegacyLibraryPreview({ sources = [] }: { sources?: LegacySource[
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || response.statusText);
       setSummary(t('legacyLibraryResult').replace('{songs}', String(result.added)).replace('{existing}', String(result.already_imported))
-        .replace('{lists}', String(result.playlists_added)).replace('{knownLists}', String(result.playlists_already_imported)));
+        .replace('{lists}', String(result.playlists_added)).replace('{knownLists}', String(result.playlists_already_imported))
+        + (result.updated ? ' ' + t('legacyLibraryUpdated').replace('{songs}', String(result.updated)) : ''));
       setIssues(result.errors ?? []);
       libraryChanged();
       playlistsChanged();

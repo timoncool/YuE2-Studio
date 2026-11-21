@@ -1275,7 +1275,7 @@ fn tools() -> &'static [Tool] {
             },
             Tool {
                 name: "library_migration_import",
-                description: "Copy songs and selected content from an old Studio folder. Optional exclude categories apply to newly imported songs. Returns per-file errors and imports the entries that can be copied. Safe to retry.",
+                description: "Copy songs and selected content from an old Studio folder. Later imports can fill in omitted content without duplicating songs. Returns per-file errors for entries that could not be copied.",
                 schema: || object(json!({
                     "path": {"type": "string", "description": "Old Studio installation or data folder"},
                     "exclude": {"type":"array", "items":{"type":"string",

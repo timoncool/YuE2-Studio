@@ -6,8 +6,8 @@ use crate::{
 };
 use anyhow::{Context, Result};
 use axum::{extract::State, http::StatusCode, Json};
-use rusqlite::{params, Transaction};
-use serde::Deserialize;
+use rusqlite::{params, OptionalExtension, Transaction};
+use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use std::{
@@ -23,7 +23,7 @@ pub(crate) struct ImportRequest {
     exclude: HashSet<Category>,
 }
 
-#[derive(Deserialize, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Deserialize, Serialize, PartialEq, Eq, Hash)]
 #[serde(rename_all = "snake_case")]
 enum Category {
     Audio,
@@ -37,6 +37,11 @@ enum Category {
     Latents,
     Playlists,
 }
+
+const SONG_CATEGORIES: [Category; 9] = [Category::Audio, Category::Lyrics, Category::Generation,
+    Category::Covers, Category::Karaoke, Category::Takes, Category::Stems, Category::Midi, Category::Latents];
+
+type Content = HashSet<Category>;
 
 fn included(kind: &str, exclude: &HashSet<Category>) -> bool {
     let category = match kind {
@@ -108,6 +113,14 @@ fn claim(tx: &Transaction, id: &str) -> Result<bool> {
 
 use crate::install_record::sha256_of as digest;
 
+fn filter_files(song: &mut Value, exclude: &Content) -> Result<()> {
+    for key in ["files", "missing"] {
+        song[key].as_array_mut().context("Missing file inventory")?
+            .retain(|file| included(file["kind"].as_str().unwrap_or_default(), exclude));
+    }
+    Ok(())
+}
+
 const STAGING_FOLDER: &str = ".legacy-import";
 const PARTIAL_PREFIX: &str = "copy-";
 
@@ -139,7 +152,7 @@ fn lock_staging(media: &Path) -> Result<(fs::File, PathBuf)> {
 
 // A retry can find a complete file from an interrupted import. A partially copied file never
 // occupies the final name, and a user edit or a different file is never overwritten.
-fn install(source: &Path, target: &Path, staging: &Path) -> Result<()> {
+fn install(source: &Path, target: &Path, staging: &Path) -> Result<bool> {
     anyhow::ensure!(
         fs::symlink_metadata(source)?.is_file(),
         "Expected regular file {}",
@@ -152,7 +165,7 @@ fn install(source: &Path, target: &Path, staging: &Path) -> Result<()> {
         io::copy(&mut fs::File::open(source)?, &mut tmp)?;
         tmp.as_file().sync_all()?;
         match tmp.persist_noclobber(target) {
-            Ok(_) => return Ok(()),
+            Ok(_) => return Ok(true),
             Err(e) if e.error.kind() == io::ErrorKind::AlreadyExists => {}
             Err(e) => return Err(e.error.into()),
         }
@@ -162,7 +175,86 @@ fn install(source: &Path, target: &Path, staging: &Path) -> Result<()> {
         "Destination already contains different data: {}",
         target.display()
     );
+    Ok(false)
+}
+
+fn pending_content(tx: &Transaction, id: &str) -> Result<Option<Content>> {
+    let raw: Option<String> = tx.query_row(
+        "SELECT pending FROM legacy_import_content WHERE song_id=?", [id], |row| row.get(0)
+    ).optional()?;
+    raw.map(|raw| serde_json::from_str(&raw).context("Read pending legacy content")).transpose()
+}
+
+fn save_pending(tx: &Transaction, song_id: &str, pending: &Content) -> Result<()> {
+    tx.execute("INSERT INTO legacy_import_content(song_id,pending) VALUES(?,?) ON CONFLICT(song_id) DO UPDATE SET pending=excluded.pending",
+        params![song_id, serde_json::to_string(pending)?])?;
     Ok(())
+}
+
+fn absent(song: &Song, category: Category) -> bool {
+    let no = |key| song.metadata.get(key).is_none_or(Value::is_null);
+    match category {
+        Category::Audio => song.audio_path.is_none(),
+        Category::Lyrics => song.lyrics.is_empty(),
+        Category::Generation => song.replay_request.is_none() && song.audio_codes.is_none() &&
+            (song.generation_settings.is_null() || song.generation_settings.as_object().is_some_and(|obj| obj.is_empty())),
+        Category::Covers => no("cover_filename"),
+        Category::Karaoke => no("lrc") && no("karaoke"),
+        Category::Takes => no("audio_versions") && no("original_audio_path") && no("active_version"),
+        _ => true,
+    }
+}
+
+fn source_has(song: &Song, item: &Value, category: Category, include_missing: bool) -> bool {
+    let kinds: &[&str] = match category {
+        Category::Audio => &["audio"],
+        Category::Covers => &["cover"],
+        Category::Takes => &["original", "version"],
+        Category::Stems => &["stem"],
+        Category::Midi => &["midi", "midi_metadata"],
+        Category::Latents => &["latent"],
+        _ => return !absent(song, category),
+    };
+    let matches = |key| item[key].as_array().into_iter().flatten()
+        .any(|file| file["kind"].as_str().is_some_and(|kind| kinds.contains(&kind)));
+    matches("files") || (include_missing && matches("missing"))
+}
+
+// Old imports had no selection. Missing files can be recovered, but absence
+// alone is insufficient to tell which textual fields a user deliberately cleared.
+fn old_pending(song: &Song) -> Content {
+    [Category::Audio, Category::Covers, Category::Takes, Category::Stems, Category::Midi, Category::Latents]
+        .into_iter().filter(|kind| absent(song, *kind)).collect()
+}
+
+fn merge_content(target: &mut Song, patch: &Song, chosen: &Content) {
+    for &category in chosen {
+        if !absent(target, category) {
+            continue;
+        }
+        match category {
+            Category::Audio => target.audio_path.clone_from(&patch.audio_path),
+            Category::Lyrics => target.lyrics.clone_from(&patch.lyrics),
+            Category::Generation => {
+                target.generation_settings.clone_from(&patch.generation_settings);
+                target.replay_request.clone_from(&patch.replay_request);
+                target.audio_codes.clone_from(&patch.audio_codes);
+            }
+            Category::Covers | Category::Karaoke | Category::Takes => {
+                let fields: &[&str] = match category {
+                    Category::Covers => &["cover_filename"],
+                    Category::Karaoke => &["lrc", "karaoke"],
+                    _ => &["audio_versions", "original_audio_path", "active_version"],
+                };
+                for key in fields {
+                    if let (Some(value), Some(metadata)) = (patch.metadata.get(*key), target.metadata.as_object_mut()) {
+                        metadata.insert((*key).to_owned(), value.clone());
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
 }
 
 fn remap_reference(value: &mut Value, pointer: &str, ids: &Ids) -> Result<()> {
@@ -257,6 +349,7 @@ fn prepare_song(
     staging: &Path,
     exclude: &HashSet<Category>,
     errors: &mut Vec<Value>,
+    backfill: bool,
 ) -> Result<bool> {
     let id = &ids[&song.id].id;
     let missing = item["missing"]
@@ -271,10 +364,17 @@ fn prepare_song(
         return Ok(false);
     }
     let mut names = HashMap::new();
+    let mut created = Vec::new();
     for file in item["files"].as_array().context("Missing file inventory")? {
         let name = file["name"].as_str().context("Missing filename")?;
-        match destination_name(&song.id, id, name, file["kind"].as_str()).and_then(|new_name| {
-            install(&source_media.join(name), &destination.join(&new_name), staging)?;
+        let kind = file["kind"].as_str();
+        match destination_name(&song.id, id, name, kind).and_then(|new_name| {
+            let target = destination.join(&new_name);
+            let existing_sidecar = backfill && target.is_file() &&
+                matches!(kind, Some("stem" | "midi" | "midi_metadata" | "latent"));
+            if !existing_sidecar && install(&source_media.join(name), &target, staging)? {
+                created.push(target);
+            }
             Ok(new_name)
         }) {
             Ok(new_name) => { names.insert(name.to_owned(), new_name); }
@@ -283,6 +383,12 @@ fn prepare_song(
         }
     }
     if errors.len() != start {
+        for target in created {
+            if let Err(error) = fs::remove_file(&target) {
+                errors.push(json!({"song_id": song.id, "title": song.title, "kind": "cleanup",
+                    "file": target.file_name().and_then(|name| name.to_str()), "code": "copy_failed", "error": error.to_string()}));
+            }
+        }
         return Ok(false);
     }
     if let Some(metadata) = song.metadata.as_object_mut() {
@@ -368,10 +474,7 @@ fn transfer_selected(to: &Library, folder: &Path, exclude: &HashSet<Category>) -
     let db = open_source(&root)?;
     let mut view = manifest(&root, &db)?;
     for song in view["songs"].as_array_mut().context("Missing songs")? {
-        for key in ["files", "missing"] {
-            song[key].as_array_mut().context("Missing file inventory")?
-                .retain(|file| included(file["kind"].as_str().unwrap_or_default(), exclude));
-        }
+        filter_files(song, exclude)?;
     }
     let items: HashMap<_, _> = view["songs"]
         .as_array()
@@ -400,31 +503,74 @@ fn transfer_selected(to: &Library, folder: &Path, exclude: &HashSet<Category>) -
             free
         );
     }
-    let (song_ids, list_ids) = to.legacy_transaction(|tx| {
+    let (song_ids, list_ids, pending) = to.legacy_transaction(|tx| {
+        let ids = reserve(tx, source, "song", songs.iter().map(|s| s.id.clone()))?;
+        let mut pending = HashMap::new();
+        for (_, mapping) in ids.iter().filter(|(_, mapping)| mapping.imported) {
+            if let Some(song) = Library::read_song(tx, &mapping.id)? {
+                let content = pending_content(tx, &song.id)?;
+                pending.insert(song.id.clone(), (song, content));
+            }
+        }
         Ok((
-            reserve(tx, source, "song", songs.iter().map(|s| s.id.clone()))?,
+            ids,
             reserve(
                 tx,
                 source,
                 "playlist",
                 playlists.iter().map(|p| p.id.clone()),
             )?,
+            pending,
         ))
     })?;
     let already_imported = song_ids.values().filter(|mapping| mapping.imported).count();
     let already_imported_lists = list_ids.values().filter(|mapping| mapping.imported).count();
     let mut errors = Vec::new();
-    let mut available: HashSet<&str> = song_ids.iter().filter(|(_, mapping)| mapping.imported)
+    let mut available: HashSet<&str> = song_ids.iter().filter(|(_, mapping)| pending.contains_key(&mapping.id))
         .map(|(id, _)| id.as_str()).collect();
     let mut prepared = Vec::new();
-    songs.retain(|song| !song_ids[&song.id].imported);
+    let mut backfills = Vec::new();
+    let mut protected = Vec::new();
+    let mut omitted = exclude.clone();
+    omitted.remove(&Category::Playlists);
+    if omitted.contains(&Category::Audio) {
+        omitted.insert(Category::Takes);
+    }
     for mut song in songs {
         let old_id = song.id.clone();
-        let (old_id, _) = song_ids.get_key_value(&old_id).context("Missing song ID")?;
-        if prepare_song(&mut song, items[old_id.as_str()], &song_ids, &source_media,
-            to.media_dir(), &staging, exclude, &mut errors)? {
-            available.insert(old_id.as_str());
-            prepared.push(song);
+        let (old_id, mapping) = song_ids.get_key_value(&old_id).context("Missing song ID")?;
+        let item = items[old_id.as_str()];
+        if !mapping.imported {
+            if prepare_song(&mut song, item, &song_ids, &source_media,
+                to.media_dir(), &staging, &omitted, &mut errors, false)? {
+                available.insert(old_id.as_str());
+                prepared.push(song);
+            }
+        } else if let Some((current, recorded)) = pending.get(&mapping.id) {
+            let mut remaining = recorded.clone().unwrap_or_else(|| old_pending(current));
+            let count = remaining.len();
+            remaining.retain(|kind| omitted.contains(kind) || absent(current, *kind));
+            if remaining.len() != count {
+                protected.push((current.id.clone(), remaining.clone()));
+            }
+            let chosen = remaining.difference(&omitted).copied()
+                .filter(|kind| absent(current, *kind) && source_has(&song, item, *kind, recorded.is_some()))
+                .collect::<Content>();
+            if chosen.is_empty() { continue; }
+            let mut skip = SONG_CATEGORIES.into_iter().filter(|kind| !chosen.contains(kind)).collect::<Content>();
+            let mut selected_item = item.clone();
+            // A backfill can attach additional takes to an audio file already present.
+            if current.audio_path.is_some() && chosen.contains(&Category::Takes) {
+                skip.remove(&Category::Audio);
+                selected_item["files"].as_array_mut().unwrap().retain(|file| file["kind"] != "audio");
+                selected_item["missing"].as_array_mut().unwrap().retain(|file| file["kind"] != "audio");
+                song.audio_path = None;
+            }
+            filter_files(&mut selected_item, &skip)?;
+            if prepare_song(&mut song, &selected_item, &song_ids, &source_media,
+                to.media_dir(), &staging, &skip, &mut errors, true)? {
+                backfills.push((song, chosen, remaining));
+            }
         }
     }
     to.legacy_transaction(|tx|{
@@ -433,7 +579,25 @@ fn transfer_selected(to: &Library, folder: &Path, exclude: &HashSet<Category>) -
             if !claim(tx,&s.id)? {continue;}
             tx.execute("INSERT INTO songs(id,title,audio_path,caption,lyrics,metadata_json,generation_settings_json,engine_id,profile_id,replay_request_json,audio_codes_json,source,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 params![s.id,s.title,s.audio_path,s.caption,s.lyrics,s.metadata.to_string(),s.generation_settings.to_string(),s.engine_id,s.profile_id,s.replay_request.map(|v|v.to_string()),s.audio_codes.map(|v|v.to_string()),s.source,s.created_at,s.updated_at])?;
+            save_pending(tx, &s.id, &omitted)?;
             added+=1;
+        }
+        let mut updated = 0;
+        for (id, remaining) in protected {
+            if Library::read_song(tx, &id)?.is_some() {
+                save_pending(tx, &id, &remaining)?;
+            }
+        }
+        for (patch, chosen, remaining) in backfills {
+            if let Some(mut current) = Library::read_song(tx, &patch.id)? {
+                merge_content(&mut current, &patch, &chosen);
+                tx.execute("UPDATE songs SET audio_path=?,lyrics=?,metadata_json=?,generation_settings_json=?,replay_request_json=?,audio_codes_json=? WHERE id=?",
+                    params![current.audio_path,current.lyrics,current.metadata.to_string(),current.generation_settings.to_string(),
+                        current.replay_request.map(|v|v.to_string()),current.audio_codes.map(|v|v.to_string()),current.id])?;
+                let pending = remaining.difference(&chosen).copied().collect();
+                save_pending(tx, &current.id, &pending)?;
+                updated += 1;
+            }
         }
         let mut added_lists=0;
         let mut next_album_position = None;
@@ -469,7 +633,7 @@ fn transfer_selected(to: &Library, folder: &Path, exclude: &HashSet<Category>) -
             added_lists+=1;
         }
         Ok(json!({"added":added,"already_imported":already_imported,"playlists_added":added_lists,
-            "playlists_already_imported":already_imported_lists,"errors":errors}))
+            "playlists_already_imported":already_imported_lists,"updated":updated,"errors":errors}))
     })
 }
 
@@ -572,9 +736,10 @@ mod tests {
         old.create_playlist(library::PlaylistInput {
             name: "Both".into(), description: None, song_ids: vec!["b".into(), "a".into()],
         })?;
-        let first = transfer_selected(&new, &source, &HashSet::from([
+        let exclude = HashSet::from([
             Category::Stems, Category::Karaoke, Category::Covers, Category::Takes,
-        ]))?;
+        ]);
+        let first = transfer_selected(&new, &source, &exclude)?;
         assert_eq!(first["added"], 1);
         assert_eq!(first["already_imported"], 0);
         assert_eq!(first["playlists_added"], 0);
@@ -589,7 +754,7 @@ mod tests {
         assert!(song.audio_path.is_some());
         new.rename_song(&song.id, "Edited in YuE2")?;
         fs::write(old.media_dir().join("b.wav"), b"second")?;
-        let repaired = transfer(&new, &source)?;
+        let repaired = transfer_selected(&new, &source, &exclude)?;
         assert_eq!(repaired["added"], 1);
         assert_eq!(repaired["playlists_added"], 1);
         assert_eq!(repaired["errors"], json!([]));
@@ -598,9 +763,21 @@ mod tests {
         let preview = super::super::inspect(&source, &new)?;
         assert_eq!(preview["space"]["required_bytes"], 0);
         assert_eq!(preview["space"]["total_bytes"], 15);
-        let repeat = transfer(&new, &source)?;
+        let repeat = transfer_selected(&new, &source, &exclude)?;
         assert_eq!(repeat["already_imported"], 2);
         assert_eq!(new.get_song(&song.id)?.unwrap().title, "Edited in YuE2");
+        new.legacy_transaction(|tx| {
+            tx.execute("DELETE FROM legacy_import_content WHERE song_id=?", [&song.id])?;
+            tx.execute("UPDATE songs SET audio_path=NULL, lyrics='' WHERE id=?", [&song.id])?;
+            Ok(())
+        })?;
+        let recovered = transfer_selected(&new, &source, &exclude)?;
+        assert_eq!(recovered["added"], 0);
+        assert_eq!(recovered["updated"], 1);
+        let existing = new.get_song(&song.id)?.unwrap();
+        assert!(existing.audio_path.is_some());
+        assert!(existing.lyrics.is_empty(), "legacy rows must keep cleared lyrics");
+        assert_eq!(existing.title, "Edited in YuE2");
         let entries = fs::read_dir(new.media_dir())?.collect::<io::Result<Vec<_>>>()?;
         assert_eq!(entries.iter().filter(|entry| entry.path().is_file()).count(), 2);
         let staged = fs::read_dir(new.media_dir().join(STAGING_FOLDER))?
@@ -618,10 +795,13 @@ mod tests {
         let destination = temp.path().join("new");
         let old = Library::open_at(source.join("library.sqlite"), source.join("media"))?;
         let new = Library::open_at(destination.join("library.sqlite"), destination.join("media"))?;
-        let song = json!({"files": [{"kind":"audio","name":"old.wav"}], "missing":[]});
+        let song = json!({"files": [
+            {"kind":"stem","name":"old-drums.wav"}, {"kind":"audio","name":"old.wav"}
+        ], "missing":[]});
         fs::create_dir_all(old.media_dir())?;
         fs::create_dir_all(new.media_dir())?;
         fs::write(old.media_dir().join("old.wav"), b"source")?;
+        fs::write(old.media_dir().join("old-drums.wav"), b"part of a failed copy")?;
         let target = new.media_dir().join(destination_name("old", "reserved", "old.wav", Some("audio"))?);
         fs::write(&target, b"user edit")?;
         old.legacy_transaction(|tx| {
@@ -634,10 +814,11 @@ mod tests {
         let (_lock, staging) = lock_staging(new.media_dir())?;
         let mut errors = Vec::new();
         assert!(!prepare_song(&mut original, &song, &ids, old.media_dir(), new.media_dir(),
-            &staging, &HashSet::new(), &mut errors)?);
+            &staging, &HashSet::new(), &mut errors, false)?);
         assert_eq!(errors[0]["file"], "old.wav");
         assert_eq!(errors[0]["code"], "copy_failed");
         assert_eq!(fs::read(&target)?, b"user edit");
+        assert!(!new.media_dir().join("reserved-drums.wav").exists());
         Ok(())
     }
 }
