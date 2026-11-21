@@ -1857,6 +1857,26 @@ describe('Auto max duration', () => {
   });
 });
 
+it('reuses a packed YuE2 audio.cpp take with its score and token bounds', async () => {
+  vi.stubGlobal('fetch', vi.fn(async () => Response.json({
+    engine: 'audio.cpp', engine_installed: true,
+    models: [{ id: 'yue2', profile_id: 'yue2-3b-q8_0-nar-v9', quantization: 'Q8_0', ready: true, missing: [] }],
+  })));
+  const music_source = { kind: 'audio_cpp', model: 'yue2' };
+  const abc = 'X:1\nL:1/8\nK:C\nCDEF|';
+  const song = {
+    title: 'YuE2 take', ditModel: 'audio.cpp', style: 'warm piano', lyrics: '[Verse] Morning',
+    generationParams: { music_source, abc, cot: 'full', duration_seconds: 4, seed: 42, steps: 2,
+      semantic_sampling: { min_tokens: 100, max_tokens: 100 } },
+  } as Song;
+  act(() => root.render(panel({ musicEngine: 'audio.cpp', initialData: { song, timestamp: 1 } })));
+  await flush();
+  click(buttonNamed('create')!);
+  expect(sent.at(-1)).toMatchObject({ music_source, abc, cot: 'full', style: 'warm piano',
+    lyrics: '[Verse] Morning', duration_seconds: 4, seed: 42, steps: 2,
+    semantic_sampling: { min_tokens: 100, max_tokens: 100 } });
+});
+
 it('restores a HOT-Step Stable Audio 3 take with its sampler and adapter without asking for a cover', async () => {
   vi.stubGlobal('fetch', vi.fn(async () => Response.json({
     engine: 'hotstep', engine_installed: true,

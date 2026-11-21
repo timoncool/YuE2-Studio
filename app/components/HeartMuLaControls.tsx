@@ -83,7 +83,7 @@ const installLabels: Record<string, readonly [string, string, string]> = {
 };
 
 export function AudioCppModelInstall({ model, bytes, licenseUrl, language, onInstalled }: {
-  model: 'heartmula' | 'stable_audio' | 'stable-audio-3-medium' | 'heartmula-3b-q8_0' | 'hotstep-minimax-music3' | 'soulx_singer' | 'soulx_singer_svc';
+  model: 'heartmula' | 'stable_audio' | 'stable-audio-3-medium' | 'heartmula-3b-q8_0' | 'hotstep-minimax-music3' | 'yue2' | 'soulx_singer' | 'soulx_singer_svc';
   bytes: number;
   licenseUrl?: string;
   language: string;
@@ -96,7 +96,7 @@ export function AudioCppModelInstall({ model, bytes, licenseUrl, language, onIns
   const hotstepMinimax = model === 'hotstep-minimax-music3';
   const hotstep = model === 'stable-audio-3-medium' || hotstepHeart || hotstepMinimax;
   const soulx = model === 'soulx_singer' ? 'SoulX-Singer SVS' : model === 'soulx_singer_svc' ? 'SoulX-Singer SVC' : undefined;
-  const name = soulx ?? (hotstepMinimax ? 'MiniMax Music3 (HOT-Step)' : hotstepHeart ? 'HeartMuLa 3B (HOT-Step)' : hotstep ? 'Stable Audio 3 Medium (HOT-Step)' : model === 'stable_audio' ? 'Stable Audio 3' : 'HeartMuLa');
+  const name = soulx ?? (model === 'yue2' ? 'YuE2 (audio.cpp)' : hotstepMinimax ? 'MiniMax Music3 (HOT-Step)' : hotstepHeart ? 'HeartMuLa 3B (HOT-Step)' : hotstep ? 'Stable Audio 3 Medium (HOT-Step)' : model === 'stable_audio' ? 'Stable Audio 3' : 'HeartMuLa');
   const [install, installing, failed] = (installLabels[language] ?? installLabels.en).map(label => label.replace('HeartMuLa', name));
   const size = bytes > 0 ? ` · ${new Intl.NumberFormat(language, { maximumFractionDigits: 2 }).format(bytes / (1024 ** 3))} GiB` : '';
 

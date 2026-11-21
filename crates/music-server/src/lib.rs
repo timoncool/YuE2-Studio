@@ -30,6 +30,7 @@ mod audio_cpp_midasheng;
 mod audio_cpp_minimax_h3;
 mod audio_cpp_mulacover;
 mod audio_cpp_music;
+mod audio_cpp_yue2;
 mod audio_cpp_controlfoley;
 mod audio_cpp_sound_effects;
 mod hotstep_cover;
@@ -170,6 +171,7 @@ struct AppState {
     hotstep_sa3_train_install: Arc<tokio::sync::Mutex<()>>,
     audio_cpp_music_stops: Arc<RwLock<HashMap<String, Arc<std::sync::atomic::AtomicBool>>>>,
     heartmula_install: Arc<tokio::sync::Mutex<()>>,
+    audio_cpp_yue2_install: Arc<tokio::sync::Mutex<()>>,
     stable_audio_install: Arc<tokio::sync::Mutex<()>>,
     soulx_install: Arc<tokio::sync::Mutex<()>>,
     openrouter_music_stops: Arc<RwLock<HashMap<String, Arc<tokio::sync::Notify>>>>,
@@ -1646,6 +1648,7 @@ pub async fn serve_on_port(port: u16) -> anyhow::Result<()> {
         hotstep_sa3_train_install: Arc::default(),
         audio_cpp_music_stops: Arc::default(),
         heartmula_install: Arc::default(),
+        audio_cpp_yue2_install: Arc::default(),
         stable_audio_install: Arc::default(),
         soulx_install: Arc::default(),
         openrouter_music_stops: Arc::new(RwLock::new(HashMap::new())),
@@ -11936,6 +11939,7 @@ async fn submit_replay_job(state: AppState, request: ReplayMusicJobRequest, atte
             match song.engine_id.as_str() {
                 ace::ENGINE_ID => return native_ace_jobs::replay(state, song, request, attempt).await,
                 native_minimax::ENGINE_ID => return native_music_jobs::replay(state, song, request, attempt).await,
+                audio_cpp_music::ENGINE if song.generation_settings["family"] == audio_cpp_yue2::FAMILY => return audio_cpp_music::replay_yue(state, song, request, attempt).await,
                 hotstep_cover::ENGINE if song.generation_settings["profile_id"] == hotstep_sa3::PROFILE => return hotstep_sa3::replay(state, song, request, attempt).await,
                 hotstep_cover::ENGINE if song.generation_settings["profile_id"] == hotstep_minimax::PROFILE => return hotstep_minimax::replay(state, song, request, attempt).await,
                 PRIMARY_MUSIC_ENGINE_ID => {},
