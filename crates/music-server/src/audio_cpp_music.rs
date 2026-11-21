@@ -241,10 +241,16 @@ pub(super) async fn models(State(state): State<AppState>) -> Json<Value> {
     let runtime_ready = build
         .as_ref()
         .is_ok_and(|build| state.acpp.exe(*build).is_file() && state.acpp.installed(*build));
+    let models = [
+        Family::MiniMax,
+        Family::HeartMuLa,
+        Family::MiDasheng,
+        Family::Vevo2,
+    ]
+    .map(|family| family.catalog(root.as_deref(), runtime_ready));
     Json(serde_json::json!({
         "engine": ENGINE,
-        "models": [Family::MiniMax, Family::HeartMuLa, Family::MiDasheng, Family::Vevo2]
-            .map(|family| family.catalog(root.as_deref(), runtime_ready))
+        "models": models
     }))
 }
 
