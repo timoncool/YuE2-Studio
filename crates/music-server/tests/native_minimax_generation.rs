@@ -131,9 +131,9 @@ async fn audio_cpp_minimax_music3_generates_and_saves_q8_provenance() {
         "style":"Soft folk guitar", "lyrics":"[verse] Morning comes",
         "duration_seconds":3.2, "steps":2, "seed":424242
     });
-    let mut h3 = request.clone();
-    h3["music_source"]["model"] = json!("minimax_h3");
-    let rejected = http.post(&endpoint).json(&h3).send().await.unwrap();
+    let mut unknown = request.clone();
+    unknown["music_source"]["model"] = json!("unknown_model");
+    let rejected = http.post(&endpoint).json(&unknown).send().await.unwrap();
     assert_eq!(rejected.status(), StatusCode::BAD_REQUEST);
     assert!(!root.path().join("audio-cpp-submitted.json").exists());
     let accepted = http.post(&endpoint).json(&request).send().await.unwrap();
@@ -198,6 +198,157 @@ async fn audio_cpp_minimax_music3_generates_and_saves_q8_provenance() {
     studio.kill().await.unwrap();
 }
 
+#[tokio::test]
+async fn audio_cpp_vevo2_sings_and_saves_reference_ids_and_route() {
+    use base64::Engine as _;
+    use reqwest::multipart::{Form, Part};
+
+    let root = tempfile::tempdir().unwrap();
+    let engine = build_engine(root.path()).await;
+    let data = root.path().join("data");
+    let model = data.join("audiocpp/models/vevo2");
+    fs::create_dir_all(&model).unwrap();
+    let mut gguf = vec![0; 32];
+    gguf[..4].copy_from_slice(b"GGUF");
+    fs::write(model.join("vevo2-q8_0.gguf"), gguf).unwrap();
+    let wav = fs::read(root.path().join("fixture.wav")).unwrap();
+    let encoded = base64::engine::general_purpose::STANDARD.encode(&wav);
+    fs::write(
+        root.path().join("audio-cpp-response.json"),
+        json!({"audio": encoded}).to_string(),
+    )
+    .unwrap();
+
+    let port = free_port().await;
+    let mut studio = Command::new(env!("CARGO_BIN_EXE_music-server"))
+        .env("YUE_STUDIO_PORT", port.to_string())
+        .env("YUE_ENGINE_BIN", root.path().join("absent-yue-server"))
+        .env("YUE_STUDIO_DATA_ROOT", &data)
+        .env("YUE_AUDIOCPP_SERVER", &engine)
+        .env("TIMONCOOL_SHARED_DIR", root.path().join("registry"))
+        .env("DO_NOT_TRACK", "1")
+        .kill_on_drop(true)
+        .spawn()
+        .unwrap();
+    let http = Client::builder().no_proxy().build().unwrap();
+    let url = format!("http://127.0.0.1:{port}");
+    let catalog = format!("{url}/v1/music/audio-cpp/models");
+    let models = timeout(Duration::from_secs(30), async {
+        loop {
+            if let Ok(response) = http.get(&catalog).send().await {
+                break response
+                    .error_for_status()
+                    .unwrap()
+                    .json::<Value>()
+                    .await
+                    .unwrap();
+            }
+            sleep(Duration::from_millis(50)).await;
+        }
+    })
+    .await
+    .unwrap();
+    let vevo2 = models["models"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|model| model["id"] == "vevo2")
+        .unwrap();
+    assert_eq!(vevo2["ready"], true);
+
+    let mut ids = Vec::new();
+    for title in ["Dry voice", "Melody"] {
+        let form = Form::new().text("title", title).part(
+            "audio",
+            Part::bytes(wav.clone()).file_name(format!("{title}.wav")),
+        );
+        let imported: Value = http
+            .post(format!("{url}/v1/library/import"))
+            .multipart(form)
+            .send()
+            .await
+            .unwrap()
+            .error_for_status()
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+        ids.push(imported["id"].as_str().unwrap().to_owned());
+    }
+
+    let endpoint = format!("{url}/v1/music/jobs");
+    let mut request = json!({
+        "music_source": {"kind":"audio_cpp","model":"vevo2"},
+        "lyrics":"Morning comes", "seed":123
+    });
+    let missing_voice = http.post(&endpoint).json(&request).send().await.unwrap();
+    assert_eq!(missing_voice.status(), StatusCode::BAD_REQUEST);
+
+    request["vevo2"] = json!({"voice_song_id": ids[0], "melody_song_id": ids[1]});
+    let accepted = http.post(&endpoint).json(&request).send().await.unwrap();
+    assert_eq!(accepted.status(), StatusCode::ACCEPTED);
+    let accepted: Value = accepted.json().await.unwrap();
+    let id = accepted["id"].as_str().unwrap();
+    let completed = timeout(Duration::from_secs(20), async {
+        loop {
+            let job: Value = http
+                .get(format!("{endpoint}/{id}"))
+                .send()
+                .await
+                .unwrap()
+                .json()
+                .await
+                .unwrap();
+            match job["status"].as_str() {
+                Some("completed") => break job,
+                Some("queued" | "running") => sleep(Duration::from_millis(50)).await,
+                _ => panic!("Vevo2 generation did not complete: {job}"),
+            }
+        }
+    })
+    .await
+    .unwrap();
+    let track = &completed["songs"][0];
+    assert_eq!(track["song"]["engine_id"], "audio.cpp");
+    assert_eq!(track["song"]["profile_id"], "quality-q8");
+    assert_eq!(
+        track["song"]["generation_settings"]["route"],
+        "text_to_singing"
+    );
+    assert_eq!(
+        track["song"]["generation_settings"]["vevo2"],
+        request["vevo2"]
+    );
+    let audio = http
+        .get(format!("{url}{}", track["audio_url"].as_str().unwrap()))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .bytes()
+        .await
+        .unwrap();
+    assert_eq!(&audio[..4], b"fLaC");
+
+    let sent: Value =
+        serde_json::from_slice(&fs::read(root.path().join("audio-cpp-submitted.json")).unwrap())
+            .unwrap();
+    assert_eq!(sent["model"], "vevo2");
+    assert_eq!(sent["request"]["text"], "Morning comes");
+    assert_eq!(sent["request"]["options"]["route"], "text_to_singing");
+    assert_eq!(sent["request"]["options"]["seed"], 123);
+    assert_eq!(sent["request"]["options"]["use_prosody_code"], true);
+    for option in ["target_voice", "prosody_ref"] {
+        let staged = Path::new(sent["request"]["options"][option].as_str().unwrap());
+        assert_eq!(staged.extension().unwrap(), "wav");
+        assert!(
+            !staged.exists(),
+            "the completed job retained its temporary input"
+        );
+    }
+    studio.kill().await.unwrap();
+}
 async fn exercise_generation(format: Option<&str>) {
     let root = tempfile::tempdir().unwrap();
     let engine = build_engine(root.path()).await;

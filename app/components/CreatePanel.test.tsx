@@ -9,14 +9,8 @@ import { afterGenerationPause } from '../services/generationPause';
 const composeScore = vi.fn();
 const transcribe = vi.fn();
 const instrumentalScore = vi.fn();
-const recogniseLyrics = vi.fn();
 let ready = true;
 let configured = false;
-vi.mock('../services/karaoke', async original => ({
-  ...(await original<typeof import('../services/karaoke')>()),
-  recogniseLyrics: (...args: unknown[]) => recogniseLyrics(...args),
-}));
-
 vi.mock('../context/I18nContext', () => ({ useI18n: () => ({ language: 'en', t: (key: string) => key }) }));
 vi.mock('../services/studioQueries', async original => ({
   ...await original<typeof import('../services/studioQueries')>(),
@@ -45,6 +39,10 @@ vi.mock('../services/adapters', async (original) => ({
 vi.mock('./AdapterPicker', () => ({ AdapterPicker: () => null }));
 vi.mock('./AudioWaveform', () => ({ AudioWaveform: () => null }));
 vi.mock('./ScoreView', () => ({ ScoreView: () => null }));
+vi.mock('./WindowAudioCapture', () => ({
+  WindowAudioCapture: ({ disabled, onRecording }: { disabled: boolean; onRecording: (file: File) => void }) =>
+    <button disabled={disabled} onClick={() => onRecording(new File(['RIFF'], 'window-audio.wav', { type: 'audio/wav' }))}>Finish fixture recording</button>,
+}));
 vi.mock('./midi/MidiEditor', () => ({ MidiEditor: () => null }));
 vi.mock('./MidiImportDialog', () => ({ MidiImportDialog: () => null }));
 vi.mock('./PlaylistModals', () => ({ CreatePlaylistModal: () => null }));
@@ -196,6 +194,21 @@ describe('pauses between repeated generations (#261)', () => {
     advance(60_000);
     expect(sent).toHaveLength(1);
   });
+});
+
+it('reads a captured window WAV through the existing cover transcription and score form', async () => {
+  vi.stubGlobal('fetch', vi.fn(async () => Response.json({ catalog: { transcriber: true } })));
+  act(() => root.render(panel({})));
+  await flush();
+  click(buttonNamed('coverMode')!);
+  await flush();
+  const record = buttonNamed('Finish fixture recording')!;
+  expect(record.disabled).toBe(false);
+  click(record);
+  await flush();
+  expect(transcribe).toHaveBeenCalledWith({ file: expect.objectContaining({ name: 'window-audio.wav', type: 'audio/wav' }) },
+    expect.any(Boolean), expect.any(AbortSignal));
+  expect(field('textarea[aria-label="scoreCardTitle"]')?.value).toContain('X:1');
 });
 
 it('keeps an edited score across a cloud session and reopening the native form', async () => {
@@ -386,7 +399,9 @@ it('chooses MiniMax Music3 through audio.cpp and reuses the saved seed and forma
   const fetcher = vi.fn(async (url: string) => Response.json(url === '/v1/music/audio-cpp/models' ? {
     engine: 'audio.cpp',
     models: [{ id: 'minimax_music3', profile_id: 'quality-q8', quantization: 'Q8_0', ready,
-      missing: ready ? [] : ['language_model_q8_0.gguf'] }],
+      missing: ready ? [] : ['language_model_q8_0.gguf'] },
+      { id: 'heartmula', name: 'HeartMuLa', profile_id: 'heartmula_q8_0', quantization: 'Q8_0',
+        ready: false, missing: ['heartmula.gguf'] }],
   } : {}));
   vi.stubGlobal('fetch', fetcher);
   function Editor() {
@@ -396,7 +411,7 @@ it('chooses MiniMax Music3 through audio.cpp and reuses the saved seed and forma
   act(() => root.render(<Editor />));
   await flush();
   const option = host.querySelector<HTMLOptionElement>('option[value="audio.cpp"]')!;
-  expect(option.textContent).toContain('MiniMax Music3 · audio.cpp');
+  expect(option.textContent).toBe('audio.cpp');
   const engineSelect = option.parentElement as HTMLSelectElement;
   const choose = (select: HTMLSelectElement, value: string) => act(() => {
     select.value = value;
@@ -412,6 +427,11 @@ it('chooses MiniMax Music3 through audio.cpp and reuses the saved seed and forma
   await flush();
   expect(generate().disabled).toBe(false);
   expect(host.textContent).toContain('quality-q8 · Q8_0');
+  const models = host.querySelector<HTMLOptionElement>('option[value="heartmula"]')!.parentElement as HTMLSelectElement;
+  choose(models, 'heartmula');
+  expect(models.value).toBe('heartmula');
+  expect(generate().disabled).toBe(true);
+  expect(host.textContent).toContain('heartmula.gguf');
 
   const song = { title: 'Music3 take', style: 'folk', lyrics: '[verse] Good morning',
     ditModel: 'audio.cpp', lmModel: 'quality-q8', nativeReplayAvailable: false,
@@ -432,6 +452,23 @@ it('chooses MiniMax Music3 through audio.cpp and reuses the saved seed and forma
   });
 });
 
+it.each([
+  ['heartmula', { heartmula: { top_k: 30, temperature: 0.9 } }, 'pop', ''],
+  ['vevo2', { vevo2: { voice_song_id: 'original-take' } }, '', 'Words to sing'],
+  ['midashenglm_gen', { midasheng: { caption: '', music: 'quiet piano', speech_text: '', speech_style: '', effects: '', environment: 'rain' } }, 'quiet piano', ''],
+] as const)('restores and submits model-specific settings for %s', async (model, options, style, lyrics) => {
+  vi.stubGlobal('fetch', vi.fn(async () => Response.json({ engine: 'audio.cpp', models: [
+    { id: model, name: model, profile_id: 'q8', quantization: 'Q8_0', ready: true, missing: [] },
+  ] })));
+  const song = {
+    title: 'Saved take', ditModel: 'audio.cpp', style, lyrics,
+    generationParams: { music_source: { kind: 'audio_cpp', model }, ...options },
+  } as Song;
+  act(() => root.render(panel({ musicEngine: 'audio.cpp', initialData: { song, timestamp: 1 } })));
+  await flush();
+  click(buttonNamed('create')!);
+  expect(sent.at(-1)).toMatchObject({ music_source: { kind: 'audio_cpp', model }, ...options });
+});
 it('asks for an explicit profile when a migrated ACE take used custom weights', async () => {
   const engine = 'acestep-cpp';
   const models = ['acestep-v15-xl-sft-Q4_K_M.gguf', 'acestep-5Hz-lm-4B-BF16.gguf', 'vae-BF16.gguf'];
@@ -558,20 +595,106 @@ describe('selecting a second cover source', () => {
 });
 
 describe('lyrics from a cover recording', () => {
-  it('keeps text edited while recognition is running', async () => {
-    const song = { id: 'cover', title: 'Cover', lyrics: '' } as Song;
-    act(() => root.render(panel({ request: { id: 7, kind: 'transcribe', song, melodyOnly: true } })));
+  const sourceButton = () => host.querySelector<HTMLButtonElement>('button[title="recogniseFromSourceHint"]')!;
+  const lyricsBox = () => field('textarea[aria-label="lyrics"]')!;
+  const requests = () => vi.mocked(fetch).mock.calls
+    .filter(([url]) => url === '/v1/lyrics/recognise')
+    .map(([, options]) => JSON.parse(options!.body as string));
+  const respond = (reply: (body: RequestInit) => Promise<Response>) =>
+    vi.mocked(fetch).mockImplementation(async (url, options) =>
+      url === '/v1/lyrics/recognise' ? reply(options!) : Response.json({}));
+  const cover = async (id: number, songId = 'cover') => {
+    const song = { id: songId, title: songId, lyrics: '' } as Song;
+    act(() => root.render(panel({ request: { id, kind: 'transcribe', song, melodyOnly: true } })));
     await flush();
-    let finish!: (words: string) => void;
-    recogniseLyrics.mockImplementationOnce(() => new Promise<string>(resolve => { finish = resolve; }));
-    click(buttonNamed('recogniseFromSource')!);
-    expect(recogniseLyrics).toHaveBeenCalledWith({ songId: 'cover' });
-    const lyrics = field('textarea[aria-label="lyrics"]')!;
-    type(lyrics, 'my newer lyrics');
-    await act(async () => finish('older recognition result'));
-    expect(lyrics.value).toBe('my newer lyrics');
+  };
+  const confirm = () => click([...host.querySelectorAll('button')].find(
+    button => button.textContent === 'recogniseFromSource' && button !== sourceButton(),
+  )!);
+
+  it('asks before replacing text, allows refusal, and reports a recogniser refusal', async () => {
+    await cover(7);
+    type(lyricsBox(), 'Words already in the form');
+    respond(async () => Response.json({ error: 'karaoke.no-recogniser' }, { status: 409 }));
+    click(sourceButton());
+    expect(requests()).toEqual([]);
+    click([...host.querySelectorAll('button')].find(button => button.textContent === 'cancel')!);
+    expect(requests()).toEqual([]);
+    expect(lyricsBox().value).toBe('Words already in the form');
+
+    click(sourceButton());
+    confirm();
+    await flush();
+    expect(requests()).toEqual([{ song_id: 'cover' }]);
+    expect(lyricsBox().value).toBe('Words already in the form');
+    expect(host.textContent).toContain('karaokeNoRecogniser');
+
+    respond(async () => Response.json({ text: 'Words from the library recording' }));
+    click(sourceButton());
+    confirm();
+    await flush();
+    expect(lyricsBox().value).toBe('Words from the library recording');
+  });
+
+  it('dismisses a pending replacement confirmation when the source changes', async () => {
+    await cover(12, 'first');
+    type(lyricsBox(), 'Words already in the form');
+    click(sourceButton());
+    expect(host.textContent).toContain('recogniseFromSourceReplace');
+
+    await cover(13, 'second');
+    expect(host.textContent).not.toContain('recogniseFromSourceReplace');
+    expect(requests()).toEqual([]);
+  });
+
+  it('sends the chosen audio file instead of the previous library track', async () => {
+    await cover(8);
+    const file = new File(['RIFF'], 'singing.wav', { type: 'audio/wav' });
+    const input = host.querySelector<HTMLInputElement>('input[type="file"][accept*=".wav"]')!;
+    act(() => {
+      Object.defineProperty(input, 'files', { value: [file], configurable: true });
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    await flush();
+    respond(async () => Response.json({ text: 'Words from the file' }));
+    click(sourceButton());
+    await flush();
+    expect(requests()).toEqual([{ audio_base64: 'UklGRg==', audio_format: 'wav', audio_name: 'singing.wav' }]);
+    expect(lyricsBox().value).toBe('Words from the file');
+  });
+
+  it('recognises a new source while the abandoned request finishes later', async () => {
+    const replies: ((response: Response) => void)[] = [];
+    respond(async () => new Promise(resolve => replies.push(resolve)));
+    await cover(9, 'first');
+    click(sourceButton());
+    expect(sourceButton().disabled).toBe(true);
+
+    await cover(10, 'second');
+    expect(sourceButton().disabled).toBe(false);
+    click(sourceButton());
+    expect(requests()).toEqual([{ song_id: 'first' }, { song_id: 'second' }]);
+    await act(async () => replies[0](Response.json({ error: 'karaoke.no-recogniser' }, { status: 409 })));
+    expect(host.textContent).not.toContain('karaokeNoRecogniser');
+    expect(sourceButton().disabled).toBe(true);
+    await act(async () => replies[1](Response.json({ text: 'Second recording' })));
+    expect(lyricsBox().value).toBe('Second recording');
+  });
+
+  it('keeps text edited while recognition is running', async () => {
+    await cover(11);
+    let finish!: (reply: Response) => void;
+    respond(async () => new Promise(resolve => { finish = resolve; }));
+    click(sourceButton());
+    expect(requests()).toEqual([{ song_id: 'cover' }]);
+    type(lyricsBox(), 'my newer lyrics');
+    expect(sourceButton().disabled).toBe(false);
+    await act(async () => finish(Response.json({ text: 'older recognition result' })));
+    expect(lyricsBox().value).toBe('my newer lyrics');
+    expect(sourceButton().disabled).toBe(false);
   });
 });
+
 
 describe('Reuse prompt (#216)', () => {
   const song = { id: 's', title: 'Song', style: 'pop', lyrics: '[verse]\nfirst words', generationParams: {} } as unknown as Song;
@@ -676,5 +799,28 @@ describe('OpenRouter music creation', () => {
     expect(vi.mocked(fetch)).toHaveBeenCalledWith('/v1/openrouter/catalog/refresh', expect.objectContaining({ method: 'POST' }));
     expect(host.textContent).toContain('No OpenRouter music models are available.');
     expect(create().disabled).toBe(true);
+  });
+});
+
+it('reuses the MiniMax-H3 prompt, duration, seed and format without a lyrics field', async () => {
+  vi.stubGlobal('fetch', vi.fn(async () => Response.json({ engine: 'audio.cpp', models: [
+    { id: 'minimax_h3', name: 'MiniMax-H3', profile_id: 'minimax_h3_q4_k', quantization: 'Q4_K', ready: true, missing: [] },
+  ] })));
+  const song = {
+    title: 'H3 take', ditModel: 'audio.cpp', style: 'funk groove', lyrics: 'Retained draft lyrics',
+    generationParams: {
+      music_source: { kind: 'audio_cpp', model: 'minimax_h3' },
+      duration_seconds: 4, steps: 20, seed: 2026, guidance_scale: 1, output_format: 'wav32',
+    },
+  } as Song;
+  act(() => root.render(panel({ musicEngine: 'audio.cpp', initialData: { song, timestamp: 1 } })));
+  await flush();
+  expect(field('textarea[aria-label="lyrics"]')).toBeNull();
+  expect(field('input[max="20"]')?.value).toBe('4');
+  click(buttonNamed('create')!);
+  expect(sent.at(-1)).toMatchObject({
+    music_source: { kind: 'audio_cpp', model: 'minimax_h3' },
+    style: 'funk groove', lyrics: '', duration_seconds: 4, steps: 20, seed: 2026,
+    cfg_scale: 1, output_format: 'wav32',
   });
 });

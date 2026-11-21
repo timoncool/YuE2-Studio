@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import type { MusicEngine, NativeMusicEngine, ProfileMusicEngine, YueRequest } from '../types';
 
 export const nativeEngines = { 'minimaxmusic-cpp': 'MiniMax Music3', 'acestep-cpp': 'ACE-Step' } as const;
-export const profileMusicEngines = { ...nativeEngines, 'audio.cpp': 'MiniMax Music3 · audio.cpp' } as const;
+export const profileMusicEngines = { ...nativeEngines, 'audio.cpp': 'audio.cpp' } as const;
 export const audioCppMiniMax = 'minimax_music3';
 export const isNativeMusicEngine = (value: unknown): value is NativeMusicEngine =>
   value === 'minimaxmusic-cpp' || value === 'acestep-cpp';
@@ -86,9 +86,8 @@ export function useNativeMusicProfiles(engine: ProfileMusicEngine | undefined) {
         const body = await reply.json();
         const data: NativeProfiles = engine === 'audio.cpp' && body.engine === engine && Array.isArray(body.models)
           ? { engine, engine_installed: true, profiles: body.models
-              .filter((model: { id: string }) => model.id === audioCppMiniMax)
-              .map((model: { id: string; profile_id: string; quantization: string; ready: boolean; missing: string[] }) => ({
-                id: model.id, label: `${model.profile_id} · ${model.quantization}`, total_bytes: 0,
+              .map((model: { id: string; name?: string; profile_id: string; quantization: string; ready: boolean; missing: string[] }) => ({
+                id: model.id, label: [model.name ?? model.id, model.profile_id, model.quantization].filter(Boolean).join(' · '), total_bytes: 0,
                 ready: model.ready, missing: model.missing,
               })) }
           : body;
@@ -102,7 +101,7 @@ export function useNativeMusicProfiles(engine: ProfileMusicEngine | undefined) {
   }, [engine, refreshCount]);
   const result = response?.engine === engine ? response : undefined;
   const profiles = result?.data?.profiles ?? [];
-  const remembered = engine === 'audio.cpp' ? audioCppMiniMax : engine ? preferences.selected[engine] : undefined;
+  const remembered = engine ? preferences.selected[engine] ?? (engine === 'audio.cpp' ? audioCppMiniMax : undefined) : undefined;
   const pending = engine === 'acestep-cpp' ? legacyAce : undefined;
   const profile = pending ? undefined : profiles.find(entry => entry.id === remembered);
   const pair = profile && engine ? JSON.stringify([engine, profile.id]) : undefined;
