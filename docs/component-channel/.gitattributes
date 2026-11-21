@@ -1,0 +1,2 @@
+# TUF verifies the bytes of each published target.
+targets/*.json -text !eol whitespace=cr-at-eol
