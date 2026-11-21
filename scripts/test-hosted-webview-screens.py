@@ -370,6 +370,29 @@ def check_lrc(root, pid):
         page = wait_page(predicate=lambda value: any(context in line and " Export…" in line for line in value.splitlines()))
         row = next(line for line in page.splitlines() if context in line)
         ui("click", ref=re.search(r"(e\d+) Export…(?:,|$)", row)[1])
+        def cancel_export(label, kind):
+            def cancelled_replies():
+                try:
+                    events = json.loads((out/"lrc-webview-network.json").read_text(encoding="utf8"))
+                except (OSError, json.JSONDecodeError):
+                    return None
+                return {entry["id"] for entry in events if entry.get("responseBody")
+                        and json.loads(entry["responseBody"]).get("cancelled") is True}
+            before = cancelled_replies()
+            assert before is not None
+            click(label)
+            target = root/f"Отказ-{kind}"
+            save_dialog_file(pid, target, f"{kind}-cancel-dialog.json", action="cancel")
+            wait_page(label)
+            for _ in range(40):
+                after = cancelled_replies()
+                if after and after - before:
+                    break
+                time.sleep(.2)
+            else:
+                raise AssertionError(f"{kind}: service did not acknowledge cancellation")
+            assert not list(root.glob(target.name + "*"))
+            json_file(out/f"{kind}-cancel.json", dict(response_ids=sorted(after-before), file_created=False))
         for fmt in ("wav", "flac", "mp3"):
             wait_page('button "Export"')
             ui("select", text="Format", value=fmt)
@@ -386,6 +409,7 @@ def check_lrc(root, pid):
                     blob[:4] == b"fLaC" if fmt == "flac" else
                     blob.startswith(b"ID3") or blob[0] == 255 and blob[1] & 224 == 224), (fmt, blob[:12])
             json_file(out/f"master-{fmt}.json", dict(bytes=len(blob), sha256=hashlib.sha256(blob).hexdigest()))
+            cancel_export('button "Save…"', f"master-{fmt}")
             click('button "Export again"')
         import zipfile
         for kind in ("track", "ableton"):
@@ -406,6 +430,7 @@ def check_lrc(root, pid):
                 if kind == "ableton":
                     assert any(name.endswith(".als") for name in members), members
                 json_file(out/f"{kind}-archive.json", dict(members=members, bytes=target.stat().st_size))
+            cancel_export(label, kind)
     finally:
         observer.stdin.close()
         try:
