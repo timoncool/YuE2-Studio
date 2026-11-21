@@ -1,5 +1,15 @@
-use super::*;
-use crate::downloads::{Asset, DownloadProgress, Downloader};
+use std::{
+    fs,
+    path::{Path, PathBuf},
+    sync::Arc,
+};
+
+use axum::{Json, extract::State, http::StatusCode};
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
+
+use super::{ApiError, AppState, api_error};
+use crate::downloads::{Asset, AssetKind, DownloadProgress, Downloader};
 use anyhow::{Context, ensure};
 
 const SCOPE: &str = "yue2-engine-hip";
@@ -74,7 +84,9 @@ fn detect_host() -> Result<&'static Host, String> {
         if !cfg!(all(windows, target_arch = "x86_64")) {
             return Err("Native YuE2 HIP components are available on Windows x64.".into());
         }
-        let mut command = std::process::Command::new("powershell.exe");
+        let windows = std::env::var_os("SystemRoot").map(PathBuf::from)
+            .ok_or_else(|| "Windows system directory could not be identified.".to_string())?;
+        let mut command = std::process::Command::new(windows.join("System32/WindowsPowerShell/v1.0/powershell.exe"));
         command.args(["-NoProfile", "-NonInteractive", "-Command",
             "ConvertTo-Json -InputObject @(Get-CimInstance Win32_VideoController | Select-Object PNPDeviceID,DriverVersion) -Compress"]);
         #[cfg(windows)]
@@ -100,7 +112,46 @@ fn package(gfx: Gfx) -> Option<&'static Package> {
     PACKAGES.iter().find(|package| package.gfx == gfx)
 }
 
-const PACKAGES: &[Package] = &[];
+const ENGINE_REVISION: &str = "188d13b3d619cc0fd13f47db9ff64e0bd815d577";
+
+const PACKAGES: &[Package] = &[
+    Package {
+        gfx: Gfx::Gfx1036,
+        revision: ENGINE_REVISION,
+        sha256: "7ccf312e5236c190b25bca9d119cc8e2062ac49fa7fde228a5aabde1aa5f085c",
+        asset: Asset {
+            id: "yue2-hip-gfx1036",
+            label: "YuE2 HIP (gfx1036)",
+            kind: AssetKind::Runtime,
+            url: "https://github.com/timoncool/yue2.cpp/releases/download/studio-hip-188d13b-4e38eee/yue2-windows-gfx1036.zip",
+            relative_path: "yue2-windows-gfx1036.zip",
+            bytes: 105_088_399,
+            unzip_into: None,
+            marker: "",
+            pick: &[],
+            vram_gb: None,
+            note: "ROCm 10.1.0 Windows x64 runtime",
+        },
+    },
+    Package {
+        gfx: Gfx::Gfx1100,
+        revision: ENGINE_REVISION,
+        sha256: "4f977f2a017ea8e93936801f8566caa641c971260ef1d4a2a3ca6531109e5c0e",
+        asset: Asset {
+            id: "yue2-hip-gfx1100",
+            label: "YuE2 HIP (gfx1100)",
+            kind: AssetKind::Runtime,
+            url: "https://github.com/timoncool/yue2.cpp/releases/download/studio-hip-188d13b-4e38eee/yue2-windows-gfx1100.zip",
+            relative_path: "yue2-windows-gfx1100.zip",
+            bytes: 115_027_012,
+            unzip_into: None,
+            marker: "",
+            pick: &[],
+            vram_gb: None,
+            note: "ROCm 10.1.0 Windows x64 runtime",
+        },
+    },
+];
 
 pub(super) fn archive_sha(url: &str) -> Option<&'static str> {
     PACKAGES
@@ -188,6 +239,10 @@ impl Runtime {
     }
 
     pub(super) async fn verified_executable(&self) -> Result<PathBuf, String> {
+        self.selected_path(true).await
+    }
+
+    pub(super) async fn selected_path(&self, verify: bool) -> Result<PathBuf, String> {
         let runtime = self.clone();
         tokio::task::spawn_blocking(move || {
             let host = detect_host()?;
@@ -199,7 +254,7 @@ impl Runtime {
             let binary = runtime.installed(package).map_err(|error| error.to_string())?;
             let build: Build = serde_json::from_slice(&fs::read(dir.join("BUILD.json")).map_err(|error| error.to_string())?)
                 .map_err(|error| error.to_string())?;
-            if !crate::pin_sha::holds(&binary, &build.engine_sha256) {
+            if verify && !crate::pin_sha::holds(&binary, &build.engine_sha256) {
                 return Err("The HIP executable checksum changed. Reinstall the component or choose Vulkan.".into());
             }
             Ok(binary)
@@ -213,29 +268,7 @@ impl Runtime {
         let parent = target.parent().context("HIP runtime directory")?;
         fs::create_dir_all(parent)?;
         let stage = tempfile::tempdir_in(parent)?;
-        let mut zip = zip::ZipArchive::new(fs::File::open(archive)?)?;
-        let mut files = Vec::new();
-        for index in 0..zip.len() {
-            let mut entry = zip.by_index(index)?;
-            let path = entry
-                .enclosed_name()
-                .context("Unsafe path in HIP component")?;
-            ensure!(
-                !path.to_string_lossy().contains(':'),
-                "Unsafe path in HIP component"
-            );
-            if entry.is_dir() {
-                continue;
-            }
-            let path = stage.path().join(path);
-            fs::create_dir_all(path.parent().context("HIP component path")?)?;
-            let mut file = fs::OpenOptions::new()
-                .create_new(true)
-                .write(true)
-                .open(&path)?;
-            files.push(path);
-            std::io::copy(&mut entry, &mut file)?;
-        }
+        let files = extract_package(&archive, stage.path())?;
         let binary = executable(stage.path(), package)?;
         let build: Build = serde_json::from_slice(&fs::read(stage.path().join("BUILD.json"))?)?;
         ensure!(
@@ -264,12 +297,41 @@ impl Runtime {
     }
 }
 
+fn extract_package(archive: &Path, destination: &Path) -> anyhow::Result<Vec<PathBuf>> {
+    let mut zip = zip::ZipArchive::new(fs::File::open(archive)?)?;
+    let mut files = Vec::new();
+    for index in 0..zip.len() {
+        let mut entry = zip.by_index(index)?;
+        let path = entry
+            .enclosed_name()
+            .context("Unsafe path in HIP component")?;
+        ensure!(
+            !path.to_string_lossy().contains(':'),
+            "Unsafe path in HIP component"
+        );
+        if entry.is_dir() {
+            continue;
+        }
+        let path = destination.join(path);
+        fs::create_dir_all(path.parent().context("HIP component path")?)?;
+        let mut file = fs::OpenOptions::new()
+            .create_new(true)
+            .write(true)
+            .open(&path)?;
+        files.push(path);
+        std::io::copy(&mut entry, &mut file)?;
+    }
+    Ok(files)
+}
+
 #[derive(Serialize)]
 pub(super) struct Status {
     platform_supported: bool,
     gfx: Option<Gfx>,
     driver: Option<String>,
     supported: bool,
+    active: bool,
+    tested_driver: Option<&'static str>,
     pub(super) installed: bool,
     pub(super) missing_bytes: u64,
     installing: bool,
@@ -287,6 +349,8 @@ impl Runtime {
             gfx: None,
             driver: None,
             supported: false,
+            active: false,
+            tested_driver: None,
             installed: false,
             missing_bytes: 0,
             installing: self.installing.try_lock().is_err(),
@@ -297,6 +361,7 @@ impl Runtime {
             Ok(host) => {
                 output.gfx = Some(host.gfx);
                 output.driver = host.driver.clone();
+                output.tested_driver = (host.gfx == Gfx::Gfx1036).then_some("32.0.21034.41");
                 if let Some(package) = package(host.gfx) {
                     output.supported = true;
                     output.installed = self.installed(package).is_ok();
@@ -322,7 +387,11 @@ impl Runtime {
 }
 
 pub(super) async fn get(State(state): State<AppState>) -> Json<Status> {
-    Json(state.engine_hip.status().await)
+    let mut status = state.engine_hip.status().await;
+    let using_hip =
+        *state.active_device.read().await == Some(music_engine::yue_server::ComputeBackend::Hip);
+    status.active = using_hip && state.music_server.health().await;
+    Json(status)
 }
 
 pub(super) async fn install(
@@ -373,13 +442,54 @@ pub(super) async fn cancel(State(state): State<AppState>) -> Json<Value> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use std::{
+        fs,
+        path::{Path, PathBuf},
+        sync::Arc,
+    };
+
+    use axum::{Json, extract::State, http::StatusCode};
+    use serde::{Deserialize, Serialize};
+    use serde_json::Value;
+
+    use super::{ApiError, AppState, api_error};
 
     fn adapter(pnp: &str) -> Adapter {
         Adapter {
             pnp_device_id: Some(pnp.into()),
             driver_version: None,
         }
+    }
+
+    #[test]
+    fn hip_zip_preserves_rocblas_directories_and_rejects_traversal() {
+        use std::io::Write;
+        let temp = tempfile::tempdir().unwrap();
+        let archive = temp.path().join("runtime.zip");
+        let root = temp.path().join("staged");
+        let entries = |paths: &[&str]| {
+            let mut writer = zip::ZipWriter::new(fs::File::create(&archive).unwrap());
+            for path in paths {
+                writer
+                    .start_file(*path, zip::write::SimpleFileOptions::default())
+                    .unwrap();
+                writer.write_all(b"fixture").unwrap();
+            }
+            writer.finish().unwrap();
+        };
+        entries(&[
+            "BUILD.json",
+            "bin/yue-server.exe",
+            "bin/rocblas/library/target.dat",
+        ]);
+        assert_eq!(extract_package(&archive, &root).unwrap().len(), 3);
+        assert_eq!(
+            fs::read(root.join("bin/rocblas/library/target.dat")).unwrap(),
+            b"fixture"
+        );
+        entries(&["../outside.dll"]);
+        assert!(extract_package(&archive, &root).is_err());
+        assert!(!temp.path().join("outside.dll").exists());
     }
 
     #[test]

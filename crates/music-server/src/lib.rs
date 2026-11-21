@@ -6060,11 +6060,14 @@ async fn engine_options(State(state): State<AppState>) -> Json<Value> {
     // bundled engine - and what is running now, so "did my change apply?"
     // has an answer on the page itself.
     let from_environment = env::var_os("YUE_ENGINE_BIN");
-    let executable = from_environment
+    let mut executable = from_environment
         .clone()
         .map(|path| path.to_string_lossy().into_owned())
         .or_else(|| options.engine_bin.clone().filter(|path| !path.trim().is_empty()));
-    let executable_source = if from_environment.is_some() {
+    let executable_source = if options.backend == music_engine::yue_server::ComputeBackend::Hip {
+        executable = state.engine_hip.selected_path(false).await.ok().map(|path| path.display().to_string());
+        "managed_hip"
+    } else if from_environment.is_some() {
         "environment"
     } else if executable.is_some() {
         "settings"
