@@ -1,8 +1,5 @@
 <div align="center">
 
-<!-- studio family tabs -->
-[![YuE2 Studio](https://img.shields.io/badge/YuE2_Studio-songs_with_a_score-ec4899?style=for-the-badge)](https://github.com/timoncool/YuE2-Studio) [![MiniMax Music3 Studio](https://img.shields.io/badge/MiniMax_Music3_Studio-full--length_tracks-3f3f46?style=for-the-badge)](https://github.com/timoncool/MiniMax-Music3-Studio) [![ACE-Step Studio](https://img.shields.io/badge/ACE--Step_Studio-Suno_at_home-3f3f46?style=for-the-badge)](https://github.com/timoncool/ACE-Step-Studio)
-
 <img src="docs/logo.png" alt="" width="112" height="112" />
 
 # YuE2 Studio
@@ -10,7 +7,7 @@
 **Create songs with YuE2, ACE-Step and MiniMax. Bring your tracks into one library and compare takes made with different engines.**
 
 [![Project page](https://img.shields.io/badge/Project_page-timoncool.github.io-7c3aed?style=for-the-badge)](https://timoncool.github.io/YuE2-Studio/)
-[![Download](https://img.shields.io/badge/Download-Windows_x64-0078D6?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/timoncool/YuE2-Studio/releases/latest)
+[![Download](https://img.shields.io/badge/Download-YuE2_Studio-0078D6?style=for-the-badge)](https://github.com/timoncool/YuE2-Studio/releases/latest)
 [![Donate](https://img.shields.io/badge/Support-Donate-ff69b4?style=for-the-badge)](DONATE.md)
 
 [![License](https://img.shields.io/github/license/timoncool/YuE2-Studio?style=flat-square)](LICENSE)
@@ -18,13 +15,15 @@
 [![Last commit](https://img.shields.io/github/last-commit/timoncool/YuE2-Studio?style=flat-square)](https://github.com/timoncool/YuE2-Studio/commits/main)
 [![Downloads](https://img.shields.io/github/downloads/timoncool/YuE2-Studio/total?style=flat-square)](https://github.com/timoncool/YuE2-Studio/releases)
 
-**English** · [Русский](https://timoncool.github.io/YuE2-Studio/ru.html) · [中文](https://timoncool.github.io/YuE2-Studio/zh.html) · [日本語](https://timoncool.github.io/YuE2-Studio/ja.html) · [한국어](https://timoncool.github.io/YuE2-Studio/ko.html) · [Português](https://timoncool.github.io/YuE2-Studio/pt.html)
+**English** · [Русский](README.ru.md) · [中文](README.zh.md) · [日本語](README.ja.md) · [한국어](README.ko.md) · [Português](README.pt.md)
 
 </div>
 
 Choose the model and engine in **Create**. With **YuE2**, describe a style and write the lyrics to get a song with an editable score. Change the melody or chords and render another take. You can also use native **ACE-Step** and **MiniMax Music 3**, choose a supported alternative engine, or generate with a music model from **OpenRouter**.
 
-Songs from the older studios can join the same library with their playlists. Listen to the original recording, compare takes or try a different singing voice with RVC. Local engines run on your computer after their components and weights have been downloaded. On Windows, choose the installer with automatic updates or the portable package. [Import your existing library](guides/en/getting-started.md#bring-your-ace-step-or-minimax-library-into-yue2) · [GPU measurements](guides/en/benchmarks.md#how-fast-is-it)
+Songs from the older studios can join the same library with their playlists. Listen to the original recording, compare takes or try a different singing voice with RVC. Local engines run on your computer after their components and weights have been downloaded. Downloads include a Windows installer and portable ZIP, an AppImage and Debian package for Linux x86-64, and a DMG for Apple Silicon. [Import your existing library](guides/en/getting-started.md#bring-your-ace-step-or-minimax-library-into-yue2) · [GPU measurements](guides/en/benchmarks.md#how-fast-is-it)
+
+[![YuE2 Studio 5.0](docs/screenshots/en-18-music-engines.webp)](guides/en/showcase.md)
 
 ## Guides
 
