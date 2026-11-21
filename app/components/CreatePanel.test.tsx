@@ -1922,6 +1922,11 @@ it('reuses a packed audio.cpp ACE-Step take without activating native ACE contro
   expect(sent.at(-1)).toMatchObject({ music_source, style: song.style, lyrics: song.lyrics,
     duration_seconds: 10, seed: 42, steps: 8 });
   expect(sent.at(-1)?.ace).toBeUndefined();
+  const invalid = { ...song, generationParams: { ...song.generationParams, duration_seconds: 301, seed: -1, steps: 101, cfg_scale: 0 } };
+  act(() => root.render(panel({ musicEngine: 'audio.cpp', initialData: { song: invalid, timestamp: 2 } })));
+  await flush();
+  expect(host.querySelectorAll('input[type="number"][aria-invalid="true"]')).toHaveLength(4);
+  expect(buttonNamed('create')?.disabled).toBe(true);
 });
 
 it('reuses a packed YuE2 audio.cpp take with its score and token bounds', async () => {

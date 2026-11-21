@@ -77,7 +77,7 @@ impl Family {
     }
 
     fn dedicated(self) -> bool {
-        matches!(self, Self::Yue)
+        matches!(self, Self::Yue | Self::Ace)
     }
 
     fn id(self) -> &'static str {
