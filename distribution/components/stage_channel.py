@@ -14,7 +14,7 @@ from urllib.parse import urlsplit
 
 from tuf.api.exceptions import DownloadHTTPError
 from tuf.api.metadata import Metadata, Root
-from tuf.ngclient import Updater
+from tuf.ngclient import Updater, UpdaterConfig
 from tuf.ngclient.fetcher import FetcherInterface
 
 from verify import read_catalogue
@@ -56,8 +56,8 @@ class StagingFetcher(FetcherInterface):
                 yield chunk
 
 
-ROLE_PATH = re.compile(r"([1-9][0-9]*)\.(root|snapshot|targets)\.json")
-TARGET_PATH = re.compile(r"[0-9a-f]{64}\.(mirrors|rvc-voice-catalog|music-engine-catalog)\.json")
+ROLE_PATH = re.compile(r"[1-9][0-9]*\.(root|snapshot|targets)\.json")
+TARGET_PATH = re.compile(r"(?:[0-9a-f]{64}|[0-9a-f]{128})\.(mirrors|rvc-voice-catalog|music-engine-catalog)\.json")
 
 
 def retain_immutable_files(previous, candidate):
@@ -109,25 +109,34 @@ def stage_channel(root, metadata, targets, mirrors, voices, output, previous_sit
         if bootstrap_path.exists() and bootstrap_path.read_bytes() != bootstrap:
             raise ValueError(f"immutable published file changed: {bootstrap_path.name}")
         bootstrap_path.write_bytes(bootstrap)
-        roots = sorted(
-            (int(relative.name.split(".", 1)[0]), relative)
+        roots = [
+            int(relative.name.split(".", 1)[0])
             for relative in published if relative.name.endswith(".root.json")
-        )
-        if previous_site is not None and not roots:
-            raise ValueError("the previous publication has no trusted root history")
-        # Verify from the oldest still-supported installer. Its forward chain must
-        # reach the packager bootstrap even if the signing checkout has pruned files.
-        anchor = (candidate / roots[0][1]).read_bytes() if roots and roots[0][0] < version else bootstrap
+        ]
+        fetcher = StagingFetcher(metadata, targets, candidate)
+        config = UpdaterConfig()
+        base = "https://channel.invalid/"
+        # Studio also caches root 1..N for offline catalogue verification.
+        # Start at root 1 and verify continuity through the supplied installer root.
+        first_root = candidate / "1.root.json"
+        try:
+            anchor = first_root.read_bytes() if first_root.exists() else fetcher.download_bytes(
+                base + first_root.name, config.root_max_length
+            )
+        except DownloadHTTPError as error:
+            raise ValueError("publication must include the complete root chain starting at version 1") from error
+        first = Metadata.from_bytes(anchor).signed
+        if not isinstance(first, Root) or first.version != 1:
+            raise ValueError("1.root.json must be root metadata of version 1")
         cache = work / "cache"
         cache.mkdir()
-        client = Updater(str(cache), "https://channel.invalid/", bootstrap=anchor,
-                         target_base_url="https://channel.invalid/targets/",
-                         fetcher=StagingFetcher(metadata, targets, candidate))
+        client = Updater(str(cache), base, bootstrap=anchor, config=config,
+                         target_base_url=base + "targets/", fetcher=fetcher)
         client.refresh()
         verified_bootstrap = cache / "root_history" / bootstrap_path.name
         if not verified_bootstrap.is_file() or verified_bootstrap.read_bytes() != bootstrap:
             raise ValueError("the installer bootstrap is not in the verified public root chain")
-        if roots and Metadata.from_file(str(cache / "root.json")).signed.version < roots[-1][0]:
+        if roots and Metadata.from_file(str(cache / "root.json")).signed.version < max(roots):
             raise ValueError("publication would roll back the trusted root")
         reviewed = {"mirrors.json": mirrors}
         if voices is not None:

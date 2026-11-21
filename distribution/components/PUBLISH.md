@@ -41,7 +41,8 @@ The Studio expects the signed targets under `targets/` inside that directory.
    catalogues for older installers and downloads already in progress. During
    root rotation, provide each intermediate root missing from the previous
    publication in the signing metadata directory. Staging follows the
-   verified chain from the oldest retained bootstrap to the new root.
+   verified chain from root version 1 to the new root. Supply that complete
+   chain for an initial deployment if the installer already embeds a later root.
    For a host with individually uploaded files, upload immutable files first,
    verify they are reachable, and replace `timestamp.json` last. Publish from
    one writer at a time and recheck the base deployment before promotion.

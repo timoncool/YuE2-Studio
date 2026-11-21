@@ -192,6 +192,16 @@ class Publication(unittest.TestCase):
                               previous_site=first, engines=work / "engines-2.json")
             self.assertFalse(rejected.exists())
 
+            initial_v2 = work / "initial-v2"
+            inputs = (bootstrap2, work / "meta-2", work / "targets-2", catalogue2,
+                      work / "voices-2.json", initial_v2)
+            with self.assertRaisesRegex(ValueError, "complete root chain"):
+                stage_channel(*inputs, engines=work / "engines-2.json")
+            self.assertFalse(initial_v2.exists())
+            (work / "meta-2" / "1.root.json").write_bytes(bootstrap1.read_bytes())
+            stage_channel(*inputs, engines=work / "engines-2.json")
+            self.assertEqual((initial_v2 / "1.root.json").read_bytes(), bootstrap1.read_bytes())
+
             pointer = work / "current"
             pointer.write_text(first.name, encoding="ascii")
 
