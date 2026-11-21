@@ -85,7 +85,9 @@ def run(binary, port, data, frontend):
         with sync_playwright() as playwright:
             browser = playwright.chromium.launch(args=["--autoplay-policy=no-user-gesture-required", "--mute-audio"])
             page = browser.new_page(viewport={"width": 1400, "height": 900})
+            page.on("pageerror", lambda error: print(f"Browser error: {error}", flush=True))
             page.add_init_script("""localStorage.setItem('language', 'en');
+              localStorage.setItem('studio.musicEngine', 'minimaxmusic-cpp');
               localStorage.setItem('studio.legacyLibraryOfferSeen', '1');""")
             page.goto(f"http://127.0.0.1:{frontend}/", wait_until="domcontentloaded")
             page.get_by_role("heading", name="Create music").wait_for(timeout=20_000)
