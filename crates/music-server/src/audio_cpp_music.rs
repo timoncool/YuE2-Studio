@@ -40,6 +40,7 @@ const CONFIGS: [&str; 8] = [
 #[derive(Clone, Copy)]
 enum Family {
     MiniMax,
+    MiniMaxH3,
     HeartMuLa,
     MiDasheng,
     Vevo2,
@@ -49,6 +50,7 @@ impl Family {
     fn parse(id: &str) -> Option<Self> {
         match id {
             FAMILY => Some(Self::MiniMax),
+            audio_cpp_minimax_h3::FAMILY => Some(Self::MiniMaxH3),
             audio_cpp_heartmula::FAMILY => Some(Self::HeartMuLa),
             audio_cpp_midasheng::FAMILY => Some(Self::MiDasheng),
             audio_cpp_vevo2::FAMILY => Some(Self::Vevo2),
@@ -59,6 +61,7 @@ impl Family {
     fn id(self) -> &'static str {
         match self {
             Self::MiniMax => FAMILY,
+            Self::MiniMaxH3 => audio_cpp_minimax_h3::FAMILY,
             Self::HeartMuLa => audio_cpp_heartmula::FAMILY,
             Self::MiDasheng => audio_cpp_midasheng::FAMILY,
             Self::Vevo2 => audio_cpp_vevo2::FAMILY,
@@ -68,6 +71,7 @@ impl Family {
     fn name(self) -> &'static str {
         match self {
             Self::MiniMax => "MiniMax Music3",
+            Self::MiniMaxH3 => audio_cpp_minimax_h3::NAME,
             Self::HeartMuLa => "HeartMuLa",
             Self::MiDasheng => "MiDashengLM-Gen",
             Self::Vevo2 => audio_cpp_vevo2::NAME,
@@ -77,15 +81,24 @@ impl Family {
     fn profile(self) -> &'static str {
         match self {
             Self::MiniMax => PROFILE,
+            Self::MiniMaxH3 => audio_cpp_minimax_h3::PROFILE,
             Self::HeartMuLa => audio_cpp_heartmula::PROFILE,
             Self::MiDasheng => audio_cpp_midasheng::PROFILE,
             Self::Vevo2 => audio_cpp_vevo2::PROFILE,
         }
     }
 
+    fn quantization(self) -> &'static str {
+        match self {
+            Self::MiniMaxH3 => audio_cpp_minimax_h3::QUANTIZATION,
+            _ => QUANTIZATION,
+        }
+    }
+
     fn directory(self, root: &FsPath) -> PathBuf {
         match self {
             Self::MiniMax => model_dir(root),
+            Self::MiniMaxH3 => audio_cpp_minimax_h3::model_dir(root),
             Self::HeartMuLa => audio_cpp_heartmula::model_dir(root),
             Self::MiDasheng => audio_cpp_midasheng::model_dir(root),
             Self::Vevo2 => audio_cpp_vevo2::model_dir(root),
@@ -95,6 +108,7 @@ impl Family {
     fn missing(self, path: &FsPath) -> Vec<&'static str> {
         match self {
             Self::MiniMax => missing_files(path),
+            Self::MiniMaxH3 => audio_cpp_minimax_h3::missing_files(path),
             Self::HeartMuLa => audio_cpp_heartmula::missing_files(path),
             Self::MiDasheng => audio_cpp_midasheng::missing_files(path),
             Self::Vevo2 => audio_cpp_vevo2::missing_files(path),
@@ -104,6 +118,7 @@ impl Family {
     fn entry(self, path: PathBuf) -> ModelEntry {
         match self {
             Self::MiniMax => entry(path),
+            Self::MiniMaxH3 => audio_cpp_minimax_h3::entry(path),
             Self::HeartMuLa => audio_cpp_heartmula::entry(path),
             Self::MiDasheng => audio_cpp_midasheng::entry(path),
             Self::Vevo2 => audio_cpp_vevo2::entry(path),
@@ -117,6 +132,7 @@ impl Family {
     ) -> anyhow::Result<PreparedTask> {
         match self {
             Self::MiniMax => task(request).map(PreparedTask::Json),
+            Self::MiniMaxH3 => audio_cpp_minimax_h3::task(request).map(PreparedTask::Json),
             Self::HeartMuLa => audio_cpp_heartmula::task(request).map(PreparedTask::Json),
             Self::MiDasheng => audio_cpp_midasheng::task(request).map(PreparedTask::Json),
             Self::Vevo2 => audio_cpp_vevo2::task(request, library).map(PreparedTask::Singing),
@@ -126,6 +142,7 @@ impl Family {
     fn catalog(self, root: Option<&FsPath>, runtime_ready: bool) -> Value {
         match self {
             Self::MiniMax => minimax_catalog(root, runtime_ready),
+            Self::MiniMaxH3 => audio_cpp_minimax_h3::catalog(root, runtime_ready),
             Self::HeartMuLa => audio_cpp_heartmula::catalog(root, runtime_ready),
             Self::MiDasheng => match root {
                 Some(root) => audio_cpp_midasheng::catalog(&self.directory(root), runtime_ready),
@@ -168,7 +185,9 @@ pub(super) fn registered_model_ready(model: &ModelEntry) -> Option<bool> {
     }
     let directory = match family {
         Family::MiniMax if model.task == "gen" => Some(model.path.as_path()),
-        Family::HeartMuLa | Family::MiDasheng if model.task == "gen" => model.path.parent(),
+        Family::HeartMuLa | Family::MiDasheng | Family::MiniMaxH3 if model.task == "gen" => {
+            model.path.parent()
+        }
         Family::Vevo2 if model.task == "tts" => model.path.parent(),
         _ => return None,
     };
@@ -243,6 +262,7 @@ pub(super) async fn models(State(state): State<AppState>) -> Json<Value> {
         .is_ok_and(|build| state.acpp.exe(*build).is_file() && state.acpp.installed(*build));
     let models = [
         Family::MiniMax,
+        Family::MiniMaxH3,
         Family::HeartMuLa,
         Family::MiDasheng,
         Family::Vevo2,
@@ -278,6 +298,7 @@ mod tests {
         let root = tempfile::tempdir().unwrap();
         for (family, task) in [
             (Family::MiniMax, "gen"),
+            (Family::MiniMaxH3, "gen"),
             (Family::HeartMuLa, "gen"),
             (Family::MiDasheng, "gen"),
             (Family::Vevo2, "tts"),
@@ -291,7 +312,7 @@ mod tests {
             assert_eq!(entry.task, task);
             assert_eq!(registered_model_ready(&entry), Some(false));
         }
-        assert!(Family::parse("minimax_h3").is_none());
+        assert!(Family::parse("unknown_model").is_none());
     }
 }
 
@@ -423,7 +444,7 @@ pub(super) async fn submit(
     evict_kept_models(&state, "before audio.cpp music generation").await;
     let mut settings = serde_json::json!({
         "music_source": request.music_source, "family": family.id(), "profile_id": family.profile(),
-        "quantization": QUANTIZATION, "backend": build.backend(),
+        "quantization": family.quantization(), "backend": build.backend(),
         "duration_seconds": request.duration_seconds, "steps": request.steps,
         "seed": request.seed, "guidance_scale": request.cfg_scale,
         "output_format": format, "mp3_bitrate": bitrate,
@@ -437,6 +458,12 @@ pub(super) async fn submit(
             settings["duration_seconds"] = body["duration_seconds"].clone();
             settings["steps"] = body["num_inference_steps"].clone();
             settings["seed"] = body["seed"].clone();
+        }
+        (Family::MiniMaxH3, PreparedTask::Json(body)) => {
+            settings["duration_seconds"] = body["duration_seconds"].clone();
+            settings["steps"] = body["num_inference_steps"].clone();
+            settings["seed"] = body["seed"].clone();
+            settings["guidance_scale"] = body["guidance_scale"].clone();
         }
         (Family::HeartMuLa, _) => settings["heartmula"] = serde_json::json!(request.heartmula),
         (Family::MiDasheng, _) => settings["midasheng"] = serde_json::json!(request.midasheng),

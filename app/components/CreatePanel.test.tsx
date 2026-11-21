@@ -702,3 +702,26 @@ describe('OpenRouter music creation', () => {
     expect(create().disabled).toBe(true);
   });
 });
+
+it('reuses the MiniMax-H3 prompt, duration, seed and format without a lyrics field', async () => {
+  vi.stubGlobal('fetch', vi.fn(async () => Response.json({ engine: 'audio.cpp', models: [
+    { id: 'minimax_h3', name: 'MiniMax-H3', profile_id: 'minimax_h3_q4_k', quantization: 'Q4_K', ready: true, missing: [] },
+  ] })));
+  const song = {
+    title: 'H3 take', ditModel: 'audio.cpp', style: 'funk groove', lyrics: 'Retained draft lyrics',
+    generationParams: {
+      music_source: { kind: 'audio_cpp', model: 'minimax_h3' },
+      duration_seconds: 4, steps: 20, seed: 2026, guidance_scale: 1, output_format: 'wav32',
+    },
+  } as Song;
+  act(() => root.render(panel({ musicEngine: 'audio.cpp', initialData: { song, timestamp: 1 } })));
+  await flush();
+  expect(field('textarea[aria-label="lyrics"]')).toBeNull();
+  expect(field('input[max="20"]')?.value).toBe('4');
+  click(buttonNamed('create')!);
+  expect(sent.at(-1)).toMatchObject({
+    music_source: { kind: 'audio_cpp', model: 'minimax_h3' },
+    style: 'funk groove', lyrics: '', duration_seconds: 4, steps: 20, seed: 2026,
+    cfg_scale: 1, output_format: 'wav32',
+  });
+});
