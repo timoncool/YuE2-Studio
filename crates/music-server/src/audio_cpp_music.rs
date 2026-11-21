@@ -683,11 +683,63 @@ fn task(request: &CreateMusicJobRequest) -> anyhow::Result<Value> {
     Ok(body)
 }
 
+pub(super) fn supports_replay(song: &library::Song) -> bool {
+    song.engine_id == ENGINE
+        && song.generation_settings["family"].as_str() == Some(audio_cpp_heartmula::FAMILY)
+}
+
+fn heartmula_replay_request(
+    song: &library::Song,
+    options: ReplayMusicJobRequest,
+) -> Result<CreateMusicJobRequest, String> {
+    if options.extend_seconds.is_some() || options.solver.is_some()
+        || options.synth_batch_size.is_some_and(|batch| batch != 1)
+    {
+        return Err("HeartMuLa replay supports seed, steps and output overrides.".into());
+    }
+    let mut request: CreateMusicJobRequest =
+        serde_json::from_value(song.generation_settings.clone())
+            .map_err(|error| format!("Invalid saved HeartMuLa settings: {error}"))?;
+    request.music_source = Some(MusicSource::AudioCpp { model: audio_cpp_heartmula::FAMILY.into() });
+    request.style = song.caption.clone();
+    request.lyrics = song.lyrics.clone();
+    request.title = options.title.or_else(|| Some(song.title.clone()));
+    request.client_ref = options.client_ref;
+    request.cfg_scale = song.generation_settings["guidance_scale"].as_f64();
+    request.cover_prompt = song.metadata["cover_prompt"].as_str().map(str::to_owned);
+    request.steps = options.steps.or(request.steps);
+    request.seed = options.seed.or(request.seed);
+    request.output_format = options.output_format.or(request.output_format);
+    request.mp3_bitrate = options.mp3_bitrate.or(request.mp3_bitrate);
+    Ok(request)
+}
+
+pub(super) async fn replay(
+    state: AppState,
+    song: library::Song,
+    options: ReplayMusicJobRequest,
+    attempt: u32,
+) -> Result<(StatusCode, Json<MusicJob>), (StatusCode, Json<ApiError>)> {
+    let request = heartmula_replay_request(&song, options)
+        .map_err(|error| api_error(StatusCode::BAD_REQUEST, error))?;
+    Ok(submit_with_source(state, request, audio_cpp_heartmula::FAMILY.into(), attempt, Some(&song)).await)
+}
+
 pub(super) async fn submit(
     state: AppState,
     request: CreateMusicJobRequest,
     model: String,
     attempt: u32,
+) -> (StatusCode, Json<MusicJob>) {
+    submit_with_source(state, request, model, attempt, None).await
+}
+
+async fn submit_with_source(
+    state: AppState,
+    request: CreateMusicJobRequest,
+    model: String,
+    attempt: u32,
+    source: Option<&library::Song>,
 ) -> (StatusCode, Json<MusicJob>) {
     let submitted = std::time::Instant::now();
     let reject = |status, reason| {
@@ -861,7 +913,7 @@ pub(super) async fn submit(
     let job = MusicJob {
         derived: match &task {
             PreparedTask::Cover(cover) => Some(cover.derived.clone()),
-            _ => None,
+            _ => source.map(|song| derivation(song, "replay", Value::Null)),
         },
         id: format!("audio-cpp-{}", uuid_suffix()),
         client_ref: request.client_ref.clone(),
