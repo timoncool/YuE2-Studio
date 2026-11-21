@@ -13,6 +13,7 @@ import { openAudioEditor } from '../services/audioEditor';
 import { StemMixer } from './StemMixer';
 import { mapNativeLibrarySong } from '../services/nativeLibrary';
 import type { NativeLibrarySong, YueRequest } from '../types';
+import { ControlFoleyTool } from './ControlFoleyTool';
 import { SoundEffectsTool } from './SoundEffectsTool';
 import type { TranslationKey } from '../i18n/translations';
 import { stemOf } from '../services/songStems';
@@ -487,6 +488,8 @@ export function StudioToolsPanel({ initialSongId, focusRvc, onRvcFocused, onGene
             <p role="alert" className="mt-3 select-text rounded-lg bg-rose-500/10 px-3 py-2 text-xs text-rose-700 wrap-anywhere dark:text-rose-300">{run.error}</p>
           )}
         </section>
+
+        {onGenerateEffect && <ControlFoleyTool card={CARD} control={CONTROL} busy={Boolean(generationBusy)} onGenerate={onGenerateEffect} />}
 
         {/* Restore after compression, on the track chosen above or a file. */}
         <RestoreTool
