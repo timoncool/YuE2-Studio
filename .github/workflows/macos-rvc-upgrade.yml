@@ -1,0 +1,23 @@
+name: macOS RVC installed profile upgrade
+on:
+  push:
+    branches: [qa/macos-rvc-profile-upgrade]
+permissions:
+  contents: read
+  actions: read
+jobs:
+  upgrade:
+    runs-on: macos-15
+    timeout-minutes: 20
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - name: Compare the installed profiles of two verified DMGs
+        run: python3 .github/check-macos-rvc-upgrade.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: macos-rvc-profile-upgrade
+          path: ${{ runner.temp }}/rvc-proof
+          if-no-files-found: error
