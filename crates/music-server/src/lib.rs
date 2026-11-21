@@ -11926,6 +11926,7 @@ fn spawn_job_watcher(state: AppState, job_id: String) {
             (job_status_name(&job.status), job.message.clone(), job.songs.len(), profiles, songs_seconds(&job.songs))
         });
         if let Some(hub) = &state.hub {
+            let hub = hub.for_scheduled_report();
             match ended.as_ref() {
                 Some(("completed", _, songs, profiles, seconds)) if *songs > 0 => {
                     hub.count("songs", *songs as u64);
