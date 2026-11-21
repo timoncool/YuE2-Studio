@@ -11,7 +11,7 @@ interface Job {
   id: string;
   song_id: string;
   status: Stage;
-  take: { song_id: string } | null;
+  take: { song_id: string; effective_backend?: string } | null;
   error: string | null;
 }
 
@@ -28,18 +28,13 @@ export function RvcQuickJobs({ songs }: { songs: { id: string; title: string }[]
   useEffect(() => {
     const controller = new AbortController();
     const knownTakes = new Set<string>();
-    let first = true;
     const stop = poll(async () => {
       try {
         const fetched = await responseJson<Job[]>(await fetch(URL, { signal: controller.signal }));
         if (!Array.isArray(fetched) || controller.signal.aborted) return;
-        for (const row of fetched) {
-          if (row.take && !knownTakes.has(row.take.song_id)) {
-            knownTakes.add(row.take.song_id);
-            if (!first) void libraryChanged();
-          }
-        }
-        first = false;
+        const added = fetched.flatMap(row => row.take && !knownTakes.has(row.take.song_id) ? [row.take.song_id] : []);
+        added.forEach(id => knownTakes.add(id));
+        if (added.length) void libraryChanged();
         setJobs(fetched);
       } catch { /* A short polling failure can recover on the next request. */ }
     }, 1800);
@@ -82,7 +77,7 @@ export function RvcQuickJobs({ songs }: { songs: { id: string; title: string }[]
     {error && <div role="alert">{error} <button type="button" className="underline" onClick={() => setError(undefined)}>{t('dismiss')}</button></div>}
     {rows.map(job => (
       <div key={job.id} className="flex items-center gap-2">
-        <p role="status">{songs.find(song => song.id === job.song_id)?.title ?? labels.jobs} · {labels[job.status]}{job.error && ` · ${job.error}`}</p>
+        <p role="status">{songs.find(song => song.id === job.song_id)?.title ?? labels.jobs} · {labels[job.status]}{job.take?.effective_backend && ` · ${job.take.effective_backend}`}{job.error && ` · ${job.error}`}</p>
         {active(job) ? (
           <button type="button" className="underline" onClick={() => void cancel(job.id)}>{t('cancel')}</button>
         ) : (

@@ -4050,7 +4050,7 @@ async fn read_stem_audio(
     Ok(serve_audio_file(&path, request).await)
 }
 
-/// Separates one track into stems, in the background, reporting progress.
+/// Runs the selected separator and writes the requested stems.
 #[allow(clippy::too_many_arguments)]
 fn separate_song_audio(
     state: &AppState, song_id: &str, audio_path: &std::path::Path, engine: separation::Engine,
@@ -4085,6 +4085,7 @@ fn separate_song_audio(
     Ok((written, ran_on_gpu))
 }
 
+/// Separates one track into stems in the background and reports progress.
 async fn start_separation(
     State(state): State<AppState>,
     Path(id): Path<String>,

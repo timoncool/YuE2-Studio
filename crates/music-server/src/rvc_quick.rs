@@ -327,7 +327,7 @@ async fn prepare_stems(state: &AppState, run: Arc<Run>, id: &str) -> Result<(), 
     let runtime = config.runtime;
     let engine = config.engine;
     let gpu = roformer_on_card(state, runtime);
-    let wanted: Vec<String> = if engine == separation::Engine::Roformer {
+    let mut wanted: Vec<String> = if engine == separation::Engine::Roformer {
         if !state.separator.roformer_installed(gpu) {
             return Err(rvc_voices::invalid(
                 "Install Mel-Band RoFormer in Settings → Models → Stems.",
@@ -348,6 +348,7 @@ async fn prepare_stems(state: &AppState, run: Arc<Run>, id: &str) -> Result<(), 
             .map(|name| (*name).to_owned())
             .collect()
     };
+    wanted.retain(|name| !stem_path(state, id, name).is_file());
     let state = state.clone();
     let id = id.to_owned();
     tokio::task::spawn_blocking(move || {
