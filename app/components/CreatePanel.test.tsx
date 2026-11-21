@@ -503,6 +503,59 @@ it('shows the waiting pair without cancelling the song and keeps the selected Yu
   expect(sent[1]).toMatchObject({ music_source: { kind: 'local' }, adapters: [{ id: 'my-acoustic-lora', scales: { nar: 0.7 } }] });
 });
 
+it('shows the engine memory failure and returns to the working pair with the draft intact', async () => {
+  const oldPair = { kind: 'local' };
+  const failingPair = { kind: 'native', engine: 'minimaxmusic-cpp', model: 'minimal' };
+  const cancel = vi.fn(async () => {});
+  let status: Record<string, unknown> = { revision: 0, stage: 'idle', active: oldPair, elapsed_ms: 0 };
+  vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+    if (url === '/v1/music/pair') {
+      if (init?.method === 'POST') {
+        const { music_source } = JSON.parse(String(init.body));
+        status = music_source.kind === 'local'
+          ? { revision: 2, stage: 'ready', active: oldPair, requested: oldPair, elapsed_ms: 100 }
+          : { revision: 1, stage: 'error', active: oldPair, requested: failingPair, elapsed_ms: 600,
+              error: 'MiniMax ran out of GPU memory while loading. See minimax-engine.log' };
+      }
+      return Response.json(status);
+    }
+    if (url === '/v1/music/native/minimaxmusic-cpp/profiles') return Response.json({
+      engine: 'minimaxmusic-cpp', engine_installed: true,
+      profiles: [{ id: 'minimal', label: 'Minimal', ready: true, missing: [] }],
+    });
+    return Response.json({});
+  }));
+  function Editor() {
+    const [engine, setEngine] = React.useState<NonNullable<React.ComponentProps<typeof CreatePanel>['musicEngine']>>('local');
+    return panel({ musicEngine: engine, onMusicEngineChange: setEngine, onCancelJob: cancel });
+  }
+  act(() => root.render(<Editor />));
+  await flush();
+  act(() => { bridgeCommands.get('create_set')?.({ fields: { style: 'folk', lyrics: 'Keep this verse' } }); });
+  const model = [...host.querySelectorAll('label')]
+    .find(label => label.textContent?.startsWith('Model'))!.querySelector('select')!;
+  act(() => {
+    model.value = 'minimaxmusic-cpp';
+    model.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  await flush();
+  const profile = host.querySelector<HTMLSelectElement>('select[aria-label="Local model"]')!;
+  act(() => {
+    profile.value = 'minimal';
+    profile.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  await flush();
+  expect(host.querySelector('[role="alert"]')?.textContent).toContain('ran out of GPU memory');
+  expect(host.textContent).toContain('Active pair · YuE2');
+  expect(host.textContent).toContain('Requested pair · minimaxmusic-cpp · minimal');
+  expect((buttonNamed('create') as HTMLButtonElement).disabled).toBe(true);
+  expect(cancel).not.toHaveBeenCalled();
+  click(buttonNamed('Return to active pair')!);
+  await flush();
+  click(buttonNamed('create')!);
+  expect(sent[0]).toMatchObject({ music_source: oldPair, style: 'folk', lyrics: 'Keep this verse' });
+});
+
 it('submits the same MuLaCover reference after switching engines in either direction', async () => {
   const firstScore = 'X:1\nK:C\nCDEF|';
   const secondScore = 'X:1\nK:D\nDEFG|';
