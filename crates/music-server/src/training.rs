@@ -1492,13 +1492,20 @@ impl Training {
         let run = self.run(id)?;
         let root = self.run_dir(id)?;
         let path = if run.status == RunStatus::Done { root.join(crate::rvc_burn::CHECKPOINT) }
+            else if let Some(saved) = crate::rvc_burn::best_snapshot(&root) { saved.join("voice.safetensors") }
             else { root.join("rvc-output/checkpoint/voice.best.safetensors") };
         if !path.is_file() { bail!("This RVC run has no saved voice."); }
         Ok(path)
     }
 
     pub(super) fn rvc_burn_best(&self, id: &str) -> Option<serde_json::Value> {
-        read_json(&self.run_dir(id).ok()?.join("rvc-output/checkpoint/voice.best.json"))
+        let root = self.run_dir(id).ok()?;
+        crate::rvc_burn::best_snapshot(&root)
+            .and_then(|saved| read_json(&saved.join("best.json")))
+            .or_else(|| {
+                if self.run(id).ok()?.status == RunStatus::Running { return None; }
+                read_json(&root.join("rvc-output/checkpoint/voice.best.json"))
+            })
     }
 
     pub(super) fn record_rvc_burn_voice(&self, id: &str, voice: &str) -> Result<()> {
@@ -1684,7 +1691,7 @@ impl Training {
             command.env("GGML_BACKEND", "CUDA0");
             if stage.id == crate::rvc_burn::STAGE {
                 let folder = trainer.parent().context("RVC Burn runtime folder")?.to_owned();
-                command.envs(crate::rvc_burn::Runtime::from_folder(folder).environment());
+                command.envs(crate::rvc_burn::Runtime::from_folder(folder).environment(run_dir));
             }
             #[cfg(windows)]
             command.creation_flags(0x0800_0000);
@@ -1715,6 +1722,15 @@ impl Training {
                         Some(line) => {
                             log.write_all(line.as_bytes()).await?;
                             log.write_all(b"\n").await?;
+                            if stage.id == crate::rvc_burn::STAGE
+                                && let Some((step, mel)) = crate::rvc_burn::best_report(&line)
+                            {
+                                let run_dir = run_dir.to_owned();
+                                let snapshot = tokio::task::spawn_blocking(move || crate::rvc_burn::snapshot_best(&run_dir, step, mel)).await;
+                                if let Err(error) = snapshot.map_err(anyhow::Error::from).and_then(|result| result) {
+                                    log.write_all(format!("[studio] the previous RVC checkpoint was kept: {error:#}\n").as_bytes()).await?;
+                                }
+                            }
                             let step = if stage.id == crate::rvc_burn::STAGE {
                                 crate::rvc_burn::progress(&line).map(|(total, step)| {
                                     let _edit = self.edits.lock().unwrap_or_else(|poisoned| poisoned.into_inner());

@@ -707,7 +707,7 @@ it('chooses MiniMax Music3 through audio.cpp and reuses the saved seed and forma
 it.each([
   ['heartmula', { heartmula: { top_k: 30, temperature: 0.9 } }, 'pop', ''],
   ['vevo2', { vevo2: { voice_song_id: 'original-take' } }, '', 'Words to sing'],
-  ['midashenglm_gen', { midasheng: { caption: '', music: 'quiet piano', speech_text: '', speech_style: '', effects: '', environment: 'rain' } }, 'quiet piano', ''],
+  ['midashenglm_gen', { duration_seconds: 5, midasheng: { caption: '', music: 'quiet piano', speech_text: '', speech_style: '', effects: '', environment: 'rain' } }, 'quiet piano', ''],
 ] as const)('restores and submits model-specific settings for %s', async (model, options, style, lyrics) => {
   vi.stubGlobal('fetch', vi.fn(async () => Response.json({ engine: 'audio.cpp', models: [
     { id: model, name: model, profile_id: 'q8', quantization: 'Q8_0', ready: true, missing: [] },
@@ -720,6 +720,13 @@ it.each([
   await flush();
   click(buttonNamed('create')!);
   expect(sent.at(-1)).toMatchObject({ music_source: { kind: 'audio_cpp', model }, ...options });
+  if (model === 'midashenglm_gen') {
+    expect(host.textContent).toContain('Duration limit (seconds)');
+    const duration = host.querySelector<HTMLInputElement>('input[aria-describedby]');
+    expect(duration?.value).toBe('5');
+    expect(document.getElementById(duration?.getAttribute('aria-describedby') ?? '')?.textContent)
+      .toBe('The model rounds the limit to audio blocks and can finish sooner.');
+  }
 });
 it('restores a Magenta reference and submits either the available reference or text style', async () => {
   const model = 'magenta_realtime_2';
@@ -1269,6 +1276,32 @@ describe('OpenRouter music creation', () => {
     expect(host.textContent).toContain('No OpenRouter music models are available.');
     expect(create().disabled).toBe(true);
   });
+});
+
+it('shows the manual MiniMax-H3 package and blocks Create when its weights are absent', async () => {
+  const packageInfo = {
+    package_url: 'https://huggingface.co/audio-cpp/audio.cpp-gguf/tree/test/MiniMax-H3-Q4-GGUF',
+    license_url: 'https://huggingface.co/MiniMaxAI/MiniMax-H3/blob/main/LICENSE',
+    model_directory: 'audiocpp/models/MiniMax-H3-Q4-GGUF',
+  };
+  vi.stubGlobal('fetch', vi.fn(async () => Response.json({ engine: 'audio.cpp', models: [{
+    id: 'minimax_h3', name: 'MiniMax-H3', profile_id: 'minimax_h3_q4_k', quantization: 'Q4_K',
+    ready: false, missing: ['dit.gguf'], missing_bytes: 32_443_213_394, status: 'experimental', ...packageInfo,
+  }] })));
+  const song = {
+    title: 'H3 take', ditModel: 'audio.cpp', style: 'funk groove',
+    generationParams: { music_source: { kind: 'audio_cpp', model: 'minimax_h3' } },
+  } as Song;
+  act(() => root.render(panel({ musicEngine: 'audio.cpp', initialData: { song, timestamp: 1 } })));
+  await flush();
+  expect(host.textContent).toContain('Experimental');
+  expect(host.textContent).toContain('30.22 GiB');
+  expect(host.textContent).toContain(packageInfo.model_directory);
+  expect(host.textContent).toContain('dit.gguf');
+  expect(host.querySelector(`a[href="${packageInfo.package_url}"]`)).not.toBeNull();
+  expect(host.querySelector(`a[href="${packageInfo.license_url}"]`)).not.toBeNull();
+  expect(buttonNamed('create')?.disabled).toBe(true);
+  expect(sent).toHaveLength(0);
 });
 
 it('reuses the MiniMax-H3 prompt, duration, seed and format without a lyrics field', async () => {

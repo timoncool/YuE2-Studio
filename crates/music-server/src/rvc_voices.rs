@@ -346,7 +346,7 @@ pub(super) async fn install_trained_burn(
     }).await.map_err(internal)?
 }
 
-fn validate_burn_voice(path: &Path) -> anyhow::Result<()> {
+pub(super) fn validate_burn_voice(path: &Path) -> anyhow::Result<()> {
     let mut file = File::open(path)?;
     let mut size = [0_u8; 8];
     file.read_exact(&mut size)?;

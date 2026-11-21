@@ -11,6 +11,7 @@ export interface Song {
   /** Set while the cover is the look's placeholder, not one of the track's own. */
   coverPlaceholder?: string;
   duration: string;
+  durationSeconds?: number;
   createdAt: Date;
   isGenerating?: boolean;
   /** Why a generation ended without a song; the card stays until it is removed. */

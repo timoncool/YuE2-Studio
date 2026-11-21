@@ -49,12 +49,22 @@ export const musicSourceStrings = {
   },
 };
 
+export const miDashengDurationStrings = {
+  en: { limit: 'Duration limit (seconds)', hint: 'The model rounds the limit to audio blocks and can finish sooner.', requested: 'Requested duration limit', effective: 'Audio duration', default: 'Model default' },
+  ru: { limit: 'Предельная длительность, с', hint: 'Модель округляет предел до целого аудиоблока и может завершить генерацию раньше.', requested: 'Запрошенный предел', effective: 'Длительность аудио', default: 'По умолчанию в модели' },
+  zh: { limit: '时长上限（秒）', hint: '模型会按音频块取整，也可能提前结束。', requested: '请求的时长上限', effective: '音频时长', default: '模型默认值' },
+  ja: { limit: '生成時間の上限（秒）', hint: '上限は音声ブロック単位に丸められ、生成は早く終わる場合があります。', requested: '指定した生成時間の上限', effective: '音声の長さ', default: 'モデル既定値' },
+  ko: { limit: '생성 시간 한도(초)', hint: '한도는 오디오 블록 단위로 조정되며 생성이 더 일찍 끝날 수 있습니다.', requested: '요청한 시간 한도', effective: '오디오 길이', default: '모델 기본값' },
+  pt: { limit: 'Limite de duração (segundos)', hint: 'O modelo arredonda o limite em blocos de áudio e pode terminar antes.', requested: 'Limite de duração solicitado', effective: 'Duração do áudio', default: 'Padrão do modelo' },
+};
+
 export const nativeMusicSourceStrings = {
   en: {
     model: 'Local model', loading: 'Checking model availability…', error: 'Could not check model availability.',
     engineMissing: 'This engine is not installed.', empty: 'No profiles are available.', unavailable: 'Unavailable',
     chooseLegacyProfile: 'Choose a profile to create a new take. This song used these model files.',
     styleAndLyricsRequired: 'Enter both a style and lyrics for MiniMax Music3.',
+    experimental: 'Experimental', manualWeights: 'Download the missing weights manually', modelDirectory: 'Place the files under the Studio data folder at', weightFiles: 'Weight files', modelLicense: 'Model license',
     h3PromptRequired: 'Enter an instrumental music prompt for MiniMax-H3.',
     settings: 'Generation settings', default: 'Engine default', duration: 'Duration (seconds)', steps: 'Steps',
     seed: 'Seed', lmSeed: 'Language model seed', scoreKept: 'The draft keeps your ABC score. This model does not use it.',
@@ -64,6 +74,7 @@ export const nativeMusicSourceStrings = {
     engineMissing: 'Этот движок не установлен.', empty: 'Нет доступных профилей.', unavailable: 'Недоступна',
     chooseLegacyProfile: 'Выберите профиль для нового дубля. В исходной песне использовались эти файлы моделей.',
     styleAndLyricsRequired: 'Для MiniMax Music3 укажите стиль и текст песни.',
+    experimental: 'Экспериментальная модель', manualWeights: 'Скачайте недостающие веса вручную', modelDirectory: 'Папка для файлов относительно папки данных Studio', weightFiles: 'Файлы весов', modelLicense: 'Лицензия модели',
     h3PromptRequired: 'Опишите инструментальную музыку для MiniMax-H3.',
     settings: 'Настройки генерации', default: 'По умолчанию в движке', duration: 'Длительность (с)', steps: 'Шаги',
     seed: 'Сид', lmSeed: 'Сид языковой модели', scoreKept: 'Партитура ABC сохранена в черновике. Эта модель её не использует.',
@@ -73,6 +84,7 @@ export const nativeMusicSourceStrings = {
     engineMissing: '尚未安装此引擎。', empty: '没有可用的配置。', unavailable: '不可用',
     chooseLegacyProfile: '请选择一个配置来创建新版本。原曲使用了以下模型文件。',
     styleAndLyricsRequired: '请为 MiniMax Music3 输入风格和歌词。',
+    experimental: '实验性模型', manualWeights: '手动下载缺少的权重', modelDirectory: '将文件放在 Studio 数据目录下的', weightFiles: '权重文件', modelLicense: '模型许可证',
     h3PromptRequired: '请为 MiniMax-H3 输入器乐提示词。',
     settings: '生成设置', default: '引擎默认值', duration: '时长（秒）', steps: '步数',
     seed: '种子', lmSeed: '语言模型种子', scoreKept: 'ABC 乐谱保留在草稿中。此模型不使用它。',
@@ -82,6 +94,7 @@ export const nativeMusicSourceStrings = {
     engineMissing: 'このエンジンはインストールされていません。', empty: '利用できるプロファイルがありません。', unavailable: '利用不可',
     chooseLegacyProfile: '新しいテイクを作成するにはプロファイルを選択してください。元の曲で使用したモデルファイルは以下のとおりです。',
     styleAndLyricsRequired: 'MiniMax Music3 のスタイルと歌詞を入力してください。',
+    experimental: '実験的なモデル', manualWeights: '不足している重みを手動でダウンロード', modelDirectory: 'Studio データフォルダー内の保存先', weightFiles: '重みファイル', modelLicense: 'モデルライセンス',
     h3PromptRequired: 'MiniMax-H3 にインスト曲のプロンプトを入力してください。',
     settings: '生成設定', default: 'エンジンの既定値', duration: '長さ（秒）', steps: 'ステップ',
     seed: 'シード', lmSeed: '言語モデルのシード', scoreKept: 'ABC 楽譜は下書きに残ります。このモデルは楽譜を使いません。',
@@ -91,6 +104,7 @@ export const nativeMusicSourceStrings = {
     engineMissing: '이 엔진이 설치되지 않았습니다.', empty: '사용할 수 있는 프로필이 없습니다.', unavailable: '사용 불가',
     chooseLegacyProfile: '새 테이크를 만들려면 프로필을 선택하세요. 원래 곡에는 다음 모델 파일이 사용되었습니다.',
     styleAndLyricsRequired: 'MiniMax Music3의 스타일과 가사를 모두 입력하세요.',
+    experimental: '실험 모델', manualWeights: '누락된 가중치를 수동으로 다운로드하세요', modelDirectory: 'Studio 데이터 폴더 아래 저장 경로', weightFiles: '가중치 파일', modelLicense: '모델 라이선스',
     h3PromptRequired: 'MiniMax-H3에 연주곡 프롬프트를 입력하세요.',
     settings: '생성 설정', default: '엔진 기본값', duration: '길이(초)', steps: '단계',
     seed: '시드', lmSeed: '언어 모델 시드', scoreKept: 'ABC 악보는 초안에 저장됩니다. 이 모델은 악보를 사용하지 않습니다.',
@@ -100,6 +114,7 @@ export const nativeMusicSourceStrings = {
     engineMissing: 'Este motor não está instalado.', empty: 'Nenhum perfil disponível.', unavailable: 'Indisponível',
     chooseLegacyProfile: 'Escolha um perfil para criar uma nova versão. A faixa original usou estes arquivos de modelo.',
     styleAndLyricsRequired: 'Informe o estilo e a letra para o MiniMax Music3.',
+    experimental: 'Modelo experimental', manualWeights: 'Baixe manualmente os pesos ausentes', modelDirectory: 'Destino na pasta de dados do Studio', weightFiles: 'Arquivos de pesos', modelLicense: 'Licença do modelo',
     h3PromptRequired: 'Descreva a música instrumental para o MiniMax-H3.',
     settings: 'Configurações de geração', default: 'Padrão do motor', duration: 'Duração (segundos)', steps: 'Etapas',
     seed: 'Semente', lmSeed: 'Semente do modelo de linguagem', scoreKept: 'A partitura ABC fica no rascunho. Este modelo não a utiliza.',

@@ -1,5 +1,37 @@
 [
   {
+    "id": "yue2-studio-5-0-0",
+    "date": "2026-11-21",
+    "title": {
+      "en": "Your ACE-Step and MiniMax songs in YuE2",
+      "ru": "Песни из ACE-Step и MiniMax в YuE2",
+      "zh": "在 YuE2 中打开 ACE-Step 和 MiniMax 歌曲",
+      "ja": "ACE-Step と MiniMax の曲を YuE2 で開く",
+      "ko": "YuE2에서 ACE-Step과 MiniMax 곡 열기",
+      "pt": "Suas músicas do ACE-Step e do MiniMax no YuE2"
+    },
+    "body": {
+      "en": "Preview your old library before importing it into YuE2. Open an imported song to hear the original, then choose the model and engine in Create to record another take.\n\nTo try a different singing voice, open RVC, search the voice catalog and install the voice you want. Apply it to the vocal stem and compare the new take with the original.",
+      "ru": "Перед переносом в YuE2 можно посмотреть, какие треки есть в старой библиотеке. Откройте перенесённую песню, послушайте оригинал и выберите модель и движок в разделе «Создать», чтобы сделать другой дубль.\n\nЧтобы поменять тембр вокала, откройте RVC, найдите голос в каталоге и установите его. Примените голос к вокальной дорожке и сравните новый дубль с оригиналом.",
+      "zh": "导入 YuE2 前可以先预览旧曲库。打开导入的歌曲试听原曲，然后在创作页面选择模型和引擎，生成另一个版本。\n\n要更换演唱音色，请打开 RVC，在目录中搜索并安装声音模型。将它应用到人声分轨后，就能对比新版本和原曲。",
+      "ja": "以前のライブラリの内容を確認してから YuE2 に取り込めます。取り込んだ曲で原音を聴き、作成画面でモデルとエンジンを選ぶと別テイクを作れます。\n\n歌声の音色を変えるには、RVC のカタログから好みの声を探してインストールします。ボーカルトラックに適用すると、新しいテイクを原音と聴き比べられます。",
+      "ko": "기존 라이브러리를 미리 본 뒤 YuE2로 가져올 수 있습니다. 가져온 곡을 열어 원곡을 듣고, 만들기 화면에서 모델과 엔진을 골라 새 테이크를 만드세요.\n\n노래의 음색을 바꾸려면 RVC 카탈로그에서 원하는 목소리를 검색해 설치하세요. 보컬 트랙에 적용한 다음 새 테이크와 원곡을 비교해 들을 수 있습니다.",
+      "pt": "Confira as músicas da biblioteca antiga antes de importá-las para o YuE2. Abra uma música importada para ouvir o original. Na tela de criação, escolha o modelo e o motor para gerar outra versão.\n\nPara mudar o timbre do canto, abra o RVC, procure uma voz no catálogo e instale-a. Aplique a voz à faixa vocal e compare a nova versão com o original."
+    },
+    "tags": [
+      "YuE2",
+      "ACE-Step",
+      "MiniMax",
+      "RVC"
+    ],
+    "links": [
+      {
+        "label": "YuE2 Studio",
+        "url": "https://timoncool.github.io/YuE2-Studio/"
+      }
+    ]
+  },
+  {
     "id": "yue2-studio-4-1-0",
     "date": "2026-11-16",
     "title": {
