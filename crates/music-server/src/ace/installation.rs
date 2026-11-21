@@ -206,6 +206,10 @@ fn contains_adapter(directory: &Path, name: &str) -> bool {
 }
 
 impl Installation {
+    pub(crate) fn executable(&self) -> Option<&Path> {
+        self.executable.as_deref()
+    }
+
     pub fn engine_installed(&self) -> bool {
         self.executable.as_deref().is_some_and(usable_executable)
     }

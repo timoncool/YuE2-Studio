@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useI18n } from '../context/I18nContext';
-import { enginePageStrings, showUnsupportedEngines } from '../i18n/enginePage';
+import { enginePageStrings, runtimeSourceStrings, showUnsupportedEngines } from '../i18n/enginePage';
 import { apiUrl } from '../services/apiBase';
 import type { PairStatus } from '../services/musicPair';
 import { SELF_READ, useOpenRouterSettings, useSetupStatus } from '../services/studioQueries';
@@ -16,12 +16,20 @@ const native = [
   { id: 'audio.cpp', name: 'audio.cpp', path: '/v1/music/audio-cpp/models' },
   { id: 'hotstep', name: 'HOT-Step', path: '/v1/music/native/hotstep/profiles' },
 ] as const;
-type ModelStatus = { id: string; label?: string; name?: string; ready: boolean; missing_bytes?: number };
-type ProfileStatus = { engine_installed: boolean; adapter_runtime_update?: boolean; profiles?: ModelStatus[]; models?: ModelStatus[] };
+type ModelStatus = { id: string; label?: string; name?: string; ready: boolean; missing_bytes?: number; install_path?: string | null };
+type ProfileStatus = {
+  engine_installed: boolean;
+  adapter_runtime_update?: boolean;
+  selected_executable?: { path: string; source: 'local' | 'managed' } | null;
+  profiles?: ModelStatus[];
+  models?: ModelStatus[];
+};
 type RuntimeStatus = { supported: boolean; installed?: boolean; revision?: string; installed_revision?: string | null };
 type RvcStatus = { installed: boolean; supported: boolean; reason?: string | null };
-const installable = ['heartmula', 'stable_audio', 'soulx_singer', 'soulx_singer_svc', 'yue2', 'ace_step',
-  'stable-audio-3-medium', 'heartmula-3b-q8_0', 'hotstep-minimax-music3', 'hotstep-ace-step-1.5', 'hotstep-yue2-q4-k-m'] as const;
+function modelInstallPath(engine: string, path?: string | null) {
+  if (engine === 'audio.cpp' && path === '/v1/music/audio-cpp/models/install') return path;
+  if (engine === 'hotstep' && path && /^\/v1\/music\/native\/hotstep\/(?:[a-z0-9-]+\/)?install$/.test(path)) return path;
+}
 
 function InstallDetails({ label, initialOpen = false, children }: { label: string; initialOpen?: boolean; children: ReactNode }) {
   const [open, setOpen] = useState(initialOpen);
@@ -52,6 +60,7 @@ export function EnginesAndUpdates({ focus, onNavigate }: {
     target?.scrollIntoView?.({ block: 'nearest' });
   }, [focus]);
   const [title, active, installed, missing, checking, unavailable, manageModels, settings] = enginePageStrings[language];
+  const [managedPackage, localExecutable] = runtimeSourceStrings[language];
   const setup = useSetupStatus<{ ready?: boolean; engine_ready?: boolean }>();
   const cloud = useOpenRouterSettings<{ configured?: boolean }>();
   const catalogue = useQuery({
@@ -115,7 +124,9 @@ export function EnginesAndUpdates({ focus, onNavigate }: {
             <p>{status(profile?.engine_installed)}{activeId === engine.id && ' · ' + active}
               {ready !== undefined && <> · {t(ready ? 'profileReady' : 'profileNotInstalled')}</>}</p>
             {unsupported && <p className="text-sm">{t('engineUnavailable')}</p>}
-            {installedRevision && <p className="text-xs">{installed} · <code>{installedRevision.slice(0, 12)}</code></p>}
+            {profile?.selected_executable?.source === 'local' &&
+              <p className="break-all text-xs">{localExecutable} · <code>{profile.selected_executable.path}</code></p>}
+            {installedRevision && <p className="text-xs">{managedPackage} · {installed} · <code>{installedRevision.slice(0, 12)}</code></p>}
             {runtime?.revision && runtime.revision !== installedRevision &&
               <p className="text-xs">{t('download')} · <code>{runtime.revision.slice(0, 12)}</code></p>}
             {(engine.id === 'acestep-cpp' || engine.id === 'minimaxmusic-cpp') && profile &&
@@ -123,10 +134,12 @@ export function EnginesAndUpdates({ focus, onNavigate }: {
               <InstallDetails key={focus} label={t('download')} initialOpen={focus === engine.id}>
                 <NativeMusicRuntimeInstall engine={engine.id} update={profile.adapter_runtime_update} onInstalled={refresh} />
               </InstallDetails>}
-            {(engine.id === 'hotstep' || engine.id === 'audio.cpp') && models?.map(model => {
-              const id = installable.find(value => value === model.id);
-              return id && !model.ready ? <InstallDetails key={id} label={model.label ?? model.name ?? id}>
-                <AudioCppModelInstall model={id} bytes={model.missing_bytes ?? 0} language={language} onInstalled={refresh} />
+            {models?.map(model => {
+              const installPath = modelInstallPath(engine.id, model.install_path);
+              const label = model.label ?? model.name ?? model.id;
+              return installPath && !model.ready ? <InstallDetails key={model.id} label={label}>
+                <AudioCppModelInstall model={model.id} bytes={model.missing_bytes ?? 0} language={language} onInstalled={refresh}
+                  target={{ catalogue: engine.path, installPath, label }} />
               </InstallDetails> : null;
             })}
           </li>;

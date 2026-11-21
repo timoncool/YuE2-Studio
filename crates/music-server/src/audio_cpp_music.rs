@@ -465,6 +465,7 @@ pub(super) async fn models(State(state): State<AppState>) -> Json<Value> {
             continue;
         };
         let installing = managed.lease.try_lock().is_err();
+        model["install_path"] = Value::String("/v1/music/audio-cpp/models/install".into());
         model["installing"] = Value::Bool(installing);
         if installing {
             model["ready"] = Value::Bool(false);

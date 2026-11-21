@@ -82,8 +82,13 @@ const installLabels: Record<string, readonly [string, string, string]> = {
   pt: ['Instalar HeartMuLa', 'Instalando HeartMuLa…', 'Não foi possível instalar HeartMuLa.'],
 };
 
-export function AudioCppModelInstall({ model, bytes, licenseUrl, language, onInstalled }: {
-  model: 'heartmula' | 'stable_audio' | 'stable-audio-3-medium' | 'heartmula-3b-q8_0' | 'hotstep-minimax-music3' | 'hotstep-ace-step-1.5' | 'hotstep-yue2-q4-k-m' | 'yue2' | 'ace_step' | 'soulx_singer' | 'soulx_singer_svc';
+type LegacyManagedModel = 'heartmula' | 'stable_audio' | 'stable-audio-3-medium' | 'heartmula-3b-q8_0'
+  | 'hotstep-minimax-music3' | 'hotstep-ace-step-1.5' | 'hotstep-yue2-q4-k-m' | 'yue2' | 'ace_step' | 'soulx_singer' | 'soulx_singer_svc';
+type ModelInstallTarget =
+  | { model: LegacyManagedModel; target?: never }
+  | { model: string; target: { catalogue: string; installPath: string; label: string } };
+
+export function AudioCppModelInstall({ model, bytes, licenseUrl, language, onInstalled, target }: ModelInstallTarget & {
   bytes: number;
   licenseUrl?: string;
   language: string;
@@ -98,16 +103,16 @@ export function AudioCppModelInstall({ model, bytes, licenseUrl, language, onIns
   const hotstepYue = model === 'hotstep-yue2-q4-k-m';
   const hotstep = model === 'stable-audio-3-medium' || hotstepHeart || hotstepMinimax || hotstepAce || hotstepYue;
   const soulx = model === 'soulx_singer' ? 'SoulX-Singer SVS' : model === 'soulx_singer_svc' ? 'SoulX-Singer SVC' : undefined;
-  const name = soulx ?? (model === 'ace_step' ? 'ACE-Step 1.5 Turbo (audio.cpp)' : model === 'yue2' ? 'YuE2 (audio.cpp)' : hotstepYue ? 'YuE2 (HOT-Step)' : hotstepAce ? 'ACE-Step 1.5 Turbo (HOT-Step)' : hotstepMinimax ? 'MiniMax Music3 (HOT-Step)' : hotstepHeart ? 'HeartMuLa 3B (HOT-Step)' : hotstep ? 'Stable Audio 3 Medium (HOT-Step)' : model === 'stable_audio' ? 'Stable Audio 3' : 'HeartMuLa');
+  const name = target?.label ?? soulx ?? (model === 'ace_step' ? 'ACE-Step 1.5 Turbo (audio.cpp)' : model === 'yue2' ? 'YuE2 (audio.cpp)' : hotstepYue ? 'YuE2 (HOT-Step)' : hotstepAce ? 'ACE-Step 1.5 Turbo (HOT-Step)' : hotstepMinimax ? 'MiniMax Music3 (HOT-Step)' : hotstepHeart ? 'HeartMuLa 3B (HOT-Step)' : hotstep ? 'Stable Audio 3 Medium (HOT-Step)' : model === 'stable_audio' ? 'Stable Audio 3' : 'HeartMuLa');
   const [install, installing, failed] = (installLabels[language] ?? installLabels.en).map(label => label.replace('HeartMuLa', name));
   const size = bytes > 0 ? ` · ${new Intl.NumberFormat(language, { maximumFractionDigits: 2 }).format(bytes / (1024 ** 3))} GiB` : '';
 
   async function status(signal?: AbortSignal) {
-    const response = await fetch(apiUrl(hotstep ? '/v1/music/native/hotstep/profiles' : '/v1/music/audio-cpp/models'), { signal });
+    const response = await fetch(apiUrl(target?.catalogue ?? (hotstep ? '/v1/music/native/hotstep/profiles' : '/v1/music/audio-cpp/models')), { signal });
     if (!response.ok || signal?.aborted) return;
     const data = await response.json();
     if (signal?.aborted) return;
-    const row = (hotstep ? data.profiles : data.models)?.find((item: {id: string}) => item.id === model);
+    const row = (data.profiles ?? data.models)?.find((item: {id: string}) => item.id === model);
     if (!row) return;
     setBusy(Boolean(row.installing));
     const download = row.download;
@@ -123,13 +128,13 @@ export function AudioCppModelInstall({ model, bytes, licenseUrl, language, onIns
     poll();
     const timer = window.setInterval(poll, 1_000);
     return () => { controller.abort(); window.clearInterval(timer); };
-  }, [model, onInstalled]);
+  }, [model, onInstalled, target?.catalogue]);
 
   async function start() {
     setBusy(true);
     setError('');
     try {
-      const route = hotstep ? `/v1/music/native/hotstep/${hotstepYue ? 'yue2' : hotstepAce ? 'ace-step-1.5' : hotstepMinimax ? 'minimax-music3' : hotstepHeart ? 'heartmula' : 'stable-audio-3'}/install` : '/v1/music/audio-cpp/models/install';
+      const route = target?.installPath ?? (hotstep ? `/v1/music/native/hotstep/${hotstepYue ? 'yue2' : hotstepAce ? 'ace-step-1.5' : hotstepMinimax ? 'minimax-music3' : hotstepHeart ? 'heartmula' : 'stable-audio-3'}/install` : '/v1/music/audio-cpp/models/install');
       const result = await fetch(apiUrl(route), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

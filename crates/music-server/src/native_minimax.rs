@@ -922,6 +922,10 @@ impl Installation {
         self.executable.as_ref().is_some_and(|file| file.is_file())
     }
 
+    pub(crate) fn executable(&self) -> Option<&Path> {
+        self.executable.as_deref()
+    }
+
     pub(crate) fn profiles(&self) -> Vec<ProfileStatus> {
         let adapters = self.native_adapters();
         PROFILES.iter().map(|profile| {
