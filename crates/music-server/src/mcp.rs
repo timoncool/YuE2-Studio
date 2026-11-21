@@ -462,7 +462,7 @@ fn annotations(name: &str) -> Value {
     let read_only = READ_NAMES.contains(&name) || !changes && (READS.iter().any(|part| name.ends_with(part) || name.contains(&format!("{part}_"))) || name.starts_with("writing_"));
     let destructive = name.ends_with("_delete") || name.ends_with("_remove") || name == "processing_discard" || name.ends_with("_cancel") || name.contains("_cancel_") || OVERWRITES.contains(&name);
     // what reaches the internet: OpenRouter, Hugging Face, the lyric databases and every download
-    let open_world = name.starts_with("openrouter_") || name == "problem_report" || name.contains("_hf") || name == "lyrics_find" || name == "models_download" || name == "models_update_apply" || name == "lora_install_catalog" || name.ends_with("_install") && name != "training_checkpoint_install";
+    let open_world = name.starts_with("openrouter_") || name == "problem_report" || name.contains("_hf") || name == "lyrics_find" || name == "models_download" || name == "models_update_apply" || name == "lora_install_catalog" || name == "rvc_training_install_runtime" || name.ends_with("_install") && name != "training_checkpoint_install";
     let title = name.replace('_', " ");
     json!({ "title": title, "readOnlyHint": read_only, "destructiveHint": destructive, "idempotentHint": read_only || name.ends_with("_set") || name.contains("_select") || name == "rvc_voice_remove", "openWorldHint": open_world })
 }
@@ -535,6 +535,8 @@ const JOURNAL: &[(&str, &str, &str)] = &[
     ("training_start", "started", "training"),
     ("rvc_training_start", "started", "training"),
     ("rvc_training_install_voice", "installed", "rvc_voice"),
+    ("rvc_training_install_runtime", "started", "download"),
+    ("rvc_training_runtime_cancel", "cancelled", "download"),
     ("hotstep_sa3_training_install", "started", "download"),
     ("hotstep_sa3_training_start", "started", "training"),
     ("hotstep_heartmula_training_start", "started", "training"),
@@ -3166,6 +3168,18 @@ fn tools() -> &'static [Tool] {
                 description: "Train an RVC v2 Safetensors voice on isolated voice recordings in a Studio dataset, using native Burn CUDA.",
                 schema: || object(json!({"dataset_id":{"type":"string"},"name":{"type":"string"},"settings":{"type":"object","properties":{"epochs":{"type":"integer","minimum":1},"batch_size":{"type":"integer","minimum":1},"learning_rate":{"type":"number"}}}}), &["dataset_id"]),
                 call: |args| post("/v1/training/rvc-burn".into(), args.clone()),
+            },
+            Tool {
+                name: "rvc_training_install_runtime",
+                description: "Download and verify the pinned RVC Burn CUDA trainer and its resources. Follow the transfer in rvc_training_status.",
+                schema: nothing,
+                call: |_| post("/v1/training/rvc-burn/setup".into(), json!({})),
+            },
+            Tool {
+                name: "rvc_training_runtime_cancel",
+                description: "Cancel the current RVC Burn component download.",
+                schema: nothing,
+                call: |_| Ok(Call { method: Method::DELETE, path: "/v1/training/rvc-burn/setup".into(), payload: Payload::None }),
             },
             Tool {
                 name: "rvc_training_install_voice",

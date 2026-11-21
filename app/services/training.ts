@@ -194,9 +194,15 @@ export const updateItem = (id: string, item: string, patch: Partial<Pick<Dataset
 export const deleteItem = (id: string, item: string) => call<Dataset>(`/v1/training/datasets/${id}/items/${item}`, { method: 'DELETE' });
 
 export const startRun = (datasetId: string, name: string, recipe: Recipe) => call<TrainingRun>('/v1/training/runs', json('POST', { dataset_id: datasetId, name, recipe }));
-export interface RvcBurnStatus { ready: boolean; cuda: boolean; missing: string[]; folder: string }
+export interface RvcBurnStatus {
+  ready: boolean; cuda: boolean; missing: string[]; folder: string;
+  installable: boolean; missing_bytes: number; install_reason: string | null;
+  download: { downloaded_bytes: number; total_bytes: number; done: boolean; error?: string | null } | null;
+}
 export interface RvcBurnSettings { epochs: number; batch_size: number; learning_rate: number }
 export const getRvcBurnTraining = () => call<RvcBurnStatus>('/v1/training/rvc-burn', { headers: SELF_READ });
+export const installRvcBurnRuntime = () => call<{ started: boolean }>('/v1/training/rvc-burn/setup', { method: 'POST' });
+export const cancelRvcBurnRuntime = () => call<RvcBurnStatus>('/v1/training/rvc-burn/setup', { method: 'DELETE' });
 export const startRvcBurnTraining = (datasetId: string, name: string, settings: RvcBurnSettings) =>
   call<TrainingRun>('/v1/training/rvc-burn', json('POST', { dataset_id: datasetId, name, settings }));
 export const installRvcBurnVoice = (runId: string) =>
