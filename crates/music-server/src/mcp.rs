@@ -492,6 +492,7 @@ const JOURNAL: &[(&str, &str, &str)] = &[
     ("song_job_score_again", "started", "generation"),
     ("song_job_again", "started", "generation"),
     ("song_create", "started", "generation"),
+    ("controlfoley_video_import", "imported", "video"),
     ("controlfoley_create", "started", "generation"),
     ("sound_effect_create", "started", "generation"),
     ("song_replay", "started", "generation"),
