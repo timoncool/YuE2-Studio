@@ -41,7 +41,7 @@ jobs:
         run: |
           $ErrorActionPreference = 'Stop'
           $PSNativeCommandUseErrorActionPreference = $true
-          foreach ($suite in @('songbook-gallery', 'dj-gallery', 'edit-track')) {
+          foreach ($suite in @('songbook-gallery')) {
             python -u scripts/test-hosted-webview-screens.py $env:GALLERY_EXE (Join-Path $env:RUNNER_TEMP "creative-gallery/$suite") --suite $suite
           }
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02

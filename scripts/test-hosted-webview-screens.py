@@ -536,7 +536,8 @@ def check_songbook_gallery(root):
     page = wait_page('button "Print A4"')
     (out/"songbook.txt").write_text(page, encoding="utf8")
     time.sleep(.8)
-    screenshot("songbook")
+    script = pathlib.Path(__file__).with_name("capture-native-songbook.mjs")
+    subprocess.run(["node", str(script), str(out/"songbook.png")], check=True, timeout=20)
 
 
 def check_dj_gallery(root):
