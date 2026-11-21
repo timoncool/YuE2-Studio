@@ -2029,6 +2029,34 @@ it('submits a MuLaCover library original and restores it for a new take', async 
   });
 });
 
+it('keeps the same explicitly copied YuE2 seeds in two ordinary Create requests', async () => {
+  act(() => root.render(panel({})));
+  await flush();
+  act(() => bridgeCommands.get('create_set')!({ fields: {
+    style: 'acoustic folk', lyrics: 'Morning light', randomize_seed: false,
+    lm_seed: '4294967295', seed: '721',
+  } }));
+  await flush();
+  act(() => bridgeCommands.get('create_submit')!({}));
+  act(() => bridgeCommands.get('create_submit')!({}));
+  expect(sent).toHaveLength(2);
+  expect(sent[0]).toMatchObject({ lm_seed: 4294967295, seed: 721 });
+  expect(sent[1]).toEqual(sent[0]);
+});
+
+it('refuses a manually copied seed that cannot be sent exactly', async () => {
+  act(() => root.render(panel({})));
+  await flush();
+  act(() => bridgeCommands.get('create_set')!({ fields: {
+    style: 'acoustic folk', lyrics: 'Morning light', randomize_seed: false,
+    lm_seed: '9007199254740993', seed: '721',
+  } }));
+  await flush();
+  act(() => bridgeCommands.get('create_submit')!({}));
+  expect(sent).toHaveLength(0);
+  expect(bridgeCommands.get('create_get')!({})).toMatchObject({ error: 'seedIntegerRange' });
+});
+
 describe('Auto max duration', () => {
   const autoButton = () => buttonNamed('maxDurationAuto');
   // an instrumental with No score goes straight to onGenerate, with no score to compose first

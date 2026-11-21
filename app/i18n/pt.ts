@@ -1985,6 +1985,7 @@ export const pt = {
     songsPerRequestHint: 'Aumentar o limite de músicas em Definições → Motor para gerar várias músicas de uma vez; cada uma precisa da sua própria cache KV.',
     lmSeedYue: 'Semente da composição',
     noiseSeed: 'Semente do som',
+    seedIntegerRange: 'Introduza uma semente inteira entre 0 e 9007199254740991 ou use -1 para um valor aleatório.',
     stageScoreSampling: 'Amostragem da partitura',
     stageScoreSamplingHint: 'Quão livremente o modelo escreve o plano ABC. Os campos vazios usam os valores do checkpoint.',
     solver: 'Método de resolução',

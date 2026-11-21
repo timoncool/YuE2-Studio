@@ -767,6 +767,11 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
   const [randomizeSeed, setRandomizeSeed] = useState(() => keptFlag(kept, 'randomizeSeed', true));
   const [lmSeed, setLmSeed] = useState(() => keptText(kept, 'lmSeed'));
   const [seed, setSeed] = useState(() => keptText(kept, 'seed'));
+  const invalidManualSeed = yue && !randomizeSeed && [lmSeed, seed].some(value => {
+    const seedText = value.trim();
+    const parsed = Number(seedText);
+    return seedText !== '' && (!Number.isSafeInteger(parsed) || parsed < -1);
+  });
   const [semanticTokens, setSemanticTokens] = useState('');
   const [saveMenuOpen, setSaveMenuOpen] = useState(false);
   const [takeChoiceOpen, setTakeChoiceOpen] = useState(false);
@@ -1281,8 +1286,10 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
     const lmSeedValue = randomizeSeed ? undefined : numberOrUndefined(lmSeed);
     const seedValue = randomizeSeed ? undefined : numberOrUndefined(seed);
     const pinned = (value: number | undefined) => value !== undefined && value >= 0;
-    if (!forFile || pinned(lmSeedValue)) request.lm_seed = pinned(lmSeedValue) ? lmSeedValue : randomSeed();
-    if (!forFile || pinned(seedValue)) request.seed = pinned(seedValue) ? seedValue : randomSeed();
+    if (!invalidManualSeed) {
+      if (!forFile || pinned(lmSeedValue)) request.lm_seed = pinned(lmSeedValue) ? lmSeedValue : randomSeed();
+      if (!forFile || pinned(seedValue)) request.seed = pinned(seedValue) ? seedValue : randomSeed();
+    }
     if (semanticTokens.trim()) request.semantic_tokens = semanticTokens.trim();
     if (!forFile && mode === 'cover' && coverSongId && request.abc) request.cover_of = coverSongId;
     if (musicEngine === 'local' && mode !== 'cover' && backingSongId) request.backing_song_id = backingSongId;
@@ -1376,6 +1383,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
   /** The score the model writes from the form's style and lyrics, nothing sung. */
   const writeScoreAlone = (signal: AbortSignal) => {
     if (!ready) throw new Error(unavailableHint);
+    if (invalidManualSeed) throw new Error(tt('seedIntegerRange'));
     if (!style.trim() && !lyrics.trim()) throw new Error(tt('styleOrLyricsRequired'));
     const pinned = randomizeSeed ? undefined : numberOrUndefined(lmSeed);
     return composeScore({
@@ -1392,6 +1400,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
   /** Writes the score alone, so it can be read and edited before a song is sung from it. */
   const runComposition = async () => {
     if (!ready) { setError(unavailableHint); return; }
+    if (invalidManualSeed) { setError(tt('seedIntegerRange')); return; }
     if (!style.trim() && !lyrics.trim()) { setError(tt('styleOrLyricsRequired')); return; }
     setError(null);
     setComposing(true);
@@ -1800,7 +1809,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
 
   const variationChoices = Object.entries(samplingPresets.semantic_sampling).filter(([, knobs]) =>
     !presetFields.every(key => numberOrUndefined(semanticSampling[key]) === knobs[key]));
-  const canVary = yue && ready && !pair.blocked && !queueBusy && !forever && !composing && !instrumental
+  const canVary = yue && ready && !invalidManualSeed && !pair.blocked && !queueBusy && !forever && !composing && !instrumental
     && Boolean(abc.trim()) && effectiveCot !== 'off' && !semanticTokens.trim() && Boolean(style.trim() || lyrics.trim());
   const createVariations = () => {
     if (!canVary) return;
@@ -1817,6 +1826,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
 
   const submit = () => {
     if (pair.blocked) return;
+    if (invalidManualSeed) { setError(tt('seedIntegerRange')); return; }
     if (signed) {
       if (!packages.ready || !packages.engine || !packages.model) return;
       if (!style.trim() && !lyrics.trim()) { setError(tt('styleOrLyricsRequired')); return; }
@@ -1923,6 +1933,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
 
   const renderTake = (fresh: boolean) => {
     setTakeChoiceOpen(false);
+    if (!fresh && invalidManualSeed) { setError(tt('seedIntegerRange')); return; }
     const request = buildRequest();
     if (fresh) {
       delete request.semantic_tokens;
@@ -1973,8 +1984,8 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
     mode,
     fields: { ...Object.fromEntries(Object.entries(formFields).map(([key, [value]]) => [key, value])), randomize_seed: randomizeSeed, adapters },
     request: buildRequest(),
-    ready: !pair.blocked && (signed ? packages.ready : cloud ? Boolean(selectedMusicModel) : nativeEngine ? native.ready : ready),
-    error: error ?? pair.error ?? pair.status?.error,
+    ready: !invalidManualSeed && !pair.blocked && (signed ? packages.ready : cloud ? Boolean(selectedMusicModel) : nativeEngine ? native.ready : ready),
+    error: invalidManualSeed ? tt('seedIntegerRange') : error ?? pair.error ?? pair.status?.error,
     music_pair: pair.status,
     variations: { ready: canVary, presets: variationChoices.map(([name]) => name) },
     style_hints: styleHints,
