@@ -48,7 +48,7 @@ class Provider(http.server.BaseHTTPRequestHandler):
 
 
 @contextlib.contextmanager
-def http(handler):
+def local_http(handler):
     with http.server.ThreadingHTTPServer(("127.0.0.1", 0), handler) as server:
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
@@ -82,7 +82,7 @@ def wait_until(check):
 
 
 def run(binary, bundle, port):
-    with tempfile.TemporaryDirectory(prefix="yue-create-keys-") as temp, http(Provider) as upstream, http(
+    with tempfile.TemporaryDirectory(prefix="yue-create-keys-") as temp, local_http(Provider) as upstream, local_http(
         partial(http.server.SimpleHTTPRequestHandler, directory=bundle)
     ) as ui_port:
         profile = Path(temp)
