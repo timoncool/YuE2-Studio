@@ -1,4 +1,4 @@
-name: Windows studio service for SoulX acceptance
+name: Verify the published SoulX runtime install
 
 on:
   push:
@@ -13,20 +13,19 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7.0.1
+      - uses: actions/checkout@v7.0.1
         with:
-          ref: c018540468a867a7ace80823c45b3e240ee91fe7
+          ref: 30505a3eef88b77f3975e2ac6cba5afb5416cc80
+          path: studio
       - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: studio
       - run: cargo build --locked -p music-server --bin music-server
-      - run: |
-          git rev-parse HEAD | Set-Content -Encoding utf8NoBOM revision.txt
-          (Get-FileHash target/debug/music-server.exe -Algorithm SHA256).Hash | Set-Content -Encoding utf8NoBOM music-server.sha256
+        working-directory: studio
+      - run: python -u scripts/qa-soulx-published-install.py
       - uses: actions/upload-artifact@v4
         with:
-          name: soulx-studio-windows
-          compression-level: 6
-          retention-days: 2
-          path: |
-            target/debug/music-server.exe
-            music-server.sha256
-            revision.txt
+          name: soulx-published-install
+          retention-days: 5
+          path: soulx-published-install.json
 
