@@ -134,9 +134,13 @@ pub(crate) async fn list(
 ) -> Result<Json<serde_json::Value>, Failure> {
     let root = update_data_root(&state);
     let plan = plan(root).await.map_err(failure)?;
+    let notice_scope = Sha256::digest(root.as_os_str().as_encoded_bytes())
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect::<String>();
     Ok(Json(
         serde_json::json!({"mode":policy(root).map_err(failure)?.mode,
-        "updates":plan.updates, "errors":plan.errors}),
+        "updates":plan.updates, "errors":plan.errors, "notice_scope":notice_scope}),
     ))
 }
 

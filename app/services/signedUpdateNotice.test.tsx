@@ -99,3 +99,43 @@ it('reads the plan once per server revision, even across many setup polls', asyn
     vi.unstubAllGlobals();
   }
 });
+
+it('remembers an announced version after restart while keeping engines and profiles independent', async () => {
+  let noticeScope = 'profile-a';
+  let update = { kind: 'music-engines', id: 'ace', from_version: '1', to_version: '2' };
+  vi.stubGlobal('fetch', async () => Response.json({ mode: 'notify', notice_scope: noticeScope, updates: [update] }));
+  const announce = vi.fn();
+  const root = createRoot(document.createElement('div'));
+  function Notice() {
+    useSignedUpdateNotice(true, 'new-process', true, announce);
+    return null;
+  }
+  const restart = async () => {
+    await act(async () => root.render(null));
+    const client = new QueryClient();
+    await act(async () => root.render(<QueryClientProvider client={client}><Notice /></QueryClientProvider>));
+    await act(async () => { await new Promise(resolve => setTimeout(resolve, 10)); });
+  };
+  try {
+    await restart();
+    expect(announce).toHaveBeenCalledTimes(1);
+    await restart();
+    expect(announce).toHaveBeenCalledTimes(1);
+    update = { ...update, to_version: '3' };
+    await restart();
+    expect(announce).toHaveBeenCalledTimes(2);
+    update = { ...update, id: 'minimax' };
+    await restart();
+    expect(announce).toHaveBeenCalledTimes(3);
+    noticeScope = 'profile-b';
+    await restart();
+    expect(announce).toHaveBeenCalledTimes(4);
+    noticeScope = 'profile-a';
+    await restart();
+    expect(announce).toHaveBeenCalledTimes(4);
+  } finally {
+    await act(async () => root.unmount());
+    localStorage.clear();
+    vi.unstubAllGlobals();
+  }
+});
