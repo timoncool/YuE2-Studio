@@ -2119,6 +2119,7 @@ export const pt = {
     hipCancel: 'Cancelar download',
     kvQ8OffHip: 'O cache KV em Q8 não está disponível nesta versão HIP.',
     computeBackend_cpu: 'Processador',
+    computeBackendHint_macAuto: 'O modo Auto usa Metal em Apple Silicon. Se o motor não arrancar com Metal, usa o processador.',
     computeBackendHint_auto: 'CUDA numa placa NVIDIA; se aqui o CUDA não funcionar, Vulkan (experimental em AMD e Intel); se também não, o processador. Um dispositivo que falha é saltado até o estúdio reiniciar.',
     computeBackendHint_cuda: 'Só NVIDIA, e o mais rápido aí. Precisa do cuBLAS, descarregado uma vez no primeiro arranque.',
     computeBackendHint_vulkan: 'Através do controlador da própria placa, nada para descarregar. Verificado em NVIDIA; experimental em AMD e Intel.',
