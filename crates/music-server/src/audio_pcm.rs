@@ -218,7 +218,7 @@ pub fn duration_seconds(path: &Path) -> Option<f64> {
     Some(track.num_frames? as f64 / params.sample_rate? as f64)
 }
 
-fn decode_channels(path: &Path) -> Result<(Vec<Vec<f32>>, u32)> {
+pub(crate) fn decode_channels(path: &Path) -> Result<(Vec<Vec<f32>>, u32)> {
     let file = File::open(path).with_context(|| format!("open {}", path.display()))?;
     let extension = path.extension().and_then(|value| value.to_str());
     decode_source(Box::new(file), extension).with_context(|| format!("decode {}", path.display()))

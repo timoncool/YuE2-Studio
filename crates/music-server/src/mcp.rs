@@ -2058,8 +2058,9 @@ fn tools() -> &'static [Tool] {
             },
             Tool {
                 name: "processing_start",
-                description: "Run audio processing on a library song: any of denoise, lifter (Spectral Lifter), naturalize (vocal naturaliser), vst (plugin chain), master (to a reference). Each is an object of its settings; processing_get shows the result, then processing_keep or processing_discard.",
-                schema: || object(json!({ "song_id": { "type": "string" }, "denoise": { "type": "object" }, "lifter": { "type": "object" }, "naturalize": { "type": "object" }, "vst": { "type": "array" }, "master": { "type": "object" } }), &["song_id"]),
+                description: "Run audio processing on a library song: any of denoise, lifter (Spectral Lifter), naturalize (vocal naturaliser), vst (plugin chain), master (to a reference), normalize (peak normalization). The optional region in seconds applies the effects only to that part. Each stage is an object of its settings; processing_get shows the result, then processing_keep or processing_discard.",
+                schema: || object(json!({ "song_id": { "type": "string" }, "denoise": { "type": "object" }, "lifter": { "type": "object" }, "naturalize": { "type": "object" }, "vst": { "type": "array" }, "master": { "type": "object" }, "normalize": { "type": "object" },
+                    "region": { "type": "object", "properties": { "start_seconds": { "type": "number", "minimum": 0 }, "end_seconds": { "type": "number", "exclusiveMinimum": 0 } }, "required": ["start_seconds", "end_seconds"] } }), &["song_id"]),
                 call: |args| post(format!("/v1/library/songs/{}/process", segment(&text(args, "song_id")?)), body_without(args, &["song_id"])),
             },
             Tool {
