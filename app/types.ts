@@ -156,7 +156,7 @@ export interface YueRequest {
   vevo2?: import('./components/Vevo2SingingFields').Vevo2References;
   controlfoley_video?: string;
   soulx?: import('./components/SoulXSingerFields').SoulXInputs;
-  ace?: { guidance_scale?: number };
+  ace?: import('./components/AceTaskControls').AceCreateOptions;
   /** Style tags or a short style prompt, verbatim under `[Tags]`. */
   style: string;
   /** Lyrics with section tags, verbatim under `[Lyrics]`. */

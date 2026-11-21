@@ -378,6 +378,60 @@ it('keeps settings by native engine and profile and submits the selected pair', 
   expect(field('textarea[aria-label="scoreCardTitle"]')!.value).toBe('');
 });
 
+it('creates native ACE covers and restores a migrated repaint with its source, reference and range', async () => {
+  librarySongs = [
+    { id: 'origin', title: 'Source track', audioUrl: '/origin.wav' },
+    { id: 'voice', title: 'Reference track', audioUrl: '/voice.wav' },
+  ] as Song[];
+  vi.mocked(fetch).mockImplementation(async url => String(url).endsWith('/acestep-cpp/profiles')
+    ? Response.json({ engine: 'acestep-cpp', engine_installed: true, profiles: [{ id: 'balanced', label: 'Balanced', ready: true, missing: [], total_bytes: 1 }] })
+    : Response.json([]));
+  const select = (label: string, value: string) => act(() => {
+    const input = host.querySelector<HTMLSelectElement>(`select[aria-label="${label}"]`)!;
+    input.value = value;
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  const control = (name: string) => field(`input[aria-label="${name}"]`) as HTMLInputElement;
+  const create = () => buttonNamed('create') as HTMLButtonElement;
+  act(() => root.render(panel({ musicEngine: 'acestep-cpp' })));
+  await flush();
+  select('Local model', 'balanced');
+  await flush();
+  type(field('textarea[aria-label="styleCardTitle"]')!, 'acoustic folk');
+  select('ACE-Step task', 'cover');
+  expect(create().disabled).toBe(true);
+  select('Source song', 'origin');
+  type(control('Cover strength'), '0.65');
+  click(create());
+  expect(sent[0]).toMatchObject({
+    music_source: { kind: 'native', engine: 'acestep-cpp', model: 'balanced' },
+    style: 'acoustic folk',
+    ace: { task_type: 'cover', source_song_id: 'origin', audio_cover_strength: 0.65 },
+  });
+
+  const imported = {
+    ditModel: 'acestep-cpp', lmModel: 'balanced', title: 'Migrated repaint', style: 'indie pop', lyrics: 'new verse',
+    generationParams: {
+      task_type: 'repaint', source_song_id: 'origin', reference_song_id: 'voice', repainting_start: 2, repainting_end: 4,
+      guidance_scale: 3, seed: 22, music_source: { kind: 'native', engine: 'acestep-cpp', model: 'balanced' },
+    },
+  } as Song;
+  act(() => root.render(panel({ musicEngine: 'acestep-cpp', initialData: { song: imported, timestamp: 1 } })));
+  await flush();
+  expect(host.querySelector<HTMLSelectElement>('select[aria-label="ACE-Step task"]')!.value).toBe('repaint');
+  expect(control('Repaint start (seconds)').value).toBe('2');
+  expect(control('Repaint end (seconds)').value).toBe('4');
+  expect(field('input[aria-label="Cover strength"]')).toBeNull();
+  type(control('Repaint end (seconds)'), '1');
+  expect(create().disabled).toBe(true);
+  type(control('Repaint end (seconds)'), '4');
+  click(create());
+  expect(sent[1]).toMatchObject({ seed: 22, ace: {
+    task_type: 'repaint', repainting_start: 2, repainting_end: 4, source_song_id: 'origin',
+    reference_song_id: 'voice', guidance_scale: 3,
+  } });
+});
+
 it('posts the remembered MiniMax output format and keeps it out of ACE requests', async () => {
   vi.stubGlobal('EventSource', class { close() {} });
   const profiles = ['balanced', 'quality'].map(id => ({ id, label: id, ready: true, missing: [], total_bytes: 1 }));
