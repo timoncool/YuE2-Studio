@@ -1,0 +1,52 @@
+name: Windows song notification acceptance
+on:
+  push:
+    branches: [qa/windows-song-notification]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  webview:
+    runs-on: windows-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: desktop/src-tauri -> target
+          cache-on-failure: true
+      - name: Verify product source
+        run: |
+          if ((git rev-parse HEAD^) -ne '82cc7346ff44d8ddf9da7c2a50d41a43c0359569') { throw 'Incorrect #524 code' }
+          $unexpected = @(git diff --name-only HEAD^ HEAD | Where-Object { $_ -notin '.github/workflows/windows-song-notification-qa.yml','scripts/test-openrouter-music.py','scripts/observe-song-shell.ps1','scripts/trace-notification-ipc.mjs' })
+          if ($unexpected.Count) { throw "Unexpected source changes: $unexpected" }
+      - name: Install interface and desktop dependencies
+        run: |
+          npm --prefix app ci
+          npm --prefix desktop ci
+      - name: Build bundled Windows desktop
+        working-directory: desktop
+        run: npm run tauri -- build --debug --no-bundle
+      - name: Observe native Shell notification and restart preference
+        env:
+          PYTHONUTF8: '1'
+        run: |
+          $desktop = Get-ChildItem desktop/src-tauri/target/debug -Filter '*.exe' |
+            Where-Object { $_.Name -in @('YuE2-Studio.exe', 'yue2-studio-desktop.exe') } |
+            Select-Object -First 1
+          if (!$desktop) { throw 'Studio executable missing' }
+          $env:SONG_NOTIFICATION_QA = Join-Path $env:RUNNER_TEMP 'song-notification-evidence'
+          python -u scripts/test-openrouter-music.py $desktop.FullName --notifications
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: windows-song-notification-receipt
+          path: ${{ runner.temp }}/song-notification-evidence

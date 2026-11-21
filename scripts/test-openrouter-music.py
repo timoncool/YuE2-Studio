@@ -4,8 +4,9 @@ from http.client import IncompleteRead
 import base64, hashlib, http.server, io, json, math, os, pathlib, socket, struct, subprocess, sys, tempfile, threading, time, urllib.error, urllib.request, wave
 
 exe = pathlib.Path(sys.argv[1]).resolve()
-webview = "--webview" in sys.argv
-catalog_phase = "error"
+notifications = "--notifications" in sys.argv
+webview = "--webview" in sys.argv or notifications
+catalog_phase = "ready" if notifications else "error"
 allow_catalog_error = threading.Event()
 model = "fixture/sse-music"
 model_name = "Fixture music"
@@ -72,6 +73,8 @@ class Provider(http.server.BaseHTTPRequestHandler):
         if "natural wait case" in content:
             natural_started.set()
             assert finish_naturally.wait(8),"the test never released the music response"
+        if notifications:
+            time.sleep(2.5)
         if "incomplete case" not in body["messages"][0]["content"]:
             self.wfile.write(b"data: [DONE]\r\n\r\n")
 
@@ -94,9 +97,9 @@ def local_provider():
             listener.join()
 
 
-with tempfile.TemporaryDirectory(prefix="yue-openrouter-") as profile, local_provider() as upstream:
+with tempfile.TemporaryDirectory(prefix="yue-openrouter-", ignore_cleanup_errors=notifications) as profile, local_provider() as upstream:
     root=pathlib.Path(profile)
-    if not webview:
+    if not webview or notifications:
         options = ["seed", "temperature", "top_p", "max_tokens"]
         cached_models = [
             {"id": identifier, "name": model_name, "input_modalities": ["text"], "output_modalities": ["audio"],
@@ -113,6 +116,15 @@ with tempfile.TemporaryDirectory(prefix="yue-openrouter-") as profile, local_pro
              HOME=str(root/"home"),USERPROFILE=str(root/"home"),APPDATA=str(root/"appdata"),
              LOCALAPPDATA=str(root/"localappdata"))
     env.pop("YUE_ENGINE_BASE_URL",None)
+    if notifications:
+        os_profile = ("HOME", "USERPROFILE", "APPDATA", "LOCALAPPDATA")
+        for key in os_profile:
+            if key in os.environ:
+                env[key] = os.environ[key]
+            else:
+                env.pop(key, None)
+        env.update(WEBVIEW2_USER_DATA_FOLDER=str(root/"webview"), TIMONCOOL_SHARED_DIR=str(root/"shared"),
+                   WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS="--remote-debugging-port=9889", DO_NOT_TRACK="1")
     client=urllib.request.build_opener(urllib.request.ProxyHandler({}))
     def request(path,payload=None, *, headers=False):
         url=f"http://127.0.0.1:{port}"+path
@@ -200,7 +212,7 @@ with tempfile.TemporaryDirectory(prefix="yue-openrouter-") as profile, local_pro
         raise AssertionError("The library WAV never acquired its ID3 artist")
     def run_service():
         log=(root/"service.log").open("ab")
-        proc=subprocess.Popen([str(exe), *(["--headless"] if webview else [])],env=env,stdout=log,stderr=subprocess.STDOUT)
+        proc=subprocess.Popen([str(exe), *(["--headless"] if webview and not notifications else [])],env=env,stdout=log,stderr=subprocess.STDOUT)
         try:
             for _ in range(180):
                 assert proc.poll() is None,proc.returncode
@@ -315,6 +327,209 @@ with tempfile.TemporaryDirectory(prefix="yue-openrouter-") as profile, local_pro
         hint_rules = {hint["rule"] for hint in form["style_hints"]}
         assert {"negative", "instruction"} <= hint_rules, form
         print(json.dumps({"style": local_style, "style_hints": sorted(hint_rules)}, indent=2))
+
+    def check_windows_notifications():
+        import ctypes
+        from ctypes import wintypes
+
+        output = pathlib.Path(os.environ["SONG_NOTIFICATION_QA"])
+        output.mkdir(parents=True, exist_ok=True)
+        with exe.open("rb") as handle:
+            details = {"exe": str(exe), "sha256": hashlib.file_digest(handle, "sha256").hexdigest(), "steps": {}}
+        def record(key, value):
+            details["steps"][key] = value
+            (output/"summary.json").write_text(json.dumps(details, indent=2), encoding="utf8")
+
+        def ipc(action):
+            script = pathlib.Path(__file__).with_name("trace-notification-ipc.mjs")
+            return json.loads(subprocess.check_output(["node", str(script), "9889", action], timeout=12))
+
+        def shell_state(studio_pid):
+            class IconIdentifier(ctypes.Structure):
+                _fields_ = [("cbSize", wintypes.DWORD), ("hWnd", wintypes.HWND),
+                            ("uID", wintypes.UINT), ("guid", ctypes.c_ubyte * 16)]
+
+            user = ctypes.windll.user32
+            shell = ctypes.windll.shell32
+            rect_results = []
+            callback_type = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
+            user.GetWindowThreadProcessId.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.DWORD)]
+            shell.Shell_NotifyIconGetRect.argtypes = [ctypes.POINTER(IconIdentifier), ctypes.POINTER(wintypes.RECT)]
+            @callback_type
+            def inspect(hwnd, _):
+                owner = wintypes.DWORD()
+                user.GetWindowThreadProcessId(hwnd, ctypes.byref(owner))
+                if owner.value == studio_pid:
+                    icon = IconIdentifier(ctypes.sizeof(IconIdentifier), hwnd, 0x59554532)
+                    rect = wintypes.RECT()
+                    code = shell.Shell_NotifyIconGetRect(ctypes.byref(icon), ctypes.byref(rect))
+                    rect_results.append({"hwnd": hwnd, "code": f"{code & 0xffffffff:08x}",
+                        "rect": [rect.left, rect.top, rect.right, rect.bottom]})
+                return True
+            user.EnumWindows(inspect, 0)
+            state = ctypes.c_int()
+            query = shell.SHQueryUserNotificationState(ctypes.byref(state))
+            return {"state": state.value, "query_hresult": query, "icon_lookup": rect_results}
+
+        next_id = 0
+        def ui(name, **args):
+            nonlocal next_id
+            next_id += 1
+            reply = rpc("tools/call", {"name": "ui_" + name, "arguments": args}, next_id)
+            assert not reply.get("isError"), reply
+            return reply["content"][0]["text"]
+
+        def wait_page(predicate):
+            deadline = time.monotonic()+30
+            page = ""
+            while time.monotonic() < deadline:
+                try:
+                    page = ui("read_page")
+                    if predicate(page):
+                        return page
+                except (AssertionError, OSError):
+                    pass
+                time.sleep(.2)
+            raise AssertionError(page)
+
+        def init():
+            mcp_headers.pop("Mcp-Session-Id", None)
+            rpc("initialize", {"protocolVersion": "2025-03-26", "capabilities": {},
+                "clientInfo": {"name": "windows-song-notifications", "version": "1"}}, 1000)
+            rpc("notifications/initialized", {})
+            wait_page(lambda page: "button" in page)
+
+        button = 'button "Send a test notification"'
+        checkbox = 'checkbox "Show Windows notifications when songs finish generating"'
+        def settings():
+            ui("open_settings", section="notifications")
+            return wait_page(lambda page: button in page and any(
+                checkbox in line and "disabled" not in line for line in page.splitlines()))
+
+        def observe(title, state, stem):
+            result = output/(stem + ".json")
+            script = pathlib.Path(__file__).with_name("observe-song-shell.ps1")
+            with (output/(stem + ".log")).open("wb") as observer_log:
+                observer = subprocess.Popen(["powershell.exe", "-NoLogo", "-NoProfile", "-NonInteractive",
+                    "-Mta", "-ExecutionPolicy", "Bypass", "-File", str(script),
+                    "-Needle", title, "-Expected", state, "-Receipt", str(result)],
+                    stdout=observer_log, stderr=subprocess.STDOUT)
+            deadline = time.monotonic()+45
+            while not result.with_suffix(".json.ready").exists():
+                assert observer.poll() is None, observer.returncode
+                if time.monotonic() >= deadline:
+                    observer.terminate()
+                    raise TimeoutError("The Shell observer did not start")
+                time.sleep(.10)
+            return observer
+
+        def create_form(title):
+            page = ui("read_page")
+            if 'button "x icon"' in page and checkbox in page:
+                ref = next(line.split()[0] for line in page.splitlines() if 'button "x icon"' in line)
+                ui("click", ref=ref)
+            ui("navigate", view="create")
+            page = wait_page(lambda text: 'button "Use OpenRouter"' in text or 'select "Model"' in text)
+            if 'button "Use OpenRouter"' in page:
+                ui("click", text="Use OpenRouter")
+            wait_page(lambda text: 'select "Model"' in text)
+            ui("select", text="Model", value="openrouter")
+            wait_page(lambda text: "cloud:" + model in text)
+            ui("select", text="Model", value="cloud:" + model)
+            ui("type", text="Untitled", value=title)
+            ui("type", text="Style", value="Soft piano")
+            page = wait_page(lambda text: f'value="{title}"' in text and 'value="Soft piano"' in text)
+            submits = [line for line in page.splitlines() if line.endswith('button "Create"')]
+            assert len(submits) >= 2, page
+            return submits[-1].split()[0]
+
+        def submit(title, ref):
+            ui("click", ref=ref)
+            deadline = time.monotonic()+18
+            while time.monotonic() < deadline:
+                code, raw = request("/v1/library/songs")
+                assert code == 200, (code, raw)
+                song = next((row for row in json.loads(raw) if row["title"] == title), None)
+                if song:
+                    assert song["engine_id"] == "openrouter", song
+                    return song["id"]
+                time.sleep(.2)
+            raise AssertionError(f"Song not imported: {title}, provider calls: {len(calls)}")
+
+        studio = run_service()
+        try:
+            init()
+            assert ipc("install") is True
+            record("before_completion", shell_state(studio.pid))
+            initial = settings()
+            (output/"settings-initial.txt").write_text(initial, encoding="utf8")
+            assert button + " disabled" not in initial, initial
+            title = "Hosted Windows QA song ready"
+            submit_ref = create_form(title)
+            try:
+                observer = observe(f'"{title}" is ready to listen to.', "visible", "enabled-shell")
+            except (AssertionError, TimeoutError) as error:
+                observer = None
+                record("enabled_observer_error", str(error))
+            job = submit(title, submit_ref)
+            record("enabled_job", job)
+            shell_visible = observer is not None and observer.wait(timeout=25) == 0
+            record("shell_visible", shell_visible)
+            enabled_ipc = ipc("read")
+            record("enabled_ipc", enabled_ipc)
+            enabled_shell = shell_state(studio.pid)
+            record("after_completion", enabled_shell)
+            active = settings()
+            ref = next(line.split()[0] for line in active.splitlines() if checkbox in line)
+            ui("click", ref=ref)
+            wait_page(lambda page: button + " disabled" in page)
+            record("toggle_off", True)
+            preference_file = root / "song-notifications.json"
+            assert ipc("read")["preference"] is False
+            assert preference_file.read_bytes() == b"false"
+            subprocess.run(["powershell.exe", "-NoProfile", "-NonInteractive", "-Command",
+                f'$studio = Get-Process -Id {studio.pid}; if (!$studio.CloseMainWindow()) {{ exit 1 }}'],
+                check=True, timeout=15)
+            studio.wait(timeout=20)
+            old_pid = studio.pid
+            studio = run_service()
+            assert studio.pid != old_pid
+            init()
+            assert ipc("install") is True
+            restored = settings()
+            (output/"settings-restarted.txt").write_text(restored, encoding="utf8")
+            assert button + " disabled" in restored, restored
+            assert ipc("read")["preference"] is False
+            assert preference_file.read_bytes() == b"false"
+            record("restart_toggle_off", {"before": old_pid, "after": studio.pid})
+            title = "Hosted Windows QA disabled song"
+            submit_ref = create_form(title)
+            try:
+                observer = observe(f'"{title}" is ready to listen to.', "absent", "disabled-shell")
+            except (AssertionError, TimeoutError) as error:
+                observer = None
+                record("disabled_observer_error", str(error))
+            record("disabled_job", submit(title, submit_ref))
+            shell_absent = observer is not None and observer.wait(timeout=25) == 0
+            record("shell_absent", shell_absent)
+            disabled_ipc = ipc("read")
+            record("disabled_ipc", disabled_ipc)
+            record("disabled_shell_state", shell_state(studio.pid))
+            assert enabled_ipc["invocations"] == [{"message": '"Hosted Windows QA song ready" is ready to listen to.',
+                "status": "shell_accepted"}], enabled_ipc
+            assert any(row["code"] == "00000000" for row in enabled_shell["icon_lookup"]), enabled_shell
+            assert disabled_ipc["invocations"] == [] and shell_absent, disabled_ipc
+            assert shell_visible or enabled_shell["state"] == 6, "Windows Shell visibility was not confirmed"
+            record("display_disposition", "observed" if shell_visible else "unobserved_during_windows_quiet_time")
+        finally:
+            if studio.poll() is None:
+                studio.terminate()
+                studio.wait(timeout=15)
+            (output/"service.log").write_bytes((root/"service.log").read_bytes())
+
+    if notifications:
+        check_windows_notifications()
+        sys.exit(0)
 
     proc=run_service()
     try:
