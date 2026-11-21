@@ -545,6 +545,7 @@ const JOURNAL: &[(&str, &str, &str)] = &[
     ("hotstep_heartmula_training_install", "started", "download"),
     ("hotstep_heartmula_install", "started", "download"),
     ("training_continue", "started", "training"),
+    ("training_checkpoints_listen", "started", "training"),
     ("training_cancel", "cancelled", "training"),
     ("training_run_delete", "deleted", "training"),
     ("training_checkpoint_install", "installed", "lora"),
@@ -3397,6 +3398,12 @@ fn tools() -> &'static [Tool] {
                 description: "Stop a training run; its saved checkpoints stay.",
                 schema: || id_only("run_id", "training run id"),
                 call: |args| post(format!("/v1/training/runs/{}/cancel", segment(&text(args, "run_id")?)), json!({})),
+            },
+            Tool {
+                name: "training_checkpoints_listen",
+                description: "Queue a 35-second YuE2 base take and one take per saved LoRA checkpoint, using one score and seed. Reuses previous takes. Returns the comparison playlist and job IDs.",
+                schema: || id_only("run_id", "YuE2 training run id"),
+                call: |args| post(format!("/v1/training/runs/{}/checkpoints/listen", segment(&text(args, "run_id")?)), json!({})),
             },
             Tool {
                 name: "training_checkpoint_install",
