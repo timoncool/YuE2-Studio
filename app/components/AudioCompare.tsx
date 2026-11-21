@@ -17,7 +17,8 @@ export const AudioCompare: React.FC<{
   const [side, setSide] = useState<Side>('after');
   const [playing, setPlaying] = useState(false);
   const [time, setTime] = useState(0);
-  const [duration, setDuration] = useState(0);
+  const [durations, setDurations] = useState<Record<Side, number>>({ before: 0, after: 0 });
+  const duration = durations[side];
 
   useEffect(() => {
     if (before.current) before.current.muted = side !== 'before';
@@ -33,7 +34,9 @@ export const AudioCompare: React.FC<{
       if (!a || !b) return;
       const [lead, follow] = side === 'after' ? [b, a] : [a, b];
       setTime(lead.currentTime);
-      if (Math.abs(follow.currentTime - lead.currentTime) > 0.05) follow.currentTime = lead.currentTime;
+      if (follow.readyState > 0 && lead.currentTime < follow.duration) {
+        if (Math.abs(follow.currentTime - lead.currentTime) > 0.05) follow.currentTime = lead.currentTime;
+      }
     }, 200);
     return () => window.clearInterval(timer);
   }, [playing, side]);
@@ -47,8 +50,15 @@ export const AudioCompare: React.FC<{
     if (playing) {
       stop();
     } else {
+      const audible = side === 'before' ? before.current : after.current;
+      if (!audible) return;
+      if (audible.ended || (duration > 0 && audible.currentTime >= duration)) seek(0);
+      const silent = side === 'before' ? after.current : before.current;
+      if (silent && (!Number.isFinite(silent.duration) || silent.currentTime < silent.duration)) {
+        void silent.play().catch(() => undefined);
+      }
       try {
-        await Promise.all(both().map(element => element.play()));
+        await audible.play();
         setPlaying(true);
       } catch {
         stop();
@@ -62,21 +72,42 @@ export const AudioCompare: React.FC<{
     if (a && b) {
       const [lead, follow] = value === 'after' ? [a, b] : [b, a];
       lead.muted = true;
-      if (follow.readyState > 0 && Math.abs(follow.currentTime - lead.currentTime) > 0.05) follow.currentTime = lead.currentTime;
+      const end = durations[value];
+      const position = end > 0 ? Math.min(lead.currentTime, end) : lead.currentTime;
+      if (follow.readyState > 0) follow.currentTime = position;
       follow.muted = false;
+      setTime(position);
+      if (end > 0 && position >= end) {
+        stop();
+      } else if (playing && follow.paused) {
+        void follow.play().catch(stop);
+      }
     }
     setSide(value);
   };
   const seek = (value: number) => {
-    both().forEach(element => { element.currentTime = value; });
+    both().forEach(element => {
+      element.currentTime = Number.isFinite(element.duration) ? Math.min(value, element.duration) : value;
+    });
     setTime(value);
   };
+  const mediaEvents = (value: Side) => ({
+    onLoadedMetadata: (event: React.SyntheticEvent<HTMLAudioElement>) => {
+      const length = event.currentTarget.duration;
+      setDurations(previous => ({ ...previous, [value]: Number.isFinite(length) ? length : 0 }));
+    },
+    onEnded: (event: React.SyntheticEvent<HTMLAudioElement>) => {
+      if (side !== value) return;
+      setTime(event.currentTarget.currentTime);
+      stop();
+    },
+  });
   const clock = (value: number) => `${Math.floor(value / 60)}:${String(Math.floor(value % 60)).padStart(2, '0')}`;
 
   return (
     <section className="rounded-xl border border-pink-400/40 bg-pink-500/5 p-3">
-      <audio ref={before} src={original} preload="auto" muted onEnded={stop} />
-      <audio ref={after} src={processed} preload="auto" onLoadedMetadata={event => setDuration(event.currentTarget.duration)} onEnded={stop} />
+      <audio ref={before} src={original} preload="auto" muted {...mediaEvents('before')} />
+      <audio ref={after} src={processed} preload="auto" {...mediaEvents('after')} />
       <div className="flex items-center gap-3">
         <button type="button" onClick={() => void toggle()} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-linear-to-r from-orange-500 to-pink-600 text-white" aria-label={playing ? 'pause' : 'play'}>
           {playing ? <Pause size={16} /> : <Play size={16} className="ml-0.5" />}

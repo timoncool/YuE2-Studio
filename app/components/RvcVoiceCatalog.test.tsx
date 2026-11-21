@@ -55,7 +55,7 @@ it('imports paired RVC files and selects the resulting catalog entry', async () 
 
 it('retries a failed catalog request and restores the selected voice on remount', async () => {
   const voice = { id: 'selected', model_name: 'Saved.pth', index_name: null, version: 1 };
-  const request = vi.fn<() => Promise<Response>>()
+  const request = vi.fn<(url: string, init?: RequestInit) => Promise<Response>>()
     .mockResolvedValueOnce(Response.json({ error: 'Catalog unavailable' }, { status: 503 }))
     .mockImplementation(async () => Response.json([voice]));
   vi.stubGlobal('fetch', request);
@@ -82,7 +82,10 @@ it('retries a failed catalog request and restores the selected voice on remount'
     act(() => root.render(<RvcVoiceCatalog card="" control="" />));
     await flush();
     expect(host.querySelector('select')!.value).toBe(voice.id);
-    expect(request).toHaveBeenCalledTimes(3);
+    expect(request.mock.calls.filter(([url]) => url === '/v1/rvc/voices')).toHaveLength(3);
+    expect(request).toHaveBeenCalledWith('/v1/rvc/selection', expect.objectContaining({
+      method: 'PUT', body: JSON.stringify({ voice_id: voice.id, backend: 'auto' }),
+    }));
   } finally {
     act(() => root.unmount());
     host.remove();

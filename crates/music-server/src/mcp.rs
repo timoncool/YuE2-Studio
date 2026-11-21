@@ -125,7 +125,7 @@ fn compact_run(run: &Value) -> Value {
         "steps_done": steps.len(), "step_limit": run["recipe"]["steps"], "preset": run["recipe"]["preset"], "songs_per_step": run["recipe"]["grad_accum"],
         "stop": if tuned { run["recipe"]["stop"].clone() } else { Value::Null }, "target_kl": if tuned { run["recipe"]["target_kl"].clone() } else { Value::Null },
         "last_step": last, "checkpoints": run["checkpoints"], "installed": run["installed"], "error": run["error"],
-        "step_stage": run["step_stage"],
+        "step_stage": run["step_stage"], "engine": run["engine"], "output_adapter": run["output_adapter"],
     })
 }
 
@@ -452,7 +452,7 @@ fn annotations(name: &str) -> Value {
     // a verb that changes something outweighs a noun that reads
     const CHANGES: &[&str] = &["install", "import", "remove", "delete", "refresh", "create", "update", "start", "cancel", "select", "download", "apply", "restart"];
     // reads whose names the rules above miss: create_form names the create page
-    const READ_NAMES: &[&str] = &["lyrics_syllables", "assistant_cli_agents", "system_gpus", "cover_scenes", "cover_photos_search", "video_backgrounds_search", "network_proxy_test", "journal_read", "score_to_midi", "score_instrumental", "score_vocal_octave", "score_from_midi", "score_mark", "lyrics_find", "cover_prompt_render", "studio_wait", "engine_presets_get", "assistant_requests_wait", "ui_console", "song_defaults", "create_form_get", "library_liked", "score_chord_bed", "song_tokenize", "score_match_sections", "models_update_plan", "problem_preview", "library_migration_preview", "audio_cpp_music_models"];
+    const READ_NAMES: &[&str] = &["lyrics_syllables", "assistant_cli_agents", "system_gpus", "cover_scenes", "cover_photos_search", "video_backgrounds_search", "network_proxy_test", "journal_read", "score_to_midi", "score_instrumental", "score_vocal_octave", "score_from_midi", "score_mark", "lyrics_find", "cover_prompt_render", "studio_wait", "engine_presets_get", "assistant_requests_wait", "ui_console", "song_defaults", "create_form_get", "library_liked", "score_chord_bed", "song_tokenize", "score_match_sections", "models_update_plan", "problem_preview", "library_migration_preview", "audio_cpp_music_models", "hotstep_cover_profiles", "hotstep_sa3_training_status"];
     // writes over what was stored, so the earlier content is gone: a client asks first
     const OVERWRITES: &[&str] = &["library_song_rename", "library_song_update", "playlist_update", "album_reorder", "dataset_update", "dataset_song_update", "dataset_prepare", "lora_update", "stems_split", "restore_start", "karaoke_make", "midi_transcribe", "cover_draw", "cover_set_from_file", "openrouter_set_key", "models_update_apply"];
     let changes = CHANGES.iter().any(|verb| name.split('_').any(|word| word == *verb));
@@ -529,6 +529,8 @@ const JOURNAL: &[(&str, &str, &str)] = &[
     ("dataset_prepare_train_after", "updated", "preparation"),
     ("dataset_prepare_cancel", "cancelled", "preparation"),
     ("training_start", "started", "training"),
+    ("hotstep_sa3_training_install", "started", "download"),
+    ("hotstep_sa3_training_start", "started", "training"),
     ("training_continue", "started", "training"),
     ("training_cancel", "cancelled", "training"),
     ("training_run_delete", "deleted", "training"),
@@ -543,6 +545,9 @@ const JOURNAL: &[(&str, &str, &str)] = &[
     ("rvc_native_runtime_install", "started", "download"),
     ("rvc_native_runtime_cancel", "cancelled", "download"),
     ("rvc_apply", "created", "song"),
+    ("rvc_voice_select", "updated", "rvc_voice"),
+    ("rvc_quick_start", "started", "processing"),
+    ("rvc_quick_cancel", "cancelled", "processing"),
     ("lora_import_folder", "installed", "lora"),
     ("lora_update", "updated", "lora"),
     ("lora_delete", "deleted", "lora"),
@@ -561,6 +566,9 @@ const JOURNAL: &[(&str, &str, &str)] = &[
     ("assistant_model_install", "started", "download"),
     ("separator_install", "started", "download"),
     ("separator_runtime_install", "started", "download"),
+    ("hotstep_cover_install", "started", "download"),
+    ("hotstep_sa3_install", "started", "download"),
+    ("mulacover_runtime_install", "started", "download"),
     ("recogniser_install", "started", "download"),
     ("midi_install", "started", "download"),
     ("restore_install", "started", "download"),
@@ -1026,7 +1034,17 @@ fn id_only(name: &str, what: &str) -> Value {
 }
 
 fn song_create_schema(mut properties: Value) -> Value {
+    properties["rvc_after"] = json!({
+        "type": "object",
+        "description": "After successful generation, save a separate RVC take with this voice and backend. Use rvc_quick_list for progress.",
+        "properties": {
+            "voice_id": { "type": "string", "description": "An installed RVC voice ID" },
+            "backend": { "type": "string", "enum": ["auto", "vocal-fast-rs", "audio.cpp"] }
+        },
+        "required": ["voice_id"]
+    });
     properties["heartmula"] = json!({"type":"object","description":"Native HeartMuLa sampling and codec settings.","properties":{"temperature":{"type":"number"},"top_k":{"type":"integer"},"codec_duration_sec":{"type":"number"},"codec_guidance_scale":{"type":"number"}}});
+    properties["hotstep_sa3"] = json!({"type":"object","description":"HOT-Step Stable Audio 3 Medium. Use an instrumental description as style.","properties":{"sampler":{"enum":["pingpong","euler"]},"adapter":{"type":"string","description":"Installed adapter name from hotstep_cover_profiles."},"adapter_scale":{"type":"number","minimum":0,"maximum":2}}});
     properties["stable_audio"] = json!({"type":"object","description":"Native Stable Audio 3 controls. Send the music prompt as style and leave lyrics empty.","properties":{"negative_prompt":{"type":"string"},"sampler_mode":{"enum":["pingpong","euler"]},"apg_scale":{"type":"number"},"duration_padding_sec":{"type":"number","minimum":0}}});
     properties["midasheng"] = json!({"type":"object","description":"MiDashengLM-Gen scene and sound layers.","properties":{"caption":{"type":"string"},"music":{"type":"string"},"speech_text":{"type":"string"},"speech_style":{"type":"string"},"effects":{"type":"string"},"environment":{"type":"string"}}});
     properties["magenta"] = json!({
@@ -1694,7 +1712,7 @@ fn tools() -> &'static [Tool] {
                     "mp3_bitrate": { "type": "integer" },
                     "output_format": { "type": "string", "enum": ["flac", "mp3", "wav32"], "description": "how the song is kept: lossless FLAC, 32-bit WAV, or MP3 at mp3_bitrate" },
                     "cover_prompt": { "type": "string", "description": "what the cover should show; it is drawn only when an image model is set up (settings_get, covers), else the song has no cover" },
-                    "cover_of": { "type": "string", "description": "for a cover: the library song whose melody abc came from (score_transcribe of it); the new song names it as the track it was made from" },
+                    "cover_of": { "type": "string", "description": "Library original song ID. Required by MuLaCover, which reads the song audio directly. For YuE2 covers, pass the source of the ABC melody." },
                     "adapters": { "type": "array", "items": { "type": "object", "properties": { "id": { "type": "string" }, "scales": { "type": "object", "description": "slot -> strength, e.g. {\"ar\": 1, \"nar\": 1}; left out, the LoRA's own strengths, else 1 on each slot it touches" } }, "required": ["id"] } }
                 })),
                 call: |args| post("/v1/music/jobs".into(), args.clone()),
@@ -1719,7 +1737,7 @@ fn tools() -> &'static [Tool] {
             },
             Tool {
                 name: "song_replay",
-                description: "Render a library song again from its saved audio codes, bit for bit or with other steps, a new sound seed, a batch of variations, or another format - without composing again.",
+                description: "Render a library song again. HOT-Step Stable Audio 3 uses the saved prompt, model and adapter, with optional steps, seed or format overrides. Engines with saved audio codes can resynthesize those codes directly.",
                 schema: || object(json!({ "song_id": { "type": "string" }, "steps": { "type": "integer" }, "solver": { "type": "string", "enum": ["midpoint", "ab2"] }, "seed": { "type": "integer" }, "synth_batch_size": { "type": "integer" }, "output_format": { "type": "string", "enum": ["flac", "mp3", "wav32"] }, "title": { "type": "string" } }), &["song_id"]),
                 call: |args| post("/v1/music/replay".into(), args.clone()),
             },
@@ -1987,9 +2005,9 @@ fn tools() -> &'static [Tool] {
             },
             Tool {
                 name: "stems_split",
-                description: "Split a library song into stems with the chosen separator: six (drums, bass, other, vocals, guitar, piano) with HT-Demucs, or vocals and instrumental with Mel-Band RoFormer (separator_settings_get names it). Each stem becomes a track of the library made from the song (made_from, made_by stems), replacing the stems of an earlier split; stems_get names them. A stem is not split again: split the song it came from. Wait with studio_wait until stems.",
-                schema: || id_only("song_id", "library song id"),
-                call: |args| post(format!("/v1/library/songs/{}/stems", segment(&text(args, "song_id")?)), json!({})),
+                description: "Split a library song into stems with the chosen separator: six (drums, bass, other, vocals, guitar, piano) with HT-Demucs, or vocals and instrumental with Mel-Band RoFormer (separator_settings_get names it). Optionally select engine for just this split. Each stem becomes a track of the library made from the song (made_from, made_by stems), replacing the stems of an earlier split; stems_get names them. A stem is not split again: split the song it came from. Wait with studio_wait until stems.",
+                schema: || object(json!({ "song_id": { "type": "string" }, "engine": { "type": "string", "enum": ["htdemucs", "roformer"] } }), &["song_id"]),
+                call: |args| post(format!("/v1/library/songs/{}/stems", segment(&text(args, "song_id")?)), body_without(args, &["song_id"])),
             },
             Tool {
                 name: "stems_get",
@@ -2169,6 +2187,30 @@ fn tools() -> &'static [Tool] {
                 description: "List audio.cpp music models, installed weight profiles, runtime readiness and active installation progress.",
                 schema: nothing,
                 call: |_| get("/v1/music/audio-cpp/models".into()),
+            },
+            Tool {
+                name: "hotstep_cover_profiles",
+                description: "List HOT-Step profiles, installed native runtime, adapters and required weights.",
+                schema: nothing,
+                call: |_| get("/v1/music/native/hotstep/profiles".into()),
+            },
+            Tool {
+                name: "hotstep_cover_install",
+                description: "Install the pinned HOT-Step runtime and MuLaCover weights. Its codec and tokenizer files are shared with HeartMuLa.",
+                schema: nothing,
+                call: |_| post("/v1/music/native/hotstep/install".into(), json!({})),
+            },
+            Tool {
+                name: "hotstep_sa3_install",
+                description: "Start the managed HOT-Step Stable Audio 3 Medium installation. Read progress in hotstep_cover_profiles.",
+                schema: nothing,
+                call: |_| post("/v1/music/native/hotstep/stable-audio-3/install".into(), json!({})),
+            },
+            Tool {
+                name: "mulacover_runtime_install",
+                description: "Install the pinned SOXR runtime for MuLaCover on Windows. The local model catalog reports readiness afterwards. On Linux and macOS, use the system libsoxr package.",
+                schema: nothing,
+                call: |_| post("/v1/music/audio-cpp/mulacover/runtime".into(), json!({})),
             },
             Tool {
                 name: "audio_cpp_music_model_install",
@@ -2663,6 +2705,49 @@ fn tools() -> &'static [Tool] {
                 call: |args| post("/v1/rvc/apply".into(), args.clone()),
             },
             Tool {
+                name: "rvc_voice_selection_get",
+                description: "Read the installed voice and backend remembered for the quick RVC library action.",
+                schema: nothing,
+                call: |_| get("/v1/rvc/selection".into()),
+            },
+            Tool {
+                name: "rvc_voice_select",
+                description: "Remember the installed RVC voice and backend used by the quick library action.",
+                schema: || object(json!({
+                    "voice_id": { "type": "string" },
+                    "backend": { "enum": ["auto", "vocal-fast-rs", "audio.cpp"] }
+                }), &["voice_id"]),
+                call: |args| send(Method::PUT, "/v1/rvc/selection".into(), args.clone()),
+            },
+            Tool {
+                name: "rvc_quick_start",
+                description: "Save a separate RVC take of a library song. Uses the remembered voice by default and separates missing stems. Repeating the same song, voice and backend reuses the job or the saved take.",
+                schema: || object(json!({
+                    "song_id": { "type": "string" },
+                    "voice_id": { "type": "string" },
+                    "backend": { "enum": ["auto", "vocal-fast-rs", "audio.cpp"] }
+                }), &["song_id"]),
+                call: |args| post("/v1/rvc/quick".into(), args.clone()),
+            },
+            Tool {
+                name: "rvc_quick_list",
+                description: "List quick and automatic RVC take jobs, including their current stage and saved take.",
+                schema: nothing,
+                call: |_| get("/v1/rvc/quick".into()),
+            },
+            Tool {
+                name: "rvc_quick_get",
+                description: "Read a quick RVC take job by ID.",
+                schema: || id_only("id", "the job ID from rvc_quick_start or rvc_quick_list"),
+                call: |args| get(format!("/v1/rvc/quick/{}", segment(&text(args, "id")?))),
+            },
+            Tool {
+                name: "rvc_quick_cancel",
+                description: "Stop a queued or active RVC take before it is saved. A completed take stays in the library.",
+                schema: || id_only("id", "the job ID from rvc_quick_start or rvc_quick_list"),
+                call: |args| send(Method::DELETE, format!("/v1/rvc/quick/{}", segment(&text(args, "id")?)), json!({})),
+            },
+            Tool {
                 name: "rvc_voice_remove",
                 description: "Remove the installed RVC checkpoint and its retrieval index. Keeps existing songs and rendered audio.",
                 schema: || id_only("id", "the installed ID from rvc_voices_list"),
@@ -2884,6 +2969,24 @@ fn tools() -> &'static [Tool] {
                 description: "Stop the preparation at work; every song keeps what it has.",
                 schema: nothing,
                 call: |_| post("/v1/training/prepare/cancel".into(), json!({})),
+            },
+            Tool {
+                name: "hotstep_sa3_training_status",
+                description: "Report CUDA readiness and download progress for HOT-Step Stable Audio 3 Medium training.",
+                schema: nothing,
+                call: |_| get("/v1/training/hotstep-sa3".into()),
+            },
+            Tool {
+                name: "hotstep_sa3_training_install",
+                description: "Download the pinned Stable Audio 3 Medium training base and native HOT-Step CUDA components.",
+                schema: nothing,
+                call: |_| post("/v1/training/hotstep-sa3/install".into(), json!({})),
+            },
+            Tool {
+                name: "hotstep_sa3_training_start",
+                description: "Train a native HOT-Step Stable Audio 3 Medium DoRA adapter from a prepared instrumental dataset. A finished adapter is available in the HOT-Step Create profile.",
+                schema: || object(json!({"dataset_id":{"type":"string"},"name":{"type":"string"},"settings":{"type":"object","properties":{"steps":{"type":"integer","minimum":1},"rank":{"type":"integer","minimum":1},"alpha":{"type":"number"},"learning_rate":{"type":"number"},"duration_seconds":{"type":"number","minimum":1,"maximum":384},"seed":{"type":"integer","minimum":0}}}}), &["dataset_id"]),
+                call: |args| post("/v1/training/hotstep-sa3".into(), args.clone()),
             },
             Tool {
                 name: "training_start",

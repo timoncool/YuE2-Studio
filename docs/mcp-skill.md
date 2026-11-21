@@ -142,6 +142,44 @@ under `audiocpp/models/MiniMax-H3-Q4-GGUF`. Review the
 [MiniMax H3 Community License](https://huggingface.co/MiniMaxAI/MiniMax-H3/blob/main/LICENSE)
 for its territorial and use terms.
 
+For MuLaCover, select `mulacover` and pass the library ID of the original song
+as `cover_of`. The model uses its audio, with optional new `lyrics` and
+`style` tags. It saves a separate take which keeps the original track ID.
+Place the [Q8_0 bundle](https://huggingface.co/audio-cpp/audio.cpp-gguf/tree/32c1ce1fea57a513eb9386aa62408d47b1cf7ab2/MuLaCover-GGUF)
+in `audiocpp/models/MuLaCover-GGUF`. The Windows audio.cpp installer includes
+SoX Resampler 0.1.3 from [ShiftMediaProject](https://github.com/ShiftMediaProject/soxr/releases/tag/0.1.3-2)
+under LGPL 2.1. You can also install it with `mulacover_runtime_install`.
+On Linux and macOS, install libsoxr with the system package
+manager. [MuLaCover weights and outputs are licensed for noncommercial use](https://github.com/HeartMuLa/MuLaCover/blob/e27fa7fa0da7c9817879cc6210cc5693f9327946/MODEL_LICENSE).
+
+For Stable Audio 3 Medium on HOT-Step, use `hotstep_sa3_install` to start the
+managed runtime and BF16 model download. Read readiness, progress and adapter
+names with `hotstep_cover_profiles`. Call `song_create` with
+`music_source: {kind: "native", engine: "hotstep", model: "stable-audio-3-medium"}`
+and an instrumental description in `style`. Use `hotstep_sa3` to choose
+`sampler` (pingpong or euler) and the name and strength of an installed
+adapter. Wait for the job, then call `library_song_get` to read its engine,
+profile, seed and settings. Use `song_replay` with the saved library song ID
+to create another take with the same parameters.
+
+For Stable Audio 3 Medium training, check `hotstep_sa3_training_status` and
+use `hotstep_sa3_training_install` to fetch the CUDA trainer and training
+base. Prepare an instrumental dataset with a style description for every
+song. Call `hotstep_sa3_training_start` with its `dataset_id` and optional
+`settings` (`steps`, `rank`, `alpha`, `learning_rate`, `duration_seconds`,
+`seed`). Read training progress with `training_status`. When the run finishes,
+use its `output_adapter` as the `hotstep_sa3.adapter` in `song_create`.
+
+For a HOT-Step MuLaCover cover, check `hotstep_cover_profiles` and use
+`hotstep_cover_install` to install the Windows CPU runtime and its GGUF
+weights. The four codec and tokenizer files are shared with other HeartMuLa
+profiles. On other systems a compatible local `ace-server` can be configured
+with `YUE_HOTSTEP_SERVER`. Call `score_transcribe` with the original library song
+and retain both melody and chord symbols. Pass the approved `abc`, the
+original song ID as `cover_of`, and the native source
+`{"kind":"native","engine":"hotstep","model":"heartmula-mulacover"}`
+to `song_create`. Reuse restores the source and the exact score for the cover.
+
 For Vevo2, pass the lyrics and a library song ID as `vevo2.voice_song_id`.
 Add `vevo2.melody_song_id` to condition the singing on a second library track.
 
@@ -317,7 +355,7 @@ move around. Check the result with `ui_screenshot`.
 - **processing**: `processing_start`, `processing_get`, `processing_keep`, `processing_discard`, `processing_set_reference`.
 - **vst**: `vst_list`, `vst_scan`, `vst_open_editor`.
 - **lora**: `lora_list`, `lora_install_catalog`, `lora_search_hf`, `lora_hf_files`, `lora_install_hf`, `lora_update`, `lora_delete`, `lora_import_folder` (every LoRA of a folder, linked without a copy), `lora_import_files`, `lora_cancel_download`, `lora_export_comfyui` (a trained LoRA as one file for ComfyUI's native YuE2).
-- **RVC voices**: `rvc_voices_list` lists the voices installed in Studio Tools. `rvc_voice_import` takes an exported inference checkpoint at `model_path` and an optional filled FAISS `index_path`. `rvc_catalog_list` shows up to 20 curated voices with source and license. Filter by `query` (name and source labels), `vocal_style`, `rvc_version`, `sample_rate_hz`, and `has_index`; `total` counts the matching voices. Continue with the same filters and `offset` set to the returned `next_offset`. `rvc_catalog_install` verifies and installs the chosen ID. `rvc_catalog_progress_get` follows the active transfer or verification. `rvc_voice_remove` removes a voice and any index by its installed ID, keeping rendered songs. `rvc_backend_status` reports availability without starting the worker. `rvc_apply_install` installs audio.cpp and its RVC support weights. On supported RTX hardware, `rvc_native_runtime_install` starts the verified vocal-fast-rs download, `rvc_native_runtime_status` shows its progress, and `rvc_native_runtime_cancel` cancels it. Use `rvc_apply` with the song and installed voice IDs after separation. It saves a new song with the converted vocal and the existing accompaniment. Use `backend` to choose `auto`, `vocal-fast-rs`, or `audio.cpp`. Auto tries the native worker when available and can use installed audio.cpp after a native backend failure. The returned take includes the requested and effective backend and any fallback diagnostic.
+- **RVC voices**: `rvc_voices_list` lists the voices installed in Studio Tools. `rvc_voice_import` takes an exported inference checkpoint at `model_path` and an optional filled FAISS `index_path`. `rvc_catalog_list` shows up to 20 curated voices with source and license. Filter by `query` (name and source labels), `vocal_style`, `rvc_version`, `sample_rate_hz`, and `has_index`; `total` counts the matching voices. Continue with the same filters and `offset` set to the returned `next_offset`. `rvc_catalog_install` verifies and installs the chosen ID. `rvc_catalog_progress_get` follows the active transfer or verification. `rvc_voice_remove` removes a voice and any index by its installed ID, keeping rendered songs. `rvc_backend_status` reports availability without starting the worker. `rvc_apply_install` installs audio.cpp and its RVC support weights. On supported RTX hardware, `rvc_native_runtime_install` starts the verified vocal-fast-rs download, `rvc_native_runtime_status` shows its progress, and `rvc_native_runtime_cancel` cancels it. Use `rvc_apply` with the song and installed voice IDs after separation. It saves a new song with the converted vocal and the existing accompaniment. Use `backend` to choose `auto`, `vocal-fast-rs`, or `audio.cpp`. Auto tries the native worker when available and can use installed audio.cpp after a native backend failure. The returned take includes the requested and effective backend and any fallback diagnostic. Use `rvc_voice_select` to remember the voice used by `rvc_quick_start`. Read the remembered choice with `rvc_voice_selection_get`. Quick RVC separates missing stems and reuses the saved take on repeat. Set `song_create.rvc_after` to a voice and optional backend to save a second take after successful generation. Follow work with `rvc_quick_list` or `rvc_quick_get` and cancel before saving with `rvc_quick_cancel`.
 - **dataset**: `dataset_import_folder`, `dataset_reveal`, `dataset_song_files`, `dataset_prepare_train_after`, `dataset_get`, `dataset_create`, `dataset_add_folder`, `dataset_add_library_songs`, `dataset_update`, `dataset_delete`, `dataset_song_update`, `dataset_song_delete`, `lyrics_syllables` (each sung line with its syllables, as the score counts them), `lyrics_find`, `dataset_prepare`, `dataset_take_as_is` (no assistant: found lyrics and heard styles kept as they are), `dataset_prepare_cancel`.
 - **training**: `training_pack_cancel`, `training_status`, `training_pack_install`, `training_listen_pack_install`, `training_listen_pack_cancel`, `training_start`, `training_continue`, `training_cancel`, `training_checkpoint_install`, `training_run_delete`.
 - **ui**: `ui_screenshot`, `ui_read_page`, `ui_click`, `ui_type`, `ui_select`, `ui_press_key`, `ui_scroll`, `ui_navigate`, `ui_open_settings`, `ui_notify`, `ui_console`.

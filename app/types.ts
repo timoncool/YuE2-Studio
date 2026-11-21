@@ -131,7 +131,7 @@ export interface YueHarmony {
 export type YueCot = 'full' | 'melody' | 'off';
 export type YueOutputFormat = 'flac' | 'mp3' | 'wav32';
 
-export type NativeMusicEngine = 'minimaxmusic-cpp' | 'acestep-cpp';
+export type NativeMusicEngine = 'minimaxmusic-cpp' | 'acestep-cpp' | 'hotstep';
 export type ProfileMusicEngine = NativeMusicEngine | 'audio.cpp';
 export type MusicEngine = 'local' | 'openrouter' | ProfileMusicEngine;
 
@@ -140,7 +140,9 @@ export type MusicEngine = 'local' | 'openrouter' | ProfileMusicEngine;
  * own (`Yue2Request` in yue2.cpp); anything left out is the engine default.
  */
 export interface YueRequest {
+  rvc_after?: import('./services/rvcQuick').RvcSelection;
   /** Capture the editor's selection with the job so later switches cannot reroute it. */
+  hotstep_sa3?: { sampler?: 'pingpong' | 'euler'; adapter?: string; adapter_scale?: number };
   music_source?: { kind: 'local' } | { kind: 'openrouter' | 'audio_cpp'; model: string } | { kind: 'native'; engine: NativeMusicEngine; model: string };
   midasheng?: import('./components/MiDashengFields').MiDashengPrompt;
   heartmula?: import('./components/HeartMuLaControls').HeartMuLaOptions;

@@ -19,7 +19,17 @@ mod audio_cpp_heartmula;
 mod audio_cpp_magenta;
 mod audio_cpp_midasheng;
 mod audio_cpp_minimax_h3;
+mod audio_cpp_mulacover;
 mod audio_cpp_music;
+mod hotstep_cover;
+mod hotstep_runtime;
+mod hotstep_sa3;
+mod hotstep_sa3_assets;
+mod hotstep_sa3_tokenizer;
+mod hotstep_sa3_training;
+mod hotstep_sa3_train_assets;
+mod hotstep_cover_assets;
+mod hotstep_cover_rolls;
 mod audio_cpp_stable_audio;
 mod audio_cpp_vevo2;
 mod native_music_jobs;
@@ -61,6 +71,7 @@ mod restore;
 mod rvc_voices;
 mod rvc_catalog;
 mod rvc_apply;
+mod rvc_quick;
 mod rvc_fast;
 mod rvc_fast_install;
 mod rvc_catalog_progress;
@@ -129,6 +140,9 @@ struct AppState {
     ace_cancellations: Arc<RwLock<HashMap<String, native_ace_jobs::CancelSender>>>,
     minimax: Arc<native_minimax::Runtime>,
     minimax_cancellations: Arc<RwLock<HashMap<String, native_music_jobs::CancelSender>>>,
+    hotstep_cover: Arc<downloads::Downloader>,
+    hotstep_sa3_install: Arc<tokio::sync::Mutex<()>>,
+    hotstep_sa3_train_install: Arc<tokio::sync::Mutex<()>>,
     audio_cpp_music_stops: Arc<RwLock<HashMap<String, Arc<std::sync::atomic::AtomicBool>>>>,
     heartmula_install: Arc<tokio::sync::Mutex<()>>,
     stable_audio_install: Arc<tokio::sync::Mutex<()>>,
@@ -145,6 +159,7 @@ struct AppState {
     /// Downloads of community models (`community`) into `models/yue2-cpp/own`.
     community_downloads: Arc<downloads::Downloader>,
     rvc_native_downloads: Arc<downloads::Downloader>,
+    rvc_quick: Arc<rvc_quick::Queue>,
     settings_path: PathBuf,
     openrouter_catalog: Arc<RwLock<OpenRouterCatalogState>>,
     library: library::Library,
@@ -314,9 +329,13 @@ impl SamplingPreset {
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
 struct CreateMusicJobRequest {
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    rvc_after: Option<rvc_quick::Options>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     music_source: Option<MusicSource>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     ace: Option<native_ace_jobs::AceOptions>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    hotstep_sa3: Option<hotstep_sa3::Options>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     heartmula: Option<audio_cpp_heartmula::HeartMuLaOptions>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -1535,6 +1554,9 @@ pub async fn serve_on_port(port: u16) -> anyhow::Result<()> {
         ace_cancellations: Arc::default(),
         minimax: Arc::default(),
         minimax_cancellations: Arc::default(),
+        hotstep_cover: Arc::new(downloads::Downloader::new(studio_data_root().unwrap_or_else(|| PathBuf::from(".")).join("hotstep"))),
+        hotstep_sa3_install: Arc::default(),
+        hotstep_sa3_train_install: Arc::default(),
         audio_cpp_music_stops: Arc::default(),
         heartmula_install: Arc::default(),
         stable_audio_install: Arc::default(),
@@ -1605,6 +1627,7 @@ pub async fn serve_on_port(port: u16) -> anyhow::Result<()> {
         selected_component_ids: Arc::new(RwLock::new(selected_component_ids)),
         own_backbone: Arc::new(RwLock::new(persisted.as_ref().and_then(|settings| settings.own_backbone.clone()))),
         community_downloads,
+        rvc_quick: Arc::default(),
         rvc_native_downloads: Arc::new(rvc_fast_install::downloader(
             settings_path.parent().expect("settings file has a data directory"),
         )),
@@ -1692,6 +1715,9 @@ pub async fn serve_on_port(port: u16) -> anyhow::Result<()> {
         .route("/v1/capabilities", get(capabilities))
         .route("/v1/rvc/voices", get(rvc_voices::list))
         .route("/v1/rvc/apply", post(rvc_apply::apply))
+        .route("/v1/rvc/selection", get(rvc_quick::selected).put(rvc_quick::select))
+        .route("/v1/rvc/quick", get(rvc_quick::list).post(rvc_quick::start))
+        .route("/v1/rvc/quick/{id}", get(rvc_quick::status).delete(rvc_quick::cancel))
         .route("/v1/rvc/apply/setup", get(rvc_apply::setup).post(rvc_apply::install))
         .route("/v1/rvc/voices/{id}", axum::routing::delete(rvc_voices::remove))
         .route("/v1/rvc/catalog", get(rvc_catalog::list))
@@ -1838,6 +1864,8 @@ pub async fn serve_on_port(port: u16) -> anyhow::Result<()> {
         .route("/v1/training/listen/install", post(install_listen_pack))
         .route("/v1/training/listen/cancel", post(cancel_listen_pack))
         .route("/v1/training/runs", post(start_training))
+        .route("/v1/training/hotstep-sa3", get(hotstep_sa3_training::status).post(hotstep_sa3_training::start))
+        .route("/v1/training/hotstep-sa3/install", post(hotstep_sa3_training::install))
         .route("/v1/training/runs/{id}/cancel", post(cancel_training))
         .route("/v1/training/runs/{id}/continue", post(continue_training))
         .route("/v1/training/runs/{id}", axum::routing::delete(delete_training_run))
@@ -1911,6 +1939,10 @@ pub async fn serve_on_port(port: u16) -> anyhow::Result<()> {
         .route("/v1/local-models/music", get(local_music_model_catalog))
         .route("/v1/music/jobs", post(create_music_job).get(list_active_music_jobs))
         .route("/v1/music/audio-cpp/models", get(audio_cpp_music::models))
+        .route("/v1/music/native/hotstep/profiles", get(hotstep_cover::profiles))
+        .route("/v1/music/native/hotstep/install", post(hotstep_cover::install))
+        .route("/v1/music/native/hotstep/stable-audio-3/install", post(hotstep_sa3::install))
+        .route("/v1/music/audio-cpp/mulacover/runtime", post(audio_cpp_mulacover::install_runtime))
         .route("/v1/music/audio-cpp/models/install", post(audio_cpp_music::install))
         .route("/v1/music/replay", post(replay_music_job))
         .route("/v1/transcriptions", post(create_transcription))
@@ -2773,6 +2805,10 @@ async fn separation_status(State(state): State<AppState>) -> Json<Value> {
         "card_missing_bytes": card_missing_bytes,
         "missing_bytes": runtime_missing_bytes + if model_installed { 0 } else { model.bytes },
         "ready": model_installed && server_installed,
+        "engines": {
+            "htdemucs": { "ready": htdemucs_installed(&state, config.runtime) },
+            "roformer": { "ready": state.separator.roformer_installed(roformer_on_card(&state, config.runtime)) }
+        },
         "engine": engine,
         "stems": engine_stems(engine),
         // Either downloader may be the busy one: the model has its own, audio.cpp's server comes through its own.
@@ -4055,10 +4091,51 @@ async fn read_stem_audio(
     Ok(serve_audio_file(&path, request).await)
 }
 
-/// Separates one track into stems, in the background, reporting progress.
+/// Runs the selected separator and writes the requested stems.
+#[allow(clippy::too_many_arguments)]
+fn separate_song_audio(
+    state: &AppState, song_id: &str, audio_path: &std::path::Path, engine: separation::Engine,
+    runtime: lyrics_sync::OnnxFlavour, roformer_gpu: bool, wanted: &[String], cancelled: &(impl Fn() -> bool + Sync),
+) -> anyhow::Result<(Vec<String>, bool)> {
+    anyhow::ensure!(!cancelled(), "Separation cancelled.");
+    let audio = audio_pcm::decode_stereo_44k(audio_path)?;
+    if engine == separation::Engine::Roformer {
+        let (vocals, instrumental) = state.separator.separate_roformer(&audio, roformer_gpu)?;
+        anyhow::ensure!(!cancelled(), "Separation cancelled.");
+        let mut written = Vec::new();
+        for (name, samples) in [("vocals", vocals), ("instrumental", instrumental)] {
+            if wanted.iter().any(|stem| stem == name) {
+                separation::write_wav_stereo(&stem_path(state, song_id, name), &samples)?;
+                written.push(name.to_string());
+            }
+        }
+        return Ok((written, roformer_gpu));
+    }
+    let separated = separation::separate_htdemucs(&state.acpp, &state.separator.model_path(), &audio, separation_build(runtime)?, cancelled)?;
+    anyhow::ensure!(!cancelled(), "Separation cancelled.");
+    let mut written = Vec::new();
+    let ran_on_gpu = separated.used_gpu;
+    for stem in separated.stems {
+        if !wanted.iter().any(|name| name == stem.name) {
+            continue;
+        }
+        let path = stem_path(state, song_id, stem.name);
+        separation::write_wav_stereo(&path, &stem.samples)?;
+        written.push(stem.name.to_string());
+    }
+    Ok((written, ran_on_gpu))
+}
+
+#[derive(Deserialize)]
+struct SeparateTrackRequest {
+    engine: Option<separation::Engine>,
+}
+
+/// Separates one track into stems, optionally choosing an engine for this run.
 async fn start_separation(
     State(state): State<AppState>,
     Path(id): Path<String>,
+    request: Option<Json<SeparateTrackRequest>>,
 ) -> Result<Json<Value>, (StatusCode, Json<ApiError>)> {
     let song = state
         .library
@@ -4071,10 +4148,17 @@ async fn start_separation(
         return Err(api_error(StatusCode::CONFLICT, "this track is a stem, a part of a song already; separate the song it came from".into()));
     }
     card_free_of_training(&state, "separate tracks").await?;
+    let separation_guard = state.rvc_quick.separation.clone().try_lock_owned().map_err(|_| {
+        api_error(StatusCode::CONFLICT, "a track is already being separated".into())
+    })?;
     if state.separation_run.read().await.as_ref().is_some_and(|run| !run.done) {
         return Err(api_error(StatusCode::CONFLICT, "a track is already being separated".into()));
     }
-    let config = state.separation_config.read().await.clone();
+    let mut config = state.separation_config.read().await.clone();
+    if let Some(engine) = request.and_then(|Json(request)| request.engine) {
+        config.engine = engine;
+        config.stems = engine_stems(engine).iter().map(|stem| (*stem).into()).collect();
+    }
     let wanted_runtime = config.runtime;
     let engine = config.engine;
     // audio.cpp's server of the chosen device is HT-Demucs's; Mel-Band RoFormer runs its own engine
@@ -4096,42 +4180,20 @@ async fn start_separation(
         .media_path_for_song(&song)
         .ok_or_else(|| api_error(StatusCode::BAD_REQUEST, "this track has no stored audio".into()))?;
 
-    *state.separation_run.write().await =
-        Some(SeparationRun { song_id: id.clone(), progress: 0.0, started_ms: unix_millis(), done: false, error: None, stems: vec![], used_gpu: None, library_songs: vec![] });
+    {
+        let mut run = state.separation_run.write().await;
+        if run.as_ref().is_some_and(|run| !run.done) {
+            return Err(api_error(StatusCode::CONFLICT, "a track is already being separated".into()));
+        }
+        *run = Some(SeparationRun { song_id: id.clone(), progress: 0.0, started_ms: unix_millis(), done: false, error: None, stems: vec![], used_gpu: None, library_songs: vec![] });
+    }
 
-    let model = state.separator.model_path();
     let wanted = config.stems.clone();
     let background = state.clone();
     let song_id = id.clone();
-    let separator = state.separator.clone();
-    let acpp = state.acpp.clone();
     tokio::task::spawn_blocking(move || {
-        let outcome = (|| -> anyhow::Result<(Vec<String>, bool)> {
-            let audio = audio_pcm::decode_stereo_44k(&audio_path)?;
-            if engine == separation::Engine::Roformer {
-                let (vocals, instrumental) = separator.separate_roformer(&audio, roformer_gpu)?;
-                let mut written = Vec::new();
-                for (name, samples) in [("vocals", vocals), ("instrumental", instrumental)] {
-                    if wanted.iter().any(|stem| stem == name) {
-                        separation::write_wav_stereo(&stem_path(&background, &song_id, name), &samples)?;
-                        written.push(name.to_string());
-                    }
-                }
-                return Ok((written, roformer_gpu));
-            }
-            let separated = separation::separate_htdemucs(&acpp, &model, &audio, build?, &|| false)?;
-            let mut written = Vec::new();
-            let ran_on_gpu = separated.used_gpu;
-            for stem in separated.stems {
-                if !wanted.iter().any(|name| name == stem.name) {
-                    continue;
-                }
-                let path = stem_path(&background, &song_id, stem.name);
-                separation::write_wav_stereo(&path, &stem.samples)?;
-                written.push(stem.name.to_string());
-            }
-            Ok((written, ran_on_gpu))
-        })();
+        let outcome = separate_song_audio(&background, &song_id, &audio_path, engine, wanted_runtime, roformer_gpu, &wanted, &|| false);
+        let _guard = separation_guard;
         // still on this thread: the stems are hundreds of megabytes to copy
         let model = if engine == separation::Engine::Roformer { "Mel-Band RoFormer" } else { "HT-Demucs" };
         let library = outcome.as_ref().ok().map(|(stems, _)| stems_into_library(&background, &song_id, stems, model));
@@ -11212,7 +11274,16 @@ fn music_destination(source: Option<&MusicSource>, config: &StudioConfiguration)
 
 /// Sends a request to the engine and keeps it; `attempt` counts the times it
 /// was started again after the studio closed on it.
-async fn submit_music_job(state: AppState, mut request: CreateMusicJobRequest, attempt: u32, retry_engine: Option<&str>) -> (StatusCode, Json<MusicJob>) {
+async fn submit_music_job(state: AppState, request: CreateMusicJobRequest, attempt: u32, retry_engine: Option<&str>) -> (StatusCode, Json<MusicJob>) {
+    let rvc_after = request.rvc_after.clone();
+    let result = dispatch_music_job(state.clone(), request, attempt, retry_engine).await;
+    if result.0.is_success() && let Some(options) = rvc_after {
+        rvc_quick::after_generation(state, result.1.id.clone(), options);
+    }
+    result
+}
+
+async fn dispatch_music_job(state: AppState, mut request: CreateMusicJobRequest, attempt: u32, retry_engine: Option<&str>) -> (StatusCode, Json<MusicJob>) {
     let destination = music_destination(request.music_source.as_ref(), &*state.configuration.read().await);
     let engine_id = match destination {
         MusicDestination::AudioCpp(model) => {
@@ -11235,6 +11306,8 @@ async fn submit_music_job(state: AppState, mut request: CreateMusicJobRequest, a
             }
             return match engine.as_str() {
                 "acestep-cpp" => native_ace_jobs::submit(state, request, model, attempt).await,
+                hotstep_cover::ENGINE if model == hotstep_sa3::PROFILE => hotstep_sa3::submit(state, request, attempt).await,
+                hotstep_cover::ENGINE => hotstep_cover::submit(state, request, model, attempt).await,
                 native_minimax::ENGINE_ID => native_music_jobs::submit_minimax(state, request, model, attempt).await,
                 _ => (StatusCode::BAD_REQUEST, Json(failed_request_job(request, engine.clone(), format!("Unknown native engine {engine}.")))),
             };
@@ -11391,6 +11464,7 @@ async fn submit_replay_job(state: AppState, request: ReplayMusicJobRequest, atte
             match song.engine_id.as_str() {
                 ace::ENGINE_ID => return native_ace_jobs::replay(state, song, request, attempt).await,
                 native_minimax::ENGINE_ID => return native_music_jobs::replay(state, song, request, attempt).await,
+                hotstep_cover::ENGINE if song.generation_settings["profile_id"] == hotstep_sa3::PROFILE => return hotstep_sa3::replay(state, song, request, attempt).await,
                 PRIMARY_MUSIC_ENGINE_ID => {},
                 _ if song.replay_request.is_none() => return Err(api_error(StatusCode::BAD_REQUEST, "This track has no replay request.".into())),
                 _ => return Err(api_error(StatusCode::BAD_REQUEST, format!("Re-rendering is unavailable for engine {}.", song.engine_id))),
@@ -12403,7 +12477,7 @@ async fn cancel_music_job(
     if existing.engine_id == native_minimax::ENGINE_ID {
         return native_music_jobs::cancel_minimax(&state, existing).await;
     }
-    if existing.engine_id == audio_cpp_music::ENGINE {
+    if matches!(existing.engine_id.as_str(), audio_cpp_music::ENGINE | hotstep_cover::ENGINE) {
         return audio_cpp_music::cancel(&state, &job_id).await;
     }
     if existing.engine_id == "openrouter" {
@@ -13061,7 +13135,7 @@ fn check_saved_job_source(library: &library::Library, original: &str, request: &
 
 /// An automatic retry must reach the same local engine that accepted the saved job.
 fn check_retry_engine(original: &str, selected: &str) -> Result<(), String> {
-    if matches!(original, PRIMARY_MUSIC_ENGINE_ID | native_minimax::ENGINE_ID | "acestep-cpp" | audio_cpp_music::ENGINE) && original == selected {
+    if matches!(original, PRIMARY_MUSIC_ENGINE_ID | native_minimax::ENGINE_ID | "acestep-cpp" | audio_cpp_music::ENGINE | hotstep_cover::ENGINE) && original == selected {
         Ok(())
     } else {
         Err(format!("The saved job used {original}, but it cannot resume with the current engine ({selected})."))
@@ -13128,7 +13202,7 @@ fn drawn_seed() -> i64 {
 /// nothing changes its loudness on the way.
 fn engine_submission(body: &Value) -> Value {
     let mut engine = body.clone();
-    if let Some(fields) = engine.as_object_mut() { fields.remove("vocals_only"); fields.remove("score_edit"); fields.remove("fade_in"); fields.remove("fade_out"); }
+    if let Some(fields) = engine.as_object_mut() { fields.remove("vocals_only"); fields.remove("rvc_after"); fields.remove("score_edit"); fields.remove("fade_in"); fields.remove("fade_out"); }
     if let Some(fields) = engine.as_object_mut() {
         fields.insert("output_format".into(), Value::from("wav32"));
         fields.remove("mp3_bitrate");

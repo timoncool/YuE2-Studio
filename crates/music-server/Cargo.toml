@@ -14,6 +14,7 @@ path = "src/main.rs"
 
 [dependencies]
 async-trait = "0.1"
+tokenizers = { version = "0.23.2", default-features = false, features = ["fancy-regex"] }
 tough = "0.24"
 anyhow.workspace = true
 # A song deleted for good sends its files to the system's recycle bin, as Dub Studio does with a project.
@@ -73,6 +74,10 @@ zip.workspace = true
 tar.workspace = true
 lzma-rust2.workspace = true
 
+[target.'cfg(unix)'.dependencies]
+# Loads system libsoxr on Unix and queries Vulkan video memory on Linux.
+libloading = "0.8"
+
 [target.'cfg(windows)'.dependencies]
 windows-sys.workspace = true
 # The model folders moved to another disk leave a junction where they were (model_storage).
@@ -84,7 +89,3 @@ roxmltree = "0.21"
 [target.'cfg(target_os = "linux")'.dependencies]
 # gnu_get_libc_version: which llama.cpp build this Linux starts (assistant_runtime::glibc_version).
 libc = "0.2"
-# The Vulkan loader, to read the video memory of a card whose driver publishes
-# none: Intel's xe driver publishes nothing, so the size is asked of Vulkan
-# (vulkan_mem), the API the engine runs the card on.
-libloading = "0.8"

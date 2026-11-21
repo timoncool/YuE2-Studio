@@ -6,7 +6,7 @@ use std::{
     path::{Path, PathBuf},
     process::{Child, ChildStdin, Stdio},
     sync::{Mutex, mpsc},
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 use anyhow::{Context, Result, anyhow, bail};
@@ -80,7 +80,12 @@ fn from_worker_failure(message: &str) -> anyhow::Error {
     }
 }
 
-pub fn convert(data_root: &Path, request: &Request<'_>) -> Result<audio_post::Stereo> {
+pub fn convert(
+    data_root: &Path,
+    request: &Request<'_>,
+    cancelled: &impl Fn() -> bool,
+) -> Result<audio_post::Stereo> {
+    anyhow::ensure!(!cancelled(), "Native RVC conversion cancelled.");
     let (runtime, cache) =
         runtime_paths(data_root).map_err(|error| BackendFailure(format!("{error:#}")))?;
     std::fs::create_dir_all(&cache).context("Create native RVC cache")?;
@@ -101,11 +106,14 @@ pub fn convert(data_root: &Path, request: &Request<'_>) -> Result<audio_post::St
         .map_err(|_| anyhow!("The native RVC worker is unavailable."))?;
     let transport = ensure_worker(&mut worker, runtime, &cache)
         .map_err(|error| BackendFailure(format!("{error:#}")))?
-        .roundtrip(&ipc);
+        .roundtrip(&ipc, cancelled);
     let reply = match transport {
         Ok(reply) => reply,
         Err(error) => {
             *worker = None;
+            if cancelled() {
+                return Err(error);
+            }
             return Err(BackendFailure(format!("{error:#}")).into());
         }
     };
@@ -254,12 +262,30 @@ impl Worker {
         Ok(worker)
     }
 
-    fn roundtrip(&mut self, request: &serde_json::Value) -> Result<Reply> {
+    fn roundtrip(
+        &mut self,
+        request: &serde_json::Value,
+        cancelled: &impl Fn() -> bool,
+    ) -> Result<Reply> {
+        anyhow::ensure!(!cancelled(), "Native RVC conversion cancelled.");
         serde_json::to_writer(&mut self.input, request)?;
         self.input.write_all(b"\n")?;
         self.input.flush()?;
-        self.receive(CONVERSION_TIMEOUT)
-            .context("Native RVC worker ended or did not respond")
+        let deadline = Instant::now() + CONVERSION_TIMEOUT;
+        loop {
+            anyhow::ensure!(!cancelled(), "Native RVC conversion cancelled.");
+            let remaining = deadline.saturating_duration_since(Instant::now());
+            match self
+                .output
+                .recv_timeout(remaining.min(Duration::from_millis(100)))
+            {
+                Ok(line) => return Ok(serde_json::from_str(&line?)?),
+                Err(mpsc::RecvTimeoutError::Timeout) if !remaining.is_zero() => {}
+                Err(error) => {
+                    return Err(error).context("Native RVC worker ended or did not respond");
+                }
+            }
+        }
     }
 
     fn receive<T: for<'de> Deserialize<'de>>(&self, timeout: Duration) -> Result<T> {

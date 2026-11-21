@@ -29,6 +29,7 @@ export const FilesPanel: React.FC = () => {
     setFiles((current) => {
       const known = current.find((file) => file.id === change.id);
       if (!known) return change.name ? [{ state: 'saving', ...change } as SavingFile, ...current] : current;
+      if (known.state !== 'saving' && change.state !== 'done' && change.state !== 'error') return current;
       return current.map((file) => (file.id === change.id ? { ...file, ...change } : file));
     });
   }), []);

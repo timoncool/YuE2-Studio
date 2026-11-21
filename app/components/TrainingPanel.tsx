@@ -9,6 +9,7 @@ import { ConfirmDialog } from './ConfirmDialog';
 import { ManualRuntimeArchive } from './ManualDownloads';
 import { StemPlayer } from './StemPlayer';
 import { TrainingGuide } from './TrainingGuide';
+import { HotStepSa3Training, sa3TrainingText } from './HotStepSa3Training';
 import {
   Dataset,
   DatasetItem,
@@ -741,6 +742,8 @@ const TrainStep: React.FC<{ state: TrainingState; recipe: Recipe; setRecipe: (re
   const { t, songs } = useStrings();
   const [advanced, setAdvanced] = useState(false);
   const [starting, setStarting] = useState(false);
+  const { language } = useI18n();
+  const [trainingEngine, setTrainingEngine] = useState<'yue2' | 'sa3'>('yue2');
   const unsung = dataset.items.filter(item => item.lyrics_state === 'wanted').length;
   const unlaid = dataset.items.filter(item => item.lyrics_state === 'found').length;
   const unstyled = dataset.items.filter(item => item.style_state === 'wanted').length;
@@ -768,6 +771,19 @@ const TrainStep: React.FC<{ state: TrainingState; recipe: Recipe; setRecipe: (re
   );
   return (
     <div className="space-y-3">
+      <label className="block max-w-sm">
+        <span className={LABEL}>{(sa3TrainingText[language] ?? sa3TrainingText.en)[0]}</span>
+        <select className={`${CONTROL} mt-1`} value={trainingEngine} onChange={event => setTrainingEngine(event.target.value === 'sa3' ? 'sa3' : 'yue2')}>
+          <option value="yue2">YuE2</option>
+          <option value="sa3">Stable Audio 3 Medium · HOT-Step</option>
+        </select>
+      </label>
+      {trainingEngine === 'sa3' ? <>
+        <HotStepSa3Training key={dataset.id} dataset={dataset} busy={Boolean(state.active || preparing)} language={language}
+          labels={{ start: t('trainingStart'), steps: t('trainingSteps'), rank: t('loraRank'), alpha: t('loraAlpha'), learning_rate: t('learningRate'), seed: t('seed') }}
+          card={CARD} control={CONTROL} primary={PRIMARY} onStarted={onStarted} onError={onError} />
+        <button type="button" onClick={onBack} className={OUTLINE}><ChevronLeft size={14} />{t('trainingBackSongs')}</button>
+      </> : <>
       {!packReady && <PackCard state={state} onError={onError} onChanged={onRefresh} />}
       <section className={CARD}>
         <div className="grid gap-3 sm:grid-cols-2">
@@ -816,6 +832,7 @@ const TrainStep: React.FC<{ state: TrainingState; recipe: Recipe; setRecipe: (re
           </button>
         </div>
       </div>
+      </>}
     </div>
   );
 };
@@ -961,9 +978,9 @@ const RunCard: React.FC<{ run: TrainingRun; onChanged: () => void; onError: (mes
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="truncate text-sm font-semibold text-zinc-900 dark:text-white">{run.name}</p>
-          <p className="mt-0.5 text-[11px] text-zinc-500">{run.dataset_name}{run.trigger ? ` · ${run.trigger}` : ''} · {tunedRun
+          <p className="mt-0.5 text-[11px] text-zinc-500">{run.dataset_name}{run.engine === 'hotstep' ? ' · Stable Audio 3 Medium · HOT-Step' : ''}{run.trigger ? ` · ${run.trigger}` : ''} · {tunedRun
             ? <>{target > 0 ? `KL ${target} · ≤ ` : ''}{cap} {t('trainingSteps')}</>
-            : <>{tt(`trainingPresetName_${run.recipe.preset}`)} · {cap} {t('trainingSteps')} · {t('trainingSongsPerStep')}: {Number(run.recipe.grad_accum ?? 1)}</>}</p>
+            : run.engine === 'hotstep' ? <>{cap} {t('trainingSteps')}</> : <>{tt(`trainingPresetName_${run.recipe.preset}`)} · {cap} {t('trainingSteps')} · {t('trainingSongsPerStep')}: {Number(run.recipe.grad_accum ?? 1)}</>}</p>
         </div>
         <div className="flex shrink-0 items-center gap-2">
           <span className={`inline-flex items-center gap-1 text-xs font-semibold ${tone}`}>{running && <Loader2 size={12} className="animate-spin" />}{tt(`trainingStatus_${run.status}`)}</span>
@@ -983,7 +1000,7 @@ const RunCard: React.FC<{ run: TrainingRun; onChanged: () => void; onError: (mes
               index < stageIndex ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' : index === stageIndex ? 'bg-pink-500/15 text-pink-600 dark:text-pink-300' : 'bg-zinc-200/60 text-zinc-500 dark:bg-white/5'
             }`}
           >
-            {tt(`trainingStage_${stage}`)}
+            {tt(`trainingStage_${stage === 'sa3-train' ? 'train' : stage}`)}
           </span>
         ))}
       </div>
@@ -1017,6 +1034,7 @@ const RunCard: React.FC<{ run: TrainingRun; onChanged: () => void; onError: (mes
       {running && !onCpu && run.f32_path && <p role="alert" className="mt-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-300">{t('trainingF32Path')}</p>}
       {running && !onCpu && cardFull && <p role="alert" className="mt-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-300">{t(tunedRun ? 'trainingCardFullWarning' : 'trainingCardFullWarningPreset')}</p>}
 
+      {run.output_adapter && <p className="mt-3 text-xs">{t('trainingLoraName')}: <code>{run.output_adapter}</code></p>}
       {run.checkpoints.length > 0 && (
         <div className="mt-3">
           <p className={LABEL}>{t('trainingCheckpoints')}</p>

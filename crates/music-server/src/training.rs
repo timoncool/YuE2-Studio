@@ -268,6 +268,10 @@ pub struct Run {
     /// Each time the run was trained further, oldest first.
     #[serde(default)]
     pub continuations: Vec<Continuation>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub output_adapter: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hotstep_sa3_settings: Option<crate::hotstep_sa3_training::Settings>,
 }
 
 /// The run trained on from the checkpoint at `from` up to `to` steps.
@@ -1111,7 +1115,8 @@ impl Training {
 
     pub fn runs(&self) -> Vec<Run> {
         let Ok(entries) = std::fs::read_dir(self.runs_dir()) else { return Vec::new() };
-        let mut list: Vec<Run> = entries.flatten().filter_map(|entry| read_run(&entry.path())).filter(|run: &Run| run.engine == self.engine).collect();
+        let mut list: Vec<Run> = entries.flatten().filter_map(|entry| read_run(&entry.path())).filter(|run: &Run| run.engine == self.engine
+            || (self.engine == crate::PRIMARY_MUSIC_ENGINE_ID && run.engine == crate::hotstep_cover::ENGINE)).collect();
         list.sort_by(|a, b| b.created_at.cmp(&a.created_at));
         list
     }
@@ -1280,6 +1285,8 @@ impl Training {
             finished_at: None,
             installed: Vec::new(),
             continuations: Vec::new(),
+            output_adapter: None,
+            hotstep_sa3_settings: None,
         };
         self.save_run(&run)?;
         let cancel = Arc::new(tokio::sync::Notify::new());
@@ -1293,6 +1300,100 @@ impl Training {
                 Ok(true) => training.work(&trainer, libraries.as_deref(), &run_dir, &run_id, stages, cancel).await,
                 other => other,
             };
+            training.settle(&run_id, outcome, (card.give_back)()).await;
+        });
+        Ok(run)
+    }
+
+    /// Runs the native Stable Audio 3 Medium DoRA trainer on an instrumental dataset.
+    pub(super) async fn start_hotstep_sa3(
+        self: &Arc<Self>,
+        trainer: PathBuf,
+        models: PathBuf,
+        dataset_id: &str,
+        name: &str,
+        settings: crate::hotstep_sa3_training::Settings,
+        card: CardHooks,
+    ) -> Result<Run> {
+        use crate::hotstep_sa3_training as sa3;
+        use std::sync::atomic::{AtomicBool, Ordering};
+
+        let dataset = self.dataset(dataset_id)?;
+        if dataset.items.is_empty() || dataset.items.iter().any(|item| !item.instrumental || item.style.trim().is_empty()) {
+            bail!("Stable Audio 3 training needs instrumental songs with a style description on every song.");
+        }
+        let mut active = self.active.write().await;
+        if active.is_some() {
+            bail!("a training run is already going");
+        }
+        let run_id = new_id();
+        let run_dir = self.run_dir(&run_id)?;
+        let input_audio = self.dataset_dir(&dataset.id)?.join("audio");
+        let stages = vec![sa3::stage(&models, &run_dir, &settings)];
+        let step_goal = settings.steps;
+        let run = Run {
+            id: run_id.clone(),
+            engine: "hotstep".into(),
+            dataset_id: dataset.id.clone(),
+            dataset_name: dataset.name.clone(),
+            name: if name.trim().is_empty() { dataset.name.clone() } else { name.trim().into() },
+            trigger: String::new(),
+            recipe: Recipe {
+                preset: "hotstep-sa3".into(),
+                stop: "steps".into(),
+                steps: settings.steps,
+                rank: settings.rank,
+                alpha: settings.alpha,
+                learning_rate: settings.learning_rate,
+                seed: settings.seed,
+                lyric_timing: false,
+                ..Recipe::default()
+            },
+            status: RunStatus::Running,
+            stage: Some("prepare".into()),
+            stages: vec!["prepare".into(), sa3::STAGE.into()],
+            steps: Vec::new(),
+            error: None,
+            created_at: now(),
+            finished_at: None,
+            installed: Vec::new(),
+            continuations: Vec::new(),
+            output_adapter: None,
+            hotstep_sa3_settings: Some(settings),
+        };
+        self.save_run(&run)?;
+        let cancel = Arc::new(tokio::sync::Notify::new());
+        *active = Some(Active { run_id: run_id.clone(), cancel: cancel.clone() });
+        drop(active);
+        let training = self.clone();
+        tokio::spawn(async move {
+            (card.take)().await;
+            let outcome = async {
+                let stop = Arc::new(AtomicBool::new(false));
+                let (manifest_models, manifest_run, stopped) = (models.clone(), run_dir.clone(), stop.clone());
+                let mut preparing = tokio::task::spawn_blocking(move || {
+                    sa3::dataset_manifest(&manifest_models, &manifest_run, &input_audio, &dataset, &stopped)
+                });
+                tokio::select! {
+                    prepared = &mut preparing => prepared??,
+                    _ = cancel.notified() => {
+                        stop.store(true, Ordering::Relaxed);
+                        let _ = preparing.await;
+                        return Ok(false);
+                    }
+                }
+                if !training.work(&trainer, None, &run_dir, &run_id, stages, cancel).await? {
+                    return Ok(false);
+                }
+                let (path, id) = (run_dir.clone(), run_id.clone());
+                let name = tokio::task::spawn_blocking(move || sa3::publish(&models, &path, &id)).await??;
+                let _edit = training.edits.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+                let mut finished = training.run(&run_id)?;
+                finished.output_adapter = Some(name);
+                finished.installed.push(step_goal);
+                training.save_run(&finished)?;
+                Ok(true)
+            }.await;
             training.settle(&run_id, outcome, (card.give_back)()).await;
         });
         Ok(run)
@@ -1501,10 +1602,15 @@ impl Training {
                         Some(line) => {
                             log.write_all(line.as_bytes()).await?;
                             log.write_all(b"\n").await?;
-                            if let Some(step) = yue_train::parse_training_step(&line) {
+                            let step = if stage.id == crate::hotstep_sa3_training::STAGE {
+                                crate::hotstep_sa3_training::progress(&line)
+                            } else {
+                                yue_train::parse_training_step(&line).map(Into::into)
+                            };
+                            if let Some(step) = step {
                                 let recorded = {
                                     let _edit = self.edits.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
-                                    self.append_step(run_id, step.into())
+                                    self.append_step(run_id, step)
                                 };
                                 if let Err(error) = recorded {
                                     log.write_all(format!("[studio] the step was not recorded: {error:#}\n").as_bytes()).await?;
@@ -1528,6 +1634,9 @@ impl Training {
             if !status.success() {
                 let mut last_error = failure.message();
                 if last_error.contains("GGML_BACKEND=CUDA0 not found") {
+                    if stage.id == crate::hotstep_sa3_training::STAGE {
+                        bail!("HOT-Step CUDA did not load; check the NVIDIA driver and the pinned CUDA 12 runtime.");
+                    }
                     bail!("{} stopped: the trainer's CUDA did not load on the graphics card, and training does not run on the processor; it needs NVIDIA driver {} or newer", stage.id, crate::hardware::CUDA13_DRIVER);
                 }
                 // a crash says where it happened only in Windows' record of it
@@ -1934,6 +2043,8 @@ mod tests {
             finished_at: None,
             installed: Vec::new(),
             continuations: Vec::new(),
+            output_adapter: None,
+            hotstep_sa3_settings: None,
         };
         training.save_run(&run).unwrap();
         training.append_step("r1", record(3)).unwrap();

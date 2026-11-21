@@ -45,6 +45,7 @@ enum Family {
     HeartMuLa,
     StableAudio,
     MiDasheng,
+    MuLaCover,
     Magenta,
     Vevo2,
 }
@@ -58,6 +59,7 @@ impl Family {
             audio_cpp_magenta::FAMILY => Some(Self::Magenta),
             audio_cpp_stable_audio::FAMILY => Some(Self::StableAudio),
             audio_cpp_midasheng::FAMILY => Some(Self::MiDasheng),
+            audio_cpp_mulacover::FAMILY => Some(Self::MuLaCover),
             audio_cpp_vevo2::FAMILY => Some(Self::Vevo2),
             _ => None,
         }
@@ -70,6 +72,7 @@ impl Family {
             Self::HeartMuLa => audio_cpp_heartmula::FAMILY,
             Self::StableAudio => audio_cpp_stable_audio::FAMILY,
             Self::MiDasheng => audio_cpp_midasheng::FAMILY,
+            Self::MuLaCover => audio_cpp_mulacover::FAMILY,
             Self::Magenta => audio_cpp_magenta::FAMILY,
             Self::Vevo2 => audio_cpp_vevo2::FAMILY,
         }
@@ -82,6 +85,7 @@ impl Family {
             Self::HeartMuLa => "HeartMuLa",
             Self::StableAudio => "Stable Audio 3",
             Self::MiDasheng => "MiDashengLM-Gen",
+            Self::MuLaCover => audio_cpp_mulacover::NAME,
             Self::Magenta => "Magenta RealTime 2",
             Self::Vevo2 => audio_cpp_vevo2::NAME,
         }
@@ -94,6 +98,7 @@ impl Family {
             Self::HeartMuLa => audio_cpp_heartmula::PROFILE,
             Self::StableAudio => audio_cpp_stable_audio::PROFILE,
             Self::MiDasheng => audio_cpp_midasheng::PROFILE,
+            Self::MuLaCover => audio_cpp_mulacover::PROFILE,
             Self::Magenta => audio_cpp_magenta::PROFILE,
             Self::Vevo2 => audio_cpp_vevo2::PROFILE,
         }
@@ -114,6 +119,7 @@ impl Family {
             Self::HeartMuLa => audio_cpp_heartmula::model_dir(root),
             Self::StableAudio => audio_cpp_stable_audio::model_dir(root),
             Self::MiDasheng => audio_cpp_midasheng::model_dir(root),
+            Self::MuLaCover => audio_cpp_mulacover::model_dir(root),
             Self::Magenta => audio_cpp_magenta::model_dir(root),
             Self::Vevo2 => audio_cpp_vevo2::model_dir(root),
         }
@@ -126,6 +132,7 @@ impl Family {
             Self::HeartMuLa => audio_cpp_heartmula::missing_files(path),
             Self::StableAudio => audio_cpp_stable_audio::missing_files(path),
             Self::MiDasheng => audio_cpp_midasheng::missing_files(path),
+            Self::MuLaCover => audio_cpp_mulacover::missing_files(path),
             Self::Magenta => audio_cpp_magenta::missing_files(path),
             Self::Vevo2 => audio_cpp_vevo2::missing_files(path),
         }
@@ -138,6 +145,7 @@ impl Family {
             Self::HeartMuLa => audio_cpp_heartmula::entry(path),
             Self::StableAudio => audio_cpp_stable_audio::entry(path),
             Self::MiDasheng => audio_cpp_midasheng::entry(path),
+            Self::MuLaCover => audio_cpp_mulacover::entry(path),
             Self::Magenta => audio_cpp_magenta::entry(path),
             Self::Vevo2 => audio_cpp_vevo2::entry(path),
         }
@@ -147,6 +155,7 @@ impl Family {
         self,
         request: &CreateMusicJobRequest,
         library: &library::Library,
+        resumed: bool,
     ) -> anyhow::Result<PreparedTask> {
         match self {
             Self::MiniMax => task(request).map(PreparedTask::Json),
@@ -154,12 +163,15 @@ impl Family {
             Self::HeartMuLa => audio_cpp_heartmula::task(request).map(PreparedTask::Json),
             Self::StableAudio => audio_cpp_stable_audio::task(request).map(PreparedTask::Json),
             Self::MiDasheng => audio_cpp_midasheng::task(request).map(PreparedTask::Json),
+            Self::MuLaCover => {
+                audio_cpp_mulacover::task(request, library, resumed).map(PreparedTask::Cover)
+            }
             Self::Magenta => audio_cpp_magenta::task(request, library).map(PreparedTask::Magenta),
             Self::Vevo2 => audio_cpp_vevo2::task(request, library).map(PreparedTask::Singing),
         }
     }
 
-    fn catalog(self, root: Option<&FsPath>, runtime_ready: bool) -> Value {
+    fn catalog(self, root: Option<&FsPath>, runtime_ready: bool, soxr_ready: bool) -> Value {
         match self {
             Self::MiniMax => minimax_catalog(root, runtime_ready),
             Self::MiniMaxH3 => audio_cpp_minimax_h3::catalog(root, runtime_ready),
@@ -179,6 +191,7 @@ impl Family {
                 }
             },
             Self::Magenta => audio_cpp_magenta::catalog(root, runtime_ready),
+            Self::MuLaCover => audio_cpp_mulacover::catalog(root, runtime_ready, soxr_ready),
             Self::Vevo2 => audio_cpp_vevo2::catalog(root, runtime_ready),
         }
     }
@@ -220,6 +233,7 @@ fn managed_model(family: Family, state: &AppState) -> Option<ManagedModel> {
 enum PreparedTask {
     Json(Value),
     Magenta(audio_cpp_magenta::MagentaTask),
+    Cover(audio_cpp_mulacover::CoverTask),
     Singing(audio_cpp_vevo2::SingingTask),
 }
 
@@ -228,6 +242,9 @@ impl PreparedTask {
         match self {
             Self::Json(body) => Ok((body, None)),
             Self::Magenta(task) => Ok(task.into_request()),
+            Self::Cover(task) => task
+                .into_request()
+                .map(|(body, directory)| (body, Some(directory))),
             Self::Singing(task) => task
                 .into_request()
                 .map(|(body, directory)| (body, Some(directory))),
@@ -242,7 +259,12 @@ pub(super) fn registered_model_ready(model: &ModelEntry) -> Option<bool> {
     }
     let directory = match family {
         Family::MiniMax if model.task == "gen" => Some(model.path.as_path()),
-        Family::HeartMuLa | Family::StableAudio | Family::Magenta | Family::MiDasheng | Family::MiniMaxH3
+        Family::HeartMuLa
+        | Family::StableAudio
+        | Family::Magenta
+        | Family::MiDasheng
+        | Family::MiniMaxH3
+        | Family::MuLaCover
             if model.task == "gen" =>
         {
             model.path.parent()
@@ -319,6 +341,7 @@ pub(super) async fn models(State(state): State<AppState>) -> Json<Value> {
     let runtime_ready = build
         .as_ref()
         .is_ok_and(|build| state.acpp.exe(*build).is_file() && state.acpp.installed(*build));
+    let soxr_ready = state.acpp.soxr_ready();
     let mut models = [
         Family::MiniMax,
         Family::MiniMaxH3,
@@ -326,9 +349,10 @@ pub(super) async fn models(State(state): State<AppState>) -> Json<Value> {
         Family::StableAudio,
         Family::MiDasheng,
         Family::Magenta,
+        Family::MuLaCover,
         Family::Vevo2,
     ]
-    .map(|family| family.catalog(root.as_deref(), runtime_ready));
+    .map(|family| family.catalog(root.as_deref(), runtime_ready, soxr_ready));
     for model in &mut models {
         let Some(managed) = model["id"]
             .as_str()
@@ -430,7 +454,7 @@ async fn install_managed_model(
     Ok(())
 }
 
-fn repair_managed_file(
+pub(super) fn repair_managed_file(
     target: &FsPath,
     asset: &downloads::Asset,
     sha256: &str,
@@ -506,9 +530,10 @@ mod tests {
             (Family::StableAudio, "gen"),
             (Family::MiDasheng, "gen"),
             (Family::Magenta, "gen"),
+            (Family::MuLaCover, "gen"),
             (Family::Vevo2, "tts"),
         ] {
-            let row = family.catalog(Some(root.path()), true);
+            let row = family.catalog(Some(root.path()), true, true);
             assert_eq!(row["id"], family.id());
             assert_eq!(row["profile_id"], family.profile());
             assert_eq!(row["ready"], false);
@@ -594,11 +619,11 @@ pub(super) async fn submit(
     let prepared = if matches!(family, Family::Magenta) {
         let request = request.clone();
         let library = state.library.clone();
-        tokio::task::spawn_blocking(move || family.task(&request, &library))
+        tokio::task::spawn_blocking(move || family.task(&request, &library, attempt > 0))
             .await
             .unwrap_or_else(|error| Err(error.into()))
     } else {
-        family.task(&request, &state.library)
+        family.task(&request, &state.library, attempt > 0)
     };
     let task = match prepared {
         Ok(task) => task,
@@ -644,6 +669,12 @@ pub(super) async fn submit(
         }
         Err(error) => return reject(StatusCode::SERVICE_UNAVAILABLE, error.to_string()),
     };
+    if matches!(family, Family::MuLaCover) && !state.acpp.soxr_ready() {
+        return reject(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "Install the libsoxr runtime for MuLaCover.".into(),
+        );
+    }
     let Ok(lease) = state.engine_use.clone().try_write_owned() else {
         return reject(
             StatusCode::CONFLICT,
@@ -698,6 +729,13 @@ pub(super) async fn submit(
         (Family::Magenta, _) => {
             settings["magenta"] = serde_json::json!(request.magenta);
         }
+        (Family::MuLaCover, PreparedTask::Cover(cover)) => {
+            settings["cover_of"] = serde_json::json!(request.cover_of);
+            settings["duration_seconds"] = cover.body["options"]["duration_sec"].clone();
+            settings["steps"] = cover.body["num_inference_steps"].clone();
+            settings["seed"] = cover.body["seed"].clone();
+            settings["guidance_scale"] = cover.body["guidance_scale"].clone();
+        }
         (Family::Vevo2, _) => {
             settings["route"] = Value::from(audio_cpp_vevo2::ROUTE);
             settings["vevo2"] = serde_json::json!(request.vevo2);
@@ -705,7 +743,10 @@ pub(super) async fn submit(
         _ => unreachable!(),
     }
     let job = MusicJob {
-        derived: None,
+        derived: match &task {
+            PreparedTask::Cover(cover) => Some(cover.derived.clone()),
+            _ => None,
+        },
         id: format!("audio-cpp-{}", uuid_suffix()),
         client_ref: request.client_ref.clone(),
         submitted_at: unix_millis(),
@@ -772,7 +813,15 @@ pub(super) async fn submit(
         .await
         .context("the audio.cpp worker stopped")
         .and_then(|result| result);
-        complete(&state, &job.id, family, build, submitted, outcome).await;
+        complete(
+            &state,
+            &job.id,
+            family.name(),
+            family.profile(),
+            Some((family, build, submitted)),
+            outcome,
+        )
+        .await;
         state.audio_cpp_music_stops.write().await.remove(&job.id);
     });
     (StatusCode::ACCEPTED, Json(accepted))
@@ -796,7 +845,7 @@ fn shape(reply: &Value, settings: &Value) -> anyhow::Result<native_music_jobs::S
 fn save(
     library: &library::Library,
     job: &MusicJob,
-    family: Family,
+    profile: &str,
     output: native_music_jobs::ShapedOutput,
 ) -> anyhow::Result<library::ImportedSong> {
     let mut settings = job.generation_settings.clone();
@@ -807,24 +856,34 @@ fn save(
         caption: job.style.clone(),
         lyrics: job.lyrics.clone(),
         metadata: serde_json::json!({"job_id": job.id, "duration_seconds": output.duration,
-            "output_format": settings["output_format"], "cover_prompt": job.cover_prompt}),
+            "output_format": settings["output_format"], "cover_prompt": job.cover_prompt, "derived": job.derived}),
         generation_settings: settings,
         replay_request: None,
         audio_codes: None,
-        engine_id: ENGINE.into(),
-        profile_id: Some(family.profile().into()),
+        engine_id: job.engine_id.clone(),
+        profile_id: Some(profile.into()),
         source: "local_generation".into(),
         audio_extension: output.extension,
         audio: output.audio,
     })
 }
 
+pub(super) async fn complete_local(
+    state: &AppState,
+    id: &str,
+    name: &str,
+    profile: &str,
+    outcome: anyhow::Result<native_music_jobs::ShapedOutput>,
+) {
+    complete(state, id, name, profile, None, outcome).await;
+}
+
 async fn complete(
     state: &AppState,
     id: &str,
-    family: Family,
-    build: Build,
-    submitted: std::time::Instant,
+    name: &str,
+    profile: &str,
+    telemetry: Option<(Family, Build, std::time::Instant)>,
     outcome: anyhow::Result<native_music_jobs::ShapedOutput>,
 ) {
     let mut jobs = state.jobs.write().await;
@@ -832,7 +891,7 @@ async fn complete(
     if !matches!(job.status, MusicJobStatus::Running) {
         return;
     }
-    let song_id = match outcome.and_then(|output| save(&state.library, job, family, output)) {
+    let song_id = match outcome.and_then(|output| save(&state.library, job, profile, output)) {
         Ok(imported) => {
             let id = imported.song.id.clone();
             if let Some(playlist) = &job.playlist_id
@@ -854,22 +913,25 @@ async fn complete(
             job.songs = vec![song];
             job.status = MusicJobStatus::Completed;
             job.phase = MusicJobPhase::Completed;
-            job.message = format!("{} song saved to the library.", family.name());
+            job.message = format!("{name} song saved to the library.");
             Some(id)
         }
         Err(error) => {
             job.status = MusicJobStatus::Failed;
             job.phase = MusicJobPhase::Failed;
-            job.message = format!("audio.cpp music generation failed: {error:#}");
+            job.message = format!("{name} music generation failed: {error:#}");
             None
         }
     };
     persist(state, job);
     let seconds = songs_seconds(&job.songs);
     let completed = song_id.is_some();
-    let elapsed = submitted.elapsed();
+
     drop(jobs);
-    if let Some(hub) = state.hub.clone().filter(|hub| hub.telemetry_on()) {
+    if let Some((family, build, submitted)) = telemetry
+        && let Some(hub) = state.hub.clone().filter(|hub| hub.telemetry_on())
+    {
+        let elapsed = submitted.elapsed();
         // Only enumerated runtime and model names enter the existing daily
         // report. A cancelled job returns above before recording an outcome.
         let hub = hub.for_scheduled_report();
@@ -883,7 +945,11 @@ async fn complete(
                     Build::Cpu => "cpu",
                 };
                 let set = format!("audio.cpp.{}.{}", family.id(), backend);
-                let parts = [ENGINE.to_string(), family.profile().to_string(), backend.to_string()];
+                let parts = [
+                    ENGINE.to_string(),
+                    family.profile().to_string(),
+                    backend.to_string(),
+                ];
                 hub.count("songs", 1);
                 hub.count("song_done", 1);
                 hub.used_models(Some(&set), &parts, 1);

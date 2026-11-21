@@ -1,3 +1,4 @@
+import { RvcQuickJobs } from './components/RvcQuickJobs';
 import React, { Activity, useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Sidebar } from './components/Sidebar';
 import { CreatePanel, type CreateRequest } from './components/CreatePanel';
@@ -130,6 +131,7 @@ import { registerPlayer } from './services/audioGraph';
 import { loadLibraryTrack, setLibraryPlaybackRate } from './services/playerTempo';
 import { serveVisualizerFeed } from './services/visualizerFeed';
 import { winampControl, winampOn } from './services/winamp';
+import { djModeOn } from './services/djMode';
 import { notePlayed } from './services/playHistory';
 import { moveAlbum } from './services/albumOrder';
 import { collectionToastKey } from './services/collectionToasts';
@@ -951,7 +953,7 @@ function AppContent() {
   // Spacebar play/pause
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.code !== 'Space' || winampOn()) return;
+      if (e.code !== 'Space' || winampOn() || djModeOn()) return;
       const tag = (e.target as HTMLElement)?.tagName;
       if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || (e.target as HTMLElement)?.isContentEditable) return;
       e.preventDefault();
@@ -1714,6 +1716,7 @@ function AppContent() {
       <HubBars items={hubItems} elapsed={hubElapsed} view={hubSection} closed={hubClosed} onClosed={closeHubNotice} />
       {hubPopup && <HubPopup item={hubPopup} onClose={() => closeHubNotice(hubPopup.id)} onOpen={openHubTarget} />}
       <ShellPrompts />
+      <RvcQuickJobs songs={librarySongs} />
       <div className="flex min-h-0 min-w-0 flex-1 overflow-hidden">
         <Sidebar
           currentView={currentView}
