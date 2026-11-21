@@ -14,6 +14,8 @@ use crate::{ApiError, api_error, component_catalogue as channel, net};
 struct Catalogue {
     schema: u32,
     engines: Vec<EnginePackage>,
+    #[serde(default)]
+    models: Vec<ModelPackage>,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -24,6 +26,15 @@ struct EnginePackage {
     protocol: String,
     platform: String,
     executable: String,
+    files: Vec<PackageFile>,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+struct ModelPackage {
+    id: String,
+    name: String,
+    version: String,
+    engines: Vec<String>,
     files: Vec<PackageFile>,
 }
 
@@ -61,6 +72,36 @@ fn portable_name(value: &str) -> bool {
             .all(|byte| byte.is_ascii_alphanumeric() || b"._-".contains(&byte))
 }
 
+fn validate_files(files: &[PackageFile]) -> Result<()> {
+    ensure!(!files.is_empty(), "empty package");
+    let mut names = HashSet::new();
+    for file in files {
+        ensure!(
+            portable_name(&file.name) && names.insert(file.name.to_ascii_lowercase()),
+            "invalid or duplicate component file"
+        );
+        ensure!(
+            file.bytes > 0
+                && file.sha256.len() == 64
+                && file
+                    .sha256
+                    .bytes()
+                    .all(|b| b.is_ascii_digit() || matches!(b, b'a'..=b'f')),
+            "invalid component file pin"
+        );
+        let url = reqwest::Url::parse(&file.url).context("invalid component URL")?;
+        ensure!(
+            url.scheme() == "https"
+                && url.host().is_some()
+                && url.username().is_empty()
+                && url.password().is_none()
+                && url.fragment().is_none(),
+            "invalid component HTTPS source"
+        );
+    }
+    Ok(())
+}
+
 fn parse(bytes: &[u8]) -> Result<Catalogue> {
     let catalog: Catalogue = serde_json::from_slice(bytes)?;
     ensure!(catalog.schema == 1, "unsupported engine catalogue schema");
@@ -85,31 +126,7 @@ fn parse(bytes: &[u8]) -> Result<Catalogue> {
             )),
             "duplicate engine for platform"
         );
-        let mut names = HashSet::new();
-        for file in &package.files {
-            ensure!(
-                portable_name(&file.name) && names.insert(file.name.to_ascii_lowercase()),
-                "invalid or duplicate component file"
-            );
-            ensure!(
-                file.bytes > 0
-                    && file.sha256.len() == 64
-                    && file
-                        .sha256
-                        .bytes()
-                        .all(|b| b.is_ascii_digit() || matches!(b, b'a'..=b'f')),
-                "invalid component file pin"
-            );
-            let url = reqwest::Url::parse(&file.url).context("invalid component URL")?;
-            ensure!(
-                url.scheme() == "https"
-                    && url.host().is_some()
-                    && url.username().is_empty()
-                    && url.password().is_none()
-                    && url.fragment().is_none(),
-                "invalid component HTTPS source"
-            );
-        }
+        validate_files(&package.files)?;
         ensure!(
             package
                 .files
@@ -117,6 +134,34 @@ fn parse(bytes: &[u8]) -> Result<Catalogue> {
                 .any(|file| file.name == package.executable),
             "executable absent from signed file list"
         );
+    }
+    let engine_ids: HashSet<_> = catalog
+        .engines
+        .iter()
+        .map(|engine| engine.id.as_str())
+        .collect();
+    let mut model_ids = HashSet::new();
+    for model in &catalog.models {
+        ensure!(
+            portable_name(&model.id)
+                && portable_name(&model.version)
+                && model_ids.insert(model.id.to_ascii_lowercase()),
+            "invalid or duplicate model identifier"
+        );
+        ensure!(
+            !model.name.trim().is_empty() && model.name.len() <= 160,
+            "invalid model display name"
+        );
+        let mut compatible = HashSet::new();
+        ensure!(
+            !model.engines.is_empty()
+                && model
+                    .engines
+                    .iter()
+                    .all(|id| engine_ids.contains(id.as_str()) && compatible.insert(id)),
+            "unknown or duplicate model engine"
+        );
+        validate_files(&model.files)?;
     }
     Ok(catalog)
 }
@@ -127,9 +172,14 @@ pub(super) async fn list() -> Result<Json<serde_json::Value>, Failure> {
     let load = async {
         match channel::cached_catalogue(channel::ENGINES).await? {
             Some(bytes) => {
-                Ok(serde_json::json!({"source":"signed","engines":parse(&bytes)?.engines}))
+                let catalog = parse(&bytes)?;
+                Ok(
+                    serde_json::json!({"source":"signed","platform":install::host_platform(),"engines":catalog.engines,"models":catalog.models}),
+                )
             }
-            None => Ok(serde_json::json!({"source":"bundled","engines":[]})),
+            None => Ok(
+                serde_json::json!({"source":"bundled","platform":install::host_platform(),"engines":[],"models":[]}),
+            ),
         }
     };
     load.await.map(Json).map_err(|error: anyhow::Error| {
@@ -150,7 +200,7 @@ pub(super) async fn refresh() -> Result<Json<serde_json::Value>, Failure> {
         })?
         .map_err(|error| api_error(StatusCode::BAD_GATEWAY, format!("{error:#}")))?;
     Ok(Json(
-        serde_json::json!({"source":"signed","engines":catalog.engines}),
+        serde_json::json!({"source":"signed","platform":install::host_platform(),"engines":catalog.engines,"models":catalog.models}),
     ))
 }
 

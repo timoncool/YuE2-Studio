@@ -19,5 +19,11 @@
     "url": "https://github.com/timoncool/vocal-fast-rs/releases/download/component-03c3be316067/vocal-fast-macos-arm64-cpu.tar.gz",
     "sha256": "409f24075b4a7b9dd86953ff9da0ea25de10c4f97f1727076b8681091738c873",
     "bytes": 7753829
+  },
+  "macos_metal": {
+    "file": "vocal-fast-macos-arm64-metal-preview.tar.gz",
+    "url": "https://github.com/timoncool/vocal-fast-rs/releases/download/component-300ad493ace0/vocal-fast-macos-arm64-metal-preview.tar.gz",
+    "sha256": "c31ff0237af06a964a8178fdd6c684e2ff4291a147c4d6237c609ecab552703b",
+    "bytes": 7756736
   }
 }

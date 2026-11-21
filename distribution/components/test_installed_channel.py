@@ -365,6 +365,24 @@ def run_rvc(work, binary, certificate, tls_key, install_voice=False):
             assert "/worker" not in request_paths and "/music.dll" in request_paths, request_paths
             assert second["generation"] != first["generation"]
             assert tool("music_engine_package_status", args)["version"] == "2"
+            weight = b"shared model weights"
+            (origin / "weights.bin").write_bytes(weight)
+            model = {"id": "new-model", "name": "New model", "version": "1", "engines": [engine["id"]],
+                     "files": [pinned("weights.bin", weight)]}
+            sibling = dict(model, id="new-model-alt", name="Same weights, another model")
+            publish(8, {"schema": 1, "engines": [engine], "models": [model, sibling]}, "music-engine-catalog.json")
+            refreshed = engine_catalogue(refresh=True)
+            assert refreshed["models"] == [model, sibling] and refreshed["platform"] == engine["platform"]
+            request_paths.clear()
+            first_model = tool("music_model_package_install", {"id": model["id"]})
+            assert first_model["downloaded_bytes"] == len(weight) and "/worker" not in request_paths, first_model
+            request_paths.clear()
+            other = tool("music_model_package_install", {"id": sibling["id"]})
+            assert other["downloaded_bytes"] == 0 and other["reused_bytes"] == len(weight) and not request_paths
+            model_args = {"engine": engine["id"], "model": model["id"]}
+            assert tool("music_model_package_status", model_args)["generation"] == first_model["generation"]
+            tool("music_model_package_status", dict(model_args, engine="incompatible-engine"), expected_error=True)
+            print("PASS new model delivered without engine update; second model reused pinned weights offline")
             print("PASS independent library update, unchanged executable reused, failed update preserved prior generation")
             assert tool("rvc_catalog_list", {"has_index": False})["voices"][0]["name"] == signed_voice["name"]
         finally:
@@ -379,6 +397,7 @@ def run_rvc(work, binary, certificate, tls_key, install_voice=False):
         assert tool("rvc_catalog_list", {"has_index": False})["voices"][0]["name"] == signed_voice["name"]
         assert engine_catalogue()["engines"] == [engine]
         assert tool("music_engine_package_status", args)["generation"] == second["generation"]
+        assert tool("music_model_package_status", model_args)["generation"] == first_model["generation"]
         active_files, = [p.parent for p in studio.rglob("music.dll") if p.parent.parent.name == second["generation"]]
         rogue = active_files / "unexpected.dll"
         rogue.write_bytes(b"unlisted")

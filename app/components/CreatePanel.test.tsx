@@ -1106,6 +1106,31 @@ it('restores a HOT-Step Stable Audio 3 take with its sampler and adapter without
   expect(sent.at(-1)?.cover_of).toBeUndefined();
 });
 
+it('restores HeartMuLa lyrics and its trained HOT-Step adapter without cover requirements', async () => {
+  vi.stubGlobal('fetch', vi.fn(async () => Response.json({
+    engine: 'hotstep', engine_installed: true,
+    profiles: [{ id: 'heartmula-3b-q8_0', label: 'HeartMuLa 3B · HOT-Step', ready: true, missing: [], adapters: ['heartmula-run'] }],
+  })));
+  const hotstep_heartmula = { adapter: 'heartmula-run', adapter_scale: 0.75 };
+  const song = {
+    title: 'Heart take', ditModel: 'hotstep', style: 'pop,piano', lyrics: 'We rise with the morning light',
+    generationParams: {
+      music_source: { kind: 'native', engine: 'hotstep', model: 'heartmula-3b-q8_0' },
+      duration_seconds: 4, seed: 42, cfg_scale: 1.5, hotstep_heartmula,
+    },
+  } as Song;
+  act(() => root.render(panel({ musicEngine: 'hotstep', initialData: { song, timestamp: 1 } })));
+  await flush();
+  expect(field('textarea[aria-label="lyrics"]')).not.toBeNull();
+  expect(host.textContent).not.toContain('Cover score');
+  click(buttonNamed('create')!);
+  expect(sent.at(-1)).toMatchObject({
+    music_source: { kind: 'native', engine: 'hotstep', model: 'heartmula-3b-q8_0' },
+    style: 'pop,piano', lyrics: 'We rise with the morning light', duration_seconds: 4, seed: 42, cfg_scale: 1.5,
+    hotstep_heartmula,
+  });
+});
+
 it('restores HOT-Step cover source and lead sheet from a saved take', async () => {
   vi.stubGlobal('fetch', vi.fn(async (url: string) => Response.json(url === '/v1/music/native/hotstep/profiles' ? {
     engine: 'hotstep', engine_installed: true,
