@@ -122,9 +122,9 @@ function readPage(): string {
   const lines: string[] = [];
   const dialog = openDialog();
   const scopeForTitle = dialog ?? document.querySelector('main') ?? document.body;
-  const labelledBy = dialog?.getAttribute('aria-labelledby');
+  const labelledBy = scopeForTitle.getAttribute('aria-labelledby');
   const title = (labelledBy && document.getElementById(labelledBy)?.textContent?.trim())
-    || dialog?.getAttribute('aria-label')
+    || scopeForTitle.getAttribute('aria-label')
     || Array.from(scopeForTitle.querySelectorAll('h1, h2, h3')).find(visible)?.textContent?.trim();
   if (title) lines.push(`Page: ${title}`);
   if (dialog) lines.push('A dialog is open; its controls are listed first, then the page behind it.');
@@ -159,6 +159,12 @@ function readPage(): string {
       }
       if (element instanceof HTMLSelectElement) {
         parts.push(`value=${JSON.stringify(element.value)}`, `options=${JSON.stringify(Array.from(element.options).map((option) => option.value))}`);
+      }
+      const describedBy = element.getAttribute('aria-describedby');
+      if (describedBy) {
+        const description = describedBy.trim().split(/\s+/)
+          .map(id => document.getElementById(id)?.textContent?.trim()).filter(Boolean).join(' ');
+        if (description) parts.push(`description=${JSON.stringify(description.slice(0, 1000))}`);
       }
       const pressed = element.getAttribute('aria-checked') ?? element.getAttribute('aria-pressed') ?? element.getAttribute('aria-selected');
       if (pressed) parts.push(pressed === 'true' ? 'on' : 'off');

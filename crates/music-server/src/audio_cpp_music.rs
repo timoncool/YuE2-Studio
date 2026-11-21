@@ -48,6 +48,8 @@ enum Family {
     MuLaCover,
     Magenta,
     Vevo2,
+    Moss,
+    SoulX(audio_cpp_soulx::Variant),
 }
 
 impl Family {
@@ -61,6 +63,9 @@ impl Family {
             audio_cpp_midasheng::FAMILY => Some(Self::MiDasheng),
             audio_cpp_mulacover::FAMILY => Some(Self::MuLaCover),
             audio_cpp_vevo2::FAMILY => Some(Self::Vevo2),
+            audio_cpp_sound_effects::FAMILY => Some(Self::Moss),
+            audio_cpp_soulx::SYNTHESIS => Some(Self::SoulX(audio_cpp_soulx::Variant::Synthesis)),
+            audio_cpp_soulx::CONVERSION => Some(Self::SoulX(audio_cpp_soulx::Variant::Conversion)),
             _ => None,
         }
     }
@@ -75,6 +80,8 @@ impl Family {
             Self::MuLaCover => audio_cpp_mulacover::FAMILY,
             Self::Magenta => audio_cpp_magenta::FAMILY,
             Self::Vevo2 => audio_cpp_vevo2::FAMILY,
+            Self::Moss => audio_cpp_sound_effects::FAMILY,
+            Self::SoulX(variant) => variant.id(),
         }
     }
 
@@ -88,6 +95,8 @@ impl Family {
             Self::MuLaCover => audio_cpp_mulacover::NAME,
             Self::Magenta => "Magenta RealTime 2",
             Self::Vevo2 => audio_cpp_vevo2::NAME,
+            Self::Moss => audio_cpp_sound_effects::NAME,
+            Self::SoulX(variant) => variant.name(),
         }
     }
 
@@ -101,6 +110,8 @@ impl Family {
             Self::MuLaCover => audio_cpp_mulacover::PROFILE,
             Self::Magenta => audio_cpp_magenta::PROFILE,
             Self::Vevo2 => audio_cpp_vevo2::PROFILE,
+            Self::Moss => audio_cpp_sound_effects::PROFILE,
+            Self::SoulX(_) => audio_cpp_soulx::PROFILE,
         }
     }
 
@@ -122,6 +133,8 @@ impl Family {
             Self::MuLaCover => audio_cpp_mulacover::model_dir(root),
             Self::Magenta => audio_cpp_magenta::model_dir(root),
             Self::Vevo2 => audio_cpp_vevo2::model_dir(root),
+            Self::Moss => audio_cpp_sound_effects::model_dir(root),
+            Self::SoulX(_) => audio_cpp_soulx::model_dir(root),
         }
     }
 
@@ -135,6 +148,8 @@ impl Family {
             Self::MuLaCover => audio_cpp_mulacover::missing_files(path),
             Self::Magenta => audio_cpp_magenta::missing_files(path),
             Self::Vevo2 => audio_cpp_vevo2::missing_files(path),
+            Self::Moss => audio_cpp_sound_effects::missing_files(path),
+            Self::SoulX(variant) => variant.missing(path),
         }
     }
 
@@ -148,6 +163,8 @@ impl Family {
             Self::MuLaCover => audio_cpp_mulacover::entry(path),
             Self::Magenta => audio_cpp_magenta::entry(path),
             Self::Vevo2 => audio_cpp_vevo2::entry(path),
+            Self::Moss => audio_cpp_sound_effects::entry(path),
+            Self::SoulX(variant) => variant.entry(path),
         }
     }
 
@@ -168,6 +185,8 @@ impl Family {
             }
             Self::Magenta => audio_cpp_magenta::task(request, library).map(PreparedTask::Magenta),
             Self::Vevo2 => audio_cpp_vevo2::task(request, library).map(PreparedTask::Singing),
+            Self::Moss => audio_cpp_sound_effects::task(request).map(PreparedTask::Json),
+            Self::SoulX(variant) => audio_cpp_soulx::task(variant, request, library).map(PreparedTask::SoulX),
         }
     }
 
@@ -177,22 +196,12 @@ impl Family {
             Self::MiniMaxH3 => audio_cpp_minimax_h3::catalog(root, runtime_ready),
             Self::HeartMuLa => audio_cpp_heartmula::catalog(root, runtime_ready),
             Self::StableAudio => audio_cpp_stable_audio::catalog(root, runtime_ready),
-            Self::MiDasheng => match root {
-                Some(root) => audio_cpp_midasheng::catalog(&self.directory(root), runtime_ready),
-                None => {
-                    let mut row = audio_cpp_midasheng::catalog(FsPath::new(""), runtime_ready);
-                    row["ready"] = Value::Bool(false);
-                    row["missing"] = serde_json::json!(if runtime_ready {
-                        vec!["Studio data folder"]
-                    } else {
-                        vec!["Studio data folder", "audio.cpp runtime"]
-                    });
-                    row
-                }
-            },
+            Self::MiDasheng => audio_cpp_midasheng::catalog(root, runtime_ready),
             Self::Magenta => audio_cpp_magenta::catalog(root, runtime_ready),
             Self::MuLaCover => audio_cpp_mulacover::catalog(root, runtime_ready, soxr_ready),
             Self::Vevo2 => audio_cpp_vevo2::catalog(root, runtime_ready),
+            Self::Moss => audio_cpp_sound_effects::catalog(root, runtime_ready),
+            Self::SoulX(variant) => variant.catalog(root, runtime_ready, soxr_ready),
         }
     }
 }
@@ -219,6 +228,10 @@ fn managed_model(family: Family, state: &AppState) -> Option<ManagedModel> {
             audio_cpp_stable_audio::SHA256,
             &state.stable_audio_install,
         ),
+        Family::SoulX(variant) => {
+            let (asset, sha256) = variant.asset();
+            (variant.id(), asset, sha256, &state.soulx_install)
+        }
         _ => return None,
     };
     Some(ManagedModel {
@@ -235,6 +248,7 @@ enum PreparedTask {
     Magenta(audio_cpp_magenta::MagentaTask),
     Cover(audio_cpp_mulacover::CoverTask),
     Singing(audio_cpp_vevo2::SingingTask),
+    SoulX(audio_cpp_soulx::SingingTask),
 }
 
 impl PreparedTask {
@@ -242,6 +256,7 @@ impl PreparedTask {
         match self {
             Self::Json(body) => Ok((body, None)),
             Self::Magenta(task) => Ok(task.into_request()),
+            Self::SoulX(task) => task.into_request().map(|(body, directory)| (body, Some(directory))),
             Self::Cover(task) => task
                 .into_request()
                 .map(|(body, directory)| (body, Some(directory))),
@@ -252,9 +267,27 @@ impl PreparedTask {
     }
 }
 
+pub(super) fn matches_gguf_package(path: &FsPath, bytes: u64, tensors: u64, metadata_keys: u64) -> bool {
+    std::fs::File::open(path).is_ok_and(|mut file| {
+        use std::io::Read as _;
+        let mut header = [0; 24];
+        file.metadata().is_ok_and(|info| info.is_file() && info.len() == bytes)
+            && file.read_exact(&mut header).is_ok()
+            && header[..4] == *b"GGUF"
+            && header[4..8] == 3_u32.to_le_bytes()
+            && header[8..16] == tensors.to_le_bytes()
+            && header[16..24] == metadata_keys.to_le_bytes()
+    })
+}
+
 pub(super) fn registered_model_ready(model: &ModelEntry) -> Option<bool> {
-    let family = Family::parse(&model.family)?;
-    if model.id != family.id() || !matches!(model.mode, Mode::Offline) {
+    let family = Family::parse(&model.id)?;
+    let expected_family = if matches!(family, Family::SoulX(_)) {
+        audio_cpp_soulx::FAMILY
+    } else {
+        family.id()
+    };
+    if model.family != expected_family || !matches!(model.mode, Mode::Offline) {
         return None;
     }
     let directory = match family {
@@ -265,11 +298,13 @@ pub(super) fn registered_model_ready(model: &ModelEntry) -> Option<bool> {
         | Family::MiDasheng
         | Family::MiniMaxH3
         | Family::MuLaCover
+        | Family::Moss
             if model.task == "gen" =>
         {
             model.path.parent()
         }
         Family::Vevo2 if model.task == "tts" => model.path.parent(),
+        Family::SoulX(variant) if model.task == variant.engine_task() => model.path.parent(),
         _ => return None,
     };
     Some(directory.is_some_and(|path| family.missing(path).is_empty()))
@@ -335,6 +370,13 @@ async fn build(state: &AppState) -> anyhow::Result<Build> {
     }
 }
 
+pub(super) async fn sound_effect_model(State(state): State<AppState>) -> Json<Value> {
+    let runtime_ready = build(&state)
+        .await
+        .is_ok_and(|build| state.acpp.exe(build).is_file() && state.acpp.installed(build));
+    Json(Family::Moss.catalog(studio_data_root().as_deref(), runtime_ready, true))
+}
+
 pub(super) async fn models(State(state): State<AppState>) -> Json<Value> {
     let root = studio_data_root();
     let build = build(&state).await;
@@ -351,6 +393,8 @@ pub(super) async fn models(State(state): State<AppState>) -> Json<Value> {
         Family::Magenta,
         Family::MuLaCover,
         Family::Vevo2,
+        Family::SoulX(audio_cpp_soulx::Variant::Synthesis),
+        Family::SoulX(audio_cpp_soulx::Variant::Conversion),
     ]
     .map(|family| family.catalog(root.as_deref(), runtime_ready, soxr_ready));
     for model in &mut models {
@@ -438,6 +482,13 @@ async fn install_managed_model(
             .await
             .context("Installing audio.cpp runtime")?;
     }
+    if matches!(managed.family, Family::SoulX(audio_cpp_soulx::Variant::Conversion)) {
+        #[cfg(windows)]
+        if !state.acpp.soxr_ready() {
+            state.acpp.install_soxr().await.context("Installing SoulX-Singer SVC resampler")?;
+        }
+        anyhow::ensure!(state.acpp.soxr_ready(), "Install the libsoxr runtime for SoulX-Singer SVC.");
+    }
     downloader
         .install_all(managed.scope, &[asset])
         .await
@@ -499,6 +550,26 @@ fn minimax_catalog(root: Option<&FsPath>, runtime_ready: bool) -> Value {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn manual_magenta_and_midasheng_catalogues_reject_truncated_packages() {
+        let root = tempfile::tempdir().unwrap();
+        for (family, file, bytes) in [
+            (Family::Magenta, "magenta-rt2-small-f16.gguf", 1_529_647_616_u64),
+            (Family::MiDasheng, "midashenglm-gen-q8_0.gguf", 3_381_370_752_u64),
+        ] {
+            let directory = family.directory(root.path());
+            std::fs::create_dir_all(&directory).unwrap();
+            std::fs::write(directory.join(file), [b"GGUF".as_slice(), &[0; 32]].concat()).unwrap();
+            let row = family.catalog(Some(root.path()), false, true);
+            assert_eq!(row["ready"], false);
+            assert_eq!(row["missing"], serde_json::json!([file, "audio.cpp runtime"]));
+            assert_eq!(row["missing_bytes"], bytes);
+            assert_eq!(row["bytes"], bytes);
+            assert!(row["package_url"].as_str().unwrap().ends_with(file));
+            assert!(row["license_url"].is_string());
+        }
+    }
 
     #[test]
     fn repairing_heartmula_preserves_download_resume_files() {
@@ -675,6 +746,9 @@ pub(super) async fn submit(
             "Install the libsoxr runtime for MuLaCover.".into(),
         );
     }
+    if matches!(family, Family::SoulX(audio_cpp_soulx::Variant::Conversion)) && !state.acpp.soxr_ready() {
+        return reject(StatusCode::SERVICE_UNAVAILABLE, "Install the libsoxr runtime for SoulX-Singer SVC.".into());
+    }
     let Ok(lease) = state.engine_use.clone().try_write_owned() else {
         return reject(
             StatusCode::CONFLICT,
@@ -735,6 +809,20 @@ pub(super) async fn submit(
             settings["steps"] = cover.body["num_inference_steps"].clone();
             settings["seed"] = cover.body["seed"].clone();
             settings["guidance_scale"] = cover.body["guidance_scale"].clone();
+        }
+        (Family::SoulX(variant), _) => {
+            settings["route"] = Value::from(variant.engine_task());
+            settings["soulx"] = serde_json::json!(request.soulx);
+            settings["seed"] = Value::from(request.seed.unwrap_or(2026));
+        }
+        (Family::Moss, PreparedTask::Json(body)) => {
+            settings["route"] = Value::from("sfx");
+            let options = &body["options"];
+            settings["duration_seconds"] = serde_json::json!(
+                options["duration_sec"].as_str().and_then(|value| value.parse::<f64>().ok())
+            );
+            settings["steps"] = serde_json::json!(request.steps.unwrap_or(100));
+            settings["seed"] = serde_json::json!(request.seed.unwrap_or(0));
         }
         (Family::Vevo2, _) => {
             settings["route"] = Value::from(audio_cpp_vevo2::ROUTE);

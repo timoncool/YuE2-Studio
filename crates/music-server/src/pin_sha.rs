@@ -8,6 +8,8 @@ use std::path::Path;
 use anyhow::{bail, Result};
 
 const PINNED: &[(&str, &str)] = &[
+    (crate::audio_cpp_soulx::SVS_URL, crate::audio_cpp_soulx::SVS_SHA),
+    (crate::audio_cpp_soulx::SVC_URL, crate::audio_cpp_soulx::SVC_SHA),
     (crate::acpp::SOXR_URL, "1c2177da4871f1713b666f576f83be649980b66d783723d9572a0ffffe67fe26"),
     ("https://huggingface.co/audio-cpp/audio.cpp-gguf/resolve/32c1ce1fea57a513eb9386aa62408d47b1cf7ab2/RVC-GGUF/rvc-f16.gguf", "09bd8f233e7ae82697826513c94d754c3904e58e30ad503b83437defccf99a72"),
     ("https://developer.download.nvidia.com/compute/cuda/redist/libcublas/windows-x86_64/libcublas-windows-x86_64-12.9.1.4-archive.zip", "d534d98b0b453a98914dbf3adf47d7e84b55037abf02f87466439e1dcef581ed"),

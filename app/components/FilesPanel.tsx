@@ -4,6 +4,7 @@ import { Check, FolderDown, FolderOpen, Loader2, Minimize2, Move, X } from 'luci
 import { useI18n } from '../context/I18nContext';
 import { onSaving, revealSaved, type SavingFile } from '../services/saveFile';
 import { dockSlot, useFloatable } from '../services/useFloatable';
+import { Toast } from './Toast';
 
 /**
  * The files saved this session, from Dub Studio's files panel: a chip in the
@@ -21,11 +22,15 @@ const size = (bytes?: number | null) => {
 export const FilesPanel: React.FC = () => {
   const { t } = useI18n();
   const [files, setFiles] = useState<SavingFile[]>([]);
+  const [error, setError] = useState<string>();
   const [, redraw] = useState(0);
   const panel = useFloatable('files', { x: window.innerWidth - 360, y: 64 });
   const shown = useRef(0);
 
   useEffect(() => onSaving((change) => {
+    if (change.state === 'error' && change.error) {
+      setError(change.name ? `${change.name}: ${change.error}` : change.error);
+    }
     setFiles((current) => {
       const known = current.find((file) => file.id === change.id);
       if (!known) return change.name ? [{ state: 'saving', ...change } as SavingFile, ...current] : current;
@@ -44,12 +49,15 @@ export const FilesPanel: React.FC = () => {
   }, [files.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!files.length) return null;
+  const notice = error && createPortal(
+    <Toast message={error} type="error" isVisible onClose={() => setError(undefined)} />,
+    document.body,
+  );
   const busy = files.filter((file) => file.state === 'saving').length;
 
   if (!panel.floating) {
     const slot = dockSlot();
-    if (!slot) return null;
-    return createPortal(
+    return <>{notice}{slot && createPortal(
       <button
         type="button"
         onClick={panel.pop}
@@ -61,10 +69,11 @@ export const FilesPanel: React.FC = () => {
         <span className="text-[11px] tabular-nums text-zinc-400">{files.length}</span>
       </button>,
       slot,
-    );
+    )}</>;
   }
 
   return (
+    <>{notice}
     <div className="fixed z-45 w-[min(calc(var(--vw)*90),340px)]" style={{ left: panel.pos.x, top: panel.pos.y }}>
       <div className="w-full overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-2xl dark:border-white/10 dark:bg-suno-card">
         <div
@@ -120,5 +129,6 @@ export const FilesPanel: React.FC = () => {
         </div>
       </div>
     </div>
+    </>
   );
 };

@@ -292,7 +292,7 @@ fn shape(name: &str, args: &Value, value: Value) -> Value {
                 "next_offset": (end < entries.len()).then_some(end),
             })
         },
-        "song_create" | "song_job_get" | "song_replay" if !detailed => compact_job(&value),
+        "song_create" | "sound_effect_create" | "song_job_get" | "song_replay" if !detailed => compact_job(&value),
         "song_jobs_list" if !detailed => Value::Array(value.as_array().into_iter().flatten().map(compact_job).collect()),
         "library_song_get" if !detailed => compact_song(&value),
         "lora_list" if !detailed => compact_loras(&value),
@@ -491,6 +491,7 @@ const JOURNAL: &[(&str, &str, &str)] = &[
     ("song_job_score_again", "started", "generation"),
     ("song_job_again", "started", "generation"),
     ("song_create", "started", "generation"),
+    ("sound_effect_create", "started", "generation"),
     ("song_replay", "started", "generation"),
     ("audio_cpp_music_model_install", "started", "download"),
     ("song_job_cancel", "cancelled", "generation"),
@@ -597,6 +598,7 @@ const JOURNAL: &[(&str, &str, &str)] = &[
     ("hotstep_cover_install", "started", "download"),
     ("hotstep_sa3_install", "started", "download"),
     ("mulacover_runtime_install", "started", "download"),
+    ("vevo2_model_directory_set", "updated", "settings"),
     ("recogniser_install", "started", "download"),
     ("midi_install", "started", "download"),
     ("restore_install", "started", "download"),
@@ -1107,9 +1109,26 @@ fn song_create_schema(mut properties: Value) -> Value {
         "additionalProperties": false
     });
     properties["vevo2"] = json!({"type":"object","description":"Vevo2 singing references from the song library.","properties":{"voice_song_id":{"type":"string"},"melody_song_id":{"type":"string"}},"required":["voice_song_id"]});
+    properties["soulx"] = json!({
+        "type": "object", "description": "SoulX-Singer singing synthesis (soulx_singer) or voice conversion (soulx_singer_svc).",
+        "properties": {
+            "reference_song_id": {"type": "string", "description": "Library recording of the target singing voice."},
+            "source_song_id": {"type": "string", "description": "Library recording of the source vocals for conversion."},
+            "reference_metadata": {"type": "string", "description": "For synthesis, the aligned metadata JSON text for the reference singing.", "maxLength": 262144},
+            "target_metadata": {"type": "string", "description": "For synthesis, the aligned metadata JSON text for the output singing.", "maxLength": 262144},
+            "control": {"enum": ["score", "melody"], "description": "Default score uses notes. Melody requires 50 Hz F0 contours."}
+        },
+        "required": ["reference_song_id"]
+    });
     let mut schema = object(properties, &[]);
     schema["anyOf"] = json!([
         { "required": ["style"] },
+        {
+            "required": ["music_source", "soulx"],
+            "properties": { "music_source": { "required": ["kind", "model"], "properties": {
+                "kind": { "const": "audio_cpp" }, "model": { "enum": ["soulx_singer", "soulx_singer_svc"] }
+            } } }
+        },
         {
             "required": ["music_source", "midasheng"],
             "properties": { "music_source": { "properties": {
@@ -2268,6 +2287,29 @@ fn tools() -> &'static [Tool] {
                 call: |args| send(Method::DELETE, native_music_runtime_route(args)?, json!({})),
             },
             Tool {
+                name: "sound_effect_model_get",
+                description: "Read the local MOSS-SoundEffect model and runtime readiness, file source, terms and destination.",
+                schema: nothing,
+                call: |_| get("/v1/tools/sound-effects/model".into()),
+            },
+            Tool {
+                name: "sound_effect_create",
+                description: "Generate a sound effect from an English or Chinese description with local MOSS-SoundEffect. The result goes to the library. Follow with song_job_get or cancel with song_job_cancel.",
+                schema: || object(json!({
+                    "description": {"type":"string", "minLength":1}, "title": {"type":"string"},
+                    "duration_seconds": {"type":"number", "minimum":0.1, "maximum":30},
+                    "steps": {"type":"integer", "minimum":1}, "seed": {"type":"integer", "minimum":0, "maximum":4294967295_u64}
+                }), &["description"]),
+                call: |args| {
+                    let description = args["description"].as_str().ok_or("A sound description is required.")?;
+                    post("/v1/music/jobs".into(), json!({
+                        "music_source": {"kind":"audio_cpp", "model":crate::audio_cpp_sound_effects::FAMILY},
+                        "style": description, "title": args["title"], "duration_seconds": args["duration_seconds"],
+                        "steps": args["steps"], "seed": args["seed"],
+                    }))
+                },
+            },
+            Tool {
                 name: "audio_cpp_music_models",
                 description: "List audio.cpp music models with experimental status, runtime readiness and installation progress. Manual profiles include the weight source, license, data-root-relative directory and missing bytes.",
                 schema: nothing,
@@ -2298,6 +2340,12 @@ fn tools() -> &'static [Tool] {
                 call: |_| post("/v1/music/native/hotstep/stable-audio-3/install".into(), json!({})),
             },
             Tool {
+                name: "vevo2_model_directory_set",
+                description: "Use a local folder containing your existing vevo2-q8_0.gguf. Use null to return to the Studio data folder. Read audio_cpp_music_models for readiness and original model terms.",
+                schema: || object(json!({"directory": {"type": ["string", "null"]}}), &["directory"]),
+                call: |args| post("/v1/music/audio-cpp/vevo2/model-directory".into(), args.clone()),
+            },
+            Tool {
                 name: "mulacover_runtime_install",
                 description: "Install the pinned SOXR runtime for MuLaCover on Windows. The local model catalog reports readiness afterwards. On Linux and macOS, use the system libsoxr package.",
                 schema: nothing,
@@ -2306,7 +2354,7 @@ fn tools() -> &'static [Tool] {
             Tool {
                 name: "audio_cpp_music_model_install",
                 description: "Start installation of a managed audio.cpp music model. Poll audio_cpp_music_models for progress.",
-                schema: || object(json!({"model": {"type": "string", "enum": ["heartmula", "stable_audio"]}}), &["model"]),
+                schema: || object(json!({"model": {"type": "string", "enum": ["heartmula", "stable_audio", "soulx_singer", "soulx_singer_svc"]}}), &["model"]),
                 call: |args| post("/v1/music/audio-cpp/models/install".into(), args.clone()),
             },
             Tool {
@@ -3229,7 +3277,7 @@ fn tools() -> &'static [Tool] {
             Tool {
                 name: "training_start",
                 description: "Train a LoRA on a dataset. recipe: the recipe from training_status (recipe_defaults) with your changes. preset picks the size: 'fast' (100 steps of 4 songs), 'balanced' (200 of 4, the default), 'thorough' (300 of 8) - the base-matched method, trained the way the base model was; or 'tuned', the previous recipe, with stop 'kl' and target_kl 1.4 or stop 'epochs' with epochs. Watch training_status; one run at a time, and it holds the card.",
-                schema: || object(json!({ "dataset_id": { "type": "string" }, "name": { "type": "string" }, "recipe": { "type": "object" } }), &["dataset_id", "recipe"]),
+                schema: || object(json!({ "dataset_id": { "type": "string" }, "name": { "type": "string" }, "recipe": { "type": "object" }, "trainer_id": { "type": "string" } }), &["dataset_id", "recipe"]),
                 call: |args| post("/v1/training/runs".into(), args.clone()),
             },
             Tool {

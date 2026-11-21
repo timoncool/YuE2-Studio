@@ -491,7 +491,7 @@ it('shows the waiting pair without cancelling the song and keeps the selected Yu
   click(buttonNamed('Cancel the active song')!);
   await act(async () => { await new Promise(resolve => setTimeout(resolve, 450)); });
   expect(cancel).toHaveBeenCalledOnce();
-  expect(host.textContent).toContain('Ready to load when you create');
+  expect(host.textContent).toContain('Ready to create. Weights load as needed');
   click(buttonNamed('create')!);
   expect(sent[0]).toMatchObject({ music_source: source, style: 'folk' });
   expect(sent[0]).not.toHaveProperty('adapters');
@@ -501,6 +501,59 @@ it('shows the waiting pair without cancelling the song and keeps the selected Yu
   expect(Number(pairRequests[1].sequence)).toBeGreaterThan(Number(pairRequests[0].sequence));
   click(buttonNamed('create')!);
   expect(sent[1]).toMatchObject({ music_source: { kind: 'local' }, adapters: [{ id: 'my-acoustic-lora', scales: { nar: 0.7 } }] });
+});
+
+it('shows the engine memory failure and returns to the working pair with the draft intact', async () => {
+  const oldPair = { kind: 'local' };
+  const failingPair = { kind: 'native', engine: 'minimaxmusic-cpp', model: 'minimal' };
+  const cancel = vi.fn(async () => {});
+  let status: Record<string, unknown> = { revision: 0, stage: 'idle', active: oldPair, elapsed_ms: 0 };
+  vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+    if (url === '/v1/music/pair') {
+      if (init?.method === 'POST') {
+        const { music_source } = JSON.parse(String(init.body));
+        status = music_source.kind === 'local'
+          ? { revision: 2, stage: 'ready', active: oldPair, requested: oldPair, elapsed_ms: 100 }
+          : { revision: 1, stage: 'error', active: oldPair, requested: failingPair, elapsed_ms: 600,
+              error: 'MiniMax ran out of GPU memory while loading. See minimax-engine.log' };
+      }
+      return Response.json(status);
+    }
+    if (url === '/v1/music/native/minimaxmusic-cpp/profiles') return Response.json({
+      engine: 'minimaxmusic-cpp', engine_installed: true,
+      profiles: [{ id: 'minimal', label: 'Minimal', ready: true, missing: [] }],
+    });
+    return Response.json({});
+  }));
+  function Editor() {
+    const [engine, setEngine] = React.useState<NonNullable<React.ComponentProps<typeof CreatePanel>['musicEngine']>>('local');
+    return panel({ musicEngine: engine, onMusicEngineChange: setEngine, onCancelJob: cancel });
+  }
+  act(() => root.render(<Editor />));
+  await flush();
+  act(() => { bridgeCommands.get('create_set')?.({ fields: { style: 'folk', lyrics: 'Keep this verse' } }); });
+  const model = [...host.querySelectorAll('label')]
+    .find(label => label.textContent?.startsWith('Model'))!.querySelector('select')!;
+  act(() => {
+    model.value = 'minimaxmusic-cpp';
+    model.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  await flush();
+  const profile = host.querySelector<HTMLSelectElement>('select[aria-label="Local model"]')!;
+  act(() => {
+    profile.value = 'minimal';
+    profile.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  await flush();
+  expect(host.querySelector('[role="alert"]')?.textContent).toContain('ran out of GPU memory');
+  expect(host.textContent).toContain('Active pair · YuE2');
+  expect(host.textContent).toContain('Requested pair · minimaxmusic-cpp · minimal');
+  expect((buttonNamed('create') as HTMLButtonElement).disabled).toBe(true);
+  expect(cancel).not.toHaveBeenCalled();
+  click(buttonNamed('Return to active pair')!);
+  await flush();
+  click(buttonNamed('create')!);
+  expect(sent[0]).toMatchObject({ music_source: oldPair, style: 'folk', lyrics: 'Keep this verse' });
 });
 
 it('submits the same MuLaCover reference after switching engines in either direction', async () => {
@@ -707,6 +760,8 @@ it('chooses MiniMax Music3 through audio.cpp and reuses the saved seed and forma
 it.each([
   ['heartmula', { heartmula: { top_k: 30, temperature: 0.9 } }, 'pop', ''],
   ['vevo2', { vevo2: { voice_song_id: 'original-take' } }, '', 'Words to sing'],
+  ['soulx_singer', { soulx: { reference_song_id: 'reference', reference_metadata: '[{}]', target_metadata: '[{}]', control: 'score' } }, '', ''],
+  ['soulx_singer_svc', { soulx: { reference_song_id: 'reference', source_song_id: 'vocals' } }, '', ''],
   ['midashenglm_gen', { duration_seconds: 5, midasheng: { caption: '', music: 'quiet piano', speech_text: '', speech_style: '', effects: '', environment: 'rain' } }, 'quiet piano', ''],
 ] as const)('restores and submits model-specific settings for %s', async (model, options, style, lyrics) => {
   vi.stubGlobal('fetch', vi.fn(async () => Response.json({ engine: 'audio.cpp', models: [
@@ -728,6 +783,72 @@ it.each([
       .toBe('The model rounds the limit to audio blocks and can finish sooner.');
   }
 });
+
+it('uses a saved Vevo2 weights folder without offering a conversion download', async () => {
+  const local = 'D:/Models/Singing';
+  const license = 'https://huggingface.co/RMSnow/Vevo2';
+  let directory: string | null = null;
+  const request = vi.fn(async (url: string, init?: RequestInit) => {
+    if (url.endsWith('/model-directory')) {
+      directory = JSON.parse(String(init?.body)).directory;
+      return Response.json({ configured_directory: directory });
+    }
+    return Response.json({ engine: 'audio.cpp', models: [{
+      id: 'vevo2', name: 'Vevo2', profile_id: 'quality-q8', quantization: 'Q8_0',
+      ready: directory !== null, missing: directory ? [] : ['vevo2-q8_0.gguf'],
+      model_directory: 'audiocpp/models/vevo2', configured_directory: directory, license_url: license,
+    }] });
+  });
+  vi.stubGlobal('fetch', request);
+  const song = {
+    title: 'Singing', lyrics: 'Words to sing', style: '', ditModel: 'audio.cpp',
+    generationParams: { music_source: { kind: 'audio_cpp', model: 'vevo2' }, vevo2: { voice_song_id: 'voice' } },
+  } as Song;
+  act(() => root.render(panel({ musicEngine: 'audio.cpp', initialData: { song, timestamp: 1 } })));
+  await flush();
+  expect(buttonNamed('create')?.disabled).toBe(true);
+  expect(host.querySelector(`a[href="${license}"]`)?.textContent).toBe('Original model terms');
+  const label = [...host.querySelectorAll('label')].find(item => item.textContent?.includes('Folder containing your Vevo2 weights'));
+  type(label!.querySelector('input')!, local);
+  click(buttonNamed('Use this folder')!);
+  await flush();
+  expect(directory).toBe(local);
+  expect(buttonNamed('Use the Studio folder')).toBeDefined();
+  expect(buttonNamed('create')?.disabled).toBe(false);
+});
+
+it('takes two aligned score files in SoulX-Singer and sends their contents', async () => {
+  const model = 'soulx_singer';
+  librarySongs = [{ id: 'reference', title: 'Singing reference', audioUrl: '/voice.wav' } as Song];
+  vi.stubGlobal('fetch', vi.fn(async () => Response.json({ engine: 'audio.cpp', models: [
+    { id: model, name: 'SoulX-Singer SVS', profile_id: 'quality-q8', quantization: 'Q8_0', ready: true, missing: [] },
+  ] })));
+  const song = { title: 'SoulX score', style: '', lyrics: '', ditModel: 'audio.cpp', generationParams: {
+    music_source: { kind: 'audio_cpp', model }, soulx: { reference_song_id: 'reference' },
+  } } as Song;
+  act(() => root.render(panel({ musicEngine: 'audio.cpp', initialData: { song, timestamp: 1 } })));
+  await flush();
+  expect(host.textContent).toContain('Pitch contour mode also needs F0 samples at 50 Hz.');
+  const fields = [...host.querySelectorAll<HTMLInputElement>('input[type=file]')];
+  expect(fields).toHaveLength(2);
+  const upload = async (input: HTMLInputElement, text: string) => {
+    const file = new File([text], 'score.json', { type: 'application/json' });
+    Object.defineProperty(file, 'text', { value: async () => text });
+    Object.defineProperty(input, 'files', { value: [file], configurable: true });
+    await act(async () => input.dispatchEvent(new Event('change', { bubbles: true })));
+  };
+  await upload(fields[0], '[]');
+  expect(host.textContent).toContain('Use an aligned vocals JSON file up to 256 KiB.');
+  const reference = '[{"phoneme":"AA","note_pitch":"60"}]';
+  const target = '[{"phoneme":"AA","note_pitch":"62"}]';
+  await upload(fields[0], reference);
+  await upload(fields[1], target);
+  click(buttonNamed('create')!);
+  expect(sent.at(-1)).toMatchObject({ music_source: { kind: 'audio_cpp', model }, soulx: {
+    reference_song_id: 'reference', reference_metadata: reference, target_metadata: target,
+  } });
+});
+
 it('restores a Magenta reference and submits either the available reference or text style', async () => {
   const model = 'magenta_realtime_2';
   librarySongs = [{ id: 'ref-take', title: 'Reference take', audioUrl: '/audio.wav' } as Song];
@@ -830,13 +951,14 @@ describe('an instrumental (#217)', () => {
     click(buttonNamed('createInstrumental')!);
     await flush();
     expect(sent[0].adapters).toEqual([expect.objectContaining({ id: 'instrumental' })]);
-    expect(sent[0].lyrics).toBe('');
+    expect(sent[0].lyrics).toBe('[instrumental]');
 
     click(instrumental);
     click(buttonNamed('create')!);
     await flush();
     expect(sent).toHaveLength(2);
     expect(sent[1].adapters).toBeUndefined();
+    expect(sent[1].lyrics).toBe('');
   });
 
   it('keeps a score written for one submission out of the form and writes a new one for the next', async () => {
@@ -853,6 +975,7 @@ describe('an instrumental (#217)', () => {
     click(buttonNamed('createInstrumental')!);
     await flush();
     expect(sent.map(request => request.abc)).toEqual(['X:1\nPLAN-A\nINSTR', 'X:1\nPLAN-B\nINSTR']);
+    expect(sent.map(request => request.lyrics)).toEqual(['[instrumental]', '[instrumental]']);
     expect(composeScore).toHaveBeenCalledTimes(2);
   });
 
@@ -1278,28 +1401,41 @@ describe('OpenRouter music creation', () => {
   });
 });
 
-it('shows the manual MiniMax-H3 package and blocks Create when its weights are absent', async () => {
-  const packageInfo = {
+it.each([
+  {
+    id: 'minimax_h3', name: 'MiniMax-H3', profile_id: 'minimax_h3_q4_k', quantization: 'Q4_K',
     package_url: 'https://huggingface.co/audio-cpp/audio.cpp-gguf/tree/test/MiniMax-H3-Q4-GGUF',
     license_url: 'https://huggingface.co/MiniMaxAI/MiniMax-H3/blob/main/LICENSE',
-    model_directory: 'audiocpp/models/MiniMax-H3-Q4-GGUF',
-  };
+    model_directory: 'audiocpp/models/MiniMax-H3-Q4-GGUF', file: 'dit.gguf', missing_bytes: 32_443_213_394, size: '30.22 GiB',
+  },
+  {
+    id: 'magenta_realtime_2', name: 'Magenta RealTime 2', profile_id: 'small-f16', quantization: 'F16',
+    package_url: 'https://huggingface.co/audio-cpp/Magenta-RealTime-2-GGUF/blob/16ebc99233e394fdb673ca1de94f1c81b560b5a0/magenta-rt2-small-f16.gguf',
+    license_url: 'https://huggingface.co/google/magenta-realtime-2#terms-of-use',
+    model_directory: 'audiocpp/models/magenta_realtime_2', file: 'magenta-rt2-small-f16.gguf', missing_bytes: 1_529_647_616, size: '1.42 GiB',
+  },
+  {
+    id: 'midashenglm_gen', name: 'MiDashengLM-Gen', profile_id: 'q8_0', quantization: 'Q8_0',
+    package_url: 'https://huggingface.co/audio-cpp/audio.cpp-gguf/blob/33120a4cfdf0d56786db934a03a093d4675de938/MiDashengLM-Gen-GGUF/midashenglm-gen-q8_0.gguf',
+    license_url: 'https://huggingface.co/mispeech/midashenglm-gen#license',
+    model_directory: 'audiocpp/models/midashenglm_gen', file: 'midashenglm-gen-q8_0.gguf', missing_bytes: 3_381_370_752, size: '3.15 GiB',
+  },
+])('shows the manual $name package and blocks Create with absent weights', async ({ file, size, ...model }) => {
   vi.stubGlobal('fetch', vi.fn(async () => Response.json({ engine: 'audio.cpp', models: [{
-    id: 'minimax_h3', name: 'MiniMax-H3', profile_id: 'minimax_h3_q4_k', quantization: 'Q4_K',
-    ready: false, missing: ['dit.gguf'], missing_bytes: 32_443_213_394, status: 'experimental', ...packageInfo,
+    ...model, ready: false, missing: [file], status: 'experimental',
   }] })));
   const song = {
-    title: 'H3 take', ditModel: 'audio.cpp', style: 'funk groove',
-    generationParams: { music_source: { kind: 'audio_cpp', model: 'minimax_h3' } },
+    title: 'Saved take', ditModel: 'audio.cpp', style: 'funk groove',
+    generationParams: { music_source: { kind: 'audio_cpp', model: model.id } },
   } as Song;
   act(() => root.render(panel({ musicEngine: 'audio.cpp', initialData: { song, timestamp: 1 } })));
   await flush();
   expect(host.textContent).toContain('Experimental');
-  expect(host.textContent).toContain('30.22 GiB');
-  expect(host.textContent).toContain(packageInfo.model_directory);
-  expect(host.textContent).toContain('dit.gguf');
-  expect(host.querySelector(`a[href="${packageInfo.package_url}"]`)).not.toBeNull();
-  expect(host.querySelector(`a[href="${packageInfo.license_url}"]`)).not.toBeNull();
+  expect(host.textContent).toContain(size);
+  expect(host.textContent).toContain(model.model_directory);
+  expect(host.textContent).toContain(file);
+  expect(host.querySelector(`a[href="${model.package_url}"]`)).not.toBeNull();
+  expect(host.querySelector(`a[href="${model.license_url}"]`)).not.toBeNull();
   expect(buttonNamed('create')?.disabled).toBe(true);
   expect(sent).toHaveLength(0);
 });
@@ -1351,6 +1487,37 @@ it('reuses a Stable Audio 3 text prompt and its sampler and guidance controls', 
     style: 'instrumental piano', lyrics: '', duration_seconds: 4, steps: 4, seed: 42,
     cfg_scale: 2, output_format: 'wav32', stable_audio,
   });
+});
+
+it('shows the MuLaCover weights and resampler steps independently', async () => {
+  const package_url = 'https://huggingface.co/audio-cpp/audio.cpp-gguf/tree/32c1ce1fea57a513eb9386aa62408d47b1cf7ab2/MuLaCover-GGUF';
+  const license_url = 'https://github.com/HeartMuLa/MuLaCover/blob/e27fa7fa0da7c9817879cc6210cc5693f9327946/MODEL_LICENSE';
+  let weightsMissing = true;
+  vi.stubGlobal('fetch', vi.fn(async () => Response.json({ engine: 'audio.cpp', models: [{
+    id: 'mulacover', name: 'MuLaCover', profile_id: 'mulacover_q8_0', quantization: 'Q8_0', ready: false,
+    missing: weightsMissing ? ['mulacover-q8_0.gguf', 'libsoxr'] : ['libsoxr'],
+    missing_bytes: weightsMissing ? 8_220_378_496 : 0,
+    model_directory: 'audiocpp/models/MuLaCover-GGUF', package_url, license_url,
+  }] })));
+  const song = {
+    title: 'Cover', lyrics: '', style: '', ditModel: 'audio.cpp',
+    generationParams: { music_source: { kind: 'audio_cpp', model: 'mulacover' }, cover_of: 'original-track' },
+  } as Song;
+  act(() => root.render(panel({ musicEngine: 'audio.cpp', initialData: { song, timestamp: 1 } })));
+  await flush();
+  expect(host.textContent).toContain('7.66 GiB');
+  expect(host.textContent).toContain('audiocpp/models/MuLaCover-GGUF');
+  expect(host.querySelector(`a[href="${package_url}"]`)).not.toBeNull();
+  expect(host.querySelectorAll(`a[href="${license_url}"]`)).toHaveLength(1);
+  expect(buttonNamed('Install resampler')).toBeDefined();
+  expect(buttonNamed('create')?.disabled).toBe(true);
+
+  weightsMissing = false;
+  click(buttonNamed('Refresh models')!);
+  await flush();
+  expect(host.querySelector(`a[href="${package_url}"]`)).toBeNull();
+  expect(buttonNamed('Install resampler')).toBeDefined();
+  expect(buttonNamed('create')?.disabled).toBe(true);
 });
 
 it('submits a MuLaCover library original and restores it for a new take', async () => {

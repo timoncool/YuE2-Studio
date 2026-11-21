@@ -29,6 +29,7 @@ mod audio_cpp_midasheng;
 mod audio_cpp_minimax_h3;
 mod audio_cpp_mulacover;
 mod audio_cpp_music;
+mod audio_cpp_sound_effects;
 mod hotstep_cover;
 mod hotstep_runtime;
 mod hotstep_heartmula;
@@ -42,6 +43,7 @@ mod hotstep_cover_assets;
 mod hotstep_cover_rolls;
 mod audio_cpp_stable_audio;
 mod audio_cpp_vevo2;
+mod audio_cpp_soulx;
 mod native_music_jobs;
 mod music_pair;
 mod native_ace_jobs;
@@ -161,6 +163,7 @@ struct AppState {
     audio_cpp_music_stops: Arc<RwLock<HashMap<String, Arc<std::sync::atomic::AtomicBool>>>>,
     heartmula_install: Arc<tokio::sync::Mutex<()>>,
     stable_audio_install: Arc<tokio::sync::Mutex<()>>,
+    soulx_install: Arc<tokio::sync::Mutex<()>>,
     openrouter_music_stops: Arc<RwLock<HashMap<String, Arc<tokio::sync::Notify>>>>,
     music_server: EngineClient,
     /// The engine's log, followed for the service's life: its recent lines and
@@ -368,6 +371,8 @@ struct CreateMusicJobRequest {
     magenta: Option<audio_cpp_magenta::MagentaOptions>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     vevo2: Option<audio_cpp_vevo2::Options>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    soulx: Option<audio_cpp_soulx::Options>,
     /// The window's own mark for this request, handed back on the job so the
     /// window knows the job as its own before the response reaches it.
     client_ref: Option<String>,
@@ -1591,6 +1596,7 @@ pub async fn serve_on_port(port: u16) -> anyhow::Result<()> {
         audio_cpp_music_stops: Arc::default(),
         heartmula_install: Arc::default(),
         stable_audio_install: Arc::default(),
+        soulx_install: Arc::default(),
         openrouter_music_stops: Arc::new(RwLock::new(HashMap::new())),
         music_server,
         engine_log,
@@ -2004,6 +2010,8 @@ pub async fn serve_on_port(port: u16) -> anyhow::Result<()> {
         .route("/v1/local-models/music", get(local_music_model_catalog))
         .route("/v1/music/jobs", post(create_music_job).get(list_active_music_jobs))
         .route("/v1/music/audio-cpp/models", get(audio_cpp_music::models))
+        .route("/v1/tools/sound-effects/model", get(audio_cpp_music::sound_effect_model))
+        .route("/v1/music/audio-cpp/vevo2/model-directory", post(audio_cpp_vevo2::set_directory))
         .route("/v1/music/native/hotstep/profiles", get(hotstep_cover::profiles))
         .route("/v1/music/native/hotstep/install", post(hotstep_cover::install))
         .route("/v1/music/native/hotstep/stable-audio-3/install", post(hotstep_sa3::install))
@@ -3544,6 +3552,8 @@ async fn read_training(State(state): State<AppState>) -> Json<Value> {
     Json(serde_json::json!({
         "pack": pack,
         "pack_ready": training.pack_ready() && !trainer_cublas_missing(&state),
+        "trainer_weights_ready": training.weights_ready() && !trainer_cublas_missing(&state),
+        "trainers": training.trainer_choices().await,
         "separator_ready": separator_ready,
         "recipe_defaults": training::Recipe::default(),
         "recipe_fields": music_engine::yue_train::recipe_fields(),
@@ -3961,13 +3971,15 @@ struct StartTraining {
     #[serde(default)]
     name: String,
     recipe: training::Recipe,
+    #[serde(default)]
+    trainer_id: Option<String>,
 }
 
 /// Starts a run. It wants the whole card: refused while a song renders, and
 /// the writing assistant is let go first.
 async fn start_training(State(state): State<AppState>, Json(input): Json<StartTraining>) -> Result<Json<training::Run>, (StatusCode, Json<ApiError>)> {
     card_free_for_training(&state).await.map_err(|reason| api_error(StatusCode::CONFLICT, reason))?;
-    start_training_run(&state, &input.dataset_id, &input.name, input.recipe)
+    start_training_run(&state, &input.dataset_id, &input.name, input.recipe, input.trainer_id.as_deref())
         .await
         .map(Json)
         .map_err(|error| api_error(StatusCode::CONFLICT, error))
@@ -3975,14 +3987,14 @@ async fn start_training(State(state): State<AppState>, Json(input): Json<StartTr
 
 /// A run of `dataset`, refused while a song renders or where the trainer
 /// could not compute on the card.
-async fn start_training_run(state: &AppState, dataset: &str, name: &str, recipe: training::Recipe) -> Result<training::Run, String> {
+async fn start_training_run(state: &AppState, dataset: &str, name: &str, recipe: training::Recipe, trainer_id: Option<&str>) -> Result<training::Run, String> {
     trainer_ready(state)?;
     let _exclusive = state.engine_use.try_write().map_err(|_| "the engine is in use; start training once it is idle".to_owned())?;
     no_song_rendering(state).await?;
     let models = set_engine_models(state).await?;
     state
         .training
-        .start(Some(engine_bundle_root()), models.backbone, models.companion, vocal_separator(state).await, dataset, name, recipe, card_hooks(state).await)
+        .start(Some(engine_bundle_root()), models.backbone, models.companion, vocal_separator(state).await, dataset, name, recipe, trainer_id, card_hooks(state).await)
         .await
         .map_err(|error| format!("{error:#}"))
 }
@@ -6443,8 +6455,8 @@ async fn start_engine_again_with(
                 .await
                 .map_err(|error| format!("the engine's runtime libraries could not be installed: {error}"))?;
         }
-        // The engine loads eleven gigabytes of weights the moment it starts.
-        // If the writing assistant is still holding the card, it does not finish.
+        // The engine needs the device during initialization. Free it before
+        // starting, then generation loads any remaining weights on demand.
         free_the_card_for_the_engine(state).await;
         let models = selected_engine_models(state).await?;
         let backbone = models.backbone.clone();

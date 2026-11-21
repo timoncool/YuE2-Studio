@@ -48,8 +48,8 @@ pub(super) struct Status {
     waiting_job_id: Option<String>,
     missing_bytes: Option<u64>,
     error: Option<String>,
-    // Some processes resolve their weights per request. A ready response for
-    // those routes confirms admission prerequisites, while work still starts on Create.
+    // Ready confirms the pair can accept a request. These engines can defer
+    // loading their generation weights until Create.
     load_on_create: bool,
 }
 
@@ -436,25 +436,25 @@ async fn start(state: &AppState, revision: u64, preparation: Preparation) -> any
             if state.music_server.health().await {
                 if let Some(files) = selected.as_ref() {
                     if selection_matches_files(state, files).await.unwrap_or(false) {
-                        return Ok(false);
+                        return Ok(true);
                     }
                 }
             }
             if state.ace_runtime.health().await {
                 if !stage(Stage::Unloading) {
-                    return Ok(false);
+                    return Ok(true);
                 }
                 state.ace_runtime.stop().await?;
             }
             if state.minimax.healthy().await {
                 if !stage(Stage::Unloading) {
-                    return Ok(false);
+                    return Ok(true);
                 }
                 state.minimax.stop().await;
             }
             start_engine_again_with(state, Some(&stage))
                 .await
-                .map(|()| false)
+                .map(|()| true)
                 .map_err(anyhow::Error::msg)
         }
         Preparation::Ace(launch) => {

@@ -132,7 +132,7 @@ original source until it ends or you explicitly cancel it with `song_job_cancel`
 Send a stable `client_id` with an increasing `sequence` from each UI window to
 keep delayed requests from overriding that window's latest selection. When
 `stage` is `needs_install`, install the listed resources and select the pair
-again. `ready` with `load_on_create: true` means the next song starts model work.
+again. For local YuE2, `loading_model` is engine initialization through its health check. A `ready` pair with `load_on_create: true` loads generation weights as needed when you create a song.
 
 For MiniMax Music3 through audio.cpp, call `audio_cpp_music_models` and check that
 `minimax_music3` is ready. Pass `"music_source": {"kind":"audio_cpp","model":"minimax_music3"}`
@@ -151,7 +151,9 @@ them in `song_create`.
 For other ready audio.cpp families, pass the ID returned by the same catalog as
 `music_source.model`. HeartMuLa takes lyrics and style tags, with optional
 sampling and codec settings in `heartmula`. For MiDashengLM-Gen, use
-`midasheng` to describe the scene, music, speech, effects and environment. Its
+`audio_cpp_music_models` for the manual Q8_0 file, original terms, destination,
+and bytes missing. Use `midasheng` to describe the scene, music, speech,
+effects and environment. Its
 `duration_seconds` is a budget. The model can finish early. The compact job
 shows `requested_duration_seconds` and, after completion, `effective_duration_seconds`.
 Read `generation_settings.duration_seconds` from the library to repeat the same
@@ -208,6 +210,12 @@ Cancel with `training_cancel`. Install a saved checkpoint with
 `backend: "auto"` or `"burn-cuda"`. The stored voice uses Safetensors; legacy
 RVC voices continue to use their installed checkpoint and optional index.
 
+For YuE2 LoRA training, the detailed `training_status` response lists the
+bundled trainer and compatible signed trainers for this platform. Install a
+signed trainer with the normal engine component installer and pass its
+`trainer_id` to `training_start` to select it. A continuation uses the
+original trainer generation and optimizer format recorded in the run.
+
 For HeartMuLa adapter training, use `hotstep_heartmula_training_status`,
 `hotstep_heartmula_training_install` and `hotstep_heartmula_training_start`.
 Give each sample a style and add lyrics to vocal tracks. The training run
@@ -225,13 +233,39 @@ original song ID as `cover_of`, and the native source
 `{"kind":"native","engine":"hotstep","model":"heartmula-mulacover"}`
 to `song_create`. Reuse restores the source and the exact score for the cover.
 
-For Vevo2, pass the lyrics and a library song ID as `vevo2.voice_song_id`.
+For Vevo2, consult the [original model terms](https://huggingface.co/RMSnow/Vevo2).
+Use `vevo2_model_directory_set` with the absolute path on the Studio computer
+to your local folder containing the supported `vevo2-q8_0.gguf` bundle
+(3,242,129,792 bytes). Studio verifies its checksum before saving the folder.
+Pass `null` to return to
+`audiocpp/models/vevo2` in the Studio data folder. The choice survives restarts.
+Read `audio_cpp_music_models` to check the configured directory and runtime
+readiness. Pass the lyrics and a library song ID as `vevo2.voice_song_id`.
 Add `vevo2.melody_song_id` to condition the singing on a second library track.
 
-For Magenta RealTime 2, select `magenta_realtime_2` with the installed Small F16
-profile. Use `style` for a text description or `magenta.reference_song_id` for
+SoulX-Singer uses separate Q8 weights for singing synthesis (`soulx_singer`)
+and conversion (`soulx_singer_svc`). Install the corresponding model with
+`audio_cpp_music_model_install` and check readiness with `audio_cpp_music_models`.
+For `song_create`, set `music_source.kind` to `audio_cpp` and supply the model ID
+and `soulx.reference_song_id` from the library. Synthesis also requires the
+reference and target JSON files as `soulx.reference_metadata` and
+`soulx.target_metadata` strings. They contain aligned phoneme and note segments.
+Set `soulx.control` to `melody` only if both files supply a 50 Hz pitch contour.
+Conversion takes `soulx.source_song_id` for the source vocal recording and
+requires libsoxr. The installer handles libsoxr on Windows. On Linux and macOS
+use the system libsoxr package. Both modes save a separate song to the library.
+
+For Magenta RealTime 2, select `magenta_realtime_2` with the Small F16 profile.
+Use `audio_cpp_music_models` for the manual file, original terms, destination,
+and bytes missing. Use `style` for a text description or `magenta.reference_song_id` for
 a library track that supplies the musical style. Both modes generate an
 instrumental. The reference sets the style when supplied.
+
+For sound effects, read `sound_effect_model_get`. It lists the local audio.cpp
+runtime, the MOSS-SoundEffect v2 Q8_0 file, its source and terms, and the path
+relative to the Studio data directory. When ready, use `sound_effect_create`
+with an English or Chinese description and optional `duration_seconds` from
+0.1 to 30. Follow `song_job_get` until it saves the result in the library.
 
 For an OpenRouter generation, read `openrouter_catalog` and select an ID whose
 `capabilities` include `music_generation`. Pass that exact ID as

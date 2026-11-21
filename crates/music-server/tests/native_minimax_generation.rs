@@ -223,7 +223,7 @@ async fn audio_cpp_minimax_music3_generates_and_saves_q8_provenance() {
 }
 
 #[tokio::test]
-async fn audio_cpp_vevo2_sings_and_saves_reference_ids_and_route() {
+async fn audio_cpp_vevo2_rejects_truncated_weights_and_sings_with_a_local_bundle() {
     use base64::Engine as _;
     use reqwest::multipart::{Form, Part};
 
@@ -278,7 +278,26 @@ async fn audio_cpp_vevo2_sings_and_saves_reference_ids_and_route() {
         .iter()
         .find(|model| model["id"] == "vevo2")
         .unwrap();
-    assert_eq!(vevo2["ready"], true);
+    assert_eq!(vevo2["ready"], false);
+    assert_eq!(vevo2["missing"], json!(["vevo2-q8_0.gguf"]));
+    let attach = format!("{url}/v1/music/audio-cpp/vevo2/model-directory");
+    let truncated = http
+        .post(&attach)
+        .json(&json!({"directory": model}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(truncated.status(), StatusCode::BAD_REQUEST);
+    let weights = std::env::var_os("YUE2_QA_VEVO2_DIRECTORY");
+    if let Some(directory) = &weights {
+        http.post(&attach)
+            .json(&json!({"directory": std::path::Path::new(directory)}))
+            .send()
+            .await
+            .unwrap()
+            .error_for_status()
+            .unwrap();
+    }
 
     let mut ids = Vec::new();
     for title in ["Dry voice", "Melody"] {
@@ -310,6 +329,11 @@ async fn audio_cpp_vevo2_sings_and_saves_reference_ids_and_route() {
 
     request["vevo2"] = json!({"voice_song_id": ids[0], "melody_song_id": ids[1]});
     let accepted = http.post(&endpoint).json(&request).send().await.unwrap();
+    if weights.is_none() {
+        assert_eq!(accepted.status(), StatusCode::SERVICE_UNAVAILABLE);
+        studio.kill().await.unwrap();
+        return;
+    }
     assert_eq!(accepted.status(), StatusCode::ACCEPTED);
     let accepted: Value = accepted.json().await.unwrap();
     let id = accepted["id"].as_str().unwrap();
