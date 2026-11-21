@@ -1093,9 +1093,26 @@ fn song_create_schema(mut properties: Value) -> Value {
         "additionalProperties": false
     });
     properties["vevo2"] = json!({"type":"object","description":"Vevo2 singing references from the song library.","properties":{"voice_song_id":{"type":"string"},"melody_song_id":{"type":"string"}},"required":["voice_song_id"]});
+    properties["soulx"] = json!({
+        "type": "object", "description": "SoulX-Singer singing synthesis (soulx_singer) or voice conversion (soulx_singer_svc).",
+        "properties": {
+            "reference_song_id": {"type": "string", "description": "Library recording of the target singing voice."},
+            "source_song_id": {"type": "string", "description": "Library recording of the source vocals for conversion."},
+            "reference_metadata": {"type": "string", "description": "For synthesis, the aligned metadata JSON text for the reference singing.", "maxLength": 262144},
+            "target_metadata": {"type": "string", "description": "For synthesis, the aligned metadata JSON text for the output singing.", "maxLength": 262144},
+            "control": {"enum": ["score", "melody"], "description": "Default score uses notes. Melody requires 50 Hz F0 contours."}
+        },
+        "required": ["reference_song_id"]
+    });
     let mut schema = object(properties, &[]);
     schema["anyOf"] = json!([
         { "required": ["style"] },
+        {
+            "required": ["music_source", "soulx"],
+            "properties": { "music_source": { "required": ["kind", "model"], "properties": {
+                "kind": { "const": "audio_cpp" }, "model": { "enum": ["soulx_singer", "soulx_singer_svc"] }
+            } } }
+        },
         {
             "required": ["music_source", "midasheng"],
             "properties": { "music_source": { "properties": {
@@ -2274,7 +2291,7 @@ fn tools() -> &'static [Tool] {
             Tool {
                 name: "audio_cpp_music_model_install",
                 description: "Start installation of a managed audio.cpp music model. Poll audio_cpp_music_models for progress.",
-                schema: || object(json!({"model": {"type": "string", "enum": ["heartmula", "stable_audio"]}}), &["model"]),
+                schema: || object(json!({"model": {"type": "string", "enum": ["heartmula", "stable_audio", "soulx_singer", "soulx_singer_svc"]}}), &["model"]),
                 call: |args| post("/v1/music/audio-cpp/models/install".into(), args.clone()),
             },
             Tool {
