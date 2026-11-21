@@ -315,47 +315,52 @@ mod tests {
     }
 
     #[tokio::test]
-    #[ignore = "needs the pinned archives in STUDIO_NATIVE_RUNTIME_CACHE"]
-    async fn pinned_runtime_cache_installs_both_cuda_modules() {
-        let cache = PathBuf::from(std::env::var_os("STUDIO_NATIVE_RUNTIME_CACHE").unwrap());
+    #[ignore = "uses the pinned release archive or local runtime cache"]
+    async fn pinned_runtime_installs_its_verified_members() {
+        let cache = std::env::var_os("STUDIO_NATIVE_RUNTIME_CACHE").map(PathBuf::from);
+        let engine = std::env::var("STUDIO_NATIVE_RUNTIME_TEST_ENGINE")
+            .unwrap_or_else(|_| "acestep-cpp".into());
         let temporary = tempfile::tempdir().unwrap();
         let downloads = downloader(temporary.path());
-        for engine in ["acestep-cpp", "minimaxmusic-cpp"] {
-            let Some(runtime) = selected(engine) else {
-                continue;
-            };
+        let runtime = selected(&engine).expect("supported host and test engine");
+        if let Some(cache) = cache {
             let archive = cache.join(runtime.pin.archive);
             downloads
-                .install_local_archive(engine, &runtime.asset, &archive)
+                .install_local_archive(&engine, &runtime.asset, &archive)
                 .await
                 .unwrap();
-            let executable = installed_by(&downloads, runtime).unwrap();
-            let folder = executable.parent().unwrap();
-            for (member, sha) in &runtime.pin.required {
-                assert_eq!(
-                    install_record::sha256_of(&folder.join(member)).unwrap(),
-                    *sha
-                );
-            }
             assert!(archive.is_file());
-            // A rejected reinstall must leave the good generation untouched.
-            let corrupt = temporary.path().join("damaged.zip");
-            fs::write(&corrupt, b"damaged").unwrap();
-            assert!(
-                install_tree(
-                    runtime.pin.url,
-                    &corrupt,
-                    folder,
-                    &downloads.record_of(&runtime.asset),
-                    downloads.root()
-                )
-                .unwrap()
-                .is_err()
-            );
+        } else {
+            downloads
+                .install_all(&engine, &[&runtime.asset])
+                .await
+                .unwrap();
+        }
+        let executable = installed_by(&downloads, runtime).unwrap();
+        let folder = executable.parent().unwrap();
+        for (member, sha) in &runtime.pin.required {
             assert_eq!(
-                installed_by(&downloads, runtime).as_deref(),
-                Some(executable.as_path())
+                install_record::sha256_of(&folder.join(member)).unwrap(),
+                *sha
             );
         }
+        // A rejected reinstall must leave the good generation untouched.
+        let corrupt = temporary.path().join("damaged.zip");
+        fs::write(&corrupt, b"damaged").unwrap();
+        assert!(
+            install_tree(
+                runtime.pin.url,
+                &corrupt,
+                folder,
+                &downloads.record_of(&runtime.asset),
+                downloads.root()
+            )
+            .unwrap()
+            .is_err()
+        );
+        assert_eq!(
+            installed_by(&downloads, runtime).as_deref(),
+            Some(executable.as_path())
+        );
     }
 }
