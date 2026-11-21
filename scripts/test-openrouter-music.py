@@ -222,28 +222,26 @@ with tempfile.TemporaryDirectory(prefix="yue-openrouter-") as profile, local_pro
             assert not reply.get("isError"), reply
             return reply["content"][0]["text"]
 
-        def wait_page(*strings):
+        def wait_page(*strings, any_of=()):
             last = ""
             deadline = time.monotonic() + 35
             while time.monotonic() < deadline:
                 try:
                     last = ui("read_page")
-                    if all(string in last for string in strings):
+                    if all(string in last for string in strings) and (not any_of or any(string in last for string in any_of)):
                         return last
                 except (AssertionError, OSError) as error:
                     last = str(error)
                 time.sleep(.15)
-            raise AssertionError(f"Missing {strings!r} in WebView page:\n{last}")
+            raise AssertionError(f"Missing {strings!r} (alternatives: {any_of!r}) in WebView page:\n{last}")
 
         def click_button(text, page):
             line = next(line for line in page.splitlines() if f'button "{text}"' in line)
             ui("click", ref=line.split()[0])
 
-        page = wait_page('button "Create"')
+        page = wait_page(any_of=('button "Use OpenRouter"', 'select "Model"'))
         if 'button "Use OpenRouter"' in page:
             click_button("Use OpenRouter", page)
-        elif 'select "Model"' not in page:
-            click_button("Create", page)
         page = wait_page('select "Model"')
         if 'select "Model" value="openrouter"' not in page:
             ui("select", text="Model", value="openrouter")
@@ -289,9 +287,16 @@ with tempfile.TemporaryDirectory(prefix="yue-openrouter-") as profile, local_pro
             assert pcm == original.readframes(8000)
         ui("select", text="Model", value="local")
         wait_page('select "Model" value="local"', f'value="{prompt}"')
+        local_style = "make it massive, without drums"
+        tool("create_form_set", {"fields": {"style": local_style}}, next_id + 1)
+        wait_page(f'value="{local_style}"')
+        form = tool("create_form_get", {}, next_id + 20)
+        assert form["fields"]["style"] == local_style, form
+        hint_rules = {hint["rule"] for hint in form["style_hints"]}
+        assert {"negative", "instruction"} <= hint_rules, form
         print(json.dumps({"transport": "Windows WebView2 and localhost SSE", "catalog": ["loading", "error",
               "empty", "ready"], "model": peer_model, "library_id": song["id"],
-              "pcm_sha256": hashlib.sha256(pcm).hexdigest(), "local_draft_restored": True,
+              "pcm_sha256": hashlib.sha256(pcm).hexdigest(), "local_draft_restored": True, "style_hints": sorted(hint_rules),
               "paid_requests": 0}, indent=2))
 
     proc=run_service()
