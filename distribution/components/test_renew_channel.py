@@ -1,6 +1,6 @@
 """Test operational renewal against an isolated Git remote and Windows key store."""
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import hashlib
 import os
 from pathlib import Path
@@ -19,7 +19,7 @@ import sign_channel as signer
 class PastDay(datetime):
     @classmethod
     def now(cls, tz=None):
-        return datetime.now(tz) - timedelta(days=8)
+        return datetime.now(tz) - timedelta(days=100)
 
 
 @unittest.skipUnless(os.name == "nt", "Windows DPAPI")
@@ -41,6 +41,9 @@ class RenewalTest(unittest.TestCase):
             signed = work / "signed"
             with patch.object(signer, "datetime", PastDay):
                 signer.sign(store, signed, inputs)
+            for metadata in ("timestamp.json", "1.snapshot.json", "1.targets.json"):
+                expired = Metadata.from_bytes((signed / "metadata" / metadata).read_bytes()).signed
+                self.assertLess(expired.expires, datetime.now(timezone.utc))
             site = source / renewal.SITE
             shutil.copytree(signed / "metadata", site)
             shutil.copytree(signed / "targets", site / "targets")
