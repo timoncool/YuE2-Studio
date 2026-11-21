@@ -1,4 +1,4 @@
-name: Create keyboard acceptance
+name: MiniMax-H3 MCP acceptance
 
 on:
   push:
@@ -8,36 +8,22 @@ permissions:
   contents: read
 
 jobs:
-  keyboard:
+  h3-mcp:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 15
     env:
       RUSTUP_TOOLCHAIN: stable
     steps:
       - uses: actions/checkout@v7.0.1
-      - uses: actions/setup-node@v6
-        with:
-          node-version: 24
-          cache: npm
-          cache-dependency-path: app/package-lock.json
       - uses: actions/setup-python@v6
         with:
           python-version: '3.13'
-      - name: Install service and browser dependencies
+      - name: Install service dependencies
         run: |
           sudo apt-get update -q
           sudo apt-get install -y -q --no-install-recommends libwayland-dev cmake
-          python -m pip install playwright==1.64.1
-          python -m playwright install --with-deps --only-shell chromium
       - uses: Swatinem/rust-cache@v2
       - name: Build the standalone Studio service
         run: cargo build --locked -p music-server --bin music-server
-      - name: Build the release UI bundle
-        working-directory: app
-        env:
-          VITE_STUDIO_API_BASE: http://127.0.0.1:18791
-        run: |
-          npm ci
-          npm run build
-      - name: Keyboard through the built Create form
-        run: python scripts/test-create-keyboard.py target/debug/music-server app/dist 18791
+      - name: Read the experimental entry through MCP
+        run: python scripts/test-h3-mcp.py target/debug/music-server 18791
