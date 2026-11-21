@@ -304,14 +304,12 @@ impl GpuChoice {
         })
     }
 
-    /// The NVML index from an older setting is resolved before it reaches CUDA.
+    /// Resolve legacy NVML indices before launch. An explicit UUID pins CUDA
+    /// even when NVML has not enumerated that device yet.
     pub(crate) fn cuda_mask<'a>(&'a self, cards: Option<&'a [NvidiaCard]>) -> Option<&'a str> {
-        match cards {
-            Some(cards) => self.card(cards).map(|card| card.uuid.as_str()),
-            None => match self {
-                Self::Uuid(uuid) if valid_gpu_uuid(uuid) => Some(uuid),
-                _ => None,
-            },
+        match self {
+            Self::LegacyIndex(_) => self.card(cards?).map(|card| card.uuid.as_str()),
+            Self::Uuid(uuid) => valid_gpu_uuid(uuid).then_some(uuid.as_str()),
         }
     }
 }
@@ -722,7 +720,10 @@ mod tests {
         let new_setting: GpuChoice = serde_json::from_str(&format!("\"{low_pci}\"")).unwrap();
         let reordered = parse_cards(&format!("0, {low_pci}, NVIDIA GeForce RTX 3060, 12288\n1, {high_pci}, NVIDIA GeForce RTX 4090, 24564\n"));
         assert_eq!(new_setting.cuda_mask(Some(&reordered)), Some(low_pci));
-        assert_eq!(new_setting.cuda_mask(Some(&cards[..1])), None);
+        assert_eq!(new_setting.cuda_mask(Some(&cards[..1])), Some(low_pci));
+        assert_eq!(new_setting.cuda_mask(Some(&[])), Some(low_pci));
+        assert_eq!(new_setting.cuda_mask(None), Some(low_pci));
+        assert_eq!(GpuChoice::Uuid("GPU-invalid".into()).cuda_mask(None), None);
         assert_eq!(old_setting.cuda_mask(None), None);
     }
 
