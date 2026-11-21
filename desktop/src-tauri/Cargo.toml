@@ -32,6 +32,11 @@ tokio = { version = "1", features = ["rt-multi-thread"] }
 # release cadence and Tauri dependency graph must not modify native engines.
 [workspace]
 
+[target.'cfg(windows)'.dependencies]
+hound = "3.5"
+wasapi = "0.27"
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_UI_WindowsAndMessaging"] }
+
 [profile.dev]
 debug = "line-tables-only"
 

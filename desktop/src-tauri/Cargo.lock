@@ -6871,6 +6871,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "wasapi"
+version = "0.27.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "58b35dbcb6fae6fbaba9f6f52a22686bb405978ee112ed6eb33d98bd63c97583"
+dependencies = [
+ "log",
+ "num-integer",
+ "thiserror 2.0.21",
+ "windows",
+ "windows-core",
+]
+
+[[package]]
 name = "wasi"
 version = "0.11.1+wasi-snapshot-preview1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7619,6 +7632,7 @@ dependencies = [
 name = "yue2-studio-desktop"
 version = "0.1.0"
 dependencies = [
+ "hound",
  "music-engine",
  "music-server",
  "reqwest",
@@ -7631,6 +7645,8 @@ dependencies = [
  "tauri-plugin-updater",
  "tauri-plugin-window-state",
  "tokio",
+ "wasapi",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]

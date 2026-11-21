@@ -7,6 +7,10 @@
 //! on loopback — a developer running it separately — the shell uses it instead
 //! of starting a second one.
 
+#[cfg(windows)]
+mod process_audio;
+mod window_audio;
+
 use std::{
     net::{Ipv4Addr, SocketAddrV4, TcpStream},
     path::{Path, PathBuf},
@@ -1155,8 +1159,12 @@ pub fn run() {
                 .build(),
         )
         .manage(Prompts::default())
+        .manage(window_audio::WindowAudio::default())
         .manage(Session::new(launch.headless))
         .invoke_handler(tauri::generate_handler![
+            window_audio::audio_capture_windows,
+            window_audio::record_window_audio,
+            window_audio::stop_window_audio,
             open_visualizer_window,
             open_audio_editor_window,
             restart_offline_studio,
