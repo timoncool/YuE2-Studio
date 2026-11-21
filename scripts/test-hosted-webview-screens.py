@@ -413,6 +413,30 @@ def check_lrc(root, pid):
         click(score_button)
         save_dialog_file(pid, root/"Cancel.abc", "abc-cancel-dialog.json", action="cancel")
         failed_save(score_button, "score", "abc")
+        for label, extension in (("PDF", "pdf"), ("MIDI", "mid")):
+            button = f'button "{label}"'
+            output = root/f"Партитура.{extension}"
+            click(button)
+            save_dialog_file(pid, output, f"score-{extension}-dialog.json")
+            for _ in range(60):
+                content = output.read_bytes() if output.is_file() else b""
+                if extension == "pdf":
+                    complete = content.startswith(b"%PDF-") and content.rstrip().endswith(b"%%EOF")
+                else:
+                    complete = content.startswith(b"MThd") and b"MTrk" in content and b"\xff\x2f\x00" in content
+                if complete:
+                    break
+                time.sleep(.2)
+            else:
+                raise AssertionError(f"Invalid saved score {extension}: {len(content)} bytes")
+            cancel_path = root/f"Отмена-партитуры.{extension}"
+            click(button)
+            save_dialog_file(pid, cancel_path, f"score-{extension}-cancel-dialog.json", action="cancel")
+            wait_page(button)
+            assert not cancel_path.exists()
+            failed_save(button, f"score-{extension}", extension)
+            json_file(out/f"score-{extension}-export.json", dict(bytes=len(content),
+                      sha256=hashlib.sha256(content).hexdigest(), cancelled_file_absent=True))
         json_file(out/"score.json", dict(bytes=score_file.stat().st_size, sha256=hashlib.sha256(score_file.read_bytes()).hexdigest()))
         click('button "Songbook"')
         wait_page('button "Print A4"')
