@@ -56,7 +56,8 @@ fi
 
 midi="$root/desktop/src-tauri/resources/music-midi"
 midi_commit="$(sed -n 's/.*"commit": "\(.*\)".*/\1/p' "$root/engines/music-midi-source.json")"
-if [ ! -x "$midi/music-midi" ] || [ ! -x "$midi/music-caption" ] || [ "$(cat "$midi/runtime.commit" 2>/dev/null)" != "$midi_commit" ]; then
+midi_stamp="$midi_commit:$(sha256sum "$root/scripts/hotstep-ggml-xcr0.patch" | cut -d' ' -f1)"
+if [ ! -x "$midi/music-midi" ] || [ ! -x "$midi/music-caption" ] || [ "$(cat "$midi/runtime.commit" 2>/dev/null)" != "$midi_stamp" ]; then
     rm -rf "$midi"
     "$root/scripts/build-midi-runtime-linux.sh" "$midi"
 fi

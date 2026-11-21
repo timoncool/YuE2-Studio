@@ -1,0 +1,101 @@
+Backport 1cbd79adc5b3ca65eff7a913e73209226289025d
+Author: Nerual Dreming <timoncool@gmail.com>
+
+cpu: a variant is scored only when the OS has enabled its registers (XCR0)
+
+A CPU that reports AVX-512 under an OS that has not enabled the ZMM state
+raised an illegal instruction on the first ZMM use of the variant picked
+for it (0xc000001d at the first vmovups zmm of ggml-cpu-cascadelake,
+-icelake and -cannonlake). The score now reads XCR0 and gives 0 to a
+variant whose YMM, ZMM or AMX state the OS does not save.
+
+diff --git a/src/ggml-cpu/arch/x86/cpu-feats.cpp b/src/ggml-cpu/arch/x86/cpu-feats.cpp
+index d775a036..7d2ec1b2 100644
+--- a/src/ggml-cpu/arch/x86/cpu-feats.cpp
++++ b/src/ggml-cpu/arch/x86/cpu-feats.cpp
+@@ -6,6 +6,7 @@
+ #include <intrin.h>
+ #endif
+
++#include <cstdint>
+ #include <cstring>
+ #include <vector>
+ #include <bitset>
+@@ -260,18 +261,39 @@ void test_x86_is() {
+ }
+ #endif
+
+-static int ggml_backend_cpu_x86_score() {
+-    // FIXME: this does not check for OS support
++// The register states the OS saves and restores, from XCR0. An instruction set the CPU names is usable
++// only when the OS has enabled its registers: a CPU that reports AVX-512 under an OS that has not
++// enabled the ZMM state raises an illegal instruction on the first ZMM use.
++static uint64_t os_enabled_states(cpuid_x86 & is) {
++    if (!is.OSXSAVE()) { return 0; }
++#ifdef _MSC_VER
++    return _xgetbv(0);
++#else
++    uint32_t eax, edx;
++    __asm__ volatile(".byte 0x0f, 0x01, 0xd0" : "=a"(eax), "=d"(edx) : "c"(0));
++    return ((uint64_t) edx << 32) | eax;
++#endif
++}
++
++static const uint64_t OS_YMM = 0x6;      // XMM and YMM
++static const uint64_t OS_ZMM = 0xE6;     // and the opmasks, the upper halves of ZMM0-15, ZMM16-31
++static const uint64_t OS_AMX = 0x60000;  // tile configuration and tile data
+
++static int ggml_backend_cpu_x86_score() {
+     int score = 1;
+     cpuid_x86 is;
++    const uint64_t os = os_enabled_states(is);
++    const bool os_ymm = (os & OS_YMM) == OS_YMM;
++    const bool os_zmm = (os & OS_ZMM) == OS_ZMM;
++    const bool os_amx = (os & OS_AMX) == OS_AMX;
++    (void) os_ymm; (void) os_zmm; (void) os_amx;
+
+ #ifdef GGML_FMA
+-    if (!is.FMA()) { return 0; }
++    if (!is.FMA() || !os_ymm) { return 0; }
+     score += 1;
+ #endif
+ #ifdef GGML_F16C
+-    if (!is.F16C()) { return 0; }
++    if (!is.F16C() || !os_ymm) { return 0; }
+     score += 1<<1;
+ #endif
+ #ifdef GGML_SSE42
+@@ -283,18 +305,19 @@ static int ggml_backend_cpu_x86_score() {
+     score += 1<<3;
+ #endif
+ #ifdef GGML_AVX
+-    if (!is.AVX()) { return 0; }
++    if (!is.AVX() || !os_ymm) { return 0; }
+     score += 1<<4;
+ #endif
+ #ifdef GGML_AVX2
+-    if (!is.AVX2()) { return 0; }
++    if (!is.AVX2() || !os_ymm) { return 0; }
+     score += 1<<5;
+ #endif
+ #ifdef GGML_AVX_VNNI
+-    if (!is.AVX_VNNI()) { return 0; }
++    if (!is.AVX_VNNI() || !os_ymm) { return 0; }
+     score += 1<<6;
+ #endif
+ #ifdef GGML_AVX512
++    if (!os_zmm) { return 0; }
+     if (!is.AVX512F()) { return 0; }
+     if (!is.AVX512CD()) { return 0; }
+     if (!is.AVX512VL()) { return 0; }
+@@ -315,7 +338,7 @@ static int ggml_backend_cpu_x86_score() {
+     score += 1<<10;
+ #endif
+ #ifdef GGML_AMX_INT8
+-    if (!is.AMX_INT8()) { return 0; }
++    if (!is.AMX_INT8() || !os_amx) { return 0; }
+     score += 1<<11;
+ #endif
+
+--
+Backported from YuE2 GGML
