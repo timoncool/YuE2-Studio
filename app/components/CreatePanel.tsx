@@ -1,3 +1,5 @@
+import { readRvcBackend, useLastRvcVoice } from '../services/rvcQuick';
+import { rvcQuickStrings } from '../i18n/rvcQuick';
 import React, { useCallback, useEffect, useEffectEvent, useMemo, useRef, useState } from 'react';
 import { libraryChanged, SELF_READ, useActivity, useAssistantStatus, useOpenRouterSettings, useSetupStatus, setupStatusChanged, type ActivityEntry } from '../services/studioQueries';
 import { hasSungLines, karaokeReason, recogniseLyrics } from '../services/karaoke';
@@ -416,6 +418,8 @@ const LYRIC_LANGUAGES: { code: string; native: string; name: string }[] = [
 
 export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngine = 'local', onMusicEngineChange, isGenerating, activeJobCount = 0, queueBusy = isGenerating || activeJobCount > 0, initialData, request, playlists, onCreatePlaylist, playlistId, onChoosePlaylist }) => {
   const { t, language } = useI18n();
+  const rvcVoice = useLastRvcVoice();
+  const [rvcAfter, setRvcAfter] = useState(false);
   const writingText = songWritingStrings[language];
   const tt = t as unknown as (key: string) => string;
   const musicStrings = musicSourceStrings[language];
@@ -1402,8 +1406,11 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
 
   const generate = (request: YueRequest) => {
     cancelPause.current?.();
-    if (forever) foreverRequest.current = { ...request };
-    onGenerate(request);
+    const snapshot = rvcAfter && rvcVoice && !instrumental
+      ? { ...request, rvc_after: { voice_id: rvcVoice, backend: readRvcBackend() } }
+      : request;
+    if (forever) foreverRequest.current = { ...snapshot };
+    onGenerate(snapshot);
     if (nameFilled) { setName(''); setNameFilled(false); }
   };
   const repeat = useEffectEvent((snapshot: YueRequest) => {
@@ -2602,6 +2609,12 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
               <button type="button" onClick={() => setTakeChoiceOpen(false)} className="ml-auto px-2 py-1.5 text-zinc-500 hover:text-zinc-800 dark:hover:text-white">{t('cancel')}</button>
             </div>
           </div>
+        )}
+        {rvcVoice && !instrumental && (
+          <label className="flex items-center gap-2 text-sm">
+            <input type="checkbox" checked={rvcAfter} onChange={event => setRvcAfter(event.target.checked)} />
+            {rvcQuickStrings[language].after}
+          </label>
         )}
         <label className="mb-2 flex items-center gap-2 text-xs text-zinc-600 dark:text-zinc-300">
           <span className="shrink-0">{tt('createIntoPlaylist')}</span>

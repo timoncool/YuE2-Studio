@@ -3,19 +3,18 @@ import { useI18n } from '../context/I18nContext';
 import { rvcApplyStrings } from '../i18n/rvcApply';
 import { apiUrl } from '../services/apiBase';
 import { responseJson, type Voice } from '../services/rvcVoices';
+import { chooseLastRvcVoice, readRvcBackend, RVC_BACKEND_STORAGE, type RvcBackend } from '../services/rvcQuick';
 import { RvcNativeRuntime } from './RvcNativeRuntime';
 
 const URL = '/v1/rvc/apply';
 const accompaniment = ['drums', 'bass', 'other', 'guitar', 'piano'];
 export interface RvcSourceSong { id: string; title: string; stems: string[] }
 type Engine = 'vocal-fast-rs' | 'audio.cpp';
-type Backend = 'auto' | Engine;
-const BACKEND_STORAGE = 'studio.rvc.backend';
 interface Setup {
   effective_backend: Engine | null;
   backends: Record<Engine, { ready: boolean; can_start?: boolean; reason?: string; missing_bytes?: number }>;
 }
-interface Take { song_id: string; audio_url: string; requested_backend: Backend; effective_backend: Engine; fallback_reason?: string | null }
+interface Take { song_id: string; audio_url: string; requested_backend: RvcBackend; effective_backend: Engine; fallback_reason?: string | null }
 
 export function RvcApplyVoice({ song, voice, control, onSaved }: {
   song: RvcSourceSong;
@@ -28,10 +27,7 @@ export function RvcApplyVoice({ song, voice, control, onSaved }: {
   const [setup, setSetup] = useState<Setup>();
   const [setupRequest, setSetupRequest] = useState(0);
   const reloadSetup = useCallback(() => { setSetupRequest(request => request + 1); }, []);
-  const [backend, setBackend] = useState<Backend>(() => {
-    const stored = localStorage.getItem(BACKEND_STORAGE);
-    return stored === 'audio.cpp' || stored === 'vocal-fast-rs' ? stored : 'auto';
-  });
+  const [backend, setBackend] = useState<RvcBackend>(readRvcBackend);
   const [shift, setShift] = useState(0);
   const [blend, setBlend] = useState(0);
   const [busy, setBusy] = useState<'install' | 'convert'>();
@@ -100,9 +96,10 @@ export function RvcApplyVoice({ song, voice, control, onSaved }: {
       <label className="block space-y-1">
         <span>{labels.backend}</span>
         <select className={control} value={backend} disabled={!!busy} onChange={event => {
-          const next = event.target.value as Backend;
+          const next = event.target.value as RvcBackend;
           setBackend(next);
-          localStorage.setItem(BACKEND_STORAGE, next);
+          localStorage.setItem(RVC_BACKEND_STORAGE, next);
+          if (voice) chooseLastRvcVoice(voice.id, next);
         }}>
           <option value="auto">{labels.auto}</option>
           <option value="vocal-fast-rs">vocal-fast-rs</option>

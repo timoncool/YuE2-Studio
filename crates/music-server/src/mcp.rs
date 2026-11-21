@@ -542,6 +542,9 @@ const JOURNAL: &[(&str, &str, &str)] = &[
     ("rvc_native_runtime_install", "started", "download"),
     ("rvc_native_runtime_cancel", "cancelled", "download"),
     ("rvc_apply", "created", "song"),
+    ("rvc_voice_select", "selected", "rvc_voice"),
+    ("rvc_quick_start", "started", "processing"),
+    ("rvc_quick_cancel", "cancelled", "processing"),
     ("lora_import_folder", "installed", "lora"),
     ("lora_update", "updated", "lora"),
     ("lora_delete", "deleted", "lora"),
@@ -1636,6 +1639,10 @@ fn tools() -> &'static [Tool] {
                 name: "song_create",
                 description: "Generate a song with YuE2, native ACE-Step or MiniMax, an installed audio.cpp music family, or an explicitly selected OpenRouter music model. YuE2 uses the ABC score. Native engines use their own profile and supported controls. style: one English sentence (language, genre, vocal, instruments, mood, production, 'N BPM'). lyrics: sections tagged [Verse 1], [Chorus], [Bridge]... one per line, blank line between sections; empty for an instrumental. abc: a score to sing (from score_compose or an edited one), else the model writes its own. cot: full (melody and chords), melody, or off. adapters: installed LoRA ids with strengths per slot (see lora_list). Returns a job; poll song_job_get until completed, the song then is in the library.",
                 schema: || song_create_schema(json!({
+                    "rvc_after": { "type": "object", "properties": {
+                        "voice_id": { "type": "string", "description": "An installed RVC voice ID" },
+                        "backend": { "enum": ["auto", "vocal-fast-rs", "audio.cpp"] }
+                    }, "required": ["voice_id"], "description": "After successful generation, save a separate RVC take with this snapshot of the voice and backend. Use rvc_quick_list for progress." },
                     "ace": { "type": "object", "description": "ACE-Step generation settings, including guidance_scale, think, source_song_id and reference_song_id." },
                     "music_source": {
                         "description": "Select local YuE2, a native profile from ace_music_profiles or minimax_music_profiles, an audio.cpp model from audio_cpp_music_models, or a cloud model with music_generation capability from openrouter_catalog. OpenRouter submits a paid request to the selected model.",
@@ -2631,6 +2638,43 @@ fn tools() -> &'static [Tool] {
                     "backend": { "type": "string", "enum": ["auto", "vocal-fast-rs", "audio.cpp"] },
                 }), &["song_id", "voice_id"]),
                 call: |args| post("/v1/rvc/apply".into(), args.clone()),
+            },
+            Tool {
+                name: "rvc_voice_select",
+                description: "Remember the installed RVC voice and backend used by the quick library action.",
+                schema: || object(json!({
+                    "voice_id": { "type": "string" },
+                    "backend": { "enum": ["auto", "vocal-fast-rs", "audio.cpp"] }
+                }), &["voice_id"]),
+                call: |args| send(Method::PUT, "/v1/rvc/selection".into(), args.clone()),
+            },
+            Tool {
+                name: "rvc_quick_start",
+                description: "Save a separate RVC take of a library song. Uses the remembered voice by default and separates missing stems. Repeating the same song, voice and backend reuses the job or the saved take.",
+                schema: || object(json!({
+                    "song_id": { "type": "string" },
+                    "voice_id": { "type": "string" },
+                    "backend": { "enum": ["auto", "vocal-fast-rs", "audio.cpp"] }
+                }), &["song_id"]),
+                call: |args| post("/v1/rvc/quick".into(), args.clone()),
+            },
+            Tool {
+                name: "rvc_quick_list",
+                description: "List quick and automatic RVC take jobs, including their current stage and saved take.",
+                schema: nothing,
+                call: |_| get("/v1/rvc/quick".into()),
+            },
+            Tool {
+                name: "rvc_quick_get",
+                description: "Read a quick RVC take job by ID.",
+                schema: || id_only("id", "the job ID from rvc_quick_start or rvc_quick_list"),
+                call: |args| get(format!("/v1/rvc/quick/{}", segment(&text(args, "id")?))),
+            },
+            Tool {
+                name: "rvc_quick_cancel",
+                description: "Stop a queued or active RVC take before it is saved. A completed take stays in the library.",
+                schema: || id_only("id", "the job ID from rvc_quick_start or rvc_quick_list"),
+                call: |args| send(Method::DELETE, format!("/v1/rvc/quick/{}", segment(&text(args, "id")?)), json!({})),
             },
             Tool {
                 name: "rvc_voice_remove",
