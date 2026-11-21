@@ -55,3 +55,19 @@ start
 bytes=$(install_runtime)
 test "$bytes" = 0
 echo "PASS manual offline import and repeat install after relocating the legacy record (0 bytes)"
+
+# Damage only the library in this disposable portable profile. The old
+# receipt must stop reporting it installed, and the normal endpoint must
+# repair it from the original archive without a connection.
+stop
+library=$(find "$YUE_STUDIO_DATA_ROOT/karaoke" -type f -name 'libonnxruntime.so.*' -print -quit)
+test -s "$library"
+expected=$(sha256sum "$library" | cut -d' ' -f1)
+truncate -s 1 "$library"
+start
+curl --noproxy '*' -fsS "$base/v1/karaoke/status" |
+  jq -e 'any(.assets[]; .id == "onnxruntime" and (.installed == false))' >/dev/null
+cp "$archive" "$YUE_STUDIO_DATA_ROOT/karaoke/runtime/onnxruntime.tgz"
+install_runtime
+test "$(sha256sum "$library" | cut -d' ' -f1)" = "$expected"
+echo "PASS damaged runtime detected and repaired offline with original library SHA-256 $expected"
