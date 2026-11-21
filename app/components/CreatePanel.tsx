@@ -8,7 +8,7 @@ import { libraryChanged, SELF_READ, useActivity, useAssistantStatus, useLibraryS
 import { hasSungLines, karaokeReason, recogniseLyrics } from '../services/karaoke';
 import { ConfirmDialog } from './ConfirmDialog';
 import { enginePauseStrings } from '../i18n/enginePause';
-import { AUTO_DURATION, durationAfterLoad, isAutoDuration, keptDurationText } from '../services/createDuration';
+import { AUTO_DURATION, durationAfterLoad, isAutoDuration, keptDurationText, scoreSeconds } from '../services/createDuration';
 import { minTokensCutsTheSongOff } from '../services/samplingLimits';
 import { foldedAfter, keepFolded, keptFolded } from '../services/createFold';
 import {
@@ -2002,11 +2002,14 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
   const formatDuration = (seconds: number) => `${Math.floor(seconds / 60)}:${String(Math.round(seconds % 60)).padStart(2, '0')}`;
   // The engine caps the audio-code stage at duration x 25 codes: what a
   // larger max tokens would ask for is never drawn.
-  const effectiveDuration = Math.min(Math.max(numberOrUndefined(duration) ?? durationFallback, 1), MAX_DURATION_SECONDS);
+  const manualDuration = numberOrUndefined(duration);
+  const effectiveDuration = Math.min(Math.max(manualDuration ?? durationFallback, 1), MAX_DURATION_SECONDS);
   const semanticBudget = Math.round(effectiveDuration * SEMANTIC_CODES_PER_SECOND);
   const semanticMaxTokens = numberOrUndefined(semanticSampling.max_tokens);
   const budgetText = (key: string) => tt(key).replace('{frames}', String(semanticBudget)).replace('{time}', formatDuration(effectiveDuration));
   const scoreDisabled = effectiveCot === 'off';
+  const hasManualScoreLimit = musicEngine === 'local' && !scoreDisabled && manualDuration !== undefined && !semanticTokens.trim();
+  const durationOfScore = useMemo(() => hasManualScoreLimit ? scoreSeconds(abc) : undefined, [hasManualScoreLimit, abc]);
   // The model card: melody mode does not strip chord symbols by itself.
   const melodyWithChords = effectiveCot === 'melody' && CHORD_SYMBOL.test(abc);
 
@@ -3021,6 +3024,11 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
                 {tt('maxDurationAuto')}
               </button>
               <p className="text-[11px] leading-4 text-zinc-500">{tt(autoDuration ? 'maxDurationAutoHint' : 'maxDurationHintYue')}</p>
+              {durationOfScore !== undefined && durationOfScore > effectiveDuration + 0.5 && (
+                <p role="status" className="text-[11px] text-amber-700 dark:text-amber-300">
+                  {tt('maxDurationScoreWarning').replace('{score}', formatDuration(Math.ceil(durationOfScore)))}
+                </p>
+              )}
               <SliderRow
                 label={tt('flowSteps')}
                 value={steps}

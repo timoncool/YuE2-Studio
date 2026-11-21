@@ -1906,6 +1906,23 @@ describe('Auto max duration', () => {
     expect(read().style_hints).toEqual([]);
   });
 
+  it('explains a manual cap shorter than the score and leaves Auto unbounded', async () => {
+    act(() => root.render(panel({})));
+    await flush();
+    const set = (fields: Record<string, unknown>) => bridgeCommands.get('create_set')!({ fields });
+    const read = () => bridgeCommands.get('create_get')!({}) as { request: YueRequest };
+    const abc = 'X:1\nM:4/4\nL:1/16\nQ:1/4=96\nV:Vocal\nV:Ins\nK:Em\nV:Vocal\nZ8|\nV:Ins\n' + 'z16|'.repeat(8);
+    act(() => { set({ style: 'quiet acoustic folk', abc, cot: 'full', duration_seconds: 15 }); });
+    await flush();
+    expect(host.textContent).toContain('maxDurationScoreWarning');
+    expect(read().request.duration_seconds).toBe(15);
+    act(() => { set({ duration_seconds: 20 }); });
+    expect(host.textContent).not.toContain('maxDurationScoreWarning');
+    act(() => { set({ duration_seconds: 'auto' }); });
+    expect(host.textContent).not.toContain('maxDurationScoreWarning');
+    expect(read().request).not.toHaveProperty('duration_seconds');
+  });
+
   it('sends the manual ceiling or omits it through the Create MCP bridge', async () => {
     act(() => root.render(panel({})));
     await flush();
