@@ -339,6 +339,30 @@ def check_lrc(root, pid):
         repeated = root/"Repeated LRC.lrc"
         save_dialog_file(pid, repeated, "repeat-dialog.json")
         verify_lrc_file(repeated, expected, song["id"], "desktop", "repeat-lrc-file.json")
+
+        for label, extension in [("Download Audio", "wav"), ("Download SRT (subtitles)", "srt")]:
+            control_name = f'button "{label}"'
+            destination = root / f"Сохранённый дубль.{extension}"
+            click(control_name)
+            save_dialog_file(pid, destination, f"{extension}-dialog.json")
+            for _ in range(60):
+                if destination.is_file() and destination.stat().st_size:
+                    break
+                time.sleep(.2)
+            saved = destination.read_bytes()
+            if extension == "wav":
+                assert saved == source.read_bytes(), "Exported original audio differs"
+            else:
+                subtitles = saved.decode("utf-8")
+                assert "00:00:00,500 -->" in subtitles and "00:00:01,750 -->" in subtitles, subtitles
+                assert "Привет, мир" in subtitles and "Canção em português" in subtitles, subtitles
+            click(control_name)
+            cancelled = root / f"Отмена.{extension}"
+            save_dialog_file(pid, cancelled, f"{extension}-cancel-dialog.json", action="cancel")
+            wait_page(control_name)
+            assert not cancelled.exists(), cancelled
+            json_file(out/f"{extension}-export.json", dict(song_id=song["id"], bytes=len(saved),
+                      sha256=hashlib.sha256(saved).hexdigest(), cancelled_file_absent=True))
     finally:
         observer.stdin.close()
         try:
