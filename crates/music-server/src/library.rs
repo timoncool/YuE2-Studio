@@ -643,9 +643,18 @@ fn row_song(r: &rusqlite::Row) -> rusqlite::Result<Song> {
             .and_then(|request| crate::native_minimax::saved_profile(None, request).ok())
             .map(str::to_owned);
     }
+    let metadata = json(r.get(5)?);
+    let mut generation_settings = json(r.get(6)?);
+    // Earlier imports remapped the derivation but left the request's original ID.
+    if generation_settings["family"] == "mulacover"
+        && generation_settings.get("cover_of").is_some()
+        && metadata["derived"]["tool"] == "cover"
+    {
+        generation_settings["cover_of"] = metadata["derived"]["from"].clone();
+    }
     Ok(Song {
         id: r.get(0)?, title: r.get(1)?, audio_path: r.get(2)?, caption: r.get(3)?,
-        lyrics: r.get(4)?, metadata: json(r.get(5)?), generation_settings: json(r.get(6)?),
+        lyrics: r.get(4)?, metadata, generation_settings,
         engine_id, profile_id, replay_request, audio_codes: r.get::<_, Option<String>>(10)?.map(json),
         source: r.get(11)?, created_at: r.get(12)?, updated_at: r.get(13)?,
     })
