@@ -159,6 +159,10 @@ impl Library {
              AND json_type(metadata_json,'$.derived.tool')='text'
              AND json_extract(metadata_json,'$.derived.tool') NOT IN ('','stems')", [])?;
   c.execute_batch("CREATE TABLE IF NOT EXISTS album_order(playlist_id TEXT PRIMARY KEY REFERENCES playlists(id) ON DELETE CASCADE, position INTEGER NOT NULL);")?;
+  c.execute_batch("CREATE TABLE IF NOT EXISTS checkpoint_listening_jobs(
+    playlist_id TEXT NOT NULL REFERENCES playlists(id) ON DELETE CASCADE,
+    client_ref TEXT NOT NULL, job_id TEXT NOT NULL,
+    PRIMARY KEY(playlist_id,client_ref));")?;
   c.execute_batch("CREATE TABLE IF NOT EXISTS playlist_preferred_takes(
     playlist_id TEXT PRIMARY KEY, song_id TEXT NOT NULL,
     FOREIGN KEY(playlist_id,song_id) REFERENCES playlist_songs(playlist_id,song_id) ON DELETE CASCADE
@@ -1133,11 +1137,22 @@ impl Library {
     }
 
     pub fn save_music_job(&self, job: &StoredJob) -> Result<()> {
-        let connection = self.connection.lock().unwrap();
+        let mut guard = self.connection.lock().unwrap();
+        let connection = guard.transaction()?;
         connection.execute(
             "INSERT OR REPLACE INTO music_jobs(id,submitted_at,engine_id,title,style,lyrics,duration_seconds,playlist_id,generation_settings_json,request_json,status,message,attempt,resumed_as) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14)",
             params![job.id, job.submitted_at as i64, job.engine_id, job.title, job.style, job.lyrics, job.duration_seconds, job.playlist_id, job.generation_settings.to_string(), job.request.to_string(), job.status, job.message, job.attempt, job.resumed_as],
         )?;
+        if let Some(playlist) = job.playlist_id.as_deref().filter(|id| id.starts_with("checkpoint-listen-v1-"))
+            && let Some(reference) = job.request["client_ref"].as_str().filter(|value| value.starts_with(playlist))
+        {
+            connection.execute(
+                "INSERT INTO checkpoint_listening_jobs VALUES(?1,?2,?3)
+                 ON CONFLICT(playlist_id,client_ref) DO UPDATE SET job_id=excluded.job_id",
+                params![playlist,reference,job.id],
+            )?;
+        }
+        connection.commit()?;
         Ok(())
     }
 
@@ -1154,15 +1169,17 @@ impl Library {
     /// The stable client reference identifies the same comparison after a service restart or a renamed take.
     pub(super) fn checkpoint_listening_job(&self, playlist: &str, client_ref: &str) -> Result<Option<String>> {
         self.connection.lock().unwrap().query_row(
-            "SELECT j.id FROM music_jobs j WHERE j.playlist_id=?1
-             AND json_extract(j.request_json,'$.client_ref')=?2
-             AND (j.status IN ('queued','running') OR EXISTS (
+            "SELECT c.job_id FROM checkpoint_listening_jobs c
+             WHERE c.playlist_id=?1 AND c.client_ref=?2 AND EXISTS (
                SELECT 1 FROM playlist_songs ps JOIN songs s ON s.id=ps.song_id
-               WHERE ps.playlist_id=j.playlist_id AND json_extract(s.metadata_json,'$.job_id')=j.id))
-             ORDER BY j.submitted_at DESC LIMIT 1",
+               WHERE ps.playlist_id=c.playlist_id AND json_extract(s.metadata_json,'$.job_id')=c.job_id)
+             UNION ALL SELECT j.id FROM music_jobs j WHERE j.playlist_id=?1
+               AND json_extract(j.request_json,'$.client_ref')=?2
+               AND j.status IN ('queued','running') LIMIT 1",
             params![playlist, client_ref], |row| row.get(0),
         ).optional().map_err(Into::into)
     }
+
 
     pub fn set_music_job_status(&self, id: &str, status: &str, message: &str) -> Result<()> {
         self.connection.lock().unwrap().execute("UPDATE music_jobs SET status=?1,message=?2 WHERE id=?3", params![status, message, id])?;
@@ -1253,6 +1270,27 @@ mod stored_job_tests {
         assert!(library.checkpoint_listening_job("group","checkpoint/step-2").unwrap().is_none());
         library.set_music_job_status("job","failed","device disconnected").unwrap();
         assert!(library.checkpoint_listening_job("group","checkpoint/step-1").unwrap().is_none());
+    }
+
+    #[test]
+    fn checkpoint_audio_remains_reusable_after_the_finished_job_is_evicted() {
+        let dir = tempfile::tempdir().unwrap();
+        let library = Library::open_at(dir.path().join("db"), dir.path().join("media")).unwrap();
+        let playlist = "checkpoint-listen-v1-run1";
+        let reference = format!("{playlist}/Base");
+        library.ensure_checkpoint_playlist(playlist, "Audition").unwrap();
+        let mut job = stored("job", "queued", 10);
+        job.playlist_id = Some(playlist.into());
+        job.request = serde_json::json!({"client_ref":reference});
+        library.save_music_job(&job).unwrap();
+        let song = library.create_song(serde_json::from_value(serde_json::json!({
+            "title":"Base", "metadata":{"job_id":"job"}
+        })).unwrap()).unwrap();
+        library.update_playlist(playlist, PlaylistInput {
+            name:"Audition".into(),description:None,song_ids:vec![song.id],
+        }).unwrap();
+        library.forget_music_job("job").unwrap();
+        assert_eq!(library.checkpoint_listening_job(playlist,&reference).unwrap().as_deref(), Some("job"));
     }
 
     fn stored(id: &str, status: &str, at: u64) -> StoredJob {

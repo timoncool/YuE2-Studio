@@ -54,7 +54,7 @@ pub(super) async fn listen(
         }
         let mut request = CreateMusicJobRequest {
             music_source: Some(MusicSource::Local), client_ref: Some(client_ref), title: Some(label),
-            playlist_id: Some(playlist.clone()), style: format!("{} warm acoustic pop, piano, clear vocal, 96 BPM", run.trigger),
+            playlist_id: Some(playlist.clone()), style: adapters::upstream_style("warm acoustic pop, piano, clear vocal, 96 BPM", &run.trigger),
             lyrics: "[Verse]\nWe follow the river\nWe sing through the night\n[Chorus]\nCarry the melody\nInto the light".into(),
             abc: Some(SCORE.into()), lm_seed: Some(AUDITION_SEED), seed: Some(AUDITION_SEED),
             duration_seconds: Some(35.0), lm_batch_size: Some(1), synth_batch_size: Some(1),
