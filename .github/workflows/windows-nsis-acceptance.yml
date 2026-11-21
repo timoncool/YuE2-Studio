@@ -81,6 +81,7 @@ jobs:
           STUDIO_QA_REAL_SHELL_PROFILE: '1'
         run: |
           $exe = Join-Path $env:QA_DIR 'installed/YuE2-Studio.exe'
+          python -m pip install pypdf==6.4.0
           python -u scripts/test-hosted-webview-screens.py $exe (Join-Path $env:QA_DIR 'evidence/print') --suite print
       - name: Collect PrintService events and queues
         if: always()

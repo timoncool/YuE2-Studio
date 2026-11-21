@@ -296,6 +296,9 @@ def check_lrc(root, pid, media=None):
            'V: Ins clef=treble name="Ins Melody" snm="Inst."\n'
            'K:C\nV: Vocal\nC D E F |\nV: Ins\nG4 |')
     record = tool("library_song_get", song_id=song["id"], response_format="detailed")
+    if media == "print":
+        abc = 'X:1\nT:Print fixture\nM:4/4\nL:1/4\nK:C\n"Cmaj7"C D E F|\nw:Blue birds greet dawn\n"G7"G A B c|\nw:Bright sails head home'
+        record["lyrics"] = "Blue birds greet dawn\nBright sails head home"
     record["generation_settings"] = {**(record.get("generation_settings") or {}), "abc": abc}
     tool("library_song_update", song_id=song["id"], song=record)
     expected = "[00:00.50]Привет, мир\n[00:01.75]Canção em português\n"
@@ -643,6 +646,11 @@ while ([DateTime]::UtcNow -lt $deadline -and !(Test-Path -LiteralPath $env:STUDI
     else:
         raise AssertionError("Windows PDF printer did not complete the songbook")
     (out/"songbook.pdf").write_bytes(printed)
+    from pypdf import PdfReader
+    extracted = "\n".join(page.extract_text() for page in PdfReader(out/"songbook.pdf").pages)
+    (out/"songbook-extracted.txt").write_text(extracted, encoding="utf8")
+    for expected in ("Blue", "birds", "greet", "dawn", "Bright", "sails", "head", "home", "Cmaj7", "G7"):
+        assert expected in extracted, (expected, extracted)
     json_file(out/"songbook-print.json", dict(bytes=len(printed), sha256=hashlib.sha256(printed).hexdigest()))
     click('button "Close songbook"')
 
