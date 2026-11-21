@@ -24,8 +24,8 @@ jobs:
         id: desktop-build
         working-directory: desktop
         run: npm run tauri -- build --debug --no-bundle
-      - name: Capture Portuguese screens through Studio MCP
-        if: false
+      - name: Verify timed LRC export from the library
+        if: always() && steps.desktop-build.outcome == 'success'
         env:
           PYTHONUTF8: '1'
         run: |
@@ -33,7 +33,7 @@ jobs:
             Where-Object { $_.Name -in @('YuE2-Studio.exe', 'yue2-studio-desktop.exe') } |
             Select-Object -First 1
           if (!$desktop) { throw 'Studio executable missing' }
-          python -u scripts/test-hosted-webview-screens.py $desktop.FullName artifacts/pt --suite pt
+          python -u scripts/test-hosted-webview-screens.py $desktop.FullName artifacts/lrc --suite lrc
       - name: Exercise U3 routing in WebView2 through Studio MCP
         if: always() && steps.desktop-build.outcome == 'success'
         env:

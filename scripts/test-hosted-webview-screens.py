@@ -4,7 +4,7 @@ import argparse, base64, ctypes, hashlib, json, os, pathlib, re, sqlite3, struct
 p = argparse.ArgumentParser()
 p.add_argument("exe", type=pathlib.Path)
 p.add_argument("output", type=pathlib.Path)
-p.add_argument("--suite", choices=["pt", "screens", "u3"], default="pt")
+p.add_argument("--suite", choices=["pt", "screens", "u3", "lrc"], default="pt")
 args = p.parse_args()
 out = args.output.resolve()
 out.mkdir(parents=True, exist_ok=True)
@@ -265,6 +265,82 @@ def u3_form(root):
     (out/"console.txt").write_text(ui("console"), encoding="utf8")
 
 
+def save_dialog_file(pid, path):
+    # UI Automation operates only on the isolated runner's native Save As dialog.
+    script = r"""
+$ErrorActionPreference = 'Stop'
+Add-Type -AssemblyName UIAutomationClient, UIAutomationTypes
+$root = [Windows.Automation.AutomationElement]::RootElement
+$owner = [Windows.Automation.PropertyCondition]::new(
+  [Windows.Automation.AutomationElement]::ProcessIdProperty, [int]$env:STUDIO_QA_PID)
+$deadline = [DateTime]::UtcNow.AddSeconds(20)
+do {
+  $dialogs = $root.FindAll([Windows.Automation.TreeScope]::Children, $owner)
+  foreach ($dialog in $dialogs) {
+    if ($dialog.Current.ClassName -ne '#32770' -or $dialog.Current.IsOffscreen) { continue }
+    $elements = $dialog.FindAll([Windows.Automation.TreeScope]::Descendants,
+      [Windows.Automation.Condition]::TrueCondition)
+    $fields = @($elements | Where-Object {
+      $_.Current.ControlType -eq [Windows.Automation.ControlType]::Edit -and
+      ($_.Current.AutomationId -in @('1001','1148') -or $_.Current.Name -match '^File name')
+    })
+    $save = @($elements | Where-Object {
+      $_.Current.ControlType -eq [Windows.Automation.ControlType]::Button -and
+      ($_.Current.AutomationId -eq '1' -or $_.Current.Name -eq 'Save')
+    })
+    if (!$fields -or !$save) { continue }
+    $fields[0].GetCurrentPattern([Windows.Automation.ValuePattern]::Pattern).SetValue($env:STUDIO_QA_FILE)
+    $name = $dialog.Current.Name
+    $save[0].GetCurrentPattern([Windows.Automation.InvokePattern]::Pattern).Invoke()
+    $name
+    exit 0
+  }
+  Start-Sleep -Milliseconds 200
+} while ([DateTime]::UtcNow -lt $deadline)
+throw 'The isolated Save As dialog did not expose a file name and Save button'
+"""
+    encoded = base64.b64encode(script.encode("utf-16-le")).decode("ascii")
+    run = subprocess.run(["powershell.exe", "-NoProfile", "-STA", "-EncodedCommand", encoded],
+                         env=dict(os.environ, STUDIO_QA_PID=str(pid), STUDIO_QA_FILE=str(path)),
+                         capture_output=True, text=True, timeout=27)
+    json_file(out/"save-dialog.json", dict(code=run.returncode, stdout=run.stdout, stderr=run.stderr))
+    assert run.returncode == 0, (run.stdout, run.stderr)
+
+
+def check_lrc(root, pid):
+    title = "Hosted LRC receipt"
+    source = root/"source.wav"
+    with wave.open(str(source), "wb") as audio:
+        audio.setparams((1, 2, 24000, 0, "NONE", "not compressed"))
+        audio.writeframes(bytes(24000*8))
+    song = tool("library_import_audio", path=str(source), title=title)
+    expected = "[00:00.50]Привет, мир\n[00:01.75]Canção em português\n"
+    data = tool("karaoke_set", song_id=song["id"], lrc=expected)
+    assert data == {"lrc": expected, "lines": 2}, data
+    ui("navigate", view="library")
+    context = f"song {song['id']}:"
+    page = wait_page(predicate=lambda value: any(context in line and "Song Details" in line for line in value.splitlines()))
+    row = next(line for line in page.splitlines() if context in line)
+    ui("click", ref=re.search(r"(e\d+) Song Details", row)[1])
+    page = wait_page('button "Download LRC (Lyrics)"')
+    (out/"lrc-details.txt").write_text(page, encoding="utf8")
+    click('button "Download LRC (Lyrics)"', page)
+    destination = root/f"{title}.lrc"
+    save_dialog_file(pid, destination)
+    for _ in range(40):
+        if destination.is_file() and destination.stat().st_size == len(expected.encode("utf8")):
+            saved = destination.read_bytes()
+            break
+        time.sleep(.25)
+    else:
+        raise AssertionError(("LRC file was not saved", ui("console")))
+    assert saved.decode("utf-8", errors="strict") == expected
+    assert re.findall(r"^\[(\d\d:\d\d\.\d\d)\]", expected, re.M) == ["00:00.50", "00:01.75"]
+    (out/destination.name).write_bytes(saved)
+    json_file(out/"lrc-file.json", dict(song_id=song["id"], bytes=len(saved), sha256=hashlib.sha256(saved).hexdigest(),
+                                       timestamps=["00:00.50", "00:01.75"], name=destination.name))
+
+
 def check_screens(root, pid):
     ui("navigate", view="create")
     page = wait_page(predicate=lambda value: '"Style"' in value or '"Use OpenRouter"' in value)
@@ -456,6 +532,8 @@ with tempfile.TemporaryDirectory(prefix="studio-hosted-webview-") as directory:
                 capture_pt()
             elif args.suite == "u3":
                 u3_form(root)
+            elif args.suite == "lrc":
+                check_lrc(root, process.pid)
             else:
                 check_screens(root, process.pid)
         finally:
