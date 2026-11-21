@@ -19,6 +19,7 @@ mod audio_cpp_heartmula;
 mod audio_cpp_magenta;
 mod audio_cpp_midasheng;
 mod audio_cpp_minimax_h3;
+mod audio_cpp_mulacover;
 mod audio_cpp_music;
 mod audio_cpp_stable_audio;
 mod audio_cpp_vevo2;
@@ -1918,6 +1919,7 @@ pub async fn serve_on_port(port: u16) -> anyhow::Result<()> {
         .route("/v1/local-models/music", get(local_music_model_catalog))
         .route("/v1/music/jobs", post(create_music_job).get(list_active_music_jobs))
         .route("/v1/music/audio-cpp/models", get(audio_cpp_music::models))
+        .route("/v1/music/audio-cpp/mulacover/runtime", post(audio_cpp_mulacover::install_runtime))
         .route("/v1/music/audio-cpp/models/install", post(audio_cpp_music::install))
         .route("/v1/music/replay", post(replay_music_job))
         .route("/v1/transcriptions", post(create_transcription))
@@ -2780,6 +2782,10 @@ async fn separation_status(State(state): State<AppState>) -> Json<Value> {
         "card_missing_bytes": card_missing_bytes,
         "missing_bytes": runtime_missing_bytes + if model_installed { 0 } else { model.bytes },
         "ready": model_installed && server_installed,
+        "engines": {
+            "htdemucs": { "ready": htdemucs_installed(&state, config.runtime) },
+            "roformer": { "ready": state.separator.roformer_installed(roformer_on_card(&state, config.runtime)) }
+        },
         "engine": engine,
         "stems": engine_stems(engine),
         // Either downloader may be the busy one: the model has its own, audio.cpp's server comes through its own.
@@ -4097,10 +4103,16 @@ fn separate_song_audio(
     Ok((written, ran_on_gpu))
 }
 
-/// Separates one track into stems in the background and reports progress.
+#[derive(Deserialize)]
+struct SeparateTrackRequest {
+    engine: Option<separation::Engine>,
+}
+
+/// Separates one track into stems, optionally choosing an engine for this run.
 async fn start_separation(
     State(state): State<AppState>,
     Path(id): Path<String>,
+    request: Option<Json<SeparateTrackRequest>>,
 ) -> Result<Json<Value>, (StatusCode, Json<ApiError>)> {
     let song = state
         .library
@@ -4119,7 +4131,11 @@ async fn start_separation(
     if state.separation_run.read().await.as_ref().is_some_and(|run| !run.done) {
         return Err(api_error(StatusCode::CONFLICT, "a track is already being separated".into()));
     }
-    let config = state.separation_config.read().await.clone();
+    let mut config = state.separation_config.read().await.clone();
+    if let Some(engine) = request.and_then(|Json(request)| request.engine) {
+        config.engine = engine;
+        config.stems = engine_stems(engine).iter().map(|stem| (*stem).into()).collect();
+    }
     let wanted_runtime = config.runtime;
     let engine = config.engine;
     // audio.cpp's server of the chosen device is HT-Demucs's; Mel-Band RoFormer runs its own engine
@@ -4141,8 +4157,13 @@ async fn start_separation(
         .media_path_for_song(&song)
         .ok_or_else(|| api_error(StatusCode::BAD_REQUEST, "this track has no stored audio".into()))?;
 
-    *state.separation_run.write().await =
-        Some(SeparationRun { song_id: id.clone(), progress: 0.0, started_ms: unix_millis(), done: false, error: None, stems: vec![], used_gpu: None, library_songs: vec![] });
+    {
+        let mut run = state.separation_run.write().await;
+        if run.as_ref().is_some_and(|run| !run.done) {
+            return Err(api_error(StatusCode::CONFLICT, "a track is already being separated".into()));
+        }
+        *run = Some(SeparationRun { song_id: id.clone(), progress: 0.0, started_ms: unix_millis(), done: false, error: None, stems: vec![], used_gpu: None, library_songs: vec![] });
+    }
 
     let wanted = config.stems.clone();
     let background = state.clone();

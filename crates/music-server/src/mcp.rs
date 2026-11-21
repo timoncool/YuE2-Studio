@@ -563,6 +563,7 @@ const JOURNAL: &[(&str, &str, &str)] = &[
     ("assistant_model_install", "started", "download"),
     ("separator_install", "started", "download"),
     ("separator_runtime_install", "started", "download"),
+    ("mulacover_runtime_install", "started", "download"),
     ("recogniser_install", "started", "download"),
     ("midi_install", "started", "download"),
     ("restore_install", "started", "download"),
@@ -1700,7 +1701,7 @@ fn tools() -> &'static [Tool] {
                     "mp3_bitrate": { "type": "integer" },
                     "output_format": { "type": "string", "enum": ["flac", "mp3", "wav32"], "description": "how the song is kept: lossless FLAC, 32-bit WAV, or MP3 at mp3_bitrate" },
                     "cover_prompt": { "type": "string", "description": "what the cover should show; it is drawn only when an image model is set up (settings_get, covers), else the song has no cover" },
-                    "cover_of": { "type": "string", "description": "for a cover: the library song whose melody abc came from (score_transcribe of it); the new song names it as the track it was made from" },
+                    "cover_of": { "type": "string", "description": "Library original song ID. Required by MuLaCover, which reads the song audio directly. For YuE2 covers, pass the source of the ABC melody." },
                     "adapters": { "type": "array", "items": { "type": "object", "properties": { "id": { "type": "string" }, "scales": { "type": "object", "description": "slot -> strength, e.g. {\"ar\": 1, \"nar\": 1}; left out, the LoRA's own strengths, else 1 on each slot it touches" } }, "required": ["id"] } }
                 })),
                 call: |args| post("/v1/music/jobs".into(), args.clone()),
@@ -1984,9 +1985,9 @@ fn tools() -> &'static [Tool] {
             },
             Tool {
                 name: "stems_split",
-                description: "Split a library song into stems with the chosen separator: six (drums, bass, other, vocals, guitar, piano) with HT-Demucs, or vocals and instrumental with Mel-Band RoFormer (separator_settings_get names it). Each stem becomes a track of the library made from the song (made_from, made_by stems), replacing the stems of an earlier split; stems_get names them. A stem is not split again: split the song it came from. Wait with studio_wait until stems.",
-                schema: || id_only("song_id", "library song id"),
-                call: |args| post(format!("/v1/library/songs/{}/stems", segment(&text(args, "song_id")?)), json!({})),
+                description: "Split a library song into stems with the chosen separator: six (drums, bass, other, vocals, guitar, piano) with HT-Demucs, or vocals and instrumental with Mel-Band RoFormer (separator_settings_get names it). Optionally select engine for just this split. Each stem becomes a track of the library made from the song (made_from, made_by stems), replacing the stems of an earlier split; stems_get names them. A stem is not split again: split the song it came from. Wait with studio_wait until stems.",
+                schema: || object(json!({ "song_id": { "type": "string" }, "engine": { "type": "string", "enum": ["htdemucs", "roformer"] } }), &["song_id"]),
+                call: |args| post(format!("/v1/library/songs/{}/stems", segment(&text(args, "song_id")?)), body_without(args, &["song_id"])),
             },
             Tool {
                 name: "stems_get",
@@ -2166,6 +2167,12 @@ fn tools() -> &'static [Tool] {
                 description: "List audio.cpp music models, installed weight profiles, runtime readiness and active installation progress.",
                 schema: nothing,
                 call: |_| get("/v1/music/audio-cpp/models".into()),
+            },
+            Tool {
+                name: "mulacover_runtime_install",
+                description: "Install the pinned SOXR runtime for MuLaCover on Windows. The local model catalog reports readiness afterwards. On Linux and macOS, use the system libsoxr package.",
+                schema: nothing,
+                call: |_| post("/v1/music/audio-cpp/mulacover/runtime".into(), json!({})),
             },
             Tool {
                 name: "audio_cpp_music_model_install",

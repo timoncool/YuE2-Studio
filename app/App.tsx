@@ -131,6 +131,7 @@ import { registerPlayer } from './services/audioGraph';
 import { loadLibraryTrack, setLibraryPlaybackRate } from './services/playerTempo';
 import { serveVisualizerFeed } from './services/visualizerFeed';
 import { winampControl, winampOn } from './services/winamp';
+import { djModeOn } from './services/djMode';
 import { notePlayed } from './services/playHistory';
 import { moveAlbum } from './services/albumOrder';
 import { collectionToastKey } from './services/collectionToasts';
@@ -952,7 +953,7 @@ function AppContent() {
   // Spacebar play/pause
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.code !== 'Space' || winampOn()) return;
+      if (e.code !== 'Space' || winampOn() || djModeOn()) return;
       const tag = (e.target as HTMLElement)?.tagName;
       if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || (e.target as HTMLElement)?.isContentEditable) return;
       e.preventDefault();

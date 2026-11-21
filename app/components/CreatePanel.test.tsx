@@ -982,6 +982,28 @@ it('reuses a Stable Audio 3 text prompt and its sampler and guidance controls', 
   });
 });
 
+it('submits a MuLaCover library original and restores it for a new take', async () => {
+  vi.stubGlobal('fetch', vi.fn(async () => Response.json({ engine: 'audio.cpp', models: [
+    { id: 'mulacover', name: 'MuLaCover', profile_id: 'mulacover_q8_0', quantization: 'Q8_0', ready: true, missing: [] },
+  ] })));
+  const song = {
+    title: 'Cover take', ditModel: 'audio.cpp', style: 'warm piano', lyrics: '[verse] Morning',
+    generationParams: {
+      music_source: { kind: 'audio_cpp', model: 'mulacover' },
+      cover_of: 'original-track', duration_seconds: 3, seed: 2026, output_format: 'flac',
+    },
+  } as Song;
+  act(() => root.render(panel({ musicEngine: 'audio.cpp', initialData: { song, timestamp: 1 } })));
+  await flush();
+  const picker = [...host.querySelectorAll('select')].find(select => select.closest('label')?.textContent?.includes('Original song'));
+  expect(picker?.value).toBe('original-track');
+  click(buttonNamed('create')!);
+  expect(sent.at(-1)).toMatchObject({
+    music_source: { kind: 'audio_cpp', model: 'mulacover' }, cover_of: 'original-track',
+    style: 'warm piano', lyrics: '[verse] Morning', duration_seconds: 3, seed: 2026, output_format: 'flac',
+  });
+});
+
 describe('Auto max duration', () => {
   const autoButton = () => buttonNamed('maxDurationAuto');
   // an instrumental with No score goes straight to onGenerate, with no score to compose first

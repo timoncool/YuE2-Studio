@@ -12,6 +12,8 @@ import { VisualizerPanel, openVisualizerWindow, setVisualizerPanelSize, visualiz
 import { SPECTRUM_LOOK_IDS, milkdropPresetNames } from './VisualizerView';
 import { WinampMode, restoreWindowAfterReload, type WinampExit, type WinampSaveTarget } from './WinampMode';
 import { placePanel } from '../../services/useFloatable';
+import { djModeOn, onDjMode, setDjModeOn } from '../../services/djMode';
+import { DjMode } from './DjMode';
 
 /**
  * The player's extras over the studio - the equalizer panel, the visualiser
@@ -71,11 +73,20 @@ export const PlayerExtras: React.FC<Props> = ({ queue, currentSong, currentTime,
   const [eqOpen, setEqOpen] = useState(equalizerPanelOpen);
   const [view, setView] = useState<VisualizerState>(visualizer);
   const [winamp, setWinamp] = useState(winampOn);
+  const [djMode, setDjMode] = useState(djModeOn);
   const [start, setStart] = useState<{ queue: Song[]; index: number; seconds: number; playing: boolean; volume: number; shuffle: boolean; repeat: boolean; sourcePlaylistId: string | null } | null>(null);
 
   useEffect(() => onEqualizerPanel(setEqOpen), []);
   useEffect(() => onVisualizer(setView), []);
   useEffect(() => onWinamp(() => setWinamp(winampOn())), []);
+  useEffect(() => onDjMode(setDjMode), []);
+  useEffect(() => {
+    if (!djMode) return;
+    // DJ mode uses independent deck elements: do not also play the studio's music.
+    onPause();
+    if (winampControl()) winampControl()!.leave();
+    else if (winampOn()) setWinampOn(false);
+  }, [djMode]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     restoreWindowAfterReload().catch((error) => console.error('The window did not get its shape back after the Winamp mode:', error));
   }, []);
@@ -83,7 +94,7 @@ export const PlayerExtras: React.FC<Props> = ({ queue, currentSong, currentTime,
   // Ctrl+M switches the Winamp mode on and off, as in Spotifast
   useEffect(() => {
     const key = (event: KeyboardEvent) => {
-      if (!event.ctrlKey || event.altKey || event.key.toLowerCase() !== 'm') return;
+      if (djModeOn() || !event.ctrlKey || event.altKey || event.key.toLowerCase() !== 'm') return;
       event.preventDefault();
       if (winampControl()) winampControl()!.leave();
       else if (!winampOn()) setWinampOn(true);
@@ -257,9 +268,9 @@ export const PlayerExtras: React.FC<Props> = ({ queue, currentSong, currentTime,
 
   return (
     <>
-      {eqOpen && !winamp && <EqualizerPanel onClose={() => setEqualizerPanelOpen(false)} />}
-      {view.place === 'panel' && !winamp && <VisualizerPanel />}
-      {winamp && start && (
+      {eqOpen && !winamp && !djMode && <EqualizerPanel onClose={() => setEqualizerPanelOpen(false)} />}
+      {view.place === 'panel' && !winamp && !djMode && <VisualizerPanel />}
+      {winamp && !djMode && start && (
         <WinampMode
           queue={start.queue}
           startIndex={start.index}
@@ -277,6 +288,9 @@ export const PlayerExtras: React.FC<Props> = ({ queue, currentSong, currentTime,
             onLeaveWinamp(exit);
           }}
         />
+      )}
+      {djMode && (
+        <DjMode library={library} playlists={playlists} initialSong={currentSong} onClose={() => setDjModeOn(false)} />
       )}
     </>
   );

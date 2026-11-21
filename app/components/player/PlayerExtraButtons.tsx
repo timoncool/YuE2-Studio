@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { AudioLines, Disc3, ExternalLink, Plus, SlidersVertical } from 'lucide-react';
+import { AudioLines, Disc3, Disc, ExternalLink, Plus, SlidersVertical } from 'lucide-react';
 import { useI18n } from '../../context/I18nContext';
 import { equalizer, onEqualizer } from '../../services/audioGraph';
 import { equalizerPanelOpen, onEqualizerPanel, onSidebarExtras, setEqualizerPanelOpen, sidebarExtras } from '../../services/playerPanels';
@@ -8,6 +8,7 @@ import { onVisualizer, setVisualizer, visualizer } from '../../services/visualiz
 import { addWinampSkin, onWinamp, SCALE_RANGE, setWinampOn, setWinampSettings, SKIN_MUSEUM, winampSettings, winampSkins, type WinampSkin } from '../../services/winamp';
 import { openExternal } from '../../services/externalLinks';
 import { NumberField } from '../NumberField';
+import { djModeOn, onDjMode, setDjModeOn } from '../../services/djMode';
 
 /**
  * The player bar's buttons for the extras: the equalizer, the visualiser, and
@@ -31,6 +32,7 @@ const LOOK: Record<ExtrasLayout, string> = {
 
 export const PlayerExtraButtons: React.FC<{ layout?: ExtrasLayout }> = ({ layout = 'bar' }) => {
   const { t } = useI18n();
+  const [djOpen, setDjOpen] = useState(djModeOn);
   const [eqOpen, setEqOpen] = useState(equalizerPanelOpen);
   const [eqOn, setEqOn] = useState(() => equalizer().enabled);
   const [vizOpen, setVizOpen] = useState(() => visualizer().place !== 'closed');
@@ -49,6 +51,7 @@ export const PlayerExtraButtons: React.FC<{ layout?: ExtrasLayout }> = ({ layout
   const [at, setAt] = useState<React.CSSProperties>({});
   const hold = useRef<{ timer: number; opened: boolean } | null>(null);
 
+  useEffect(() => onDjMode(setDjOpen), []);
   useEffect(() => onEqualizerPanel(setEqOpen), []);
   useEffect(() => onEqualizer((state) => setEqOn(state.enabled)), []);
   useEffect(() => onVisualizer((state) => setVizOpen(state.place !== 'closed')), []);
@@ -99,6 +102,13 @@ export const PlayerExtraButtons: React.FC<{ layout?: ExtrasLayout }> = ({ layout
         <AudioLines size={layout === 'bar' ? 17 : 20} className="shrink-0" />
         {layout === 'list' && <span className="truncate text-sm font-medium">{t('vizTitle')}</span>}
       </button>}
+      <button type="button" onClick={() => setDjModeOn(!djModeOn())}
+        title="DJ mode · two decks, scratching, stems and mixing"
+        aria-label="DJ mode" aria-pressed={djOpen}
+        className={`${LOOK[layout]} ${layout === 'bar' ? 'hidden md:flex' : ''} ${djOpen ? ON : ''}`}>
+        <Disc size={layout === 'bar' ? 17 : 20} className="shrink-0" />
+        {layout === 'list' && <span className="truncate text-sm font-medium">DJ mode</span>}
+      </button>
       {show('winamp') && <div ref={box} className={layout === 'bar' ? 'relative hidden md:block' : 'w-full'}>
         <button
           ref={opener}
