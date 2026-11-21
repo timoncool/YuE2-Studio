@@ -567,6 +567,8 @@ const JOURNAL: &[(&str, &str, &str)] = &[
     ("rvc_catalog_refresh", "refreshed", "rvc_catalog"),
     ("rvc_catalog_install", "installed", "rvc_voice"),
     ("rvc_apply_install", "installed", "model"),
+    ("native_music_runtime_install", "started", "download"),
+    ("native_music_runtime_cancel", "cancelled", "download"),
     ("rvc_native_runtime_install", "started", "download"),
     ("rvc_native_runtime_cancel", "cancelled", "download"),
     ("rvc_apply", "created", "song"),
