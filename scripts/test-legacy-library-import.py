@@ -69,6 +69,10 @@ def exercise(executable, root):
 
     env = dict(os.environ, YUE_STUDIO_DATA_ROOT=str(data), YUE_STUDIO_PORT=str(port),
                TIMONCOOL_SHARED_DIR=str(root / "shared"), DO_NOT_TRACK="1")
+    for name in ("HOME", "USERPROFILE", "APPDATA", "LOCALAPPDATA"):
+        location = root / name.lower()
+        location.mkdir()
+        env[name] = str(location)
     env.pop("YUE_ENGINE_BASE_URL", None)
     with (root / "service.log").open("wb") as log:
         process = subprocess.Popen([str(executable)], cwd=root, env=env, stdout=log, stderr=subprocess.STDOUT)
@@ -83,6 +87,8 @@ def exercise(executable, root):
             else:
                 raise TimeoutError("Studio did not start")
             args = {"path": str(source), "exclude": ["covers", "stems", "karaoke"]}
+            preview = tool("library_migration_preview", path=str(source))
+            assert any(file["name"] == "missing.wav" for song in preview["songs"] for file in song["missing"]), preview
             initial = tool("library_migration_import", **args)
             assert initial["added"] == 1 and initial["already_imported"] == 0, initial
             assert initial["playlists_added"] == 0, initial
@@ -92,6 +98,8 @@ def exercise(executable, root):
             songs = request("/v1/library/songs")
             healthy, = songs
             assert healthy["title"] == "Healthy" and healthy["lyrics"] == "words to keep", healthy
+            with opener.open(f"http://127.0.0.1:{port}/v1/library/media/{healthy['id']}", timeout=10) as audio:
+                assert audio.read() == (source / "media" / "healthy.wav").read_bytes()
             assert "lrc" not in healthy["metadata"] and "cover_filename" not in healthy["metadata"], healthy
             assert not list((data / "media").glob("*-drums.wav"))
             assert snapshot(source) == original
