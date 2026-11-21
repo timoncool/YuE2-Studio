@@ -122,10 +122,12 @@ fn compact_run(run: &Value) -> Value {
     let tuned = run["recipe"]["preset"].as_str() == Some("tuned");
     json!({
         "id": run["id"], "name": run["name"], "dataset": run["dataset_name"], "trigger": run["trigger"], "status": run["status"], "stage": run["stage"],
-        "steps_done": steps.len(), "step_limit": run["recipe"]["steps"], "preset": run["recipe"]["preset"], "songs_per_step": run["recipe"]["grad_accum"],
+        "steps_done": last["step"].as_u64().unwrap_or(steps.len() as u64), "step_limit": run["recipe"]["steps"], "preset": run["recipe"]["preset"], "songs_per_step": run["recipe"]["grad_accum"],
         "stop": if tuned { run["recipe"]["stop"].clone() } else { Value::Null }, "target_kl": if tuned { run["recipe"]["target_kl"].clone() } else { Value::Null },
         "last_step": last, "checkpoints": run["checkpoints"], "installed": run["installed"], "error": run["error"],
         "step_stage": run["step_stage"], "engine": run["engine"], "output_adapter": run["output_adapter"],
+        "rvc_voice_id": run["rvc_voice_id"], "rvc_best_checkpoint": run["rvc_best_checkpoint"],
+        "rvc_checkpoint_ready": run["rvc_checkpoint_ready"],
     })
 }
 
@@ -452,7 +454,7 @@ fn annotations(name: &str) -> Value {
     // a verb that changes something outweighs a noun that reads
     const CHANGES: &[&str] = &["install", "import", "remove", "delete", "refresh", "create", "update", "start", "cancel", "select", "download", "apply", "restart"];
     // reads whose names the rules above miss: create_form names the create page
-    const READ_NAMES: &[&str] = &["music_package_progress", "lyrics_syllables", "assistant_cli_agents", "system_gpus", "cover_scenes", "cover_photos_search", "video_backgrounds_search", "network_proxy_test", "journal_read", "score_to_midi", "score_instrumental", "score_vocal_octave", "score_from_midi", "score_mark", "lyrics_find", "cover_prompt_render", "studio_wait", "engine_presets_get", "assistant_requests_wait", "ui_console", "song_defaults", "create_form_get", "library_liked", "score_chord_bed", "song_tokenize", "score_match_sections", "models_update_plan", "problem_preview", "library_migration_preview", "audio_cpp_music_models", "hotstep_cover_profiles", "hotstep_sa3_training_status", "hotstep_heartmula_training_status"];
+    const READ_NAMES: &[&str] = &["music_package_progress", "lyrics_syllables", "assistant_cli_agents", "system_gpus", "cover_scenes", "cover_photos_search", "video_backgrounds_search", "network_proxy_test", "journal_read", "score_to_midi", "score_instrumental", "score_vocal_octave", "score_from_midi", "score_mark", "lyrics_find", "cover_prompt_render", "studio_wait", "engine_presets_get", "assistant_requests_wait", "ui_console", "song_defaults", "create_form_get", "library_liked", "score_chord_bed", "song_tokenize", "score_match_sections", "models_update_plan", "problem_preview", "library_migration_preview", "audio_cpp_music_models", "hotstep_cover_profiles", "hotstep_sa3_training_status", "hotstep_heartmula_training_status", "rvc_training_status"];
     // writes over what was stored, so the earlier content is gone: a client asks first
     const OVERWRITES: &[&str] = &["library_song_rename", "library_song_update", "playlist_update", "album_reorder", "dataset_update", "dataset_song_update", "dataset_song_describe_style", "dataset_prepare", "lora_update", "stems_split", "restore_start", "karaoke_make", "midi_transcribe", "cover_draw", "cover_set_from_file", "openrouter_set_key", "models_update_apply"];
     let changes = CHANGES.iter().any(|verb| name.split('_').any(|word| word == *verb));
@@ -530,6 +532,8 @@ const JOURNAL: &[(&str, &str, &str)] = &[
     ("dataset_prepare_train_after", "updated", "preparation"),
     ("dataset_prepare_cancel", "cancelled", "preparation"),
     ("training_start", "started", "training"),
+    ("rvc_training_start", "started", "training"),
+    ("rvc_training_install_voice", "installed", "rvc_voice"),
     ("hotstep_sa3_training_install", "started", "download"),
     ("hotstep_sa3_training_start", "started", "training"),
     ("hotstep_heartmula_training_start", "started", "training"),
@@ -1061,7 +1065,7 @@ fn song_create_schema(mut properties: Value) -> Value {
         "description": "After successful generation, save a separate RVC take with this voice and backend. Use rvc_quick_list for progress.",
         "properties": {
             "voice_id": { "type": "string", "description": "An installed RVC voice ID" },
-            "backend": { "type": "string", "enum": ["auto", "vocal-fast-rs", "vocal-fast-metal", "audio.cpp"] }
+            "backend": { "type": "string", "enum": ["auto", "vocal-fast-rs", "vocal-fast-metal", "burn-cuda", "audio.cpp"] }
         },
         "required": ["voice_id"]
     });
@@ -2785,7 +2789,7 @@ fn tools() -> &'static [Tool] {
                     "end_seconds": { "type": "number", "description": "Between 0.5 and 15 seconds after start; shortened to the vocal end if necessary" },
                     "semitone_shift": { "type": "integer", "minimum": -24, "maximum": 24 },
                     "retrieval_blend": { "type": "number", "minimum": 0, "maximum": 1 },
-                    "backend": { "type": "string", "enum": ["auto", "vocal-fast-rs", "vocal-fast-metal", "audio.cpp"] },
+                    "backend": { "type": "string", "enum": ["auto", "vocal-fast-rs", "vocal-fast-metal", "burn-cuda", "audio.cpp"] },
                 }), &["song_id", "voice_id", "start_seconds", "end_seconds"]),
                 call: |args| post("/v1/rvc/preview".into(), args.clone()),
             },
@@ -2797,7 +2801,7 @@ fn tools() -> &'static [Tool] {
                     "voice_id": { "type": "string", "description": "The installed ID from rvc_voices_list" },
                     "semitone_shift": { "type": "integer", "minimum": -24, "maximum": 24 },
                     "retrieval_blend": { "type": "number", "minimum": 0, "maximum": 1 },
-                    "backend": { "type": "string", "enum": ["auto", "vocal-fast-rs", "vocal-fast-metal", "audio.cpp"] },
+                    "backend": { "type": "string", "enum": ["auto", "vocal-fast-rs", "vocal-fast-metal", "burn-cuda", "audio.cpp"] },
                 }), &["song_id", "voice_id"]),
                 call: |args| post("/v1/rvc/apply".into(), args.clone()),
             },
@@ -2812,7 +2816,7 @@ fn tools() -> &'static [Tool] {
                 description: "Remember the installed RVC voice and backend used by the quick library action.",
                 schema: || object(json!({
                     "voice_id": { "type": "string" },
-                    "backend": { "enum": ["auto", "vocal-fast-rs", "vocal-fast-metal", "audio.cpp"] }
+                    "backend": { "enum": ["auto", "vocal-fast-rs", "vocal-fast-metal", "burn-cuda", "audio.cpp"] }
                 }), &["voice_id"]),
                 call: |args| send(Method::PUT, "/v1/rvc/selection".into(), args.clone()),
             },
@@ -2822,7 +2826,7 @@ fn tools() -> &'static [Tool] {
                 schema: || object(json!({
                     "song_id": { "type": "string" },
                     "voice_id": { "type": "string" },
-                    "backend": { "enum": ["auto", "vocal-fast-rs", "vocal-fast-metal", "audio.cpp"] }
+                    "backend": { "enum": ["auto", "vocal-fast-rs", "vocal-fast-metal", "burn-cuda", "audio.cpp"] }
                 }), &["song_id"]),
                 call: |args| post("/v1/rvc/quick".into(), args.clone()),
             },
@@ -3108,6 +3112,24 @@ fn tools() -> &'static [Tool] {
                 description: "Train a native HOT-Step Stable Audio 3 Medium DoRA adapter from a prepared instrumental dataset. A finished adapter is available in the HOT-Step Create profile.",
                 schema: || object(json!({"dataset_id":{"type":"string"},"name":{"type":"string"},"settings":{"type":"object","properties":{"steps":{"type":"integer","minimum":1},"rank":{"type":"integer","minimum":1},"alpha":{"type":"number"},"learning_rate":{"type":"number"},"duration_seconds":{"type":"number","minimum":1,"maximum":384},"seed":{"type":"integer","minimum":0}}}}), &["dataset_id"]),
                 call: |args| post("/v1/training/hotstep-sa3".into(), args.clone()),
+            },
+            Tool {
+                name: "rvc_training_status",
+                description: "Check the native Burn RVC training pack, accelerator and missing files.",
+                schema: nothing,
+                call: |_| get("/v1/training/rvc-burn".into()),
+            },
+            Tool {
+                name: "rvc_training_start",
+                description: "Train an RVC v2 Safetensors voice on isolated voice recordings in a Studio dataset, using native Burn CUDA.",
+                schema: || object(json!({"dataset_id":{"type":"string"},"name":{"type":"string"},"settings":{"type":"object","properties":{"epochs":{"type":"integer","minimum":1},"batch_size":{"type":"integer","minimum":1},"learning_rate":{"type":"number"}}}}), &["dataset_id"]),
+                call: |args| post("/v1/training/rvc-burn".into(), args.clone()),
+            },
+            Tool {
+                name: "rvc_training_install_voice",
+                description: "Install a saved native RVC Burn training checkpoint in the voice catalogue. Use the returned ID with rvc_apply.",
+                schema: || id_only("run_id", "RVC Burn run ID"),
+                call: |args| post(format!("/v1/training/rvc-burn/{}/install", segment(&text(args, "run_id")?)), json!({})),
             },
             Tool {
                 name: "training_start",

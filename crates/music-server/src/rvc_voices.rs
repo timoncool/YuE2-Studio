@@ -1,6 +1,7 @@
 use axum::extract::{Multipart, Path as RoutePath, State};
 use axum::http::StatusCode;
 use axum::Json;
+use anyhow::Context;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::fs::{self, File};
@@ -16,8 +17,18 @@ const MANIFEST: &str = "voice.json";
 
 pub(super) type ApiFailure = (StatusCode, Json<ApiError>);
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub(super) enum VoiceFormat {
+    #[default]
+    Pth,
+    BurnSafetensors,
+}
+
 #[derive(Deserialize, Serialize)]
 pub(super) struct Voice {
+    #[serde(default)]
+    pub(super) format: VoiceFormat,
     pub(super) id: String,
     model_name: String,
     index_name: Option<String>,
@@ -29,6 +40,13 @@ pub(super) struct Voice {
 impl Voice {
     pub(super) fn title(&self) -> &str {
         self.origin.as_ref().map_or(&self.model_name, |origin| &origin.name)
+    }
+
+    pub(super) fn weights_file(&self) -> &'static str {
+        match self.format {
+            VoiceFormat::Pth => "voice.pth",
+            VoiceFormat::BurnSafetensors => "voice.safetensors",
+        }
     }
 
     pub(super) fn has_index(&self) -> bool {
@@ -69,7 +87,7 @@ pub(super) fn read_voice(root: &Path, id: &str) -> Option<Voice> {
     let file = File::open(path.join(MANIFEST)).ok()?;
     let voice = serde_json::from_reader::<_, Voice>(file).ok()?;
     (voice.id == id
-        && path.join("voice.pth").is_file()
+        && path.join(voice.weights_file()).is_file()
         && (voice.index_name.is_none() || path.join("retrieval.index").is_file()))
     .then_some(voice)
 }
@@ -271,6 +289,7 @@ pub(super) async fn install_staged(
         let id = voice_id(&model.hash, index.as_ref().map(|file| &file.hash));
         let voice = Voice {
             id,
+            format: VoiceFormat::Pth,
             model_name: model.name,
             index_name: index.map(|file| file.name),
             version,
@@ -295,6 +314,63 @@ pub(super) async fn install_staged(
     .map_err(internal)?
 }
 
+
+pub(super) async fn install_trained_burn(
+    root: PathBuf, model: PathBuf, name: String,
+) -> Result<(StatusCode, Json<Voice>), ApiFailure> {
+    let stage = new_stage(&root).await?;
+    tokio::task::spawn_blocking(move || {
+        validate_burn_voice(&model).map_err(invalid)?;
+        let model_name = name;
+        let target = stage.path().join("voice.safetensors");
+        fs::copy(&model, &target).map_err(internal)?;
+        let mut file = File::open(&target).map_err(internal)?;
+        let mut hash = Sha256::new();
+        let mut buffer = vec![0; 1024 * 1024];
+        loop {
+            let read = file.read(&mut buffer).map_err(internal)?;
+            if read == 0 { break; }
+            hash.update(&buffer[..read]);
+        }
+        drop(file);
+        let voice = Voice { id: voice_id(&hash.finalize().into(), None), format: VoiceFormat::BurnSafetensors,
+            model_name, index_name: None, version: Some(2), origin: None };
+        serde_json::to_writer(File::create(stage.path().join(MANIFEST)).map_err(internal)?, &voice).map_err(internal)?;
+        match fs::rename(stage.path(), root.join(&voice.id)) {
+            Ok(()) => Ok((StatusCode::CREATED, Json(voice))),
+            Err(error) => {
+                let existing = read_voice(&root, &voice.id).ok_or_else(|| internal(error))?;
+                Ok((StatusCode::OK, Json(existing)))
+            }
+        }
+    }).await.map_err(internal)?
+}
+
+fn validate_burn_voice(path: &Path) -> anyhow::Result<()> {
+    let mut file = File::open(path)?;
+    let mut size = [0_u8; 8];
+    file.read_exact(&mut size)?;
+    let size = u64::from_le_bytes(size);
+    let length = file.metadata()?.len();
+    anyhow::ensure!((1..=1024 * 1024).contains(&size) && size + 8 < length,
+        "The Burn Safetensors voice has an invalid header.");
+    let mut header = vec![0; size as usize];
+    file.read_exact(&mut header)?;
+    let header: serde_json::Value = serde_json::from_slice(&header)?;
+    anyhow::ensure!(header["__metadata__"]["producer"] == "burn"
+        && header["enc_p.emb_phone.weight"]["shape"][0] == 768
+        && header.get("emb_g.weight").is_some()
+        && header.get("dec.conv_post.weight").is_some(),
+        "The checkpoint is not a Burn RVC v2 generator.");
+    for (key, value) in header.as_object().context("The checkpoint header is not an object.")? {
+        if key == "__metadata__" { continue; }
+        let range = &value["data_offsets"];
+        let start = range[0].as_u64().context("Missing tensor offset.")?;
+        let end = range[1].as_u64().context("Missing tensor end.")?;
+        anyhow::ensure!(start < end && end <= length - size - 8, "Invalid tensor range for {key}.");
+    }
+    Ok(())
+}
 // Inspect a bounded archive member as bytes. The inference engine performs
 // full tensor validation with its native checkpoint reader.
 fn checkpoint_version(path: &Path) -> anyhow::Result<Option<u8>> {

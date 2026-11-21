@@ -274,6 +274,10 @@ pub struct Run {
     pub hotstep_sa3_settings: Option<crate::hotstep_sa3_training::Settings>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub hotstep_heartmula_settings: Option<crate::hotstep_sa3_training::Settings>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rvc_burn_settings: Option<crate::rvc_burn::Settings>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rvc_voice_id: Option<String>,
 }
 
 /// The run trained on from the checkpoint at `from` up to `to` steps.
@@ -1118,7 +1122,7 @@ impl Training {
     pub fn runs(&self) -> Vec<Run> {
         let Ok(entries) = std::fs::read_dir(self.runs_dir()) else { return Vec::new() };
         let mut list: Vec<Run> = entries.flatten().filter_map(|entry| read_run(&entry.path())).filter(|run: &Run| run.engine == self.engine
-            || (self.engine == crate::PRIMARY_MUSIC_ENGINE_ID && run.engine == crate::hotstep_cover::ENGINE)).collect();
+            || (self.engine == crate::PRIMARY_MUSIC_ENGINE_ID && matches!(run.engine.as_str(), crate::hotstep_cover::ENGINE | crate::rvc_burn::STAGE))).collect();
         list.sort_by(|a, b| b.created_at.cmp(&a.created_at));
         list
     }
@@ -1290,6 +1294,8 @@ impl Training {
             output_adapter: None,
             hotstep_sa3_settings: None,
             hotstep_heartmula_settings: None,
+            rvc_burn_settings: None,
+            rvc_voice_id: None,
         };
         self.save_run(&run)?;
         let cancel = Arc::new(tokio::sync::Notify::new());
@@ -1370,6 +1376,8 @@ impl Training {
             output_adapter: None,
             hotstep_sa3_settings: (!heart).then(|| settings.clone()),
             hotstep_heartmula_settings: heart.then_some(settings),
+            rvc_burn_settings: None,
+            rvc_voice_id: None,
         };
         self.save_run(&run)?;
         let cancel = Arc::new(tokio::sync::Notify::new());
@@ -1408,6 +1416,96 @@ impl Training {
             training.settle(&run_id, outcome, (card.give_back)()).await;
         });
         Ok(run)
+    }
+
+    /// Uses the existing run scheduler for the native RVC voice trainer.
+    pub(super) async fn start_rvc_burn(
+        self: &Arc<Self>,
+        runtime: crate::rvc_burn::Runtime,
+        dataset_id: &str,
+        name: &str,
+        settings: crate::rvc_burn::Settings,
+        card: CardHooks,
+    ) -> Result<Run> {
+        let dataset = self.dataset(dataset_id)?;
+        let audio = self.dataset_dir(dataset_id)?.join("audio");
+        let clips = dataset.items.iter().filter(|item| !item.instrumental).map(|item| {
+            let name = Path::new(&item.file);
+            if name.components().count() != 1 || !matches!(name.components().next(), Some(std::path::Component::Normal(_))) {
+                bail!("Invalid RVC recording filename.");
+            }
+            let path = audio.join(name);
+            if !path.is_file() { bail!("Recording does not exist: {}", item.title); }
+            Ok(path)
+        }).collect::<Result<Vec<_>>>()?;
+        if clips.is_empty() { bail!("Add at least one isolated voice recording to the dataset."); }
+        let mut active = self.active.write().await;
+        if active.is_some() { bail!("a training run is already going"); }
+        let run_id = new_id();
+        let run_dir = self.run_dir(&run_id)?;
+        std::fs::create_dir_all(run_dir.join("rvc-output"))?;
+        // Keep the files available if the dataset changes while the trainer
+        // reads them. Its CLI takes file arguments, relative to the run folder.
+        let inputs = tempfile::Builder::new().prefix("rvc-").tempdir_in(&run_dir)?;
+        let mut staged_clips = Vec::with_capacity(clips.len());
+        for (index, path) in clips.into_iter().enumerate() {
+            let target = inputs.path().join(format!("{index}.wav"));
+            if std::fs::hard_link(&path, &target).is_err() {
+                std::fs::copy(&path, &target)?;
+            }
+            staged_clips.push(target.strip_prefix(&run_dir)?.to_owned());
+        }
+        let stage = runtime.training_stage(staged_clips, &run_dir, &settings);
+        let run = Run {
+            id: run_id.clone(), engine: crate::rvc_burn::STAGE.into(),
+            dataset_id: dataset.id, dataset_name: dataset.name.clone(),
+            name: if name.trim().is_empty() { dataset.name } else { name.trim().to_owned() },
+            trigger: String::new(),
+            recipe: Recipe { preset:"rvc-burn".into(), stop:"epochs".into(), epochs:settings.epochs,
+                grad_accum:settings.batch_size, learning_rate:settings.learning_rate, steps:0, ..Recipe::default() },
+            status: RunStatus::Running, stage:Some(stage.id.into()), stages:vec![stage.id.into()],
+            steps:vec![], error:None, created_at:now(), finished_at:None,
+            installed:vec![], continuations:vec![], output_adapter:None, hotstep_sa3_settings:None,
+            hotstep_heartmula_settings:None, rvc_burn_settings:Some(settings), rvc_voice_id:None,
+        };
+        self.save_run(&run)?;
+        let cancel = Arc::new(tokio::sync::Notify::new());
+        *active = Some(Active { run_id:run_id.clone(), cancel:cancel.clone() });
+        drop(active);
+        let training = self.clone();
+        tokio::spawn(async move {
+            (card.take)().await;
+            let outcome = training.work(&runtime.exe, None, &run_dir, &run_id, vec![stage], cancel).await
+                .and_then(|done| {
+                    if done && !run_dir.join(crate::rvc_burn::CHECKPOINT).is_file() {
+                        bail!("RVC Burn completed without exporting a voice.");
+                    }
+                    Ok(done)
+                });
+            drop(inputs);
+            training.settle(&run_id, outcome, (card.give_back)()).await;
+        });
+        Ok(run)
+    }
+
+    pub(super) fn rvc_burn_checkpoint(&self, id: &str) -> Result<PathBuf> {
+        let run = self.run(id)?;
+        let root = self.run_dir(id)?;
+        let path = if run.status == RunStatus::Done { root.join(crate::rvc_burn::CHECKPOINT) }
+            else { root.join("rvc-output/checkpoint/voice.best.safetensors") };
+        if !path.is_file() { bail!("This RVC run has no saved voice."); }
+        Ok(path)
+    }
+
+    pub(super) fn rvc_burn_best(&self, id: &str) -> Option<serde_json::Value> {
+        read_json(&self.run_dir(id).ok()?.join("rvc-output/checkpoint/voice.best.json"))
+    }
+
+    pub(super) fn record_rvc_burn_voice(&self, id: &str, voice: &str) -> Result<()> {
+        let _edit = self.edits.lock().unwrap_or_else(|error| error.into_inner());
+        let mut run = self.run(id)?;
+        run.rvc_voice_id = Some(voice.to_owned());
+        self.save_run(&run)
     }
 
     /// Where a run can be trained further from, or which [`RESUME_REFUSALS`]
@@ -1584,6 +1682,10 @@ impl Training {
             // The pack carries ggml's processor builds beside CUDA; without this
             // a card whose CUDA does not load would train on the processor.
             command.env("GGML_BACKEND", "CUDA0");
+            if stage.id == crate::rvc_burn::STAGE {
+                let folder = trainer.parent().context("RVC Burn runtime folder")?.to_owned();
+                command.envs(crate::rvc_burn::Runtime::from_folder(folder).environment());
+            }
             #[cfg(windows)]
             command.creation_flags(0x0800_0000);
             let mut child = command.spawn().with_context(|| format!("start {}", trainer.display()))?;
@@ -1613,7 +1715,18 @@ impl Training {
                         Some(line) => {
                             log.write_all(line.as_bytes()).await?;
                             log.write_all(b"\n").await?;
-                            let step = if stage.id == crate::hotstep_sa3_training::STAGE {
+                            let step = if stage.id == crate::rvc_burn::STAGE {
+                                crate::rvc_burn::progress(&line).map(|(total, step)| {
+                                    let _edit = self.edits.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+                                    if let Ok(mut run) = self.run(run_id)
+                                        && run.recipe.steps != total
+                                    {
+                                        run.recipe.steps = total;
+                                        let _ = self.save_run(&run);
+                                    }
+                                    step
+                                })
+                            } else if stage.id == crate::hotstep_sa3_training::STAGE {
                                 crate::hotstep_sa3_training::progress(&line)
                             } else if stage.id == crate::hotstep_sa3_training::HEART_STAGE {
                                 crate::hotstep_sa3_training::heart_progress(&line)
@@ -2059,6 +2172,8 @@ mod tests {
             output_adapter: None,
             hotstep_sa3_settings: None,
             hotstep_heartmula_settings: None,
+            rvc_burn_settings: None,
+            rvc_voice_id: None,
         };
         training.save_run(&run).unwrap();
         training.append_step("r1", record(3)).unwrap();

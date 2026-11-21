@@ -55,7 +55,8 @@ it.each([false, true])('uses the selected recipe after revisiting songs (automat
     vi.unstubAllGlobals();
   }
 });
-it.each(['sa3', 'heartmula'])('starts HOT-Step %s training with its native defaults', async target => {
+it.each(['sa3', 'heartmula', 'rvc'])('starts %s training with its native defaults', async target => {
+  const endpoint = `/v1/training/${target === 'rvc' ? 'rvc-burn' : `hotstep-${target}`}`;
   const state = {
     pack: [], pack_ready: false, card_trains: false, listen: { ready: true }, runs: [],
     recipe_defaults: { preset: 'balanced', seed: 42 }, recipe_fields: [],
@@ -67,12 +68,12 @@ it.each(['sa3', 'heartmula'])('starts HOT-Step %s training with its native defau
   const start = vi.fn();
   vi.stubGlobal('fetch', async (url: string, init?: RequestInit) => {
     if (url === '/v1/training') return Response.json(state);
-    if (url === `/v1/training/hotstep-${target}` && init?.method === 'POST') {
+    if (url === endpoint && init?.method === 'POST') {
       start(JSON.parse(String(init.body)));
       return Response.json({ id: 'run' });
     }
-    if (url === `/v1/training/hotstep-${target}`) return Response.json({
-      cuda: true, installable: true, ready: true, installing: false, missing_bytes: 0,
+    if (url === endpoint) return Response.json({
+      cuda: true, installable: true, ready: true, installing: false, missing_bytes: 0, missing: [],
     });
     return Response.json({});
   });
@@ -95,7 +96,8 @@ it.each(['sa3', 'heartmula'])('starts HOT-Step %s training with its native defau
     await press('trainingStart');
     expect(start).toHaveBeenCalledWith({
       dataset_id: 'instrumental-set', name: 'Instrumentals',
-      settings: { steps: 200, rank: 8, alpha: 8, learning_rate: 0.0001, duration_seconds: 30, seed: 42 },
+      settings: target === 'rvc' ? { epochs: 5, batch_size: 4, learning_rate: 0.0001 }
+        : { steps: 200, rank: 8, alpha: 8, learning_rate: 0.0001, duration_seconds: 30, seed: 42 },
     });
   } finally {
     await act(async () => root.unmount());
