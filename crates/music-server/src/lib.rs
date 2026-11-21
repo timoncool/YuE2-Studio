@@ -1701,6 +1701,7 @@ pub async fn serve_on_port(port: u16) -> anyhow::Result<()> {
     }
     prepare::resume(&state);
     tokio::spawn(resume_unfinished_jobs(state.clone()));
+    tokio::spawn(engine_catalogue::install::updates::watch(state.clone()));
     spawn_idle_eviction(state.clone());
     {
         let state = state.clone();
@@ -1748,6 +1749,8 @@ pub async fn serve_on_port(port: u16) -> anyhow::Result<()> {
         .route("/v1/rvc/voices/{id}", axum::routing::delete(rvc_voices::remove))
         .route("/v1/components/music-engines", get(engine_catalogue::list))
         .route("/v1/components/music-engines/refresh", post(engine_catalogue::refresh))
+        .route("/v1/components/updates", get(engine_catalogue::install::updates::list))
+        .route("/v1/components/updates/mode", post(engine_catalogue::install::updates::set_mode))
         .route("/v1/components/packages/{kind}/{id}/progress", get(engine_catalogue::progress::status))
         .route("/v1/components/packages/{kind}/{id}/cancel", post(engine_catalogue::progress::cancel))
         .route("/v1/components/music-models/{id}/install", post(engine_catalogue::install::install_model))

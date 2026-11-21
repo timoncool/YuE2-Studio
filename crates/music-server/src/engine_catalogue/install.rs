@@ -1,3 +1,5 @@
+pub(crate) mod updates;
+
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
