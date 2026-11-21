@@ -17,6 +17,8 @@ struct Identity {
     model: String,
     generation: String,
     version: String,
+    model_generation: String,
+    model_version: String,
     protocol: String,
 }
 
@@ -42,9 +44,20 @@ pub(super) async fn submit(
     engine: String,
     model: String,
     generation: Option<String>,
+    model_generation: Option<String>,
     attempt: u32,
 ) -> JobResponse {
-    run(state, request, engine, model, generation, attempt, None).await
+    run(
+        state,
+        request,
+        engine,
+        model,
+        generation,
+        model_generation,
+        attempt,
+        None,
+    )
+    .await
 }
 
 pub(super) async fn replay(
@@ -110,6 +123,7 @@ pub(super) async fn replay(
     let engine = identity.engine.clone();
     let model = identity.model.clone();
     let generation = Some(identity.generation.clone());
+    let model_generation = Some(identity.model_generation.clone());
     let derived = derivation(
         &song,
         "replay",
@@ -123,6 +137,7 @@ pub(super) async fn replay(
         engine,
         model,
         generation,
+        model_generation,
         attempt,
         Some(Replay {
             saved,
@@ -144,6 +159,7 @@ async fn run(
     engine: String,
     model: String,
     generation: Option<String>,
+    model_generation: Option<String>,
     attempt: u32,
     replay: Option<Replay>,
 ) -> JobResponse {
@@ -210,37 +226,34 @@ async fn run(
             "Resume the engine or wait for generation or training to finish.".into(),
         );
     }
-    let Some(root) = studio_data_root() else {
-        return reject(
-            request,
-            StatusCode::SERVICE_UNAVAILABLE,
-            "Studio data folder is unavailable.".into(),
-        );
-    };
-    let verify_root = root.clone();
-    let verify_engine = engine.clone();
-    let resolved = tokio::task::spawn_blocking(move || {
-        engine_catalogue::install::resolve_generation(
-            &verify_root,
-            &verify_engine,
-            generation.as_deref(),
-        )
-    })
-    .await;
-    let package = match resolved {
-        Ok(Ok(package)) => package,
-        Ok(Err(error)) => {
-            return reject(
-                request,
-                StatusCode::SERVICE_UNAVAILABLE,
-                format!("Could not verify the music engine: {error:#}"),
-            );
-        }
+    let root = update_data_root(&state);
+    let package =
+        match engine_catalogue::install::resolve_generation(root, &engine, generation.as_deref())
+            .await
+        {
+            Ok(package) => package,
+            Err(error) => {
+                return reject(
+                    request,
+                    StatusCode::SERVICE_UNAVAILABLE,
+                    format!("Could not verify the music engine: {error:#}"),
+                );
+            }
+        };
+    let model_package = match engine_catalogue::install::resolve_model_generation(
+        root,
+        &engine,
+        &model,
+        model_generation.as_deref(),
+    )
+    .await
+    {
+        Ok(package) => package,
         Err(error) => {
             return reject(
                 request,
-                StatusCode::INTERNAL_SERVER_ERROR,
-                format!("Music engine verification stopped: {error}"),
+                StatusCode::SERVICE_UNAVAILABLE,
+                format!("Could not verify the model for {engine}: {error:#}"),
             );
         }
     };
@@ -251,14 +264,14 @@ async fn run(
             "The installed music engine uses an unsupported protocol.".into(),
         );
     }
-    if replay
-        .as_ref()
-        .is_some_and(|replay| replay.saved.signed_engine.version != package.version)
-    {
+    if replay.as_ref().is_some_and(|replay| {
+        replay.saved.signed_engine.version != package.version
+            || replay.saved.signed_engine.model_version != model_package.version
+    }) {
         return reject(
             request,
             StatusCode::CONFLICT,
-            "The verified package version differs from the stored replay.".into(),
+            "The verified engine or model version differs from the stored replay.".into(),
         );
     }
     if let Err(error) = state.ace_runtime.stop().await {
@@ -275,24 +288,31 @@ async fn run(
         model,
         generation: package.generation,
         version: package.version,
+        model_generation: model_package.generation,
+        model_version: model_package.version,
         protocol: package.protocol,
     };
     let source = MusicSource::Signed {
         engine: identity.engine.clone(),
         model: identity.model.clone(),
         generation: Some(identity.generation.clone()),
+        model_generation: Some(identity.model_generation.clone()),
     };
     request.music_source = Some(source.clone());
     let submission = submission(&request, &identity, replay.as_ref());
-    let process =
-        match protocol::Process::launch(&package.executable, &root, &engine, &identity.version)
-            .await
-        {
-            Ok(process) => process,
-            Err(error) => {
-                return reject(request, StatusCode::SERVICE_UNAVAILABLE, error.to_string());
-            }
-        };
+    let process = match protocol::Process::launch(
+        &package.executable,
+        &model_package.files,
+        &engine,
+        &identity.version,
+    )
+    .await
+    {
+        Ok(process) => process,
+        Err(error) => {
+            return reject(request, StatusCode::SERVICE_UNAVAILABLE, error.to_string());
+        }
+    };
     let remote = match process.submit(&submission).await {
         Ok(id) => id,
         Err(error) => {

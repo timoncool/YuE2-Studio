@@ -79,7 +79,7 @@ pub(super) struct Process {
 impl Process {
     pub async fn launch(
         executable: &Path,
-        data: &Path,
+        models: &Path,
         engine: &str,
         version: &str,
     ) -> Result<Self> {
@@ -105,13 +105,13 @@ impl Process {
             .current_dir(directory)
             .env_clear()
             .kill_on_drop(true)
-            .stdin(Stdio::null())
+            .stdin(Stdio::piped())
             .stdout(Stdio::null())
             .stderr(Stdio::null())
             .env("YUE_MUSIC_ADAPTER_HOST", Ipv4Addr::LOCALHOST.to_string())
             .env("YUE_MUSIC_ADAPTER_PORT", port.to_string())
             .env("YUE_MUSIC_ADAPTER_TOKEN", &secret)
-            .env("YUE_MUSIC_ADAPTER_DATA", data)
+            .env("YUE_MUSIC_ADAPTER_MODELS", models)
             .env("YUE_MUSIC_ADAPTER_ID", engine)
             .env("YUE_MUSIC_ADAPTER_VERSION", version);
         for key in ["SystemRoot", "WINDIR", "TEMP", "TMP", "TMPDIR"] {
@@ -225,7 +225,14 @@ impl Process {
     }
 
     pub async fn stop(mut self) {
-        let _ = self.child.kill().await;
+        // EOF also arrives when Studio exits without running this cleanup.
+        drop(self.child.stdin.take());
+        if tokio::time::timeout(Duration::from_secs(3), self.child.wait())
+            .await
+            .is_err()
+        {
+            let _ = self.child.kill().await;
+        }
     }
 }
 

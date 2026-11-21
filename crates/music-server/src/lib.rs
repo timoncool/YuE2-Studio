@@ -6,6 +6,9 @@ mod component_catalogue;
 mod engine_catalogue;
 mod signed_music_jobs;
 mod signed_music_protocol;
+mod signed_music_ace_example;
+#[doc(hidden)]
+pub use signed_music_ace_example::run_ace_adapter;
 mod diagnostics;
 mod problem;
 mod processing;
@@ -421,7 +424,14 @@ struct CreateMusicJobRequest {
 enum MusicSource {
     Local,
     Native { engine: String, model: String },
-    Signed { engine: String, model: String, #[serde(default, skip_serializing_if = "Option::is_none")] generation: Option<String> },
+    Signed {
+        engine: String,
+        model: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        generation: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        model_generation: Option<String>,
+    },
     AudioCpp { model: String },
     #[serde(rename = "openrouter")]
     OpenRouter { model: String },
@@ -11262,7 +11272,7 @@ enum MusicDestination {
     AudioCpp(String),
     Local(String),
     Native { engine: String, model: String },
-    Signed { engine: String, model: String, generation: Option<String> },
+    Signed { engine: String, model: String, generation: Option<String>, model_generation: Option<String> },
     OpenRouter(Option<String>),
     Unconfigured,
 }
@@ -11271,8 +11281,8 @@ fn music_destination(source: Option<&MusicSource>, config: &StudioConfiguration)
     match source {
         Some(MusicSource::AudioCpp { model }) => MusicDestination::AudioCpp(model.clone()),
         Some(MusicSource::Native { engine, model }) => MusicDestination::Native { engine: engine.clone(), model: model.clone() },
-        Some(MusicSource::Signed { engine, model, generation }) => MusicDestination::Signed {
-            engine: engine.clone(), model: model.clone(), generation: generation.clone(),
+        Some(MusicSource::Signed { engine, model, generation, model_generation }) => MusicDestination::Signed {
+            engine: engine.clone(), model: model.clone(), generation: generation.clone(), model_generation: model_generation.clone(),
         },
         Some(MusicSource::Local) => MusicDestination::Local(PRIMARY_MUSIC_ENGINE_ID.to_owned()),
         Some(MusicSource::OpenRouter { model }) => MusicDestination::OpenRouter(Some(model.clone())),
@@ -11302,11 +11312,11 @@ async fn submit_music_job(state: AppState, request: CreateMusicJobRequest, attem
 async fn dispatch_music_job(state: AppState, mut request: CreateMusicJobRequest, attempt: u32, retry_engine: Option<&str>) -> (StatusCode, Json<MusicJob>) {
     let destination = music_destination(request.music_source.as_ref(), &*state.configuration.read().await);
     let engine_id = match destination {
-        MusicDestination::Signed { engine, model, generation } => {
-            if retry_engine.is_some_and(|original| original != engine || generation.is_none()) {
+        MusicDestination::Signed { engine, model, generation, model_generation } => {
+            if retry_engine.is_some_and(|original| original != engine || generation.is_none() || model_generation.is_none()) {
                 return (StatusCode::CONFLICT, Json(failed_request_job(request, engine, "The saved job has no matching signed engine generation.".into())));
             }
-            return signed_music_jobs::submit(state, request, engine, model, generation, attempt).await;
+            return signed_music_jobs::submit(state, request, engine, model, generation, model_generation, attempt).await;
         }
         MusicDestination::AudioCpp(model) => {
             if let Some(original) = retry_engine && let Err(reason) = check_retry_engine(original, audio_cpp_music::ENGINE) {
@@ -13173,7 +13183,7 @@ fn check_saved_job_source(library: &library::Library, original: &str, request: &
         let song = library.get_song(id).map_err(|error| error.to_string())?
             .ok_or_else(|| format!("The saved replay source {id} is missing."))?;
         if let Some(identity) = song.replay_request.as_ref().and_then(|value| value.get("signed_engine"))
-            && original == song.engine_id && identity["engine"] == original && identity["generation"].is_string()
+            && original == song.engine_id && identity["engine"] == original && identity["generation"].is_string() && identity["model_generation"].is_string()
         {
             return Ok(());
         }
@@ -13182,6 +13192,7 @@ fn check_saved_job_source(library: &library::Library, original: &str, request: &
     if request.pointer("/music_source/kind").and_then(Value::as_str) == Some("signed") {
         return if request.pointer("/music_source/engine").and_then(Value::as_str) == Some(original)
             && request.pointer("/music_source/generation").and_then(Value::as_str).is_some_and(|value| !value.is_empty())
+            && request.pointer("/music_source/model_generation").and_then(Value::as_str).is_some_and(|value| !value.is_empty())
         {
             Ok(())
         } else {
