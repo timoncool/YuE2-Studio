@@ -719,7 +719,7 @@ impl AssistantRuntime {
         }
 
         let total: u64 = pending.iter().map(|asset| asset.bytes).sum();
-        {
+        let _activity = {
             let mut state = self.state.lock().await;
             if state.download.as_ref().is_some_and(|progress| !progress.done && progress.error.is_none()) {
                 bail!("another assistant download is already running");
@@ -732,7 +732,8 @@ impl AssistantRuntime {
                 done: false,
                 error: None,
             });
-        }
+            crate::chunked::track_download()
+        };
 
         // Sequential on purpose: the model is most of the set, and the two
         // runtime files are small enough that fetching them at the same time
@@ -781,7 +782,7 @@ impl AssistantRuntime {
     /// interrupted file resumes from what is already on disk.
     pub async fn install(&self, id: &str) -> Result<()> {
         let asset = asset(id).ok_or_else(|| anyhow!("unknown assistant asset: {id}"))?;
-        {
+        let activity = {
             let mut state = self.state.lock().await;
             if state.download.as_ref().is_some_and(|progress| !progress.done && progress.error.is_none()) {
                 bail!("another assistant download is already running");
@@ -794,7 +795,8 @@ impl AssistantRuntime {
                 done: false,
                 error: None,
             });
-        }
+            crate::chunked::track_download()
+        };
 
         let target = self.path_of(asset);
         let http = self.http.clone();
@@ -802,6 +804,7 @@ impl AssistantRuntime {
         let root = self.root.clone();
         let cancel = self.cancel.clone();
         tokio::spawn(async move {
+            let _activity = activity;
             let outcome = match download_asset(&http, asset, &target, &state, 0, cancel).await {
                 Ok(downloaded) => finish_apart(asset, downloaded, &target, &root).await,
                 Err(error) => Err(error),
@@ -996,6 +999,12 @@ impl AssistantRuntime {
 /// piece by piece, resumable down to the last sixteen megabytes. A seven
 /// gigabyte model over one connection was the studio waiting on a single TCP
 /// stream for no reason.
+async fn wait_for_cancel(cancel: &std::sync::atomic::AtomicBool) {
+    while !cancel.load(std::sync::atomic::Ordering::Relaxed) {
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    }
+}
+
 async fn download_asset(
     http: &reqwest::Client,
     asset: &Asset,
@@ -1019,7 +1028,11 @@ async fn download_asset(
     }
 
     let url = crate::net::model_url(asset.url);
-    let (plan, url) = crate::chunked::probe(http, &url).await?;
+    let (plan, url) = tokio::select! {
+        biased;
+        () = wait_for_cancel(&cancel) => bail!("cancelled"),
+        result = crate::chunked::probe(http, &url) => result?,
+    };
     if plan.total > 0 {
         crate::sizes::learn(asset.url, plan.total);
     }
@@ -1105,6 +1118,33 @@ mod tests {
         assert!(error.to_string().contains("SHA-256"));
         assert_eq!(fs::read(&target).unwrap(), b"previous model");
         assert!(!part.exists());
+    }
+
+    #[tokio::test]
+    async fn a_pending_assistant_probe_keeps_the_studio_busy_and_responds_to_cancel() {
+        let directory = tempfile::tempdir().unwrap();
+        let proxy = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let mut runtime = AssistantRuntime::new(directory.path());
+        runtime.http = reqwest::Client::builder()
+            .proxy(reqwest::Proxy::all(format!("http://{}", proxy.local_addr().unwrap())).unwrap())
+            .build().unwrap();
+
+        runtime.install("llama-cpu").await.unwrap();
+        let (_connection, _) = tokio::time::timeout(Duration::from_secs(3), proxy.accept())
+            .await.unwrap().unwrap();
+        assert!(!runtime.status().await.active_download.unwrap().done);
+        assert!(crate::chunked::downloading());
+        runtime.cancel();
+        tokio::time::timeout(Duration::from_secs(3), async {
+            loop {
+                let status = runtime.status().await.active_download.unwrap();
+                if status.done {
+                    assert_eq!(status.error.as_deref(), Some("cancelled"));
+                    break;
+                }
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
+        }).await.unwrap();
     }
 
     /// llama.cpp is pinned to one build so a working setup keeps working.
