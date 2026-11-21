@@ -71,13 +71,20 @@ jobs:
         run: python scripts/windows-nsis-acceptance.py download ${{ matrix.scenario }}
       - name: Verify and exercise installed Studio
         run: python scripts/windows-nsis-acceptance.py verify ${{ matrix.scenario }}
+      - name: Print the standalone Windows control
+        id: print-control
+        run: scripts/hosted-print-control.ps1 control
       - name: Exercise installed songbook printing
+        if: always() && steps.print-control.outcome != 'skipped'
         env:
           PYTHONUTF8: '1'
           STUDIO_QA_REAL_SHELL_PROFILE: '1'
         run: |
           $exe = Join-Path $env:QA_DIR 'installed/YuE2-Studio.exe'
           python -u scripts/test-hosted-webview-screens.py $exe (Join-Path $env:QA_DIR 'evidence/print') --suite print
+      - name: Collect PrintService events and queues
+        if: always()
+        run: scripts/hosted-print-control.ps1 collect
       - name: Save acceptance evidence
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2

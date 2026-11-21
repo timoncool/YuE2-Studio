@@ -530,7 +530,8 @@ def check_lrc(root, pid, media=None):
 def check_songbook_print(root, pid):
     click('button "Songbook"')
     wait_page('button "Print A4"')
-    pdf = root/"songbook.pdf"
+    file_port = os.environ.get("STUDIO_QA_FILE_PORT")
+    pdf = pathlib.Path(file_port) if file_port else root/"songbook.pdf"
     # WebView2 may show its own print preview even with a default printer.
     # Read the isolated runner's UIA tree and confirm the visible Print action.
     print_dialog = r"""
@@ -597,6 +598,10 @@ while ([DateTime]::UtcNow -lt $deadline -and !(Test-Path -LiteralPath $env:STUDI
       }
     }
     if ($confirm -and !$confirmed) {
+      $destinations = @($elements | Where-Object {
+        $_.Current.Name -match 'Printer|Destination|Studio QA PDF|Microsoft Print' -and !$_.Current.IsOffscreen
+      } | ForEach-Object { $_.Current.Name })
+      Write-Output (@{destinationControls=$destinations} | ConvertTo-Json -Compress)
       if ($env:STUDIO_QA_PRINT_ACTION -eq 'cancel') {
         $cancel = $buttons | Where-Object {$_.Current.Name -eq 'Cancel'} | Select-Object -First 1
         if (!$cancel) { throw 'The print preview has no Cancel button' }
@@ -958,7 +963,7 @@ with isolated_profile() as root:
         env.update(HOME=str(root/"user"), USERPROFILE=str(root/"user"), APPDATA=str(root/"roaming"),
                    LOCALAPPDATA=str(root/"local"))
     env["WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS"] += " --remote-debugging-port=9889"
-    if args.suite == "print":
+    if args.suite == "print" and not os.environ.get("STUDIO_QA_FILE_PORT"):
         # Use Windows' native print output picker on the disposable hosted runner.
         printer_setup = """
 $ErrorActionPreference = 'Stop'
