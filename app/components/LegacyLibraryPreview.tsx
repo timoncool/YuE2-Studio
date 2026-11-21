@@ -19,6 +19,16 @@ interface Preview {
 }
 
 export interface LegacySource { studio: string; path: string; version: string }
+const categories = [
+  ['audio', 'legacyLibraryAudio'],
+  ['lyrics', 'legacyLibraryLyrics'], ['generation', 'legacyLibraryGeneration'],
+  ['covers', 'legacyLibraryCovers'], ['karaoke', 'legacyLibraryKaraoke'],
+  ['takes', 'legacyLibraryTakes'], ['stems', 'stems'],
+  ['midi', 'legacyLibraryMidi'], ['latents', 'legacyLibraryLatents'],
+  ['playlists', 'playlists'],
+] as const;
+type Category = typeof categories[number][0];
+interface ImportIssue { title: string; file: string; code: string; error?: string }
 export function LegacyLibraryPreview({ sources = [] }: { sources?: LegacySource[] }) {
   const { t, songCount, language } = useI18n();
   function formatSize(bytes: number) {
@@ -32,6 +42,8 @@ export function LegacyLibraryPreview({ sources = [] }: { sources?: LegacySource[
   const [copying, setCopying] = useState(false);
   const [summary, setSummary] = useState('');
   const [error, setError] = useState('');
+  const [exclude, setExclude] = useState<Category[]>([]);
+  const [issues, setIssues] = useState<ImportIssue[]>([]);
   async function chooseFolder(path?: string, registeredName?: string) {
     setBusy(true);
     setError('');
@@ -48,6 +60,8 @@ export function LegacyLibraryPreview({ sources = [] }: { sources?: LegacySource[
         setSourceName(registeredName || library.studio || folderName || library.path);
         setPreview(library);
         setSummary('');
+        setIssues([]);
+        setExclude([]);
       }
     } catch (reason) {
       setError(String(reason instanceof Error ? reason.message : reason));
@@ -61,14 +75,17 @@ export function LegacyLibraryPreview({ sources = [] }: { sources?: LegacySource[
     setCopying(true);
     setSummary('');
     setError('');
+    setIssues([]);
     try {
       const response = await fetch('/v1/library/migration/import', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path: preview.path }),
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path: preview.path, exclude }),
       });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || response.statusText);
       setSummary(t('legacyLibraryResult').replace('{songs}', String(result.added)).replace('{existing}', String(result.already_imported))
-        .replace('{lists}', String(result.playlists_added)).replace('{knownLists}', String(result.playlists_already_imported)));
+        .replace('{lists}', String(result.playlists_added)).replace('{knownLists}', String(result.playlists_already_imported))
+        + (result.updated ? ' ' + t('legacyLibraryUpdated').replace('{songs}', String(result.updated)) : ''));
+      setIssues(result.errors ?? []);
       libraryChanged();
       playlistsChanged();
       // Refresh the free-space figure after the actual copy. The result of the copy
@@ -102,17 +119,39 @@ export function LegacyLibraryPreview({ sources = [] }: { sources?: LegacySource[
     {error && <p role="alert" className="mt-2 text-sm text-rose-600 dark:text-rose-300">{error}</p>}
     {preview && <div className="mt-3 space-y-2 text-sm">
       <p role="status" className="break-all"><strong>{sourceName}</strong> · {preview.path} · {songCount(preview.songs.length)} · {t('playlists')} ({preview.playlists.length})</p>
-      <p className="text-xs">{t('legacyLibrarySize').replace('{size}', formatSize(preview.space.total_bytes)).replace('{required}', formatSize(preview.space.required_bytes))}
+      <p className="text-xs">{exclude.length === 0 && t('legacyLibrarySize').replace('{size}', formatSize(preview.space.total_bytes)).replace('{required}', formatSize(preview.space.required_bytes))}
         {preview.space.available_bytes !== null && <> · {t('legacyLibraryFree').replace('{size}', formatSize(preview.space.available_bytes))}</>}
       </p>
-      {preview.space.available_bytes !== null && preview.space.required_bytes > preview.space.available_bytes &&
+      {exclude.length === 0 && preview.space.available_bytes !== null && preview.space.required_bytes > preview.space.available_bytes &&
         <p role="alert" className="text-amber-700 dark:text-amber-300">{t('legacyLibraryNoSpace')}</p>}
-      <button type="button" disabled={busy || copying || (preview.space.available_bytes !== null && preview.space.required_bytes > preview.space.available_bytes) || (!preview.songs.length && !preview.playlists.length)} onClick={() => void importLibrary()}
+      <fieldset className="flex flex-wrap gap-x-4 gap-y-1" disabled={busy || copying}>
+        <legend className="mb-1 font-medium">{t('legacyLibraryOptional')}</legend>
+        {categories.map(([category, label]) => <label key={category} className="inline-flex items-center gap-1.5">
+          <input type="checkbox" checked={!exclude.includes(category) && !(category === 'takes' && exclude.includes('audio'))}
+            disabled={category === 'takes' && exclude.includes('audio')} onChange={event => {
+            const checked = event.currentTarget.checked;
+            setExclude(previous => checked ? previous.filter(item => item !== category) : [...previous, category]);
+          }} />
+          {t(label)}
+        </label>)}
+      </fieldset>
+      <button type="button" disabled={busy || copying || (exclude.length === 0 && preview.space.available_bytes !== null && preview.space.required_bytes > preview.space.available_bytes) || (!preview.songs.length && (!preview.playlists.length || exclude.includes('playlists')))} onClick={() => void importLibrary()}
         className="inline-flex items-center gap-2 rounded-lg bg-orange-600 px-3 py-2 font-semibold text-white disabled:opacity-50">
         {copying && <Loader2 size={15} className="animate-spin" />}
         {t(copying ? 'legacyLibraryCopying' : 'legacyLibraryCopy')}
       </button>
       {summary && <p role="status">{summary}</p>}
+      {issues.length > 0 && <div role="alert" className="text-rose-700 dark:text-rose-300">
+        <p className="font-medium">{t('legacyLibraryImportIssues')}</p>
+        <ul className="max-h-48 list-disc space-y-1 overflow-auto pl-5">
+          {issues.map((issue, index) => <li key={index} className="break-all">
+            {issue.code !== 'playlist_incomplete' && <>{issue.title} · </>}
+            <strong>{issue.file}</strong> · {issue.code === 'missing' ? t('legacyLibraryMissing')
+              : issue.code === 'playlist_incomplete' ? t('legacyLibraryPlaylistIncomplete')
+              : issue.error || t('legacyLibraryImportIssues')}
+          </li>)}
+        </ul>
+      </div>}
       <ul className="max-h-64 space-y-1 overflow-auto">
         {preview.songs.map(song => <li key={song.id}><details>
           <summary className="cursor-pointer">{song.title} · {t('legacyLibraryAvailable')} ({song.files.length})

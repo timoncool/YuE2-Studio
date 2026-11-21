@@ -167,7 +167,8 @@ impl Library {
     playlist_id TEXT PRIMARY KEY, song_id TEXT NOT NULL,
     FOREIGN KEY(playlist_id,song_id) REFERENCES playlist_songs(playlist_id,song_id) ON DELETE CASCADE
   );")?;
-  c.execute_batch("CREATE TABLE IF NOT EXISTS legacy_ids(source TEXT NOT NULL,kind TEXT NOT NULL,old_id TEXT NOT NULL,new_id TEXT NOT NULL UNIQUE,imported INTEGER NOT NULL DEFAULT 0,PRIMARY KEY(source,kind,old_id))")?;
+  c.execute_batch("CREATE TABLE IF NOT EXISTS legacy_ids(source TEXT NOT NULL,kind TEXT NOT NULL,old_id TEXT NOT NULL,new_id TEXT NOT NULL UNIQUE,imported INTEGER NOT NULL DEFAULT 0,PRIMARY KEY(source,kind,old_id));
+    CREATE TABLE IF NOT EXISTS legacy_import_content(song_id TEXT PRIMARY KEY REFERENCES songs(id) ON DELETE CASCADE,pending TEXT NOT NULL)")?;
   Ok(Self{connection:Arc::new(Mutex::new(c)),media_dir})}
  pub(super) fn legacy_song_mappings(&self, source: &str) -> Result<std::collections::HashMap<String,(String,bool)>> {
     let connection = self.connection.lock().unwrap();
@@ -237,7 +238,7 @@ impl Library {
  }
  pub(super) fn read_songs(c: &Connection)->Result<Vec<Song>>{let mut s=c.prepare("SELECT id,title,audio_path,caption,lyrics,metadata_json,generation_settings_json,engine_id,profile_id,replay_request_json,audio_codes_json,source,created_at,updated_at FROM songs ORDER BY created_at DESC, id DESC")?;Ok(s.query_map([],row_song)?.collect::<rusqlite::Result<_>>()?)}
  pub fn get_song(&self,id:&str)->Result<Option<Song>>{Self::read_song(&self.connection.lock().unwrap(),id)}
- fn read_song(c:&Connection,id:&str)->Result<Option<Song>>{Ok(c.query_row("SELECT id,title,audio_path,caption,lyrics,metadata_json,generation_settings_json,engine_id,profile_id,replay_request_json,audio_codes_json,source,created_at,updated_at FROM songs WHERE id=?",[id],row_song).optional()?)}
+ pub(super) fn read_song(c:&Connection,id:&str)->Result<Option<Song>>{Ok(c.query_row("SELECT id,title,audio_path,caption,lyrics,metadata_json,generation_settings_json,engine_id,profile_id,replay_request_json,audio_codes_json,source,created_at,updated_at FROM songs WHERE id=?",[id],row_song).optional()?)}
  pub fn create_song(&self,input:SongInput)->Result<Song>{let now=now();let song=Song{id:uuid::Uuid::now_v7().to_string(),title:input.title,audio_path:input.audio_path,caption:input.caption,lyrics:input.lyrics,metadata:input.metadata,generation_settings:input.generation_settings,engine_id:input.engine_id,profile_id:input.profile_id,replay_request:input.replay_request,audio_codes:input.audio_codes,source:input.source,created_at:now.clone(),updated_at:now};self.save_song(&song)?;Ok(song)}
  pub fn import_generated_song(&self, input: GeneratedSongInput) -> Result<ImportedSong> {
     self.import_generated_song_with_latent(input, None)

@@ -1275,9 +1275,15 @@ fn tools() -> &'static [Tool] {
             },
             Tool {
                 name: "library_migration_import",
-                description: "Copy the songs, related files and playlists from the selected old Studio folder into this library. Safe to retry after a preview.",
-                schema: || id_only("path", "Old Studio installation or data folder"),
-                call: |args| post("/v1/library/migration/import".into(), json!({ "path": text(args, "path")? })),
+                description: "Copy songs and selected content from an old Studio folder. Later imports can fill in omitted content without duplicating songs. Returns per-file errors for entries that could not be copied.",
+                schema: || object(json!({
+                    "path": {"type": "string", "description": "Old Studio installation or data folder"},
+                    "exclude": {"type":"array", "items":{"type":"string",
+                        "enum":["audio","lyrics","generation","covers","karaoke","takes","stems","midi","latents","playlists"]}}
+                }), &["path"]),
+                call: |args| post("/v1/library/migration/import".into(), json!({
+                    "path": text(args, "path")?, "exclude": args.get("exclude").cloned().unwrap_or_else(|| json!([]))
+                })),
             },
             Tool {
                 name: "library_migration_sources_list",
