@@ -108,9 +108,20 @@ pub fn cuda_unavailable_reason(hardware: &Hardware) -> String {
 /// happened on with its architecture and driver (`NVIDIA GeForce GTX 1050,
 /// compute 6.1, driver 581, cuda12 build`); on a Vulkan card, the card the
 /// engine computes on and the memory it was found to have (`Intel Arc B580,
-/// Vulkan, 12.0 GB`).
+/// Vulkan, 12.0 GB`); on Apple Silicon, the chip and its unified memory.
 pub fn describe_card(hardware: &Hardware) -> Option<String> {
+    describe_card_on(hardware, cfg!(target_os = "macos"))
+}
+
+fn describe_card_on(hardware: &Hardware, macos: bool) -> Option<String> {
     let name = hardware.gpu_name.as_deref()?;
+    if macos {
+        return Some(if hardware.total_vram_gb > 0.0 {
+            format!("{name}, Metal, {:.1} GB unified memory", hardware.total_vram_gb)
+        } else {
+            format!("{name}, Metal, unified memory size unavailable")
+        });
+    }
     if !hardware.nvidia {
         return Some(match hardware.total_vram_gb {
             gib if gib > 0.0 => format!("{name}, Vulkan, {gib:.1} GB"),
@@ -730,9 +741,8 @@ mod tests {
         assert_eq!(asked.get(), 2, "an answer past its life is asked again");
     }
 
-    #[cfg(not(windows))]
     #[test]
-    fn a_vulkan_card_is_described_with_the_memory_its_driver_publishes() {
+    fn a_card_is_described_with_its_platform_backend_and_memory() {
         // A card the engine computes on is named from its PCI identity, and on
         // Linux sized by Vulkan when the kernel publishes nothing (Intel's xe
         // driver): that size is what recommends a set and keeps a working card
@@ -752,13 +762,21 @@ mod tests {
             on_processor: false,
             short_of_smallest_set: None,
         };
-        assert_eq!(describe_card(&card).as_deref(), Some("Intel Arc B580, Vulkan, 11.9 GB"));
+        assert_eq!(describe_card_on(&card, false).as_deref(), Some("Intel Arc B580, Vulkan, 11.9 GB"));
         // A card nothing sizes still appears in a report, saying so, instead of
         // reading as no card at all.
         let unsized_card = Hardware { total_vram_gb: 0.0, ..card.clone() };
-        assert_eq!(describe_card(&unsized_card).as_deref(), Some("Intel Arc B580, Vulkan, memory size not published by its driver"));
-        let no_card = Hardware { gpu_name: None, ..card };
-        assert_eq!(describe_card(&no_card), None);
+        assert_eq!(describe_card_on(&unsized_card, false).as_deref(), Some("Intel Arc B580, Vulkan, memory size not published by its driver"));
+        let mac = Hardware {
+            gpu_name: Some("Apple M2 Max".into()),
+            total_vram_gb: 32.0,
+            vulkan: false,
+            ..card
+        };
+        assert_eq!(describe_card_on(&mac, true).as_deref(), Some("Apple M2 Max, Metal, 32.0 GB unified memory"));
+        let no_card = Hardware { gpu_name: None, ..mac };
+        assert_eq!(describe_card_on(&no_card, true), None);
+        assert_eq!(describe_card_on(&no_card, false), None);
     }
 
     #[cfg(not(windows))]
