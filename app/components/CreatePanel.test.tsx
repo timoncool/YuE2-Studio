@@ -519,6 +519,49 @@ it('keeps compatible native ACE LoRA separate and restores its saved scale', asy
   expect(sent[2]?.ace?.adapters).toEqual([{ name: 'ace-xl', scale: 0.35 }]);
 });
 
+it('restores native MiniMax DiT and LM LoRA scales only in the MiniMax request', async () => {
+  const tune = { id: 'mm3-lora', name: 'MiniMax tune', engine: 'minimaxmusic-cpp', kind: 'sound',
+    slots: ['lm', 'dit'], scales: { lm: 0.2, dit: 0.9 }, origin: { type: 'imported' } };
+  vi.mocked(fetch).mockImplementation(async url => {
+    const engine = String(url).match(/\/v1\/music\/native\/([^/]+)\/profiles$/)?.[1];
+    return engine ? Response.json({ engine, engine_installed: true, profiles: [{
+      id: 'balanced', label: 'Balanced', ready: true, missing: [], total_bytes: 1,
+      native_adapters: engine === 'minimaxmusic-cpp' ? [tune] : [],
+    }] }) : Response.json([]);
+  });
+  const show = async (engine: 'minimaxmusic-cpp' | 'acestep-cpp', initialData?: { song: Song; timestamp: number }) => {
+    act(() => root.render(panel({ musicEngine: engine, initialData })));
+    await flush();
+    const model = host.querySelector<HTMLSelectElement>('select[aria-label="Local model"]')!;
+    act(() => {
+      model.value = 'balanced';
+      model.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    await flush();
+  };
+  const create = () => buttonNamed('create') as HTMLButtonElement;
+  await show('minimaxmusic-cpp');
+  type(field('textarea[aria-label="styleCardTitle"]')!, 'warm piano');
+  type(field('textarea[aria-label="lyrics"]')!, 'short verse');
+  click(buttonNamed('adaptersAdd')!);
+  click(buttonNamed('MiniMax tune')!);
+  click(create());
+  expect(sent[0]?.minimax?.adapters).toEqual([{ name: 'mm3-lora', lm_scale: 0.2, dit_scale: 0.9 }]);
+  await show('acestep-cpp');
+  click(create());
+  expect(sent[1]?.minimax).toBeUndefined();
+  await show('minimaxmusic-cpp');
+  expect(field('input[aria-label="MiniMax tune"]')).toBeTruthy();
+
+  const saved = { ditModel: 'minimaxmusic-cpp', lmModel: 'balanced', title: 'Migrated MiniMax take',
+    style: 'warm piano', lyrics: 'short verse',
+    generationParams: { adapters: [{ name: 'mm3-lora', scale: 1, lm_scale: 0.3, dit_scale: 0.75 }] },
+  } as Song;
+  await show('minimaxmusic-cpp', { song: saved, timestamp: 1 });
+  click(create());
+  expect(sent[2]?.minimax?.adapters).toEqual([{ name: 'mm3-lora', lm_scale: 0.3, dit_scale: 0.75 }]);
+});
+
 it('posts the remembered MiniMax output format and keeps it out of ACE requests', async () => {
   vi.stubGlobal('EventSource', class { close() {} });
   const profiles = ['balanced', 'quality'].map(id => ({ id, label: id, ready: true, missing: [], total_bytes: 1 }));
