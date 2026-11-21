@@ -111,9 +111,15 @@ with tempfile.TemporaryDirectory(prefix="yue-ableton-http-", dir=args.receipt.pa
                 current = call("library_song_get", song_id=song["id"], response_format="detailed")
                 current["generation_settings"] = {**(current.get("generation_settings") or {}), "abc": score}
                 call("library_song_update", song_id=song["id"], song=current)
+                library_wav = Path(call("library_song_files", song_id=song["id"])["audio"])
+                original = library_wav.read_bytes()
+                with wave.open(io.BytesIO(original), "rb") as stored, wave.open(str(source), "rb") as input_wav:
+                    assert stored.getparams() == input_wav.getparams()
+                    assert stored.readframes(stored.getnframes()) == input_wav.readframes(input_wav.getnframes())
                 code, raw = send("/v1/exports/live", {"song_id": song["id"]})
                 got = json.loads(raw)
                 results[label] = dict(http=code, response=got)
+                print(label, code, got.get("bpm"), got.get("meter"), got.get("midi_parts"), flush=True)
                 if args.expect_fix:
                     assert code == 200 and got["bpm"] == bpm and got["meter"] == meter, (label, code, got)
                     assert got["midi_parts"] == midi_count and got["tempo_from_score"] == explicit, (label, got)
@@ -124,9 +130,10 @@ with tempfile.TemporaryDirectory(prefix="yue-ableton-http-", dir=args.receipt.pa
                         assert archive.testzip() is None
                         names = archive.namelist()
                         master, = [name for name in names if name.endswith(" - Master.wav")]
-                        assert archive.read(master) == source.read_bytes()
+                        assert archive.read(master) == original == library_wav.read_bytes()
                         assert sum(name.endswith(".mid") for name in names) == midi_count
                     results[label].update(archive_members=names, archive_sha256=hashlib.sha256(payload).hexdigest())
+                    results[label]["master_sha256"] = hashlib.sha256(original).hexdigest()
             args.receipt.write_text(json.dumps(results, indent=2) + "\n", encoding="utf8")
             if not args.expect_fix:
                 assert results["native"]["http"] == 200 and results["mono_without_tempo"]["http"] == 422, results
