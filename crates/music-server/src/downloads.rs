@@ -192,6 +192,7 @@ impl Downloader {
             return false;
         }
         let libraries = crate::pin_sha::runtime_libraries(asset.url);
+        let mut file_sha256 = "";
         let files: Vec<PathBuf> = if !libraries.is_empty() {
             let destination = self.picked_into(asset);
             let mut files = Vec::new();
@@ -216,13 +217,16 @@ impl Downloader {
         } else if asset.unzip_into.is_none() {
             let path = self.path_of(asset);
             match crate::pin_sha::sha256(asset.url) {
-                Some(sha256) if crate::pin_sha::holds(&path, sha256) => vec![path],
+                Some(sha256) if crate::pin_sha::holds(&path, sha256) => {
+                    file_sha256 = sha256;
+                    vec![path]
+                }
                 _ => return false,
             }
         } else {
             return false;
         };
-        if let Err(error) = crate::install_record::write(record, asset.url, "", &files, &self.root) {
+        if let Err(error) = crate::install_record::write(record, asset.url, file_sha256, &files, &self.root) {
             eprintln!("[ERROR] {}: the record of today's files already on disk was not written: {error:#}", asset.label);
         }
         true
@@ -256,6 +260,11 @@ impl Downloader {
             return true;
         }
         if !crate::pin_sha::runtime_libraries(asset.url).is_empty() { return false; }
+        // A pin for a complete file can prove the actual bytes. Let
+        // holds_pinned_bytes do that before adopting it from an older install.
+        if asset.pick.is_empty() && asset.unzip_into.is_none() && crate::pin_sha::sha256(asset.url).is_some() {
+            return false;
+        }
         let key = if asset.pick.is_empty() && asset.unzip_into.is_none() {
             Some((self.path_of(asset), asset.bytes))
         } else {
@@ -446,6 +455,15 @@ impl Downloader {
             return Some(ours.clone());
         }
         self.rejected.lock().await.get(scope).cloned()
+    }
+
+    /// Clear an earlier result before accepting a new background transfer.
+    pub(crate) async fn clear_finished(&self, scope: &str) {
+        let mut active = self.progress.lock().await;
+        if active.as_ref().is_some_and(|progress| progress.done && progress.scope.as_deref() == Some(scope)) {
+            *active = None;
+        }
+        self.rejected.lock().await.remove(scope);
     }
 
     /// Stops the running download only when the panel of `scope` started it: a downloader two panels share (audio.cpp's
@@ -814,6 +832,7 @@ fn check_staged_archive(url: &str, archive: &Path) -> Result<String> {
 
 /// ONNX releases may be unreachable from networks that cannot connect to GitHub at all (#276).
 /// Only offer these mirrors for known, hash-pinned release files. Installation still checks the original pin.
+#[cfg(test)]
 fn onnx_sources(url: &str) -> Option<&'static [String]> {
     let digest = crate::pin_sha::sha256(url)?;
     crate::component_catalogue::bundled().sources(digest)
@@ -831,7 +850,7 @@ async fn unless_cancelled<T>(cancel: &std::sync::atomic::AtomicBool, work: impl 
     }
 }
 
-fn try_another_onnx_source(error: &anyhow::Error) -> bool {
+fn try_another_source(error: &anyhow::Error) -> bool {
     matches!(failure_code(error), "network" | "http_status" | "rate_limited" | "size_mismatch" | "hash_mismatch")
         || error.chain().any(|cause| cause.downcast_ref::<reqwest::Error>().is_some_and(|error| error.is_body() || error.is_decode() || error.is_request() || error.is_timeout()))
 }
@@ -878,24 +897,44 @@ async fn fetch_absent(
     // How big it is and whether it can be fetched in pieces, asked of the
     // server rather than assumed - both answers come from one ranged byte.
     let url = crate::net::model_url(asset.url);
-    if let Some(fallback) = onnx_sources(asset.url) {
-        let digest = crate::pin_sha::sha256(asset.url).expect("ONNX mirror lists require a pinned digest");
-        let refresh = tokio::time::timeout(std::time::Duration::from_secs(12), crate::component_catalogue::channel_sources(http, digest));
-        let mut sources = match unless_cancelled(&cancel, async { Ok(refresh.await) }).await? {
-            Ok(Ok(sources)) => sources.unwrap_or_default(),
-            Ok(Err(error)) => { eprintln!("Component mirror refresh failed: {error}"); Vec::new() }
-            Err(_) => { eprintln!("Component mirror refresh timed out"); Vec::new() }
-        };
-        for source in fallback {
-            if !sources.contains(source) { sources.push(source.clone()); }
+    let Some(digest) = crate::pin_sha::sha256(asset.url) else {
+        return fetch_from(http, asset, target, progress, cancel, &url, false).await;
+    };
+    let bundled = crate::component_catalogue::bundled().sources(digest);
+    // For pins outside the bundled mirror list, a healthy primary needs no channel request.
+    let primary_failure = if bundled.is_none() {
+        match fetch_from(http, asset, target, progress, cancel.clone(), &url, false).await {
+            Ok(()) => return Ok(()),
+            Err(error) if !try_another_source(&error) => return Err(error),
+            Err(error) => Some(error),
         }
-        let sources: Vec<_> = sources.iter().map(|source| crate::net::model_url(source)).collect();
-        return fetch_onnx_sources(http, asset, target, progress, cancel, sources).await;
+    } else {
+        None
+    };
+    let refresh = tokio::time::timeout(std::time::Duration::from_secs(12), crate::component_catalogue::channel_sources(http, digest));
+    let mut sources = match unless_cancelled(&cancel, async { Ok(refresh.await) }).await? {
+        Ok(Ok(sources)) => sources.unwrap_or_default(),
+        Ok(Err(error)) => { eprintln!("Component mirror refresh failed: {error}"); Vec::new() }
+        Err(_) => { eprintln!("Component mirror refresh timed out"); Vec::new() }
+    };
+    for source in bundled.unwrap_or_default() {
+        if !sources.contains(source) { sources.push(source.clone()); }
     }
-    fetch_from(http, asset, target, progress, cancel, &url, false).await
+    let mut candidates = Vec::new();
+    for source in sources {
+        let mapped = crate::net::model_url(&source);
+        if !(primary_failure.is_some() && mapped == url) && !candidates.contains(&mapped) {
+            candidates.push(mapped);
+        }
+    }
+    if let Some(error) = primary_failure {
+        if candidates.is_empty() { return Err(error); }
+        return fetch_mirrors(http, asset, target, progress, cancel, candidates).await
+            .with_context(|| format!("primary download failed: {error:#}; component mirrors also failed"));
+    }
+    fetch_mirrors(http, asset, target, progress, cancel, candidates).await
 }
-
-async fn fetch_onnx_sources(
+async fn fetch_mirrors(
     http: &reqwest::Client,
     asset: &Asset,
     target: &Path,
@@ -908,7 +947,7 @@ async fn fetch_onnx_sources(
         match fetch_from(http, asset, target, progress, cancel.clone(), source, true).await {
             Ok(()) => return Ok(()),
             Err(_) if cancel.load(std::sync::atomic::Ordering::Relaxed) => bail!("cancelled"),
-            Err(error) if !try_another_onnx_source(&error) => return Err(error),
+            Err(error) if !try_another_source(&error) => return Err(error),
             Err(error) => failures.push(format!("{source}: {error:#}")),
         }
     }
@@ -922,12 +961,12 @@ async fn fetch_from(
     progress: &Arc<Mutex<Option<DownloadProgress>>>,
     cancel: Arc<std::sync::atomic::AtomicBool>,
     source: &str,
-    is_onnx: bool,
+    verify_before_publish: bool,
 ) -> Result<()> {
     let probe = crate::chunked::probe(http, source);
     let (plan, url) = unless_cancelled(&cancel, probe).await?;
     if plan.total > 0 {
-        if !is_onnx {
+        if !verify_before_publish {
             crate::sizes::learn(asset.url, plan.total);
         }
         // another program of timoncool's has it: taken from there, by copy too when it is on another drive
@@ -978,7 +1017,7 @@ async fn fetch_from(
     if plan.total > 0 && size != plan.total {
         bail!("{} has {size} bytes, the server said {}", asset.label, plan.total);
     }
-    if is_onnx {
+    if verify_before_publish {
         let (original, staged) = (asset.url, part.clone());
         tokio::task::spawn_blocking(move || crate::pin_sha::check(original, &staged)).await??;
         crate::sizes::learn(asset.url, size);
@@ -1501,7 +1540,7 @@ mod tests {
         let target = root.path().join("test.zip");
         let http = reqwest::Client::builder().no_proxy().build().unwrap();
         let cancel = Arc::new(std::sync::atomic::AtomicBool::new(false));
-        fetch_onnx_sources(&http, &asset(), &target, &Arc::new(Mutex::new(None)), cancel.clone(),
+        fetch_mirrors(&http, &asset(), &target, &Arc::new(Mutex::new(None)), cancel.clone(),
             [format!("{base}/broken"), format!("{base}/copy"), format!("{base}/unused")]).await.unwrap();
         assert_eq!(fs::read(&target).unwrap(), b"archive");
         assert!(!cancel.load(std::sync::atomic::Ordering::Relaxed));
@@ -1584,7 +1623,7 @@ mod tests {
         let cancel = Arc::new(AtomicBool::new(false));
         let progress = Arc::new(Mutex::new(None));
         let asset = asset();
-        let download = fetch_onnx_sources(&http, &asset, &target, &progress, cancel.clone(),
+        let download = fetch_mirrors(&http, &asset, &target, &progress, cancel.clone(),
             [format!("{base}/stall"), format!("{base}/mirror"), format!("{base}/mirror")]);
         let (outcome, ()) = tokio::time::timeout(std::time::Duration::from_secs(3), async {
             tokio::join!(download, async {
@@ -1608,7 +1647,7 @@ mod tests {
         let target = root.path().join("test.zip");
         let http = reqwest::Client::builder().no_proxy().build().unwrap();
         let entry = Asset { url: ONNX_FIXTURE_PIN, ..asset() };
-        let error = fetch_onnx_sources(&http, &entry, &target, &Arc::new(Mutex::new(None)),
+        let error = fetch_mirrors(&http, &entry, &target, &Arc::new(Mutex::new(None)),
             Arc::new(std::sync::atomic::AtomicBool::new(false)), vec![format!("{base}/copy"); 3]).await.unwrap_err();
         assert_eq!(failure_code(&error), "hash_mismatch");
         assert!(!target.exists());

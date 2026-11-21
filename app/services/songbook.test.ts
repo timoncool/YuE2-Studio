@@ -68,3 +68,16 @@ it('produces instrument-specific shapes with the requested chord and bass', () =
   expect([...new Set(played.map(note => note % 12))].sort()).toEqual([0, 4, 7]);
   expect(chordShape('C(no3)', 'guitar')).toBeNull();
 });
+
+
+it('uses the named vocal line before the first pitched voice when the words are separate', () => {
+  const source = 'X:1\nM:4/4\nL:1/4\nK:C\nV:Ins\n"C"C, C, C, C,|\nV:Vocal\nG A B c|';
+  for (const shift of [0, 2]) {
+    const song = buildSongbook(source.replaceAll('\n', '\r\n'), shift);
+    expect(placeLyricSyllables(song.lines, ['one', 'two', 'three', 'four'])).toBe(true);
+    expect(song.lines.flat().map(cell => [cell.number, cell.lyrics[0]])).toEqual([
+      ['5', 'one'], ['6', 'two'], ['7', 'three'], ['1\u0307', 'four'],
+    ]);
+    expect(song.lines[0][0].chords).toEqual([shift === 0 ? 'C' : 'D']);
+  }
+});

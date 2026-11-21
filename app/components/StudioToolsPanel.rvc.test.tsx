@@ -82,3 +82,56 @@ it('opens the curated catalog from Studio Tools and chooses an installed RVC voi
     vi.unstubAllGlobals();
   }
 });
+
+it('applies the selected RVC voice to the current Studio Tools song', async () => {
+  const track = { id: 'source-song', audio_path: 'source.wav', title: 'RVC source song', engine_id: 'manual',
+    caption: '', lyrics: '', metadata: {}, generation_settings: {}, source: 'manual' };
+  const voice = { id: 'installed-voice', model_name: 'voice.pth', index_name: null, version: 1 };
+  const fetchStudio = vi.fn(async (url: string, _init?: RequestInit) => {
+    if (url === '/v1/rvc/voices') return Response.json([voice]);
+    if (url === '/v1/library/songs') return Response.json([track]);
+    if (url === '/v1/library/songs/source-song/stems') return Response.json({ stems: ['vocals', 'instrumental'] });
+    if (url === '/v1/separation/status') return Response.json({ run: null, model: { installed: false }, stems: [] });
+    if (url === '/v1/midi') return Response.json({ run: null, sizes: [] });
+    if (url === '/v1/rvc/apply/setup') return Response.json({ effective_backend: 'audio.cpp', backends: {
+      'vocal-fast-rs': { ready: false }, 'audio.cpp': { ready: true },
+    } });
+    if (url === '/v1/rvc/apply') return Response.json({
+      song_id: 'new-take', audio_url: '/v1/library/media/new-take', requested_backend: 'auto', effective_backend: 'audio.cpp',
+    });
+    return Response.json(null);
+  });
+  vi.stubGlobal('fetch', fetchStudio);
+  vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+  localStorage.setItem('language', 'en');
+  localStorage.setItem('studio.rvc.voiceId', voice.id);
+  const host = document.createElement('div');
+  document.body.append(host);
+  const root = createRoot(host);
+  const query = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  try {
+    act(() => root.render(<QueryClientProvider client={query}><I18nProvider>
+      <StudioToolsPanel initialSongId={track.id} />
+    </I18nProvider></QueryClientProvider>));
+    await flush();
+    await flush();
+    const section = host.querySelector<HTMLElement>('section[aria-label="RVC voice catalog"]')!;
+    expect(section.textContent).toContain(track.title);
+    const button = [...section.querySelectorAll('button')]
+      .find(button => button.textContent === 'Save a new take with this voice')!;
+    expect(button.disabled).toBe(false);
+    act(() => button.click());
+    await flush();
+    const [, request] = fetchStudio.mock.calls.find(([url]) => url === '/v1/rvc/apply')!;
+    expect(JSON.parse(String(request?.body))).toMatchObject({ song_id: track.id, voice_id: voice.id, backend: 'auto' });
+    expect(section.textContent).toContain('Saved a new take with audio.cpp.');
+    expect(section.querySelector('audio')?.getAttribute('src')).toContain('/v1/library/media/new-take');
+  } finally {
+    act(() => root.unmount());
+    query.clear();
+    host.remove();
+    localStorage.removeItem('language');
+    localStorage.removeItem('studio.rvc.voiceId');
+    vi.unstubAllGlobals();
+  }
+});
