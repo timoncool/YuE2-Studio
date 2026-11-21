@@ -93,7 +93,11 @@ pub fn mismatch(edit: &Edit, style: &str, lyrics: &str, cot: &str) -> Option<&'s
         return Some("cot_off");
     }
     match &edit.words {
-        Some(words) if !edit.keep && *words != mark(style, lyrics, cot) => Some("other_words"),
+        Some(words) if !edit.keep && *words != mark(style, lyrics, cot) => {
+            // An explicit instrumental cue still uses the score edited for the same empty vocal part.
+            let empty_vocals = lyrics.trim() == "[instrumental]" && *words == mark(style, "", cot);
+            (!empty_vocals).then_some("other_words")
+        }
         _ => None,
     }
 }
@@ -122,5 +126,15 @@ mod tests {
         let strict = Edit { keep: false, ..edit };
         assert_eq!(mismatch(&strict, "s", "other", "full"), Some("other_words"));
         assert_eq!(mismatch(&strict, "s", "l", "off"), Some("cot_off"));
+    }
+
+    #[test]
+    fn the_instrumental_cue_keeps_an_edit_for_empty_lyrics_and_the_same_style() {
+        let score = "X:1\nK:C";
+        let empty = read(&attach(score, Some(&mark("piano", "", "full")), false));
+        assert_eq!(mismatch(&empty, "piano", "[instrumental]", "full"), None);
+        assert_eq!(mismatch(&empty, "guitar", "[instrumental]", "full"), Some("other_words"));
+        let sung = read(&attach(score, Some(&mark("piano", "Sing me", "full")), false));
+        assert_eq!(mismatch(&sung, "piano", "[instrumental]", "full"), Some("other_words"));
     }
 }

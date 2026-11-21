@@ -20,6 +20,8 @@ mod cover_art;
 mod cover_prompt;
 mod providers;
 mod openrouter_stream;
+mod native_music_runtime;
+mod native_runtime_archive;
 mod native_minimax;
 mod audio_cpp_heartmula;
 mod audio_cpp_magenta;
@@ -175,6 +177,8 @@ struct AppState {
     own_backbone: Arc<RwLock<Option<String>>>,
     /// Downloads of community models (`community`) into `models/yue2-cpp/own`.
     community_downloads: Arc<downloads::Downloader>,
+    native_music_downloads: Arc<downloads::Downloader>,
+    native_music_setup: Arc<tokio::sync::Mutex<()>>,
     rvc_native_downloads: Arc<downloads::Downloader>,
     rvc_burn_downloads: Arc<downloads::Downloader>,
     rvc_quick: Arc<rvc_quick::Queue>,
@@ -1668,6 +1672,10 @@ pub async fn serve_on_port(port: u16) -> anyhow::Result<()> {
         rvc_burn_downloads: Arc::new(rvc_burn_install::downloader(
             settings_path.parent().expect("settings file has a data directory"),
         )),
+        native_music_setup: Arc::default(),
+        native_music_downloads: Arc::new(native_music_runtime::downloader(
+            settings_path.parent().expect("settings file has a data directory"),
+        )),
         rvc_native_downloads: Arc::new(rvc_fast_install::downloader(
             settings_path.parent().expect("settings file has a data directory"),
         )),
@@ -1790,6 +1798,7 @@ pub async fn serve_on_port(port: u16) -> anyhow::Result<()> {
         .route("/engine/restart", post(restart_local_engine))
         .route("/engine/pause", post(pause_local_engine))
         .route("/engine/resume", post(resume_local_engine))
+        .route("/v1/music/native/{engine}/runtime", get(native_music_runtime::status).post(native_music_runtime::start).delete(native_music_runtime::cancel))
         .route("/v1/music/native/minimaxmusic-cpp/profiles", get(minimax_music_profiles))
         .route("/v1/music/native/acestep-cpp/profiles", get(ace_music_profiles))
         .route("/v1/engine/logs", get(engine_logs))

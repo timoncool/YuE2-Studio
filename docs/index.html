@@ -561,6 +561,17 @@ footer p { margin: 0 0 8px; }
       </tbody>
     </table></div>
 <!-- radeon-gpu-pair:end -->
+<!-- native-radeon-pair:start -->
+    <h3>YuE2-3B Q8_0 · Radeon gfx1036</h3>
+    <p class="note">Same 12-second saved song and Radeon iGPU, four steps. Cold includes process startup. Warm is the median of three requests with weights resident. WDDM peaks are sampled per process on this adapter.</p>
+    <div class="scroll"><table>
+      <thead><tr><th scope="col">Backend</th><th scope="col">Cold (s)</th><th scope="col">Warm (s)</th><th scope="col">WDDM dedicated peak (GiB)</th><th scope="col">WDDM shared peak (GiB)</th></tr></thead>
+      <tbody>
+      <tr><td>HIP 188d13b3</td><td>22.749</td><td>18.483</td><td>0.28</td><td>4.39</td></tr>
+      <tr><td>Vulkan 892b9b03</td><td>30.923</td><td>24.438</td><td>1.82</td><td>2.59</td></tr>
+      </tbody>
+    </table></div>
+<!-- native-radeon-pair:end -->
 
   </section>
 

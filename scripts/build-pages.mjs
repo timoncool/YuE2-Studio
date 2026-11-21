@@ -7,7 +7,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { ORDER, SAMPLES, SETS, STRINGS } from '../docs/site/strings.mjs';
 import { STUDIO } from '../docs/site/studio.mjs';
-import { MATRIX_TEXT, NATIVE_YUE2, RADEON_TEXT, RVC } from '../docs/site/music-benchmarks.mjs';
+import { MATRIX_TEXT, NATIVE_RADEON_NOTE, NATIVE_YUE2, RADEON_TEXT, RVC } from '../docs/site/music-benchmarks.mjs';
 // the studio's version, from the one place it is written
 const VERSION = JSON.parse(readFileSync(new URL('../desktop/src-tauri/tauri.conf.json', import.meta.url), 'utf8')).version;
 
@@ -99,6 +99,10 @@ function musicGpuMatrix(lang) {
     number(row.wddm_peak_sampled_bytes.dedicated / gib, 2),
     number(row.wddm_peak_sampled_bytes.shared / gib, 2),
   ]));
+  const nativeRows = musicBenchmarks.native_radeon_pair.results.map((row) => renderRow([
+    `${row.backend} ${row.revision.slice(0, 8)}`, number(row.process_start_to_first_wav_s, 3),
+    number(row.warm_median_s, 3), number(row.wddm.dedicated_bytes / gib, 2), number(row.wddm.shared_bytes / gib, 2),
+  ]));
   return `<!-- music-gpu-matrix:start -->
     <h3>${escape(title)}</h3>
     <p class="note">${escape(note)}</p>
@@ -119,7 +123,17 @@ ${rows.join('\n')}
 ${radeonRows.join('\n')}
       </tbody>
     </table></div>
-<!-- radeon-gpu-pair:end -->`;
+<!-- radeon-gpu-pair:end -->
+<!-- native-radeon-pair:start -->
+    <h3>YuE2-3B Q8_0 · Radeon gfx1036</h3>
+    <p class="note">${escape(NATIVE_RADEON_NOTE[lang])}</p>
+    <div class="scroll"><table>
+      <thead><tr>${radeonColumns.map((column) => `<th scope="col">${escape(column)}</th>`).join('')}</tr></thead>
+      <tbody>
+${nativeRows.join('\n')}
+      </tbody>
+    </table></div>
+<!-- native-radeon-pair:end -->`;
 }
 
 function page(lang) {
