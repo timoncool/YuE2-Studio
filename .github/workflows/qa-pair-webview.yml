@@ -1,0 +1,32 @@
+name: Windows WebView music-pair QA
+on:
+  push:
+    branches: [qa/music-pair-webview]
+  workflow_dispatch:
+
+jobs:
+  webview:
+    runs-on: windows-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: Swatinem/rust-cache@v2
+      - run: npm --prefix app ci
+      - run: npm --prefix desktop ci
+      - run: npm --prefix desktop run build
+      - name: Exercise the native window through Studio MCP
+        shell: pwsh
+        run: |
+          $exe = Get-ChildItem target -Filter YuE2-Studio.exe -File -Recurse |
+            Where-Object { $_.DirectoryName -match '[\\/]release$' } | Select-Object -First 1
+          if (-not $exe) { throw 'Tauri binary not found' }
+          python scripts/check-pair-webview.py $exe.FullName
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: windows-webview-pair
+          path: ${{ runner.temp }}/yue2-webview-qa/
+          retention-days: 5
