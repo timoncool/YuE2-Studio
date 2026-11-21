@@ -131,17 +131,24 @@ type SamplingText = Record<keyof YueSampling, string>;
 type SamplingStage = keyof typeof samplingPresets;
 const presetFields = ['temperature', 'top_p', 'top_k', 'repetition_penalty'] as const;
 
+const presetName = (stage: SamplingStage, value: SamplingText) =>
+  Object.entries(samplingPresets[stage]).find(([, knobs]) => presetFields.every(key => numberOrUndefined(value[key]) === knobs[key]))?.[0]
+    ?? (presetFields.every(key => value[key].trim() === '') ? '' : 'custom');
+
+function applyPreset(stage: SamplingStage, value: SamplingText, name: string): SamplingText {
+  const knobs = Object.entries(samplingPresets[stage]).find(([id]) => id === name)?.[1];
+  const next = { ...value };
+  for (const key of presetFields) next[key] = knobs ? String(knobs[key]) : '';
+  return next;
+}
+
 function SamplingSelector({ stage, value, onChange, strings }: {
   stage: SamplingStage; value: SamplingText; onChange: (value: SamplingText) => void; strings: typeof yueSamplingStrings.en;
 }) {
   const choices = Object.entries(samplingPresets[stage]);
-  const current = choices.find(([, knobs]) => presetFields.every(key => numberOrUndefined(value[key]) === knobs[key]))?.[0]
-    ?? (presetFields.every(key => value[key].trim() === '') ? '' : 'custom');
+  const current = presetName(stage, value);
   return <Field label={stage === 'abc_sampling' ? strings.plan : strings.reading}><select className={CONTROL} value={current} onChange={event => {
-    const knobs = choices.find(([name]) => name === event.target.value)?.[1];
-    const next = { ...value };
-    for (const key of presetFields) next[key] = knobs ? String(knobs[key]) : '';
-    onChange(next);
+    onChange(applyPreset(stage, value, event.target.value));
   }}>
     <option value="">{strings.checkpoint}</option>
     {current === 'custom' && <option value="custom">{strings.custom}</option>}
@@ -1785,6 +1792,8 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
     solver: [solver, value => setSolver(value === 'ab2' || value === 'midpoint' ? value : '')],
     cfg_scale: [cfgScale, setCfgScale],
     lm_seed: [lmSeed, setLmSeed],
+    plan_variety: [presetName('abc_sampling', abcSampling), name => setAbcSampling(value => applyPreset('abc_sampling', value, name))],
+    performance: [presetName('semantic_sampling', semanticSampling), name => setSemanticSampling(value => applyPreset('semantic_sampling', value, name))],
     seed: [seed, setSeed],
     cover_prompt: [coverPrompt, setCoverPrompt],
     output_format: [format, (value) => setFormat(value as YueOutputFormat)],
@@ -1812,6 +1821,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
     ready: !pair.blocked && (signed ? packages.ready : cloud ? Boolean(selectedMusicModel) : nativeEngine ? native.ready : ready),
     error: error ?? pair.error ?? pair.status?.error,
     music_pair: pair.status,
+    variations: { ready: canVary, presets: variationChoices.map(([name]) => name) },
     assistant_writing: assisting,
   }));
   useBridgeCommand('create_set', (args) => {
@@ -1819,6 +1829,8 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
     // every field is checked before any changes, so a refused call leaves the form as it was
     const choices: Record<string, string[]> = { mode: ['studio', 'simple', 'cover'], cot: ['full', 'melody', 'off', ''], output_format: ['flac', 'mp3', 'wav32'] };
     const unknown = Object.keys(fields).filter(key => !formFields[key] && !['mode', 'randomize_seed', 'adapters'].includes(key));
+    choices.plan_variety = ['', ...Object.keys(samplingPresets.abc_sampling)];
+    choices.performance = ['', ...Object.keys(samplingPresets.semantic_sampling)];
     if (unknown.length) throw new Error(`Unknown fields: ${unknown.join(', ')}. The form has: ${[...Object.keys(formFields), 'mode', 'randomize_seed', 'adapters'].join(', ')}.`);
     for (const [key, allowed] of Object.entries(choices)) {
       if (key in fields && !allowed.includes(String(fields[key] ?? ''))) throw new Error(`${key} is one of: ${allowed.filter(Boolean).join(', ')}.`);
@@ -1832,7 +1844,12 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
     }
     return { text: 'Filled in; create_form_get shows the form, ui_screenshot shows it on screen.' };
   });
-  useBridgeCommand('create_submit', () => {
+  useBridgeCommand('create_submit', (args) => {
+    if (args.variations === true) {
+      if (!canVary) throw new Error('Variations require a ready local YuE2 score, style or lyrics, and an idle queue. Clear fixed audio codes and turn off instrumental and continuous generation.');
+      createVariations();
+      return { presets: variationChoices.map(([name]) => name) };
+    }
     submit();
     return { text: 'Pressed Create. studio_status shows the new job; if the form refused, create_form_get says why under error.' };
   });

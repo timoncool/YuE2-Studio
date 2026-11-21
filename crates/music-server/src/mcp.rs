@@ -1492,7 +1492,7 @@ fn tools() -> &'static [Tool] {
             Tool {
                 name: "create_form_submit",
                 description: "Press Create on the create page: the song is made from the form as it stands. studio_wait until idle waits for it; create_form_get shows why the form refused, if it did.",
-                schema: nothing,
+                schema: || object(json!({ "variations": { "type": "boolean", "description": "Use the local YuE2 score and the same seeds for the alternate performance presets." } }), &[]),
                 call: |args| window("create_submit", args, 15),
             },
             // ---------------------------------------------------------------- the player
