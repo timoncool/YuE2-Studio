@@ -104,9 +104,9 @@ function musicGpuMatrix(lang) {
     number(row.warm_median_s, 3), number(row.wddm.dedicated_bytes / gib, 2), number(row.wddm.shared_bytes / gib, 2),
   ]));
   return `<!-- music-gpu-matrix:start -->
-    <h3>${escape(title)}</h3>
+    <h3 id="music-gpu-matrix-title">${escape(title)}</h3>
     <p class="note">${escape(note)}</p>
-    <div class="scroll"><table>
+    <div class="scroll benchmark-scroll" role="region" aria-labelledby="music-gpu-matrix-title" tabindex="0"><table>
       <thead><tr>${columns.map((column) => `<th scope="col">${escape(column)}</th>`).join('')}</tr></thead>
       <tbody>
 ${rows.join('\n')}
@@ -115,9 +115,9 @@ ${rows.join('\n')}
     <p><a href="music-gpu-benchmarks.json">${escape(detail)}</a></p>
 <!-- music-gpu-matrix:end -->
 <!-- radeon-gpu-pair:start -->
-    <h3>${escape(radeonTitle)}</h3>
+    <h3 id="radeon-gpu-pair-title">${escape(radeonTitle)}</h3>
     <p class="note">${escape(radeonNote)} <code>audio.cpp ${escape(radeon.source_sha.slice(0, 8))}</code></p>
-    <div class="scroll"><table>
+    <div class="scroll benchmark-scroll" role="group" aria-labelledby="radeon-gpu-pair-title" tabindex="0"><table>
       <thead><tr>${radeonColumns.map((column) => `<th scope="col">${escape(column)}</th>`).join('')}</tr></thead>
       <tbody>
 ${radeonRows.join('\n')}
@@ -125,9 +125,9 @@ ${radeonRows.join('\n')}
     </table></div>
 <!-- radeon-gpu-pair:end -->
 <!-- native-radeon-pair:start -->
-    <h3>YuE2-3B Q8_0 · Radeon gfx1036</h3>
+    <h3 id="native-radeon-pair-title">YuE2-3B Q8_0 · Radeon gfx1036</h3>
     <p class="note">${escape(NATIVE_RADEON_NOTE[lang])}</p>
-    <div class="scroll"><table>
+    <div class="scroll benchmark-scroll" role="group" aria-labelledby="native-radeon-pair-title" tabindex="0"><table>
       <thead><tr>${radeonColumns.map((column) => `<th scope="col">${escape(column)}</th>`).join('')}</tr></thead>
       <tbody>
 ${nativeRows.join('\n')}

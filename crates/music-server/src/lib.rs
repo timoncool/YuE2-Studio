@@ -6341,6 +6341,7 @@ async fn engine_options(State(state): State<AppState>) -> Json<Value> {
     let kv_cache_now = *state.kv_cache_running.read().await;
     Json(serde_json::json!({
         "options": options,
+        "platform": std::env::consts::OS,
         "in_effect": in_effect,
         "saved_max_seq": saved_max_seq,
         "effective_max_batch": options.effective_max_batch(),
