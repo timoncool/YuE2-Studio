@@ -11,6 +11,7 @@ import { isDesktop } from './externalLinks';
  */
 
 export type SaveSource = { url: string } | { blob: Blob };
+export type SaveOutcome = 'saved' | 'cancelled' | 'failed' | 'download_started';
 
 export interface SavingFile {
   id: string;
@@ -23,6 +24,7 @@ export interface SavingFile {
 }
 
 const EVENT = 'studio:saving';
+let nextAttempt = 0;
 
 function tell(file: Partial<SavingFile> & { id: string }): void {
   window.dispatchEvent(new CustomEvent(EVENT, { detail: file }));
@@ -46,7 +48,7 @@ async function answer(response: Response): Promise<Record<string, unknown>> {
  * wrong is shown in the files panel with its reason, so callers have nothing
  * to catch.
  */
-export async function saveFile(name: string, source: SaveSource): Promise<void> {
+export async function saveFile(name: string, source: SaveSource): Promise<SaveOutcome> {
   // A browser on another computer: the Save dialog would open on the studio's
   // computer, so the browser downloads the file itself.
   if (!isDesktop()) {
@@ -57,24 +59,33 @@ export async function saveFile(name: string, source: SaveSource): Promise<void> 
     link.click();
     link.remove();
     if (!('url' in source)) window.setTimeout(() => URL.revokeObjectURL(link.href), 60_000);
-    return;
+    return 'download_started';
   }
-  let id = `failed-${Date.now()}`;
+  let id = `failed-${++nextAttempt}`;
   try {
     const place = await answer(await fetch(apiUrl('/v1/files/save'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name }),
     }));
-    if (place.cancelled) return;
-    id = String(place.id);
-    tell({ id, name: String(place.name ?? name), path: String(place.path), state: 'saving', written: 0 });
+    if (place.cancelled === true) return 'cancelled';
+    if (typeof place.id !== 'string' || !place.id || typeof place.path !== 'string' || !place.path) {
+      throw new Error('The studio did not return a save destination.');
+    }
+    id = place.id;
+    tell({ id, name: String(place.name ?? name), path: place.path, state: 'saving', written: 0 });
     const body = 'url' in source
       ? { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url: source.url }) }
       : { headers: { 'Content-Type': 'application/octet-stream' }, body: source.blob };
-    await answer(await fetch(apiUrl(`/v1/files/save/${encodeURIComponent(id)}`), { method: 'POST', ...body }));
+    const result = await answer(await fetch(apiUrl(`/v1/files/save/${encodeURIComponent(id)}`), { method: 'POST', ...body }));
+    if (typeof result.written !== 'number' || typeof result.path !== 'string') {
+      throw new Error('The studio did not confirm the file was saved.');
+    }
+    tell({ id, path: result.path, state: 'done', written: result.written, total: result.written });
+    return 'saved';
   } catch (problem) {
     tell({ id, name, state: 'error', error: problem instanceof Error ? problem.message : String(problem) });
+    return 'failed';
   }
 }
 

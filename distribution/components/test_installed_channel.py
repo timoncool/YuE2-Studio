@@ -44,12 +44,27 @@ def run(work, binary, archive, certificate, tls_key):
     (origin / "targets").mkdir(parents=True)
     exe = Path(shutil.copy2(binary, install))
     shutil.copyfile(archive, origin / "current.tgz")
+    binary_hash = hashlib.sha256(exe.read_bytes()).hexdigest()
     requested = []
+    interrupted = []
 
     class Handler(SimpleHTTPRequestHandler):
+        def do_GET(self):
+            if self.path != "/timestamp.json" or not cut_timestamp:
+                return super().do_GET()
+            content = (origin / "timestamp.json").read_bytes()
+            self.send_response(200)
+            self.send_header("Content-Length", str(len(content)))
+            self.end_headers()
+            self.wfile.write(content[:len(content) // 2])
+            self.wfile.flush()
+            self.close_connection = True
+            interrupted.append(self.path)
+
         def log_request(self, code="-", size="-"):
             requested.append((self.path, int(code)))
 
+    cut_timestamp = False
     keys = {role: CryptoSigner.generate_ed25519() for role in ("root", "snapshot", "timestamp", "targets")}
     expires = datetime.now(timezone.utc) + timedelta(days=1)
     root = Root(expires=expires)
@@ -137,6 +152,13 @@ def run(work, binary, archive, certificate, tls_key):
             assert not any(path == "/tampered.tgz" for path, _ in requested), requested
 
             publish(4, "current.tgz")
+            cut_timestamp = True
+            requested.clear()
+            dropped = install_runtime()
+            assert dropped["error"] and interrupted, (dropped, requested)
+            assert not any(path == "/current.tgz" for path, _ in requested), requested
+            assert not any(data.rglob("libonnxruntime.so*"))
+            cut_timestamp = False
             second = install_runtime()
             assert not second["error"], second
             assert ("/current.tgz", 200) in requested, requested
@@ -155,6 +177,8 @@ def run(work, binary, archive, certificate, tls_key):
             stored, = data.rglob("crisperwhisper2-turbo/config.json")
             assert hashlib.sha256(stored.read_bytes()).hexdigest() == config_sha
             print("PASS same service PID", proc.pid, "signed mirror for a previously unlisted pinned config", config_sha)
+            assert proc.poll() is None and hashlib.sha256(exe.read_bytes()).hexdigest() == binary_hash
+            print("PASS interrupted timestamp rejected; retry recovered in unchanged binary SHA-256", binary_hash)
         finally:
             proc.terminate()
             proc.wait(timeout=20)
