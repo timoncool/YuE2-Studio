@@ -142,6 +142,12 @@ impl Downloader {
         }
     }
 
+    #[cfg(test)]
+    pub(crate) fn with_test_http(mut self, http: reqwest::Client) -> Self {
+        self.http = http;
+        self
+    }
+
     pub fn root(&self) -> &Path {
         &self.root
     }

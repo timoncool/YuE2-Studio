@@ -134,6 +134,14 @@ keep delayed requests from overriding that window's latest selection. When
 `stage` is `needs_install`, install the listed resources and select the pair
 again. For local YuE2, `loading_model` is engine initialization through its health check. A `ready` pair with `load_on_create: true` loads generation weights as needed when you create a song.
 
+On Windows x64, `engine_hip_status` reports the optional YuE2 HIP component,
+the matched AMD target, installed state, and whether the running engine
+has answered on HIP. Use `engine_hip_install` to install the architecture
+chosen from the system's AMD PCI device and `engine_hip_cancel` to cancel
+the transfer. In Engine Settings, select HIP (ROCm) after installation.
+Vulkan and Auto remain available. The Studio refuses ambiguous AMD adapters
+when it cannot match the package to ROCm0.
+
 For MiniMax Music3 through audio.cpp, call `audio_cpp_music_models` and check that
 `minimax_music3` is ready. Pass `"music_source": {"kind":"audio_cpp","model":"minimax_music3"}`
 to `song_create` with `style`, `lyrics`, and an optional nonnegative `seed`.
@@ -461,6 +469,14 @@ move around. Check the result with `ui_screenshot`.
 ## RVC catalog demos
 
 `rvc_catalog_list` reports `sample_audio_url` for a published source demo and null when none is recorded. Use `has_sample` to filter the same paginated results. Fetch the returned audio URL to play the verified demo before installing its voice.
+
+## Seed-VC vocal replacement
+
+Use `seed_vc_status` to find the model file and audio.cpp runtime status.
+With an already separated song, send your 1–25 second target voice sample
+through `processing_set_reference`. Pass its `upload_id` and the library song ID
+to `seed_vc_apply`. The new library take uses the original accompaniment and
+the source vocal's pauses. The original song is kept.
 
 ## RVC vocal audition
 

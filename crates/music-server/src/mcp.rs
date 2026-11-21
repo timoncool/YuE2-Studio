@@ -463,7 +463,7 @@ fn annotations(name: &str) -> Value {
     // a verb that changes something outweighs a noun that reads
     const CHANGES: &[&str] = &["install", "import", "remove", "delete", "refresh", "create", "update", "start", "cancel", "select", "download", "apply", "restart"];
     // reads whose names the rules above miss: create_form names the create page
-    const READ_NAMES: &[&str] = &["music_package_updates_get", "music_package_progress", "lyrics_syllables", "assistant_cli_agents", "system_gpus", "cover_scenes", "cover_photos_search", "video_backgrounds_search", "network_proxy_test", "journal_read", "score_to_midi", "score_instrumental", "score_vocal_octave", "score_from_midi", "score_mark", "lyrics_find", "cover_prompt_render", "studio_wait", "engine_presets_get", "assistant_requests_wait", "ui_console", "song_defaults", "create_form_get", "library_liked", "score_chord_bed", "song_tokenize", "score_match_sections", "models_update_plan", "problem_preview", "library_migration_preview", "audio_cpp_music_models", "hotstep_cover_profiles", "hotstep_sa3_training_status", "hotstep_heartmula_training_status", "rvc_training_status"];
+    const READ_NAMES: &[&str] = &["engine_hip_status", "music_package_updates_get", "music_package_progress", "lyrics_syllables", "assistant_cli_agents", "system_gpus", "cover_scenes", "cover_photos_search", "video_backgrounds_search", "network_proxy_test", "journal_read", "score_to_midi", "score_instrumental", "score_vocal_octave", "score_from_midi", "score_mark", "lyrics_find", "cover_prompt_render", "studio_wait", "engine_presets_get", "assistant_requests_wait", "ui_console", "song_defaults", "create_form_get", "library_liked", "score_chord_bed", "song_tokenize", "score_match_sections", "models_update_plan", "problem_preview", "library_migration_preview", "audio_cpp_music_models", "hotstep_cover_profiles", "hotstep_sa3_training_status", "hotstep_heartmula_training_status", "rvc_training_status"];
     // writes over what was stored, so the earlier content is gone: a client asks first
     const OVERWRITES: &[&str] = &["library_song_rename", "library_song_update", "playlist_update", "album_reorder", "dataset_update", "dataset_song_update", "dataset_song_describe_style", "dataset_prepare", "lora_update", "stems_split", "restore_start", "karaoke_make", "midi_transcribe", "cover_draw", "cover_set_from_file", "openrouter_set_key", "models_update_apply"];
     let changes = CHANGES.iter().any(|verb| name.split('_').any(|word| word == *verb));
@@ -528,6 +528,7 @@ const JOURNAL: &[(&str, &str, &str)] = &[
     ("processing_keep", "kept", "processing"),
     ("processing_discard", "discarded", "processing"),
     ("processing_set_reference", "updated", "processing"),
+    ("seed_vc_apply", "created", "song"),
     ("cover_draw", "started", "cover"),
     ("cover_set_from_file", "updated", "cover"),
     ("dataset_create", "created", "dataset"),
@@ -621,6 +622,8 @@ const JOURNAL: &[(&str, &str, &str)] = &[
     ("midi_remove", "deleted", "model"),
     ("models_select", "updated", "settings"),
     ("music_pair_select", "updated", "settings"),
+    ("engine_hip_install", "started", "download"),
+    ("engine_hip_cancel", "cancelled", "download"),
     ("models_preset", "updated", "settings"),
     ("models_own_select", "updated", "settings"),
     ("models_own_cancel", "cancelled", "download"),
@@ -1102,6 +1105,11 @@ fn song_create_schema(mut properties: Value) -> Value {
             "max_tokens": { "type": "integer", "minimum": 1, "maximum": u32::MAX }
         }
     });
+    for stage in ["abc_sampling", "semantic_sampling"] {
+        let names: Vec<_> = crate::sampling_choices()[stage].as_object().unwrap().keys().collect();
+        let knobs = properties[stage].take();
+        properties[stage] = json!({"oneOf": [knobs, {"type": "string", "enum": names}]});
+    }
     properties["rvc_after"] = json!({
         "type": "object",
         "description": "After successful generation, save a separate RVC take with this voice and backend. Use rvc_quick_list for progress.",
@@ -1282,6 +1290,24 @@ fn tools() -> &'static [Tool] {
                 call: |args| post("/setup/adopt".into(), json!({ "path": text(args, "path")? })),
             },
             Tool {
+                name: "engine_hip_status",
+                description: "Read the optional Windows YuE2 HIP component, matched AMD gfx target, driver and installation progress.",
+                schema: nothing,
+                call: |_| get("/engine/hip".into()),
+            },
+            Tool {
+                name: "engine_hip_install",
+                description: "Download and verify the optional HIP component for the matching AMD GPU. This does not change the engine choice.",
+                schema: nothing,
+                call: |_| send(Method::POST, "/engine/hip".into(), json!({})),
+            },
+            Tool {
+                name: "engine_hip_cancel",
+                description: "Cancel the active YuE2 HIP component download.",
+                schema: nothing,
+                call: |_| send(Method::DELETE, "/engine/hip".into(), json!({})),
+            },
+            Tool {
                 name: "music_pair_status",
                 description: "Read the server-side music pair transition, including requested and active source, exact stage and elapsed time. Does not install files or start a song.",
                 schema: nothing,
@@ -1410,7 +1436,7 @@ fn tools() -> &'static [Tool] {
             },
             Tool {
                 name: "ui_read_page",
-                description: "Every visible control of the window, one per line: its ref (e12), kind, label and value. Refs are what ui_click, ui_type and ui_select take; read the page again after it changes.",
+                description: "Visible messages and controls of the window, one per line. Each control includes its ref (e12), kind, label and value. Refs are what ui_click, ui_type and ui_select take; read the page again after it changes.",
                 schema: nothing,
                 call: |args| window("read_page", args, 15),
             },
@@ -1497,7 +1523,7 @@ fn tools() -> &'static [Tool] {
             Tool {
                 name: "create_form_submit",
                 description: "Press Create on the create page: the song is made from the form as it stands. studio_wait until idle waits for it; create_form_get shows why the form refused, if it did.",
-                schema: nothing,
+                schema: || object(json!({ "variations": { "type": "boolean", "description": "Use the local YuE2 score and the same seeds for the alternate performance presets." } }), &[]),
                 call: |args| window("create_submit", args, 15),
             },
             // ---------------------------------------------------------------- the player
@@ -2972,6 +2998,20 @@ fn tools() -> &'static [Tool] {
                     "backend": { "type": "string", "enum": ["auto", "vocal-fast-rs", "vocal-fast-metal", "burn-cuda", "audio.cpp"] },
                 }), &["song_id", "voice_id", "start_seconds", "end_seconds"]),
                 call: |args| post("/v1/rvc/preview".into(), args.clone()),
+            },
+            Tool {
+                name: "seed_vc_status",
+                description: "Read Seed-VC model and audio.cpp runtime readiness for singing conversion.",
+                schema: nothing,
+                call: |_| get("/v1/seed-vc".into()),
+            },
+            Tool {
+                name: "seed_vc_apply",
+                description: "Replace a separated song's vocal timbre with Seed-VC using a 1–25 second voice sample. Upload it with processing_set_reference first and pass its upload_id. The original song stays and the result is a new take.",
+                schema: || object(json!({"song_id":{"type":"string"}, "upload_id":{"type":"string"}}), &["song_id","upload_id"]),
+                call: |args| post("/v1/seed-vc".into(), json!({
+                    "song_id": text(args, "song_id")?, "upload_id": text(args, "upload_id")?
+                })),
             },
             Tool {
                 name: "rvc_apply",

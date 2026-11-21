@@ -1,3 +1,6 @@
+import samplingPresets from '../data/yue-sampling.json';
+import { yueSamplingStrings } from '../i18n/yueSampling';
+
 import { readRvcBackend, useLastRvcVoice } from '../services/rvcQuick';
 import { rvcQuickStrings } from '../i18n/rvcQuick';
 import React, { useCallback, useEffect, useEffectEvent, useMemo, useRef, useState } from 'react';
@@ -126,6 +129,33 @@ type EngineCatalog = {
 };
 
 type SamplingText = Record<keyof YueSampling, string>;
+type SamplingStage = keyof typeof samplingPresets;
+const presetFields = ['temperature', 'top_p', 'top_k', 'repetition_penalty'] as const;
+
+const presetName = (stage: SamplingStage, value: SamplingText) =>
+  Object.entries(samplingPresets[stage]).find(([, knobs]) => presetFields.every(key => numberOrUndefined(value[key]) === knobs[key]))?.[0]
+    ?? (presetFields.every(key => value[key].trim() === '') ? '' : 'custom');
+
+function applyPreset(stage: SamplingStage, value: SamplingText, name: string): SamplingText {
+  const knobs = Object.entries(samplingPresets[stage]).find(([id]) => id === name)?.[1];
+  const next = { ...value };
+  for (const key of presetFields) next[key] = knobs ? String(knobs[key]) : '';
+  return next;
+}
+
+function SamplingSelector({ stage, value, onChange, strings }: {
+  stage: SamplingStage; value: SamplingText; onChange: (value: SamplingText) => void; strings: typeof yueSamplingStrings.en;
+}) {
+  const choices = Object.entries(samplingPresets[stage]);
+  const current = presetName(stage, value);
+  return <Field label={stage === 'abc_sampling' ? strings.plan : strings.reading}><select className={CONTROL} value={current} onChange={event => {
+    onChange(applyPreset(stage, value, event.target.value));
+  }}>
+    <option value="">{strings.checkpoint}</option>
+    {current === 'custom' && <option value="custom">{strings.custom}</option>}
+    {choices.map(([name]) => <option key={name} value={name}>{strings[name as keyof typeof strings]}</option>)}
+  </select></Field>;
+}
 
 /** The select entry that opens the new-playlist dialog instead of choosing. */
 const NEW_PLAYLIST = '__new__';
@@ -1661,6 +1691,23 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
     }
   };
 
+  const variationChoices = Object.entries(samplingPresets.semantic_sampling).filter(([, knobs]) =>
+    !presetFields.every(key => numberOrUndefined(semanticSampling[key]) === knobs[key]));
+  const canVary = yue && ready && !pair.blocked && !queueBusy && !forever && !composing && !instrumental
+    && Boolean(abc.trim()) && effectiveCot !== 'off' && !semanticTokens.trim() && Boolean(style.trim() || lyrics.trim());
+  const createVariations = () => {
+    if (!canVary) return;
+    const base = buildRequest();
+    for (const [name, knobs] of variationChoices) {
+      const label = yueSamplingStrings[language][name as keyof typeof samplingPresets.semantic_sampling];
+      generate({
+        ...base, title: base.title ? base.title + ' · ' + label : label,
+        abc_continue: false, lm_batch_size: 1, synth_batch_size: 1,
+        semantic_sampling: { ...base.semantic_sampling, ...knobs },
+      });
+    }
+  };
+
   const submit = () => {
     if (pair.blocked) return;
     if (signed) {
@@ -1768,6 +1815,8 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
     solver: [solver, value => setSolver(value === 'ab2' || value === 'midpoint' ? value : '')],
     cfg_scale: [cfgScale, setCfgScale],
     lm_seed: [lmSeed, setLmSeed],
+    plan_variety: [presetName('abc_sampling', abcSampling), name => setAbcSampling(value => applyPreset('abc_sampling', value, name))],
+    performance: [presetName('semantic_sampling', semanticSampling), name => setSemanticSampling(value => applyPreset('semantic_sampling', value, name))],
     seed: [seed, setSeed],
     cover_prompt: [coverPrompt, setCoverPrompt],
     output_format: [format, (value) => setFormat(value as YueOutputFormat)],
@@ -1795,6 +1844,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
     ready: !pair.blocked && (signed ? packages.ready : cloud ? Boolean(selectedMusicModel) : nativeEngine ? native.ready : ready),
     error: error ?? pair.error ?? pair.status?.error,
     music_pair: pair.status,
+    variations: { ready: canVary, presets: variationChoices.map(([name]) => name) },
     style_hints: styleHints,
     assistant_writing: assisting,
   }));
@@ -1803,6 +1853,8 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
     // every field is checked before any changes, so a refused call leaves the form as it was
     const choices: Record<string, string[]> = { mode: ['studio', 'simple', 'cover'], cot: ['full', 'melody', 'off', ''], output_format: ['flac', 'mp3', 'wav32'] };
     const unknown = Object.keys(fields).filter(key => !formFields[key] && !['mode', 'randomize_seed', 'adapters'].includes(key));
+    choices.plan_variety = ['', ...Object.keys(samplingPresets.abc_sampling)];
+    choices.performance = ['', ...Object.keys(samplingPresets.semantic_sampling)];
     if (unknown.length) throw new Error(`Unknown fields: ${unknown.join(', ')}. The form has: ${[...Object.keys(formFields), 'mode', 'randomize_seed', 'adapters'].join(', ')}.`);
     for (const [key, allowed] of Object.entries(choices)) {
       if (key in fields && !allowed.includes(String(fields[key] ?? ''))) throw new Error(`${key} is one of: ${allowed.filter(Boolean).join(', ')}.`);
@@ -1816,7 +1868,12 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
     }
     return { text: 'Filled in; create_form_get shows the form, ui_screenshot shows it on screen.' };
   });
-  useBridgeCommand('create_submit', () => {
+  useBridgeCommand('create_submit', (args) => {
+    if (args.variations === true) {
+      if (!canVary) throw new Error('Variations require a ready local YuE2 score, style or lyrics, and an idle queue. Clear fixed audio codes and turn off instrumental and continuous generation.');
+      createVariations();
+      return { presets: variationChoices.map(([name]) => name) };
+    }
     submit();
     return { text: 'Pressed Create. studio_status shows the new job; if the form refused, create_form_get says why under error.' };
   });
@@ -2850,6 +2907,17 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
             </div>
           </Card>
 
+          <div className="grid gap-2 sm:grid-cols-2">
+            <SamplingSelector stage="abc_sampling" value={abcSampling} onChange={setAbcSampling} strings={yueSamplingStrings[language]} />
+            <SamplingSelector stage="semantic_sampling" value={semanticSampling} onChange={setSemanticSampling} strings={yueSamplingStrings[language]} />
+          </div>
+          <div>
+            <button type="button" className={CHIP} disabled={!canVary} onClick={createVariations}>
+              {yueSamplingStrings[language].batch} ({variationChoices.length})
+            </button>
+            <p className="mt-1 text-[11px] text-zinc-500">{yueSamplingStrings[language].hint}</p>
+          </div>
+
           <div className="overflow-hidden rounded-xl border border-zinc-200 bg-white dark:border-white/5 dark:bg-suno-card">
             <button
               type="button"
@@ -2909,6 +2977,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
                     </Field>
                     <div className="mt-3">
                       <SamplingGrid value={semanticSampling} defaults={defaults.semantic_sampling} onChange={setSemanticSampling} t={t as never} maxTokensCap={semanticBudget} minTokensHint={tt('samplingMinTokensHint')} />
+
                       {minTokensCutsTheSongOff(semanticSampling.min_tokens, effectiveDuration) && (
                         <p className="mt-2 text-[11px] leading-4 text-amber-600 dark:text-amber-400">{tt('samplingMinTokensCutsOff')}</p>
                       )}

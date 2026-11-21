@@ -1,0 +1,18 @@
+{
+  "abc_sampling": {
+    "calm":   { "temperature": 0.55, "top_p": 0.9, "top_k": 30, "repetition_penalty": 1.0 },
+    "normal": { "temperature": 0.7,  "top_p": 0.9, "top_k": 30, "repetition_penalty": 1.005 },
+    "lively": { "temperature": 0.85, "top_p": 0.9, "top_k": 30, "repetition_penalty": 1.02 },
+    "bold":   { "temperature": 1.0,  "top_p": 0.9, "top_k": 30, "repetition_penalty": 1.03 },
+    "quirky": { "temperature": 1.0,  "top_p": 0.9, "top_k": 30, "repetition_penalty": 1.08 },
+    "wild":   { "temperature": 1.15, "top_p": 0.9, "top_k": 30, "repetition_penalty": 1.08 }
+  },
+  "semantic_sampling": {
+    "standard": { "temperature": 1.0, "top_p": 0.95, "top_k": 100, "repetition_penalty": 1.2 },
+    "tight":    { "temperature": 0.8, "top_p": 0.95, "top_k": 100, "repetition_penalty": 1.2 },
+    "loose":    { "temperature": 1.2, "top_p": 0.95, "top_k": 100, "repetition_penalty": 1.2 },
+    "settled":  { "temperature": 1.0, "top_p": 0.95, "top_k": 100, "repetition_penalty": 1.0 },
+    "restless": { "temperature": 1.0, "top_p": 0.95, "top_k": 100, "repetition_penalty": 1.35 },
+    "wide":     { "temperature": 1.0, "top_p": 0.99, "top_k": 250, "repetition_penalty": 1.2 }
+  }
+}

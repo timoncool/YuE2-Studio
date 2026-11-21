@@ -6,6 +6,7 @@ import { chooseLastRvcVoice, clearLastRvcVoice, useLastRvcVoice } from '../servi
 import { ConfirmDialog } from './ConfirmDialog';
 import { RvcCuratedVoices } from './RvcCuratedVoices';
 import { RvcApplyVoice, type RvcSourceSong } from './RvcApplyVoice';
+import { SeedVcApply } from './SeedVcApply';
 
 const URL = '/v1/rvc/voices';
 
@@ -135,6 +136,7 @@ export function RvcVoiceCatalog({ card, control, song, onSaved }: { card: string
         </button>
       )}
       {song && <RvcApplyVoice key={song.id} song={song} voice={voice} control={control} onSaved={onSaved} />}
+      {song && <SeedVcApply key={`seed-vc:${song.id}`} song={song} control={control} onSaved={onSaved} />}
       <RvcCuratedVoices onInstalled={acceptVoice} onChoose={chooseInstalled} disabled={!voices || busy}
         installedIds={new Set(voices?.map(item => item.id))} />
     </section>

@@ -55,6 +55,7 @@ const PINNED: &[(&str, &str)] = &[
     ("https://github.com/timoncool/YuE2-Studio/releases/download/hotstep-tools-75923e70/hotstep-tools-cuda-windows-x64.zip", "f423135405e51ed861b51ad1fa8dc108d891914951915eb54e18c03b8271331a"),
     ("https://github.com/timoncool/YuE2-Studio/releases/download/hotstep-tools-75923e70-xcr0/ace-caption-xcr0-windows-x64.zip", "934bb5841e2deaa12db73e6cd29ac3f205e1a3e10e0a19a9809113fc989dbee5"),
     ("https://github.com/timoncool/YuE2-Studio/releases/download/hotstep-tools-75923e70-xcr0/hotstep-tools-xcr0-cuda-windows-x64.zip", "c7fd3d093a1ed769d7d6159cd4c8fadf70105d360470597cc96067cbcba9893b"),
+    ("https://github.com/timoncool/YuE2-Studio/releases/download/hotstep-trainer-75923e70-cuda12/hotstep-trainer-cuda12-backend-windows-x64.zip", "63bb122cb2634146a578be1635f4456a218679a3b500532a30d0c04d0e54383f"),
     ("https://huggingface.co/nyralabs/CrisperWhisper2.0_turbo/resolve/de0369c8a68025b7f6e86387b6eb5a3b369787c8/LICENSE.md", "42f43bf4dc72ef422f91f6ca143f4514e21a68b353940d99091c1addcd0aee79"),
     ("https://huggingface.co/nyralabs/CrisperWhisper2.0_turbo/resolve/de0369c8a68025b7f6e86387b6eb5a3b369787c8/README.md", "ddc82a301a1b59035eefcc1a8b2ec90d56257104df7365b00493c58135a6b029"),
     ("https://huggingface.co/nyralabs/CrisperWhisper2.0_turbo/resolve/de0369c8a68025b7f6e86387b6eb5a3b369787c8/added_tokens.json", "228ddf33a2c2b94033dc0fad8e7847b554b1c9f7d2054f5455ffd562b6a30dc7"),
@@ -94,6 +95,7 @@ const PINNED: &[(&str, &str)] = &[
 /// The SHA-256 the pin at `url` names: this table, then the transcribe.cpp builds and models of the shared binding,
 /// then audio.cpp's server archives and the CUDA 12 wheels of the shared client.
 pub fn sha256(url: &str) -> Option<&'static str> {
+    if let Some(sha) = crate::engine_hip::archive_sha(url) { return Some(sha); }
     if let Some(sha) = crate::native_music_runtime::sha256(url) {
         return Some(sha);
     }
