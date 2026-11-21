@@ -2259,6 +2259,7 @@ fn listed_song(song: &library::Song) -> serde_json::Result<Value> {
                     .into_iter().flatten().any(|duration| duration > 0.0)
         });
         let replay_available = hotstep_generation::family_for_replay(song).is_some()
+            || audio_cpp_music::supports_replay(song)
             || (kept(&song.replay_request) && (kept(&song.audio_codes) || ace_without_codes));
         fields.insert("replay_available".into(), Value::Bool(replay_available));
         let model_keys: &[&str] = match song.engine_id.as_str() {
@@ -11949,6 +11950,9 @@ async fn submit_replay_job(state: AppState, request: ReplayMusicJobRequest, atte
             match song.engine_id.as_str() {
                 ace::ENGINE_ID => return native_ace_jobs::replay(state, song, request, attempt).await,
                 native_minimax::ENGINE_ID => return native_music_jobs::replay(state, song, request, attempt).await,
+                audio_cpp_music::ENGINE if audio_cpp_music::supports_replay(&song) => {
+                    return audio_cpp_music::replay(state, song, request, attempt).await;
+                }
                 hotstep_cover::ENGINE if song.generation_settings["profile_id"] == hotstep_sa3::PROFILE => return hotstep_sa3::replay(state, song, request, attempt).await,
                 PRIMARY_MUSIC_ENGINE_ID => {},
                 _ if song.replay_request.is_none() => return Err(api_error(StatusCode::BAD_REQUEST, "This track has no replay request.".into())),
@@ -14311,6 +14315,13 @@ mod tests {
         assert!(listed.get("replay_request").is_none());
         ace.replay_request = Some(serde_json::json!({}));
         assert_eq!(listed_song(&ace).unwrap()["replay_available"], false);
+
+        let mut heartmula = song(None, None);
+        heartmula.engine_id = audio_cpp_music::ENGINE.into();
+        heartmula.generation_settings = serde_json::json!({ "family": audio_cpp_heartmula::FAMILY });
+        assert_eq!(listed_song(&heartmula).unwrap()["replay_available"], true);
+        heartmula.generation_settings["family"] = serde_json::json!("vevo2");
+        assert_eq!(listed_song(&heartmula).unwrap()["replay_available"], false);
     }
 
     /// yue2.cpp `backend_set_device` prints this line before it exits.
