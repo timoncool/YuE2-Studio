@@ -367,7 +367,9 @@ def check_lrc(root, pid):
         page = wait_page(predicate=lambda text: context in text and 'button "Download LRC (Lyrics)"' not in text)
         row = next(line for line in page.splitlines() if context in line)
         ui("click", ref=re.search(r"(e\d+) More actions", row)[1])
-        click('"Export…"')
+        page = wait_page(predicate=lambda value: any(context in line and " Export…" in line for line in value.splitlines()))
+        row = next(line for line in page.splitlines() if context in line)
+        ui("click", ref=re.search(r"(e\d+) Export…(?:,|$)", row)[1])
         for fmt in ("wav", "flac", "mp3"):
             wait_page('button "Export"')
             ui("select", text="Format", value=fmt)
