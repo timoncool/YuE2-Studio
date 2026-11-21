@@ -1305,9 +1305,10 @@ impl Training {
         Ok(run)
     }
 
-    /// Runs the native Stable Audio 3 Medium DoRA trainer on an instrumental dataset.
-    pub(super) async fn start_hotstep_sa3(
+    /// Runs a native HOT-Step trainer and publishes its adapter when it finishes.
+    pub(super) async fn start_hotstep(
         self: &Arc<Self>,
+        model: crate::hotstep_sa3_training::Model,
         trainer: PathBuf,
         models: PathBuf,
         dataset_id: &str,
@@ -1319,7 +1320,11 @@ impl Training {
         use std::sync::atomic::{AtomicBool, Ordering};
 
         let dataset = self.dataset(dataset_id)?;
-        if dataset.items.is_empty() || dataset.items.iter().any(|item| !item.instrumental || item.style.trim().is_empty()) {
+        let heart = model == sa3::Model::Heartmula;
+        if heart && (dataset.items.is_empty() || dataset.items.iter().any(|item| item.style.trim().is_empty() || (!item.instrumental && item.lyrics.trim().is_empty()))) {
+            bail!("HeartMuLa training needs a style on every track and lyrics on tracks with vocals.");
+        }
+        if !heart && (dataset.items.is_empty() || dataset.items.iter().any(|item| !item.instrumental || item.style.trim().is_empty())) {
             bail!("Stable Audio 3 training needs instrumental songs with a style description on every song.");
         }
         let mut active = self.active.write().await;
@@ -1329,7 +1334,8 @@ impl Training {
         let run_id = new_id();
         let run_dir = self.run_dir(&run_id)?;
         let input_audio = self.dataset_dir(&dataset.id)?.join("audio");
-        let stages = vec![sa3::stage(&models, &run_dir, &settings)];
+        let stages = if heart { sa3::heart_stages(&models, &run_dir, &settings) } else { vec![sa3::stage(&models, &run_dir, &settings)] };
+        let stage_names = std::iter::once("prepare").chain(stages.iter().map(|stage| stage.id)).map(str::to_owned).collect();
         let step_goal = settings.steps;
         let run = Run {
             id: run_id.clone(),
@@ -1339,7 +1345,7 @@ impl Training {
             name: if name.trim().is_empty() { dataset.name.clone() } else { name.trim().into() },
             trigger: String::new(),
             recipe: Recipe {
-                preset: "hotstep-sa3".into(),
+                preset: if heart { "hotstep-heartmula" } else { "hotstep-sa3" }.into(),
                 stop: "steps".into(),
                 steps: settings.steps,
                 rank: settings.rank,
@@ -1351,7 +1357,7 @@ impl Training {
             },
             status: RunStatus::Running,
             stage: Some("prepare".into()),
-            stages: vec!["prepare".into(), sa3::STAGE.into()],
+            stages: stage_names,
             steps: Vec::new(),
             error: None,
             created_at: now(),
@@ -1372,7 +1378,8 @@ impl Training {
                 let stop = Arc::new(AtomicBool::new(false));
                 let (manifest_models, manifest_run, stopped) = (models.clone(), run_dir.clone(), stop.clone());
                 let mut preparing = tokio::task::spawn_blocking(move || {
-                    sa3::dataset_manifest(&manifest_models, &manifest_run, &input_audio, &dataset, &stopped)
+                    if heart { sa3::heart_manifest(&manifest_run, &input_audio, &dataset) }
+                    else { sa3::dataset_manifest(&manifest_models, &manifest_run, &input_audio, &dataset, &stopped) }
                 });
                 tokio::select! {
                     prepared = &mut preparing => prepared??,
@@ -1386,7 +1393,7 @@ impl Training {
                     return Ok(false);
                 }
                 let (path, id) = (run_dir.clone(), run_id.clone());
-                let name = tokio::task::spawn_blocking(move || sa3::publish(&models, &path, &id)).await??;
+                let name = tokio::task::spawn_blocking(move || if heart { sa3::publish_heart(&models, &path, &id, step_goal) } else { sa3::publish(&models, &path, &id) }).await??;
                 let _edit = training.edits.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
                 let mut finished = training.run(&run_id)?;
                 finished.output_adapter = Some(name);
@@ -1604,6 +1611,8 @@ impl Training {
                             log.write_all(b"\n").await?;
                             let step = if stage.id == crate::hotstep_sa3_training::STAGE {
                                 crate::hotstep_sa3_training::progress(&line)
+                            } else if stage.id == crate::hotstep_sa3_training::HEART_STAGE {
+                                crate::hotstep_sa3_training::heart_progress(&line)
                             } else {
                                 yue_train::parse_training_step(&line).map(Into::into)
                             };
@@ -1634,7 +1643,7 @@ impl Training {
             if !status.success() {
                 let mut last_error = failure.message();
                 if last_error.contains("GGML_BACKEND=CUDA0 not found") {
-                    if stage.id == crate::hotstep_sa3_training::STAGE {
+                    if matches!(stage.id, crate::hotstep_sa3_training::STAGE | crate::hotstep_sa3_training::HEART_STAGE | crate::hotstep_sa3_training::HEART_PREPARE) {
                         bail!("HOT-Step CUDA did not load; check the NVIDIA driver and the pinned CUDA 12 runtime.");
                     }
                     bail!("{} stopped: the trainer's CUDA did not load on the graphics card, and training does not run on the processor; it needs NVIDIA driver {} or newer", stage.id, crate::hardware::CUDA13_DRIVER);

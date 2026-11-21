@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { fetchSa3Training, installSa3Training, startSa3Training, type Dataset, type Sa3TrainingSettings, type Sa3TrainingStatus } from '../services/training';
+import { fetchSa3Training, installSa3Training, startSa3Training, type Dataset, type HotStepTrainingTarget, type Sa3TrainingSettings, type Sa3TrainingStatus } from '../services/training';
 
 export const sa3TrainingText: Record<string, [string, string, string, string, string, string, string]> = {
   en: ['Training engine', 'Instrumental songs with a style description are required.', 'An NVIDIA CUDA card is required.', 'HOT-Step CUDA trainer is unavailable.', 'Install training pack', 'Installing training pack…', 'Crop duration (s)'],
@@ -8,6 +8,15 @@ export const sa3TrainingText: Record<string, [string, string, string, string, st
   ja: ['学習エンジン', 'スタイルを記述したインスト曲が必要です。', 'NVIDIA CUDA 対応 GPU が必要です。', 'HOT-Step CUDA 学習エンジンを利用できません。', '学習パックをインストール', '学習パックをインストール中…', '区間の長さ（秒）'],
   ko: ['학습 엔진', '스타일 설명이 있는 연주곡이 필요합니다.', 'NVIDIA CUDA 그래픽 카드가 필요합니다.', 'HOT-Step CUDA 학습 엔진을 사용할 수 없습니다.', '학습 팩 설치', '학습 팩 설치 중…', '구간 길이(초)'],
   pt: ['Motor de treinamento', 'São necessárias faixas instrumentais com descrição de estilo.', 'É necessária uma GPU NVIDIA com CUDA.', 'O treinador HOT-Step CUDA está indisponível.', 'Instalar pacote de treinamento', 'Instalando pacote de treinamento…', 'Duração do trecho (s)'],
+};
+
+const heartSamples: Record<string, string> = {
+  en: 'Describe the style of every track and add lyrics to vocal tracks.',
+  ru: 'Опишите стиль каждого трека и добавьте текст для треков с вокалом.',
+  zh: '请描述每首曲目的风格，并为人声曲目添加歌词。',
+  ja: '各曲のスタイルを記述し、歌入りの曲には歌詞を追加してください。',
+  ko: '모든 곡의 스타일을 설명하고 보컬 곡에는 가사를 추가하세요.',
+  pt: 'Descreva o estilo de cada faixa e adicione letras às faixas vocais.',
 };
 
 const fields = [
@@ -19,7 +28,8 @@ const fields = [
   ['seed', 42, 0, 4294967295, 1],
 ] as const;
 
-export function HotStepSa3Training({ dataset, busy, language, labels, card, control, primary, onStarted, onError }: {
+export function HotStepSa3Training({ target, dataset, busy, language, labels, card, control, primary, onStarted, onError }: {
+  target: HotStepTrainingTarget;
   dataset: Dataset;
   busy: boolean;
   language: string;
@@ -39,7 +49,7 @@ export function HotStepSa3Training({ dataset, busy, language, labels, card, cont
     let active = true;
     const refresh = async () => {
       try {
-        const state = await fetchSa3Training();
+        const state = await fetchSa3Training(target);
         if (active) { setStatus(state); setStatusFailed(false); }
       } catch {
         if (active) setStatusFailed(true);
@@ -48,9 +58,9 @@ export function HotStepSa3Training({ dataset, busy, language, labels, card, cont
     void refresh();
     const timer = window.setInterval(() => void refresh(), 1000);
     return () => { active = false; window.clearInterval(timer); };
-  }, []);
+  }, [target]);
 
-  const eligible = dataset.items.length > 0 && dataset.items.every(item => item.instrumental && item.style.trim());
+  const eligible = dataset.items.length > 0 && dataset.items.every(item => item.style.trim() && (item.instrumental || (target === 'heartmula' && item.lyrics.trim())));
   const current = Object.fromEntries(fields.map(([key, fallback]) => [key, Number(settings[key] || fallback)])) as Sa3TrainingSettings;
   const valid = fields.every(([key, , min, max, step]) => current[key] >= min && current[key] <= max && (step !== 1 || Number.isInteger(current[key])));
   const size = status?.missing_bytes ? new Intl.NumberFormat(language, { maximumFractionDigits: 2 }).format(status.missing_bytes / (1024 ** 3)) + ' GiB' : '';
@@ -61,18 +71,18 @@ export function HotStepSa3Training({ dataset, busy, language, labels, card, cont
     setWorking(true);
     try {
       if (action === 'start') {
-        await startSa3Training(dataset.id, dataset.name, current);
+        await startSa3Training(target, dataset.id, dataset.name, current);
         onStarted();
       } else {
-        await installSa3Training();
-        setStatus(await fetchSa3Training());
+        await installSa3Training(target);
+        setStatus(await fetchSa3Training(target));
       }
     } catch (error) { onError(error instanceof Error ? error.message : String(error)); }
     finally { setWorking(false); }
   };
 
   return <section className={card}>
-    {!eligible && <p role="status" className="mb-2 text-sm">{needsSongs}</p>}
+    {!eligible && <p role="status" className="mb-2 text-sm">{target === 'heartmula' ? (heartSamples[language] ?? heartSamples.en) : needsSongs}</p>}
     {status?.cuda === false && <p role="status" className="mb-2 text-sm">{needsCuda}</p>}
     {(statusFailed || status?.installable === false) && <p role="status" className="mb-2 text-sm">{unavailable}</p>}
     {status?.cuda && status.installable && !status.ready && <button type="button" className={primary}

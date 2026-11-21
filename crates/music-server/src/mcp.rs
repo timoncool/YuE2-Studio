@@ -452,7 +452,7 @@ fn annotations(name: &str) -> Value {
     // a verb that changes something outweighs a noun that reads
     const CHANGES: &[&str] = &["install", "import", "remove", "delete", "refresh", "create", "update", "start", "cancel", "select", "download", "apply", "restart"];
     // reads whose names the rules above miss: create_form names the create page
-    const READ_NAMES: &[&str] = &["lyrics_syllables", "assistant_cli_agents", "system_gpus", "cover_scenes", "cover_photos_search", "video_backgrounds_search", "network_proxy_test", "journal_read", "score_to_midi", "score_instrumental", "score_vocal_octave", "score_from_midi", "score_mark", "lyrics_find", "cover_prompt_render", "studio_wait", "engine_presets_get", "assistant_requests_wait", "ui_console", "song_defaults", "create_form_get", "library_liked", "score_chord_bed", "song_tokenize", "score_match_sections", "models_update_plan", "problem_preview", "library_migration_preview", "audio_cpp_music_models", "hotstep_cover_profiles", "hotstep_sa3_training_status"];
+    const READ_NAMES: &[&str] = &["lyrics_syllables", "assistant_cli_agents", "system_gpus", "cover_scenes", "cover_photos_search", "video_backgrounds_search", "network_proxy_test", "journal_read", "score_to_midi", "score_instrumental", "score_vocal_octave", "score_from_midi", "score_mark", "lyrics_find", "cover_prompt_render", "studio_wait", "engine_presets_get", "assistant_requests_wait", "ui_console", "song_defaults", "create_form_get", "library_liked", "score_chord_bed", "song_tokenize", "score_match_sections", "models_update_plan", "problem_preview", "library_migration_preview", "audio_cpp_music_models", "hotstep_cover_profiles", "hotstep_sa3_training_status", "hotstep_heartmula_training_status"];
     // writes over what was stored, so the earlier content is gone: a client asks first
     const OVERWRITES: &[&str] = &["library_song_rename", "library_song_update", "playlist_update", "album_reorder", "dataset_update", "dataset_song_update", "dataset_song_describe_style", "dataset_prepare", "lora_update", "stems_split", "restore_start", "karaoke_make", "midi_transcribe", "cover_draw", "cover_set_from_file", "openrouter_set_key", "models_update_apply"];
     let changes = CHANGES.iter().any(|verb| name.split('_').any(|word| word == *verb));
@@ -532,6 +532,9 @@ const JOURNAL: &[(&str, &str, &str)] = &[
     ("training_start", "started", "training"),
     ("hotstep_sa3_training_install", "started", "download"),
     ("hotstep_sa3_training_start", "started", "training"),
+    ("hotstep_heartmula_training_start", "started", "training"),
+    ("hotstep_heartmula_training_install", "started", "download"),
+    ("hotstep_heartmula_install", "started", "download"),
     ("training_continue", "started", "training"),
     ("training_cancel", "cancelled", "training"),
     ("training_run_delete", "deleted", "training"),
@@ -1046,6 +1049,7 @@ fn song_create_schema(mut properties: Value) -> Value {
         "required": ["voice_id"]
     });
     properties["heartmula"] = json!({"type":"object","description":"Native HeartMuLa sampling and codec settings.","properties":{"temperature":{"type":"number"},"top_k":{"type":"integer"},"codec_duration_sec":{"type":"number"},"codec_guidance_scale":{"type":"number"}}});
+    properties["hotstep_heartmula"] = json!({"type":"object","description":"HOT-Step HeartMuLa 3B backed by native HeartCodec.","properties":{"adapter":{"type":"string"},"adapter_scale":{"type":"number","minimum":0,"maximum":2}}});
     properties["hotstep_sa3"] = json!({"type":"object","description":"HOT-Step Stable Audio 3 Medium. Use an instrumental description as style.","properties":{"sampler":{"enum":["pingpong","euler"]},"adapter":{"type":"string","description":"Installed adapter name from hotstep_cover_profiles."},"adapter_scale":{"type":"number","minimum":0,"maximum":2}}});
     properties["stable_audio"] = json!({"type":"object","description":"Native Stable Audio 3 controls. Send the music prompt as style and leave lyrics empty.","properties":{"negative_prompt":{"type":"string"},"sampler_mode":{"enum":["pingpong","euler"]},"apg_scale":{"type":"number"},"duration_padding_sec":{"type":"number","minimum":0}}});
     properties["midasheng"] = json!({"type":"object","description":"MiDashengLM-Gen scene and sound layers.","properties":{"caption":{"type":"string"},"music":{"type":"string"},"speech_text":{"type":"string"},"speech_style":{"type":"string"},"effects":{"type":"string"},"environment":{"type":"string"}}});
@@ -2203,6 +2207,12 @@ fn tools() -> &'static [Tool] {
                 call: |_| post("/v1/music/native/hotstep/install".into(), json!({})),
             },
             Tool {
+                name: "hotstep_heartmula_install",
+                description: "Install the HOT-Step HeartMuLa 3B Q8_0 generation profile. Read progress in hotstep_cover_profiles.",
+                schema: nothing,
+                call: |_| post("/v1/music/native/hotstep/heartmula/install".into(), json!({})),
+            },
+            Tool {
                 name: "hotstep_sa3_install",
                 description: "Start the managed HOT-Step Stable Audio 3 Medium installation. Read progress in hotstep_cover_profiles.",
                 schema: nothing,
@@ -2983,6 +2993,24 @@ fn tools() -> &'static [Tool] {
                 description: "Stop the preparation at work; every song keeps what it has.",
                 schema: nothing,
                 call: |_| post("/v1/training/prepare/cancel".into(), json!({})),
+            },
+            Tool {
+                name: "hotstep_heartmula_training_status",
+                description: "Report CUDA readiness and asset progress for HOT-Step HeartMuLa 3B.",
+                schema: nothing,
+                call: |_| get("/v1/training/hotstep-heartmula".into()),
+            },
+            Tool {
+                name: "hotstep_heartmula_training_install",
+                description: "Install the shared pinned HOT-Step CUDA trainer and HeartCodec encoder weights.",
+                schema: nothing,
+                call: |_| post("/v1/training/hotstep-heartmula/install".into(), json!({})),
+            },
+            Tool {
+                name: "hotstep_heartmula_training_start",
+                description: "Prepare HeartCodec samples and train a HeartMuLa 3B LoRA (set style for all samples and lyrics for vocal samples). Read the resulting adapter in training_status.",
+                schema: || object(json!({"dataset_id":{"type":"string"},"name":{"type":"string"},"settings":{"type":"object","properties":{"steps":{"type":"integer","minimum":1},"rank":{"type":"integer","minimum":1},"alpha":{"type":"number"},"learning_rate":{"type":"number"},"duration_seconds":{"type":"number","minimum":1,"maximum":384},"seed":{"type":"integer","minimum":0}}}}), &["dataset_id"]),
+                call: |args| post("/v1/training/hotstep-heartmula".into(), args.clone()),
             },
             Tool {
                 name: "hotstep_sa3_training_status",

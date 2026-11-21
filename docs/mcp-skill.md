@@ -170,6 +170,18 @@ song. Call `hotstep_sa3_training_start` with its `dataset_id` and optional
 `seed`). Read training progress with `training_status`. When the run finishes,
 use its `output_adapter` as the `hotstep_sa3.adapter` in `song_create`.
 
+For HeartMuLa 3B Q8_0 on HOT-Step, install with `hotstep_heartmula_install`
+and check `hotstep_cover_profiles`. Call `song_create` with native engine
+`hotstep`, model `heartmula-3b-q8_0`, `style` and optional `lyrics`. A
+`hotstep_heartmula` object can select the installed adapter and its strength.
+
+For HeartMuLa adapter training, use `hotstep_heartmula_training_status`,
+`hotstep_heartmula_training_install` and `hotstep_heartmula_training_start`.
+Give each sample a style and add lyrics to vocal tracks. The training run
+performs native HeartCodec preparation and exports a GGUF adapter. Read
+`output_adapter` in `training_status` and select it in Create or pass it in
+`hotstep_heartmula.adapter`.
+
 For a HOT-Step MuLaCover cover, check `hotstep_cover_profiles` and use
 `hotstep_cover_install` to install the Windows CPU runtime and its GGUF
 weights. The four codec and tokenizer files are shared with other HeartMuLa

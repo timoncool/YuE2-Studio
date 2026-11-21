@@ -1,6 +1,7 @@
 import type { YueRequest } from '../types';
 
 export const hotStepSa3Profile = 'stable-audio-3-medium';
+export const hotStepHeartmulaProfile = 'heartmula-3b-q8_0';
 export type HotStepSa3Draft = NonNullable<YueRequest['hotstep_sa3']>;
 
 const labels: Record<string, [string, string, string, string]> = {
@@ -12,23 +13,24 @@ const labels: Record<string, [string, string, string, string]> = {
   pt: ['Amostrador', 'Adaptador', 'Sem adaptador', 'Intensidade do adaptador'],
 };
 
-export function HotStepSa3Controls({ value, onChange, adapters, control, language }: {
+export function HotStepSa3Controls({ value, onChange, adapters, control, language, hasSampler = true }: {
   value: HotStepSa3Draft;
   onChange: (value: HotStepSa3Draft) => void;
   adapters: string[];
   control: string;
   language: string;
+  hasSampler?: boolean;
 }) {
   const [sampler, adapter, none, strength] = labels[language] ?? labels.en;
   return <div className="grid grid-cols-2 gap-2">
-    <label className="space-y-1 text-xs">
+    {hasSampler && <label className="space-y-1 text-xs">
       <span>{sampler}</span>
       <select className={control} value={value.sampler ?? 'pingpong'}
         onChange={event => onChange({ ...value, sampler: event.target.value === 'euler' ? 'euler' : 'pingpong' })}>
         <option value="pingpong">Ping-pong</option>
         <option value="euler">Euler</option>
       </select>
-    </label>
+    </label>}
     {(adapters.length > 0 || value.adapter) && <label className="space-y-1 text-xs">
       <span>{adapter}</span>
       <select className={control} value={value.adapter ?? ''}
