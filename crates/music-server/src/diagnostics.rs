@@ -136,7 +136,7 @@ fn text(report: &Value, log: &[String]) -> String {
     out.push_str(&format!("OS: {}\n", report["os"].as_str().unwrap_or_default()));
     match report["gpu"].as_str() {
         Some(gpu) => out.push_str(&format!("GPU: {gpu}\n")),
-        None => out.push_str("GPU: no NVIDIA card answered nvidia-smi\n"),
+        None => out.push_str("GPU: no card found (no NVIDIA card answered nvidia-smi)\n"),
     }
     let memory = &report["memory"];
     for vram in memory["vram"].as_array().into_iter().flatten() {
