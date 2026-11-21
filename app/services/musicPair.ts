@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { YueRequest } from '../types';
 import { SELF_READ } from './studioQueries';
 import { poll } from './poll';
@@ -7,6 +7,7 @@ export type PairSource = NonNullable<YueRequest['music_source']>;
 export type PairStage = 'idle' | 'waiting_for_generation' | 'checking_files' | 'needs_install' | 'unloading' | 'starting_engine' | 'loading_model' | 'ready' | 'error';
 
 export interface PairStatus {
+  instance_id?: string;
   revision: number;
   requested: PairSource | null;
   active: PairSource | null;
@@ -24,13 +25,35 @@ const busyStages: PairStage[] = ['waiting_for_generation', 'checking_files', 'un
 
 const endpoint = '/v1/music/pair';
 
-export function useMusicPair(source: PairSource | undefined, enabled: boolean) {
+export function useMusicPair(source: PairSource | undefined, enabled: boolean, serviceInstance?: string) {
   const [status, setStatus] = useState<PairStatus>();
   const [intent, setIntent] = useState(0);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string>();
   const sent = useRef(0);
   const client = useRef('');
+  const requestCount = useRef(0);
+  const latest = useRef<{ status: PairStatus; request: number } | undefined>(undefined);
+  const retired = useRef(new Set<string>());
+  const observe = useCallback((next: PairStatus, request: number) => {
+    if (!Number.isInteger(next.revision)) return;
+    const previous = latest.current;
+    if (previous) {
+      const old = previous.status;
+      if (next.instance_id === old.instance_id) {
+        if (next.revision < old.revision) return;
+        if (next.revision === old.revision && (request < previous.request ||
+            (!busyStages.includes(old.stage) && busyStages.includes(next.stage)))) return;
+      } else {
+        if (!next.instance_id || retired.current.has(next.instance_id) || request < previous.request) return;
+        if (old.instance_id) retired.current.add(old.instance_id);
+        setSending(false);
+        setError(undefined);
+      }
+    }
+    latest.current = { status: next, request };
+    setStatus(next);
+  }, []);
   const key = pairKey(source);
   const busy = Boolean(status && busyStages.includes(status.stage));
   const matching = Boolean(key && key === pairKey(status?.requested));
@@ -39,25 +62,27 @@ export function useMusicPair(source: PairSource | undefined, enabled: boolean) {
     if (!enabled) return;
     const controller = new AbortController();
     const read = async () => {
+      const request = ++requestCount.current;
       try {
         const reply = await fetch(endpoint, { headers: SELF_READ, signal: controller.signal });
         if (!reply.ok) return;
         const next: PairStatus = await reply.json();
-        if (!controller.signal.aborted && Number.isInteger(next.revision)) {
-          setStatus(previous => !previous || next.revision >= previous.revision ? next : previous);
-        }
+        if (!controller.signal.aborted) observe(next, request);
       } catch { /* Keep the latest state when a status read is interrupted. */ }
     };
     const stop = busy ? poll(read, 400) : undefined;
     if (!stop) void read();
     return () => { controller.abort(); stop?.(); };
-  }, [enabled, busy]);
+  }, [enabled, busy, serviceInstance, observe]);
 
   useEffect(() => {
     if (!enabled || !source || intent === sent.current) return;
     sent.current = intent;
     client.current ||= globalThis.crypto?.randomUUID?.() ?? `studio-${Date.now()}-${Math.random().toString(36).slice(2)}`;
     const sequence = intent;
+    const request = ++requestCount.current;
+    const instanceAtSend = latest.current?.status.instance_id;
+    const sameRequest = () => sent.current === sequence && (!instanceAtSend || instanceAtSend === latest.current?.status.instance_id);
     setSending(true);
     setError(undefined);
     void fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -67,13 +92,13 @@ export function useMusicPair(source: PairSource | undefined, enabled: boolean) {
       const next = await reply.json();
       if (sent.current !== sequence) return;
       if (!reply.ok) throw new Error(next.error || `HTTP ${reply.status}`);
-      if (Number.isInteger(next.revision)) setStatus(previous => !previous || next.revision >= previous.revision ? next : previous);
+      observe(next, request);
     }).catch((problem: unknown) => {
-      if (sent.current === sequence) setError(String(problem));
+      if (sameRequest()) setError(String(problem));
     }).finally(() => {
-      if (sent.current === sequence) setSending(false);
+      if (sameRequest()) setSending(false);
     });
-  }, [enabled, source, intent]);
+  }, [enabled, source, intent, observe]);
 
   return { status, error, matching, sending, busy,
     blocked: sending || Boolean(error) || Boolean(matching && status && status.stage !== 'ready' && status.stage !== 'idle'),
