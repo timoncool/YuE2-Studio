@@ -22,6 +22,7 @@ interface Setup {
   runtime_ready: boolean;
   model_path: string;
   model_url: string;
+  model_source_url: string;
   bytes: number;
 }
 interface Take { song_id: string; audio_url: string }
@@ -87,13 +88,14 @@ export function SeedVcApply({ song, control, onSaved }: { song: RvcSourceSong; c
             <a className="underline" href={setup.model_url} target="_blank" rel="noreferrer">
               {model} ({new Intl.NumberFormat(language).format(setup.bytes)} B)
             </a>
+            <a className="ml-2 underline" href={setup.model_source_url} target="_blank" rel="noreferrer">GPL-3.0</a>
             <p>{place} <code className="break-all">{setup.model_path}</code></p>
           </div>
         )}
         {setup && !setup.runtime_ready && <p>{runtime}</p>}
         {!setup?.ready && <button type="button" className={control} disabled={checking} onClick={() => void refresh()}>{check}</button>}
         <label htmlFor={inputId} className="block">{sample}</label>
-        <input id={inputId} className={control} type="file" accept="audio/*,.wav,.flac,.mp3,.m4a,.ogg,.opus,.aiff"
+        <input id={inputId} className={control} type="file" accept="audio/*,.wav,.flac,.mp3,.m4a,.ogg,.aiff"
           disabled={busy} onChange={event => setFile(event.target.files?.[0])} />
         <button type="button" className={control} disabled={busy || !file || !hasStems || !setup?.ready} onClick={() => void apply()}>
           {busy ? converting : convert}

@@ -33,6 +33,7 @@ pub(super) async fn status(State(state): State<AppState>) -> Json<Value> {
         "model_ready": model_ready,
         "model_path": plain_path(&model),
         "model_url": MODEL_URL,
+        "model_source_url": "https://huggingface.co/Plachta/Seed-VC",
         "bytes": BYTES
     }))
 }
