@@ -379,7 +379,12 @@ def check_lrc(root, pid):
                 time.sleep(.2)
             saved = destination.read_bytes()
             if extension == "wav":
-                assert saved == source.read_bytes(), "Exported original audio differs"
+                # Updating the score embeds metadata in the library WAV. Export retains
+                # those bytes, while the imported fixture still defines the expected PCM.
+                assert saved == request(f"/v1/library/media/{song['id']}"), "Export differs from current library audio"
+                with wave.open(str(source), "rb") as original, wave.open(str(destination), "rb") as exported:
+                    assert exported.getparams() == original.getparams()
+                    assert exported.readframes(exported.getnframes()) == original.readframes(original.getnframes())
             else:
                 subtitles = saved.decode("utf-8")
                 assert "00:00:00,500 -->" in subtitles and "00:00:01,750 -->" in subtitles, subtitles
