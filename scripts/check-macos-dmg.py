@@ -21,11 +21,10 @@ def checked_output(*command):
     return subprocess.check_output(command, text=True, timeout=30).strip()
 
 
-def check_macho(binary, app, executable_dir):
-    if not binary.resolve(strict=True).is_relative_to(app):
+def check_macho(binary, app, executable_dir, checked, inherited_rpaths=(), *, exact_arm64=False):
+    resolved = binary.resolve(strict=True)
+    if not resolved.is_relative_to(app):
         raise ValueError(f"Binary resolves outside the app: {binary}")
-    if checked_output("lipo", "-archs", binary) != "arm64":
-        raise ValueError(f"Expected an arm64 Mach-O: {binary}")
 
     def expand(path):
         for token, directory in (("@loader_path", binary.parent),
@@ -38,7 +37,7 @@ def check_macho(binary, app, executable_dir):
 
     rpaths, libraries = [], []
     command = None
-    for line in checked_output("otool", "-l", binary).splitlines():
+    for line in checked_output("otool", "-arch", "arm64", "-l", binary).splitlines():
         if match := re.fullmatch(r"\s*cmd (LC_\w+)", line):
             command = match[1]
         elif match := re.fullmatch(r"\s*(?:path|name) (.+) \(offset \d+\)", line):
@@ -47,6 +46,16 @@ def check_macho(binary, app, executable_dir):
             elif command in DYLIB_LOAD_COMMANDS:
                 libraries.append(match[1])
 
+    rpaths = tuple(dict.fromkeys((*rpaths, *inherited_rpaths)))
+    key = (resolved, binary.parent, executable_dir, rpaths)
+    if key in checked:
+        return rpaths
+    checked.add(key)
+
+    architectures = checked_output("lipo", "-archs", binary).split()
+    if "arm64" not in architectures or (exact_arm64 and architectures != ["arm64"]):
+        raise ValueError(f"Expected arm64 in {binary}, found: {architectures}")
+    subprocess.run(["codesign", "--verify", "--strict", binary], check=True, timeout=30)
     for dependency in libraries:
         if dependency.startswith(SYSTEM_PATHS):
             continue  # macOS may supply these through the dyld shared cache.
@@ -54,10 +63,12 @@ def check_macho(binary, app, executable_dir):
             candidates = [path / dependency.removeprefix("@rpath/") for path in rpaths]
         else:
             candidates = [expand(dependency)]
-        if not any(path.is_file() and path.resolve().is_relative_to(app) for path in candidates):
+        packaged = next((path for path in candidates if path.is_file() and path.resolve().is_relative_to(app)), None)
+        if packaged is None:
             raise ValueError(f"{binary} has an unresolved packaged dependency: {dependency}")
-    subprocess.run(["codesign", "--verify", "--strict", binary], check=True, timeout=30)
+        check_macho(packaged, app, executable_dir, checked, rpaths)
     print(f"Verified arm64, signature and {len(libraries)} imports: {binary.relative_to(app)}", flush=True)
+    return rpaths
 
 
 def check_help(executable, expected_exit, usage):
@@ -80,7 +91,8 @@ def check_app(mount):
     with (contents / "Info.plist").open("rb") as metadata:
         main = contents / "MacOS" / plistlib.load(metadata)["CFBundleExecutable"]
     subprocess.run(["codesign", "--verify", "--deep", "--strict", "--verbose=2", app], check=True, timeout=30)
-    check_macho(main, app, main.parent)
+    checked = set()
+    check_macho(main, app, main.parent, checked, exact_arm64=True)
 
     resources = contents / "Resources" / "resources"
     tools = (
@@ -88,15 +100,17 @@ def check_app(mount):
         (resources / "music-midi" / "music-midi", 2, r"^usage: ace-midi --model <dir>"),
         (resources / "music-midi" / "music-caption", 2, r"^usage: ace-caption --models <dir>"),
     )
-    for directory in sorted({tool.parent for tool, _, _ in tools}):
+    runtime_rpaths = {}
+    for tool, status, usage in tools:
+        rpaths = check_macho(tool, app, tool.parent, checked, exact_arm64=True)
+        runtime_rpaths.setdefault(tool.parent, rpaths)
+        check_help(tool, status, usage)
+    for directory, rpaths in runtime_rpaths.items():
         libraries = sorted(directory.glob("*.dylib"))
         if not libraries:
             raise ValueError(f"No packaged dylibs: {directory}")
         for library in sorted({path.resolve(strict=True) for path in libraries}):
-            check_macho(library, app, directory)
-    for tool, status, usage in tools:
-        check_macho(tool, app, tool.parent)
-        check_help(tool, status, usage)
+            check_macho(library, app, directory, checked, rpaths)
 
 
 def interrupt(signum, _frame):
