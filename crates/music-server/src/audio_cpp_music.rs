@@ -373,7 +373,7 @@ fn entry(path: PathBuf) -> ModelEntry {
 async fn build(state: &AppState) -> anyhow::Result<Build> {
     use music_engine::yue_server::ComputeBackend;
     match state.engine_options.read().await.backend {
-        ComputeBackend::Auto => acpp::build_for("auto"),
+        ComputeBackend::Auto | ComputeBackend::Hip => acpp::build_for("auto"),
         ComputeBackend::Cpu => Ok(Build::Cpu),
         ComputeBackend::Vulkan => Ok(Build::Vulkan),
         ComputeBackend::Cuda => match acpp::build_for("cuda")? {
