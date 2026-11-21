@@ -91,6 +91,9 @@ export const AdapterPicker: React.FC<AdapterPickerProps> = ({ value, onChange, o
                 {t('adaptersMissing')}
               </p>
             )}
+            {adapter?.training_base_matches === false && <p className="mt-1 flex items-start gap-1 text-[11px] text-amber-600 dark:text-amber-300">
+              <AlertTriangle size={12} />{t('trainingBase')} · {adapter.origin.training_base?.id}
+            </p>}
             {adapter?.model && otherSize(adapter) && model && (
               <p className="mt-1 flex items-start gap-1 text-[11px] leading-4 text-amber-600 dark:text-amber-300">
                 <AlertTriangle size={12} className="mt-0.5 shrink-0" />
@@ -157,11 +160,14 @@ export const AdapterPicker: React.FC<AdapterPickerProps> = ({ value, onChange, o
                   <button
                     key={adapter.id}
                     type="button"
-                    onClick={() => add(adapter)}
+                    onClick={() => add(adapter)} disabled={adapter.training_base_matches === false}
                     className="flex w-full items-center justify-between gap-2 border-b border-zinc-100 px-3 py-2 text-left last:border-b-0 hover:bg-zinc-100 dark:border-white/5 dark:hover:bg-white/5"
                   >
                     <span className="min-w-0 truncate text-sm text-zinc-800 dark:text-zinc-200">{localized(adapter.name, language)}</span>
                     <span className="flex shrink-0 items-center gap-1.5">
+                      {adapter.origin.training_base && <span className={`text-[10px] ${adapter.training_base_matches === false ? 'text-amber-600' : 'text-zinc-400'}`}>
+                        {t('trainingBase')} · {adapter.origin.training_base.id}
+                      </span>}
                       {adapter.model && (
                         <span className={`text-[10px] font-bold ${otherSize(adapter) ? 'text-amber-600 dark:text-amber-300' : 'text-zinc-400'}`}>{familyLabel(adapter.model)}</span>
                       )}

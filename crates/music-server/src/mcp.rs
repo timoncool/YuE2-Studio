@@ -313,16 +313,6 @@ fn shape(name: &str, args: &Value, value: Value) -> Value {
             value["slots"] = json!("not known yet: the engine reads them from the file; lora_list shows them");
             value
         }
-        "dataset_get" => {
-            let wanted = args.get("dataset_id").and_then(Value::as_str).unwrap_or_default();
-            let Some(dataset) = value["datasets"].as_array().into_iter().flatten().find(|dataset| dataset["id"] == wanted).cloned() else {
-                return json!({ "error": format!("No dataset {wanted}; training_status lists them.") });
-            };
-            match args.get("song_id").and_then(Value::as_str) {
-                Some(song) => dataset["items"].as_array().into_iter().flatten().find(|item| item["id"] == song).cloned().unwrap_or_else(|| json!({ "error": format!("No song {song} in the dataset.") })),
-                None => dataset,
-            }
-        }
         "library_songs_list" => {
             let query = args.get("query").and_then(Value::as_str).unwrap_or_default().to_lowercase();
             let bound = |name: &str, end: bool| match args.get(name).and_then(Value::as_str) {
@@ -3139,13 +3129,20 @@ fn tools() -> &'static [Tool] {
             },
             Tool {
                 name: "training_pack_cancel",
-                description: "Stop the trainer download at work.",
-                schema: nothing,
-                call: |_| post("/v1/training/pack/cancel".into(), json!({})),
+                description: "Stop the trainer download. Set training_base true for a separately selected base.",
+                schema: || object(json!({ "training_base": { "type": "boolean" } }), &[]),
+                call: |args| {
+                    let path = if args.get("training_base").and_then(Value::as_bool) == Some(true) {
+                        "/v1/training/bases/cancel"
+                    } else {
+                        "/v1/training/pack/cancel"
+                    };
+                    post(path.into(), json!({}))
+                },
             },
             Tool {
                 name: "dataset_prepare_train_after",
-                description: "For the preparation at work: start this training run once every song is ready (train: {name, recipe}), or not (train: null).",
+                description: "For the preparation at work: start this training run once every song is ready (train: {name, recipe, optional base_id}), or disable auto-start (train: null).",
                 schema: || object(json!({ "train": { "anyOf": [{ "type": "object" }, { "type": "null" }] } }), &[]),
                 call: |args| post("/v1/training/prepare/train-after".into(), args.clone()),
             },
@@ -3158,15 +3155,35 @@ fn tools() -> &'static [Tool] {
             },
             Tool {
                 name: "dataset_get",
-                description: "One dataset with every song: id, title, artist, lyrics, style, lyrics_state (wanted, found, done) and style_state (wanted, heard, done), lyrics_source, heard (what MOSS heard: genre, caption, bpm) and length. Give song_id for one song only.",
-                schema: || object(json!({ "dataset_id": { "type": "string" }, "song_id": { "type": "string" } }), &["dataset_id"]),
-                call: |_| get("/v1/training".into()),
+                description: "Read a dataset. Set page or page_size for a short page of titles, lengths and readiness, with total and has_more. Set response_format detailed for full rows on that page, or give song_id to read one complete song.",
+                schema: || object(json!({
+                    "dataset_id": { "type": "string" },
+                    "song_id": { "type": "string" },
+                    "page": { "type": "integer", "minimum": 1 },
+                    "page_size": { "type": "integer", "minimum": 1, "maximum": 100 },
+                    "response_format": { "type": "string", "enum": ["concise", "detailed"] },
+                }), &["dataset_id"]),
+                call: |args| {
+                    let mut path = format!("/v1/training/datasets/{}", segment(&text(args, "dataset_id")?));
+                    if let Some(song_id) = args.get("song_id").and_then(Value::as_str) {
+                        path.push_str(&format!("?song_id={}", segment(song_id)));
+                    } else if args.get("page").is_some() || args.get("page_size").is_some() {
+                        let page = args.get("page").and_then(Value::as_u64).unwrap_or(1).max(1);
+                        let size = args.get("page_size").and_then(Value::as_u64).unwrap_or(25).clamp(1, 100);
+                        let detailed = args["response_format"] == "detailed";
+                        path.push_str(&format!("?page={page}&page_size={size}&detailed={detailed}"));
+                    }
+                    get(path)
+                },
             },
             Tool {
                 name: "training_pack_install",
-                description: "Download the trainer and its weights (needed once before training).",
-                schema: nothing,
-                call: |_| post("/v1/training/pack/install".into(), json!({})),
+                description: "Download the standard trainer and its weights. With base_id, install a separate base listed by detailed training_status.",
+                schema: || object(json!({ "base_id": { "type": "string" } }), &[]),
+                call: |args| match args.get("base_id").and_then(Value::as_str) {
+                    Some(id) => post(format!("/v1/training/bases/{}/install", segment(id)), json!({})),
+                    None => post("/v1/training/pack/install".into(), json!({})),
+                },
             },
             Tool {
                 name: "training_listen_pack_cancel",
@@ -3366,7 +3383,7 @@ fn tools() -> &'static [Tool] {
             Tool {
                 name: "training_start",
                 description: "Train a LoRA on a dataset. recipe: the recipe from training_status (recipe_defaults) with your changes. preset picks the size: 'fast' (100 steps of 4 songs), 'balanced' (200 of 4, the default), 'thorough' (300 of 8) - the base-matched method, trained the way the base model was; or 'tuned', the previous recipe, with stop 'kl' and target_kl 1.4 or stop 'epochs' with epochs. Watch training_status; one run at a time, and it holds the card.",
-                schema: || object(json!({ "dataset_id": { "type": "string" }, "name": { "type": "string" }, "recipe": { "type": "object" }, "trainer_id": { "type": "string" } }), &["dataset_id", "recipe"]),
+                schema: || object(json!({ "dataset_id": { "type": "string" }, "name": { "type": "string" }, "recipe": { "type": "object" }, "trainer_id": { "type": "string" }, "base_id": { "type": "string" } }), &["dataset_id", "recipe"]),
                 call: |args| post("/v1/training/runs".into(), args.clone()),
             },
             Tool {
@@ -4447,6 +4464,10 @@ mod tests {
         };
         let base: serde_json::Map<String, Value> = properties.iter().map(|(name, property)| (name.clone(), sample(name, property))).collect();
         let mut all = vec![Value::Object(base.clone())];
+        if matches!(tool.name, "training_pack_install" | "training_pack_cancel") {
+            // Their optional arguments select the separate training-base routes.
+            all.push(json!({}));
+        }
         for (name, property) in &properties {
             for choice in property["enum"].as_array().into_iter().flatten().skip(1) {
                 let mut other = base.clone();
