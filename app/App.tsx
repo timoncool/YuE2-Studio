@@ -115,6 +115,8 @@ import { I18nProvider, useI18n } from './context/I18nContext';
 import { List } from 'lucide-react';
 import { PlaylistDetail } from './components/PlaylistDetail';
 import { Toast, ToastType } from './components/Toast';
+import { useSignedUpdateNotice } from './services/signedUpdateNotice';
+import { signedUpdateStrings } from './i18n/signedUpdates';
 import { FilesPanel } from './components/FilesPanel';
 import { SearchPage } from './components/SearchPage';
 import { NewsPage } from './components/NewsPage';
@@ -465,6 +467,17 @@ function AppContent() {
     setToast({ message, type, isVisible: true, action });
     noteStudioMessage(message, type);
   };
+
+  useSignedUpdateNotice(setupQuery.isSuccess, !toast.isVisible && !showSettingsModal, () => {
+    const text = signedUpdateStrings[language];
+    showToast(text.notice, 'info', {
+      label: text.openUpdates,
+      onClick: () => {
+        setSettingsSection('models:component-updates');
+        setShowSettingsModal(true);
+      },
+    });
+  });
 
   const [journalOpen, setJournalOpen] = useState(false);
 

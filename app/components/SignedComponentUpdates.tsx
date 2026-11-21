@@ -3,6 +3,7 @@ import { ArrowRight } from 'lucide-react';
 import { useI18n } from '../context/I18nContext';
 import { signedUpdateStrings } from '../i18n/signedUpdates';
 import { SELF_READ } from '../services/studioQueries';
+import { signedUpdateNoticeChanged } from '../services/signedUpdateNotice';
 
 const modes = ['manual', 'notify', 'auto'] as const;
 type Mode = typeof modes[number];
@@ -95,6 +96,7 @@ export function SignedComponentUpdates() {
     setError(undefined);
     try {
       await fetch(url, { method: 'POST', ...(body ? { headers: json, body: JSON.stringify(body) } : {}) }).then(responseBody);
+      signedUpdateNoticeChanged();
       await Promise.all([readUpdates().then(setStatus), readInstalled().then(setInstalled)]);
     } catch (problem) {
       setError(problem instanceof Error ? problem.message : String(problem));
