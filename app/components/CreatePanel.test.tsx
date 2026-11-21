@@ -951,13 +951,14 @@ describe('an instrumental (#217)', () => {
     click(buttonNamed('createInstrumental')!);
     await flush();
     expect(sent[0].adapters).toEqual([expect.objectContaining({ id: 'instrumental' })]);
-    expect(sent[0].lyrics).toBe('');
+    expect(sent[0].lyrics).toBe('[instrumental]');
 
     click(instrumental);
     click(buttonNamed('create')!);
     await flush();
     expect(sent).toHaveLength(2);
     expect(sent[1].adapters).toBeUndefined();
+    expect(sent[1].lyrics).toBe('');
   });
 
   it('keeps a score written for one submission out of the form and writes a new one for the next', async () => {
@@ -974,6 +975,7 @@ describe('an instrumental (#217)', () => {
     click(buttonNamed('createInstrumental')!);
     await flush();
     expect(sent.map(request => request.abc)).toEqual(['X:1\nPLAN-A\nINSTR', 'X:1\nPLAN-B\nINSTR']);
+    expect(sent.map(request => request.lyrics)).toEqual(['[instrumental]', '[instrumental]']);
     expect(composeScore).toHaveBeenCalledTimes(2);
   });
 
@@ -1587,6 +1589,23 @@ describe('Auto max duration', () => {
     click(autoButton()!);
     await createOne();
     expect(sent[1].duration_seconds).toBe(240);
+  });
+
+  it('exposes the same optional YuE2 style advice in the form and its MCP readback', async () => {
+    act(() => root.render(panel({})));
+    await flush();
+    const style = 'make it massive, without drums';
+    act(() => { bridgeCommands.get('create_set')!({ fields: { style } }); });
+    await flush();
+    const read = () => bridgeCommands.get('create_get')!({}) as {
+      fields: { style: string }; style_hints: { rule: string; hint: string }[]
+    };
+    expect(read().fields.style).toBe(style);
+    expect(read().style_hints.some(item => item.rule === 'negative')).toBe(true);
+    for (const item of read().style_hints) expect(host.textContent).toContain(item.hint);
+    act(() => root.render(panel({ musicEngine: 'openrouter' })));
+    await flush();
+    expect(read().style_hints).toEqual([]);
   });
 
   it('sends the manual ceiling or omits it through the Create MCP bridge', async () => {

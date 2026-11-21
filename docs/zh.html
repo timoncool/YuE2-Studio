@@ -535,6 +535,17 @@ footer p { margin: 0 0 8px; }
       </tbody>
     </table></div>
 <!-- radeon-gpu-pair:end -->
+<!-- native-radeon-pair:start -->
+    <h3>YuE2-3B Q8_0 · Radeon gfx1036</h3>
+    <p class="note">同一首已保存的 12 秒歌曲，在同一块 Radeon 核显上运行四步。冷启动时间包括启动进程。热启动时间为权重常驻时三次请求的中位数。WDDM 峰值按该显卡上进程的内存用量采样。</p>
+    <div class="scroll"><table>
+      <thead><tr><th scope="col">后端</th><th scope="col">冷启动（秒）</th><th scope="col">预热后（秒）</th><th scope="col">WDDM 专用峰值（GiB）</th><th scope="col">WDDM 共享峰值（GiB）</th></tr></thead>
+      <tbody>
+      <tr><td>HIP 188d13b3</td><td>22.749</td><td>18.483</td><td>0.28</td><td>4.39</td></tr>
+      <tr><td>Vulkan 892b9b03</td><td>30.923</td><td>24.438</td><td>1.82</td><td>2.59</td></tr>
+      </tbody>
+    </table></div>
+<!-- native-radeon-pair:end -->
 
   </section>
 

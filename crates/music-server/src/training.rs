@@ -251,6 +251,8 @@ pub struct Run {
     pub name: String,
     pub trigger: String,
     pub recipe: Recipe,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub trainer: Option<TrainerIdentity>,
     pub status: RunStatus,
     /// The stage working now, or the one that failed.
     pub stage: Option<String>,
@@ -278,6 +280,18 @@ pub struct Run {
     pub rvc_burn_settings: Option<crate::rvc_burn::Settings>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub rvc_voice_id: Option<String>,
+}
+
+pub(super) const BUILTIN_TRAINER: &str = "music-train-bundled";
+const YUE2_STATE_FORMAT: &str = "yue2-joint-state-v1";
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TrainerIdentity {
+    id: String,
+    version: String,
+    generation: Option<String>,
+    optimizer_format: String,
+    weights_revision: String,
 }
 
 /// The run trained on from the checkpoint at `from` up to `to` steps.
@@ -346,6 +360,8 @@ struct TrainerSource {
     asset: String,
     /// Size of the released archive.
     bytes: u64,
+    /// The captioner's archive can have its own immutable filename.
+    caption_asset: String,
     /// Size of the captioner's archive in the same release.
     caption_bytes: u64,
 }
@@ -377,7 +393,14 @@ pub fn remove_older_tool_folders(downloader: &Downloader, current_folder: &str, 
         let Ok(entries) = std::fs::read_dir(directory) else { return };
         for entry in entries.flatten() {
             let name = entry.file_name().to_string_lossy().to_string();
-            if name.starts_with(prefix) && !today(&name) && entry.path().is_dir() {
+            let managed = if prefix == TOOLS_FOLDER_PREFIX {
+                name.strip_prefix("hotstep-tools-")
+                    .and_then(|suffix| suffix.split('-').next())
+                    .is_some_and(|revision| revision.len() == 8 && revision.bytes().all(|byte| byte.is_ascii_hexdigit()))
+            } else {
+                name.starts_with(prefix)
+            };
+            if managed && !today(&name) && entry.file_type().is_ok_and(|kind| kind.is_dir()) {
                 if let Err(error) = std::fs::remove_dir_all(entry.path()) {
                     eprintln!("[ERROR] could not remove the older {} {}: {error}", prefix, entry.path().display());
                 }
@@ -494,8 +517,8 @@ pub(crate) fn listen_pack() -> &'static [Asset] {
                 id: "ace-caption",
                 label: leak(format!("Captioner (HOT-Step {})", &source.commit[..8])),
                 kind: AssetKind::Runtime,
-                url: leak(format!("https://github.com/timoncool/YuE2-Studio/releases/download/{}/ace-caption-windows-x64.zip", source.release_tag)),
-                relative_path: "ace-caption-windows-x64.zip",
+                url: leak(format!("https://github.com/timoncool/YuE2-Studio/releases/download/{}/{}", source.release_tag, source.caption_asset)),
+                relative_path: leak(source.caption_asset.clone()),
                 bytes: source.caption_bytes,
                 unzip_into: Some(trainer_folder()),
                 marker: CAPTIONER,
@@ -661,7 +684,7 @@ fn write_steps(dir: &Path, steps: &[TrainingStepRecord]) -> Result<()> {
 impl Training {
     pub fn new(data_root: &Path, engine: &str) -> Self {
         let root = data_root.join("training");
-        Self {
+        let training = Self {
             downloader: Downloader::with_runtimes(root.clone(), tools_root(data_root)),
             root,
             engine: engine.to_string(),
@@ -670,7 +693,9 @@ impl Training {
             ended: std::sync::OnceLock::new(),
             step_stages: std::sync::Mutex::new(yue_train::StepStages::default()),
             f32_path: std::sync::atomic::AtomicBool::new(false),
-        }
+        };
+        training.remove_older_trainers();
+        training
     }
 
     /// Who is told how each run ends; set once.
@@ -688,6 +713,59 @@ impl Training {
         std::env::var_os("YUE_TRAIN_BIN")
             .map(PathBuf::from)
             .unwrap_or_else(|| self.downloader.runtime_dir(trainer_folder()).join(&trainer_source().shipped_as))
+    }
+
+    /// The built-in trainer is the default for existing runs and recipes.
+    fn builtin_identity(&self, trainer: &Path) -> Result<TrainerIdentity> {
+        let version = if std::env::var_os("YUE_TRAIN_BIN").is_some() {
+            format!("local-{}", crate::install_record::sha256_of(trainer)?)
+        } else {
+            trainer_source().commit.clone()
+        };
+        Ok(TrainerIdentity {
+            id: BUILTIN_TRAINER.into(),
+            version,
+            generation: None,
+            optimizer_format: YUE2_STATE_FORMAT.into(),
+            weights_revision: yue_train::WEIGHTS_REVISION.into(),
+        })
+    }
+
+    async fn select_trainer(&self, id: Option<&str>, saved: Option<&TrainerIdentity>) -> Result<(PathBuf, TrainerIdentity)> {
+        if let Some(saved) = saved
+            && (saved.optimizer_format != YUE2_STATE_FORMAT || saved.weights_revision != yue_train::WEIGHTS_REVISION)
+        {
+            bail!("This checkpoint needs its original YuE2 training base and optimizer format.");
+        }
+        let choice = saved.map(|saved| saved.id.as_str()).or(id).unwrap_or(BUILTIN_TRAINER);
+        let (trainer, identity) = if choice == BUILTIN_TRAINER {
+            let path = self.trainer();
+            if !path.is_file() {
+                bail!("the trainer is not installed: {} is missing", path.display());
+            }
+            let identity = self.builtin_identity(&path)?;
+            (path, identity)
+        } else {
+            let data_root = self.root.parent().context("Studio data folder")?;
+            let generation = saved.and_then(|saved| saved.generation.as_deref());
+            let worker = crate::engine_catalogue::install::resolve_trainer(data_root, choice, generation).await?;
+            (
+                worker.executable,
+                TrainerIdentity {
+                    id: choice.into(), version: worker.version, generation: Some(worker.generation),
+                    optimizer_format: YUE2_STATE_FORMAT.into(), weights_revision: yue_train::WEIGHTS_REVISION.into(),
+                },
+            )
+        };
+        if let Some(saved) = saved
+            && (identity.version != saved.version || identity.generation != saved.generation)
+        {
+            bail!("Install the original trainer generation before continuing this checkpoint.");
+        }
+        if !self.weights_ready() {
+            bail!("the YuE2 training weights are not downloaded yet");
+        }
+        Ok((trainer, identity))
     }
 
     pub fn models_dir(&self) -> PathBuf {
@@ -804,23 +882,46 @@ impl Training {
             .collect()
     }
 
+    pub(super) fn weights_ready(&self) -> bool {
+        pack().iter().filter(|asset| asset.id != "music-train").all(|asset| self.installed(asset))
+    }
+
+    pub(super) async fn trainer_choices(&self) -> Vec<serde_json::Value> {
+        let bundle = &pack()[0];
+        let mut choices = vec![serde_json::json!({
+            "id": BUILTIN_TRAINER,
+            "label": bundle.label,
+            "version": trainer_source().commit,
+            "installed": self.installed(bundle),
+            "bytes": bundle.bytes,
+        })];
+        if let Some(data_root) = self.root.parent() {
+            choices.extend(crate::engine_catalogue::install::trainer_choices(data_root).await
+                .into_iter().filter(|choice| choice["id"] != BUILTIN_TRAINER));
+        }
+        choices
+    }
+
     pub fn pack_ready(&self) -> bool {
         pack().iter().all(|asset| self.installed(asset))
     }
 
     pub async fn install_pack(&self) -> Result<()> {
         let missing: Vec<&'static Asset> = pack().iter().filter(|asset| !self.installed(asset)).collect();
-        if missing.is_empty() {
-            return Ok(());
+        if !missing.is_empty() {
+            self.downloader.install_all(SCOPE, &missing).await?;
         }
-        self.downloader.install_all(SCOPE, &missing).await?;
         self.remove_older_trainers();
         Ok(())
     }
 
     /// The trainers of earlier releases; nothing runs them any more.
     fn remove_older_trainers(&self) {
-        remove_older_tool_folders(&self.downloader, trainer_folder(), "music-train");
+        let Some(runtime) = pack().iter().find(|asset| asset.id == "music-train") else { return };
+        let managed = self.downloader.runtime_dir(trainer_folder()).join(runtime.marker);
+        if managed.is_file() && self.downloader.is_installed(runtime) {
+            remove_older_tool_folders(&self.downloader, trainer_folder(), "music-train");
+        }
     }
 
     // ── datasets ────────────────────────────────────────────────────────────
@@ -1230,15 +1331,10 @@ impl Training {
         dataset_id: &str,
         name: &str,
         recipe: Recipe,
+        trainer_id: Option<&str>,
         card: CardHooks,
     ) -> Result<Run> {
-        let trainer = self.trainer();
-        if !self.pack_ready() {
-            bail!("the training files are not downloaded yet");
-        }
-        if !trainer.is_file() {
-            bail!("the trainer is not installed: {} is missing", trainer.display());
-        }
+        let (trainer, trainer_identity) = self.select_trainer(trainer_id, None).await?;
         let dataset = self.dataset(dataset_id)?;
         if dataset.items.is_empty() {
             bail!("the dataset has no songs yet");
@@ -1282,6 +1378,7 @@ impl Training {
             name: if name.trim().is_empty() { dataset.name.clone() } else { name.trim().into() },
             trigger: dataset.trigger.clone(),
             recipe,
+            trainer: Some(trainer_identity),
             status: RunStatus::Running,
             stage: None,
             stages: inputs.recipe.lyric_timing.then_some(VOCALS_STAGE).into_iter().chain(stages.iter().map(|stage| stage.id)).map(str::to_string).collect(),
@@ -1364,6 +1461,7 @@ impl Training {
                 lyric_timing: false,
                 ..Recipe::default()
             },
+            trainer: None,
             status: RunStatus::Running,
             stage: Some("prepare".into()),
             stages: stage_names,
@@ -1463,6 +1561,7 @@ impl Training {
             trigger: String::new(),
             recipe: Recipe { preset:"rvc-burn".into(), stop:"epochs".into(), epochs:settings.epochs,
                 grad_accum:settings.batch_size, learning_rate:settings.learning_rate, steps:0, ..Recipe::default() },
+            trainer: None,
             status: RunStatus::Running, stage:Some(stage.id.into()), stages:vec![stage.id.into()],
             steps:vec![], error:None, created_at:now(), finished_at:None,
             installed:vec![], continuations:vec![], output_adapter:None, hotstep_sa3_settings:None,
@@ -1530,13 +1629,8 @@ impl Training {
     /// where they stopped. Stops by steps only - a likeness target would be
     /// judged on a window the resumed trainer starts empty.
     pub async fn continue_run(self: &Arc<Self>, libraries: Option<PathBuf>, companion: PathBuf, run_id: &str, steps: u32, card: CardHooks) -> Result<Run> {
-        let trainer = self.trainer();
-        if !self.pack_ready() {
-            bail!("the training files are not downloaded yet");
-        }
-        if !trainer.is_file() {
-            bail!("the trainer is not installed: {} is missing", trainer.display());
-        }
+        let saved = self.run(run_id)?;
+        let (trainer, trainer_identity) = self.select_trainer(None, saved.trainer.as_ref()).await?;
         let (from, state) = self.resume_point(run_id).map_err(|code| anyhow::anyhow!(refusal(code)))?;
         if steps <= from {
             bail!("set the steps above {from}, the checkpoint the run goes on from");
@@ -1555,6 +1649,7 @@ impl Training {
         let output = run_dir.join(format!("output-{}", new_id()));
         let stage = yue_train::continuation_stage(&self.models_dir(), &companion, &run_dir, &recipe, &output, &state);
         run.recipe = recipe;
+        run.trainer = Some(trainer_identity);
         run.status = RunStatus::Running;
         run.stage = None;
         run.stages = vec![stage.id.to_string()];
@@ -1657,16 +1752,18 @@ impl Training {
         for stage in stages {
             #[cfg(windows)]
             let stage = joint_checkpoint_paths(stage)?;
-            {
-                {
-                    let _edit = self.edits.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
-                    let mut run = self.run(run_id)?;
-                    run.stage = Some(stage.id.to_string());
-                    self.save_run(&run)?;
-                }
-            }
+            let signed_trainer = {
+                let _edit = self.edits.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+                let mut run = self.run(run_id)?;
+                run.stage = Some(stage.id.to_string());
+                self.save_run(&run)?;
+                run.trainer.is_some_and(|trainer| trainer.generation.is_some())
+            };
             log.write_all(format!("==== {}\n", stage.id).as_bytes()).await?;
-            music_core::process::runtime_beside(trainer);
+            // A signed generation declares its dependencies and is verified again on resume.
+            if !signed_trainer {
+                music_core::process::runtime_beside(trainer);
+            }
             let mut command = tokio::process::Command::new(trainer);
             if let Some(path) = music_core::process::own_libraries_first(trainer) {
                 command.env("LD_LIBRARY_PATH", path);
@@ -2069,14 +2166,51 @@ mod tests {
         let root = std::env::temp_dir().join(format!("yue-tool-folders-{}", uuid::Uuid::now_v7()));
         let shared = root.join("hotstep");
         let downloader = Downloader::with_runtimes(root.join("training"), shared.clone());
-        for name in ["hotstep-tools-new", "hotstep-tools-new-midi-cuda12", "hotstep-tools-new-midi-cpu", "hotstep-tools-old", "hotstep-tools-old-midi-cpu"] {
+        for name in ["hotstep-tools-75923e70-xcr0", "hotstep-tools-75923e70-xcr0-midi-cuda12", "hotstep-tools-75923e70-xcr0-midi-cpu", "hotstep-tools-75923e70", "hotstep-tools-2ef93a1c-midi-cpu", "hotstep-tools-local"] {
             std::fs::create_dir_all(shared.join(name)).unwrap();
         }
-        remove_older_tool_folders(&downloader, "hotstep-tools-new", "music-train");
+        remove_older_tool_folders(&downloader, "hotstep-tools-75923e70-xcr0", "music-train");
         let mut left: Vec<String> = std::fs::read_dir(&shared).unwrap().flatten().map(|entry| entry.file_name().to_string_lossy().into_owned()).collect();
         left.sort();
-        assert_eq!(left, ["hotstep-tools-new", "hotstep-tools-new-midi-cpu", "hotstep-tools-new-midi-cuda12"]);
+        assert_eq!(left, ["hotstep-tools-75923e70-xcr0", "hotstep-tools-75923e70-xcr0-midi-cpu", "hotstep-tools-75923e70-xcr0-midi-cuda12", "hotstep-tools-local"]);
         std::fs::remove_dir_all(&root).ok();
+    }
+
+    #[tokio::test]
+    async fn upgrading_an_already_installed_trainer_preserves_training_inputs() {
+        let data = tempfile::tempdir().unwrap();
+        let training = Training::new(data.path(), "yue2");
+        let old = tools_root(data.path()).join("hotstep-tools-2ef93a1c");
+        std::fs::create_dir_all(&old).unwrap();
+        let checkpoint = training.runs_dir().join("previous-run/checkpoints/step-42.safetensors");
+        std::fs::create_dir_all(checkpoint.parent().unwrap()).unwrap();
+        std::fs::write(&checkpoint, b"resume from step 42").unwrap();
+        let trainer = pack().iter().find(|asset| asset.id == "music-train").unwrap();
+        for asset in pack().iter().filter(|asset| asset.kind == AssetKind::Model) {
+            let file = training.downloader.path_of(asset);
+            std::fs::create_dir_all(file.parent().unwrap()).unwrap();
+            std::fs::write(file, b"existing weights").unwrap();
+        }
+        let managed = training.downloader.runtime_dir(trainer_folder()).join(trainer.marker);
+        std::fs::create_dir_all(managed.parent().unwrap()).unwrap();
+        std::fs::write(&managed, b"current trainer").unwrap();
+        training.remove_older_trainers();
+        assert!(old.exists(), "an unpacked marker alone cannot retire the previous runtime");
+        crate::install_record::write(
+            &training.downloader.record_of(trainer), trainer.url, "", &[managed.clone()], training.downloader.root(),
+        ).unwrap();
+
+        let restarted = Training::new(data.path(), "yue2");
+        assert!(!old.exists(), "a verified replacement retires the old runtime at startup");
+        assert!(restarted.pack_ready());
+        std::fs::create_dir_all(&old).unwrap();
+        restarted.install_pack().await.unwrap();
+        assert!(!old.exists(), "repeat install takes the local ready path and retires old files");
+        assert_eq!(std::fs::read(managed).unwrap(), b"current trainer");
+        assert_eq!(std::fs::read(checkpoint).unwrap(), b"resume from step 42");
+        for asset in pack().iter().filter(|asset| asset.kind == AssetKind::Model) {
+            assert_eq!(std::fs::read(restarted.downloader.path_of(asset)).unwrap(), b"existing weights");
+        }
     }
 
     #[tokio::test]
@@ -2176,6 +2310,7 @@ mod tests {
             name: "n".into(),
             trigger: "t".into(),
             recipe: Recipe::default(),
+            trainer: None,
             status: RunStatus::Running,
             stage: None,
             stages: Vec::new(),

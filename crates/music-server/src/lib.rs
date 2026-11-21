@@ -20,6 +20,8 @@ mod cover_art;
 mod cover_prompt;
 mod providers;
 mod openrouter_stream;
+mod native_music_runtime;
+mod native_runtime_archive;
 mod native_minimax;
 mod audio_cpp_heartmula;
 mod audio_cpp_magenta;
@@ -27,6 +29,8 @@ mod audio_cpp_midasheng;
 mod audio_cpp_minimax_h3;
 mod audio_cpp_mulacover;
 mod audio_cpp_music;
+mod audio_cpp_controlfoley;
+mod audio_cpp_sound_effects;
 mod hotstep_cover;
 mod hotstep_runtime;
 mod hotstep_heartmula;
@@ -174,6 +178,8 @@ struct AppState {
     own_backbone: Arc<RwLock<Option<String>>>,
     /// Downloads of community models (`community`) into `models/yue2-cpp/own`.
     community_downloads: Arc<downloads::Downloader>,
+    native_music_downloads: Arc<downloads::Downloader>,
+    native_music_setup: Arc<tokio::sync::Mutex<()>>,
     rvc_native_downloads: Arc<downloads::Downloader>,
     rvc_burn_downloads: Arc<downloads::Downloader>,
     rvc_quick: Arc<rvc_quick::Queue>,
@@ -370,6 +376,8 @@ struct CreateMusicJobRequest {
     vevo2: Option<audio_cpp_vevo2::Options>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     soulx: Option<audio_cpp_soulx::Options>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    controlfoley_video: Option<String>,
     /// The window's own mark for this request, handed back on the job so the
     /// window knows the job as its own before the response reaches it.
     client_ref: Option<String>,
@@ -1667,6 +1675,10 @@ pub async fn serve_on_port(port: u16) -> anyhow::Result<()> {
         rvc_burn_downloads: Arc::new(rvc_burn_install::downloader(
             settings_path.parent().expect("settings file has a data directory"),
         )),
+        native_music_setup: Arc::default(),
+        native_music_downloads: Arc::new(native_music_runtime::downloader(
+            settings_path.parent().expect("settings file has a data directory"),
+        )),
         rvc_native_downloads: Arc::new(rvc_fast_install::downloader(
             settings_path.parent().expect("settings file has a data directory"),
         )),
@@ -1791,6 +1803,7 @@ pub async fn serve_on_port(port: u16) -> anyhow::Result<()> {
         .route("/engine/restart", post(restart_local_engine))
         .route("/engine/pause", post(pause_local_engine))
         .route("/engine/resume", post(resume_local_engine))
+        .route("/v1/music/native/{engine}/runtime", get(native_music_runtime::status).post(native_music_runtime::start).delete(native_music_runtime::cancel))
         .route("/v1/music/native/minimaxmusic-cpp/profiles", get(minimax_music_profiles))
         .route("/v1/music/native/acestep-cpp/profiles", get(ace_music_profiles))
         .route("/v1/engine/logs", get(engine_logs))
@@ -2005,6 +2018,8 @@ pub async fn serve_on_port(port: u16) -> anyhow::Result<()> {
         .route("/v1/local-models/music", get(local_music_model_catalog))
         .route("/v1/music/jobs", post(create_music_job).get(list_active_music_jobs))
         .route("/v1/music/audio-cpp/models", get(audio_cpp_music::models))
+        .route("/v1/tools/controlfoley/model", get(audio_cpp_music::controlfoley_model))
+        .route("/v1/tools/sound-effects/model", get(audio_cpp_music::sound_effect_model))
         .route("/v1/music/audio-cpp/vevo2/model-directory", post(audio_cpp_vevo2::set_directory))
         .route("/v1/music/native/hotstep/profiles", get(hotstep_cover::profiles))
         .route("/v1/music/native/hotstep/install", post(hotstep_cover::install))
@@ -3546,6 +3561,8 @@ async fn read_training(State(state): State<AppState>) -> Json<Value> {
     Json(serde_json::json!({
         "pack": pack,
         "pack_ready": training.pack_ready() && !trainer_cublas_missing(&state),
+        "trainer_weights_ready": training.weights_ready() && !trainer_cublas_missing(&state),
+        "trainers": training.trainer_choices().await,
         "separator_ready": separator_ready,
         "recipe_defaults": training::Recipe::default(),
         "recipe_fields": music_engine::yue_train::recipe_fields(),
@@ -3963,13 +3980,15 @@ struct StartTraining {
     #[serde(default)]
     name: String,
     recipe: training::Recipe,
+    #[serde(default)]
+    trainer_id: Option<String>,
 }
 
 /// Starts a run. It wants the whole card: refused while a song renders, and
 /// the writing assistant is let go first.
 async fn start_training(State(state): State<AppState>, Json(input): Json<StartTraining>) -> Result<Json<training::Run>, (StatusCode, Json<ApiError>)> {
     card_free_for_training(&state).await.map_err(|reason| api_error(StatusCode::CONFLICT, reason))?;
-    start_training_run(&state, &input.dataset_id, &input.name, input.recipe)
+    start_training_run(&state, &input.dataset_id, &input.name, input.recipe, input.trainer_id.as_deref())
         .await
         .map(Json)
         .map_err(|error| api_error(StatusCode::CONFLICT, error))
@@ -3977,14 +3996,14 @@ async fn start_training(State(state): State<AppState>, Json(input): Json<StartTr
 
 /// A run of `dataset`, refused while a song renders or where the trainer
 /// could not compute on the card.
-async fn start_training_run(state: &AppState, dataset: &str, name: &str, recipe: training::Recipe) -> Result<training::Run, String> {
+async fn start_training_run(state: &AppState, dataset: &str, name: &str, recipe: training::Recipe, trainer_id: Option<&str>) -> Result<training::Run, String> {
     trainer_ready(state)?;
     let _exclusive = state.engine_use.try_write().map_err(|_| "the engine is in use; start training once it is idle".to_owned())?;
     no_song_rendering(state).await?;
     let models = set_engine_models(state).await?;
     state
         .training
-        .start(Some(engine_bundle_root()), models.backbone, models.companion, vocal_separator(state).await, dataset, name, recipe, card_hooks(state).await)
+        .start(Some(engine_bundle_root()), models.backbone, models.companion, vocal_separator(state).await, dataset, name, recipe, trainer_id, card_hooks(state).await)
         .await
         .map_err(|error| format!("{error:#}"))
 }
@@ -9906,7 +9925,7 @@ async fn store_video(Query(query): Query<VideoName>, body: axum::body::Bytes) ->
         number += 1;
     }
     tokio::fs::write(&path, &body).await.map_err(|error| api_error(StatusCode::INTERNAL_SERVER_ERROR, format!("write {}: {error}", path.display())))?;
-    Ok(Json(serde_json::json!({ "path": plain_path(&path) })))
+    Ok(Json(serde_json::json!({ "path": plain_path(&path), "name": path.file_name().and_then(|name| name.to_str()) })))
 }
 
 #[derive(Debug, Deserialize)]

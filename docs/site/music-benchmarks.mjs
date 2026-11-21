@@ -154,3 +154,12 @@ export const RADEON_TEXT = {
     'Windows, AMD Radeon Graphics(gfx1036, UMA). 같은 audio.cpp 리비전으로 각 백엔드에서 4단계로 4초를 생성했습니다. 첫 실행은 첫 번째 결과이고 재실행은 요청 세 건의 중앙값입니다. WDDM 전용 및 공유 메모리 피크는 1초 간격으로 측정했습니다.',
     ['백엔드', '첫 실행 (초)', '재실행 (초)', 'WDDM 전용 피크 (GiB)', 'WDDM 공유 피크 (GiB)']],
 };
+
+export const NATIVE_RADEON_NOTE = {
+  "en": "Same 12-second saved song and Radeon iGPU, four steps. Cold includes process startup. Warm is the median of three requests with weights resident. WDDM peaks are sampled per process on this adapter.",
+  "ja": "同じ Radeon 内蔵 GPU で、保存した同じ 12 秒の曲を 4 ステップで再生成。コールド値はプロセス起動を含み、ウォーム値は重みを保持した状態での 3 回の中央値です。WDDM のピークはこの GPU 上のプロセス単位の測定値です。",
+  "ru": "Одна сохранённая песня длиной 12 секунд, одна встроенная Radeon, четыре шага. Холодный замер включает запуск процесса. Прогретый — медиана трёх запросов с весами в памяти. Пики WDDM измерены для процесса на этой карте.",
+  "pt": "Mesma música salva de 12 s, mesma Radeon integrada, quatro passos. O tempo a frio inclui a inicialização do processo. O tempo a quente é a mediana de três pedidos com os pesos em memória. Os picos WDDM foram medidos por processo nesta GPU.",
+  "ko": "같은 Radeon 내장 GPU에서 저장된 12초 곡을 4단계로 다시 생성했습니다. 콜드 측정에는 프로세스 시작 시간이 포함됩니다. 웜 측정은 가중치를 메모리에 유지한 세 요청의 중앙값입니다. WDDM 최댓값은 이 GPU에서 해당 프로세스의 메모리를 측정한 값입니다.",
+  "zh": "同一首已保存的 12 秒歌曲，在同一块 Radeon 核显上运行四步。冷启动时间包括启动进程。热启动时间为权重常驻时三次请求的中位数。WDDM 峰值按该显卡上进程的内存用量采样。"
+};

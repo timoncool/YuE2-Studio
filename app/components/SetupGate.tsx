@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useImperativeHandle, useMemo, useRef, us
 import { openRouterSettingsChanged, SELF_READ } from '../services/studioQueries';
 import { Check, ChevronDown, Download, FolderDown, FolderOpen, Loader2, Play, Square, Trash2, X } from 'lucide-react';
 import { useI18n } from '../context/I18nContext';
+import { trainingAssetLabel } from '../i18n/trainingAssets';
 import { poll } from '../services/poll';
 import { DevicePicker, type Device } from './DevicePicker';
 import { ManualDownloads, ManualRuntimeArchive, type RuntimeArchive } from './ManualDownloads';
@@ -163,7 +164,7 @@ export const OptionalGroup: React.FC<{
   /** Why the page was sent here, shown on top when it was. */
   focusNote?: string;
 }> = ({ libraryRevision = 0, title, purpose, statusUrl, installUrl, removeUrl, engines, settingsUrl, serverField, cancelUrl, embedded, children, focused, focusNote }) => {
-  const { t } = useI18n();
+  const { t, language } = useI18n();
   const box = useRef<HTMLDivElement>(null);
   const [status, setStatus] = useState<OptionalStatus | null>(null);
   const [open, setOpen] = useState(Boolean(embedded || focused));
@@ -612,7 +613,7 @@ export const OptionalGroup: React.FC<{
             return (
               <div key={asset.id} className="rounded-lg border border-zinc-200 p-3 dark:border-white/10">
                 <div className="flex items-center justify-between gap-3">
-                  <span className="truncate text-sm text-zinc-800 dark:text-zinc-100">{asset.label}</span>
+                  <span className="truncate text-sm text-zinc-800 dark:text-zinc-100">{trainingAssetLabel(language, asset)}</span>
                   <div className="flex shrink-0 items-center gap-2">
                     <span className="text-xs tabular-nums text-zinc-500">{bytes(asset.bytes)}</span>
                     {asset.installed ? (
