@@ -86,6 +86,8 @@ pub struct TrainingInputs {
     pub audio: PathBuf,
     /// The training models folder, holding [`TRAINING_FILES`].
     pub models: PathBuf,
+    /// The selected ConvRot Safetensors, independent of the shared pack.
+    pub checkpoint: PathBuf,
     /// A YuE2 GGUF the studio already has, read for its text tokenizer.
     pub tokenizer: PathBuf,
     /// The decoder adapter every render merges, frozen under the LoRA so it
@@ -364,13 +366,13 @@ fn path(value: &Path) -> OsString {
 
 /// The training stage's arguments: the prepared songs of `run`, trained by
 /// `recipe` into `output`, which the trainer wants new.
-fn train_args(models: &Path, companion: &Path, run: &Path, recipe: &Recipe, output: &Path) -> Vec<OsString> {
+fn train_args(checkpoint: &Path, companion: &Path, run: &Path, recipe: &Recipe, output: &Path) -> Vec<OsString> {
     let arg = |text: &str| OsString::from(text);
     let text = |value: &dyn ToString| OsString::from(value.to_string());
     let mut train = vec![
         arg("yue2-joint-train"),
         arg("--checkpoint"),
-        path(&models.join(TRAINING_FILES[0].file)),
+        path(checkpoint),
         arg("--companion"),
         path(companion),
         arg("--dataset"),
@@ -433,8 +435,8 @@ fn train_args(models: &Path, companion: &Path, run: &Path, recipe: &Recipe, outp
 /// trainer picks up the optimizer, the song order and the step count from
 /// `resume` and writes the new checkpoints into `output`. The recipe must be
 /// the one the run started with; the trainer refuses any other.
-pub fn continuation_stage(models: &Path, companion: &Path, run: &Path, recipe: &Recipe, output: &Path, resume: &Path) -> TrainingStage {
-    let mut args = train_args(models, companion, run, recipe, output);
+pub fn continuation_stage(checkpoint: &Path, companion: &Path, run: &Path, recipe: &Recipe, output: &Path, resume: &Path) -> TrainingStage {
+    let mut args = train_args(checkpoint, companion, run, recipe, output);
     args.extend([OsString::from("--resume"), path(resume)]);
     TrainingStage { id: "train", args }
 }
@@ -492,13 +494,13 @@ pub fn training_stages(inputs: &TrainingInputs) -> Vec<TrainingStage> {
     let arg = |text: &str| OsString::from(text);
     let model = |name: &str, file: &str| OsString::from(format!("{name}={}", models.join(file).display()));
     let recipe = &inputs.recipe;
-    let train = train_args(models, &inputs.companion, &inputs.run, recipe, &inputs.run.join("output"));
+    let train = train_args(&inputs.checkpoint, &inputs.companion, &inputs.run, recipe, &inputs.run.join("output"));
     let mut prepare = vec![
         arg("yue2-prepare-aitk"),
         arg("--legacy-manifest"),
         path(&manifest),
         arg("--checkpoint"),
-        path(&models.join(TRAINING_FILES[0].file)),
+        path(&inputs.checkpoint),
         arg("--tokenizer"),
         path(&inputs.tokenizer),
         arg("--output"),
@@ -786,7 +788,7 @@ mod tests {
     #[test]
     fn a_continuation_trains_the_prepared_songs_into_a_new_output_from_the_state() {
         let recipe = Recipe { steps: 1400, target_kl: 0.0, ..Recipe::default() };
-        let stage = continuation_stage(Path::new("models"), Path::new("models/c.safetensors"), Path::new("run"), &recipe, Path::new("run/output-x"), Path::new("run/output/checkpoint-step1000/optimizer.resume"));
+        let stage = continuation_stage(Path::new("models/selected-base.safetensors"), Path::new("models/c.safetensors"), Path::new("run"), &recipe, Path::new("run/output-x"), Path::new("run/output/checkpoint-step1000/optimizer.resume"));
         let args: Vec<String> = stage.args.iter().map(|arg| arg.to_string_lossy().replace('\\', "/")).collect();
         let after = |flag: &str| args[args.iter().position(|arg| arg == flag).unwrap() + 1].clone();
         assert_eq!(stage.id, "train");
@@ -871,6 +873,7 @@ mod tests {
         let inputs = TrainingInputs {
             audio: "a".into(),
             models: "m".into(),
+            checkpoint: "alternate/selected.safetensors".into(),
             tokenizer: "t.gguf".into(),
             companion: "c.safetensors".into(),
             run: "r".into(),
@@ -884,6 +887,9 @@ mod tests {
         let args = |stage: &TrainingStage| -> Vec<String> { stage.args.iter().map(|arg| arg.to_string_lossy().into_owned()).collect() };
         assert!(args(&stages[0]).windows(2).any(|pair| pair == ["--loudness-lufs", "0"]));
         let train = args(&stages[4]);
+        for stage in &stages[3..] {
+            assert!(args(stage).windows(2).any(|pair| pair == ["--checkpoint", "alternate/selected.safetensors"]));
+        }
         for pair in [["--optimizer", "adamw-lm"], ["--lr", "1e-4"], ["--grad-accum", "4"], ["--warmup", "6"], ["--ar-targets", "base"], ["--cursor-weight", "0"], ["--lokr-dim", "128"], ["--nar-crop-frames", "1500"], ["--steps", "200"], ["--save-every", "20"], ["--companion", "c.safetensors"]] {
             assert!(train.windows(2).any(|window| window == pair), "{pair:?}");
         }
