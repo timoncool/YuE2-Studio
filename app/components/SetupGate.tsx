@@ -897,9 +897,10 @@ export const SetupGate: React.FC<{
     () => selectedComponentBytes(catalog?.components || [], chosenIds ?? chosenValues),
     [catalog, chosenIds, chosenValues],
   );
-  /// The set the studio would pick for this card, by name, so the sentence at
-  /// the top says the same thing as the list underneath.
-  const recommended = catalog?.profiles.find((profile) => profile.id === status?.recommended_profile_id);
+  const totalRamGb = status?.hardware?.totalRamGb;
+  const exceedsRam = (profile: Profile) => totalRamGb !== undefined && profile.ram_needed_gb > totalRamGb;
+  // The server keeps a default selection even when no set fits this machine.
+  const recommended = catalog?.profiles.find((profile) => profile.id === status?.recommended_profile_id && !exceedsRam(profile));
   const active = status?.active;
   const jobRunning = active?.status === 'downloading';
   const progress = active && active.total_bytes > 0 ? Math.min(100, (active.downloaded_bytes / active.total_bytes) * 100) : 0;
@@ -1045,15 +1046,11 @@ export const SetupGate: React.FC<{
         )}
 
         {mode === 'first-run' && <div className="mt-5 rounded-xl border border-pink-300/50 bg-pink-50 px-4 py-3 text-sm text-zinc-700 dark:border-pink-500/25 dark:bg-pink-500/10 dark:text-zinc-200">
-          <span className="font-semibold text-pink-600 dark:text-pink-400">{t('recommendedForMachine')}</span>{' '}
-          {/* The card, its memory, and the set that fits - named as the set is
-              named in the list below. The server's own sentence was English
-              prose in a Russian window, and it called the answer "Native
-              quality", which reads as the unquantised weights it is not. */}
-          {recommended
-            ? `${status?.hardware?.gpuName ?? ''}${status?.hardware?.totalVramGb ? `, ${status.hardware.totalVramGb.toFixed(1)} GB` : ''}${status?.hardware?.vulkan ? ` (${t('recommendedOnVulkan')})` : ''} — ${profileLabel(t, recommended)} · ${bytes(recommended.total_bytes)}`
-            : status?.hardware?.reason || t('recommendedFallback')}
-          . {t('setupResumable')}
+          {recommended && <>
+            <span className="font-semibold text-pink-600 dark:text-pink-400">{t('recommendedForMachine')}</span>{' '}
+            {`${status?.hardware?.gpuName ?? ''}${status?.hardware?.totalVramGb ? `, ${status.hardware.totalVramGb.toFixed(1)} GB` : ''}${status?.hardware?.vulkan ? ` (${t('recommendedOnVulkan')})` : ''} — ${profileLabel(t, recommended)} · ${bytes(recommended.total_bytes)}. `}
+          </>}
+          {t('setupResumable')}
           {status?.hardware?.onProcessor && <span className="mt-2 block text-amber-700 dark:text-amber-300">{t('songsOnProcessor')}</span>}
           {status?.hardware?.shortOfSmallestSet && (
             <span className="mt-2 block text-amber-700 dark:text-amber-300">
@@ -1117,7 +1114,7 @@ export const SetupGate: React.FC<{
                       >
                         <div className="flex flex-wrap items-center gap-2">
                           <span className="text-sm font-semibold text-zinc-900 dark:text-white">{profileLabel(t, profile)}</span>
-                          {profile.recommended && (
+                          {profile.recommended && !exceedsRam(profile) && (
                             <span className="rounded-full bg-pink-500/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-pink-600 dark:text-pink-300">
                               {t('recommendedBadge')}
                             </span>
@@ -1125,9 +1122,9 @@ export const SetupGate: React.FC<{
                           <span className="ml-auto shrink-0 text-xs tabular-nums text-zinc-500">{bytes(profile.total_bytes)}</span>
                         </div>
                         <p className="mt-1 text-[11px] leading-5 text-zinc-500 dark:text-zinc-400">{parts.join(' · ')}</p>
-                        {status?.hardware?.totalRamGb !== undefined && profile.ram_needed_gb > status.hardware.totalRamGb && (
+                        {totalRamGb !== undefined && exceedsRam(profile) && (
                           <p className="mt-1 text-[11px] font-medium text-amber-600 dark:text-amber-300">
-                            {t('ramShort').replace('{have}', status.hardware.totalRamGb.toFixed(0)).replace('{need}', String(Math.ceil(profile.ram_needed_gb)))}
+                            {t('ramShort').replace('{have}', totalRamGb.toFixed(0)).replace('{need}', String(Math.ceil(profile.ram_needed_gb)))}
                           </p>
                         )}
                         <div className="mt-1 flex items-center justify-between gap-2">

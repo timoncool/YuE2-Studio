@@ -85,7 +85,17 @@ function card(id: string, fields: CardFields): Song {
 
 /** The progress stream belongs to the local engine and carries no job IDs. */
 export function followsLocalProgress(entry: Song): boolean {
-  return Boolean(entry.isGenerating && entry.jobId && entry.ditModel !== 'openrouter' && entry.ditModel !== 'audio.cpp');
+  return Boolean(entry.isGenerating && entry.jobId && entry.ditModel === 'yue2-cpp' && !entry.jobId.startsWith('signed-'));
+}
+
+function withJobStatus(entry: Song, job: YueJob): Song {
+  const current = job.engine_id && entry.ditModel !== job.engine_id ? { ...entry, ditModel: job.engine_id } : entry;
+  if (followsLocalProgress(current)) return current;
+  if (job.status !== 'queued' && job.status !== 'running') return current;
+  const stage = job.status === 'queued' ? 'stageWaitingInQueue' : 'stageGeneratingTrack';
+  const detail = job.message?.trim() || undefined;
+  return current.stage === stage && current.stageDetail === detail && current.progress === undefined
+    ? current : { ...current, stage, stageDetail: detail, progress: undefined };
 }
 
 /** The tracks a job makes: its songs times the variations of each. */
@@ -209,7 +219,7 @@ export function useGenerations({ enabled, notify, onFinished }: GenerationOption
   // of several tracks gets a card for each, under the one the request began as.
   const follow = useCallback((cardId: string, job: YueJob) => {
     const rows = rowsFor(cardId, tracksOf(job));
-    setCards(prev => prev.flatMap(entry => (entry.id === cardId ? rows.map(id => ({ ...entry, id, jobId: job.id, ditModel: job.engine_id, createdAt: new Date(job.submitted_at) })) : [entry])));
+    setCards(prev => prev.flatMap(entry => (entry.id === cardId ? rows.map(id => withJobStatus({ ...entry, id, jobId: job.id, createdAt: new Date(job.submitted_at) }, job)) : [entry])));
     setRowsOfJob(prev => (prev.has(job.id) ? prev : new Map(prev).set(job.id, rows)));
   }, []);
 
@@ -339,13 +349,13 @@ export function useGenerations({ enabled, notify, onFinished }: GenerationOption
   });
 
   const reconcile = useEffectEvent((listed: YueJob[]) => {
-    const running = new Set(listed.map(job => job.id));
+    const running = new Map(listed.map(job => [job.id, job]));
     // an agent's jobs, and the ones sent before this window was opened
     const shown = new Set([...cards, ...leftEarly.current.values()].flatMap(entry => (entry.jobId ? [entry.id, entry.jobId] : [entry.id])));
     const fresh = listed.filter(job => !shown.has(job.id) && !(job.client_ref && shown.has(job.client_ref)) && !stopped.current.has(job.id));
     if (fresh.length > 0) {
       setCards(prev => [
-        ...fresh.flatMap(job => rowsFor(`restored_${job.id}`, tracksOf(job)).map(id => card(id, {
+        ...fresh.flatMap(job => rowsFor(`restored_${job.id}`, tracksOf(job)).map(id => withJobStatus(card(id, {
           title: job.title || t('generating'),
           style: job.style,
           lyrics: job.lyrics,
@@ -353,7 +363,7 @@ export function useGenerations({ enabled, notify, onFinished }: GenerationOption
           engineId: job.engine_id,
           createdAt: new Date(job.submitted_at),
           playlistId: job.playlist_id,
-        }))),
+        }), job))),
         ...prev,
       ]);
       setRowsOfJob(prev => {
@@ -362,10 +372,15 @@ export function useGenerations({ enabled, notify, onFinished }: GenerationOption
         return next;
       });
     }
-    const short = new Set(listed.filter(job => job.card_memory_short).map(job => job.id));
-    if (cards.some(entry => entry.jobId && short.has(entry.jobId) && !entry.memoryShort)) {
-      setCards(prev => prev.map(entry => (entry.jobId && short.has(entry.jobId) && !entry.memoryShort ? { ...entry, memoryShort: true } : entry)));
-    }
+    setCards(prev => {
+      const next = prev.map(entry => {
+        const job = entry.isGenerating && entry.jobId ? running.get(entry.jobId) : undefined;
+        if (!job) return entry;
+        const current = withJobStatus(entry, job);
+        return job.card_memory_short && !current.memoryShort ? { ...current, memoryShort: true } : current;
+      });
+      return next.some((entry, index) => entry !== prev[index]) ? next : prev;
+    });
     // a job that left the list finished, failed or was stopped elsewhere
     for (const entry of [...waiting, ...leftEarly.current.values()]) {
       if (entry.jobId && entry.isGenerating && !running.has(entry.jobId)) void settle(entry);
@@ -406,7 +421,7 @@ export function useGenerations({ enabled, notify, onFinished }: GenerationOption
     try {
       const job = await stopJob(jobId);
       if (job.status !== 'cancelled') {
-        if (job.engine_id === 'audio.cpp' && job.message) notify(job.message, 'info');
+        setCards(prev => prev.map(entry => entry.isGenerating && entry.jobId === jobId ? withJobStatus(entry, job) : entry));
         void queryClient.invalidateQueries({ queryKey: activeJobsKey });
         return;
       }
@@ -422,7 +437,7 @@ export function useGenerations({ enabled, notify, onFinished }: GenerationOption
         if (entry.jobId !== jobId) return [entry];
         if (marked) return [];
         marked = true;
-        return [{ ...entry, isGenerating: false, stage: 'cancelled' }];
+        return [{ ...entry, isGenerating: false, stage: 'cancelled', stageDetail: undefined, progress: undefined }];
       });
     });
   }, [notify]);
@@ -432,7 +447,7 @@ export function useGenerations({ enabled, notify, onFinished }: GenerationOption
     const source = request.music_source;
     const engineId = source?.kind === 'audio_cpp' ? 'audio.cpp'
       : source?.kind === 'openrouter' ? 'openrouter'
-      : source?.kind === 'native' ? source.engine : undefined;
+      : source?.kind === 'native' || source?.kind === 'signed' ? source.engine : 'yue2-cpp';
     setCards(prev => [card(id, { title: request.title?.trim() || t('generating'), style: request.style, lyrics: request.lyrics, playlistId: request.playlist_id, engineId }), ...prev]);
     try {
       const response = await fetch('/v1/music/jobs', {
