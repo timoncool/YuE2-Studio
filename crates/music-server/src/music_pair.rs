@@ -300,7 +300,10 @@ async fn check_files(state: &AppState, source: &MusicSource) -> anyhow::Result<P
                     anyhow::bail!("{reason}");
                 }
                 if !status.installed {
-                    return missing(Some(status.missing_bytes), "Install the YuE2 HIP component in Engine Settings.".into());
+                    return missing(
+                        Some(status.missing_bytes),
+                        "Install the YuE2 HIP component in Engine Settings.".into(),
+                    );
                 }
                 return Ok(Preparation::YuE2);
             }
@@ -337,7 +340,9 @@ async fn check_files(state: &AppState, source: &MusicSource) -> anyhow::Result<P
             );
         }
         MusicSource::Native { engine, model } if engine == ace::ENGINE_ID => {
-            let install = ace::installation(root);
+            let (install, _) =
+                ace::resolve_installation(root, None, engine_catalogue::install::Probe::Sha256)
+                    .await?;
             let profile = install
                 .profiles()
                 .into_iter()
@@ -355,7 +360,12 @@ async fn check_files(state: &AppState, source: &MusicSource) -> anyhow::Result<P
             return Ok(Preparation::Ace(install.launch(model)?));
         }
         MusicSource::Native { engine, model } if engine == native_minimax::ENGINE_ID => {
-            let install = native_minimax::Runtime::installation(root);
+            let (install, _) = native_minimax::Runtime::resolve_installation(
+                root,
+                None,
+                engine_catalogue::install::Probe::Presence,
+            )
+            .await?;
             let profile = install
                 .profiles()
                 .into_iter()

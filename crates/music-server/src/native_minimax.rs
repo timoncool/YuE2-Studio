@@ -699,12 +699,49 @@ impl Runtime {
         Installation::discover(data_root)
     }
 
+    pub(crate) async fn resolve_installation(
+        data_root: &Path,
+        replay: Option<&Value>,
+        probe: crate::engine_catalogue::install::Probe,
+    ) -> Result<(
+        Installation,
+        Option<crate::engine_catalogue::install::NativeIdentity>,
+    )> {
+        let mut install = Self::installation(data_root);
+        let explicit = override_path("YUE_MINIMAX_MM_SERVER_BIN", "MINIMAX_MM_SERVER_BIN")
+            .is_some()
+            || env::var_os("MINIMAX_MM_SERVER_ROOT").is_some();
+        let signed = crate::engine_catalogue::install::resolve_native(
+            data_root, ENGINE_ID, explicit, replay, probe,
+        )
+        .await?;
+        let identity = signed.map(|(executable, identity)| {
+            install.executable = Some(executable);
+            identity
+        });
+        Ok((install, identity))
+    }
+
     pub(crate) async fn start(&self, profile_id: &str, data_root: &Path) -> Result<Client> {
+        let (install, _) = Self::resolve_installation(
+            data_root,
+            None,
+            crate::engine_catalogue::install::Probe::Sha256,
+        )
+        .await?;
+        self.start_selected(profile_id, data_root, install).await
+    }
+
+    pub(crate) async fn start_selected(
+        &self,
+        profile_id: &str,
+        data_root: &Path,
+        install: Installation,
+    ) -> Result<Client> {
         let profile = PROFILES
             .iter()
             .find(|profile| profile.id == profile_id)
             .with_context(|| format!("unknown MiniMax profile {profile_id}"))?;
-        let install = Self::installation(data_root);
         let launch = install.for_profile(profile)?;
 
         let mut running = self.running.lock().await;
@@ -881,10 +918,14 @@ impl Installation {
         let executable = override_path("YUE_MINIMAX_MM_SERVER_BIN", "MINIMAX_MM_SERVER_BIN")
             .or_else(|| match &bundle {
                 Some(dir) => Some(dir.join(name)),
-                None => crate::native_music_runtime::installed(data_root, ENGINE_ID).or_else(|| binaries
-                    .into_iter()
-                    .map(|dir| dir.join(name))
-                    .find(|file| file.is_file())),
+                None => {
+                    crate::native_music_runtime::installed(data_root, ENGINE_ID).or_else(|| {
+                        binaries
+                            .into_iter()
+                            .map(|dir| dir.join(name))
+                            .find(|file| file.is_file())
+                    })
+                }
             });
         let roots = override_path("YUE_MINIMAX_MODELS_ROOT", "MINIMAX_MUSIC_MODELS_ROOT")
             .map(|root| vec![root])

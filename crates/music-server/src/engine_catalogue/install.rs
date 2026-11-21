@@ -423,6 +423,16 @@ async fn resolve_package<P: Package>(
     generation: Option<&str>,
     probe: Probe,
 ) -> Result<(P, PathBuf, String)> {
+    let (package, files, generation) = read_package::<P>(data_root, id, generation).await?;
+    verify_package_files(&package, &files, probe).await?;
+    Ok((package, files, generation))
+}
+
+async fn read_package<P: Package>(
+    data_root: &Path,
+    id: &str,
+    generation: Option<&str>,
+) -> Result<(P, PathBuf, String)> {
     ensure!(portable_name(id), "invalid engine id");
     let root = data_root.join(P::FOLDER).join(id);
     let selected = match generation {
@@ -439,8 +449,12 @@ async fn resolve_package<P: Package>(
     // Resolve the actual files from the signed catalogue. Editable local
     // manifest fields must never decide which binary runs for a saved song.
     let files = dir.join("files");
+    Ok((package, files, selected))
+}
+
+async fn verify_package_files<P: Package>(package: &P, files: &Path, probe: Probe) -> Result<()> {
     ensure!(
-        only_signed_files(&files, &package).await?,
+        only_signed_files(files, package).await?,
         "engine directory contains missing or undeclared files"
     );
     for item in package.files() {
@@ -457,7 +471,7 @@ async fn resolve_package<P: Package>(
             item.name
         );
     }
-    Ok((package, files, selected))
+    Ok(())
 }
 
 pub(crate) async fn require_pair_presence(
@@ -480,7 +494,113 @@ pub(crate) async fn resolve_generation(
     inspect_engine(data_root, id, generation, Probe::Sha256).await
 }
 
+#[derive(Deserialize, Serialize)]
+pub(crate) struct NativeIdentity {
+    engine: String,
+    generation: String,
+    version: String,
+}
+
+pub(crate) async fn resolve_native(
+    data_root: &Path,
+    id: &str,
+    explicit_override: bool,
+    replay: Option<&serde_json::Value>,
+    probe: Probe,
+) -> Result<Option<(PathBuf, NativeIdentity)>> {
+    let saved: Option<NativeIdentity> = replay
+        .filter(|value| !value.is_null())
+        .map(|value| serde_json::from_value(value.clone()))
+        .transpose()
+        .context("Invalid saved native runtime identity")?;
+    // Old native songs have no signed identity and replay with the legacy resolver.
+    if saved.is_none() && (explicit_override || replay.is_some()) {
+        return Ok(None);
+    }
+    ensure!(
+        matches!(id, crate::ace::ENGINE_ID | crate::native_minimax::ENGINE_ID),
+        "unknown first-party native runtime"
+    );
+    let selection = match &saved {
+        Some(saved) => {
+            ensure!(
+                saved.engine == id,
+                "saved native runtime belongs to another engine"
+            );
+            saved.generation.clone()
+        }
+        None => {
+            let selection = read_selection(&data_root.join(EnginePackage::FOLDER).join(id))?;
+            if selection.active.is_empty() {
+                return Ok(None);
+            }
+            selection.active
+        }
+    };
+    let (package, files, generation) =
+        read_package::<EnginePackage>(data_root, id, Some(&selection))
+            .await
+            .context("Verify native music runtime package")?;
+    let Some(native) = package.compatible_native() else {
+        ensure!(
+            saved.is_none(),
+            "saved package has no compatible native runtime"
+        );
+        return Ok(None);
+    };
+    if let Some(saved) = saved {
+        ensure!(
+            saved.version == package.version,
+            "saved native runtime version does not match the signed package"
+        );
+    }
+    verify_package_files(&package, &files, probe).await?;
+    Ok(Some((
+        files.join(&native.executable),
+        NativeIdentity {
+            engine: id.into(),
+            generation,
+            version: package.version,
+        },
+    )))
+}
+
 pub(crate) const YUE2_TRAINER_PROTOCOL: &str = "yue2-train-v1";
+
+#[cfg(test)]
+#[tokio::test]
+async fn native_resolution_keeps_legacy_replay_and_overrides_separate_from_signed_replay() {
+    use serde_json::json;
+    let root = tempfile::tempdir().unwrap();
+    for engine in [crate::ace::ENGINE_ID, crate::native_minimax::ENGINE_ID] {
+        let saved = json!({"engine":engine,"generation":"generation-retained","version":"1"});
+        let resolve =
+            |explicit, replay| resolve_native(root.path(), engine, explicit, replay, Probe::Sha256);
+        assert!(resolve(false, None).await.unwrap().is_none());
+        let directory = root.path().join(EnginePackage::FOLDER).join(engine);
+        std::fs::create_dir_all(&directory).unwrap();
+        std::fs::write(
+            directory.join("active.json"),
+            r#"{"active":"generation-current","previous":"generation-retained"}"#,
+        )
+        .unwrap();
+        assert!(resolve(true, None).await.unwrap().is_none());
+        assert!(
+            resolve(false, Some(&serde_json::Value::Null))
+                .await
+                .unwrap()
+                .is_none()
+        );
+        assert!(
+            resolve(true, Some(&saved)).await.is_err(),
+            "a missing signed replay generation must not use the external executable"
+        );
+        assert!(
+            resolve(false, None).await.is_err(),
+            "an installed selection without proof must fail verification"
+        );
+    }
+}
 
 pub(super) fn supported_protocol(protocol: &str) -> bool {
     matches!(protocol, "music-http-v1" | YUE2_TRAINER_PROTOCOL)

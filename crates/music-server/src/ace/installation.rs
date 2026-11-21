@@ -94,12 +94,13 @@ pub struct InstalledProfile {
 
 pub struct Installation {
     executable: Option<PathBuf>,
+    signed_runtime: bool,
     model_roots: Vec<PathBuf>,
     legacy_adapters: Vec<(PathBuf, PathBuf)>,
     data_root: PathBuf,
 }
 
-pub fn installation(data_root: &Path) -> Installation {
+fn installation(data_root: &Path) -> Installation {
     let neighbors = studio_hub_client::neighbors::others(data_root);
     installation_from(
         data_root,
@@ -109,6 +110,29 @@ pub fn installation(data_root: &Path) -> Installation {
         std::env::var_os("ACE_MODELS_ROOT").map(PathBuf::from),
         &neighbors,
     )
+}
+
+pub(crate) async fn resolve_installation(
+    data_root: &Path,
+    replay: Option<&serde_json::Value>,
+    probe: crate::engine_catalogue::install::Probe,
+) -> Result<(
+    Installation,
+    Option<crate::engine_catalogue::install::NativeIdentity>,
+)> {
+    let mut install = installation(data_root);
+    let explicit = std::env::var_os("ACE_ENGINE_BIN").is_some()
+        || std::env::var_os("ACE_ENGINE_ROOT").is_some();
+    let signed = crate::engine_catalogue::install::resolve_native(
+        data_root, ENGINE_ID, explicit, replay, probe,
+    )
+    .await?;
+    let identity = signed.map(|(executable, identity)| {
+        install.executable = Some(executable);
+        install.signed_runtime = true;
+        identity
+    });
+    Ok((install, identity))
 }
 
 fn installation_from(
@@ -153,6 +177,7 @@ fn installation_from(
     };
     Installation {
         executable,
+        signed_runtime: false,
         model_roots,
         legacy_adapters,
         data_root: data_root.into(),
@@ -216,7 +241,11 @@ impl Installation {
 
     pub fn adapter_runtime_update(&self) -> bool {
         self.executable.as_deref().is_some_and(|executable| {
-            crate::native_music_runtime::requires_adapter_update(&self.data_root, ENGINE_ID, executable)
+            crate::native_music_runtime::requires_adapter_update(
+                &self.data_root,
+                ENGINE_ID,
+                executable,
+            )
         })
     }
 
@@ -380,12 +409,19 @@ impl Installation {
         let (source, _) = self.profile_root(profile);
         let adapters_root = self.adapter_root(source, replay)?;
         let models_root = profile.prepare_directory(source)?;
-        let managed = crate::native_music_runtime::installed(&self.data_root, ENGINE_ID)
+        let managed = self.signed_runtime || crate::native_music_runtime::installed(&self.data_root, ENGINE_ID)
             .is_some_and(|path| path == *executable);
         let mut device = std::env::var("ACE_DEVICE").ok().filter(|value| !value.trim().is_empty());
         let mut cuda_backend = std::env::var_os("ACE_CUDA_BACKEND").map(PathBuf::from);
         if managed && cuda_backend.is_none() && device.as_deref().is_none_or(|label| label.starts_with("CUDA")) {
-            cuda_backend = crate::native_music_runtime::cuda_backend(executable);
+            cuda_backend = crate::native_music_runtime::cuda_backend(executable).or_else(|| {
+                if !self.signed_runtime || crate::native_music_runtime::cuda_build().is_none() {
+                    return None;
+                }
+                let library = if cfg!(windows) { "ggml-cuda.dll" } else { "libggml-cuda.so" };
+                let path = executable.parent()?.join(library);
+                path.is_file().then_some(path)
+            });
             if cuda_backend.is_some() && device.is_none() {
                 device = Some("CUDA0".into());
             }

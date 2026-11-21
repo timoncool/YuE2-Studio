@@ -8042,33 +8042,70 @@ fn is_portable_installation() -> bool {
 }
 
 async fn ace_music_profiles() -> Result<Json<Value>, (StatusCode, Json<ApiError>)> {
-    native_profile_catalog(|root| {
-        let installed = ace::installation(root);
+    let root = native_profile_root()?;
+    let (installed, signed) =
+        ace::resolve_installation(&root, None, engine_catalogue::install::Probe::Presence)
+            .await
+            .map_err(training_error)?;
+    native_profile_catalog(move || {
         serde_json::json!({
             "engine": ace::ENGINE_ID,
             "engine_installed": installed.engine_installed(),
             "adapter_runtime_update": installed.adapter_runtime_update(),
-            "selected_executable": native_music_runtime::selected_executable(root, ace::ENGINE_ID, installed.executable()),
+            "selected_executable": native_executable_profile(&root, ace::ENGINE_ID, installed.executable(), signed),
             "profiles": installed.profiles(),
         })
     }).await
 }
 
 async fn minimax_music_profiles() -> Result<Json<Value>, (StatusCode, Json<ApiError>)> {
-    native_profile_catalog(|root| {
-        let installed = native_minimax::Runtime::installation(root);
+    let root = native_profile_root()?;
+    let (installed, signed) = native_minimax::Runtime::resolve_installation(
+        &root,
+        None,
+        engine_catalogue::install::Probe::Presence,
+    )
+    .await
+    .map_err(training_error)?;
+    native_profile_catalog(move || {
         serde_json::json!({
             "engine": native_minimax::ENGINE_ID,
             "engine_installed": installed.engine_installed(),
-            "selected_executable": native_music_runtime::selected_executable(root, native_minimax::ENGINE_ID, installed.executable()),
+            "selected_executable": native_executable_profile(&root, native_minimax::ENGINE_ID, installed.executable(), signed),
             "profiles": installed.profiles(),
         })
     }).await
 }
 
-async fn native_profile_catalog(read: fn(&std::path::Path) -> Value) -> Result<Json<Value>, (StatusCode, Json<ApiError>)> {
-    let root = studio_data_root().ok_or_else(|| api_error(StatusCode::SERVICE_UNAVAILABLE, "Studio data folder is unavailable".into()))?;
-    let catalog = tokio::task::spawn_blocking(move || read(&root)).await.map_err(|error| api_error(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?;
+fn native_profile_root() -> Result<PathBuf, (StatusCode, Json<ApiError>)> {
+    studio_data_root().ok_or_else(|| {
+        api_error(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "Studio data folder is unavailable".into(),
+        )
+    })
+}
+
+fn native_executable_profile(
+    root: &std::path::Path,
+    engine: &str,
+    executable: Option<&std::path::Path>,
+    signed: Option<engine_catalogue::install::NativeIdentity>,
+) -> Option<Value> {
+    if let Some(signed) = signed {
+        return Some(
+            serde_json::json!({"source": "signed", "path": executable?, "package": signed}),
+        );
+    }
+    native_music_runtime::selected_executable(root, engine, executable)
+}
+
+async fn native_profile_catalog(
+    read: impl FnOnce() -> Value + Send + 'static,
+) -> Result<Json<Value>, (StatusCode, Json<ApiError>)> {
+    let catalog = tokio::task::spawn_blocking(read)
+        .await
+        .map_err(|error| api_error(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?;
     Ok(Json(catalog))
 }
 
