@@ -403,6 +403,7 @@ Windows 11, RTX 4090, driver 617.42. Cold includes server launch and the first W
 | YuE2 · yue2.cpp `892b9b0` · 3B Q8_0 + F32 VAE; NAR v9 · 30 s · 32 steps | CUDA 13 | 29.999 | 8.813 | 4.759 | 6.30× | 8.13 / +5.75 | 3.37 |
 | YuE2 · yue2.cpp `892b9b0` · 3B Q8_0 + F32 VAE; NAR v9 · 30 s · 32 steps | Vulkan | 29.999 | 16.609 | 5.861 | 5.12× | 8.19 / +5.81 | 3.08 |
 | YuE2 · audio.cpp `41242418` · 3B Q8_0 + F16 VAE; NAR v9 · 30 s · 32 steps | CUDA 13 | 29.999 | 16.807 | 7.441 | 4.03× | 7.02 / +4.68 | 6.24 |
+| YuE2 · audio.cpp `41242418` · 3B Q8_0 + F16 VAE; NAR v9 · 30 s · 32 steps | Vulkan | 29.999 | 28.258 | 10.286 | 2.92× | 6.44 / +4.51 | 6.85 |
 | YuE2 · yue2.cpp `892b9b0` · 3B Q8_0 + F32 VAE; NAR v9 · 100 tokens · 2 steps | CUDA 13 | 3.999 | 6.516 | 0.172 | 23.20× | 6.88 / +4.51 | 3.40 |
 | YuE2 · audio.cpp `41242418` · 3B Q8_0 + F16 VAE; NAR v9 · 100 tokens · 2 steps | CUDA 13 | 3.999 | 7.482 | 0.383 | 10.44× | 6.28 / +3.92 | 5.84 |
 | YuE2 · yue2.cpp `892b9b0` · 3B Q8_0 + F32 VAE; NAR v9 · 100 tokens · 2 steps | CUDA 12 | 3.999 | 4.969 | 0.125 | 31.95× | 6.88 / +4.50 | 3.45 |
@@ -414,7 +415,9 @@ Windows 11, RTX 4090, driver 617.42. Cold includes server launch and the first W
 | ACE-Step 1.5 · audio.cpp `41242418` · Turbo Q8_0, packed GGUF · 30 s · 8 Euler steps | CUDA 13 | 30.000 | 10.512 | 1.387 | 21.62× | 10.43 / +8.49 | 2.58 |
 | ACE-Step 1.5 · audio.cpp `41242418` · Turbo Q8_0, packed GGUF · 30 s · 8 Euler steps | Vulkan | 30.000 | 21.746 | 2.237 | 13.41× | 10.23 / +8.30 | 4.60 |
 | MiniMax Music3 · minimaxmusic.cpp `f476b0e` · Minimal Q3_K_M / Q4_K_M + F32 · 3.2 s · 2 steps | CUDA 13 | 3.193 | 7.312 | 1.257 | 2.54× | 9.32 / +7.38 | 4.56 |
+| MiniMax Music3 · minimaxmusic.cpp `f476b0e` · Quality Q8_0 + F32 vocoder · 3.2 s · 2 steps | CUDA 13 | 3.193 | 9.156 | 1.852 | 1.72× | 15.18 / +13.23 | 8.91 |
 | MiniMax Music3 · minimaxmusic.cpp `f476b0e` · Minimal Q3_K_M / Q4_K_M + F32 · 3.2 s · 2 steps | Vulkan | 3.193 | 7.343 | 1.987 | 1.61× | 8.96 / +7.03 | 4.33 |
+| MiniMax Music3 · minimaxmusic.cpp `f476b0e` · Quality Q8_0 + F32 vocoder · 3.2 s · 2 steps | Vulkan | 3.193 | 16.047 | 2.295 | 1.39× | 14.94 / +13.00 | 8.35 |
 | MiniMax Music3 · audio.cpp `41242418` · LM/depth/DiT Q8_0 · 3.2 s · 2 steps | CUDA 13 | 3.193 | 14.604 | 8.720 | 0.37× | 10.97 / +9.04 | 8.87 |
 | MiniMax Music3 · audio.cpp `41242418` · LM/depth/DiT Q8_0 · 3.2 s · 2 steps | Vulkan | 3.193 | 17.621 | 10.478 | 0.30× | 10.65 / +8.72 | 8.66 |
 | Stable Audio 3 · HOT-Step `cdef1b0d67af` · Medium BF16/F16 · 4 s · 4 steps | CUDA 12.8 | 4.000 | 6.737 | 0.254 | 15.72× | 9.30 / +7.37 | 2.82 |
