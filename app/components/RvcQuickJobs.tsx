@@ -3,7 +3,7 @@ import { useI18n } from '../context/I18nContext';
 import { rvcQuickStrings } from '../i18n/rvcQuick';
 import { libraryChanged } from '../services/studioQueries';
 import { poll } from '../services/poll';
-import { readRvcBackend, RVC_QUICK_EVENT } from '../services/rvcQuick';
+import { readRvcBackend, restoreLastRvcVoice, RVC_QUICK_EVENT } from '../services/rvcQuick';
 import { responseJson } from '../services/rvcVoices';
 
 type Stage = 'queued' | 'separating' | 'converting' | 'completed' | 'cancelled' | 'failed';
@@ -27,6 +27,7 @@ export function RvcQuickJobs({ songs }: { songs: { id: string; title: string }[]
 
   useEffect(() => {
     const controller = new AbortController();
+    void restoreLastRvcVoice(controller.signal);
     const knownTakes = new Set<string>();
     const stop = poll(async () => {
       try {
