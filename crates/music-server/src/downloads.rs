@@ -183,6 +183,9 @@ impl Downloader {
             return true;
         }
         let record = self.record_of(asset);
+        if crate::engine_runtime::is_shared_windows_cublas(asset) {
+            return self.is_verified_install(asset) || self.holds_pinned_bytes(asset, &record);
+        }
         match crate::install_record::matches(&record, asset.url, &self.root) {
             Some(true) => true,
             Some(false) => self.holds_pinned_bytes(asset, &record),
@@ -215,6 +218,10 @@ impl Downloader {
                 let path = destination.join(name);
                 if !crate::pin_sha::holds(&path, sha) { return false; }
                 files.push(path);
+            }
+            if crate::engine_runtime::is_shared_windows_cublas(asset) {
+                // Keep the archive identity after verifying all of its pinned members.
+                file_sha256 = crate::pin_sha::sha256(asset.url).unwrap_or_default();
             }
             files
         } else if !asset.pick.is_empty() {
@@ -1869,6 +1876,28 @@ mod tests {
         crate::install_record::write(&downloader.record_of(&runtime), runtime.url, "", &[program], &root).unwrap();
         assert!(downloader.is_installed(&runtime));
         fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn legacy_cublas_receipt_cannot_adopt_unverified_dlls_by_size() {
+        for build in [crate::hardware::CudaBuild::Cuda12, crate::hardware::CudaBuild::Cuda13] {
+            let asset = crate::engine_runtime::cublas_asset(build);
+            let root = tempfile::tempdir().unwrap();
+            let downloader = Downloader::new(root.path().to_path_buf());
+            let files: Vec<_> = crate::pin_sha::runtime_libraries(asset.url)
+                .iter()
+                .map(|(name, _)| {
+                    let path = root.path().join(name);
+                    std::fs::write(&path, b"not the pinned DLL").unwrap();
+                    path
+                })
+                .collect();
+            assert_eq!(files.len(), 2);
+            let record = downloader.record_of(asset);
+            crate::install_record::write(&record, asset.url, "", &files, root.path()).unwrap();
+            assert_eq!(crate::install_record::matches(&record, asset.url, root.path()), Some(true));
+            assert!(!downloader.is_installed(asset));
+        }
     }
 
     #[test]

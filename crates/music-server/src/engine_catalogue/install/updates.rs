@@ -53,6 +53,7 @@ async fn pending<P: Package>(
     for file in candidate.files() {
         if !old.files().iter().any(|previous| {
             previous.name == file.name
+                && previous.cuda_variant == file.cuda_variant
                 && previous.sha256 == file.sha256
                 && previous.bytes == file.bytes
         }) {
@@ -107,7 +108,7 @@ async fn plan(root: &Path) -> Result<Plan> {
     let engines: Vec<_> = catalogue
         .engines
         .iter()
-        .filter(|engine| engine.platform == platform && super::supported_protocol(&engine.protocol))
+        .filter(|engine| engine.platform == platform && engine.installable())
         .collect();
     for engine in &engines {
         updates.inspect(root, *engine, |p| &p.version).await;

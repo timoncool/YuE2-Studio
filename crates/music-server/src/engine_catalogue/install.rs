@@ -111,25 +111,38 @@ async fn only_signed_files(directory: &Path, package: &impl Package) -> Result<b
     if !tokio::fs::symlink_metadata(directory).await?.is_dir() {
         return Ok(false);
     }
-    let expected: std::collections::HashSet<_> = package
-        .files()
-        .iter()
-        .map(|file| file.name.as_str())
-        .collect();
-    let mut entries = tokio::fs::read_dir(directory).await?;
-    let mut count = 0;
-    while let Some(entry) = entries.next_entry().await? {
-        if !entry.file_type().await?.is_file()
-            || !entry
-                .file_name()
-                .to_str()
-                .is_some_and(|name| expected.contains(name))
-        {
-            return Ok(false);
+    let mut expected = std::collections::HashMap::new();
+    for file in package.files() {
+        let path = file.relative_path();
+        if let Some(variant) = file.cuda_variant {
+            expected.insert(PathBuf::from(variant.folder()), true);
         }
-        count += 1;
+        expected.insert(path, false);
     }
-    Ok(count == expected.len())
+    let mut dirs = vec![PathBuf::new()];
+    while let Some(relative) = dirs.pop() {
+        let mut entries = tokio::fs::read_dir(directory.join(&relative)).await?;
+        while let Some(entry) = entries.next_entry().await? {
+            let path = relative.join(entry.file_name());
+            let kind = entry.file_type().await?;
+            match expected.remove(&path) {
+                Some(true) if kind.is_dir() => {
+                    #[cfg(windows)]
+                    {
+                        use std::os::windows::fs::MetadataExt;
+                        const FILE_ATTRIBUTE_REPARSE_POINT: u32 = 0x400;
+                        if entry.metadata().await?.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0 {
+                            return Ok(false);
+                        }
+                    }
+                    dirs.push(path);
+                }
+                Some(false) if kind.is_file() => {}
+                _ => return Ok(false),
+            }
+        }
+    }
+    Ok(expected.is_empty())
 }
 async fn download(
     file: &PackageFile,
@@ -261,6 +274,35 @@ async fn install<P: Package>(
         .context("package size overflow")?;
     let (job, mut cancelled) =
         super::progress::Installation::begin(P::FOLDER, package.id(), total)?;
+    if cfg!(windows)
+        && package.files().iter().any(|file| file.cuda_variant.is_some())
+        && let Some(cuda) = crate::native_music_runtime::cuda_build()
+    {
+        let downloader = state.engine_runtime.downloader();
+        let missing: Vec<_> = crate::engine_runtime::cuda_assets(cuda)
+            .into_iter()
+            .filter(|asset| !downloader.is_installed(asset))
+            .collect();
+        if !missing.is_empty() {
+            job.transfer.stage("downloading", Some("CUDA runtime"));
+            let scope = format!("signed-native-{}", package.id());
+            let dependency_signal = cancelled.clone();
+            let dependency_cancelled = || *dependency_signal.borrow();
+            let dependencies = downloader.install_all_with_cancel(
+                &scope, &missing, Some(&dependency_cancelled)
+            );
+            tokio::pin!(dependencies);
+            tokio::select! {
+                biased;
+                _ = cancelled.changed() => {
+                    downloader.cancel_for(&scope).await;
+                    let _ = dependencies.await;
+                    anyhow::bail!("Package installation cancelled");
+                }
+                result = &mut dependencies => result.context("Install shared CUDA runtime")?,
+            }
+        }
+    }
     tokio::select! {
         biased;
         _ = cancelled.changed() => anyhow::bail!("Package installation cancelled"),
@@ -311,13 +353,17 @@ async fn stage_package<P: Package>(
     );
     let directory = stage.path().join("files");
     tokio::fs::create_dir(&directory).await?;
+    for variant in package.files().iter().filter_map(|file| file.cuda_variant) {
+        tokio::fs::create_dir(directory.join(variant.folder())).await?;
+    }
     let client = net::download_client();
     let mut downloaded = 0u64;
     let mut reused = 0u64;
     for file in package.files() {
         transfer.stage("verifying", Some(&file.name));
-        let to = directory.join(&file.name);
-        let from = prior.join("files").join(&file.name);
+        let path = file.relative_path();
+        let to = directory.join(&path);
+        let from = prior.join("files").join(path);
         if !selected.active.is_empty() && verified(from.clone(), file).await? {
             if Some(file.name.as_str()) == package.executable()
                 || tokio::fs::hard_link(&from, &to).await.is_err()
@@ -488,7 +534,7 @@ async fn verify_package_files<P: Package>(package: &P, files: &Path, probe: Prob
         "engine directory contains missing or undeclared files"
     );
     for item in package.files() {
-        let path = files.join(&item.name);
+        let path = files.join(item.relative_path());
         let valid = match probe {
             Probe::Sha256 => verified(path, item).await?,
             Probe::Presence => tokio::fs::symlink_metadata(path)
@@ -599,6 +645,51 @@ pub(crate) const YUE2_TRAINER_PROTOCOL: &str = "yue2-train-v1";
 
 #[cfg(test)]
 #[tokio::test]
+async fn signed_native_universal_layout_verifies_only_the_two_fixed_cuda_plugins() {
+    use serde_json::json;
+    let pin = |name: &str, bytes: &[u8]| {
+        json!({"name":name,"bytes":bytes.len(),
+            "sha256":Sha256::digest(bytes).iter().map(|byte| format!("{byte:02x}")).collect::<String>(),
+            "url":format!("https://example.org/{name}")})
+    };
+    for (engine, exe) in [(crate::ace::ENGINE_ID, "ace-server.exe"), (crate::native_minimax::ENGINE_ID, "mm-server.exe")] {
+        let mut cuda12 = pin("ggml-cuda12.dll", b"cuda12");
+        cuda12["cuda_variant"] = json!("cuda12");
+        let mut cuda13 = pin("ggml-cuda13.dll", b"cuda13");
+        cuda13["cuda_variant"] = json!("cuda13");
+        let mut raw = json!({"id":engine,"name":engine,"version":"2","platform":"windows-x86_64",
+            "protocol":super::NATIVE_WINDOWS_PROTOCOL,"executable":exe,
+            "native_runtime":{"api_version":2,"executable":exe},
+            "files":[pin(exe, b"native"),cuda12,cuda13]});
+        let read = |item: &serde_json::Value| parse(&serde_json::to_vec(
+            &json!({"schema":1,"engines":[item]})).unwrap());
+        let pkg = read(&raw).unwrap().engines.pop().unwrap();
+        assert!(pkg.installable());
+        assert!(!supported_protocol(&pkg.protocol));
+        let root = tempfile::tempdir().unwrap();
+        for (file, bytes) in pkg.files.iter().zip([b"native", b"cuda12", b"cuda13"]) {
+            let target = root.path().join(file.relative_path());
+            std::fs::create_dir_all(target.parent().unwrap()).unwrap();
+            std::fs::write(target, bytes).unwrap();
+        }
+        assert!(root.path().join("cuda12/ggml-cuda.dll").is_file());
+        assert!(root.path().join("cuda13/ggml-cuda.dll").is_file());
+        verify_package_files(&pkg, root.path(), Probe::Sha256).await.unwrap();
+        std::fs::write(root.path().join("cuda12/other.dll"), b"extra").unwrap();
+        assert!(!only_signed_files(root.path(), &pkg).await.unwrap());
+        std::fs::remove_file(root.path().join("cuda12/other.dll")).unwrap();
+        std::fs::write(root.path().join("cuda12/ggml-cuda.dll"), b"cuda13").unwrap();
+        assert!(verify_package_files(&pkg, root.path(), Probe::Sha256).await.is_err());
+        raw["files"].as_array_mut().unwrap().push(pin("ggml-cuda-extra.dll", b"extra"));
+        assert!(read(&raw).is_err());
+        raw["files"].as_array_mut().unwrap().pop();
+        raw["files"].as_array_mut().unwrap().pop();
+        assert!(read(&raw).is_err());
+    }
+}
+
+#[cfg(test)]
+#[tokio::test]
 async fn native_resolution_keeps_legacy_replay_and_overrides_separate_from_signed_replay() {
     use serde_json::json;
     let root = tempfile::tempdir().unwrap();
@@ -665,7 +756,7 @@ async fn inspect_component(
 ) -> Result<InstalledEngine> {
     let (package, files, selected) =
         resolve_package::<EnginePackage>(data_root, id, generation, probe).await?;
-    ensure!(supported_protocol(&package.protocol), "incompatible component protocol");
+    ensure!(package.installable(), "incompatible component protocol");
     Ok(InstalledEngine {
         executable: files.join(package.executable),
         generation: selected,
@@ -717,7 +808,7 @@ async fn update_engine(
                 "No signed engine package for this platform.".into(),
             )
         })?;
-    if !supported_protocol(&package.protocol) {
+    if !package.installable() {
         return Err(api_error(
             StatusCode::UNPROCESSABLE_ENTITY,
             "This engine needs a different Studio protocol.".into(),

@@ -77,6 +77,10 @@ const CUBLAS12: Asset = Asset {
     note: "The linear algebra of the engine's CUDA 12 backend, for cards CUDA 13 dropped and older drivers.",
 };
 
+pub(crate) fn is_shared_windows_cublas(asset: &Asset) -> bool {
+    asset.url == CUBLAS12.url || asset.url == CUBLAS13.url
+}
+
 /// NVIDIA serves the same pinned Windows CUDA 12 archive from both domains.
 pub(crate) fn archive_mirror(url: &str) -> Option<&'static str> {
     (url == CUBLAS12.url).then_some(
@@ -647,7 +651,11 @@ mod tests {
         }
         assert!(!runtime.downloader().is_installed(asset), "libraries without the record of their pin are not taken for it");
         let unpacked: Vec<_> = CUDA13_LIBRARIES.iter().map(|library| runtime.library_dir().join(library)).collect();
-        crate::install_record::write(&runtime.downloader().record_of(asset), asset.url, "", &unpacked, runtime.downloader().root()).unwrap();
+        let record = runtime.downloader().record_of(asset);
+        crate::install_record::write(&record, asset.url, "", &unpacked, runtime.downloader().root()).unwrap();
+        assert!(!runtime.downloader().is_installed(asset), "a size-only receipt needs member verification");
+        let archive_sha = crate::pin_sha::sha256(asset.url).unwrap();
+        crate::install_record::write(&record, asset.url, archive_sha, &unpacked, runtime.downloader().root()).unwrap();
         assert!(runtime.downloader().is_installed(asset));
         // The other build asks for its own cuBLAS, unless PATH has it.
         if !CUDA12_LIBRARIES.iter().all(|library| is_on_the_search_path(library)) {
