@@ -505,11 +505,17 @@ def remove_profile(root, timeout=20):
         try:
             shutil.rmtree(root)
             return
+        except FileNotFoundError:
+            # Python 3.12 raises if WebView2 removes a child during traversal.
+            if not root.exists():
+                return
+            if time.monotonic() >= deadline:
+                raise
         except OSError as error:
             # WebView2 subprocesses may still hold files after Studio has exited.
             if getattr(error, "winerror", None) not in (5, 32, 145) or time.monotonic() >= deadline:
                 raise
-            time.sleep(.25)
+        time.sleep(.25)
 
 
 @contextmanager
