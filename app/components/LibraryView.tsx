@@ -1,14 +1,14 @@
 import React, { useMemo, useRef, useState } from 'react';
 import { Song, Playlist } from '../types';
-import { Heart, Plus, Play, Upload, Loader2, MoreHorizontal, ListMusic } from 'lucide-react';
+import { Heart, Plus, Play, Upload, Loader2, MoreHorizontal, ListMusic, Disc3, GripVertical, ArrowLeft, ArrowRight } from 'lucide-react';
 import { useI18n } from '../context/I18nContext';
 import { AUDIO_ACCEPT } from '../services/audioFiles';
 import { useSongActions } from '../context/SongActionsContext';
 import { deleteNativePlaylist } from '../services/nativeLibrary';
-import { updateLibraryPlaylists } from '../services/studioQueries';
+import { updateLibraryPlaylists, useLibraryTrashedSongs } from '../services/studioQueries';
 import { named } from '../services/accessibleName';
 import { ConfirmDialog } from './ConfirmDialog';
-import { PlaylistCover, PlaylistEditModal, PlaylistMenu, playlistSongs } from './PlaylistEditor';
+import { collectionSongAvailability, PlaylistCover, PlaylistEditModal, PlaylistMenu, playlistSongs } from './PlaylistEditor';
 import { isCard, SongList } from './SongList';
 import { foldStems } from '../services/songStems';
 import { LegacyLibraryPreview, type LegacySource } from './LegacyLibraryPreview';
@@ -18,13 +18,13 @@ import { SONG_ORDERS, type SongOrder } from '../services/songOrder';
 /** The liked songs are read from the latest like first. */
 const LIKED_ORDERS: SongOrder[] = ['likedNewest', ...SONG_ORDERS];
 
-type LibraryTab = 'all' | 'playlists' | 'liked' | 'import' | 'trash';
+type LibraryTab = 'all' | 'playlists' | 'albums' | 'liked' | 'import' | 'trash';
 const TAB_KEY = 'studio.library.tab';
 /** The tab last open: coming back from a playlist lands on the playlists. */
 function readTab(): LibraryTab {
   try {
     const kept = window.sessionStorage.getItem(TAB_KEY);
-    return kept === 'playlists' || kept === 'liked' || kept === 'import' || kept === 'trash' ? kept : 'all';
+    return kept === 'playlists' || kept === 'albums' || kept === 'liked' || kept === 'import' || kept === 'trash' ? kept : 'all';
   } catch {
     return 'all';
   }
@@ -41,6 +41,7 @@ function shuffled<T>(items: T[]): T[] {
 
 interface LibraryViewProps {
   legacySources?: LegacySource[];
+  onReorderAlbums: (from: string, to: string) => Promise<void>;
   allSongs: Song[];
   likedSongs: Song[];
   playlists: Playlist[];
@@ -49,6 +50,7 @@ interface LibraryViewProps {
   currentSong: Song | null;
   isPlaying: boolean;
   onCreatePlaylist: () => void;
+  onCreateAlbum: () => void;
   onSelectPlaylist: (playlist: Playlist) => void;
   /** Plays a playlist's songs from the first given, the playlist named as the queue's source. */
   onPlayPlaylist: (playlist: Playlist, songs: Song[]) => void;
@@ -73,6 +75,7 @@ interface LibraryViewProps {
 
 export const LibraryView: React.FC<LibraryViewProps> = ({ 
     legacySources,
+    onReorderAlbums,
     allSongs,
     likedSongs, 
     playlists, 
@@ -80,6 +83,7 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
     currentSong,
     isPlaying,
     onCreatePlaylist,
+    onCreateAlbum,
     onSelectPlaylist,
     onPlayPlaylist,
     onError,
@@ -106,6 +110,22 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
     const [playlistMenu, setPlaylistMenu] = useState<{ playlist: Playlist; at: { x: number; y: number } } | null>(null);
     const [editing, setEditing] = useState<Playlist | null>(null);
     const [deleting, setDeleting] = useState<Playlist | null>(null);
+    const albums = playlists.filter(playlist => playlist.kind === 'album');
+    const ordinaryPlaylists = playlists.filter(playlist => playlist.kind !== 'album');
+    const visibleCollections = activeTab === 'albums' ? albums : ordinaryPlaylists;
+    const bin = useLibraryTrashedSongs(activeTab === 'playlists' || activeTab === 'albums');
+    const [draggingAlbum, setDraggingAlbum] = useState<string | null>(null);
+    const [overAlbum, setOverAlbum] = useState<string | null>(null);
+    const [savingAlbumOrder, setSavingAlbumOrder] = useState(false);
+    const reorderAlbum = async (source: string, target: string) => {
+        if (source === target) return;
+        setSavingAlbumOrder(true);
+        try {
+            await onReorderAlbums(source, target);
+        } finally {
+            setSavingAlbumOrder(false);
+        }
+    };
     const playable = (playlist: Playlist) => playlistSongs(playlist, allSongs).filter(song => song.audioUrl && !song.isGenerating);
     const removePlaylist = async (playlist: Playlist) => {
         setDeleting(null);
@@ -152,6 +172,7 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
             embedded
             songs={songs}
             librarySongs={allSongs}
+            collections={playlists}
             currentSong={currentSong}
             selectedSong={selectedSong}
             likedSongIds={likedSongIds}
@@ -193,20 +214,22 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
         <div className="min-w-0 flex-1 overflow-y-auto bg-white p-4 pb-32 transition-colors duration-300 dark:bg-black sm:p-6 lg:p-10">
              <div className="mb-8 flex flex-col items-start justify-between gap-3 sm:flex-row sm:items-center">
                 <h1 className="min-w-0 truncate text-2xl font-bold text-zinc-900 dark:text-white sm:text-3xl">{t('yourLibrary')}</h1>
-                <button 
-                    onClick={onCreatePlaylist}
-                    className="flex items-center gap-2 bg-zinc-900 dark:bg-zinc-800 hover:bg-zinc-800 dark:hover:bg-zinc-700 text-white px-4 py-2 rounded-full font-medium transition-colors shadow-lg shadow-zinc-900/10 dark:shadow-none"
-                >
-                    <Plus size={18} />
-                    <span>{t('newPlaylist')}</span>
-                </button>
+                <div className="flex flex-wrap items-center gap-2">
+                  <button type="button" onClick={onCreatePlaylist} className="flex items-center gap-2 rounded-full bg-zinc-900 px-4 py-2 font-medium text-white shadow-lg shadow-zinc-900/10 transition-colors hover:bg-zinc-800 dark:bg-zinc-800 dark:shadow-none dark:hover:bg-zinc-700">
+                    <Plus size={18} /><span>{t('newPlaylist')}</span>
+                  </button>
+                  <button type="button" onClick={onCreateAlbum} className="flex items-center gap-2 rounded-full bg-zinc-900 px-4 py-2 font-medium text-white shadow-lg shadow-zinc-900/10 transition-colors hover:bg-zinc-800 dark:bg-zinc-800 dark:shadow-none dark:hover:bg-zinc-700">
+                    <Plus size={18} /><span>{t('newAlbum')}</span>
+                  </button>
+                </div>
              </div>
 
              {/* Tabs, and the order of the list they show */}
              <div role="tablist" className="mb-8 flex min-w-0 flex-wrap items-center gap-x-5 gap-y-1 border-b border-zinc-200 pb-1 dark:border-white/10">
                  {tabButton('all', t('allSongs'), songsInLibrary)}
                  {tabButton('liked', t('likedTab'), likedSongs.length)}
-                 {tabButton('playlists', t('playlists'), playlists.length)}
+                 {tabButton('playlists', t('playlists'), ordinaryPlaylists.length)}
+                  {tabButton('albums', t('albums'), albums.length)}
                  {tabButton('import', t('importAudioTab'))}
                  {tabButton('trash', t('trashTab'))}
              </div>
@@ -247,7 +270,7 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
                     {songList(likedSongs, 'liked', LIKED_ORDERS, 'likedNewest')}
                  </div>
              )}
-             {activeTab === 'playlists' && playlists.length === 0 && (
+             {activeTab === 'playlists' && ordinaryPlaylists.length === 0 && (
                  <div className="flex flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-zinc-200 bg-zinc-50 px-6 py-16 text-center dark:border-white/5 dark:bg-white/2">
                      <div className="flex h-16 w-16 items-center justify-center rounded-full bg-zinc-100 dark:bg-white/5"><ListMusic size={30} className="text-zinc-400" /></div>
                      <p className="font-bold text-zinc-900 dark:text-white">{t('playlistsEmptyTitle')}</p>
@@ -255,22 +278,72 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
                      <button type="button" onClick={onCreatePlaylist} className="mt-2 flex items-center gap-2 rounded-full bg-zinc-900 px-4 py-2 text-sm font-bold text-white dark:bg-white dark:text-black"><Plus size={16} />{t('createPlaylist')}</button>
                  </div>
              )}
-             {activeTab === 'playlists' && playlists.length > 0 && (
+             {activeTab === 'albums' && albums.length === 0 && (
+                  <div className="flex flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-zinc-200 bg-zinc-50 px-6 py-16 text-center dark:border-white/5 dark:bg-white/2">
+                      <Disc3 size={32} className="text-zinc-400" />
+                      <p className="font-bold text-zinc-900 dark:text-white">{t('albumsEmptyTitle')}</p>
+                      <p className="max-w-sm text-center text-sm text-zinc-500">{t('albumsEmptyHint')}</p>
+                      <button type="button" onClick={onCreateAlbum} className="mt-2 rounded-full bg-zinc-900 px-4 py-2 text-sm font-bold text-white dark:bg-white dark:text-black">{t('createAlbum')}</button>
+                  </div>
+              )}
+              {(activeTab === 'playlists' || activeTab === 'albums') && visibleCollections.length > 0 && (
                  <div className="grid grid-cols-1 gap-4 min-[440px]:grid-cols-2 sm:gap-6 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
-                     {playlists.map((playlist) => {
-                         const songs = playlistSongs(playlist, allSongs);
+                     {visibleCollections.map((playlist) => {
+                         const availability = collectionSongAvailability(playlist, allSongs, bin.data?.songs ?? []);
+                         const songs = availability.active;
                          const ready = playable(playlist);
+                         const albumIndex = activeTab === 'albums' ? albums.findIndex(item => item.id === playlist.id) : -1;
                          return (
                          <div
                              key={playlist.id}
                              data-mcp-context={`playlist ${playlist.id}: ${playlist.name}`}
-                             className="group relative cursor-pointer rounded-lg border border-zinc-200 bg-white p-4 transition-all hover:border-zinc-300 hover:shadow-lg dark:border-white/5 dark:bg-zinc-900/40 dark:hover:border-white/10 dark:hover:bg-zinc-900"
+                             className={`group relative rounded-lg border border-zinc-200 bg-white p-4 transition-all hover:border-zinc-300 hover:shadow-lg dark:border-white/5 dark:bg-zinc-900/40 dark:hover:border-white/10 dark:hover:bg-zinc-900 ${activeTab === 'albums' ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer'} ${draggingAlbum === playlist.id ? 'opacity-40' : ''} ${overAlbum === playlist.id && draggingAlbum !== playlist.id ? 'ring-2 ring-pink-500' : ''}`}
+                             draggable={activeTab === 'albums' && !savingAlbumOrder}
+                             onDragStart={event => {
+                                 if (activeTab !== 'albums') return;
+                                 event.dataTransfer.effectAllowed = 'move';
+                                 event.dataTransfer.setData('text/plain', playlist.id);
+                                 setDraggingAlbum(playlist.id);
+                             }}
+                             onDragOver={event => {
+                                 if (activeTab !== 'albums' || !draggingAlbum || savingAlbumOrder) return;
+                                 event.preventDefault();
+                                 event.dataTransfer.dropEffect = 'move';
+                                 if (playlist.id !== draggingAlbum) setOverAlbum(playlist.id);
+                             }}
+                             onDrop={event => {
+                                 if (activeTab !== 'albums' || !draggingAlbum) return;
+                                 event.preventDefault();
+                                 void reorderAlbum(draggingAlbum, playlist.id);
+                                 setOverAlbum(null);
+                                 setDraggingAlbum(null);
+                             }}
+                             onDragEnd={() => { setDraggingAlbum(null); setOverAlbum(null); }}
                              onClick={() => onSelectPlaylist(playlist)}
                              onContextMenu={(event) => {
                                  event.preventDefault();
                                  setPlaylistMenu({ playlist, at: { x: event.clientX, y: event.clientY } });
                              }}
                          >
+                             {activeTab === 'albums' && (
+                                 <div className="absolute left-5 top-5 z-10 flex items-center gap-1 rounded-md bg-black/75 p-1 text-white opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100" title={t('dragAlbumToReorder')}>
+                                     <GripVertical size={16} aria-hidden="true" />
+                                     <button type="button" disabled={savingAlbumOrder || albumIndex <= 0}
+                                         aria-label={`${t('moveAlbumEarlier')}: ${playlist.name}`}
+                                         title={t('moveAlbumEarlier')}
+                                         className="rounded p-1 hover:bg-white/20 disabled:opacity-30"
+                                         onClick={event => { event.stopPropagation(); if (albumIndex > 0) void reorderAlbum(playlist.id, albums[albumIndex - 1].id); }}>
+                                         <ArrowLeft size={15} />
+                                     </button>
+                                     <button type="button" disabled={savingAlbumOrder || albumIndex >= albums.length - 1}
+                                         aria-label={`${t('moveAlbumLater')}: ${playlist.name}`}
+                                         title={t('moveAlbumLater')}
+                                         className="rounded p-1 hover:bg-white/20 disabled:opacity-30"
+                                         onClick={event => { event.stopPropagation(); if (albumIndex < albums.length - 1) void reorderAlbum(playlist.id, albums[albumIndex + 1].id); }}>
+                                         <ArrowRight size={15} />
+                                     </button>
+                                 </div>
+                             )}
                              <div className="relative mb-4 aspect-square overflow-hidden rounded-md bg-zinc-100 dark:bg-zinc-800">
                                  <PlaylistCover playlist={playlist} songs={songs} className="h-full w-full" />
                                  {ready.length > 0 && (
@@ -288,6 +361,12 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
                                  <div className="min-w-0">
                                      <h3 className="truncate font-bold text-zinc-900 dark:text-white">{playlist.name}</h3>
                                      <p className="line-clamp-2 text-sm text-zinc-500 dark:text-zinc-400">{playlist.description || songCount(songs.length)}</p>
+                                     {bin.isSuccess && availability.inBin.length > 0 && (
+                                         <p className="text-xs text-amber-500">{t('collectionInBin').replace('{count}', String(availability.inBin.length))}</p>
+                                     )}
+                                     {bin.isSuccess && availability.missingIds.length > 0 && (
+                                         <p className="text-xs text-amber-500">{t('collectionMissing').replace('{count}', String(availability.missingIds.length))}</p>
+                                     )}
                                  </div>
                                  <button
                                      type="button"
@@ -310,6 +389,7 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
              )}
              {playlistMenu && (
                  <PlaylistMenu
+                     kind={playlistMenu.playlist.kind}
                      at={playlistMenu.at}
                      empty={playable(playlistMenu.playlist).length === 0}
                      onClose={() => setPlaylistMenu(null)}
@@ -325,9 +405,9 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
              <PlaylistEditModal playlist={editing} onClose={() => setEditing(null)} onError={onError} />
              <ConfirmDialog
                  isOpen={Boolean(deleting)}
-                 title={t('deletePlaylist')}
-                 message={t('deletePlaylistConfirm')}
-                 confirmLabel={t('deletePlaylist')}
+                 title={t(deleting?.kind === 'album' ? 'deleteAlbum' : 'deletePlaylist')}
+                 message={t(deleting?.kind === 'album' ? 'deleteAlbumConfirm' : 'deletePlaylistConfirm')}
+                 confirmLabel={t(deleting?.kind === 'album' ? 'deleteAlbum' : 'deletePlaylist')}
                  onConfirm={() => deleting && void removePlaylist(deleting)}
                  onCancel={() => setDeleting(null)}
              />

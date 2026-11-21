@@ -538,6 +538,10 @@ const JOURNAL: &[(&str, &str, &str)] = &[
     ("rvc_voice_import", "installed", "rvc_voice"),
     ("rvc_voice_remove", "deleted", "rvc_voice"),
     ("rvc_catalog_install", "installed", "rvc_voice"),
+    ("rvc_apply_install", "installed", "model"),
+    ("rvc_native_runtime_install", "started", "download"),
+    ("rvc_native_runtime_cancel", "cancelled", "download"),
+    ("rvc_apply", "created", "song"),
     ("lora_import_folder", "installed", "lora"),
     ("lora_update", "updated", "lora"),
     ("lora_delete", "deleted", "lora"),
@@ -1017,7 +1021,13 @@ fn id_only(name: &str, what: &str) -> Value {
 
 fn song_create_schema(mut properties: Value) -> Value {
     properties["heartmula"] = json!({"type":"object","description":"Native HeartMuLa sampling and codec settings.","properties":{"temperature":{"type":"number"},"top_k":{"type":"integer"},"codec_duration_sec":{"type":"number"},"codec_guidance_scale":{"type":"number"}}});
+    properties["stable_audio"] = json!({"type":"object","description":"Native Stable Audio 3 controls. Send the music prompt as style and leave lyrics empty.","properties":{"negative_prompt":{"type":"string"},"sampler_mode":{"enum":["pingpong","euler"]},"apg_scale":{"type":"number"},"duration_padding_sec":{"type":"number","minimum":0}}});
     properties["midasheng"] = json!({"type":"object","description":"MiDashengLM-Gen scene and sound layers.","properties":{"caption":{"type":"string"},"music":{"type":"string"},"speech_text":{"type":"string"},"speech_style":{"type":"string"},"effects":{"type":"string"},"environment":{"type":"string"}}});
+    properties["magenta"] = json!({
+        "type": "object", "description": "Magenta RealTime 2 instrumental style reference from the library.",
+        "properties": { "reference_song_id": { "type": "string", "minLength": 1 } },
+        "additionalProperties": false
+    });
     properties["vevo2"] = json!({"type":"object","description":"Vevo2 singing references from the song library.","properties":{"voice_song_id":{"type":"string"},"melody_song_id":{"type":"string"}},"required":["voice_song_id"]});
     let mut schema = object(properties, &[]);
     schema["anyOf"] = json!([
@@ -1035,6 +1045,15 @@ fn song_create_schema(mut properties: Value) -> Value {
             } } }
         }
     ]);
+    schema["anyOf"].as_array_mut().expect("song_create anyOf").push(json!({
+        "required": ["music_source", "magenta"],
+        "properties": {
+            "music_source": { "properties": {
+                "kind": { "const": "audio_cpp" }, "model": { "const": "magenta_realtime_2" }
+            } },
+            "magenta": { "required": ["reference_song_id"] }
+        }
+    }));
     schema
 }
 
@@ -2138,7 +2157,7 @@ fn tools() -> &'static [Tool] {
             Tool {
                 name: "audio_cpp_music_model_install",
                 description: "Start installation of a managed audio.cpp music model. Poll audio_cpp_music_models for progress.",
-                schema: || object(json!({"model": {"type": "string", "enum": ["heartmula"]}}), &["model"]),
+                schema: || object(json!({"model": {"type": "string", "enum": ["heartmula", "stable_audio"]}}), &["model"]),
                 call: |args| post("/v1/music/audio-cpp/models/install".into(), args.clone()),
             },
             Tool {
@@ -2584,6 +2603,48 @@ fn tools() -> &'static [Tool] {
                 description: "List local RVC voices and their optional retrieval indexes.",
                 schema: nothing,
                 call: |_| get("/v1/rvc/voices".into()),
+            },
+            Tool {
+                name: "rvc_backend_status",
+                description: "Check readiness of both RVC backends without starting the native worker.",
+                schema: nothing,
+                call: |_| get("/v1/rvc/apply/setup".into()),
+            },
+            Tool {
+                name: "rvc_apply_install",
+                description: "Install the audio.cpp conversion runtime and its RVC support weights.",
+                schema: nothing,
+                call: |_| post("/v1/rvc/apply/setup".into(), json!({})),
+            },
+            Tool {
+                name: "rvc_native_runtime_status",
+                description: "Check hardware support, remaining bytes and download progress for the vocal-fast-rs TensorRT-RTX runtime without starting it.",
+                schema: nothing,
+                call: |_| get("/v1/rvc/native/runtime".into()),
+            },
+            Tool {
+                name: "rvc_native_runtime_install",
+                description: "Start downloading the verified vocal-fast-rs TensorRT-RTX runtime and acoustic weights. Read rvc_native_runtime_status for progress.",
+                schema: nothing,
+                call: |_| post("/v1/rvc/native/runtime".into(), json!({})),
+            },
+            Tool {
+                name: "rvc_native_runtime_cancel",
+                description: "Cancel the active vocal-fast-rs runtime download. Keeps installed components.",
+                schema: nothing,
+                call: |_| send(Method::DELETE, "/v1/rvc/native/runtime".into(), json!({})),
+            },
+            Tool {
+                name: "rvc_apply",
+                description: "Convert the separated vocal of a library song with an installed RVC voice, mix it with the existing accompaniment, and save a new song.",
+                schema: || object(json!({
+                    "song_id": { "type": "string" },
+                    "voice_id": { "type": "string", "description": "The installed ID from rvc_voices_list" },
+                    "semitone_shift": { "type": "integer", "minimum": -24, "maximum": 24 },
+                    "retrieval_blend": { "type": "number", "minimum": 0, "maximum": 1 },
+                    "backend": { "type": "string", "enum": ["auto", "vocal-fast-rs", "audio.cpp"] },
+                }), &["song_id", "voice_id"]),
+                call: |args| post("/v1/rvc/apply".into(), args.clone()),
             },
             Tool {
                 name: "rvc_voice_remove",

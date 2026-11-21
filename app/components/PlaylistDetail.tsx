@@ -47,6 +47,7 @@ export const PlaylistDetail: React.FC<PlaylistDetailProps> = ({ playlistId, onBa
     const library = useLibrarySongs();
     const playlist = playlists.data?.find(entry => entry.id === playlistId) ?? null;
     const loading = playlists.isPending || library.isPending;
+    const album = playlist?.kind === 'album';
     const songs = useMemo(() => (playlist ? playlistSongs(playlist, library.data ?? []) : []), [playlist, library.data]);
     const [confirmDelete, setConfirmDelete] = useState(false);
     const [editing, setEditing] = useState<Playlist | null>(null);
@@ -164,7 +165,7 @@ export const PlaylistDetail: React.FC<PlaylistDetailProps> = ({ playlistId, onBa
                 </button>
 
                 <div className="min-w-0 flex-1 space-y-2 md:space-y-4 text-center md:text-left">
-                    <span className="text-xs font-bold tracking-wider uppercase text-white/80">{t('playlist')}</span>
+                    <span className="text-xs font-bold tracking-wider uppercase text-white/80">{t(album ? 'album' : 'playlist')}</span>
                     <h1>
                         <button
                             type="button"
@@ -235,7 +236,7 @@ export const PlaylistDetail: React.FC<PlaylistDetailProps> = ({ playlistId, onBa
                 <button
                     onClick={() => setConfirmDelete(true)}
                     className="p-2 text-zinc-400 transition-colors hover:text-red-500"
-                    {...named(t('deletePlaylist'))}
+                    {...named(t(album ? 'deleteAlbum' : 'deletePlaylist'))}
                 >
                     <Trash2 size={20} />
                 </button>
@@ -375,7 +376,7 @@ export const PlaylistDetail: React.FC<PlaylistDetailProps> = ({ playlistId, onBa
                                                 e.stopPropagation();
                                                 removeSong(song);
                                             }}
-                                            {...named(t('removeFromPlaylist'))}
+                                            {...named(t(album ? 'removeFromAlbum' : 'removeFromPlaylist'))}
                                             className="p-2 text-zinc-500 transition-opacity hover:text-white md:p-0 md:opacity-0 md:group-hover:opacity-100 md:focus-visible:opacity-100"
                                         >
                                             <Trash2 size={16} />
@@ -465,7 +466,7 @@ export const PlaylistDetail: React.FC<PlaylistDetailProps> = ({ playlistId, onBa
                 </div>
             </div>
 
-            <PlaylistMenu at={menuAt} empty={!playable.length} actions={menuActions} onClose={() => setMenuAt(null)} />
+            <PlaylistMenu kind={playlist.kind} at={menuAt} empty={!playable.length} actions={menuActions} onClose={() => setMenuAt(null)} />
             {songMenu && (
                 <SongActionsProvider value={{ ...actions, reusePrompt: onReuseHere }}>
                     <SongDropdownMenu song={songMenu.song} isOpen at={songMenu.at} onClose={() => setSongMenu(null)} />
@@ -474,9 +475,9 @@ export const PlaylistDetail: React.FC<PlaylistDetailProps> = ({ playlistId, onBa
             <PlaylistEditModal playlist={editing} onClose={() => setEditing(null)} onError={onError} />
             <ConfirmDialog
                 isOpen={confirmDelete}
-                title={t('deletePlaylist')}
-                message={t('deletePlaylistConfirm')}
-                confirmLabel={t('deletePlaylist')}
+                title={t(album ? 'deleteAlbum' : 'deletePlaylist')}
+                message={t(album ? 'deleteAlbumConfirm' : 'deletePlaylistConfirm')}
+                confirmLabel={t(album ? 'deleteAlbum' : 'deletePlaylist')}
                 onConfirm={() => void handleDeletePlaylist()}
                 onCancel={() => setConfirmDelete(false)}
             />

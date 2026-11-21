@@ -82,15 +82,18 @@ const installLabels: Record<string, readonly [string, string, string]> = {
   pt: ['Instalar HeartMuLa', 'Instalando HeartMuLa…', 'Não foi possível instalar HeartMuLa.'],
 };
 
-export function HeartMuLaInstall({ bytes, language, onInstalled }: {
+export function AudioCppModelInstall({ model, bytes, licenseUrl, language, onInstalled }: {
+  model: 'heartmula' | 'stable_audio';
   bytes: number;
+  licenseUrl?: string;
   language: string;
   onInstalled: () => void;
 }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [percent, setPercent] = useState<number>();
-  const [install, installing, failed] = installLabels[language] ?? installLabels.en;
+  const name = model === 'stable_audio' ? 'Stable Audio 3' : 'HeartMuLa';
+  const [install, installing, failed] = (installLabels[language] ?? installLabels.en).map(label => label.replace('HeartMuLa', name));
   const size = bytes > 0 ? ` · ${new Intl.NumberFormat(language, { maximumFractionDigits: 2 }).format(bytes / (1024 ** 3))} GiB` : '';
 
   async function status(signal?: AbortSignal) {
@@ -98,7 +101,7 @@ export function HeartMuLaInstall({ bytes, language, onInstalled }: {
     if (!response.ok || signal?.aborted) return;
     const data = await response.json();
     if (signal?.aborted) return;
-    const row = data.models?.find((model: {id: string}) => model.id === 'heartmula');
+    const row = data.models?.find((item: {id: string}) => item.id === model);
     if (!row) return;
     setBusy(Boolean(row.installing));
     const download = row.download;
@@ -114,7 +117,7 @@ export function HeartMuLaInstall({ bytes, language, onInstalled }: {
     poll();
     const timer = window.setInterval(poll, 1_000);
     return () => { controller.abort(); window.clearInterval(timer); };
-  }, [onInstalled]);
+  }, [model, onInstalled]);
 
   async function start() {
     setBusy(true);
@@ -123,7 +126,7 @@ export function HeartMuLaInstall({ bytes, language, onInstalled }: {
       const result = await fetch(apiUrl('/v1/music/audio-cpp/models/install'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model: 'heartmula' }),
+        body: JSON.stringify({ model }),
       });
       const body = await result.json();
       if (!result.ok || body.installing !== true) throw new Error(body.error || failed);
@@ -140,5 +143,6 @@ export function HeartMuLaInstall({ bytes, language, onInstalled }: {
       {busy ? installing + (percent === undefined ? '' : ` ${percent}%`) : install + size}
     </button>
     {!busy && error && <p role="alert">{error}</p>}
+    {licenseUrl && <a href={licenseUrl} target="_blank" rel="noreferrer" className="block underline">Stability AI Community License</a>}
   </div>;
 }

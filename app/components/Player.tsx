@@ -36,6 +36,77 @@ interface PlayerProps {
     onPlayFirst?: () => void;
 }
 
+const RATE_PRESETS = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
+
+/** Unlike the browser's time-stretch playback, this control couples rate and pitch.
+ * The library transport applies the same rate with pitch preservation disabled.
+ */
+const SpeedPitchControl: React.FC<{
+    rate: number;
+    onRateChange: (rate: number) => void;
+    t: (key: import('../i18n/translations').TranslationKey) => string;
+}> = ({ rate, onRateChange, t }) => {
+    const [open, setOpen] = useState(false);
+    const ref = useRef<HTMLDivElement>(null);
+    const trigger = useRef<HTMLButtonElement>(null);
+    useEffect(() => {
+        if (!open) return undefined;
+        const outside = (event: MouseEvent) => {
+            if (ref.current && !ref.current.contains(event.target as Node)) setOpen(false);
+        };
+        const key = (event: KeyboardEvent) => {
+            if (event.key === 'Escape') {
+                setOpen(false);
+                if (ref.current?.contains(document.activeElement)) trigger.current?.focus();
+            }
+        };
+        document.addEventListener('mousedown', outside);
+        document.addEventListener('keydown', key);
+        return () => {
+            document.removeEventListener('mousedown', outside);
+            document.removeEventListener('keydown', key);
+        };
+    }, [open]);
+    const rounded = Math.round(rate * 100) / 100;
+    const semitones = 12 * Math.log2(rate);
+    return (
+        <div className="relative hidden lg:block" ref={ref}>
+            <button ref={trigger} type="button" onClick={() => setOpen(!open)} aria-expanded={open} aria-haspopup="dialog"
+                aria-label={t('speedPitchTitle')}
+                className="min-w-[44px] rounded-md px-2 py-1 font-mono text-[11px] font-bold hover:bg-zinc-200 dark:hover:bg-white/10"
+            >{rounded}x</button>
+            {open && (
+                <div role="dialog" aria-label={t('speedPitchTitle')}
+                    className="absolute bottom-full right-0 z-50 mb-2 w-[280px] rounded-xl border border-zinc-200 bg-white p-3 text-zinc-900 shadow-2xl dark:border-white/10 dark:bg-zinc-800 dark:text-white">
+                    <div className="mb-1 flex items-center justify-between gap-2 text-xs font-semibold">
+                        <span>{t('speedPitchTitle')}</span>
+                        <button type="button" onClick={() => onRateChange(1)} className="rounded-md px-2 py-1 text-pink-600 hover:bg-zinc-100 dark:text-pink-400 dark:hover:bg-white/10">{t('speedPitchReset')}</button>
+                    </div>
+                    <div className="mb-2 flex items-center justify-between font-mono text-sm">
+                        <strong>{Math.round(rate * 100)}%</strong>
+                        <span className="text-xs text-zinc-500 dark:text-zinc-400">{semitones >= 0 ? '+' : ''}{semitones.toFixed(1)} st</span>
+                    </div>
+                    <input type="range" min="0.25" max="2" step="0.01" value={rate}
+                        aria-label={t('speedPitchTitle')} onChange={event => onRateChange(Number(event.target.value))}
+                        className="mb-3 w-full cursor-pointer accent-pink-500" />
+                    <div className="grid grid-cols-4 gap-1.5">
+                        {RATE_PRESETS.map(preset => (
+                            <button type="button" key={preset} onClick={() => onRateChange(preset)}
+                                aria-pressed={Math.abs(rate - preset) < 0.005}
+                                className={`rounded-md px-1 py-2 text-center font-mono text-[11px] transition-colors ${Math.abs(rate - preset) < 0.005
+                                    ? 'bg-pink-600 text-white'
+                                    : 'bg-zinc-100 text-zinc-700 hover:bg-zinc-200 dark:bg-white/10 dark:text-zinc-200 dark:hover:bg-white/20'}`}>
+                                {preset}x
+                            </button>
+                        ))}
+                    </div>
+                    <p className="mt-2 text-[11px] leading-4 text-zinc-500 dark:text-zinc-400">{t('speedPitchHint')}</p>
+                </div>
+            )}
+        </div>
+    );
+};
+
 export const Player: React.FC<PlayerProps> = ({
     currentSong,
     isPlaying,
@@ -66,8 +137,6 @@ export const Player: React.FC<PlayerProps> = ({
     const volumeHideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
     const [showDropdown, setShowDropdown] = useState(false);
     const [isFullscreen, setIsFullscreen] = useState(false);
-    const [showSpeedMenu, setShowSpeedMenu] = useState(false);
-    const speedMenuRef = useRef<HTMLDivElement>(null);
 
     // Close fullscreen on Escape key
     useEffect(() => {
@@ -80,17 +149,6 @@ export const Player: React.FC<PlayerProps> = ({
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
     }, [isFullscreen]);
-
-    // Close speed menu when clicking outside
-    useEffect(() => {
-        const handleClickOutside = (event: MouseEvent) => {
-            if (speedMenuRef.current && !speedMenuRef.current.contains(event.target as Node)) {
-                setShowSpeedMenu(false);
-            }
-        };
-        document.addEventListener('mousedown', handleClickOutside);
-        return () => document.removeEventListener('mousedown', handleClickOutside);
-    }, []);
 
     // Hide player when no song selected
     if (!currentSong) {
@@ -486,33 +544,8 @@ export const Player: React.FC<PlayerProps> = ({
                                 </button>
                             </div>
 
-                            {/* Playback Speed Dropdown */}
-                            <div className="relative group hidden lg:block" ref={speedMenuRef}>
-                                <button
-                                    className="px-2 py-1 text-[11px] font-mono font-bold hover:bg-zinc-200 dark:hover:bg-white/10 rounded-sm transition-colors min-w-[42px] text-center"
-                                    onClick={() => setShowSpeedMenu(!showSpeedMenu)}
-                                >
-                                    {playbackRate}x
-                                </button>
-                                {showSpeedMenu && (
-                                    <div className="absolute bottom-full right-0 mb-2 bg-white dark:bg-zinc-800 rounded-lg shadow-xl border border-zinc-200 dark:border-white/10 py-1 min-w-[80px] z-50">
-                                        {[0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0].map((rate) => (
-                                            <button
-                                                key={rate}
-                                                onClick={() => {
-                                                    onPlaybackRateChange(rate);
-                                                    setShowSpeedMenu(false);
-                                                }}
-                                                className={`w-full px-3 py-1.5 text-left text-xs font-mono hover:bg-zinc-100 dark:hover:bg-white/10 transition-colors ${
-                                                    playbackRate === rate ? 'text-pink-600 dark:text-pink-500 font-bold' : 'text-zinc-700 dark:text-zinc-300'
-                                                }`}
-                                            >
-                                                {rate === 1.0 ? t('normalSpeed') : `${rate}x`}
-                                            </button>
-                                        ))}
-                                    </div>
-                                )}
-                            </div>
+                            {/* Speed and pitch: the slider and presets share one playback rate. */}
+                            <SpeedPitchControl rate={playbackRate} onRateChange={onPlaybackRateChange} t={t} />
 
                             {/* Volume Control */}
                             <div className="flex items-center gap-4 w-full max-w-xs">
@@ -679,33 +712,8 @@ export const Player: React.FC<PlayerProps> = ({
                         {formatTime(currentTime)} / {formatTime(duration || 0)}
                     </span>
 
-                    {/* Playback Speed */}
-                    <div className="relative group hidden lg:block" ref={speedMenuRef}>
-                        <button
-                            className="px-2 py-1 text-[11px] font-mono font-bold hover:bg-zinc-200 dark:hover:bg-white/10 rounded-sm transition-colors min-w-[42px] text-center"
-                            onClick={() => setShowSpeedMenu(!showSpeedMenu)}
-                        >
-                            {playbackRate}x
-                        </button>
-                        {showSpeedMenu && (
-                            <div className="absolute bottom-full right-0 mb-2 bg-white dark:bg-zinc-800 rounded-lg shadow-xl border border-zinc-200 dark:border-white/10 py-1 min-w-[80px] z-50">
-                                {[0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0].map((rate) => (
-                                    <button
-                                        key={rate}
-                                        onClick={() => {
-                                            onPlaybackRateChange(rate);
-                                            setShowSpeedMenu(false);
-                                        }}
-                                        className={`w-full px-3 py-1.5 text-left text-xs font-mono hover:bg-zinc-100 dark:hover:bg-white/10 transition-colors ${
-                                            playbackRate === rate ? 'text-pink-600 dark:text-pink-500 font-bold' : 'text-zinc-700 dark:text-zinc-300'
-                                        }`}
-                                    >
-                                        {rate === 1.0 ? t('normalSpeed') : `${rate}x`}
-                                    </button>
-                                ))}
-                            </div>
-                        )}
-                    </div>
+                    {/* Speed and pitch, like a compact DJ rate control. */}
+                    <SpeedPitchControl rate={playbackRate} onRateChange={onPlaybackRateChange} t={t} />
 
                     {/* Volume Control with Vertical Slider */}
                     <div

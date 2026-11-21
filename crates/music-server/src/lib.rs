@@ -16,9 +16,11 @@ mod providers;
 mod openrouter_stream;
 mod native_minimax;
 mod audio_cpp_heartmula;
+mod audio_cpp_magenta;
 mod audio_cpp_midasheng;
 mod audio_cpp_minimax_h3;
 mod audio_cpp_music;
+mod audio_cpp_stable_audio;
 mod audio_cpp_vevo2;
 mod native_music_jobs;
 mod native_ace_jobs;
@@ -55,6 +57,9 @@ mod separation;
 mod restore;
 mod rvc_voices;
 mod rvc_catalog;
+mod rvc_apply;
+mod rvc_fast;
+mod rvc_fast_install;
 mod rvc_catalog_progress;
 mod midi;
 mod midi_edit;
@@ -123,6 +128,7 @@ struct AppState {
     minimax_cancellations: Arc<RwLock<HashMap<String, native_music_jobs::CancelSender>>>,
     audio_cpp_music_stops: Arc<RwLock<HashMap<String, Arc<std::sync::atomic::AtomicBool>>>>,
     heartmula_install: Arc<tokio::sync::Mutex<()>>,
+    stable_audio_install: Arc<tokio::sync::Mutex<()>>,
     openrouter_music_stops: Arc<RwLock<HashMap<String, Arc<tokio::sync::Notify>>>>,
     music_server: EngineClient,
     /// The engine's log, followed for the service's life: its recent lines and
@@ -135,6 +141,7 @@ struct AppState {
     own_backbone: Arc<RwLock<Option<String>>>,
     /// Downloads of community models (`community`) into `models/yue2-cpp/own`.
     community_downloads: Arc<downloads::Downloader>,
+    rvc_native_downloads: Arc<downloads::Downloader>,
     settings_path: PathBuf,
     openrouter_catalog: Arc<RwLock<OpenRouterCatalogState>>,
     library: library::Library,
@@ -310,7 +317,11 @@ struct CreateMusicJobRequest {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     heartmula: Option<audio_cpp_heartmula::HeartMuLaOptions>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    stable_audio: Option<audio_cpp_stable_audio::Options>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     midasheng: Option<audio_cpp_midasheng::MiDashengPrompt>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    magenta: Option<audio_cpp_magenta::MagentaOptions>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     vevo2: Option<audio_cpp_vevo2::Options>,
     /// The window's own mark for this request, handed back on the job so the
@@ -1523,6 +1534,7 @@ pub async fn serve_on_port(port: u16) -> anyhow::Result<()> {
         minimax_cancellations: Arc::default(),
         audio_cpp_music_stops: Arc::default(),
         heartmula_install: Arc::default(),
+        stable_audio_install: Arc::default(),
         openrouter_music_stops: Arc::new(RwLock::new(HashMap::new())),
         music_server,
         engine_log,
@@ -1590,6 +1602,9 @@ pub async fn serve_on_port(port: u16) -> anyhow::Result<()> {
         selected_component_ids: Arc::new(RwLock::new(selected_component_ids)),
         own_backbone: Arc::new(RwLock::new(persisted.as_ref().and_then(|settings| settings.own_backbone.clone()))),
         community_downloads,
+        rvc_native_downloads: Arc::new(rvc_fast_install::downloader(
+            settings_path.parent().expect("settings file has a data directory"),
+        )),
         settings_path,
         openrouter_catalog: Arc::new(RwLock::new(OpenRouterCatalogState::default())),
         library: library::Library::open_default()?,
@@ -1673,10 +1688,13 @@ pub async fn serve_on_port(port: u16) -> anyhow::Result<()> {
         .route("/health", get(health))
         .route("/v1/capabilities", get(capabilities))
         .route("/v1/rvc/voices", get(rvc_voices::list))
+        .route("/v1/rvc/apply", post(rvc_apply::apply))
+        .route("/v1/rvc/apply/setup", get(rvc_apply::setup).post(rvc_apply::install))
         .route("/v1/rvc/voices/{id}", axum::routing::delete(rvc_voices::remove))
         .route("/v1/rvc/catalog", get(rvc_catalog::list))
         .route("/v1/rvc/catalog/install", post(rvc_catalog::install))
         .route("/v1/rvc/catalog/progress/{id}", get(rvc_catalog_progress::get))
+        .route("/v1/rvc/native/runtime", get(rvc_fast_install::get).post(rvc_fast_install::start).delete(rvc_fast_install::cancel))
         .route("/v1/rvc/voices/import", post(rvc_voices::import).layer(DefaultBodyLimit::max(rvc_voices::UPLOAD_LIMIT)))
         .route("/v1/configuration", get(configuration).put(update_configuration))
         .route("/engine/options", get(engine_options).put(update_engine_options))
