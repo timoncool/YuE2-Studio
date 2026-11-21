@@ -7,11 +7,13 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { ORDER, SAMPLES, SETS, STRINGS } from '../docs/site/strings.mjs';
 import { STUDIO } from '../docs/site/studio.mjs';
+import { MATRIX_TEXT, NATIVE_YUE2, RVC } from '../docs/site/music-benchmarks.mjs';
 // the studio's version, from the one place it is written
 const VERSION = JSON.parse(readFileSync(new URL('../desktop/src-tauri/tauri.conf.json', import.meta.url), 'utf8')).version;
 
 const docs = join(dirname(fileURLToPath(import.meta.url)), '..', 'docs');
 const css = readFileSync(join(docs, 'site', 'page.css'), 'utf8');
+const musicBenchmarks = JSON.parse(readFileSync(join(docs, 'music-gpu-benchmarks.json'), 'utf8'));
 const { name: NAME, repo: REPO, site: SITE } = STUDIO;
 // The donation page is the same on every studio site; this site only frames it.
 const DONATE = Object.fromEntries(['donate.css', 'donate-lang.html', 'donate-body.html']
@@ -56,6 +58,39 @@ function firstSentence(text) {
   const latin = text.match(/^(.+?[.!?])(\s|$)/);
   const cut = [cjk?.[1], latin?.[1]].filter(Boolean).sort((a, b) => a.length - b.length)[0];
   return cut ?? text;
+}
+
+function musicGpuMatrix(lang) {
+  const { title, note, columns, detail } = MATRIX_TEXT[lang];
+  const gib = 2 ** 30;
+  const number = (value, places) => {
+    const printed = value.toFixed(places);
+    return lang === 'ru' || lang === 'pt' ? printed.replace('.', ',') : printed;
+  };
+  const rows = musicBenchmarks.rows.map((row) => {
+    const label = [row.family, `${row.engine} ${row.revision}`, row.weight_profile, row.workload].join(' · ');
+    const peak = number(row.cold_vram_peak_bytes / gib, 2);
+    const delta = row.cold_vram_increase_bytes / gib;
+    const cells = [
+      label, row.backend, number(row.runs[0].audio_seconds, 3),
+      number(row.cold_seconds, 3), number(row.warm_median_seconds, 3),
+      `${number(row.warm_audio_seconds_per_second, 2)}×`,
+      `${peak} / ${delta >= 0 ? '+' : ''}${number(delta, 2)}`,
+      number(row.cold_rss_peak_bytes / gib, 2),
+    ];
+    return `      <tr>${cells.map((cell) => `<td>${escape(cell)}</td>`).join('')}</tr>`;
+  });
+  return `<!-- music-gpu-matrix:start -->
+    <h3>${escape(title)}</h3>
+    <p class="note">${escape(note)}</p>
+    <div class="scroll"><table>
+      <thead><tr>${columns.map((column) => `<th scope="col">${escape(column)}</th>`).join('')}</tr></thead>
+      <tbody>
+${rows.join('\n')}
+      </tbody>
+    </table></div>
+    <p><a href="music-gpu-benchmarks.json">${escape(detail)}</a></p>
+<!-- music-gpu-matrix:end -->`;
 }
 
 function page(lang) {
@@ -164,13 +199,15 @@ ${sp.rows.map((row) => `          <tr>${row.map((cell) => `<td>${escape(cell)}</
       <thead><tr>${headings.slice(2).map(label => `<th>${escape(label)}</th>`).join('')}</tr></thead>
       <tbody>${baseline.map(row => `<tr>${row.map(cell => `<td>${escape(cell)}</td>`).join('')}</tr>`).join('\n')}</tbody>
     </table></div>
-    <h3>ACE-Step Studio 4.0.2 · acestep.cpp 9eb75e8</h3>
+${lang === 'en' ? NATIVE_YUE2 : ''}    <h3>ACE-Step Studio 4.0.2 · acestep.cpp 9eb75e8</h3>
     <p>Windows · RTX 4090 · 617.42 · Turbo Q8_0 · 30 s · Euler × 8</p>
     <div class="scroll"><table>
       <thead><tr>${aceColumns.map(label => `<th>${escape(label)}</th>`).join('')}</tr></thead>
       <tbody>${aceRows.map(row => `<tr>${row.map(cell => `<td>${escape(cell)}</td>`).join('')}</tr>`).join('\n')}</tbody>
     </table></div>
     <p class="note">${escape(aceAudioNote)}</p>
+${lang === 'en' ? RVC : ''}${musicGpuMatrix(lang)}
+
   </section>
 
 ` : '';
