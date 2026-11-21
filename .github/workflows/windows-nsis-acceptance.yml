@@ -26,6 +26,10 @@ jobs:
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
           python-version: '3.12'
+      - uses: actions/setup-node@v6
+        if: matrix.scenario == 'clean'
+        with:
+          node-version: '24'
       - name: Read pinned files from the unpublished v5.0.0 draft
         env:
           GH_TOKEN: ${{ github.token }}
@@ -67,9 +71,26 @@ jobs:
         run: python scripts/windows-nsis-acceptance.py download ${{ matrix.scenario }}
       - name: Verify and exercise installed Studio
         run: python scripts/windows-nsis-acceptance.py verify ${{ matrix.scenario }}
+      - name: Exercise installed Windows screens through Studio MCP
+        id: installed-screens
+        if: matrix.scenario == 'clean'
+        env:
+          PYTHONUTF8: '1'
+          STUDIO_QA_REAL_SHELL_PROFILE: '1'
+        run: |
+          $exe = Join-Path $env:QA_DIR 'installed/YuE2-Studio.exe'
+          python -u scripts/test-hosted-webview-screens.py $exe (Join-Path $env:QA_DIR 'evidence/screens') --suite screens
+      - name: Exercise installed Native LRC Save As
+        if: always() && (steps.installed-screens.outcome == 'success' || steps.installed-screens.outcome == 'failure')
+        env:
+          PYTHONUTF8: '1'
+          STUDIO_QA_REAL_SHELL_PROFILE: '1'
+        run: |
+          $exe = Join-Path $env:QA_DIR 'installed/YuE2-Studio.exe'
+          python -u scripts/test-hosted-webview-screens.py $exe (Join-Path $env:QA_DIR 'evidence/native-lrc') --suite lrc
       - name: Save acceptance evidence
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: windows-nsis-${{ matrix.scenario }}
-          path: ${{ runner.temp }}/nsis-qa/evidence/*.json
+          path: ${{ runner.temp }}/nsis-qa/evidence/**
