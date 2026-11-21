@@ -480,7 +480,12 @@ mod tests {
         let repeat = transfer(&new, &source)?;
         assert_eq!(repeat["already_imported"], 2);
         assert_eq!(new.get_song(&song.id)?.unwrap().title, "Edited in YuE2");
-        assert_eq!(fs::read_dir(new.media_dir())?.count(), 2);
+        let entries = fs::read_dir(new.media_dir())?.collect::<io::Result<Vec<_>>>()?;
+        assert_eq!(entries.iter().filter(|entry| entry.path().is_file()).count(), 2);
+        let staged = fs::read_dir(new.media_dir().join(STAGING_FOLDER))?
+            .map(|entry| entry.map(|entry| entry.file_name()))
+            .collect::<io::Result<Vec<_>>>()?;
+        assert_eq!(staged, [std::ffi::OsString::from("lock")]);
         assert!(transfer(&new, &destination).is_err());
         Ok(())
     }
