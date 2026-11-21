@@ -13,6 +13,7 @@ import { AudioWaveform } from './AudioWaveform';
 import type { MusicEngine, Playlist, Song, YueCot, YueHarmony, YueOutputFormat, YueRequest, YueSampling } from '../types';
 import { useI18n } from '../context/I18nContext';
 import { AUDIO_ACCEPT } from '../services/audioFiles';
+import { WindowAudioCapture } from './WindowAudioCapture';
 import { saveFile } from '../services/saveFile';
 import { useBridgeCommand } from '../services/mcpBridge';
 import { EXAMPLES, randomExample } from '../services/examples';
@@ -1001,6 +1002,14 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
     }
   };
 
+  const readCoverRecording = (file: File) => {
+    setCoverSource(file.name);
+    setCoverSongId(null);
+    setCoverFile(file);
+    setCoverAudio(URL.createObjectURL(file));
+    void runTranscription({ file }, coverMelodyOnly);
+  };
+
   /** The score the model writes from the form's style and lyrics, nothing sung. */
   const writeScoreAlone = (signal: AbortSignal) => {
     if (!ready) throw new Error(unavailableHint);
@@ -1800,11 +1809,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
                       setMidiCover({ name: file.name, data: btoa(raw) });
                     }).catch(reason => { if (!signal.aborted) setError(reason instanceof Error ? reason.message : String(reason)); });
                   } else {
-                    setCoverSource(file.name);
-                    setCoverSongId(null);
-                    setCoverFile(file);
-                    setCoverAudio(URL.createObjectURL(file));
-                    void runTranscription({ file }, coverMelodyOnly);
+                    readCoverRecording(file);
                   }
                 }}
               />
@@ -1817,6 +1822,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
                 {transcribing !== null ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />}
                 {transcribing !== null ? `${tt('transcribing')} · ${transcribing}` : tt('coverPickRecording')}
               </button>
+              <WindowAudioCapture disabled={!transcriberReady || transcribing !== null} onRecording={readCoverRecording} />
               <p className="mt-2 text-[11px] leading-4 text-zinc-500">{tt('coverFromLibraryHint')}</p>
               {(coverFile || coverSongId) && (
                 <button type="button" disabled={hearingLyrics} aria-busy={hearingLyrics}
