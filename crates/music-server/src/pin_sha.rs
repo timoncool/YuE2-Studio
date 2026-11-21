@@ -8,6 +8,7 @@ use std::path::Path;
 use anyhow::{bail, Result};
 
 const PINNED: &[(&str, &str)] = &[
+    ("https://huggingface.co/audio-cpp/audio.cpp-gguf/resolve/32c1ce1fea57a513eb9386aa62408d47b1cf7ab2/RVC-GGUF/rvc-f16.gguf", "09bd8f233e7ae82697826513c94d754c3904e58e30ad503b83437defccf99a72"),
     ("https://developer.download.nvidia.com/compute/cuda/redist/libcublas/windows-x86_64/libcublas-windows-x86_64-12.9.1.4-archive.zip", "d534d98b0b453a98914dbf3adf47d7e84b55037abf02f87466439e1dcef581ed"),
     ("https://developer.download.nvidia.com/compute/cuda/redist/libcublas/windows-x86_64/libcublas-windows-x86_64-13.5.1.27-archive.zip", "c946e1c825e05895747a95ed4fee18030b08052c09783b9b7b19818fd2e31f58"),
     ("https://developer.download.nvidia.com/compute/cuda/redist/libcufft/windows-x86_64/libcufft-windows-x86_64-12.4.0.43-archive.zip", "69d0ad8dc3a1be66f01a748a8206d0ceaafa56939474663fbe790dc3e91d2009"),
