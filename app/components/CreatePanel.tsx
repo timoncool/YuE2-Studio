@@ -1042,7 +1042,9 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
     setHearingLyrics(true);
     setError(null);
     try {
-      setLyrics(await recogniseLyrics(coverSongId ? { songId: coverSongId } : { file: coverFile! }));
+      const detected = await recogniseLyrics(coverSongId ? { songId: coverSongId } : { file: coverFile! });
+      if (!detected.trim()) throw new Error('karaoke.no-words');
+      setLyrics(detected);
     } catch (reason) {
       const message = reason instanceof Error ? reason.message : String(reason);
       setError(karaokeReason(t, message) ?? message);
@@ -1464,6 +1466,27 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
                 {transcribing !== null ? `${tt('transcribing')} · ${transcribing}` : tt('coverPickRecording')}
               </button>
               <p className="mt-2 text-[11px] leading-4 text-zinc-500">{tt('coverFromLibraryHint')}</p>
+              {(coverFile || coverSongId) && (
+                <div className="mt-3 rounded-lg border border-pink-500/20 bg-pink-500/5 p-3">
+                  <button type="button"
+                    disabled={hearingLyrics}
+                    onClick={() => (lyrics.trim() ? setConfirmHearLyrics(true) : void hearLyrics())}
+                    className="flex w-full items-center justify-center gap-2 rounded-lg border border-pink-500/40 px-3 py-2 text-xs font-semibold text-pink-600 transition-colors hover:bg-pink-500/10 disabled:opacity-50 dark:text-pink-300"
+                  >
+                    {hearingLyrics ? <Loader2 size={15} className="animate-spin" /> : <Ear size={15} />}
+                    {hearingLyrics ? t('recogniseFromSource') + '…' : t('transcribeCoverLyrics')}
+                  </button>
+                  <p className="mt-2 text-[11px] leading-4 text-zinc-500">{t('transcribeCoverLyricsHint')}</p>
+                </div>
+              )}
+              <ConfirmDialog
+                isOpen={confirmHearLyrics}
+                title={t('recogniseFromSource')}
+                message={t('recogniseFromSourceReplace')}
+                confirmLabel={t('recogniseFromSource')}
+                onConfirm={() => { setConfirmHearLyrics(false); void hearLyrics(); }}
+                onCancel={() => setConfirmHearLyrics(false)}
+              />
               {coverAudio && (
                 <div className="mt-3 flex items-center gap-3 rounded-lg border border-zinc-100 bg-zinc-50 p-2 dark:border-white/5 dark:bg-white/3">
                   <audio
@@ -1724,14 +1747,6 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, isGenerati
               placeholder={'[Verse 1]\n…\n\n[Chorus]\n…'}
               aria-label={t('lyrics')}
               className={`${CONTROL} resize-none overflow-y-auto font-mono text-xs leading-5 custom-scrollbar`}
-            />
-            <ConfirmDialog
-              isOpen={confirmHearLyrics}
-              title={t('recogniseFromSource')}
-              message={t('recogniseFromSourceReplace')}
-              confirmLabel={t('recogniseFromSource')}
-              onConfirm={() => { setConfirmHearLyrics(false); void hearLyrics(); }}
-              onCancel={() => setConfirmHearLyrics(false)}
             />
             {resingFrom && (
               <div className="mt-2 rounded-lg border border-pink-500/25 bg-pink-500/5 p-2 text-[11px] leading-5 text-zinc-600 dark:text-zinc-300">

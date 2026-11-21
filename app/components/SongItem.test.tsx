@@ -56,3 +56,31 @@ describe('the play control of a song row (YuE2 Studio #171)', () => {
     expect(playing?.getAttribute('aria-pressed')).toBe('true');
   });
 });
+
+
+describe('Suno-style multi-selection never steals the song details click', () => {
+  it('opens details from a row but only selects from its checkbox', () => {
+    const onSelect = vi.fn();
+    const onToggleSelect = vi.fn();
+    const noop = () => undefined;
+    act(() => root.render(
+      <QueryClientProvider client={queries}>
+        <SongItem song={song} isCurrent={false} isSelected={false} isSelectionMode={true}
+          isChecked={false} isLiked={false} isPlaying={false} isOwner={false}
+          onPlay={noop} onSelect={onSelect} onToggleSelect={onToggleSelect}
+          onToggleLike={noop} onAddToPlaylist={noop} />
+      </QueryClientProvider>
+    ));
+    const row = host.querySelector<HTMLElement>('[data-mcp-context^="song "]');
+    expect(row).not.toBeNull();
+    act(() => row!.click());
+    expect(onSelect).toHaveBeenCalledTimes(1);
+    expect(onToggleSelect).not.toHaveBeenCalled();
+
+    const checkbox = host.querySelector<HTMLButtonElement>('button[aria-label="Select Neon nights"]');
+    expect(checkbox).not.toBeNull();
+    act(() => checkbox!.click());
+    expect(onToggleSelect).toHaveBeenCalledTimes(1);
+    expect(onSelect).toHaveBeenCalledTimes(1);
+  });
+});
