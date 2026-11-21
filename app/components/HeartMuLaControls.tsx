@@ -83,7 +83,7 @@ const installLabels: Record<string, readonly [string, string, string]> = {
 };
 
 export function AudioCppModelInstall({ model, bytes, licenseUrl, language, onInstalled }: {
-  model: 'heartmula' | 'stable_audio' | 'stable-audio-3-medium' | 'heartmula-3b-q8_0' | 'soulx_singer' | 'soulx_singer_svc';
+  model: 'heartmula' | 'stable_audio' | 'stable-audio-3-medium' | 'heartmula-3b-q8_0' | 'hotstep-minimax-music3' | 'soulx_singer' | 'soulx_singer_svc';
   bytes: number;
   licenseUrl?: string;
   language: string;
