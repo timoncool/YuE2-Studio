@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useI18n } from '../context/I18nContext';
-import { enginePageStrings } from '../i18n/enginePage';
+import { enginePageStrings, showUnsupportedEngines } from '../i18n/enginePage';
 import { apiUrl } from '../services/apiBase';
 import type { PairStatus } from '../services/musicPair';
 import { SELF_READ, useOpenRouterSettings, useSetupStatus } from '../services/studioQueries';
@@ -45,6 +45,7 @@ export function EnginesAndUpdates({ focus, onNavigate }: {
   onNavigate: (target: 'models' | 'engine' | 'cloud') => void;
 }) {
   const { language, t } = useI18n();
+  const [showUnsupported, setShowUnsupported] = useState(false);
   const list = useRef<HTMLUListElement>(null);
   useEffect(() => {
     const target = [...(list.current?.children ?? [])].find(item => item.getAttribute('data-engine') === focus);
@@ -69,6 +70,9 @@ export function EnginesAndUpdates({ focus, onNavigate }: {
     staleTime: 0,
   });
   const data = catalogue.data;
+  const hasUnsupported = data?.rvc?.supported === false
+    || (data?.ace?.supported === false && data.profiles[0]?.engine_installed === false)
+    || (data?.minimax?.supported === false && data.profiles[1]?.engine_installed === false);
   const refresh = () => { void catalogue.refetch(); };
   const status = (value: boolean | undefined) => value === undefined ? (catalogue.isPending ? checking : unavailable) : value ? installed : missing;
   const mark = (id: string) => id === focus ? ' border-pink-500' : ' border-zinc-200 dark:border-white/10';
@@ -78,7 +82,13 @@ export function EnginesAndUpdates({ focus, onNavigate }: {
   return (
     <section aria-label={title} className="space-y-5">
       {focus === 'updates' && <UpdatePlanView />}
-      <button type="button" className={action} disabled={catalogue.isFetching} onClick={refresh}>{t('refresh')}</button>
+      <div className="flex flex-wrap items-center gap-3">
+        <button type="button" className={action} disabled={catalogue.isFetching} onClick={refresh}>{t('refresh')}</button>
+        {hasUnsupported && <label className="flex items-center gap-2 text-sm">
+          <input type="checkbox" checked={showUnsupported} onChange={event => setShowUnsupported(event.target.checked)} />
+          {showUnsupportedEngines[language]}
+        </label>}
+      </div>
       <ul ref={list} className="grid gap-2" aria-label={title}>
         <li data-engine="local" className={'space-y-1 rounded-lg border p-3' + mark('local')}>
           <h4 className="font-semibold">yue2.cpp</h4>
@@ -86,7 +96,9 @@ export function EnginesAndUpdates({ focus, onNavigate }: {
             {setup.data?.engine_ready && <> · {active}{data?.local?.in_effect?.backend && ' · ' + data.local.in_effect.backend}</>}
             {setup.data?.ready !== undefined && <> · {t(setup.data.ready ? 'profileReady' : 'profileNotInstalled')}</>}
           </p>
-          {data?.local?.executable && <p className="break-all text-xs">{data.local.executable}</p>}
+          {data?.local?.executable && <p className="break-all text-xs">{data.local.executable}
+            {data.local.executable_source === 'environment' && <> · {t('engineBinEnvOverride')}</>}
+          </p>}
           <button type="button" className={action} onClick={() => onNavigate('models')}>{manageModels}</button>
           {' · '}<button type="button" className={action} onClick={() => onNavigate('engine')}>{settings}</button>
         </li>
@@ -95,10 +107,13 @@ export function EnginesAndUpdates({ focus, onNavigate }: {
           const models = profile?.profiles ?? profile?.models;
           const ready = models?.some(model => model.ready);
           const runtime = engine.id === 'acestep-cpp' ? data?.ace : engine.id === 'minimaxmusic-cpp' ? data?.minimax : null;
+          const unsupported = runtime?.supported === false && profile?.engine_installed === false;
+          if (unsupported && !showUnsupported && focus !== engine.id) return null;
           return <li key={engine.id} data-engine={engine.id} aria-label={engine.name} className={'space-y-1 rounded-lg border p-3' + mark(engine.id)}>
             <h4 className="font-semibold">{engine.name}</h4>
             <p>{status(profile?.engine_installed)}{activeId === engine.id && ' · ' + active}
               {ready !== undefined && <> · {t(ready ? 'profileReady' : 'profileNotInstalled')}</>}</p>
+            {unsupported && <p className="text-sm">{t('engineUnavailable')}</p>}
             {runtime?.revision && <p className="text-xs">{runtime.installed ? installed : t('download')} · <code>{runtime.revision.slice(0, 12)}</code></p>}
             {(engine.id === 'acestep-cpp' || engine.id === 'minimaxmusic-cpp') && profile &&
               runtime?.supported && (!profile.engine_installed || profile.adapter_runtime_update) &&
@@ -113,12 +128,13 @@ export function EnginesAndUpdates({ focus, onNavigate }: {
             })}
           </li>;
         })}
+        {(data?.rvc?.supported !== false || showUnsupported || focus === 'rvc') &&
         <li data-engine="rvc" className={'space-y-1 rounded-lg border p-3' + mark('rvc')}>
           <h4 className="font-semibold">RVC · vocal-fast-rs</h4>
           <p>{data?.rvc?.supported === false ? data.rvc.reason || unavailable : status(data?.rvc?.installed)}</p>
           {data?.rvc?.supported && !data.rvc.installed &&
             <InstallDetails label={t('download')}><RvcNativeRuntime onInstalled={refresh} disabled={false} /></InstallDetails>}
-        </li>
+        </li>}
         <li data-engine="openrouter" className={'space-y-1 rounded-lg border p-3' + mark('openrouter')}>
           <h4 className="font-semibold">OpenRouter</h4>
           <p>{cloud.data ? t(cloud.data.configured ? 'openRouterConfigured' : 'openRouterNotConfigured') : cloud.isPending ? checking : unavailable}</p>

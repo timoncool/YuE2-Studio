@@ -2,6 +2,15 @@ import type { Language } from './translations';
 
 export const engineUpdateTarget = 'engines:updates';
 
+export const showUnsupportedEngines: Record<Language, string> = {
+  en: 'Show unsupported engines',
+  ru: 'Показать несовместимые движки',
+  zh: '显示不兼容的引擎',
+  ja: '非対応のエンジンを表示',
+  ko: '지원되지 않는 엔진 표시',
+  pt: 'Mostrar motores incompatíveis',
+};
+
 export const enginePageStrings: Record<Language, readonly [string, string, string, string, string, string, string, string]> = {
   en: ['Engines and updates', 'Active', 'Installed', 'Not installed', 'Checking…', 'Status unavailable', 'Manage models', 'Engine settings'],
   ru: ['Движки и обновления', 'Активен', 'Установлен', 'Не установлен', 'Проверка…', 'Статус недоступен', 'Управление моделями', 'Настройки движка'],

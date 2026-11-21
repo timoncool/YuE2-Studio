@@ -52,6 +52,8 @@ it('opens upgrades from the notification target and reads per-engine readiness w
     expect(host.querySelector('[data-engine="audio.cpp"]')?.textContent).toContain('Installed · Active · profileReady');
     expect(host.querySelector('[data-engine="minimaxmusic-cpp"]')?.textContent).toContain('Not installed');
     expect(host.querySelector('[data-engine="hotstep"]')?.textContent).toContain('Status unavailable');
+    expect(host.querySelector('[data-engine="rvc"]')).toBeNull();
+    await act(async () => host.querySelector<HTMLInputElement>('label:has(input[type="checkbox"]) input')!.click());
     expect(host.querySelector('[data-engine="rvc"]')?.textContent).toContain('Unsupported GPU');
     expect(host.querySelector('[data-engine="openrouter"]')?.textContent).toContain('openRouterNotConfigured');
   } finally {
