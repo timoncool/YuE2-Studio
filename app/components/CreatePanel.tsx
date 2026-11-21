@@ -32,6 +32,7 @@ import { trackMidiBase64 } from '../services/midiEditor';
 import { composePlans, composeScore, transcribe, type ScorePlan } from '../services/transcription';
 import { bedLine, chordBed, failed, instrumentalScore, matchSections, type BedSection, type SectionProposal } from '../services/scoreApi';
 import { BackingTempo } from './BackingTempo';
+import { BackingHarmony } from './BackingHarmony';
 import { hasOnlySectionTags, sectionTagsOnly } from '../services/instrumental';
 import { lyricSyllables, syllableChangesOf, type SyllableChange } from '../services/syllables';
 import { profileLabel as setLabel, setupLabel, type SetupChoice } from '../services/modelCatalog';
@@ -2917,7 +2918,10 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
                       </Field>
                     )}
                     {musicEngine === 'local' && mode !== 'cover' && backingSongId && (
-                      <BackingTempo key={backingSongId} songId={backingSongId} onApply={bpm => setBedBpm(String(bpm))} />
+                      <div key={backingSongId}>
+                        <BackingTempo songId={backingSongId} onApply={bpm => setBedBpm(String(bpm))} />
+                        <BackingHarmony songId={backingSongId} onApplyKey={setBedKey} />
+                      </div>
                     )}
                     <div className="grid grid-cols-3 gap-2">
                       <Field label={tt('chordBedTempo')}>
