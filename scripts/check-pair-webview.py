@@ -2,7 +2,6 @@ import itertools
 import json
 import os
 from pathlib import Path
-import socket
 import subprocess
 import sys
 import time
@@ -10,11 +9,8 @@ from urllib.request import Request, urlopen
 
 root = Path(os.environ["RUNNER_TEMP"]) / "yue2-webview-qa"
 root.mkdir()
-with socket.socket() as listener:
-    listener.bind(("127.0.0.1", 0))
-    port = listener.getsockname()[1]
-base = f"http://127.0.0.1:{port}"
-env = dict(os.environ, YUE_STUDIO_PORT=str(port), YUE_STUDIO_DATA_ROOT=str(root / "data"),
+base = "http://127.0.0.1:8791"
+env = dict(os.environ, YUE_STUDIO_DATA_ROOT=str(root / "data"),
            YUE_ENGINE_BIN=str(root / "absent-engine.exe"), YUE_STUDIO_SETTINGS_PATH=str(root / "settings.json"),
            TIMONCOOL_SHARED_DIR=str(root / "shared"))
 ids = itertools.count(1)
@@ -68,5 +64,6 @@ with (root / "studio.log").open("wb") as log:
         print("PASS Windows WebView Create, live pair selection, missing weights feedback and retained draft")
     finally:
         (root / "transcript.json").write_text(json.dumps(calls, indent=2), encoding="utf-8")
-        studio.terminate()
-        studio.wait(timeout=20)
+        if studio.poll() is None:
+            studio.terminate()
+            studio.wait(timeout=20)
