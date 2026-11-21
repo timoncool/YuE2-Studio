@@ -53,6 +53,10 @@ letters, digits, underscores or hyphens. A job reports `queued`, `running`,
 `completed`, `failed`, or `cancelled`. A failure may include a `message`.
 Other failing HTTP responses may include an `error` string.
 
+Health may include `compute_backend` once the adapter knows what will run the
+job. The supported values are `cpu`, `cuda`, `vulkan` and `metal`.
+An omitted or unrecognized value reports `unknown` for speed attribution.
+
 The submission object has a string `model`, a `mode` of `create` or `replay`,
 and a `payload` object. Create can send `style`, `lyrics`, `duration_seconds`,
 `seed`, `lm_seed`, `steps`, `cfg_scale`, `abc`, `solver` and `cot`. An
