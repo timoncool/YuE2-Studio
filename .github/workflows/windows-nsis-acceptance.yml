@@ -44,7 +44,7 @@ jobs:
           $pinned = [ordered]@{
             'YuE2.Studio_5.0.0_x64-setup.exe' = '2c12f8242d9a3e743614d7c652d176edf51d24a69c47c5998faad54121a59fb7'
             'YuE2.Studio_5.0.0_x64-setup.exe.sig' = '99dd4c94c7714b0375f3c6bc790cb46aa7c12d60d8d025bdd3a53a465c7958bb'
-            'windows-rc-receipt.json' = 'f08ef5a5037963300024137cc3d7ab60dff86a98f465ac7c287c4123906df768'
+            'windows-rc-receipt.json' = '950cd919b9b27fd2552165f6a59b5ae7edaefb12533bf6388f7f1bf2187d6c64'
           }
           $evidence = [ordered]@{ release_id = $draft.id; assets = [ordered]@{} }
           foreach ($name in $pinned.Keys) {
