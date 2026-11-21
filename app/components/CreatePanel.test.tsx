@@ -919,14 +919,14 @@ it('lists signed model pairs for this platform and installs only the selected en
       return Response.json({
       platform: 'windows-x86_64',
       engines: [
-        { id: 'engine-a', name: 'Engine A', platform: 'windows-x86_64', protocol: 'music-http-v1', files: [{ bytes: 2 ** 30 }] },
-        { id: 'engine-b', name: 'Engine B', platform: 'windows-x86_64', protocol: 'music-http-v1', files: [{ bytes: 2 ** 30 }] },
-        { id: 'engine-c', name: 'Linux C', platform: 'linux-x86_64', protocol: 'music-http-v1', files: [] },
-        { id: 'engine-d', name: 'Unsupported D', platform: 'windows-x86_64', protocol: 'future', files: [] },
+        { id: 'engine-a', name: 'Engine A', version: '1', platform: 'windows-x86_64', protocol: 'music-http-v1', files: [{ bytes: 2 ** 30 }] },
+        { id: 'engine-b', name: 'Engine B', version: '1', platform: 'windows-x86_64', protocol: 'music-http-v1', files: [{ bytes: 2 ** 30 }] },
+        { id: 'engine-c', name: 'Linux C', version: '1', platform: 'linux-x86_64', protocol: 'music-http-v1', files: [] },
+        { id: 'engine-d', name: 'Unsupported D', version: '1', platform: 'windows-x86_64', protocol: 'future', files: [] },
       ],
       models: [
-        { id: 'signed-model', name: 'Test local model', engines: ['engine-a', 'engine-b', 'engine-c', 'engine-d'], files: [{ bytes: 2 ** 30 }] },
-        { id: 'linux-only', name: 'Linux-only model', engines: ['engine-c'], files: [] },
+        { id: 'signed-model', name: 'Test local model', version: '1', engines: ['engine-a', 'engine-b', 'engine-c', 'engine-d'], files: [{ bytes: 2 ** 30 }] },
+        { id: 'linux-only', name: 'Linux-only model', version: '1', engines: ['engine-c'], files: [] },
       ],
       });
     }
@@ -942,7 +942,7 @@ it('lists signed model pairs for this platform and installs only the selected en
     }
     if (url.endsWith('/status')) {
       const id = url.split('/').at(-2)!;
-      return Response.json(installed.has(id) ? { id, generation: id + '-1' } : {}, { status: installed.has(id) ? 200 : 409 });
+      return Response.json(installed.has(id) ? { id, generation: id + '-1', version: '1' } : {}, { status: installed.has(id) ? 200 : 409 });
     }
     return Response.json({});
   });
@@ -985,6 +985,79 @@ it('lists signed model pairs for this platform and installs only the selected en
   choose('Model', 'local');
   choose('Model', 'signed:signed-model');
   expect(select('Music engine').value).toBe('engine-b');
+});
+
+it('lets an active signed update be cancelled and retried while the previous pair remains usable', async () => {
+  let installedVersion = '1';
+  let resolveInstall: ((reply: Response) => void) | undefined;
+  const fetcher = vi.fn(async (url: string, init?: RequestInit) => {
+    if (url === '/v1/components/music-engines') return Response.json({
+      platform: 'windows-x86_64',
+      engines: [{ id: 'engine', name: 'Engine', version: '2', platform: 'windows-x86_64',
+        protocol: 'music-http-v1', files: [{ bytes: 2 ** 30 }] }],
+      models: [{ id: 'weights', name: 'Weights', version: '1', engines: ['engine'], files: [{ bytes: 2 ** 30 }] }],
+    });
+    if (url === '/v1/components/music-engines/engine/status') return Response.json({ version: installedVersion, generation: installedVersion });
+    if (url === '/v1/components/music-engines/engine/models/weights/status') return Response.json({ version: '1' });
+    if (url === '/v1/components/music-engines/engine/install') {
+      expect(init?.method).toBe('POST');
+      return new Promise<Response>(resolve => { resolveInstall = resolve; });
+    }
+    if (url === '/v1/components/packages/engine/engine/progress') return Response.json({
+      active: resolveInstall ? { stage: 'downloading', file: 'engine.exe', total_bytes: 2 ** 30,
+        downloaded_bytes: 250, reused_bytes: 750 } : null,
+    });
+    if (url === '/v1/components/packages/engine/engine/cancel') {
+      expect(init?.method).toBe('POST');
+      const finish = resolveInstall!;
+      resolveInstall = undefined;
+      finish(Response.json({ error: 'Package installation cancelled' }, { status: 409 }));
+      return Response.json({ cancel_requested: true });
+    }
+    return Response.json({});
+  });
+  vi.stubGlobal('fetch', fetcher);
+  function Editor() {
+    const [engine, select] = React.useState<NonNullable<React.ComponentProps<typeof CreatePanel>['musicEngine']>>('local');
+    return panel({ musicEngine: engine, onMusicEngineChange: select });
+  }
+  act(() => root.render(<Editor />));
+  await flush();
+  const select = [...host.querySelectorAll('label')]
+    .find(label => label.textContent?.startsWith('Model'))!.querySelector('select')!;
+  act(() => {
+    select.value = 'signed:weights';
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  await flush();
+  const update = () => buttonNamed('Update · 1 GiB');
+  click(update()!);
+  await flush();
+  expect(host.textContent).toContain('Downloading… · engine.exe');
+  const progress = host.querySelector('progress')!;
+  expect(progress.value).toBe(1000);
+  expect(progress.max).toBe(2 ** 30);
+  click(buttonNamed('cancel')!);
+  await flush();
+  await flush();
+  expect(update()).toBeTruthy();
+  expect(host.textContent).not.toContain('Package installation cancelled');
+  expect((buttonNamed('create') as HTMLButtonElement).disabled).toBe(false);
+  type(field('textarea[aria-label="styleCardTitle"]')!, 'piano');
+  click(buttonNamed('create')!);
+  expect(sent.at(-1)).toMatchObject({ music_source: { kind: 'signed', engine: 'engine', model: 'weights' } });
+  click(update()!);
+  await flush();
+  await act(async () => {
+    const finish = resolveInstall!;
+    resolveInstall = undefined;
+    installedVersion = '2';
+    finish(Response.json({ generation: '2', downloaded_bytes: 2 ** 30, reused_bytes: 0 }));
+  });
+  await flush();
+  expect(update()).toBeUndefined();
+  expect((buttonNamed('create') as HTMLButtonElement).disabled).toBe(false);
+  expect(fetcher.mock.calls.filter(([url]) => url === '/v1/components/music-engines/engine/install')).toHaveLength(2);
 });
 
 describe('OpenRouter music creation', () => {

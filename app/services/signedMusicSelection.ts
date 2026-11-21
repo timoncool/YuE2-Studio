@@ -8,6 +8,7 @@ interface PackageFile {
 interface EnginePackage {
   id: string;
   name: string;
+  version: string;
   platform: string;
   protocol: string;
   files: PackageFile[];
@@ -16,6 +17,7 @@ interface EnginePackage {
 interface ModelPackage {
   id: string;
   name: string;
+  version: string;
   engines: string[];
   files: PackageFile[];
 }
@@ -42,11 +44,28 @@ function preferences(): Selection {
   }
 }
 
-async function available(path: string, signal: AbortSignal): Promise<boolean> {
+interface PackageStatus {
+  version: string;
+}
+
+interface PackageProgress {
+  stage: 'verifying' | 'downloading' | 'activating';
+  file?: string | null;
+  total_bytes: number;
+  downloaded_bytes: number;
+  reused_bytes: number;
+}
+
+interface Transfer {
+  key: string;
+  path: string;
+}
+
+async function available(path: string, signal: AbortSignal): Promise<PackageStatus | undefined> {
   const response = await fetch(apiUrl(path), { signal });
-  if (response.status === 404 || response.status === 409) return false;
+  if (response.status === 404 || response.status === 409) return undefined;
   if (!response.ok) throw new Error(`HTTP ${response.status}`);
-  return true;
+  return response.json();
 }
 
 async function post(path: string) {
@@ -65,9 +84,11 @@ export function useSignedMusicSelection(list: boolean, active: boolean) {
   const [catalogue, setCatalogue] = useState<Catalogue>();
   const [catalogueError, setCatalogueError] = useState<string>();
   const [refreshingCatalogue, setRefreshingCatalogue] = useState(false);
-  const [probe, setProbe] = useState<{ key: string; engine?: boolean; model?: boolean; error?: string }>();
-  const [installing, setInstalling] = useState<string>();
-  const installLock = useRef(false);
+  const [probe, setProbe] = useState<{ key: string; engine?: PackageStatus; model?: PackageStatus; error?: string }>();
+  const [transfer, setTransfer] = useState<Transfer>();
+  const [progress, setProgress] = useState<PackageProgress>();
+  const [cancelPending, setCancelPending] = useState(false);
+  const operation = useRef<{ cancelled: boolean } | undefined>(undefined);
   const [installError, setInstallError] = useState<{ key: string; message: string }>();
   const [attempt, setAttempt] = useState(0);
   useEffect(() => {
@@ -107,6 +128,26 @@ export function useSignedMusicSelection(list: boolean, active: boolean) {
   }, [key, enginePath, modelStatus, attempt]);
 
   const status = key && probe?.key === key ? probe : undefined;
+  const needsEngine = Boolean(engine && status?.engine?.version !== engine.version);
+  const needsModel = Boolean(model && status?.model?.version !== model.version);
+  const ownTransfer = transfer?.key === key ? transfer : undefined;
+  useEffect(() => {
+    if (!ownTransfer) return;
+    const controller = new AbortController();
+    let timer: ReturnType<typeof setTimeout>;
+    const poll = async () => {
+      try {
+        const response = await fetch(apiUrl(`${ownTransfer.path}/progress`), { signal: controller.signal });
+        if (!response.ok) return;
+        const body: { active: PackageProgress | null } = await response.json();
+        if (!controller.signal.aborted) setProgress(body.active ?? undefined);
+      } catch { /* The install response reports the result even if progress is unavailable. */ }
+      finally { if (!controller.signal.aborted) timer = setTimeout(() => void poll(), 400); }
+    };
+    setProgress(undefined);
+    void poll();
+    return () => { controller.abort(); clearTimeout(timer); };
+  }, [ownTransfer]);
   const save = (next: Selection) => {
     setSelection(next);
     try { localStorage.setItem(PREFS, JSON.stringify(next)); } catch { /* Keep the session's selection. */ }
@@ -131,12 +172,31 @@ export function useSignedMusicSelection(list: boolean, active: boolean) {
         setRefreshingCatalogue(false);
       }
     },
-    ready: status?.engine === true && status.model === true,
+    ready: Boolean(status?.engine && status?.model),
     pending: Boolean(key && !status),
-    installing: Boolean(installing),
+    installing: Boolean(ownTransfer),
+    busy: Boolean(transfer),
+    progress: ownTransfer && progress,
+    cancelPending,
+    updateAvailable: Boolean(status?.engine && status?.model && (needsEngine || needsModel)),
+    cancel: async () => {
+      const run = operation.current;
+      if (!ownTransfer || !progress || cancelPending || !run) return;
+      setCancelPending(true);
+      try {
+        const response = await post(`${ownTransfer.path}/cancel`);
+        const answer: { cancel_requested?: boolean } = await response.json();
+        if (answer.cancel_requested) run.cancelled = true;
+        else if (operation.current === run) setCancelPending(false);
+      } catch (error) {
+        if (operation.current !== run) return;
+        setInstallError({ key: ownTransfer.key, message: String(error) });
+        setCancelPending(false);
+      }
+    },
     error: status?.error ?? (installError?.key === key ? installError?.message : undefined),
     missingBytes: status && !status.error && engine && model
-      ? (status.engine ? 0 : bytes(engine.files)) + (status.model ? 0 : bytes(model.files))
+      ? (needsEngine ? bytes(engine.files) : 0) + (needsModel ? bytes(model.files) : 0)
       : undefined,
     selectModel: (id: string) => save({ ...selection, model: id }),
     selectEngine: (id: string) => {
@@ -144,19 +204,27 @@ export function useSignedMusicSelection(list: boolean, active: boolean) {
     },
     refresh: () => setAttempt(current => current + 1),
     install: async () => {
-      if (!key || !status || status.error || !enginePath || !modelPath || installLock.current) return;
-      installLock.current = true;
+      if (!key || !status || status.error || !enginePath || !modelPath || !engine || !model || operation.current) return;
+      const run = { cancelled: false };
+      operation.current = run;
       setInstallError(undefined);
-      setInstalling(key);
+      const installPackage = (kind: 'engine' | 'model', id: string, path: string) => {
+        setProgress(undefined);
+        setTransfer({ key, path: `/v1/components/packages/${kind}/${encodeURIComponent(id)}` });
+        return post(`${path}/install`);
+      };
       try {
-        if (!status.engine) await post(`${enginePath}/install`);
-        if (!status.model) await post(`${modelPath}/install`);
-        setAttempt(current => current + 1);
+        if (needsEngine) await installPackage('engine', engine.id, enginePath);
+        if (needsModel && !run.cancelled) await installPackage('model', model.id, modelPath);
       } catch (error) {
-        setInstallError({ key, message: String(error) });
+        if (!run.cancelled && !String(error).includes('Package installation cancelled')) {
+          setInstallError({ key, message: String(error) });
+        }
       } finally {
-        installLock.current = false;
-        setInstalling(undefined);
+        operation.current = undefined;
+        setTransfer(undefined);
+        setCancelPending(false);
+        setAttempt(current => current + 1);
       }
     },
   };

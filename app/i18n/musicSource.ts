@@ -1,5 +1,6 @@
 export const musicSourceStrings = {
   en: {
+    updateModel: 'Update', transferStages: { verifying: 'Verifying…', downloading: 'Downloading…', activating: 'Activating…' },
     modelFamily: 'Model', refreshPackages: 'Refresh installable models', installModel: 'Install', installing: 'Installing…', engine: 'Music engine', local: 'Local YuE2', model: 'OpenRouter music model', choose: 'Select a model',
     loading: 'Loading OpenRouter models…', empty: 'No OpenRouter music models are available.',
     catalogError: 'Could not load OpenRouter music models.', refresh: 'Refresh models',
@@ -7,6 +8,7 @@ export const musicSourceStrings = {
     openResources: 'Install local models',
   },
   ru: {
+    updateModel: 'Обновить', transferStages: { verifying: 'Проверка…', downloading: 'Скачивание…', activating: 'Активация…' },
     modelFamily: 'Модель', refreshPackages: 'Обновить список устанавливаемых моделей', installModel: 'Установить', installing: 'Установка…', engine: 'Музыкальный движок', local: 'Локальный YuE2', model: 'Музыкальная модель OpenRouter', choose: 'Выберите модель',
     loading: 'Загрузка моделей OpenRouter…', empty: 'Нет доступных музыкальных моделей OpenRouter.',
     catalogError: 'Не удалось загрузить музыкальные модели OpenRouter.', refresh: 'Обновить список моделей',
@@ -14,6 +16,7 @@ export const musicSourceStrings = {
     openResources: 'Установить локальные модели',
   },
   zh: {
+    updateModel: '更新', transferStages: { verifying: '正在验证…', downloading: '正在下载…', activating: '正在启用…' },
     modelFamily: '模型', refreshPackages: '刷新可安装模型列表', installModel: '安装', installing: '正在安装…', engine: '音乐引擎', local: '本地 YuE2', model: 'OpenRouter 音乐模型', choose: '选择模型',
     loading: '正在加载 OpenRouter 模型…', empty: '当前没有可用的 OpenRouter 音乐模型。',
     catalogError: '无法加载 OpenRouter 音乐模型。', refresh: '刷新模型列表',
@@ -21,6 +24,7 @@ export const musicSourceStrings = {
     openResources: '安装本地模型',
   },
   ja: {
+    updateModel: '更新', transferStages: { verifying: '検証中…', downloading: 'ダウンロード中…', activating: '有効化中…' },
     modelFamily: 'モデル', refreshPackages: 'インストールできるモデルを更新', installModel: 'インストール', installing: 'インストール中…', engine: '音楽エンジン', local: 'ローカル YuE2', model: 'OpenRouter の音楽モデル', choose: 'モデルを選択',
     loading: 'OpenRouter のモデルを読み込み中…', empty: '利用できる OpenRouter の音楽モデルはありません。',
     catalogError: 'OpenRouter の音楽モデルを読み込めませんでした。', refresh: 'モデル一覧を更新',
@@ -28,6 +32,7 @@ export const musicSourceStrings = {
     openResources: 'ローカルモデルをインストール',
   },
   ko: {
+    updateModel: '업데이트', transferStages: { verifying: '검증 중…', downloading: '다운로드 중…', activating: '활성화 중…' },
     modelFamily: '모델', refreshPackages: '설치 가능한 모델 목록 새로고침', installModel: '설치', installing: '설치 중…', engine: '음악 엔진', local: '로컬 YuE2', model: 'OpenRouter 음악 모델', choose: '모델 선택',
     loading: 'OpenRouter 모델을 불러오는 중…', empty: '사용할 수 있는 OpenRouter 음악 모델이 없습니다.',
     catalogError: 'OpenRouter 음악 모델을 불러오지 못했습니다.', refresh: '모델 목록 새로고침',
@@ -35,6 +40,7 @@ export const musicSourceStrings = {
     openResources: '로컬 모델 설치',
   },
   pt: {
+    updateModel: 'Atualizar', transferStages: { verifying: 'Verificando…', downloading: 'Baixando…', activating: 'Ativando…' },
     modelFamily: 'Modelo', refreshPackages: 'Atualizar modelos instaláveis', installModel: 'Instalar', installing: 'Instalando…', engine: 'Motor de música', local: 'YuE2 local', model: 'Modelo musical do OpenRouter', choose: 'Selecione um modelo',
     loading: 'Carregando modelos do OpenRouter…', empty: 'Nenhum modelo musical do OpenRouter está disponível.',
     catalogError: 'Não foi possível carregar os modelos musicais do OpenRouter.', refresh: 'Atualizar modelos',

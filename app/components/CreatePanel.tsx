@@ -1872,11 +1872,24 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
                 {packages.ready && <p role="status" className="text-xs">{t('installed')}</p>}
                 {packages.pending && <p role="status" className="text-xs">{nativeStrings.loading}</p>}
                 {packages.error && <p role="alert" className="text-xs">{packages.error}</p>}
-                {packages.installing ? <p role="status" className="text-xs">{musicStrings.installing}</p>
-                  : packages.missingBytes ? (
-                    <button type="button" className="text-xs text-pink-600 underline dark:text-pink-300"
+                {packages.installing ? (
+                  <div className="space-y-1 text-xs">
+                    <p role="status">{packages.progress
+                      ? [musicStrings.transferStages[packages.progress.stage] ?? musicStrings.installing, packages.progress.file].filter(Boolean).join(' · ')
+                      : musicStrings.installing}</p>
+                    {packages.progress && packages.progress.total_bytes > 0 && (
+                      <progress className="w-full" aria-label={musicStrings.installing} max={packages.progress.total_bytes}
+                        value={Math.min(packages.progress.total_bytes, packages.progress.downloaded_bytes + packages.progress.reused_bytes)} />
+                    )}
+                    {packages.progress && packages.progress.stage !== 'activating' && (
+                      <button type="button" className="text-pink-600 underline disabled:opacity-50 dark:text-pink-300"
+                        disabled={packages.cancelPending} onClick={() => void packages.cancel()}>{t('cancel')}</button>
+                    )}
+                  </div>
+                  ) : packages.missingBytes ? (
+                    <button type="button" disabled={packages.busy} className="text-xs text-pink-600 underline disabled:opacity-50 dark:text-pink-300"
                       onClick={() => void packages.install()}>
-                      {musicStrings.installModel} · {new Intl.NumberFormat(language, { maximumFractionDigits: 2 }).format(packages.missingBytes / 2 ** 30)} GiB
+                      {packages.updateAvailable ? musicStrings.updateModel : musicStrings.installModel} · {new Intl.NumberFormat(language, { maximumFractionDigits: 2 }).format(packages.missingBytes / 2 ** 30)} GiB
                     </button>
                   ) : (!packages.ready && !packages.pending && packages.error) && (
                     <button type="button" className="text-xs text-pink-600 underline dark:text-pink-300" onClick={packages.refresh}>
