@@ -1,4 +1,4 @@
-//! Download state and hardware selection for the optional TensorRT-RTX worker.
+//! Download state and hardware selection for the optional native RVC worker.
 
 use std::path::{Path, PathBuf};
 
@@ -43,7 +43,36 @@ static RMVPE: Asset = Asset {
 
 const RELEASE: &str =
     "https://github.com/timoncool/vocal-fast-rs/releases/download/component-64b4f5dfc088/";
+const RELEASE_ROOT: &str = "https://github.com/timoncool/vocal-fast-rs/releases/download/";
 const RUNTIME_DATA: &str = include_str!("rvc_fast_assets.json");
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub(crate) enum RuntimeBackend {
+    #[serde(rename = "tensorrt-rtx")]
+    TensorRtRtx,
+    CpuGraph,
+}
+
+impl RuntimeBackend {
+    pub(crate) fn protocol_name(self) -> &'static str {
+        match self {
+            Self::TensorRtRtx => "tensorrt-rtx",
+            Self::CpuGraph => "cpu-graph",
+        }
+    }
+}
+
+pub(crate) struct InstalledWorker {
+    pub(crate) directory: PathBuf,
+    pub(crate) backend: RuntimeBackend,
+}
+
+struct RuntimeComponent {
+    asset: Asset,
+    sha256: &'static str,
+    backend: RuntimeBackend,
+}
 
 #[derive(serde::Deserialize)]
 struct RuntimePin<'a> {
@@ -51,6 +80,8 @@ struct RuntimePin<'a> {
     file: &'a str,
     sha256: &'a str,
     bytes: u64,
+    #[serde(borrow)]
+    url: Option<&'a str>,
 }
 
 #[derive(serde::Deserialize)]
@@ -59,24 +90,53 @@ struct RuntimePins<'a> {
     windows: RuntimePin<'a>,
     linux12: RuntimePin<'a>,
     linux13: RuntimePin<'a>,
+    #[serde(borrow)]
+    macos_cpu: RuntimePin<'a>,
 }
 
-fn runtimes() -> &'static [(Asset, &'static str); 3] {
-    static RUNTIMES: std::sync::OnceLock<[(Asset, &'static str); 3]> = std::sync::OnceLock::new();
+fn runtimes() -> &'static [RuntimeComponent; 4] {
+    static RUNTIMES: std::sync::OnceLock<[RuntimeComponent; 4]> = std::sync::OnceLock::new();
     RUNTIMES.get_or_init(|| {
         let pins: RuntimePins<'_> =
             serde_json::from_str(RUNTIME_DATA).expect("valid native RVC asset pins");
         [
-            (pins.windows, "cuda13", "vocal-fast.exe"),
-            (pins.linux12, "cuda12", "vocal-fast"),
-            (pins.linux13, "cuda13", "vocal-fast"),
-        ]
-        .map(|(pin, folder, marker)| {
-            let url = format!("{RELEASE}{}", pin.file).leak();
             (
-                Asset {
+                pins.windows,
+                "cuda13",
+                "vocal-fast.exe",
+                RuntimeBackend::TensorRtRtx,
+            ),
+            (
+                pins.linux12,
+                "cuda12",
+                "vocal-fast",
+                RuntimeBackend::TensorRtRtx,
+            ),
+            (
+                pins.linux13,
+                "cuda13",
+                "vocal-fast",
+                RuntimeBackend::TensorRtRtx,
+            ),
+            (
+                pins.macos_cpu,
+                "macos-cpu",
+                "vocal-fast",
+                RuntimeBackend::CpuGraph,
+            ),
+        ]
+        .map(|(pin, folder, marker, backend)| {
+            let url = pin
+                .url
+                .unwrap_or_else(|| format!("{RELEASE}{}", pin.file).leak());
+            let (label, note) = match backend {
+                RuntimeBackend::TensorRtRtx => ("TensorRT-RTX", "Native RVC worker for NVIDIA RTX"),
+                RuntimeBackend::CpuGraph => ("CPU", "Native RVC worker for macOS on Apple Silicon"),
+            };
+            RuntimeComponent {
+                asset: Asset {
                     id: "rvc-native-worker",
-                    label: "TensorRT-RTX",
+                    label,
                     kind: AssetKind::Runtime,
                     url,
                     relative_path: pin.file,
@@ -85,10 +145,11 @@ fn runtimes() -> &'static [(Asset, &'static str); 3] {
                     marker,
                     pick: &[],
                     vram_gb: None,
-                    note: "Native RVC worker for NVIDIA RTX",
+                    note,
                 },
-                pin.sha256,
-            )
+                sha256: pin.sha256,
+                backend,
+            }
         })
     })
 }
@@ -100,16 +161,33 @@ pub(crate) fn sha256(url: &str) -> Option<&'static str> {
     if url == RMVPE.url {
         return Some("462ee5494525ed1029abfad368abb56ca20285478e24aa846575ed400bff4734");
     }
-    if !url.starts_with(RELEASE) {
+    if !url.starts_with(RELEASE_ROOT) {
         return None;
     }
     runtimes()
         .iter()
-        .find(|(asset, _)| asset.url == url)
-        .map(|(_, sha)| *sha)
+        .find(|runtime| runtime.asset.url == url)
+        .map(|runtime| runtime.sha256)
 }
 
-fn selected() -> Result<[&'static Asset; 3], String> {
+fn macos_cpu_supported(apple_silicon: bool, version: Option<&str>) -> bool {
+    apple_silicon
+        && version
+            .and_then(|version| version.split('.').next())
+            .and_then(|major| major.parse::<u32>().ok())
+            .is_some_and(|major| major >= 13)
+}
+
+fn selected() -> Result<&'static RuntimeComponent, String> {
+    if cfg!(target_os = "macos") {
+        if macos_cpu_supported(
+            cfg!(target_arch = "aarch64"),
+            sysinfo::System::os_version().ok().as_deref(),
+        ) {
+            return Ok(&runtimes()[3]);
+        }
+        return Err("Native CPU RVC requires Apple Silicon and macOS 13 or newer.".into());
+    }
     if !cfg!(all(
         target_arch = "x86_64",
         any(target_os = "windows", target_os = "linux")
@@ -143,7 +221,15 @@ fn selected() -> Result<[&'static Asset; 3], String> {
     } else {
         return Err("Update the NVIDIA graphics driver to R575 or newer for TensorRT-RTX.".into());
     };
-    Ok([&runtimes()[runtime].0, &HUBERT, &RMVPE])
+    Ok(&runtimes()[runtime])
+}
+
+pub(crate) fn selected_backend() -> Option<RuntimeBackend> {
+    selected().ok().map(|runtime| runtime.backend)
+}
+
+fn assets(runtime: &'static RuntimeComponent) -> [&'static Asset; 3] {
+    [&runtime.asset, &HUBERT, &RMVPE]
 }
 
 pub(crate) fn downloader(data_root: &Path) -> Downloader {
@@ -151,11 +237,17 @@ pub(crate) fn downloader(data_root: &Path) -> Downloader {
     Downloader::with_runtimes(root.clone(), root.join("v1"))
 }
 
-pub(crate) fn installed_worker(data_root: &Path) -> Result<Option<PathBuf>, String> {
-    let assets = selected()?;
+pub(crate) fn installed_worker(data_root: &Path) -> Result<Option<InstalledWorker>, String> {
+    let runtime = selected()?;
     let downloader = downloader(data_root);
-    if assets.iter().all(|asset| present(&downloader, asset)) {
-        return Ok(Some(downloader.picked_into(assets[0])));
+    if assets(runtime)
+        .iter()
+        .all(|asset| present(&downloader, asset))
+    {
+        return Ok(Some(InstalledWorker {
+            directory: downloader.picked_into(&runtime.asset),
+            backend: runtime.backend,
+        }));
     }
     Ok(None)
 }
@@ -170,6 +262,7 @@ fn present(downloader: &Downloader, asset: &Asset) -> bool {
 #[derive(Serialize)]
 pub(crate) struct Setup {
     supported: bool,
+    backend: Option<RuntimeBackend>,
     installed: bool,
     missing_bytes: u64,
     reason: Option<String>,
@@ -179,11 +272,12 @@ pub(crate) struct Setup {
 pub(crate) async fn get(State(state): State<AppState>) -> Json<Setup> {
     let downloader = &state.rvc_native_downloads;
     let download = downloader.active_for(SCOPE).await;
-    let assets = match selected() {
-        Ok(assets) => assets,
+    let runtime = match selected() {
+        Ok(runtime) => runtime,
         Err(reason) => {
             return Json(Setup {
                 supported: false,
+                backend: None,
                 installed: false,
                 missing_bytes: 0,
                 reason: Some(reason),
@@ -191,12 +285,13 @@ pub(crate) async fn get(State(state): State<AppState>) -> Json<Setup> {
             });
         }
     };
-    let missing: Vec<_> = assets
-        .iter()
+    let missing: Vec<_> = assets(runtime)
+        .into_iter()
         .filter(|asset| !present(downloader, asset))
         .collect();
     Json(Setup {
         supported: true,
+        backend: Some(runtime.backend),
         installed: missing.is_empty(),
         missing_bytes: missing
             .iter()
@@ -209,7 +304,7 @@ pub(crate) async fn get(State(state): State<AppState>) -> Json<Setup> {
 
 pub(crate) async fn start(State(state): State<AppState>) -> impl IntoResponse {
     let assets = match selected() {
-        Ok(assets) => assets,
+        Ok(runtime) => assets(runtime),
         Err(reason) => return api_error(StatusCode::CONFLICT, reason).into_response(),
     };
     let downloader = state.rvc_native_downloads.clone();
@@ -237,11 +332,14 @@ mod tests {
 
     #[test]
     fn each_runtime_has_a_platform_archive_and_sha256_pin() {
-        for (asset, digest) in runtimes() {
-            assert_eq!(sha256(asset.url), Some(*digest));
+        for component in runtimes() {
+            let asset = &component.asset;
+            let digest = component.sha256;
+            assert_eq!(sha256(asset.url), Some(digest));
             assert!(asset.bytes > 0);
             assert_eq!(digest.len(), 64);
             assert!(digest.bytes().all(|byte| byte.is_ascii_hexdigit()));
+            assert!(asset.url.ends_with(asset.relative_path));
             assert!(
                 asset
                     .relative_path
@@ -250,6 +348,25 @@ mod tests {
                     } else {
                         ".tar.gz"
                     })
+            );
+        }
+    }
+
+    #[test]
+    fn cpu_component_requires_apple_silicon_and_macos_13() {
+        assert!(macos_cpu_supported(true, Some("13.0")));
+        assert!(macos_cpu_supported(true, Some("26.2.1")));
+        assert!(!macos_cpu_supported(true, Some("12.7.4")));
+        assert!(!macos_cpu_supported(false, Some("15.5")));
+        assert!(!macos_cpu_supported(true, None));
+        assert!(!macos_cpu_supported(true, Some("unknown")));
+        let component = &runtimes()[3];
+        assert_eq!(component.backend, RuntimeBackend::CpuGraph);
+        assert_eq!(component.asset.unzip_into, Some("macos-cpu"));
+        for component in runtimes() {
+            assert_eq!(
+                serde_json::to_value(component.backend).unwrap(),
+                component.backend.protocol_name()
             );
         }
     }
@@ -287,7 +404,55 @@ mod tests {
     }
 
     #[tokio::test]
-    #[ignore = "requires an RTX host and the verified runtime, acoustic models and indexed RVC fixture"]
+    #[ignore = "requires the pinned macOS runtime archive via YUE2_MACOS_RVC_ARCHIVE"]
+    async fn installs_the_macos_cpu_archive_with_its_loader_dependencies() {
+        let archive = PathBuf::from(std::env::var_os("YUE2_MACOS_RVC_ARCHIVE").unwrap());
+        let scratch = tempfile::Builder::new()
+            .prefix("rvc-голос-")
+            .tempdir()
+            .unwrap();
+        let downloader = downloader(scratch.path());
+        let asset = &runtimes()[3].asset;
+        let local = downloader.path_of(asset);
+        std::fs::create_dir_all(local.parent().unwrap()).unwrap();
+        std::fs::copy(&archive, &local).unwrap();
+        downloader.install_all(SCOPE, &[asset]).await.unwrap();
+        assert!(present(&downloader, asset));
+        let directory = downloader.picked_into(asset);
+        let exe = directory.join(asset.marker);
+        let dylib = directory.join("libdnnl.3.dylib");
+        assert!(exe.is_file() && dylib.is_file());
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            assert_ne!(
+                std::fs::metadata(&exe).unwrap().permissions().mode() & 0o111,
+                0
+            );
+        }
+        #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+        {
+            assert_eq!(selected_backend(), Some(RuntimeBackend::CpuGraph));
+            assert!(installed_worker(scratch.path()).unwrap().is_none());
+            assert!(!scratch.path().join("rvc/native/cache-v1").exists());
+            let result = std::process::Command::new(&exe)
+                .arg("--help")
+                .env_remove("DYLD_LIBRARY_PATH")
+                .env_remove("DYLD_FALLBACK_LIBRARY_PATH")
+                .output()
+                .unwrap();
+            assert!(
+                result.status.success(),
+                "{}",
+                String::from_utf8_lossy(&result.stderr)
+            );
+        }
+        std::fs::remove_file(dylib).unwrap();
+        assert!(!present(&downloader, asset));
+    }
+
+    #[tokio::test]
+    #[ignore = "requires supported hardware and the verified runtime, acoustic models and indexed RVC fixture"]
     async fn installs_and_converts_from_the_pinned_runtime() {
         // Supply the release archive, hubert.vfrm, rmvpe.vfrm, input.wav,
         // voice.pth and retrieval.index.
@@ -297,7 +462,7 @@ mod tests {
             .tempdir_in(&fixture)
             .unwrap();
         let downloader = downloader(scratch.path());
-        let assets = selected().unwrap();
+        let assets = assets(selected().unwrap());
         for asset in assets {
             let destination = downloader.path_of(asset);
             std::fs::create_dir_all(destination.parent().unwrap()).unwrap();
@@ -315,6 +480,7 @@ mod tests {
             installed_worker(scratch.path())
                 .unwrap()
                 .unwrap()
+                .directory
                 .join(assets[0].marker)
                 .is_file()
         );

@@ -11926,6 +11926,7 @@ fn spawn_job_watcher(state: AppState, job_id: String) {
             (job_status_name(&job.status), job.message.clone(), job.songs.len(), profiles, songs_seconds(&job.songs))
         });
         if let Some(hub) = &state.hub {
+            let hub = hub.for_scheduled_report();
             match ended.as_ref() {
                 Some(("completed", _, songs, profiles, seconds)) if *songs > 0 => {
                     hub.count("songs", *songs as u64);
@@ -12572,7 +12573,7 @@ async fn local_music_model_catalog(
 
 /// A job whose answer is a score: a transcription of a recording, or a
 /// composition from a style and lyrics.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 struct ScoreJob {
     id: String,
     status: String,
@@ -12580,7 +12581,7 @@ struct ScoreJob {
     finished_at: Option<std::time::Instant>,
     #[serde(skip_serializing_if = "Option::is_none")]
     abc: Option<String>,
-    #[serde(skip_serializing_if = "Vec::is_empty")]
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     plans: Vec<ScorePlan>,
     /// The token seed a composition drew its score with.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -12595,7 +12596,7 @@ impl ScoreJob {
     }
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 struct ScorePlan { abc: String, lm_seed: Option<i64> }
 
 #[derive(Debug, Deserialize)]
@@ -12800,7 +12801,7 @@ async fn watch_score_job(state: AppState, id: String, using: tokio::sync::OwnedR
     track_engine_score(scores, submitted, using, async move {
         let mut errors = 0;
         let mut last_answer = std::time::Instant::now();
-        loop {
+        let finished = loop {
             match tokio::time::timeout(std::time::Duration::from_secs(5), read_engine_score(&state.music_server, &id)).await {
                 Ok(Ok(job)) if job.status != "running" => break job,
                 Ok(Ok(_)) => {
@@ -12825,7 +12826,13 @@ async fn watch_score_job(state: AppState, id: String, using: tokio::sync::OwnedR
                 }
             }
             tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+        };
+        if finished.status == "done"
+            && let Err(error) = state.library.save_score_result(&finished, SCORE_CACHE_LIMIT)
+        {
+            eprintln!("[ERROR] the completed score {id} could not be kept: {error:#}");
         }
+        finished
     }).await
 }
 
@@ -12849,7 +12856,7 @@ async fn track_engine_score(
         jobs.retain(|job| job.id != finished.id && score_still_cached(job));
         jobs.push_back(finished);
         // Match the native engine's cache of 32 finished jobs; never evict a running score.
-        if jobs.iter().filter(|job| job.status != "running").count() > 32 {
+        if jobs.iter().filter(|job| job.status != "running").count() > SCORE_CACHE_LIMIT {
             if let Some(oldest) = jobs.iter().position(|job| job.status != "running") {
                 jobs.remove(oldest);
             }
@@ -12861,6 +12868,7 @@ async fn track_engine_score(
 }
 
 /// Keep scores for a late UI poll, including after the native engine restarts.
+const SCORE_CACHE_LIMIT: usize = 32;
 const SCORE_CACHE_TTL: std::time::Duration = std::time::Duration::from_secs(30 * 60);
 
 fn score_still_cached(job: &ScoreJob) -> bool {
@@ -12905,6 +12913,9 @@ async fn score_job_status(
     if let Some(job) = state.score_jobs.read().await.iter().find(|job| job.id == job_id && score_still_cached(job)).cloned() {
         return Ok(Json(job));
     }
+    if let Some(score) = stored_score(&state.library, &job_id) {
+        return Ok(Json(score));
+    }
     read_engine_score(&state.music_server, &job_id).await.map(Json).map_err(|(status, error)| api_error(status, error))
 }
 
@@ -12914,6 +12925,9 @@ async fn cancel_score_job(
 ) -> Result<Json<ScoreJob>, (StatusCode, Json<ApiError>)> {
     if let Some(job) = state.score_jobs.read().await.iter().find(|job| job.id == job_id && job.status != "running" && score_still_cached(job)).cloned() {
         return Ok(Json(job));
+    }
+    if let Some(score) = stored_score(&state.library, &job_id) {
+        return Ok(Json(score));
     }
     // Cancel only requests that the worker stop. Keep the lease until it actually reports a terminal status.
     match state.music_server.cancel(&job_id).await {
@@ -12925,6 +12939,13 @@ async fn cancel_score_job(
             Err(api_error(StatusCode::SERVICE_UNAVAILABLE, error.to_string()))
         }
     }
+}
+
+fn stored_score(library: &library::Library, id: &str) -> Option<ScoreJob> {
+    library.score_result(id).unwrap_or_else(|error| {
+        eprintln!("[ERROR] the saved score {id} could not be read: {error:#}");
+        None
+    })
 }
 
 async fn engine_http_error(response: reqwest::Response) -> anyhow::Error {

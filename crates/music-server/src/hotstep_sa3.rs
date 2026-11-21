@@ -267,6 +267,7 @@ async fn submit_with_source(
     source: Option<&library::Song>,
 ) -> (StatusCode, Json<MusicJob>) {
     let engine = hotstep_cover::ENGINE;
+    let submitted = std::time::Instant::now();
     let reject = |status, reason: String| {
         (
             status,
@@ -413,7 +414,7 @@ async fn submit_with_source(
             let fades = (request.fade_in.unwrap_or_default(), request.fade_out.unwrap_or_default());
             tokio::task::spawn_blocking(move || native_music_jobs::shape_output(wav, &format, request.mp3_bitrate, fades)).await?
         }.await;
-        audio_cpp_music::complete_local(&state, &job.id, MODEL, PROFILE, result).await;
+        audio_cpp_music::complete_local(&state, &job.id, MODEL, PROFILE, "hotstep.stable_audio_3", submitted, result).await;
         state.audio_cpp_music_stops.write().await.remove(&job.id);
     });
     (StatusCode::ACCEPTED, Json(accepted))

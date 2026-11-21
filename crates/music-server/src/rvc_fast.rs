@@ -1,4 +1,4 @@
-//! Optional native RVC runtime. Each process owns its CUDA context and keeps
+//! Optional native RVC runtime. Each process owns its backend and keeps
 //! the last voice's compiled graphs between requests.
 
 use std::{
@@ -13,6 +13,8 @@ use anyhow::{Context, Result, anyhow, bail};
 use serde::Deserialize;
 use serde_json::json;
 
+use crate::rvc_fast_install::RuntimeBackend;
+
 static WORKER: Mutex<Option<Worker>> = Mutex::new(None);
 const HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(12);
 const CONVERSION_TIMEOUT: Duration = Duration::from_secs(15 * 60);
@@ -26,22 +28,25 @@ pub struct Request<'a> {
 }
 
 pub fn availability(data_root: &Path) -> Result<(), String> {
-    let (runtime, cache) = runtime_paths(data_root).map_err(|error| error.to_string())?;
+    let (runtime, cache, backend) = runtime_paths(data_root).map_err(|error| error.to_string())?;
     let mut worker = WORKER
         .lock()
         .map_err(|_| "The native RVC worker is unavailable.".to_string())?;
-    ensure_worker(&mut worker, runtime, &cache)
+    ensure_worker(&mut worker, runtime, &cache, backend)
         .map(|_| ())
         .map_err(|error| format!("{error:#}"))
 }
 
 /// Reports installation and an already-running worker without starting one.
 pub fn status(data_root: &Path) -> Result<bool, String> {
-    let (runtime, _) = runtime_paths(data_root).map_err(|error| error.to_string())?;
+    let (runtime, _, backend) = runtime_paths(data_root).map_err(|error| error.to_string())?;
     let Ok(mut slot) = WORKER.try_lock() else {
         return Ok(false);
     };
-    let Some(worker) = slot.as_mut().filter(|worker| worker.runtime == runtime) else {
+    let Some(worker) = slot
+        .as_mut()
+        .filter(|worker| worker.runtime == runtime && worker.device == device(backend))
+    else {
         return Ok(false);
     };
     worker
@@ -86,7 +91,7 @@ pub fn convert(
     cancelled: &impl Fn() -> bool,
 ) -> Result<audio_post::Stereo> {
     anyhow::ensure!(!cancelled(), "Native RVC conversion cancelled.");
-    let (runtime, cache) =
+    let (runtime, cache, backend) =
         runtime_paths(data_root).map_err(|error| BackendFailure(format!("{error:#}")))?;
     std::fs::create_dir_all(&cache).context("Create native RVC cache")?;
     let handoff = tempfile::tempdir_in(&cache)?;
@@ -104,7 +109,7 @@ pub fn convert(
     let mut worker = WORKER
         .lock()
         .map_err(|_| anyhow!("The native RVC worker is unavailable."))?;
-    let transport = ensure_worker(&mut worker, runtime, &cache)
+    let transport = ensure_worker(&mut worker, runtime, &cache, backend)
         .map_err(|error| BackendFailure(format!("{error:#}")))?
         .roundtrip(&ipc, cancelled);
     let reply = match transport {
@@ -130,37 +135,44 @@ pub fn convert(
     Ok(audio)
 }
 
-fn runtime_paths(data_root: &Path) -> Result<(PathBuf, PathBuf)> {
-    if !cfg!(any(target_os = "windows", target_os = "linux")) || !cfg!(target_arch = "x86_64") {
-        bail!("Native TensorRT-RTX is available on x86-64 Windows and Linux.");
-    }
+fn runtime_paths(data_root: &Path) -> Result<(PathBuf, PathBuf, RuntimeBackend)> {
     let root = data_root.join("rvc/native");
     let runtime = crate::rvc_fast_install::installed_worker(data_root)
         .map_err(|error| anyhow!(error))?
         .context("Install the native RVC runtime and acoustic models first.")?;
     let variant = runtime
+        .directory
         .file_name()
         .context("Worker has no runtime directory")?;
     Ok((
-        runtime.canonicalize()?,
+        runtime.directory.canonicalize()?,
         root.canonicalize()?.join("cache-v1").join(variant),
+        runtime.backend,
     ))
+}
+
+fn device(backend: RuntimeBackend) -> Option<std::ffi::OsString> {
+    if backend == RuntimeBackend::TensorRtRtx {
+        return std::env::var_os("CUDA_VISIBLE_DEVICES");
+    }
+    None
 }
 
 fn ensure_worker<'a>(
     slot: &'a mut Option<Worker>,
     runtime: PathBuf,
     cache: &Path,
+    backend: RuntimeBackend,
 ) -> Result<&'a mut Worker> {
     if let Some(worker) = slot
         && (worker.runtime != runtime
-            || worker.device != std::env::var_os("CUDA_VISIBLE_DEVICES")
+            || worker.device != device(backend)
             || worker.child.try_wait()?.is_some())
     {
         *slot = None;
     }
     if slot.is_none() {
-        *slot = Some(Worker::start(runtime, cache)?);
+        *slot = Some(Worker::start(runtime, cache, backend)?);
     }
     slot.as_mut().context("Native RVC worker failed to start")
 }
@@ -187,7 +199,7 @@ struct Worker {
 }
 
 impl Worker {
-    fn start(runtime: PathBuf, cache: &Path) -> Result<Self> {
+    fn start(runtime: PathBuf, cache: &Path, backend: RuntimeBackend) -> Result<Self> {
         #[cfg(windows)]
         let launch_dir = windows_launch_dir(&runtime)?;
         #[cfg(not(windows))]
@@ -204,12 +216,19 @@ impl Worker {
                 cache.as_os_str(),
             ])
             .current_dir(&launch_dir)
-            .env("NVIDIA_TF32_OVERRIDE", "0")
-            .env("VOCAL_TRT_PLAN_CACHE_DIR", cache.join("plans"))
             .env("RUST_LOG", "warn")
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::inherit());
+        if backend == RuntimeBackend::TensorRtRtx {
+            command
+                .env("NVIDIA_TF32_OVERRIDE", "0")
+                .env("VOCAL_TRT_PLAN_CACHE_DIR", cache.join("plans"));
+        }
+        #[cfg(target_os = "macos")]
+        command
+            .env_remove("DYLD_LIBRARY_PATH")
+            .env_remove("DYLD_FALLBACK_LIBRARY_PATH");
         #[cfg(target_os = "linux")]
         {
             // TensorRT opens its companion libraries at runtime. Prepend their
@@ -230,9 +249,8 @@ impl Worker {
             use std::os::windows::process::CommandExt;
             command.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
         }
-        let mut child = music_core::process::spawn_dying_with_parent(command).context(
-            "Start native RVC process; check the TensorRT-RTX runtime and NVIDIA driver",
-        )?;
+        let mut child = music_core::process::spawn_dying_with_parent(command)
+            .with_context(|| format!("Start native RVC process for {}", backend.protocol_name()))?;
         music_core::process::adopt(&child);
         let stdout = child.stdout.take().expect("worker stdout is piped");
         let input = child.stdin.take().expect("worker stdin is piped");
@@ -242,7 +260,7 @@ impl Worker {
             input,
             output,
             runtime,
-            device: std::env::var_os("CUDA_VISIBLE_DEVICES"),
+            device: device(backend),
         };
         std::thread::Builder::new()
             .name("rvc-worker-output".into())
@@ -253,10 +271,18 @@ impl Worker {
                     }
                 }
             })?;
-        let hello = worker.receive::<Hello>(HANDSHAKE_TIMEOUT).context(
-            "Native RVC device self-test failed; check the NVIDIA driver and TensorRT runtime",
-        )?;
-        if hello.protocol != 1 || hello.backend != "tensorrt-rtx" || hello.version != "0.1.7" {
+        let hello = worker
+            .receive::<Hello>(HANDSHAKE_TIMEOUT)
+            .with_context(|| {
+                format!(
+                    "Native RVC {} runtime self-test failed",
+                    backend.protocol_name()
+                )
+            })?;
+        if hello.protocol != 1
+            || hello.backend != backend.protocol_name()
+            || hello.version != "0.1.7"
+        {
             bail!("The native RVC worker version or backend is incompatible.");
         }
         Ok(worker)
