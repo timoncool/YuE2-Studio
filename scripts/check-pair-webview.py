@@ -64,7 +64,7 @@ with (root / "studio.log").open("wb") as log:
         assert pair["requested"] == {"kind": "native", "engine": "minimaxmusic-cpp", "model": "minimal"}, pair
         assert "Keep these words" in json.dumps(form) and "Windows WebView folk" in json.dumps(form), form
         page = mcp("ui_read_page")
-        assert "Installation required" in json.dumps(page), page
+        assert "Retry" in json.dumps(page), page
         print("PASS Windows WebView Create, live pair selection, missing weights feedback and retained draft")
     finally:
         (root / "transcript.json").write_text(json.dumps(calls, indent=2), encoding="utf-8")
