@@ -363,6 +363,47 @@ def check_lrc(root, pid):
             assert not cancelled.exists(), cancelled
             json_file(out/f"{extension}-export.json", dict(song_id=song["id"], bytes=len(saved),
                       sha256=hashlib.sha256(saved).hexdigest(), cancelled_file_absent=True))
+        click('button "x icon"')
+        page = wait_page(predicate=lambda text: context in text and 'button "Download LRC (Lyrics)"' not in text)
+        row = next(line for line in page.splitlines() if context in line)
+        ui("click", ref=re.search(r"(e\d+) More actions", row)[1])
+        click('"Export…"')
+        for fmt in ("wav", "flac", "mp3"):
+            wait_page('button "Export"')
+            ui("select", text="Format", value=fmt)
+            click('button "Export"')
+            click('button "Save…"')
+            target = root/f"Мастер.{fmt}"
+            save_dialog_file(pid, target, f"master-{fmt}-dialog.json")
+            for _ in range(80):
+                if target.exists() and target.stat().st_size > 128:
+                    break
+                time.sleep(.2)
+            blob = target.read_bytes()
+            assert (blob[:4] == b"RIFF" and blob[8:12] == b"WAVE" if fmt == "wav" else
+                    blob[:4] == b"fLaC" if fmt == "flac" else
+                    blob.startswith(b"ID3") or blob[0] == 255 and blob[1] & 224 == 224), (fmt, blob[:12])
+            json_file(out/f"master-{fmt}.json", dict(bytes=len(blob), sha256=hashlib.sha256(blob).hexdigest()))
+            click('button "Export again"')
+        import zipfile
+        for kind in ("track", "ableton"):
+            if kind == "ableton":
+                click('button "Make the project"')
+            label = 'button "Save…"' if kind == "ableton" else 'button "Export… ZIP"'
+            click(label)
+            target = root/f"Проект-{kind}.zip"
+            save_dialog_file(pid, target, f"{kind}-dialog.json")
+            for _ in range(80):
+                if zipfile.is_zipfile(target):
+                    break
+                time.sleep(.2)
+            with zipfile.ZipFile(target) as archive:
+                assert archive.testzip() is None
+                members = archive.namelist()
+                assert any(name.lower().endswith(".wav") for name in members), members
+                if kind == "ableton":
+                    assert any(name.endswith(".als") for name in members), members
+                json_file(out/f"{kind}-archive.json", dict(members=members, bytes=target.stat().st_size))
     finally:
         observer.stdin.close()
         try:
