@@ -41,7 +41,7 @@ def wait(check, duration=45):
             result = check()
             if result:
                 return result
-        except OSError as error:
+        except (OSError, AssertionError) as error:
             last = error
         time.sleep(.5)
     raise TimeoutError((last, calls[-3:]))
@@ -50,9 +50,9 @@ with (root / "studio.log").open("wb") as log:
     studio = subprocess.Popen([sys.argv[1]], env=env, stdout=log, stderr=subprocess.STDOUT)
     try:
         wait(lambda: mcp("studio_status").get("window_open"), 90)
-        mcp("ui_navigate", {"view": "create"})
         wait(lambda: "Use OpenRouter" in json.dumps(mcp("ui_read_page")))
         mcp("ui_click", {"text": "Use OpenRouter"})
+        wait(lambda: "Local model" in json.dumps(mcp("ui_read_page")) or bool(mcp("create_form_get")))
         mcp("create_form_set", {"fields": {"style": "Windows WebView folk", "lyrics": "Keep these words"}})
         mcp("ui_select", {"text": "Model", "value": "minimaxmusic-cpp"})
         mcp("ui_select", {"text": "Local model", "value": "minimal"})
