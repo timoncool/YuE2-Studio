@@ -380,6 +380,7 @@ async fn run(
         let mut cancel_ack = None;
         let outcome = watch(&state, &job, &process, &remote, receiver, &mut cancel_ack).await;
         let elapsed = started.elapsed();
+        let backend = process.compute_backend.report_name();
         process.stop().await;
         let outcome = match outcome {
             Ok(Some(track)) => import(&state, &job, identity, track).await.map(Some),
@@ -398,7 +399,13 @@ async fn run(
         }
         if let Some(report) = report {
             report
-                .record(&state, "signed_music", "native.signed_music", elapsed)
+                .record_on(
+                    &state,
+                    "signed_music",
+                    "native.signed_music",
+                    elapsed,
+                    Some(backend),
+                )
                 .await;
         }
     });

@@ -74,8 +74,31 @@ async fn pending<P: Package>(
     }))
 }
 
-async fn plan(root: &Path) -> Result<Vec<Update>> {
-    let mut updates = Vec::new();
+#[derive(Default)]
+struct Plan {
+    updates: Vec<Update>,
+    errors: Vec<serde_json::Value>,
+}
+
+impl Plan {
+    async fn inspect<P: Package>(
+        &mut self,
+        root: &Path,
+        candidate: &P,
+        version: impl Fn(&P) -> &str,
+    ) {
+        match pending(root, candidate, version).await {
+            Ok(Some(update)) => self.updates.push(update),
+            Ok(None) => (),
+            Err(error) => self.errors.push(serde_json::json!({
+                "kind": P::FOLDER, "id": candidate.id(), "error": format!("{error:#}")
+            })),
+        }
+    }
+}
+
+async fn plan(root: &Path) -> Result<Plan> {
+    let mut updates = Plan::default();
     let Some(bytes) = channel::cached_catalogue(channel::ENGINES).await? else {
         return Ok(updates);
     };
@@ -87,9 +110,7 @@ async fn plan(root: &Path) -> Result<Vec<Update>> {
         .filter(|engine| engine.platform == platform && engine.protocol == "music-http-v1")
         .collect();
     for engine in &engines {
-        if let Some(update) = pending(root, *engine, |p| &p.version).await? {
-            updates.push(update);
-        }
+        updates.inspect(root, *engine, |p| &p.version).await;
     }
     for model in &catalogue.models {
         if model
@@ -97,9 +118,7 @@ async fn plan(root: &Path) -> Result<Vec<Update>> {
             .iter()
             .any(|id| engines.iter().any(|engine| &engine.id == id))
         {
-            if let Some(update) = pending(root, model, |p| &p.version).await? {
-                updates.push(update);
-            }
+            updates.inspect(root, model, |p| &p.version).await;
         }
     }
     Ok(updates)
@@ -113,9 +132,10 @@ pub(crate) async fn list(
     State(state): State<AppState>,
 ) -> Result<Json<serde_json::Value>, Failure> {
     let root = update_data_root(&state);
+    let plan = plan(root).await.map_err(failure)?;
     Ok(Json(
         serde_json::json!({"mode":policy(root).map_err(failure)?.mode,
-        "updates":plan(root).await.map_err(failure)?}),
+        "updates":plan.updates, "errors":plan.errors}),
     ))
 }
 
@@ -132,6 +152,7 @@ pub(crate) async fn set_mode(
         Ok(())
     };
     save().map_err(failure)?;
+    super::super::note_updates_changed();
     MODE_CHANGED.notify_one();
     Ok(Json(next))
 }
@@ -146,7 +167,7 @@ async fn check(state: &AppState) -> Result<()> {
         .await
         .map_err(|(_, body)| anyhow::anyhow!(body.error.clone()))?;
     if mode == Mode::Auto {
-        for change in plan(root).await? {
+        for change in plan(root).await?.updates {
             if policy(root)?.mode != Mode::Auto {
                 break;
             }

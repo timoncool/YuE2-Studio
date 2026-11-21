@@ -18,12 +18,19 @@ impl SongReport {
     }
 
     pub(super) async fn record(self, state: &AppState, engine: &'static str, set: &'static str, elapsed: std::time::Duration) {
+        self.record_on(state, engine, set, elapsed, None).await;
+    }
+
+    pub(super) async fn record_on(self, state: &AppState, engine: &'static str, set: &'static str, elapsed: std::time::Duration, backend: Option<&'static str>) {
         let Some(hub) = state.hub.as_ref().map(|hub| hub.for_scheduled_report()) else { return };
         if let Err(error) = tokio::task::spawn_blocking(move || match self.status {
             MusicJobStatus::Completed if self.tracks > 0 => {
                 hub.count("songs", self.tracks);
                 hub.count("song_done", 1);
                 if hub.telemetry_on() {
+                    if let Some(backend) = backend {
+                        hub.computes_on(backend);
+                    }
                     hub.used_models(Some(set), &[engine.to_string()], self.tracks);
                     hub.worked_on("song", Some(set), self.seconds, elapsed);
                 }

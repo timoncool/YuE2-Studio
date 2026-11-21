@@ -808,6 +808,13 @@ export const SetupGate: React.FC<{
   const [status, setStatus] = useState<SetupStatus | null>(null);
   const [catalog, setCatalog] = useState<Catalog | null>(null);
   const [updateOpen, setUpdateOpen] = useState(false);
+  const openUpdates = useCallback((panel: HTMLDetailsElement | null) => {
+    if (panel && focus === 'component-updates') {
+      panel.open = true;
+      setUpdateOpen(true);
+      panel.scrollIntoView?.({ block: 'nearest' });
+    }
+  }, [focus]);
   const [choice, setChoice] = useState<Record<string, string>>({});
   const choiceEdited = useRef(false);
   const pendingSelection = useRef<Promise<boolean> | null>(null);
@@ -1011,7 +1018,7 @@ export const SetupGate: React.FC<{
 
         {mode === 'settings' && <WhereItRuns trainingVram={trainingInfo?.min_vram_gb ?? null} />}
         {mode === 'settings' && (
-          <details className="group mt-4 overflow-hidden rounded-xl border border-zinc-200 bg-white dark:border-white/10 dark:bg-suno-card" onToggle={(event) => setUpdateOpen(event.currentTarget.open)}>
+          <details ref={openUpdates} className="group mt-4 overflow-hidden rounded-xl border border-zinc-200 bg-white dark:border-white/10 dark:bg-suno-card" onToggle={(event) => setUpdateOpen(event.currentTarget.open)}>
             <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 hover:bg-zinc-50 dark:hover:bg-white/5">
               <span className="min-w-0">
                 <span className="block text-sm font-semibold text-zinc-900 dark:text-white">{t('updateSettingsEntry')}</span>

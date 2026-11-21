@@ -491,33 +491,33 @@ footer p { margin: 0 0 8px; }
     <p class="note">种子为 42 时，两份 WAV 均为 30.0 秒、48 kHz 的立体声。按 100 毫秒窗口计算双声道 RMS，CUDA 的最后 5.3 秒和 Vulkan 的最后 5.0 秒均低于 −60 dBFS。速度按 WAV 的完整时长计算。</p>
 <!-- music-gpu-matrix:start -->
     <h3>音乐引擎 GPU 测试矩阵 · 5.0 开发版</h3>
-    <p class="note">Windows 11、RTX 4090、驱动 617.42。冷启动计时包含服务器启动至收到首个 WAV，预热后为同一服务器三次请求的中位数。内存数据为冷启动时整卡显存和进程树 RSS 峰值。比较同一任务时也需核对权重、静音段和构建版本。</p>
+    <p class="note">Windows 11、RTX 4090、驱动 617.42。冷启动计时包含服务器启动至收到首个 WAV，预热后为同一服务器三次请求的中位数。内存数据为冷启动时整卡显存和进程树 RSS 峰值。比较同一任务时也需核对权重、静音段和构建版本。 热运行请求前显存为三次请求之前整张显卡显存读数的中位数。</p>
     <div class="scroll"><table>
-      <thead><tr><th scope="col">模型和引擎</th><th scope="col">后端</th><th scope="col">WAV（秒）</th><th scope="col">冷启动（秒）</th><th scope="col">预热后（秒）</th><th scope="col">音频秒/秒</th><th scope="col">显存峰值 / 增量（GiB）</th><th scope="col">内存峰值（GiB）</th></tr></thead>
+      <thead><tr><th scope="col">模型和引擎</th><th scope="col">后端</th><th scope="col">WAV（秒）</th><th scope="col">冷启动（秒）</th><th scope="col">预热后（秒）</th><th scope="col">音频秒/秒</th><th scope="col">显存峰值 / 增量（GiB）</th><th scope="col">热运行请求前显存（GiB）</th><th scope="col">内存峰值（GiB）</th></tr></thead>
       <tbody>
-      <tr><td>YuE2 · yue2.cpp 892b9b0 · 3B Q8_0 + F32 VAE; NAR v9 · 30 s · 32 steps</td><td>CUDA 13</td><td>29.999</td><td>8.813</td><td>4.759</td><td>6.30×</td><td>8.13 / +5.75</td><td>3.37</td></tr>
-      <tr><td>YuE2 · yue2.cpp 892b9b0 · 3B Q8_0 + F32 VAE; NAR v9 · 30 s · 32 steps</td><td>Vulkan</td><td>29.999</td><td>16.609</td><td>5.861</td><td>5.12×</td><td>8.19 / +5.81</td><td>3.08</td></tr>
-      <tr><td>YuE2 · audio.cpp 41242418 · 3B Q8_0 + F16 VAE; NAR v9 · 30 s · 32 steps</td><td>CUDA 13</td><td>29.999</td><td>16.807</td><td>7.441</td><td>4.03×</td><td>7.02 / +4.68</td><td>6.24</td></tr>
-      <tr><td>YuE2 · audio.cpp 41242418 · 3B Q8_0 + F16 VAE; NAR v9 · 30 s · 32 steps</td><td>Vulkan</td><td>29.999</td><td>28.258</td><td>10.286</td><td>2.92×</td><td>6.44 / +4.51</td><td>6.85</td></tr>
-      <tr><td>YuE2 · yue2.cpp 892b9b0 · 3B Q8_0 + F32 VAE; NAR v9 · 100 tokens · 2 steps</td><td>CUDA 13</td><td>3.999</td><td>6.516</td><td>0.172</td><td>23.20×</td><td>6.88 / +4.51</td><td>3.40</td></tr>
-      <tr><td>YuE2 · audio.cpp 41242418 · 3B Q8_0 + F16 VAE; NAR v9 · 100 tokens · 2 steps</td><td>CUDA 13</td><td>3.999</td><td>7.482</td><td>0.383</td><td>10.44×</td><td>6.28 / +3.92</td><td>5.84</td></tr>
-      <tr><td>YuE2 · yue2.cpp 892b9b0 · 3B Q8_0 + F32 VAE; NAR v9 · 100 tokens · 2 steps</td><td>CUDA 12</td><td>3.999</td><td>4.969</td><td>0.125</td><td>31.95×</td><td>6.88 / +4.50</td><td>3.45</td></tr>
-      <tr><td>YuE2 · audio.cpp 41242418 · 3B Q8_0 + F16 VAE; NAR v9 · 100 tokens · 2 steps</td><td>CUDA 12</td><td>3.999</td><td>7.869</td><td>0.420</td><td>9.52×</td><td>6.46 / +4.10</td><td>5.76</td></tr>
-      <tr><td>YuE2 · yue2.cpp 892b9b0 · 3B Q8_0 + F32 VAE; NAR v9 · 100 tokens · 2 steps</td><td>Vulkan</td><td>3.999</td><td>13.766</td><td>0.252</td><td>15.88×</td><td>6.54 / +4.17</td><td>3.82</td></tr>
-      <tr><td>YuE2 · audio.cpp 41242418 · 3B Q8_0 + F16 VAE; NAR v9 · 100 tokens · 2 steps</td><td>Vulkan</td><td>3.999</td><td>8.373</td><td>0.974</td><td>4.11×</td><td>6.31 / +3.94</td><td>5.33</td></tr>
-      <tr><td>ACE-Step 1.5 · acestep.cpp 6e0e414 · Turbo Q8_0 + BF16 embedder/VAE · 30 s · 8 Euler steps</td><td>CUDA 13</td><td>30.000</td><td>6.234</td><td>0.392</td><td>76.51×</td><td>9.73 / +7.80</td><td>2.11</td></tr>
-      <tr><td>ACE-Step 1.5 · acestep.cpp 6e0e414 · Turbo Q8_0 + BF16 embedder/VAE · 30 s · 8 Euler steps</td><td>Vulkan</td><td>30.000</td><td>7.204</td><td>0.381</td><td>78.69×</td><td>8.58 / +6.65</td><td>2.00</td></tr>
-      <tr><td>ACE-Step 1.5 · audio.cpp 41242418 · Turbo Q8_0, packed GGUF · 30 s · 8 Euler steps</td><td>CUDA 13</td><td>30.000</td><td>10.512</td><td>1.387</td><td>21.62×</td><td>10.43 / +8.49</td><td>2.58</td></tr>
-      <tr><td>ACE-Step 1.5 · audio.cpp 41242418 · Turbo Q8_0, packed GGUF · 30 s · 8 Euler steps</td><td>Vulkan</td><td>30.000</td><td>21.746</td><td>2.237</td><td>13.41×</td><td>10.23 / +8.30</td><td>4.60</td></tr>
-      <tr><td>MiniMax Music3 · minimaxmusic.cpp f476b0e · Minimal Q3_K_M / Q4_K_M + F32 · 3.2 s · 2 steps</td><td>CUDA 13</td><td>3.193</td><td>7.312</td><td>1.257</td><td>2.54×</td><td>9.32 / +7.38</td><td>4.56</td></tr>
-      <tr><td>MiniMax Music3 · minimaxmusic.cpp f476b0e · Quality Q8_0 + F32 vocoder · 3.2 s · 2 steps</td><td>CUDA 13</td><td>3.193</td><td>9.156</td><td>1.852</td><td>1.72×</td><td>15.18 / +13.23</td><td>8.91</td></tr>
-      <tr><td>MiniMax Music3 · minimaxmusic.cpp f476b0e · Minimal Q3_K_M / Q4_K_M + F32 · 3.2 s · 2 steps</td><td>Vulkan</td><td>3.193</td><td>7.343</td><td>1.987</td><td>1.61×</td><td>8.96 / +7.03</td><td>4.33</td></tr>
-      <tr><td>MiniMax Music3 · minimaxmusic.cpp f476b0e · Quality Q8_0 + F32 vocoder · 3.2 s · 2 steps</td><td>Vulkan</td><td>3.193</td><td>16.047</td><td>2.295</td><td>1.39×</td><td>14.94 / +13.00</td><td>8.35</td></tr>
-      <tr><td>MiniMax Music3 · audio.cpp 41242418 · LM/depth/DiT Q8_0 · 3.2 s · 2 steps</td><td>CUDA 13</td><td>3.193</td><td>14.604</td><td>8.720</td><td>0.37×</td><td>10.97 / +9.04</td><td>8.87</td></tr>
-      <tr><td>MiniMax Music3 · audio.cpp 41242418 · LM/depth/DiT Q8_0 · 3.2 s · 2 steps</td><td>Vulkan</td><td>3.193</td><td>17.621</td><td>10.478</td><td>0.30×</td><td>10.65 / +8.72</td><td>8.66</td></tr>
-      <tr><td>Stable Audio 3 · HOT-Step cdef1b0d67af · Medium BF16/F16 · 4 s · 4 steps</td><td>CUDA 12.8</td><td>4.000</td><td>6.737</td><td>0.254</td><td>15.72×</td><td>9.30 / +7.37</td><td>2.82</td></tr>
-      <tr><td>Stable Audio 3 · audio.cpp 41242418 · Small Music Q8_0 · 4 s · 4 steps</td><td>CUDA 12</td><td>4.000</td><td>1.259</td><td>0.078</td><td>51.18×</td><td>3.54 / +1.60</td><td>1.17</td></tr>
-      <tr><td>Stable Audio 3 · audio.cpp 41242418 · Small Music Q8_0 · 4 s · 4 steps</td><td>CUDA 13</td><td>4.000</td><td>1.893</td><td>0.071</td><td>56.00×</td><td>3.53 / +1.60</td><td>1.18</td></tr>
+      <tr><td>YuE2 · yue2.cpp 892b9b0 · 3B Q8_0 + F32 VAE; NAR v9 · 30 s · 32 steps</td><td>CUDA 13</td><td>29.999</td><td>8.813</td><td>4.759</td><td>6.30×</td><td>8.13 / +5.75</td><td>8.13</td><td>3.37</td></tr>
+      <tr><td>YuE2 · yue2.cpp 892b9b0 · 3B Q8_0 + F32 VAE; NAR v9 · 30 s · 32 steps</td><td>Vulkan</td><td>29.999</td><td>16.609</td><td>5.861</td><td>5.12×</td><td>8.19 / +5.81</td><td>8.87</td><td>3.08</td></tr>
+      <tr><td>YuE2 · audio.cpp 41242418 · 3B Q8_0 + F16 VAE; NAR v9 · 30 s · 32 steps</td><td>CUDA 13</td><td>29.999</td><td>16.807</td><td>7.441</td><td>4.03×</td><td>7.02 / +4.68</td><td>3.16</td><td>6.24</td></tr>
+      <tr><td>YuE2 · audio.cpp 41242418 · 3B Q8_0 + F16 VAE; NAR v9 · 30 s · 32 steps</td><td>Vulkan</td><td>29.999</td><td>28.258</td><td>10.286</td><td>2.92×</td><td>6.44 / +4.51</td><td>2.54</td><td>6.85</td></tr>
+      <tr><td>YuE2 · yue2.cpp 892b9b0 · 3B Q8_0 + F32 VAE; NAR v9 · 100 tokens · 2 steps</td><td>CUDA 13</td><td>3.999</td><td>6.516</td><td>0.172</td><td>23.20×</td><td>6.88 / +4.51</td><td>6.88</td><td>3.40</td></tr>
+      <tr><td>YuE2 · audio.cpp 41242418 · 3B Q8_0 + F16 VAE; NAR v9 · 100 tokens · 2 steps</td><td>CUDA 13</td><td>3.999</td><td>7.482</td><td>0.383</td><td>10.44×</td><td>6.28 / +3.92</td><td>3.03</td><td>5.84</td></tr>
+      <tr><td>YuE2 · yue2.cpp 892b9b0 · 3B Q8_0 + F32 VAE; NAR v9 · 100 tokens · 2 steps</td><td>CUDA 12</td><td>3.999</td><td>4.969</td><td>0.125</td><td>31.95×</td><td>6.88 / +4.50</td><td>6.88</td><td>3.45</td></tr>
+      <tr><td>YuE2 · audio.cpp 41242418 · 3B Q8_0 + F16 VAE; NAR v9 · 100 tokens · 2 steps</td><td>CUDA 12</td><td>3.999</td><td>7.869</td><td>0.420</td><td>9.52×</td><td>6.46 / +4.10</td><td>3.03</td><td>5.76</td></tr>
+      <tr><td>YuE2 · yue2.cpp 892b9b0 · 3B Q8_0 + F32 VAE; NAR v9 · 100 tokens · 2 steps</td><td>Vulkan</td><td>3.999</td><td>13.766</td><td>0.252</td><td>15.88×</td><td>6.54 / +4.17</td><td>6.54</td><td>3.82</td></tr>
+      <tr><td>YuE2 · audio.cpp 41242418 · 3B Q8_0 + F16 VAE; NAR v9 · 100 tokens · 2 steps</td><td>Vulkan</td><td>3.999</td><td>8.373</td><td>0.974</td><td>4.11×</td><td>6.31 / +3.94</td><td>2.89</td><td>5.33</td></tr>
+      <tr><td>ACE-Step 1.5 · acestep.cpp 6e0e414 · Turbo Q8_0 + BF16 embedder/VAE · 30 s · 8 Euler steps</td><td>CUDA 13</td><td>30.000</td><td>6.234</td><td>0.392</td><td>76.51×</td><td>9.73 / +7.80</td><td>9.74</td><td>2.11</td></tr>
+      <tr><td>ACE-Step 1.5 · acestep.cpp 6e0e414 · Turbo Q8_0 + BF16 embedder/VAE · 30 s · 8 Euler steps</td><td>Vulkan</td><td>30.000</td><td>7.204</td><td>0.381</td><td>78.69×</td><td>8.58 / +6.65</td><td>8.57</td><td>2.00</td></tr>
+      <tr><td>ACE-Step 1.5 · audio.cpp 41242418 · Turbo Q8_0, packed GGUF · 30 s · 8 Euler steps</td><td>CUDA 13</td><td>30.000</td><td>10.512</td><td>1.387</td><td>21.62×</td><td>10.43 / +8.49</td><td>10.48</td><td>2.58</td></tr>
+      <tr><td>ACE-Step 1.5 · audio.cpp 41242418 · Turbo Q8_0, packed GGUF · 30 s · 8 Euler steps</td><td>Vulkan</td><td>30.000</td><td>21.746</td><td>2.237</td><td>13.41×</td><td>10.23 / +8.30</td><td>10.22</td><td>4.60</td></tr>
+      <tr><td>MiniMax Music3 · minimaxmusic.cpp f476b0e · Minimal Q3_K_M / Q4_K_M + F32 · 3.2 s · 2 steps</td><td>CUDA 13</td><td>3.193</td><td>7.312</td><td>1.257</td><td>2.54×</td><td>9.32 / +7.38</td><td>9.32</td><td>4.56</td></tr>
+      <tr><td>MiniMax Music3 · minimaxmusic.cpp f476b0e · Quality Q8_0 + F32 vocoder · 3.2 s · 2 steps</td><td>CUDA 13</td><td>3.193</td><td>9.156</td><td>1.852</td><td>1.72×</td><td>15.18 / +13.23</td><td>15.18</td><td>8.91</td></tr>
+      <tr><td>MiniMax Music3 · minimaxmusic.cpp f476b0e · Minimal Q3_K_M / Q4_K_M + F32 · 3.2 s · 2 steps</td><td>Vulkan</td><td>3.193</td><td>7.343</td><td>1.987</td><td>1.61×</td><td>8.96 / +7.03</td><td>8.96</td><td>4.33</td></tr>
+      <tr><td>MiniMax Music3 · minimaxmusic.cpp f476b0e · Quality Q8_0 + F32 vocoder · 3.2 s · 2 steps</td><td>Vulkan</td><td>3.193</td><td>16.047</td><td>2.295</td><td>1.39×</td><td>14.94 / +13.00</td><td>14.94</td><td>8.35</td></tr>
+      <tr><td>MiniMax Music3 · audio.cpp 41242418 · LM/depth/DiT Q8_0 · 3.2 s · 2 steps</td><td>CUDA 13</td><td>3.193</td><td>14.604</td><td>8.720</td><td>0.37×</td><td>10.97 / +9.04</td><td>2.47</td><td>8.87</td></tr>
+      <tr><td>MiniMax Music3 · audio.cpp 41242418 · LM/depth/DiT Q8_0 · 3.2 s · 2 steps</td><td>Vulkan</td><td>3.193</td><td>17.621</td><td>10.478</td><td>0.30×</td><td>10.65 / +8.72</td><td>2.39</td><td>8.66</td></tr>
+      <tr><td>Stable Audio 3 · HOT-Step cdef1b0d67af · Medium BF16/F16 · 4 s · 4 steps</td><td>CUDA 12.8</td><td>4.000</td><td>6.737</td><td>0.254</td><td>15.72×</td><td>9.30 / +7.37</td><td>9.30</td><td>2.82</td></tr>
+      <tr><td>Stable Audio 3 · audio.cpp 41242418 · Small Music Q8_0 · 4 s · 4 steps</td><td>CUDA 12</td><td>4.000</td><td>1.259</td><td>0.078</td><td>51.18×</td><td>3.54 / +1.60</td><td>3.55</td><td>1.17</td></tr>
+      <tr><td>Stable Audio 3 · audio.cpp 41242418 · Small Music Q8_0 · 4 s · 4 steps</td><td>CUDA 13</td><td>4.000</td><td>1.893</td><td>0.071</td><td>56.00×</td><td>3.53 / +1.60</td><td>3.54</td><td>1.18</td></tr>
       </tbody>
     </table></div>
     <p><a href="music-gpu-benchmarks.json">各次运行、SHA-256 和权重配置</a></p>

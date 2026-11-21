@@ -604,6 +604,7 @@ const JOURNAL: &[(&str, &str, &str)] = &[
     ("recogniser_remove", "deleted", "model"),
     ("midi_remove", "deleted", "model"),
     ("models_select", "updated", "settings"),
+    ("music_pair_select", "updated", "settings"),
     ("models_preset", "updated", "settings"),
     ("models_own_select", "updated", "settings"),
     ("models_own_cancel", "cancelled", "download"),
@@ -1224,6 +1225,18 @@ fn tools() -> &'static [Tool] {
                 description: "Take model files already on this computer instead of downloading them: every file of the catalogue found in the folder (by name, else by exact size) is linked into the studio's models. models_status shows the result.",
                 schema: || id_only("path", "folder with the model files"),
                 call: |args| post("/setup/adopt".into(), json!({ "path": text(args, "path")? })),
+            },
+            Tool {
+                name: "music_pair_status",
+                description: "Read the server-side music pair transition, including requested and active source, exact stage and elapsed time. Does not install files or start a song.",
+                schema: nothing,
+                call: |_| get("/v1/music/pair".into()),
+            },
+            Tool {
+                name: "music_pair_select",
+                description: "Prepare a music source using the same music_source object as song_create. Waits for active generation and does not download missing files. Read music_pair_status for progress.",
+                schema: || object(json!({"music_source":{"type":"object"},"client_id":{"type":"string"},"sequence":{"type":"integer","minimum":0}}), &["music_source"]),
+                call: |args| post("/v1/music/pair".into(), args.clone()),
             },
             Tool {
                 name: "models_update_plan",

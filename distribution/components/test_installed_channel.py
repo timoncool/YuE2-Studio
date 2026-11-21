@@ -420,7 +420,7 @@ def run_rvc(work, binary, certificate, tls_key, install_voice=False):
             model_args = {"engine": engine["id"], "model": model["id"]}
             assert tool("music_model_package_status", model_args)["generation"] == first_model["generation"]
             tool("music_model_package_status", dict(model_args, engine="incompatible-engine"), expected_error=True)
-            assert tool("music_package_updates_get") == {"mode": "manual", "updates": []}
+            assert tool("music_package_updates_get") == {"mode": "manual", "updates": [], "errors": []}
             new_weight = b"updated model weights"
             (origin / "weights-v2.bin").write_bytes(new_weight)
             next_model = dict(sibling, version="2", files=[pinned("weights-v2.bin", new_weight)])
@@ -497,6 +497,16 @@ def run_rvc(work, binary, certificate, tls_key, install_voice=False):
         assert tool("music_package_rollback", rollback) == restored
         assert tool("music_engine_package_status", args)["version"] == "1"
         assert tool("music_package_updates_get")["updates"][0]["automatic_updates_paused"]
+        model_selection, = [p for p in studio.rglob("active.json") if p.parent.name == model["id"]]
+        selection_bytes = model_selection.read_bytes()
+        try:
+            model_selection.write_bytes(b"{")
+            isolated = tool("music_package_updates_get")
+            assert isolated["updates"][0]["id"] == engine["id"], isolated
+            assert [(e["kind"], e["id"]) for e in isolated["errors"]] == [("music-models", model["id"])], isolated
+        finally:
+            model_selection.write_bytes(selection_bytes)
+        print("PASS damaged model selection did not hide independent engine update")
         print("PASS offline rollback rejected damaged previous DLL and restored intact generation once")
         print("PASS signed engine discovery, incompatible schema rejected, offline restart, unexpected library rejected")
         cache = studio / "component-channel" / "rvc"
