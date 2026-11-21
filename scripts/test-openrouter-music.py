@@ -230,6 +230,21 @@ with tempfile.TemporaryDirectory(prefix="yue-openrouter-") as profile, local_pro
         assert code==202,(code,data)
         slow_job=json.loads(data)["id"]
         assert slow_started.wait(5),"provider never started its stream"
+        if sys.platform in ("win32", "linux") and os.environ.get("PROCESSOR_ARCHITECTURE", "AMD64").lower() in ("amd64", "x86_64"):
+            native=root/"rvc"/"native"
+            native_runtime=native/"v1"
+            native_runtime.mkdir(parents=True)
+            executable="vocal-fast.exe" if sys.platform=="win32" else "vocal-fast"
+            for filename in (executable, "hubert.vfrm", "rmvpe.vfrm"):
+                (native_runtime/filename).write_bytes(b"passive discovery fixture")
+            assert tool("rvc_catalog_list", {"query":"Radio Tapok"}, 20)["total"] > 0
+            assert tool("rvc_voices_list", {}, 21) == []
+            detected=tool("rvc_backend_status", {}, 22)["backends"]["vocal-fast-rs"]
+            assert detected["can_start"] and not detected["ready"], detected
+            assert not (native/"cache-v1").exists(), "reading the catalog started native RVC"
+            code,data=request("/v1/music/jobs/"+slow_job)
+            assert code==200 and json.loads(data)["status"]=="running",(code,data)
+
         code,data=request("/v1/music/jobs/"+slow_job,{})
         assert code==200 and json.loads(data)["status"]=="cancelled",(code,data)
         assert slow_disconnected.wait(5),"cancel did not close the upstream HTTP connection"
