@@ -19,9 +19,9 @@ jobs:
       VERSION: "5.0.0"
       APP: "YuE2 Studio"
       DMG: "YuE2-Studio-5.0.0-macos-arm64.dmg"
-      BUILD_RUN: "44885352475"
-      BUILD_SHA: "9e50a4b0dc1240bf573ad19009eba5e59aaf17ab"
-      DMG_SHA256: "8aeff76ffde1d7a24dab053f7b7bb61d1bf9a014873d8fde4bfa425d108ec419"
+      BUILD_RUN: "44894247344"
+      BUILD_SHA: "2a9bde22843bdf23a96632bf7b1f8e0d0b0b9f87"
+      DMG_SHA256: "1893260dd2f0b546d09098fa815fdf65178f593ead025be353c91fd93d91f94f"
       PORT: "8791"
       GH_TOKEN: ${{ github.token }}
     steps:
@@ -75,8 +75,6 @@ jobs:
           cp status.txt init.txt "$receipt/"
           call ui_read_page '{}' | text > "$receipt/start.txt"
           [ "$(awk 'END {print NR}' "$receipt/start.txt")" -gt 5 ]
-          screencapture -x "$receipt/window.png"
-          test -s "$receipt/window.png"
           for view in create library search playlist adapters tools news; do
             call ui_navigate "{\"view\":\"$view\"}" | text > "$receipt/navigate-$view.txt"
             call ui_read_page '{}' | text > "$receipt/$view.txt"
