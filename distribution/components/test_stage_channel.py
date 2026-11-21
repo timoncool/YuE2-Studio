@@ -2,6 +2,8 @@
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
+import hashlib
+from io import BytesIO
 import json
 import os
 from pathlib import Path
@@ -13,6 +15,7 @@ from tempfile import TemporaryDirectory
 from threading import Thread
 import time
 import unittest
+from unittest.mock import patch
 from urllib.error import URLError
 from urllib.request import Request, urlopen
 
@@ -22,7 +25,7 @@ from tuf.api.metadata import Metadata, MetaFile, Root, Snapshot, TargetFile, Tar
 
 from tuf.ngclient import Updater
 
-from stage_channel import stage_channel
+from stage_channel import stage_channel, verify_package_changes
 from test_installed_channel import sign
 
 
@@ -291,6 +294,30 @@ class Publication(unittest.TestCase):
                 finally:
                     server.shutdown()
                     thread.join()
+
+
+class PackagePublicationTest(unittest.TestCase):
+    def test_fetches_only_new_pins_and_rejects_bad_artifacts(self):
+        with TemporaryDirectory() as folder:
+            old, new = (Path(folder) / name for name in ("old.json", "new.json"))
+            pin = {"name": "worker", "url": "https://engine.invalid/v1", "bytes": 3,
+                   "sha256": hashlib.sha256(b"abc").hexdigest()}
+            model_pin = dict(pin, name="weights", url="https://weights.invalid/shared")
+            snapshot = {"schema": 1, "engines": [{"id": "engine", "files": [pin]}]}
+            old.write_text(json.dumps(snapshot))
+            snapshot["models"] = [{"id": name, "files": [model_pin]} for name in ("a", "b")]
+            new.write_text(json.dumps(snapshot))
+            for data in (b"abc", b"ab", b"abcd", b"bad"):
+                with self.subTest(data=data), patch("stage_channel.urlopen") as fetch:
+                    reply = fetch.return_value.__enter__.return_value
+                    reply.geturl.return_value = model_pin["url"]
+                    reply.read.side_effect = BytesIO(data).read
+                    if data == b"abc":
+                        verify_package_changes(new, old)
+                    else:
+                        with self.assertRaisesRegex(ValueError, "size or SHA-256 mismatch"):
+                            verify_package_changes(new, old)
+                    fetch.assert_called_once_with(model_pin["url"], timeout=60)
 
 
 if __name__ == "__main__":
