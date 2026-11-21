@@ -127,6 +127,7 @@ import { StudioToolsPanel } from './components/StudioToolsPanel';
 import { AdaptersPage } from './components/AdaptersPage';
 import { PlayerExtras } from './components/player/PlayerExtras';
 import { registerPlayer } from './services/audioGraph';
+import { loadLibraryTrack, setLibraryPlaybackRate } from './services/playerTempo';
 import { serveVisualizerFeed } from './services/visualizerFeed';
 import { winampControl, winampOn } from './services/winamp';
 import { notePlayed } from './services/playHistory';
@@ -427,6 +428,10 @@ function AppContent() {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const selectedSongRef = useRef<Song | null>(null);
   const currentSongIdRef = useRef<string | null>(null);
+  const changePlaybackRate = useCallback((rate: number) => {
+    if (audioRef.current) setLibraryPlaybackRate(audioRef.current, rate);
+    setPlaybackRate(rate);
+  }, []);
   const pendingSeekRef = useRef<number | null>(null);
   const playNextRef = useRef<() => void>(() => {});
 
@@ -916,15 +921,15 @@ function AppContent() {
       }
     };
 
-    if (currentSongIdRef.current !== currentSong.id) {
+    const loaded = loadLibraryTrack(audio, currentSongIdRef.current, {
+      id: currentSong.id, audioUrl: currentSong.audioUrl,
+    });
+    if (loaded) {
       currentSongIdRef.current = currentSong.id;
-      audio.src = currentSong.audioUrl;
-      audio.load();
-      if (isPlaying) playAudio();
-    } else {
-      if (isPlaying) playAudio();
-      else audio.pause();
+      setPlaybackRate(1);
     }
+    if (isPlaying) playAudio();
+    else if (!loaded) audio.pause();
   }, [currentSong, isPlaying]);
 
   // Handle Volume
@@ -934,13 +939,6 @@ function AppContent() {
     }
     localStorage.setItem('volume', String(volume));
   }, [volume]);
-
-  // Handle Playback Rate
-  useEffect(() => {
-    if (audioRef.current) {
-      audioRef.current.playbackRate = playbackRate;
-    }
-  }, [playbackRate]);
 
   // a visualiser in its own window hears the player through this window
   useEffect(() => serveVisualizerFeed(), []);
@@ -1241,6 +1239,7 @@ function AppContent() {
             if (audioRef.current) {
               audioRef.current.pause();
               audioRef.current.src = '';
+              currentSongIdRef.current = null;
             }
           }
 
@@ -1720,7 +1719,7 @@ function AppContent() {
         volume={volume}
         onVolumeChange={setVolume}
         playbackRate={playbackRate}
-        onPlaybackRateChange={setPlaybackRate}
+        onPlaybackRateChange={changePlaybackRate}
         audioRef={audioRef}
         isShuffle={isShuffle}
         onToggleShuffle={() => setIsShuffle(!isShuffle)}
