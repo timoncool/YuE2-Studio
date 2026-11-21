@@ -19,9 +19,9 @@ let root: Root;
 let host: HTMLDivElement;
 const writeText = vi.fn(async () => undefined);
 
-function mount(lyrics: string) {
+function mount(lyrics: string, details: Partial<Song> = {}) {
   Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
-  const song: Song = { id: 'song', title: 'A vocal recording', lyrics, style: '', coverUrl: '', duration: '1:00', createdAt: new Date(), isPublic: false, tags: [] };
+  const song: Song = { id: 'song', title: 'A vocal recording', lyrics, style: '', coverUrl: '', duration: '1:00', createdAt: new Date(), isPublic: false, tags: [], ...details };
   host = document.createElement('div');
   document.body.append(host);
   root = createRoot(host);
@@ -40,6 +40,21 @@ afterEach(() => {
   act(() => root?.unmount());
   host?.remove();
   vi.clearAllMocks();
+});
+
+it('separates the MiDasheng duration budget from the actual recording length', () => {
+  mount('', {
+    duration: '0:01',
+    durationSeconds: 1,
+    generationParams: { music_source: { kind: 'audio_cpp', model: 'midashenglm_gen' }, duration_seconds: 5 },
+  });
+  const params = Array.from(host.querySelectorAll<HTMLButtonElement>('button[aria-expanded]'))
+    .find(node => node.textContent === 'songParamsBlock');
+  expect(params).toBeDefined();
+  act(() => params!.click());
+  const rows = params!.parentElement!.parentElement!.textContent;
+  expect(rows).toContain('Duration budget (seconds)5 sec');
+  expect(rows).toContain('Audio duration1 sec');
 });
 
 describe('song details lyrics', () => {

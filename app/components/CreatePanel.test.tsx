@@ -707,7 +707,7 @@ it('chooses MiniMax Music3 through audio.cpp and reuses the saved seed and forma
 it.each([
   ['heartmula', { heartmula: { top_k: 30, temperature: 0.9 } }, 'pop', ''],
   ['vevo2', { vevo2: { voice_song_id: 'original-take' } }, '', 'Words to sing'],
-  ['midashenglm_gen', { midasheng: { caption: '', music: 'quiet piano', speech_text: '', speech_style: '', effects: '', environment: 'rain' } }, 'quiet piano', ''],
+  ['midashenglm_gen', { duration_seconds: 5, midasheng: { caption: '', music: 'quiet piano', speech_text: '', speech_style: '', effects: '', environment: 'rain' } }, 'quiet piano', ''],
 ] as const)('restores and submits model-specific settings for %s', async (model, options, style, lyrics) => {
   vi.stubGlobal('fetch', vi.fn(async () => Response.json({ engine: 'audio.cpp', models: [
     { id: model, name: model, profile_id: 'q8', quantization: 'Q8_0', ready: true, missing: [] },
@@ -720,6 +720,13 @@ it.each([
   await flush();
   click(buttonNamed('create')!);
   expect(sent.at(-1)).toMatchObject({ music_source: { kind: 'audio_cpp', model }, ...options });
+  if (model === 'midashenglm_gen') {
+    expect(host.textContent).toContain('Duration budget (seconds)');
+    const duration = host.querySelector<HTMLInputElement>('input[aria-describedby]');
+    expect(duration?.value).toBe('5');
+    expect(document.getElementById(duration?.getAttribute('aria-describedby') ?? '')?.textContent)
+      .toBe('Generation can finish before the budget runs out.');
+  }
 });
 it('restores a Magenta reference and submits either the available reference or text style', async () => {
   const model = 'magenta_realtime_2';

@@ -49,6 +49,15 @@ export const musicSourceStrings = {
   },
 };
 
+export const miDashengDurationStrings = {
+  en: { budget: 'Duration budget (seconds)', hint: 'Generation can finish before the budget runs out.', effective: 'Audio duration', default: 'Model default' },
+  ru: { budget: 'Бюджет длительности (с)', hint: 'Генерация может завершиться раньше.', effective: 'Длительность аудио', default: 'По умолчанию в модели' },
+  zh: { budget: '时长预算（秒）', hint: '生成可能在预算用完前结束。', effective: '音频时长', default: '模型默认值' },
+  ja: { budget: '生成時間の目安（秒）', hint: '指定した時間より短く終わることがあります。', effective: '音声の長さ', default: 'モデル既定値' },
+  ko: { budget: '생성 시간 예산(초)', hint: '설정한 시간보다 먼저 생성이 끝날 수 있습니다.', effective: '오디오 길이', default: '모델 기본값' },
+  pt: { budget: 'Limite de duração (segundos)', hint: 'A geração pode terminar antes do tempo indicado.', effective: 'Duração do áudio', default: 'Padrão do modelo' },
+};
+
 export const nativeMusicSourceStrings = {
   en: {
     model: 'Local model', loading: 'Checking model availability…', error: 'Could not check model availability.',

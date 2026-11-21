@@ -51,7 +51,7 @@ import { Vevo2SingingFields, vevo2SingingStrings, type Vevo2References } from '.
 import { NumberField } from './NumberField';
 import { explainCliFailure } from '../services/cliFailure';
 import { loadNativeOpenRouterCatalog, modelsForCapability, refreshNativeOpenRouterCatalog, type NativeOpenRouterModel } from '../services/nativeOpenRouter';
-import { musicSourceStrings, nativeMusicSourceStrings } from '../i18n/musicSource';
+import { miDashengDurationStrings, musicSourceStrings, nativeMusicSourceStrings } from '../i18n/musicSource';
 import { useSignedMusicSelection } from '../services/signedMusicSelection';
 import { useMusicPair, type PairSource } from '../services/musicPair';
 import { musicPairStrings } from '../i18n/musicPair';
@@ -489,9 +489,11 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
   const [stableSettings, setStableSettings] = useState(emptyStableAudioDraft);
   const [vevoReferences, setVevoReferences] = useState<Vevo2References>({ voice_song_id: '' });
   const nativeStrings = nativeMusicSourceStrings[language];
+  const durationHintId = React.useId();
+  const miDashengDuration = miDashengDurationStrings[language];
   const yue = musicEngine === 'local';
   const nativeControls = [
-    ['duration_seconds', nativeStrings.duration],
+    ['duration_seconds', miDasheng ? miDashengDuration.budget : nativeStrings.duration],
     ['steps', nativeStrings.steps],
     ['seed', nativeStrings.seed],
     nativeEngine === 'minimaxmusic-cpp'
@@ -2036,6 +2038,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
                       <label key={key} className="space-y-1 text-xs">
                         <span>{label}</span>
                         <input type="number" step={key === 'duration_seconds' || key === 'guidance_scale' ? 'any' : 1}
+                          aria-describedby={miDasheng && key === 'duration_seconds' ? durationHintId : undefined}
                           min={miniMaxH3 && key === 'duration_seconds' ? 1 : undefined}
                           max={miniMaxH3 && key === 'duration_seconds' ? 20 : undefined}
                           className={CONTROL} value={native.settings[key] ?? ''}
@@ -2043,6 +2046,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
                           onChange={event => native.set(key, event.target.value)} />
                       </label>
                     ))}
+                    {miDasheng && <p id={durationHintId} className="col-span-2 text-xs text-zinc-500">{miDashengDuration.hint}</p>}
                     {nativeEngine !== 'acestep-cpp' && (
                       <label className="space-y-1 text-xs">
                         <span>{t('outputFormat')}</span>

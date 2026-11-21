@@ -4,7 +4,8 @@ import { useKaraokeStatus } from '../services/studioQueries';
 import { TRACK_ARTIST } from '../services/studio';
 import { Song } from '../types';
 import { Heart, Share2, Play, Pause, MoreHorizontal, X, Copy, Wand2, MoreVertical, Download, Repeat, Video, Music, Link as LinkIcon, Sparkles, Globe, Lock, Trash2, Edit3, Layers, ChevronDown, ClipboardCopy, Braces, ImagePlus, Loader2, Mic2, FileMusic, Clapperboard } from 'lucide-react';
-import { musicSourceStrings } from '../i18n/musicSource';
+import { miDashengDurationStrings, musicSourceStrings } from '../i18n/musicSource';
+import { miDashengModel } from './MiDashengFields';
 import { cloudMusicModel, cloudMusicModelName, mapNativeLibrarySong, setNativeSongNote, renameNativeSong } from '../services/nativeLibrary';
 import { pendingNotes } from '../services/generations';
 import { useAuth } from '../context/AuthContext';
@@ -613,6 +614,9 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({ song, onClose, onOpe
                     {(() => {
                         const p = (song.generationParams || {}) as Record<string, any>;
                         if (!song.generationParams) return null;
+                        const miDasheng = p.music_source?.kind === 'audio_cpp' && p.music_source.model === miDashengModel;
+                        const durationLabels = miDashengDurationStrings[language];
+                        const seconds = new Intl.NumberFormat(language, { style: 'unit', unit: 'second', maximumFractionDigits: 2 });
                         const cotLabel: Record<string, string> = { full: t('cotFull'), melody: t('cotMelody'), off: t('cotOff') };
                         const paramRows: [string, string | number | undefined][] = [
                             [musicSourceStrings[language].model, cloudMusicModelName(song)],
@@ -621,7 +625,7 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({ song, onClose, onOpe
                             [(t as unknown as (key: string) => string)('ownModelRow'), typeof p.own_model === 'string' ? p.own_model : undefined],
                             [(t as unknown as (key: string) => string)('kvCacheRow'), typeof p.kv_cache === 'string' ? p.kv_cache.toUpperCase() : undefined],
                             [t('cotMode'), p.cot ? cotLabel[p.cot] ?? p.cot : undefined],
-                            [t('maxDuration'), song.duration && song.duration !== '0:00' ? song.duration : undefined],
+                            [t('maxDuration'), !miDasheng && song.duration && song.duration !== '0:00' ? song.duration : undefined],
                             [t('flowSteps'), p.steps],
                             ['CFG', typeof p.cfg_scale === 'number' && p.cfg_scale >= 0 ? p.cfg_scale : undefined],
                             [t('lmSeedYue'), p.lm_seed],
@@ -629,6 +633,13 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({ song, onClose, onOpe
                             [t('outputFormat'), typeof p.output_format === 'string' ? p.output_format.toUpperCase() : undefined],
                             [t('mp3Bitrate'), p.output_format === 'mp3' && p.mp3_bitrate ? `${p.mp3_bitrate} kbps` : undefined],
                         ];
+                        if (miDasheng) {
+                            paramRows.push(
+                                [durationLabels.budget, typeof p.duration_seconds === 'number'
+                                    ? seconds.format(p.duration_seconds) : durationLabels.default],
+                                [durationLabels.effective, song.durationSeconds ? seconds.format(song.durationSeconds) : undefined],
+                            );
+                        }
                         const tr = t as unknown as (key: string) => string;
                         // A stage's sampling is recorded only when it was changed from the checkpoint's.
                         const samplingLabel: Record<string, string> = {

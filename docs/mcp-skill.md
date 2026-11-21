@@ -143,7 +143,11 @@ them in `song_create`.
 For other ready audio.cpp families, pass the ID returned by the same catalog as
 `music_source.model`. HeartMuLa takes lyrics and style tags, with optional
 sampling and codec settings in `heartmula`. For MiDashengLM-Gen, use
-`midasheng` to describe the scene, music, speech, effects and environment.
+`midasheng` to describe the scene, music, speech, effects and environment. Its
+`duration_seconds` is a budget. The model can finish early. The compact job
+shows `requested_duration_seconds` and, after completion, `effective_duration_seconds`.
+Read `generation_settings.duration_seconds` from the library to repeat the same
+budget and `metadata.duration_seconds` for the saved audio length.
 For MiniMax-H3, select `minimax_h3` and supply one instrumental description in
 `style`. The audio-only route accepts `duration_seconds` from 1 to 20 (default 4),
 plus `steps`, `seed`, and `cfg_scale`. It uses the locally installed

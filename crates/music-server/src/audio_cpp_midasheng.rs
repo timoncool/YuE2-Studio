@@ -49,6 +49,7 @@ pub(super) fn catalog(path: &Path, runtime_ready: bool) -> Value {
         "id": FAMILY, "name": "MiDashengLM-Gen", "profile_id": PROFILE,
         "quantization": "Q8_0", "status": "experimental", "ready": missing.is_empty(),
         "missing": missing, "requires": ["midasheng"], "output_formats": ["flac", "mp3", "wav32"],
+        "duration_seconds": { "kind": "budget", "allows_early_stop": true },
     })
 }
 
