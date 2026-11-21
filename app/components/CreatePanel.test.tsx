@@ -1474,6 +1474,37 @@ it('reuses a Stable Audio 3 text prompt and its sampler and guidance controls', 
   });
 });
 
+it('shows the MuLaCover weights and resampler steps independently', async () => {
+  const package_url = 'https://huggingface.co/audio-cpp/audio.cpp-gguf/tree/32c1ce1fea57a513eb9386aa62408d47b1cf7ab2/MuLaCover-GGUF';
+  const license_url = 'https://github.com/HeartMuLa/MuLaCover/blob/e27fa7fa0da7c9817879cc6210cc5693f9327946/MODEL_LICENSE';
+  let weightsMissing = true;
+  vi.stubGlobal('fetch', vi.fn(async () => Response.json({ engine: 'audio.cpp', models: [{
+    id: 'mulacover', name: 'MuLaCover', profile_id: 'mulacover_q8_0', quantization: 'Q8_0', ready: false,
+    missing: weightsMissing ? ['mulacover-q8_0.gguf', 'libsoxr'] : ['libsoxr'],
+    missing_bytes: weightsMissing ? 8_220_378_496 : 0,
+    model_directory: 'audiocpp/models/MuLaCover-GGUF', package_url, license_url,
+  }] })));
+  const song = {
+    title: 'Cover', lyrics: '', style: '', ditModel: 'audio.cpp',
+    generationParams: { music_source: { kind: 'audio_cpp', model: 'mulacover' }, cover_of: 'original-track' },
+  } as Song;
+  act(() => root.render(panel({ musicEngine: 'audio.cpp', initialData: { song, timestamp: 1 } })));
+  await flush();
+  expect(host.textContent).toContain('7.66 GiB');
+  expect(host.textContent).toContain('audiocpp/models/MuLaCover-GGUF');
+  expect(host.querySelector(`a[href="${package_url}"]`)).not.toBeNull();
+  expect(host.querySelectorAll(`a[href="${license_url}"]`)).toHaveLength(1);
+  expect(buttonNamed('Install resampler')).toBeDefined();
+  expect(buttonNamed('create')?.disabled).toBe(true);
+
+  weightsMissing = false;
+  click(buttonNamed('Refresh models')!);
+  await flush();
+  expect(host.querySelector(`a[href="${package_url}"]`)).toBeNull();
+  expect(buttonNamed('Install resampler')).toBeDefined();
+  expect(buttonNamed('create')?.disabled).toBe(true);
+});
+
 it('submits a MuLaCover library original and restores it for a new take', async () => {
   vi.stubGlobal('fetch', vi.fn(async () => Response.json({ engine: 'audio.cpp', models: [
     { id: 'mulacover', name: 'MuLaCover', profile_id: 'mulacover_q8_0', quantization: 'Q8_0', ready: true, missing: [] },

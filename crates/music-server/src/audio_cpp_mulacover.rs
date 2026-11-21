@@ -32,6 +32,7 @@ pub(super) fn catalog(root: Option<&Path>, runtime_ready: bool, soxr_ready: bool
         || vec!["Studio data folder"],
         |root| missing_files(&model_dir(root)),
     );
+    let missing_bytes = if root.is_none() || missing.contains(&WEIGHT) { BYTES } else { 0 };
     if !runtime_ready {
         missing.push("audio.cpp runtime");
     }
@@ -43,6 +44,7 @@ pub(super) fn catalog(root: Option<&Path>, runtime_ready: bool, soxr_ready: bool
         "status": "experimental", "ready": missing.is_empty(), "missing": missing,
         "requires": ["cover_of"], "output_formats": ["flac", "mp3", "wav32"],
         "license_url": LICENSE, "package_url": PACKAGE, "model_directory": format!("audiocpp/models/{DIRECTORY}"),
+        "bytes": BYTES, "missing_bytes": missing_bytes,
     })
 }
 
@@ -224,6 +226,10 @@ mod tests {
         let folder = tempfile::tempdir().unwrap();
         let row = catalog(Some(folder.path()), true, false);
         assert_eq!(row["missing"], json!([WEIGHT, "libsoxr"]));
+        assert_eq!(row["bytes"], BYTES);
+        assert_eq!(row["missing_bytes"], BYTES);
+        assert_eq!(row["package_url"], PACKAGE);
+        assert_eq!(row["license_url"], LICENSE);
         let model = entry(model_dir(folder.path()));
         assert_eq!(model.task, "gen");
         assert!(matches!(model.mode, Mode::Offline));
