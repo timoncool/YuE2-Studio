@@ -1,4 +1,4 @@
-name: RVC application service handoff
+name: RVC fallback single take
 
 on:
   push:
@@ -20,8 +20,10 @@ jobs:
         run: cargo build --locked -p music-server --bin music-server
       - name: Verify passive discovery during active generation
         run: python scripts/test-openrouter-music.py target/debug/music-server.exe
+      - name: Verify Auto fallback saves only one take
+        run: python scripts/qa-rvc-apply-stem-mcp.py
       - uses: actions/upload-artifact@v4
         with:
-          name: rvc-apply-stem-service
-          path: target/debug/music-server.exe
+          name: rvc-fallback-single-take
+          path: rvc-fallback-single-take-mcp.json
           retention-days: 7

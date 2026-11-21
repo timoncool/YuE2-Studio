@@ -73,18 +73,39 @@ def wave_shape(body):
 
 def run():
     binary = Path("target/debug/music-server.exe").resolve()
-    revision = subprocess.check_output(["git", "rev-parse", "HEAD^"], text=True).strip()
+    revision = subprocess.check_output(["git", "rev-parse", "2f96f229"], text=True).strip()
     studio, engine_port = port(), port()
     base = f"http://127.0.0.1:{studio}"
     with tempfile.TemporaryDirectory(prefix="yue-rvc-published-") as folder:
         root = Path(folder)
         (root / "data").mkdir()
+        runtime = root / "data/rvc/native/v1"
+        runtime.mkdir(parents=True)
+        for asset in ("hubert.vfrm", "rmvpe.vfrm"):
+            (runtime / asset).write_bytes(b"test asset")
+        worker = root / "worker.rs"
+        worker.write_text(r"""
+use std::io::{self, BufRead, Write};
+
+fn main() {
+    let stdin = io::stdin();
+    let mut out = io::stdout().lock();
+    writeln!(out, "{}", r#"{"protocol":1,"backend":"tensorrt-rtx","version":"0.1.7"}"#).unwrap();
+    out.flush().unwrap();
+    for request in stdin.lock().lines() {
+        request.unwrap();
+        writeln!(out, "{}", r#"{"ok":false,"error":"engine backend is unavailable: TensorRT-RTX API failed: createExecutionContext"}"#).unwrap();
+        out.flush().unwrap();
+    }
+}
+""", encoding="utf-8")
+        subprocess.run(["rustc", str(worker), "-o", str(runtime / "vocal-fast.exe")], check=True)
         env = dict(os.environ, YUE_STUDIO_PORT=str(studio), YUE_ENGINE_PORT=str(engine_port),
                    YUE_STUDIO_DATA_ROOT=str(root / "data"), YUE_ENGINE_BIN=str(root / "absent-yue-server.exe"),
                    TIMONCOOL_SHARED_DIR=str(root / "registry"), DO_NOT_TRACK="1", STUDIO_HUB_URL=f"{base}/fixture-hub")
         requests = 0
 
-        def mcp(name, arguments, timeout=30):
+        def mcp(name, arguments, timeout=30, expect_error=False):
             nonlocal requests
             requests += 1
             payload = {"jsonrpc": "2.0", "id": requests, "method": "tools/call",
@@ -93,7 +114,11 @@ def run():
                               {"Content-Type": "application/json", "Accept": "application/json, text/event-stream"})
             with HTTP.open(request, timeout=timeout) as response:
                 result = json.load(response)
-            assert "error" not in result and not result["result"].get("isError"), result
+            assert "error" not in result, result
+            if expect_error:
+                assert result["result"].get("isError"), result
+                return result["result"]
+            assert not result["result"].get("isError"), result
             return result["result"]["structuredContent"]
 
         with (root / "studio.log").open("wb") as log, subprocess.Popen(
@@ -129,12 +154,18 @@ def run():
                 assert setup["backends"]["audio.cpp"]["ready"], setup
                 assert setup["effective_backend"] == "audio.cpp", setup
                 voice = mcp("rvc_catalog_install", {"id": VOICE}, timeout=600)
-                parameters = {"song_id": song_id, "voice_id": voice["id"], "backend": "audio.cpp", "retrieval_blend": 0.35}
+                parameters = {"song_id": song_id, "voice_id": voice["id"], "backend": "auto", "retrieval_blend": 0.35}
                 started = time.monotonic()
                 take = mcp("rvc_apply", parameters, timeout=600)
                 elapsed = time.monotonic() - started
                 assert take["song_id"] != song_id, take
-                assert take["requested_backend"] == take["effective_backend"] == "audio.cpp"
+                assert take["requested_backend"] == "auto" and take["effective_backend"] == "audio.cpp", take
+                assert "createExecutionContext" in take["fallback_reason"], take
+                explicit_error = mcp("rvc_apply", {**parameters, "backend": "vocal-fast-rs"}, expect_error=True)
+                assert "createExecutionContext" in json.dumps(explicit_error), explicit_error
+                with HTTP.open(f"{base}/v1/library/songs", timeout=15) as response:
+                    library_ids = [row["id"] for row in json.load(response)]
+                assert len(library_ids) == 2 and set(library_ids) == {song_id, take["song_id"]}, library_ids
                 with HTTP.open(base + take["audio_url"], timeout=15) as response:
                     rendered = response.read()
                 assert wave_shape(rendered)[1:] == (2, rate, 32, frames), wave_shape(rendered)
@@ -148,17 +179,19 @@ def run():
                 assert derived["settings"]["voice_id"] == voice["id"]
                 assert derived["settings"]["retrieval_blend"] == 0.35
                 assert derived["settings"]["effective_backend"] == "audio.cpp"
+                assert derived["settings"]["fallback_reason"] == take["fallback_reason"]
                 assert derived["settings"]["voice_sha256"].startswith("50ea3d733073550ef6f7")
                 evidence = {"source_revision": revision, "server_sha256": digest(binary), "source_song": song_id,
                             "source_sha256": hashlib.sha256(source_before).hexdigest(), "source_preserved": True,
                             "stems_preserved": stems_before, "take": take, "derived": derived,
                             "wav_shape": wave_shape(rendered), "take_sha256": hashlib.sha256(rendered).hexdigest(),
-                            "seconds": elapsed}
+                            "seconds": elapsed, "library_ids": library_ids, "explicit_native_error": explicit_error}
                 output = json.dumps(evidence, ensure_ascii=True, indent=2)
-                Path("rvc-apply-stem-mcp.json").write_text(output + "\n", encoding="utf-8")
+                Path("rvc-fallback-single-take-mcp.json").write_text(output + "\n", encoding="utf-8")
                 print(output)
             finally:
-                process.terminate()
+                subprocess.run(["taskkill", "/PID", str(process.pid), "/T", "/F"], capture_output=True)
+                process.wait(timeout=15)
 
 
 if __name__ == "__main__":
