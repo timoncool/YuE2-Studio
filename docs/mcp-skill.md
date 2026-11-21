@@ -267,6 +267,13 @@ relative to the Studio data directory. When ready, use `sound_effect_create`
 with an English or Chinese description and optional `duration_seconds` from
 0.1 to 30. Follow `song_job_get` until it saves the result in the library.
 
+For ControlFoley video-to-audio, read `controlfoley_model_get` for the offline
+Q8 package and prerequisites. The Studio computer needs FFmpeg on its PATH.
+Use `controlfoley_video_import` with a local MP4, MOV, WebM or MKV. Pass the
+returned name to `controlfoley_create` and optionally add a sound description.
+Studio decodes up to the first 8 seconds and saves the generated audio separately
+in the library. Follow the job with `song_job_get` or cancel it with `song_job_cancel`.
+
 For an OpenRouter generation, read `openrouter_catalog` and select an ID whose
 `capabilities` include `music_generation`. Pass that exact ID as
 `music_source.model`, with `music_source.kind` set to `openrouter`.
@@ -442,7 +449,7 @@ move around. Check the result with `ui_screenshot`.
 - **dataset**: `dataset_import_folder`, `dataset_reveal`, `dataset_song_files`, `dataset_prepare_train_after`, `dataset_get`, `dataset_create`, `dataset_add_folder`, `dataset_add_library_songs`, `dataset_update`, `dataset_delete`, `dataset_song_update`, `dataset_song_describe_style` (wait for an active song, then listen and save the style), `dataset_song_delete`, `lyrics_syllables` (each sung line with its syllables, as the score counts them), `lyrics_find`, `dataset_prepare`, `dataset_take_as_is` (no assistant: found lyrics and heard styles kept as they are), `dataset_prepare_cancel`.
 - **training**: `training_pack_cancel`, `training_status`, `training_pack_install`, `training_listen_pack_install`, `training_listen_pack_cancel`, `training_start`, `training_continue`, `training_cancel`, `training_checkpoint_install`, `training_run_delete`.
 - **ui**: `ui_screenshot`, `ui_read_page`, `ui_click`, `ui_type`, `ui_select`, `ui_press_key`, `ui_scroll`, `ui_navigate`, `ui_open_settings`, `ui_notify`, `ui_console`.
-- **create form**: `create_form_get`, `create_form_set`, `create_form_submit`.
+- **create form**: `create_form_get`, `create_form_set`, `create_form_submit`. In native YuE2, `create_form_get.style_hints` lists optional style suggestions with their stable rule IDs and localized text. They never prevent submission.
 - **player**: `player_state`, `player_play`, `player_pause`, `player_seek`, `player_next`, `player_previous`, `player_queue_add`, `player_set` (repeat none, all, one, or stop after the track).
 - **equalizer**: `equalizer_get`, `equalizer_set`, `equalizer_import`, `equalizer_export`.
 - **visualizer**: `visualizer_get`, `visualizer_set`, `visualizer_presets`.

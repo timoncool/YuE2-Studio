@@ -29,6 +29,7 @@ mod audio_cpp_midasheng;
 mod audio_cpp_minimax_h3;
 mod audio_cpp_mulacover;
 mod audio_cpp_music;
+mod audio_cpp_controlfoley;
 mod audio_cpp_sound_effects;
 mod hotstep_cover;
 mod hotstep_runtime;
@@ -373,6 +374,8 @@ struct CreateMusicJobRequest {
     vevo2: Option<audio_cpp_vevo2::Options>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     soulx: Option<audio_cpp_soulx::Options>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    controlfoley_video: Option<String>,
     /// The window's own mark for this request, handed back on the job so the
     /// window knows the job as its own before the response reaches it.
     client_ref: Option<String>,
@@ -2010,6 +2013,7 @@ pub async fn serve_on_port(port: u16) -> anyhow::Result<()> {
         .route("/v1/local-models/music", get(local_music_model_catalog))
         .route("/v1/music/jobs", post(create_music_job).get(list_active_music_jobs))
         .route("/v1/music/audio-cpp/models", get(audio_cpp_music::models))
+        .route("/v1/tools/controlfoley/model", get(audio_cpp_music::controlfoley_model))
         .route("/v1/tools/sound-effects/model", get(audio_cpp_music::sound_effect_model))
         .route("/v1/music/audio-cpp/vevo2/model-directory", post(audio_cpp_vevo2::set_directory))
         .route("/v1/music/native/hotstep/profiles", get(hotstep_cover::profiles))
@@ -9900,7 +9904,7 @@ async fn store_video(Query(query): Query<VideoName>, body: axum::body::Bytes) ->
         number += 1;
     }
     tokio::fs::write(&path, &body).await.map_err(|error| api_error(StatusCode::INTERNAL_SERVER_ERROR, format!("write {}: {error}", path.display())))?;
-    Ok(Json(serde_json::json!({ "path": plain_path(&path) })))
+    Ok(Json(serde_json::json!({ "path": plain_path(&path), "name": path.file_name().and_then(|name| name.to_str()) })))
 }
 
 #[derive(Debug, Deserialize)]
