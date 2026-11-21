@@ -254,11 +254,20 @@ async fn submit(
         Ok(resolved) => resolved,
         Err(error) => return reject(StatusCode::SERVICE_UNAVAILABLE, format!("{error:#}")),
     };
-    if let Some(options) = request
+    let adapters = request
         .minimax
         .as_ref()
-        .filter(|options| !options.adapters.is_empty())
-    {
+        .filter(|options| !options.adapters.is_empty());
+    let replay_has_adapters = replay.as_ref().is_some_and(|replay| {
+        replay.body["adapters"].as_array().is_some_and(|items| !items.is_empty())
+    });
+    if (adapters.is_some() || replay_has_adapters) && installation.adapter_runtime_update(&root) {
+        return reject(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "Update the MiniMax runtime in Create before using LoRA adapters on Windows.".into(),
+        );
+    }
+    if let Some(options) = adapters {
         let available = installation.native_adapters();
         for adapter in &options.adapters {
             let compatible = available.iter().any(|entry| {

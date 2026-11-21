@@ -377,9 +377,19 @@ mod tests {
     #[cfg(windows)]
     #[test]
     fn windows_ace_fallback_stays_available_for_requests_without_adapters() {
+        assert_windows_adapter_fallback("acestep-cpp");
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn windows_minimax_fallback_stays_available_for_requests_without_adapters() {
+        assert_windows_adapter_fallback(crate::native_minimax::ENGINE_ID);
+    }
+
+    #[cfg(windows)]
+    fn assert_windows_adapter_fallback(engine: &str) {
         let root = tempfile::tempdir().unwrap();
         let downloads = downloader(root.path());
-        let engine = "acestep-cpp";
         let current = selected(engine).unwrap();
         assert!(!current.pin.broken_windows_adapter_paths);
         let previous = host_runtimes(engine)
@@ -404,7 +414,7 @@ mod tests {
         let (reported, _) = installed_runtime(&downloads, engine).unwrap();
         assert_eq!(reported.pin.revision, previous.pin.revision);
         assert_ne!(reported.pin.revision, current.pin.revision);
-        let external = root.path().join("external/ace-server.exe");
+        let external = root.path().join("external").join(current.pin.executable);
         let selected = selected_executable(root.path(), engine, Some(&external)).unwrap();
         assert_eq!(selected["source"], "local");
         assert!(selected["revision"].is_null());

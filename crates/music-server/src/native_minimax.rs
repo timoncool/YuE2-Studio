@@ -967,6 +967,12 @@ impl Installation {
         self.executable.as_deref()
     }
 
+    pub(crate) fn adapter_runtime_update(&self, data_root: &Path) -> bool {
+        self.executable().is_some_and(|executable| {
+            crate::native_music_runtime::requires_adapter_update(data_root, ENGINE_ID, executable)
+        })
+    }
+
     pub(crate) fn profiles(&self) -> Vec<ProfileStatus> {
         let adapters = self.native_adapters();
         PROFILES.iter().map(|profile| {
