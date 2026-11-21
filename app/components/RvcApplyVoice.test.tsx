@@ -66,6 +66,7 @@ it('keeps explicit RVC backend selection and saves an audio.cpp take from the se
     const select = host.querySelector('select')!;
     const apply = [...host.querySelectorAll('button')].find(button => button.textContent === 'Save a new take with this voice')!;
     expect(host.textContent).toContain('The original remains in the library.');
+    expect(host.textContent).toContain('Word clarity can vary with the selected voice.');
     const choose = (value: string) => act(() => {
       select.value = value;
       select.dispatchEvent(new Event('change', { bubbles: true }));
