@@ -18,7 +18,10 @@ const WEIGHTS: &str = "vevo2-q8_0.gguf";
 const WEIGHTS_BYTES: u64 = 3_242_129_792;
 const WEIGHTS_SHA256: &str = "881434e73b98e2d3ac94951f26488b5dc5d60f365d9980324a70055dfbffd1ef";
 const PREFIX_BYTES: usize = 16_384;
-const PREFIX_SHA256: &str = "8939daf40bff44e297b2fd4388f34fbbaf2484d3a3dcc50b4d6e4ba4f3baf616";
+const PREFIX_SHA256: [u8; 32] = [
+    0x89, 0x39, 0xda, 0xf4, 0x0b, 0xff, 0x44, 0xe2, 0x97, 0xb2, 0xfd, 0x43, 0x88, 0xf3, 0x4f, 0xbb,
+    0xaf, 0x24, 0x84, 0xd3, 0xa3, 0xdc, 0xc5, 0x0b, 0x4d, 0x6e, 0x4b, 0xa4, 0xf3, 0xba, 0xf6, 0x16,
+];
 const LICENSE: &str = "https://huggingface.co/RMSnow/Vevo2";
 const FOLDER_SETTING: &str = "vevo2-model-directory.json";
 const DEFAULT_FOLDER: &str = "audiocpp/models/vevo2";
@@ -94,8 +97,7 @@ pub(super) fn model_dir(root: &Path) -> PathBuf {
 
 fn pinned_prefix(mut reader: impl std::io::Read) -> bool {
     let mut prefix = [0; PREFIX_BYTES];
-    reader.read_exact(&mut prefix).is_ok()
-        && format!("{:x}", Sha256::digest(prefix)) == PREFIX_SHA256
+    reader.read_exact(&mut prefix).is_ok() && Sha256::digest(prefix).as_slice() == PREFIX_SHA256
 }
 
 pub(super) fn missing_files(dir: &Path) -> Vec<&'static str> {
