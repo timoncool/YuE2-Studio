@@ -411,6 +411,22 @@ def check_lrc(root, pid):
         save_dialog_file(pid, root/"Cancel.abc", "abc-cancel-dialog.json", action="cancel")
         failed_save(score_button, "score", "abc")
         json_file(out/"score.json", dict(bytes=score_file.stat().st_size, sha256=hashlib.sha256(score_file.read_bytes()).hexdigest()))
+        click('button "Songbook"')
+        click('button "Print A4"')
+        pdf = root/"songbook.pdf"
+        for _ in range(150):
+            try:
+                printed = pdf.read_bytes()
+            except OSError:
+                printed = b""
+            if printed.startswith(b"%PDF-") and printed.rstrip().endswith(b"%%EOF"):
+                break
+            time.sleep(.2)
+        else:
+            raise AssertionError("Windows PDF printer did not complete the songbook")
+        (out/"songbook.pdf").write_bytes(printed)
+        json_file(out/"songbook-print.json", dict(bytes=len(printed), sha256=hashlib.sha256(printed).hexdigest()))
+        click('button "Close songbook"')
         click('button "x icon"')
         page = wait_page(predicate=lambda text: context in text and 'button "Download LRC (Lyrics)"' not in text)
         row = next(line for line in page.splitlines() if context in line)
@@ -701,6 +717,26 @@ with isolated_profile() as root:
         env.update(HOME=str(root/"user"), USERPROFILE=str(root/"user"), APPDATA=str(root/"roaming"),
                    LOCALAPPDATA=str(root/"local"))
     env["WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS"] += " --remote-debugging-port=9889"
+    if args.suite == "lrc":
+        # This disposable hosted runner prints through the Windows spooler to an
+        # actual PDF file without opening a second file picker for the printer.
+        env["WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS"] += " --kiosk-printing"
+        printer_setup = """
+$ErrorActionPreference = 'Stop'
+Start-Service Spooler
+$driver = 'Microsoft Print To PDF'
+if (!(Get-PrinterDriver -Name $driver -ErrorAction SilentlyContinue)) { Add-PrinterDriver -Name $driver }
+Add-PrinterPort -Name $env:STUDIO_QA_PDF
+Add-Printer -Name 'Studio QA PDF' -PortName $env:STUDIO_QA_PDF -DriverName $driver
+Set-PrintConfiguration -PrinterName 'Studio QA PDF' -PaperSize A4
+(New-Object -ComObject WScript.Network).SetDefaultPrinter('Studio QA PDF')
+Get-Printer -Name 'Studio QA PDF' | Select-Object Name,DriverName,PortName | ConvertTo-Json
+"""
+        printer = subprocess.run(["powershell", "-NoProfile", "-Command", printer_setup],
+                                 env=dict(env, STUDIO_QA_PDF=str(root/"songbook.pdf")),
+                                 capture_output=True, text=True, timeout=60)
+        (out/"printer-setup.txt").write_text(printer.stdout + printer.stderr, encoding="utf8")
+        printer.check_returncode()
     with (out/"service.log").open("wb") as log:
         process = subprocess.Popen([str(args.exe.resolve(strict=True))], env=env, stdout=log, stderr=log)
         try:
