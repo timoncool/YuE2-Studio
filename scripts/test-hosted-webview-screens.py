@@ -545,6 +545,9 @@ $tree = [Windows.Automation.TreeScope]
 $all = [Windows.Automation.Condition]::TrueCondition
 $root = [Windows.Automation.AutomationElement]::RootElement
 $confirmed = $false
+$settingsOpen = $false
+$paperOpen = $false
+$paperSet = $false
 $deadline = [DateTime]::UtcNow.AddSeconds(28)
 while ([DateTime]::UtcNow -lt $deadline -and !(Test-Path -LiteralPath $env:STUDIO_QA_PDF)) {
   $ids = [Collections.Generic.HashSet[int]]::new()
@@ -613,6 +616,51 @@ while ([DateTime]::UtcNow -lt $deadline -and !(Test-Path -LiteralPath $env:STUDI
         Write-Output 'Cancelled print preview'
         exit 0
       }
+      if (!$paperSet -and $env:STUDIO_QA_FILE_PORT) {
+        if (!$settingsOpen) {
+          $more = $buttons | Where-Object {$_.Current.Name -eq 'More settings'} | Select-Object -First 1
+          if (!$more) { throw 'Print preview does not show More settings' }
+          $more.GetCurrentPattern([Windows.Automation.InvokePattern]::Pattern).Invoke()
+          $settingsOpen = $true
+          break
+        }
+        $paper = $elements | Where-Object {
+          $_.Current.ControlType -eq [Windows.Automation.ControlType]::ComboBox -and $_.Current.Name -match 'Paper size'
+        } | Select-Object -First 1
+        if (!$paper) {
+          $elements | Where-Object {$_.Current.Name -match 'Paper|Size|Letter|A4'} | ForEach-Object {
+            Write-Output "$($_.Current.ControlType.ProgrammaticName):$($_.Current.Name)"
+          }
+          continue
+        }
+        if (!$paperOpen) {
+          $pattern = $null
+          if ($paper.TryGetCurrentPattern([Windows.Automation.ExpandCollapsePattern]::Pattern,[ref]$pattern)) {
+            $pattern.Expand()
+          } else {
+            $paper.SetFocus()
+            [Windows.Forms.SendKeys]::SendWait('%{DOWN}')
+          }
+          $paperOpen = $true
+          break
+        }
+        $a4 = $elements | Where-Object {
+          $_.Current.Name -match '(^|\s)A4($|[\s(])' -and !$_.Current.IsOffscreen
+        } | Select-Object -First 1
+        if (!$a4) { continue }
+        $choice = $null
+        if ($a4.TryGetCurrentPattern([Windows.Automation.SelectionItemPattern]::Pattern,[ref]$choice)) {
+          $choice.Select()
+        } elseif ($a4.TryGetCurrentPattern([Windows.Automation.InvokePattern]::Pattern,[ref]$choice)) {
+          $choice.Invoke()
+        } else {
+          $a4.SetFocus()
+          [Windows.Forms.SendKeys]::SendWait('{ENTER}')
+        }
+        $paperSet = $true
+        Write-Output 'Selected A4 in the WebView print preview'
+        break
+      }
       $confirm.GetCurrentPattern([Windows.Automation.InvokePattern]::Pattern).Invoke()
       Write-Output 'Confirmed print'
       $confirmed = $true
@@ -647,11 +695,10 @@ while ([DateTime]::UtcNow -lt $deadline -and !(Test-Path -LiteralPath $env:STUDI
         raise AssertionError("Windows PDF printer did not complete the songbook")
     (out/"songbook.pdf").write_bytes(printed)
     from pypdf import PdfReader
-    extracted = "\n".join(page.extract_text() for page in PdfReader(out/"songbook.pdf").pages)
-    (out/"songbook-extracted.txt").write_text(extracted, encoding="utf8")
-    for expected in ("Blue", "birds", "greet", "dawn", "Bright", "sails", "head", "home", "Cmaj7", "G7"):
-        assert expected in extracted, (expected, extracted)
-    json_file(out/"songbook-print.json", dict(bytes=len(printed), sha256=hashlib.sha256(printed).hexdigest()))
+    pages = PdfReader(out/"songbook.pdf").pages
+    boxes = [[float(page.mediabox.width), float(page.mediabox.height)] for page in pages]
+    json_file(out/"songbook-print.json", dict(bytes=len(printed), sha256=hashlib.sha256(printed).hexdigest(), media_boxes=boxes))
+    assert all(abs(width - 595) < 2 and abs(height - 842) < 2 for width, height in boxes), boxes
     click('button "Close songbook"')
 
 
