@@ -406,6 +406,7 @@ export function useGenerations({ enabled, notify, onFinished }: GenerationOption
     try {
       const job = await stopJob(jobId);
       if (job.status !== 'cancelled') {
+        if (job.engine_id === 'audio.cpp' && job.message) notify(job.message, 'info');
         void queryClient.invalidateQueries({ queryKey: activeJobsKey });
         return;
       }
