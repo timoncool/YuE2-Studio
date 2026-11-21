@@ -1,0 +1,123 @@
+name: macOS DMG bootstrap repack QA
+
+on:
+  push:
+    branches: [qa/yue2-macos-dmg-bootstrap]
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  repack:
+    runs-on: macos-15
+    timeout-minutes: 15
+    env:
+      GH_TOKEN: ${{ github.token }}
+      BUILD_RUN: '44885352475'
+      BUILD_SHA: '9e50a4b0dc1240bf573ad19009eba5e59aaf17ab'
+      DMG_SHA: '8aeff76ffde1d7a24dab053f7b7bb61d1bf9a014873d8fde4bfa425d108ec419'
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - name: Repack copy with an ephemeral QA TUF root
+        shell: bash
+        run: |
+          set -euo pipefail
+          work=$(mktemp -d "$RUNNER_TEMP/repack.XXXXXX")
+          [ "$(gh run view "$BUILD_RUN" -R "$GITHUB_REPOSITORY" --json headSha --jq .headSha)" = "$BUILD_SHA" ]
+          gh run download "$BUILD_RUN" -R "$GITHUB_REPOSITORY" -n yue2-studio-macos-arm64 -D "$work"
+          source_dmg="$work/YuE2-Studio-5.0.0-macos-arm64.dmg"
+          printf '%s  %s\n' "$DMG_SHA" "$source_dmg" | shasum -a 256 -c -
+
+          python3 -m venv "$work/venv"
+          "$work/venv/bin/pip" -q install tuf 'securesystemslib[crypto]'
+          PYTHONPATH=distribution/components "$work/venv/bin/python" - "$work" <<'PY'
+          from datetime import datetime, timedelta, timezone
+          from pathlib import Path
+          import sys
+          from securesystemslib.signer import CryptoSigner
+          from tuf.api.metadata import Metadata, Root
+          from test_installed_channel import sign
+
+          work = Path(sys.argv[1])
+          root = Root(expires=datetime.now(timezone.utc) + timedelta(days=1))
+          keys = {role: CryptoSigner.generate_ed25519() for role in root.roles}
+          for role, signer in keys.items():
+              root.add_key(signer.public_key, role)
+          payload = sign(root, keys["root"])
+          metadata = Metadata.from_bytes(payload)
+          metadata.verify_delegate("root", metadata)
+          (work / "root.json").write_bytes(payload)
+          (work / "url.txt").write_text("http://127.0.0.1:9/qa-component-channel/\n", encoding="ascii")
+          PY
+
+          source_mount="$work/source"
+          target_mount="$work/target"
+          mkdir "$source_mount" "$target_mount" "$work/stage"
+          trap 'for point in "$target_mount" "$source_mount"; do if mount | grep -Fq " on $point ("; then hdiutil detach "$point" || hdiutil detach -force "$point"; fi; done' EXIT
+          hdiutil attach -readonly -nobrowse -noautoopen -mountpoint "$source_mount" "$source_dmg"
+          source_app="$source_mount/YuE2 Studio.app"
+          app="$work/stage/YuE2 Studio.app"
+          codesign --verify --deep --strict "$source_app"
+          ditto "$source_app" "$app"
+          ln -s /Applications "$work/stage/Applications"
+          bootstrap="Contents/Resources/component-channel"
+          cmp "$work/root.json" "$source_app/$bootstrap/root.json" && exit 1
+          install -m 0644 "$work/root.json" "$app/$bootstrap/root.json"
+          install -m 0644 "$work/url.txt" "$app/$bootstrap/url.txt"
+          if codesign --verify --deep --strict "$app"; then
+            echo 'Replacing a sealed resource unexpectedly preserved the bundle signature' >&2
+            exit 1
+          fi
+          codesign --force --sign - --preserve-metadata=identifier,entitlements,flags,runtime "$app"
+          codesign --verify --deep --strict "$app"
+
+          repacked="$work/repacked-qa.dmg"
+          hdiutil create -srcfolder "$work/stage" -volname 'YuE2 Studio' -format UDZO "$repacked"
+          hdiutil verify "$repacked"
+          # Tauri ships UDZO with a signed .app and skips ad-hoc signing the DMG itself.
+          # Exercise signing the container separately so the two receipts are distinguishable.
+          signed_dmg="$work/repacked-qa-signed.dmg"
+          cp "$repacked" "$signed_dmg"
+          if codesign --sign - "$signed_dmg" && codesign --verify --strict "$signed_dmg" && hdiutil verify "$signed_dmg"; then
+            echo 'Optional ad-hoc DMG container signature and UDZO checksum verified'
+            repacked="$signed_dmg"
+          else
+            echo 'Optional ad-hoc container signature did not verify; retained unsigned UDZO with signed app'
+          fi
+          shasum -a 256 "$repacked"
+          hdiutil attach -readonly -nobrowse -noautoopen -mountpoint "$target_mount" "$repacked"
+          target_app="$target_mount/YuE2 Studio.app"
+          codesign --verify --deep --strict "$target_app"
+          cmp "$work/root.json" "$target_app/$bootstrap/root.json"
+          cmp "$work/url.txt" "$target_app/$bootstrap/url.txt"
+          echo 'Both QA bootstrap files verified byte for byte in the re-mounted signed app'
+
+          main=Contents/MacOS/YuE2-Studio
+          python3 - "$source_app" "$target_app" "$main" <<'PY'
+          import hashlib
+          import sys
+          from pathlib import Path
+
+          source, target, main = map(Path, sys.argv[1:])
+          def hashes(app):
+              magic = {b"\xcf\xfa\xed\xfe", b"\xca\xfe\xba\xbe", b"\xca\xfe\xba\xbf"}
+              digest = {}
+              for path in (app / "Contents").rglob("*"):
+                  if path.is_file() and path.open("rb").read(4) in magic:
+                      digest[path.relative_to(app)] = hashlib.sha256(path.read_bytes()).hexdigest()
+              return digest
+          before, after = hashes(source), hashes(target)
+          assert before.keys() == after.keys()
+          changed = [path for path in before if before[path] != after[path]]
+          assert set(changed) <= {main}, changed
+          print(f"{len(before)} Mach-O files checked; {len(before) - len(changed)} byte-identical")
+          print(f"Main signed SHA: {before[main]} -> {after[main]}")
+          PY
+          ditto "$source_app/$main" "$work/before-unsigned"
+          ditto "$target_app/$main" "$work/after-unsigned"
+          codesign --remove-signature "$work/before-unsigned"
+          codesign --remove-signature "$work/after-unsigned"
+          shasum -a 256 "$work/before-unsigned" "$work/after-unsigned"
+          cmp "$work/before-unsigned" "$work/after-unsigned"
+          echo 'Main executable is byte-identical after removing both signatures'
