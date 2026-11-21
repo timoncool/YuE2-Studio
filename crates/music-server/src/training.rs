@@ -364,6 +364,9 @@ struct TrainerSource {
     caption_asset: String,
     /// Size of the captioner's archive in the same release.
     caption_bytes: u64,
+    cuda12_backend_tag: String,
+    cuda12_backend_asset: String,
+    cuda12_backend_bytes: u64,
 }
 
 fn trainer_source() -> &'static TrainerSource {
@@ -419,6 +422,49 @@ pub fn remove_older_tool_folders(downloader: &Downloader, current_folder: &str, 
 fn trainer_folder() -> &'static str {
     static FOLDER: OnceLock<String> = OnceLock::new();
     FOLDER.get_or_init(|| trainer_source().release_tag.clone())
+}
+
+pub(super) fn cuda12_backend() -> &'static Asset {
+    static BACKEND: OnceLock<Asset> = OnceLock::new();
+    BACKEND.get_or_init(|| {
+        let source = trainer_source();
+        Asset {
+            id: "music-train-cuda12",
+            label: "HOT-Step CUDA 12",
+            kind: AssetKind::Runtime,
+            url: Box::leak(format!("https://github.com/timoncool/YuE2-Studio/releases/download/{}/{}", source.cuda12_backend_tag, source.cuda12_backend_asset).into_boxed_str()),
+            relative_path: &source.cuda12_backend_asset,
+            bytes: source.cuda12_backend_bytes,
+            unzip_into: Some(&source.cuda12_backend_tag),
+            marker: "ggml-cuda.dll",
+            pick: &[],
+            vram_gb: None,
+            note: "",
+        }
+    })
+}
+
+fn stage_cuda12_trainer(base: &Path, backend: &Path, directory: &Path) -> Result<PathBuf> {
+    let root = base.parent().context("HOT-Step runtime folder")?;
+    let copy = |source: &Path, name: &std::ffi::OsStr| -> Result<()> {
+        let destination = directory.join(name);
+        if std::fs::hard_link(source, &destination).is_err() {
+            std::fs::copy(source, destination)?;
+        }
+        Ok(())
+    };
+    let name = base.file_name().context("HOT-Step executable filename")?;
+    copy(base, name)?;
+    for entry in std::fs::read_dir(root)? {
+        let entry = entry?;
+        let name = entry.file_name();
+        let dll = name.to_string_lossy();
+        if entry.file_type()?.is_file() && (matches!(&*dll, "ggml.dll" | "ggml-base.dll") || (dll.starts_with("ggml-cpu-") && dll.ends_with(".dll"))) {
+            copy(&entry.path(), &name)?;
+        }
+    }
+    copy(backend, std::ffi::OsStr::new("ggml-cuda.dll"))?;
+    Ok(directory.join(name))
 }
 
 /// Everything training needs: the trainer, released beside the studio, and
@@ -1760,6 +1806,20 @@ impl Training {
                 run.trainer.is_some_and(|trainer| trainer.generation.is_some())
             };
             log.write_all(format!("==== {}\n", stage.id).as_bytes()).await?;
+            let cuda12_runtime = (cfg!(windows) && !signed_trainer
+                && trainer == self.downloader.runtime_dir(trainer_folder()).join(&trainer_source().shipped_as)
+                && crate::trainer_cuda_build() == Some(crate::hardware::CudaBuild::Cuda12))
+                .then(|| -> Result<_> {
+                    let asset = cuda12_backend();
+                    if !self.downloader.is_installed(asset) {
+                        bail!("Install the HOT-Step CUDA 12 backend from the training pack");
+                    }
+                    let directory = tempfile::Builder::new().prefix("cuda12-trainer-").tempdir_in(run_dir)?;
+                    let backend = self.downloader.runtime_dir(&trainer_source().cuda12_backend_tag).join(asset.marker);
+                    let executable = stage_cuda12_trainer(trainer, &backend, directory.path())?;
+                    Ok((directory, executable))
+                }).transpose()?;
+            let trainer = cuda12_runtime.as_ref().map_or(trainer, |(_, executable)| executable.as_path());
             // A signed generation declares its dependencies and is verified again on resume.
             if !signed_trainer {
                 music_core::process::runtime_beside(trainer);
@@ -2161,6 +2221,34 @@ mod tests {
 
     /// The trainer's cleanup keeps the transcriber's CUDA 12.9 and processor
     /// builds of today's release, and takes every folder of an earlier one.
+    #[test]
+    fn the_cuda12_trainer_stages_its_backend_without_changing_originals() {
+        let fixture = tempfile::tempdir().unwrap();
+        let original = fixture.path().join("original");
+        let staged = fixture.path().join("staged");
+        std::fs::create_dir(&original).unwrap();
+        std::fs::create_dir(&staged).unwrap();
+        for (name, bytes) in [
+            ("music-train.exe", "trainer"),
+            ("music-midi.exe", "midi"),
+            ("ggml.dll", "shared"),
+            ("ggml-base.dll", "base"),
+            ("ggml-cpu-x64.dll", "cpu"),
+            ("ggml-cuda.dll", "cuda13"),
+        ] {
+            std::fs::write(original.join(name), bytes).unwrap();
+        }
+        let backend = fixture.path().join("cuda12.dll");
+        std::fs::write(&backend, "cuda12").unwrap();
+
+        let executable = stage_cuda12_trainer(&original.join("music-train.exe"), &backend, &staged).unwrap();
+        assert_eq!(std::fs::read_to_string(executable).unwrap(), "trainer");
+        assert_eq!(std::fs::read_to_string(staged.join("ggml-cuda.dll")).unwrap(), "cuda12");
+        assert_eq!(std::fs::read_to_string(staged.join("ggml-cpu-x64.dll")).unwrap(), "cpu");
+        assert!(!staged.join("music-midi.exe").exists());
+        assert_eq!(std::fs::read_to_string(original.join("ggml-cuda.dll")).unwrap(), "cuda13");
+    }
+
     #[test]
     fn todays_tool_folders_stay_and_earlier_releases_go() {
         let root = std::env::temp_dir().join(format!("yue-tool-folders-{}", uuid::Uuid::now_v7()));

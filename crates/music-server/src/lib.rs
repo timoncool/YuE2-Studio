@@ -3551,7 +3551,7 @@ async fn read_training(State(state): State<AppState>) -> Json<Value> {
     let listen_ready = listen_pack.iter().all(|file| file["installed"].as_bool() == Some(true));
     Json(serde_json::json!({
         "pack": pack,
-        "pack_ready": training.pack_ready() && !trainer_cublas_missing(&state),
+        "pack_ready": training.pack_ready() && !trainer_runtime_missing(&state),
         "trainer_weights_ready": training.weights_ready() && !trainer_cublas_missing(&state),
         "trainers": training.trainer_choices().await,
         "separator_ready": separator_ready,
@@ -3561,6 +3561,7 @@ async fn read_training(State(state): State<AppState>) -> Json<Value> {
         "card_trains": trainer_card_refusal().is_none(),
         "card_needs": trainer_card_needs(),
         "trainer_driver": hardware::CUDA13_DRIVER,
+        "trainer_cuda": trainer_cuda_build(),
         "item_style": "style",
         "download": training_pack_download(&state).await,
         "listen": {
@@ -3582,8 +3583,15 @@ async fn read_training(State(state): State<AppState>) -> Json<Value> {
 async fn training_pack_files(state: &AppState) -> (Vec<Value>, bool) {
     let separator_ready = vocal_separator(state).await.is_some();
     let mut pack = state.training.pack_status();
-    if trainer_card_refusal().is_none() {
-        let cublas = engine_runtime::cublas_asset(hardware::CudaBuild::Cuda13);
+    if let Some(build) = trainer_cuda_build() {
+        if build == hardware::CudaBuild::Cuda12 {
+            let asset = training::cuda12_backend();
+            pack.push(serde_json::json!({
+                "id": asset.id, "label": asset.label, "bytes": asset.bytes,
+                "installed": state.training.downloader().is_installed(asset),
+            }));
+        }
+        let cublas = engine_runtime::cublas_asset(build);
         pack.push(serde_json::json!({
             "id": cublas.id,
             "label": cublas.label,
@@ -3638,10 +3646,11 @@ fn pack_runtime(mut files: Vec<Value>, ready: bool, active_download: Option<down
 /// the video memory a run needs and whether this card trains at all.
 async fn training_pack_runtime(State(state): State<AppState>) -> Json<Value> {
     let (pack, separator_ready) = training_pack_files(&state).await;
-    let mut body = pack_runtime(pack, state.training.pack_ready() && separator_ready && !trainer_cublas_missing(&state), training_pack_download(&state).await);
+    let mut body = pack_runtime(pack, state.training.pack_ready() && separator_ready && !trainer_runtime_missing(&state), training_pack_download(&state).await);
     body["min_vram_gb"] = music_engine::yue_train::MIN_VRAM_GB.into();
     body["card_trains"] = trainer_card_refusal().is_none().into();
     body["card_needs"] = trainer_card_needs().into();
+    body["trainer_cuda"] = serde_json::json!(trainer_cuda_build());
     Json(body)
 }
 
@@ -3725,7 +3734,14 @@ async fn install_training_pack(State(state): State<AppState>) -> Result<Json<Val
             eprintln!("[ERROR] training pack: {error:#}");
             return;
         }
-        if let Err(error) = background.engine_runtime.install_missing_for(Some(hardware::CudaBuild::Cuda13), training::SCOPE).await {
+        let build = trainer_cuda_build();
+        if build == Some(hardware::CudaBuild::Cuda12)
+            && let Err(error) = background.training.downloader().install_all(training::SCOPE, &[training::cuda12_backend()]).await
+        {
+            eprintln!("[ERROR] HOT-Step CUDA 12 backend: {error:#}");
+            return;
+        }
+        if let Err(error) = background.engine_runtime.install_missing_for(build, training::SCOPE).await {
             eprintln!("[ERROR] cuBLAS for the trainer: {error:#}");
             return;
         }
@@ -4056,36 +4072,52 @@ async fn card_free_for_training(state: &AppState) -> Result<(), String> {
     no_song_rendering(state).await
 }
 
-/// Why the trainer does not run on this machine's card, none when it does. It
-/// is a CUDA 13 build and computes on the card only: on the processor one run
-/// would take days.
+/// The Windows HOT-Step trainer has separate CUDA modules from the same pin.
+fn trainer_build_for(card: Option<hardware::CudaBuild>, compute: Option<(u32, u32)>, windows: bool) -> Option<hardware::CudaBuild> {
+    match card {
+        Some(hardware::CudaBuild::Cuda13) => card,
+        Some(hardware::CudaBuild::Cuda12) if windows && matches!(compute, Some((7, 5..) | (8..=9, _) | (12, 0))) => card,
+        _ => None,
+    }
+}
+
+fn trainer_cuda_build() -> Option<hardware::CudaBuild> {
+    let detected = hardware::hardware();
+    trainer_build_for(detected.card_cuda, detected.compute_capability, cfg!(windows))
+}
+
 fn trainer_card_refusal() -> Option<String> {
+    if trainer_cuda_build().is_some() {
+        return None;
+    }
     match hardware::hardware().card_cuda {
-        Some(hardware::CudaBuild::Cuda13) => None,
+        Some(hardware::CudaBuild::Cuda12) if cfg!(windows) => Some("the HOT-Step trainer needs Turing (compute 7.5) or newer".into()),
         Some(hardware::CudaBuild::Cuda12) => Some(format!(
             "training needs NVIDIA driver {} or newer: the trainer is a CUDA 13 build, and this card or its driver runs CUDA 12 only",
             hardware::CUDA13_DRIVER
         )),
-        None => Some(TRAINING_NEEDS_CUDA.into()),
+        _ => Some(TRAINING_NEEDS_CUDA.into()),
     }
 }
 
-/// What the card lacks for the trainer, as the training page names it:
-/// "nvidia" on a machine with no CUDA card, "driver" where the card or its
-/// driver runs CUDA 12 only.
 fn trainer_card_needs() -> Option<&'static str> {
+    if trainer_cuda_build().is_some() {
+        return None;
+    }
     match hardware::hardware().card_cuda {
-        Some(hardware::CudaBuild::Cuda13) => None,
+        Some(hardware::CudaBuild::Cuda12) if cfg!(windows) => Some("architecture"),
         Some(hardware::CudaBuild::Cuda12) => Some("driver"),
-        None => Some("nvidia"),
+        _ => Some("nvidia"),
     }
 }
 
-/// Whether the cuBLAS the trainer's CUDA backend loads is missing. It comes
-/// from beside the engine, which fetches it only for a CUDA 13 run of its own.
 fn trainer_cublas_missing(state: &AppState) -> bool {
-    // elsewhere the trainer is a local build linked against the system's CUDA
-    cfg!(windows) && !state.engine_runtime.missing(Some(hardware::CudaBuild::Cuda13)).is_empty()
+    cfg!(windows) && !state.engine_runtime.missing(trainer_cuda_build()).is_empty()
+}
+
+fn trainer_runtime_missing(state: &AppState) -> bool {
+    trainer_cublas_missing(state) || (trainer_cuda_build() == Some(hardware::CudaBuild::Cuda12)
+        && !state.training.downloader().is_installed(training::cuda12_backend()))
 }
 
 /// Refuses a run the trainer could not compute on the card.
@@ -4093,16 +4125,25 @@ fn trainer_ready(state: &AppState) -> Result<(), String> {
     if let Some(refusal) = trainer_card_refusal() {
         return Err(refusal);
     }
-    if trainer_cublas_missing(state) {
-        return Err(TRAINER_CUBLAS_MISSING.into());
+    if trainer_runtime_missing(state) {
+        return Err("the training runtime is not downloaded yet; download the training pack".into());
     }
     Ok(())
 }
 
-/// Why this machine does not train.
 const TRAINING_NEEDS_CUDA: &str = "training runs on an NVIDIA card with CUDA only, and this machine has none";
-/// Why a run cannot start before the training pack is complete.
-const TRAINER_CUBLAS_MISSING: &str = "the training files are not downloaded yet: the trainer needs NVIDIA cuBLAS 13; download the training pack";
+
+#[test]
+fn hotstep_trainer_uses_cuda12_on_eligible_windows_cards_only() {
+    use hardware::CudaBuild::{Cuda12, Cuda13};
+    assert_eq!(trainer_build_for(hardware::cuda_build((8, 9), 566), Some((8, 9)), true), Some(Cuda12));
+    assert_eq!(trainer_build_for(Some(Cuda12), Some((7, 5)), true), Some(Cuda12));
+    assert_eq!(trainer_build_for(Some(Cuda12), Some((7, 0)), true), None);
+    assert_eq!(trainer_build_for(Some(Cuda12), Some((12, 1)), true), None);
+    assert_eq!(trainer_build_for(Some(Cuda12), Some((8, 9)), false), None);
+    assert_eq!(trainer_build_for(hardware::cuda_build((8, 9), 590), Some((8, 9)), true), Some(Cuda13));
+    assert_eq!(trainer_build_for(None, None, true), None);
+}
 
 async fn card_free_of_training(state: &AppState, what: &str) -> Result<(), (StatusCode, Json<ApiError>)> {
     if state.training.active_run().await.is_some() {
@@ -10687,7 +10728,9 @@ fn update_catalogue(part: update_screen::Part) -> Vec<&'static downloads::Asset>
         Part::Karaoke => lyrics_sync::ASSETS.iter().collect(),
         Part::Separation => std::iter::once(&separation::MODEL).chain(roformer_set(true)).chain(roformer_set(false)).chain(std::iter::once(&restore::MODEL)).collect(),
         Part::Midi => midi::SIZES.iter().flat_map(midi::weight_assets).collect(),
-        Part::Training => training::pack().iter().collect(),
+        Part::Training => training::pack().iter()
+            .chain((trainer_cuda_build() == Some(hardware::CudaBuild::Cuda12)).then(training::cuda12_backend))
+            .collect(),
         Part::Listening => training::listen_pack().iter().collect(),
         Part::Audiocpp => acpp::BUILDS.into_iter().flat_map(acpp::assets).collect(),
         Part::Assistant | Part::Models => Vec::new(),

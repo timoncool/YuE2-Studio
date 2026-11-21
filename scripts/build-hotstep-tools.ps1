@@ -5,7 +5,8 @@ param(
     [ValidateSet('universal', 'sm_89')]
     [string]$CudaArchitecture = 'universal',
     [ValidateSet('cuda13', 'cuda12', 'cpu')]
-    [string]$Build = 'cuda13'
+    [string]$Build = 'cuda13',
+    [switch]$Cuda12TrainerBackend
 )
 
 # Builds HOT-Step's tools at the pinned commit.
@@ -16,6 +17,7 @@ param(
 #     to MIDI both download into one folder; and the captioner's own asset.
 #   cuda12: the transcriber alone on CUDA 12.9 (MSVC 14.44), for the cards and
 #     drivers CUDA 13 has no code for.
+#     With -Cuda12TrainerBackend, only the trainer-plugin DLL is rebuilt and archived.
 #   cpu: the transcriber alone without CUDA, for machines without an NVIDIA card.
 # Its ggml carries HOT-Step's patches, so it never shares a folder with the engine's.
 
@@ -41,6 +43,7 @@ function Get-VcVars64 {
     return $vcvars
 }
 
+if ($Cuda12TrainerBackend -and $Build -ne 'cuda12') { throw 'Cuda12TrainerBackend requires -Build cuda12.' }
 $cuda12Root = 'D:\Projects\_tools\cuda-12.9'
 if ($Build -eq 'cuda13' -and -not (Get-Command nvcc -ErrorAction SilentlyContinue)) { throw 'The trainer is CUDA only: nvcc is required.' }
 if ($Build -eq 'cuda12' -and -not (Test-Path (Join-Path $cuda12Root 'bin\nvcc.exe'))) { throw "CUDA 12.9 is not at $cuda12Root." }
@@ -93,6 +96,11 @@ switch ($Build) {
         $setup = "call `"$(Get-VcVars64)`" -vcvars_ver=14.44 >nul && set `"CUDA_PATH=$cuda12Root`" && set `"PATH=$cuda12Root\bin;!PATH!`""
         $tools = @($midi.target)
         $buildDirectory = 'build-midi-cuda12'
+        if ($Cuda12TrainerBackend) {
+            $flags = $flags.Replace($midi.cuda12_architectures, $source.cuda_architectures)
+            $tools = @()
+            $buildDirectory = 'build-trainer-backend-cuda12'
+        }
     }
     'cpu' {
         $flags = '-DGGML_CUDA=OFF'
@@ -112,7 +120,7 @@ $ninja = Get-Content -Raw (Join-Path $worktree "$($source.source_dir)\$buildDire
 $variants = [regex]::Matches($ninja, '(?m)^build (ggml-cpu-[a-z0-9_]+): phony') | ForEach-Object { $_.Groups[1].Value } | Sort-Object -Unique
 if ($variants.Count -eq 0) { throw 'The configured build has no processor variants of ggml-cpu.' }
 $cudaTarget = if ($Build -eq 'cpu') { '' } else { 'ggml-cuda' }
-$targets = "$($tools -join ' ') $cudaTarget $($variants -join ' ')"
+$targets = if ($Cuda12TrainerBackend) { $cudaTarget } else { "$($tools -join ' ') $cudaTarget $($variants -join ' ')" }
 $command = "$setup && set `"VSLANG=1033`" && cmake --build `"$buildDirectory`" --target $targets --parallel 8"
 Push-Location (Join-Path $worktree $source.source_dir)
 try { & cmd.exe /d /v:on /s /c $command | Out-Host } finally { Pop-Location }
@@ -122,6 +130,18 @@ $binDirectory = Join-Path $worktree "$($source.source_dir)\$buildDirectory"
 
 $output = [System.IO.Path]::GetFullPath($OutputDirectory)
 if ($output -eq [System.IO.Path]::GetPathRoot($output)) { throw 'OutputDirectory must be a specific child directory, not a drive root.' }
+if ($Cuda12TrainerBackend) {
+    New-Item -ItemType Directory -Force -Path $output | Out-Null
+    $backend = Join-Path $binDirectory 'ggml-cuda.dll'
+    $archive = Join-Path $output $source.cuda12_backend_asset
+    if (-not (Test-Path -LiteralPath $backend -PathType Leaf)) { throw "The build completed without $backend." }
+    $license = Join-Path $ggml 'LICENSE'
+    $cudaLicense = Join-Path $output 'CUDA-LICENSE.txt'
+    Copy-Item -LiteralPath (Join-Path $cuda12Root 'LICENSE') -Destination $cudaLicense
+    Compress-Archive -LiteralPath @($backend, $license, $cudaLicense) -DestinationPath $archive -Force
+    [pscustomobject]@{ zip = $archive; bytes = (Get-Item $archive).Length; sha256 = (Get-FileHash $archive -Algorithm SHA256).Hash.ToLowerInvariant(); commit = $source.commit } | ConvertTo-Json -Compress
+    return
+}
 if (Test-Path $output) { Remove-Item -Recurse -Force $output }
 New-Item -ItemType Directory -Force -Path $output | Out-Null
 $shipped = @{ $source.target = $source.shipped_as; $midi.target = $midi.shipped_as; 'ace-caption' = 'ace-caption.exe' }
