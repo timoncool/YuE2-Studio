@@ -2,7 +2,12 @@
 
 use std::path::{Path, PathBuf};
 
-use axum::{Json, extract::State, http::StatusCode, response::IntoResponse};
+use axum::{
+    Json,
+    extract::{Query, State},
+    http::StatusCode,
+    response::IntoResponse,
+};
 use serde::Serialize;
 
 use crate::{
@@ -12,6 +17,7 @@ use crate::{
 };
 
 const SCOPE: &str = "rvc-native";
+const METAL_SCOPE: &str = "rvc-native-metal";
 
 static HUBERT: Asset = Asset {
     // These weights are runtime components and use the verified install record.
@@ -52,6 +58,7 @@ pub(crate) enum RuntimeBackend {
     #[serde(rename = "tensorrt-rtx")]
     TensorRtRtx,
     CpuGraph,
+    MetalProjections,
 }
 
 impl RuntimeBackend {
@@ -59,6 +66,7 @@ impl RuntimeBackend {
         match self {
             Self::TensorRtRtx => "tensorrt-rtx",
             Self::CpuGraph => "cpu-graph",
+            Self::MetalProjections => "metal-projections",
         }
     }
 }
@@ -92,10 +100,12 @@ struct RuntimePins<'a> {
     linux13: RuntimePin<'a>,
     #[serde(borrow)]
     macos_cpu: RuntimePin<'a>,
+    #[serde(borrow)]
+    macos_metal: RuntimePin<'a>,
 }
 
-fn runtimes() -> &'static [RuntimeComponent; 4] {
-    static RUNTIMES: std::sync::OnceLock<[RuntimeComponent; 4]> = std::sync::OnceLock::new();
+fn runtimes() -> &'static [RuntimeComponent; 5] {
+    static RUNTIMES: std::sync::OnceLock<[RuntimeComponent; 5]> = std::sync::OnceLock::new();
     RUNTIMES.get_or_init(|| {
         let pins: RuntimePins<'_> =
             serde_json::from_str(RUNTIME_DATA).expect("valid native RVC asset pins");
@@ -124,6 +134,12 @@ fn runtimes() -> &'static [RuntimeComponent; 4] {
                 "vocal-fast",
                 RuntimeBackend::CpuGraph,
             ),
+            (
+                pins.macos_metal,
+                "macos-metal",
+                "vocal-fast",
+                RuntimeBackend::MetalProjections,
+            ),
         ]
         .map(|(pin, folder, marker, backend)| {
             let url = pin
@@ -132,6 +148,10 @@ fn runtimes() -> &'static [RuntimeComponent; 4] {
             let (label, note) = match backend {
                 RuntimeBackend::TensorRtRtx => ("TensorRT-RTX", "Native RVC worker for NVIDIA RTX"),
                 RuntimeBackend::CpuGraph => ("CPU", "Native RVC worker for macOS on Apple Silicon"),
+                RuntimeBackend::MetalProjections => (
+                    "Metal (experimental)",
+                    "Metal projections with CPU graph operators on Apple Silicon",
+                ),
             };
             RuntimeComponent {
                 asset: Asset {
@@ -178,15 +198,18 @@ fn macos_cpu_supported(apple_silicon: bool, version: Option<&str>) -> bool {
             .is_some_and(|major| major >= 13)
 }
 
-fn selected() -> Result<&'static RuntimeComponent, String> {
+fn selected(metal: bool) -> Result<&'static RuntimeComponent, String> {
     if cfg!(target_os = "macos") {
         if macos_cpu_supported(
             cfg!(target_arch = "aarch64"),
             sysinfo::System::os_version().ok().as_deref(),
         ) {
-            return Ok(&runtimes()[3]);
+            return Ok(&runtimes()[if metal { 4 } else { 3 }]);
         }
-        return Err("Native CPU RVC requires Apple Silicon and macOS 13 or newer.".into());
+        return Err("Native macOS RVC requires Apple Silicon and macOS 13 or newer.".into());
+    }
+    if metal {
+        return Err("Metal RVC requires Apple Silicon and macOS 13 or newer.".into());
     }
     if !cfg!(all(
         target_arch = "x86_64",
@@ -224,8 +247,8 @@ fn selected() -> Result<&'static RuntimeComponent, String> {
     Ok(&runtimes()[runtime])
 }
 
-pub(crate) fn selected_backend() -> Option<RuntimeBackend> {
-    selected().ok().map(|runtime| runtime.backend)
+pub(crate) fn selected_backend(metal: bool) -> Option<RuntimeBackend> {
+    selected(metal).ok().map(|runtime| runtime.backend)
 }
 
 fn assets(runtime: &'static RuntimeComponent) -> [&'static Asset; 3] {
@@ -237,8 +260,11 @@ pub(crate) fn downloader(data_root: &Path) -> Downloader {
     Downloader::with_runtimes(root.clone(), root.join("v1"))
 }
 
-pub(crate) fn installed_worker(data_root: &Path) -> Result<Option<InstalledWorker>, String> {
-    let runtime = selected()?;
+pub(crate) fn installed_worker(
+    data_root: &Path,
+    metal: bool,
+) -> Result<Option<InstalledWorker>, String> {
+    let runtime = selected(metal)?;
     let downloader = downloader(data_root);
     if assets(runtime)
         .iter()
@@ -269,10 +295,23 @@ pub(crate) struct Setup {
     download: Option<DownloadProgress>,
 }
 
-pub(crate) async fn get(State(state): State<AppState>) -> Json<Setup> {
+#[derive(Default, serde::Deserialize)]
+pub(crate) struct RuntimeQuery {
+    #[serde(default)]
+    metal: bool,
+}
+
+fn download_scope(metal: bool) -> &'static str {
+    if metal { METAL_SCOPE } else { SCOPE }
+}
+
+pub(crate) async fn get(
+    State(state): State<AppState>,
+    Query(query): Query<RuntimeQuery>,
+) -> Json<Setup> {
     let downloader = &state.rvc_native_downloads;
-    let download = downloader.active_for(SCOPE).await;
-    let runtime = match selected() {
+    let download = downloader.active_for(download_scope(query.metal)).await;
+    let runtime = match selected(query.metal) {
         Ok(runtime) => runtime,
         Err(reason) => {
             return Json(Setup {
@@ -302,15 +341,38 @@ pub(crate) async fn get(State(state): State<AppState>) -> Json<Setup> {
     })
 }
 
-pub(crate) async fn start(State(state): State<AppState>) -> impl IntoResponse {
-    let assets = match selected() {
+pub(crate) async fn start(
+    State(state): State<AppState>,
+    Query(query): Query<RuntimeQuery>,
+) -> impl IntoResponse {
+    let assets = match selected(query.metal) {
         Ok(runtime) => assets(runtime),
         Err(reason) => return api_error(StatusCode::CONFLICT, reason).into_response(),
     };
     let downloader = state.rvc_native_downloads.clone();
-    downloader.clear_finished(SCOPE).await;
+    let scope = download_scope(query.metal);
+    let other = download_scope(!query.metal);
+    if downloader
+        .active_for(other)
+        .await
+        .is_some_and(|progress| !progress.done)
+    {
+        return api_error(
+            StatusCode::CONFLICT,
+            "Another RVC runtime download is already running.".into(),
+        )
+        .into_response();
+    }
+    downloader.clear_finished(scope).await;
     tokio::spawn(async move {
-        if let Err(error) = downloader.install_all(SCOPE, &assets).await {
+        if let Err(error) = downloader.install_all(scope, &assets).await {
+            if downloader
+                .active_for(other)
+                .await
+                .is_some_and(|progress| !progress.done)
+            {
+                downloader.fail(scope, error.to_string()).await;
+            }
             eprintln!("Could not install native RVC: {error:#}");
         }
     });
@@ -321,9 +383,15 @@ pub(crate) async fn start(State(state): State<AppState>) -> impl IntoResponse {
         .into_response()
 }
 
-pub(crate) async fn cancel(State(state): State<AppState>) -> Json<Setup> {
-    state.rvc_native_downloads.cancel_for(SCOPE).await;
-    get(State(state)).await
+pub(crate) async fn cancel(
+    State(state): State<AppState>,
+    Query(query): Query<RuntimeQuery>,
+) -> Json<Setup> {
+    state
+        .rvc_native_downloads
+        .cancel_for(download_scope(query.metal))
+        .await;
+    get(State(state), Query(query)).await
 }
 
 #[cfg(test)]
@@ -405,19 +473,35 @@ mod tests {
 
     #[tokio::test]
     #[ignore = "requires the pinned macOS runtime archive via YUE2_MACOS_RVC_ARCHIVE"]
-    async fn installs_the_macos_cpu_archive_with_its_loader_dependencies() {
-        let archive = PathBuf::from(std::env::var_os("YUE2_MACOS_RVC_ARCHIVE").unwrap());
+    async fn installs_the_macos_archives_with_their_loader_dependencies() {
+        let cpu = std::env::var_os("YUE2_MACOS_RVC_ARCHIVE")
+            .map(PathBuf::from)
+            .unwrap();
+        let metal = std::env::var_os("YUE2_MACOS_RVC_METAL_ARCHIVE").map(PathBuf::from);
         let scratch = tempfile::Builder::new()
             .prefix("rvc-голос-")
             .tempdir()
             .unwrap();
         let downloader = downloader(scratch.path());
-        let asset = &runtimes()[3].asset;
+        verify_archive_install(&downloader, scratch.path(), &runtimes()[3].asset, &cpu).await;
+        if let Some(metal) = metal {
+            verify_archive_install(&downloader, scratch.path(), &runtimes()[4].asset, &metal).await;
+        }
+    }
+
+    async fn verify_archive_install(
+        downloader: &Downloader,
+        profile: &Path,
+        asset: &'static Asset,
+        archive: &Path,
+    ) {
+        #[cfg(not(all(target_os = "macos", target_arch = "aarch64")))]
+        let _ = profile;
         let local = downloader.path_of(asset);
         std::fs::create_dir_all(local.parent().unwrap()).unwrap();
-        std::fs::copy(&archive, &local).unwrap();
+        std::fs::copy(archive, &local).unwrap();
         downloader.install_all(SCOPE, &[asset]).await.unwrap();
-        assert!(present(&downloader, asset));
+        assert!(present(downloader, asset));
         let directory = downloader.picked_into(asset);
         let exe = directory.join(asset.marker);
         let dylib = directory.join("libdnnl.3.dylib");
@@ -432,9 +516,13 @@ mod tests {
         }
         #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
         {
-            assert_eq!(selected_backend(), Some(RuntimeBackend::CpuGraph));
-            assert!(installed_worker(scratch.path()).unwrap().is_none());
-            assert!(!scratch.path().join("rvc/native/cache-v1").exists());
+            assert_eq!(selected_backend(false), Some(RuntimeBackend::CpuGraph));
+            assert_eq!(
+                selected_backend(true),
+                Some(RuntimeBackend::MetalProjections)
+            );
+            assert!(installed_worker(profile, false).unwrap().is_none());
+            assert!(!profile.join("rvc/native/cache-v1").exists());
             let result = std::process::Command::new(&exe)
                 .arg("--help")
                 .env_remove("DYLD_LIBRARY_PATH")
@@ -448,7 +536,7 @@ mod tests {
             );
         }
         std::fs::remove_file(dylib).unwrap();
-        assert!(!present(&downloader, asset));
+        assert!(!present(downloader, asset));
     }
 
     #[tokio::test]
@@ -457,12 +545,13 @@ mod tests {
         // Supply the release archive, hubert.vfrm, rmvpe.vfrm, input.wav,
         // voice.pth and retrieval.index.
         let fixture = PathBuf::from(std::env::var_os("YUE2_RVC_INSTALL_FIXTURE").unwrap());
+        let metal = std::env::var("YUE2_RVC_INSTALL_METAL").as_deref() == Ok("1");
         let scratch = tempfile::Builder::new()
             .prefix("rvc-голос-")
             .tempdir_in(&fixture)
             .unwrap();
         let downloader = downloader(scratch.path());
-        let assets = assets(selected().unwrap());
+        let assets = assets(selected(metal).unwrap());
         for asset in assets {
             let destination = downloader.path_of(asset);
             std::fs::create_dir_all(destination.parent().unwrap()).unwrap();
@@ -474,10 +563,10 @@ mod tests {
         for asset in assets {
             assert!(present(&downloader, asset), "unverified {}", asset.label);
         }
-        assert_eq!(crate::rvc_fast::status(scratch.path()), Ok(false));
+        assert_eq!(crate::rvc_fast::status(scratch.path(), metal), Ok(false));
         assert!(!scratch.path().join("rvc/native/cache-v1").exists());
         assert!(
-            installed_worker(scratch.path())
+            installed_worker(scratch.path(), metal)
                 .unwrap()
                 .unwrap()
                 .directory
@@ -489,6 +578,7 @@ mod tests {
         let index = fixture.join("retrieval.index");
         let audio = crate::rvc_fast::convert(
             scratch.path(),
+            metal,
             &crate::rvc_fast::Request {
                 vocal: &vocal,
                 voice: &voice,
@@ -502,6 +592,6 @@ mod tests {
         assert_eq!(audio.rate, 40_000);
         assert_eq!(audio.frames(), 159_200);
         assert!(audio.peak() > 0.1);
-        assert_eq!(crate::rvc_fast::status(scratch.path()), Ok(true));
+        assert_eq!(crate::rvc_fast::status(scratch.path(), metal), Ok(true));
     }
 }

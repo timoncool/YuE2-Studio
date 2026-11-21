@@ -435,6 +435,59 @@ it.each([
     style: 'folk', lyrics: 'verse', duration_seconds: 18, steps: 7, seed: 42, ...extra });
 });
 
+it('keeps focus, the song draft and pair settings when switching the MiniMax Music3 engine', async () => {
+  vi.stubGlobal('fetch', vi.fn(async (url: string) => Response.json(url === '/v1/music/audio-cpp/models' ? {
+    engine: 'audio.cpp', engine_installed: true,
+    models: [{ id: 'heartmula', ready: true, missing: [] }, { id: 'minimax_music3', ready: true, missing: [] }],
+  } : url === '/v1/music/native/minimaxmusic-cpp/profiles' ? {
+    engine: 'minimaxmusic-cpp', engine_installed: true,
+    profiles: [{ id: 'quality-q8', label: 'Q8', ready: true, missing: [] }],
+  } : {})));
+  function Editor() {
+    const [engine, setEngine] = React.useState<NonNullable<React.ComponentProps<typeof CreatePanel>['musicEngine']>>('audio.cpp');
+    return panel({ musicEngine: engine, onMusicEngineChange: setEngine, activeJobCount: 1 });
+  }
+  const labeled = (name: string) => [...host.querySelectorAll('label')].find(node => node.textContent?.startsWith(name))!;
+  const model = () => host.querySelector<HTMLSelectElement>('select[aria-label="Local model"]')!;
+  const choose = (select: HTMLSelectElement, value: string) => act(() => {
+    select.focus();
+    select.value = value;
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  act(() => root.render(<Editor />));
+  await flush();
+  choose(model(), 'heartmula');
+  expect(document.activeElement).toBe(model());
+  expect(buttonNamed('create')).toBeTruthy();
+  const musicEngine = labeled('Music source').querySelector('select')!;
+  choose(musicEngine, 'minimaxmusic-cpp');
+  await flush();
+  choose(model(), 'quality-q8');
+  type(field('textarea[aria-label="styleCardTitle"]')!, 'acoustic folk');
+  type(field('textarea[aria-label="lyrics"]')!, 'Morning light');
+  type(labeled('Seed').querySelector('input')!, '11');
+  const engine = labeled('MiniMax Music3 · Music engine').querySelector('select')!;
+  choose(engine, 'audio.cpp');
+  await flush();
+  expect(document.activeElement).toBe(engine);
+  expect(model().value).toBe('minimax_music3');
+  expect(field('textarea[aria-label="lyrics"]')?.value).toBe('Morning light');
+  type(labeled('Seed').querySelector('input')!, '22');
+  click(buttonNamed('create')!);
+  expect(sent.at(-1)).toMatchObject({
+    music_source: { kind: 'audio_cpp', model: 'minimax_music3' }, seed: 22, lyrics: 'Morning light',
+  });
+  choose(engine, 'minimaxmusic-cpp');
+  await flush();
+  expect(document.activeElement).toBe(engine);
+  expect(model().value).toBe('quality-q8');
+  expect(labeled('Seed').querySelector('input')?.value).toBe('11');
+  click(buttonNamed('create')!);
+  expect(sent.at(-1)).toMatchObject({
+    music_source: { kind: 'native', engine: 'minimaxmusic-cpp', model: 'quality-q8' }, seed: 11, lyrics: 'Morning light',
+  });
+});
+
 it('chooses MiniMax Music3 through audio.cpp and reuses the saved seed and format', async () => {
   let ready = false;
   let heartMuLaReady = false;
@@ -870,7 +923,7 @@ describe('OpenRouter music creation', () => {
     act(() => root.render(panel({ musicEngine: 'local', onMusicEngineChange: engineChange })));
     await flush();
     expect(buttonNamed('Install local models')).toBeDefined();
-    choose(select('Music engine'), 'openrouter');
+    choose(select('Music source'), 'openrouter');
     expect(engineChange).toHaveBeenCalledWith('openrouter');
 
     act(() => root.render(panel({ musicEngine: 'openrouter', onMusicEngineChange: engineChange })));
@@ -1104,6 +1157,31 @@ it('restores a HOT-Step Stable Audio 3 take with its sampler and adapter without
     output_format: 'wav32', hotstep_sa3,
   });
   expect(sent.at(-1)?.cover_of).toBeUndefined();
+});
+
+it('restores HeartMuLa lyrics and its trained HOT-Step adapter without cover requirements', async () => {
+  vi.stubGlobal('fetch', vi.fn(async () => Response.json({
+    engine: 'hotstep', engine_installed: true,
+    profiles: [{ id: 'heartmula-3b-q8_0', label: 'HeartMuLa 3B · HOT-Step', ready: true, missing: [], adapters: ['heartmula-run'] }],
+  })));
+  const hotstep_heartmula = { adapter: 'heartmula-run', adapter_scale: 0.75 };
+  const song = {
+    title: 'Heart take', ditModel: 'hotstep', style: 'pop,piano', lyrics: 'We rise with the morning light',
+    generationParams: {
+      music_source: { kind: 'native', engine: 'hotstep', model: 'heartmula-3b-q8_0' },
+      duration_seconds: 4, seed: 42, cfg_scale: 1.5, hotstep_heartmula,
+    },
+  } as Song;
+  act(() => root.render(panel({ musicEngine: 'hotstep', initialData: { song, timestamp: 1 } })));
+  await flush();
+  expect(field('textarea[aria-label="lyrics"]')).not.toBeNull();
+  expect(host.textContent).not.toContain('Cover score');
+  click(buttonNamed('create')!);
+  expect(sent.at(-1)).toMatchObject({
+    music_source: { kind: 'native', engine: 'hotstep', model: 'heartmula-3b-q8_0' },
+    style: 'pop,piano', lyrics: 'We rise with the morning light', duration_seconds: 4, seed: 42, cfg_scale: 1.5,
+    hotstep_heartmula,
+  });
 });
 
 it('restores HOT-Step cover source and lead sheet from a saved take', async () => {

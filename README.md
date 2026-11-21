@@ -863,6 +863,12 @@ statistics off entirely: no id exists and nothing is counted.
 - [pytraveler](https://github.com/pytraveler) for [YuE2-ComfyUI](https://github.com/pytraveler/YuE2-ComfyUI) (Apache-2.0): the reader and writer of YuE2's score, the score as a MIDI file and a MIDI file read back into a score are ported from it.
 - [ryohey](https://github.com/ryohey) for [signal](https://github.com/ryohey/signal) (MIT), the MIDI editor, and Milton Paredes for the A320U SoundFonts it plays (GPL-2.0).
 
+## Report a problem
+
+Open **Report a problem** in **Settings → About**. **Send via GitHub** opens the issue
+form with your draft filled in. You can preview the report before choosing
+**Send anonymously**, which lets Studio Hub file a public issue without a GitHub account.
+
 ## Support the Author
 
 I build open-source software and do AI research. Most of what I create is free and available to everyone. Your donations help me keep creating without worrying about where the next meal comes from =)

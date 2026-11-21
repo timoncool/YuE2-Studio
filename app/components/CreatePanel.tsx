@@ -43,7 +43,7 @@ import { songWritingStrings } from '../i18n/songWriting';
 import { MagentaFields, magentaModel, restoreMagentaOptions } from './MagentaFields';
 import { MiDashengFields, miDashengModel, miDashengPromptReady, restoreMiDashengPrompt } from './MiDashengFields';
 import { HeartMuLaControls, AudioCppModelInstall, emptyHeartMuLaDraft, heartMuLaDraft, heartMuLaOptions } from './HeartMuLaControls';
-import { HotStepSa3Controls, hotStepSa3Profile, type HotStepSa3Draft } from './HotStepSa3Controls';
+import { HotStepSa3Controls, hotStepSa3Profile, hotStepHeartmulaProfile, type HotStepSa3Draft } from './HotStepSa3Controls';
 import { StableAudioControls, emptyStableAudioDraft, stableAudioDraft, stableAudioOptions, stableAudioPromptRequired } from './StableAudioControls';
 import { MuLaCoverFields } from './MuLaCoverFields';
 import { HotStepCoverFields, type HotStepCoverDraft } from './HotStepCoverFields';
@@ -441,10 +441,13 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
   const audioCpp = nativeEngine === 'audio.cpp';
   const native = useNativeMusicProfiles(nativeEngine);
   const hotstepSa3 = nativeEngine === 'hotstep' && native.profile?.id === hotStepSa3Profile;
-  const hotstep = nativeEngine === 'hotstep' && !hotstepSa3;
+  const hotstepHeart = nativeEngine === 'hotstep' && native.profile?.id === hotStepHeartmulaProfile;
+  const hotstep = nativeEngine === 'hotstep' && !hotstepSa3 && !hotstepHeart;
+  const [hotstepHeartDraft, setHotstepHeartDraft] = useState<HotStepSa3Draft>({});
   const [hotstepSa3Draft, setHotstepSa3Draft] = useState<HotStepSa3Draft>({});
   const [hotstepDraft, setHotstepDraft] = useState<HotStepCoverDraft>({ original: '', abc: '' });
   const audioFamily = audioCpp ? native.profile?.id : undefined;
+  const miniMaxMusic3 = nativeEngine === 'minimaxmusic-cpp' || (audioCpp && native.selectedId === audioCppMiniMax);
   const miDasheng = audioFamily === miDashengModel;
   const magenta = audioFamily === magentaModel;
   const [magentaOptions, setMagentaOptions] = useState(() => restoreMagentaOptions(undefined));
@@ -817,7 +820,8 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
         if (profile === 'stable_audio') setStableSettings(stableAudioDraft(settings.stable_audio as YueRequest['stable_audio']));
         if (profile === 'vevo2') setVevoReferences((settings.vevo2 as YueRequest['vevo2']) ?? { voice_song_id: '' });
         if (profile === hotStepSa3Profile) setHotstepSa3Draft((settings.hotstep_sa3 as YueRequest['hotstep_sa3']) ?? {});
-        if (song.ditModel === 'hotstep' && profile !== hotStepSa3Profile) setHotstepDraft({
+        if (profile === hotStepHeartmulaProfile) setHotstepHeartDraft((settings.hotstep_heartmula as YueRequest['hotstep_heartmula']) ?? {});
+        if (song.ditModel === 'hotstep' && profile !== hotStepSa3Profile && profile !== hotStepHeartmulaProfile) setHotstepDraft({
           original: typeof settings.cover_of === 'string' ? settings.cover_of : song.derived?.from ?? '',
           abc: typeof settings.abc === 'string' ? settings.abc : '',
         });
@@ -1544,6 +1548,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
         ...(mulaCover ? { cover_of: mulaOriginal } : {}),
         ...(stableAudio ? { stable_audio: stableAudioOptions(stableSettings) } : {}),
         ...(hotstepSa3 ? { hotstep_sa3: hotstepSa3Draft } : {}),
+        ...(hotstepHeart ? { hotstep_heartmula: hotstepHeartDraft } : {}),
         ...(vevo2 ? { vevo2: vevoReferences } : {}),
         ...nativeGenerationSettings(nativeEngine, vevo2 ? { seed: native.settings.seed, output_format: native.settings.output_format } : miDasheng || magenta ? { ...native.settings, steps: undefined } : native.settings),
       });
@@ -1694,7 +1699,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
 
           {onMusicEngineChange && (
             <label className="flex items-center gap-2 text-xs font-medium">
-              <span className="shrink-0">{musicStrings.engine}</span>
+              <span className="shrink-0">{musicStrings.source}</span>
               <select className={CONTROL} value={musicEngine} onChange={event => {
                 if (isMusicEngine(event.target.value)) onMusicEngineChange(event.target.value);
                 setError(null);
@@ -1703,6 +1708,22 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
                 <option value="local">{musicStrings.local}</option>
                 {Object.entries(profileMusicEngines).map(([engine, label]) => <option key={engine} value={engine}>{label}</option>)}
                 <option value="openrouter">OpenRouter</option>
+              </select>
+            </label>
+          )}
+          {onMusicEngineChange && miniMaxMusic3 && (
+            <label className="flex items-center gap-2 text-xs font-medium">
+              <span className="shrink-0">MiniMax Music3 · {musicStrings.engine}</span>
+              <select className={CONTROL} value={nativeEngine} onChange={event => {
+                const engine = event.target.value;
+                if (engine !== 'minimaxmusic-cpp' && engine !== 'audio.cpp') return;
+                if (engine === 'audio.cpp') native.select(audioCppMiniMax, engine);
+                onMusicEngineChange(engine);
+                setError(null);
+                setTakeChoiceOpen(false);
+              }}>
+                <option value="minimaxmusic-cpp">minimaxmusic.cpp</option>
+                <option value="audio.cpp">audio.cpp</option>
               </select>
             </label>
           )}
@@ -1737,6 +1758,9 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
                     {native.profile && !native.ready && <p role="status" className="text-xs">
                       {nativeStrings.unavailable}{native.profile.missing?.length ? ` · ${native.profile.missing.join(', ')}` : ''}
                     </p>}
+                    {hotstepHeart && native.profile?.installable && !native.ready &&
+                      <AudioCppModelInstall key={hotStepHeartmulaProfile} model={hotStepHeartmulaProfile} bytes={native.profile.missing_bytes ?? 0}
+                        language={language} onInstalled={native.refresh} />}
                     {hotstepSa3 && native.profile?.installable && !native.ready &&
                       <AudioCppModelInstall key={hotStepSa3Profile} model={hotStepSa3Profile} bytes={native.profile.missing_bytes ?? 0}
                         licenseUrl="https://huggingface.co/scragnog/HOT-Step-CPP-StableStep" language={language} onInstalled={native.refresh} />}
@@ -1793,6 +1817,8 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
                 missingSoxr={native.profile?.missing.includes('libsoxr') === true} controlClassName={CONTROL} />}
               {vevo2 && <Vevo2SingingFields value={vevoReferences} onChange={setVevoReferences} controlClassName={CONTROL} />}
               {heartMuLa && <HeartMuLaControls values={heartSettings} onChange={setHeartSettings} language={language} />}
+              {hotstepHeart && <HotStepSa3Controls value={hotstepHeartDraft} onChange={setHotstepHeartDraft}
+                adapters={native.profile?.adapters ?? []} control={CONTROL} language={language} hasSampler={false} />}
               {hotstepSa3 && <HotStepSa3Controls value={hotstepSa3Draft} onChange={setHotstepSa3Draft}
                 adapters={native.profile?.adapters ?? []} control={CONTROL} language={language} />}
               {stableAudio && <StableAudioControls value={stableSettings} onChange={setStableSettings} language={language} />}
