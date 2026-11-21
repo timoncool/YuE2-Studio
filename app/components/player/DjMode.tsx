@@ -488,12 +488,18 @@ export const DjMode: React.FC<{
   const saveMix = async () => {
     if (!mixer || finishing.current) return false;
     finishing.current = true;
+    setError(null);
     try {
       if (mixer.recording) pendingMix.current = await mixer.stopRecording();
       const blob = pendingMix.current;
       if (blob) {
         const extension = blob.type.includes('ogg') ? 'ogg' : blob.type.includes('mp4') ? 'm4a' : 'webm';
-        await saveFile(`YuE2-DJ-mix-${new Date().toISOString().replace(/[:.]/g, '-') }.${extension}`, { blob });
+        const outcome = await saveFile(`YuE2-DJ-mix-${new Date().toISOString().replace(/[:.]/g, '-')}.${extension}`, { blob });
+        if (outcome === 'cancelled') return false;
+        if (outcome === 'failed') {
+          setError('The DJ mix could not be saved. Select Save recording to try again.');
+          return false;
+        }
         pendingMix.current = null;
       }
       return true;
@@ -502,6 +508,7 @@ export const DjMode: React.FC<{
       return false;
     } finally {
       finishing.current = false;
+      tick.current();
     }
   };
   const leave = async () => {
