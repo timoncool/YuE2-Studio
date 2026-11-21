@@ -1326,6 +1326,8 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
   const [instrumental, setInstrumental] = useState(false);
   // the model was trained to sing: the Instrumental LoRA is what keeps it from it, so the switch takes it along
   const [instrumentalLoraLoading, setInstrumentalLoraLoading] = useState(false);
+  const [instrumentalAdapterId, setInstrumentalAdapterId] = useState<string | null>(null);
+  const instrumentalAdapterReady = instrumentalAdapterId !== null && adapters.some(use => use.id === instrumentalAdapterId && !use.disabled);
   // the latest press of the switch: a LoRA download outlives a click, and only the latest press acts on its result
   const instrumentalRun = useRef(0);
   useEffect(() => () => { instrumentalRun.current += 1; }, []);
@@ -1349,6 +1351,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
     const latest = () => instrumentalRun.current === run;
     if (!on) {
       setInstrumentalLoraLoading(false);
+      setInstrumentalAdapterId(null);
       const change = instrumentalChange.current;
       instrumentalChange.current = null;
       if (change) {
@@ -1358,6 +1361,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
       }
       return;
     }
+    setInstrumentalLoraLoading(true);
     try {
       const installed = async () => {
         const state = await fetchAdapters();
@@ -1365,7 +1369,6 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
       };
       let { state, lora } = await installed();
       if (!lora) {
-        setInstrumentalLoraLoading(true);
         // a download an earlier press started is waited for, not asked for again
         if (!state.installing.includes(INSTRUMENTAL_LORA)) await installCatalogAdapters([INSTRUMENTAL_LORA]);
         for (;;) {
@@ -1380,6 +1383,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
       }
       if (!latest()) return;
       const chosen = lora;
+      setInstrumentalAdapterId(chosen.id);
       setAdapters(current => {
         const present = current.find(use => use.id === chosen.id);
         if (present && !present.disabled) return current;
@@ -1521,7 +1525,14 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
     if (!ready) { setError(unavailableHint); return; }
     if (!style.trim() && !lyrics.trim() && !semanticTokens.trim()) { setError(tt('styleOrLyricsRequired')); return; }
     setError(null);
-    if (instrumental) { void createInstrumental(); return; }
+    if (instrumental) {
+      if (!instrumentalAdapterReady) {
+        setError(tt(instrumentalLoraLoading ? 'instrumentalLoraLoading' : 'instrumentalLoraFailed'));
+        return;
+      }
+      void createInstrumental();
+      return;
+    }
     // Audio codes hold a performance already sung: ask whether to render that
     // take again or perform the prompt anew, as the engine's own WebUI does.
     if (semanticTokens.trim()) { setTakeChoiceOpen(true); return; }
@@ -2687,7 +2698,9 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
         <button
           type="button"
           onClick={submit}
-          disabled={cloud ? !selectedMusicModel : nativeEngine ? !native.ready || (miDasheng && !miDashengPromptReady(scene)) || (magenta && !magentaReady) : false}
+          disabled={cloud ? !selectedMusicModel : nativeEngine
+            ? !native.ready || (miDasheng && !miDashengPromptReady(scene)) || (magenta && !magentaReady)
+            : yue && instrumental && instrumentalLoraLoading && !isGenerating}
           className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-linear-to-r from-orange-500 to-pink-600 text-base font-bold text-white shadow-lg transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
         >
           {isGenerating ? <Square size={18} /> : yue && instrumental ? <Guitar size={18} /> : <Sparkles size={18} />}
