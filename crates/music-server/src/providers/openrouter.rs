@@ -320,6 +320,48 @@ pub fn request_for(
     })
 }
 
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct MusicOptions {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub seed: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub temperature: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub top_p: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_tokens: Option<u32>,
+}
+
+fn music_request_with_options(
+    catalog: &CapabilityCatalog,
+    model_id: &str,
+    prompt: &str,
+    options: &MusicOptions,
+) -> Result<OpenRouterRequest> {
+    let model = catalog.selected(Capability::MusicGeneration, model_id)?;
+    let mut request = request_for(catalog, Capability::MusicGeneration, model_id, prompt)?;
+    if options.temperature.is_some_and(|value| !(0.0..=2.0).contains(&value)) {
+        bail!("OpenRouter temperature must be between 0 and 2");
+    }
+    if options.top_p.is_some_and(|value| !(0.0..=1.0).contains(&value)) {
+        bail!("OpenRouter top_p must be between 0 and 1");
+    }
+    if options.max_tokens == Some(0) {
+        bail!("OpenRouter max_tokens must be at least 1");
+    }
+    let Value::Object(parameters) = serde_json::to_value(options)? else {
+        unreachable!("OpenRouter music options serialize as an object");
+    };
+    for (name, value) in parameters {
+        if !model.supported_parameters.contains(&name) {
+            bail!("OpenRouter music model {} does not advertise {name}", model.id);
+        }
+        request.body[name] = value;
+    }
+    Ok(request)
+}
+
 /// Builds the documented OpenRouter streaming chat request for a catalog
 /// verified music model. The caller must attach this key as a Bearer token and
 /// consume SSE audio chunks; this adapter never starts a paid generation.
@@ -327,10 +369,9 @@ pub fn music_stream_request_for(
     catalog: &CapabilityCatalog,
     model_id: &str,
     prompt: &str,
+    options: &MusicOptions,
 ) -> Result<OpenRouterMusicStreamRequest> {
-    authenticated_request_for(
-        request_for(catalog, Capability::MusicGeneration, model_id, prompt)?,
-    )
+    authenticated_request_for(music_request_with_options(catalog, model_id, prompt, options)?)
 }
 
 /// Add the locally-held credential to an already catalog-validated request.
@@ -529,6 +570,31 @@ mod tests {
         assert_eq!(request.path, CHAT_COMPLETIONS_PATH);
         assert_eq!(request.body["stream"], true);
         assert_eq!(request.body["modalities"], json!(["text", "audio"]));
+    }
+
+    #[test]
+    fn music_request_uses_only_advertised_options_and_keeps_old_wire_shape() {
+        let catalog = CapabilityCatalog::parse(r#"{"data":[{"id":"catalog/music","name":"Song creator","description":"Music generation for full-length songs","architecture":{"input_modalities":["text"],"output_modalities":["audio"]},"supported_parameters":["seed","temperature","top_p","max_tokens","response_format"]}]}"#).unwrap();
+        let defaults = MusicOptions::default();
+        let old = request_for(&catalog, Capability::MusicGeneration, "catalog/music", "dream pop").unwrap();
+        let plain = music_request_with_options(&catalog, "catalog/music", "dream pop", &defaults).unwrap();
+        assert_eq!(plain.body, old.body);
+
+        let settings = MusicOptions { seed: Some(0), temperature: Some(0.0), top_p: Some(0.85), max_tokens: Some(4096) };
+        let request = music_request_with_options(&catalog, "catalog/music", "dream pop", &settings).unwrap();
+        assert_eq!(request.body["seed"], 0);
+        assert_eq!(request.body["temperature"], 0.0);
+        assert_eq!(request.body["top_p"], 0.85);
+        assert_eq!(request.body["max_tokens"], 4096);
+        assert_eq!(request.body["audio"], json!({"format":"wav"}));
+        assert!(request.body.get("response_format").is_none());
+
+        let invalid = MusicOptions { temperature: Some(2.01), ..defaults.clone() };
+        assert!(music_request_with_options(&catalog, "catalog/music", "dream pop", &invalid).is_err());
+        let mut changed = catalog;
+        changed.models[0].supported_parameters.retain(|name| name != "seed");
+        assert!(music_request_with_options(&changed, "catalog/music", "dream pop", &settings).unwrap_err().to_string().contains("does not advertise seed"));
+        assert!(music_request_with_options(&changed, "catalog/music", "dream pop", &defaults).is_ok());
     }
 
     #[test]

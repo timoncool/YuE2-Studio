@@ -144,6 +144,7 @@ export type MusicEngine = 'local' | 'openrouter' | 'signed' | ProfileMusicEngine
  */
 export interface YueRequest {
   rvc_after?: import('./services/rvcQuick').RvcSelection;
+  openrouter?: import('./services/nativeOpenRouter').OpenRouterMusicOptions;
   /** Capture the editor's selection with the job so later switches cannot reroute it. */
   hotstep_heartmula?: { adapter?: string; adapter_scale?: number };
   hotstep_sa3?: { sampler?: 'pingpong' | 'euler'; adapter?: string; adapter_scale?: number };

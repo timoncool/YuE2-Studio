@@ -53,7 +53,7 @@ import { SoulXSingerFields, soulxRequired, type SoulXInputs } from './SoulXSinge
 import { Vevo2ModelDirectory, Vevo2SingingFields, vevo2SingingStrings, type Vevo2References } from './Vevo2SingingFields';
 import { NumberField } from './NumberField';
 import { explainCliFailure } from '../services/cliFailure';
-import { loadNativeOpenRouterCatalog, modelsForCapability, refreshNativeOpenRouterCatalog, type NativeOpenRouterModel } from '../services/nativeOpenRouter';
+import { loadNativeOpenRouterCatalog, modelsForCapability, openRouterMusicFields, openRouterMusicParameters, refreshNativeOpenRouterCatalog, type NativeOpenRouterModel, type OpenRouterMusicOptions, type OpenRouterMusicParameter } from '../services/nativeOpenRouter';
 import { miDashengDurationStrings, musicSourceStrings, nativeMusicSourceStrings } from '../i18n/musicSource';
 import { useSignedMusicSelection } from '../services/signedMusicSelection';
 import { useMusicPair, type PairSource } from '../services/musicPair';
@@ -535,6 +535,16 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
   }, [readMusicCatalog, catalogAttempt]);
   const musicModels = musicCatalog.state === 'ready' ? musicCatalog.models : [];
   const selectedMusicModel = !provider.isError && configured ? musicModels.find(model => model.id === musicModelId) : undefined;
+  const [musicParameterDrafts, setMusicParameterDrafts] = useState<Record<string, Partial<Record<OpenRouterMusicParameter, string>>>>({});
+  const modelParameters = openRouterMusicParameters.filter(key => selectedMusicModel?.supported_parameters?.includes(key));
+  const modelDraft = musicParameterDrafts[musicModelId] ?? {};
+  const enteredParameters = modelParameters.filter(key => modelDraft[key]?.trim());
+  const invalidParameters = enteredParameters.filter(key => {
+    const value = Number(modelDraft[key]);
+    const field = openRouterMusicFields[key];
+    return !Number.isFinite(value) || value < field.min || value > field.max
+      || (field.step === 1 && !Number.isSafeInteger(value));
+  });
   const changeMusicModel = useCallback((model: string) => {
     setMusicModelId(model);
     try { window.localStorage.setItem('yue:openrouter-music-model', model); } catch { /* kept until a reload */ }
@@ -948,7 +958,14 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
         });
         native.restore(song.ditModel, profile ?? '', settings);
       } else {
-        changeMusicModel(typeof settings.model === 'string' ? settings.model : '');
+        const model = typeof settings.model === 'string' ? settings.model : '';
+        changeMusicModel(model);
+        if (model) {
+          const options = (settings.request as Partial<YueRequest> | undefined)?.openrouter;
+          const draft = Object.fromEntries(openRouterMusicParameters.flatMap(key =>
+            typeof options?.[key] === 'number' ? [[key, String(options[key])]] : []));
+          setMusicParameterDrafts(previous => ({ ...previous, [model]: draft }));
+        }
       }
       setStyle(song.style);
       setLyrics(song.lyrics);
@@ -1694,11 +1711,13 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
       return;
     }
     if (cloud) {
-      if (!selectedMusicModel) return;
+      if (!selectedMusicModel || invalidParameters.length) return;
       if (!style.trim() && !lyrics.trim()) { setError(tt('styleOrLyricsRequired')); return; }
+      const openrouter: OpenRouterMusicOptions = Object.fromEntries(enteredParameters.map(key => [key, Number(modelDraft[key])]));
       setError(null);
       generate({
         music_source: { kind: 'openrouter', model: selectedMusicModel.id },
+        ...(enteredParameters.length ? { openrouter } : {}),
         style: finishedStyle(style),
         lyrics: lyrics.replace(/\r\n?/g, '\n').trim(),
         ...(name.trim() ? { title: name.trim() } : {}),
@@ -2036,6 +2055,23 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
                                 <option value="">{musicStrings.choose}</option>
                                 {musicModels.map(model => <option key={model.id} value={model.id}>{model.name || model.id}</option>)}
                               </select>}
+                        {modelParameters.length > 0 && <div className="grid grid-cols-2 gap-2">
+                          {modelParameters.map(key => {
+                            const field = openRouterMusicFields[key];
+                            return <label key={key} className="min-w-0 text-xs">
+                              {t(field.label)}
+                              <input type="number" aria-label={t(field.label)} min={field.min} max={field.max} step={field.step}
+                                placeholder={t('auto')} value={modelDraft[key] ?? ''} aria-invalid={invalidParameters.includes(key)}
+                                className={CONTROL + ' mt-1 aria-invalid:border-red-600'}
+                                onChange={event => {
+                                  const value = event.target.value;
+                                  setMusicParameterDrafts(previous => ({
+                                    ...previous, [musicModelId]: { ...previous[musicModelId], [key]: value },
+                                  }));
+                                }} />
+                            </label>;
+                          })}
+                        </div>}
                         <button type="button" onClick={requestCatalogRefresh} className="text-xs text-pink-600 underline dark:text-pink-300">
                           {musicStrings.refresh}
                         </button>
@@ -3044,7 +3080,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
         <button
           type="button"
           onClick={submit}
-          disabled={pair.blocked || (signed ? !packages.ready : cloud ? !selectedMusicModel : nativeEngine
+          disabled={pair.blocked || (signed ? !packages.ready : cloud ? !selectedMusicModel || invalidParameters.length > 0 : nativeEngine
             ? !native.ready || (miDasheng && !miDashengPromptReady(scene)) || (magenta && !magentaReady) || (mulaCover && !mulaCoverDraft.original) || (hotstep && (!mulaCoverDraft.original || !mulaCoverDraft.abc.trim()))
             : yue && instrumental && instrumentalLoraLoading && !isGenerating)}
           className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-linear-to-r from-orange-500 to-pink-600 text-base font-bold text-white shadow-lg transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"

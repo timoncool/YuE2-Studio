@@ -1763,6 +1763,16 @@ fn tools() -> &'static [Tool] {
                 description: "Generate a song with YuE2, native ACE-Step or MiniMax, an installed audio.cpp music family, or an explicitly selected OpenRouter music model. YuE2 uses the ABC score. Native engines use their own profile and supported controls. style: one English sentence (language, genre, vocal, instruments, mood, production, 'N BPM'). lyrics: sections tagged [Verse 1], [Chorus], [Bridge]... one per line, blank line between sections; empty for an instrumental. abc: a score to sing (from score_compose or an edited one), else the model writes its own. cot: full (melody and chords), melody, or off. adapters: installed LoRA ids with strengths per slot (see lora_list). Returns a job; poll song_job_get until completed, the song then is in the library.",
                 schema: || song_create_schema(json!({
                     "ace": { "type": "object", "description": "ACE-Step generation settings, including guidance_scale, think, source_song_id and reference_song_id." },
+                    "openrouter": {
+                        "type": "object", "additionalProperties": false,
+                        "description": "Optional music settings advertised by the selected OpenRouter model. Omit fields to use provider defaults.",
+                        "properties": {
+                            "seed": { "type": "integer" },
+                            "temperature": { "type": "number", "minimum": 0, "maximum": 2 },
+                            "top_p": { "type": "number", "minimum": 0, "maximum": 1 },
+                            "max_tokens": { "type": "integer", "minimum": 1, "maximum": 4294967295 }
+                        }
+                    },
                     "music_source": {
                         "description": "Select local YuE2, a native profile, an audio.cpp model, an installed signed music adapter and its model, or an OpenRouter music model. OpenRouter submits a paid request to the selected model.",
                         "oneOf": [

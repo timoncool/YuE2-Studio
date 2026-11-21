@@ -357,6 +357,8 @@ struct CreateMusicJobRequest {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     music_source: Option<MusicSource>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    openrouter: Option<providers::openrouter::MusicOptions>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     ace: Option<native_ace_jobs::AceOptions>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     hotstep_sa3: Option<hotstep_sa3::Options>,
@@ -11252,7 +11254,9 @@ async fn create_openrouter_music_job(
         return rejected("Refresh the OpenRouter catalog before starting cloud music generation.".into());
     };
     let prompt = format!("Music style:\n{}\n\nLyrics:\n{}", request.style.trim(), request.lyrics.trim());
-    let stream = match providers::openrouter::music_stream_request_for(&catalog, model, &prompt) {
+    let defaults = providers::openrouter::MusicOptions::default();
+    let options = request.openrouter.as_ref().unwrap_or(&defaults);
+    let stream = match providers::openrouter::music_stream_request_for(&catalog, model, &prompt, options) {
         Ok(stream) => stream,
         Err(error) => return rejected(error.to_string()),
     };
