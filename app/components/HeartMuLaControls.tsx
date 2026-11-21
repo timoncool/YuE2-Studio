@@ -1,3 +1,5 @@
+import { useState } from 'react';
+
 export interface HeartMuLaOptions {
   temperature?: number;
   top_k?: number;
@@ -69,4 +71,50 @@ export function HeartMuLaControls({values, onChange, language = 'en'}: {
       ))}
     </div>
   );
+}
+const installLabels: Record<string, readonly [string, string, string]> = {
+  en: ['Install HeartMuLa', 'Installing HeartMuLa…', 'HeartMuLa installation failed.'],
+  ru: ['Установить HeartMuLa', 'Установка HeartMuLa…', 'Не удалось установить HeartMuLa.'],
+  zh: ['安装 HeartMuLa', '正在安装 HeartMuLa…', '无法安装 HeartMuLa。'],
+  ja: ['HeartMuLa をインストール', 'HeartMuLa をインストール中…', 'HeartMuLa をインストールできませんでした。'],
+  ko: ['HeartMuLa 설치', 'HeartMuLa 설치 중…', 'HeartMuLa를 설치하지 못했습니다.'],
+  pt: ['Instalar HeartMuLa', 'Instalando HeartMuLa…', 'Não foi possível instalar HeartMuLa.'],
+};
+
+export function HeartMuLaInstall({ bytes, language, onInstalled }: {
+  bytes: number;
+  language: string;
+  onInstalled: () => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const [install, installing, failed] = installLabels[language] ?? installLabels.en;
+  const size = bytes > 0 ? ` · ${new Intl.NumberFormat(language, { maximumFractionDigits: 2 }).format(bytes / (1024 ** 3))} GiB` : '';
+
+  async function start() {
+    setBusy(true);
+    setError('');
+    try {
+      const result = await fetch('/v1/music/audio-cpp/models/install', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model: 'heartmula' }),
+      });
+      const body = await result.json();
+      if (!result.ok || body.ready !== true) throw new Error(body.error || failed);
+      onInstalled();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : failed);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return <div className="space-y-1 text-xs">
+    <button type="button" className="text-pink-600 underline disabled:opacity-50 dark:text-pink-300"
+      disabled={busy} onClick={() => void start()}>
+      {busy ? installing : install + size}
+    </button>
+    {error && <p role="alert">{error}</p>}
+  </div>;
 }

@@ -254,6 +254,71 @@ pub(super) async fn models(State(state): State<AppState>) -> Json<Value> {
     }))
 }
 
+#[derive(Deserialize)]
+pub(super) struct InstallModel {
+    model: String,
+}
+
+pub(super) async fn install(
+    State(state): State<AppState>,
+    Json(request): Json<InstallModel>,
+) -> Result<Json<Value>, (StatusCode, Json<ApiError>)> {
+    if request.model != audio_cpp_heartmula::FAMILY {
+        return Err(api_error(
+            StatusCode::BAD_REQUEST,
+            "This audio.cpp music model has no managed installation.".into(),
+        ));
+    }
+    let scope = "audio-cpp-heartmula";
+    let build = build(&state)
+        .await
+        .map_err(|error| api_error(StatusCode::SERVICE_UNAVAILABLE, error.to_string()))?;
+    let root = studio_data_root().ok_or_else(|| {
+        api_error(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "Studio data folder is unavailable.".into(),
+        )
+    })?;
+    let asset = &audio_cpp_heartmula::ASSET;
+    let downloader = state.acpp.downloader();
+    let target = downloader.path_of(asset);
+    let weights_missing =
+        || !audio_cpp_heartmula::missing_files(&audio_cpp_heartmula::model_dir(&root)).is_empty();
+    if weights_missing() && target.exists() {
+        return Err(api_error(
+            StatusCode::CONFLICT,
+            format!(
+                "HeartMuLa weights at {} are incomplete. Move the existing file and retry installation.",
+                target.display()
+            ),
+        ));
+    }
+    if !state.acpp.installed(build) {
+        install_acpp(&state, build, scope).await.map_err(|error| {
+            api_error(
+                StatusCode::BAD_GATEWAY,
+                format!("Installing audio.cpp runtime: {error:#}"),
+            )
+        })?;
+    }
+    downloader
+        .install_all(scope, &[asset])
+        .await
+        .map_err(|error| {
+            api_error(
+                StatusCode::BAD_GATEWAY,
+                format!("Installing HeartMuLa weights: {error:#}"),
+            )
+        })?;
+    if weights_missing() || !state.acpp.exe(build).is_file() || !state.acpp.installed(build) {
+        return Err(api_error(
+            StatusCode::BAD_GATEWAY,
+            "HeartMuLa installation is incomplete.".into(),
+        ));
+    }
+    Ok(Json(serde_json::json!({"ready": true})))
+}
+
 fn minimax_catalog(root: Option<&FsPath>, runtime_ready: bool) -> Value {
     let mut missing = root.map_or_else(
         || vec!["Studio data folder"],

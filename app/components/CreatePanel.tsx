@@ -38,7 +38,7 @@ import { SongTextParts } from './SongTextParts';
 import { writerInstruction } from '../services/songWriting';
 import { songWritingStrings } from '../i18n/songWriting';
 import { MiDashengFields, miDashengModel, miDashengPromptReady, restoreMiDashengPrompt } from './MiDashengFields';
-import { HeartMuLaControls, emptyHeartMuLaDraft, heartMuLaDraft, heartMuLaOptions } from './HeartMuLaControls';
+import { HeartMuLaControls, HeartMuLaInstall, emptyHeartMuLaDraft, heartMuLaDraft, heartMuLaOptions } from './HeartMuLaControls';
 import { Vevo2SingingFields, vevo2SingingStrings, type Vevo2References } from './Vevo2SingingFields';
 import { NumberField } from './NumberField';
 import { explainCliFailure } from '../services/cliFailure';
@@ -1635,6 +1635,8 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
                     {native.profile && !native.ready && <p role="status" className="text-xs">
                       {nativeStrings.unavailable}{native.profile.missing?.length ? ` · ${native.profile.missing.join(', ')}` : ''}
                     </p>}
+                    {heartMuLa && native.profile?.installable && !native.ready &&
+                      <HeartMuLaInstall bytes={native.profile.total_bytes} language={language} onInstalled={native.refresh} />}
                     <button type="button" className="text-xs text-pink-600 underline dark:text-pink-300" onClick={native.refresh}>
                       {musicStrings.refresh}
                     </button>

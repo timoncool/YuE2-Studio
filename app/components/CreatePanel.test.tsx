@@ -402,13 +402,22 @@ it.each([
 
 it('chooses MiniMax Music3 through audio.cpp and reuses the saved seed and format', async () => {
   let ready = false;
-  const fetcher = vi.fn(async (url: string) => Response.json(url === '/v1/music/audio-cpp/models' ? {
+  let heartMuLaReady = false;
+  const fetcher = vi.fn(async (url: string, init?: RequestInit) => {
+    if (url === '/v1/music/audio-cpp/models/install') {
+      expect(init?.method).toBe('POST');
+      expect(JSON.parse(String(init?.body))).toEqual({ model: 'heartmula' });
+      heartMuLaReady = true;
+      return Response.json({ ready: true });
+    }
+    return Response.json(url === '/v1/music/audio-cpp/models' ? {
     engine: 'audio.cpp',
     models: [{ id: 'minimax_music3', profile_id: 'quality-q8', quantization: 'Q8_0', ready,
       missing: ready ? [] : ['language_model_q8_0.gguf'] },
       { id: 'heartmula', name: 'HeartMuLa', profile_id: 'heartmula_q8_0', quantization: 'Q8_0',
-        ready: false, missing: ['heartmula.gguf'] }],
-  } : {}));
+        installable: true, bytes: 7659762592, ready: heartMuLaReady, missing: heartMuLaReady ? [] : ['heartmula.gguf'] }],
+    } : {});
+  });
   vi.stubGlobal('fetch', fetcher);
   function Editor() {
     const [engine, setEngine] = React.useState<NonNullable<React.ComponentProps<typeof CreatePanel>['musicEngine']>>('local');
@@ -438,6 +447,14 @@ it('chooses MiniMax Music3 through audio.cpp and reuses the saved seed and forma
   expect(models.value).toBe('heartmula');
   expect(generate().disabled).toBe(true);
   expect(host.textContent).toContain('heartmula.gguf');
+  const installHeartMuLa = () => [...host.querySelectorAll('button')]
+    .find(button => button.textContent?.startsWith('Install HeartMuLa'));
+  expect(installHeartMuLa()?.textContent).toContain('7.13 GiB');
+  click(installHeartMuLa()!);
+  await flush();
+  await flush();
+  expect(heartMuLaReady).toBe(true);
+  expect(installHeartMuLa()).toBeUndefined();
 
   const song = { title: 'Music3 take', style: 'folk', lyrics: '[verse] Good morning',
     ditModel: 'audio.cpp', lmModel: 'quality-q8', nativeReplayAvailable: false,
