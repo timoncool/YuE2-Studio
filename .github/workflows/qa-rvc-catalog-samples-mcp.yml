@@ -1,0 +1,22 @@
+name: RVC catalog demos and voice lifecycle MCP proof
+
+on:
+  push:
+    branches: [qa/rvc-catalog-samples-mcp]
+
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo build --locked -p music-server --bin music-server
+      - run: python -u scripts/qa-rvc-catalog-demos-mcp.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rvc-catalog-demos-mcp
+          path: rvc-catalog-demos-mcp.json
