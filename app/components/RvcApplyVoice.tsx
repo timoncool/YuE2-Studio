@@ -142,6 +142,9 @@ export function RvcApplyVoice({ song, voice, control, onSaved }: {
       {take && (
         <div className="space-y-1">
           <p role="status">{labels.saved.replace('{backend}', take.effective_backend)}</p>
+          {take.requested_backend !== take.effective_backend && (
+            <p>{labels.requested.replace('{backend}', take.requested_backend === 'auto' ? labels.auto : take.requested_backend)}</p>
+          )}
           {take.fallback_reason && <p>{labels.fallbackReason} {take.fallback_reason}</p>}
           <audio className="w-full" controls src={apiUrl(take.audio_url)} />
         </div>
