@@ -82,6 +82,7 @@ mod rvc_catalog;
 mod rvc_apply;
 mod rvc_audition;
 mod rvc_burn;
+mod rvc_burn_install;
 mod rvc_quick;
 mod rvc_fast;
 mod rvc_fast_install;
@@ -171,6 +172,7 @@ struct AppState {
     /// Downloads of community models (`community`) into `models/yue2-cpp/own`.
     community_downloads: Arc<downloads::Downloader>,
     rvc_native_downloads: Arc<downloads::Downloader>,
+    rvc_burn_downloads: Arc<downloads::Downloader>,
     rvc_quick: Arc<rvc_quick::Queue>,
     rvc_auditions: Arc<rvc_audition::Cache>,
     settings_path: PathBuf,
@@ -1654,6 +1656,9 @@ pub async fn serve_on_port(port: u16) -> anyhow::Result<()> {
         community_downloads,
         rvc_quick: Arc::default(),
         rvc_auditions: Arc::default(),
+        rvc_burn_downloads: Arc::new(rvc_burn_install::downloader(
+            settings_path.parent().expect("settings file has a data directory"),
+        )),
         rvc_native_downloads: Arc::new(rvc_fast_install::downloader(
             settings_path.parent().expect("settings file has a data directory"),
         )),
@@ -1911,6 +1916,7 @@ pub async fn serve_on_port(port: u16) -> anyhow::Result<()> {
         .route("/v1/training/runs", post(start_training))
         .route("/v1/training/rvc-burn", get(rvc_burn::status).post(rvc_burn::start))
         .route("/v1/training/rvc-burn/{id}/install", post(rvc_burn::install))
+        .route("/v1/training/rvc-burn/setup", post(rvc_burn_install::start).delete(rvc_burn_install::cancel))
         .route("/v1/training/hotstep-sa3", get(hotstep_sa3_training::status).post(hotstep_sa3_training::start))
         .route("/v1/training/hotstep-sa3/install", post(hotstep_sa3_training::install))
         .route("/v1/training/hotstep-heartmula", get(hotstep_sa3_training::heartmula_status).post(hotstep_sa3_training::heartmula_start))
@@ -1989,6 +1995,7 @@ pub async fn serve_on_port(port: u16) -> anyhow::Result<()> {
         .route("/v1/local-models/music", get(local_music_model_catalog))
         .route("/v1/music/jobs", post(create_music_job).get(list_active_music_jobs))
         .route("/v1/music/audio-cpp/models", get(audio_cpp_music::models))
+        .route("/v1/music/audio-cpp/vevo2/model-directory", post(audio_cpp_vevo2::set_directory))
         .route("/v1/music/native/hotstep/profiles", get(hotstep_cover::profiles))
         .route("/v1/music/native/hotstep/install", post(hotstep_cover::install))
         .route("/v1/music/native/hotstep/stable-audio-3/install", post(hotstep_sa3::install))

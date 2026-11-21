@@ -16,15 +16,25 @@ pub(super) struct Runtime {
     folder: PathBuf,
     pub(super) exe: PathBuf,
     ort: PathBuf,
+    managed: Option<(rvc_burn_install::Profile, Arc<downloads::Downloader>)>,
 }
 
 impl Runtime {
-    pub(super) fn discover(data: &FsPath) -> Self {
-        let folder = std::env::var_os("YUE_RVC_BURN_ROOT")
-            .filter(|value| !value.is_empty())
-            .map(PathBuf::from)
-            .unwrap_or_else(|| data.join("rvc/burn"));
-        Self::from_folder(folder)
+    pub(super) fn discover(state: &AppState) -> Self {
+        let override_path = std::env::var_os("YUE_RVC_BURN_ROOT").filter(|value| !value.is_empty());
+        if let Some(folder) = override_path {
+            return Self::from_folder(folder.into());
+        }
+        let mut runtime = Self::from_folder(update_data_root(state).join("rvc/burn"));
+        if !runtime.exe.is_file()
+            && let Ok(profile) = rvc_burn_install::selected()
+        {
+            let folder = runtime.folder.join("runtime").join(profile.folder());
+            runtime.exe = folder.join("rvc.exe");
+            runtime.ort = folder.join("onnxruntime.dll");
+            runtime.managed = Some((profile, state.rvc_burn_downloads.clone()));
+        }
+        runtime
     }
 
     pub(super) fn from_folder(folder: PathBuf) -> Self {
@@ -34,10 +44,22 @@ impl Runtime {
         } else {
             "libonnxruntime.so"
         });
-        Self { folder, exe, ort }
+        Self {
+            folder,
+            exe,
+            ort,
+            managed: None,
+        }
     }
 
     fn missing(&self, training: bool) -> Vec<String> {
+        if let Some((profile, downloads)) = &self.managed {
+            return profile
+                .assets(training)
+                .filter(|asset| !rvc_burn_install::present(downloads, asset))
+                .map(|asset| asset.label.to_owned())
+                .collect();
+        }
         let mut paths = vec![(&self.exe, None), (&self.ort, None)];
         let candidates = [
             (CONTENT, 377_655_729),
@@ -80,20 +102,49 @@ impl Runtime {
         Ok(())
     }
 
-    pub(super) fn environment(&self) -> Vec<(OsString, OsString)> {
+    fn prepare_sdk(&self) -> anyhow::Result<()> {
+        music_core::process::runtime_beside(&self.exe);
+        if let Some((profile, downloader)) = &self.managed {
+            rvc_burn_install::prepare_sdk(*profile, downloader)?;
+        }
+        Ok(())
+    }
+
+    pub(super) fn environment(&self, working_dir: &FsPath) -> Vec<(OsString, OsString)> {
         let path = std::env::join_paths(
-            std::iter::once(self.folder.clone()).chain(
-                std::env::var_os("PATH")
-                    .iter()
-                    .flat_map(std::env::split_paths),
-            ),
+            self.exe
+                .parent()
+                .map(FsPath::to_path_buf)
+                .into_iter()
+                .chain(
+                    std::env::var_os("PATH")
+                        .iter()
+                        .flat_map(std::env::split_paths),
+                ),
         )
         .unwrap_or_default();
-        vec![
+        let mut env = vec![
             ("PATH".into(), path),
             ("ORT_DYLIB_PATH".into(), self.ort.clone().into_os_string()),
             ("RUST_LOG".into(), "info".into()),
-        ]
+        ];
+        if let Some(sdk) = self
+            .exe
+            .parent()
+            .map(|folder| {
+                rvc_burn_install::Profile::from_folder(folder)
+                    .map(|profile| profile.sdk_dir(folder))
+                    .filter(|sdk| sdk.is_dir())
+                    .unwrap_or_else(|| folder.join("cuda-sdk"))
+            })
+            .filter(|sdk| sdk.is_dir())
+        {
+            env.push((
+                "CUDA_PATH".into(),
+                sdk_environment_path(&sdk, working_dir).into_os_string(),
+            ));
+        }
+        env
     }
 
     fn common_args(&self, local: &FsPath) -> Vec<OsString> {
@@ -150,6 +201,7 @@ impl Runtime {
         semitone_shift: i32,
         cancelled: impl Fn() -> bool,
     ) -> anyhow::Result<audio_post::Stereo> {
+        self.prepare_sdk()?;
         let output = stage.join("converted");
         std::fs::create_dir(&output)?;
         let stderr = stage.join("rvc-convert.log");
@@ -168,7 +220,7 @@ impl Runtime {
                 &semitone_shift.to_string(),
             ])
             .args(self.common_args(stage))
-            .envs(self.environment())
+            .envs(self.environment(&self.folder))
             .current_dir(&self.folder)
             .stdin(Stdio::null())
             .stdout(Stdio::null())
@@ -207,6 +259,28 @@ impl Runtime {
     }
 }
 
+// NVRTC interprets the byte strings of its include options using the Windows
+// ANSI API. An ASCII relative path keeps a Unicode profile folder in the
+// child process's wide-character working directory instead.
+fn sdk_environment_path(sdk: &FsPath, working_dir: &FsPath) -> PathBuf {
+    if cfg!(windows) && !sdk.as_os_str().as_encoded_bytes().is_ascii() {
+        for (parents, ancestor) in working_dir.ancestors().enumerate() {
+            if let Ok(rest) = sdk.strip_prefix(ancestor) {
+                let mut relative = PathBuf::from(".");
+                for _ in 0..parents {
+                    relative.push("..");
+                }
+                relative.push(rest);
+                if relative.as_os_str().as_encoded_bytes().is_ascii() {
+                    return relative;
+                }
+                break;
+            }
+        }
+    }
+    sdk.to_owned()
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Settings {
@@ -235,11 +309,16 @@ pub(super) struct Start {
 }
 
 pub(super) async fn status(State(state): State<AppState>) -> Json<Value> {
-    let runtime = Runtime::discover(update_data_root(&state));
-    Json(serde_json::json!({
-        "ready":runtime.ready(true).is_ok(), "conversion_ready":runtime.ready(false).is_ok(),
-        "missing":runtime.missing(true),"folder":runtime.folder,"cuda":hardware::hardware().card_cuda.is_some()
-    }))
+    let runtime = Runtime::discover(&state);
+    let mut result = rvc_burn_install::status(&state).await;
+    let missing = runtime.missing(true);
+    result["ready"] =
+        serde_json::json!(hardware::hardware().card_cuda.is_some() && missing.is_empty());
+    result["conversion_ready"] = serde_json::json!(runtime.ready(false).is_ok());
+    result["missing"] = serde_json::json!(missing);
+    result["folder"] = serde_json::json!(runtime.folder);
+    result["cuda"] = serde_json::json!(hardware::hardware().card_cuda.is_some());
+    Json(result)
 }
 
 pub(super) async fn start(
@@ -256,7 +335,7 @@ pub(super) async fn start(
         ));
     }
     let outcome = async {
-        let runtime = Runtime::discover(update_data_root(&state));
+        let runtime = Runtime::discover(&state);
         runtime.ready(true)?;
         let _lease = state
             .engine_use
@@ -278,6 +357,8 @@ pub(super) async fn start(
                 .is_some_and(|job| !job.finished),
             "Wait until dataset preparation ends."
         );
+        let sdk_runtime = runtime.clone();
+        tokio::task::spawn_blocking(move || sdk_runtime.prepare_sdk()).await??;
         state.ace_runtime.stop().await?;
         state.minimax.stop().await;
         evict_kept_models(&state, "before RVC Burn training").await;
@@ -345,4 +426,21 @@ pub(super) fn progress(line: &str) -> Option<(u32, training::TrainingStepRecord)
             step_ms: None,
         },
     ))
+}
+
+#[cfg(all(test, windows))]
+#[test]
+fn nvrtc_uses_an_ascii_relative_include_root_for_a_unicode_profile() {
+    let studio = FsPath::new("studio/данные");
+    let sdk = studio.join("rvc/burn/runtime/cuda13/cuda-sdk-pinned");
+    let training = studio.join("training/runs/saved");
+    let convert = studio.join("rvc/burn");
+    assert_eq!(
+        sdk_environment_path(&sdk, &training),
+        PathBuf::from("./../../../rvc/burn/runtime/cuda13/cuda-sdk-pinned")
+    );
+    assert_eq!(
+        sdk_environment_path(&sdk, &convert),
+        PathBuf::from("./runtime/cuda13/cuda-sdk-pinned")
+    );
 }

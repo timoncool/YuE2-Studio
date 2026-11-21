@@ -1684,7 +1684,7 @@ impl Training {
             command.env("GGML_BACKEND", "CUDA0");
             if stage.id == crate::rvc_burn::STAGE {
                 let folder = trainer.parent().context("RVC Burn runtime folder")?.to_owned();
-                command.envs(crate::rvc_burn::Runtime::from_folder(folder).environment());
+                command.envs(crate::rvc_burn::Runtime::from_folder(folder).environment(run_dir));
             }
             #[cfg(windows)]
             command.creation_flags(0x0800_0000);

@@ -49,6 +49,15 @@ export const musicSourceStrings = {
   },
 };
 
+export const miDashengDurationStrings = {
+  en: { limit: 'Duration limit (seconds)', hint: 'The model rounds the limit to audio blocks and can finish sooner.', requested: 'Requested duration limit', effective: 'Audio duration', default: 'Model default' },
+  ru: { limit: 'Предельная длительность, с', hint: 'Модель округляет предел до целого аудиоблока и может завершить генерацию раньше.', requested: 'Запрошенный предел', effective: 'Длительность аудио', default: 'По умолчанию в модели' },
+  zh: { limit: '时长上限（秒）', hint: '模型会按音频块取整，也可能提前结束。', requested: '请求的时长上限', effective: '音频时长', default: '模型默认值' },
+  ja: { limit: '生成時間の上限（秒）', hint: '上限は音声ブロック単位に丸められ、生成は早く終わる場合があります。', requested: '指定した生成時間の上限', effective: '音声の長さ', default: 'モデル既定値' },
+  ko: { limit: '생성 시간 한도(초)', hint: '한도는 오디오 블록 단위로 조정되며 생성이 더 일찍 끝날 수 있습니다.', requested: '요청한 시간 한도', effective: '오디오 길이', default: '모델 기본값' },
+  pt: { limit: 'Limite de duração (segundos)', hint: 'O modelo arredonda o limite em blocos de áudio e pode terminar antes.', requested: 'Limite de duração solicitado', effective: 'Duração do áudio', default: 'Padrão do modelo' },
+};
+
 export const nativeMusicSourceStrings = {
   en: {
     model: 'Local model', loading: 'Checking model availability…', error: 'Could not check model availability.',

@@ -71,6 +71,7 @@ export function cloudMusicModelName(song: Song): string | undefined {
 export function mapNativeLibrarySong(song: NativeLibrarySong): Song {
   const metadata = song.metadata ?? {};
   const tags = Array.isArray(metadata.tags) ? metadata.tags.filter((tag): tag is string => typeof tag === 'string') : [];
+  const seconds = numberMetadata(metadata, 'duration_seconds') ?? numberMetadata(metadata, 'duration');
 
   return {
     id: song.id,
@@ -85,10 +86,8 @@ export function mapNativeLibrarySong(song: NativeLibrarySong): Song {
       : '',
     coverSource: stringMetadata(metadata, 'cover_source'),
     coverPlaceholder: stringMetadata(metadata, 'cover_placeholder'),
-    duration: (() => {
-      const seconds = numberMetadata(metadata, 'duration_seconds') ?? numberMetadata(metadata, 'duration');
-      return seconds && seconds > 0 ? `${Math.floor(seconds / 60)}:${String(Math.floor(seconds % 60)).padStart(2, '0')}` : '0:00';
-    })(),
+    duration: seconds && seconds > 0 ? `${Math.floor(seconds / 60)}:${String(Math.floor(seconds % 60)).padStart(2, '0')}` : '0:00',
+    durationSeconds: seconds,
     createdAt: nativeDate(song.created_at),
     madeByJob: stringMetadata(metadata, 'job_id'),
     liked: metadata.liked === true,

@@ -707,7 +707,7 @@ it('chooses MiniMax Music3 through audio.cpp and reuses the saved seed and forma
 it.each([
   ['heartmula', { heartmula: { top_k: 30, temperature: 0.9 } }, 'pop', ''],
   ['vevo2', { vevo2: { voice_song_id: 'original-take' } }, '', 'Words to sing'],
-  ['midashenglm_gen', { midasheng: { caption: '', music: 'quiet piano', speech_text: '', speech_style: '', effects: '', environment: 'rain' } }, 'quiet piano', ''],
+  ['midashenglm_gen', { duration_seconds: 5, midasheng: { caption: '', music: 'quiet piano', speech_text: '', speech_style: '', effects: '', environment: 'rain' } }, 'quiet piano', ''],
 ] as const)('restores and submits model-specific settings for %s', async (model, options, style, lyrics) => {
   vi.stubGlobal('fetch', vi.fn(async () => Response.json({ engine: 'audio.cpp', models: [
     { id: model, name: model, profile_id: 'q8', quantization: 'Q8_0', ready: true, missing: [] },
@@ -720,7 +720,47 @@ it.each([
   await flush();
   click(buttonNamed('create')!);
   expect(sent.at(-1)).toMatchObject({ music_source: { kind: 'audio_cpp', model }, ...options });
+  if (model === 'midashenglm_gen') {
+    expect(host.textContent).toContain('Duration limit (seconds)');
+    const duration = host.querySelector<HTMLInputElement>('input[aria-describedby]');
+    expect(duration?.value).toBe('5');
+    expect(document.getElementById(duration?.getAttribute('aria-describedby') ?? '')?.textContent)
+      .toBe('The model rounds the limit to audio blocks and can finish sooner.');
+  }
 });
+it('uses a saved Vevo2 weights folder without offering a conversion download', async () => {
+  const local = 'D:/Models/Singing';
+  const license = 'https://huggingface.co/RMSnow/Vevo2';
+  let directory: string | null = null;
+  const request = vi.fn(async (url: string, init?: RequestInit) => {
+    if (url.endsWith('/model-directory')) {
+      directory = JSON.parse(String(init?.body)).directory;
+      return Response.json({ configured_directory: directory });
+    }
+    return Response.json({ engine: 'audio.cpp', models: [{
+      id: 'vevo2', name: 'Vevo2', profile_id: 'quality-q8', quantization: 'Q8_0',
+      ready: directory !== null, missing: directory ? [] : ['vevo2-q8_0.gguf'],
+      model_directory: 'audiocpp/models/vevo2', configured_directory: directory, license_url: license,
+    }] });
+  });
+  vi.stubGlobal('fetch', request);
+  const song = {
+    title: 'Singing', lyrics: 'Words to sing', style: '', ditModel: 'audio.cpp',
+    generationParams: { music_source: { kind: 'audio_cpp', model: 'vevo2' }, vevo2: { voice_song_id: 'voice' } },
+  } as Song;
+  act(() => root.render(panel({ musicEngine: 'audio.cpp', initialData: { song, timestamp: 1 } })));
+  await flush();
+  expect(buttonNamed('create')?.disabled).toBe(true);
+  expect(host.querySelector(`a[href="${license}"]`)?.textContent).toBe('Original model terms');
+  const label = [...host.querySelectorAll('label')].find(item => item.textContent?.includes('Folder containing your Vevo2 weights'));
+  type(label!.querySelector('input')!, local);
+  click(buttonNamed('Use this folder')!);
+  await flush();
+  expect(directory).toBe(local);
+  expect(buttonNamed('Use the Studio folder')).toBeDefined();
+  expect(buttonNamed('create')?.disabled).toBe(false);
+});
+
 it('restores a Magenta reference and submits either the available reference or text style', async () => {
   const model = 'magenta_realtime_2';
   librarySongs = [{ id: 'ref-take', title: 'Reference take', audioUrl: '/audio.wav' } as Song];
