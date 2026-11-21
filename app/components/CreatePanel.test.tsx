@@ -707,6 +707,8 @@ it('chooses MiniMax Music3 through audio.cpp and reuses the saved seed and forma
 it.each([
   ['heartmula', { heartmula: { top_k: 30, temperature: 0.9 } }, 'pop', ''],
   ['vevo2', { vevo2: { voice_song_id: 'original-take' } }, '', 'Words to sing'],
+  ['soulx_singer', { soulx: { reference_song_id: 'reference', reference_metadata: '[{}]', target_metadata: '[{}]', control: 'score' } }, '', ''],
+  ['soulx_singer_svc', { soulx: { reference_song_id: 'reference', source_song_id: 'vocals' } }, '', ''],
   ['midashenglm_gen', { duration_seconds: 5, midasheng: { caption: '', music: 'quiet piano', speech_text: '', speech_style: '', effects: '', environment: 'rain' } }, 'quiet piano', ''],
 ] as const)('restores and submits model-specific settings for %s', async (model, options, style, lyrics) => {
   vi.stubGlobal('fetch', vi.fn(async () => Response.json({ engine: 'audio.cpp', models: [
@@ -728,6 +730,7 @@ it.each([
       .toBe('The model rounds the limit to audio blocks and can finish sooner.');
   }
 });
+
 it('uses a saved Vevo2 weights folder without offering a conversion download', async () => {
   const local = 'D:/Models/Singing';
   const license = 'https://huggingface.co/RMSnow/Vevo2';
@@ -759,6 +762,38 @@ it('uses a saved Vevo2 weights folder without offering a conversion download', a
   expect(directory).toBe(local);
   expect(buttonNamed('Use the Studio folder')).toBeDefined();
   expect(buttonNamed('create')?.disabled).toBe(false);
+});
+
+it('takes two aligned score files in SoulX-Singer and sends their contents', async () => {
+  const model = 'soulx_singer';
+  librarySongs = [{ id: 'reference', title: 'Singing reference', audioUrl: '/voice.wav' } as Song];
+  vi.stubGlobal('fetch', vi.fn(async () => Response.json({ engine: 'audio.cpp', models: [
+    { id: model, name: 'SoulX-Singer SVS', profile_id: 'quality-q8', quantization: 'Q8_0', ready: true, missing: [] },
+  ] })));
+  const song = { title: 'SoulX score', style: '', lyrics: '', ditModel: 'audio.cpp', generationParams: {
+    music_source: { kind: 'audio_cpp', model }, soulx: { reference_song_id: 'reference' },
+  } } as Song;
+  act(() => root.render(panel({ musicEngine: 'audio.cpp', initialData: { song, timestamp: 1 } })));
+  await flush();
+  expect(host.textContent).toContain('Pitch contour mode also needs F0 samples at 50 Hz.');
+  const fields = [...host.querySelectorAll<HTMLInputElement>('input[type=file]')];
+  expect(fields).toHaveLength(2);
+  const upload = async (input: HTMLInputElement, text: string) => {
+    const file = new File([text], 'score.json', { type: 'application/json' });
+    Object.defineProperty(file, 'text', { value: async () => text });
+    Object.defineProperty(input, 'files', { value: [file], configurable: true });
+    await act(async () => input.dispatchEvent(new Event('change', { bubbles: true })));
+  };
+  await upload(fields[0], '[]');
+  expect(host.textContent).toContain('Use an aligned vocals JSON file up to 256 KiB.');
+  const reference = '[{"phoneme":"AA","note_pitch":"60"}]';
+  const target = '[{"phoneme":"AA","note_pitch":"62"}]';
+  await upload(fields[0], reference);
+  await upload(fields[1], target);
+  click(buttonNamed('create')!);
+  expect(sent.at(-1)).toMatchObject({ music_source: { kind: 'audio_cpp', model }, soulx: {
+    reference_song_id: 'reference', reference_metadata: reference, target_metadata: target,
+  } });
 });
 
 it('restores a Magenta reference and submits either the available reference or text style', async () => {

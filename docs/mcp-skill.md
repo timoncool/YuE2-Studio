@@ -225,6 +225,18 @@ Read `audio_cpp_music_models` to check the configured directory and runtime
 readiness. Pass the lyrics and a library song ID as `vevo2.voice_song_id`.
 Add `vevo2.melody_song_id` to condition the singing on a second library track.
 
+SoulX-Singer uses separate Q8 weights for singing synthesis (`soulx_singer`)
+and conversion (`soulx_singer_svc`). Install the corresponding model with
+`audio_cpp_music_model_install` and check readiness with `audio_cpp_music_models`.
+For `song_create`, set `music_source.kind` to `audio_cpp` and supply the model ID
+and `soulx.reference_song_id` from the library. Synthesis also requires the
+reference and target JSON files as `soulx.reference_metadata` and
+`soulx.target_metadata` strings. They contain aligned phoneme and note segments.
+Set `soulx.control` to `melody` only if both files supply a 50 Hz pitch contour.
+Conversion takes `soulx.source_song_id` for the source vocal recording and
+requires libsoxr. The installer handles libsoxr on Windows. On Linux and macOS
+use the system libsoxr package. Both modes save a separate song to the library.
+
 For Magenta RealTime 2, select `magenta_realtime_2` with the installed Small F16
 profile. Use `style` for a text description or `magenta.reference_song_id` for
 a library track that supplies the musical style. Both modes generate an

@@ -1447,6 +1447,15 @@ function AppContent() {
   // lyrics, the score and every setting typed into it.
   const createKept = nativeModels !== 'offline' && (nativeSetupReady || enteredOtherEditor);
   const showingCreate = !['tools', 'adapters', 'library', 'playlist', 'search', 'news'].includes(currentView);
+  const pageTitle = {
+    create: t('createMusic'),
+    library: t('library'),
+    tools: t('toolsHeading'),
+    adapters: t('adaptersNav'),
+    playlist: playlists.find(playlist => playlist.id === viewingPlaylistId)?.name ?? t('playlist'),
+    search: t('search'),
+    news: t('news'),
+  }[currentView];
 
   // the details show the library's copy of the song, so a cover or a rename
   // made after it was opened appears there too
@@ -1760,7 +1769,7 @@ function AppContent() {
           onToggleJournal={() => setJournalOpen(open => !open)}
         />
 
-        <main className="relative ml-[72px] flex min-h-0 min-w-0 flex-1 overflow-hidden md:ml-0">
+        <main aria-label={pageTitle} className="relative ml-[72px] flex min-h-0 min-w-0 flex-1 overflow-hidden md:ml-0">
           {createKept && <Activity mode={showingCreate ? 'visible' : 'hidden'}>{renderContent('create')}</Activity>}
           {!(createKept && showingCreate) && renderContent()}
         </main>

@@ -7,7 +7,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { ORDER, SAMPLES, SETS, STRINGS } from '../docs/site/strings.mjs';
 import { STUDIO } from '../docs/site/studio.mjs';
-import { MATRIX_TEXT, NATIVE_YUE2, RVC } from '../docs/site/music-benchmarks.mjs';
+import { MATRIX_TEXT, NATIVE_YUE2, RADEON_TEXT, RVC } from '../docs/site/music-benchmarks.mjs';
 // the studio's version, from the one place it is written
 const VERSION = JSON.parse(readFileSync(new URL('../desktop/src-tauri/tauri.conf.json', import.meta.url), 'utf8')).version;
 
@@ -67,8 +67,14 @@ function musicGpuMatrix(lang) {
     const printed = value.toFixed(places);
     return lang === 'ru' || lang === 'pt' ? printed.replace('.', ',') : printed;
   };
+  const residency = Object.values(musicBenchmarks.published_residency);
+  const residentCell = (entry) => entry
+    ? `${number(entry.dedicated_gpu_bytes / gib, 2)} / ${number(entry.rss_bytes / gib, 2)}`
+    : '—';
+  const renderRow = (cells) => `      <tr>${cells.map((cell) => `<td>${escape(cell)}</td>`).join('')}</tr>`;
   const rows = musicBenchmarks.rows.map((row) => {
-    const label = [row.family, `${row.engine} ${row.revision}`, row.weight_profile, row.workload].join(' · ');
+    const resident = residency.find((entry) => entry.timing_summary_id === row.summary_id);
+    const label = resident?.label ?? [row.family, `${row.engine} ${row.revision}`, row.weight_profile, row.workload].join(' · ');
     const peak = number(row.cold_vram_peak_bytes / gib, 2);
     const delta = row.cold_vram_increase_bytes / gib;
     const cells = [
@@ -78,9 +84,21 @@ function musicGpuMatrix(lang) {
       `${peak} / ${delta >= 0 ? '+' : ''}${number(delta, 2)}`,
       number(row.warm_pre_request_vram_bytes / gib, 2),
       number(row.cold_rss_peak_bytes / gib, 2),
+      residentCell(resident),
     ];
-    return `      <tr>${cells.map((cell) => `<td>${escape(cell)}</td>`).join('')}</tr>`;
+    return renderRow(cells);
   });
+  for (const entry of residency.filter((item) => !item.timing_summary_id)) {
+    rows.push(renderRow([entry.label, entry.backend, number(entry.audio_seconds, 3),
+      '—', '—', '—', '—', '—', '—', residentCell(entry)]));
+  }
+  const [radeonTitle, radeonNote, radeonColumns] = RADEON_TEXT[lang];
+  const radeon = musicBenchmarks.radeon_pair;
+  const radeonRows = radeon.results.map((row) => renderRow([
+    row.backend, number(row.cold_seconds, 3), number(row.warm_median_seconds, 3),
+    number(row.wddm_peak_sampled_bytes.dedicated / gib, 2),
+    number(row.wddm_peak_sampled_bytes.shared / gib, 2),
+  ]));
   return `<!-- music-gpu-matrix:start -->
     <h3>${escape(title)}</h3>
     <p class="note">${escape(note)}</p>
@@ -91,7 +109,17 @@ ${rows.join('\n')}
       </tbody>
     </table></div>
     <p><a href="music-gpu-benchmarks.json">${escape(detail)}</a></p>
-<!-- music-gpu-matrix:end -->`;
+<!-- music-gpu-matrix:end -->
+<!-- radeon-gpu-pair:start -->
+    <h3>${escape(radeonTitle)}</h3>
+    <p class="note">${escape(radeonNote)} <code>audio.cpp ${escape(radeon.source_sha.slice(0, 8))}</code></p>
+    <div class="scroll"><table>
+      <thead><tr>${radeonColumns.map((column) => `<th scope="col">${escape(column)}</th>`).join('')}</tr></thead>
+      <tbody>
+${radeonRows.join('\n')}
+      </tbody>
+    </table></div>
+<!-- radeon-gpu-pair:end -->`;
 }
 
 function page(lang) {
