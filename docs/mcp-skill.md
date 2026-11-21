@@ -128,6 +128,11 @@ sampling and codec settings in `heartmula`. For MiDashengLM-Gen, use
 For Vevo2, pass the lyrics and a library song ID as `vevo2.voice_song_id`.
 Add `vevo2.melody_song_id` to condition the singing on a second library track.
 
+For Magenta RealTime 2, select `magenta_realtime_2` with the installed Small F16
+profile. Use `style` for a text description or `magenta.reference_song_id` for
+a library track that supplies the musical style. Both modes generate an
+instrumental. The reference sets the style when supplied.
+
 For an OpenRouter generation, read `openrouter_catalog` and select an ID whose
 `capabilities` include `music_generation`. Pass that exact ID as
 `music_source.model`, with `music_source.kind` set to `openrouter`.
