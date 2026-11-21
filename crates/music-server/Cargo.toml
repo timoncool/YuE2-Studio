@@ -79,7 +79,7 @@ lzma-rust2.workspace = true
 libloading = "0.8"
 
 [target.'cfg(windows)'.dependencies]
-windows-sys.workspace = true
+windows-sys = { workspace = true, features = ["Win32_Storage_FileSystem"] }
 # The model folders moved to another disk leave a junction where they were (model_storage).
 junction = "2.1"
 
