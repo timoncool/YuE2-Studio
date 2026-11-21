@@ -554,10 +554,30 @@ impl Downloader {
         self.install_set(scope, &[asset], Some(source), &mut None, Self::is_installed, None).await
     }
 
-    pub(crate) async fn install_verified(&self, scope: &str, assets: &[&'static Asset]) -> Result<()> {
+    /// Reserve the verified transfer before acknowledging that it has started.
+    pub(crate) async fn start_verified(&self, scope: &str, assets: Vec<&'static Asset>) -> Result<bool> {
         anyhow::ensure!(assets.iter().all(|asset| crate::pin_sha::sha256(asset.url).is_some()),
             "verified installation requires a checksum for each component");
-        self.install_set(scope, assets, None, &mut None, Self::is_verified_install, None).await
+
+        let mut progress = self.progress.lock().await;
+        if progress.as_ref().is_some_and(|active| !active.done && active.scope.as_deref() == Some(scope)) {
+            return Ok(true);
+        }
+        let pending: Vec<_> = assets.iter().copied().filter(|asset| !self.is_verified_install(asset)).collect();
+        if pending.is_empty() {
+            return Ok(false);
+        }
+        let total = self.register_set(scope, &pending, &mut progress).await?;
+        drop(progress);
+
+        let downloader = self.clone();
+        let scope = scope.to_owned();
+        tokio::spawn(async move {
+            if let Err(error) = downloader.finish_set(&scope, &assets, &pending, total, None, &mut None, Self::is_verified_install).await {
+                crate::studio_log!("Verified install failed for {scope}: {error:#}");
+            }
+        });
+        Ok(true)
     }
 
     async fn install_set(
@@ -566,29 +586,32 @@ impl Downloader {
         cancelled: Option<&(dyn Fn() -> bool + Sync)>,
     ) -> Result<()> {
         *hint = None;
-        const AT_ONCE: usize = 4;
-        let pending: Vec<&'static Asset> = assets.iter().copied().filter(|asset| !is_installed(self, asset)).collect();
+        let pending: Vec<_> = assets.iter().copied().filter(|asset| !is_installed(self, asset)).collect();
         if pending.is_empty() {
             return Ok(());
         }
-        let total: u64 = pending.iter().map(|asset| asset.bytes).sum();
         let mut progress = self.progress.lock().await;
         // cancel_for takes this same lock. A queued owner may already have
         // been stopped before this set could publish its progress.
         if cancelled.is_some_and(|check| check()) {
             bail!("cancelled");
         }
-        // a second press before the first set finished would write the same
-        // partial files twice
+        let total = self.register_set(scope, &pending, &mut progress).await?;
+        drop(progress);
+        self.finish_set(scope, assets, &pending, total, source, hint, is_installed).await
+    }
+
+    async fn register_set(
+        &self, scope: &str, pending: &[&'static Asset], progress: &mut Option<DownloadProgress>,
+    ) -> Result<u64> {
         if progress.as_ref().is_some_and(|active| !active.done && active.error.is_none()) {
             bail!("another download is already running");
         }
         self.rejected.lock().await.remove(scope);
         self.cancel.store(false, std::sync::atomic::Ordering::Relaxed);
-        // A set of one is that one file, as far as anyone watching is
-        // concerned; only a real set needs a name of its own.
+        let total = pending.iter().map(|asset| asset.bytes).sum();
         let asset_id = if pending.len() == 1 { pending[0].id.to_string() } else { SET.to_string() };
-        // the panel learns the outcome of a set from here alone
+        // Report a preflight rejection through the same progress slot.
         if let Err(error) = pending.iter().try_for_each(|asset| refuse_foreign_runtime(asset)) {
             *progress = Some(DownloadProgress { asset_id, scope: Some(scope.to_string()), downloaded_bytes: 0, total_bytes: total, done: true, error: Some(error.to_string()), manual_archive: None });
             return Err(error);
@@ -602,8 +625,14 @@ impl Downloader {
             error: None,
             manual_archive: None,
         });
-        drop(progress);
+        Ok(total)
+    }
 
+    async fn finish_set(
+        &self, scope: &str, assets: &[&'static Asset], pending: &[&'static Asset], total: u64,
+        source: Option<&Path>, hint: &mut Option<ManualArchive>, is_installed: fn(&Self, &Asset) -> bool,
+    ) -> Result<()> {
+        const AT_ONCE: usize = 4;
         let mut finished = 0u64;
         let mut failure = None;
         let mut manual_archive = None;
@@ -637,6 +666,7 @@ impl Downloader {
                     }
                 })).await;
             reporter.abort();
+            let _ = reporter.await;
             finished += batch.iter().map(|asset| asset.bytes).sum::<u64>();
             if let Some((asset, error)) = batch.iter().zip(outcomes).find_map(|(asset, result)| result.err().map(|error| (*asset, error))) {
                 manual_archive = manual_archive_hint(asset, &self.path_of(asset), &error);
