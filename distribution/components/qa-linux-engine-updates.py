@@ -195,11 +195,16 @@ try:
             planned = tool("music_package_updates_get")
             assert len(planned["updates"]) == 1 and planned["updates"][0]["changed_bytes"] == len(payloads[2]), planned
             install = pool.submit(tool, "music_engine_package_install", id_arg)
-            await_until(lambda: install.done() or
-                        tool("music_package_progress", progress_args).get("active", {}).get("stage") == "waiting_for_idle"
-                        if tool("music_package_progress", progress_args).get("active") else install.done(), bool)
+            def activation_observed():
+                if install.done():
+                    return True
+                active = tool("music_package_progress", progress_args)["active"]
+                return active is not None and active["stage"] == "waiting_for_idle"
+            await_until(activation_observed, bool)
             now = {"old_worker":worker, "old_pid_alive":Path(f"/proc/{worker['pid']}").exists(),
-                   "active":json.loads(active_path.read_text()), "shown":status(), "update_returned":install.done()}
+                   "active":json.loads(active_path.read_text()), "shown":status(), "update_returned":install.done(),
+                   "progress":tool("music_package_progress", progress_args)["active"],
+                   "visible_updates":tool("music_package_updates_get")["updates"]}
             concurrent = tool("song_create", prompt | {"seed":44}, error=True)
             assert now["old_pid_alive"] and "busy" in json.dumps(concurrent), (now, concurrent)
             report.update({"during_update":now,"parallel_submission":concurrent,"update_plan":planned})
@@ -211,7 +216,9 @@ try:
             assert a["worker"]["pid"] != b["worker"]["pid"]
             assert a["reported"]["generation"] == first["generation"] and b["reported"]["generation"] == second["generation"]
             assert tool("music_package_updates_get")["updates"] == []
-            report["takes"] = [a,b]
+            replay = completed(tool, call, tool("song_replay", {"song_id":a["id"], "seed":91}), 1)
+            assert replay["reported"]["generation"] == first["generation"]
+            report.update({"takes":[a,b], "historical_replay":replay})
             publish(3)
             refresh()
             canceled = pool.submit(tool, "music_engine_package_install", id_arg, True)
@@ -222,10 +229,29 @@ try:
             abort = canceled.result(timeout=15)
             assert "cancelled" in json.dumps(abort).lower() and status()["version"] == "2.0"
             download_release.set()
+            if strict:
+                gate.unlink()
+                previous_events = len(runs())
+                later_b = tool("song_create", prompt | {"seed":47})
+                staged_worker = await_until(runs, lambda log: len(log) > previous_events)[-1]
+                assert staged_worker["version"] == "2.0" and Path(f"/proc/{staged_worker['pid']}").exists()
+                current_dirs = {path.name for path in active_path.parent.glob("generation-*")}
+                deferred = pool.submit(tool, "music_engine_package_install", id_arg, True)
+                deferred_progress = await_until(lambda: tool("music_package_progress", progress_args)["active"],
+                                                lambda p: p is not None and p["stage"] == "waiting_for_idle")
+                assert deferred_progress["downloaded_bytes"] == len(payloads[3]), deferred_progress
+                assert status()["version"] == "2.0" and not deferred.done()
+                assert tool("music_package_cancel", progress_args)["cancel_requested"]
+                canceled_prepared = deferred.result(timeout=15)
+                assert "cancelled" in json.dumps(canceled_prepared).lower() and status()["version"] == "2.0"
+                assert {path.name for path in active_path.parent.glob("generation-*")} == current_dirs
+                gate.touch()
+                report["cancel_after_verification"] = {"progress":deferred_progress, "outcome":canceled_prepared,
+                                                       "finishing_worker":completed(tool, call, later_b, 2)}
             publish(4)
             refresh()
             corrupt = tool("music_engine_package_install", id_arg, error=True)
-            assert "sha-256" in json.dumps(corrupt).lower() and status()["version"] == "2.0", corrupt
+            assert "integrity check failed" in json.dumps(corrupt).lower() and status()["version"] == "2.0", corrupt
             report.update({"cancel":abort, "corrupt":corrupt, "retained":status()})
         origin_server.shutdown()
     with start("offline.log") as (call, tool):
@@ -238,6 +264,7 @@ try:
     if strict:
         assert not now["update_returned"] and now["shown"]["version"] == "1.0", now
         assert now["active"]["active"] == first["generation"], now
+        assert now["progress"]["stage"] == "waiting_for_idle" and now["visible_updates"] == planned["updates"], now
 finally:
     for name, value in (("receipt.json", report), ("mcp.json", calls)):
         (work / name).write_text(json.dumps(value, indent=2), encoding="utf8")
