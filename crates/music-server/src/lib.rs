@@ -27,6 +27,7 @@ mod audio_cpp_midasheng;
 mod audio_cpp_minimax_h3;
 mod audio_cpp_mulacover;
 mod audio_cpp_music;
+mod audio_cpp_sound_effects;
 mod hotstep_cover;
 mod hotstep_runtime;
 mod hotstep_heartmula;
@@ -2000,6 +2001,7 @@ pub async fn serve_on_port(port: u16) -> anyhow::Result<()> {
         .route("/v1/local-models/music", get(local_music_model_catalog))
         .route("/v1/music/jobs", post(create_music_job).get(list_active_music_jobs))
         .route("/v1/music/audio-cpp/models", get(audio_cpp_music::models))
+        .route("/v1/tools/sound-effects/model", get(audio_cpp_music::sound_effect_model))
         .route("/v1/music/audio-cpp/vevo2/model-directory", post(audio_cpp_vevo2::set_directory))
         .route("/v1/music/native/hotstep/profiles", get(hotstep_cover::profiles))
         .route("/v1/music/native/hotstep/install", post(hotstep_cover::install))

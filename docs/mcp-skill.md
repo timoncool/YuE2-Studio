@@ -253,6 +253,12 @@ and bytes missing. Use `style` for a text description or `magenta.reference_song
 a library track that supplies the musical style. Both modes generate an
 instrumental. The reference sets the style when supplied.
 
+For sound effects, read `sound_effect_model_get`. It lists the local audio.cpp
+runtime, the MOSS-SoundEffect v2 Q8_0 file, its source and terms, and the path
+relative to the Studio data directory. When ready, use `sound_effect_create`
+with an English or Chinese description and optional `duration_seconds` from
+0.1 to 30. Follow `song_job_get` until it saves the result in the library.
+
 For an OpenRouter generation, read `openrouter_catalog` and select an ID whose
 `capabilities` include `music_generation`. Pass that exact ID as
 `music_source.model`, with `music_source.kind` set to `openrouter`.

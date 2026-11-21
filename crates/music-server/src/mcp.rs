@@ -292,7 +292,7 @@ fn shape(name: &str, args: &Value, value: Value) -> Value {
                 "next_offset": (end < entries.len()).then_some(end),
             })
         },
-        "song_create" | "song_job_get" | "song_replay" if !detailed => compact_job(&value),
+        "song_create" | "sound_effect_create" | "song_job_get" | "song_replay" if !detailed => compact_job(&value),
         "song_jobs_list" if !detailed => Value::Array(value.as_array().into_iter().flatten().map(compact_job).collect()),
         "library_song_get" if !detailed => compact_song(&value),
         "lora_list" if !detailed => compact_loras(&value),
@@ -491,6 +491,7 @@ const JOURNAL: &[(&str, &str, &str)] = &[
     ("song_job_score_again", "started", "generation"),
     ("song_job_again", "started", "generation"),
     ("song_create", "started", "generation"),
+    ("sound_effect_create", "started", "generation"),
     ("song_replay", "started", "generation"),
     ("audio_cpp_music_model_install", "started", "download"),
     ("song_job_cancel", "cancelled", "generation"),
@@ -2252,6 +2253,29 @@ fn tools() -> &'static [Tool] {
                 description: "List native MiniMax Music 3 profiles, installed weights, and missing model files.",
                 schema: nothing,
                 call: |_| get("/v1/music/native/minimaxmusic-cpp/profiles".into()),
+            },
+            Tool {
+                name: "sound_effect_model_get",
+                description: "Read the local MOSS-SoundEffect model and runtime readiness, file source, terms and destination.",
+                schema: nothing,
+                call: |_| get("/v1/tools/sound-effects/model".into()),
+            },
+            Tool {
+                name: "sound_effect_create",
+                description: "Generate a sound effect from an English or Chinese description with local MOSS-SoundEffect. The result goes to the library. Follow with song_job_get or cancel with song_job_cancel.",
+                schema: || object(json!({
+                    "description": {"type":"string", "minLength":1}, "title": {"type":"string"},
+                    "duration_seconds": {"type":"number", "minimum":0.1, "maximum":30},
+                    "steps": {"type":"integer", "minimum":1}, "seed": {"type":"integer", "minimum":0, "maximum":4294967295_u64}
+                }), &["description"]),
+                call: |args| {
+                    let description = args["description"].as_str().ok_or("A sound description is required.")?;
+                    post("/v1/music/jobs".into(), json!({
+                        "music_source": {"kind":"audio_cpp", "model":crate::audio_cpp_sound_effects::FAMILY},
+                        "style": description, "title": args["title"], "duration_seconds": args["duration_seconds"],
+                        "steps": args["steps"], "seed": args["seed"],
+                    }))
+                },
             },
             Tool {
                 name: "audio_cpp_music_models",
