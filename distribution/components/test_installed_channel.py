@@ -428,6 +428,15 @@ def run_rvc(work, binary, certificate, tls_key, install_voice=False):
         assert tool("music_engine_package_status", args)["generation"] == second["generation"]
         assert tool("music_model_package_status", model_args)["generation"] == first_model["generation"]
         active_files, = [p.parent for p in studio.rglob("music.dll") if p.parent.parent.name == second["generation"]]
+        model_file, = [p for p in studio.rglob("weights.bin") if p.parent.parent.name == first_model["generation"]]
+        model_url = base + f"/v1/components/music-engines/{engine['id']}/models/{model['id']}/status"
+        model_file.write_bytes(b"?" * len(weight))
+        with http.open(model_url + "?probe=presence", timeout=10) as response:
+            assert json.load(response)["verification"] == "presence"
+        tool("music_model_package_status", model_args, expected_error=True)
+        model_file.write_bytes(weight)
+        assert tool("music_model_package_status", model_args)["verification"] == "sha256"
+        print("PASS selector can inspect weights without hashing; full verification rejects same-size corruption")
         rogue = active_files / "unexpected.dll"
         rogue.write_bytes(b"unlisted")
         tool("music_engine_package_status", args, expected_error=True)
