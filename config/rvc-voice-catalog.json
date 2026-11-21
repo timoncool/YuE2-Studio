@@ -10610,6 +10610,11 @@
     },
     {
       "id": "rvc-d77ef3e33ec950746ad8",
+      "sample": {
+        "url": "https://huggingface.co/niobures/RVC-Models/resolve/4d174cf0b72edfcdba74c8510bdc894a2dd53b3c/rvc-big-ru-voice-pack/%D0%90%D0%BA%D1%82%D0%B5%D1%80%D1%8B%20%D0%B4%D1%83%D0%B1%D0%BB%D0%B5%D0%B6%D0%B0/%D0%90%D0%BD%D0%B4%D1%80%D0%B5%D0%B9%20%D0%93%D0%B0%D0%B2%D1%80%D0%B8%D0%BB%D0%BE%D0%B2/Demo.mp3",
+        "sha256": "a9d17a00e44b5c9e19149ce623f23ea9727fb4380f000cb83b3c200445718584",
+        "size": 301748
+      },
       "name": "Gavrilov",
       "source_repo": "niobures/RVC-Models",
       "source_url": "https://huggingface.co/niobures/RVC-Models/tree/4d174cf0b72edfcdba74c8510bdc894a2dd53b3c/rvc-big-ru-voice-pack/%D0%90%D0%BA%D1%82%D0%B5%D1%80%D1%8B%20%D0%B4%D1%83%D0%B1%D0%BB%D0%B5%D0%B6%D0%B0/%D0%90%D0%BD%D0%B4%D1%80%D0%B5%D0%B9%20%D0%93%D0%B0%D0%B2%D1%80%D0%B8%D0%BB%D0%BE%D0%B2",
@@ -10819,6 +10824,11 @@
     },
     {
       "id": "rvc-3d114ade3fdf27050c8a",
+      "sample": {
+        "url": "https://huggingface.co/niobures/RVC-Models/resolve/4d174cf0b72edfcdba74c8510bdc894a2dd53b3c/rvc-big-ru-voice-pack/%D0%90%D0%BA%D1%82%D0%B5%D1%80%D1%8B%20%D0%B4%D1%83%D0%B1%D0%BB%D0%B5%D0%B6%D0%B0/%D0%90%D0%BB%D0%B5%D0%BA%D1%81%D0%B0%D0%BD%D0%B4%D1%80%20%D0%93%D0%BE%D0%BB%D0%BE%D0%B2%D1%87%D0%B0%D0%BD%D1%81%D0%BA%D0%B8%D0%B9/Demo.mp3",
+        "sha256": "8f9d097eab25a79c776351dcf9706165ef89a24509cca7924fbf7424cc423de0",
+        "size": 135392
+      },
       "name": "Golovchanskiy",
       "source_repo": "niobures/RVC-Models",
       "source_url": "https://huggingface.co/niobures/RVC-Models/tree/4d174cf0b72edfcdba74c8510bdc894a2dd53b3c/rvc-big-ru-voice-pack/%D0%90%D0%BA%D1%82%D0%B5%D1%80%D1%8B%20%D0%B4%D1%83%D0%B1%D0%BB%D0%B5%D0%B6%D0%B0/%D0%90%D0%BB%D0%B5%D0%BA%D1%81%D0%B0%D0%BD%D0%B4%D1%80%20%D0%93%D0%BE%D0%BB%D0%BE%D0%B2%D1%87%D0%B0%D0%BD%D1%81%D0%BA%D0%B8%D0%B9",
@@ -11030,6 +11040,11 @@
     },
     {
       "id": "rvc-4d37fb072a4b9f55267a",
+      "sample": {
+        "url": "https://huggingface.co/niobures/RVC-Models/resolve/4d174cf0b72edfcdba74c8510bdc894a2dd53b3c/rvc-big-ru-voice-pack/%D0%98%D0%B7%D0%B2%D0%B5%D1%81%D1%82%D0%BD%D1%8B%D0%B5%20%D0%BB%D1%8E%D0%B4%D0%B8/%D0%A5%D0%B0%D1%80%D0%BB%D0%B0%D0%BC%D0%BE%D0%B2/demo.mp3",
+        "sha256": "64e51b87a6da16845c372ed41f54c29e93e9f810dbf3c36458e66122d68a43bf",
+        "size": 188308
+      },
       "name": "Harlamov",
       "source_repo": "niobures/RVC-Models",
       "source_url": "https://huggingface.co/niobures/RVC-Models/tree/4d174cf0b72edfcdba74c8510bdc894a2dd53b3c/rvc-big-ru-voice-pack/%D0%98%D0%B7%D0%B2%D0%B5%D1%81%D1%82%D0%BD%D1%8B%D0%B5%20%D0%BB%D1%8E%D0%B4%D0%B8/%D0%A5%D0%B0%D1%80%D0%BB%D0%B0%D0%BC%D0%BE%D0%B2",
@@ -11765,6 +11780,11 @@
     },
     {
       "id": "rvc-56d2d08081a800c8c239",
+      "sample": {
+        "url": "https://huggingface.co/niobures/RVC-Models/resolve/4d174cf0b72edfcdba74c8510bdc894a2dd53b3c/rvc-big-ru-voice-pack/%D0%9F%D0%B5%D0%B2%D1%86%D1%8B/%D0%9A%D0%B8%D1%80%D0%BA%D0%BE%D1%80%D0%BE%D0%B2/demo.mp3",
+        "sha256": "f09b1c31b1d176f5d1000a76225394477606ad22ee78a14d1c063060c62da419",
+        "size": 188308
+      },
       "name": "Kirkorov",
       "source_repo": "niobures/RVC-Models",
       "source_url": "https://huggingface.co/niobures/RVC-Models/tree/4d174cf0b72edfcdba74c8510bdc894a2dd53b3c/rvc-big-ru-voice-pack/%D0%9F%D0%B5%D0%B2%D1%86%D1%8B/%D0%9A%D0%B8%D1%80%D0%BA%D0%BE%D1%80%D0%BE%D0%B2",
@@ -12184,6 +12204,11 @@
     },
     {
       "id": "rvc-f50a77e1554c4f811543",
+      "sample": {
+        "url": "https://huggingface.co/niobures/RVC-Models/resolve/4d174cf0b72edfcdba74c8510bdc894a2dd53b3c/rvc-big-ru-voice-pack/%D0%90%D0%BA%D1%82%D0%B5%D1%80%D1%8B%20%D0%B4%D1%83%D0%B1%D0%BB%D0%B5%D0%B6%D0%B0/%D0%95%D0%B2%D0%B3%D0%B5%D0%BD%D0%B8%D0%B9%20%D0%9B%D0%B5%D0%BE%D0%BD%D0%BE%D0%B2/Demo.mp3",
+        "sha256": "d1f753193199bed51bd187f7c89277a7599f24bbd7fc7d144611f32fe5dbdd01",
+        "size": 556832
+      },
       "name": "Leonov",
       "source_repo": "niobures/RVC-Models",
       "source_url": "https://huggingface.co/niobures/RVC-Models/tree/4d174cf0b72edfcdba74c8510bdc894a2dd53b3c/rvc-big-ru-voice-pack/%D0%90%D0%BA%D1%82%D0%B5%D1%80%D1%8B%20%D0%B4%D1%83%D0%B1%D0%BB%D0%B5%D0%B6%D0%B0/%D0%95%D0%B2%D0%B3%D0%B5%D0%BD%D0%B8%D0%B9%20%D0%9B%D0%B5%D0%BE%D0%BD%D0%BE%D0%B2",
@@ -12302,6 +12327,11 @@
     },
     {
       "id": "rvc-4ffc7124688fc32ce650",
+      "sample": {
+        "url": "https://huggingface.co/niobures/RVC-Models/resolve/4d174cf0b72edfcdba74c8510bdc894a2dd53b3c/rvc-big-ru-voice-pack/%D0%90%D0%BA%D1%82%D0%B5%D1%80%D1%8B%20%D0%B4%D1%83%D0%B1%D0%BB%D0%B5%D0%B6%D0%B0/%D0%92%D0%B0%D1%81%D0%B8%D0%BB%D0%B8%D0%B9%20%D0%9B%D0%B8%D0%B2%D0%B0%D0%BD%D0%BE%D0%B2/Demo.mp3",
+        "sha256": "b2ea3781c5b5399c1d87834007d4532fa098684a7ed59b3064f9a39e1c8425dc",
+        "size": 393632
+      },
       "name": "Livanov",
       "source_repo": "niobures/RVC-Models",
       "source_url": "https://huggingface.co/niobures/RVC-Models/tree/4d174cf0b72edfcdba74c8510bdc894a2dd53b3c/rvc-big-ru-voice-pack/%D0%90%D0%BA%D1%82%D0%B5%D1%80%D1%8B%20%D0%B4%D1%83%D0%B1%D0%BB%D0%B5%D0%B6%D0%B0/%D0%92%D0%B0%D1%81%D0%B8%D0%BB%D0%B8%D0%B9%20%D0%9B%D0%B8%D0%B2%D0%B0%D0%BD%D0%BE%D0%B2",
@@ -13823,6 +13853,11 @@
     },
     {
       "id": "rvc-d04be581c85e911e250d",
+      "sample": {
+        "url": "https://huggingface.co/niobures/RVC-Models/resolve/4d174cf0b72edfcdba74c8510bdc894a2dd53b3c/rvc-big-ru-voice-pack/%D0%98%D0%B7%D0%B2%D0%B5%D1%81%D1%82%D0%BD%D1%8B%D0%B5%20%D0%BB%D1%8E%D0%B4%D0%B8/%D0%95%D0%B2%D0%B3%D0%B5%D0%BD%D0%B8%D0%B9%20%D0%9F%D0%B0%D0%BD%D0%B0%D1%81%D0%B5%D0%BD%D0%BA%D0%BE%D0%B2/demo.mp3",
+        "sha256": "4672131f4a92a2a3c6b806ecdde56c44170fdf03ec5a67117a9fcc221bd15625",
+        "size": 941496
+      },
       "name": "Ponasenkov_By_Loda",
       "source_repo": "niobures/RVC-Models",
       "source_url": "https://huggingface.co/niobures/RVC-Models/tree/4d174cf0b72edfcdba74c8510bdc894a2dd53b3c/rvc-big-ru-voice-pack/%D0%98%D0%B7%D0%B2%D0%B5%D1%81%D1%82%D0%BD%D1%8B%D0%B5%20%D0%BB%D1%8E%D0%B4%D0%B8/%D0%95%D0%B2%D0%B3%D0%B5%D0%BD%D0%B8%D0%B9%20%D0%9F%D0%B0%D0%BD%D0%B0%D1%81%D0%B5%D0%BD%D0%BA%D0%BE%D0%B2",
@@ -13879,6 +13914,11 @@
     },
     {
       "id": "rvc-a143e2e572a4422d48ce",
+      "sample": {
+        "url": "https://huggingface.co/niobures/RVC-Models/resolve/4d174cf0b72edfcdba74c8510bdc894a2dd53b3c/rvc-big-ru-voice-pack/%D0%A1%D1%82%D1%80%D0%B8%D0%BC%D0%B5%D1%80%D1%8B%20%D0%B8%20%D0%B1%D0%BB%D0%BE%D0%B3%D0%B5%D1%80%D1%8B/%D0%9F%D1%83%D1%87%D0%BA%D0%BE%D0%B2/demo.mp3",
+        "sha256": "2cce22aea3a3a7d716ec0929fba3dba620f9f6f1544b556b487b730d462ae9c2",
+        "size": 405104
+      },
       "name": "Puchkov_Goblin",
       "source_repo": "niobures/RVC-Models",
       "source_url": "https://huggingface.co/niobures/RVC-Models/tree/4d174cf0b72edfcdba74c8510bdc894a2dd53b3c/rvc-big-ru-voice-pack/%D0%A1%D1%82%D1%80%D0%B8%D0%BC%D0%B5%D1%80%D1%8B%20%D0%B8%20%D0%B1%D0%BB%D0%BE%D0%B3%D0%B5%D1%80%D1%8B/%D0%9F%D1%83%D1%87%D0%BA%D0%BE%D0%B2",
@@ -14627,6 +14667,11 @@
     },
     {
       "id": "rvc-9004b22d76df7aef1a7a",
+      "sample": {
+        "url": "https://huggingface.co/niobures/RVC-Models/resolve/4d174cf0b72edfcdba74c8510bdc894a2dd53b3c/rvc-big-ru-voice-pack/%D0%9F%D0%BE%D0%BB%D0%B8%D1%82%D0%B8%D0%BA%D0%B8/%D0%95%D0%BA%D0%B0%D1%82%D0%B5%D1%80%D0%B8%D0%BD%D0%B0%20%D0%A8%D1%83%D0%BB%D1%8C%D0%BC%D0%B0%D0%BD/Demo.mp3",
+        "sha256": "2544ebee5105a4c7dcaf59d782ed75e1d5b5dd880eab6846b5946f6f56084ff1",
+        "size": 388832
+      },
       "name": "Shulman",
       "source_repo": "niobures/RVC-Models",
       "source_url": "https://huggingface.co/niobures/RVC-Models/tree/4d174cf0b72edfcdba74c8510bdc894a2dd53b3c/rvc-big-ru-voice-pack/%D0%9F%D0%BE%D0%BB%D0%B8%D1%82%D0%B8%D0%BA%D0%B8/%D0%95%D0%BA%D0%B0%D1%82%D0%B5%D1%80%D0%B8%D0%BD%D0%B0%20%D0%A8%D1%83%D0%BB%D1%8C%D0%BC%D0%B0%D0%BD",
@@ -14652,6 +14697,11 @@
     },
     {
       "id": "rvc-9f7077d8cdf0f657c334",
+      "sample": {
+        "url": "https://huggingface.co/niobures/RVC-Models/resolve/4d174cf0b72edfcdba74c8510bdc894a2dd53b3c/rvc-big-ru-voice-pack/%D0%90%D0%BA%D1%82%D1%80%D0%B8%D1%81%D1%8B%20%D0%B4%D1%83%D0%B1%D0%BB%D0%B5%D0%B6%D0%B0/%D0%95%D0%BB%D0%B5%D0%BD%D0%B0%20%D0%A8%D1%83%D0%BB%D1%8C%D0%BC%D0%B0%D0%BD/demo.mp3",
+        "sha256": "6e95d5bd487776b7a2364abda4dbe3f03a1dad4bb4e93830f212a924cd6ab8c6",
+        "size": 431072
+      },
       "name": "Shulman_Elena",
       "source_repo": "niobures/RVC-Models",
       "source_url": "https://huggingface.co/niobures/RVC-Models/tree/4d174cf0b72edfcdba74c8510bdc894a2dd53b3c/rvc-big-ru-voice-pack/%D0%90%D0%BA%D1%82%D1%80%D0%B8%D1%81%D1%8B%20%D0%B4%D1%83%D0%B1%D0%BB%D0%B5%D0%B6%D0%B0/%D0%95%D0%BB%D0%B5%D0%BD%D0%B0%20%D0%A8%D1%83%D0%BB%D1%8C%D0%BC%D0%B0%D0%BD",
@@ -14838,6 +14888,11 @@
     },
     {
       "id": "rvc-cd0183e1c668e01a80d6",
+      "sample": {
+        "url": "https://huggingface.co/niobures/RVC-Models/resolve/4d174cf0b72edfcdba74c8510bdc894a2dd53b3c/rvc-big-ru-voice-pack/%D0%9F%D0%BE%D0%BB%D0%B8%D1%82%D0%B8%D0%BA%D0%B8/%D0%92%D0%BB%D0%B0%D0%B4%D0%B8%D0%BC%D0%B8%D1%80%20%D0%A1%D0%BE%D0%BB%D0%BE%D0%B2%D1%8C%D0%B5%D0%B2/demo.mp3",
+        "sha256": "73e3b5609457428165ab9461637ef80e15d715a0dcc170dfee97fa20ba33e81c",
+        "size": 188308
+      },
       "name": "Solovyev",
       "source_repo": "niobures/RVC-Models",
       "source_url": "https://huggingface.co/niobures/RVC-Models/tree/4d174cf0b72edfcdba74c8510bdc894a2dd53b3c/rvc-big-ru-voice-pack/%D0%9F%D0%BE%D0%BB%D0%B8%D1%82%D0%B8%D0%BA%D0%B8/%D0%92%D0%BB%D0%B0%D0%B4%D0%B8%D0%BC%D0%B8%D1%80%20%D0%A1%D0%BE%D0%BB%D0%BE%D0%B2%D1%8C%D0%B5%D0%B2",
@@ -14925,6 +14980,11 @@
     },
     {
       "id": "rvc-dc0a393bc65468f313df",
+      "sample": {
+        "url": "https://huggingface.co/niobures/RVC-Models/resolve/4d174cf0b72edfcdba74c8510bdc894a2dd53b3c/rvc-big-ru-voice-pack/%D0%98%D0%B7%D0%B2%D0%B5%D1%81%D1%82%D0%BD%D1%8B%D0%B5%20%D0%BB%D1%8E%D0%B4%D0%B8/%D0%A1%D1%82%D0%B0%D1%81%20%D0%92%D0%B0%D1%81%D0%B8%D0%BB%D1%8C%D0%B5%D0%B2/demo.mp3",
+        "sha256": "1ecfa11d32875b074d5e52d28cbbccbea10ec806b552f320ae601c23b7e48884",
+        "size": 188308
+      },
       "name": "Stas_Vasilyev",
       "source_repo": "niobures/RVC-Models",
       "source_url": "https://huggingface.co/niobures/RVC-Models/tree/4d174cf0b72edfcdba74c8510bdc894a2dd53b3c/rvc-big-ru-voice-pack/%D0%98%D0%B7%D0%B2%D0%B5%D1%81%D1%82%D0%BD%D1%8B%D0%B5%20%D0%BB%D1%8E%D0%B4%D0%B8/%D0%A1%D1%82%D0%B0%D1%81%20%D0%92%D0%B0%D1%81%D0%B8%D0%BB%D1%8C%D0%B5%D0%B2",
@@ -15308,6 +15368,11 @@
     },
     {
       "id": "rvc-a5737fbb6fcab04e53b4",
+      "sample": {
+        "url": "https://huggingface.co/niobures/RVC-Models/resolve/4d174cf0b72edfcdba74c8510bdc894a2dd53b3c/rvc-big-ru-voice-pack/%D0%98%D0%B7%D0%B2%D0%B5%D1%81%D1%82%D0%BD%D1%8B%D0%B5%20%D0%BB%D1%8E%D0%B4%D0%B8/%D0%98%D0%B2%D0%B0%D0%BD%20%D0%A3%D1%80%D0%B3%D0%B0%D0%BD%D1%82/demo.mp3",
+        "sha256": "868ea49fa7d982b4e81e9f9be2f0c5d523405c160648ac9ebf599f29b1c13fec",
+        "size": 558018
+      },
       "name": "Urgant300e_by_sun",
       "source_repo": "niobures/RVC-Models",
       "source_url": "https://huggingface.co/niobures/RVC-Models/tree/4d174cf0b72edfcdba74c8510bdc894a2dd53b3c/rvc-big-ru-voice-pack/%D0%98%D0%B7%D0%B2%D0%B5%D1%81%D1%82%D0%BD%D1%8B%D0%B5%20%D0%BB%D1%8E%D0%B4%D0%B8/%D0%98%D0%B2%D0%B0%D0%BD%20%D0%A3%D1%80%D0%B3%D0%B0%D0%BD%D1%82",
@@ -15747,6 +15812,11 @@
     },
     {
       "id": "rvc-fd1aef36695701f76409",
+      "sample": {
+        "url": "https://huggingface.co/niobures/RVC-Models/resolve/4d174cf0b72edfcdba74c8510bdc894a2dd53b3c/rvc-big-ru-voice-pack/%D0%90%D0%BA%D1%82%D0%B5%D1%80%D1%8B%20%D0%B4%D1%83%D0%B1%D0%BB%D0%B5%D0%B6%D0%B0/%D0%90%D0%BD%D0%B4%D1%80%D0%B5%D0%B9%20%D0%AF%D1%80%D0%BE%D1%81%D0%BB%D0%B0%D0%B2%D1%86%D0%B5%D0%B2/demo.mp3",
+        "sha256": "b3f048c5b4cd2c85fa71670216cea8051805c3eb1f29171c7e3c97daac24f0bc",
+        "size": 521312
+      },
       "name": "Yaroslavtsev",
       "source_repo": "niobures/RVC-Models",
       "source_url": "https://huggingface.co/niobures/RVC-Models/tree/4d174cf0b72edfcdba74c8510bdc894a2dd53b3c/rvc-big-ru-voice-pack/%D0%90%D0%BA%D1%82%D0%B5%D1%80%D1%8B%20%D0%B4%D1%83%D0%B1%D0%BB%D0%B5%D0%B6%D0%B0/%D0%90%D0%BD%D0%B4%D1%80%D0%B5%D0%B9%20%D0%AF%D1%80%D0%BE%D1%81%D0%BB%D0%B0%D0%B2%D1%86%D0%B5%D0%B2",
@@ -20766,6 +20836,11 @@
     },
     {
       "id": "rvc-260d953aef7365a24b5e",
+      "sample": {
+        "url": "https://huggingface.co/niobures/RVC-Models/resolve/4d174cf0b72edfcdba74c8510bdc894a2dd53b3c/rvc-big-ru-voice-pack/%D0%9F%D0%BE%D0%BB%D0%B8%D1%82%D0%B8%D0%BA%D0%B8/%D0%9A%D1%81%D0%B5%D0%BD%D0%B8%D1%8F%20%D0%A1%D0%BE%D0%B1%D1%87%D0%B0%D0%BA/demo.mp3",
+        "sha256": "f634559015552b6b6ce4024ffa5e8eadc806471bf7b7476fcb675a1c33a67f54",
+        "size": 421401
+      },
       "name": "sobchak",
       "source_repo": "niobures/RVC-Models",
       "source_url": "https://huggingface.co/niobures/RVC-Models/tree/4d174cf0b72edfcdba74c8510bdc894a2dd53b3c/rvc-big-ru-voice-pack/%D0%9F%D0%BE%D0%BB%D0%B8%D1%82%D0%B8%D0%BA%D0%B8/%D0%9A%D1%81%D0%B5%D0%BD%D0%B8%D1%8F%20%D0%A1%D0%BE%D0%B1%D1%87%D0%B0%D0%BA",
@@ -21101,6 +21176,11 @@
     },
     {
       "id": "rvc-f83a87285b5def574932",
+      "sample": {
+        "url": "https://huggingface.co/niobures/RVC-Models/resolve/4d174cf0b72edfcdba74c8510bdc894a2dd53b3c/rvc-big-ru-voice-pack/%D0%90%D0%BA%D1%82%D0%B5%D1%80%D1%8B%20%D0%B4%D1%83%D0%B1%D0%BB%D0%B5%D0%B6%D0%B0/%D0%AE%D1%80%D0%B8%D0%B9%20%D0%9B%D0%B5%D0%B2%D0%B8%D1%82%D0%B0%D0%BD/Demo.mp3",
+        "sha256": "473283501c84dbb5d003a6c1faa479d5ac15bb955c4b2de636b47ddad21e3748",
+        "size": 1109792
+      },
       "name": "urilev",
       "source_repo": "niobures/RVC-Models",
       "source_url": "https://huggingface.co/niobures/RVC-Models/tree/4d174cf0b72edfcdba74c8510bdc894a2dd53b3c/rvc-big-ru-voice-pack/%D0%90%D0%BA%D1%82%D0%B5%D1%80%D1%8B%20%D0%B4%D1%83%D0%B1%D0%BB%D0%B5%D0%B6%D0%B0/%D0%AE%D1%80%D0%B8%D0%B9%20%D0%9B%D0%B5%D0%B2%D0%B8%D1%82%D0%B0%D0%BD",
@@ -21745,6 +21825,11 @@
     },
     {
       "id": "rvc-47a92161f2b84c647398",
+      "sample": {
+        "url": "https://huggingface.co/niobures/RVC-Models/resolve/4d174cf0b72edfcdba74c8510bdc894a2dd53b3c/rvc-big-ru-voice-pack/%D0%90%D0%BA%D1%82%D0%B5%D1%80%D1%8B%20%D0%B4%D1%83%D0%B1%D0%BB%D0%B5%D0%B6%D0%B0/%D0%90%D0%BB%D0%B5%D0%BA%D1%81%D0%B0%D0%BD%D0%B4%D1%80%20%D0%9A%D0%BB%D1%8E%D0%BA%D0%B2%D0%B8%D0%BD/demo.mp3",
+        "sha256": "43ee11371f1b9e91b02423d301b3831c2018e96c08a66b82d26a7b3e1104a55e",
+        "size": 558018
+      },
       "name": "Александр Клюквин",
       "source_repo": "niobures/RVC-Models",
       "source_url": "https://huggingface.co/niobures/RVC-Models/tree/4d174cf0b72edfcdba74c8510bdc894a2dd53b3c/rvc-big-ru-voice-pack/%D0%90%D0%BA%D1%82%D0%B5%D1%80%D1%8B%20%D0%B4%D1%83%D0%B1%D0%BB%D0%B5%D0%B6%D0%B0/%D0%90%D0%BB%D0%B5%D0%BA%D1%81%D0%B0%D0%BD%D0%B4%D1%80%20%D0%9A%D0%BB%D1%8E%D0%BA%D0%B2%D0%B8%D0%BD",
@@ -21770,6 +21855,11 @@
     },
     {
       "id": "rvc-88a3f7bb5c4642c84519",
+      "sample": {
+        "url": "https://huggingface.co/niobures/RVC-Models/resolve/4d174cf0b72edfcdba74c8510bdc894a2dd53b3c/rvc-big-ru-voice-pack/%D0%90%D0%BA%D1%82%D1%80%D0%B8%D1%81%D1%8B%20%D0%B4%D1%83%D0%B1%D0%BB%D0%B5%D0%B6%D0%B0/%D0%90%D0%BB%D0%B5%D0%BA%D1%81%D0%B0%D0%BD%D0%B4%D1%80%D0%B0%20%D0%9A%D1%83%D1%80%D0%B0%D0%B3%D0%B8%D0%BD%D0%B0/Demo.wav",
+        "sha256": "bf339d8a6b86769bc1967f3550376369e29efee606ae4c0ac9e44e8163067dea",
+        "size": 1110444
+      },
       "name": "Александра Курагина",
       "source_repo": "niobures/RVC-Models",
       "source_url": "https://huggingface.co/niobures/RVC-Models/tree/4d174cf0b72edfcdba74c8510bdc894a2dd53b3c/rvc-big-ru-voice-pack/%D0%90%D0%BA%D1%82%D1%80%D0%B8%D1%81%D1%8B%20%D0%B4%D1%83%D0%B1%D0%BB%D0%B5%D0%B6%D0%B0/%D0%90%D0%BB%D0%B5%D0%BA%D1%81%D0%B0%D0%BD%D0%B4%D1%80%D0%B0%20%D0%9A%D1%83%D1%80%D0%B0%D0%B3%D0%B8%D0%BD%D0%B0",
@@ -21795,6 +21885,11 @@
     },
     {
       "id": "rvc-eca660e18a9d89259f66",
+      "sample": {
+        "url": "https://huggingface.co/niobures/RVC-Models/resolve/4d174cf0b72edfcdba74c8510bdc894a2dd53b3c/rvc-big-ru-voice-pack/%D0%90%D0%BA%D1%82%D0%B5%D1%80%D1%8B%20%D0%B4%D1%83%D0%B1%D0%BB%D0%B5%D0%B6%D0%B0/%D0%90%D1%80%D1%82%D1%91%D0%BC%20%D0%9A%D0%B0%D1%80%D0%B0%D0%BF%D0%B5%D1%82%D1%8F%D0%BD/demo.mp3",
+        "sha256": "dff15bce2c09e7ba9198ffb998dd4daf7c24b612a0c4533fca7234068e5ef534",
+        "size": 281912
+      },
       "name": "Артём Карапетян",
       "source_repo": "niobures/RVC-Models",
       "source_url": "https://huggingface.co/niobures/RVC-Models/tree/4d174cf0b72edfcdba74c8510bdc894a2dd53b3c/rvc-big-ru-voice-pack/%D0%90%D0%BA%D1%82%D0%B5%D1%80%D1%8B%20%D0%B4%D1%83%D0%B1%D0%BB%D0%B5%D0%B6%D0%B0/%D0%90%D1%80%D1%82%D1%91%D0%BC%20%D0%9A%D0%B0%D1%80%D0%B0%D0%BF%D0%B5%D1%82%D1%8F%D0%BD",
@@ -21845,6 +21940,11 @@
     },
     {
       "id": "rvc-9800afa67c5ec9a86516",
+      "sample": {
+        "url": "https://huggingface.co/niobures/RVC-Models/resolve/4d174cf0b72edfcdba74c8510bdc894a2dd53b3c/rvc-big-ru-voice-pack/%D0%90%D0%BA%D1%82%D1%80%D0%B8%D1%81%D1%8B%20%D0%B4%D1%83%D0%B1%D0%BB%D0%B5%D0%B6%D0%B0/%D0%92%D0%B5%D1%80%D0%BE%D0%BD%D0%B8%D0%BA%D0%B0%20%D0%A1%D0%B0%D1%80%D0%BA%D0%B8%D1%81%D0%BE%D0%B2%D0%B0_2/demo.mp3",
+        "sha256": "08eed26f2a6e10faee63365826fd63e908bcc394863070bce850f2455ba93ccd",
+        "size": 653576
+      },
       "name": "Вероника Саркисова_2",
       "source_repo": "niobures/RVC-Models",
       "source_url": "https://huggingface.co/niobures/RVC-Models/tree/4d174cf0b72edfcdba74c8510bdc894a2dd53b3c/rvc-big-ru-voice-pack/%D0%90%D0%BA%D1%82%D1%80%D0%B8%D1%81%D1%8B%20%D0%B4%D1%83%D0%B1%D0%BB%D0%B5%D0%B6%D0%B0/%D0%92%D0%B5%D1%80%D0%BE%D0%BD%D0%B8%D0%BA%D0%B0%20%D0%A1%D0%B0%D1%80%D0%BA%D0%B8%D1%81%D0%BE%D0%B2%D0%B0_2",
@@ -21870,6 +21970,11 @@
     },
     {
       "id": "rvc-1f72eb8d510e0ff9bd70",
+      "sample": {
+        "url": "https://huggingface.co/niobures/RVC-Models/resolve/4d174cf0b72edfcdba74c8510bdc894a2dd53b3c/rvc-big-ru-voice-pack/%D0%90%D0%BA%D1%82%D0%B5%D1%80%D1%8B%20%D0%B4%D1%83%D0%B1%D0%BB%D0%B5%D0%B6%D0%B0/%D0%92%D0%BB%D0%B0%D0%B4%D0%B8%D0%BC%D0%B8%D1%80%20%D0%97%D0%B0%D0%B9%D1%86%D0%B5%D0%B2/demo.mp3",
+        "sha256": "11313b4f5da1d9b300c0d9ce57050671705a1f049774a23141b211051e62d9de",
+        "size": 199619
+      },
       "name": "Владимир Зайцев",
       "source_repo": "niobures/RVC-Models",
       "source_url": "https://huggingface.co/niobures/RVC-Models/tree/4d174cf0b72edfcdba74c8510bdc894a2dd53b3c/rvc-big-ru-voice-pack/%D0%90%D0%BA%D1%82%D0%B5%D1%80%D1%8B%20%D0%B4%D1%83%D0%B1%D0%BB%D0%B5%D0%B6%D0%B0/%D0%92%D0%BB%D0%B0%D0%B4%D0%B8%D0%BC%D0%B8%D1%80%20%D0%97%D0%B0%D0%B9%D1%86%D0%B5%D0%B2",
@@ -21895,6 +22000,11 @@
     },
     {
       "id": "rvc-c7167253c0e4db8a303f",
+      "sample": {
+        "url": "https://huggingface.co/niobures/RVC-Models/resolve/4d174cf0b72edfcdba74c8510bdc894a2dd53b3c/rvc-big-ru-voice-pack/%D0%9F%D0%BE%D0%BB%D0%B8%D1%82%D0%B8%D0%BA%D0%B8/%D0%92%D0%BB%D0%B0%D0%B4%D0%B8%D0%BC%D0%B8%D1%80%20%D0%9F%D0%BE%D0%B7%D0%BD%D0%B5%D1%80/Pozner_demo.mp3",
+        "sha256": "b3a55f51cc5272163d27cea5886543d0d1d84243357186894f79ae63a9796782",
+        "size": 1826139
+      },
       "name": "Владимир Познер",
       "source_repo": "niobures/RVC-Models",
       "source_url": "https://huggingface.co/niobures/RVC-Models/tree/4d174cf0b72edfcdba74c8510bdc894a2dd53b3c/rvc-big-ru-voice-pack/%D0%9F%D0%BE%D0%BB%D0%B8%D1%82%D0%B8%D0%BA%D0%B8/%D0%92%D0%BB%D0%B0%D0%B4%D0%B8%D0%BC%D0%B8%D1%80%20%D0%9F%D0%BE%D0%B7%D0%BD%D0%B5%D1%80",
@@ -21970,6 +22080,11 @@
     },
     {
       "id": "rvc-b77f227fffdfab2deb2e",
+      "sample": {
+        "url": "https://huggingface.co/niobures/RVC-Models/resolve/4d174cf0b72edfcdba74c8510bdc894a2dd53b3c/rvc-big-ru-voice-pack/%D0%90%D0%BA%D1%82%D0%B5%D1%80%D1%8B%20%D0%B4%D1%83%D0%B1%D0%BB%D0%B5%D0%B6%D0%B0/%D0%92%D1%8F%D1%87%D0%B5%D1%81%D0%BB%D0%B0%D0%B2%20%D0%91%D0%B0%D1%80%D0%B0%D0%BD%D0%BE%D0%B2/demo.mp3",
+        "sha256": "751be925730112bb22e2bc8437f6197a8aaaf1a2f4830cc9d5451bbc81929219",
+        "size": 558018
+      },
       "name": "Вячеслав Баранов",
       "source_repo": "niobures/RVC-Models",
       "source_url": "https://huggingface.co/niobures/RVC-Models/tree/4d174cf0b72edfcdba74c8510bdc894a2dd53b3c/rvc-big-ru-voice-pack/%D0%90%D0%BA%D1%82%D0%B5%D1%80%D1%8B%20%D0%B4%D1%83%D0%B1%D0%BB%D0%B5%D0%B6%D0%B0/%D0%92%D1%8F%D1%87%D0%B5%D1%81%D0%BB%D0%B0%D0%B2%20%D0%91%D0%B0%D1%80%D0%B0%D0%BD%D0%BE%D0%B2",
@@ -21995,6 +22110,11 @@
     },
     {
       "id": "rvc-a7464b5917278bf84ffc",
+      "sample": {
+        "url": "https://huggingface.co/niobures/RVC-Models/resolve/4d174cf0b72edfcdba74c8510bdc894a2dd53b3c/rvc-big-ru-voice-pack/%D0%90%D0%BA%D1%82%D0%B5%D1%80%D1%8B%20%D0%B4%D1%83%D0%B1%D0%BB%D0%B5%D0%B6%D0%B0/%D0%94%D0%B5%D0%BD%D0%B8%D1%81%20%D0%91%D0%B5%D1%81%D0%BF%D0%B0%D0%BB%D1%8B%D0%B9/demo.mp3",
+        "sha256": "466f9f3c7b05c84218aae31d29df7f3de30f6da5fcb4c323abddfddafb847101",
+        "size": 558018
+      },
       "name": "Денис Беспалый",
       "source_repo": "niobures/RVC-Models",
       "source_url": "https://huggingface.co/niobures/RVC-Models/tree/4d174cf0b72edfcdba74c8510bdc894a2dd53b3c/rvc-big-ru-voice-pack/%D0%90%D0%BA%D1%82%D0%B5%D1%80%D1%8B%20%D0%B4%D1%83%D0%B1%D0%BB%D0%B5%D0%B6%D0%B0/%D0%94%D0%B5%D0%BD%D0%B8%D1%81%20%D0%91%D0%B5%D1%81%D0%BF%D0%B0%D0%BB%D1%8B%D0%B9",
@@ -22045,6 +22165,11 @@
     },
     {
       "id": "rvc-5c0cfac1c962c6de8604",
+      "sample": {
+        "url": "https://huggingface.co/niobures/RVC-Models/resolve/4d174cf0b72edfcdba74c8510bdc894a2dd53b3c/rvc-big-ru-voice-pack/%D0%90%D0%BA%D1%82%D0%B5%D1%80%D1%8B%20%D0%B4%D1%83%D0%B1%D0%BB%D0%B5%D0%B6%D0%B0/%D0%9B%D0%B5%D0%BE%D0%BD%D0%B8%D0%B4%20%D0%91%D0%B5%D0%BB%D0%BE%D0%B7%D0%BE%D1%80%D0%BE%D0%B2%D0%B8%D1%87_2/Demo_2.mp3",
+        "sha256": "760423aaa403f3a6e778125ae92030788ba6a3bcf78402ec794db530f266bc91",
+        "size": 218640
+      },
       "name": "Леонид Белозорович_2",
       "source_repo": "niobures/RVC-Models",
       "source_url": "https://huggingface.co/niobures/RVC-Models/tree/4d174cf0b72edfcdba74c8510bdc894a2dd53b3c/rvc-big-ru-voice-pack/%D0%90%D0%BA%D1%82%D0%B5%D1%80%D1%8B%20%D0%B4%D1%83%D0%B1%D0%BB%D0%B5%D0%B6%D0%B0/%D0%9B%D0%B5%D0%BE%D0%BD%D0%B8%D0%B4%20%D0%91%D0%B5%D0%BB%D0%BE%D0%B7%D0%BE%D1%80%D0%BE%D0%B2%D0%B8%D1%87_2",
@@ -22070,6 +22195,11 @@
     },
     {
       "id": "rvc-f7b5211c32960edef20f",
+      "sample": {
+        "url": "https://huggingface.co/niobures/RVC-Models/resolve/4d174cf0b72edfcdba74c8510bdc894a2dd53b3c/rvc-big-ru-voice-pack/%D0%90%D0%BA%D1%82%D0%B5%D1%80%D1%8B%20%D0%B4%D1%83%D0%B1%D0%BB%D0%B5%D0%B6%D0%B0/%D0%9C%D0%B8%D1%85%D0%B0%D0%B8%D0%BB%20%D0%91%D0%B5%D0%BB%D1%8F%D0%BA%D0%BE%D0%B2%D0%B8%D1%87/demo.mp3",
+        "sha256": "b298aa137e0b5967b1c3ebbe4766a2253e6ecce093db033604baa7abb1f35fac",
+        "size": 557760
+      },
       "name": "Михаил Белякович",
       "source_repo": "niobures/RVC-Models",
       "source_url": "https://huggingface.co/niobures/RVC-Models/tree/4d174cf0b72edfcdba74c8510bdc894a2dd53b3c/rvc-big-ru-voice-pack/%D0%90%D0%BA%D1%82%D0%B5%D1%80%D1%8B%20%D0%B4%D1%83%D0%B1%D0%BB%D0%B5%D0%B6%D0%B0/%D0%9C%D0%B8%D1%85%D0%B0%D0%B8%D0%BB%20%D0%91%D0%B5%D0%BB%D1%8F%D0%BA%D0%BE%D0%B2%D0%B8%D1%87",
@@ -22095,6 +22225,11 @@
     },
     {
       "id": "rvc-d26934bb53ee066efbea",
+      "sample": {
+        "url": "https://huggingface.co/niobures/RVC-Models/resolve/4d174cf0b72edfcdba74c8510bdc894a2dd53b3c/rvc-big-ru-voice-pack/%D0%90%D0%BA%D1%82%D0%B5%D1%80%D1%8B%20%D0%B4%D1%83%D0%B1%D0%BB%D0%B5%D0%B6%D0%B0/%D0%9C%D0%B8%D1%85%D0%B0%D0%B8%D0%BB%20%D0%93%D0%B5%D0%BE%D1%80%D0%B3%D0%B8%D1%83/Demo1.mp3",
+        "sha256": "24e876816f53eb090bdcdf294c96e89cd6f14329bfdbaba19d90e02286a51b33",
+        "size": 500549
+      },
       "name": "Михаил Георгиу",
       "source_repo": "niobures/RVC-Models",
       "source_url": "https://huggingface.co/niobures/RVC-Models/tree/4d174cf0b72edfcdba74c8510bdc894a2dd53b3c/rvc-big-ru-voice-pack/%D0%90%D0%BA%D1%82%D0%B5%D1%80%D1%8B%20%D0%B4%D1%83%D0%B1%D0%BB%D0%B5%D0%B6%D0%B0/%D0%9C%D0%B8%D1%85%D0%B0%D0%B8%D0%BB%20%D0%93%D0%B5%D0%BE%D1%80%D0%B3%D0%B8%D1%83",
@@ -22120,6 +22255,11 @@
     },
     {
       "id": "rvc-99d920f5ea56f8848656",
+      "sample": {
+        "url": "https://huggingface.co/niobures/RVC-Models/resolve/4d174cf0b72edfcdba74c8510bdc894a2dd53b3c/rvc-big-ru-voice-pack/%D0%90%D0%BA%D1%82%D0%B5%D1%80%D1%8B%20%D0%B4%D1%83%D0%B1%D0%BB%D0%B5%D0%B6%D0%B0/%D0%9D%D0%B8%D0%BA%D0%B8%D1%82%D0%B0%20%D0%9F%D1%80%D0%BE%D0%B7%D0%BE%D1%80%D0%BE%D0%B2%D1%81%D0%BA%D0%B8%D0%B9/Prozorovsky_demo.mp3",
+        "sha256": "168d6a2f94e8c54dc3f955980847de4e3bc2e8c1d87ce763361ed14f07ac653f",
+        "size": 2044935
+      },
       "name": "Никита Прозоровский",
       "source_repo": "niobures/RVC-Models",
       "source_url": "https://huggingface.co/niobures/RVC-Models/tree/4d174cf0b72edfcdba74c8510bdc894a2dd53b3c/rvc-big-ru-voice-pack/%D0%90%D0%BA%D1%82%D0%B5%D1%80%D1%8B%20%D0%B4%D1%83%D0%B1%D0%BB%D0%B5%D0%B6%D0%B0/%D0%9D%D0%B8%D0%BA%D0%B8%D1%82%D0%B0%20%D0%9F%D1%80%D0%BE%D0%B7%D0%BE%D1%80%D0%BE%D0%B2%D1%81%D0%BA%D0%B8%D0%B9",
@@ -22145,6 +22285,11 @@
     },
     {
       "id": "rvc-d33a233da5365792c934",
+      "sample": {
+        "url": "https://huggingface.co/niobures/RVC-Models/resolve/4d174cf0b72edfcdba74c8510bdc894a2dd53b3c/rvc-big-ru-voice-pack/%D0%90%D0%BA%D1%82%D0%B5%D1%80%D1%8B%20%D0%B4%D1%83%D0%B1%D0%BB%D0%B5%D0%B6%D0%B0/%D0%9D%D0%B8%D0%BA%D0%BE%D0%BB%D0%B0%D0%B9%20%D0%91%D1%83%D1%80%D0%BE%D0%B2/demo_burov.mp3",
+        "sha256": "7e4085e2188a5c06b867262661610c7247f29c41e27e4df876e51e007277ef7e",
+        "size": 787260
+      },
       "name": "Николай Буров",
       "source_repo": "niobures/RVC-Models",
       "source_url": "https://huggingface.co/niobures/RVC-Models/tree/4d174cf0b72edfcdba74c8510bdc894a2dd53b3c/rvc-big-ru-voice-pack/%D0%90%D0%BA%D1%82%D0%B5%D1%80%D1%8B%20%D0%B4%D1%83%D0%B1%D0%BB%D0%B5%D0%B6%D0%B0/%D0%9D%D0%B8%D0%BA%D0%BE%D0%BB%D0%B0%D0%B9%20%D0%91%D1%83%D1%80%D0%BE%D0%B2",
@@ -22170,6 +22315,11 @@
     },
     {
       "id": "rvc-a68e0b5d8bafb1ce7e39",
+      "sample": {
+        "url": "https://huggingface.co/niobures/RVC-Models/resolve/4d174cf0b72edfcdba74c8510bdc894a2dd53b3c/rvc-big-ru-voice-pack/%D0%90%D0%BA%D1%82%D0%B5%D1%80%D1%8B%20%D0%B4%D1%83%D0%B1%D0%BB%D0%B5%D0%B6%D0%B0/%D0%9D%D0%B8%D0%BA%D0%BE%D0%BB%D0%B0%D0%B9%20%D0%94%D1%80%D0%BE%D0%B7%D0%B4%D0%BE%D0%B2/demo.mp3",
+        "sha256": "92f95ba5b9b4e51eaa628f9f5cb63a82422cbe0c5867cdd8211f18357a312097",
+        "size": 408598
+      },
       "name": "Николай Дроздов",
       "source_repo": "niobures/RVC-Models",
       "source_url": "https://huggingface.co/niobures/RVC-Models/tree/4d174cf0b72edfcdba74c8510bdc894a2dd53b3c/rvc-big-ru-voice-pack/%D0%90%D0%BA%D1%82%D0%B5%D1%80%D1%8B%20%D0%B4%D1%83%D0%B1%D0%BB%D0%B5%D0%B6%D0%B0/%D0%9D%D0%B8%D0%BA%D0%BE%D0%BB%D0%B0%D0%B9%20%D0%94%D1%80%D0%BE%D0%B7%D0%B4%D0%BE%D0%B2",
@@ -22195,6 +22345,11 @@
     },
     {
       "id": "rvc-5870b6698848b2b87737",
+      "sample": {
+        "url": "https://huggingface.co/niobures/RVC-Models/resolve/4d174cf0b72edfcdba74c8510bdc894a2dd53b3c/rvc-big-ru-voice-pack/%D0%90%D0%BA%D1%82%D0%B5%D1%80%D1%8B%20%D0%B4%D1%83%D0%B1%D0%BB%D0%B5%D0%B6%D0%B0/%D0%9E%D0%BB%D0%B5%D0%B3%20%D0%92%D0%B8%D1%80%D0%BE%D0%B7%D1%83%D0%B1/demo.mp3",
+        "sha256": "fffc3ad638a564872dba5d20d1a492ea79245c2b6956a0ab2f4c822eae3d8718",
+        "size": 372512
+      },
       "name": "Олег Вирозуб",
       "source_repo": "niobures/RVC-Models",
       "source_url": "https://huggingface.co/niobures/RVC-Models/tree/4d174cf0b72edfcdba74c8510bdc894a2dd53b3c/rvc-big-ru-voice-pack/%D0%90%D0%BA%D1%82%D0%B5%D1%80%D1%8B%20%D0%B4%D1%83%D0%B1%D0%BB%D0%B5%D0%B6%D0%B0/%D0%9E%D0%BB%D0%B5%D0%B3%20%D0%92%D0%B8%D1%80%D0%BE%D0%B7%D1%83%D0%B1",
@@ -22245,6 +22400,11 @@
     },
     {
       "id": "rvc-abccd6fcba038bd5c88e",
+      "sample": {
+        "url": "https://huggingface.co/niobures/RVC-Models/resolve/4d174cf0b72edfcdba74c8510bdc894a2dd53b3c/rvc-big-ru-voice-pack/%D0%90%D0%BA%D1%82%D0%B5%D1%80%D1%8B%20%D0%B4%D1%83%D0%B1%D0%BB%D0%B5%D0%B6%D0%B0/%D0%A0%D1%83%D1%81%D0%BB%D0%B0%D0%BD%20%D0%93%D0%B0%D0%B1%D0%B8%D0%B4%D1%83%D0%BB%D0%BB%D0%B8%D0%BD/Gabidullin_Demo_1.mp3",
+        "sha256": "420f4b58af8aecf0d9580f41bc8e1035afb76c1216c9dc1abb70496af24de1c9",
+        "size": 768070
+      },
       "name": "Руслан Габидуллин",
       "source_repo": "niobures/RVC-Models",
       "source_url": "https://huggingface.co/niobures/RVC-Models/tree/4d174cf0b72edfcdba74c8510bdc894a2dd53b3c/rvc-big-ru-voice-pack/%D0%90%D0%BA%D1%82%D0%B5%D1%80%D1%8B%20%D0%B4%D1%83%D0%B1%D0%BB%D0%B5%D0%B6%D0%B0/%D0%A0%D1%83%D1%81%D0%BB%D0%B0%D0%BD%20%D0%93%D0%B0%D0%B1%D0%B8%D0%B4%D1%83%D0%BB%D0%BB%D0%B8%D0%BD",
@@ -22270,6 +22430,11 @@
     },
     {
       "id": "rvc-4a2ae8d52f1e58effe65",
+      "sample": {
+        "url": "https://huggingface.co/niobures/RVC-Models/resolve/4d174cf0b72edfcdba74c8510bdc894a2dd53b3c/rvc-big-ru-voice-pack/%D0%90%D0%BA%D1%82%D1%80%D0%B8%D1%81%D1%8B%20%D0%B4%D1%83%D0%B1%D0%BB%D0%B5%D0%B6%D0%B0/%D0%A1%D0%B2%D0%B5%D1%82%D0%BB%D0%B0%D0%BD%D0%B0%20%D0%A0%D0%B5%D0%BF%D0%B5%D1%82%D0%B8%D0%BD%D0%B0/demo.mp3",
+        "sha256": "059e0b5612e549b32c6db44e89af05fbe26f889ac43c6636de9b9973af0a2805",
+        "size": 558018
+      },
       "name": "Светлана Репетина",
       "source_repo": "niobures/RVC-Models",
       "source_url": "https://huggingface.co/niobures/RVC-Models/tree/4d174cf0b72edfcdba74c8510bdc894a2dd53b3c/rvc-big-ru-voice-pack/%D0%90%D0%BA%D1%82%D1%80%D0%B8%D1%81%D1%8B%20%D0%B4%D1%83%D0%B1%D0%BB%D0%B5%D0%B6%D0%B0/%D0%A1%D0%B2%D0%B5%D1%82%D0%BB%D0%B0%D0%BD%D0%B0%20%D0%A0%D0%B5%D0%BF%D0%B5%D1%82%D0%B8%D0%BD%D0%B0",
@@ -22295,6 +22460,11 @@
     },
     {
       "id": "rvc-564003eafc35495dfe6e",
+      "sample": {
+        "url": "https://huggingface.co/niobures/RVC-Models/resolve/4d174cf0b72edfcdba74c8510bdc894a2dd53b3c/rvc-big-ru-voice-pack/%D0%90%D0%BA%D1%82%D0%B5%D1%80%D1%8B%20%D0%B4%D1%83%D0%B1%D0%BB%D0%B5%D0%B6%D0%B0/%D0%A1%D0%B5%D1%80%D0%B3%D0%B5%D0%B9%20%D0%91%D1%83%D1%80%D1%83%D0%BD%D0%BE%D0%B2/demo.mp3",
+        "sha256": "edd9a25046e541347c59df04704b14976bece53903bac228cec9f7fffea38d39",
+        "size": 215096
+      },
       "name": "Сергей Бурунов",
       "source_repo": "niobures/RVC-Models",
       "source_url": "https://huggingface.co/niobures/RVC-Models/tree/4d174cf0b72edfcdba74c8510bdc894a2dd53b3c/rvc-big-ru-voice-pack/%D0%90%D0%BA%D1%82%D0%B5%D1%80%D1%8B%20%D0%B4%D1%83%D0%B1%D0%BB%D0%B5%D0%B6%D0%B0/%D0%A1%D0%B5%D1%80%D0%B3%D0%B5%D0%B9%20%D0%91%D1%83%D1%80%D1%83%D0%BD%D0%BE%D0%B2",
@@ -22345,6 +22515,11 @@
     },
     {
       "id": "rvc-082e40efb5328808898e",
+      "sample": {
+        "url": "https://huggingface.co/niobures/RVC-Models/resolve/4d174cf0b72edfcdba74c8510bdc894a2dd53b3c/rvc-big-ru-voice-pack/%D0%90%D0%BA%D1%82%D0%B5%D1%80%D1%8B%20%D0%B4%D1%83%D0%B1%D0%BB%D0%B5%D0%B6%D0%B0/%D0%A1%D0%B5%D1%80%D0%B3%D0%B5%D0%B9%20%D0%A7%D0%B8%D1%85%D0%B0%D1%87%D0%B5%D0%B2/demo.mp3",
+        "sha256": "38f7b3ff8d808b684058e23a8e73b0d092f445b0e7ad768b9ed2a1bd29e0c19d",
+        "size": 558018
+      },
       "name": "Сергей Чихачев",
       "source_repo": "niobures/RVC-Models",
       "source_url": "https://huggingface.co/niobures/RVC-Models/tree/4d174cf0b72edfcdba74c8510bdc894a2dd53b3c/rvc-big-ru-voice-pack/%D0%90%D0%BA%D1%82%D0%B5%D1%80%D1%8B%20%D0%B4%D1%83%D0%B1%D0%BB%D0%B5%D0%B6%D0%B0/%D0%A1%D0%B5%D1%80%D0%B3%D0%B5%D0%B9%20%D0%A7%D0%B8%D1%85%D0%B0%D1%87%D0%B5%D0%B2",
@@ -22370,6 +22545,11 @@
     },
     {
       "id": "rvc-79ba35776cc77637820e",
+      "sample": {
+        "url": "https://huggingface.co/niobures/RVC-Models/resolve/4d174cf0b72edfcdba74c8510bdc894a2dd53b3c/rvc-big-ru-voice-pack/%D0%90%D0%BA%D1%82%D0%B5%D1%80%D1%8B%20%D0%B4%D1%83%D0%B1%D0%BB%D0%B5%D0%B6%D0%B0/%D0%A1%D0%B5%D1%80%D0%B3%D0%B5%D0%B9%20%D0%A7%D0%BE%D0%BD%D0%B8%D1%88%D0%B2%D0%B8%D0%BB%D0%B8_2/demo.mp3",
+        "sha256": "33b2c3ec3a2a4ae21724dfbb998712d112e8589708c30cf3dd558010a9cee2b3",
+        "size": 558018
+      },
       "name": "Сергей Чонишвили_2",
       "source_repo": "niobures/RVC-Models",
       "source_url": "https://huggingface.co/niobures/RVC-Models/tree/4d174cf0b72edfcdba74c8510bdc894a2dd53b3c/rvc-big-ru-voice-pack/%D0%90%D0%BA%D1%82%D0%B5%D1%80%D1%8B%20%D0%B4%D1%83%D0%B1%D0%BB%D0%B5%D0%B6%D0%B0/%D0%A1%D0%B5%D1%80%D0%B3%D0%B5%D0%B9%20%D0%A7%D0%BE%D0%BD%D0%B8%D1%88%D0%B2%D0%B8%D0%BB%D0%B8_2",
@@ -22395,6 +22575,11 @@
     },
     {
       "id": "rvc-7c0b5eda179ab1c61be3",
+      "sample": {
+        "url": "https://huggingface.co/niobures/RVC-Models/resolve/4d174cf0b72edfcdba74c8510bdc894a2dd53b3c/rvc-big-ru-voice-pack/%D0%90%D0%BA%D1%82%D0%B5%D1%80%D1%8B%20%D0%B4%D1%83%D0%B1%D0%BB%D0%B5%D0%B6%D0%B0/%D0%A1%D1%82%D0%B0%D0%BD%D0%B8%D1%81%D0%BB%D0%B0%D0%B2%20%D0%9A%D0%BE%D0%BD%D1%86%D0%B5%D0%B2%D0%B8%D1%87/demo.mp3",
+        "sha256": "76bc3dc326824fc8644b2442756fdf77ed9a441762ffa98ca4f85041156dd659",
+        "size": 474008
+      },
       "name": "Станислав Концевич",
       "source_repo": "niobures/RVC-Models",
       "source_url": "https://huggingface.co/niobures/RVC-Models/tree/4d174cf0b72edfcdba74c8510bdc894a2dd53b3c/rvc-big-ru-voice-pack/%D0%90%D0%BA%D1%82%D0%B5%D1%80%D1%8B%20%D0%B4%D1%83%D0%B1%D0%BB%D0%B5%D0%B6%D0%B0/%D0%A1%D1%82%D0%B0%D0%BD%D0%B8%D1%81%D0%BB%D0%B0%D0%B2%20%D0%9A%D0%BE%D0%BD%D1%86%D0%B5%D0%B2%D0%B8%D1%87",

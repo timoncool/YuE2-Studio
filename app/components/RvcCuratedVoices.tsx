@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useI18n } from '../context/I18nContext';
 import { rvcVoiceStrings } from '../i18n/rvcVoices';
+import { apiUrl } from '../services/apiBase';
 import { poll } from '../services/poll';
 import { responseJson, type Voice, voiceName } from '../services/rvcVoices';
 
@@ -17,6 +18,7 @@ interface CatalogVoice {
   index?: { size: number } | null;
   download_bytes?: number;
   has_index?: boolean;
+  sample_audio_url?: string | null;
   installed_id: string | null;
   metadata?: {
     source_labels?: string[] | null;
@@ -28,7 +30,7 @@ interface CatalogVoice {
 
 const metadataFields = ['vocal_style', 'rvc_version', 'sample_rate_hz'] as const;
 type MetadataField = typeof metadataFields[number];
-type Filters = Partial<Record<MetadataField | 'index', string>>;
+type Filters = Partial<Record<MetadataField | 'index' | 'sample', string>>;
 interface InstallProgress {
   stage: 'preparing' | 'downloading_weights' | 'downloading_archive' | 'downloading_index' | 'verifying';
   downloaded_bytes: number;
@@ -44,6 +46,8 @@ export function RvcCuratedVoices({ onInstalled, onChoose, disabled, installedIds
   const { language } = useI18n();
   const labels = rvcVoiceStrings[language];
   const [open, setOpen] = useState(false);
+  const [playingSample, setPlayingSample] = useState<string>();
+  const [sampleError, setSampleError] = useState(false);
   const [catalog, setCatalog] = useState<CatalogVoice[] | null>(null);
   const [request, setRequest] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
@@ -57,7 +61,7 @@ export function RvcCuratedVoices({ onInstalled, onChoose, disabled, installedIds
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   const sizeFormat = new Intl.NumberFormat(language, { style: 'unit', unit: 'megabyte', maximumFractionDigits: 1 });
 
-  function setFilter(field: MetadataField | 'index', value: string) {
+  function setFilter(field: MetadataField | 'index' | 'sample', value: string) {
     setFilters(current => ({ ...current, [field]: value }));
     setVisibleCount(PAGE_SIZE);
   }
@@ -125,7 +129,8 @@ export function RvcCuratedVoices({ onInstalled, onChoose, disabled, installedIds
     const searchable = [voice.name, ...(voice.metadata?.source_labels ?? [])].join(' ').toLocaleLowerCase(language);
     return terms.every(term => searchable.includes(term))
       && metadataFields.every(field => !filters[field] || String(voice.metadata?.[field] ?? '') === filters[field])
-      && (!filters.index || ((voice.has_index ?? !!voice.index) ? 'present' : 'absent') === filters.index);
+      && (!filters.index || ((voice.has_index ?? !!voice.index) ? 'present' : 'absent') === filters.index)
+      && (!filters.sample || !!voice.sample_audio_url);
   });
   const visible = matches.slice(0, visibleCount);
   const filterActive = terms.length > 0 || Object.values(filters).some(Boolean);
@@ -145,7 +150,10 @@ export function RvcCuratedVoices({ onInstalled, onChoose, disabled, installedIds
 
   return (
     <details className="mt-4 border-t border-zinc-200 pt-3 text-xs dark:border-white/10"
-      onToggle={event => setOpen(event.currentTarget.open)}>
+      onToggle={event => {
+        setOpen(event.currentTarget.open);
+        if (!event.currentTarget.open) setPlayingSample(undefined);
+      }}>
       <summary className="cursor-pointer text-sm font-semibold">{labels.curated}</summary>
       {open && (
         <div className="mt-2">
@@ -206,6 +214,14 @@ export function RvcCuratedVoices({ onInstalled, onChoose, disabled, installedIds
                   </select>
                 </label>
               </div>
+              <label className="mb-2 flex items-center gap-1">
+                <input type="checkbox" checked={!!filters.sample}
+                  onChange={event => {
+                    setFilters(current => ({ ...current, sample: event.target.checked ? 'present' : undefined }));
+                    setVisibleCount(PAGE_SIZE);
+                  }} />
+                {labels.withSample}
+              </label>
               {filterActive && (
                 <button type="button" className="mb-2 text-pink-600 underline dark:text-pink-300"
                   onClick={() => { setSearch(''); setFilters({}); setVisibleCount(PAGE_SIZE); }}>{labels.clear}</button>
@@ -229,6 +245,21 @@ export function RvcCuratedVoices({ onInstalled, onChoose, disabled, installedIds
                         {sizeFormat.format(size)}
                       </p>
                     </div>
+                    <div className="min-w-0">
+                      {voice.sample_audio_url ? (
+                        playingSample === voice.id && !sampleError ? (
+                          <SourceDemo key={voice.id} url={apiUrl(voice.sample_audio_url)} name={voice.name}
+                            onError={() => setSampleError(true)} />
+                        ) : (
+                          <>
+                            <button type="button" className="text-pink-600 underline dark:text-pink-300"
+                              aria-label={`${labels.playSample} ${voice.name}`}
+                              onClick={() => { setSampleError(false); setPlayingSample(voice.id); }}>{labels.playSample}</button>
+                            {playingSample === voice.id && sampleError && <p role="alert">{labels.sampleError}</p>}
+                          </>
+                        )
+                      ) : <span className="text-zinc-600 dark:text-zinc-300">{labels.sampleUnavailable}</span>}
+                    </div>
                     <button type="button" disabled={disabled || refreshing || Boolean(installing)}
                       aria-label={`${installedId ? labels.selectInstalled : labels.install} ${voice.name}`}
                       onClick={() => installedId ? onChoose(installedId) : void install(voice.id)}
@@ -249,4 +280,14 @@ export function RvcCuratedVoices({ onInstalled, onChoose, disabled, installedIds
       )}
     </details>
   );
+}
+
+
+function SourceDemo({ url, name, onError }: { url: string; name: string; onError: () => void }) {
+  const player = useRef<HTMLAudioElement>(null);
+  useEffect(() => {
+    const audio = player.current;
+    return () => audio?.pause();
+  }, []);
+  return <audio ref={player} src={url} controls autoPlay aria-label={name} onError={onError} className="max-w-full" />;
 }
