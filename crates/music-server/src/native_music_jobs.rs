@@ -244,14 +244,6 @@ async fn submit(
             "Studio data folder is unavailable.".into(),
         );
     };
-    // MiniMax can auto-select CUDA from a local bundle even when NVML
-    // failed the initial probe and Studio does not pass --device CUDA0.
-    if !cfg!(target_os = "macos") {
-        let chosen = state.engine_options.read().await;
-        if let Some(problem) = crate::legacy_cuda_startup_problem(chosen.gpu.as_ref(), crate::APPLIED_LEGACY_GPU.get().copied()) {
-            return reject(StatusCode::SERVICE_UNAVAILABLE, problem);
-        }
-    }
     let (installation, runtime) = match native_minimax::Runtime::resolve_installation(
         &root,
         replay.as_ref().map(|replay| &replay.runtime),
@@ -299,9 +291,10 @@ async fn submit(
         return reject(StatusCode::CONFLICT, format!("ACE-Step is busy: {error:#}"));
     }
     evict_kept_models(&state, "before MiniMax generation").await;
+    let gpu = state.engine_options.read().await.gpu.clone();
     let client = match state
         .minimax
-        .start_selected(&profile, &root, installation)
+        .start_selected(&profile, &root, installation, gpu.as_ref())
         .await
     {
         Ok(client) => client,

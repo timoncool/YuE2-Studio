@@ -722,14 +722,16 @@ impl Runtime {
         Ok((install, identity))
     }
 
-    pub(crate) async fn start(&self, profile_id: &str, data_root: &Path) -> Result<Client> {
+    pub(crate) async fn start(
+        &self, profile_id: &str, data_root: &Path, gpu: Option<&hardware::GpuChoice>,
+    ) -> Result<Client> {
         let (install, _) = Self::resolve_installation(
             data_root,
             None,
             crate::engine_catalogue::install::Probe::Sha256,
         )
         .await?;
-        self.start_selected(profile_id, data_root, install).await
+        self.start_selected(profile_id, data_root, install, gpu).await
     }
 
     pub(crate) async fn start_selected(
@@ -737,7 +739,15 @@ impl Runtime {
         profile_id: &str,
         data_root: &Path,
         install: Installation,
+        gpu: Option<&hardware::GpuChoice>,
     ) -> Result<Client> {
+        // The engine can still auto-select a local CUDA backend if Studio's
+        // initial NVML probe failed and no explicit --device is passed.
+        if !cfg!(target_os = "macos") {
+            if let Some(problem) = crate::legacy_cuda_startup_problem(gpu, crate::APPLIED_LEGACY_GPU.get().copied()) {
+                bail!("{problem}");
+            }
+        }
         let profile = PROFILES
             .iter()
             .find(|profile| profile.id == profile_id)
@@ -844,6 +854,19 @@ pub(crate) struct Installation {
     roots: Vec<PathBuf>,
     runtime_dirs: Vec<PathBuf>,
     adapters_root: Option<PathBuf>,
+}
+
+#[cfg(all(test, not(target_os = "macos")))]
+#[tokio::test]
+async fn mini_max_rejects_an_unapplied_legacy_index_before_launch() {
+    let data = tempfile::tempdir().unwrap();
+    let runtime = Runtime::default();
+    let install = Installation {
+        executable: None, roots: Vec::new(), runtime_dirs: Vec::new(), adapters_root: None,
+    };
+    let choice = hardware::GpuChoice::LegacyIndex(u32::MAX);
+    let result = runtime.start_selected("minimal", data.path(), install, Some(&choice)).await;
+    assert!(matches!(result, Err(ref error) if error.to_string().contains("restart Studio")));
 }
 
 #[cfg(test)]

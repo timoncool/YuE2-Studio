@@ -503,10 +503,11 @@ async fn start(state: &AppState, revision: u64, preparation: Preparation) -> any
             }
             evict_kept_models(state, "before preparing a MiniMax pair").await;
             if stage(Stage::StartingEngine) {
+                let gpu = state.engine_options.read().await.gpu.clone();
                 tokio::select! {
                     biased;
                     _ = pair.superseded(revision) => return Ok(true),
-                    result = state.minimax.start(&profile, update_data_root(state)) => { result?; }
+                    result = state.minimax.start(&profile, update_data_root(state), gpu.as_ref()) => { result?; }
                 }
             }
             Ok(true)
