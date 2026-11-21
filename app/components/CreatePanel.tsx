@@ -1929,6 +1929,17 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
                         {native.profiles.map(profile => <option key={profile.id} value={profile.id}>{profile.label}{(!native.installed || !profile.ready) ? ` — ${nativeStrings.unavailable}` : ''}</option>)}
                       </select>
                     )}
+                    {native.profile?.status === 'experimental' && <p className="text-xs">{nativeStrings.experimental}</p>}
+                    {native.profile?.package_url && native.profile.model_directory && (native.profile.missing_bytes ?? 0) > 0 && (
+                      <div className="space-y-1 text-xs">
+                        <p>{nativeStrings.manualWeights} · {new Intl.NumberFormat(language, { maximumFractionDigits: 2 }).format(
+                          (native.profile.missing_bytes ?? 0) / 2 ** 30
+                        )} GiB</p>
+                        <p>{nativeStrings.modelDirectory} <code>{native.profile.model_directory}</code></p>
+                        <a href={native.profile.package_url} target="_blank" rel="noreferrer" className="mr-2 underline">{nativeStrings.weightFiles}</a>
+                        {native.profile.license_url && <a href={native.profile.license_url} target="_blank" rel="noreferrer" className="underline">{nativeStrings.modelLicense}</a>}
+                      </div>
+                    )}
                     {native.profile && !native.ready && <p role="status" className="text-xs">
                       {nativeStrings.unavailable}{native.profile.missing?.length ? ` · ${native.profile.missing.join(', ')}` : ''}
                     </p>}

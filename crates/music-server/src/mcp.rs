@@ -2230,7 +2230,7 @@ fn tools() -> &'static [Tool] {
             },
             Tool {
                 name: "audio_cpp_music_models",
-                description: "List audio.cpp music models, installed weight profiles, runtime readiness and active installation progress.",
+                description: "List audio.cpp music models with experimental status, runtime readiness and installation progress. Manual profiles include the weight source, license, data-root-relative directory and missing bytes.",
                 schema: nothing,
                 call: |_| get("/v1/music/audio-cpp/models".into()),
             },
