@@ -62,9 +62,9 @@ if ($Phase -eq 'control') {
         }
         Start-Sleep -Milliseconds 500
     }
-    @(Get-PrintJob -PrinterName $printer | Select-Object Id,DocumentName,JobStatus,SubmittedTime,TotalPages) |
-        ConvertTo-Json -AsArray | Set-Content "$evidence/queue-after-control.json"
-    "STUDIO_QA_FILE_PORT=$destination" >> $env:GITHUB_ENV
+    [IO.File]::AppendAllText($env:GITHUB_ENV, "STUDIO_QA_FILE_PORT=$destination`n", [Text.UTF8Encoding]::new($false))
+    $jobs = @(Get-PrintJob -PrinterName $printer | Select-Object Id,DocumentName,JobStatus,SubmittedTime,TotalPages)
+    ConvertTo-Json -InputObject $jobs | Set-Content "$evidence/queue-after-control.json"
     if (!(Test-Path "$evidence/windows-control.pdf")) { throw 'Windows control produced no complete PDF' }
 } else {
     if (!(Test-Path "$evidence/start.txt")) { exit 0 }
