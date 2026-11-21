@@ -40,6 +40,8 @@ const CONFIGS: [&str; 8] = [
 
 #[derive(Clone, Copy)]
 enum Family {
+    Yue,
+    Ace,
     MiniMax,
     MiniMaxH3,
     HeartMuLa,
@@ -56,6 +58,8 @@ enum Family {
 impl Family {
     fn parse(id: &str) -> Option<Self> {
         match id {
+            audio_cpp_yue2::FAMILY => Some(Self::Yue),
+            audio_cpp_ace_step::FAMILY => Some(Self::Ace),
             FAMILY => Some(Self::MiniMax),
             audio_cpp_minimax_h3::FAMILY => Some(Self::MiniMaxH3),
             audio_cpp_heartmula::FAMILY => Some(Self::HeartMuLa),
@@ -74,6 +78,8 @@ impl Family {
 
     fn id(self) -> &'static str {
         match self {
+            Self::Yue => audio_cpp_yue2::FAMILY,
+            Self::Ace => audio_cpp_ace_step::FAMILY,
             Self::MiniMax => FAMILY,
             Self::MiniMaxH3 => audio_cpp_minimax_h3::FAMILY,
             Self::HeartMuLa => audio_cpp_heartmula::FAMILY,
@@ -90,6 +96,8 @@ impl Family {
 
     fn name(self) -> &'static str {
         match self {
+            Self::Yue => "YuE2",
+            Self::Ace => "ACE-Step 1.5",
             Self::MiniMax => "MiniMax Music3",
             Self::MiniMaxH3 => audio_cpp_minimax_h3::NAME,
             Self::HeartMuLa => "HeartMuLa",
@@ -106,6 +114,8 @@ impl Family {
 
     fn profile(self) -> &'static str {
         match self {
+            Self::Yue => audio_cpp_yue2::PROFILE,
+            Self::Ace => audio_cpp_ace_step::PROFILE,
             Self::MiniMax => PROFILE,
             Self::MiniMaxH3 => audio_cpp_minimax_h3::PROFILE,
             Self::HeartMuLa => audio_cpp_heartmula::PROFILE,
@@ -130,6 +140,8 @@ impl Family {
 
     fn directory(self, root: &FsPath) -> PathBuf {
         match self {
+            Self::Yue => audio_cpp_yue2::model_dir(root),
+            Self::Ace => audio_cpp_ace_step::model_dir(root),
             Self::MiniMax => model_dir(root),
             Self::MiniMaxH3 => audio_cpp_minimax_h3::model_dir(root),
             Self::HeartMuLa => audio_cpp_heartmula::model_dir(root),
@@ -146,6 +158,8 @@ impl Family {
 
     fn missing(self, path: &FsPath) -> Vec<&'static str> {
         match self {
+            Self::Yue => audio_cpp_yue2::missing_files(path),
+            Self::Ace => audio_cpp_ace_step::missing_files(path),
             Self::MiniMax => missing_files(path),
             Self::MiniMaxH3 => audio_cpp_minimax_h3::missing_files(path),
             Self::HeartMuLa => audio_cpp_heartmula::missing_files(path),
@@ -162,6 +176,8 @@ impl Family {
 
     fn entry(self, path: PathBuf) -> ModelEntry {
         match self {
+            Self::Yue => audio_cpp_yue2::entry(path),
+            Self::Ace => audio_cpp_ace_step::entry(path),
             Self::MiniMax => entry(path),
             Self::MiniMaxH3 => audio_cpp_minimax_h3::entry(path),
             Self::HeartMuLa => audio_cpp_heartmula::entry(path),
@@ -183,6 +199,8 @@ impl Family {
         resumed: bool,
     ) -> anyhow::Result<PreparedTask> {
         match self {
+            Self::Yue => audio_cpp_yue2::task(request).map(PreparedTask::Json),
+            Self::Ace => audio_cpp_ace_step::task(request).map(PreparedTask::Json),
             Self::MiniMax => task(request).map(PreparedTask::Json),
             Self::MiniMaxH3 => audio_cpp_minimax_h3::task(request).map(PreparedTask::Json),
             Self::HeartMuLa => audio_cpp_heartmula::task(request).map(PreparedTask::Json),
@@ -201,6 +219,8 @@ impl Family {
 
     fn catalog(self, root: Option<&FsPath>, runtime_ready: bool, soxr_ready: bool) -> Value {
         match self {
+            Self::Yue => audio_cpp_yue2::catalog(root, runtime_ready),
+            Self::Ace => audio_cpp_ace_step::catalog(root, runtime_ready),
             Self::MiniMax => minimax_catalog(root, runtime_ready),
             Self::MiniMaxH3 => audio_cpp_minimax_h3::catalog(root, runtime_ready),
             Self::HeartMuLa => audio_cpp_heartmula::catalog(root, runtime_ready),
@@ -219,12 +239,19 @@ impl Family {
 struct ManagedModel {
     family: Family,
     scope: &'static str,
-    asset: &'static downloads::Asset,
-    sha256: &'static str,
+    assets: Vec<(&'static downloads::Asset, &'static str)>,
     lease: Arc<tokio::sync::Mutex<()>>,
 }
 
 fn managed_model(family: Family, state: &AppState) -> Option<ManagedModel> {
+    if matches!(family, Family::Yue) {
+        return Some(ManagedModel {
+            family,
+            scope: "audio-cpp-yue2",
+            assets: audio_cpp_yue2::ASSETS.iter().map(|(asset, sha)| (asset, *sha)).collect(),
+            lease: state.audio_cpp_yue2_install.clone(),
+        });
+    }
     let (scope, asset, sha256, lease) = match family {
         Family::HeartMuLa => (
             HEARTMULA_INSTALL,
@@ -232,6 +259,7 @@ fn managed_model(family: Family, state: &AppState) -> Option<ManagedModel> {
             audio_cpp_heartmula::SHA256,
             &state.heartmula_install,
         ),
+        Family::Ace => ("audio-cpp-ace-step", &audio_cpp_ace_step::ASSET, audio_cpp_ace_step::SHA256, &state.audio_cpp_ace_install),
         Family::StableAudio => (
             "audio-cpp-stable-audio",
             &audio_cpp_stable_audio::ASSET,
@@ -247,8 +275,7 @@ fn managed_model(family: Family, state: &AppState) -> Option<ManagedModel> {
     Some(ManagedModel {
         family,
         scope,
-        asset,
-        sha256,
+        assets: vec![(asset, sha256)],
         lease: lease.clone(),
     })
 }
@@ -303,7 +330,7 @@ pub(super) fn registered_model_ready(model: &ModelEntry) -> Option<bool> {
         return None;
     }
     let directory = match family {
-        Family::MiniMax if model.task == "gen" => Some(model.path.as_path()),
+        Family::MiniMax | Family::Yue if model.task == "gen" => Some(model.path.as_path()),
         Family::HeartMuLa
         | Family::StableAudio
         | Family::Magenta
@@ -312,6 +339,7 @@ pub(super) fn registered_model_ready(model: &ModelEntry) -> Option<bool> {
         | Family::MuLaCover
         | Family::ControlFoley
         | Family::Moss
+        | Family::Ace
             if model.task == "gen" =>
         {
             model.path.parent()
@@ -416,6 +444,8 @@ pub(super) async fn models(State(state): State<AppState>) -> Json<Value> {
         Family::Vevo2,
         Family::SoulX(audio_cpp_soulx::Variant::Synthesis),
         Family::SoulX(audio_cpp_soulx::Variant::Conversion),
+        Family::Yue,
+        Family::Ace,
     ]
     .map(|family| family.catalog(root.as_deref(), runtime_ready, soxr_ready));
     for model in &mut models {
@@ -492,12 +522,16 @@ async fn install_managed_model(
     root: PathBuf,
     managed: &ManagedModel,
 ) -> anyhow::Result<()> {
-    let asset = managed.asset;
-    let sha256 = managed.sha256;
     let name = managed.family.name();
     let downloader = state.acpp.downloader();
-    let target = downloader.path_of(asset);
-    tokio::task::spawn_blocking(move || repair_managed_file(&target, asset, sha256)).await??;
+    let assets = managed.assets.clone();
+    let repair = downloader.clone();
+    tokio::task::spawn_blocking(move || -> anyhow::Result<()> {
+        for (asset, sha256) in assets {
+            repair_managed_file(&repair.path_of(asset), asset, sha256)?;
+        }
+        Ok(())
+    }).await??;
     if !state.acpp.installed(build) {
         install_acpp(state, build, managed.scope)
             .await
@@ -511,7 +545,7 @@ async fn install_managed_model(
         anyhow::ensure!(state.acpp.soxr_ready(), "Install the libsoxr runtime for SoulX-Singer SVC.");
     }
     downloader
-        .install_all(managed.scope, &[asset])
+        .install_all(managed.scope, &managed.assets.iter().map(|(asset, _)| *asset).collect::<Vec<_>>())
         .await
         .with_context(|| format!("Installing {name} weights"))?;
     anyhow::ensure!(
@@ -683,11 +717,68 @@ fn task(request: &CreateMusicJobRequest) -> anyhow::Result<Value> {
     Ok(body)
 }
 
+pub(super) fn supports_replay(song: &library::Song) -> bool {
+    song.engine_id == ENGINE
+        && matches!(song.generation_settings["family"].as_str(), Some(audio_cpp_heartmula::FAMILY | audio_cpp_yue2::FAMILY | audio_cpp_ace_step::FAMILY))
+}
+
+fn saved_replay_request(
+    song: &library::Song,
+    options: ReplayMusicJobRequest,
+    family: Family,
+) -> Result<CreateMusicJobRequest, String> {
+    if options.extend_seconds.is_some() || options.solver.is_some()
+        || options.synth_batch_size.is_some_and(|batch| batch != 1)
+    {
+        return Err(format!("{} replay supports seed, steps and output overrides.", family.name()));
+    }
+    let mut request: CreateMusicJobRequest =
+        serde_json::from_value(song.generation_settings.clone())
+            .map_err(|error| format!("Invalid saved {} settings: {error}", family.name()))?;
+    request.music_source = Some(MusicSource::AudioCpp { model: family.id().into() });
+    request.style = song.caption.clone();
+    request.lyrics = song.lyrics.clone();
+    request.title = options.title.or_else(|| Some(song.title.clone()));
+    request.client_ref = options.client_ref;
+    if matches!(family, Family::HeartMuLa) {
+        request.cfg_scale = song.generation_settings["guidance_scale"].as_f64();
+    }
+    request.cover_prompt = song.metadata["cover_prompt"].as_str().map(str::to_owned);
+    request.steps = options.steps.or(request.steps);
+    request.seed = options.seed.or(request.seed);
+    request.output_format = options.output_format.or(request.output_format);
+    request.mp3_bitrate = options.mp3_bitrate.or(request.mp3_bitrate);
+    Ok(request)
+}
+
+pub(super) async fn replay(
+    state: AppState,
+    song: library::Song,
+    options: ReplayMusicJobRequest,
+    attempt: u32,
+) -> Result<(StatusCode, Json<MusicJob>), (StatusCode, Json<ApiError>)> {
+    let family = song.generation_settings["family"].as_str().and_then(Family::parse)
+        .ok_or_else(|| api_error(StatusCode::BAD_REQUEST, "The saved audio.cpp family is unavailable.".into()))?;
+    let request = saved_replay_request(&song, options, family)
+        .map_err(|error| api_error(StatusCode::BAD_REQUEST, error))?;
+    Ok(submit_with_source(state, request, family.id().into(), attempt, Some(&song)).await)
+}
+
 pub(super) async fn submit(
     state: AppState,
     request: CreateMusicJobRequest,
     model: String,
     attempt: u32,
+) -> (StatusCode, Json<MusicJob>) {
+    submit_with_source(state, request, model, attempt, None).await
+}
+
+async fn submit_with_source(
+    state: AppState,
+    request: CreateMusicJobRequest,
+    model: String,
+    attempt: u32,
+    source: Option<&library::Song>,
 ) -> (StatusCode, Json<MusicJob>) {
     let submitted = std::time::Instant::now();
     let reject = |status, reason| {
@@ -799,6 +890,22 @@ pub(super) async fn submit(
         "fade_out": request.fade_out.unwrap_or_default().max(0.0)
     });
     match (&family, &task) {
+        (Family::Ace, PreparedTask::Json(body)) => {
+            settings["duration_seconds"] = body["duration_seconds"].clone();
+            settings["steps"] = body["num_inference_steps"].clone();
+            settings["seed"] = body["seed"].clone();
+            settings["cfg_scale"] = Value::from(request.cfg_scale.unwrap_or(1.0));
+        }
+        (Family::Yue, PreparedTask::Json(body)) => {
+            settings["duration_seconds"] = Value::from(request.duration_seconds.unwrap_or(30.0));
+            settings["steps"] = body["num_inference_steps"].clone();
+            settings["seed"] = body["seed"].clone();
+            settings["cfg_scale"] = body["guidance_scale"].clone();
+            settings["abc"] = serde_json::json!(request.abc);
+            settings["cot"] = serde_json::json!(request.cot);
+            settings["semantic_sampling"] = serde_json::json!(request.semantic_sampling);
+            settings["semantic_tokens"] = serde_json::json!(request.semantic_tokens);
+        }
         (Family::MiniMax, PreparedTask::Json(body)) => {
             settings["weight_files"] = serde_json::json!(weights());
             settings["shared_weight_files"] = serde_json::json!(SHARED_WEIGHTS);
@@ -861,7 +968,7 @@ pub(super) async fn submit(
     let job = MusicJob {
         derived: match &task {
             PreparedTask::Cover(cover) => Some(cover.derived.clone()),
-            _ => None,
+            _ => source.map(|song| derivation(song, "replay", Value::Null)),
         },
         id: format!("audio-cpp-{}", uuid_suffix()),
         client_ref: request.client_ref.clone(),
