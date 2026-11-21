@@ -1,5 +1,6 @@
 use super::*;
 use crate::downloads::{Asset, AssetKind, Downloader};
+use sha2::{Digest, Sha256};
 
 const PINS: &str = include_str!("rvc_burn_assets.json");
 const SCOPE: &str = "rvc-burn-runtime";
@@ -63,6 +64,14 @@ impl Profile {
         }
     }
 
+    pub(super) fn from_folder(folder: &std::path::Path) -> Option<Self> {
+        match folder.file_name()?.to_str()? {
+            "cuda12" => Some(Self::Cuda12),
+            "cuda13" => Some(Self::Cuda13),
+            _ => None,
+        }
+    }
+
     fn runtime(self) -> &'static [Asset; 7] {
         static CUDA12: std::sync::OnceLock<[Asset; 7]> = std::sync::OnceLock::new();
         static CUDA13: std::sync::OnceLock<[Asset; 7]> = std::sync::OnceLock::new();
@@ -83,6 +92,19 @@ impl Profile {
         }
     }
 
+    fn sdk_assets(self) -> impl Iterator<Item = &'static Asset> {
+        self.runtime()
+            .iter()
+            .filter(|asset| pins()[asset.id].headers)
+    }
+
+    pub(super) fn sdk_dir(self, worker: &std::path::Path) -> PathBuf {
+        sdk_dir(
+            worker,
+            self.sdk_assets().map(|asset| pins()[asset.id].sha256),
+        )
+    }
+
     pub(super) fn assets(self, training: bool) -> impl Iterator<Item = &'static Asset> {
         static MODELS: std::sync::OnceLock<[Asset; 4]> = std::sync::OnceLock::new();
         let models = MODELS.get_or_init(|| {
@@ -94,29 +116,47 @@ impl Profile {
     }
 }
 
-// CubeCL compiles kernels with NVRTC and expects one CUDA SDK layout, including
-// CUDA headers that NVIDIA publishes in separate redistributable archives.
+fn sdk_dir<'a>(worker: &std::path::Path, hashes: impl IntoIterator<Item = &'a str>) -> PathBuf {
+    let mut digest = Sha256::new();
+    for hash in hashes {
+        digest.update(hash.as_bytes());
+        digest.update([0]);
+    }
+    worker.join(format!("cuda-sdk-{:x}", digest.finalize()))
+}
+
+// NVRTC expects the combined SDK layout, including NVIDIA's separate header archives.
 pub(super) fn prepare_sdk(profile: Profile, downloader: &Downloader) -> anyhow::Result<()> {
     let worker = downloader.runtime_dir(profile.folder());
-    let sdk = worker.join("cuda-sdk");
+    let sdk = profile.sdk_dir(&worker);
+    install_sdk(
+        &worker,
+        &sdk,
+        profile.sdk_assets().map(|asset| downloader.path_of(asset)),
+    )
+}
+
+fn install_sdk(
+    worker: &std::path::Path,
+    sdk: &std::path::Path,
+    archives: impl IntoIterator<Item = PathBuf>,
+) -> anyhow::Result<()> {
+    static PREPARE: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    let _guard = PREPARE.lock().unwrap_or_else(|error| error.into_inner());
     let complete = |root: &std::path::Path| {
         root.join("include/cuda_runtime.h").is_file()
             && root.join("include/crt/host_config.h").is_file()
             && (root.join("include/cuda/std/type_traits").is_file()
                 || root.join("include/cccl/cuda/std/type_traits").is_file())
     };
-    if complete(&sdk) {
+    if complete(sdk) {
         return Ok(());
     }
-    let stage = tempfile::tempdir_in(&worker)?;
-    for asset in profile
-        .runtime()
-        .iter()
-        .filter(|asset| pins()[asset.id].headers)
-    {
+    let stage = tempfile::tempdir_in(worker)?;
+    for archive in archives {
         use anyhow::Context as _;
-        let mut zip = zip::ZipArchive::new(std::fs::File::open(downloader.path_of(asset))?)
-            .with_context(|| format!("Read {}", asset.label))?;
+        let mut zip = zip::ZipArchive::new(std::fs::File::open(&archive)?)
+            .with_context(|| format!("Read CUDA SDK archive {}", archive.display()))?;
         for index in 0..zip.len() {
             let mut entry = zip.by_index(index)?;
             let Some(path) = entry.enclosed_name() else {
@@ -137,11 +177,14 @@ pub(super) fn prepare_sdk(profile: Profile, downloader: &Downloader) -> anyhow::
     );
     // Use a same-volume temporary directory so only a complete SDK becomes visible.
     if sdk.is_dir() {
-        let old = tempfile::tempdir_in(&worker)?;
-        std::fs::rename(&sdk, old.path().join("cuda-sdk"))?;
+        let old = tempfile::tempdir_in(worker)?;
+        std::fs::rename(sdk, old.path().join("cuda-sdk"))?;
     }
-    std::fs::rename(stage.path(), sdk)?;
-    Ok(())
+    match std::fs::rename(stage.path(), sdk) {
+        Ok(()) => Ok(()),
+        Err(_) if complete(sdk) => Ok(()),
+        Err(error) => Err(error.into()),
+    }
 }
 
 pub(super) fn selected() -> Result<Profile, &'static str> {
@@ -228,4 +271,56 @@ pub(super) async fn start(State(state): State<AppState>) -> impl IntoResponse {
 pub(super) async fn cancel(State(state): State<AppState>) -> Json<Value> {
     state.rvc_burn_downloads.cancel_for(SCOPE).await;
     rvc_burn::status(State(state)).await
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::Write as _;
+
+    #[test]
+    fn sdk_uses_current_pins_and_survives_concurrent_starts() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path();
+        let make_archive = |name: &str, marker: &str| {
+            let path = root.join(name);
+            let mut zip = zip::ZipWriter::new(std::fs::File::create(&path).unwrap());
+            for header in [
+                "cuda_runtime.h",
+                "crt/host_config.h",
+                "cccl/cuda/std/type_traits",
+            ] {
+                zip.start_file(
+                    format!("vendor/include/{header}"),
+                    zip::write::SimpleFileOptions::default(),
+                )
+                .unwrap();
+                zip.write_all(marker.as_bytes()).unwrap();
+            }
+            zip.finish().unwrap();
+            path
+        };
+        let old_archive = make_archive("old.zip", "old");
+        let new_archive = make_archive("new.zip", "new");
+        let old_pin = install_record::sha256_of(&old_archive).unwrap();
+        let new_pin = install_record::sha256_of(&new_archive).unwrap();
+        let old_sdk = sdk_dir(root, [old_pin.as_str(), "crt", "cccl"]);
+        let new_sdk = sdk_dir(root, [new_pin.as_str(), "crt", "cccl"]);
+        install_sdk(root, &old_sdk, [old_archive]).unwrap();
+        std::thread::scope(|scope| {
+            let first = scope.spawn(|| install_sdk(root, &new_sdk, [new_archive.clone()]));
+            let second = scope.spawn(|| install_sdk(root, &new_sdk, [new_archive.clone()]));
+            first.join().unwrap().unwrap();
+            second.join().unwrap().unwrap();
+        });
+        assert_ne!(old_sdk, new_sdk);
+        assert_eq!(
+            std::fs::read_to_string(old_sdk.join("include/cuda_runtime.h")).unwrap(),
+            "old"
+        );
+        assert_eq!(
+            std::fs::read_to_string(new_sdk.join("include/cuda_runtime.h")).unwrap(),
+            "new"
+        );
+    }
 }

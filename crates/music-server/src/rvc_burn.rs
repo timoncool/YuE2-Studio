@@ -131,7 +131,12 @@ impl Runtime {
         if let Some(sdk) = self
             .exe
             .parent()
-            .map(|folder| folder.join("cuda-sdk"))
+            .map(|folder| {
+                rvc_burn_install::Profile::from_folder(folder)
+                    .map(|profile| profile.sdk_dir(folder))
+                    .filter(|sdk| sdk.is_dir())
+                    .unwrap_or_else(|| folder.join("cuda-sdk"))
+            })
             .filter(|sdk| sdk.is_dir())
         {
             env.push(("CUDA_PATH".into(), sdk.into_os_string()));
