@@ -59,8 +59,9 @@ jobs:
         run: |
           set -e
           mkdir -p out
-          dmg="$(find desktop/src-tauri/target/release/bundle/dmg -name '*.dmg' | head -n 1)"
           version="$(node -p "require('./desktop/src-tauri/tauri.conf.json').version")"
+          product="$(node -p "require('./desktop/src-tauri/tauri.conf.json').productName")"
+          dmg="$(node scripts/release-target-dir.mjs)/bundle/dmg/${product}_${version}_aarch64.dmg"
           cp "$dmg" "out/YuE2-Studio-${version}-macos-arm64.dmg"
           ls -la out
       - uses: actions/upload-artifact@v4

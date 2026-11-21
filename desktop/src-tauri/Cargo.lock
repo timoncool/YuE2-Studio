@@ -5,7 +5,7 @@ version = 4
 [[package]]
 name = "acpp-server"
 version = "2.0.0"
-source = "git+https://github.com/timoncool/dub-studio?rev=bd27e1179221c7dc546177bdf6afa2f60ecc6791#bd27e1179221c7dc546177bdf6afa2f60ecc6791"
+source = "git+https://github.com/timoncool/dub-studio?rev=ef62573a6876389671c1077ad60ebc4108a7b2aa#ef62573a6876389671c1077ad60ebc4108a7b2aa"
 dependencies = [
  "base64 0.23.1",
  "dub-core",
@@ -1356,7 +1356,7 @@ dependencies = [
 [[package]]
 name = "dub-core"
 version = "2.0.0"
-source = "git+https://github.com/timoncool/dub-studio?rev=bd27e1179221c7dc546177bdf6afa2f60ecc6791#bd27e1179221c7dc546177bdf6afa2f60ecc6791"
+source = "git+https://github.com/timoncool/dub-studio?rev=ef62573a6876389671c1077ad60ebc4108a7b2aa#ef62573a6876389671c1077ad60ebc4108a7b2aa"
 dependencies = [
  "iced-x86",
  "libc",
@@ -1372,7 +1372,7 @@ dependencies = [
 [[package]]
 name = "dub-sep"
 version = "2.0.0"
-source = "git+https://github.com/timoncool/dub-studio?rev=bd27e1179221c7dc546177bdf6afa2f60ecc6791#bd27e1179221c7dc546177bdf6afa2f60ecc6791"
+source = "git+https://github.com/timoncool/dub-studio?rev=ef62573a6876389671c1077ad60ebc4108a7b2aa#ef62573a6876389671c1077ad60ebc4108a7b2aa"
 dependencies = [
  "dub-core",
  "thiserror 2.0.21",
@@ -1383,7 +1383,7 @@ dependencies = [
 [[package]]
 name = "dub-tcpp"
 version = "2.0.0"
-source = "git+https://github.com/timoncool/dub-studio?rev=bd27e1179221c7dc546177bdf6afa2f60ecc6791#bd27e1179221c7dc546177bdf6afa2f60ecc6791"
+source = "git+https://github.com/timoncool/dub-studio?rev=ef62573a6876389671c1077ad60ebc4108a7b2aa#ef62573a6876389671c1077ad60ebc4108a7b2aa"
 dependencies = [
  "libloading 0.9.1",
 ]

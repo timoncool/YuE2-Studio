@@ -242,6 +242,17 @@ async fn submit(
             "Studio data folder is unavailable.".into(),
         );
     };
+    if let Some(options) = request.minimax.as_ref().filter(|options| !options.adapters.is_empty()) {
+        let available = native_minimax::Runtime::installation(&root).native_adapters();
+        for adapter in &options.adapters {
+            let compatible = available.iter().any(|entry| entry.meta.id == adapter.name
+                && (adapter.lm_scale == 0.0 || entry.meta.slots.iter().any(|slot| slot == "lm"))
+                && (adapter.dit_scale == 0.0 || entry.meta.slots.iter().any(|slot| slot == "dit")));
+            if !compatible {
+                return reject(StatusCode::BAD_REQUEST, format!("MiniMax adapter {} is unavailable for the requested slots", adapter.name));
+            }
+        }
+    }
     if let Err(error) = state.ace_runtime.stop().await {
         return reject(StatusCode::CONFLICT, format!("ACE-Step is busy: {error:#}"));
     }

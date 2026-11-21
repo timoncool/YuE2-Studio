@@ -422,7 +422,6 @@ pub(super) async fn models(State(state): State<AppState>) -> Json<Value> {
         .is_ok_and(|build| state.acpp.exe(*build).is_file() && state.acpp.installed(*build));
     let soxr_ready = state.acpp.soxr_ready();
     let mut models = [
-        Family::Yue,
         Family::MiniMax,
         Family::MiniMaxH3,
         Family::HeartMuLa,
@@ -433,6 +432,7 @@ pub(super) async fn models(State(state): State<AppState>) -> Json<Value> {
         Family::Vevo2,
         Family::SoulX(audio_cpp_soulx::Variant::Synthesis),
         Family::SoulX(audio_cpp_soulx::Variant::Conversion),
+        Family::Yue,
     ]
     .map(|family| family.catalog(root.as_deref(), runtime_ready, soxr_ready));
     for model in &mut models {

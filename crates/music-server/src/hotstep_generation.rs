@@ -1,4 +1,4 @@
-//! MiniMax Music3 on the published HOT-Step Windows CPU runtime.
+//! Shared generation jobs for the published HOT-Step Windows CPU runtime.
 use super::*;
 use crate::{hotstep_cover_assets as runtime, hotstep_runtime};
 use anyhow::{Context, ensure};
@@ -7,8 +7,80 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
 pub(super) const PROFILE: &str = "hotstep-minimax-music3";
-const MODEL: &str = "MiniMax Music3";
-const SCOPE: &str = PROFILE;
+pub(super) const ACE_PROFILE: &str = "hotstep-ace-step-1.5";
+
+#[derive(Clone, Copy)]
+pub(super) enum Family {
+    MiniMax,
+    Ace,
+}
+
+impl Family {
+    fn id(self) -> &'static str {
+        match self {
+            Self::MiniMax => PROFILE,
+            Self::Ace => ACE_PROFILE,
+        }
+    }
+    fn name(self) -> &'static str {
+        match self {
+            Self::MiniMax => "MiniMax Music3",
+            Self::Ace => "ACE-Step 1.5",
+        }
+    }
+    fn family(self) -> &'static str {
+        match self {
+            Self::MiniMax => "minimax_music3",
+            Self::Ace => "ace_step",
+        }
+    }
+    fn folder(self) -> &'static str {
+        match self {
+            Self::MiniMax => "minimax-music3",
+            Self::Ace => "ace-step-1.5",
+        }
+    }
+    fn telemetry(self) -> &'static str {
+        match self {
+            Self::MiniMax => "hotstep.minimax",
+            Self::Ace => "hotstep.ace",
+        }
+    }
+    fn label(self) -> &'static str {
+        match self {
+            Self::MiniMax => "MiniMax Music3 · HOT-Step · Compact (experimental)",
+            Self::Ace => "ACE-Step 1.5 Turbo · HOT-Step · Q8_0 (experimental)",
+        }
+    }
+    fn license(self) -> &'static str {
+        match self {
+            Self::MiniMax => {
+                "https://huggingface.co/scragnog/MiniMax-Music3-GGUF/blob/67b48c3028544e4ad9c26946b7c7c840f355ec2b/LICENSE"
+            }
+            Self::Ace => {
+                "https://huggingface.co/Serveurperso/ACE-Step-1.5-GGUF/tree/666ac70204440867d8c01ba4b119cc79c95b370a"
+            }
+        }
+    }
+    fn assets(self) -> &'static [(downloads::Asset, &'static str)] {
+        match self {
+            Self::MiniMax => &WEIGHTS,
+            Self::Ace => &crate::hotstep_ace_assets::ASSETS,
+        }
+    }
+    fn lock(self, state: &AppState) -> Arc<tokio::sync::Mutex<()>> {
+        match self {
+            Self::MiniMax => state.hotstep_minimax_install.clone(),
+            Self::Ace => state.hotstep_ace_install.clone(),
+        }
+    }
+    fn supported(self, downloader: &downloads::Downloader) -> bool {
+        match self {
+            Self::MiniMax => runtime::server(downloader).is_some(),
+            Self::Ace => runtime::managed_revision().is_some(),
+        }
+    }
+}
 const ENGINE: &str = hotstep_cover::ENGINE;
 
 macro_rules! weight {
@@ -54,57 +126,79 @@ const WEIGHTS: [(downloads::Asset, &str); 5] = [
 pub(super) fn sha256(url: &str) -> Option<&'static str> {
     WEIGHTS
         .iter()
+        .chain(crate::hotstep_ace_assets::ASSETS.iter())
         .find_map(|(asset, sha)| (asset.url == url).then_some(*sha))
 }
 
-fn missing(downloader: &downloads::Downloader) -> Vec<&'static downloads::Asset> {
-    WEIGHTS
-        .iter()
-        .map(|(asset, _)| asset)
-        .filter(|asset| {
-            !std::fs::metadata(downloader.path_of(asset))
-                .is_ok_and(|file| file.is_file() && file.len() == asset.bytes)
-        })
-        .chain(runtime::missing_runtime(downloader))
+fn missing(downloader: &downloads::Downloader, family: Family) -> Vec<&'static downloads::Asset> {
+    runtime::missing_runtime(downloader)
+        .into_iter()
+        .chain(
+            family
+                .assets()
+                .iter()
+                .filter(|(asset, sha)| {
+                    let path = downloader.path_of(asset);
+                    !std::fs::metadata(&path)
+                        .is_ok_and(|file| file.is_file() && file.len() == asset.bytes)
+                        || (asset.marker.ends_with(".lua")
+                            && !crate::install_record::sha256_of(&path)
+                                .is_ok_and(|actual| actual == *sha))
+                })
+                .map(|(asset, _)| asset),
+        )
         .collect()
 }
 
-pub(super) async fn profile(state: &AppState, engine_installed: bool) -> Value {
+pub(super) async fn profile(state: &AppState, engine_installed: bool, family: Family) -> Value {
     let downloader = &state.hotstep_cover;
-    let missing = missing(downloader);
-    let installing = state.hotstep_minimax_install.try_lock().is_err();
+    let missing = missing(downloader, family);
+    let installing = family.lock(state).try_lock().is_err();
     serde_json::json!({
-        "id": PROFILE, "label": "MiniMax Music3 · HOT-Step · Compact (experimental)",
-        "status": "experimental", "ready": engine_installed && missing.is_empty() && !installing,
-        "installable": runtime::server(downloader).is_some(),
+        "id": family.id(), "label": family.label(),
+        "status": "experimental", "ready": family.supported(downloader) && engine_installed && missing.is_empty() && !installing,
+        "installable": family.supported(downloader),
         "installing": installing,
-        "download": downloader.active_for(SCOPE).await,
+        "download": downloader.active_for(family.id()).await,
         "missing": missing.iter().map(|asset| asset.label).collect::<Vec<_>>(),
         "missing_bytes": missing.iter().map(|asset| asset.bytes).sum::<u64>(),
-        "license_url": "https://huggingface.co/scragnog/MiniMax-Music3-GGUF/blob/67b48c3028544e4ad9c26946b7c7c840f355ec2b/LICENSE",
+        "license_url": family.license(),
     })
 }
 
 pub(super) async fn install(
     State(state): State<AppState>,
 ) -> Result<Json<Value>, (StatusCode, Json<ApiError>)> {
+    install_family(state, Family::MiniMax).await
+}
+pub(super) async fn install_ace(
+    State(state): State<AppState>,
+) -> Result<Json<Value>, (StatusCode, Json<ApiError>)> {
+    install_family(state, Family::Ace).await
+}
+async fn install_family(
+    state: AppState,
+    family: Family,
+) -> Result<Json<Value>, (StatusCode, Json<ApiError>)> {
+    let scope = family.id();
     let downloader = state.hotstep_cover.clone();
-    if runtime::missing_runtime(&downloader).is_none()
-        && !runtime::server(&downloader).is_some_and(|path| path.is_file())
+    if !family.supported(&downloader)
+        || (runtime::missing_runtime(&downloader).is_none()
+            && !runtime::server(&downloader).is_some_and(|path| path.is_file()))
     {
         return Err(api_error(
             StatusCode::SERVICE_UNAVAILABLE,
-            "The managed HOT-Step MiniMax profile is available on Windows.".into(),
+            "The managed HOT-Step profile is available on Windows.".into(),
         ));
     }
-    let Ok(lease) = state.hotstep_minimax_install.clone().try_lock_owned() else {
+    let Ok(lease) = family.lock(&state).try_lock_owned() else {
         return Ok(Json(serde_json::json!({"installing": true})));
     };
-    let missing = missing(&downloader);
+    let missing = missing(&downloader, family);
     if missing.is_empty() {
         return Ok(Json(serde_json::json!({"ready": true})));
     }
-    downloader.clear_finished(SCOPE).await;
+    downloader.clear_finished(scope).await;
     tokio::spawn(async move {
         let _lease = lease;
         let result = async {
@@ -119,11 +213,11 @@ pub(super) async fn install(
                 Ok(())
             })
             .await??;
-            downloader.install_all(SCOPE, &missing).await
+            downloader.install_all(scope, &missing).await
         }
         .await;
         if let Err(error) = result {
-            downloader.fail(SCOPE, format!("{error:#}")).await;
+            downloader.fail(scope, format!("{error:#}")).await;
         }
     });
     Ok(Json(serde_json::json!({"installing": true})))
@@ -169,12 +263,63 @@ fn payload(request: &mut CreateMusicJobRequest) -> anyhow::Result<Value> {
     )
 }
 
+fn ace_payload(request: &mut CreateMusicJobRequest) -> anyhow::Result<Value> {
+    ensure!(
+        !request.style.trim().is_empty() || !request.lyrics.trim().is_empty(),
+        "Enter a style or lyrics."
+    );
+    ensure!(
+        request.ace.is_none()
+            && request.adapters.is_empty()
+            && request.cover_of.is_none()
+            && request
+                .abc
+                .as_deref()
+                .is_none_or(|abc| abc.trim().is_empty()),
+        "HOT-Step ACE-Step Turbo accepts style and lyrics for text-to-music."
+    );
+    let duration = request.duration_seconds.unwrap_or(30.0);
+    let seed = request.seed.unwrap_or(42);
+    let steps = request.steps.unwrap_or(8);
+    let cfg = request.cfg_scale.unwrap_or(1.0);
+    ensure!(
+        (1.0..=300.0).contains(&duration),
+        "HOT-Step ACE-Step duration must be between 1 and 300 seconds."
+    );
+    ensure!(
+        (1..=100).contains(&steps) && seed >= 0 && cfg > 0.0 && cfg.is_finite(),
+        "Enter 1–100 steps, a nonnegative seed and positive guidance."
+    );
+    request.duration_seconds = Some(duration);
+    request.seed = Some(seed);
+    request.steps = Some(steps);
+    request.cfg_scale = Some(cfg);
+    let lyrics = if request.lyrics.trim().is_empty() {
+        "[Instrumental]"
+    } else {
+        &request.lyrics
+    };
+    Ok(
+        serde_json::json!({"task_type":"text2music","caption":request.style,"lyrics":lyrics,
+        "duration":duration,"seed":seed,"inference_steps":steps,"guidance_scale":cfg,
+        "shift":3,"solver":"euler","output_format":"wav16"}),
+    )
+}
+
 pub(super) async fn submit(
     state: AppState,
     request: CreateMusicJobRequest,
     attempt: u32,
 ) -> (StatusCode, Json<MusicJob>) {
-    submit_from(state, request, attempt, None).await
+    submit_from(state, request, attempt, None, Family::MiniMax).await
+}
+
+pub(super) async fn submit_ace(
+    state: AppState,
+    request: CreateMusicJobRequest,
+    attempt: u32,
+) -> (StatusCode, Json<MusicJob>) {
+    submit_from(state, request, attempt, None, Family::Ace).await
 }
 
 pub(super) async fn replay(
@@ -182,6 +327,7 @@ pub(super) async fn replay(
     song: library::Song,
     options: ReplayMusicJobRequest,
     attempt: u32,
+    family: Family,
 ) -> Result<(StatusCode, Json<MusicJob>), (StatusCode, Json<ApiError>)> {
     if options.extend_seconds.is_some()
         || options.solver.is_some()
@@ -189,14 +335,14 @@ pub(super) async fn replay(
     {
         return Err(api_error(
             StatusCode::BAD_REQUEST,
-            "The HOT-Step MiniMax profile replays one whole song with its saved request.".into(),
+            "This HOT-Step profile replays one whole song with its saved request.".into(),
         ));
     }
     let mut request: CreateMusicJobRequest =
         serde_json::from_value(song.generation_settings.clone()).map_err(|error| {
             api_error(
                 StatusCode::BAD_REQUEST,
-                format!("Invalid saved HOT-Step MiniMax settings: {error}"),
+                format!("Invalid saved HOT-Step settings: {error}"),
             )
         })?;
     request.style = song.caption.clone();
@@ -207,7 +353,7 @@ pub(super) async fn replay(
     request.seed = options.seed.or(request.seed);
     request.output_format = options.output_format.or(request.output_format);
     request.mp3_bitrate = options.mp3_bitrate.or(request.mp3_bitrate);
-    Ok(submit_from(state, request, attempt, Some(&song)).await)
+    Ok(submit_from(state, request, attempt, Some(&song), family).await)
 }
 
 async fn submit_from(
@@ -215,6 +361,7 @@ async fn submit_from(
     mut request: CreateMusicJobRequest,
     attempt: u32,
     source: Option<&library::Song>,
+    family: Family,
 ) -> (StatusCode, Json<MusicJob>) {
     let submitted = Instant::now();
     let reject = |request: &CreateMusicJobRequest, status, reason| {
@@ -224,17 +371,21 @@ async fn submit_from(
         )
     };
     let downloader = &state.hotstep_cover;
-    let Some(exe) =
-        runtime::server(downloader).filter(|path| path.is_file() && missing(downloader).is_empty())
-    else {
+    let Some(exe) = runtime::server(downloader).filter(|path| {
+        family.supported(downloader) && path.is_file() && missing(downloader, family).is_empty()
+    }) else {
         return reject(
             &request,
             StatusCode::SERVICE_UNAVAILABLE,
-            "Install the HOT-Step MiniMax Music3 profile in Create.".into(),
+            format!("Install the HOT-Step {} profile in Create.", family.name()),
         );
     };
-    let models = runtime::model_folder(downloader).join("minimax-music3");
-    let body = match payload(&mut request) {
+    let models = runtime::model_folder(downloader).join(family.folder());
+    let native = match family {
+        Family::MiniMax => payload(&mut request),
+        Family::Ace => ace_payload(&mut request),
+    };
+    let body = match native {
         Ok(value) => value,
         Err(error) => return reject(&request, StatusCode::BAD_REQUEST, error.to_string()),
     };
@@ -270,9 +421,9 @@ async fn submit_from(
         );
     }
     state.minimax.stop().await;
-    evict_kept_models(&state, "before HOT-Step MiniMax generation").await;
+    evict_kept_models(&state, "before HOT-Step generation").await;
     let job = MusicJob {
-        id: format!("hotstep-minimax-{}", uuid_suffix()),
+        id: format!("{}-{}", family.id(), uuid_suffix()),
         client_ref: request.client_ref.clone(),
         submitted_at: unix_millis(),
         engine_id: ENGINE.into(),
@@ -285,14 +436,14 @@ async fn submit_from(
         lyrics: request.lyrics.clone(),
         duration_seconds: request.duration_seconds.unwrap_or_default(),
         generation_settings: serde_json::json!({"music_source": request.music_source,
-            "family":"minimax_music3", "profile_id":PROFILE, "model":MODEL, "output_format":format,
+            "family":family.family(), "profile_id":family.id(), "model":family.name(), "output_format":format,
             "runtime_revision":runtime::managed_revision(), "native_request":body,
             "duration_seconds":request.duration_seconds, "seed":request.seed, "steps":request.steps,
             "cfg_scale":request.cfg_scale, "fade_in":request.fade_in, "fade_out":request.fade_out,
             "mp3_bitrate":request.mp3_bitrate}),
         song: None,
         songs: vec![],
-        message: "MiniMax Music3 is generating through HOT-Step.".into(),
+        message: format!("{} is generating through HOT-Step.", family.name()),
         code: None,
         params: None,
         playlist_id: request.playlist_id.clone(),
@@ -329,7 +480,7 @@ async fn submit_from(
     tokio::spawn(async move {
         let _lease = lease;
         let outcome = async {
-            let audio = render(&exe, &models, body, &stop).await?;
+            let audio = render(&exe, &models, body, &stop, family).await?;
             let fades = (
                 request.fade_in.unwrap_or_default(),
                 request.fade_out.unwrap_or_default(),
@@ -343,9 +494,9 @@ async fn submit_from(
         audio_cpp_music::complete_local(
             &state,
             &job.id,
-            MODEL,
-            PROFILE,
-            "hotstep.minimax",
+            family.name(),
+            family.id(),
+            family.telemetry(),
             submitted,
             outcome,
         )
@@ -360,32 +511,38 @@ async fn render(
     models: &FsPath,
     body: Value,
     stop: &AtomicBool,
+    family: Family,
 ) -> anyhow::Result<Vec<u8>> {
+    let prefix = match family {
+        Family::MiniMax => "/mm3",
+        Family::Ace => "",
+    };
     let (_child, http, url, props) =
-        hotstep_runtime::start(exe, models, "/mm3/props", stop).await?;
-    ensure!(
-        props["synth_ready"] == true,
-        "HOT-Step MiniMax Music3 weights are incompatible."
-    );
+        hotstep_runtime::start(exe, models, &format!("{prefix}/props"), stop).await?;
+    if matches!(family, Family::MiniMax) {
+        ensure!(
+            props["synth_ready"] == true,
+            "HOT-Step MiniMax Music3 weights are incompatible."
+        );
+    }
     let accepted = hotstep_runtime::json_response(
-        http.post(format!("{url}/mm3/synth"))
+        http.post(format!("{url}{prefix}/synth"))
             .json(&body)
             .send()
             .await?,
     )
     .await?;
-    let id = accepted["job_id"]
+    let id = accepted["id"]
         .as_str()
-        .context("HOT-Step did not return a MiniMax job ID")?;
+        .or_else(|| accepted["job_id"].as_str())
+        .filter(|id| !id.is_empty() && id.bytes().all(|byte| byte.is_ascii_hexdigit()))
+        .context("HOT-Step did not return a valid job ID")?;
     let deadline = Instant::now() + Duration::from_secs(1800);
     loop {
         ensure!(!stop.load(Ordering::SeqCst), "Stopped.");
-        ensure!(
-            Instant::now() < deadline,
-            "HOT-Step MiniMax Music3 timed out."
-        );
+        ensure!(Instant::now() < deadline, "HOT-Step generation timed out.");
         let state = hotstep_runtime::json_response(
-            http.get(format!("{url}/mm3/job"))
+            http.get(format!("{url}{prefix}/job"))
                 .query(&[("id", id)])
                 .send()
                 .await?,
@@ -394,15 +551,19 @@ async fn render(
         match state["status"].as_str() {
             Some("done" | "completed") => break,
             Some("failed" | "error" | "cancelled") => {
-                anyhow::bail!("HOT-Step MiniMax Music3 failed: {state}")
+                anyhow::bail!("HOT-Step generation failed: {state}")
             }
             _ => tokio::time::sleep(Duration::from_millis(300)).await,
         }
     }
     ensure!(!stop.load(Ordering::SeqCst), "Stopped.");
+    let (result, query) = match family {
+        Family::MiniMax => ("/mm3/take", [("id", id), ("take", "0")]),
+        Family::Ace => ("/job", [("id", id), ("result", "1")]),
+    };
     let response = http
-        .get(format!("{url}/mm3/take"))
-        .query(&[("id", id), ("take", "0")])
+        .get(format!("{url}{result}"))
+        .query(&query)
         .send()
         .await?
         .error_for_status()?;

@@ -592,6 +592,7 @@ const JOURNAL: &[(&str, &str, &str)] = &[
     ("separator_runtime_install", "started", "download"),
     ("hotstep_cover_install", "started", "download"),
     ("hotstep_minimax_install", "started", "download"),
+    ("hotstep_ace_install", "started", "download"),
     ("hotstep_sa3_install", "started", "download"),
     ("mulacover_runtime_install", "started", "download"),
     ("vevo2_model_directory_set", "updated", "settings"),
@@ -1093,7 +1094,11 @@ fn song_create_schema(mut properties: Value) -> Value {
         "properties": {
             "lm_cfg": { "type": "number", "minimum": 0 },
             "lm_top_k": { "type": "integer", "minimum": 1, "maximum": i32::MAX },
-            "dit_cfg": { "type": "number", "minimum": 0 }
+            "dit_cfg": { "type": "number", "minimum": 0 },
+            "adapters": {"type": "array", "items": {"type": "object", "additionalProperties": false,
+                "required": ["name", "lm_scale", "dit_scale"], "properties": {
+                    "name": {"type": "string"}, "lm_scale": {"type": "number"}, "dit_scale": {"type": "number"}
+                }}}
         }
     });
     properties["backing_song_id"] = json!({"type":"string","description":"Instrumental library song to use unchanged as the backing. Requires native YuE2, a matching Chord bed in abc, lyrics, and a ready vocal separator. Returns a mixed WAV."});
@@ -2415,6 +2420,12 @@ fn tools() -> &'static [Tool] {
                 description: "Install the HOT-Step HeartMuLa 3B Q8_0 generation profile. Read progress in hotstep_cover_profiles.",
                 schema: nothing,
                 call: |_| post("/v1/music/native/hotstep/heartmula/install".into(), json!({})),
+            },
+            Tool {
+                name: "hotstep_ace_install",
+                description: "Install the published HOT-Step runtime, pinned Lua plugins and ACE-Step 1.5 Turbo generation weights. Read progress in hotstep_cover_profiles.",
+                schema: nothing,
+                call: |_| post("/v1/music/native/hotstep/ace-step-1.5/install".into(), json!({})),
             },
             Tool {
                 name: "hotstep_minimax_install",
