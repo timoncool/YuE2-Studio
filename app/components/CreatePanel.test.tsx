@@ -1280,6 +1280,27 @@ describe('an instrumental (#217)', () => {
     else expect(sent[0].adapters).toBeUndefined();
   });
 
+  it.each([
+    { settings: [{ name: 'yue2-instrumental', ar_scale: 1, nar_scale: 0 }], instrumental: true },
+    { settings: [], instrumental: false },
+  ])('only restores old section-only prompts as instrumental with the catalogued LoRA ($instrumental)', async ({ settings, instrumental }) => {
+    const abc = 'X:1\nM:4/4\nL:1/16\nQ:1/4=96\nK:C\nV:Vocal\nz16|\nV:Ins\nC16|';
+    const lyrics = '[Verse]\n\n[Chorus]';
+    const song = { title: 'Old take', ditModel: 'yue2-cpp', style: 'Calm folk', lyrics,
+      generationParams: { abc, cot: 'full', adapters: settings, seed: 721, lm_seed: 721 },
+    } as Song;
+    instrumentalScore.mockImplementation(async score => ({ abc: score, moved: 0, trimmed: 0, dropped: 0 }));
+    act(() => root.render(panel({ initialData: { song, timestamp: 2 } })));
+    await flush();
+    expect(Boolean(buttonNamed('createInstrumental'))).toBe(instrumental);
+    click(buttonNamed(instrumental ? 'createInstrumental' : 'create')!);
+    await flush();
+    expect(sent[0]).toMatchObject({ abc, lyrics, seed: 721, lm_seed: 721 });
+    expect(sent[0].instrumental_only).toBe(instrumental ? true : undefined);
+    if (instrumental) expect(sent[0].adapters).toEqual([{ id: 'yue2-instrumental', scales: { ar: 1, nar: 0 } }]);
+    else expect(sent[0].adapters).toBeUndefined();
+  });
+
   it('keeps a score written for one submission out of the form and writes a new one for the next', async () => {
     act(() => root.render(panel({})));
     await flush();

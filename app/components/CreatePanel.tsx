@@ -31,7 +31,7 @@ import { trackMidiBase64 } from '../services/midiEditor';
 import { composePlans, composeScore, transcribe, type ScorePlan } from '../services/transcription';
 import { bedLine, chordBed, failed, instrumentalScore, matchSections, type BedSection, type SectionProposal } from '../services/scoreApi';
 import { BackingTempo } from './BackingTempo';
-import { sectionTagsOnly } from '../services/instrumental';
+import { hasOnlySectionTags, sectionTagsOnly } from '../services/instrumental';
 import { lyricSyllables, syllableChangesOf, type SyllableChange } from '../services/syllables';
 import { profileLabel as setLabel, setupLabel, type SetupChoice } from '../services/modelCatalog';
 import { REQUEST_FILE_ACCEPT, parseRequestFile, requestFileTitle, serializeRequest, type RequestFileFormat } from '../services/requestFile';
@@ -995,8 +995,10 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
     setResingFrom(null);
     instrumentalRun.current += 1;
     instrumentalChange.current = null;
+    const savedAdapters = usesFromSettings(request);
     const keepInstrumental = request.instrumental_only === true ||
-      (request.instrumental_only === undefined && typeof request.lyrics === 'string' && /^\[instrumental\]$/i.test(request.lyrics.trim()));
+      (request.instrumental_only === undefined && typeof request.lyrics === 'string' &&
+        hasOnlySectionTags(request.lyrics) && savedAdapters.some(adapter => adapter.id === INSTRUMENTAL_LORA));
     setInstrumental(keepInstrumental);
     setInstrumentalLoraLoading(false);
     setInstrumentalAdapterPrepared(keepInstrumental);
@@ -1032,7 +1034,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
     setRealaudio(request.companion_scale === undefined ? 'auto' : request.companion_scale === 0 ? 'off' : 'on');
     if (request.mp3_bitrate !== undefined) setMp3Bitrate(asText(request.mp3_bitrate));
     if (request.output_format === 'mp3' || request.output_format === 'flac' || request.output_format === 'wav32') setFormat(request.output_format);
-    if (Array.isArray(request.adapters)) setAdapters(usesFromSettings(request));
+    if (Array.isArray(request.adapters)) setAdapters(savedAdapters);
     setError(null);
   }, [cancelCoverRead]);
 
