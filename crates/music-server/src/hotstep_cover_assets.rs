@@ -119,8 +119,12 @@ pub(super) fn sha256(url: &str) -> Option<&'static str> {
         .find_map(|(asset, sha)| (asset.url == url).then_some(*sha))
 }
 
+fn server_override() -> Option<std::ffi::OsString> {
+    std::env::var_os("YUE_HOTSTEP_SERVER").filter(|path| !path.is_empty())
+}
+
 pub(super) fn server(downloader: &Downloader) -> Option<PathBuf> {
-    if let Some(path) = std::env::var_os("YUE_HOTSTEP_SERVER") {
+    if let Some(path) = server_override() {
         return Some(path.into());
     }
     #[cfg(windows)]
@@ -148,7 +152,7 @@ pub(super) fn missing(downloader: &Downloader) -> Vec<&'static Asset> {
         })
         .collect();
     #[cfg(windows)]
-    if std::env::var_os("YUE_HOTSTEP_SERVER").is_none() && !downloader.is_installed(&WIN) {
+    if server_override().is_none() && !downloader.is_installed(&WIN) {
         missing.push(&WIN);
     }
     missing
