@@ -55,8 +55,12 @@ vi.mock('./WindowAudioCapture', () => ({
   WindowAudioCapture: ({ disabled, onRecording }: { disabled: boolean; onRecording: (file: File) => void }) =>
     <button disabled={disabled} onClick={() => onRecording(new File(['RIFF'], 'window-audio.wav', { type: 'audio/wav' }))}>Finish fixture recording</button>,
 }));
-vi.mock('./midi/MidiEditor', () => ({ MidiEditor: () => null }));
-vi.mock('./MidiImportDialog', () => ({ MidiImportDialog: () => null }));
+vi.mock('./midi/MidiEditor', () => ({
+  MidiEditor: ({ source }: { source: { abc: string } }) => <div role="dialog" aria-label="MIDI editor">{source.abc}</div>,
+}));
+vi.mock('./MidiImportDialog', () => ({
+  MidiImportDialog: ({ initial }: { initial: { name: string } }) => <div role="dialog" aria-label="MIDI import">{initial.name}</div>,
+}));
 vi.mock('./PlaylistModals', () => ({ CreatePlaylistModal: () => null }));
 vi.mock('./SlideToEnable', () => ({
   SlideToEnable: ({ on, onChange, offLabel, stopLabel }: { on: boolean; onChange: (on: boolean) => void; offLabel: string; stopLabel: string }) =>
@@ -96,11 +100,11 @@ afterEach(() => {
 
 const flush = () => act(async () => { await new Promise(resolve => setTimeout(resolve, 0)); });
 
-function panel(props: Pick<React.ComponentProps<typeof CreatePanel>, 'musicEngine' | 'onMusicEngineChange' | 'onOpenEngines' | 'onCancelJob' | 'activeJobCount' | 'queueBusy'> & { initialData?: { song: Song; timestamp: number } | null; visible?: boolean; request?: React.ComponentProps<typeof CreatePanel>['request']; onGenerate?: (request: YueRequest) => void }) {
+function panel(props: Pick<React.ComponentProps<typeof CreatePanel>, 'musicEngine' | 'onMusicEngineChange' | 'onOpenEngines' | 'onCancelJob' | 'activeJobCount' | 'queueBusy'> & Partial<Pick<React.ComponentProps<typeof CreatePanel>, 'playlists' | 'playlistId' | 'onChoosePlaylist'>> & { initialData?: { song: Song; timestamp: number } | null; visible?: boolean; request?: React.ComponentProps<typeof CreatePanel>['request']; onGenerate?: (request: YueRequest) => void }) {
   return (
     <Activity mode={props.visible === false ? 'hidden' : 'visible'}>
       <CreatePanel musicEngine={props.musicEngine} onMusicEngineChange={props.onMusicEngineChange} onOpenEngines={props.onOpenEngines} onCancelJob={props.onCancelJob} onGenerate={props.onGenerate ?? (request => sent.push(request))} isGenerating={Boolean(props.activeJobCount)} queueBusy={props.queueBusy} activeJobCount={props.activeJobCount} request={props.request} initialData={props.initialData ?? null}
-        playlists={[]} onCreatePlaylist={async () => null} playlistId="" onChoosePlaylist={() => undefined} />
+        playlists={props.playlists ?? []} onCreatePlaylist={async () => null} playlistId={props.playlistId ?? ''} onChoosePlaylist={props.onChoosePlaylist ?? (() => undefined)} />
     </Activity>
   );
 }
@@ -337,6 +341,29 @@ it('keeps an edited score across a cloud session and reopening the native form',
   expect(JSON.parse(localStorage.getItem('studio.createDraft')!)).toMatchObject({ style: 'folk', lyrics: 'verse', abc: score, cot: 'melody' });
   click(host.querySelector('button[title="resetPrompt"]')!);
   expect(JSON.parse(localStorage.getItem('studio.createDraft')!)).toMatchObject({ style: '', lyrics: '', abc: '', cot: '', continueScore: '' });
+});
+
+it.each(['midi', 'score'] as const)('opens the YuE2 %s editor when the library action arrives in OpenRouter', async kind => {
+  const song = { id: 'piece', title: 'Piece', lyrics: '' } as Song;
+  const abc = 'X:1\nK:C\nC D E F|';
+  const midiUrl = '/v1/library/songs/piece/midi/file';
+  const fetcher = vi.fn(async (url: string) => url === midiUrl
+    ? new Response(new Uint8Array([77, 84, 104, 100]))
+    : Response.json({}));
+  vi.stubGlobal('fetch', fetcher);
+  const request: NonNullable<React.ComponentProps<typeof CreatePanel>['request']> =
+    kind === 'midi' ? { id: 1, kind, song } : { id: 1, kind, abc, edit: true };
+  function LibraryAction({ open }: { open: boolean }) {
+    const [engine, select] = React.useState<React.ComponentProps<typeof CreatePanel>['musicEngine']>('openrouter');
+    return panel({ musicEngine: engine, onMusicEngineChange: select, request: open ? request : undefined });
+  }
+  act(() => root.render(<LibraryAction open={false} />));
+  await flush();
+  act(() => root.render(<LibraryAction open />));
+  await flush();
+  expect(host.querySelector(kind === 'midi' ? '[aria-label="MIDI import"]' : '[aria-label="MIDI editor"]')?.textContent)
+    .toBe(kind === 'midi' ? 'Piece.mid' : abc);
+  expect(fetcher.mock.calls.filter(([url]) => url === midiUrl)).toHaveLength(Number(kind === 'midi'));
 });
 
 it('keeps settings by native engine and profile and submits the selected pair', async () => {
@@ -1592,6 +1619,40 @@ it('lists signed model pairs for this platform and installs only the selected en
   choose('Model', 'local');
   choose('Model', 'signed:signed-model');
   expect(select('Music engine').value).toBe('engine-b');
+});
+
+it('submits a signed music job to the Create Here playlist', async () => {
+  vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+    if (url === '/v1/components/music-engines') return Response.json({
+      platform: 'windows-x86_64',
+      engines: [{ id: 'engine', name: 'Engine', version: '1', platform: 'windows-x86_64', protocol: 'music-http-v1', files: [] }],
+      models: [{ id: 'weights', name: 'Weights', version: '1', engines: ['engine'], files: [] }],
+    });
+    if (url.endsWith('/status?probe=presence')) return Response.json({ version: '1', verification: 'presence' });
+    return Response.json({});
+  }));
+  const playlists = [{ id: 'project', name: 'Project' }];
+  function Editor({ playlistId }: { playlistId: string }) {
+    const [engine, select] = React.useState<React.ComponentProps<typeof CreatePanel>['musicEngine']>('local');
+    return panel({ musicEngine: engine, onMusicEngineChange: select, playlists, playlistId });
+  }
+  act(() => root.render(<Editor playlistId="project" />));
+  await flush();
+  const model = [...host.querySelectorAll('label')].find(label => label.textContent?.startsWith('Model'))!.querySelector('select')!;
+  act(() => {
+    model.value = 'signed:weights';
+    model.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  await flush();
+  type(field('textarea[aria-label="styleCardTitle"]')!, 'folk');
+  click(buttonNamed('create')!);
+  expect(sent).toEqual([expect.objectContaining({
+    playlist_id: 'project', music_source: { kind: 'signed', engine: 'engine', model: 'weights' },
+  })]);
+  act(() => root.render(<Editor playlistId="" />));
+  click(buttonNamed('create')!);
+  expect(sent).toHaveLength(2);
+  expect(sent[1]).not.toHaveProperty('playlist_id');
 });
 
 it('lets an active signed update be cancelled and retried while the previous pair remains usable', async () => {

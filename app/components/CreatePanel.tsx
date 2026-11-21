@@ -1149,6 +1149,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
     } else if (request.kind === 'midi') {
       // a track made or edited in the MIDI editor: its MIDI becomes the score,
       // through the MIDI import, where the voice's part is chosen
+      if (!yue) chooseRoute('local');
       const { song } = request;
       setCoverSource(song.title);
       setCoverSongId(song.id);
@@ -1171,6 +1172,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
       setSemanticTokens('');
       setMode('studio');
       if (request.edit) {
+        if (!yue) chooseRoute('local');
         setShowNotation(true);
         setEditorOpen(true);
       }
@@ -1821,6 +1823,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
       generate({
         music_source: { kind: 'signed', engine: packages.engine.id, model: packages.model.id },
         style: finishedStyle(style), lyrics: lyrics.trim(), title: name.trim() || undefined,
+        ...(chosenPlaylist ? { playlist_id: chosenPlaylist } : {}),
       });
       return;
     }
