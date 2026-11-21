@@ -465,7 +465,18 @@ fn prepare_song(
     }
     remap_reference(&mut song.metadata, "/derived/from", ids)?;
     remap_reference(&mut song.metadata, "/deleted_with", ids)?;
-    for field in ["/source_song_id", "/reference_song_id", "/cover_of"] {
+    // Only the request fields that identify library tracks are in this namespace.
+    for field in [
+        "/source_song_id",
+        "/reference_song_id",
+        "/cover_of",
+        "/backing_song_id",
+        "/vevo2/voice_song_id",
+        "/vevo2/melody_song_id",
+        "/soulx/reference_song_id",
+        "/soulx/source_song_id",
+        "/magenta/reference_song_id",
+    ] {
         remap_reference(&mut song.generation_settings, field, ids)?;
         if let Some(req) = &mut song.replay_request {
             remap_reference(req, field, ids)?;
@@ -653,6 +664,13 @@ fn transfer_selected(to: &Library, folder: &Path, exclude: &HashSet<Category>) -
                 let song=song_ids.get(old_id).context("Playlist refers to a missing song")?;
                 tx.execute("INSERT INTO playlist_songs(playlist_id,song_id,position) VALUES(?,?,?)",params![new_id,song.id,i64::try_from(position)?])?;
             }
+            if let Some(preferred) = list.preferred_song_id.as_ref()
+                .filter(|preferred| list.song_ids.contains(preferred))
+            {
+                let song = &song_ids[preferred];
+                tx.execute("INSERT INTO playlist_preferred_takes(playlist_id,song_id) VALUES(?,?)",
+                    params![new_id,song.id])?;
+            }
             added_lists+=1;
         }
         Ok(json!({"added":added,"already_imported":already_imported,"playlists_added":added_lists,
@@ -814,9 +832,10 @@ mod tests {
         })?;
         fs::write(old.media_dir().join("a.wav"), b"first")?;
         fs::write(old.media_dir().join("a-drums.wav"), b"stem")?;
-        old.create_playlist(library::PlaylistInput {
+        let list = old.create_playlist(library::PlaylistInput {
             name: "Both".into(), description: None, song_ids: vec!["b".into(), "a".into()],
         })?;
+        old.select_preferred_take(&list.id, "a")?;
         let exclude = HashSet::from([
             Category::Stems, Category::Karaoke, Category::Covers, Category::Takes,
         ]);
@@ -841,11 +860,17 @@ mod tests {
         assert_eq!(repaired["errors"], json!([]));
         let playlist = new.list_playlists()?.remove(0);
         assert_eq!(playlist.song_ids[1], song.id);
+        assert_eq!(playlist.preferred_song_id.as_deref(), Some(song.id.as_str()));
+        new.select_preferred_take(&playlist.id, &playlist.song_ids[0])?;
         let preview = super::super::inspect(&source, &new)?;
         assert_eq!(preview["space"]["required_bytes"], 4);
         assert_eq!(preview["space"]["total_bytes"], 15);
         let repeat = transfer_selected(&new, &source, &exclude)?;
         assert_eq!(repeat["already_imported"], 2);
+        let repeated_playlist = new.get_playlist(&playlist.id)?.unwrap();
+        assert_eq!(repeated_playlist.song_ids, playlist.song_ids);
+        assert_eq!(repeated_playlist.preferred_song_id.as_ref(), playlist.song_ids.first());
+        assert_eq!(old.get_playlist(&list.id)?.unwrap().preferred_song_id.as_deref(), Some("a"));
         assert_eq!(new.get_song(&song.id)?.unwrap().title, "Edited in YuE2");
         new.legacy_transaction(|tx| {
             tx.execute("DELETE FROM legacy_import_content WHERE song_id=?", [&song.id])?;
@@ -904,4 +929,68 @@ mod tests {
         assert!(!new.media_dir().join("reserved-drums.wav").exists());
         Ok(())
     }
+    #[test]
+    fn import_remaps_backing_and_nested_audio_references_in_both_saved_payloads() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let source = temp.path().join("old");
+        let destination = temp.path().join("new");
+        let old = Library::open_at(source.join("library.sqlite"), source.join("media"))?;
+        let new = Library::open_at(destination.join("library.sqlite"), destination.join("media"))?;
+        fs::create_dir_all(old.media_dir())?;
+        let settings = json!({
+            "backing_song_id": "backing",
+            "vevo2": {"voice_song_id": "voice", "melody_song_id": "melody"},
+            "soulx": {"reference_song_id": "voice", "source_song_id": "melody"},
+            "magenta": {"reference_song_id": "removed"},
+            "caption": "voice",
+        });
+        let replay = json!({
+            "backing_song_id": "backing",
+            "vevo2": {"voice_song_id": "voice", "melody_song_id": null},
+            "soulx": {"reference_song_id": "melody", "source_song_id": "voice"},
+            "magenta": {"reference_song_id": "voice"},
+            "caption": "voice",
+        });
+        old.legacy_transaction(|tx| {
+            for id in ["render", "backing", "voice", "melody"] {
+                tx.execute("INSERT INTO songs VALUES(?,?,?,'','','{}','{}','yue2',NULL,NULL,NULL,'native','1','1')",
+                    params![id,id,format!("{id}.wav")])?;
+                fs::write(old.media_dir().join(format!("{id}.wav")), id.as_bytes())?;
+            }
+            tx.execute("UPDATE songs SET generation_settings_json=?,replay_request_json=? WHERE id='render'",
+                params![settings.to_string(),replay.to_string()])?;
+            Ok(())
+        })?;
+        let receipt = transfer(&new, &source)?;
+        assert_eq!(receipt["added"], 4);
+        assert_eq!(receipt["errors"], json!([]));
+        let songs = new.list_songs()?;
+        let find = |title: &str| songs.iter().find(|song| song.title == title).unwrap();
+        let backing = &find("backing").id;
+        let voice = &find("voice").id;
+        let melody = &find("melody").id;
+        let rendered = find("render");
+        assert_ne!(voice, "voice");
+        assert_eq!(rendered.generation_settings, json!({
+            "backing_song_id": backing,
+            "vevo2": {"voice_song_id": voice, "melody_song_id": melody},
+            "soulx": {"reference_song_id": voice, "source_song_id": melody},
+            "magenta": {"reference_song_id": null},
+            "caption": "voice",
+        }));
+        assert_eq!(rendered.replay_request.as_ref(), Some(&json!({
+            "backing_song_id": backing,
+            "vevo2": {"voice_song_id": voice, "melody_song_id": null},
+            "soulx": {"reference_song_id": melody, "source_song_id": voice},
+            "magenta": {"reference_song_id": voice},
+            "caption": "voice",
+        })));
+        for title in ["backing", "voice", "melody"] {
+            assert_eq!(fs::read(new.media_path_for_song(find(title)).unwrap())?, title.as_bytes());
+        }
+        assert_eq!(old.get_song("render")?.unwrap().generation_settings, settings);
+        assert_eq!(old.get_song("render")?.unwrap().replay_request, Some(replay));
+        Ok(())
+    }
+
 }
