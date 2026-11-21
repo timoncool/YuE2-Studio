@@ -80,6 +80,24 @@
   {
     "engine": "minimaxmusic-cpp",
     "platform": "windows-x86_64",
+    "revision": "46c4c90b6fccc2020dc4252fb9aaba7e82105d0e",
+    "directory": "minimaxmusic-cpp-46c4c90b6fcc",
+    "archive": "mm3-runtime-46c4c90-windows-universal-x64.zip",
+    "url": "https://github.com/timoncool/minimaxmusic.cpp/releases/download/studio-signed-native-46c4c90b6fcc-windows-v2/mm3-runtime-46c4c90-windows-universal-x64.zip",
+    "bytes": 489206383,
+    "sha256": "251b1e28155fad92424af1683a78871af54b47c5cacb3c5976517696169e3652",
+    "executable": "mm-server.exe",
+    "required": {
+      "mm-server.exe": "9930df98f8bda4e63fe2742a8bd472fffaae60b24eb47aa00127208b7efd6335",
+      "ggml-vulkan.dll": "e91d85c66cf4ba45b09ab3fe6e2a1f8aa452476b0206c893912e8874b04b3a7b",
+      "ggml-cpu-x64.dll": "eef6fe6072feb2d85e4a80eea8df64fe74dc5067714051be600dd9ff7b1de2c0",
+      "cuda12/ggml-cuda.dll": "9b5b060195428e2800bb6a6f4a4fac2aa306618aa94602250e4d31aac6576833",
+      "cuda13/ggml-cuda.dll": "bb1019e3f347df267834797e5b05666fa25f9a6bb5c404617f73f05586984729"
+    }
+  },
+  {
+    "engine": "minimaxmusic-cpp",
+    "platform": "windows-x86_64",
     "revision": "b79d37f46ae7fd359b3ad805f053385c7768b9cb",
     "directory": "minimaxmusic-cpp-b79d37f46ae7",
     "archive": "mm3-runtime-b79d37f-windows-universal-x64.zip",
@@ -93,7 +111,8 @@
       "ggml-cpu-x64.dll": "eef6fe6072feb2d85e4a80eea8df64fe74dc5067714051be600dd9ff7b1de2c0",
       "cuda12/ggml-cuda.dll": "9b5b060195428e2800bb6a6f4a4fac2aa306618aa94602250e4d31aac6576833",
       "cuda13/ggml-cuda.dll": "bb1019e3f347df267834797e5b05666fa25f9a6bb5c404617f73f05586984729"
-    }
+    },
+    "broken_windows_adapter_paths": true
   },
   {
     "engine": "minimaxmusic-cpp",
