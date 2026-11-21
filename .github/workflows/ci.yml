@@ -10,6 +10,7 @@ on:
       - 'docs/stars-*.svg'
       - '.github/workflows/ci.yml'
       - '.github/workflows/windows-nsis-acceptance.yml'
+      - '.github/workflows/training-gallery-5.yml'
       - 'scripts/windows-nsis-acceptance.py'
       - 'scripts/hosted-print-control.ps1'
       - 'scripts/test-hosted-webview-screens.py'

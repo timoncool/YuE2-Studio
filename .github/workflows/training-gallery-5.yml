@@ -1,0 +1,47 @@
+name: YuE2 5.0 training documentation gallery
+
+on:
+  push:
+    branches: [qa/training-gallery-5]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  capture:
+    runs-on: windows-latest
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.12'
+      - name: Download exact public Windows 5.0.0 package
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $asset = 'https://github.com/timoncool/YuE2-Studio/releases/download/v5.0.0/YuE2-Studio-5.0.0-portable-windows-x64.zip'
+          $sha = '054b521bff77b2dc3b54afcf933b4724303f323bcd0bcbd7267cd7af52b727fe'
+          $root = New-Item -ItemType Directory -Path (Join-Path $env:RUNNER_TEMP 'training-gallery-5')
+          $zip = Join-Path $root 'studio.zip'
+          Invoke-WebRequest -UseBasicParsing -Uri $asset -OutFile $zip
+          if ((Get-FileHash $zip).Hash -ine $sha) { throw 'Unexpected studio package SHA' }
+          Expand-Archive -LiteralPath $zip -DestinationPath (Join-Path $root 'studio')
+          $studio = @(Get-ChildItem (Join-Path $root 'studio') -Filter YuE2-Studio.exe -Recurse -File)
+          if ($studio.Count -ne 1) { throw 'Expected one portable Studio executable' }
+          $gallery = New-Item -ItemType Directory -Path (Join-Path $root 'gallery')
+          [ordered]@{ url=$asset; archive_sha256=$sha; studio_sha256=(Get-FileHash $studio[0].FullName).Hash.ToLowerInvariant(); locale='en'; runner='hosted Windows'; profile='isolated sample dataset and illustrative checkpoint'; capture_commit=$env:GITHUB_SHA } | ConvertTo-Json | Set-Content (Join-Path $gallery 'release.json')
+          "STUDIO_GALLERY_EXE=$($studio[0].FullName)" >> $env:GITHUB_ENV
+      - name: Capture training and voice catalog screens
+        env:
+          PYTHONUTF8: '1'
+        run: python -u scripts/test-hosted-webview-screens.py "$env:STUDIO_GALLERY_EXE" "$env:RUNNER_TEMP/training-gallery-5/gallery" --suite training-gallery
+      - name: Upload PNGs, state and source receipt
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: yue2-training-gallery-5
+          path: ${{ runner.temp }}/training-gallery-5/gallery

@@ -5,7 +5,7 @@ from contextlib import contextmanager
 p = argparse.ArgumentParser()
 p.add_argument("exe", type=pathlib.Path)
 p.add_argument("output", type=pathlib.Path)
-p.add_argument("--suite", choices=["screens", "lrc", "print", "eqf", "video", "dj"], default="screens")
+p.add_argument("--suite", choices=["screens", "lrc", "print", "eqf", "video", "dj", "training-gallery"], default="screens")
 args = p.parse_args()
 out = args.output.resolve()
 out.mkdir(parents=True, exist_ok=True)
@@ -109,6 +109,82 @@ def seed_training(root):
     checkpoint.mkdir(parents=True)
     for half in ("ar","nar"):
         (checkpoint/f"native-{half}.safetensors").write_bytes(b"isolated UI receipt fixture only")
+
+
+def training_gallery(root):
+    def take(name, *terms, focus=None):
+        page = wait_page(*terms)
+        if focus:
+            ui("scroll", ref=control(page, focus))
+            page = wait_page(*terms)
+        (out/f"{name}.txt").write_text(page, encoding="utf8")
+        time.sleep(.3)
+        screenshot(name)
+
+    def open_dataset():
+        ui("navigate", view="adapters")
+        click('tab "Training"')
+        click('Example training dataset')
+
+    def dataset():
+        open_dataset()
+        click('button "Songs"')
+        take('03-dataset', 'Example training dataset', 'Morning vocal')
+
+    def training():
+        open_dataset()
+        click('button "Training"')
+        take('04-training', 'Training base', 'Stable Audio 3')
+        take('05-training-base', 'Training base', focus='Training base')
+        page = wait_page('RVC · Burn CUDA')
+        select = next(line.split()[0] for line in page.splitlines() if line.startswith('e') and 'select' in line and 'YuE2' in line)
+        ui('select', ref=select, value='rvc')
+        take('02-train-own-voice', 'RVC · Burn CUDA', 'Batch size', focus='Batch size')
+
+    def results():
+        open_dataset()
+        click('Result')
+        take('06-checkpoints', 'To LoRA', '50', focus='To LoRA')
+
+    def lora():
+        ui("navigate", view="adapters")
+        click('tab "Catalog"')
+        take('07-lora-catalog', 'Search the catalog')
+        json_file(out/'lora-catalog.json', tool('lora_list', response_format='detailed'))
+
+    def rvc():
+        ui('navigate', view='tools')
+        take('01-rvc-catalog', 'RVC voice catalog', 'Search voices', focus='Search voices')
+        json_file(out/'rvc-status.json', tool('rvc_training_status'))
+
+    failures = {}
+    for scene in (dataset, training, results, lora, rvc):
+        try:
+            scene()
+        except Exception as problem:
+            failures[scene.__name__] = repr(problem)
+            (out/f'{scene.__name__}-failure-page.txt').write_text(ui('read_page'), encoding='utf8')
+    json_file(out/'capture-failures.json', failures)
+    assert not failures, failures
+
+
+def seed_training_gallery(root):
+    seed_training(root)
+    dataset = root/'training'/'datasets'/'demo-dataset'
+    original = json.loads((dataset/'dataset.json').read_text(encoding='utf8'))
+    original.update(name='Example training dataset', trigger='loexample', trigger_chosen=True)
+    items = []
+    for number, title in enumerate(('Morning vocal', 'Evening vocal', 'Harmony practice'), 1):
+        name = f'demo-vocal-{number}.wav'
+        audio = dataset/'audio'/name
+        audio.parent.mkdir(exist_ok=True)
+        with wave.open(str(audio), 'wb') as sample:
+            sample.setparams((1, 2, 8000, 8000, 'NONE', 'not compressed'))
+            sample.writeframes(b'\x00\x00'*8000)
+        items.append(dict(id=f'demo-{number}', title=title, file=name, seconds=1.0,
+                          lyrics='[verse]\nA morning song', style='Acoustic vocal demo', lyrics_state='done', style_state='done'))
+    original['items'] = items
+    json_file(dataset/'dataset.json', original)
 
 
 def native_editor_window(pid):
@@ -1077,7 +1153,10 @@ def isolated_profile():
 
 
 with isolated_profile() as root:
-    seed_training(root)
+    if args.suite == "training-gallery":
+        seed_training_gallery(root)
+    else:
+        seed_training(root)
     for folder in ("user", "roaming", "local"):
         (root/folder).mkdir()
     env = dict(os.environ, YUE_STUDIO_DATA_ROOT=str(root), YUE_STUDIO_PORT="8791", DO_NOT_TRACK="1",
@@ -1120,7 +1199,9 @@ Get-Printer -Name 'Studio QA PDF' | Select-Object Name,DriverName,PortName | Con
                 clientInfo=dict(name="studio-hosted-webview", version="1")))
             rpc("notifications/initialized", {}, notify=True)
             wait_page(predicate=lambda page: "button" in page)
-            if args.suite in ("lrc", "print", "eqf", "video", "dj"):
+            if args.suite == "training-gallery":
+                training_gallery(root)
+            elif args.suite in ("lrc", "print", "eqf", "video", "dj"):
                 check_lrc(root, process.pid, media=args.suite if args.suite != "lrc" else None)
             else:
                 check_screens(root, process.pid)
