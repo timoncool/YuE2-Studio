@@ -73,18 +73,47 @@ fn claim(tx: &Transaction, id: &str) -> Result<bool> {
 
 use crate::install_record::sha256_of as digest;
 
+const STAGING_FOLDER: &str = ".legacy-import";
+const PARTIAL_PREFIX: &str = "copy-";
+
+fn lock_staging(media: &Path) -> Result<(fs::File, PathBuf)> {
+    let staging = media.join(STAGING_FOLDER);
+    fs::create_dir_all(&staging)?;
+    anyhow::ensure!(
+        fs::symlink_metadata(&staging)?.file_type().is_dir(),
+        "Import staging path is not a directory"
+    );
+    let lock = fs::OpenOptions::new()
+        .write(true)
+        .create(true)
+        .truncate(false)
+        .open(staging.join("lock"))?;
+    fs2::FileExt::lock_exclusive(&lock)?;
+    // A process exit between copy and persist can leave a file from the last import.
+    for entry in fs::read_dir(&staging)? {
+        let entry = entry?;
+        if entry.file_name().to_string_lossy().starts_with(PARTIAL_PREFIX)
+            && entry.file_type()?.is_file()
+        {
+            fs::remove_file(entry.path())?;
+        }
+    }
+    Ok((lock, staging))
+}
+
+
 // A retry can find a complete file from an interrupted import. A partially copied file never
 // occupies the final name, and a user edit or a different file is never overwritten.
-fn install(source: &Path, target: &Path) -> Result<()> {
+fn install(source: &Path, target: &Path, staging: &Path) -> Result<()> {
     anyhow::ensure!(
         fs::symlink_metadata(source)?.is_file(),
         "Expected regular file {}",
         source.display()
     );
     if !target.exists() {
-        let mut tmp = tempfile::NamedTempFile::new_in(
-            target.parent().context("Missing destination folder")?,
-        )?;
+        let mut tmp = tempfile::Builder::new()
+            .prefix(PARTIAL_PREFIX)
+            .tempfile_in(staging)?;
         io::copy(&mut fs::File::open(source)?, &mut tmp)?;
         tmp.as_file().sync_all()?;
         match tmp.persist_noclobber(target) {
@@ -190,6 +219,7 @@ fn prepare_song(
     ids: &Ids,
     source_media: &Path,
     destination: &Path,
+    staging: &Path,
 ) -> Result<()> {
     let id = &ids[&song.id].id;
     let missing = item["missing"]
@@ -205,7 +235,7 @@ fn prepare_song(
     for file in item["files"].as_array().context("Missing file inventory")? {
         let name = file["name"].as_str().context("Missing filename")?;
         let new_name = destination_name(&song.id, id, name, file["kind"].as_str())?;
-        install(&source_media.join(name), &destination.join(&new_name))
+        install(&source_media.join(name), &destination.join(&new_name), staging)
             .with_context(|| format!("{}: {name}", song.title))?;
         names.insert(name.to_owned(), new_name);
     }
@@ -270,6 +300,15 @@ fn transfer(to: &Library, folder: &Path) -> Result<Value> {
     let mut songs = Library::read_songs(&db)?;
     let playlists = Library::read_playlists(&db)?;
     let source = root.to_str().context("Unsupported library path")?;
+    fs::create_dir_all(to.media_dir())?;
+    let source_media = root.join("media");
+    if source_media.is_dir() {
+        anyhow::ensure!(
+            !same_file::is_same_file(&source_media, to.media_dir())?,
+            "Source and destination share a media folder"
+        );
+    }
+    let (_lock, staging) = lock_staging(to.media_dir())?;
     let space = media_space(&view, &to.legacy_song_mappings(source)?, to.media_dir())?;
     if let Some(free) = space.available_bytes {
         anyhow::ensure!(
@@ -290,18 +329,10 @@ fn transfer(to: &Library, folder: &Path) -> Result<Value> {
             )?,
         ))
     })?;
-    fs::create_dir_all(to.media_dir())?;
-    let source_media = root.join("media");
-    if source_media.is_dir() {
-        anyhow::ensure!(
-            !same_file::is_same_file(&source_media, to.media_dir())?,
-            "Source and destination share a media folder"
-        );
-    }
     songs.retain(|s| !song_ids[&s.id].imported);
     for song in &mut songs {
         let item = items[song.id.as_str()];
-        prepare_song(song, item, &song_ids, &source_media, to.media_dir())?;
+        prepare_song(song, item, &song_ids, &source_media, to.media_dir(), &staging)?;
     }
     to.legacy_transaction(|tx|{
         let mut added=0;
@@ -346,6 +377,22 @@ fn transfer(to: &Library, folder: &Path) -> Result<Value> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn retry_discards_only_the_interrupted_import_staging_files() -> Result<()> {
+        let media = tempfile::tempdir()?;
+        let staging = media.path().join(STAGING_FOLDER);
+        fs::create_dir(&staging)?;
+        fs::write(staging.join("copy-abandoned"), b"partial import")?;
+        fs::write(media.path().join("imported.wav"), b"completed audio")?;
+        fs::write(media.path().join(".other-temp"), b"another tool's file")?;
+        let (_lock, found) = lock_staging(media.path())?;
+        assert_eq!(found, staging);
+        assert!(!staging.join("copy-abandoned").exists());
+        assert_eq!(fs::read(media.path().join("imported.wav"))?, b"completed audio");
+        assert_eq!(fs::read(media.path().join(".other-temp"))?, b"another tool's file");
+        Ok(())
+    }
 
     #[test]
     fn mulacover_import_rewrites_the_original_for_saved_settings() -> Result<()> {
