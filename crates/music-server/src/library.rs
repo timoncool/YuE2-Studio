@@ -1141,6 +1141,29 @@ impl Library {
         Ok(())
     }
 
+    pub(super) fn ensure_checkpoint_playlist(&self, id: &str, name: &str) -> Result<()> {
+        let time = now();
+        let inserted = self.connection.lock().unwrap().execute(
+            "INSERT OR IGNORE INTO playlists(id,name,description,created_at,updated_at) VALUES(?1,?2,NULL,?3,?3)",
+            params![id, name, time],
+        )?;
+        if inserted > 0 { crate::mcp::announce("library"); }
+        Ok(())
+    }
+
+    /// The stable client reference identifies the same comparison after a service restart or a renamed take.
+    pub(super) fn checkpoint_listening_job(&self, playlist: &str, client_ref: &str) -> Result<Option<String>> {
+        self.connection.lock().unwrap().query_row(
+            "SELECT j.id FROM music_jobs j WHERE j.playlist_id=?1
+             AND json_extract(j.request_json,'$.client_ref')=?2
+             AND (j.status IN ('queued','running') OR EXISTS (
+               SELECT 1 FROM playlist_songs ps JOIN songs s ON s.id=ps.song_id
+               WHERE ps.playlist_id=j.playlist_id AND json_extract(s.metadata_json,'$.job_id')=j.id))
+             ORDER BY j.submitted_at DESC LIMIT 1",
+            params![playlist, client_ref], |row| row.get(0),
+        ).optional().map_err(Into::into)
+    }
+
     pub fn set_music_job_status(&self, id: &str, status: &str, message: &str) -> Result<()> {
         self.connection.lock().unwrap().execute("UPDATE music_jobs SET status=?1,message=?2 WHERE id=?3", params![status, message, id])?;
         Ok(())
@@ -1211,6 +1234,26 @@ fn stored_job_row(row: &rusqlite::Row) -> rusqlite::Result<StoredJob> {
 #[cfg(test)]
 mod stored_job_tests {
     use super::*;
+
+    #[test]
+    fn checkpoint_comparison_reuses_live_jobs_and_retries_failed_takes() {
+        let folder = tempfile::tempdir().unwrap();
+        let open = || Library::open_at(folder.path().join("library.sqlite"), folder.path().join("media")).unwrap();
+        let library = open();
+        library.ensure_checkpoint_playlist("group", "First name").unwrap();
+        library.ensure_checkpoint_playlist("group", "Second name").unwrap();
+        assert_eq!(library.get_playlist("group").unwrap().unwrap().name, "First name");
+        let mut job = stored("job", "queued", 10);
+        job.playlist_id = Some("group".into());
+        job.request = serde_json::json!({"client_ref":"checkpoint/step-1"});
+        library.save_music_job(&job).unwrap();
+        drop(library);
+        let library = open();
+        assert_eq!(library.checkpoint_listening_job("group","checkpoint/step-1").unwrap().as_deref(),Some("job"));
+        assert!(library.checkpoint_listening_job("group","checkpoint/step-2").unwrap().is_none());
+        library.set_music_job_status("job","failed","device disconnected").unwrap();
+        assert!(library.checkpoint_listening_job("group","checkpoint/step-1").unwrap().is_none());
+    }
 
     fn stored(id: &str, status: &str, at: u64) -> StoredJob {
         StoredJob {

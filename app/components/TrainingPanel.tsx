@@ -40,6 +40,7 @@ import {
   downloadSize,
   importDataset,
   installCheckpoint,
+  listenCheckpoints,
   installRvcBurnVoice,
   installSignedTrainer,
   installListenPack,
@@ -993,6 +994,19 @@ const ContinueRun: React.FC<{ run: TrainingRun; onChanged: () => void; onError: 
 
 const RunCard: React.FC<{ run: TrainingRun; onChanged: () => void; onError: (message: string) => void; onDelete: () => void }> = ({ run, onChanged, onError, onDelete }) => {
   const { t, tt } = useStrings();
+  const [preparingTakes, setPreparingTakes] = useState(false);
+  const compareCheckpoints = async () => {
+    setPreparingTakes(true);
+    try {
+      const { playlist_id } = await listenCheckpoints(run.id);
+      window.history.pushState({}, '', '/playlist/' + encodeURIComponent(playlist_id));
+      window.dispatchEvent(new PopStateEvent('popstate'));
+    } catch (problem) {
+      onError(errorText(problem));
+    } finally {
+      setPreparingTakes(false);
+    }
+  };
   const running = run.status === 'running';
   const rvc = run.engine === 'rvc-burn';
   const { language } = useI18n();
@@ -1098,6 +1112,10 @@ const RunCard: React.FC<{ run: TrainingRun; onChanged: () => void; onError: (mes
       {run.checkpoints.length > 0 && (
         <div className="mt-3">
           <p className={LABEL}>{t('trainingCheckpoints')}</p>
+          {run.engine === 'yue2-cpp' && <button className={OUTLINE} type="button" disabled={preparingTakes} onClick={() => void compareCheckpoints()}>
+            {preparingTakes ? <Loader2 size={14} className="animate-spin" /> : <Headphones size={14} />}
+            {{ en: 'Compare all checkpoints · 35 s per take', ru: 'Сравнить все чекпойнты · 35 с на дубль', pt: 'Comparar checkpoints · 35 s por tomada', ja: '全チェックポイントを比較 · 各35秒', ko: '전체 체크포인트 비교 · 테이크당 35초', zh: '比较所有检查点 · 每个版本 35 秒' }[language]}
+          </button>}
           <div className="mt-1.5 flex flex-wrap gap-2">
             {[...run.checkpoints].sort((a, b) => a - b).map(step => {
               const installed = run.installed.includes(step);

@@ -15,7 +15,7 @@ export const PlaylistTakeComparison: React.FC<{
 }> = ({ playlist, songs, playerIsPlaying, onError }) => {
   const { language } = useI18n();
   const labels = preferredTakeStrings[language];
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(playlist.id.startsWith('checkpoint-listen-v1-'));
   const [leftId, setLeftId] = useState('');
   const [rightId, setRightId] = useState('');
   const pending = useRef(false);

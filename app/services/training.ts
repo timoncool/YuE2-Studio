@@ -231,6 +231,8 @@ export const startSa3Training = (target: HotStepTrainingTarget, datasetId: strin
 export const cancelRun = (id: string) => call<void>(`/v1/training/runs/${id}/cancel`, { method: 'POST' });
 export const continueRun = (id: string, steps: number) => call<TrainingRun>(`/v1/training/runs/${id}/continue`, json('POST', { steps }));
 export const deleteRun = (id: string) => call<void>(`/v1/training/runs/${id}`, { method: 'DELETE' });
+export const listenCheckpoints = (id: string) =>
+  call<{ playlist_id: string }>(`/v1/training/runs/${encodeURIComponent(id)}/checkpoints/listen`, { method: 'POST' });
 export const installCheckpoint = (id: string, step: number, name?: string) =>
   call<{ id: string }>(`/v1/training/runs/${id}/checkpoints/${step}/install`, json('POST', { name }));
 

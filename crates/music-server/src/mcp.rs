@@ -3332,6 +3332,12 @@ fn tools() -> &'static [Tool] {
                 call: |args| post(format!("/v1/training/runs/{}/cancel", segment(&text(args, "run_id")?)), json!({})),
             },
             Tool {
+                name: "training_checkpoints_listen",
+                description: "Queue a 35-second YuE2 base take and one take per saved LoRA checkpoint, using one score and seed. Reuses previous takes. Returns the comparison playlist and job IDs.",
+                schema: || id_only("run_id", "YuE2 training run id"),
+                call: |args| post(format!("/v1/training/runs/{}/checkpoints/listen", segment(&text(args, "run_id")?)), json!({})),
+            },
+            Tool {
                 name: "training_checkpoint_install",
                 description: "Put a run's checkpoint (its step) into the LoRA library, ready to use in song_create.",
                 schema: || object(json!({ "run_id": { "type": "string" }, "step": { "type": "integer" }, "name": { "type": "string" } }), &["run_id", "step"]),
