@@ -1701,7 +1701,7 @@ fn tools() -> &'static [Tool] {
                         "oneOf": [
                             { "type": "object", "properties": { "kind": { "const": "local" } }, "required": ["kind"] },
                             { "type": "object", "properties": { "kind": { "const": "native" }, "engine": { "enum": ["acestep-cpp", "minimaxmusic-cpp"] }, "model": { "type": "string", "minLength": 1 } }, "required": ["kind", "engine", "model"] },
-                            { "type": "object", "properties": { "kind": { "const": "signed" }, "engine": { "type": "string", "minLength": 1 }, "model": { "type": "string", "minLength": 1 }, "generation": { "type": "string", "description": "Optional verified installed generation; omitted uses the active package." } }, "required": ["kind", "engine", "model"] },
+                            { "type": "object", "properties": { "kind": { "const": "signed" }, "engine": { "type": "string", "minLength": 1 }, "model": { "type": "string", "minLength": 1 }, "generation": { "type": "string", "description": "Optional verified engine generation. Omit to use the active engine." }, "model_generation": { "type": "string", "description": "Optional verified model generation. Omit to use the active model." } }, "required": ["kind", "engine", "model"] },
                             { "type": "object", "properties": { "kind": { "const": "audio_cpp" }, "model": { "type": "string", "minLength": 1 } }, "required": ["kind", "model"] },
                             { "type": "object", "properties": { "kind": { "const": "openrouter" }, "model": { "type": "string", "minLength": 1 } }, "required": ["kind", "model"] }
                         ]

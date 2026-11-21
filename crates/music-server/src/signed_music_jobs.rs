@@ -376,8 +376,8 @@ async fn run(
     state.jobs.write().await.insert(job.id.clone(), job.clone());
     let accepted = job.clone();
     tokio::spawn(async move {
-        let _lease = lease;
-        let outcome = watch(&state, &job, &process, &remote, receiver).await;
+        let mut cancel_ack = None;
+        let outcome = watch(&state, &job, &process, &remote, receiver, &mut cancel_ack).await;
         process.stop().await;
         let outcome = match outcome {
             Ok(Some(track)) => import(&state, &job, identity, track).await.map(Some),
@@ -390,6 +390,10 @@ async fn run(
             .write()
             .await
             .remove(&job.id);
+        drop(lease);
+        if let Some(reply) = cancel_ack {
+            let _ = reply.send(Ok(()));
+        }
     });
     (StatusCode::ACCEPTED, Json(accepted))
 }
@@ -433,6 +437,7 @@ async fn watch(
     process: &protocol::Process,
     remote: &str,
     mut receiver: mpsc::Receiver<CancelReply>,
+    cancel_ack: &mut Option<CancelReply>,
 ) -> anyhow::Result<Option<protocol::Track>> {
     use protocol::Status;
     let deadline = Instant::now() + Duration::from_secs(60 * 60);
@@ -443,8 +448,7 @@ async fn watch(
             Some(reply) = receiver.recv() => {
                 match process.cancel(remote).await {
                     Ok(progress) if progress.status == Status::Cancelled => {
-                        finish(state, &job.id, Ok(None)).await;
-                        let _ = reply.send(Ok(()));
+                        *cancel_ack = Some(reply);
                         return Ok(None);
                     }
                     Ok(_) => { let _ = reply.send(Err("The music adapter is already finishing this take.".into())); }
