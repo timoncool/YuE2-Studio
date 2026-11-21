@@ -42,11 +42,7 @@ pub(super) fn from_abc(text: &str) -> Result<Rolls> {
         !vocal.notes.is_empty(),
         "The lead sheet needs a vocal melody."
     );
-    let harmony = if vocal.chords.is_empty() {
-        &score.voices[abc::INS].chords
-    } else {
-        &vocal.chords
-    };
+    let harmony = &vocal.chords;
     anyhow::ensure!(!harmony.is_empty(), "The lead sheet needs chord symbols.");
 
     let notes = vocal
@@ -122,9 +118,8 @@ mod tests {
 
     #[test]
     fn hotstep_cover_rolls_encode_melody_attacks_holds_and_chroma() {
-        let text =
-            "X:1\nM:4/4\nL:1/4\nQ:1/4=120\nK:C\nV:Vocal\n|\"C\"C E G c|\"F\"F A c a|\nV:Ins\n|Z|Z|";
-        let roll = from_abc(text).unwrap();
+        let text = sheet("\"C\"C E G c|\"F\"F A c a|", "Z|Z|");
+        let roll = from_abc(&text).unwrap();
         assert_eq!((roll.bpm, roll.length), (120, 32));
         assert_eq!(roll.pianoroll[60 * 2], 1);
         assert_eq!(roll.pianoroll[256 + 60 * 2 + 1], 1);
@@ -137,10 +132,18 @@ mod tests {
         assert_eq!(roll.context_mask.len(), 32);
     }
 
+    fn sheet(vocal: &str, ins: &str) -> String {
+        let [voice, instrument] = abc::VOICE_LINES;
+        format!(
+            "X:1\nT:\nM:4/4\nL:1/4\nQ:1/4=120\n{voice}\n{instrument}\nK:C\nV: Vocal\n{vocal}\nV: Ins\n{ins}\n"
+        )
+    }
+
     #[test]
     fn hotstep_cover_rolls_refuse_unconditioned_lead_sheets() {
-        let intro = "X:1\nM:4/4\nL:1/4\nQ:1/4=120\nK:C\nV:Vocal\n";
-        assert!(from_abc(&format!("{intro}|C E G c|\nV:Ins\n|Z|")).is_err());
-        assert!(from_abc(&format!("{intro}|Z|\nV:Ins\n|\"C\"C E G c|")).is_err());
+        let no_chords = from_abc(&sheet("C E G c|", "Z|")).unwrap_err();
+        assert!(no_chords.to_string().contains("chord symbols"));
+        let no_melody = from_abc(&sheet("Z|", "C E G c|")).unwrap_err();
+        assert!(no_melody.to_string().contains("vocal melody"));
     }
 }
