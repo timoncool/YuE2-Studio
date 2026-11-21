@@ -39,7 +39,7 @@ struct Adapter {
     driver_version: Option<String>,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 struct Host {
     gfx: Gfx,
     driver: Option<String>,
@@ -78,29 +78,51 @@ fn select_host(adapters: &[Adapter]) -> Result<Host, String> {
     })
 }
 
-fn detect_host() -> Result<&'static Host, String> {
-    static HOST: std::sync::OnceLock<Result<Host, String>> = std::sync::OnceLock::new();
-    HOST.get_or_init(|| {
-        if !cfg!(all(windows, target_arch = "x86_64")) {
-            return Err("Native YuE2 HIP components are available on Windows x64.".into());
-        }
-        let windows = std::env::var_os("SystemRoot").map(PathBuf::from)
-            .ok_or_else(|| "Windows system directory could not be identified.".to_string())?;
-        let mut command = std::process::Command::new(windows.join("System32/WindowsPowerShell/v1.0/powershell.exe"));
-        command.args(["-NoProfile", "-NonInteractive", "-Command",
-            "ConvertTo-Json -InputObject @(Get-CimInstance Win32_VideoController | Select-Object PNPDeviceID,DriverVersion) -Compress"]);
-        #[cfg(windows)]
-        {
-            use std::os::windows::process::CommandExt;
-            command.creation_flags(0x0800_0000);
-        }
-        let adapters = command.output().ok().filter(|output| output.status.success())
-            .and_then(|output| serde_json::from_slice::<Vec<Adapter>>(&output.stdout).ok())
-            .ok_or_else(|| "Unable to identify AMD PCI devices on this Windows host. Choose Vulkan or Auto.".to_string())?;
-        select_host(&adapters)
-    }).as_ref().map_err(Clone::clone)
+fn query_host() -> Result<Host, String> {
+    if !cfg!(all(windows, target_arch = "x86_64")) {
+        return Err("Native YuE2 HIP components are available on Windows x64.".into());
+    }
+    let windows = std::env::var_os("SystemRoot")
+        .map(PathBuf::from)
+        .ok_or_else(|| "Windows system directory could not be identified.".to_string())?;
+    let mut command =
+        std::process::Command::new(windows.join("System32/WindowsPowerShell/v1.0/powershell.exe"));
+    command.args(["-NoProfile", "-NonInteractive", "-Command",
+        "ConvertTo-Json -InputObject @(Get-CimInstance Win32_VideoController | Select-Object PNPDeviceID,DriverVersion) -Compress"]);
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        command.creation_flags(0x0800_0000);
+    }
+    let adapters = command
+        .output()
+        .ok()
+        .filter(|output| output.status.success())
+        .and_then(|output| serde_json::from_slice::<Vec<Adapter>>(&output.stdout).ok())
+        .ok_or_else(|| {
+            "Unable to identify AMD PCI devices on this Windows host. Choose Vulkan or Auto."
+                .to_string()
+        })?;
+    select_host(&adapters)
 }
 
+fn detect_host(refresh: bool) -> Result<Host, String> {
+    use std::time::{Duration, Instant};
+    type Report = (Instant, Result<Host, String>);
+    static HOST: std::sync::Mutex<Option<Report>> = std::sync::Mutex::new(None);
+    let mut cached = HOST
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    if !refresh
+        && let Some((checked, result)) = cached.as_ref()
+        && checked.elapsed() < Duration::from_secs(3)
+    {
+        return result.clone();
+    }
+    let result = query_host();
+    *cached = Some((Instant::now(), result.clone()));
+    result
+}
 struct Package {
     gfx: Gfx,
     revision: &'static str,
@@ -113,6 +135,7 @@ fn package(gfx: Gfx) -> Option<&'static Package> {
 }
 
 const ENGINE_REVISION: &str = "188d13b3d619cc0fd13f47db9ff64e0bd815d577";
+const ENGINE_SHA: &str = "b6ef627d585b57ebbb5c284b7492c42e341f45dc7a1e5002288ccd3574363864";
 
 const PACKAGES: &[Package] = &[
     Package {
@@ -179,12 +202,8 @@ fn executable(root: &Path, package: &Package) -> anyhow::Result<PathBuf> {
         "The installed HIP build does not match this device and engine revision."
     );
     ensure!(
-        build.engine_sha256.len() == 64
-            && build
-                .engine_sha256
-                .bytes()
-                .all(|byte| byte.is_ascii_hexdigit()),
-        "The HIP build metadata has no valid engine checksum."
+        build.engine_sha256 == ENGINE_SHA,
+        "The HIP build manifest has an unexpected executable checksum."
     );
     for file in [
         "yue-server.exe",
@@ -245,16 +264,14 @@ impl Runtime {
     pub(super) async fn selected_path(&self, verify: bool) -> Result<PathBuf, String> {
         let runtime = self.clone();
         tokio::task::spawn_blocking(move || {
-            let host = detect_host()?;
+            let host = detect_host(verify)?;
             let package = package(host.gfx).ok_or_else(|| "No published HIP component is available for this device.".to_string())?;
             let dir = runtime.root(package);
             if !dir.is_dir() {
                 return Err(format!("Install the YuE2 HIP component for {} in Engine Settings, or choose Vulkan.", host.gfx.name()));
             }
             let binary = runtime.installed(package).map_err(|error| error.to_string())?;
-            let build: Build = serde_json::from_slice(&fs::read(dir.join("BUILD.json")).map_err(|error| error.to_string())?)
-                .map_err(|error| error.to_string())?;
-            if verify && !crate::pin_sha::holds(&binary, &build.engine_sha256) {
+            if verify && !crate::pin_sha::holds(&binary, ENGINE_SHA) {
                 return Err("The HIP executable checksum changed. Reinstall the component or choose Vulkan.".into());
             }
             Ok(binary)
@@ -270,9 +287,8 @@ impl Runtime {
         let stage = tempfile::tempdir_in(parent)?;
         let files = extract_package(&archive, stage.path())?;
         let binary = executable(stage.path(), package)?;
-        let build: Build = serde_json::from_slice(&fs::read(stage.path().join("BUILD.json"))?)?;
         ensure!(
-            crate::pin_sha::holds(&binary, &build.engine_sha256),
+            crate::pin_sha::holds(&binary, ENGINE_SHA),
             "The HIP executable checksum does not match the build manifest."
         );
         crate::install_record::write(
@@ -341,7 +357,7 @@ pub(super) struct Status {
 
 impl Runtime {
     pub(super) async fn status(&self) -> Status {
-        let host = tokio::task::spawn_blocking(detect_host)
+        let host = tokio::task::spawn_blocking(|| detect_host(false))
             .await
             .unwrap_or_else(|error| Err(error.to_string()));
         let mut output = Status {
@@ -398,7 +414,7 @@ pub(super) async fn install(
     State(state): State<AppState>,
 ) -> Result<(StatusCode, Json<Value>), (StatusCode, Json<ApiError>)> {
     let runtime = state.engine_hip.clone();
-    let host = tokio::task::spawn_blocking(detect_host)
+    let host = tokio::task::spawn_blocking(|| detect_host(true))
         .await
         .unwrap_or_else(|error| Err(error.to_string()))
         .map_err(|error| api_error(StatusCode::CONFLICT, error))?;
@@ -448,6 +464,36 @@ mod tests {
         Adapter {
             pnp_device_id: Some(pnp.into()),
             driver_version: None,
+        }
+    }
+
+    #[test]
+    fn published_hip_pins_are_reachable_by_catalogue_and_bind_the_engine_digest() {
+        let temp = tempfile::tempdir().unwrap();
+        for package in PACKAGES {
+            assert_eq!(
+                crate::pin_sha::sha256(package.asset.url),
+                Some(package.sha256)
+            );
+            let mirrors = crate::component_catalogue::bundled()
+                .sources(package.sha256)
+                .unwrap();
+            assert_eq!(mirrors.first().map(String::as_str), Some(package.asset.url));
+            fs::write(
+                temp.path().join("BUILD.json"),
+                serde_json::to_vec(&serde_json::json!({
+                    "gpu_target": package.gfx.name(), "rocm": "10.1.0",
+                    "engine_revision": package.revision, "engine_sha256": "0".repeat(64),
+                }))
+                .unwrap(),
+            )
+            .unwrap();
+            assert!(
+                executable(temp.path(), package)
+                    .unwrap_err()
+                    .to_string()
+                    .contains("unexpected executable checksum")
+            );
         }
     }
 

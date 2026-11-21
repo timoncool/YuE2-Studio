@@ -1,7 +1,17 @@
 {
   "schema": 1,
-  "revision": 1,
+  "revision": 2,
   "archives": {
+    "7ccf312e5236c190b25bca9d119cc8e2062ac49fa7fde228a5aabde1aa5f085c": {
+      "sources": [
+        "https://github.com/timoncool/yue2.cpp/releases/download/studio-hip-188d13b-4e38eee/yue2-windows-gfx1036.zip"
+      ]
+    },
+    "4f977f2a017ea8e93936801f8566caa641c971260ef1d4a2a3ca6531109e5c0e": {
+      "sources": [
+        "https://github.com/timoncool/yue2.cpp/releases/download/studio-hip-188d13b-4e38eee/yue2-windows-gfx1100.zip"
+      ]
+    },
     "c849e36a1ef3e22d4ff217b9d1ce4a3cf5b9467b975610913ae959ad5b16bdc9": {
       "sources": [
         "https://github.com/timoncool/onnxruntime/releases/download/v1.31.1/onnxruntime-linux-x64-1.31.1.tgz",
