@@ -449,7 +449,7 @@ move around. Check the result with `ui_screenshot`.
 - **dataset**: `dataset_import_folder`, `dataset_reveal`, `dataset_song_files`, `dataset_prepare_train_after`, `dataset_get`, `dataset_create`, `dataset_add_folder`, `dataset_add_library_songs`, `dataset_update`, `dataset_delete`, `dataset_song_update`, `dataset_song_describe_style` (wait for an active song, then listen and save the style), `dataset_song_delete`, `lyrics_syllables` (each sung line with its syllables, as the score counts them), `lyrics_find`, `dataset_prepare`, `dataset_take_as_is` (no assistant: found lyrics and heard styles kept as they are), `dataset_prepare_cancel`.
 - **training**: `training_pack_cancel`, `training_status`, `training_pack_install`, `training_listen_pack_install`, `training_listen_pack_cancel`, `training_start`, `training_continue`, `training_cancel`, `training_checkpoint_install`, `training_run_delete`.
 - **ui**: `ui_screenshot`, `ui_read_page`, `ui_click`, `ui_type`, `ui_select`, `ui_press_key`, `ui_scroll`, `ui_navigate`, `ui_open_settings`, `ui_notify`, `ui_console`.
-- **create form**: `create_form_get`, `create_form_set`, `create_form_submit`.
+- **create form**: `create_form_get`, `create_form_set`, `create_form_submit`. In native YuE2, `create_form_get.style_hints` lists optional style suggestions with their stable rule IDs and localized text. They never prevent submission.
 - **player**: `player_state`, `player_play`, `player_pause`, `player_seek`, `player_next`, `player_previous`, `player_queue_add`, `player_set` (repeat none, all, one, or stop after the track).
 - **equalizer**: `equalizer_get`, `equalizer_set`, `equalizer_import`, `equalizer_export`.
 - **visualizer**: `visualizer_get`, `visualizer_set`, `visualizer_presets`.

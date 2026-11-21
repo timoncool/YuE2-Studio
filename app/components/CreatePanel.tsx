@@ -41,7 +41,8 @@ import { fetchAdapters, installCatalogAdapters, startingScales, usesFromSettings
 import { engineParityLabels, planLabels } from '../i18n/engineParity';
 import { midiImportOptions } from '../i18n/midiImportOptions';
 import { SongTextParts } from './SongTextParts';
-import { writerInstruction } from '../services/songWriting';
+import { styleLint, writerInstruction } from '../services/songWriting';
+import { styleAdvice } from '../i18n/styleAdvice';
 import { songWritingStrings } from '../i18n/songWriting';
 import { MagentaFields, magentaModel, restoreMagentaOptions } from './MagentaFields';
 import { MiDashengFields, miDashengModel, miDashengPromptReady, restoreMiDashengPrompt } from './MiDashengFields';
@@ -663,6 +664,9 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
   nameNow.current = name;
   const typeName = (value: string) => { setName(value); setNameFilled(false); };
   const [style, setStyle] = useState(() => keptText(draft, 'style'));
+  const styleHints = useMemo(() => musicEngine === 'local' ? styleLint(style, styleAdvice[language]) : [],
+    [style, musicEngine, language]);
+  const styleHintsId = React.useId();
   const magentaReady = magentaReference ? magentaTracks.some(track => track.id === magentaReference) : Boolean(style.trim());
   const [lyrics, setLyrics] = useState(() => keptText(draft, 'lyrics'));
   const [abc, setAbc] = useState(() => keptText(draft, 'abc'));
@@ -1822,6 +1826,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
     error: error ?? pair.error ?? pair.status?.error,
     music_pair: pair.status,
     variations: { ready: canVary, presets: variationChoices.map(([name]) => name) },
+    style_hints: styleHints,
     assistant_writing: assisting,
   }));
   useBridgeCommand('create_set', (args) => {
@@ -2513,9 +2518,16 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
               onChange={event => setStyle(event.target.value)}
               placeholder={tt('stylePlaceholder')}
               aria-label={tt('styleCardTitle')}
+              aria-describedby={styleHints.length ? styleHintsId : undefined}
               className={`${CONTROL} mt-3 resize-none overflow-y-auto leading-5 custom-scrollbar`}
             />
             <p className="mt-2 text-[11px] leading-4 text-zinc-500">{tt('styleHint')}</p>
+            {styleHints.length > 0 && <details className="mt-2 text-xs text-zinc-600 dark:text-zinc-300">
+              <summary className="cursor-pointer">{styleAdvice[language].title} ({styleHints.length})</summary>
+              <ul id={styleHintsId} className="mt-1 list-disc space-y-1 ps-5">
+                {styleHints.map(item => <li key={item.rule}>{item.hint}</li>)}
+              </ul>
+            </details>}
             <SongTextParts kind="style" value={style} onChange={setStyle} />
             {mode === 'cover' && (coverSongId || coverFile) && (
               <button type="button" onClick={() => void describeByEar()} disabled={describing} className="mt-2 inline-flex items-center gap-1.5 rounded-md border border-zinc-200 px-2 py-1 text-[11px] font-medium text-zinc-600 transition-colors hover:border-pink-400 hover:text-pink-600 disabled:opacity-50 dark:border-white/10 dark:text-zinc-300" title={tt('describeByEarHint')}>
