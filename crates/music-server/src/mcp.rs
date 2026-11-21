@@ -2130,6 +2130,12 @@ fn tools() -> &'static [Tool] {
                 call: |_| get("/v1/music/audio-cpp/models".into()),
             },
             Tool {
+                name: "mulacover_runtime_install",
+                description: "Install the pinned SOXR runtime for MuLaCover on Windows. The local model catalog reports readiness afterwards. On Linux and macOS, use the system libsoxr package.",
+                schema: nothing,
+                call: |_| post("/v1/music/audio-cpp/mulacover/runtime".into(), json!({})),
+            },
+            Tool {
                 name: "engine_logs",
                 description: "The music engine's recent log, for when a song fails or the engine will not start.",
                 schema: nothing,
