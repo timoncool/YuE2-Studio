@@ -1010,6 +1010,11 @@ fn id_only(name: &str, what: &str) -> Value {
 fn song_create_schema(mut properties: Value) -> Value {
     properties["heartmula"] = json!({"type":"object","description":"Native HeartMuLa sampling and codec settings.","properties":{"temperature":{"type":"number"},"top_k":{"type":"integer"},"codec_duration_sec":{"type":"number"},"codec_guidance_scale":{"type":"number"}}});
     properties["midasheng"] = json!({"type":"object","description":"MiDashengLM-Gen scene and sound layers.","properties":{"caption":{"type":"string"},"music":{"type":"string"},"speech_text":{"type":"string"},"speech_style":{"type":"string"},"effects":{"type":"string"},"environment":{"type":"string"}}});
+    properties["magenta"] = json!({
+        "type": "object", "description": "Magenta RealTime 2 instrumental style reference from the library.",
+        "properties": { "reference_song_id": { "type": "string", "minLength": 1 } },
+        "additionalProperties": false
+    });
     properties["vevo2"] = json!({"type":"object","description":"Vevo2 singing references from the song library.","properties":{"voice_song_id":{"type":"string"},"melody_song_id":{"type":"string"}},"required":["voice_song_id"]});
     let mut schema = object(properties, &[]);
     schema["anyOf"] = json!([
@@ -1027,6 +1032,15 @@ fn song_create_schema(mut properties: Value) -> Value {
             } } }
         }
     ]);
+    schema["anyOf"].as_array_mut().expect("song_create anyOf").push(json!({
+        "required": ["music_source", "magenta"],
+        "properties": {
+            "music_source": { "properties": {
+                "kind": { "const": "audio_cpp" }, "model": { "const": "magenta_realtime_2" }
+            } },
+            "magenta": { "required": ["reference_song_id"] }
+        }
+    }));
     schema
 }
 

@@ -16,6 +16,7 @@ mod providers;
 mod openrouter_stream;
 mod native_minimax;
 mod audio_cpp_heartmula;
+mod audio_cpp_magenta;
 mod audio_cpp_midasheng;
 mod audio_cpp_music;
 mod audio_cpp_vevo2;
@@ -308,6 +309,8 @@ struct CreateMusicJobRequest {
     heartmula: Option<audio_cpp_heartmula::HeartMuLaOptions>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     midasheng: Option<audio_cpp_midasheng::MiDashengPrompt>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    magenta: Option<audio_cpp_magenta::MagentaOptions>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     vevo2: Option<audio_cpp_vevo2::Options>,
     /// The window's own mark for this request, handed back on the job so the

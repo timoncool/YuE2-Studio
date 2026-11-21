@@ -42,6 +42,7 @@ enum Family {
     MiniMax,
     HeartMuLa,
     MiDasheng,
+    Magenta,
     Vevo2,
 }
 
@@ -50,6 +51,7 @@ impl Family {
         match id {
             FAMILY => Some(Self::MiniMax),
             audio_cpp_heartmula::FAMILY => Some(Self::HeartMuLa),
+            audio_cpp_magenta::FAMILY => Some(Self::Magenta),
             audio_cpp_midasheng::FAMILY => Some(Self::MiDasheng),
             audio_cpp_vevo2::FAMILY => Some(Self::Vevo2),
             _ => None,
@@ -61,6 +63,7 @@ impl Family {
             Self::MiniMax => FAMILY,
             Self::HeartMuLa => audio_cpp_heartmula::FAMILY,
             Self::MiDasheng => audio_cpp_midasheng::FAMILY,
+            Self::Magenta => audio_cpp_magenta::FAMILY,
             Self::Vevo2 => audio_cpp_vevo2::FAMILY,
         }
     }
@@ -70,6 +73,7 @@ impl Family {
             Self::MiniMax => "MiniMax Music3",
             Self::HeartMuLa => "HeartMuLa",
             Self::MiDasheng => "MiDashengLM-Gen",
+            Self::Magenta => "Magenta RealTime 2",
             Self::Vevo2 => audio_cpp_vevo2::NAME,
         }
     }
@@ -79,6 +83,7 @@ impl Family {
             Self::MiniMax => PROFILE,
             Self::HeartMuLa => audio_cpp_heartmula::PROFILE,
             Self::MiDasheng => audio_cpp_midasheng::PROFILE,
+            Self::Magenta => audio_cpp_magenta::PROFILE,
             Self::Vevo2 => audio_cpp_vevo2::PROFILE,
         }
     }
@@ -88,6 +93,7 @@ impl Family {
             Self::MiniMax => model_dir(root),
             Self::HeartMuLa => audio_cpp_heartmula::model_dir(root),
             Self::MiDasheng => audio_cpp_midasheng::model_dir(root),
+            Self::Magenta => audio_cpp_magenta::model_dir(root),
             Self::Vevo2 => audio_cpp_vevo2::model_dir(root),
         }
     }
@@ -97,6 +103,7 @@ impl Family {
             Self::MiniMax => missing_files(path),
             Self::HeartMuLa => audio_cpp_heartmula::missing_files(path),
             Self::MiDasheng => audio_cpp_midasheng::missing_files(path),
+            Self::Magenta => audio_cpp_magenta::missing_files(path),
             Self::Vevo2 => audio_cpp_vevo2::missing_files(path),
         }
     }
@@ -106,6 +113,7 @@ impl Family {
             Self::MiniMax => entry(path),
             Self::HeartMuLa => audio_cpp_heartmula::entry(path),
             Self::MiDasheng => audio_cpp_midasheng::entry(path),
+            Self::Magenta => audio_cpp_magenta::entry(path),
             Self::Vevo2 => audio_cpp_vevo2::entry(path),
         }
     }
@@ -119,6 +127,7 @@ impl Family {
             Self::MiniMax => task(request).map(PreparedTask::Json),
             Self::HeartMuLa => audio_cpp_heartmula::task(request).map(PreparedTask::Json),
             Self::MiDasheng => audio_cpp_midasheng::task(request).map(PreparedTask::Json),
+            Self::Magenta => audio_cpp_magenta::task(request, library).map(PreparedTask::Magenta),
             Self::Vevo2 => audio_cpp_vevo2::task(request, library).map(PreparedTask::Singing),
         }
     }
@@ -140,6 +149,7 @@ impl Family {
                     row
                 }
             },
+            Self::Magenta => audio_cpp_magenta::catalog(root, runtime_ready),
             Self::Vevo2 => audio_cpp_vevo2::catalog(root, runtime_ready),
         }
     }
@@ -147,6 +157,7 @@ impl Family {
 
 enum PreparedTask {
     Json(Value),
+    Magenta(audio_cpp_magenta::MagentaTask),
     Singing(audio_cpp_vevo2::SingingTask),
 }
 
@@ -154,6 +165,7 @@ impl PreparedTask {
     fn into_request(self) -> anyhow::Result<(Value, Option<tempfile::TempDir>)> {
         match self {
             Self::Json(body) => Ok((body, None)),
+            Self::Magenta(task) => Ok(task.into_request()),
             Self::Singing(task) => task
                 .into_request()
                 .map(|(body, directory)| (body, Some(directory))),
@@ -168,7 +180,9 @@ pub(super) fn registered_model_ready(model: &ModelEntry) -> Option<bool> {
     }
     let directory = match family {
         Family::MiniMax if model.task == "gen" => Some(model.path.as_path()),
-        Family::HeartMuLa | Family::MiDasheng if model.task == "gen" => model.path.parent(),
+        Family::HeartMuLa | Family::MiDasheng | Family::Magenta if model.task == "gen" => {
+            model.path.parent()
+        }
         Family::Vevo2 if model.task == "tts" => model.path.parent(),
         _ => return None,
     };
@@ -245,6 +259,7 @@ pub(super) async fn models(State(state): State<AppState>) -> Json<Value> {
         Family::MiniMax,
         Family::HeartMuLa,
         Family::MiDasheng,
+        Family::Magenta,
         Family::Vevo2,
     ]
     .map(|family| family.catalog(root.as_deref(), runtime_ready));
@@ -280,6 +295,7 @@ mod tests {
             (Family::MiniMax, "gen"),
             (Family::HeartMuLa, "gen"),
             (Family::MiDasheng, "gen"),
+            (Family::Magenta, "gen"),
             (Family::Vevo2, "tts"),
         ] {
             let row = family.catalog(Some(root.path()), true);
@@ -358,7 +374,16 @@ pub(super) async fn submit(
             format!("Unknown audio.cpp music model {model}."),
         );
     };
-    let task = match family.task(&request, &state.library) {
+    let prepared = if matches!(family, Family::Magenta) {
+        let request = request.clone();
+        let library = state.library.clone();
+        tokio::task::spawn_blocking(move || family.task(&request, &library))
+            .await
+            .unwrap_or_else(|error| Err(error.into()))
+    } else {
+        family.task(&request, &state.library)
+    };
+    let task = match prepared {
         Ok(task) => task,
         Err(error) => return reject(StatusCode::BAD_REQUEST, error.to_string()),
     };
@@ -440,6 +465,10 @@ pub(super) async fn submit(
         }
         (Family::HeartMuLa, _) => settings["heartmula"] = serde_json::json!(request.heartmula),
         (Family::MiDasheng, _) => settings["midasheng"] = serde_json::json!(request.midasheng),
+        (Family::Magenta, _) => {
+            settings["quantization"] = Value::from(audio_cpp_magenta::QUANTIZATION);
+            settings["magenta"] = serde_json::json!(request.magenta);
+        }
         (Family::Vevo2, _) => {
             settings["route"] = Value::from(audio_cpp_vevo2::ROUTE);
             settings["vevo2"] = serde_json::json!(request.vevo2);

@@ -176,8 +176,8 @@ const libraryPlaylistsKey = [...libraryKey, 'playlists'] as const;
  * The library's songs, newest first. Everything that writes a song says so,
  * so a read is kept until then rather than repeated for every screen showing it.
  */
-export function useLibrarySongs() {
-  return useQuery({ queryKey: librarySongsKey, queryFn: loadNativeLibrarySongs, staleTime: Infinity });
+export function useLibrarySongs(enabled = true) {
+  return useQuery({ queryKey: librarySongsKey, queryFn: loadNativeLibrarySongs, staleTime: Infinity, enabled });
 }
 
 export function useLibraryPlaylists() {

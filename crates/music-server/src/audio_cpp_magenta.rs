@@ -8,6 +8,7 @@ use std::path::{Path, PathBuf};
 
 pub(super) const FAMILY: &str = "magenta_realtime_2";
 pub(super) const PROFILE: &str = "small-f16";
+pub(super) const QUANTIZATION: &str = "F16";
 const FILE: &str = "magenta-rt2-small-f16.gguf";
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
@@ -34,14 +35,17 @@ pub(super) fn missing_files(dir: &Path) -> Vec<&'static str> {
     }
 }
 
-pub(super) fn catalog(dir: &Path, runtime_ready: bool) -> Value {
-    let mut missing = missing_files(dir);
+pub(super) fn catalog(root: Option<&Path>, runtime_ready: bool) -> Value {
+    let mut missing = root.map_or_else(
+        || vec!["Studio data folder"],
+        |root| missing_files(&model_dir(root)),
+    );
     if !runtime_ready {
         missing.push("audio.cpp runtime");
     }
     json!({
         "id": FAMILY, "name": "Magenta RealTime 2", "profile_id": PROFILE,
-        "quantization": "F16", "status": "experimental", "ready": missing.is_empty(),
+        "quantization": QUANTIZATION, "status": "experimental", "ready": missing.is_empty(),
         "missing": missing, "requires": [], "output_formats": ["flac", "mp3", "wav32"],
     })
 }
@@ -95,23 +99,19 @@ pub(super) fn task(
             && request.lm_batch_size.is_none_or(|n| n == 1),
         "Magenta RealTime 2 generates one instrumental with a text style or an audio style reference."
     );
+    let reference_id = request
+        .magenta
+        .as_ref()
+        .and_then(|options| options.reference_song_id.as_deref());
     let mut body = request_body(
         &request.style,
-        request
-            .magenta
-            .as_ref()
-            .and_then(|options| options.reference_song_id.as_deref())
-            .is_some(),
+        reference_id.is_some(),
         request.duration_seconds,
         request.seed,
         request.cfg_scale,
     )?;
 
-    let reference_dir = if let Some(id) = request
-        .magenta
-        .as_ref()
-        .and_then(|options| options.reference_song_id.as_deref())
-    {
+    let reference_dir = if let Some(id) = reference_id {
         let song = library
             .get_song(id)?
             .filter(|song| library::trashed_at(song) == 0)
@@ -175,14 +175,9 @@ fn request_body(
 fn stage_reference(source: &Path) -> Result<(PathBuf, tempfile::TempDir)> {
     let audio = audio_pcm::decode_stereo(source)
         .context("The Magenta style reference has unreadable audio.")?;
-    ensure!(
-        audio.frames() > 0,
-        "The Magenta style reference contains no audio."
-    );
     let directory = tempfile::tempdir().context("Creating the Magenta style reference folder")?;
     let path = directory.path().join("style.wav");
-    std::fs::write(&path, audio_pcm::wav24_bytes(&audio)?)
-        .context("Preparing the Magenta style reference audio")?;
+    audio_pcm::write_wav24(&path, &audio).context("Preparing the Magenta style reference audio")?;
     Ok((path, directory))
 }
 
