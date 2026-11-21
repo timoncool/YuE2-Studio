@@ -1,6 +1,7 @@
 //! Engine manifests are data obtained from a named TUF target. Reading this
 //! catalogue is offline and never installs or starts a process.
 pub(super) mod install;
+pub(super) mod progress;
 
 use std::collections::HashSet;
 

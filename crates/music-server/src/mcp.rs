@@ -544,6 +544,7 @@ const JOURNAL: &[(&str, &str, &str)] = &[
     ("lora_import_files", "installed", "lora"),
     ("rvc_voice_import", "installed", "rvc_voice"),
     ("rvc_voice_remove", "deleted", "rvc_voice"),
+    ("music_package_cancel", "cancelled", "download"),
     ("music_model_package_install", "installed", "model"),
     ("music_engine_package_install", "installed", "music_engine"),
     ("music_engine_catalog_refresh", "refreshed", "music_engine_catalog"),
@@ -2676,6 +2677,18 @@ fn tools() -> &'static [Tool] {
                 description: "Read preparation, file download and verification progress for a catalog voice being installed.",
                 schema: || id_only("id", "the ID from rvc_catalog_list"),
                 call: |args| get(format!("/v1/rvc/catalog/progress/{}", segment(&text(args, "id")?))),
+            },
+            Tool {
+                name: "music_package_progress",
+                description: "Read the current file, transfer stage, reused and downloaded bytes for one signed package.",
+                schema: || object(json!({"kind":{"type":"string","enum":["music-engines","music-models"]},"id":{"type":"string"}}), &["kind","id"]),
+                call: |args| get(format!("/v1/components/packages/{}/{}/progress", segment(&text(args,"kind")?),segment(&text(args,"id")?))),
+            },
+            Tool {
+                name: "music_package_cancel",
+                description: "Request cancellation of an active signed package installation.",
+                schema: || object(json!({"kind":{"type":"string","enum":["music-engines","music-models"]},"id":{"type":"string"}}), &["kind","id"]),
+                call: |args| post(format!("/v1/components/packages/{}/{}/cancel", segment(&text(args,"kind")?),segment(&text(args,"id")?)),json!({})),
             },
             Tool {
                 name: "music_model_package_install",

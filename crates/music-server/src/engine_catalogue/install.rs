@@ -125,7 +125,13 @@ async fn only_signed_files(directory: &Path, package: &impl Package) -> Result<b
     }
     Ok(count == expected.len())
 }
-async fn download(file: &PackageFile, path: &Path, client: &reqwest::Client) -> Result<()> {
+async fn download(
+    file: &PackageFile,
+    path: &Path,
+    client: &reqwest::Client,
+    transfer: &super::progress::Transfer,
+) -> Result<()> {
+    transfer.stage("downloading", Some(&file.name));
     let mut response = client.get(&file.url).send().await?.error_for_status()?;
     let mut writer = tokio::fs::File::create_new(path).await?;
     let mut hash = Sha256::new();
@@ -138,6 +144,7 @@ async fn download(file: &PackageFile, path: &Path, client: &reqwest::Client) -> 
         bytes += chunk.len() as u64;
         hash.update(&chunk);
         writer.write_all(&chunk).await?;
+        transfer.downloaded(chunk.len() as u64);
     }
     ensure!(
         bytes == file.bytes
@@ -162,6 +169,7 @@ async fn materialize_model_file(
     file: &PackageFile,
     to: &Path,
     client: &reqwest::Client,
+    transfer: &super::progress::Transfer,
 ) -> Result<bool> {
     tokio::fs::create_dir_all(store).await?;
     let object = store.join(&file.sha256);
@@ -180,7 +188,7 @@ async fn materialize_model_file(
     if !reused {
         let staged = tempfile::tempdir_in(store)?;
         let fresh = staged.path().join("weight");
-        download(file, &fresh, client).await?;
+        download(file, &fresh, client, transfer).await?;
         tempfile::TempPath::try_from_path(fresh)?.persist(&object)?;
     }
     if tokio::fs::hard_link(&object, to).await.is_err() {
@@ -190,6 +198,25 @@ async fn materialize_model_file(
 }
 
 async fn install<P: Package>(root: &Path, package: &P) -> Result<serde_json::Value> {
+    let total = package
+        .files()
+        .iter()
+        .try_fold(0u64, |sum, f| sum.checked_add(f.bytes))
+        .context("package size overflow")?;
+    let (job, mut cancelled) =
+        super::progress::Installation::begin(P::FOLDER, package.id(), total)?;
+    tokio::select! {
+        biased;
+        _ = cancelled.changed() => anyhow::bail!("Package installation cancelled"),
+        result = stage_package(root, package, &job.transfer) => result,
+    }
+}
+
+async fn stage_package<P: Package>(
+    root: &Path,
+    package: &P,
+    transfer: &super::progress::Transfer,
+) -> Result<serde_json::Value> {
     let objects = root.with_file_name("music-model-objects");
     let root = root.join(package.id());
     tokio::fs::create_dir_all(&root).await?;
@@ -224,6 +251,7 @@ async fn install<P: Package>(root: &Path, package: &P) -> Result<serde_json::Val
     let mut downloaded = 0u64;
     let mut reused = 0u64;
     for file in package.files() {
+        transfer.stage("verifying", Some(&file.name));
         let to = directory.join(&file.name);
         let from = prior.join("files").join(&file.name);
         if !selected.active.is_empty() && verified(from.clone(), file).await? {
@@ -232,19 +260,21 @@ async fn install<P: Package>(root: &Path, package: &P) -> Result<serde_json::Val
             {
                 tokio::fs::copy(&from, &to).await?;
             }
+            transfer.reused(file.bytes);
             reused = reused
                 .checked_add(file.bytes)
                 .context("package size overflow")?;
         } else {
             if P::FOLDER == ModelPackage::FOLDER {
-                if materialize_model_file(&objects, file, &to, &client).await? {
+                if materialize_model_file(&objects, file, &to, &client, transfer).await? {
+                    transfer.reused(file.bytes);
                     reused = reused
                         .checked_add(file.bytes)
                         .context("package size overflow")?;
                     continue;
                 }
             } else {
-                download(file, &to, &client).await?;
+                download(file, &to, &client, transfer).await?;
             }
             downloaded = downloaded
                 .checked_add(file.bytes)
@@ -294,6 +324,7 @@ async fn install<P: Package>(root: &Path, package: &P) -> Result<serde_json::Val
     next.as_file().sync_all()?;
     // Files from an old generation may still be loaded by an active engine.
     // Publish its replacement only after every signed artifact is present.
+    transfer.stage("activating", None);
     let _generation_path = stage.keep();
     next.persist(root.join("active.json"))?;
     Ok(
