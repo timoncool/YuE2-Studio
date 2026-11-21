@@ -390,7 +390,7 @@ mod tests {
         target_arch = "x86_64"
     ))]
     #[tokio::test]
-    async fn catalog_setup_inspects_installed_worker_without_starting_it() {
+    async fn catalog_setup_ignores_unverified_worker_without_starting_it() {
         let root = tempfile::tempdir().unwrap();
         let runtime = root.path().join("rvc/native/v1");
         fs::create_dir_all(&runtime).unwrap();
@@ -398,7 +398,7 @@ mod tests {
         for name in [&executable, "hubert.vfrm", "rmvpe.vfrm"] {
             fs::write(runtime.join(name), b"fixture, cannot launch").unwrap();
         }
-        assert_eq!(fast_status(root.path()).await, Ok(false));
+        assert!(fast_status(root.path()).await.is_err());
         assert!(!root.path().join("rvc/native/cache-v1").exists());
     }
 

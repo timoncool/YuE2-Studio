@@ -240,7 +240,9 @@ with tempfile.TemporaryDirectory(prefix="yue-openrouter-") as profile, local_pro
             assert tool("rvc_catalog_list", {"query":"Radio Tapok"}, 20)["total"] > 0
             assert tool("rvc_voices_list", {}, 21) == []
             detected=tool("rvc_backend_status", {}, 22)["backends"]["vocal-fast-rs"]
-            assert detected["can_start"] and not detected["ready"], detected
+            assert not detected["can_start"] and not detected["ready"], detected
+            installer = tool("rvc_native_runtime_status", {}, 23)
+            assert not installer["installed"] and installer["download"] is None, installer
             assert not (native/"cache-v1").exists(), "reading the catalog started native RVC"
             code,data=request("/v1/music/jobs/"+slow_job)
             assert code==200 and json.loads(data)["status"]=="running",(code,data)
