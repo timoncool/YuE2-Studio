@@ -90,7 +90,7 @@ const PINNED: &[(&str, &str)] = &[
 /// The SHA-256 the pin at `url` names: this table, then the transcribe.cpp builds and models of the shared binding,
 /// then audio.cpp's server archives and the CUDA 12 wheels of the shared client.
 pub fn sha256(url: &str) -> Option<&'static str> {
-    if let Some(sha) = crate::hotstep_cover_assets::sha256(url).or_else(|| crate::hotstep_sa3_assets::sha256(url)).or_else(|| crate::hotstep_sa3_train_assets::sha256(url)) { return Some(sha); }
+    if let Some(sha) = crate::hotstep_cover_assets::sha256(url).or_else(|| crate::hotstep_sa3_assets::sha256(url)).or_else(|| crate::hotstep_sa3_train_assets::sha256(url)).or_else(|| crate::hotstep_heartmula_assets::sha256(url)) { return Some(sha); }
     if url == crate::audio_cpp_heartmula::ASSET.url {
         return Some(crate::audio_cpp_heartmula::SHA256);
     }

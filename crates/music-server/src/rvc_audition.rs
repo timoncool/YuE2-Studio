@@ -137,8 +137,7 @@ impl Clip {
                 .all(|sample| sample.is_finite()),
             "The converted fragment contains invalid audio."
         );
-        let vocal_gain_db =
-            match_playback_level(audio_post::loudness::integrated(&self.source), &mut after);
+        let vocal_gain_db = match_playback_level(&self.source, &mut after);
         let folder = tempfile::tempdir()?;
         for (side, audio) in [("before", &self.source), ("after", &after)] {
             std::fs::write(
@@ -166,21 +165,32 @@ impl Clip {
     }
 }
 
-/// Loudness-match the temporary comparison audio by one constant gain.
-fn match_playback_level(target: Option<f64>, vocal: &mut audio_post::Stereo) -> f64 {
-    let (Some(target), Some(current)) = (target, audio_post::loudness::integrated(vocal)) else {
-        return 0.0;
-    };
-    // A nearly silent choice is a rest. Do not try to match its residual noise.
-    if target < -45.0 || current < -55.0 {
-        return 0.0;
+/// Limit the level adjustment to the temporary comparison audio.
+fn match_playback_level(
+    reference: &audio_post::Stereo,
+    vocal: &mut audio_post::Stereo,
+) -> Option<f64> {
+    if vocal.peak() == 0.0 {
+        return Some(0.0);
     }
-    let wanted = 10_f64.powf((target - current).clamp(-12.0, 12.0) / 20.0);
-    let gain = wanted.min(0.98 / f64::from(vocal.peak()));
+    use audio_post::loudness::{integrated, true_peak_db};
+    let target = integrated(reference);
+    let adjustment = if let Some(target) = target.filter(|level| *level >= -45.0) {
+        // Keep a missing or barely audible conversion from being boosted as noise.
+        integrated(vocal)
+            .filter(|level| *level >= -55.0)
+            .map_or(0.0, |current| (target - current).clamp(-12.0, 12.0))
+    } else {
+        // A quiet selection may contain a rest or room tone. Match at most its peak.
+        (true_peak_db(reference) - true_peak_db(vocal)).min(0.0)
+    };
+    let gain = 10_f64
+        .powf(adjustment / 20.0)
+        .min(0.98 / f64::from(vocal.peak()));
     for sample in vocal.left.iter_mut().chain(&mut vocal.right) {
         *sample *= gain as f32;
     }
-    20.0 * gain.log10()
+    (gain > 0.0).then(|| 20.0 * gain.log10())
 }
 
 pub(super) async fn preview(
@@ -263,7 +273,7 @@ mod tests {
         let louder: Vec<_> = source.iter().map(|sample| sample * 2.0).collect();
         let mut vocal = audio_post::Stereo::new(louder.clone(), louder, rate);
         let target = audio_post::loudness::integrated(&reference);
-        let gain_db = match_playback_level(target, &mut vocal);
+        let gain_db = match_playback_level(&reference, &mut vocal).unwrap();
         assert!((gain_db + 6.0206).abs() < 0.001);
         assert!(
             (target.unwrap() - audio_post::loudness::integrated(&vocal).unwrap()).abs() < 0.001
@@ -288,12 +298,27 @@ mod tests {
         let quiet = signal(0.002);
         let reference = audio_post::Stereo::new(quiet.clone(), quiet, rate);
         let noise = signal(0.0005);
-        for target in [audio_post::loudness::integrated(&reference), None] {
-            let mut output = audio_post::Stereo::new(noise.clone(), noise.clone(), rate);
-            assert_eq!(match_playback_level(target, &mut output), 0.0);
-            assert_eq!(output.left, noise);
-            assert_eq!(output.right, noise);
-        }
+        let mut quiet_output = audio_post::Stereo::new(noise.clone(), noise.clone(), rate);
+        assert_eq!(
+            match_playback_level(&reference, &mut quiet_output),
+            Some(0.0)
+        );
+        assert_eq!(quiet_output.left, noise);
+        assert_eq!(quiet_output.right, noise);
+
+        let loud_noise = signal(0.005);
+        let mut output = audio_post::Stereo::new(loud_noise.clone(), loud_noise, rate);
+        assert!(match_playback_level(&reference, &mut output).unwrap() < 0.0);
+        assert!(
+            (audio_post::loudness::true_peak_db(&reference)
+                - audio_post::loudness::true_peak_db(&output))
+            .abs()
+                < 0.001
+        );
+        let silence =
+            audio_post::Stereo::new(vec![0.0; rate as usize], vec![0.0; rate as usize], rate);
+        assert_eq!(match_playback_level(&silence, &mut output), None);
+        assert_eq!(output.peak(), 0.0);
     }
 
     #[test]
