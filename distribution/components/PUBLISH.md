@@ -33,13 +33,18 @@ The Studio expects the signed targets under `targets/` inside that directory.
 
    On initial deployment omit `--previous-site`. If a voice catalogue is
    offered, also pass `--voices config/rvc-voice-catalog.json` on every
-   deployment. The verified target must match its reviewed file byte for byte.
-4. Apply the staged files as an overlay to the current channel in a single
-   versioned deployment. Keep older numbered roles and hashed targets for
-   clients already downloading. For a host with individually uploaded files,
-   upload immutable files first, verify they are reachable, and replace
-   `timestamp.json` last. Publish from one writer at a time. Recheck the
-   base deployment immediately before promotion if another writer exists.
+   deployment. Pass `--engines` with the reviewed engine catalogue if the
+   signing repository publishes `music-engine-catalog.json`. Each verified
+   target must match its reviewed file byte for byte.
+4. Promote the staged directory in one versioned deployment. Staging retains
+   the previous publication's numbered roots, numbered roles and hash-prefixed
+   catalogues for older installers and downloads already in progress. During
+   root rotation, provide each intermediate root missing from the previous
+   publication in the signing metadata directory. Staging follows the
+   verified chain from the oldest retained bootstrap to the new root.
+   For a host with individually uploaded files, upload immutable files first,
+   verify they are reachable, and replace `timestamp.json` last. Publish from
+   one writer at a time and recheck the base deployment before promotion.
 5. Check the published channel with a previously installed Studio and a clean
    profile. To withdraw a bad mirror, sign the previous working URLs as a new
    revision and publish using the current channel as the comparison point.
