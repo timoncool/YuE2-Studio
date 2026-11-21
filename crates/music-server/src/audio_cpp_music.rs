@@ -557,6 +557,7 @@ pub(super) async fn submit(
     model: String,
     attempt: u32,
 ) -> (StatusCode, Json<MusicJob>) {
+    let submitted = std::time::Instant::now();
     let reject = |status, reason| {
         (
             status,
@@ -744,7 +745,7 @@ pub(super) async fn submit(
         .await
         .context("the audio.cpp worker stopped")
         .and_then(|result| result);
-        complete(&state, &job.id, family, outcome).await;
+        complete(&state, &job.id, family, build, submitted, outcome).await;
         state.audio_cpp_music_stops.write().await.remove(&job.id);
     });
     (StatusCode::ACCEPTED, Json(accepted))
@@ -795,6 +796,8 @@ async fn complete(
     state: &AppState,
     id: &str,
     family: Family,
+    build: Build,
+    submitted: std::time::Instant,
     outcome: anyhow::Result<native_music_jobs::ShapedOutput>,
 ) {
     let mut jobs = state.jobs.write().await;
@@ -835,7 +838,37 @@ async fn complete(
         }
     };
     persist(state, job);
+    let seconds = songs_seconds(&job.songs);
+    let completed = song_id.is_some();
+    let elapsed = submitted.elapsed();
     drop(jobs);
+    if let Some(hub) = state.hub.clone().filter(|hub| hub.telemetry_on()) {
+        // Only enumerated runtime and model names enter the existing daily
+        // report. A cancelled job returns above before recording an outcome.
+        let hub = hub.for_scheduled_report();
+        let write = tokio::task::spawn_blocking(move || {
+            if completed {
+                let backend = match build {
+                    Build::Cuda12 => "cuda12",
+                    Build::Cuda13 => "cuda13",
+                    Build::Vulkan => "vulkan",
+                    Build::Metal => "metal",
+                    Build::Cpu => "cpu",
+                };
+                let set = format!("audio.cpp.{}.{}", family.id(), backend);
+                let parts = [ENGINE.to_string(), family.profile().to_string(), backend.to_string()];
+                hub.count("songs", 1);
+                hub.count("song_done", 1);
+                hub.used_models(Some(&set), &parts, 1);
+                hub.worked_on("song", Some(&set), seconds, elapsed);
+            } else {
+                hub.count("song_failed", 1);
+            }
+        });
+        if let Err(error) = write.await {
+            studio_log!("[ERROR] recording audio.cpp music outcome: {error}");
+        }
+    }
     if let Some(id) = song_id {
         tag_stored_song(state, &id).await;
         after_import(state, &id);
