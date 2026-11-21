@@ -4335,6 +4335,10 @@ mod tests {
         };
         let base: serde_json::Map<String, Value> = properties.iter().map(|(name, property)| (name.clone(), sample(name, property))).collect();
         let mut all = vec![Value::Object(base.clone())];
+        if matches!(tool.name, "training_pack_install" | "training_pack_cancel") {
+            // Their optional arguments select the separate training-base routes.
+            all.push(json!({}));
+        }
         for (name, property) in &properties {
             for choice in property["enum"].as_array().into_iter().flatten().skip(1) {
                 let mut other = base.clone();
