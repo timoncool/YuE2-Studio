@@ -5,7 +5,19 @@ export interface NativeOpenRouterModel {
   name: string;
   description?: string | null;
   capabilities: string[];
+  supported_parameters?: string[];
 }
+
+export const openRouterMusicFields = {
+  seed: { label: 'lmProvider.seed', step: 1, min: Number.MIN_SAFE_INTEGER, max: Number.MAX_SAFE_INTEGER },
+  temperature: { label: 'lmProvider.temperature', step: 'any', min: 0, max: 2 },
+  top_p: { label: 'lmProvider.topP', step: 'any', min: 0, max: 1 },
+  max_tokens: { label: 'lmProvider.maxTokens', step: 1, min: 1, max: 4_294_967_295 },
+} as const;
+
+export type OpenRouterMusicParameter = keyof typeof openRouterMusicFields;
+export type OpenRouterMusicOptions = Partial<Record<OpenRouterMusicParameter, number>>;
+export const openRouterMusicParameters = Object.keys(openRouterMusicFields) as OpenRouterMusicParameter[];
 
 interface CatalogResponse {
   models?: NativeOpenRouterModel[] | null;
