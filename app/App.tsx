@@ -131,7 +131,7 @@ import { serveVisualizerFeed } from './services/visualizerFeed';
 import { winampControl, winampOn } from './services/winamp';
 import { notePlayed } from './services/playHistory';
 import { deleteQuestion } from './services/deleteQuestion';
-import { createNativePlaylist, deleteNativeSong, moveStoredLikes, restoreTrashedSong, setNativeSongLiked, updateNativePlaylist } from './services/nativeLibrary';
+import { createNativePlaylist, moveStoredLikes, restoreTrashedSong, setNativeSongLiked, trashNativeSongs, updateNativePlaylist } from './services/nativeLibrary';
 import { foldStems } from './services/songStems';
 import { noteStudioMessage } from './services/journal';
 import { JournalPanel } from './components/JournalPanel';
@@ -1226,28 +1226,16 @@ function AppContent() {
       onConfirm: async () => {
         setConfirmDialog(null);
 
-        const idsToDelete = new Set(songsToDelete.map(song => song.id));
-        const succeeded: string[] = [];
-        const failed: string[] = [];
+        const { removed, restore, failed } = await trashNativeSongs(songsToDelete);
 
-        for (const song of songsToDelete) {
-          try {
-            await deleteNativeSong(song.id);
-            succeeded.push(song.id);
-          } catch (error) {
-            console.error('Failed to delete song:', error);
-            failed.push(song.id);
-          }
-        }
+        if (removed.size > 0) {
+          updateLibrarySongs(songs => songs.filter(song => !removed.has(song.id)));
 
-        if (succeeded.length > 0) {
-          updateLibrarySongs(songs => songs.filter(s => !idsToDelete.has(s.id) || failed.includes(s.id)));
-
-          if (selectedSong?.id && succeeded.includes(selectedSong.id)) {
+          if (selectedSong?.id && removed.has(selectedSong.id)) {
             setSelectedSong(null);
           }
 
-          if (currentSong?.id && succeeded.includes(currentSong.id)) {
+          if (currentSong?.id && removed.has(currentSong.id)) {
             setCurrentSong(null);
             setIsPlaying(false);
             if (audioRef.current) {
@@ -1256,20 +1244,20 @@ function AppContent() {
             }
           }
 
-          setPlayQueue(prev => prev.filter(s => !idsToDelete.has(s.id) || failed.includes(s.id)));
+          setPlayQueue(prev => prev.filter(song => !removed.has(song.id)));
         }
 
         // what went to the bin comes back from the message, with its stems
-        const undo = {
+        const undo = restore.length > 0 ? {
           label: t('undo'),
           onClick: () => {
-            void Promise.all(succeeded.map(id => restoreTrashedSong(id)))
+            void Promise.all(restore.map(id => restoreTrashedSong(id)))
               .then(() => { libraryChanged(); showToast(t('songsRestored')); })
               .catch((error: unknown) => showToast(error instanceof Error ? error.message : String(error), 'error'));
           },
-        };
+        } : undefined;
         if (failed.length > 0) {
-          showToast(t('songsDeletedPartial').replace('{succeeded}', String(succeeded.length)).replace('{total}', String(songsToDelete.length)), 'error');
+          showToast(t('songsDeletedPartial').replace('{succeeded}', String(songsToDelete.length - failed.length)).replace('{total}', String(songsToDelete.length)), 'error', undo);
         } else if (isSingle) {
           showToast(t('songDeleted'), 'success', undo);
         } else {

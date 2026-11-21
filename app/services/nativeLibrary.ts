@@ -242,9 +242,34 @@ export async function renameNativeSong(id: string, title: string): Promise<Song>
   return mapNativeLibrarySong(await response.json());
 }
 
-export async function deleteNativeSong(id: string): Promise<void> {
-  const response = await fetch(`/v1/library/songs/${encodeURIComponent(id)}`, { method: 'DELETE' });
-  if (!response.ok) throw new Error(`Native song deletion failed (${response.status})`);
+/** Moves selected songs to the bin and records the groups this operation can undo. */
+export async function trashNativeSongs(songs: Pick<Song, 'id' | 'derived'>[]): Promise<{
+  removed: Set<string>;
+  restore: string[];
+  failed: string[];
+}> {
+  const removed = new Set<string>();
+  const restore: string[] = [];
+  const failed: string[] = [];
+  // A selected original can move its stems in the same operation.
+  const isStem = (song: Pick<Song, 'derived'>) => song.derived?.tool === 'stems';
+  const ordered = [...songs.filter(song => !isStem(song)), ...songs.filter(isStem)];
+  for (const song of ordered) {
+    if (removed.has(song.id)) continue;
+    try {
+      const response = await fetch(`/v1/library/songs/${encodeURIComponent(song.id)}`, { method: 'DELETE' });
+      if (!response.ok) throw new Error(`Native song deletion failed (${response.status})`);
+      const result = await response.json().catch(() => null) as { moved_ids?: string[] } | null;
+      const moved = result?.moved_ids ?? [song.id];
+      if (moved.includes(song.id)) restore.push(song.id);
+      removed.add(song.id);
+      for (const id of moved) removed.add(id);
+    } catch (error) {
+      console.error('Failed to delete song:', error);
+      failed.push(song.id);
+    }
+  }
+  return { removed, restore, failed: failed.filter(id => !removed.has(id)) };
 }
 
 /** A song in the library's bin: when it went there, when it goes for good, how many songs went with it. */
