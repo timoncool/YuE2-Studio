@@ -534,7 +534,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
   const [mulaCoverDraft, setMulaCoverDraft] = useState<HotStepCoverDraft>({ original: '', abc: '' });
   const audioFamily = audioCpp ? native.profile?.id : undefined;
   const linkedFamily = linkedMusicFamilies.find(family => family.pairs.some((pair: LinkedMusicPair) =>
-    pair.engine === nativeEngine && (!('profile' in pair) || pair.profile === native.selectedId)));
+    pair.engine === musicEngine && (!('profile' in pair) || pair.profile === native.selectedId)));
   const miDasheng = audioFamily === miDashengModel;
   const magenta = audioFamily === magentaModel;
   const [magentaOptions, setMagentaOptions] = useState(() => restoreMagentaOptions(undefined));
