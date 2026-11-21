@@ -68,6 +68,10 @@ try {
     # Native tools write progress to stderr; exit codes are the verdict.
     $ErrorActionPreference = 'Continue'
 
+    # Optional runtime-only cache for offline setup. Its contents stay outside the installer.
+    node (Join-Path $PSScriptRoot 'check-native-runtime-cache.mjs')
+    if ($LASTEXITCODE -ne 0) { throw 'Native runtime release cache verification failed.' }
+
     # The engine is rebuilt only when the staged one is not the pinned commit
     # for this backend: a CUDA build of ggml is the slow part of a release.
     $stampPath = Join-Path $engineResourceRoot 'runtime.json'

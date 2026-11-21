@@ -4,6 +4,8 @@
 set -euo pipefail
 
 root="$(cd "$(dirname "$0")/.." && pwd)"
+# Optional runtime-only cache for offline setup. Its contents stay outside the installer.
+node "$root/scripts/check-native-runtime-cache.mjs"
 engine="$root/desktop/src-tauri/resources/yue2-cpp"
 commit="$(sed -n 's/.*"commit": "\(.*\)".*/\1/p' "$root/engines/yue2-cpp-source.json")"
 
