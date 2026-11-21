@@ -5,12 +5,21 @@
 set -euo pipefail
 
 root="$(cd "$(dirname "$0")/.." && pwd)"
+macos_config="$root/desktop/src-tauri/tauri.macos-release.conf.json"
+MACOSX_DEPLOYMENT_TARGET="$(node -p 'require(process.argv[1]).bundle.macOS.minimumSystemVersion' "$macos_config")"
+export MACOSX_DEPLOYMENT_TARGET
+
+has_deployment_target() {
+    vtool -show-build "$1" | awk -v target="$MACOSX_DEPLOYMENT_TARGET" \
+        '$1 == "minos" && ($2 == target || $2 == target ".0") { found = 1 } END { exit !found }'
+}
 # Optional runtime-only cache for offline setup. Its contents stay outside the installer.
 node "$root/scripts/check-native-runtime-cache.mjs"
 engine="$root/desktop/src-tauri/resources/yue2-cpp"
 commit="$(sed -n 's/.*"commit": "\(.*\)".*/\1/p' "$root/engines/yue2-cpp-source.json")"
 
-if [ ! -x "$engine/yue-server" ] || [ "$(cat "$engine/runtime.commit" 2>/dev/null)" != "$commit" ]; then
+if [ ! -x "$engine/yue-server" ] || [ "$(cat "$engine/runtime.commit" 2>/dev/null)" != "$commit" ] ||
+    ! has_deployment_target "$engine/yue-server"; then
     rm -rf "$engine"
     "$root/scripts/build-yue-runtime.sh" "$engine"
     echo "$commit" > "$engine/runtime.commit"
@@ -18,7 +27,8 @@ fi
 
 midi="$root/desktop/src-tauri/resources/music-midi"
 midi_commit="$(sed -n 's/.*"commit": "\(.*\)".*/\1/p' "$root/engines/music-midi-source.json")"
-if [ ! -x "$midi/music-midi" ] || [ ! -x "$midi/music-caption" ] || [ "$(cat "$midi/runtime.commit" 2>/dev/null)" != "$midi_commit" ]; then
+if [ ! -x "$midi/music-midi" ] || [ ! -x "$midi/music-caption" ] || [ "$(cat "$midi/runtime.commit" 2>/dev/null)" != "$midi_commit" ] ||
+    ! has_deployment_target "$midi/music-midi" || ! has_deployment_target "$midi/music-caption"; then
     rm -rf "$midi"
     "$root/scripts/build-midi-runtime.sh" "$midi"
     echo "$midi_commit" > "$midi/runtime.commit"
@@ -32,8 +42,5 @@ cd desktop
 # layout is set. CI mode skips that cosmetic step so the image can be detached.
 CI=true npm exec tauri build -- --config src-tauri/tauri.macos-release.conf.json --bundles dmg
 bundle="$(node "$root/scripts/release-target-dir.mjs")/bundle"
-for file in root.json url.txt; do
-  cmp "../distribution/channels/stable/bootstrap/$file" "$bundle/macos/YuE2 Studio.app/Contents/Resources/component-channel/$file"
-done
-
+# Tauri removes the intermediate .app in DMG-only builds. The release check mounts the image.
 find "$bundle/dmg" -name '*.dmg'
