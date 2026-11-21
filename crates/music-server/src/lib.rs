@@ -2240,7 +2240,10 @@ pub async fn serve_on_port(port: u16) -> anyhow::Result<()> {
         .with_graceful_shutdown(shutdown(state.clone()))
         .await;
     let acpp = state.acpp.clone();
-    tokio::task::spawn_blocking(move || acpp.stop_music()).await?;
+    tokio::task::spawn_blocking(move || {
+        acpp.stop_music();
+        acpp_server::SERVERS.stop_all();
+    }).await?;
     service?;
     Ok(())
 }
