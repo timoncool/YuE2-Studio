@@ -1195,22 +1195,37 @@ pub fn run() {
                 use tauri_plugin_dialog::DialogExt;
                 eprintln!("[save QA] callback on {:?}", std::thread::current().id());
                 #[cfg(windows)]
-                if std::env::var_os("STUDIO_QA_DIRECT_SAVE").is_some() {
-                    let mut dialog = rfd::FileDialog::new().set_file_name(name);
-                    if let Some(extension) = std::path::Path::new(name).extension().and_then(|extension| extension.to_str()) {
-                        dialog = dialog.add_filter(extension.to_uppercase(), &[extension]);
+                if let Ok(method) = std::env::var("STUDIO_QA_DIRECT_SAVE") {
+                    let gui_thread = method == "gui-thread";
+                    let unowned = method == "unowned";
+                    let app = dialogs.clone();
+                    let name = name.to_owned();
+                    let pick = move || {
+                        let mut dialog = rfd::FileDialog::new().set_file_name(&name);
+                        if let Some(extension) = std::path::Path::new(&name).extension().and_then(|extension| extension.to_str()) {
+                            dialog = dialog.add_filter(extension.to_uppercase(), &[extension]);
+                        }
+                        if let Some(folder) = start {
+                            dialog = dialog.set_directory(folder);
+                        }
+                        if !unowned && let Some(window) = app.get_webview_window("main") {
+                            eprintln!("[save QA] direct owner={:?}", window.hwnd());
+                            dialog = dialog.set_parent(&window);
+                        }
+                        eprintln!("[save QA] {method} opening on {:?}", std::thread::current().id());
+                        let choice = dialog.save_file();
+                        eprintln!("[save QA] {method} returned={}", choice.is_some());
+                        choice
+                    };
+                    if gui_thread {
+                        let (sender, receiver) = std::sync::mpsc::channel();
+                        if let Err(error) = dialogs.run_on_main_thread(move || { let _ = sender.send(pick()); }) {
+                            eprintln!("[save QA] dispatch failed: {error}");
+                            return None;
+                        }
+                        return receiver.recv().ok().flatten();
                     }
-                    if let Some(folder) = start {
-                        dialog = dialog.set_directory(folder);
-                    }
-                    if let Some(window) = dialogs.get_webview_window("main") {
-                        eprintln!("[save QA] direct owner={:?}", window.hwnd());
-                        dialog = dialog.set_parent(&window);
-                    }
-                    eprintln!("[save QA] direct opening");
-                    let choice = dialog.save_file();
-                    eprintln!("[save QA] direct returned={}", choice.is_some());
-                    return choice;
+                    return pick();
                 }
                 if let Err(error) = dialogs.run_on_main_thread(|| eprintln!("[save QA] GUI dispatcher responsive")) {
                     eprintln!("[save QA] did not dispatch: {error}");
