@@ -146,6 +146,7 @@ import { JournalPanel } from './components/JournalPanel';
 import { hubStateChanged, useActivity, useHubState } from './services/studioQueries';
 import { hubView, setTelemetry, showsNow, type HubButton } from './services/studioHub';
 import { HubBars } from './components/HubBars';
+import { filterHubPromotions, useHubPromotions } from './services/hubPreferences';
 import { ShellPrompts } from './components/ShellPrompts';
 import { HubPopup } from './components/HubPopup';
 import { applyUiScale, scaleForKey, setUiScale, storedUiScale, UI_SCALE_EVENT } from './services/uiScale';
@@ -514,7 +515,8 @@ function AppContent() {
   // updated past that screen keeps the default until it is unchecked in Settings.
   const hub = useHubState(language);
   // every kind of the hub's notices shows to everyone; the service decides which fit this launch
-  const hubItems = nativeSetupReady && hub.data ? hub.data.items : [];
+  const [showPromotions] = useHubPromotions();
+  const hubItems = nativeSetupReady && hub.data ? filterHubPromotions(hub.data.items, showPromotions) : [];
   const activity = useActivity();
   // a popup waits until nothing is being made: no song or re-render, no cover or timings in progress
   const making = generations.isGenerating || generations.activeJobCount > 0 || (activity.data ?? []).some(entry => entry.state === 'running');

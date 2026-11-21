@@ -394,6 +394,8 @@ struct CreateMusicJobRequest {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     openrouter: Option<providers::openrouter::MusicOptions>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    minimax: Option<native_minimax::Sampling>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     ace: Option<native_ace_jobs::AceOptions>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     hotstep_sa3: Option<hotstep_sa3::Options>,
