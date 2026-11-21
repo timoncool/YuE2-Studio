@@ -121,9 +121,14 @@ For MiniMax Music3 through audio.cpp, call `audio_cpp_music_models` and check th
 to `song_create` with `style`, `lyrics`, and an optional nonnegative `seed`.
 The job uses the installed `quality-q8` profile and returns its library song.
 
-Use `audio_cpp_music_model_install` with `{"model":"heartmula"}` to start installing
-HeartMuLa. Poll `audio_cpp_music_models` for installation progress and readiness
-before creating a song.
+Use `audio_cpp_music_model_install` with `{"model":"heartmula"}` or
+`{"model":"stable_audio"}` to install the selected package. Poll
+`audio_cpp_music_models` for progress and readiness.
+Stable Audio 3 Small Music uses `music_source.model: "stable_audio"`, a
+music prompt in `style`, and optional `stable_audio` fields
+`negative_prompt`, `sampler_mode`, `apg_scale` and `duration_padding_sec`.
+Retrieve the saved prompt, seed and parameters with `library_song_get` to repeat
+them in `song_create`.
 
 For other ready audio.cpp families, pass the ID returned by the same catalog as
 `music_source.model`. HeartMuLa takes lyrics and style tags, with optional

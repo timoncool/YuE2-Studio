@@ -851,3 +851,29 @@ it('reuses the MiniMax-H3 prompt, duration, seed and format without a lyrics fie
     cfg_scale: 1, output_format: 'wav32',
   });
 });
+
+it('reuses a Stable Audio 3 text prompt and its sampler and guidance controls', async () => {
+  vi.stubGlobal('fetch', vi.fn(async () => Response.json({ engine: 'audio.cpp', models: [
+    { id: 'stable_audio', name: 'Stable Audio 3', profile_id: 'stable_audio_3_small_music_q8_0',
+      quantization: 'Q8_0', ready: true, missing: [] },
+  ] })));
+  const stable_audio = { negative_prompt: 'vocals', sampler_mode: 'euler', apg_scale: 0.5, duration_padding_sec: 1 };
+  const song = {
+    title: 'Stable take', ditModel: 'audio.cpp', style: 'instrumental piano', lyrics: 'Previous draft',
+    generationParams: {
+      music_source: { kind: 'audio_cpp', model: 'stable_audio' },
+      duration_seconds: 4, steps: 4, seed: 42, guidance_scale: 2, output_format: 'wav32', stable_audio,
+    },
+  } as Song;
+  act(() => root.render(panel({ musicEngine: 'audio.cpp', initialData: { song, timestamp: 1 } })));
+  await flush();
+  expect(field('textarea[aria-label="lyrics"]')).toBeNull();
+  const sampler = [...host.querySelectorAll('label')].find(node => node.textContent?.startsWith('Sampler'));
+  expect(sampler?.querySelector('select')?.value).toBe('euler');
+  click(buttonNamed('create')!);
+  expect(sent.at(-1)).toMatchObject({
+    music_source: { kind: 'audio_cpp', model: 'stable_audio' },
+    style: 'instrumental piano', lyrics: '', duration_seconds: 4, steps: 4, seed: 42,
+    cfg_scale: 2, output_format: 'wav32', stable_audio,
+  });
+});

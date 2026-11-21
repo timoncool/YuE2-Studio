@@ -1,7 +1,7 @@
 import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { expect, it, vi } from 'vitest';
-import { HeartMuLaInstall } from './HeartMuLaControls';
+import { AudioCppModelInstall } from './HeartMuLaControls';
 
 vi.hoisted(() => vi.stubGlobal('location', { protocol: 'https:', hostname: 'tauri.localhost' }));
 
@@ -24,12 +24,12 @@ it('uses the desktop service address and observes the same installation after re
   const finished = vi.fn();
   let root = createRoot(host);
   try {
-    await act(async () => root.render(<HeartMuLaInstall bytes={0} language="en" onInstalled={finished} />));
+    await act(async () => root.render(<AudioCppModelInstall model="heartmula" bytes={0} language="en" onInstalled={finished} />));
     await act(async () => host.querySelector('button')!.click());
     expect(host.textContent).toContain('40%');
     await act(async () => root.unmount());
     root = createRoot(host);
-    await act(async () => root.render(<HeartMuLaInstall bytes={0} language="en" onInstalled={finished} />));
+    await act(async () => root.render(<AudioCppModelInstall model="heartmula" bytes={0} language="en" onInstalled={finished} />));
     expect(host.querySelector('button')?.disabled).toBe(true);
     expect(host.textContent).toContain('40%');
     expect(starts).toBe(1);
