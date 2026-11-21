@@ -1727,6 +1727,8 @@ pub async fn serve_on_port(port: u16) -> anyhow::Result<()> {
         .route("/v1/rvc/voices/{id}", axum::routing::delete(rvc_voices::remove))
         .route("/v1/components/music-engines", get(engine_catalogue::list))
         .route("/v1/components/music-engines/refresh", post(engine_catalogue::refresh))
+        .route("/v1/components/music-engines/{id}/status", get(engine_catalogue::install::status))
+        .route("/v1/components/music-engines/{id}/install", post(engine_catalogue::install::install_selected))
         .route("/v1/rvc/catalog", get(rvc_catalog::list))
         .route("/v1/rvc/catalog/refresh", post(rvc_catalog::refresh))
         .route("/v1/rvc/catalog/install", post(rvc_catalog::install))

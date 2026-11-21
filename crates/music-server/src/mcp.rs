@@ -544,6 +544,7 @@ const JOURNAL: &[(&str, &str, &str)] = &[
     ("lora_import_files", "installed", "lora"),
     ("rvc_voice_import", "installed", "rvc_voice"),
     ("rvc_voice_remove", "deleted", "rvc_voice"),
+    ("music_engine_package_install", "installed", "music_engine"),
     ("music_engine_catalog_refresh", "refreshed", "music_engine_catalog"),
     ("rvc_catalog_refresh", "refreshed", "rvc_catalog"),
     ("rvc_catalog_install", "installed", "rvc_voice"),
@@ -2674,6 +2675,18 @@ fn tools() -> &'static [Tool] {
                 description: "Read preparation, file download and verification progress for a catalog voice being installed.",
                 schema: || id_only("id", "the ID from rvc_catalog_list"),
                 call: |args| get(format!("/v1/rvc/catalog/progress/{}", segment(&text(args, "id")?))),
+            },
+            Tool {
+                name: "music_engine_package_install",
+                description: "Verify and activate the signed engine package for this platform. A failed update preserves the active generation.",
+                schema: || id_only("id", "the engine ID from music_engine_catalog_list"),
+                call: |args| post(format!("/v1/components/music-engines/{}/install", segment(&text(args, "id")?)), json!({})),
+            },
+            Tool {
+                name: "music_engine_package_status",
+                description: "Check the active engine generation, its signature, and the contents of its runtime directory.",
+                schema: || id_only("id", "the installed engine ID"),
+                call: |args| get(format!("/v1/components/music-engines/{}/status", segment(&text(args, "id")?))),
             },
             Tool {
                 name: "music_engine_catalog_list",

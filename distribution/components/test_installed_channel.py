@@ -324,11 +324,25 @@ def run_rvc(work, binary, certificate, tls_key, install_voice=False):
             publish(4, {"schema_version": 2, "voices": [voice]})
             tool("rvc_catalog_refresh", expected_error=True)
             assert engine_catalogue()["engines"] == []
-            engine = {"id": "fixture-engine", "name": "Fixture", "protocol": "music-http-v1",
-                      "version": "1", "platform": "linux-x86_64", "executable": "worker",
-                      "files": [{"name": "worker", "url": "https://example.org/worker", "bytes": 1, "sha256": "a"*64}]}
+            url = f"https://localhost:{server.server_port}/"
+            binary_bytes = b"fixture executable for package verification"
+            library_bytes = b"revision one"
+            (origin / "worker").write_bytes(binary_bytes)
+            (origin / "music.dll").write_bytes(library_bytes)
+            def pinned(name, contents):
+                return {"name": name, "url": url+name, "bytes": len(contents), "sha256": hashlib.sha256(contents).hexdigest()}
+            engine = {"id": "fixture-engine", "name": "Fixture", "protocol": "music-http-v1", "version": "1",
+                      "platform": "windows-x86_64" if os.name == "nt" else "linux-x86_64", "executable": "worker",
+                      "files": [pinned("worker", binary_bytes), pinned("music.dll", library_bytes)]}
             publish(5, {"schema": 1, "engines": [engine]}, "music-engine-catalog.json")
             assert engine_catalogue(refresh=True)["engines"] == [engine]
+            args = {"id": engine["id"]}
+            first = tool("music_engine_package_install", args)
+            assert first["downloaded_bytes"] == len(binary_bytes) + len(library_bytes), first
+            assert tool("music_engine_package_status", args)["generation"] == first["generation"]
+            request_paths.clear()
+            assert tool("music_engine_package_install", args)["generation"] == first["generation"]
+            assert not request_paths, request_paths
             publish(6, {"schema": 9, "engines": []}, "music-engine-catalog.json")
             try:
                 engine_catalogue(refresh=True)
@@ -337,6 +351,21 @@ def run_rvc(work, binary, certificate, tls_key, install_voice=False):
             else:
                 raise AssertionError("incompatible catalogue was accepted")
             assert engine_catalogue()["engines"] == [engine]
+            engine["version"] = "2"
+            new_library = b"revision two"
+            engine["files"][1] = pinned("music.dll", new_library)
+            publish(7, {"schema": 1, "engines": [engine]}, "music-engine-catalog.json")
+            engine_catalogue(refresh=True)
+            tool("music_engine_package_install", args, expected_error=True)
+            assert tool("music_engine_package_status", args)["generation"] == first["generation"]
+            (origin / "music.dll").write_bytes(new_library)
+            request_paths.clear()
+            second = tool("music_engine_package_install", args)
+            assert second["downloaded_bytes"] == len(new_library) and second["reused_bytes"] == len(binary_bytes), second
+            assert "/worker" not in request_paths and "/music.dll" in request_paths, request_paths
+            assert second["generation"] != first["generation"]
+            assert tool("music_engine_package_status", args)["version"] == "2"
+            print("PASS independent library update, unchanged executable reused, failed update preserved prior generation")
             assert tool("rvc_catalog_list", {"has_index": False})["voices"][0]["name"] == signed_voice["name"]
         finally:
             proc.terminate()
@@ -349,7 +378,14 @@ def run_rvc(work, binary, certificate, tls_key, install_voice=False):
         tool("rvc_catalog_refresh", expected_error=True)
         assert tool("rvc_catalog_list", {"has_index": False})["voices"][0]["name"] == signed_voice["name"]
         assert engine_catalogue()["engines"] == [engine]
-        print("PASS signed engine discovery, incompatible schema rejected, offline restart")
+        assert tool("music_engine_package_status", args)["generation"] == second["generation"]
+        active_files, = [p.parent for p in studio.rglob("music.dll") if p.parent.parent.name == second["generation"]]
+        rogue = active_files / "unexpected.dll"
+        rogue.write_bytes(b"unlisted")
+        tool("music_engine_package_status", args, expected_error=True)
+        rogue.unlink()
+        assert tool("music_engine_package_status", args)["version"] == "2"
+        print("PASS signed engine discovery, incompatible schema rejected, offline restart, unexpected library rejected")
         cache = studio / "component-channel" / "rvc"
         snapshot = cache / (cache / "accepted").read_text()
         path, = (snapshot / "targets").iterdir()
