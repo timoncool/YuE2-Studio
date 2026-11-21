@@ -555,6 +555,8 @@ const JOURNAL: &[(&str, &str, &str)] = &[
     ("rvc_voice_import", "installed", "rvc_voice"),
     ("rvc_voice_remove", "deleted", "rvc_voice"),
     ("music_package_rollback", "updated", "settings"),
+    ("audio_cpp_music_model_install_cancel", "cancelled", "download"),
+    ("hotstep_music_model_install_cancel", "cancelled", "download"),
     ("music_package_cancel", "cancelled", "download"),
     ("music_model_package_install", "installed", "model"),
     ("music_engine_package_install", "installed", "music_engine"),
@@ -2469,6 +2471,18 @@ fn tools() -> &'static [Tool] {
                 description: "Start installation of a managed audio.cpp music model. Poll audio_cpp_music_models for progress.",
                 schema: || object(json!({"model": {"type": "string", "enum": ["heartmula", "stable_audio", "soulx_singer", "soulx_singer_svc"]}}), &["model"]),
                 call: |args| post("/v1/music/audio-cpp/models/install".into(), args.clone()),
+            },
+            Tool {
+                name: "audio_cpp_music_model_install_cancel",
+                description: "Cancel the scoped managed audio.cpp model download while it is in progress. A later install can resume the transfer.",
+                schema: || object(json!({"model": {"type": "string"}}), &["model"]),
+                call: |args| send(Method::DELETE, "/v1/music/audio-cpp/models/install".into(), args.clone()),
+            },
+            Tool {
+                name: "hotstep_music_model_install_cancel",
+                description: "Cancel an active HOT-Step model download by profile ID. Other model downloads keep running.",
+                schema: || object(json!({"model": {"type": "string"}}), &["model"]),
+                call: |args| send(Method::DELETE, "/v1/music/native/hotstep/install".into(), args.clone()),
             },
             Tool {
                 name: "engine_logs",

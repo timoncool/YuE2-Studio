@@ -5,7 +5,7 @@ use std::sync::atomic::AtomicBool;
 
 pub(super) const PROFILE: &str = "heartmula-3b-q8_0";
 const MODEL: &str = "HeartMuLa 3B";
-const SCOPE: &str = "hotstep-heartmula";
+pub(super) const SCOPE: &str = "hotstep-heartmula";
 pub(super) const ADAPTERS: &str = "heartmula-adapters";
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]

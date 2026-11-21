@@ -535,3 +535,7 @@ Use `rvc_preview` with an installed voice, an already separated vocal and a 0.5â
    A file named by path is written to the studio's `midi` folder (`midi_status` run.file).
 4. The weights are MuScriptor by Kyutai & Mirelo, CC BY-NC 4.0: say so when the user wants
    the MIDI for commercial work.
+
+Cancel a running model download with `audio_cpp_music_model_install_cancel` or
+`hotstep_music_model_install_cancel`. Use the model or profile ID for the active
+download. Start the same installation again to reuse downloaded files.

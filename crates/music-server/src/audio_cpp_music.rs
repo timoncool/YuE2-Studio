@@ -481,7 +481,16 @@ pub(super) async fn models(State(state): State<AppState>) -> Json<Value> {
 
 #[derive(Deserialize)]
 pub(super) struct InstallModel {
-    model: String,
+    pub(super) model: String,
+}
+
+pub(super) async fn cancel_install(
+    State(state): State<AppState>,
+    Json(request): Json<InstallModel>,
+) -> Result<Json<Value>, (StatusCode, Json<ApiError>)> {
+    let managed = Family::parse(&request.model).and_then(|family| managed_model(family, &state))
+        .ok_or_else(|| api_error(StatusCode::BAD_REQUEST, "This audio.cpp music model has no managed installation.".into()))?;
+    Ok(Json(serde_json::json!({"cancelled": cancel_acpp_download(&state, managed.scope).await})))
 }
 
 pub(super) async fn install(
@@ -510,6 +519,7 @@ pub(super) async fn install(
             serde_json::json!({"started": false, "installing": true}),
         ));
     };
+    state.acpp.downloader().clear_finished(managed.scope).await;
     tokio::spawn(async move {
         let _lease = lease;
         if let Err(error) = install_managed_model(&state, build, root, &managed).await {
@@ -549,7 +559,7 @@ async fn install_managed_model(
     if matches!(managed.family, Family::SoulX(audio_cpp_soulx::Variant::Conversion)) {
         #[cfg(windows)]
         if !state.acpp.soxr_ready() {
-            state.acpp.install_soxr().await.context("Installing SoulX-Singer SVC resampler")?;
+            state.acpp.install_soxr_for(managed.scope).await.context("Installing SoulX-Singer SVC resampler")?;
         }
         anyhow::ensure!(state.acpp.soxr_ready(), "Install the libsoxr runtime for SoulX-Singer SVC.");
     }
