@@ -29,7 +29,11 @@ if ($Phase -eq 'control') {
     $doc.add_PrintPage({param($sender,$page) $page.Graphics.DrawString('Studio QA Windows control', $font, [System.Drawing.Brushes]::Black, 80, 80)})
     try { $doc.Print() } finally { $font.Dispose(); $doc.Dispose() }
     for ($i = 0; $i -lt 40; $i++) {
-        if ((Test-Path -LiteralPath $destination) -and [Text.Encoding]::ASCII.GetString([IO.File]::ReadAllBytes($destination)).TrimEnd().EndsWith('%%EOF')) {
+        $bytes = $null
+        try { $bytes = [IO.File]::ReadAllBytes($destination) } catch {
+            if ($_.Exception.GetBaseException() -isnot [IO.IOException]) { throw }
+        }
+        if ($bytes -and [Text.Encoding]::ASCII.GetString($bytes).TrimEnd().EndsWith('%%EOF')) {
             Move-Item -LiteralPath $destination -Destination "$evidence/windows-control.pdf"
             break
         }
