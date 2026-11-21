@@ -533,6 +533,20 @@ footer p { margin: 0 0 8px; }
     </table></div>
     <p><a href="music-gpu-benchmarks.json">개별 실행, SHA-256 및 가중치 구성</a></p>
 <!-- music-gpu-matrix:end -->
+<!-- music-gpu-wsl:start -->
+    <h3 id="music-gpu-wsl-title">네이티브 음악 엔진 · WSL2의 Linux</h3>
+    <p class="note">RTX 4090, 드라이버 617.42. Linux 실행 파일을 WSL2에서 실행하고 가중치는 Windows 드라이브에 두었습니다. 콜드는 실행부터 첫 WAV 수신까지, 웜은 같은 프로세스에 보낸 요청 3회의 중앙값입니다. VRAM은 GPU 전체, RSS는 Linux 프로세스 트리를 측정했습니다.</p>
+    <div class="scroll benchmark-scroll" role="region" aria-labelledby="music-gpu-wsl-title" tabindex="0"><table>
+      <thead><tr><th scope="col">모델 및 엔진</th><th scope="col">백엔드</th><th scope="col">WAV (초)</th><th scope="col">첫 실행 (초)</th><th scope="col">재실행 (초)</th><th scope="col">VRAM 최대 / 증가 (GiB)</th><th scope="col">RAM 최대 (GiB)</th></tr></thead>
+      <tbody>
+      <tr><td>YuE2 · yue2.cpp 892b9b0 · 3B Q8_0 + F32 VAE; NAR v9 · 30 s · 32 steps</td><td>CUDA 13</td><td>29.999</td><td>31.134</td><td>5.491</td><td>7.32 / +5.79</td><td>3.51</td></tr>
+      <tr><td>YuE2 · yue2.cpp 892b9b0 · 3B Q8_0 + F32 VAE; NAR v9 · 100 tokens · 2 steps</td><td>CUDA 13</td><td>3.999</td><td>24.461</td><td>0.158</td><td>6.08 / +4.55</td><td>3.50</td></tr>
+      <tr><td>ACE-Step 1.5 · acestep.cpp 6e0e414 · Turbo Q8_0 + BF16 embedder/VAE · 30 s · 8 Euler steps</td><td>CUDA 13</td><td>30.000</td><td>20.569</td><td>0.318</td><td>9.37 / +7.85</td><td>2.20</td></tr>
+      <tr><td>MiniMax Music3 · minimaxmusic.cpp b79d37f · Minimal Q3_K_M / Q4_K_M + F32 vocoder · 3.2 s · 2 steps</td><td>CUDA 13</td><td>3.193</td><td>35.096</td><td>1.091</td><td>8.82 / +7.30</td><td>4.71</td></tr>
+      <tr><td>MiniMax Music3 · minimaxmusic.cpp b79d37f · Quality Q8_0 + F32 vocoder · 3.2 s · 2 steps</td><td>CUDA 13</td><td>3.193</td><td>65.319</td><td>1.697</td><td>14.67 / +13.13</td><td>8.95</td></tr>
+      </tbody>
+    </table></div>
+<!-- music-gpu-wsl:end -->
 <!-- radeon-gpu-pair:start -->
     <h3 id="radeon-gpu-pair-title">Stable Audio 3 Small Q8_0 · Radeon 내장 GPU</h3>
     <p class="note">Windows, AMD Radeon Graphics(gfx1036, UMA). 같은 audio.cpp 리비전으로 각 백엔드에서 4단계로 4초를 생성했습니다. 첫 실행은 첫 번째 결과이고 재실행은 요청 세 건의 중앙값입니다. WDDM 전용 및 공유 메모리 피크는 1초 간격으로 측정했습니다. <code>audio.cpp 5e7273db</code></p>

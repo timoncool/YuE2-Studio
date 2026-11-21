@@ -533,6 +533,20 @@ footer p { margin: 0 0 8px; }
     </table></div>
     <p><a href="music-gpu-benchmarks.json">Замеры, SHA-256 и наборы весов</a></p>
 <!-- music-gpu-matrix:end -->
+<!-- music-gpu-wsl:start -->
+    <h3 id="music-gpu-wsl-title">Нативные музыкальные движки · Linux в WSL2</h3>
+    <p class="note">RTX 4090, драйвер 617.42. Linux-бинарники работали в WSL2, веса лежали на диске Windows. Холодный замер идёт от запуска до первого WAV. Прогретый — медиана трёх запросов тому же процессу. VRAM измерена для всей карты, RSS — для дерева процессов Linux.</p>
+    <div class="scroll benchmark-scroll" role="region" aria-labelledby="music-gpu-wsl-title" tabindex="0"><table>
+      <thead><tr><th scope="col">Модель и движок</th><th scope="col">Бэкенд</th><th scope="col">WAV (с)</th><th scope="col">Холодный (с)</th><th scope="col">Прогретый (с)</th><th scope="col">Пик / Δ VRAM (ГиБ)</th><th scope="col">Пик RAM (ГиБ)</th></tr></thead>
+      <tbody>
+      <tr><td>YuE2 · yue2.cpp 892b9b0 · 3B Q8_0 + F32 VAE; NAR v9 · 30 s · 32 steps</td><td>CUDA 13</td><td>29,999</td><td>31,134</td><td>5,491</td><td>7,32 / +5,79</td><td>3,51</td></tr>
+      <tr><td>YuE2 · yue2.cpp 892b9b0 · 3B Q8_0 + F32 VAE; NAR v9 · 100 tokens · 2 steps</td><td>CUDA 13</td><td>3,999</td><td>24,461</td><td>0,158</td><td>6,08 / +4,55</td><td>3,50</td></tr>
+      <tr><td>ACE-Step 1.5 · acestep.cpp 6e0e414 · Turbo Q8_0 + BF16 embedder/VAE · 30 s · 8 Euler steps</td><td>CUDA 13</td><td>30,000</td><td>20,569</td><td>0,318</td><td>9,37 / +7,85</td><td>2,20</td></tr>
+      <tr><td>MiniMax Music3 · minimaxmusic.cpp b79d37f · Minimal Q3_K_M / Q4_K_M + F32 vocoder · 3.2 s · 2 steps</td><td>CUDA 13</td><td>3,193</td><td>35,096</td><td>1,091</td><td>8,82 / +7,30</td><td>4,71</td></tr>
+      <tr><td>MiniMax Music3 · minimaxmusic.cpp b79d37f · Quality Q8_0 + F32 vocoder · 3.2 s · 2 steps</td><td>CUDA 13</td><td>3,193</td><td>65,319</td><td>1,697</td><td>14,67 / +13,13</td><td>8,95</td></tr>
+      </tbody>
+    </table></div>
+<!-- music-gpu-wsl:end -->
 <!-- radeon-gpu-pair:start -->
     <h3 id="radeon-gpu-pair-title">Stable Audio 3 Small Q8_0 · встроенная Radeon</h3>
     <p class="note">Windows, AMD Radeon Graphics (gfx1036, UMA). Одна ревизия audio.cpp с каждым бэкендом сгенерировала 4 секунды за четыре шага. Холодный замер — первый запуск, прогретый — медиана трёх запросов. Пики выделенной и общей памяти WDDM взяты из замеров с интервалом в секунду. <code>audio.cpp 5e7273db</code></p>

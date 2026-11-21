@@ -7,7 +7,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { ORDER, SAMPLES, SETS, STRINGS } from '../docs/site/strings.mjs';
 import { STUDIO } from '../docs/site/studio.mjs';
-import { MATRIX_TEXT, NATIVE_RADEON_NOTE, NATIVE_YUE2, RADEON_TEXT, RVC } from '../docs/site/music-benchmarks.mjs';
+import { MATRIX_TEXT, NATIVE_RADEON_NOTE, NATIVE_YUE2, RADEON_TEXT, RVC, WSL_TEXT } from '../docs/site/music-benchmarks.mjs';
 // the studio's version, from the one place it is written
 const VERSION = JSON.parse(readFileSync(new URL('../desktop/src-tauri/tauri.conf.json', import.meta.url), 'utf8')).version;
 
@@ -95,6 +95,14 @@ function musicGpuMatrix(lang) {
     rows.push(renderRow([entry.label, entry.backend, number(entry.audio_seconds, 3),
       '—', '—', '—', '—', '—', '—', residentCell(entry)]));
   }
+  const wslColumns = [0, 1, 2, 3, 4, 6, 8].map((index) => columns[index]);
+  const [wslTitle, wslNote] = WSL_TEXT[lang];
+  const wslRows = musicBenchmarks.wsl2_linux.rows.map((row) => renderRow([
+    row.label, row.backend, number(row.runs[0].audio_seconds, 3),
+    number(row.runs[0].wall_seconds, 3), number(row.warm_median_seconds, 3),
+    `${number(row.runs[0].vram_peak_bytes / gib, 2)} / +${number(row.cold_vram_increase_bytes / gib, 2)}`,
+    number(row.runs[0].rss_peak_bytes / gib, 2),
+  ]));
   const [radeonTitle, radeonNote, radeonColumns] = RADEON_TEXT[lang];
   const radeon = musicBenchmarks.radeon_pair;
   const radeonRows = radeon.results.map((row) => renderRow([
@@ -117,6 +125,16 @@ ${rows.join('\n')}
     </table></div>
     <p><a href="music-gpu-benchmarks.json">${escape(detail)}</a></p>
 <!-- music-gpu-matrix:end -->
+<!-- music-gpu-wsl:start -->
+    <h3 id="music-gpu-wsl-title">${escape(wslTitle)}</h3>
+    <p class="note">${escape(wslNote)}</p>
+    <div class="scroll benchmark-scroll" role="region" aria-labelledby="music-gpu-wsl-title" tabindex="0"><table>
+      <thead><tr>${wslColumns.map((column) => `<th scope="col">${escape(column)}</th>`).join('')}</tr></thead>
+      <tbody>
+${wslRows.join('\n')}
+      </tbody>
+    </table></div>
+<!-- music-gpu-wsl:end -->
 <!-- radeon-gpu-pair:start -->
     <h3 id="radeon-gpu-pair-title">${escape(radeonTitle)}</h3>
     <p class="note">${escape(radeonNote)} <code>audio.cpp ${escape(radeon.source_sha.slice(0, 8))}</code></p>

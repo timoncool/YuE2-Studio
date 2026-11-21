@@ -198,6 +198,24 @@ def verify_radeon(pair, evidence_dir):
     return rows
 
 
+def wsl_rows(data, decimal_comma=False):
+    observed = []
+    for row in data["rows"]:
+        cold, *warm = row["runs"]
+        assert len(warm) == 3 and row["warm_median_seconds"] == median(x["wall_seconds"] for x in warm)
+        assert cold["vram_peak_bytes"] - row["prelaunch_vram_bytes"] == row["cold_vram_increase_bytes"]
+        assert all(run["audio_seconds"] > 0 and run["wall_seconds"] > 0 and SHA256.fullmatch(run["wav_sha256"])
+                   for run in row["runs"])
+        hashes = [row[key] for key in ("server_sha256", "ggml_cuda_sha256", "archive_sha256", "request_sha256")]
+        assert all(SHA256.fullmatch(digest) for digest in hashes)
+        numbers = [f"{cold['audio_seconds']:.3f}", f"{cold['wall_seconds']:.3f}", f"{row['warm_median_seconds']:.3f}",
+                   f"{cold['vram_peak_bytes']/GIB:.2f} / +{row['cold_vram_increase_bytes']/GIB:.2f}",
+                   f"{cold['rss_peak_bytes']/GIB:.2f}"]
+        observed.append([row["label"], row["backend"], *[v.replace(".", ",") if decimal_comma else v for v in numbers]])
+    assert observed
+    return observed
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--evidence-dir", type=Path, help="Also verify cold WAV hashes against the original files.")
@@ -237,12 +255,14 @@ def main():
     radeon_section = "radeon-gpu-pair"
     readme = ROOT / "README.md"
     validate_table(readme, readme_rows(readme), rows, residency.values())
+    assert readme_rows(readme, "music-gpu-wsl") == wsl_rows(data["wsl2_linux"])
     assert readme_rows(readme, radeon_section) == radeon
     assert len(native) == 2 and readme_rows(readme, "native-radeon-pair") == native
     for locale in LOCALES:
         page = ROOT / "docs" / f"{locale}.html"
         validate_table(page, site_rows(page), rows, residency.values(), decimal_comma=locale in {"ru", "pt"})
         matrix = [[value.replace(".", ",") for value in row] for row in radeon] if locale in {"ru", "pt"} else radeon
+        assert site_rows(page, "music-gpu-wsl") == wsl_rows(data["wsl2_linux"], decimal_comma=locale in {"ru", "pt"})
         assert site_rows(page, radeon_section) == matrix, page
         native_rows = [[row[0], *[v.replace(".", ",") for v in row[1:]]] for row in native] if locale in {"ru", "pt"} else native
         assert site_rows(page, "native-radeon-pair") == native_rows, page
