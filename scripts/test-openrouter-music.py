@@ -287,17 +287,19 @@ with tempfile.TemporaryDirectory(prefix="yue-openrouter-") as profile, local_pro
             assert pcm == original.readframes(8000)
         ui("select", text="Model", value="local")
         wait_page('select "Model" value="local"', f'value="{prompt}"')
+        receipt = {"transport": "Windows WebView2 and localhost SSE", "catalog": ["loading", "error", "empty", "ready"],
+                   "model": peer_model, "library_id": song["id"], "pcm_sha256": hashlib.sha256(pcm).hexdigest(),
+                   "local_draft_restored": True, "paid_requests": 0}
+        print(json.dumps(receipt, indent=2))
         local_style = "make it massive, without drums"
-        tool("create_form_set", {"fields": {"style": local_style}}, next_id + 1)
+        updated = rpc("tools/call", {"name": "create_form_set", "arguments": {"fields": {"style": local_style}}}, next_id + 1)
+        assert not updated.get("isError"), updated
         wait_page(f'value="{local_style}"')
         form = tool("create_form_get", {}, next_id + 20)
         assert form["fields"]["style"] == local_style, form
         hint_rules = {hint["rule"] for hint in form["style_hints"]}
         assert {"negative", "instruction"} <= hint_rules, form
-        print(json.dumps({"transport": "Windows WebView2 and localhost SSE", "catalog": ["loading", "error",
-              "empty", "ready"], "model": peer_model, "library_id": song["id"],
-              "pcm_sha256": hashlib.sha256(pcm).hexdigest(), "local_draft_restored": True, "style_hints": sorted(hint_rules),
-              "paid_requests": 0}, indent=2))
+        print(json.dumps({"style": local_style, "style_hints": sorted(hint_rules)}, indent=2))
 
     proc=run_service()
     try:
