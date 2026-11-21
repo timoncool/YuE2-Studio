@@ -72,6 +72,7 @@ def expected_cells(row, decimal_comma):
         f"{row['warm_median_seconds']:.3f}",
         f"{row['warm_audio_seconds_per_second']:.2f}×",
         f"{peak / GIB:.2f} / {delta / GIB:+.2f}",
+        f"{row['warm_pre_request_vram_bytes'] / GIB:.2f}",
         f"{row['cold_rss_peak_bytes'] / GIB:.2f}",
     ]
     if decimal_comma:
@@ -89,6 +90,10 @@ def validate_table(path, observed, rows, decimal_comma=False):
 def verify_wav(evidence_dir, row):
     summary = evidence_dir / row["summary_id"]
     assert summary.is_file(), summary
+    raw = json.loads(summary.read_bytes())
+    runs = raw.get("rows") or raw["runs"]
+    baselines = [(run.get("memory") or run)["gpus"][0]["device_baseline_bytes"] for run in runs[1:]]
+    assert len(baselines) == 3 and median(baselines) == row["warm_pre_request_vram_bytes"], summary
     if summary.name == "summary.json":
         wav = summary.with_name("take-0.wav")
     else:
@@ -111,6 +116,7 @@ def validate_data(rows, evidence_dir):
         ), source
         assert all(run["audio_seconds"] > 0 and run["wall_seconds"] > 0 for run in row["runs"]), source
         assert row["cold_vram_peak_bytes"] - row["cold_vram_baseline_bytes"] == row["cold_vram_increase_bytes"], source
+        assert 0 < row["warm_pre_request_vram_bytes"] <= row["warm_vram_peak_bytes"], source
         assert row["audio_levels"]["rms_dbfs"] > -60 and row["weight_sha256"], source
         hashes = [
             row["binary_sha256"], row["request_sha256"], *(run["wav_sha256"] for run in row["runs"]),
