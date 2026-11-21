@@ -330,6 +330,7 @@ mod tests {
                 semitone_shift: 0,
                 retrieval_blend: 0.5,
             },
+            &|| false,
         )
         .unwrap();
         assert_eq!(audio.rate, 40_000);

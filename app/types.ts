@@ -139,6 +139,7 @@ export type MusicEngine = 'local' | 'openrouter' | ProfileMusicEngine;
  * own (`Yue2Request` in yue2.cpp); anything left out is the engine default.
  */
 export interface YueRequest {
+  rvc_after?: import('./services/rvcQuick').RvcSelection;
   /** Capture the editor's selection with the job so later switches cannot reroute it. */
   hotstep_sa3?: { sampler?: 'pingpong' | 'euler'; adapter?: string; adapter_scale?: number };
   music_source?: { kind: 'local' } | { kind: 'openrouter' | 'audio_cpp'; model: string } | { kind: 'native'; engine: NativeMusicEngine; model: string };

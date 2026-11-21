@@ -542,6 +542,9 @@ const JOURNAL: &[(&str, &str, &str)] = &[
     ("rvc_native_runtime_install", "started", "download"),
     ("rvc_native_runtime_cancel", "cancelled", "download"),
     ("rvc_apply", "created", "song"),
+    ("rvc_voice_select", "updated", "rvc_voice"),
+    ("rvc_quick_start", "started", "processing"),
+    ("rvc_quick_cancel", "cancelled", "processing"),
     ("lora_import_folder", "installed", "lora"),
     ("lora_update", "updated", "lora"),
     ("lora_delete", "deleted", "lora"),
@@ -1023,6 +1026,15 @@ fn id_only(name: &str, what: &str) -> Value {
 }
 
 fn song_create_schema(mut properties: Value) -> Value {
+    properties["rvc_after"] = json!({
+        "type": "object",
+        "description": "After successful generation, save a separate RVC take with this voice and backend. Use rvc_quick_list for progress.",
+        "properties": {
+            "voice_id": { "type": "string", "description": "An installed RVC voice ID" },
+            "backend": { "type": "string", "enum": ["auto", "vocal-fast-rs", "audio.cpp"] }
+        },
+        "required": ["voice_id"]
+    });
     properties["heartmula"] = json!({"type":"object","description":"Native HeartMuLa sampling and codec settings.","properties":{"temperature":{"type":"number"},"top_k":{"type":"integer"},"codec_duration_sec":{"type":"number"},"codec_guidance_scale":{"type":"number"}}});
     properties["hotstep_sa3"] = json!({"type":"object","description":"HOT-Step Stable Audio 3 Medium. Use an instrumental description as style.","properties":{"sampler":{"enum":["pingpong","euler"]},"adapter":{"type":"string","description":"Installed adapter name from hotstep_cover_profiles."},"adapter_scale":{"type":"number","minimum":0,"maximum":2}}});
     properties["stable_audio"] = json!({"type":"object","description":"Native Stable Audio 3 controls. Send the music prompt as style and leave lyrics empty.","properties":{"negative_prompt":{"type":"string"},"sampler_mode":{"enum":["pingpong","euler"]},"apg_scale":{"type":"number"},"duration_padding_sec":{"type":"number","minimum":0}}});
@@ -2674,6 +2686,49 @@ fn tools() -> &'static [Tool] {
                     "backend": { "type": "string", "enum": ["auto", "vocal-fast-rs", "audio.cpp"] },
                 }), &["song_id", "voice_id"]),
                 call: |args| post("/v1/rvc/apply".into(), args.clone()),
+            },
+            Tool {
+                name: "rvc_voice_selection_get",
+                description: "Read the installed voice and backend remembered for the quick RVC library action.",
+                schema: nothing,
+                call: |_| get("/v1/rvc/selection".into()),
+            },
+            Tool {
+                name: "rvc_voice_select",
+                description: "Remember the installed RVC voice and backend used by the quick library action.",
+                schema: || object(json!({
+                    "voice_id": { "type": "string" },
+                    "backend": { "enum": ["auto", "vocal-fast-rs", "audio.cpp"] }
+                }), &["voice_id"]),
+                call: |args| send(Method::PUT, "/v1/rvc/selection".into(), args.clone()),
+            },
+            Tool {
+                name: "rvc_quick_start",
+                description: "Save a separate RVC take of a library song. Uses the remembered voice by default and separates missing stems. Repeating the same song, voice and backend reuses the job or the saved take.",
+                schema: || object(json!({
+                    "song_id": { "type": "string" },
+                    "voice_id": { "type": "string" },
+                    "backend": { "enum": ["auto", "vocal-fast-rs", "audio.cpp"] }
+                }), &["song_id"]),
+                call: |args| post("/v1/rvc/quick".into(), args.clone()),
+            },
+            Tool {
+                name: "rvc_quick_list",
+                description: "List quick and automatic RVC take jobs, including their current stage and saved take.",
+                schema: nothing,
+                call: |_| get("/v1/rvc/quick".into()),
+            },
+            Tool {
+                name: "rvc_quick_get",
+                description: "Read a quick RVC take job by ID.",
+                schema: || id_only("id", "the job ID from rvc_quick_start or rvc_quick_list"),
+                call: |args| get(format!("/v1/rvc/quick/{}", segment(&text(args, "id")?))),
+            },
+            Tool {
+                name: "rvc_quick_cancel",
+                description: "Stop a queued or active RVC take before it is saved. A completed take stays in the library.",
+                schema: || id_only("id", "the job ID from rvc_quick_start or rvc_quick_list"),
+                call: |args| send(Method::DELETE, format!("/v1/rvc/quick/{}", segment(&text(args, "id")?)), json!({})),
             },
             Tool {
                 name: "rvc_voice_remove",

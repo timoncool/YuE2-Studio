@@ -125,6 +125,20 @@ it('uses explicit controls for the YuE2 engine and follows the shared paused sta
   expect(buttonNamed('Resume YuE2 engine')).toBeUndefined();
 });
 
+it('snapshots the last voice only when an automatic RVC take is enabled', () => {
+  localStorage.setItem('studio.rvc.voiceId', 'installed-voice');
+  localStorage.setItem('studio.rvc.backend', 'audio.cpp');
+  act(() => root.render(panel({})));
+  type(field('textarea')!, 'calm folk');
+  click(buttonNamed('create')!);
+  expect(sent[0].rvc_after).toBeUndefined();
+
+  const option = [...host.querySelectorAll('label')].find(label => label.textContent?.includes('Make an RVC take after generation'));
+  act(() => { option?.querySelector('input')?.click(); });
+  click(buttonNamed('create')!);
+  expect(sent[1].rvc_after).toEqual({ voice_id: 'installed-voice', backend: 'audio.cpp' });
+});
+
 describe('pauses between repeated generations (#261)', () => {
   const renderQueue = (queueBusy: boolean, activeJobCount = 0) =>
     act(() => root.render(panel({ queueBusy, activeJobCount })));
