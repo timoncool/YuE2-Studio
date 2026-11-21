@@ -4,7 +4,8 @@ use acpp_server::{Mode, ModelEntry};
 use anyhow::{Context as _, Result};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
-use std::io::Read as _;
+use sha2::{Digest as _, Sha256};
+use std::io::{Read as _, Write as _};
 use std::path::{Path, PathBuf};
 
 pub(super) const FAMILY: &str = "vevo2";
@@ -13,6 +14,75 @@ pub(super) const PROFILE: &str = "quality-q8";
 pub(super) const QUANTIZATION: &str = "Q8_0";
 pub(super) const ROUTE: &str = "text_to_singing";
 const WEIGHTS: &str = "vevo2-q8_0.gguf";
+// Established Q8_0 conversion, snapshot 33120a4c. No other conversions are registered.
+const WEIGHTS_BYTES: u64 = 3_242_129_792;
+const WEIGHTS_SHA256: &str = "881434e73b98e2d3ac94951f26488b5dc5d60f365d9980324a70055dfbffd1ef";
+const PREFIX_BYTES: usize = 16_384;
+const PREFIX_SHA256: [u8; 32] = [
+    0x89, 0x39, 0xda, 0xf4, 0x0b, 0xff, 0x44, 0xe2, 0x97, 0xb2, 0xfd, 0x43, 0x88, 0xf3, 0x4f, 0xbb,
+    0xaf, 0x24, 0x84, 0xd3, 0xa3, 0xdc, 0xc5, 0x0b, 0x4d, 0x6e, 0x4b, 0xa4, 0xf3, 0xba, 0xf6, 0x16,
+];
+const LICENSE: &str = "https://huggingface.co/RMSnow/Vevo2";
+const FOLDER_SETTING: &str = "vevo2-model-directory.json";
+const DEFAULT_FOLDER: &str = "audiocpp/models/vevo2";
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(super) struct DirectorySelection {
+    directory: Value,
+}
+
+fn configured_directory(root: &Path) -> Option<PathBuf> {
+    serde_json::from_slice(&std::fs::read(root.join(FOLDER_SETTING)).ok()?).ok()
+}
+
+fn select_directory(root: &Path, directory: Option<&Path>) -> Result<()> {
+    if let Some(directory) = directory {
+        anyhow::ensure!(
+            directory.is_absolute(),
+            "Choose an absolute folder path on the Studio computer."
+        );
+        anyhow::ensure!(
+            missing_files(directory).is_empty(),
+            "The folder needs the complete {WEIGHTS} Q8_0 bundle used by Studio."
+        );
+        anyhow::ensure!(
+            crate::install_record::sha256_of(&directory.join(WEIGHTS))? == WEIGHTS_SHA256,
+            "The {WEIGHTS} file does not match the supported Q8_0 bundle."
+        );
+    }
+    persist_directory(root, directory)
+}
+
+fn persist_directory(root: &Path, directory: Option<&Path>) -> Result<()> {
+    let mut temp = tempfile::NamedTempFile::new_in(root)?;
+    serde_json::to_writer(&mut temp, &directory)?;
+    temp.flush()?;
+    temp.persist(root.join(FOLDER_SETTING))?;
+    Ok(())
+}
+
+pub(super) async fn set_directory(
+    axum::Json(selection): axum::Json<DirectorySelection>,
+) -> Result<axum::Json<Value>, (axum::http::StatusCode, axum::Json<crate::ApiError>)> {
+    use axum::http::StatusCode;
+    let root = crate::studio_data_root().ok_or_else(|| {
+        crate::api_error(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "Studio data folder is unavailable.".into(),
+        )
+    })?;
+    let directory: Option<PathBuf> = serde_json::from_value(selection.directory)
+        .map_err(|error| crate::api_error(StatusCode::BAD_REQUEST, error.to_string()))?;
+    let directory = tokio::task::spawn_blocking(move || {
+        select_directory(&root, directory.as_deref())?;
+        Ok::<_, anyhow::Error>(directory)
+    })
+    .await
+    .map_err(|error| crate::api_error(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?
+    .map_err(|error| crate::api_error(StatusCode::BAD_REQUEST, error.to_string()))?;
+    Ok(axum::Json(json!({ "configured_directory": directory })))
+}
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub(super) struct Options {
@@ -22,15 +92,19 @@ pub(super) struct Options {
 }
 
 pub(super) fn model_dir(root: &Path) -> PathBuf {
-    root.join("audiocpp/models").join(FAMILY)
+    configured_directory(root).unwrap_or_else(|| root.join(DEFAULT_FOLDER))
+}
+
+fn pinned_prefix(mut reader: impl std::io::Read) -> bool {
+    let mut prefix = [0; PREFIX_BYTES];
+    reader.read_exact(&mut prefix).is_ok() && Sha256::digest(prefix).as_slice() == PREFIX_SHA256
 }
 
 pub(super) fn missing_files(dir: &Path) -> Vec<&'static str> {
-    let valid = std::fs::File::open(dir.join(WEIGHTS)).is_ok_and(|mut file| {
-        let mut magic = [0; 4];
-        file.metadata().is_ok_and(|metadata| metadata.len() > 24)
-            && file.read_exact(&mut magic).is_ok()
-            && &magic == b"GGUF"
+    let valid = std::fs::File::open(dir.join(WEIGHTS)).is_ok_and(|file| {
+        file.metadata()
+            .is_ok_and(|metadata| metadata.is_file() && metadata.len() == WEIGHTS_BYTES)
+            && pinned_prefix(file)
     });
     if valid { vec![] } else { vec![WEIGHTS] }
 }
@@ -47,7 +121,8 @@ pub(super) fn catalog(root: Option<&Path>, runtime_ready: bool) -> Value {
         "id": FAMILY, "name": NAME, "profile_id": PROFILE, "quantization": QUANTIZATION,
         "status": "experimental", "ready": missing.is_empty(), "missing": missing,
         "requires": ["lyrics", "voice_song_id"], "output_formats": ["flac", "mp3", "wav32"],
-        "route": ROUTE
+        "route": ROUTE, "license_url": LICENSE, "model_directory": DEFAULT_FOLDER,
+        "configured_directory": root.and_then(configured_directory),
     })
 }
 
@@ -169,15 +244,33 @@ mod tests {
         std::fs::create_dir_all(&directory).unwrap();
         assert_eq!(catalog(Some(root.path()), true)["ready"], false);
         let path = directory.join(WEIGHTS);
-        std::fs::write(&path, b"GGUF").unwrap();
-        assert_eq!(catalog(Some(root.path()), true)["ready"], false);
         std::fs::write(&path, [b"GGUF".as_slice(), &[0; 32]].concat()).unwrap();
-        assert_eq!(catalog(Some(root.path()), true)["ready"], true);
+        assert_eq!(catalog(Some(root.path()), true)["ready"], false);
+        let mut bad_header = [0; PREFIX_BYTES];
+        bad_header[..4].copy_from_slice(b"GGUF");
+        assert!(!pinned_prefix(bad_header.as_slice()));
+        assert!(select_directory(root.path(), Some(&directory)).is_err());
         assert_eq!(catalog(Some(root.path()), false)["ready"], false);
         let entry = entry(directory);
         assert_eq!(entry.path, path);
         assert_eq!(entry.task, "tts");
         assert!(matches!(entry.mode, Mode::Offline));
+    }
+
+    #[test]
+    fn vevo2_keeps_the_selected_local_folder_and_can_restore_the_default() {
+        let root = tempfile::tempdir().unwrap();
+        let supplied = tempfile::tempdir().unwrap();
+        let path = supplied.path().join(WEIGHTS);
+        assert_eq!(catalog(Some(root.path()), true)["ready"], false);
+        persist_directory(root.path(), Some(supplied.path())).unwrap();
+        assert_eq!(entry(model_dir(root.path())).path, path);
+        assert!(select_directory(root.path(), Some(Path::new("relative"))).is_err());
+        assert!(select_directory(root.path(), Some(root.path())).is_err());
+        assert_eq!(model_dir(root.path()), supplied.path());
+        select_directory(root.path(), None).unwrap();
+        assert_eq!(model_dir(root.path()), root.path().join(DEFAULT_FOLDER));
+        assert_eq!(catalog(Some(root.path()), true)["ready"], false);
     }
 
     #[test]

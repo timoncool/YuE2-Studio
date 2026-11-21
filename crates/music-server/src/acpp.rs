@@ -403,11 +403,12 @@ impl Acpp {
     /// chosen; `stop`, asked while it waits for the server, ends it with "stopped" first.
     pub fn with_server<T>(&self, build: Build, model: ModelEntry, stop: &(dyn Fn() -> bool + Sync), work: impl FnOnce(&Server) -> Result<T>) -> Result<T> {
         let id = model.id.clone();
+        let path = model.path.clone();
         self.register(model);
         let backend = build.backend();
         let server = self.claim(build, stop, |busy| {
             let running = acpp_server::SERVERS.running(backend);
-            let seen = running.as_ref().map(|server| Seen { alive: server.alive(), carries: server.config().models.iter().any(|entry| entry.id == id) });
+            let seen = running.as_ref().map(|server| Seen { alive: server.alive(), carries: server.config().models.iter().any(|entry| entry.id == id && entry.path == path) });
             match take(seen, busy) {
                 Take::Running => Ok(Some(running.expect("a running server was seen"))),
                 Take::Wait => Ok(None),

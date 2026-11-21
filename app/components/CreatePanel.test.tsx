@@ -784,6 +784,39 @@ it.each([
   }
 });
 
+it('uses a saved Vevo2 weights folder without offering a conversion download', async () => {
+  const local = 'D:/Models/Singing';
+  const license = 'https://huggingface.co/RMSnow/Vevo2';
+  let directory: string | null = null;
+  const request = vi.fn(async (url: string, init?: RequestInit) => {
+    if (url.endsWith('/model-directory')) {
+      directory = JSON.parse(String(init?.body)).directory;
+      return Response.json({ configured_directory: directory });
+    }
+    return Response.json({ engine: 'audio.cpp', models: [{
+      id: 'vevo2', name: 'Vevo2', profile_id: 'quality-q8', quantization: 'Q8_0',
+      ready: directory !== null, missing: directory ? [] : ['vevo2-q8_0.gguf'],
+      model_directory: 'audiocpp/models/vevo2', configured_directory: directory, license_url: license,
+    }] });
+  });
+  vi.stubGlobal('fetch', request);
+  const song = {
+    title: 'Singing', lyrics: 'Words to sing', style: '', ditModel: 'audio.cpp',
+    generationParams: { music_source: { kind: 'audio_cpp', model: 'vevo2' }, vevo2: { voice_song_id: 'voice' } },
+  } as Song;
+  act(() => root.render(panel({ musicEngine: 'audio.cpp', initialData: { song, timestamp: 1 } })));
+  await flush();
+  expect(buttonNamed('create')?.disabled).toBe(true);
+  expect(host.querySelector(`a[href="${license}"]`)?.textContent).toBe('Original model terms');
+  const label = [...host.querySelectorAll('label')].find(item => item.textContent?.includes('Folder containing your Vevo2 weights'));
+  type(label!.querySelector('input')!, local);
+  click(buttonNamed('Use this folder')!);
+  await flush();
+  expect(directory).toBe(local);
+  expect(buttonNamed('Use the Studio folder')).toBeDefined();
+  expect(buttonNamed('create')?.disabled).toBe(false);
+});
+
 it('takes two aligned score files in SoulX-Singer and sends their contents', async () => {
   const model = 'soulx_singer';
   librarySongs = [{ id: 'reference', title: 'Singing reference', audioUrl: '/voice.wav' } as Song];
