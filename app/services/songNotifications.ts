@@ -1,40 +1,3 @@
-import { useEffect, useState } from 'react';
-
-export const SONG_NOTIFICATIONS_KEY = 'studio.notifications.songReady';
-const CHANGED = 'studio:song-notifications-changed';
-let sessionPreference: boolean | undefined;
-
-/** A separate, opt-out setting. Existing in-app toasts are unaffected. */
-export function songNotificationsEnabled(): boolean {
-  try {
-    const value = window.localStorage.getItem(SONG_NOTIFICATIONS_KEY);
-    return value === null ? (sessionPreference ?? true) : value !== '0';
-  } catch {
-    return sessionPreference ?? true;
-  }
-}
-
-export function setSongNotificationsEnabled(enabled: boolean): void {
-  sessionPreference = enabled;
-  try { window.localStorage.setItem(SONG_NOTIFICATIONS_KEY, enabled ? '1' : '0'); }
-  catch { /* Keep the choice for this session if local storage is unavailable. */ }
-  window.dispatchEvent(new Event(CHANGED));
-}
-
-export function useSongNotifications(): [boolean, (enabled: boolean) => void] {
-  const [enabled, setEnabled] = useState(songNotificationsEnabled);
-  useEffect(() => {
-    const changed = () => setEnabled(songNotificationsEnabled());
-    window.addEventListener(CHANGED, changed);
-    window.addEventListener('storage', changed);
-    return () => {
-      window.removeEventListener(CHANGED, changed);
-      window.removeEventListener('storage', changed);
-    };
-  }, []);
-  return [enabled, setSongNotificationsEnabled];
-}
-
 export function supportsWindowsSongNotifications(): boolean {
   return /^Win/.test(navigator.platform) && Boolean(desktopInvoke());
 }
@@ -44,16 +7,26 @@ function desktopInvoke(): Invoke | undefined {
   return (window as unknown as { __TAURI__?: { core?: { invoke?: Invoke } } }).__TAURI__?.core?.invoke;
 }
 
+export async function songNotificationsEnabled(): Promise<boolean> {
+  return await desktopInvoke()?.('song_notification_preference') === true;
+}
+
+export async function setSongNotificationsEnabled(enabled: boolean): Promise<boolean> {
+  const invoke = desktopInvoke();
+  if (!invoke) throw new Error('The native notification preference is unavailable');
+  return await invoke('set_song_notification_preference', { enabled }) === true;
+}
+
 /** A real Windows notification, even from a portable build with the window
  * minimised/hidden. The app's regular success toast is still displayed.
  * Errors never interrupt song completion or trigger another notification. */
 export async function sendWindowsSongNotification(message: string): Promise<boolean> {
-  if (!supportsWindowsSongNotifications() || !songNotificationsEnabled() || !message.trim()) return false;
+  if (!supportsWindowsSongNotifications() || !message.trim()) return false;
   const invoke = desktopInvoke();
   if (!invoke) return false;
   try {
-    await invoke('notify_song_ready', { message });
-    return true;
+    if (!await songNotificationsEnabled()) return false;
+    return await invoke('notify_song_ready', { message }) === true;
   } catch (error) {
     console.warn('[song notifications] native notification unavailable:', error);
     return false;

@@ -2,7 +2,6 @@ import React, { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { NotificationSettings } from './NotificationSettings';
-import { SONG_NOTIFICATIONS_KEY, setSongNotificationsEnabled } from '../services/songNotifications';
 
 vi.mock('../context/I18nContext', () => ({
   useI18n: () => ({ t: (key: string) => key }),
@@ -21,37 +20,55 @@ afterEach(() => {
   host?.remove();
   root = null;
   host = null;
-  setSongNotificationsEnabled(true);
-  localStorage.removeItem(SONG_NOTIFICATIONS_KEY);
   vi.unstubAllGlobals();
+  vi.restoreAllMocks();
 });
 
+async function mount() {
+  host = document.createElement('div');
+  document.body.append(host);
+  root = createRoot(host);
+  await act(async () => root?.render(<NotificationSettings />));
+  return {
+    checkbox: host.querySelector<HTMLInputElement>('input[type="checkbox"]')!,
+    test: host.querySelector<HTMLButtonElement>('button')!,
+  };
+}
+
 describe('song notification settings', () => {
-  it('turns Windows notifications off and back on and provides a test alert', async () => {
-    const invoke = vi.fn(async () => undefined);
+  it('reads and saves the native preference before changing the control', async () => {
+    let enabled = true;
+    const invoke = vi.fn(async (command: string, args?: { enabled: boolean }) => {
+      if (command === 'set_song_notification_preference') enabled = args!.enabled;
+      return enabled;
+    });
     vi.stubGlobal('__TAURI__', { core: { invoke } });
-    host = document.createElement('div');
-    document.body.append(host);
-    root = createRoot(host);
-    act(() => root?.render(<NotificationSettings />));
+    const { checkbox, test } = await mount();
 
-    const checkbox = host.querySelector<HTMLInputElement>('input[type="checkbox"]');
-    const test = Array.from(host.querySelectorAll('button')).find(button => button.textContent?.includes('shellNotificationsTest'));
-    expect(checkbox?.checked).toBe(true);
-    expect(test).not.toBeUndefined();
+    expect(checkbox.checked).toBe(true);
+    await act(async () => checkbox.click());
+    expect(checkbox.checked).toBe(false);
+    expect(test.disabled).toBe(true);
+    expect(invoke).toHaveBeenCalledWith('set_song_notification_preference', { enabled: false });
 
-    act(() => checkbox?.click());
-    expect(checkbox?.checked).toBe(false);
-    expect(test?.disabled).toBe(true);
-    expect(localStorage.getItem(SONG_NOTIFICATIONS_KEY)).toBe('0');
-
-    act(() => checkbox?.click());
-    expect(checkbox?.checked).toBe(true);
-    expect(test?.disabled).toBe(false);
-
-    await act(async () => { test?.click(); });
-    expect(invoke).toHaveBeenCalledOnce();
+    await act(async () => checkbox.click());
+    expect(checkbox.checked).toBe(true);
+    expect(test.disabled).toBe(false);
+    await act(async () => test.click());
     expect(invoke).toHaveBeenCalledWith('notify_song_ready', { message: 'shellNotificationsTestBody' });
-    expect(host.textContent).toContain('shellNotificationsTestRequested');
+    expect(host?.textContent).toContain('shellNotificationsTestRequested');
+  });
+
+  it('retains the saved preference and shows an error when a write fails', async () => {
+    const invoke = vi.fn(async (command: string) => {
+      if (command === 'set_song_notification_preference') throw new Error('write failed');
+      return true;
+    });
+    vi.stubGlobal('__TAURI__', { core: { invoke } });
+    const { checkbox, test } = await mount();
+    await act(async () => checkbox.click());
+    expect(checkbox.checked).toBe(true);
+    expect(test.disabled).toBe(false);
+    expect(host?.textContent).toContain('shellNotificationsPreferenceError');
   });
 });

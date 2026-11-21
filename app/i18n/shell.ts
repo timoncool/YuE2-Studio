@@ -23,6 +23,7 @@ const en = {
   shellNotificationsTestBody: 'YuE2 Studio notifications are working.',
   shellNotificationsTestRequested: 'The alert was sent to Windows. Your notification settings determine whether it appears.',
   shellNotificationsUnavailable: 'No Windows desktop notification was available. This feature requires the Windows YuE2 Studio app.',
+  shellNotificationsPreferenceError: 'Could not read or save the notification setting.',
   shellSongReadyOne: '"{title}" is ready to listen to.',
   shellSongsReadyMany: '{count} tracks are ready, including "{title}".',
 };
@@ -52,6 +53,7 @@ const ru: Strings = {
   shellNotificationsTestBody: 'Уведомления YuE2 Studio работают.',
   shellNotificationsTestRequested: 'Запрос отправлен в Windows; показ зависит от её настроек.',
   shellNotificationsUnavailable: 'Уведомления Windows недоступны. Требуется приложение YuE2 Studio для Windows.',
+  shellNotificationsPreferenceError: 'Не удалось прочитать или сохранить настройку уведомлений.',
   shellSongReadyOne: 'Песня «{title}» готова.',
   shellSongsReadyMany: 'Готово треков: {count}, в том числе «{title}».',
 };
@@ -79,6 +81,7 @@ const zh: Strings = {
   shellNotificationsTestBody: 'YuE2 Studio 通知正常。',
   shellNotificationsTestRequested: '已请求 Windows 显示通知；是否出现取决于系统设置。',
   shellNotificationsUnavailable: '无法发送 Windows 通知。请使用 Windows 桌面版 YuE2 Studio。',
+  shellNotificationsPreferenceError: '无法读取或保存通知设置。',
   shellSongReadyOne: '歌曲“{title}”已完成。',
   shellSongsReadyMany: '已完成 {count} 首歌曲，包括“{title}”。',
 };
@@ -106,6 +109,7 @@ const ja: Strings = {
   shellNotificationsTestBody: 'YuE2 Studio の通知テストです。',
   shellNotificationsTestRequested: 'Windows に通知を送信しました。表示はシステム設定によります。',
   shellNotificationsUnavailable: 'Windows 通知を利用できません。Windows 版 YuE2 Studio が必要です。',
+  shellNotificationsPreferenceError: '通知設定を読み込みまたは保存できませんでした。',
   shellSongReadyOne: '「{title}」が完成しました。',
   shellSongsReadyMany: '{count} 曲が完成しました（「{title}」を含む）。',
 };
@@ -133,6 +137,7 @@ const ko: Strings = {
   shellNotificationsTestBody: 'YuE2 Studio 알림 테스트입니다.',
   shellNotificationsTestRequested: 'Windows로 알림을 보냈습니다. 표시 여부는 시스템 설정에 따릅니다.',
   shellNotificationsUnavailable: 'Windows 알림을 사용할 수 없습니다. Windows용 YuE2 Studio가 필요합니다.',
+  shellNotificationsPreferenceError: '알림 설정을 읽거나 저장하지 못했습니다.',
   shellSongReadyOne: '“{title}” 곡이 완성되었습니다.',
   shellSongsReadyMany: '{count}곡이 완성되었습니다(“{title}” 포함).',
 };

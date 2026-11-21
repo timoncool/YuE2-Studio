@@ -1,16 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import {
-  SONG_NOTIFICATIONS_KEY, sendCompletedSongsNotification, sendWindowsSongNotification,
-  setSongNotificationsEnabled, songNotificationsEnabled,
-} from './songNotifications';
+import { sendCompletedSongsNotification, sendWindowsSongNotification, songNotificationsEnabled } from './songNotifications';
 
 beforeEach(() => {
   vi.spyOn(navigator, 'platform', 'get').mockReturnValue('Win32');
 });
-
 afterEach(() => {
-  setSongNotificationsEnabled(true);
-  localStorage.removeItem(SONG_NOTIFICATIONS_KEY);
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });
@@ -21,46 +15,50 @@ const messages = {
   untitled: 'Untitled',
 };
 
-describe('native Windows song completion alerts', () => {
-  it('defaults on, and the menu toggle persists independently of promotional notices', () => {
-    expect(songNotificationsEnabled()).toBe(true);
-    setSongNotificationsEnabled(false);
-    expect(songNotificationsEnabled()).toBe(false);
-    expect(localStorage.getItem(SONG_NOTIFICATIONS_KEY)).toBe('0');
-    setSongNotificationsEnabled(true);
-    expect(songNotificationsEnabled()).toBe(true);
-  });
+function nativeDesktop(enabled: boolean, notification: () => Promise<boolean> = async () => true) {
+  const invoke = vi.fn(async (command: string, _args?: Record<string, unknown>) =>
+    command === 'song_notification_preference' ? enabled : notification());
+  vi.stubGlobal('__TAURI__', { core: { invoke } });
+  return invoke;
+}
 
-  it('sends a single completion notification with the actual song title', async () => {
-    const invoke = vi.fn(async () => null);
-    vi.stubGlobal('__TAURI__', { core: { invoke } });
+describe('native Windows song completion alerts', () => {
+  it('sends one alert containing the actual song title', async () => {
+    const invoke = nativeDesktop(true);
     expect(await sendCompletedSongsNotification([{ title: 'Lofi Rainy Days' }], messages)).toBe(true);
-    expect(invoke).toHaveBeenCalledOnce();
-    expect(invoke).toHaveBeenCalledWith('notify_song_ready', { message: '"Lofi Rainy Days" has finished generating.' });
+    expect(invoke.mock.calls).toEqual([
+      ['song_notification_preference'],
+      ['notify_song_ready', { message: '"Lofi Rainy Days" has finished generating.' }],
+    ]);
   });
 
   it('sends just one native alert for an entire batch of songs', async () => {
-    const invoke = vi.fn(async () => null);
-    vi.stubGlobal('__TAURI__', { core: { invoke } });
+    const invoke = nativeDesktop(true);
     expect(await sendCompletedSongsNotification([{ title: 'Track 1' }, { title: 'Track 2' }], messages)).toBe(true);
-    expect(invoke).toHaveBeenCalledOnce();
-    expect(invoke).toHaveBeenCalledWith('notify_song_ready', { message: '2 tracks are ready, including "Track 1".' });
+    expect(invoke.mock.calls).toEqual([
+      ['song_notification_preference'],
+      ['notify_song_ready', { message: '2 tracks are ready, including "Track 1".' }],
+    ]);
   });
 
-  it('does nothing for an empty job or while alerts are disabled', async () => {
-    const invoke = vi.fn(async () => null);
-    vi.stubGlobal('__TAURI__', { core: { invoke } });
+  it('skips empty jobs and reads the native opt-out even in a new window', async () => {
+    const invoke = nativeDesktop(false);
     expect(await sendCompletedSongsNotification([], messages)).toBe(false);
-    setSongNotificationsEnabled(false);
-    expect(await sendCompletedSongsNotification([{ title: 'Never alert' }], messages)).toBe(false);
-    expect(await sendWindowsSongNotification('Test')).toBe(false);
     expect(invoke).not.toHaveBeenCalled();
+    expect(await songNotificationsEnabled()).toBe(false);
+    expect(await sendCompletedSongsNotification([{ title: 'Never alert' }], messages)).toBe(false);
+    expect(invoke.mock.calls).toEqual([['song_notification_preference'], ['song_notification_preference']]);
+  });
+
+  it('honours a native opt-out between reading the preference and sending the notification', async () => {
+    nativeDesktop(true, async () => false);
+    expect(await sendWindowsSongNotification('Test')).toBe(false);
   });
 
   it('does not report success outside the desktop shell or if Windows refuses the alert', async () => {
     expect(await sendCompletedSongsNotification([{ title: 'Song' }], messages)).toBe(false);
     const warning = vi.spyOn(console, 'warn').mockImplementation(() => {});
-    vi.stubGlobal('__TAURI__', { core: { invoke: vi.fn(async () => { throw new Error('Windows notifications blocked'); }) } });
+    nativeDesktop(true, async () => { throw new Error('Windows notifications blocked'); });
     expect(await sendCompletedSongsNotification([{ title: 'Song' }], messages)).toBe(false);
     expect(warning).toHaveBeenCalled();
   });

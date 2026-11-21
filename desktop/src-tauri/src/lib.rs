@@ -1214,6 +1214,8 @@ pub fn run() {
             close_to_tray,
             set_close_to_tray,
             song_notifications::notify_song_ready,
+            song_notifications::song_notification_preference,
+            song_notifications::set_song_notification_preference,
             pending_update,
             install_update
         ]);

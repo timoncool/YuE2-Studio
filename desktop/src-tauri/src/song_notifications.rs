@@ -1,14 +1,56 @@
 //! Native song-completion notifications for the Windows *portable* studio.
 //! The Tauri notification plugin requires an installed Windows application.
 //! A Shell notification-area balloon is supported without a Start Menu shortcut.
+use std::{fs, io, path::Path};
+
+fn preference_path() -> std::path::PathBuf {
+    crate::studio_data_directory().join("song-notifications.json")
+}
+
+fn read_preference(path: &Path) -> Result<bool, String> {
+    match fs::read(path) {
+        Ok(bytes) => serde_json::from_slice(&bytes).map_err(|error| error.to_string()),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(true),
+        Err(error) => Err(error.to_string()),
+    }
+}
+
+fn write_preference(path: &Path, enabled: bool) -> io::Result<()> {
+    use io::Write;
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    let temporary = path.with_extension("json.part");
+    let mut file = fs::File::create(&temporary)?;
+    file.write_all(if enabled { b"true" } else { b"false" })?;
+    file.sync_all()?;
+    drop(file);
+    fs::rename(temporary, path)
+}
+
 #[tauri::command]
-pub fn notify_song_ready(app: tauri::AppHandle, message: String) -> Result<(), String> {
+pub fn song_notification_preference() -> Result<bool, String> {
+    read_preference(&preference_path())
+}
+
+#[tauri::command]
+pub fn set_song_notification_preference(enabled: bool) -> Result<bool, String> {
+    write_preference(&preference_path(), enabled).map_err(|error| error.to_string())?;
+    Ok(enabled)
+}
+
+#[tauri::command]
+pub fn notify_song_ready(app: tauri::AppHandle, message: String) -> Result<bool, String> {
     if message.trim().is_empty() {
         return Err("the notification message is empty".into());
     }
     #[cfg(windows)]
     {
-        show_windows_balloon(&app, &message)
+        if !song_notification_preference()? {
+            return Ok(false);
+        }
+        show_windows_balloon(&app, &message)?;
+        Ok(true)
     }
     #[cfg(not(windows))]
     {
@@ -102,7 +144,27 @@ fn show_windows_balloon(app: &tauri::AppHandle, message: &str) -> Result<(), Str
 
 #[cfg(all(test, windows))]
 mod tests {
-    use super::wide_field;
+    use super::{fs, read_preference, wide_field, write_preference};
+
+    #[test]
+    fn preference_is_readable_from_disk_immediately_and_can_be_replaced() {
+        let directory = std::env::temp_dir().join(format!(
+            "yue2-song-notification-preference-test-{}",
+            std::process::id()
+        ));
+        fs::create_dir(&directory).unwrap();
+        let path = directory.join("song-notifications.json");
+        assert_eq!(read_preference(&path), Ok(true));
+        write_preference(&path, false).unwrap();
+        assert_eq!(fs::read(&path).unwrap(), b"false");
+        assert_eq!(read_preference(&path), Ok(false));
+        write_preference(&path, true).unwrap();
+        assert_eq!(read_preference(&path), Ok(true));
+        assert!(!path.with_extension("json.part").exists());
+        fs::remove_file(&path).unwrap();
+        fs::remove_dir(&directory).unwrap();
+    }
+
     #[test]
     fn notification_fields_are_terminated_and_preserve_unicode_characters() {
         let field = wide_field::<8>("ab🎵cd");
