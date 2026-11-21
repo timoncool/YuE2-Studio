@@ -1003,11 +1003,11 @@ it('lets an active signed update be cancelled and retried while the previous pai
       expect(init?.method).toBe('POST');
       return new Promise<Response>(resolve => { resolveInstall = resolve; });
     }
-    if (url === '/v1/components/packages/engine/engine/progress') return Response.json({
+    if (url === '/v1/components/packages/music-engines/engine/progress') return Response.json({
       active: resolveInstall ? { stage: 'downloading', file: 'engine.exe', total_bytes: 2 ** 30,
         downloaded_bytes: 250, reused_bytes: 750 } : null,
     });
-    if (url === '/v1/components/packages/engine/engine/cancel') {
+    if (url === '/v1/components/packages/music-engines/engine/cancel') {
       expect(init?.method).toBe('POST');
       const finish = resolveInstall!;
       resolveInstall = undefined;

@@ -208,14 +208,14 @@ export function useSignedMusicSelection(list: boolean, active: boolean) {
       const run = { cancelled: false };
       operation.current = run;
       setInstallError(undefined);
-      const installPackage = (kind: 'engine' | 'model', id: string, path: string) => {
+      const installPackage = (kind: 'music-engines' | 'music-models', id: string, path: string) => {
         setProgress(undefined);
         setTransfer({ key, path: `/v1/components/packages/${kind}/${encodeURIComponent(id)}` });
         return post(`${path}/install`);
       };
       try {
-        if (needsEngine) await installPackage('engine', engine.id, enginePath);
-        if (needsModel && !run.cancelled) await installPackage('model', model.id, modelPath);
+        if (needsEngine) await installPackage('music-engines', engine.id, enginePath);
+        if (needsModel && !run.cancelled) await installPackage('music-models', model.id, modelPath);
       } catch (error) {
         if (!run.cancelled && !String(error).includes('Package installation cancelled')) {
           setInstallError({ key, message: String(error) });
