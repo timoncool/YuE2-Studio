@@ -134,6 +134,12 @@ pub(super) fn missing_models(downloader: &Downloader) -> Vec<&'static Asset> {
 
 pub(super) fn missing(downloader: &Downloader) -> Vec<&'static Asset> {
     let mut list = missing_models(downloader);
+    list.extend(missing_runtime(downloader));
+    list
+}
+
+pub(super) fn missing_runtime(downloader: &Downloader) -> Vec<&'static Asset> {
+    let mut list = Vec::new();
     #[cfg(windows)]
     if trainer_override().is_none() {
         if !downloader.is_installed(&TRAINER) {
@@ -148,7 +154,7 @@ pub(super) fn missing(downloader: &Downloader) -> Vec<&'static Asset> {
     list
 }
 
-fn has_size(downloader: &Downloader, asset: &Asset) -> bool {
+pub(super) fn has_size(downloader: &Downloader, asset: &Asset) -> bool {
     std::fs::metadata(downloader.path_of(asset))
         .is_ok_and(|meta| meta.is_file() && meta.len() == asset.bytes)
 }

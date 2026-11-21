@@ -7,12 +7,12 @@ export const RVC_QUICK_EVENT = 'yue:rvc-quick';
 const SELECTION_CHANGED = 'yue:rvc-selection';
 const SELECTION_URL = '/v1/rvc/selection';
 
-export type RvcBackend = 'auto' | 'vocal-fast-rs' | 'audio.cpp';
+export type RvcBackend = 'auto' | 'vocal-fast-rs' | 'vocal-fast-metal' | 'audio.cpp';
 export interface RvcSelection { voice_id: string; backend: RvcBackend }
 
 export function readRvcBackend(): RvcBackend {
   const value = localStorage.getItem(RVC_BACKEND_STORAGE);
-  return value === 'audio.cpp' || value === 'vocal-fast-rs' ? value : 'auto';
+  return value === 'audio.cpp' || value === 'vocal-fast-rs' || value === 'vocal-fast-metal' ? value : 'auto';
 }
 
 function readLastVoice() {

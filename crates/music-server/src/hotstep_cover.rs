@@ -24,7 +24,7 @@ pub(super) async fn profiles(State(state): State<AppState>) -> Json<Value> {
     }
     Json(serde_json::json!({
         "engine": ENGINE, "engine_installed": server,
-        "profiles": [{"id": PROFILE, "label": "MuLaCover · HOT-Step · BF16", "ready": missing.is_empty(), "missing": missing}, crate::hotstep_sa3::profile(&state, server).await]
+        "profiles": [{"id": PROFILE, "label": "MuLaCover · HOT-Step · BF16", "ready": missing.is_empty(), "missing": missing}, crate::hotstep_sa3::profile(&state, server).await, crate::hotstep_heartmula::profile(&state, server).await]
     }))
 }
 
@@ -198,7 +198,7 @@ pub(super) async fn submit(
     let format = format.to_owned();
     tokio::spawn(async move {
         let _lease = lease;
-        let outcome = match render(&exe, &directory, body, &stop).await {
+        let outcome = match render(&exe, &directory, body, &stop, false).await {
             Ok(wav) => tokio::task::spawn_blocking(move || {
                 native_music_jobs::shape_output(wav, &format, None, (0.0, 0.0))
             })
@@ -215,21 +215,23 @@ pub(super) async fn submit(
 
 use crate::hotstep_runtime::json_response;
 
-async fn render(
+pub(super) async fn render(
     exe: &std::path::Path,
     models: &std::path::Path,
     request: Value,
     stop: &AtomicBool,
+    synth: bool,
 ) -> anyhow::Result<Vec<u8>> {
     let (_child, http, url, props) =
         crate::hotstep_runtime::start(exe, models, "/heartmula/props", stop).await?;
     anyhow::ensure!(
-        props["cover_ready"] == true,
-        "HOT-Step cannot render covers: {}",
+        props[if synth { "synth_ready" } else { "cover_ready" }] == true,
+        "HOT-Step HeartMuLa profile is unavailable: {}",
         props["cover_error"]
     );
+    let route = if synth { "synth" } else { "cover" };
     let accepted = json_response(
-        http.post(format!("{url}/heartmula/cover?format=wav16"))
+        http.post(format!("{url}/heartmula/{route}?format=wav16"))
             .json(&request)
             .send()
             .await?,
@@ -249,7 +251,14 @@ async fn render(
         )
         .await?;
         match job["status"].as_str() {
-            Some("done") => break,
+            Some("done") => {
+                if synth && request["adapter"].is_string() {
+                    anyhow::ensure!(job["pick"]["adapter"].as_str().zip(request["adapter"].as_str()).is_some_and(|(actual, expected)|
+                        std::path::Path::new(actual) == std::path::Path::new(expected)),
+                        "HOT-Step did not report the requested HeartMuLa adapter.");
+                }
+                break;
+            },
             Some("queued" | "running" | "pending") => {}
             _ => anyhow::bail!("HOT-Step cover failed: {job}"),
         }

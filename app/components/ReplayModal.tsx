@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { AlertTriangle, Loader2, Repeat, X } from 'lucide-react';
 import { Song } from '../types';
 import { useI18n } from '../context/I18nContext';
+import { nativeMusicSourceStrings } from '../i18n/musicSource';
 import { nativeMusicEngineName, parseDuration } from '../services/nativeLibrary';
 import { isNativeMusicEngine } from '../services/nativeMusicProfiles';
 
@@ -27,7 +28,7 @@ const CONTROL =
   'w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 outline-hidden focus:border-pink-500 dark:border-white/10 dark:bg-black/20 dark:text-white';
 
 export const ReplayModal: React.FC<ReplayModalProps> = ({ song, clientRef, onClose, onQueued }) => {
-  const { t } = useI18n();
+  const { language, t } = useI18n();
   const settings = (song.generationParams ?? {}) as Record<string, unknown>;
   const numberOr = (key: string, fallback: number) =>
     typeof settings[key] === 'number' ? (settings[key] as number) : fallback;
@@ -86,7 +87,7 @@ export const ReplayModal: React.FC<ReplayModalProps> = ({ song, clientRef, onClo
 
   return (
     <div className="fixed inset-0 z-70 flex items-center justify-center bg-black/60 p-4" onClick={onClose}>
-      <div className="w-full max-w-md overflow-hidden rounded-2xl bg-white shadow-2xl dark:bg-zinc-900" onClick={event => event.stopPropagation()}>
+      <div className="max-h-[calc(100vh-2rem)] w-full max-w-md overflow-y-auto rounded-2xl bg-white shadow-2xl dark:bg-zinc-900" onClick={event => event.stopPropagation()}>
         <div className="flex items-center justify-between border-b border-zinc-200 px-5 py-4 dark:border-white/10">
           <h3 className="flex items-center gap-2 text-base font-bold text-zinc-900 dark:text-white">
             <Repeat size={17} className="text-pink-500" /> {t('replayTitle')}
@@ -99,6 +100,14 @@ export const ReplayModal: React.FC<ReplayModalProps> = ({ song, clientRef, onClo
         <div className="space-y-3 p-5">
           <p className="truncate text-sm font-semibold text-zinc-900 dark:text-white">{song.title}</p>
           <p className="text-xs leading-5 text-zinc-500 dark:text-zinc-400">{native ? nativeMusicEngineName(song.ditModel) : t('replayHint')}</p>
+          {(song.lmModel || song.replayModelFiles?.length) && (
+            <div className="break-all text-xs leading-5 text-zinc-500 dark:text-zinc-400">
+              <p>{[nativeMusicSourceStrings[language].model, song.lmModel].filter(Boolean).join(' · ')}</p>
+              {song.replayModelFiles?.length ? (
+                <ul>{song.replayModelFiles.map(file => <li key={file}>{file}</li>)}</ul>
+              ) : null}
+            </div>
+          )}
 
           <div className="grid grid-cols-2 gap-3">
             <label className="block text-xs font-medium text-zinc-600 dark:text-zinc-300">
