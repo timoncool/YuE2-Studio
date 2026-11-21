@@ -244,7 +244,9 @@ async fn submit(
             "Studio data folder is unavailable.".into(),
         );
     };
-    if !cfg!(target_os = "macos") && crate::hardware::hardware().nvidia {
+    // MiniMax can auto-select CUDA from a local bundle even when NVML
+    // failed the initial probe and Studio does not pass --device CUDA0.
+    if !cfg!(target_os = "macos") {
         let chosen = state.engine_options.read().await;
         if let Some(problem) = crate::legacy_cuda_startup_problem(chosen.gpu.as_ref(), crate::APPLIED_LEGACY_GPU.get().copied()) {
             return reject(StatusCode::SERVICE_UNAVAILABLE, problem);

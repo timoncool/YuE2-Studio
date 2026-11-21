@@ -6782,11 +6782,12 @@ async fn start_engine_again_with(
             note_once("nvidia-smi did not answer, so the graphics card chosen in Settings - Local engine is not checked; the engine starts as before");
         }
     }
+    let skip_automatic_cuda =
+        legacy_problem.filter(|_| !cfg!(target_os = "macos") && options.backend == ComputeBackend::Auto);
     let mut chain = options.device_chain(&state.failed_devices.read().await);
-    if let Some(problem) = legacy_problem.filter(|_| !cfg!(target_os = "macos") && options.backend == ComputeBackend::Auto) {
-        // Off Windows, the engine's own Auto selection can start CUDA as well.
-        chain.retain(|backend| !matches!(backend, ComputeBackend::Auto | ComputeBackend::Cuda));
-        music_engine::yue_server::note_in_log(&problem);
+    if let Some(problem) = skip_automatic_cuda {
+        restrict_automatic_chain_to_non_cuda(&mut chain);
+        music_engine::yue_server::note_in_log(&format!("{problem} Trying {} instead.", device_name(chain[0])));
     }
     {
         let hardware = hardware::hardware();
@@ -6921,6 +6922,15 @@ fn missing_chosen_card(chosen: Option<&hardware::GpuChoice>, cards: Option<&[har
     Some(format!(
         "the graphics card chosen in Settings - Local engine ({identity}) is not in this computer ({present}); choose another card or Auto there"
     ))
+}
+
+fn restrict_automatic_chain_to_non_cuda(chain: &mut Vec<music_engine::yue_server::ComputeBackend>) {
+    use music_engine::yue_server::ComputeBackend;
+    // On Linux, upstream Auto may load CUDA even if the first NVML probe failed.
+    chain.retain(|backend| !matches!(backend, ComputeBackend::Auto | ComputeBackend::Cuda));
+    if chain.is_empty() {
+        chain.push(ComputeBackend::Cpu);
+    }
 }
 
 /// The device's name as the settings show it.
@@ -15158,6 +15168,18 @@ mod tests {
         assert!(legacy_cuda_startup_problem(Some(&legacy), Some(1)).is_some());
         assert_eq!(legacy_cuda_startup_problem(Some(&legacy), Some(2)), None);
         assert_eq!(legacy_cuda_startup_problem(None, None), None);
+    }
+
+    #[test]
+    fn a_legacy_index_keeps_an_explicit_non_cuda_fallback_on_platform_auto() {
+        use music_engine::yue_server::ComputeBackend::{Auto, Cpu, Cuda, Vulkan};
+        for mut chain in [vec![Auto], vec![Auto, Cpu], vec![Cuda, Cpu]] {
+            restrict_automatic_chain_to_non_cuda(&mut chain);
+            assert_eq!(chain, vec![Cpu]);
+        }
+        let mut chain = vec![Cuda, Vulkan, Cpu];
+        restrict_automatic_chain_to_non_cuda(&mut chain);
+        assert_eq!(chain, vec![Vulkan, Cpu]);
     }
 
     #[test]
