@@ -581,6 +581,20 @@ while ([DateTime]::UtcNow -lt $deadline -and !(Test-Path -LiteralPath $env:STUDI
         Write-Output 'Selected PDF output path'
         exit 0
       }
+      $printOutputFolder = @($buttons | Where-Object {$_.Current.Name -eq 'New folder'}).Count -eq 1 -and
+        @($buttons | Where-Object {$_.Current.AutomationId -eq 'HelpButton'}).Count -eq 1
+      if ($printOutputFolder) {
+        # The shell exposes its folder view but can omit the lower controls
+        # from UIA when the output chooser is embedded in the Studio owner.
+        $focus = [Windows.Automation.AutomationElement]::FocusedElement
+        if (!$focus -or !$ids.Contains($focus.Current.ProcessId)) { throw 'Print output chooser is not focused' }
+        [Windows.Forms.SendKeys]::SendWait('%n')
+        [Windows.Forms.SendKeys]::SendWait('^a')
+        [Windows.Forms.SendKeys]::SendWait($env:STUDIO_QA_PDF)
+        [Windows.Forms.SendKeys]::SendWait('{ENTER}')
+        Write-Output 'Selected PDF output path in the focused Windows folder chooser'
+        exit 0
+      }
     }
     if ($confirm -and !$confirmed) {
       if ($env:STUDIO_QA_PRINT_ACTION -eq 'cancel') {
