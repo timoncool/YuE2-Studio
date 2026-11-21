@@ -138,5 +138,52 @@ Run `python distribution/components/test_sign_channel.py` on Windows to exercise
 provisioning, staging versions 1 and 2, and staging version 3 from the recovered
 store with the same public root.
 
+## Scheduled timestamp renewal
+
+The stable GitHub Pages site builds from `main:/docs`. Once the initial channel
+is live, run `renew_channel.py` under the Windows account that owns the signing
+store. The account needs noninteractive Git access with permission to update
+`main`. Start with the command below without `--publish` as a read-only probe.
+Use the reviewed SHA-256 and the same pinned Python environment as for signing.
+
+```powershell
+& $python $renew --store $store --work-dir $publicWork --root-sha256 $reviewedRootHash
+```
+
+The command compares the timestamp served by Pages with the signed version on
+`main`. With more than five days remaining it exits without signing or
+requesting an update. Otherwise it renews the existing catalogue and runs
+staging. With `--publish`, it pushes only the three changed metadata files.
+The push requires the exact `main` revision used for staging. If another
+publisher advances `main`, the task retries from the new revision. If Pages
+lags or fails to build, check the deployment status before retrying.
+
+After approving direct publication, register a daily task and an owner-logon
+trigger. Set `$python` and `$renew` to absolute paths in a persistent publisher
+checkout and venv. Set `$store` to the working DPAPI store and `$log` to a
+private profile path. Use a short, existing `$publicWork` directory outside
+the private store. Keep `$reviewedRootHash` from the release review.
+
+```powershell
+$task = 'YuE2 Studio stable component renewal'
+if (Get-ScheduledTask -TaskName $task -ErrorAction SilentlyContinue) {
+    throw "Task already registered: $task"
+}
+$owner = [Security.Principal.WindowsIdentity]::GetCurrent().Name
+$arguments = '"{0}" --store "{1}" --work-dir "{2}" --root-sha256 {3} --log-file "{4}" --publish' -f $renew, $store, $publicWork, $reviewedRootHash, $log
+$action = New-ScheduledTaskAction -Execute $python -Argument $arguments -WorkingDirectory $publicWork
+$triggers = @((New-ScheduledTaskTrigger -Daily -At 09:00), (New-ScheduledTaskTrigger -AtLogOn -User $owner))
+$principal = New-ScheduledTaskPrincipal -UserId $owner -LogonType Interactive -RunLevel Limited
+$settings = New-ScheduledTaskSettingsSet -StartWhenAvailable -MultipleInstances IgnoreNew -ExecutionTimeLimit (New-TimeSpan -Minutes 15) -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 30)
+Register-ScheduledTask -TaskName $task -Action $action -Trigger $triggers -Principal $principal -Settings $settings
+```
+
+This task runs while the owner is signed in, including after an outage when the
+owner next signs in. An expired timestamp is an authenticated predecessor for
+renewal. Restored machines use the same task with the recovered store path and
+the same root fingerprint. Monitor the Pages timestamp independently and
+investigate by three days remaining. A successful Git submission is followed
+by the Pages build. Check the public timestamp after the build completes.
+
 See the [TUF repository maintenance manual](https://github.com/theupdateframework/tuf-on-ci/blob/main/docs/REPOSITORY-MAINTENANCE.md)
 for renewal and rotation.
