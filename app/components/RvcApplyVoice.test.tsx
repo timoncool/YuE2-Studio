@@ -5,6 +5,7 @@ import { RvcApplyVoice } from './RvcApplyVoice';
 import { RvcNativeRuntime } from './RvcNativeRuntime';
 
 vi.mock('../context/I18nContext', () => ({ useI18n: () => ({ language: 'en', t: (key: string) => key }) }));
+vi.mock('./AudioWaveform', () => ({ AudioWaveform: () => null }));
 const flush = () => act(async () => { await new Promise(resolve => setTimeout(resolve, 0)); });
 
 it('keeps explicit RVC backend selection and saves an audio.cpp take from the selected song', async () => {
@@ -28,7 +29,7 @@ it('keeps explicit RVC backend selection and saves an audio.cpp take from the se
     act(() => root.render(<RvcApplyVoice song={source} voice={voice} control="" onSaved={saved} />));
     await flush();
     const select = host.querySelector('select')!;
-    const apply = host.querySelector('button')!;
+    const apply = [...host.querySelectorAll('button')].find(button => button.textContent === 'Save a new take with this voice')!;
     expect(host.textContent).toContain('The original remains in the library.');
     const choose = (value: string) => act(() => {
       select.value = value;
@@ -87,6 +88,51 @@ it('starts native runtime installation, reports progress, and refreshes conversi
   } finally {
     act(() => root.unmount());
     vi.useRealTimers();
+    vi.unstubAllGlobals();
+  }
+});
+
+
+it('previews the chosen range without saving and switches vocal sides at the heard position', async () => {
+  const source = { id: 'original', title: 'Original song', stems: ['vocals'] };
+  const voice = { id: 'voice', model_name: 'voice.pth', index_name: 'voice.index', version: 2 };
+  const fetchRvc = vi.fn(async (url: string, _init?: RequestInit) => {
+    if (url.endsWith('/setup')) return Response.json({ effective_backend: 'audio.cpp', backends: {
+      'audio.cpp': { ready: true }, 'vocal-fast-rs': { ready: false },
+    } });
+    if (url.endsWith('/preview')) return Response.json({
+      id: 'clip-one', start_seconds: 0, end_seconds: 6.5, effective_backend: 'audio.cpp',
+      before_url: '/before-vocal', after_url: '/after-vocal',
+    });
+    return Response.json(null);
+  });
+  vi.stubGlobal('fetch', fetchRvc);
+  vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+  const host = document.createElement('div');
+  const root = createRoot(host);
+  const saved = vi.fn();
+  try {
+    await act(async () => root.render(<RvcApplyVoice song={source} voice={voice} control="" onSaved={saved} />));
+    const preview = [...host.querySelectorAll('button')].find(button => button.textContent === 'Preview vocal fragment')!;
+    await act(async () => preview.click());
+    const [, init] = fetchRvc.mock.calls.find(([url]) => url.endsWith('/preview'))!;
+    expect(JSON.parse(String(init?.body))).toEqual({
+      song_id: 'original', voice_id: 'voice', semitone_shift: 0, retrieval_blend: 0,
+      backend: 'auto', start_seconds: 0, end_seconds: 8,
+    });
+    expect(host.textContent).toContain('0–6.5 s');
+    const [before, after] = host.querySelectorAll('audio');
+    expect(before.getAttribute('src')).toContain('/before-vocal');
+    expect(after.getAttribute('src')).toContain('/after-vocal');
+    Object.defineProperty(before, 'readyState', { value: 1 });
+    after.currentTime = 2.25;
+    act(() => { host.querySelector<HTMLButtonElement>('[role=tab]')?.click(); });
+    expect(before.currentTime).toBe(2.25);
+    expect(after.muted).toBe(true);
+    expect(before.muted).toBe(false);
+    expect(saved).not.toHaveBeenCalled();
+  } finally {
+    act(() => root.unmount());
     vi.unstubAllGlobals();
   }
 });
