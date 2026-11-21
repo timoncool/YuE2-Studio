@@ -31,15 +31,34 @@ The Studio expects the signed targets under `targets/` inside that directory.
      --previous-site published --output incoming
    ```
 
-   On initial deployment omit `--previous-site`. If a voice catalogue is
-   offered, also pass `--voices config/rvc-voice-catalog.json` on every
-   deployment. The verified target must match its reviewed file byte for byte.
-4. Apply the staged files as an overlay to the current channel in a single
-   versioned deployment. Keep older numbered roles and hashed targets for
-   clients already downloading. For a host with individually uploaded files,
-   upload immutable files first, verify they are reachable, and replace
-   `timestamp.json` last. Publish from one writer at a time. Recheck the
-   base deployment immediately before promotion if another writer exists.
+   On initial deployment omit `--previous-site`. Pass `--voices config/rvc-voice-catalog.json`
+   for the signed target `rvc-voice-catalog.json`. To publish engine package
+   definitions, pass `--engines candidate/music-engine-catalog.json` and sign
+   that file under the exact target name `music-engine-catalog.json`. Its
+   package `files` entries give the HTTPS URL, byte count and SHA-256 for each
+   executable, library or model included in the package. Upload those assets
+   before signing the catalogue. Each staged catalogue must match the reviewed
+   source byte for byte, including JSON whitespace.
+
+   For a mirror-only release, keep all already published catalogue declarations
+   in the new signed targets metadata and pass their existing reviewed files
+   again. Reuse the identical catalogue bytes and hash-prefixed paths so
+   clients can continue reading them. Before the first engine catalogue is
+   published, omit its signed target and the `--engines` argument. Studio
+   starts from its packaged engine profiles, and the engine catalogue list
+   reads a previously verified local cache or returns an empty extension list.
+   A network fetch occurs only on explicit catalogue refresh.
+
+4. Promote the staged directory in one versioned deployment. Staging retains
+   the previous publication's numbered roots, numbered roles and hash-prefixed
+   catalogues for older installers and downloads already in progress. During
+   root rotation, provide each intermediate root missing from the previous
+   publication in the signing metadata directory. Staging follows the
+   verified chain from root version 1 to the new root. Supply that complete
+   chain for an initial deployment if the installer already embeds a later root.
+   For a host with individually uploaded files, upload immutable files first,
+   verify they are reachable, and replace `timestamp.json` last. Publish from
+   one writer at a time and recheck the base deployment before promotion.
 5. Check the published channel with a previously installed Studio and a clean
    profile. To withdraw a bad mirror, sign the previous working URLs as a new
    revision and publish using the current channel as the comparison point.

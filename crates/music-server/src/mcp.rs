@@ -452,7 +452,7 @@ fn annotations(name: &str) -> Value {
     // a verb that changes something outweighs a noun that reads
     const CHANGES: &[&str] = &["install", "import", "remove", "delete", "refresh", "create", "update", "start", "cancel", "select", "download", "apply", "restart"];
     // reads whose names the rules above miss: create_form names the create page
-    const READ_NAMES: &[&str] = &["lyrics_syllables", "assistant_cli_agents", "system_gpus", "cover_scenes", "cover_photos_search", "video_backgrounds_search", "network_proxy_test", "journal_read", "score_to_midi", "score_instrumental", "score_vocal_octave", "score_from_midi", "score_mark", "lyrics_find", "cover_prompt_render", "studio_wait", "engine_presets_get", "assistant_requests_wait", "ui_console", "song_defaults", "create_form_get", "library_liked", "score_chord_bed", "song_tokenize", "score_match_sections", "models_update_plan", "problem_preview", "library_migration_preview", "audio_cpp_music_models", "hotstep_cover_profiles", "hotstep_sa3_training_status", "hotstep_heartmula_training_status"];
+    const READ_NAMES: &[&str] = &["music_package_progress", "lyrics_syllables", "assistant_cli_agents", "system_gpus", "cover_scenes", "cover_photos_search", "video_backgrounds_search", "network_proxy_test", "journal_read", "score_to_midi", "score_instrumental", "score_vocal_octave", "score_from_midi", "score_mark", "lyrics_find", "cover_prompt_render", "studio_wait", "engine_presets_get", "assistant_requests_wait", "ui_console", "song_defaults", "create_form_get", "library_liked", "score_chord_bed", "song_tokenize", "score_match_sections", "models_update_plan", "problem_preview", "library_migration_preview", "audio_cpp_music_models", "hotstep_cover_profiles", "hotstep_sa3_training_status", "hotstep_heartmula_training_status"];
     // writes over what was stored, so the earlier content is gone: a client asks first
     const OVERWRITES: &[&str] = &["library_song_rename", "library_song_update", "playlist_update", "album_reorder", "dataset_update", "dataset_song_update", "dataset_song_describe_style", "dataset_prepare", "lora_update", "stems_split", "restore_start", "karaoke_make", "midi_transcribe", "cover_draw", "cover_set_from_file", "openrouter_set_key", "models_update_apply"];
     let changes = CHANGES.iter().any(|verb| name.split('_').any(|word| word == *verb));
@@ -544,12 +544,17 @@ const JOURNAL: &[(&str, &str, &str)] = &[
     ("lora_import_files", "installed", "lora"),
     ("rvc_voice_import", "installed", "rvc_voice"),
     ("rvc_voice_remove", "deleted", "rvc_voice"),
+    ("music_package_cancel", "cancelled", "download"),
+    ("music_model_package_install", "installed", "model"),
+    ("music_engine_package_install", "installed", "music_engine"),
+    ("music_engine_catalog_refresh", "refreshed", "music_engine_catalog"),
     ("rvc_catalog_refresh", "refreshed", "rvc_catalog"),
     ("rvc_catalog_install", "installed", "rvc_voice"),
     ("rvc_apply_install", "installed", "model"),
     ("rvc_native_runtime_install", "started", "download"),
     ("rvc_native_runtime_cancel", "cancelled", "download"),
     ("rvc_apply", "created", "song"),
+    ("rvc_preview", "started", "processing"),
     ("rvc_voice_select", "updated", "rvc_voice"),
     ("rvc_quick_start", "started", "processing"),
     ("rvc_quick_cancel", "cancelled", "processing"),
@@ -2675,6 +2680,54 @@ fn tools() -> &'static [Tool] {
                 call: |args| get(format!("/v1/rvc/catalog/progress/{}", segment(&text(args, "id")?))),
             },
             Tool {
+                name: "music_package_progress",
+                description: "Read the current file, transfer stage, reused and downloaded bytes for one signed package.",
+                schema: || object(json!({"kind":{"type":"string","enum":["music-engines","music-models"]},"id":{"type":"string"}}), &["kind","id"]),
+                call: |args| get(format!("/v1/components/packages/{}/{}/progress", segment(&text(args,"kind")?),segment(&text(args,"id")?))),
+            },
+            Tool {
+                name: "music_package_cancel",
+                description: "Request cancellation of an active signed package installation.",
+                schema: || object(json!({"kind":{"type":"string","enum":["music-engines","music-models"]},"id":{"type":"string"}}), &["kind","id"]),
+                call: |args| post(format!("/v1/components/packages/{}/{}/cancel", segment(&text(args,"kind")?),segment(&text(args,"id")?)),json!({})),
+            },
+            Tool {
+                name: "music_model_package_install",
+                description: "Install an independently published music model, reusing verified weights already present.",
+                schema: || id_only("id", "model ID in the signed music catalogue"),
+                call: |args| post(format!("/v1/components/music-models/{}/install", segment(&text(args, "id")?)), json!({})),
+            },
+            Tool {
+                name: "music_model_package_status",
+                description: "Verify the installed model and its compatibility with the named engine.",
+                schema: || object(json!({"engine":{"type":"string"},"model":{"type":"string"}}), &["engine","model"]),
+                call: |args| get(format!("/v1/components/music-engines/{}/models/{}/status", segment(&text(args, "engine")?),segment(&text(args, "model")?))),
+            },
+            Tool {
+                name: "music_engine_package_install",
+                description: "Verify and activate the signed engine package for this platform. A failed update preserves the active generation.",
+                schema: || id_only("id", "the engine ID from music_engine_catalog_list"),
+                call: |args| post(format!("/v1/components/music-engines/{}/install", segment(&text(args, "id")?)), json!({})),
+            },
+            Tool {
+                name: "music_engine_package_status",
+                description: "Check the active engine generation, its signature, and the contents of its runtime directory.",
+                schema: || id_only("id", "the installed engine ID"),
+                call: |args| get(format!("/v1/components/music-engines/{}/status", segment(&text(args, "id")?))),
+            },
+            Tool {
+                name: "music_engine_catalog_list",
+                description: "List engine packages in the accepted signed catalogue without network access.",
+                schema: nothing,
+                call: |_| get("/v1/components/music-engines".into()),
+            },
+            Tool {
+                name: "music_engine_catalog_refresh",
+                description: "Refresh signed music engine package manifests. Installed versions remain available.",
+                schema: nothing,
+                call: |_| post("/v1/components/music-engines/refresh".into(), json!({})),
+            },
+            Tool {
                 name: "rvc_catalog_refresh",
                 description: "Update the curated RVC voices from the installed signed component channel. A failed update preserves the last accepted catalogue.",
                 schema: nothing,
@@ -2721,6 +2774,20 @@ fn tools() -> &'static [Tool] {
                 description: "Cancel the active vocal-fast-rs runtime download. Keeps installed components.",
                 schema: rvc_runtime_schema,
                 call: |args| send(Method::DELETE, rvc_runtime_route(args), json!({})),
+            },
+            Tool {
+                name: "rvc_preview",
+                description: "Prepare time-aligned before and after WAVs of an isolated vocal fragment with the chosen installed RVC voice. Returns both URLs and the actual bounds; leaves the library untouched.",
+                schema: || object(json!({
+                    "song_id": { "type": "string" },
+                    "voice_id": { "type": "string", "description": "The installed ID from rvc_voices_list" },
+                    "start_seconds": { "type": "number", "minimum": 0 },
+                    "end_seconds": { "type": "number", "description": "Between 0.5 and 15 seconds after start; shortened to the vocal end if necessary" },
+                    "semitone_shift": { "type": "integer", "minimum": -24, "maximum": 24 },
+                    "retrieval_blend": { "type": "number", "minimum": 0, "maximum": 1 },
+                    "backend": { "type": "string", "enum": ["auto", "vocal-fast-rs", "vocal-fast-metal", "audio.cpp"] },
+                }), &["song_id", "voice_id", "start_seconds", "end_seconds"]),
+                call: |args| post("/v1/rvc/preview".into(), args.clone()),
             },
             Tool {
                 name: "rvc_apply",
@@ -4026,6 +4093,7 @@ mod tests {
 
     /// Routes an agent is not given, and why.
     const NOT_TOOLS: &[(&str, &str, &str)] = &[
+        ("GET", "/v1/rvc/preview/{id}/{side}", "binary audio from the before_url and after_url answered by rvc_preview"),
         ("GET", "/health", "the service's identity for the desktop shell: initialize names the server and its version"),
         ("POST", "/engine/pick-executable", "a file dialog for the person: engine_options_set takes the executable's path"),
         ("POST", "/setup/kv-cache-notice/seen", "the window's note that it told the person: engine_options_get says the cache and why"),

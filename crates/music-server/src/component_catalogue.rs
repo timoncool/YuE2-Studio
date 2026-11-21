@@ -242,10 +242,23 @@ pub(crate) async fn channel_sources(
     Ok(catalogue.sources(digest).map(<[String]>::to_vec))
 }
 
-const RVC_TARGET: &str = "rvc-voice-catalog.json";
-const RVC_LIMIT: usize = 8 * 1024 * 1024;
+#[derive(Clone, Copy)]
+pub(crate) struct ChannelTarget {
+    name: &'static str,
+    cache: &'static str,
+    limit: usize,
+}
 
-async fn read_rvc_snapshot(
+pub(crate) const RVC: ChannelTarget = ChannelTarget {
+    name: "rvc-voice-catalog.json", cache: "rvc", limit: 8 * 1024 * 1024,
+};
+
+pub(crate) const ENGINES: ChannelTarget = ChannelTarget {
+    name: "music-engine-catalog.json", cache: "music-engines", limit: 1024 * 1024,
+};
+
+async fn read_snapshot(
+    target: ChannelTarget,
     root: &[u8],
     snapshot: &Path,
     refreshing: Option<&tough::Repository>,
@@ -255,7 +268,7 @@ async fn read_rvc_snapshot(
 
     let base = |folder| {
         reqwest::Url::from_directory_path(snapshot.join(folder))
-            .map_err(|_| anyhow::anyhow!("invalid RVC catalogue cache path"))
+            .map_err(|_| anyhow::anyhow!("invalid catalogue cache path"))
     };
     // Offline use rechecks signatures and target hashes. Only a refresh can accept new metadata.
     let repo = RepositoryLoader::new(&root, base("metadata")?, base("targets")?)
@@ -269,42 +282,69 @@ async fn read_rvc_snapshot(
                 && repo.timestamp().signed.version == online.timestamp().signed.version
                 && repo.snapshot().signed.version == online.snapshot().signed.version
                 && repo.targets().signed.version == online.targets().signed.version,
-            "component channel changed while caching the RVC catalogue"
+            "component channel changed while caching the catalogue"
         );
     }
     let stream = repo
-        .read_target(&TargetName::new(RVC_TARGET)?)
+        .read_target(&TargetName::new(target.name)?)
         .await?
-        .context("missing signed RVC catalogue")?;
+        .context("missing signed catalogue")?;
     futures_util::pin_mut!(stream);
     let mut bytes = Vec::new();
     while let Some(chunk) = stream.try_next().await? {
-        ensure!(chunk.len() <= RVC_LIMIT - bytes.len(), "RVC catalogue exceeds 8 MiB");
+        ensure!(chunk.len() <= target.limit - bytes.len(), "signed catalogue exceeds its size limit");
         bytes.extend_from_slice(&chunk);
     }
     Ok(bytes)
 }
 
-fn rvc_snapshot_name(name: &str) -> bool {
+fn snapshot_name(name: &str) -> bool {
     name.strip_prefix("snapshot-").is_some_and(|suffix| {
         suffix.len() == 6 && suffix.bytes().all(|byte| byte.is_ascii_alphanumeric())
     })
 }
 
-pub(crate) async fn cached_rvc_catalogue() -> Result<Option<Vec<u8>>> {
+pub(crate) async fn cached_catalogue(target: ChannelTarget) -> Result<Option<Vec<u8>>> {
     let Some(root) = installed_root().await? else {
         return Ok(None);
     };
-    let store = channel_store()?.join("rvc");
+    let store = channel_store()?.join(target.cache);
     let id = match tokio::fs::read_to_string(store.join("accepted")).await {
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
         result => result?,
     };
-    ensure!(rvc_snapshot_name(&id), "invalid RVC catalogue cache pointer");
-    Ok(Some(read_rvc_snapshot(&root, &store.join(id), None).await?))
+    ensure!(snapshot_name(&id), "invalid catalogue cache pointer");
+    Ok(Some(read_snapshot(target, &root, &store.join(id), None).await?))
 }
 
-pub(crate) async fn refresh_rvc_catalogue<T>(
+/// Keep the signed target and chain with an installed engine generation. Catalogue
+/// refreshes can retire their own older cache without breaking historical replay.
+pub(crate) async fn save_engine_proof(destination: &Path) -> Result<Vec<u8>> {
+    let root = installed_root().await?.context("component channel is not installed")?;
+    let channel = channel_store()?;
+    let _guard = lock_channel(&channel).await?;
+    let store = channel.join(ENGINES.cache);
+    let id = tokio::fs::read_to_string(store.join("accepted")).await?;
+    ensure!(snapshot_name(&id), "invalid catalogue cache pointer");
+    let from = store.join(id);
+    for folder in ["metadata", "targets"] {
+        let dest = destination.join(folder);
+        tokio::fs::create_dir_all(&dest).await?;
+        let mut entries = tokio::fs::read_dir(from.join(folder)).await?;
+        while let Some(entry) = entries.next_entry().await? {
+            ensure!(entry.file_type().await?.is_file(), "unexpected catalogue cache entry");
+            tokio::fs::copy(entry.path(), dest.join(entry.file_name())).await?;
+        }
+    }
+    read_snapshot(ENGINES, &root, destination, None).await
+}
+
+pub(crate) async fn verify_engine_proof(path: &Path) -> Result<Vec<u8>> {
+    let root = installed_root().await?.context("component channel is not installed")?;
+    read_snapshot(ENGINES, &root, path, None).await
+}
+pub(crate) async fn refresh_catalogue<T>(
+    descriptor: ChannelTarget,
     http: &reqwest::Client,
     validate: impl FnOnce(&[u8]) -> Result<T>,
 ) -> Result<T> {
@@ -315,12 +355,12 @@ pub(crate) async fn refresh_rvc_catalogue<T>(
         .context("component channel is not installed")?;
     let channel = channel_store()?;
     let _lock = lock_channel(&channel).await?;
-    let store = channel.join("rvc");
+    let store = channel.join(descriptor.cache);
     let repo = channel_repository(http, &root, &store.join("datastore")).await?;
-    let target = tough::TargetName::new(RVC_TARGET)?;
+    let target = tough::TargetName::new(descriptor.name)?;
     ensure!(
-        repo.targets().signed.find_target(&target, false)?.length <= RVC_LIMIT as u64,
-        "RVC catalogue exceeds 8 MiB"
+        repo.targets().signed.find_target(&target, false)?.length <= descriptor.limit as u64,
+        "signed catalogue exceeds its size limit"
     );
     let snapshot = tempfile::Builder::new()
         .prefix("snapshot-")
@@ -330,15 +370,15 @@ pub(crate) async fn refresh_rvc_catalogue<T>(
         .path()
         .file_name()
         .and_then(|name| name.to_str())
-        .context("invalid RVC catalogue cache path")?;
+        .context("invalid catalogue cache path")?;
     repo.cache(
         snapshot.path().join("metadata"),
         snapshot.path().join("targets"),
-        Some(&[RVC_TARGET]),
+        Some(&[descriptor.name]),
         true,
     )
     .await?;
-    let bytes = read_rvc_snapshot(&root, snapshot.path(), Some(&repo)).await?;
+    let bytes = read_snapshot(descriptor, &root, snapshot.path(), Some(&repo)).await?;
     let result = validate(&bytes)?;
     let pointer = store.join("accepted");
     let previous = std::fs::read_to_string(&pointer).ok();
@@ -355,7 +395,7 @@ pub(crate) async fn refresh_rvc_catalogue<T>(
         let Some(name) = name.to_str() else {
             continue;
         };
-        if name != id && previous.as_deref() != Some(name) && rvc_snapshot_name(name) {
+        if name != id && previous.as_deref() != Some(name) && snapshot_name(name) {
             let _ = std::fs::remove_dir_all(entry.path());
         }
     }

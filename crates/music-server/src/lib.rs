@@ -3,6 +3,7 @@ pub mod studio_log;
 mod adapters;
 mod community;
 mod component_catalogue;
+mod engine_catalogue;
 mod diagnostics;
 mod problem;
 mod processing;
@@ -73,6 +74,7 @@ mod restore;
 mod rvc_voices;
 mod rvc_catalog;
 mod rvc_apply;
+mod rvc_audition;
 mod rvc_quick;
 mod rvc_fast;
 mod rvc_fast_install;
@@ -162,6 +164,7 @@ struct AppState {
     community_downloads: Arc<downloads::Downloader>,
     rvc_native_downloads: Arc<downloads::Downloader>,
     rvc_quick: Arc<rvc_quick::Queue>,
+    rvc_auditions: Arc<rvc_audition::Cache>,
     settings_path: PathBuf,
     openrouter_catalog: Arc<RwLock<OpenRouterCatalogState>>,
     library: library::Library,
@@ -1632,6 +1635,7 @@ pub async fn serve_on_port(port: u16) -> anyhow::Result<()> {
         own_backbone: Arc::new(RwLock::new(persisted.as_ref().and_then(|settings| settings.own_backbone.clone()))),
         community_downloads,
         rvc_quick: Arc::default(),
+        rvc_auditions: Arc::default(),
         rvc_native_downloads: Arc::new(rvc_fast_install::downloader(
             settings_path.parent().expect("settings file has a data directory"),
         )),
@@ -1719,11 +1723,21 @@ pub async fn serve_on_port(port: u16) -> anyhow::Result<()> {
         .route("/v1/capabilities", get(capabilities))
         .route("/v1/rvc/voices", get(rvc_voices::list))
         .route("/v1/rvc/apply", post(rvc_apply::apply))
+        .route("/v1/rvc/preview", post(rvc_audition::preview))
+        .route("/v1/rvc/preview/{id}/{side}", get(rvc_audition::audio))
         .route("/v1/rvc/selection", get(rvc_quick::selected).put(rvc_quick::select))
         .route("/v1/rvc/quick", get(rvc_quick::list).post(rvc_quick::start))
         .route("/v1/rvc/quick/{id}", get(rvc_quick::status).delete(rvc_quick::cancel))
         .route("/v1/rvc/apply/setup", get(rvc_apply::setup).post(rvc_apply::install))
         .route("/v1/rvc/voices/{id}", axum::routing::delete(rvc_voices::remove))
+        .route("/v1/components/music-engines", get(engine_catalogue::list))
+        .route("/v1/components/music-engines/refresh", post(engine_catalogue::refresh))
+        .route("/v1/components/packages/{kind}/{id}/progress", get(engine_catalogue::progress::status))
+        .route("/v1/components/packages/{kind}/{id}/cancel", post(engine_catalogue::progress::cancel))
+        .route("/v1/components/music-models/{id}/install", post(engine_catalogue::install::install_model))
+        .route("/v1/components/music-engines/{engine}/models/{model}/status", get(engine_catalogue::install::model_status))
+        .route("/v1/components/music-engines/{id}/status", get(engine_catalogue::install::status))
+        .route("/v1/components/music-engines/{id}/install", post(engine_catalogue::install::install_selected))
         .route("/v1/rvc/catalog", get(rvc_catalog::list))
         .route("/v1/rvc/catalog/refresh", post(rvc_catalog::refresh))
         .route("/v1/rvc/catalog/install", post(rvc_catalog::install))

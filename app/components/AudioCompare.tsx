@@ -25,6 +25,11 @@ export const AudioCompare: React.FC<{
     if (after.current) after.current.muted = side !== 'after';
   }, [side]);
 
+  useEffect(() => {
+    const tracks = [before.current, after.current];
+    return () => tracks.forEach(track => track?.pause());
+  }, []);
+
   // keep the silent one aligned with the heard one
   useEffect(() => {
     if (!playing) return;

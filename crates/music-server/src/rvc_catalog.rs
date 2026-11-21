@@ -204,7 +204,7 @@ pub(super) struct ListedVoice {
 }
 
 async fn active_manifest() -> anyhow::Result<Vec<CatalogVoice>> {
-    match crate::component_catalogue::cached_rvc_catalogue()
+    match crate::component_catalogue::cached_catalogue(crate::component_catalogue::RVC)
         .await
         .and_then(|bytes| {
             bytes.map(|bytes| parse_manifest(std::str::from_utf8(&bytes)?)).transpose()
@@ -220,7 +220,7 @@ async fn active_manifest() -> anyhow::Result<Vec<CatalogVoice>> {
 pub(super) async fn refresh() -> Result<Json<serde_json::Value>, ApiFailure> {
     let voices = tokio::time::timeout(
         std::time::Duration::from_secs(45),
-        crate::component_catalogue::refresh_rvc_catalogue(&net::download_client(), |bytes| {
+        crate::component_catalogue::refresh_catalogue(crate::component_catalogue::RVC, &net::download_client(), |bytes| {
             let voices = parse_manifest(std::str::from_utf8(bytes)?)?;
             anyhow::ensure!(!voices.is_empty(), "signed RVC catalogue is empty");
             Ok(voices.len())
