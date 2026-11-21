@@ -41,6 +41,7 @@ import { songWritingStrings } from '../i18n/songWriting';
 import { MagentaFields, magentaModel, restoreMagentaOptions } from './MagentaFields';
 import { MiDashengFields, miDashengModel, miDashengPromptReady, restoreMiDashengPrompt } from './MiDashengFields';
 import { HeartMuLaControls, AudioCppModelInstall, emptyHeartMuLaDraft, heartMuLaDraft, heartMuLaOptions } from './HeartMuLaControls';
+import { HotStepSa3Controls, hotStepSa3Profile, type HotStepSa3Draft } from './HotStepSa3Controls';
 import { StableAudioControls, emptyStableAudioDraft, stableAudioDraft, stableAudioOptions, stableAudioPromptRequired } from './StableAudioControls';
 import { MuLaCoverFields } from './MuLaCoverFields';
 import { HotStepCoverFields, type HotStepCoverDraft } from './HotStepCoverFields';
@@ -435,7 +436,9 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
   const nativeEngine = isProfileMusicEngine(musicEngine) ? musicEngine : undefined;
   const audioCpp = nativeEngine === 'audio.cpp';
   const native = useNativeMusicProfiles(nativeEngine);
-  const hotstep = nativeEngine === 'hotstep';
+  const hotstepSa3 = nativeEngine === 'hotstep' && native.profile?.id === hotStepSa3Profile;
+  const hotstep = nativeEngine === 'hotstep' && !hotstepSa3;
+  const [hotstepSa3Draft, setHotstepSa3Draft] = useState<HotStepSa3Draft>({});
   const [hotstepDraft, setHotstepDraft] = useState<HotStepCoverDraft>({ original: '', abc: '' });
   const audioFamily = audioCpp ? native.profile?.id : undefined;
   const miDasheng = audioFamily === miDashengModel;
@@ -809,7 +812,8 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
         if (profile === 'mulacover') setMulaOriginal(typeof settings.cover_of === 'string' ? settings.cover_of : song.derived?.from ?? '');
         if (profile === 'stable_audio') setStableSettings(stableAudioDraft(settings.stable_audio as YueRequest['stable_audio']));
         if (profile === 'vevo2') setVevoReferences((settings.vevo2 as YueRequest['vevo2']) ?? { voice_song_id: '' });
-        if (song.ditModel === 'hotstep') setHotstepDraft({
+        if (profile === hotStepSa3Profile) setHotstepSa3Draft((settings.hotstep_sa3 as YueRequest['hotstep_sa3']) ?? {});
+        if (song.ditModel === 'hotstep' && profile !== hotStepSa3Profile) setHotstepDraft({
           original: typeof settings.cover_of === 'string' ? settings.cover_of : song.derived?.from ?? '',
           abc: typeof settings.abc === 'string' ? settings.abc : '',
         });
@@ -1515,7 +1519,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
       if (audioFamily === audioCppMiniMax && (!style.trim() || !lyrics.trim())) { setError(nativeStrings.styleAndLyricsRequired); return; }
       if (magenta && !magentaReady) return;
       if (miniMaxH3 && !style.trim()) { setError(nativeStrings.h3PromptRequired); return; }
-      if (stableAudio && !style.trim()) { setError(stableAudioPromptRequired(language)); return; }
+      if ((stableAudio || hotstepSa3) && !style.trim()) { setError(stableAudioPromptRequired(language)); return; }
       if (!hotstep && !magenta && !miDasheng && !miniMaxH3 && !mulaCover && !style.trim() && !lyrics.trim()) { setError(tt('styleOrLyricsRequired')); return; }
       setError(null);
       generate({
@@ -1523,7 +1527,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
           ? { kind: 'audio_cpp', model: native.profile.id }
           : { kind: 'native', engine: nativeEngine, model: native.profile.id },
         style: miDasheng ? scene.caption || scene.music : vevo2 ? '' : finishedStyle(style),
-        lyrics: miDasheng ? scene.speech_text.trim() : miniMaxH3 || stableAudio || magenta ? '' : lyrics.replace(/\r\n?/g, '\n').trim(),
+        lyrics: miDasheng ? scene.speech_text.trim() : miniMaxH3 || stableAudio || hotstepSa3 || magenta ? '' : lyrics.replace(/\r\n?/g, '\n').trim(),
         ...(name.trim() ? { title: name.trim() } : {}),
         ...(chosenPlaylist ? { playlist_id: chosenPlaylist } : {}),
         ...(miDasheng ? { midasheng: scene } : {}),
@@ -1532,6 +1536,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
         ...(hotstep ? { cover_of: hotstepDraft.original, abc: hotstepDraft.abc } : {}),
         ...(mulaCover ? { cover_of: mulaOriginal } : {}),
         ...(stableAudio ? { stable_audio: stableAudioOptions(stableSettings) } : {}),
+        ...(hotstepSa3 ? { hotstep_sa3: hotstepSa3Draft } : {}),
         ...(vevo2 ? { vevo2: vevoReferences } : {}),
         ...nativeGenerationSettings(nativeEngine, vevo2 ? { seed: native.settings.seed, output_format: native.settings.output_format } : miDasheng || magenta ? { ...native.settings, steps: undefined } : native.settings),
       });
@@ -1725,6 +1730,9 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
                     {native.profile && !native.ready && <p role="status" className="text-xs">
                       {nativeStrings.unavailable}{native.profile.missing?.length ? ` · ${native.profile.missing.join(', ')}` : ''}
                     </p>}
+                    {hotstepSa3 && native.profile?.installable && !native.ready &&
+                      <AudioCppModelInstall key={hotStepSa3Profile} model={hotStepSa3Profile} bytes={native.profile.missing_bytes ?? 0}
+                        licenseUrl="https://huggingface.co/scragnog/HOT-Step-CPP-StableStep" language={language} onInstalled={native.refresh} />}
                     {(heartMuLa || stableAudio) && native.profile?.installable && !native.ready &&
                       <AudioCppModelInstall key={audioFamily} model={stableAudio ? 'stable_audio' : 'heartmula'} bytes={native.profile.total_bytes}
                         licenseUrl={native.profile.license_url} language={language} onInstalled={native.refresh} />}
@@ -1767,7 +1775,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
                 {!vevo2 && !miDasheng && !(magenta && magentaReference) && <AutoTextarea className={CONTROL} value={style} onChange={event => setStyle(event.target.value)}
                   placeholder={tt('stylePlaceholder')} aria-label={tt('styleCardTitle')} />}
               </Card>
-              {miDasheng ? <MiDashengFields value={scene} onChange={setScene} /> : !magenta && !miniMaxH3 && !stableAudio && <Card title={t('lyrics')}>
+              {miDasheng ? <MiDashengFields value={scene} onChange={setScene} /> : !magenta && !miniMaxH3 && !stableAudio && !hotstepSa3 && <Card title={t('lyrics')}>
                 <AutoTextarea className={CONTROL} value={lyrics} onChange={event => setLyrics(event.target.value)}
                   aria-label={t('lyrics')} />
               </Card>}
@@ -1778,6 +1786,8 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
                 missingSoxr={native.profile?.missing.includes('libsoxr') === true} controlClassName={CONTROL} />}
               {vevo2 && <Vevo2SingingFields value={vevoReferences} onChange={setVevoReferences} controlClassName={CONTROL} />}
               {heartMuLa && <HeartMuLaControls values={heartSettings} onChange={setHeartSettings} language={language} />}
+              {hotstepSa3 && <HotStepSa3Controls value={hotstepSa3Draft} onChange={setHotstepSa3Draft}
+                adapters={native.profile?.adapters ?? []} control={CONTROL} language={language} />}
               {stableAudio && <StableAudioControls value={stableSettings} onChange={setStableSettings} language={language} />}
               {nativeEngine && abc.trim() && <p role="status" className="text-xs text-zinc-500">{nativeStrings.scoreKept}</p>}
               {nativeEngine && (native.profile || native.originalModels) && (

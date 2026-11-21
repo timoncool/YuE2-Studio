@@ -561,6 +561,7 @@ const JOURNAL: &[(&str, &str, &str)] = &[
     ("separator_install", "started", "download"),
     ("separator_runtime_install", "started", "download"),
     ("hotstep_cover_install", "started", "download"),
+    ("hotstep_sa3_install", "started", "download"),
     ("mulacover_runtime_install", "started", "download"),
     ("recogniser_install", "started", "download"),
     ("midi_install", "started", "download"),
@@ -1023,6 +1024,7 @@ fn id_only(name: &str, what: &str) -> Value {
 
 fn song_create_schema(mut properties: Value) -> Value {
     properties["heartmula"] = json!({"type":"object","description":"Native HeartMuLa sampling and codec settings.","properties":{"temperature":{"type":"number"},"top_k":{"type":"integer"},"codec_duration_sec":{"type":"number"},"codec_guidance_scale":{"type":"number"}}});
+    properties["hotstep_sa3"] = json!({"type":"object","description":"HOT-Step Stable Audio 3 Medium. Use an instrumental description as style.","properties":{"sampler":{"enum":["pingpong","euler"]},"adapter":{"type":"string","description":"Installed adapter name from hotstep_cover_profiles."},"adapter_scale":{"type":"number","minimum":0,"maximum":2}}});
     properties["stable_audio"] = json!({"type":"object","description":"Native Stable Audio 3 controls. Send the music prompt as style and leave lyrics empty.","properties":{"negative_prompt":{"type":"string"},"sampler_mode":{"enum":["pingpong","euler"]},"apg_scale":{"type":"number"},"duration_padding_sec":{"type":"number","minimum":0}}});
     properties["midasheng"] = json!({"type":"object","description":"MiDashengLM-Gen scene and sound layers.","properties":{"caption":{"type":"string"},"music":{"type":"string"},"speech_text":{"type":"string"},"speech_style":{"type":"string"},"effects":{"type":"string"},"environment":{"type":"string"}}});
     properties["magenta"] = json!({
@@ -1715,7 +1717,7 @@ fn tools() -> &'static [Tool] {
             },
             Tool {
                 name: "song_replay",
-                description: "Render a library song again from its saved audio codes, bit for bit or with other steps, a new sound seed, a batch of variations, or another format - without composing again.",
+                description: "Render a library song again. HOT-Step Stable Audio 3 uses the saved prompt, model and adapter, with optional steps, seed or format overrides. Engines with saved audio codes can resynthesize those codes directly.",
                 schema: || object(json!({ "song_id": { "type": "string" }, "steps": { "type": "integer" }, "solver": { "type": "string", "enum": ["midpoint", "ab2"] }, "seed": { "type": "integer" }, "synth_batch_size": { "type": "integer" }, "output_format": { "type": "string", "enum": ["flac", "mp3", "wav32"] }, "title": { "type": "string" } }), &["song_id"]),
                 call: |args| post("/v1/music/replay".into(), args.clone()),
             },
@@ -2159,7 +2161,7 @@ fn tools() -> &'static [Tool] {
             },
             Tool {
                 name: "hotstep_cover_profiles",
-                description: "List the HOT-Step MuLaCover profile, installed native runtime and required weights.",
+                description: "List HOT-Step profiles, installed native runtime, adapters and required weights.",
                 schema: nothing,
                 call: |_| get("/v1/music/native/hotstep/profiles".into()),
             },
@@ -2168,6 +2170,12 @@ fn tools() -> &'static [Tool] {
                 description: "Install the pinned HOT-Step runtime and MuLaCover weights. Its codec and tokenizer files are shared with HeartMuLa.",
                 schema: nothing,
                 call: |_| post("/v1/music/native/hotstep/install".into(), json!({})),
+            },
+            Tool {
+                name: "hotstep_sa3_install",
+                description: "Start the managed HOT-Step Stable Audio 3 Medium installation. Read progress in hotstep_cover_profiles.",
+                schema: nothing,
+                call: |_| post("/v1/music/native/hotstep/stable-audio-3/install".into(), json!({})),
             },
             Tool {
                 name: "mulacover_runtime_install",

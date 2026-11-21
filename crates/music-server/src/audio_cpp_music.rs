@@ -454,7 +454,7 @@ async fn install_managed_model(
     Ok(())
 }
 
-fn repair_managed_file(
+pub(super) fn repair_managed_file(
     target: &FsPath,
     asset: &downloads::Asset,
     sha256: &str,

@@ -16,6 +16,8 @@ interface NativeProfile {
   id: string;
   label: string;
   total_bytes: number;
+  missing_bytes?: number;
+  adapters?: string[];
   installable?: boolean;
   license_url?: string;
   ready: boolean;
@@ -135,7 +137,7 @@ export function useNativeMusicProfiles(engine: ProfileMusicEngine | undefined) {
         controls.output_format = miniMaxOutputFormat(saved.output_format);
       }
       if (source === 'audio.cpp' || source === 'hotstep') {
-        number('guidance_scale', saved.guidance_scale);
+        number('guidance_scale', saved.guidance_scale ?? saved.cfg_scale);
         controls.output_format = miniMaxOutputFormat(saved.output_format);
       }
       if (source === 'acestep-cpp') {

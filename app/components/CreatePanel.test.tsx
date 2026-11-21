@@ -1062,6 +1062,36 @@ describe('Auto max duration', () => {
   });
 });
 
+it('restores a HOT-Step Stable Audio 3 take with its sampler and adapter without asking for a cover', async () => {
+  vi.stubGlobal('fetch', vi.fn(async () => Response.json({
+    engine: 'hotstep', engine_installed: true,
+    profiles: [
+      { id: 'heartmula-mulacover', label: 'MuLaCover · HOT-Step', ready: true, missing: [] },
+      { id: 'stable-audio-3-medium', label: 'Stable Audio 3 Medium · HOT-Step', ready: true, missing: [], adapters: ['trained'] },
+    ],
+  })));
+  const hotstep_sa3 = { sampler: 'euler', adapter: 'trained', adapter_scale: 0.75 };
+  const song = {
+    title: 'Stable take', ditModel: 'hotstep', style: 'instrumental piano', lyrics: 'Previous draft',
+    generationParams: {
+      music_source: { kind: 'native', engine: 'hotstep', model: 'stable-audio-3-medium' },
+      duration_seconds: 4, steps: 8, seed: 42, cfg_scale: 1.5, output_format: 'wav32', hotstep_sa3,
+    },
+  } as Song;
+  act(() => root.render(panel({ musicEngine: 'hotstep', initialData: { song, timestamp: 1 } })));
+  await flush();
+  expect(field('textarea[aria-label="lyrics"]')).toBeNull();
+  expect(host.textContent).not.toContain('Cover score');
+  expect([...host.querySelectorAll('label')].find(node => node.textContent?.startsWith('Sampler'))?.querySelector('select')?.value).toBe('euler');
+  click(buttonNamed('create')!);
+  expect(sent.at(-1)).toMatchObject({
+    music_source: { kind: 'native', engine: 'hotstep', model: 'stable-audio-3-medium' },
+    style: 'instrumental piano', lyrics: '', duration_seconds: 4, steps: 8, seed: 42, cfg_scale: 1.5,
+    output_format: 'wav32', hotstep_sa3,
+  });
+  expect(sent.at(-1)?.cover_of).toBeUndefined();
+});
+
 it('restores HOT-Step cover source and lead sheet from a saved take', async () => {
   vi.stubGlobal('fetch', vi.fn(async (url: string) => Response.json(url === '/v1/music/native/hotstep/profiles' ? {
     engine: 'hotstep', engine_installed: true,
