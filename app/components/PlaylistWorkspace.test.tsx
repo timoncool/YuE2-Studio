@@ -1,4 +1,4 @@
-import React, { act } from 'react';
+import React, { act, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { expect, it, vi } from 'vitest';
 import type { Playlist, Song } from '../types';
@@ -8,7 +8,11 @@ const reads = vi.hoisted(() => ({ playlists: [] as Playlist[], songs: [] as Song
 vi.mock('../context/I18nContext', () => ({
   useI18n: () => ({ language: 'en', t: (key: string) => key, songCount: (count: number) => String(count) }),
 }));
+vi.mock('../context/AuthContext', () => ({ useAuth: () => ({ user: null }) }));
+vi.mock('./KaraokeAction', () => ({ KaraokeAction: () => null }));
+vi.mock('../services/adapters', () => ({ useAdapterLibrary: () => ({ installed: [], slots: [] }), usesFromSettings: () => [], localized: () => '' }));
 vi.mock('../services/studioQueries', () => ({
+  useKaraokeStatus: () => ({ data: { ready: false } }),
   useLibraryPlaylists: () => ({ data: reads.playlists }),
   useLibrarySongs: () => ({ data: reads.songs }),
   updateLibraryPlaylists: (change: (playlists: Playlist[]) => Playlist[]) => { reads.playlists = change(reads.playlists); },
@@ -23,12 +27,16 @@ vi.mock('./SongDropdownMenu', async () => {
 });
 
 const { PlaylistDetail } = await import('./PlaylistDetail');
+const { RightSidebar } = await import('./RightSidebar');
 const { SongActionsProvider } = await import('../context/SongActionsContext');
 
-it('continues and reuses a take in the open playlist and only removes its membership', async () => {
+it('opens the selected take’s songbook in its workspace and only removes its membership', async () => {
   const take = (id: string): Song => ({
     id, title: 'Same title', style: 'Folk', lyrics: 'Verse', coverUrl: '', duration: '0:20',
     createdAt: new Date(0), tags: [], audioUrl: `/v1/library/media/${id}`,
+    generationParams: { abc: id === 'first'
+      ? 'X:1\nM:4/4\nL:1/4\nK:C\n"C"C D E G|\nw:Or-i-gi-nal'
+      : 'X:1\nM:4/4\nL:1/4\nK:D\n"D"D E F A|\nw:Dif-fer-ent take' },
   });
   const source = take('first');
   const duplicate = take('second');
@@ -48,13 +56,18 @@ it('continues and reuses a take in the open playlist and only removes its member
   const root = createRoot(node);
   vi.stubGlobal('fetch', fetcher);
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
-  const render = () => act(() => root.render(
-    <SongActionsProvider value={{ reusePrompt: globalReuse, remove: removeFromLibrary }}>
-      <PlaylistDetail playlistId="work" onBack={() => {}} onPlaySong={() => {}} onSelect={() => {}}
-        onCreateHere={create} onReuseHere={reuseHere} currentSong={null} isPlaying={false}
-        notify={() => {}} onError={onError} />
-    </SongActionsProvider>,
-  ));
+  function Workspace() {
+    const [selected, select] = useState<Song | null>(null);
+    return (
+      <SongActionsProvider value={{ reusePrompt: globalReuse, remove: removeFromLibrary }}>
+        <PlaylistDetail playlistId="work" onBack={() => {}} onPlaySong={() => {}} onSelect={select}
+          onCreateHere={create} onReuseHere={reuseHere} currentSong={null} isPlaying={false}
+          notify={() => {}} onError={onError} />
+        <RightSidebar song={selected} />
+      </SongActionsProvider>
+    );
+  }
+  const render = () => act(() => root.render(<Workspace />));
   const exactButton = (label: string) => [...node.querySelectorAll('button')].find(button => button.textContent?.trim() === label)!;
   const click = (button: HTMLButtonElement) => act(async () => button.click());
   const row = (song: Song) => node.querySelector(`[data-mcp-context="song ${song.id}: ${song.title}"]`)!;
@@ -71,7 +84,23 @@ it('continues and reuses a take in the open playlist and only removes its member
     await click(exactButton('reusePrompt'));
     expect(reuseHere).toHaveBeenCalledWith(duplicate);
     expect(globalReuse).not.toHaveBeenCalled();
+
+    await act(async () => row(duplicate).dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    await click(exactButton('Songbook'));
+    const sheet = () => document.querySelector<HTMLDialogElement>('dialog[aria-label="Songbook"]')!;
+    expect(sheet().open).toBe(true);
+    expect(sheet().querySelector('strong')?.textContent).toBe('D');
+    expect(sheet().textContent).toContain('Dif-');
+    await click(sheet().querySelector('button[aria-label="Close songbook"]')!);
+
     await click(row(duplicate).querySelector('button[aria-label="removeFromPlaylist"]')!);
+    render();
+    expect(row(duplicate)).toBeNull();
+    await act(async () => row(source).dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    await click(exactButton('Songbook'));
+    expect(sheet().querySelector('strong')?.textContent).toBe('C');
+    expect(sheet().textContent).toContain('Or-');
+    expect(sheet().textContent).not.toContain('Dif-');
     expect(reads.playlists[0].songIds).toEqual([source.id]);
     expect(reads.songs.map(song => song.audioUrl)).toEqual([source.audioUrl, duplicate.audioUrl]);
     expect(removeFromLibrary).not.toHaveBeenCalled();
