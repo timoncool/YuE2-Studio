@@ -2233,9 +2233,12 @@ pub async fn serve_on_port(port: u16) -> anyhow::Result<()> {
     }
 
     println!("music-server listening on http://{address}");
-    axum::serve(listener, app.into_make_service_with_connect_info::<SocketAddr>())
-        .with_graceful_shutdown(shutdown())
-        .await?;
+    let service = axum::serve(listener, app.into_make_service_with_connect_info::<SocketAddr>())
+        .with_graceful_shutdown(shutdown(state.clone()))
+        .await;
+    let acpp = state.acpp.clone();
+    tokio::task::spawn_blocking(move || acpp.stop_music()).await?;
+    service?;
     Ok(())
 }
 
@@ -6185,8 +6188,11 @@ async fn test_proxy(Json(settings): Json<net::ProxySettings>) -> Result<Json<Val
     net::test(settings).await.map(Json).map_err(|error| api_error(StatusCode::BAD_REQUEST, format!("{error:#}")))
 }
 
-async fn shutdown() {
+async fn shutdown(state: AppState) {
     let _ = tokio::signal::ctrl_c().await;
+    for stop in state.audio_cpp_music_stops.read().await.values() {
+        stop.store(true, std::sync::atomic::Ordering::SeqCst);
+    }
 }
 
 async fn health(State(state): State<AppState>) -> Json<Value> {
