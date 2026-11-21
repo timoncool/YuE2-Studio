@@ -189,7 +189,7 @@ fn probe() -> &'static Hardware {
             card_cuda,
             compute_capability,
             driver_major,
-            recommended: profile_for_machine(total_vram_gb, total_ram_gb, crate::model_manager::profile_weights_bytes),
+            recommended: profile_for_machine(total_vram_gb, total_ram_gb, cfg!(target_os = "macos"), crate::model_manager::profile_weights_bytes),
         }
     })
 }
@@ -243,10 +243,16 @@ pub fn ram_needed_gb(profile: &str, weights_bytes: u64, total_vram_gb: f64) -> f
     }
 }
 
-/// The largest set the card and the memory both hold; without a card for any
-/// set, the lightest one when the memory holds it in RAM.
-fn profile_for_machine(total_vram_gb: f64, total_ram_gb: f64, weights_bytes: impl Fn(&str) -> u64) -> Option<&'static str> {
-    let fits = |id: &str| total_ram_gb >= ram_needed_gb(id, weights_bytes(id), total_vram_gb);
+/// Prefer a smaller set on Macs with up to 16 GiB of unified memory.
+/// Otherwise choose the largest set that fits, falling back to Light for RAM-only generation.
+fn profile_for_machine(total_vram_gb: f64, total_ram_gb: f64, macos: bool, weights_bytes: impl Fn(&str) -> u64) -> Option<&'static str> {
+    let dedicated_vram_gb = if macos { 0.0 } else { total_vram_gb };
+    let fits = |id: &str| total_ram_gb >= ram_needed_gb(id, weights_bytes(id), dedicated_vram_gb);
+    // On Macs with up to 16 GiB of unified memory, prefer the smaller backbone
+    // to leave more room for macOS and the rest of the generation workload.
+    if macos && total_ram_gb <= 16.0 {
+        return Some(FALLBACK_PROFILE).filter(|id| fits(id));
+    }
     VRAM_TIERS
         .iter()
         .filter(|(id, _)| *id != FULL_WEIGHTS_PROFILE)
@@ -607,19 +613,29 @@ mod tests {
 
     #[test]
     fn with_enough_memory_the_card_picks_the_set() {
-        assert_eq!(profile_for_machine(24.0, 64.0, weights), Some("quality-q8"));
-        assert_eq!(profile_for_machine(11.9, 32.0, weights), Some("quality-q8"));
-        assert_eq!(profile_for_machine(8.0, 16.0, weights), Some("quality-q8"));
-        assert_eq!(profile_for_machine(7.6, 16.0, weights), Some("balanced"));
-        assert_eq!(profile_for_machine(6.0, 16.0, weights), Some("light"));
+        assert_eq!(profile_for_machine(24.0, 64.0, false, weights), Some("quality-q8"));
+        assert_eq!(profile_for_machine(11.9, 32.0, false, weights), Some("quality-q8"));
+        assert_eq!(profile_for_machine(8.0, 16.0, false, weights), Some("quality-q8"));
+        assert_eq!(profile_for_machine(7.6, 16.0, false, weights), Some("balanced"));
+        assert_eq!(profile_for_machine(6.0, 16.0, false, weights), Some("light"));
+    }
+
+    #[test]
+    fn macs_with_up_to_16_gib_recommend_light_when_it_fits() {
+        let weights = crate::model_manager::profile_weights_bytes;
+        for memory in [15.0, 16.0] {
+            assert_eq!(profile_for_machine(memory, memory, true, weights), Some("light"));
+        }
+        assert_eq!(profile_for_machine(17.0, 17.0, true, weights), Some("quality-q8"));
+        assert_eq!(profile_for_machine(6.0, 6.0, true, weights), None);
     }
 
     #[test]
     fn without_a_card_for_any_set_the_light_one_runs_from_memory_that_holds_it() {
-        assert_eq!(profile_for_machine(4.0, 16.0, weights), Some("light"));
-        assert_eq!(profile_for_machine(0.0, 16.0, weights), Some("light"));
-        assert_eq!(profile_for_machine(0.0, 8.0, weights), None);
-        assert_eq!(profile_for_machine(2.0, 8.0, weights), None);
+        assert_eq!(profile_for_machine(4.0, 16.0, false, weights), Some("light"));
+        assert_eq!(profile_for_machine(0.0, 16.0, false, weights), Some("light"));
+        assert_eq!(profile_for_machine(0.0, 8.0, false, weights), None);
+        assert_eq!(profile_for_machine(2.0, 8.0, false, weights), None);
     }
 
     #[test]
@@ -627,13 +643,13 @@ mod tests {
         assert_eq!(ram_needed_gb("quality-q8", weights("quality-q8"), 12.0), 6.0);
         let light_in_memory = ram_needed_gb("light", weights("light"), 0.0);
         assert!((8.5..9.0).contains(&light_in_memory), "{light_in_memory}");
-        assert!(profile_for_machine(8.0, 5.0, weights).is_none());
+        assert!(profile_for_machine(8.0, 5.0, false, weights).is_none());
     }
 
     #[test]
     fn every_recommendation_is_a_declared_profile() {
         for vram in [6.0, 7.5, 10.0, 16.0, 24.0] {
-            assert!(crate::model_manager::profile_exists(profile_for_machine(vram, 64.0, weights).unwrap()));
+            assert!(crate::model_manager::profile_exists(profile_for_machine(vram, 64.0, false, weights).unwrap()));
         }
         assert!(crate::model_manager::profile_exists(FALLBACK_PROFILE));
     }
