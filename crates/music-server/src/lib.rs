@@ -26,6 +26,8 @@ mod hotstep_runtime;
 mod hotstep_sa3;
 mod hotstep_sa3_assets;
 mod hotstep_sa3_tokenizer;
+mod hotstep_sa3_training;
+mod hotstep_sa3_train_assets;
 mod hotstep_cover_assets;
 mod hotstep_cover_rolls;
 mod audio_cpp_stable_audio;
@@ -140,6 +142,7 @@ struct AppState {
     minimax_cancellations: Arc<RwLock<HashMap<String, native_music_jobs::CancelSender>>>,
     hotstep_cover: Arc<downloads::Downloader>,
     hotstep_sa3_install: Arc<tokio::sync::Mutex<()>>,
+    hotstep_sa3_train_install: Arc<tokio::sync::Mutex<()>>,
     audio_cpp_music_stops: Arc<RwLock<HashMap<String, Arc<std::sync::atomic::AtomicBool>>>>,
     heartmula_install: Arc<tokio::sync::Mutex<()>>,
     stable_audio_install: Arc<tokio::sync::Mutex<()>>,
@@ -1553,6 +1556,7 @@ pub async fn serve_on_port(port: u16) -> anyhow::Result<()> {
         minimax_cancellations: Arc::default(),
         hotstep_cover: Arc::new(downloads::Downloader::new(studio_data_root().unwrap_or_else(|| PathBuf::from(".")).join("hotstep"))),
         hotstep_sa3_install: Arc::default(),
+        hotstep_sa3_train_install: Arc::default(),
         audio_cpp_music_stops: Arc::default(),
         heartmula_install: Arc::default(),
         stable_audio_install: Arc::default(),
@@ -1717,6 +1721,7 @@ pub async fn serve_on_port(port: u16) -> anyhow::Result<()> {
         .route("/v1/rvc/apply/setup", get(rvc_apply::setup).post(rvc_apply::install))
         .route("/v1/rvc/voices/{id}", axum::routing::delete(rvc_voices::remove))
         .route("/v1/rvc/catalog", get(rvc_catalog::list))
+        .route("/v1/rvc/catalog/refresh", post(rvc_catalog::refresh))
         .route("/v1/rvc/catalog/install", post(rvc_catalog::install))
         .route("/v1/rvc/catalog/progress/{id}", get(rvc_catalog_progress::get))
         .route("/v1/rvc/native/runtime", get(rvc_fast_install::get).post(rvc_fast_install::start).delete(rvc_fast_install::cancel))
@@ -1861,6 +1866,8 @@ pub async fn serve_on_port(port: u16) -> anyhow::Result<()> {
         .route("/v1/training/listen/install", post(install_listen_pack))
         .route("/v1/training/listen/cancel", post(cancel_listen_pack))
         .route("/v1/training/runs", post(start_training))
+        .route("/v1/training/hotstep-sa3", get(hotstep_sa3_training::status).post(hotstep_sa3_training::start))
+        .route("/v1/training/hotstep-sa3/install", post(hotstep_sa3_training::install))
         .route("/v1/training/runs/{id}/cancel", post(cancel_training))
         .route("/v1/training/runs/{id}/continue", post(continue_training))
         .route("/v1/training/runs/{id}", axum::routing::delete(delete_training_run))
@@ -1912,6 +1919,7 @@ pub async fn serve_on_port(port: u16) -> anyhow::Result<()> {
         .route("/v1/library/playlists", get(library_playlists).post(create_library_playlist))
         .route("/v1/library/albums/order", axum::routing::put(reorder_library_albums))
         .route("/v1/library/playlists/{id}", get(library_playlist).put(update_library_playlist).delete(delete_library_playlist))
+        .route("/v1/library/playlists/{id}/preferred-take", axum::routing::put(select_library_playlist_preferred_take))
         .route("/setup/status", get(setup_status))
         .route("/setup/catalog", get(setup_catalog))
         .route("/setup/download", post(setup_download))
@@ -5728,6 +5736,27 @@ async fn reorder_library_albums(
 async fn library_playlists(State(state):State<AppState>)->Result<Json<Vec<library::Playlist>>,(StatusCode,Json<ApiError>)>{state.library.list_playlists().map(Json).map_err(|e|api_error(StatusCode::INTERNAL_SERVER_ERROR,e.to_string()))}
 async fn create_library_playlist(State(state):State<AppState>,Json(input):Json<library::PlaylistInput>)->Result<(StatusCode,Json<library::Playlist>),(StatusCode,Json<ApiError>)>{state.library.create_playlist(input).map(|p|(StatusCode::CREATED,Json(p))).map_err(|e|api_error(StatusCode::BAD_REQUEST,e.to_string()))}
 async fn library_playlist(State(state):State<AppState>,Path(id):Path<String>)->Result<Json<library::Playlist>,(StatusCode,Json<ApiError>)>{state.library.get_playlist(&id).map_err(|e|api_error(StatusCode::INTERNAL_SERVER_ERROR,e.to_string()))?.map(Json).ok_or_else(||api_error(StatusCode::NOT_FOUND,"Playlist not found".into()))}
+
+#[derive(Deserialize)]
+struct PreferredTakeRequest {
+    song_id: String,
+}
+
+async fn select_library_playlist_preferred_take(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    Json(input): Json<PreferredTakeRequest>,
+) -> Result<Json<serde_json::Value>, (StatusCode, Json<ApiError>)> {
+    match state.library.select_preferred_take(&id, &input.song_id)
+        .map_err(|error| api_error(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?
+    {
+        library::PreferredTakeSelection::Selected(selection) => Ok(Json(serde_json::json!({
+            "preferred_song_id": selection.song.id, "changed": selection.changed,
+        }))),
+        library::PreferredTakeSelection::PlaylistNotFound => Err(api_error(StatusCode::NOT_FOUND, "Playlist not found".into())),
+        library::PreferredTakeSelection::NotPlayableMember => Err(api_error(StatusCode::BAD_REQUEST, "The preferred take must be a playable song in this playlist.".into())),
+    }
+}
 async fn update_library_playlist(State(state):State<AppState>,Path(id):Path<String>,Json(input):Json<library::PlaylistInput>)->Result<Json<library::Playlist>,(StatusCode,Json<ApiError>)>{state.library.update_playlist(&id,input).map_err(|e|api_error(StatusCode::BAD_REQUEST,e.to_string()))?.map(Json).ok_or_else(||api_error(StatusCode::NOT_FOUND,"Playlist not found".into()))}
 async fn delete_library_playlist(State(state):State<AppState>,Path(id):Path<String>)->Result<StatusCode,(StatusCode,Json<ApiError>)>{if state.library.delete_playlist(&id).map_err(|e|api_error(StatusCode::INTERNAL_SERVER_ERROR,e.to_string()))?{Ok(StatusCode::NO_CONTENT)}else{Err(api_error(StatusCode::NOT_FOUND,"Playlist not found".into()))}}
 

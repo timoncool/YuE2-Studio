@@ -22,6 +22,7 @@ interface NativePlaylist {
   name: string;
   description: string | null;
   song_ids: string[];
+  preferred_song_id?: string;
   created_at: string;
   updated_at: string;
 }
@@ -175,6 +176,7 @@ export function mapNativePlaylist(playlist: NativePlaylist): import('../types').
     name: playlist.name,
     description: description || undefined,
     songIds: playlist.song_ids,
+    ...(playlist.preferred_song_id ? { preferredSongId: playlist.preferred_song_id } : {}),
     created_at: playlist.created_at,
     song_count: playlist.song_ids.length,
     isPublic: false,
@@ -232,6 +234,18 @@ export async function updateNativePlaylist(id: string, playlist: import('../type
 export async function deleteNativePlaylist(id: string): Promise<void> {
   const response = await fetch(`/v1/library/playlists/${encodeURIComponent(id)}`, { method: 'DELETE' });
   if (!response.ok) throw new Error(`Native playlist deletion failed (${response.status})`);
+}
+
+export async function selectNativePlaylistPreferredTake(id: string, songId: string): Promise<string> {
+  const response = await fetch(`/v1/library/playlists/${encodeURIComponent(id)}/preferred-take`, {
+    method: 'PUT', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ song_id: songId }),
+  });
+  const result = await response.json().catch(() => null);
+  if (!response.ok || typeof result?.preferred_song_id !== 'string') {
+    throw new Error(result?.error || `Preferred take could not be saved (${response.status})`);
+  }
+  return result.preferred_song_id;
 }
 
 export async function renameNativeSong(id: string, title: string): Promise<Song> {
