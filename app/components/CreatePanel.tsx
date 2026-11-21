@@ -47,7 +47,7 @@ import { HotStepSa3Controls, hotStepSa3Profile, hotStepHeartmulaProfile, type Ho
 import { StableAudioControls, emptyStableAudioDraft, stableAudioDraft, stableAudioOptions, stableAudioPromptRequired } from './StableAudioControls';
 import { MuLaCoverFields } from './MuLaCoverFields';
 import { HotStepCoverFields, type HotStepCoverDraft } from './HotStepCoverFields';
-import { Vevo2SingingFields, vevo2SingingStrings, type Vevo2References } from './Vevo2SingingFields';
+import { Vevo2ModelDirectory, Vevo2SingingFields, vevo2SingingStrings, type Vevo2References } from './Vevo2SingingFields';
 import { NumberField } from './NumberField';
 import { explainCliFailure } from '../services/cliFailure';
 import { loadNativeOpenRouterCatalog, modelsForCapability, refreshNativeOpenRouterCatalog, type NativeOpenRouterModel } from '../services/nativeOpenRouter';
@@ -1942,6 +1942,11 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
                         {native.profile.license_url && <a href={native.profile.license_url} target="_blank" rel="noreferrer" className="underline">{nativeStrings.modelLicense}</a>}
                       </div>
                     )}
+                    {vevo2 && native.profile?.model_directory && <Vevo2ModelDirectory
+                      key={native.profile.configured_directory ?? ''}
+                      directory={native.profile.configured_directory ?? ''}
+                      defaultDirectory={native.profile.model_directory} licenseUrl={native.profile.license_url}
+                      controlClassName={CONTROL} onChanged={refreshNativeChoice} />}
                     {native.profile && !native.ready && <p role="status" className="text-xs">
                       {nativeStrings.unavailable}{native.profile.missing?.length ? ` · ${native.profile.missing.join(', ')}` : ''}
                     </p>}

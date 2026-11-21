@@ -4,7 +4,7 @@ use acpp_server::{Mode, ModelEntry};
 use anyhow::{Context as _, Result};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
-use std::io::Read as _;
+use std::io::{Read as _, Write as _};
 use std::path::{Path, PathBuf};
 
 pub(super) const FAMILY: &str = "vevo2";
@@ -13,6 +13,54 @@ pub(super) const PROFILE: &str = "quality-q8";
 pub(super) const QUANTIZATION: &str = "Q8_0";
 pub(super) const ROUTE: &str = "text_to_singing";
 const WEIGHTS: &str = "vevo2-q8_0.gguf";
+const LICENSE: &str = "https://huggingface.co/RMSnow/Vevo2";
+const FOLDER_SETTING: &str = "vevo2-model-directory.json";
+const DEFAULT_FOLDER: &str = "audiocpp/models/vevo2";
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(super) struct DirectorySelection {
+    directory: Value,
+}
+
+fn configured_directory(root: &Path) -> Option<PathBuf> {
+    serde_json::from_slice(&std::fs::read(root.join(FOLDER_SETTING)).ok()?).ok()
+}
+
+fn select_directory(root: &Path, directory: Option<&Path>) -> Result<()> {
+    if let Some(directory) = directory {
+        anyhow::ensure!(
+            directory.is_absolute(),
+            "Choose an absolute folder path on the Studio computer."
+        );
+        anyhow::ensure!(
+            missing_files(directory).is_empty(),
+            "The folder needs a readable {WEIGHTS} file."
+        );
+    }
+    let mut temp = tempfile::NamedTempFile::new_in(root)?;
+    serde_json::to_writer(&mut temp, &directory)?;
+    temp.flush()?;
+    temp.persist(root.join(FOLDER_SETTING))?;
+    Ok(())
+}
+
+pub(super) async fn set_directory(
+    axum::Json(selection): axum::Json<DirectorySelection>,
+) -> Result<axum::Json<Value>, (axum::http::StatusCode, axum::Json<crate::ApiError>)> {
+    use axum::http::StatusCode;
+    let root = crate::studio_data_root().ok_or_else(|| {
+        crate::api_error(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "Studio data folder is unavailable.".into(),
+        )
+    })?;
+    let directory: Option<PathBuf> = serde_json::from_value(selection.directory)
+        .map_err(|error| crate::api_error(StatusCode::BAD_REQUEST, error.to_string()))?;
+    select_directory(&root, directory.as_deref())
+        .map_err(|error| crate::api_error(StatusCode::BAD_REQUEST, error.to_string()))?;
+    Ok(axum::Json(json!({ "configured_directory": directory })))
+}
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub(super) struct Options {
@@ -22,7 +70,7 @@ pub(super) struct Options {
 }
 
 pub(super) fn model_dir(root: &Path) -> PathBuf {
-    root.join("audiocpp/models").join(FAMILY)
+    configured_directory(root).unwrap_or_else(|| root.join(DEFAULT_FOLDER))
 }
 
 pub(super) fn missing_files(dir: &Path) -> Vec<&'static str> {
@@ -47,7 +95,8 @@ pub(super) fn catalog(root: Option<&Path>, runtime_ready: bool) -> Value {
         "id": FAMILY, "name": NAME, "profile_id": PROFILE, "quantization": QUANTIZATION,
         "status": "experimental", "ready": missing.is_empty(), "missing": missing,
         "requires": ["lyrics", "voice_song_id"], "output_formats": ["flac", "mp3", "wav32"],
-        "route": ROUTE
+        "route": ROUTE, "license_url": LICENSE, "model_directory": DEFAULT_FOLDER,
+        "configured_directory": root.and_then(configured_directory),
     })
 }
 
@@ -178,6 +227,24 @@ mod tests {
         assert_eq!(entry.path, path);
         assert_eq!(entry.task, "tts");
         assert!(matches!(entry.mode, Mode::Offline));
+    }
+
+    #[test]
+    fn vevo2_keeps_the_selected_local_folder_and_can_restore_the_default() {
+        let root = tempfile::tempdir().unwrap();
+        let supplied = tempfile::tempdir().unwrap();
+        let path = supplied.path().join(WEIGHTS);
+        std::fs::write(&path, [b"GGUF".as_slice(), &[0; 32]].concat()).unwrap();
+        assert_eq!(catalog(Some(root.path()), true)["ready"], false);
+        select_directory(root.path(), Some(supplied.path())).unwrap();
+        assert_eq!(catalog(Some(root.path()), true)["ready"], true);
+        assert_eq!(entry(model_dir(root.path())).path, path);
+        assert!(select_directory(root.path(), Some(Path::new("relative"))).is_err());
+        assert!(select_directory(root.path(), Some(root.path())).is_err());
+        assert_eq!(model_dir(root.path()), supplied.path());
+        select_directory(root.path(), None).unwrap();
+        assert_eq!(model_dir(root.path()), root.path().join(DEFAULT_FOLDER));
+        assert_eq!(catalog(Some(root.path()), true)["ready"], false);
     }
 
     #[test]
