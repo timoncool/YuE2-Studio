@@ -169,7 +169,7 @@ async fn desktop_save_contract_runs_through_http_with_unicode_paths() -> Result<
         ("Архив.zip".to_owned(), zip_url.to_owned()),
         ("Проект Ableton.zip".to_owned(), live_url),
     ];
-    for (format, depth) in [("wav", "16"), ("flac", "24"), ("mp3", "16")] {
+    for (format, depth) in [("wav", Some("16")), ("flac", Some("24")), ("mp3", None)] {
         let job = response(client.post(format!("{base}/v1/exports")).json(
             &json!({"song_id": song_id, "format": format, "bit_depth": depth, "mp3_kbps": 128}),
         ))
