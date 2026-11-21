@@ -7,7 +7,7 @@
 
 # YuE2 Studio
 
-**Full songs with an editable score, generated on your own GPU. One executable — no Python, no Node.js, no launcher.**
+**Create songs with YuE2, ACE-Step and MiniMax. Bring your tracks into one library and compare takes made with different engines.**
 
 [![Project page](https://img.shields.io/badge/Project_page-timoncool.github.io-7c3aed?style=for-the-badge)](https://timoncool.github.io/YuE2-Studio/)
 [![Download](https://img.shields.io/badge/Download-Windows_x64-0078D6?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/timoncool/YuE2-Studio/releases/latest)
@@ -24,16 +24,9 @@
 
 </div>
 
-YuE2 Studio is a desktop studio for **YuE2**, the open song model from M-A-P that writes a
-score before it sings. Describe a style, write the lyrics, and the model composes a melody
-with chords as sheet music, then performs it as a full song with vocals. The score comes
-back with the track: read it, edit it, and render the same composition again with a
-different sound. Windows installer with auto-update or a portable folder, runs offline on
-an NVIDIA card with 6 GB of VRAM or more; AMD and Intel cards through Vulkan are experimental.
+Choose the model and engine in **Create**. With **YuE2**, describe a style and write the lyrics to get a song with an editable score. Change the melody or chords and render another take. You can also use native **ACE-Step** and **MiniMax Music 3**, choose a supported alternative engine, or generate with a music model from **OpenRouter**.
 
-It is built on [yue2.cpp](https://github.com/ServeurpersoCom/yue2.cpp), the native C++/CUDA
-port of YuE2. The studio around it is Rust and React in a Tauri window — nothing in the
-runtime path is Python.
+Songs from the older studios can join the same library with their playlists. Listen to the original recording, compare takes or try a different singing voice with RVC. Local engines run on your computer after their components and weights have been downloaded. On Windows, choose the installer with automatic updates or the portable package. [Import your existing library](#bring-your-ace-step-or-minimax-library-into-yue2) · [GPU measurements](#how-fast-is-it)
 
 ## For AI agents
 
