@@ -132,7 +132,9 @@ pub(super) async fn apply(
     if !(-24..=24).contains(&request.semitone_shift)
         || !(0.0..=1.0).contains(&request.retrieval_blend)
     {
-        return Err(rvc_voices::invalid("RVC pitch shift must be between -24 and 24 semitones, and index strength between 0 and 1."));
+        return Err(rvc_voices::invalid(
+            "RVC pitch shift must be between -24 and 24 semitones, and index strength between 0 and 1.",
+        ));
     }
     let original = state
         .library
@@ -203,7 +205,9 @@ pub(super) async fn apply(
                 StatusCode::CONFLICT,
                 if request.backend == Backend::VocalFastRs {
                     native
+                        .as_ref()
                         .err()
+                        .cloned()
                         .unwrap_or_else(|| "vocal-fast-rs is unavailable.".into())
                 } else {
                     "Install the RVC conversion components first.".into()
@@ -226,25 +230,41 @@ pub(super) async fn apply(
         let hash = install_record::sha256_of(&weights)?;
         let index = voice.has_index().then(|| copy("retrieval.index")).transpose()?;
         let blend = if index.is_some() { request.retrieval_blend } else { 0.0 };
-        let conversion = match effective {
-            Backend::VocalFastRs => rvc_fast::convert(update_data_root(&state), &rvc_fast::Request {
-                vocal: &vocal,
-                voice: &weights,
-                index: index.as_deref(),
-                semitone_shift: request.semitone_shift,
-                retrieval_blend: blend,
-            })?,
-            Backend::AudioCpp => convert(&state.acpp, audio_build.context("audio.cpp runtime is unavailable")?, model,
-                &vocal, &weights, index.as_deref(), request.semitone_shift, blend)?,
-            Backend::Auto => unreachable!("Auto resolves to a concrete RVC backend"),
-        };
-        let mix = audio_pcm::decode_stereo(&source)?;
-        let mut backing = audio_post::Stereo::new(vec![0.0; mix.frames()], vec![0.0; mix.frames()], mix.rate);
+        // Validate the source audio and accompaniment before dispatching a backend.
+        let source_audio = audio_pcm::decode_stereo(&source)?;
+        let vocal_audio = audio_pcm::decode_stereo(&vocal)?;
+        let frame_delta = (source_audio.frames() as f64 / source_audio.rate as f64
+            - vocal_audio.frames() as f64 / vocal_audio.rate as f64).abs();
+        anyhow::ensure!(frame_delta <= 0.25 && vocal_audio.left.iter().chain(&vocal_audio.right).all(|sample| sample.is_finite()),
+            "The vocal stem does not align with the source song or contains invalid audio.");
+        let (frames, rate) = (source_audio.frames(), source_audio.rate);
+        drop(source_audio);
+        drop(vocal_audio);
+        let mut backing = audio_post::Stereo::new(vec![0.0; frames], vec![0.0; frames], rate);
         for path in accompaniment {
-            let stem = audio_pcm::decode_stereo(&path)?.resampled(mix.rate)?;
+            let stem = audio_pcm::decode_stereo(&path)?.resampled(rate)?;
             add_aligned(&mut backing, &stem)?;
         }
-        add_aligned(&mut backing, &conversion.resampled(mix.rate)?)?;
+        let audio_cpp = || convert(&state.acpp, audio_build.context("audio.cpp runtime is unavailable")?,
+            model, &vocal, &weights, index.as_deref(), request.semitone_shift, blend);
+        let native_convert = || rvc_fast::convert(update_data_root(&state), &rvc_fast::Request {
+            vocal: &vocal, voice: &weights, index: index.as_deref(),
+            semitone_shift: request.semitone_shift, retrieval_blend: blend,
+        });
+        let (conversion, effective, fallback_reason) = match effective {
+            Backend::VocalFastRs => match native_convert() {
+                Ok(output) => (output, Backend::VocalFastRs, None),
+                Err(error) if request.backend == Backend::Auto && audio_build.is_some()
+                    && error.is::<rvc_fast::BackendFailure>() => {
+                    (audio_cpp()?, Backend::AudioCpp, Some(format!("{error:#}")))
+                }
+                Err(error) => return Err(error),
+            },
+            Backend::AudioCpp => (audio_cpp()?, Backend::AudioCpp,
+                if request.backend == Backend::Auto { native.err() } else { None }),
+            Backend::Auto => unreachable!("Auto resolves to a concrete RVC backend"),
+        };
+        add_aligned(&mut backing, &conversion.resampled(rate)?)?;
         let peak = backing.left.iter().chain(&backing.right).map(|sample| sample.abs()).fold(0.0f32, f32::max);
         let gain = if peak > 1.0 { 0.98 / peak } else { 1.0 };
         if gain < 1.0 {
@@ -256,7 +276,7 @@ pub(super) async fn apply(
             "voice_id": voice.id, "voice_name": voice.title(), "voice_sha256": hash,
             "index_sha256": index.as_deref().map(install_record::sha256_of).transpose()?,
             "semitone_shift": request.semitone_shift, "retrieval_blend": blend, "mix_gain": gain,
-            "requested_backend": request.backend, "effective_backend": effective
+            "requested_backend": request.backend, "effective_backend": effective, "fallback_reason": fallback_reason
         });
         let song = state.library.import_audio_song(library::AudioImportInput {
             title: format!("{} · RVC · {}", original.title, voice.title()),
@@ -273,7 +293,7 @@ pub(super) async fn apply(
         if let Err(error) = cover_like(&state, &original, &song.id) {
             studio_log!("[RVC] Could not copy source cover: {error:#}");
         }
-        Ok::<_, anyhow::Error>(json!({ "song_id": song.id, "audio_url": format!("/v1/library/media/{}", song.id), "requested_backend": request.backend, "effective_backend": effective }))
+        Ok::<_, anyhow::Error>(json!({ "song_id": song.id, "audio_url": format!("/v1/library/media/{}", song.id), "requested_backend": request.backend, "effective_backend": effective, "fallback_reason": fallback_reason }))
     }).await.map_err(rvc_voices::internal)?.map_err(bad_gateway)?;
     Ok((StatusCode::CREATED, Json(result)))
 }

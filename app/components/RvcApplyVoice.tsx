@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useI18n } from '../context/I18nContext';
 import { rvcApplyStrings } from '../i18n/rvcApply';
 import { apiUrl } from '../services/apiBase';
 import { responseJson, type Voice } from '../services/rvcVoices';
+import { RvcNativeRuntime } from './RvcNativeRuntime';
 
 const URL = '/v1/rvc/apply';
 const accompaniment = ['drums', 'bass', 'other', 'guitar', 'piano'];
@@ -14,7 +15,7 @@ interface Setup {
   effective_backend: Engine | null;
   backends: Record<Engine, { ready: boolean; can_start?: boolean; reason?: string; missing_bytes?: number }>;
 }
-interface Take { song_id: string; audio_url: string; requested_backend: Backend; effective_backend: Engine }
+interface Take { song_id: string; audio_url: string; requested_backend: Backend; effective_backend: Engine; fallback_reason?: string | null }
 
 export function RvcApplyVoice({ song, voice, control, onSaved }: {
   song: RvcSourceSong;
@@ -26,6 +27,7 @@ export function RvcApplyVoice({ song, voice, control, onSaved }: {
   const labels = rvcApplyStrings[language];
   const [setup, setSetup] = useState<Setup>();
   const [setupRequest, setSetupRequest] = useState(0);
+  const reloadSetup = useCallback(() => { setSetupRequest(request => request + 1); }, []);
   const [backend, setBackend] = useState<Backend>(() => {
     const stored = localStorage.getItem(BACKEND_STORAGE);
     return stored === 'audio.cpp' || stored === 'vocal-fast-rs' ? stored : 'auto';
@@ -126,17 +128,24 @@ export function RvcApplyVoice({ song, voice, control, onSaved }: {
           {voice && !voice.index_name && <span className="text-zinc-500">{labels.noIndex}</span>}
         </label>
       </div>
+      {backend !== 'audio.cpp' && <RvcNativeRuntime onInstalled={reloadSetup} disabled={!!busy} />}
       {backend !== 'vocal-fast-rs' && fallbackSetup && !fallbackSetup.ready && !ready && (
         <button type="button" disabled={!!busy} className="px-2 py-1 font-semibold text-pink-600 underline disabled:opacity-50 dark:text-pink-300"
           onClick={() => void install()}>{busy === 'install' ? labels.installing : `${labels.install}${mb ? ` · ${mb}` : ''}`}</button>
       )}
       {!setup && error && <button type="button" className="text-pink-600 underline dark:text-pink-300"
-        onClick={() => { setError(undefined); setSetupRequest(request => request + 1); }}>{labels.retry}</button>}
+        onClick={() => { setError(undefined); reloadSetup(); }}>{labels.retry}</button>}
       <button type="button" disabled={!voice || !hasStems || !ready || !!busy}
         className="rounded border border-zinc-200 px-3 py-2 font-semibold disabled:opacity-50 dark:border-white/10"
         onClick={() => void apply()}>{labels.apply}</button>
       {busy === 'convert' && <p role="status">{labels.converting}</p>}
-      {take && <div className="space-y-1"><p role="status">{labels.saved.replace('{backend}', take.effective_backend)}</p><audio className="w-full" controls src={apiUrl(take.audio_url)} /></div>}
+      {take && (
+        <div className="space-y-1">
+          <p role="status">{labels.saved.replace('{backend}', take.effective_backend)}</p>
+          {take.fallback_reason && <p>{labels.fallbackReason} {take.fallback_reason}</p>}
+          <audio className="w-full" controls src={apiUrl(take.audio_url)} />
+        </div>
+      )}
       {error && <p role="alert" className="text-rose-600 dark:text-rose-300">{error}</p>}
     </div>
   );
