@@ -1005,8 +1005,8 @@ it('keeps focus, the song draft and pair settings when switching the MiniMax Mus
   expect(document.activeElement).toBe(engine);
   expect(model().value).toBe('quality-q8');
   expect(labeled('Seed').querySelector('input')?.value).toBe('11');
-  expect(host.textContent).toContain('CUDA 13 1.85 audio s/s');
-  expect(host.textContent).toContain('b79d37f');
+  expect(host.textContent).toContain('CUDA 13 1.8 audio s/s');
+  expect(host.textContent).toContain('46c4c90');
   click(buttonNamed('create')!);
   expect(sent.at(-1)).toMatchObject({
     music_source: { kind: 'native', engine: 'minimaxmusic-cpp', model: 'quality-q8' }, seed: 11, lyrics: 'Morning light',

@@ -1351,37 +1351,37 @@
       "family": "MiniMax Music3",
       "workload": "3.2 s · 2 steps",
       "engine": "minimaxmusic.cpp",
-      "revision": "b79d37f",
+      "revision": "46c4c90",
       "backend": "CUDA 13",
       "stage": "5.0 published runtime pin (#436)",
       "weight_profile": "Minimal Q3_K_M / Q4_K_M + F32 vocoder",
-      "cold_seconds": 7.421999999998661,
-      "warm_median_seconds": 1.0750126999992062,
-      "cold_vram_peak_bytes": 9861718016,
-      "cold_vram_baseline_bytes": 2080927744,
-      "cold_vram_increase_bytes": 7780790272,
-      "cold_rss_peak_bytes": 4867837952,
-      "warm_vram_peak_bytes": 9859489792,
-      "warm_rss_peak_bytes": 1089806336,
-      "warm_audio_seconds_per_second": 2.969959112273458,
+      "cold_seconds": 8.390999999988708,
+      "warm_median_seconds": 1.1161167999962345,
+      "cold_vram_peak_bytes": 10017832960,
+      "cold_vram_baseline_bytes": 2227097600,
+      "cold_vram_increase_bytes": 7790735360,
+      "cold_rss_peak_bytes": 4756283392,
+      "warm_vram_peak_bytes": 10017964032,
+      "warm_rss_peak_bytes": 1092575232,
+      "warm_audio_seconds_per_second": 2.8605821220351735,
       "runs": [
         {
-          "wall_seconds": 7.421999999998661,
+          "wall_seconds": 8.390999999988708,
           "audio_seconds": 3.1927437641723357,
           "wav_sha256": "4fa0e1cd3fb2892f4d81be554ca927730155d725a0332568b2c96b3490cc4504"
         },
         {
-          "wall_seconds": 1.0750126999992062,
+          "wall_seconds": 1.099836299996241,
           "audio_seconds": 3.1927437641723357,
           "wav_sha256": "4fa0e1cd3fb2892f4d81be554ca927730155d725a0332568b2c96b3490cc4504"
         },
         {
-          "wall_seconds": 1.1245662000001175,
+          "wall_seconds": 1.1185870000044815,
           "audio_seconds": 3.1927437641723357,
           "wav_sha256": "4fa0e1cd3fb2892f4d81be554ca927730155d725a0332568b2c96b3490cc4504"
         },
         {
-          "wall_seconds": 1.0715396000014152,
+          "wall_seconds": 1.1161167999962345,
           "audio_seconds": 3.1927437641723357,
           "wav_sha256": "4fa0e1cd3fb2892f4d81be554ca927730155d725a0332568b2c96b3490cc4504"
         }
@@ -1393,8 +1393,8 @@
         "activity_threshold_dbfs": -60,
         "trailing_quiet_seconds": 0.0
       },
-      "binary_sha256": "8b33bc52e7e5178ffe6b3e45979de36e27da1e2f12ccf7802778d6298b302d1a",
-      "archive_sha256": "df9d8b4dcd91c6fc908425b0e08293a3e22f1fc46f75fe64394b333b67f67288",
+      "binary_sha256": "9930df98f8bda4e63fe2742a8bd472fffaae60b24eb47aa00127208b7efd6335",
+      "archive_sha256": "251b1e28155fad92424af1683a78871af54b47c5cacb3c5976517696169e3652",
       "weight_sha256": {
         "mm3-lm-Q3_K_M.gguf": "65a1ee35212547a95ed19067c5b3bc3492725d55e754729e693e4141396064a5",
         "mm3-dit-Q3_K_M.gguf": "f1a67119c34ede23e27240d3ebd630fa492247e1d0184263574482302ab48f3f",
@@ -1425,44 +1425,44 @@
       "driver": "617.42",
       "memory_sample_interval_ms": 200,
       "retention": "keep-loaded",
-      "summary_id": "mm3-b79d37f-bench-CUDA0-3.2s-summary.json",
-      "warm_pre_request_vram_bytes": 9859489792
+      "summary_id": "minimax-46c4c90-rtx-4090/timing-cuda13-minimal/mm3-46c4c90-bench-CUDA0-cublas-13.5.1.27-3.2s-summary.json",
+      "warm_pre_request_vram_bytes": 10017832960
     },
     {
       "family": "MiniMax Music3",
       "workload": "3.2 s · 2 steps",
       "engine": "minimaxmusic.cpp",
-      "revision": "b79d37f",
+      "revision": "46c4c90",
       "backend": "CUDA 12",
       "stage": "5.0 published runtime pin (#436)",
       "weight_profile": "Minimal Q3_K_M / Q4_K_M + F32 vocoder",
-      "cold_seconds": 7.5,
-      "warm_median_seconds": 1.148581200002809,
-      "cold_vram_peak_bytes": 9825705984,
-      "cold_vram_baseline_bytes": 2031153152,
-      "cold_vram_increase_bytes": 7794552832,
-      "cold_rss_peak_bytes": 4893900800,
-      "warm_vram_peak_bytes": 9826066432,
-      "warm_rss_peak_bytes": 1091289088,
-      "warm_audio_seconds_per_second": 2.779728385041064,
+      "cold_seconds": 6.1560000000026776,
+      "warm_median_seconds": 1.119231899996521,
+      "cold_vram_peak_bytes": 10014294016,
+      "cold_vram_baseline_bytes": 2229440512,
+      "cold_vram_increase_bytes": 7784853504,
+      "cold_rss_peak_bytes": 4860960768,
+      "warm_vram_peak_bytes": 10014294016,
+      "warm_rss_peak_bytes": 1091026944,
+      "warm_audio_seconds_per_second": 2.8526204124295065,
       "runs": [
         {
-          "wall_seconds": 7.5,
+          "wall_seconds": 6.1560000000026776,
           "audio_seconds": 3.1927437641723357,
           "wav_sha256": "4fa0e1cd3fb2892f4d81be554ca927730155d725a0332568b2c96b3490cc4504"
         },
         {
-          "wall_seconds": 1.121242599998368,
+          "wall_seconds": 1.1015525000111666,
           "audio_seconds": 3.1927437641723357,
           "wav_sha256": "4fa0e1cd3fb2892f4d81be554ca927730155d725a0332568b2c96b3490cc4504"
         },
         {
-          "wall_seconds": 1.1609921999988728,
+          "wall_seconds": 1.131662799991318,
           "audio_seconds": 3.1927437641723357,
           "wav_sha256": "4fa0e1cd3fb2892f4d81be554ca927730155d725a0332568b2c96b3490cc4504"
         },
         {
-          "wall_seconds": 1.148581200002809,
+          "wall_seconds": 1.119231899996521,
           "audio_seconds": 3.1927437641723357,
           "wav_sha256": "4fa0e1cd3fb2892f4d81be554ca927730155d725a0332568b2c96b3490cc4504"
         }
@@ -1474,8 +1474,8 @@
         "activity_threshold_dbfs": -60,
         "trailing_quiet_seconds": 0.0
       },
-      "binary_sha256": "8b33bc52e7e5178ffe6b3e45979de36e27da1e2f12ccf7802778d6298b302d1a",
-      "archive_sha256": "df9d8b4dcd91c6fc908425b0e08293a3e22f1fc46f75fe64394b333b67f67288",
+      "binary_sha256": "9930df98f8bda4e63fe2742a8bd472fffaae60b24eb47aa00127208b7efd6335",
+      "archive_sha256": "251b1e28155fad92424af1683a78871af54b47c5cacb3c5976517696169e3652",
       "weight_sha256": {
         "mm3-lm-Q3_K_M.gguf": "65a1ee35212547a95ed19067c5b3bc3492725d55e754729e693e4141396064a5",
         "mm3-dit-Q3_K_M.gguf": "f1a67119c34ede23e27240d3ebd630fa492247e1d0184263574482302ab48f3f",
@@ -1508,44 +1508,44 @@
       "driver": "617.42",
       "memory_sample_interval_ms": 200,
       "retention": "keep-loaded",
-      "summary_id": "native-4090-cuda12-residency/timing-mm3-cuda12-minimal/mm3-b79d37f-bench-CUDA0-cublas-12.9.1.4-3.2s-summary.json",
-      "warm_pre_request_vram_bytes": 9825705984
+      "summary_id": "minimax-46c4c90-rtx-4090/timing-cuda12-minimal/mm3-46c4c90-bench-CUDA0-cublas-12.9.1.4-3.2s-summary.json",
+      "warm_pre_request_vram_bytes": 10014294016
     },
     {
       "family": "MiniMax Music3",
       "workload": "3.2 s · 2 steps",
       "engine": "minimaxmusic.cpp",
-      "revision": "b79d37f",
+      "revision": "46c4c90",
       "backend": "CUDA 13",
       "stage": "5.0 published runtime pin (#436)",
       "weight_profile": "Quality Q8_0 + F32 vocoder",
-      "cold_seconds": 13.485000000000582,
-      "warm_median_seconds": 1.7283652000041911,
-      "cold_vram_peak_bytes": 16149929984,
-      "cold_vram_baseline_bytes": 2082533376,
-      "cold_vram_increase_bytes": 14067396608,
-      "cold_rss_peak_bytes": 9357090816,
-      "warm_vram_peak_bytes": 16150126592,
-      "warm_rss_peak_bytes": 1087209472,
-      "warm_audio_seconds_per_second": 1.847262236108777,
+      "cold_seconds": 13.76600000000326,
+      "warm_median_seconds": 1.769422700002906,
+      "cold_vram_peak_bytes": 16335798272,
+      "cold_vram_baseline_bytes": 2227441664,
+      "cold_vram_increase_bytes": 14108356608,
+      "cold_rss_peak_bytes": 9503281152,
+      "warm_vram_peak_bytes": 16376430592,
+      "warm_rss_peak_bytes": 1091715072,
+      "warm_audio_seconds_per_second": 1.804398555623307,
       "runs": [
         {
-          "wall_seconds": 13.485000000000582,
+          "wall_seconds": 13.76600000000326,
           "audio_seconds": 3.1927437641723357,
           "wav_sha256": "0c5d305b2574b1584a14c690a82ec0dcccd3f37d1637e57dd303b85b2e219b97"
         },
         {
-          "wall_seconds": 1.8615172999998322,
+          "wall_seconds": 1.830223199998727,
           "audio_seconds": 3.1927437641723357,
           "wav_sha256": "0c5d305b2574b1584a14c690a82ec0dcccd3f37d1637e57dd303b85b2e219b97"
         },
         {
-          "wall_seconds": 1.7283652000041911,
+          "wall_seconds": 1.769422700002906,
           "audio_seconds": 3.1927437641723357,
           "wav_sha256": "0c5d305b2574b1584a14c690a82ec0dcccd3f37d1637e57dd303b85b2e219b97"
         },
         {
-          "wall_seconds": 1.7193713999949978,
+          "wall_seconds": 1.6936996000004,
           "audio_seconds": 3.1927437641723357,
           "wav_sha256": "0c5d305b2574b1584a14c690a82ec0dcccd3f37d1637e57dd303b85b2e219b97"
         }
@@ -1557,8 +1557,8 @@
         "activity_threshold_dbfs": -60,
         "trailing_quiet_seconds": 0.0
       },
-      "binary_sha256": "8b33bc52e7e5178ffe6b3e45979de36e27da1e2f12ccf7802778d6298b302d1a",
-      "archive_sha256": "df9d8b4dcd91c6fc908425b0e08293a3e22f1fc46f75fe64394b333b67f67288",
+      "binary_sha256": "9930df98f8bda4e63fe2742a8bd472fffaae60b24eb47aa00127208b7efd6335",
+      "archive_sha256": "251b1e28155fad92424af1683a78871af54b47c5cacb3c5976517696169e3652",
       "weight_sha256": {
         "MiniMax-Music3-language_model-Q8_0.gguf": "9ffa190eb5892c5c0829014dc3070b9ce8d2464636bbaae884b08f1bf6de0ad3",
         "MiniMax-Music3-transformer-Q8_0.gguf": "cbadca0600f325ba9263ea4dcf0d71d0361abf0733303398b9995fbadac6b38e",
@@ -1589,44 +1589,44 @@
       "driver": "617.42",
       "memory_sample_interval_ms": 200,
       "retention": "keep-loaded",
-      "summary_id": "mm3-b79d37f-bench-CUDA0-quality-q8-3.2s-summary.json",
-      "warm_pre_request_vram_bytes": 16149929984
+      "summary_id": "minimax-46c4c90-rtx-4090/timing-cuda13-quality/mm3-46c4c90-bench-CUDA0-quality-q8-cublas-13.5.1.27-3.2s-summary.json",
+      "warm_pre_request_vram_bytes": 16335732736
     },
     {
       "family": "MiniMax Music3",
       "workload": "3.2 s · 2 steps",
       "engine": "minimaxmusic.cpp",
-      "revision": "b79d37f",
+      "revision": "46c4c90",
       "backend": "CUDA 12",
       "stage": "5.0 published runtime pin (#436)",
       "weight_profile": "Quality Q8_0 + F32 vocoder",
-      "cold_seconds": 14.125,
-      "warm_median_seconds": 1.6890635000017937,
-      "cold_vram_peak_bytes": 16107118592,
-      "cold_vram_baseline_bytes": 2040098816,
-      "cold_vram_increase_bytes": 14067019776,
-      "cold_rss_peak_bytes": 9409499136,
-      "warm_vram_peak_bytes": 16107905024,
-      "warm_rss_peak_bytes": 1067732992,
-      "warm_audio_seconds_per_second": 1.8902449577348306,
+      "cold_seconds": 8.078000000008615,
+      "warm_median_seconds": 1.730091999997967,
+      "cold_vram_peak_bytes": 16296247296,
+      "cold_vram_baseline_bytes": 2232848384,
+      "cold_vram_increase_bytes": 14063398912,
+      "cold_rss_peak_bytes": 9230217216,
+      "warm_vram_peak_bytes": 16304439296,
+      "warm_rss_peak_bytes": 1071087616,
+      "warm_audio_seconds_per_second": 1.8454184888295464,
       "runs": [
         {
-          "wall_seconds": 14.125,
+          "wall_seconds": 8.078000000008615,
           "audio_seconds": 3.1927437641723357,
           "wav_sha256": "0c5d305b2574b1584a14c690a82ec0dcccd3f37d1637e57dd303b85b2e219b97"
         },
         {
-          "wall_seconds": 1.6890635000017937,
+          "wall_seconds": 1.730091999997967,
           "audio_seconds": 3.1927437641723357,
           "wav_sha256": "0c5d305b2574b1584a14c690a82ec0dcccd3f37d1637e57dd303b85b2e219b97"
         },
         {
-          "wall_seconds": 1.694760899998073,
+          "wall_seconds": 1.7820064999978058,
           "audio_seconds": 3.1927437641723357,
           "wav_sha256": "0c5d305b2574b1584a14c690a82ec0dcccd3f37d1637e57dd303b85b2e219b97"
         },
         {
-          "wall_seconds": 1.6879088999994565,
+          "wall_seconds": 1.7190550999948755,
           "audio_seconds": 3.1927437641723357,
           "wav_sha256": "0c5d305b2574b1584a14c690a82ec0dcccd3f37d1637e57dd303b85b2e219b97"
         }
@@ -1638,8 +1638,8 @@
         "activity_threshold_dbfs": -60,
         "trailing_quiet_seconds": 0.0
       },
-      "binary_sha256": "8b33bc52e7e5178ffe6b3e45979de36e27da1e2f12ccf7802778d6298b302d1a",
-      "archive_sha256": "df9d8b4dcd91c6fc908425b0e08293a3e22f1fc46f75fe64394b333b67f67288",
+      "binary_sha256": "9930df98f8bda4e63fe2742a8bd472fffaae60b24eb47aa00127208b7efd6335",
+      "archive_sha256": "251b1e28155fad92424af1683a78871af54b47c5cacb3c5976517696169e3652",
       "weight_sha256": {
         "MiniMax-Music3-language_model-Q8_0.gguf": "9ffa190eb5892c5c0829014dc3070b9ce8d2464636bbaae884b08f1bf6de0ad3",
         "MiniMax-Music3-transformer-Q8_0.gguf": "cbadca0600f325ba9263ea4dcf0d71d0361abf0733303398b9995fbadac6b38e",
@@ -1672,44 +1672,44 @@
       "driver": "617.42",
       "memory_sample_interval_ms": 200,
       "retention": "keep-loaded",
-      "summary_id": "native-4090-cuda12-residency/timing-mm3-cuda12/mm3-b79d37f-bench-CUDA0-quality-q8-cublas-12.9.1.4-3.2s-summary.json",
-      "warm_pre_request_vram_bytes": 16107184128
+      "summary_id": "minimax-46c4c90-rtx-4090/timing-cuda12-quality/mm3-46c4c90-bench-CUDA0-quality-q8-cublas-12.9.1.4-3.2s-summary.json",
+      "warm_pre_request_vram_bytes": 16301752320
     },
     {
       "family": "MiniMax Music3",
       "workload": "3.2 s · 2 steps",
       "engine": "minimaxmusic.cpp",
-      "revision": "b79d37f",
+      "revision": "46c4c90",
       "backend": "Vulkan",
       "stage": "5.0 published runtime pin (#436)",
       "weight_profile": "Minimal Q3_K_M / Q4_K_M + F32 vocoder",
-      "cold_seconds": 6.3439999999973224,
-      "warm_median_seconds": 1.484254000002693,
-      "cold_vram_peak_bytes": 9479041024,
-      "cold_vram_baseline_bytes": 2073260032,
-      "cold_vram_increase_bytes": 7405780992,
-      "cold_rss_peak_bytes": 4656955392,
-      "warm_vram_peak_bytes": 9479041024,
-      "warm_rss_peak_bytes": 476332032,
-      "warm_audio_seconds_per_second": 2.151076408867042,
+      "cold_seconds": 6.092999999993481,
+      "warm_median_seconds": 1.5118603000009898,
+      "cold_vram_peak_bytes": 9631518720,
+      "cold_vram_baseline_bytes": 2233602048,
+      "cold_vram_increase_bytes": 7397916672,
+      "cold_rss_peak_bytes": 4701995008,
+      "warm_vram_peak_bytes": 9637613568,
+      "warm_rss_peak_bytes": 502652928,
+      "warm_audio_seconds_per_second": 2.1117981364880376,
       "runs": [
         {
-          "wall_seconds": 6.3439999999973224,
+          "wall_seconds": 6.092999999993481,
           "audio_seconds": 3.1927437641723357,
           "wav_sha256": "94cc722e207ab462bcb6c761a9a9775beec5c14abbdb2e5df9e2710e10b23bd9"
         },
         {
-          "wall_seconds": 1.503210199996829,
+          "wall_seconds": 1.4743588999990607,
           "audio_seconds": 3.1927437641723357,
           "wav_sha256": "94cc722e207ab462bcb6c761a9a9775beec5c14abbdb2e5df9e2710e10b23bd9"
         },
         {
-          "wall_seconds": 1.484254000002693,
+          "wall_seconds": 1.5118603000009898,
           "audio_seconds": 3.1927437641723357,
           "wav_sha256": "94cc722e207ab462bcb6c761a9a9775beec5c14abbdb2e5df9e2710e10b23bd9"
         },
         {
-          "wall_seconds": 1.4831877000033273,
+          "wall_seconds": 1.534235200000694,
           "audio_seconds": 3.1927437641723357,
           "wav_sha256": "94cc722e207ab462bcb6c761a9a9775beec5c14abbdb2e5df9e2710e10b23bd9"
         }
@@ -1721,8 +1721,8 @@
         "activity_threshold_dbfs": -60,
         "trailing_quiet_seconds": 0.0
       },
-      "binary_sha256": "8b33bc52e7e5178ffe6b3e45979de36e27da1e2f12ccf7802778d6298b302d1a",
-      "archive_sha256": "df9d8b4dcd91c6fc908425b0e08293a3e22f1fc46f75fe64394b333b67f67288",
+      "binary_sha256": "9930df98f8bda4e63fe2742a8bd472fffaae60b24eb47aa00127208b7efd6335",
+      "archive_sha256": "251b1e28155fad92424af1683a78871af54b47c5cacb3c5976517696169e3652",
       "weight_sha256": {
         "mm3-lm-Q3_K_M.gguf": "65a1ee35212547a95ed19067c5b3bc3492725d55e754729e693e4141396064a5",
         "mm3-dit-Q3_K_M.gguf": "f1a67119c34ede23e27240d3ebd630fa492247e1d0184263574482302ab48f3f",
@@ -1747,44 +1747,44 @@
       "driver": "617.42",
       "memory_sample_interval_ms": 200,
       "retention": "keep-loaded",
-      "summary_id": "mm3-b79d37f-bench-Vulkan0-3.2s-summary.json",
-      "warm_pre_request_vram_bytes": 9478909952
+      "summary_id": "minimax-46c4c90-rtx-4090/timing-vulkan-minimal/mm3-46c4c90-bench-Vulkan0-3.2s-summary.json",
+      "warm_pre_request_vram_bytes": 9631256576
     },
     {
       "family": "MiniMax Music3",
       "workload": "3.2 s · 2 steps",
       "engine": "minimaxmusic.cpp",
-      "revision": "b79d37f",
+      "revision": "46c4c90",
       "backend": "Vulkan",
       "stage": "5.0 published runtime pin (#436)",
       "weight_profile": "Quality Q8_0 + F32 vocoder",
-      "cold_seconds": 14.578000000001339,
-      "warm_median_seconds": 1.9239608999996562,
-      "cold_vram_peak_bytes": 15768989696,
-      "cold_vram_baseline_bytes": 2068180992,
-      "cold_vram_increase_bytes": 13700808704,
-      "cold_rss_peak_bytes": 9168703488,
-      "warm_vram_peak_bytes": 15876993024,
-      "warm_rss_peak_bytes": 605757440,
-      "warm_audio_seconds_per_second": 1.6594639548926935,
+      "cold_seconds": 9.531000000002678,
+      "warm_median_seconds": 1.9216499000031035,
+      "cold_vram_peak_bytes": 15913373696,
+      "cold_vram_baseline_bytes": 2227965952,
+      "cold_vram_increase_bytes": 13685407744,
+      "cold_rss_peak_bytes": 8868274176,
+      "warm_vram_peak_bytes": 15926480896,
+      "warm_rss_peak_bytes": 495292416,
+      "warm_audio_seconds_per_second": 1.6614596468207758,
       "runs": [
         {
-          "wall_seconds": 14.578000000001339,
+          "wall_seconds": 9.531000000002678,
           "audio_seconds": 3.1927437641723357,
           "wav_sha256": "26bff0e841b81a5ce3d29574c59cd34f4123cd89a10998be091efcb12d742fb0"
         },
         {
-          "wall_seconds": 1.9239608999996562,
+          "wall_seconds": 1.9422260999999708,
           "audio_seconds": 3.1927437641723357,
           "wav_sha256": "26bff0e841b81a5ce3d29574c59cd34f4123cd89a10998be091efcb12d742fb0"
         },
         {
-          "wall_seconds": 1.9672148000026937,
+          "wall_seconds": 1.8780162000039127,
           "audio_seconds": 3.1927437641723357,
           "wav_sha256": "26bff0e841b81a5ce3d29574c59cd34f4123cd89a10998be091efcb12d742fb0"
         },
         {
-          "wall_seconds": 1.9018754999997327,
+          "wall_seconds": 1.9216499000031035,
           "audio_seconds": 3.1927437641723357,
           "wav_sha256": "26bff0e841b81a5ce3d29574c59cd34f4123cd89a10998be091efcb12d742fb0"
         }
@@ -1796,8 +1796,8 @@
         "activity_threshold_dbfs": -60,
         "trailing_quiet_seconds": 0.0
       },
-      "binary_sha256": "8b33bc52e7e5178ffe6b3e45979de36e27da1e2f12ccf7802778d6298b302d1a",
-      "archive_sha256": "df9d8b4dcd91c6fc908425b0e08293a3e22f1fc46f75fe64394b333b67f67288",
+      "binary_sha256": "9930df98f8bda4e63fe2742a8bd472fffaae60b24eb47aa00127208b7efd6335",
+      "archive_sha256": "251b1e28155fad92424af1683a78871af54b47c5cacb3c5976517696169e3652",
       "weight_sha256": {
         "MiniMax-Music3-language_model-Q8_0.gguf": "9ffa190eb5892c5c0829014dc3070b9ce8d2464636bbaae884b08f1bf6de0ad3",
         "MiniMax-Music3-transformer-Q8_0.gguf": "cbadca0600f325ba9263ea4dcf0d71d0361abf0733303398b9995fbadac6b38e",
@@ -1822,8 +1822,8 @@
       "driver": "617.42",
       "memory_sample_interval_ms": 200,
       "retention": "keep-loaded",
-      "summary_id": "mm3-b79d37f-bench-Vulkan0-quality-q8-3.2s-summary.json",
-      "warm_pre_request_vram_bytes": 15772921856
+      "summary_id": "minimax-46c4c90-rtx-4090/timing-vulkan-quality/mm3-46c4c90-bench-Vulkan0-quality-q8-3.2s-summary.json",
+      "warm_pre_request_vram_bytes": 15918616576
     },
     {
       "family": "MiniMax Music3",
@@ -2806,18 +2806,6 @@
       "receipt": "native-4090-cuda12-residency/resident-yue2-cuda13/yue2-892b9b0-bench-CUDA0-cublas-13.5.1.27-resident.json",
       "timing_summary_id": "yue2-892b9b0-bench-CUDA0-cublas-13.5.1.27-summary.json"
     },
-    "b79d37f": {
-      "label": "MiniMax Music3 · minimaxmusic.cpp b79d37f · Minimal Q3_K_M / Q4_K_M + F32 vocoder · 3.2 s · 2 steps",
-      "backend": "CUDA 13",
-      "audio_seconds": 3.1927437641723357,
-      "binary_sha256": "8b33bc52e7e5178ffe6b3e45979de36e27da1e2f12ccf7802778d6298b302d1a",
-      "cuda_dll_sha256": "bb1019e3f347df267834797e5b05666fa25f9a6bb5c404617f73f05586984729",
-      "wav_sha256": "4fa0e1cd3fb2892f4d81be554ca927730155d725a0332568b2c96b3490cc4504",
-      "dedicated_gpu_bytes": 7784988672,
-      "rss_bytes": 1073754112,
-      "receipt": "native-4090-cuda12-residency/resident-mm3-cuda13-minimal/mm3-b79d37f-bench-CUDA0-cublas-13.5.1.27-3.2s-resident.json",
-      "timing_summary_id": "mm3-b79d37f-bench-CUDA0-3.2s-summary.json"
-    },
     "d058cd8": {
       "label": "ACE-Step 1.5 · acestep.cpp d058cd8 · Turbo Q8_0 + BF16 embedder/VAE · 30 s · 8 Euler steps",
       "backend": "CUDA 13",
@@ -2829,6 +2817,18 @@
       "rss_bytes": 984317952,
       "receipt": "music-gpu-20261121-d058/ace-native-resident-cuda13/ace-d058cd8-bench-CUDA0-cublas-13.5.1.27-30s-resident.json",
       "timing_summary_id": "music-gpu-20261121-d058/ace-native-timing-cuda13/ace-d058cd8-bench-CUDA0-cublas-13.5.1.27-30s-summary.json"
+    },
+    "46c4c90": {
+      "label": "MiniMax Music3 · minimaxmusic.cpp 46c4c90 · Minimal Q3_K_M / Q4_K_M + F32 vocoder · 3.2 s · 2 steps",
+      "backend": "CUDA 13",
+      "audio_seconds": 3.1927437641723357,
+      "binary_sha256": "9930df98f8bda4e63fe2742a8bd472fffaae60b24eb47aa00127208b7efd6335",
+      "cuda_dll_sha256": "bb1019e3f347df267834797e5b05666fa25f9a6bb5c404617f73f05586984729",
+      "wav_sha256": "4fa0e1cd3fb2892f4d81be554ca927730155d725a0332568b2c96b3490cc4504",
+      "dedicated_gpu_bytes": 7784988672,
+      "rss_bytes": 1077616640,
+      "receipt": "minimax-46c4c90-rtx-4090/resident-cuda13-minimal/mm3-46c4c90-bench-CUDA0-cublas-13.5.1.27-3.2s-resident.json",
+      "timing_summary_id": "minimax-46c4c90-rtx-4090/timing-cuda13-minimal/mm3-46c4c90-bench-CUDA0-cublas-13.5.1.27-3.2s-summary.json"
     }
   },
   "wsl2_linux": {

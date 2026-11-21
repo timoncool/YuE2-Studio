@@ -414,12 +414,12 @@ Windows 11, RTX 4090, driver 617.42. Cold includes server launch and the first W
 | ACE-Step 1.5 · audio.cpp `41242418` · Turbo Q8_0, packed GGUF · 30 s · 8 Euler steps | CUDA 13 | 30.000 | 10.512 | 1.387 | 21.62× | 10.43 / +8.49 | 10.48 | 2.58 | — |
 | ACE-Step 1.5 · audio.cpp `41242418` · Turbo Q8_0, packed GGUF · 30 s · 8 Euler steps | CUDA 12 | 30.000 | 11.398 | 1.536 | 19.53× | 10.57 / +8.50 | 10.62 | 2.67 | — |
 | ACE-Step 1.5 · audio.cpp `41242418` · Turbo Q8_0, packed GGUF · 30 s · 8 Euler steps | Vulkan | 30.000 | 21.746 | 2.237 | 13.41× | 10.23 / +8.30 | 10.22 | 4.60 | — |
-| MiniMax Music3 · minimaxmusic.cpp `b79d37f` · Minimal Q3_K_M / Q4_K_M + F32 vocoder · 3.2 s · 2 steps | CUDA 13 | 3.193 | 7.422 | 1.075 | 2.97× | 9.18 / +7.25 | 9.18 | 4.53 | 7.25 / 1.00 |
-| MiniMax Music3 · minimaxmusic.cpp `b79d37f` · Minimal Q3_K_M / Q4_K_M + F32 vocoder · 3.2 s · 2 steps | CUDA 12 | 3.193 | 7.500 | 1.149 | 2.78× | 9.15 / +7.26 | 9.15 | 4.56 | — |
-| MiniMax Music3 · minimaxmusic.cpp `b79d37f` · Quality Q8_0 + F32 vocoder · 3.2 s · 2 steps | CUDA 13 | 3.193 | 13.485 | 1.728 | 1.85× | 15.04 / +13.10 | 15.04 | 8.71 | — |
-| MiniMax Music3 · minimaxmusic.cpp `b79d37f` · Quality Q8_0 + F32 vocoder · 3.2 s · 2 steps | CUDA 12 | 3.193 | 14.125 | 1.689 | 1.89× | 15.00 / +13.10 | 15.00 | 8.76 | — |
-| MiniMax Music3 · minimaxmusic.cpp `b79d37f` · Minimal Q3_K_M / Q4_K_M + F32 vocoder · 3.2 s · 2 steps | Vulkan | 3.193 | 6.344 | 1.484 | 2.15× | 8.83 / +6.90 | 8.83 | 4.34 | — |
-| MiniMax Music3 · minimaxmusic.cpp `b79d37f` · Quality Q8_0 + F32 vocoder · 3.2 s · 2 steps | Vulkan | 3.193 | 14.578 | 1.924 | 1.66× | 14.69 / +12.76 | 14.69 | 8.54 | — |
+| MiniMax Music3 · minimaxmusic.cpp `46c4c90` · Minimal Q3_K_M / Q4_K_M + F32 vocoder · 3.2 s · 2 steps | CUDA 13 | 3.193 | 8.391 | 1.116 | 2.86× | 9.33 / +7.26 | 9.33 | 4.43 | 7.25 / 1.00 |
+| MiniMax Music3 · minimaxmusic.cpp `46c4c90` · Minimal Q3_K_M / Q4_K_M + F32 vocoder · 3.2 s · 2 steps | CUDA 12 | 3.193 | 6.156 | 1.119 | 2.85× | 9.33 / +7.25 | 9.33 | 4.53 | — |
+| MiniMax Music3 · minimaxmusic.cpp `46c4c90` · Quality Q8_0 + F32 vocoder · 3.2 s · 2 steps | CUDA 13 | 3.193 | 13.766 | 1.769 | 1.80× | 15.21 / +13.14 | 15.21 | 8.85 | — |
+| MiniMax Music3 · minimaxmusic.cpp `46c4c90` · Quality Q8_0 + F32 vocoder · 3.2 s · 2 steps | CUDA 12 | 3.193 | 8.078 | 1.730 | 1.85× | 15.18 / +13.10 | 15.18 | 8.60 | — |
+| MiniMax Music3 · minimaxmusic.cpp `46c4c90` · Minimal Q3_K_M / Q4_K_M + F32 vocoder · 3.2 s · 2 steps | Vulkan | 3.193 | 6.093 | 1.512 | 2.11× | 8.97 / +6.89 | 8.97 | 4.38 | — |
+| MiniMax Music3 · minimaxmusic.cpp `46c4c90` · Quality Q8_0 + F32 vocoder · 3.2 s · 2 steps | Vulkan | 3.193 | 9.531 | 1.922 | 1.66× | 14.82 / +12.75 | 14.83 | 8.26 | — |
 | MiniMax Music3 Studio v4.0.3 · minimaxmusic.cpp `f476b0e` · Minimal Q3_K_M / Q4_K_M + F32 · 3.2 s · 2 steps | CUDA 13 | 3.193 | 7.312 | 1.257 | 2.54× | 9.32 / +7.38 | 9.32 | 4.56 | 7.39 / 0.89 |
 | MiniMax Music3 · minimaxmusic.cpp `f476b0e` · Quality Q8_0 + F32 vocoder · 3.2 s · 2 steps | CUDA 13 | 3.193 | 9.156 | 1.852 | 1.72× | 15.18 / +13.23 | 15.18 | 8.91 | — |
 | MiniMax Music3 · minimaxmusic.cpp `f476b0e` · Minimal Q3_K_M / Q4_K_M + F32 · 3.2 s · 2 steps | Vulkan | 3.193 | 7.343 | 1.987 | 1.61× | 8.96 / +7.03 | 8.96 | 4.33 | — |
@@ -433,7 +433,7 @@ Windows 11, RTX 4090, driver 617.42. Cold includes server launch and the first W
 | YuE2 Studio v4.1.1 · yue2.cpp `67f59c1` · 3B Q8_0 + F32 VAE · 100 tokens · 2 steps | CUDA 13 | 3.999 | — | — | — | — | — | — | 4.61 / 0.65 |
 | ACE-Step Studio v4.0.2 · acestep.cpp `9eb75e8` · Turbo Q8_0 + BF16 embedder/VAE · 30 s · 8 Euler steps | CUDA 13 | 30.000 | — | — | — | — | — | — | 9.51 / 0.78 |
 
-Each workload has its own fixed input and step count. YuE2 VAE precision differs, and the audio.cpp text-to-song request fixes the semantic-token budget. The native ACE CUDA take ends with five quiet seconds. MiniMax Quality and audio.cpp Q8_0 share four weights and use different vocoders. Stable Audio 3 compares Medium BF16 to Small Q8_0. The ACE-Step 6e0e414 and MiniMax b79d37f rows use the exact separately published 5.0 runtime pins. MiniMax f476b0e is the 4.0.3 control.
+Each workload has its own fixed input and step count. YuE2 VAE precision differs, and the audio.cpp text-to-song request fixes the semantic-token budget. The native ACE CUDA take ends with five quiet seconds. MiniMax Quality and audio.cpp Q8_0 share four weights and use different vocoders. Stable Audio 3 compares Medium BF16 to Small Q8_0. The ACE-Step d058cd8 and MiniMax 46c4c90 rows use the exact separately published Windows 5.0 runtime pins. The WSL2 table identifies the measured Linux pins. MiniMax f476b0e is the 4.0.3 control.
 
 [Individual runs, residency, SHA-256, exact weights and output checks](docs/music-gpu-benchmarks.json)
 <!-- music-gpu-matrix:end -->
