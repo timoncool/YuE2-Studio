@@ -130,6 +130,11 @@ def run(binary, bundle, port):
                     assert LYRICS in page.locator("textarea").evaluate_all("(items) => items.map(x => x.value)")
                     create = page.locator("footer").get_by_role("button", name="Create", exact=True)
                     expect(create).to_be_enabled()
+                    expect(page.get_by_text("Ready to load when you create", exact=True)).to_be_visible()
+                    expect(page.get_by_text(f"Requested pair · OpenRouter · {MODEL}", exact=True)).to_be_visible()
+                    pair = json.loads(read(base + "/v1/music/pair"))
+                    assert pair["requested"] == {"kind": "openrouter", "model": MODEL}, pair
+                    assert pair["stage"] == "ready" and pair["load_on_create"], pair
                     for _ in range(70):
                         page.keyboard.press("Tab")
                         if create.evaluate("(button) => document.activeElement === button"):
@@ -159,6 +164,7 @@ def run(binary, bundle, port):
                 assert len(calls) == 1
                 print(json.dumps({"result": "pass", "keys": ["Tab", "ArrowDown", "ArrowUp", "Shift+Tab", "End", "Enter"],
                                   "engine_switch": "minimaxmusic-cpp → audio.cpp → minimaxmusic-cpp",
+                                  "pair_stage": pair["stage"], "load_on_create": pair["load_on_create"],
                                   "model": MODEL, "job": job_id, "song": take["id"],
                                   "pcm_sha256": hashlib.sha256(pcm).hexdigest()}, ensure_ascii=False))
             except BaseException:
