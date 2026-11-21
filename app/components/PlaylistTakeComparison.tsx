@@ -95,7 +95,8 @@ export const PlaylistTakeComparison: React.FC<{
                 </div>
               );
             }} />
-          <TakeWords key={JSON.stringify([left.id, right.id, left.lyrics, left.audioUrl, right.audioUrl])} left={left} right={right} />
+          <TakeWords key={JSON.stringify([left.id, right.id, left.lyrics, left.audioUrl, right.audioUrl])} left={left} right={right}
+            preferredSongId={playlist.preferredSongId} saving={saving} onChoose={song => void mark(song)} />
         </>
       ))}
     </section>
