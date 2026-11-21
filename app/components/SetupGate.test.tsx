@@ -1,10 +1,13 @@
 import React, { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { OptionalGroup, WHERE_IT_RUNS } from './SetupGate';
+import { OptionalGroup, SetupGate, WHERE_IT_RUNS } from './SetupGate';
 import { SettingsModal } from './SettingsModal';
 
-vi.mock('../context/I18nContext', () => ({ useI18n: () => ({ t: (key: string) => key, language: 'en' }) }));
+vi.mock('../context/I18nContext', () => ({ useI18n: () => ({
+  t: (key: string) => key === 'ramShort' ? 'Have {have} GB, need {need} GB' : key,
+  language: 'en',
+}) }));
 vi.mock('../context/AuthContext', () => ({ useAuth: () => ({ user: { username: 'test' }, setDisplayName: vi.fn() }) }));
 vi.mock('../services/studioQueries', () => ({ openRouterSettingsChanged: vi.fn(), useSetupStatus: () => ({}), SELF_READ: { 'x-hub-skip': '1' } }));
 vi.mock('./EngineSettings', () => ({ EngineSettings: () => null }));
@@ -90,6 +93,54 @@ afterEach(() => {
   host?.remove();
   vi.useRealTimers();
   vi.unstubAllGlobals();
+});
+
+describe('first-run memory recommendation', () => {
+  async function mountFirstRun(totalRamGb: number) {
+    const components = [
+      { id: 'backbone-q5', kind: 'backbone', filename: 'YuE2-Q5_K_M.gguf', bytes: 1 },
+      { id: 'backbone-q8', kind: 'backbone', filename: 'YuE2-Q8_0.gguf', bytes: 1 },
+      { id: 'vae-f32', kind: 'vae', filename: 'Vae-F32.gguf', bytes: 1 },
+    ];
+    const profiles = [
+      { id: 'light', label: 'Test light set', components: ['backbone-q5', 'vae-f32'], recommended: true, installable: true, total_bytes: 2, ram_needed_gb: 9 },
+      { id: 'heavy', label: 'Test heavy set', components: ['backbone-q8', 'vae-f32'], recommended: false, installable: true, total_bytes: 2, ram_needed_gb: 14 },
+    ];
+    calls = [];
+    vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+      calls.push({ url, init });
+      if (url === '/setup/status') return response({
+        ready: false, engine_ready: false, first_run: true, recommended_profile_id: 'light',
+        active: null, installed_components: [], hardware: { totalRamGb },
+      });
+      if (url === '/setup/catalog') return response({ engine_id: 'yue2-cpp', recommended_profile_id: 'light', profiles, components });
+      return response({});
+    }));
+    host = document.createElement('div');
+    document.body.append(host);
+    root = createRoot(host);
+    await act(async () => root.render(<SetupGate />));
+  }
+
+  it('keeps the 7 GB / 9 GB warning and lets the user pick a set without recommending it', async () => {
+    await mountFirstRun(7);
+    expect(host.textContent).toContain('Have 7 GB, need 9 GB');
+    expect(host.textContent).not.toContain('recommendedForMachine');
+    expect(host.textContent).not.toContain('recommendedBadge');
+    const heavy = [...host.querySelectorAll('button')].find(element => element.textContent?.includes('Test heavy set'))!;
+    expect(heavy.disabled).toBe(false);
+    await act(async () => heavy.click());
+    expect(heavy.className).toContain('border-pink-400');
+    expect(calls.some(({ url }) => url === '/setup/download')).toBe(false);
+  });
+
+  it('keeps the machine recommendation and card badge when the recommended set fits', async () => {
+    await mountFirstRun(12);
+    expect(host.textContent).toContain('recommendedForMachine');
+    expect(host.textContent).toContain('recommendedBadge');
+    expect(host.textContent).not.toContain('Have 12 GB, need 9 GB');
+    expect(host.textContent).toContain('Have 12 GB, need 14 GB');
+  });
 });
 
 describe('saving a model set from Settings', () => {
