@@ -121,6 +121,9 @@ def make_packages(work, adapter, native, models):
         return generation
 
     first, second = publish(1), publish(2)
+    catalogue = data / "component-channel/music-engines"
+    shutil.copytree(engine_dir / first / "proof", catalogue / "snapshot-signed")
+    (catalogue / "accepted").write_text("snapshot-signed", encoding="utf-8")
     for folder in (engine_dir, model_dir):
         write(folder / "active.json", {"active": first})
     return data, engine_dir, model_dir, first, second, exe_name, all_pins
@@ -150,12 +153,14 @@ def run(work, binary, adapter, native, models):
             assert error.code == expected, (route, error.code, content)
             return content
 
-    def tool(name, arguments):
-        request = {"jsonrpc": "2.0", "id": len(rpc) + 1, "method": "tools/call",
-                   "params": {"name": name, "arguments": arguments}}
+    def rpc_call(method, params):
+        request = {"jsonrpc": "2.0", "id": len(rpc) + 1, "method": method, "params": params}
         response = json.loads(call("/mcp", request))
         rpc.append({"request": request, "response": response})
-        result = response["result"]
+        return response["result"]
+
+    def tool(name, arguments):
+        result = rpc_call("tools/call", {"name": name, "arguments": arguments})
         assert not result.get("isError"), result
         return result["structuredContent"]
 
@@ -202,6 +207,14 @@ def run(work, binary, adapter, native, models):
             else:
                 raise TimeoutError("Studio did not start")
 
+            names = {entry["name"] for entry in rpc_call("tools/list", {})["tools"]}
+            assert {"song_create", "song_replay", "music_engine_catalog_list",
+                    "music_engine_package_status", "music_model_package_status"} <= names
+            catalogue = tool("music_engine_catalog_list", {})
+            assert catalogue["source"] == "signed" and catalogue["engines"][0]["id"] == ENGINE
+            assert catalogue["models"][0]["id"] == MODEL and ENGINE in catalogue["models"][0]["engines"]
+            assert tool("music_engine_package_status", {"id": ENGINE})["generation"] == first
+            assert tool("music_model_package_status", {"engine": ENGINE, "model": MODEL})["generation"] == first
             original = complete(tool("song_create", request))
             before = json.loads(call(f"/v1/library/songs/{original}"))
             identity = before["metadata"]["signed_engine"]

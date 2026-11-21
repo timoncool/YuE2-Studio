@@ -11348,7 +11348,7 @@ async fn dispatch_music_job(state: AppState, mut request: CreateMusicJobRequest,
     let engine_id = match destination {
         MusicDestination::Signed { engine, model, generation, model_generation } => {
             if retry_engine.is_some_and(|original| original != engine || generation.is_none() || model_generation.is_none()) {
-                return (StatusCode::CONFLICT, Json(failed_request_job(request, engine, "The saved job has no matching signed engine generation.".into())));
+                return (StatusCode::CONFLICT, Json(failed_request_job(request, engine, "The saved job has no matching signed engine generation.")));
             }
             return signed_music_jobs::submit(state, request, engine, model, generation, model_generation, attempt).await;
         }
