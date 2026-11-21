@@ -1,0 +1,75 @@
+name: Windows NSIS release acceptance
+
+on:
+  push:
+    branches: [qa/yue2-windows-nsis-upgrade]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  install:
+    permissions:
+      contents: write # GitHub requires push access for an unpublished draft.
+    strategy:
+      fail-fast: false
+      matrix:
+        scenario: [clean, upgrade]
+    runs-on: windows-latest
+    timeout-minutes: 40
+    env:
+      QA_DIR: ${{ runner.temp }}/nsis-qa
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: '3.12'
+      - name: Read pinned files from the unpublished v5.0.0 draft
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $PSNativeCommandUseErrorActionPreference = $true
+          if ($PSVersionTable.PSVersion -lt [version]'7.4') { throw 'PowerShell 7.4 binary redirection required' }
+          $repo = $env:GITHUB_REPOSITORY
+          $draft = gh api "repos/$repo/releases/453516878" | ConvertFrom-Json
+          if (!$draft.draft -or $draft.tag_name -cne 'v5.0.0') { throw 'Expected unpublished v5.0.0 draft 453516878' }
+          $directory = New-Item -ItemType Directory -Path $env:QA_DIR
+          $package = 'YuE2.Studio_5.0.0_x64-setup.exe'
+          $pinned = [ordered]@{
+            'YuE2.Studio_5.0.0_x64-setup.exe' = '2c12f8242d9a3e743614d7c652d176edf51d24a69c47c5998faad54121a59fb7'
+            'YuE2.Studio_5.0.0_x64-setup.exe.sig' = '99dd4c94c7714b0375f3c6bc790cb46aa7c12d60d8d025bdd3a53a465c7958bb'
+            'windows-rc-receipt.json' = 'f08ef5a5037963300024137cc3d7ab60dff86a98f465ac7c287c4123906df768'
+          }
+          $evidence = [ordered]@{ release_id = $draft.id; assets = [ordered]@{} }
+          foreach ($name in $pinned.Keys) {
+            $selected = @($draft.assets | Where-Object { $_.name -ceq $name -and $_.state -eq 'uploaded' })
+            if ($selected.Count -ne 1) { throw "Draft $($draft.id) has $($selected.Count) uploaded copies of $name" }
+            $asset = $selected[0]
+            $path = Join-Path $directory.FullName $name
+            gh api -H 'Accept: application/octet-stream' "repos/$repo/releases/assets/$($asset.id)" > $path
+            $actual = (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLowerInvariant()
+            if ((Get-Item -LiteralPath $path).Length -ne $asset.size -or "sha256:$actual" -cne $asset.digest -or $actual -cne $pinned[$name]) {
+              throw "$name does not match the draft metadata and pinned SHA-256"
+            }
+            $evidence.assets[$name] = [ordered]@{ id = $asset.id; bytes = $asset.size; sha256 = $actual }
+          }
+          $receipt = Get-Content -LiteralPath (Join-Path $directory.FullName 'windows-rc-receipt.json') -Raw | ConvertFrom-Json
+          if ($receipt.revision -cne '8a202d0093e4f321da05aeccb9e952b26b15d917') { throw 'Unexpected source revision in staging receipt' }
+          if ($receipt.installer_sha256 -ine $evidence.assets[$package].sha256) { throw 'Installer SHA-256 does not match the staging receipt' }
+          $evidence | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath (Join-Path $directory.FullName 'draft.json')
+      - name: Download public verification tooling and baseline
+        run: python scripts/windows-nsis-acceptance.py download ${{ matrix.scenario }}
+      - name: Verify and exercise installed Studio
+        run: python scripts/windows-nsis-acceptance.py verify ${{ matrix.scenario }}
+      - name: Save acceptance evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: windows-nsis-${{ matrix.scenario }}
+          path: ${{ env.QA_DIR }}/evidence/*.json
