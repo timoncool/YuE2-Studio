@@ -139,7 +139,14 @@ pub enum Origin {
     Catalog { catalog_id: String },
     Imported,
     /// A checkpoint of a training run.
-    Trained { #[serde(default)] run: String, #[serde(default)] step: u32 },
+    Trained {
+        #[serde(default)]
+        run: String,
+        #[serde(default)]
+        step: u32,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        training_base: Option<crate::training::TrainingBaseIdentity>,
+    },
     /// A file of a Hugging Face repository, pinned to the commit it came from.
     Hub { repo: String, revision: String, file: String },
 }
@@ -186,6 +193,8 @@ pub struct Installed {
     pub bytes: u64,
     /// The engine's complaint about the files, when it has one.
     pub error: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub training_base_matches: Option<bool>,
 }
 
 /// A catalogue entry as the interface sees it.
@@ -338,7 +347,7 @@ impl AdapterLibrary {
                     }
                 }
             }
-            out.push(Installed { bytes: folder_bytes(&entry.path()), meta, error });
+            out.push(Installed { bytes: folder_bytes(&entry.path()), meta, error, training_base_matches: None });
         }
         out.sort_by(|a, b| b.meta.created_at.cmp(&a.meta.created_at));
         out
@@ -637,6 +646,13 @@ impl AdapterLibrary {
         self.read_meta(id).and_then(|meta| meta.trigger).filter(|trigger| !trigger.trim().is_empty())
     }
 
+    pub(super) fn training_base(&self, id: &str) -> Option<crate::training::TrainingBaseIdentity> {
+        match self.read_meta(id)?.origin {
+            Origin::Trained { training_base, .. } => training_base,
+            _ => None,
+        }
+    }
+
     /// Whether the adapter came out of the studio's own trainer, which keeps
     /// the decoder companion frozen under every LoRA it trains: such a LoRA
     /// sounds as trained only over the companion.
@@ -792,7 +808,7 @@ fn header_in(start: &[u8]) -> Result<HeaderRead> {
 }
 
 /// The header of a safetensors file on disk.
-fn local_header(path: &Path) -> Result<serde_json::Map<String, Value>> {
+pub(super) fn local_header(path: &Path) -> Result<serde_json::Map<String, Value>> {
     use std::io::Read;
     let mut file = fs::File::open(path)?;
     let mut length = [0u8; 8];

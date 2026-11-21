@@ -403,13 +403,13 @@ Windows 11, RTX 4090, driver 617.42. Cold includes server launch and the first W
 
 | Model and engine | Backend | WAV (s) | Cold (s) | Warm (s) | Warm audio s/s | VRAM peak / Δ (GiB) | Warm pre-request VRAM (GiB) | Peak RAM (GiB) | Resident WDDM VRAM / RSS (GiB) |
 | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| YuE2 · yue2.cpp `892b9b0` · 3B Q8_0 + F32 VAE; NAR v9 · 30 s · 32 steps | CUDA 13 | 29.999 | 8.813 | 4.759 | 6.30× | 8.13 / +5.75 | 8.13 | 3.37 | — |
+| YuE2 · yue2.cpp `892b9b0` · 3B Q8_0 + F32 VAE; NAR v9 · 30 s · 32 steps | CUDA 13 | 29.999 | 9.735 | 5.166 | 5.81× | 7.67 / +5.74 | 7.67 | 3.36 | — |
 | YuE2 · yue2.cpp `892b9b0` · 3B Q8_0 + F32 VAE; NAR v9 · 30 s · 32 steps | Vulkan | 29.999 | 16.609 | 5.861 | 5.12× | 8.19 / +5.81 | 8.87 | 3.08 | — |
 | YuE2 · audio.cpp `41242418` · 3B Q8_0 + F16 VAE; NAR v9 · 30 s · 32 steps | CUDA 13 | 29.999 | 16.807 | 7.441 | 4.03× | 7.02 / +4.68 | 3.16 | 6.24 | — |
 | YuE2 · audio.cpp `41242418` · 3B Q8_0 + F16 VAE; NAR v9 · 30 s · 32 steps | Vulkan | 29.999 | 28.258 | 10.286 | 2.92× | 6.44 / +4.51 | 2.54 | 6.85 | — |
-| YuE2 · yue2.cpp `892b9b0` · 3B Q8_0 + F32 VAE; NAR v9 · 100 tokens · 2 steps | CUDA 13 | 3.999 | 6.516 | 0.172 | 23.20× | 6.88 / +4.51 | 6.88 | 3.40 | — |
+| YuE2 · yue2.cpp `892b9b0` · 3B Q8_0 + F32 VAE; NAR v9 · 100 tokens · 2 steps | CUDA 13 | 3.999 | 6.062 | 0.140 | 28.52× | 6.44 / +4.51 | 6.44 | 3.35 | — |
 | YuE2 · audio.cpp `41242418` · 3B Q8_0 + F16 VAE; NAR v9 · 100 tokens · 2 steps | CUDA 13 | 3.999 | 7.482 | 0.383 | 10.44× | 6.28 / +3.92 | 3.03 | 5.84 | — |
-| YuE2 · yue2.cpp `892b9b0` · 3B Q8_0 + F32 VAE; NAR v9 · 100 tokens · 2 steps | CUDA 12 | 3.999 | 4.969 | 0.125 | 31.95× | 6.88 / +4.50 | 6.88 | 3.45 | — |
+| YuE2 · yue2.cpp `892b9b0` · 3B Q8_0 + F32 VAE; NAR v9 · 100 tokens · 2 steps | CUDA 12 | 3.999 | 4.312 | 0.110 | 36.20× | 6.43 / +4.50 | 6.43 | 3.34 | — |
 | YuE2 · audio.cpp `41242418` · 3B Q8_0 + F16 VAE; NAR v9 · 100 tokens · 2 steps | CUDA 12 | 3.999 | 7.869 | 0.420 | 9.52× | 6.46 / +4.10 | 3.03 | 5.76 | — |
 | YuE2 · yue2.cpp `892b9b0` · 3B Q8_0 + F32 VAE; NAR v9 · 100 tokens · 2 steps | Vulkan | 3.999 | 13.766 | 0.252 | 15.88× | 6.54 / +4.17 | 6.54 | 3.82 | — |
 | YuE2 · audio.cpp `41242418` · 3B Q8_0 + F16 VAE; NAR v9 · 100 tokens · 2 steps | Vulkan | 3.999 | 8.373 | 0.974 | 4.11× | 6.31 / +3.94 | 2.89 | 5.33 | — |
@@ -417,6 +417,10 @@ Windows 11, RTX 4090, driver 617.42. Cold includes server launch and the first W
 | ACE-Step 1.5 · acestep.cpp `6e0e414` · Turbo Q8_0 + BF16 embedder/VAE · 30 s · 8 Euler steps | Vulkan | 30.000 | 7.204 | 0.381 | 78.69× | 8.58 / +6.65 | 8.57 | 2.00 | — |
 | ACE-Step 1.5 · audio.cpp `41242418` · Turbo Q8_0, packed GGUF · 30 s · 8 Euler steps | CUDA 13 | 30.000 | 10.512 | 1.387 | 21.62× | 10.43 / +8.49 | 10.48 | 2.58 | — |
 | ACE-Step 1.5 · audio.cpp `41242418` · Turbo Q8_0, packed GGUF · 30 s · 8 Euler steps | Vulkan | 30.000 | 21.746 | 2.237 | 13.41× | 10.23 / +8.30 | 10.22 | 4.60 | — |
+| MiniMax Music3 · minimaxmusic.cpp `b79d37f` · Minimal Q3_K_M / Q4_K_M + F32 vocoder · 3.2 s · 2 steps | CUDA 13 | 3.193 | 7.422 | 1.075 | 2.97× | 9.18 / +7.25 | 9.18 | 4.53 | — |
+| MiniMax Music3 · minimaxmusic.cpp `b79d37f` · Quality Q8_0 + F32 vocoder · 3.2 s · 2 steps | CUDA 13 | 3.193 | 13.485 | 1.728 | 1.85× | 15.04 / +13.10 | 15.04 | 8.71 | — |
+| MiniMax Music3 · minimaxmusic.cpp `b79d37f` · Minimal Q3_K_M / Q4_K_M + F32 vocoder · 3.2 s · 2 steps | Vulkan | 3.193 | 6.344 | 1.484 | 2.15× | 8.83 / +6.90 | 8.83 | 4.34 | — |
+| MiniMax Music3 · minimaxmusic.cpp `b79d37f` · Quality Q8_0 + F32 vocoder · 3.2 s · 2 steps | Vulkan | 3.193 | 14.578 | 1.924 | 1.66× | 14.69 / +12.76 | 14.69 | 8.54 | — |
 | MiniMax Music3 Studio v4.0.3 · minimaxmusic.cpp `f476b0e` · Minimal Q3_K_M / Q4_K_M + F32 · 3.2 s · 2 steps | CUDA 13 | 3.193 | 7.312 | 1.257 | 2.54× | 9.32 / +7.38 | 9.32 | 4.56 | 7.39 / 0.89 |
 | MiniMax Music3 · minimaxmusic.cpp `f476b0e` · Quality Q8_0 + F32 vocoder · 3.2 s · 2 steps | CUDA 13 | 3.193 | 9.156 | 1.852 | 1.72× | 15.18 / +13.23 | 15.18 | 8.91 | — |
 | MiniMax Music3 · minimaxmusic.cpp `f476b0e` · Minimal Q3_K_M / Q4_K_M + F32 · 3.2 s · 2 steps | Vulkan | 3.193 | 7.343 | 1.987 | 1.61× | 8.96 / +7.03 | 8.96 | 4.33 | — |
@@ -429,7 +433,7 @@ Windows 11, RTX 4090, driver 617.42. Cold includes server launch and the first W
 | YuE2 Studio v4.1.1 · yue2.cpp `67f59c1` · 3B Q8_0 + F32 VAE · 100 tokens · 2 steps | CUDA 13 | 3.999 | — | — | — | — | — | — | 4.61 / 0.65 |
 | ACE-Step Studio v4.0.2 · acestep.cpp `9eb75e8` · Turbo Q8_0 + BF16 embedder/VAE · 30 s · 8 Euler steps | CUDA 13 | 30.000 | — | — | — | — | — | — | 9.51 / 0.78 |
 
-Each workload has its own fixed input and step count. YuE2 VAE precision differs, and the audio.cpp text-to-song request fixes the semantic-token budget. The native ACE CUDA take ends with five quiet seconds. MiniMax Quality and audio.cpp Q8_0 share four weights and use different vocoders. Stable Audio 3 compares Medium BF16 to Small Q8_0. The native MiniMax rows use the published 4.0.3 engine. Final 5.0 package measurements require its release binaries.
+Each workload has its own fixed input and step count. YuE2 VAE precision differs, and the audio.cpp text-to-song request fixes the semantic-token budget. The native ACE CUDA take ends with five quiet seconds. MiniMax Quality and audio.cpp Q8_0 share four weights and use different vocoders. Stable Audio 3 compares Medium BF16 to Small Q8_0. The ACE-Step 6e0e414 and MiniMax b79d37f rows use the exact separately published 5.0 runtime pins. MiniMax f476b0e is the 4.0.3 control.
 
 [Individual runs, published residency, SHA-256, exact weights and output checks](docs/music-gpu-benchmarks.json)
 <!-- music-gpu-matrix:end -->

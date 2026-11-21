@@ -22,39 +22,39 @@
       "backend": "CUDA 13",
       "stage": "5.0 candidate",
       "weight_profile": "3B Q8_0 + F32 VAE; NAR v9",
-      "cold_seconds": 8.812999999994645,
-      "warm_median_seconds": 4.75927270000102,
-      "cold_vram_peak_bytes": 8724979712,
-      "cold_vram_baseline_bytes": 2555670528,
-      "cold_vram_increase_bytes": 6169309184,
-      "cold_rss_peak_bytes": 3619315712,
-      "warm_vram_peak_bytes": 8959598592,
-      "warm_rss_peak_bytes": 878346240,
-      "warm_audio_seconds_per_second": 6.303203988849018,
+      "cold_seconds": 9.735000000000582,
+      "warm_median_seconds": 5.1664777000041795,
+      "cold_vram_peak_bytes": 8240357376,
+      "cold_vram_baseline_bytes": 2081714176,
+      "cold_vram_increase_bytes": 6158643200,
+      "cold_rss_peak_bytes": 3609632768,
+      "warm_vram_peak_bytes": 8478482432,
+      "warm_rss_peak_bytes": 868798464,
+      "warm_audio_seconds_per_second": 5.806405912996082,
       "runs": [
         {
-          "wall_seconds": 8.812999999994645,
-          "audio_seconds": 29.998666666666665,
-          "wav_sha256": "109546c0b27fc10c4da5382d3433d8f1d300f7b9cef765ae2b11e5125349e255"
-        },
-        {
-          "wall_seconds": 4.75927270000102,
+          "wall_seconds": 9.735000000000582,
           "audio_seconds": 29.998666666666665,
           "wav_sha256": "9a4722fed0863ca0ef5c2e6f280ab635665fa704ae4c78ce5cc6f890d29c0012"
         },
         {
-          "wall_seconds": 4.7729431000043405,
+          "wall_seconds": 5.232476200006204,
           "audio_seconds": 29.998666666666665,
           "wav_sha256": "9a4722fed0863ca0ef5c2e6f280ab635665fa704ae4c78ce5cc6f890d29c0012"
         },
         {
-          "wall_seconds": 4.719823400009773,
+          "wall_seconds": 5.1664777000041795,
+          "audio_seconds": 29.998666666666665,
+          "wav_sha256": "9a4722fed0863ca0ef5c2e6f280ab635665fa704ae4c78ce5cc6f890d29c0012"
+        },
+        {
+          "wall_seconds": 5.131400099999155,
           "audio_seconds": 29.998666666666665,
           "wav_sha256": "9a4722fed0863ca0ef5c2e6f280ab635665fa704ae4c78ce5cc6f890d29c0012"
         }
       ],
       "audio_levels": {
-        "rms_dbfs": -13.9081920686986,
+        "rms_dbfs": -14.430118967880812,
         "sample_rate_hz": 48000,
         "window_ms": 100,
         "activity_threshold_dbfs": -60,
@@ -79,8 +79,8 @@
         "ggml.dll"
       ],
       "module_sha256": {
-        "cublas64_13.dll": "db5a1d5a0ed0ef126e005fc7449d3584353aaeb8739a18d716fe74be1254a3da",
-        "cublasLt64_13.dll": "ca478e1ea932f883ef4fc284f8f33d910079df4e77f9a2ec38d9b4387795f96f",
+        "cublas64_13.dll": "f1d500d0cd892f5b8c6b6cdbffd82d0c55d5f5427215668e7ceb55aeeccc1b63",
+        "cublasLt64_13.dll": "b592cd016d7673e9cb97716a22b27c4010ee635377a3ba28f37070a9bdb76a68",
         "ggml-cuda.dll": "b5f6dee6a566d450f78d26c94f901de702136e83fb0a8a38420ede2754e5d1b0",
         "ggml-base.dll": "f404c0245c71abf1f64dc712ad71ff0c003147368901c105d80f24d1721bf6d9",
         "ggml-cpu-cascadelake.dll": "778d257d7b45af60111ed49461569363ea4fad27f8f7c909c47178f5b2a0715d",
@@ -90,8 +90,8 @@
       "driver": "617.42",
       "memory_sample_interval_ms": 200,
       "retention": "keep-loaded",
-      "summary_id": "yue2-892b9b0-bench-CUDA0-from-lyrics-cublas-13.10.0.20-30s-summary.json",
-      "warm_pre_request_vram_bytes": 8724455424
+      "summary_id": "yue2-892b9b0-bench-CUDA0-from-lyrics-cublas-13.5.1.27-30s-summary.json",
+      "warm_pre_request_vram_bytes": 8239800320
     },
     {
       "family": "YuE2",
@@ -313,33 +313,33 @@
       "backend": "CUDA 13",
       "stage": "5.0 candidate",
       "weight_profile": "3B Q8_0 + F32 VAE; NAR v9",
-      "cold_seconds": 6.51600000000326,
-      "warm_median_seconds": 0.17234930000267923,
-      "cold_vram_peak_bytes": 7389257728,
-      "cold_vram_baseline_bytes": 2546544640,
-      "cold_vram_increase_bytes": 4842713088,
-      "cold_rss_peak_bytes": 3648794624,
-      "warm_vram_peak_bytes": 7395745792,
-      "warm_rss_peak_bytes": 841748480,
-      "warm_audio_seconds_per_second": 23.20094521187209,
+      "cold_seconds": 6.061999999998079,
+      "warm_median_seconds": 0.1402206999991904,
+      "cold_vram_peak_bytes": 6914105344,
+      "cold_vram_baseline_bytes": 2069164032,
+      "cold_vram_increase_bytes": 4844941312,
+      "cold_rss_peak_bytes": 3598565376,
+      "warm_vram_peak_bytes": 6918561792,
+      "warm_rss_peak_bytes": 831209472,
+      "warm_audio_seconds_per_second": 28.51694982759146,
       "runs": [
         {
-          "wall_seconds": 6.51600000000326,
+          "wall_seconds": 6.061999999998079,
           "audio_seconds": 3.998666666666667,
           "wav_sha256": "284bbb500b2c82d09cd4dd31f4cc9dbdfccd071c45208e47927af7ed36843084"
         },
         {
-          "wall_seconds": 0.12462950000190176,
+          "wall_seconds": 0.17225100000359816,
           "audio_seconds": 3.998666666666667,
           "wav_sha256": "284bbb500b2c82d09cd4dd31f4cc9dbdfccd071c45208e47927af7ed36843084"
         },
         {
-          "wall_seconds": 0.17234930000267923,
+          "wall_seconds": 0.1402206999991904,
           "audio_seconds": 3.998666666666667,
           "wav_sha256": "284bbb500b2c82d09cd4dd31f4cc9dbdfccd071c45208e47927af7ed36843084"
         },
         {
-          "wall_seconds": 0.1871087999898009,
+          "wall_seconds": 0.1105981000000611,
           "audio_seconds": 3.998666666666667,
           "wav_sha256": "284bbb500b2c82d09cd4dd31f4cc9dbdfccd071c45208e47927af7ed36843084"
         }
@@ -370,8 +370,8 @@
         "ggml.dll"
       ],
       "module_sha256": {
-        "cublas64_13.dll": "db5a1d5a0ed0ef126e005fc7449d3584353aaeb8739a18d716fe74be1254a3da",
-        "cublasLt64_13.dll": "ca478e1ea932f883ef4fc284f8f33d910079df4e77f9a2ec38d9b4387795f96f",
+        "cublas64_13.dll": "f1d500d0cd892f5b8c6b6cdbffd82d0c55d5f5427215668e7ceb55aeeccc1b63",
+        "cublasLt64_13.dll": "b592cd016d7673e9cb97716a22b27c4010ee635377a3ba28f37070a9bdb76a68",
         "ggml-cuda.dll": "b5f6dee6a566d450f78d26c94f901de702136e83fb0a8a38420ede2754e5d1b0",
         "ggml-base.dll": "f404c0245c71abf1f64dc712ad71ff0c003147368901c105d80f24d1721bf6d9",
         "ggml-cpu-cascadelake.dll": "778d257d7b45af60111ed49461569363ea4fad27f8f7c909c47178f5b2a0715d",
@@ -381,8 +381,8 @@
       "driver": "617.42",
       "memory_sample_interval_ms": 200,
       "retention": "keep-loaded",
-      "summary_id": "yue2-892b9b0-bench-CUDA0-cublas-13.10.0.20-summary.json",
-      "warm_pre_request_vram_bytes": 7389454336
+      "summary_id": "yue2-892b9b0-bench-CUDA0-cublas-13.5.1.27-summary.json",
+      "warm_pre_request_vram_bytes": 6912270336
     },
     {
       "family": "YuE2",
@@ -459,33 +459,33 @@
       "backend": "CUDA 12",
       "stage": "5.0 candidate",
       "weight_profile": "3B Q8_0 + F32 VAE; NAR v9",
-      "cold_seconds": 4.9689999999973224,
-      "warm_median_seconds": 0.1251568000006955,
-      "cold_vram_peak_bytes": 7388864512,
-      "cold_vram_baseline_bytes": 2557128704,
-      "cold_vram_increase_bytes": 4831735808,
-      "cold_rss_peak_bytes": 3701252096,
-      "warm_vram_peak_bytes": 7395876864,
-      "warm_rss_peak_bytes": 821800960,
-      "warm_audio_seconds_per_second": 31.9492561861956,
+      "cold_seconds": 4.312000000005355,
+      "warm_median_seconds": 0.11045240000385093,
+      "cold_vram_peak_bytes": 6907092992,
+      "cold_vram_baseline_bytes": 2070605824,
+      "cold_vram_increase_bytes": 4836487168,
+      "cold_rss_peak_bytes": 3588341760,
+      "warm_vram_peak_bytes": 6912729088,
+      "warm_rss_peak_bytes": 820805632,
+      "warm_audio_seconds_per_second": 36.20262363268932,
       "runs": [
         {
-          "wall_seconds": 4.9689999999973224,
+          "wall_seconds": 4.312000000005355,
           "audio_seconds": 3.998666666666667,
           "wav_sha256": "284bbb500b2c82d09cd4dd31f4cc9dbdfccd071c45208e47927af7ed36843084"
         },
         {
-          "wall_seconds": 0.11114269999961834,
+          "wall_seconds": 0.0833245000030729,
           "audio_seconds": 3.998666666666667,
           "wav_sha256": "284bbb500b2c82d09cd4dd31f4cc9dbdfccd071c45208e47927af7ed36843084"
         },
         {
-          "wall_seconds": 0.1251568000006955,
+          "wall_seconds": 0.11045240000385093,
           "audio_seconds": 3.998666666666667,
           "wav_sha256": "284bbb500b2c82d09cd4dd31f4cc9dbdfccd071c45208e47927af7ed36843084"
         },
         {
-          "wall_seconds": 0.12541969999438152,
+          "wall_seconds": 0.12504289999924367,
           "audio_seconds": 3.998666666666667,
           "wav_sha256": "284bbb500b2c82d09cd4dd31f4cc9dbdfccd071c45208e47927af7ed36843084"
         }
@@ -517,8 +517,8 @@
         "ggml.dll"
       ],
       "module_sha256": {
-        "cublas64_12.dll": "52ce5ba0ec5327d39be6021f0f9362d2ed4d64d7206f9b5afc06398d827b8e82",
-        "cublasLt64_12.dll": "71705a7cf0923f4ab034d0d2620bbfc989ff669ac3d79f868b7a7c597ca559c5",
+        "cublas64_12.dll": "90052a83efd1b57a8e3616a6590b335855f81b814a4f16eecb7b5bf6d1b1d4eb",
+        "cublasLt64_12.dll": "c3a05ea244c937314afec09f87b91f814c7e27977681f6c67eb51bb06ced3a4a",
         "ggml-cuda.dll": "104924958bd0067a796b1b079b83d2b27b45f7446c994d42f000f308f3b4d1b1",
         "cudart64_12.dll": "760c38928bbe5759f7b31ed6692599eb7ec83cedd5702e84c2b72028a89837e1",
         "ggml-base.dll": "f404c0245c71abf1f64dc712ad71ff0c003147368901c105d80f24d1721bf6d9",
@@ -529,8 +529,8 @@
       "driver": "617.42",
       "memory_sample_interval_ms": 200,
       "retention": "keep-loaded",
-      "summary_id": "yue2-892b9b0-bench-CUDA0-cublas-12.9.2.10-summary.json",
-      "warm_pre_request_vram_bytes": 7389585408
+      "summary_id": "yue2-892b9b0-bench-CUDA0-cublas-12.9.1.4-summary.json",
+      "warm_pre_request_vram_bytes": 6907092992
     },
     {
       "family": "YuE2",
@@ -745,7 +745,7 @@
       "engine": "acestep.cpp",
       "revision": "6e0e414",
       "backend": "CUDA 13",
-      "stage": "5.0 candidate",
+      "stage": "5.0 published runtime pin (#436)",
       "weight_profile": "Turbo Q8_0 + BF16 embedder/VAE",
       "cold_seconds": 6.23399999999674,
       "warm_median_seconds": 0.39212929999484913,
@@ -786,7 +786,7 @@
         "trailing_quiet_seconds": 5.0
       },
       "binary_sha256": "a76e1d60dadb3ffdcf128e7266f81e2924316ae80731a194871acdfef4704858",
-      "archive_sha256": null,
+      "archive_sha256": "ce0229c2fb5d3c718d3b44ca9d0e0e3407f248451494f3c2db3d0b711dfa3499",
       "weight_sha256": {
         "acestep-v15-turbo-Q8_0.gguf": "288f708a61cfc241013a98a62f98ba331f83fe34d0d3559acdd9b0f6a2f7cd6b",
         "Qwen3-Embedding-0.6B-BF16.gguf": "6f57900773fbd447b2943bc8126e2dc68ed009151ba89a47c14d1be05d4c73df",
@@ -824,7 +824,7 @@
       "engine": "acestep.cpp",
       "revision": "6e0e414",
       "backend": "Vulkan",
-      "stage": "5.0 candidate",
+      "stage": "5.0 published runtime pin (#436)",
       "weight_profile": "Turbo Q8_0 + BF16 embedder/VAE",
       "cold_seconds": 7.2039999999979045,
       "warm_median_seconds": 0.38124720000632806,
@@ -865,7 +865,7 @@
         "trailing_quiet_seconds": 0.0
       },
       "binary_sha256": "a76e1d60dadb3ffdcf128e7266f81e2924316ae80731a194871acdfef4704858",
-      "archive_sha256": null,
+      "archive_sha256": "ce0229c2fb5d3c718d3b44ca9d0e0e3407f248451494f3c2db3d0b711dfa3499",
       "weight_sha256": {
         "acestep-v15-turbo-Q8_0.gguf": "288f708a61cfc241013a98a62f98ba331f83fe34d0d3559acdd9b0f6a2f7cd6b",
         "Qwen3-Embedding-0.6B-BF16.gguf": "6f57900773fbd447b2943bc8126e2dc68ed009151ba89a47c14d1be05d4c73df",
@@ -1024,6 +1024,318 @@
       "retention": "lazy first load; reused process and session",
       "summary_id": "music-gpu-20261121a/ace_step-matrix-30-vulkan/summary.json",
       "warm_pre_request_vram_bytes": 10978459648
+    },
+    {
+      "family": "MiniMax Music3",
+      "workload": "3.2 s · 2 steps",
+      "engine": "minimaxmusic.cpp",
+      "revision": "b79d37f",
+      "backend": "CUDA 13",
+      "stage": "5.0 published runtime pin (#436)",
+      "weight_profile": "Minimal Q3_K_M / Q4_K_M + F32 vocoder",
+      "cold_seconds": 7.421999999998661,
+      "warm_median_seconds": 1.0750126999992062,
+      "cold_vram_peak_bytes": 9861718016,
+      "cold_vram_baseline_bytes": 2080927744,
+      "cold_vram_increase_bytes": 7780790272,
+      "cold_rss_peak_bytes": 4867837952,
+      "warm_vram_peak_bytes": 9859489792,
+      "warm_rss_peak_bytes": 1089806336,
+      "warm_audio_seconds_per_second": 2.969959112273458,
+      "runs": [
+        {
+          "wall_seconds": 7.421999999998661,
+          "audio_seconds": 3.1927437641723357,
+          "wav_sha256": "4fa0e1cd3fb2892f4d81be554ca927730155d725a0332568b2c96b3490cc4504"
+        },
+        {
+          "wall_seconds": 1.0750126999992062,
+          "audio_seconds": 3.1927437641723357,
+          "wav_sha256": "4fa0e1cd3fb2892f4d81be554ca927730155d725a0332568b2c96b3490cc4504"
+        },
+        {
+          "wall_seconds": 1.1245662000001175,
+          "audio_seconds": 3.1927437641723357,
+          "wav_sha256": "4fa0e1cd3fb2892f4d81be554ca927730155d725a0332568b2c96b3490cc4504"
+        },
+        {
+          "wall_seconds": 1.0715396000014152,
+          "audio_seconds": 3.1927437641723357,
+          "wav_sha256": "4fa0e1cd3fb2892f4d81be554ca927730155d725a0332568b2c96b3490cc4504"
+        }
+      ],
+      "audio_levels": {
+        "rms_dbfs": -13.33091112704658,
+        "sample_rate_hz": 44100,
+        "window_ms": 100,
+        "activity_threshold_dbfs": -60,
+        "trailing_quiet_seconds": 0.0
+      },
+      "binary_sha256": "8b33bc52e7e5178ffe6b3e45979de36e27da1e2f12ccf7802778d6298b302d1a",
+      "archive_sha256": "df9d8b4dcd91c6fc908425b0e08293a3e22f1fc46f75fe64394b333b67f67288",
+      "weight_sha256": {
+        "mm3-lm-Q3_K_M.gguf": "65a1ee35212547a95ed19067c5b3bc3492725d55e754729e693e4141396064a5",
+        "mm3-dit-Q3_K_M.gguf": "f1a67119c34ede23e27240d3ebd630fa492247e1d0184263574482302ab48f3f",
+        "MiniMax-Music3-condition_encoder-F32.gguf": "ebb69ec6e6d730b4dcc48ba1b51da4f201514cbaaa7cae0c8d6259d3b178efb0",
+        "MiniMax-Music3-vocoder-F32.gguf": "4eaa451e54fa755cfe7b0fd15b0bfe64458db35b822e1d250488d0a2a363507d",
+        "mm3-depth-Q4_K_M.gguf": "77e729d6e0599ed7928a3c0f13a36e1d3ef5f7de9259eaf01a19445549fa958e"
+      },
+      "request_sha256": "08bf3f3eb1cbbde18f9a92178542b3dbeee45347b637bacae2f31c8509d1f619",
+      "request_sha256_scope": "canonical JSON from captured native request",
+      "module_names": [
+        "cublas64_13.dll",
+        "cublasLt64_13.dll",
+        "ggml-base.dll",
+        "ggml-cpu-cascadelake.dll",
+        "ggml-cuda.dll",
+        "ggml-vulkan.dll",
+        "ggml.dll"
+      ],
+      "module_sha256": {
+        "ggml-cuda.dll": "bb1019e3f347df267834797e5b05666fa25f9a6bb5c404617f73f05586984729",
+        "ggml-base.dll": "caeae788d035d5e9124f1108528b954a87155aaff9d5b1a03104c046f39a66bb",
+        "ggml-cpu-cascadelake.dll": "7bebf24f101b5b91378b9ebc5613c2fd8a47c71303ff0bf7aa7cb2f952772851",
+        "ggml-vulkan.dll": "e91d85c66cf4ba45b09ab3fe6e2a1f8aa452476b0206c893912e8874b04b3a7b",
+        "ggml.dll": "55335a6c79c400867a7866eb820636a0574dd6d19c612c40b1eb8a5fe9e88436",
+        "cublas64_13.dll": "f1d500d0cd892f5b8c6b6cdbffd82d0c55d5f5427215668e7ceb55aeeccc1b63",
+        "cublasLt64_13.dll": "b592cd016d7673e9cb97716a22b27c4010ee635377a3ba28f37070a9bdb76a68"
+      },
+      "driver": "617.42",
+      "memory_sample_interval_ms": 200,
+      "retention": "keep-loaded",
+      "summary_id": "mm3-b79d37f-bench-CUDA0-3.2s-summary.json",
+      "warm_pre_request_vram_bytes": 9859489792
+    },
+    {
+      "family": "MiniMax Music3",
+      "workload": "3.2 s · 2 steps",
+      "engine": "minimaxmusic.cpp",
+      "revision": "b79d37f",
+      "backend": "CUDA 13",
+      "stage": "5.0 published runtime pin (#436)",
+      "weight_profile": "Quality Q8_0 + F32 vocoder",
+      "cold_seconds": 13.485000000000582,
+      "warm_median_seconds": 1.7283652000041911,
+      "cold_vram_peak_bytes": 16149929984,
+      "cold_vram_baseline_bytes": 2082533376,
+      "cold_vram_increase_bytes": 14067396608,
+      "cold_rss_peak_bytes": 9357090816,
+      "warm_vram_peak_bytes": 16150126592,
+      "warm_rss_peak_bytes": 1087209472,
+      "warm_audio_seconds_per_second": 1.847262236108777,
+      "runs": [
+        {
+          "wall_seconds": 13.485000000000582,
+          "audio_seconds": 3.1927437641723357,
+          "wav_sha256": "0c5d305b2574b1584a14c690a82ec0dcccd3f37d1637e57dd303b85b2e219b97"
+        },
+        {
+          "wall_seconds": 1.8615172999998322,
+          "audio_seconds": 3.1927437641723357,
+          "wav_sha256": "0c5d305b2574b1584a14c690a82ec0dcccd3f37d1637e57dd303b85b2e219b97"
+        },
+        {
+          "wall_seconds": 1.7283652000041911,
+          "audio_seconds": 3.1927437641723357,
+          "wav_sha256": "0c5d305b2574b1584a14c690a82ec0dcccd3f37d1637e57dd303b85b2e219b97"
+        },
+        {
+          "wall_seconds": 1.7193713999949978,
+          "audio_seconds": 3.1927437641723357,
+          "wav_sha256": "0c5d305b2574b1584a14c690a82ec0dcccd3f37d1637e57dd303b85b2e219b97"
+        }
+      ],
+      "audio_levels": {
+        "rms_dbfs": -13.42118499052479,
+        "sample_rate_hz": 44100,
+        "window_ms": 100,
+        "activity_threshold_dbfs": -60,
+        "trailing_quiet_seconds": 0.0
+      },
+      "binary_sha256": "8b33bc52e7e5178ffe6b3e45979de36e27da1e2f12ccf7802778d6298b302d1a",
+      "archive_sha256": "df9d8b4dcd91c6fc908425b0e08293a3e22f1fc46f75fe64394b333b67f67288",
+      "weight_sha256": {
+        "MiniMax-Music3-language_model-Q8_0.gguf": "9ffa190eb5892c5c0829014dc3070b9ce8d2464636bbaae884b08f1bf6de0ad3",
+        "MiniMax-Music3-transformer-Q8_0.gguf": "cbadca0600f325ba9263ea4dcf0d71d0361abf0733303398b9995fbadac6b38e",
+        "MiniMax-Music3-condition_encoder-F32.gguf": "ebb69ec6e6d730b4dcc48ba1b51da4f201514cbaaa7cae0c8d6259d3b178efb0",
+        "MiniMax-Music3-vocoder-F32.gguf": "4eaa451e54fa755cfe7b0fd15b0bfe64458db35b822e1d250488d0a2a363507d",
+        "MiniMax-Music3-rvq_depth_decoder-Q8_0.gguf": "7da73a953747f3f40857ba266a53eeb5487adbe473d4e7a53c99d5eaf9e5c3d5"
+      },
+      "request_sha256": "3b0f6866020daf48e178cb38a91d53895fe9f50c16848b958a8923afe989e75c",
+      "request_sha256_scope": "canonical JSON from captured native request",
+      "module_names": [
+        "cublas64_13.dll",
+        "cublasLt64_13.dll",
+        "ggml-base.dll",
+        "ggml-cpu-cascadelake.dll",
+        "ggml-cuda.dll",
+        "ggml-vulkan.dll",
+        "ggml.dll"
+      ],
+      "module_sha256": {
+        "ggml-cuda.dll": "bb1019e3f347df267834797e5b05666fa25f9a6bb5c404617f73f05586984729",
+        "ggml-base.dll": "caeae788d035d5e9124f1108528b954a87155aaff9d5b1a03104c046f39a66bb",
+        "ggml-cpu-cascadelake.dll": "7bebf24f101b5b91378b9ebc5613c2fd8a47c71303ff0bf7aa7cb2f952772851",
+        "ggml-vulkan.dll": "e91d85c66cf4ba45b09ab3fe6e2a1f8aa452476b0206c893912e8874b04b3a7b",
+        "ggml.dll": "55335a6c79c400867a7866eb820636a0574dd6d19c612c40b1eb8a5fe9e88436",
+        "cublas64_13.dll": "f1d500d0cd892f5b8c6b6cdbffd82d0c55d5f5427215668e7ceb55aeeccc1b63",
+        "cublasLt64_13.dll": "b592cd016d7673e9cb97716a22b27c4010ee635377a3ba28f37070a9bdb76a68"
+      },
+      "driver": "617.42",
+      "memory_sample_interval_ms": 200,
+      "retention": "keep-loaded",
+      "summary_id": "mm3-b79d37f-bench-CUDA0-quality-q8-3.2s-summary.json",
+      "warm_pre_request_vram_bytes": 16149929984
+    },
+    {
+      "family": "MiniMax Music3",
+      "workload": "3.2 s · 2 steps",
+      "engine": "minimaxmusic.cpp",
+      "revision": "b79d37f",
+      "backend": "Vulkan",
+      "stage": "5.0 published runtime pin (#436)",
+      "weight_profile": "Minimal Q3_K_M / Q4_K_M + F32 vocoder",
+      "cold_seconds": 6.3439999999973224,
+      "warm_median_seconds": 1.484254000002693,
+      "cold_vram_peak_bytes": 9479041024,
+      "cold_vram_baseline_bytes": 2073260032,
+      "cold_vram_increase_bytes": 7405780992,
+      "cold_rss_peak_bytes": 4656955392,
+      "warm_vram_peak_bytes": 9479041024,
+      "warm_rss_peak_bytes": 476332032,
+      "warm_audio_seconds_per_second": 2.151076408867042,
+      "runs": [
+        {
+          "wall_seconds": 6.3439999999973224,
+          "audio_seconds": 3.1927437641723357,
+          "wav_sha256": "94cc722e207ab462bcb6c761a9a9775beec5c14abbdb2e5df9e2710e10b23bd9"
+        },
+        {
+          "wall_seconds": 1.503210199996829,
+          "audio_seconds": 3.1927437641723357,
+          "wav_sha256": "94cc722e207ab462bcb6c761a9a9775beec5c14abbdb2e5df9e2710e10b23bd9"
+        },
+        {
+          "wall_seconds": 1.484254000002693,
+          "audio_seconds": 3.1927437641723357,
+          "wav_sha256": "94cc722e207ab462bcb6c761a9a9775beec5c14abbdb2e5df9e2710e10b23bd9"
+        },
+        {
+          "wall_seconds": 1.4831877000033273,
+          "audio_seconds": 3.1927437641723357,
+          "wav_sha256": "94cc722e207ab462bcb6c761a9a9775beec5c14abbdb2e5df9e2710e10b23bd9"
+        }
+      ],
+      "audio_levels": {
+        "rms_dbfs": -11.470594700469714,
+        "sample_rate_hz": 44100,
+        "window_ms": 100,
+        "activity_threshold_dbfs": -60,
+        "trailing_quiet_seconds": 0.0
+      },
+      "binary_sha256": "8b33bc52e7e5178ffe6b3e45979de36e27da1e2f12ccf7802778d6298b302d1a",
+      "archive_sha256": "df9d8b4dcd91c6fc908425b0e08293a3e22f1fc46f75fe64394b333b67f67288",
+      "weight_sha256": {
+        "mm3-lm-Q3_K_M.gguf": "65a1ee35212547a95ed19067c5b3bc3492725d55e754729e693e4141396064a5",
+        "mm3-dit-Q3_K_M.gguf": "f1a67119c34ede23e27240d3ebd630fa492247e1d0184263574482302ab48f3f",
+        "MiniMax-Music3-condition_encoder-F32.gguf": "ebb69ec6e6d730b4dcc48ba1b51da4f201514cbaaa7cae0c8d6259d3b178efb0",
+        "MiniMax-Music3-vocoder-F32.gguf": "4eaa451e54fa755cfe7b0fd15b0bfe64458db35b822e1d250488d0a2a363507d",
+        "mm3-depth-Q4_K_M.gguf": "77e729d6e0599ed7928a3c0f13a36e1d3ef5f7de9259eaf01a19445549fa958e"
+      },
+      "request_sha256": "08bf3f3eb1cbbde18f9a92178542b3dbeee45347b637bacae2f31c8509d1f619",
+      "request_sha256_scope": "canonical JSON from captured native request",
+      "module_names": [
+        "ggml-base.dll",
+        "ggml-cpu-cascadelake.dll",
+        "ggml-vulkan.dll",
+        "ggml.dll"
+      ],
+      "module_sha256": {
+        "ggml-base.dll": "caeae788d035d5e9124f1108528b954a87155aaff9d5b1a03104c046f39a66bb",
+        "ggml-cpu-cascadelake.dll": "7bebf24f101b5b91378b9ebc5613c2fd8a47c71303ff0bf7aa7cb2f952772851",
+        "ggml-vulkan.dll": "e91d85c66cf4ba45b09ab3fe6e2a1f8aa452476b0206c893912e8874b04b3a7b",
+        "ggml.dll": "55335a6c79c400867a7866eb820636a0574dd6d19c612c40b1eb8a5fe9e88436"
+      },
+      "driver": "617.42",
+      "memory_sample_interval_ms": 200,
+      "retention": "keep-loaded",
+      "summary_id": "mm3-b79d37f-bench-Vulkan0-3.2s-summary.json",
+      "warm_pre_request_vram_bytes": 9478909952
+    },
+    {
+      "family": "MiniMax Music3",
+      "workload": "3.2 s · 2 steps",
+      "engine": "minimaxmusic.cpp",
+      "revision": "b79d37f",
+      "backend": "Vulkan",
+      "stage": "5.0 published runtime pin (#436)",
+      "weight_profile": "Quality Q8_0 + F32 vocoder",
+      "cold_seconds": 14.578000000001339,
+      "warm_median_seconds": 1.9239608999996562,
+      "cold_vram_peak_bytes": 15768989696,
+      "cold_vram_baseline_bytes": 2068180992,
+      "cold_vram_increase_bytes": 13700808704,
+      "cold_rss_peak_bytes": 9168703488,
+      "warm_vram_peak_bytes": 15876993024,
+      "warm_rss_peak_bytes": 605757440,
+      "warm_audio_seconds_per_second": 1.6594639548926935,
+      "runs": [
+        {
+          "wall_seconds": 14.578000000001339,
+          "audio_seconds": 3.1927437641723357,
+          "wav_sha256": "26bff0e841b81a5ce3d29574c59cd34f4123cd89a10998be091efcb12d742fb0"
+        },
+        {
+          "wall_seconds": 1.9239608999996562,
+          "audio_seconds": 3.1927437641723357,
+          "wav_sha256": "26bff0e841b81a5ce3d29574c59cd34f4123cd89a10998be091efcb12d742fb0"
+        },
+        {
+          "wall_seconds": 1.9672148000026937,
+          "audio_seconds": 3.1927437641723357,
+          "wav_sha256": "26bff0e841b81a5ce3d29574c59cd34f4123cd89a10998be091efcb12d742fb0"
+        },
+        {
+          "wall_seconds": 1.9018754999997327,
+          "audio_seconds": 3.1927437641723357,
+          "wav_sha256": "26bff0e841b81a5ce3d29574c59cd34f4123cd89a10998be091efcb12d742fb0"
+        }
+      ],
+      "audio_levels": {
+        "rms_dbfs": -13.90441192072418,
+        "sample_rate_hz": 44100,
+        "window_ms": 100,
+        "activity_threshold_dbfs": -60,
+        "trailing_quiet_seconds": 0.0
+      },
+      "binary_sha256": "8b33bc52e7e5178ffe6b3e45979de36e27da1e2f12ccf7802778d6298b302d1a",
+      "archive_sha256": "df9d8b4dcd91c6fc908425b0e08293a3e22f1fc46f75fe64394b333b67f67288",
+      "weight_sha256": {
+        "MiniMax-Music3-language_model-Q8_0.gguf": "9ffa190eb5892c5c0829014dc3070b9ce8d2464636bbaae884b08f1bf6de0ad3",
+        "MiniMax-Music3-transformer-Q8_0.gguf": "cbadca0600f325ba9263ea4dcf0d71d0361abf0733303398b9995fbadac6b38e",
+        "MiniMax-Music3-condition_encoder-F32.gguf": "ebb69ec6e6d730b4dcc48ba1b51da4f201514cbaaa7cae0c8d6259d3b178efb0",
+        "MiniMax-Music3-vocoder-F32.gguf": "4eaa451e54fa755cfe7b0fd15b0bfe64458db35b822e1d250488d0a2a363507d",
+        "MiniMax-Music3-rvq_depth_decoder-Q8_0.gguf": "7da73a953747f3f40857ba266a53eeb5487adbe473d4e7a53c99d5eaf9e5c3d5"
+      },
+      "request_sha256": "3b0f6866020daf48e178cb38a91d53895fe9f50c16848b958a8923afe989e75c",
+      "request_sha256_scope": "canonical JSON from captured native request",
+      "module_names": [
+        "ggml-base.dll",
+        "ggml-cpu-cascadelake.dll",
+        "ggml-vulkan.dll",
+        "ggml.dll"
+      ],
+      "module_sha256": {
+        "ggml-base.dll": "caeae788d035d5e9124f1108528b954a87155aaff9d5b1a03104c046f39a66bb",
+        "ggml-cpu-cascadelake.dll": "7bebf24f101b5b91378b9ebc5613c2fd8a47c71303ff0bf7aa7cb2f952772851",
+        "ggml-vulkan.dll": "e91d85c66cf4ba45b09ab3fe6e2a1f8aa452476b0206c893912e8874b04b3a7b",
+        "ggml.dll": "55335a6c79c400867a7866eb820636a0574dd6d19c612c40b1eb8a5fe9e88436"
+      },
+      "driver": "617.42",
+      "memory_sample_interval_ms": 200,
+      "retention": "keep-loaded",
+      "summary_id": "mm3-b79d37f-bench-Vulkan0-quality-q8-3.2s-summary.json",
+      "warm_pre_request_vram_bytes": 15772921856
     },
     {
       "family": "MiniMax Music3",

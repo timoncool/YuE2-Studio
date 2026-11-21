@@ -943,6 +943,10 @@ fn profile(id: &'static str, label: &'static str, ids: &[&'static str]) -> Profi
     Profile { id, label, backend: ENGINE_ID, installable: true, recommended, components: ids.to_vec(), total_bytes: ids.iter().filter_map(|id| all.iter().find(|component| component.id == *id)).map(|component| component.bytes).sum(), ram_needed_gb }
 }
 
+pub(super) fn stock_backbone_sha(sha: &str) -> bool {
+    components().iter().any(|component| component.kind == "backbone" && component.sha256 == sha)
+}
+
 fn components() -> Vec<Component> {
     vec![
         c("backbone-bf16", "backbone", "YuE2-3B-BF16.gguf", 7166072352, "668ca9ffa4622449916aae5068b5737363e7ec186a824cd3d7a1a8a95269f166"),

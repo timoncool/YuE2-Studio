@@ -96,7 +96,13 @@ def local_provider():
 with tempfile.TemporaryDirectory(prefix="yue-openrouter-") as profile, local_provider() as upstream:
     root=pathlib.Path(profile)
     if not webview:
-        (root/"openrouter-catalog-v2.json").write_text(json.dumps({"models":[{"id":identifier,"name":model_name,"input_modalities":["text"],"output_modalities":["audio"],"supported_parameters":[],"capabilities":["music_generation"]} for identifier in (model, peer_model, final_model)]}),encoding="utf8")
+        options = ["seed", "temperature", "top_p", "max_tokens"]
+        cached_models = [
+            {"id": identifier, "name": model_name, "input_modalities": ["text"], "output_modalities": ["audio"],
+             "supported_parameters": options if identifier == final_model else [], "capabilities": ["music_generation"]}
+            for identifier in (model, peer_model, final_model)
+        ]
+        (root / "openrouter-catalog-v2.json").write_text(json.dumps({"models": cached_models}), encoding="utf8")
     port = 8791 if webview else unused_port()
     # Only this child process gets the disposable Studio profile and credentials.
     for folder in ("home", "appdata", "localappdata"):
@@ -332,7 +338,7 @@ with tempfile.TemporaryDirectory(prefix="yue-openrouter-") as profile, local_pro
         assert song["generation_settings"]["model_name"]==model_name,song
         assert song["engine_id"]=="openrouter" and not song.get("replay_request") and not song.get("audio_codes"),song
         assert not song["generation_settings"].get("api_key"),song
-        assert calls[0]["model"]==model and calls[0]["stream"] is True,calls
+        assert calls[0]["model"]==model and calls[0]["stream"] is True and "seed" not in calls[0],calls
         assert "soft piano" in calls[0]["messages"][0]["content"] and body["lyrics"] in calls[0]["messages"][0]["content"],calls
         pcm_sha256=assert_played_wav(complete["song"]["audio_url"])
         code,data=request("/v1/music/replay",{"song_id":song_id})
@@ -417,9 +423,13 @@ with tempfile.TemporaryDirectory(prefix="yue-openrouter-") as profile, local_pro
         assert code==200 and len(json.loads(data))==1,(code,data)
         time.sleep(.35)
         assert tool("rvc_quick_list", {}, 30) == [], "cancelled generation queued RVC"
-        code,data=request("/v1/music/jobs",dict(body,title="Final paired source",music_source=source_for(final_model)))
-        assert code == 202,(code,data)
-        final = finish(json.loads(data)["id"])
+        options = {"seed": 0, "temperature": 0.0, "top_p": 0.8, "max_tokens": 4096}
+        submission = tool("song_create",
+                          dict(body, title="Final paired source", music_source=source_for(final_model),
+                               openrouter=options, response_format="detailed"), 41)
+        final = finish(submission["id"])
+        assert final["song"]["song"]["generation_settings"]["request"]["openrouter"] == options, final
+        assert {key: calls[-1][key] for key in options} == options, calls[-1]
         assert final["status"] == "completed" and calls[-1]["model"] == final_model,(final,calls[-1])
         assert len(calls) == 5
 

@@ -55,8 +55,9 @@ import { HotStepCoverFields, type HotStepCoverDraft } from './HotStepCoverFields
 import { SoulXSingerFields, soulxRequired, type SoulXInputs } from './SoulXSingerFields';
 import { Vevo2ModelDirectory, Vevo2SingingFields, vevo2SingingStrings, type Vevo2References } from './Vevo2SingingFields';
 import { NumberField } from './NumberField';
+import { AceTaskControls, aceTaskOptions, newAceTask, restoreAceTask } from './AceTaskControls';
 import { explainCliFailure } from '../services/cliFailure';
-import { loadNativeOpenRouterCatalog, modelsForCapability, refreshNativeOpenRouterCatalog, type NativeOpenRouterModel } from '../services/nativeOpenRouter';
+import { loadNativeOpenRouterCatalog, modelsForCapability, openRouterMusicFields, openRouterMusicParameters, refreshNativeOpenRouterCatalog, type NativeOpenRouterModel, type OpenRouterMusicOptions, type OpenRouterMusicParameter } from '../services/nativeOpenRouter';
 import { miDashengDurationStrings, musicSourceStrings, nativeMusicSourceStrings } from '../i18n/musicSource';
 import { useSignedMusicSelection } from '../services/signedMusicSelection';
 import { useMusicPair, type PairSource } from '../services/musicPair';
@@ -495,6 +496,9 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
   const signed = musicEngine === 'signed';
   const packages = useSignedMusicSelection(Boolean(onMusicEngineChange) || signed, signed);
   const nativeEngine = isProfileMusicEngine(musicEngine) ? musicEngine : undefined;
+  const [aceTask, setAceTask] = useState(newAceTask);
+  const aceEngine = nativeEngine === 'acestep-cpp';
+  const aceOptions = aceEngine ? aceTaskOptions(aceTask) : undefined;
   const audioCpp = nativeEngine === 'audio.cpp';
   const native = useNativeMusicProfiles(nativeEngine, Boolean(onMusicEngineChange));
   const hotstepSa3 = nativeEngine === 'hotstep' && native.profile?.id === hotStepSa3Profile;
@@ -565,6 +569,16 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
   }, [readMusicCatalog, catalogAttempt]);
   const musicModels = musicCatalog.state === 'ready' ? musicCatalog.models : [];
   const selectedMusicModel = !provider.isError && configured ? musicModels.find(model => model.id === musicModelId) : undefined;
+  const [musicParameterDrafts, setMusicParameterDrafts] = useState<Record<string, Partial<Record<OpenRouterMusicParameter, string>>>>({});
+  const modelParameters = openRouterMusicParameters.filter(key => selectedMusicModel?.supported_parameters?.includes(key));
+  const modelDraft = musicParameterDrafts[musicModelId] ?? {};
+  const enteredParameters = modelParameters.filter(key => modelDraft[key]?.trim());
+  const invalidParameters = enteredParameters.filter(key => {
+    const value = Number(modelDraft[key]);
+    const field = openRouterMusicFields[key];
+    return !Number.isFinite(value) || value < field.min || value > field.max
+      || (field.step === 1 && !Number.isSafeInteger(value));
+  });
   const changeMusicModel = useCallback((model: string) => {
     setMusicModelId(model);
     try { window.localStorage.setItem('yue:openrouter-music-model', model); } catch { /* kept until a reload */ }
@@ -966,6 +980,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
     const settings = (song.generationParams ?? {}) as Record<string, unknown>;
     if (isProfileMusicEngine(song.ditModel) || song.ditModel === 'openrouter') {
       if (isProfileMusicEngine(song.ditModel)) {
+        if (song.ditModel === 'acestep-cpp') setAceTask(restoreAceTask(settings));
         const source = settings.music_source as YueRequest['music_source'] | undefined;
         const profile = song.ditModel === 'audio.cpp' ? (source?.kind === 'audio_cpp' ? source.model : audioCppMiniMax)
           : source?.kind === 'native' && source.engine === song.ditModel ? source.model : song.lmModel;
@@ -987,7 +1002,14 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
         });
         native.restore(song.ditModel, profile ?? '', settings);
       } else {
-        changeMusicModel(typeof settings.model === 'string' ? settings.model : '');
+        const model = typeof settings.model === 'string' ? settings.model : '';
+        changeMusicModel(model);
+        if (model) {
+          const options = (settings.request as Partial<YueRequest> | undefined)?.openrouter;
+          const draft = Object.fromEntries(openRouterMusicParameters.flatMap(key =>
+            typeof options?.[key] === 'number' ? [[key, String(options[key])]] : []));
+          setMusicParameterDrafts(previous => ({ ...previous, [model]: draft }));
+        }
       }
       setStyle(song.style);
       setLyrics(song.lyrics);
@@ -1715,6 +1737,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
       return;
     }
     if (nativeEngine) {
+      if (aceEngine && !aceOptions) return;
       if (!native.ready || !native.profile || (mulaCover && !mulaCoverDraft.original) || (hotstep && (!mulaCoverDraft.original || !mulaCoverDraft.abc.trim()))) return;
       if (miDasheng && !miDashengPromptReady(scene)) return;
       if (soulx && (!soulxInputs.reference_song_id || (soulxConversion
@@ -1729,6 +1752,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
       if ((stableAudio || hotstepSa3) && !style.trim()) { setError(stableAudioPromptRequired(language)); return; }
       if (!hotstep && !magenta && !miDasheng && !miniMaxH3 && !mulaCover && !soulx && !style.trim() && !lyrics.trim()) { setError(tt('styleOrLyricsRequired')); return; }
       setError(null);
+      const settings = nativeGenerationSettings(nativeEngine, (vevo2 || soulx) ? { seed: native.settings.seed, output_format: native.settings.output_format } : miDasheng || magenta ? { ...native.settings, steps: undefined } : native.settings);
       generate({
         music_source: nativeEngine === 'audio.cpp'
           ? { kind: 'audio_cpp', model: native.profile.id }
@@ -1747,16 +1771,19 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
         ...(hotstepHeart ? { hotstep_heartmula: hotstepHeartDraft } : {}),
         ...(vevo2 ? { vevo2: vevoReferences } : {}),
         ...(soulx ? { soulx: soulxConversion ? { reference_song_id: soulxInputs.reference_song_id, source_song_id: soulxInputs.source_song_id } : { reference_song_id: soulxInputs.reference_song_id, reference_metadata: soulxInputs.reference_metadata, target_metadata: soulxInputs.target_metadata, control: soulxInputs.control } } : {}),
-        ...nativeGenerationSettings(nativeEngine, (vevo2 || soulx) ? { seed: native.settings.seed, output_format: native.settings.output_format } : miDasheng || magenta ? { ...native.settings, steps: undefined } : native.settings),
+        ...settings,
+        ...(aceOptions && Object.keys(aceOptions).length ? { ace: { ...settings.ace, ...aceOptions } } : {}),
       });
       return;
     }
     if (cloud) {
-      if (!selectedMusicModel) return;
+      if (!selectedMusicModel || invalidParameters.length) return;
       if (!style.trim() && !lyrics.trim()) { setError(tt('styleOrLyricsRequired')); return; }
+      const openrouter: OpenRouterMusicOptions = Object.fromEntries(enteredParameters.map(key => [key, Number(modelDraft[key])]));
       setError(null);
       generate({
         music_source: { kind: 'openrouter', model: selectedMusicModel.id },
+        ...(enteredParameters.length ? { openrouter } : {}),
         style: finishedStyle(style),
         lyrics: lyrics.replace(/\r\n?/g, '\n').trim(),
         ...(name.trim() ? { title: name.trim() } : {}),
@@ -2104,6 +2131,23 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
                                 <option value="">{musicStrings.choose}</option>
                                 {musicModels.map(model => <option key={model.id} value={model.id}>{model.name || model.id}</option>)}
                               </select>}
+                        {modelParameters.length > 0 && <div className="grid grid-cols-2 gap-2">
+                          {modelParameters.map(key => {
+                            const field = openRouterMusicFields[key];
+                            return <label key={key} className="min-w-0 text-xs">
+                              {t(field.label)}
+                              <input type="number" aria-label={t(field.label)} min={field.min} max={field.max} step={field.step}
+                                placeholder={t('auto')} value={modelDraft[key] ?? ''} aria-invalid={invalidParameters.includes(key)}
+                                className={CONTROL + ' mt-1 aria-invalid:border-red-600'}
+                                onChange={event => {
+                                  const value = event.target.value;
+                                  setMusicParameterDrafts(previous => ({
+                                    ...previous, [musicModelId]: { ...previous[musicModelId], [key]: value },
+                                  }));
+                                }} />
+                            </label>;
+                          })}
+                        </div>}
                         <button type="button" onClick={requestCatalogRefresh} className="text-xs text-pink-600 underline dark:text-pink-300">
                           {musicStrings.refresh}
                         </button>
@@ -2123,6 +2167,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
               {magenta && <MagentaFields value={magentaOptions} onChange={setMagentaOptions} tracks={magentaTracks} controlClassName={CONTROL} />}
               {hotstep && <HotStepCoverFields draft={mulaCoverDraft} onChange={setMulaCoverDraft} ready={native.ready}
                 refresh={native.refresh} controlClassName={CONTROL} />}
+              {aceEngine && <AceTaskControls value={aceTask} onChange={setAceTask} control={CONTROL} profileReady={native.ready} />}
               {mulaCover && <MuLaCoverFields value={mulaCoverDraft.original}
                 onChange={(original, abc) => setMulaCoverDraft(previous => previous.original === original ? previous : { original, abc })}
                 onInstall={native.refresh}
@@ -3132,8 +3177,8 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
         <button
           type="button"
           onClick={submit}
-          disabled={pair.blocked || (signed ? !packages.ready : cloud ? !selectedMusicModel : nativeEngine
-            ? !native.ready || (miDasheng && !miDashengPromptReady(scene)) || (magenta && !magentaReady) || (mulaCover && !mulaCoverDraft.original) || (hotstep && (!mulaCoverDraft.original || !mulaCoverDraft.abc.trim()))
+          disabled={pair.blocked || (signed ? !packages.ready : cloud ? !selectedMusicModel || invalidParameters.length > 0 : nativeEngine
+            ? !native.ready || (aceEngine && !aceOptions) || (miDasheng && !miDashengPromptReady(scene)) || (magenta && !magentaReady) || (mulaCover && !mulaCoverDraft.original) || (hotstep && (!mulaCoverDraft.original || !mulaCoverDraft.abc.trim()))
             : yue && instrumental && instrumentalLoraLoading && !isGenerating)}
           className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-linear-to-r from-orange-500 to-pink-600 text-base font-bold text-white shadow-lg transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
         >

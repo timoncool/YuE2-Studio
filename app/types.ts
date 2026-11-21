@@ -144,6 +144,7 @@ export type MusicEngine = 'local' | 'openrouter' | 'signed' | ProfileMusicEngine
  */
 export interface YueRequest {
   rvc_after?: import('./services/rvcQuick').RvcSelection;
+  openrouter?: import('./services/nativeOpenRouter').OpenRouterMusicOptions;
   /** Capture the editor's selection with the job so later switches cannot reroute it. */
   hotstep_heartmula?: { adapter?: string; adapter_scale?: number };
   hotstep_sa3?: { sampler?: 'pingpong' | 'euler'; adapter?: string; adapter_scale?: number };
@@ -155,7 +156,7 @@ export interface YueRequest {
   vevo2?: import('./components/Vevo2SingingFields').Vevo2References;
   controlfoley_video?: string;
   soulx?: import('./components/SoulXSingerFields').SoulXInputs;
-  ace?: { guidance_scale?: number };
+  ace?: import('./components/AceTaskControls').AceCreateOptions;
   /** Style tags or a short style prompt, verbatim under `[Tags]`. */
   style: string;
   /** Lyrics with section tags, verbatim under `[Lyrics]`. */

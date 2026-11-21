@@ -391,6 +391,60 @@ it('keeps settings by native engine and profile and submits the selected pair', 
   expect(field('textarea[aria-label="scoreCardTitle"]')!.value).toBe('');
 });
 
+it('creates native ACE covers and restores a migrated repaint with its source, reference and range', async () => {
+  librarySongs = [
+    { id: 'origin', title: 'Source track', audioUrl: '/origin.wav' },
+    { id: 'voice', title: 'Reference track', audioUrl: '/voice.wav' },
+  ] as Song[];
+  vi.mocked(fetch).mockImplementation(async url => String(url).endsWith('/acestep-cpp/profiles')
+    ? Response.json({ engine: 'acestep-cpp', engine_installed: true, profiles: [{ id: 'balanced', label: 'Balanced', ready: true, missing: [], total_bytes: 1 }] })
+    : Response.json([]));
+  const select = (label: string, value: string) => act(() => {
+    const input = host.querySelector<HTMLSelectElement>(`select[aria-label="${label}"]`)!;
+    input.value = value;
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  const control = (name: string) => field(`input[aria-label="${name}"]`) as HTMLInputElement;
+  const create = () => buttonNamed('create') as HTMLButtonElement;
+  act(() => root.render(panel({ musicEngine: 'acestep-cpp' })));
+  await flush();
+  select('Local model', 'balanced');
+  await flush();
+  type(field('textarea[aria-label="styleCardTitle"]')!, 'acoustic folk');
+  select('ACE-Step task', 'cover');
+  expect(create().disabled).toBe(true);
+  select('Source song', 'origin');
+  type(control('Cover strength'), '0.65');
+  click(create());
+  expect(sent[0]).toMatchObject({
+    music_source: { kind: 'native', engine: 'acestep-cpp', model: 'balanced' },
+    style: 'acoustic folk',
+    ace: { task_type: 'cover', source_song_id: 'origin', audio_cover_strength: 0.65 },
+  });
+
+  const imported = {
+    ditModel: 'acestep-cpp', lmModel: 'balanced', title: 'Migrated repaint', style: 'indie pop', lyrics: 'new verse',
+    generationParams: {
+      task_type: 'repaint', source_song_id: 'origin', reference_song_id: 'voice', repainting_start: 2, repainting_end: 4,
+      guidance_scale: 3, seed: 22, music_source: { kind: 'native', engine: 'acestep-cpp', model: 'balanced' },
+    },
+  } as Song;
+  act(() => root.render(panel({ musicEngine: 'acestep-cpp', initialData: { song: imported, timestamp: 1 } })));
+  await flush();
+  expect(host.querySelector<HTMLSelectElement>('select[aria-label="ACE-Step task"]')!.value).toBe('repaint');
+  expect(control('Repaint start (seconds)').value).toBe('2');
+  expect(control('Repaint end (seconds)').value).toBe('4');
+  expect(field('input[aria-label="Cover strength"]')).toBeNull();
+  type(control('Repaint end (seconds)'), '1');
+  expect(create().disabled).toBe(true);
+  type(control('Repaint end (seconds)'), '4');
+  click(create());
+  expect(sent[1]).toMatchObject({ seed: 22, ace: {
+    task_type: 'repaint', repainting_start: 2, repainting_end: 4, source_song_id: 'origin',
+    reference_song_id: 'voice', guidance_scale: 3,
+  } });
+});
+
 it('posts the remembered MiniMax output format and keeps it out of ACE requests', async () => {
   vi.stubGlobal('EventSource', class { close() {} });
   const profiles = ['balanced', 'quality'].map(id => ({ id, label: id, ready: true, missing: [], total_bytes: 1 }));
@@ -1349,7 +1403,7 @@ it('lets an active signed update be cancelled and retried while the previous pai
 
 describe('OpenRouter music creation', () => {
   const catalog = () => Response.json({ models: [
-    { id: 'test/music', name: 'Music test model', capabilities: ['music_generation'] },
+    { id: 'test/music', name: 'Music test model', capabilities: ['music_generation'], supported_parameters: ['seed'] },
     { id: 'test/asr', name: 'Speech-only test model', capabilities: ['speech_to_text'] },
   ] });
   const select = (label: string) => [...host.querySelectorAll('select')]
@@ -1390,6 +1444,48 @@ describe('OpenRouter music creation', () => {
     expect(sent[1]).toMatchObject({ music_source: { kind: 'local' }, style: 'ambient soul, soft piano', steps: 47 });
   });
 
+  it('uses advertised OpenRouter controls and keeps separate drafts when switching models', async () => {
+    configured = true;
+    const modelA = { id: 'test/a', name: 'A', capabilities: ['music_generation'], supported_parameters: ['seed', 'temperature', 'response_format'] };
+    const modelB = { id: 'test/b', name: 'B', capabilities: ['music_generation'], supported_parameters: ['top_p', 'max_tokens'] };
+    vi.mocked(fetch).mockImplementation(async url =>
+      String(url) === '/v1/openrouter/catalog' ? Response.json({ models: [modelA, modelB] }) : Response.json({}));
+    act(() => root.render(panel({ musicEngine: 'openrouter', onMusicEngineChange: vi.fn() })));
+    await flush();
+    const option = (name: string) => field(`input[aria-label="lmProvider.${name}"]`);
+    const value = (name: string) => (option(name) as HTMLInputElement).value;
+    choose(select('Model'), 'cloud:test/a');
+    await flush();
+    type(option('seed')!, '0');
+    type(option('temperature')!, '0.7');
+    expect(option('topP')).toBeFalsy();
+    expect(option('response_format')).toBeFalsy();
+
+    choose(select('Model'), 'cloud:test/b');
+    await flush();
+    expect(option('seed')).toBeFalsy();
+    type(option('topP')!, '0.8');
+    type(option('maxTokens')!, '4096');
+    choose(select('Model'), 'cloud:test/a');
+    await flush();
+    expect(value('seed')).toBe('0');
+    expect(value('temperature')).toBe('0.7');
+    type(field('textarea[aria-label="styleCardTitle"]')!, 'ambient soul');
+    click(create());
+    expect(sent[0]).toMatchObject({ music_source: { kind: 'openrouter', model: 'test/a' }, openrouter: { seed: 0, temperature: 0.7 } });
+    expect(sent[0].openrouter).toEqual({ seed: 0, temperature: 0.7 });
+
+    choose(select('Model'), 'cloud:test/b');
+    await flush();
+    expect(value('topP')).toBe('0.8');
+    expect(value('maxTokens')).toBe('4096');
+    type(option('topP')!, '1.5');
+    expect(create().disabled).toBe(true);
+    type(option('topP')!, '0.8');
+    click(create());
+    expect(sent[1].openrouter).toEqual({ top_p: 0.8, max_tokens: 4096 });
+  });
+
   it('reuses the saved cloud model and requires a new choice when that model disappears', async () => {
     configured = true;
     vi.mocked(fetch).mockImplementation(async url =>
@@ -1405,7 +1501,12 @@ describe('OpenRouter music creation', () => {
     expect(sent).toHaveLength(0);
     click(create());
     expect(sent[0]).toMatchObject({ style: 'piano', lyrics: 'verse', music_source: { model: 'test/music' } });
-    show({ ...song, generationParams: { model: 'retired/model' } }, 2);
+    show({ ...song, generationParams: { model: 'test/music', request: { openrouter: { seed: 81 } } } }, 2);
+    await flush();
+    expect((field('input[aria-label="lmProvider.seed"]') as HTMLInputElement).value).toBe('81');
+    click(create());
+    expect(sent[1].openrouter).toEqual({ seed: 81 });
+    show({ ...song, generationParams: { model: 'retired/model' } }, 3);
     await flush();
     expect(select('OpenRouter music model').value).toBe('');
     expect(create().disabled).toBe(true);

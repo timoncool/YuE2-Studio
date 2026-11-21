@@ -36,7 +36,8 @@ export interface InstalledAdapter {
   /** The DiT width the weights fit, when known. */
   model?: DitFamily | null;
   slots: string[];
-  origin: { type: 'catalog' | 'imported' | 'trained' | 'hub'; catalog_id?: string; repo?: string; revision?: string; file?: string };
+  origin: { type: 'catalog' | 'imported' | 'trained' | 'hub'; catalog_id?: string; repo?: string; revision?: string; file?: string; training_base?: { id: string } };
+  training_base_matches?: boolean;
   created_at: string;
   bytes: number;
   error?: string | null;
