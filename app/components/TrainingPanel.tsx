@@ -567,10 +567,11 @@ const SongsStep: React.FC<{
   onPrepare: (request: PrepareRequest) => void;
   onNext: () => void;
   onTrainAfter: (on: boolean) => void;
+  canTrainAfter: boolean;
   onChanged: (dataset: Dataset) => void;
   onRefresh: () => void;
   onError: (message: string) => void;
-}> = ({ state, dataset, job, adding, onAdd, onAddLibrary, onPrepare, onNext, onTrainAfter, onChanged, onRefresh, onError }) => {
+}> = ({ state, dataset, job, adding, onAdd, onAddLibrary, onPrepare, onNext, onTrainAfter, canTrainAfter, onChanged, onRefresh, onError }) => {
   const { t, tt, songs } = useStrings();
   const [open, setOpen] = useState<string | null>(null);
   const [picking, setPicking] = useState(false);
@@ -731,8 +732,8 @@ const SongsStep: React.FC<{
       <div className="sticky bottom-0 z-10 flex flex-wrap items-center justify-end gap-3 rounded-2xl border border-zinc-200 bg-white/90 p-3 backdrop-blur-sm dark:border-white/10 dark:bg-zinc-950/90">
         {working && (
           <label className="mr-auto flex items-center gap-2 text-xs text-zinc-700 dark:text-zinc-200">
-            <input type="checkbox" checked={Boolean(mine?.train_after)} disabled={!state.pack_ready} onChange={event => onTrainAfter(event.target.checked)} className="accent-pink-500" />
-            {state.pack_ready ? t('trainingTrainWhenReady') : t('trainingTrainWhenReadyNeedsPack')}
+            <input type="checkbox" checked={Boolean(mine?.train_after)} disabled={!canTrainAfter} onChange={event => onTrainAfter(event.target.checked)} className="accent-pink-500" />
+            {canTrainAfter ? t('trainingTrainWhenReady') : t('trainingTrainWhenReadyNeedsPack')}
           </label>
         )}
         <button type="button" onClick={onNext} className={PRIMARY}>{t('trainingNextTrain')}<ChevronRight size={15} /></button>
@@ -743,14 +744,13 @@ const SongsStep: React.FC<{
 };
 
 /** Step two: what will be trained, checked, and the button that starts it. */
-const TrainStep: React.FC<{ state: TrainingState; recipe: Recipe; setRecipe: (recipe: Recipe) => void; dataset: Dataset; job: PrepareStatus | null; onBack: () => void; onStarted: () => void; onChanged: (dataset: Dataset) => void; onRefresh: () => void; onError: (message: string) => void }> = ({ state, recipe, setRecipe, dataset, job, onBack, onStarted, onChanged, onRefresh, onError }) => {
+const TrainStep: React.FC<{ state: TrainingState; recipe: Recipe; setRecipe: (recipe: Recipe) => void; baseId: string; setBaseId: (id: string) => void; dataset: Dataset; job: PrepareStatus | null; onBack: () => void; onStarted: () => void; onChanged: (dataset: Dataset) => void; onRefresh: () => void; onError: (message: string) => void }> = ({ state, recipe, setRecipe, baseId, setBaseId, dataset, job, onBack, onStarted, onChanged, onRefresh, onError }) => {
   const { t, songs } = useStrings();
   const [advanced, setAdvanced] = useState(false);
   const [starting, setStarting] = useState(false);
   const { language } = useI18n();
   const [trainingEngine, setTrainingEngine] = useState<'yue2' | 'sa3' | 'heartmula' | 'rvc'>('yue2');
   const [selectedTrainer, setSelectedTrainer] = useState('');
-  const [baseId, setBaseId] = useState('stock');
   const [installingBase, setInstallingBase] = useState(false);
   const base = state.training_bases?.find(option => option.id === baseId);
   const alternateBase = Boolean(base && base.id !== 'stock');
@@ -1201,6 +1201,7 @@ export const TrainingPanel: React.FC = () => {
   const [openId, setOpenId] = useState<string | null>(null);
   const [step, setStep] = useState<Step>('songs');
   const [recipes, setRecipes] = useState<Record<string, Recipe>>({});
+  const [bases, setBases] = useState<Record<string, string>>({});
   const [adding, setAdding] = useState<{ done: number; total: number } | null>(null);
   const [importing, setImporting] = useState(false);
   const [deleting, setDeleting] = useState<{ kind: 'dataset' | 'run'; id: string } | null>(null);
@@ -1294,7 +1295,7 @@ export const TrainingPanel: React.FC = () => {
   const trainAfter = async (on: boolean) => {
     if (!dataset || !state) return;
     try {
-      await setTrainAfter(on ? { name: dataset.name, recipe: recipes[dataset.id] ?? state.recipe_defaults } : null);
+      await setTrainAfter(on ? { name: dataset.name, recipe: recipes[dataset.id] ?? state.recipe_defaults, base_id: bases[dataset.id] } : null);
       await refresh();
     } catch (problem) {
       setError(errorText(problem));
@@ -1317,6 +1318,11 @@ export const TrainingPanel: React.FC = () => {
   };
 
   if (!state) return <p className="flex items-center gap-2 text-sm text-zinc-500"><Loader2 size={14} className="animate-spin" />{offline}</p>;
+  const selectedBase = dataset && bases[dataset.id];
+  const canTrainAfter = !selectedBase || selectedBase === 'stock'
+    ? state.pack_ready
+    : Boolean(state.training_shared_weights_ready && state.trainers?.[0]?.installed
+      && state.training_bases?.some(base => base.id === selectedBase && base.installed));
   const runs = dataset ? state.runs.filter(run => run.dataset_id === dataset.id) : [];
   // one step after another: training once there are songs, the result once there was a run
   const steps: { id: Step; label: string; open: boolean }[] = [
@@ -1382,12 +1388,13 @@ export const TrainingPanel: React.FC = () => {
           onPrepare={request => void prepare(request)}
           onNext={() => setStep('train')}
           onTrainAfter={on => void trainAfter(on)}
+          canTrainAfter={canTrainAfter}
           onChanged={replace}
           onRefresh={() => void refresh()}
           onError={setError}
         />
       )}
-      {dataset && step === 'train' && <TrainStep state={state} recipe={recipes[dataset.id] ?? state.recipe_defaults} setRecipe={next => setRecipes(current => ({ ...current, [dataset.id]: next }))} dataset={dataset} job={job} onBack={() => setStep('songs')} onStarted={() => { setStep('result'); void refresh(); }} onChanged={replace} onRefresh={() => void refresh()} onError={setError} />}
+      {dataset && step === 'train' && <TrainStep state={state} recipe={recipes[dataset.id] ?? state.recipe_defaults} setRecipe={next => setRecipes(current => ({ ...current, [dataset.id]: next }))} baseId={bases[dataset.id] ?? 'stock'} setBaseId={next => setBases(current => ({ ...current, [dataset.id]: next }))} dataset={dataset} job={job} onBack={() => setStep('songs')} onStarted={() => { setStep('result'); void refresh(); }} onChanged={replace} onRefresh={() => void refresh()} onError={setError} />}
       {dataset && step === 'result' && (
         <div className="space-y-3">
           {runs.length === 0 && <p className="text-sm text-zinc-500">{t('trainingNoRuns')}</p>}

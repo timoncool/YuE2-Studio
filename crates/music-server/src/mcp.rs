@@ -3031,7 +3031,7 @@ fn tools() -> &'static [Tool] {
             },
             Tool {
                 name: "dataset_prepare_train_after",
-                description: "For the preparation at work: start this training run once every song is ready (train: {name, recipe}), or not (train: null).",
+                description: "For the preparation at work: start this training run once every song is ready (train: {name, recipe, optional base_id}), or disable auto-start (train: null).",
                 schema: || object(json!({ "train": { "anyOf": [{ "type": "object" }, { "type": "null" }] } }), &[]),
                 call: |args| post("/v1/training/prepare/train-after".into(), args.clone()),
             },

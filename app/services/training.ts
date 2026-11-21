@@ -294,7 +294,7 @@ export const prepareDataset = (id: string, request: PrepareRequest) => call<Prep
 export const takeAsIs = (id: string, items?: string[]) => call<Dataset>(`/v1/training/datasets/${id}/take-as-is`, json('POST', { items }));
 export const cancelPrepare = () => call<void>('/v1/training/prepare/cancel', { method: 'POST' });
 /** Starts this run once the preparation at work is done, or no run with null. */
-export const setTrainAfter = (train: { name: string; recipe: Recipe } | null) => call<void>('/v1/training/prepare/train-after', json('POST', { train }));
+export const setTrainAfter = (train: { name: string; recipe: Recipe; base_id?: string } | null) => call<void>('/v1/training/prepare/train-after', json('POST', { train }));
 
 /** A file picked or dropped, with the folder it came from inside what was chosen. */
 export interface PickedFile {

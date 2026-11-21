@@ -156,6 +156,14 @@ it.each([undefined, 'ruach-rs-tw-2.0x0.75'])('starts a signed trainer with train
         baseSelect.value = base;
         baseSelect.dispatchEvent(new Event('change', { bubbles: true }));
       });
+      await press('trainingBackSongs');
+      await press('2 · trainingStepTrain');
+      expect(host.querySelector<HTMLSelectElement>(`select:has(option[value="${base}"])`)?.value).toBe(base);
+      const reopenedTrainer = host.querySelector<HTMLSelectElement>('select:has(option[value="signed-trainer"])')!;
+      await act(async () => {
+        reopenedTrainer.value = 'signed-trainer';
+        reopenedTrainer.dispatchEvent(new Event('change', { bubbles: true }));
+      });
     }
     await press('trainingStart');
     expect(start).toHaveBeenCalledWith({ dataset_id: 'set', name: 'Test vocals', recipe: state.recipe_defaults,
