@@ -291,7 +291,10 @@ def check_lrc(root, pid):
         audio.setparams((1, 2, 24000, 0, "NONE", "not compressed"))
         audio.writeframes(bytes(24000*8))
     song = tool("library_import_audio", path=str(source), title=title)
-    abc = "X:1\nT:Hosted score\nM:4/4\nL:1/4\nK:C\nC D E F|G A B c|"
+    abc = ('X:1\nT:\nM:4/4\nL:1/4\nQ:1/4=120\n'
+           'V: Vocal clef=treble name="Vocal Melody" snm="Vocal"\n'
+           'V: Ins clef=treble name="Ins Melody" snm="Inst."\n'
+           'K:C\nV: Vocal\nC D E F |\nV: Ins\nG4 |')
     record = tool("library_song_get", song_id=song["id"], response_format="detailed")
     record["generation_settings"] = {**(record.get("generation_settings") or {}), "abc": abc}
     tool("library_song_update", song_id=song["id"], song=record)
@@ -414,6 +417,46 @@ def check_lrc(root, pid):
         click('button "Songbook"')
         click('button "Print A4"')
         pdf = root/"songbook.pdf"
+        # WebView2 may show its own print preview even with a default printer.
+        # Read the isolated runner's UIA tree and confirm the visible Print action.
+        print_dialog = r"""
+$ErrorActionPreference = 'Stop'
+Add-Type -AssemblyName UIAutomationClient, UIAutomationTypes
+$tree = [Windows.Automation.TreeScope]
+$all = [Windows.Automation.Condition]::TrueCondition
+$root = [Windows.Automation.AutomationElement]::RootElement
+$deadline = [DateTime]::UtcNow.AddSeconds(22)
+while ([DateTime]::UtcNow -lt $deadline -and !(Test-Path -LiteralPath $env:STUDIO_QA_PDF)) {
+  $ids = [Collections.Generic.HashSet[int]]::new()
+  [void]$ids.Add([int]$env:STUDIO_QA_PID)
+  $procs = @(Get-CimInstance Win32_Process)
+  do {
+    $count = $ids.Count
+    foreach ($p in $procs) {
+      if ($ids.Contains([int]$p.ParentProcessId)) { [void]$ids.Add([int]$p.ProcessId) }
+    }
+  } while ($count -ne $ids.Count)
+  foreach ($window in $root.FindAll($tree::Children,$all)) {
+    if (!$ids.Contains($window.Current.ProcessId) -and $window.Current.Name -notmatch '^Print(ing)?$') { continue }
+    $elements = $window.FindAll($tree::Descendants,$all)
+    $buttons = @($elements | Where-Object {
+      $_.Current.ControlType -eq [Windows.Automation.ControlType]::Button -and !$_.Current.IsOffscreen
+    })
+    Write-Output (@{window=$window.Current.Name;buttons=@($buttons | ForEach-Object {$_.Current.Name})} | ConvertTo-Json -Compress)
+    $confirm = $buttons | Where-Object {$_.Current.Name -eq 'Print' -and $_.Current.IsEnabled} | Select-Object -First 1
+    if ($confirm) {
+      $confirm.GetCurrentPattern([Windows.Automation.InvokePattern]::Pattern).Invoke()
+      Write-Output 'Confirmed print'
+      exit 0
+    }
+  }
+  Start-Sleep -Milliseconds 500
+}
+"""
+        with (out/"print-dialog.txt").open("w", encoding="utf8") as log:
+            subprocess.run(["powershell", "-NoProfile", "-Command", print_dialog],
+                           env=dict(os.environ, STUDIO_QA_PDF=str(pdf), STUDIO_QA_PID=str(pid)),
+                           stdout=log, stderr=subprocess.STDOUT, timeout=40, check=True)
         for _ in range(150):
             try:
                 printed = pdf.read_bytes()
