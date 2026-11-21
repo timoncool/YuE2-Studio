@@ -563,6 +563,8 @@ impl YueServerSupervisor {
         }
         if self.config.options.backend == ComputeBackend::Hip {
             command.env("ROCBLAS_USE_HIPBLASLT", "0");
+            #[cfg(windows)]
+            command.env("ROCBLAS_TENSILE_LIBPATH", hip_tensile_directory(&self.config.executable)?);
             for variable in ["HIP_VISIBLE_DEVICES", "ROCR_VISIBLE_DEVICES", "HSA_OVERRIDE_GFX_VERSION"] {
                 command.env_remove(variable);
             }
@@ -721,6 +723,46 @@ fn canonical_file(path: &Path, label: &str) -> Result<PathBuf> {
         bail!("{label} is not a file: {}", path.display());
     }
     fs::canonicalize(path).with_context(|| format!("canonicalize {label}: {}", path.display()))
+}
+
+#[cfg(windows)]
+pub fn hip_tensile_directory(executable: &Path) -> Result<PathBuf> {
+    use std::os::windows::ffi::{OsStrExt, OsStringExt};
+    use windows_sys::Win32::Storage::FileSystem::GetShortPathNameW;
+
+    let folder = strip_verbatim(executable)
+        .parent()
+        .context("The HIP executable has no containing directory")?
+        .join("rocblas/library");
+    let mut longest_name = 0;
+    for entry in fs::read_dir(&folder).context("Read the HIP rocBLAS device data")? {
+        longest_name = longest_name.max(entry?.file_name().encode_wide().count());
+    }
+    let fits = |path: &Path| path.as_os_str().encode_wide().count() + 1 + longest_name < 260;
+    if fits(&folder) {
+        return Ok(folder);
+    }
+
+    // rocBLAS/Tensile uses the legacy Windows path limit for device data.
+    // Ask Windows for an alias to the existing directory. Never change the
+    // volume's 8.3 policy or the user's global long-path settings.
+    let wide: Vec<u16> = folder.as_os_str().encode_wide().chain(Some(0)).collect();
+    // SAFETY: wide is NUL-terminated and a null output asks for the required size.
+    let required = unsafe { GetShortPathNameW(wide.as_ptr(), std::ptr::null_mut(), 0) };
+    if required > 0 {
+        let mut short = vec![0; required as usize];
+        // SAFETY: the writable buffer is exactly required UTF-16 code units.
+        let length = unsafe { GetShortPathNameW(wide.as_ptr(), short.as_mut_ptr(), required) };
+        if length > 0 && length < required {
+            let alias = PathBuf::from(std::ffi::OsString::from_wide(&short[..length as usize]));
+            if fits(&alias) && fs::canonicalize(&alias).ok() == Some(fs::canonicalize(&folder)?) {
+                return Ok(alias);
+            }
+        }
+    }
+    anyhow::bail!(
+        "The HIP rocBLAS data path is too long and Windows has no usable short alias. Move the Studio data folder to a shorter path or choose Vulkan."
+    )
 }
 
 fn canonical_directory(path: &Path, label: &str) -> Result<PathBuf> {
@@ -896,6 +938,27 @@ pub fn startup_log_tail(lines: usize) -> Vec<String> {
     let text = String::from_utf8_lossy(&bytes);
     let all: Vec<&str> = text.lines().filter(|line| !line.trim().is_empty()).collect();
     all.iter().rev().take(lines).rev().map(|line| (*line).to_string()).collect()
+}
+
+#[cfg(all(test, windows))]
+#[test]
+fn hip_tensile_uses_the_installed_library_folder_and_handles_legacy_limits() {
+    let root = std::env::temp_dir().join(format!("yue-hip-path-{}", std::process::id()));
+    let executable = root.join("bin/yue-server.exe");
+    let library = root.join("bin/rocblas/library");
+    fs::create_dir_all(&library).unwrap();
+    fs::write(library.join("TensileLibrary.dat"), []).unwrap();
+    assert_eq!(fs::canonicalize(hip_tensile_directory(&executable).unwrap()).unwrap(),
+        fs::canonicalize(&library).unwrap());
+    let long_root = root.join("long".repeat(30));
+    let long_library = long_root.join("bin/rocblas/library");
+    fs::create_dir_all(&long_library).unwrap();
+    fs::write(long_library.join(format!("{}.dat", "T".repeat(150))), []).unwrap();
+    match hip_tensile_directory(&long_root.join("bin/yue-server.exe")) {
+        Ok(alias) => assert_eq!(fs::canonicalize(alias).unwrap(), fs::canonicalize(&long_library).unwrap()),
+        Err(error) => assert!(error.to_string().contains("short alias"), "{error:#}"),
+    }
+    fs::remove_dir_all(root).unwrap();
 }
 
 #[cfg(test)]

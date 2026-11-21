@@ -271,6 +271,10 @@ impl Runtime {
                 return Err(format!("Install the YuE2 HIP component for {} in Engine Settings, or choose Vulkan.", host.gfx.name()));
             }
             let binary = runtime.installed(package).map_err(|error| error.to_string())?;
+            #[cfg(windows)]
+            if verify {
+                music_engine::yue_server::hip_tensile_directory(&binary).map_err(|error| error.to_string())?;
+            }
             if verify && !crate::pin_sha::holds(&binary, ENGINE_SHA) {
                 return Err("The HIP executable checksum changed. Reinstall the component or choose Vulkan.".into());
             }
