@@ -1677,6 +1677,7 @@ export const ru = {
     midiDelete: 'Удалить MIDI',
     midiStage_preparing: 'Подготовка',
     midiStage_downloading: 'Скачивается транскрибер',
+    midiStage_waiting_for_runtime: 'Ожидание общей установки audio.cpp',
     midiStage_reading: 'Читаю аудио',
     midiStage_transcribing: 'Слушаю ноты',
     midiStage_done: 'Готово',
