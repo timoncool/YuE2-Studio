@@ -560,6 +560,7 @@ const JOURNAL: &[(&str, &str, &str)] = &[
     ("assistant_model_install", "started", "download"),
     ("separator_install", "started", "download"),
     ("separator_runtime_install", "started", "download"),
+    ("mulacover_runtime_install", "started", "download"),
     ("recogniser_install", "started", "download"),
     ("midi_install", "started", "download"),
     ("restore_install", "started", "download"),
@@ -1688,7 +1689,7 @@ fn tools() -> &'static [Tool] {
                     "mp3_bitrate": { "type": "integer" },
                     "output_format": { "type": "string", "enum": ["flac", "mp3", "wav32"], "description": "how the song is kept: lossless FLAC, 32-bit WAV, or MP3 at mp3_bitrate" },
                     "cover_prompt": { "type": "string", "description": "what the cover should show; it is drawn only when an image model is set up (settings_get, covers), else the song has no cover" },
-                    "cover_of": { "type": "string", "description": "for a cover: the library song whose melody abc came from (score_transcribe of it); the new song names it as the track it was made from" },
+                    "cover_of": { "type": "string", "description": "Library original song ID. Required by MuLaCover, which reads the song audio directly. For YuE2 covers, pass the source of the ABC melody." },
                     "adapters": { "type": "array", "items": { "type": "object", "properties": { "id": { "type": "string" }, "scales": { "type": "object", "description": "slot -> strength, e.g. {\"ar\": 1, \"nar\": 1}; left out, the LoRA's own strengths, else 1 on each slot it touches" } }, "required": ["id"] } }
                 })),
                 call: |args| post("/v1/music/jobs".into(), args.clone()),
@@ -2154,6 +2155,12 @@ fn tools() -> &'static [Tool] {
                 description: "List audio.cpp music models, installed weight profiles, runtime readiness and active installation progress.",
                 schema: nothing,
                 call: |_| get("/v1/music/audio-cpp/models".into()),
+            },
+            Tool {
+                name: "mulacover_runtime_install",
+                description: "Install the pinned SOXR runtime for MuLaCover on Windows. The local model catalog reports readiness afterwards. On Linux and macOS, use the system libsoxr package.",
+                schema: nothing,
+                call: |_| post("/v1/music/audio-cpp/mulacover/runtime".into(), json!({})),
             },
             Tool {
                 name: "audio_cpp_music_model_install",

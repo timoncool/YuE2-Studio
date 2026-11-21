@@ -185,6 +185,23 @@ fn linux_cuda_libraries(build: Build) -> &'static [&'static str] {
     }
 }
 
+pub(crate) const SOXR_URL: &str = "https://github.com/ShiftMediaProject/soxr/releases/download/0.1.3-2/libsoxr_0.1.3-2_msvc17.zip";
+
+#[cfg(windows)]
+const SOXR: Asset = Asset {
+    id: "audiocpp-soxr",
+    label: "SoX Resampler 0.1.3 for MuLaCover",
+    kind: AssetKind::Runtime,
+    url: SOXR_URL,
+    relative_path: "runtime/libsoxr_0.1.3-2_msvc17.zip",
+    bytes: 1_351_421,
+    unzip_into: Some("audiocpp-soxr"),
+    marker: "soxr.dll",
+    pick: &["bin/x64/soxr.dll", "licenses/soxr.txt"],
+    vram_gb: None,
+    note: "SoX Resampler by Rob Sykes, LGPL-2.1. Runtime for MuLaCover's reference-audio transcription.",
+};
+
 /// Every download a build of the server needs, the program first.
 pub fn assets(build: Build) -> Vec<&'static Asset> {
     let mut assets: Vec<&'static Asset> = server_asset(build).into_iter().collect();
@@ -196,6 +213,8 @@ pub fn assets(build: Build) -> Vec<&'static Asset> {
     }
     #[cfg(target_os = "linux")]
     assets.extend(LINUX_CUDA.iter().filter(|(of, _)| *of == build).map(|(_, asset)| asset));
+    #[cfg(windows)]
+    assets.push(&SOXR);
     assets
 }
 
@@ -276,7 +295,34 @@ impl Acpp {
     /// Its downloads are here, and the CUDA libraries it imports are where it finds them: the CUDA 13 build takes the
     /// music engine's cuBLAS 13, which the engine runtime downloads.
     pub fn installed(&self, build: Build) -> bool {
-        self.missing(build).is_empty() && (std::env::var_os("YUE_AUDIOCPP_SERVER").is_some() || self.missing_libraries(build).is_empty())
+        self.missing(build).iter().all(|asset| asset.url == SOXR_URL)
+            && (std::env::var_os("YUE_AUDIOCPP_SERVER").is_some() || self.missing_libraries(build).is_empty())
+    }
+
+    #[cfg(windows)]
+    pub async fn install_soxr(&self) -> Result<()> {
+        self.downloader.install_all("audiocpp-soxr", &[&SOXR]).await
+    }
+
+    /// The cover frontend requires Soxr's HQ resampler, even with a 24 kHz source.
+    pub fn soxr_ready(&self) -> bool {
+        #[cfg(windows)]
+        return self.downloader.is_installed(&SOXR);
+        #[cfg(unix)]
+        return ["libsoxr.so.0", "libsoxr.so", "libsoxr.dylib",
+            "/opt/homebrew/lib/libsoxr.dylib", "/usr/local/lib/libsoxr.dylib"]
+            .into_iter()
+            .any(|name| {
+                // A successful load and both symbols are what the pinned server checks.
+                unsafe {
+                    libloading::Library::new(name).is_ok_and(|library| {
+                        library.get::<unsafe extern "C" fn()>(b"soxr_oneshot").is_ok()
+                            && library.get::<unsafe extern "C" fn()>(b"soxr_quality_spec").is_ok()
+                    })
+                }
+            });
+        #[cfg(not(any(windows, unix)))]
+        false
     }
 
     /// The CUDA libraries a CUDA build loads that are in none of the places the loader finds them for the server: beside
@@ -338,9 +384,12 @@ impl Acpp {
                     }
                 }
                 // cuBLAS 13 lies beside the music engine, which the studio's PATH already names first
-                if let Some(folder) = &cuda13 {
+                let mut libraries = cuda13.iter().cloned().collect::<Vec<_>>();
+                #[cfg(windows)]
+                libraries.push(self.downloader.runtime_dir("audiocpp-soxr"));
+                if !libraries.is_empty() {
                     let existing = std::env::var_os("PATH").unwrap_or_default();
-                    if let Ok(path) = std::env::join_paths(std::iter::once(folder.clone()).chain(std::env::split_paths(&existing))) {
+                    if let Ok(path) = std::env::join_paths(libraries.into_iter().chain(std::env::split_paths(&existing))) {
                         command.env("PATH", path);
                     }
                 }
