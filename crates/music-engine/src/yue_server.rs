@@ -256,6 +256,7 @@ pub enum ComputeBackend {
     #[default]
     Auto,
     Cuda,
+    Hip,
     Vulkan,
     Cpu,
 }
@@ -266,6 +267,7 @@ impl ComputeBackend {
         match self {
             Self::Auto => None,
             Self::Cuda => Some("CUDA0"),
+            Self::Hip => Some("ROCm0"),
             Self::Vulkan => Some("Vulkan0"),
             Self::Cpu => Some("CPU"),
         }
@@ -557,6 +559,11 @@ impl YueServerSupervisor {
             }
             None => {
                 command.env_remove("YUE_CUDA_BACKEND");
+            }
+        }
+        if self.config.options.backend == ComputeBackend::Hip {
+            for variable in ["HIP_VISIBLE_DEVICES", "ROCR_VISIBLE_DEVICES", "HSA_OVERRIDE_GFX_VERSION"] {
+                command.env_remove(variable);
             }
         }
         if let Some(device) = self.config.options.backend.ggml_device() {

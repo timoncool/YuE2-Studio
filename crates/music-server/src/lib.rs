@@ -57,6 +57,7 @@ mod downloads;
 mod install_record;
 mod pin_sha;
 mod engine_runtime;
+mod engine_hip;
 mod engine_start_backoff;
 mod lyrics_db;
 mod mcp;
@@ -200,6 +201,7 @@ struct AppState {
     /// The CUDA libraries the engine binary imports. They are downloaded, not
     /// installed, so the engine cannot start until they are on disk.
     engine_runtime: Arc<engine_runtime::EngineRuntime>,
+    engine_hip: engine_hip::Runtime,
     assistant: Arc<RwLock<AssistantConfig>>,
     assistant_runtime: Arc<assistant_runtime::AssistantRuntime>,
     lyrics_sync: Arc<lyrics_sync::LyricsSync>,
@@ -1074,7 +1076,7 @@ impl EngineOptions {
         use music_engine::yue_server::ComputeBackend;
         match self.backend {
             ComputeBackend::Cuda | ComputeBackend::Auto => hardware::hardware().cuda,
-            ComputeBackend::Vulkan | ComputeBackend::Cpu => None,
+            ComputeBackend::Hip | ComputeBackend::Vulkan | ComputeBackend::Cpu => None,
         }
     }
 
@@ -1093,7 +1095,7 @@ impl EngineOptions {
                 let hardware = hardware::hardware();
                 hardware.cuda.is_none() && hardware.gpu_name.is_some()
             }
-            ComputeBackend::Cuda | ComputeBackend::Cpu => false,
+            ComputeBackend::Cuda | ComputeBackend::Hip | ComputeBackend::Cpu => false,
         }
     }
 
@@ -1283,6 +1285,7 @@ impl EngineOptions {
     /// Why a KV cache in Q8 does not apply to this start, `None` when it can: the engine reads it only through flash
     /// attention on a card, and it is measured on CUDA alone, not yet on Vulkan.
     fn kv_q8_off_reason(&self) -> Option<&'static str> {
+        if self.backend == music_engine::yue_server::ComputeBackend::Hip { return Some("hip"); }
         if self.cuda_build().is_none() {
             return Some(if self.uses_vulkan() { "vulkan" } else { "processor" });
         }
@@ -1676,6 +1679,7 @@ pub async fn serve_on_port(port: u16) -> anyhow::Result<()> {
         engine_paused: Arc::new(std::sync::atomic::AtomicBool::new(false)),
         score_jobs: Arc::new(RwLock::new(std::collections::VecDeque::new())),
         engine_options: Arc::new(RwLock::new(persisted.as_ref().map(|settings| settings.engine_options.clone().migrated()).unwrap_or_default())),
+        engine_hip: engine_hip::Runtime::new(&studio_data_root().unwrap_or_else(|| PathBuf::from("."))),
         engine_runtime: Arc::new(engine_runtime::EngineRuntime::new(&engine_bundle_root(), &studio_data_root().unwrap_or_else(|| std::path::PathBuf::from(".")))),
         failed_devices: Arc::new(RwLock::new(Vec::new())),
         engine_start_error: Arc::new(RwLock::new(None)),
@@ -1781,6 +1785,7 @@ pub async fn serve_on_port(port: u16) -> anyhow::Result<()> {
         .route("/v1/rvc/voices/import", post(rvc_voices::import).layer(DefaultBodyLimit::max(rvc_voices::UPLOAD_LIMIT)))
         .route("/v1/configuration", get(configuration).put(update_configuration))
         .route("/engine/options", get(engine_options).put(update_engine_options))
+        .route("/engine/hip", get(engine_hip::get).post(engine_hip::install).delete(engine_hip::cancel))
         .route("/engine/options/fitted", axum::routing::delete(reset_fitted_max_seq))
         .route("/engine/pick-executable", post(pick_engine_executable))
         .route("/engine/restart", post(restart_local_engine))
@@ -6126,6 +6131,9 @@ async fn update_engine_options(
     Json(mut request): Json<EngineOptions>,
 ) -> Result<Json<Value>, (StatusCode, Json<ApiError>)> {
     request = request.migrated();
+    if request.backend == music_engine::yue_server::ComputeBackend::Hip {
+        state.engine_hip.verified_executable().await.map_err(|error| api_error(StatusCode::CONFLICT, error))?;
+    }
     if matches!(request.gpu.as_ref(), Some(hardware::GpuChoice::Uuid(uuid)) if !hardware::valid_gpu_uuid(uuid)) {
         return Err(api_error(StatusCode::BAD_REQUEST, "gpu must be an NVIDIA GPU UUID or a legacy GPU index".into()));
     }
@@ -6359,6 +6367,12 @@ async fn start_engine_again_with(
             Ok(())
         }
     };
+    let options = state.engine_options.read().await.clone();
+    let hip_executable = if options.backend == music_engine::yue_server::ComputeBackend::Hip {
+        Some(state.engine_hip.verified_executable().await?)
+    } else {
+        None
+    };
     let mut supervisor = state.engine.lock().await;
     let owned = supervisor.is_some();
     if let Some(engine) = supervisor.as_mut() {
@@ -6395,7 +6409,6 @@ async fn start_engine_again_with(
     // actually takes on launch, so the fetch belongs here rather than only in
     // the endpoint nothing calls.
     report(music_pair::Stage::StartingEngine)?;
-    let options = state.engine_options.read().await.clone();
     if options.backend == music_engine::yue_server::ComputeBackend::Cuda && hardware::hardware().cuda.is_none() {
         return Err("CUDA was chosen, but this card or its driver runs neither CUDA build of the engine: it needs an NVIDIA card from the GTX 900 series on and driver 525 or newer. Update the NVIDIA driver, or choose Vulkan in Settings.".into());
     }
@@ -6430,7 +6443,7 @@ async fn start_engine_again_with(
     for (index, device) in chain.iter().copied().enumerate() {
         let attempt = EngineOptions { backend: device, ..options.clone() };
         let cuda = attempt.cuda_build();
-        if !state.engine_runtime.is_ready(cuda) {
+        if device != music_engine::yue_server::ComputeBackend::Hip && !state.engine_runtime.is_ready(cuda) {
             if transition.is_some() {
                 return Err("Install the missing libraries for this YuE2 device first.".into());
             }
@@ -6468,8 +6481,11 @@ async fn start_engine_again_with(
             };
             music_engine::yue_server::note_in_log(&format!("flash-attention off on {}: {reason}{chunk}", device_name(device)));
         }
-        let config = engine_location(attempt, Some(&backbone))
-            .resolve(models)
+        let mut location = engine_location(attempt, Some(&backbone));
+        if let Some(binary) = &hip_executable {
+            location.configured_executable = Some(binary.clone());
+        }
+        let config = location.resolve(models)
             .map_err(|error| format!("the local engine runtime was not found: {error}"))?;
         let mut engine = music_engine::yue_server::YueServerSupervisor::new(config).map_err(|error| error.to_string())?;
         report(music_pair::Stage::LoadingModel)?;
@@ -6558,6 +6574,7 @@ fn device_name(device: music_engine::yue_server::ComputeBackend) -> &'static str
     match device {
         ComputeBackend::Auto => "Auto",
         ComputeBackend::Cuda => "CUDA",
+        ComputeBackend::Hip => "HIP (ROCm)",
         ComputeBackend::Vulkan => "Vulkan",
         ComputeBackend::Cpu => "the processor",
     }
@@ -6569,6 +6586,7 @@ fn hub_device(device: music_engine::yue_server::ComputeBackend) -> Option<&'stat
     match device {
         ComputeBackend::Auto => None,
         ComputeBackend::Cuda => Some("cuda"),
+        ComputeBackend::Hip => Some("hip"),
         ComputeBackend::Vulkan => Some("vulkan"),
         ComputeBackend::Cpu => Some("cpu"),
     }

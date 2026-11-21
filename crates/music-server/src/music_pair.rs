@@ -294,6 +294,16 @@ async fn check_files(state: &AppState, source: &MusicSource) -> anyhow::Result<P
                 );
             }
             let options = state.engine_options.read().await.clone();
+            if options.backend == music_engine::yue_server::ComputeBackend::Hip {
+                let status = state.engine_hip.status().await;
+                if let Some(reason) = status.reason {
+                    anyhow::bail!("{reason}");
+                }
+                if !status.installed {
+                    return missing(Some(status.missing_bytes), "Install the YuE2 HIP component in Engine Settings.".into());
+                }
+                return Ok(Preparation::YuE2);
+            }
             let chain = options.device_chain(&state.failed_devices.read().await);
             if let Some(backend) = chain.first().copied() {
                 let cuda = EngineOptions { backend, ..options }.cuda_build();
