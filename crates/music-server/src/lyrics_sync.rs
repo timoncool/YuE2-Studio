@@ -1678,7 +1678,11 @@ Third");
         let asset = ASSETS.iter().find(|asset| asset.unzip_into == Some(build.dir())).expect("the processor build");
         let dir = sync.downloader.runtime_dir(build.dir());
         std::fs::create_dir_all(&dir).unwrap();
-        let files: Vec<PathBuf> = [dub_tcpp::LIBRARY, "ggml-cpu-alderlake.dll"].iter().map(|name| dir.join(name)).collect();
+        let mut files = vec![dir.join(dub_tcpp::LIBRARY), dir.join("ggml-cpu-alderlake.dll")];
+        for (name, _) in crate::pin_sha::runtime_libraries(asset.url) {
+            let file = dir.join(name);
+            if !files.contains(&file) { files.push(file); }
+        }
         for file in &files {
             std::fs::write(file, b"x").unwrap();
         }
@@ -1711,7 +1715,9 @@ Third");
                     || entry.url.contains(CUDNN_BUILD)
                     || entry.url.contains(CUFFT_BUILD)
                     || entry.url.contains(CURAND_BUILD)
-                    || entry.url.contains("/transcribe.cpp/releases/download/engine-");
+                    || [dub_tcpp::Build::Cpu, dub_tcpp::Build::Cuda, dub_tcpp::Build::Cuda12, dub_tcpp::Build::Vulkan]
+                        .iter().map(|build| build.download())
+                        .any(|package| package.url == entry.url && crate::pin_sha::sha256(entry.url) == Some(package.sha256));
                 assert!(pinned, "{} is not pinned to a release", entry.id);
                 // a single library is downloaded as it is, not unpacked
                 if entry.unzip_into.is_some() {
