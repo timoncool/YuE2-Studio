@@ -308,10 +308,25 @@ pub(crate) struct InstalledEngine {
     pub(crate) protocol: String,
 }
 
+#[derive(Clone, Copy, Default, Deserialize, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub(crate) enum Probe {
+    #[default]
+    Sha256,
+    Presence,
+}
+
+#[derive(Default, Deserialize)]
+pub(crate) struct StatusQuery {
+    #[serde(default)]
+    probe: Probe,
+}
+
 async fn resolve_package<P: Package>(
     data_root: &Path,
     id: &str,
     generation: Option<&str>,
+    probe: Probe,
 ) -> Result<(P, PathBuf, String)> {
     ensure!(portable_name(id), "invalid engine id");
     let root = data_root.join(P::FOLDER).join(id);
@@ -334,8 +349,15 @@ async fn resolve_package<P: Package>(
         "engine directory contains missing or undeclared files"
     );
     for item in package.files() {
+        let path = files.join(&item.name);
+        let valid = match probe {
+            Probe::Sha256 => verified(path, item).await?,
+            Probe::Presence => tokio::fs::symlink_metadata(path)
+                .await
+                .is_ok_and(|meta| meta.is_file() && meta.len() == item.bytes),
+        };
         ensure!(
-            verified(files.join(&item.name), item).await?,
+            valid,
             "installed engine file failed verification: {}",
             item.name
         );
@@ -348,8 +370,17 @@ pub(crate) async fn resolve_generation(
     id: &str,
     generation: Option<&str>,
 ) -> Result<InstalledEngine> {
+    inspect_engine(data_root, id, generation, Probe::Sha256).await
+}
+
+async fn inspect_engine(
+    data_root: &Path,
+    id: &str,
+    generation: Option<&str>,
+    probe: Probe,
+) -> Result<InstalledEngine> {
     let (package, files, selected) =
-        resolve_package::<EnginePackage>(data_root, id, generation).await?;
+        resolve_package::<EnginePackage>(data_root, id, generation, probe).await?;
     ensure!(
         package.protocol == "music-http-v1",
         "incompatible engine protocol"
@@ -365,13 +396,14 @@ pub(crate) async fn resolve_generation(
 pub(crate) async fn status(
     State(state): State<AppState>,
     RoutePath(id): RoutePath<String>,
+    axum::extract::Query(query): axum::extract::Query<StatusQuery>,
 ) -> Result<Json<serde_json::Value>, Failure> {
-    let current = resolve_generation(update_data_root(&state), &id, None)
+    let current = inspect_engine(update_data_root(&state), &id, None, query.probe)
         .await
         .map_err(|error| api_error(StatusCode::CONFLICT, format!("{error:#}")))?;
     Ok(Json(
         serde_json::json!({"id": id,"generation":current.generation,"version":current.version,
-        "protocol":current.protocol,"executable":current.executable.file_name().and_then(|name| name.to_str())}),
+        "verification":query.probe,"protocol":current.protocol,"executable":current.executable.file_name().and_then(|name| name.to_str())}),
     ))
 }
 pub(crate) async fn install_selected(
@@ -415,8 +447,18 @@ pub(crate) async fn resolve_model_generation(
     model_id: &str,
     generation: Option<&str>,
 ) -> Result<InstalledModel> {
+    inspect_model(data_root, engine_id, model_id, generation, Probe::Sha256).await
+}
+
+async fn inspect_model(
+    data_root: &Path,
+    engine_id: &str,
+    model_id: &str,
+    generation: Option<&str>,
+    probe: Probe,
+) -> Result<InstalledModel> {
     let (model, files, generation) =
-        resolve_package::<ModelPackage>(data_root, model_id, generation).await?;
+        resolve_package::<ModelPackage>(data_root, model_id, generation, probe).await?;
     ensure!(
         model.engines.iter().any(|id| id == engine_id),
         "model is incompatible with the selected engine"
@@ -457,11 +499,12 @@ async fn current_catalogue() -> Result<Catalogue, Failure> {
 pub(crate) async fn model_status(
     State(state): State<AppState>,
     RoutePath((engine, id)): RoutePath<(String, String)>,
+    axum::extract::Query(query): axum::extract::Query<StatusQuery>,
 ) -> Result<Json<serde_json::Value>, Failure> {
-    let model = resolve_model_generation(update_data_root(&state), &engine, &id, None)
+    let model = inspect_model(update_data_root(&state), &engine, &id, None, query.probe)
         .await
         .map_err(|e| api_error(StatusCode::CONFLICT, format!("{e:#}")))?;
     Ok(Json(
-        serde_json::json!({"id":id,"engine":engine,"generation":model.generation,"version":model.version}),
+        serde_json::json!({"id":id,"engine":engine,"generation":model.generation,"version":model.version,"verification":query.probe}),
     ))
 }
