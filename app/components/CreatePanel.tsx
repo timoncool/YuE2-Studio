@@ -1951,7 +1951,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
                         )} GiB</p>
                         <p>{nativeStrings.modelDirectory} <code>{native.profile.model_directory}</code></p>
                         <a href={native.profile.package_url} target="_blank" rel="noreferrer" className="mr-2 underline">{nativeStrings.weightFiles}</a>
-                        {native.profile.license_url && <a href={native.profile.license_url} target="_blank" rel="noreferrer" className="underline">{nativeStrings.modelLicense}</a>}
+                        {!mulaCover && native.profile.license_url && <a href={native.profile.license_url} target="_blank" rel="noreferrer" className="underline">{nativeStrings.modelLicense}</a>}
                       </div>
                     )}
                     {vevo2 && native.profile?.model_directory && <Vevo2ModelDirectory
