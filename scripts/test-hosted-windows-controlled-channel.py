@@ -56,11 +56,16 @@ def hosted_trust(ca):
     assert os.environ.get("RUNNER_ENVIRONMENT") == "github-hosted"
     cert = x509.load_pem_x509_certificate(ca.read_bytes())
     thumbprint = cert.fingerprint(hashes.SHA1()).hex()
-    subprocess.run(["certutil.exe", "-user", "-addstore", "Root", str(ca)], check=True)
+    # A user-root import can open a consent dialog. These jobs use an
+    # administrator on a fresh GitHub-hosted VM and tear down the exact cert.
+    print(f"Importing temporary QA CA {thumbprint}", flush=True)
+    subprocess.run(["certutil.exe", "-f", "-addstore", "Root", str(ca)],
+                   stdin=subprocess.DEVNULL, timeout=20, check=True)
     try:
         yield
     finally:
-        subprocess.run(["certutil.exe", "-user", "-delstore", "Root", thumbprint], check=True)
+        subprocess.run(["certutil.exe", "-delstore", "Root", thumbprint],
+                       stdin=subprocess.DEVNULL, timeout=20, check=True)
 
 
 def check(work, installed, archive, receipt, revision, installer_sha, executable_sha):

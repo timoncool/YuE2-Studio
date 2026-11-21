@@ -69,6 +69,7 @@ jobs:
       - name: Verify and exercise installed Studio
         run: python scripts/windows-nsis-acceptance.py verify ${{ matrix.scenario }}
       - name: Verify installed executable through controlled signed mirrors
+        timeout-minutes: 8
         run: |
           $ErrorActionPreference = 'Stop'
           $PSNativeCommandUseErrorActionPreference = $true
