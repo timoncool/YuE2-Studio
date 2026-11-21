@@ -1,4 +1,4 @@
-name: Manual audio.cpp models Windows standalone
+name: MOSS SoundEffect Windows standalone
 
 on:
   push:
@@ -18,7 +18,8 @@ jobs:
         run: cargo build --locked -p music-server --bin music-server
       - uses: actions/upload-artifact@v7
         with:
-          name: manual-acpp-standalone
+          name: moss-soundeffect-standalone
           path: target/debug/music-server.exe
           retention-days: 2
+
 
