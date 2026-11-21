@@ -8,9 +8,10 @@
 //! version plays in place of the original, which stays on disk and can be
 //! chosen again at any time.
 
+use std::ops::Range;
 use std::path::{Path, PathBuf};
 
-use anyhow::{bail, Context, Result};
+use anyhow::{bail, ensure, Context, Result};
 use audio_post::{denoise, lifter, mastering, naturalize, Stereo};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -31,6 +32,34 @@ pub struct ProcessRequest {
     pub master: Option<MasterSource>,
     #[serde(default)]
     pub normalize: Option<NormalizeSettings>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub region: Option<ProcessRegion>,
+}
+
+/// A half-open interval in the source recording, in seconds.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+pub struct ProcessRegion {
+    pub start_seconds: f64,
+    pub end_seconds: f64,
+}
+
+impl ProcessRegion {
+    pub fn validate(self) -> Result<()> {
+        ensure!(
+            self.start_seconds.is_finite() && self.end_seconds.is_finite()
+                && self.start_seconds >= 0.0 && self.end_seconds > self.start_seconds,
+            "Choose a non-empty processing range with a nonnegative start and an end after it."
+        );
+        Ok(())
+    }
+
+    fn frames(self, rate: u32, count: usize) -> Result<Range<usize>> {
+        self.validate()?;
+        let start = (self.start_seconds * f64::from(rate)).round() as usize;
+        let end = (self.end_seconds * f64::from(rate)).round() as usize;
+        ensure!(start < end && end <= count, "The selected range must fit within the source audio.");
+        Ok(start..end)
+    }
 }
 
 /// Peak normalisation: the level all but `peak_clip` samples per million stay
@@ -134,8 +163,70 @@ pub fn workspace_file(media: &Path, name: &str) -> Option<PathBuf> {
     path.is_file().then_some(path)
 }
 
-/// Runs the stages on `source`, calling `on_stage` as each begins.
-pub fn run(
+/// Renders a complete preview while processing either a selection or the whole track.
+pub fn render_preview(
+    source: &Path,
+    preview: &Path,
+    reference: Option<&Path>,
+    request: &ProcessRequest,
+    vst: Option<&crate::vst::VstHost>,
+    on_stage: impl Fn(&'static str),
+) -> Result<()> {
+    if let Some(region) = request.region {
+        let (mut planes, rate) = crate::audio_pcm::decode_channels(source)?;
+        ensure!((1..=2).contains(&planes.len()), "Range processing requires a mono or stereo recording.");
+        let frames = region.frames(rate, planes[0].len())?;
+        ensure!(planes.iter().all(|channel| channel.len() == planes[0].len()), "Source channels have different lengths.");
+        let left = planes[0][frames.clone()].to_vec();
+        let right = planes.get(1).map_or_else(|| left.clone(), |plane| plane[frames.clone()].to_vec());
+        let edited = run_stages(Stereo::new(left, right, rate), source, reference, request, vst, on_stage)?;
+        ensure!(
+            edited.rate == rate && edited.frames() == frames.len() && edited.right.len() == frames.len(),
+            "An effect changed the sample rate or duration of the selected audio."
+        );
+        if planes.len() == 1 {
+            let mono: Vec<_> = edited.left.iter().zip(&edited.right)
+                .map(|(left, right)| 0.5 * left + 0.5 * right).collect();
+            splice(&mut planes[0], &mono, frames, rate);
+        } else {
+            splice(&mut planes[0], &edited.left, frames.clone(), rate);
+            splice(&mut planes[1], &edited.right, frames, rate);
+        }
+        crate::audio_pcm::write_wav_planes_f32(preview, rate, &planes)?;
+    } else {
+        let audio = crate::audio_pcm::decode_stereo(source)?;
+        let audio = run_stages(audio, source, reference, request, vst, on_stage)?;
+        std::fs::write(preview, audio_post::encode::flac(&audio)?)
+            .with_context(|| format!("write {}", preview.display()))?;
+    }
+    Ok(())
+}
+
+fn splice(plane: &mut [f32], edited: &[f32], range: Range<usize>, rate: u32) {
+    // The fades are inside the edit. The preceding and following samples are never written.
+    let fade = (rate as usize / 200).min((range.len() - 1) / 2);
+    let last = range.len() - 1;
+    let fade_in = range.start > 0;
+    let fade_out = range.end < plane.len();
+    for (index, (source, &sample)) in plane[range].iter_mut().zip(edited).enumerate() {
+        let distance = if fade_in && index < fade {
+            index
+        } else if fade_out && last - index < fade {
+            last - index
+        } else {
+            fade
+        };
+        if distance == fade {
+            *source = sample;
+        } else if distance > 0 {
+            let wet = distance as f32 / fade as f32;
+            *source = *source * (1.0 - wet) + sample * wet;
+        }
+    }
+}
+
+fn run_stages(
+    mut audio: Stereo,
     source: &Path,
     reference: Option<&Path>,
     request: &ProcessRequest,
@@ -145,7 +236,6 @@ pub fn run(
     if request.stages().is_empty() {
         bail!("choose at least one kind of processing");
     }
-    let mut audio = crate::audio_pcm::decode_stereo(source)?;
     if let Some(settings) = &request.denoise {
         on_stage("denoise");
         audio = denoise::denoise(&audio, settings);
@@ -189,6 +279,40 @@ pub fn settings_record(request: &ProcessRequest, reference_title: Option<&str>) 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn region_preview_preserves_decoded_samples_outside_and_keeps_channel_count() {
+        let root = tempfile::tempdir().unwrap();
+        let source = root.path().join("source.wav");
+        let preview = root.path().join("preview.wav");
+        let rate = 8_000;
+        for channel_count in [1, 2] {
+            let mut planes = vec![vec![0.125; rate as usize]];
+            if channel_count == 2 {
+                planes.push(vec![-0.25; rate as usize]);
+            }
+            crate::audio_pcm::write_wav_planes_f32(&source, rate, &planes).unwrap();
+            let request = ProcessRequest {
+                normalize: Some(NormalizeSettings { peak_clip: 0 }),
+                region: Some(ProcessRegion { start_seconds: 0.25, end_seconds: 0.75 }),
+                ..Default::default()
+            };
+            render_preview(&source, &preview, None, &request, None, |_| {}).unwrap();
+            let (actual, actual_rate) = crate::audio_pcm::decode_channels(&preview).unwrap();
+            assert_eq!(actual_rate, rate);
+            assert_eq!(actual.len(), channel_count);
+            for (original, edited) in planes.iter().zip(&actual) {
+                assert_eq!(edited.len(), original.len());
+                assert_eq!(&edited[..2_000], &original[..2_000]);
+                assert_eq!(&edited[6_000..], &original[6_000..]);
+                assert_eq!(edited[2_000], original[2_000]);
+                assert_eq!(edited[5_999], original[5_999]);
+                assert_ne!(edited[4_000], original[4_000]);
+            }
+        }
+        let bad = ProcessRegion { start_seconds: 0.75, end_seconds: 1.25 };
+        assert!(bad.frames(rate, rate as usize).is_err());
+    }
 
     #[test]
     fn stages_follow_the_request_in_processing_order() {

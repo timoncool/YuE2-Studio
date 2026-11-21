@@ -4,18 +4,21 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Song, YueRequest } from '../types';
 import { useGenerations } from '../services/generations';
+import { fetchAdapters } from '../services/adapters';
 import { afterGenerationPause } from '../services/generationPause';
 
+const bridgeCommands = new Map<string, (args: Record<string, unknown>) => unknown>();
 const composeScore = vi.fn();
 const transcribe = vi.fn();
 const instrumentalScore = vi.fn();
 let ready = true;
 let enginePaused = false;
 let configured = false;
+let librarySongs: Song[] = [];
 vi.mock('../context/I18nContext', () => ({ useI18n: () => ({ language: 'en', t: (key: string) => key }) }));
 vi.mock('../services/studioQueries', async original => ({
   ...await original<typeof import('../services/studioQueries')>(),
-  useLibrarySongs: () => ({ data: [] }),
+  useLibrarySongs: () => ({ data: librarySongs }),
   SELF_READ: {},
   libraryChanged: vi.fn(),
   useActivity: () => ({ data: [] }),
@@ -24,7 +27,9 @@ vi.mock('../services/studioQueries', async original => ({
   useSetupStatus: () => ({ isError: false, data: { ready, engine_ready: ready && !enginePaused, engine_paused: enginePaused } }),
   useOpenRouterSettings: () => ({ data: { configured } }),
 }));
-vi.mock('../services/mcpBridge', () => ({ useBridgeCommand: () => undefined }));
+vi.mock('../services/mcpBridge', () => ({
+  useBridgeCommand: (name: string, handler: (args: Record<string, unknown>) => unknown) => bridgeCommands.set(name, handler),
+}));
 vi.mock('../services/transcription', () => ({ composeScore: (...args: unknown[]) => composeScore(...args), composePlans: vi.fn(), transcribe: (...args: unknown[]) => transcribe(...args) }));
 vi.mock('../services/scoreApi', () => ({
   instrumentalScore: (abc: string) => instrumentalScore(abc),
@@ -34,7 +39,7 @@ vi.mock('../services/scoreApi', () => ({
 }));
 vi.mock('../services/adapters', async (original) => ({
   ...(await original<typeof import('../services/adapters')>()),
-  fetchAdapters: async () => ({ installed: [{ id: 'instrumental', origin: { type: 'catalog', catalog_id: 'yue2-instrumental' }, slots: ['ar', 'nar'], scales: {}, error: null }], installing: [], slots: [] }),
+  fetchAdapters: vi.fn(async () => ({ installed: [{ id: 'instrumental', origin: { type: 'catalog', catalog_id: 'yue2-instrumental' }, slots: ['ar', 'nar'], scales: {}, error: null }], installing: [], slots: [] })),
   installCatalogAdapters: vi.fn(),
   useAdapterLibrary: () => ({ installed: [], slots: [] }),
 }));
@@ -62,9 +67,11 @@ const sent: YueRequest[] = [];
 
 beforeEach(() => {
   sent.length = 0;
+  bridgeCommands.clear();
   ready = true;
   enginePaused = false;
   configured = false;
+  librarySongs = [];
   localStorage.clear();
   composeScore.mockReset();
   transcribe.mockReset().mockResolvedValue('X:1\nK:C\nC');
@@ -530,6 +537,42 @@ it.each([
   click(buttonNamed('create')!);
   expect(sent.at(-1)).toMatchObject({ music_source: { kind: 'audio_cpp', model }, ...options });
 });
+it('restores a Magenta reference and submits either the available reference or text style', async () => {
+  const model = 'magenta_realtime_2';
+  librarySongs = [{ id: 'ref-take', title: 'Reference take', audioUrl: '/audio.wav' } as Song];
+  vi.stubGlobal('fetch', vi.fn(async () => Response.json({ engine: 'audio.cpp', models: [
+    { id: model, name: 'Magenta RealTime 2', profile_id: 'small-f16', quantization: 'F16', ready: true, missing: [] },
+  ] })));
+  const song = {
+    title: 'Saved instrumental', ditModel: 'audio.cpp', style: 'jazz piano', lyrics: 'old lyrics',
+    generationParams: { music_source: { kind: 'audio_cpp', model }, magenta: { reference_song_id: 'ref-take' } },
+  } as Song;
+  act(() => root.render(panel({ musicEngine: 'audio.cpp', initialData: { song, timestamp: 1 } })));
+  await flush();
+  const generate = buttonNamed('create')!;
+  expect(field('textarea[aria-label="lyrics"]')).toBeNull();
+  expect(field('textarea[aria-label="styleCardTitle"]')).toBeNull();
+  click(generate);
+  expect(sent.at(-1)).toMatchObject({
+    music_source: { kind: 'audio_cpp', model }, magenta: { reference_song_id: 'ref-take' }, lyrics: '',
+  });
+
+  const reference = [...host.querySelectorAll('select')].find(select => select.value === 'ref-take')!;
+  act(() => {
+    reference.value = '';
+    reference.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  expect(field('textarea[aria-label="styleCardTitle"]')!.value).toBe('jazz piano');
+  click(generate);
+  expect(sent.at(-1)).toMatchObject({ music_source: { kind: 'audio_cpp', model }, style: 'jazz piano', magenta: {}, lyrics: '' });
+
+  librarySongs = [];
+  act(() => root.render(panel({ musicEngine: 'audio.cpp', initialData: { song, timestamp: 2 } })));
+  await flush();
+  expect(generate.disabled).toBe(true);
+  expect(reference.selectedOptions[0].disabled).toBe(true);
+});
+
 it('asks for an explicit profile when a migrated ACE take used custom weights', async () => {
   const engine = 'acestep-cpp';
   const models = ['acestep-v15-xl-sft-Q4_K_M.gguf', 'acestep-5Hz-lm-4B-BF16.gguf', 'vae-BF16.gguf'];
@@ -578,6 +621,33 @@ it('asks for an explicit profile when a migrated ACE take used custom weights', 
 });
 
 describe('an instrumental (#217)', () => {
+  it('waits for the Instrumental LoRA and permits an ordinary request without it (#234)', async () => {
+    const installed = await fetchAdapters();
+    let finishLookup!: (result: typeof installed) => void;
+    vi.mocked(fetchAdapters).mockReturnValueOnce(new Promise(resolve => { finishLookup = resolve; }));
+    act(() => root.render(panel({})));
+    await flush();
+    type(field('textarea')!, 'calm folk, acoustic guitar');
+    click(buttonNamed('cotOff')!);
+    const instrumental = host.querySelector<HTMLInputElement>('input[type="checkbox"]')!;
+    click(instrumental);
+    click(buttonNamed('createInstrumental')!);
+    await flush();
+    expect(sent).toHaveLength(0);
+
+    await act(async () => { finishLookup(installed); });
+    click(buttonNamed('createInstrumental')!);
+    await flush();
+    expect(sent[0].adapters).toEqual([expect.objectContaining({ id: 'instrumental' })]);
+    expect(sent[0].lyrics).toBe('');
+
+    click(instrumental);
+    click(buttonNamed('create')!);
+    await flush();
+    expect(sent).toHaveLength(2);
+    expect(sent[1].adapters).toBeUndefined();
+  });
+
   it('keeps a score written for one submission out of the form and writes a new one for the next', async () => {
     act(() => root.render(panel({})));
     await flush();
@@ -909,5 +979,77 @@ it('reuses a Stable Audio 3 text prompt and its sampler and guidance controls', 
     music_source: { kind: 'audio_cpp', model: 'stable_audio' },
     style: 'instrumental piano', lyrics: '', duration_seconds: 4, steps: 4, seed: 42,
     cfg_scale: 2, output_format: 'wav32', stable_audio,
+  });
+});
+
+describe('Auto max duration', () => {
+  const autoButton = () => buttonNamed('maxDurationAuto');
+  // an instrumental with No score goes straight to onGenerate, with no score to compose first
+  const createOne = async () => {
+    click(buttonNamed('cotOff')!);
+    click(buttonNamed('createInstrumental')!);
+    await flush();
+  };
+  const startInstrumental = async () => {
+    act(() => root.render(panel({})));
+    await flush();
+    type(field('textarea')!, 'calm folk, acoustic guitar');
+    click(host.querySelector<HTMLInputElement>('input[type="checkbox"]')!);
+    await flush();
+  };
+
+  it('is where a new studio starts, and sends no ceiling: the song ends where the model ends it', async () => {
+    await startInstrumental();
+    expect(autoButton()?.getAttribute('aria-pressed')).toBe('true');
+    await createOne();
+    expect(sent).toHaveLength(1);
+    expect(sent[0].duration_seconds).toBeUndefined();
+  });
+
+  it('switched off sends the seconds again and is kept for the next song', async () => {
+    await startInstrumental();
+    click(autoButton()!);
+    await flush();
+    expect(autoButton()?.getAttribute('aria-pressed')).toBe('false');
+    await createOne();
+    expect(sent[0].duration_seconds).toBe(130);
+    expect(localStorage.getItem('studio.createDuration')).toBe('130');
+    click(autoButton()!);
+    await flush();
+    expect(localStorage.getItem('studio.createDuration')).toBe('auto');
+  });
+
+  it('keeps seconds a user chose before Auto existed', async () => {
+    localStorage.setItem('studio.createDuration', '240');
+    await startInstrumental();
+    expect(autoButton()?.getAttribute('aria-pressed')).toBe('false');
+    await createOne();
+    expect(sent[0].duration_seconds).toBe(240);
+    click(autoButton()!);
+    click(autoButton()!);
+    await createOne();
+    expect(sent[1].duration_seconds).toBe(240);
+  });
+
+  it('sends the manual ceiling or omits it through the Create MCP bridge', async () => {
+    act(() => root.render(panel({})));
+    await flush();
+    const command = (name: string, args: Record<string, unknown> = {}) => bridgeCommands.get(name)!(args);
+    const read = () => command('create_get') as { fields: Record<string, unknown>; request: YueRequest };
+
+    act(() => { command('create_set', { fields: { style: 'calm acoustic folk, gentle guitar instrumental', cot: 'off', duration_seconds: 10 } }); });
+    expect(read().fields.duration_seconds).toBe('10');
+    expect(read().request.duration_seconds).toBe(10);
+    act(() => { command('create_submit'); });
+    await flush();
+
+    act(() => { command('create_set', { fields: { duration_seconds: 'auto' } }); });
+    expect(read().fields.duration_seconds).toBe('auto');
+    expect(read().request).not.toHaveProperty('duration_seconds');
+    act(() => { command('create_submit'); });
+    await flush();
+    expect(sent).toHaveLength(2);
+    expect(sent[0].duration_seconds).toBe(10);
+    expect(sent[1]).not.toHaveProperty('duration_seconds');
   });
 });

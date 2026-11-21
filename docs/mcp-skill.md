@@ -145,6 +145,11 @@ for its territorial and use terms.
 For Vevo2, pass the lyrics and a library song ID as `vevo2.voice_song_id`.
 Add `vevo2.melody_song_id` to condition the singing on a second library track.
 
+For Magenta RealTime 2, select `magenta_realtime_2` with the installed Small F16
+profile. Use `style` for a text description or `magenta.reference_song_id` for
+a library track that supplies the musical style. Both modes generate an
+instrumental. The reference sets the style when supplied.
+
 For an OpenRouter generation, read `openrouter_catalog` and select an ID whose
 `capabilities` include `music_generation`. Pass that exact ID as
 `music_source.model`, with `music_source.kind` set to `openrouter`.
@@ -233,7 +238,7 @@ Local score, sampling and LoRA controls apply to local generation.
 
 `song_create` makes a song directly. When the user wants to watch and adjust it first:
 `ui_navigate` create, `create_form_set` with the fields (the user sees them fill in),
-`create_form_get` to check, and `create_form_submit` to press Create.
+`create_form_get` to check, and `create_form_submit` to press Create. Set `duration_seconds` to a number for a local YuE2 ceiling or `"auto"` to use the checkpoint budget. With `song_create`, omit `duration_seconds` for Auto.
 
 **When you are the studio's writing assistant**
 

@@ -1035,6 +1035,11 @@ fn song_create_schema(mut properties: Value) -> Value {
     properties["heartmula"] = json!({"type":"object","description":"Native HeartMuLa sampling and codec settings.","properties":{"temperature":{"type":"number"},"top_k":{"type":"integer"},"codec_duration_sec":{"type":"number"},"codec_guidance_scale":{"type":"number"}}});
     properties["stable_audio"] = json!({"type":"object","description":"Native Stable Audio 3 controls. Send the music prompt as style and leave lyrics empty.","properties":{"negative_prompt":{"type":"string"},"sampler_mode":{"enum":["pingpong","euler"]},"apg_scale":{"type":"number"},"duration_padding_sec":{"type":"number","minimum":0}}});
     properties["midasheng"] = json!({"type":"object","description":"MiDashengLM-Gen scene and sound layers.","properties":{"caption":{"type":"string"},"music":{"type":"string"},"speech_text":{"type":"string"},"speech_style":{"type":"string"},"effects":{"type":"string"},"environment":{"type":"string"}}});
+    properties["magenta"] = json!({
+        "type": "object", "description": "Magenta RealTime 2 instrumental style reference from the library.",
+        "properties": { "reference_song_id": { "type": "string", "minLength": 1 } },
+        "additionalProperties": false
+    });
     properties["vevo2"] = json!({"type":"object","description":"Vevo2 singing references from the song library.","properties":{"voice_song_id":{"type":"string"},"melody_song_id":{"type":"string"}},"required":["voice_song_id"]});
     let mut schema = object(properties, &[]);
     schema["anyOf"] = json!([
@@ -1052,6 +1057,15 @@ fn song_create_schema(mut properties: Value) -> Value {
             } } }
         }
     ]);
+    schema["anyOf"].as_array_mut().expect("song_create anyOf").push(json!({
+        "required": ["music_source", "magenta"],
+        "properties": {
+            "music_source": { "properties": {
+                "kind": { "const": "audio_cpp" }, "model": { "const": "magenta_realtime_2" }
+            } },
+            "magenta": { "required": ["reference_song_id"] }
+        }
+    }));
     schema
 }
 
@@ -1366,7 +1380,7 @@ fn tools() -> &'static [Tool] {
             },
             Tool {
                 name: "create_form_set",
-                description: "Fill the create page's form in the window, as if typed - the user sees every field change; fields not given stay. fields: title, style, lyrics, abc, cot (full|melody|off), duration_seconds, lm_batch_size, synth_batch_size, steps, cfg_scale, companion_scale, lm_seed, seed, randomize_seed, chord_strength, chord_identity (root|spelling), chord_window, chord_hold_limit, outside_bonus, section_strength, follow_sections, cover_prompt, output_format, mp3_bitrate, adapters, mode (studio|simple|cover). Use it when the user wants to see and adjust the song before it is made; song_create makes one directly.",
+                description: "Fill the create page's form in the window, as if typed - the user sees every field change; fields not given stay. fields: title, style, lyrics, abc, cot (full|melody|off), duration_seconds (seconds or 'auto'), lm_batch_size, synth_batch_size, steps, cfg_scale, companion_scale, lm_seed, seed, randomize_seed, chord_strength, chord_identity (root|spelling), chord_window, chord_hold_limit, outside_bonus, section_strength, follow_sections, cover_prompt, output_format, mp3_bitrate, adapters, mode (studio|simple|cover). Use it when the user wants to see and adjust the song before it is made; song_create makes one directly.",
                 schema: || object(json!({ "fields": { "type": "object", "description": "field -> value" } }), &["fields"]),
                 call: |args| window("create_set", args, 15),
             },
@@ -1671,7 +1685,7 @@ fn tools() -> &'static [Tool] {
                     "fade_out": { "type": "number", "minimum": 0, "description": "seconds the studio fades the made song out over at its end; 0 or absent leaves the end as sung" },
                     "playlist_id": { "type": "string", "description": "a playlist (see playlist_list) the made songs are added to" },
                     "cot": { "type": "string", "enum": ["full", "melody", "off"] },
-                    "duration_seconds": { "type": "number" },
+                    "duration_seconds": { "type": "number", "description": "In seconds. For local YuE2, this caps generation. Omit it to use the checkpoint budget and let the song end naturally." },
                     "seed": { "type": "integer" },
                     "lm_seed": { "type": "integer" },
                     "steps": { "type": "integer" },
@@ -2056,8 +2070,9 @@ fn tools() -> &'static [Tool] {
             },
             Tool {
                 name: "processing_start",
-                description: "Run audio processing on a library song: any of denoise, lifter (Spectral Lifter), naturalize (vocal naturaliser), vst (plugin chain), master (to a reference). Each is an object of its settings; processing_get shows the result, then processing_keep or processing_discard.",
-                schema: || object(json!({ "song_id": { "type": "string" }, "denoise": { "type": "object" }, "lifter": { "type": "object" }, "naturalize": { "type": "object" }, "vst": { "type": "array" }, "master": { "type": "object" } }), &["song_id"]),
+                description: "Run audio processing on a library song: any of denoise, lifter (Spectral Lifter), naturalize (vocal naturaliser), vst (plugin chain), master (to a reference), normalize (peak normalization). The optional region in seconds applies the effects only to that part. Each stage is an object of its settings; processing_get shows the result, then processing_keep or processing_discard.",
+                schema: || object(json!({ "song_id": { "type": "string" }, "denoise": { "type": "object" }, "lifter": { "type": "object" }, "naturalize": { "type": "object" }, "vst": { "type": "array" }, "master": { "type": "object" }, "normalize": { "type": "object" },
+                    "region": { "type": "object", "properties": { "start_seconds": { "type": "number", "minimum": 0 }, "end_seconds": { "type": "number", "exclusiveMinimum": 0 } }, "required": ["start_seconds", "end_seconds"] } }), &["song_id"]),
                 call: |args| post(format!("/v1/library/songs/{}/process", segment(&text(args, "song_id")?)), body_without(args, &["song_id"])),
             },
             Tool {

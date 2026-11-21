@@ -1,11 +1,11 @@
 import { readRvcBackend, useLastRvcVoice } from '../services/rvcQuick';
 import { rvcQuickStrings } from '../i18n/rvcQuick';
 import React, { useCallback, useEffect, useEffectEvent, useMemo, useRef, useState } from 'react';
-import { libraryChanged, SELF_READ, useActivity, useAssistantStatus, useOpenRouterSettings, useSetupStatus, setupStatusChanged, type ActivityEntry } from '../services/studioQueries';
+import { libraryChanged, SELF_READ, useActivity, useAssistantStatus, useLibrarySongs, useOpenRouterSettings, useSetupStatus, setupStatusChanged, type ActivityEntry } from '../services/studioQueries';
 import { hasSungLines, karaokeReason, recogniseLyrics } from '../services/karaoke';
 import { ConfirmDialog } from './ConfirmDialog';
 import { enginePauseStrings } from '../i18n/enginePause';
-import { clampDurationToKept } from '../services/createDuration';
+import { AUTO_DURATION, durationAfterLoad, isAutoDuration, keptDurationText } from '../services/createDuration';
 import { minTokensCutsTheSongOff } from '../services/samplingLimits';
 import { foldedAfter, keepFolded, keptFolded } from '../services/createFold';
 import {
@@ -40,6 +40,7 @@ import { midiImportOptions } from '../i18n/midiImportOptions';
 import { SongTextParts } from './SongTextParts';
 import { writerInstruction } from '../services/songWriting';
 import { songWritingStrings } from '../i18n/songWriting';
+import { MagentaFields, magentaModel, restoreMagentaOptions } from './MagentaFields';
 import { MiDashengFields, miDashengModel, miDashengPromptReady, restoreMiDashengPrompt } from './MiDashengFields';
 import { HeartMuLaControls, AudioCppModelInstall, emptyHeartMuLaDraft, heartMuLaDraft, heartMuLaOptions } from './HeartMuLaControls';
 import { StableAudioControls, emptyStableAudioDraft, stableAudioDraft, stableAudioOptions, stableAudioPromptRequired } from './StableAudioControls';
@@ -121,18 +122,27 @@ const NEW_PLAYLIST = '__new__';
 /** The style as it is sent: a trigger's comma with nothing after it goes. */
 const finishedStyle = (text: string) => text.trim().replace(/,$/, '').trimEnd();
 const SEMANTIC_CODES_PER_SECOND = 25;
-/** 9000 semantic frames at 25 per second, the stage's own budget. */
 const MAX_DURATION_SECONDS = 600;
-/** A new prompt's ceiling: 2:10. Examples and prompt files keep their own. */
+/** 9000 semantic frames at 25 per second when the engine catalog is unavailable. */
+const DEFAULT_AUTO_DURATION_SECONDS = 360;
+/** Where the slider starts when Auto is switched off and no seconds were chosen before: 2:10. */
 const DEFAULT_DURATION_SECONDS = 130;
-/** The max-duration the user keeps for every new song (studio.createDuration),
- *  or the default when none is saved yet. */
-function keptCreateDuration(): number {
+const MIN_DURATION_SECONDS = 10;
+/** The max-duration the user keeps for every new song (studio.createDuration):
+ *  Auto (no ceiling sent, the song ends where the model ends it) unless seconds were chosen. */
+function keptCreateDuration(): string {
   try {
-    const kept = Number(window.localStorage.getItem('studio.createDuration'));
-    if (kept >= 10 && kept <= MAX_DURATION_SECONDS) return kept;
+    return keptDurationText(window.localStorage.getItem('studio.createDuration'), MIN_DURATION_SECONDS, MAX_DURATION_SECONDS);
   } catch { /* fall through to the default */ }
-  return DEFAULT_DURATION_SECONDS;
+  return AUTO_DURATION;
+}
+/** The seconds last chosen by hand, for when Auto is switched off again. */
+function keptManualDuration(): string {
+  try {
+    const kept = Number(window.localStorage.getItem('studio.createDurationManual'));
+    if (kept >= MIN_DURATION_SECONDS && kept <= MAX_DURATION_SECONDS) return String(kept);
+  } catch { /* fall through to the default */ }
+  return String(DEFAULT_DURATION_SECONDS);
 }
 
 /** The file format last chosen by hand, kept between sessions like the duration. */
@@ -429,6 +439,11 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
   const native = useNativeMusicProfiles(nativeEngine);
   const audioFamily = audioCpp ? native.profile?.id : undefined;
   const miDasheng = audioFamily === miDashengModel;
+  const magenta = audioFamily === magentaModel;
+  const [magentaOptions, setMagentaOptions] = useState(() => restoreMagentaOptions(undefined));
+  const magentaLibrary = useLibrarySongs(magenta);
+  const magentaTracks = magenta ? (magentaLibrary.data ?? []).filter(song => song.audioUrl && !song.isGenerating) : [];
+  const magentaReference = magentaOptions.reference_song_id;
   const [scene, setScene] = useState(() => restoreMiDashengPrompt(undefined));
   const heartMuLa = audioFamily === 'heartmula';
   const stableAudio = audioFamily === 'stable_audio';
@@ -492,6 +507,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
   nameNow.current = name;
   const typeName = (value: string) => { setName(value); setNameFilled(false); };
   const [style, setStyle] = useState(() => keptText(draft, 'style'));
+  const magentaReady = magentaReference ? magentaTracks.some(track => track.id === magentaReference) : Boolean(style.trim());
   const [lyrics, setLyrics] = useState(() => keptText(draft, 'lyrics'));
   const [abc, setAbc] = useState(() => keptText(draft, 'abc'));
   const [cot, setCot] = useState<YueCot | ''>(() =>
@@ -505,10 +521,16 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
   // Strings, so an empty field can mean "engine default".
   // The ceiling last set by hand, kept between sessions like the playlist:
   // a song made longer once is not cut at 2:10 after the next start.
-  const [duration, setDuration] = useState(() => String(keptCreateDuration()));
+  // "auto" sends no ceiling: the engine's whole budget, and the song is as long as its plan.
+  const [duration, setDuration] = useState(keptCreateDuration);
+  const autoDuration = isAutoDuration(duration);
   const chooseDuration = (value: string) => {
     setDuration(value);
-    try { window.localStorage.setItem('studio.createDuration', value); } catch { /* kept until a reload */ }
+    try {
+      const manual = isAutoDuration(value) ? keptCreateDuration() : value;
+      if (!isAutoDuration(manual)) window.localStorage.setItem('studio.createDurationManual', manual);
+      window.localStorage.setItem('studio.createDuration', value);
+    } catch { /* kept until a reload */ }
   };
   const [kept] = useState(keptSettings);
   const [lmBatch, setLmBatch] = useState(() => keptText(kept, 'lmBatch'));
@@ -737,7 +759,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
     setAbc(typeof request.abc === 'string' ? request.abc.trimEnd() : '');
     setPlans([]); setSelectedPlan(0);
     setCot(request.cot === 'full' || request.cot === 'melody' || request.cot === 'off' ? request.cot : '');
-    setDuration(String(clampDurationToKept(Number(request.duration ?? request.duration_seconds), keptCreateDuration())));
+    setDuration(durationAfterLoad(Number(request.duration ?? request.duration_seconds), keptCreateDuration(), MAX_DURATION_SECONDS));
     setLmBatch('');
     setSynthBatch('');
     setSteps(asText(request.steps));
@@ -779,6 +801,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
         const source = settings.music_source as YueRequest['music_source'] | undefined;
         const profile = song.ditModel === 'audio.cpp' ? (source?.kind === 'audio_cpp' ? source.model : audioCppMiniMax)
           : source?.kind === 'native' && source.engine === song.ditModel ? source.model : song.lmModel;
+        if (profile === magentaModel) setMagentaOptions(restoreMagentaOptions(settings.magenta));
         if (profile === miDashengModel) setScene(restoreMiDashengPrompt(settings.midasheng));
         if (profile === 'heartmula') setHeartSettings(heartMuLaDraft(settings.heartmula as YueRequest['heartmula']));
         if (profile === 'stable_audio') setStableSettings(stableAudioDraft(settings.stable_audio as YueRequest['stable_audio']));
@@ -873,6 +896,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
     setResingFrom(null);
     typeName('');
     setStyle(''); setLyrics(''); setAbc(''); setCot(''); setContinueScore(false);
+    setMagentaOptions({});
     setPlans([]); setSelectedPlan(0);
     setError(null);
   };
@@ -1186,7 +1210,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
       if (typeof body?.title === 'string' && body.title.trim() && target !== 'score') { setName(body.title.trim()); setNameFilled(true); }
       if (typeof body?.cover_prompt === 'string' && body.cover_prompt.trim()) setCoverPrompt(body.cover_prompt.trim());
       if (typeof body?.duration_seconds === 'number' && body.duration_seconds >= 10 && target === 'all') {
-        setDuration(String(Math.min(MAX_DURATION_SECONDS, clampDurationToKept(body.duration_seconds, keptCreateDuration()))));
+        setDuration(durationAfterLoad(body.duration_seconds, keptCreateDuration(), MAX_DURATION_SECONDS));
       }
     } catch (reason) {
       const cancelled = reason instanceof DOMException && reason.name === 'AbortError';
@@ -1321,6 +1345,8 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
   const [instrumental, setInstrumental] = useState(false);
   // the model was trained to sing: the Instrumental LoRA is what keeps it from it, so the switch takes it along
   const [instrumentalLoraLoading, setInstrumentalLoraLoading] = useState(false);
+  const [instrumentalAdapterId, setInstrumentalAdapterId] = useState<string | null>(null);
+  const instrumentalAdapterReady = instrumentalAdapterId !== null && adapters.some(use => use.id === instrumentalAdapterId && !use.disabled);
   // the latest press of the switch: a LoRA download outlives a click, and only the latest press acts on its result
   const instrumentalRun = useRef(0);
   useEffect(() => () => { instrumentalRun.current += 1; }, []);
@@ -1344,6 +1370,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
     const latest = () => instrumentalRun.current === run;
     if (!on) {
       setInstrumentalLoraLoading(false);
+      setInstrumentalAdapterId(null);
       const change = instrumentalChange.current;
       instrumentalChange.current = null;
       if (change) {
@@ -1353,6 +1380,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
       }
       return;
     }
+    setInstrumentalLoraLoading(true);
     try {
       const installed = async () => {
         const state = await fetchAdapters();
@@ -1360,7 +1388,6 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
       };
       let { state, lora } = await installed();
       if (!lora) {
-        setInstrumentalLoraLoading(true);
         // a download an earlier press started is waited for, not asked for again
         if (!state.installing.includes(INSTRUMENTAL_LORA)) await installCatalogAdapters([INSTRUMENTAL_LORA]);
         for (;;) {
@@ -1375,6 +1402,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
       }
       if (!latest()) return;
       const chosen = lora;
+      setInstrumentalAdapterId(chosen.id);
       setAdapters(current => {
         const present = current.find(use => use.id === chosen.id);
         if (present && !present.disabled) return current;
@@ -1481,23 +1509,25 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
       if (miDasheng && !miDashengPromptReady(scene)) return;
       if (vevo2 && (!lyrics.trim() || !vevoReferences.voice_song_id)) { setError(vevo2SingingStrings[language].required); return; }
       if (audioFamily === audioCppMiniMax && (!style.trim() || !lyrics.trim())) { setError(nativeStrings.styleAndLyricsRequired); return; }
+      if (magenta && !magentaReady) return;
       if (miniMaxH3 && !style.trim()) { setError(nativeStrings.h3PromptRequired); return; }
       if (stableAudio && !style.trim()) { setError(stableAudioPromptRequired(language)); return; }
-      if (!miniMaxH3 && !miDasheng && !style.trim() && !lyrics.trim()) { setError(tt('styleOrLyricsRequired')); return; }
+      if (!magenta && !miDasheng && !miniMaxH3 && !style.trim() && !lyrics.trim()) { setError(tt('styleOrLyricsRequired')); return; }
       setError(null);
       generate({
         music_source: nativeEngine === 'audio.cpp'
           ? { kind: 'audio_cpp', model: native.profile.id }
           : { kind: 'native', engine: nativeEngine, model: native.profile.id },
         style: miDasheng ? scene.caption || scene.music : vevo2 ? '' : finishedStyle(style),
-        lyrics: miDasheng ? scene.speech_text.trim() : miniMaxH3 || stableAudio ? '' : lyrics.replace(/\r\n?/g, '\n').trim(),
+        lyrics: miDasheng ? scene.speech_text.trim() : miniMaxH3 || stableAudio || magenta ? '' : lyrics.replace(/\r\n?/g, '\n').trim(),
         ...(name.trim() ? { title: name.trim() } : {}),
         ...(chosenPlaylist ? { playlist_id: chosenPlaylist } : {}),
         ...(miDasheng ? { midasheng: scene } : {}),
+        ...(magenta ? { magenta: magentaOptions } : {}),
         ...(heartMuLa ? { heartmula: heartMuLaOptions(heartSettings) } : {}),
         ...(stableAudio ? { stable_audio: stableAudioOptions(stableSettings) } : {}),
         ...(vevo2 ? { vevo2: vevoReferences } : {}),
-        ...nativeGenerationSettings(nativeEngine, vevo2 ? { seed: native.settings.seed, output_format: native.settings.output_format } : miDasheng ? { ...native.settings, steps: undefined } : native.settings),
+        ...nativeGenerationSettings(nativeEngine, vevo2 ? { seed: native.settings.seed, output_format: native.settings.output_format } : miDasheng || magenta ? { ...native.settings, steps: undefined } : native.settings),
       });
       return;
     }
@@ -1517,7 +1547,14 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
     if (!ready) { setError(unavailableHint); return; }
     if (!style.trim() && !lyrics.trim() && !semanticTokens.trim()) { setError(tt('styleOrLyricsRequired')); return; }
     setError(null);
-    if (instrumental) { void createInstrumental(); return; }
+    if (instrumental) {
+      if (!instrumentalAdapterReady) {
+        setError(tt(instrumentalLoraLoading ? 'instrumentalLoraLoading' : 'instrumentalLoraFailed'));
+        return;
+      }
+      void createInstrumental();
+      return;
+    }
     // Audio codes hold a performance already sung: ask whether to render that
     // take again or perform the prompt anew, as the engine's own WebUI does.
     if (semanticTokens.trim()) { setTakeChoiceOpen(true); return; }
@@ -1543,7 +1580,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
     lyrics: [lyrics, setLyrics],
     abc: [abc, setAbc],
     cot: [cot, (value) => setCot(value as YueCot | '')],
-    duration_seconds: [duration, setDuration],
+    duration_seconds: [duration, value => setDuration(value || AUTO_DURATION)],
     lm_batch_size: [lmBatch, setLmBatch],
     synth_batch_size: [synthBatch, setSynthBatch],
     steps: [steps, setSteps],
@@ -1604,7 +1641,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
   const songs = numberOrUndefined(lmBatch) ?? 1;
   const variations = numberOrUndefined(synthBatch) ?? 1;
   const totalTracks = songs * variations;
-  const durationFallback = Number(defaults.duration ?? MAX_DURATION_SECONDS);
+  const durationFallback = Number(defaults.duration ?? DEFAULT_AUTO_DURATION_SECONDS);
   const formatDuration = (seconds: number) => `${Math.floor(seconds / 60)}:${String(Math.round(seconds % 60)).padStart(2, '0')}`;
   // The engine caps the audio-code stage at duration x 25 codes: what a
   // larger max tokens would ask for is never drawn.
@@ -1718,16 +1755,17 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
                       </div>
                     )}
               </Card>}
-              <Card title={miDasheng || vevo2 ? t('title') : tt('styleCardTitle')}>
+              <Card title={miDasheng || vevo2 || (magenta && magentaReference) ? t('title') : tt('styleCardTitle')}>
                 <input value={name} onChange={event => typeName(event.target.value)} placeholder={t('untitled')}
                   aria-label={t('untitled')} className={CONTROL + ' mb-2'} />
-                {!vevo2 && !miDasheng && <AutoTextarea className={CONTROL} value={style} onChange={event => setStyle(event.target.value)}
+                {!vevo2 && !miDasheng && !(magenta && magentaReference) && <AutoTextarea className={CONTROL} value={style} onChange={event => setStyle(event.target.value)}
                   placeholder={tt('stylePlaceholder')} aria-label={tt('styleCardTitle')} />}
               </Card>
-              {miDasheng ? <MiDashengFields value={scene} onChange={setScene} /> : !miniMaxH3 && !stableAudio && <Card title={t('lyrics')}>
+              {miDasheng ? <MiDashengFields value={scene} onChange={setScene} /> : !magenta && !miniMaxH3 && !stableAudio && <Card title={t('lyrics')}>
                 <AutoTextarea className={CONTROL} value={lyrics} onChange={event => setLyrics(event.target.value)}
                   aria-label={t('lyrics')} />
               </Card>}
+              {magenta && <MagentaFields value={magentaOptions} onChange={setMagentaOptions} tracks={magentaTracks} controlClassName={CONTROL} />}
               {vevo2 && <Vevo2SingingFields value={vevoReferences} onChange={setVevoReferences} controlClassName={CONTROL} />}
               {heartMuLa && <HeartMuLaControls values={heartSettings} onChange={setHeartSettings} language={language} />}
               {stableAudio && <StableAudioControls value={stableSettings} onChange={setStableSettings} language={language} />}
@@ -1735,7 +1773,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
               {nativeEngine && (native.profile || native.originalModels) && (
                 <Card title={nativeStrings.settings}>
                   <div className="grid grid-cols-2 gap-2">
-                    {nativeControls.filter(([key]) => vevo2 ? key === 'seed' : !miDasheng || key !== 'steps').map(([key, label]) => (
+                    {nativeControls.filter(([key]) => vevo2 ? key === 'seed' : !(miDasheng || magenta) || key !== 'steps').map(([key, label]) => (
                       <label key={key} className="space-y-1 text-xs">
                         <span>{label}</span>
                         <input type="number" step={key === 'duration_seconds' || key === 'guidance_scale' ? 'any' : 1}
@@ -2394,15 +2432,26 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
             <div className="space-y-3">
               <SliderRow
                 label={t('maxDuration')}
-                value={duration}
+                value={autoDuration ? '' : duration}
                 fallback={durationFallback}
-                min={10}
+                min={MIN_DURATION_SECONDS}
                 max={MAX_DURATION_SECONDS}
                 step={5}
                 onChange={chooseDuration}
                 format={formatDuration}
+                disabled={autoDuration}
               />
-              <p className="text-[11px] leading-4 text-zinc-500">{tt('maxDurationHintYue')}</p>
+              <button
+                type="button"
+                aria-pressed={autoDuration}
+                onClick={() => chooseDuration(autoDuration ? keptManualDuration() : AUTO_DURATION)}
+                className={`rounded-md border px-2 py-1 text-[11px] font-semibold transition-colors ${autoDuration
+                  ? 'border-pink-500 bg-pink-500/10 text-pink-600 dark:text-pink-300'
+                  : 'border-zinc-200 text-zinc-500 hover:bg-zinc-100 hover:text-black dark:border-white/10 dark:text-zinc-400 dark:hover:bg-white/10 dark:hover:text-white'}`}
+              >
+                {tt('maxDurationAuto')}
+              </button>
+              <p className="text-[11px] leading-4 text-zinc-500">{tt(autoDuration ? 'maxDurationAutoHint' : 'maxDurationHintYue')}</p>
               <SliderRow
                 label={tt('flowSteps')}
                 value={steps}
@@ -2688,7 +2737,9 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
         <button
           type="button"
           onClick={submit}
-          disabled={cloud ? !selectedMusicModel : nativeEngine ? !native.ready || (miDasheng && !miDashengPromptReady(scene)) : false}
+          disabled={cloud ? !selectedMusicModel : nativeEngine
+            ? !native.ready || (miDasheng && !miDashengPromptReady(scene)) || (magenta && !magentaReady)
+            : yue && instrumental && instrumentalLoraLoading && !isGenerating}
           className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-linear-to-r from-orange-500 to-pink-600 text-base font-bold text-white shadow-lg transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
         >
           {isGenerating ? <Square size={18} /> : yue && instrumental ? <Guitar size={18} /> : <Sparkles size={18} />}
