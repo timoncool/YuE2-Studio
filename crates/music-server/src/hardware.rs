@@ -1,8 +1,6 @@
 //! The machine the studio runs on: its GPU, how much memory it has, and the
 //! model set that fits in it.
 
-#[cfg(not(any(windows, target_os = "macos")))]
-use std::path::PathBuf;
 use std::{process::Command, sync::OnceLock};
 
 use serde::{Deserialize, Serialize};
@@ -435,80 +433,47 @@ fn apple_chip(profile: &str) -> Option<String> {
 /// on a machine whose GPU works. Used by the Intel and AMD builds alike.
 #[cfg(not(any(windows, target_os = "macos")))]
 fn display_adapter() -> Option<(String, f64)> {
-    let card = linux_card()?;
-    let name = linux_card_name(&card.vendor_id, &card.device_id);
-    Some((name, card.vram_gb))
+    let card = linux_cards().first()?;
+    Some((card.name.clone(), card.vram_gb))
 }
 
 #[cfg(not(any(windows, target_os = "macos")))]
-struct LinuxCard {
-    vendor_id: String,
-    device_id: String,
-    vram_gb: f64,
+pub(crate) struct LinuxCard {
+    pub name: String,
+    pub pci: Option<String>,
+    pub used_path: std::path::PathBuf,
+    pub vram_gb: f64,
+    pub nvidia: bool,
 }
 
-/// The first DRM card that is a PCI device, with the dedicated memory it
-/// reports. Only the proprietary AMD driver publishes `mem_info_vram_total`;
-/// where it is absent the size is asked of Vulkan, which is where the engine
-/// reads it too - Intel's `xe` driver publishes nothing at all, and without this
-/// a working Intel card looked like a machine with no card. A card whose size
-/// neither tells keeps 0.0, which recommends the lightest set rather than
-/// guessing at one that may not fit.
+/// Static inventory for the lifetime of the studio, in DRM card order.
 #[cfg(not(any(windows, target_os = "macos")))]
-fn linux_card() -> Option<LinuxCard> {
-    let (device, vendor_id, device_id) = first_drm_card()?;
-    let vram_gb = std::fs::read_to_string(device.join("mem_info_vram_total"))
-        .ok()
-        .and_then(|bytes| bytes.trim().parse::<f64>().ok())
-        .map(|bytes| bytes / 1024.0 / 1024.0 / 1024.0)
-        .or_else(|| crate::vulkan_mem::device_memory_gb(&vendor_id, &device_id))
-        .unwrap_or(0.0);
-    Some(LinuxCard { vendor_id, device_id, vram_gb })
-}
-
-/// The first DRM card that is a PCI device: its `/sys` device folder and the ids
-/// the kernel gives it. The size files live in that folder; the ids also name the
-/// card to Vulkan, which is where a size the kernel does not publish is asked for.
-#[cfg(not(any(windows, target_os = "macos")))]
-fn first_drm_card() -> Option<(PathBuf, String, String)> {
-    let mut cards: Vec<PathBuf> = std::fs::read_dir("/sys/class/drm")
-        .ok()?
-        .flatten()
-        .map(|entry| entry.path())
-        .filter(|path| {
-            path.file_name()
-                .and_then(|name| name.to_str())
-                .is_some_and(|name| name.starts_with("card") && name[4..].chars().all(|c| c.is_ascii_digit()))
-        })
-        .collect();
-    cards.sort();
-    cards.into_iter().find_map(|path| {
-        let device = path.join("device");
-        let read = |name: &str| -> Option<String> {
-            std::fs::read_to_string(device.join(name)).ok().map(|value| value.trim().to_owned())
-        };
-        let vendor_id = read("vendor")?;
-        let device_id = read("device").unwrap_or_default();
-        Some((device, vendor_id, device_id))
+pub(crate) fn linux_cards() -> &'static [LinuxCard] {
+    static CARDS: OnceLock<Vec<LinuxCard>> = OnceLock::new();
+    CARDS.get_or_init(|| {
+        let Ok(entries) = std::fs::read_dir("/sys/class/drm") else { return Vec::new() };
+        let mut cards: Vec<_> = entries.flatten().filter_map(|entry| {
+            let number: u32 = entry.file_name().to_str()?.strip_prefix("card")?.parse().ok()?;
+            Some((number, entry.path().join("device")))
+        }).collect();
+        cards.sort_by_key(|(number, _)| *number);
+        cards.into_iter().filter_map(|(_, device)| {
+            let read = |name: &str| std::fs::read_to_string(device.join(name)).ok();
+            let vendor = read("vendor")?;
+            let vendor = vendor.trim();
+            let model = read("device").unwrap_or_default();
+            let model = model.trim();
+            let pci = read("uevent").and_then(|text| text.lines().find_map(|line|
+                line.strip_prefix("PCI_SLOT_NAME=").map(str::to_owned)));
+            let vram_gb = read("mem_info_vram_total").and_then(|s| s.trim().parse::<u64>().ok())
+                .map(|bytes| bytes as f64 / GIB)
+                .or_else(|| crate::vulkan_mem::device_memory_gb(vendor, model)).unwrap_or(0.0);
+            Some(LinuxCard { name: linux_card_name(vendor, model), pci, vram_gb,
+                used_path: device.join("mem_info_vram_used"), nvidia: vendor == "0x10de" })
+        }).collect()
     })
 }
 
-/// The PCI address of the card the kernel names (`0000:04:00.0`), as the DRM
-/// `fdinfo` blocks write it; none on the platforms that name no card.
-#[cfg(any(windows, target_os = "macos"))]
-pub fn card_pci_address() -> Option<String> {
-    None
-}
-
-#[cfg(not(any(windows, target_os = "macos")))]
-pub fn card_pci_address() -> Option<String> {
-    let (device, _, _) = first_drm_card()?;
-    let uevent = std::fs::read_to_string(device.join("uevent")).ok()?;
-    uevent.lines().find_map(|line| line.strip_prefix("PCI_SLOT_NAME=").map(|address| address.trim().to_owned()))
-}
-
-/// `lspci` names the card as a person would; without it the vendor still names
-/// it well enough to reach the GPU. `8086` is Intel, `1002` and `1022` AMD.
 #[cfg(not(any(windows, target_os = "macos")))]
 fn linux_card_name(vendor_id: &str, device_id: &str) -> String {
     let vendor = match vendor_id.trim_start_matches("0x").to_ascii_lowercase().as_str() {

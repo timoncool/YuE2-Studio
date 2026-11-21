@@ -86,7 +86,7 @@ pub fn snapshot() -> ResourceSnapshot {
         cpu_percent: system.global_cpu_usage(),
         ram_used_mb: system.used_memory() / 1_048_576,
         ram_total_mb: system.total_memory() / 1_048_576,
-        gpus: nvidia_gpus().or_else(vulkan_gpus).unwrap_or_else(|| unified_memory_gpu(system.used_memory() / 1_048_576, system.total_memory() / 1_048_576)),
+        gpus: machine_gpus(system.used_memory() / 1_048_576, system.total_memory() / 1_048_576),
         engine_process,
         studio_process_mb,
     }
@@ -103,22 +103,20 @@ pub fn snapshot() -> ResourceSnapshot {
 /// `None` when nothing under /proc could be read (no /proc, or hidepid): the
 /// monitor then shows no figure for this card rather than an invented one.
 #[cfg(not(any(windows, target_os = "macos")))]
-fn drm_vram_used_bytes(card: Option<&str>) -> Option<u64> {
-    // Reading every process's fdinfo costs tens of milliseconds; the window asks
-    // once a second, and a number two seconds old is the same gauge.
-    static LAST: Mutex<Option<(std::time::Instant, Option<u64>)>> = Mutex::new(None);
-    if let Some((at, answer)) = *LAST.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
-        && at.elapsed() < Duration::from_secs(2)
-    {
-        return answer;
+fn drm_usage() -> Option<std::collections::HashMap<String, u64>> {
+    type Sample = (std::time::Instant, Option<std::collections::HashMap<String, u64>>);
+    static LAST: Mutex<Option<Sample>> = Mutex::new(None);
+    let mut last = LAST.lock().unwrap_or_else(|p| p.into_inner());
+    if let Some((at, usage)) = &*last && at.elapsed() < Duration::from_secs(2) {
+        return usage.clone();
     }
-    let answer = scan_drm_vram_used_bytes(card);
-    *LAST.lock().unwrap_or_else(|poisoned| poisoned.into_inner()) = Some((std::time::Instant::now(), answer));
-    answer
+    let usage = scan_drm_usage();
+    *last = Some((std::time::Instant::now(), usage.clone()));
+    usage
 }
 
 #[cfg(not(any(windows, target_os = "macos")))]
-fn scan_drm_vram_used_bytes(card: Option<&str>) -> Option<u64> {
+fn scan_drm_usage() -> Option<std::collections::HashMap<String, u64>> {
     use std::collections::HashMap;
 
     // (card, client id) -> (resident, shared): the same client is written by
@@ -137,28 +135,23 @@ fn scan_drm_vram_used_bytes(card: Option<&str>) -> Option<u64> {
                 continue;
             }
             if let Some((pdev, client, resident, shared)) = drm_client_of_fdinfo(&text)
-                && on_card(card, &pdev)
+                && !pdev.is_empty()
             {
                 clients.insert((pdev, client), (resident, shared));
             }
         }
     }
-    (!clients.is_empty()).then(|| vram_of_clients(&clients))
+    Some(vram_of_clients(&clients))
 }
 
-/// Whether a client's `drm-pdev` is the card whose gauge this is: a laptop with
-/// two cards must not add the other one's clients to this one's figure.
 #[cfg(not(any(windows, target_os = "macos")))]
-fn on_card(card: Option<&str>, pdev: &str) -> bool {
-    card.is_none_or(|card| card == pdev)
+fn vram_of_clients(clients: &std::collections::HashMap<(String, String), (u64, u64)>) -> std::collections::HashMap<String,u64> {
+    let mut usage = std::collections::HashMap::new();
+    for ((card, _), (resident, shared)) in clients {
+        *usage.entry(card.clone()).or_default() += resident.saturating_sub(*shared);
+    }
+    usage
 }
-
-/// What the clients hold together: each client's resident less its shared.
-#[cfg(not(any(windows, target_os = "macos")))]
-fn vram_of_clients(clients: &std::collections::HashMap<(String, String), (u64, u64)>) -> u64 {
-    clients.values().map(|(resident, shared)| resident.saturating_sub(*shared)).sum()
-}
-
 /// One `fdinfo` block as the kernel writes it for a DRM client: the card it is
 /// on, the client id, and its resident and shared video memory in bytes
 /// (`drm-resident-vram0: 1234 KiB`). Every region a card keeps is counted.
@@ -166,7 +159,7 @@ fn vram_of_clients(clients: &std::collections::HashMap<(String, String), (u64, u
 fn drm_client_of_fdinfo(text: &str) -> Option<(String, String, u64, u64)> {
     let mut card = String::new();
     let mut client = None;
-    let mut resident = 0u64;
+    let mut resident = None;
     let mut shared = 0u64;
     for line in text.lines() {
         let Some((key, value)) = line.split_once(':') else { continue };
@@ -176,7 +169,7 @@ fn drm_client_of_fdinfo(text: &str) -> Option<(String, String, u64, u64)> {
             "drm-client-id" => client = Some(value.to_owned()),
             _ if key.starts_with("drm-resident-vram") => {
                 if let Some(kib) = value.strip_suffix("KiB").and_then(|value| value.trim().parse::<u64>().ok()) {
-                    resident += kib * 1024;
+                    *resident.get_or_insert(0u64) += kib * 1024;
                 }
             }
             _ if key.starts_with("drm-shared-vram") => {
@@ -187,39 +180,39 @@ fn drm_client_of_fdinfo(text: &str) -> Option<(String, String, u64, u64)> {
             _ => {}
         }
     }
-    Some((card, client?, resident, shared))
+    Some((card, client?, resident?, shared))
 }
 
 /// The card the engine computes on when nvidia-smi does not know it: a Vulkan
 /// card on Linux, with the memory the kernel reports in use. `None` when there
 /// is no such card, or when the kernel publishes nothing for it: a number is
 /// never invented for the gauge.
-fn vulkan_gpus() -> Option<Vec<GpuSnapshot>> {
+fn machine_gpus(used: u64, total: u64) -> Vec<GpuSnapshot> {
+    let nvidia = nvidia_gpus();
     #[cfg(not(any(windows, target_os = "macos")))]
     {
-        let hardware = crate::hardware::hardware();
-        let name = hardware.gpu_name.clone()?;
-        if hardware.total_vram_gb <= 0.0 {
-            return None;
+        let has_nvidia_readings = nvidia.as_ref().is_some_and(|cards| !cards.is_empty());
+        let mut gpus = nvidia.unwrap_or_default();
+        let cards = crate::hardware::linux_cards();
+        let usage = std::cell::OnceCell::new();
+        for card in cards {
+            if card.vram_gb <= 0.0 || (card.nvidia && has_nvidia_readings) { continue; }
+            let Some(pci) = card.pci.as_ref() else { continue };
+            let bytes = std::fs::read_to_string(&card.used_path).ok().and_then(|s| s.trim().parse::<u64>().ok())
+                .or_else(|| usage.get_or_init(drm_usage).as_ref()?.get(pci).copied());
+            let Some(bytes) = bytes else { continue };
+            gpus.push(GpuSnapshot {
+                name: if cards.len() > 1 { format!("{} ({pci})", card.name) } else { card.name.clone() },
+                vram_used_mb: bytes / 1_048_576, vram_total_mb: (card.vram_gb * 1024.0).round() as u64,
+                utilization_percent: None, temperature_c: None, power_draw_w: None, power_limit_w: None,
+            });
         }
-        let total_mb = (hardware.total_vram_gb * 1024.0).round() as u64;
-        let used_bytes = drm_vram_used_bytes(crate::hardware::card_pci_address().as_deref())?;
-        Some(vec![GpuSnapshot {
-            name,
-            vram_used_mb: used_bytes / 1_048_576,
-            vram_total_mb: total_mb,
-            utilization_percent: None,
-            temperature_c: None,
-            power_draw_w: None,
-            power_limit_w: None,
-        }])
+        if !gpus.is_empty() { return gpus; }
     }
     #[cfg(any(windows, target_os = "macos"))]
-    {
-        None
-    }
+    if let Some(gpus) = nvidia { return gpus; }
+    unified_memory_gpu(used, total)
 }
-
 /// Apple Silicon has one GPU that shares the machine's memory, so its memory
 /// figures are the system's; it reports no load, temperature or power.
 fn unified_memory_gpu(used_mb: u64, total_mb: u64) -> Vec<GpuSnapshot> {
@@ -321,10 +314,10 @@ mod tests {
 
     #[cfg(not(any(windows, target_os = "macos")))]
     #[test]
-    fn only_the_cards_own_clients_are_counted() {
-        assert!(super::on_card(Some("0000:04:00.0"), "0000:04:00.0"));
-        assert!(!super::on_card(Some("0000:04:00.0"), "0000:00:02.0"), "the integrated card is another gauge");
-        assert!(super::on_card(None, "0000:00:02.0"), "a machine that names no card takes what it finds");
+    fn missing_residency_is_unknown_and_measured_zero_is_valid() {
+        let base = "drm-pdev: 0000:04:00.0\ndrm-client-id: 30\n";
+        assert!(super::drm_client_of_fdinfo(base).is_none());
+        assert_eq!(super::drm_client_of_fdinfo(&format!("{base}drm-resident-vram0: 0 KiB")).unwrap().2, 0);
     }
 
     #[cfg(not(any(windows, target_os = "macos")))]
@@ -338,7 +331,10 @@ mod tests {
             clients.insert((card.clone(), "30".to_string()), (2_000u64, 500u64));
         }
         clients.insert((card.clone(), "70".to_string()), (1_000, 0));
-        assert_eq!(super::vram_of_clients(&clients), 1_500 + 1_000);
+        clients.insert(("0000:00:02.0".into(), "30".into()), (3_000, 200));
+        let totals = super::vram_of_clients(&clients);
+        assert_eq!(totals[&card], 2_500);
+        assert_eq!(totals["0000:00:02.0"], 2_800);
     }
 
     #[test]

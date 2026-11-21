@@ -128,7 +128,9 @@ struct Candidate {
 /// is none, so a machine whose first DRM card is built-in graphics never borrows
 /// the size of a discrete card beside it.
 fn pick(candidates: &[Candidate], vendor: u32, device: u32) -> Option<usize> {
-    candidates.iter().position(|candidate| candidate.vendor == vendor && candidate.device == device)
+    let mut matching = candidates.iter().enumerate().filter(|(_, c)| c.vendor == vendor && c.device == device);
+    let (index, first) = matching.next()?;
+    matching.all(|(_, other)| other.bytes == first.bytes).then_some(index)
 }
 
 fn probe(vendor: u32, device: u32) -> Option<u64> {
@@ -172,7 +174,7 @@ fn probe(vendor: u32, device: u32) -> Option<u64> {
 
         let mut candidates: Vec<Candidate> = Vec::new();
         for device_handle in devices {
-            let mut buffer = [0u8; PROPERTIES_BYTES];
+            let mut buffer = [0u64; PROPERTIES_BYTES.div_ceil(8)];
             properties(device_handle, buffer.as_mut_ptr().cast());
             let head: PropertiesHead = ptr::read_unaligned(buffer.as_ptr().cast());
             // Integrated graphics report the system's memory as their own: the
