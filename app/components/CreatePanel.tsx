@@ -104,6 +104,7 @@ type EngineDefaults = Partial<Record<string, unknown>> & {
 type ProfileFiles = { backbone: string; vae: string; transcriber?: string | null };
 
 type SetupStatus = SetupChoice & {
+  music_pair_instance_id?: string;
   ready?: boolean;
   profile_files?: ProfileFiles | null;
   engine_ready?: boolean;
@@ -553,7 +554,8 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
     : signed && packages.engine && packages.model ? { kind: 'signed', engine: packages.engine.id, model: packages.model.id }
     : nativeEngine && native.selectedId ? nativeEngine === 'audio.cpp' ? { kind: 'audio_cpp', model: native.selectedId }
       : { kind: 'native', engine: nativeEngine, model: native.selectedId } : undefined;
-  const pair = useMusicPair(pairSource, Boolean(onMusicEngineChange));
+  const setupQuery = useSetupStatus<SetupStatus>();
+  const pair = useMusicPair(pairSource, Boolean(onMusicEngineChange), setupQuery.data?.music_pair_instance_id);
   const pairText = musicPairStrings[language];
   const waitingJobId = pair.status?.stage === 'waiting_for_generation' ? pair.status.waiting_job_id : undefined;
   const [cancellingPairJob, setCancellingPairJob] = useState(false);
@@ -687,7 +689,6 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
     try { window.localStorage.setItem('studio.createFormat', value); } catch { /* kept until a reload */ }
   };
 
-  const setupQuery = useSetupStatus<SetupStatus>();
   const setup = setupQuery.isError ? null : setupQuery.data ?? null;
   const serviceDown = setupQuery.isError;
   const [catalog, setCatalog] = useState<EngineCatalog | null>(null);
