@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useI18n } from '../context/I18nContext';
+import { signedUpdateStrings } from '../i18n/signedUpdates';
 import { apiUrl } from '../services/apiBase';
 
 type Engine = 'acestep-cpp' | 'minimaxmusic-cpp';
@@ -10,8 +11,9 @@ type Status = {
   download?: { done: boolean; error?: string; downloaded_bytes: number; total_bytes: number };
 };
 
-export function NativeMusicRuntimeInstall({ engine, onInstalled }: {
+export function NativeMusicRuntimeInstall({ engine, update, onInstalled }: {
   engine: Engine;
+  update?: boolean;
   onInstalled: () => void;
 }) {
   const { t, language } = useI18n();
@@ -61,9 +63,10 @@ export function NativeMusicRuntimeInstall({ engine, onInstalled }: {
   const busy = waiting || Boolean(download && !download.done);
   const percent = download?.total_bytes ? Math.floor(100 * download.downloaded_bytes / download.total_bytes) : 0;
   const size = status.bytes && new Intl.NumberFormat(language, { maximumFractionDigits: 2 }).format(status.bytes / 2 ** 30);
+  const action = update ? signedUpdateStrings[language].update : t('download');
   return <div className="space-y-1 text-xs">
     <button type="button" disabled={busy} onClick={() => void install()} className="text-pink-600 underline disabled:opacity-50 dark:text-pink-300">
-      {busy ? `${t('downloading')} ${Math.min(100, percent)}%` : `${t('download')}${size ? ` · ${size} GiB` : ''}`}
+      {busy ? `${t('downloading')} ${Math.min(100, percent)}%` : `${action}${size ? ` · ${size} GiB` : ''}`}
     </button>
     {busy && download && !download.done && <button type="button" className="ml-2 underline" onClick={() => {
       void fetch(url, { method: 'DELETE' }).catch(problem => setError(String(problem)));

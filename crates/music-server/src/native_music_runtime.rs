@@ -31,6 +31,8 @@ struct Pin<'a> {
     bytes: u64,
     sha256: &'a str,
     executable: &'a str,
+    #[serde(default)]
+    broken_windows_adapter_paths: bool,
     #[serde(borrow)]
     required: std::collections::BTreeMap<&'a str, &'a str>,
 }
@@ -112,6 +114,14 @@ pub(super) fn installed(data_root: &FsPath, engine: &str) -> Option<PathBuf> {
     // Keep earlier pins in the table behind the current pin. An app upgrade
     // can then run the previous verified install before the user downloads.
     host_runtimes(engine).find_map(|runtime| installed_by(&downloader, runtime))
+}
+
+pub(super) fn requires_adapter_update(data_root: &FsPath, engine: &str, executable: &FsPath) -> bool {
+    let downloader = downloader(data_root);
+    host_runtimes(engine).any(|runtime| {
+        runtime.pin.broken_windows_adapter_paths
+            && downloader.picked_into(&runtime.asset).join(runtime.pin.executable) == executable
+    })
 }
 
 pub(super) fn cuda_build() -> Option<crate::hardware::CudaBuild> {
@@ -343,6 +353,38 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn windows_ace_fallback_stays_available_for_requests_without_adapters() {
+        let root = tempfile::tempdir().unwrap();
+        let downloads = downloader(root.path());
+        let engine = "acestep-cpp";
+        let current = selected(engine).unwrap();
+        assert!(!current.pin.broken_windows_adapter_paths);
+        let previous = host_runtimes(engine)
+            .find(|runtime| runtime.pin.broken_windows_adapter_paths)
+            .unwrap();
+        let folder = downloads.picked_into(&previous.asset);
+        let files: Vec<_> = previous.pin.required.keys().map(|name| folder.join(name)).collect();
+        for file in &files {
+            fs::create_dir_all(file.parent().unwrap()).unwrap();
+            fs::write(file, b"fixture").unwrap();
+        }
+        install_record::write(
+            &downloads.record_of(&previous.asset),
+            previous.pin.url,
+            previous.pin.sha256,
+            &files,
+            downloads.root(),
+        )
+        .unwrap();
+        let fallback = installed(root.path(), engine).unwrap();
+        assert_eq!(fallback, folder.join(previous.pin.executable));
+        assert!(requires_adapter_update(root.path(), engine, &fallback));
+        let executable = downloads.picked_into(&current.asset).join(current.pin.executable);
+        assert!(!requires_adapter_update(root.path(), engine, &executable));
     }
 
     #[tokio::test]

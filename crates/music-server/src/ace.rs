@@ -21,6 +21,21 @@ mod runtime;
 pub use installation::{installation, InstalledProfile, ENGINE_ID};
 pub use runtime::{Launch, Runtime};
 
+pub(super) fn adapter_names(request: &Value) -> impl Iterator<Item = &str> {
+    [request.get("adapter"), request.get("lm_adapter")]
+        .into_iter()
+        .flatten()
+        .chain(
+            request["adapters"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter_map(|entry| entry.get("name")),
+        )
+        .filter_map(Value::as_str)
+        .filter(|name| !name.is_empty())
+}
+
 /// Every field `AceRequest` reads. Anything else a page sends is refused, so a
 /// misspelt control fails loudly instead of being ignored by the engine.
 pub const REQUEST_FIELDS: &[&str] = &[

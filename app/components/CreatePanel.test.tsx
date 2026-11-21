@@ -415,6 +415,38 @@ it('keeps settings by native engine and profile and submits the selected pair', 
   expect(field('textarea[aria-label="scoreCardTitle"]')!.value).toBe('');
 });
 
+it('offers the ACE runtime update while the installed fallback remains usable', async () => {
+  const install = vi.fn();
+  let updateRequired = true;
+  vi.mocked(fetch).mockImplementation(async (url, options) => {
+    if (String(url).endsWith('/acestep-cpp/profiles')) return Response.json({
+      engine: 'acestep-cpp', engine_installed: true, adapter_runtime_update: updateRequired,
+      profiles: [{ id: 'balanced', label: 'Balanced', ready: true, missing: [], total_bytes: 1 }],
+    });
+    if (String(url).endsWith('/acestep-cpp/runtime')) {
+      if (options?.method === 'POST') {
+        install();
+        return Response.json({ started: true }, { status: 202 });
+      }
+      return Response.json({ supported: true, installed: false, bytes: 2 ** 30 });
+    }
+    return Response.json([]);
+  });
+  act(() => root.render(panel({ musicEngine: 'acestep-cpp' })));
+  await flush();
+  const model = host.querySelector<HTMLSelectElement>('select[aria-label="Local model"]')!;
+  act(() => { model.value = 'balanced'; model.dispatchEvent(new Event('change', { bubbles: true })); });
+  type(field('textarea[aria-label="styleCardTitle"]')!, 'acoustic folk');
+  expect(buttonNamed('create')?.disabled).toBe(false);
+  click(buttonNamed('Update · 1 GiB')!);
+  expect(install).toHaveBeenCalledOnce();
+  updateRequired = false;
+  click(buttonNamed('Refresh models')!);
+  await flush();
+  expect(buttonNamed('Update · 1 GiB')).toBeUndefined();
+  expect(buttonNamed('create')?.disabled).toBe(false);
+});
+
 it('creates native ACE covers and restores a migrated repaint with its source, reference and range', async () => {
   librarySongs = [
     { id: 'origin', title: 'Source track', audioUrl: '/origin.wav' },

@@ -7988,7 +7988,12 @@ fn is_portable_installation() -> bool {
 async fn ace_music_profiles() -> Result<Json<Value>, (StatusCode, Json<ApiError>)> {
     native_profile_catalog(|root| {
         let installed = ace::installation(root);
-        serde_json::json!({"engine":"acestep-cpp","engine_installed":installed.engine_installed(),"profiles":installed.profiles()})
+        serde_json::json!({
+            "engine": ace::ENGINE_ID,
+            "engine_installed": installed.engine_installed(),
+            "adapter_runtime_update": installed.adapter_runtime_update(),
+            "profiles": installed.profiles(),
+        })
     }).await
 }
 
