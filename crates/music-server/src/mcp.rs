@@ -555,6 +555,8 @@ const JOURNAL: &[(&str, &str, &str)] = &[
     ("rvc_voice_import", "installed", "rvc_voice"),
     ("rvc_voice_remove", "deleted", "rvc_voice"),
     ("music_package_rollback", "updated", "settings"),
+    ("audio_cpp_music_model_install_cancel", "cancelled", "download"),
+    ("hotstep_music_model_install_cancel", "cancelled", "download"),
     ("music_package_cancel", "cancelled", "download"),
     ("music_model_package_install", "installed", "model"),
     ("music_engine_package_install", "installed", "music_engine"),
