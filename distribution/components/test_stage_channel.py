@@ -32,7 +32,12 @@ class Publication(unittest.TestCase):
             target = TargetFile.from_data("mirrors.json", data, ["sha256"])
             payload = targets / (target.hashes["sha256"] + ".mirrors.json")
             payload.write_bytes(data)
-            role = Targets(expires=expiry, targets={"mirrors.json": target})
+            voices = Path(__file__).resolve().parents[2] / "config/rvc-voice-catalog.json"
+            voices_data = voices.read_bytes()
+            voice_target = TargetFile.from_data("rvc-voice-catalog.json", voices_data, ["sha256"])
+            voice_filename = voice_target.hashes["sha256"] + ".rvc-voice-catalog.json"
+            (targets / voice_filename).write_bytes(voices_data)
+            role = Targets(expires=expiry, targets={"mirrors.json": target, "rvc-voice-catalog.json": voice_target})
             signed = sign(role, keys["targets"])
             (meta / "1.targets.json").write_bytes(signed)
             snapshot = sign(Snapshot(expires=expiry, meta={"targets.json": MetaFile.from_data(1, signed, ["sha256"])}), keys["snapshot"])
@@ -40,20 +45,24 @@ class Publication(unittest.TestCase):
             (meta / "timestamp.json").write_bytes(sign(Timestamp(expires=expiry, snapshot_meta=MetaFile.from_data(1, snapshot, ["sha256"])), keys["timestamp"]))
             (meta / "unrelated-file").write_bytes(b"must stay outside publication")
             site = work / "site"
-            stage_channel(anchor, meta, targets, reviewed, None, site)
+            with self.assertRaisesRegex(ValueError, "exactly the reviewed catalogues"):
+                stage_channel(anchor, meta, targets, reviewed, None, site)
+            self.assertFalse(site.exists())
+            stage_channel(anchor, meta, targets, reviewed, voices, site)
             self.assertEqual((site / "targets" / payload.name).read_bytes(), data)
+            self.assertEqual((site / "targets" / voice_filename).read_bytes(), voices_data)
             self.assertFalse((site / "unrelated-file").exists())
             self.assertEqual((site / "1.root.json").read_bytes(), anchor.read_bytes())
-            stage_channel(anchor, meta, targets, reviewed, None, work / "repeat", previous_site=site)
+            stage_channel(anchor, meta, targets, reviewed, voices, work / "repeat", previous_site=site)
             future = Timestamp(version=2, expires=expiry, snapshot_meta=MetaFile.from_data(1, snapshot, ["sha256"]))
             (site / "timestamp.json").write_bytes(sign(future, keys["timestamp"]))
             with self.assertRaisesRegex(ValueError, "roll back"):
-                stage_channel(anchor, meta, targets, reviewed, None, work / "rollback", previous_site=site)
+                stage_channel(anchor, meta, targets, reviewed, voices, work / "rollback", previous_site=site)
             self.assertFalse((work / "rollback").exists())
             payload.write_bytes(b"x" * len(data))
             bad = work / "bad"
             with self.assertRaises(LengthOrHashMismatchError):
-                stage_channel(anchor, meta, targets, reviewed, None, bad)
+                stage_channel(anchor, meta, targets, reviewed, voices, bad)
             self.assertFalse(bad.exists())
 
 
