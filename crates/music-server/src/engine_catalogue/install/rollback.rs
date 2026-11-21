@@ -6,8 +6,9 @@ pub(crate) struct Requested {
     to_generation: String,
 }
 
-async fn restore<P: Package>(data: &Path, id: &str, request: Requested) -> Result<Selection> {
+async fn restore<P: Package>(state: &AppState, id: &str, request: Requested) -> Result<Selection> {
     ensure!(portable_name(id), "invalid package identifier");
+    let data = update_data_root(state);
     let root = data.join(P::FOLDER).join(id);
     let lock = std::fs::OpenOptions::new()
         .write(true)
@@ -40,6 +41,8 @@ async fn restore<P: Package>(data: &Path, id: &str, request: Requested) -> Resul
     let mut file = tempfile::NamedTempFile::new_in(&root)?;
     serde_json::to_writer(file.as_file_mut(), &selection)?;
     file.as_file().sync_all()?;
+    let _activation = state.engine_use.try_write().context("The local music engine is busy.")?;
+    ensure!(!local_work_pending(state).await, "The local music engine is busy.");
     file.persist(root.join("active.json"))?;
     Ok(selection)
 }
@@ -49,10 +52,9 @@ pub(crate) async fn apply(
     RoutePath((kind, id)): RoutePath<(String, String)>,
     Json(request): Json<Requested>,
 ) -> Result<Json<Selection>, Failure> {
-    let data = update_data_root(&state);
     let result = match kind.as_str() {
-        EnginePackage::FOLDER => restore::<EnginePackage>(data, &id, request).await,
-        ModelPackage::FOLDER => restore::<ModelPackage>(data, &id, request).await,
+        EnginePackage::FOLDER => restore::<EnginePackage>(&state, &id, request).await,
+        ModelPackage::FOLDER => restore::<ModelPackage>(&state, &id, request).await,
         _ => {
             return Err(api_error(
                 StatusCode::BAD_REQUEST,
