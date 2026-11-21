@@ -248,32 +248,12 @@ pub(super) async fn start(State(state): State<AppState>) -> impl IntoResponse {
         Ok(None) => return Json(serde_json::json!({ "started": false })).into_response(),
         Err(reason) => return api_error(StatusCode::CONFLICT, reason).into_response(),
     };
-    let downloader = state.rvc_burn_downloads.clone();
-    if downloader
-        .active_for(SCOPE)
-        .await
-        .is_some_and(|progress| !progress.done)
-    {
-        return (
-            StatusCode::ACCEPTED,
-            Json(serde_json::json!({ "started": true })),
-        )
-            .into_response();
+    let assets = profile.assets(true).collect();
+    match state.rvc_burn_downloads.start_verified(SCOPE, assets).await {
+        Ok(true) => (StatusCode::ACCEPTED, Json(serde_json::json!({ "started": true }))).into_response(),
+        Ok(false) => Json(serde_json::json!({ "started": false })).into_response(),
+        Err(error) => api_error(StatusCode::CONFLICT, error.to_string()).into_response(),
     }
-    let assets: Vec<_> = profile.assets(true).collect();
-    if assets.iter().all(|asset| present(&downloader, asset)) {
-        return Json(serde_json::json!({ "started": false })).into_response();
-    }
-    tokio::spawn(async move {
-        if let Err(error) = downloader.install_verified(SCOPE, &assets).await {
-            studio_log!("RVC Burn install failed: {error:#}");
-        }
-    });
-    (
-        StatusCode::ACCEPTED,
-        Json(serde_json::json!({ "started": true })),
-    )
-        .into_response()
 }
 
 pub(super) async fn cancel(State(state): State<AppState>) -> Json<Value> {
@@ -307,8 +287,51 @@ mod tests {
 
         install_record::write(&record, asset.url, sha256(asset.url).unwrap(), &[dll], &root).unwrap();
         assert!(present(&downloader, asset));
-        downloader.install_verified(SCOPE, &[asset]).await.unwrap();
+        assert!(!downloader.start_verified(SCOPE, vec![asset]).await.unwrap());
         assert!(downloader.active_for(SCOPE).await.is_none(), "an already verified asset starts no download");
+    }
+
+    #[tokio::test]
+    async fn burn_retry_publishes_fresh_progress_before_the_worker_runs() {
+        let temp = tempfile::tempdir().unwrap();
+        let proxy = tokio::net::TcpListener::bind(("127.0.0.1", 0)).await.unwrap();
+        let http = reqwest::Client::builder()
+            .proxy(reqwest::Proxy::all(format!("http://{}", proxy.local_addr().unwrap())).unwrap())
+            .build()
+            .unwrap();
+        let downloader = downloader(temp.path()).with_test_http(http);
+        let asset = Profile::Cuda12.assets(false).find(|asset| asset.id == "content").unwrap();
+        downloader.fail(SCOPE, "previous failure".into()).await;
+
+        for previous in ["previous failure", "cancelled"] {
+            let earlier = downloader.active_for(SCOPE).await.unwrap();
+            assert!(earlier.done);
+            assert_eq!(earlier.error.as_deref(), Some(previous));
+
+            assert!(downloader.start_verified(SCOPE, vec![asset]).await.unwrap());
+            let first = downloader.active_for(SCOPE).await.unwrap();
+            assert!(!first.done);
+            assert!(first.error.is_none());
+            assert_eq!(first.asset_id, asset.id);
+            assert_eq!(first.total_bytes, asset.bytes);
+
+            assert!(downloader.start_verified(SCOPE, vec![asset]).await.unwrap());
+            assert!(downloader.start_verified("other", vec![asset]).await.is_err());
+            assert!(!downloader.cancel_for("other").await);
+            assert!(downloader.cancel_for(SCOPE).await);
+            let cancelled = tokio::time::timeout(std::time::Duration::from_secs(3), async {
+                loop {
+                    let status = downloader.active_for(SCOPE).await.unwrap();
+                    if status.done {
+                        break status;
+                    }
+                    tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+                }
+            })
+            .await
+            .unwrap();
+            assert_eq!(cancelled.error.as_deref(), Some("cancelled"));
+        }
     }
 
     #[test]
