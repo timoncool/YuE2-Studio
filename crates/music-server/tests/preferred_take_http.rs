@@ -113,6 +113,24 @@ async fn preferred_take_survives_restart_and_reordering_without_touching_media()
         mcp(&http, &base, "playlist_select_preferred_take", args).await?,
         json!({"preferred_song_id":second, "changed":false})
     );
+    let journal: Vec<Value> = http
+        .get(format!("{base}/v1/journal"))
+        .send()
+        .await?
+        .error_for_status()?
+        .json()
+        .await?;
+    assert_eq!(
+        journal
+            .iter()
+            .filter(|entry| entry["source"] == "agent"
+                && entry["verb"] == "updated"
+                && entry["kind"] == "playlist"
+                && entry["target"] == "Drafts")
+            .count(),
+        1,
+        "Journal must contain one named change for the first selection: {journal:?}",
+    );
     let reversed: Value = http
         .put(&endpoint)
         .json(&json!({"name":"Renamed", "song_ids":[second, first]}))

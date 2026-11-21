@@ -496,6 +496,7 @@ const JOURNAL: &[(&str, &str, &str)] = &[
     ("album_reorder", "updated", "library"),
     ("playlist_create", "created", "playlist"),
     ("playlist_update", "updated", "playlist"),
+    ("playlist_select_preferred_take", "updated", "playlist"),
     ("playlist_delete", "deleted", "playlist"),
     ("stems_split", "started", "stems"),
     ("karaoke_make", "started", "karaoke"),
@@ -694,7 +695,12 @@ fn change_target(kind: &str, args: &Value, before: &str, reply: &str) -> String 
 
 /// Writes an agent's change into the studio's journal, where the person reads it.
 async fn journal_change(name: &str, args: &Value, before: &str, reply: &str) {
-    if name == "rvc_voice_remove" && serde_json::from_str::<Value>(reply).is_ok_and(|result| result["removed"] == false) {
+    let outcome_field = match name {
+        "rvc_voice_remove" => Some("removed"),
+        "playlist_select_preferred_take" => Some("changed"),
+        _ => None,
+    };
+    if outcome_field.is_some_and(|field| serde_json::from_str::<Value>(reply).is_ok_and(|result| result[field] == false)) {
         return;
     }
     let Some((verb, kind)) = journal_facts(name, args) else { return };
