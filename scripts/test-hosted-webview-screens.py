@@ -546,10 +546,11 @@ $all = [Windows.Automation.Condition]::TrueCondition
 $root = [Windows.Automation.AutomationElement]::RootElement
 $confirmed = $false
 $settingsOpen = $false
-$paperOpen = $false
 $paperSet = $false
 $paperChoiceInvoked = $false
 $paperGroupLogged = $false
+$paperStrategy = 0
+$paperSince = [DateTime]::UtcNow
 $deadline = [DateTime]::UtcNow.AddSeconds(28)
 while ([DateTime]::UtcNow -lt $deadline -and !(Test-Path -LiteralPath $env:STUDIO_QA_PDF)) {
   $ids = [Collections.Generic.HashSet[int]]::new()
@@ -561,7 +562,8 @@ while ([DateTime]::UtcNow -lt $deadline -and !(Test-Path -LiteralPath $env:STUDI
       if ($ids.Contains([int]$p.ParentProcessId)) { [void]$ids.Add([int]$p.ProcessId) }
     }
   } while ($count -ne $ids.Count)
-  foreach ($window in $root.FindAll($tree::Children,$all)) {
+  $windows = $root.FindAll($tree::Children,$all)
+  foreach ($window in $windows) {
     if (!$ids.Contains($window.Current.ProcessId) -and $window.Current.Name -notmatch '^(Print(ing)?|Save As|Save Print Output As)$') { continue }
     $elements = $window.FindAll($tree::Descendants,$all)
     $buttons = @($elements | Where-Object {
@@ -645,16 +647,8 @@ while ([DateTime]::UtcNow -lt $deadline -and !(Test-Path -LiteralPath $env:STUDI
             $paperGroupLogged = $true
           }
           $paper = $paperElements | Where-Object {
-            $_.Current.IsKeyboardFocusable -and !$_.Current.IsOffscreen
-          } | Where-Object { $_.Current.ControlType -ne [Windows.Automation.ControlType]::Text } | Select-Object -First 1
-          if ($paperChoiceInvoked -and ($paperElements | Where-Object {
-            $_.Current.ControlType -eq [Windows.Automation.ControlType]::Text -and
-            $_.Current.Name -match '^A4($|[\s(])' -and !$_.Current.IsOffscreen
-          })) {
-            $paperSet = $true
-            Write-Output 'Selected paper shown by the WebView print preview: A4'
-            break
-          }
+            $_.Current.ControlType -eq [Windows.Automation.ControlType]::ComboBox
+          } | Select-Object -First 1
         }
         if (!$paper) {
           $elements | Where-Object {$_.Current.Name -match 'Paper|Size|Letter|A4'} | ForEach-Object {
@@ -662,39 +656,74 @@ while ([DateTime]::UtcNow -lt $deadline -and !(Test-Path -LiteralPath $env:STUDI
           }
           continue
         }
-        if (!$paperOpen) {
-          $pattern = $null
-          if ($paper.TryGetCurrentPattern([Windows.Automation.ExpandCollapsePattern]::Pattern,[ref]$pattern)) {
-            $pattern.Expand()
-          } elseif ($paper.TryGetCurrentPattern([Windows.Automation.InvokePattern]::Pattern,[ref]$pattern)) {
-            $pattern.Invoke()
-          } else {
-            $paper.SetFocus()
-            [Windows.Forms.SendKeys]::SendWait(' ')
-          }
-          $paperOpen = $true
+        $value = $null
+        $selection = $null
+        $expand = $null
+        [void]$paper.TryGetCurrentPattern([Windows.Automation.ValuePattern]::Pattern,[ref]$value)
+        [void]$paper.TryGetCurrentPattern([Windows.Automation.SelectionPattern]::Pattern,[ref]$selection)
+        [void]$paper.TryGetCurrentPattern([Windows.Automation.ExpandCollapsePattern]::Pattern,[ref]$expand)
+        $selected = if ($selection) { @($selection.Current.GetSelection() | ForEach-Object { $_.Current.Name }) }
+        $shown = @($paperElements | Where-Object {
+          $_.Current.ControlType -eq [Windows.Automation.ControlType]::Text -and !$_.Current.IsOffscreen
+        } | ForEach-Object { $_.Current.Name })
+        $readBack = if ($value) { $value.Current.Value }
+        if ((!$expand -or $expand.Current.ExpandCollapseState -eq 'Collapsed') -and
+            (@($readBack) + $selected + $shown | Where-Object { $_ -match '^A4($|[\s(])' })) {
+          $paperSet = $true
+          Write-Output (@{confirmedPaper='A4';value=$readBack;selected=$selected;shown=$shown} | ConvertTo-Json -Compress)
           break
         }
-        if ($paperChoiceInvoked) { continue }
-        $a4Options = @($elements | Where-Object {
+
+        if ($paperStrategy -eq 0) {
+          $scroll = $null
+          if ($paper.TryGetCurrentPattern([Windows.Automation.ScrollItemPattern]::Pattern,[ref]$scroll)) { $scroll.ScrollIntoView() }
+          $paper.SetFocus()
+          if ($value -and !$value.Current.IsReadOnly) {
+            try { $value.SetValue('A4'); Write-Output 'Tried setting A4 via ValuePattern' }
+            catch { Write-Output "Print paper ValuePattern rejected A4: $($_.Exception.Message)" }
+          }
+          Write-Output (@{initialValue=$readBack;selected=$selected;shown=$shown;offscreen=$paper.Current.IsOffscreen;valueReadonly=(!$value -or $value.Current.IsReadOnly)} | ConvertTo-Json -Compress)
+          $paperStrategy = 1
+          break
+        }
+        if ($paperStrategy -eq 1) {
+          try {
+            if ($expand) { $expand.Expand() } else { [Windows.Forms.SendKeys]::SendWait('%{DOWN}') }
+          } catch { Write-Output "Print paper Expand failed: $($_.Exception.Message)" }
+          $paperStrategy = 2
+          $paperSince = [DateTime]::UtcNow
+          break
+        }
+        $popupRoots = @($windows | Where-Object { $ids.Contains($_.Current.ProcessId) -and ![object]::Equals($_,$window) })
+        $popupElements = foreach ($popup in $popupRoots) { $popup.FindAll($tree::Descendants,$all) }
+        $a4Options = @((@($elements) + @($popupRoots) + @($popupElements)) | Where-Object {
           $_.Current.Name -match '^A4($|[\s(])' -and !$_.Current.IsOffscreen
         })
-        $a4 = $a4Options | Where-Object { $_.Current.ControlType -ne [Windows.Automation.ControlType]::Text } | Select-Object -First 1
-        if (!$a4 -and $a4Options.Count) {
-          $a4 = [Windows.Automation.TreeWalker]::ControlViewWalker.GetParent($a4Options[0])
+        if ($paperStrategy -eq 2 -and !$paperChoiceInvoked) {
+          foreach ($a4 in $a4Options) {
+            $choice = $null
+            if ($a4.TryGetCurrentPattern([Windows.Automation.SelectionItemPattern]::Pattern,[ref]$choice)) {
+              $choice.Select()
+              $paperChoiceInvoked = $true
+            } elseif ($a4.TryGetCurrentPattern([Windows.Automation.InvokePattern]::Pattern,[ref]$choice)) {
+              $choice.Invoke()
+              $paperChoiceInvoked = $true
+            }
+            if ($paperChoiceInvoked) {
+              if ($expand -and $expand.Current.ExpandCollapseState -eq 'Expanded') { $expand.Collapse() }
+              Write-Output "Selected A4 option via UIA: $($a4.Current.ControlType.ProgrammaticName)"
+              break
+            }
+          }
         }
-        if (!$a4) { continue }
-        $choice = $null
-        if ($a4.TryGetCurrentPattern([Windows.Automation.SelectionItemPattern]::Pattern,[ref]$choice)) {
-          $choice.Select()
-        } elseif ($a4.TryGetCurrentPattern([Windows.Automation.InvokePattern]::Pattern,[ref]$choice)) {
-          $choice.Invoke()
-        } else {
-          $a4.SetFocus()
-          [Windows.Forms.SendKeys]::SendWait('{ENTER}')
+        if ($paperStrategy -eq 2 -and ([DateTime]::UtcNow - $paperSince).TotalSeconds -ge 2) {
+          Write-Output (@{popupRoots=@($popupRoots | ForEach-Object { "$($_.Current.ClassName):$($_.Current.Name)" });a4Options=@($a4Options | ForEach-Object {$_.Current.ControlType.ProgrammaticName});expanded="$($expand.Current.ExpandCollapseState)"} | ConvertTo-Json -Compress)
+          $paper.SetFocus()
+          [Windows.Forms.SendKeys]::SendWait('{HOME}a4')
+          if ($expand -and $expand.Current.ExpandCollapseState -eq 'Expanded') { $expand.Collapse() }
+          Write-Output 'Tried A4 keyboard selection on the focused paper picker'
+          $paperStrategy = 3
         }
-        $paperChoiceInvoked = $true
-        Write-Output 'Invoked A4 option in the WebView print preview'
         break
       }
       $confirm.GetCurrentPattern([Windows.Automation.InvokePattern]::Pattern).Invoke()

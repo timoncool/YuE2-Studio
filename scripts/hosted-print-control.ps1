@@ -20,6 +20,29 @@ if ($Phase -eq 'control') {
     (New-Object -ComObject WScript.Network).SetDefaultPrinter($printer)
     Get-CimInstance Win32_Printer | Where-Object Name -eq $printer | Select-Object Name,Default,DriverName,PortName |
         ConvertTo-Json | Set-Content "$evidence/printer.json"
+    Add-Type -AssemblyName System.Printing
+    $printServer = [System.Printing.LocalPrintServer]::new()
+    $queue = $printServer.GetPrintQueue($printer)
+    $queue.Refresh()
+    $supported = $queue.GetPrintCapabilities().PageMediaSizeCapability
+    $a4 = $supported | Where-Object PageMediaSizeName -eq 'ISOA4' | Select-Object -First 1
+    $tickets = [ordered]@{
+        papers = @($supported | ForEach-Object { $_.PageMediaSizeName.ToString() })
+        priorUser = "$($queue.UserPrintTicket.PageMediaSize.PageMediaSizeName)"
+        priorDefault = "$($queue.DefaultPrintTicket.PageMediaSize.PageMediaSizeName)"
+    }
+    if ($a4) {
+        $userTicket = $queue.UserPrintTicket
+        if (!$userTicket) { $userTicket = $queue.DefaultPrintTicket.Clone() }
+        $delta = [System.Printing.PrintTicket]::new()
+        $delta.PageMediaSize = $a4
+        $queue.UserPrintTicket = $queue.MergeAndValidatePrintTicket($userTicket, $delta).ValidatedPrintTicket
+        $queue.Commit()
+        $queue.Refresh()
+    }
+    $tickets.user = "$($queue.UserPrintTicket.PageMediaSize.PageMediaSizeName)"
+    $tickets.default = "$($queue.DefaultPrintTicket.PageMediaSize.PageMediaSizeName)"
+    $tickets | ConvertTo-Json | Set-Content "$evidence/paper-tickets.json"
     Add-Type -AssemblyName System.Drawing
     $doc = [System.Drawing.Printing.PrintDocument]::new()
     $font = [System.Drawing.Font]::new('Arial', 24)

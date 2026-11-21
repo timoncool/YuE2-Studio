@@ -73,6 +73,7 @@ jobs:
         run: python scripts/windows-nsis-acceptance.py verify ${{ matrix.scenario }}
       - name: Print the standalone Windows control
         id: print-control
+        shell: powershell
         run: scripts/hosted-print-control.ps1 control
       - name: Exercise installed songbook printing
         if: always() && steps.print-control.outcome != 'skipped'
