@@ -304,7 +304,31 @@ try:
             assert "integrity check failed" in json.dumps(corrupt).lower() and status()["version"] == "2.0", corrupt
             report.update({"cancel":abort, "corrupt":corrupt, "retained":status()})
             if strict:
-                peer_first = tool("music_engine_package_install", {"id":peer})
+                peer_progress_args = {"kind":"music-engines","id":peer}
+                peer_dir = active_path.parent.with_name(peer)
+                def peer_waiting():
+                    return await_until(lambda: tool("music_package_progress", peer_progress_args)["active"],
+                                       lambda p: p is not None and p["stage"] == "waiting_for_idle")
+                gate.unlink()
+                previous_events = len(runs())
+                in_flight = tool("song_create", prompt | {"seed":49})
+                await_until(runs, lambda log: len(log) > previous_events)
+                peer_init_cancel = pool.submit(tool, "music_engine_package_install", {"id":peer}, True)
+                peer_pending = peer_waiting()
+                assert peer_pending["downloaded_bytes"] == len(payloads[1]) and not peer_init_cancel.done()
+                assert not (peer_dir / "active.json").exists()
+                assert tool("music_package_cancel", peer_progress_args)["cancel_requested"]
+                assert "cancelled" in json.dumps(peer_init_cancel.result(timeout=5)).lower()
+                assert not (peer_dir / "active.json").exists() and not list(peer_dir.glob("generation-*"))
+                peer_init = pool.submit(tool, "music_engine_package_install", {"id":peer})
+                peer_waiting()
+                assert not peer_init.done() and not (peer_dir / "active.json").exists()
+                gate.touch()
+                first_install_during = completed(tool, call, in_flight, 2)
+                peer_first = peer_init.result(timeout=15)
+                assert tool("music_engine_package_status", {"id":peer})["generation"] == peer_first["generation"]
+                report["initial_install"] = {"pending":peer_pending,"retained_local_worker":first_install_during,
+                                             "activated_after_idle":peer_first}
                 gate.unlink()
                 previous_events = len(runs())
                 busy = tool("song_create", prompt | {"seed":50})
@@ -318,7 +342,6 @@ try:
                 assert cloud_started.wait(8)
                 publish(5)
                 refresh()
-                peer_dir = active_path.parent.with_name(peer)
                 def generations(directory):
                     return {path.name for path in directory.glob("generation-*")}
                 before_main, before_peer = generations(active_path.parent), generations(peer_dir)
