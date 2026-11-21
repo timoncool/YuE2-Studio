@@ -233,7 +233,10 @@ def run(work, binary, adapter, native, models):
             assert saved["replay_request"]["payload"]["seed"] == 43
             second_wav = download(replay, "replay")
             assert second_wav["pcm_sha256"] != first_wav["pcm_sha256"]
-            assert download(original, "original-after-replay") == first_wav
+            original_after = download(original, "original-after-replay")
+            assert original_after["pcm_sha256"] == first_wav["pcm_sha256"]
+            after = json.loads(call(f"/v1/library/songs/{original}"))
+            assert after["replay_request"] == before["replay_request"] and after["metadata"]["signed_engine"] == identity
 
             long_job = tool("song_create", request | {"duration_seconds": 45, "steps": 32})
             assert json.loads(call(f"/v1/music/jobs/{long_job['id']}", method="POST"))["status"] == "cancelled"
@@ -246,7 +249,8 @@ def run(work, binary, adapter, native, models):
             refused = json.loads(call("/v1/music/jobs", request, expected=503))
             assert "failed verification" in refused["message"], refused
             write(work / "result.json", {"identity": identity, "original_song": original, "replay_song": replay,
-                "original": first_wav, "replay": second_wav, "native_files": pins[0], "weights": pins[1],
+                "original": first_wav, "original_after_replay": original_after, "replay": second_wav,
+                "native_files": pins[0], "weights": pins[1],
                 "cancelled_job": long_job["id"], "tampered_executable": refused["message"]})
             print(work / "result.json")
         finally:
