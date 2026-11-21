@@ -6034,7 +6034,7 @@ fn purge_old_trash(state: &AppState) {
 /// Removes a song of the bin and the songs that went there with it from the
 /// library, their files sent to the system's recycle bin first.
 fn delete_for_good(state: &AppState, id: &str) -> anyhow::Result<()> {
-    delete_songs_for_good(&state.library, id, |song| song_files(state, song), |path| trash::delete(path).map_err(|error| error.to_string()))
+    delete_songs_for_good(&state.library, id, |song| song_files(&state.library, song), |path| trash::delete(path).map_err(|error| error.to_string()))
 }
 
 /// A file the recycle bin does not take (a Linux desktop without one, a
@@ -6055,7 +6055,7 @@ fn remove_replaced_tracks(state: &AppState, replaced: &[library::Song]) -> anyho
     }
     let mut kept = Vec::new();
     state.library.delete_replaced_songs(replaced, |songs, survivors| {
-        for path in unshared_song_files(songs, survivors, |song| song_files(state, song))? {
+        for path in unshared_song_files(songs, survivors, |song| song_files(&state.library, song))? {
             if let Err(error) = std::fs::remove_file(&path) {
                 kept.push(format!("{}: {error}", path.display()));
             }
@@ -6109,14 +6109,16 @@ fn unshared_song_files(
 
 /// The files in the media folder that belong to one song: its audio, its
 /// stems and its cover. Anything outside the media folder is not ours to remove.
-fn song_files(state: &AppState, song: &library::Song) -> Vec<PathBuf> {
-    let media = state.library.media_dir();
-    let mut files: Vec<PathBuf> = separation::STEMS.iter().chain(["instrumental"].iter()).map(|stem| stem_path(state, &song.id, stem)).collect();
-    if let Some(audio) = state.library.media_path_for_song(song) {
+fn song_files(library: &library::Library, song: &library::Song) -> Vec<PathBuf> {
+    let media = library.media_dir();
+    let id = &song.id;
+    let mut files: Vec<PathBuf> = separation::STEMS.iter().chain(["instrumental"].iter())
+        .map(|stem| media.join(format!("{id}-{stem}.wav"))).collect();
+    if let Some(audio) = library.media_path_for_song(song) {
         files.push(audio);
     }
     // a processed track owns its original and every version besides the one playing
-    if let Some(original) = song.metadata.get("original_audio_path").and_then(Value::as_str).and_then(|path| state.library.resolve_media(path)) {
+    if let Some(original) = song.metadata.get("original_audio_path").and_then(Value::as_str).and_then(|path| library.resolve_media(path)) {
         files.push(original);
     }
     for version in song.metadata.get("audio_versions").and_then(Value::as_array).into_iter().flatten() {
@@ -6124,11 +6126,13 @@ fn song_files(state: &AppState, song: &library::Song) -> Vec<PathBuf> {
             files.push(media.join(file));
         }
     }
-    files.push(midi_path(state, &song.id));
-    files.push(midi_sidecar(&midi_path(state, &song.id)));
-    files.sort();
-    files.dedup();
-    if let Some((cover, _)) = state.library.cover_path_for_song(song) {
+    let midi = media.join(format!("{id}.mid"));
+    files.push(midi_sidecar(&midi));
+    files.push(midi);
+    if let Some(latent) = library.media_file(&format!("{id}.latent")) {
+        files.push(latent);
+    }
+    if let Some((cover, _)) = library.cover_path_for_song(song) {
         files.push(cover);
     }
     files.retain(|path| in_media_folder(media, path));

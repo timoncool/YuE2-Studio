@@ -43,22 +43,23 @@ const SONG_CATEGORIES: [Category; 9] = [Category::Audio, Category::Lyrics, Categ
 
 type Content = HashSet<Category>;
 
-fn included(kind: &str, exclude: &HashSet<Category>) -> bool {
-    let category = match kind {
+fn file_category(kind: &str) -> Option<Category> {
+    Some(match kind {
         "audio" => Category::Audio,
         "cover" => Category::Covers,
-        "original" | "version" => {
-            if exclude.contains(&Category::Audio) {
-                return false;
-            }
-            Category::Takes
-        }
+        "original" | "version" => Category::Takes,
         "stem" => Category::Stems,
         "midi" | "midi_metadata" => Category::Midi,
         "latent" => Category::Latents,
-        _ => return true,
-    };
-    !exclude.contains(&category)
+        _ => return None,
+    })
+}
+
+fn included(kind: &str, exclude: &HashSet<Category>) -> bool {
+    file_category(kind).is_none_or(|category| {
+        !exclude.contains(&category)
+            && (category != Category::Takes || !exclude.contains(&Category::Audio))
+    })
 }
 
 pub(crate) async fn import(
@@ -306,9 +307,25 @@ pub(super) struct MediaSpace {
 
 pub(super) fn media_space(
     view: &Value,
-    mappings: &HashMap<String, (String, bool)>,
-    destination: &Path,
+    library: &Library,
+    source: &str,
 ) -> Result<MediaSpace> {
+    let mappings = library.legacy_song_mappings(source)?;
+    let pending = library.legacy_transaction(|tx| {
+        let mut pending = HashMap::new();
+        for (id, imported) in mappings.values() {
+            if !imported {
+                continue;
+            }
+            if let Some(song) = Library::read_song(tx, id)? {
+                let mut categories = pending_content(tx, id)?.unwrap_or_else(|| old_pending(&song));
+                categories.retain(|category| absent(&song, *category));
+                pending.insert(id.as_str(), categories);
+            }
+        }
+        Ok(pending)
+    })?;
+    let destination = library.media_dir();
     let volume = destination.ancestors().find(|path| path.exists());
     let mut space = MediaSpace {
         total_bytes: 0,
@@ -318,7 +335,8 @@ pub(super) fn media_space(
     for song in view["songs"].as_array().context("Missing songs")? {
         let old = song["id"].as_str().context("Missing song ID")?;
         let mapping = mappings.get(old);
-        let mut counted = std::collections::HashSet::new();
+        let mut counted = HashSet::new();
+        let mut required = HashSet::new();
         for file in song["files"].as_array().context("Missing files")? {
             let name = file["name"].as_str().context("Missing filename")?;
             // The active take and the original may point to the same file.
@@ -328,12 +346,16 @@ pub(super) fn media_space(
                 name,
                 file["kind"].as_str(),
             ) else { continue };
-            if !counted.insert(key.clone()) {
-                continue;
-            }
             let bytes = file["bytes"].as_u64().context("Missing file size")?;
-            space.total_bytes += bytes;
-            if !mapping.is_some_and(|(_, done)| *done || destination.join(&key).is_file()) {
+            if counted.insert(key.clone()) {
+                space.total_bytes += bytes;
+            }
+            let needs_copy = mapping.is_none_or(|(id, done)| {
+                let needs_category = file["kind"].as_str().and_then(file_category)
+                    .is_some_and(|category| pending.get(id.as_str()).is_some_and(|set| set.contains(&category)));
+                (!done || needs_category) && !destination.join(&key).is_file()
+            });
+            if needs_copy && required.insert(key) {
                 space.required_bytes += bytes;
             }
         }
@@ -495,7 +517,7 @@ fn transfer_selected(to: &Library, folder: &Path, exclude: &HashSet<Category>) -
         );
     }
     let (_lock, staging) = lock_staging(to.media_dir())?;
-    let space = media_space(&view, &to.legacy_song_mappings(source)?, to.media_dir())?;
+    let space = media_space(&view, to, source)?;
     if let Some(free) = space.available_bytes {
         anyhow::ensure!(
             space.required_bytes <= free,
@@ -711,6 +733,64 @@ mod tests {
     }
 
     #[test]
+    fn metadata_only_backfill_counts_and_purge_owns_only_local_attachments() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let source = temp.path().join("old");
+        let destination = temp.path().join("new");
+        let old = Library::open_at(source.join("library.sqlite"), source.join("media"))?;
+        let new = Library::open_at(destination.join("library.sqlite"), destination.join("media"))?;
+        fs::create_dir_all(old.media_dir())?;
+        old.legacy_transaction(|tx| {
+            tx.execute("INSERT INTO songs VALUES('old-id','Song','old-id.wav','','','{}','{}','acestep-cpp',NULL,NULL,NULL,'native','1','1')", [])?;
+            Ok(())
+        })?;
+        let source_audio = old.media_dir().join("old-id.wav");
+        let source_latent = old.media_dir().join("old-id.latent");
+        fs::write(&source_audio, b"wave")?;
+        fs::write(&source_latent, b"latent")?;
+
+        let exclude = HashSet::from([Category::Audio, Category::Latents]);
+        let first = transfer_selected(&new, &source, &exclude)?;
+        assert_eq!(first["added"], 1);
+        let song = new.list_songs()?.remove(0);
+        assert_ne!(song.id, "old-id");
+        assert!(song.audio_path.is_none());
+        let latent = new.media_dir().join(format!("{}.latent", song.id));
+        assert!(!latent.exists());
+        let preview = || super::super::inspect(&source, &new);
+        assert_eq!(preview()?["space"]["required_bytes"], 10);
+        assert_eq!(transfer_selected(&new, &source, &exclude)?["updated"], 0);
+        assert_eq!(preview()?["space"]["required_bytes"], 10);
+
+        let backfill = transfer(&new, &source)?;
+        assert_eq!(backfill["updated"], 1);
+        assert_eq!(preview()?["space"]["required_bytes"], 0);
+        let song = new.get_song(&song.id)?.unwrap();
+        let audio = new.media_path_for_song(&song).unwrap();
+        assert_eq!(fs::read(&audio)?, b"wave");
+        assert_eq!(fs::read(&latent)?, b"latent");
+
+        // Include an explicit reference to an attachment in the old library.
+        new.legacy_transaction(|tx| {
+            let metadata = json!({"audio_versions": [{"file": source_audio}]}).to_string();
+            tx.execute("UPDATE songs SET metadata_json=? WHERE id=?", params![metadata, song.id])?;
+            Ok(())
+        })?;
+        new.set_song_trashed(&song.id, true, None)?;
+        crate::delete_songs_for_good(
+            &new, &song.id,
+            |song| crate::song_files(&new, song),
+            |path| fs::remove_file(path).map_err(|error| error.to_string()),
+        )?;
+        assert!(!audio.exists());
+        assert!(!latent.exists());
+        assert_eq!(fs::read(source_audio)?, b"wave");
+        assert_eq!(fs::read(source_latent)?, b"latent");
+        assert_eq!(preview()?["space"]["required_bytes"], 0);
+        Ok(())
+    }
+
+    #[test]
     fn mixed_import_reports_missing_files_and_retries_without_replacing_user_edits() -> Result<()> {
         let temp = tempfile::tempdir()?;
         let source = temp.path().join("old");
@@ -762,7 +842,7 @@ mod tests {
         let playlist = new.list_playlists()?.remove(0);
         assert_eq!(playlist.song_ids[1], song.id);
         let preview = super::super::inspect(&source, &new)?;
-        assert_eq!(preview["space"]["required_bytes"], 0);
+        assert_eq!(preview["space"]["required_bytes"], 4);
         assert_eq!(preview["space"]["total_bytes"], 15);
         let repeat = transfer_selected(&new, &source, &exclude)?;
         assert_eq!(repeat["already_imported"], 2);

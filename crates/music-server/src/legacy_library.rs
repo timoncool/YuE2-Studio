@@ -110,9 +110,8 @@ fn inspect(folder: &Path, destination: &crate::library::Library) -> Result<Value
             _ => {}
         }
     }
-    let mappings =
-        destination.legacy_song_mappings(root.to_str().context("Unsupported library path")?)?;
-    let space = write::media_space(&view, &mappings, destination.media_dir())?;
+    let source = root.to_str().context("Unsupported library path")?;
+    let space = write::media_space(&view, destination, source)?;
     view["space"] = serde_json::to_value(space)?;
     Ok(view)
 }
