@@ -26,6 +26,8 @@ mod hotstep_runtime;
 mod hotstep_sa3;
 mod hotstep_sa3_assets;
 mod hotstep_sa3_tokenizer;
+mod hotstep_sa3_training;
+mod hotstep_sa3_train_assets;
 mod hotstep_cover_assets;
 mod hotstep_cover_rolls;
 mod audio_cpp_stable_audio;
@@ -140,6 +142,7 @@ struct AppState {
     minimax_cancellations: Arc<RwLock<HashMap<String, native_music_jobs::CancelSender>>>,
     hotstep_cover: Arc<downloads::Downloader>,
     hotstep_sa3_install: Arc<tokio::sync::Mutex<()>>,
+    hotstep_sa3_train_install: Arc<tokio::sync::Mutex<()>>,
     audio_cpp_music_stops: Arc<RwLock<HashMap<String, Arc<std::sync::atomic::AtomicBool>>>>,
     heartmula_install: Arc<tokio::sync::Mutex<()>>,
     stable_audio_install: Arc<tokio::sync::Mutex<()>>,
@@ -1553,6 +1556,7 @@ pub async fn serve_on_port(port: u16) -> anyhow::Result<()> {
         minimax_cancellations: Arc::default(),
         hotstep_cover: Arc::new(downloads::Downloader::new(studio_data_root().unwrap_or_else(|| PathBuf::from(".")).join("hotstep"))),
         hotstep_sa3_install: Arc::default(),
+        hotstep_sa3_train_install: Arc::default(),
         audio_cpp_music_stops: Arc::default(),
         heartmula_install: Arc::default(),
         stable_audio_install: Arc::default(),
@@ -1860,6 +1864,8 @@ pub async fn serve_on_port(port: u16) -> anyhow::Result<()> {
         .route("/v1/training/listen/install", post(install_listen_pack))
         .route("/v1/training/listen/cancel", post(cancel_listen_pack))
         .route("/v1/training/runs", post(start_training))
+        .route("/v1/training/hotstep-sa3", get(hotstep_sa3_training::status).post(hotstep_sa3_training::start))
+        .route("/v1/training/hotstep-sa3/install", post(hotstep_sa3_training::install))
         .route("/v1/training/runs/{id}/cancel", post(cancel_training))
         .route("/v1/training/runs/{id}/continue", post(continue_training))
         .route("/v1/training/runs/{id}", axum::routing::delete(delete_training_run))
