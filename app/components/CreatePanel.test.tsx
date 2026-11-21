@@ -491,7 +491,7 @@ it('shows the waiting pair without cancelling the song and keeps the selected Yu
   click(buttonNamed('Cancel the active song')!);
   await act(async () => { await new Promise(resolve => setTimeout(resolve, 450)); });
   expect(cancel).toHaveBeenCalledOnce();
-  expect(host.textContent).toContain('Ready to load when you create');
+  expect(host.textContent).toContain('Ready to create. Weights load as needed');
   click(buttonNamed('create')!);
   expect(sent[0]).toMatchObject({ music_source: source, style: 'folk' });
   expect(sent[0]).not.toHaveProperty('adapters');
