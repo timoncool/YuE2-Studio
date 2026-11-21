@@ -150,21 +150,38 @@ def run(binary, bundle, port):
                     assert request["music_source"] == {"kind": "openrouter", "model": MODEL}, request
                     assert request["style"] == STYLE and request["lyrics"] == LYRICS, request
                     job_id = response.json()["id"]
+                    def completed():
+                        record = json.loads(read(base + f"/v1/music/jobs/{job_id}"))
+                        assert record["status"] not in ("failed", "cancelled"), record
+                        return record if record["status"] == "completed" else None
+
+                    job = wait_until(completed)
+                    take = job.get("song") or job["songs"][0]
+                    with wave.open(io.BytesIO(read(base + take["audio_url"])), "rb") as result:
+                        assert result.readframes(result.getnframes()) == pcm
+
+                    selection_posts = []
+                    page.on("request", lambda req: selection_posts.append(req.url)
+                            if req.method == "POST" and req.url == base + "/v1/music/pair" else None)
+                    service.terminate()
+                    service.wait(timeout=15)
+                    service = subprocess.Popen([binary], env=env, stdout=log, stderr=subprocess.STDOUT)
+                    wait_until(lambda: read(base + "/health"))
+                    after_restart = json.loads(read(base + "/v1/music/pair"))
+                    assert after_restart["instance_id"] != pair["instance_id"], after_restart
+                    assert after_restart["revision"] == 0 and after_restart["stage"] == "idle", after_restart
+                    expect(page.get_by_text("Ready to load when you create", exact=True)).to_have_count(0)
+                    expect(model).to_have_value(f"cloud:{MODEL}")
+                    expect(create).to_be_enabled()
+                    assert not selection_posts, selection_posts
                     browser.close()
 
-                def completed():
-                    record = json.loads(read(base + f"/v1/music/jobs/{job_id}"))
-                    assert record["status"] not in ("failed", "cancelled"), record
-                    return record if record["status"] == "completed" else None
-
-                job = wait_until(completed)
-                take = job.get("song") or job["songs"][0]
-                with wave.open(io.BytesIO(read(base + take["audio_url"])), "rb") as result:
-                    assert result.readframes(result.getnframes()) == pcm
                 assert len(calls) == 1
                 print(json.dumps({"result": "pass", "keys": ["Tab", "ArrowDown", "ArrowUp", "Shift+Tab", "End", "Enter"],
                                   "engine_switch": "minimaxmusic-cpp → audio.cpp → minimaxmusic-cpp",
                                   "pair_stage": pair["stage"], "load_on_create": pair["load_on_create"],
+                                  "after_restart": after_restart["stage"], "revision_after_restart": after_restart["revision"],
+                                  "selection_posts_after_restart": len(selection_posts),
                                   "model": MODEL, "job": job_id, "song": take["id"],
                                   "pcm_sha256": hashlib.sha256(pcm).hexdigest()}, ensure_ascii=False))
             except BaseException:
