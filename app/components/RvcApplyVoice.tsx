@@ -188,6 +188,7 @@ export function RvcApplyVoice({ song, voice, control, onSaved }: {
           <button type="button" disabled={!canPreview || !ready || !!busy}
             className="rounded border border-zinc-200 px-3 py-2 font-semibold disabled:opacity-50 dark:border-white/10"
             onClick={() => void makePreview()}>{labels.preview}</button>
+          <p className="text-zinc-600 dark:text-zinc-300">{labels.previewClarity}</p>
           {busy === 'preview' && <p role="status">{labels.previewing}</p>}
           {preview && (
             <>
