@@ -35,6 +35,7 @@ pub(crate) struct ProfileStatus {
     pub profile: &'static Profile,
     pub ready: bool,
     pub missing: Vec<&'static str>,
+    pub native_adapters: Vec<crate::adapters::Installed>,
 }
 
 #[cfg(test)]
@@ -200,6 +201,7 @@ impl Profile {
             .unwrap_or_else(|| self.files.to_vec());
         ProfileStatus {
             profile: self,
+            native_adapters: Vec::new(),
             ready: missing.is_empty(),
             missing,
         }
@@ -237,6 +239,7 @@ impl Props {
             .collect();
         ProfileStatus {
             profile,
+            native_adapters: Vec::new(),
             ready: missing.is_empty(),
             missing,
         }
@@ -252,6 +255,16 @@ pub(crate) struct Sampling {
     pub lm_top_k: Option<i32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub dit_cfg: Option<f64>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub adapters: Vec<AdapterRef>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct AdapterRef {
+    pub name: String,
+    pub lm_scale: f64,
+    pub dit_scale: f64,
 }
 
 impl Sampling {
@@ -263,6 +276,13 @@ impl Sampling {
         }
         if self.lm_top_k.is_some_and(|value| value < 1) {
             bail!("MiniMax LM Top-K must be a positive integer");
+        }
+        for adapter in &self.adapters {
+            if adapter.name.is_empty() || adapter.name.starts_with('.') || adapter.name.contains(['/', '\\', ':'])
+                || ![adapter.lm_scale, adapter.dit_scale].into_iter().all(|scale| (scale as f32).is_finite())
+            {
+                bail!("MiniMax adapter needs a folder name and finite scales");
+            }
         }
         Ok(())
     }
@@ -483,6 +503,7 @@ mod tests {
             executable: None,
             roots: vec![path.to_path_buf()],
             runtime_dirs: vec![],
+            adapters_root: None,
         };
         let profile = &PROFILES[0];
         assert!(!installation.engine_installed());
@@ -624,7 +645,8 @@ mod tests {
         let invalid = SongRequest { sampling: Sampling { lm_top_k: Some(0), ..Default::default() }, ..request.clone() };
         assert!(request_body(profile, &invalid).is_err());
         let request = SongRequest {
-            sampling: Sampling { lm_cfg: Some(1.3), lm_top_k: Some(41), dit_cfg: Some(2.2) },
+            sampling: Sampling { lm_cfg: Some(1.3), lm_top_k: Some(41), dit_cfg: Some(2.2),
+                adapters: vec![AdapterRef { name: "test-dit".into(), lm_scale: 0.0, dit_scale: 0.65 }] },
             ..request
         };
         let id = client.submit(profile.id, &request).await.unwrap();
@@ -655,6 +677,7 @@ mod tests {
         assert_eq!(requests[0]["lm_cfg"], 1.3);
         assert_eq!(requests[0]["lm_top_k"], 41);
         assert_eq!(requests[0]["dit_cfg"], 2.2);
+        assert_eq!(requests[0]["adapters"], json!([{"name":"test-dit","lm_scale":0.0,"dit_scale":0.65}]));
         for (field, file) in PROFILE_FILE_FIELDS.into_iter().zip(profile.files) {
             assert_eq!(requests[0][field], file);
         }
@@ -783,6 +806,27 @@ pub(crate) struct Installation {
     executable: Option<PathBuf>,
     roots: Vec<PathBuf>,
     runtime_dirs: Vec<PathBuf>,
+    adapters_root: Option<PathBuf>,
+}
+
+#[cfg(test)]
+#[test]
+fn native_adapter_inventory_requires_matching_engine_and_weights() {
+    let root = tempfile::tempdir().unwrap();
+    let install = Installation {
+        executable: None, roots: Vec::new(), runtime_dirs: Vec::new(), adapters_root: Some(root.path().to_owned()),
+    };
+    for (id, engine, weights) in [("valid", ENGINE_ID, true), ("missing", ENGINE_ID, false), ("foreign", "acestep-cpp", true)] {
+        let directory = root.path().join(id);
+        fs::create_dir(&directory).unwrap();
+        fs::write(directory.join("adapter.json"), json!({
+            "id": id, "name": id, "engine": engine, "slots": ["dit"], "origin": {"type":"imported"}
+        }).to_string()).unwrap();
+        if weights { fs::write(directory.join("model.safetensors"), b"fixture").unwrap(); }
+    }
+    let adapters = install.native_adapters();
+    assert_eq!(adapters.len(), 1);
+    assert_eq!(adapters[0].meta.id, "valid");
 }
 
 impl Installation {
@@ -867,11 +911,11 @@ impl Installation {
                 }
             })
             .collect();
-        Self {
-            executable,
-            roots,
-            runtime_dirs,
-        }
+        let adapters_root = std::iter::once(data_root.join("adapters").join(ENGINE_ID))
+            .chain(data_dirs.iter().skip(1).map(|dir| dir.join("adapters")))
+            .filter_map(|dir| dir.canonicalize().ok())
+            .find(|dir| !native_adapters_at(dir).is_empty());
+        Self { executable, roots, runtime_dirs, adapters_root }
     }
 
     pub(crate) fn engine_installed(&self) -> bool {
@@ -879,10 +923,19 @@ impl Installation {
     }
 
     pub(crate) fn profiles(&self) -> Vec<ProfileStatus> {
-        PROFILES
-            .iter()
-            .map(|profile| profile.status_on_disk(&self.roots))
-            .collect()
+        let adapters = self.native_adapters();
+        PROFILES.iter().map(|profile| {
+            let mut status = profile.status_on_disk(&self.roots);
+            if status.ready && self.engine_installed() {
+                status.native_adapters = adapters.clone();
+            }
+            status
+        }).collect()
+    }
+
+    pub(crate) fn native_adapters(&self) -> Vec<crate::adapters::Installed> {
+        let Some(root) = self.adapters_root.as_ref() else { return Vec::new() };
+        native_adapters_at(root)
     }
 
     fn for_profile(&self, profile: &'static Profile) -> Result<Launch> {
@@ -905,8 +958,20 @@ impl Installation {
             models_root: fs::canonicalize(models_root)
                 .context("resolve the installed MiniMax model folder")?,
             runtime_dirs: self.runtime_dirs.clone(),
+            adapters_root: self.adapters_root.clone(),
         })
     }
+}
+
+fn native_adapters_at(root: &Path) -> Vec<crate::adapters::Installed> {
+    let library = crate::adapters::AdapterLibrary::at(root.to_owned(), ENGINE_ID);
+    library.installed(None).into_iter().filter(|entry| {
+        let id = &entry.meta.id;
+        entry.error.is_none() && !id.is_empty() && !id.starts_with('.') && !id.contains(['/', '\\', ':'])
+            && entry.meta.slots.iter().any(|slot| matches!(slot.as_str(), "lm" | "dit"))
+            && fs::read_dir(root.join(id)).is_ok_and(|files| files.flatten().any(|file|
+                file.path().is_file() && file.path().extension().is_some_and(|extension| extension == "safetensors")))
+    }).collect()
 }
 
 fn override_path(primary: &str, legacy: &str) -> Option<PathBuf> {
@@ -920,6 +985,7 @@ struct Launch {
     executable: PathBuf,
     models_root: PathBuf,
     runtime_dirs: Vec<PathBuf>,
+    adapters_root: Option<PathBuf>,
 }
 
 impl Launch {
@@ -943,6 +1009,9 @@ impl Launch {
             ])
             .env_remove("MM3_CUDA_BACKEND")
             .stdin(Stdio::null());
+        if let Some(root) = &self.adapters_root {
+            command.arg("--adapters").arg(root);
+        }
         let machine = hardware::hardware();
         if machine.nvidia && !cfg!(target_os = "macos") {
             let compute = machine

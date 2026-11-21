@@ -1092,7 +1092,11 @@ fn song_create_schema(mut properties: Value) -> Value {
         "properties": {
             "lm_cfg": { "type": "number", "minimum": 0 },
             "lm_top_k": { "type": "integer", "minimum": 1, "maximum": i32::MAX },
-            "dit_cfg": { "type": "number", "minimum": 0 }
+            "dit_cfg": { "type": "number", "minimum": 0 },
+            "adapters": {"type": "array", "items": {"type": "object", "additionalProperties": false,
+                "required": ["name", "lm_scale", "dit_scale"], "properties": {
+                    "name": {"type": "string"}, "lm_scale": {"type": "number"}, "dit_scale": {"type": "number"}
+                }}}
         }
     });
     properties["backing_song_id"] = json!({"type":"string","description":"Instrumental library song to use unchanged as the backing. Requires native YuE2, a matching Chord bed in abc, lyrics, and a ready vocal separator. Returns a mixed WAV."});
