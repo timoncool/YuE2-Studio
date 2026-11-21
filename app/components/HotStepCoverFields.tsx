@@ -27,7 +27,7 @@ export function HotStepCoverFields({ draft, onChange, ready, refresh, controlCla
   const [listening, setListening] = useState(false);
   const [installing, setInstalling] = useState(false);
   const [error, setError] = useState('');
-  useEffect(() => () => active.current?.abort(), []);
+  useEffect(() => () => active.current?.abort(), [draft.original]);
 
   const choose = (original: string) => {
     active.current?.abort();
