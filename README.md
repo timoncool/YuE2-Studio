@@ -7,7 +7,7 @@
 
 # YuE2 Studio
 
-**Full songs with an editable score, generated on your own GPU. One executable — no Python, no Node.js, no launcher.**
+**Create songs with YuE2, ACE-Step and MiniMax. Bring your tracks into one library and compare takes made with different engines.**
 
 [![Project page](https://img.shields.io/badge/Project_page-timoncool.github.io-7c3aed?style=for-the-badge)](https://timoncool.github.io/YuE2-Studio/)
 [![Download](https://img.shields.io/badge/Download-Windows_x64-0078D6?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/timoncool/YuE2-Studio/releases/latest)
@@ -24,16 +24,9 @@
 
 </div>
 
-YuE2 Studio is a desktop studio for **YuE2**, the open song model from M-A-P that writes a
-score before it sings. Describe a style, write the lyrics, and the model composes a melody
-with chords as sheet music, then performs it as a full song with vocals. The score comes
-back with the track: read it, edit it, and render the same composition again with a
-different sound. Windows installer with auto-update or a portable folder, runs offline on
-an NVIDIA card with 6 GB of VRAM or more; AMD and Intel cards through Vulkan are experimental.
+Choose the model and engine in **Create**. With **YuE2**, describe a style and write the lyrics to get a song with an editable score. Change the melody or chords and render another take. You can also use native **ACE-Step** and **MiniMax Music 3**, choose a supported alternative engine, or generate with a music model from **OpenRouter**.
 
-It is built on [yue2.cpp](https://github.com/ServeurpersoCom/yue2.cpp), the native C++/CUDA
-port of YuE2. The studio around it is Rust and React in a Tauri window — nothing in the
-runtime path is Python.
+Songs from the older studios can join the same library with their playlists. Listen to the original recording, compare takes or try a different singing voice with RVC. Local engines run on your computer after their components and weights have been downloaded. On Windows, choose the installer with automatic updates or the portable package. [Import your existing library](#bring-your-ace-step-or-minimax-library-into-yue2) · [GPU measurements](#how-fast-is-it)
 
 ## For AI agents
 
@@ -399,26 +392,30 @@ For seed 42, both WAVs contain 30.0 s of stereo audio at 48 kHz. Measured in 100
 <!-- music-gpu-matrix:start -->
 ### Music engine GPU matrix · 5.0 development and published builds
 
-Windows 11, RTX 4090, driver 617.42. Cold includes server launch and the first WAV response. Warm is the median of three requests to the same server. Memory peaks are cold-run whole-card VRAM and process-tree RSS. Warm pre-request VRAM is the median whole-card reading immediately before each of the three warm requests. Resident WDDM VRAM and RSS are medians of three idle process-tree samples after one warm-up on the published CUDA 13 builds. Compare rows within each workload and check the weight profiles, silence and exact build before drawing a speed conclusion.
+Windows 11, RTX 4090, driver 617.42. Cold includes server launch and the first WAV response. Warm is the median of three requests to the same server. Memory peaks are cold-run whole-card VRAM and process-tree RSS. Warm pre-request VRAM is the median whole-card reading immediately before each of the three warm requests. Resident WDDM VRAM and RSS are medians of three idle process-tree samples after one warm-up on each listed CUDA 13 build. Compare rows within each workload and check the weight profiles, silence and exact build before drawing a speed conclusion.
 
 | Model and engine | Backend | WAV (s) | Cold (s) | Warm (s) | Warm audio s/s | VRAM peak / Δ (GiB) | Warm pre-request VRAM (GiB) | Peak RAM (GiB) | Resident WDDM VRAM / RSS (GiB) |
 | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
 | YuE2 · yue2.cpp `892b9b0` · 3B Q8_0 + F32 VAE; NAR v9 · 30 s · 32 steps | CUDA 13 | 29.999 | 9.735 | 5.166 | 5.81× | 7.67 / +5.74 | 7.67 | 3.36 | — |
+| YuE2 · yue2.cpp `892b9b0` · 3B Q8_0 + F32 VAE; NAR v9 · 30 s · 32 steps | CUDA 12 | 29.999 | 11.219 | 5.155 | 5.82× | 7.64 / +5.75 | 7.63 | 3.35 | — |
 | YuE2 · yue2.cpp `892b9b0` · 3B Q8_0 + F32 VAE; NAR v9 · 30 s · 32 steps | Vulkan | 29.999 | 16.609 | 5.861 | 5.12× | 8.19 / +5.81 | 8.87 | 3.08 | — |
 | YuE2 · audio.cpp `41242418` · 3B Q8_0 + F16 VAE; NAR v9 · 30 s · 32 steps | CUDA 13 | 29.999 | 16.807 | 7.441 | 4.03× | 7.02 / +4.68 | 3.16 | 6.24 | — |
 | YuE2 · audio.cpp `41242418` · 3B Q8_0 + F16 VAE; NAR v9 · 30 s · 32 steps | Vulkan | 29.999 | 28.258 | 10.286 | 2.92× | 6.44 / +4.51 | 2.54 | 6.85 | — |
-| YuE2 · yue2.cpp `892b9b0` · 3B Q8_0 + F32 VAE; NAR v9 · 100 tokens · 2 steps | CUDA 13 | 3.999 | 6.062 | 0.140 | 28.52× | 6.44 / +4.51 | 6.44 | 3.35 | — |
+| YuE2 · yue2.cpp `892b9b0` · 3B Q8_0 + F32 VAE; NAR v9 · 100 tokens · 2 steps | CUDA 13 | 3.999 | 6.062 | 0.140 | 28.52× | 6.44 / +4.51 | 6.44 | 3.35 | 4.50 / 0.77 |
 | YuE2 · audio.cpp `41242418` · 3B Q8_0 + F16 VAE; NAR v9 · 100 tokens · 2 steps | CUDA 13 | 3.999 | 7.482 | 0.383 | 10.44× | 6.28 / +3.92 | 3.03 | 5.84 | — |
 | YuE2 · yue2.cpp `892b9b0` · 3B Q8_0 + F32 VAE; NAR v9 · 100 tokens · 2 steps | CUDA 12 | 3.999 | 4.312 | 0.110 | 36.20× | 6.43 / +4.50 | 6.43 | 3.34 | — |
 | YuE2 · audio.cpp `41242418` · 3B Q8_0 + F16 VAE; NAR v9 · 100 tokens · 2 steps | CUDA 12 | 3.999 | 7.869 | 0.420 | 9.52× | 6.46 / +4.10 | 3.03 | 5.76 | — |
 | YuE2 · yue2.cpp `892b9b0` · 3B Q8_0 + F32 VAE; NAR v9 · 100 tokens · 2 steps | Vulkan | 3.999 | 13.766 | 0.252 | 15.88× | 6.54 / +4.17 | 6.54 | 3.82 | — |
 | YuE2 · audio.cpp `41242418` · 3B Q8_0 + F16 VAE; NAR v9 · 100 tokens · 2 steps | Vulkan | 3.999 | 8.373 | 0.974 | 4.11× | 6.31 / +3.94 | 2.89 | 5.33 | — |
-| ACE-Step 1.5 · acestep.cpp `6e0e414` · Turbo Q8_0 + BF16 embedder/VAE · 30 s · 8 Euler steps | CUDA 13 | 30.000 | 6.234 | 0.392 | 76.51× | 9.73 / +7.80 | 9.74 | 2.11 | — |
+| ACE-Step 1.5 · acestep.cpp `6e0e414` · Turbo Q8_0 + BF16 embedder/VAE · 30 s · 8 Euler steps | CUDA 13 | 30.000 | 6.234 | 0.392 | 76.51× | 9.73 / +7.80 | 9.74 | 2.11 | 7.80 / 0.91 |
+| ACE-Step 1.5 · acestep.cpp `6e0e414` · Turbo Q8_0 + BF16 embedder/VAE · 30 s · 8 Euler steps | CUDA 12 | 30.000 | 3.469 | 0.396 | 75.78× | 9.73 / +7.78 | 9.74 | 1.67 | — |
 | ACE-Step 1.5 · acestep.cpp `6e0e414` · Turbo Q8_0 + BF16 embedder/VAE · 30 s · 8 Euler steps | Vulkan | 30.000 | 7.204 | 0.381 | 78.69× | 8.58 / +6.65 | 8.57 | 2.00 | — |
 | ACE-Step 1.5 · audio.cpp `41242418` · Turbo Q8_0, packed GGUF · 30 s · 8 Euler steps | CUDA 13 | 30.000 | 10.512 | 1.387 | 21.62× | 10.43 / +8.49 | 10.48 | 2.58 | — |
 | ACE-Step 1.5 · audio.cpp `41242418` · Turbo Q8_0, packed GGUF · 30 s · 8 Euler steps | Vulkan | 30.000 | 21.746 | 2.237 | 13.41× | 10.23 / +8.30 | 10.22 | 4.60 | — |
-| MiniMax Music3 · minimaxmusic.cpp `b79d37f` · Minimal Q3_K_M / Q4_K_M + F32 vocoder · 3.2 s · 2 steps | CUDA 13 | 3.193 | 7.422 | 1.075 | 2.97× | 9.18 / +7.25 | 9.18 | 4.53 | — |
+| MiniMax Music3 · minimaxmusic.cpp `b79d37f` · Minimal Q3_K_M / Q4_K_M + F32 vocoder · 3.2 s · 2 steps | CUDA 13 | 3.193 | 7.422 | 1.075 | 2.97× | 9.18 / +7.25 | 9.18 | 4.53 | 7.25 / 1.00 |
+| MiniMax Music3 · minimaxmusic.cpp `b79d37f` · Minimal Q3_K_M / Q4_K_M + F32 vocoder · 3.2 s · 2 steps | CUDA 12 | 3.193 | 7.500 | 1.149 | 2.78× | 9.15 / +7.26 | 9.15 | 4.56 | — |
 | MiniMax Music3 · minimaxmusic.cpp `b79d37f` · Quality Q8_0 + F32 vocoder · 3.2 s · 2 steps | CUDA 13 | 3.193 | 13.485 | 1.728 | 1.85× | 15.04 / +13.10 | 15.04 | 8.71 | — |
+| MiniMax Music3 · minimaxmusic.cpp `b79d37f` · Quality Q8_0 + F32 vocoder · 3.2 s · 2 steps | CUDA 12 | 3.193 | 14.125 | 1.689 | 1.89× | 15.00 / +13.10 | 15.00 | 8.76 | — |
 | MiniMax Music3 · minimaxmusic.cpp `b79d37f` · Minimal Q3_K_M / Q4_K_M + F32 vocoder · 3.2 s · 2 steps | Vulkan | 3.193 | 6.344 | 1.484 | 2.15× | 8.83 / +6.90 | 8.83 | 4.34 | — |
 | MiniMax Music3 · minimaxmusic.cpp `b79d37f` · Quality Q8_0 + F32 vocoder · 3.2 s · 2 steps | Vulkan | 3.193 | 14.578 | 1.924 | 1.66× | 14.69 / +12.76 | 14.69 | 8.54 | — |
 | MiniMax Music3 Studio v4.0.3 · minimaxmusic.cpp `f476b0e` · Minimal Q3_K_M / Q4_K_M + F32 · 3.2 s · 2 steps | CUDA 13 | 3.193 | 7.312 | 1.257 | 2.54× | 9.32 / +7.38 | 9.32 | 4.56 | 7.39 / 0.89 |
@@ -435,8 +432,22 @@ Windows 11, RTX 4090, driver 617.42. Cold includes server launch and the first W
 
 Each workload has its own fixed input and step count. YuE2 VAE precision differs, and the audio.cpp text-to-song request fixes the semantic-token budget. The native ACE CUDA take ends with five quiet seconds. MiniMax Quality and audio.cpp Q8_0 share four weights and use different vocoders. Stable Audio 3 compares Medium BF16 to Small Q8_0. The ACE-Step 6e0e414 and MiniMax b79d37f rows use the exact separately published 5.0 runtime pins. MiniMax f476b0e is the 4.0.3 control.
 
-[Individual runs, published residency, SHA-256, exact weights and output checks](docs/music-gpu-benchmarks.json)
+[Individual runs, residency, SHA-256, exact weights and output checks](docs/music-gpu-benchmarks.json)
 <!-- music-gpu-matrix:end -->
+
+<!-- music-gpu-wsl:start -->
+#### Native music engines · Linux in WSL2
+
+RTX 4090, driver 617.42. The pinned Linux executables ran in WSL2 with weights on a Windows drive. Cold includes process launch through receipt of the first WAV. Warm is the median of three requests to the same process. Memory peaks cover whole-card VRAM and Linux process-tree RSS.
+
+| Model and engine | Backend | WAV (s) | Cold (s) | Warm (s) | VRAM peak / Δ (GiB) | Peak RAM (GiB) |
+| --- | --- | ---: | ---: | ---: | ---: | ---: |
+| YuE2 · yue2.cpp 892b9b0 · 3B Q8_0 + F32 VAE; NAR v9 · 30 s · 32 steps | CUDA 13 | 29.999 | 31.134 | 5.491 | 7.32 / +5.79 | 3.51 |
+| YuE2 · yue2.cpp 892b9b0 · 3B Q8_0 + F32 VAE; NAR v9 · 100 tokens · 2 steps | CUDA 13 | 3.999 | 24.461 | 0.158 | 6.08 / +4.55 | 3.50 |
+| ACE-Step 1.5 · acestep.cpp 6e0e414 · Turbo Q8_0 + BF16 embedder/VAE · 30 s · 8 Euler steps | CUDA 13 | 30.000 | 20.569 | 0.318 | 9.37 / +7.85 | 2.20 |
+| MiniMax Music3 · minimaxmusic.cpp b79d37f · Minimal Q3_K_M / Q4_K_M + F32 vocoder · 3.2 s · 2 steps | CUDA 13 | 3.193 | 35.096 | 1.091 | 8.82 / +7.30 | 4.71 |
+| MiniMax Music3 · minimaxmusic.cpp b79d37f · Quality Q8_0 + F32 vocoder · 3.2 s · 2 steps | CUDA 13 | 3.193 | 65.319 | 1.697 | 14.67 / +13.13 | 8.95 |
+<!-- music-gpu-wsl:end -->
 
 <!-- radeon-gpu-pair:start -->
 #### Stable Audio 3 Small Q8_0 · Radeon iGPU
@@ -554,6 +565,14 @@ Windows 10 builds that refuse Microsoft's small bootstrapper (error 0x80040902),
 fails and the installer says so. Install WebView2 from Microsoft's standalone installer,
 [Evergreen Standalone x64](https://go.microsoft.com/fwlink/p/?LinkId=2124701), then run the
 studio's installer again.
+
+### Bring your ACE-Step or MiniMax library into YuE2
+
+In YuE2 Studio 5.0, open **Library → Import → ACE-Step or MiniMax library**. Select the old studio from the list, or use **Choose old Studio folder** to locate it yourself.
+
+The preview shows the source folder, songs, playlists and space needed on the destination drive. Expand a song to see which files are available and which are missing. Once you have the right library, select **Copy library into YuE2**. The original library stays in place. You can run the import again; the summary distinguishes new songs and playlists from items already imported.
+
+Open an imported song in **Library** to play the original recording. To make a new song with the familiar engine, open **Create** and select the native ACE-Step or MiniMax engine and model.
 
 ### Install Windows runtime archives manually
 

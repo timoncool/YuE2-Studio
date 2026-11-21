@@ -17,6 +17,10 @@ Windows build.
 - **Choose the base for YuE2 LoRA training.** Studio records which backbone and decoder companion you trained against. It checks the selected weights when you apply the adapter. The Windows trainer can also use CUDA 12 on compatible NVIDIA systems. [Training bases](https://github.com/timoncool/YuE2-Studio/pull/460) · [CUDA 12 trainer](https://github.com/timoncool/YuE2-Studio/pull/453)
 - **Install an optional Radeon HIP runtime on Windows.** Studio selects the component for a recognized adapter. The benchmark table includes HIP and Vulkan on the same Radeon iGPU and cold and warm timings for the NVIDIA backends. [HIP installation](https://github.com/timoncool/YuE2-Studio/pull/447) · [GPU measurements](docs/music-gpu-benchmarks.json)
 
+- **Compare an edit with the original recording.** Select a region in Edit Track, listen to A and B, then open the take you selected directly in the library. [Edit Track](https://github.com/timoncool/YuE2-Studio/pull/467)
+- **Listen to what changed during training.** Queue the same score with the base YuE2 model and each saved checkpoint. The comparison playlist keeps the takes together with the same seeds. [Checkpoint comparison](https://github.com/timoncool/YuE2-Studio/pull/454)
+- **Use LoRA with the native ACE-Step and MiniMax engines.** Create lists compatible installed adapters. ACE-Step matches the adapter to the 2B or XL model. MiniMax lets you set separate strengths for the language model and diffusion model and reuse them on replay. [ACE-Step](https://github.com/timoncool/YuE2-Studio/pull/477) · [MiniMax](https://github.com/timoncool/YuE2-Studio/pull/480)
+
 ## 2026-11-19 — 4.1.1
 
 ### Fixed
