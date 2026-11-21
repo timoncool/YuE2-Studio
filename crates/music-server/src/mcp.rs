@@ -1099,7 +1099,7 @@ fn song_create_schema(mut properties: Value) -> Value {
             "seed": { "type": "integer" },
             "temperature": { "type": "number", "minimum": 0, "maximum": 2 },
             "top_p": { "type": "number", "minimum": 0, "maximum": 1 },
-            "max_tokens": { "type": "integer", "minimum": 1, "maximum": 4294967295 }
+            "max_tokens": { "type": "integer", "minimum": 1, "maximum": u32::MAX }
         }
     });
     properties["rvc_after"] = json!({
