@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Song, YueRequest } from '../types';
 import { useGenerations } from '../services/generations';
+import { fetchAdapters } from '../services/adapters';
 import { afterGenerationPause } from '../services/generationPause';
 
 const composeScore = vi.fn();
@@ -35,7 +36,7 @@ vi.mock('../services/scoreApi', () => ({
 }));
 vi.mock('../services/adapters', async (original) => ({
   ...(await original<typeof import('../services/adapters')>()),
-  fetchAdapters: async () => ({ installed: [{ id: 'instrumental', origin: { type: 'catalog', catalog_id: 'yue2-instrumental' }, slots: ['ar', 'nar'], scales: {}, error: null }], installing: [], slots: [] }),
+  fetchAdapters: vi.fn(async () => ({ installed: [{ id: 'instrumental', origin: { type: 'catalog', catalog_id: 'yue2-instrumental' }, slots: ['ar', 'nar'], scales: {}, error: null }], installing: [], slots: [] })),
   installCatalogAdapters: vi.fn(),
   useAdapterLibrary: () => ({ installed: [], slots: [] }),
 }));
@@ -602,6 +603,33 @@ it('asks for an explicit profile when a migrated ACE take used custom weights', 
 });
 
 describe('an instrumental (#217)', () => {
+  it('waits for the Instrumental LoRA and permits an ordinary request without it (#234)', async () => {
+    const installed = await fetchAdapters();
+    let finishLookup!: (result: typeof installed) => void;
+    vi.mocked(fetchAdapters).mockReturnValueOnce(new Promise(resolve => { finishLookup = resolve; }));
+    act(() => root.render(panel({})));
+    await flush();
+    type(field('textarea')!, 'calm folk, acoustic guitar');
+    click(buttonNamed('cotOff')!);
+    const instrumental = host.querySelector<HTMLInputElement>('input[type="checkbox"]')!;
+    click(instrumental);
+    click(buttonNamed('createInstrumental')!);
+    await flush();
+    expect(sent).toHaveLength(0);
+
+    await act(async () => { finishLookup(installed); });
+    click(buttonNamed('createInstrumental')!);
+    await flush();
+    expect(sent[0].adapters).toEqual([expect.objectContaining({ id: 'instrumental' })]);
+    expect(sent[0].lyrics).toBe('');
+
+    click(instrumental);
+    click(buttonNamed('create')!);
+    await flush();
+    expect(sent).toHaveLength(2);
+    expect(sent[1].adapters).toBeUndefined();
+  });
+
   it('keeps a score written for one submission out of the form and writes a new one for the next', async () => {
     act(() => root.render(panel({})));
     await flush();

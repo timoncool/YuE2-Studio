@@ -74,7 +74,8 @@ tar.workspace = true
 lzma-rust2.workspace = true
 
 [target.'cfg(unix)'.dependencies]
-libloading = "0.9"
+# Loads system libsoxr on Unix and queries Vulkan video memory on Linux.
+libloading = "0.8"
 
 [target.'cfg(windows)'.dependencies]
 windows-sys.workspace = true
