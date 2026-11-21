@@ -58,6 +58,13 @@ async fn preferred_take_survives_restart_and_reordering_without_touching_media()
     let root = tempfile::tempdir()?;
     let http = reqwest::Client::builder().no_proxy().build()?;
     let (mut server, base) = studio(root.path(), &http).await?;
+    // The startup cover backfill otherwise embeds a generated APIC into these
+    // hand-created WAVs on reopen, independently of the preferred take.
+    http.put(format!("{base}/v1/covers/look"))
+        .json(&json!({"keep":false}))
+        .send()
+        .await?
+        .error_for_status()?;
     let media = root.path().join("data/media");
     fs::create_dir_all(&media)?;
     let mut songs = Vec::new();
