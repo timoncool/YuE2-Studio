@@ -1,0 +1,38 @@
+name: Verify the public native MiniMax runtimes
+on:
+  push:
+    branches: [qa/native-runtime-minimax-public]
+permissions:
+  contents: read
+jobs:
+  pin:
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [windows-latest, ubuntu-latest, macos-15]
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: Swatinem/rust-cache@v2
+      - name: Linux service dependencies
+        if: runner.os == 'Linux'
+        run: sudo apt-get update -q && sudo apt-get install -y -q --no-install-recommends libwayland-dev cmake
+      - name: Verify public download and install
+        env:
+          RUSTUP_TOOLCHAIN: stable
+          STUDIO_NATIVE_RUNTIME_TEST_ENGINE: minimaxmusic-cpp
+        run: cargo test --locked -p music-server --lib native_music_runtime::tests::pinned_runtime_installs_its_verified_members -- --ignored
+      - name: Reinstall from verified offline cache
+        if: runner.os == 'macOS'
+        env:
+          RUSTUP_TOOLCHAIN: stable
+          STUDIO_NATIVE_RUNTIME_TEST_ENGINE: minimaxmusic-cpp
+        shell: bash
+        run: |
+          set -euo pipefail
+          export STUDIO_NATIVE_RUNTIME_CACHE="$RUNNER_TEMP/native-cache"
+          mkdir -p "$STUDIO_NATIVE_RUNTIME_CACHE"
+          curl -fsSL 'https://github.com/timoncool/minimaxmusic.cpp/releases/download/studio-runtime-b79d37f46ae7/mm3-runtime-b79d37f-macos-arm64.tar.gz' -o "$STUDIO_NATIVE_RUNTIME_CACHE/mm3-runtime-b79d37f-macos-arm64.tar.gz"
+          cargo test --locked -p music-server --lib native_music_runtime::tests::pinned_runtime_installs_its_verified_members -- --ignored
+
