@@ -198,8 +198,9 @@ Local score, sampling and LoRA controls apply to local generation.
   instrumental says `instrumental` where the language goes.
 - **lyrics**: sections tagged `[Intro]`, `[Verse 1]`, `[Pre-Chorus]`, `[Chorus]`,
   `[Bridge]`, `[Outro]`, one tag per line, a blank line between sections, about 2-3 sung
-  words per second. Russian `ё` stays `ё`; a combining acute (U+0301) right after a vowel
-  puts the sung stress on it where the model would stress the word otherwise.
+  words per second. Preserve Russian `ё` and any existing stress marks. In YuE2 lyrics
+  a combining acute (U+0301) immediately after a vowel can suggest the intended stress.
+  Compare the saved vocals when pronunciation matters.
 - **abc**: the score the model sings from, in YuE2's dialect (`writing_guide` topic
   `score`). `score_compose` writes one to start from.
 - **abc_continue** (song_create; `abc` on score_compose): the abc is only an opening - a hum

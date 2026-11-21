@@ -69,8 +69,9 @@ Code, save [docs/mcp-skill.md](docs/mcp-skill.md) as `~/.claude/skills/yue2-stud
   so everything that shares them keeps working. Songs and datasets stay. One more button brings
   them back.
 - **Full songs from a style and lyrics** — up to ten minutes, in the languages the model
-  sings. In Russian a stress mark (the combining acute U+0301, Alt+0769 on Windows) after a
-  vowel moves the sung stress to it, as Ruach Studio documents. On an RTX 4090 with the Q8_0 set a 3:38 song renders in about 46 seconds.
+  sings. In Russian YuE2 lyrics, try a combining acute accent (U+0301) after the vowel,
+  for example за́мок (castle) or замо́к (lock). Listen to the resulting take to check the stress.
+  On an RTX 4090 with the Q8_0 set a 3:38 song renders in about 46 seconds.
 - **Songs one by one** — ask for several songs at once and each lands in the library as soon as
   it is finished, ready to play while the rest are still made; a stopped request keeps the songs
   it finished.
