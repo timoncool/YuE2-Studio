@@ -313,6 +313,29 @@ def check_lrc(root, pid):
             time.sleep(.25)
         else:
             raise TimeoutError("The WebView observer did not initialize")
+        def failed_save(label, kind, extension):
+            name = f"conflict-{kind}.{extension}"
+            marker = out/"save-conflict.json"
+            json_file(out/"save-conflict.tmp", dict(file=name))
+            (out/"save-conflict.tmp").replace(marker)
+            click(label)
+            save_dialog_file(pid, root/name, f"{kind}-conflict-dialog.json")
+            for _ in range(60):
+                try:
+                    events = json.loads((out/"lrc-webview-network.json").read_text(encoding="utf8"))
+                except (OSError, json.JSONDecodeError):
+                    time.sleep(.2)
+                    continue
+                failures = [entry for entry in events if entry.get("visibleSaveError")
+                            and entry["id"] not in seen_errors]
+                if failures:
+                    assert (root/name).is_dir() and not marker.exists()
+                    seen_errors.add(failures[0]["id"])
+                    json_file(out/f"{kind}-visible-error.json", failures[0])
+                    return
+                time.sleep(.2)
+            raise AssertionError(f"No visible write error for {name}")
+        seen_errors = set()
         click('button "Download LRC (Lyrics)"', page)
         save_dialog_file(pid, destination)
         verify_lrc_file(destination, expected, song["id"], "desktop")
@@ -340,6 +363,7 @@ def check_lrc(root, pid):
         save_dialog_file(pid, repeated, "repeat-dialog.json")
         verify_lrc_file(repeated, expected, song["id"], "desktop", "repeat-lrc-file.json")
 
+        failed_save('button "Download LRC (Lyrics)"', "lrc", "lrc")
         for label, extension in [("Download Audio", "wav"), ("Download SRT (subtitles)", "srt")]:
             control_name = f'button "{label}"'
             destination = root / f"Сохранённый дубль.{extension}"
@@ -361,6 +385,7 @@ def check_lrc(root, pid):
             save_dialog_file(pid, cancelled, f"{extension}-cancel-dialog.json", action="cancel")
             wait_page(control_name)
             assert not cancelled.exists(), cancelled
+            failed_save(control_name, f"download-{extension}", extension)
             json_file(out/f"{extension}-export.json", dict(song_id=song["id"], bytes=len(saved),
                       sha256=hashlib.sha256(saved).hexdigest(), cancelled_file_absent=True))
         click('button "x icon"')
@@ -410,6 +435,7 @@ def check_lrc(root, pid):
                     blob.startswith(b"ID3") or blob[0] == 255 and blob[1] & 224 == 224), (fmt, blob[:12])
             json_file(out/f"master-{fmt}.json", dict(bytes=len(blob), sha256=hashlib.sha256(blob).hexdigest()))
             cancel_export('button "Save…"', f"master-{fmt}")
+            failed_save('button "Save…"', f"master-{fmt}", fmt)
             click('button "Export again"')
         import zipfile
         for kind in ("track", "ableton"):
@@ -431,6 +457,7 @@ def check_lrc(root, pid):
                     assert any(name.endswith(".als") for name in members), members
                 json_file(out/f"{kind}-archive.json", dict(members=members, bytes=target.stat().st_size))
             cancel_export(label, kind)
+            failed_save(label, kind, "zip")
     finally:
         observer.stdin.close()
         try:
