@@ -198,6 +198,25 @@ def verify_radeon(pair, evidence_dir):
     return rows
 
 
+def verify_wsl_evidence(rows, evidence_dir):
+    for major in (12, 13):
+        receipt = evidence_dir / f"f0-native-linux-wsl-cuda{major}-results.json"
+        originals = json.loads(receipt.read_bytes())
+        by_identity = {(item['server_sha256'], item['request_sha256']): item for item in originals}
+        assert len(by_identity) == len(originals), f"Duplicate benchmark input in {receipt}"
+        for row in rows:
+            if row['backend'] != f'CUDA {major}':
+                continue
+            item = by_identity.pop((row['server_sha256'], row['request_sha256']))
+            for key in ('ggml_cuda_sha256', 'linux_runtime_sha256', 'archive_sha256', 'weights', 'prelaunch_vram_bytes'):
+                assert row[key] == item[key], (row['label'], key)
+            assert len(row['runs']) == len(item['runs']) == 4, row['label']
+            for published, original in zip(row['runs'], item['runs']):
+                measurements = {k: v for k, v in original.items() if k not in ('begin', 'end')}
+                assert published == measurements, row['label']
+        assert not by_identity, f"Missing published measurements from {receipt}"
+
+
 def wsl_rows(data, decimal_comma=False):
     observed = []
     for row in data["rows"]:
@@ -255,7 +274,10 @@ def main():
     radeon_section = "radeon-gpu-pair"
     readme = ROOT / "README.md"
     validate_table(readme, readme_rows(readme), rows, residency.values())
-    assert readme_rows(readme, "music-gpu-wsl") == wsl_rows(data["wsl2_linux"])
+    wsl = data["wsl2_linux"]
+    if args.evidence_dir:
+        verify_wsl_evidence(wsl["rows"], args.evidence_dir)
+    assert readme_rows(readme, "music-gpu-wsl") == wsl_rows(wsl)
     assert readme_rows(readme, radeon_section) == radeon
     assert len(native) == 2 and readme_rows(readme, "native-radeon-pair") == native
     for locale in LOCALES:
@@ -267,7 +289,7 @@ def main():
         native_rows = [[row[0], *[v.replace(".", ",") for v in row[1:]]] for row in native] if locale in {"ru", "pt"} else native
         assert site_rows(page, "native-radeon-pair") == native_rows, page
         assert data["radeon_pair"]["source_sha"][:8] in section(page, radeon_section), page
-    print(f"{len(rows)} timing results, {len(residency)} residency results and both Radeon comparisons match the README and {len(LOCALES)} site pages.")
+    print(f"{len(rows)} Windows and {len(wsl['rows'])} WSL2 timing results, {len(residency)} residency results and both Radeon comparisons match the README and {len(LOCALES)} site pages.")
 
 
 if __name__ == "__main__":

@@ -1,6 +1,7 @@
 #[macro_use]
 pub mod studio_log;
 mod adapters;
+mod acpp_install;
 mod community;
 mod component_catalogue;
 mod engine_catalogue;
@@ -2724,22 +2725,62 @@ fn separation_build(runtime: lyrics_sync::OnnxFlavour) -> anyhow::Result<acpp_se
 /// Downloads what audio.cpp's server of `build` still lacks: the program and its libraries, and the CUDA libraries it
 /// shares with the music engine through the engine runtime that downloads them (`shared_cuda`).
 async fn install_acpp(state: &AppState, build: acpp_server::asset::Build, scope: &str) -> anyhow::Result<()> {
-    state.acpp.downloader().install_all(scope, &state.acpp.missing(build)).await?;
-    if let Some(cuda) = shared_cuda(build) {
-        state.engine_runtime.install_missing_for(Some(cuda), scope).await?;
-    }
-    Ok(())
+    state.acpp.downloader().clear_finished(scope).await;
+    state.acpp.installs.run(build, scope, |request| async move {
+        let cancelled = || request.cancelled();
+        state.acpp.downloader().install_all_with_cancel(scope, &state.acpp.missing(build), Some(&cancelled)).await?;
+        request.check_cancelled()?;
+        if let Some(cuda) = shared_cuda(build) {
+            state.engine_runtime.install_missing_with_cancel(Some(cuda), scope, Some(&cancelled)).await?;
+        }
+        request.check_cancelled()
+    }, || async {
+        if scope == "midi" {
+            set_midi_stage(state, "waiting_for_runtime").await;
+        }
+    }).await
 }
 
 async fn acpp_download(state: &AppState, scope: &str) -> Option<downloads::DownloadProgress> {
-    separation_download_progress(
+    if let Some(owner) = state.acpp.installs.waiting_on(scope) {
+        let shared = separation_download_progress(
+            state.acpp.downloader().active_for(&owner).await,
+            state.engine_runtime.downloader().active_for(&owner).await,
+        );
+        let (downloaded_bytes, total_bytes) = shared.filter(|progress| !progress.done)
+            .map_or((0, 0), |progress| (progress.downloaded_bytes, progress.total_bytes));
+        return Some(downloads::DownloadProgress {
+            asset_id: "audio.cpp".into(),
+            scope: Some(scope.into()),
+            downloaded_bytes,
+            total_bytes,
+            done: false,
+            error: None,
+            manual_archive: None,
+        });
+    }
+    let progress = separation_download_progress(
         state.acpp.downloader().active_for(scope).await,
         state.engine_runtime.downloader().active_for(scope).await,
-    )
+    );
+    if let Some(error) = state.acpp.installs.error_for(scope) {
+        return Some(downloads::DownloadProgress {
+            asset_id: "audio.cpp".into(),
+            scope: Some(scope.into()),
+            downloaded_bytes: progress.as_ref().map_or(0, |item| item.downloaded_bytes),
+            total_bytes: progress.as_ref().map_or(0, |item| item.total_bytes),
+            done: true,
+            error: Some(error),
+            manual_archive: progress.and_then(|item| item.manual_archive),
+        });
+    }
+    progress
 }
 
 async fn cancel_acpp_download(state: &AppState, scope: &str) -> bool {
-    state.acpp.downloader().cancel_for(scope).await | state.engine_runtime.downloader().cancel_for(scope).await
+    state.acpp.installs.cancel(scope)
+        | state.acpp.downloader().cancel_for(scope).await
+        | state.engine_runtime.downloader().cancel_for(scope).await
 }
 
 /// The engine's CUDA build whose libraries audio.cpp's server of `build` loads: cuBLAS 13 on Windows for the CUDA 13
@@ -2864,7 +2905,6 @@ async fn install_separation_asset(
             }
             if let Err(error) = install_acpp(&background, build, "separation").await {
                 eprintln!("[ERROR] audio.cpp's server could not be installed for the separator: {error:#}");
-                background.acpp.downloader().fail("separation", format!("{error:#}")).await;
             }
         });
         return Ok(Json(serde_json::json!({ "started": true })));
@@ -3693,7 +3733,7 @@ async fn training_pack_files(state: &AppState) -> (Vec<Value>, bool) {
 async fn training_pack_download(state: &AppState, scope: &str) -> Option<downloads::DownloadProgress> {
     let separator_download = separation_download_progress(
         state.separator.downloader().active_for(scope).await,
-        state.acpp.downloader().active_for(scope).await,
+        acpp_download(state, scope).await,
     );
     let cublas_download = state.engine_runtime.downloader().active_for(scope).await;
     match state.training.downloader().active_for(scope).await {
@@ -4703,7 +4743,6 @@ async fn install_restore(State(state): State<AppState>) -> Result<Json<Value>, (
         }
         if let Err(error) = install_acpp(&background, build, "restore").await {
             studio_log!("[ERROR] audio.cpp's server could not be installed for Apollo: {error:#}");
-            background.acpp.downloader().fail("restore", format!("{error:#}")).await;
         }
     });
     Ok(Json(serde_json::json!({ "started": true })))
@@ -5330,13 +5369,13 @@ async fn tag_stored_song(state: &AppState, song_id: &str) {
         title: song.title.clone(),
         album: "YuE2 Studio".to_string(),
         // The engine is the performer here; the studio is the label.
-        artist: match song.engine_id.as_str() {
+        artist: music_adapter_artist(&song.engine_id, &song.generation_settings).unwrap_or_else(|| match song.engine_id.as_str() {
             "openrouter" => song.generation_settings.get("model").and_then(Value::as_str)
                 .filter(|id| !id.is_empty()).unwrap_or("OpenRouter"),
             "acestep-cpp" => "ACE-Step",
             "minimaxmusic-cpp" => "MiniMax Music 3",
             _ => "YuE2",
-        }.to_string(),
+        }).to_string(),
         genre: tagging::genre_from_caption(&song.caption),
         lyrics: Some(song.lyrics.clone()).filter(|value| !value.trim().is_empty()),
         bpm: tagging::bpm_from_caption(&song.caption),
@@ -5366,6 +5405,24 @@ async fn tag_stored_song(state: &AppState, song_id: &str) {
         Ok(Err(error)) => eprintln!("could not tag {shown}: {error}"),
         Err(error) => eprintln!("could not tag {shown}: the tagging task stopped: {error}"),
     }
+}
+
+/// These engines host several models, so the saved model takes precedence over the runtime name.
+fn music_adapter_artist<'a>(engine: &str, settings: &'a Value) -> Option<&'a str> {
+    let fallback = match engine {
+        audio_cpp_music::ENGINE => "audio.cpp",
+        hotstep_cover::ENGINE => "HOT-Step",
+        _ => return None,
+    };
+    let text = |value: &'a Value| value.as_str().map(str::trim).filter(|name| !name.is_empty());
+    let family = text(&settings["family"]);
+    let model = text(&settings["model"]).map(|name| audio_cpp_music::family_name(name).unwrap_or(name));
+    let source_model = text(&settings["music_source"]["model"]);
+    Some(model
+        .or_else(|| family.and_then(audio_cpp_music::family_name))
+        .or_else(|| source_model.and_then(audio_cpp_music::family_name))
+        .or(family)
+        .unwrap_or(fallback))
 }
 
 /// Tracks stored before the studio tagged anything carry no tag, and a download
@@ -9760,7 +9817,6 @@ async fn install_midi(State(state): State<AppState>, Json(input): Json<MidiSizeR
         }
         if let Err(error) = install_acpp(&background, build, "midi").await {
             eprintln!("[ERROR] midi: audio.cpp's server: {error:#}");
-            background.acpp.downloader().fail("midi", format!("{error:#}")).await;
         }
     });
     Ok(Json(serde_json::json!({ "started": true, "size": size.id })))
@@ -9939,6 +9995,9 @@ async fn transcribe_to_midi(state: &AppState, size: &'static midi::Size, audio: 
         // the first use fetches what the tool needs, as the karaoke recogniser does
         set_midi_stage(state, "downloading").await;
         state.midi.downloader().install_all("midi", &missing).await.context("download MuScriptor")?;
+        if midi_stopped(state) {
+            anyhow::bail!("cancelled");
+        }
         install_acpp(state, build, "midi").await.context("download audio.cpp's server")?;
         if midi_stopped(state) || !state.midi.missing(size).is_empty() || !state.acpp.installed(build) {
             anyhow::bail!("stopped before everything the transcriber needs had arrived");

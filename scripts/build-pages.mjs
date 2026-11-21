@@ -180,7 +180,7 @@ function page(lang) {
     .map((code) => `      <a href="${file(code)}" hreflang="${code}"${code === lang ? ' aria-current="page"' : ''}>${escape(STRINGS[code].label)}</a>`)
     .join('\n');
 
-  const download = `<a class="btn primary" href="${REPO}/releases/latest">${escape(s.ctaDownload)}<small data-release>v${VERSION} · ${STUDIO.installerMB} MB</small></a>`;
+  const download = `<a class="btn primary" href="${REPO}/releases/latest">${escape(s.ctaDownload)}<small data-release>v${VERSION}</small></a>`;
 
   const tiles = STUDIO.bento.map(({ feature, shot: name }) => {
     const [title, body] = s.features[feature];
@@ -308,7 +308,7 @@ ${s.inside.map((row) => `            <tr>${row.map((cell) => `<td>${escape(cell)
       {
         '@type': 'SoftwareApplication', '@id': `${SITE}#app`, name: NAME, url: pageUrl(lang), inLanguage: lang,
         description: s.description, applicationCategory: 'MultimediaApplication', applicationSubCategory: 'AI music generation',
-        operatingSystem: 'Windows 10, Windows 11', softwareVersion: VERSION, fileSize: `${STUDIO.installerMB} MB`,
+        operatingSystem: ['Windows 10', 'Windows 11', 'Linux', 'macOS'], softwareVersion: VERSION,
         downloadUrl: `${REPO}/releases/latest`, isAccessibleForFree: true, license: 'https://opensource.org/licenses/MIT',
         offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD' },
         image: `${SITE}og-${lang}.jpg`, screenshot: `${SITE}${shot(lang, '01-create')}`,
@@ -487,7 +487,8 @@ fetch('https://api.github.com/repos/${REPO.replace('https://github.com/', '')}/r
   .then((release) => {
     const installer = release.assets.find((asset) => asset.name.endsWith('-setup.exe'));
     if (!installer) throw new Error('the latest release has no installer');
-    const label = release.tag_name + ' · ' + Math.round(installer.size / 1048576) + ' MB';
+    const size = new Intl.NumberFormat(document.documentElement.lang, { style: 'unit', unit: 'megabyte', maximumFractionDigits: 0 }).format(installer.size / 1000000);
+    const label = release.tag_name + ' · ' + size;
     document.querySelectorAll('[data-release]').forEach((element) => { element.textContent = label; });
   })
   .catch((error) => console.warn('Latest release not read; the page shows the one it was built with:', error));

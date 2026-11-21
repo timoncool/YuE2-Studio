@@ -1,6 +1,6 @@
 # YuE2 Studio
 
-> A Windows desktop studio for YuE2 (M-A-P), which writes a score in ABC notation and then sings it, running on the user's own NVIDIA card. While it is open it serves an MCP server at http://127.0.0.1:8791/mcp that an agent uses to do everything the studio does: songs from a style and lyrics, editable scores, covers of recordings, the library, covers, stems, MIDI from any track, karaoke, audio processing, video clips, the player, LoRA, and a LoRA trained from a folder of songs end to end. The agent also sees the studio's window and works it like a user.
+> YuE2 Studio is a desktop music workstation with one library for YuE2, ACE-Step and MiniMax songs. The Create panel selects the model and engine, including supported local engines and OpenRouter music models. With YuE2 you can generate an editable ABC score and render new takes from it. You can import older Studio libraries, compare recordings, change singing voices with RVC, edit stems and MIDI, align lyrics, and train and apply LoRA adapters. Use the Studio MCP server to inspect installed capabilities and control the running application.
 
 For an agent given this repository: install the studio from the latest release, start it, connect to its MCP server, and read the skill the server serves (resource `studio://skill`, prompt `studio`) - it names every tool, what the model reads, and the recipes. Start every session with the tool `studio_status`.
 

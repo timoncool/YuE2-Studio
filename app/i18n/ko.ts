@@ -1673,6 +1673,7 @@ export const ko = {
     midiDelete: 'MIDI 삭제',
     midiStage_preparing: '준비 중',
     midiStage_downloading: '변환기 내려받는 중',
+    midiStage_waiting_for_runtime: '공유 audio.cpp 런타임 설치 대기 중',
     midiStage_reading: '오디오 읽는 중',
     midiStage_transcribing: '음표 듣는 중',
     midiStage_done: '완료',
