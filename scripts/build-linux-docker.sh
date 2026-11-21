@@ -75,11 +75,18 @@ if [ "${1:-}" = "--inside" ]; then
   found="$(dpkg-deb -f "$deb" Package)"
   [ "$found" = "$package" ] || { echo "[ERROR] $deb is the package $found, not $package"; exit 1; }
   listing="$(dpkg-deb -c "$deb")"
+  for file in root.json url.txt; do
+    grep -qF "usr/lib/${product}/component-channel/$file" <<< "$listing" || { echo "[ERROR] $deb lacks component-channel/$file"; exit 1; }
+  done
   grep -qF " usr/share/applications/${product}.desktop" <<< "$listing" || { echo "[ERROR] $deb has no ${product}.desktop"; exit 1; }
   grep -qF " usr/lib/${product}/resources/yue2-cpp/yue-server" <<< "$listing" || { echo "[ERROR] $deb carries no YuE2 engine"; exit 1; }
   rm -rf /tmp/appimage-check && mkdir -p /tmp/appimage-check
   # the .desktop at the image's root is a link into usr/share/applications: take the file it points to
   (cd /tmp/appimage-check && env -u APPIMAGE_EXTRACT_AND_RUN "$appimage" --appimage-extract 'usr/share/applications/*.desktop' >/dev/null)
+  (cd /tmp/appimage-check && env -u APPIMAGE_EXTRACT_AND_RUN "$appimage" --appimage-extract 'usr/lib/*/component-channel/*' >/dev/null)
+  for file in root.json url.txt; do
+    cmp "distribution/channels/stable/bootstrap/$file" "/tmp/appimage-check/squashfs-root/usr/lib/$product/component-channel/$file"
+  done
   grep -qx "Name=${product}" /tmp/appimage-check/squashfs-root/usr/share/applications/*.desktop || { echo "[ERROR] $appimage is not ${product}"; exit 1; }
   echo "[OK] packages are ${product}: deb ${found}, AppImage $(basename /tmp/appimage-check/squashfs-root/usr/share/applications/*.desktop)"
   cp "$deb" "/out/YuE2-Studio-${version}-linux-amd64.deb"

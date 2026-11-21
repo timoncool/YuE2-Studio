@@ -191,9 +191,6 @@ pub async fn start(
     if state.prepare.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).as_ref().is_some_and(|running| !running.finished) {
         return Err(api_error(StatusCode::CONFLICT, "songs are already being prepared; wait for them or stop it".into()));
     }
-    if crate::no_song_rendering(&state).await.is_err() {
-        return Err(api_error(StatusCode::CONFLICT, "a song is being made on the card; prepare songs once it is done".into()));
-    }
     // the agent writes after the preparation, so training cannot follow it
     if request.writer == Writer::Agent && request.train.is_some() {
         return Err(api_error(StatusCode::BAD_REQUEST, "with writer agent the songs are written after the preparation; start the training once they are, not with train".into()));
@@ -256,10 +253,7 @@ fn launch(state: &AppState, job: Job) -> anyhow::Result<PrepareStatus> {
     tokio::spawn(async move {
         let shared = background.prepare.clone();
         let id = job.dataset.clone();
-        let hooks = crate::card_hooks(&background).await;
-        (hooks.take)().await;
-        let outcome = run(&background, &job).await;
-        (hooks.give_back)().await;
+        let outcome = run_on_card(&background, &job).await;
         let cancelled = background.prepare_cancel.load(Ordering::Relaxed);
         if let Err(error) = &outcome {
             if !cancelled {
@@ -312,7 +306,7 @@ pub async fn describe_song_style(State(state): State<AppState>, Path(song_id): P
         .ok_or_else(|| api_error(StatusCode::NOT_FOUND, format!("no library song {song_id}")))?;
     crate::refuse_trashed(&song)?;
     let audio = state.library.media_path_for_song(&song).ok_or_else(|| api_error(StatusCode::BAD_REQUEST, format!("{} has no audio", song.title)))?;
-    describe_style_of(state, audio, song.lyrics).await
+    describe_style_of(state, audio, song.lyrics).await.map(|description| Json(serde_json::json!(description)))
 }
 
 /// The style of a recording the cover form took from disk (`audio` part), by
@@ -339,29 +333,48 @@ pub async fn describe_recording_style(State(state): State<AppState>, mut multipa
     let path = tempfile::Builder::new().prefix("yue2-describe-").suffix(&format!(".{extension}")).tempfile()
         .map_err(|error| api_error(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?.into_temp_path();
     tokio::fs::write(&path, bytes).await.map_err(|error| api_error(StatusCode::INTERNAL_SERVER_ERROR, format!("write {}: {error}", path.display())))?;
-    describe_style_of(state, path, lyrics).await
+    describe_style_of(state, path, lyrics).await.map(|description| Json(serde_json::json!(description)))
 }
 
-async fn describe_style_of(state: AppState, audio: impl AsRef<std::path::Path> + Send + 'static, lyrics: String) -> Result<Json<serde_json::Value>, (StatusCode, Json<ApiError>)> {
-    let exclusive = state.engine_use.clone().try_write_owned()
-        .map_err(|_| api_error(StatusCode::CONFLICT, "the engine is busy; describe once it is free".into()))?;
+pub async fn describe_dataset_item(State(state): State<AppState>, Path((dataset, item)): Path<(String, String)>) -> Result<Json<training::Dataset>, (StatusCode, Json<ApiError>)> {
+    let audio = state.training.item_audio(&dataset, &item).map_err(crate::training_error)?;
+    let song = state.training.dataset(&dataset).map_err(crate::training_error)?.items
+        .into_iter().find(|song| song.id == item)
+        .ok_or_else(|| api_error(StatusCode::NOT_FOUND, format!("no song {item} in the dataset")))?;
+    let lyrics = if song.instrumental { String::new() } else { song.lyrics };
+    let description = describe_style_of(state.clone(), audio, lyrics).await?;
+    state.training.update_item(&dataset, &item, training::ItemPatch {
+        style: Some(description.style),
+        style_state: Some(if description.written { training::StyleState::Done } else { training::StyleState::Heard }),
+        heard: Some(Some(description.heard)),
+        ..Default::default()
+    }).map(Json).map_err(crate::training_error)
+}
+
+#[derive(Serialize)]
+struct StyleDescription {
+    style: String,
+    heard: training::HeardNote,
+    #[serde(skip)]
+    written: bool,
+}
+
+async fn describe_style_of(state: AppState, audio: impl AsRef<std::path::Path> + Send + 'static, lyrics: String) -> Result<StyleDescription, (StatusCode, Json<ApiError>)> {
+    if !state.training.listen_ready() {
+        return Err(api_error(StatusCode::CONFLICT, "auto-describe (MOSS-Music) is not installed; install it on the training page".into()));
+    }
+    let Some(exclusive) = wait_for_idle_card(&state, || false).await else { unreachable!("a description has no stop flag") };
     // A disconnected window must not release the engine while the blocking captioner is still running.
     tokio::spawn(async move {
         hear_style(&state, audio.as_ref().to_owned(), &lyrics, exclusive).await
     }).await.map_err(|error| api_error(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?
 }
 
-async fn hear_style(state: &AppState, audio: std::path::PathBuf, lyrics: &str, exclusive: tokio::sync::OwnedRwLockWriteGuard<()>) -> Result<Json<serde_json::Value>, (StatusCode, Json<ApiError>)> {
-    if !state.training.listen_ready() {
-        return Err(api_error(StatusCode::CONFLICT, "auto-describe (MOSS-Music) is not installed; install it on the training page".into()));
-    }
+async fn hear_style(state: &AppState, audio: std::path::PathBuf, lyrics: &str, exclusive: tokio::sync::OwnedRwLockWriteGuard<()>) -> Result<StyleDescription, (StatusCode, Json<ApiError>)> {
     // the tempo is measured on the processor, on the studio's ONNX Runtime
     state.lyrics_sync.bind_ort().map_err(|error| api_error(StatusCode::CONFLICT, format!("{error:#}")))?;
     if state.training.active_run().await.is_some() || state.prepare.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).as_ref().is_some_and(|job| !job.finished) {
         return Err(api_error(StatusCode::CONFLICT, "the card is training or preparing songs; describe once it is free".into()));
-    }
-    if crate::no_song_rendering(state).await.is_err() {
-        return Err(api_error(StatusCode::CONFLICT, "a song is being made on the card; describe once it is done".into()));
     }
 
     let restart = if crate::models_kept(state).await {
@@ -395,7 +408,8 @@ async fn hear_style(state: &AppState, audio: std::path::PathBuf, lyrics: &str, e
     let (heard, facts) = heard.map_err(|error| api_error(StatusCode::BAD_GATEWAY, format!("{error:#}")))?;
 
     let note = training::HeardNote { genre: heard.genre.clone(), caption: heard.caption.clone(), bpm: facts.bpm };
-    let style = if state.assistant.read().await.available() {
+    let written = state.assistant.read().await.available();
+    let style = if written {
         let instrumental = lyrics.trim().is_empty();
         let written = write_style(state, &heard, &facts, lyrics, instrumental).await;
         crate::release_assistant_unless_kept(state).await;
@@ -403,7 +417,7 @@ async fn hear_style(state: &AppState, audio: std::path::PathBuf, lyrics: &str, e
     } else {
         heard_style(&note)
     };
-    Ok(Json(serde_json::json!({ "style": style, "heard": { "genre": note.genre, "caption": note.caption, "bpm": note.bpm } })))
+    Ok(StyleDescription { style, heard: note, written })
 }
 
 /// The notice of a preparation that found songs to write and no assistant.
@@ -526,6 +540,41 @@ fn settle_pending(training: &training::Training, job: &Job, shared: &Shared, can
 /// The songs of the job, as they stand now.
 fn songs(state: &AppState, job: &Job) -> anyhow::Result<Vec<training::DatasetItem>> {
     Ok(state.training.dataset(&job.dataset)?.items.into_iter().filter(|item| job.items.as_ref().is_none_or(|ids| ids.contains(&item.id))).collect())
+}
+
+async fn wait_for_idle_card(state: &AppState, cancelled: impl Fn() -> bool) -> Option<tokio::sync::OwnedRwLockWriteGuard<()>> {
+    while !cancelled() {
+        // A queued YuE2 song releases its submission lock while it renders.
+        // Leave the lock free while it completes or recovers from a failed attempt.
+        if let Ok(lease) = state.engine_use.clone().try_write_owned()
+            && crate::no_song_rendering(state).await.is_ok()
+        {
+            return Some(lease);
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(250)).await;
+    }
+    None
+}
+
+async fn run_on_card(state: &AppState, job: &Job) -> anyhow::Result<()> {
+    let Some(_exclusive) = wait_for_idle_card(state, || state.prepare_cancel.load(Ordering::Relaxed)).await else {
+        return Ok(());
+    };
+    if state.training.active_run().await.is_some() {
+        anyhow::bail!("a LoRA is training on the card; prepare songs once it finishes");
+    }
+    let restart = if crate::models_kept(state).await {
+        crate::stop_engine_and_assistant(state).await.map_err(anyhow::Error::msg)?
+    } else {
+        crate::free_the_card_for_the_engine(state).await;
+        false
+    };
+    let outcome = run(state, job).await;
+    if restart {
+        outcome.and(crate::restart_engine(state).await.map_err(anyhow::Error::msg))
+    } else {
+        outcome
+    }
 }
 
 async fn run(state: &AppState, job: &Job) -> anyhow::Result<()> {

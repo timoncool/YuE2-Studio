@@ -67,8 +67,19 @@ if __name__ == "__main__":
     channel_changed = not base or subprocess.run(
         ["git", "diff", "--quiet", base, "HEAD", "--", *channel_inputs]
     ).returncode != 0
+    macos_rvc_inputs = [
+        "crates/music-server/src/rvc_fast*",
+        "crates/music-server/src/rvc_apply.rs",
+        "crates/music-server/src/downloads.rs",
+        "crates/music-server/src/install_record.rs",
+        ".github/workflows/ci.yml",
+    ]
+    macos_rvc_changed = not base or subprocess.run(
+        ["git", "diff", "--quiet", base, "HEAD", "--", *macos_rvc_inputs]
+    ).returncode != 0
     with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
         print(f"mirrors_only={str(mirrors_only).lower()}", file=output)
         print(f"skip_build={str(mirrors_only or publisher_only).lower()}", file=output)
         print(f"publisher_test={str(publisher_test).lower()}", file=output)
         print(f"channel_changed={str(channel_changed).lower()}", file=output)
+        print(f"macos_rvc_changed={str(macos_rvc_changed).lower()}", file=output)

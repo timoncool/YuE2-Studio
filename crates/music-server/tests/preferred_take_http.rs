@@ -14,7 +14,9 @@ async fn studio(root: &Path, http: &reqwest::Client) -> anyhow::Result<(Child, S
         .env("YUE_STUDIO_DATA_ROOT", root.join("data"))
         .env("YUE_ENGINE_BIN", root.join("absent-engine"))
         .env("TIMONCOOL_SHARED_DIR", root.join("registry"))
-        .env("DO_NOT_TRACK", "1")
+        .env("DO_NOT_TRACK", "0")
+        .env("STUDIO_TELEMETRY", "1")
+        .env("STUDIO_HUB_URL", format!("http://{address}/fixture-hub"))
         .env("TEMP", root)
         .env("TMP", root)
         .env("TMPDIR", root)
@@ -56,6 +58,13 @@ async fn preferred_take_survives_restart_and_reordering_without_touching_media()
     let root = tempfile::tempdir()?;
     let http = reqwest::Client::builder().no_proxy().build()?;
     let (mut server, base) = studio(root.path(), &http).await?;
+    // The startup cover backfill otherwise embeds a generated APIC into these
+    // hand-created WAVs on reopen, independently of the preferred take.
+    http.put(format!("{base}/v1/covers/look"))
+        .json(&json!({"keep":false}))
+        .send()
+        .await?
+        .error_for_status()?;
     let media = root.path().join("data/media");
     fs::create_dir_all(&media)?;
     let mut songs = Vec::new();
@@ -113,6 +122,11 @@ async fn preferred_take_survives_restart_and_reordering_without_touching_media()
     assert!(playlist.get("preferred_song_id").is_none());
     let id = playlist["id"].as_str().unwrap();
     let endpoint = format!("{base}/v1/library/playlists/{id}");
+    http.post(format!("{base}/v1/hub/telemetry"))
+        .json(&json!({"enabled":true, "acknowledge":true}))
+        .send()
+        .await?
+        .error_for_status()?;
     let rejected = http
         .put(format!("{endpoint}/preferred-take"))
         .json(&json!({"song_id":outsider}))
@@ -128,6 +142,14 @@ async fn preferred_take_survives_restart_and_reordering_without_touching_media()
         mcp(&http, &base, "playlist_select_preferred_take", args).await?,
         json!({"preferred_song_id":second, "changed":false})
     );
+    let preview: Value = http
+        .get(format!("{base}/v1/hub/telemetry/preview"))
+        .send()
+        .await?
+        .error_for_status()?
+        .json()
+        .await?;
+    assert_eq!(preview["report"]["counts"]["take_preferred_minimax"], 1);
     let journal: Vec<Value> = http
         .get(format!("{base}/v1/journal"))
         .send()
