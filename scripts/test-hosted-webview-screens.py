@@ -46,7 +46,7 @@ def rpc(method, params, notify=False):
     assert not result.get("error"), result
     return result["result"]
 
-def tool(name, **fields):
+def tool(name, /, **fields):
     result = rpc("tools/call", dict(name=name, arguments=fields))
     assert not result.get("isError"), (name, fields, result)
     content = result.get("content", [])
@@ -114,7 +114,7 @@ def capture_pt():
     options = wait_page(predicate=lambda page: 'select ' in page and '"pt"' in page)
     ui("select", ref=control(options, '"pt"'), value="pt")
     localized = wait_page(predicate=lambda page: 'value="pt"' in page)
-    click('button ""', localized)
+    click('button "x icon"', localized)
     ui("navigate", view="adapters")
     click('tab "Treino"')
     click('Canções de exemplo')
