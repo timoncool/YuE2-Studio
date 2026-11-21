@@ -103,6 +103,7 @@ export function RvcApplyVoice({ song, voice, control, onSaved }: {
           <option value="audio.cpp">audio.cpp</option>
         </select>
       </label>
+      {!setup && !error && <p role="status">{labels.checking}</p>}
       {effective && ready && <p>{labels.effective.replace('{backend}', effective)}</p>}
       {backend === 'vocal-fast-rs' && !ready && setup?.backends['vocal-fast-rs'].reason && <p role="status">{setup.backends['vocal-fast-rs'].reason}</p>}
       <div className="grid gap-2 sm:grid-cols-2">
