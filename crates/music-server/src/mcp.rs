@@ -554,6 +554,7 @@ const JOURNAL: &[(&str, &str, &str)] = &[
     ("hotstep_heartmula_training_install", "started", "download"),
     ("hotstep_heartmula_install", "started", "download"),
     ("training_continue", "started", "training"),
+    ("training_checkpoints_listen", "started", "training"),
     ("training_cancel", "cancelled", "training"),
     ("training_run_delete", "deleted", "training"),
     ("training_checkpoint_install", "installed", "lora"),
