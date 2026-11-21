@@ -544,6 +544,7 @@ const JOURNAL: &[(&str, &str, &str)] = &[
     ("lora_import_files", "installed", "lora"),
     ("rvc_voice_import", "installed", "rvc_voice"),
     ("rvc_voice_remove", "deleted", "rvc_voice"),
+    ("music_model_package_install", "installed", "model"),
     ("music_engine_package_install", "installed", "music_engine"),
     ("music_engine_catalog_refresh", "refreshed", "music_engine_catalog"),
     ("rvc_catalog_refresh", "refreshed", "rvc_catalog"),
@@ -2675,6 +2676,18 @@ fn tools() -> &'static [Tool] {
                 description: "Read preparation, file download and verification progress for a catalog voice being installed.",
                 schema: || id_only("id", "the ID from rvc_catalog_list"),
                 call: |args| get(format!("/v1/rvc/catalog/progress/{}", segment(&text(args, "id")?))),
+            },
+            Tool {
+                name: "music_model_package_install",
+                description: "Install an independently published music model, reusing verified weights already present.",
+                schema: || id_only("id", "model ID in the signed music catalogue"),
+                call: |args| post(format!("/v1/components/music-models/{}/install", segment(&text(args, "id")?)), json!({})),
+            },
+            Tool {
+                name: "music_model_package_status",
+                description: "Verify the installed model and its compatibility with the named engine.",
+                schema: || object(json!({"engine":{"type":"string"},"model":{"type":"string"}}), &["engine","model"]),
+                call: |args| get(format!("/v1/components/music-engines/{}/models/{}/status", segment(&text(args, "engine")?),segment(&text(args, "model")?))),
             },
             Tool {
                 name: "music_engine_package_install",
