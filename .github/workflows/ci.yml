@@ -6,7 +6,15 @@ name: CI
 on:
   push:
     branches-ignore: [main]
-    paths-ignore: ["docs/stars-*.svg"]
+    paths-ignore:
+      - 'docs/stars-*.svg'
+      - '.github/workflows/ci.yml'
+      - '.github/workflows/windows-nsis-acceptance.yml'
+      - 'scripts/windows-nsis-acceptance.py'
+      - 'scripts/hosted-print-control.ps1'
+      - 'scripts/test-hosted-webview-screens.py'
+      - 'scripts/observe-hosted-lrc.mjs'
+      - 'scripts/sample-installed-visualizer.mjs'
   pull_request:
   workflow_dispatch:
 

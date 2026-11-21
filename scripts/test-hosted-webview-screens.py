@@ -548,6 +548,8 @@ $confirmed = $false
 $settingsOpen = $false
 $paperOpen = $false
 $paperSet = $false
+$paperChoiceInvoked = $false
+$paperGroupLogged = $false
 $deadline = [DateTime]::UtcNow.AddSeconds(28)
 while ([DateTime]::UtcNow -lt $deadline -and !(Test-Path -LiteralPath $env:STUDIO_QA_PDF)) {
   $ids = [Collections.Generic.HashSet[int]]::new()
@@ -630,9 +632,30 @@ while ([DateTime]::UtcNow -lt $deadline -and !(Test-Path -LiteralPath $env:STUDI
           $settingsOpen = $true
           break
         }
-        $paper = $elements | Where-Object {
-          $_.Current.ControlType -eq [Windows.Automation.ControlType]::ComboBox -and $_.Current.Name -match 'Paper size'
+        $paperGroup = $elements | Where-Object {
+          $_.Current.ControlType -eq [Windows.Automation.ControlType]::Group -and $_.Current.Name -eq 'Paper size'
         } | Select-Object -First 1
+        $paper = $null
+        if ($paperGroup) {
+          $paperElements = @($paperGroup) + @($paperGroup.FindAll($tree::Descendants,$all))
+          if (!$paperGroupLogged) {
+            $paperElements | ForEach-Object {
+              Write-Output "Paper picker: $($_.Current.ControlType.ProgrammaticName) '$($_.Current.Name)' focusable=$($_.Current.IsKeyboardFocusable) patterns=$($_.GetSupportedPatterns().ProgrammaticName -join ',')"
+            }
+            $paperGroupLogged = $true
+          }
+          $paper = $paperElements | Where-Object {
+            $_.Current.IsKeyboardFocusable -and !$_.Current.IsOffscreen
+          } | Where-Object { $_.Current.ControlType -ne [Windows.Automation.ControlType]::Text } | Select-Object -First 1
+          if ($paperChoiceInvoked -and ($paperElements | Where-Object {
+            $_.Current.ControlType -eq [Windows.Automation.ControlType]::Text -and
+            $_.Current.Name -match '^A4($|[\s(])' -and !$_.Current.IsOffscreen
+          })) {
+            $paperSet = $true
+            Write-Output 'Selected paper shown by the WebView print preview: A4'
+            break
+          }
+        }
         if (!$paper) {
           $elements | Where-Object {$_.Current.Name -match 'Paper|Size|Letter|A4'} | ForEach-Object {
             Write-Output "$($_.Current.ControlType.ProgrammaticName):$($_.Current.Name)"
@@ -643,16 +666,23 @@ while ([DateTime]::UtcNow -lt $deadline -and !(Test-Path -LiteralPath $env:STUDI
           $pattern = $null
           if ($paper.TryGetCurrentPattern([Windows.Automation.ExpandCollapsePattern]::Pattern,[ref]$pattern)) {
             $pattern.Expand()
+          } elseif ($paper.TryGetCurrentPattern([Windows.Automation.InvokePattern]::Pattern,[ref]$pattern)) {
+            $pattern.Invoke()
           } else {
             $paper.SetFocus()
-            [Windows.Forms.SendKeys]::SendWait('%{DOWN}')
+            [Windows.Forms.SendKeys]::SendWait(' ')
           }
           $paperOpen = $true
           break
         }
-        $a4 = $elements | Where-Object {
-          $_.Current.Name -match '(^|\s)A4($|[\s(])' -and !$_.Current.IsOffscreen
-        } | Select-Object -First 1
+        if ($paperChoiceInvoked) { continue }
+        $a4Options = @($elements | Where-Object {
+          $_.Current.Name -match '^A4($|[\s(])' -and !$_.Current.IsOffscreen
+        })
+        $a4 = $a4Options | Where-Object { $_.Current.ControlType -ne [Windows.Automation.ControlType]::Text } | Select-Object -First 1
+        if (!$a4 -and $a4Options.Count) {
+          $a4 = [Windows.Automation.TreeWalker]::ControlViewWalker.GetParent($a4Options[0])
+        }
         if (!$a4) { continue }
         $choice = $null
         if ($a4.TryGetCurrentPattern([Windows.Automation.SelectionItemPattern]::Pattern,[ref]$choice)) {
@@ -663,8 +693,8 @@ while ([DateTime]::UtcNow -lt $deadline -and !(Test-Path -LiteralPath $env:STUDI
           $a4.SetFocus()
           [Windows.Forms.SendKeys]::SendWait('{ENTER}')
         }
-        $paperSet = $true
-        Write-Output 'Selected A4 in the WebView print preview'
+        $paperChoiceInvoked = $true
+        Write-Output 'Invoked A4 option in the WebView print preview'
         break
       }
       $confirm.GetCurrentPattern([Windows.Automation.InvokePattern]::Pattern).Invoke()
