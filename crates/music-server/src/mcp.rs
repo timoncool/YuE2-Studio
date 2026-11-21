@@ -1086,6 +1086,7 @@ fn rvc_runtime_route(args: &Value) -> String {
 }
 
 fn song_create_schema(mut properties: Value) -> Value {
+    properties["backing_song_id"] = json!({"type":"string","description":"Instrumental library song to use unchanged as the backing. Requires native YuE2, a matching Chord bed in abc, lyrics, and a ready vocal separator. Returns a mixed WAV."});
     properties["openrouter"] = json!({
         "type": "object", "additionalProperties": false,
         "description": "Optional music settings advertised by the selected OpenRouter model. Omit fields to use provider defaults.",
