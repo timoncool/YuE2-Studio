@@ -32,6 +32,8 @@ struct Update {
     from_version: String,
     to_version: String,
     changed_bytes: u64,
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    automatic_updates_paused: bool,
 }
 
 async fn pending<P: Package>(
@@ -40,7 +42,8 @@ async fn pending<P: Package>(
     version: impl Fn(&P) -> &str,
 ) -> Result<Option<Update>> {
     let dir = root.join(P::FOLDER).join(candidate.id());
-    let active = read_selection(&dir)?.active;
+    let selection = read_selection(&dir)?;
+    let active = selection.active;
     if active.is_empty() {
         return Ok(None);
     }
@@ -67,6 +70,7 @@ async fn pending<P: Package>(
         from_version: version(&old).into(),
         to_version: version(candidate).into(),
         changed_bytes,
+        automatic_updates_paused: selection.automatic_updates_paused,
     }))
 }
 
@@ -146,11 +150,13 @@ async fn check(state: &AppState) -> Result<()> {
             if policy(root)?.mode != Mode::Auto {
                 break;
             }
-            let args = (State(state.clone()), RoutePath(change.id));
+            if change.automatic_updates_paused {
+                continue;
+            }
             let result = if change.kind == EnginePackage::FOLDER {
-                install_selected(args.0, args.1).await
+                update_engine(state, &change.id, true).await
             } else {
-                install_model(args.0, args.1).await
+                update_model(state, &change.id, true).await
             };
             if let Err((_, error)) = result {
                 eprintln!("component update failed: {}", error.error);

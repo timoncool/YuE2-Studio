@@ -549,6 +549,7 @@ const JOURNAL: &[(&str, &str, &str)] = &[
     ("lora_import_files", "installed", "lora"),
     ("rvc_voice_import", "installed", "rvc_voice"),
     ("rvc_voice_remove", "deleted", "rvc_voice"),
+    ("music_package_rollback", "updated", "settings"),
     ("music_package_cancel", "cancelled", "download"),
     ("music_model_package_install", "installed", "model"),
     ("music_engine_package_install", "installed", "music_engine"),
@@ -2704,6 +2705,12 @@ fn tools() -> &'static [Tool] {
                 description: "Read the current file, transfer stage, reused and downloaded bytes for one signed package.",
                 schema: || object(json!({"kind":{"type":"string","enum":["music-engines","music-models"]},"id":{"type":"string"}}), &["kind","id"]),
                 call: |args| get(format!("/v1/components/packages/{}/{}/progress", segment(&text(args,"kind")?),segment(&text(args,"id")?))),
+            },
+            Tool {
+                name: "music_package_rollback",
+                description: "Restore the previous installed generation after a full offline integrity check. Pass the active and previous generation IDs from package status.",
+                schema: || object(json!({"kind":{"type":"string","enum":["music-engines","music-models"]},"id":{"type":"string"},"from_generation":{"type":"string"},"to_generation":{"type":"string"}}), &["kind","id","from_generation","to_generation"]),
+                call: |args| post(format!("/v1/components/packages/{}/{}/rollback",segment(&text(args,"kind")?),segment(&text(args,"id")?)),args.clone()),
             },
             Tool {
                 name: "music_package_cancel",

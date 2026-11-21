@@ -1752,6 +1752,7 @@ pub async fn serve_on_port(port: u16) -> anyhow::Result<()> {
         .route("/v1/components/updates", get(engine_catalogue::install::updates::list))
         .route("/v1/components/updates/mode", post(engine_catalogue::install::updates::set_mode))
         .route("/v1/components/packages/{kind}/{id}/progress", get(engine_catalogue::progress::status))
+        .route("/v1/components/packages/{kind}/{id}/rollback", post(engine_catalogue::install::rollback::apply))
         .route("/v1/components/packages/{kind}/{id}/cancel", post(engine_catalogue::progress::cancel))
         .route("/v1/components/music-models/{id}/install", post(engine_catalogue::install::install_model))
         .route("/v1/components/music-engines/{engine}/models/{model}/status", get(engine_catalogue::install::model_status))

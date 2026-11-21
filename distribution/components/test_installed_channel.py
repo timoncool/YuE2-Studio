@@ -469,6 +469,22 @@ def run_rvc(work, binary, certificate, tls_key, install_voice=False):
         tool("music_engine_package_status", args, expected_error=True)
         rogue.unlink()
         assert tool("music_engine_package_status", args)["version"] == "2"
+        installed = tool("music_engine_package_status", args)
+        rollback = dict(args, kind="music-engines", from_generation=installed["generation"],
+                        to_generation=installed["previous_generation"])
+        assert rollback["to_generation"] == first["generation"]
+        prior_lib, = [p for p in studio.rglob("music.dll") if p.parent.parent.name == first["generation"]]
+        prior_bytes = prior_lib.read_bytes()
+        prior_lib.write_bytes(b"?" * len(prior_bytes))
+        tool("music_package_rollback", rollback, expected_error=True)
+        assert tool("music_engine_package_status", args)["generation"] == second["generation"]
+        prior_lib.write_bytes(prior_bytes)
+        restored = tool("music_package_rollback", rollback)
+        assert restored["active"] == first["generation"] and restored["automatic_updates_paused"]
+        assert tool("music_package_rollback", rollback) == restored
+        assert tool("music_engine_package_status", args)["version"] == "1"
+        assert tool("music_package_updates_get")["updates"][0]["automatic_updates_paused"]
+        print("PASS offline rollback rejected damaged previous DLL and restored intact generation once")
         print("PASS signed engine discovery, incompatible schema rejected, offline restart, unexpected library rejected")
         cache = studio / "component-channel" / "rvc"
         snapshot = cache / (cache / "accepted").read_text()
