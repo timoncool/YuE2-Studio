@@ -457,8 +457,13 @@ struct TrainerSource {
     asset: String,
     /// Size of the released archive.
     bytes: u64,
+    /// The captioner's archive can have its own immutable filename.
+    caption_asset: String,
     /// Size of the captioner's archive in the same release.
     caption_bytes: u64,
+    cuda12_backend_tag: String,
+    cuda12_backend_asset: String,
+    cuda12_backend_bytes: u64,
 }
 
 fn trainer_source() -> &'static TrainerSource {
@@ -488,7 +493,14 @@ pub fn remove_older_tool_folders(downloader: &Downloader, current_folder: &str, 
         let Ok(entries) = std::fs::read_dir(directory) else { return };
         for entry in entries.flatten() {
             let name = entry.file_name().to_string_lossy().to_string();
-            if name.starts_with(prefix) && !today(&name) && entry.path().is_dir() {
+            let managed = if prefix == TOOLS_FOLDER_PREFIX {
+                name.strip_prefix("hotstep-tools-")
+                    .and_then(|suffix| suffix.split('-').next())
+                    .is_some_and(|revision| revision.len() == 8 && revision.bytes().all(|byte| byte.is_ascii_hexdigit()))
+            } else {
+                name.starts_with(prefix)
+            };
+            if managed && !today(&name) && entry.file_type().is_ok_and(|kind| kind.is_dir()) {
                 if let Err(error) = std::fs::remove_dir_all(entry.path()) {
                     eprintln!("[ERROR] could not remove the older {} {}: {error}", prefix, entry.path().display());
                 }
@@ -507,6 +519,49 @@ pub fn remove_older_tool_folders(downloader: &Downloader, current_folder: &str, 
 fn trainer_folder() -> &'static str {
     static FOLDER: OnceLock<String> = OnceLock::new();
     FOLDER.get_or_init(|| trainer_source().release_tag.clone())
+}
+
+pub(super) fn cuda12_backend() -> &'static Asset {
+    static BACKEND: OnceLock<Asset> = OnceLock::new();
+    BACKEND.get_or_init(|| {
+        let source = trainer_source();
+        Asset {
+            id: "music-train-cuda12",
+            label: "HOT-Step CUDA 12",
+            kind: AssetKind::Runtime,
+            url: Box::leak(format!("https://github.com/timoncool/YuE2-Studio/releases/download/{}/{}", source.cuda12_backend_tag, source.cuda12_backend_asset).into_boxed_str()),
+            relative_path: &source.cuda12_backend_asset,
+            bytes: source.cuda12_backend_bytes,
+            unzip_into: Some(&source.cuda12_backend_tag),
+            marker: "ggml-cuda.dll",
+            pick: &[],
+            vram_gb: None,
+            note: "",
+        }
+    })
+}
+
+fn stage_cuda12_trainer(base: &Path, backend: &Path, directory: &Path) -> Result<PathBuf> {
+    let root = base.parent().context("HOT-Step runtime folder")?;
+    let copy = |source: &Path, name: &std::ffi::OsStr| -> Result<()> {
+        let destination = directory.join(name);
+        if std::fs::hard_link(source, &destination).is_err() {
+            std::fs::copy(source, destination)?;
+        }
+        Ok(())
+    };
+    let name = base.file_name().context("HOT-Step executable filename")?;
+    copy(base, name)?;
+    for entry in std::fs::read_dir(root)? {
+        let entry = entry?;
+        let name = entry.file_name();
+        let dll = name.to_string_lossy();
+        if entry.file_type()?.is_file() && (matches!(&*dll, "ggml.dll" | "ggml-base.dll") || (dll.starts_with("ggml-cpu-") && dll.ends_with(".dll"))) {
+            copy(&entry.path(), &name)?;
+        }
+    }
+    copy(backend, std::ffi::OsStr::new("ggml-cuda.dll"))?;
+    Ok(directory.join(name))
 }
 
 /// Everything training needs: the trainer, released beside the studio, and
@@ -605,8 +660,8 @@ pub(crate) fn listen_pack() -> &'static [Asset] {
                 id: "ace-caption",
                 label: leak(format!("Captioner (HOT-Step {})", &source.commit[..8])),
                 kind: AssetKind::Runtime,
-                url: leak(format!("https://github.com/timoncool/YuE2-Studio/releases/download/{}/ace-caption-windows-x64.zip", source.release_tag)),
-                relative_path: "ace-caption-windows-x64.zip",
+                url: leak(format!("https://github.com/timoncool/YuE2-Studio/releases/download/{}/{}", source.release_tag, source.caption_asset)),
+                relative_path: leak(source.caption_asset.clone()),
                 bytes: source.caption_bytes,
                 unzip_into: Some(trainer_folder()),
                 marker: CAPTIONER,
@@ -773,7 +828,7 @@ impl Training {
     pub fn new(data_root: &Path, engine: &str) -> Self {
         let root = data_root.join("training");
         let _ = fs::create_dir_all(root.join("models/own"));
-        Self {
+        let training = Self {
             downloader: Downloader::with_runtimes(root.clone(), tools_root(data_root)),
             root,
             engine: engine.to_string(),
@@ -782,7 +837,9 @@ impl Training {
             ended: std::sync::OnceLock::new(),
             step_stages: std::sync::Mutex::new(yue_train::StepStages::default()),
             f32_path: std::sync::atomic::AtomicBool::new(false),
-        }
+        };
+        training.remove_older_trainers();
+        training
     }
 
     /// Who is told how each run ends; set once.
@@ -1128,17 +1185,20 @@ impl Training {
 
     pub async fn install_pack(&self) -> Result<()> {
         let missing: Vec<&'static Asset> = pack().iter().filter(|asset| !self.installed(asset)).collect();
-        if missing.is_empty() {
-            return Ok(());
+        if !missing.is_empty() {
+            self.downloader.install_all(SCOPE, &missing).await?;
         }
-        self.downloader.install_all(SCOPE, &missing).await?;
         self.remove_older_trainers();
         Ok(())
     }
 
     /// The trainers of earlier releases; nothing runs them any more.
     fn remove_older_trainers(&self) {
-        remove_older_tool_folders(&self.downloader, trainer_folder(), "music-train");
+        let Some(runtime) = pack().iter().find(|asset| asset.id == "music-train") else { return };
+        let managed = self.downloader.runtime_dir(trainer_folder()).join(runtime.marker);
+        if managed.is_file() && self.downloader.is_installed(runtime) {
+            remove_older_tool_folders(&self.downloader, trainer_folder(), "music-train");
+        }
     }
 
     // ── datasets ────────────────────────────────────────────────────────────
@@ -1985,6 +2045,20 @@ impl Training {
                 run.trainer.is_some_and(|trainer| trainer.generation.is_some())
             };
             log.write_all(format!("==== {}\n", stage.id).as_bytes()).await?;
+            let cuda12_runtime = (cfg!(windows) && !signed_trainer
+                && trainer == self.downloader.runtime_dir(trainer_folder()).join(&trainer_source().shipped_as)
+                && crate::trainer_cuda_build() == Some(crate::hardware::CudaBuild::Cuda12))
+                .then(|| -> Result<_> {
+                    let asset = cuda12_backend();
+                    if !self.downloader.is_installed(asset) {
+                        bail!("Install the HOT-Step CUDA 12 backend from the training pack");
+                    }
+                    let directory = tempfile::Builder::new().prefix("cuda12-trainer-").tempdir_in(run_dir)?;
+                    let backend = self.downloader.runtime_dir(&trainer_source().cuda12_backend_tag).join(asset.marker);
+                    let executable = stage_cuda12_trainer(trainer, &backend, directory.path())?;
+                    Ok((directory, executable))
+                }).transpose()?;
+            let trainer = cuda12_runtime.as_ref().map_or(trainer, |(_, executable)| executable.as_path());
             // A signed generation declares its dependencies and is verified again on resume.
             if !signed_trainer {
                 music_core::process::runtime_beside(trainer);
@@ -2416,18 +2490,83 @@ mod tests {
     /// The trainer's cleanup keeps the transcriber's CUDA 12.9 and processor
     /// builds of today's release, and takes every folder of an earlier one.
     #[test]
+    fn the_cuda12_trainer_stages_its_backend_without_changing_originals() {
+        let fixture = tempfile::tempdir().unwrap();
+        let original = fixture.path().join("original");
+        let staged = fixture.path().join("staged");
+        std::fs::create_dir(&original).unwrap();
+        std::fs::create_dir(&staged).unwrap();
+        for (name, bytes) in [
+            ("music-train.exe", "trainer"),
+            ("music-midi.exe", "midi"),
+            ("ggml.dll", "shared"),
+            ("ggml-base.dll", "base"),
+            ("ggml-cpu-x64.dll", "cpu"),
+            ("ggml-cuda.dll", "cuda13"),
+        ] {
+            std::fs::write(original.join(name), bytes).unwrap();
+        }
+        let backend = fixture.path().join("cuda12.dll");
+        std::fs::write(&backend, "cuda12").unwrap();
+
+        let executable = stage_cuda12_trainer(&original.join("music-train.exe"), &backend, &staged).unwrap();
+        assert_eq!(std::fs::read_to_string(executable).unwrap(), "trainer");
+        assert_eq!(std::fs::read_to_string(staged.join("ggml-cuda.dll")).unwrap(), "cuda12");
+        assert_eq!(std::fs::read_to_string(staged.join("ggml-cpu-x64.dll")).unwrap(), "cpu");
+        assert!(!staged.join("music-midi.exe").exists());
+        assert_eq!(std::fs::read_to_string(original.join("ggml-cuda.dll")).unwrap(), "cuda13");
+    }
+
+    #[test]
     fn todays_tool_folders_stay_and_earlier_releases_go() {
         let root = std::env::temp_dir().join(format!("yue-tool-folders-{}", uuid::Uuid::now_v7()));
         let shared = root.join("hotstep");
         let downloader = Downloader::with_runtimes(root.join("training"), shared.clone());
-        for name in ["hotstep-tools-new", "hotstep-tools-new-midi-cuda12", "hotstep-tools-new-midi-cpu", "hotstep-tools-old", "hotstep-tools-old-midi-cpu"] {
+        for name in ["hotstep-tools-75923e70-xcr0", "hotstep-tools-75923e70-xcr0-midi-cuda12", "hotstep-tools-75923e70-xcr0-midi-cpu", "hotstep-tools-75923e70", "hotstep-tools-2ef93a1c-midi-cpu", "hotstep-tools-local"] {
             std::fs::create_dir_all(shared.join(name)).unwrap();
         }
-        remove_older_tool_folders(&downloader, "hotstep-tools-new", "music-train");
+        remove_older_tool_folders(&downloader, "hotstep-tools-75923e70-xcr0", "music-train");
         let mut left: Vec<String> = std::fs::read_dir(&shared).unwrap().flatten().map(|entry| entry.file_name().to_string_lossy().into_owned()).collect();
         left.sort();
-        assert_eq!(left, ["hotstep-tools-new", "hotstep-tools-new-midi-cpu", "hotstep-tools-new-midi-cuda12"]);
+        assert_eq!(left, ["hotstep-tools-75923e70-xcr0", "hotstep-tools-75923e70-xcr0-midi-cpu", "hotstep-tools-75923e70-xcr0-midi-cuda12", "hotstep-tools-local"]);
         std::fs::remove_dir_all(&root).ok();
+    }
+
+    #[tokio::test]
+    async fn upgrading_an_already_installed_trainer_preserves_training_inputs() {
+        let data = tempfile::tempdir().unwrap();
+        let training = Training::new(data.path(), "yue2");
+        let old = tools_root(data.path()).join("hotstep-tools-2ef93a1c");
+        std::fs::create_dir_all(&old).unwrap();
+        let checkpoint = training.runs_dir().join("previous-run/checkpoints/step-42.safetensors");
+        std::fs::create_dir_all(checkpoint.parent().unwrap()).unwrap();
+        std::fs::write(&checkpoint, b"resume from step 42").unwrap();
+        let trainer = pack().iter().find(|asset| asset.id == "music-train").unwrap();
+        for asset in pack().iter().filter(|asset| asset.kind == AssetKind::Model) {
+            let file = training.downloader.path_of(asset);
+            std::fs::create_dir_all(file.parent().unwrap()).unwrap();
+            std::fs::write(file, b"existing weights").unwrap();
+        }
+        let managed = training.downloader.runtime_dir(trainer_folder()).join(trainer.marker);
+        std::fs::create_dir_all(managed.parent().unwrap()).unwrap();
+        std::fs::write(&managed, b"current trainer").unwrap();
+        training.remove_older_trainers();
+        assert!(old.exists(), "an unpacked marker alone cannot retire the previous runtime");
+        crate::install_record::write(
+            &training.downloader.record_of(trainer), trainer.url, "", &[managed.clone()], training.downloader.root(),
+        ).unwrap();
+
+        let restarted = Training::new(data.path(), "yue2");
+        assert!(!old.exists(), "a verified replacement retires the old runtime at startup");
+        assert!(restarted.pack_ready());
+        std::fs::create_dir_all(&old).unwrap();
+        restarted.install_pack().await.unwrap();
+        assert!(!old.exists(), "repeat install takes the local ready path and retires old files");
+        assert_eq!(std::fs::read(managed).unwrap(), b"current trainer");
+        assert_eq!(std::fs::read(checkpoint).unwrap(), b"resume from step 42");
+        for asset in pack().iter().filter(|asset| asset.kind == AssetKind::Model) {
+            assert_eq!(std::fs::read(restarted.downloader.path_of(asset)).unwrap(), b"existing weights");
+        }
     }
 
     #[tokio::test]

@@ -1,3 +1,40 @@
+import { STYLE_SUGGESTIONS } from './styleSuggestions';
+import { styleAdvice } from '../i18n/styleAdvice';
+
+const catalogueDescriptors = new Set(STYLE_SUGGESTIONS.map(s => s.toLowerCase()));
+const instruments = /\b(guitars?|piano|bass|drums?|violins?|cello|viola|saxophone|trumpet|trombone|flute|clarinet|harp|banjo|mandolin|synth(?:esizer)?s?|accordion|timpani|marimba|organ)\b/gi;
+const genreTag = /^(rock|pop|jazz|metal|classical|country|reggae|disco|folk|punk|blues|techno|house|rap)$/i;
+export type StyleRule = 'language' | 'tempo' | 'length' | 'numbers' | 'negative' | 'instruction' | 'artist'
+  | 'genres' | 'quality' | 'instruments' | 'voice' | 'lyrics';
+
+/** Optional advice for YuE2's English style descriptors. A catalogue fragment is valid on its own. */
+export function styleLint(text: string, hints: Record<StyleRule, string> = styleAdvice.en) {
+  const tags = text.trim().split(/[,;\n]+/).map(s => s.trim().toLowerCase()).filter(Boolean);
+  if (!tags.length || tags.every(tag => catalogueDescriptors.has(tag))) return [];
+  const rules: StyleRule[] = [];
+  const words = text.match(/[\p{L}\p{N}]+(?:[-'][\p{L}\p{N}]+)*/gu) ?? [];
+  const uniqueInstruments = new Set(Array.from(text.matchAll(instruments), m => m[1].toLowerCase().replace(/s$/, '')));
+  if (!/^(?:instrumental|english|russian|chinese|mandarin|cantonese|japanese|korean|spanish|french|german|italian|portuguese|swedish|norwegian|danish|finnish|polish|ukrainian|arabic|hindi|turkish|dutch|greek)\b/i.test(tags[0])) rules.push('language');
+  if (!/\b\d{2,3}\s+bpm\s*$/i.test(text)) rules.push('tempo');
+  if (words.length < 12 || words.length > 50) rules.push('length');
+  // Decade genres, instrument names and meters are meaningful musical descriptors.
+  const nonTempo = text.replace(/\b(?:\d+(?:\.\d+)?\s*bpm|bpm\s*\d+|(?:19|20)?\d0['’]?s|(?:tr[- ]?)?808|tr[- ]?909|[234679]\/[248])\b/gi, '');
+  if (/\b\d+\b/.test(nonTempo)) rules.push('numbers');
+  if (/\b(?:no|without|utan)\s+\w+/i.test(text)) rules.push('negative');
+  if (/\b(?:make (?:it|the song)|the song (?:should|must)|please (?:write|generate|create))\b/i.test(text)) rules.push('instruction');
+  if (/\bin the style of\s+\S/i.test(text) || /\b[A-Z][a-z]+\s+[A-Z][a-z]+(?:'s|’s)?\s+style\b/.test(text)) rules.push('artist');
+  if (new Set(tags.filter(t => genreTag.test(t))).size >= 3) rules.push('genres');
+  if (!uniqueInstruments.size && /\b(?:phat|huge|massive|high[- ]quality|masterpiece)\b/i.test(text)) rules.push('quality');
+  if (uniqueInstruments.size > 6) rules.push('instruments');
+  if (VOICE.test(text)) {
+    const register = /\b(?:male|female|alto|soprano|tenor|baritone|contralto|mezzo|androgynous|mixed)\b/i.test(text);
+    const delivery = /\b(?:airy|warm|soft|clear|deep|breathy|raspy|belt(?:ing)?|whisper(?:ed)?|spoken|smooth|operatic|falsetto|powerful)\b/i.test(text);
+    if (!register || !delivery) rules.push('voice');
+  }
+  if (/^\s*\[(?:verse|chorus|bridge|outro|intro|hook|куплет|припев)\b[^\]]*\]/im.test(text)) rules.push('lyrics');
+  return rules.map(rule => ({ rule, level: 'advice' as const, hint: hints[rule] }));
+}
+
 export type LyricSection = { tag: string; body: string };
 export const SECTION_PRESETS = ['Intro', 'Verse', 'Pre-Chorus', 'Chorus', 'Hook', 'Bridge', 'Refrain', 'Outro', 'Instrumental', 'Interlude'];
 const SECTION_CYCLE = ['Verse', 'Pre-Chorus', 'Chorus', 'Bridge', 'Outro', 'Intro'];

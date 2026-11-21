@@ -426,7 +426,7 @@ fn convert(
     Ok(audio_post::Stereo::new(left, right, audio.sample_rate))
 }
 
-fn add_aligned(mix: &mut audio_post::Stereo, stem: &audio_post::Stereo) -> anyhow::Result<()> {
+pub(super) fn add_aligned(mix: &mut audio_post::Stereo, stem: &audio_post::Stereo) -> anyhow::Result<()> {
     // The native model rounds to its analysis hop. Preserve the original song's frame count.
     anyhow::ensure!(
         mix.rate == stem.rate && mix.frames().abs_diff(stem.frames()) <= mix.rate as usize / 4,

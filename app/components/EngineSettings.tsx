@@ -13,9 +13,9 @@ import { DiagnosticsPanel } from './DiagnosticsPanel';
  * request may compose, which is why the create panel clamps to it.
  */
 
-type ComputeBackend = 'auto' | 'cuda' | 'vulkan' | 'cpu';
+type ComputeBackend = 'auto' | 'cuda' | 'hip' | 'vulkan' | 'cpu';
 type FlashAttention = 'auto' | 'on' | 'off';
-type KvQ8Off = 'processor' | 'vulkan' | 'flash_attention_off' | null;
+type KvQ8Off = 'processor' | 'vulkan' | 'hip' | 'flash_attention_off' | null;
 type KvCache = 'auto' | 'f16' | 'q8';
 
 /** The KV cache the running engine took, and why (`KvChoice` of the service). */
@@ -131,7 +131,7 @@ export const EngineSettings: React.FC = () => {
   // why a KV cache in Q8 cannot apply here, as the service reads the machine (an Auto it resolves to the processor)
   const [serverKvQ8Off, setServerKvQ8Off] = useState<KvQ8Off>(null);
   const [kvCacheNow, setKvCacheNow] = useState<KvCacheNow | null>(null);
-  const kvQ8Off: KvQ8Off = options.backend === 'cpu' ? 'processor' : options.backend === 'vulkan' ? 'vulkan' : options.flash_attention === 'off' ? 'flash_attention_off'
+  const kvQ8Off: KvQ8Off = options.backend === 'cpu' ? 'processor' : options.backend === 'vulkan' ? 'vulkan' : options.backend === 'hip' ? 'hip' : options.flash_attention === 'off' ? 'flash_attention_off'
     : options.backend === saved.backend && options.flash_attention === saved.flash_attention ? serverKvQ8Off : null;
   const [savedMaxSeq, setSavedMaxSeq] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
@@ -185,6 +185,25 @@ export const EngineSettings: React.FC = () => {
 
   useEffect(() => { void load(); }, [load]);
 
+  const [hip, setHip] = useState<{ platform_supported: boolean; gfx?: string; driver?: string; supported: boolean; installed: boolean;
+    installing: boolean; missing_bytes: number; reason?: string;
+    download?: { downloaded_bytes: number; total_bytes: number; done: boolean; error?: string } } | null>(null);
+  useEffect(() => poll(async () => {
+    const response = await fetch('/engine/hip').catch(() => null);
+    if (response?.ok) await response.json().then(setHip).catch(() => undefined);
+  }, hip?.installing ? 700 : 3500), [hip?.installing]);
+
+  const controlHip = async (method: 'POST' | 'DELETE') => {
+    setError(null);
+    try {
+      const response = await fetch('/engine/hip', { method });
+      if (!response.ok) throw new Error((await response.json()).error);
+      const status = await fetch('/engine/hip');
+      if (status.ok) setHip(await status.json());
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : String(reason));
+    }
+  };
   const dirty = JSON.stringify(options) !== JSON.stringify(saved);
 
   // The cache stepped down after the card ran out of memory goes back to the model's full context.
@@ -301,12 +320,13 @@ export const EngineSettings: React.FC = () => {
       <div className="rounded-xl border border-zinc-200 p-3 dark:border-white/10">
         <span className="block text-sm font-medium text-zinc-800 dark:text-zinc-100">{tt('computeBackendLabel')}</span>
         <div className="mt-2 grid grid-cols-2 gap-1 rounded-lg bg-zinc-100 p-1 sm:grid-cols-4 dark:bg-black/30" role="radiogroup" aria-label={tt('computeBackendLabel')}>
-          {(['auto', 'cuda', 'vulkan', 'cpu'] as const).map(value => (
+          {(['auto', 'cuda', 'hip', 'vulkan', 'cpu'] as const).filter(value => value !== 'hip' || hip?.platform_supported || options.backend === 'hip').map(value => (
             <button
               key={value}
               type="button"
               role="radio"
               aria-checked={options.backend === value}
+              disabled={value === 'hip' && !hip?.installed}
               onClick={() => setOptions(current => ({ ...current, backend: value }))}
               className={`rounded-md px-2 py-1.5 text-xs font-semibold transition-all ${options.backend === value ? 'bg-white text-black shadow-xs dark:bg-zinc-700 dark:text-white' : 'text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200'}`}
             >
@@ -315,6 +335,24 @@ export const EngineSettings: React.FC = () => {
           ))}
         </div>
         <span className="mt-2 block text-xs leading-5 text-zinc-500 dark:text-zinc-400">{tt(`computeBackendHint_${options.backend}`)}</span>
+        {(hip?.platform_supported || options.backend === 'hip') && hip && (
+          <div className="mt-2 space-y-1 text-xs text-zinc-600 dark:text-zinc-300">
+            <div>{[hip.gfx, hip.driver].filter(Boolean).join(' · ')}</div>
+            {hip.reason && <p role="status">{hip.reason}</p>}
+            {hip.download?.error && <p role="alert">{hip.download.error}</p>}
+            {hip.installing ? (
+              <div>
+                <span role="status">{tt('hipInstalling')}</span>
+                {Boolean(hip.download?.total_bytes) && <progress max={hip.download!.total_bytes} value={hip.download!.downloaded_bytes} />}
+                {!hip.download?.done && <button type="button" onClick={() => void controlHip('DELETE')}>{tt('hipCancel')}</button>}
+              </div>
+            ) : hip.supported && !hip.installed && (
+              <button type="button" className="underline" onClick={() => void controlHip('POST')}>
+                {tt('hipInstall')}{hip.missing_bytes > 0 ? ` · ${Math.ceil(hip.missing_bytes / 2 ** 20)} MiB` : ''}
+              </button>
+            )}
+          </div>
+        )}
         {setup?.hardware?.onProcessor && <span className="mt-2 block text-xs leading-5 text-amber-700 dark:text-amber-300">{tt('songsOnProcessor')}</span>}
         {setup?.hardware?.shortOfSmallestSet && (
           <span className="mt-2 block text-xs leading-5 text-amber-700 dark:text-amber-300">
@@ -461,7 +499,7 @@ export const EngineSettings: React.FC = () => {
         <span className="mt-2 block text-xs leading-5 text-zinc-500 dark:text-zinc-400">{tt('kvCacheHint')}</span>
         {kvQ8Off !== null && (
           <span className="mt-1 block text-xs leading-5 text-amber-600 dark:text-amber-300">
-            {kvQ8Off === 'processor' ? tt('kvQ8OffProcessor') : kvQ8Off === 'vulkan' ? tt('kvQ8OffVulkan') : tt('kvQ8OffFlashAttention')}
+            {kvQ8Off === 'processor' ? tt('kvQ8OffProcessor') : kvQ8Off === 'vulkan' ? tt('kvQ8OffVulkan') : kvQ8Off === 'hip' ? tt('kvQ8OffHip') : tt('kvQ8OffFlashAttention')}
           </span>
         )}
         {kvCacheNow && <span className="mt-1 block text-xs leading-5 text-zinc-500 dark:text-zinc-400">{kvCacheNowLine(tt, kvCacheNow)}</span>}

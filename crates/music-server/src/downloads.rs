@@ -142,6 +142,12 @@ impl Downloader {
         }
     }
 
+    #[cfg(test)]
+    pub(crate) fn with_test_http(mut self, http: reqwest::Client) -> Self {
+        self.http = http;
+        self
+    }
+
     pub fn root(&self) -> &Path {
         &self.root
     }
@@ -1148,6 +1154,13 @@ pub(crate) fn replace_earlier(record: &Path, root: &Path, kept: &Path) -> Result
 /// pin, the earlier pin's files gone, unpacked into `unpack_into` when it is an archive, made executable and recorded.
 async fn settle_apart(asset: &'static Asset, target: PathBuf, record: PathBuf, root: PathBuf, unpack_into: Option<PathBuf>, keep_archive: bool) -> Result<()> {
     tokio::task::spawn_blocking(move || {
+        if let Some(result) = unpack_into.as_ref().and_then(|folder| {
+            crate::native_music_runtime::install_tree(asset.url, &target, folder, &record, &root)
+        }) {
+            result?;
+            if !keep_archive { fs::remove_file(&target).ok(); }
+            return Ok(());
+        }
         let sha256 = crate::pin_sha::check(asset.url, &target)?;
         replace_earlier(&record, &root, &target)?;
         let files = match unpack_into {

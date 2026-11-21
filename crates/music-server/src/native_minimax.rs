@@ -794,10 +794,10 @@ impl Installation {
         let executable = override_path("YUE_MINIMAX_MM_SERVER_BIN", "MINIMAX_MM_SERVER_BIN")
             .or_else(|| match &bundle {
                 Some(dir) => Some(dir.join(name)),
-                None => binaries
+                None => crate::native_music_runtime::installed(data_root, ENGINE_ID).or_else(|| binaries
                     .into_iter()
                     .map(|dir| dir.join(name))
-                    .find(|file| file.is_file()),
+                    .find(|file| file.is_file())),
             });
         let roots = override_path("YUE_MINIMAX_MODELS_ROOT", "MINIMAX_MUSIC_MODELS_ROOT")
             .map(|root| vec![root])
@@ -844,7 +844,7 @@ impl Installation {
 
     fn for_profile(&self, profile: &'static Profile) -> Result<Launch> {
         let executable = self.executable.as_ref().filter(|file| file.is_file())
-            .context("MiniMax mm-server is missing. Install MiniMax Music3 Studio or set YUE_MINIMAX_MM_SERVER_BIN to its executable.")?;
+            .context("MiniMax mm-server is missing. Install the runtime in Create or set YUE_MINIMAX_MM_SERVER_BIN to its executable.")?;
         let models_root = self
             .roots
             .iter()
@@ -940,6 +940,9 @@ impl Launch {
         dub_core::proc::outside_appimage(&mut command);
         let mut dirs = vec![folder.to_path_buf()];
         dirs.extend(self.runtime_dirs.iter().filter(|dir| dir.is_dir()).cloned());
+        if cfg!(windows) {
+            dirs.push(crate::engine_bundle_root());
+        }
         if cfg!(target_os = "linux") {
             command.env("LD_LIBRARY_PATH", env::join_paths(dirs)?);
         } else if cfg!(windows) {

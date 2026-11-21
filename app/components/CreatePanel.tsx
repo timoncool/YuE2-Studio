@@ -1,3 +1,6 @@
+import samplingPresets from '../data/yue-sampling.json';
+import { yueSamplingStrings } from '../i18n/yueSampling';
+
 import { readRvcBackend, useLastRvcVoice } from '../services/rvcQuick';
 import { rvcQuickStrings } from '../i18n/rvcQuick';
 import React, { useCallback, useEffect, useEffectEvent, useMemo, useRef, useState } from 'react';
@@ -38,10 +41,12 @@ import { fetchAdapters, installCatalogAdapters, startingScales, usesFromSettings
 import { engineParityLabels, planLabels } from '../i18n/engineParity';
 import { midiImportOptions } from '../i18n/midiImportOptions';
 import { SongTextParts } from './SongTextParts';
-import { writerInstruction } from '../services/songWriting';
+import { styleLint, writerInstruction } from '../services/songWriting';
+import { styleAdvice } from '../i18n/styleAdvice';
 import { songWritingStrings } from '../i18n/songWriting';
 import { MagentaFields, magentaModel, restoreMagentaOptions } from './MagentaFields';
 import { MiDashengFields, miDashengModel, miDashengPromptReady, restoreMiDashengPrompt } from './MiDashengFields';
+import { NativeMusicRuntimeInstall } from './NativeMusicRuntimeInstall';
 import { HeartMuLaControls, AudioCppModelInstall, emptyHeartMuLaDraft, heartMuLaDraft, heartMuLaOptions } from './HeartMuLaControls';
 import { HotStepSa3Controls, hotStepSa3Profile, hotStepHeartmulaProfile, type HotStepSa3Draft } from './HotStepSa3Controls';
 import { StableAudioControls, emptyStableAudioDraft, stableAudioDraft, stableAudioOptions, stableAudioPromptRequired } from './StableAudioControls';
@@ -124,6 +129,33 @@ type EngineCatalog = {
 };
 
 type SamplingText = Record<keyof YueSampling, string>;
+type SamplingStage = keyof typeof samplingPresets;
+const presetFields = ['temperature', 'top_p', 'top_k', 'repetition_penalty'] as const;
+
+const presetName = (stage: SamplingStage, value: SamplingText) =>
+  Object.entries(samplingPresets[stage]).find(([, knobs]) => presetFields.every(key => numberOrUndefined(value[key]) === knobs[key]))?.[0]
+    ?? (presetFields.every(key => value[key].trim() === '') ? '' : 'custom');
+
+function applyPreset(stage: SamplingStage, value: SamplingText, name: string): SamplingText {
+  const knobs = Object.entries(samplingPresets[stage]).find(([id]) => id === name)?.[1];
+  const next = { ...value };
+  for (const key of presetFields) next[key] = knobs ? String(knobs[key]) : '';
+  return next;
+}
+
+function SamplingSelector({ stage, value, onChange, strings }: {
+  stage: SamplingStage; value: SamplingText; onChange: (value: SamplingText) => void; strings: typeof yueSamplingStrings.en;
+}) {
+  const choices = Object.entries(samplingPresets[stage]);
+  const current = presetName(stage, value);
+  return <Field label={stage === 'abc_sampling' ? strings.plan : strings.reading}><select className={CONTROL} value={current} onChange={event => {
+    onChange(applyPreset(stage, value, event.target.value));
+  }}>
+    <option value="">{strings.checkpoint}</option>
+    {current === 'custom' && <option value="custom">{strings.custom}</option>}
+    {choices.map(([name]) => <option key={name} value={name}>{strings[name as keyof typeof strings]}</option>)}
+  </select></Field>;
+}
 
 /** The select entry that opens the new-playlist dialog instead of choosing. */
 const NEW_PLAYLIST = '__new__';
@@ -632,6 +664,9 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
   nameNow.current = name;
   const typeName = (value: string) => { setName(value); setNameFilled(false); };
   const [style, setStyle] = useState(() => keptText(draft, 'style'));
+  const styleHints = useMemo(() => musicEngine === 'local' ? styleLint(style, styleAdvice[language]) : [],
+    [style, musicEngine, language]);
+  const styleHintsId = React.useId();
   const magentaReady = magentaReference ? magentaTracks.some(track => track.id === magentaReference) : Boolean(style.trim());
   const [lyrics, setLyrics] = useState(() => keptText(draft, 'lyrics'));
   const [abc, setAbc] = useState(() => keptText(draft, 'abc'));
@@ -1639,6 +1674,23 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
     }
   };
 
+  const variationChoices = Object.entries(samplingPresets.semantic_sampling).filter(([, knobs]) =>
+    !presetFields.every(key => numberOrUndefined(semanticSampling[key]) === knobs[key]));
+  const canVary = yue && ready && !pair.blocked && !queueBusy && !forever && !composing && !instrumental
+    && Boolean(abc.trim()) && effectiveCot !== 'off' && !semanticTokens.trim() && Boolean(style.trim() || lyrics.trim());
+  const createVariations = () => {
+    if (!canVary) return;
+    const base = buildRequest();
+    for (const [name, knobs] of variationChoices) {
+      const label = yueSamplingStrings[language][name as keyof typeof samplingPresets.semantic_sampling];
+      generate({
+        ...base, title: base.title ? base.title + ' · ' + label : label,
+        abc_continue: false, lm_batch_size: 1, synth_batch_size: 1,
+        semantic_sampling: { ...base.semantic_sampling, ...knobs },
+      });
+    }
+  };
+
   const submit = () => {
     if (pair.blocked) return;
     if (signed) {
@@ -1744,6 +1796,8 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
     solver: [solver, value => setSolver(value === 'ab2' || value === 'midpoint' ? value : '')],
     cfg_scale: [cfgScale, setCfgScale],
     lm_seed: [lmSeed, setLmSeed],
+    plan_variety: [presetName('abc_sampling', abcSampling), name => setAbcSampling(value => applyPreset('abc_sampling', value, name))],
+    performance: [presetName('semantic_sampling', semanticSampling), name => setSemanticSampling(value => applyPreset('semantic_sampling', value, name))],
     seed: [seed, setSeed],
     cover_prompt: [coverPrompt, setCoverPrompt],
     output_format: [format, (value) => setFormat(value as YueOutputFormat)],
@@ -1771,6 +1825,8 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
     ready: !pair.blocked && (signed ? packages.ready : cloud ? Boolean(selectedMusicModel) : nativeEngine ? native.ready : ready),
     error: error ?? pair.error ?? pair.status?.error,
     music_pair: pair.status,
+    variations: { ready: canVary, presets: variationChoices.map(([name]) => name) },
+    style_hints: styleHints,
     assistant_writing: assisting,
   }));
   useBridgeCommand('create_set', (args) => {
@@ -1778,6 +1834,8 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
     // every field is checked before any changes, so a refused call leaves the form as it was
     const choices: Record<string, string[]> = { mode: ['studio', 'simple', 'cover'], cot: ['full', 'melody', 'off', ''], output_format: ['flac', 'mp3', 'wav32'] };
     const unknown = Object.keys(fields).filter(key => !formFields[key] && !['mode', 'randomize_seed', 'adapters'].includes(key));
+    choices.plan_variety = ['', ...Object.keys(samplingPresets.abc_sampling)];
+    choices.performance = ['', ...Object.keys(samplingPresets.semantic_sampling)];
     if (unknown.length) throw new Error(`Unknown fields: ${unknown.join(', ')}. The form has: ${[...Object.keys(formFields), 'mode', 'randomize_seed', 'adapters'].join(', ')}.`);
     for (const [key, allowed] of Object.entries(choices)) {
       if (key in fields && !allowed.includes(String(fields[key] ?? ''))) throw new Error(`${key} is one of: ${allowed.filter(Boolean).join(', ')}.`);
@@ -1791,7 +1849,12 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
     }
     return { text: 'Filled in; create_form_get shows the form, ui_screenshot shows it on screen.' };
   });
-  useBridgeCommand('create_submit', () => {
+  useBridgeCommand('create_submit', (args) => {
+    if (args.variations === true) {
+      if (!canVary) throw new Error('Variations require a ready local YuE2 score, style or lyrics, and an idle queue. Clear fixed audio codes and turn off instrumental and continuous generation.');
+      createVariations();
+      return { presets: variationChoices.map(([name]) => name) };
+    }
     submit();
     return { text: 'Pressed Create. studio_status shows the new job; if the form refused, create_form_get says why under error.' };
   });
@@ -1928,6 +1991,8 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
                     {native.loading && <p role="status" className="text-xs">{nativeStrings.loading}</p>}
                     {native.error && <p role="alert" className="text-xs">{nativeStrings.error}</p>}
                     {!native.loading && !native.error && !native.installed && <p role="status" className="text-xs">{nativeStrings.engineMissing}</p>}
+                    {!native.loading && !native.error && !native.installed && (musicEngine === 'acestep-cpp' || musicEngine === 'minimaxmusic-cpp') &&
+                      <NativeMusicRuntimeInstall key={musicEngine} engine={musicEngine} onInstalled={native.refresh} />}
                     {!native.loading && !native.error && native.profiles.length === 0 && native.installed && <p className="text-xs">{nativeStrings.empty}</p>}
                     {native.originalModels && (
                       <div className="space-y-1 text-xs" role="status">
@@ -2453,9 +2518,16 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
               onChange={event => setStyle(event.target.value)}
               placeholder={tt('stylePlaceholder')}
               aria-label={tt('styleCardTitle')}
+              aria-describedby={styleHints.length ? styleHintsId : undefined}
               className={`${CONTROL} mt-3 resize-none overflow-y-auto leading-5 custom-scrollbar`}
             />
             <p className="mt-2 text-[11px] leading-4 text-zinc-500">{tt('styleHint')}</p>
+            {styleHints.length > 0 && <details className="mt-2 text-xs text-zinc-600 dark:text-zinc-300">
+              <summary className="cursor-pointer">{styleAdvice[language].title} ({styleHints.length})</summary>
+              <ul id={styleHintsId} className="mt-1 list-disc space-y-1 ps-5">
+                {styleHints.map(item => <li key={item.rule}>{item.hint}</li>)}
+              </ul>
+            </details>}
             <SongTextParts kind="style" value={style} onChange={setStyle} />
             {mode === 'cover' && (coverSongId || coverFile) && (
               <button type="button" onClick={() => void describeByEar()} disabled={describing} className="mt-2 inline-flex items-center gap-1.5 rounded-md border border-zinc-200 px-2 py-1 text-[11px] font-medium text-zinc-600 transition-colors hover:border-pink-400 hover:text-pink-600 disabled:opacity-50 dark:border-white/10 dark:text-zinc-300" title={tt('describeByEarHint')}>
@@ -2799,6 +2871,17 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
             </div>
           </Card>
 
+          <div className="grid gap-2 sm:grid-cols-2">
+            <SamplingSelector stage="abc_sampling" value={abcSampling} onChange={setAbcSampling} strings={yueSamplingStrings[language]} />
+            <SamplingSelector stage="semantic_sampling" value={semanticSampling} onChange={setSemanticSampling} strings={yueSamplingStrings[language]} />
+          </div>
+          <div>
+            <button type="button" className={CHIP} disabled={!canVary} onClick={createVariations}>
+              {yueSamplingStrings[language].batch} ({variationChoices.length})
+            </button>
+            <p className="mt-1 text-[11px] text-zinc-500">{yueSamplingStrings[language].hint}</p>
+          </div>
+
           <div className="overflow-hidden rounded-xl border border-zinc-200 bg-white dark:border-white/5 dark:bg-suno-card">
             <button
               type="button"
@@ -2858,6 +2941,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
                     </Field>
                     <div className="mt-3">
                       <SamplingGrid value={semanticSampling} defaults={defaults.semantic_sampling} onChange={setSemanticSampling} t={t as never} maxTokensCap={semanticBudget} minTokensHint={tt('samplingMinTokensHint')} />
+
                       {minTokensCutsTheSongOff(semanticSampling.min_tokens, effectiveDuration) && (
                         <p className="mt-2 text-[11px] leading-4 text-amber-600 dark:text-amber-400">{tt('samplingMinTokensCutsOff')}</p>
                       )}

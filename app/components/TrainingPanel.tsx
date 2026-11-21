@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { karaokeStatusChanged, useSystemResources } from '../services/studioQueries';
 import { AlertTriangle, BookOpen, Check, CheckSquare, ChevronDown, Clock, ChevronLeft, ChevronRight, Cpu, Download, FolderInput, FolderOpen, FolderOutput, Headphones, Library, Loader2, Mic2, MoreHorizontal, Music, Play, Plus, RotateCcw, Search, Square, Trash2, UploadCloud, Wand2, X } from 'lucide-react';
 import { useI18n } from '../context/I18nContext';
+import { trainingAssetLabel } from '../i18n/trainingAssets';
 import { poll } from '../services/poll';
 import { AUDIO_ACCEPT } from '../services/audioFiles';
 import { karaokeReason } from '../services/karaoke';
@@ -198,17 +199,17 @@ const RecipeForm: React.FC<{ recipe: Recipe; defaults: Recipe; fields: RecipeFie
 };
 
 function useStrings() {
-  const { t, songCount } = useI18n();
+  const { t, songCount, language } = useI18n();
   const tt = t as unknown as (key: string) => string;
   const songs = songCount;
-  return { t, tt, songs };
+  return { t, tt, songs, language };
 }
 
 const errorText = (problem: unknown) => (problem instanceof Error ? problem.message : String(problem));
 
 /** The pack: what it holds, the requirements, and its download. */
 const PackCard: React.FC<{ state: TrainingState; onError: (message: string) => void; onChanged: () => void }> = ({ state, onError, onChanged }) => {
-  const { t } = useStrings();
+  const { t, language } = useStrings();
   const total = state.pack.reduce((sum, file) => sum + file.bytes, 0);
   const missing = state.pack.filter(file => !file.installed).reduce((sum, file) => sum + file.bytes, 0);
   const download = state.download && !state.download.done ? state.download : null;
@@ -219,13 +220,13 @@ const PackCard: React.FC<{ state: TrainingState; onError: (message: string) => v
       <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-300">{t('trainingSetupNeeds').replace('{size}', downloadSize(total)).replace('{vram}', String(state.min_vram_gb))}</p>
       {!state.card_trains && (
         <p role="note" className="mt-2 text-sm text-amber-700 dark:text-amber-300">
-          {state.card_needs === 'driver' ? t('trainingNeedsDriver').replace('{driver}', String(state.trainer_driver ?? '')) : t('trainingNeedsNvidia')}
+          {state.card_needs === 'driver' ? t('trainingNeedsDriver').replace('{driver}', String(state.trainer_driver ?? '')) : t(state.card_needs === 'architecture' ? 'trainingNeedsTuring' : 'trainingNeedsNvidia')}
         </p>
       )}
       <ul className="mt-3 space-y-1.5">
         {state.pack.map(file => (
           <li key={file.id} className="flex items-center justify-between gap-3 text-xs text-zinc-700 dark:text-zinc-200">
-            <span className="flex items-center gap-2">{file.installed ? <Check size={13} className="text-emerald-500" /> : <Square size={13} className="text-zinc-400" />}{file.label}</span>
+            <span className="flex items-center gap-2">{file.installed ? <Check size={13} className="text-emerald-500" /> : <Square size={13} className="text-zinc-400" />}{trainingAssetLabel(language, file)}</span>
             <span className="tabular-nums text-zinc-500">{downloadSize(file.bytes)}</span>
           </li>
         ))}
@@ -260,7 +261,7 @@ const PackCard: React.FC<{ state: TrainingState; onError: (message: string) => v
 
 /** The optional listening pack: songs described by ear instead of by hand. */
 const ListenCard: React.FC<{ state: TrainingState; onError: (message: string) => void; onChanged: () => void }> = ({ state, onError, onChanged }) => {
-  const { t } = useStrings();
+  const { t, language } = useStrings();
   const listen = state.listen;
   if (!listen || listen.ready) return null;
   const missing = listen.pack.filter(file => !file.installed).reduce((sum, file) => sum + file.bytes, 0);
@@ -273,7 +274,7 @@ const ListenCard: React.FC<{ state: TrainingState; onError: (message: string) =>
       <ul className="mt-3 space-y-1.5">
         {listen.pack.map(file => (
           <li key={file.id} className="flex items-center justify-between gap-3 text-xs text-zinc-700 dark:text-zinc-200">
-            <span className="flex items-center gap-2">{file.installed ? <Check size={13} className="text-emerald-500" /> : <Square size={13} className="text-zinc-400" />}{file.label}</span>
+            <span className="flex items-center gap-2">{file.installed ? <Check size={13} className="text-emerald-500" /> : <Square size={13} className="text-zinc-400" />}{trainingAssetLabel(language, file)}</span>
             <span className="tabular-nums text-zinc-500">{downloadSize(file.bytes)}</span>
           </li>
         ))}

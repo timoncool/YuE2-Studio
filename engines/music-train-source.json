@@ -5,9 +5,13 @@
   "source_dir": "engine",
   "target": "ace-train",
   "shipped_as": "music-train.exe",
-  "release_tag": "hotstep-tools-75923e70",
-  "asset": "hotstep-tools-cuda-windows-x64.zip",
-  "bytes": 125396680,
-  "caption_bytes": 4268241,
+  "release_tag": "hotstep-tools-75923e70-xcr0",
+  "asset": "hotstep-tools-xcr0-cuda-windows-x64.zip",
+  "bytes": 125410660,
+  "caption_asset": "ace-caption-xcr0-windows-x64.zip",
+  "caption_bytes": 4282221,
+  "cuda12_backend_tag": "hotstep-trainer-75923e70-cuda12",
+  "cuda12_backend_asset": "hotstep-trainer-cuda12-backend-windows-x64.zip",
+  "cuda12_backend_bytes": 116410071,
   "cuda_architectures": "75-real;80-real;86-real;89-real;90-real;120a-real"
 }
