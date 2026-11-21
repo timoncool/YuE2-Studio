@@ -2046,3 +2046,29 @@ it('restores HOT-Step cover source and lead sheet from a saved take', async () =
     abc, duration_seconds: 4, steps: 10, seed: 42, cfg_scale: 1.5, output_format: 'flac',
   });
 });
+
+it('switches a YuE2 model from its local runtime and back using the engine selector', async () => {
+  vi.stubGlobal('fetch', vi.fn(async (url: string) => Response.json(url === '/v1/music/audio-cpp/models' ? {
+    engine: 'audio.cpp', engine_installed: true, models: [{ id: 'yue2', ready: true, missing: [] }],
+  } : {})));
+  function Editor() {
+    const [route, choose] = React.useState<NonNullable<React.ComponentProps<typeof CreatePanel>['musicEngine']>>('local');
+    return panel({ musicEngine: route, onMusicEngineChange: choose });
+  }
+  const selectEngine = () => [...host.querySelectorAll('label')]
+    .find(node => node.textContent?.startsWith('Music engine'))!.querySelector('select')!;
+  const choose = (value: string) => act(() => {
+    const input = selectEngine();
+    input.value = value;
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  act(() => root.render(<Editor />));
+  await flush();
+  expect(Array.from(selectEngine().options, option => option.value)).toEqual(['local', 'audio.cpp']);
+  choose('audio.cpp');
+  await flush();
+  expect(selectEngine().value).toBe('audio.cpp');
+  choose('local');
+  await flush();
+  expect(selectEngine().value).toBe('local');
+});
