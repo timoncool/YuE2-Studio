@@ -16,6 +16,7 @@ import { apiUrl } from './services/apiBase';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { libraryChanged, queryClient, updateLibraryPlaylists, updateLibrarySongs, useLibraryPlaylists, useLibrarySongs, useSetupStatus } from './services/studioQueries';
 import { useGenerations } from './services/generations';
+import { sendCompletedSongsNotification } from './services/songNotifications';
 import { SettingsModal } from './components/SettingsModal';
 import { Song, View, Playlist } from './types';
 // Resizable panel hook
@@ -439,6 +440,14 @@ function AppContent() {
       // a card that was open in the details stays open as the song it became
       setSelectedSong(current => (current?.id === cardId ? made[0] : current));
       if (window.innerWidth < 768) setMobileShowList(true);
+    },
+    onCompleted: (_jobId, made) => {
+      // One Windows OS notification per completed job; never for progress, failure or cancellation.
+      void sendCompletedSongsNotification(made, {
+        single: t('shellSongReadyOne'),
+        multiple: t('shellSongsReadyMany'),
+        untitled: t('untitled'),
+      });
     },
   });
   // Anonymous statistics are on by default: the start screen's checkbox decides on a first run, and an install that
