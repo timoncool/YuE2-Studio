@@ -1873,7 +1873,7 @@ pub async fn serve_on_port(port: u16) -> anyhow::Result<()> {
         // A dataset is gigabytes of lossless audio, far over the studio's usual body limit.
         .route("/v1/training/datasets/import", post(import_training_dataset).layer(DefaultBodyLimit::max(TRAINING_UPLOAD_LIMIT)))
         .route("/v1/training/datasets/{id}/reveal", post(reveal_training_dataset))
-        .route("/v1/training/datasets/{id}", axum::routing::patch(update_training_dataset).delete(delete_training_dataset))
+        .route("/v1/training/datasets/{id}", get(read_training_dataset).patch(update_training_dataset).delete(delete_training_dataset))
         .route("/v1/training/datasets/{id}/songs", post(add_training_songs))
         .route("/v1/training/datasets/{id}/files", post(upload_training_files).layer(DefaultBodyLimit::max(TRAINING_UPLOAD_LIMIT)))
         .route("/v1/training/datasets/{id}/items/{item}", axum::routing::patch(update_training_item).delete(delete_training_item))
@@ -3883,6 +3883,81 @@ async fn reveal_training_dataset(State(state): State<AppState>, Path(id): Path<S
     let opened = music_engine::process_group::detach_from_group(&mut dub_core::proc::host_command("xdg-open")).arg(&folder).spawn();
     opened.map_err(|error| api_error(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?;
     Ok(Json(serde_json::json!({ "opened": folder.display().to_string() })))
+}
+
+#[derive(Deserialize)]
+struct ReadTrainingDataset {
+    song_id: Option<String>,
+    page: Option<usize>,
+    page_size: Option<usize>,
+    detailed: Option<bool>,
+}
+
+async fn read_training_dataset(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    Query(query): Query<ReadTrainingDataset>,
+) -> Result<Json<Value>, (StatusCode, Json<ApiError>)> {
+    let dataset = state.training.dataset(&id).map_err(training_error)?;
+    training_dataset_view(dataset, query).map(Json).map_err(training_error)
+}
+
+fn training_dataset_view(mut dataset: training::Dataset, query: ReadTrainingDataset) -> anyhow::Result<Value> {
+    if let Some(song_id) = query.song_id {
+        let item = dataset.items.into_iter().find(|item| item.id == song_id)
+            .ok_or_else(|| anyhow::anyhow!("No song {song_id} in the dataset."))?;
+        return Ok(serde_json::to_value(item)?);
+    }
+    if query.page.is_none() && query.page_size.is_none() {
+        return Ok(serde_json::to_value(dataset)?);
+    }
+    let page = query.page.unwrap_or(1).max(1);
+    let page_size = query.page_size.unwrap_or(25).clamp(1, 100);
+    let total = dataset.items.len();
+    let offset = (page - 1).saturating_mul(page_size);
+    let items = std::mem::take(&mut dataset.items).into_iter().skip(offset).take(page_size)
+        .map(|item| {
+            if query.detailed == Some(true) {
+                serde_json::to_value(item)
+            } else {
+                Ok(serde_json::json!({
+                    "id": item.id, "title": item.title, "artist": item.artist, "seconds": item.seconds,
+                    "instrumental": item.instrumental, "lyrics_state": item.lyrics_state, "style_state": item.style_state,
+                }))
+            }
+        }).collect::<Result<Vec<_>, _>>()?;
+    let mut response = serde_json::to_value(dataset)?;
+    response["items"] = serde_json::Value::Array(items);
+    response["page"] = serde_json::json!(page);
+    response["page_size"] = serde_json::json!(page_size);
+    response["total"] = serde_json::json!(total);
+    response["has_more"] = serde_json::json!(offset.saturating_add(page_size) < total);
+    Ok(response)
+}
+
+#[cfg(test)]
+#[test]
+fn training_dataset_pages_keep_legacy_reads_and_offer_short_rows() {
+    let dataset: training::Dataset = serde_json::from_value(serde_json::json!({
+        "id": "set", "name": "Set", "created_at": "0",
+        "items": (1..=28).map(|i| serde_json::json!({
+            "id": i.to_string(), "title": format!("Track {i}"), "seconds": 12.0, "file": format!("{i}.wav"),
+            "lyrics": "Original lyrics", "lyrics_state": "done", "style_state": "done",
+        })).collect::<Vec<_>>()
+    })).unwrap();
+    let read = |args: Value| training_dataset_view(dataset.clone(), serde_json::from_value(args).unwrap()).unwrap();
+    assert_eq!(read(serde_json::json!({}))["items"].as_array().unwrap().len(), 28);
+    let first = read(serde_json::json!({"page": 1}));
+    assert_eq!(first["items"].as_array().unwrap().len(), 25);
+    assert_eq!(first["has_more"], true);
+    let last = read(serde_json::json!({"page": 2}));
+    assert_eq!(last["total"], 28);
+    assert_eq!(last["items"][0]["id"], "26");
+    assert_eq!(last["items"].as_array().unwrap().len(), 3);
+    assert_eq!(last["has_more"], false);
+    assert!(last["items"][0].get("lyrics").is_none());
+    assert_eq!(read(serde_json::json!({"page": 2, "detailed": true}))["items"][0]["lyrics"], "Original lyrics");
+    assert_eq!(read(serde_json::json!({"song_id": "26", "page": 1}))["lyrics"], "Original lyrics");
 }
 
 async fn update_training_dataset(State(state): State<AppState>, Path(id): Path<String>, Json(input): Json<DatasetInput>) -> Result<Json<training::Dataset>, (StatusCode, Json<ApiError>)> {

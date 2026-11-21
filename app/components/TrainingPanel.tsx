@@ -556,6 +556,8 @@ const SongEditor: React.FC<{
   );
 };
 
+const DATASET_PAGE_SIZE = 25;
+
 /** Step one: the songs, prepared by themselves as soon as they arrive. */
 const SongsStep: React.FC<{
   state: TrainingState;
@@ -574,6 +576,18 @@ const SongsStep: React.FC<{
 }> = ({ state, dataset, job, adding, onAdd, onAddLibrary, onPrepare, onNext, onTrainAfter, canTrainAfter, onChanged, onRefresh, onError }) => {
   const { t, tt, songs } = useStrings();
   const [open, setOpen] = useState<string | null>(null);
+  const [page, setPage] = useState(0);
+  const pages = Math.max(1, Math.ceil(dataset.items.length / DATASET_PAGE_SIZE));
+  const currentPage = Math.min(page, pages - 1);
+  const offset = currentPage * DATASET_PAGE_SIZE;
+  const last = Math.min(offset + DATASET_PAGE_SIZE, dataset.items.length);
+  useEffect(() => {
+    if (page !== currentPage) setPage(currentPage);
+  }, [page, currentPage]);
+  const changePage = (next: number) => {
+    setOpen(null);
+    setPage(next);
+  };
   const [picking, setPicking] = useState(false);
   const [describing, setDescribing] = useState<string[]>([]);
   const mine = job && job.dataset === dataset.id ? job : null;
@@ -677,7 +691,8 @@ const SongsStep: React.FC<{
         {picking && <LibraryPicker exclude={exclude} onAdd={ids => { setPicking(false); onAddLibrary(ids); }} onClose={() => setPicking(false)} />}
 
         <div className="mt-3 divide-y divide-zinc-200 dark:divide-white/10">
-          {dataset.items.map((item, index) => {
+          {dataset.items.slice(offset, last).map((item, visibleIndex) => {
+            const index = offset + visibleIndex;
             const expanded = open === item.id;
             return (
               <div key={item.id}>
@@ -724,6 +739,13 @@ const SongsStep: React.FC<{
             );
           })}
         </div>
+        {pages > 1 && <nav aria-label={t('trainingDatasets')} className="mt-3 flex items-center justify-between gap-3">
+          <button type="button" className={OUTLINE} aria-label={t('trainingPreviousPage')} disabled={currentPage === 0}
+            onClick={() => changePage(currentPage - 1)}><ChevronLeft size={15} /></button>
+          <span className="text-xs tabular-nums text-zinc-500" aria-live="polite">{offset + 1}–{last} / {dataset.items.length}</span>
+          <button type="button" className={OUTLINE} aria-label={t('trainingNextPage')} disabled={currentPage + 1 >= pages}
+            onClick={() => changePage(currentPage + 1)}><ChevronRight size={15} /></button>
+        </nav>}
         <div className="mt-3">
           <DropZone onPicked={onAdd} disabled={Boolean(adding)} title={t('trainingDropMore')} />
         </div>
@@ -1378,7 +1400,7 @@ export const TrainingPanel: React.FC = () => {
       {!dataset && <DatasetList state={state} busy={Boolean(adding)} onOpen={id => { setOpenId(id); setStep(state.runs.some(run => run.dataset_id === id && run.status === 'running') ? 'result' : 'songs'); }} onNew={files => void createFrom(files)} onImport={files => void importFolder(files)} importing={importing} />}
 
       {dataset && step === 'songs' && (
-        <SongsStep
+        <SongsStep key={dataset.id}
           state={state}
           dataset={dataset}
           job={job}

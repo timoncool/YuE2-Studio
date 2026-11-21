@@ -115,6 +115,35 @@ it('displays Burn training progress and keeps a saved checkpoint installable aft
   }
 });
 
+it('shows a second page of a long dataset without changing which songs it contains', async () => {
+  const items = Array.from({ length: 26 }, (_, index) => ({
+    id: `item-${index + 1}`, title: `Recording ${index + 1}`, source: `item-${index + 1}.wav`,
+    seconds: 12, lyrics_state: 'done', style_state: 'done', style: 'Ready',
+  }));
+  const state = { runs: [], datasets: [{ id: 'set', name: 'Paged dataset', items }],
+    recipe_defaults: {}, recipe_fields: [], pack: [], listen: { ready: true } };
+  vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+  vi.stubGlobal('fetch', async () => Response.json(state));
+  const host = document.createElement('div');
+  const root = createRoot(host);
+  try {
+    await act(async () => root.render(<TrainingPanel />));
+    const open = [...host.querySelectorAll('button')].find(button => button.textContent?.includes('Paged dataset'))!;
+    await act(async () => open.click());
+    expect(host.textContent).toContain('1–25 / 26');
+    expect(host.textContent).not.toContain('Recording 26');
+    await act(async () => host.querySelector<HTMLButtonElement>('[aria-label="trainingNextPage"]')!.click());
+    expect(host.textContent).toContain('26–26 / 26');
+    expect(host.textContent).toContain('Recording 26');
+    expect(host.textContent).not.toContain('Recording 25');
+    await act(async () => host.querySelector<HTMLButtonElement>('[aria-label="trainingPreviousPage"]')!.click());
+    expect(host.textContent).toContain('Recording 25');
+  } finally {
+    await act(async () => root.unmount());
+    vi.unstubAllGlobals();
+  }
+});
+
 it.each([undefined, 'ruach-rs-tw-2.0x0.75'])('starts a signed trainer with training base %s', async base => {
   const state = {
     pack: [], pack_ready: false, trainer_weights_ready: true, training_shared_weights_ready: true,

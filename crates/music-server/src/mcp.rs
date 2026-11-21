@@ -312,16 +312,6 @@ fn shape(name: &str, args: &Value, value: Value) -> Value {
             value["slots"] = json!("not known yet: the engine reads them from the file; lora_list shows them");
             value
         }
-        "dataset_get" => {
-            let wanted = args.get("dataset_id").and_then(Value::as_str).unwrap_or_default();
-            let Some(dataset) = value["datasets"].as_array().into_iter().flatten().find(|dataset| dataset["id"] == wanted).cloned() else {
-                return json!({ "error": format!("No dataset {wanted}; training_status lists them.") });
-            };
-            match args.get("song_id").and_then(Value::as_str) {
-                Some(song) => dataset["items"].as_array().into_iter().flatten().find(|item| item["id"] == song).cloned().unwrap_or_else(|| json!({ "error": format!("No song {song} in the dataset.") })),
-                None => dataset,
-            }
-        }
         "library_songs_list" => {
             let query = args.get("query").and_then(Value::as_str).unwrap_or_default().to_lowercase();
             let bound = |name: &str, end: bool| match args.get(name).and_then(Value::as_str) {
@@ -3044,9 +3034,26 @@ fn tools() -> &'static [Tool] {
             },
             Tool {
                 name: "dataset_get",
-                description: "One dataset with every song: id, title, artist, lyrics, style, lyrics_state (wanted, found, done) and style_state (wanted, heard, done), lyrics_source, heard (what MOSS heard: genre, caption, bpm) and length. Give song_id for one song only.",
-                schema: || object(json!({ "dataset_id": { "type": "string" }, "song_id": { "type": "string" } }), &["dataset_id"]),
-                call: |_| get("/v1/training".into()),
+                description: "Read a dataset. Set page or page_size for a short page of titles, lengths and readiness, with total and has_more. Set response_format detailed for full rows on that page, or give song_id to read one complete song.",
+                schema: || object(json!({
+                    "dataset_id": { "type": "string" },
+                    "song_id": { "type": "string" },
+                    "page": { "type": "integer", "minimum": 1 },
+                    "page_size": { "type": "integer", "minimum": 1, "maximum": 100 },
+                    "response_format": { "type": "string", "enum": ["concise", "detailed"] },
+                }), &["dataset_id"]),
+                call: |args| {
+                    let mut path = format!("/v1/training/datasets/{}", segment(&text(args, "dataset_id")?));
+                    if let Some(song_id) = args.get("song_id").and_then(Value::as_str) {
+                        path.push_str(&format!("?song_id={}", segment(song_id)));
+                    } else if args.get("page").is_some() || args.get("page_size").is_some() {
+                        let page = args.get("page").and_then(Value::as_u64).unwrap_or(1).max(1);
+                        let size = args.get("page_size").and_then(Value::as_u64).unwrap_or(25).clamp(1, 100);
+                        let detailed = args["response_format"] == "detailed";
+                        path.push_str(&format!("?page={page}&page_size={size}&detailed={detailed}"));
+                    }
+                    get(path)
+                },
             },
             Tool {
                 name: "training_pack_install",

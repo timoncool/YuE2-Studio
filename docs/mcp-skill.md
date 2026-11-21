@@ -332,7 +332,7 @@ Local score, sampling and LoRA controls apply to local generation.
    `studio_wait until: preparation`. The studio finds the lyrics in LRCLIB, QQ Music and
    Kugou, recognises only what they miss with CrisperWhisper, and listens to every song with
    MOSS-Music, measuring the tempo. It leaves the writing to you.
-4. `dataset_get`. For each song:
+4. `dataset_get`. For a long dataset, request a short page with `page` and `page_size` and follow `has_more`. Pass `song_id` for one complete row. For each song:
    - `lyrics_state: found` - the words are there (from a database when `lyrics_source`
      names one: keep every word; `recognised`: fix the recogniser's mishearings). Lay them
      out in sections (`writing_guide` topics `sections` or `transcript`).

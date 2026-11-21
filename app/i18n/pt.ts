@@ -2282,6 +2282,8 @@ export const pt = {
     trainingSetupTitle: 'O que o treino precisa',
     trainingTrainer: 'Treinador',
     trainingBase: 'Base de treinamento',
+    trainingPreviousPage: 'Página anterior',
+    trainingNextPage: 'Página seguinte',
     trainingOwnBase: 'Para usar o próprio ConvRot Safetensors, coloque-o nesta pasta e selecione o GGUF de geração correspondente nas configurações.',
     trainingSetupNeeds: 'Uma placa NVIDIA RTX série 30 ou mais recente (precisa de BF16), cerca de {vram} GB de memória de vídeo e {size} no disco. Fazer músicas não precisa de nada disto; só é descarregado se quiser treinar.',
     trainingNeedsNvidia: 'O treino só corre numa placa NVIDIA: o treinador não tem caminho para placas AMD ou Intel, e no processador um treino demoraria dias. Os ficheiros de treino não são oferecidos neste computador.',
