@@ -7970,6 +7970,7 @@ dependencies = [
  "music-engine",
  "music-server",
  "reqwest",
+ "rfd 0.18.0",
  "serde_json",
  "tauri",
  "tauri-build",

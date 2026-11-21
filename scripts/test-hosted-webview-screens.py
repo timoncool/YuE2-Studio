@@ -272,7 +272,7 @@ def save_dialog_file(pid, path, output="save-dialog.json"):
     # UI Automation operates only on the isolated runner's native Save As dialog.
     script = r"""
 $ErrorActionPreference = 'Stop'
-Add-Type -AssemblyName UIAutomationClient, UIAutomationTypes
+Add-Type -AssemblyName UIAutomationClient, UIAutomationTypes, System.Windows.Forms
 $root = [Windows.Automation.AutomationElement]::RootElement
 Add-Type @'
 using System;
@@ -282,6 +282,8 @@ public static class StudioQaWindows {
   [DllImport("user32.dll")] public static extern IntPtr GetWindow(IntPtr window, uint command);
   [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr window, out uint pid);
   [DllImport("user32.dll")] public static extern IntPtr GetProcessWindowStation();
+  [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
+  [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr window);
   [DllImport("user32.dll")] public static extern IntPtr GetThreadDesktop(uint threadId);
   [DllImport("user32.dll", SetLastError=true)] public static extern IntPtr OpenInputDesktop(uint flags, bool inherit, uint access);
   [DllImport("user32.dll")] public static extern bool CloseDesktop(IntPtr desktop);
@@ -353,11 +355,22 @@ do {
       $_.Current.ControlType -eq [Windows.Automation.ControlType]::Button -and
       ($_.Current.AutomationId -eq '1' -or $_.Current.Name -eq 'Save')
     })
-    if (!$fields -or !$save) { continue }
-    $fields[0].GetCurrentPattern([Windows.Automation.ValuePattern]::Pattern).SetValue($env:STUDIO_QA_FILE)
     $name = $dialog.Current.Name
-    $save[0].GetCurrentPattern([Windows.Automation.InvokePattern]::Pattern).Invoke()
-    @{name=$name; windows=$windowThreads} | ConvertTo-Json -Depth 5 -Compress
+    if ($fields -and $save) {
+      $fields[0].GetCurrentPattern([Windows.Automation.ValuePattern]::Pattern).SetValue($env:STUDIO_QA_FILE)
+      $save[0].GetCurrentPattern([Windows.Automation.InvokePattern]::Pattern).Invoke()
+      @{name=$name; method='UIA'; windows=$windowThreads} | ConvertTo-Json -Depth 5 -Compress
+      exit 0
+    }
+    $hwnd = [IntPtr]$current.NativeWindowHandle
+    if ($current.ClassName -ne '#32770' -or $name -ne 'Save As' -or $hwnd -eq [IntPtr]::Zero) { continue }
+    [void][StudioQaWindows]::SetForegroundWindow($hwnd)
+    if ([StudioQaWindows]::GetForegroundWindow() -ne $hwnd) { continue }
+    [Windows.Forms.SendKeys]::SendWait('%n')
+    [Windows.Forms.SendKeys]::SendWait('^a')
+    [Windows.Forms.SendKeys]::SendWait($env:STUDIO_QA_FILE)
+    [Windows.Forms.SendKeys]::SendWait('{ENTER}')
+    @{name=$name; method='owned foreground dialog'; windows=$windowThreads} | ConvertTo-Json -Depth 5 -Compress
     exit 0
   }
   Start-Sleep -Milliseconds 200

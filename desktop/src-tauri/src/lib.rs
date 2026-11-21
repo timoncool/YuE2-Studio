@@ -1193,6 +1193,28 @@ pub fn run() {
             music_server::set_save_dialog(Box::new(move |name: &str, start: Option<std::path::PathBuf>| {
                 use tauri::Manager;
                 use tauri_plugin_dialog::DialogExt;
+                eprintln!("[save QA] callback on {:?}", std::thread::current().id());
+                #[cfg(windows)]
+                if std::env::var_os("STUDIO_QA_DIRECT_SAVE").is_some() {
+                    let mut dialog = rfd::FileDialog::new().set_file_name(name);
+                    if let Some(extension) = std::path::Path::new(name).extension().and_then(|extension| extension.to_str()) {
+                        dialog = dialog.add_filter(extension.to_uppercase(), &[extension]);
+                    }
+                    if let Some(folder) = start {
+                        dialog = dialog.set_directory(folder);
+                    }
+                    if let Some(window) = dialogs.get_webview_window("main") {
+                        eprintln!("[save QA] direct owner={:?}", window.hwnd());
+                        dialog = dialog.set_parent(&window);
+                    }
+                    eprintln!("[save QA] direct opening");
+                    let choice = dialog.save_file();
+                    eprintln!("[save QA] direct returned={}", choice.is_some());
+                    return choice;
+                }
+                if let Err(error) = dialogs.run_on_main_thread(|| eprintln!("[save QA] GUI dispatcher responsive")) {
+                    eprintln!("[save QA] did not dispatch: {error}");
+                }
                 let mut dialog = dialogs.dialog().file().set_file_name(name);
                 if let Some(extension) = std::path::Path::new(name).extension().and_then(|extension| extension.to_str()) {
                     dialog = dialog.add_filter(extension.to_uppercase(), &[extension]);
@@ -1203,7 +1225,10 @@ pub fn run() {
                 if let Some(window) = dialogs.get_webview_window("main") {
                     dialog = dialog.set_parent(&window);
                 }
-                dialog.blocking_save_file().and_then(|path| path.into_path().ok())
+                eprintln!("[save QA] calling plugin chooser");
+                let choice = dialog.blocking_save_file().and_then(|path| path.into_path().ok());
+                eprintln!("[save QA] plugin returned={}", choice.is_some());
+                choice
             }));
             // The window is built here rather than from the configuration so
             // the WebView2 arguments can be extended: Tauri passes its own, and
