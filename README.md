@@ -555,6 +555,14 @@ fails and the installer says so. Install WebView2 from Microsoft's standalone in
 [Evergreen Standalone x64](https://go.microsoft.com/fwlink/p/?LinkId=2124701), then run the
 studio's installer again.
 
+### Bring your ACE-Step or MiniMax library into YuE2
+
+In YuE2 Studio 5.0, open **Library → Import → ACE-Step or MiniMax library**. Select the old studio from the list, or use **Choose old Studio folder** to locate it yourself.
+
+The preview shows the source folder, songs, playlists and space needed on the destination drive. Expand a song to see which files are available and which are missing. Once you have the right library, select **Copy library into YuE2**. The original library stays in place. You can run the import again; the summary distinguishes new songs and playlists from items already imported.
+
+Open an imported song in **Library** to play the original recording. To make a new song with the familiar engine, open **Create** and select the native ACE-Step or MiniMax engine and model.
+
 ### Install Windows runtime archives manually
 
 If a runtime download fails, open the studio data folder from Settings. Download the
