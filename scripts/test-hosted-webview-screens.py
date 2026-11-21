@@ -200,7 +200,11 @@ def u3_form(root):
     _, yue_status = expect_pair("local", "audio.cpp", yue)
     assert yue_status["stage"] == "needs_install", yue_status
     yue_page = fields(yue_values)
+    for label, value in (("Style", "Hosted U3 draft"), ("Lyrics", "[Instrumental]")):
+        field = f'textarea "{label}"'
+        ui("type", ref=control(wait_page(field), field), value=value)
     (out/"yue2-first.txt").write_text(yue_page, encoding="utf8")
+    json_file(out/"yue2-pair.json", yue_status)
 
     choose("Model", "acestep-cpp")
     choose("Music engine", "audio.cpp")
@@ -209,11 +213,13 @@ def u3_form(root):
     fields(dict.fromkeys(ace_values))
     ace_page = fields(ace_values)
     (out/"ace-first.txt").write_text(ace_page, encoding="utf8")
+    json_file(out/"ace-pair.json", ace_status)
 
     for family, source, expected in [("local", yue, yue_values), ("acestep-cpp", ace, ace_values)]:
         choose("Model", family)
         expect_pair(family, "audio.cpp", source)
-        page = wait_page(*(f'input number "{label}" value={json.dumps(value)}' for label, value in expected.items()))
+        controls = [f'input number "{label}" value={json.dumps(value)}' for label, value in expected.items()]
+        page = wait_page(*controls, 'textarea "Style" value="Hosted U3 draft"', 'textarea "Lyrics" value="[Instrumental]"')
         (out/f"{family}-restored.txt").write_text(page, encoding="utf8")
 
     pcm = root/"u3-audio.wav"
