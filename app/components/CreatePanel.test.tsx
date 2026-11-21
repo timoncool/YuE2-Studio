@@ -1591,6 +1591,23 @@ describe('Auto max duration', () => {
     expect(sent[1].duration_seconds).toBe(240);
   });
 
+  it('exposes the same optional YuE2 style advice in the form and its MCP readback', async () => {
+    act(() => root.render(panel({})));
+    await flush();
+    const style = 'make it massive, without drums';
+    act(() => { bridgeCommands.get('create_set')!({ fields: { style } }); });
+    await flush();
+    const read = () => bridgeCommands.get('create_get')!({}) as {
+      fields: { style: string }; style_hints: { rule: string; hint: string }[]
+    };
+    expect(read().fields.style).toBe(style);
+    expect(read().style_hints.some(item => item.rule === 'negative')).toBe(true);
+    for (const item of read().style_hints) expect(host.textContent).toContain(item.hint);
+    act(() => root.render(panel({ musicEngine: 'openrouter' })));
+    await flush();
+    expect(read().style_hints).toEqual([]);
+  });
+
   it('sends the manual ceiling or omits it through the Create MCP bridge', async () => {
     act(() => root.render(panel({})));
     await flush();
