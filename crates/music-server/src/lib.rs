@@ -41,6 +41,7 @@ mod hotstep_cover_rolls;
 mod audio_cpp_stable_audio;
 mod audio_cpp_vevo2;
 mod native_music_jobs;
+mod music_pair;
 mod native_ace_jobs;
 mod assistant;
 mod song_tokenizer;
@@ -180,6 +181,7 @@ struct AppState {
     /// A restart holds this for writing because it clears the engine's job table.
     /// Songs hold it while being submitted, scores through terminal result collection.
     engine_use: Arc<tokio::sync::RwLock<()>>,
+    music_pair: Arc<music_pair::Lifecycle>,
     engine_paused: Arc<std::sync::atomic::AtomicBool>,
     score_jobs: Arc<RwLock<std::collections::VecDeque<ScoreJob>>>,
     engine_options: Arc<RwLock<EngineOptions>>,
@@ -426,7 +428,7 @@ struct CreateMusicJobRequest {
     cover_of: Option<String>,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 enum MusicSource {
     Local,
@@ -1660,6 +1662,7 @@ pub async fn serve_on_port(port: u16) -> anyhow::Result<()> {
         library: library::Library::open_default()?,
         engine: Arc::new(tokio::sync::Mutex::new(None)),
         engine_use: Arc::new(tokio::sync::RwLock::new(())),
+        music_pair: Arc::default(),
         engine_paused: Arc::new(std::sync::atomic::AtomicBool::new(false)),
         score_jobs: Arc::new(RwLock::new(std::collections::VecDeque::new())),
         engine_options: Arc::new(RwLock::new(persisted.as_ref().map(|settings| settings.engine_options.clone().migrated()).unwrap_or_default())),
@@ -1982,6 +1985,7 @@ pub async fn serve_on_port(port: u16) -> anyhow::Result<()> {
         .route("/setup/update", get(setup_update))
         .route("/setup/update/apply", post(setup_update_apply))
         .route("/setup/update/seen", post(setup_update_seen))
+        .route("/v1/music/pair", get(music_pair::status).post(music_pair::select))
         .route("/v1/local-models/music", get(local_music_model_catalog))
         .route("/v1/music/jobs", post(create_music_job).get(list_active_music_jobs))
         .route("/v1/music/audio-cpp/models", get(audio_cpp_music::models))
@@ -6329,9 +6333,24 @@ fn engine_failure_code(error: &str) -> String {
 }
 
 async fn start_engine_again(state: &AppState) -> Result<(), String> {
+    start_engine_again_with(state, None).await
+}
+
+async fn start_engine_again_with(
+    state: &AppState,
+    transition: Option<&(dyn Fn(music_pair::Stage) -> bool + Sync)>,
+) -> Result<(), String> {
+    let report = |stage| {
+        if transition.is_some_and(|update| !update(stage)) {
+            Err("Music pair selection was superseded.".to_string())
+        } else {
+            Ok(())
+        }
+    };
     let mut supervisor = state.engine.lock().await;
     let owned = supervisor.is_some();
     if let Some(engine) = supervisor.as_mut() {
+        report(music_pair::Stage::Unloading)?;
         tokio::task::block_in_place(|| engine.stop(std::time::Duration::from_secs(10)))
             .map_err(|error| format!("stopping the local engine failed: {error}"))?;
     }
@@ -6363,6 +6382,7 @@ async fn start_engine_again(state: &AppState) -> Result<(), String> {
     // is not a slow start, it is no start at all. This is the path the studio
     // actually takes on launch, so the fetch belongs here rather than only in
     // the endpoint nothing calls.
+    report(music_pair::Stage::StartingEngine)?;
     let options = state.engine_options.read().await.clone();
     if options.backend == music_engine::yue_server::ComputeBackend::Cuda && hardware::hardware().cuda.is_none() {
         return Err("CUDA was chosen, but this card or its driver runs neither CUDA build of the engine: it needs an NVIDIA card from the GTX 900 series on and driver 525 or newer. Update the NVIDIA driver, or choose Vulkan in Settings.".into());
@@ -6399,6 +6419,9 @@ async fn start_engine_again(state: &AppState) -> Result<(), String> {
         let attempt = EngineOptions { backend: device, ..options.clone() };
         let cuda = attempt.cuda_build();
         if !state.engine_runtime.is_ready(cuda) {
+            if transition.is_some() {
+                return Err("Install the missing libraries for this YuE2 device first.".into());
+            }
             state
                 .engine_runtime
                 .install_missing(cuda)
@@ -6437,8 +6460,10 @@ async fn start_engine_again(state: &AppState) -> Result<(), String> {
             .resolve(models)
             .map_err(|error| format!("the local engine runtime was not found: {error}"))?;
         let mut engine = music_engine::yue_server::YueServerSupervisor::new(config).map_err(|error| error.to_string())?;
+        report(music_pair::Stage::LoadingModel)?;
         match tokio::task::block_in_place(|| engine.ensure_started(std::time::Duration::from_secs(60))) {
             Ok(_) => {
+                report(music_pair::Stage::LoadingModel)?;
                 *state.running_max_seq.write().await = engine.config().options.max_seq.unwrap_or(MODEL_CONTEXT);
                 *state.kv_cache_running.write().await = Some(kv);
                 *state.keep_decision.write().await = Some(keep.clone());
@@ -11369,7 +11394,11 @@ fn music_destination(source: Option<&MusicSource>, config: &StudioConfiguration)
 /// was started again after the studio closed on it.
 async fn submit_music_job(state: AppState, request: CreateMusicJobRequest, attempt: u32, retry_engine: Option<&str>) -> (StatusCode, Json<MusicJob>) {
     let rvc_after = request.rvc_after.clone();
+    let requested_source = request.music_source.clone();
     let result = dispatch_music_job(state.clone(), request, attempt, retry_engine).await;
+    if result.0.is_success() && let Some(source) = requested_source {
+        state.music_pair.note_generation(source);
+    }
     if result.0.is_success() && let Some(options) = rvc_after {
         rvc_quick::after_generation(state, result.1.id.clone(), options);
     }
