@@ -11,6 +11,7 @@ const bridgeCommands = new Map<string, (args: Record<string, unknown>) => unknow
 const composeScore = vi.fn();
 const transcribe = vi.fn();
 const instrumentalScore = vi.fn();
+const backingTempo = vi.fn();
 let ready = true;
 let enginePaused = false;
 let configured = false;
@@ -35,6 +36,7 @@ vi.mock('../services/scoreApi', () => ({
   instrumentalScore: (abc: string) => instrumentalScore(abc),
   failed: (answer: { error?: string }) => typeof answer?.error === 'string',
   chordBed: vi.fn(),
+  backingTempo: (...args: unknown[]) => backingTempo(...args),
   matchSections: vi.fn(),
 }));
 vi.mock('../services/adapters', async (original) => ({
@@ -43,7 +45,10 @@ vi.mock('../services/adapters', async (original) => ({
   installCatalogAdapters: vi.fn(),
   useAdapterLibrary: () => ({ installed: [], slots: [] }),
 }));
-vi.mock('./AdapterPicker', () => ({ AdapterPicker: () => null }));
+vi.mock('./AdapterPicker', async original => {
+  const { AdapterPicker } = await original<typeof import('./AdapterPicker')>();
+  return { AdapterPicker: (props: React.ComponentProps<typeof AdapterPicker>) => props.nativeLibrary ? <AdapterPicker {...props} /> : null };
+});
 vi.mock('./AudioWaveform', () => ({ AudioWaveform: () => null }));
 vi.mock('./ScoreView', () => ({ ScoreView: () => null }));
 vi.mock('./WindowAudioCapture', () => ({
@@ -76,6 +81,7 @@ beforeEach(() => {
   composeScore.mockReset();
   transcribe.mockReset().mockResolvedValue('X:1\nK:C\nC');
   instrumentalScore.mockReset();
+  backingTempo.mockReset();
   vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({}), { status: 200 })));
   host = document.createElement('div');
   document.body.append(host);
@@ -107,6 +113,37 @@ const type = (element: HTMLTextAreaElement | HTMLInputElement, value: string) =>
 });
 const click = (element: Element) => act(() => { element.dispatchEvent(new MouseEvent('click', { bubbles: true })); });
 const buttonNamed = (text: string) => [...host.querySelectorAll('button')].find(button => button.textContent?.includes(text));
+
+it('sends the chosen library backing with the same score and words', async () => {
+  const abc = 'X:1\nM:4/4\nL:1/16\nQ:1/4=120\nK:C\nV: Vocal\n"C"z16|';
+  librarySongs = [{ id: 'backing', title: 'Instrumental recording', audioUrl: '/test.wav' } as Song];
+  act(() => root.render(panel({ request: { id: 1, kind: 'score', abc, lyrics: 'one line' } })));
+  await flush();
+  click(buttonNamed('chordBed')!);
+  const select = host.querySelector<HTMLSelectElement>('select[aria-label="Sing over a library backing track"]')!;
+  act(() => { select.value = 'backing'; select.dispatchEvent(new Event('change', { bubbles: true })); });
+  click(buttonNamed('create')!);
+  expect(sent[0]).toMatchObject({ backing_song_id: 'backing', abc, lyrics: 'one line' });
+  expect(sent[0].cover_of).toBeUndefined();
+});
+
+it('applies a measured backing tempo only when confirmed', async () => {
+  backingTempo.mockResolvedValue({ ok: true, bpm: 121, method: 'beat-this' });
+  librarySongs = [{ id: 'backing', title: 'Instrumental recording', audioUrl: '/test.wav' } as Song];
+  act(() => root.render(panel({ request: { id: 1, kind: 'score', abc: 'X:1\nK:C\nC|', lyrics: 'one line' } })));
+  await flush();
+  click(buttonNamed('chordBed')!);
+  const select = host.querySelector<HTMLSelectElement>('select[aria-label="Sing over a library backing track"]')!;
+  act(() => { select.value = 'backing'; select.dispatchEvent(new Event('change', { bubbles: true })); });
+  const bpm = field('input[inputmode="numeric"]')!;
+  const previous = bpm.value;
+  click(buttonNamed('Measure backing tempo')!);
+  await flush();
+  expect(backingTempo).toHaveBeenCalledWith('backing');
+  expect(bpm.value).toBe(previous);
+  click(buttonNamed('Use 121 BPM')!);
+  expect(bpm.value).toBe('121');
+});
 
 it('queues the other five readings with exactly one score and one pair of seeds', async () => {
   const abc = 'X:1\nK:C\nCDEF|';
@@ -432,6 +469,99 @@ it('creates native ACE covers and restores a migrated repaint with its source, r
   } });
 });
 
+it('keeps compatible native ACE LoRA separate and restores its saved scale', async () => {
+  const xl = { id: 'ace-xl', name: 'ACE XL Synthwave', engine: 'acestep-cpp', kind: 'style',
+    trigger: 'xl-exact', slots: ['dit'], scales: { dit: 0.6 }, model: 'xl', origin: { type: 'imported' } };
+  vi.mocked(fetch).mockImplementation(async url => {
+    const engine = String(url).match(/\/v1\/music\/native\/([^/]+)\/profiles$/)?.[1];
+    if (!engine) return Response.json([]);
+    const profile = { id: 'balanced', label: 'Balanced', ready: true, missing: [], total_bytes: 1 };
+    return Response.json({ engine, engine_installed: true, profiles: [
+      { ...profile, native_adapters: engine === 'acestep-cpp' ? [xl] : [] },
+      { ...profile, id: 'minimal', label: 'Minimal', native_adapters: [] },
+    ] });
+  });
+  const show = async (engine: 'acestep-cpp' | 'minimaxmusic-cpp', initialData?: { song: Song; timestamp: number }) => {
+    act(() => root.render(panel({ musicEngine: engine, initialData })));
+    await flush();
+  };
+  const select = (profile: string) => act(() => {
+    const input = host.querySelector<HTMLSelectElement>('select[aria-label="Local model"]')!;
+    input.value = profile;
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  const create = () => buttonNamed('create') as HTMLButtonElement;
+  await show('acestep-cpp');
+  select('balanced');
+  await flush();
+  type(field('textarea[aria-label="styleCardTitle"]')!, 'bright folk');
+  click(buttonNamed('adaptersAdd')!);
+  click(buttonNamed('ACE XL Synthwave')!);
+  click(create());
+  expect(sent[0]).toMatchObject({ style: 'xl-exact, bright folk', ace: { adapters: [{ name: 'ace-xl', scale: 0.6 }] } });
+  select('minimal');
+  expect(create().disabled).toBe(true);
+  await show('minimaxmusic-cpp');
+  select('balanced');
+  await flush();
+  click(create());
+  expect(sent[1]?.ace).toBeUndefined();
+  expect(sent[1]?.style).toBe('bright folk');
+  await show('acestep-cpp');
+  select('balanced');
+  await flush();
+  expect(field('input[aria-label="ACE XL Synthwave"]')).toBeTruthy();
+
+  const saved = { ditModel: 'acestep-cpp', lmModel: 'balanced', title: 'Saved take',
+    style: 'bright folk', lyrics: 'verse', generationParams: { adapters: [{ name: 'ace-xl', scale: 0.35 }] } } as Song;
+  await show('acestep-cpp', { song: saved, timestamp: 1 });
+  click(create());
+  expect(sent[2]?.ace?.adapters).toEqual([{ name: 'ace-xl', scale: 0.35 }]);
+});
+
+it('restores native MiniMax DiT and LM LoRA scales only in the MiniMax request', async () => {
+  const tune = { id: 'mm3-lora', name: 'MiniMax tune', engine: 'minimaxmusic-cpp', kind: 'sound',
+    slots: ['lm', 'dit'], scales: { lm: 0.2, dit: 0.9 }, origin: { type: 'imported' } };
+  vi.mocked(fetch).mockImplementation(async url => {
+    const engine = String(url).match(/\/v1\/music\/native\/([^/]+)\/profiles$/)?.[1];
+    return engine ? Response.json({ engine, engine_installed: true, profiles: [{
+      id: 'balanced', label: 'Balanced', ready: true, missing: [], total_bytes: 1,
+      native_adapters: engine === 'minimaxmusic-cpp' ? [tune] : [],
+    }] }) : Response.json([]);
+  });
+  const show = async (engine: 'minimaxmusic-cpp' | 'acestep-cpp', initialData?: { song: Song; timestamp: number }) => {
+    act(() => root.render(panel({ musicEngine: engine, initialData })));
+    await flush();
+    const model = host.querySelector<HTMLSelectElement>('select[aria-label="Local model"]')!;
+    act(() => {
+      model.value = 'balanced';
+      model.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    await flush();
+  };
+  const create = () => buttonNamed('create') as HTMLButtonElement;
+  await show('minimaxmusic-cpp');
+  type(field('textarea[aria-label="styleCardTitle"]')!, 'warm piano');
+  type(field('textarea[aria-label="lyrics"]')!, 'short verse');
+  click(buttonNamed('adaptersAdd')!);
+  click(buttonNamed('MiniMax tune')!);
+  click(create());
+  expect(sent[0]?.minimax?.adapters).toEqual([{ name: 'mm3-lora', lm_scale: 0.2, dit_scale: 0.9 }]);
+  await show('acestep-cpp');
+  click(create());
+  expect(sent[1]?.minimax).toBeUndefined();
+  await show('minimaxmusic-cpp');
+  expect(field('input[aria-label="MiniMax tune"]')).toBeTruthy();
+
+  const saved = { ditModel: 'minimaxmusic-cpp', lmModel: 'balanced', title: 'Migrated MiniMax take',
+    style: 'warm piano', lyrics: 'short verse',
+    generationParams: { adapters: [{ name: 'mm3-lora', scale: 1, lm_scale: 0.3, dit_scale: 0.75 }] },
+  } as Song;
+  await show('minimaxmusic-cpp', { song: saved, timestamp: 1 });
+  click(create());
+  expect(sent[2]?.minimax?.adapters).toEqual([{ name: 'mm3-lora', lm_scale: 0.3, dit_scale: 0.75 }]);
+});
+
 it('posts the remembered MiniMax output format and keeps it out of ACE requests', async () => {
   vi.stubGlobal('EventSource', class { close() {} });
   const profiles = ['balanced', 'quality'].map(id => ({ id, label: id, ready: true, missing: [], total_bytes: 1 }));
@@ -461,6 +591,8 @@ it('posts the remembered MiniMax output format and keeps it out of ACE requests'
   });
   const model = () => host.querySelector<HTMLSelectElement>('select[aria-label="Local model"]')!;
   const format = () => Array.from(host.querySelectorAll('label')).find(label => label.textContent?.startsWith('outputFormat'))?.querySelector('select');
+  const numeric = (label: string) =>
+    [...host.querySelectorAll('label')].find(node => node.textContent?.trim() === label)?.querySelector('input');
   const submit = async () => { click(buttonNamed('create')!); await flush(); };
 
   await setup('minimaxmusic-cpp');
@@ -468,20 +600,29 @@ it('posts the remembered MiniMax output format and keeps it out of ACE requests'
   expect(format()?.value).toBe('flac');
   await submit();
   choose(format()!, 'wav32');
+  type(numeric('lmCfgScale')!, '1.2');
+  type(numeric('lmTopK')!, '35');
+  type(numeric('DiT cfgScale')!, '2.4');
   await submit();
   choose(model(), 'quality');
   expect(format()?.value).toBe('flac');
   choose(format()!, 'mp3');
+  expect(numeric('lmCfgScale')?.value).toBe('');
+  type(numeric('mp3Bitrate')!, '256');
+  type(numeric('fadeInLabel')!, '0.25');
+  type(numeric('fadeOutLabel')!, '1');
   await submit();
   await setup('acestep-cpp');
   choose(model(), 'balanced');
   expect(format()).toBeUndefined();
+  expect(numeric('lmCfgScale')).toBeUndefined();
   await submit();
   await setup('minimaxmusic-cpp');
   expect(model().value).toBe('quality');
   expect(format()?.value).toBe('mp3');
   choose(model(), 'balanced');
   expect(format()?.value).toBe('wav32');
+  expect(numeric('lmTopK')?.value).toBe('35');
   await submit();
 
   expect(posted.map(({ music_source, output_format }) => [music_source, output_format])).toEqual([
@@ -491,11 +632,19 @@ it('posts the remembered MiniMax output format and keeps it out of ACE requests'
     [{ kind: 'native', engine: 'acestep-cpp', model: 'balanced' }, undefined],
     [{ kind: 'native', engine: 'minimaxmusic-cpp', model: 'balanced' }, 'wav32'],
   ]);
+  expect(posted[0].minimax).toBeUndefined();
+  expect(posted[1].minimax).toEqual({ lm_cfg: 1.2, lm_top_k: 35, dit_cfg: 2.4 });
+  expect(posted[2]).toMatchObject({ mp3_bitrate: 256, fade_in: 0.25, fade_out: 1 });
+  expect(posted[3].minimax).toBeUndefined();
+  expect(posted[4].minimax).toEqual(posted[1].minimax);
+  expect(posted[4].mp3_bitrate).toBeUndefined();
 });
 
 it.each([
   { engine: 'acestep-cpp' as const, settings: { duration: 18, inference_steps: 7, guidance_scale: 2.5 }, extra: { ace: { guidance_scale: 2.5 } } },
-  { engine: 'minimaxmusic-cpp' as const, settings: { duration: 18, steps: 7, lm_seed: 55 }, extra: { lm_seed: 55 } },
+  { engine: 'minimaxmusic-cpp' as const,
+    settings: { duration: 18, steps: 7, lm_seed: 55, lm_cfg: 1.25, lm_top_k: 51, dit_cfg: 2.1, output_format: 'mp3', mp3_bitrate: 192, fade_out: 0.4 },
+    extra: { lm_seed: 55, minimax: { lm_cfg: 1.25, lm_top_k: 51, dit_cfg: 2.1 }, output_format: 'mp3', mp3_bitrate: 192, fade_out: 0.4 } },
 ])('reuses the original profile and settings of a migrated $engine take', async ({ engine, settings, extra }) => {
   const song = { title: 'Old take', style: 'folk', lyrics: 'verse', ditModel: engine, lmModel: 'original', generationParams: { ...settings, seed: 42 } } as Song;
   vi.stubGlobal('fetch', vi.fn(async () => Response.json({ engine, engine_installed: true,
@@ -722,6 +871,9 @@ it('keeps focus, the song draft and pair settings when switching the MiniMax Mus
   expect(document.activeElement).toBe(engine);
   expect(modelFamily.value).toBe('minimaxmusic-cpp');
   expect(field('textarea[aria-label="lyrics"]')?.value).toBe('Morning light');
+  expect(host.textContent).toContain('Reference speed on RTX 4090');
+  expect(host.textContent).toContain('CUDA 13 0.37 audio s/s');
+  expect(host.textContent).toContain('41242418');
   type(labeled('Seed').querySelector('input')!, '22');
   click(buttonNamed('create')!);
   expect(sent.at(-1)).toMatchObject({
@@ -732,6 +884,8 @@ it('keeps focus, the song draft and pair settings when switching the MiniMax Mus
   expect(document.activeElement).toBe(engine);
   expect(model().value).toBe('quality-q8');
   expect(labeled('Seed').querySelector('input')?.value).toBe('11');
+  expect(host.textContent).toContain('CUDA 13 1.85 audio s/s');
+  expect(host.textContent).toContain('b79d37f');
   click(buttonNamed('create')!);
   expect(sent.at(-1)).toMatchObject({
     music_source: { kind: 'native', engine: 'minimaxmusic-cpp', model: 'quality-q8' }, seed: 11, lyrics: 'Morning light',
@@ -739,6 +893,7 @@ it('keeps focus, the song draft and pair settings when switching the MiniMax Mus
   choose(modelFamily, 'heartmula');
   expect([...engine.options].map(option => option.value)).toEqual(['audio.cpp', 'hotstep']);
   expect(engine.value).toBe('audio.cpp');
+  expect(host.textContent).not.toContain('Reference speed on RTX 4090');
   choose(modelFamily, 'minimaxmusic-cpp');
   await flush();
   expect(engine.value).toBe('minimaxmusic-cpp');
@@ -1804,6 +1959,48 @@ it('restores HeartMuLa lyrics and its trained HOT-Step adapter without cover req
     style: 'pop,piano', lyrics: 'We rise with the morning light', duration_seconds: 4, seed: 42, cfg_scale: 1.5,
     hotstep_heartmula,
   });
+});
+
+it('restores MiniMax Music3 through HOT-Step as a text and lyrics pair', async () => {
+  const model = 'hotstep-minimax-music3';
+  vi.stubGlobal('fetch', vi.fn(async () => Response.json({
+    engine: 'hotstep', engine_installed: true,
+    profiles: [{ id: model, label: 'MiniMax Music3 · HOT-Step', ready: true, missing: [] }],
+  })));
+  const music_source = { kind: 'native', engine: 'hotstep', model };
+  const song = {
+    title: 'MiniMax take', ditModel: 'hotstep', style: 'folk', lyrics: '[Verse] Morning',
+    generationParams: { music_source, duration_seconds: 3.2, seed: 42, steps: 2 },
+  } as Song;
+  act(() => root.render(panel({ musicEngine: 'hotstep', initialData: { song, timestamp: 1 } })));
+  await flush();
+  expect(field('textarea[aria-label="lyrics"]')).not.toBeNull();
+  expect(host.textContent).not.toContain('Cover score');
+  click(buttonNamed('create')!);
+  expect(sent.at(-1)).toMatchObject({ music_source, style: 'folk', lyrics: '[Verse] Morning',
+    duration_seconds: 3.2, seed: 42, steps: 2 });
+  expect(sent.at(-1)?.cover_of).toBeUndefined();
+});
+
+it('restores HOT-Step ACE-Step Turbo with text generation and its saved settings', async () => {
+  const model = 'hotstep-ace-step-1.5';
+  vi.stubGlobal('fetch', vi.fn(async () => Response.json({
+    engine: 'hotstep', engine_installed: true,
+    profiles: [{ id: model, label: 'ACE-Step 1.5 Turbo · HOT-Step', ready: true, missing: [] }],
+  })));
+  const music_source = { kind: 'native', engine: 'hotstep', model };
+  const song = {
+    title: 'ACE take', ditModel: 'hotstep', style: 'instrumental funk', lyrics: '[Instrumental]',
+    generationParams: { music_source, duration_seconds: 10, seed: 42, steps: 8 },
+  } as Song;
+  act(() => root.render(panel({ musicEngine: 'hotstep', initialData: { song, timestamp: 1 } })));
+  await flush();
+  expect(field('textarea[aria-label="lyrics"]')).not.toBeNull();
+  expect(host.textContent).not.toContain('Cover score');
+  click(buttonNamed('create')!);
+  expect(sent.at(-1)).toMatchObject({ music_source, style: 'instrumental funk', lyrics: '[Instrumental]',
+    duration_seconds: 10, seed: 42, steps: 8 });
+  expect(sent.at(-1)?.cover_of).toBeUndefined();
 });
 
 it('restores HOT-Step cover source and lead sheet from a saved take', async () => {

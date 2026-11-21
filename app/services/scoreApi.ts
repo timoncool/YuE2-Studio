@@ -7,6 +7,10 @@ export function failed<T>(answer: Answer<T>): answer is Failure {
   return !answer.ok;
 }
 
+export function backingTempo(songId: string): Promise<Answer<{ bpm: number; method: 'beat-this' }>> {
+  return post('/v1/score/backing-tempo', { song_id: songId });
+}
+
 async function post<T>(path: string, body: unknown): Promise<Answer<T>> {
   const response = await fetch(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
   const payload = (await response.json().catch(() => null)) as Answer<T> | null;

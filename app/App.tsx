@@ -17,6 +17,7 @@ import { useBridgeCommand } from './services/mcpBridge';
 import { apiUrl } from './services/apiBase';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { libraryChanged, queryClient, updateLibraryPlaylists, updateLibrarySongs, useLibraryPlaylists, useLibrarySongs, useSetupStatus } from './services/studioQueries';
+import { preferredTakeStrings } from './i18n/preferredTake';
 import { useGenerations } from './services/generations';
 import { isSettingsTarget, SettingsModal } from './components/SettingsModal';
 import { Song, View, Playlist, type MusicEngine } from './types';
@@ -145,6 +146,7 @@ import { JournalPanel } from './components/JournalPanel';
 import { hubStateChanged, useActivity, useHubState } from './services/studioQueries';
 import { hubView, setTelemetry, showsNow, type HubButton } from './services/studioHub';
 import { HubBars } from './components/HubBars';
+import { filterHubPromotions, useHubPromotions } from './services/hubPreferences';
 import { ShellPrompts } from './components/ShellPrompts';
 import { HubPopup } from './components/HubPopup';
 import { applyUiScale, scaleForKey, setUiScale, storedUiScale, UI_SCALE_EVENT } from './services/uiScale';
@@ -513,7 +515,8 @@ function AppContent() {
   // updated past that screen keeps the default until it is unchecked in Settings.
   const hub = useHubState(language);
   // every kind of the hub's notices shows to everyone; the service decides which fit this launch
-  const hubItems = nativeSetupReady && hub.data ? hub.data.items : [];
+  const [showPromotions] = useHubPromotions();
+  const hubItems = nativeSetupReady && hub.data ? filterHubPromotions(hub.data.items, showPromotions) : [];
   const activity = useActivity();
   // a popup waits until nothing is being made: no song or re-render, no cover or timings in progress
   const making = generations.isGenerating || generations.activeJobCount > 0 || (activity.data ?? []).some(entry => entry.state === 'running');
@@ -639,6 +642,11 @@ function AppContent() {
     // the side panel exists from Tailwind's xl up; below it the details open over the page
     if (hasSidePanel) setShowRightSidebar(true);
     else setShowMobileDetails(true);
+  };
+
+  const handleOpenLibraryTake = (song: Song) => {
+    handleBackFromPlaylist();
+    handleShowDetails(song);
   };
 
   // Reuse Handler
@@ -1384,7 +1392,7 @@ function AppContent() {
   const handleBackFromPlaylist = () => {
     setViewingPlaylistId(null);
     setCurrentView('library');
-    window.history.pushState({}, '', '/library');
+    if (window.location.pathname !== '/library') window.history.pushState({}, '', '/library');
   };
 
   const openCoverRegen = (song: Song) => {
@@ -1559,6 +1567,7 @@ function AppContent() {
                 isPlaying={isPlaying}
                 notify={showToast}
                 onSelect={handleShowDetails}
+                onOpenLibraryTake={handleOpenLibraryTake}
                 onError={message => showToast(message, 'error')}
               />
             </div>
@@ -1885,7 +1894,13 @@ function AppContent() {
         <ProcessingModal
           song={songToProcess}
           onClose={() => setSongToProcess(null)}
-          onKept={libraryChanged}
+          onKept={take => {
+            libraryChanged();
+            showToast(t('processKept'), 'success', {
+              label: preferredTakeStrings[language].openInLibrary,
+              onClick: () => handleOpenLibraryTake(take),
+            });
+          }}
         />
       )}
       {songForReplay && (

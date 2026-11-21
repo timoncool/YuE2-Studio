@@ -31,8 +31,9 @@ cd desktop
 # Finder's DMG layout automation can keep the temporary image busy after the
 # layout is set. CI mode skips that cosmetic step so the image can be detached.
 CI=true npm exec tauri build -- --config src-tauri/tauri.macos-release.conf.json --bundles dmg
+bundle="$(node "$root/scripts/release-target-dir.mjs")/bundle"
 for file in root.json url.txt; do
-  cmp "../distribution/channels/stable/bootstrap/$file" "src-tauri/target/release/bundle/macos/YuE2 Studio.app/Contents/Resources/component-channel/$file"
+  cmp "../distribution/channels/stable/bootstrap/$file" "$bundle/macos/YuE2 Studio.app/Contents/Resources/component-channel/$file"
 done
 
-find src-tauri/target/release/bundle/dmg -name '*.dmg'
+find "$bundle/dmg" -name '*.dmg'

@@ -1,4 +1,5 @@
 from contextlib import contextmanager
+from http.client import IncompleteRead
 
 import base64, hashlib, http.server, io, json, math, os, pathlib, socket, struct, subprocess, sys, tempfile, threading, time, urllib.error, urllib.request, wave
 
@@ -113,13 +114,20 @@ with tempfile.TemporaryDirectory(prefix="yue-openrouter-") as profile, local_pro
              LOCALAPPDATA=str(root/"localappdata"))
     env.pop("YUE_ENGINE_BASE_URL",None)
     client=urllib.request.build_opener(urllib.request.ProxyHandler({}))
-    def request(path,payload=None):
+    def request(path,payload=None, *, headers=False):
         url=f"http://127.0.0.1:{port}"+path
         req=urllib.request.Request(url,data=json.dumps(payload).encode() if payload is not None else None,
                                    headers={"Content-Type":"application/json"})
         try:
-            with client.open(req,timeout=8) as r: return r.status,r.read()
-        except urllib.error.HTTPError as e: return e.code,e.read()
+            with client.open(req,timeout=8) as r:
+                try:
+                    body = r.read()
+                except IncompleteRead as error:
+                    raise AssertionError((path, r.status, dict(r.headers), len(error.partial), error.partial[:100])) from error
+                return (r.status, body, dict(r.headers)) if headers else (r.status, body)
+        except urllib.error.HTTPError as e:
+            body = e.read()
+            return (e.code, body, dict(e.headers)) if headers else (e.code, body)
     mcp_headers={"Content-Type":"application/json","Accept":"application/json, text/event-stream"}
     def rpc(method,params,rid=None):
         body={"jsonrpc":"2.0","method":method,"params":params}
@@ -176,9 +184,10 @@ with tempfile.TemporaryDirectory(prefix="yue-openrouter-") as profile, local_pro
     def assert_played_wav(url):
         # The job is marked complete before the asynchronous WAV tag rewrite.
         for _ in range(80):
-            code,served=request(url)
-            assert code==200,(code,served[:100],url)
-            assert served[:4]==b"RIFF" and served[8:12]==b"WAVE"
+            code, served, headers = request(url, headers=True)
+            details = (url, code, headers, len(served), served[:100])
+            assert code == 200 and headers.get("content-type") == "audio/wav", details
+            assert served[:4] == b"RIFF" and served[8:12] == b"WAVE", details
             with wave.open(io.BytesIO(wav)) as original, wave.open(io.BytesIO(served)) as playback:
                 assert playback.getparams()==original.getparams(),playback.getparams()
                 frames=playback.readframes(8000)

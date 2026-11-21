@@ -55,7 +55,11 @@ export function RvcBurnTraining({ dataset, busy, card, control, primary, onStart
   }
   async function installRuntime() {
     setStarting(true);
-    try { await installRvcBurnRuntime(); setInstalling(true); }
+    try {
+      const { started } = await installRvcBurnRuntime();
+      setInstalling(started);
+      if (!started) setStatus(await getRvcBurnTraining());
+    }
     catch (error) { onError(String(error)); }
     finally { setStarting(false); }
   }

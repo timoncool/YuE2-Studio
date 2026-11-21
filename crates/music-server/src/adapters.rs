@@ -267,7 +267,10 @@ pub struct AdapterLibrary {
 impl AdapterLibrary {
     /// The library of one engine's adapters, under the studio data root.
     pub fn new(data_root: &Path, engine: &str) -> Self {
-        let root = data_root.join("adapters");
+        Self::at(data_root.join("adapters"), engine)
+    }
+
+    pub(crate) fn at(root: PathBuf, engine: &str) -> Self {
         Self { downloader: Downloader::new(root.clone()), root, engine: engine.to_string(), installing: std::sync::Mutex::new(Vec::new()) }
     }
 

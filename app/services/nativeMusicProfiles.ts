@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { MusicEngine, NativeMusicEngine, ProfileMusicEngine, YueRequest } from '../types';
 import { apiUrl } from './apiBase';
+import type { InstalledAdapter } from './adapters';
 
 export const nativeEngines = { 'minimaxmusic-cpp': 'MiniMax Music3', 'acestep-cpp': 'ACE-Step', hotstep: 'HOT-Step' } as const;
 export const profileMusicEngines = { ...nativeEngines, 'audio.cpp': 'audio.cpp' } as const;
@@ -18,6 +19,7 @@ interface NativeProfile {
   total_bytes: number;
   missing_bytes?: number;
   adapters?: string[];
+  native_adapters?: InstalledAdapter[];
   status?: string;
   package_url?: string;
   model_directory?: string;
@@ -35,7 +37,10 @@ interface NativeProfiles {
 }
 
 const STORAGE = 'studio.nativeMusicProfiles';
-type Control = 'duration_seconds' | 'steps' | 'seed' | 'lm_seed' | 'guidance_scale';
+const miniMaxSampling = ['lm_cfg', 'lm_top_k', 'dit_cfg'] as const;
+const miniMaxOutput = ['mp3_bitrate', 'fade_in', 'fade_out'] as const;
+type Control = 'duration_seconds' | 'steps' | 'seed' | 'lm_seed' | 'guidance_scale'
+  | typeof miniMaxSampling[number] | typeof miniMaxOutput[number];
 type Settings = Partial<Record<Control | 'output_format', string>>;
 type Preferences = {
   selected: Partial<Record<ProfileMusicEngine, string>>;
@@ -63,12 +68,24 @@ export function nativeGenerationSettings(engine: ProfileMusicEngine, settings: S
   const seed = optionalNumber(settings.seed);
   const lmSeed = optionalNumber(settings.lm_seed);
   const guidance = optionalNumber(settings.guidance_scale);
+  const miniMax = engine === 'minimaxmusic-cpp';
+  const minimax = Object.fromEntries(miniMaxSampling.flatMap(key => {
+    const value = miniMax ? optionalNumber(settings[key]) : undefined;
+    return value === undefined ? [] : [[key, value]];
+  }));
+  const output = Object.fromEntries(miniMaxOutput.flatMap(key => {
+    const value = miniMax && (key !== 'mp3_bitrate' || settings.output_format === 'mp3')
+      ? optionalNumber(settings[key]) : undefined;
+    return value === undefined ? [] : [[key, value]];
+  }));
   return {
     ...(duration === undefined ? {} : { duration_seconds: duration }),
     ...(steps === undefined ? {} : { steps }),
     ...(seed === undefined ? {} : { seed }),
     ...(engine !== 'acestep-cpp' ? { output_format: miniMaxOutputFormat(settings.output_format) } : {}),
-    ...(engine === 'minimaxmusic-cpp' && lmSeed !== undefined ? { lm_seed: lmSeed } : {}),
+    ...(miniMax && lmSeed !== undefined ? { lm_seed: lmSeed } : {}),
+    ...(Object.keys(minimax).length ? { minimax } : {}),
+    ...output,
     ...(engine === 'acestep-cpp' && guidance !== undefined ? { ace: { guidance_scale: guidance } } : {}),
     ...((engine === 'audio.cpp' || engine === 'hotstep') && guidance !== undefined ? { cfg_scale: guidance } : {}),
   };
@@ -151,6 +168,7 @@ export function useNativeMusicProfiles(engine: ProfileMusicEngine | undefined, l
       number('seed', saved.seed);
       if (source === 'minimaxmusic-cpp') {
         number('lm_seed', saved.lm_seed);
+        for (const key of [...miniMaxSampling, ...miniMaxOutput]) number(key, saved[key]);
         controls.output_format = miniMaxOutputFormat(saved.output_format);
       }
       if (source === 'audio.cpp' || source === 'hotstep') {

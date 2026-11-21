@@ -11,6 +11,12 @@ Windows build.
 - **Choose the model and engine where you create the song.** The Create panel shows the requested pair, the active pair and what is still loading. For OpenRouter, choose a music model directly in the same panel. [Model selector](https://github.com/timoncool/YuE2-Studio/pull/389) · [Switching engines](https://github.com/timoncool/YuE2-Studio/pull/414)
 - **Try another singing voice on an existing recording.** Search and filter the RVC voice catalogue, listen to a preview when the source provides one, and install a voice with its optional index. Compare the converted take with the source in your library. [Voice catalogue](https://github.com/timoncool/YuE2-Studio/pull/394) · [Compare takes](https://github.com/timoncool/YuE2-Studio/pull/364)
 
+- **Play the same YuE2 score several ways.** Choose how freely YuE2 writes the score and how it performs it. With a score in the editor, Create variations keeps the notes and both seeds fixed and queues the other readings. The numerical controls remain editable. [Performance presets](https://github.com/timoncool/YuE2-Studio/pull/451)
+- **Match a reference voice with Seed-VC.** In the voice replacement tool, choose a recording and a reference voice. The result goes into the library as a separate take, with the original accompaniment and the pauses in the vocal. [Seed-VC](https://github.com/timoncool/YuE2-Studio/pull/450)
+- **Create sound effects for a scene.** Use a text description with MOSS-SoundEffect or import a video for ControlFoley. Generated audio goes into the library, and the source video stays available. [MOSS-SoundEffect](https://github.com/timoncool/YuE2-Studio/pull/442) · [ControlFoley](https://github.com/timoncool/YuE2-Studio/pull/444)
+- **Choose the base for YuE2 LoRA training.** Studio records which backbone and decoder companion you trained against. It checks the selected weights when you apply the adapter. The Windows trainer can also use CUDA 12 on compatible NVIDIA systems. [Training bases](https://github.com/timoncool/YuE2-Studio/pull/460) · [CUDA 12 trainer](https://github.com/timoncool/YuE2-Studio/pull/453)
+- **Install an optional Radeon HIP runtime on Windows.** Studio selects the component for a recognized adapter. The benchmark table includes HIP and Vulkan on the same Radeon iGPU and cold and warm timings for the NVIDIA backends. [HIP installation](https://github.com/timoncool/YuE2-Studio/pull/447) · [GPU measurements](docs/music-gpu-benchmarks.json)
+
 ## 2026-11-19 — 4.1.1
 
 ### Fixed

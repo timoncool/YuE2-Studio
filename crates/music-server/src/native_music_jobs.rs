@@ -242,6 +242,17 @@ async fn submit(
             "Studio data folder is unavailable.".into(),
         );
     };
+    if let Some(options) = request.minimax.as_ref().filter(|options| !options.adapters.is_empty()) {
+        let available = native_minimax::Runtime::installation(&root).native_adapters();
+        for adapter in &options.adapters {
+            let compatible = available.iter().any(|entry| entry.meta.id == adapter.name
+                && (adapter.lm_scale == 0.0 || entry.meta.slots.iter().any(|slot| slot == "lm"))
+                && (adapter.dit_scale == 0.0 || entry.meta.slots.iter().any(|slot| slot == "dit")));
+            if !compatible {
+                return reject(StatusCode::BAD_REQUEST, format!("MiniMax adapter {} is unavailable for the requested slots", adapter.name));
+            }
+        }
+    }
     if let Err(error) = state.ace_runtime.stop().await {
         return reject(StatusCode::CONFLICT, format!("ACE-Step is busy: {error:#}"));
     }
@@ -257,6 +268,7 @@ async fn submit(
         steps: request.steps,
         seed: request.seed,
         lm_seed: request.lm_seed,
+        sampling: request.minimax.clone().unwrap_or_default(),
     };
     let submitted = match &replay {
         Some(replay) => client.submit_replay(&profile, replay.body.clone()).await,
@@ -270,6 +282,11 @@ async fn submit(
         "duration_seconds":request.duration_seconds.unwrap_or(60.0), "seed":request.seed, "lm_seed":request.lm_seed,
         "output_format":format, "fade_in":request.fade_in.unwrap_or(0.0).max(0.0),
         "fade_out":request.fade_out.unwrap_or(0.0).max(0.0)});
+    if let Some(sampling) = &request.minimax {
+        if let Value::Object(parameters) = serde_json::json!(sampling) {
+            settings.as_object_mut().expect("MiniMax job settings object").extend(parameters);
+        }
+    }
     if format == "mp3" {
         settings["mp3_bitrate"] = Value::from(audio_post::encode::mp3_bitrate(
             request.mp3_bitrate.unwrap_or(DEFAULT_MP3_KBPS),
