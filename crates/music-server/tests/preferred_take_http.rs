@@ -85,8 +85,13 @@ async fn preferred_take_survives_restart_and_reordering_without_touching_media()
             .json()
             .await?;
         let id = song["id"].as_str().unwrap().to_owned();
-        // Creation can embed file tags. Baseline the WAV as the library serves
-        // it before choosing a take so the comparison measures the selection.
+        // Renaming writes the tags synchronously so the startup backfill does
+        // not rewrite these fixture files after restarting the service.
+        http.put(format!("{base}/v1/library/songs/{id}/title"))
+            .json(&json!({"title":"Same title"}))
+            .send()
+            .await?
+            .error_for_status()?;
         let original = http
             .get(format!("{base}/v1/library/media/{id}"))
             .send()
