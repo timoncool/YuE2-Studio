@@ -562,6 +562,7 @@ impl YueServerSupervisor {
             }
         }
         if self.config.options.backend == ComputeBackend::Hip {
+            command.env("ROCBLAS_USE_HIPBLASLT", "0");
             for variable in ["HIP_VISIBLE_DEVICES", "ROCR_VISIBLE_DEVICES", "HSA_OVERRIDE_GFX_VERSION"] {
                 command.env_remove(variable);
             }
