@@ -133,6 +133,15 @@ under `audiocpp/models/MiniMax-H3-Q4-GGUF`. Review the
 [MiniMax H3 Community License](https://huggingface.co/MiniMaxAI/MiniMax-H3/blob/main/LICENSE)
 for its territorial and use terms.
 
+For MuLaCover, select `mulacover` and pass the library ID of the original song
+as `cover_of`. The model uses its audio, with optional new `lyrics` and
+`style` tags. It saves a separate take which keeps the original track ID.
+Place the [Q8_0 bundle](https://huggingface.co/audio-cpp/audio.cpp-gguf/tree/32c1ce1fea57a513eb9386aa62408d47b1cf7ab2/MuLaCover-GGUF)
+in `audiocpp/models/MuLaCover-GGUF`. The Windows audio.cpp installer includes
+SoX Resampler 0.1.3 from [ShiftMediaProject](https://github.com/ShiftMediaProject/soxr/releases/tag/0.1.3-2)
+under LGPL 2.1. On Linux and macOS, install libsoxr with the system package
+manager. [MuLaCover weights and outputs are licensed for noncommercial use](https://github.com/HeartMuLa/MuLaCover/blob/e27fa7fa0da7c9817879cc6210cc5693f9327946/MODEL_LICENSE).
+
 For Vevo2, pass the lyrics and a library song ID as `vevo2.voice_song_id`.
 Add `vevo2.melody_song_id` to condition the singing on a second library track.
 

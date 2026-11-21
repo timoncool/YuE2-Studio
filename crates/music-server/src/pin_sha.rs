@@ -8,6 +8,7 @@ use std::path::Path;
 use anyhow::{bail, Result};
 
 const PINNED: &[(&str, &str)] = &[
+    (crate::acpp::SOXR_URL, "1c2177da4871f1713b666f576f83be649980b66d783723d9572a0ffffe67fe26"),
     ("https://developer.download.nvidia.com/compute/cuda/redist/libcublas/windows-x86_64/libcublas-windows-x86_64-12.9.1.4-archive.zip", "d534d98b0b453a98914dbf3adf47d7e84b55037abf02f87466439e1dcef581ed"),
     ("https://developer.download.nvidia.com/compute/cuda/redist/libcublas/windows-x86_64/libcublas-windows-x86_64-13.5.1.27-archive.zip", "c946e1c825e05895747a95ed4fee18030b08052c09783b9b7b19818fd2e31f58"),
     ("https://developer.download.nvidia.com/compute/cuda/redist/libcufft/windows-x86_64/libcufft-windows-x86_64-12.4.0.43-archive.zip", "69d0ad8dc3a1be66f01a748a8206d0ceaafa56939474663fbe790dc3e91d2009"),
@@ -130,6 +131,8 @@ pub fn accepts(url: &str, staged: &Path) -> bool {
 /// The SHA-256 of the files a pick takes out of a pinned package, by the package's URL and the file's name, as the
 /// package's own RECORD lists them: a file already on disk from another address is known by its bytes.
 const PICKED: &[(&str, &str, &str)] = &[
+    (crate::acpp::SOXR_URL, "soxr.dll", "3614f7703a5e48dce72cc0726390782287779195149657f87963792f37e76791"),
+    (crate::acpp::SOXR_URL, "soxr.txt", "f2f118b9029ec1871b953639ecc46651b2fc7b62e295e6cf3ef2ac4c9a058b33"),
     ("https://files.pythonhosted.org/packages/59/df/e7c3a360be4f7b93cee39271b792669baeb3846c58a4df6dfcf187a7ffab/nvidia_cuda_runtime_cu12-12.9.79-py3-none-win_amd64.whl", "cudart64_12.dll", "760c38928bbe5759f7b31ed6692599eb7ec83cedd5702e84c2b72028a89837e1"),
     ("https://files.pythonhosted.org/packages/20/ee/29955203338515b940bd4f60ffdbc073428f25ef9bfbce44c9a066aedc5c/nvidia_cufft_cu12-11.4.1.4-py3-none-win_amd64.whl", "cufft64_11.dll", "5b90655ca9cdf5d91cbdf2c72b995ec937eed0aef2d6954370c711b45c929b35"),
     ("https://files.pythonhosted.org/packages/20/e2/fc9a0e985249d873150276d5afb02e39a66817fedbf1a385724393e505ed/nvidia_cublas_cu12-12.9.2.10-py3-none-win_amd64.whl", "cublas64_12.dll", "52ce5ba0ec5327d39be6021f0f9362d2ed4d64d7206f9b5afc06398d827b8e82"),

@@ -19,6 +19,7 @@ mod audio_cpp_heartmula;
 mod audio_cpp_magenta;
 mod audio_cpp_midasheng;
 mod audio_cpp_minimax_h3;
+mod audio_cpp_mulacover;
 mod audio_cpp_music;
 mod audio_cpp_vevo2;
 mod native_music_jobs;
@@ -1886,6 +1887,7 @@ pub async fn serve_on_port(port: u16) -> anyhow::Result<()> {
         .route("/v1/local-models/music", get(local_music_model_catalog))
         .route("/v1/music/jobs", post(create_music_job).get(list_active_music_jobs))
         .route("/v1/music/audio-cpp/models", get(audio_cpp_music::models))
+        .route("/v1/music/audio-cpp/mulacover/runtime", post(audio_cpp_mulacover::install_runtime))
         .route("/v1/music/replay", post(replay_music_job))
         .route("/v1/transcriptions", post(create_transcription))
         .route("/v1/transcriptions/{job_id}", get(score_job_status).post(cancel_score_job))

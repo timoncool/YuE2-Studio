@@ -73,6 +73,9 @@ zip.workspace = true
 tar.workspace = true
 lzma-rust2.workspace = true
 
+[target.'cfg(unix)'.dependencies]
+libloading = "0.9"
+
 [target.'cfg(windows)'.dependencies]
 windows-sys.workspace = true
 # The model folders moved to another disk leave a junction where they were (model_storage).
