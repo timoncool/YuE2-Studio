@@ -2044,17 +2044,33 @@ it('keeps the same explicitly copied YuE2 seeds in two ordinary Create requests'
   expect(sent[1]).toEqual(sent[0]);
 });
 
-it('refuses a manually copied seed that cannot be sent exactly', async () => {
+it.each(['9007199254740993', '9007199254740990.5'])('refuses manually copied seed %s before conversion', async lmSeed => {
   act(() => root.render(panel({})));
   await flush();
   act(() => bridgeCommands.get('create_set')!({ fields: {
     style: 'acoustic folk', lyrics: 'Morning light', randomize_seed: false,
-    lm_seed: '9007199254740993', seed: '721',
+    lm_seed: lmSeed, seed: '721',
   } }));
   await flush();
   act(() => bridgeCommands.get('create_submit')!({}));
   expect(sent).toHaveLength(0);
   expect(bridgeCommands.get('create_get')!({})).toMatchObject({ error: 'seedIntegerRange' });
+});
+
+it('keeps both random seed sentinels in manual mode', async () => {
+  act(() => root.render(panel({})));
+  await flush();
+  act(() => bridgeCommands.get('create_set')!({ fields: {
+    style: 'acoustic folk', lyrics: 'Morning light', randomize_seed: false, lm_seed: '-1', seed: '',
+  } }));
+  await flush();
+  act(() => bridgeCommands.get('create_submit')!({}));
+  expect(sent).toHaveLength(1);
+  for (const value of [sent[0].lm_seed!, sent[0].seed!]) {
+    expect(Number.isInteger(value)).toBe(true);
+    expect(value).toBeGreaterThanOrEqual(0);
+    expect(value).toBeLessThan(0x100000000);
+  }
 });
 
 describe('Auto max duration', () => {

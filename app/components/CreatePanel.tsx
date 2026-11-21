@@ -769,8 +769,8 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
   const [seed, setSeed] = useState(() => keptText(kept, 'seed'));
   const invalidManualSeed = yue && !randomizeSeed && [lmSeed, seed].some(value => {
     const seedText = value.trim();
-    const parsed = Number(seedText);
-    return seedText !== '' && (!Number.isSafeInteger(parsed) || parsed < -1);
+    if (seedText === '' || seedText === '-1') return false;
+    return !/^\d+$/.test(seedText) || !Number.isSafeInteger(Number(seedText));
   });
   const [semanticTokens, setSemanticTokens] = useState('');
   const [saveMenuOpen, setSaveMenuOpen] = useState(false);
