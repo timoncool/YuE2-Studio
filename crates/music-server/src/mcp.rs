@@ -2685,13 +2685,13 @@ fn tools() -> &'static [Tool] {
             },
             Tool {
                 name: "rvc_native_runtime_status",
-                description: "Check hardware support, remaining bytes and download progress for the vocal-fast-rs TensorRT-RTX runtime without starting it.",
+                description: "Check host support, selected backend, remaining bytes and download progress for vocal-fast-rs without starting the worker.",
                 schema: nothing,
                 call: |_| get("/v1/rvc/native/runtime".into()),
             },
             Tool {
                 name: "rvc_native_runtime_install",
-                description: "Start downloading the verified vocal-fast-rs TensorRT-RTX runtime and acoustic weights. Read rvc_native_runtime_status for progress.",
+                description: "Start downloading the verified vocal-fast-rs runtime for this host and its acoustic weights. Supported runtimes include CPU on Apple Silicon with macOS 13+ and TensorRT-RTX on compatible Windows and Linux hardware. Read rvc_native_runtime_status for progress.",
                 schema: nothing,
                 call: |_| post("/v1/rvc/native/runtime".into(), json!({})),
             },

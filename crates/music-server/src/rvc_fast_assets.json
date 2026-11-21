@@ -13,5 +13,11 @@
     "file": "yue2-rvc-vocal-fast-linux-cuda13-x64.tar.gz",
     "sha256": "e9ec89dd3e5c85b64b03c5b7df0d999f13e1b35f54d89297c67a676e5f6246e8",
     "bytes": 752570041
+  },
+  "macos_cpu": {
+    "file": "vocal-fast-macos-arm64-cpu.tar.gz",
+    "url": "https://github.com/timoncool/vocal-fast-rs/releases/download/component-03c3be316067/vocal-fast-macos-arm64-cpu.tar.gz",
+    "sha256": "409f24075b4a7b9dd86953ff9da0ea25de10c4f97f1727076b8681091738c873",
+    "bytes": 7753829
   }
 }

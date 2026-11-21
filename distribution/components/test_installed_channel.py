@@ -37,9 +37,10 @@ def sign(role, key):
 
 def run(work, binary, archive, certificate, tls_key):
     assert hashlib.sha256(archive.read_bytes()).hexdigest() == DIGEST
-    install = work / "install"
+    install = work / "package/usr/bin"
+    install.mkdir(parents=True)
     origin = work / "origin"
-    channel = install / "component-channel"
+    channel = work / "package/usr/lib/YuE2 Studio/component-channel"
     channel.mkdir(parents=True)
     (origin / "targets").mkdir(parents=True)
     exe = Path(shutil.copy2(binary, install))

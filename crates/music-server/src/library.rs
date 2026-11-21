@@ -148,6 +148,7 @@ impl Library {
     /// showed two different libraries depending on how it was launched.
     pub fn open_default()->Result<Self>{let root=crate::studio_data_root().unwrap_or_else(||env::current_dir().unwrap_or_else(|_|PathBuf::from(".")).join("data"));let database=root.join("library.sqlite");Self::open_at(database.clone(),root.join("media")).with_context(||format!("open the song library {}",database.display()))}
  pub fn open_at(db_path:PathBuf,media_dir:PathBuf)->Result<Self>{if let Some(p)=db_path.parent(){fs::create_dir_all(p)?};let c=Connection::open(db_path)?;c.execute_batch("PRAGMA foreign_keys=ON; CREATE TABLE IF NOT EXISTS songs(id TEXT PRIMARY KEY,title TEXT NOT NULL,audio_path TEXT,caption TEXT NOT NULL,lyrics TEXT NOT NULL,metadata_json TEXT NOT NULL,generation_settings_json TEXT NOT NULL,engine_id TEXT NOT NULL,profile_id TEXT,replay_request_json TEXT,audio_codes_json TEXT,source TEXT NOT NULL,created_at TEXT NOT NULL,updated_at TEXT NOT NULL); CREATE TABLE IF NOT EXISTS playlists(id TEXT PRIMARY KEY,name TEXT NOT NULL,description TEXT,created_at TEXT NOT NULL,updated_at TEXT NOT NULL); CREATE TABLE IF NOT EXISTS playlist_songs(playlist_id TEXT NOT NULL REFERENCES playlists(id) ON DELETE CASCADE,song_id TEXT NOT NULL REFERENCES songs(id) ON DELETE CASCADE,position INTEGER NOT NULL,PRIMARY KEY(playlist_id,song_id)); CREATE TABLE IF NOT EXISTS music_jobs(id TEXT PRIMARY KEY,submitted_at INTEGER NOT NULL,engine_id TEXT NOT NULL,title TEXT,style TEXT NOT NULL,lyrics TEXT NOT NULL,duration_seconds REAL NOT NULL,playlist_id TEXT,generation_settings_json TEXT NOT NULL,request_json TEXT NOT NULL,status TEXT NOT NULL,message TEXT NOT NULL DEFAULT '',attempt INTEGER NOT NULL DEFAULT 0,resumed_as TEXT); CREATE TABLE IF NOT EXISTS journal(id INTEGER PRIMARY KEY AUTOINCREMENT,at TEXT NOT NULL,source TEXT NOT NULL,tone TEXT NOT NULL DEFAULT '',verb TEXT NOT NULL DEFAULT '',kind TEXT NOT NULL DEFAULT '',target TEXT NOT NULL DEFAULT '',text TEXT NOT NULL DEFAULT '');")?;
+  c.execute_batch("CREATE TABLE IF NOT EXISTS score_results(id TEXT PRIMARY KEY, result_json TEXT NOT NULL);")?;
   // Earlier builds binned independent versions together with their original.
   // The source marker distinguishes that cascade from an explicit deletion.
   c.execute("UPDATE songs SET metadata_json=json_remove(metadata_json,'$.deleted_at','$.deleted_with')
@@ -1108,6 +1109,29 @@ pub struct StoredJob {
 }
 
 impl Library {
+    pub(crate) fn save_score_result(&self, score: &crate::ScoreJob, limit: usize) -> Result<()> {
+        let mut connection = self.connection.lock().unwrap();
+        let transaction = connection.transaction()?;
+        transaction.execute(
+            "INSERT OR REPLACE INTO score_results(id, result_json) VALUES(?1, ?2)",
+            params![score.id, serde_json::to_string(score)?],
+        )?;
+        transaction.execute(
+            "DELETE FROM score_results WHERE rowid IN
+             (SELECT rowid FROM score_results ORDER BY rowid DESC LIMIT -1 OFFSET ?1)",
+            [i64::try_from(limit)?],
+        )?;
+        transaction.commit()?;
+        Ok(())
+    }
+
+    pub(crate) fn score_result(&self, id: &str) -> Result<Option<crate::ScoreJob>> {
+        let payload: Option<String> = self.connection.lock().unwrap().query_row(
+            "SELECT result_json FROM score_results WHERE id = ?1", [id], |row| row.get(0),
+        ).optional()?;
+        payload.map(|json| serde_json::from_str(&json)).transpose().map_err(Into::into)
+    }
+
     pub fn save_music_job(&self, job: &StoredJob) -> Result<()> {
         let connection = self.connection.lock().unwrap();
         connection.execute(

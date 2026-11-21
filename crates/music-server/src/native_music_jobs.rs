@@ -4,6 +4,39 @@ use tokio::sync::{mpsc, oneshot};
 type CancelReply = oneshot::Sender<Result<(), String>>;
 pub(super) type CancelSender = mpsc::Sender<CancelReply>;
 
+/// Capture the terminal state before releasing the job lock. Audio duration
+/// comes from tracks already imported, including every member of a batch.
+pub(super) struct SongReport {
+    status: MusicJobStatus,
+    tracks: u64,
+    seconds: f64,
+}
+
+impl SongReport {
+    pub(super) fn from_job(job: &MusicJob) -> Self {
+        Self { status: job.status.clone(), tracks: job.songs.len() as u64, seconds: songs_seconds(&job.songs) }
+    }
+
+    pub(super) async fn record(self, state: &AppState, engine: &'static str, set: &'static str, elapsed: std::time::Duration) {
+        let Some(hub) = state.hub.as_ref().map(|hub| hub.for_scheduled_report()) else { return };
+        if let Err(error) = tokio::task::spawn_blocking(move || match self.status {
+            MusicJobStatus::Completed if self.tracks > 0 => {
+                hub.count("songs", self.tracks);
+                hub.count("song_done", 1);
+                if hub.telemetry_on() {
+                    hub.used_models(Some(set), &[engine.to_string()], self.tracks);
+                    hub.worked_on("song", Some(set), self.seconds, elapsed);
+                }
+            }
+            MusicJobStatus::Failed => hub.count("song_failed", 1),
+            MusicJobStatus::Cancelled => hub.count("song_cancelled", 1),
+            _ => {}
+        }).await {
+            studio_log!("[ERROR] recording {engine} job outcome: {error}");
+        }
+    }
+}
+
 pub(super) async fn submit_minimax(
     state: AppState,
     request: CreateMusicJobRequest,
@@ -166,6 +199,7 @@ async fn submit(
     replay: Option<Replay>,
 ) -> (StatusCode, Json<MusicJob>) {
     let engine = native_minimax::ENGINE_ID;
+    let started = std::time::Instant::now();
     let reject = |status, reason: String| {
         (
             status,
@@ -322,21 +356,12 @@ async fn submit(
         ) {
             studio_log!("[ERROR] saving MiniMax job state: {error:#}");
         }
+        let report = SongReport::from_job(active);
+        let elapsed = started.elapsed();
         drop(_lease);
         drop(jobs);
         state.minimax_cancellations.write().await.remove(&job.id);
-        // Only this watcher completes an import. The Hub writes its local
-        // state synchronously, so do it after releasing the jobs and engine locks.
-        if completed && let Some(hub) = state.hub.clone() {
-            if let Err(error) = tokio::task::spawn_blocking(move || {
-                hub.count("songs", 1);
-                hub.count("song_done", 1);
-            })
-            .await
-            {
-                studio_log!("[ERROR] recording MiniMax completion: {error}");
-            }
-        }
+        report.record(&state, engine, "native.minimax_music3", elapsed).await;
     });
     (StatusCode::ACCEPTED, Json(accepted))
 }

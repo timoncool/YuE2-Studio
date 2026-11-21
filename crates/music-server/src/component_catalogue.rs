@@ -135,14 +135,31 @@ impl tough::Transport for ChannelTransport {
 }
 
 fn installed_channel() -> Result<PathBuf> {
-    Ok(std::env::current_exe()?
-        .parent()
-        .context("missing installation folder")?
-        .join("component-channel"))
+    let executable = std::env::current_exe()?;
+    let parent = executable.parent().context("missing installation folder")?;
+    Ok(packaged_channel(parent, std::env::consts::OS))
+}
+
+fn packaged_channel(binary_dir: &Path, os: &str) -> PathBuf {
+    if let Some(parent) = binary_dir.parent() {
+        let resources = match os {
+            "macos" if binary_dir.ends_with("Contents/MacOS") => Some(parent.join("Resources")),
+            "linux" if binary_dir.ends_with("usr/bin") => Some(parent.join("lib/YuE2 Studio")),
+            _ => None,
+        };
+        if let Some(resources) = resources {
+            let channel = resources.join("component-channel");
+            if channel.join("root.json").exists() {
+                return channel;
+            }
+        }
+    }
+    binary_dir.join("component-channel")
 }
 
 async fn installed_root() -> Result<Option<Vec<u8>>> {
     match tokio::fs::read(installed_channel()?.join("root.json")).await {
+        Ok(bytes) if bytes.trim_ascii() == b"null" => Ok(None),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
         result => result.map(Some).context("read installed channel root"),
     }
@@ -348,6 +365,23 @@ pub(crate) async fn refresh_rvc_catalogue<T>(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn bootstrap_uses_the_package_resource_directory_or_standalone_layout() {
+        let root = tempfile::tempdir().unwrap();
+        for (os, bin, resources) in [
+            ("macos", "Studio.app/Contents/MacOS", "Studio.app/Contents/Resources"),
+            ("linux", "AppDir/usr/bin", "AppDir/usr/lib/YuE2 Studio"),
+        ] {
+            let bin = root.path().join(bin);
+            let channel = root.path().join(resources).join("component-channel");
+            assert_eq!(packaged_channel(&bin, os), bin.join("component-channel"));
+            std::fs::create_dir_all(&channel).unwrap();
+            std::fs::write(channel.join("root.json"), b"null").unwrap();
+            assert_eq!(packaged_channel(&bin, os), channel);
+        }
+        assert_eq!(packaged_channel(root.path(), "windows"), root.path().join("component-channel"));
+    }
 
     #[tokio::test]
     async fn metadata_uses_the_installers_proxy_and_distinguishes_missing_roots() {

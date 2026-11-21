@@ -1,7 +1,12 @@
 # Publish a Studio component catalogue
 
-The Studio executable reads the public trust anchor from
-`component-channel/root.json` next to the executable. Its `url.txt` contains
+NSIS, portable, deb, AppImage and DMG package exactly the public `root.json`
+and `url.txt` from `distribution/channels/stable/bootstrap/`. Set the former to
+the reviewed public TUF root when activating production. The JSON value
+`null` keeps the channel inactive in builds prepared before that activation.
+The files are installed in `component-channel/` beside the Windows or standalone
+executable, under `Contents/Resources` on macOS, and under
+`usr/lib/YuE2 Studio` in Linux packages. The URL file contains
 the HTTPS directory ending in a slash that serves `timestamp.json`.
 The Studio expects the signed targets under `targets/` inside that directory.
 

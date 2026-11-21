@@ -818,7 +818,7 @@ pub(super) async fn submit(
             &job.id,
             family.name(),
             family.profile(),
-            Some((family, build, submitted)),
+            LocalRun::AudioCpp(family, build, submitted),
             outcome,
         )
         .await;
@@ -868,14 +868,21 @@ fn save(
     })
 }
 
+enum LocalRun {
+    AudioCpp(Family, Build, std::time::Instant),
+    HotStep(&'static str, std::time::Instant),
+}
+
 pub(super) async fn complete_local(
     state: &AppState,
     id: &str,
     name: &str,
     profile: &str,
+    set: &'static str,
+    submitted: std::time::Instant,
     outcome: anyhow::Result<native_music_jobs::ShapedOutput>,
 ) {
-    complete(state, id, name, profile, None, outcome).await;
+    complete(state, id, name, profile, LocalRun::HotStep(set, submitted), outcome).await;
 }
 
 async fn complete(
@@ -883,7 +890,7 @@ async fn complete(
     id: &str,
     name: &str,
     profile: &str,
-    telemetry: Option<(Family, Build, std::time::Instant)>,
+    telemetry: LocalRun,
     outcome: anyhow::Result<native_music_jobs::ShapedOutput>,
 ) {
     let mut jobs = state.jobs.write().await;
@@ -926,9 +933,12 @@ async fn complete(
     persist(state, job);
     let seconds = songs_seconds(&job.songs);
     let completed = song_id.is_some();
-
+    let report = native_music_jobs::SongReport::from_job(job);
     drop(jobs);
-    if let Some((family, build, submitted)) = telemetry
+    if let LocalRun::HotStep(set, submitted) = telemetry {
+        report.record(state, hotstep_cover::ENGINE, set, submitted.elapsed()).await;
+    }
+    if let LocalRun::AudioCpp(family, build, submitted) = telemetry
         && let Some(hub) = state.hub.clone().filter(|hub| hub.telemetry_on())
     {
         let elapsed = submitted.elapsed();

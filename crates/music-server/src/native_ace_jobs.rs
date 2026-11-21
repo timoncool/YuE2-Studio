@@ -38,6 +38,7 @@ async fn submit_inner(
     attempt: u32,
     replay: Option<ReplayOrigin>,
 ) -> (StatusCode, Json<MusicJob>) {
+    let started = std::time::Instant::now();
     let reject = |status, reason: String| {
         (
             status,
@@ -160,7 +161,7 @@ async fn submit_inner(
         let _lease = lease;
         let outcome = watch(&state, &job, &profile, &client, input, options, rx).await;
         let mut jobs = state.jobs.write().await;
-        if let Some(active) = jobs.get_mut(&job.id) {
+        let report = if let Some(active) = jobs.get_mut(&job.id) {
             match outcome {
                 Ok(Some(songs)) => {
                     active.song = songs.first().cloned();
@@ -184,9 +185,15 @@ async fn submit_inner(
             ) {
                 studio_log!("[ERROR] saving ACE-Step job state: {error:#}");
             }
-        }
+            Some(native_music_jobs::SongReport::from_job(active))
+        } else { None };
+        let elapsed = started.elapsed();
         drop(jobs);
+        drop(_lease);
         state.ace_cancellations.write().await.remove(&job.id);
+        if let Some(report) = report {
+            report.record(&state, ace::ENGINE_ID, "native.ace_step", elapsed).await;
+        }
     });
     (StatusCode::ACCEPTED, Json(accepted))
 }
