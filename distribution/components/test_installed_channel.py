@@ -229,8 +229,21 @@ def run_rvc(work, binary, certificate, tls_key, install_voice=False):
     (channel / "root.json").write_bytes(root_metadata)
     (origin / "1.root.json").write_bytes(root_metadata)
     request_paths = []
+    hold_library = threading.Event()
+    library_requested = threading.Event()
+    release_library = threading.Event()
 
     class Handler(SimpleHTTPRequestHandler):
+        def do_GET(self):
+            if self.path == "/music.dll" and hold_library.is_set():
+                self.send_response(200)
+                self.send_header("Content-Length", str((origin / "music.dll").stat().st_size))
+                self.end_headers()
+                library_requested.set()
+                release_library.wait(20)
+                return
+            super().do_GET()
+
         def log_request(self, code="-", size="-"):
             request_paths.append(self.path)
 
@@ -359,6 +372,22 @@ def run_rvc(work, binary, certificate, tls_key, install_voice=False):
             tool("music_engine_package_install", args, expected_error=True)
             assert tool("music_engine_package_status", args)["generation"] == first["generation"]
             (origin / "music.dll").write_bytes(new_library)
+            from concurrent.futures import ThreadPoolExecutor
+            package_key = {"kind": "music-engines", "id": engine["id"]}
+            hold_library.set()
+            try:
+                with ThreadPoolExecutor(max_workers=1) as pool:
+                    pending = pool.submit(tool, "music_engine_package_install", args, True)
+                    assert library_requested.wait(10)
+                    progress = tool("music_package_progress", package_key)["active"]
+                    assert progress["stage"] == "downloading" and progress["file"] == "music.dll", progress
+                    assert tool("music_package_cancel", package_key)["cancel_requested"]
+                    pending.result(timeout=10)
+                    assert tool("music_package_progress", package_key)["active"] is None
+                    assert tool("music_engine_package_status", args)["generation"] == first["generation"]
+            finally:
+                hold_library.clear()
+                release_library.set()
             request_paths.clear()
             second = tool("music_engine_package_install", args)
             assert second["downloaded_bytes"] == len(new_library) and second["reused_bytes"] == len(binary_bytes), second
