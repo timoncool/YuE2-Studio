@@ -6,6 +6,39 @@ import { SongbookDialog } from './SongbookDialog';
 vi.mock('../context/I18nContext', () => ({ useI18n: () => ({ language: 'en' }) }));
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
+it('shows transposed jianpu key changes independently of capo and ukulele shapes', () => {
+  const host = document.createElement('div');
+  document.body.append(host);
+  const root = createRoot(host);
+  try {
+    const abc = 'X:1\nM:4/4\nL:1/4\nK:C\n"C"C D E G | [K:D] "D"D E F A |';
+    act(() => root.render(<SongbookDialog abc={abc} title="Key change" onClose={() => {}} />));
+    const sheet = document.querySelector<HTMLDialogElement>('dialog[aria-label="Songbook"]')!;
+    const controls = (prefix: string) => [...sheet.querySelectorAll('label')]
+      .find(label => label.textContent?.startsWith(prefix))!.querySelector('select')!;
+    const choose = (prefix: string, value: string) => act(() => {
+      const select = controls(prefix);
+      select.value = value;
+      select.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    const keyLabels = () => [...sheet.querySelectorAll('.songbook-cell > span')]
+      .map(label => label.textContent).filter(value => value?.startsWith('Key'));
+    expect(keyLabels()).toEqual([]);
+    act(() => sheet.querySelector<HTMLInputElement>('input[type="checkbox"]')!.click());
+    expect(keyLabels()).toEqual(['Key D']);
+    choose('Transpose', '2');
+    expect(keyLabels()).toEqual(['Key E']);
+    choose('Capo fret', '2');
+    choose('Chord shapes', 'ukulele');
+    expect(keyLabels()).toEqual(['Key E']);
+    expect(sheet.querySelector('h3')?.textContent).toBe('Ukulele');
+    expect(sheet.querySelector('figure svg[aria-label^="C:"]')?.getAttribute('aria-label')?.split(' ').slice(1)).toHaveLength(4);
+  } finally {
+    act(() => root.unmount());
+    host.remove();
+  }
+});
+
 it('shows the printable songbook and updates chord shapes when the capo changes', () => {
   const host = document.createElement('div');
   document.body.append(host);

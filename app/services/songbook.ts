@@ -16,6 +16,7 @@ interface Event {
 
 export interface SongbookCell {
   number: string;
+  keyChange?: string;
   lyrics: string[];
   attack?: boolean;
   duration?: number;
@@ -41,6 +42,8 @@ export function chordName(chord: string, semitones: number): string {
       return prefix + (/[b♭]/.test(accidental) ? FLAT : SHARP)[at];
     });
 }
+
+const keyName = (key: abcjs.KeySignature) => `${key.root}${key.acc}${key.mode}`;
 
 function numberFor({ note, key }: Event): string {
   const pitch = note.pitches?.[0]?.pitch;
@@ -96,14 +99,19 @@ export function buildSongbook(abc: string, transpose: number) {
       .map(chord => ({ at, line, chord: chord.name })))).sort((a, b) => a.at - b.at);
   const lines = new Map<number, SongbookCell[]>();
   let chord = 0;
+  const initialKey = keyName(tune.getKeySignature());
+  let displayedKey = initialKey;
   for (const event of melody) {
+    const currentKey = keyName(event.key);
+    const keyChange = currentKey === displayedKey ? undefined : currentKey;
+    displayedKey = currentKey;
     const cells = lines.get(event.line) ?? [];
     const chords: string[] = [];
     while (chord < harmony.length && harmony[chord].at <= event.at + 1e-7) {
       const name = harmony[chord++].chord;
       if (!chords.includes(name)) chords.push(name);
     }
-    cells.push({ chords, number: numberFor(event), duration: event.note.duration,
+    cells.push({ chords, number: numberFor(event), keyChange, duration: event.note.duration,
       attack: Boolean(event.note.pitches?.some(pitch => !pitch.endTie)),
       lyrics: (event.note.lyric ?? []).map(item => item.syllable + (item.divider === '-' ? '-' : '')) });
     lines.set(event.line, cells);
@@ -114,7 +122,6 @@ export function buildSongbook(abc: string, transpose: number) {
     cells.push({ chords: [change.chord], number: '', lyrics: [] });
     lines.set(change.line, cells);
   }
-  const key = tune.getKeySignature();
-  return { title: tune.metaText.title ?? '', key: `${key.root}${key.acc}${key.mode}`,
+  return { title: tune.metaText.title ?? '', key: initialKey,
     lines: [...lines.entries()].sort((a, b) => a[0] - b[0]).map(([, cells]) => cells) };
 }
