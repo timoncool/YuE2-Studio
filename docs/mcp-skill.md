@@ -152,6 +152,16 @@ under LGPL 2.1. You can also install it with `mulacover_runtime_install`.
 On Linux and macOS, install libsoxr with the system package
 manager. [MuLaCover weights and outputs are licensed for noncommercial use](https://github.com/HeartMuLa/MuLaCover/blob/e27fa7fa0da7c9817879cc6210cc5693f9327946/MODEL_LICENSE).
 
+For Stable Audio 3 Medium on HOT-Step, use `hotstep_sa3_install` to start the
+managed runtime and BF16 model download. Read readiness, progress and adapter
+names with `hotstep_cover_profiles`. Call `song_create` with
+`music_source: {kind: "native", engine: "hotstep", model: "stable-audio-3-medium"}`
+and an instrumental description in `style`. Use `hotstep_sa3` to choose
+`sampler` (pingpong or euler) and the name and strength of an installed
+adapter. Wait for the job, then call `library_song_get` to read its engine,
+profile, seed and settings. Use `song_replay` with the saved library song ID
+to create another take with the same parameters.
+
 For a HOT-Step MuLaCover cover, check `hotstep_cover_profiles` and use
 `hotstep_cover_install` to install the Windows CPU runtime and its GGUF
 weights. The four codec and tokenizer files are shared with other HeartMuLa

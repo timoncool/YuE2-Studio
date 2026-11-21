@@ -83,7 +83,7 @@ const installLabels: Record<string, readonly [string, string, string]> = {
 };
 
 export function AudioCppModelInstall({ model, bytes, licenseUrl, language, onInstalled }: {
-  model: 'heartmula' | 'stable_audio';
+  model: 'heartmula' | 'stable_audio' | 'stable-audio-3-medium';
   bytes: number;
   licenseUrl?: string;
   language: string;
@@ -92,16 +92,17 @@ export function AudioCppModelInstall({ model, bytes, licenseUrl, language, onIns
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [percent, setPercent] = useState<number>();
-  const name = model === 'stable_audio' ? 'Stable Audio 3' : 'HeartMuLa';
+  const hotstep = model === 'stable-audio-3-medium';
+  const name = hotstep ? 'Stable Audio 3 Medium (HOT-Step)' : model === 'stable_audio' ? 'Stable Audio 3' : 'HeartMuLa';
   const [install, installing, failed] = (installLabels[language] ?? installLabels.en).map(label => label.replace('HeartMuLa', name));
   const size = bytes > 0 ? ` · ${new Intl.NumberFormat(language, { maximumFractionDigits: 2 }).format(bytes / (1024 ** 3))} GiB` : '';
 
   async function status(signal?: AbortSignal) {
-    const response = await fetch(apiUrl('/v1/music/audio-cpp/models'), { signal });
+    const response = await fetch(apiUrl(hotstep ? '/v1/music/native/hotstep/profiles' : '/v1/music/audio-cpp/models'), { signal });
     if (!response.ok || signal?.aborted) return;
     const data = await response.json();
     if (signal?.aborted) return;
-    const row = data.models?.find((item: {id: string}) => item.id === model);
+    const row = (hotstep ? data.profiles : data.models)?.find((item: {id: string}) => item.id === model);
     if (!row) return;
     setBusy(Boolean(row.installing));
     const download = row.download;
@@ -123,7 +124,7 @@ export function AudioCppModelInstall({ model, bytes, licenseUrl, language, onIns
     setBusy(true);
     setError('');
     try {
-      const result = await fetch(apiUrl('/v1/music/audio-cpp/models/install'), {
+      const result = await fetch(apiUrl(hotstep ? '/v1/music/native/hotstep/stable-audio-3/install' : '/v1/music/audio-cpp/models/install'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ model }),
