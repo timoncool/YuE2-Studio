@@ -865,13 +865,14 @@ describe('an instrumental (#217)', () => {
     click(buttonNamed('createInstrumental')!);
     await flush();
     expect(sent[0].adapters).toEqual([expect.objectContaining({ id: 'instrumental' })]);
-    expect(sent[0].lyrics).toBe('');
+    expect(sent[0].lyrics).toBe('[instrumental]');
 
     click(instrumental);
     click(buttonNamed('create')!);
     await flush();
     expect(sent).toHaveLength(2);
     expect(sent[1].adapters).toBeUndefined();
+    expect(sent[1].lyrics).toBe('');
   });
 
   it('keeps a score written for one submission out of the form and writes a new one for the next', async () => {
@@ -888,6 +889,7 @@ describe('an instrumental (#217)', () => {
     click(buttonNamed('createInstrumental')!);
     await flush();
     expect(sent.map(request => request.abc)).toEqual(['X:1\nPLAN-A\nINSTR', 'X:1\nPLAN-B\nINSTR']);
+    expect(sent.map(request => request.lyrics)).toEqual(['[instrumental]', '[instrumental]']);
     expect(composeScore).toHaveBeenCalledTimes(2);
   });
 
