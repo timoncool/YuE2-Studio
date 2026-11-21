@@ -57,8 +57,9 @@ jobs:
           H=(-H "content-type: application/json" -H "accept: application/json, text/event-stream")
           init='{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"macos-window-check","version":"1"}}}'
           curl -s -m 30 -D headers.txt -o init.txt "${H[@]}" -d "$init" "$u"
-          sid=$(grep -i '^mcp-session-id:' headers.txt | tr -d '\r' | awk '{print $2}')
-          S=(); [ -n "$sid" ] && S=(-H "mcp-session-id: $sid")
+          cp headers.txt init.txt "$receipt/"
+          sid=$(awk 'tolower($1)=="mcp-session-id:" {gsub(/\r/, "", $2); print $2}' headers.txt)
+          S=(); if [ -n "$sid" ]; then S=(-H "mcp-session-id: $sid"); fi
           curl -s -m 30 -o /dev/null "${H[@]}" "${S[@]}" -d '{"jsonrpc":"2.0","method":"notifications/initialized"}' "$u"
           sed 's/^data: //' init.txt | grep -oE '"version":"[0-9.]+"' | tail -1
           sed 's/^data: //' init.txt | grep -q "\"version\":\"$VERSION\"" || { echo "[ERROR] the studio is not $VERSION"; head -c 600 init.txt; exit 1; }
