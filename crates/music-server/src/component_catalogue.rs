@@ -317,6 +317,32 @@ pub(crate) async fn cached_catalogue(target: ChannelTarget) -> Result<Option<Vec
     Ok(Some(read_snapshot(target, &root, &store.join(id), None).await?))
 }
 
+/// Keep the signed target and chain with an installed engine generation. Catalogue
+/// refreshes can retire their own older cache without breaking historical replay.
+pub(crate) async fn save_engine_proof(destination: &Path) -> Result<Vec<u8>> {
+    let root = installed_root().await?.context("component channel is not installed")?;
+    let channel = channel_store()?;
+    let _guard = lock_channel(&channel).await?;
+    let store = channel.join(ENGINES.cache);
+    let id = tokio::fs::read_to_string(store.join("accepted")).await?;
+    ensure!(snapshot_name(&id), "invalid catalogue cache pointer");
+    let from = store.join(id);
+    for folder in ["metadata", "targets"] {
+        let dest = destination.join(folder);
+        tokio::fs::create_dir_all(&dest).await?;
+        let mut entries = tokio::fs::read_dir(from.join(folder)).await?;
+        while let Some(entry) = entries.next_entry().await? {
+            ensure!(entry.file_type().await?.is_file(), "unexpected catalogue cache entry");
+            tokio::fs::copy(entry.path(), dest.join(entry.file_name())).await?;
+        }
+    }
+    read_snapshot(ENGINES, &root, destination, None).await
+}
+
+pub(crate) async fn verify_engine_proof(path: &Path) -> Result<Vec<u8>> {
+    let root = installed_root().await?.context("component channel is not installed")?;
+    read_snapshot(ENGINES, &root, path, None).await
+}
 pub(crate) async fn refresh_catalogue<T>(
     descriptor: ChannelTarget,
     http: &reqwest::Client,
