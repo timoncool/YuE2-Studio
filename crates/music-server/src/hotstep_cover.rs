@@ -1,6 +1,7 @@
 //! HOT-Step's native MuLaCover job, conditioned by the selected song's lead sheet.
 use super::*;
 use crate::{hotstep_cover_assets as assets, hotstep_cover_rolls as rolls};
+use crate::hotstep_generation::{self, Family};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
@@ -24,7 +25,10 @@ pub(super) async fn profiles(State(state): State<AppState>) -> Json<Value> {
     }
     Json(serde_json::json!({
         "engine": ENGINE, "engine_installed": server,
-        "profiles": [{"id": PROFILE, "label": "MuLaCover · HOT-Step · BF16", "ready": missing.is_empty(), "missing": missing}, crate::hotstep_sa3::profile(&state, server).await, crate::hotstep_heartmula::profile(&state, server).await, crate::hotstep_minimax::profile(&state, server).await]
+        "profiles": [{"id": PROFILE, "label": "MuLaCover · HOT-Step · BF16", "ready": missing.is_empty(), "missing": missing},
+            crate::hotstep_sa3::profile(&state, server).await, crate::hotstep_heartmula::profile(&state, server).await,
+            hotstep_generation::profile(&state, server, Family::MiniMax).await,
+            hotstep_generation::profile(&state, server, Family::Ace).await]
     }))
 }
 
