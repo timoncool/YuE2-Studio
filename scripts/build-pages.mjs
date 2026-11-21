@@ -430,7 +430,7 @@ ${nav}
       <a class="btn" href="${REPO}">${escape(w.starCta)}${starsBadge(escape(w.stars))}</a>
     </div>
     <p class="note">${escape(s.ctaNote)}</p>
-    <figure class="hero-shot"><img src="${shot(lang, '01-create')}" alt="${escape(shotAlt('01-create'))}" width="1600" height="1000" fetchpriority="high" /></figure>
+    <figure class="hero-shot"><img src="${shot(lang, '01-create')}" alt="${escape(shotAlt('01-create'))}" width="${pictureSize(lang, '01-create')[0]}" height="${pictureSize(lang, '01-create')[1]}" fetchpriority="high" /></figure>
   </section>
 
 ${samples}  <section id="features">
