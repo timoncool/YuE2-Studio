@@ -13494,10 +13494,9 @@ async fn start_score_on_engine(state: &AppState) -> Result<tokio::sync::OwnedRwL
 async fn watch_score_job(state: AppState, id: String, using: tokio::sync::OwnedRwLockReadGuard<()>) -> ScoreJob {
     let scores = state.score_jobs.clone();
     let submitted = ScoreJob::running(id.clone());
-    // Keep a terminal fallback for the accepted ID if Studio is interrupted before
-    // the watcher can fetch a result. Live polls still use the in-memory job.
-    let interrupted = failed_score(&id, "Studio stopped before this score was saved. Write the score again.".into());
-    store_score(&state.library, &interrupted);
+    // Record acceptance before returning the ID. After a restart the worker
+    // may still have this job, so leave the outcome undecided here.
+    store_score(&state.library, &submitted);
     track_engine_score(scores, submitted, using, async move {
         let mut errors = 0;
         let mut last_answer = std::time::Instant::now();
@@ -13609,7 +13608,7 @@ async fn score_job_status(
     if let Some(job) = state.score_jobs.read().await.iter().find(|job| job.id == job_id && score_still_cached(job)).cloned() {
         return Ok(Json(job));
     }
-    if let Some(score) = stored_score(&state.library, &job_id) {
+    if let Some(score) = restored_score(&state, &job_id).await {
         return Ok(Json(score));
     }
     read_engine_score(&state.music_server, &job_id).await.map(Json).map_err(|(status, error)| api_error(status, error))
@@ -13624,7 +13623,9 @@ async fn cancel_score_job(
     match cached {
         Some(job) if job.status != "running" => return Ok(Json(job)),
         None => {
-            if let Some(score) = stored_score(&state.library, &job_id) {
+            if let Some(score) = restored_score(&state, &job_id).await
+                && score.status != "running"
+            {
                 return Ok(Json(score));
             }
         }
@@ -13648,11 +13649,29 @@ fn store_score(library: &library::Library, score: &ScoreJob) {
     }
 }
 
-fn stored_score(library: &library::Library, id: &str) -> Option<ScoreJob> {
-    library.score_result(id).unwrap_or_else(|error| {
+async fn restored_score(state: &AppState, id: &str) -> Option<ScoreJob> {
+    let stored = state.library.score_result(id).unwrap_or_else(|error| {
         eprintln!("[ERROR] the saved score {id} could not be read: {error:#}");
         None
-    })
+    })?;
+    if stored.status != "running" {
+        return Some(stored);
+    }
+    let check = tokio::time::timeout(
+        std::time::Duration::from_secs(5),
+        read_engine_score(&state.music_server, id),
+    ).await;
+    match check {
+        Ok(Ok(score)) => {
+            if score.status != "running" {
+                store_score(&state.library, &score);
+            }
+            Some(score)
+        }
+        _ => Some(failed_score(
+            id, "Studio restarted before this score was saved, and the engine did not return it. Write the score again.".into(),
+        )),
+    }
 }
 
 async fn engine_http_error(response: reqwest::Response) -> anyhow::Error {
