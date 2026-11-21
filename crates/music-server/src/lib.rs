@@ -85,6 +85,7 @@ mod restore;
 mod rvc_voices;
 mod rvc_catalog;
 mod rvc_apply;
+mod seed_vc;
 mod rvc_audition;
 mod rvc_burn;
 mod rvc_burn_install;
@@ -1765,6 +1766,7 @@ pub async fn serve_on_port(port: u16) -> anyhow::Result<()> {
         .route("/v1/capabilities", get(capabilities))
         .route("/v1/rvc/voices", get(rvc_voices::list))
         .route("/v1/rvc/apply", post(rvc_apply::apply))
+        .route("/v1/seed-vc", get(seed_vc::status).post(seed_vc::apply))
         .route("/v1/rvc/preview", post(rvc_audition::preview))
         .route("/v1/rvc/preview/{id}/{side}", get(rvc_audition::audio))
         .route("/v1/rvc/selection", get(rvc_quick::selected).put(rvc_quick::select))
