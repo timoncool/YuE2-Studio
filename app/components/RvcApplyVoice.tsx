@@ -51,7 +51,8 @@ export function RvcApplyVoice({ song, voice, control, onSaved }: {
 
   const fastSetup = setup?.backends['vocal-fast-rs'];
   const fallbackSetup = setup?.backends['audio.cpp'];
-  const candidate = backend === 'auto'
+  const burnVoice = voice?.format === 'burn_safetensors';
+  const candidate = burnVoice ? 'burn-cuda' : backend === 'auto'
     ? fastSetup?.can_start ? 'vocal-fast-rs' : setup?.effective_backend
     : backend;
   const backendStatus = candidate && setup?.backends[candidate];
@@ -80,7 +81,7 @@ export function RvcApplyVoice({ song, voice, control, onSaved }: {
 
   function settings() {
     return { song_id: song.id, voice_id: voice?.id, semitone_shift: shift,
-      retrieval_blend: voice?.index_name ? blend : 0, backend };
+      retrieval_blend: voice?.index_name ? blend : 0, backend: burnVoice ? 'burn-cuda' : backend };
   }
 
   async function makePreview() {
@@ -130,12 +131,13 @@ export function RvcApplyVoice({ song, voice, control, onSaved }: {
       {!hasStems && <p role="status">{labels.stemsNeeded}</p>}
       <label className="block space-y-1">
         <span>{labels.backend}</span>
-        <select className={control} value={backend} disabled={!!busy} onChange={event => {
+        <select className={control} value={burnVoice ? 'burn-cuda' : backend} disabled={!!busy || burnVoice} onChange={event => {
           const next = event.target.value as RvcBackend;
           setBackend(next);
           localStorage.setItem(RVC_BACKEND_STORAGE, next);
           if (voice) chooseLastRvcVoice(voice.id, next);
         }}>
+          {burnVoice && <option value="burn-cuda">RVC Burn CUDA</option>}
           <option value="auto">{labels.auto}</option>
           <option value="vocal-fast-rs">vocal-fast-rs</option>
           {(setup?.backends['vocal-fast-metal']?.supported || backend === 'vocal-fast-metal') &&
@@ -148,7 +150,7 @@ export function RvcApplyVoice({ song, voice, control, onSaved }: {
       {candidate && backendStatus && !backendStatus.ready && backendStatus.can_start && (
         <p role="status">{labels.onStart.replace('{backend}', candidate)}</p>
       )}
-      {backend !== 'auto' && !ready && backendStatus && backendStatus.reason && <p role="status">{backendStatus.reason}</p>}
+      {(burnVoice || backend !== 'auto') && !ready && backendStatus && backendStatus.reason && <p role="status">{backendStatus.reason}</p>}
       <div className="grid gap-2 sm:grid-cols-2">
         <label className="block space-y-1">
           <span>{labels.pitch}</span>
@@ -162,8 +164,8 @@ export function RvcApplyVoice({ song, voice, control, onSaved }: {
           {voice && !voice.index_name && <span className="text-zinc-500">{labels.noIndex}</span>}
         </label>
       </div>
-      {backend !== 'audio.cpp' && <RvcNativeRuntime key={backend === 'vocal-fast-metal' ? 'metal' : 'default'} metal={backend === 'vocal-fast-metal'} onInstalled={reloadSetup} disabled={!!busy} />}
-      {(backend === 'audio.cpp' || backend === 'auto') && fallbackSetup && !fallbackSetup.ready && !ready && (
+      {!burnVoice && backend !== 'audio.cpp' && <RvcNativeRuntime key={backend === 'vocal-fast-metal' ? 'metal' : 'default'} metal={backend === 'vocal-fast-metal'} onInstalled={reloadSetup} disabled={!!busy} />}
+      {!burnVoice && (backend === 'audio.cpp' || backend === 'auto') && fallbackSetup && !fallbackSetup.ready && !ready && (
         <button type="button" disabled={!!busy} className="px-2 py-1 font-semibold text-pink-600 underline disabled:opacity-50 dark:text-pink-300"
           onClick={() => void install()}>{busy === 'install' ? labels.installing : `${labels.install}${mb ? ` · ${mb}` : ''}`}</button>
       )}

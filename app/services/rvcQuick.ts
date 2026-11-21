@@ -7,7 +7,7 @@ export const RVC_QUICK_EVENT = 'yue:rvc-quick';
 const SELECTION_CHANGED = 'yue:rvc-selection';
 const SELECTION_URL = '/v1/rvc/selection';
 
-export type RvcBackend = 'auto' | 'vocal-fast-rs' | 'vocal-fast-metal' | 'audio.cpp';
+export type RvcBackend = 'auto' | 'vocal-fast-rs' | 'vocal-fast-metal' | 'audio.cpp' | 'burn-cuda';
 export interface RvcSelection { voice_id: string; backend: RvcBackend }
 
 export function readRvcBackend(): RvcBackend {

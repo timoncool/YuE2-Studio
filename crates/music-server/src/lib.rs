@@ -75,6 +75,7 @@ mod rvc_voices;
 mod rvc_catalog;
 mod rvc_apply;
 mod rvc_audition;
+mod rvc_burn;
 mod rvc_quick;
 mod rvc_fast;
 mod rvc_fast_install;
@@ -1739,6 +1740,7 @@ pub async fn serve_on_port(port: u16) -> anyhow::Result<()> {
         .route("/v1/components/music-engines/{id}/status", get(engine_catalogue::install::status))
         .route("/v1/components/music-engines/{id}/install", post(engine_catalogue::install::install_selected))
         .route("/v1/rvc/catalog", get(rvc_catalog::list))
+        .route("/v1/rvc/catalog/sample/{id}", get(rvc_catalog::sample))
         .route("/v1/rvc/catalog/refresh", post(rvc_catalog::refresh))
         .route("/v1/rvc/catalog/install", post(rvc_catalog::install))
         .route("/v1/rvc/catalog/progress/{id}", get(rvc_catalog_progress::get))
@@ -1884,6 +1886,8 @@ pub async fn serve_on_port(port: u16) -> anyhow::Result<()> {
         .route("/v1/training/listen/install", post(install_listen_pack))
         .route("/v1/training/listen/cancel", post(cancel_listen_pack))
         .route("/v1/training/runs", post(start_training))
+        .route("/v1/training/rvc-burn", get(rvc_burn::status).post(rvc_burn::start))
+        .route("/v1/training/rvc-burn/{id}/install", post(rvc_burn::install))
         .route("/v1/training/hotstep-sa3", get(hotstep_sa3_training::status).post(hotstep_sa3_training::start))
         .route("/v1/training/hotstep-sa3/install", post(hotstep_sa3_training::install))
         .route("/v1/training/hotstep-heartmula", get(hotstep_sa3_training::heartmula_status).post(hotstep_sa3_training::heartmula_start))
@@ -3464,6 +3468,15 @@ async fn read_training(State(state): State<AppState>) -> Json<Value> {
         .map(|run| {
             let checkpoints = training.checkpoints(&run.id);
             let mut value = serde_json::to_value(&run).unwrap_or(Value::Null);
+            if run.engine == rvc_burn::STAGE {
+                if run.rvc_voice_id.as_deref().is_some_and(|id| {
+                    rvc_voices::read_voice(&update_data_root(&state).join("rvc/voices"), id).is_none()
+                }) {
+                    value["rvc_voice_id"] = Value::Null;
+                }
+                value["rvc_checkpoint_ready"] = serde_json::json!(training.rvc_burn_checkpoint(&run.id).is_ok() && run.status != training::RunStatus::Running);
+                value["rvc_best_checkpoint"] = serde_json::json!(training.rvc_burn_best(&run.id));
+            }
             value["checkpoints"] = serde_json::json!(checkpoints.iter().map(|checkpoint| checkpoint.step).collect::<Vec<_>>());
             // where "train further" starts, or why it cannot; a run going now has neither
             if run.status != training::RunStatus::Running {

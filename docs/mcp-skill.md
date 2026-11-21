@@ -175,6 +175,15 @@ and check `hotstep_cover_profiles`. Call `song_create` with native engine
 `hotstep`, model `heartmula-3b-q8_0`, `style` and optional `lyrics`. A
 `hotstep_heartmula` object can select the installed adapter and its strength.
 
+For a locally prepared [RVC Burn CUDA runtime](rvc-burn-runtime.md), check `rvc_training_status`.
+Use `dataset_create` and `dataset_add_folder` to add isolated voice recordings.
+Run `rvc_training_start` with the dataset ID and optional epochs, batch size
+and learning rate. `training_status` shows losses and the best checkpoint.
+Cancel with `training_cancel`. Install a saved checkpoint with
+`rvc_training_install_voice`. In `rvc_apply`, use the returned voice ID and
+`backend: "auto"` or `"burn-cuda"`. The stored voice uses Safetensors; legacy
+RVC voices continue to use their installed checkpoint and optional index.
+
 For HeartMuLa adapter training, use `hotstep_heartmula_training_status`,
 `hotstep_heartmula_training_install` and `hotstep_heartmula_training_start`.
 Give each sample a style and add lyrics to vocal tracks. The training run
@@ -381,6 +390,10 @@ move around. Check the result with `ui_screenshot`.
 - **video**: `video_open`, `video_get`, `video_set`, `video_render`, `video_play`, `video_pause`, `video_seek`, `video_close`.
 - **openrouter**: `openrouter_status`, `openrouter_set_key`, `openrouter_catalog`, `openrouter_catalog_refresh`, `openrouter_log`, `openrouter_complete`, `openrouter_cover`, `openrouter_transcribe`.
 - **restore**: `restore_status`, `restore_start` (a track or a file compressed to MP3, restored with Apollo into a new track `<title> · restored`), `restore_install`, `restore_remove`, `restore_cancel`.
+
+## RVC catalog demos
+
+`rvc_catalog_list` reports `sample_audio_url` for a published source demo and null when none is recorded. Use `has_sample` to filter the same paginated results. Fetch the returned audio URL to play the verified demo before installing its voice.
 
 ## RVC vocal audition
 
