@@ -5678,6 +5678,36 @@ struct PreferredTakeRequest {
     song_id: String,
 }
 
+/// A fixed vocabulary keeps imported engine names and voice metadata out of Hub.
+fn preferred_take_counter(engine: &str, metadata: &Value) -> Option<&'static str> {
+    match engine {
+        model_manager::ENGINE_ID => Some("take_preferred_yue2"),
+        ace::ENGINE_ID => Some("take_preferred_ace"),
+        native_minimax::ENGINE_ID => Some("take_preferred_minimax"),
+        audio_cpp_music::ENGINE => Some("take_preferred_audio_cpp"),
+        "hotstep" => Some("take_preferred_hotstep"),
+        "openrouter" => Some("take_preferred_openrouter"),
+        "rvc" => match metadata.pointer("/derived/settings/effective_backend")?.as_str()? {
+            "audio.cpp" => Some("take_preferred_rvc_audio_cpp"),
+            "vocal-fast-rs" => Some("take_preferred_rvc_fast"),
+            _ => None,
+        },
+        _ => None,
+    }
+}
+
+#[cfg(test)]
+#[test]
+fn preferred_take_uses_only_known_effective_backends() {
+    let metadata = serde_json::json!({"derived":{"settings":{
+        "voice_name":"private voice", "requested_backend":"auto", "effective_backend":"vocal-fast-rs"
+    }}});
+    assert_eq!(preferred_take_counter("rvc", &metadata), Some("take_preferred_rvc_fast"));
+    assert_eq!(preferred_take_counter("rvc", &Value::Null), None);
+    assert_eq!(preferred_take_counter("user-supplied-name", &metadata), None);
+    assert_eq!(preferred_take_counter("openrouter", &Value::Null), Some("take_preferred_openrouter"));
+}
+
 async fn select_library_playlist_preferred_take(
     State(state): State<AppState>,
     Path(id): Path<String>,
@@ -5686,9 +5716,22 @@ async fn select_library_playlist_preferred_take(
     match state.library.select_preferred_take(&id, &input.song_id)
         .map_err(|error| api_error(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?
     {
-        library::PreferredTakeSelection::Selected(selection) => Ok(Json(serde_json::json!({
-            "preferred_song_id": selection.song.id, "changed": selection.changed,
-        }))),
+        library::PreferredTakeSelection::Selected(selection) => {
+            if selection.changed {
+                if let (Some(hub), Some(counter)) = (
+                    state.hub.as_ref().filter(|hub| hub.telemetry_on()),
+                    preferred_take_counter(&selection.song.engine_id, &selection.song.metadata),
+                ) {
+                    let hub = hub.for_scheduled_report();
+                    if let Err(error) = tokio::task::spawn_blocking(move || hub.count(counter, 1)).await {
+                        studio_log!("[Hub] Could not record preferred take: {error}");
+                    }
+                }
+            }
+            Ok(Json(serde_json::json!({
+                "preferred_song_id": selection.song.id, "changed": selection.changed,
+            })))
+        }
         library::PreferredTakeSelection::PlaylistNotFound => Err(api_error(StatusCode::NOT_FOUND, "Playlist not found".into())),
         library::PreferredTakeSelection::NotPlayableMember => Err(api_error(StatusCode::BAD_REQUEST, "The preferred take must be a playable song in this playlist.".into())),
     }
