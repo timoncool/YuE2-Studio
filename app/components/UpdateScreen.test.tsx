@@ -29,6 +29,7 @@ describe('UpdatePlanView', () => {
     const api = vi.fn(async (url: string, init?: RequestInit) => {
       if (url === '/setup/update') return Response.json({ plan, job: null });
       if (url === '/v1/components/updates') return Response.json({ mode, updates });
+      if (url === '/v1/components/packages/installed') return new Response(null, { status: 404 });
       if (url === '/v1/components/updates/mode') {
         expect(init?.method).toBe('POST');
         mode = JSON.parse(String(init?.body)).mode;
@@ -81,6 +82,69 @@ describe('UpdatePlanView', () => {
     await act(async () => root.render(<UpdatePlanView />));
     expect(host.querySelector('section select')?.getAttribute('disabled')).toBeNull();
     expect(host.querySelector<HTMLSelectElement>('section select')?.value).toBe('auto');
+  });
+
+  it('rolls back only the selected installed generation and displays its individual automatic pause', async () => {
+    const plan = { version: '5.0.0', updated: [], added: [], retired: [], download: 0, freed: 0, show: false };
+    let current = { kind: 'music-engines', id: 'worker', name: 'Test worker', version: '2',
+      generation: 'new-generation', previous_generation: 'old-generation', automatic_updates_paused: false };
+    const other = { kind: 'music-models', id: 'weights', name: 'Test weights', version: '1',
+      generation: 'weight-generation', previous_generation: null, automatic_updates_paused: false };
+    const updated = { ...current };
+    const api = vi.fn(async (url: string, init?: RequestInit) => {
+      if (url === '/setup/update') return Response.json({ plan, job: null });
+      if (url === '/v1/components/updates') return Response.json({
+        mode: 'auto', updates: current.automatic_updates_paused ? [
+          { kind: current.kind, id: current.id, from_version: '1', to_version: '2',
+            changed_bytes: 256, automatic_updates_paused: true },
+        ] : [],
+      });
+      if (url === '/v1/components/packages/installed') return Response.json({ packages: [current, other], errors: [] });
+      if (url === '/v1/components/packages/music-engines/worker/rollback') {
+        expect(init?.method).toBe('POST');
+        expect(JSON.parse(String(init?.body))).toEqual({ from_generation: 'new-generation', to_generation: 'old-generation' });
+        current = { ...current, version: '1', generation: 'old-generation',
+          previous_generation: 'new-generation', automatic_updates_paused: true };
+        return Response.json(current);
+      }
+      if (url === '/v1/components/music-engines/worker/install') {
+        expect(init?.method).toBe('POST');
+        current = updated;
+        return Response.json({ generation: current.generation });
+      }
+      throw new Error(url);
+    });
+    vi.stubGlobal('fetch', api);
+    host = document.createElement('div');
+    document.body.append(host);
+    root = createRoot(host);
+    await act(async () => root.render(<UpdatePlanView />));
+    const select = [...host.querySelectorAll('label')]
+      .find(label => label.textContent?.startsWith('Installed package'))!.querySelector('select')!;
+    const choose = async (value: string) => {
+      await act(async () => {
+        select.value = value;
+        select.dispatchEvent(new Event('change', { bubbles: true }));
+      });
+    };
+    const rollback = () => [...host.querySelectorAll('button')].find(button => button.textContent === 'Restore previous version');
+    expect(rollback()).toBeUndefined();
+    await choose('music-models/weights');
+    expect(rollback()).toBeUndefined();
+    await choose('music-engines/worker');
+    await act(async () => rollback()!.click());
+    expect(select.selectedOptions[0].text).toBe('Test worker · 1');
+    expect(host.querySelector('li')?.textContent).toContain('Automatic updates paused for this package');
+    expect(host.querySelector('li')?.textContent).toContain('256 B');
+    expect(host.querySelector('section select')?.getAttribute('disabled')).toBeNull();
+    expect(host.querySelector<HTMLSelectElement>('section select')?.value).toBe('auto');
+    await act(async () => host.querySelector<HTMLButtonElement>('[aria-label="Update worker"]')!.click());
+    expect(select.selectedOptions[0].text).toBe('Test worker · 2');
+    expect(host.textContent).not.toContain('Automatic updates paused for this package');
+    expect(api.mock.calls.filter(([, init]) => init?.method === 'POST').map(([url]) => url)).toEqual([
+      '/v1/components/packages/music-engines/worker/rollback',
+      '/v1/components/music-engines/worker/install',
+    ]);
   });
 
   it('shows the exact recovery archive and local destination from the failed update', async () => {
