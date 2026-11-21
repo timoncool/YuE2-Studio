@@ -1,4 +1,4 @@
-name: MOSS SoundEffect Windows standalone
+name: ControlFoley Windows standalone
 
 on:
   push:
@@ -18,8 +18,9 @@ jobs:
         run: cargo build --locked -p music-server --bin music-server
       - uses: actions/upload-artifact@v7
         with:
-          name: moss-soundeffect-standalone
+          name: controlfoley-standalone
           path: target/debug/music-server.exe
           retention-days: 2
+
 
 
