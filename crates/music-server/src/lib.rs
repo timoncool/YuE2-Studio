@@ -6461,6 +6461,7 @@ async fn start_engine_again_with(
         report(music_pair::Stage::LoadingModel)?;
         match tokio::task::block_in_place(|| engine.ensure_started(std::time::Duration::from_secs(60))) {
             Ok(_) => {
+                report(music_pair::Stage::LoadingModel)?;
                 *state.running_max_seq.write().await = engine.config().options.max_seq.unwrap_or(MODEL_CONTEXT);
                 *state.kv_cache_running.write().await = Some(kv);
                 *state.keep_decision.write().await = Some(keep.clone());

@@ -110,11 +110,14 @@ impl Current {
 }
 
 #[derive(Default)]
-pub(super) struct Lifecycle(std::sync::Mutex<Current>);
+pub(super) struct Lifecycle {
+    current: std::sync::Mutex<Current>,
+    selected: tokio::sync::Notify,
+}
 
 impl Lifecycle {
     fn read(&self) -> std::sync::MutexGuard<'_, Current> {
-        self.0
+        self.current
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
     }
@@ -132,6 +135,16 @@ impl Lifecycle {
             .unwrap_or(u64::MAX);
         update(&mut current.status);
         true
+    }
+
+    async fn superseded(&self, revision: u64) {
+        loop {
+            let selected = self.selected.notified();
+            if self.read().status.revision != revision {
+                return;
+            }
+            selected.await;
+        }
     }
 
     pub(super) fn note_generation(&self, source: MusicSource) {
@@ -171,6 +184,7 @@ pub(super) async fn select(
         (current.select(request), current.snapshot())
     };
     if let Some(revision) = revision {
+        state.music_pair.selected.notify_waiters();
         tokio::spawn(prepare(state, revision, source));
     }
     Ok(Json(snapshot))
@@ -443,7 +457,11 @@ async fn start(state: &AppState, revision: u64, preparation: Preparation) -> any
             }
             evict_kept_models(state, "before preparing an ACE-Step pair").await;
             if stage(Stage::StartingEngine) {
-                state.ace_runtime.start(launch).await?;
+                tokio::select! {
+                    biased;
+                    _ = pair.superseded(revision) => return Ok(true),
+                    result = state.ace_runtime.start(launch) => { result?; }
+                }
             }
             Ok(true)
         }
@@ -456,10 +474,11 @@ async fn start(state: &AppState, revision: u64, preparation: Preparation) -> any
             }
             evict_kept_models(state, "before preparing a MiniMax pair").await;
             if stage(Stage::StartingEngine) {
-                state
-                    .minimax
-                    .start(&profile, update_data_root(state))
-                    .await?;
+                tokio::select! {
+                    biased;
+                    _ = pair.superseded(revision) => return Ok(true),
+                    result = state.minimax.start(&profile, update_data_root(state)) => { result?; }
+                }
             }
             Ok(true)
         }
