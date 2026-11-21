@@ -435,6 +435,59 @@ it.each([
     style: 'folk', lyrics: 'verse', duration_seconds: 18, steps: 7, seed: 42, ...extra });
 });
 
+it('submits the same MuLaCover reference after switching engines in either direction', async () => {
+  const firstScore = 'X:1\nK:C\nCDEF|';
+  const secondScore = 'X:1\nK:D\nDEFG|';
+  librarySongs = [
+    { id: 'first-recording', title: 'First', audioUrl: '/first.wav', generationParams: { abc: firstScore } },
+    { id: 'second-recording', title: 'Second', audioUrl: '/second.wav', generationParams: { abc: secondScore } },
+  ] as Song[];
+  vi.stubGlobal('fetch', vi.fn(async (url: string) => Response.json(url === '/v1/music/audio-cpp/models' ? {
+    engine: 'audio.cpp', engine_installed: true, models: [{ id: 'mulacover', ready: true, missing: [] }],
+  } : url === '/v1/music/native/hotstep/profiles' ? {
+    engine: 'hotstep', engine_installed: true,
+    profiles: [{ id: 'heartmula-mulacover', label: 'MuLaCover', ready: true, missing: [] }],
+  } : {})));
+  function Editor() {
+    const [route, choose] = React.useState<NonNullable<React.ComponentProps<typeof CreatePanel>['musicEngine']>>('local');
+    return panel({ musicEngine: route, onMusicEngineChange: choose });
+  }
+  const select = (label: string) => [...host.querySelectorAll('label')]
+    .find(node => node.textContent?.startsWith(label))!.querySelector('select')!;
+  const choose = (label: string, value: string) => act(() => {
+    const input = select(label);
+    input.value = value;
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  act(() => root.render(<Editor />));
+  await flush();
+  choose('Model', 'mulacover');
+  await flush();
+  choose('Original song', 'first-recording');
+  click(buttonNamed('create')!);
+  expect(sent[0]).toMatchObject({ music_source: { kind: 'audio_cpp', model: 'mulacover' }, cover_of: 'first-recording' });
+  expect(sent[0]).not.toHaveProperty('abc');
+  choose('Music engine', 'hotstep');
+  await flush();
+  expect(select('Original song').value).toBe('first-recording');
+  click(buttonNamed('create')!);
+  expect(sent[1]).toMatchObject({
+    music_source: { kind: 'native', engine: 'hotstep', model: 'heartmula-mulacover' }, cover_of: 'first-recording', abc: firstScore,
+  });
+  choose('Original song', 'second-recording');
+  choose('Music engine', 'audio.cpp');
+  await flush();
+  expect(select('Original song').value).toBe('second-recording');
+  expect(host.textContent).toContain('The draft keeps your ABC score.');
+  click(buttonNamed('create')!);
+  expect(sent[2]).toMatchObject({ music_source: { kind: 'audio_cpp', model: 'mulacover' }, cover_of: 'second-recording' });
+  expect(sent[2]).not.toHaveProperty('abc');
+  choose('Music engine', 'hotstep');
+  await flush();
+  click(buttonNamed('create')!);
+  expect(sent[3]).toMatchObject({ cover_of: 'second-recording', abc: secondScore });
+});
+
 it('keeps focus, the song draft and pair settings when switching the MiniMax Music3 engine', async () => {
   vi.stubGlobal('fetch', vi.fn(async (url: string) => Response.json(url === '/v1/music/audio-cpp/models' ? {
     engine: 'audio.cpp', engine_installed: true,
