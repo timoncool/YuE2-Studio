@@ -135,7 +135,7 @@ export type YueOutputFormat = 'flac' | 'mp3' | 'wav32';
 
 export type NativeMusicEngine = 'minimaxmusic-cpp' | 'acestep-cpp' | 'hotstep';
 export type ProfileMusicEngine = NativeMusicEngine | 'audio.cpp';
-export type MusicEngine = 'local' | 'openrouter' | ProfileMusicEngine;
+export type MusicEngine = 'local' | 'openrouter' | 'signed' | ProfileMusicEngine;
 
 /**
  * A YuE2 request as `/v1/music/jobs` accepts it. Field names are the engine's
@@ -146,7 +146,7 @@ export interface YueRequest {
   /** Capture the editor's selection with the job so later switches cannot reroute it. */
   hotstep_heartmula?: { adapter?: string; adapter_scale?: number };
   hotstep_sa3?: { sampler?: 'pingpong' | 'euler'; adapter?: string; adapter_scale?: number };
-  music_source?: { kind: 'local' } | { kind: 'openrouter' | 'audio_cpp'; model: string } | { kind: 'native'; engine: NativeMusicEngine; model: string };
+  music_source?: { kind: 'local' } | { kind: 'openrouter' | 'audio_cpp'; model: string } | { kind: 'native'; engine: NativeMusicEngine; model: string } | { kind: 'signed'; engine: string; model: string };
   midasheng?: import('./components/MiDashengFields').MiDashengPrompt;
   heartmula?: import('./components/HeartMuLaControls').HeartMuLaOptions;
   magenta?: import('./components/MagentaFields').MagentaOptions;

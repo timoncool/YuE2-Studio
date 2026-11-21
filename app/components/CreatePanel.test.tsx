@@ -456,21 +456,24 @@ it('keeps focus, the song draft and pair settings when switching the MiniMax Mus
   });
   act(() => root.render(<Editor />));
   await flush();
-  choose(model(), 'heartmula');
-  expect(document.activeElement).toBe(model());
+  const modelFamily = labeled('Model').querySelector('select')!;
+  choose(modelFamily, 'heartmula');
+  expect(document.activeElement).toBe(modelFamily);
   expect(buttonNamed('create')).toBeTruthy();
-  const musicEngine = labeled('Music source').querySelector('select')!;
-  choose(musicEngine, 'minimaxmusic-cpp');
+  choose(modelFamily, 'minimaxmusic-cpp');
+  expect(modelFamily.value).toBe('minimaxmusic-cpp');
+  const engine = labeled('Music engine').querySelector('select')!;
+  expect(engine.value).toBe('audio.cpp');
+  choose(engine, 'minimaxmusic-cpp');
   await flush();
   choose(model(), 'quality-q8');
   type(field('textarea[aria-label="styleCardTitle"]')!, 'acoustic folk');
   type(field('textarea[aria-label="lyrics"]')!, 'Morning light');
   type(labeled('Seed').querySelector('input')!, '11');
-  const engine = labeled('MiniMax Music3 · Music engine').querySelector('select')!;
   choose(engine, 'audio.cpp');
   await flush();
   expect(document.activeElement).toBe(engine);
-  expect(model().value).toBe('minimax_music3');
+  expect(modelFamily.value).toBe('minimaxmusic-cpp');
   expect(field('textarea[aria-label="lyrics"]')?.value).toBe('Morning light');
   type(labeled('Seed').querySelector('input')!, '22');
   click(buttonNamed('create')!);
@@ -486,6 +489,13 @@ it('keeps focus, the song draft and pair settings when switching the MiniMax Mus
   expect(sent.at(-1)).toMatchObject({
     music_source: { kind: 'native', engine: 'minimaxmusic-cpp', model: 'quality-q8' }, seed: 11, lyrics: 'Morning light',
   });
+  choose(modelFamily, 'heartmula');
+  expect([...engine.options].map(option => option.value)).toEqual(['audio.cpp', 'hotstep']);
+  expect(engine.value).toBe('audio.cpp');
+  choose(modelFamily, 'minimaxmusic-cpp');
+  await flush();
+  expect(engine.value).toBe('minimaxmusic-cpp');
+  expect(labeled('Seed').querySelector('input')?.value).toBe('11');
 });
 
 it('chooses MiniMax Music3 through audio.cpp and reuses the saved seed and format', async () => {
@@ -515,14 +525,14 @@ it('chooses MiniMax Music3 through audio.cpp and reuses the saved seed and forma
   }
   act(() => root.render(<Editor />));
   await flush();
-  const option = host.querySelector<HTMLOptionElement>('option[value="audio.cpp"]')!;
-  expect(option.textContent).toBe('audio.cpp');
-  const engineSelect = option.parentElement as HTMLSelectElement;
+  const pairControl = (name: string) => [...host.querySelectorAll('label')]
+    .find(label => label.textContent?.startsWith(name))!.querySelector('select')!;
   const choose = (select: HTMLSelectElement, value: string) => act(() => {
     select.value = value;
     select.dispatchEvent(new Event('change', { bubbles: true }));
   });
-  choose(engineSelect, 'audio.cpp');
+  choose(pairControl('Model'), 'minimaxmusic-cpp');
+  choose(pairControl('Music engine'), 'audio.cpp');
   await flush();
   const generate = () => buttonNamed('create') as HTMLButtonElement;
   expect(generate().disabled).toBe(true);
@@ -540,7 +550,7 @@ it('chooses MiniMax Music3 through audio.cpp and reuses the saved seed and forma
   await flush();
   expect(generate().disabled).toBe(false);
   expect(host.textContent).toContain('quality-q8 · Q8_0');
-  const models = host.querySelector<HTMLOptionElement>('option[value="heartmula"]')!.parentElement as HTMLSelectElement;
+  const models = pairControl('Model');
   choose(models, 'heartmula');
   expect(models.value).toBe('heartmula');
   expect(generate().disabled).toBe(true);
@@ -900,6 +910,160 @@ describe('Reuse prompt (#216)', () => {
   });
 });
 
+it('lists signed model pairs for this platform and installs only the selected engine and model', async () => {
+  const installed = new Set<string>(['engine-b']);
+  const fetcher = vi.fn(async (url: string, init?: RequestInit) => {
+    if (url === '/v1/components/music-engines') return Response.json({ platform: 'windows-x86_64', engines: [], models: [] });
+    if (url === '/v1/components/music-engines/refresh') {
+      expect(init?.method).toBe('POST');
+      return Response.json({
+      platform: 'windows-x86_64',
+      engines: [
+        { id: 'engine-a', name: 'Engine A', version: '1', platform: 'windows-x86_64', protocol: 'music-http-v1', files: [{ bytes: 2 ** 30 }] },
+        { id: 'engine-b', name: 'Engine B', version: '1', platform: 'windows-x86_64', protocol: 'music-http-v1', files: [{ bytes: 2 ** 30 }] },
+        { id: 'engine-c', name: 'Linux C', version: '1', platform: 'linux-x86_64', protocol: 'music-http-v1', files: [] },
+        { id: 'engine-d', name: 'Unsupported D', version: '1', platform: 'windows-x86_64', protocol: 'future', files: [] },
+      ],
+      models: [
+        { id: 'signed-model', name: 'Test local model', version: '1', engines: ['engine-a', 'engine-b', 'engine-c', 'engine-d'], files: [{ bytes: 2 ** 30 }] },
+        { id: 'linux-only', name: 'Linux-only model', version: '1', engines: ['engine-c'], files: [] },
+      ],
+      });
+    }
+    if (url === '/v1/components/music-models/signed-model/install') {
+      expect(init?.method).toBe('POST');
+      installed.add('signed-model');
+      return Response.json({ generation: 'm1', reused_bytes: 0, downloaded_bytes: 2 ** 30 });
+    }
+    if (url === '/v1/components/music-engines/engine-a/install') {
+      expect(init?.method).toBe('POST');
+      installed.add('engine-a');
+      return Response.json({ generation: 'a1', reused_bytes: 0, downloaded_bytes: 2 ** 30 });
+    }
+    if (url.endsWith('/status?probe=presence')) {
+      const id = url.split('/').at(-2)!;
+      return Response.json(installed.has(id) ? { id, generation: id + '-1', version: '1', verification: 'presence' } : {}, { status: installed.has(id) ? 200 : 409 });
+    }
+    return Response.json({});
+  });
+  vi.stubGlobal('fetch', fetcher);
+  function Editor() {
+    const [engine, select] = React.useState<NonNullable<React.ComponentProps<typeof CreatePanel>['musicEngine']>>('local');
+    return panel({ musicEngine: engine, onMusicEngineChange: select });
+  }
+  const select = (name: string) => [...host.querySelectorAll('label')]
+    .find(label => label.textContent?.startsWith(name))!.querySelector('select')!;
+  const choose = (name: string, value: string) => act(() => {
+    const input = select(name);
+    input.value = value;
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  act(() => root.render(<Editor />));
+  await flush();
+  expect([...select('Model').options].map(row => row.value)).not.toContain('signed:signed-model');
+  click(buttonNamed('Refresh installable models')!);
+  await flush();
+  expect([...select('Model').options].map(row => row.value)).toContain('signed:signed-model');
+  expect(select('Model').textContent).not.toContain('Linux-only');
+  expect(fetcher.mock.calls.some(([url]) => url.includes('/status'))).toBe(false);
+  choose('Model', 'signed:signed-model');
+  await flush();
+  expect([...select('Music engine').options].map(row => row.value)).toEqual(['engine-a', 'engine-b']);
+  expect(fetcher.mock.calls.filter(([url]) => url.includes('/status')).map(([url]) => url)).toEqual([
+    '/v1/components/music-engines/engine-a/status?probe=presence',
+    '/v1/components/music-engines/engine-a/models/signed-model/status?probe=presence',
+  ]);
+  expect(buttonNamed('Install · 2 GiB')).toBeTruthy();
+  expect((buttonNamed('create') as HTMLButtonElement).disabled).toBe(true);
+  click(buttonNamed('Install · 2 GiB')!);
+  await flush();
+  await flush();
+  type(field('textarea[aria-label="styleCardTitle"]')!, 'acoustic folk');
+  click(buttonNamed('create')!);
+  expect(sent.at(-1)).toMatchObject({ style: 'acoustic folk', music_source: { kind: 'signed', engine: 'engine-a', model: 'signed-model' } });
+  choose('Music engine', 'engine-b');
+  expect((buttonNamed('create') as HTMLButtonElement).disabled).toBe(true);
+  await flush();
+  click(buttonNamed('create')!);
+  expect(sent.at(-1)).toMatchObject({ style: 'acoustic folk', music_source: { kind: 'signed', engine: 'engine-b', model: 'signed-model' } });
+  choose('Model', 'local');
+  choose('Model', 'signed:signed-model');
+  expect(select('Music engine').value).toBe('engine-b');
+});
+
+it('lets an active signed update be cancelled and retried while the previous pair remains usable', async () => {
+  let installedVersion = '1';
+  let resolveInstall: ((reply: Response) => void) | undefined;
+  const fetcher = vi.fn(async (url: string, init?: RequestInit) => {
+    if (url === '/v1/components/music-engines') return Response.json({
+      platform: 'windows-x86_64',
+      engines: [{ id: 'engine', name: 'Engine', version: '2', platform: 'windows-x86_64',
+        protocol: 'music-http-v1', files: [{ bytes: 2 ** 30 }] }],
+      models: [{ id: 'weights', name: 'Weights', version: '1', engines: ['engine'], files: [{ bytes: 2 ** 30 }] }],
+    });
+    if (url === '/v1/components/music-engines/engine/status?probe=presence') return Response.json({ version: installedVersion, generation: installedVersion, verification: 'presence' });
+    if (url === '/v1/components/music-engines/engine/models/weights/status?probe=presence') return Response.json({ version: '1', verification: 'presence' });
+    if (url === '/v1/components/music-engines/engine/install') {
+      expect(init?.method).toBe('POST');
+      return new Promise<Response>(resolve => { resolveInstall = resolve; });
+    }
+    if (url === '/v1/components/packages/music-engines/engine/progress') return Response.json({
+      active: resolveInstall ? { stage: 'downloading', file: 'engine.exe', total_bytes: 2 ** 30,
+        downloaded_bytes: 250, reused_bytes: 750 } : null,
+    });
+    if (url === '/v1/components/packages/music-engines/engine/cancel') {
+      expect(init?.method).toBe('POST');
+      const finish = resolveInstall!;
+      resolveInstall = undefined;
+      finish(Response.json({ error: 'Package installation cancelled' }, { status: 409 }));
+      return Response.json({ cancel_requested: true });
+    }
+    return Response.json({});
+  });
+  vi.stubGlobal('fetch', fetcher);
+  function Editor() {
+    const [engine, select] = React.useState<NonNullable<React.ComponentProps<typeof CreatePanel>['musicEngine']>>('local');
+    return panel({ musicEngine: engine, onMusicEngineChange: select });
+  }
+  act(() => root.render(<Editor />));
+  await flush();
+  const select = [...host.querySelectorAll('label')]
+    .find(label => label.textContent?.startsWith('Model'))!.querySelector('select')!;
+  act(() => {
+    select.value = 'signed:weights';
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  await flush();
+  const update = () => buttonNamed('Update · 1 GiB');
+  click(update()!);
+  await flush();
+  expect(host.textContent).toContain('Downloading… · engine.exe');
+  const progress = host.querySelector('progress')!;
+  expect(progress.value).toBe(1000);
+  expect(progress.max).toBe(2 ** 30);
+  click(buttonNamed('cancel')!);
+  await flush();
+  await flush();
+  expect(update()).toBeTruthy();
+  expect(host.textContent).not.toContain('Package installation cancelled');
+  expect((buttonNamed('create') as HTMLButtonElement).disabled).toBe(false);
+  type(field('textarea[aria-label="styleCardTitle"]')!, 'piano');
+  click(buttonNamed('create')!);
+  expect(sent.at(-1)).toMatchObject({ music_source: { kind: 'signed', engine: 'engine', model: 'weights' } });
+  click(update()!);
+  await flush();
+  await act(async () => {
+    const finish = resolveInstall!;
+    resolveInstall = undefined;
+    installedVersion = '2';
+    finish(Response.json({ generation: '2', downloaded_bytes: 2 ** 30, reused_bytes: 0 }));
+  });
+  await flush();
+  expect(update()).toBeUndefined();
+  expect((buttonNamed('create') as HTMLButtonElement).disabled).toBe(false);
+  expect(fetcher.mock.calls.filter(([url]) => url === '/v1/components/music-engines/engine/install')).toHaveLength(2);
+});
+
 describe('OpenRouter music creation', () => {
   const catalog = () => Response.json({ models: [
     { id: 'test/music', name: 'Music test model', capabilities: ['music_generation'] },
@@ -923,14 +1087,14 @@ describe('OpenRouter music creation', () => {
     act(() => root.render(panel({ musicEngine: 'local', onMusicEngineChange: engineChange })));
     await flush();
     expect(buttonNamed('Install local models')).toBeDefined();
-    choose(select('Music source'), 'openrouter');
+    expect(host.textContent).not.toContain('Speech-only test model');
+    choose(select('Model'), 'cloud:test/music');
     expect(engineChange).toHaveBeenCalledWith('openrouter');
 
     act(() => root.render(panel({ musicEngine: 'openrouter', onMusicEngineChange: engineChange })));
     await flush();
-    expect(host.textContent).not.toContain('Speech-only test model');
-    expect(create().disabled).toBe(true);
-    choose(select('OpenRouter music model'), 'test/music');
+    expect(select('Model').value).toBe('cloud:test/music');
+    expect(select('Music engine').value).toBe('openrouter');
     expect(localStorage.getItem('yue:openrouter-music-model')).toBe('test/music');
     type(field('textarea[aria-label="styleCardTitle"]')!, 'ambient soul, soft piano');
     click(create());
