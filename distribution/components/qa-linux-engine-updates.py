@@ -1,6 +1,7 @@
 """Linux Studio release candidate acceptance through public HTTP/MCP."""
 import contextlib
 import base64
+import fcntl
 import functools
 import hashlib
 import io
@@ -317,8 +318,23 @@ try:
                 assert cloud_started.wait(8)
                 publish(5)
                 refresh()
-                pending = [(target, pool.submit(tool, "music_engine_package_install", {"id":target}))
-                           for target in (engine, peer)]
+                peer_dir = active_path.parent.with_name(peer)
+                def generations(directory):
+                    return {path.name for path in directory.glob("generation-*")}
+                before_main, before_peer = generations(active_path.parent), generations(peer_dir)
+                with (data / "component-channel/refresh.lock").open("r+b") as refresh_lock:
+                    fcntl.flock(refresh_lock, fcntl.LOCK_EX)
+                    first_waiter = pool.submit(tool, "music_engine_package_install", id_arg, True)
+                    peer_update = pool.submit(tool, "music_engine_package_install", {"id":peer})
+                    await_until(lambda: generations(active_path.parent) - before_main, bool)
+                    other_stage = await_until(lambda: generations(peer_dir) - before_peer, bool)
+                    assert tool("music_package_cancel", progress_args)["cancel_requested"]
+                    proof_wait_cancel = first_waiter.result(timeout=5)
+                    assert "cancelled" in json.dumps(proof_wait_cancel).lower()
+                    assert generations(active_path.parent) == before_main
+                    assert generations(peer_dir) - before_peer == other_stage and not peer_update.done()
+                    pending = [(engine, pool.submit(tool, "music_engine_package_install", id_arg)),
+                               (peer, peer_update)]
                 for target, future in pending:
                     active = await_until(lambda: tool("music_package_progress", {"kind":"music-engines","id":target})["active"],
                                          lambda p: p is not None and p["stage"] == "waiting_for_idle")
@@ -342,7 +358,8 @@ try:
                 assert cloud_done["status"] == "completed", cloud_done
                 report["parallel_activation"] = {"before":b_during,"applied":applied,"cloud_during":cloud_now,
                                                  "rollback_busy":refused_rollback,"rollback_waiting":queued_rollback,
-                                                 "restored":restored,"cloud_finished":cloud_done["status"]}
+                                                 "restored":restored,"cloud_finished":cloud_done["status"],
+                                                 "cancel_while_proof_waits":proof_wait_cancel,"retained_peer_stage":list(other_stage)}
         origin_server.shutdown()
         provider.shutdown()
     with start("offline.log") as (call, tool):
