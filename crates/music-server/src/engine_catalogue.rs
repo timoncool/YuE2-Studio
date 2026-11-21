@@ -53,7 +53,13 @@ struct NativeRuntimeDescriptor {
     executable: String,
 }
 
+const NATIVE_WINDOWS_PROTOCOL: &str = "music-native-windows-v2";
+
 impl EnginePackage {
+    fn installable(&self) -> bool {
+        install::supported_protocol(&self.protocol) || self.compatible_native().is_some()
+    }
+
     fn compatible_native(&self) -> Option<&NativeRuntimeDescriptor> {
         let native = self.native_runtime.as_ref()?;
         let name = match self.id.as_str() {
@@ -61,13 +67,14 @@ impl EnginePackage {
             crate::native_minimax::ENGINE_ID => "mm-server",
             _ => return None,
         };
-        let suffix = if self.platform.starts_with("windows-") {
-            ".exe"
-        } else {
-            ""
+        let windows = self.platform.starts_with("windows-");
+        let suffix = if windows { ".exe" } else { "" };
+        let api = match (self.protocol.as_str(), native.api_version) {
+            ("music-http-v1", 1) => true,
+            (NATIVE_WINDOWS_PROTOCOL, 2) => windows && native.executable == self.executable,
+            _ => false,
         };
-        (self.protocol == "music-http-v1"
-            && native.api_version == 1
+        (api
             && native.executable == format!("{name}{suffix}")
             && self.files.iter().any(|file| file.name == native.executable))
         .then_some(native)
@@ -89,10 +96,43 @@ struct PackageFile {
     bytes: u64,
     sha256: String,
     url: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    cuda_variant: Option<CudaVariant>,
 }
 
-// A component can install only direct children of its own version directory.
-// Use the same portable filename rules even when browsing from another OS.
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "lowercase")]
+enum CudaVariant {
+    Cuda12,
+    Cuda13,
+}
+
+impl CudaVariant {
+    fn folder(self) -> &'static str {
+        match self {
+            Self::Cuda12 => "cuda12",
+            Self::Cuda13 => "cuda13",
+        }
+    }
+
+    fn pin(self) -> &'static str {
+        match self {
+            Self::Cuda12 => "ggml-cuda12.dll",
+            Self::Cuda13 => "ggml-cuda13.dll",
+        }
+    }
+}
+
+impl PackageFile {
+    fn relative_path(&self) -> std::path::PathBuf {
+        match self.cuda_variant {
+            Some(variant) => std::path::Path::new(variant.folder()).join("ggml-cuda.dll"),
+            None => self.name.as_str().into(),
+        }
+    }
+}
+
+// A component's signed pins use portable names, even when browsing from another OS.
 pub(super) fn portable_name(value: &str) -> bool {
     let stem = value
         .split('.')
@@ -172,6 +212,29 @@ fn parse(bytes: &[u8]) -> Result<Catalogue> {
             "duplicate engine for platform"
         );
         validate_files(&package.files)?;
+        let universal = package.compatible_native().is_some_and(|native| native.api_version == 2);
+        if universal {
+            for variant in [CudaVariant::Cuda12, CudaVariant::Cuda13] {
+                ensure!(
+                    package.files.iter().any(|file| {
+                        file.cuda_variant == Some(variant) && file.name == variant.pin()
+                    }),
+                    "missing signed Windows native CUDA variant: {}",
+                    variant.folder()
+                );
+            }
+        }
+        ensure!(
+            package.files.iter().all(|file| match file.cuda_variant {
+                Some(variant) => universal && file.name == variant.pin(),
+                None => {
+                    let name = file.name.to_ascii_lowercase();
+                    !universal || !matches!(name.as_str(), "cuda12" | "cuda13" | "ggml-cuda.dll")
+                        && !(name.starts_with("ggml-cuda-") && name.ends_with(".dll"))
+                }
+            }),
+            "invalid signed Windows native CUDA layout"
+        );
         ensure!(
             package
                 .files
@@ -207,6 +270,10 @@ fn parse(bytes: &[u8]) -> Result<Catalogue> {
             "unknown or duplicate model engine"
         );
         validate_files(&model.files)?;
+        ensure!(
+            model.files.iter().all(|file| file.cuda_variant.is_none()),
+            "model packages do not install runtime CUDA variants"
+        );
     }
     Ok(catalog)
 }
@@ -275,7 +342,7 @@ mod tests {
                     .executable,
                 native
             );
-            package["native_runtime"]["api_version"] = json!(2);
+            package["native_runtime"]["api_version"] = json!(3);
             assert!(read(&package).engines[0].compatible_native().is_none());
             package["native_runtime"] = json!({"api_version":1,"executable":"worker.exe"});
             assert!(read(&package).engines[0].compatible_native().is_none());
