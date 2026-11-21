@@ -1038,13 +1038,25 @@ fn id_only(name: &str, what: &str) -> Value {
     object(json!({ name: { "type": "string", "description": what } }), &[name])
 }
 
+fn rvc_runtime_schema() -> Value {
+    object(json!({ "metal": { "type": "boolean", "description": "Choose the experimental Apple Metal projections runtime." } }), &[])
+}
+
+fn rvc_runtime_route(args: &Value) -> String {
+    if args.get("metal").and_then(Value::as_bool) == Some(true) {
+        "/v1/rvc/native/runtime?metal=true".into()
+    } else {
+        "/v1/rvc/native/runtime".into()
+    }
+}
+
 fn song_create_schema(mut properties: Value) -> Value {
     properties["rvc_after"] = json!({
         "type": "object",
         "description": "After successful generation, save a separate RVC take with this voice and backend. Use rvc_quick_list for progress.",
         "properties": {
             "voice_id": { "type": "string", "description": "An installed RVC voice ID" },
-            "backend": { "type": "string", "enum": ["auto", "vocal-fast-rs", "audio.cpp"] }
+            "backend": { "type": "string", "enum": ["auto", "vocal-fast-rs", "vocal-fast-metal", "audio.cpp"] }
         },
         "required": ["voice_id"]
     });
@@ -2682,7 +2694,7 @@ fn tools() -> &'static [Tool] {
             },
             Tool {
                 name: "rvc_backend_status",
-                description: "Check readiness of both RVC backends without starting the native worker.",
+                description: "Check RVC backend readiness without starting a native worker. Metal is experimental and its device is checked on start.",
                 schema: nothing,
                 call: |_| get("/v1/rvc/apply/setup".into()),
             },
@@ -2695,20 +2707,20 @@ fn tools() -> &'static [Tool] {
             Tool {
                 name: "rvc_native_runtime_status",
                 description: "Check host support, selected backend, remaining bytes and download progress for vocal-fast-rs without starting the worker.",
-                schema: nothing,
-                call: |_| get("/v1/rvc/native/runtime".into()),
+                schema: rvc_runtime_schema,
+                call: |args| get(rvc_runtime_route(args)),
             },
             Tool {
                 name: "rvc_native_runtime_install",
                 description: "Start downloading the verified vocal-fast-rs runtime for this host and its acoustic weights. Supported runtimes include CPU on Apple Silicon with macOS 13+ and TensorRT-RTX on compatible Windows and Linux hardware. Read rvc_native_runtime_status for progress.",
-                schema: nothing,
-                call: |_| post("/v1/rvc/native/runtime".into(), json!({})),
+                schema: rvc_runtime_schema,
+                call: |args| post(rvc_runtime_route(args), json!({})),
             },
             Tool {
                 name: "rvc_native_runtime_cancel",
                 description: "Cancel the active vocal-fast-rs runtime download. Keeps installed components.",
-                schema: nothing,
-                call: |_| send(Method::DELETE, "/v1/rvc/native/runtime".into(), json!({})),
+                schema: rvc_runtime_schema,
+                call: |args| send(Method::DELETE, rvc_runtime_route(args), json!({})),
             },
             Tool {
                 name: "rvc_apply",
@@ -2718,7 +2730,7 @@ fn tools() -> &'static [Tool] {
                     "voice_id": { "type": "string", "description": "The installed ID from rvc_voices_list" },
                     "semitone_shift": { "type": "integer", "minimum": -24, "maximum": 24 },
                     "retrieval_blend": { "type": "number", "minimum": 0, "maximum": 1 },
-                    "backend": { "type": "string", "enum": ["auto", "vocal-fast-rs", "audio.cpp"] },
+                    "backend": { "type": "string", "enum": ["auto", "vocal-fast-rs", "vocal-fast-metal", "audio.cpp"] },
                 }), &["song_id", "voice_id"]),
                 call: |args| post("/v1/rvc/apply".into(), args.clone()),
             },
@@ -2733,7 +2745,7 @@ fn tools() -> &'static [Tool] {
                 description: "Remember the installed RVC voice and backend used by the quick library action.",
                 schema: || object(json!({
                     "voice_id": { "type": "string" },
-                    "backend": { "enum": ["auto", "vocal-fast-rs", "audio.cpp"] }
+                    "backend": { "enum": ["auto", "vocal-fast-rs", "vocal-fast-metal", "audio.cpp"] }
                 }), &["voice_id"]),
                 call: |args| send(Method::PUT, "/v1/rvc/selection".into(), args.clone()),
             },
@@ -2743,7 +2755,7 @@ fn tools() -> &'static [Tool] {
                 schema: || object(json!({
                     "song_id": { "type": "string" },
                     "voice_id": { "type": "string" },
-                    "backend": { "enum": ["auto", "vocal-fast-rs", "audio.cpp"] }
+                    "backend": { "enum": ["auto", "vocal-fast-rs", "vocal-fast-metal", "audio.cpp"] }
                 }), &["song_id"]),
                 call: |args| post("/v1/rvc/quick".into(), args.clone()),
             },
