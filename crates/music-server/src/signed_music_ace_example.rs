@@ -71,6 +71,7 @@ pub async fn run_ace_adapter() -> Result<()> {
             adapters_root: None,
             device: Some(if cuda { "CUDA0" } else { "CPU" }.into()),
             cuda_backend: cuda.then_some(cuda_dir),
+            managed_data_root: None,
             log_path: log_dir.path().join("ace.log"),
         })
         .await?;

@@ -219,7 +219,7 @@ export const ProviderSettings: React.FC = () => {
                 type={showKey ? 'text' : 'password'}
                 value={apiKey}
                 onChange={event => setApiKey(event.target.value)}
-                placeholder={cloudReady ? 'Replace the stored key…' : 'sk-or-…'}
+                placeholder={cloudReady ? t('providerKeyReplace') : 'sk-or-…'}
                 autoComplete="off"
                 className={`${CONTROL} pr-10`}
               />
@@ -227,7 +227,8 @@ export const ProviderSettings: React.FC = () => {
                 type="button"
                 onClick={() => setShowKey(value => !value)}
                 className="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-pink-500"
-                title={showKey ? 'Hide' : 'Show'}
+                aria-label={t(showKey ? 'providerKeyHide' : 'providerKeyShow')}
+                title={t(showKey ? 'providerKeyHide' : 'providerKeyShow')}
               >
                 {showKey ? <EyeOff size={15} /> : <Eye size={15} />}
               </button>

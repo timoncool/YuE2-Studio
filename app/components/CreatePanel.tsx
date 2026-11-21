@@ -42,6 +42,7 @@ import { writerInstruction } from '../services/songWriting';
 import { songWritingStrings } from '../i18n/songWriting';
 import { MagentaFields, magentaModel, restoreMagentaOptions } from './MagentaFields';
 import { MiDashengFields, miDashengModel, miDashengPromptReady, restoreMiDashengPrompt } from './MiDashengFields';
+import { NativeMusicRuntimeInstall } from './NativeMusicRuntimeInstall';
 import { HeartMuLaControls, AudioCppModelInstall, emptyHeartMuLaDraft, heartMuLaDraft, heartMuLaOptions } from './HeartMuLaControls';
 import { HotStepSa3Controls, hotStepSa3Profile, hotStepHeartmulaProfile, type HotStepSa3Draft } from './HotStepSa3Controls';
 import { StableAudioControls, emptyStableAudioDraft, stableAudioDraft, stableAudioOptions, stableAudioPromptRequired } from './StableAudioControls';
@@ -1928,6 +1929,8 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
                     {native.loading && <p role="status" className="text-xs">{nativeStrings.loading}</p>}
                     {native.error && <p role="alert" className="text-xs">{nativeStrings.error}</p>}
                     {!native.loading && !native.error && !native.installed && <p role="status" className="text-xs">{nativeStrings.engineMissing}</p>}
+                    {!native.loading && !native.error && !native.installed && (musicEngine === 'acestep-cpp' || musicEngine === 'minimaxmusic-cpp') &&
+                      <NativeMusicRuntimeInstall key={musicEngine} engine={musicEngine} onInstalled={native.refresh} />}
                     {!native.loading && !native.error && native.profiles.length === 0 && native.installed && <p className="text-xs">{nativeStrings.empty}</p>}
                     {native.originalModels && (
                       <div className="space-y-1 text-xs" role="status">

@@ -60,7 +60,7 @@ struct PackageFile {
 
 // A component can install only direct children of its own version directory.
 // Use the same portable filename rules even when browsing from another OS.
-fn portable_name(value: &str) -> bool {
+pub(super) fn portable_name(value: &str) -> bool {
     let stem = value
         .split('.')
         .next()

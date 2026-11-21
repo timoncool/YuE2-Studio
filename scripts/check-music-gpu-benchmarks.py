@@ -211,17 +211,41 @@ def main():
     verify_residency(residency, rows, args.evidence_dir)
     validate_data(rows, args.evidence_dir)
     radeon = verify_radeon(data["radeon_pair"], args.evidence_dir)
+    native = []
+    receipt = None
+    if args.evidence_dir:
+        receipt = json.loads((args.evidence_dir / "yue2-242-native-pair.json").read_bytes())
+    for result in data["native_radeon_pair"]["results"]:
+        cold, *warm = result["runs"]
+        assert len(warm) == 3 and all(SHA256.fullmatch(run["sha256"]) and run["rms_pcm16"] > 1
+                                     for run in result["runs"])
+        assert result["process_start_to_first_wav_s"] >= cold["request_to_wav_s"]
+        assert median(run["request_to_wav_s"] for run in warm) == result["warm_median_s"]
+        peak = result["wddm"]
+        assert peak["samples"] > 0
+        if receipt is not None:
+            source = receipt[{"HIP": "ROCm0", "Vulkan": "Vulkan1"}[result["backend"]]]
+            assert source["runs"] == result["runs"] and source["revision"] == result["revision"]
+            assert source["process_start_to_first_wav_s"] == result["process_start_to_first_wav_s"]
+            assert peak == next(p for n, p in source["wddm_sampled_peaks_by_adapter"].items()
+                                if n.endswith(receipt["verified_adapter_luid"]))
+        native.append([result["backend"] + " " + result["revision"][:8],
+                       f'{result["process_start_to_first_wav_s"]:.3f}', f'{result["warm_median_s"]:.3f}',
+                       f'{peak["dedicated_bytes"]/GIB:.2f}', f'{peak["shared_bytes"]/GIB:.2f}'])
     radeon_section = "radeon-gpu-pair"
     readme = ROOT / "README.md"
     validate_table(readme, readme_rows(readme), rows, residency.values())
     assert readme_rows(readme, radeon_section) == radeon
+    assert len(native) == 2 and readme_rows(readme, "native-radeon-pair") == native
     for locale in LOCALES:
         page = ROOT / "docs" / f"{locale}.html"
         validate_table(page, site_rows(page), rows, residency.values(), decimal_comma=locale in {"ru", "pt"})
         matrix = [[value.replace(".", ",") for value in row] for row in radeon] if locale in {"ru", "pt"} else radeon
         assert site_rows(page, radeon_section) == matrix, page
+        native_rows = [[row[0], *[v.replace(".", ",") for v in row[1:]]] for row in native] if locale in {"ru", "pt"} else native
+        assert site_rows(page, "native-radeon-pair") == native_rows, page
         assert data["radeon_pair"]["source_sha"][:8] in section(page, radeon_section), page
-    print(f"{len(rows)} timing results and {len(residency)} published residency results plus the Radeon pair match the README and {len(LOCALES)} site pages.")
+    print(f"{len(rows)} timing results, {len(residency)} residency results and both Radeon comparisons match the README and {len(LOCALES)} site pages.")
 
 
 if __name__ == "__main__":
