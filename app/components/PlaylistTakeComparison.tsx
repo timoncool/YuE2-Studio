@@ -4,6 +4,7 @@ import { preferredTakeStrings } from '../i18n/preferredTake';
 import { selectNativePlaylistPreferredTake } from '../services/nativeLibrary';
 import { updateLibraryPlaylists } from '../services/studioQueries';
 import type { Playlist, Song } from '../types';
+import { TakeWords } from './TakeWords';
 import { AudioCompare } from './AudioCompare';
 
 export const PlaylistTakeComparison: React.FC<{
@@ -87,6 +88,7 @@ export const PlaylistTakeComparison: React.FC<{
                 </button>
               );
             }} />
+          <TakeWords key={JSON.stringify([left.id, right.id, left.lyrics, left.audioUrl, right.audioUrl])} left={left} right={right} />
         </>
       ))}
     </section>
