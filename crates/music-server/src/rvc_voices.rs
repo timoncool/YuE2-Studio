@@ -26,6 +26,16 @@ pub(super) struct Voice {
     origin: Option<VoiceOrigin>,
 }
 
+impl Voice {
+    pub(super) fn title(&self) -> &str {
+        self.origin.as_ref().map_or(&self.model_name, |origin| &origin.name)
+    }
+
+    pub(super) fn has_index(&self) -> bool {
+        self.index_name.is_some()
+    }
+}
+
 #[derive(Serialize, Deserialize)]
 pub(super) struct VoiceOrigin {
     pub(super) catalog_id: String,
