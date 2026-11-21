@@ -1147,6 +1147,19 @@ mod tests {
         }).await.unwrap();
     }
 
+    #[tokio::test]
+    async fn a_failed_assistant_archive_install_reaches_its_ended_state() {
+        let directory = tempfile::tempdir().unwrap();
+        let runtime = AssistantRuntime::new(directory.path());
+        let source = directory.path().join("missing.tar.gz");
+        let asset = asset("llama-cpu").unwrap();
+
+        assert!(runtime.install_set(vec![asset], Some(&source)).await.is_err());
+        let ended = runtime.status().await.active_download.unwrap();
+        assert!(ended.done);
+        assert!(ended.error.is_some());
+    }
+
     /// llama.cpp is pinned to one build so a working setup keeps working.
     const LLAMA_BUILD: &str = "b12556";
     /// The Windows CUDA 12.4 runtime carries no build number in its name and is the
