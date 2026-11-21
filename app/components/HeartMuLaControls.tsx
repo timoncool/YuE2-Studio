@@ -130,7 +130,7 @@ export function AudioCppModelInstall({ model, bytes, licenseUrl, language, onIns
         body: JSON.stringify({ model }),
       });
       const body = await result.json();
-      if (!result.ok || body.installing !== true) throw new Error(body.error || failed);
+      if (!result.ok || (body.installing !== true && body.ready !== true)) throw new Error(body.error || failed);
       await status();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : failed);

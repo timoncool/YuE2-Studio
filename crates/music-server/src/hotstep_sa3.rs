@@ -46,6 +46,11 @@ pub(super) async fn install(
     State(state): State<AppState>,
 ) -> Result<Json<Value>, (StatusCode, Json<ApiError>)> {
     let downloader = &state.hotstep_cover;
+    let Ok(lease) = state.hotstep_sa3_install.try_lock_owned() else {
+        return Ok(Json(
+            serde_json::json!({"started": false, "installing": true}),
+        ));
+    };
     let runtime = hotstep_cover_assets::missing_runtime(downloader);
     if runtime.is_none()
         && !hotstep_cover_assets::server(downloader).is_some_and(|path| path.is_file())
@@ -56,17 +61,37 @@ pub(super) async fn install(
         ));
     }
     let mut missing: Vec<_> = runtime.into_iter().collect();
-    missing.extend(hotstep_sa3_assets::missing(downloader));
-    let Ok(lease) = state.hotstep_sa3_install.try_lock_owned() else {
+    let weights = hotstep_sa3_assets::missing(downloader);
+    missing.extend(weights.iter().copied());
+    if missing.is_empty() {
         return Ok(Json(
-            serde_json::json!({"started": false, "installing": true}),
+            serde_json::json!({"started": false, "installing": false, "ready": true}),
         ));
-    };
+    }
     let downloader = downloader.clone();
     downloader.clear_finished(INSTALL_SCOPE).await;
     tokio::spawn(async move {
         let _lease = lease;
-        if let Err(error) = downloader.install_all(INSTALL_SCOPE, &missing).await {
+        let result = async {
+            let assets = downloader.clone();
+            tokio::task::spawn_blocking(move || -> anyhow::Result<()> {
+                for asset in weights {
+                    let sha = hotstep_sa3_assets::sha256(asset.url)
+                        .context("Missing Stable Audio 3 checksum")?;
+                    audio_cpp_music::repair_managed_file(&assets.path_of(asset), asset, sha)?;
+                }
+                Ok(())
+            })
+            .await??;
+            downloader.install_all(INSTALL_SCOPE, &missing).await?;
+            ensure!(
+                hotstep_sa3_assets::missing(&downloader).is_empty(),
+                "HOT-Step Stable Audio 3 installation is incomplete."
+            );
+            Ok::<(), anyhow::Error>(())
+        }
+        .await;
+        if let Err(error) = result {
             downloader.fail(INSTALL_SCOPE, format!("{error:#}")).await;
         }
     });
