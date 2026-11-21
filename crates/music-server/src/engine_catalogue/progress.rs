@@ -74,6 +74,18 @@ impl Transfer {
             .expect("package progress")
             .downloaded_bytes += bytes;
     }
+    pub(super) fn downloaded_bytes(&self) -> u64 {
+        self.status
+            .lock()
+            .expect("package progress")
+            .downloaded_bytes
+    }
+    pub(super) fn set_downloaded_bytes(&self, bytes: u64) {
+        self.status
+            .lock()
+            .expect("package progress")
+            .downloaded_bytes = bytes;
+    }
     pub(super) fn reused(&self, bytes: u64) {
         self.status.lock().expect("package progress").reused_bytes += bytes;
     }

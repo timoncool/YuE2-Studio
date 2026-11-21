@@ -134,7 +134,53 @@ async fn download(
     transfer: &super::progress::Transfer,
 ) -> Result<()> {
     transfer.stage("downloading", Some(&file.name));
-    let mut response = client.get(&file.url).send().await?.error_for_status()?;
+    let primary = net::model_url(&file.url);
+    let initial_bytes = transfer.downloaded_bytes();
+    let mut source = primary.clone();
+    let mut mirrors = None;
+    loop {
+        let scratch = tempfile::tempdir_in(path.parent().context("missing package directory")?)?;
+        let staged = scratch.path().join("part");
+        let result = download_from(file, &source, &staged, client, transfer).await;
+        match result {
+            Ok(()) => {
+                tokio::fs::rename(&staged, path).await?;
+                return Ok(());
+            }
+            Err(error) => {
+                // Local write errors, including a full disk, affect every mirror.
+                if error.downcast_ref::<reqwest::Error>().is_none()
+                    && error.downcast_ref::<std::io::Error>().is_some()
+                {
+                    return Err(error);
+                }
+                drop(scratch);
+                transfer.set_downloaded_bytes(initial_bytes);
+                if mirrors.is_none() {
+                    let mut urls = crate::downloads::mirror_sources(client, &file.sha256).await;
+                    urls.retain(|url| url != &primary);
+                    mirrors = Some(urls.into_iter());
+                }
+                match mirrors.as_mut().and_then(Iterator::next) {
+                    Some(next) => source = next,
+                    None => {
+                        return Err(error)
+                            .with_context(|| format!("no verified download for {}", file.name));
+                    }
+                }
+            }
+        }
+    }
+}
+
+async fn download_from(
+    file: &PackageFile,
+    source: &str,
+    path: &Path,
+    client: &reqwest::Client,
+    transfer: &super::progress::Transfer,
+) -> Result<()> {
+    let mut response = client.get(source).send().await?.error_for_status()?;
     let mut writer = tokio::fs::File::create_new(path).await?;
     let mut hash = Sha256::new();
     let mut bytes = 0u64;
