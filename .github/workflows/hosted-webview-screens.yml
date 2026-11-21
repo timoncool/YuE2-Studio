@@ -1,0 +1,39 @@
+name: Studio hosted WebView2 screens
+on:
+  push:
+    branches: [qa/mminimax-webview-screens]
+  workflow_dispatch:
+jobs:
+  windows-webview:
+    runs-on: windows-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: desktop/src-tauri -> target
+          cache-on-failure: true
+      - name: Install locked dependencies
+        run: |
+          npm --prefix app ci
+          npm --prefix desktop ci
+      - name: Build Windows Studio
+        working-directory: desktop
+        run: npm run tauri -- build --debug --no-bundle
+      - name: Capture Portuguese screens through Studio MCP
+        env:
+          PYTHONUTF8: '1'
+        run: |
+          $desktop = Get-ChildItem desktop/src-tauri/target/debug -Filter '*.exe' |
+            Where-Object { $_.Name -in @('YuE2-Studio.exe', 'yue2-studio-desktop.exe') } |
+            Select-Object -First 1
+          if (!$desktop) { throw 'Studio executable missing' }
+          python -u scripts/test-hosted-webview-screens.py $desktop.FullName artifacts/pt --suite pt
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: studio-hosted-webview-screens
+          path: artifacts
