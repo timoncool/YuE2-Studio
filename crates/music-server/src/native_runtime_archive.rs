@@ -61,7 +61,8 @@ pub(super) fn unpack(archive: &Path, stage: &Path) -> Result<Vec<PathBuf>> {
             if entry.is_dir() {
                 continue;
             }
-            let destination = stage.join(relative_path(Path::new(entry.name()))?);
+            let name = entry.name()?;
+            let destination = stage.join(relative_path(Path::new(name.as_ref()))?);
             let mode = entry.unix_mode();
             ensure!(
                 !mode.is_some_and(|mode| mode & 0o170000 == 0o120000),
