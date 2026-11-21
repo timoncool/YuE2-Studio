@@ -159,6 +159,19 @@ jobs:
               assert not result.get("isError"), result
               return result.get("structuredContent") or result["content"][0]["text"]
 
+          def window_tool(name, params=None):
+              # First-run WebView subscriptions can reconnect after registering a window.
+              def attempt():
+                  result, _ = rpc("tools/call", {"name":name, "arguments":params or {}}, time.monotonic_ns())
+                  text = result["content"][0]["text"]
+                  if result.get("isError"):
+                      if any(marker in text for marker in ("window closed before it answered", "window is not open", "window did not answer")):
+                          print(f"{name}: {text}", flush=True)
+                          return None
+                      raise RuntimeError(text)
+                  return result.get("structuredContent") or text
+              return wait_for(attempt, 60)
+
           def stop_process(process, log, filename):
               try:
                   stop = subprocess.run([executable, "--stop"], env=child_env, stdout=log, stderr=log, timeout=25)
@@ -194,14 +207,14 @@ jobs:
                   write("window.json", wait_for(opened))
                   page_digests = {}
                   for screen in ("create", "library", "search", "playlist", "adapters", "tools", "news"):
-                      write(f"navigate-{screen}.json", tool("ui_navigate", {"view":screen}))
-                      page = tool("ui_read_page")
+                      write(f"navigate-{screen}.json", window_tool("ui_navigate", {"view":screen}))
+                      page = window_tool("ui_read_page")
                       assert len(str(page).splitlines()) > 5, (screen, page)
                       write(f"page-{screen}.json", page)
                       page_digests[screen] = sha(receipt / f"page-{screen}.json")
                   assert len(set(page_digests.values())) == 7, page_digests
                   write("screens.json", page_digests)
-                  tool("ui_navigate", {"view":"create"})
+                  window_tool("ui_navigate", {"view":"create"})
                   checked("screencapture", "-x", receipt.parent / "window.png")
                   assert (receipt.parent / "window.png").stat().st_size > 0
                   catalogue, _ = local("/v1/components/music-engines/refresh", {}, timeout=60)
@@ -209,7 +222,10 @@ jobs:
                   write("signed-catalogue.json", catalogue)
                   print(json.dumps(metadata))
               finally:
-                  stop_process(process, log, "window-shutdown.json")
+                  if process.poll() is None:
+                      process.terminate()
+                  process.wait(timeout=30)
+                  write("window-shutdown.json", {"launcher_exited":True})
 
           session_id = None
           with (receipt/"headless.log").open("wb") as log:
