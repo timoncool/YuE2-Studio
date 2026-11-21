@@ -165,6 +165,7 @@ details.more summary { cursor: pointer; color: var(--muted); font-weight: 600; m
 .answer ul { margin: 0; padding-left: 18px; display: grid; gap: 6px; }
 
 .scroll { overflow-x: auto; margin: 10px 0; }
+.benchmark-scroll:focus-visible { outline: 2px solid var(--pink); outline-offset: 3px; }
 table { border-collapse: collapse; width: 100%; font-size: 14px; }
 th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--line); }
 th { color: var(--muted); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
@@ -490,9 +491,9 @@ footer p { margin: 0 0 8px; }
     </table></div>
     <p class="note">种子为 42 时，两份 WAV 均为 30.0 秒、48 kHz 的立体声。按 100 毫秒窗口计算双声道 RMS，CUDA 的最后 5.3 秒和 Vulkan 的最后 5.0 秒均低于 −60 dBFS。速度按 WAV 的完整时长计算。</p>
 <!-- music-gpu-matrix:start -->
-    <h3>音乐引擎 GPU 测试矩阵 · 5.0 开发版与已发布版本</h3>
+    <h3 id="music-gpu-matrix-title">音乐引擎 GPU 测试矩阵 · 5.0 开发版与已发布版本</h3>
     <p class="note">Windows 11、RTX 4090、驱动 617.42。冷启动计时包含服务器启动至收到首个 WAV，预热后为同一服务器三次请求的中位数。内存数据为冷启动时整卡显存和进程树 RSS 峰值。比较同一任务时也需核对权重、静音段和构建版本。 热运行请求前显存为三次请求之前整张显卡显存读数的中位数。 驻留 WDDM 显存和 RSS 为已发布 CUDA 13 版本预热一次后，进程树空闲时三次测量的中位数。</p>
-    <div class="scroll"><table>
+    <div class="scroll benchmark-scroll" role="region" aria-labelledby="music-gpu-matrix-title" tabindex="0"><table>
       <thead><tr><th scope="col">模型和引擎</th><th scope="col">后端</th><th scope="col">WAV（秒）</th><th scope="col">冷启动（秒）</th><th scope="col">预热后（秒）</th><th scope="col">音频秒/秒</th><th scope="col">显存峰值 / 增量（GiB）</th><th scope="col">热运行请求前显存（GiB）</th><th scope="col">内存峰值（GiB）</th><th scope="col">驻留 WDDM 显存 / RSS（GiB）</th></tr></thead>
       <tbody>
       <tr><td>YuE2 · yue2.cpp 892b9b0 · 3B Q8_0 + F32 VAE; NAR v9 · 30 s · 32 steps</td><td>CUDA 13</td><td>29.999</td><td>9.735</td><td>5.166</td><td>5.81×</td><td>7.67 / +5.74</td><td>7.67</td><td>3.36</td><td>—</td></tr>
@@ -529,9 +530,9 @@ footer p { margin: 0 0 8px; }
     <p><a href="music-gpu-benchmarks.json">各次运行、SHA-256 和权重配置</a></p>
 <!-- music-gpu-matrix:end -->
 <!-- radeon-gpu-pair:start -->
-    <h3>Stable Audio 3 Small Q8_0 · Radeon 核显</h3>
+    <h3 id="radeon-gpu-pair-title">Stable Audio 3 Small Q8_0 · Radeon 核显</h3>
     <p class="note">Windows，AMD Radeon Graphics（gfx1036，UMA）。同一 audio.cpp 版本在两个后端均用四步生成 4 秒音频。冷启动取首次运行，预热后取三次请求的中位数。WDDM 专用及共享内存峰值按一秒间隔采样。 <code>audio.cpp 5e7273db</code></p>
-    <div class="scroll"><table>
+    <div class="scroll benchmark-scroll" role="group" aria-labelledby="radeon-gpu-pair-title" tabindex="0"><table>
       <thead><tr><th scope="col">后端</th><th scope="col">冷启动（秒）</th><th scope="col">预热后（秒）</th><th scope="col">WDDM 专用峰值（GiB）</th><th scope="col">WDDM 共享峰值（GiB）</th></tr></thead>
       <tbody>
       <tr><td>HIP</td><td>4.609</td><td>2.953</td><td>1.39</td><td>0.04</td></tr>
@@ -540,9 +541,9 @@ footer p { margin: 0 0 8px; }
     </table></div>
 <!-- radeon-gpu-pair:end -->
 <!-- native-radeon-pair:start -->
-    <h3>YuE2-3B Q8_0 · Radeon gfx1036</h3>
+    <h3 id="native-radeon-pair-title">YuE2-3B Q8_0 · Radeon gfx1036</h3>
     <p class="note">同一首已保存的 12 秒歌曲，在同一块 Radeon 核显上运行四步。冷启动时间包括启动进程。热启动时间为权重常驻时三次请求的中位数。WDDM 峰值按该显卡上进程的内存用量采样。</p>
-    <div class="scroll"><table>
+    <div class="scroll benchmark-scroll" role="group" aria-labelledby="native-radeon-pair-title" tabindex="0"><table>
       <thead><tr><th scope="col">后端</th><th scope="col">冷启动（秒）</th><th scope="col">预热后（秒）</th><th scope="col">WDDM 专用峰值（GiB）</th><th scope="col">WDDM 共享峰值（GiB）</th></tr></thead>
       <tbody>
       <tr><td>HIP 188d13b3</td><td>22.749</td><td>18.483</td><td>0.28</td><td>4.39</td></tr>

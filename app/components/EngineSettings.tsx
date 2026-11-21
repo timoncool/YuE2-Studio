@@ -123,6 +123,8 @@ export const EngineSettings: React.FC = () => {
   const { data: setup } = useSetupStatus<{ hardware?: { onProcessor?: boolean; shortOfSmallestSet?: number | null; totalVramGb?: number }; engine_on_processor?: boolean }>();
   const [options, setOptions] = useState<EngineOptions>(DEFAULTS);
   const [saved, setSaved] = useState<EngineOptions>(DEFAULTS);
+  const [hostPlatform, setHostPlatform] = useState<string>();
+  const macHost = hostPlatform === 'macos';
   // Which engine executable a start takes and which one is running, so the
   // page answers "did my change apply?" without opening the engine log.
   const [runtime, setRuntime] = useState<{ executable: string | null; executable_source: string; running_executable: string | null; engine_starting: boolean } | null>(null);
@@ -163,7 +165,8 @@ export const EngineSettings: React.FC = () => {
     try {
       const response = await fetch('/engine/options');
       if (!response.ok) throw new Error(`Engine options are unavailable (${response.status})`);
-      const body: { options: EngineOptions; in_effect?: InEffect | null; saved_max_seq?: number; kv_q8_off_reason?: KvQ8Off; kv_cache_now?: KvCacheNow | null; executable?: string | null; executable_source?: string; running_executable?: string | null; engine_starting?: boolean } = await response.json();
+      const body: { options: EngineOptions; platform?: string; in_effect?: InEffect | null; saved_max_seq?: number; kv_q8_off_reason?: KvQ8Off; kv_cache_now?: KvCacheNow | null; executable?: string | null; executable_source?: string; running_executable?: string | null; engine_starting?: boolean } = await response.json();
+      setHostPlatform(body.platform);
       setInEffect(body.in_effect ?? null);
       setServerKvQ8Off(body.kv_q8_off_reason ?? null);
       setKvCacheNow(body.kv_cache_now ?? null);
@@ -205,6 +208,7 @@ export const EngineSettings: React.FC = () => {
     }
   };
   const dirty = JSON.stringify(options) !== JSON.stringify(saved);
+  const backends: ComputeBackend[] = macHost ? ['auto', 'cpu'] : ['auto', 'cuda', 'hip', 'vulkan', 'cpu'];
 
   // The cache stepped down after the card ran out of memory goes back to the model's full context.
   const resetFitted = async () => {
@@ -320,7 +324,7 @@ export const EngineSettings: React.FC = () => {
       <div className="rounded-xl border border-zinc-200 p-3 dark:border-white/10">
         <span className="block text-sm font-medium text-zinc-800 dark:text-zinc-100">{tt('computeBackendLabel')}</span>
         <div className="mt-2 grid grid-cols-2 gap-1 rounded-lg bg-zinc-100 p-1 sm:grid-cols-4 dark:bg-black/30" role="radiogroup" aria-label={tt('computeBackendLabel')}>
-          {(['auto', 'cuda', 'hip', 'vulkan', 'cpu'] as const).filter(value => value !== 'hip' || hip?.platform_supported || options.backend === 'hip').map(value => (
+          {backends.filter(value => value !== 'hip' || hip?.platform_supported || options.backend === 'hip').map(value => (
             <button
               key={value}
               type="button"
@@ -334,8 +338,8 @@ export const EngineSettings: React.FC = () => {
             </button>
           ))}
         </div>
-        <span className="mt-2 block text-xs leading-5 text-zinc-500 dark:text-zinc-400">{tt(`computeBackendHint_${options.backend}`)}</span>
-        {(hip?.platform_supported || options.backend === 'hip') && hip && (
+        <span className="mt-2 block text-xs leading-5 text-zinc-500 dark:text-zinc-400">{tt(macHost && options.backend !== 'cpu' ? 'computeBackendHint_macAuto' : `computeBackendHint_${options.backend}`)}</span>
+        {!macHost && (hip?.platform_supported || options.backend === 'hip') && hip && (
           <div className="mt-2 space-y-1 text-xs text-zinc-600 dark:text-zinc-300">
             <div>{[hip.gfx, hip.driver].filter(Boolean).join(' · ')}</div>
             {hip.reason && <p role="status">{hip.reason}</p>}
@@ -362,7 +366,7 @@ export const EngineSettings: React.FC = () => {
         {setup?.engine_on_processor && <span className="mt-2 block text-xs leading-5 text-amber-700 dark:text-amber-300">{tt('engineOnProcessorHint')}</span>}
       </div>
 
-      {cards?.cards && (cards.cards.length > 1 || cardMissing) && (
+      {!macHost && cards?.cards && (cards.cards.length > 1 || cardMissing) && (
         <label className="block rounded-xl border border-zinc-200 p-3 dark:border-white/10">
           <span className="block text-sm font-medium text-zinc-800 dark:text-zinc-100">{t('gpuChoice')}</span>
           <select

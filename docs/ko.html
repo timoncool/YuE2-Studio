@@ -165,6 +165,7 @@ details.more summary { cursor: pointer; color: var(--muted); font-weight: 600; m
 .answer ul { margin: 0; padding-left: 18px; display: grid; gap: 6px; }
 
 .scroll { overflow-x: auto; margin: 10px 0; }
+.benchmark-scroll:focus-visible { outline: 2px solid var(--pink); outline-offset: 3px; }
 table { border-collapse: collapse; width: 100%; font-size: 14px; }
 th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--line); }
 th { color: var(--muted); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
@@ -490,9 +491,9 @@ footer p { margin: 0 0 8px; }
     </table></div>
     <p class="note">시드 42에서 두 WAV 모두 48 kHz 스테레오로 30.0초입니다. 두 채널을 함께 100 ms 단위로 측정한 RMS는 CUDA에서 마지막 5.3초, Vulkan에서 마지막 5.0초 동안 −60 dBFS 미만이었습니다. 속도는 WAV 전체 길이로 계산했습니다.</p>
 <!-- music-gpu-matrix:start -->
-    <h3>음악 엔진 GPU 비교 · 5.0 개발 빌드와 출시 버전</h3>
+    <h3 id="music-gpu-matrix-title">음악 엔진 GPU 비교 · 5.0 개발 빌드와 출시 버전</h3>
     <p class="note">Windows 11, RTX 4090, 드라이버 617.42. 첫 실행은 서버 시작부터 첫 WAV 응답까지입니다. 재실행은 같은 서버에 보낸 3개 요청의 중앙값입니다. 메모리는 첫 실행의 전체 GPU 및 프로세스 트리 RSS 최대값입니다. 같은 작업에서 가중치, 무음 구간 및 빌드 버전을 확인하세요. 웜 요청 전 VRAM은 세 요청 직전에 측정한 전체 GPU 사용량의 중앙값입니다. 상주 WDDM VRAM과 RSS는 출시된 CUDA 13 빌드를 한 번 예열한 후 유휴 상태의 프로세스 트리에서 측정한 세 값의 중앙값입니다.</p>
-    <div class="scroll"><table>
+    <div class="scroll benchmark-scroll" role="region" aria-labelledby="music-gpu-matrix-title" tabindex="0"><table>
       <thead><tr><th scope="col">모델 및 엔진</th><th scope="col">백엔드</th><th scope="col">WAV (초)</th><th scope="col">첫 실행 (초)</th><th scope="col">재실행 (초)</th><th scope="col">오디오 초/초</th><th scope="col">VRAM 최대 / 증가 (GiB)</th><th scope="col">웜 요청 전 VRAM (GiB)</th><th scope="col">RAM 최대 (GiB)</th><th scope="col">상주 WDDM VRAM / RSS (GiB)</th></tr></thead>
       <tbody>
       <tr><td>YuE2 · yue2.cpp 892b9b0 · 3B Q8_0 + F32 VAE; NAR v9 · 30 s · 32 steps</td><td>CUDA 13</td><td>29.999</td><td>9.735</td><td>5.166</td><td>5.81×</td><td>7.67 / +5.74</td><td>7.67</td><td>3.36</td><td>—</td></tr>
@@ -529,9 +530,9 @@ footer p { margin: 0 0 8px; }
     <p><a href="music-gpu-benchmarks.json">개별 실행, SHA-256 및 가중치 구성</a></p>
 <!-- music-gpu-matrix:end -->
 <!-- radeon-gpu-pair:start -->
-    <h3>Stable Audio 3 Small Q8_0 · Radeon 내장 GPU</h3>
+    <h3 id="radeon-gpu-pair-title">Stable Audio 3 Small Q8_0 · Radeon 내장 GPU</h3>
     <p class="note">Windows, AMD Radeon Graphics(gfx1036, UMA). 같은 audio.cpp 리비전으로 각 백엔드에서 4단계로 4초를 생성했습니다. 첫 실행은 첫 번째 결과이고 재실행은 요청 세 건의 중앙값입니다. WDDM 전용 및 공유 메모리 피크는 1초 간격으로 측정했습니다. <code>audio.cpp 5e7273db</code></p>
-    <div class="scroll"><table>
+    <div class="scroll benchmark-scroll" role="group" aria-labelledby="radeon-gpu-pair-title" tabindex="0"><table>
       <thead><tr><th scope="col">백엔드</th><th scope="col">첫 실행 (초)</th><th scope="col">재실행 (초)</th><th scope="col">WDDM 전용 피크 (GiB)</th><th scope="col">WDDM 공유 피크 (GiB)</th></tr></thead>
       <tbody>
       <tr><td>HIP</td><td>4.609</td><td>2.953</td><td>1.39</td><td>0.04</td></tr>
@@ -540,9 +541,9 @@ footer p { margin: 0 0 8px; }
     </table></div>
 <!-- radeon-gpu-pair:end -->
 <!-- native-radeon-pair:start -->
-    <h3>YuE2-3B Q8_0 · Radeon gfx1036</h3>
+    <h3 id="native-radeon-pair-title">YuE2-3B Q8_0 · Radeon gfx1036</h3>
     <p class="note">같은 Radeon 내장 GPU에서 저장된 12초 곡을 4단계로 다시 생성했습니다. 콜드 측정에는 프로세스 시작 시간이 포함됩니다. 웜 측정은 가중치를 메모리에 유지한 세 요청의 중앙값입니다. WDDM 최댓값은 이 GPU에서 해당 프로세스의 메모리를 측정한 값입니다.</p>
-    <div class="scroll"><table>
+    <div class="scroll benchmark-scroll" role="group" aria-labelledby="native-radeon-pair-title" tabindex="0"><table>
       <thead><tr><th scope="col">백엔드</th><th scope="col">첫 실행 (초)</th><th scope="col">재실행 (초)</th><th scope="col">WDDM 전용 피크 (GiB)</th><th scope="col">WDDM 공유 피크 (GiB)</th></tr></thead>
       <tbody>
       <tr><td>HIP 188d13b3</td><td>22.749</td><td>18.483</td><td>0.28</td><td>4.39</td></tr>

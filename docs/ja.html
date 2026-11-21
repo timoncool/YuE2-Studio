@@ -165,6 +165,7 @@ details.more summary { cursor: pointer; color: var(--muted); font-weight: 600; m
 .answer ul { margin: 0; padding-left: 18px; display: grid; gap: 6px; }
 
 .scroll { overflow-x: auto; margin: 10px 0; }
+.benchmark-scroll:focus-visible { outline: 2px solid var(--pink); outline-offset: 3px; }
 table { border-collapse: collapse; width: 100%; font-size: 14px; }
 th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--line); }
 th { color: var(--muted); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
@@ -490,9 +491,9 @@ footer p { margin: 0 0 8px; }
     </table></div>
     <p class="note">シード 42 で生成した WAV はどちらも 48 kHz のステレオで、長さは 30.0 秒です。両チャンネルを合わせて 100 ミリ秒ごとに求めた RMS は、CUDA では最後の 5.3 秒、Vulkan では最後の 5.0 秒で −60 dBFS を下回りました。速度は WAV 全体の長さから算出しています。</p>
 <!-- music-gpu-matrix:start -->
-    <h3>音楽エンジンの GPU 比較 · 5.0 開発版と公開版</h3>
+    <h3 id="music-gpu-matrix-title">音楽エンジンの GPU 比較 · 5.0 開発版と公開版</h3>
     <p class="note">Windows 11、RTX 4090、ドライバー 617.42。初回はサーバー起動から最初の WAV 受信までです。再実行は同じサーバーに送った 3 回の中央値です。メモリーは初回のカード全体とプロセスツリー RSS のピークです。同じ処理を比較し、重み、無音区間、リビジョンもご確認ください。 ウォームリクエスト前の VRAM は、各リクエストの直前に測定した GPU 全体の使用量の中央値です。 常駐 WDDM VRAM と RSS は、公開版の CUDA 13 で 1 回実行した後、アイドル状態のプロセスツリーを 3 回測定した中央値です。</p>
-    <div class="scroll"><table>
+    <div class="scroll benchmark-scroll" role="region" aria-labelledby="music-gpu-matrix-title" tabindex="0"><table>
       <thead><tr><th scope="col">モデルとエンジン</th><th scope="col">バックエンド</th><th scope="col">WAV（秒）</th><th scope="col">初回（秒）</th><th scope="col">再実行（秒）</th><th scope="col">音声秒/秒</th><th scope="col">VRAM ピーク / 増分（GiB）</th><th scope="col">ウォームリクエスト前の VRAM（GiB）</th><th scope="col">RAM ピーク（GiB）</th><th scope="col">常駐 WDDM VRAM / RSS（GiB）</th></tr></thead>
       <tbody>
       <tr><td>YuE2 · yue2.cpp 892b9b0 · 3B Q8_0 + F32 VAE; NAR v9 · 30 s · 32 steps</td><td>CUDA 13</td><td>29.999</td><td>9.735</td><td>5.166</td><td>5.81×</td><td>7.67 / +5.74</td><td>7.67</td><td>3.36</td><td>—</td></tr>
@@ -529,9 +530,9 @@ footer p { margin: 0 0 8px; }
     <p><a href="music-gpu-benchmarks.json">個別の計測結果、SHA-256、重みの構成</a></p>
 <!-- music-gpu-matrix:end -->
 <!-- radeon-gpu-pair:start -->
-    <h3>Stable Audio 3 Small Q8_0 · Radeon 内蔵 GPU</h3>
+    <h3 id="radeon-gpu-pair-title">Stable Audio 3 Small Q8_0 · Radeon 内蔵 GPU</h3>
     <p class="note">Windows、AMD Radeon Graphics（gfx1036、UMA）。同じ audio.cpp リビジョンを使い、各バックエンドで 4 ステップで 4 秒を生成しました。初回は 1 回目、再実行は 3 回の中央値です。WDDM 専用・共有メモリーのピークは 1 秒間隔の測定値です。 <code>audio.cpp 5e7273db</code></p>
-    <div class="scroll"><table>
+    <div class="scroll benchmark-scroll" role="group" aria-labelledby="radeon-gpu-pair-title" tabindex="0"><table>
       <thead><tr><th scope="col">バックエンド</th><th scope="col">初回（秒）</th><th scope="col">再実行（秒）</th><th scope="col">WDDM 専用ピーク（GiB）</th><th scope="col">WDDM 共有ピーク（GiB）</th></tr></thead>
       <tbody>
       <tr><td>HIP</td><td>4.609</td><td>2.953</td><td>1.39</td><td>0.04</td></tr>
@@ -540,9 +541,9 @@ footer p { margin: 0 0 8px; }
     </table></div>
 <!-- radeon-gpu-pair:end -->
 <!-- native-radeon-pair:start -->
-    <h3>YuE2-3B Q8_0 · Radeon gfx1036</h3>
+    <h3 id="native-radeon-pair-title">YuE2-3B Q8_0 · Radeon gfx1036</h3>
     <p class="note">同じ Radeon 内蔵 GPU で、保存した同じ 12 秒の曲を 4 ステップで再生成。コールド値はプロセス起動を含み、ウォーム値は重みを保持した状態での 3 回の中央値です。WDDM のピークはこの GPU 上のプロセス単位の測定値です。</p>
-    <div class="scroll"><table>
+    <div class="scroll benchmark-scroll" role="group" aria-labelledby="native-radeon-pair-title" tabindex="0"><table>
       <thead><tr><th scope="col">バックエンド</th><th scope="col">初回（秒）</th><th scope="col">再実行（秒）</th><th scope="col">WDDM 専用ピーク（GiB）</th><th scope="col">WDDM 共有ピーク（GiB）</th></tr></thead>
       <tbody>
       <tr><td>HIP 188d13b3</td><td>22.749</td><td>18.483</td><td>0.28</td><td>4.39</td></tr>
