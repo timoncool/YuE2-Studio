@@ -644,6 +644,7 @@ export class DjMixer {
   private crossfade = 0.5;
   private readonly onChange: () => void;
   private recorder: MediaRecorder | null = null;
+  private startingRecording = false;
   private recordingParts: Blob[] = [];
   recording = false;
 
@@ -687,14 +688,21 @@ export class DjMixer {
     return true;
   }
   async startRecording(): Promise<void> {
+    if (this.startingRecording) return;
     if (this.recorder || typeof MediaRecorder === 'undefined') throw new Error('Audio recording is not available in this browser.');
-    await this.context.resume();
-    this.recordingParts = [];
-    const mimeType = ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus', 'audio/mp4'].find(type => MediaRecorder.isTypeSupported(type));
-    this.recorder = new MediaRecorder(this.recordingOutput.stream, mimeType ? { mimeType } : undefined);
-    this.recorder.ondataavailable = (event) => { if (event.data.size) this.recordingParts.push(event.data); };
-    this.recorder.start(1000);
-    this.recording = true;
+    this.startingRecording = true;
+    try {
+      await this.context.resume();
+      const mimeType = ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus', 'audio/mp4'].find(type => MediaRecorder.isTypeSupported(type));
+      const recorder = new MediaRecorder(this.recordingOutput.stream, mimeType ? { mimeType } : undefined);
+      this.recordingParts = [];
+      recorder.ondataavailable = (event) => { if (event.data.size) this.recordingParts.push(event.data); };
+      recorder.start(1000);
+      this.recorder = recorder;
+      this.recording = true;
+    } finally {
+      this.startingRecording = false;
+    }
     this.onChange();
   }
   async stopRecording(): Promise<Blob> {
