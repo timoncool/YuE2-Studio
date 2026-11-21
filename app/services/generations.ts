@@ -92,7 +92,11 @@ function withJobStatus(entry: Song, job: YueJob): Song {
   const current = job.engine_id && entry.ditModel !== job.engine_id ? { ...entry, ditModel: job.engine_id } : entry;
   if (followsLocalProgress(current)) return current;
   if (job.status !== 'queued' && job.status !== 'running') return current;
-  const stage = job.status === 'queued' ? 'stageWaitingInQueue' : 'stageGeneratingTrack';
+  let stage = job.status === 'queued' ? 'stageWaitingInQueue' : 'stageGeneratingTrack';
+  if (job.status === 'running' && job.engine_id === 'audio.cpp') {
+    if (job.phase === 'preparing') stage = 'stageStartingTrack';
+    if (job.phase === 'encoding') stage = 'stageEncodingTrack';
+  }
   const detail = job.message?.trim() || undefined;
   return current.stage === stage && current.stageDetail === detail && current.progress === undefined
     ? current : { ...current, stage, stageDetail: detail, progress: undefined };
