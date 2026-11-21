@@ -1,5 +1,5 @@
 """Drive only the bundled Studio WebView on the isolated Windows runner."""
-import argparse, base64, json, os, pathlib, re, struct, subprocess, tempfile, time, urllib.request, wave, math
+import argparse, base64, ctypes, json, os, pathlib, re, struct, subprocess, tempfile, time, urllib.request, wave, math
 
 p = argparse.ArgumentParser()
 p.add_argument("exe", type=pathlib.Path)
@@ -135,7 +135,33 @@ def capture_pt():
     json_file(out/"pt-11-agent-status.json", info)
     screenshot("pt-11-agent")
 
-def check_screens(root):
+def native_editor_window(pid):
+    from ctypes import wintypes
+
+    windows = []
+    user = ctypes.WinDLL("user32", use_last_error=True)
+    callback_type = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
+    user.EnumWindows.argtypes = [callback_type, wintypes.LPARAM]
+    user.GetWindowThreadProcessId.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.DWORD)]
+    user.IsWindowVisible.argtypes = [wintypes.HWND]
+    user.GetWindowTextW.argtypes = [wintypes.HWND, wintypes.LPWSTR, ctypes.c_int]
+
+    @callback_type
+    def inspect(handle, _):
+        owner = wintypes.DWORD()
+        user.GetWindowThreadProcessId(handle, ctypes.byref(owner))
+        if owner.value == pid and user.IsWindowVisible(handle):
+            title = ctypes.create_unicode_buffer(256)
+            user.GetWindowTextW(handle, title, len(title))
+            if title.value.endswith(" - Audio Editor"):
+                windows.append(title.value)
+        return True
+
+    user.EnumWindows(inspect, 0)
+    return windows
+
+
+def check_screens(root, pid):
     ui("navigate", view="create")
     page = wait_page(predicate=lambda value: '"Style"' in value or '"Use OpenRouter"' in value)
     if 'button "Use OpenRouter"' in page:
@@ -241,23 +267,18 @@ G4 |
     assert "notes" in midi_result and midi_result["notes"], midi_result
 
     ui("navigate", view="tools")
-    page = wait_page("Open the MIDI editor")
+    click('button "Hosted QA recording"')
+    page = wait_page('Open the MIDI editor', 'Separate again', 'Open the track')
     (out/"screen-tools.txt").write_text(page, encoding="utf8")
     click('Open the MIDI editor', page)
-    page = wait_page('MIDI editor')
+    page = wait_page('Page: MIDI editor', 'button "Close"')
     (out/"screen-midi-editor.txt").write_text(page, encoding="utf8")
     click('button "Close"')
     stem_status = tool("stems_get", song_id=song["id"])
     json_file(out/"stems.json", stem_status)
     assert {"vocals","instrumental"} <= set(stem_status["stems"]), stem_status
 
-    ui("navigate", view="library")
-    click('All songs')
-    page = wait_page(predicate=lambda value: any('Hosted QA recording' in line and 'More actions' in line
-                                                  for line in value.splitlines()))
-    song_line = next(line for line in page.splitlines() if "Hosted QA recording" in line and "More actions" in line)
-    ui("click", ref=re.search(r"(e\d+) More actions",song_line)[1])
-    click("Process audio")
+    click('Process audio')
     process_page = wait_page('Peak normalisation', 'button "Process"')
     click('Peak normalisation', process_page)
     click('button "Process"')
@@ -273,15 +294,25 @@ G4 |
     else:
         raise AssertionError(("Processed track is absent", library, ui("read_page")))
 
+    click('Open the track')
+    for _ in range(30):
+        if windows := native_editor_window(pid):
+            json_file(out/'audio-editor-window.json', dict(pid=pid, titles=windows))
+            break
+        time.sleep(.25)
+    else:
+        raise AssertionError(('Audio Editor window did not open', ui('console')))
+
     ui("navigate", view="adapters")
     click('tab "Catalog"')
-    (out/"screen-lora-catalog.txt").write_text(wait_page('tab "Catalog"'), encoding="utf8")
+    (out/"screen-lora-catalog.txt").write_text(wait_page('Search the catalog'), encoding="utf8")
+    json_file(out/'lora-catalog.json', tool('lora_list', response_format='detailed'))
     click('tab "Training"')
     click('Canções de exemplo')
     click('Result')
     (out/"screen-training.txt").write_text(wait_page('To LoRA', '50'), encoding="utf8")
     ui("navigate", view="news")
-    (out/"screen-news.txt").write_text(wait_page('News'), encoding="utf8")
+    (out/"screen-news.txt").write_text(wait_page('Page: News'), encoding="utf8")
     sections = dict(account="Account", models="Models", engine="Local engine", cloud="Providers",
                     agent="Agent (MCP)", covers="Cover art", interface="Appearance", privacy="Privacy", about="About")
     for section, label in sections.items():
@@ -317,7 +348,7 @@ with tempfile.TemporaryDirectory(prefix="studio-hosted-webview-") as directory:
                 clientInfo=dict(name="studio-hosted-webview", version="1")))
             rpc("notifications/initialized", {}, notify=True)
             wait_page(predicate=lambda page: "button" in page)
-            capture_pt() if args.suite == "pt" else check_screens(root)
+            capture_pt() if args.suite == "pt" else check_screens(root, process.pid)
         finally:
             json_file(out/"trace.json", trace)
             stop = subprocess.Popen([str(args.exe.resolve()), "--stop"], env=env)
