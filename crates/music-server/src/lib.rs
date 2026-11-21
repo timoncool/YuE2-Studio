@@ -5830,6 +5830,11 @@ fn preferred_take_counter(engine: &str, metadata: &Value) -> Option<&'static str
             "vocal-fast-rs" => Some("take_preferred_rvc_fast"),
             _ => None,
         },
+        _ if metadata.pointer("/signed_engine/protocol").and_then(Value::as_str) == Some(signed_music_protocol::NAME)
+            && metadata.pointer("/signed_engine/engine").and_then(Value::as_str) == Some(engine) =>
+        {
+            Some("take_preferred_signed_music")
+        }
         _ => None,
     }
 }
@@ -5844,6 +5849,9 @@ fn preferred_take_uses_only_known_effective_backends() {
     assert_eq!(preferred_take_counter("rvc", &Value::Null), None);
     assert_eq!(preferred_take_counter("user-supplied-name", &metadata), None);
     assert_eq!(preferred_take_counter("openrouter", &Value::Null), Some("take_preferred_openrouter"));
+    let signed = serde_json::json!({"signed_engine":{"protocol":"music-http-v1","engine":"fixture-ace-http","model":"private model"}});
+    assert_eq!(preferred_take_counter("fixture-ace-http", &signed), Some("take_preferred_signed_music"));
+    assert_eq!(preferred_take_counter("different-engine", &signed), None);
 }
 
 async fn select_library_playlist_preferred_take(
