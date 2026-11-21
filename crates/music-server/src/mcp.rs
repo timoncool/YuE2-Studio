@@ -544,6 +544,7 @@ const JOURNAL: &[(&str, &str, &str)] = &[
     ("lora_import_files", "installed", "lora"),
     ("rvc_voice_import", "installed", "rvc_voice"),
     ("rvc_voice_remove", "deleted", "rvc_voice"),
+    ("music_engine_catalog_refresh", "refreshed", "music_engine_catalog"),
     ("rvc_catalog_refresh", "refreshed", "rvc_catalog"),
     ("rvc_catalog_install", "installed", "rvc_voice"),
     ("rvc_apply_install", "installed", "model"),
@@ -2673,6 +2674,18 @@ fn tools() -> &'static [Tool] {
                 description: "Read preparation, file download and verification progress for a catalog voice being installed.",
                 schema: || id_only("id", "the ID from rvc_catalog_list"),
                 call: |args| get(format!("/v1/rvc/catalog/progress/{}", segment(&text(args, "id")?))),
+            },
+            Tool {
+                name: "music_engine_catalog_list",
+                description: "List engine packages in the accepted signed catalogue without network access.",
+                schema: nothing,
+                call: |_| get("/v1/components/music-engines".into()),
+            },
+            Tool {
+                name: "music_engine_catalog_refresh",
+                description: "Refresh signed music engine package manifests. Installed versions remain available.",
+                schema: nothing,
+                call: |_| post("/v1/components/music-engines/refresh".into(), json!({})),
             },
             Tool {
                 name: "rvc_catalog_refresh",
