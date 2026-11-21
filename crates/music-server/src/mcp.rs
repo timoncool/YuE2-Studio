@@ -2654,6 +2654,30 @@ fn tools() -> &'static [Tool] {
                 call: |args| get(format!("/v1/rvc/catalog/progress/{}", segment(&text(args, "id")?))),
             },
             Tool {
+                name: "music_engine_package_install",
+                description: "Verify and activate the signed engine package for this platform. A failed update preserves the active generation.",
+                schema: || id_only("id", "the engine ID from music_engine_catalog_list"),
+                call: |args| post(format!("/v1/components/music-engines/{}/install", segment(&text(args, "id")?)), json!({})),
+            },
+            Tool {
+                name: "music_engine_package_status",
+                description: "Check the active engine generation, its signature, and the contents of its runtime directory.",
+                schema: || id_only("id", "the installed engine ID"),
+                call: |args| get(format!("/v1/components/music-engines/{}/status", segment(&text(args, "id")?))),
+            },
+            Tool {
+                name: "music_engine_catalog_list",
+                description: "List engine packages in the accepted signed catalogue without network access.",
+                schema: nothing,
+                call: |_| get("/v1/components/music-engines".into()),
+            },
+            Tool {
+                name: "music_engine_catalog_refresh",
+                description: "Refresh signed music engine package manifests. Installed versions remain available.",
+                schema: nothing,
+                call: |_| post("/v1/components/music-engines/refresh".into(), json!({})),
+            },
+            Tool {
                 name: "rvc_catalog_refresh",
                 description: "Update the curated RVC voices from the installed signed component channel. A failed update preserves the last accepted catalogue.",
                 schema: nothing,
