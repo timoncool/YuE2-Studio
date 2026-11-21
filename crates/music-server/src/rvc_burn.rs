@@ -16,15 +16,23 @@ pub(super) struct Runtime {
     folder: PathBuf,
     pub(super) exe: PathBuf,
     ort: PathBuf,
+    managed: Option<(rvc_burn_install::Profile, Arc<downloads::Downloader>)>,
 }
 
 impl Runtime {
-    pub(super) fn discover(data: &FsPath) -> Self {
-        let folder = std::env::var_os("YUE_RVC_BURN_ROOT")
-            .filter(|value| !value.is_empty())
-            .map(PathBuf::from)
-            .unwrap_or_else(|| data.join("rvc/burn"));
-        Self::from_folder(folder)
+    pub(super) fn discover(state: &AppState) -> Self {
+        let override_path = std::env::var_os("YUE_RVC_BURN_ROOT").filter(|value| !value.is_empty());
+        if let Some(folder) = override_path {
+            return Self::from_folder(folder.into());
+        }
+        let mut runtime = Self::from_folder(update_data_root(state).join("rvc/burn"));
+        if !runtime.exe.is_file() && let Ok(profile) = rvc_burn_install::selected() {
+            let folder = runtime.folder.join("runtime").join(profile.folder());
+            runtime.exe = folder.join("rvc.exe");
+            runtime.ort = folder.join("onnxruntime.dll");
+            runtime.managed = Some((profile, state.rvc_burn_downloads.clone()));
+        }
+        runtime
     }
 
     pub(super) fn from_folder(folder: PathBuf) -> Self {
@@ -34,10 +42,15 @@ impl Runtime {
         } else {
             "libonnxruntime.so"
         });
-        Self { folder, exe, ort }
+        Self { folder, exe, ort, managed: None }
     }
 
     fn missing(&self, training: bool) -> Vec<String> {
+        if let Some((profile, downloads)) = &self.managed {
+            return profile.assets(training)
+                .filter(|asset| !rvc_burn_install::present(downloads, asset))
+                .map(|asset| asset.label.to_owned()).collect();
+        }
         let mut paths = vec![(&self.exe, None), (&self.ort, None)];
         let candidates = [
             (CONTENT, 377_655_729),
@@ -82,7 +95,7 @@ impl Runtime {
 
     pub(super) fn environment(&self) -> Vec<(OsString, OsString)> {
         let path = std::env::join_paths(
-            std::iter::once(self.folder.clone()).chain(
+            self.exe.parent().map(FsPath::to_path_buf).into_iter().chain(
                 std::env::var_os("PATH")
                     .iter()
                     .flat_map(std::env::split_paths),
@@ -235,11 +248,15 @@ pub(super) struct Start {
 }
 
 pub(super) async fn status(State(state): State<AppState>) -> Json<Value> {
-    let runtime = Runtime::discover(update_data_root(&state));
-    Json(serde_json::json!({
-        "ready":runtime.ready(true).is_ok(), "conversion_ready":runtime.ready(false).is_ok(),
-        "missing":runtime.missing(true),"folder":runtime.folder,"cuda":hardware::hardware().card_cuda.is_some()
-    }))
+    let runtime = Runtime::discover(&state);
+    let mut result = rvc_burn_install::status(&state).await;
+    let missing = runtime.missing(true);
+    result["ready"] = serde_json::json!(hardware::hardware().card_cuda.is_some() && missing.is_empty());
+    result["conversion_ready"] = serde_json::json!(runtime.ready(false).is_ok());
+    result["missing"] = serde_json::json!(missing);
+    result["folder"] = serde_json::json!(runtime.folder);
+    result["cuda"] = serde_json::json!(hardware::hardware().card_cuda.is_some());
+    Json(result)
 }
 
 pub(super) async fn start(
@@ -256,7 +273,7 @@ pub(super) async fn start(
         ));
     }
     let outcome = async {
-        let runtime = Runtime::discover(update_data_root(&state));
+        let runtime = Runtime::discover(&state);
         runtime.ready(true)?;
         let _lease = state
             .engine_use

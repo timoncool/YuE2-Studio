@@ -2,7 +2,9 @@
 
 The Training panel can train an RVC voice from isolated voice recordings on an NVIDIA GPU. The Studio installs the resulting Safetensors checkpoint into the voice catalogue. Choose the voice on a song with separated stems to convert its vocal and save a new mixed take.
 
-The runtime is a separate local installation. Put the native executable and libraries in `rvc/burn` inside the Studio data folder. To use a shared installation, set `YUE_RVC_BURN_ROOT` to its absolute path before starting the Studio. The Training panel and the `rvc_training_status` MCP tool report the folder and missing components.
+In the Studio on Windows x64, open **Training**, choose **RVC · Burn CUDA**, and select **Install native RVC**. The Studio chooses a CUDA package for the detected NVIDIA card and driver. The installer verifies the pinned SHA-256 of the runtime, dependency archives and weights. It saves the components in the Studio data folder and displays progress and cancellation. In MCP, use `rvc_training_install_runtime` and `rvc_training_status`.
+
+A manually prepared runtime can still be placed in `rvc/burn` in the Studio data folder. To use a shared manual installation, set `YUE_RVC_BURN_ROOT` to its absolute path before starting the Studio.
 
 Build the CUDA CLI from [kingwingfly/voice at 0639605](https://github.com/kingwingfly/voice/tree/06396059536f5894d5872a86bf00fe30d6ff62f9) with `cargo build --locked -p rvc-cli --no-default-features --features cuda`. The Windows build and runtime were verified with CUDA Toolkit 13.3, the upstream FFmpeg shared dependencies, and the CPU ONNX Runtime 1.28.2. Put `rvc.exe`, `onnxruntime.dll`, and the required FFmpeg and CUDA DLLs in the runtime folder or supply the dependency DLLs on the process PATH. Keep all executable and dependency files from a trusted build. The Windows runtime uses a native Rust CLI, Burn CUDA and ONNX, with no Python dependencies.
 

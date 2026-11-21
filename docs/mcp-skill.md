@@ -175,8 +175,10 @@ and check `hotstep_cover_profiles`. Call `song_create` with native engine
 `hotstep`, model `heartmula-3b-q8_0`, `style` and optional `lyrics`. A
 `hotstep_heartmula` object can select the installed adapter and its strength.
 
-For a locally prepared [RVC Burn CUDA runtime](rvc-burn-runtime.md), check `rvc_training_status`.
-Use `dataset_create` and `dataset_add_folder` to add isolated voice recordings.
+Check `rvc_training_status` for the [RVC Burn CUDA runtime](rvc-burn-runtime.md).
+On supported hardware, `rvc_training_install_runtime` downloads the pinned
+components. Watch transfer progress in `rvc_training_status` and cancel a
+transfer with `rvc_training_runtime_cancel`. Use `dataset_create` and `dataset_add_folder` to add isolated voice recordings.
 Run `rvc_training_start` with the dataset ID and optional epochs, batch size
 and learning rate. `training_status` shows losses and the best checkpoint.
 Cancel with `training_cancel`. Install a saved checkpoint with
