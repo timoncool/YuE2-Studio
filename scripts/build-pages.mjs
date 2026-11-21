@@ -2,11 +2,12 @@
 // docs/sitemap.xml. Every page is plain HTML in its own language, with the app and its
 // questions described for search engines and AI answers (schema.org JSON-LD), so readers
 // without JavaScript, crawlers and assistants all see the same page.
-import { openSync, readFileSync, readSync, closeSync, writeFileSync } from 'node:fs';
+import { existsSync, openSync, readFileSync, readSync, closeSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { ORDER, SAMPLES, SETS, STRINGS } from '../docs/site/strings.mjs';
 import { STUDIO } from '../docs/site/studio.mjs';
+import { GALLERY, GALLERY_NAMES } from '../docs/site/gallery.mjs';
 import { MATRIX_TEXT, NATIVE_RADEON_NOTE, NATIVE_YUE2, RADEON_TEXT, RVC, WSL_TEXT } from '../docs/site/music-benchmarks.mjs';
 // the studio's version, from the one place it is written
 const VERSION = JSON.parse(readFileSync(new URL('../desktop/src-tauri/tauri.conf.json', import.meta.url), 'utf8')).version;
@@ -50,6 +51,26 @@ function pictureSize(lang, name) {
   closeSync(handle);
   return [head.readUInt32BE(16), head.readUInt32BE(20)];
 }
+/** Prefer the local capture and mark an English fallback in the page language. */
+function galleryGroup(lang, id, title, pictures) {
+  const cards = pictures.flatMap(([name, caption]) => {
+    const paths = (locale) => [shot(locale, name), `screenshots/${locale}-${name}.png`];
+    const candidates = lang === 'en' ? paths(lang) : [...paths(lang), ...paths('en')];
+    const src = candidates.find((path) => existsSync(join(docs, path)));
+    if (!src) return [];
+    const language = lang !== 'en' && src.startsWith('screenshots/en-') ? GALLERY[lang].english : '';
+    const alt = language ? `${caption} (${language})` : caption;
+    return `      <figure><img src="${src}" alt="${escape(alt)}" loading="lazy" width="1600" height="1000" /><figcaption>${escape(caption)}${language ? `<small class="gallery-language">${escape(language)}</small>` : ''}</figcaption></figure>`;
+  });
+  if (!cards.length) return '';
+  return `    <div class="gallery-group" role="group" aria-labelledby="${id}">
+      <h3 id="${id}">${escape(title)}</h3>
+      <div class="gallery">
+${cards.join('\n')}
+      </div>
+    </div>`;
+}
+
 const starsBadge = (alt) => `<img class="stars" src="https://img.shields.io/github/stars/${REPO.replace('https://github.com/', '')}?style=flat&amp;label=%E2%98%85&amp;color=3f3f46" alt="${alt}" height="20" />`;
 
 /** The first sentence of a text: the one line a tile or the hero has room for. */
@@ -194,6 +215,11 @@ function page(lang) {
 
   // the gallery holds the screenshots the hero and the tiles do not already show
   const shown = new Set(['01-create', ...STUDIO.bento.map(({ shot: name }) => name)]);
+  const gallery = GALLERY[lang];
+  const newShots = galleryGroup(lang, 'screenshots-new', gallery.newTitle,
+    GALLERY_NAMES.map((name, index) => [name, gallery.captions[index]]));
+  const earlierShots = galleryGroup(lang, 'screenshots-earlier', gallery.earlierTitle,
+    s.shots.filter(([name]) => !shown.has(name)));
   const sampleCard = (sample) => `      <figure class="sample"><figcaption><b>${escape(sample.title)}</b><span>${escape(sample.note[lang])}</span></figcaption><audio controls preload="none" src="samples/${sample.file}"></audio></figure>`;
   const samples = SAMPLES.length ? `  <section id="listen">
     <h2>${escape(s.samplesTitle)}</h2>
@@ -414,9 +440,7 @@ ${tiles}
 ${reviews}  <section id="screenshots">
     <h2>${escape(s.shotsTitle)}</h2>
     <p class="sub">${escape(s.shotsSub)}</p>
-    <div class="gallery">
-${s.shots.filter(([name]) => !shown.has(name)).map(([name, caption]) => `      <figure><img src="${shot(lang, name)}" alt="${escape(caption)}" loading="lazy" width="1600" height="1000" /><figcaption>${escape(caption)}</figcaption></figure>`).join('\n')}
-    </div>
+${[newShots, earlierShots].filter(Boolean).join('\n')}
   </section>
 
 ${speed}  <section id="start">

@@ -101,6 +101,8 @@ details.more summary { cursor: pointer; color: var(--muted); font-weight: 600; m
   box-shadow: 0 12px 30px rgba(0,0,0,.45);
 }
 
+.gallery-group + .gallery-group { margin-top: 28px; }
+.gallery-group > h3 { margin: 0 0 12px; }
 .gallery { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; }
 .gallery figure { margin: 0; }
 .gallery img {
@@ -109,8 +111,8 @@ details.more summary { cursor: pointer; color: var(--muted); font-weight: 600; m
 }
 .gallery figcaption {
   margin-top: 8px; color: var(--muted); font-size: 13px; line-height: 1.45;
-  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
 }
+.gallery-language { display: block; font-size: 12px; }
 .stars { display: block; }
 
 .steps { list-style: none; margin: 20px 0 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 12px; }

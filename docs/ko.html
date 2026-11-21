@@ -132,6 +132,8 @@ details.more summary { cursor: pointer; color: var(--muted); font-weight: 600; m
   box-shadow: 0 12px 30px rgba(0,0,0,.45);
 }
 
+.gallery-group + .gallery-group { margin-top: 28px; }
+.gallery-group > h3 { margin: 0 0 12px; }
 .gallery { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; }
 .gallery figure { margin: 0; }
 .gallery img {
@@ -140,8 +142,8 @@ details.more summary { cursor: pointer; color: var(--muted); font-weight: 600; m
 }
 .gallery figcaption {
   margin-top: 8px; color: var(--muted); font-size: 13px; line-height: 1.45;
-  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
 }
+.gallery-language { display: block; font-size: 12px; }
 .stars { display: block; }
 
 .steps { list-style: none; margin: 20px 0 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 12px; }
@@ -441,7 +443,9 @@ footer p { margin: 0 0 8px; }
   <section id="screenshots">
     <h2>스크린샷</h2>
     <p class="sub">스튜디오 그대로, 여러분의 언어로.</p>
-    <div class="gallery">
+    <div class="gallery-group" role="group" aria-labelledby="screenshots-earlier">
+      <h3 id="screenshots-earlier">기존 스튜디오 도구</h3>
+      <div class="gallery">
       <figure><img src="screenshots/ko-03-track.webp" alt="완성된 트랙과 가사, 그리고 노래의 바탕이 된 악보 — 바로 다시 쓸 수 있습니다." loading="lazy" width="1600" height="1000" /><figcaption>완성된 트랙과 가사, 그리고 노래의 바탕이 된 악보 — 바로 다시 쓸 수 있습니다.</figcaption></figure>
       <figure><img src="screenshots/ko-05-models.webp" alt="모델 세트: 역할별 양자화, 디스크에 있는 파일, 클릭 한 번으로 전환." loading="lazy" width="1600" height="1000" /><figcaption>모델 세트: 역할별 양자화, 디스크에 있는 파일, 클릭 한 번으로 전환.</figcaption></figure>
       <figure><img src="screenshots/ko-06-lora.webp" alt="LoRA 카탈로그: 스타일, 아티스트, 사운드를 작가 표기와 함께 한 번에 내려받기." loading="lazy" width="1600" height="1000" /><figcaption>LoRA 카탈로그: 스타일, 아티스트, 사운드를 작가 표기와 함께 한 번에 내려받기.</figcaption></figure>
@@ -452,6 +456,7 @@ footer p { margin: 0 0 8px; }
       <figure><img src="screenshots/ko-14-winamp.webp" alt="창 전체가 Winamp 2로: 스킨을 입힌 이퀄라이저, 재생 목록, MilkDrop." loading="lazy" width="1600" height="1000" /><figcaption>창 전체가 Winamp 2로: 스킨을 입힌 이퀄라이저, 재생 목록, MilkDrop.</figcaption></figure>
       <figure><img src="screenshots/ko-16-midi-editor.webp" alt="MIDI нЋём§‘кё°: нЉёлћ™кіј мќЊн‘њ, нЋём§‘ к°ЂлЉҐн•њ мЅ”л“њм™Ђ кµ¬к°„ н‘њм‹њ." loading="lazy" width="1600" height="1000" /><figcaption>MIDI нЋём§‘кё°: нЉёлћ™кіј мќЊн‘њ, нЋём§‘ к°ЂлЉҐн•њ мЅ”л“њм™Ђ кµ¬к°„ н‘њм‹њ.</figcaption></figure>
       <figure><img src="screenshots/ko-17-chord-bed.webp" alt="코드 바탕: 정한 템포·조성·박자로 쉼표 위에 코드를 놓고, 가사 태그마다 한 섹션. 고른 진행도 보여 줍니다." loading="lazy" width="1600" height="1000" /><figcaption>코드 바탕: 정한 템포·조성·박자로 쉼표 위에 코드를 놓고, 가사 태그마다 한 섹션. 고른 진행도 보여 줍니다.</figcaption></figure>
+      </div>
     </div>
   </section>
 
