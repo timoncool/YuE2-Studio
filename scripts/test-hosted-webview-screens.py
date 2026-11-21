@@ -217,7 +217,21 @@ def check_screens(root):
     tool("winamp_set", on=False)
     tool("player_pause")
 
-    notes = tool("score_to_midi", abc="X:1\nM:4/4\nL:1/4\nK:C\nC D E F |]")
+    abc = """X:1
+T:
+M:4/4
+L:1/4
+Q:1/4=120
+V: Vocal clef=treble name="Vocal Melody" snm="Vocal"
+V: Ins clef=treble name="Ins Melody" snm="Inst."
+K:C
+V: Vocal
+C D E F |
+V: Ins
+G4 |
+"""
+    notes = tool("score_to_midi", abc=abc)
+    assert notes.get("data"), notes
     midi = root/"hosted-midi.mid"
     midi.write_bytes(base64.b64decode(notes["data"]))
     assert midi.read_bytes().startswith(b"MThd")
@@ -238,16 +252,26 @@ def check_screens(root):
     assert {"vocals","instrumental"} <= set(stem_status["stems"]), stem_status
 
     ui("navigate", view="library")
-    page = wait_page("Hosted QA recording")
+    click('All songs')
+    page = wait_page(predicate=lambda value: any('Hosted QA recording' in line and 'More actions' in line
+                                                  for line in value.splitlines()))
     song_line = next(line for line in page.splitlines() if "Hosted QA recording" in line and "More actions" in line)
     ui("click", ref=re.search(r"(e\d+) More actions",song_line)[1])
     click("Process audio")
-    process_page = wait_page('Page: Process audio', 'Peak normalisation')
+    process_page = wait_page('Peak normalisation', 'button "Process"')
     click('Peak normalisation', process_page)
     click('button "Process"')
     (out/"screen-processing.txt").write_text(wait_page('Save as a new track'), encoding="utf8")
     click('Save as a new track')
-    wait_page('Open in Library')
+    for _ in range(40):
+        library = json.loads(request('/v1/library/songs'))
+        if any(entry.get('metadata', {}).get('derived', {}).get('from') == song['id']
+               for entry in library):
+            json_file(out/'processing-library.json', library)
+            break
+        time.sleep(.25)
+    else:
+        raise AssertionError(("Processed track is absent", library, ui("read_page")))
 
     ui("navigate", view="adapters")
     click('tab "Catalog"')
@@ -255,8 +279,7 @@ def check_screens(root):
     click('tab "Training"')
     click('Canções de exemplo')
     click('Result')
-    wait_page('LoRA de exemplo')
-    (out/"screen-training.txt").write_text(ui("read_page"), encoding="utf8")
+    (out/"screen-training.txt").write_text(wait_page('To LoRA', '50'), encoding="utf8")
     ui("navigate", view="news")
     (out/"screen-news.txt").write_text(wait_page('News'), encoding="utf8")
     sections = dict(account="Account", models="Models", engine="Local engine", cloud="Providers",
