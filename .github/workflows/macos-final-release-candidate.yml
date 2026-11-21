@@ -1,0 +1,244 @@
+name: macOS final release candidate acceptance
+
+on:
+  push:
+    branches: [qa/yue2-final-rc-macos]
+
+permissions:
+  actions: read
+  contents: read
+
+env:
+  BUILD_RUN: "44906300832"
+  BUILD_SHA: "34b3fe4676683fffe90229f4bd396524ef0d5967"
+  DMG_SHA256: "4a7d73b35730fa4ceee7d9f0bb18d431fd86efcc9ad3a627a1cdb98699123f97"
+  PUBLIC_ROOT_SHA256: "6115060a91903955485aefaf4fbacfee0ec1292053d819be2ed98cdf4cce2a83"
+  VERSION: "5.0.0"
+  GH_TOKEN: ${{ github.token }}
+
+jobs:
+  macos-release-candidate:
+    runs-on: macos-15
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ env.BUILD_SHA }}
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Verify and download the exact build artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$BUILD_SHA"
+          actual="$(gh run view "$BUILD_RUN" -R "$GITHUB_REPOSITORY" --json headSha,conclusion --jq '.headSha + ":" + .conclusion')"
+          test "$actual" = "$BUILD_SHA:success"
+          work="$RUNNER_TEMP/mac-rc"
+          mkdir -p "$work/receipt"
+          gh run download "$BUILD_RUN" -R "$GITHUB_REPOSITORY" -n yue2-studio-macos-arm64 -D "$work"
+          dmg="$work/YuE2-Studio-$VERSION-macos-arm64.dmg"
+          printf '%s  %s\n' "$DMG_SHA256" "$dmg" | shasum -a 256 -c -
+          printf 'DMG=%s\n' "$dmg" >> "$GITHUB_ENV"
+      - name: Verify mounted Mach-O contents and supported CLI commands
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/check-macos-dmg.py "$DMG" 2>&1 | tee "$RUNNER_TEMP/mac-rc/receipt/mounted-abi.log"
+      - name: Verify the public bootstrap, application window and signed catalogue
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          """Passive verification of the release DMG and actual app on the hosted Mac."""
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+          import plistlib
+          import subprocess
+          import time
+          import urllib.error
+          import urllib.parse
+          import urllib.request
+
+          dmg = Path(os.environ["DMG"])
+          receipt = Path(os.environ["RUNNER_TEMP"]) / "mac-rc/receipt"
+          checkout = Path.cwd()
+          receipt.mkdir(parents=True, exist_ok=True)
+          env = os.environ
+          expected_version = env["VERSION"]
+          def checked(*argv):
+              subprocess.run(argv, check=True, timeout=60)
+          def sha(path):
+              with path.open("rb") as file:
+                  return hashlib.file_digest(file, "sha256").hexdigest()
+          def write(name, value):
+              (receipt / name).write_text(json.dumps(value, indent=2) + "\n", encoding="utf8")
+          def wait_for(test, timeout=150):
+              end = time.monotonic() + timeout
+              while time.monotonic() < end:
+                  try:
+                      value = test()
+                      if value:
+                          return value
+                  except (urllib.error.URLError, TimeoutError):
+                      pass
+                  time.sleep(1)
+              raise TimeoutError(test)
+
+          assert sha(dmg) == env["DMG_SHA256"]
+          metadata = {
+              "build_run": env["BUILD_RUN"], "build_sha": env["BUILD_SHA"],
+              "dmg_sha256": sha(dmg), "bytes": dmg.stat().st_size,
+              "runner": subprocess.check_output(["sw_vers"], text=True).strip(),
+          }
+          write("source.json", metadata)
+          mount = receipt.parent / "mount"
+          mount.mkdir()
+          copied = receipt.parent / "YuE2 Studio.app"
+          checked("hdiutil", "verify", dmg)
+          checked("hdiutil", "attach", "-readonly", "-noautoopen", "-nobrowse", "-mountpoint", mount, dmg)
+          try:
+              app, = mount.glob("*.app")
+              assert not app.is_symlink()
+              bundled = app / "Contents/Resources/component-channel"
+              bootstrap = checkout / "distribution/channels/stable/bootstrap"
+              for name in ("root.json", "url.txt"):
+                  assert (bundled / name).read_bytes() == (bootstrap / name).read_bytes(), name
+              root = json.loads((bundled / "root.json").read_bytes())
+              assert root["signed"]["_type"] == "root" and root["signatures"]
+              version = root["signed"]["version"]
+              url = (bundled / "url.txt").read_text().strip()
+              assert url == "https://timoncool.github.io/YuE2-Studio/component-channel/", url
+              public_root_url = urllib.parse.urljoin(url, f"{version}.root.json")
+              with urllib.request.urlopen(public_root_url, timeout=30) as response:
+                  public_bytes = response.read()
+              assert public_bytes == (bundled / "root.json").read_bytes()
+              metadata.update(root_version=version, root_sha256=sha(bundled / "root.json"), public_root_url=public_root_url)
+              assert metadata["root_sha256"] == env["PUBLIC_ROOT_SHA256"], metadata
+              info = plistlib.loads((app / "Contents/Info.plist").read_bytes())
+              assert info["CFBundleShortVersionString"] == expected_version
+              metadata["version"] = expected_version
+              metadata["declared_min_os"] = info["LSMinimumSystemVersion"]
+              write("source.json", metadata)
+              checked("codesign", "--verify", "--deep", "--strict", app)
+              checked("ditto", app, copied)
+          finally:
+              if subprocess.run(["hdiutil", "detach", mount], timeout=30).returncode:
+                  checked("hdiutil", "detach", "-force", mount)
+          checked("codesign", "--verify", "--deep", "--strict", copied)
+          executable = copied / "Contents/MacOS" / info["CFBundleExecutable"]
+          child_env = dict(env, YUE_STUDIO_DATA_ROOT=str(receipt.parent / "profile"),
+                           TIMONCOOL_SHARED_DIR=str(receipt.parent / "shared"), DO_NOT_TRACK="1")
+          for key in ("YUE_COMPONENT_CHANNEL_URL", "YUE_COMPONENT_CHANNEL_ROOT", "YUE_ENGINE_BIN", "YUE_ENGINE_BASE_URL", "GH_TOKEN", "GITHUB_TOKEN"):
+              child_env.pop(key, None)
+          opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+          session_id = None
+          def local(route, body=None, timeout=10):
+              headers = {"Content-Type": "application/json", "Accept": "application/json,text/event-stream"}
+              if session_id:
+                  headers["Mcp-Session-Id"] = session_id
+              request = urllib.request.Request("http://127.0.0.1:8791" + route,
+                  data=None if body is None else json.dumps(body).encode(), headers=headers)
+              with opener.open(request, timeout=timeout) as response:
+                  raw = response.read().decode()
+                  if raw.startswith(("event:", "data:")):
+                      raw = next(line[6:] for line in raw.splitlines() if line.startswith("data: "))
+                  return (json.loads(raw) if raw else None), response.headers.get("Mcp-Session-Id")
+          def rpc(method, params, request_id=None):
+              request = {"jsonrpc":"2.0", "method":method, "params":params}
+              if request_id is not None:
+                  request["id"] = request_id
+              reply, sid = local("/mcp", request, timeout=35)
+              if reply is not None:
+                  assert not reply.get("error"), reply
+              return (reply["result"] if reply else None), sid
+          def tool(name, params=None):
+              result, _ = rpc("tools/call", {"name":name, "arguments":params or {}}, time.monotonic_ns())
+              assert not result.get("isError"), result
+              return result.get("structuredContent") or result["content"][0]["text"]
+
+          def stop_process(process, log, filename):
+              try:
+                  stop = subprocess.run([executable, "--stop"], env=child_env, stdout=log, stderr=log, timeout=25)
+                  def service_stopped():
+                      try:
+                          local("/health", timeout=2)
+                      except (urllib.error.URLError, TimeoutError):
+                          return True
+                      return False
+                  write(filename, {"stop_exit":stop.returncode,"service_stopped":wait_for(service_stopped, 30)})
+              finally:
+                  if process.poll() is None:
+                      process.terminate()
+                  process.wait(timeout=30)
+
+          with (receipt/"studio.log").open("wb") as log:
+              process = subprocess.Popen([executable], env=child_env, stdout=log, stderr=log)
+              try:
+                  health, _ = wait_for(lambda: local("/health", timeout=2))
+                  assert health["status"] == "ok" and health["runtime"] == "native", health
+                  assert Path(health["service_executable"]).resolve().is_relative_to(copied.resolve()), health
+                  write("health.json", health)
+                  initialized, session_id = rpc("initialize", {"protocolVersion":"2025-03-26","capabilities":{},
+                        "clientInfo":{"name":"macos-final-rc-check","version":"1"}}, 1)
+                  assert initialized["serverInfo"]["version"] == expected_version, initialized
+                  write("initialize.json", initialized)
+                  rpc("notifications/initialized", {})
+                  def opened():
+                      status = tool("studio_status")
+                      if isinstance(status, str):
+                          status = json.loads(status)
+                      return status if status["window_open"] else None
+                  write("window.json", wait_for(opened))
+                  page_digests = {}
+                  for screen in ("create", "library", "search", "playlist", "adapters", "tools", "news"):
+                      write(f"navigate-{screen}.json", tool("ui_navigate", {"view":screen}))
+                      page = tool("ui_read_page")
+                      assert len(str(page).splitlines()) > 5, (screen, page)
+                      write(f"page-{screen}.json", page)
+                      page_digests[screen] = sha(receipt / f"page-{screen}.json")
+                  assert len(set(page_digests.values())) == 7, page_digests
+                  write("screens.json", page_digests)
+                  tool("ui_navigate", {"view":"create"})
+                  checked("screencapture", "-x", receipt.parent / "window.png")
+                  assert (receipt.parent / "window.png").stat().st_size > 0
+                  catalogue, _ = local("/v1/components/music-engines/refresh", {}, timeout=60)
+                  assert catalogue["source"] == "signed" and catalogue["platform"] == "macos-aarch64", catalogue
+                  write("signed-catalogue.json", catalogue)
+                  print(json.dumps(metadata))
+              finally:
+                  stop_process(process, log, "window-shutdown.json")
+
+          session_id = None
+          with (receipt/"headless.log").open("wb") as log:
+              process = subprocess.Popen([executable, "--headless"], env=child_env, stdout=log, stderr=log)
+              try:
+                  health, _ = wait_for(lambda: local("/health", timeout=2))
+                  assert health["status"] == "ok" and Path(health["service_executable"]).resolve().is_relative_to(copied.resolve())
+                  write("headless-health.json", health)
+                  initialized, session_id = rpc("initialize", {"protocolVersion":"2025-03-26","capabilities":{},
+                        "clientInfo":{"name":"macos-final-rc-check","version":"1"}}, 1)
+                  assert initialized["serverInfo"]["version"] == expected_version
+                  rpc("notifications/initialized", {})
+                  status = tool("studio_status")
+                  if isinstance(status, str):
+                      status = json.loads(status)
+                  assert status["window_open"] is False, status
+                  write("headless-status.json", status)
+              finally:
+                  stop_process(process, log, "headless-shutdown.json")
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: macos-final-release-candidate-receipt
+          path: ${{ runner.temp }}/mac-rc/receipt
+          retention-days: 14
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: macos-final-release-candidate-window
+          path: ${{ runner.temp }}/mac-rc/window.png
+          retention-days: 1
