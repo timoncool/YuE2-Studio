@@ -56,6 +56,9 @@ mod request_log;
 mod resources;
 #[cfg(windows)]
 mod gpu_memory;
+// The video memory of an Intel card on Linux, whose driver publishes none.
+#[cfg(not(any(windows, target_os = "macos")))]
+mod vulkan_mem;
 mod chunked;
 mod separation;
 mod restore;
@@ -2995,6 +2998,9 @@ async fn start_processing(
         .library
         .media_path_for_song(&song)
         .ok_or_else(|| api_error(StatusCode::BAD_REQUEST, "this track has no stored audio".into()))?;
+    if let Some(region) = request.region {
+        region.validate().map_err(|error| api_error(StatusCode::BAD_REQUEST, error.to_string()))?;
+    }
     let media = state.library.media_dir().to_path_buf();
     let reference = match &request.master {
         None => None,
@@ -3052,7 +3058,11 @@ async fn start_processing(
         let current = |run: &Option<processing::ProcessRun>| run.as_ref().is_some_and(|run| run.id == run_id);
         let outcome = (|| -> anyhow::Result<std::path::PathBuf> {
             let vst = studio_data_root().and_then(|root| vst::VstHost::locate(&root));
-            let audio = processing::run(&source, reference.as_deref(), &request, vst.as_ref(), |stage| {
+            let folder = processing::workspace(&media);
+            std::fs::create_dir_all(&folder)?;
+            let extension = if request.region.is_some() { "wav" } else { "flac" };
+            let path = folder.join(format!("{id}-{}.{extension}", &run_id[run_id.len() - 8..]));
+            if let Err(error) = processing::render_preview(&source, &path, reference.as_deref(), &request, vst.as_ref(), |stage| {
                 let state = background.clone();
                 let run_id = run_id.clone();
                 handle.spawn(async move {
@@ -3060,11 +3070,10 @@ async fn start_processing(
                         run.stage = Some(stage);
                     }
                 });
-            })?;
-            let folder = processing::workspace(&media);
-            std::fs::create_dir_all(&folder)?;
-            let path = folder.join(format!("{id}-{}.flac", &run_id[run_id.len() - 8..]));
-            std::fs::write(&path, audio_post::encode::flac(&audio)?).with_context(|| format!("write {}", path.display()))?;
+            }) {
+                let _ = std::fs::remove_file(&path);
+                return Err(error);
+            }
             Ok(path)
         })();
         handle.block_on(async {

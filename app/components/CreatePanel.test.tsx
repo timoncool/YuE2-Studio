@@ -4,8 +4,10 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Song, YueRequest } from '../types';
 import { useGenerations } from '../services/generations';
+import { fetchAdapters } from '../services/adapters';
 import { afterGenerationPause } from '../services/generationPause';
 
+const bridgeCommands = new Map<string, (args: Record<string, unknown>) => unknown>();
 const composeScore = vi.fn();
 const transcribe = vi.fn();
 const instrumentalScore = vi.fn();
@@ -25,7 +27,9 @@ vi.mock('../services/studioQueries', async original => ({
   useSetupStatus: () => ({ isError: false, data: { ready, engine_ready: ready && !enginePaused, engine_paused: enginePaused } }),
   useOpenRouterSettings: () => ({ data: { configured } }),
 }));
-vi.mock('../services/mcpBridge', () => ({ useBridgeCommand: () => undefined }));
+vi.mock('../services/mcpBridge', () => ({
+  useBridgeCommand: (name: string, handler: (args: Record<string, unknown>) => unknown) => bridgeCommands.set(name, handler),
+}));
 vi.mock('../services/transcription', () => ({ composeScore: (...args: unknown[]) => composeScore(...args), composePlans: vi.fn(), transcribe: (...args: unknown[]) => transcribe(...args) }));
 vi.mock('../services/scoreApi', () => ({
   instrumentalScore: (abc: string) => instrumentalScore(abc),
@@ -35,7 +39,7 @@ vi.mock('../services/scoreApi', () => ({
 }));
 vi.mock('../services/adapters', async (original) => ({
   ...(await original<typeof import('../services/adapters')>()),
-  fetchAdapters: async () => ({ installed: [{ id: 'instrumental', origin: { type: 'catalog', catalog_id: 'yue2-instrumental' }, slots: ['ar', 'nar'], scales: {}, error: null }], installing: [], slots: [] }),
+  fetchAdapters: vi.fn(async () => ({ installed: [{ id: 'instrumental', origin: { type: 'catalog', catalog_id: 'yue2-instrumental' }, slots: ['ar', 'nar'], scales: {}, error: null }], installing: [], slots: [] })),
   installCatalogAdapters: vi.fn(),
   useAdapterLibrary: () => ({ installed: [], slots: [] }),
 }));
@@ -63,6 +67,7 @@ const sent: YueRequest[] = [];
 
 beforeEach(() => {
   sent.length = 0;
+  bridgeCommands.clear();
   ready = true;
   enginePaused = false;
   configured = false;
@@ -602,6 +607,33 @@ it('asks for an explicit profile when a migrated ACE take used custom weights', 
 });
 
 describe('an instrumental (#217)', () => {
+  it('waits for the Instrumental LoRA and permits an ordinary request without it (#234)', async () => {
+    const installed = await fetchAdapters();
+    let finishLookup!: (result: typeof installed) => void;
+    vi.mocked(fetchAdapters).mockReturnValueOnce(new Promise(resolve => { finishLookup = resolve; }));
+    act(() => root.render(panel({})));
+    await flush();
+    type(field('textarea')!, 'calm folk, acoustic guitar');
+    click(buttonNamed('cotOff')!);
+    const instrumental = host.querySelector<HTMLInputElement>('input[type="checkbox"]')!;
+    click(instrumental);
+    click(buttonNamed('createInstrumental')!);
+    await flush();
+    expect(sent).toHaveLength(0);
+
+    await act(async () => { finishLookup(installed); });
+    click(buttonNamed('createInstrumental')!);
+    await flush();
+    expect(sent[0].adapters).toEqual([expect.objectContaining({ id: 'instrumental' })]);
+    expect(sent[0].lyrics).toBe('');
+
+    click(instrumental);
+    click(buttonNamed('create')!);
+    await flush();
+    expect(sent).toHaveLength(2);
+    expect(sent[1].adapters).toBeUndefined();
+  });
+
   it('keeps a score written for one submission out of the form and writes a new one for the next', async () => {
     act(() => root.render(panel({})));
     await flush();
@@ -958,6 +990,78 @@ it('submits a MuLaCover library original and restores it for a new take', async 
   });
 });
 
+describe('Auto max duration', () => {
+  const autoButton = () => buttonNamed('maxDurationAuto');
+  // an instrumental with No score goes straight to onGenerate, with no score to compose first
+  const createOne = async () => {
+    click(buttonNamed('cotOff')!);
+    click(buttonNamed('createInstrumental')!);
+    await flush();
+  };
+  const startInstrumental = async () => {
+    act(() => root.render(panel({})));
+    await flush();
+    type(field('textarea')!, 'calm folk, acoustic guitar');
+    click(host.querySelector<HTMLInputElement>('input[type="checkbox"]')!);
+    await flush();
+  };
+
+  it('is where a new studio starts, and sends no ceiling: the song ends where the model ends it', async () => {
+    await startInstrumental();
+    expect(autoButton()?.getAttribute('aria-pressed')).toBe('true');
+    await createOne();
+    expect(sent).toHaveLength(1);
+    expect(sent[0].duration_seconds).toBeUndefined();
+  });
+
+  it('switched off sends the seconds again and is kept for the next song', async () => {
+    await startInstrumental();
+    click(autoButton()!);
+    await flush();
+    expect(autoButton()?.getAttribute('aria-pressed')).toBe('false');
+    await createOne();
+    expect(sent[0].duration_seconds).toBe(130);
+    expect(localStorage.getItem('studio.createDuration')).toBe('130');
+    click(autoButton()!);
+    await flush();
+    expect(localStorage.getItem('studio.createDuration')).toBe('auto');
+  });
+
+  it('keeps seconds a user chose before Auto existed', async () => {
+    localStorage.setItem('studio.createDuration', '240');
+    await startInstrumental();
+    expect(autoButton()?.getAttribute('aria-pressed')).toBe('false');
+    await createOne();
+    expect(sent[0].duration_seconds).toBe(240);
+    click(autoButton()!);
+    click(autoButton()!);
+    await createOne();
+    expect(sent[1].duration_seconds).toBe(240);
+  });
+
+  it('sends the manual ceiling or omits it through the Create MCP bridge', async () => {
+    act(() => root.render(panel({})));
+    await flush();
+    const command = (name: string, args: Record<string, unknown> = {}) => bridgeCommands.get(name)!(args);
+    const read = () => command('create_get') as { fields: Record<string, unknown>; request: YueRequest };
+
+    act(() => { command('create_set', { fields: { style: 'calm acoustic folk, gentle guitar instrumental', cot: 'off', duration_seconds: 10 } }); });
+    expect(read().fields.duration_seconds).toBe('10');
+    expect(read().request.duration_seconds).toBe(10);
+    act(() => { command('create_submit'); });
+    await flush();
+
+    act(() => { command('create_set', { fields: { duration_seconds: 'auto' } }); });
+    expect(read().fields.duration_seconds).toBe('auto');
+    expect(read().request).not.toHaveProperty('duration_seconds');
+    act(() => { command('create_submit'); });
+    await flush();
+    expect(sent).toHaveLength(2);
+    expect(sent[0].duration_seconds).toBe(10);
+    expect(sent[1]).not.toHaveProperty('duration_seconds');
+  });
+});
+
 it('restores HOT-Step cover source and lead sheet from a saved take', async () => {
   vi.stubGlobal('fetch', vi.fn(async (url: string) => Response.json(url === '/v1/music/native/hotstep/profiles' ? {
     engine: 'hotstep', engine_installed: true,
@@ -979,27 +1083,5 @@ it('restores HOT-Step cover source and lead sheet from a saved take', async () =
   expect(sent.at(-1)).toMatchObject({
     music_source: { kind: 'native', engine: 'hotstep', model: 'heartmula-mulacover' }, cover_of: 'recording-original',
     abc, duration_seconds: 4, steps: 10, seed: 42, cfg_scale: 1.5, output_format: 'flac',
-  });
-});
-
-it('submits a MuLaCover library original and restores it for a new take', async () => {
-  vi.stubGlobal('fetch', vi.fn(async () => Response.json({ engine: 'audio.cpp', models: [
-    { id: 'mulacover', name: 'MuLaCover', profile_id: 'mulacover_q8_0', quantization: 'Q8_0', ready: true, missing: [] },
-  ] })));
-  const song = {
-    title: 'Cover take', ditModel: 'audio.cpp', style: 'warm piano', lyrics: '[verse] Morning',
-    generationParams: {
-      music_source: { kind: 'audio_cpp', model: 'mulacover' },
-      cover_of: 'original-track', duration_seconds: 3, seed: 2026, output_format: 'flac',
-    },
-  } as Song;
-  act(() => root.render(panel({ musicEngine: 'audio.cpp', initialData: { song, timestamp: 1 } })));
-  await flush();
-  const picker = [...host.querySelectorAll('select')].find(select => select.closest('label')?.textContent?.includes('Original song'));
-  expect(picker?.value).toBe('original-track');
-  click(buttonNamed('create')!);
-  expect(sent.at(-1)).toMatchObject({
-    music_source: { kind: 'audio_cpp', model: 'mulacover' }, cover_of: 'original-track',
-    style: 'warm piano', lyrics: '[verse] Morning', duration_seconds: 3, seed: 2026, output_format: 'flac',
   });
 });

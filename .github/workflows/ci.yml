@@ -18,13 +18,21 @@ jobs:
   changes:
     runs-on: ubuntu-latest
     outputs:
+      pr_run: ${{ steps.coverage.outputs.run }}
       mirrors_only: ${{ steps.classify.outputs.mirrors_only }}
       channel_changed: ${{ steps.classify.outputs.channel_changed }}
     steps:
       - uses: actions/checkout@v7.0.1
         with:
           fetch-depth: 0
+      - id: coverage
+        name: Find CI already testing this feature push in its pull request
+        if: github.event_name == 'push' && startsWith(github.ref_name, 'music-round/') && github.ref_name != 'music-round/native-minimax-integration'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash distribution/components/find_pr_ci.sh
       - id: classify
+        if: steps.coverage.outputs.run == ''
         name: Check whether only component mirrors changed
         env:
           PUSH_BASE: ${{ github.event.before }}
@@ -34,7 +42,7 @@ jobs:
 
   service:
     needs: changes
-    if: ${{ needs.changes.outputs.mirrors_only != 'true' }}
+    if: ${{ needs.changes.outputs.pr_run == '' && needs.changes.outputs.mirrors_only != 'true' }}
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v7.0.1
@@ -50,7 +58,7 @@ jobs:
   # the Windows one, so the runner's own stable toolchain is taken
   service-linux:
     needs: changes
-    if: ${{ needs.changes.outputs.mirrors_only != 'true' }}
+    if: ${{ needs.changes.outputs.pr_run == '' && needs.changes.outputs.mirrors_only != 'true' }}
     runs-on: ubuntu-latest
     env:
       RUSTUP_TOOLCHAIN: stable
@@ -70,7 +78,7 @@ jobs:
 
   interface:
     needs: changes
-    if: ${{ needs.changes.outputs.mirrors_only != 'true' }}
+    if: ${{ needs.changes.outputs.pr_run == '' && needs.changes.outputs.mirrors_only != 'true' }}
     runs-on: ubuntu-latest
     defaults:
       run:
