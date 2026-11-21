@@ -1,0 +1,27 @@
+name: RVC application service handoff
+
+on:
+  push:
+    branches: [qa/rvc-apply-stem-mcp]
+
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 22
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          fetch-depth: 2
+      - uses: Swatinem/rust-cache@v2
+      - name: Build Studio service for the local RTX smoke
+        run: cargo build --locked -p music-server --bin music-server
+      - name: Verify passive discovery during active generation
+        run: python scripts/test-openrouter-music.py target/debug/music-server.exe
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rvc-apply-stem-service
+          path: target/debug/music-server.exe
+          retention-days: 7
