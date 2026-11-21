@@ -445,6 +445,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
   const [hotstepSa3Draft, setHotstepSa3Draft] = useState<HotStepSa3Draft>({});
   const [hotstepDraft, setHotstepDraft] = useState<HotStepCoverDraft>({ original: '', abc: '' });
   const audioFamily = audioCpp ? native.profile?.id : undefined;
+  const miniMaxMusic3 = nativeEngine === 'minimaxmusic-cpp' || (audioCpp && native.selectedId === audioCppMiniMax);
   const miDasheng = audioFamily === miDashengModel;
   const magenta = audioFamily === magentaModel;
   const [magentaOptions, setMagentaOptions] = useState(() => restoreMagentaOptions(undefined));
@@ -1694,7 +1695,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
 
           {onMusicEngineChange && (
             <label className="flex items-center gap-2 text-xs font-medium">
-              <span className="shrink-0">{musicStrings.engine}</span>
+              <span className="shrink-0">{musicStrings.source}</span>
               <select className={CONTROL} value={musicEngine} onChange={event => {
                 if (isMusicEngine(event.target.value)) onMusicEngineChange(event.target.value);
                 setError(null);
@@ -1703,6 +1704,22 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
                 <option value="local">{musicStrings.local}</option>
                 {Object.entries(profileMusicEngines).map(([engine, label]) => <option key={engine} value={engine}>{label}</option>)}
                 <option value="openrouter">OpenRouter</option>
+              </select>
+            </label>
+          )}
+          {onMusicEngineChange && miniMaxMusic3 && (
+            <label className="flex items-center gap-2 text-xs font-medium">
+              <span className="shrink-0">MiniMax Music3 · {musicStrings.engine}</span>
+              <select className={CONTROL} value={nativeEngine} onChange={event => {
+                const engine = event.target.value;
+                if (engine !== 'minimaxmusic-cpp' && engine !== 'audio.cpp') return;
+                if (engine === 'audio.cpp') native.select(audioCppMiniMax, engine);
+                onMusicEngineChange(engine);
+                setError(null);
+                setTakeChoiceOpen(false);
+              }}>
+                <option value="minimaxmusic-cpp">minimaxmusic.cpp</option>
+                <option value="audio.cpp">audio.cpp</option>
               </select>
             </label>
           )}
