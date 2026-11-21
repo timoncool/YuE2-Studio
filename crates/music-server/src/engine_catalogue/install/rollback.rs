@@ -41,7 +41,8 @@ async fn restore<P: Package>(state: &AppState, id: &str, request: Requested) -> 
     let mut file = tempfile::NamedTempFile::new_in(&root)?;
     serde_json::to_writer(file.as_file_mut(), &selection)?;
     file.as_file().sync_all()?;
-    let _activation = state.engine_use.try_write().context("The local music engine is busy.")?;
+    let _activation = state.engine_use.try_write()
+        .map_err(|_| anyhow::anyhow!("The local music engine is busy."))?;
     ensure!(!local_work_pending(state).await, "The local music engine is busy.");
     file.persist(root.join("active.json"))?;
     Ok(selection)
