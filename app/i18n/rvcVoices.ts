@@ -1,5 +1,6 @@
 export const rvcVoiceStrings = {
   en: {
+    refresh: 'Update catalog', refreshing: 'Updating catalog…', refreshed: 'Catalog updated', refreshFailed: 'Could not update the catalog.',
     remove: 'Remove voice', confirmRemove: 'Remove {name} and its retrieval index? Finished songs will stay in the library.',
     title: 'RVC voice catalog', choose: 'Voice', none: 'Choose a voice',
     model: 'Voice checkpoint (.pth or .pt)', index: 'Retrieval index (.index, optional)',
@@ -18,6 +19,7 @@ export const rvcVoiceStrings = {
     search: 'Search voices', vocalStyle: 'Vocal style', rvcVersion: 'RVC version', sampleRate: 'Sample rate', retrieval: 'Retrieval index', withIndex: 'With index', withoutIndex: 'Without index', all: 'All', clear: 'Clear filters', noMatch: 'No voices match these filters.',
   },
   ru: {
+    refresh: 'Обновить каталог', refreshing: 'Обновляем каталог…', refreshed: 'Каталог обновлён', refreshFailed: 'Не удалось обновить каталог.',
     remove: 'Удалить голос', confirmRemove: 'Удалить голос {name} и его поисковый индекс? Готовые песни останутся в библиотеке.',
     title: 'Каталог голосов RVC', choose: 'Голос', none: 'Выберите голос',
     model: 'Веса голоса (.pth или .pt)', index: 'Поисковый индекс (.index, необязательно)',
@@ -36,6 +38,7 @@ export const rvcVoiceStrings = {
     search: 'Поиск голосов', vocalStyle: 'Стиль вокала', rvcVersion: 'Версия RVC', sampleRate: 'Частота дискретизации', retrieval: 'Поисковый индекс', withIndex: 'С индексом', withoutIndex: 'Без индекса', all: 'Все', clear: 'Сбросить фильтры', noMatch: 'Нет голосов по этим фильтрам.',
   },
   zh: {
+    refresh: '更新目录', refreshing: '正在更新目录…', refreshed: '目录已更新', refreshFailed: '无法更新目录。',
     remove: '删除声音', confirmRemove: '删除 {name} 及其检索索引？已完成的歌曲将保留在曲库中。',
     title: 'RVC 声音库', choose: '声音', none: '选择声音',
     model: '声音权重（.pth 或 .pt）', index: '检索索引（.index，可选）',
@@ -54,6 +57,7 @@ export const rvcVoiceStrings = {
     search: '搜索声音', vocalStyle: '演唱风格', rvcVersion: 'RVC 版本', sampleRate: '采样率', retrieval: '检索索引', withIndex: '有索引', withoutIndex: '无索引', all: '全部', clear: '清除筛选', noMatch: '没有符合筛选条件的声音。',
   },
   ja: {
+    refresh: 'カタログを更新', refreshing: 'カタログを更新しています…', refreshed: 'カタログを更新しました', refreshFailed: 'カタログを更新できませんでした。',
     remove: '音声を削除', confirmRemove: '{name} とその検索インデックスを削除しますか？完成した曲はライブラリに残ります。',
     title: 'RVC 音声カタログ', choose: '音声', none: '音声を選択',
     model: '音声の重み（.pth または .pt）', index: '検索インデックス（.index、任意）',
@@ -72,6 +76,7 @@ export const rvcVoiceStrings = {
     search: '音声を検索', vocalStyle: '歌唱スタイル', rvcVersion: 'RVC バージョン', sampleRate: 'サンプルレート', retrieval: '検索インデックス', withIndex: 'インデックスあり', withoutIndex: 'インデックスなし', all: 'すべて', clear: '絞り込みを解除', noMatch: '条件に一致する音声がありません。',
   },
   ko: {
+    refresh: '카탈로그 업데이트', refreshing: '카탈로그 업데이트 중…', refreshed: '카탈로그 업데이트 완료', refreshFailed: '카탈로그를 업데이트하지 못했습니다.',
     remove: '음성 삭제', confirmRemove: '{name} 및 검색 인덱스를 삭제할까요? 완성된 곡은 라이브러리에 남습니다.',
     title: 'RVC 음성 카탈로그', choose: '음성', none: '음성 선택',
     model: '음성 가중치(.pth 또는 .pt)', index: '검색 인덱스(.index, 선택 사항)',
@@ -90,6 +95,7 @@ export const rvcVoiceStrings = {
     search: '음성 검색', vocalStyle: '보컬 스타일', rvcVersion: 'RVC 버전', sampleRate: '샘플레이트', retrieval: '검색 인덱스', withIndex: '인덱스 있음', withoutIndex: '인덱스 없음', all: '전체', clear: '필터 초기화', noMatch: '필터에 맞는 음성이 없습니다.',
   },
   pt: {
+    refresh: 'Atualizar catálogo', refreshing: 'Atualizando catálogo…', refreshed: 'Catálogo atualizado', refreshFailed: 'Não foi possível atualizar o catálogo.',
     remove: 'Remover voz', confirmRemove: 'Remover {name} e seu índice de busca? As músicas prontas permanecerão na biblioteca.',
     title: 'Catálogo de vozes RVC', choose: 'Voz', none: 'Escolha uma voz',
     model: 'Pesos da voz (.pth ou .pt)', index: 'Índice de busca (.index, opcional)',
