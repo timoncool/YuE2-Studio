@@ -107,7 +107,6 @@ def validate_table(path, observed, rows, residency, decimal_comma=False):
 
 def verify_residency(residency, rows, evidence_dir):
     timings = {row["summary_id"]: row for row in rows}
-    assert len(residency) == 3
     for revision, entry in residency.items():
         assert revision in entry["label"] and entry["backend"] == "CUDA 13"
         assert entry["dedicated_gpu_bytes"] > 0 and entry["rss_bytes"] > 0 and entry["audio_seconds"] > 0
@@ -207,7 +206,10 @@ def main():
     assert not re.search(r"[A-Za-z]:[/\\]|GPU-[a-f0-9-]{20}", payload), "Local paths or GPU UUID in public data"
     data = json.loads(payload)
     rows = data["rows"]
-    residency = data["published_residency"]
+    published = data["published_residency"]
+    candidates = data.get("candidate_residency", {})
+    assert len(published) == 3 and published.keys().isdisjoint(candidates)
+    residency = {**published, **candidates}
     verify_residency(residency, rows, args.evidence_dir)
     validate_data(rows, args.evidence_dir)
     radeon = verify_radeon(data["radeon_pair"], args.evidence_dir)

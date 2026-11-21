@@ -67,7 +67,10 @@ function musicGpuMatrix(lang) {
     const printed = value.toFixed(places);
     return lang === 'ru' || lang === 'pt' ? printed.replace('.', ',') : printed;
   };
-  const residency = Object.values(musicBenchmarks.published_residency);
+  const residency = [
+    ...Object.values(musicBenchmarks.published_residency),
+    ...Object.values(musicBenchmarks.candidate_residency ?? {}),
+  ];
   const residentCell = (entry) => entry
     ? `${number(entry.dedicated_gpu_bytes / gib, 2)} / ${number(entry.rss_bytes / gib, 2)}`
     : '—';
