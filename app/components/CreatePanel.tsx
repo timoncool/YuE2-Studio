@@ -119,8 +119,9 @@ const NEW_PLAYLIST = '__new__';
 /** The style as it is sent: a trigger's comma with nothing after it goes. */
 const finishedStyle = (text: string) => text.trim().replace(/,$/, '').trimEnd();
 const SEMANTIC_CODES_PER_SECOND = 25;
-/** 9000 semantic frames at 25 per second, the stage's own budget. */
 const MAX_DURATION_SECONDS = 600;
+/** 9000 semantic frames at 25 per second when the engine catalog is unavailable. */
+const DEFAULT_AUTO_DURATION_SECONDS = 360;
 /** Where the slider starts when Auto is switched off and no seconds were chosen before: 2:10. */
 const DEFAULT_DURATION_SECONDS = 130;
 const MIN_DURATION_SECONDS = 10;
@@ -515,8 +516,9 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
   const chooseDuration = (value: string) => {
     setDuration(value);
     try {
+      const manual = isAutoDuration(value) ? keptCreateDuration() : value;
+      if (!isAutoDuration(manual)) window.localStorage.setItem('studio.createDurationManual', manual);
       window.localStorage.setItem('studio.createDuration', value);
-      if (!isAutoDuration(value)) window.localStorage.setItem('studio.createDurationManual', value);
     } catch { /* kept until a reload */ }
   };
   const [kept] = useState(keptSettings);
@@ -1549,7 +1551,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
     lyrics: [lyrics, setLyrics],
     abc: [abc, setAbc],
     cot: [cot, (value) => setCot(value as YueCot | '')],
-    duration_seconds: [duration, setDuration],
+    duration_seconds: [duration, value => setDuration(value || AUTO_DURATION)],
     lm_batch_size: [lmBatch, setLmBatch],
     synth_batch_size: [synthBatch, setSynthBatch],
     steps: [steps, setSteps],
@@ -1610,7 +1612,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
   const songs = numberOrUndefined(lmBatch) ?? 1;
   const variations = numberOrUndefined(synthBatch) ?? 1;
   const totalTracks = songs * variations;
-  const durationFallback = Number(defaults.duration ?? MAX_DURATION_SECONDS);
+  const durationFallback = Number(defaults.duration ?? DEFAULT_AUTO_DURATION_SECONDS);
   const formatDuration = (seconds: number) => `${Math.floor(seconds / 60)}:${String(Math.round(seconds % 60)).padStart(2, '0')}`;
   // The engine caps the audio-code stage at duration x 25 codes: what a
   // larger max tokens would ask for is never drawn.

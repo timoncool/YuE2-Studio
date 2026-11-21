@@ -6,6 +6,7 @@ import type { Song, YueRequest } from '../types';
 import { useGenerations } from '../services/generations';
 import { afterGenerationPause } from '../services/generationPause';
 
+const bridgeCommands = new Map<string, (args: Record<string, unknown>) => unknown>();
 const composeScore = vi.fn();
 const transcribe = vi.fn();
 const instrumentalScore = vi.fn();
@@ -24,7 +25,9 @@ vi.mock('../services/studioQueries', async original => ({
   useSetupStatus: () => ({ isError: false, data: { ready, engine_ready: ready && !enginePaused, engine_paused: enginePaused } }),
   useOpenRouterSettings: () => ({ data: { configured } }),
 }));
-vi.mock('../services/mcpBridge', () => ({ useBridgeCommand: () => undefined }));
+vi.mock('../services/mcpBridge', () => ({
+  useBridgeCommand: (name: string, handler: (args: Record<string, unknown>) => unknown) => bridgeCommands.set(name, handler),
+}));
 vi.mock('../services/transcription', () => ({ composeScore: (...args: unknown[]) => composeScore(...args), composePlans: vi.fn(), transcribe: (...args: unknown[]) => transcribe(...args) }));
 vi.mock('../services/scoreApi', () => ({
   instrumentalScore: (abc: string) => instrumentalScore(abc),
@@ -62,6 +65,7 @@ const sent: YueRequest[] = [];
 
 beforeEach(() => {
   sent.length = 0;
+  bridgeCommands.clear();
   ready = true;
   enginePaused = false;
   configured = false;
@@ -941,5 +945,31 @@ describe('Auto max duration', () => {
     expect(autoButton()?.getAttribute('aria-pressed')).toBe('false');
     await createOne();
     expect(sent[0].duration_seconds).toBe(240);
+    click(autoButton()!);
+    click(autoButton()!);
+    await createOne();
+    expect(sent[1].duration_seconds).toBe(240);
+  });
+
+  it('sends the manual ceiling or omits it through the Create MCP bridge', async () => {
+    act(() => root.render(panel({})));
+    await flush();
+    const command = (name: string, args: Record<string, unknown> = {}) => bridgeCommands.get(name)!(args);
+    const read = () => command('create_get') as { fields: Record<string, unknown>; request: YueRequest };
+
+    act(() => { command('create_set', { fields: { style: 'calm acoustic folk, gentle guitar instrumental', cot: 'off', duration_seconds: 10 } }); });
+    expect(read().fields.duration_seconds).toBe('10');
+    expect(read().request.duration_seconds).toBe(10);
+    act(() => { command('create_submit'); });
+    await flush();
+
+    act(() => { command('create_set', { fields: { duration_seconds: 'auto' } }); });
+    expect(read().fields.duration_seconds).toBe('auto');
+    expect(read().request).not.toHaveProperty('duration_seconds');
+    act(() => { command('create_submit'); });
+    await flush();
+    expect(sent).toHaveLength(2);
+    expect(sent[0].duration_seconds).toBe(10);
+    expect(sent[1]).not.toHaveProperty('duration_seconds');
   });
 });
