@@ -17,6 +17,7 @@ interface NativeProfile {
   label: string;
   total_bytes: number;
   installable?: boolean;
+  license_url?: string;
   ready: boolean;
   missing: string[];
 }
@@ -88,9 +89,9 @@ export function useNativeMusicProfiles(engine: ProfileMusicEngine | undefined) {
         const body = await reply.json();
         const data: NativeProfiles = engine === 'audio.cpp' && body.engine === engine && Array.isArray(body.models)
           ? { engine, engine_installed: body.engine_installed !== false, profiles: body.models
-              .map((model: { id: string; name?: string; profile_id: string; quantization: string; ready: boolean; missing: string[]; bytes?: number; installable?: boolean }) => ({
+              .map((model: { id: string; name?: string; profile_id: string; quantization: string; ready: boolean; missing: string[]; bytes?: number; installable?: boolean; license_url?: string }) => ({
                 id: model.id, label: [model.name ?? model.id, model.profile_id, model.quantization].filter(Boolean).join(' · '), total_bytes: model.bytes ?? 0,
-                ready: model.ready, missing: model.missing, installable: model.installable,
+                ready: model.ready, missing: model.missing, installable: model.installable, license_url: model.license_url,
               })) }
           : body;
         if (data.engine !== engine || !Array.isArray(data.profiles)) throw new Error('Invalid native profile response');

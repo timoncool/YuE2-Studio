@@ -492,7 +492,9 @@ export function StudioToolsPanel({ initialSongId, focusRvc, onRvcFocused }: { in
         />
 
         <div ref={rvcSection} tabIndex={-1} className="scroll-m-4 rounded-lg focus-visible:outline-2 focus-visible:outline-pink-500">
-          <RvcVoiceCatalog card={CARD} control={CONTROL} />
+          <RvcVoiceCatalog card={CARD} control={CONTROL}
+            song={songId ? { id: songId, title: songs.find(song => song.id === songId)?.title ?? '', stems } : undefined}
+            onSaved={() => void loadSongs()} />
         </div>
 
         {/* Audio to MIDI, on the track chosen above. */}
