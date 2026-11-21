@@ -368,7 +368,8 @@ do {
     if ([StudioQaWindows]::GetForegroundWindow() -ne $hwnd) { continue }
     [Windows.Forms.SendKeys]::SendWait('%n')
     [Windows.Forms.SendKeys]::SendWait('^a')
-    [Windows.Forms.SendKeys]::SendWait($env:STUDIO_QA_FILE)
+    $keys = [regex]::Replace($env:STUDIO_QA_FILE, '[+^%~(){}\[\]]', { param($match) '{' + $match.Value + '}' })
+    [Windows.Forms.SendKeys]::SendWait($keys)
     [Windows.Forms.SendKeys]::SendWait('{ENTER}')
     @{name=$name; method='owned foreground dialog'; windows=$windowThreads} | ConvertTo-Json -Depth 5 -Compress
     exit 0
@@ -667,10 +668,12 @@ with tempfile.TemporaryDirectory(prefix="studio-hosted-webview-") as directory:
     seed_training(root)
     for folder in ("user", "roaming", "local"):
         (root/folder).mkdir()
-    env = dict(os.environ, YUE_STUDIO_DATA_ROOT=str(root), YUE_STUDIO_PORT="8791",
-        HOME=str(root/"user"), USERPROFILE=str(root/"user"), APPDATA=str(root/"roaming"),
-        LOCALAPPDATA=str(root/"local"), DO_NOT_TRACK="1",
+    env = dict(os.environ, YUE_STUDIO_DATA_ROOT=str(root), YUE_STUDIO_PORT="8791", DO_NOT_TRACK="1",
+        WEBVIEW2_USER_DATA_FOLDER=str(root/"webview"),
         WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS="--autoplay-policy=no-user-gesture-required --use-angle=swiftshader --enable-unsafe-swiftshader")
+    if os.environ.get("STUDIO_QA_REAL_SHELL_PROFILE") != "1":
+        env.update(HOME=str(root/"user"), USERPROFILE=str(root/"user"), APPDATA=str(root/"roaming"),
+                   LOCALAPPDATA=str(root/"local"))
     if args.suite == "lrc":
         env["WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS"] += " --remote-debugging-port=9889"
     with (out/"service.log").open("wb") as log:
