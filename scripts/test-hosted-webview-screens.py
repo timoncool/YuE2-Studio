@@ -6,7 +6,7 @@ import argparse, base64, ctypes, hashlib, json, os, pathlib, re, sqlite3, struct
 p = argparse.ArgumentParser()
 p.add_argument("exe", type=pathlib.Path)
 p.add_argument("output", type=pathlib.Path)
-p.add_argument("--suite", choices=["pt", "screens", "u3", "lrc"], default="pt")
+p.add_argument("--suite", choices=["pt", "screens", "u3", "lrc", "lrc-browser"], default="pt")
 args = p.parse_args()
 out = args.output.resolve()
 out.mkdir(parents=True, exist_ok=True)
@@ -336,6 +336,41 @@ throw 'The isolated Save As dialog did not expose a file name and Save button'
     assert run.returncode == 0, (run.stdout, run.stderr)
 
 
+def browser_download_lrc(root, song_id):
+    edge = next(browser for variable in ("ProgramFiles(x86)", "ProgramFiles")
+                if (prefix := os.environ.get(variable))
+                if (browser := pathlib.Path(prefix)/"Microsoft"/"Edge"/"Application"/"msedge.exe").is_file())
+    browser = subprocess.Popen([str(edge), "--headless=new", "--disable-gpu", "--no-first-run",
+                                "--remote-debugging-port=9890", f"--user-data-dir={root/'browser'}",
+                                base + "/"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    try:
+        script = pathlib.Path(__file__).with_name("download-hosted-lrc.mjs")
+        subprocess.run(["node", str(script), str(out), song_id], timeout=90, check=True)
+    finally:
+        if browser.poll() is None:
+            try:
+                browser.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                browser.terminate()
+                browser.wait(timeout=5)
+    return out/"Hosted LRC receipt.lrc"
+
+
+def verify_lrc_file(destination, expected, song_id, route):
+    for _ in range(40):
+        if destination.is_file() and destination.stat().st_size == len(expected.encode("utf8")):
+            saved = destination.read_bytes()
+            break
+        time.sleep(.25)
+    else:
+        raise AssertionError(("LRC file was not saved", ui("console")))
+    assert saved.decode("utf-8", errors="strict") == expected
+    assert re.findall(r"^\[(\d\d:\d\d\.\d\d)\]", expected, re.M) == ["00:00.50", "00:01.75"]
+    (out/destination.name).write_bytes(saved)
+    json_file(out/"lrc-file.json", dict(song_id=song_id, bytes=len(saved), sha256=hashlib.sha256(saved).hexdigest(),
+                                       timestamps=["00:00.50", "00:01.75"], name=destination.name, route=route))
+
+
 def check_lrc(root, pid):
     title = "Hosted LRC receipt"
     source = root/"source.wav"
@@ -346,6 +381,9 @@ def check_lrc(root, pid):
     expected = "[00:00.50]Привет, мир\n[00:01.75]Canção em português\n"
     data = tool("karaoke_set", song_id=song["id"], lrc=expected)
     assert data == {"lrc": expected, "lines": 2}, data
+    if args.suite == "lrc-browser":
+        verify_lrc_file(browser_download_lrc(root, song["id"]), expected, song["id"], "browser")
+        return
     ui("navigate", view="library")
     context = f"song {song['id']}:"
     page = wait_page(predicate=lambda value: any(context in line and "Song Details" in line for line in value.splitlines()))
@@ -379,18 +417,7 @@ def check_lrc(root, pid):
         except subprocess.TimeoutExpired:
             observer.terminate()
             observer.wait(timeout=4)
-    for _ in range(40):
-        if destination.is_file() and destination.stat().st_size == len(expected.encode("utf8")):
-            saved = destination.read_bytes()
-            break
-        time.sleep(.25)
-    else:
-        raise AssertionError(("LRC file was not saved", ui("console")))
-    assert saved.decode("utf-8", errors="strict") == expected
-    assert re.findall(r"^\[(\d\d:\d\d\.\d\d)\]", expected, re.M) == ["00:00.50", "00:01.75"]
-    (out/destination.name).write_bytes(saved)
-    json_file(out/"lrc-file.json", dict(song_id=song["id"], bytes=len(saved), sha256=hashlib.sha256(saved).hexdigest(),
-                                       timestamps=["00:00.50", "00:01.75"], name=destination.name))
+    verify_lrc_file(destination, expected, song["id"], "desktop")
 
 
 def check_screens(root, pid):
@@ -586,7 +613,7 @@ with tempfile.TemporaryDirectory(prefix="studio-hosted-webview-") as directory:
                 capture_pt()
             elif args.suite == "u3":
                 u3_form(root)
-            elif args.suite == "lrc":
+            elif args.suite in {"lrc", "lrc-browser"}:
                 check_lrc(root, process.pid)
             else:
                 check_screens(root, process.pid)

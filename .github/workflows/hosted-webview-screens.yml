@@ -75,7 +75,7 @@ jobs:
             Where-Object { $_.Name -in @('YuE2-Studio.exe', 'yue2-studio-desktop.exe') } |
             Select-Object -First 1
           if (!$desktop) { throw 'Studio executable missing' }
-          python -u scripts/test-hosted-webview-screens.py $desktop.FullName artifacts/lrc --suite lrc
+          python -u scripts/test-hosted-webview-screens.py $desktop.FullName artifacts/lrc-browser --suite lrc-browser
       - name: Exercise U3 routing in WebView2 through Studio MCP
         if: always() && (steps.desktop-build.outcome == 'success' || steps.shell-cache.outputs.cache-hit == 'true')
         env:
