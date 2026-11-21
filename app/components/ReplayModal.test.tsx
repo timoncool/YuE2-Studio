@@ -36,6 +36,31 @@ describe('saved model requirements in replay', () => {
     expect(minimax).not.toContain('+15 s');
   });
 
+  it('offers a single HeartMuLa take with the saved step count and seed', () => {
+    const heartmula = open({
+      ...migrated, engine_id: 'audio.cpp', profile_id: 'heartmula_q8_0',
+      generation_settings: { family: 'heartmula', steps: 4, seed: 42 },
+    });
+    expect(heartmula).toContain('HeartMuLa · audio.cpp');
+    expect(heartmula).toContain('value="4"');
+    expect(heartmula).toContain('placeholder="42"');
+    expect(heartmula).not.toContain('+15 s');
+    expect(heartmula).not.toContain('max="9"');
+  });
+
+  it('offers one packed YuE2 take with its original steps and no extension', () => {
+    const yue = open({
+      ...migrated, engine_id: 'audio.cpp', profile_id: 'yue2-3b-q8_0-nar-v9',
+      generation_settings: { family: 'yue2', steps: 2, seed: 1221 },
+    });
+    expect(yue).toContain('YuE2 · audio.cpp');
+    expect(yue).toContain('value="2"');
+    expect(yue).toContain('max="100"');
+    expect(yue).toContain('placeholder="1221"');
+    expect(yue).not.toContain('+15 s');
+    expect(yue).not.toContain('max="9"');
+  });
+
   it('keeps the saved YuE2 profile visible when offering an extension', () => {
     const yue = open({ ...migrated, engine_id: 'yue2-cpp', profile_id: 'quality-q8' });
     expect(yue).toContain('quality-q8');
