@@ -61,8 +61,8 @@ interface Transfer {
   path: string;
 }
 
-async function available(path: string, signal: AbortSignal): Promise<PackageStatus | undefined> {
-  const response = await fetch(apiUrl(path), { signal });
+async function packagePresence(path: string, signal: AbortSignal): Promise<PackageStatus | undefined> {
+  const response = await fetch(apiUrl(`${path}?probe=presence`), { signal });
   if (response.status === 404 || response.status === 409) return undefined;
   if (!response.ok) throw new Error(`HTTP ${response.status}`);
   return response.json();
@@ -116,8 +116,8 @@ export function useSignedMusicSelection(list: boolean, active: boolean) {
     if (!key || !enginePath || !modelStatus) return;
     const controller = new AbortController();
     void Promise.all([
-      available(`${enginePath}/status`, controller.signal),
-      available(modelStatus, controller.signal),
+      packagePresence(`${enginePath}/status`, controller.signal),
+      packagePresence(modelStatus, controller.signal),
     ]).then(([engine, model]) => {
       if (!controller.signal.aborted) setProbe({ key, engine, model });
     }, (error: Error) => {

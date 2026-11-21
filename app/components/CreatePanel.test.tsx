@@ -940,9 +940,9 @@ it('lists signed model pairs for this platform and installs only the selected en
       installed.add('engine-a');
       return Response.json({ generation: 'a1', reused_bytes: 0, downloaded_bytes: 2 ** 30 });
     }
-    if (url.endsWith('/status')) {
+    if (url.endsWith('/status?probe=presence')) {
       const id = url.split('/').at(-2)!;
-      return Response.json(installed.has(id) ? { id, generation: id + '-1', version: '1' } : {}, { status: installed.has(id) ? 200 : 409 });
+      return Response.json(installed.has(id) ? { id, generation: id + '-1', version: '1', verification: 'presence' } : {}, { status: installed.has(id) ? 200 : 409 });
     }
     return Response.json({});
   });
@@ -965,10 +965,14 @@ it('lists signed model pairs for this platform and installs only the selected en
   await flush();
   expect([...select('Model').options].map(row => row.value)).toContain('signed:signed-model');
   expect(select('Model').textContent).not.toContain('Linux-only');
-  expect(fetcher.mock.calls.some(([url]) => url.endsWith('/status'))).toBe(false);
+  expect(fetcher.mock.calls.some(([url]) => url.includes('/status'))).toBe(false);
   choose('Model', 'signed:signed-model');
   await flush();
   expect([...select('Music engine').options].map(row => row.value)).toEqual(['engine-a', 'engine-b']);
+  expect(fetcher.mock.calls.filter(([url]) => url.includes('/status')).map(([url]) => url)).toEqual([
+    '/v1/components/music-engines/engine-a/status?probe=presence',
+    '/v1/components/music-engines/engine-a/models/signed-model/status?probe=presence',
+  ]);
   expect(buttonNamed('Install · 2 GiB')).toBeTruthy();
   expect((buttonNamed('create') as HTMLButtonElement).disabled).toBe(true);
   click(buttonNamed('Install · 2 GiB')!);
@@ -997,8 +1001,8 @@ it('lets an active signed update be cancelled and retried while the previous pai
         protocol: 'music-http-v1', files: [{ bytes: 2 ** 30 }] }],
       models: [{ id: 'weights', name: 'Weights', version: '1', engines: ['engine'], files: [{ bytes: 2 ** 30 }] }],
     });
-    if (url === '/v1/components/music-engines/engine/status') return Response.json({ version: installedVersion, generation: installedVersion });
-    if (url === '/v1/components/music-engines/engine/models/weights/status') return Response.json({ version: '1' });
+    if (url === '/v1/components/music-engines/engine/status?probe=presence') return Response.json({ version: installedVersion, generation: installedVersion, verification: 'presence' });
+    if (url === '/v1/components/music-engines/engine/models/weights/status?probe=presence') return Response.json({ version: '1', verification: 'presence' });
     if (url === '/v1/components/music-engines/engine/install') {
       expect(init?.method).toBe('POST');
       return new Promise<Response>(resolve => { resolveInstall = resolve; });
