@@ -603,6 +603,7 @@ const JOURNAL: &[(&str, &str, &str)] = &[
     ("recogniser_remove", "deleted", "model"),
     ("midi_remove", "deleted", "model"),
     ("models_select", "updated", "settings"),
+    ("music_pair_select", "updated", "settings"),
     ("models_preset", "updated", "settings"),
     ("models_own_select", "updated", "settings"),
     ("models_own_cancel", "cancelled", "download"),
