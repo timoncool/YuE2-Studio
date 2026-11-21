@@ -224,6 +224,7 @@ pub struct Acpp {
     logs: PathBuf,
     /// cuBLAS 13 of the music engine, which the CUDA 13 build imports.
     cuda13_libraries: OnceLock<PathBuf>,
+    music: std::sync::Mutex<Option<Server>>,
     /// Every model the server may carry, by id. One server per build serves them all: a config that names only the
     /// model of the run at hand would restart the server whenever another tool asks for its own.
     known: std::sync::Mutex<Vec<ModelEntry>>,
@@ -239,6 +240,7 @@ impl Acpp {
             downloader: Downloader::new(data_root.join("audiocpp")),
             logs: data_root.join("logs").join("audiocpp"),
             cuda13_libraries: OnceLock::new(),
+            music: std::sync::Mutex::new(None),
             known: std::sync::Mutex::new(Vec::new()),
             active: std::sync::Mutex::new(Vec::new()),
             ended: std::sync::Condvar::new(),
@@ -363,6 +365,13 @@ impl Acpp {
         if !config.models.iter().any(|entry| entry.id == id) {
             bail!("{id} is not on disk; download it in Settings - Models");
         }
+        self.check_runtime(build, &config)?;
+        acpp_server::SERVERS
+            .get(&config, READY_WITHIN, &|command| self.prepare(build, command))
+            .map_err(|error| anyhow!("{}", describe(&error)))
+    }
+
+    fn check_runtime(&self, build: Build, config: &ServerConfig) -> Result<()> {
         if !config.exe.is_file() {
             bail!("audio.cpp's server is not installed: {} is missing; download it in Settings - Models", config.exe.display());
         }
@@ -372,32 +381,64 @@ impl Acpp {
                 bail!("audio.cpp's server is missing {} beside it; download it again in Settings - Models", missing.join(", "));
             }
         }
-        let cuda13 = self.cuda13_libraries.get().cloned();
-        let beside = self.folder(build);
-        let server = acpp_server::SERVERS
-            .get(&config, READY_WITHIN, &|command| {
-                // a Linux loader does not look beside the program: the CUDA libraries lie in its folder
-                if cfg!(target_os = "linux") {
-                    let inherited = std::env::var_os("LD_LIBRARY_PATH").unwrap_or_default();
-                    if let Ok(path) = std::env::join_paths(std::iter::once(beside.clone()).chain(std::env::split_paths(&inherited))) {
-                        command.env("LD_LIBRARY_PATH", path);
-                    }
-                }
-                // cuBLAS 13 lies beside the music engine, which the studio's PATH already names first
-                let mut libraries = cuda13.iter().cloned().collect::<Vec<_>>();
-                #[cfg(windows)]
-                libraries.push(self.downloader.runtime_dir("audiocpp-soxr"));
-                if !libraries.is_empty() {
-                    let existing = std::env::var_os("PATH").unwrap_or_default();
-                    if let Ok(path) = std::env::join_paths(libraries.into_iter().chain(std::env::split_paths(&existing))) {
-                        command.env("PATH", path);
-                    }
-                }
-            })
-            .map_err(|error| anyhow!("{}", describe(&error)))?;
-        Ok(server)
+        Ok(())
     }
 
+    fn prepare(&self, build: Build, command: &mut std::process::Command) {
+        let cuda13 = self.cuda13_libraries.get().cloned();
+        let beside = self.folder(build);
+        // a Linux loader does not look beside the program: the CUDA libraries lie in its folder
+        if cfg!(target_os = "linux") {
+            let inherited = std::env::var_os("LD_LIBRARY_PATH").unwrap_or_default();
+            if let Ok(path) = std::env::join_paths(std::iter::once(beside.clone()).chain(std::env::split_paths(&inherited))) {
+                command.env("LD_LIBRARY_PATH", path);
+            }
+        }
+        // cuBLAS 13 lies beside the music engine, which the studio's PATH already names first
+        let mut libraries = cuda13.iter().cloned().collect::<Vec<_>>();
+        #[cfg(windows)]
+        libraries.push(self.downloader.runtime_dir("audiocpp-soxr"));
+        if !libraries.is_empty() {
+            let existing = std::env::var_os("PATH").unwrap_or_default();
+            if let Ok(path) = std::env::join_paths(libraries.into_iter().chain(std::env::split_paths(&existing))) {
+                command.env("PATH", path);
+            }
+        }
+    }
+
+    /// Private to generation. Stopping one of these jobs can reap the process
+    /// without touching the process that serves separation, MIDI and audio tools.
+    pub(super) fn run_music(&self, build: Build, model: ModelEntry, body: Value, stop: &AtomicBool) -> Result<Value> {
+        let mut music = self.music.lock().unwrap_or_else(|error| error.into_inner());
+        anyhow::ensure!(!stop.load(Ordering::SeqCst), "stopped");
+        let id = model.id.clone();
+        let mut config = self.config(build, vec![model]);
+        config.data_dir.push("music");
+        self.check_runtime(build, &config)?;
+        if music.as_ref().is_none_or(|server| server.config() != &config || !server.alive()) {
+            drop(music.take());
+            *music = Some(Server::start(&config, READY_WITHIN, &|command| self.prepare(build, command))?);
+        }
+        let server = music.as_ref().expect("The music server has started.");
+        let reply = if stop.load(Ordering::SeqCst) { Err(AcppError::Cancelled) } else {
+            server.run_task(&id, body, stop)
+        };
+        if matches!(reply, Err(AcppError::Cancelled)) || stop.load(Ordering::SeqCst) {
+            // Drop kills and reaps the owned child before the caller releases the engine lease.
+            drop(music.take());
+            bail!("stopped");
+        }
+        if let Err(error) = server.unload(&[&id]) {
+            eprintln!("[ERROR] unloading audio.cpp {id}: {error:#}");
+            drop(music.take());
+        }
+        Ok(reply?)
+    }
+
+    pub(super) fn stop_music(&self) {
+        let mut music = self.music.lock().unwrap_or_else(|error| error.into_inner());
+        drop(music.take());
+    }
     /// `work` on the server of `build` carrying `model`: the one at work when it carries the model, else a new one once
     /// the runs on it have ended; a server under work is never replaced. The run counts from the moment its server is
     /// chosen; `stop`, asked while it waits for the server, ends it with "stopped" first.

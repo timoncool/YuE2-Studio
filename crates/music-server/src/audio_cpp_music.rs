@@ -76,6 +76,10 @@ impl Family {
         }
     }
 
+    fn dedicated(self) -> bool {
+        matches!(self, Self::Yue)
+    }
+
     fn id(self) -> &'static str {
         match self {
             Self::Yue => audio_cpp_yue2::FAMILY,
@@ -1009,12 +1013,16 @@ async fn submit_with_source(
     state.jobs.write().await.insert(job.id.clone(), job.clone());
     let accepted = job.clone();
     tokio::spawn(async move {
-        let _lease = lease;
         let acpp = state.acpp.clone();
+        let cancel = stop.clone();
         let settings = job.generation_settings.clone();
         let outcome = tokio::task::spawn_blocking(move || {
             anyhow::ensure!(!stop.load(Ordering::SeqCst), "stopped");
             let (body, _references) = task.into_request(&stop)?;
+            if family.dedicated() {
+                let reply = acpp.run_music(build, family.entry(path), body, &stop)?;
+                return shape(&reply, &settings);
+            }
             acpp.with_server(
                 build,
                 family.entry(path),
@@ -1036,6 +1044,7 @@ async fn submit_with_source(
         .await
         .context("the audio.cpp worker stopped")
         .and_then(|result| result);
+        drop(lease);
         complete(
             &state,
             &job.id,
@@ -1043,6 +1052,7 @@ async fn submit_with_source(
             family.profile(),
             LocalRun::AudioCpp(family, build, submitted),
             outcome,
+            Some(&cancel),
         )
         .await;
         state.audio_cpp_music_stops.write().await.remove(&job.id);
@@ -1105,7 +1115,7 @@ pub(super) async fn complete_local(
     submitted: std::time::Instant,
     outcome: anyhow::Result<native_music_jobs::ShapedOutput>,
 ) {
-    complete(state, id, name, profile, LocalRun::HotStep(set, submitted), outcome).await;
+    complete(state, id, name, profile, LocalRun::HotStep(set, submitted), outcome, None).await;
 }
 
 async fn complete(
@@ -1115,10 +1125,17 @@ async fn complete(
     profile: &str,
     telemetry: LocalRun,
     outcome: anyhow::Result<native_music_jobs::ShapedOutput>,
+    stop: Option<&AtomicBool>,
 ) {
     let mut jobs = state.jobs.write().await;
     let Some(job) = jobs.get_mut(id) else { return };
     if !matches!(job.status, MusicJobStatus::Running) {
+        return;
+    }
+    if stop.is_some_and(|flag| flag.load(Ordering::SeqCst)) {
+        stop_on_request(job);
+        job.message = "Stopped; the audio.cpp generation process has released the engine.".into();
+        persist(state, job);
         return;
     }
     let song_id = match outcome.and_then(|output| save(&state.library, job, profile, output)) {
@@ -1223,7 +1240,13 @@ pub(super) async fn cancel(
         if let Some(stop) = state.audio_cpp_music_stops.read().await.get(id) {
             stop.store(true, Ordering::SeqCst);
         }
-        stop_on_request(job);
+        let dedicated = job.engine_id == ENGINE
+            && job.generation_settings["family"].as_str().and_then(Family::parse).is_some_and(Family::dedicated);
+        if dedicated {
+            job.message = "Stopping audio.cpp generation and releasing its engine.".into();
+        } else {
+            stop_on_request(job);
+        }
         persist(state, job);
     }
     Ok(Json(job.clone()))
