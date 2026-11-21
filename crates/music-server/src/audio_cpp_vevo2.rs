@@ -4,6 +4,7 @@ use acpp_server::{Mode, ModelEntry};
 use anyhow::{Context as _, Result};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
+use sha2::{Digest as _, Sha256};
 use std::io::{Read as _, Write as _};
 use std::path::{Path, PathBuf};
 
@@ -13,6 +14,11 @@ pub(super) const PROFILE: &str = "quality-q8";
 pub(super) const QUANTIZATION: &str = "Q8_0";
 pub(super) const ROUTE: &str = "text_to_singing";
 const WEIGHTS: &str = "vevo2-q8_0.gguf";
+// Established Q8_0 conversion, snapshot 33120a4c. No other conversions are registered.
+const WEIGHTS_BYTES: u64 = 3_242_129_792;
+const WEIGHTS_SHA256: &str = "881434e73b98e2d3ac94951f26488b5dc5d60f365d9980324a70055dfbffd1ef";
+const PREFIX_BYTES: usize = 16_384;
+const PREFIX_SHA256: &str = "8939daf40bff44e297b2fd4388f34fbbaf2484d3a3dcc50b4d6e4ba4f3baf616";
 const LICENSE: &str = "https://huggingface.co/RMSnow/Vevo2";
 const FOLDER_SETTING: &str = "vevo2-model-directory.json";
 const DEFAULT_FOLDER: &str = "audiocpp/models/vevo2";
@@ -35,9 +41,17 @@ fn select_directory(root: &Path, directory: Option<&Path>) -> Result<()> {
         );
         anyhow::ensure!(
             missing_files(directory).is_empty(),
-            "The folder needs a readable {WEIGHTS} file."
+            "The folder needs the complete {WEIGHTS} Q8_0 bundle used by Studio."
+        );
+        anyhow::ensure!(
+            crate::install_record::sha256_of(&directory.join(WEIGHTS))? == WEIGHTS_SHA256,
+            "The {WEIGHTS} file does not match the supported Q8_0 bundle."
         );
     }
+    persist_directory(root, directory)
+}
+
+fn persist_directory(root: &Path, directory: Option<&Path>) -> Result<()> {
     let mut temp = tempfile::NamedTempFile::new_in(root)?;
     serde_json::to_writer(&mut temp, &directory)?;
     temp.flush()?;
@@ -57,8 +71,13 @@ pub(super) async fn set_directory(
     })?;
     let directory: Option<PathBuf> = serde_json::from_value(selection.directory)
         .map_err(|error| crate::api_error(StatusCode::BAD_REQUEST, error.to_string()))?;
-    select_directory(&root, directory.as_deref())
-        .map_err(|error| crate::api_error(StatusCode::BAD_REQUEST, error.to_string()))?;
+    let directory = tokio::task::spawn_blocking(move || {
+        select_directory(&root, directory.as_deref())?;
+        Ok::<_, anyhow::Error>(directory)
+    })
+    .await
+    .map_err(|error| crate::api_error(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?
+    .map_err(|error| crate::api_error(StatusCode::BAD_REQUEST, error.to_string()))?;
     Ok(axum::Json(json!({ "configured_directory": directory })))
 }
 
@@ -73,12 +92,17 @@ pub(super) fn model_dir(root: &Path) -> PathBuf {
     configured_directory(root).unwrap_or_else(|| root.join(DEFAULT_FOLDER))
 }
 
+fn pinned_prefix(mut reader: impl std::io::Read) -> bool {
+    let mut prefix = [0; PREFIX_BYTES];
+    reader.read_exact(&mut prefix).is_ok()
+        && format!("{:x}", Sha256::digest(prefix)) == PREFIX_SHA256
+}
+
 pub(super) fn missing_files(dir: &Path) -> Vec<&'static str> {
-    let valid = std::fs::File::open(dir.join(WEIGHTS)).is_ok_and(|mut file| {
-        let mut magic = [0; 4];
-        file.metadata().is_ok_and(|metadata| metadata.len() > 24)
-            && file.read_exact(&mut magic).is_ok()
-            && &magic == b"GGUF"
+    let valid = std::fs::File::open(dir.join(WEIGHTS)).is_ok_and(|file| {
+        file.metadata()
+            .is_ok_and(|metadata| metadata.is_file() && metadata.len() == WEIGHTS_BYTES)
+            && pinned_prefix(file)
     });
     if valid { vec![] } else { vec![WEIGHTS] }
 }
@@ -218,10 +242,12 @@ mod tests {
         std::fs::create_dir_all(&directory).unwrap();
         assert_eq!(catalog(Some(root.path()), true)["ready"], false);
         let path = directory.join(WEIGHTS);
-        std::fs::write(&path, b"GGUF").unwrap();
-        assert_eq!(catalog(Some(root.path()), true)["ready"], false);
         std::fs::write(&path, [b"GGUF".as_slice(), &[0; 32]].concat()).unwrap();
-        assert_eq!(catalog(Some(root.path()), true)["ready"], true);
+        assert_eq!(catalog(Some(root.path()), true)["ready"], false);
+        let mut bad_header = [0; PREFIX_BYTES];
+        bad_header[..4].copy_from_slice(b"GGUF");
+        assert!(!pinned_prefix(bad_header.as_slice()));
+        assert!(select_directory(root.path(), Some(&directory)).is_err());
         assert_eq!(catalog(Some(root.path()), false)["ready"], false);
         let entry = entry(directory);
         assert_eq!(entry.path, path);
@@ -234,10 +260,8 @@ mod tests {
         let root = tempfile::tempdir().unwrap();
         let supplied = tempfile::tempdir().unwrap();
         let path = supplied.path().join(WEIGHTS);
-        std::fs::write(&path, [b"GGUF".as_slice(), &[0; 32]].concat()).unwrap();
         assert_eq!(catalog(Some(root.path()), true)["ready"], false);
-        select_directory(root.path(), Some(supplied.path())).unwrap();
-        assert_eq!(catalog(Some(root.path()), true)["ready"], true);
+        persist_directory(root.path(), Some(supplied.path())).unwrap();
         assert_eq!(entry(model_dir(root.path())).path, path);
         assert!(select_directory(root.path(), Some(Path::new("relative"))).is_err());
         assert!(select_directory(root.path(), Some(root.path())).is_err());

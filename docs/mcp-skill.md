@@ -219,7 +219,9 @@ to `song_create`. Reuse restores the source and the exact score for the cover.
 
 For Vevo2, consult the [original model terms](https://huggingface.co/RMSnow/Vevo2).
 Use `vevo2_model_directory_set` with the absolute path on the Studio computer
-to your local folder containing `vevo2-q8_0.gguf`. Pass `null` to return to
+to your local folder containing the supported `vevo2-q8_0.gguf` bundle
+(3,242,129,792 bytes). Studio verifies its checksum before saving the folder.
+Pass `null` to return to
 `audiocpp/models/vevo2` in the Studio data folder. The choice survives restarts.
 Read `audio_cpp_music_models` to check the configured directory and runtime
 readiness. Pass the lyrics and a library song ID as `vevo2.voice_song_id`.
