@@ -471,6 +471,8 @@ fn prepare_song(
         "/reference_song_id",
         "/cover_of",
         "/backing_song_id",
+        "/ace/source_song_id",
+        "/ace/reference_song_id",
         "/vevo2/voice_song_id",
         "/vevo2/melody_song_id",
         "/soulx/reference_song_id",
@@ -939,6 +941,9 @@ mod tests {
         fs::create_dir_all(old.media_dir())?;
         let settings = json!({
             "backing_song_id": "backing",
+            "source_song_id": "backing",
+            "reference_song_id": "voice",
+            "ace": {"task_type": "cover", "source_song_id": "backing", "reference_song_id": "voice"},
             "vevo2": {"voice_song_id": "voice", "melody_song_id": "melody"},
             "soulx": {"reference_song_id": "voice", "source_song_id": "melody"},
             "magenta": {"reference_song_id": "removed"},
@@ -946,6 +951,9 @@ mod tests {
         });
         let replay = json!({
             "backing_song_id": "backing",
+            "source_song_id": "melody",
+            "reference_song_id": "voice",
+            "ace": {"task_type": "repaint", "source_song_id": "melody", "reference_song_id": "voice"},
             "vevo2": {"voice_song_id": "voice", "melody_song_id": null},
             "soulx": {"reference_song_id": "melody", "source_song_id": "voice"},
             "magenta": {"reference_song_id": "voice"},
@@ -973,6 +981,9 @@ mod tests {
         assert_ne!(voice, "voice");
         assert_eq!(rendered.generation_settings, json!({
             "backing_song_id": backing,
+            "source_song_id": backing,
+            "reference_song_id": voice,
+            "ace": {"task_type": "cover", "source_song_id": backing, "reference_song_id": voice},
             "vevo2": {"voice_song_id": voice, "melody_song_id": melody},
             "soulx": {"reference_song_id": voice, "source_song_id": melody},
             "magenta": {"reference_song_id": null},
@@ -980,6 +991,9 @@ mod tests {
         }));
         assert_eq!(rendered.replay_request.as_ref(), Some(&json!({
             "backing_song_id": backing,
+            "source_song_id": melody,
+            "reference_song_id": voice,
+            "ace": {"task_type": "repaint", "source_song_id": melody, "reference_song_id": voice},
             "vevo2": {"voice_song_id": voice, "melody_song_id": null},
             "soulx": {"reference_song_id": melody, "source_song_id": voice},
             "magenta": {"reference_song_id": voice},
