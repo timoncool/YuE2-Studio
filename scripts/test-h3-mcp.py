@@ -57,11 +57,9 @@ with tempfile.TemporaryDirectory(prefix="yue-h3-mcp-") as folder:
             assert model["ready"] is False and model["status"] == "experimental", model
             assert model["missing_bytes"] == model["bytes"] == 32_443_213_394, model
             assert "dit.gguf" in model["missing"], model
-            assert model["manual_install"] == {
-                "source_url": "https://huggingface.co/audio-cpp/audio.cpp-gguf/tree/32c1ce1fea57a513eb9386aa62408d47b1cf7ab2/MiniMax-H3-Q4-GGUF",
-                "license_url": "https://huggingface.co/MiniMaxAI/MiniMax-H3/blob/main/LICENSE",
-                "directory": "audiocpp/models/MiniMax-H3-Q4-GGUF",
-            }, model
+            assert model["package_url"] == "https://huggingface.co/audio-cpp/audio.cpp-gguf/tree/32c1ce1fea57a513eb9386aa62408d47b1cf7ab2/MiniMax-H3-Q4-GGUF", model
+            assert model["license_url"] == "https://huggingface.co/MiniMaxAI/MiniMax-H3/blob/main/LICENSE", model
+            assert model["model_directory"] == "audiocpp/models/MiniMax-H3-Q4-GGUF", model
             print(json.dumps(model))
         except BaseException:
             log.seek(0)
