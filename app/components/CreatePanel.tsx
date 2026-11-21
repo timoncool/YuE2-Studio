@@ -1,3 +1,6 @@
+import samplingPresets from '../data/yue-sampling.json';
+import { yueSamplingStrings } from '../i18n/yueSampling';
+
 import { readRvcBackend, useLastRvcVoice } from '../services/rvcQuick';
 import { rvcQuickStrings } from '../i18n/rvcQuick';
 import React, { useCallback, useEffect, useEffectEvent, useMemo, useRef, useState } from 'react';
@@ -125,6 +128,26 @@ type EngineCatalog = {
 };
 
 type SamplingText = Record<keyof YueSampling, string>;
+type SamplingStage = keyof typeof samplingPresets;
+const presetFields = ['temperature', 'top_p', 'top_k', 'repetition_penalty'] as const;
+
+function SamplingSelector({ stage, value, onChange, strings }: {
+  stage: SamplingStage; value: SamplingText; onChange: (value: SamplingText) => void; strings: typeof yueSamplingStrings.en;
+}) {
+  const choices = Object.entries(samplingPresets[stage]);
+  const current = choices.find(([, knobs]) => presetFields.every(key => numberOrUndefined(value[key]) === knobs[key]))?.[0]
+    ?? (presetFields.every(key => value[key].trim() === '') ? '' : 'custom');
+  return <Field label={stage === 'abc_sampling' ? strings.plan : strings.reading}><select className={CONTROL} value={current} onChange={event => {
+    const knobs = choices.find(([name]) => name === event.target.value)?.[1];
+    const next = { ...value };
+    for (const key of presetFields) next[key] = knobs ? String(knobs[key]) : '';
+    onChange(next);
+  }}>
+    <option value="">{strings.checkpoint}</option>
+    {current === 'custom' && <option value="custom">{strings.custom}</option>}
+    {choices.map(([name]) => <option key={name} value={name}>{strings[name as keyof typeof strings]}</option>)}
+  </select></Field>;
+}
 
 /** The select entry that opens the new-playlist dialog instead of choosing. */
 const NEW_PLAYLIST = '__new__';
@@ -1640,6 +1663,23 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
     }
   };
 
+  const variationChoices = Object.entries(samplingPresets.semantic_sampling).filter(([, knobs]) =>
+    !presetFields.every(key => numberOrUndefined(semanticSampling[key]) === knobs[key]));
+  const canVary = yue && ready && !pair.blocked && !queueBusy && !forever && !composing && !instrumental
+    && Boolean(abc.trim()) && effectiveCot !== 'off' && !semanticTokens.trim() && Boolean(style.trim() || lyrics.trim());
+  const createVariations = () => {
+    if (!canVary) return;
+    const base = buildRequest();
+    for (const [name, knobs] of variationChoices) {
+      const label = yueSamplingStrings[language][name as keyof typeof samplingPresets.semantic_sampling];
+      generate({
+        ...base, title: base.title ? base.title + ' · ' + label : label,
+        abc_continue: false, lm_batch_size: 1, synth_batch_size: 1,
+        semantic_sampling: { ...base.semantic_sampling, ...knobs },
+      });
+    }
+  };
+
   const submit = () => {
     if (pair.blocked) return;
     if (signed) {
@@ -2802,6 +2842,17 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
             </div>
           </Card>
 
+          <div className="grid gap-2 sm:grid-cols-2">
+            <SamplingSelector stage="abc_sampling" value={abcSampling} onChange={setAbcSampling} strings={yueSamplingStrings[language]} />
+            <SamplingSelector stage="semantic_sampling" value={semanticSampling} onChange={setSemanticSampling} strings={yueSamplingStrings[language]} />
+          </div>
+          <div>
+            <button type="button" className={CHIP} disabled={!canVary} onClick={createVariations}>
+              {yueSamplingStrings[language].batch} ({variationChoices.length})
+            </button>
+            <p className="mt-1 text-[11px] text-zinc-500">{yueSamplingStrings[language].hint}</p>
+          </div>
+
           <div className="overflow-hidden rounded-xl border border-zinc-200 bg-white dark:border-white/5 dark:bg-suno-card">
             <button
               type="button"
@@ -2861,6 +2912,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
                     </Field>
                     <div className="mt-3">
                       <SamplingGrid value={semanticSampling} defaults={defaults.semantic_sampling} onChange={setSemanticSampling} t={t as never} maxTokensCap={semanticBudget} minTokensHint={tt('samplingMinTokensHint')} />
+
                       {minTokensCutsTheSongOff(semanticSampling.min_tokens, effectiveDuration) && (
                         <p className="mt-2 text-[11px] leading-4 text-amber-600 dark:text-amber-400">{tt('samplingMinTokensCutsOff')}</p>
                       )}

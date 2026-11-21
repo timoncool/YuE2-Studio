@@ -313,6 +313,35 @@ struct SamplingPreset {
     max_tokens: Option<u32>,
 }
 
+fn sampling_choices() -> &'static Value {
+    static CHOICES: std::sync::OnceLock<Value> = std::sync::OnceLock::new();
+    CHOICES.get_or_init(|| serde_json::from_str(include_str!("../../../app/data/yue-sampling.json"))
+        .expect("bundled YuE2 sampling presets"))
+}
+
+fn sampling_choice<'de, D: serde::Deserializer<'de>>(deserializer: D, stage: &str) -> Result<Option<SamplingPreset>, D::Error> {
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum Choice { Name(String), Knobs(SamplingPreset) }
+    match Option::<Choice>::deserialize(deserializer)? {
+        Some(Choice::Name(name)) => {
+            let preset = sampling_choices()[stage].get(&name)
+                .ok_or_else(|| serde::de::Error::custom(format!("Unknown {stage} preset: {name}")))?;
+            serde_json::from_value(preset.clone()).map(Some).map_err(serde::de::Error::custom)
+        }
+        Some(Choice::Knobs(knobs)) => Ok(Some(knobs)),
+        None => Ok(None),
+    }
+}
+
+fn abc_choice<'de, D: serde::Deserializer<'de>>(deserializer: D) -> Result<Option<SamplingPreset>, D::Error> {
+    sampling_choice(deserializer, "abc_sampling")
+}
+
+fn semantic_choice<'de, D: serde::Deserializer<'de>>(deserializer: D) -> Result<Option<SamplingPreset>, D::Error> {
+    sampling_choice(deserializer, "semantic_sampling")
+}
+
 impl SamplingPreset {
     fn is_empty(&self) -> bool {
         *self == Self::default()
@@ -416,7 +445,9 @@ struct CreateMusicJobRequest {
     companion_scale: Option<f64>,
     /// Comma-separated semantic codes; present means the AR stage is skipped.
     semantic_tokens: Option<String>,
+    #[serde(default, deserialize_with = "abc_choice")]
     abc_sampling: Option<SamplingPreset>,
+    #[serde(default, deserialize_with = "semantic_choice")]
     semantic_sampling: Option<SamplingPreset>,
     /// Chord variety and section order of the score the model plans.
     #[serde(default)]
@@ -14598,6 +14629,20 @@ mod tests {
             lyrics: "[Verse]\r\none line".into(),
             ..CreateMusicJobRequest::default()
         }
+    }
+
+    #[test]
+    fn named_sampling_choices_replay_as_numeric_knobs() {
+        let input = json!({"style":"folk","lyrics":"one line","abc_sampling":"wild","semantic_sampling":"tight"});
+        let request: CreateMusicJobRequest = serde_json::from_value(input.clone()).unwrap();
+        let numeric = serde_json::to_value(request).unwrap();
+        assert_eq!(numeric["abc_sampling"]["top_k"], 30);
+        assert!((numeric["semantic_sampling"]["temperature"].as_f64().unwrap() - 0.8).abs() < 1e-5);
+        let replay: CreateMusicJobRequest = serde_json::from_value(numeric.clone()).unwrap();
+        assert_eq!(serde_json::to_value(replay).unwrap(), numeric);
+        let mut wrong_stage = input;
+        wrong_stage["abc_sampling"] = json!("tight");
+        assert!(serde_json::from_value::<CreateMusicJobRequest>(wrong_stage).is_err());
     }
 
     #[test]

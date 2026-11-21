@@ -1092,6 +1092,11 @@ fn rvc_runtime_route(args: &Value) -> String {
 }
 
 fn song_create_schema(mut properties: Value) -> Value {
+    for stage in ["abc_sampling", "semantic_sampling"] {
+        let names: Vec<_> = crate::sampling_choices()[stage].as_object().unwrap().keys().collect();
+        let knobs = properties[stage].take();
+        properties[stage] = json!({"oneOf": [knobs, {"type": "string", "enum": names}]});
+    }
     properties["rvc_after"] = json!({
         "type": "object",
         "description": "After successful generation, save a separate RVC take with this voice and backend. Use rvc_quick_list for progress.",
