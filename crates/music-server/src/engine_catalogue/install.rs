@@ -1,3 +1,4 @@
+pub(crate) mod inventory;
 pub(crate) mod rollback;
 pub(crate) mod updates;
 

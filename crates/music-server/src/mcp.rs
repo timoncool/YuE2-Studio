@@ -2707,6 +2707,12 @@ fn tools() -> &'static [Tool] {
                 call: |args| get(format!("/v1/components/packages/{}/{}/progress", segment(&text(args,"kind")?),segment(&text(args,"id")?))),
             },
             Tool {
+                name: "music_installed_package_list",
+                description: "Read installed music packages and their retained generations from local signed metadata, including packages removed from the online catalogue.",
+                schema: nothing,
+                call: |_| get("/v1/components/packages/installed".into()),
+            },
+            Tool {
                 name: "music_package_rollback",
                 description: "Restore the previous installed generation after a full offline integrity check. Pass the active and previous generation IDs from package status.",
                 schema: || object(json!({"kind":{"type":"string","enum":["music-engines","music-models"]},"id":{"type":"string"},"from_generation":{"type":"string"},"to_generation":{"type":"string"}}), &["kind","id","from_generation","to_generation"]),

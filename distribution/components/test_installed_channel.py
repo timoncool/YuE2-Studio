@@ -481,6 +481,10 @@ def run_rvc(work, binary, certificate, tls_key, install_voice=False):
         prior_lib.write_bytes(prior_bytes)
         restored = tool("music_package_rollback", rollback)
         assert restored["active"] == first["generation"] and restored["automatic_updates_paused"]
+        inventory = tool("music_installed_package_list")
+        assert len(inventory["packages"]) == 3 and inventory["errors"] == [], inventory
+        installed_engine = next(p for p in inventory["packages"] if p["kind"] == "music-engines")
+        assert installed_engine["previous_generation"] == second["generation"] and installed_engine["automatic_updates_paused"]
         assert tool("music_package_rollback", rollback) == restored
         assert tool("music_engine_package_status", args)["version"] == "1"
         assert tool("music_package_updates_get")["updates"][0]["automatic_updates_paused"]
