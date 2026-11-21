@@ -32,6 +32,7 @@ mod audio_cpp_minimax_h3;
 mod audio_cpp_mulacover;
 mod audio_cpp_music;
 mod audio_cpp_yue2;
+mod audio_cpp_ace_step;
 mod audio_cpp_controlfoley;
 mod audio_cpp_sound_effects;
 mod hotstep_cover;
@@ -177,6 +178,7 @@ struct AppState {
     audio_cpp_music_stops: Arc<RwLock<HashMap<String, Arc<std::sync::atomic::AtomicBool>>>>,
     heartmula_install: Arc<tokio::sync::Mutex<()>>,
     audio_cpp_yue2_install: Arc<tokio::sync::Mutex<()>>,
+    audio_cpp_ace_install: Arc<tokio::sync::Mutex<()>>,
     stable_audio_install: Arc<tokio::sync::Mutex<()>>,
     soulx_install: Arc<tokio::sync::Mutex<()>>,
     openrouter_music_stops: Arc<RwLock<HashMap<String, Arc<tokio::sync::Notify>>>>,
@@ -1656,6 +1658,7 @@ pub async fn serve_on_port(port: u16) -> anyhow::Result<()> {
         audio_cpp_music_stops: Arc::default(),
         heartmula_install: Arc::default(),
         audio_cpp_yue2_install: Arc::default(),
+        audio_cpp_ace_install: Arc::default(),
         stable_audio_install: Arc::default(),
         soulx_install: Arc::default(),
         openrouter_music_stops: Arc::new(RwLock::new(HashMap::new())),

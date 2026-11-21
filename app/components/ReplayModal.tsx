@@ -35,11 +35,11 @@ export const ReplayModal: React.FC<ReplayModalProps> = ({ song, clientRef, onClo
 
   const native = isNativeMusicEngine(song.ditModel);
   const audioCppFamily = song.ditModel === 'audio.cpp' ? settings.family : null;
-  const audioCppLabel = audioCppFamily === 'heartmula' ? 'HeartMuLa' : audioCppFamily === 'yue2' ? 'YuE2' : null;
+  const audioCppLabel = audioCppFamily === 'heartmula' ? 'HeartMuLa' : audioCppFamily === 'yue2' ? 'YuE2' : audioCppFamily === 'ace_step' ? 'ACE-Step 1.5' : null;
   const hotStepReplayLabel = song.ditModel === 'hotstep' ? ({
     'hotstep-yue2-q4-k-m': 'YuE2', 'hotstep-ace-step-1.5': 'ACE-Step 1.5', 'hotstep-minimax-music3': 'MiniMax Music3',
   } as Record<string, string>)[String(settings.profile_id)] : undefined;
-  const maximumSteps = settings.profile_id === 'hotstep-yue2-q4-k-m' || audioCppFamily === 'yue2' ? 100 : 200;
+  const maximumSteps = settings.profile_id === 'hotstep-yue2-q4-k-m' || audioCppFamily === 'yue2' || audioCppFamily === 'ace_step' ? 100 : 200;
   const supportsVariations = song.ditModel !== 'minimaxmusic-cpp' && !hotStepReplayLabel && !audioCppLabel;
   const minimumSteps = song.ditModel === 'minimaxmusic-cpp' ? 2 : 1;
   const originalSteps = settings.inference_steps ?? settings.steps;

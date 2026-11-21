@@ -460,6 +460,7 @@ const SamplingGrid: React.FC<{ value: SamplingText; defaults?: YueSampling; onCh
 const NO_ACTIVITY: ActivityEntry[] = [];
 const hotStepMiniMaxProfile = 'hotstep-minimax-music3';
 const audioCppYueProfile = 'yue2';
+const audioCppAceProfile = 'ace_step';
 const hotStepYueProfile = 'hotstep-yue2-q4-k-m';
 const hotStepAceProfile = 'hotstep-ace-step-1.5';
 
@@ -472,6 +473,7 @@ const linkedMusicFamilies = [
   { id: 'acestep-cpp', name: 'ACE-Step', pairs: [
     { engine: 'acestep-cpp', label: 'acestep.cpp' },
     { engine: 'hotstep', label: 'HOT-Step', profile: hotStepAceProfile },
+    { engine: 'audio.cpp', label: 'audio.cpp', profile: audioCppAceProfile },
   ] },
   { id: 'minimaxmusic-cpp', name: 'MiniMax Music3', pairs: [
     { engine: 'minimaxmusic-cpp', label: 'minimaxmusic.cpp' },
@@ -526,6 +528,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
     installedNativeAdapters.some(installed => installed.id === adapter.id && !installed.error));
   const audioCpp = nativeEngine === 'audio.cpp';
   const audioCppYue = audioCpp && native.profile?.id === audioCppYueProfile;
+  const audioCppAce = audioCpp && native.profile?.id === audioCppAceProfile;
   const hotstepSa3 = nativeEngine === 'hotstep' && native.profile?.id === hotStepSa3Profile;
   const hotstepHeart = nativeEngine === 'hotstep' && native.profile?.id === hotStepHeartmulaProfile;
   const hotstepMiniMax = nativeEngine === 'hotstep' && native.profile?.id === hotStepMiniMaxProfile;
@@ -561,6 +564,22 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
   const durationHintId = React.useId();
   const miDashengDuration = miDashengDurationStrings[language];
   const yue = musicEngine === 'local';
+  const packedAceRanges = {
+    duration_seconds: { min: 1, max: 300 },
+    steps: { min: 1, max: 100, integer: true },
+    seed: { min: 0, max: Number.MAX_SAFE_INTEGER, integer: true },
+    guidance_scale: { min: 0, exclusive: true },
+  } as const;
+  const packedAceInvalid = audioCppAce ? Object.entries(packedAceRanges).flatMap(([key, range]) => {
+    const value = native.settings[key as keyof typeof packedAceRanges];
+    if (value === undefined || value.trim() === '') return [];
+    const number = Number(value);
+    const valid = Number.isFinite(number)
+      && ('exclusive' in range ? number > range.min : number >= range.min)
+      && (!('max' in range) || number <= range.max)
+      && (!('integer' in range) || Number.isInteger(number));
+    return valid ? [] : [key];
+  }) : [];
   const nativeControls = [
     ['duration_seconds', miDasheng ? miDashengDuration.limit : nativeStrings.duration],
     ['steps', nativeStrings.steps],
@@ -1794,7 +1813,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
       return;
     }
     if (nativeEngine) {
-      if ((aceEngine && !aceOptions) || !nativeAdaptersReady) return;
+      if (packedAceInvalid.length || (aceEngine && !aceOptions) || !nativeAdaptersReady) return;
       if (!native.ready || !native.profile || (mulaCover && !mulaCoverDraft.original) || (hotstep && (!mulaCoverDraft.original || !mulaCoverDraft.abc.trim()))) return;
       if (miDasheng && !miDashengPromptReady(scene)) return;
       if (soulx && (!soulxInputs.reference_song_id || (soulxConversion
@@ -2155,6 +2174,9 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
                     {audioCppYue && native.profile?.installable && !native.ready &&
                       <AudioCppModelInstall key={audioCppYueProfile} model={audioCppYueProfile} bytes={native.profile.missing_bytes ?? 0}
                         licenseUrl={native.profile.license_url} language={language} onInstalled={refreshNativeChoice} />}
+                    {audioCppAce && native.profile?.installable && !native.ready &&
+                      <AudioCppModelInstall key={audioCppAceProfile} model={audioCppAceProfile} bytes={native.profile.missing_bytes ?? 0}
+                        licenseUrl={native.profile.license_url} language={language} onInstalled={refreshNativeChoice} />}
                     {hotstepAce && native.profile?.installable && !native.ready &&
                       <AudioCppModelInstall key={hotStepAceProfile} model={hotStepAceProfile} bytes={native.profile.missing_bytes ?? 0}
                         licenseUrl={native.profile.license_url} language={language} onInstalled={refreshNativeChoice} />}
@@ -2298,8 +2320,9 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
                         <span>{label}</span>
                         <input type="number" step={key === 'steps' || key === 'seed' || key === 'lm_seed' || key === 'lm_top_k' ? 1 : 'any'}
                           aria-describedby={miDasheng && key === 'duration_seconds' ? durationHintId : undefined}
-                          min={miniMaxH3 && key === 'duration_seconds' || key === 'lm_top_k' ? 1 : ['lm_cfg', 'dit_cfg', 'fade_in', 'fade_out'].includes(key) ? 0 : undefined}
-                          max={miniMaxH3 && key === 'duration_seconds' ? 20 : undefined}
+                          aria-invalid={packedAceInvalid.includes(key) || undefined}
+                          min={(audioCppAce ? packedAceRanges[key as keyof typeof packedAceRanges]?.min : undefined) ?? (miniMaxH3 && key === 'duration_seconds' || key === 'lm_top_k' ? 1 : ['lm_cfg', 'dit_cfg', 'fade_in', 'fade_out'].includes(key) ? 0 : undefined)}
+                          max={audioCppAce && key === 'duration_seconds' ? 300 : audioCppAce && key === 'steps' ? 100 : miniMaxH3 && key === 'duration_seconds' ? 20 : undefined}
                           className={CONTROL} value={native.settings[key] ?? ''}
                           placeholder={miniMaxH3 && key === 'duration_seconds' ? '4' : nativeStrings.default}
                           onChange={event => native.set(key, event.target.value)} />
@@ -3295,7 +3318,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
           type="button"
           onClick={submit}
           disabled={pair.blocked || (signed ? !packages.ready : cloud ? !selectedMusicModel || invalidParameters.length > 0 : nativeEngine
-            ? !native.ready || (aceEngine && !aceOptions) || !nativeAdaptersReady || (miDasheng && !miDashengPromptReady(scene)) || (magenta && !magentaReady) || (mulaCover && !mulaCoverDraft.original) || (hotstep && (!mulaCoverDraft.original || !mulaCoverDraft.abc.trim()))
+            ? packedAceInvalid.length > 0 || !native.ready || (aceEngine && !aceOptions) || !nativeAdaptersReady || (miDasheng && !miDashengPromptReady(scene)) || (magenta && !magentaReady) || (mulaCover && !mulaCoverDraft.original) || (hotstep && (!mulaCoverDraft.original || !mulaCoverDraft.abc.trim()))
             : yue && instrumental && instrumentalLoraLoading && !isGenerating)}
           className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-linear-to-r from-orange-500 to-pink-600 text-base font-bold text-white shadow-lg transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
         >
