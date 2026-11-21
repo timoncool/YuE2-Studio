@@ -191,9 +191,6 @@ pub async fn start(
     if state.prepare.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).as_ref().is_some_and(|running| !running.finished) {
         return Err(api_error(StatusCode::CONFLICT, "songs are already being prepared; wait for them or stop it".into()));
     }
-    if crate::no_song_rendering(&state).await.is_err() {
-        return Err(api_error(StatusCode::CONFLICT, "a song is being made on the card; prepare songs once it is done".into()));
-    }
     // the agent writes after the preparation, so training cannot follow it
     if request.writer == Writer::Agent && request.train.is_some() {
         return Err(api_error(StatusCode::BAD_REQUEST, "with writer agent the songs are written after the preparation; start the training once they are, not with train".into()));
@@ -256,10 +253,7 @@ fn launch(state: &AppState, job: Job) -> anyhow::Result<PrepareStatus> {
     tokio::spawn(async move {
         let shared = background.prepare.clone();
         let id = job.dataset.clone();
-        let hooks = crate::card_hooks(&background).await;
-        (hooks.take)().await;
-        let outcome = run(&background, &job).await;
-        (hooks.give_back)().await;
+        let outcome = run_on_card(&background, &job).await;
         let cancelled = background.prepare_cancel.load(Ordering::Relaxed);
         if let Err(error) = &outcome {
             if !cancelled {
@@ -526,6 +520,37 @@ fn settle_pending(training: &training::Training, job: &Job, shared: &Shared, can
 /// The songs of the job, as they stand now.
 fn songs(state: &AppState, job: &Job) -> anyhow::Result<Vec<training::DatasetItem>> {
     Ok(state.training.dataset(&job.dataset)?.items.into_iter().filter(|item| job.items.as_ref().is_none_or(|ids| ids.contains(&item.id))).collect())
+}
+
+async fn run_on_card(state: &AppState, job: &Job) -> anyhow::Result<()> {
+    let _exclusive = loop {
+        if state.prepare_cancel.load(Ordering::Relaxed) {
+            return Ok(());
+        }
+        // A queued YuE2 song releases its submission lock while it renders.
+        // Leave the lock free while it completes or recovers from a failed attempt.
+        if let Ok(lease) = state.engine_use.try_write()
+            && crate::no_song_rendering(state).await.is_ok()
+        {
+            break lease;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(250)).await;
+    };
+    if state.training.active_run().await.is_some() {
+        anyhow::bail!("a LoRA is training on the card; prepare songs once it finishes");
+    }
+    let restart = if crate::models_kept(state).await {
+        crate::stop_engine_and_assistant(state).await.map_err(anyhow::Error::msg)?
+    } else {
+        crate::free_the_card_for_the_engine(state).await;
+        false
+    };
+    let outcome = run(state, job).await;
+    if restart {
+        outcome.and(crate::restart_engine(state).await.map_err(anyhow::Error::msg))
+    } else {
+        outcome
+    }
 }
 
 async fn run(state: &AppState, job: &Job) -> anyhow::Result<()> {
