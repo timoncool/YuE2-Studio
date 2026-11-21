@@ -1119,7 +1119,7 @@ impl Library {
         transaction.execute(
             "DELETE FROM score_results WHERE rowid IN
              (SELECT rowid FROM score_results ORDER BY rowid DESC LIMIT -1 OFFSET ?1)",
-            [limit],
+            [i64::try_from(limit)?],
         )?;
         transaction.commit()?;
         Ok(())
