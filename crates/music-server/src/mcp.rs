@@ -2471,6 +2471,18 @@ fn tools() -> &'static [Tool] {
                 call: |args| post("/v1/music/audio-cpp/models/install".into(), args.clone()),
             },
             Tool {
+                name: "audio_cpp_music_model_install_cancel",
+                description: "Cancel the scoped managed audio.cpp model download while it is in progress. A later install can resume the transfer.",
+                schema: || object(json!({"model": {"type": "string"}}), &["model"]),
+                call: |args| send(Method::DELETE, "/v1/music/audio-cpp/models/install".into(), args.clone()),
+            },
+            Tool {
+                name: "hotstep_music_model_install_cancel",
+                description: "Cancel an active HOT-Step model download by profile ID. Other model downloads keep running.",
+                schema: || object(json!({"model": {"type": "string"}}), &["model"]),
+                call: |args| send(Method::DELETE, "/v1/music/native/hotstep/install".into(), args.clone()),
+            },
+            Tool {
                 name: "engine_logs",
                 description: "The music engine's recent log, for when a song fails or the engine will not start.",
                 schema: nothing,

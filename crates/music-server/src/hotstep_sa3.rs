@@ -9,7 +9,7 @@ use crate::{hotstep_cover_assets, hotstep_runtime, hotstep_sa3_assets, hotstep_s
 
 pub(super) const PROFILE: &str = "stable-audio-3-medium";
 const MODEL: &str = "Stable Audio 3 Medium";
-const INSTALL_SCOPE: &str = "hotstep-stable-audio-3";
+pub(super) const INSTALL_SCOPE: &str = "hotstep-stable-audio-3";
 
 pub(super) async fn profile(state: &AppState, engine_installed: bool) -> Value {
     let downloader = &state.hotstep_cover;

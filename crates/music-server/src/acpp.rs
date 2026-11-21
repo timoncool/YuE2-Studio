@@ -309,7 +309,12 @@ impl Acpp {
 
     #[cfg(windows)]
     pub async fn install_soxr(&self) -> Result<()> {
-        self.downloader.install_all("audiocpp-soxr", &[&SOXR]).await
+        self.install_soxr_for("audiocpp-soxr").await
+    }
+
+    #[cfg(windows)]
+    pub async fn install_soxr_for(&self, scope: &str) -> Result<()> {
+        self.downloader.install_all(scope, &[&SOXR]).await
     }
 
     /// The cover frontend requires Soxr's HQ resampler, even with a 24 kHz source.

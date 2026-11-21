@@ -8,6 +8,50 @@ use std::time::Duration;
 pub(super) const ENGINE: &str = "hotstep";
 pub(super) const PROFILE: &str = "heartmula-mulacover";
 const MODEL: &str = "MuLaCover";
+const INSTALL_SCOPE: &str = "hotstep-mulacover";
+
+fn install_scope(model: &str) -> Option<&str> {
+    match model {
+        PROFILE => Some(INSTALL_SCOPE),
+        crate::hotstep_sa3::PROFILE => Some(crate::hotstep_sa3::INSTALL_SCOPE),
+        crate::hotstep_heartmula::PROFILE => Some(crate::hotstep_heartmula::SCOPE),
+        hotstep_generation::PROFILE | hotstep_generation::ACE_PROFILE | hotstep_generation::YUE_PROFILE => Some(model),
+        _ => None,
+    }
+}
+
+pub(super) async fn cancel_install(
+    State(state): State<AppState>,
+    Json(request): Json<audio_cpp_music::InstallModel>,
+) -> Result<Json<Value>, (StatusCode, Json<ApiError>)> {
+    let scope = install_scope(&request.model)
+        .ok_or_else(|| api_error(StatusCode::BAD_REQUEST, "Unknown managed HOT-Step model.".into()))?;
+    Ok(Json(serde_json::json!({"cancelled": downloader(&state).cancel_for(scope).await})))
+}
+
+fn runtime_supported(server: bool, managed_revision: Option<&str>) -> bool {
+    server || managed_revision.is_some()
+}
+
+#[cfg(test)]
+mod install_tests {
+    use super::*;
+
+    #[test]
+    fn mulacover_requires_a_discovered_server_or_supported_runtime() {
+        assert!(!runtime_supported(false, None));
+        assert!(runtime_supported(true, None));
+        assert!(runtime_supported(false, Some("known")));
+    }
+
+    #[test]
+    fn model_cancel_targets_the_install_scope() {
+        assert_eq!(install_scope(PROFILE), Some(INSTALL_SCOPE));
+        assert_eq!(install_scope(hotstep_generation::ACE_PROFILE), Some(hotstep_generation::ACE_PROFILE));
+        assert_eq!(install_scope(crate::hotstep_sa3::PROFILE), Some(crate::hotstep_sa3::INSTALL_SCOPE));
+        assert_eq!(install_scope("midi"), None);
+    }
+}
 
 fn downloader(state: &AppState) -> Arc<downloads::Downloader> {
     state.hotstep_cover.clone()
@@ -24,13 +68,13 @@ pub(super) async fn profiles(State(state): State<AppState>) -> Json<Value> {
     if !server {
         missing.push("HOT-Step server");
     }
-    let download = downloader.active_for("hotstep-mulacover").await;
+    let download = downloader.active_for(INSTALL_SCOPE).await;
     let installing = download.as_ref().is_some_and(|progress| !progress.done);
     Json(serde_json::json!({
         "engine": ENGINE, "engine_installed": server,
         "profiles": [{"id": PROFILE, "label": "MuLaCover · HOT-Step · BF16", "ready": missing.is_empty(), "missing": missing,
             "missing_bytes": missing_assets.iter().map(|asset| asset.bytes).sum::<u64>(), "installing": installing, "download": download,
-            "install_path": (server || assets::managed_revision().is_some()).then_some("/v1/music/native/hotstep/install")},
+            "install_path": runtime_supported(server, assets::managed_revision()).then_some("/v1/music/native/hotstep/install")},
             crate::hotstep_sa3::profile(&state, server).await, crate::hotstep_heartmula::profile(&state, server).await,
             hotstep_generation::profile(&state, server, Family::MiniMax).await,
             hotstep_generation::profile(&state, server, Family::Ace).await,
@@ -42,9 +86,13 @@ pub(super) async fn install(
     State(state): State<AppState>,
 ) -> Result<Json<Value>, (StatusCode, Json<ApiError>)> {
     let downloader = downloader(&state);
+    let server = assets::server(&downloader).is_some_and(|path| path.is_file());
+    if !runtime_supported(server, assets::managed_revision()) {
+        return Err(api_error(StatusCode::SERVICE_UNAVAILABLE, "Configure a HOT-Step server before downloading the MuLaCover weights.".into()));
+    }
     let missing = assets::missing(&downloader);
     downloader
-        .install_all("hotstep-mulacover", &missing)
+        .install_all(INSTALL_SCOPE, &missing)
         .await
         .map_err(|error| api_error(StatusCode::SERVICE_UNAVAILABLE, format!("{error:#}")))?;
     Ok(Json(

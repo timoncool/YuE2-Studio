@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { apiUrl } from '../services/apiBase';
+import { useI18n } from '../context/I18nContext';
 
 export interface HeartMuLaOptions {
   temperature?: number;
@@ -97,6 +98,9 @@ export function AudioCppModelInstall({ model, bytes, licenseUrl, language, onIns
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [percent, setPercent] = useState<number>();
+  const [canCancel, setCanCancel] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
+  const { t } = useI18n();
   const hotstepHeart = model === 'heartmula-3b-q8_0';
   const hotstepMinimax = model === 'hotstep-minimax-music3';
   const hotstepAce = model === 'hotstep-ace-step-1.5';
@@ -116,6 +120,7 @@ export function AudioCppModelInstall({ model, bytes, licenseUrl, language, onIns
     if (!row) return;
     setBusy(Boolean(row.installing));
     const download = row.download;
+    setCanCancel(Boolean(row.installing && download && !download.done));
     setPercent(row.installing && download && !download.done && download.total_bytes > 0
       ? Math.min(100, Math.floor(100 * download.downloaded_bytes / download.total_bytes)) : undefined);
     if (!row.installing && download?.error) setError(download.error);
@@ -132,6 +137,7 @@ export function AudioCppModelInstall({ model, bytes, licenseUrl, language, onIns
 
   async function start() {
     setBusy(true);
+    setCanCancel(false);
     setError('');
     try {
       const route = target?.installPath ?? (hotstep ? `/v1/music/native/hotstep/${hotstepYue ? 'yue2' : hotstepAce ? 'ace-step-1.5' : hotstepMinimax ? 'minimax-music3' : hotstepHeart ? 'heartmula' : 'stable-audio-3'}/install` : '/v1/music/audio-cpp/models/install');
@@ -149,12 +155,33 @@ export function AudioCppModelInstall({ model, bytes, licenseUrl, language, onIns
     }
   }
 
+  async function cancel() {
+    setCancelling(true);
+    try {
+      const needsHotstep = target ? target.catalogue === '/v1/music/native/hotstep/profiles' : hotstep;
+      const route = needsHotstep ? '/v1/music/native/hotstep/install' : '/v1/music/audio-cpp/models/install';
+      const response = await fetch(apiUrl(route), {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model }),
+      });
+      if (!response.ok) throw new Error((await response.json()).error || `HTTP ${response.status}`);
+      await status();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : failed);
+    } finally {
+      setCancelling(false);
+    }
+  }
+
   return <div className="space-y-1 text-xs">
     <button type="button" className="text-pink-600 underline disabled:opacity-50 dark:text-pink-300"
       disabled={busy} onClick={() => void start()}>
       {busy ? installing + (percent === undefined ? '' : ` ${percent}%`) : install + size}
     </button>
-    {!busy && error && <p role="alert">{error}</p>}
+    {busy && canCancel && <button type="button" className="ml-2 underline" disabled={cancelling}
+      onClick={() => void cancel()}>{t('cancelDownload')}</button>}
+    {error && <p role="alert">{error}</p>}
     {licenseUrl && <a href={licenseUrl} target="_blank" rel="noreferrer" className="block underline">Stability AI Community License</a>}
   </div>;
 }
