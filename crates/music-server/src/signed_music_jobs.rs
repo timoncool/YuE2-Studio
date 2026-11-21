@@ -313,6 +313,7 @@ async fn run(
             return reject(request, StatusCode::SERVICE_UNAVAILABLE, error.to_string());
         }
     };
+    let started = Instant::now();
     let remote = match process.submit(&submission).await {
         Ok(id) => id,
         Err(error) => {
@@ -378,13 +379,14 @@ async fn run(
     tokio::spawn(async move {
         let mut cancel_ack = None;
         let outcome = watch(&state, &job, &process, &remote, receiver, &mut cancel_ack).await;
+        let elapsed = started.elapsed();
         process.stop().await;
         let outcome = match outcome {
             Ok(Some(track)) => import(&state, &job, identity, track).await.map(Some),
             Ok(None) => Ok(None),
             Err(error) => Err(error),
         };
-        finish(&state, &job.id, outcome).await;
+        let report = finish(&state, &job.id, outcome).await;
         state
             .signed_music_cancellations
             .write()
@@ -393,6 +395,11 @@ async fn run(
         drop(lease);
         if let Some(reply) = cancel_ack {
             let _ = reply.send(Ok(()));
+        }
+        if let Some(report) = report {
+            report
+                .record(&state, "signed_music", "native.signed_music", elapsed)
+                .await;
         }
     });
     (StatusCode::ACCEPTED, Json(accepted))
@@ -545,11 +552,18 @@ async fn import(
     })
 }
 
-async fn finish(state: &AppState, id: &str, result: anyhow::Result<Option<CompletedSong>>) {
+async fn finish(
+    state: &AppState,
+    id: &str,
+    result: anyhow::Result<Option<CompletedSong>>,
+) -> Option<native_music_jobs::SongReport> {
     let mut jobs = state.jobs.write().await;
-    let Some(job) = jobs.get_mut(id) else { return };
-    if matches!(job.status, MusicJobStatus::Cancelled) {
-        return;
+    let job = jobs.get_mut(id)?;
+    if matches!(
+        job.status,
+        MusicJobStatus::Completed | MusicJobStatus::Failed | MusicJobStatus::Cancelled
+    ) {
+        return None;
     }
     match result {
         Ok(Some(song)) => {
@@ -582,6 +596,7 @@ async fn finish(state: &AppState, id: &str, result: anyhow::Result<Option<Comple
     {
         studio_log!("[ERROR] saving signed music job state: {error:#}");
     }
+    Some(native_music_jobs::SongReport::from_job(job))
 }
 
 pub(super) async fn cancel(

@@ -13,7 +13,7 @@ const strings = {
 
 type Props = {
   value: string;
-  onChange: (id: string) => void;
+  onChange: (id: string, score: string) => void;
   onInstall: () => void;
   missingSoxr: boolean;
   controlClassName: string;
@@ -49,7 +49,11 @@ export function MuLaCoverFields({ value, onChange, onInstall, missingSoxr, contr
       <label className="grid gap-1">
         <span>{text.original}</span>
         <select required className={controlClassName} value={value}
-          onChange={event => onChange(event.target.value)}>
+          onChange={event => {
+            const id = event.target.value;
+            const score = songs.find(song => song.id === id)?.generationParams?.abc;
+            onChange(id, typeof score === 'string' ? score : '');
+          }}>
           <option value="">{text.choose}</option>
           {value && !songs.some(song => song.id === value) && <option value={value} disabled>{value}</option>}
           {songs.map(song => <option key={song.id} value={song.id}>{song.title}</option>)}
