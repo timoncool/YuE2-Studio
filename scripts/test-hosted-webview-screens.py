@@ -1,11 +1,11 @@
 """Drive only the bundled Studio WebView on the isolated Windows runner."""
-import argparse, base64, ctypes, hashlib, json, os, pathlib, re, shutil, struct, subprocess, tempfile, time, urllib.request, wave, math
+import argparse, base64, ctypes, gzip, hashlib, json, os, pathlib, re, shutil, struct, subprocess, tempfile, time, urllib.request, wave, math, zipfile
 from contextlib import contextmanager
 
 p = argparse.ArgumentParser()
 p.add_argument("exe", type=pathlib.Path)
 p.add_argument("output", type=pathlib.Path)
-p.add_argument("--suite", choices=["screens", "lrc"], default="screens")
+p.add_argument("--suite", choices=["screens", "lrc", "batch-stems"], default="screens")
 args = p.parse_args()
 out = args.output.resolve()
 out.mkdir(parents=True, exist_ok=True)
@@ -284,7 +284,7 @@ def verify_lrc_file(destination, expected, song_id, route, receipt="lrc-file.jso
                                        timestamps=["00:00.50", "00:01.75"], name=destination.name, route=route))
 
 
-def check_lrc(root, pid):
+def check_lrc(root, pid, batch_stems=False):
     title = "Hosted LRC receipt"
     source = root/"source.wav"
     with wave.open(str(source), "wb") as audio:
@@ -335,7 +335,34 @@ def check_lrc(root, pid):
                     return
                 time.sleep(.2)
             raise AssertionError(f"No visible write error for {name}")
+        def cancel_export(label, kind):
+            def cancelled_replies():
+                try:
+                    events = json.loads((out/"lrc-webview-network.json").read_text(encoding="utf8"))
+                except (OSError, json.JSONDecodeError):
+                    return None
+                return {entry["id"] for entry in events if entry.get("responseBody")
+                        and json.loads(entry["responseBody"]).get("cancelled") is True}
+            before = cancelled_replies()
+            assert before is not None
+            click(label)
+            target = root/f"Отказ-{kind}"
+            save_dialog_file(pid, target, f"{kind}-cancel-dialog.json", action="cancel")
+            wait_page(label)
+            for _ in range(40):
+                after = cancelled_replies()
+                if after and after - before:
+                    break
+                time.sleep(.2)
+            else:
+                raise AssertionError(f"{kind}: service did not acknowledge cancellation")
+            assert not list(root.glob(target.name + "*"))
+            json_file(out/f"{kind}-cancel.json", dict(response_ids=sorted(after-before), file_created=False))
         seen_errors = set()
+        if batch_stems:
+            click('button "x icon"')
+            check_batch_stems(root, pid, song, source, cancel_export, failed_save)
+            return
         click('button "Download LRC (Lyrics)"', page)
         save_dialog_file(pid, destination)
         verify_lrc_file(destination, expected, song["id"], "desktop")
@@ -395,29 +422,6 @@ def check_lrc(root, pid):
         page = wait_page(predicate=lambda value: any(context in line and " Export…" in line for line in value.splitlines()))
         row = next(line for line in page.splitlines() if context in line)
         ui("click", ref=re.search(r"(e\d+) Export…(?:,|$)", row)[1])
-        def cancel_export(label, kind):
-            def cancelled_replies():
-                try:
-                    events = json.loads((out/"lrc-webview-network.json").read_text(encoding="utf8"))
-                except (OSError, json.JSONDecodeError):
-                    return None
-                return {entry["id"] for entry in events if entry.get("responseBody")
-                        and json.loads(entry["responseBody"]).get("cancelled") is True}
-            before = cancelled_replies()
-            assert before is not None
-            click(label)
-            target = root/f"Отказ-{kind}"
-            save_dialog_file(pid, target, f"{kind}-cancel-dialog.json", action="cancel")
-            wait_page(label)
-            for _ in range(40):
-                after = cancelled_replies()
-                if after and after - before:
-                    break
-                time.sleep(.2)
-            else:
-                raise AssertionError(f"{kind}: service did not acknowledge cancellation")
-            assert not list(root.glob(target.name + "*"))
-            json_file(out/f"{kind}-cancel.json", dict(response_ids=sorted(after-before), file_created=False))
         for fmt in ("wav", "flac", "mp3"):
             wait_page('button "Export"')
             ui("select", text="Format", value=fmt)
@@ -437,7 +441,6 @@ def check_lrc(root, pid):
             cancel_export('button "Save…"', f"master-{fmt}")
             failed_save('button "Save…"', f"master-{fmt}", fmt)
             click('button "Export again"')
-        import zipfile
         for kind in ("track", "ableton"):
             if kind == "ableton":
                 click('button "Make the project"')
@@ -465,6 +468,139 @@ def check_lrc(root, pid):
         except subprocess.TimeoutExpired:
             observer.terminate()
             observer.wait(timeout=4)
+
+
+def check_batch_stems(root, pid, first, first_source, cancel_export, failed_save):
+    def tone(path, frequency):
+        with wave.open(str(path), "wb") as audio:
+            audio.setparams((1, 2, 24000, 0, "NONE", "not compressed"))
+            audio.writeframes(b"".join(
+                struct.pack("<h", round(5000 * math.sin(2 * math.pi * frequency * index / 24000)))
+                for index in range(24000)
+            ))
+        return path.read_bytes()
+
+    def sha(data):
+        return hashlib.sha256(data).hexdigest()
+
+    def saved(path, valid):
+        for _ in range(80):
+            if path.is_file() and valid(path):
+                return path.read_bytes()
+            time.sleep(.2)
+        raise AssertionError(f"Export did not finish: {path.name}")
+
+    def save_requests():
+        events = json.loads((out/"lrc-webview-network.json").read_text(encoding="utf8"))
+        return {
+            entry["id"]: entry["request"]["url"].split("/v1/files/save", 1)[1]
+            for entry in events if entry.get("request", {}).get("method") == "POST"
+        }
+
+    tracks = {first["id"]: first_source.read_bytes()}
+    titles = ["Hosted LRC receipt"]
+    for index, frequency in enumerate((220, 440), 1):
+        path = root/f"batch-source-{index}.wav"
+        titles.append(f"Hosted batch take {index}")
+        blob = tone(path, frequency)
+        last = tool("library_import_audio", path=str(path), title=titles[-1])
+        tracks[last["id"]] = blob
+    assert len(tracks) == 3
+    media = pathlib.Path(tool("library_song_files", song_id=last["id"])["audio"]).parent
+    stems = {
+        name: tone(media/f"{last['id']}-{name}.wav", freq)
+        for name, freq in (("vocals", 330), ("instrumental", 550))
+    }
+    status = tool("stems_get", song_id=last["id"])
+    assert set(stems) <= set(status["stems"]), status
+
+    ui("navigate", view="library")
+    click('button "Select"', wait_page(*titles))
+    click('button "Select all"')
+    wait_page("3 selected")
+    download = 'button "Download"'
+    archive_label = 'button "Export… ZIP"'
+    before = save_requests()
+    click(download)
+    first_output = root/"Batch first.wav"
+    save_dialog_file(pid, first_output, "batch-first-save.json")
+    first_saved = saved(first_output, lambda path: path.read_bytes() in tracks.values())
+    save_dialog_file(pid, root/"Batch cancelled.wav", "batch-queue-cancel-dialog.json", action="cancel")
+    wait_page(download)
+    for _ in range(8):
+        time.sleep(.25)
+        try:
+            after = save_requests()
+        except json.JSONDecodeError:
+            continue
+        diff = [suffix for key, suffix in after.items() if key not in before]
+        if diff.count("") > 2 or sum(bool(suffix) for suffix in diff) > 1:
+            raise AssertionError(f"Download queue continued after cancelling its second pick: {diff}")
+    assert diff.count("") == 2 and sum(bool(suffix) for suffix in diff) == 1, diff
+    assert not (root/"Batch cancelled.wav").exists()
+    json_file(out/"batch-queue-cancel.json", dict(selected=3, dialog_requests=2, writes=1,
+              saved_sha256=sha(first_saved), cancelled_file_absent=True, third_pick_absent=True))
+
+    click(download)
+    retry = []
+    for index in range(3):
+        destination = root/f"Batch retry {index + 1}.wav"
+        save_dialog_file(pid, destination, f"batch-retry-{index + 1}-dialog.json")
+        retry.append(saved(destination, lambda path: path.read_bytes() in tracks.values()))
+    assert set(map(sha, retry)) == set(map(sha, tracks.values())), "Batch retry lost or duplicated a track"
+    json_file(out/"batch-download.json", dict(selected=3, files=[sha(blob) for blob in retry]))
+
+    click(archive_label)
+    target = root/"Batch tracks.zip"
+    save_dialog_file(pid, target, "batch-zip-dialog.json")
+    saved(target, zipfile.is_zipfile)
+    with zipfile.ZipFile(target) as archive:
+        assert archive.testzip() is None
+        members = {name: sha(archive.read(name)) for name in archive.namelist()}
+        audio = {name: digest for name, digest in members.items() if name.endswith(".wav")}
+        assert len(audio) == 3 and set(audio.values()) == set(map(sha, tracks.values())), audio
+        assert len({name.rsplit("/", 1)[0] for name in audio}) == 3, audio
+        assert sum(name.endswith("/settings.txt") for name in members) == 3, members
+        assert set(audio.values()).isdisjoint(map(sha, stems.values())), audio
+    json_file(out/"batch-track-archive.json", dict(members=members, ids=list(tracks), archive_sha256=sha(target.read_bytes())))
+    cancel_export(archive_label, "batch-zip")
+    failed_save(archive_label, "batch-zip", "zip")
+
+    click('button "Select"')
+    context = f"song {last['id']}:"
+    page = wait_page(predicate=lambda value: any(context in line and "More actions" in line for line in value.splitlines()))
+    row = next(line for line in page.splitlines() if context in line)
+    ui("click", ref=re.search(r"(e\d+) More actions", row)[1])
+    page = wait_page(predicate=lambda value: any(context in line and " Export…" in line for line in value.splitlines()))
+    row = next(line for line in page.splitlines() if context in line)
+    ui("click", ref=re.search(r"(e\d+) Export…(?:,|$)", row)[1])
+    click('button "Make the project"')
+    label = 'button "Save…"'
+    click(label)
+    project = root/"Batch stems in Ableton.zip"
+    save_dialog_file(pid, project, "stems-ableton-dialog.json")
+    saved(project, zipfile.is_zipfile)
+    with zipfile.ZipFile(project) as archive:
+        assert archive.testzip() is None
+        names = archive.namelist()
+        files = {pathlib.PurePosixPath(name).name: sha(archive.read(name))
+                 for name in names if "/Samples/Imported/" in name}
+        title = titles[-1]
+        expected = {f"{title} - Master.wav": sha(tracks[last["id"]])}
+        expected.update({f"{title} - {name.title()} (separated).wav": sha(blob) for name, blob in stems.items()})
+        assert files == expected, (files, expected)
+        live_set, = [name for name in names if name.endswith(".als")]
+        xml = gzip.decompress(archive.read(live_set)).decode("utf8")
+        assert all(name in xml for name in expected), names
+    json_file(out/"stems-ableton-archive.json", dict(members=names, audio_sha256=files, song_id=last["id"],
+              tracks_referenced_in_live_set=True, archive_sha256=sha(project.read_bytes())))
+    cancel_export(label, "stems-ableton")
+    failed_save(label, "stems-ableton", "zip")
+    assert all((media/f"{last['id']}-{name}.wav").read_bytes() == blob for name, blob in stems.items())
+    for song_id, original in tracks.items():
+        library_path = pathlib.Path(tool("library_song_files", song_id=song_id)["audio"])
+        assert library_path.read_bytes() == original, song_id
+    json_file(out/"batch-stems-verdict.json", dict(originals_preserved=len(tracks), stems_preserved=len(stems)))
 
 
 def check_screens(root, pid):
@@ -679,8 +815,8 @@ with isolated_profile() as root:
                 clientInfo=dict(name="studio-hosted-webview", version="1")))
             rpc("notifications/initialized", {}, notify=True)
             wait_page(predicate=lambda page: "button" in page)
-            if args.suite == "lrc":
-                check_lrc(root, process.pid)
+            if args.suite in ("lrc", "batch-stems"):
+                check_lrc(root, process.pid, batch_stems=args.suite == "batch-stems")
             else:
                 check_screens(root, process.pid)
         finally:
