@@ -33,7 +33,7 @@ it.each([false, true])('uses the selected recipe after revisiting songs (automat
     await act(async () => root.render(<TrainingPanel />));
     await press('Test songs');
     await press('2 · trainingStepTrain');
-    const preset = host.querySelector('select')!;
+    const preset = host.querySelector<HTMLSelectElement>('select:has(option[value="fast"])')!;
     await act(async () => {
       preset.value = 'fast';
       preset.dispatchEvent(new Event('change', { bubbles: true }));
@@ -46,7 +46,7 @@ it.each([false, true])('uses the selected recipe after revisiting songs (automat
       expect(requests.get('/v1/training/prepare/train-after')).toEqual({ train: { name: 'Test songs', recipe } });
     } else {
       await press('2 · trainingStepTrain');
-      expect(host.querySelector('select')?.value).toBe('fast');
+      expect(host.querySelector<HTMLSelectElement>('select:has(option[value="fast"])')?.value).toBe('fast');
       await press('trainingStart');
       expect(requests.get('/v1/training/runs')).toEqual({ dataset_id: 'set', name: 'Test songs', recipe });
     }

@@ -162,6 +162,14 @@ adapter. Wait for the job, then call `library_song_get` to read its engine,
 profile, seed and settings. Use `song_replay` with the saved library song ID
 to create another take with the same parameters.
 
+For Stable Audio 3 Medium training, check `hotstep_sa3_training_status` and
+use `hotstep_sa3_training_install` to fetch the CUDA trainer and training
+base. Prepare an instrumental dataset with a style description for every
+song. Call `hotstep_sa3_training_start` with its `dataset_id` and optional
+`settings` (`steps`, `rank`, `alpha`, `learning_rate`, `duration_seconds`,
+`seed`). Read training progress with `training_status`. When the run finishes,
+use its `output_adapter` as the `hotstep_sa3.adapter` in `song_create`.
+
 For a HOT-Step MuLaCover cover, check `hotstep_cover_profiles` and use
 `hotstep_cover_install` to install the Windows CPU runtime and its GGUF
 weights. The four codec and tokenizer files are shared with other HeartMuLa

@@ -452,7 +452,7 @@ fn annotations(name: &str) -> Value {
     // a verb that changes something outweighs a noun that reads
     const CHANGES: &[&str] = &["install", "import", "remove", "delete", "refresh", "create", "update", "start", "cancel", "select", "download", "apply", "restart"];
     // reads whose names the rules above miss: create_form names the create page
-    const READ_NAMES: &[&str] = &["lyrics_syllables", "assistant_cli_agents", "system_gpus", "cover_scenes", "cover_photos_search", "video_backgrounds_search", "network_proxy_test", "journal_read", "score_to_midi", "score_instrumental", "score_vocal_octave", "score_from_midi", "score_mark", "lyrics_find", "cover_prompt_render", "studio_wait", "engine_presets_get", "assistant_requests_wait", "ui_console", "song_defaults", "create_form_get", "library_liked", "score_chord_bed", "song_tokenize", "score_match_sections", "models_update_plan", "problem_preview", "library_migration_preview", "audio_cpp_music_models", "hotstep_cover_profiles"];
+    const READ_NAMES: &[&str] = &["lyrics_syllables", "assistant_cli_agents", "system_gpus", "cover_scenes", "cover_photos_search", "video_backgrounds_search", "network_proxy_test", "journal_read", "score_to_midi", "score_instrumental", "score_vocal_octave", "score_from_midi", "score_mark", "lyrics_find", "cover_prompt_render", "studio_wait", "engine_presets_get", "assistant_requests_wait", "ui_console", "song_defaults", "create_form_get", "library_liked", "score_chord_bed", "song_tokenize", "score_match_sections", "models_update_plan", "problem_preview", "library_migration_preview", "audio_cpp_music_models", "hotstep_cover_profiles", "hotstep_sa3_training_status"];
     // writes over what was stored, so the earlier content is gone: a client asks first
     const OVERWRITES: &[&str] = &["library_song_rename", "library_song_update", "playlist_update", "album_reorder", "dataset_update", "dataset_song_update", "dataset_prepare", "lora_update", "stems_split", "restore_start", "karaoke_make", "midi_transcribe", "cover_draw", "cover_set_from_file", "openrouter_set_key", "models_update_apply"];
     let changes = CHANGES.iter().any(|verb| name.split('_').any(|word| word == *verb));
@@ -528,6 +528,8 @@ const JOURNAL: &[(&str, &str, &str)] = &[
     ("dataset_prepare_train_after", "updated", "preparation"),
     ("dataset_prepare_cancel", "cancelled", "preparation"),
     ("training_start", "started", "training"),
+    ("hotstep_sa3_training_install", "started", "download"),
+    ("hotstep_sa3_training_start", "started", "training"),
     ("training_continue", "started", "training"),
     ("training_cancel", "cancelled", "training"),
     ("training_run_delete", "deleted", "training"),
@@ -2952,6 +2954,24 @@ fn tools() -> &'static [Tool] {
                 description: "Stop the preparation at work; every song keeps what it has.",
                 schema: nothing,
                 call: |_| post("/v1/training/prepare/cancel".into(), json!({})),
+            },
+            Tool {
+                name: "hotstep_sa3_training_status",
+                description: "Report CUDA readiness and download progress for HOT-Step Stable Audio 3 Medium training.",
+                schema: nothing,
+                call: |_| get("/v1/training/hotstep-sa3".into()),
+            },
+            Tool {
+                name: "hotstep_sa3_training_install",
+                description: "Download the pinned Stable Audio 3 Medium training base and native HOT-Step CUDA components.",
+                schema: nothing,
+                call: |_| post("/v1/training/hotstep-sa3/install".into(), json!({})),
+            },
+            Tool {
+                name: "hotstep_sa3_training_start",
+                description: "Train a native HOT-Step Stable Audio 3 Medium DoRA adapter from a prepared instrumental dataset. A finished adapter is available in the HOT-Step Create profile.",
+                schema: || object(json!({"dataset_id":{"type":"string"},"name":{"type":"string"},"settings":{"type":"object","properties":{"steps":{"type":"integer","minimum":1},"rank":{"type":"integer","minimum":1},"alpha":{"type":"number"},"learning_rate":{"type":"number"},"duration_seconds":{"type":"number","minimum":1,"maximum":384},"seed":{"type":"integer","minimum":0}}}}), &["dataset_id"]),
+                call: |args| post("/v1/training/hotstep-sa3".into(), args.clone()),
             },
             Tool {
                 name: "training_start",
