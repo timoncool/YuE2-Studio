@@ -25,7 +25,24 @@ const collection: Playlist = {
 vi.mock('../context/I18nContext', () => ({
     useI18n: () => ({ t: (key: string) => key, songCount: (count: number) => String(count), language: 'en' }),
 }));
-vi.mock('../context/SongActionsContext', () => ({ useSongActions: () => ({}) }));
+vi.mock('../context/SongActionsContext', () => ({ useSongActions: () => ({}), ownsSong: () => true }));
+vi.mock('../context/AuthContext', () => ({ useAuth: () => ({ user: { id: 'local-studio' } }) }));
+vi.mock('./SongList', () => ({
+    DENSITY_KEY: 'studio.library.density',
+    readDensity: () => localStorage.getItem('studio.library.density') === 'compact' ? 'compact' : 'comfortable',
+    SongItem: ({ song, onSelect, onPlay, compact, onToggleLike, onOpenCoverRegen, onSongUpdate, onRemoveFromCollection }: {
+        song: Song; onSelect: () => void; onPlay: () => void; compact: boolean;
+        onToggleLike: () => void; onOpenCoverRegen: () => void; onSongUpdate: (song: Song) => void;
+        onRemoveFromCollection: () => void;
+    }) => <div data-testid={compact ? 'compact-song' : 'comfortable-song'}>
+        <button onClick={onSelect}>{song.title}</button>
+        <button onClick={onPlay}>Play song</button>
+        <button onClick={onToggleLike}>Like</button>
+        <button onClick={onOpenCoverRegen}>Change cover</button>
+        <button onClick={() => onSongUpdate(song)}>Rename</button>
+        <button onClick={onRemoveFromCollection}>Remove from collection</button>
+    </div>,
+}));
 vi.mock('../services/studioQueries', () => ({
     libraryChanged: vi.fn(),
     useLibraryTrashedSongs: () => ({ data: { songs: [], days: 30 }, isPending: false, isSuccess: true, isError: false }),
@@ -61,6 +78,7 @@ let root: Root | null = null;
 let host: HTMLDivElement | null = null;
 
 afterEach(() => {
+    localStorage.removeItem('studio.library.density');
     act(() => root?.unmount());
     host?.remove();
     root = null;
@@ -72,6 +90,9 @@ describe('collection song details', () => {
         collection.kind = kind;
         const onSelect = vi.fn();
         const onPlaySong = vi.fn();
+        const onToggleLike = vi.fn();
+        const onOpenCoverRegen = vi.fn();
+        const onSongUpdate = vi.fn();
         host = document.createElement('div');
         document.body.append(host);
         root = createRoot(host);
@@ -81,6 +102,9 @@ describe('collection song details', () => {
                 onBack={vi.fn()}
                 onPlaySong={onPlaySong}
                 onSelect={onSelect}
+                onToggleLike={onToggleLike}
+                onOpenCoverRegen={onOpenCoverRegen}
+                onSongUpdate={onSongUpdate}
                 currentSong={null}
                 isPlaying={false}
                 notify={vi.fn()}
@@ -88,16 +112,29 @@ describe('collection song details', () => {
             />,
         ));
 
-        const info = host.querySelector<HTMLButtonElement>('button[aria-label="songDetails"]');
-        expect(info).not.toBeNull();
-        act(() => info?.click());
+        const row = host.querySelector<HTMLLIElement>('li[data-mcp-context^="song "]');
+        expect(row).not.toBeNull();
+        const details = Array.from(row?.querySelectorAll('button') ?? []).find(button => button.textContent === song.title);
+        act(() => details?.click());
         expect(onSelect).toHaveBeenCalledWith(song);
         expect(onPlaySong).not.toHaveBeenCalled();
 
-        const row = host.querySelector<HTMLLIElement>('li[data-mcp-context^="song "]');
-        expect(row).not.toBeNull();
-        act(() => row?.click());
-        expect(onSelect).toHaveBeenCalledTimes(2);
+        const play = Array.from(row?.querySelectorAll('button') ?? []).find(button => button.textContent === 'Play song');
+        act(() => play?.click());
         expect(onPlaySong).toHaveBeenCalledWith(song, [song]);
+        const like = Array.from(row?.querySelectorAll('button') ?? []).find(button => button.textContent === 'Like');
+        const cover = Array.from(row?.querySelectorAll('button') ?? []).find(button => button.textContent === 'Change cover');
+        const rename = Array.from(row?.querySelectorAll('button') ?? []).find(button => button.textContent === 'Rename');
+        act(() => { like?.click(); cover?.click(); rename?.click(); });
+        expect(onToggleLike).toHaveBeenCalledWith(song.id);
+        expect(onOpenCoverRegen).toHaveBeenCalledWith(song);
+        expect(onSongUpdate).toHaveBeenCalledWith(song);
+
+        const density = host.querySelector<HTMLButtonElement>('button[aria-pressed="false"][title="listCompact"]');
+        expect(density).not.toBeNull();
+        expect(host.querySelector('[data-testid="comfortable-song"]')).not.toBeNull();
+        act(() => density?.click());
+        expect(host.querySelector('[data-testid="compact-song"]')).not.toBeNull();
+        expect(localStorage.getItem('studio.library.density')).toBe('compact');
     });
 });

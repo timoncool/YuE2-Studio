@@ -79,9 +79,9 @@ const SOURCE_FILTERS: FilterType[] = ['made', 'imported', 'derived'];
 const isImported = (song: Song) => song.ditModel === 'imported-audio';
 
 /** Rows with their cover, style and actions, or one line each. */
-type Density = 'comfortable' | 'compact';
-const DENSITY_KEY = 'studio.library.density';
-function readDensity(): Density {
+export type Density = 'comfortable' | 'compact';
+export const DENSITY_KEY = 'studio.library.density';
+export function readDensity(): Density {
     try {
         return window.localStorage.getItem(DENSITY_KEY) === 'compact' ? 'compact' : 'comfortable';
     } catch {
@@ -795,6 +795,9 @@ interface SongItemProps {
     onShowDetails?: () => void;
     detailsOpen?: boolean;
     onDelete?: () => void;
+    /** Context-menu removal from an album/playlist, not deletion from the library. */
+    onRemoveFromCollection?: () => void;
+    removeFromCollectionLabel?: string;
     onNavigateToProfile?: (username: string) => void;
     onSongUpdate?: (updatedSong: Song) => void;
     onCancelJob?: () => void;
@@ -827,6 +830,8 @@ export const SongItem: React.FC<SongItemProps> = ({
     onShowDetails,
     detailsOpen = false,
     onDelete,
+    onRemoveFromCollection,
+    removeFromCollectionLabel,
     onNavigateToProfile,
     onSongUpdate,
     onCancelJob,
@@ -1184,6 +1189,8 @@ export const SongItem: React.FC<SongItemProps> = ({
                                 song={song}
                                 isOpen={showDropdown}
                                 onClose={() => setShowDropdown(false)}
+                                onRemoveFromCollection={onRemoveFromCollection}
+                                removeFromCollectionLabel={removeFromCollectionLabel}
                             />
                             {menuAt && (
                                 <SongDropdownMenu
@@ -1191,6 +1198,8 @@ export const SongItem: React.FC<SongItemProps> = ({
                                     isOpen
                                     at={menuAt}
                                     onClose={() => setMenuAt(null)}
+                                    onRemoveFromCollection={onRemoveFromCollection}
+                                    removeFromCollectionLabel={removeFromCollectionLabel}
                                 />
                             )}
                         </div>

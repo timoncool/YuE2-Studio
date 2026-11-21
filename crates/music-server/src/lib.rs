@@ -54,6 +54,7 @@ mod song_midi;
 mod ableton;
 mod ableton_project;
 mod model_storage;
+mod music_storage;
 mod skins;
 pub use saving::{set_save_dialog, SaveDialog};
 mod skill;
@@ -1735,6 +1736,8 @@ pub async fn serve() -> anyhow::Result<()> {
         .route("/v1/activity", get(read_activity))
         .route("/v1/cover-templates", get(read_cover_templates).put(write_cover_templates))
         .route("/v1/library/file-tags", get(read_file_tags).put(write_file_tags))
+        .route("/v1/library/location", get(music_storage::status).put(music_storage::change))
+        .route("/v1/library/location/pick", post(music_storage::pick))
         .route("/v1/storage", get(model_storage::status).put(model_storage::change))
         .route("/v1/storage/pick", post(model_storage::pick))
         .route("/v1/storage/cancel", post(model_storage::cancel))
