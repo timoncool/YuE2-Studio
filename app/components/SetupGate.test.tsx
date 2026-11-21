@@ -5,14 +5,15 @@ import { OptionalGroup, SetupGate, WHERE_IT_RUNS } from './SetupGate';
 import { SettingsModal } from './SettingsModal';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { engineUpdateTarget } from '../i18n/enginePage';
+import { useOpenRouterSettings, useSetupStatus } from '../services/studioQueries';
 
 vi.mock('../context/I18nContext', () => ({ useI18n: () => ({
   t: (key: string) => key === 'ramShort' ? 'Have {have} GB, need {need} GB' : key,
   language: 'en',
 }) }));
 vi.mock('../context/AuthContext', () => ({ useAuth: () => ({ user: { username: 'test' }, setDisplayName: vi.fn() }) }));
-vi.mock('../services/studioQueries', () => ({ openRouterSettingsChanged: vi.fn(), useSetupStatus: () => ({}),
-  useOpenRouterSettings: () => ({ data: { configured: false } }), SELF_READ: { 'x-hub-skip': '1' } }));
+vi.mock('../services/studioQueries', () => ({ openRouterSettingsChanged: vi.fn(), useSetupStatus: vi.fn(() => ({})),
+  useOpenRouterSettings: vi.fn(() => ({})), SELF_READ: { 'x-hub-skip': '1' } }));
 vi.mock('./EngineSettings', () => ({ EngineSettings: () => null }));
 vi.mock('./ModelPreset', () => ({ ModelPreset: () => null }));
 vi.mock('./ModelStorageCard', () => ({ ModelStorageCard: () => null }));
@@ -25,11 +26,20 @@ vi.mock('../services/studioHub', () => ({ setTelemetry: vi.fn() }));
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 it('opens upgrades from the notification target and reads per-engine readiness without starting jobs', async () => {
+  const queries = await vi.importActual<typeof import('../services/studioQueries')>('../services/studioQueries');
+  const setupHook = vi.mocked(useSetupStatus).mockImplementation(queries.useSetupStatus);
+  const cloudHook = vi.mocked(useOpenRouterSettings).mockImplementation(queries.useOpenRouterSettings);
+  let openRouterConfigured = false;
   const onlyRead = vi.fn(async (url: string, init?: RequestInit) => {
     expect(init?.method ?? 'GET').toBe('GET');
-    if (url === '/v1/music/pair') return Response.json({ active: { kind: 'audio_cpp', model: 'yue2' } });
+    if (url === '/setup/status') return Response.json({ ready: true, engine_ready: true });
+    if (url === '/v1/openrouter/settings') return Response.json({ configured: openRouterConfigured });
+    if (url === '/v1/music/pair') return Response.json({ active: { kind: 'native', engine: 'acestep-cpp', model: 'minimal' } });
     if (url === '/engine/options') return Response.json({ executable: '/engines/yue-server' });
     if (url.includes('/acestep-cpp/profiles')) return Response.json({ engine_installed: true, profiles: [{ id: 'minimal', ready: false }] });
+    if (url.includes('/acestep-cpp/runtime')) return Response.json({
+      supported: true, installed: false, installed_revision: '6e0e414ec113', revision: 'd058cd86564a',
+    });
     if (url.includes('/minimaxmusic-cpp/profiles')) return Response.json({ engine_installed: false, profiles: [] });
     if (url === '/v1/music/audio-cpp/models') return Response.json({ engine_installed: true, models: [{ id: 'yue2', ready: true }] });
     if (url === '/v1/music/native/hotstep/profiles') return Response.json({}, { status: 503 });
@@ -48,17 +58,29 @@ it('opens upgrades from the notification target and reads per-engine readiness w
     await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)); });
     expect(host.querySelector('h3')?.textContent).toBe('Engines and updates');
     expect(host.querySelector('section[aria-label="Signed component updates"]')).toBeTruthy();
-    expect(host.querySelector('[data-engine="acestep-cpp"]')?.textContent).toContain('Installed · profileNotInstalled');
-    expect(host.querySelector('[data-engine="audio.cpp"]')?.textContent).toContain('Installed · Active · profileReady');
+    expect(host.querySelector('[data-engine="local"]')?.textContent).toContain('Installed · profileReady');
+    expect(host.querySelector('[data-engine="local"]')?.textContent).not.toContain('Active');
+    expect(host.querySelector('[data-engine="acestep-cpp"]')?.textContent).toContain('Installed · Active · profileNotInstalled');
+    expect(host.querySelector('[data-engine="acestep-cpp"]')?.textContent).toContain('Installed · 6e0e414ec113');
+    expect(host.querySelector('[data-engine="acestep-cpp"]')?.textContent).toContain('download · d058cd86564a');
+    expect(host.querySelector('[data-engine="audio.cpp"]')?.textContent).toContain('Installed · profileReady');
     expect(host.querySelector('[data-engine="minimaxmusic-cpp"]')?.textContent).toContain('Not installed');
     expect(host.querySelector('[data-engine="hotstep"]')?.textContent).toContain('Status unavailable');
     expect(host.querySelector('[data-engine="rvc"]')).toBeNull();
     await act(async () => host.querySelector<HTMLInputElement>('label:has(input[type="checkbox"]) input')!.click());
     expect(host.querySelector('[data-engine="rvc"]')?.textContent).toContain('Unsupported GPU');
     expect(host.querySelector('[data-engine="openrouter"]')?.textContent).toContain('openRouterNotConfigured');
+    openRouterConfigured = true;
+    const refresh = [...host.querySelectorAll('button')].find(button => button.textContent === 'refresh')!;
+    await act(async () => refresh.click());
+    await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)); });
+    expect(host.querySelector('[data-engine="openrouter"]')?.textContent).toContain('openRouterConfigured');
+    expect(onlyRead.mock.calls.filter(([url]) => url === '/setup/status')).toHaveLength(2);
   } finally {
     await act(async () => root.unmount());
     client.clear();
+    setupHook.mockReset();
+    cloudHook.mockReset();
     vi.unstubAllGlobals();
   }
 });

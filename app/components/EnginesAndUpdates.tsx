@@ -18,7 +18,7 @@ const native = [
 ] as const;
 type ModelStatus = { id: string; label?: string; name?: string; ready: boolean; missing_bytes?: number };
 type ProfileStatus = { engine_installed: boolean; adapter_runtime_update?: boolean; profiles?: ModelStatus[]; models?: ModelStatus[] };
-type RuntimeStatus = { supported: boolean; installed?: boolean; revision?: string };
+type RuntimeStatus = { supported: boolean; installed?: boolean; revision?: string; installed_revision?: string | null };
 type RvcStatus = { installed: boolean; supported: boolean; reason?: string | null };
 const installable = ['heartmula', 'stable_audio', 'soulx_singer', 'soulx_singer_svc', 'yue2', 'ace_step',
   'stable-audio-3-medium', 'heartmula-3b-q8_0', 'hotstep-minimax-music3', 'hotstep-ace-step-1.5', 'hotstep-yue2-q4-k-m'] as const;
@@ -73,7 +73,7 @@ export function EnginesAndUpdates({ focus, onNavigate }: {
   const hasUnsupported = data?.rvc?.supported === false
     || (data?.ace?.supported === false && data.profiles[0]?.engine_installed === false)
     || (data?.minimax?.supported === false && data.profiles[1]?.engine_installed === false);
-  const refresh = () => { void catalogue.refetch(); };
+  const refresh = () => { void Promise.all([catalogue.refetch(), setup.refetch(), cloud.refetch()]); };
   const status = (value: boolean | undefined) => value === undefined ? (catalogue.isPending ? checking : unavailable) : value ? installed : missing;
   const mark = (id: string) => id === focus ? ' border-pink-500' : ' border-zinc-200 dark:border-white/10';
   const action = 'text-sm text-pink-600 underline dark:text-pink-300';
@@ -83,7 +83,7 @@ export function EnginesAndUpdates({ focus, onNavigate }: {
     <section aria-label={title} className="space-y-5">
       {focus === 'updates' && <UpdatePlanView />}
       <div className="flex flex-wrap items-center gap-3">
-        <button type="button" className={action} disabled={catalogue.isFetching} onClick={refresh}>{t('refresh')}</button>
+        <button type="button" className={action} disabled={catalogue.isFetching || setup.isFetching || cloud.isFetching} onClick={refresh}>{t('refresh')}</button>
         {hasUnsupported && <label className="flex items-center gap-2 text-sm">
           <input type="checkbox" checked={showUnsupported} onChange={event => setShowUnsupported(event.target.checked)} />
           {showUnsupportedEngines[language]}
@@ -93,7 +93,7 @@ export function EnginesAndUpdates({ focus, onNavigate }: {
         <li data-engine="local" className={'space-y-1 rounded-lg border p-3' + mark('local')}>
           <h4 className="font-semibold">yue2.cpp</h4>
           <p>{status(data?.local ? Boolean(data.local.executable || setup.data?.engine_ready) : undefined)}
-            {setup.data?.engine_ready && <> · {active}{data?.local?.in_effect?.backend && ' · ' + data.local.in_effect.backend}</>}
+            {activeId === 'local' && <> · {active}{data?.local?.in_effect?.backend && ' · ' + data.local.in_effect.backend}</>}
             {setup.data?.ready !== undefined && <> · {t(setup.data.ready ? 'profileReady' : 'profileNotInstalled')}</>}
           </p>
           {data?.local?.executable && <p className="break-all text-xs">{data.local.executable}
@@ -107,6 +107,7 @@ export function EnginesAndUpdates({ focus, onNavigate }: {
           const models = profile?.profiles ?? profile?.models;
           const ready = models?.some(model => model.ready);
           const runtime = engine.id === 'acestep-cpp' ? data?.ace : engine.id === 'minimaxmusic-cpp' ? data?.minimax : null;
+          const installedRevision = runtime?.installed_revision ?? (runtime?.installed ? runtime.revision : undefined);
           const unsupported = runtime?.supported === false && profile?.engine_installed === false;
           if (unsupported && !showUnsupported && focus !== engine.id) return null;
           return <li key={engine.id} data-engine={engine.id} aria-label={engine.name} className={'space-y-1 rounded-lg border p-3' + mark(engine.id)}>
@@ -114,7 +115,9 @@ export function EnginesAndUpdates({ focus, onNavigate }: {
             <p>{status(profile?.engine_installed)}{activeId === engine.id && ' · ' + active}
               {ready !== undefined && <> · {t(ready ? 'profileReady' : 'profileNotInstalled')}</>}</p>
             {unsupported && <p className="text-sm">{t('engineUnavailable')}</p>}
-            {runtime?.revision && <p className="text-xs">{runtime.installed ? installed : t('download')} · <code>{runtime.revision.slice(0, 12)}</code></p>}
+            {installedRevision && <p className="text-xs">{installed} · <code>{installedRevision.slice(0, 12)}</code></p>}
+            {runtime?.revision && runtime.revision !== installedRevision &&
+              <p className="text-xs">{t('download')} · <code>{runtime.revision.slice(0, 12)}</code></p>}
             {(engine.id === 'acestep-cpp' || engine.id === 'minimaxmusic-cpp') && profile &&
               runtime?.supported && (!profile.engine_installed || profile.adapter_runtime_update) &&
               <InstallDetails key={focus} label={t('download')} initialOpen={focus === engine.id}>
