@@ -414,7 +414,14 @@ impl Installation {
         let mut device = std::env::var("ACE_DEVICE").ok().filter(|value| !value.trim().is_empty());
         let mut cuda_backend = std::env::var_os("ACE_CUDA_BACKEND").map(PathBuf::from);
         if managed && cuda_backend.is_none() && device.as_deref().is_none_or(|label| label.starts_with("CUDA")) {
-            cuda_backend = crate::native_music_runtime::cuda_backend(executable);
+            cuda_backend = crate::native_music_runtime::cuda_backend(executable).or_else(|| {
+                if !self.signed_runtime || crate::native_music_runtime::cuda_build().is_none() {
+                    return None;
+                }
+                let library = if cfg!(windows) { "ggml-cuda.dll" } else { "libggml-cuda.so" };
+                let path = executable.parent()?.join(library);
+                path.is_file().then_some(path)
+            });
             if cuda_backend.is_some() && device.is_none() {
                 device = Some("CUDA0".into());
             }
