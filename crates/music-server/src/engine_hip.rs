@@ -244,7 +244,7 @@ impl Runtime {
         self.downloads
             .root()
             .join(package.gfx.name())
-            .join(package.sha256)
+            .join(&package.sha256[..12])
     }
 
     fn installed(&self, package: &Package) -> anyhow::Result<PathBuf> {
