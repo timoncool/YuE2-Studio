@@ -1041,6 +1041,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
           abc: typeof settings.abc === 'string' ? settings.abc : '',
         });
         native.restore(song.ditModel, profile ?? '', settings);
+        if (profile) pair.select();
       } else {
         const model = typeof settings.model === 'string' ? settings.model : '';
         changeMusicModel(model);
@@ -1063,7 +1064,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
     // A song made without LoRA reuses without it, whatever was picked before.
     setAdapters(usesFromSettings(settings));
     setMode('studio');
-  }, [initialData, applyRequest, changeMusicModel, native.restore]);
+  }, [initialData, applyRequest, changeMusicModel, native.restore, pair.select]);
 
   useEffect(() => {
     setCoverPlaying(false);
