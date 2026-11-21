@@ -59,8 +59,11 @@ function galleryGroup(lang, id, title, pictures) {
     const src = candidates.find((path) => existsSync(join(docs, path)));
     if (!src) return [];
     const language = lang !== 'en' && src.startsWith('screenshots/en-') ? GALLERY[lang].english : '';
+    const locale = language ? 'en' : lang;
+    const dimensions = existsSync(join(docs, paths(locale)[1])) ? pictureSize(locale, name) : null;
+    const size = dimensions ? ` width="${dimensions[0]}" height="${dimensions[1]}"` : '';
     const alt = language ? `${caption} (${language})` : caption;
-    return `      <figure><img src="${src}" alt="${escape(alt)}" loading="lazy" width="1600" height="1000" /><figcaption>${escape(caption)}${language ? `<small class="gallery-language">${escape(language)}</small>` : ''}</figcaption></figure>`;
+    return `      <figure><img src="${src}" alt="${escape(alt)}" loading="lazy"${size} /><figcaption>${escape(caption)}${language ? `<small class="gallery-language">${escape(language)}</small>` : ''}</figcaption></figure>`;
   });
   if (!cards.length) return '';
   return `    <div class="gallery-group" role="group" aria-labelledby="${id}">
