@@ -423,7 +423,12 @@ def run_rvc(work, binary, certificate, tls_key, install_voice=False):
             model_args = {"engine": engine["id"], "model": model["id"]}
             assert tool("music_model_package_status", model_args)["generation"] == first_model["generation"]
             tool("music_model_package_status", dict(model_args, engine="incompatible-engine"), expected_error=True)
-            assert tool("music_package_updates_get") == {"mode": "manual", "updates": [], "errors": []}
+            update_status = tool("music_package_updates_get")
+            assert {key: update_status[key] for key in ("mode", "updates", "errors")} == {
+                "mode": "manual", "updates": [], "errors": []
+            }
+            notice_scope = update_status["notice_scope"]
+            assert len(notice_scope) == 64 and all(character in "0123456789abcdef" for character in notice_scope)
             new_weight = b"updated model weights"
             (origin / "weights-v2.bin").write_bytes(new_weight)
             next_model = dict(sibling, version="2", files=[pinned("weights-v2.bin", new_weight)])
@@ -499,7 +504,9 @@ def run_rvc(work, binary, certificate, tls_key, install_voice=False):
         assert installed_engine["previous_generation"] == second["generation"] and installed_engine["automatic_updates_paused"]
         assert tool("music_package_rollback", rollback) == restored
         assert tool("music_engine_package_status", args)["version"] == "1"
-        assert tool("music_package_updates_get")["updates"][0]["automatic_updates_paused"]
+        offline_updates = tool("music_package_updates_get")
+        assert offline_updates["notice_scope"] == notice_scope
+        assert offline_updates["updates"][0]["automatic_updates_paused"]
         model_selection, = [p for p in studio.rglob("active.json") if p.parent.name == model["id"]]
         selection_bytes = model_selection.read_bytes()
         try:
