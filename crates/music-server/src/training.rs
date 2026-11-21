@@ -889,10 +889,16 @@ impl Training {
             .unwrap_or_else(|| self.downloader.runtime_dir(trainer_folder()).join(&trainer_source().shipped_as))
     }
 
+    fn previous_trainer(&self) -> PathBuf {
+        self.downloader.picked_into(&PREVIOUS_TRAINER).join(PREVIOUS_TRAINER.marker)
+    }
+
     /// The built-in trainer is the default for existing runs and recipes.
     fn builtin_identity(&self, trainer: &Path) -> Result<TrainerIdentity> {
         let version = if std::env::var_os("YUE_TRAIN_BIN").is_some() {
             format!("local-{}", crate::install_record::sha256_of(trainer)?)
+        } else if trainer == self.previous_trainer() {
+            PREVIOUS_BUILTIN_VERSION.into()
         } else {
             trainer_source().commit.clone()
         };
@@ -905,7 +911,7 @@ impl Training {
         })
     }
 
-    async fn select_trainer(&self, id: Option<&str>, saved: Option<&TrainerIdentity>) -> Result<(PathBuf, TrainerIdentity)> {
+    async fn select_trainer(&self, id: Option<&str>, saved: Option<&TrainerIdentity>, continuing: bool) -> Result<(PathBuf, TrainerIdentity)> {
         if let Some(saved) = saved
             && (saved.optimizer_format != YUE2_STATE_FORMAT || saved.weights_revision != yue_train::WEIGHTS_REVISION)
         {
@@ -913,7 +919,7 @@ impl Training {
         }
         let choice = saved.map(|saved| saved.id.as_str()).or(id).unwrap_or(BUILTIN_TRAINER);
         let (trainer, identity) = if choice == BUILTIN_TRAINER {
-            self.select_builtin_trainer(saved)?
+            self.select_builtin_trainer(saved, continuing)?
         } else {
             let data_root = self.root.parent().context("Studio data folder")?;
             let generation = saved.and_then(|saved| saved.generation.as_deref());
@@ -935,21 +941,21 @@ impl Training {
         Ok((trainer, identity))
     }
 
-    fn select_builtin_trainer(&self, saved: Option<&TrainerIdentity>) -> Result<(PathBuf, TrainerIdentity)> {
+    fn select_builtin_trainer(&self, saved: Option<&TrainerIdentity>, continuing: bool) -> Result<(PathBuf, TrainerIdentity)> {
         let program = self.trainer();
         if self.installed(&pack()[0]) {
             let identity = self.builtin_identity(&program)?;
             return Ok((program, identity));
         }
-        if let Some(saved) = saved
+        if continuing
             && std::env::var_os("YUE_TRAIN_BIN").is_none()
             && trainer_source().commit == CURRENT_BUILTIN_VERSION
-            && saved.version == PREVIOUS_BUILTIN_VERSION
-            && saved.generation.is_none()
+            && saved.is_none_or(|identity| identity.version == PREVIOUS_BUILTIN_VERSION && identity.generation.is_none())
             && self.downloader.is_verified_install(&PREVIOUS_TRAINER)
         {
-            let previous = self.downloader.picked_into(&PREVIOUS_TRAINER).join(PREVIOUS_TRAINER.marker);
-            return Ok((previous, saved.clone()));
+            let previous = self.previous_trainer();
+            let identity = self.builtin_identity(&previous)?;
+            return Ok((previous, identity));
         }
         bail!("the trainer is not installed: {} has no completed installation", program.display());
     }
@@ -1654,7 +1660,7 @@ impl Training {
         base_id: Option<&str>,
         card: CardHooks,
     ) -> Result<Run> {
-        let (trainer, trainer_identity) = self.select_trainer(trainer_id, None).await?;
+        let (trainer, trainer_identity) = self.select_trainer(trainer_id, None, false).await?;
         let (checkpoint, training_base) = self.resolve_training_base(base_id, None, &companion, Some(&tokenizer)).await?;
         let dataset = self.dataset(dataset_id)?;
         if dataset.items.is_empty() {
@@ -1955,7 +1961,7 @@ impl Training {
     /// judged on a window the resumed trainer starts empty.
     pub async fn continue_run(self: &Arc<Self>, libraries: Option<PathBuf>, companion: PathBuf, run_id: &str, steps: u32, card: CardHooks) -> Result<Run> {
         let saved = self.run(run_id)?;
-        let (trainer, trainer_identity) = self.select_trainer(None, saved.trainer.as_ref()).await?;
+        let (trainer, trainer_identity) = self.select_trainer(None, saved.trainer.as_ref(), true).await?;
         let (checkpoint, training_base) = self.resolve_training_base(None, saved.training_base.as_ref(), &companion, None).await?;
         let (from, state) = self.resume_point(run_id).map_err(|code| anyhow::anyhow!(refusal(code)))?;
         if steps <= from {
@@ -2089,7 +2095,7 @@ impl Training {
             log.write_all(format!("==== {}\n", stage.id).as_bytes()).await?;
             let cuda12_runtime = (cfg!(windows) && !signed_trainer
                 && (trainer == self.downloader.runtime_dir(trainer_folder()).join(&trainer_source().shipped_as)
-                    || trainer == self.downloader.picked_into(&PREVIOUS_TRAINER).join(PREVIOUS_TRAINER.marker))
+                    || trainer == self.previous_trainer())
                 && crate::trainer_cuda_build() == Some(crate::hardware::CudaBuild::Cuda12))
                 .then(|| -> Result<_> {
                     let asset = cuda12_backend();
@@ -2664,10 +2670,13 @@ mod tests {
         };
         let attempt = downloader.install_all_with_cancel(SCOPE, &[current], Some(&|| true)).await;
         assert_eq!(attempt.unwrap_err().to_string(), "cancelled");
-        let (executable, identity) = training.select_trainer(None, Some(&saved)).await.unwrap();
+        let (executable, identity) = training.select_trainer(None, Some(&saved), true).await.unwrap();
         assert_eq!(executable, previous);
         assert_eq!(identity.version, PREVIOUS_BUILTIN_VERSION);
-        assert!(training.select_trainer(None, None).await.is_err());
+        assert!(training.select_trainer(None, None, false).await.is_err());
+        let (executable, identity) = training.select_trainer(None, None, true).await.unwrap();
+        assert_eq!(executable, previous);
+        assert_eq!(identity.version, PREVIOUS_BUILTIN_VERSION);
 
         let broken = data.path().join("broken.zip");
         std::fs::write(&broken, b"the wrong archive").unwrap();
@@ -2679,7 +2688,7 @@ mod tests {
         std::fs::write(&program, b"partially extracted trainer").unwrap();
 
         let restarted = Training::new(data.path(), "yue2");
-        let (executable, identity) = restarted.select_trainer(None, Some(&saved)).await.unwrap();
+        let (executable, identity) = restarted.select_trainer(None, Some(&saved), true).await.unwrap();
         assert_eq!(executable, previous);
         assert_eq!(identity.version, PREVIOUS_BUILTIN_VERSION);
         assert_eq!(std::fs::read(&previous).unwrap(), b"previous trainer");
@@ -2691,7 +2700,7 @@ mod tests {
             std::slice::from_ref(&program), downloader.root(),
         ).unwrap();
         let restarted = Training::new(data.path(), "yue2");
-        let (executable, identity) = restarted.select_trainer(None, Some(&saved)).await.unwrap();
+        let (executable, identity) = restarted.select_trainer(None, Some(&saved), true).await.unwrap();
         assert_eq!(executable, program);
         assert_eq!(identity.version, CURRENT_BUILTIN_VERSION);
         assert!(restarted.downloader().is_verified_install(&PREVIOUS_TRAINER));
