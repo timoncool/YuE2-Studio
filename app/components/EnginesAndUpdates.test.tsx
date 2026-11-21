@@ -20,6 +20,7 @@ it.each(['acestep-cpp', 'minimaxmusic-cpp'])('installs a verified Windows first-
     protocol: 'music-native-windows-v2', native_runtime: { api_version: 2 }, files: [{ bytes: 2 ** 30 }] };
   let verified = false;
   let installed = false;
+  let externalTransfer = false;
   let finish: ((response: Response) => void) | undefined;
   const request = vi.fn(async (url: string, options?: RequestInit) => {
     if (url === '/v1/components/music-engines') return Response.json(verified
@@ -41,14 +42,17 @@ it.each(['acestep-cpp', 'minimaxmusic-cpp'])('installs a verified Windows first-
     if (url === installPath) {
       expect(options?.method).toBe('POST');
       expect(options?.body).toBeUndefined();
-      return new Promise<Response>(resolve => { finish = resolve; });
+      return new Promise<Response>(resolve => {
+        finish = response => { finish = undefined; resolve(response); };
+      });
     }
     if (url === `${progressPath}/progress`) return Response.json({
-      active: { stage: 'downloading', downloaded_bytes: 25, reused_bytes: 25, total_bytes: 100 },
+      active: finish || externalTransfer ? { stage: 'downloading', downloaded_bytes: 25, reused_bytes: 25, total_bytes: 100 } : null,
     });
     if (url === `${progressPath}/cancel`) {
       expect(options?.method).toBe('POST');
-      finish!(Response.json({ error: 'Package installation cancelled' }, { status: 409 }));
+      externalTransfer = false;
+      finish?.(Response.json({ error: 'Package installation cancelled' }, { status: 409 }));
       return Response.json({ cancel_requested: true });
     }
     return Response.json({});
@@ -58,34 +62,57 @@ it.each(['acestep-cpp', 'minimaxmusic-cpp'])('installs a verified Windows first-
   const root = createRoot(host);
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const settle = () => act(async () => { await new Promise(resolve => setTimeout(resolve, 10)); });
+  const mount = () => act(async () => root.render(<QueryClientProvider client={client}>
+    <EnginesAndUpdates focus={engine} onNavigate={vi.fn()} />
+  </QueryClientProvider>));
+  const poll = () => act(async () => { await new Promise(resolve => setTimeout(resolve, 450)); });
+  const remount = async () => {
+    await act(async () => root.render(null));
+    await mount();
+    await settle();
+  };
   try {
-    await act(async () => root.render(<QueryClientProvider client={client}>
-      <EnginesAndUpdates focus={engine} onNavigate={vi.fn()} />
-    </QueryClientProvider>));
+    await mount();
     await settle();
     expect(verified).toBe(false);
     await act(async () => [...host.querySelectorAll('button')].find(button => button.textContent === 'refresh')!.click());
     await settle();
-    const card = host.querySelector(`[data-engine="${engine}"]`)!;
+    let card = host.querySelector(`[data-engine="${engine}"]`)!;
     const install = () => [...card.querySelectorAll('button')].find(button => button.textContent?.includes('Install · signed-2'))!;
+    await settle();
     expect(install().textContent).toContain('1 GiB');
     expect(card.textContent).not.toContain('baked');
     expect(host.querySelector(`[data-engine="${localEngine}"]`)?.textContent).toContain('C:/local/mm-server.exe');
     expect(host.querySelector(`[data-engine="${localEngine}"]`)?.textContent).not.toContain('signed-2');
 
     await act(async () => install().click());
-    await settle();
+    await poll();
     expect(card.querySelector('[role="status"]')?.textContent).toContain('50%');
+    await remount();
+    card = host.querySelector(`[data-engine="${engine}"]`)!;
+    expect(card.querySelector('[role="status"]')?.textContent).toContain('50%');
+    expect(install().disabled).toBe(true);
     await act(async () => [...card.querySelectorAll('button')].find(button => button.textContent === 'cancelDownload')!.click());
+    await settle();
     expect(card.querySelector('[role="alert"]')).toBeNull();
     expect(install().disabled).toBe(false);
+    const probes = () => request.mock.calls.filter(([url]) => url === `${progressPath}/progress`).length;
+    const idleProbes = probes();
+    await poll();
+    expect(probes()).toBe(idleProbes);
 
     await act(async () => install().click());
     await act(async () => finish!(Response.json({ error: 'Digest mismatch' }, { status: 422 })));
     expect(card.querySelector('[role="alert"]')?.textContent).toBe('Digest mismatch');
     await act(async () => install().click());
+    await act(async () => finish!(Response.json({ error: 'Package installation cancelled' }, { status: 409 })));
+    externalTransfer = true;
+    await remount();
+    card = host.querySelector(`[data-engine="${engine}"]`)!;
+    expect(card.querySelector('[role="status"]')?.textContent).toContain('50%');
     installed = true;
-    await act(async () => finish!(Response.json({ generation: 'signed-2', downloaded_bytes: 100, reused_bytes: 0 })));
+    externalTransfer = false;
+    await poll();
     await settle();
     expect(card.textContent).toContain('Managed package · signed-2 · C:/signed/ace-server.exe');
     expect(install()).toBeUndefined();
