@@ -184,9 +184,9 @@ def check_screens(root):
     else:
         raise AssertionError(("audio did not play", playback, ui("console")))
     json_file(out/"player.json", playback)
-    eq = tool("equalizer_set", enabled=True, bands={"250": 3}, panel_open=True, preamp_db=-2)
+    eq = tool("equalizer_set", enabled=True, bands={"310": 3}, panel_open=True, preamp_db=-2)
     assert eq["enabled"] and eq["panel_open"] and eq["preamp_db"] == -2, eq
-    assert any(row["hz"] == 250 and row["db"] == 3 for row in eq["bands"]), eq
+    assert any(row["hz"] == 310 and row["db"] == 3 for row in eq["bands"]), eq
     json_file(out/"equalizer.json", eq)
 
     for mode in ("milkdrop", "spectrum"):
@@ -211,7 +211,7 @@ def check_screens(root):
     tool("equalizer_set", panel_open=False)
     tool("winamp_set", on=True, windows={"equalizer":{"open":True},"playlist":{"open":True}})
     winamp = tool("winamp_get")
-    assert winamp["on"], winamp
+    assert winamp["on"] and winamp["windows"]["equalizer"]["open"] and winamp["windows"]["playlist"]["open"], winamp
     json_file(out/"winamp.json", winamp)
     screenshot("winamp")
     tool("winamp_set", on=False)
@@ -232,7 +232,7 @@ def check_screens(root):
     click('Open the MIDI editor', page)
     page = wait_page('MIDI editor')
     (out/"screen-midi-editor.txt").write_text(page, encoding="utf8")
-    ui("press_key", key="Escape")
+    click('button "Close"')
     stem_status = tool("stems_get", song_id=song["id"])
     json_file(out/"stems.json", stem_status)
     assert {"vocals","instrumental"} <= set(stem_status["stems"]), stem_status
