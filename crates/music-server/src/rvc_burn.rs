@@ -11,6 +11,67 @@ const BASE_D: &str = "f0D48k.pth";
 pub(super) const STAGE: &str = "rvc-burn";
 pub(super) const CHECKPOINT: &str = "rvc-output/voice.safetensors";
 
+const SAVED_BEST: &str = "rvc-output/studio-checkpoints";
+
+pub(super) fn best_report(line: &str) -> Option<(u32, f64)> {
+    let (_, report) = line.split_once("best mel ")?;
+    let (mel, step) = report.strip_suffix(") saved")?.split_once(" (step ")?;
+    let mel: f64 = mel.parse().ok()?;
+    mel.is_finite().then_some((step.parse().ok()?, mel))
+}
+
+pub(super) fn best_snapshot(run: &FsPath) -> Option<PathBuf> {
+    let root = run.join(SAVED_BEST);
+    std::fs::read_dir(root)
+        .ok()?
+        .filter_map(Result::ok)
+        .filter_map(|entry| {
+            let step = entry.file_name().to_str()?.parse::<u32>().ok()?;
+            let path = entry.path();
+            (path.join("voice.safetensors").is_file() && path.join("best.json").is_file())
+                .then_some((step, path))
+        })
+        .max_by_key(|(step, _)| *step)
+        .map(|(_, path)| path)
+}
+
+// The pinned CLI overwrites its best file in place. Keep an independent
+// complete generation so stopping during the next write cannot destroy it.
+pub(super) fn snapshot_best(run: &FsPath, step: u32, mel: f64) -> anyhow::Result<()> {
+    let source = run.join("rvc-output/checkpoint/voice.best.safetensors");
+    let output = run.join(SAVED_BEST);
+    std::fs::create_dir_all(&output)?;
+    let destination = output.join(step.to_string());
+    if destination.is_dir() {
+        return Ok(());
+    }
+    let previous = best_snapshot(run);
+    let stage = tempfile::tempdir_in(&output)?;
+    let voice = stage.path().join("voice.safetensors");
+    let before = std::fs::metadata(&source)?;
+    std::fs::copy(&source, &voice)?;
+    let after = std::fs::metadata(&source)?;
+    ensure!(
+        before.len() == after.len() && before.modified()? == after.modified()?,
+        "RVC replaced the source checkpoint while it was being saved."
+    );
+    rvc_voices::validate_burn_voice(&voice)?;
+    std::fs::write(
+        stage.path().join("best.json"),
+        serde_json::to_vec(&serde_json::json!({ "step": step, "mel": mel }))?,
+    )?;
+    std::fs::rename(stage.path(), destination)?;
+    if let Some(previous) = previous
+        && let Err(error) = std::fs::remove_dir_all(&previous)
+    {
+        studio_log!(
+            "Could not remove older RVC checkpoint {}: {error}",
+            previous.display()
+        );
+    }
+    Ok(())
+}
+
 #[derive(Clone)]
 pub(super) struct Runtime {
     folder: PathBuf,
@@ -442,5 +503,40 @@ fn nvrtc_uses_an_ascii_relative_include_root_for_a_unicode_profile() {
     assert_eq!(
         sdk_environment_path(&sdk, &convert),
         PathBuf::from("./runtime/cuda13/cuda-sdk-pinned")
+    );
+}
+
+#[cfg(test)]
+#[test]
+fn interrupted_best_write_keeps_the_preceding_completed_checkpoint() {
+    let run = tempfile::tempdir().unwrap();
+    let raw = run
+        .path()
+        .join("rvc-output/checkpoint/voice.best.safetensors");
+    std::fs::create_dir_all(raw.parent().unwrap()).unwrap();
+    let header = serde_json::to_vec(&serde_json::json!({
+        "__metadata__": {"producer": "burn"},
+        "enc_p.emb_phone.weight": {"shape": [768], "data_offsets": [0, 1]},
+        "emb_g.weight": {"data_offsets": [1, 2]},
+        "dec.conv_post.weight": {"data_offsets": [2, 3]},
+    }))
+    .unwrap();
+    let mut checkpoint = (header.len() as u64).to_le_bytes().to_vec();
+    checkpoint.extend(header);
+    checkpoint.extend([0x0a, 0x0b, 0x0c]);
+    std::fs::write(&raw, &checkpoint).unwrap();
+    assert_eq!(
+        best_report("00:42 INFO best mel 45.500 (step 2) saved"),
+        Some((2, 45.5))
+    );
+    snapshot_best(run.path(), 2, 45.5).unwrap();
+    let previous = best_snapshot(run.path()).unwrap();
+
+    std::fs::write(&raw, &checkpoint[..checkpoint.len() - 2]).unwrap();
+    assert!(snapshot_best(run.path(), 3, 42.0).is_err());
+    assert_eq!(best_snapshot(run.path()).unwrap(), previous);
+    assert_eq!(
+        std::fs::read(previous.join("voice.safetensors")).unwrap(),
+        checkpoint
     );
 }
