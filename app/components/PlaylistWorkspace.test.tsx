@@ -32,13 +32,16 @@ const { SongActionsProvider } = await import('../context/SongActionsContext');
 
 vi.mock('./AudioWaveform', () => ({ AudioWaveform: () => null }));
 
-it('marks the auditioned side as preferred and restores the badge from the library read', async () => {
-  const first = { id: 'first', title: 'Same title', tags: [], createdAt: new Date(0), style: '', duration: '0:10', audioUrl: '/v1/library/media/one.wav' } as Song;
+it('marks the better word match only on request and restores the badge from the library read', async () => {
+  const first = { id: 'first', title: 'Same title', tags: [], createdAt: new Date(0), style: '', lyrics: 'Come back home', duration: '0:10', audioUrl: '/v1/library/media/one.wav' } as Song;
   const second = { ...first, id: 'second', audioUrl: '/v1/library/media/two.wav' };
   const stored = { id: 'work', name: 'Drafts', song_ids: [first.id, second.id] };
   reads.songs = [first, second];
   reads.playlists = [{ id: 'work', name: 'Drafts', songIds: stored.song_ids }];
   const fetcher = vi.fn(async (url: string, init?: RequestInit) => {
+    if (url === '/v1/lyrics/recognise') {
+      return Response.json({ text: JSON.parse(String(init?.body)).song_id === 'first' ? 'come back home' : 'come home' });
+    }
     if (init?.method === 'PUT') return Response.json({ preferred_song_id: 'first', changed: true });
     return Response.json([{ ...stored, preferred_song_id: 'first' }]);
   });
@@ -70,7 +73,11 @@ it('marks the auditioned side as preferred and restores the badge from the libra
     expect(a.currentTime).toBe(3.25);
     await act(async () => button('Open in Library').click());
     expect(openTake).toHaveBeenLastCalledWith(first);
-    await act(async () => button('Mark as preferred take').click());
+    expect(button('Mark take A as preferred')).toBeUndefined();
+    await act(async () => button('Compare sung words').click());
+    expect(host.textContent).toContain('A: 100% · B: 67%');
+    expect(fetcher.mock.calls.some(([, init]) => init?.method === 'PUT')).toBe(false);
+    await act(async () => button('Mark take A as preferred').click());
     expect(fetcher).toHaveBeenCalledWith('/v1/library/playlists/work/preferred-take', expect.objectContaining({
       method: 'PUT', body: JSON.stringify({ song_id: first.id }),
     }));
