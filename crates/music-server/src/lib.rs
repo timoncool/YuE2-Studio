@@ -21,6 +21,9 @@ mod audio_cpp_midasheng;
 mod audio_cpp_minimax_h3;
 mod audio_cpp_mulacover;
 mod audio_cpp_music;
+mod hotstep_cover;
+mod hotstep_cover_assets;
+mod hotstep_cover_rolls;
 mod audio_cpp_stable_audio;
 mod audio_cpp_vevo2;
 mod native_music_jobs;
@@ -130,6 +133,7 @@ struct AppState {
     ace_cancellations: Arc<RwLock<HashMap<String, native_ace_jobs::CancelSender>>>,
     minimax: Arc<native_minimax::Runtime>,
     minimax_cancellations: Arc<RwLock<HashMap<String, native_music_jobs::CancelSender>>>,
+    hotstep_cover: Arc<downloads::Downloader>,
     audio_cpp_music_stops: Arc<RwLock<HashMap<String, Arc<std::sync::atomic::AtomicBool>>>>,
     heartmula_install: Arc<tokio::sync::Mutex<()>>,
     stable_audio_install: Arc<tokio::sync::Mutex<()>>,
@@ -1536,6 +1540,7 @@ pub async fn serve_on_port(port: u16) -> anyhow::Result<()> {
         ace_cancellations: Arc::default(),
         minimax: Arc::default(),
         minimax_cancellations: Arc::default(),
+        hotstep_cover: Arc::new(downloads::Downloader::new(studio_data_root().unwrap_or_else(|| PathBuf::from(".")).join("hotstep"))),
         audio_cpp_music_stops: Arc::default(),
         heartmula_install: Arc::default(),
         stable_audio_install: Arc::default(),
@@ -1911,6 +1916,8 @@ pub async fn serve_on_port(port: u16) -> anyhow::Result<()> {
         .route("/v1/local-models/music", get(local_music_model_catalog))
         .route("/v1/music/jobs", post(create_music_job).get(list_active_music_jobs))
         .route("/v1/music/audio-cpp/models", get(audio_cpp_music::models))
+        .route("/v1/music/native/hotstep/profiles", get(hotstep_cover::profiles))
+        .route("/v1/music/native/hotstep/install", post(hotstep_cover::install))
         .route("/v1/music/audio-cpp/mulacover/runtime", post(audio_cpp_mulacover::install_runtime))
         .route("/v1/music/audio-cpp/models/install", post(audio_cpp_music::install))
         .route("/v1/music/replay", post(replay_music_job))
@@ -11191,6 +11198,7 @@ async fn submit_music_job(state: AppState, mut request: CreateMusicJobRequest, a
             }
             return match engine.as_str() {
                 "acestep-cpp" => native_ace_jobs::submit(state, request, model, attempt).await,
+                hotstep_cover::ENGINE => hotstep_cover::submit(state, request, model, attempt).await,
                 native_minimax::ENGINE_ID => native_music_jobs::submit_minimax(state, request, model, attempt).await,
                 _ => (StatusCode::BAD_REQUEST, Json(failed_request_job(request, engine.clone(), format!("Unknown native engine {engine}.")))),
             };
@@ -12359,7 +12367,7 @@ async fn cancel_music_job(
     if existing.engine_id == native_minimax::ENGINE_ID {
         return native_music_jobs::cancel_minimax(&state, existing).await;
     }
-    if existing.engine_id == audio_cpp_music::ENGINE {
+    if matches!(existing.engine_id.as_str(), audio_cpp_music::ENGINE | hotstep_cover::ENGINE) {
         return audio_cpp_music::cancel(&state, &job_id).await;
     }
     if existing.engine_id == "openrouter" {
@@ -13017,7 +13025,7 @@ fn check_saved_job_source(library: &library::Library, original: &str, request: &
 
 /// An automatic retry must reach the same local engine that accepted the saved job.
 fn check_retry_engine(original: &str, selected: &str) -> Result<(), String> {
-    if matches!(original, PRIMARY_MUSIC_ENGINE_ID | native_minimax::ENGINE_ID | "acestep-cpp" | audio_cpp_music::ENGINE) && original == selected {
+    if matches!(original, PRIMARY_MUSIC_ENGINE_ID | native_minimax::ENGINE_ID | "acestep-cpp" | audio_cpp_music::ENGINE | hotstep_cover::ENGINE) && original == selected {
         Ok(())
     } else {
         Err(format!("The saved job used {original}, but it cannot resume with the current engine ({selected})."))

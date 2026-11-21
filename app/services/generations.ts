@@ -79,7 +79,7 @@ function card(id: string, fields: CardFields): Song {
     createdAt: fields.createdAt ?? new Date(),
     isGenerating: true,
     stage: direct ? 'stageGeneratingTrack' : 'stageWaitingInQueue',
-    tags: fields.engineId === 'openrouter' ? ['OpenRouter'] : fields.engineId === 'audio.cpp' ? ['audio.cpp'] : ['yue2'],
+    tags: fields.engineId === 'openrouter' ? ['OpenRouter'] : fields.engineId === 'audio.cpp' ? ['audio.cpp'] : fields.engineId === 'hotstep' ? ['HOT-Step'] : ['yue2'],
   };
 }
 

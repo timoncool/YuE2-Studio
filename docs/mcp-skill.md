@@ -152,6 +152,16 @@ under LGPL 2.1. You can also install it with `mulacover_runtime_install`.
 On Linux and macOS, install libsoxr with the system package
 manager. [MuLaCover weights and outputs are licensed for noncommercial use](https://github.com/HeartMuLa/MuLaCover/blob/e27fa7fa0da7c9817879cc6210cc5693f9327946/MODEL_LICENSE).
 
+For a HOT-Step MuLaCover cover, check `hotstep_cover_profiles` and use
+`hotstep_cover_install` to install the Windows CPU runtime and its GGUF
+weights. The four codec and tokenizer files are shared with other HeartMuLa
+profiles. On other systems a compatible local `ace-server` can be configured
+with `YUE_HOTSTEP_SERVER`. Call `score_transcribe` with the original library song
+and retain both melody and chord symbols. Pass the approved `abc`, the
+original song ID as `cover_of`, and the native source
+`{"kind":"native","engine":"hotstep","model":"heartmula-mulacover"}`
+to `song_create`. Reuse restores the source and the exact score for the cover.
+
 For Vevo2, pass the lyrics and a library song ID as `vevo2.voice_song_id`.
 Add `vevo2.melody_song_id` to condition the singing on a second library track.
 

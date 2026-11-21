@@ -813,7 +813,15 @@ pub(super) async fn submit(
         .await
         .context("the audio.cpp worker stopped")
         .and_then(|result| result);
-        complete(&state, &job.id, family, build, submitted, outcome).await;
+        complete(
+            &state,
+            &job.id,
+            family.name(),
+            family.profile(),
+            Some((family, build, submitted)),
+            outcome,
+        )
+        .await;
         state.audio_cpp_music_stops.write().await.remove(&job.id);
     });
     (StatusCode::ACCEPTED, Json(accepted))
@@ -837,7 +845,7 @@ fn shape(reply: &Value, settings: &Value) -> anyhow::Result<native_music_jobs::S
 fn save(
     library: &library::Library,
     job: &MusicJob,
-    family: Family,
+    profile: &str,
     output: native_music_jobs::ShapedOutput,
 ) -> anyhow::Result<library::ImportedSong> {
     let mut settings = job.generation_settings.clone();
@@ -852,20 +860,30 @@ fn save(
         generation_settings: settings,
         replay_request: None,
         audio_codes: None,
-        engine_id: ENGINE.into(),
-        profile_id: Some(family.profile().into()),
+        engine_id: job.engine_id.clone(),
+        profile_id: Some(profile.into()),
         source: "local_generation".into(),
         audio_extension: output.extension,
         audio: output.audio,
     })
 }
 
+pub(super) async fn complete_local(
+    state: &AppState,
+    id: &str,
+    name: &str,
+    profile: &str,
+    outcome: anyhow::Result<native_music_jobs::ShapedOutput>,
+) {
+    complete(state, id, name, profile, None, outcome).await;
+}
+
 async fn complete(
     state: &AppState,
     id: &str,
-    family: Family,
-    build: Build,
-    submitted: std::time::Instant,
+    name: &str,
+    profile: &str,
+    telemetry: Option<(Family, Build, std::time::Instant)>,
     outcome: anyhow::Result<native_music_jobs::ShapedOutput>,
 ) {
     let mut jobs = state.jobs.write().await;
@@ -873,7 +891,7 @@ async fn complete(
     if !matches!(job.status, MusicJobStatus::Running) {
         return;
     }
-    let song_id = match outcome.and_then(|output| save(&state.library, job, family, output)) {
+    let song_id = match outcome.and_then(|output| save(&state.library, job, profile, output)) {
         Ok(imported) => {
             let id = imported.song.id.clone();
             if let Some(playlist) = &job.playlist_id
@@ -895,22 +913,25 @@ async fn complete(
             job.songs = vec![song];
             job.status = MusicJobStatus::Completed;
             job.phase = MusicJobPhase::Completed;
-            job.message = format!("{} song saved to the library.", family.name());
+            job.message = format!("{name} song saved to the library.");
             Some(id)
         }
         Err(error) => {
             job.status = MusicJobStatus::Failed;
             job.phase = MusicJobPhase::Failed;
-            job.message = format!("audio.cpp music generation failed: {error:#}");
+            job.message = format!("{name} music generation failed: {error:#}");
             None
         }
     };
     persist(state, job);
     let seconds = songs_seconds(&job.songs);
     let completed = song_id.is_some();
-    let elapsed = submitted.elapsed();
+
     drop(jobs);
-    if let Some(hub) = state.hub.clone().filter(|hub| hub.telemetry_on()) {
+    if let Some((family, build, submitted)) = telemetry
+        && let Some(hub) = state.hub.clone().filter(|hub| hub.telemetry_on())
+    {
+        let elapsed = submitted.elapsed();
         // Only enumerated runtime and model names enter the existing daily
         // report. A cancelled job returns above before recording an outcome.
         let hub = hub.for_scheduled_report();

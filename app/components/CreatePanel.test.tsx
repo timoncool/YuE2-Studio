@@ -1061,3 +1061,27 @@ describe('Auto max duration', () => {
     expect(sent[1]).not.toHaveProperty('duration_seconds');
   });
 });
+
+it('restores HOT-Step cover source and lead sheet from a saved take', async () => {
+  vi.stubGlobal('fetch', vi.fn(async (url: string) => Response.json(url === '/v1/music/native/hotstep/profiles' ? {
+    engine: 'hotstep', engine_installed: true,
+    profiles: [{ id: 'heartmula-mulacover', label: 'MuLaCover · HOT-Step · BF16', ready: true, missing: [] }],
+  } : {})));
+  const abc = 'X:1\nQ:1/4=120\nK:C\nV:Vocal\n|"C"C E G c|';
+  const song = {
+    title: 'HOT-Step cover', ditModel: 'hotstep', style: 'folk', lyrics: '[Verse] Morning',
+    generationParams: {
+      music_source: { kind: 'native', engine: 'hotstep', model: 'heartmula-mulacover' },
+      cover_of: 'recording-original', abc, duration_seconds: 4, seed: 42, steps: 10, guidance_scale: 1.5, output_format: 'flac',
+    },
+  } as Song;
+  act(() => root.render(panel({ musicEngine: 'hotstep', initialData: { song, timestamp: 1 } })));
+  await flush();
+  const score = [...host.querySelectorAll('textarea')].find(field => field.closest('label')?.textContent?.includes('Cover score'));
+  expect(score?.value).toBe(abc);
+  click(buttonNamed('create')!);
+  expect(sent.at(-1)).toMatchObject({
+    music_source: { kind: 'native', engine: 'hotstep', model: 'heartmula-mulacover' }, cover_of: 'recording-original',
+    abc, duration_seconds: 4, steps: 10, seed: 42, cfg_scale: 1.5, output_format: 'flac',
+  });
+});
