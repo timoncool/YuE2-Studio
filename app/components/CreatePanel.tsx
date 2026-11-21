@@ -53,6 +53,8 @@ import { explainCliFailure } from '../services/cliFailure';
 import { loadNativeOpenRouterCatalog, modelsForCapability, refreshNativeOpenRouterCatalog, type NativeOpenRouterModel } from '../services/nativeOpenRouter';
 import { musicSourceStrings, nativeMusicSourceStrings } from '../i18n/musicSource';
 import { useSignedMusicSelection } from '../services/signedMusicSelection';
+import { useMusicPair, type PairSource } from '../services/musicPair';
+import { musicPairStrings } from '../i18n/musicPair';
 import { audioCppMiniMax, isMusicEngine, isProfileMusicEngine, miniMaxOutputFormat, profileMusicEngines, nativeGenerationSettings, useNativeMusicProfiles } from '../services/nativeMusicProfiles';
 import { generationPauseStrings } from '../i18n/generationPause';
 import { afterGenerationPause, formatGenerationCountdown, generationPauseMs, type GenerationPauseMode } from '../services/generationPause';
@@ -79,6 +81,7 @@ export type CreateRequest =
 
 interface CreatePanelProps {
   onGenerate: (request: YueRequest) => void;
+  onCancelJob?: (jobId: string) => Promise<void>;
   musicEngine?: MusicEngine;
   onMusicEngineChange?: (engine: MusicEngine) => void;
   isGenerating: boolean;
@@ -447,7 +450,7 @@ const LYRIC_LANGUAGES: { code: string; native: string; name: string }[] = [
   { code: 'ko', native: '한국어', name: 'Korean' },
 ];
 
-export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngine = 'local', onMusicEngineChange, isGenerating, activeJobCount = 0, queueBusy = isGenerating || activeJobCount > 0, initialData, request, playlists, onCreatePlaylist, playlistId, onChoosePlaylist }) => {
+export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJob, musicEngine = 'local', onMusicEngineChange, isGenerating, activeJobCount = 0, queueBusy = isGenerating || activeJobCount > 0, initialData, request, playlists, onCreatePlaylist, playlistId, onChoosePlaylist }) => {
   const { t, language } = useI18n();
   const rvcVoice = useLastRvcVoice();
   const [rvcAfter, setRvcAfter] = useState(false);
@@ -545,8 +548,27 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
     : nativeEngine === 'hotstep' && native.selectedId && native.hotstepProfiles.some(profile => profile.id === native.selectedId) ? `hotstep:${native.selectedId}`
     : cloud && selectedMusicModel ? `cloud:${selectedMusicModel.id}`
     : signed && packages.model ? `signed:${packages.model.id}` : musicEngine;
+  const pairSource: PairSource | undefined = yue ? { kind: 'local' }
+    : cloud && selectedMusicModel ? { kind: 'openrouter', model: selectedMusicModel.id }
+    : signed && packages.engine && packages.model ? { kind: 'signed', engine: packages.engine.id, model: packages.model.id }
+    : nativeEngine && native.selectedId ? nativeEngine === 'audio.cpp' ? { kind: 'audio_cpp', model: native.selectedId }
+      : { kind: 'native', engine: nativeEngine, model: native.selectedId } : undefined;
+  const pair = useMusicPair(pairSource, Boolean(onMusicEngineChange));
+  const pairText = musicPairStrings[language];
+  const waitingJobId = pair.status?.stage === 'waiting_for_generation' ? pair.status.waiting_job_id : undefined;
+  const [cancellingPairJob, setCancellingPairJob] = useState(false);
+  const cancelPairJob = async (id: string) => {
+    if (!onCancelJob || cancellingPairJob) return;
+    setCancellingPairJob(true);
+    try { await onCancelJob(id); } finally { setCancellingPairJob(false); }
+  };
+  const refreshNativeChoice = () => {
+    native.refresh();
+    if (pair.matching && pair.status?.stage === 'needs_install') pair.select();
+  };
   const chooseRoute = (engine: MusicEngine) => {
     onMusicEngineChange?.(engine);
+    pair.select();
     setError(null);
     setTakeChoiceOpen(false);
   };
@@ -571,6 +593,23 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
       changeMusicModel(value.slice(6));
       chooseRoute('openrouter');
     } else if (isMusicEngine(value)) chooseRoute(value);
+  };
+  const returnToActivePair = () => {
+    const active = pair.status?.active;
+    if (!active) return;
+    if (active.kind === 'native') {
+      native.select(active.model, active.engine);
+      chooseRoute(active.engine);
+    } else if (active.kind === 'audio_cpp') {
+      native.select(active.model, 'audio.cpp');
+      chooseRoute('audio.cpp');
+    } else if (active.kind === 'openrouter') {
+      changeMusicModel(active.model);
+      chooseRoute('openrouter');
+    } else if (active.kind === 'signed') {
+      packages.selectPair(active.model, active.engine);
+      chooseRoute('signed');
+    } else chooseRoute('local');
   };
   const requestCatalogRefresh = () => {
     refreshCatalog.current = true;
@@ -1592,6 +1631,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
   };
 
   const submit = () => {
+    if (pair.blocked) return;
     if (signed) {
       if (!packages.ready || !packages.engine || !packages.model) return;
       if (!style.trim() && !lyrics.trim()) { setError(tt('styleOrLyricsRequired')); return; }
@@ -1713,8 +1753,9 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
     mode,
     fields: { ...Object.fromEntries(Object.entries(formFields).map(([key, [value]]) => [key, value])), randomize_seed: randomizeSeed, adapters },
     request: buildRequest(),
-    ready,
-    error,
+    ready: !pair.blocked && (signed ? packages.ready : cloud ? Boolean(selectedMusicModel) : nativeEngine ? native.ready : ready),
+    error: error ?? pair.error ?? pair.status?.error,
+    music_pair: pair.status,
     assistant_writing: assisting,
   }));
   useBridgeCommand('create_set', (args) => {
@@ -1803,9 +1844,9 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
                 <span className="shrink-0">{musicStrings.engine}</span>
                 <select className={CONTROL} value={signed ? packages.engine?.id ?? '' : musicEngine} onChange={event => {
                   const engine = event.target.value;
-                  if (signed) { packages.selectEngine(engine); return; }
-                  const pair = linkedFamily?.pairs.find(pair => pair.engine === engine);
-                  if (pair) chooseLinkedPair(pair);
+                  if (signed) { packages.selectEngine(engine); pair.select(); return; }
+                  const linked = linkedFamily?.pairs.find(pair => pair.engine === engine);
+                  if (linked) chooseLinkedPair(linked);
                 }}>
                   {signed ? packages.engines.length
                     ? packages.engines.map(engine => <option key={engine.id} value={engine.id}>{engine.name}</option>)
@@ -1823,6 +1864,40 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
               )}
               {packages.catalogueError && <p role="alert" className="text-xs">{packages.catalogueError}</p>}
             </div>
+          )}
+          {onMusicEngineChange && (pair.sending || pair.error || (pair.status && pair.status.stage !== 'idle')) && (
+            <div className="space-y-1 text-xs">
+              <p role="status">
+                {pair.sending ? pairText.checking_files : pair.status?.load_on_create && pair.status.stage === 'ready'
+                  ? pairText.loadOnCreate : pair.status ? pairText[pair.status.stage] : ''}
+                {pair.busy && pair.status ? ` · ${Math.floor(pair.status.elapsed_ms / 1000)} s` : ''}
+                {pair.status?.missing_bytes != null
+                  ? ` · ${new Intl.NumberFormat(language, { maximumFractionDigits: 2 }).format(pair.status.missing_bytes / 2 ** 20)} MiB` : ''}
+              </p>
+              {(['active', 'requested'] as const).map(field => {
+                const source = field === 'requested' && pair.sending ? pairSource : pair.status?.[field];
+                return source && <p key={field}>{pairText[field]} · {
+                  [source.kind === 'local' ? 'YuE2' : 'engine' in source ? source.engine : source.kind === 'openrouter' ? 'OpenRouter' : 'audio.cpp',
+                    'model' in source ? source.model : null].filter(Boolean).join(' · ')
+                }</p>;
+              })}
+              {(pair.error || pair.status?.error) && <p role="alert">{pair.error ?? pair.status?.error}</p>}
+              {waitingJobId && onCancelJob && (
+                <button type="button" className="mr-2 text-pink-600 underline disabled:opacity-50 dark:text-pink-300"
+                  disabled={cancellingPairJob || pair.sending} onClick={() => void cancelPairJob(waitingJobId)}>{pairText.cancelSong}</button>
+              )}
+              {(pair.error || pair.status?.stage === 'error' || pair.status?.stage === 'needs_install') && pairSource && (
+                <button type="button" className="mr-2 text-pink-600 underline disabled:opacity-50 dark:text-pink-300" disabled={pair.sending} onClick={pair.select}>{pairText.retry}</button>
+              )}
+              {(pair.error || pair.status?.stage === 'error' || pair.status?.stage === 'needs_install') && pair.status?.active && (
+                <button type="button" className="text-pink-600 underline disabled:opacity-50 dark:text-pink-300" disabled={pair.sending} onClick={returnToActivePair}>{pairText.back}</button>
+              )}
+            </div>
+          )}
+          {!yue && adapters.some(adapter => !adapter.disabled) && (
+            <p role="status" className="text-xs text-zinc-500">
+              {pairText.loraKept} {adapters.filter(adapter => !adapter.disabled).map(adapter => adapter.id).join(', ')}
+            </p>
           )}
           {yue && !serviceDown && setup?.ready && (
             <button type="button" disabled={engineAction} onClick={() => void changeEnginePause()}
@@ -1848,7 +1923,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
                     {onMusicEngineChange && (audioCpp || nativeEngine === 'hotstep') && native.profile && <p className="text-xs">{native.profile.label}</p>}
                     {native.profiles.length > 0 && (!onMusicEngineChange || (!audioCpp && nativeEngine !== 'hotstep')) && (
                       <select aria-label={nativeStrings.model} className={CONTROL} value={native.profile?.id ?? ''}
-                        onChange={event => native.select(event.target.value)}>
+                        onChange={event => { native.select(event.target.value); pair.select(); }}>
                         <option value="">{musicStrings.choose}</option>
                         {native.profiles.map(profile => <option key={profile.id} value={profile.id}>{profile.label}{(!native.installed || !profile.ready) ? ` — ${nativeStrings.unavailable}` : ''}</option>)}
                       </select>
@@ -1858,14 +1933,14 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
                     </p>}
                     {hotstepHeart && native.profile?.installable && !native.ready &&
                       <AudioCppModelInstall key={hotStepHeartmulaProfile} model={hotStepHeartmulaProfile} bytes={native.profile.missing_bytes ?? 0}
-                        language={language} onInstalled={native.refresh} />}
+                        language={language} onInstalled={refreshNativeChoice} />}
                     {hotstepSa3 && native.profile?.installable && !native.ready &&
                       <AudioCppModelInstall key={hotStepSa3Profile} model={hotStepSa3Profile} bytes={native.profile.missing_bytes ?? 0}
-                        licenseUrl="https://huggingface.co/scragnog/HOT-Step-CPP-StableStep" language={language} onInstalled={native.refresh} />}
+                        licenseUrl="https://huggingface.co/scragnog/HOT-Step-CPP-StableStep" language={language} onInstalled={refreshNativeChoice} />}
                     {(heartMuLa || stableAudio) && native.profile?.installable && !native.ready &&
                       <AudioCppModelInstall key={audioFamily} model={stableAudio ? 'stable_audio' : 'heartmula'} bytes={native.profile.total_bytes}
-                        licenseUrl={native.profile.license_url} language={language} onInstalled={native.refresh} />}
-                    <button type="button" className="text-xs text-pink-600 underline dark:text-pink-300" onClick={native.refresh}>
+                        licenseUrl={native.profile.license_url} language={language} onInstalled={refreshNativeChoice} />}
+                    <button type="button" className="text-xs text-pink-600 underline dark:text-pink-300" onClick={refreshNativeChoice}>
                       {musicStrings.refresh}
                     </button>
                   </div>
@@ -1890,7 +1965,9 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
                   </div>
                   ) : packages.missingBytes ? (
                     <button type="button" disabled={packages.busy} className="text-xs text-pink-600 underline disabled:opacity-50 dark:text-pink-300"
-                      onClick={() => void packages.install()}>
+                      onClick={() => void packages.install().then(() => {
+                        if (pair.matching && pair.status?.stage === 'needs_install') pair.select();
+                      })}>
                       {packages.updateAvailable ? musicStrings.updateModel : musicStrings.installModel} · {new Intl.NumberFormat(language, { maximumFractionDigits: 2 }).format(packages.missingBytes / 2 ** 30)} GiB
                     </button>
                   ) : (!packages.ready && !packages.pending && packages.error) && (
@@ -1916,7 +1993,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
                         {musicCatalog.state === 'error' ? <p role="alert" className="text-xs">{musicStrings.catalogError}</p>
                           : musicModels.length === 0 ? <p role="status" className="text-xs">{musicStrings.empty}</p>
                             : !onMusicEngineChange && <select aria-label={musicStrings.model} className={CONTROL}
-                                value={selectedMusicModel?.id ?? ''} onChange={event => changeMusicModel(event.target.value)}>
+                                value={selectedMusicModel?.id ?? ''} onChange={event => { changeMusicModel(event.target.value); pair.select(); }}>
                                 <option value="">{musicStrings.choose}</option>
                                 {musicModels.map(model => <option key={model.id} value={model.id}>{model.name || model.id}</option>)}
                               </select>}
@@ -2918,9 +2995,9 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
         <button
           type="button"
           onClick={submit}
-          disabled={signed ? !packages.ready : cloud ? !selectedMusicModel : nativeEngine
+          disabled={pair.blocked || (signed ? !packages.ready : cloud ? !selectedMusicModel : nativeEngine
             ? !native.ready || (miDasheng && !miDashengPromptReady(scene)) || (magenta && !magentaReady) || (mulaCover && !mulaCoverDraft.original) || (hotstep && (!mulaCoverDraft.original || !mulaCoverDraft.abc.trim()))
-            : yue && instrumental && instrumentalLoraLoading && !isGenerating}
+            : yue && instrumental && instrumentalLoraLoading && !isGenerating)}
           className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-linear-to-r from-orange-500 to-pink-600 text-base font-bold text-white shadow-lg transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
         >
           {isGenerating ? <Square size={18} /> : yue && instrumental ? <Guitar size={18} /> : <Sparkles size={18} />}
