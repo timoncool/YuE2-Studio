@@ -140,7 +140,13 @@ async fn download(file: &PackageFile, path: &Path, client: &reqwest::Client) -> 
         writer.write_all(&chunk).await?;
     }
     ensure!(
-        bytes == file.bytes && format!("{:x}", hash.finalize()) == file.sha256,
+        bytes == file.bytes
+            && hash
+                .finalize()
+                .iter()
+                .map(|byte| format!("{byte:02x}"))
+                .collect::<String>()
+                == file.sha256,
         "component integrity check failed for {}",
         file.name
     );
