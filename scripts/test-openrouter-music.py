@@ -11,6 +11,7 @@ with wave.open(wav_buffer, "wb") as audio:
     audio.writeframes(b"".join(struct.pack("<h", int(3000 * math.sin(n * math.pi * 440 / 4000))) for n in range(8000)))
 wav = wav_buffer.getvalue()
 encoded = base64.b64encode(wav).decode()
+actual_encoded = None
 calls = []
 slow_started = threading.Event()
 slow_disconnected = threading.Event()
@@ -26,7 +27,7 @@ class Provider(http.server.BaseHTTPRequestHandler):
         self.end_headers()
         content=body["messages"][0]["content"]
         malformed="broken wave case" in content
-        wire=base64.b64encode(b"RIFF\x04\x00\x00\x00WAVE").decode() if malformed else encoded
+        wire=base64.b64encode(b"RIFF\x04\x00\x00\x00WAVE").decode() if malformed else actual_encoded if "rvc actual success case" in content else encoded
         for chunk in (wire[:51], wire[51:]):
             if not chunk:
                 continue
@@ -91,7 +92,7 @@ with tempfile.TemporaryDirectory(prefix="yue-openrouter-") as profile, local_pro
         if rid is not None:
             body["id"]=rid
         req=urllib.request.Request(f"http://127.0.0.1:{port}/mcp",data=json.dumps(body).encode(),headers=mcp_headers)
-        with client.open(req,timeout=12) as response:
+        with client.open(req,timeout=900) as response:
             raw=response.read().decode()
             if response.headers.get("Mcp-Session-Id"):
                 mcp_headers["Mcp-Session-Id"]=response.headers["Mcp-Session-Id"]
@@ -280,22 +281,72 @@ with tempfile.TemporaryDirectory(prefix="yue-openrouter-") as profile, local_pro
         mcp_headers.pop("Mcp-Session-Id", None)
         rpc("initialize", {"protocolVersion": "2025-03-26", "capabilities": {}, "clientInfo": {"name": "rvc-after-qa", "version": "1"}}, 31)
         rpc("notifications/initialized", {})
-        auto = tool("song_create", dict(body, title="RVC automatic fixture", rvc_after=rvc_after, response_format="detailed"), 31)
+        evidence = {}
+        fixture = root / "source-speech.wav"
+        subprocess.run(["powershell.exe", "-NoProfile", "-NonInteractive", "-Command", """
+Add-Type -AssemblyName System.Speech
+$s = [System.Speech.Synthesis.SpeechSynthesizer]::new()
+$f = [System.Speech.AudioFormat.SpeechAudioFormatInfo]::new(44100, [System.Speech.AudioFormat.AudioBitsPerSample]::Sixteen, [System.Speech.AudioFormat.AudioChannel]::Mono)
+$s.SetOutputToWaveFile($env:RVC_QA_SPEECH, $f)
+$s.Speak("The morning wind is gentle. We can sing and hear the river flowing through the valley.")
+$s.Dispose()
+"""], env=dict(os.environ, RVC_QA_SPEECH=str(fixture)), check=True)
+        actual_encoded = base64.b64encode(fixture.read_bytes()).decode()
+        assert tool("rvc_apply_install", {}, 31)["backends"]["audio.cpp"]["ready"]
+        tool("separator_install", {}, 32)
+        voice = tool("rvc_catalog_install", {"id": "rvc-50ea3d733073550ef6f7"}, 33)
+        selected = tool("rvc_voice_select", {"voice_id": voice["id"], "backend": "audio.cpp"}, 34)
+        assert selected["voice_id"] == voice["id"]
+        auto = tool("song_create", dict(body, title="RVC automatic fixture", style="rvc actual success case",
+                    rvc_after=selected, response_format="detailed"), 35)
         completed_auto = finish(auto["id"])
         assert completed_auto["status"] == "completed", completed_auto
-        automatic_song = completed_auto["song"]["song"]["id"]
-        for i in range(100):
+        original = completed_auto["song"]
+        automatic_song = original["song"]["id"]
+        original_wav = request(original["audio_url"])[1]
+        with wave.open(io.BytesIO(original_wav)) as audio:
+            original_frames = audio.readframes(audio.getnframes())
+            duration = audio.getnframes() / audio.getframerate()
+        for i in range(1800):
             rows = tool("rvc_quick_list", {}, 100+i)
-            if rows and rows[0]["status"] == "failed":
+            if rows and rows[0]["status"] in ("completed", "failed"):
                 break
-            time.sleep(.1)
+            time.sleep(.2)
         else:
             raise AssertionError("automatic RVC was not queued")
         assert len(rows) == 1 and rows[0]["song_id"] == automatic_song, rows
-        assert rows[0]["voice_id"] == voice_id and rows[0]["backend"] == "audio.cpp", rows[0]
-        assert rows[0]["take"] is None and "Settings" in rows[0]["error"], rows[0]
-        assert assert_played_wav(completed_auto["song"]["audio_url"]) == pcm_sha256
-
+        converted = rows[0]
+        assert converted["status"] == "completed", converted
+        assert converted["voice_id"] == voice["id"] and converted["backend"] == "audio.cpp", converted
+        assert converted["take"]["effective_backend"] == "audio.cpp", converted
+        duplicate = tool("rvc_quick_start", {"song_id": automatic_song}, 2500)
+        assert duplicate["id"] == converted["id"] and duplicate["take"] == converted["take"], duplicate
+        source_for_cancel = root / "cancel-quick.wav"
+        source_for_cancel.write_bytes(fixture.read_bytes())
+        imported = tool("library_import_audio", {"path": str(source_for_cancel), "title": "Quick RVC cancellation fixture"}, 2501)
+        cancel_song = imported.get("song", imported)["id"]
+        running = tool("rvc_quick_start", {"song_id": cancel_song}, 2502)
+        repeated = tool("rvc_quick_start", {"song_id": cancel_song}, 2503)
+        assert running["id"] == repeated["id"], (running, repeated)
+        stopped = tool("rvc_quick_cancel", {"id": running["id"]}, 2504)
+        assert stopped["status"] == "cancelled" and stopped["take"] is None, stopped
+        time.sleep(5)
+        assert tool("rvc_quick_get", {"id": running["id"]}, 2505)["take"] is None
+        assert assert_played_wav(complete["song"]["audio_url"]) == pcm_sha256
+        check_wav = request(original["audio_url"])[1]
+        with wave.open(io.BytesIO(check_wav)) as audio:
+            assert audio.readframes(audio.getnframes()) == original_frames
+        code, data = request("/v1/library/songs")
+        library = json.loads(data)
+        assert code == 200 and {row["id"] for row in library} == {song_id, cancel_song, automatic_song, converted["take"]["song_id"]}, library
+        assert len(library) == 4
+        evidence = {"revision": subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip(),
+                    "automatic_generation_job": auto["id"], "source": automatic_song,
+                    "source_seconds": duration, "source_pcm_sha256": hashlib.sha256(original_frames).hexdigest(),
+                    "source_preserved": True, "converted": converted, "repeated_result": duplicate["id"],
+                    "cancelled": stopped, "library_ids": [row["id"] for row in library]}
+        pathlib.Path("rvc-quick-actions-mcp.json").write_text(json.dumps(evidence, indent=2), encoding="utf8")
+        print(json.dumps(evidence, indent=2))
         print(json.dumps({"status":"pass","http_calls":len(calls),"library_song":song_id,"wav_bytes":len(wav),
                           "restart_persisted":True,"incomplete_failed":True,"replay_rejected":True,
                           "explicit_model":model,"upstream_disconnected_on_cancel":True,"cancel_no_import":True,"mcp_tools_list":True,"mcp_catalog":True,"mcp_song_create":True,"model_name":model_name,"id3_artist":model,"pcm_sha256":pcm_sha256,"empty_prompt_rejected":True,"malformed_wav_rejected":True},indent=2))

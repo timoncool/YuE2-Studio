@@ -1,0 +1,22 @@
+name: RVC quick actions MCP proof
+
+on:
+  push:
+    branches: [qa/rvc-quick-actions-mcp]
+
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo build --locked -p music-server --bin music-server
+      - run: python scripts/test-openrouter-music.py target/debug/music-server.exe
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rvc-quick-actions-mcp
+          path: rvc-quick-actions-mcp.json
