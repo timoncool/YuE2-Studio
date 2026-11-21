@@ -1,11 +1,12 @@
 """Drive only the bundled Studio WebView on the isolated Windows runner."""
 import argparse, base64, ctypes, hashlib, json, os, pathlib, re, shutil, struct, subprocess, tempfile, time, urllib.request, wave, math
 from contextlib import contextmanager
+from urllib.error import HTTPError
 
 p = argparse.ArgumentParser()
 p.add_argument("exe", type=pathlib.Path)
 p.add_argument("output", type=pathlib.Path)
-p.add_argument("--suite", choices=["screens", "lrc"], default="screens")
+p.add_argument("--suite", choices=["screens", "lrc", "engine-install"], default="screens")
 args = p.parse_args()
 out = args.output.resolve()
 out.mkdir(parents=True, exist_ok=True)
@@ -19,7 +20,7 @@ def json_file(path, value):
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(value, ensure_ascii=False, indent=2), encoding="utf8")
 
-def request(path, body=None, method=None, rpc=False):
+def request(path, body=None, method=None, rpc=False, timeout=None):
     global session
     headers = {"Content-Type": "application/json"}
     if rpc:
@@ -28,7 +29,7 @@ def request(path, body=None, method=None, rpc=False):
             headers["Mcp-Session-Id"] = session
     req = urllib.request.Request(base + path, method=method,
         data=json.dumps(body).encode() if body is not None else None, headers=headers)
-    with client.open(req, timeout=48 if rpc else 8) as reply:
+    with client.open(req, timeout=timeout or (48 if rpc else 8)) as reply:
         session = reply.headers.get("Mcp-Session-Id", session)
         return reply.read()
 
@@ -499,6 +500,70 @@ G4 |
     assert not re.search(r"butterchurn.*(?:error|not a function)|(?:error|not a function).*butterchurn", ui("console"), re.I)
 
 
+def check_engine_install():
+    pin = json.loads(pathlib.Path("scripts/component-channel-v2-pinned.json").read_text(encoding="utf8"))
+    name = next(name for name in pin["files"] if name.endswith(".music-engine-catalog.json"))
+    with client.open(pin["base"] + name, timeout=20) as response:
+        catalogue = response.read()
+    assert hashlib.sha256(catalogue).hexdigest() == pin["files"][name]["sha256"]
+    packages = {entry["id"]: entry["version"] for entry in json.loads(catalogue)["engines"]
+                if entry["platform"] == "windows-x86_64" and entry["protocol"] == "music-native-windows-v2"}
+    assert set(packages) == {"acestep-cpp", "minimaxmusic-cpp"}, packages
+    path = "/v1/components/music-engines"
+    receipt = dict(catalogue=pin["base"] + name, catalogue_sha256=pin["files"][name]["sha256"],
+                   executable_sha256=hashlib.file_digest(args.exe.open("rb"), "sha256").hexdigest(),
+                   installed={})
+    ui("open_settings", section="engines")
+    refresh = 'button "Refresh"'
+    click(refresh, wait_page("Engines and updates", refresh, predicate=lambda page: any(
+        refresh in line and "disabled" not in line for line in page.splitlines())))
+    for engine, version in packages.items():
+        try:
+            request(f"{path}/{engine}/status")
+        except HTTPError as error:
+            assert error.code == 409, error
+        else:
+            raise AssertionError(f"{engine} was already installed in the clean profile")
+        button = f'button "Install · {version}'
+        page = wait_page(button, predicate=lambda page: any(
+            line.startswith("e") and button in line and "disabled" not in line
+            for line in page.splitlines()))
+        index = json.loads(request(path))
+        assert index["source"] == "signed" and index["platform"] == "windows-x86_64", index
+        assert any(entry["id"] == engine and entry["version"] == version and
+                   entry["protocol"] == "music-native-windows-v2" for entry in index["engines"]), index
+        (out/f"{engine}-before.txt").write_text(page, encoding="utf8")
+        click(button, page)
+        deadline = time.monotonic() + 720
+        max_downloaded = 0
+        while time.monotonic() < deadline:
+            progress = json.loads(request(f"/v1/components/packages/music-engines/{engine}/progress"))["active"]
+            if progress:
+                max_downloaded = max(max_downloaded, progress["downloaded_bytes"])
+            try:
+                status = json.loads(request(f"{path}/{engine}/status?probe=presence"))
+            except HTTPError as error:
+                assert error.code == 409, error
+            else:
+                assert status["version"] == version, status
+                break
+            time.sleep(.5)
+        else:
+            raise AssertionError(f"{engine} did not activate:\n{ui('read_page')}")
+        assert max_downloaded > 0, f"No downloaded bytes observed for {engine}"
+        status = json.loads(request(f"{path}/{engine}/status?probe=sha256", timeout=60))
+        assert status["version"] == version and status["previous_generation"] is None, status
+        assert status["protocol"] == "music-native-windows-v2" and status["verification"] == "sha256", status
+        page = wait_page("Engines and updates", predicate=lambda page: button not in page)
+        (out/f"{engine}-after.txt").write_text(page, encoding="utf8")
+        profile = json.loads(request(f"/v1/music/native/{engine}/profiles"))
+        selected = profile["selected_executable"]
+        assert selected["source"] == "signed" and selected["package"]["version"] == version, profile
+        screenshot(f"{engine}-managed")
+        receipt["installed"][engine] = dict(status, observed_downloaded_bytes=max_downloaded)
+        json_file(out/"engine-first-install.json", receipt)
+
+
 def remove_profile(root, timeout=20):
     deadline = time.monotonic() + timeout
     while True:
@@ -534,7 +599,8 @@ def isolated_profile():
 
 
 with isolated_profile() as root:
-    seed_training(root)
+    if args.suite != "engine-install":
+        seed_training(root)
     for folder in ("user", "roaming", "local"):
         (root/folder).mkdir()
     env = dict(os.environ, YUE_STUDIO_DATA_ROOT=str(root), YUE_STUDIO_PORT="8791", DO_NOT_TRACK="1",
@@ -562,6 +628,8 @@ with isolated_profile() as root:
             wait_page(predicate=lambda page: "button" in page)
             if args.suite == "lrc":
                 check_lrc(root, process.pid)
+            elif args.suite == "engine-install":
+                check_engine_install()
             else:
                 check_screens(root, process.pid)
         finally:

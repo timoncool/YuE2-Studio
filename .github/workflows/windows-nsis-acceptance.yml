@@ -17,7 +17,7 @@ jobs:
       matrix:
         scenario: [clean, upgrade]
     runs-on: windows-latest
-    timeout-minutes: 40
+    timeout-minutes: 65
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
@@ -118,6 +118,14 @@ jobs:
               if (Test-Path -LiteralPath $path) { Copy-Item -LiteralPath $path -Destination $evidence.FullName }
             }
           }
+      - name: Install both public signed engines from the installed WebView
+        if: always() && matrix.scenario == 'clean' && steps.installed-studio.outcome == 'success'
+        env:
+          PYTHONUTF8: '1'
+          STUDIO_QA_REAL_SHELL_PROFILE: '1'
+        run: |
+          $exe = Join-Path $env:QA_DIR 'installed/YuE2-Studio.exe'
+          python -u scripts/test-hosted-webview-screens.py $exe (Join-Path $env:QA_DIR 'evidence/engine-first-install') --suite engine-install
       - name: Save acceptance evidence
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
