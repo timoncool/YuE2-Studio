@@ -1,5 +1,6 @@
 """Drive only the bundled Studio WebView on the isolated Windows runner."""
-import argparse, base64, ctypes, hashlib, json, os, pathlib, re, struct, subprocess, tempfile, time, urllib.request, wave, math
+import argparse, base64, ctypes, hashlib, json, os, pathlib, re, shutil, struct, subprocess, tempfile, time, urllib.request, wave, math
+from contextlib import contextmanager
 
 p = argparse.ArgumentParser()
 p.add_argument("exe", type=pathlib.Path)
@@ -109,6 +110,8 @@ def seed_training(root):
     for half in ("ar","nar"):
         (checkpoint/f"native-{half}.safetensors").write_bytes(b"isolated UI receipt fixture only")
 
+
+def native_editor_window(pid):
     from ctypes import wintypes
 
     windows = []
@@ -496,8 +499,35 @@ G4 |
     assert not re.search(r"butterchurn.*(?:error|not a function)|(?:error|not a function).*butterchurn", ui("console"), re.I)
 
 
-with tempfile.TemporaryDirectory(prefix="studio-hosted-webview-") as directory:
-    root = pathlib.Path(directory)
+def remove_profile(root, timeout=20):
+    deadline = time.monotonic() + timeout
+    while True:
+        try:
+            shutil.rmtree(root)
+            return
+        except OSError as error:
+            # WebView2 subprocesses may still hold files after Studio has exited.
+            if getattr(error, "winerror", None) not in (5, 32, 145) or time.monotonic() >= deadline:
+                raise
+            time.sleep(.25)
+
+
+@contextmanager
+def isolated_profile():
+    root = pathlib.Path(tempfile.mkdtemp(prefix="studio-hosted-webview-"))
+    try:
+        yield root
+    except BaseException:
+        try:
+            remove_profile(root)
+        except OSError as error:
+            print(f"Profile cleanup after test failure: {error}", flush=True)
+        raise
+    else:
+        remove_profile(root)
+
+
+with isolated_profile() as root:
     seed_training(root)
     for folder in ("user", "roaming", "local"):
         (root/folder).mkdir()
@@ -532,6 +562,8 @@ with tempfile.TemporaryDirectory(prefix="studio-hosted-webview-") as directory:
             json_file(out/"trace.json", trace)
             stop = subprocess.Popen([str(args.exe.resolve()), "--stop"], env=env)
             stop.wait(timeout=10)
-            if process.poll() is None:
+            try:
+                process.wait(timeout=4)
+            except subprocess.TimeoutExpired:
                 process.terminate()
-            process.wait(timeout=10)
+                process.wait(timeout=10)
