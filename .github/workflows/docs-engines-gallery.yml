@@ -1,0 +1,40 @@
+name: Capture YuE2 5.0 engine documentation
+
+on:
+  push:
+    branches: [qa/yue2-50-docs-engines]
+
+permissions:
+  contents: read
+
+jobs:
+  capture:
+    runs-on: windows-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Download and verify the released portable package
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $archive = 'YuE2-Studio-5.0.0-portable-windows-x64.zip'
+          gh release download v5.0.0 -R timoncool/YuE2-Studio -p $archive
+          if ((Get-FileHash $archive -Algorithm SHA256).Hash.ToLowerInvariant() -ne '054b521bff77b2dc3b54afcf933b4724303f323bcd0bcbd7267cd7af52b727fe') {
+            throw 'Public portable archive hash mismatch'
+          }
+          Expand-Archive $archive -DestinationPath portable
+      - name: Capture the real Studio menus and import previews
+        shell: pwsh
+        run: |
+          $exe = @(Get-ChildItem portable -Recurse -Filter YuE2-Studio.exe)
+          if ($exe.Count -ne 1) { throw "Unexpected portable layout" }
+          python -u scripts/test-hosted-webview-screens.py $exe.FullName evidence --suite docs-engines
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: yue2-50-engines-gallery
+          path: evidence
