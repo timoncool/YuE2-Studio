@@ -260,6 +260,11 @@ impl Downloader {
             return true;
         }
         if !crate::pin_sha::runtime_libraries(asset.url).is_empty() { return false; }
+        // A pin for a complete file can prove the actual bytes. Let
+        // holds_pinned_bytes do that before adopting it from an older install.
+        if asset.pick.is_empty() && asset.unzip_into.is_none() && crate::pin_sha::sha256(asset.url).is_some() {
+            return false;
+        }
         let key = if asset.pick.is_empty() && asset.unzip_into.is_none() {
             Some((self.path_of(asset), asset.bytes))
         } else {
