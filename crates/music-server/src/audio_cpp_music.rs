@@ -253,7 +253,11 @@ pub(super) async fn models(State(state): State<AppState>) -> Json<Value> {
         .iter_mut()
         .find(|model| model["id"] == audio_cpp_heartmula::FAMILY)
     {
-        model["installing"] = Value::Bool(state.heartmula_install.try_lock().is_err());
+        let installing = state.heartmula_install.try_lock().is_err();
+        model["installing"] = Value::Bool(installing);
+        if installing {
+            model["ready"] = Value::Bool(false);
+        }
         model["download"] = serde_json::json!(acpp_download(&state, HEARTMULA_INSTALL).await);
     }
     Json(serde_json::json!({
@@ -477,6 +481,12 @@ pub(super) async fn submit(
             format!("Unknown audio.cpp music model {model}."),
         );
     };
+    if matches!(family, Family::HeartMuLa) && state.heartmula_install.try_lock().is_err() {
+        return reject(
+            StatusCode::CONFLICT,
+            "HeartMuLa installation is in progress.".into(),
+        );
+    }
     let task = match family.task(&request, &state.library) {
         Ok(task) => task,
         Err(error) => return reject(StatusCode::BAD_REQUEST, error.to_string()),
