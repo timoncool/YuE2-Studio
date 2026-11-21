@@ -293,6 +293,7 @@ with tempfile.TemporaryDirectory(prefix="studio-hosted-webview-") as directory:
             rpc("initialize", dict(protocolVersion="2025-03-26", capabilities={},
                 clientInfo=dict(name="studio-hosted-webview", version="1")))
             rpc("notifications/initialized", {}, notify=True)
+            wait_page(predicate=lambda page: "button" in page)
             capture_pt() if args.suite == "pt" else check_screens(root)
         finally:
             json_file(out/"trace.json", trace)
