@@ -453,7 +453,7 @@ fn annotations(name: &str) -> Value {
     // a verb that changes something outweighs a noun that reads
     const CHANGES: &[&str] = &["install", "import", "remove", "delete", "refresh", "create", "update", "start", "cancel", "select", "download", "apply", "restart"];
     // reads whose names the rules above miss: create_form names the create page
-    const READ_NAMES: &[&str] = &["engine_hip_status", "music_package_updates_get", "music_package_progress", "lyrics_syllables", "assistant_cli_agents", "system_gpus", "cover_scenes", "cover_photos_search", "video_backgrounds_search", "network_proxy_test", "journal_read", "score_to_midi", "score_instrumental", "score_vocal_octave", "score_from_midi", "score_mark", "lyrics_find", "cover_prompt_render", "studio_wait", "engine_presets_get", "assistant_requests_wait", "ui_console", "song_defaults", "create_form_get", "library_liked", "score_chord_bed", "song_tokenize", "score_match_sections", "models_update_plan", "problem_preview", "library_migration_preview", "audio_cpp_music_models", "hotstep_cover_profiles", "hotstep_sa3_training_status", "hotstep_heartmula_training_status", "rvc_training_status"];
+    const READ_NAMES: &[&str] = &["engine_hip_status", "music_package_updates_get", "music_package_progress", "lyrics_syllables", "assistant_cli_agents", "system_gpus", "cover_scenes", "cover_photos_search", "video_backgrounds_search", "network_proxy_test", "journal_read", "score_to_midi", "score_instrumental", "score_vocal_octave", "score_from_midi", "score_mark", "lyrics_find", "cover_prompt_render", "studio_wait", "engine_presets_get", "assistant_requests_wait", "ui_console", "song_defaults", "create_form_get", "library_liked", "score_chord_bed", "score_backing_tempo", "song_tokenize", "score_match_sections", "models_update_plan", "problem_preview", "library_migration_preview", "audio_cpp_music_models", "hotstep_cover_profiles", "hotstep_sa3_training_status", "hotstep_heartmula_training_status", "rvc_training_status"];
     // writes over what was stored, so the earlier content is gone: a client asks first
     const OVERWRITES: &[&str] = &["library_song_rename", "library_song_update", "playlist_update", "album_reorder", "dataset_update", "dataset_song_update", "dataset_song_describe_style", "dataset_prepare", "lora_update", "stems_split", "restore_start", "karaoke_make", "midi_transcribe", "cover_draw", "cover_set_from_file", "openrouter_set_key", "models_update_apply"];
     let changes = CHANGES.iter().any(|verb| name.split('_').any(|word| word == *verb));
@@ -1874,6 +1874,12 @@ fn tools() -> &'static [Tool] {
                 description: "Write a chord bed at once, without the model planning: chords over rests in the Vocal voice and an empty Ins voice, one section per lyrics tag (bars from its lines), in the tempo, key and meter given; verses, choruses and a bridge each get a common progression, no chord repeats its neighbour; a section plays as many of its chords as its bars take, and the answer's sections name each section once with the chords it plays. Pass its abc to song_create (cot full): with words to sing the model plans the melody over the bed's chords, section by section, and the song's score is that plan; without words the bed is played as it stands. The same seed writes the same bed.",
                 schema: || object(json!({ "bpm": { "type": "integer", "minimum": 40, "maximum": 240 }, "key": { "type": "string", "description": "tonic and m for minor: Em, F#m, Bb" }, "meter": { "type": "string", "enum": ["4/4", "3/4", "6/8", "2/4"] }, "lyrics": { "type": "string" }, "seed": { "type": "integer" } }), &["bpm", "key", "meter"]),
                 call: |args| post("/v1/score/chord-bed".into(), args.clone()),
+            },
+            Tool {
+                name: "score_backing_tempo",
+                description: "Measure a library recording's tempo with Beat This. Requires the listening pack. Returns a tempo estimate for review.",
+                schema: || object(json!({ "song_id": { "type": "string" } }), &["song_id"]),
+                call: |args| post("/v1/score/backing-tempo".into(), args.clone()),
             },
             Tool {
                 name: "score_job_get",
