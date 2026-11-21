@@ -238,7 +238,7 @@ Local score, sampling and LoRA controls apply to local generation.
 
 `song_create` makes a song directly. When the user wants to watch and adjust it first:
 `ui_navigate` create, `create_form_set` with the fields (the user sees them fill in),
-`create_form_get` to check, and `create_form_submit` to press Create.
+`create_form_get` to check, and `create_form_submit` to press Create. Set `duration_seconds` to a number for a local YuE2 ceiling or `"auto"` to use the checkpoint budget. With `song_create`, omit `duration_seconds` for Auto.
 
 **When you are the studio's writing assistant**
 

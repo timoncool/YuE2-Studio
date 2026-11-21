@@ -7,6 +7,7 @@ import { useGenerations } from '../services/generations';
 import { fetchAdapters } from '../services/adapters';
 import { afterGenerationPause } from '../services/generationPause';
 
+const bridgeCommands = new Map<string, (args: Record<string, unknown>) => unknown>();
 const composeScore = vi.fn();
 const transcribe = vi.fn();
 const instrumentalScore = vi.fn();
@@ -26,7 +27,9 @@ vi.mock('../services/studioQueries', async original => ({
   useSetupStatus: () => ({ isError: false, data: { ready, engine_ready: ready && !enginePaused, engine_paused: enginePaused } }),
   useOpenRouterSettings: () => ({ data: { configured } }),
 }));
-vi.mock('../services/mcpBridge', () => ({ useBridgeCommand: () => undefined }));
+vi.mock('../services/mcpBridge', () => ({
+  useBridgeCommand: (name: string, handler: (args: Record<string, unknown>) => unknown) => bridgeCommands.set(name, handler),
+}));
 vi.mock('../services/transcription', () => ({ composeScore: (...args: unknown[]) => composeScore(...args), composePlans: vi.fn(), transcribe: (...args: unknown[]) => transcribe(...args) }));
 vi.mock('../services/scoreApi', () => ({
   instrumentalScore: (abc: string) => instrumentalScore(abc),
@@ -64,6 +67,7 @@ const sent: YueRequest[] = [];
 
 beforeEach(() => {
   sent.length = 0;
+  bridgeCommands.clear();
   ready = true;
   enginePaused = false;
   configured = false;
@@ -961,5 +965,77 @@ it('reuses a Stable Audio 3 text prompt and its sampler and guidance controls', 
     music_source: { kind: 'audio_cpp', model: 'stable_audio' },
     style: 'instrumental piano', lyrics: '', duration_seconds: 4, steps: 4, seed: 42,
     cfg_scale: 2, output_format: 'wav32', stable_audio,
+  });
+});
+
+describe('Auto max duration', () => {
+  const autoButton = () => buttonNamed('maxDurationAuto');
+  // an instrumental with No score goes straight to onGenerate, with no score to compose first
+  const createOne = async () => {
+    click(buttonNamed('cotOff')!);
+    click(buttonNamed('createInstrumental')!);
+    await flush();
+  };
+  const startInstrumental = async () => {
+    act(() => root.render(panel({})));
+    await flush();
+    type(field('textarea')!, 'calm folk, acoustic guitar');
+    click(host.querySelector<HTMLInputElement>('input[type="checkbox"]')!);
+    await flush();
+  };
+
+  it('is where a new studio starts, and sends no ceiling: the song ends where the model ends it', async () => {
+    await startInstrumental();
+    expect(autoButton()?.getAttribute('aria-pressed')).toBe('true');
+    await createOne();
+    expect(sent).toHaveLength(1);
+    expect(sent[0].duration_seconds).toBeUndefined();
+  });
+
+  it('switched off sends the seconds again and is kept for the next song', async () => {
+    await startInstrumental();
+    click(autoButton()!);
+    await flush();
+    expect(autoButton()?.getAttribute('aria-pressed')).toBe('false');
+    await createOne();
+    expect(sent[0].duration_seconds).toBe(130);
+    expect(localStorage.getItem('studio.createDuration')).toBe('130');
+    click(autoButton()!);
+    await flush();
+    expect(localStorage.getItem('studio.createDuration')).toBe('auto');
+  });
+
+  it('keeps seconds a user chose before Auto existed', async () => {
+    localStorage.setItem('studio.createDuration', '240');
+    await startInstrumental();
+    expect(autoButton()?.getAttribute('aria-pressed')).toBe('false');
+    await createOne();
+    expect(sent[0].duration_seconds).toBe(240);
+    click(autoButton()!);
+    click(autoButton()!);
+    await createOne();
+    expect(sent[1].duration_seconds).toBe(240);
+  });
+
+  it('sends the manual ceiling or omits it through the Create MCP bridge', async () => {
+    act(() => root.render(panel({})));
+    await flush();
+    const command = (name: string, args: Record<string, unknown> = {}) => bridgeCommands.get(name)!(args);
+    const read = () => command('create_get') as { fields: Record<string, unknown>; request: YueRequest };
+
+    act(() => { command('create_set', { fields: { style: 'calm acoustic folk, gentle guitar instrumental', cot: 'off', duration_seconds: 10 } }); });
+    expect(read().fields.duration_seconds).toBe('10');
+    expect(read().request.duration_seconds).toBe(10);
+    act(() => { command('create_submit'); });
+    await flush();
+
+    act(() => { command('create_set', { fields: { duration_seconds: 'auto' } }); });
+    expect(read().fields.duration_seconds).toBe('auto');
+    expect(read().request).not.toHaveProperty('duration_seconds');
+    act(() => { command('create_submit'); });
+    await flush();
+    expect(sent).toHaveLength(2);
+    expect(sent[0].duration_seconds).toBe(10);
+    expect(sent[1]).not.toHaveProperty('duration_seconds');
   });
 });

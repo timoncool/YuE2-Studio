@@ -3,7 +3,7 @@ import { libraryChanged, SELF_READ, useActivity, useAssistantStatus, useLibraryS
 import { hasSungLines, karaokeReason, recogniseLyrics } from '../services/karaoke';
 import { ConfirmDialog } from './ConfirmDialog';
 import { enginePauseStrings } from '../i18n/enginePause';
-import { clampDurationToKept } from '../services/createDuration';
+import { AUTO_DURATION, durationAfterLoad, isAutoDuration, keptDurationText } from '../services/createDuration';
 import { minTokensCutsTheSongOff } from '../services/samplingLimits';
 import { foldedAfter, keepFolded, keptFolded } from '../services/createFold';
 import {
@@ -120,18 +120,27 @@ const NEW_PLAYLIST = '__new__';
 /** The style as it is sent: a trigger's comma with nothing after it goes. */
 const finishedStyle = (text: string) => text.trim().replace(/,$/, '').trimEnd();
 const SEMANTIC_CODES_PER_SECOND = 25;
-/** 9000 semantic frames at 25 per second, the stage's own budget. */
 const MAX_DURATION_SECONDS = 600;
-/** A new prompt's ceiling: 2:10. Examples and prompt files keep their own. */
+/** 9000 semantic frames at 25 per second when the engine catalog is unavailable. */
+const DEFAULT_AUTO_DURATION_SECONDS = 360;
+/** Where the slider starts when Auto is switched off and no seconds were chosen before: 2:10. */
 const DEFAULT_DURATION_SECONDS = 130;
-/** The max-duration the user keeps for every new song (studio.createDuration),
- *  or the default when none is saved yet. */
-function keptCreateDuration(): number {
+const MIN_DURATION_SECONDS = 10;
+/** The max-duration the user keeps for every new song (studio.createDuration):
+ *  Auto (no ceiling sent, the song ends where the model ends it) unless seconds were chosen. */
+function keptCreateDuration(): string {
   try {
-    const kept = Number(window.localStorage.getItem('studio.createDuration'));
-    if (kept >= 10 && kept <= MAX_DURATION_SECONDS) return kept;
+    return keptDurationText(window.localStorage.getItem('studio.createDuration'), MIN_DURATION_SECONDS, MAX_DURATION_SECONDS);
   } catch { /* fall through to the default */ }
-  return DEFAULT_DURATION_SECONDS;
+  return AUTO_DURATION;
+}
+/** The seconds last chosen by hand, for when Auto is switched off again. */
+function keptManualDuration(): string {
+  try {
+    const kept = Number(window.localStorage.getItem('studio.createDurationManual'));
+    if (kept >= MIN_DURATION_SECONDS && kept <= MAX_DURATION_SECONDS) return String(kept);
+  } catch { /* fall through to the default */ }
+  return String(DEFAULT_DURATION_SECONDS);
 }
 
 /** The file format last chosen by hand, kept between sessions like the duration. */
@@ -508,10 +517,16 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
   // Strings, so an empty field can mean "engine default".
   // The ceiling last set by hand, kept between sessions like the playlist:
   // a song made longer once is not cut at 2:10 after the next start.
-  const [duration, setDuration] = useState(() => String(keptCreateDuration()));
+  // "auto" sends no ceiling: the engine's whole budget, and the song is as long as its plan.
+  const [duration, setDuration] = useState(keptCreateDuration);
+  const autoDuration = isAutoDuration(duration);
   const chooseDuration = (value: string) => {
     setDuration(value);
-    try { window.localStorage.setItem('studio.createDuration', value); } catch { /* kept until a reload */ }
+    try {
+      const manual = isAutoDuration(value) ? keptCreateDuration() : value;
+      if (!isAutoDuration(manual)) window.localStorage.setItem('studio.createDurationManual', manual);
+      window.localStorage.setItem('studio.createDuration', value);
+    } catch { /* kept until a reload */ }
   };
   const [kept] = useState(keptSettings);
   const [lmBatch, setLmBatch] = useState(() => keptText(kept, 'lmBatch'));
@@ -740,7 +755,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
     setAbc(typeof request.abc === 'string' ? request.abc.trimEnd() : '');
     setPlans([]); setSelectedPlan(0);
     setCot(request.cot === 'full' || request.cot === 'melody' || request.cot === 'off' ? request.cot : '');
-    setDuration(String(clampDurationToKept(Number(request.duration ?? request.duration_seconds), keptCreateDuration())));
+    setDuration(durationAfterLoad(Number(request.duration ?? request.duration_seconds), keptCreateDuration(), MAX_DURATION_SECONDS));
     setLmBatch('');
     setSynthBatch('');
     setSteps(asText(request.steps));
@@ -1191,7 +1206,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
       if (typeof body?.title === 'string' && body.title.trim() && target !== 'score') { setName(body.title.trim()); setNameFilled(true); }
       if (typeof body?.cover_prompt === 'string' && body.cover_prompt.trim()) setCoverPrompt(body.cover_prompt.trim());
       if (typeof body?.duration_seconds === 'number' && body.duration_seconds >= 10 && target === 'all') {
-        setDuration(String(Math.min(MAX_DURATION_SECONDS, clampDurationToKept(body.duration_seconds, keptCreateDuration()))));
+        setDuration(durationAfterLoad(body.duration_seconds, keptCreateDuration(), MAX_DURATION_SECONDS));
       }
     } catch (reason) {
       const cancelled = reason instanceof DOMException && reason.name === 'AbortError';
@@ -1558,7 +1573,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
     lyrics: [lyrics, setLyrics],
     abc: [abc, setAbc],
     cot: [cot, (value) => setCot(value as YueCot | '')],
-    duration_seconds: [duration, setDuration],
+    duration_seconds: [duration, value => setDuration(value || AUTO_DURATION)],
     lm_batch_size: [lmBatch, setLmBatch],
     synth_batch_size: [synthBatch, setSynthBatch],
     steps: [steps, setSteps],
@@ -1619,7 +1634,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
   const songs = numberOrUndefined(lmBatch) ?? 1;
   const variations = numberOrUndefined(synthBatch) ?? 1;
   const totalTracks = songs * variations;
-  const durationFallback = Number(defaults.duration ?? MAX_DURATION_SECONDS);
+  const durationFallback = Number(defaults.duration ?? DEFAULT_AUTO_DURATION_SECONDS);
   const formatDuration = (seconds: number) => `${Math.floor(seconds / 60)}:${String(Math.round(seconds % 60)).padStart(2, '0')}`;
   // The engine caps the audio-code stage at duration x 25 codes: what a
   // larger max tokens would ask for is never drawn.
@@ -2410,15 +2425,26 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
             <div className="space-y-3">
               <SliderRow
                 label={t('maxDuration')}
-                value={duration}
+                value={autoDuration ? '' : duration}
                 fallback={durationFallback}
-                min={10}
+                min={MIN_DURATION_SECONDS}
                 max={MAX_DURATION_SECONDS}
                 step={5}
                 onChange={chooseDuration}
                 format={formatDuration}
+                disabled={autoDuration}
               />
-              <p className="text-[11px] leading-4 text-zinc-500">{tt('maxDurationHintYue')}</p>
+              <button
+                type="button"
+                aria-pressed={autoDuration}
+                onClick={() => chooseDuration(autoDuration ? keptManualDuration() : AUTO_DURATION)}
+                className={`rounded-md border px-2 py-1 text-[11px] font-semibold transition-colors ${autoDuration
+                  ? 'border-pink-500 bg-pink-500/10 text-pink-600 dark:text-pink-300'
+                  : 'border-zinc-200 text-zinc-500 hover:bg-zinc-100 hover:text-black dark:border-white/10 dark:text-zinc-400 dark:hover:bg-white/10 dark:hover:text-white'}`}
+              >
+                {tt('maxDurationAuto')}
+              </button>
+              <p className="text-[11px] leading-4 text-zinc-500">{tt(autoDuration ? 'maxDurationAutoHint' : 'maxDurationHintYue')}</p>
               <SliderRow
                 label={tt('flowSteps')}
                 value={steps}
