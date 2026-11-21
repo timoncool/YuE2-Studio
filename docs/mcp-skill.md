@@ -222,7 +222,14 @@ For YuE2 LoRA training, the detailed `training_status` response lists the
 bundled trainer and compatible signed trainers for this platform. Install a
 signed trainer with the normal engine component installer and pass its
 `trainer_id` to `training_start` to select it. A continuation uses the
-original trainer generation and optimizer format recorded in the run.
+original trainer generation and optimizer format recorded in the run. The
+same detailed status lists `training_bases`. Pass one of those IDs as
+`base_id` to `training_pack_install` and to `training_start`. The selected
+ConvRot and decoder companion are recorded by SHA-256. Place a matching custom
+ConvRot Safetensors in `training_own_base_folder` and select its generation
+GGUF in Settings before training it. The installed LoRA shows which base fits
+the selected generation model. Use `training_base: true` with
+`training_pack_cancel` to stop a base download.
 
 For HeartMuLa adapter training, use `hotstep_heartmula_training_status`,
 `hotstep_heartmula_training_install` and `hotstep_heartmula_training_start`.
@@ -348,7 +355,7 @@ Local score, sampling and LoRA controls apply to local generation.
    `studio_wait until: preparation`. The studio finds the lyrics in LRCLIB, QQ Music and
    Kugou, recognises only what they miss with CrisperWhisper, and listens to every song with
    MOSS-Music, measuring the tempo. It leaves the writing to you.
-4. `dataset_get`. For each song:
+4. `dataset_get`. For a long dataset, request a short page with `page` and `page_size` and follow `has_more`. Pass `song_id` for one complete row. For each song:
    - `lyrics_state: found` - the words are there (from a database when `lyrics_source`
      names one: keep every word; `recognised`: fix the recogniser's mishearings). Lay them
      out in sections (`writing_guide` topics `sections` or `transcript`).
@@ -361,7 +368,8 @@ Local score, sampling and LoRA controls apply to local generation.
    (200 steps of 4 songs; `fast` and `thorough` are the smaller and larger sizes), or
    `tuned`, the previous recipe with stop `kl` at 1.4 or stop `epochs`.
    `studio_wait until: training`; `training_status` shows step and loss (KL under `tuned`).
-6. `training_checkpoint_install` for the chosen step, then `song_create` with that LoRA
+6. `training_checkpoints_listen` with `run_id` queues a 35-second reference take and one per saved checkpoint, using the same score and seeds. The returned playlist lets you compare them. Repeating the call reuses the existing takes and adds newly saved steps.
+7. `training_checkpoint_install` for the chosen step, then `song_create` with that LoRA
    in `adapters` and its trigger word in the style.
 7. Not there yet after the run? `training_continue` with `steps` above the run's
    `resume_step` from `training_status`: it goes on from the latest checkpoint with the

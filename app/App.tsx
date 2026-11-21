@@ -17,6 +17,7 @@ import { useBridgeCommand } from './services/mcpBridge';
 import { apiUrl } from './services/apiBase';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { libraryChanged, queryClient, updateLibraryPlaylists, updateLibrarySongs, useLibraryPlaylists, useLibrarySongs, useSetupStatus } from './services/studioQueries';
+import { preferredTakeStrings } from './i18n/preferredTake';
 import { useGenerations } from './services/generations';
 import { isSettingsTarget, SettingsModal } from './components/SettingsModal';
 import { Song, View, Playlist, type MusicEngine } from './types';
@@ -639,6 +640,11 @@ function AppContent() {
     // the side panel exists from Tailwind's xl up; below it the details open over the page
     if (hasSidePanel) setShowRightSidebar(true);
     else setShowMobileDetails(true);
+  };
+
+  const handleOpenLibraryTake = (song: Song) => {
+    handleBackFromPlaylist();
+    handleShowDetails(song);
   };
 
   // Reuse Handler
@@ -1384,7 +1390,7 @@ function AppContent() {
   const handleBackFromPlaylist = () => {
     setViewingPlaylistId(null);
     setCurrentView('library');
-    window.history.pushState({}, '', '/library');
+    if (window.location.pathname !== '/library') window.history.pushState({}, '', '/library');
   };
 
   const openCoverRegen = (song: Song) => {
@@ -1559,6 +1565,7 @@ function AppContent() {
                 isPlaying={isPlaying}
                 notify={showToast}
                 onSelect={handleShowDetails}
+                onOpenLibraryTake={handleOpenLibraryTake}
                 onError={message => showToast(message, 'error')}
               />
             </div>
@@ -1885,7 +1892,13 @@ function AppContent() {
         <ProcessingModal
           song={songToProcess}
           onClose={() => setSongToProcess(null)}
-          onKept={libraryChanged}
+          onKept={take => {
+            libraryChanged();
+            showToast(t('processKept'), 'success', {
+              label: preferredTakeStrings[language].openInLibrary,
+              onClick: () => handleOpenLibraryTake(take),
+            });
+          }}
         />
       )}
       {songForReplay && (

@@ -157,7 +157,7 @@ export interface YueRequest {
   vevo2?: import('./components/Vevo2SingingFields').Vevo2References;
   controlfoley_video?: string;
   soulx?: import('./components/SoulXSingerFields').SoulXInputs;
-  ace?: { guidance_scale?: number };
+  ace?: import('./components/AceTaskControls').AceCreateOptions;
   /** Style tags or a short style prompt, verbatim under `[Tags]`. */
   style: string;
   /** Lyrics with section tags, verbatim under `[Lyrics]`. */
@@ -199,6 +199,7 @@ export interface YueRequest {
   title?: string;
   /** The library song whose melody this cover sings; the new song names it. */
   cover_of?: string;
+  backing_song_id?: string;
   cover_prompt?: string;
   /** LoRA adapters for this song, each with a strength per engine slot. */
   adapters?: { id: string; scales: Record<string, number> }[];

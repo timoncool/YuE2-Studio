@@ -55,6 +55,7 @@ import { HotStepCoverFields, type HotStepCoverDraft } from './HotStepCoverFields
 import { SoulXSingerFields, soulxRequired, type SoulXInputs } from './SoulXSingerFields';
 import { Vevo2ModelDirectory, Vevo2SingingFields, vevo2SingingStrings, type Vevo2References } from './Vevo2SingingFields';
 import { NumberField } from './NumberField';
+import { AceTaskControls, aceTaskOptions, newAceTask, restoreAceTask } from './AceTaskControls';
 import { explainCliFailure } from '../services/cliFailure';
 import { loadNativeOpenRouterCatalog, modelsForCapability, openRouterMusicFields, openRouterMusicParameters, refreshNativeOpenRouterCatalog, type NativeOpenRouterModel, type OpenRouterMusicOptions, type OpenRouterMusicParameter } from '../services/nativeOpenRouter';
 import { miDashengDurationStrings, musicSourceStrings, nativeMusicSourceStrings } from '../i18n/musicSource';
@@ -495,6 +496,9 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
   const signed = musicEngine === 'signed';
   const packages = useSignedMusicSelection(Boolean(onMusicEngineChange) || signed, signed);
   const nativeEngine = isProfileMusicEngine(musicEngine) ? musicEngine : undefined;
+  const [aceTask, setAceTask] = useState(newAceTask);
+  const aceEngine = nativeEngine === 'acestep-cpp';
+  const aceOptions = aceEngine ? aceTaskOptions(aceTask) : undefined;
   const audioCpp = nativeEngine === 'audio.cpp';
   const native = useNativeMusicProfiles(nativeEngine, Boolean(onMusicEngineChange));
   const hotstepSa3 = nativeEngine === 'hotstep' && native.profile?.id === hotStepSa3Profile;
@@ -792,6 +796,14 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
   const composeRun = useRef<AbortController | null>(null);
   const [editorOpen, setEditorOpen] = useState(false);
   const [bedOpen, setBedOpen] = useState(false);
+  const [backingSongId, setBackingSongId] = useState('');
+  const backingSongs = useLibrarySongs(bedOpen && musicEngine === 'local');
+  const backingTracks = (backingSongs.data ?? []).filter(song => song.audioUrl && !song.isGenerating);
+  const backingLabel = {
+    en: 'Sing over a library backing track', ru: 'Спеть поверх аккомпанемента из библиотеки',
+    pt: 'Cantar sobre um acompanhamento da biblioteca', zh: '在曲库伴奏上演唱',
+    ja: 'ライブラリの伴奏に歌を重ねる', ko: '라이브러리 반주에 노래 얹기',
+  }[language];
   const [bedBpm, setBedBpm] = useState('100');
   const [bedKey, setBedKey] = useState('C');
   const [bedMeter, setBedMeter] = useState('4/4');
@@ -948,6 +960,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
     setContinueScore(request.abc_continue === true);
     setTranspose(asText(request.transpose) || '0');
     setVocalsOnly(request.vocals_only === true);
+    setBackingSongId(typeof request.backing_song_id === 'string' ? request.backing_song_id : '');
     setFadeIn(request.fade_in ? asText(request.fade_in) : '');
     setFadeOut(request.fade_out ? asText(request.fade_out) : '');
     setLyricTiming(request.lyric_timing !== false);
@@ -968,6 +981,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
     const settings = (song.generationParams ?? {}) as Record<string, unknown>;
     if (isProfileMusicEngine(song.ditModel) || song.ditModel === 'openrouter') {
       if (isProfileMusicEngine(song.ditModel)) {
+        if (song.ditModel === 'acestep-cpp') setAceTask(restoreAceTask(settings));
         const source = settings.music_source as YueRequest['music_source'] | undefined;
         const profile = song.ditModel === 'audio.cpp' ? (source?.kind === 'audio_cpp' ? source.model : audioCppMiniMax)
           : source?.kind === 'native' && source.engine === song.ditModel ? source.model : song.lmModel;
@@ -1129,6 +1143,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
     setAbcSampling(emptySampling()); setSemanticSampling(emptySampling()); setHarmony(emptyHarmony());
     setMp3Bitrate('320');
     setTranspose('0'); setVocalsOnly(false); setLyricTiming(true); setRealaudio('auto');
+    setBackingSongId('');
   };
 
   const loadExample = (id?: string) => {
@@ -1179,6 +1194,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
     if (!forFile || pinned(seedValue)) request.seed = pinned(seedValue) ? seedValue : randomSeed();
     if (semanticTokens.trim()) request.semantic_tokens = semanticTokens.trim();
     if (!forFile && mode === 'cover' && coverSongId && request.abc) request.cover_of = coverSongId;
+    if (musicEngine === 'local' && mode !== 'cover' && backingSongId) request.backing_song_id = backingSongId;
     const abcPreset = samplingFrom(abcSampling);
     if (abcPreset) request.abc_sampling = abcPreset;
     const semanticPreset = samplingFrom(semanticSampling);
@@ -1722,6 +1738,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
       return;
     }
     if (nativeEngine) {
+      if (aceEngine && !aceOptions) return;
       if (!native.ready || !native.profile || (mulaCover && !mulaCoverDraft.original) || (hotstep && (!mulaCoverDraft.original || !mulaCoverDraft.abc.trim()))) return;
       if (miDasheng && !miDashengPromptReady(scene)) return;
       if (soulx && (!soulxInputs.reference_song_id || (soulxConversion
@@ -1736,6 +1753,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
       if ((stableAudio || hotstepSa3) && !style.trim()) { setError(stableAudioPromptRequired(language)); return; }
       if (!hotstep && !magenta && !miDasheng && !miniMaxH3 && !mulaCover && !soulx && !style.trim() && !lyrics.trim()) { setError(tt('styleOrLyricsRequired')); return; }
       setError(null);
+      const settings = nativeGenerationSettings(nativeEngine, (vevo2 || soulx) ? { seed: native.settings.seed, output_format: native.settings.output_format } : miDasheng || magenta ? { ...native.settings, steps: undefined } : native.settings);
       generate({
         music_source: nativeEngine === 'audio.cpp'
           ? { kind: 'audio_cpp', model: native.profile.id }
@@ -1754,7 +1772,8 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
         ...(hotstepHeart ? { hotstep_heartmula: hotstepHeartDraft } : {}),
         ...(vevo2 ? { vevo2: vevoReferences } : {}),
         ...(soulx ? { soulx: soulxConversion ? { reference_song_id: soulxInputs.reference_song_id, source_song_id: soulxInputs.source_song_id } : { reference_song_id: soulxInputs.reference_song_id, reference_metadata: soulxInputs.reference_metadata, target_metadata: soulxInputs.target_metadata, control: soulxInputs.control } } : {}),
-        ...nativeGenerationSettings(nativeEngine, (vevo2 || soulx) ? { seed: native.settings.seed, output_format: native.settings.output_format } : miDasheng || magenta ? { ...native.settings, steps: undefined } : native.settings),
+        ...settings,
+        ...(aceOptions && Object.keys(aceOptions).length ? { ace: { ...settings.ace, ...aceOptions } } : {}),
       });
       return;
     }
@@ -2149,6 +2168,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
               {magenta && <MagentaFields value={magentaOptions} onChange={setMagentaOptions} tracks={magentaTracks} controlClassName={CONTROL} />}
               {hotstep && <HotStepCoverFields draft={mulaCoverDraft} onChange={setMulaCoverDraft} ready={native.ready}
                 refresh={native.refresh} controlClassName={CONTROL} />}
+              {aceEngine && <AceTaskControls value={aceTask} onChange={setAceTask} control={CONTROL} profileReady={native.ready} />}
               {mulaCover && <MuLaCoverFields value={mulaCoverDraft.original}
                 onChange={(original, abc) => setMulaCoverDraft(previous => previous.original === original ? previous : { original, abc })}
                 onInstall={native.refresh}
@@ -2736,6 +2756,14 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
                 {bedOpen && (
                   <div className="mt-2 rounded-lg border border-zinc-100 p-2 dark:border-white/5">
                     <p className="mb-2 text-[11px] leading-4 text-zinc-500">{tt('chordBedHint')}</p>
+                    {musicEngine === 'local' && mode !== 'cover' && (
+                      <Field label={backingLabel}>
+                        <select aria-label={backingLabel} value={backingSongId} onChange={event => setBackingSongId(event.target.value)} className={CONTROL}>
+                          <option value="">—</option>
+                          {backingTracks.map(song => <option key={song.id} value={song.id}>{song.title}</option>)}
+                        </select>
+                      </Field>
+                    )}
                     <div className="grid grid-cols-3 gap-2">
                       <Field label={tt('chordBedTempo')}>
                         <input value={bedBpm} onChange={event => setBedBpm(event.target.value)} inputMode="numeric" className={CONTROL} />
@@ -3156,7 +3184,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
           type="button"
           onClick={submit}
           disabled={pair.blocked || (signed ? !packages.ready : cloud ? !selectedMusicModel || invalidParameters.length > 0 : nativeEngine
-            ? !native.ready || (miDasheng && !miDashengPromptReady(scene)) || (magenta && !magentaReady) || (mulaCover && !mulaCoverDraft.original) || (hotstep && (!mulaCoverDraft.original || !mulaCoverDraft.abc.trim()))
+            ? !native.ready || (aceEngine && !aceOptions) || (miDasheng && !miDashengPromptReady(scene)) || (magenta && !magentaReady) || (mulaCover && !mulaCoverDraft.original) || (hotstep && (!mulaCoverDraft.original || !mulaCoverDraft.abc.trim()))
             : yue && instrumental && instrumentalLoraLoading && !isGenerating)}
           className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-linear-to-r from-orange-500 to-pink-600 text-base font-bold text-white shadow-lg transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
         >
