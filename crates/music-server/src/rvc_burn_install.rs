@@ -217,16 +217,15 @@ pub(super) fn downloader(data: &std::path::Path) -> Downloader {
 }
 
 pub(super) fn present(downloader: &Downloader, asset: &Asset) -> bool {
-    downloader.is_installed(asset)
-        && install_record::read(&downloader.record_of(asset))
-            .is_some_and(|record| Some(record.sha256.as_str()) == sha256(asset.url))
+    downloader.is_verified_install(asset)
 }
 
-pub(super) async fn status(state: &AppState) -> Value {
+pub(super) async fn status(state: &AppState, runtime: &rvc_burn::Runtime) -> Value {
     let downloader = &state.rvc_burn_downloads;
-    let profile = selected();
+    let profile = runtime.install_profile();
+    let managed = profile.as_ref().ok().copied().flatten();
     let download = downloader.active_for(SCOPE).await;
-    let missing_bytes = profile.as_ref().ok().map_or(0, |profile| {
+    let missing_bytes = managed.map_or(0, |profile| {
         profile
             .assets(true)
             .filter(|asset| !present(downloader, asset))
@@ -234,8 +233,8 @@ pub(super) async fn status(state: &AppState) -> Value {
             .sum()
     });
     serde_json::json!({
-        "installable": profile.is_ok(),
-        "profile": profile.as_ref().ok().map(|profile| profile.folder()),
+        "installable": managed.is_some(),
+        "profile": managed.map(Profile::folder),
         "missing_bytes": missing_bytes,
         "install_reason": profile.err(),
         "download": download,
@@ -243,9 +242,11 @@ pub(super) async fn status(state: &AppState) -> Value {
 }
 
 pub(super) async fn start(State(state): State<AppState>) -> impl IntoResponse {
-    let profile = match selected() {
-        Ok(profile) => profile,
-        Err(reason) => return api_error(StatusCode::CONFLICT, reason.to_owned()).into_response(),
+    let runtime = rvc_burn::Runtime::discover_for(&state, true);
+    let profile = match runtime.install_profile() {
+        Ok(Some(profile)) => profile,
+        Ok(None) => return Json(serde_json::json!({ "started": false })).into_response(),
+        Err(reason) => return api_error(StatusCode::CONFLICT, reason).into_response(),
     };
     let downloader = state.rvc_burn_downloads.clone();
     if downloader
@@ -259,10 +260,12 @@ pub(super) async fn start(State(state): State<AppState>) -> impl IntoResponse {
         )
             .into_response();
     }
-    downloader.clear_finished(SCOPE).await;
+    let assets: Vec<_> = profile.assets(true).collect();
+    if assets.iter().all(|asset| present(&downloader, asset)) {
+        return Json(serde_json::json!({ "started": false })).into_response();
+    }
     tokio::spawn(async move {
-        let assets: Vec<_> = profile.assets(true).collect();
-        if let Err(error) = downloader.install_all(SCOPE, &assets).await {
+        if let Err(error) = downloader.install_verified(SCOPE, &assets).await {
             studio_log!("RVC Burn install failed: {error:#}");
         }
     });
@@ -282,6 +285,31 @@ pub(super) async fn cancel(State(state): State<AppState>) -> Json<Value> {
 mod tests {
     use super::*;
     use std::io::Write as _;
+
+    #[tokio::test]
+    async fn burn_needs_a_verified_onnx_record_even_for_a_correctly_sized_dll() {
+        let temp = tempfile::tempdir().unwrap();
+        let downloader = downloader(temp.path());
+        let asset = Profile::Cuda12.runtime().iter().find(|asset| asset.id == "ort").unwrap();
+        let (name, size) = install_record::key_file(asset.url).unwrap();
+        let root = temp.path().join("rvc/burn");
+        let dll = root.join("runtime/cuda12").join(name);
+        std::fs::create_dir_all(dll.parent().unwrap()).unwrap();
+        std::fs::File::create(&dll).unwrap().set_len(size).unwrap();
+        let record = downloader.record_of(asset);
+        std::fs::create_dir_all(record.parent().unwrap()).unwrap();
+
+        assert!(!present(&downloader, asset));
+        assert!(!record.exists(), "probing readiness must never adopt unverified bytes");
+        assert!(downloader.is_installed(asset), "the generic predicate takes over an older DLL by size");
+        assert_eq!(install_record::read(&record).unwrap().sha256, "");
+        assert!(!present(&downloader, asset), "an earlier size-only record requires repair");
+
+        install_record::write(&record, asset.url, sha256(asset.url).unwrap(), &[dll], &root).unwrap();
+        assert!(present(&downloader, asset));
+        downloader.install_verified(SCOPE, &[asset]).await.unwrap();
+        assert!(downloader.active_for(SCOPE).await.is_none(), "an already verified asset starts no download");
+    }
 
     #[test]
     fn sdk_uses_current_pins_and_survives_concurrent_starts() {

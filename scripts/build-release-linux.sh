@@ -70,4 +70,10 @@ cd desktop
 export LINUXDEPLOY_EXCLUDED_LIBRARIES="libcuda.so*;libcudart.so*;libcublas.so*;libcublasLt.so*"
 npm exec tauri build -- --config src-tauri/tauri.linux-release.conf.json --bundles deb,appimage
 
-find src-tauri/target/release/bundle -name '*.deb' -o -name '*.AppImage'
+bundle="$(node "$root/scripts/release-target-dir.mjs")/bundle"
+product="$(node -p "require('./src-tauri/tauri.conf.json').productName")"
+version="$(node -p "require('./src-tauri/tauri.conf.json').version")"
+for package in "$bundle/deb/${product}_${version}_amd64.deb" "$bundle/appimage/${product}_${version}_amd64.AppImage"; do
+    test -s "$package" || { echo "Missing package: $package" >&2; exit 1; }
+    printf '%s\n' "$package"
+done

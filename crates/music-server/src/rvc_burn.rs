@@ -78,24 +78,61 @@ pub(super) struct Runtime {
     pub(super) exe: PathBuf,
     ort: PathBuf,
     managed: Option<(rvc_burn_install::Profile, Arc<downloads::Downloader>)>,
+    manual_override: bool,
 }
 
 impl Runtime {
     pub(super) fn discover(state: &AppState) -> Self {
+        Self::discover_for(state, false)
+    }
+
+    pub(super) fn discover_for(state: &AppState, training: bool) -> Self {
         let override_path = std::env::var_os("YUE_RVC_BURN_ROOT").filter(|value| !value.is_empty());
+        Self::select(
+            update_data_root(state).join("rvc/burn"), override_path.map(PathBuf::from),
+            rvc_burn_install::selected().ok(), &state.rvc_burn_downloads, training,
+        )
+    }
+
+    fn select(
+        folder: PathBuf, override_path: Option<PathBuf>, profile: Option<rvc_burn_install::Profile>,
+        downloads: &Arc<downloads::Downloader>, training: bool,
+    ) -> Self {
         if let Some(folder) = override_path {
-            return Self::from_folder(folder.into());
+            let mut runtime = Self::from_folder(folder);
+            runtime.manual_override = true;
+            return runtime;
         }
-        let mut runtime = Self::from_folder(update_data_root(state).join("rvc/burn"));
-        if !runtime.exe.is_file()
-            && let Ok(profile) = rvc_burn_install::selected()
+        let runtime = Self::from_folder(folder);
+        if let Some(profile) = profile
+            && !runtime.missing(training).is_empty()
         {
-            let folder = runtime.folder.join("runtime").join(profile.folder());
-            runtime.exe = folder.join("rvc.exe");
-            runtime.ort = folder.join("onnxruntime.dll");
-            runtime.managed = Some((profile, state.rvc_burn_downloads.clone()));
+            let worker = runtime.folder.join("runtime").join(profile.folder());
+            return Self {
+                exe: worker.join("rvc.exe"),
+                ort: worker.join("onnxruntime.dll"),
+                managed: Some((profile, downloads.clone())),
+                ..runtime
+            };
         }
         runtime
+    }
+
+    pub(super) fn install_profile(&self) -> Result<Option<rvc_burn_install::Profile>, String> {
+        if let Some((profile, _)) = &self.managed {
+            return Ok(Some(*profile));
+        }
+        let missing = self.missing(true);
+        if missing.is_empty() {
+            return Ok(None);
+        }
+        if self.manual_override {
+            return Err(format!(
+                "Repair the manual RVC Burn installation set by YUE_RVC_BURN_ROOT ({}). Missing: {}",
+                self.folder.display(), missing.join(", "),
+            ));
+        }
+        Err(rvc_burn_install::selected().err().unwrap_or("No managed RVC Burn runtime was selected.").to_owned())
     }
 
     pub(super) fn from_folder(folder: PathBuf) -> Self {
@@ -110,6 +147,7 @@ impl Runtime {
             exe,
             ort,
             managed: None,
+            manual_override: false,
         }
     }
 
@@ -370,14 +408,14 @@ pub(super) struct Start {
 }
 
 pub(super) async fn status(State(state): State<AppState>) -> Json<Value> {
-    let runtime = Runtime::discover(&state);
-    let mut result = rvc_burn_install::status(&state).await;
+    let runtime = Runtime::discover_for(&state, true);
+    let mut result = rvc_burn_install::status(&state, &runtime).await;
     let missing = runtime.missing(true);
     result["ready"] =
         serde_json::json!(hardware::hardware().card_cuda.is_some() && missing.is_empty());
-    result["conversion_ready"] = serde_json::json!(runtime.ready(false).is_ok());
+    result["conversion_ready"] = serde_json::json!(Runtime::discover(&state).ready(false).is_ok());
     result["missing"] = serde_json::json!(missing);
-    result["folder"] = serde_json::json!(runtime.folder);
+    result["folder"] = serde_json::json!(runtime.exe.parent().unwrap_or(&runtime.folder));
     result["cuda"] = serde_json::json!(hardware::hardware().card_cuda.is_some());
     Json(result)
 }
@@ -396,7 +434,7 @@ pub(super) async fn start(
         ));
     }
     let outcome = async {
-        let runtime = Runtime::discover(&state);
+        let runtime = Runtime::discover_for(&state, true);
         runtime.ready(true)?;
         let _lease = state
             .engine_use
@@ -504,6 +542,34 @@ fn nvrtc_uses_an_ascii_relative_include_root_for_a_unicode_profile() {
         sdk_environment_path(&sdk, &convert),
         PathBuf::from("./runtime/cuda13/cuda-sdk-pinned")
     );
+}
+
+#[cfg(test)]
+#[test]
+fn burn_setup_and_training_share_the_managed_path_for_a_stray_worker() {
+    let temp = tempfile::tempdir().unwrap();
+    let data = temp.path();
+    let folder = data.join("rvc/burn");
+    let stray = Runtime::from_folder(folder.clone());
+    std::fs::create_dir_all(&folder).unwrap();
+    std::fs::write(&stray.exe, b"stray executable").unwrap();
+    let downloader = Arc::new(rvc_burn_install::downloader(data));
+    let profile = Some(rvc_burn_install::Profile::Cuda12);
+
+    let runtime = Runtime::select(folder.clone(), None, profile, &downloader, true);
+    assert_eq!(runtime.folder, folder);
+    assert_eq!(runtime.exe, folder.join("runtime/cuda12/rvc.exe"));
+    assert_eq!(runtime.ort, folder.join("runtime/cuda12/onnxruntime.dll"));
+    assert!(matches!(runtime.install_profile(), Ok(Some(rvc_burn_install::Profile::Cuda12))));
+    let arguments = runtime.common_args(data);
+    assert!(arguments.windows(2).any(|args| args[0] == "--content" && args[1].as_os_str() == folder.join(CONTENT).as_os_str()));
+    assert!(arguments.windows(2).any(|args| args[0] == "--rmvpe" && args[1].as_os_str() == folder.join(PITCH).as_os_str()));
+
+    let explicit = Runtime::select(folder.clone(), Some(folder.clone()), profile, &downloader, true);
+    assert_eq!(explicit.folder, folder);
+    let reason = explicit.install_profile().err().unwrap();
+    assert!(reason.contains("YUE_RVC_BURN_ROOT"));
+    assert!(reason.contains("onnxruntime"));
 }
 
 #[cfg(test)]

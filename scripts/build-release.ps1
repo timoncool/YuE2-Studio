@@ -121,9 +121,12 @@ try {
         Pop-Location
     }
 
+    $ErrorActionPreference = 'Stop'
     New-Item -ItemType Directory -Force -Path $releaseDir | Out-Null
-    $bundleRoot = Join-Path $tauriRoot 'target\release\bundle'
-    $nsisInstaller = Get-ChildItem -Recurse -File (Join-Path $bundleRoot 'nsis') -Filter "*_$($Version)_x64-setup.exe" | Select-Object -First 1
+    $targetRelease = node (Join-Path $PSScriptRoot 'release-target-dir.mjs')
+    if ($LASTEXITCODE -ne 0) { throw 'Could not locate desktop Cargo output.' }
+    $productName = (Get-Content -Raw (Join-Path $tauriRoot 'tauri.conf.json') | ConvertFrom-Json).productName
+    $nsisInstaller = Get-Item -LiteralPath (Join-Path $targetRelease "bundle\nsis\$($productName)_$($Version)_x64-setup.exe") -ErrorAction SilentlyContinue
     if (-not $nsisInstaller) { throw "the NSIS installer for $Version is missing" }
     $signaturePath = "$($nsisInstaller.FullName).sig"
     if (-not (Test-Path $signaturePath)) { throw "the updater signature is missing: $signaturePath" }
@@ -141,7 +144,7 @@ try {
     $portableRoot = Join-Path $releaseDir "YuE2-Studio-$Version-portable"
     if (Test-Path $portableRoot) { Remove-Item -Recurse -Force $portableRoot }
     New-Item -ItemType Directory -Force -Path $portableRoot | Out-Null
-    Copy-Item (Join-Path $tauriRoot "target\release\$binaryName.exe") (Join-Path $portableRoot "$binaryName.exe") -Force
+    Copy-Item (Join-Path $targetRelease "$binaryName.exe") (Join-Path $portableRoot "$binaryName.exe") -Force
     New-Item -ItemType Directory -Force -Path (Join-Path $portableRoot 'resources') | Out-Null
     Copy-Item $engineResourceRoot (Join-Path $portableRoot 'resources\yue2-cpp') -Recurse -Force
     Get-ChildItem (Join-Path $portableRoot 'resources\yue2-cpp') -Filter '*.pdb' | Remove-Item -Force

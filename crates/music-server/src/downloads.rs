@@ -190,6 +190,15 @@ impl Downloader {
         }
     }
 
+    /// Checks an installation record with the pinned checksum, without adopting files by size.
+    pub(crate) fn is_verified_install(&self, asset: &Asset) -> bool {
+        let Some(expected) = crate::pin_sha::sha256(asset.url) else { return false };
+        let record = self.record_of(asset);
+        self.present(asset)
+            && crate::install_record::read(&record).is_some_and(|record| record.sha256 == expected)
+            && crate::install_record::matches(&record, asset.url, &self.root) == Some(true)
+    }
+
     /// Today's pin already on disk byte for byte, from whichever address: the files a pick takes out of its
     /// package by the hashes the package lists, or a single file by the pin's own. Its record is then written for
     /// today's pin, so the next look reads the record.
@@ -531,18 +540,27 @@ impl Downloader {
     }
 
     pub(crate) async fn install_with_hint(&self, scope: &str, assets: &[&'static Asset], hint: &mut Option<ManualArchive>) -> Result<()> {
-        self.install_set(scope, assets, None, hint).await
+        self.install_set(scope, assets, None, hint, Self::is_installed).await
     }
 
     pub(crate) async fn install_local_archive(&self, scope: &str, asset: &'static Asset, source: &Path) -> Result<()> {
         anyhow::ensure!(release_archive_name(asset).is_some(), "this component has no pinned runtime archive");
-        self.install_set(scope, &[asset], Some(source), &mut None).await
+        self.install_set(scope, &[asset], Some(source), &mut None, Self::is_installed).await
     }
 
-    async fn install_set(&self, scope: &str, assets: &[&'static Asset], source: Option<&Path>, hint: &mut Option<ManualArchive>) -> Result<()> {
+    pub(crate) async fn install_verified(&self, scope: &str, assets: &[&'static Asset]) -> Result<()> {
+        anyhow::ensure!(assets.iter().all(|asset| crate::pin_sha::sha256(asset.url).is_some()),
+            "verified installation requires a checksum for each component");
+        self.install_set(scope, assets, None, &mut None, Self::is_verified_install).await
+    }
+
+    async fn install_set(
+        &self, scope: &str, assets: &[&'static Asset], source: Option<&Path>,
+        hint: &mut Option<ManualArchive>, is_installed: fn(&Self, &Asset) -> bool,
+    ) -> Result<()> {
         *hint = None;
         const AT_ONCE: usize = 4;
-        let pending: Vec<&'static Asset> = assets.iter().copied().filter(|asset| !self.is_installed(asset)).collect();
+        let pending: Vec<&'static Asset> = assets.iter().copied().filter(|asset| !is_installed(self, asset)).collect();
         if pending.is_empty() {
             return Ok(());
         }
@@ -621,7 +639,7 @@ impl Downloader {
                 Err(anyhow::anyhow!("cancelled"))
             }
             Some(error) => Err(error),
-            None => match assets.iter().find(|asset| !self.is_installed(asset)) {
+            None => match assets.iter().find(|asset| !is_installed(self, asset)) {
                 Some(asset) => Err(anyhow::anyhow!("{} finished downloading but its files are not on disk", asset.label)),
                 None => Ok(()),
             },
