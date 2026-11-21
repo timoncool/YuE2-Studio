@@ -27,6 +27,7 @@ it('opens the curated catalog from Studio Tools and chooses an installed RVC voi
       const list = bundled.voices.map(voice => ({
         ...voice, installed_id: voice.id === high.id ? installed.id : null,
         name: refreshes && voice.id === high.id ? updatedName : voice.name,
+        sample_audio_url: 'sample' in voice ? `/v1/rvc/catalog/sample/${voice.id}` : null,
       }));
       return Response.json(list);
     }
@@ -74,6 +75,7 @@ it('opens the curated catalog from Studio Tools and chooses an installed RVC voi
     expect(details.querySelectorAll('li')).toHaveLength(1);
     expect(details.textContent).toContain(high.name);
     expect(details.textContent).not.toContain(drive.name);
+    expect(details.textContent).toContain('No published demo');
     const select = details.querySelector<HTMLButtonElement>('li button')!;
     expect(select.textContent).toBe('Select');
     expect(select.disabled).toBe(false);
@@ -93,6 +95,22 @@ it('opens the curated catalog from Studio Tools and chooses an installed RVC voi
     expect(details.querySelector('[role=alert]')?.textContent).toContain('Could not update the catalog.');
     expect(details.querySelectorAll('li')).toHaveLength(1);
     expect(details.textContent).toContain(updatedName);
+
+    const clear = [...details.querySelectorAll('button')].find(button => button.textContent === 'Clear filters')!;
+    act(() => clear.click());
+    act(() => details.querySelector<HTMLInputElement>('input[type=checkbox]')!.click());
+    expect(details.querySelectorAll('li')).toHaveLength(37);
+    expect(details.querySelector('audio')).toBeNull();
+    const play = [...details.querySelectorAll('button')].find(button => button.textContent === 'Play source demo')!;
+    act(() => play.click());
+    const audio = details.querySelector('audio')!;
+    expect(audio.getAttribute('src')).toContain('/v1/rvc/catalog/sample/');
+    act(() => audio.dispatchEvent(new Event('error')));
+    expect(details.textContent).toContain('Demo unavailable. Try again.');
+    const retry = [...details.querySelectorAll('button')].find(button => button.textContent === 'Play source demo')!;
+    act(() => retry.click());
+    expect(details.querySelector('audio')).not.toBeNull();
+    expect(fetchStudio.mock.calls.some(([path]) => path === '/v1/rvc/catalog/install')).toBe(false);
   } finally {
     act(() => root.unmount());
     query.clear();

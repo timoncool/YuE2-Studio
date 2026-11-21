@@ -1,5 +1,6 @@
 export interface Voice {
   id: string;
+  format?: 'pth' | 'burn_safetensors';
   model_name: string;
   index_name: string | null;
   version: number | null;

@@ -63,6 +63,9 @@ export type RunStatus = 'running' | 'done' | 'failed' | 'cancelled' | 'interrupt
 
 export interface TrainingRun {
   id: string;
+  rvc_voice_id?: string;
+  rvc_checkpoint_ready?: boolean;
+  rvc_best_checkpoint?: { step: number; mel: number };
   engine?: string;
   output_adapter?: string;
   dataset_id: string;
@@ -191,6 +194,13 @@ export const updateItem = (id: string, item: string, patch: Partial<Pick<Dataset
 export const deleteItem = (id: string, item: string) => call<Dataset>(`/v1/training/datasets/${id}/items/${item}`, { method: 'DELETE' });
 
 export const startRun = (datasetId: string, name: string, recipe: Recipe) => call<TrainingRun>('/v1/training/runs', json('POST', { dataset_id: datasetId, name, recipe }));
+export interface RvcBurnStatus { ready: boolean; cuda: boolean; missing: string[]; folder: string }
+export interface RvcBurnSettings { epochs: number; batch_size: number; learning_rate: number }
+export const getRvcBurnTraining = () => call<RvcBurnStatus>('/v1/training/rvc-burn', { headers: SELF_READ });
+export const startRvcBurnTraining = (datasetId: string, name: string, settings: RvcBurnSettings) =>
+  call<TrainingRun>('/v1/training/rvc-burn', json('POST', { dataset_id: datasetId, name, settings }));
+export const installRvcBurnVoice = (runId: string) =>
+  call<{ id: string }>(`/v1/training/rvc-burn/${encodeURIComponent(runId)}/install`, { method: 'POST' });
 export interface Sa3TrainingStatus {
   cuda: boolean;
   installable: boolean;

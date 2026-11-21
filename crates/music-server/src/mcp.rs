@@ -122,10 +122,12 @@ fn compact_run(run: &Value) -> Value {
     let tuned = run["recipe"]["preset"].as_str() == Some("tuned");
     json!({
         "id": run["id"], "name": run["name"], "dataset": run["dataset_name"], "trigger": run["trigger"], "status": run["status"], "stage": run["stage"],
-        "steps_done": steps.len(), "step_limit": run["recipe"]["steps"], "preset": run["recipe"]["preset"], "songs_per_step": run["recipe"]["grad_accum"],
+        "steps_done": last["step"].as_u64().unwrap_or(steps.len() as u64), "step_limit": run["recipe"]["steps"], "preset": run["recipe"]["preset"], "songs_per_step": run["recipe"]["grad_accum"],
         "stop": if tuned { run["recipe"]["stop"].clone() } else { Value::Null }, "target_kl": if tuned { run["recipe"]["target_kl"].clone() } else { Value::Null },
         "last_step": last, "checkpoints": run["checkpoints"], "installed": run["installed"], "error": run["error"],
         "step_stage": run["step_stage"], "engine": run["engine"], "output_adapter": run["output_adapter"],
+        "rvc_voice_id": run["rvc_voice_id"], "rvc_best_checkpoint": run["rvc_best_checkpoint"],
+        "rvc_checkpoint_ready": run["rvc_checkpoint_ready"],
     })
 }
 
@@ -264,6 +266,7 @@ fn rvc_catalog_match(voice: &Value, args: &Value) -> bool {
     }
     let has_index = voice["has_index"].as_bool().unwrap_or(!voice["index"].is_null());
     args["has_index"].as_bool().is_none_or(|requested| requested == has_index)
+        && args["has_sample"].as_bool().is_none_or(|requested| requested == voice["sample_audio_url"].is_string())
 }
 
 /// What an agent is answered: the parts it acts on, unless it asked for
@@ -452,7 +455,7 @@ fn annotations(name: &str) -> Value {
     // a verb that changes something outweighs a noun that reads
     const CHANGES: &[&str] = &["install", "import", "remove", "delete", "refresh", "create", "update", "start", "cancel", "select", "download", "apply", "restart"];
     // reads whose names the rules above miss: create_form names the create page
-    const READ_NAMES: &[&str] = &["music_package_updates_get", "music_package_progress", "lyrics_syllables", "assistant_cli_agents", "system_gpus", "cover_scenes", "cover_photos_search", "video_backgrounds_search", "network_proxy_test", "journal_read", "score_to_midi", "score_instrumental", "score_vocal_octave", "score_from_midi", "score_mark", "lyrics_find", "cover_prompt_render", "studio_wait", "engine_presets_get", "assistant_requests_wait", "ui_console", "song_defaults", "create_form_get", "library_liked", "score_chord_bed", "song_tokenize", "score_match_sections", "models_update_plan", "problem_preview", "library_migration_preview", "audio_cpp_music_models", "hotstep_cover_profiles", "hotstep_sa3_training_status", "hotstep_heartmula_training_status"];
+    const READ_NAMES: &[&str] = &["music_package_updates_get", "music_package_progress", "lyrics_syllables", "assistant_cli_agents", "system_gpus", "cover_scenes", "cover_photos_search", "video_backgrounds_search", "network_proxy_test", "journal_read", "score_to_midi", "score_instrumental", "score_vocal_octave", "score_from_midi", "score_mark", "lyrics_find", "cover_prompt_render", "studio_wait", "engine_presets_get", "assistant_requests_wait", "ui_console", "song_defaults", "create_form_get", "library_liked", "score_chord_bed", "song_tokenize", "score_match_sections", "models_update_plan", "problem_preview", "library_migration_preview", "audio_cpp_music_models", "hotstep_cover_profiles", "hotstep_sa3_training_status", "hotstep_heartmula_training_status", "rvc_training_status"];
     // writes over what was stored, so the earlier content is gone: a client asks first
     const OVERWRITES: &[&str] = &["library_song_rename", "library_song_update", "playlist_update", "album_reorder", "dataset_update", "dataset_song_update", "dataset_song_describe_style", "dataset_prepare", "lora_update", "stems_split", "restore_start", "karaoke_make", "midi_transcribe", "cover_draw", "cover_set_from_file", "openrouter_set_key", "models_update_apply"];
     let changes = CHANGES.iter().any(|verb| name.split('_').any(|word| word == *verb));
@@ -530,6 +533,8 @@ const JOURNAL: &[(&str, &str, &str)] = &[
     ("dataset_prepare_train_after", "updated", "preparation"),
     ("dataset_prepare_cancel", "cancelled", "preparation"),
     ("training_start", "started", "training"),
+    ("rvc_training_start", "started", "training"),
+    ("rvc_training_install_voice", "installed", "rvc_voice"),
     ("hotstep_sa3_training_install", "started", "download"),
     ("hotstep_sa3_training_start", "started", "training"),
     ("hotstep_heartmula_training_start", "started", "training"),
@@ -1062,7 +1067,7 @@ fn song_create_schema(mut properties: Value) -> Value {
         "description": "After successful generation, save a separate RVC take with this voice and backend. Use rvc_quick_list for progress.",
         "properties": {
             "voice_id": { "type": "string", "description": "An installed RVC voice ID" },
-            "backend": { "type": "string", "enum": ["auto", "vocal-fast-rs", "vocal-fast-metal", "audio.cpp"] }
+            "backend": { "type": "string", "enum": ["auto", "vocal-fast-rs", "vocal-fast-metal", "burn-cuda", "audio.cpp"] }
         },
         "required": ["voice_id"]
     });
@@ -1700,10 +1705,11 @@ fn tools() -> &'static [Tool] {
                 schema: || song_create_schema(json!({
                     "ace": { "type": "object", "description": "ACE-Step generation settings, including guidance_scale, think, source_song_id and reference_song_id." },
                     "music_source": {
-                        "description": "Select local YuE2, a native profile from ace_music_profiles or minimax_music_profiles, an audio.cpp model from audio_cpp_music_models, or a cloud model with music_generation capability from openrouter_catalog. OpenRouter submits a paid request to the selected model.",
+                        "description": "Select local YuE2, a native profile, an audio.cpp model, an installed signed music adapter and its model, or an OpenRouter music model. OpenRouter submits a paid request to the selected model.",
                         "oneOf": [
                             { "type": "object", "properties": { "kind": { "const": "local" } }, "required": ["kind"] },
                             { "type": "object", "properties": { "kind": { "const": "native" }, "engine": { "enum": ["acestep-cpp", "minimaxmusic-cpp"] }, "model": { "type": "string", "minLength": 1 } }, "required": ["kind", "engine", "model"] },
+                            { "type": "object", "properties": { "kind": { "const": "signed" }, "engine": { "type": "string", "minLength": 1 }, "model": { "type": "string", "minLength": 1 }, "generation": { "type": "string", "description": "Optional verified engine generation. Omit to use the active engine." }, "model_generation": { "type": "string", "description": "Optional verified model generation. Omit to use the active model." } }, "required": ["kind", "engine", "model"] },
                             { "type": "object", "properties": { "kind": { "const": "audio_cpp" }, "model": { "type": "string", "minLength": 1 } }, "required": ["kind", "model"] },
                             { "type": "object", "properties": { "kind": { "const": "openrouter" }, "model": { "type": "string", "minLength": 1 } }, "required": ["kind", "model"] }
                         ]
@@ -2663,7 +2669,7 @@ fn tools() -> &'static [Tool] {
             },
             Tool {
                 name: "rvc_catalog_list",
-                description: "List up to 20 curated RVC voices, license terms and installed local IDs. Pass next_offset as offset for the next page.",
+                description: "List up to 20 curated RVC voices, license terms, demo WAV/MP3 URLs when published, and installed local IDs. Pass next_offset as offset for the next page.",
                 schema: || object(json!({
                     "offset": { "type": "integer", "minimum": 0 },
                     "query": { "type": "string", "description": "Case-insensitive words in the name or source labels" },
@@ -2671,6 +2677,7 @@ fn tools() -> &'static [Tool] {
                     "rvc_version": { "type": "string", "description": "Exact version such as v2" },
                     "sample_rate_hz": { "type": "integer", "minimum": 1 },
                     "has_index": { "type": "boolean" },
+                    "has_sample": { "type": "boolean" },
                 }), &[]),
                 call: |_| get("/v1/rvc/catalog".into()),
             },
@@ -2798,7 +2805,7 @@ fn tools() -> &'static [Tool] {
                     "end_seconds": { "type": "number", "description": "Between 0.5 and 15 seconds after start; shortened to the vocal end if necessary" },
                     "semitone_shift": { "type": "integer", "minimum": -24, "maximum": 24 },
                     "retrieval_blend": { "type": "number", "minimum": 0, "maximum": 1 },
-                    "backend": { "type": "string", "enum": ["auto", "vocal-fast-rs", "vocal-fast-metal", "audio.cpp"] },
+                    "backend": { "type": "string", "enum": ["auto", "vocal-fast-rs", "vocal-fast-metal", "burn-cuda", "audio.cpp"] },
                 }), &["song_id", "voice_id", "start_seconds", "end_seconds"]),
                 call: |args| post("/v1/rvc/preview".into(), args.clone()),
             },
@@ -2810,7 +2817,7 @@ fn tools() -> &'static [Tool] {
                     "voice_id": { "type": "string", "description": "The installed ID from rvc_voices_list" },
                     "semitone_shift": { "type": "integer", "minimum": -24, "maximum": 24 },
                     "retrieval_blend": { "type": "number", "minimum": 0, "maximum": 1 },
-                    "backend": { "type": "string", "enum": ["auto", "vocal-fast-rs", "vocal-fast-metal", "audio.cpp"] },
+                    "backend": { "type": "string", "enum": ["auto", "vocal-fast-rs", "vocal-fast-metal", "burn-cuda", "audio.cpp"] },
                 }), &["song_id", "voice_id"]),
                 call: |args| post("/v1/rvc/apply".into(), args.clone()),
             },
@@ -2825,7 +2832,7 @@ fn tools() -> &'static [Tool] {
                 description: "Remember the installed RVC voice and backend used by the quick library action.",
                 schema: || object(json!({
                     "voice_id": { "type": "string" },
-                    "backend": { "enum": ["auto", "vocal-fast-rs", "vocal-fast-metal", "audio.cpp"] }
+                    "backend": { "enum": ["auto", "vocal-fast-rs", "vocal-fast-metal", "burn-cuda", "audio.cpp"] }
                 }), &["voice_id"]),
                 call: |args| send(Method::PUT, "/v1/rvc/selection".into(), args.clone()),
             },
@@ -2835,7 +2842,7 @@ fn tools() -> &'static [Tool] {
                 schema: || object(json!({
                     "song_id": { "type": "string" },
                     "voice_id": { "type": "string" },
-                    "backend": { "enum": ["auto", "vocal-fast-rs", "vocal-fast-metal", "audio.cpp"] }
+                    "backend": { "enum": ["auto", "vocal-fast-rs", "vocal-fast-metal", "burn-cuda", "audio.cpp"] }
                 }), &["song_id"]),
                 call: |args| post("/v1/rvc/quick".into(), args.clone()),
             },
@@ -3121,6 +3128,24 @@ fn tools() -> &'static [Tool] {
                 description: "Train a native HOT-Step Stable Audio 3 Medium DoRA adapter from a prepared instrumental dataset. A finished adapter is available in the HOT-Step Create profile.",
                 schema: || object(json!({"dataset_id":{"type":"string"},"name":{"type":"string"},"settings":{"type":"object","properties":{"steps":{"type":"integer","minimum":1},"rank":{"type":"integer","minimum":1},"alpha":{"type":"number"},"learning_rate":{"type":"number"},"duration_seconds":{"type":"number","minimum":1,"maximum":384},"seed":{"type":"integer","minimum":0}}}}), &["dataset_id"]),
                 call: |args| post("/v1/training/hotstep-sa3".into(), args.clone()),
+            },
+            Tool {
+                name: "rvc_training_status",
+                description: "Check the native Burn RVC training pack, accelerator and missing files.",
+                schema: nothing,
+                call: |_| get("/v1/training/rvc-burn".into()),
+            },
+            Tool {
+                name: "rvc_training_start",
+                description: "Train an RVC v2 Safetensors voice on isolated voice recordings in a Studio dataset, using native Burn CUDA.",
+                schema: || object(json!({"dataset_id":{"type":"string"},"name":{"type":"string"},"settings":{"type":"object","properties":{"epochs":{"type":"integer","minimum":1},"batch_size":{"type":"integer","minimum":1},"learning_rate":{"type":"number"}}}}), &["dataset_id"]),
+                call: |args| post("/v1/training/rvc-burn".into(), args.clone()),
+            },
+            Tool {
+                name: "rvc_training_install_voice",
+                description: "Install a saved native RVC Burn training checkpoint in the voice catalogue. Use the returned ID with rvc_apply.",
+                schema: || id_only("run_id", "RVC Burn run ID"),
+                call: |args| post(format!("/v1/training/rvc-burn/{}/install", segment(&text(args, "run_id")?)), json!({})),
             },
             Tool {
                 name: "training_start",
@@ -4107,6 +4132,7 @@ mod tests {
     /// Routes an agent is not given, and why.
     const NOT_TOOLS: &[(&str, &str, &str)] = &[
         ("GET", "/v1/rvc/preview/{id}/{side}", "binary audio from the before_url and after_url answered by rvc_preview"),
+        ("GET", "/v1/rvc/catalog/sample/{id}", "binary verified demo audio addressed by sample_audio_url in rvc_catalog_list"),
         ("GET", "/health", "the service's identity for the desktop shell: initialize names the server and its version"),
         ("POST", "/engine/pick-executable", "a file dialog for the person: engine_options_set takes the executable's path"),
         ("POST", "/setup/kv-cache-notice/seen", "the window's note that it told the person: engine_options_get says the cache and why"),
