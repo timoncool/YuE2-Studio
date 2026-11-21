@@ -56,6 +56,7 @@ import { HotStepCoverFields, type HotStepCoverDraft } from './HotStepCoverFields
 import { SoulXSingerFields, soulxRequired, type SoulXInputs } from './SoulXSingerFields';
 import { Vevo2ModelDirectory, Vevo2SingingFields, vevo2SingingStrings, type Vevo2References } from './Vevo2SingingFields';
 import { NumberField } from './NumberField';
+import { CreateSpeedReference, type CreateSpeedProfile } from './CreateSpeedReference';
 import { AceTaskControls, aceTaskOptions, newAceTask, restoreAceTask } from './AceTaskControls';
 import { explainCliFailure } from '../services/cliFailure';
 import { loadNativeOpenRouterCatalog, modelsForCapability, openRouterMusicFields, openRouterMusicParameters, refreshNativeOpenRouterCatalog, type NativeOpenRouterModel, type OpenRouterMusicOptions, type OpenRouterMusicParameter } from '../services/nativeOpenRouter';
@@ -109,7 +110,7 @@ type EngineDefaults = Partial<Record<string, unknown>> & {
   semantic_sampling?: YueSampling;
 };
 
-type ProfileFiles = { backbone: string; vae: string; transcriber?: string | null };
+type ProfileFiles = { backbone: string; vae: string; vae_decoder?: string | null; transcriber?: string | null };
 
 type SetupStatus = SetupChoice & {
   music_pair_instance_id?: string;
@@ -755,6 +756,17 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
   };
 
   const setup = setupQuery.isError ? null : setupQuery.data ?? null;
+  const speedReferenceId = React.useId();
+  let speedProfile: CreateSpeedProfile | undefined;
+  if (nativeEngine === 'minimaxmusic-cpp') {
+    if (native.profile?.id === 'minimal') speedProfile = 'minimax-minimal';
+    if (native.profile?.id === 'quality-q8') speedProfile = 'minimax-quality-q8';
+  } else if (audioFamily === audioCppMiniMax) {
+    speedProfile = 'audio-cpp-minimax-q8';
+  } else if (yue && !setup?.own_model && !setup?.profile_files?.vae_decoder
+    && setup?.profile_files?.backbone === 'YuE2-3B-Q8_0.gguf' && setup?.profile_files?.vae === 'YuE2-Vae-F32.gguf') {
+    speedProfile = 'yue2-quality-q8';
+  }
   const serviceDown = setupQuery.isError;
   const [catalog, setCatalog] = useState<EngineCatalog | null>(null);
   const assistantQuery = useAssistantStatus<{ available?: boolean }>();
@@ -1986,7 +1998,8 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
               </label>
               <label className="flex items-center gap-2 text-xs font-medium">
                 <span className="shrink-0">{musicStrings.engine}</span>
-                <select className={CONTROL} value={signed ? packages.engine?.id ?? '' : musicEngine} onChange={event => {
+                <select className={CONTROL} value={signed ? packages.engine?.id ?? '' : musicEngine}
+                  aria-describedby={speedProfile ? speedReferenceId : undefined} onChange={event => {
                   const engine = event.target.value;
                   if (signed) { packages.selectEngine(engine); pair.select(); return; }
                   const linked = linkedFamily?.pairs.find(pair => pair.engine === engine);
@@ -1999,6 +2012,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
                     : <option value={musicEngine}>{nativeEngine ? profileMusicEngines[nativeEngine] : cloud ? 'OpenRouter' : 'yue2.cpp'}</option>}
                 </select>
               </label>
+              {speedProfile && <CreateSpeedReference profile={speedProfile} id={speedReferenceId} />}
               {packages.hasCatalogue && (
                 <button type="button" disabled={packages.refreshingCatalogue}
                   className="text-xs text-pink-600 underline disabled:opacity-50 dark:text-pink-300"

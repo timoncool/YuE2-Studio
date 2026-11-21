@@ -828,6 +828,9 @@ it('keeps focus, the song draft and pair settings when switching the MiniMax Mus
   expect(document.activeElement).toBe(engine);
   expect(modelFamily.value).toBe('minimaxmusic-cpp');
   expect(field('textarea[aria-label="lyrics"]')?.value).toBe('Morning light');
+  expect(host.textContent).toContain('Reference speed on RTX 4090');
+  expect(host.textContent).toContain('CUDA 13 0.37 audio s/s');
+  expect(host.textContent).toContain('41242418');
   type(labeled('Seed').querySelector('input')!, '22');
   click(buttonNamed('create')!);
   expect(sent.at(-1)).toMatchObject({
@@ -838,6 +841,8 @@ it('keeps focus, the song draft and pair settings when switching the MiniMax Mus
   expect(document.activeElement).toBe(engine);
   expect(model().value).toBe('quality-q8');
   expect(labeled('Seed').querySelector('input')?.value).toBe('11');
+  expect(host.textContent).toContain('CUDA 13 1.85 audio s/s');
+  expect(host.textContent).toContain('b79d37f');
   click(buttonNamed('create')!);
   expect(sent.at(-1)).toMatchObject({
     music_source: { kind: 'native', engine: 'minimaxmusic-cpp', model: 'quality-q8' }, seed: 11, lyrics: 'Morning light',
@@ -845,6 +850,7 @@ it('keeps focus, the song draft and pair settings when switching the MiniMax Mus
   choose(modelFamily, 'heartmula');
   expect([...engine.options].map(option => option.value)).toEqual(['audio.cpp', 'hotstep']);
   expect(engine.value).toBe('audio.cpp');
+  expect(host.textContent).not.toContain('Reference speed on RTX 4090');
   choose(modelFamily, 'minimaxmusic-cpp');
   await flush();
   expect(engine.value).toBe('minimaxmusic-cpp');
