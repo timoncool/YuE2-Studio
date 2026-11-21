@@ -122,9 +122,9 @@ function readPage(): string {
   const lines: string[] = [];
   const dialog = openDialog();
   const scopeForTitle = dialog ?? document.querySelector('main') ?? document.body;
-  const labelledBy = dialog?.getAttribute('aria-labelledby');
+  const labelledBy = scopeForTitle.getAttribute('aria-labelledby');
   const title = (labelledBy && document.getElementById(labelledBy)?.textContent?.trim())
-    || dialog?.getAttribute('aria-label')
+    || scopeForTitle.getAttribute('aria-label')
     || Array.from(scopeForTitle.querySelectorAll('h1, h2, h3')).find(visible)?.textContent?.trim();
   if (title) lines.push(`Page: ${title}`);
   if (dialog) lines.push('A dialog is open; its controls are listed first, then the page behind it.');

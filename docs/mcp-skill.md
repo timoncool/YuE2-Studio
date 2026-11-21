@@ -124,7 +124,7 @@ original source until it ends or you explicitly cancel it with `song_job_cancel`
 Send a stable `client_id` with an increasing `sequence` from each UI window to
 keep delayed requests from overriding that window's latest selection. When
 `stage` is `needs_install`, install the listed resources and select the pair
-again. `ready` with `load_on_create: true` means the next song starts model work.
+again. For local YuE2, `loading_model` is engine initialization through its health check. A `ready` pair with `load_on_create: true` loads generation weights as needed when you create a song.
 
 For MiniMax Music3 through audio.cpp, call `audio_cpp_music_models` and check that
 `minimax_music3` is ready. Pass `"music_source": {"kind":"audio_cpp","model":"minimax_music3"}`
@@ -219,6 +219,18 @@ to `song_create`. Reuse restores the source and the exact score for the cover.
 
 For Vevo2, pass the lyrics and a library song ID as `vevo2.voice_song_id`.
 Add `vevo2.melody_song_id` to condition the singing on a second library track.
+
+SoulX-Singer uses separate Q8 weights for singing synthesis (`soulx_singer`)
+and conversion (`soulx_singer_svc`). Install the corresponding model with
+`audio_cpp_music_model_install` and check readiness with `audio_cpp_music_models`.
+For `song_create`, set `music_source.kind` to `audio_cpp` and supply the model ID
+and `soulx.reference_song_id` from the library. Synthesis also requires the
+reference and target JSON files as `soulx.reference_metadata` and
+`soulx.target_metadata` strings. They contain aligned phoneme and note segments.
+Set `soulx.control` to `melody` only if both files supply a 50 Hz pitch contour.
+Conversion takes `soulx.source_song_id` for the source vocal recording and
+requires libsoxr. The installer handles libsoxr on Windows. On Linux and macOS
+use the system libsoxr package. Both modes save a separate song to the library.
 
 For Magenta RealTime 2, select `magenta_realtime_2` with the installed Small F16
 profile. Use `style` for a text description or `magenta.reference_song_id` for

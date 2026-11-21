@@ -1,5 +1,6 @@
 use std::{
     env, fs,
+    io::{Read, Seek, SeekFrom},
     net::{Ipv4Addr, TcpListener},
     path::{Path, PathBuf},
     process::{Child, Command, Stdio},
@@ -406,6 +407,45 @@ mod tests {
     };
 
     #[test]
+    fn startup_diagnosis_only_uses_the_current_mini_max_run() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("engine.log");
+        let old = "CUDA error: out of memory\n";
+        fs::write(&path, format!("{old}listener unavailable\n")).unwrap();
+        assert!(
+            startup_failure_context(&path, old.len() as u64).starts_with("MiniMax did not start.")
+        );
+        assert!(startup_failure_context(&path, 0).starts_with("MiniMax ran out of GPU memory"));
+    }
+
+    #[test]
+    fn startup_memory_diagnosis_distinguishes_host_device_and_unknown_allocations() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("engine.log");
+        for (diagnostic, expected) in [
+            (
+                "[Load] Device backend: CPU\nfailed to allocate 4096 MB",
+                "out of system memory",
+            ),
+            ("failed to allocate 4096 MB", "could not allocate memory"),
+            ("cudaMalloc failed: out of memory", "out of GPU memory"),
+            ("VK_ERROR_OUT_OF_DEVICE_MEMORY", "out of GPU memory"),
+            (
+                "[Load] Device backend: CUDA0\nVK_ERROR_OUT_OF_HOST_MEMORY",
+                "out of system memory",
+            ),
+            (
+                "[Load] Device backend: Vulkan0\nfailed to allocate 4096 MB",
+                "out of GPU memory",
+            ),
+        ] {
+            fs::write(&path, diagnostic).unwrap();
+            let message = startup_failure_context(&path, 0);
+            assert!(message.contains(expected), "{diagnostic}: {message}");
+        }
+    }
+
+    #[test]
     fn minimax_missing_engine_and_truncated_profile_are_rejected_before_start() {
         let directory = tempfile::tempdir().unwrap();
         let path = directory.path();
@@ -617,18 +657,16 @@ impl Runtime {
         let listener = TcpListener::bind((Ipv4Addr::LOCALHOST, 0))
             .context("reserve a loopback port for MiniMax")?;
         let port = listener.local_addr()?.port();
+        let log = data_root.join("minimax-engine.log");
+        let log_start = fs::metadata(&log).map_or(0, |meta| meta.len());
         let command = launch.command(port, data_root)?;
         drop(listener);
         let mut current = Running::spawn(command, port)?;
-        current
-            .wait_ready(Duration::from_secs(30))
-            .await
-            .with_context(|| {
-                format!(
-                    "MiniMax did not start. See {}",
-                    data_root.join("minimax-engine.log").display()
-                )
-            })?;
+        if let Err(error) = current.wait_ready(Duration::from_secs(30)).await {
+            drop(current);
+            let context = startup_failure_context(&log, log_start);
+            return Err(error).context(context);
+        }
         current.launch = Some(launch);
         let client = current.client.clone();
         *running = Some(current);
@@ -647,6 +685,53 @@ impl Runtime {
     pub(crate) async fn stop(&self) {
         self.running.lock().await.take();
     }
+}
+
+fn startup_failure_context(log: &Path, start: u64) -> String {
+    let diagnostic = (|| -> std::io::Result<String> {
+        let mut file = fs::File::open(log)?;
+        let tail = file.metadata()?.len().saturating_sub(64 * 1024);
+        file.seek(SeekFrom::Start(start.max(tail)))?;
+        let mut bytes = Vec::new();
+        file.take(64 * 1024).read_to_end(&mut bytes)?;
+        Ok(String::from_utf8_lossy(&bytes).to_lowercase())
+    })()
+    .unwrap_or_default();
+    let backend = diagnostic.lines().rev().find_map(|line| {
+        line.split_once("device backend:")
+            .or_else(|| line.split_once("lm backend:"))
+            .map(|(_, backend)| backend.trim_start())
+    });
+    let host_allocation = crate::describes_exhausted_ram(&diagnostic)
+        || diagnostic.contains("vk_error_out_of_host_memory")
+        || diagnostic.contains("failed to allocate host memory");
+    let gpu_allocation = diagnostic.lines().any(|line| {
+        line.contains("vk_error_out_of_device_memory")
+            || (line.contains("cuda") || line.contains("vulkan"))
+                && crate::describes_exhausted_memory(line)
+    });
+    let reason = if host_allocation {
+        "MiniMax ran out of system memory while loading."
+    } else if gpu_allocation {
+        "MiniMax ran out of GPU memory while loading."
+    } else if crate::describes_exhausted_memory(&diagnostic) {
+        match backend {
+            Some(name) if name.starts_with("cpu") => {
+                "MiniMax ran out of system memory while loading."
+            }
+            Some(name)
+                if ["cuda", "vulkan", "metal"]
+                    .iter()
+                    .any(|prefix| name.starts_with(prefix)) =>
+            {
+                "MiniMax ran out of GPU memory while loading."
+            }
+            _ => "MiniMax could not allocate memory while loading.",
+        }
+    } else {
+        "MiniMax did not start."
+    };
+    format!("{reason} See {}", log.display())
 }
 
 /// Same resource and model-folder conventions as the native MiniMax manager.
