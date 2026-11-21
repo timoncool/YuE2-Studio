@@ -1929,6 +1929,26 @@ describe('Auto max duration', () => {
   });
 });
 
+it('reuses a packed YuE2 audio.cpp take with its score and token bounds', async () => {
+  vi.stubGlobal('fetch', vi.fn(async () => Response.json({
+    engine: 'audio.cpp', engine_installed: true,
+    models: [{ id: 'yue2', profile_id: 'yue2-3b-q8_0-nar-v9', quantization: 'Q8_0', ready: true, missing: [] }],
+  })));
+  const music_source = { kind: 'audio_cpp', model: 'yue2' };
+  const abc = 'X:1\nL:1/8\nK:C\nCDEF|';
+  const song = {
+    title: 'YuE2 take', ditModel: 'audio.cpp', style: 'warm piano', lyrics: '[Verse] Morning',
+    generationParams: { music_source, abc, cot: 'full', duration_seconds: 4, seed: 42, steps: 2,
+      semantic_sampling: { min_tokens: 100, max_tokens: 100 } },
+  } as Song;
+  act(() => root.render(panel({ musicEngine: 'audio.cpp', initialData: { song, timestamp: 1 } })));
+  await flush();
+  click(buttonNamed('create')!);
+  expect(sent.at(-1)).toMatchObject({ music_source, abc, cot: 'full', style: 'warm piano',
+    lyrics: '[Verse] Morning', duration_seconds: 4, seed: 42, steps: 2,
+    semantic_sampling: { min_tokens: 100, max_tokens: 100 } });
+});
+
 it('restores a HOT-Step Stable Audio 3 take with its sampler and adapter without asking for a cover', async () => {
   vi.stubGlobal('fetch', vi.fn(async () => Response.json({
     engine: 'hotstep', engine_installed: true,
@@ -2073,7 +2093,9 @@ it('restores a HOT-Step YuE2 score with its own sampling and no cover source', a
 });
 
 it('switches a YuE2 model from its local runtime and back using the engine selector', async () => {
-  vi.stubGlobal('fetch', vi.fn(async (url: string) => Response.json(url === '/v1/music/native/hotstep/profiles' ? {
+  vi.stubGlobal('fetch', vi.fn(async (url: string) => Response.json(url === '/v1/music/audio-cpp/models' ? {
+    engine: 'audio.cpp', engine_installed: true, models: [{ id: 'yue2', ready: true, missing: [] }],
+  } : url === '/v1/music/native/hotstep/profiles' ? {
     engine: 'hotstep', engine_installed: true, profiles: [{ id: 'hotstep-yue2-q4-k-m', ready: true, missing: [] }],
   } : {})));
   function Editor() {
@@ -2089,10 +2111,13 @@ it('switches a YuE2 model from its local runtime and back using the engine selec
   });
   act(() => root.render(<Editor />));
   await flush();
-  expect(Array.from(selectEngine().options, option => option.value)).toEqual(['local', 'hotstep']);
+  expect(Array.from(selectEngine().options, option => option.value)).toEqual(['local', 'audio.cpp', 'hotstep']);
   choose('hotstep');
   await flush();
   expect(selectEngine().value).toBe('hotstep');
+  choose('audio.cpp');
+  await flush();
+  expect(selectEngine().value).toBe('audio.cpp');
   choose('local');
   await flush();
   expect(selectEngine().value).toBe('local');

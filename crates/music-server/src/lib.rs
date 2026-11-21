@@ -31,6 +31,7 @@ mod audio_cpp_midasheng;
 mod audio_cpp_minimax_h3;
 mod audio_cpp_mulacover;
 mod audio_cpp_music;
+mod audio_cpp_yue2;
 mod audio_cpp_controlfoley;
 mod audio_cpp_sound_effects;
 mod hotstep_cover;
@@ -175,6 +176,7 @@ struct AppState {
     hotstep_sa3_train_install: Arc<tokio::sync::Mutex<()>>,
     audio_cpp_music_stops: Arc<RwLock<HashMap<String, Arc<std::sync::atomic::AtomicBool>>>>,
     heartmula_install: Arc<tokio::sync::Mutex<()>>,
+    audio_cpp_yue2_install: Arc<tokio::sync::Mutex<()>>,
     stable_audio_install: Arc<tokio::sync::Mutex<()>>,
     soulx_install: Arc<tokio::sync::Mutex<()>>,
     openrouter_music_stops: Arc<RwLock<HashMap<String, Arc<tokio::sync::Notify>>>>,
@@ -1653,6 +1655,7 @@ pub async fn serve_on_port(port: u16) -> anyhow::Result<()> {
         hotstep_sa3_train_install: Arc::default(),
         audio_cpp_music_stops: Arc::default(),
         heartmula_install: Arc::default(),
+        audio_cpp_yue2_install: Arc::default(),
         stable_audio_install: Arc::default(),
         soulx_install: Arc::default(),
         openrouter_music_stops: Arc::new(RwLock::new(HashMap::new())),
@@ -2235,9 +2238,15 @@ pub async fn serve_on_port(port: u16) -> anyhow::Result<()> {
     }
 
     println!("music-server listening on http://{address}");
-    axum::serve(listener, app.into_make_service_with_connect_info::<SocketAddr>())
-        .with_graceful_shutdown(shutdown())
-        .await?;
+    let service = axum::serve(listener, app.into_make_service_with_connect_info::<SocketAddr>())
+        .with_graceful_shutdown(shutdown(state.clone()))
+        .await;
+    let acpp = state.acpp.clone();
+    tokio::task::spawn_blocking(move || {
+        acpp.stop_music();
+        acpp_server::SERVERS.stop_all();
+    }).await?;
+    service?;
     Ok(())
 }
 
@@ -6244,8 +6253,11 @@ async fn test_proxy(Json(settings): Json<net::ProxySettings>) -> Result<Json<Val
     net::test(settings).await.map(Json).map_err(|error| api_error(StatusCode::BAD_REQUEST, format!("{error:#}")))
 }
 
-async fn shutdown() {
+async fn shutdown(state: AppState) {
     let _ = tokio::signal::ctrl_c().await;
+    for stop in state.audio_cpp_music_stops.read().await.values() {
+        stop.store(true, std::sync::atomic::Ordering::SeqCst);
+    }
 }
 
 async fn health(State(state): State<AppState>) -> Json<Value> {
@@ -6420,6 +6432,12 @@ async fn engine_options(State(state): State<AppState>) -> Json<Value> {
     Json(serde_json::json!({
         "options": options,
         "platform": std::env::consts::OS,
+        "audio_cpp_keep_loaded": state.acpp.music_keep().map(|decision| serde_json::json!({
+            "keep_loaded": decision.keep,
+            "keep_loaded_reason": decision.reason,
+            "keep_loaded_need_gb": decision.need_gib,
+            "keep_loaded_free_gb": decision.free_gib,
+        })),
         "in_effect": in_effect,
         "saved_max_seq": saved_max_seq,
         "effective_max_batch": options.effective_max_batch(),
@@ -7085,6 +7103,11 @@ async fn models_kept(state: &AppState) -> bool {
 }
 
 async fn evict_kept_models(state: &AppState, before: &str) {
+    state.acpp.evict_idle_card_music();
+    evict_native_kept_models(state, before).await;
+}
+
+async fn evict_native_kept_models(state: &AppState, before: &str) {
     let holds = state.engine_idle_since.lock().unwrap_or_else(std::sync::PoisonError::into_inner).is_some();
     if !holds || !models_kept(state).await || !state.music_server.health().await {
         return;
@@ -14378,6 +14401,8 @@ mod tests {
         let mut heartmula = song(None, None);
         heartmula.engine_id = audio_cpp_music::ENGINE.into();
         heartmula.generation_settings = serde_json::json!({ "family": audio_cpp_heartmula::FAMILY });
+        assert_eq!(listed_song(&heartmula).unwrap()["replay_available"], true);
+        heartmula.generation_settings["family"] = serde_json::json!(audio_cpp_yue2::FAMILY);
         assert_eq!(listed_song(&heartmula).unwrap()["replay_available"], true);
         heartmula.generation_settings["family"] = serde_json::json!("vevo2");
         assert_eq!(listed_song(&heartmula).unwrap()["replay_available"], false);

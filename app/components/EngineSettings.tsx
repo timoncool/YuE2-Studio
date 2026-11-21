@@ -54,14 +54,16 @@ interface InEffect {
 
 type KeepLoaded = 'auto' | 'yes' | 'no';
 
+type KeepState = Pick<InEffect, 'keep_loaded' | 'keep_loaded_reason' | 'keep_loaded_need_gb' | 'keep_loaded_free_gb'>;
+
 /** The line under the choice: whether the running engine keeps its models, and why. */
-export function keepLoadedNow(inEffect: Pick<InEffect, 'keep_loaded' | 'keep_loaded_reason' | 'keep_loaded_need_gb' | 'keep_loaded_free_gb'>, t: (key: string) => string): string {
+export function keepLoadedNow(inEffect: KeepState, t: (key: string) => string): string {
   const reason = inEffect.keep_loaded_reason ?? 'set';
   const why = reason === 'fits' || reason === 'does_not_fit'
     ? t(reason === 'fits' ? 'keepLoadedReasonFits' : 'keepLoadedReasonNoRoom')
       .replace('{need}', (inEffect.keep_loaded_need_gb ?? 0).toFixed(1))
       .replace('{free}', (inEffect.keep_loaded_free_gb ?? 0).toFixed(1))
-    : t(reason === 'not_on_card' ? 'keepLoadedReasonNotOnCard' : reason === 'set' ? 'keepLoadedReasonSet' : reason === 'unmeasured' ? 'keepLoadedReasonUnmeasured' : 'keepLoadedReasonUnknown');
+    : t(reason === 'not_on_card' ? 'keepLoadedReasonNotOnCard' : reason === 'set' ? 'keepLoadedReasonSet' : reason === 'unmeasured' ? 'keepLoadedReasonUnmeasured' : reason === 'in_use' ? 'keepLoadedReasonInUse' : 'keepLoadedReasonUnknown');
   return t(inEffect.keep_loaded ? 'keepLoadedNowKept' : 'keepLoadedNowNotKept').replace('{reason}', why);
 }
 
@@ -129,6 +131,7 @@ export const EngineSettings: React.FC = () => {
   // page answers "did my change apply?" without opening the engine log.
   const [runtime, setRuntime] = useState<{ executable: string | null; executable_source: string; running_executable: string | null; engine_starting: boolean } | null>(null);
   // The KV cache and flash attention of the running engine, and the cache the saved settings start the next one with.
+  const [audioCppKeep, setAudioCppKeep] = useState<KeepState | null>(null);
   const [inEffect, setInEffect] = useState<InEffect | null>(null);
   // why a KV cache in Q8 cannot apply here, as the service reads the machine (an Auto it resolves to the processor)
   const [serverKvQ8Off, setServerKvQ8Off] = useState<KvQ8Off>(null);
@@ -165,9 +168,10 @@ export const EngineSettings: React.FC = () => {
     try {
       const response = await fetch('/engine/options');
       if (!response.ok) throw new Error(`Engine options are unavailable (${response.status})`);
-      const body: { options: EngineOptions; platform?: string; in_effect?: InEffect | null; saved_max_seq?: number; kv_q8_off_reason?: KvQ8Off; kv_cache_now?: KvCacheNow | null; executable?: string | null; executable_source?: string; running_executable?: string | null; engine_starting?: boolean } = await response.json();
+      const body: { options: EngineOptions; platform?: string; in_effect?: InEffect | null; audio_cpp_keep_loaded?: KeepState | null; saved_max_seq?: number; kv_q8_off_reason?: KvQ8Off; kv_cache_now?: KvCacheNow | null; executable?: string | null; executable_source?: string; running_executable?: string | null; engine_starting?: boolean } = await response.json();
       setHostPlatform(body.platform);
       setInEffect(body.in_effect ?? null);
+      setAudioCppKeep(body.audio_cpp_keep_loaded ?? null);
       setServerKvQ8Off(body.kv_q8_off_reason ?? null);
       setKvCacheNow(body.kv_cache_now ?? null);
       setSavedMaxSeq(typeof body.saved_max_seq === 'number' ? body.saved_max_seq : null);
@@ -438,6 +442,9 @@ export const EngineSettings: React.FC = () => {
           <option value="no">{tt('keepLoadedNo')}</option>
         </select>
         <span className="mt-2 block text-xs leading-5 text-zinc-500 dark:text-zinc-400">{t('keepLoadedHint')}</span>
+        {audioCppKeep && (
+          <span className="mt-1 block text-xs leading-5 text-zinc-500 dark:text-zinc-400">audio.cpp · {keepLoadedNow(audioCppKeep, tt)}</span>
+        )}
         {inEffect?.keep_loaded !== undefined && (
           <span className="mt-1 block text-xs leading-5 text-zinc-500 dark:text-zinc-400">{keepLoadedNow(inEffect, tt)}</span>
         )}

@@ -225,6 +225,9 @@ pub struct Acpp {
     logs: PathBuf,
     /// cuBLAS 13 of the music engine, which the CUDA 13 build imports.
     cuda13_libraries: OnceLock<PathBuf>,
+    music: std::sync::Mutex<Option<Server>>,
+    music_keep: std::sync::Mutex<Option<super::KeepDecision>>,
+    music_evict: AtomicBool,
     /// Every model the server may carry, by id. One server per build serves them all: a config that names only the
     /// model of the run at hand would restart the server whenever another tool asks for its own.
     known: std::sync::Mutex<Vec<ModelEntry>>,
@@ -241,6 +244,9 @@ impl Acpp {
             installs: crate::acpp_install::RuntimeInstalls::default(),
             logs: data_root.join("logs").join("audiocpp"),
             cuda13_libraries: OnceLock::new(),
+            music: std::sync::Mutex::new(None),
+            music_keep: std::sync::Mutex::new(None),
+            music_evict: AtomicBool::new(false),
             known: std::sync::Mutex::new(Vec::new()),
             active: std::sync::Mutex::new(Vec::new()),
             ended: std::sync::Condvar::new(),
@@ -365,6 +371,13 @@ impl Acpp {
         if !config.models.iter().any(|entry| entry.id == id) {
             bail!("{id} is not on disk; download it in Settings - Models");
         }
+        self.check_runtime(build, &config)?;
+        acpp_server::SERVERS
+            .get(&config, READY_WITHIN, &|command| self.prepare(build, command))
+            .map_err(|error| anyhow!("{}", describe(&error)))
+    }
+
+    fn check_runtime(&self, build: Build, config: &ServerConfig) -> Result<()> {
         if !config.exe.is_file() {
             bail!("audio.cpp's server is not installed: {} is missing; download it in Settings - Models", config.exe.display());
         }
@@ -374,38 +387,104 @@ impl Acpp {
                 bail!("audio.cpp's server is missing {} beside it; download it again in Settings - Models", missing.join(", "));
             }
         }
-        let cuda13 = self.cuda13_libraries.get().cloned();
-        let beside = self.folder(build);
-        let server = acpp_server::SERVERS
-            .get(&config, READY_WITHIN, &|command| {
-                // a Linux loader does not look beside the program: the CUDA libraries lie in its folder
-                if cfg!(target_os = "linux") {
-                    let inherited = std::env::var_os("LD_LIBRARY_PATH").unwrap_or_default();
-                    if let Ok(path) = std::env::join_paths(std::iter::once(beside.clone()).chain(std::env::split_paths(&inherited))) {
-                        command.env("LD_LIBRARY_PATH", path);
-                    }
-                }
-                // cuBLAS 13 lies beside the music engine, which the studio's PATH already names first
-                let mut libraries = cuda13.iter().cloned().collect::<Vec<_>>();
-                #[cfg(windows)]
-                libraries.push(self.downloader.runtime_dir("audiocpp-soxr"));
-                if !libraries.is_empty() {
-                    let existing = std::env::var_os("PATH").unwrap_or_default();
-                    if let Ok(path) = std::env::join_paths(libraries.into_iter().chain(std::env::split_paths(&existing))) {
-                        command.env("PATH", path);
-                    }
-                }
-            })
-            .map_err(|error| anyhow!("{}", describe(&error)))?;
-        Ok(server)
+        Ok(())
     }
 
+    fn prepare(&self, build: Build, command: &mut std::process::Command) {
+        let cuda13 = self.cuda13_libraries.get().cloned();
+        let beside = self.folder(build);
+        // a Linux loader does not look beside the program: the CUDA libraries lie in its folder
+        if cfg!(target_os = "linux") {
+            let inherited = std::env::var_os("LD_LIBRARY_PATH").unwrap_or_default();
+            if let Ok(path) = std::env::join_paths(std::iter::once(beside.clone()).chain(std::env::split_paths(&inherited))) {
+                command.env("LD_LIBRARY_PATH", path);
+            }
+        }
+        // cuBLAS 13 lies beside the music engine, which the studio's PATH already names first
+        let mut libraries = cuda13.iter().cloned().collect::<Vec<_>>();
+        #[cfg(windows)]
+        libraries.push(self.downloader.runtime_dir("audiocpp-soxr"));
+        if !libraries.is_empty() {
+            let existing = std::env::var_os("PATH").unwrap_or_default();
+            if let Ok(path) = std::env::join_paths(libraries.into_iter().chain(std::env::split_paths(&existing))) {
+                command.env("PATH", path);
+            }
+        }
+    }
+
+    /// Private to generation. Stopping one of these jobs can reap the process
+    /// without touching the process that serves separation, MIDI and audio tools.
+    pub(super) fn run_music(&self, build: Build, model: ModelEntry, body: Value, stop: &AtomicBool, keep_weights: bool) -> Result<Value> {
+        let mut music = self.music.lock().unwrap_or_else(|error| error.into_inner());
+        self.music_evict.store(false, Ordering::SeqCst);
+        anyhow::ensure!(!stop.load(Ordering::SeqCst), "stopped");
+        let id = model.id.clone();
+        let mut config = self.config(build, vec![model]);
+        config.data_dir.push("music");
+        self.check_runtime(build, &config)?;
+        if music.as_ref().is_none_or(|server| server.config() != &config || !server.alive()) {
+            drop(music.take());
+            *music = Some(Server::start(&config, READY_WITHIN, &|command| self.prepare(build, command))?);
+        }
+        let server = music.as_ref().expect("The music server has started.");
+        let reply = if stop.load(Ordering::SeqCst) { Err(AcppError::Cancelled) } else {
+            server.run_task(&id, body, stop)
+        };
+        if matches!(reply, Err(AcppError::Cancelled)) || stop.load(Ordering::SeqCst) {
+            // Drop kills and reaps the owned child before the caller releases the engine lease.
+            drop(music.take());
+            self.set_music_keep(None);
+            bail!("stopped");
+        }
+        let card = on_card(build);
+        let free_gib = (matches!(build, Build::Cuda12 | Build::Cuda13) && keep_weights && reply.is_ok()).then(|| {
+            crate::resources::nvidia_gpus()
+                .and_then(|gpus| gpus.first().map(|gpu| gpu.vram_total_mb.saturating_sub(gpu.vram_used_mb) as f64 / 1024.0))
+        }).flatten();
+        let mut decision = music_keep_decision(keep_weights && reply.is_ok(), card, free_gib);
+        if card && self.music_evict.load(Ordering::SeqCst) {
+            decision.keep = false;
+            decision.reason = "in_use";
+        }
+        if !decision.keep && let Err(error) = server.unload(&[&id]) {
+            eprintln!("[ERROR] unloading audio.cpp {id}: {error:#}");
+            drop(music.take());
+        }
+        self.set_music_keep(reply.as_ref().ok().map(|_| decision));
+        Ok(reply?)
+    }
+
+    fn set_music_keep(&self, decision: Option<super::KeepDecision>) {
+        *self.music_keep.lock().unwrap_or_else(|error| error.into_inner()) = decision;
+    }
+
+    pub(super) fn music_keep(&self) -> Option<super::KeepDecision> {
+        self.music_keep.lock().unwrap_or_else(|error| error.into_inner()).clone()
+    }
+
+    pub(super) fn evict_idle_card_music(&self) {
+        self.music_evict.store(true, Ordering::SeqCst);
+        if let Ok(mut music) = self.music.try_lock()
+            && music.as_ref().is_some_and(|server| server.config().backend != Build::Cpu.backend())
+            && self.music_keep().is_some_and(|decision| decision.keep)
+        {
+            drop(music.take());
+            self.set_music_keep(None);
+        }
+    }
+
+    pub(super) fn stop_music(&self) {
+        let mut music = self.music.lock().unwrap_or_else(|error| error.into_inner());
+        drop(music.take());
+        self.set_music_keep(None);
+    }
     /// `work` on the server of `build` carrying `model`: the one at work when it carries the model, else a new one once
     /// the runs on it have ended; a server under work is never replaced. The run counts from the moment its server is
     /// chosen; `stop`, asked while it waits for the server, ends it with "stopped" first.
     pub fn with_server<T>(&self, build: Build, model: ModelEntry, stop: &(dyn Fn() -> bool + Sync), work: impl FnOnce(&Server) -> Result<T>) -> Result<T> {
         let id = model.id.clone();
         let path = model.path.clone();
+        if on_card(build) { self.evict_idle_card_music(); }
         self.register(model);
         let backend = build.backend();
         let server = self.claim(build, stop, |busy| {
@@ -437,6 +516,32 @@ impl Acpp {
         };
         begin(&mut active, build);
         Ok(server)
+    }
+}
+
+fn music_keep_decision(wanted: bool, on_card: bool, free_gib: Option<f64>) -> super::KeepDecision {
+    let need_gib = (wanted && on_card).then_some(super::TRACKS_RESERVE_GIB + super::KEEP_HEADROOM_GIB);
+    let (keep, reason) = match (wanted, need_gib, free_gib) {
+        (false, _, _) => (false, "set"),
+        (true, None, _) => (true, "set"),
+        (true, Some(need), Some(free)) if free >= need => (true, "fits"),
+        (true, Some(_), Some(_)) => (false, "does_not_fit"),
+        (true, Some(_), None) => (false, "free_unknown"),
+    };
+    super::KeepDecision { keep, reason, need_gib, free_gib }
+}
+
+#[cfg(test)]
+mod packed_residency_tests {
+    use super::*;
+
+    #[test]
+    fn explicit_residency_needs_measured_card_headroom() {
+        assert!(music_keep_decision(true, false, None).keep);
+        assert!(music_keep_decision(true, true, Some(12.0)).keep);
+        assert_eq!(music_keep_decision(true, true, Some(1.0)).reason, "does_not_fit");
+        assert_eq!(music_keep_decision(true, true, None).reason, "free_unknown");
+        assert!(!music_keep_decision(false, true, Some(12.0)).keep);
     }
 }
 
