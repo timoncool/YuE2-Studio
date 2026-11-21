@@ -231,15 +231,22 @@ pub(super) async fn apply(
         let index = voice.has_index().then(|| copy("retrieval.index")).transpose()?;
         let blend = if index.is_some() { request.retrieval_blend } else { 0.0 };
         // Validate the source audio and accompaniment before dispatching a backend.
-        let source_audio = audio_pcm::decode_stereo(&source)?;
-        let vocal_audio = audio_pcm::decode_stereo(&vocal)?;
-        let frame_delta = (source_audio.frames() as f64 / source_audio.rate as f64
-            - vocal_audio.frames() as f64 / vocal_audio.rate as f64).abs();
-        anyhow::ensure!(frame_delta <= 0.25 && vocal_audio.left.iter().chain(&vocal_audio.right).all(|sample| sample.is_finite()),
-            "The vocal stem does not align with the source song or contains invalid audio.");
-        let (frames, rate) = (source_audio.frames(), source_audio.rate);
-        drop(source_audio);
-        drop(vocal_audio);
+        let (frames, rate) = {
+            let source_audio = audio_pcm::decode_stereo(&source)?;
+            (source_audio.frames(), source_audio.rate)
+        };
+        {
+            let vocal_audio = audio_pcm::decode_stereo(&vocal)?;
+            let duration_delta = (frames as f64 / rate as f64
+                - vocal_audio.frames() as f64 / vocal_audio.rate as f64).abs();
+            let valid_audio = vocal_audio.left.iter()
+                .chain(&vocal_audio.right)
+                .all(|sample| sample.is_finite());
+            anyhow::ensure!(
+                duration_delta <= 0.25 && valid_audio,
+                "The vocal stem does not align with the source song or contains invalid audio."
+            );
+        }
         let mut backing = audio_post::Stereo::new(vec![0.0; frames], vec![0.0; frames], rate);
         for path in accompaniment {
             let stem = audio_pcm::decode_stereo(&path)?.resampled(rate)?;

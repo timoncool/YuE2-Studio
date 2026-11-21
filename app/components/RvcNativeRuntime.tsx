@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useI18n } from '../context/I18nContext';
 import { rvcApplyStrings } from '../i18n/rvcApply';
 import { poll } from '../services/poll';
@@ -20,6 +20,7 @@ export function RvcNativeRuntime({ onInstalled, disabled }: { onInstalled: () =>
   const [pending, setPending] = useState(false);
   const [starting, setStarting] = useState(false);
   const [error, setError] = useState<string>();
+  const reportedInstalled = useRef(false);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -28,11 +29,12 @@ export function RvcNativeRuntime({ onInstalled, disabled }: { onInstalled: () =>
         const next = await responseJson<NativeRuntime | null>(await fetch(URL, { signal: controller.signal }));
         if (!next || controller.signal.aborted) return;
         setStatus(next);
+        if (next.installed && !reportedInstalled.current) {
+          reportedInstalled.current = true;
+          onInstalled();
+        }
         if (pending) {
-          if (next.installed || next.download?.done || next.download?.error) {
-            setPending(false);
-            if (next.installed) onInstalled();
-          }
+          if (next.installed || next.download?.done || next.download?.error) setPending(false);
         } else if (next.download && !next.download.done && !next.download.error) {
           setPending(true);
         }
