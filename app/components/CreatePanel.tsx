@@ -1095,6 +1095,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
       setMode('studio');
       return;
     }
+    if (song.ditModel === 'yue2-cpp') pair.select();
     applyRequest({ style: song.style, lyrics: song.lyrics, ...settings }, song.title || '');
     // A song made without LoRA reuses without it, whatever was picked before.
     setAdapters(usesFromSettings(settings));
