@@ -1,7 +1,6 @@
 //! Text-to-sound-effects through the shared audio.cpp process.
 use super::*;
 use acpp_server::{Mode, ModelEntry};
-use std::io::Read as _;
 use std::path::{Path, PathBuf};
 
 pub(super) const FAMILY: &str = "moss_soundeffect";
@@ -19,13 +18,7 @@ pub(super) fn model_dir(root: &Path) -> PathBuf {
 }
 
 pub(super) fn missing_files(directory: &Path) -> Vec<&'static str> {
-    let valid = std::fs::File::open(directory.join(FILE)).is_ok_and(|mut file| {
-        let mut magic = [0; 8];
-        file.metadata()
-            .is_ok_and(|metadata| metadata.is_file() && metadata.len() == BYTES)
-            && file.read_exact(&mut magic).is_ok()
-            && magic == *b"GGUF\x03\x00\x00\x00"
-    });
+    let valid = audio_cpp_music::matches_gguf_package(&directory.join(FILE), BYTES, 1247, 16);
     if valid { vec![] } else { vec![FILE] }
 }
 
