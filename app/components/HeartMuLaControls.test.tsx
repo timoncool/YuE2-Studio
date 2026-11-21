@@ -1,17 +1,16 @@
-/** @vitest-environment jsdom */
-import { act } from 'react';
+import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { expect, it, vi } from 'vitest';
 import { HeartMuLaInstall } from './HeartMuLaControls';
 
-vi.hoisted(() => vi.stubEnv('VITE_STUDIO_API_BASE', 'http://127.0.0.1:18891'));
+vi.hoisted(() => vi.stubGlobal('location', { protocol: 'https:', hostname: 'tauri.localhost' }));
 
 it('uses the desktop service address and observes the same installation after remount', async () => {
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
   let installing = false;
   let starts = 0;
   const fetcher = vi.fn(async (url: string, init?: RequestInit) => {
-    expect(url).toMatch(/^http:\/\/127\.0\.0\.1:18891\/v1\/music\/audio-cpp\/models/);
+    expect(url).toMatch(/^http:\/\/127\.0\.0\.1:8791\/v1\/music\/audio-cpp\/models/);
     if (init?.method === 'POST') {
       starts++;
       installing = true;
@@ -37,6 +36,5 @@ it('uses the desktop service address and observes the same installation after re
   } finally {
     await act(async () => root.unmount());
     vi.unstubAllGlobals();
-    vi.unstubAllEnvs();
   }
 });

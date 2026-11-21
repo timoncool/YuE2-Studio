@@ -403,6 +403,7 @@ it.each([
 it('chooses MiniMax Music3 through audio.cpp and reuses the saved seed and format', async () => {
   let ready = false;
   let heartMuLaReady = false;
+  let engineInstalled: boolean | undefined;
   const fetcher = vi.fn(async (url: string, init?: RequestInit) => {
     if (url === '/v1/music/audio-cpp/models/install') {
       expect(init?.method).toBe('POST');
@@ -412,6 +413,7 @@ it('chooses MiniMax Music3 through audio.cpp and reuses the saved seed and forma
     }
     return Response.json(url === '/v1/music/audio-cpp/models' ? {
     engine: 'audio.cpp',
+    engine_installed: engineInstalled,
     models: [{ id: 'minimax_music3', profile_id: 'quality-q8', quantization: 'Q8_0', ready,
       missing: ready ? [] : ['language_model_q8_0.gguf'] },
       { id: 'heartmula', name: 'HeartMuLa', profile_id: 'heartmula_q8_0', quantization: 'Q8_0',
@@ -438,6 +440,14 @@ it('chooses MiniMax Music3 through audio.cpp and reuses the saved seed and forma
   expect(generate().disabled).toBe(true);
   expect(host.textContent).toContain('language_model_q8_0.gguf');
   ready = true;
+  click(buttonNamed('Refresh models')!);
+  await flush();
+  expect(generate().disabled).toBe(false);
+  engineInstalled = false;
+  click(buttonNamed('Refresh models')!);
+  await flush();
+  expect(generate().disabled).toBe(true);
+  engineInstalled = true;
   click(buttonNamed('Refresh models')!);
   await flush();
   expect(generate().disabled).toBe(false);
