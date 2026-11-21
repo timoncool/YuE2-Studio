@@ -6439,8 +6439,8 @@ async fn start_engine_again_with(
                 .await
                 .map_err(|error| format!("the engine's runtime libraries could not be installed: {error}"))?;
         }
-        // The engine loads eleven gigabytes of weights the moment it starts.
-        // If the writing assistant is still holding the card, it does not finish.
+        // The engine needs the device during initialization. Free it before
+        // starting, then generation loads any remaining weights on demand.
         free_the_card_for_the_engine(state).await;
         let models = selected_engine_models(state).await?;
         let backbone = models.backbone.clone();

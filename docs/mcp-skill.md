@@ -124,7 +124,7 @@ original source until it ends or you explicitly cancel it with `song_job_cancel`
 Send a stable `client_id` with an increasing `sequence` from each UI window to
 keep delayed requests from overriding that window's latest selection. When
 `stage` is `needs_install`, install the listed resources and select the pair
-again. `ready` with `load_on_create: true` means the next song starts model work.
+again. For local YuE2, `loading_model` is engine initialization through its health check. A `ready` pair with `load_on_create: true` loads generation weights as needed when you create a song.
 
 For MiniMax Music3 through audio.cpp, call `audio_cpp_music_models` and check that
 `minimax_music3` is ready. Pass `"music_source": {"kind":"audio_cpp","model":"minimax_music3"}`
