@@ -580,6 +580,8 @@ const JOURNAL: &[(&str, &str, &str)] = &[
     ("models_own_remove", "deleted", "model"),
     ("settings_set", "updated", "settings"),
     ("engine_options_set", "updated", "settings"),
+    ("engine_pause", "updated", "settings"),
+    ("engine_resume", "updated", "settings"),
     ("engine_fitted_cache_reset", "updated", "settings"),
     ("karaoke_settings_set", "updated", "settings"),
     ("separator_settings_set", "updated", "settings"),
@@ -1239,6 +1241,18 @@ fn tools() -> &'static [Tool] {
                 description: "Restart the music engine, for example after changing its options or models.",
                 schema: nothing,
                 call: |_| post("/engine/restart".into(), json!({})),
+            },
+            Tool {
+                name: "engine_pause",
+                description: "Stop the Studio-managed YuE2 engine until explicitly resumed. Finish or cancel any active local song or score first. Saved songs remain playable.",
+                schema: nothing,
+                call: |_| post("/engine/pause".into(), json!({})),
+            },
+            Tool {
+                name: "engine_resume",
+                description: "Resume the Studio-managed YuE2 engine with its selected models and launch options after a manual pause.",
+                schema: nothing,
+                call: |_| post("/engine/resume".into(), json!({})),
             },
             // ---------------------------------------------------------------- the window: what the user sees
             Tool {

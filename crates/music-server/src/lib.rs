@@ -1958,7 +1958,8 @@ pub async fn serve_on_port(port: u16) -> anyhow::Result<()> {
                 let ready = state.model_manager.status(effective_install_target(&state).await).await.ready;
                 // an engine inside a long step does not answer /health in time; while it is still a
                 // running process with a job on it, it is at work, not gone
-                let running = state.music_server.health().await || engine_at_work(&state).await;
+                let running = !engine_is_paused(&state)
+                    && (state.music_server.health().await || engine_at_work(&state).await);
                 // A changed runtime or model selection can resolve a prior failure.
                 let retry_key = (
                     state.engine_options.read().await.clone(),
@@ -5673,7 +5674,7 @@ async fn shutdown() {
 }
 
 async fn health(State(state): State<AppState>) -> Json<Value> {
-    let engine_ready = state.music_server.health().await;
+    let engine_ready = !engine_is_paused(&state) && state.music_server.health().await;
     // Which program is actually answering here, and whether it can start an
     // engine at all. A second copy of the studio - a development build, say -
     // takes this port and the window then waits forever on an engine that
@@ -5924,7 +5925,7 @@ async fn restart_idle_engine(state: &AppState) -> Result<bool, String> {
     if engine_at_work(state).await { return Ok(false); }
     let _restart = state.engine_use.write().await;
     // A submitter may have handed a song to the engine while we waited.
-    if engine_at_work(state).await || !state.music_server.health().await { return Ok(false); }
+    if engine_is_paused(state) || engine_at_work(state).await || !state.music_server.health().await { return Ok(false); }
     restart_engine(state).await?;
     Ok(true)
 }
@@ -5950,6 +5951,7 @@ async fn pause_local_engine(State(state): State<AppState>) -> Result<Json<Value>
             return Err(api_error(StatusCode::CONFLICT, "The local engine is managed outside Studio and cannot be paused here.".into()));
         }
         state.engine_paused.store(true, std::sync::atomic::Ordering::Release);
+        music_engine::yue_server::note_in_log("the local YuE2 engine was paused on request");
     }
     Ok(Json(serde_json::json!({ "engine_paused": true })))
 }
@@ -5963,6 +5965,7 @@ async fn resume_local_engine(State(state): State<AppState>) -> Result<Json<Value
             state.engine_paused.store(true, std::sync::atomic::Ordering::Release);
             return Err(api_error(StatusCode::SERVICE_UNAVAILABLE, error));
         }
+        music_engine::yue_server::note_in_log("the local YuE2 engine was resumed on request");
     }
     Ok(Json(serde_json::json!({ "engine_paused": false })))
 }
