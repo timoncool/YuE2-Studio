@@ -1,0 +1,53 @@
+name: HOT-Step package upgrade acceptance
+
+on:
+  push:
+    branches: [qa/hotstep-xcr0-upgrade]
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  windows-upgrade:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    env:
+      RUSTUP_TOOLCHAIN: stable
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+      - uses: actions/download-artifact@v7
+        with:
+          name: hotstep-tools-xcr0-windows
+          run-id: 44869382831
+          github-token: ${{ github.token }}
+          path: packages
+      - name: Prepare the previous installation
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: pwsh
+        run: |
+          gh release download hotstep-tools-75923e70 --repo timoncool/YuE2-Studio --dir old --pattern hotstep-tools-cuda-windows-x64.zip
+          $archive = 'old/hotstep-tools-cuda-windows-x64.zip'
+          if ((Get-FileHash $archive).Hash.ToLowerInvariant() -ne 'f423135405e51ed861b51ad1fa8dc108d891914951915eb54e18c03b8271331a') { throw 'unexpected old archive' }
+          Expand-Archive -Path $archive -DestinationPath 'old/hotstep/hotstep-tools-75923e70'
+          New-Item -ItemType Directory -Path 'old/training/models'
+          foreach ($name in 'yue2_3b_int8_convrot.safetensors', 'yue2-vae-standard-f32.gguf', 'yue2-tok-f16.gguf', 'sheetsage2-f16.gguf', 'mms-fa-f32.gguf') {
+            [IO.File]::WriteAllText((Join-Path $PWD "old/training/models/$name"), "previous weight fixture: $name")
+          }
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo build --locked -p music-server --bin music-server
+      - name: Verify native adoption, restart and repeat via MCP
+        run: python scripts/check-hotstep-tools-upgrade.py verification target/debug/music-server.exe packages old hotstep-tools-75923e70-xcr0
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: hotstep-tools-xcr0-upgrade
+          path: |
+            verification/*.json
+            verification/*.log
+            target/debug/music-server.exe
+          if-no-files-found: error
