@@ -368,7 +368,8 @@ Local score, sampling and LoRA controls apply to local generation.
    (200 steps of 4 songs; `fast` and `thorough` are the smaller and larger sizes), or
    `tuned`, the previous recipe with stop `kl` at 1.4 or stop `epochs`.
    `studio_wait until: training`; `training_status` shows step and loss (KL under `tuned`).
-6. `training_checkpoint_install` for the chosen step, then `song_create` with that LoRA
+6. `training_checkpoints_listen` with `run_id` queues a 35-second reference take and one per saved checkpoint, using the same score and seeds. The returned playlist lets you compare them. Repeating the call reuses the existing takes and adds newly saved steps.
+7. `training_checkpoint_install` for the chosen step, then `song_create` with that LoRA
    in `adapters` and its trigger word in the style.
 7. Not there yet after the run? `training_continue` with `steps` above the run's
    `resume_step` from `training_status`: it goes on from the latest checkpoint with the

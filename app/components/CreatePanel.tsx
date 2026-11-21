@@ -541,9 +541,10 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
     ['duration_seconds', miDasheng ? miDashengDuration.limit : nativeStrings.duration],
     ['steps', nativeStrings.steps],
     ['seed', nativeStrings.seed],
-    nativeEngine === 'minimaxmusic-cpp'
-      ? (['lm_seed', nativeStrings.lmSeed] as const)
-      : (['guidance_scale', 'CFG'] as const),
+    ...(nativeEngine === 'minimaxmusic-cpp'
+      ? [['lm_seed', nativeStrings.lmSeed], ['lm_cfg', t('lmCfgScale')], ['lm_top_k', t('lmTopK')],
+         ['dit_cfg', `DiT ${t('cfgScale')}`], ['fade_in', t('fadeInLabel')], ['fade_out', t('fadeOutLabel')]] as const
+      : [['guidance_scale', 'CFG']] as const),
   ] as const;
   const provider = useOpenRouterSettings<{ configured: boolean }>();
   const configured = provider.data?.configured === true;
@@ -800,6 +801,14 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
   const composeRun = useRef<AbortController | null>(null);
   const [editorOpen, setEditorOpen] = useState(false);
   const [bedOpen, setBedOpen] = useState(false);
+  const [backingSongId, setBackingSongId] = useState('');
+  const backingSongs = useLibrarySongs(bedOpen && musicEngine === 'local');
+  const backingTracks = (backingSongs.data ?? []).filter(song => song.audioUrl && !song.isGenerating);
+  const backingLabel = {
+    en: 'Sing over a library backing track', ru: 'Спеть поверх аккомпанемента из библиотеки',
+    pt: 'Cantar sobre um acompanhamento da biblioteca', zh: '在曲库伴奏上演唱',
+    ja: 'ライブラリの伴奏に歌を重ねる', ko: '라이브러리 반주에 노래 얹기',
+  }[language];
   const [bedBpm, setBedBpm] = useState('100');
   const [bedKey, setBedKey] = useState('C');
   const [bedMeter, setBedMeter] = useState('4/4');
@@ -956,6 +965,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
     setContinueScore(request.abc_continue === true);
     setTranspose(asText(request.transpose) || '0');
     setVocalsOnly(request.vocals_only === true);
+    setBackingSongId(typeof request.backing_song_id === 'string' ? request.backing_song_id : '');
     setFadeIn(request.fade_in ? asText(request.fade_in) : '');
     setFadeOut(request.fade_out ? asText(request.fade_out) : '');
     setLyricTiming(request.lyric_timing !== false);
@@ -1146,6 +1156,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
     setAbcSampling(emptySampling()); setSemanticSampling(emptySampling()); setHarmony(emptyHarmony());
     setMp3Bitrate('320');
     setTranspose('0'); setVocalsOnly(false); setLyricTiming(true); setRealaudio('auto');
+    setBackingSongId('');
   };
 
   const loadExample = (id?: string) => {
@@ -1196,6 +1207,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
     if (!forFile || pinned(seedValue)) request.seed = pinned(seedValue) ? seedValue : randomSeed();
     if (semanticTokens.trim()) request.semantic_tokens = semanticTokens.trim();
     if (!forFile && mode === 'cover' && coverSongId && request.abc) request.cover_of = coverSongId;
+    if (musicEngine === 'local' && mode !== 'cover' && backingSongId) request.backing_song_id = backingSongId;
     const abcPreset = samplingFrom(abcSampling);
     if (abcPreset) request.abc_sampling = abcPreset;
     const semanticPreset = samplingFrom(semanticSampling);
@@ -2204,9 +2216,9 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
                     {nativeControls.filter(([key]) => (vevo2 || soulx) ? key === 'seed' : !(miDasheng || magenta) || key !== 'steps').map(([key, label]) => (
                       <label key={key} className="space-y-1 text-xs">
                         <span>{label}</span>
-                        <input type="number" step={key === 'duration_seconds' || key === 'guidance_scale' ? 'any' : 1}
+                        <input type="number" step={key === 'steps' || key === 'seed' || key === 'lm_seed' || key === 'lm_top_k' ? 1 : 'any'}
                           aria-describedby={miDasheng && key === 'duration_seconds' ? durationHintId : undefined}
-                          min={miniMaxH3 && key === 'duration_seconds' ? 1 : undefined}
+                          min={miniMaxH3 && key === 'duration_seconds' || key === 'lm_top_k' ? 1 : ['lm_cfg', 'dit_cfg', 'fade_in', 'fade_out'].includes(key) ? 0 : undefined}
                           max={miniMaxH3 && key === 'duration_seconds' ? 20 : undefined}
                           className={CONTROL} value={native.settings[key] ?? ''}
                           placeholder={miniMaxH3 && key === 'duration_seconds' ? '4' : nativeStrings.default}
@@ -2214,6 +2226,11 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
                       </label>
                     ))}
                     {miDasheng && <p id={durationHintId} className="col-span-2 text-xs text-zinc-500">{miDashengDuration.hint}</p>}
+                    {nativeEngine === 'minimaxmusic-cpp' && native.settings.output_format === 'mp3' && <label className="space-y-1 text-xs">
+                      <span>{t('mp3Bitrate')}</span>
+                      <input type="number" min={32} max={320} step={1} className={CONTROL} placeholder="320"
+                        value={native.settings.mp3_bitrate ?? ''} onChange={event => native.set('mp3_bitrate', event.target.value)} />
+                    </label>}
                     {nativeEngine !== 'acestep-cpp' && (
                       <label className="space-y-1 text-xs">
                         <span>{t('outputFormat')}</span>
@@ -2767,6 +2784,14 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
                 {bedOpen && (
                   <div className="mt-2 rounded-lg border border-zinc-100 p-2 dark:border-white/5">
                     <p className="mb-2 text-[11px] leading-4 text-zinc-500">{tt('chordBedHint')}</p>
+                    {musicEngine === 'local' && mode !== 'cover' && (
+                      <Field label={backingLabel}>
+                        <select aria-label={backingLabel} value={backingSongId} onChange={event => setBackingSongId(event.target.value)} className={CONTROL}>
+                          <option value="">—</option>
+                          {backingTracks.map(song => <option key={song.id} value={song.id}>{song.title}</option>)}
+                        </select>
+                      </Field>
+                    )}
                     <div className="grid grid-cols-3 gap-2">
                       <Field label={tt('chordBedTempo')}>
                         <input value={bedBpm} onChange={event => setBedBpm(event.target.value)} inputMode="numeric" className={CONTROL} />

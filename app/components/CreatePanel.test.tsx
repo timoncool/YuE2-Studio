@@ -111,6 +111,19 @@ const type = (element: HTMLTextAreaElement | HTMLInputElement, value: string) =>
 const click = (element: Element) => act(() => { element.dispatchEvent(new MouseEvent('click', { bubbles: true })); });
 const buttonNamed = (text: string) => [...host.querySelectorAll('button')].find(button => button.textContent?.includes(text));
 
+it('sends the chosen library backing with the same score and words', async () => {
+  const abc = 'X:1\nM:4/4\nL:1/16\nQ:1/4=120\nK:C\nV: Vocal\n"C"z16|';
+  librarySongs = [{ id: 'backing', title: 'Instrumental recording', audioUrl: '/test.wav' } as Song];
+  act(() => root.render(panel({ request: { id: 1, kind: 'score', abc, lyrics: 'one line' } })));
+  await flush();
+  click(buttonNamed('chordBed')!);
+  const select = host.querySelector<HTMLSelectElement>('select[aria-label="Sing over a library backing track"]')!;
+  act(() => { select.value = 'backing'; select.dispatchEvent(new Event('change', { bubbles: true })); });
+  click(buttonNamed('create')!);
+  expect(sent[0]).toMatchObject({ backing_song_id: 'backing', abc, lyrics: 'one line' });
+  expect(sent[0].cover_of).toBeUndefined();
+});
+
 it('queues the other five readings with exactly one score and one pair of seeds', async () => {
   const abc = 'X:1\nK:C\nCDEF|';
   act(() => root.render(panel({ request: { id: 1, kind: 'score', abc, lyrics: 'one line' } })));
@@ -514,6 +527,8 @@ it('posts the remembered MiniMax output format and keeps it out of ACE requests'
   });
   const model = () => host.querySelector<HTMLSelectElement>('select[aria-label="Local model"]')!;
   const format = () => Array.from(host.querySelectorAll('label')).find(label => label.textContent?.startsWith('outputFormat'))?.querySelector('select');
+  const numeric = (label: string) =>
+    [...host.querySelectorAll('label')].find(node => node.textContent?.trim() === label)?.querySelector('input');
   const submit = async () => { click(buttonNamed('create')!); await flush(); };
 
   await setup('minimaxmusic-cpp');
@@ -521,20 +536,29 @@ it('posts the remembered MiniMax output format and keeps it out of ACE requests'
   expect(format()?.value).toBe('flac');
   await submit();
   choose(format()!, 'wav32');
+  type(numeric('lmCfgScale')!, '1.2');
+  type(numeric('lmTopK')!, '35');
+  type(numeric('DiT cfgScale')!, '2.4');
   await submit();
   choose(model(), 'quality');
   expect(format()?.value).toBe('flac');
   choose(format()!, 'mp3');
+  expect(numeric('lmCfgScale')?.value).toBe('');
+  type(numeric('mp3Bitrate')!, '256');
+  type(numeric('fadeInLabel')!, '0.25');
+  type(numeric('fadeOutLabel')!, '1');
   await submit();
   await setup('acestep-cpp');
   choose(model(), 'balanced');
   expect(format()).toBeUndefined();
+  expect(numeric('lmCfgScale')).toBeUndefined();
   await submit();
   await setup('minimaxmusic-cpp');
   expect(model().value).toBe('quality');
   expect(format()?.value).toBe('mp3');
   choose(model(), 'balanced');
   expect(format()?.value).toBe('wav32');
+  expect(numeric('lmTopK')?.value).toBe('35');
   await submit();
 
   expect(posted.map(({ music_source, output_format }) => [music_source, output_format])).toEqual([
@@ -544,11 +568,19 @@ it('posts the remembered MiniMax output format and keeps it out of ACE requests'
     [{ kind: 'native', engine: 'acestep-cpp', model: 'balanced' }, undefined],
     [{ kind: 'native', engine: 'minimaxmusic-cpp', model: 'balanced' }, 'wav32'],
   ]);
+  expect(posted[0].minimax).toBeUndefined();
+  expect(posted[1].minimax).toEqual({ lm_cfg: 1.2, lm_top_k: 35, dit_cfg: 2.4 });
+  expect(posted[2]).toMatchObject({ mp3_bitrate: 256, fade_in: 0.25, fade_out: 1 });
+  expect(posted[3].minimax).toBeUndefined();
+  expect(posted[4].minimax).toEqual(posted[1].minimax);
+  expect(posted[4].mp3_bitrate).toBeUndefined();
 });
 
 it.each([
   { engine: 'acestep-cpp' as const, settings: { duration: 18, inference_steps: 7, guidance_scale: 2.5 }, extra: { ace: { guidance_scale: 2.5 } } },
-  { engine: 'minimaxmusic-cpp' as const, settings: { duration: 18, steps: 7, lm_seed: 55 }, extra: { lm_seed: 55 } },
+  { engine: 'minimaxmusic-cpp' as const,
+    settings: { duration: 18, steps: 7, lm_seed: 55, lm_cfg: 1.25, lm_top_k: 51, dit_cfg: 2.1, output_format: 'mp3', mp3_bitrate: 192, fade_out: 0.4 },
+    extra: { lm_seed: 55, minimax: { lm_cfg: 1.25, lm_top_k: 51, dit_cfg: 2.1 }, output_format: 'mp3', mp3_bitrate: 192, fade_out: 0.4 } },
 ])('reuses the original profile and settings of a migrated $engine take', async ({ engine, settings, extra }) => {
   const song = { title: 'Old take', style: 'folk', lyrics: 'verse', ditModel: engine, lmModel: 'original', generationParams: { ...settings, seed: 42 } } as Song;
   vi.stubGlobal('fetch', vi.fn(async () => Response.json({ engine, engine_installed: true,

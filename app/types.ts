@@ -145,6 +145,7 @@ export type MusicEngine = 'local' | 'openrouter' | 'signed' | ProfileMusicEngine
 export interface YueRequest {
   rvc_after?: import('./services/rvcQuick').RvcSelection;
   openrouter?: import('./services/nativeOpenRouter').OpenRouterMusicOptions;
+  minimax?: { lm_cfg?: number; lm_top_k?: number; dit_cfg?: number };
   /** Capture the editor's selection with the job so later switches cannot reroute it. */
   hotstep_heartmula?: { adapter?: string; adapter_scale?: number };
   hotstep_sa3?: { sampler?: 'pingpong' | 'euler'; adapter?: string; adapter_scale?: number };
@@ -198,6 +199,7 @@ export interface YueRequest {
   title?: string;
   /** The library song whose melody this cover sings; the new song names it. */
   cover_of?: string;
+  backing_song_id?: string;
   cover_prompt?: string;
   /** LoRA adapters for this song, each with a strength per engine slot. */
   adapters?: { id: string; scales: Record<string, number> }[];

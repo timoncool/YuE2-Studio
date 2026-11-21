@@ -545,6 +545,7 @@ const JOURNAL: &[(&str, &str, &str)] = &[
     ("hotstep_heartmula_training_install", "started", "download"),
     ("hotstep_heartmula_install", "started", "download"),
     ("training_continue", "started", "training"),
+    ("training_checkpoints_listen", "started", "training"),
     ("training_cancel", "cancelled", "training"),
     ("training_run_delete", "deleted", "training"),
     ("training_checkpoint_install", "installed", "lora"),
@@ -1085,6 +1086,16 @@ fn rvc_runtime_route(args: &Value) -> String {
 }
 
 fn song_create_schema(mut properties: Value) -> Value {
+    properties["minimax"] = json!({
+        "type": "object", "additionalProperties": false,
+        "description": "Optional sampling controls for native MiniMax Music3.",
+        "properties": {
+            "lm_cfg": { "type": "number", "minimum": 0 },
+            "lm_top_k": { "type": "integer", "minimum": 1, "maximum": i32::MAX },
+            "dit_cfg": { "type": "number", "minimum": 0 }
+        }
+    });
+    properties["backing_song_id"] = json!({"type":"string","description":"Instrumental library song to use unchanged as the backing. Requires native YuE2, a matching Chord bed in abc, lyrics, and a ready vocal separator. Returns a mixed WAV."});
     properties["openrouter"] = json!({
         "type": "object", "additionalProperties": false,
         "description": "Optional music settings advertised by the selected OpenRouter model. Omit fields to use provider defaults.",
@@ -3397,6 +3408,12 @@ fn tools() -> &'static [Tool] {
                 description: "Stop a training run; its saved checkpoints stay.",
                 schema: || id_only("run_id", "training run id"),
                 call: |args| post(format!("/v1/training/runs/{}/cancel", segment(&text(args, "run_id")?)), json!({})),
+            },
+            Tool {
+                name: "training_checkpoints_listen",
+                description: "Queue a 35-second YuE2 base take and one take per saved LoRA checkpoint, using one score and seed. Reuses previous takes. Returns the comparison playlist and job IDs.",
+                schema: || id_only("run_id", "YuE2 training run id"),
+                call: |args| post(format!("/v1/training/runs/{}/checkpoints/listen", segment(&text(args, "run_id")?)), json!({})),
             },
             Tool {
                 name: "training_checkpoint_install",
