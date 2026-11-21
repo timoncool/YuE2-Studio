@@ -54,7 +54,7 @@ pub(super) async fn select(
 }
 
 pub(super) async fn selected(State(state): State<AppState>) -> Json<Option<Options>> {
-    Json(selection(&state))
+    Json(selection(&state).filter(|options| check_voice(&state, &options.voice_id).is_ok()))
 }
 
 fn check_voice(state: &AppState, voice_id: &str) -> Result<(), Failure> {
@@ -109,6 +109,12 @@ impl Stage {
 }
 
 impl Progress {
+    fn cancel(&mut self) {
+        if self.status.active() {
+            self.status = Stage::Cancelled;
+        }
+    }
+
     pub(super) fn complete(&mut self, take: Value) {
         self.take = Some(take);
         self.status = Stage::Completed;
@@ -180,7 +186,13 @@ fn enqueue(state: AppState, song_id: String, options: Options) -> Result<Progres
         take: None,
         error: None,
     };
-    if let Some(take) = saved_take(&state, &progress).map_err(rvc_voices::internal)? {
+    if let Some(take) = saved_take(&state.library, &progress).map_err(rvc_voices::internal)? {
+        if let Some(saved) = jobs.values().find_map(|run| {
+            let job = run.0.lock().unwrap();
+            (job.take.as_ref() == Some(&take)).then(|| job.clone())
+        }) {
+            return Ok(saved);
+        }
         progress.complete(take);
     }
     let run = Arc::new(Run(Mutex::new(progress.clone())));
@@ -192,9 +204,12 @@ fn enqueue(state: AppState, song_id: String, options: Options) -> Result<Progres
     Ok(progress)
 }
 
-fn saved_take(state: &AppState, progress: &Progress) -> anyhow::Result<Option<Value>> {
+fn saved_take(
+    library: &crate::library::Library,
+    progress: &Progress,
+) -> anyhow::Result<Option<Value>> {
     let requested = serde_json::to_value(progress.backend)?;
-    Ok(state.library.list_songs()?.into_iter().find_map(|song| {
+    Ok(library.list_songs()?.into_iter().find_map(|song| {
         let details = &song.metadata["derived"];
         let settings = &details["settings"];
         (details["tool"] == "rvc"
@@ -202,8 +217,7 @@ fn saved_take(state: &AppState, progress: &Progress) -> anyhow::Result<Option<Va
             && settings["quick"] == true
             && settings["voice_id"] == progress.voice_id
             && settings["requested_backend"] == requested
-            && state
-                .library
+            && library
                 .media_path_for_song(&song)
                 .is_some_and(|path| path.is_file()))
         .then(|| {
@@ -250,9 +264,7 @@ pub(super) async fn cancel(
 ) -> Result<Json<Progress>, Failure> {
     let run = read(&state, &id)?;
     let mut progress = run.0.lock().unwrap();
-    if progress.status.active() {
-        progress.status = Stage::Cancelled;
-    }
+    progress.cancel();
     Ok(Json(progress.clone()))
 }
 
@@ -375,4 +387,90 @@ pub(super) fn after_generation(state: AppState, id: String, options: Options) {
             }
         }
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::library::{AudioImportInput, Library};
+
+    fn progress() -> Progress {
+        Progress {
+            id: "job".into(),
+            song_id: "original".into(),
+            voice_id: "voice".into(),
+            backend: Backend::Auto,
+            status: Stage::Converting,
+            take: None,
+            error: None,
+        }
+    }
+
+    #[test]
+    fn cancellation_and_save_have_one_commit_boundary() {
+        let stopped = Run(Mutex::new(progress()));
+        stopped.0.lock().unwrap().cancel();
+        assert!(stopped.commit().is_err());
+
+        let saved = Run(Mutex::new(progress()));
+        saved.commit().unwrap().complete(json!({"song_id":"take"}));
+        let mut saved = saved.0.lock().unwrap();
+        saved.cancel();
+        assert_eq!(saved.status, Stage::Completed);
+        assert_eq!(saved.take.as_ref().unwrap()["song_id"], "take");
+    }
+
+    #[test]
+    fn reuses_only_the_saved_quick_take_for_the_same_source_voice_and_backend() {
+        let scratch = tempfile::tempdir().unwrap();
+        let library = Library::open_at(
+            scratch.path().join("library.sqlite"),
+            scratch.path().join("media"),
+        )
+        .unwrap();
+        let import = |metadata| {
+            library
+                .import_audio_song(AudioImportInput {
+                    title: "Fixture".into(),
+                    caption: String::new(),
+                    lyrics: String::new(),
+                    metadata,
+                    generation_settings: Value::Null,
+                    engine_id: "rvc".into(),
+                    profile_id: None,
+                    source: "rvc".into(),
+                    audio_extension: "wav".into(),
+                    audio: b"fixture".to_vec(),
+                })
+                .unwrap()
+                .song
+        };
+        let source = import(Value::Null);
+        let mut same = progress();
+        same.song_id = source.id.clone();
+        let take = import(
+            json!({"derived": {"from": source.id, "tool": "rvc", "settings": {
+                "voice_id": same.voice_id, "quick": true, "requested_backend": "auto", "effective_backend": "audio.cpp"
+            }}}),
+        );
+        assert_eq!(
+            saved_take(&library, &same).unwrap().unwrap()["song_id"],
+            take.id
+        );
+        let different_voice = Progress {
+            voice_id: "different".into(),
+            ..same.clone()
+        };
+        assert!(saved_take(&library, &different_voice).unwrap().is_none());
+        let different_backend = Progress {
+            backend: Backend::VocalFastRs,
+            ..same
+        };
+        assert!(saved_take(&library, &different_backend).unwrap().is_none());
+        assert_eq!(library.list_songs().unwrap().len(), 2);
+        assert_eq!(
+            std::fs::read(library.media_path_for_song(&source).unwrap()).unwrap(),
+            b"fixture"
+        );
+    }
 }

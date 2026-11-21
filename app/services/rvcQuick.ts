@@ -36,8 +36,9 @@ export function chooseLastRvcVoice(voiceId: string, backend = readRvcBackend()) 
   localStorage.setItem(RVC_VOICE_STORAGE, voiceId);
   window.dispatchEvent(new Event(SELECTION_CHANGED));
   const body: RvcSelection = { voice_id: voiceId, backend };
+  const save = globalThis.fetch;
   lastUpdate = lastUpdate.then(async () => {
-    await responseJson(await fetch('/v1/rvc/selection', {
+    await responseJson(await save('/v1/rvc/selection', {
       method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
     }));
   }).catch(() => { /* The local action still carries the chosen voice and backend. */ });

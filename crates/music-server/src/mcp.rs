@@ -542,7 +542,7 @@ const JOURNAL: &[(&str, &str, &str)] = &[
     ("rvc_native_runtime_install", "started", "download"),
     ("rvc_native_runtime_cancel", "cancelled", "download"),
     ("rvc_apply", "created", "song"),
-    ("rvc_voice_select", "selected", "rvc_voice"),
+    ("rvc_voice_select", "updated", "rvc_voice"),
     ("rvc_quick_start", "started", "processing"),
     ("rvc_quick_cancel", "cancelled", "processing"),
     ("lora_import_folder", "installed", "lora"),
