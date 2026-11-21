@@ -41,6 +41,8 @@ import {
   installCheckpoint,
   installRvcBurnVoice,
   installSignedTrainer,
+  installTrainingBase,
+  cancelTrainingBase,
   installListenPack,
   installTrainingPack,
   nameFromPicked,
@@ -748,6 +750,11 @@ const TrainStep: React.FC<{ state: TrainingState; recipe: Recipe; setRecipe: (re
   const { language } = useI18n();
   const [trainingEngine, setTrainingEngine] = useState<'yue2' | 'sa3' | 'heartmula' | 'rvc'>('yue2');
   const [selectedTrainer, setSelectedTrainer] = useState('');
+  const [baseId, setBaseId] = useState('stock');
+  const [installingBase, setInstallingBase] = useState(false);
+  const base = state.training_bases?.find(option => option.id === baseId);
+  const alternateBase = Boolean(base && base.id !== 'stock');
+  const baseDownload = state.training_base_download;
   const [installingTrainer, setInstallingTrainer] = useState(false);
   const trainers = state.trainers ?? [];
   const signed = trainers.slice(1).find(trainer => trainer.id === selectedTrainer);
@@ -762,8 +769,22 @@ const TrainStep: React.FC<{ state: TrainingState; recipe: Recipe; setRecipe: (re
   const preparing = Boolean(job && !job.finished);
   const blocker = !dataset.items.length ? t('trainingNeedSongs') : lyricsProblem ? lyricsProblem : preparing ? t('trainingWaitPrepare') : state.active ? t('trainingBusy') : null;
   // only the previous recipe's lyric timing reads separated vocals
-  const packReady = (signed ? state.trainer_weights_ready && signed.installed : state.pack_ready)
+  const selectedPackReady = alternateBase
+    ? base?.installed && state.training_shared_weights_ready && (signed ? signed.installed : trainers[0]?.installed)
+    : signed ? state.trainer_weights_ready && signed.installed : state.pack_ready;
+  const packReady = selectedPackReady
     && (state.separator_ready || String(recipe.preset) !== 'tuned' || recipe.lyric_timing !== true);
+  const installBase = async (id: string) => {
+    setInstallingBase(true);
+    try {
+      await installTrainingBase(id);
+      onRefresh();
+    } catch (problem) {
+      onError(errorText(problem));
+    } finally {
+      setInstallingBase(false);
+    }
+  };
   const installTrainer = async (id: string) => {
     setInstallingTrainer(true);
     try {
@@ -778,7 +799,7 @@ const TrainStep: React.FC<{ state: TrainingState; recipe: Recipe; setRecipe: (re
   const start = async () => {
     setStarting(true);
     try {
-      await startRun(dataset.id, dataset.name, recipe, signed?.id);
+      await startRun(dataset.id, dataset.name, recipe, signed?.id, base?.id);
       onStarted();
     } catch (problem) {
       onError(errorText(problem));
@@ -825,7 +846,32 @@ const TrainStep: React.FC<{ state: TrainingState; recipe: Recipe; setRecipe: (re
           <Download size={14} />{t('trainingDownload')} · {downloadSize(signed.bytes)}
         </button>}
       </div>}
-      {!packReady && (!signed || !state.trainer_weights_ready) && <PackCard state={state} onError={onError} onChanged={onRefresh} />}
+      {(state.training_bases?.length ?? 0) > 1 && <div className={CARD}>
+        <label className="block max-w-sm">
+          <span className={LABEL}>{t('trainingBase')}</span>
+          <select className={`${CONTROL} mt-1`} value={baseId}
+            disabled={starting || installingBase || Boolean(baseDownload && !baseDownload.done)}
+            onChange={event => setBaseId(event.target.value)}>
+            {state.training_bases?.map(option => <option key={option.id} value={option.id}>{option.label}</option>)}
+          </select>
+        </label>
+        {alternateBase && base?.note && <p className={HINT}>{base.note}</p>}
+        {state.training_own_base_folder && <p className={HINT}>
+          {t('trainingOwnBase')} <code className="break-all">{state.training_own_base_folder}</code>
+        </p>}
+        {alternateBase && base && !selectedPackReady && !(baseDownload && !baseDownload.done) &&
+          <button type="button" className={`${OUTLINE} mt-2`}
+            disabled={installingBase || !state.card_trains} onClick={() => void installBase(base.id)}>
+            <Download size={14} />{t('trainingDownload')}{!base.installed && ` · ${downloadSize(base.bytes)}`}
+          </button>}
+        {baseDownload && !baseDownload.done && <div className="mt-2 flex items-center gap-2">
+          <progress aria-label={t('trainingBase')} className="w-full" value={baseDownload.downloaded_bytes} max={Math.max(1, baseDownload.total_bytes)} />
+          <button type="button" className={OUTLINE}
+            onClick={() => void cancelTrainingBase().then(onRefresh).catch(problem => onError(errorText(problem)))}>{t('trainingStop')}</button>
+        </div>}
+        {baseDownload?.error && <p className="mt-2 text-sm text-red-600">{baseDownload.error}</p>}
+      </div>}
+      {!alternateBase && !packReady && (!signed || !state.trainer_weights_ready) && <PackCard state={state} onError={onError} onChanged={onRefresh} />}
       <section className={CARD}>
         <div className="grid gap-3 sm:grid-cols-2">
           <label>
@@ -1093,6 +1139,7 @@ const RunCard: React.FC<{ run: TrainingRun; onChanged: () => void; onError: (mes
         </button>
       )}
       {run.trainer && <p className="mt-2 text-xs">{t('trainingTrainer')} · {run.trainer.id} · {run.trainer.version.slice(0, 12)}</p>}
+      {run.training_base && <p className="text-xs">{t('trainingBase')} · {run.training_base.id}</p>}
       {run.output_adapter && <p className="mt-3 text-xs">{t('trainingLoraName')}: <code>{run.output_adapter}</code></p>}
       {run.checkpoints.length > 0 && (
         <div className="mt-3">

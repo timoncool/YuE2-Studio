@@ -3018,9 +3018,16 @@ fn tools() -> &'static [Tool] {
             },
             Tool {
                 name: "training_pack_cancel",
-                description: "Stop the trainer download at work.",
-                schema: nothing,
-                call: |_| post("/v1/training/pack/cancel".into(), json!({})),
+                description: "Stop the trainer download. Set training_base true for a separately selected base.",
+                schema: || object(json!({ "training_base": { "type": "boolean" } }), &[]),
+                call: |args| {
+                    let path = if args.get("training_base").and_then(Value::as_bool) == Some(true) {
+                        "/v1/training/bases/cancel"
+                    } else {
+                        "/v1/training/pack/cancel"
+                    };
+                    post(path.into(), json!({}))
+                },
             },
             Tool {
                 name: "dataset_prepare_train_after",
@@ -3043,9 +3050,12 @@ fn tools() -> &'static [Tool] {
             },
             Tool {
                 name: "training_pack_install",
-                description: "Download the trainer and its weights (needed once before training).",
-                schema: nothing,
-                call: |_| post("/v1/training/pack/install".into(), json!({})),
+                description: "Download the standard trainer and its weights. With base_id, install a separate base listed by detailed training_status.",
+                schema: || object(json!({ "base_id": { "type": "string" } }), &[]),
+                call: |args| match args.get("base_id").and_then(Value::as_str) {
+                    Some(id) => post(format!("/v1/training/bases/{}/install", segment(id)), json!({})),
+                    None => post("/v1/training/pack/install".into(), json!({})),
+                },
             },
             Tool {
                 name: "training_listen_pack_cancel",
@@ -3245,7 +3255,7 @@ fn tools() -> &'static [Tool] {
             Tool {
                 name: "training_start",
                 description: "Train a LoRA on a dataset. recipe: the recipe from training_status (recipe_defaults) with your changes. preset picks the size: 'fast' (100 steps of 4 songs), 'balanced' (200 of 4, the default), 'thorough' (300 of 8) - the base-matched method, trained the way the base model was; or 'tuned', the previous recipe, with stop 'kl' and target_kl 1.4 or stop 'epochs' with epochs. Watch training_status; one run at a time, and it holds the card.",
-                schema: || object(json!({ "dataset_id": { "type": "string" }, "name": { "type": "string" }, "recipe": { "type": "object" }, "trainer_id": { "type": "string" } }), &["dataset_id", "recipe"]),
+                schema: || object(json!({ "dataset_id": { "type": "string" }, "name": { "type": "string" }, "recipe": { "type": "object" }, "trainer_id": { "type": "string" }, "base_id": { "type": "string" } }), &["dataset_id", "recipe"]),
                 call: |args| post("/v1/training/runs".into(), args.clone()),
             },
             Tool {

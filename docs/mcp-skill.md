@@ -206,7 +206,14 @@ For YuE2 LoRA training, the detailed `training_status` response lists the
 bundled trainer and compatible signed trainers for this platform. Install a
 signed trainer with the normal engine component installer and pass its
 `trainer_id` to `training_start` to select it. A continuation uses the
-original trainer generation and optimizer format recorded in the run.
+original trainer generation and optimizer format recorded in the run. The
+same detailed status lists `training_bases`. Pass one of those IDs as
+`base_id` to `training_pack_install` and to `training_start`. The selected
+ConvRot and decoder companion are recorded by SHA-256. Place a matching custom
+ConvRot Safetensors in `training_own_base_folder` and select its generation
+GGUF in Settings before training it. The installed LoRA shows which base fits
+the selected generation model. Use `training_base: true` with
+`training_pack_cancel` to stop a base download.
 
 For HeartMuLa adapter training, use `hotstep_heartmula_training_status`,
 `hotstep_heartmula_training_install` and `hotstep_heartmula_training_start`.

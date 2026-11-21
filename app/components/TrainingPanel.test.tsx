@@ -115,9 +115,12 @@ it('displays Burn training progress and keeps a saved checkpoint installable aft
   }
 });
 
-it('can start the same YuE2 dataset with an installed signed trainer', async () => {
+it.each([undefined, 'ruach-rs-tw-2.0x0.75'])('starts a signed trainer with training base %s', async base => {
   const state = {
-    pack: [], pack_ready: false, trainer_weights_ready: true, card_trains: true, listen: { ready: true }, runs: [],
+    pack: [], pack_ready: false, trainer_weights_ready: true, training_shared_weights_ready: true,
+    training_bases: base ? [{ id: 'stock', label: 'Stock', bytes: 300, installed: false },
+      { id: base, label: 'Ruach', bytes: 400, installed: true }] : undefined,
+    card_trains: true, listen: { ready: true }, runs: [],
     recipe_defaults: { preset: 'balanced', seed: 42 }, recipe_fields: [],
     trainers: [{ id: 'music-train-bundled', label: 'Bundled', version: 'original', installed: false, bytes: 500 },
       { id: 'signed-trainer', label: 'Signed', version: 'revised', installed_version: 'revised', installed: true, bytes: 700 }],
@@ -147,8 +150,16 @@ it('can start the same YuE2 dataset with an installed signed trainer', async () 
       trainer.value = 'signed-trainer';
       trainer.dispatchEvent(new Event('change', { bubbles: true }));
     });
+    if (base) {
+      const baseSelect = host.querySelector<HTMLSelectElement>(`select:has(option[value="${base}"])`)!;
+      await act(async () => {
+        baseSelect.value = base;
+        baseSelect.dispatchEvent(new Event('change', { bubbles: true }));
+      });
+    }
     await press('trainingStart');
-    expect(start).toHaveBeenCalledWith({ dataset_id: 'set', name: 'Test vocals', recipe: state.recipe_defaults, trainer_id: 'signed-trainer' });
+    expect(start).toHaveBeenCalledWith({ dataset_id: 'set', name: 'Test vocals', recipe: state.recipe_defaults,
+      trainer_id: 'signed-trainer', ...(base ? { base_id: base } : {}) });
   } finally {
     await act(async () => root.unmount());
     vi.unstubAllGlobals();
