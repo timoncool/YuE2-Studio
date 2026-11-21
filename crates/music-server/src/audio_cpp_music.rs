@@ -196,19 +196,7 @@ impl Family {
             Self::MiniMaxH3 => audio_cpp_minimax_h3::catalog(root, runtime_ready),
             Self::HeartMuLa => audio_cpp_heartmula::catalog(root, runtime_ready),
             Self::StableAudio => audio_cpp_stable_audio::catalog(root, runtime_ready),
-            Self::MiDasheng => match root {
-                Some(root) => audio_cpp_midasheng::catalog(&self.directory(root), runtime_ready),
-                None => {
-                    let mut row = audio_cpp_midasheng::catalog(FsPath::new(""), runtime_ready);
-                    row["ready"] = Value::Bool(false);
-                    row["missing"] = serde_json::json!(if runtime_ready {
-                        vec!["Studio data folder"]
-                    } else {
-                        vec!["Studio data folder", "audio.cpp runtime"]
-                    });
-                    row
-                }
-            },
+            Self::MiDasheng => audio_cpp_midasheng::catalog(root, runtime_ready),
             Self::Magenta => audio_cpp_magenta::catalog(root, runtime_ready),
             Self::MuLaCover => audio_cpp_mulacover::catalog(root, runtime_ready, soxr_ready),
             Self::Vevo2 => audio_cpp_vevo2::catalog(root, runtime_ready),
@@ -277,6 +265,19 @@ impl PreparedTask {
                 .map(|(body, directory)| (body, Some(directory))),
         }
     }
+}
+
+pub(super) fn matches_gguf_package(path: &FsPath, bytes: u64, tensors: u64, metadata_keys: u64) -> bool {
+    std::fs::File::open(path).is_ok_and(|mut file| {
+        use std::io::Read as _;
+        let mut header = [0; 24];
+        file.metadata().is_ok_and(|info| info.is_file() && info.len() == bytes)
+            && file.read_exact(&mut header).is_ok()
+            && header[..4] == *b"GGUF"
+            && header[4..8] == 3_u32.to_le_bytes()
+            && header[8..16] == tensors.to_le_bytes()
+            && header[16..24] == metadata_keys.to_le_bytes()
+    })
 }
 
 pub(super) fn registered_model_ready(model: &ModelEntry) -> Option<bool> {
@@ -549,6 +550,26 @@ fn minimax_catalog(root: Option<&FsPath>, runtime_ready: bool) -> Value {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn manual_magenta_and_midasheng_catalogues_reject_truncated_packages() {
+        let root = tempfile::tempdir().unwrap();
+        for (family, file, bytes) in [
+            (Family::Magenta, "magenta-rt2-small-f16.gguf", 1_529_647_616_u64),
+            (Family::MiDasheng, "midashenglm-gen-q8_0.gguf", 3_381_370_752_u64),
+        ] {
+            let directory = family.directory(root.path());
+            std::fs::create_dir_all(&directory).unwrap();
+            std::fs::write(directory.join(file), [b"GGUF".as_slice(), &[0; 32]].concat()).unwrap();
+            let row = family.catalog(Some(root.path()), false, true);
+            assert_eq!(row["ready"], false);
+            assert_eq!(row["missing"], serde_json::json!([file, "audio.cpp runtime"]));
+            assert_eq!(row["missing_bytes"], bytes);
+            assert_eq!(row["bytes"], bytes);
+            assert!(row["package_url"].as_str().unwrap().ends_with(file));
+            assert!(row["license_url"].is_string());
+        }
+    }
 
     #[test]
     fn repairing_heartmula_preserves_download_resume_files() {
