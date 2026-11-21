@@ -250,7 +250,7 @@ async fn materialize_model_file(
 }
 
 async fn install<P: Package>(
-    root: &Path,
+    state: &AppState,
     package: &P,
     automatic: bool,
 ) -> Result<serde_json::Value> {
@@ -264,16 +264,17 @@ async fn install<P: Package>(
     tokio::select! {
         biased;
         _ = cancelled.changed() => anyhow::bail!("Package installation cancelled"),
-        result = stage_package(root, package, &job.transfer, automatic) => result,
+        result = stage_package(state, package, &job.transfer, automatic) => result,
     }
 }
 
 async fn stage_package<P: Package>(
-    root: &Path,
+    state: &AppState,
     package: &P,
     transfer: &super::progress::Transfer,
     automatic: bool,
 ) -> Result<serde_json::Value> {
+    let root = update_data_root(state).join(P::FOLDER);
     let objects = root.with_file_name("music-model-objects");
     let root = root.join(package.id());
     tokio::fs::create_dir_all(&root).await?;
@@ -386,14 +387,43 @@ async fn stage_package<P: Package>(
     let mut next = tempfile::NamedTempFile::new_in(&root)?;
     serde_json::to_writer(next.as_file_mut(), &selection)?;
     next.as_file().sync_all()?;
-    // Files from an old generation may still be loaded by an active engine.
-    // Publish its replacement only after every signed artifact is present.
+    // An installed generation stays selected until work on the shared device
+    // drains. The lease also orders activation against the next admission.
+    let _activation = if selection.previous.is_some() {
+        Some(wait_for_activation(state, transfer).await)
+    } else {
+        None
+    };
     transfer.stage("activating", None);
-    let _generation_path = stage.keep();
     next.persist(root.join("active.json"))?;
+    let _generation_path = stage.keep();
     Ok(
         serde_json::json!({"generation":generation,"downloaded_bytes":downloaded,"reused_bytes":reused}),
     )
+}
+
+async fn wait_for_activation(
+    state: &AppState,
+    transfer: &super::progress::Transfer,
+) -> tokio::sync::OwnedRwLockWriteGuard<()> {
+    loop {
+        let lease = match state.engine_use.clone().try_write_owned() {
+            Ok(lease) => lease,
+            Err(_) => {
+                transfer.stage("waiting_for_idle", None);
+                state.engine_use.clone().write_owned().await
+            }
+        };
+        // A native queue or a trainer can still be working after releasing
+        // its admission lease. Let it finish without holding up its cleanup.
+        let songs_running = state.jobs.read().await.values().any(crate::song_in_engine);
+        if !songs_running && state.training.active_run().await.is_none() {
+            return lease;
+        }
+        transfer.stage("waiting_for_idle", None);
+        drop(lease);
+        tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+    }
 }
 
 pub(crate) struct InstalledEngine {
@@ -573,8 +603,7 @@ async fn update_engine(
             "This engine needs a different Studio protocol.".into(),
         ));
     }
-    let root = update_data_root(&state).join("music-engines");
-    install(&root, package, automatic)
+    install(state, package, automatic)
         .await
         .map(Json)
         .map_err(|e| api_error(StatusCode::CONFLICT, format!("{e:#}")))
@@ -630,11 +659,7 @@ async fn update_model(
     let catalog = current_catalogue().await?;
     let model = ModelPackage::select(catalog, &id)
         .map_err(|e| api_error(StatusCode::NOT_FOUND, e.to_string()))?;
-    install(
-        &update_data_root(state).join(ModelPackage::FOLDER),
-        &model,
-        automatic,
-    )
+    install(state, &model, automatic)
     .await
     .map(Json)
     .map_err(|e| api_error(StatusCode::CONFLICT, format!("{e:#}")))
