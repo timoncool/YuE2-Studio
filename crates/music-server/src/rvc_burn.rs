@@ -103,6 +103,7 @@ impl Runtime {
     }
 
     fn prepare_sdk(&self) -> anyhow::Result<()> {
+        music_core::process::runtime_beside(&self.exe);
         if let Some((profile, downloader)) = &self.managed {
             rvc_burn_install::prepare_sdk(*profile, downloader)?;
         }
