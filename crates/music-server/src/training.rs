@@ -287,6 +287,8 @@ pub struct Run {
 
 pub(super) const BUILTIN_TRAINER: &str = "music-train-bundled";
 const YUE2_STATE_FORMAT: &str = "yue2-joint-state-v1";
+const PREVIOUS_BUILTIN_VERSION: &str = "75923e70036e3f36653e4d9f4d4e8c5e23c73dfb";
+const CURRENT_BUILTIN_VERSION: &str = "479cbeb8f5e7de98f85f2ac8c3da305cb73839e8";
 const STOCK_BASE: &str = "stock";
 const OWN_BASE_PREFIX: &str = "own:";
 pub(super) const BASE_SCOPE: &str = "training-base";
@@ -391,6 +393,19 @@ pub struct TrainerIdentity {
     weights_revision: String,
 }
 
+impl TrainerIdentity {
+    fn can_resume(&self, saved: &Self) -> bool {
+        if self.id != saved.id || self.generation != saved.generation {
+            return false;
+        }
+        self.version == saved.version
+            || (self.id == BUILTIN_TRAINER
+                && self.generation.is_none()
+                && saved.version == PREVIOUS_BUILTIN_VERSION
+                && self.version == CURRENT_BUILTIN_VERSION)
+    }
+}
+
 /// The run trained on from the checkpoint at `from` up to `to` steps.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Continuation {
@@ -484,11 +499,10 @@ pub const TOOLS_FOLDER_PREFIX: &str = "hotstep-tools";
 /// Removes the tools folders of earlier releases from the shared root, and
 /// the folders of before the tools were one build (`legacy_prefix` under the
 /// capability's own `runtime`): nothing runs them any more. The folders of
-/// today's release (`current_folder`, and the transcriber's other builds named
-/// `<current_folder>-...`) stay.
-pub fn remove_older_tool_folders(downloader: &Downloader, current_folder: &str, legacy_prefix: &str) {
+/// today's release and the compatible retained trainer stay.
+fn remove_older_tool_folders(downloader: &Downloader, current_folder: &str, retained: Option<&str>, legacy_prefix: &str) {
     let current = downloader.runtime_dir(current_folder);
-    let today = |name: &str| name == current_folder || name.starts_with(&format!("{current_folder}-"));
+    let keep = |name: &str| Some(name) == retained || name == current_folder || name.starts_with(&format!("{current_folder}-"));
     let sweep = |directory: &Path, prefix: &str| {
         let Ok(entries) = std::fs::read_dir(directory) else { return };
         for entry in entries.flatten() {
@@ -500,7 +514,7 @@ pub fn remove_older_tool_folders(downloader: &Downloader, current_folder: &str, 
             } else {
                 name.starts_with(prefix)
             };
-            if managed && !today(&name) && entry.file_type().is_ok_and(|kind| kind.is_dir()) {
+            if managed && !keep(&name) && entry.file_type().is_ok_and(|kind| kind.is_dir()) {
                 if let Err(error) = std::fs::remove_dir_all(entry.path()) {
                     eprintln!("[ERROR] could not remove the older {} {}: {error}", prefix, entry.path().display());
                 }
@@ -520,6 +534,22 @@ fn trainer_folder() -> &'static str {
     static FOLDER: OnceLock<String> = OnceLock::new();
     FOLDER.get_or_init(|| trainer_source().release_tag.clone())
 }
+
+// Older signed generations are resolved separately. Keep this one compatible
+// built-in archive's record and runtime independent during the current upgrade.
+const PREVIOUS_TRAINER: Asset = Asset {
+    id: "music-train",
+    label: "Trainer (HOT-Step 75923e70)",
+    kind: AssetKind::Runtime,
+    url: "https://github.com/timoncool/YuE2-Studio/releases/download/hotstep-tools-75923e70-xcr0/hotstep-tools-xcr0-cuda-windows-x64.zip",
+    relative_path: "hotstep-tools-xcr0-cuda-windows-x64.zip",
+    bytes: 125_410_660,
+    unzip_into: Some("hotstep-tools-75923e70-xcr0"),
+    marker: "music-train.exe",
+    pick: &[],
+    vram_gb: None,
+    note: "",
+};
 
 pub(super) fn cuda12_backend() -> &'static Asset {
     static BACKEND: OnceLock<Asset> = OnceLock::new();
@@ -859,10 +889,16 @@ impl Training {
             .unwrap_or_else(|| self.downloader.runtime_dir(trainer_folder()).join(&trainer_source().shipped_as))
     }
 
+    fn previous_trainer(&self) -> PathBuf {
+        self.downloader.picked_into(&PREVIOUS_TRAINER).join(PREVIOUS_TRAINER.marker)
+    }
+
     /// The built-in trainer is the default for existing runs and recipes.
     fn builtin_identity(&self, trainer: &Path) -> Result<TrainerIdentity> {
         let version = if std::env::var_os("YUE_TRAIN_BIN").is_some() {
             format!("local-{}", crate::install_record::sha256_of(trainer)?)
+        } else if trainer == self.previous_trainer() {
+            PREVIOUS_BUILTIN_VERSION.into()
         } else {
             trainer_source().commit.clone()
         };
@@ -875,7 +911,7 @@ impl Training {
         })
     }
 
-    async fn select_trainer(&self, id: Option<&str>, saved: Option<&TrainerIdentity>) -> Result<(PathBuf, TrainerIdentity)> {
+    async fn select_trainer(&self, id: Option<&str>, saved: Option<&TrainerIdentity>, continuing: bool) -> Result<(PathBuf, TrainerIdentity)> {
         if let Some(saved) = saved
             && (saved.optimizer_format != YUE2_STATE_FORMAT || saved.weights_revision != yue_train::WEIGHTS_REVISION)
         {
@@ -883,12 +919,7 @@ impl Training {
         }
         let choice = saved.map(|saved| saved.id.as_str()).or(id).unwrap_or(BUILTIN_TRAINER);
         let (trainer, identity) = if choice == BUILTIN_TRAINER {
-            let path = self.trainer();
-            if !path.is_file() {
-                bail!("the trainer is not installed: {} is missing", path.display());
-            }
-            let identity = self.builtin_identity(&path)?;
-            (path, identity)
+            self.select_builtin_trainer(saved, continuing)?
         } else {
             let data_root = self.root.parent().context("Studio data folder")?;
             let generation = saved.and_then(|saved| saved.generation.as_deref());
@@ -901,15 +932,32 @@ impl Training {
                 },
             )
         };
-        if let Some(saved) = saved
-            && (identity.version != saved.version || identity.generation != saved.generation)
-        {
+        if let Some(saved) = saved && !identity.can_resume(saved) {
             bail!("Install the original trainer generation before continuing this checkpoint.");
         }
         if !self.shared_weights_ready() {
             bail!("the YuE2 shared training weights are not downloaded yet");
         }
         Ok((trainer, identity))
+    }
+
+    fn select_builtin_trainer(&self, saved: Option<&TrainerIdentity>, continuing: bool) -> Result<(PathBuf, TrainerIdentity)> {
+        let program = self.trainer();
+        if self.installed(&pack()[0]) {
+            let identity = self.builtin_identity(&program)?;
+            return Ok((program, identity));
+        }
+        if continuing
+            && std::env::var_os("YUE_TRAIN_BIN").is_none()
+            && trainer_source().commit == CURRENT_BUILTIN_VERSION
+            && saved.is_none_or(|identity| identity.version == PREVIOUS_BUILTIN_VERSION && identity.generation.is_none())
+            && self.downloader.is_verified_install(&PREVIOUS_TRAINER)
+        {
+            let previous = self.previous_trainer();
+            let identity = self.builtin_identity(&previous)?;
+            return Ok((previous, identity));
+        }
+        bail!("the trainer is not installed: {} has no completed installation", program.display());
     }
 
     pub(super) fn training_base_asset(id: &str) -> Result<&'static Asset> {
@@ -1137,10 +1185,8 @@ impl Training {
         Ok(self.runs_dir().join(safe_id(id)?))
     }
 
-    /// Whether a part of the pack is usable; the trainer counts as present
-    /// wherever `trainer` finds it.
     fn installed(&self, asset: &Asset) -> bool {
-        if asset.id == "music-train" {
+        if asset.id == "music-train" && std::env::var_os("YUE_TRAIN_BIN").is_some() {
             return self.trainer().is_file();
         }
         self.downloader.is_installed(asset)
@@ -1192,12 +1238,14 @@ impl Training {
         Ok(())
     }
 
-    /// The trainers of earlier releases; nothing runs them any more.
+    /// Retire older tools once the upgrade is complete, keeping the compatible
+    /// predecessor available for continuations that started during the upgrade.
     fn remove_older_trainers(&self) {
         let Some(runtime) = pack().iter().find(|asset| asset.id == "music-train") else { return };
         let managed = self.downloader.runtime_dir(trainer_folder()).join(runtime.marker);
         if managed.is_file() && self.downloader.is_installed(runtime) {
-            remove_older_tool_folders(&self.downloader, trainer_folder(), "music-train");
+            let retained = PREVIOUS_TRAINER.unzip_into.filter(|_| trainer_source().commit == CURRENT_BUILTIN_VERSION);
+            remove_older_tool_folders(&self.downloader, trainer_folder(), retained, "music-train");
         }
     }
 
@@ -1612,7 +1660,7 @@ impl Training {
         base_id: Option<&str>,
         card: CardHooks,
     ) -> Result<Run> {
-        let (trainer, trainer_identity) = self.select_trainer(trainer_id, None).await?;
+        let (trainer, trainer_identity) = self.select_trainer(trainer_id, None, false).await?;
         let (checkpoint, training_base) = self.resolve_training_base(base_id, None, &companion, Some(&tokenizer)).await?;
         let dataset = self.dataset(dataset_id)?;
         if dataset.items.is_empty() {
@@ -1913,7 +1961,7 @@ impl Training {
     /// judged on a window the resumed trainer starts empty.
     pub async fn continue_run(self: &Arc<Self>, libraries: Option<PathBuf>, companion: PathBuf, run_id: &str, steps: u32, card: CardHooks) -> Result<Run> {
         let saved = self.run(run_id)?;
-        let (trainer, trainer_identity) = self.select_trainer(None, saved.trainer.as_ref()).await?;
+        let (trainer, trainer_identity) = self.select_trainer(None, saved.trainer.as_ref(), true).await?;
         let (checkpoint, training_base) = self.resolve_training_base(None, saved.training_base.as_ref(), &companion, None).await?;
         let (from, state) = self.resume_point(run_id).map_err(|code| anyhow::anyhow!(refusal(code)))?;
         if steps <= from {
@@ -2046,7 +2094,8 @@ impl Training {
             };
             log.write_all(format!("==== {}\n", stage.id).as_bytes()).await?;
             let cuda12_runtime = (cfg!(windows) && !signed_trainer
-                && trainer == self.downloader.runtime_dir(trainer_folder()).join(&trainer_source().shipped_as)
+                && (trainer == self.downloader.runtime_dir(trainer_folder()).join(&trainer_source().shipped_as)
+                    || trainer == self.previous_trainer())
                 && crate::trainer_cuda_build() == Some(crate::hardware::CudaBuild::Cuda12))
                 .then(|| -> Result<_> {
                     let asset = cuda12_backend();
@@ -2525,7 +2574,7 @@ mod tests {
         for name in ["hotstep-tools-75923e70-xcr0", "hotstep-tools-75923e70-xcr0-midi-cuda12", "hotstep-tools-75923e70-xcr0-midi-cpu", "hotstep-tools-75923e70", "hotstep-tools-2ef93a1c-midi-cpu", "hotstep-tools-local"] {
             std::fs::create_dir_all(shared.join(name)).unwrap();
         }
-        remove_older_tool_folders(&downloader, "hotstep-tools-75923e70-xcr0", "music-train");
+        remove_older_tool_folders(&downloader, "hotstep-tools-75923e70-xcr0", None, "music-train");
         let mut left: Vec<String> = std::fs::read_dir(&shared).unwrap().flatten().map(|entry| entry.file_name().to_string_lossy().into_owned()).collect();
         left.sort();
         assert_eq!(left, ["hotstep-tools-75923e70-xcr0", "hotstep-tools-75923e70-xcr0-midi-cpu", "hotstep-tools-75923e70-xcr0-midi-cuda12", "hotstep-tools-local"]);
@@ -2567,6 +2616,94 @@ mod tests {
         for asset in pack().iter().filter(|asset| asset.kind == AssetKind::Model) {
             assert_eq!(std::fs::read(restarted.downloader.path_of(asset)).unwrap(), b"existing weights");
         }
+    }
+
+    #[test]
+    fn the_builtin_trainer_resumes_the_previous_native_release() {
+        let current = TrainerIdentity {
+            id: BUILTIN_TRAINER.into(),
+            version: CURRENT_BUILTIN_VERSION.into(),
+            generation: None,
+            optimizer_format: YUE2_STATE_FORMAT.into(),
+            weights_revision: yue_train::WEIGHTS_REVISION.into(),
+        };
+        let mut saved = TrainerIdentity {
+            version: PREVIOUS_BUILTIN_VERSION.into(),
+            ..current.clone()
+        };
+        assert!(current.can_resume(&saved));
+        assert!(!saved.can_resume(&current));
+        saved.generation = Some("previous-generation".into());
+        assert!(!current.can_resume(&saved));
+        saved.generation = None;
+        saved.version = "unknown-native-version".into();
+        assert!(!current.can_resume(&saved));
+    }
+
+    #[tokio::test]
+    #[cfg(windows)]
+    async fn a_cancelled_or_failed_upgrade_keeps_saved_runs_on_the_verified_trainer() {
+        let data = tempfile::tempdir().unwrap();
+        let training = Training::new(data.path(), "yue2");
+        let downloader = training.downloader();
+        let current = &pack()[0];
+        let record = downloader.record_of(current);
+        let previous_record = downloader.record_of(&PREVIOUS_TRAINER);
+        assert_ne!(record, previous_record);
+        let previous = downloader.picked_into(&PREVIOUS_TRAINER).join(PREVIOUS_TRAINER.marker);
+        std::fs::create_dir_all(previous.parent().unwrap()).unwrap();
+        std::fs::write(&previous, b"previous trainer").unwrap();
+        crate::install_record::write(
+            &previous_record, PREVIOUS_TRAINER.url, crate::pin_sha::sha256(PREVIOUS_TRAINER.url).unwrap(),
+            std::slice::from_ref(&previous), downloader.root(),
+        ).unwrap();
+        for asset in pack().iter().filter(|asset| asset.kind == AssetKind::Model) {
+            let file = downloader.path_of(asset);
+            std::fs::write(file, b"existing weights").unwrap();
+        }
+        let saved = TrainerIdentity {
+            id: BUILTIN_TRAINER.into(),
+            version: PREVIOUS_BUILTIN_VERSION.into(),
+            generation: None,
+            optimizer_format: YUE2_STATE_FORMAT.into(),
+            weights_revision: yue_train::WEIGHTS_REVISION.into(),
+        };
+        let attempt = downloader.install_all_with_cancel(SCOPE, &[current], Some(&|| true)).await;
+        assert_eq!(attempt.unwrap_err().to_string(), "cancelled");
+        let (executable, identity) = training.select_trainer(None, Some(&saved), true).await.unwrap();
+        assert_eq!(executable, previous);
+        assert_eq!(identity.version, PREVIOUS_BUILTIN_VERSION);
+        assert!(training.select_trainer(None, None, false).await.is_err());
+        let (executable, identity) = training.select_trainer(None, None, true).await.unwrap();
+        assert_eq!(executable, previous);
+        assert_eq!(identity.version, PREVIOUS_BUILTIN_VERSION);
+
+        let broken = data.path().join("broken.zip");
+        std::fs::write(&broken, b"the wrong archive").unwrap();
+        let attempt = downloader.install_local_archive(SCOPE, current, &broken).await;
+        assert!(format!("{:#}", attempt.unwrap_err()).contains("differs from the pinned"));
+        let program = training.trainer();
+        std::fs::create_dir_all(program.parent().unwrap()).unwrap();
+        crate::install_record::begin(&record).unwrap();
+        std::fs::write(&program, b"partially extracted trainer").unwrap();
+
+        let restarted = Training::new(data.path(), "yue2");
+        let (executable, identity) = restarted.select_trainer(None, Some(&saved), true).await.unwrap();
+        assert_eq!(executable, previous);
+        assert_eq!(identity.version, PREVIOUS_BUILTIN_VERSION);
+        assert_eq!(std::fs::read(&previous).unwrap(), b"previous trainer");
+        assert!(!restarted.pack_ready());
+
+        std::fs::write(&program, b"current trainer").unwrap();
+        crate::install_record::write(
+            &record, current.url, crate::pin_sha::sha256(current.url).unwrap(),
+            std::slice::from_ref(&program), downloader.root(),
+        ).unwrap();
+        let restarted = Training::new(data.path(), "yue2");
+        let (executable, identity) = restarted.select_trainer(None, Some(&saved), true).await.unwrap();
+        assert_eq!(executable, program);
+        assert_eq!(identity.version, CURRENT_BUILTIN_VERSION);
+        assert!(restarted.downloader().is_verified_install(&PREVIOUS_TRAINER));
     }
 
     #[tokio::test]
