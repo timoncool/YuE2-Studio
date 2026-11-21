@@ -12,6 +12,7 @@
                                 }
                 },
     "bundle":  {
+                   "useLocalToolsDir": true,
                    "resources":  {
                                      "../../distribution/channels/stable/bootstrap/root.json": "component-channel/root.json",
                                      "../../distribution/channels/stable/bootstrap/url.txt": "component-channel/url.txt",
