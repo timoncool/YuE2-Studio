@@ -395,7 +395,12 @@ export const SongList: React.FC<SongListProps> = ({
         setDownloading(true);
         try {
             if (zip) await saveTrackZip(selectedSongs.map(song => song.id));
-            else for (const song of selectedSongs.filter(entry => entry.audioUrl)) await downloadSongAudio(song);
+            else {
+                for (const song of selectedSongs.filter(entry => entry.audioUrl)) {
+                    const outcome = await downloadSongAudio(song);
+                    if (outcome === 'cancelled' || outcome === 'failed') break;
+                }
+            }
         } catch (error) {
             console.error('Download failed:', error);
             window.alert(error instanceof Error ? error.message : String(error));

@@ -12,10 +12,11 @@ const instrumentalScore = vi.fn();
 let ready = true;
 let enginePaused = false;
 let configured = false;
+let librarySongs: Song[] = [];
 vi.mock('../context/I18nContext', () => ({ useI18n: () => ({ language: 'en', t: (key: string) => key }) }));
 vi.mock('../services/studioQueries', async original => ({
   ...await original<typeof import('../services/studioQueries')>(),
-  useLibrarySongs: () => ({ data: [] }),
+  useLibrarySongs: () => ({ data: librarySongs }),
   SELF_READ: {},
   libraryChanged: vi.fn(),
   useActivity: () => ({ data: [] }),
@@ -65,6 +66,7 @@ beforeEach(() => {
   ready = true;
   enginePaused = false;
   configured = false;
+  librarySongs = [];
   localStorage.clear();
   composeScore.mockReset();
   transcribe.mockReset().mockResolvedValue('X:1\nK:C\nC');
@@ -516,6 +518,42 @@ it.each([
   click(buttonNamed('create')!);
   expect(sent.at(-1)).toMatchObject({ music_source: { kind: 'audio_cpp', model }, ...options });
 });
+it('restores a Magenta reference and submits either the available reference or text style', async () => {
+  const model = 'magenta_realtime_2';
+  librarySongs = [{ id: 'ref-take', title: 'Reference take', audioUrl: '/audio.wav' } as Song];
+  vi.stubGlobal('fetch', vi.fn(async () => Response.json({ engine: 'audio.cpp', models: [
+    { id: model, name: 'Magenta RealTime 2', profile_id: 'small-f16', quantization: 'F16', ready: true, missing: [] },
+  ] })));
+  const song = {
+    title: 'Saved instrumental', ditModel: 'audio.cpp', style: 'jazz piano', lyrics: 'old lyrics',
+    generationParams: { music_source: { kind: 'audio_cpp', model }, magenta: { reference_song_id: 'ref-take' } },
+  } as Song;
+  act(() => root.render(panel({ musicEngine: 'audio.cpp', initialData: { song, timestamp: 1 } })));
+  await flush();
+  const generate = buttonNamed('create')!;
+  expect(field('textarea[aria-label="lyrics"]')).toBeNull();
+  expect(field('textarea[aria-label="styleCardTitle"]')).toBeNull();
+  click(generate);
+  expect(sent.at(-1)).toMatchObject({
+    music_source: { kind: 'audio_cpp', model }, magenta: { reference_song_id: 'ref-take' }, lyrics: '',
+  });
+
+  const reference = [...host.querySelectorAll('select')].find(select => select.value === 'ref-take')!;
+  act(() => {
+    reference.value = '';
+    reference.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  expect(field('textarea[aria-label="styleCardTitle"]')!.value).toBe('jazz piano');
+  click(generate);
+  expect(sent.at(-1)).toMatchObject({ music_source: { kind: 'audio_cpp', model }, style: 'jazz piano', magenta: {}, lyrics: '' });
+
+  librarySongs = [];
+  act(() => root.render(panel({ musicEngine: 'audio.cpp', initialData: { song, timestamp: 2 } })));
+  await flush();
+  expect(generate.disabled).toBe(true);
+  expect(reference.selectedOptions[0].disabled).toBe(true);
+});
+
 it('asks for an explicit profile when a migrated ACE take used custom weights', async () => {
   const engine = 'acestep-cpp';
   const models = ['acestep-v15-xl-sft-Q4_K_M.gguf', 'acestep-5Hz-lm-4B-BF16.gguf', 'vae-BF16.gguf'];

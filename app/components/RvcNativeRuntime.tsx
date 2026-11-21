@@ -20,6 +20,8 @@ export function RvcNativeRuntime({ onInstalled, disabled }: { onInstalled: () =>
   const [pending, setPending] = useState(false);
   const [starting, setStarting] = useState(false);
   const [error, setError] = useState<string>();
+  const [statusError, setStatusError] = useState<string>();
+  const [retry, setRetry] = useState(0);
   const reportedInstalled = useRef(false);
 
   useEffect(() => {
@@ -28,6 +30,7 @@ export function RvcNativeRuntime({ onInstalled, disabled }: { onInstalled: () =>
       try {
         const next = await responseJson<NativeRuntime | null>(await fetch(URL, { signal: controller.signal }));
         if (!next || controller.signal.aborted) return;
+        setStatusError(undefined);
         setStatus(next);
         if (next.installed && !reportedInstalled.current) {
           reportedInstalled.current = true;
@@ -38,14 +41,14 @@ export function RvcNativeRuntime({ onInstalled, disabled }: { onInstalled: () =>
         } else if (next.download && !next.download.done && !next.download.error) {
           setPending(true);
         }
-      } catch {
-        // The explicit install or cancel operation still reports request errors.
+      } catch (failure) {
+        if (!controller.signal.aborted) setStatusError(failure instanceof Error ? failure.message : String(failure));
       }
     }
     const stop = pending ? poll(refresh, 500) : undefined;
     if (!pending) void refresh();
     return () => { controller.abort(); stop?.(); };
-  }, [pending, onInstalled]);
+  }, [pending, onInstalled, retry]);
 
   async function install() {
     setError(undefined);
@@ -69,6 +72,13 @@ export function RvcNativeRuntime({ onInstalled, disabled }: { onInstalled: () =>
     }
   }
 
+  if (statusError && !pending) {
+    return <div className="space-y-1">
+      <p role="alert" className="text-rose-600 dark:text-rose-300">{statusError}</p>
+      <button type="button" className="font-semibold text-pink-600 underline dark:text-pink-300"
+        onClick={() => { setStatusError(undefined); setRetry(value => value + 1); }}>{labels.retry}</button>
+    </div>;
+  }
   if (!status?.supported || status.installed) return null;
   const bytes = new Intl.NumberFormat(language, { style: 'unit', unit: 'megabyte', maximumFractionDigits: 0 })
     .format(status.missing_bytes / 1_000_000);
@@ -87,9 +97,9 @@ export function RvcNativeRuntime({ onInstalled, disabled }: { onInstalled: () =>
         </>
       ) : (
         <button type="button" disabled={disabled || starting} className="font-semibold text-pink-600 underline disabled:opacity-50 dark:text-pink-300"
-          onClick={() => void install()}>{labels.installNative} В· {bytes}</button>
+          onClick={() => void install()}>{labels.installNative} · {bytes}</button>
       )}
-      {(error || download?.error) && <p role="alert" className="text-rose-600 dark:text-rose-300">{error || download?.error}</p>}
+      {(error || statusError || download?.error) && <p role="alert" className="text-rose-600 dark:text-rose-300">{error || statusError || download?.error}</p>}
     </div>
   );
 }

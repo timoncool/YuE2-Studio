@@ -105,6 +105,10 @@ export const ProcessingModal: React.FC<ProcessingModalProps> = ({ song, onClose,
   const [vstPick, setVstPick] = useState('');
   const [scanning, setScanning] = useState(false);
   const [masterOn, setMasterOn] = useState(false);
+  const [regionOn, setRegionOn] = useState(false);
+  const [regionStart, setRegionStart] = useState('0');
+  const [regionEnd, setRegionEnd] = useState('');
+  const [sourceDuration, setSourceDuration] = useState(0);
   const [normalizeOn, setNormalizeOn] = useState(false);
   const [peakClip, setPeakClip] = useState(10);
   const [referenceMode, setReferenceMode] = useState<'library' | 'file'>('library');
@@ -217,7 +221,12 @@ export const ProcessingModal: React.FC<ProcessingModalProps> = ({ song, onClose,
   const referenceTitle = referenceMode === 'library' ? referenceSong?.title : upload?.name;
   const vstReady = vstChain.some(slot => slot.enabled);
   const nothing = !denoiseOn && !lifterOn && !naturalizeOn && !(vstOn && vstReady) && !masterOn && !normalizeOn;
-  const ready = !nothing && (!masterOn || Boolean(reference));
+  const startSeconds = Number(regionStart);
+  const endSeconds = Number(regionEnd);
+  const regionValid = regionStart !== '' && regionEnd !== '' && Number.isFinite(startSeconds) &&
+    Number.isFinite(endSeconds) && startSeconds >= 0 && endSeconds > startSeconds &&
+    (!sourceDuration || endSeconds <= sourceDuration);
+  const ready = !nothing && (!masterOn || Boolean(reference)) && (!regionOn || regionValid);
 
   const uploadReference = async (file: File | undefined) => {
     if (!file) return;
@@ -239,6 +248,7 @@ export const ProcessingModal: React.FC<ProcessingModalProps> = ({ song, onClose,
   };
 
   const start = async () => {
+    if (!ready || running) return;
     setError(null);
     setRunLabel(label());
     const request: Record<string, unknown> = {};
@@ -247,6 +257,7 @@ export const ProcessingModal: React.FC<ProcessingModalProps> = ({ song, onClose,
     if (naturalizeOn) request.naturalize = { amount: naturalizeAmount };
     if (vstOn && vstReady) request.vst = vstChain;
     if (masterOn && reference) request.master = reference;
+    if (regionOn) request.region = { start_seconds: startSeconds, end_seconds: endSeconds };
     if (normalizeOn) request.normalize = { peak_clip: peakClip };
     try {
       const response = await fetch(`/v1/library/songs/${encodeURIComponent(song.id)}/process`, {
@@ -328,6 +339,30 @@ export const ProcessingModal: React.FC<ProcessingModalProps> = ({ song, onClose,
 
           {!preview && (
             <fieldset disabled={running} className="space-y-3 disabled:opacity-60">
+              <section className={CARD}>
+                <Toggle checked={regionOn} onChange={setRegionOn} label={t('processRegion')} hint={t('processRegionHint')} />
+                {regionOn && <>
+                  <audio src={song.audioUrl} preload="metadata" onLoadedMetadata={event => {
+                    const seconds = event.currentTarget.duration;
+                    if (Number.isFinite(seconds) && seconds > 0) setSourceDuration(seconds);
+                  }} />
+                  <div className="mt-2 grid grid-cols-2 gap-2">
+                    <label className="text-xs">{t('processRegionStart')}
+                      <input className={CONTROL} type="number" min={0} max={sourceDuration || undefined} step="any" value={regionStart}
+                        onChange={event => setRegionStart(event.currentTarget.value)} />
+                    </label>
+                    <label className="text-xs">{t('processRegionEnd')}
+                      <input className={CONTROL} type="number" min={0} max={sourceDuration || undefined} step="any" value={regionEnd}
+                        onChange={event => setRegionEnd(event.currentTarget.value)} />
+                    </label>
+                  </div>
+                  {song.audioUrl && sourceDuration > 0 && <div className="relative mt-2">
+                    <AudioWaveform url={song.audioUrl} duration={sourceDuration} currentTime={0} />
+                    {regionValid && <div className="pointer-events-none absolute inset-y-0 border-x border-pink-600 bg-pink-500/20"
+                      style={{ left: `${100 * startSeconds / sourceDuration}%`, width: `${100 * (endSeconds - startSeconds) / sourceDuration}%` }} />}
+                  </div>}
+                </>}
+              </section>
               <section className={CARD}>
                 <Toggle checked={denoiseOn} onChange={setDenoiseOn} label={t('processDenoise')} hint={t('processDenoiseHint')} />
                 {denoiseOn && <Slider label={t('processStrength')} value={denoiseStrength} min={0.05} max={1} step={0.05} onChange={setDenoiseStrength} />}

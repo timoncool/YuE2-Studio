@@ -3219,6 +3219,7 @@ dependencies = [
  "include_dir",
  "junction",
  "libc",
+ "libloading 0.8.9",
  "lofty",
  "lzma-rust2",
  "music-core",

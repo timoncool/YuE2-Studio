@@ -143,6 +143,7 @@ export interface YueRequest {
   music_source?: { kind: 'local' } | { kind: 'openrouter' | 'audio_cpp'; model: string } | { kind: 'native'; engine: NativeMusicEngine; model: string };
   midasheng?: import('./components/MiDashengFields').MiDashengPrompt;
   heartmula?: import('./components/HeartMuLaControls').HeartMuLaOptions;
+  magenta?: import('./components/MagentaFields').MagentaOptions;
   stable_audio?: import('./components/StableAudioControls').StableAudioOptions;
   vevo2?: import('./components/Vevo2SingingFields').Vevo2References;
   ace?: { guidance_scale?: number };
