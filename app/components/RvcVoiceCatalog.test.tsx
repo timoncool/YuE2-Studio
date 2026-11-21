@@ -120,7 +120,7 @@ it('lists curated voices and installs the selected ID into the local catalog', a
     await flush();
     expect(details.textContent).toContain('License unspecified');
     expect(details.querySelector('a')?.href).toBe(entry.source_url);
-    const install = details.querySelector('button')!;
+    const install = details.querySelector<HTMLButtonElement>('button[aria-label="Install Example Voice"]')!;
     expect(install.disabled).toBe(false);
     act(() => { install.dispatchEvent(new MouseEvent('click', { bubbles: true })); });
     await flush();

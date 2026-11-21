@@ -1721,6 +1721,7 @@ pub async fn serve_on_port(port: u16) -> anyhow::Result<()> {
         .route("/v1/rvc/apply/setup", get(rvc_apply::setup).post(rvc_apply::install))
         .route("/v1/rvc/voices/{id}", axum::routing::delete(rvc_voices::remove))
         .route("/v1/rvc/catalog", get(rvc_catalog::list))
+        .route("/v1/rvc/catalog/refresh", post(rvc_catalog::refresh))
         .route("/v1/rvc/catalog/install", post(rvc_catalog::install))
         .route("/v1/rvc/catalog/progress/{id}", get(rvc_catalog_progress::get))
         .route("/v1/rvc/native/runtime", get(rvc_fast_install::get).post(rvc_fast_install::start).delete(rvc_fast_install::cancel))

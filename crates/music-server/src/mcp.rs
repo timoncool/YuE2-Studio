@@ -540,6 +540,7 @@ const JOURNAL: &[(&str, &str, &str)] = &[
     ("lora_import_files", "installed", "lora"),
     ("rvc_voice_import", "installed", "rvc_voice"),
     ("rvc_voice_remove", "deleted", "rvc_voice"),
+    ("rvc_catalog_refresh", "refreshed", "rvc_catalog"),
     ("rvc_catalog_install", "installed", "rvc_voice"),
     ("rvc_apply_install", "installed", "model"),
     ("rvc_native_runtime_install", "started", "download"),
@@ -2649,6 +2650,12 @@ fn tools() -> &'static [Tool] {
                 description: "Read preparation, file download and verification progress for a catalog voice being installed.",
                 schema: || id_only("id", "the ID from rvc_catalog_list"),
                 call: |args| get(format!("/v1/rvc/catalog/progress/{}", segment(&text(args, "id")?))),
+            },
+            Tool {
+                name: "rvc_catalog_refresh",
+                description: "Update the curated RVC voices from the installed signed component channel. A failed update preserves the last accepted catalogue.",
+                schema: nothing,
+                call: |_| post("/v1/rvc/catalog/refresh".into(), json!({})),
             },
             Tool {
                 name: "rvc_catalog_install",

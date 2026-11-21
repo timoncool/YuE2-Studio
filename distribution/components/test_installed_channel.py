@@ -185,6 +185,144 @@ def run(work, binary, archive, certificate, tls_key):
             server.shutdown()
 
 
+def run_rvc(work, binary, certificate, tls_key, install_voice=False):
+    install = work / "install"
+    channel = install / "component-channel"
+    origin = work / "origin"
+    channel.mkdir(parents=True)
+    (origin / "targets").mkdir(parents=True)
+    exe = Path(shutil.copy2(binary, install))
+    source = Path(__file__).resolve().parents[2] / "config" / "rvc-voice-catalog.json"
+    bundled = json.loads(source.read_text(encoding="utf-8"))
+    voice = next(v for v in bundled["voices"] if v["id"] == "rvc-486ca595c7aeb194e1c5")
+    assert voice.get("index") is None and voice.get("archive") is None
+    keys = {role: CryptoSigner.generate_ed25519() for role in ("root", "snapshot", "timestamp", "targets")}
+    expires = datetime.now(timezone.utc) + timedelta(days=1)
+    root = Root(expires=expires)
+    for name, key in keys.items():
+        root.add_key(key.public_key, name)
+    root_metadata = sign(root, keys["root"])
+    (channel / "root.json").write_bytes(root_metadata)
+    (origin / "1.root.json").write_bytes(root_metadata)
+    request_paths = []
+
+    class Handler(SimpleHTTPRequestHandler):
+        def log_request(self, code="-", size="-"):
+            request_paths.append(self.path)
+
+    def publish(version, manifest):
+        name = "rvc-voice-catalog.json"
+        raw = json.dumps(manifest).encode()
+        target = TargetFile.from_data(name, raw, ["sha256"])
+        path = origin / "targets" / f"{target.hashes['sha256']}.{name}"
+        path.write_bytes(raw)
+        targets = sign(Targets(version=version, expires=expires, targets={name: target}), keys["targets"])
+        (origin / f"{version}.targets.json").write_bytes(targets)
+        snap = sign(Snapshot(version=version, expires=expires, meta={
+            "targets.json": MetaFile.from_data(version, targets, ["sha256"]),
+        }), keys["snapshot"])
+        (origin / f"{version}.snapshot.json").write_bytes(snap)
+        (origin / "timestamp.json").write_bytes(sign(Timestamp(
+            version=version, expires=expires, snapshot_meta=MetaFile.from_data(version, snap, ["sha256"]),
+        ), keys["timestamp"]))
+        return path
+
+    def start(studio):
+        with socket.socket() as s:
+            s.bind(("127.0.0.1", 0))
+            port = s.getsockname()[1]
+        base = f"http://127.0.0.1:{port}"
+        env = dict(os.environ, YUE_STUDIO_DATA_ROOT=str(studio), YUE_STUDIO_PORT=str(port), HOME=str(work))
+        proc = subprocess.Popen([exe], cwd=install, env=env)
+        for _ in range(120):
+            if proc.poll() is not None:
+                raise RuntimeError(f"service exited {proc.returncode}")
+            try:
+                with http.open(base + "/health", timeout=2):
+                    return proc, base
+            except URLError:
+                time.sleep(0.25)
+        proc.terminate()
+        proc.wait(timeout=20)
+        raise TimeoutError("service startup")
+
+    def tool(name, arguments=None, expected_error=False):
+        request = Request(base + "/mcp", json.dumps({
+            "jsonrpc": "2.0", "id": 1, "method": "tools/call",
+            "params": {"name": name, "arguments": arguments or {}},
+        }).encode(), {"Content-Type": "application/json", "Accept": "application/json, text/event-stream"})
+        with http.open(request, timeout=150) as response:
+            result = json.load(response)["result"]
+        assert bool(result.get("isError")) == expected_error, result
+        return result if expected_error else result["structuredContent"]
+
+    http = build_opener(ProxyHandler({}))
+    studio = work / "studio"
+    with ThreadingHTTPServer(("127.0.0.1", 0), functools.partial(Handler, directory=origin)) as server:
+        tls = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+        tls.load_cert_chain(certificate, tls_key)
+        server.socket = tls.wrap_socket(server.socket, server_side=True)
+        (channel / "url.txt").write_text(f"https://localhost:{server.server_port}/")
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        proc, base = start(studio)
+        try:
+            assert tool("rvc_catalog_list")["total"] == len(bundled["voices"])
+            assert not request_paths
+            publish(1, {"schema_version": 1, "voices": [voice]})
+            initial = (origin / "timestamp.json").read_bytes()
+            receipt = tool("rvc_catalog_refresh")
+            assert receipt["voices"] == 1 and receipt["source"] == "signed", receipt
+            signed_voice = dict(voice, name="Signed RVC catalogue test voice")
+            publish(2, {"schema_version": 1, "voices": [signed_voice]})
+            tool("rvc_catalog_refresh")
+            current = tool("rvc_catalog_list", {"has_index": False})
+            assert current["total"] == 1 and current["voices"][0]["name"] == signed_voice["name"], current
+
+            if install_voice:
+                result = tool("rvc_catalog_install", {"id": voice["id"]})
+                assert result["index_name"] is None, result
+                paths = list((studio / "rvc" / "voices").rglob("voice.pth"))
+                assert len(paths) == 1 and hashlib.sha256(paths[0].read_bytes()).hexdigest() == voice["weights"]["sha256"]
+                assert not list((studio / "rvc" / "voices").rglob("*.index"))
+                print("PASS published checkpoint installed through MCP without index", voice["id"], voice["weights"]["sha256"])
+
+            (origin / "timestamp.json").write_bytes(initial)
+            tool("rvc_catalog_refresh", expected_error=True)
+            assert tool("rvc_catalog_list", {"has_index": False})["voices"][0]["name"] == signed_voice["name"]
+            tampered = publish(3, {"schema_version": 1, "voices": [voice]})
+            tampered.write_bytes(tampered.read_bytes() + b" ")
+            tool("rvc_catalog_refresh", expected_error=True)
+            publish(4, {"schema_version": 2, "voices": [voice]})
+            tool("rvc_catalog_refresh", expected_error=True)
+            assert tool("rvc_catalog_list", {"has_index": False})["voices"][0]["name"] == signed_voice["name"]
+        finally:
+            proc.terminate()
+            proc.wait(timeout=20)
+            server.shutdown()
+
+    proc, base = start(studio)
+    try:
+        assert tool("rvc_catalog_list", {"has_index": False})["voices"][0]["name"] == signed_voice["name"]
+        tool("rvc_catalog_refresh", expected_error=True)
+        assert tool("rvc_catalog_list", {"has_index": False})["voices"][0]["name"] == signed_voice["name"]
+        cache = studio / "component-channel" / "rvc"
+        snapshot = cache / (cache / "accepted").read_text()
+        path, = (snapshot / "targets").iterdir()
+        path.write_bytes(path.read_bytes() + b" ")
+        assert tool("rvc_catalog_list")["total"] == len(bundled["voices"])
+        print("PASS signed RVC update, rollback and corruption rejected, offline restart, bundled fallback", len(bundled["voices"]))
+    finally:
+        proc.terminate()
+        proc.wait(timeout=20)
+
+
 if __name__ == "__main__":
     with tempfile.TemporaryDirectory() as temp:
-        run(Path(temp), *(Path(arg).resolve(strict=True) for arg in sys.argv[1:]))
+        work = Path(temp)
+        if sys.argv[1] == "--rvc":
+            binary, certificate, tls_key = (Path(arg).resolve(strict=True) for arg in sys.argv[2:5])
+            run_rvc(work, binary, certificate, tls_key, "--install-voice" in sys.argv[5:])
+        else:
+            binary, archive, certificate, tls_key = (Path(arg).resolve(strict=True) for arg in sys.argv[1:])
+            run(work / "components", binary, archive, certificate, tls_key)
+            run_rvc(work / "rvc", binary, certificate, tls_key)
