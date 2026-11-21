@@ -30,6 +30,7 @@ import { isMidiFile } from '../services/midiFiles';
 import { trackMidiBase64 } from '../services/midiEditor';
 import { composePlans, composeScore, transcribe, type ScorePlan } from '../services/transcription';
 import { bedLine, chordBed, failed, instrumentalScore, matchSections, type BedSection, type SectionProposal } from '../services/scoreApi';
+import { BackingTempo } from './BackingTempo';
 import { sectionTagsOnly } from '../services/instrumental';
 import { lyricSyllables, syllableChangesOf, type SyllableChange } from '../services/syllables';
 import { profileLabel as setLabel, setupLabel, type SetupChoice } from '../services/modelCatalog';
@@ -536,9 +537,10 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
     ['duration_seconds', miDasheng ? miDashengDuration.limit : nativeStrings.duration],
     ['steps', nativeStrings.steps],
     ['seed', nativeStrings.seed],
-    nativeEngine === 'minimaxmusic-cpp'
-      ? (['lm_seed', nativeStrings.lmSeed] as const)
-      : (['guidance_scale', 'CFG'] as const),
+    ...(nativeEngine === 'minimaxmusic-cpp'
+      ? [['lm_seed', nativeStrings.lmSeed], ['lm_cfg', t('lmCfgScale')], ['lm_top_k', t('lmTopK')],
+         ['dit_cfg', `DiT ${t('cfgScale')}`], ['fade_in', t('fadeInLabel')], ['fade_out', t('fadeOutLabel')]] as const
+      : [['guidance_scale', 'CFG']] as const),
   ] as const;
   const provider = useOpenRouterSettings<{ configured: boolean }>();
   const configured = provider.data?.configured === true;
@@ -2187,9 +2189,9 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
                     {nativeControls.filter(([key]) => (vevo2 || soulx) ? key === 'seed' : !(miDasheng || magenta) || key !== 'steps').map(([key, label]) => (
                       <label key={key} className="space-y-1 text-xs">
                         <span>{label}</span>
-                        <input type="number" step={key === 'duration_seconds' || key === 'guidance_scale' ? 'any' : 1}
+                        <input type="number" step={key === 'steps' || key === 'seed' || key === 'lm_seed' || key === 'lm_top_k' ? 1 : 'any'}
                           aria-describedby={miDasheng && key === 'duration_seconds' ? durationHintId : undefined}
-                          min={miniMaxH3 && key === 'duration_seconds' ? 1 : undefined}
+                          min={miniMaxH3 && key === 'duration_seconds' || key === 'lm_top_k' ? 1 : ['lm_cfg', 'dit_cfg', 'fade_in', 'fade_out'].includes(key) ? 0 : undefined}
                           max={miniMaxH3 && key === 'duration_seconds' ? 20 : undefined}
                           className={CONTROL} value={native.settings[key] ?? ''}
                           placeholder={miniMaxH3 && key === 'duration_seconds' ? '4' : nativeStrings.default}
@@ -2197,6 +2199,11 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
                       </label>
                     ))}
                     {miDasheng && <p id={durationHintId} className="col-span-2 text-xs text-zinc-500">{miDashengDuration.hint}</p>}
+                    {nativeEngine === 'minimaxmusic-cpp' && native.settings.output_format === 'mp3' && <label className="space-y-1 text-xs">
+                      <span>{t('mp3Bitrate')}</span>
+                      <input type="number" min={32} max={320} step={1} className={CONTROL} placeholder="320"
+                        value={native.settings.mp3_bitrate ?? ''} onChange={event => native.set('mp3_bitrate', event.target.value)} />
+                    </label>}
                     {nativeEngine !== 'acestep-cpp' && (
                       <label className="space-y-1 text-xs">
                         <span>{t('outputFormat')}</span>
@@ -2757,6 +2764,9 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
                           {backingTracks.map(song => <option key={song.id} value={song.id}>{song.title}</option>)}
                         </select>
                       </Field>
+                    )}
+                    {musicEngine === 'local' && mode !== 'cover' && backingSongId && (
+                      <BackingTempo key={backingSongId} songId={backingSongId} onApply={bpm => setBedBpm(String(bpm))} />
                     )}
                     <div className="grid grid-cols-3 gap-2">
                       <Field label={tt('chordBedTempo')}>

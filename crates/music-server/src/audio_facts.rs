@@ -60,6 +60,40 @@ pub fn decode(audio: &Path) -> Result<Vec<f32>> {
     Ok(stereo.left.iter().zip(&stereo.right).map(|(left, right)| 0.5 * (left + right)).collect())
 }
 
+/// Beat This can produce a grid even for a sustained tone. Offer a tempo for
+/// a backing only when distinct acoustic attacks support the same grid.
+pub(super) fn supports_backing_tempo(mono: &[f32], bpm: u32) -> bool {
+    if bpm == 0 {
+        return false;
+    }
+    let levels: Vec<_> = mono.chunks_exact(HOP).map(|samples| {
+        (samples.iter().map(|sample| sample * sample).sum::<f32>() / HOP as f32).sqrt()
+    }).collect();
+    let rises: Vec<_> = levels.windows(2).map(|pair| pair[1] - pair[0]).collect();
+    let peak = levels.iter().copied().fold(0.0, f32::max);
+    let strongest_rise = rises.iter().copied().fold(0.0, f32::max);
+    let floor = (0.012 * peak).max(0.45 * strongest_rise);
+    if floor <= 0.0 {
+        return false;
+    }
+    let frames_per_beat = 60.0 * RATE as f64 / (bpm as f64 * HOP as f64);
+    let phases: Vec<_> = rises.windows(7).enumerate().skip(1).filter_map(|(frame, window)| {
+        let rise = window[3];
+        (rise >= floor && window.iter().all(|&near| rise >= near))
+            .then(|| ((frame + 3) as f64 / frames_per_beat).fract())
+    }).collect();
+    // At least six attacks must land within 9.5% of a beat from one phase.
+    // Allow syncopation and skipped beats, but reject broadly scattered hits.
+    (0..40).any(|bin| {
+        let center = bin as f64 / 40.0;
+        let aligned = phases.iter().filter(|&&phase| {
+            let distance = (phase - center).abs();
+            distance.min(1.0 - distance) <= 0.095
+        }).count();
+        aligned >= 6 && aligned * 100 >= phases.len() * 45
+    })
+}
+
 fn session(model: &Path) -> Result<Session> {
     let environment = dub_core::runtime::ort_env().map_err(|error| anyhow::anyhow!(error))?;
     Session::builder(&environment).context("prepare an ONNX session")?.commit_from_file(model).with_context(|| format!("load {}", model.display()))
@@ -249,6 +283,26 @@ fn beat_logits(session: &mut Session, spect: &[[f32; N_MELS]]) -> Result<(Vec<f3
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn backing_tempo_requires_periodic_attacks_in_the_audio() {
+        let sine: Vec<_> = (0..RATE * 24).map(|i| {
+            let t = i as f32 / RATE as f32;
+            0.2 * (std::f32::consts::TAU * 220.0 * t).sin()
+        }).collect();
+        let ambient: Vec<_> = (0..RATE * 24).map(|i| {
+            let t = i as f32 / RATE as f32;
+            let tau = std::f32::consts::TAU;
+            0.13 * (tau * (150.0 * t + 1.1 * t * t)).sin() * (0.84 + 0.16 * (t * 0.29).sin())
+                + 0.09 * (tau * (227.0 * t + 0.27 * t * t)).sin()
+        }).collect();
+        assert!(!supports_backing_tempo(&sine, 82));
+        assert!(!supports_backing_tempo(&ambient, 64));
+        let pulsed: Vec<_> = sine.into_iter().enumerate().map(|(index, sample)| {
+            if index % (RATE as usize / 2) < HOP { sample } else { sample * 0.25 }
+        }).collect();
+        assert!(supports_backing_tempo(&pulsed, 120));
+    }
 
     #[test]
     fn the_mel_scale_round_trips() {

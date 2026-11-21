@@ -165,6 +165,7 @@ details.more summary { cursor: pointer; color: var(--muted); font-weight: 600; m
 .answer ul { margin: 0; padding-left: 18px; display: grid; gap: 6px; }
 
 .scroll { overflow-x: auto; margin: 10px 0; }
+.benchmark-scroll:focus-visible { outline: 2px solid var(--pink); outline-offset: 3px; }
 table { border-collapse: collapse; width: 100%; font-size: 14px; }
 th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--line); }
 th { color: var(--muted); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
@@ -516,9 +517,9 @@ footer p { margin: 0 0 8px; }
     </table></div>
     <p class="note">Startup runs include process launch through the first saved WAV. Columns show medians of two empty-cache launches, three cached launches and three warm requests. Both warm paths use the same local HTTP client, from POST through writing the WAV. Peak memory is the median whole-card peak across three cached processes during warm conversion, including desktop usage. The engines search different numbers of FAISS lists; timing alone does not measure voice quality. <a href="rvc-gpu-benchmarks.json">Individual runs and build identifiers</a></p>
 <!-- music-gpu-matrix:start -->
-    <h3>Music engine GPU matrix · 5.0 development and published builds</h3>
+    <h3 id="music-gpu-matrix-title">Music engine GPU matrix · 5.0 development and published builds</h3>
     <p class="note">Windows 11, RTX 4090, driver 617.42. Cold includes server launch and the first WAV response. Warm is the median of three requests to the same server. Memory peaks are cold-run whole-card VRAM and process-tree RSS. Compare rows within each workload and check the weight profiles, silence and exact build before drawing a speed conclusion. Warm pre-request VRAM is the median reading for the whole card immediately before those three requests. Resident WDDM VRAM and RSS are medians of three idle process-tree samples after one warm-up on the published CUDA 13 builds.</p>
-    <div class="scroll"><table>
+    <div class="scroll benchmark-scroll" role="region" aria-labelledby="music-gpu-matrix-title" tabindex="0"><table>
       <thead><tr><th scope="col">Model and engine</th><th scope="col">Backend</th><th scope="col">WAV (s)</th><th scope="col">Cold (s)</th><th scope="col">Warm (s)</th><th scope="col">Warm audio s/s</th><th scope="col">VRAM peak / Δ (GiB)</th><th scope="col">Warm pre-request VRAM (GiB)</th><th scope="col">Peak RAM (GiB)</th><th scope="col">Resident WDDM VRAM / RSS (GiB)</th></tr></thead>
       <tbody>
       <tr><td>YuE2 · yue2.cpp 892b9b0 · 3B Q8_0 + F32 VAE; NAR v9 · 30 s · 32 steps</td><td>CUDA 13</td><td>29.999</td><td>9.735</td><td>5.166</td><td>5.81×</td><td>7.67 / +5.74</td><td>7.67</td><td>3.36</td><td>—</td></tr>
@@ -555,9 +556,9 @@ footer p { margin: 0 0 8px; }
     <p><a href="music-gpu-benchmarks.json">Runs, SHA-256 and weight profiles</a></p>
 <!-- music-gpu-matrix:end -->
 <!-- radeon-gpu-pair:start -->
-    <h3>Stable Audio 3 Small Q8_0 · Radeon iGPU</h3>
+    <h3 id="radeon-gpu-pair-title">Stable Audio 3 Small Q8_0 · Radeon iGPU</h3>
     <p class="note">Windows, AMD Radeon Graphics (gfx1036, UMA). The same audio.cpp revision generated 4 seconds in four steps with each backend. Cold is the first run. Warm is the median of three requests. WDDM dedicated and shared columns show sampled peaks at one-second intervals. <code>audio.cpp 5e7273db</code></p>
-    <div class="scroll"><table>
+    <div class="scroll benchmark-scroll" role="group" aria-labelledby="radeon-gpu-pair-title" tabindex="0"><table>
       <thead><tr><th scope="col">Backend</th><th scope="col">Cold (s)</th><th scope="col">Warm (s)</th><th scope="col">WDDM dedicated peak (GiB)</th><th scope="col">WDDM shared peak (GiB)</th></tr></thead>
       <tbody>
       <tr><td>HIP</td><td>4.609</td><td>2.953</td><td>1.39</td><td>0.04</td></tr>
@@ -566,9 +567,9 @@ footer p { margin: 0 0 8px; }
     </table></div>
 <!-- radeon-gpu-pair:end -->
 <!-- native-radeon-pair:start -->
-    <h3>YuE2-3B Q8_0 · Radeon gfx1036</h3>
+    <h3 id="native-radeon-pair-title">YuE2-3B Q8_0 · Radeon gfx1036</h3>
     <p class="note">Same 12-second saved song and Radeon iGPU, four steps. Cold includes process startup. Warm is the median of three requests with weights resident. WDDM peaks are sampled per process on this adapter.</p>
-    <div class="scroll"><table>
+    <div class="scroll benchmark-scroll" role="group" aria-labelledby="native-radeon-pair-title" tabindex="0"><table>
       <thead><tr><th scope="col">Backend</th><th scope="col">Cold (s)</th><th scope="col">Warm (s)</th><th scope="col">WDDM dedicated peak (GiB)</th><th scope="col">WDDM shared peak (GiB)</th></tr></thead>
       <tbody>
       <tr><td>HIP 188d13b3</td><td>22.749</td><td>18.483</td><td>0.28</td><td>4.39</td></tr>

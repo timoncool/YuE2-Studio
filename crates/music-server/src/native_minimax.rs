@@ -243,6 +243,31 @@ impl Props {
     }
 }
 
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct Sampling {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub lm_cfg: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub lm_top_k: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub dit_cfg: Option<f64>,
+}
+
+impl Sampling {
+    fn validate(&self) -> Result<()> {
+        for (label, value) in [("LM CFG", self.lm_cfg), ("DiT CFG", self.dit_cfg)] {
+            if value.is_some_and(|value| value < 0.0 || !(value as f32).is_finite()) {
+                bail!("MiniMax {label} must be finite and nonnegative");
+            }
+        }
+        if self.lm_top_k.is_some_and(|value| value < 1) {
+            bail!("MiniMax LM Top-K must be a positive integer");
+        }
+        Ok(())
+    }
+}
+
 #[derive(Debug, Clone, Default)]
 pub(crate) struct SongRequest<'a> {
     pub caption: &'a str,
@@ -251,6 +276,7 @@ pub(crate) struct SongRequest<'a> {
     pub steps: Option<u32>,
     pub seed: Option<i64>,
     pub lm_seed: Option<i64>,
+    pub sampling: Sampling,
 }
 
 fn request_body(profile: &Profile, request: &SongRequest<'_>) -> Result<Value> {
@@ -280,6 +306,10 @@ fn request_body(profile: &Profile, request: &SongRequest<'_>) -> Result<Value> {
     }
     if let Some(seed) = request.lm_seed {
         body["lm_seed"] = json!(seed);
+    }
+    request.sampling.validate()?;
+    if let Value::Object(parameters) = serde_json::to_value(&request.sampling)? {
+        body.as_object_mut().expect("MiniMax request object").extend(parameters);
     }
     for (field, file) in PROFILE_FILE_FIELDS.into_iter().zip(profile.files) {
         body[field] = json!(file);
@@ -587,6 +617,16 @@ mod tests {
                 .await
                 .is_err()
         );
+        let old_body = request_body(profile, &request).unwrap();
+        for key in ["lm_cfg", "lm_top_k", "dit_cfg"] {
+            assert!(old_body.get(key).is_none());
+        }
+        let invalid = SongRequest { sampling: Sampling { lm_top_k: Some(0), ..Default::default() }, ..request.clone() };
+        assert!(request_body(profile, &invalid).is_err());
+        let request = SongRequest {
+            sampling: Sampling { lm_cfg: Some(1.3), lm_top_k: Some(41), dit_cfg: Some(2.2) },
+            ..request
+        };
         let id = client.submit(profile.id, &request).await.unwrap();
         assert_eq!(client.status(&id).await.unwrap(), "done");
         assert_eq!(client.cancel(&id).await.unwrap(), "cancelled");
@@ -612,6 +652,9 @@ mod tests {
         assert_eq!(requests[2]["dit_model"], profile.files[3]);
         assert_eq!(requests[2]["output_format"], "wav32");
         assert_eq!(requests[0]["output_format"], "wav32");
+        assert_eq!(requests[0]["lm_cfg"], 1.3);
+        assert_eq!(requests[0]["lm_top_k"], 41);
+        assert_eq!(requests[0]["dit_cfg"], 2.2);
         for (field, file) in PROFILE_FILE_FIELDS.into_iter().zip(profile.files) {
             assert_eq!(requests[0][field], file);
         }
