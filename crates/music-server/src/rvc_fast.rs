@@ -127,16 +127,15 @@ fn runtime_paths(data_root: &Path) -> Result<(PathBuf, PathBuf)> {
         bail!("Native TensorRT-RTX is available on x86-64 Windows and Linux.");
     }
     let root = data_root.join("rvc/native");
-    let runtime = root.join("v1");
-    let binary = format!("vocal-fast{}", std::env::consts::EXE_SUFFIX);
-    for required in [&binary, "hubert.vfrm", "rmvpe.vfrm"] {
-        if !runtime.join(required).is_file() {
-            bail!("The native RVC component is missing {required}.");
-        }
-    }
+    let runtime = crate::rvc_fast_install::installed_worker(data_root)
+        .map_err(|error| anyhow!(error))?
+        .context("Install the native RVC runtime and acoustic models first.")?;
+    let variant = runtime
+        .file_name()
+        .context("Worker has no runtime directory")?;
     Ok((
         runtime.canonicalize()?,
-        root.canonicalize()?.join("cache-v1"),
+        root.canonicalize()?.join("cache-v1").join(variant),
     ))
 }
 
@@ -146,7 +145,9 @@ fn ensure_worker<'a>(
     cache: &Path,
 ) -> Result<&'a mut Worker> {
     if let Some(worker) = slot
-        && (worker.runtime != runtime || worker.child.try_wait()?.is_some())
+        && (worker.runtime != runtime
+            || worker.device != std::env::var_os("CUDA_VISIBLE_DEVICES")
+            || worker.child.try_wait()?.is_some())
     {
         *slot = None;
     }
@@ -171,6 +172,7 @@ struct Reply {
 
 struct Worker {
     runtime: PathBuf,
+    device: Option<std::ffi::OsString>,
     child: Child,
     input: ChildStdin,
     output: mpsc::Receiver<std::io::Result<String>>,
@@ -178,16 +180,24 @@ struct Worker {
 
 impl Worker {
     fn start(runtime: PathBuf, cache: &Path) -> Result<Self> {
-        let exe = runtime.join(format!("vocal-fast{}", std::env::consts::EXE_SUFFIX));
+        #[cfg(windows)]
+        let launch_dir = windows_launch_dir(&runtime)?;
+        #[cfg(not(windows))]
+        let launch_dir = runtime.clone();
+        let exe = launch_dir.join(format!("vocal-fast{}", std::env::consts::EXE_SUFFIX));
+        let models = runtime
+            .parent()
+            .context("Native RVC model directory missing")?;
         let mut command = dub_core::proc::host_command(&exe);
         command
             .args([
                 std::ffi::OsStr::new("yue2-worker"),
-                runtime.as_os_str(),
+                models.as_os_str(),
                 cache.as_os_str(),
             ])
-            .current_dir(&runtime)
+            .current_dir(&launch_dir)
             .env("NVIDIA_TF32_OVERRIDE", "0")
+            .env("VOCAL_TRT_PLAN_CACHE_DIR", cache.join("plans"))
             .env("RUST_LOG", "warn")
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
@@ -224,6 +234,7 @@ impl Worker {
             input,
             output,
             runtime,
+            device: std::env::var_os("CUDA_VISIBLE_DEVICES"),
         };
         std::thread::Builder::new()
             .name("rvc-worker-output".into())
@@ -255,6 +266,42 @@ impl Worker {
         let line = self.output.recv_timeout(timeout)??;
         Ok(serde_json::from_str(&line)?)
     }
+}
+
+#[cfg(windows)]
+fn windows_launch_dir(runtime: &Path) -> Result<PathBuf> {
+    use std::os::windows::ffi::{OsStrExt, OsStringExt};
+
+    if runtime.to_string_lossy().is_ascii() {
+        return Ok(runtime.to_owned());
+    }
+
+    // TensorRT's Myelin runtime translates the directory of its loaded DLL
+    // through an ANSI codepage. The executable and CWD use the existing short
+    // alias while Rust opens acoustic models and audio by their Unicode paths.
+    #[link(name = "kernel32")]
+    unsafe extern "system" {
+        fn GetShortPathNameW(path: *const u16, short: *mut u16, capacity: u32) -> u32;
+    }
+    let path: Vec<u16> = runtime.as_os_str().encode_wide().chain([0]).collect();
+    // SAFETY: path is NUL-terminated and this call only requests the length.
+    let capacity = unsafe { GetShortPathNameW(path.as_ptr(), std::ptr::null_mut(), 0) };
+    if capacity != 0 {
+        let mut short = vec![0u16; capacity as usize];
+        // SAFETY: short holds capacity code units and path remains valid.
+        let length = unsafe { GetShortPathNameW(path.as_ptr(), short.as_mut_ptr(), capacity) };
+        if length != 0
+            && length < capacity
+            && short[..length as usize].iter().all(|unit| *unit < 128)
+        {
+            return Ok(PathBuf::from(std::ffi::OsString::from_wide(
+                &short[..length as usize],
+            )));
+        }
+    }
+    bail!(
+        "This TensorRT runtime needs an ASCII installation path or a Windows short path. Use audio.cpp or place Studio data in an ASCII path."
+    )
 }
 
 impl Drop for Worker {

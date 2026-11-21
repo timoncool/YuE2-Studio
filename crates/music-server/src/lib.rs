@@ -57,6 +57,7 @@ mod rvc_voices;
 mod rvc_catalog;
 mod rvc_apply;
 mod rvc_fast;
+mod rvc_fast_install;
 mod rvc_catalog_progress;
 mod midi;
 mod midi_edit;
@@ -136,6 +137,7 @@ struct AppState {
     own_backbone: Arc<RwLock<Option<String>>>,
     /// Downloads of community models (`community`) into `models/yue2-cpp/own`.
     community_downloads: Arc<downloads::Downloader>,
+    rvc_native_downloads: Arc<downloads::Downloader>,
     settings_path: PathBuf,
     openrouter_catalog: Arc<RwLock<OpenRouterCatalogState>>,
     library: library::Library,
@@ -1589,6 +1591,9 @@ pub async fn serve_on_port(port: u16) -> anyhow::Result<()> {
         selected_component_ids: Arc::new(RwLock::new(selected_component_ids)),
         own_backbone: Arc::new(RwLock::new(persisted.as_ref().and_then(|settings| settings.own_backbone.clone()))),
         community_downloads,
+        rvc_native_downloads: Arc::new(rvc_fast_install::downloader(
+            settings_path.parent().expect("settings file has a data directory"),
+        )),
         settings_path,
         openrouter_catalog: Arc::new(RwLock::new(OpenRouterCatalogState::default())),
         library: library::Library::open_default()?,
@@ -1677,6 +1682,7 @@ pub async fn serve_on_port(port: u16) -> anyhow::Result<()> {
         .route("/v1/rvc/catalog", get(rvc_catalog::list))
         .route("/v1/rvc/catalog/install", post(rvc_catalog::install))
         .route("/v1/rvc/catalog/progress/{id}", get(rvc_catalog_progress::get))
+        .route("/v1/rvc/native/runtime", get(rvc_fast_install::get).post(rvc_fast_install::start).delete(rvc_fast_install::cancel))
         .route("/v1/rvc/voices/import", post(rvc_voices::import).layer(DefaultBodyLimit::max(rvc_voices::UPLOAD_LIMIT)))
         .route("/v1/configuration", get(configuration).put(update_configuration))
         .route("/engine/options", get(engine_options).put(update_engine_options))

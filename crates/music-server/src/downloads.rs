@@ -192,6 +192,7 @@ impl Downloader {
             return false;
         }
         let libraries = crate::pin_sha::runtime_libraries(asset.url);
+        let mut file_sha256 = "";
         let files: Vec<PathBuf> = if !libraries.is_empty() {
             let destination = self.picked_into(asset);
             let mut files = Vec::new();
@@ -216,13 +217,16 @@ impl Downloader {
         } else if asset.unzip_into.is_none() {
             let path = self.path_of(asset);
             match crate::pin_sha::sha256(asset.url) {
-                Some(sha256) if crate::pin_sha::holds(&path, sha256) => vec![path],
+                Some(sha256) if crate::pin_sha::holds(&path, sha256) => {
+                    file_sha256 = sha256;
+                    vec![path]
+                }
                 _ => return false,
             }
         } else {
             return false;
         };
-        if let Err(error) = crate::install_record::write(record, asset.url, "", &files, &self.root) {
+        if let Err(error) = crate::install_record::write(record, asset.url, file_sha256, &files, &self.root) {
             eprintln!("[ERROR] {}: the record of today's files already on disk was not written: {error:#}", asset.label);
         }
         true
@@ -446,6 +450,15 @@ impl Downloader {
             return Some(ours.clone());
         }
         self.rejected.lock().await.get(scope).cloned()
+    }
+
+    /// Clear an earlier result before accepting a new background transfer.
+    pub(crate) async fn clear_finished(&self, scope: &str) {
+        let mut active = self.progress.lock().await;
+        if active.as_ref().is_some_and(|progress| progress.done && progress.scope.as_deref() == Some(scope)) {
+            *active = None;
+        }
+        self.rejected.lock().await.remove(scope);
     }
 
     /// Stops the running download only when the panel of `scope` started it: a downloader two panels share (audio.cpp's
