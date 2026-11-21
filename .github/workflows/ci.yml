@@ -60,6 +60,8 @@ jobs:
         run: cargo test -p music-server --locked
       - name: OpenRouter music service against local SSE
         run: python scripts/test-openrouter-music.py target/debug/music-server.exe
+        - name: Selective legacy library migration through Studio MCP
+          run: python scripts/test-legacy-library-import.py target/debug/music-server.exe
 
   # the same tests on Linux, the platform the studio's Linux package runs on; the repository's toolchain file names
   # the Windows one, so the runner's own stable toolchain is taken
