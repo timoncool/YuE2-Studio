@@ -6,24 +6,43 @@
 
 ## Screenshots
 
-![The MIDI editor: chords, sections and notes](../../docs/screenshots/en-16-midi-editor.png)
+![MIDI editor with two tracks, voice and piano notes in the piano roll](../../docs/screenshots/en-16-midi-editor.png)
 
 ![The chord bed: chords over rests in your tempo, key and meter](../../docs/screenshots/en-17-chord-bed.png)
 
 | | |
 |---|---|
-| ![The equalizer and MilkDrop](../../docs/screenshots/en-13-listen.png) | ![The Winamp mode](../../docs/screenshots/en-14-winamp.png) |
-| The equalizer with its curve and MilkDrop over the studio, as the song plays | The whole window as Winamp 2: equalizer, playlist and MilkDrop, skinned |
+| ![The equalizer and MilkDrop](../../docs/screenshots/en-13-listen.png) | ![Winamp mode with the classic player, equalizer and playlist](../../docs/screenshots/en-14-winamp.png) |
+| The equalizer with its curve and MilkDrop over the studio, as the song plays | Winamp mode: the classic player, equalizer and playlist in the original skin |
 | ![The score](../../docs/screenshots/en-02-score.png) | ![A finished track](../../docs/screenshots/en-03-track.png) |
 | The score as sheet music and as ABC text — melody + chords, melody only, or none | A finished track — its lyrics and the score it was sung from, ready to reuse |
 | ![Cover mode](../../docs/screenshots/en-04-cover.png) | ![Models](../../docs/screenshots/en-05-models.png) |
 | Cover mode — pick a recording, SheetSage2 writes its melody down | Model sets — one quantisation per role, what is on disk, switch in one click |
-| ![Any track to MIDI](../../docs/screenshots/en-09-midi.png) | ![Training your own LoRA](../../docs/screenshots/en-08-training.png) |
-| Any track to MIDI — a piano roll of every instrument, played against the original, with mute and solo | Your own LoRA trained on the card — loss and drift as it learns, a checkpoint every 50 steps |
-| ![A dataset](../../docs/screenshots/en-07-dataset.png) | ![The LoRA catalogue](../../docs/screenshots/en-06-lora.png) |
-| A dataset of 61 songs — lyrics found in the databases players use, styles written by ear | The LoRA catalogue — styles, artists and sound, each credited to its author |
+| ![Any track to MIDI](../../docs/screenshots/en-09-midi.png) | ![Choose the base model and review LoRA training settings](../../docs/screenshots/en-08-training.png) |
+| Any track to MIDI — a piano roll of every instrument, played against the original, with mute and solo | Choose the training base, review the three-song dataset, trigger word and recipe before training |
+| ![A training dataset with three demo songs](../../docs/screenshots/en-07-dataset.png) | ![The LoRA catalogue of styles, artists and sounds, with author credits and download sizes](../../docs/screenshots/en-06-lora.png) |
+| A training dataset with three demo songs, ready for training | The LoRA catalogue — styles, artists and sounds, with author credits and download sizes |
 | ![Audio processing](../../docs/screenshots/en-10-processing.png) | ![Agent over MCP](../../docs/screenshots/en-11-agent.png) |
 | Audio processing — noise reduction, the Spectral Lifter, a vocal naturaliser, VST3, mastering | An agent over MCP — the address and the lines to paste into Claude Code or any client |
+
+### Studio 5.0
+
+| | |
+|---|---|
+| ![Choose a model and music engine in Create](../../docs/screenshots/en-18-music-engines.png) | ![Engines and updates settings](../../docs/screenshots/en-19-engines-updates.png) |
+| Create panel model and engine selectors, with a link to installable engines. [Models and runtimes](models-and-runtimes.md#models) | Install and manage engine components and model profiles. [Models and runtimes](models-and-runtimes.md#what-runs-where) |
+| ![Songbook chord sheet](../../docs/screenshots/en-20-songbook.png) | ![Compare takes in a playlist](../../docs/screenshots/en-21-take-comparison.png) |
+| Lyrics and chord names with guitar shapes, transpose and capo controls. [Scores and Songbook](creating-music.md#score-and-songbook) | A/B comparison keeps playback positions aligned and lets you mark a preferred take. [Compare takes](creating-music.md#compare-takes) |
+| ![Two-deck DJ mode](../../docs/screenshots/en-23-dj-mode.png) | ![Library with imported tracks](../../docs/screenshots/en-library.webp) |
+| Two decks with cue, sync, pitch and mix controls. [DJ mode](creating-music.md#dj-mode) | Imported tracks in the Library. [Bring an existing library into YuE2](getting-started.md#bring-your-ace-step-or-minimax-library-into-yue2) |
+| ![ACE-Step or MiniMax library import preview](../../docs/screenshots/en-24-library-import.png) | ![Full-screen player](../../docs/screenshots/en-player.webp) |
+| Source library, contents, required disk space and the **Copy library into YuE2** action. [Import an existing library](getting-started.md#bring-your-ace-step-or-minimax-library-into-yue2) | Full-screen playback controls and song artwork. [The player](creating-music.md#what-you-can-do) |
+| ![Before and after audio processing](../../docs/screenshots/en-normalise.webp) | |
+| Listen to a processed result against the original, then save it as a new track. [Audio processing](creating-music.md#what-you-can-do) | |
+| ![RVC voice catalog](../../docs/screenshots/en-22-rvc-voices.png) | ![RVC voice training](../../docs/screenshots/en-25-rvc-training.png) |
+| Browse curated RVC voices or import a voice checkpoint and optional retrieval index. [RVC voice catalog](creating-music.md#rvc-voice-catalog) | Train an RVC voice from a prepared dataset on NVIDIA CUDA. [RVC training guide](../../docs/rvc-burn-runtime.md) |
+| ![Example LoRA training result](../../docs/screenshots/en-26-lora-training.png) | |
+| Demonstration run with a loss curve, checkpoint comparison and a **Step 50 · To LoRA** action. [LoRA training](creating-music.md#lora-training) | |
 
 The same screens in the language you read: [Русский](https://timoncool.github.io/YuE2-Studio/ru.html),
 [中文](https://timoncool.github.io/YuE2-Studio/zh.html), [日本語](https://timoncool.github.io/YuE2-Studio/ja.html),

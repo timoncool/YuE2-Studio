@@ -11,6 +11,19 @@
   window into a skinned Winamp 2 whose windows move apart, dock and resize — the original skin
   and ten more included, sharp at any scale, the Winamp Skin Museum one click away,
   Ctrl+M to switch. The song, its place and the equalizer carry over both ways.
+
+![Full-screen playback](../../docs/screenshots/en-player.webp)
+
+*Open the player from a song to focus on its artwork and playback controls.*
+
+<a name="dj-mode"></a>
+
+- **Two-deck DJ mode** — load songs on decks A and B, set cue points, sync playback and mix
+  between them with the central fader. Open **DJ mode** from the sidebar.
+
+![Two-deck DJ mode](../../docs/screenshots/en-23-dj-mode.png)
+
+*Cue, sync, pitch and mix two tracks in DJ mode.*
 - **Save as, and a Files panel** — songs, stems, MIDI, lyric sheets, scores and videos are
   saved where you say, in Windows' own Save dialog, and the Files panel shows each save.
 - **A proxy for the whole studio** — HTTP, HTTPS, SOCKS5 or SOCKS4, with a login: model
@@ -27,9 +40,16 @@
 - **Songs one by one** — ask for several songs at once and each lands in the library as soon as
   it is finished, ready to play while the rest are still made; a stopped request keeps the songs
   it finished.
+<a name="score-and-songbook"></a>
+
 - **Read and edit the score** — the model writes its composition in ABC notation first; the
   studio engraves it as sheet music. Edit the notes, tempo or key and create again: the
   composition stays, the performance changes. Or switch to melody-only, or no score at all.
+  **Songbook** prints lyrics and chords with transposition, capo and chord-shape options.
+
+![Songbook chord sheet](../../docs/screenshots/en-20-songbook.png)
+
+*Print a lyric and chord sheet with guitar shapes, capo and transpose controls.*
 - **Compose the score first** — write only the score from the style and lyrics, without
   singing it (the studio's take on yue2.cpp's `yue-plan`), read and fix it, then create.
 - **Covers** — SheetSage2 listens to a recording and writes its melody as a score; YuE2
@@ -38,6 +58,16 @@
   the same notes, or the singing drifts off the tune — lines stretch, pause and slide into
   the wrong section. Transcription mistakes carry into the cover too. A track from your
   library can be transcribed from its menu.
+
+<a name="rvc-voice-catalog"></a>
+
+- **RVC voice conversion** — in **Studio tools**, install a curated voice or import an
+  RVC checkpoint with its optional retrieval index. Use a voice to render a new take with
+  the song's existing accompaniment. [RVC training and runtime details](../../docs/rvc-burn-runtime.md).
+
+![RVC voice catalog in Studio tools](../../docs/screenshots/en-22-rvc-voices.png)
+
+*Browse curated voices or import a checkpoint and optional retrieval index.*
 - **Exact replay** — every track keeps its request and its audio codes, so it can be
   re-rendered bit for bit, or re-rendered with other steps, a new sound seed, several
   variations, or another output format, without composing again.
@@ -74,6 +104,15 @@
 - **Every result is a track** — stems, a processed take, a re-render and a cover land in the
   library as tracks of their own, each marked with the one it was made from and keeping the
   settings it was made with.
+
+<a name="compare-takes"></a>
+
+- **Compare takes** — choose two versions in a playlist and A/B them at the same playback
+  position, then mark the preferred take or open it in the library.
+
+![Compare two takes](../../docs/screenshots/en-21-take-comparison.png)
+
+*Switch between takes without losing their playback position.*
 - **LoRA** — LoRA and LoKr files for either half of the model, the composition or the
   sound, each with its own strength, picked in the create form. A catalogue of ready ones
   with their authors credited, and a search on Hugging Face that downloads what you pick.
@@ -83,6 +122,18 @@
   10-16 kHz band at the source's level and adds nothing above 20 kHz, at 4 GB of the card while it
   decodes against 2.5 GB. Six more community models - Ruach Studio's IRA and IRAE merges - are
   in the list of your own models, in Q8_0 and Q6_K.
+<a name="rvc-voice-training"></a>
+
+- **Train an RVC voice** — on Windows x64 with an NVIDIA GPU, train from isolated voice
+  recordings and install the finished checkpoint into the voice catalog. See the
+  [RVC training guide](../../docs/rvc-burn-runtime.md) for the runtime and steps.
+
+![RVC voice training](../../docs/screenshots/en-25-rvc-training.png)
+
+*The Training panel's RVC · Burn CUDA run settings.*
+
+<a name="lora-training"></a>
+
 - **Train your own LoRA** — an optional tab on the LoRA page: songs of one artist or
   style become a LoRA on your own card with HOT-Step's trainer and its tuned recipe (LoKr,
   Prodigy, lyric timing from a forced aligner that also reads Cyrillic). Every setting of
@@ -108,9 +159,17 @@
   - **Train further** — not there yet at 750 steps? Set 1000 and the run goes on from its
     latest checkpoint with the same recipe and songs; the loss chart and the checkpoints
     continue instead of starting over.
+
+![Example LoRA training result and checkpoint](../../docs/screenshots/en-26-lora-training.png)
+
+*A demonstration run with its loss curve, checkpoint comparison and **Step 50 · To LoRA** action.*
 - **Audio processing** — noise reduction, the Spectral Lifter, a vocal naturaliser, your
   own VST3 plugins in a chain, and mastering to a reference track. Compare before and
   after while it plays, then keep the result as a version of the track or throw it away.
+
+![Compare processed audio before saving](../../docs/screenshots/en-normalise.webp)
+
+*Listen to the processed result against the original before saving it as a new track.*
 - **The sound as the model made it** — the engine renders 32-bit float and the studio encodes
   it once, changing nothing on the way: lossless 24-bit FLAC by default (libFLAC, the reference
   encoder), MP3 with LAME when you choose it. Normalisation is a stage under Process, after
@@ -126,6 +185,10 @@
   exported with title, lyrics and cover in their own tags (Vorbis comments in a FLAC, ID3 in an
   MP3). Interface in English, Russian,
   Chinese, Japanese, Korean and Portuguese.
+
+![Imported tracks in the Library](../../docs/screenshots/en-library.webp)
+
+*Imported audio appears in the Library alongside songs made in Studio.*
 - **A cover for every track** — a track without one wears a free (CC0) Wikimedia Commons
   photograph that fits the genres, moods and instruments of its style, a pattern in one of 21
   DiceBear styles, or a cover OpenRouter generates for every new track. It is chosen by the

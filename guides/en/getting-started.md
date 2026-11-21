@@ -15,11 +15,14 @@
     native images for 7.5, 8.0, 8.6, 8.9, 9.0 and `sm_120a` for GeForce RTX 50.
     CUDA 12 adds 5.2, 6.0, 6.1 and 7.0. The [speed and memory figures](benchmarks.md)
     are from the RTX 4090. [NVIDIA compute capabilities](https://developer.nvidia.com/cuda/gpus)
-  - **AMD or Intel — experimental.** The engine runs on Vulkan through the card's own
-    driver. Owners report songs made well on a Radeon RX 7900 XT under Windows and an
-    RX 7900 XTX under Ubuntu 26 ([#196](https://github.com/timoncool/YuE2-Studio/issues/196)),
-    but on AMD Radeon integrated graphics the song came out with unintelligible vocals, and
-    Intel cards are untested. LoRA training stays on NVIDIA. Reports from owners are welcome.
+  - **AMD or Intel — experimental on Vulkan.** The engine can use the card's own Vulkan
+    driver. On Windows x64, compatible AMD cards can also install the optional HIP (ROCm)
+    component from **Settings → Local engine**; choose **Install HIP component**, then
+    **HIP (ROCm)**. Vulkan remains available. Owners report songs made well on a Radeon
+    RX 7900 XT under Windows and an RX 7900 XTX under Ubuntu 26
+    ([#196](https://github.com/timoncool/YuE2-Studio/issues/196)), but on AMD Radeon
+    integrated graphics the song came out with unintelligible vocals, and Intel cards are
+    untested. LoRA training stays on NVIDIA. Reports from owners are welcome.
   - Without a GPU the engine falls back to the processor, which works but is many times
     slower.
 - 4–10 GB of disk for one model set.
@@ -38,13 +41,17 @@ its data in `~/.local/share/yue2-studio` (`$XDG_DATA_HOME`).
 
 ## Quick start
 
-1. **Install** — run `YuE2.Studio_x.y.z_x64-setup.exe` from the
-   [latest release](https://github.com/timoncool/YuE2-Studio/releases/latest), or unzip the
-   portable archive anywhere and run `YuE2-Studio.exe`.
-2. **Choose a model set** — the first screen preselects the set your card can run. Press
-   download; it fetches only what is missing and resumes if interrupted.
-3. **Create** — write a style and lyrics, or load one of the examples, and press Create.
-   The engine starts by itself and the song lands in your library with its score.
+1. **Install** — download the build for your platform from the
+   [latest release](https://github.com/timoncool/YuE2-Studio/releases/latest): on Windows,
+   run `YuE2.Studio_x.y.z_x64-setup.exe` or unpack the portable ZIP and run
+   `YuE2-Studio.exe`; on Linux x86-64, install the `.deb` or make the AppImage executable
+   and launch it; on Apple Silicon, open the `.dmg`, move YuE2 Studio to Applications and
+   launch it. Linux packages are experimental; there is no Intel Mac build.
+2. **Choose a model set** — on first launch, pick the recommended set and press **Download**.
+   Studio downloads only missing files and resumes an interrupted download.
+3. **Create** — open **Create**. In **Simple**, describe the song in **DESCRIBE YOUR SONG**;
+   or choose **Custom** and enter a style and lyrics. Press **Create**. The song appears in
+   **Library** with its score.
 
 Everything the studio owns stays in its own folder: models, songs, settings, logs,
 temporary files and the WebView2 profile, beside `YuE2-Studio.exe`. That holds for the
@@ -94,6 +101,10 @@ For AppImage use the AppImage path in the last line. In PowerShell use `$env:YUE
 ### Bring your ACE-Step or MiniMax library into YuE2
 
 In YuE2 Studio 5.0, open **Library → Import → ACE-Step or MiniMax library**. Select the old studio from the list, or use **Choose old Studio folder** to locate it yourself.
+
+![Preview an ACE-Step or MiniMax library before importing it](../../docs/screenshots/en-24-library-import.png)
+
+*Review the source, available songs and playlists, optional content and destination space before copying.*
 
 The preview shows the source folder, songs, playlists and space needed on the destination drive. Expand a song to see which files are available and which are missing. Once you have the right library, select **Copy library into YuE2**. The original library stays in place. You can run the import again; the summary distinguishes new songs and playlists from items already imported.
 
