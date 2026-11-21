@@ -1,0 +1,64 @@
+#!/usr/bin/python3
+import base64
+import io
+import json
+import os
+import struct
+import sys
+import threading
+import wave
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
+
+VERSION = "@VERSION@"
+GATE = Path("@GATE@")
+EVENTS = Path("@EVENTS@")
+token = os.environ["YUE_MUSIC_ADAPTER_TOKEN"]
+assert os.environ["YUE_MUSIC_ADAPTER_VERSION"] == VERSION
+event = {"version": VERSION, "pid": os.getpid(), "path": str(Path(__file__).resolve())}
+
+def record(name):
+    with EVENTS.open("a") as stream:
+        stream.write(json.dumps({**event, "event": name}) + "\n")
+
+class Worker(BaseHTTPRequestHandler):
+    def response(self, value, status=200):
+        body = json.dumps(value).encode()
+        self.send_response(status)
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def do_GET(self):
+        if self.headers.get("Authorization") != "Bearer " + token:
+            return self.response({"error": "unauthorized"}, 403)
+        if self.path == "/v1/health":
+            return self.response({"protocol": "music-http-v1", "engine_id": os.environ["YUE_MUSIC_ADAPTER_ID"],
+                                  "version": VERSION, "compute_backend": "cpu"})
+        if self.path == "/v1/jobs/one":
+            return self.response({"status": "completed" if GATE.exists() else "running"})
+        if self.path == "/v1/jobs/one/result":
+            record("result")
+            output = io.BytesIO()
+            with wave.open(output, "wb") as wav:
+                wav.setparams((1, 2, 16000, 0, "NONE", "not compressed"))
+                wav.writeframes(struct.pack("<hh", int(float(VERSION)*2000), -int(float(VERSION)*2000)) * 32000)
+            return self.response({"audio_base64": base64.b64encode(output.getvalue()).decode(),
+                                  "replay": {"fixture": VERSION}, "settings": event})
+        return self.response({"error": "unknown"}, 404)
+
+    def do_POST(self):
+        if self.headers.get("Authorization") != "Bearer " + token:
+            return self.response({"error": "unauthorized"}, 403)
+        self.rfile.read(int(self.headers["Content-Length"]))
+        if self.path == "/v1/jobs":
+            record("submitted")
+            return self.response({"id": "one"})
+        return self.response({"status": "cancelled"})
+
+server = ThreadingHTTPServer(("127.0.0.1", int(os.environ["YUE_MUSIC_ADAPTER_PORT"])), Worker)
+def eof():
+    sys.stdin.buffer.read()
+    server.shutdown()
+threading.Thread(target=eof, daemon=True).start()
+server.serve_forever()

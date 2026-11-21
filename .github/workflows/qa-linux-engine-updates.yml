@@ -1,0 +1,46 @@
+name: Linux signed engine page acceptance
+
+on:
+  push:
+    branches: [music-round/qa-linux-engine-updates]
+
+permissions:
+  contents: read
+
+jobs:
+  loopback:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      RUSTUP_TOOLCHAIN: stable
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - run: sudo apt-get update -q && sudo apt-get install -y -q --no-install-recommends libwayland-dev cmake ffmpeg
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo build --locked -p music-server --bin music-server
+      - name: Run the engine update against the installed service in a loopback-only namespace
+        run: |
+          set -euo pipefail
+          repo="$PWD"
+          test_dir="$RUNNER_TEMP/update-test"
+          mkdir -p "$test_dir"
+          cd "$test_dir"
+          python3 -m venv venv
+          venv/bin/pip install --quiet 'tuf==7.0.1' 'securesystemslib[crypto]==1.6.0'
+          openssl req -x509 -newkey rsa:2048 -nodes -days 1 -subj '/CN=Temporary channel QA root' \
+            -addext 'basicConstraints=critical,CA:TRUE' -addext 'keyUsage=critical,keyCertSign,cRLSign' \
+            -addext 'subjectKeyIdentifier=hash' -keyout ca.key -out ca.pem
+          openssl req -new -newkey rsa:2048 -nodes -subj '/CN=localhost' -keyout tls.key -out tls.csr
+          printf '%s\n' 'subjectAltName=DNS:localhost' 'extendedKeyUsage=serverAuth' 'basicConstraints=CA:FALSE' \
+            'keyUsage=critical,digitalSignature,keyEncipherment' 'authorityKeyIdentifier=keyid,issuer' > tls.ext
+          openssl x509 -req -days 1 -in tls.csr -CA ca.pem -CAkey ca.key -CAcreateserial -extfile tls.ext -out tls.pem
+          sudo unshare --net bash -c 'ip link set lo up; exec setpriv --reuid="$1" --regid="$2" --clear-groups env SSL_CERT_FILE="$PWD/ca.pem" "$PWD/venv/bin/python" "$3/distribution/components/qa-linux-engine-updates.py" "$3/target/debug/music-server" "$PWD/result" tls.pem tls.key' \
+            bash "$(id -u)" "$(id -g)" "$repo"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: linux-engine-update-receipt
+          path: |
+            ${{ runner.temp }}/update-test/result/*.json
+            ${{ runner.temp }}/update-test/result/*.jsonl
+            ${{ runner.temp }}/update-test/result/*.log
