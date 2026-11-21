@@ -143,7 +143,7 @@ def verify_worker(folder):
         path = line.strip().split(" (", 1)[0]
         assert path.startswith(("@", "/usr/lib/", "/System/Library/")), line
     help_result = subprocess.run([binary, "--help"], cwd=binary.parent, capture_output=True, text=True, timeout=20)
-    assert help_result.returncode in (0, 1, 2) and "usage" in (help_result.stdout + help_result.stderr).lower(), help_result
+    assert help_result.returncode in (0, 1, 2) and "commands:" in (help_result.stdout + help_result.stderr).lower(), help_result
     return {"sha256": digest(binary), "imports": imports, "help_exit": help_result.returncode}
 
 
