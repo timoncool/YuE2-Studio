@@ -46,11 +46,11 @@ def rpc(method, params, notify=False):
     assert not result.get("error"), result
     return result["result"]
 
-def tool(name, /, **fields):
-    result = rpc("tools/call", dict(name=name, arguments=fields))
-    assert not result.get("isError"), (name, fields, result)
+def tool(tool_name, /, **fields):
+    result = rpc("tools/call", dict(name=tool_name, arguments=fields))
+    assert not result.get("isError"), (tool_name, fields, result)
     content = result.get("content", [])
-    if name == "ui_screenshot":
+    if tool_name == "ui_screenshot":
         return next(item for item in content if item.get("type") == "image")["data"]
     answer = result.get("structuredContent") or content[0]["text"]
     if isinstance(answer, str) and answer.startswith(("{","[")):
@@ -58,11 +58,11 @@ def tool(name, /, **fields):
             answer = json.loads(answer)
         except ValueError:
             pass
-    trace.append(dict(tool=name, fields=fields, answer=answer))
+    trace.append(dict(tool=tool_name, fields=fields, answer=answer))
     return answer
 
-def ui(name, **fields):
-    return tool("ui_" + name, **fields)
+def ui(action, /, **fields):
+    return tool("ui_" + action, **fields)
 
 def wait_page(*terms, predicate=None):
     last = ""

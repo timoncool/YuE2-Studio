@@ -203,7 +203,8 @@ function readPage(): string {
   const canvas = viz?.querySelector('canvas');
   if (viz && canvas && canvas.width > 0 && canvas.height > 0) {
     try {
-      const sample = viz.dataset.qaSample ?? (viz.dataset.qaVisualizer === 'milkdrop' ? '' : sampleQaCanvas(canvas, viz.dataset.qaVisualizer ?? ''));
+      const mode = viz.dataset.qaVisualizer ?? '';
+      const sample = mode === 'milkdrop' ? viz.dataset.qaSample : sampleQaCanvas(canvas, mode);
       if (sample) lines.push(`QA visualizer ${sample}`);
     } catch {
       // The frame is not yet available. The caller waits for the ready frame.
