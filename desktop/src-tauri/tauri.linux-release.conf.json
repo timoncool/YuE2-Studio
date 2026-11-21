@@ -3,6 +3,8 @@
     "createUpdaterArtifacts": false,
     "targets": ["deb", "appimage"],
     "resources": {
+      "../../distribution/channels/stable/bootstrap/root.json": "component-channel/root.json",
+      "../../distribution/channels/stable/bootstrap/url.txt": "component-channel/url.txt",
       "resources/yue2-cpp": "resources/yue2-cpp",
       "resources/music-midi": "resources/music-midi"
     },

@@ -142,6 +142,10 @@ try {
     Copy-Item $engineResourceRoot (Join-Path $portableRoot 'resources\yue2-cpp') -Recurse -Force
     Get-ChildItem (Join-Path $portableRoot 'resources\yue2-cpp') -Filter '*.pdb' | Remove-Item -Force
     Copy-Item $vstResourceRoot (Join-Path $portableRoot 'resources\vst-host') -Recurse -Force
+    $channel = New-Item -ItemType Directory -Force -Path (Join-Path $portableRoot 'component-channel')
+    foreach ($name in @('root.json', 'url.txt')) {
+        Copy-Item -LiteralPath (Join-Path $repoRoot "distribution/channels/stable/bootstrap/$name") -Destination $channel.FullName
+    }
     New-Item -ItemType File -Path (Join-Path $portableRoot 'portable.flag') -Force | Out-Null
     $portableZip = Join-Path $releaseDir "YuE2-Studio-$Version-portable-windows-x64.zip"
     if (Test-Path $portableZip) { Remove-Item -Force $portableZip }
