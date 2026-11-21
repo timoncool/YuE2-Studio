@@ -179,6 +179,14 @@ pub fn picked(url: &str, name: &str) -> Option<&'static str> {
 /// Libraries required to run a fully unpacked archive without downloading it again.
 pub(crate) fn runtime_libraries(url: &str) -> &'static [(&'static str, &'static str)] {
     match url {
+        "https://developer.download.nvidia.com/compute/cuda/redist/libcublas/windows-x86_64/libcublas-windows-x86_64-12.9.1.4-archive.zip" => &[
+            ("cublas64_12.dll", "90052a83efd1b57a8e3616a6590b335855f81b814a4f16eecb7b5bf6d1b1d4eb"),
+            ("cublasLt64_12.dll", "c3a05ea244c937314afec09f87b91f814c7e27977681f6c67eb51bb06ced3a4a"),
+        ],
+        "https://developer.download.nvidia.com/compute/cuda/redist/libcublas/windows-x86_64/libcublas-windows-x86_64-13.5.1.27-archive.zip" => &[
+            ("cublas64_13.dll", "f1d500d0cd892f5b8c6b6cdbffd82d0c55d5f5427215668e7ceb55aeeccc1b63"),
+            ("cublasLt64_13.dll", "b592cd016d7673e9cb97716a22b27c4010ee635377a3ba28f37070a9bdb76a68"),
+        ],
         "https://github.com/timoncool/onnxruntime/releases/download/v1.32.0/onnxruntime-win-x64-1.32.0.zip" => &[
             ("onnxruntime.dll", "348c3d29d6995eee37e3451825eaddb7ea7400be3afda6ca2286b12bc775f042"),
             ("onnxruntime_providers_shared.dll", "6caf57ac07c9cf72fb4e73c5bb0fe156f02dd60bbbd7385530c9a5654f10f950"),

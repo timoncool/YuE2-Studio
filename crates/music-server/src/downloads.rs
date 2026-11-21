@@ -183,6 +183,9 @@ impl Downloader {
             return true;
         }
         let record = self.record_of(asset);
+        if !crate::pin_sha::runtime_libraries(asset.url).is_empty() {
+            return self.is_verified_install(asset) || self.holds_pinned_bytes(asset, &record);
+        }
         match crate::install_record::matches(&record, asset.url, &self.root) {
             Some(true) => true,
             Some(false) => self.holds_pinned_bytes(asset, &record),
@@ -1869,6 +1872,28 @@ mod tests {
         crate::install_record::write(&downloader.record_of(&runtime), runtime.url, "", &[program], &root).unwrap();
         assert!(downloader.is_installed(&runtime));
         fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn legacy_cublas_receipt_cannot_adopt_unverified_dlls_by_size() {
+        for build in [crate::hardware::CudaBuild::Cuda12, crate::hardware::CudaBuild::Cuda13] {
+            let asset = crate::engine_runtime::cublas_asset(build);
+            let root = tempfile::tempdir().unwrap();
+            let downloader = Downloader::new(root.path().to_path_buf());
+            let files: Vec<_> = crate::pin_sha::runtime_libraries(asset.url)
+                .iter()
+                .map(|(name, _)| {
+                    let path = root.path().join(name);
+                    std::fs::write(&path, b"not the pinned DLL").unwrap();
+                    path
+                })
+                .collect();
+            assert_eq!(files.len(), 2);
+            let record = downloader.record_of(asset);
+            crate::install_record::write(&record, asset.url, "", &files, root.path()).unwrap();
+            assert_eq!(crate::install_record::matches(&record, asset.url, root.path()), Some(true));
+            assert!(!downloader.is_installed(asset));
+        }
     }
 
     #[test]

@@ -278,10 +278,13 @@ async fn install<P: Package>(
         && package.files().iter().any(|file| file.cuda_variant.is_some())
         && let Some(cuda) = crate::native_music_runtime::cuda_build()
     {
-        let missing = state.engine_runtime.missing(Some(cuda));
+        let downloader = state.engine_runtime.downloader();
+        let missing: Vec<_> = crate::engine_runtime::cuda_assets(cuda)
+            .into_iter()
+            .filter(|asset| !downloader.is_installed(asset))
+            .collect();
         if !missing.is_empty() {
             job.transfer.stage("downloading", Some("CUDA runtime"));
-            let downloader = state.engine_runtime.downloader();
             let scope = format!("signed-native-{}", package.id());
             let dependency_signal = cancelled.clone();
             let dependency_cancelled = || *dependency_signal.borrow();
