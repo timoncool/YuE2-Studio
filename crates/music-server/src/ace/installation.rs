@@ -126,9 +126,8 @@ fn installation_from(
     let executable = match (engine_bin, engine_root) {
         (Some(path), _) => usable_executable(&path).then_some(path),
         (None, Some(root)) => find_executable(&root),
-        (None, None) => [managed, packaged]
-            .iter()
-            .find_map(|root| find_executable(root))
+        (None, None) => crate::native_music_runtime::installed(data_root, ENGINE_ID)
+            .or_else(|| [managed, packaged].iter().find_map(|root| find_executable(root)))
             .or_else(|| {
                 registered
                     .clone()
@@ -362,14 +361,23 @@ impl Installation {
         let (source, _) = self.profile_root(profile);
         let adapters_root = self.adapter_root(source, replay)?;
         let models_root = profile.prepare_directory(source)?;
+        let managed = crate::native_music_runtime::installed(&self.data_root, ENGINE_ID)
+            .is_some_and(|path| path == *executable);
+        let mut device = std::env::var("ACE_DEVICE").ok().filter(|value| !value.trim().is_empty());
+        let mut cuda_backend = std::env::var_os("ACE_CUDA_BACKEND").map(PathBuf::from);
+        if managed && cuda_backend.is_none() && device.as_deref().is_none_or(|label| label.starts_with("CUDA")) {
+            cuda_backend = crate::native_music_runtime::cuda_backend(executable);
+            if cuda_backend.is_some() && device.is_none() {
+                device = Some("CUDA0".into());
+            }
+        }
         Ok(Launch {
             executable: executable.clone(),
             models_root,
             adapters_root,
-            device: std::env::var("ACE_DEVICE")
-                .ok()
-                .filter(|value| !value.trim().is_empty()),
-            cuda_backend: std::env::var_os("ACE_CUDA_BACKEND").map(PathBuf::from),
+            device,
+            cuda_backend,
+            managed_data_root: managed.then(|| self.data_root.clone()),
             log_path: self.data_root.join("logs").join("ace-server.log"),
         })
     }

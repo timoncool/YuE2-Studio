@@ -15,6 +15,7 @@ pub struct Launch {
     pub adapters_root: Option<PathBuf>,
     pub device: Option<String>,
     pub cuda_backend: Option<PathBuf>,
+    pub managed_data_root: Option<PathBuf>,
     pub log_path: PathBuf,
 }
 
@@ -179,6 +180,16 @@ impl Launch {
             command.env("LD_LIBRARY_PATH", path);
         }
         dub_core::proc::outside_appimage(&mut command);
+        if let Some(root) = &self.managed_data_root {
+            let mut paths = crate::native_music_runtime::runtime_paths(&executable, root);
+            if cfg!(target_os = "linux") {
+                command.env("LD_LIBRARY_PATH", std::env::join_paths(paths)?);
+            } else if cfg!(windows) {
+                let inherited = std::env::var_os("PATH").unwrap_or_default();
+                paths.extend(std::env::split_paths(&inherited));
+                command.env("PATH", std::env::join_paths(paths)?);
+            }
+        }
         match cuda_backend {
             Some(path) => {
                 command.env("STUDIO_CUDA_BACKEND", path);
@@ -253,6 +264,7 @@ mod tests {
             adapters_root: None,
             device: None,
             cuda_backend: None,
+            managed_data_root: None,
             log_path: PathBuf::new(),
         };
         let runtime = Runtime {
