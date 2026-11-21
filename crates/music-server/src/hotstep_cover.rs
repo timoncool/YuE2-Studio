@@ -24,7 +24,7 @@ pub(super) async fn profiles(State(state): State<AppState>) -> Json<Value> {
     }
     Json(serde_json::json!({
         "engine": ENGINE, "engine_installed": server,
-        "profiles": [{"id": PROFILE, "label": "MuLaCover · HOT-Step · BF16", "ready": missing.is_empty(), "missing": missing}, crate::hotstep_sa3::profile(&state, server).await, crate::hotstep_heartmula::profile(&state, server).await]
+        "profiles": [{"id": PROFILE, "label": "MuLaCover · HOT-Step · BF16", "ready": missing.is_empty(), "missing": missing}, crate::hotstep_sa3::profile(&state, server).await, crate::hotstep_heartmula::profile(&state, server).await, crate::hotstep_minimax::profile(&state, server).await]
     }))
 }
 

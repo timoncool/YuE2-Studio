@@ -184,6 +184,13 @@ under LGPL 2.1. You can also install it with `mulacover_runtime_install`.
 On Linux and macOS, install libsoxr with the system package
 manager. [MuLaCover weights and outputs are licensed for noncommercial use](https://github.com/HeartMuLa/MuLaCover/blob/e27fa7fa0da7c9817879cc6210cc5693f9327946/MODEL_LICENSE).
 
+For MiniMax Music3 on HOT-Step, use `hotstep_minimax_install` and read progress
+with `hotstep_cover_profiles`. This experimental compact profile uses the
+published Windows CPU server. Call `song_create` with
+`music_source: {"kind":"native","engine":"hotstep","model":"hotstep-minimax-music3"}`,
+style and lyrics. Use `song_replay` to create a separate take from the saved
+parameters. [Model license](https://huggingface.co/scragnog/MiniMax-Music3-GGUF/blob/67b48c3028544e4ad9c26946b7c7c840f355ec2b/LICENSE)
+
 For Stable Audio 3 Medium on HOT-Step, use `hotstep_sa3_install` to start the
 managed runtime and BF16 model download. Read readiness, progress and adapter
 names with `hotstep_cover_profiles`. Call `song_create` with
