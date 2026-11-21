@@ -134,29 +134,36 @@ class Publication(unittest.TestCase):
             bundled = Path(__file__).resolve().parents[2] / "config/rvc-voice-catalog.json"
             voice = json.loads(bundled.read_bytes())["voices"][0]
 
-            def publish(version, old_root_key=None, previous=None):
+            def publish(version, old_root_key=None, previous=None, reuse_catalogues=None, signer=None):
                 metadata, targets = work / f"meta-{version}", work / f"targets-{version}"
                 metadata.mkdir()
                 targets.mkdir()
-                root = Root(version=version, expires=expiry)
-                keys = {role: CryptoSigner.generate_ed25519() for role in root.roles}
-                for role, key in keys.items():
-                    root.add_key(key.public_key, role)
-                anchor = work / f"bootstrap-{version}.json"
-                envelope = Metadata(root)
-                envelope.sign(keys["root"])
-                if old_root_key is not None:
-                    envelope.sign(old_root_key, append=True)
-                anchor.write_bytes(envelope.to_bytes())
+                if signer is None:
+                    root = Root(version=version, expires=expiry)
+                    keys = {role: CryptoSigner.generate_ed25519() for role in root.roles}
+                    for role, key in keys.items():
+                        root.add_key(key.public_key, role)
+                    anchor = work / f"bootstrap-{version}.json"
+                    envelope = Metadata(root)
+                    envelope.sign(keys["root"])
+                    if old_root_key is not None:
+                        envelope.sign(old_root_key, append=True)
+                    anchor.write_bytes(envelope.to_bytes())
+                else:
+                    anchor, keys = signer
 
                 catalogue = work / f"reviewed-{version}.json"
-                catalogue.write_bytes(reviewed.read_bytes() + b" " * version)
-                voice_file = work / f"voices-{version}.json"
-                voice_file.write_bytes(json.dumps({"schema_version": 1, "voices": [
-                    dict(voice, name=f"Rotation fixture {version}"),
-                ]}).encode())
-                engines = work / f"engines-{version}.json"
-                engines.write_bytes(b'{"schema":1,"engines":[]}' + b" " * version)
+                mirror_data = json.loads(reviewed.read_bytes())
+                mirror_data["revision"] = version
+                catalogue.write_bytes(json.dumps(mirror_data).encode())
+                catalogue_revision = reuse_catalogues or version
+                voice_file = work / f"voices-{catalogue_revision}.json"
+                engines = work / f"engines-{catalogue_revision}.json"
+                if reuse_catalogues is None:
+                    voice_file.write_bytes(json.dumps({"schema_version": 1, "voices": [
+                        dict(voice, name=f"Rotation fixture {version}"),
+                    ]}).encode())
+                    engines.write_bytes(b'{"schema":1,"engines":[]}' + b" " * version)
                 specifications = {}
                 for name, path in (("mirrors.json", catalogue), ("rvc-voice-catalog.json", voice_file),
                                    ("music-engine-catalog.json", engines)):
@@ -177,10 +184,16 @@ class Publication(unittest.TestCase):
                 site = work / f"release-{version}"
                 stage_channel(anchor, metadata, targets, catalogue, voice_file, site,
                               previous_site=previous, engines=engines)
-                return site, anchor, keys["root"], catalogue
+                return site, (anchor, keys), catalogue
 
-            first, bootstrap1, old_key, catalogue1 = publish(1)
-            second, bootstrap2, _, catalogue2 = publish(2, old_key, first)
+            first, (bootstrap1, keys1), catalogue1 = publish(1)
+            old_key = keys1["root"]
+            second, signer2, catalogue2 = publish(2, old_key, first)
+            bootstrap2, _ = signer2
+            mirrors_only, _, catalogue3 = publish(3, previous=second, reuse_catalogues=2, signer=signer2)
+            self.assertFalse((mirrors_only / "3.root.json").exists())
+            self.assertEqual(sorted(p.name for p in (mirrors_only / "targets").glob("*.music-engine-catalog.json")),
+                             sorted(p.name for p in (second / "targets").glob("*.music-engine-catalog.json")))
             invalid = Metadata.from_bytes(bootstrap2.read_bytes())
             del invalid.signatures[old_key.public_key.keyid]
             disconnected = work / "disconnected.json"
@@ -230,9 +243,9 @@ class Publication(unittest.TestCase):
                                    bootstrap=bootstrap.read_bytes() if bootstrap else None,
                                    target_base_url=base + "targets/")
 
-                def promote():
+                def promote(release=second):
                     next_pointer = work / "next"
-                    next_pointer.write_text(second.name, encoding="ascii")
+                    next_pointer.write_text(release.name, encoding="ascii")
                     os.replace(next_pointer, pointer)
 
                 try:
@@ -262,6 +275,19 @@ class Publication(unittest.TestCase):
                         new_info = client.get_targetinfo("mirrors.json")
                         saved_new = Path(client.download_target(new_info, str(work / "updated")))
                         self.assertEqual(saved_new.read_bytes(), catalogue2.read_bytes())
+                    before_mirror_edit = updater("profile")
+                    before_mirror_edit.refresh()
+                    engine_info = before_mirror_edit.get_targetinfo("music-engine-catalog.json")
+                    promote(mirrors_only)
+                    after_mirror_edit = updater("profile")
+                    after_mirror_edit.refresh()
+                    self.assertEqual(after_mirror_edit.get_targetinfo("music-engine-catalog.json").hashes,
+                                     engine_info.hashes)
+                    engine = Path(after_mirror_edit.download_target(engine_info, str(work / "engines-after")))
+                    self.assertEqual(engine.read_bytes(), (work / "engines-2.json").read_bytes())
+                    mirror_info = after_mirror_edit.get_targetinfo("mirrors.json")
+                    mirror = Path(after_mirror_edit.download_target(mirror_info, str(work / "mirrors-after")))
+                    self.assertEqual(mirror.read_bytes(), catalogue3.read_bytes())
                 finally:
                     server.shutdown()
                     thread.join()

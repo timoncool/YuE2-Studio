@@ -31,11 +31,24 @@ The Studio expects the signed targets under `targets/` inside that directory.
      --previous-site published --output incoming
    ```
 
-   On initial deployment omit `--previous-site`. If a voice catalogue is
-   offered, also pass `--voices config/rvc-voice-catalog.json` on every
-   deployment. Pass `--engines` with the reviewed engine catalogue if the
-   signing repository publishes `music-engine-catalog.json`. Each verified
-   target must match its reviewed file byte for byte.
+   On initial deployment omit `--previous-site`. Pass `--voices config/rvc-voice-catalog.json`
+   for the signed target `rvc-voice-catalog.json`. To publish engine package
+   definitions, pass `--engines candidate/music-engine-catalog.json` and sign
+   that file under the exact target name `music-engine-catalog.json`. Its
+   package `files` entries give the HTTPS URL, byte count and SHA-256 for each
+   executable, library or model included in the package. Upload those assets
+   before signing the catalogue. Each staged catalogue must match the reviewed
+   source byte for byte, including JSON whitespace.
+
+   For a mirror-only release, keep all already published catalogue declarations
+   in the new signed targets metadata and pass their existing reviewed files
+   again. Reuse the identical catalogue bytes and hash-prefixed paths so
+   clients can continue reading them. Before the first engine catalogue is
+   published, omit its signed target and the `--engines` argument. Studio
+   starts from its packaged engine profiles, and the engine catalogue list
+   reads a previously verified local cache or returns an empty extension list.
+   A network fetch occurs only on explicit catalogue refresh.
+
 4. Promote the staged directory in one versioned deployment. Staging retains
    the previous publication's numbered roots, numbered roles and hash-prefixed
    catalogues for older installers and downloads already in progress. During
