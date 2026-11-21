@@ -571,6 +571,24 @@ fails and the installer says so. Install WebView2 from Microsoft's standalone in
 [Evergreen Standalone x64](https://go.microsoft.com/fwlink/p/?LinkId=2124701), then run the
 studio's installer again.
 
+### Upgrade a custom Studio data folder
+
+If your launcher sets `YUE_STUDIO_DATA_ROOT`, YuE2 Studio 5.0 uses that folder for the library and for the default settings and model paths. Earlier desktop versions could store the settings and models in the installation's ordinary data folder while the library went to your custom folder.
+
+Look for your previous `studio-settings.json` and `models/yue2-cpp` directory under `data` beside the executable. If the installation used the per-user location, check `$XDG_DATA_HOME/yue2-studio` (usually `~/.local/share/yue2-studio`) on Linux, `%LOCALAPPDATA%\YuE2 Studio` on Windows, or `~/Library/Application Support/YuE2 Studio` on macOS.
+
+If you recognize those files as belonging to this profile, you can use them in place. Start with the previous settings path and model directory explicitly selected. Keep the path to your library as `YUE_STUDIO_DATA_ROOT`.
+
+```bash
+export YUE_STUDIO_DATA_ROOT="$HOME/my-yue-library"
+legacy="$HOME/.local/share/yue2-studio"
+export YUE_STUDIO_SETTINGS_PATH="$legacy/studio-settings.json"
+export YUE_MODELS_ROOT="$legacy/models/yue2-cpp"
+/usr/bin/YuE2-Studio
+```
+
+For AppImage use the AppImage path in the last line. In PowerShell use `$env:YUE_STUDIO_SETTINGS_PATH` and `$env:YUE_MODELS_ROOT` with the paths you located. Use a separate settings file when two profiles previously shared that directory and you want independent preferences. After backing up your settings, you can copy that small JSON into your custom data folder and remove only the settings override. Keep the model override if you want the studio to use the existing weights in place.
+
 ### Bring your ACE-Step or MiniMax library into YuE2
 
 In YuE2 Studio 5.0, open **Library → Import → ACE-Step or MiniMax library**. Select the old studio from the list, or use **Choose old Studio folder** to locate it yourself.
