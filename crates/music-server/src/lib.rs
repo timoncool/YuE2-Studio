@@ -12167,14 +12167,15 @@ fn prepare_replay_synthesis(mut replay: Value, overrides: &ReplayMusicJobRequest
         if total > LONGEST_SONG_SECONDS {
             return Err(format!("the song would last {total:.0} seconds; songs go up to {LONGEST_SONG_SECONDS:.0}"));
         }
-        // A stream that stopped short of its budget was sung to the end of its
-        // score, and carried on under that score it starts the song over: the
-        // score is written on first, for the seconds added.
+        // A stream that ended on its own needs more score before continuing.
+        // A marked truncation can stop below the requested budget when the
+        // engine ran out of context, so there can still be score left to sing.
+        let truncated = object.remove("truncated").and_then(|value| value.as_bool()) == Some(true);
         let asked = object.get("duration").and_then(Value::as_f64).unwrap_or(CHECKPOINT_SONG_SECONDS);
         let ceiling = object.get("semantic_sampling").and_then(|sampling| sampling.get("max_tokens")).and_then(Value::as_u64).unwrap_or((CHECKPOINT_SONG_SECONDS * SEMANTIC_FRAMES_PER_SECOND) as u64);
         let budget = ((asked * SEMANTIC_FRAMES_PER_SECOND).floor() as u64).min(ceiling);
         let scored = object.get("abc").and_then(Value::as_str).is_some_and(|abc| !abc.trim().is_empty()) && object.get("cot").and_then(Value::as_str) != Some("off");
-        if scored && (frames as u64) < budget {
+        if scored && !truncated && (frames as u64) < budget {
             let abc = object.get("abc").and_then(Value::as_str).unwrap_or_default().trim_end().to_owned();
             if let Some(label) = score::sections::reprise(&abc) {
                 object.insert("abc".into(), Value::String(format!("{abc}\n% {label}\n")));
@@ -15803,6 +15804,15 @@ mod tests {
         let cut = serde_json::json!({"style":"lofi","lyrics":"[Verse] hi","abc":"X:1\nK:C\n","semantic_tokens":codes,"duration":10.0});
         let longer = prepare_replay_synthesis(cut, &ReplayMusicJobRequest { extend_seconds: Some(30.0), ..replay_overrides() }).unwrap();
         assert!(longer.get("abc_continue").is_none(), "a song cut by its length still has its score to follow");
+        let context_cut = serde_json::json!({"abc":sectioned,"semantic_tokens":codes,"duration":120.0,"truncated":true});
+        assert_eq!(cut_short(&context_cut), Some("memory"));
+        let longer = prepare_replay_synthesis(context_cut, &ReplayMusicJobRequest { extend_seconds: Some(30.0), ..replay_overrides() }).unwrap();
+        assert_eq!(longer["abc"], sectioned, "a context cutoff leaves the original score available");
+        assert!(longer.get("abc_continue").is_none());
+        assert!(longer.get("truncated").is_none(), "the new render must report its own outcome");
+        assert_eq!(longer["semantic_tokens"], codes);
+        assert_eq!(longer["continue_semantic_tokens"], true);
+        assert_eq!(longer["duration"], 40.0);
         let unscored = serde_json::json!({"semantic_tokens":codes,"cot":"off"});
         let longer = prepare_replay_synthesis(unscored, &ReplayMusicJobRequest { extend_seconds: Some(30.0), ..replay_overrides() }).unwrap();
         assert!(longer.get("abc_continue").is_none());
