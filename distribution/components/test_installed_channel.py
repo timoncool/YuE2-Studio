@@ -4,6 +4,7 @@ Arguments: built music-server, pinned Linux x64 ONNX 1.32 archive, TLS certifica
 for localhost (trusted inside this container only), matching private TLS key.
 TUF keys are generated for this run. No installed library is used.
 """
+import ctypes
 import functools
 import hashlib
 import json
@@ -160,6 +161,13 @@ def run(work, binary, archive, certificate, tls_key):
             assert not any(path == "/current.tgz" for path, _ in requested), requested
             assert not any(data.rglob("libonnxruntime.so*"))
             cut_timestamp = False
+            (origin / "current.tgz").write_bytes(b"incorrect archive")
+            requested.clear()
+            bad_archive = install_runtime()
+            assert bad_archive["error"] and ("/current.tgz", 200) in requested, (bad_archive, requested)
+            assert not any(data.rglob("libonnxruntime.so*"))
+            shutil.copyfile(archive, origin / "current.tgz")
+            requested.clear()
             second = install_runtime()
             assert not second["error"], second
             assert ("/current.tgz", 200) in requested, requested
@@ -178,6 +186,18 @@ def run(work, binary, archive, certificate, tls_key):
             stored, = data.rglob("crisperwhisper2-turbo/config.json")
             assert hashlib.sha256(stored.read_bytes()).hexdigest() == config_sha
             print("PASS same service PID", proc.pid, "signed mirror for a previously unlisted pinned config", config_sha)
+            # Cut off the complete mirror host after a successful installation.
+            server.shutdown()
+            server.server_close()
+            requested.clear()
+            offline = install_runtime()
+            assert not offline["error"] and not requested, (offline, requested)
+            assert hashlib.sha256(stored.read_bytes()).hexdigest() == config_sha
+            library = next(path for path in data.rglob("libonnxruntime.so*") if path.is_file())
+            runtime = ctypes.CDLL(str(library))
+            runtime.OrtGetApiBase.restype = ctypes.c_void_p
+            assert runtime.OrtGetApiBase(), library
+            print("PASS incorrect archive rejected, installed runtime reopened offline", library.name)
             assert proc.poll() is None and hashlib.sha256(exe.read_bytes()).hexdigest() == binary_hash
             print("PASS interrupted timestamp rejected; retry recovered in unchanged binary SHA-256", binary_hash)
         finally:
