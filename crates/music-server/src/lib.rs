@@ -40,6 +40,7 @@ mod hotstep_cover_assets;
 mod hotstep_cover_rolls;
 mod audio_cpp_stable_audio;
 mod audio_cpp_vevo2;
+mod audio_cpp_soulx;
 mod native_music_jobs;
 mod native_ace_jobs;
 mod assistant;
@@ -157,6 +158,7 @@ struct AppState {
     audio_cpp_music_stops: Arc<RwLock<HashMap<String, Arc<std::sync::atomic::AtomicBool>>>>,
     heartmula_install: Arc<tokio::sync::Mutex<()>>,
     stable_audio_install: Arc<tokio::sync::Mutex<()>>,
+    soulx_install: Arc<tokio::sync::Mutex<()>>,
     openrouter_music_stops: Arc<RwLock<HashMap<String, Arc<tokio::sync::Notify>>>>,
     music_server: EngineClient,
     /// The engine's log, followed for the service's life: its recent lines and
@@ -360,6 +362,8 @@ struct CreateMusicJobRequest {
     magenta: Option<audio_cpp_magenta::MagentaOptions>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     vevo2: Option<audio_cpp_vevo2::Options>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    soulx: Option<audio_cpp_soulx::Options>,
     /// The window's own mark for this request, handed back on the job so the
     /// window knows the job as its own before the response reaches it.
     client_ref: Option<String>,
@@ -1583,6 +1587,7 @@ pub async fn serve_on_port(port: u16) -> anyhow::Result<()> {
         audio_cpp_music_stops: Arc::default(),
         heartmula_install: Arc::default(),
         stable_audio_install: Arc::default(),
+        soulx_install: Arc::default(),
         openrouter_music_stops: Arc::new(RwLock::new(HashMap::new())),
         music_server,
         engine_log,

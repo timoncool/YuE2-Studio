@@ -48,6 +48,7 @@ enum Family {
     MuLaCover,
     Magenta,
     Vevo2,
+    SoulX(audio_cpp_soulx::Variant),
 }
 
 impl Family {
@@ -61,6 +62,8 @@ impl Family {
             audio_cpp_midasheng::FAMILY => Some(Self::MiDasheng),
             audio_cpp_mulacover::FAMILY => Some(Self::MuLaCover),
             audio_cpp_vevo2::FAMILY => Some(Self::Vevo2),
+            audio_cpp_soulx::SYNTHESIS => Some(Self::SoulX(audio_cpp_soulx::Variant::Synthesis)),
+            audio_cpp_soulx::CONVERSION => Some(Self::SoulX(audio_cpp_soulx::Variant::Conversion)),
             _ => None,
         }
     }
@@ -75,6 +78,7 @@ impl Family {
             Self::MuLaCover => audio_cpp_mulacover::FAMILY,
             Self::Magenta => audio_cpp_magenta::FAMILY,
             Self::Vevo2 => audio_cpp_vevo2::FAMILY,
+            Self::SoulX(variant) => variant.id(),
         }
     }
 
@@ -88,6 +92,7 @@ impl Family {
             Self::MuLaCover => audio_cpp_mulacover::NAME,
             Self::Magenta => "Magenta RealTime 2",
             Self::Vevo2 => audio_cpp_vevo2::NAME,
+            Self::SoulX(variant) => variant.name(),
         }
     }
 
@@ -101,6 +106,7 @@ impl Family {
             Self::MuLaCover => audio_cpp_mulacover::PROFILE,
             Self::Magenta => audio_cpp_magenta::PROFILE,
             Self::Vevo2 => audio_cpp_vevo2::PROFILE,
+            Self::SoulX(_) => audio_cpp_soulx::PROFILE,
         }
     }
 
@@ -122,6 +128,7 @@ impl Family {
             Self::MuLaCover => audio_cpp_mulacover::model_dir(root),
             Self::Magenta => audio_cpp_magenta::model_dir(root),
             Self::Vevo2 => audio_cpp_vevo2::model_dir(root),
+            Self::SoulX(_) => audio_cpp_soulx::model_dir(root),
         }
     }
 
@@ -135,6 +142,7 @@ impl Family {
             Self::MuLaCover => audio_cpp_mulacover::missing_files(path),
             Self::Magenta => audio_cpp_magenta::missing_files(path),
             Self::Vevo2 => audio_cpp_vevo2::missing_files(path),
+            Self::SoulX(variant) => variant.missing(path),
         }
     }
 
@@ -148,6 +156,7 @@ impl Family {
             Self::MuLaCover => audio_cpp_mulacover::entry(path),
             Self::Magenta => audio_cpp_magenta::entry(path),
             Self::Vevo2 => audio_cpp_vevo2::entry(path),
+            Self::SoulX(variant) => variant.entry(path),
         }
     }
 
@@ -168,6 +177,7 @@ impl Family {
             }
             Self::Magenta => audio_cpp_magenta::task(request, library).map(PreparedTask::Magenta),
             Self::Vevo2 => audio_cpp_vevo2::task(request, library).map(PreparedTask::Singing),
+            Self::SoulX(variant) => audio_cpp_soulx::task(variant, request, library).map(PreparedTask::SoulX),
         }
     }
 
@@ -193,6 +203,7 @@ impl Family {
             Self::Magenta => audio_cpp_magenta::catalog(root, runtime_ready),
             Self::MuLaCover => audio_cpp_mulacover::catalog(root, runtime_ready, soxr_ready),
             Self::Vevo2 => audio_cpp_vevo2::catalog(root, runtime_ready),
+            Self::SoulX(variant) => variant.catalog(root, runtime_ready, soxr_ready),
         }
     }
 }
@@ -219,6 +230,10 @@ fn managed_model(family: Family, state: &AppState) -> Option<ManagedModel> {
             audio_cpp_stable_audio::SHA256,
             &state.stable_audio_install,
         ),
+        Family::SoulX(variant) => {
+            let (asset, sha256) = variant.asset();
+            (variant.id(), asset, sha256, &state.soulx_install)
+        }
         _ => return None,
     };
     Some(ManagedModel {
@@ -235,6 +250,7 @@ enum PreparedTask {
     Magenta(audio_cpp_magenta::MagentaTask),
     Cover(audio_cpp_mulacover::CoverTask),
     Singing(audio_cpp_vevo2::SingingTask),
+    SoulX(audio_cpp_soulx::SingingTask),
 }
 
 impl PreparedTask {
@@ -242,6 +258,7 @@ impl PreparedTask {
         match self {
             Self::Json(body) => Ok((body, None)),
             Self::Magenta(task) => Ok(task.into_request()),
+            Self::SoulX(task) => task.into_request().map(|(body, directory)| (body, Some(directory))),
             Self::Cover(task) => task
                 .into_request()
                 .map(|(body, directory)| (body, Some(directory))),
@@ -253,8 +270,13 @@ impl PreparedTask {
 }
 
 pub(super) fn registered_model_ready(model: &ModelEntry) -> Option<bool> {
-    let family = Family::parse(&model.family)?;
-    if model.id != family.id() || !matches!(model.mode, Mode::Offline) {
+    let family = Family::parse(&model.id)?;
+    let expected_family = if matches!(family, Family::SoulX(_)) {
+        audio_cpp_soulx::FAMILY
+    } else {
+        family.id()
+    };
+    if model.family != expected_family || !matches!(model.mode, Mode::Offline) {
         return None;
     }
     let directory = match family {
@@ -270,6 +292,7 @@ pub(super) fn registered_model_ready(model: &ModelEntry) -> Option<bool> {
             model.path.parent()
         }
         Family::Vevo2 if model.task == "tts" => model.path.parent(),
+        Family::SoulX(variant) if model.task == variant.engine_task() => model.path.parent(),
         _ => return None,
     };
     Some(directory.is_some_and(|path| family.missing(path).is_empty()))
@@ -351,6 +374,8 @@ pub(super) async fn models(State(state): State<AppState>) -> Json<Value> {
         Family::Magenta,
         Family::MuLaCover,
         Family::Vevo2,
+        Family::SoulX(audio_cpp_soulx::Variant::Synthesis),
+        Family::SoulX(audio_cpp_soulx::Variant::Conversion),
     ]
     .map(|family| family.catalog(root.as_deref(), runtime_ready, soxr_ready));
     for model in &mut models {
@@ -437,6 +462,13 @@ async fn install_managed_model(
         install_acpp(state, build, managed.scope)
             .await
             .context("Installing audio.cpp runtime")?;
+    }
+    if matches!(managed.family, Family::SoulX(audio_cpp_soulx::Variant::Conversion)) {
+        #[cfg(windows)]
+        if !state.acpp.soxr_ready() {
+            state.acpp.install_soxr().await.context("Installing SoulX-Singer SVC resampler")?;
+        }
+        anyhow::ensure!(state.acpp.soxr_ready(), "Install the libsoxr runtime for SoulX-Singer SVC.");
     }
     downloader
         .install_all(managed.scope, &[asset])
@@ -675,6 +707,9 @@ pub(super) async fn submit(
             "Install the libsoxr runtime for MuLaCover.".into(),
         );
     }
+    if matches!(family, Family::SoulX(audio_cpp_soulx::Variant::Conversion)) && !state.acpp.soxr_ready() {
+        return reject(StatusCode::SERVICE_UNAVAILABLE, "Install the libsoxr runtime for SoulX-Singer SVC.".into());
+    }
     let Ok(lease) = state.engine_use.clone().try_write_owned() else {
         return reject(
             StatusCode::CONFLICT,
@@ -735,6 +770,11 @@ pub(super) async fn submit(
             settings["steps"] = cover.body["num_inference_steps"].clone();
             settings["seed"] = cover.body["seed"].clone();
             settings["guidance_scale"] = cover.body["guidance_scale"].clone();
+        }
+        (Family::SoulX(variant), _) => {
+            settings["route"] = Value::from(variant.engine_task());
+            settings["soulx"] = serde_json::json!(request.soulx);
+            settings["seed"] = Value::from(request.seed.unwrap_or(2026));
         }
         (Family::Vevo2, _) => {
             settings["route"] = Value::from(audio_cpp_vevo2::ROUTE);

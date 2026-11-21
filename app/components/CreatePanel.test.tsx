@@ -586,6 +586,8 @@ it('chooses MiniMax Music3 through audio.cpp and reuses the saved seed and forma
 it.each([
   ['heartmula', { heartmula: { top_k: 30, temperature: 0.9 } }, 'pop', ''],
   ['vevo2', { vevo2: { voice_song_id: 'original-take' } }, '', 'Words to sing'],
+  ['soulx_singer', { soulx: { reference_song_id: 'reference', reference_metadata: '[{}]', target_metadata: '[{}]', control: 'score' } }, '', ''],
+  ['soulx_singer_svc', { soulx: { reference_song_id: 'reference', source_song_id: 'vocals' } }, '', ''],
   ['midashenglm_gen', { midasheng: { caption: '', music: 'quiet piano', speech_text: '', speech_style: '', effects: '', environment: 'rain' } }, 'quiet piano', ''],
 ] as const)('restores and submits model-specific settings for %s', async (model, options, style, lyrics) => {
   vi.stubGlobal('fetch', vi.fn(async () => Response.json({ engine: 'audio.cpp', models: [
