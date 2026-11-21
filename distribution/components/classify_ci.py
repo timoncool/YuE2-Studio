@@ -30,12 +30,7 @@ def base_commit():
     return None
 
 
-def check_change(base):
-    if not base:
-        return False
-    if subprocess.run(["git", "cat-file", "-e", base + "^{commit}"], capture_output=True).returncode:
-        return False
-    paths = git("diff", "--no-renames", "--name-only", "-z", base, "HEAD").split(b"\0")[:-1]
+def check_change(base, paths):
     if CATALOGUE.as_posix().encode() not in paths:
         return False
     after = read_catalogue(CATALOGUE)
@@ -55,7 +50,17 @@ def check_change(base):
 
 if __name__ == "__main__":
     base = base_commit()
-    mirrors_only = check_change(base)
+    if base and subprocess.run(["git", "cat-file", "-e", base + "^{commit}"], capture_output=True).returncode:
+        base = None
+    paths = set(git("diff", "--no-renames", "--name-only", "-z", base, "HEAD").split(b"\0")[:-1]) if base else set()
+    mirrors_only = check_change(base, paths)
+    publisher_files = {b"distribution/components/" + name for name in
+                       [b"stage_channel.py", b"test_stage_channel.py", b"PUBLISH.md"]}
+    publisher_only = bool(paths) and paths <= publisher_files
+    publisher_test = not base or bool(paths & (publisher_files | {
+        b"distribution/components/verify.py", b"distribution/components/test_installed_channel.py",
+        b"distribution/channels/stable/mirrors.json", b".github/workflows/ci.yml"
+    }))
     channel_inputs = ["crates/music-server/src/component_catalogue.rs", "crates/music-server/src/downloads.rs",
                       "distribution/components/test_installed_channel.py", "distribution/components/check_installed_channel.sh",
                       "distribution/components/check_offline_onnx.sh"]
@@ -64,4 +69,6 @@ if __name__ == "__main__":
     ).returncode != 0
     with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
         print(f"mirrors_only={str(mirrors_only).lower()}", file=output)
+        print(f"skip_build={str(mirrors_only or publisher_only).lower()}", file=output)
+        print(f"publisher_test={str(publisher_test).lower()}", file=output)
         print(f"channel_changed={str(channel_changed).lower()}", file=output)
