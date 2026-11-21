@@ -30,19 +30,28 @@ it('opens upgrades from the notification target and reads per-engine readiness w
   const setupHook = vi.mocked(useSetupStatus).mockImplementation(queries.useSetupStatus);
   const cloudHook = vi.mocked(useOpenRouterSettings).mockImplementation(queries.useOpenRouterSettings);
   let openRouterConfigured = false;
+  let activeEngine = 'acestep-cpp';
   const onlyRead = vi.fn(async (url: string, init?: RequestInit) => {
     expect(init?.method ?? 'GET').toBe('GET');
     if (url === '/setup/status') return Response.json({ ready: true, engine_ready: true });
     if (url === '/v1/openrouter/settings') return Response.json({ configured: openRouterConfigured });
-    if (url === '/v1/music/pair') return Response.json({ active: { kind: 'native', engine: 'acestep-cpp', model: 'minimal' } });
+    if (url === '/v1/music/pair') return Response.json({ active: { kind: 'native', engine: activeEngine, model: 'minimal' } });
     if (url === '/engine/options') return Response.json({ executable: '/engines/yue-server' });
     if (url.includes('/acestep-cpp/profiles')) return Response.json({ engine_installed: true, profiles: [{ id: 'minimal', ready: false }] });
     if (url.includes('/acestep-cpp/runtime')) return Response.json({
       supported: true, installed: false, installed_revision: '6e0e414ec113', revision: 'd058cd86564a',
     });
-    if (url.includes('/minimaxmusic-cpp/profiles')) return Response.json({ engine_installed: false, profiles: [] });
+    if (url.includes('/minimaxmusic-cpp/profiles')) return Response.json({
+      engine_installed: true, profiles: [], selected_executable: { source: 'local', path: '/external/mm-server' },
+    });
+    if (url.includes('/minimaxmusic-cpp/runtime')) return Response.json({
+      supported: true, installed: true, installed_revision: 'managed12345', revision: 'managed12345',
+    });
     if (url === '/v1/music/audio-cpp/models') return Response.json({ engine_installed: true, models: [{ id: 'yue2', ready: true }] });
-    if (url === '/v1/music/native/hotstep/profiles') return Response.json({}, { status: 503 });
+    if (url === '/v1/music/native/hotstep/profiles') return Response.json({ engine_installed: false, profiles: [
+      { id: 'unknown-compatible-id', label: 'New compatible model', ready: false, install_path: '/v1/music/native/hotstep/new-model/install' },
+      { id: 'bad', label: 'Invalid install target', ready: false, install_path: 'https://example.invalid/install' },
+    ] });
     if (url === '/v1/rvc/native/runtime') return Response.json({ supported: false, reason: 'Unsupported GPU' });
     if (url === '/v1/components/updates') return Response.json({ mode: 'notify', updates: [] });
     return Response.json({});
@@ -64,17 +73,23 @@ it('opens upgrades from the notification target and reads per-engine readiness w
     expect(host.querySelector('[data-engine="acestep-cpp"]')?.textContent).toContain('Installed · 6e0e414ec113');
     expect(host.querySelector('[data-engine="acestep-cpp"]')?.textContent).toContain('download · d058cd86564a');
     expect(host.querySelector('[data-engine="audio.cpp"]')?.textContent).toContain('Installed · profileReady');
-    expect(host.querySelector('[data-engine="minimaxmusic-cpp"]')?.textContent).toContain('Not installed');
-    expect(host.querySelector('[data-engine="hotstep"]')?.textContent).toContain('Status unavailable');
+    expect(host.querySelector('[data-engine="minimaxmusic-cpp"]')?.textContent).toContain('Selected local executable · /external/mm-server');
+    expect(host.querySelector('[data-engine="minimaxmusic-cpp"]')?.textContent).toContain('Managed package · Installed · managed12345');
+    expect(host.querySelector('[data-engine="hotstep"]')?.textContent).toContain('Not installed');
+    expect(host.querySelector('[data-engine="hotstep"] summary')?.textContent).toBe('New compatible model');
+    expect(host.querySelector('[data-engine="hotstep"]')?.textContent).not.toContain('Invalid install target');
     expect(host.querySelector('[data-engine="rvc"]')).toBeNull();
     await act(async () => host.querySelector<HTMLInputElement>('label:has(input[type="checkbox"]) input')!.click());
     expect(host.querySelector('[data-engine="rvc"]')?.textContent).toContain('Unsupported GPU');
     expect(host.querySelector('[data-engine="openrouter"]')?.textContent).toContain('openRouterNotConfigured');
     openRouterConfigured = true;
+    activeEngine = 'minimaxmusic-cpp';
     const refresh = [...host.querySelectorAll('button')].find(button => button.textContent === 'refresh')!;
     await act(async () => refresh.click());
     await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)); });
     expect(host.querySelector('[data-engine="openrouter"]')?.textContent).toContain('openRouterConfigured');
+    expect(host.querySelector('[data-engine="minimaxmusic-cpp"] p')?.textContent).toContain('Installed · Active');
+    expect(host.querySelector('[data-engine="minimaxmusic-cpp"] p')?.textContent).not.toContain('managed12345');
     expect(onlyRead.mock.calls.filter(([url]) => url === '/setup/status')).toHaveLength(2);
   } finally {
     await act(async () => root.unmount());

@@ -139,7 +139,11 @@ it('updates two jobs independently and keeps an in-flight stop out of the YuE2 l
     ...native, id: 'hotstep-job', engine_id: 'hotstep', submitted_at: 1, status: 'queued',
     phase: 'queued', message: 'Waiting for HOT-Step',
   };
+  const song = { id: '01', title: 'Finished track', caption: '', lyrics: '',
+    engine_id: 'yue2-cpp', created_at: '2026-01-01T00:00:00Z' };
+  const tracks = [song, { ...song, id: '02' }].map(item => ({ id: item.id, audio_url: '', song: item }));
   let listed = [other, native];
+  const onFinished = vi.fn();
   let stop: YueJob = { ...other, status: 'running', message: 'Stopping HOT-Step' };
   const sources: ProgressSource[] = [];
   class ProgressSource {
@@ -154,12 +158,15 @@ it('updates two jobs independently and keeps an in-flight stop out of the YuE2 l
       listed = stop.status === 'cancelled' ? [native] : [stop, native];
       return Response.json(stop);
     }
+    if (path === '/v1/music/jobs/yue2-job') {
+      return Response.json({ ...native, status: 'completed', songs: tracks });
+    }
     return Response.json([]);
   }));
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
   let studio!: ReturnType<typeof useGenerations>;
   function Editor() {
-    studio = useGenerations({ enabled: true, notify: () => {}, onFinished: () => {} });
+    studio = useGenerations({ enabled: true, notify: () => {}, onFinished });
     return null;
   }
   const row = (id: string) => studio.songs.find(entry => entry.jobId === id);
@@ -185,6 +192,17 @@ it('updates two jobs independently and keeps an in-flight stop out of the YuE2 l
     act(() => sources[0].onmessage?.({ data: JSON.stringify({ stage: 'semantic', fraction: .5, detail: '5/10' }) }));
     expect(row(native.id)).toMatchObject({ isGenerating: true, progress: .5 });
     expect(row(other.id)).toMatchObject({ stage: 'cancelled', progress: undefined });
+    listed = [{ ...native, songs: tracks.slice(0, 1) }];
+    await act(async () => { await client.refetchQueries({ queryKey: ['music', 'jobs'] }); await new Promise(resolve => setTimeout(resolve, 10)); });
+    expect(onFinished).not.toHaveBeenCalled();
+
+    listed = [];
+    await act(async () => { await client.refetchQueries({ queryKey: ['music', 'jobs'] }); await new Promise(resolve => setTimeout(resolve, 10)); });
+    expect(onFinished).toHaveBeenCalledExactlyOnceWith(expect.any(String), expect.arrayContaining([
+      expect.objectContaining({ id: '01' }), expect.objectContaining({ id: '02' }),
+    ]));
+    await act(async () => { await client.refetchQueries({ queryKey: ['music', 'jobs'] }); await new Promise(resolve => setTimeout(resolve, 10)); });
+    expect(onFinished).toHaveBeenCalledOnce();
   } finally {
     act(() => root.unmount());
     client.clear();

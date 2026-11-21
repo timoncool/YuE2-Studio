@@ -2,6 +2,15 @@ import type { Language } from './translations';
 
 export const engineUpdateTarget = 'engines:updates';
 
+export const runtimeSourceStrings: Record<Language, readonly [string, string]> = {
+  en: ['Managed package', 'Selected local executable'],
+  ru: ['Управляемый пакет', 'Выбранный локальный файл'],
+  zh: ['托管软件包', '选中的本地可执行文件'],
+  ja: ['管理パッケージ', '選択したローカル実行ファイル'],
+  ko: ['관리 패키지', '선택한 로컬 실행 파일'],
+  pt: ['Pacote gerido', 'Executável local selecionado'],
+};
+
 export const showUnsupportedEngines: Record<Language, string> = {
   en: 'Show unsupported engines',
   ru: 'Показать несовместимые движки',

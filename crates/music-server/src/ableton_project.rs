@@ -29,7 +29,7 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 
 use crate::ableton::{self, AudioClip, Clip, ClipNote, MidiClip, SetPlan, TrackPlan};
-use crate::score::smf;
+use crate::score::{abc, smf};
 use crate::{api_error, song_midi, ApiError, AppState};
 
 /// Live's clip colours for each stem, so a set reads the same way every time.
@@ -67,6 +67,7 @@ pub struct Contents {
     pub midi: Vec<(String, String, Vec<u8>)>,
     /// Whether the tempo came from the song's score; without one it is Live's default and says so.
     pub tempo_from_score: bool,
+    pub score_midi_omitted: bool,
 }
 
 /// Live 12 Lite, the smallest edition, refuses a ninth audio or MIDI track
@@ -101,8 +102,11 @@ fn read_me(contents: &Contents, files: &[(String, String)], left_off: &[String])
         bpm = contents.bpm,
         num = contents.meter.0,
         den = contents.meter.1,
-        tempo_note = if contents.tempo_from_score { ", the tempo of the song's score" } else { " (the song has no score, so this is Live's default tempo, not the song's)" },
+        tempo_note = if contents.tempo_from_score { ", the tempo of the song's score" } else { " (Live's default tempo; the song's score supplied no supported tempo)" },
     );
+    if contents.score_midi_omitted {
+        text.push_str("Some notes from the score could not be included as MIDI. The original audio and any available transcription accompany this set.\n\n");
+    }
     text.push_str("Track -> file\n");
     for (track, file) in files {
         text.push_str(&format!("  {track} -> {file}\n"));
@@ -295,27 +299,84 @@ struct Parts {
     bpm: f64,
     meter: (u32, u32),
     tempo_from_score: bool,
+    score_midi_omitted: bool,
 }
 
-/// The score's tempo and meter, when the song has a score.
-fn score_tempo(song: &crate::library::Song) -> Result<Option<(f64, (u32, u32))>, String> {
-    let Some(score) = song_midi::song_score(&song.generation_settings, song.replay_request.as_ref()) else { return Ok(None) };
-    let facts = song_midi::facts(&score).map_err(|reason| format!("the song's score could not be read: {reason}"))?;
-    let meter = facts.meter.split_once('/').and_then(|(num, den)| Some((num.parse().ok()?, den.parse().ok()?))).unwrap_or((4, 4));
-    Ok(Some((f64::from(facts.bpm), meter)))
-}
-
-/// One MIDI file per line of the song's score; the full score would double them.
-fn score_midi(song: &crate::library::Song) -> Result<Vec<(String, String, Vec<u8>)>, String> {
-    let Some(score) = song_midi::song_score(&song.generation_settings, song.replay_request.as_ref()) else { return Ok(vec![]) };
-    let facts = song_midi::facts(&score).map_err(|reason| format!("the song's score could not be read: {reason}"))?;
-    let mut midi = Vec::new();
-    for part in facts.parts.iter().filter(|part| part.id != "score") {
-        let bytes = song_midi::part_midi(&score, part.id)?;
-        let track = format!("{} (from score)", part.label);
-        midi.push((track.clone(), song_midi::file_name(&song.title, &track), bytes));
+/// Convert the layout of a plain single-voice ABC tune into the native score dialect.
+/// The existing score parser still checks every note and bar.
+fn single_voice_score(score: &str, bpm: u32, meter: (u32, u32)) -> Option<String> {
+    let lines = score.lines().map(str::trim).filter(|line| !line.is_empty() && !line.starts_with('%'));
+    let mut unit = if meter.0 as f64 / (meter.1 as f64) < 0.75 { "1/16" } else { "1/8" };
+    let mut key = None;
+    let mut music = Vec::new();
+    for line in lines {
+        if key.is_none() {
+            match line.split_once(':') {
+                Some(("L", value)) => unit = value.trim(),
+                Some(("K", value)) => key = Some(value.trim()),
+                Some(("X" | "T" | "M" | "Q", _)) => {}
+                _ => return None,
+            }
+        } else {
+            music.push(line);
+        }
     }
-    Ok(midi)
+    let key = key?;
+    let joined = music.join(" ");
+    let bars: Vec<_> = joined.strip_suffix('|').unwrap_or(&joined).split('|').collect();
+    if bars.iter().any(|bar| bar.trim().is_empty()) {
+        return None;
+    }
+    let (num, den) = meter;
+    let mut native = format!("X:1\nT:\nM:{num}/{den}\nL:{unit}\nQ:1/4={bpm}\n{}\n{}\nK:{key}\n", abc::VOICE_LINES[0], abc::VOICE_LINES[1]);
+    for group in bars.chunks(4) {
+        let count: usize = group.iter().map(|bar| abc::whole_rest_bars(bar.trim()).unwrap_or(1)).sum();
+        native.push_str(&format!("V: Vocal\n{}|\nV: Ins\n{}\n", group.join("|"), "Z|".repeat(count)));
+    }
+    Some(native)
+}
+
+/// Keep the supported musical parts of a score even when its remaining notation is unreadable.
+fn add_score(parts: &mut Parts, score: &str) {
+    let header = || score.lines().map(str::trim).take_while(|line| !line.starts_with("K:"));
+    let tempo = header().find_map(|line| {
+        let value = line.strip_prefix("Q:")?.trim();
+        let bpm = value.strip_prefix("1/4=").unwrap_or(value).trim().parse::<u32>().ok()?;
+        (bpm > 0 && bpm <= 60_000_000).then_some(bpm)
+    });
+    let meter = header().find_map(|line| abc::meter_value(line.strip_prefix("M:")?.trim()).ok());
+    parts.bpm = f64::from(tempo.unwrap_or(120));
+    parts.tempo_from_score = tempo.is_some();
+    parts.meter = meter.unwrap_or((4, 4));
+    let normalized;
+    let (score, facts) = match song_midi::facts(score) {
+        Ok(facts) => {
+            parts.meter = abc::meter_value(&facts.meter).unwrap_or(parts.meter);
+            (score, facts)
+        }
+        Err(_) => {
+            normalized = single_voice_score(score, tempo.unwrap_or(120), parts.meter);
+            let Some(normalized) = normalized.as_deref() else {
+                parts.score_midi_omitted = true;
+                return;
+            };
+            let Ok(facts) = song_midi::facts(normalized) else {
+                parts.score_midi_omitted = true;
+                return;
+            };
+            (normalized, facts)
+        }
+    };
+    for part in facts.parts.iter().filter(|part| part.id != "score") {
+        match song_midi::part_midi(score, part.id) {
+            Ok(bytes) => {
+                let label = format!("{} (from score)", part.label);
+                let file = song_midi::file_name(&parts.title, &label);
+                parts.midi.push((label, file, bytes));
+            }
+            Err(_) => parts.score_midi_omitted = true,
+        }
+    }
 }
 
 fn stems_of(state: &AppState, song_id: &str) -> Vec<(String, PathBuf)> {
@@ -332,13 +393,14 @@ fn transcribed_midi(state: &AppState, song: &crate::library::Song) -> Option<(St
 /// Writes the project under a name no earlier one has: into the folder the caller named, where it is theirs,
 /// or into the studio's `exports` folder, where it waits for the window to save it.
 async fn package(parts: Parts, named: Option<PathBuf>) -> Result<Value, String> {
-    let contents = Contents { title: parts.title, bpm: parts.bpm, meter: parts.meter, mix: parts.mix, stems: parts.stems, midi: parts.midi, tempo_from_score: parts.tempo_from_score };
+    let contents = Contents { title: parts.title, bpm: parts.bpm, meter: parts.meter, mix: parts.mix, stems: parts.stems, midi: parts.midi, tempo_from_score: parts.tempo_from_score, score_midi_omitted: parts.score_midi_omitted };
     let folder = match &named {
         Some(folder) => folder.clone(),
         None => crate::studio_data_root().map(|root| root.join("exports")).ok_or("the studio has no data folder")?,
     };
     std::fs::create_dir_all(&folder).map_err(|error| format!("create {}: {error}", folder.display()))?;
     let summary = (contents.stems.len(), contents.midi.len(), contents.tempo_from_score, contents.bpm, contents.meter);
+    let score_midi_omitted = contents.score_midi_omitted;
     let (target, project) = tokio::task::spawn_blocking(move || write_project(&contents, &folder))
         .await
         .map_err(|error| error.to_string())?
@@ -357,6 +419,7 @@ async fn package(parts: Parts, named: Option<PathBuf>) -> Result<Value, String> 
         "stems": summary.0,
         "midi_parts": summary.1,
         "tempo_from_score": summary.2,
+        "score_midi_omitted": score_midi_omitted,
         "bpm": summary.3,
         "meter": format!("{}/{}", summary.4 .0, summary.4 .1),
         "clips_placed": true,
@@ -380,11 +443,11 @@ pub async fn start(State(state): State<AppState>, Json(start): Json<Start>) -> R
     }
     let song = song_or_404(&state, &start.song_id)?;
     let mix = state.library.media_path_for_song(&song).ok_or_else(|| api_error(StatusCode::NOT_FOUND, "the song's audio is not in the library".into()))?;
-    let tempo = score_tempo(&song).map_err(|reason| api_error(StatusCode::UNPROCESSABLE_ENTITY, reason))?;
-    let mut midi = score_midi(&song).map_err(|reason| api_error(StatusCode::UNPROCESSABLE_ENTITY, reason))?;
-    midi.extend(transcribed_midi(&state, &song));
-    let (bpm, meter) = tempo.unwrap_or((120.0, (4, 4)));
-    let parts = Parts { title: song.title.clone(), mix, stems: stems_of(&state, &song.id), midi, bpm, meter, tempo_from_score: tempo.is_some() };
+    let mut parts = Parts { title: song.title.clone(), mix, stems: stems_of(&state, &song.id), midi: Vec::new(), bpm: 120.0, meter: (4, 4), tempo_from_score: false, score_midi_omitted: false };
+    if let Some(score) = song_midi::song_score(&song.generation_settings, song.replay_request.as_ref()) {
+        add_score(&mut parts, &score);
+    }
+    parts.midi.extend(transcribed_midi(&state, &song));
     package(parts, named).await.map(Json).map_err(|reason| api_error(StatusCode::INTERNAL_SERVER_ERROR, reason))
 }
 
@@ -445,6 +508,7 @@ mod tests {
             stems: vec![("drums".into(), drums)],
             midi: vec![("Lead (from score)".into(), "Night_ drive - Lead (from score).mid".into(), lead)],
             tempo_from_score: true,
+            score_midi_omitted: false,
         };
         let original = dir.join("Night_ drive Project.zip");
         std::fs::write(&original, b"earlier export").unwrap();
@@ -538,10 +602,31 @@ mod tests {
 
     #[test]
     fn without_a_score_the_read_me_says_the_tempo_is_not_the_songs() {
-        let contents = Contents { title: "x".into(), bpm: 120.0, meter: (4, 4), mix: PathBuf::from("m.wav"), stems: vec![], midi: vec![], tempo_from_score: false };
-        assert!(read_me(&contents, &[], &[]).contains("not the song's"));
+        let contents = Contents { title: "x".into(), bpm: 120.0, meter: (4, 4), mix: PathBuf::from("m.wav"), stems: vec![], midi: vec![], tempo_from_score: false, score_midi_omitted: false };
+        assert!(read_me(&contents, &[], &[]).contains("Live's default tempo"));
     }
 
+    #[test]
+    fn score_details_survive_monophonic_and_unreadable_abc() {
+        let native = format!("X:1\nT:\nM:3/4\nL:1/4\nQ:1/4=92\n{}\n{}\nK:C\nV: Vocal\nC D E|\nV: Ins\nF G A|", abc::VOICE_LINES[0], abc::VOICE_LINES[1]);
+        let mono = "X:1\nT:Hosted score\nM:4/4\nL:1/4\nK:C\nC D E F|G A B c|";
+        let explicit = mono.replace("M:4/4", "M:2/4").replace("K:C", "Q:1/4=104\nK:C").replace("C D E F|G A B c|", "C D|E F|");
+        let damaged = explicit.replace("C D|E F|", "???");
+        for (score, bpm, meter, midi, from_score, omitted) in [
+            (native.as_str(), 92.0, (3, 4), 2, true, false),
+            (explicit.as_str(), 104.0, (2, 4), 1, true, false),
+            (mono, 120.0, (4, 4), 1, false, false),
+            (damaged.as_str(), 104.0, (2, 4), 0, true, true),
+        ] {
+            let mut parts = Parts { title: "Fixture".into(), mix: PathBuf::new(), stems: vec![], midi: vec![], bpm: 120.0, meter: (4, 4), tempo_from_score: false, score_midi_omitted: false };
+            add_score(&mut parts, score);
+            assert_eq!((parts.bpm, parts.meter, parts.midi.len(), parts.tempo_from_score, parts.score_midi_omitted),
+                       (bpm, meter, midi, from_score, omitted));
+            for (_, _, bytes) in parts.midi {
+                assert!(bytes.starts_with(b"MThd"));
+            }
+        }
+    }
 
     #[test]
     fn a_files_length_is_read_from_its_header_and_is_what_decoding_gives() {

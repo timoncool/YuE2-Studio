@@ -5,6 +5,35 @@ import { AudioCppModelInstall } from './HeartMuLaControls';
 
 vi.hoisted(() => vi.stubGlobal('location', { protocol: 'https:', hostname: 'tauri.localhost' }));
 
+it('installs a model identified by a compatible server catalogue route', async () => {
+  vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+  const installPath = '/v1/music/native/hotstep/new-model/install';
+  const catalogue = '/v1/music/native/hotstep/profiles';
+  const model = 'new-compatible-model';
+  const fetcher = vi.fn(async (url: string, init?: RequestInit) => {
+    if (init?.method === 'POST') {
+      expect(url).toMatch(/\/v1\/music\/native\/hotstep\/new-model\/install$/);
+      expect(JSON.parse(init.body as string)).toEqual({ model });
+      return Response.json({ installing: true });
+    }
+    expect(url).toMatch(/\/v1\/music\/native\/hotstep\/profiles$/);
+    return Response.json({ profiles: [{ id: model, ready: false }] });
+  });
+  vi.stubGlobal('fetch', fetcher);
+  const host = document.createElement('div');
+  const root = createRoot(host);
+  try {
+    await act(async () => root.render(<AudioCppModelInstall model={model} bytes={0} language="en" onInstalled={vi.fn()}
+      target={{ catalogue, installPath, label: 'New compatible model' }} />));
+    expect(host.querySelector('button')?.textContent).toBe('Install New compatible model');
+    await act(async () => host.querySelector('button')!.click());
+    expect(fetcher.mock.calls.filter(([, init]) => init?.method === 'POST')).toHaveLength(1);
+  } finally {
+    await act(async () => root.unmount());
+    vi.unstubAllGlobals();
+  }
+});
+
 it('uses the desktop service address and observes the same installation after remount', async () => {
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
   let installing = false;

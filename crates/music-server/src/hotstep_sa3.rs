@@ -39,6 +39,7 @@ pub(super) async fn profile(state: &AppState, engine_installed: bool) -> Value {
         "download": downloader.active_for(INSTALL_SCOPE).await,
         "missing_bytes": weights.iter().map(|asset| asset.bytes).sum::<u64>() + runtime.map_or(0, |asset| asset.bytes),
         "installable": engine_installed || runtime.is_some(), "adapters": adapters,
+        "install_path": (engine_installed || runtime.is_some()).then_some("/v1/music/native/hotstep/stable-audio-3/install"),
     })
 }
 

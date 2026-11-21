@@ -120,6 +120,20 @@ fn installed_runtime(downloader: &Downloader, engine: &str) -> Option<(&'static 
     host_runtimes(engine).find_map(|runtime| installed_by(downloader, runtime).map(|executable| (runtime, executable)))
 }
 
+pub(super) fn selected_executable(data_root: &FsPath, engine: &str, executable: Option<&FsPath>) -> Option<serde_json::Value> {
+    let path = executable?;
+    let downloads = downloader(data_root);
+    let revision = host_runtimes(engine)
+        .find(|runtime| {
+            downloads.picked_into(&runtime.asset).join(runtime.pin.executable) == path
+                && installed_by(&downloads, runtime).is_some()
+        })
+        .map(|runtime| runtime.pin.revision);
+    Some(serde_json::json!({
+        "path": path, "source": if revision.is_some() { "managed" } else { "local" }, "revision": revision,
+    }))
+}
+
 pub(super) fn requires_adapter_update(data_root: &FsPath, engine: &str, executable: &FsPath) -> bool {
     let downloader = downloader(data_root);
     host_runtimes(engine).any(|runtime| {
@@ -390,6 +404,10 @@ mod tests {
         let (reported, _) = installed_runtime(&downloads, engine).unwrap();
         assert_eq!(reported.pin.revision, previous.pin.revision);
         assert_ne!(reported.pin.revision, current.pin.revision);
+        let external = root.path().join("external/ace-server.exe");
+        let selected = selected_executable(root.path(), engine, Some(&external)).unwrap();
+        assert_eq!(selected["source"], "local");
+        assert!(selected["revision"].is_null());
         assert!(requires_adapter_update(root.path(), engine, &fallback));
         let executable = downloads.picked_into(&current.asset).join(current.pin.executable);
         assert!(!requires_adapter_update(root.path(), engine, &executable));
