@@ -45,6 +45,10 @@ vi.mock('../services/adapters', async (original) => ({
 vi.mock('./AdapterPicker', () => ({ AdapterPicker: () => null }));
 vi.mock('./AudioWaveform', () => ({ AudioWaveform: () => null }));
 vi.mock('./ScoreView', () => ({ ScoreView: () => null }));
+vi.mock('./WindowAudioCapture', () => ({
+  WindowAudioCapture: ({ disabled, onRecording }: { disabled: boolean; onRecording: (file: File) => void }) =>
+    <button disabled={disabled} onClick={() => onRecording(new File(['RIFF'], 'window-audio.wav', { type: 'audio/wav' }))}>Finish fixture recording</button>,
+}));
 vi.mock('./midi/MidiEditor', () => ({ MidiEditor: () => null }));
 vi.mock('./MidiImportDialog', () => ({ MidiImportDialog: () => null }));
 vi.mock('./PlaylistModals', () => ({ CreatePlaylistModal: () => null }));
@@ -196,6 +200,21 @@ describe('pauses between repeated generations (#261)', () => {
     advance(60_000);
     expect(sent).toHaveLength(1);
   });
+});
+
+it('reads a captured window WAV through the existing cover transcription and score form', async () => {
+  vi.stubGlobal('fetch', vi.fn(async () => Response.json({ catalog: { transcriber: true } })));
+  act(() => root.render(panel({})));
+  await flush();
+  click(buttonNamed('coverMode')!);
+  await flush();
+  const record = buttonNamed('Finish fixture recording')!;
+  expect(record.disabled).toBe(false);
+  click(record);
+  await flush();
+  expect(transcribe).toHaveBeenCalledWith({ file: expect.objectContaining({ name: 'window-audio.wav', type: 'audio/wav' }) },
+    expect.any(Boolean), expect.any(AbortSignal));
+  expect(field('textarea[aria-label="scoreCardTitle"]')?.value).toContain('X:1');
 });
 
 it('keeps an edited score across a cloud session and reopening the native form', async () => {
