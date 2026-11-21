@@ -416,14 +416,18 @@ async fn wait_for_activation(
         };
         // A native queue or a trainer can still be working after releasing
         // its admission lease. Let it finish without holding up its cleanup.
-        let songs_running = state.jobs.read().await.values().any(crate::song_in_engine);
-        if !songs_running && state.training.active_run().await.is_none() {
+        if !local_work_pending(state).await {
             return lease;
         }
         transfer.stage("waiting_for_idle", None);
         drop(lease);
         tokio::time::sleep(std::time::Duration::from_millis(200)).await;
     }
+}
+
+async fn local_work_pending(state: &AppState) -> bool {
+    let songs_running = state.jobs.read().await.values().any(crate::song_in_engine);
+    songs_running || state.training.active_run().await.is_some()
 }
 
 pub(crate) struct InstalledEngine {
