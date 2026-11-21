@@ -1,0 +1,32 @@
+name: Windows studio service for SoulX acceptance
+
+on:
+  push:
+    branches: [qa/soulx-studio-windows]
+
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          ref: c0185404
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo build --locked -p music-server --bin music-server
+      - run: |
+          git rev-parse HEAD | Set-Content -Encoding utf8NoBOM revision.txt
+          (Get-FileHash target/debug/music-server.exe -Algorithm SHA256).Hash | Set-Content -Encoding utf8NoBOM music-server.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: soulx-studio-windows
+          compression-level: 6
+          retention-days: 2
+          path: |
+            target/debug/music-server.exe
+            music-server.sha256
+            revision.txt
+
