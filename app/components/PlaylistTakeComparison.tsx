@@ -12,10 +12,11 @@ export const PlaylistTakeComparison: React.FC<{
   songs: Song[];
   playerIsPlaying: boolean;
   onError: (message: string) => void;
-}> = ({ playlist, songs, playerIsPlaying, onError }) => {
+  onOpenLibraryTake: (song: Song) => void;
+}> = ({ playlist, songs, playerIsPlaying, onOpenLibraryTake, onError }) => {
   const { language } = useI18n();
   const labels = preferredTakeStrings[language];
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(playlist.id.startsWith('checkpoint-listen-v1-'));
   const [leftId, setLeftId] = useState('');
   const [rightId, setRightId] = useState('');
   const pending = useRef(false);
@@ -81,11 +82,17 @@ export const PlaylistTakeComparison: React.FC<{
               const active = side === 'before' ? left : right;
               const preferred = playlist.preferredSongId === active.id;
               return (
-                <button type="button" disabled={preferred || saving}
-                  className="mt-2 rounded border border-white/15 px-2 py-1 text-sm enabled:hover:bg-white/10 disabled:opacity-60"
-                  onClick={() => void mark(active)}>
-                  {preferred ? labels.preferred : labels.choose}
-                </button>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  <button type="button" disabled={preferred || saving}
+                    className="rounded border border-white/15 px-2 py-1 text-sm enabled:hover:bg-white/10 disabled:opacity-60"
+                    onClick={() => void mark(active)}>
+                    {preferred ? labels.preferred : labels.choose}
+                  </button>
+                  <button type="button" className="rounded border border-white/15 px-2 py-1 text-sm hover:bg-white/10"
+                    onClick={() => onOpenLibraryTake(active)}>
+                    {labels.openInLibrary}
+                  </button>
+                </div>
               );
             }} />
           <TakeWords key={JSON.stringify([left.id, right.id, left.lyrics, left.audioUrl, right.audioUrl])} left={left} right={right} />

@@ -14,6 +14,7 @@ mod problem;
 mod processing;
 mod vst;
 mod training;
+mod checkpoint_listening;
 mod auto_title;
 mod tagging;
 mod cover_art;
@@ -154,6 +155,7 @@ const PROGRAM_ID: &str = "yue2";
 
 #[derive(Clone)]
 struct AppState {
+    checkpoint_listening: Arc<tokio::sync::Mutex<()>>,
     configuration: Arc<RwLock<StudioConfiguration>>,
     jobs: Arc<RwLock<HashMap<String, MusicJob>>>,
     ace_runtime: Arc<ace::Runtime>,
@@ -1628,6 +1630,7 @@ pub async fn serve_on_port(port: u16) -> anyhow::Result<()> {
             persisted.as_ref().map(|settings| settings.configuration.clone()).unwrap_or_else(initial_configuration),
         ))),
         jobs: Arc::new(RwLock::new(HashMap::new())),
+        checkpoint_listening: Arc::new(tokio::sync::Mutex::new(())),
         ace_runtime: Arc::default(),
         ace_cancellations: Arc::default(),
         minimax: Arc::default(),
@@ -1989,6 +1992,7 @@ pub async fn serve_on_port(port: u16) -> anyhow::Result<()> {
         .route("/v1/training/runs/{id}/continue", post(continue_training))
         .route("/v1/training/runs/{id}", axum::routing::delete(delete_training_run))
         .route("/v1/training/runs/{id}/checkpoints/{step}/install", post(install_training_checkpoint))
+        .route("/v1/training/runs/{id}/checkpoints/listen", post(checkpoint_listening::listen))
         .route("/v1/library/songs/{id}/stems", get(read_stems).post(start_separation))
         .route("/v1/library/songs/{id}/stems/{stem}", get(read_stem_audio))
         .route("/v1/library/songs/{id}/cover/auto", post(draw_cover_now))
