@@ -2048,3 +2048,29 @@ it('restores a HOT-Step YuE2 score with its own sampling and no cover source', a
     semantic_sampling: { min_tokens: 100, max_tokens: 100 } });
   expect(sent.at(-1)?.cover_of).toBeUndefined();
 });
+
+it('switches a YuE2 model from its local runtime and back using the engine selector', async () => {
+  vi.stubGlobal('fetch', vi.fn(async (url: string) => Response.json(url === '/v1/music/native/hotstep/profiles' ? {
+    engine: 'hotstep', engine_installed: true, profiles: [{ id: 'hotstep-yue2-q4-k-m', ready: true, missing: [] }],
+  } : {})));
+  function Editor() {
+    const [route, choose] = React.useState<NonNullable<React.ComponentProps<typeof CreatePanel>['musicEngine']>>('local');
+    return panel({ musicEngine: route, onMusicEngineChange: choose });
+  }
+  const selectEngine = () => [...host.querySelectorAll('label')]
+    .find(node => node.textContent?.startsWith('Music engine'))!.querySelector('select')!;
+  const choose = (value: string) => act(() => {
+    const input = selectEngine();
+    input.value = value;
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  act(() => root.render(<Editor />));
+  await flush();
+  expect(Array.from(selectEngine().options, option => option.value)).toEqual(['local', 'hotstep']);
+  choose('hotstep');
+  await flush();
+  expect(selectEngine().value).toBe('hotstep');
+  choose('local');
+  await flush();
+  expect(selectEngine().value).toBe('local');
+});
