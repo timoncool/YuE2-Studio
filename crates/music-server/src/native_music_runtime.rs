@@ -249,31 +249,55 @@ pub(super) async fn start(
         )
         .into_response();
     };
-    if let Some(cuda) = cuda_build() {
-        if let Err(error) = state
-            .engine_runtime
-            .install_missing_for(Some(cuda), &engine)
-            .await
-        {
-            return api_error(StatusCode::CONFLICT, format!("{error:#}")).into_response();
+    let Ok(guard) = state.native_music_setup.clone().try_lock_owned() else {
+        return api_error(
+            StatusCode::CONFLICT,
+            "A native music runtime installation is already running.".into(),
+        )
+        .into_response();
+    };
+    state.native_music_downloads.clear_finished(&engine).await;
+    state
+        .engine_runtime
+        .downloader()
+        .clear_finished(&engine)
+        .await;
+    tokio::spawn(async move {
+        let _guard = guard;
+        let result = install(&state, &engine, runtime).await;
+        if let Err(error) = result {
+            state
+                .native_music_downloads
+                .fail(&engine, format!("{error:#}"))
+                .await;
         }
+    });
+    (
+        StatusCode::ACCEPTED,
+        Json(serde_json::json!({ "started": true })),
+    )
+        .into_response()
+}
+
+async fn install(state: &AppState, engine: &str, runtime: &'static Runtime) -> Result<()> {
+    if let Some(cuda) = cuda_build() {
+        state
+            .engine_runtime
+            .install_missing_for(Some(cuda), engine)
+            .await?;
     }
     let downloader = &state.native_music_downloads;
     let cache = std::env::var_os("STUDIO_NATIVE_RUNTIME_CACHE")
         .map(PathBuf::from)
         .map(|dir| dir.join(runtime.pin.archive))
         .filter(|path| path.is_file());
-    let result = match cache {
+    match cache {
         Some(path) => {
             downloader
-                .install_local_archive(&engine, &runtime.asset, &path)
+                .install_local_archive(engine, &runtime.asset, &path)
                 .await
         }
-        None => downloader.install_all(&engine, &[&runtime.asset]).await,
-    };
-    match result {
-        Ok(()) => Json(serde_json::json!({ "installed": true })).into_response(),
-        Err(error) => api_error(StatusCode::CONFLICT, format!("{error:#}")).into_response(),
+        None => downloader.install_all(engine, &[&runtime.asset]).await,
     }
 }
 

@@ -174,6 +174,7 @@ struct AppState {
     /// Downloads of community models (`community`) into `models/yue2-cpp/own`.
     community_downloads: Arc<downloads::Downloader>,
     native_music_downloads: Arc<downloads::Downloader>,
+    native_music_setup: Arc<tokio::sync::Mutex<()>>,
     rvc_native_downloads: Arc<downloads::Downloader>,
     rvc_burn_downloads: Arc<downloads::Downloader>,
     rvc_quick: Arc<rvc_quick::Queue>,
@@ -1662,6 +1663,7 @@ pub async fn serve_on_port(port: u16) -> anyhow::Result<()> {
         rvc_burn_downloads: Arc::new(rvc_burn_install::downloader(
             settings_path.parent().expect("settings file has a data directory"),
         )),
+        native_music_setup: Arc::default(),
         native_music_downloads: Arc::new(native_music_runtime::downloader(
             settings_path.parent().expect("settings file has a data directory"),
         )),

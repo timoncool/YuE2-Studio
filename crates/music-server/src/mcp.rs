@@ -1060,6 +1060,18 @@ fn id_only(name: &str, what: &str) -> Value {
     object(json!({ name: { "type": "string", "description": what } }), &[name])
 }
 
+fn native_music_runtime_schema() -> Value {
+    object(json!({ "engine": { "type": "string", "enum": ["acestep-cpp", "minimaxmusic-cpp"] } }), &["engine"])
+}
+
+fn native_music_runtime_route(args: &Value) -> Result<String, String> {
+    let engine = text(args, "engine")?;
+    if !matches!(engine.as_str(), "acestep-cpp" | "minimaxmusic-cpp") {
+        return Err("Choose acestep-cpp or minimaxmusic-cpp.".into());
+    }
+    Ok(format!("/v1/music/native/{engine}/runtime"))
+}
+
 fn rvc_runtime_schema() -> Value {
     object(json!({ "metal": { "type": "boolean", "description": "Choose the experimental Apple Metal projections runtime." } }), &[])
 }
@@ -2234,6 +2246,24 @@ fn tools() -> &'static [Tool] {
                 description: "List native MiniMax Music 3 profiles, installed weights, and missing model files.",
                 schema: nothing,
                 call: |_| get("/v1/music/native/minimaxmusic-cpp/profiles".into()),
+            },
+            Tool {
+                name: "native_music_runtime_status",
+                description: "Read the pinned native music runtime revision, platform support, missing bytes, and installation progress.",
+                schema: native_music_runtime_schema,
+                call: |args| get(native_music_runtime_route(args)?),
+            },
+            Tool {
+                name: "native_music_runtime_install",
+                description: "Start installing the verified native ACE-Step or MiniMax runtime. Model weights are installed separately.",
+                schema: native_music_runtime_schema,
+                call: |args| post(native_music_runtime_route(args)?, json!({})),
+            },
+            Tool {
+                name: "native_music_runtime_cancel",
+                description: "Cancel this native runtime download without removing any installed runtime.",
+                schema: native_music_runtime_schema,
+                call: |args| send(Method::DELETE, native_music_runtime_route(args)?, json!({})),
             },
             Tool {
                 name: "audio_cpp_music_models",

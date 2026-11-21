@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useI18n } from '../context/I18nContext';
 import { apiUrl } from '../services/apiBase';
 
@@ -18,6 +18,14 @@ export function NativeMusicRuntimeInstall({ engine, onInstalled }: {
   const [status, setStatus] = useState<Status>();
   const [waiting, setWaiting] = useState(false);
   const [error, setError] = useState('');
+  const notifyInstalled = useRef(onInstalled);
+  useEffect(() => { notifyInstalled.current = onInstalled; }, [onInstalled]);
+  useEffect(() => {
+    if (status?.installed) notifyInstalled.current();
+  }, [status?.installed]);
+  useEffect(() => {
+    if (status?.download?.done && status.download.error) setWaiting(false);
+  }, [status?.download?.done, status?.download?.error]);
   const url = apiUrl(`/v1/music/native/${engine}/runtime`);
 
   useEffect(() => {
@@ -41,11 +49,9 @@ export function NativeMusicRuntimeInstall({ engine, onInstalled }: {
     try {
       const response = await fetch(url, { method: 'POST' });
       const result = await response.json();
-      if (!response.ok || result.installed !== true) throw new Error(result.error || `HTTP ${response.status}`);
-      onInstalled();
+      if (!response.ok || result.started !== true) throw new Error(result.error || `HTTP ${response.status}`);
     } catch (problem) {
       setError(problem instanceof Error ? problem.message : String(problem));
-    } finally {
       setWaiting(false);
     }
   }
