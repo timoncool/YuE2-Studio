@@ -30,6 +30,21 @@ from tuf.api.metadata import Metadata, MetaFile, Root, Snapshot, TargetFile, Tar
 DIGEST = "bb169b7e374731730d2ae406fb39de7be4b315f413a9132efe896261c31bb503"
 
 
+def wait_for_health(proc, http, base):
+    deadline = time.monotonic() + 120
+    last_error = None
+    while time.monotonic() < deadline:
+        if proc.poll() is not None:
+            raise RuntimeError(f"service exited {proc.returncode}") from last_error
+        try:
+            with http.open(base + "/health", timeout=2):
+                return
+        except (URLError, TimeoutError) as error:
+            last_error = error
+            time.sleep(0.25)
+    raise TimeoutError(f"service startup timed out at {base}/health") from last_error
+
+
 def sign(role, key):
     metadata = Metadata(role)
     metadata.sign(key)
@@ -104,16 +119,7 @@ def run(work, binary, archive, certificate, tls_key):
         env = dict(os.environ, YUE_STUDIO_DATA_ROOT=str(data), YUE_STUDIO_PORT=str(port), HOME=str(work))
         proc = subprocess.Popen([exe], cwd=install, env=env)
         try:
-            for _ in range(120):
-                if proc.poll() is not None:
-                    raise RuntimeError(f"service exited {proc.returncode}")
-                try:
-                    with http.open(url + "/health", timeout=2):
-                        break
-                except URLError:
-                    time.sleep(0.25)
-            else:
-                raise TimeoutError("service startup")
+            wait_for_health(proc, http, url)
 
             def install_runtime(asset_id="onnxruntime"):
                 req = Request(url + "/v1/karaoke/install", json.dumps({"asset_id": asset_id}).encode(), {"Content-Type": "application/json"})
@@ -270,17 +276,14 @@ def run_rvc(work, binary, certificate, tls_key, install_voice=False):
         base = f"http://127.0.0.1:{port}"
         env = dict(os.environ, YUE_STUDIO_DATA_ROOT=str(studio), YUE_STUDIO_PORT=str(port), HOME=str(work))
         proc = subprocess.Popen([exe], cwd=install, env=env)
-        for _ in range(120):
-            if proc.poll() is not None:
-                raise RuntimeError(f"service exited {proc.returncode}")
-            try:
-                with http.open(base + "/health", timeout=2):
-                    return proc, base
-            except URLError:
-                time.sleep(0.25)
-        proc.terminate()
-        proc.wait(timeout=20)
-        raise TimeoutError("service startup")
+        try:
+            wait_for_health(proc, http, base)
+        except Exception:
+            if proc.poll() is None:
+                proc.terminate()
+                proc.wait(timeout=20)
+            raise
+        return proc, base
 
     def tool(name, arguments=None, expected_error=False):
         request = Request(base + "/mcp", json.dumps({
