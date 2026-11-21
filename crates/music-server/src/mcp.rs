@@ -2789,7 +2789,7 @@ fn tools() -> &'static [Tool] {
                     "end_seconds": { "type": "number", "description": "Between 0.5 and 15 seconds after start; shortened to the vocal end if necessary" },
                     "semitone_shift": { "type": "integer", "minimum": -24, "maximum": 24 },
                     "retrieval_blend": { "type": "number", "minimum": 0, "maximum": 1 },
-                    "backend": { "type": "string", "enum": ["auto", "vocal-fast-rs", "vocal-fast-metal", "audio.cpp"] },
+                    "backend": { "type": "string", "enum": ["auto", "vocal-fast-rs", "vocal-fast-metal", "burn-cuda", "audio.cpp"] },
                 }), &["song_id", "voice_id", "start_seconds", "end_seconds"]),
                 call: |args| post("/v1/rvc/preview".into(), args.clone()),
             },

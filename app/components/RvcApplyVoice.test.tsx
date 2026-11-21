@@ -30,7 +30,8 @@ it('uses the Burn engine for a trained voice without changing the legacy engine 
   try {
     await act(async () => root.render(<RvcApplyVoice song={source} voice={voice} control="" />));
     expect(host.querySelector('select')?.value).toBe('burn-cuda');
-    await act(async () => host.querySelector('button')!.click());
+    const apply = [...host.querySelectorAll('button')].find(button => button.textContent === 'Save a new take with this voice')!;
+    await act(async () => apply.click());
     expect(request).toHaveBeenCalledWith({
       song_id: source.id, voice_id: voice.id, semitone_shift: 0, retrieval_blend: 0, backend: 'burn-cuda',
     });
