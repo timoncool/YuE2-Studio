@@ -1,3 +1,6 @@
+import { useEffect, useState } from 'react';
+import { apiUrl } from '../services/apiBase';
+
 export interface HeartMuLaOptions {
   temperature?: number;
   top_k?: number;
@@ -69,4 +72,73 @@ export function HeartMuLaControls({values, onChange, language = 'en'}: {
       ))}
     </div>
   );
+}
+const installLabels: Record<string, readonly [string, string, string]> = {
+  en: ['Install HeartMuLa', 'Installing HeartMuLa…', 'HeartMuLa installation failed.'],
+  ru: ['Установить HeartMuLa', 'Установка HeartMuLa…', 'Не удалось установить HeartMuLa.'],
+  zh: ['安装 HeartMuLa', '正在安装 HeartMuLa…', '无法安装 HeartMuLa。'],
+  ja: ['HeartMuLa をインストール', 'HeartMuLa をインストール中…', 'HeartMuLa をインストールできませんでした。'],
+  ko: ['HeartMuLa 설치', 'HeartMuLa 설치 중…', 'HeartMuLa를 설치하지 못했습니다.'],
+  pt: ['Instalar HeartMuLa', 'Instalando HeartMuLa…', 'Não foi possível instalar HeartMuLa.'],
+};
+
+export function HeartMuLaInstall({ bytes, language, onInstalled }: {
+  bytes: number;
+  language: string;
+  onInstalled: () => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const [percent, setPercent] = useState<number>();
+  const [install, installing, failed] = installLabels[language] ?? installLabels.en;
+  const size = bytes > 0 ? ` · ${new Intl.NumberFormat(language, { maximumFractionDigits: 2 }).format(bytes / (1024 ** 3))} GiB` : '';
+
+  async function status(signal?: AbortSignal) {
+    const response = await fetch(apiUrl('/v1/music/audio-cpp/models'), { signal });
+    if (!response.ok || signal?.aborted) return;
+    const data = await response.json();
+    if (signal?.aborted) return;
+    const row = data.models?.find((model: {id: string}) => model.id === 'heartmula');
+    if (!row) return;
+    setBusy(Boolean(row.installing));
+    const download = row.download;
+    setPercent(row.installing && download && !download.done && download.total_bytes > 0
+      ? Math.min(100, Math.floor(100 * download.downloaded_bytes / download.total_bytes)) : undefined);
+    if (!row.installing && download?.error) setError(download.error);
+    if (!row.installing && row.ready) onInstalled();
+  }
+
+  useEffect(() => {
+    const controller = new AbortController();
+    const poll = () => void status(controller.signal).catch(() => {});
+    poll();
+    const timer = window.setInterval(poll, 1_000);
+    return () => { controller.abort(); window.clearInterval(timer); };
+  }, [onInstalled]);
+
+  async function start() {
+    setBusy(true);
+    setError('');
+    try {
+      const result = await fetch(apiUrl('/v1/music/audio-cpp/models/install'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model: 'heartmula' }),
+      });
+      const body = await result.json();
+      if (!result.ok || body.installing !== true) throw new Error(body.error || failed);
+      await status();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : failed);
+      setBusy(false);
+    }
+  }
+
+  return <div className="space-y-1 text-xs">
+    <button type="button" className="text-pink-600 underline disabled:opacity-50 dark:text-pink-300"
+      disabled={busy} onClick={() => void start()}>
+      {busy ? installing + (percent === undefined ? '' : ` ${percent}%`) : install + size}
+    </button>
+    {!busy && error && <p role="alert">{error}</p>}
+  </div>;
 }

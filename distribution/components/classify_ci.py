@@ -57,7 +57,8 @@ if __name__ == "__main__":
     base = base_commit()
     mirrors_only = check_change(base)
     channel_inputs = ["crates/music-server/src/component_catalogue.rs", "crates/music-server/src/downloads.rs",
-                      "distribution/components/test_installed_channel.py", "distribution/components/check_installed_channel.sh"]
+                      "distribution/components/test_installed_channel.py", "distribution/components/check_installed_channel.sh",
+                      "distribution/components/check_offline_onnx.sh"]
     channel_changed = not base or subprocess.run(
         ["git", "diff", "--quiet", base, "HEAD", "--", *channel_inputs]
     ).returncode != 0

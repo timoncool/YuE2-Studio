@@ -398,13 +398,24 @@ it.each([
 
 it('chooses MiniMax Music3 through audio.cpp and reuses the saved seed and format', async () => {
   let ready = false;
-  const fetcher = vi.fn(async (url: string) => Response.json(url === '/v1/music/audio-cpp/models' ? {
+  let heartMuLaReady = false;
+  let engineInstalled: boolean | undefined;
+  const fetcher = vi.fn(async (url: string, init?: RequestInit) => {
+    if (url === '/v1/music/audio-cpp/models/install') {
+      expect(init?.method).toBe('POST');
+      expect(JSON.parse(String(init?.body))).toEqual({ model: 'heartmula' });
+      heartMuLaReady = true;
+      return Response.json({ started: true, installing: true });
+    }
+    return Response.json(url === '/v1/music/audio-cpp/models' ? {
     engine: 'audio.cpp',
+    engine_installed: engineInstalled,
     models: [{ id: 'minimax_music3', profile_id: 'quality-q8', quantization: 'Q8_0', ready,
       missing: ready ? [] : ['language_model_q8_0.gguf'] },
       { id: 'heartmula', name: 'HeartMuLa', profile_id: 'heartmula_q8_0', quantization: 'Q8_0',
-        ready: false, missing: ['heartmula.gguf'] }],
-  } : {}));
+        installable: true, bytes: 7659762592, ready: heartMuLaReady, missing: heartMuLaReady ? [] : ['heartmula.gguf'] }],
+    } : {});
+  });
   vi.stubGlobal('fetch', fetcher);
   function Editor() {
     const [engine, setEngine] = React.useState<NonNullable<React.ComponentProps<typeof CreatePanel>['musicEngine']>>('local');
@@ -428,12 +439,28 @@ it('chooses MiniMax Music3 through audio.cpp and reuses the saved seed and forma
   click(buttonNamed('Refresh models')!);
   await flush();
   expect(generate().disabled).toBe(false);
+  engineInstalled = false;
+  click(buttonNamed('Refresh models')!);
+  await flush();
+  expect(generate().disabled).toBe(true);
+  engineInstalled = true;
+  click(buttonNamed('Refresh models')!);
+  await flush();
+  expect(generate().disabled).toBe(false);
   expect(host.textContent).toContain('quality-q8 · Q8_0');
   const models = host.querySelector<HTMLOptionElement>('option[value="heartmula"]')!.parentElement as HTMLSelectElement;
   choose(models, 'heartmula');
   expect(models.value).toBe('heartmula');
   expect(generate().disabled).toBe(true);
   expect(host.textContent).toContain('heartmula.gguf');
+  const installHeartMuLa = () => [...host.querySelectorAll('button')]
+    .find(button => button.textContent?.startsWith('Install HeartMuLa'));
+  expect(installHeartMuLa()?.textContent).toContain('7.13 GiB');
+  click(installHeartMuLa()!);
+  await flush();
+  await flush();
+  expect(heartMuLaReady).toBe(true);
+  expect(installHeartMuLa()).toBeUndefined();
 
   const song = { title: 'Music3 take', style: 'folk', lyrics: '[verse] Good morning',
     ditModel: 'audio.cpp', lmModel: 'quality-q8', nativeReplayAvailable: false,
@@ -884,5 +911,27 @@ it('restores HOT-Step cover source and lead sheet from a saved take', async () =
   expect(sent.at(-1)).toMatchObject({
     music_source: { kind: 'native', engine: 'hotstep', model: 'heartmula-mulacover' }, cover_of: 'recording-original',
     abc, duration_seconds: 4, steps: 10, seed: 42, cfg_scale: 1.5, output_format: 'flac',
+  });
+});
+
+it('submits a MuLaCover library original and restores it for a new take', async () => {
+  vi.stubGlobal('fetch', vi.fn(async () => Response.json({ engine: 'audio.cpp', models: [
+    { id: 'mulacover', name: 'MuLaCover', profile_id: 'mulacover_q8_0', quantization: 'Q8_0', ready: true, missing: [] },
+  ] })));
+  const song = {
+    title: 'Cover take', ditModel: 'audio.cpp', style: 'warm piano', lyrics: '[verse] Morning',
+    generationParams: {
+      music_source: { kind: 'audio_cpp', model: 'mulacover' },
+      cover_of: 'original-track', duration_seconds: 3, seed: 2026, output_format: 'flac',
+    },
+  } as Song;
+  act(() => root.render(panel({ musicEngine: 'audio.cpp', initialData: { song, timestamp: 1 } })));
+  await flush();
+  const picker = [...host.querySelectorAll('select')].find(select => select.closest('label')?.textContent?.includes('Original song'));
+  expect(picker?.value).toBe('original-track');
+  click(buttonNamed('create')!);
+  expect(sent.at(-1)).toMatchObject({
+    music_source: { kind: 'audio_cpp', model: 'mulacover' }, cover_of: 'original-track',
+    style: 'warm piano', lyrics: '[verse] Morning', duration_seconds: 3, seed: 2026, output_format: 'flac',
   });
 });

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { MusicEngine, NativeMusicEngine, ProfileMusicEngine, YueRequest } from '../types';
+import { apiUrl } from './apiBase';
 
 export const nativeEngines = { 'minimaxmusic-cpp': 'MiniMax Music3', 'acestep-cpp': 'ACE-Step', hotstep: 'HOT-Step' } as const;
 export const profileMusicEngines = { ...nativeEngines, 'audio.cpp': 'audio.cpp' } as const;
@@ -15,6 +16,7 @@ interface NativeProfile {
   id: string;
   label: string;
   total_bytes: number;
+  installable?: boolean;
   ready: boolean;
   missing: string[];
 }
@@ -81,14 +83,14 @@ export function useNativeMusicProfiles(engine: ProfileMusicEngine | undefined) {
     void (async () => {
       try {
         const url = engine === 'audio.cpp' ? '/v1/music/audio-cpp/models' : `/v1/music/native/${engine}/profiles`;
-        const reply = await fetch(url, { signal: controller.signal });
+        const reply = await fetch(apiUrl(url), { signal: controller.signal });
         if (!reply.ok) throw new Error(`HTTP ${reply.status}`);
         const body = await reply.json();
         const data: NativeProfiles = engine === 'audio.cpp' && body.engine === engine && Array.isArray(body.models)
-          ? { engine, engine_installed: true, profiles: body.models
-              .map((model: { id: string; name?: string; profile_id: string; quantization: string; ready: boolean; missing: string[] }) => ({
-                id: model.id, label: [model.name ?? model.id, model.profile_id, model.quantization].filter(Boolean).join(' · '), total_bytes: 0,
-                ready: model.ready, missing: model.missing,
+          ? { engine, engine_installed: body.engine_installed !== false, profiles: body.models
+              .map((model: { id: string; name?: string; profile_id: string; quantization: string; ready: boolean; missing: string[]; bytes?: number; installable?: boolean }) => ({
+                id: model.id, label: [model.name ?? model.id, model.profile_id, model.quantization].filter(Boolean).join(' · '), total_bytes: model.bytes ?? 0,
+                ready: model.ready, missing: model.missing, installable: model.installable,
               })) }
           : body;
         if (data.engine !== engine || !Array.isArray(data.profiles)) throw new Error('Invalid native profile response');

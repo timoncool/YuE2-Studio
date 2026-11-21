@@ -8,6 +8,7 @@ use std::path::{Path as FsPath, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 
 pub(super) const ENGINE: &str = "audio.cpp";
+const HEARTMULA_INSTALL: &str = "audio-cpp-heartmula";
 const FAMILY: &str = "minimax_music3";
 const PROFILE: &str = "quality-q8";
 const QUANTIZATION: &str = "Q8_0";
@@ -43,6 +44,7 @@ enum Family {
     MiniMaxH3,
     HeartMuLa,
     MiDasheng,
+    MuLaCover,
     Magenta,
     Vevo2,
 }
@@ -55,6 +57,7 @@ impl Family {
             audio_cpp_heartmula::FAMILY => Some(Self::HeartMuLa),
             audio_cpp_magenta::FAMILY => Some(Self::Magenta),
             audio_cpp_midasheng::FAMILY => Some(Self::MiDasheng),
+            audio_cpp_mulacover::FAMILY => Some(Self::MuLaCover),
             audio_cpp_vevo2::FAMILY => Some(Self::Vevo2),
             _ => None,
         }
@@ -66,6 +69,7 @@ impl Family {
             Self::MiniMaxH3 => audio_cpp_minimax_h3::FAMILY,
             Self::HeartMuLa => audio_cpp_heartmula::FAMILY,
             Self::MiDasheng => audio_cpp_midasheng::FAMILY,
+            Self::MuLaCover => audio_cpp_mulacover::FAMILY,
             Self::Magenta => audio_cpp_magenta::FAMILY,
             Self::Vevo2 => audio_cpp_vevo2::FAMILY,
         }
@@ -77,6 +81,7 @@ impl Family {
             Self::MiniMaxH3 => audio_cpp_minimax_h3::NAME,
             Self::HeartMuLa => "HeartMuLa",
             Self::MiDasheng => "MiDashengLM-Gen",
+            Self::MuLaCover => audio_cpp_mulacover::NAME,
             Self::Magenta => "Magenta RealTime 2",
             Self::Vevo2 => audio_cpp_vevo2::NAME,
         }
@@ -88,6 +93,7 @@ impl Family {
             Self::MiniMaxH3 => audio_cpp_minimax_h3::PROFILE,
             Self::HeartMuLa => audio_cpp_heartmula::PROFILE,
             Self::MiDasheng => audio_cpp_midasheng::PROFILE,
+            Self::MuLaCover => audio_cpp_mulacover::PROFILE,
             Self::Magenta => audio_cpp_magenta::PROFILE,
             Self::Vevo2 => audio_cpp_vevo2::PROFILE,
         }
@@ -107,6 +113,7 @@ impl Family {
             Self::MiniMaxH3 => audio_cpp_minimax_h3::model_dir(root),
             Self::HeartMuLa => audio_cpp_heartmula::model_dir(root),
             Self::MiDasheng => audio_cpp_midasheng::model_dir(root),
+            Self::MuLaCover => audio_cpp_mulacover::model_dir(root),
             Self::Magenta => audio_cpp_magenta::model_dir(root),
             Self::Vevo2 => audio_cpp_vevo2::model_dir(root),
         }
@@ -118,6 +125,7 @@ impl Family {
             Self::MiniMaxH3 => audio_cpp_minimax_h3::missing_files(path),
             Self::HeartMuLa => audio_cpp_heartmula::missing_files(path),
             Self::MiDasheng => audio_cpp_midasheng::missing_files(path),
+            Self::MuLaCover => audio_cpp_mulacover::missing_files(path),
             Self::Magenta => audio_cpp_magenta::missing_files(path),
             Self::Vevo2 => audio_cpp_vevo2::missing_files(path),
         }
@@ -129,6 +137,7 @@ impl Family {
             Self::MiniMaxH3 => audio_cpp_minimax_h3::entry(path),
             Self::HeartMuLa => audio_cpp_heartmula::entry(path),
             Self::MiDasheng => audio_cpp_midasheng::entry(path),
+            Self::MuLaCover => audio_cpp_mulacover::entry(path),
             Self::Magenta => audio_cpp_magenta::entry(path),
             Self::Vevo2 => audio_cpp_vevo2::entry(path),
         }
@@ -138,18 +147,22 @@ impl Family {
         self,
         request: &CreateMusicJobRequest,
         library: &library::Library,
+        resumed: bool,
     ) -> anyhow::Result<PreparedTask> {
         match self {
             Self::MiniMax => task(request).map(PreparedTask::Json),
             Self::MiniMaxH3 => audio_cpp_minimax_h3::task(request).map(PreparedTask::Json),
             Self::HeartMuLa => audio_cpp_heartmula::task(request).map(PreparedTask::Json),
             Self::MiDasheng => audio_cpp_midasheng::task(request).map(PreparedTask::Json),
+            Self::MuLaCover => {
+                audio_cpp_mulacover::task(request, library, resumed).map(PreparedTask::Cover)
+            }
             Self::Magenta => audio_cpp_magenta::task(request, library).map(PreparedTask::Magenta),
             Self::Vevo2 => audio_cpp_vevo2::task(request, library).map(PreparedTask::Singing),
         }
     }
 
-    fn catalog(self, root: Option<&FsPath>, runtime_ready: bool) -> Value {
+    fn catalog(self, root: Option<&FsPath>, runtime_ready: bool, soxr_ready: bool) -> Value {
         match self {
             Self::MiniMax => minimax_catalog(root, runtime_ready),
             Self::MiniMaxH3 => audio_cpp_minimax_h3::catalog(root, runtime_ready),
@@ -168,6 +181,7 @@ impl Family {
                 }
             },
             Self::Magenta => audio_cpp_magenta::catalog(root, runtime_ready),
+            Self::MuLaCover => audio_cpp_mulacover::catalog(root, runtime_ready, soxr_ready),
             Self::Vevo2 => audio_cpp_vevo2::catalog(root, runtime_ready),
         }
     }
@@ -176,6 +190,7 @@ impl Family {
 enum PreparedTask {
     Json(Value),
     Magenta(audio_cpp_magenta::MagentaTask),
+    Cover(audio_cpp_mulacover::CoverTask),
     Singing(audio_cpp_vevo2::SingingTask),
 }
 
@@ -184,6 +199,9 @@ impl PreparedTask {
         match self {
             Self::Json(body) => Ok((body, None)),
             Self::Magenta(task) => Ok(task.into_request()),
+            Self::Cover(task) => task
+                .into_request()
+                .map(|(body, directory)| (body, Some(directory))),
             Self::Singing(task) => task
                 .into_request()
                 .map(|(body, directory)| (body, Some(directory))),
@@ -198,7 +216,11 @@ pub(super) fn registered_model_ready(model: &ModelEntry) -> Option<bool> {
     }
     let directory = match family {
         Family::MiniMax if model.task == "gen" => Some(model.path.as_path()),
-        Family::HeartMuLa | Family::MiDasheng | Family::Magenta | Family::MiniMaxH3
+        Family::HeartMuLa
+        | Family::MiDasheng
+        | Family::Magenta
+        | Family::MiniMaxH3
+        | Family::MuLaCover
             if model.task == "gen" =>
         {
             model.path.parent()
@@ -275,19 +297,128 @@ pub(super) async fn models(State(state): State<AppState>) -> Json<Value> {
     let runtime_ready = build
         .as_ref()
         .is_ok_and(|build| state.acpp.exe(*build).is_file() && state.acpp.installed(*build));
-    let models = [
+    let soxr_ready = state.acpp.soxr_ready();
+    let mut models = [
         Family::MiniMax,
         Family::MiniMaxH3,
         Family::HeartMuLa,
         Family::MiDasheng,
         Family::Magenta,
+        Family::MuLaCover,
         Family::Vevo2,
     ]
-    .map(|family| family.catalog(root.as_deref(), runtime_ready));
+    .map(|family| family.catalog(root.as_deref(), runtime_ready, soxr_ready));
+    if let Some(model) = models
+        .iter_mut()
+        .find(|model| model["id"] == audio_cpp_heartmula::FAMILY)
+    {
+        let installing = state.heartmula_install.try_lock().is_err();
+        model["installing"] = Value::Bool(installing);
+        if installing {
+            model["ready"] = Value::Bool(false);
+        }
+        model["download"] = serde_json::json!(acpp_download(&state, HEARTMULA_INSTALL).await);
+    }
     Json(serde_json::json!({
         "engine": ENGINE,
+        "engine_installed": runtime_ready,
         "models": models
     }))
+}
+
+#[derive(Deserialize)]
+pub(super) struct InstallModel {
+    model: String,
+}
+
+pub(super) async fn install(
+    State(state): State<AppState>,
+    Json(request): Json<InstallModel>,
+) -> Result<Json<Value>, (StatusCode, Json<ApiError>)> {
+    if request.model != audio_cpp_heartmula::FAMILY {
+        return Err(api_error(
+            StatusCode::BAD_REQUEST,
+            "This audio.cpp music model has no managed installation.".into(),
+        ));
+    }
+    let build = build(&state)
+        .await
+        .map_err(|error| api_error(StatusCode::SERVICE_UNAVAILABLE, error.to_string()))?;
+    let root = studio_data_root().ok_or_else(|| {
+        api_error(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "Studio data folder is unavailable.".into(),
+        )
+    })?;
+    let Ok(lease) = state.heartmula_install.clone().try_lock_owned() else {
+        return Ok(Json(
+            serde_json::json!({"started": false, "installing": true}),
+        ));
+    };
+    tokio::spawn(async move {
+        let _lease = lease;
+        if let Err(error) = install_heartmula(&state, build, root).await {
+            state
+                .acpp
+                .downloader()
+                .fail(HEARTMULA_INSTALL, format!("{error:#}"))
+                .await;
+        }
+    });
+    Ok(Json(
+        serde_json::json!({"started": true, "installing": true}),
+    ))
+}
+
+async fn install_heartmula(state: &AppState, build: Build, root: PathBuf) -> anyhow::Result<()> {
+    let asset = &audio_cpp_heartmula::ASSET;
+    let downloader = state.acpp.downloader();
+    let target = downloader.path_of(asset);
+    tokio::task::spawn_blocking(move || repair_heartmula_file(&target)).await??;
+    if !state.acpp.installed(build) {
+        install_acpp(state, build, HEARTMULA_INSTALL)
+            .await
+            .context("Installing audio.cpp runtime")?;
+    }
+    downloader
+        .install_all(HEARTMULA_INSTALL, &[asset])
+        .await
+        .context("Installing HeartMuLa weights")?;
+    anyhow::ensure!(
+        audio_cpp_heartmula::missing_files(&audio_cpp_heartmula::model_dir(&root)).is_empty()
+            && state.acpp.exe(build).is_file()
+            && state.acpp.installed(build),
+        "HeartMuLa installation is incomplete."
+    );
+    Ok(())
+}
+
+fn repair_heartmula_file(target: &FsPath) -> anyhow::Result<()> {
+    match std::fs::symlink_metadata(target) {
+        Ok(metadata) if metadata.is_file() => {
+            if metadata.len() != audio_cpp_heartmula::ASSET.bytes
+                || !crate::pin_sha::holds(target, audio_cpp_heartmula::SHA256)
+            {
+                // Keep the downloader's .part and its resume manifest.
+                std::fs::remove_file(target).with_context(|| {
+                    format!(
+                        "Replacing damaged HeartMuLa weights at {}",
+                        target.display()
+                    )
+                })?;
+            }
+        }
+        Ok(_) => anyhow::bail!(
+            "HeartMuLa installation expected a regular file at {}",
+            target.display()
+        ),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+        Err(error) => {
+            return Err(error)
+                .with_context(|| format!("Checking HeartMuLa weights at {}", target.display()));
+        }
+    }
+    Ok(())
 }
 
 fn minimax_catalog(root: Option<&FsPath>, runtime_ready: bool) -> Value {
@@ -310,6 +441,21 @@ mod tests {
     use super::*;
 
     #[test]
+    fn repairing_heartmula_preserves_download_resume_files() {
+        let dir = tempfile::tempdir().unwrap();
+        let target = dir.path().join("heartmula-q8_0.gguf");
+        let partial = target.with_extension("part");
+        let manifest = crate::chunked::manifest_path(&partial);
+        std::fs::write(&target, b"broken GGUF").unwrap();
+        std::fs::write(&partial, b"partial bytes").unwrap();
+        std::fs::write(&manifest, b"resume manifest").unwrap();
+        repair_heartmula_file(&target).unwrap();
+        assert!(!target.exists());
+        assert_eq!(std::fs::read(partial).unwrap(), b"partial bytes");
+        assert_eq!(std::fs::read(manifest).unwrap(), b"resume manifest");
+    }
+
+    #[test]
     fn music_registry_keeps_native_task_and_model_profile() {
         let root = tempfile::tempdir().unwrap();
         for (family, task) in [
@@ -318,9 +464,10 @@ mod tests {
             (Family::HeartMuLa, "gen"),
             (Family::MiDasheng, "gen"),
             (Family::Magenta, "gen"),
+            (Family::MuLaCover, "gen"),
             (Family::Vevo2, "tts"),
         ] {
-            let row = family.catalog(Some(root.path()), true);
+            let row = family.catalog(Some(root.path()), true, true);
             assert_eq!(row["id"], family.id());
             assert_eq!(row["profile_id"], family.profile());
             assert_eq!(row["ready"], false);
@@ -396,14 +543,20 @@ pub(super) async fn submit(
             format!("Unknown audio.cpp music model {model}."),
         );
     };
+    if matches!(family, Family::HeartMuLa) && state.heartmula_install.try_lock().is_err() {
+        return reject(
+            StatusCode::CONFLICT,
+            "HeartMuLa installation is in progress.".into(),
+        );
+    }
     let prepared = if matches!(family, Family::Magenta) {
         let request = request.clone();
         let library = state.library.clone();
-        tokio::task::spawn_blocking(move || family.task(&request, &library))
+        tokio::task::spawn_blocking(move || family.task(&request, &library, attempt > 0))
             .await
             .unwrap_or_else(|error| Err(error.into()))
     } else {
-        family.task(&request, &state.library)
+        family.task(&request, &state.library, attempt > 0)
     };
     let task = match prepared {
         Ok(task) => task,
@@ -449,6 +602,12 @@ pub(super) async fn submit(
         }
         Err(error) => return reject(StatusCode::SERVICE_UNAVAILABLE, error.to_string()),
     };
+    if matches!(family, Family::MuLaCover) && !state.acpp.soxr_ready() {
+        return reject(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "Install the libsoxr runtime for MuLaCover.".into(),
+        );
+    }
     let Ok(lease) = state.engine_use.clone().try_write_owned() else {
         return reject(
             StatusCode::CONFLICT,
@@ -496,6 +655,13 @@ pub(super) async fn submit(
         (Family::Magenta, _) => {
             settings["magenta"] = serde_json::json!(request.magenta);
         }
+        (Family::MuLaCover, PreparedTask::Cover(cover)) => {
+            settings["cover_of"] = serde_json::json!(request.cover_of);
+            settings["duration_seconds"] = cover.body["options"]["duration_sec"].clone();
+            settings["steps"] = cover.body["num_inference_steps"].clone();
+            settings["seed"] = cover.body["seed"].clone();
+            settings["guidance_scale"] = cover.body["guidance_scale"].clone();
+        }
         (Family::Vevo2, _) => {
             settings["route"] = Value::from(audio_cpp_vevo2::ROUTE);
             settings["vevo2"] = serde_json::json!(request.vevo2);
@@ -503,7 +669,10 @@ pub(super) async fn submit(
         _ => unreachable!(),
     }
     let job = MusicJob {
-        derived: None,
+        derived: match &task {
+            PreparedTask::Cover(cover) => Some(cover.derived.clone()),
+            _ => None,
+        },
         id: format!("audio-cpp-{}", uuid_suffix()),
         client_ref: request.client_ref.clone(),
         submitted_at: unix_millis(),

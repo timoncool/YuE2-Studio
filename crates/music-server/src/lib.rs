@@ -19,6 +19,7 @@ mod audio_cpp_heartmula;
 mod audio_cpp_magenta;
 mod audio_cpp_midasheng;
 mod audio_cpp_minimax_h3;
+mod audio_cpp_mulacover;
 mod audio_cpp_music;
 mod hotstep_cover;
 mod hotstep_cover_assets;
@@ -127,6 +128,7 @@ struct AppState {
     minimax_cancellations: Arc<RwLock<HashMap<String, native_music_jobs::CancelSender>>>,
     hotstep_cover: Arc<downloads::Downloader>,
     audio_cpp_music_stops: Arc<RwLock<HashMap<String, Arc<std::sync::atomic::AtomicBool>>>>,
+    heartmula_install: Arc<tokio::sync::Mutex<()>>,
     openrouter_music_stops: Arc<RwLock<HashMap<String, Arc<tokio::sync::Notify>>>>,
     music_server: EngineClient,
     /// The engine's log, followed for the service's life: its recent lines and
@@ -1528,6 +1530,7 @@ pub async fn serve_on_port(port: u16) -> anyhow::Result<()> {
         minimax_cancellations: Arc::default(),
         hotstep_cover: Arc::new(downloads::Downloader::new(studio_data_root().unwrap_or_else(|| PathBuf::from(".")).join("hotstep"))),
         audio_cpp_music_stops: Arc::default(),
+        heartmula_install: Arc::default(),
         openrouter_music_stops: Arc::new(RwLock::new(HashMap::new())),
         music_server,
         engine_log,
@@ -1893,6 +1896,8 @@ pub async fn serve_on_port(port: u16) -> anyhow::Result<()> {
         .route("/v1/music/audio-cpp/models", get(audio_cpp_music::models))
         .route("/v1/music/native/hotstep/profiles", get(hotstep_cover::profiles))
         .route("/v1/music/native/hotstep/install", post(hotstep_cover::install))
+        .route("/v1/music/audio-cpp/mulacover/runtime", post(audio_cpp_mulacover::install_runtime))
+        .route("/v1/music/audio-cpp/models/install", post(audio_cpp_music::install))
         .route("/v1/music/replay", post(replay_music_job))
         .route("/v1/transcriptions", post(create_transcription))
         .route("/v1/transcriptions/{job_id}", get(score_job_status).post(cancel_score_job))
@@ -5397,7 +5402,7 @@ async fn delete_library_song(State(state): State<AppState>, Path(id): Path<Strin
     let internal = |e: anyhow::Error| api_error(StatusCode::INTERNAL_SERVER_ERROR, e.to_string());
     let song = state.library.get_song(&id).map_err(internal)?.ok_or_else(|| api_error(StatusCode::NOT_FOUND, "Song not found".into()))?;
     if library::is_trashed(&song) {
-        return Ok(Json(serde_json::json!({ "deleted": true, "trashed": true, "with": 0 })));
+        return Ok(Json(serde_json::json!({ "deleted": true, "trashed": true, "with": 0, "moved_ids": [] })));
     }
     let made_from: Vec<String> = state
         .library
@@ -5411,7 +5416,8 @@ async fn delete_library_song(State(state): State<AppState>, Path(id): Path<Strin
     for other in &made_from {
         state.library.set_song_trashed(other, true, Some(&id)).map_err(internal)?;
     }
-    Ok(Json(serde_json::json!({ "deleted": true, "trashed": true, "with": made_from.len() })))
+    let moved_ids: Vec<_> = std::iter::once(&id).chain(&made_from).collect();
+    Ok(Json(serde_json::json!({ "deleted": true, "trashed": true, "with": made_from.len(), "moved_ids": moved_ids })))
 }
 
 /// How long the bin keeps a song before it goes for good.

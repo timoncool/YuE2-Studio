@@ -39,7 +39,8 @@ import { writerInstruction } from '../services/songWriting';
 import { songWritingStrings } from '../i18n/songWriting';
 import { MagentaFields, magentaModel, restoreMagentaOptions } from './MagentaFields';
 import { MiDashengFields, miDashengModel, miDashengPromptReady, restoreMiDashengPrompt } from './MiDashengFields';
-import { HeartMuLaControls, emptyHeartMuLaDraft, heartMuLaDraft, heartMuLaOptions } from './HeartMuLaControls';
+import { HeartMuLaControls, HeartMuLaInstall, emptyHeartMuLaDraft, heartMuLaDraft, heartMuLaOptions } from './HeartMuLaControls';
+import { MuLaCoverFields } from './MuLaCoverFields';
 import { HotStepCoverFields, type HotStepCoverDraft } from './HotStepCoverFields';
 import { Vevo2SingingFields, vevo2SingingStrings, type Vevo2References } from './Vevo2SingingFields';
 import { NumberField } from './NumberField';
@@ -433,6 +434,8 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
   const magentaReference = magentaOptions.reference_song_id;
   const [scene, setScene] = useState(() => restoreMiDashengPrompt(undefined));
   const heartMuLa = audioFamily === 'heartmula';
+  const mulaCover = audioFamily === 'mulacover';
+  const [mulaOriginal, setMulaOriginal] = useState('');
   const vevo2 = audioFamily === 'vevo2';
   const miniMaxH3 = audioFamily === 'minimax_h3';
   const [heartSettings, setHeartSettings] = useState(emptyHeartMuLaDraft);
@@ -764,6 +767,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
         if (profile === magentaModel) setMagentaOptions(restoreMagentaOptions(settings.magenta));
         if (profile === miDashengModel) setScene(restoreMiDashengPrompt(settings.midasheng));
         if (profile === 'heartmula') setHeartSettings(heartMuLaDraft(settings.heartmula as YueRequest['heartmula']));
+        if (profile === 'mulacover') setMulaOriginal(typeof settings.cover_of === 'string' ? settings.cover_of : song.derived?.from ?? '');
         if (profile === 'vevo2') setVevoReferences((settings.vevo2 as YueRequest['vevo2']) ?? { voice_song_id: '' });
         if (song.ditModel === 'hotstep') setHotstepDraft({
           original: typeof settings.cover_of === 'string' ? settings.cover_of : song.derived?.from ?? '',
@@ -1461,13 +1465,13 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
 
   const submit = () => {
     if (nativeEngine) {
-      if (!native.ready || !native.profile || (hotstep && (!hotstepDraft.original || !hotstepDraft.abc.trim()))) return;
+      if (!native.ready || !native.profile || (mulaCover && !mulaOriginal) || (hotstep && (!hotstepDraft.original || !hotstepDraft.abc.trim()))) return;
       if (miDasheng && !miDashengPromptReady(scene)) return;
       if (vevo2 && (!lyrics.trim() || !vevoReferences.voice_song_id)) { setError(vevo2SingingStrings[language].required); return; }
       if (audioFamily === audioCppMiniMax && (!style.trim() || !lyrics.trim())) { setError(nativeStrings.styleAndLyricsRequired); return; }
       if (magenta && !magentaReady) return;
       if (miniMaxH3 && !style.trim()) { setError(nativeStrings.h3PromptRequired); return; }
-      if (!hotstep && !magenta && !miDasheng && !miniMaxH3 && !style.trim() && !lyrics.trim()) { setError(tt('styleOrLyricsRequired')); return; }
+      if (!hotstep && !magenta && !miDasheng && !miniMaxH3 && !mulaCover && !style.trim() && !lyrics.trim()) { setError(tt('styleOrLyricsRequired')); return; }
       setError(null);
       generate({
         music_source: nativeEngine === 'audio.cpp'
@@ -1481,6 +1485,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
         ...(magenta ? { magenta: magentaOptions } : {}),
         ...(heartMuLa ? { heartmula: heartMuLaOptions(heartSettings) } : {}),
         ...(hotstep ? { cover_of: hotstepDraft.original, abc: hotstepDraft.abc } : {}),
+        ...(mulaCover ? { cover_of: mulaOriginal } : {}),
         ...(vevo2 ? { vevo2: vevoReferences } : {}),
         ...nativeGenerationSettings(nativeEngine, vevo2 ? { seed: native.settings.seed, output_format: native.settings.output_format } : miDasheng || magenta ? { ...native.settings, steps: undefined } : native.settings),
       });
@@ -1661,6 +1666,8 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
                     {native.profile && !native.ready && <p role="status" className="text-xs">
                       {nativeStrings.unavailable}{native.profile.missing?.length ? ` · ${native.profile.missing.join(', ')}` : ''}
                     </p>}
+                    {heartMuLa && native.profile?.installable && !native.ready &&
+                      <HeartMuLaInstall bytes={native.profile.total_bytes} language={language} onInstalled={native.refresh} />}
                     <button type="button" className="text-xs text-pink-600 underline dark:text-pink-300" onClick={native.refresh}>
                       {musicStrings.refresh}
                     </button>
@@ -1707,6 +1714,8 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
               {magenta && <MagentaFields value={magentaOptions} onChange={setMagentaOptions} tracks={magentaTracks} controlClassName={CONTROL} />}
               {hotstep && <HotStepCoverFields draft={hotstepDraft} onChange={setHotstepDraft} ready={native.ready}
                 refresh={native.refresh} controlClassName={CONTROL} />}
+              {mulaCover && <MuLaCoverFields value={mulaOriginal} onChange={setMulaOriginal} onInstall={native.refresh}
+                missingSoxr={native.profile?.missing.includes('libsoxr') === true} controlClassName={CONTROL} />}
               {vevo2 && <Vevo2SingingFields value={vevoReferences} onChange={setVevoReferences} controlClassName={CONTROL} />}
               {heartMuLa && <HeartMuLaControls values={heartSettings} onChange={setHeartSettings} language={language} />}
               {nativeEngine && abc.trim() && <p role="status" className="text-xs text-zinc-500">{nativeStrings.scoreKept}</p>}
@@ -2660,7 +2669,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
         <button
           type="button"
           onClick={submit}
-          disabled={cloud ? !selectedMusicModel : nativeEngine ? !native.ready || (miDasheng && !miDashengPromptReady(scene)) || (magenta && !magentaReady) || (hotstep && (!hotstepDraft.original || !hotstepDraft.abc.trim())) : false}
+          disabled={cloud ? !selectedMusicModel : nativeEngine ? !native.ready || (miDasheng && !miDashengPromptReady(scene)) || (magenta && !magentaReady) || (mulaCover && !mulaOriginal) || (hotstep && (!hotstepDraft.original || !hotstepDraft.abc.trim())) : false}
           className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-linear-to-r from-orange-500 to-pink-600 text-base font-bold text-white shadow-lg transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
         >
           {isGenerating ? <Square size={18} /> : yue && instrumental ? <Guitar size={18} /> : <Sparkles size={18} />}

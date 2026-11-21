@@ -482,6 +482,7 @@ const JOURNAL: &[(&str, &str, &str)] = &[
     ("song_job_again", "started", "generation"),
     ("song_create", "started", "generation"),
     ("song_replay", "started", "generation"),
+    ("audio_cpp_music_model_install", "started", "download"),
     ("song_job_cancel", "cancelled", "generation"),
     ("library_song_rename", "updated", "song"),
     ("library_song_update", "updated", "song"),
@@ -556,6 +557,7 @@ const JOURNAL: &[(&str, &str, &str)] = &[
     ("separator_install", "started", "download"),
     ("separator_runtime_install", "started", "download"),
     ("hotstep_cover_install", "started", "download"),
+    ("mulacover_runtime_install", "started", "download"),
     ("recogniser_install", "started", "download"),
     ("midi_install", "started", "download"),
     ("restore_install", "started", "download"),
@@ -1664,7 +1666,7 @@ fn tools() -> &'static [Tool] {
                     "mp3_bitrate": { "type": "integer" },
                     "output_format": { "type": "string", "enum": ["flac", "mp3", "wav32"], "description": "how the song is kept: lossless FLAC, 32-bit WAV, or MP3 at mp3_bitrate" },
                     "cover_prompt": { "type": "string", "description": "what the cover should show; it is drawn only when an image model is set up (settings_get, covers), else the song has no cover" },
-                    "cover_of": { "type": "string", "description": "for a cover: the library song whose melody abc came from (score_transcribe of it); the new song names it as the track it was made from" },
+                    "cover_of": { "type": "string", "description": "Library original song ID. Required by MuLaCover, which reads the song audio directly. For YuE2 covers, pass the source of the ABC melody." },
                     "adapters": { "type": "array", "items": { "type": "object", "properties": { "id": { "type": "string" }, "scales": { "type": "object", "description": "slot -> strength, e.g. {\"ar\": 1, \"nar\": 1}; left out, the LoRA's own strengths, else 1 on each slot it touches" } }, "required": ["id"] } }
                 })),
                 call: |args| post("/v1/music/jobs".into(), args.clone()),
@@ -2126,7 +2128,7 @@ fn tools() -> &'static [Tool] {
             },
             Tool {
                 name: "audio_cpp_music_models",
-                description: "List audio.cpp music models, their weight profile and whether the runtime and model files are ready.",
+                description: "List audio.cpp music models, installed weight profiles, runtime readiness and active installation progress.",
                 schema: nothing,
                 call: |_| get("/v1/music/audio-cpp/models".into()),
             },
@@ -2141,6 +2143,18 @@ fn tools() -> &'static [Tool] {
                 description: "Install the pinned HOT-Step runtime and MuLaCover weights. Its codec and tokenizer files are shared with HeartMuLa.",
                 schema: nothing,
                 call: |_| post("/v1/music/native/hotstep/install".into(), json!({})),
+            },
+            Tool {
+                name: "mulacover_runtime_install",
+                description: "Install the pinned SOXR runtime for MuLaCover on Windows. The local model catalog reports readiness afterwards. On Linux and macOS, use the system libsoxr package.",
+                schema: nothing,
+                call: |_| post("/v1/music/audio-cpp/mulacover/runtime".into(), json!({})),
+            },
+            Tool {
+                name: "audio_cpp_music_model_install",
+                description: "Start installation of a managed audio.cpp music model. Poll audio_cpp_music_models for progress.",
+                schema: || object(json!({"model": {"type": "string", "enum": ["heartmula"]}}), &["model"]),
+                call: |args| post("/v1/music/audio-cpp/models/install".into(), args.clone()),
             },
             Tool {
                 name: "engine_logs",
