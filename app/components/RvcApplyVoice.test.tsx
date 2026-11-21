@@ -124,6 +124,7 @@ it('previews the chosen range without saving and switches vocal sides at the hea
     const [before, after] = host.querySelectorAll('audio');
     expect(before.getAttribute('src')).toContain('/before-vocal');
     expect(after.getAttribute('src')).toContain('/after-vocal');
+    Object.defineProperty(before, 'readyState', { value: 1 });
     after.currentTime = 2.25;
     act(() => { host.querySelector<HTMLButtonElement>('[role=tab]')?.click(); });
     expect(before.currentTime).toBe(2.25);

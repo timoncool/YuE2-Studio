@@ -77,7 +77,22 @@ impl Range {
         let left = start.saturating_sub(pad);
         let right = end.saturating_add(pad).min(source.frames());
         let input = folder.join("preview-input.wav");
-        audio_pcm::write_wav24(&input, &slice(source, left, right))?;
+        // The native worker reads plain PCM. Hound uses WAVE_FORMAT_EXTENSIBLE for 24-bit WAV.
+        let mut wav = hound::WavWriter::create(
+            &input,
+            hound::WavSpec {
+                channels: 2,
+                sample_rate: source.rate,
+                bits_per_sample: 16,
+                sample_format: hound::SampleFormat::Int,
+            },
+        )?;
+        for frame in left..right {
+            for sample in [source.left[frame], source.right[frame]] {
+                wav.write_sample((sample.clamp(-1.0, 1.0) * i16::MAX as f32).round() as i16)?;
+            }
+        }
+        wav.finalize()?;
         Ok(Clip {
             input,
             source: slice(source, start, end),
@@ -196,6 +211,8 @@ mod tests {
             .unwrap()
             .stage(&audio, temp.path())
             .unwrap();
+        let input = std::fs::read(&clip.input).unwrap();
+        assert_eq!(&input[20..22], &[1, 0]);
         let cache = Cache::default();
         let converted = audio_post::Stereo::new(vec![0.1; 1775], vec![0.0; 1775], 1000);
         let result = clip

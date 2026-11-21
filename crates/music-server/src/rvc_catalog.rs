@@ -203,12 +203,42 @@ pub(super) struct ListedVoice {
     has_index: bool,
 }
 
+async fn active_manifest() -> anyhow::Result<Vec<CatalogVoice>> {
+    match crate::component_catalogue::cached_rvc_catalogue()
+        .await
+        .and_then(|bytes| {
+            bytes.map(|bytes| parse_manifest(std::str::from_utf8(&bytes)?)).transpose()
+        })
+    {
+        Ok(Some(voices)) => return Ok(voices),
+        Ok(None) => {}
+        Err(error) => eprintln!("Using bundled RVC voice catalogue: {error:#}"),
+    }
+    parse_manifest(BUNDLED)
+}
+
+pub(super) async fn refresh() -> Result<Json<serde_json::Value>, ApiFailure> {
+    let voices = tokio::time::timeout(
+        std::time::Duration::from_secs(45),
+        crate::component_catalogue::refresh_rvc_catalogue(&net::download_client(), |bytes| {
+            let voices = parse_manifest(std::str::from_utf8(bytes)?)?;
+            anyhow::ensure!(!voices.is_empty(), "signed RVC catalogue is empty");
+            Ok(voices.len())
+        }),
+    )
+    .await
+    .map_err(rvc_voices::internal)?
+    .map_err(rvc_voices::internal)?;
+    Ok(Json(serde_json::json!({ "source": "signed", "voices": voices })))
+}
+
 pub(super) async fn list(
     State(state): State<AppState>,
 ) -> Result<Json<Vec<ListedVoice>>, ApiFailure> {
     let root = update_data_root(&state).join("rvc/voices");
+    let voices = active_manifest().await.map_err(rvc_voices::internal)?;
     tokio::task::spawn_blocking(move || {
-        parse_manifest(BUNDLED)?
+        voices
             .into_iter()
             .map(|voice| {
                 let installed_id =
@@ -237,7 +267,8 @@ pub(super) async fn install(
     State(state): State<AppState>,
     Json(request): Json<InstallRequest>,
 ) -> Result<(StatusCode, Json<Voice>), ApiFailure> {
-    let voice = parse_manifest(BUNDLED)
+    let voice = active_manifest()
+        .await
         .map_err(rvc_voices::internal)?
         .into_iter()
         .find(|voice| voice.id == request.id)

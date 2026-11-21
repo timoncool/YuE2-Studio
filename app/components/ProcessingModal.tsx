@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { AudioWaveform } from './AudioWaveform';
-import { AudioComparison } from './AudioComparison';
+import { AudioCompare } from './AudioCompare';
 import { AlertTriangle, Check, FolderOpen, Loader2, Plus, RefreshCw, Search, SlidersHorizontal, Trash2, Wand2, X } from 'lucide-react';
 import { Song } from '../types';
 import { useI18n } from '../context/I18nContext';
@@ -508,7 +508,7 @@ export const ProcessingModal: React.FC<ProcessingModalProps> = ({ song, onClose,
               <p className="text-xs leading-5 text-zinc-700 dark:text-zinc-200">
                 <span className="font-semibold">{t('processApplied')}:</span> {runLabel}
               </p>
-              <AudioComparison original={song.audioUrl ?? ''} processed={previewUrl} />
+              <AudioCompare original={song.audioUrl ?? ''} processed={previewUrl} />
             </>
           )}
 
@@ -545,3 +545,8 @@ export const ProcessingModal: React.FC<ProcessingModalProps> = ({ song, onClose,
     </div>
   );
 };
+
+/**
+ * Before and after, playing together with one of them heard: switching keeps
+ * the position, so the difference is the only thing that changes.
+ */
