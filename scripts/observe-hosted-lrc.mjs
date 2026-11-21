@@ -23,6 +23,9 @@ function connect(url) {
         return;
       }
       const fields = message.params;
+      if (message.method === 'Runtime.bindingCalled' && fields.name === 'reportPrintEvent') {
+        trace.push({ printEvent: JSON.parse(fields.payload) });
+      }
       if (message.method === 'Fetch.requestPaused') {
         void continueSave(socket, fields).catch(error => { console.error(error); process.exit(1); });
         return;
@@ -102,7 +105,31 @@ async function record() {
 
 await record();
 await writeFile(path.join(directory, 'lrc-observer-ready'), '');
-const timer = setInterval(() => void record(), 300);
+await send(page, 'Runtime.enable');
+await send(page, 'Runtime.addBinding', { name: 'reportPrintEvent' });
+await send(page, 'Runtime.evaluate', { expression: `for (const event of ['beforeprint','afterprint','click']) {
+  window.addEventListener(event, e => {
+    if (event !== 'click' || e.target.closest?.('button')?.textContent.includes('Print A4'))
+      window.reportPrintEvent(JSON.stringify({event, trusted:e.isTrusted, active:navigator.userActivation.isActive}));
+  }, true);
+}` });
+async function clickPrintWhenRequested() {
+  const marker = path.join(directory, 'click-print');
+  try { await unlink(marker); } catch (error) { if (error.code === 'ENOENT') return; throw error; }
+  const result = await send(page, 'Runtime.evaluate', { returnByValue: true, expression: `(() => {
+    const button = [...document.querySelectorAll('button')].find(b => b.textContent.trim() === 'Print A4');
+    if (!button) throw new Error('Missing Print A4');
+    const r = button.getBoundingClientRect();
+    return {x:r.left+r.width/2, y:r.top+r.height/2};
+  })()` });
+  if (result.exceptionDetails) throw new Error(result.exceptionDetails.text);
+  const point = result.result.value;
+  for (const type of ['mousePressed','mouseReleased'])
+    await send(page, 'Input.dispatchMouseEvent', { type, ...point, button:'left', clickCount:1 });
+}
+const timer = setInterval(() => { void record(); void clickPrintWhenRequested().catch(error => {
+  trace.push({ printInputError: String(error) });
+}); }, 300);
 process.stdin.resume();
 process.stdin.once('end', () => {
   clearInterval(timer);

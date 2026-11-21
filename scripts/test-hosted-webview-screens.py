@@ -415,7 +415,8 @@ def check_lrc(root, pid):
         failed_save(score_button, "score", "abc")
         json_file(out/"score.json", dict(bytes=score_file.stat().st_size, sha256=hashlib.sha256(score_file.read_bytes()).hexdigest()))
         click('button "Songbook"')
-        click('button "Print A4"')
+        wait_page('button "Print A4"')
+        (out/"click-print").touch()
         pdf = root/"songbook.pdf"
         # WebView2 may show its own print preview even with a default printer.
         # Read the isolated runner's UIA tree and confirm the visible Print action.
@@ -763,7 +764,7 @@ with isolated_profile() as root:
     if args.suite == "lrc":
         # This disposable hosted runner prints through the Windows spooler to an
         # actual PDF file without opening a second file picker for the printer.
-        env["WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS"] += " --kiosk-printing"
+        # Use the standard interactive print dialog to match the shipped application.
         printer_setup = """
 $ErrorActionPreference = 'Stop'
 Start-Service Spooler
