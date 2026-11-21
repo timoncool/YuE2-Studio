@@ -267,6 +267,7 @@ pub(super) async fn process_request(
         } else {
             None
         };
+        let vocal_level = backing.as_ref().and_then(|_| audio_post::loudness::integrated(&input));
         drop(input);
         let cancelled = || quick.as_ref().is_some_and(|run| run.cancelled());
         let audio_cpp = || convert(&state.acpp, audio_build.context("audio.cpp runtime is unavailable")?,
@@ -293,7 +294,8 @@ pub(super) async fn process_request(
             return clip.publish(&state.rvc_auditions, conversion, request.backend, effective, fallback_reason);
         }
         let mut backing = backing.context("The source backing was not prepared.")?;
-        let converted = conversion.resampled(backing.rate)?;
+        let mut converted = conversion.resampled(backing.rate)?;
+        let vocal_gain_db = match_vocal_level(vocal_level, &mut converted);
         add_aligned(&mut backing, &converted)?;
         let peak = backing.left.iter().chain(&backing.right).map(|sample| sample.abs()).fold(0.0f32, f32::max);
         let gain = if peak > 1.0 { 0.98 / peak } else { 1.0 };
@@ -305,7 +307,7 @@ pub(super) async fn process_request(
         let options = json!({
             "voice_id": voice.id, "voice_name": voice.title(), "voice_sha256": hash,
             "index_sha256": index.as_deref().map(install_record::sha256_of).transpose()?,
-            "semitone_shift": request.semitone_shift, "retrieval_blend": blend, "mix_gain": gain,
+            "semitone_shift": request.semitone_shift, "retrieval_blend": blend, "mix_gain": gain, "vocal_gain_db": vocal_gain_db,
             "requested_backend": request.backend, "effective_backend": effective, "fallback_reason": fallback_reason, "quick": quick.is_some()
         });
         let mut commit = quick.as_ref().map(|run| run.commit()).transpose()?;
@@ -331,6 +333,19 @@ pub(super) async fn process_request(
         Ok::<_, anyhow::Error>(take)
     }).await.map_err(rvc_voices::internal)?.map_err(bad_gateway)?;
     Ok((StatusCode::CREATED, Json(result)))
+}
+
+/// Match perceived vocal gain by a single factor so pauses and local dynamics are preserved.
+pub(super) fn match_vocal_level(target: Option<f64>, vocal: &mut audio_post::Stereo) -> f64 {
+    let (Some(target), Some(current)) = (target, audio_post::loudness::integrated(vocal)) else {
+        return 0.0;
+    };
+    let wanted = 10_f64.powf((target - current).clamp(-12.0, 12.0) / 20.0);
+    let gain = wanted.min(0.98 / f64::from(vocal.peak()));
+    for sample in vocal.left.iter_mut().chain(&mut vocal.right) {
+        *sample *= gain as f32;
+    }
+    20.0 * gain.log10()
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -437,6 +452,33 @@ mod tests {
         assert!(effective_backend(Backend::Auto, false, true) == Some(Backend::AudioCpp));
         assert!(effective_backend(Backend::AudioCpp, true, true) == Some(Backend::AudioCpp));
         assert!(effective_backend(Backend::VocalFastRs, false, true).is_none());
+    }
+
+    #[test]
+    fn matches_vocal_level_with_one_gain_and_keeps_rest_samples_quiet() {
+        let rate = 44_100_u32;
+        let source: Vec<_> = (0..rate * 2)
+            .map(|frame| {
+                if (rate / 2..rate).contains(&frame) {
+                    return 0.0;
+                }
+                (frame as f32 * 250.0 * std::f32::consts::TAU / rate as f32).sin() * 0.1
+            })
+            .collect();
+        let reference = audio_post::Stereo::new(source.clone(), source.clone(), rate);
+        let louder: Vec<_> = source.iter().map(|sample| sample * 2.0).collect();
+        let mut vocal = audio_post::Stereo::new(louder.clone(), louder, rate);
+        let target = audio_post::loudness::integrated(&reference);
+        let gain_db = match_vocal_level(target, &mut vocal);
+        assert!((gain_db + 6.0206).abs() < 0.001);
+        assert!(
+            (target.unwrap() - audio_post::loudness::integrated(&vocal).unwrap()).abs() < 0.001
+        );
+        assert!(
+            vocal.left[(rate / 2) as usize..rate as usize]
+                .iter()
+                .all(|sample| *sample == 0.0)
+        );
     }
 
     #[test]

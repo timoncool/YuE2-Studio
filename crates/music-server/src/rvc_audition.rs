@@ -128,7 +128,7 @@ impl Clip {
         );
         converted.left.resize(end, 0.0);
         converted.right.resize(end, 0.0);
-        let after = slice(&converted, self.offset, end);
+        let mut after = slice(&converted, self.offset, end);
         anyhow::ensure!(
             after
                 .left
@@ -136,6 +136,10 @@ impl Clip {
                 .chain(&after.right)
                 .all(|sample| sample.is_finite()),
             "The converted fragment contains invalid audio."
+        );
+        let vocal_gain_db = rvc_apply::match_vocal_level(
+            audio_post::loudness::integrated(&self.source),
+            &mut after,
         );
         let folder = tempfile::tempdir()?;
         for (side, audio) in [("before", &self.source), ("after", &after)] {
@@ -158,7 +162,7 @@ impl Clip {
             "start_seconds": self.start as f64 / self.source.rate as f64,
             "end_seconds": self.end as f64 / self.source.rate as f64,
             "frames": self.source.frames(),
-            "sample_rate": self.source.rate,
+            "sample_rate": self.source.rate, "vocal_gain_db": vocal_gain_db,
             "requested_backend": requested, "effective_backend": effective, "fallback_reason": fallback
         }))
     }
