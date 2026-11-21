@@ -18,8 +18,6 @@ jobs:
         scenario: [clean, upgrade]
     runs-on: windows-latest
     timeout-minutes: 40
-    env:
-      QA_DIR: ${{ runner.temp }}/nsis-qa
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
@@ -31,10 +29,12 @@ jobs:
       - name: Read pinned files from the unpublished v5.0.0 draft
         env:
           GH_TOKEN: ${{ github.token }}
+          QA_DIR: ${{ runner.temp }}/nsis-qa
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
           $PSNativeCommandUseErrorActionPreference = $true
+          "QA_DIR=$env:QA_DIR" >> $env:GITHUB_ENV
           if ($PSVersionTable.PSVersion -lt [version]'7.4') { throw 'PowerShell 7.4 binary redirection required' }
           $repo = $env:GITHUB_REPOSITORY
           $draft = gh api "repos/$repo/releases/453516878" | ConvertFrom-Json
@@ -72,4 +72,4 @@ jobs:
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: windows-nsis-${{ matrix.scenario }}
-          path: ${{ env.QA_DIR }}/evidence/*.json
+          path: ${{ runner.temp }}/nsis-qa/evidence/*.json
