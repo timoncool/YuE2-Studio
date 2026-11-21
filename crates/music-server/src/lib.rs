@@ -1740,6 +1740,7 @@ pub async fn serve_on_port(port: u16) -> anyhow::Result<()> {
         .route("/v1/components/music-engines/{id}/status", get(engine_catalogue::install::status))
         .route("/v1/components/music-engines/{id}/install", post(engine_catalogue::install::install_selected))
         .route("/v1/rvc/catalog", get(rvc_catalog::list))
+        .route("/v1/rvc/catalog/sample/{id}", get(rvc_catalog::sample))
         .route("/v1/rvc/catalog/refresh", post(rvc_catalog::refresh))
         .route("/v1/rvc/catalog/install", post(rvc_catalog::install))
         .route("/v1/rvc/catalog/progress/{id}", get(rvc_catalog_progress::get))

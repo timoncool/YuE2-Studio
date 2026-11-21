@@ -391,6 +391,10 @@ move around. Check the result with `ui_screenshot`.
 - **openrouter**: `openrouter_status`, `openrouter_set_key`, `openrouter_catalog`, `openrouter_catalog_refresh`, `openrouter_log`, `openrouter_complete`, `openrouter_cover`, `openrouter_transcribe`.
 - **restore**: `restore_status`, `restore_start` (a track or a file compressed to MP3, restored with Apollo into a new track `<title> · restored`), `restore_install`, `restore_remove`, `restore_cancel`.
 
+## RVC catalog demos
+
+`rvc_catalog_list` reports `sample_audio_url` for a published source demo and null when none is recorded. Use `has_sample` to filter the same paginated results. Fetch the returned audio URL to play the verified demo before installing its voice.
+
 ## RVC vocal audition
 
 Use `rvc_preview` with an installed voice, an already separated vocal and a 0.5–15 second interval. It returns temporary before and after WAV URLs with the same frames and rate. The preview gain applies to the comparison audio. Use `rvc_apply` to save a separate take.

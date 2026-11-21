@@ -266,6 +266,7 @@ fn rvc_catalog_match(voice: &Value, args: &Value) -> bool {
     }
     let has_index = voice["has_index"].as_bool().unwrap_or(!voice["index"].is_null());
     args["has_index"].as_bool().is_none_or(|requested| requested == has_index)
+        && args["has_sample"].as_bool().is_none_or(|requested| requested == voice["sample_audio_url"].is_string())
 }
 
 /// What an agent is answered: the parts it acts on, unless it asked for
@@ -2666,7 +2667,7 @@ fn tools() -> &'static [Tool] {
             },
             Tool {
                 name: "rvc_catalog_list",
-                description: "List up to 20 curated RVC voices, license terms and installed local IDs. Pass next_offset as offset for the next page.",
+                description: "List up to 20 curated RVC voices, license terms, demo WAV/MP3 URLs when published, and installed local IDs. Pass next_offset as offset for the next page.",
                 schema: || object(json!({
                     "offset": { "type": "integer", "minimum": 0 },
                     "query": { "type": "string", "description": "Case-insensitive words in the name or source labels" },
@@ -2674,6 +2675,7 @@ fn tools() -> &'static [Tool] {
                     "rvc_version": { "type": "string", "description": "Exact version such as v2" },
                     "sample_rate_hz": { "type": "integer", "minimum": 1 },
                     "has_index": { "type": "boolean" },
+                    "has_sample": { "type": "boolean" },
                 }), &[]),
                 call: |_| get("/v1/rvc/catalog".into()),
             },
@@ -4116,6 +4118,7 @@ mod tests {
     /// Routes an agent is not given, and why.
     const NOT_TOOLS: &[(&str, &str, &str)] = &[
         ("GET", "/v1/rvc/preview/{id}/{side}", "binary audio from the before_url and after_url answered by rvc_preview"),
+        ("GET", "/v1/rvc/catalog/sample/{id}", "binary verified demo audio addressed by sample_audio_url in rvc_catalog_list"),
         ("GET", "/health", "the service's identity for the desktop shell: initialize names the server and its version"),
         ("POST", "/engine/pick-executable", "a file dialog for the person: engine_options_set takes the executable's path"),
         ("POST", "/setup/kv-cache-notice/seen", "the window's note that it told the person: engine_options_get says the cache and why"),
