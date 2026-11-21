@@ -1,0 +1,85 @@
+name: Studio hosted WebView2 screens
+on:
+  push:
+    branches: [qa/yue2-native-lrc-final]
+  workflow_dispatch:
+jobs:
+  windows-webview:
+    runs-on: windows-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: desktop/src-tauri -> target
+          cache-on-failure: true
+      - name: Identify exact desktop build inputs
+        id: shell-inputs
+        run: |
+          $revision = git log -1 --format=%H -- app crates desktop Cargo.toml Cargo.lock scripts/changelog.mjs
+          if (!$revision) { throw 'Missing desktop source revision' }
+          $inputs = @(
+            $revision
+            'npm run tauri -- build --debug --no-bundle'
+            (rustc -vV)
+            (node --version)
+            $env:ImageVersion
+          ) -join '\n'
+          $digest = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData([Text.Encoding]::UTF8.GetBytes($inputs))).ToLowerInvariant()
+          "digest=$digest" >> $env:GITHUB_OUTPUT
+          "revision=$revision" >> $env:GITHUB_OUTPUT
+      - uses: actions/cache/restore@v5
+        id: shell-cache
+        with:
+          path: |
+            desktop/src-tauri/target/debug/YuE2-Studio.exe
+            desktop/src-tauri/target/debug/yue2-studio-desktop.exe
+          key: hosted-u3-webview-${{ runner.os }}-${{ runner.arch }}-${{ steps.shell-inputs.outputs.digest }}
+      - name: Install locked dependencies
+        if: steps.shell-cache.outputs.cache-hit != 'true'
+        run: |
+          npm --prefix app ci
+          npm --prefix desktop ci
+      - name: Build Windows Studio
+        if: steps.shell-cache.outputs.cache-hit != 'true'
+        id: desktop-build
+        working-directory: desktop
+        env:
+          STUDIO_BUILD_REVISION: ${{ steps.shell-inputs.outputs.revision }}
+        run: |
+          git switch --detach $env:STUDIO_BUILD_REVISION
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          npm run tauri -- build --debug --no-bundle
+          $result = $LASTEXITCODE
+          git switch --detach $env:GITHUB_SHA
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          exit $result
+      - uses: actions/cache/save@v5
+        if: steps.desktop-build.outcome == 'success'
+        with:
+          path: |
+            desktop/src-tauri/target/debug/YuE2-Studio.exe
+            desktop/src-tauri/target/debug/yue2-studio-desktop.exe
+          key: ${{ steps.shell-cache.outputs.cache-primary-key }}
+      - name: Save, cancel and save again in the product Windows shell
+        if: always() && (steps.desktop-build.outcome == 'success' || steps.shell-cache.outputs.cache-hit == 'true')
+        env:
+          PYTHONUTF8: '1'
+          STUDIO_QA_REAL_SHELL_PROFILE: '1'
+        run: |
+          $desktop = Get-ChildItem desktop/src-tauri/target/debug -Filter '*.exe' |
+            Where-Object { $_.Name -in @('YuE2-Studio.exe', 'yue2-studio-desktop.exe') } |
+            Select-Object -First 1
+          if (!$desktop) { throw 'Studio executable missing' }
+          Get-FileHash -LiteralPath $desktop.FullName -Algorithm SHA256
+          python -u scripts/test-hosted-webview-screens.py $desktop.FullName artifacts/native-product --suite lrc
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: studio-hosted-webview-screens
+          path: artifacts
