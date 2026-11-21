@@ -12,7 +12,7 @@ type Backend = 'auto' | Engine;
 const BACKEND_STORAGE = 'studio.rvc.backend';
 interface Setup {
   effective_backend: Engine | null;
-  backends: Record<Engine, { ready: boolean; reason?: string; missing_bytes?: number }>;
+  backends: Record<Engine, { ready: boolean; can_start?: boolean; reason?: string; missing_bytes?: number }>;
 }
 interface Take { song_id: string; audio_url: string; requested_backend: Backend; effective_backend: Engine }
 
@@ -38,9 +38,13 @@ export function RvcApplyVoice({ song, voice, control, onSaved }: {
   const hasStems = song.stems.includes('vocals')
     && (song.stems.includes('instrumental') || accompaniment.every(stem => song.stems.includes(stem)));
 
-  const effective = backend === 'auto' ? setup?.effective_backend : backend;
-  const ready = Boolean(effective && setup?.backends[effective]?.ready);
+  const fastSetup = setup?.backends['vocal-fast-rs'];
   const fallbackSetup = setup?.backends['audio.cpp'];
+  const candidate = backend === 'auto'
+    ? fastSetup?.can_start ? 'vocal-fast-rs' : setup?.effective_backend
+    : backend;
+  const backendStatus = candidate && setup?.backends[candidate];
+  const ready = Boolean(backendStatus && (backendStatus.ready || backendStatus.can_start));
 
   useEffect(() => {
     const controller = new AbortController();
@@ -104,8 +108,11 @@ export function RvcApplyVoice({ song, voice, control, onSaved }: {
         </select>
       </label>
       {!setup && !error && <p role="status">{labels.checking}</p>}
-      {effective && ready && <p>{labels.effective.replace('{backend}', effective)}</p>}
-      {backend === 'vocal-fast-rs' && !ready && setup?.backends['vocal-fast-rs'].reason && <p role="status">{setup.backends['vocal-fast-rs'].reason}</p>}
+      {candidate && backendStatus && backendStatus.ready && <p>{labels.effective.replace('{backend}', candidate)}</p>}
+      {candidate && backendStatus && !backendStatus.ready && backendStatus.can_start && (
+        <p role="status">{labels.onStart.replace('{backend}', candidate)}</p>
+      )}
+      {backend === 'vocal-fast-rs' && !ready && fastSetup?.reason && <p role="status">{fastSetup.reason}</p>}
       <div className="grid gap-2 sm:grid-cols-2">
         <label className="block space-y-1">
           <span>{labels.pitch}</span>

@@ -50,7 +50,8 @@ pub(super) async fn install(
 }
 
 async fn setup_status(state: &AppState) -> Value {
-    let native = fast_availability(update_data_root(state)).await;
+    let native = fast_status(update_data_root(state)).await;
+    let native_ready = native.as_ref().is_ok_and(|ready| *ready);
     let build = selected_build(state).await.ok();
     let model_installed = model_ready(state);
     let audio_ready = build.is_some_and(|build| model_installed && state.acpp.installed(build));
@@ -63,11 +64,11 @@ async fn setup_status(state: &AppState) -> Value {
             .sum::<u64>()
             + if model_installed { 0 } else { MODEL.bytes }
     });
-    let effective = effective_backend(Backend::Auto, native.is_ok(), audio_ready);
+    let effective = effective_backend(Backend::Auto, native_ready, audio_ready);
     json!({
         "effective_backend": effective,
         "backends": {
-            "vocal-fast-rs": { "ready": native.is_ok(), "reason": native.err() },
+            "vocal-fast-rs": { "ready": native_ready, "can_start": native.is_ok(), "reason": native.err() },
             "audio.cpp": { "ready": audio_ready, "missing_bytes": missing_bytes },
         },
     })
@@ -83,12 +84,14 @@ fn effective_backend(requested: Backend, native_ready: bool, audio_ready: bool) 
     }
 }
 
+async fn fast_status(data_root: &FsPath) -> Result<bool, String> {
+    let data_root = data_root.to_path_buf();
+    tokio::task::spawn_blocking(move || rvc_fast::status(&data_root))
+        .await
+        .map_err(|error| format!("The vocal-fast-rs status check stopped: {error}"))?
+}
+
 async fn fast_availability(data_root: &FsPath) -> Result<(), String> {
-    if !cfg!(all(target_os = "windows", target_arch = "x86_64")) {
-        return Err(
-            "The vocal-fast-rs TensorRT-RTX route requires Windows x64 with an RTX card.".into(),
-        );
-    }
     let data_root = data_root.to_path_buf();
     tokio::task::spawn_blocking(move || rvc_fast::availability(&data_root))
         .await
@@ -354,6 +357,23 @@ fn add_aligned(mix: &mut audio_post::Stereo, stem: &audio_post::Stereo) -> anyho
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(all(
+        any(target_os = "windows", target_os = "linux"),
+        target_arch = "x86_64"
+    ))]
+    #[tokio::test]
+    async fn catalog_setup_inspects_installed_worker_without_starting_it() {
+        let root = tempfile::tempdir().unwrap();
+        let runtime = root.path().join("rvc/native/v1");
+        fs::create_dir_all(&runtime).unwrap();
+        let executable = format!("vocal-fast{}", std::env::consts::EXE_SUFFIX);
+        for name in [&executable, "hubert.vfrm", "rmvpe.vfrm"] {
+            fs::write(runtime.join(name), b"fixture, cannot launch").unwrap();
+        }
+        assert_eq!(fast_status(root.path()).await, Ok(false));
+        assert!(!root.path().join("rvc/native/cache-v1").exists());
+    }
 
     #[test]
     fn auto_prefers_vocal_fast_without_overriding_an_explicit_audio_cpp_request() {
