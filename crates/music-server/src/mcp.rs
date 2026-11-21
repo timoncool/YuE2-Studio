@@ -2399,6 +2399,12 @@ fn tools() -> &'static [Tool] {
                 call: |_| post("/v1/music/native/hotstep/heartmula/install".into(), json!({})),
             },
             Tool {
+                name: "hotstep_minimax_install",
+                description: "Install the published HOT-Step runtime and experimental compact MiniMax Music3 weights. Read progress in hotstep_cover_profiles.",
+                schema: nothing,
+                call: |_| post("/v1/music/native/hotstep/minimax-music3/install".into(), json!({})),
+            },
+            Tool {
                 name: "hotstep_sa3_install",
                 description: "Start the managed HOT-Step Stable Audio 3 Medium installation. Read progress in hotstep_cover_profiles.",
                 schema: nothing,

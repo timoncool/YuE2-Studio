@@ -93,9 +93,10 @@ export function AudioCppModelInstall({ model, bytes, licenseUrl, language, onIns
   const [error, setError] = useState('');
   const [percent, setPercent] = useState<number>();
   const hotstepHeart = model === 'heartmula-3b-q8_0';
-  const hotstep = model === 'stable-audio-3-medium' || hotstepHeart;
+  const hotstepMinimax = model === 'hotstep-minimax-music3';
+  const hotstep = model === 'stable-audio-3-medium' || hotstepHeart || hotstepMinimax;
   const soulx = model === 'soulx_singer' ? 'SoulX-Singer SVS' : model === 'soulx_singer_svc' ? 'SoulX-Singer SVC' : undefined;
-  const name = soulx ?? (hotstepHeart ? 'HeartMuLa 3B (HOT-Step)' : hotstep ? 'Stable Audio 3 Medium (HOT-Step)' : model === 'stable_audio' ? 'Stable Audio 3' : 'HeartMuLa');
+  const name = soulx ?? (hotstepMinimax ? 'MiniMax Music3 (HOT-Step)' : hotstepHeart ? 'HeartMuLa 3B (HOT-Step)' : hotstep ? 'Stable Audio 3 Medium (HOT-Step)' : model === 'stable_audio' ? 'Stable Audio 3' : 'HeartMuLa');
   const [install, installing, failed] = (installLabels[language] ?? installLabels.en).map(label => label.replace('HeartMuLa', name));
   const size = bytes > 0 ? ` · ${new Intl.NumberFormat(language, { maximumFractionDigits: 2 }).format(bytes / (1024 ** 3))} GiB` : '';
 
@@ -126,7 +127,8 @@ export function AudioCppModelInstall({ model, bytes, licenseUrl, language, onIns
     setBusy(true);
     setError('');
     try {
-      const result = await fetch(apiUrl(hotstepHeart ? '/v1/music/native/hotstep/heartmula/install' : hotstep ? '/v1/music/native/hotstep/stable-audio-3/install' : '/v1/music/audio-cpp/models/install'), {
+      const route = hotstep ? `/v1/music/native/hotstep/${hotstepMinimax ? 'minimax-music3' : hotstepHeart ? 'heartmula' : 'stable-audio-3'}/install` : '/v1/music/audio-cpp/models/install';
+      const result = await fetch(apiUrl(route), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ model }),

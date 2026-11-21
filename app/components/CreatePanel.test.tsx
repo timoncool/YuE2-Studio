@@ -1806,6 +1806,27 @@ it('restores HeartMuLa lyrics and its trained HOT-Step adapter without cover req
   });
 });
 
+it('restores MiniMax Music3 through HOT-Step as a text and lyrics pair', async () => {
+  const model = 'hotstep-minimax-music3';
+  vi.stubGlobal('fetch', vi.fn(async () => Response.json({
+    engine: 'hotstep', engine_installed: true,
+    profiles: [{ id: model, label: 'MiniMax Music3 · HOT-Step', ready: true, missing: [] }],
+  })));
+  const music_source = { kind: 'native', engine: 'hotstep', model };
+  const song = {
+    title: 'MiniMax take', ditModel: 'hotstep', style: 'folk', lyrics: '[Verse] Morning',
+    generationParams: { music_source, duration_seconds: 3.2, seed: 42, steps: 2 },
+  } as Song;
+  act(() => root.render(panel({ musicEngine: 'hotstep', initialData: { song, timestamp: 1 } })));
+  await flush();
+  expect(field('textarea[aria-label="lyrics"]')).not.toBeNull();
+  expect(host.textContent).not.toContain('Cover score');
+  click(buttonNamed('create')!);
+  expect(sent.at(-1)).toMatchObject({ music_source, style: 'folk', lyrics: '[Verse] Morning',
+    duration_seconds: 3.2, seed: 42, steps: 2 });
+  expect(sent.at(-1)?.cover_of).toBeUndefined();
+});
+
 it('restores HOT-Step cover source and lead sheet from a saved take', async () => {
   vi.stubGlobal('fetch', vi.fn(async (url: string) => Response.json(url === '/v1/music/native/hotstep/profiles' ? {
     engine: 'hotstep', engine_installed: true,
