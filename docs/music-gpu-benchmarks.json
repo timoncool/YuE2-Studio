@@ -1,0 +1,1462 @@
+{
+  "method": {
+    "host": "Windows 11 build 26100 · Ryzen 9 9950X3D · RTX 4090 24 GB · driver 617.42",
+    "cold": "server process launch through receipt of first encoded WAV; on-disk model cache retained",
+    "warm": "median of three requests to the same process through receipt of encoded WAV",
+    "memory": "200 ms sampling; whole RTX 4090 including desktop; process tree summed RSS; pre-launch GPU reading when recorded",
+    "quality": "PCM16 RMS and trailing windows below -60 dBFS; these are level and duration checks, not a listening study",
+    "groups": {
+      "YuE2": "Text-to-song uses the same style, words, seed and 32 steps. The audio.cpp request fixes 750 semantic tokens. Replay supplies the same 100 semantic tokens and two steps to both engines. Native VAE is F32 and audio.cpp VAE is F16 in both workloads.",
+      "ACE-Step 1.5": "Same prompt, seed 42, 30 s, eight Euler steps, CFG 1, shift 3 and 110 BPM. The native CUDA take has 5 s quiet at the end; the audio.cpp take has none. Model packing and audible outputs differ.",
+      "MiniMax Music3": "Same prompt, lyrics, seed 424242, target 3.2 s and two steps. Native Quality and audio.cpp Q8_0 share LM, depth, DiT and conditioning weights, with different vocoders and runtime controls. Native Minimal uses lower quantization.",
+      "Stable Audio 3": "Same prompt, seed 42, target 4 s and four steps. HOT-Step Medium and audio.cpp Small Music have different model sizes and precision."
+    }
+  },
+  "rows": [
+    {
+      "family": "YuE2",
+      "workload": "30 s · 32 steps",
+      "engine": "yue2.cpp",
+      "revision": "892b9b0",
+      "backend": "CUDA 13",
+      "stage": "5.0 candidate",
+      "weight_profile": "3B Q8_0 + F32 VAE; NAR v9",
+      "cold_seconds": 8.812999999994645,
+      "warm_median_seconds": 4.75927270000102,
+      "cold_vram_peak_bytes": 8724979712,
+      "cold_vram_baseline_bytes": 2555670528,
+      "cold_vram_increase_bytes": 6169309184,
+      "cold_rss_peak_bytes": 3619315712,
+      "warm_vram_peak_bytes": 8959598592,
+      "warm_rss_peak_bytes": 878346240,
+      "warm_audio_seconds_per_second": 6.303203988849018,
+      "runs": [
+        {
+          "wall_seconds": 8.812999999994645,
+          "audio_seconds": 29.998666666666665,
+          "wav_sha256": "109546c0b27fc10c4da5382d3433d8f1d300f7b9cef765ae2b11e5125349e255"
+        },
+        {
+          "wall_seconds": 4.75927270000102,
+          "audio_seconds": 29.998666666666665,
+          "wav_sha256": "9a4722fed0863ca0ef5c2e6f280ab635665fa704ae4c78ce5cc6f890d29c0012"
+        },
+        {
+          "wall_seconds": 4.7729431000043405,
+          "audio_seconds": 29.998666666666665,
+          "wav_sha256": "9a4722fed0863ca0ef5c2e6f280ab635665fa704ae4c78ce5cc6f890d29c0012"
+        },
+        {
+          "wall_seconds": 4.719823400009773,
+          "audio_seconds": 29.998666666666665,
+          "wav_sha256": "9a4722fed0863ca0ef5c2e6f280ab635665fa704ae4c78ce5cc6f890d29c0012"
+        }
+      ],
+      "audio_levels": {
+        "rms_dbfs": -13.9081920686986,
+        "sample_rate_hz": 48000,
+        "window_ms": 100,
+        "activity_threshold_dbfs": -60,
+        "trailing_quiet_seconds": 0.0
+      },
+      "binary_sha256": "9d4fb00ef3c35da6f3833130246d010831075bcb1fdc049301b4cbf9e84c9e00",
+      "archive_sha256": null,
+      "weight_sha256": {
+        "YuE2-3B-Q8_0.gguf": "41121ce97786d7795a325bcf123ca196956c03bb252c9e75384cfc1f2fc19e6b",
+        "YuE2-Vae-F32.gguf": "93e49dfb1970e89ad64cacb17cf13b5d05f6bb30ef7ed3adae3050bcb728638a",
+        "nar_lora_joint_v9.safetensors": "585f303da1d5252d228d1e8ac6d4c4d11d970df9297406935cc8bdafa49cfa7e"
+      },
+      "request_sha256": "67f434c92fe2fbcab5204110f59d05162258f25fb8b33e212ef1ccfd83004b8f",
+      "request_sha256_scope": "canonical JSON from captured native request",
+      "module_names": [
+        "cublas64_13.dll",
+        "cublasLt64_13.dll",
+        "ggml-base.dll",
+        "ggml-cpu-cascadelake.dll",
+        "ggml-cuda.dll",
+        "ggml-vulkan.dll",
+        "ggml.dll"
+      ],
+      "module_sha256": {
+        "cublas64_13.dll": "db5a1d5a0ed0ef126e005fc7449d3584353aaeb8739a18d716fe74be1254a3da",
+        "cublasLt64_13.dll": "ca478e1ea932f883ef4fc284f8f33d910079df4e77f9a2ec38d9b4387795f96f",
+        "ggml-cuda.dll": "b5f6dee6a566d450f78d26c94f901de702136e83fb0a8a38420ede2754e5d1b0",
+        "ggml-base.dll": "f404c0245c71abf1f64dc712ad71ff0c003147368901c105d80f24d1721bf6d9",
+        "ggml-cpu-cascadelake.dll": "778d257d7b45af60111ed49461569363ea4fad27f8f7c909c47178f5b2a0715d",
+        "ggml-vulkan.dll": "a1494a58417fe56b4c173c9b9b35d590d8db008053c3a4c716a0f105096420d8",
+        "ggml.dll": "11aeb15dcf6a08ef06e673471fb76371faaa691b47b435dd1cf45b6a2e6141f6"
+      },
+      "driver": "617.42",
+      "memory_sample_interval_ms": 200,
+      "retention": "keep-loaded",
+      "summary_id": "yue2-892b9b0-bench-CUDA0-from-lyrics-cublas-13.10.0.20-30s-summary.json"
+    },
+    {
+      "family": "YuE2",
+      "workload": "30 s · 32 steps",
+      "engine": "yue2.cpp",
+      "revision": "892b9b0",
+      "backend": "Vulkan",
+      "stage": "5.0 candidate",
+      "weight_profile": "3B Q8_0 + F32 VAE; NAR v9",
+      "cold_seconds": 16.60899999999674,
+      "warm_median_seconds": 5.86104940000223,
+      "cold_vram_peak_bytes": 8796696576,
+      "cold_vram_baseline_bytes": 2556719104,
+      "cold_vram_increase_bytes": 6239977472,
+      "cold_rss_peak_bytes": 3309891584,
+      "warm_vram_peak_bytes": 9788616704,
+      "warm_rss_peak_bytes": 449171456,
+      "warm_audio_seconds_per_second": 5.1183098143918135,
+      "runs": [
+        {
+          "wall_seconds": 16.60899999999674,
+          "audio_seconds": 29.998666666666665,
+          "wav_sha256": "ef24c31428c0f52a58b0d9290acd542f86bab3da9eccb8233c152df36ba2a31d"
+        },
+        {
+          "wall_seconds": 6.370305100004771,
+          "audio_seconds": 29.998666666666665,
+          "wav_sha256": "ef24c31428c0f52a58b0d9290acd542f86bab3da9eccb8233c152df36ba2a31d"
+        },
+        {
+          "wall_seconds": 5.86104940000223,
+          "audio_seconds": 29.998666666666665,
+          "wav_sha256": "ef24c31428c0f52a58b0d9290acd542f86bab3da9eccb8233c152df36ba2a31d"
+        },
+        {
+          "wall_seconds": 5.774102499999572,
+          "audio_seconds": 29.998666666666665,
+          "wav_sha256": "ef24c31428c0f52a58b0d9290acd542f86bab3da9eccb8233c152df36ba2a31d"
+        }
+      ],
+      "audio_levels": {
+        "rms_dbfs": -14.693301784274432,
+        "sample_rate_hz": 48000,
+        "window_ms": 100,
+        "activity_threshold_dbfs": -60,
+        "trailing_quiet_seconds": 0.0
+      },
+      "binary_sha256": "9d4fb00ef3c35da6f3833130246d010831075bcb1fdc049301b4cbf9e84c9e00",
+      "archive_sha256": null,
+      "weight_sha256": {
+        "YuE2-3B-Q8_0.gguf": "41121ce97786d7795a325bcf123ca196956c03bb252c9e75384cfc1f2fc19e6b",
+        "YuE2-Vae-F32.gguf": "93e49dfb1970e89ad64cacb17cf13b5d05f6bb30ef7ed3adae3050bcb728638a",
+        "nar_lora_joint_v9.safetensors": "585f303da1d5252d228d1e8ac6d4c4d11d970df9297406935cc8bdafa49cfa7e"
+      },
+      "request_sha256": "67f434c92fe2fbcab5204110f59d05162258f25fb8b33e212ef1ccfd83004b8f",
+      "request_sha256_scope": "canonical JSON from captured native request",
+      "module_names": [
+        "ggml-base.dll",
+        "ggml-cpu-cascadelake.dll",
+        "ggml-vulkan.dll",
+        "ggml.dll"
+      ],
+      "module_sha256": {
+        "ggml-base.dll": "f404c0245c71abf1f64dc712ad71ff0c003147368901c105d80f24d1721bf6d9",
+        "ggml-cpu-cascadelake.dll": "778d257d7b45af60111ed49461569363ea4fad27f8f7c909c47178f5b2a0715d",
+        "ggml-vulkan.dll": "a1494a58417fe56b4c173c9b9b35d590d8db008053c3a4c716a0f105096420d8",
+        "ggml.dll": "11aeb15dcf6a08ef06e673471fb76371faaa691b47b435dd1cf45b6a2e6141f6"
+      },
+      "driver": "617.42",
+      "memory_sample_interval_ms": 200,
+      "retention": "keep-loaded",
+      "summary_id": "yue2-892b9b0-bench-Vulkan0-from-lyrics-30s-summary.json"
+    },
+    {
+      "family": "YuE2",
+      "workload": "30 s · 32 steps",
+      "engine": "audio.cpp",
+      "revision": "41242418",
+      "backend": "CUDA 13",
+      "stage": "5.0 candidate",
+      "weight_profile": "3B Q8_0 + F16 VAE; NAR v9",
+      "cold_seconds": 16.807483599997795,
+      "warm_median_seconds": 7.441160200000013,
+      "cold_vram_peak_bytes": 7537082368,
+      "cold_vram_baseline_bytes": 2511687680,
+      "cold_vram_increase_bytes": 5025394688,
+      "cold_rss_peak_bytes": 6701576192,
+      "warm_vram_peak_bytes": 7993507840,
+      "warm_rss_peak_bytes": 7645696000,
+      "warm_audio_seconds_per_second": 4.031450185236788,
+      "runs": [
+        {
+          "wall_seconds": 16.807483599997795,
+          "audio_seconds": 29.998666666666665,
+          "wav_sha256": "7a65a781d6747cef533d142658b5f6ae8f29e4372ee3dd92a488ca7e8ad109e8"
+        },
+        {
+          "wall_seconds": 7.441160200000013,
+          "audio_seconds": 29.998666666666665,
+          "wav_sha256": "7a65a781d6747cef533d142658b5f6ae8f29e4372ee3dd92a488ca7e8ad109e8"
+        },
+        {
+          "wall_seconds": 7.420381100000668,
+          "audio_seconds": 29.998666666666665,
+          "wav_sha256": "7a65a781d6747cef533d142658b5f6ae8f29e4372ee3dd92a488ca7e8ad109e8"
+        },
+        {
+          "wall_seconds": 7.450792600000568,
+          "audio_seconds": 29.998666666666665,
+          "wav_sha256": "7a65a781d6747cef533d142658b5f6ae8f29e4372ee3dd92a488ca7e8ad109e8"
+        }
+      ],
+      "audio_levels": {
+        "rms_dbfs": -19.228064067585734,
+        "sample_rate_hz": 48000,
+        "window_ms": 100,
+        "activity_threshold_dbfs": -60,
+        "trailing_quiet_seconds": 0.0
+      },
+      "binary_sha256": "600fe184dd4ed83cd307eacbfeb42f2f9bd8ced0eac3b6911107d71d0d609aea",
+      "archive_sha256": "2bc5134d06521ec388a0e55be4d1db2e7abf4c0795fb02d3ce5b724f419df33e",
+      "weight_sha256": {
+        "sidecars/yue2-generation-config.json": "203830cebde6e3644eb291925362990d198e66c3b6006cd11f1aaa21904bcc61",
+        "sidecars/yue2-model-config.json": "ad3477bbef890bf98ae196c1e4b44779494a6231c4ab66f32708eabadf265329",
+        "sidecars/yue2-qwen.tiktoken": "b2b1b8dfb5cc5f024bafc373121c6aba3f66f9a5a0269e243470a1de16a33186",
+        "sidecars/yue2-vae-config.json": "f0191bb9694009956de44e0c361a6f1334760be4c8f848e599bde242a54a0970",
+        "yue2-3b-q8_0.gguf": "52be345b5155bf9ef0b2411e7df8d1d2b8e13b6d977a2f70c35612ec69b1f591",
+        "yue2-vae-f16.gguf": "d4f4a05d8f291ae820cd1e43609da3fa91b56465810091a2b08c3350b751719d",
+        "nar_lora_joint_v9.safetensors": "585f303da1d5252d228d1e8ac6d4c4d11d970df9297406935cc8bdafa49cfa7e"
+      },
+      "request_sha256": "5b4eefe1ab841a8833141e829c8e82dca6b854d3aab753cf0e606ebc58be809d",
+      "request_sha256_scope": "captured request file",
+      "module_names": [],
+      "module_sha256": {},
+      "driver": "617.42",
+      "memory_sample_interval_ms": 200,
+      "retention": "lazy first load; reused process and session",
+      "summary_id": "acpp-41242418-yue2-matrix-cuda13-from-lyrics-30s-summary.json"
+    },
+    {
+      "family": "YuE2",
+      "workload": "100 tokens · 2 steps",
+      "engine": "yue2.cpp",
+      "revision": "892b9b0",
+      "backend": "CUDA 13",
+      "stage": "5.0 candidate",
+      "weight_profile": "3B Q8_0 + F32 VAE; NAR v9",
+      "cold_seconds": 6.51600000000326,
+      "warm_median_seconds": 0.17234930000267923,
+      "cold_vram_peak_bytes": 7389257728,
+      "cold_vram_baseline_bytes": 2546544640,
+      "cold_vram_increase_bytes": 4842713088,
+      "cold_rss_peak_bytes": 3648794624,
+      "warm_vram_peak_bytes": 7395745792,
+      "warm_rss_peak_bytes": 841748480,
+      "warm_audio_seconds_per_second": 23.20094521187209,
+      "runs": [
+        {
+          "wall_seconds": 6.51600000000326,
+          "audio_seconds": 3.998666666666667,
+          "wav_sha256": "284bbb500b2c82d09cd4dd31f4cc9dbdfccd071c45208e47927af7ed36843084"
+        },
+        {
+          "wall_seconds": 0.12462950000190176,
+          "audio_seconds": 3.998666666666667,
+          "wav_sha256": "284bbb500b2c82d09cd4dd31f4cc9dbdfccd071c45208e47927af7ed36843084"
+        },
+        {
+          "wall_seconds": 0.17234930000267923,
+          "audio_seconds": 3.998666666666667,
+          "wav_sha256": "284bbb500b2c82d09cd4dd31f4cc9dbdfccd071c45208e47927af7ed36843084"
+        },
+        {
+          "wall_seconds": 0.1871087999898009,
+          "audio_seconds": 3.998666666666667,
+          "wav_sha256": "284bbb500b2c82d09cd4dd31f4cc9dbdfccd071c45208e47927af7ed36843084"
+        }
+      ],
+      "audio_levels": {
+        "rms_dbfs": -14.318306721287431,
+        "sample_rate_hz": 48000,
+        "window_ms": 100,
+        "activity_threshold_dbfs": -60,
+        "trailing_quiet_seconds": 0.0
+      },
+      "binary_sha256": "9d4fb00ef3c35da6f3833130246d010831075bcb1fdc049301b4cbf9e84c9e00",
+      "archive_sha256": null,
+      "weight_sha256": {
+        "YuE2-3B-Q8_0.gguf": "41121ce97786d7795a325bcf123ca196956c03bb252c9e75384cfc1f2fc19e6b",
+        "YuE2-Vae-F32.gguf": "93e49dfb1970e89ad64cacb17cf13b5d05f6bb30ef7ed3adae3050bcb728638a",
+        "nar_lora_joint_v9.safetensors": "585f303da1d5252d228d1e8ac6d4c4d11d970df9297406935cc8bdafa49cfa7e"
+      },
+      "request_sha256": "4a2509d760d1713037da0df9c793f45cc6270daf9e95dc287c3729b55d49360b",
+      "request_sha256_scope": "canonical JSON from captured native request",
+      "module_names": [
+        "cublas64_13.dll",
+        "cublasLt64_13.dll",
+        "ggml-base.dll",
+        "ggml-cpu-cascadelake.dll",
+        "ggml-cuda.dll",
+        "ggml-vulkan.dll",
+        "ggml.dll"
+      ],
+      "module_sha256": {
+        "cublas64_13.dll": "db5a1d5a0ed0ef126e005fc7449d3584353aaeb8739a18d716fe74be1254a3da",
+        "cublasLt64_13.dll": "ca478e1ea932f883ef4fc284f8f33d910079df4e77f9a2ec38d9b4387795f96f",
+        "ggml-cuda.dll": "b5f6dee6a566d450f78d26c94f901de702136e83fb0a8a38420ede2754e5d1b0",
+        "ggml-base.dll": "f404c0245c71abf1f64dc712ad71ff0c003147368901c105d80f24d1721bf6d9",
+        "ggml-cpu-cascadelake.dll": "778d257d7b45af60111ed49461569363ea4fad27f8f7c909c47178f5b2a0715d",
+        "ggml-vulkan.dll": "a1494a58417fe56b4c173c9b9b35d590d8db008053c3a4c716a0f105096420d8",
+        "ggml.dll": "11aeb15dcf6a08ef06e673471fb76371faaa691b47b435dd1cf45b6a2e6141f6"
+      },
+      "driver": "617.42",
+      "memory_sample_interval_ms": 200,
+      "retention": "keep-loaded",
+      "summary_id": "yue2-892b9b0-bench-CUDA0-cublas-13.10.0.20-summary.json"
+    },
+    {
+      "family": "YuE2",
+      "workload": "100 tokens · 2 steps",
+      "engine": "audio.cpp",
+      "revision": "41242418",
+      "backend": "CUDA 13",
+      "stage": "5.0 candidate",
+      "weight_profile": "3B Q8_0 + F16 VAE; NAR v9",
+      "cold_seconds": 7.481951599998865,
+      "warm_median_seconds": 0.38299909999477677,
+      "cold_vram_peak_bytes": 6746644480,
+      "cold_vram_baseline_bytes": 2541662208,
+      "cold_vram_increase_bytes": 4204982272,
+      "cold_rss_peak_bytes": 6268706816,
+      "warm_vram_peak_bytes": 7130423296,
+      "warm_rss_peak_bytes": 6237384704,
+      "warm_audio_seconds_per_second": 10.440407475425397,
+      "runs": [
+        {
+          "wall_seconds": 7.481951599998865,
+          "audio_seconds": 3.998666666666667,
+          "wav_sha256": "af85d41cbed92a03429c869dfb841c2081c5f0f22ed25b1f0d8c6301a94a6e2a"
+        },
+        {
+          "wall_seconds": 0.38288570000440814,
+          "audio_seconds": 3.998666666666667,
+          "wav_sha256": "af85d41cbed92a03429c869dfb841c2081c5f0f22ed25b1f0d8c6301a94a6e2a"
+        },
+        {
+          "wall_seconds": 0.38299909999477677,
+          "audio_seconds": 3.998666666666667,
+          "wav_sha256": "af85d41cbed92a03429c869dfb841c2081c5f0f22ed25b1f0d8c6301a94a6e2a"
+        },
+        {
+          "wall_seconds": 0.3966777000023285,
+          "audio_seconds": 3.998666666666667,
+          "wav_sha256": "af85d41cbed92a03429c869dfb841c2081c5f0f22ed25b1f0d8c6301a94a6e2a"
+        }
+      ],
+      "audio_levels": {
+        "rms_dbfs": -21.292220439726126,
+        "sample_rate_hz": 48000,
+        "window_ms": 100,
+        "activity_threshold_dbfs": -60,
+        "trailing_quiet_seconds": 0.0
+      },
+      "binary_sha256": "600fe184dd4ed83cd307eacbfeb42f2f9bd8ced0eac3b6911107d71d0d609aea",
+      "archive_sha256": "2bc5134d06521ec388a0e55be4d1db2e7abf4c0795fb02d3ce5b724f419df33e",
+      "weight_sha256": {
+        "sidecars/yue2-generation-config.json": "203830cebde6e3644eb291925362990d198e66c3b6006cd11f1aaa21904bcc61",
+        "sidecars/yue2-model-config.json": "ad3477bbef890bf98ae196c1e4b44779494a6231c4ab66f32708eabadf265329",
+        "sidecars/yue2-qwen.tiktoken": "b2b1b8dfb5cc5f024bafc373121c6aba3f66f9a5a0269e243470a1de16a33186",
+        "sidecars/yue2-vae-config.json": "f0191bb9694009956de44e0c361a6f1334760be4c8f848e599bde242a54a0970",
+        "yue2-3b-q8_0.gguf": "52be345b5155bf9ef0b2411e7df8d1d2b8e13b6d977a2f70c35612ec69b1f591",
+        "yue2-vae-f16.gguf": "d4f4a05d8f291ae820cd1e43609da3fa91b56465810091a2b08c3350b751719d",
+        "nar_lora_joint_v9.safetensors": "585f303da1d5252d228d1e8ac6d4c4d11d970df9297406935cc8bdafa49cfa7e"
+      },
+      "request_sha256": "27a482dfa075e1095552d7a0da45dbf4dd9ddac0acb65ec81eb2ec1c6a19713a",
+      "request_sha256_scope": "captured request file",
+      "module_names": [],
+      "module_sha256": {},
+      "driver": "617.42",
+      "memory_sample_interval_ms": 200,
+      "retention": "lazy first load; reused process and session",
+      "summary_id": "acpp-41242418-yue2-matrix-cuda13-replay-summary.json"
+    },
+    {
+      "family": "YuE2",
+      "workload": "100 tokens · 2 steps",
+      "engine": "yue2.cpp",
+      "revision": "892b9b0",
+      "backend": "CUDA 12",
+      "stage": "5.0 candidate",
+      "weight_profile": "3B Q8_0 + F32 VAE; NAR v9",
+      "cold_seconds": 4.9689999999973224,
+      "warm_median_seconds": 0.1251568000006955,
+      "cold_vram_peak_bytes": 7388864512,
+      "cold_vram_baseline_bytes": 2557128704,
+      "cold_vram_increase_bytes": 4831735808,
+      "cold_rss_peak_bytes": 3701252096,
+      "warm_vram_peak_bytes": 7395876864,
+      "warm_rss_peak_bytes": 821800960,
+      "warm_audio_seconds_per_second": 31.9492561861956,
+      "runs": [
+        {
+          "wall_seconds": 4.9689999999973224,
+          "audio_seconds": 3.998666666666667,
+          "wav_sha256": "284bbb500b2c82d09cd4dd31f4cc9dbdfccd071c45208e47927af7ed36843084"
+        },
+        {
+          "wall_seconds": 0.11114269999961834,
+          "audio_seconds": 3.998666666666667,
+          "wav_sha256": "284bbb500b2c82d09cd4dd31f4cc9dbdfccd071c45208e47927af7ed36843084"
+        },
+        {
+          "wall_seconds": 0.1251568000006955,
+          "audio_seconds": 3.998666666666667,
+          "wav_sha256": "284bbb500b2c82d09cd4dd31f4cc9dbdfccd071c45208e47927af7ed36843084"
+        },
+        {
+          "wall_seconds": 0.12541969999438152,
+          "audio_seconds": 3.998666666666667,
+          "wav_sha256": "284bbb500b2c82d09cd4dd31f4cc9dbdfccd071c45208e47927af7ed36843084"
+        }
+      ],
+      "audio_levels": {
+        "rms_dbfs": -14.318306721287431,
+        "sample_rate_hz": 48000,
+        "window_ms": 100,
+        "activity_threshold_dbfs": -60,
+        "trailing_quiet_seconds": 0.0
+      },
+      "binary_sha256": "9d4fb00ef3c35da6f3833130246d010831075bcb1fdc049301b4cbf9e84c9e00",
+      "archive_sha256": null,
+      "weight_sha256": {
+        "YuE2-3B-Q8_0.gguf": "41121ce97786d7795a325bcf123ca196956c03bb252c9e75384cfc1f2fc19e6b",
+        "YuE2-Vae-F32.gguf": "93e49dfb1970e89ad64cacb17cf13b5d05f6bb30ef7ed3adae3050bcb728638a",
+        "nar_lora_joint_v9.safetensors": "585f303da1d5252d228d1e8ac6d4c4d11d970df9297406935cc8bdafa49cfa7e"
+      },
+      "request_sha256": "4a2509d760d1713037da0df9c793f45cc6270daf9e95dc287c3729b55d49360b",
+      "request_sha256_scope": "canonical JSON from captured native request",
+      "module_names": [
+        "cublas64_12.dll",
+        "cublasLt64_12.dll",
+        "cudart64_12.dll",
+        "ggml-base.dll",
+        "ggml-cpu-cascadelake.dll",
+        "ggml-cuda.dll",
+        "ggml-vulkan.dll",
+        "ggml.dll"
+      ],
+      "module_sha256": {
+        "cublas64_12.dll": "52ce5ba0ec5327d39be6021f0f9362d2ed4d64d7206f9b5afc06398d827b8e82",
+        "cublasLt64_12.dll": "71705a7cf0923f4ab034d0d2620bbfc989ff669ac3d79f868b7a7c597ca559c5",
+        "ggml-cuda.dll": "104924958bd0067a796b1b079b83d2b27b45f7446c994d42f000f308f3b4d1b1",
+        "cudart64_12.dll": "760c38928bbe5759f7b31ed6692599eb7ec83cedd5702e84c2b72028a89837e1",
+        "ggml-base.dll": "f404c0245c71abf1f64dc712ad71ff0c003147368901c105d80f24d1721bf6d9",
+        "ggml-cpu-cascadelake.dll": "778d257d7b45af60111ed49461569363ea4fad27f8f7c909c47178f5b2a0715d",
+        "ggml-vulkan.dll": "a1494a58417fe56b4c173c9b9b35d590d8db008053c3a4c716a0f105096420d8",
+        "ggml.dll": "11aeb15dcf6a08ef06e673471fb76371faaa691b47b435dd1cf45b6a2e6141f6"
+      },
+      "driver": "617.42",
+      "memory_sample_interval_ms": 200,
+      "retention": "keep-loaded",
+      "summary_id": "yue2-892b9b0-bench-CUDA0-cublas-12.9.2.10-summary.json"
+    },
+    {
+      "family": "YuE2",
+      "workload": "100 tokens · 2 steps",
+      "engine": "audio.cpp",
+      "revision": "41242418",
+      "backend": "CUDA 12",
+      "stage": "5.0 candidate",
+      "weight_profile": "3B Q8_0 + F16 VAE; NAR v9",
+      "cold_seconds": 7.869277499994496,
+      "warm_median_seconds": 0.42011369999090675,
+      "cold_vram_peak_bytes": 6940762112,
+      "cold_vram_baseline_bytes": 2534912000,
+      "cold_vram_increase_bytes": 4405850112,
+      "cold_rss_peak_bytes": 6189572096,
+      "warm_vram_peak_bytes": 7135928320,
+      "warm_rss_peak_bytes": 6228828160,
+      "warm_audio_seconds_per_second": 9.518058246501404,
+      "runs": [
+        {
+          "wall_seconds": 7.869277499994496,
+          "audio_seconds": 3.998666666666667,
+          "wav_sha256": "af85d41cbed92a03429c869dfb841c2081c5f0f22ed25b1f0d8c6301a94a6e2a"
+        },
+        {
+          "wall_seconds": 0.42011369999090675,
+          "audio_seconds": 3.998666666666667,
+          "wav_sha256": "af85d41cbed92a03429c869dfb841c2081c5f0f22ed25b1f0d8c6301a94a6e2a"
+        },
+        {
+          "wall_seconds": 0.4247363000031328,
+          "audio_seconds": 3.998666666666667,
+          "wav_sha256": "af85d41cbed92a03429c869dfb841c2081c5f0f22ed25b1f0d8c6301a94a6e2a"
+        },
+        {
+          "wall_seconds": 0.40583150000020396,
+          "audio_seconds": 3.998666666666667,
+          "wav_sha256": "af85d41cbed92a03429c869dfb841c2081c5f0f22ed25b1f0d8c6301a94a6e2a"
+        }
+      ],
+      "audio_levels": {
+        "rms_dbfs": -21.292220439726126,
+        "sample_rate_hz": 48000,
+        "window_ms": 100,
+        "activity_threshold_dbfs": -60,
+        "trailing_quiet_seconds": 0.0
+      },
+      "binary_sha256": "afc31eb6f6942c145bd2586e3238d0552fe9d42214f74e1b817426b9c984075c",
+      "archive_sha256": "8ba29571580148b2cfe053174edccd7d195355553bc5d955158d805c84574b22",
+      "weight_sha256": {
+        "sidecars/yue2-generation-config.json": "203830cebde6e3644eb291925362990d198e66c3b6006cd11f1aaa21904bcc61",
+        "sidecars/yue2-model-config.json": "ad3477bbef890bf98ae196c1e4b44779494a6231c4ab66f32708eabadf265329",
+        "sidecars/yue2-qwen.tiktoken": "b2b1b8dfb5cc5f024bafc373121c6aba3f66f9a5a0269e243470a1de16a33186",
+        "sidecars/yue2-vae-config.json": "f0191bb9694009956de44e0c361a6f1334760be4c8f848e599bde242a54a0970",
+        "yue2-3b-q8_0.gguf": "52be345b5155bf9ef0b2411e7df8d1d2b8e13b6d977a2f70c35612ec69b1f591",
+        "yue2-vae-f16.gguf": "d4f4a05d8f291ae820cd1e43609da3fa91b56465810091a2b08c3350b751719d",
+        "nar_lora_joint_v9.safetensors": "585f303da1d5252d228d1e8ac6d4c4d11d970df9297406935cc8bdafa49cfa7e"
+      },
+      "request_sha256": "27a482dfa075e1095552d7a0da45dbf4dd9ddac0acb65ec81eb2ec1c6a19713a",
+      "request_sha256_scope": "captured request file",
+      "module_names": [],
+      "module_sha256": {},
+      "driver": "617.42",
+      "memory_sample_interval_ms": 200,
+      "retention": "lazy first load; reused process and session",
+      "summary_id": "acpp-41242418-yue2-matrix-cuda12-replay-summary.json"
+    },
+    {
+      "family": "YuE2",
+      "workload": "100 tokens · 2 steps",
+      "engine": "yue2.cpp",
+      "revision": "892b9b0",
+      "backend": "Vulkan",
+      "stage": "5.0 candidate",
+      "weight_profile": "3B Q8_0 + F32 VAE; NAR v9",
+      "cold_seconds": 13.76600000000326,
+      "warm_median_seconds": 0.2517487000004621,
+      "cold_vram_peak_bytes": 7026110464,
+      "cold_vram_baseline_bytes": 2548969472,
+      "cold_vram_increase_bytes": 4477140992,
+      "cold_rss_peak_bytes": 4103516160,
+      "warm_vram_peak_bytes": 7026110464,
+      "warm_rss_peak_bytes": 365670400,
+      "warm_audio_seconds_per_second": 15.88356431099476,
+      "runs": [
+        {
+          "wall_seconds": 13.76600000000326,
+          "audio_seconds": 3.998666666666667,
+          "wav_sha256": "54580dd3475f23dfa21d7e176dad6b867574920afe38838d91566b646804b7de"
+        },
+        {
+          "wall_seconds": 0.26808470000105444,
+          "audio_seconds": 3.998666666666667,
+          "wav_sha256": "54580dd3475f23dfa21d7e176dad6b867574920afe38838d91566b646804b7de"
+        },
+        {
+          "wall_seconds": 0.2517487000004621,
+          "audio_seconds": 3.998666666666667,
+          "wav_sha256": "54580dd3475f23dfa21d7e176dad6b867574920afe38838d91566b646804b7de"
+        },
+        {
+          "wall_seconds": 0.23367510001116898,
+          "audio_seconds": 3.998666666666667,
+          "wav_sha256": "54580dd3475f23dfa21d7e176dad6b867574920afe38838d91566b646804b7de"
+        }
+      ],
+      "audio_levels": {
+        "rms_dbfs": -14.305970353961055,
+        "sample_rate_hz": 48000,
+        "window_ms": 100,
+        "activity_threshold_dbfs": -60,
+        "trailing_quiet_seconds": 0.0
+      },
+      "binary_sha256": "9d4fb00ef3c35da6f3833130246d010831075bcb1fdc049301b4cbf9e84c9e00",
+      "archive_sha256": null,
+      "weight_sha256": {
+        "YuE2-3B-Q8_0.gguf": "41121ce97786d7795a325bcf123ca196956c03bb252c9e75384cfc1f2fc19e6b",
+        "YuE2-Vae-F32.gguf": "93e49dfb1970e89ad64cacb17cf13b5d05f6bb30ef7ed3adae3050bcb728638a",
+        "nar_lora_joint_v9.safetensors": "585f303da1d5252d228d1e8ac6d4c4d11d970df9297406935cc8bdafa49cfa7e"
+      },
+      "request_sha256": "4a2509d760d1713037da0df9c793f45cc6270daf9e95dc287c3729b55d49360b",
+      "request_sha256_scope": "canonical JSON from captured native request",
+      "module_names": [
+        "ggml-base.dll",
+        "ggml-cpu-cascadelake.dll",
+        "ggml-vulkan.dll",
+        "ggml.dll"
+      ],
+      "module_sha256": {
+        "ggml-base.dll": "f404c0245c71abf1f64dc712ad71ff0c003147368901c105d80f24d1721bf6d9",
+        "ggml-cpu-cascadelake.dll": "778d257d7b45af60111ed49461569363ea4fad27f8f7c909c47178f5b2a0715d",
+        "ggml-vulkan.dll": "a1494a58417fe56b4c173c9b9b35d590d8db008053c3a4c716a0f105096420d8",
+        "ggml.dll": "11aeb15dcf6a08ef06e673471fb76371faaa691b47b435dd1cf45b6a2e6141f6"
+      },
+      "driver": "617.42",
+      "memory_sample_interval_ms": 200,
+      "retention": "keep-loaded",
+      "summary_id": "yue2-892b9b0-bench-Vulkan0-summary.json"
+    },
+    {
+      "family": "YuE2",
+      "workload": "100 tokens · 2 steps",
+      "engine": "audio.cpp",
+      "revision": "41242418",
+      "backend": "Vulkan",
+      "stage": "5.0 candidate",
+      "weight_profile": "3B Q8_0 + F16 VAE; NAR v9",
+      "cold_seconds": 8.372764800005825,
+      "warm_median_seconds": 0.9736551999958465,
+      "cold_vram_peak_bytes": 6770782208,
+      "cold_vram_baseline_bytes": 2539958272,
+      "cold_vram_increase_bytes": 4230823936,
+      "cold_rss_peak_bytes": 5726593024,
+      "warm_vram_peak_bytes": 6847590400,
+      "warm_rss_peak_bytes": 6570283008,
+      "warm_audio_seconds_per_second": 4.106861101017819,
+      "runs": [
+        {
+          "wall_seconds": 8.372764800005825,
+          "audio_seconds": 3.998666666666667,
+          "wav_sha256": "9027c30048d4ea0f0810b1a2a064bcef629e65d41c03206ce1c01eb9a4a4f96e"
+        },
+        {
+          "wall_seconds": 0.962054800009355,
+          "audio_seconds": 3.998666666666667,
+          "wav_sha256": "9027c30048d4ea0f0810b1a2a064bcef629e65d41c03206ce1c01eb9a4a4f96e"
+        },
+        {
+          "wall_seconds": 0.9736551999958465,
+          "audio_seconds": 3.998666666666667,
+          "wav_sha256": "9027c30048d4ea0f0810b1a2a064bcef629e65d41c03206ce1c01eb9a4a4f96e"
+        },
+        {
+          "wall_seconds": 0.9800334999890765,
+          "audio_seconds": 3.998666666666667,
+          "wav_sha256": "9027c30048d4ea0f0810b1a2a064bcef629e65d41c03206ce1c01eb9a4a4f96e"
+        }
+      ],
+      "audio_levels": {
+        "rms_dbfs": -21.313361375875232,
+        "sample_rate_hz": 48000,
+        "window_ms": 100,
+        "activity_threshold_dbfs": -60,
+        "trailing_quiet_seconds": 0.0
+      },
+      "binary_sha256": "16212788618aab3a2eb43b5aa97b134b262400c3ba28cc20c6449d5b88d3789a",
+      "archive_sha256": "511376280120401284977200ab1c51c684bbb24bf2a75b9e1b2c7bebdd628e3a",
+      "weight_sha256": {
+        "sidecars/yue2-generation-config.json": "203830cebde6e3644eb291925362990d198e66c3b6006cd11f1aaa21904bcc61",
+        "sidecars/yue2-model-config.json": "ad3477bbef890bf98ae196c1e4b44779494a6231c4ab66f32708eabadf265329",
+        "sidecars/yue2-qwen.tiktoken": "b2b1b8dfb5cc5f024bafc373121c6aba3f66f9a5a0269e243470a1de16a33186",
+        "sidecars/yue2-vae-config.json": "f0191bb9694009956de44e0c361a6f1334760be4c8f848e599bde242a54a0970",
+        "yue2-3b-q8_0.gguf": "52be345b5155bf9ef0b2411e7df8d1d2b8e13b6d977a2f70c35612ec69b1f591",
+        "yue2-vae-f16.gguf": "d4f4a05d8f291ae820cd1e43609da3fa91b56465810091a2b08c3350b751719d",
+        "nar_lora_joint_v9.safetensors": "585f303da1d5252d228d1e8ac6d4c4d11d970df9297406935cc8bdafa49cfa7e"
+      },
+      "request_sha256": "27a482dfa075e1095552d7a0da45dbf4dd9ddac0acb65ec81eb2ec1c6a19713a",
+      "request_sha256_scope": "captured request file",
+      "module_names": [],
+      "module_sha256": {},
+      "driver": "617.42",
+      "memory_sample_interval_ms": 200,
+      "retention": "lazy first load; reused process and session",
+      "summary_id": "acpp-41242418-yue2-matrix-vulkan-replay-summary.json"
+    },
+    {
+      "family": "ACE-Step 1.5",
+      "workload": "30 s · 8 Euler steps",
+      "engine": "acestep.cpp",
+      "revision": "6e0e414",
+      "backend": "CUDA 13",
+      "stage": "5.0 candidate",
+      "weight_profile": "Turbo Q8_0 + BF16 embedder/VAE",
+      "cold_seconds": 6.23399999999674,
+      "warm_median_seconds": 0.39212929999484913,
+      "cold_vram_peak_bytes": 10446778368,
+      "cold_vram_baseline_bytes": 2076131328,
+      "cold_vram_increase_bytes": 8370647040,
+      "cold_rss_peak_bytes": 2265190400,
+      "warm_vram_peak_bytes": 10500321280,
+      "warm_rss_peak_bytes": 1050423296,
+      "warm_audio_seconds_per_second": 76.50537718144007,
+      "runs": [
+        {
+          "wall_seconds": 6.23399999999674,
+          "audio_seconds": 30.0,
+          "wav_sha256": "36774b4e4e83e60f0d283ce114a19e792cec7cc74fb8e997826a0cf6e178871e"
+        },
+        {
+          "wall_seconds": 0.39212929999484913,
+          "audio_seconds": 30.0,
+          "wav_sha256": "36774b4e4e83e60f0d283ce114a19e792cec7cc74fb8e997826a0cf6e178871e"
+        },
+        {
+          "wall_seconds": 0.4212933000017074,
+          "audio_seconds": 30.0,
+          "wav_sha256": "36774b4e4e83e60f0d283ce114a19e792cec7cc74fb8e997826a0cf6e178871e"
+        },
+        {
+          "wall_seconds": 0.39097359999868786,
+          "audio_seconds": 30.0,
+          "wav_sha256": "36774b4e4e83e60f0d283ce114a19e792cec7cc74fb8e997826a0cf6e178871e"
+        }
+      ],
+      "audio_levels": {
+        "rms_dbfs": -17.022032781105406,
+        "sample_rate_hz": 48000,
+        "window_ms": 100,
+        "activity_threshold_dbfs": -60,
+        "trailing_quiet_seconds": 5.0
+      },
+      "binary_sha256": "a76e1d60dadb3ffdcf128e7266f81e2924316ae80731a194871acdfef4704858",
+      "archive_sha256": null,
+      "weight_sha256": {
+        "acestep-v15-turbo-Q8_0.gguf": "288f708a61cfc241013a98a62f98ba331f83fe34d0d3559acdd9b0f6a2f7cd6b",
+        "Qwen3-Embedding-0.6B-BF16.gguf": "6f57900773fbd447b2943bc8126e2dc68ed009151ba89a47c14d1be05d4c73df",
+        "vae-BF16.gguf": "0599862ac5d15cd308e1d2e368373aea6c02e25ebd1737ad4a4562a0901b0ef8"
+      },
+      "request_sha256": "0b210c21ccc4bd3a7598d88f8979a21397880763a24e614785e264be166c98ee",
+      "request_sha256_scope": "canonical JSON from captured native request",
+      "module_names": [
+        "cublas64_13.dll",
+        "cublasLt64_13.dll",
+        "ggml-base.dll",
+        "ggml-cpu-cascadelake.dll",
+        "ggml-cuda.dll",
+        "ggml-vulkan.dll",
+        "ggml.dll"
+      ],
+      "module_sha256": {
+        "cublas64_13.dll": "f1d500d0cd892f5b8c6b6cdbffd82d0c55d5f5427215668e7ceb55aeeccc1b63",
+        "cublasLt64_13.dll": "b592cd016d7673e9cb97716a22b27c4010ee635377a3ba28f37070a9bdb76a68",
+        "ggml-cuda.dll": "c7cf591fbc60d557fd866c8d80f60188f739775a8050172f2b2c27122532d49d",
+        "ggml-base.dll": "fd138496dfe256080a58fa162288441374a56edbc888151b79ca04a069ab9140",
+        "ggml-cpu-cascadelake.dll": "ae2debbcbf17bc36fa6e101e836fa146caf0f7d4c41f4900f3b188d32508a9e7",
+        "ggml-vulkan.dll": "90edd11fae0205d7c613411e613b1fa6f862e81606963316f718b62db4e8f3a1",
+        "ggml.dll": "4a68894b4352d1787a64b638cdcfd836ccb3d4e58443970c8a334124af8700c2"
+      },
+      "driver": "617.42",
+      "memory_sample_interval_ms": 200,
+      "retention": "keep-loaded",
+      "summary_id": "ace-6e0e414-bench-CUDA0-30s-summary.json"
+    },
+    {
+      "family": "ACE-Step 1.5",
+      "workload": "30 s · 8 Euler steps",
+      "engine": "acestep.cpp",
+      "revision": "6e0e414",
+      "backend": "Vulkan",
+      "stage": "5.0 candidate",
+      "weight_profile": "Turbo Q8_0 + BF16 embedder/VAE",
+      "cold_seconds": 7.2039999999979045,
+      "warm_median_seconds": 0.38124720000632806,
+      "cold_vram_peak_bytes": 9209413632,
+      "cold_vram_baseline_bytes": 2072625152,
+      "cold_vram_increase_bytes": 7136788480,
+      "cold_rss_peak_bytes": 2146365440,
+      "warm_vram_peak_bytes": 9209413632,
+      "warm_rss_peak_bytes": 252276736,
+      "warm_audio_seconds_per_second": 78.68910250226638,
+      "runs": [
+        {
+          "wall_seconds": 7.2039999999979045,
+          "audio_seconds": 30.0,
+          "wav_sha256": "60c737caf757184f6d86335aa31312fc9168129d0fd3625d4c69bd38ab339dfd"
+        },
+        {
+          "wall_seconds": 0.3437545999986469,
+          "audio_seconds": 30.0,
+          "wav_sha256": "60c737caf757184f6d86335aa31312fc9168129d0fd3625d4c69bd38ab339dfd"
+        },
+        {
+          "wall_seconds": 0.38124720000632806,
+          "audio_seconds": 30.0,
+          "wav_sha256": "60c737caf757184f6d86335aa31312fc9168129d0fd3625d4c69bd38ab339dfd"
+        },
+        {
+          "wall_seconds": 0.4194892000014079,
+          "audio_seconds": 30.0,
+          "wav_sha256": "60c737caf757184f6d86335aa31312fc9168129d0fd3625d4c69bd38ab339dfd"
+        }
+      ],
+      "audio_levels": {
+        "rms_dbfs": -16.917930983719035,
+        "sample_rate_hz": 48000,
+        "window_ms": 100,
+        "activity_threshold_dbfs": -60,
+        "trailing_quiet_seconds": 0.0
+      },
+      "binary_sha256": "a76e1d60dadb3ffdcf128e7266f81e2924316ae80731a194871acdfef4704858",
+      "archive_sha256": null,
+      "weight_sha256": {
+        "acestep-v15-turbo-Q8_0.gguf": "288f708a61cfc241013a98a62f98ba331f83fe34d0d3559acdd9b0f6a2f7cd6b",
+        "Qwen3-Embedding-0.6B-BF16.gguf": "6f57900773fbd447b2943bc8126e2dc68ed009151ba89a47c14d1be05d4c73df",
+        "vae-BF16.gguf": "0599862ac5d15cd308e1d2e368373aea6c02e25ebd1737ad4a4562a0901b0ef8"
+      },
+      "request_sha256": "0b210c21ccc4bd3a7598d88f8979a21397880763a24e614785e264be166c98ee",
+      "request_sha256_scope": "canonical JSON from captured native request",
+      "module_names": [
+        "ggml-base.dll",
+        "ggml-cpu-cascadelake.dll",
+        "ggml-vulkan.dll",
+        "ggml.dll"
+      ],
+      "module_sha256": {
+        "ggml-base.dll": "fd138496dfe256080a58fa162288441374a56edbc888151b79ca04a069ab9140",
+        "ggml-cpu-cascadelake.dll": "ae2debbcbf17bc36fa6e101e836fa146caf0f7d4c41f4900f3b188d32508a9e7",
+        "ggml-vulkan.dll": "90edd11fae0205d7c613411e613b1fa6f862e81606963316f718b62db4e8f3a1",
+        "ggml.dll": "4a68894b4352d1787a64b638cdcfd836ccb3d4e58443970c8a334124af8700c2"
+      },
+      "driver": "617.42",
+      "memory_sample_interval_ms": 200,
+      "retention": "keep-loaded",
+      "summary_id": "ace-6e0e414-bench-Vulkan0-30s-summary.json"
+    },
+    {
+      "family": "ACE-Step 1.5",
+      "workload": "30 s · 8 Euler steps",
+      "engine": "audio.cpp",
+      "revision": "41242418",
+      "backend": "CUDA 13",
+      "stage": "5.0 candidate",
+      "weight_profile": "Turbo Q8_0, packed GGUF",
+      "cold_seconds": 10.511972699998296,
+      "warm_median_seconds": 1.3874551000044448,
+      "cold_vram_peak_bytes": 11197067264,
+      "cold_vram_baseline_bytes": 2077573120,
+      "cold_vram_increase_bytes": 9119494144,
+      "cold_rss_peak_bytes": 2767888384,
+      "warm_vram_peak_bytes": 11373686784,
+      "warm_rss_peak_bytes": 969105408,
+      "warm_audio_seconds_per_second": 21.622321327662345,
+      "runs": [
+        {
+          "wall_seconds": 10.511972699998296,
+          "audio_seconds": 30.0,
+          "wav_sha256": "e63656bbfa610ae3602fe38352ba061c758b23e6171a67dd8cbda26498311220"
+        },
+        {
+          "wall_seconds": 1.391385299997637,
+          "audio_seconds": 30.0,
+          "wav_sha256": "e63656bbfa610ae3602fe38352ba061c758b23e6171a67dd8cbda26498311220"
+        },
+        {
+          "wall_seconds": 1.3874551000044448,
+          "audio_seconds": 30.0,
+          "wav_sha256": "e63656bbfa610ae3602fe38352ba061c758b23e6171a67dd8cbda26498311220"
+        },
+        {
+          "wall_seconds": 1.3792954000018653,
+          "audio_seconds": 30.0,
+          "wav_sha256": "e63656bbfa610ae3602fe38352ba061c758b23e6171a67dd8cbda26498311220"
+        }
+      ],
+      "audio_levels": {
+        "rms_dbfs": -14.23911114542207,
+        "sample_rate_hz": 48000,
+        "window_ms": 100,
+        "activity_threshold_dbfs": -60,
+        "trailing_quiet_seconds": 0.0
+      },
+      "binary_sha256": "600fe184dd4ed83cd307eacbfeb42f2f9bd8ced0eac3b6911107d71d0d609aea",
+      "archive_sha256": "2bc5134d06521ec388a0e55be4d1db2e7abf4c0795fb02d3ce5b724f419df33e",
+      "weight_sha256": {
+        "ace-step-1.5-turbo-q8_0.gguf": "1f0015f81c10a1182531e6207c7aeaa060b8cad3470a2f88daa3cb74ed636e63"
+      },
+      "request_sha256": "21903407ae7737a00a47c84b51867f71b2e0457969ef8d774c6c2ff97f603029",
+      "request_sha256_scope": "captured request file",
+      "module_names": [
+        "cublas64_13.dll",
+        "cublasLt64_13.dll",
+        "ggml-base.dll",
+        "ggml-cpu-cascadelake.dll",
+        "ggml-cuda.dll",
+        "ggml.dll"
+      ],
+      "module_sha256": {},
+      "driver": "617.42",
+      "memory_sample_interval_ms": 200,
+      "retention": "lazy first load; reused process and session",
+      "summary_id": "music-gpu-20261121a/ace_step-matrix-30-cuda13/summary.json"
+    },
+    {
+      "family": "ACE-Step 1.5",
+      "workload": "30 s · 8 Euler steps",
+      "engine": "audio.cpp",
+      "revision": "41242418",
+      "backend": "Vulkan",
+      "stage": "5.0 candidate",
+      "weight_profile": "Turbo Q8_0, packed GGUF",
+      "cold_seconds": 21.74577860000136,
+      "warm_median_seconds": 2.2374885999961407,
+      "cold_vram_peak_bytes": 10979704832,
+      "cold_vram_baseline_bytes": 2070921216,
+      "cold_vram_increase_bytes": 8908783616,
+      "cold_rss_peak_bytes": 4943495168,
+      "warm_vram_peak_bytes": 11076386816,
+      "warm_rss_peak_bytes": 3014983680,
+      "warm_audio_seconds_per_second": 13.4078895418961,
+      "runs": [
+        {
+          "wall_seconds": 21.74577860000136,
+          "audio_seconds": 30.0,
+          "wav_sha256": "2bfaf1befaecebe6def06a77d9d4b7bff4ca89470351b553a8a5d8b57d828e5e"
+        },
+        {
+          "wall_seconds": 2.2303963999947882,
+          "audio_seconds": 30.0,
+          "wav_sha256": "2bfaf1befaecebe6def06a77d9d4b7bff4ca89470351b553a8a5d8b57d828e5e"
+        },
+        {
+          "wall_seconds": 2.2808912999971653,
+          "audio_seconds": 30.0,
+          "wav_sha256": "2bfaf1befaecebe6def06a77d9d4b7bff4ca89470351b553a8a5d8b57d828e5e"
+        },
+        {
+          "wall_seconds": 2.2374885999961407,
+          "audio_seconds": 30.0,
+          "wav_sha256": "2bfaf1befaecebe6def06a77d9d4b7bff4ca89470351b553a8a5d8b57d828e5e"
+        }
+      ],
+      "audio_levels": {
+        "rms_dbfs": -14.210297441239934,
+        "sample_rate_hz": 48000,
+        "window_ms": 100,
+        "activity_threshold_dbfs": -60,
+        "trailing_quiet_seconds": 0.0
+      },
+      "binary_sha256": "16212788618aab3a2eb43b5aa97b134b262400c3ba28cc20c6449d5b88d3789a",
+      "archive_sha256": "511376280120401284977200ab1c51c684bbb24bf2a75b9e1b2c7bebdd628e3a",
+      "weight_sha256": {
+        "ace-step-1.5-turbo-q8_0.gguf": "1f0015f81c10a1182531e6207c7aeaa060b8cad3470a2f88daa3cb74ed636e63"
+      },
+      "request_sha256": "21903407ae7737a00a47c84b51867f71b2e0457969ef8d774c6c2ff97f603029",
+      "request_sha256_scope": "captured request file",
+      "module_names": [
+        "ggml-base.dll",
+        "ggml-cpu-cascadelake.dll",
+        "ggml-vulkan.dll",
+        "ggml.dll"
+      ],
+      "module_sha256": {},
+      "driver": "617.42",
+      "memory_sample_interval_ms": 200,
+      "retention": "lazy first load; reused process and session",
+      "summary_id": "music-gpu-20261121a/ace_step-matrix-30-vulkan/summary.json"
+    },
+    {
+      "family": "MiniMax Music3",
+      "workload": "3.2 s · 2 steps",
+      "engine": "minimaxmusic.cpp",
+      "revision": "f476b0e",
+      "backend": "CUDA 13",
+      "stage": "published MiniMax 4.0.3",
+      "weight_profile": "Minimal Q3_K_M / Q4_K_M + F32",
+      "cold_seconds": 7.312000000005355,
+      "warm_median_seconds": 1.2565829000013764,
+      "cold_vram_peak_bytes": 10009817088,
+      "cold_vram_baseline_bytes": 2083831808,
+      "cold_vram_increase_bytes": 7925985280,
+      "cold_rss_peak_bytes": 4899000320,
+      "warm_vram_peak_bytes": 10011193344,
+      "warm_rss_peak_bytes": 984993792,
+      "warm_audio_seconds_per_second": 2.5408142703269627,
+      "runs": [
+        {
+          "wall_seconds": 7.312000000005355,
+          "audio_seconds": 3.1927437641723357,
+          "wav_sha256": "d39e83b1e5f9c20c7a141f30703517b2fabe3eb34d3e15b9c48840091cfab54d"
+        },
+        {
+          "wall_seconds": 1.2565829000013764,
+          "audio_seconds": 3.1927437641723357,
+          "wav_sha256": "d39e83b1e5f9c20c7a141f30703517b2fabe3eb34d3e15b9c48840091cfab54d"
+        },
+        {
+          "wall_seconds": 1.3172381999975187,
+          "audio_seconds": 3.1927437641723357,
+          "wav_sha256": "d39e83b1e5f9c20c7a141f30703517b2fabe3eb34d3e15b9c48840091cfab54d"
+        },
+        {
+          "wall_seconds": 1.2339127999948687,
+          "audio_seconds": 3.1927437641723357,
+          "wav_sha256": "d39e83b1e5f9c20c7a141f30703517b2fabe3eb34d3e15b9c48840091cfab54d"
+        }
+      ],
+      "audio_levels": {
+        "rms_dbfs": -16.68637200725626,
+        "sample_rate_hz": 44100,
+        "window_ms": 100,
+        "activity_threshold_dbfs": -60,
+        "trailing_quiet_seconds": 0.0
+      },
+      "binary_sha256": "ef2283bc6d2be5ec2b56549cc1989add6939150270b67f90cef67a11f11ea522",
+      "archive_sha256": null,
+      "weight_sha256": {
+        "mm3-lm-Q3_K_M.gguf": "65a1ee35212547a95ed19067c5b3bc3492725d55e754729e693e4141396064a5",
+        "mm3-dit-Q3_K_M.gguf": "f1a67119c34ede23e27240d3ebd630fa492247e1d0184263574482302ab48f3f",
+        "MiniMax-Music3-condition_encoder-F32.gguf": "ebb69ec6e6d730b4dcc48ba1b51da4f201514cbaaa7cae0c8d6259d3b178efb0",
+        "MiniMax-Music3-vocoder-F32.gguf": "4eaa451e54fa755cfe7b0fd15b0bfe64458db35b822e1d250488d0a2a363507d",
+        "mm3-depth-Q4_K_M.gguf": "77e729d6e0599ed7928a3c0f13a36e1d3ef5f7de9259eaf01a19445549fa958e"
+      },
+      "request_sha256": "08bf3f3eb1cbbde18f9a92178542b3dbeee45347b637bacae2f31c8509d1f619",
+      "request_sha256_scope": "canonical JSON from captured native request",
+      "module_names": [
+        "cublas64_13.dll",
+        "cublasLt64_13.dll",
+        "ggml-base.dll",
+        "ggml-cpu-cascadelake.dll",
+        "ggml-cuda.dll",
+        "ggml-vulkan.dll",
+        "ggml.dll"
+      ],
+      "module_sha256": {
+        "ggml-cuda.dll": "f3dce0020d5dae584944d1371f6de3c318c83ffa6aa777d6c4b08a37af0c2312",
+        "ggml-base.dll": "a6cb363a487d956a0694727dd438b9839be3da8d3c0a4681bef280e23e3a630c",
+        "ggml-cpu-cascadelake.dll": "1803c380b02e3fcae21a4a8f26ee7638b4c2cdb5bcc0afc770e5540b087b78aa",
+        "ggml-vulkan.dll": "02e7c748dbd10506c47679082af6b15644b510c47dfe7076a81c9ab8b8c2c18e",
+        "ggml.dll": "9d85db24556ed4b55dc5d87bc3004b9295119cee4c110820f2e3fbf79127ae83",
+        "cublas64_13.dll": "f1d500d0cd892f5b8c6b6cdbffd82d0c55d5f5427215668e7ceb55aeeccc1b63",
+        "cublasLt64_13.dll": "b592cd016d7673e9cb97716a22b27c4010ee635377a3ba28f37070a9bdb76a68"
+      },
+      "driver": "617.42",
+      "memory_sample_interval_ms": 200,
+      "retention": "keep-loaded",
+      "summary_id": "mm3-f476b0e-bench-CUDA0-3.2s-summary.json"
+    },
+    {
+      "family": "MiniMax Music3",
+      "workload": "3.2 s · 2 steps",
+      "engine": "minimaxmusic.cpp",
+      "revision": "f476b0e",
+      "backend": "Vulkan",
+      "stage": "published MiniMax 4.0.3",
+      "weight_profile": "Minimal Q3_K_M / Q4_K_M + F32",
+      "cold_seconds": 7.343000000000757,
+      "warm_median_seconds": 1.9866045000017039,
+      "cold_vram_peak_bytes": 9624387584,
+      "cold_vram_baseline_bytes": 2075607040,
+      "cold_vram_increase_bytes": 7548780544,
+      "cold_rss_peak_bytes": 4653768704,
+      "warm_vram_peak_bytes": 9626451968,
+      "warm_rss_peak_bytes": 484954112,
+      "warm_audio_seconds_per_second": 1.6071360777495458,
+      "runs": [
+        {
+          "wall_seconds": 7.343000000000757,
+          "audio_seconds": 3.1927437641723357,
+          "wav_sha256": "9dc70eee01a55f488cf9d657c3b9d5ca4298fa4a79dc3bc45de2ead39d18da5c"
+        },
+        {
+          "wall_seconds": 1.981583299995691,
+          "audio_seconds": 3.1927437641723357,
+          "wav_sha256": "9dc70eee01a55f488cf9d657c3b9d5ca4298fa4a79dc3bc45de2ead39d18da5c"
+        },
+        {
+          "wall_seconds": 1.9866045000017039,
+          "audio_seconds": 3.1927437641723357,
+          "wav_sha256": "9dc70eee01a55f488cf9d657c3b9d5ca4298fa4a79dc3bc45de2ead39d18da5c"
+        },
+        {
+          "wall_seconds": 1.9884832999960054,
+          "audio_seconds": 3.1927437641723357,
+          "wav_sha256": "9dc70eee01a55f488cf9d657c3b9d5ca4298fa4a79dc3bc45de2ead39d18da5c"
+        }
+      ],
+      "audio_levels": {
+        "rms_dbfs": -14.512948660815901,
+        "sample_rate_hz": 44100,
+        "window_ms": 100,
+        "activity_threshold_dbfs": -60,
+        "trailing_quiet_seconds": 0.0
+      },
+      "binary_sha256": "ef2283bc6d2be5ec2b56549cc1989add6939150270b67f90cef67a11f11ea522",
+      "archive_sha256": null,
+      "weight_sha256": {
+        "mm3-lm-Q3_K_M.gguf": "65a1ee35212547a95ed19067c5b3bc3492725d55e754729e693e4141396064a5",
+        "mm3-dit-Q3_K_M.gguf": "f1a67119c34ede23e27240d3ebd630fa492247e1d0184263574482302ab48f3f",
+        "MiniMax-Music3-condition_encoder-F32.gguf": "ebb69ec6e6d730b4dcc48ba1b51da4f201514cbaaa7cae0c8d6259d3b178efb0",
+        "MiniMax-Music3-vocoder-F32.gguf": "4eaa451e54fa755cfe7b0fd15b0bfe64458db35b822e1d250488d0a2a363507d",
+        "mm3-depth-Q4_K_M.gguf": "77e729d6e0599ed7928a3c0f13a36e1d3ef5f7de9259eaf01a19445549fa958e"
+      },
+      "request_sha256": "08bf3f3eb1cbbde18f9a92178542b3dbeee45347b637bacae2f31c8509d1f619",
+      "request_sha256_scope": "canonical JSON from captured native request",
+      "module_names": [
+        "ggml-base.dll",
+        "ggml-cpu-cascadelake.dll",
+        "ggml-vulkan.dll",
+        "ggml.dll"
+      ],
+      "module_sha256": {
+        "ggml-base.dll": "a6cb363a487d956a0694727dd438b9839be3da8d3c0a4681bef280e23e3a630c",
+        "ggml-cpu-cascadelake.dll": "1803c380b02e3fcae21a4a8f26ee7638b4c2cdb5bcc0afc770e5540b087b78aa",
+        "ggml-vulkan.dll": "02e7c748dbd10506c47679082af6b15644b510c47dfe7076a81c9ab8b8c2c18e",
+        "ggml.dll": "9d85db24556ed4b55dc5d87bc3004b9295119cee4c110820f2e3fbf79127ae83"
+      },
+      "driver": "617.42",
+      "memory_sample_interval_ms": 200,
+      "retention": "keep-loaded",
+      "summary_id": "mm3-f476b0e-bench-Vulkan0-3.2s-summary.json"
+    },
+    {
+      "family": "MiniMax Music3",
+      "workload": "3.2 s · 2 steps",
+      "engine": "audio.cpp",
+      "revision": "41242418",
+      "backend": "CUDA 13",
+      "stage": "5.0 candidate",
+      "weight_profile": "LM/depth/DiT Q8_0",
+      "cold_seconds": 14.604441700001189,
+      "warm_median_seconds": 8.720402099999774,
+      "cold_vram_peak_bytes": 11782008832,
+      "cold_vram_baseline_bytes": 2077442048,
+      "cold_vram_increase_bytes": 9704566784,
+      "cold_rss_peak_bytes": 9524101120,
+      "warm_vram_peak_bytes": 11787251712,
+      "warm_rss_peak_bytes": 9779064832,
+      "warm_audio_seconds_per_second": 0.36612345710210065,
+      "runs": [
+        {
+          "wall_seconds": 14.604441700001189,
+          "audio_seconds": 3.1927437641723357,
+          "wav_sha256": "94d17081cb13f5d72b7993968e66bb545f6b68495b73abb7cde5ab56fde5c8bc"
+        },
+        {
+          "wall_seconds": 8.878209200003766,
+          "audio_seconds": 3.1927437641723357,
+          "wav_sha256": "94d17081cb13f5d72b7993968e66bb545f6b68495b73abb7cde5ab56fde5c8bc"
+        },
+        {
+          "wall_seconds": 8.720402099999774,
+          "audio_seconds": 3.1927437641723357,
+          "wav_sha256": "94d17081cb13f5d72b7993968e66bb545f6b68495b73abb7cde5ab56fde5c8bc"
+        },
+        {
+          "wall_seconds": 8.602646499995899,
+          "audio_seconds": 3.1927437641723357,
+          "wav_sha256": "94d17081cb13f5d72b7993968e66bb545f6b68495b73abb7cde5ab56fde5c8bc"
+        }
+      ],
+      "audio_levels": {
+        "rms_dbfs": -38.749758516805684,
+        "sample_rate_hz": 44100,
+        "window_ms": 100,
+        "activity_threshold_dbfs": -60,
+        "trailing_quiet_seconds": 0.0
+      },
+      "binary_sha256": "600fe184dd4ed83cd307eacbfeb42f2f9bd8ced0eac3b6911107d71d0d609aea",
+      "archive_sha256": "2bc5134d06521ec388a0e55be4d1db2e7abf4c0795fb02d3ce5b724f419df33e",
+      "weight_sha256": {
+        "condition_encoder.gguf": "ebb69ec6e6d730b4dcc48ba1b51da4f201514cbaaa7cae0c8d6259d3b178efb0",
+        "config/condition_encoder.json": "1cdea3f36506719128ae4a29cdfff74b1134e607eb4a504ce6d810568fac8263",
+        "config/language_model.json": "34ded58fcd5e8181557f1417e76af9f3e95109a5ce113a4771fd16f8625b53c0",
+        "config/rvq_depth_decoder.json": "b38c7f72d4b2fa8667442071f9e4a63ca5a7b5d0859e5e64ee7f79c4bc64520c",
+        "config/transformer.json": "f60856be934127a8b8223510aff2e38a9efd8bbdbc230c3d3339b96e2cb12f00",
+        "config/vocoder.json": "4161afd07ba7d5b949e29c8a7a005592259fba73e9110b6ece9dfd38d3489eac",
+        "config.json": "1ffcff67d916d5519d1ef9a36853232ee6bcb7e14a936623c4e85559f5dce106",
+        "language_model_q8_0.gguf": "9ffa190eb5892c5c0829014dc3070b9ce8d2464636bbaae884b08f1bf6de0ad3",
+        "rvq_depth_decoder_q8_0.gguf": "7da73a953747f3f40857ba266a53eeb5487adbe473d4e7a53c99d5eaf9e5c3d5",
+        "tokenizer/tokenizer.json": "b1537fa9e59a537276ecbc2e12d0438edff635a1f4a4948e679774b5feb3e610",
+        "tokenizer/tokenizer_config.json": "1689852cc9c45010de040c8302a8acdc0d2c4c6c740dd7e9dd0a8c704e16eada",
+        "transformer_q8_0.gguf": "cbadca0600f325ba9263ea4dcf0d71d0361abf0733303398b9995fbadac6b38e",
+        "vocoder.gguf": "5d40e6d52349d50d2aeaaaf6ba934afbf490e4cbc1ba5bb715c3133ea45cdca4"
+      },
+      "request_sha256": "79b901afe9ac4cb6cc69f159dad5d8ca42d1cc69f7fd733299d607f7c9a347dc",
+      "request_sha256_scope": "captured request file",
+      "module_names": [
+        "cublas64_13.dll",
+        "cublasLt64_13.dll",
+        "ggml-base.dll",
+        "ggml-cpu-cascadelake.dll",
+        "ggml-cuda.dll",
+        "ggml.dll"
+      ],
+      "module_sha256": {},
+      "driver": "617.42",
+      "memory_sample_interval_ms": 200,
+      "retention": "lazy first load; reused process and session",
+      "summary_id": "music-gpu-20261121a/minimax_music3-legacy-q8-cuda13/summary.json"
+    },
+    {
+      "family": "MiniMax Music3",
+      "workload": "3.2 s · 2 steps",
+      "engine": "audio.cpp",
+      "revision": "41242418",
+      "backend": "Vulkan",
+      "stage": "5.0 candidate",
+      "weight_profile": "LM/depth/DiT Q8_0",
+      "cold_seconds": 17.620746299995517,
+      "warm_median_seconds": 10.478240000004007,
+      "cold_vram_peak_bytes": 11433869312,
+      "cold_vram_baseline_bytes": 2070200320,
+      "cold_vram_increase_bytes": 9363668992,
+      "cold_rss_peak_bytes": 9295351808,
+      "warm_vram_peak_bytes": 11704500224,
+      "warm_rss_peak_bytes": 9318174720,
+      "warm_audio_seconds_per_second": 0.30470229391301545,
+      "runs": [
+        {
+          "wall_seconds": 17.620746299995517,
+          "audio_seconds": 3.1927437641723357,
+          "wav_sha256": "46a60c7ba44e3da1a515071e6119ad74e7e1532f12e06c460a1d338a7bb28f95"
+        },
+        {
+          "wall_seconds": 11.077929099999892,
+          "audio_seconds": 3.1927437641723357,
+          "wav_sha256": "46a60c7ba44e3da1a515071e6119ad74e7e1532f12e06c460a1d338a7bb28f95"
+        },
+        {
+          "wall_seconds": 10.478240000004007,
+          "audio_seconds": 3.1927437641723357,
+          "wav_sha256": "46a60c7ba44e3da1a515071e6119ad74e7e1532f12e06c460a1d338a7bb28f95"
+        },
+        {
+          "wall_seconds": 10.349188400003186,
+          "audio_seconds": 3.1927437641723357,
+          "wav_sha256": "46a60c7ba44e3da1a515071e6119ad74e7e1532f12e06c460a1d338a7bb28f95"
+        }
+      ],
+      "audio_levels": {
+        "rms_dbfs": -19.53333261647852,
+        "sample_rate_hz": 44100,
+        "window_ms": 100,
+        "activity_threshold_dbfs": -60,
+        "trailing_quiet_seconds": 0.0
+      },
+      "binary_sha256": "16212788618aab3a2eb43b5aa97b134b262400c3ba28cc20c6449d5b88d3789a",
+      "archive_sha256": "511376280120401284977200ab1c51c684bbb24bf2a75b9e1b2c7bebdd628e3a",
+      "weight_sha256": {
+        "condition_encoder.gguf": "ebb69ec6e6d730b4dcc48ba1b51da4f201514cbaaa7cae0c8d6259d3b178efb0",
+        "config/condition_encoder.json": "1cdea3f36506719128ae4a29cdfff74b1134e607eb4a504ce6d810568fac8263",
+        "config/language_model.json": "34ded58fcd5e8181557f1417e76af9f3e95109a5ce113a4771fd16f8625b53c0",
+        "config/rvq_depth_decoder.json": "b38c7f72d4b2fa8667442071f9e4a63ca5a7b5d0859e5e64ee7f79c4bc64520c",
+        "config/transformer.json": "f60856be934127a8b8223510aff2e38a9efd8bbdbc230c3d3339b96e2cb12f00",
+        "config/vocoder.json": "4161afd07ba7d5b949e29c8a7a005592259fba73e9110b6ece9dfd38d3489eac",
+        "config.json": "1ffcff67d916d5519d1ef9a36853232ee6bcb7e14a936623c4e85559f5dce106",
+        "language_model_q8_0.gguf": "9ffa190eb5892c5c0829014dc3070b9ce8d2464636bbaae884b08f1bf6de0ad3",
+        "rvq_depth_decoder_q8_0.gguf": "7da73a953747f3f40857ba266a53eeb5487adbe473d4e7a53c99d5eaf9e5c3d5",
+        "tokenizer/tokenizer.json": "b1537fa9e59a537276ecbc2e12d0438edff635a1f4a4948e679774b5feb3e610",
+        "tokenizer/tokenizer_config.json": "1689852cc9c45010de040c8302a8acdc0d2c4c6c740dd7e9dd0a8c704e16eada",
+        "transformer_q8_0.gguf": "cbadca0600f325ba9263ea4dcf0d71d0361abf0733303398b9995fbadac6b38e",
+        "vocoder.gguf": "5d40e6d52349d50d2aeaaaf6ba934afbf490e4cbc1ba5bb715c3133ea45cdca4"
+      },
+      "request_sha256": "79b901afe9ac4cb6cc69f159dad5d8ca42d1cc69f7fd733299d607f7c9a347dc",
+      "request_sha256_scope": "captured request file",
+      "module_names": [
+        "ggml-base.dll",
+        "ggml-cpu-cascadelake.dll",
+        "ggml-vulkan.dll",
+        "ggml.dll"
+      ],
+      "module_sha256": {},
+      "driver": "617.42",
+      "memory_sample_interval_ms": 200,
+      "retention": "lazy first load; reused process and session",
+      "summary_id": "music-gpu-20261121a/minimax_music3-legacy-q8-vulkan/summary.json"
+    },
+    {
+      "family": "Stable Audio 3",
+      "workload": "4 s · 4 steps",
+      "engine": "HOT-Step",
+      "revision": "cdef1b0d67af",
+      "backend": "CUDA 12.8",
+      "stage": "HOT-Step v1.5.2",
+      "weight_profile": "Medium BF16/F16",
+      "cold_seconds": 6.736600999996881,
+      "warm_median_seconds": 0.25441460000001825,
+      "cold_vram_peak_bytes": 9984192512,
+      "cold_vram_baseline_bytes": 2074886144,
+      "cold_vram_increase_bytes": 7909306368,
+      "cold_rss_peak_bytes": 3031855104,
+      "warm_vram_peak_bytes": 9989369856,
+      "warm_rss_peak_bytes": 750841856,
+      "warm_audio_seconds_per_second": 15.722368134532031,
+      "runs": [
+        {
+          "wall_seconds": 6.736600999996881,
+          "audio_seconds": 4.0,
+          "wav_sha256": "0616c8dc14af8c63979426734be92f86efd29d23f9309649d2439938fff15d21"
+        },
+        {
+          "wall_seconds": 0.25441460000001825,
+          "audio_seconds": 4.0,
+          "wav_sha256": "0616c8dc14af8c63979426734be92f86efd29d23f9309649d2439938fff15d21"
+        },
+        {
+          "wall_seconds": 0.2815199999968172,
+          "audio_seconds": 4.0,
+          "wav_sha256": "0616c8dc14af8c63979426734be92f86efd29d23f9309649d2439938fff15d21"
+        },
+        {
+          "wall_seconds": 0.23623640000005253,
+          "audio_seconds": 4.0,
+          "wav_sha256": "0616c8dc14af8c63979426734be92f86efd29d23f9309649d2439938fff15d21"
+        }
+      ],
+      "audio_levels": {
+        "rms_dbfs": -14.926158268768399,
+        "sample_rate_hz": 44100,
+        "window_ms": 100,
+        "activity_threshold_dbfs": -60,
+        "trailing_quiet_seconds": 0.2
+      },
+      "binary_sha256": "6f0e60524eb50eea44a11ebb606482c376b0657bc524b2c1d5c21f3861061582",
+      "archive_sha256": "a7a0d836dd053c74a3aeb5eb40014bbbf079f7f04dbf387423fa2f24a9a6e446",
+      "weight_sha256": {
+        "sa3-dit-BF16.gguf": "550ecd0f7dd7b8bd30c3da8e6370e39393898fd1c9eace3e10714f5102e80492",
+        "sa3-same-dec-F16.gguf": "c9e6ec019d0aa834c575e839f331ddca90cc3e080a8fddfcfd57db058b308a69",
+        "sa3-same-enc-F16.gguf": "465257fdea87aa80a3fe77459e6130a6eeeb230e4249aea5854edb6ce63fc7a5",
+        "sa3-text-enc-BF16.gguf": "9945540fe3d89d3a2736c7125cf9e677775013607e7a53840a7f2deed055a3ef",
+        "onnx/sa3/special_tokens_map.json": "baec30ea10906f16adb8c18af7a34023002c1746542612b8b41c9f09e1351351",
+        "onnx/sa3/tokenizer.json": "7794135caa3ea73918949c902a781cc61dab674a4b59c17d85931c77c1114cbd",
+        "onnx/sa3/tokenizer_config.json": "9546baec0dfefec0e29873edea9488ecde153f846e18c06ea48cb44587bf408f"
+      },
+      "request_sha256": "50140581a1af9132eeb38858fbe52cd8923c63e6f86763544c542019c04e7b5c",
+      "request_sha256_scope": "captured request file",
+      "module_names": [
+        "cublas64_12.dll",
+        "cublasLt64_12.dll",
+        "cudart64_12.dll",
+        "ggml-base.dll",
+        "ggml-cpu-cascadelake.dll",
+        "ggml-cuda.dll",
+        "ggml.dll"
+      ],
+      "module_sha256": {},
+      "driver": "617.42",
+      "memory_sample_interval_ms": 200,
+      "retention": "keep-loaded",
+      "summary_id": "music-gpu-20261121a/hotstep-sa3-cuda12.8/summary.json"
+    },
+    {
+      "family": "Stable Audio 3",
+      "workload": "4 s · 4 steps",
+      "engine": "audio.cpp",
+      "revision": "41242418",
+      "backend": "CUDA 12",
+      "stage": "5.0 candidate",
+      "weight_profile": "Small Music Q8_0",
+      "cold_seconds": 1.258596599996963,
+      "warm_median_seconds": 0.07816270000330405,
+      "cold_vram_peak_bytes": 3796971520,
+      "cold_vram_baseline_bytes": 2081210368,
+      "cold_vram_increase_bytes": 1715761152,
+      "cold_rss_peak_bytes": 1257680896,
+      "warm_vram_peak_bytes": 3807457280,
+      "warm_rss_peak_bytes": 1269387264,
+      "warm_audio_seconds_per_second": 51.17530484273079,
+      "runs": [
+        {
+          "wall_seconds": 1.258596599996963,
+          "audio_seconds": 4.0,
+          "wav_sha256": "636c06efe5a43fa8cfa1ef7ecb9a7ee4a136ba6e9e31ce3117be4eb924343774"
+        },
+        {
+          "wall_seconds": 0.07816270000330405,
+          "audio_seconds": 4.0,
+          "wav_sha256": "636c06efe5a43fa8cfa1ef7ecb9a7ee4a136ba6e9e31ce3117be4eb924343774"
+        },
+        {
+          "wall_seconds": 0.08196609999868087,
+          "audio_seconds": 4.0,
+          "wav_sha256": "636c06efe5a43fa8cfa1ef7ecb9a7ee4a136ba6e9e31ce3117be4eb924343774"
+        },
+        {
+          "wall_seconds": 0.07768699999724049,
+          "audio_seconds": 4.0,
+          "wav_sha256": "636c06efe5a43fa8cfa1ef7ecb9a7ee4a136ba6e9e31ce3117be4eb924343774"
+        }
+      ],
+      "audio_levels": {
+        "rms_dbfs": -15.50201976946045,
+        "sample_rate_hz": 44100,
+        "window_ms": 100,
+        "activity_threshold_dbfs": -60,
+        "trailing_quiet_seconds": 0.3
+      },
+      "binary_sha256": "afc31eb6f6942c145bd2586e3238d0552fe9d42214f74e1b817426b9c984075c",
+      "archive_sha256": "8ba29571580148b2cfe053174edccd7d195355553bc5d955158d805c84574b22",
+      "weight_sha256": {
+        "stable-audio-3-small-music-q8_0.gguf": "a6d9176e11b857409b28cf5a69f4fefd8f3e61907b3b10d867f1f4c0a7eb9418"
+      },
+      "request_sha256": "afa3ad454dc1af7e9f69c5ad56bb18550c7b75e887afc553d607c322d810a371",
+      "request_sha256_scope": "captured request file",
+      "module_names": [
+        "cublas64_12.dll",
+        "cublasLt64_12.dll",
+        "cudart64_12.dll",
+        "ggml-base.dll",
+        "ggml-cpu-cascadelake.dll",
+        "ggml-cuda.dll",
+        "ggml.dll"
+      ],
+      "module_sha256": {},
+      "driver": "617.42",
+      "memory_sample_interval_ms": 200,
+      "retention": "lazy first load; reused process and session",
+      "summary_id": "music-gpu-20261121a/stable_audio-cuda12/summary.json"
+    },
+    {
+      "family": "Stable Audio 3",
+      "workload": "4 s · 4 steps",
+      "engine": "audio.cpp",
+      "revision": "41242418",
+      "backend": "CUDA 13",
+      "stage": "5.0 candidate",
+      "weight_profile": "Small Music Q8_0",
+      "cold_seconds": 1.892949299995962,
+      "warm_median_seconds": 0.071431999997003,
+      "cold_vram_peak_bytes": 3792678912,
+      "cold_vram_baseline_bytes": 2070364160,
+      "cold_vram_increase_bytes": 1722314752,
+      "cold_rss_peak_bytes": 1268252672,
+      "warm_vram_peak_bytes": 3803164672,
+      "warm_rss_peak_bytes": 1279905792,
+      "warm_audio_seconds_per_second": 55.997312131367224,
+      "runs": [
+        {
+          "wall_seconds": 1.892949299995962,
+          "audio_seconds": 4.0,
+          "wav_sha256": "636c06efe5a43fa8cfa1ef7ecb9a7ee4a136ba6e9e31ce3117be4eb924343774"
+        },
+        {
+          "wall_seconds": 0.071431999997003,
+          "audio_seconds": 4.0,
+          "wav_sha256": "636c06efe5a43fa8cfa1ef7ecb9a7ee4a136ba6e9e31ce3117be4eb924343774"
+        },
+        {
+          "wall_seconds": 0.06456189999880735,
+          "audio_seconds": 4.0,
+          "wav_sha256": "636c06efe5a43fa8cfa1ef7ecb9a7ee4a136ba6e9e31ce3117be4eb924343774"
+        },
+        {
+          "wall_seconds": 0.08446989999356447,
+          "audio_seconds": 4.0,
+          "wav_sha256": "636c06efe5a43fa8cfa1ef7ecb9a7ee4a136ba6e9e31ce3117be4eb924343774"
+        }
+      ],
+      "audio_levels": {
+        "rms_dbfs": -15.50201976946045,
+        "sample_rate_hz": 44100,
+        "window_ms": 100,
+        "activity_threshold_dbfs": -60,
+        "trailing_quiet_seconds": 0.3
+      },
+      "binary_sha256": "600fe184dd4ed83cd307eacbfeb42f2f9bd8ced0eac3b6911107d71d0d609aea",
+      "archive_sha256": "2bc5134d06521ec388a0e55be4d1db2e7abf4c0795fb02d3ce5b724f419df33e",
+      "weight_sha256": {
+        "stable-audio-3-small-music-q8_0.gguf": "a6d9176e11b857409b28cf5a69f4fefd8f3e61907b3b10d867f1f4c0a7eb9418"
+      },
+      "request_sha256": "afa3ad454dc1af7e9f69c5ad56bb18550c7b75e887afc553d607c322d810a371",
+      "request_sha256_scope": "captured request file",
+      "module_names": [
+        "cublas64_13.dll",
+        "cublasLt64_13.dll",
+        "ggml-base.dll",
+        "ggml-cpu-cascadelake.dll",
+        "ggml-cuda.dll",
+        "ggml.dll"
+      ],
+      "module_sha256": {},
+      "driver": "617.42",
+      "memory_sample_interval_ms": 200,
+      "retention": "lazy first load; reused process and session",
+      "summary_id": "music-gpu-20261121a/stable_audio-cuda13/summary.json"
+    }
+  ]
+}

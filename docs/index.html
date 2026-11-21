@@ -515,6 +515,37 @@ footer p { margin: 0 0 8px; }
       </tbody>
     </table></div>
     <p class="note">Startup runs include process launch through the first saved WAV. Columns show medians of two empty-cache launches, three cached launches and three warm requests. Both warm paths use the same local HTTP client, from POST through writing the WAV. Peak memory is the median whole-card peak across three cached processes during warm conversion, including desktop usage. The engines search different numbers of FAISS lists; timing alone does not measure voice quality. <a href="rvc-gpu-benchmarks.json">Individual runs and build identifiers</a></p>
+<!-- music-gpu-matrix:start -->
+    <h3>Music engine GPU matrix · 5.0 development</h3>
+    <p class="note">Windows 11, RTX 4090, driver 617.42. Cold includes server launch and the first WAV response. Warm is the median of three requests to the same server. Memory peaks are cold-run whole-card VRAM and process-tree RSS. Compare rows within each workload and check the weight profiles, silence and exact build before drawing a speed conclusion.</p>
+    <div class="scroll"><table>
+      <thead><tr><th scope="col">Model and engine</th><th scope="col">Backend</th><th scope="col">WAV (s)</th><th scope="col">Cold (s)</th><th scope="col">Warm (s)</th><th scope="col">Warm audio s/s</th><th scope="col">VRAM peak / Δ (GiB)</th><th scope="col">Peak RAM (GiB)</th></tr></thead>
+      <tbody>
+      <tr><td>YuE2 · yue2.cpp 892b9b0 · 3B Q8_0 + F32 VAE; NAR v9 · 30 s · 32 steps</td><td>CUDA 13</td><td>29.999</td><td>8.813</td><td>4.759</td><td>6.30×</td><td>8.13 / +5.75</td><td>3.37</td></tr>
+      <tr><td>YuE2 · yue2.cpp 892b9b0 · 3B Q8_0 + F32 VAE; NAR v9 · 30 s · 32 steps</td><td>Vulkan</td><td>29.999</td><td>16.609</td><td>5.861</td><td>5.12×</td><td>8.19 / +5.81</td><td>3.08</td></tr>
+      <tr><td>YuE2 · audio.cpp 41242418 · 3B Q8_0 + F16 VAE; NAR v9 · 30 s · 32 steps</td><td>CUDA 13</td><td>29.999</td><td>16.807</td><td>7.441</td><td>4.03×</td><td>7.02 / +4.68</td><td>6.24</td></tr>
+      <tr><td>YuE2 · yue2.cpp 892b9b0 · 3B Q8_0 + F32 VAE; NAR v9 · 100 tokens · 2 steps</td><td>CUDA 13</td><td>3.999</td><td>6.516</td><td>0.172</td><td>23.20×</td><td>6.88 / +4.51</td><td>3.40</td></tr>
+      <tr><td>YuE2 · audio.cpp 41242418 · 3B Q8_0 + F16 VAE; NAR v9 · 100 tokens · 2 steps</td><td>CUDA 13</td><td>3.999</td><td>7.482</td><td>0.383</td><td>10.44×</td><td>6.28 / +3.92</td><td>5.84</td></tr>
+      <tr><td>YuE2 · yue2.cpp 892b9b0 · 3B Q8_0 + F32 VAE; NAR v9 · 100 tokens · 2 steps</td><td>CUDA 12</td><td>3.999</td><td>4.969</td><td>0.125</td><td>31.95×</td><td>6.88 / +4.50</td><td>3.45</td></tr>
+      <tr><td>YuE2 · audio.cpp 41242418 · 3B Q8_0 + F16 VAE; NAR v9 · 100 tokens · 2 steps</td><td>CUDA 12</td><td>3.999</td><td>7.869</td><td>0.420</td><td>9.52×</td><td>6.46 / +4.10</td><td>5.76</td></tr>
+      <tr><td>YuE2 · yue2.cpp 892b9b0 · 3B Q8_0 + F32 VAE; NAR v9 · 100 tokens · 2 steps</td><td>Vulkan</td><td>3.999</td><td>13.766</td><td>0.252</td><td>15.88×</td><td>6.54 / +4.17</td><td>3.82</td></tr>
+      <tr><td>YuE2 · audio.cpp 41242418 · 3B Q8_0 + F16 VAE; NAR v9 · 100 tokens · 2 steps</td><td>Vulkan</td><td>3.999</td><td>8.373</td><td>0.974</td><td>4.11×</td><td>6.31 / +3.94</td><td>5.33</td></tr>
+      <tr><td>ACE-Step 1.5 · acestep.cpp 6e0e414 · Turbo Q8_0 + BF16 embedder/VAE · 30 s · 8 Euler steps</td><td>CUDA 13</td><td>30.000</td><td>6.234</td><td>0.392</td><td>76.51×</td><td>9.73 / +7.80</td><td>2.11</td></tr>
+      <tr><td>ACE-Step 1.5 · acestep.cpp 6e0e414 · Turbo Q8_0 + BF16 embedder/VAE · 30 s · 8 Euler steps</td><td>Vulkan</td><td>30.000</td><td>7.204</td><td>0.381</td><td>78.69×</td><td>8.58 / +6.65</td><td>2.00</td></tr>
+      <tr><td>ACE-Step 1.5 · audio.cpp 41242418 · Turbo Q8_0, packed GGUF · 30 s · 8 Euler steps</td><td>CUDA 13</td><td>30.000</td><td>10.512</td><td>1.387</td><td>21.62×</td><td>10.43 / +8.49</td><td>2.58</td></tr>
+      <tr><td>ACE-Step 1.5 · audio.cpp 41242418 · Turbo Q8_0, packed GGUF · 30 s · 8 Euler steps</td><td>Vulkan</td><td>30.000</td><td>21.746</td><td>2.237</td><td>13.41×</td><td>10.23 / +8.30</td><td>4.60</td></tr>
+      <tr><td>MiniMax Music3 · minimaxmusic.cpp f476b0e · Minimal Q3_K_M / Q4_K_M + F32 · 3.2 s · 2 steps</td><td>CUDA 13</td><td>3.193</td><td>7.312</td><td>1.257</td><td>2.54×</td><td>9.32 / +7.38</td><td>4.56</td></tr>
+      <tr><td>MiniMax Music3 · minimaxmusic.cpp f476b0e · Minimal Q3_K_M / Q4_K_M + F32 · 3.2 s · 2 steps</td><td>Vulkan</td><td>3.193</td><td>7.343</td><td>1.987</td><td>1.61×</td><td>8.96 / +7.03</td><td>4.33</td></tr>
+      <tr><td>MiniMax Music3 · audio.cpp 41242418 · LM/depth/DiT Q8_0 · 3.2 s · 2 steps</td><td>CUDA 13</td><td>3.193</td><td>14.604</td><td>8.720</td><td>0.37×</td><td>10.97 / +9.04</td><td>8.87</td></tr>
+      <tr><td>MiniMax Music3 · audio.cpp 41242418 · LM/depth/DiT Q8_0 · 3.2 s · 2 steps</td><td>Vulkan</td><td>3.193</td><td>17.621</td><td>10.478</td><td>0.30×</td><td>10.65 / +8.72</td><td>8.66</td></tr>
+      <tr><td>Stable Audio 3 · HOT-Step cdef1b0d67af · Medium BF16/F16 · 4 s · 4 steps</td><td>CUDA 12.8</td><td>4.000</td><td>6.737</td><td>0.254</td><td>15.72×</td><td>9.30 / +7.37</td><td>2.82</td></tr>
+      <tr><td>Stable Audio 3 · audio.cpp 41242418 · Small Music Q8_0 · 4 s · 4 steps</td><td>CUDA 12</td><td>4.000</td><td>1.259</td><td>0.078</td><td>51.18×</td><td>3.54 / +1.60</td><td>1.17</td></tr>
+      <tr><td>Stable Audio 3 · audio.cpp 41242418 · Small Music Q8_0 · 4 s · 4 steps</td><td>CUDA 13</td><td>4.000</td><td>1.893</td><td>0.071</td><td>56.00×</td><td>3.53 / +1.60</td><td>1.18</td></tr>
+      </tbody>
+    </table></div>
+    <p><a href="music-gpu-benchmarks.json">Runs, SHA-256 and weight profiles</a></p>
+<!-- music-gpu-matrix:end -->
+
   </section>
 
   <section id="start">
