@@ -5,7 +5,7 @@ from contextlib import contextmanager
 p = argparse.ArgumentParser()
 p.add_argument("exe", type=pathlib.Path)
 p.add_argument("output", type=pathlib.Path)
-p.add_argument("--suite", choices=["screens", "lrc", "edit-track"], default="screens")
+p.add_argument("--suite", choices=["screens", "lrc", "edit-track", "songbook-gallery", "dj-gallery"], default="screens")
 args = p.parse_args()
 out = args.output.resolve()
 out.mkdir(parents=True, exist_ok=True)
@@ -499,14 +499,75 @@ G4 |
     assert not re.search(r"butterchurn.*(?:error|not a function)|(?:error|not a function).*butterchurn", ui("console"), re.I)
 
 
+def gallery_track(root, title, notes):
+    rate = 24000
+    path = root/(title + ".wav")
+    with wave.open(str(path), "wb") as audio:
+        audio.setparams((1, 2, rate, 0, "NONE", "not compressed"))
+        frames = bytearray()
+        for i in range(rate * 24):
+            t = i / rate
+            note = notes[int(t * 2) % len(notes)]
+            lead = math.sin(2 * math.pi * note * t)
+            octave = math.sin(4 * math.pi * note * t)
+            phrase = (0.5 + 0.5 * math.sin(2 * math.pi * 0.6 * t))
+            level = max(0.1, 1 - (t * 2) % 1) * (0.3 + 0.7 * phrase)
+            frames.extend(struct.pack("<h", int(11000 * level * (0.8 * lead + 0.2 * octave))))
+        audio.writeframes(frames)
+    return tool("library_import_audio", path=str(path), title=title)
+
+
+def check_songbook_gallery(root):
+    title = "Harbor Lights"
+    song = gallery_track(root, title, [262, 330, 392, 440, 349, 330, 294, 262])
+    record = tool("library_song_get", song_id=song["id"], response_format="detailed")
+    record["lyrics"] = "Blue birds greet dawn\nBright sails head home\nSoft waves turn gold\nWe watch the tide"
+    abc = ('X:1\nT:Harbor Lights\nM:4/4\nL:1/4\nK:C\n'
+           '"Cmaj7"C E G A|"F"F E D C|\nw:Blue birds greet dawn Bright sails head home\n'
+           '"Am"A G E D|"G7"D F G B|\nw:Soft waves turn gold We watch the tide\n')
+    record["generation_settings"] = {**(record.get("generation_settings") or {}), "abc": abc}
+    tool("library_song_update", song_id=song["id"], song=record)
+    ui("navigate", view="library")
+    context = f"song {song['id']}:"
+    page = wait_page(predicate=lambda page: any(context in line and "Song Details" in line for line in page.splitlines()))
+    row = next(line for line in page.splitlines() if context in line)
+    ui("click", ref=re.search(r"(e\d+) Song Details", row)[1])
+    click('button "Songbook"')
+    page = wait_page('button "Print A4"')
+    (out/"songbook.txt").write_text(page, encoding="utf8")
+    time.sleep(.8)
+    screenshot("songbook")
+
+
+def check_dj_gallery(root):
+    tracks = [
+        ("Midnight Signal", [220, 261, 330, 392, 330, 261, 196, 220], "A"),
+        ("Harbor Lights", [262, 330, 392, 440, 349, 330, 294, 262], "B"),
+    ]
+    for title, notes, _ in tracks:
+        gallery_track(root, title, notes)
+    ui("navigate", view="library")
+    click('button "DJ mode"', wait_page('button "DJ mode"'))
+    for title, _, deck in tracks:
+        page = wait_page('"Search DJ library"', 'button "Record mix"')
+        ui("type", ref=control(page, '"Search DJ library"'), value=title)
+        match = wait_page(title, predicate=lambda page: page.count('button "A"') == 1 and page.count('button "B"') == 1)
+        click(f'button "{deck}"', match)
+    page = wait_page("Midnight Signal", "Harbor Lights", '"PLAY"')
+    (out/"dj.txt").write_text(page, encoding="utf8")
+    time.sleep(1.5)
+    screenshot("dj")
+
+
 def check_edit_track(root):
     rate = 24000
     source = root/"edit-track.wav"
-    original_samples = [int(6200*math.sin(2*math.pi*311*i/rate)) for i in range(rate*12)]
+    original_samples = [int(6200*(0.35+0.65*abs(math.sin(2*math.pi*0.45*i/rate)))
+                            *math.sin(2*math.pi*311*i/rate)) for i in range(rate*12)]
     with wave.open(str(source), "wb") as audio:
         audio.setparams((1, 2, rate, 0, "NONE", "not compressed"))
         audio.writeframes(struct.pack(f"<{len(original_samples)}h", *original_samples))
-    song = tool("library_import_audio", path=str(source), title="QA A original")
+    song = tool("library_import_audio", path=str(source), title="Late Night Signal")
     original_id = song["id"]
     disk_path = pathlib.Path(tool("library_song_files", song_id=original_id)["audio"])
     original_sha = hashlib.sha256(disk_path.read_bytes()).hexdigest()
@@ -519,7 +580,7 @@ def check_edit_track(root):
         time.sleep(.1)
     assert current["preview_ready"], current
     preview = request("/v1/processing/preview")
-    take = tool("processing_keep", label="QA B region edit")
+    take = tool("processing_keep", label="Lifted middle section")
     assert take["id"] != original_id and take["metadata"]["derived"]["from"] == original_id
     encoded = request("/v1/library/media/"+take["id"])
     def pcm(data):
@@ -538,23 +599,24 @@ def check_edit_track(root):
     assert rendered[:start] == original[:start] and rendered[end:] == original[end:]
     assert rendered[start:end] != original[start:end]
     assert hashlib.sha256(disk_path.read_bytes()).hexdigest() == original_sha
-    playlist = tool("playlist_create", name="QA A/B takes", song_ids=[original_id, take["id"]])
+    playlist = tool("playlist_create", name="Late Night Signal — Takes", song_ids=[original_id, take["id"]])
     json_file(out/"edit-track.json", dict(original_id=original_id, take_id=take["id"], playlist=playlist["id"],
         original_sha256=original_sha, edited_pcm_sha256=hashlib.sha256(rendered).hexdigest(),
         changed_region=region, unchanged_frames=7*rate, preview_pcm_matches=True))
     ui("navigate", view="library")
-    wait_page("QA A original")
+    wait_page("Late Night Signal")
     click('Playlists')
-    page = wait_page("QA A/B takes")
-    row = next(line for line in page.splitlines() if "QA A/B takes" in line and " open" in line)
+    page = wait_page("Late Night Signal — Takes")
+    row = next(line for line in page.splitlines() if "Late Night Signal — Takes" in line and " open" in line)
     ui("click", ref=re.search(r"(e\d+) open", row)[1])
-    click('button "Compare takes"', wait_page("Page: QA A/B takes", 'button "Compare takes"'))
+    click('button "Compare takes"', wait_page("Page: Late Night Signal — Takes", 'button "Compare takes"'))
     page = wait_page('tab "A"', 'tab "B"', 'button "Open in Library"')
     (out/"ab-page.txt").write_text(page, encoding="utf8")
     script = pathlib.Path(__file__).with_name("observe-edit-track-ab.mjs")
     subprocess.run(["node", str(script), str(out/"ab-playback.json"), original_id, take["id"]], check=True, timeout=55)
+    screenshot("edit-track-ab")
     click('button "Open in Library"')
-    page = wait_page("QA B region edit")
+    page = wait_page("Lifted middle section")
     (out/"opened-take.txt").write_text(page, encoding="utf8")
 
 
@@ -623,6 +685,10 @@ with isolated_profile() as root:
                 check_lrc(root, process.pid)
             elif args.suite == "edit-track":
                 check_edit_track(root)
+            elif args.suite == "songbook-gallery":
+                check_songbook_gallery(root)
+            elif args.suite == "dj-gallery":
+                check_dj_gallery(root)
             else:
                 check_screens(root, process.pid)
         finally:

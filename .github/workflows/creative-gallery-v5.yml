@@ -1,0 +1,51 @@
+name: Windows release creative gallery
+
+on:
+  push:
+    branches: [qa/creative-gallery-v5]
+
+permissions:
+  contents: read
+
+jobs:
+  capture:
+    runs-on: windows-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.12'
+      - name: Extract the verified public Windows 5.0.0
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $PSNativeCommandUseErrorActionPreference = $true
+          $zip = Join-Path $env:RUNNER_TEMP 'studio-portable.zip'
+          $target = Join-Path $env:RUNNER_TEMP 'studio-portable'
+          $uri = 'https://github.com/timoncool/YuE2-Studio/releases/download/v5.0.0/YuE2-Studio-5.0.0-portable-windows-x64.zip'
+          curl.exe --fail --location --retry 3 --output $zip $uri
+          if ((Get-FileHash $zip).Hash -ine '054b521bff77b2dc3b54afcf933b4724303f323bcd0bcbd7267cd7af52b727fe') { throw 'Unexpected public ZIP digest' }
+          Expand-Archive -LiteralPath $zip -DestinationPath $target
+          $exe = @(Get-ChildItem -LiteralPath $target -Recurse -Filter 'YuE2-Studio.exe' -File)
+          if ($exe.Count -ne 1 -or (Get-FileHash $exe[0].FullName).Hash -ine '98f41bf66b189a6f4e6f7144f543fabe03aa09034e56445170dea2072b23b111') { throw 'Unexpected public EXE digest' }
+          "GALLERY_EXE=$($exe[0].FullName)" >> $env:GITHUB_ENV
+      - name: Capture the populated release screens
+        shell: pwsh
+        env:
+          PYTHONUTF8: '1'
+          STUDIO_QA_REAL_SHELL_PROFILE: '1'
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $PSNativeCommandUseErrorActionPreference = $true
+          foreach ($suite in @('songbook-gallery', 'dj-gallery', 'edit-track')) {
+            python -u scripts/test-hosted-webview-screens.py $env:GALLERY_EXE (Join-Path $env:RUNNER_TEMP "creative-gallery/$suite") --suite $suite
+          }
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: creative-release-5.0.0
+          path: ${{ runner.temp }}/creative-gallery/**
