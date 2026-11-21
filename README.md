@@ -403,13 +403,13 @@ Windows 11, RTX 4090, driver 617.42. Cold includes server launch and the first W
 
 | Model and engine | Backend | WAV (s) | Cold (s) | Warm (s) | Warm audio s/s | VRAM peak / Δ (GiB) | Warm pre-request VRAM (GiB) | Peak RAM (GiB) | Resident WDDM VRAM / RSS (GiB) |
 | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| YuE2 · yue2.cpp `892b9b0` · 3B Q8_0 + F32 VAE; NAR v9 · 30 s · 32 steps | CUDA 13 | 29.999 | 8.813 | 4.759 | 6.30× | 8.13 / +5.75 | 8.13 | 3.37 | — |
+| YuE2 · yue2.cpp `892b9b0` · 3B Q8_0 + F32 VAE; NAR v9 · 30 s · 32 steps | CUDA 13 | 29.999 | 9.735 | 5.166 | 5.81× | 7.67 / +5.74 | 7.67 | 3.36 | — |
 | YuE2 · yue2.cpp `892b9b0` · 3B Q8_0 + F32 VAE; NAR v9 · 30 s · 32 steps | Vulkan | 29.999 | 16.609 | 5.861 | 5.12× | 8.19 / +5.81 | 8.87 | 3.08 | — |
 | YuE2 · audio.cpp `41242418` · 3B Q8_0 + F16 VAE; NAR v9 · 30 s · 32 steps | CUDA 13 | 29.999 | 16.807 | 7.441 | 4.03× | 7.02 / +4.68 | 3.16 | 6.24 | — |
 | YuE2 · audio.cpp `41242418` · 3B Q8_0 + F16 VAE; NAR v9 · 30 s · 32 steps | Vulkan | 29.999 | 28.258 | 10.286 | 2.92× | 6.44 / +4.51 | 2.54 | 6.85 | — |
-| YuE2 · yue2.cpp `892b9b0` · 3B Q8_0 + F32 VAE; NAR v9 · 100 tokens · 2 steps | CUDA 13 | 3.999 | 6.516 | 0.172 | 23.20× | 6.88 / +4.51 | 6.88 | 3.40 | — |
+| YuE2 · yue2.cpp `892b9b0` · 3B Q8_0 + F32 VAE; NAR v9 · 100 tokens · 2 steps | CUDA 13 | 3.999 | 6.062 | 0.140 | 28.52× | 6.44 / +4.51 | 6.44 | 3.35 | — |
 | YuE2 · audio.cpp `41242418` · 3B Q8_0 + F16 VAE; NAR v9 · 100 tokens · 2 steps | CUDA 13 | 3.999 | 7.482 | 0.383 | 10.44× | 6.28 / +3.92 | 3.03 | 5.84 | — |
-| YuE2 · yue2.cpp `892b9b0` · 3B Q8_0 + F32 VAE; NAR v9 · 100 tokens · 2 steps | CUDA 12 | 3.999 | 4.969 | 0.125 | 31.95× | 6.88 / +4.50 | 6.88 | 3.45 | — |
+| YuE2 · yue2.cpp `892b9b0` · 3B Q8_0 + F32 VAE; NAR v9 · 100 tokens · 2 steps | CUDA 12 | 3.999 | 4.312 | 0.110 | 36.20× | 6.43 / +4.50 | 6.43 | 3.34 | — |
 | YuE2 · audio.cpp `41242418` · 3B Q8_0 + F16 VAE; NAR v9 · 100 tokens · 2 steps | CUDA 12 | 3.999 | 7.869 | 0.420 | 9.52× | 6.46 / +4.10 | 3.03 | 5.76 | — |
 | YuE2 · yue2.cpp `892b9b0` · 3B Q8_0 + F32 VAE; NAR v9 · 100 tokens · 2 steps | Vulkan | 3.999 | 13.766 | 0.252 | 15.88× | 6.54 / +4.17 | 6.54 | 3.82 | — |
 | YuE2 · audio.cpp `41242418` · 3B Q8_0 + F16 VAE; NAR v9 · 100 tokens · 2 steps | Vulkan | 3.999 | 8.373 | 0.974 | 4.11× | 6.31 / +3.94 | 2.89 | 5.33 | — |
