@@ -48,7 +48,7 @@ class StagingFetcher(FetcherInterface):
                 yield chunk
 
 
-def stage_channel(root, metadata, targets, mirrors, voices, output, previous_site=None):
+def stage_channel(root, metadata, targets, mirrors, voices, output, previous_site=None, engines=None):
     if output.exists():
         raise ValueError("staging destination must be new")
     read_catalogue(mirrors)
@@ -65,6 +65,8 @@ def stage_channel(root, metadata, targets, mirrors, voices, output, previous_sit
         reviewed = {"mirrors.json": mirrors}
         if voices is not None:
             reviewed["rvc-voice-catalog.json"] = voices
+        if engines is not None:
+            reviewed["music-engine-catalog.json"] = engines
         signed = Metadata.from_file(str(cache / "targets.json")).signed
         if signed.delegations or set(signed.targets) != set(reviewed):
             raise ValueError("the signed channel must contain exactly the reviewed catalogues")
@@ -105,6 +107,7 @@ if __name__ == "__main__":
     for name in ("root", "metadata", "targets", "mirrors", "output"):
         parser.add_argument("--" + name, type=Path, required=True)
     parser.add_argument("--voices", type=Path)
+    parser.add_argument("--engines", type=Path)
     parser.add_argument("--previous-site", type=Path, help="current public site for all releases after bootstrap")
     args = parser.parse_args()
     stage_channel(**vars(args))
