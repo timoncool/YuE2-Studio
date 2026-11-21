@@ -88,6 +88,13 @@ def check_app(mount):
         raise ValueError(f"Expected one app in the mounted DMG, found: {apps}")
     app = apps[0].resolve()
     contents = app / "Contents"
+    checkout_bootstrap = Path(__file__).resolve().parents[1] / "distribution/channels/stable/bootstrap"
+    packaged_bootstrap = contents / "Resources" / "component-channel"
+    for name in ("root.json", "url.txt"):
+        if (packaged_bootstrap / name).read_bytes() != (checkout_bootstrap / name).read_bytes():
+            raise ValueError(f"Packaged component-channel/{name} differs from the checkout")
+        print(f"Verified component-channel/{name} byte for byte", flush=True)
+
     with (contents / "Info.plist").open("rb") as metadata:
         main = contents / "MacOS" / plistlib.load(metadata)["CFBundleExecutable"]
     subprocess.run(["codesign", "--verify", "--deep", "--strict", "--verbose=2", app], check=True, timeout=30)

@@ -32,8 +32,5 @@ cd desktop
 # layout is set. CI mode skips that cosmetic step so the image can be detached.
 CI=true npm exec tauri build -- --config src-tauri/tauri.macos-release.conf.json --bundles dmg
 bundle="$(node "$root/scripts/release-target-dir.mjs")/bundle"
-for file in root.json url.txt; do
-  cmp "../distribution/channels/stable/bootstrap/$file" "$bundle/macos/YuE2 Studio.app/Contents/Resources/component-channel/$file"
-done
-
+# Tauri removes the intermediate .app in DMG-only builds. The release check mounts the image.
 find "$bundle/dmg" -name '*.dmg'
