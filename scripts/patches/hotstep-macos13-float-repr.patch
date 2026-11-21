@@ -1,21 +1,26 @@
-diff --git a/engine/src/yue2/sheetsage-events.h b/engine/src/yue2/sheetsage-events.h
-index e5970b98..8da16e1a 100644
---- a/engine/src/yue2/sheetsage-events.h
-+++ b/engine/src/yue2/sheetsage-events.h
-@@ -835,6 +835,30 @@ inline std::string yue2_sheet_python_repr_double(double v) {
-     double av = std::fabs(v);
-
-     char buf[64];
+diff --git a/engine/src/legacy-float-charconv.h b/engine/src/legacy-float-charconv.h
+new file mode 100644
+index 00000000..f6bc9a0e
+--- /dev/null
++++ b/engine/src/legacy-float-charconv.h
+@@ -0,0 +1,35 @@
++#pragma once
++
 +#if defined(__ENVIRONMENT_MAC_OS_X_VERSION_MIN_REQUIRED__) && __ENVIRONMENT_MAC_OS_X_VERSION_MIN_REQUIRED__ < 130300
-+    // libc++ floating-point to_chars is unavailable on macOS 13.0–13.2.
-+    // yyjson also writes the shortest round-trippable decimal, without a locale.
-+    if (!std::isfinite(v)) return std::isnan(v) ? "nan" : neg ? "-inf" : "inf";
++#define HOTSTEP_LEGACY_FLOAT_CHARCONV 1
++
++#include "../vendor/yyjson/yyjson.h"
++#include <string>
++
++// Normalize yyjson's shortest round-trip representation of a nonnegative finite double.
++inline std::string hotstep_legacy_float_digits(double value, int & decpt) {
++    char buffer[64];
 +    yyjson_mut_val json{};
-+    yyjson_mut_set_real(&json, av);
-+    size_t length = yyjson_mut_val_write_buf(buf, sizeof buf, &json, 0, nullptr);
-+    std::string digits(buf, length);
++    yyjson_mut_set_real(&json, value);
++    size_t length = yyjson_mut_val_write_buf(buffer, sizeof buffer, &json, 0, nullptr);
++    std::string digits(buffer, length);
 +    size_t exponent = digits.find_first_of("eE");
-+    int decpt = 0;
++    decpt = 0;
 +    if (exponent != std::string::npos) {
 +        decpt = std::stoi(digits.substr(exponent + 1));
 +        digits.resize(exponent);
@@ -24,16 +29,88 @@ index e5970b98..8da16e1a 100644
 +    decpt += (int) (dot == std::string::npos ? digits.size() : dot);
 +    if (dot != std::string::npos) digits.erase(dot, 1);
 +    size_t first = digits.find_first_not_of('0');
-+    if (first == std::string::npos) return neg ? "-0.0" : "0.0";
++    if (first == std::string::npos) {
++        decpt = 1;
++        return "0";
++    }
 +    digits.erase(0, first);
 +    digits.resize(digits.find_last_not_of('0') + 1);
 +    decpt -= (int) first;
++    return digits;
++}
++#endif
+diff --git a/engine/src/lua-plugin.h b/engine/src/lua-plugin.h
+index b7bff13a..4ca18773 100644
+--- a/engine/src/lua-plugin.h
++++ b/engine/src/lua-plugin.h
+@@ -28,6 +28,7 @@ extern "C" {
+ #include "solvers/solver-interface.h"
+ #include "guidance/guidance-interface.h"
+ #include "schedulers/scheduler-interface.h"
++#include "legacy-float-charconv.h"
+
+ // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+ // Float array userdata â€” zero-copy bridge between C++ and Lua
+@@ -373,6 +374,10 @@ static std::string lua_js_number_string(double v) {
+     if (std::isinf(v)) return v < 0 ? "-Infinity" : "Infinity";
+     std::string sign = v < 0 ? "-" : "";
+     v = std::fabs(v);
++#ifdef HOTSTEP_LEGACY_FLOAT_CHARCONV
++    int n;
++    std::string digits = hotstep_legacy_float_digits(v, n);
++#else
+     // shortest round-trip digits: "d.ddde+N"
+     char e[40];
+     *std::to_chars(e, e + sizeof(e) - 1, v, std::chars_format::scientific).ptr = '\0';
+@@ -380,6 +385,7 @@ static std::string lua_js_number_string(double v) {
+     const char * c = e;
+     for (; *c != 'e'; c++) if (*c != '.') digits += *c;
+     int n = std::atoi(c + 1) + 1;  // decimal point position
++#endif
+     int k = (int) digits.size();
+     if (k <= n && n <= 21) return sign + digits + std::string(n - k, '0');
+     if (0 < n && n <= 21)  return sign + digits.substr(0, n) + "." + digits.substr(n);
+diff --git a/engine/src/pipeline-synth-ops.cpp b/engine/src/pipeline-synth-ops.cpp
+index 80c5a8c1..e8de69af 100644
+--- a/engine/src/pipeline-synth-ops.cpp
++++ b/engine/src/pipeline-synth-ops.cpp
+@@ -93,7 +93,8 @@ static const char * scan_num(const char * first, const char * last, int & v) {
+ }
+
+ static const char * scan_num(const char * first, const char * last, float & v) {
+-#if defined(_LIBCPP_VERSION) && _LIBCPP_VERSION < 200000
++#if (defined(_LIBCPP_VERSION) && _LIBCPP_VERSION < 200000) || \
++    (defined(__ENVIRONMENT_MAC_OS_X_VERSION_MIN_REQUIRED__) && __ENVIRONMENT_MAC_OS_X_VERSION_MIN_REQUIRED__ < 130300)
+     const char * p   = first;
+     bool         neg = false;
+     if (p < last && (*p == '+' || *p == '-')) {
+diff --git a/engine/src/yue2/sheetsage-events.h b/engine/src/yue2/sheetsage-events.h
+index e5970b98..681199a8 100644
+--- a/engine/src/yue2/sheetsage-events.h
++++ b/engine/src/yue2/sheetsage-events.h
+@@ -38,6 +38,7 @@
+ // export rows; it never assembles one itself.
+
+ #include "sheetsage-tokens.h"
++#include "../legacy-float-charconv.h"
+
+ #include "../../vendor/yyjson/yyjson.h"
+
+@@ -834,6 +835,13 @@ inline std::string yue2_sheet_python_repr_double(double v) {
+     bool neg = std::signbit(v);
+     double av = std::fabs(v);
+
++#ifdef HOTSTEP_LEGACY_FLOAT_CHARCONV
++    // libc++ floating-point to_chars is unavailable on macOS 13.0–13.2.
++    if (!std::isfinite(v)) return std::isnan(v) ? "nan" : neg ? "-inf" : "inf";
++    int decpt;
++    std::string digits = hotstep_legacy_float_digits(av, decpt);
 +    int exp10 = decpt - 1;
 +#else
+     char buf[64];
      auto res = std::to_chars(buf, buf + sizeof buf, av, std::chars_format::scientific);
      std::string s(buf, res.ptr);
-
-@@ -852,6 +876,7 @@ inline std::string yue2_sheet_python_repr_double(double v) {
+@@ -852,6 +860,7 @@ inline std::string yue2_sheet_python_repr_double(double v) {
      int exp10 = std::stoi(s.substr(i));
      if (eneg) exp10 = -exp10;
      int decpt = exp10 + 1;

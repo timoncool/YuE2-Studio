@@ -1,4 +1,5 @@
 #include "sheetsage-events.h"
+#include "lua-plugin.h"
 
 #include <cmath>
 #include <cstdio>
@@ -31,5 +32,19 @@ int main() {
             return 1;
         }
     }
-    std::puts("SheetSage floats preserve decimal text and round-trip");
+    for (const auto & test : cases) {
+        const auto text = lua_js_number_string(test.value);
+        char * end = nullptr;
+        const double parsed = std::strtod(text.c_str(), &end);
+        if (*end != '\0' || parsed != test.value) {
+            std::fprintf(stderr, "Lua numeric option failed to round-trip: %s\n", text.c_str());
+            return 1;
+        }
+    }
+    if (lua_js_number_string(-0.0) != "0" || lua_js_number_string(1e-5) != "0.00001" ||
+        lua_js_number_string(1e21) != "1e+21") {
+        std::fputs("Lua numeric option differs from ECMAScript formatting\n", stderr);
+        return 1;
+    }
+    std::puts("SheetSage and Lua floats preserve decimal text and round-trip");
 }

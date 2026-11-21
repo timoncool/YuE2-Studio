@@ -24,7 +24,7 @@ git -C "$worktree" submodule update --init --recursive engine/ggml
 git -C "$worktree" submodule update --init engine/vendor/vst3sdk
 git -C "$worktree/engine/vendor/vst3sdk" submodule update --init base pluginterfaces public.sdk
 
-# The pinned HOT-Step still uses floating-point to_chars in a header shared by ace-midi.
+# The pinned HOT-Step uses floating-point charconv in SheetSage and Lua plugin metadata.
 float_patch="$root/scripts/patches/hotstep-macos13-float-repr.patch"
 if ! git -C "$worktree" apply --reverse --check "$float_patch" 2>/dev/null; then
     git -C "$worktree" apply "$float_patch"
@@ -40,8 +40,10 @@ cmake -S "$worktree/engine" -B "$worktree/engine/build" -DCMAKE_BUILD_TYPE=Relea
 cmake --build "$worktree/engine/build" --config Release --target ace-midi ace-caption \
     -j "$(getconf _NPROCESSORS_ONLN)"
 
-clang++ -std=c++17 -mmacosx-version-min="$deployment_target" -I "$worktree/engine/src/yue2" \
+clang++ -O2 -std=c++17 -mmacosx-version-min="$deployment_target" -I "$worktree/engine/src/yue2" \
+    -I "$worktree/engine/src" -I "$worktree/engine/vendor/luajit/src" \
     "$root/scripts/check-macos-sheetsage-floats.cpp" "$worktree/engine/build/libyyjson.a" \
+    "$worktree/engine/build/luajit/src/libluajit.a" \
     -o "$worktree/engine/build/check-macos-sheetsage-floats"
 "$worktree/engine/build/check-macos-sheetsage-floats"
 
