@@ -11,6 +11,7 @@ const transcribe = vi.fn();
 const instrumentalScore = vi.fn();
 const recogniseLyrics = vi.fn();
 let ready = true;
+let enginePaused = false;
 let configured = false;
 vi.mock('../services/karaoke', async original => ({
   ...(await original<typeof import('../services/karaoke')>()),
@@ -25,7 +26,8 @@ vi.mock('../services/studioQueries', async original => ({
   libraryChanged: vi.fn(),
   useActivity: () => ({ data: [] }),
   useAssistantStatus: () => ({ data: null }),
-  useSetupStatus: () => ({ isError: false, data: { ready, engine_ready: ready } }),
+  setupStatusChanged: vi.fn(),
+  useSetupStatus: () => ({ isError: false, data: { ready, engine_ready: ready && !enginePaused, engine_paused: enginePaused } }),
   useOpenRouterSettings: () => ({ data: { configured } }),
 }));
 vi.mock('../services/mcpBridge', () => ({ useBridgeCommand: () => undefined }));
@@ -67,6 +69,7 @@ const sent: YueRequest[] = [];
 beforeEach(() => {
   sent.length = 0;
   ready = true;
+  enginePaused = false;
   configured = false;
   localStorage.clear();
   composeScore.mockReset();
@@ -103,6 +106,23 @@ const type = (element: HTMLTextAreaElement | HTMLInputElement, value: string) =>
 });
 const click = (element: Element) => act(() => { element.dispatchEvent(new MouseEvent('click', { bubbles: true })); });
 const buttonNamed = (text: string) => [...host.querySelectorAll('button')].find(button => button.textContent?.includes(text));
+
+it('uses explicit controls for the YuE2 engine and follows the shared paused state', async () => {
+  act(() => root.render(panel({})));
+  click(buttonNamed('Pause YuE2 engine')!);
+  await flush();
+  expect(fetch).toHaveBeenCalledWith('/engine/pause', { method: 'POST' });
+
+  enginePaused = true;
+  act(() => root.render(panel({})));
+  expect(host.textContent).toContain('YuE2 engine paused');
+  click(buttonNamed('Resume YuE2 engine')!);
+  await flush();
+  expect(fetch).toHaveBeenCalledWith('/engine/resume', { method: 'POST' });
+
+  act(() => root.render(panel({ musicEngine: 'openrouter' })));
+  expect(buttonNamed('Resume YuE2 engine')).toBeUndefined();
+});
 
 describe('pauses between repeated generations (#261)', () => {
   const renderQueue = (queueBusy: boolean, activeJobCount = 0) =>
