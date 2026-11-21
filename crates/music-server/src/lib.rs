@@ -398,6 +398,9 @@ impl SamplingPreset {
 /// out are the engine's protocol defaults.
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
 struct CreateMusicJobRequest {
+    /// Studio already prepared the lyrics and score for Instrumental mode.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    instrumental_only: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     rvc_after: Option<rvc_quick::Options>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -12840,6 +12843,9 @@ async fn import_tracks(state: &AppState, job: &MusicJob, job_id: &str, tracks: V
             .filter(|value| value.as_str().is_some_and(|value| !value.is_empty()))
             .context("the engine returned a track without its semantic stream")?
             .clone();
+        if job.generation_settings.get("instrumental_only").and_then(Value::as_bool) == Some(true) {
+            replay["instrumental_only"] = Value::Bool(true);
+        }
         // The replay request is sparse: fields at their default are omitted.
         // Start from what was submitted and let the per-track values - the
         // seeds it consumed, the score it wrote - win over it.
@@ -13869,7 +13875,7 @@ async fn analyze_backing_tempo(State(state): State<AppState>, Json(request): Jso
 
 fn engine_submission(body: &Value) -> Value {
     let mut engine = body.clone();
-    if let Some(fields) = engine.as_object_mut() { fields.remove("vocals_only"); fields.remove("backing_song_id"); fields.remove("rvc_after"); fields.remove("score_edit"); fields.remove("fade_in"); fields.remove("fade_out"); }
+    if let Some(fields) = engine.as_object_mut() { fields.remove("vocals_only"); fields.remove("backing_song_id"); fields.remove("rvc_after"); fields.remove("score_edit"); fields.remove("fade_in"); fields.remove("fade_out"); fields.remove("instrumental_only"); }
     if let Some(fields) = engine.as_object_mut() {
         fields.insert("output_format".into(), Value::from("wav32"));
         fields.remove("mp3_bitrate");
@@ -13957,6 +13963,9 @@ fn yue_request_from(request: &CreateMusicJobRequest, max_batch: u32) -> Result<V
         "style": request.style,
         "lyrics": request.lyrics.replace("\r\n", "\n"),
     });
+    if request.instrumental_only == Some(true) {
+        body["instrumental_only"] = Value::Bool(true);
+    }
     insert_optional(&mut body, "backing_song_id", request.backing_song_id.clone());
     if request.vocals_only {
         body["vocals_only"] = Value::Bool(true);
@@ -15070,6 +15079,29 @@ mod tests {
             style: "warm piano pop, female voice, 88 BPM".into(),
             lyrics: "[Verse]\r\none line".into(),
             ..CreateMusicJobRequest::default()
+        }
+    }
+
+    #[test]
+    fn an_instrumental_replay_keeps_the_saved_score_tags_and_adapter_choice() {
+        let score = "X:1\nM:4/4\nL:1/16\nQ:1/4=96\nK:C\nV:Vocal\nz16|\nV:Ins\nC16|";
+        let tags = "[Verse]\n\n[Outro]";
+        for adapters in [serde_json::json!([]), serde_json::json!([{"name":"instrumental","ar_scale":0.0,"nar_scale":0.55}])] {
+            let mut stored = yue_request_from(&CreateMusicJobRequest {
+                instrumental_only: Some(true), lyrics: tags.into(), ..sample_request()
+            }, 1).unwrap();
+            assert_eq!(stored["instrumental_only"], true);
+            stored["abc"] = Value::from(score);
+            stored["semantic_tokens"] = Value::from("1,2,3");
+            stored["adapters"] = adapters.clone();
+            let body = prepare_replay_synthesis(stored, &replay_overrides()).unwrap();
+            assert_eq!(body["instrumental_only"], true);
+            let engine = engine_submission(&body);
+            assert!(engine.get("instrumental_only").is_none(), "the flag belongs to Studio provenance");
+            assert_eq!(engine["abc"], score);
+            assert_eq!(engine["lyrics"], tags);
+            assert_eq!(engine["semantic_tokens"], "1,2,3");
+            assert_eq!(engine["adapters"], adapters);
         }
     }
 

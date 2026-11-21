@@ -1247,6 +1247,7 @@ describe('an instrumental (#217)', () => {
     await flush();
     expect(sent[0].adapters).toEqual([expect.objectContaining({ id: 'instrumental' })]);
     expect(sent[0].lyrics).toBe('[instrumental]');
+    expect(sent[0].instrumental_only).toBe(true);
 
     click(instrumental);
     click(buttonNamed('create')!);
@@ -1254,6 +1255,62 @@ describe('an instrumental (#217)', () => {
     expect(sent).toHaveLength(2);
     expect(sent[1].adapters).toBeUndefined();
     expect(sent[1].lyrics).toBe('');
+    expect(sent[1].instrumental_only).toBeUndefined();
+  });
+
+  it('keeps the instrumental tags when the user removes the automatically selected adapter', async () => {
+    act(() => root.render(panel({})));
+    await flush();
+    type(field('textarea')!, 'calm folk, acoustic guitar');
+    click(buttonNamed('cotOff')!);
+    click(host.querySelector<HTMLInputElement>('input[type="checkbox"]')!);
+    await flush();
+    act(() => { bridgeCommands.get('create_set')!({ fields: { adapters: [] } }); });
+    click(buttonNamed('createInstrumental')!);
+    await flush();
+    expect(sent[0]).toMatchObject({ cot: 'off', instrumental_only: true, lyrics: '[instrumental]' });
+    expect(sent[0]).not.toHaveProperty('adapters');
+  });
+
+  it.each([
+    { settings: [] }, { settings: [{ name: 'instrumental', ar_scale: 0, nar_scale: 0.55 }] },
+  ])('restores Instrumental mode without changing saved adapters $settings', async ({ settings }) => {
+    const abc = 'X:1\nM:4/4\nL:1/16\nQ:1/4=96\nK:C\nV:Vocal\nz16|\nV:Ins\nC16|';
+    const lyrics = '[Verse]\n\n[Outro]';
+    const original = { title: 'Instrumental take', ditModel: 'yue2-cpp', style: 'Calm folk', lyrics,
+      generationParams: { abc, cot: 'full', instrumental_only: true, adapters: settings, seed: 721, lm_seed: 721 },
+    } as Song;
+    instrumentalScore.mockImplementation(async score => ({ abc: score, moved: 0, trimmed: 0, dropped: 0 }));
+    act(() => root.render(panel({ initialData: { song: original, timestamp: 1 } })));
+    await flush();
+    const restored = buttonNamed('createInstrumental');
+    expect(restored).toBeDefined();
+    click(restored!);
+    await flush();
+    expect(sent[0]).toMatchObject({ abc, lyrics, instrumental_only: true, seed: 721, lm_seed: 721 });
+    if (settings.length) expect(sent[0].adapters).toEqual([{ id: 'instrumental', scales: { ar: 0, nar: 0.55 } }]);
+    else expect(sent[0].adapters).toBeUndefined();
+  });
+
+  it.each([
+    { settings: [{ name: 'yue2-instrumental', ar_scale: 1, nar_scale: 0 }], instrumental: true },
+    { settings: [], instrumental: false },
+  ])('only restores old section-only prompts as instrumental with the catalogued LoRA ($instrumental)', async ({ settings, instrumental }) => {
+    const abc = 'X:1\nM:4/4\nL:1/16\nQ:1/4=96\nK:C\nV:Vocal\nz16|\nV:Ins\nC16|';
+    const lyrics = '[Verse]\n\n[Chorus]';
+    const song = { title: 'Old take', ditModel: 'yue2-cpp', style: 'Calm folk', lyrics,
+      generationParams: { abc, cot: 'full', adapters: settings, seed: 721, lm_seed: 721 },
+    } as Song;
+    instrumentalScore.mockImplementation(async score => ({ abc: score, moved: 0, trimmed: 0, dropped: 0 }));
+    act(() => root.render(panel({ initialData: { song, timestamp: 2 } })));
+    await flush();
+    expect(Boolean(buttonNamed('createInstrumental'))).toBe(instrumental);
+    click(buttonNamed(instrumental ? 'createInstrumental' : 'create')!);
+    await flush();
+    expect(sent[0]).toMatchObject({ abc, lyrics, seed: 721, lm_seed: 721 });
+    expect(sent[0].instrumental_only).toBe(instrumental ? true : undefined);
+    if (instrumental) expect(sent[0].adapters).toEqual([{ id: 'yue2-instrumental', scales: { ar: 1, nar: 0 } }]);
+    else expect(sent[0].adapters).toBeUndefined();
   });
 
   it('keeps a score written for one submission out of the form and writes a new one for the next', async () => {
