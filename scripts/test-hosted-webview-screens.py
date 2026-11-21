@@ -128,7 +128,7 @@ def capture_pt():
     (out/"pt-08-training-page.txt").write_text(page, encoding="utf8")
     screenshot("pt-08-training")
     ui("open_settings", section="agent")
-    page = wait_page("Agente (MCP)", "Endereço", "Claude Code", "http://127.0.0.1:8791/mcp")
+    page = wait_page("Agente (MCP)", "QA Agent command claude mcp add", "http://127.0.0.1:8791/mcp")
     (out/"pt-11-agent-page.txt").write_text(page, encoding="utf8")
     info = json.loads(request("/mcp/status"))
     assert info["window_open"], info
@@ -166,12 +166,15 @@ def check_screens(root):
     ui("navigate", view="library")
     page = wait_page("Hosted QA recording")
     (out/"screen-library.txt").write_text(page, encoding="utf8")
-    click('Hosted QA playlist')
+    click('Playlists')
+    playlist_page = wait_page('Hosted QA playlist')
+    row = next(line for line in playlist_page.splitlines() if 'Hosted QA playlist' in line and ' open' in line)
+    ui("click", ref=re.search(r"(e\d+) open", row)[1])
     page = wait_page('Page: Hosted QA playlist', 'Hosted QA recording')
     (out/"screen-playlist.txt").write_text(page, encoding="utf8")
 
     tool("player_play", song_id=song["id"])
-    tool("player_set", volume=.35)
+    tool("player_set", volume=.35, repeat="one")
     tool("player_seek", seconds=2)
     for _ in range(35):
         playback = tool("player_state")
@@ -214,8 +217,17 @@ def check_screens(root):
     tool("winamp_set", on=False)
     tool("player_pause")
 
+    notes = tool("score_to_midi", abc="X:1\nM:4/4\nL:1/4\nK:C\nC D E F |]")
+    midi = root/"hosted-midi.mid"
+    midi.write_bytes(base64.b64decode(notes["data"]))
+    assert midi.read_bytes().startswith(b"MThd")
+    tool("midi_set", song_id=song["id"], path=str(midi))
+    midi_result = tool("midi_get", song_id=song["id"], response_format="detailed")
+    json_file(out/"audio-to-midi.json", midi_result)
+    assert "notes" in midi_result and midi_result["notes"], midi_result
+
     ui("navigate", view="tools")
-    page = wait_page("Split into stems", "Open the MIDI editor")
+    page = wait_page("Open the MIDI editor")
     (out/"screen-tools.txt").write_text(page, encoding="utf8")
     click('Open the MIDI editor', page)
     page = wait_page('MIDI editor')
@@ -230,9 +242,16 @@ def check_screens(root):
     song_line = next(line for line in page.splitlines() if "Hosted QA recording" in line and "More actions" in line)
     ui("click", ref=re.search(r"(e\d+) More actions",song_line)[1])
     click("Process audio")
-    (out/"screen-processing.txt").write_text(wait_page('Page: Process audio'), encoding="utf8")
+    process_page = wait_page('Page: Process audio', 'Peak normalisation')
+    click('Peak normalisation', process_page)
+    click('button "Process"')
+    (out/"screen-processing.txt").write_text(wait_page('Save as a new track'), encoding="utf8")
+    click('Save as a new track')
+    wait_page('Open in Library')
 
     ui("navigate", view="adapters")
+    click('tab "Catalog"')
+    (out/"screen-lora-catalog.txt").write_text(wait_page('tab "Catalog"'), encoding="utf8")
     click('tab "Training"')
     click('Canções de exemplo')
     click('Result')
@@ -257,7 +276,8 @@ with tempfile.TemporaryDirectory(prefix="studio-hosted-webview-") as directory:
         (root/folder).mkdir()
     env = dict(os.environ, YUE_STUDIO_DATA_ROOT=str(root), YUE_STUDIO_PORT="8791",
         HOME=str(root/"user"), USERPROFILE=str(root/"user"), APPDATA=str(root/"roaming"),
-        LOCALAPPDATA=str(root/"local"), DO_NOT_TRACK="1")
+        LOCALAPPDATA=str(root/"local"), DO_NOT_TRACK="1",
+        WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS="--autoplay-policy=no-user-gesture-required --use-angle=swiftshader --enable-unsafe-swiftshader")
     with (out/"service.log").open("wb") as log:
         process = subprocess.Popen([str(args.exe.resolve(strict=True))], env=env, stdout=log, stderr=log)
         try:
