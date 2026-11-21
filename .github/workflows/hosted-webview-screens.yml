@@ -9,6 +9,8 @@ jobs:
     timeout-minutes: 35
     steps:
       - uses: actions/checkout@v7.0.1
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v6
         with:
           node-version: '24'
@@ -16,16 +18,49 @@ jobs:
         with:
           workspaces: desktop/src-tauri -> target
           cache-on-failure: true
+      - name: Identify exact desktop build inputs
+        id: shell-inputs
+        run: |
+          $revision = git log -1 --format=%H -- app crates desktop Cargo.toml Cargo.lock scripts/changelog.mjs
+          if (!$revision) { throw 'Missing desktop source revision' }
+          $inputs = @(
+            $revision
+            'npm run tauri -- build --debug --no-bundle'
+            (rustc -vV)
+            (node --version)
+            $env:ImageVersion
+          ) -join '\n'
+          $digest = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData([Text.Encoding]::UTF8.GetBytes($inputs))).ToLowerInvariant()
+          "digest=$digest" >> $env:GITHUB_OUTPUT
+          "revision=$revision" >> $env:GITHUB_OUTPUT
+      - uses: actions/cache@v5
+        id: shell-cache
+        with:
+          path: |
+            desktop/src-tauri/target/debug/YuE2-Studio.exe
+            desktop/src-tauri/target/debug/yue2-studio-desktop.exe
+          key: hosted-u3-webview-${{ runner.os }}-${{ runner.arch }}-${{ steps.shell-inputs.outputs.digest }}
       - name: Install locked dependencies
+        if: steps.shell-cache.outputs.cache-hit != 'true'
         run: |
           npm --prefix app ci
           npm --prefix desktop ci
       - name: Build Windows Studio
+        if: steps.shell-cache.outputs.cache-hit != 'true'
         id: desktop-build
         working-directory: desktop
-        run: npm run tauri -- build --debug --no-bundle
+        env:
+          STUDIO_BUILD_REVISION: ${{ steps.shell-inputs.outputs.revision }}
+        run: |
+          git switch --detach $env:STUDIO_BUILD_REVISION
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          npm run tauri -- build --debug --no-bundle
+          $result = $LASTEXITCODE
+          git switch --detach $env:GITHUB_SHA
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          exit $result
       - name: Verify timed LRC export from the library
-        if: always() && steps.desktop-build.outcome == 'success'
+        if: always() && (steps.desktop-build.outcome == 'success' || steps.shell-cache.outputs.cache-hit == 'true')
         env:
           PYTHONUTF8: '1'
         run: |
@@ -35,7 +70,7 @@ jobs:
           if (!$desktop) { throw 'Studio executable missing' }
           python -u scripts/test-hosted-webview-screens.py $desktop.FullName artifacts/lrc --suite lrc
       - name: Exercise U3 routing in WebView2 through Studio MCP
-        if: always() && steps.desktop-build.outcome == 'success'
+        if: always() && (steps.desktop-build.outcome == 'success' || steps.shell-cache.outputs.cache-hit == 'true')
         env:
           PYTHONUTF8: '1'
         run: |

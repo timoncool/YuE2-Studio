@@ -1,4 +1,6 @@
 """Drive only the bundled Studio WebView on the isolated Windows runner."""
+from contextlib import closing
+
 import argparse, base64, ctypes, hashlib, json, os, pathlib, re, sqlite3, struct, subprocess, tempfile, time, urllib.request, wave, math
 
 p = argparse.ArgumentParser()
@@ -229,10 +231,11 @@ def u3_form(root):
 
     def saved_song(title, engine, profile, settings):
         song = tool("library_import_audio", path=str(pcm), title=title)
-        with sqlite3.connect(root/"library.sqlite") as database:
+        with closing(sqlite3.connect(root/"library.sqlite")) as database:
             database.execute("""UPDATE songs SET engine_id = ?, profile_id = ?, caption = ?, lyrics = ?,
                              generation_settings_json = ? WHERE id = ?""",
                              (engine, profile, title, "[Instrumental]", json.dumps(settings), song["id"]))
+            database.commit()
         return song["id"]
 
     ace_native_profiles = json.loads(request("/v1/music/native/acestep-cpp/profiles"))["profiles"]
@@ -271,15 +274,40 @@ def save_dialog_file(pid, path):
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName UIAutomationClient, UIAutomationTypes
 $root = [Windows.Automation.AutomationElement]::RootElement
-$owner = [Windows.Automation.PropertyCondition]::new(
-  [Windows.Automation.AutomationElement]::ProcessIdProperty, [int]$env:STUDIO_QA_PID)
+Add-Type @'
+using System;
+using System.Runtime.InteropServices;
+public static class StudioQaWindows {
+  [DllImport("user32.dll")] public static extern IntPtr GetWindow(IntPtr window, uint command);
+  [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr window, out uint pid);
+}
+'@
+$seen = @{}
 $deadline = [DateTime]::UtcNow.AddSeconds(20)
 do {
-  $dialogs = $root.FindAll([Windows.Automation.TreeScope]::Children, $owner)
-  foreach ($dialog in $dialogs) {
-    if ($dialog.Current.ClassName -ne '#32770' -or $dialog.Current.IsOffscreen) { continue }
+  $windows = $root.FindAll([Windows.Automation.TreeScope]::Children,
+    [Windows.Automation.Condition]::TrueCondition)
+  foreach ($dialog in $windows) {
+    $current = $dialog.Current
+    if ($current.ProcessId -ne [int]$env:STUDIO_QA_PID) {
+      if ($current.Name -ne 'Save As') { continue }
+      $parent = [StudioQaWindows]::GetWindow([IntPtr]$current.NativeWindowHandle, 4)
+      $windowOwner = [uint32]0
+      [void][StudioQaWindows]::GetWindowThreadProcessId($parent, [ref]$windowOwner)
+      if ($windowOwner -ne [int]$env:STUDIO_QA_PID) { continue }
+    }
+    $key = "$($current.ProcessId) $($current.ClassName) $($current.Name)"
+    if ($current.ClassName -ne '#32770' -and $current.Name -notlike '*Save As*') {
+      $seen[$key] = 'window'
+      continue
+    }
     $elements = $dialog.FindAll([Windows.Automation.TreeScope]::Descendants,
       [Windows.Automation.Condition]::TrueCondition)
+    $seen[$key] = @($elements | Where-Object {
+      $_.Current.ControlType -in @([Windows.Automation.ControlType]::Edit, [Windows.Automation.ControlType]::Button)
+    } | ForEach-Object {
+      "$($_.Current.ControlType.ProgrammaticName) id=$($_.Current.AutomationId) name=$($_.Current.Name)"
+    }) -join ', '
     $fields = @($elements | Where-Object {
       $_.Current.ControlType -eq [Windows.Automation.ControlType]::Edit -and
       ($_.Current.AutomationId -in @('1001','1148') -or $_.Current.Name -match '^File name')
@@ -297,6 +325,7 @@ do {
   }
   Start-Sleep -Milliseconds 200
 } while ([DateTime]::UtcNow -lt $deadline)
+$seen | ConvertTo-Json -Compress
 throw 'The isolated Save As dialog did not expose a file name and Save button'
 """
     encoded = base64.b64encode(script.encode("utf-16-le")).decode("ascii")
@@ -326,7 +355,11 @@ def check_lrc(root, pid):
     (out/"lrc-details.txt").write_text(page, encoding="utf8")
     click('button "Download LRC (Lyrics)"', page)
     destination = root/f"{title}.lrc"
-    save_dialog_file(pid, destination)
+    try:
+        save_dialog_file(pid, destination)
+    except AssertionError:
+        (out/"lrc-console.txt").write_text(ui("console"), encoding="utf8")
+        raise
     for _ in range(40):
         if destination.is_file() and destination.stat().st_size == len(expected.encode("utf8")):
             saved = destination.read_bytes()
