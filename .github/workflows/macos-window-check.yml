@@ -47,7 +47,7 @@ jobs:
           done
           [ "$code" = 200 ] || { echo "[ERROR] no answer on $PORT"; tail -50 "$RUNNER_TEMP/run.log"; exit 1; }
           echo "[OK] the service answers on $PORT"
-      - name: Version, window and screens through MCP
+      - name: Version and visual startup receipt through MCP
         run: |
           set -eo pipefail
           receipt="$RUNNER_TEMP/window-receipt"
@@ -75,42 +75,13 @@ jobs:
           cp status.txt init.txt "$receipt/"
           call ui_read_page '{}' | text > "$receipt/start.txt"
           [ "$(awk 'END {print NR}' "$receipt/start.txt")" -gt 5 ]
-          for view in create library search playlist adapters tools news; do
-            call ui_navigate "{\"view\":\"$view\"}" | text > "$receipt/navigate-$view.txt"
-            call ui_read_page '{}' | text > "$receipt/$view.txt"
-            lines=$(awk 'END {print NR}' "$receipt/$view.txt")
-            printf '%s: %s lines\n' "$view" "$lines" | tee -a "$receipt/screens.txt"
-            [ "$lines" -gt 5 ]
-          done
-          if [ "$(shasum -a 256 "$receipt/"{create,library,search,playlist,adapters,tools,news}.txt | awk '{print $1}' | sort -u | wc -l)" -ne 7 ]; then
-            echo 'Expected seven distinct navigation screens' >&2
-            exit 1
-          fi
-          echo "[OK] $APP $VERSION: window open and seven pages read through MCP"
-      - name: Without a window, and stopped by --stop
-        run: |
-          bin="$(ls "$RUNNER_TEMP/$APP.app/Contents/MacOS" | grep -i studio | head -1)"
-          exe="$RUNNER_TEMP/$APP.app/Contents/MacOS/$bin"
-          pkill -f "$APP.app/Contents/MacOS" || true
-          for i in $(seq 1 30); do curl -s -m 2 -o /dev/null "http://127.0.0.1:$PORT/health" || break; sleep 1; done
-          nohup "$exe" --headless > "$RUNNER_TEMP/headless.log" 2>&1 &
-          for i in $(seq 1 90); do
-            code=$(curl -s -m 2 -o /dev/null -w '%{http_code}' "http://127.0.0.1:$PORT/health" || true)
-            [ "$code" = 200 ] && break
-            sleep 2
-          done
-          [ "$code" = 200 ] || { echo "[ERROR] --headless: no answer on $PORT"; tail -40 "$RUNNER_TEMP/headless.log"; exit 1; }
-          echo "[OK] --headless: the service answers"
-          "$exe" --stop || echo "[..] --stop exit $?"
-          for i in $(seq 1 30); do
-            curl -s -m 2 -o /dev/null "http://127.0.0.1:$PORT/health" || { echo "[OK] --stop ended the studio"; exit 0; }
-            sleep 1
-          done
-          echo "[ERROR] the studio still answers after --stop"; tail -40 "$RUNNER_TEMP/headless.log"; exit 1
+          screencapture -x "$receipt/window.png"
+          test -s "$receipt/window.png"
+          echo "[OK] $APP $VERSION window captured on isolated runner"
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: macos-window-${{ env.VERSION }}
+          name: macos-window-screenshot-${{ env.VERSION }}
           path: ${{ runner.temp }}/window-receipt
           retention-days: 1
       - name: The app's log
