@@ -210,6 +210,12 @@ impl Installation {
         self.executable.as_deref().is_some_and(usable_executable)
     }
 
+    pub fn adapter_runtime_update(&self) -> bool {
+        self.executable.as_deref().is_some_and(|executable| {
+            crate::native_music_runtime::requires_adapter_update(&self.data_root, ENGINE_ID, executable)
+        })
+    }
+
     pub fn profiles(&self) -> Vec<InstalledProfile> {
         PROFILES
             .iter()
@@ -322,8 +328,6 @@ impl Installation {
         models: &Path,
         replay: Option<&serde_json::Value>,
     ) -> Result<Option<PathBuf>> {
-        use serde_json::Value;
-
         let own = self.data_root.join("adapters").join(ENGINE_ID);
         let source_dir = self
             .legacy_adapters
@@ -337,19 +341,7 @@ impl Installation {
                 source_dir.filter(|path| path.is_dir()).cloned()
             });
         };
-        let required: Vec<_> = [replay.get("adapter"), replay.get("lm_adapter")]
-            .into_iter()
-            .flatten()
-            .chain(
-                replay["adapters"]
-                    .as_array()
-                    .into_iter()
-                    .flatten()
-                    .filter_map(|entry| entry.get("name")),
-            )
-            .filter_map(Value::as_str)
-            .filter(|name| !name.is_empty())
-            .collect();
+        let required: Vec<_> = super::adapter_names(replay).collect();
         if required.is_empty() {
             return Ok(None);
         }

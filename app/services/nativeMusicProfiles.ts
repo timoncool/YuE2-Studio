@@ -33,6 +33,7 @@ interface NativeProfile {
 interface NativeProfiles {
   engine: ProfileMusicEngine;
   engine_installed: boolean;
+  adapter_runtime_update?: boolean;
   profiles: NativeProfile[];
 }
 
@@ -154,6 +155,7 @@ export function useNativeMusicProfiles(engine: ProfileMusicEngine | undefined, l
     error: result?.error === true,
     loading: Boolean(engine && !result),
     installed: result?.data?.engine_installed === true,
+    adapterRuntimeUpdate: result?.data?.adapter_runtime_update === true,
     ready: result?.data?.engine_installed === true && profile?.ready === true,
     originalModels: pending?.models,
     settings: pending?.settings ?? (pair ? preferences.settings[pair] ?? {} : {}),

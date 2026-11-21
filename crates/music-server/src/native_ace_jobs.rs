@@ -87,6 +87,14 @@ async fn submit_inner(
         Ok(launch) => launch,
         Err(error) => return reject(StatusCode::SERVICE_UNAVAILABLE, format!("{error:#}")),
     };
+    if ace::adapter_names(&input).next().is_some()
+        && native_music_runtime::requires_adapter_update(&root, ace::ENGINE_ID, &launch.executable)
+    {
+        return reject(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "Update the ACE-Step runtime in Create before using LoRA adapters on Windows.".into(),
+        );
+    }
     for key in ["synth_model", "lm_model", "vae"] {
         if let Some(name) = input.get(key).and_then(Value::as_str) {
             let filename = std::path::Path::new(name);
