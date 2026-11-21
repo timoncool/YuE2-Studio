@@ -14,6 +14,7 @@ path = "src/main.rs"
 
 [dependencies]
 async-trait = "0.1"
+tokenizers = { version = "0.23.2", default-features = false, features = ["fancy-regex"] }
 tough = "0.24"
 anyhow.workspace = true
 # A song deleted for good sends its files to the system's recycle bin, as Dub Studio does with a project.

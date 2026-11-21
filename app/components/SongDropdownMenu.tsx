@@ -6,6 +6,8 @@ import { Song } from '../types';
 import { useI18n } from '../context/I18nContext';
 import { openAudioEditor } from '../services/audioEditor';
 import { downloadSongAudio } from '../services/songDownload';
+import { useLastRvcVoice, RVC_QUICK_EVENT } from '../services/rvcQuick';
+import { rvcQuickStrings } from '../i18n/rvcQuick';
 import { rvcVoiceStrings } from '../i18n/rvcVoices';
 import { openMidi, openStems } from '../services/openStems';
 import { useAuth } from '../context/AuthContext';
@@ -124,6 +126,7 @@ export const SongDropdownMenu: React.FC<SongDropdownMenuProps> = ({
     at,
 }) => {
     const { t, language } = useI18n();
+    const rvcVoice = useLastRvcVoice();
     const { user } = useAuth();
     const actions = useSongActions();
     const isOwner = ownsSong(user, song);
@@ -284,6 +287,15 @@ export const SongDropdownMenu: React.FC<SongDropdownMenuProps> = ({
                         label={rvcVoiceStrings[language].title}
                         onClick={() => handleAction(() => window.dispatchEvent(new CustomEvent('yue:open-rvc', { detail: song.id })))}
                     />
+                    {rvcVoice && stemOf(song) === null && (
+                        <MenuItem
+                            icon={<Mic2 size={14} />}
+                            label={rvcQuickStrings[language].quick}
+                            onClick={() => handleAction(() => window.dispatchEvent(new CustomEvent(RVC_QUICK_EVENT, {
+                                detail: { songId: song.id, voiceId: rvcVoice },
+                            })))}
+                        />
+                    )}
                     <MenuItem
                         icon={<Piano size={14} />}
                         label={t('midiMenu')}

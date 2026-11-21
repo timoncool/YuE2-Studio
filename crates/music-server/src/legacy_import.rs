@@ -235,7 +235,7 @@ fn prepare_song(
     }
     remap_reference(&mut song.metadata, "/derived/from", ids)?;
     remap_reference(&mut song.metadata, "/deleted_with", ids)?;
-    for field in ["/source_song_id", "/reference_song_id"] {
+    for field in ["/source_song_id", "/reference_song_id", "/cover_of"] {
         remap_reference(&mut song.generation_settings, field, ids)?;
         if let Some(req) = &mut song.replay_request {
             remap_reference(req, field, ids)?;
@@ -346,6 +346,34 @@ fn transfer(to: &Library, folder: &Path) -> Result<Value> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn mulacover_import_rewrites_the_original_for_saved_settings() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let source = temp.path().join("old");
+        let dest = temp.path().join("new");
+        let old = Library::open_at(source.join("library.sqlite"), source.join("media"))?;
+        let new = Library::open_at(dest.join("library.sqlite"), dest.join("media"))?;
+        old.legacy_transaction(|tx| {
+            tx.execute("INSERT INTO songs VALUES('old-origin','Original',NULL,'','','{}','{}','imported-audio',NULL,NULL,NULL,'audio_import','1','1')",[])?;
+            tx.execute("INSERT INTO songs VALUES('old-cover','Cover',NULL,'folk','','{\"derived\":{\"from\":\"old-origin\",\"tool\":\"cover\"}}','{\"family\":\"mulacover\",\"cover_of\":\"old-origin\",\"seed\":42}','hotstep','heartmula-mulacover',NULL,NULL,'local_generation','2','2')",[])?;
+            Ok(())
+        })?;
+        transfer(&new, &source)?;
+        let imported = new.list_songs()?;
+        let original = imported.iter().find(|song| song.title == "Original").unwrap();
+        let cover = imported.iter().find(|song| song.title == "Cover").unwrap();
+        assert_ne!(original.id, "old-origin");
+        assert_eq!(cover.generation_settings["cover_of"], original.id);
+        assert_eq!(cover.generation_settings["seed"], 42);
+        new.legacy_transaction(|tx| {
+            tx.execute("UPDATE songs SET generation_settings_json = ? WHERE id = ?", params![json!({"family":"mulacover","cover_of":"old-origin"}).to_string(), cover.id])?;
+            Ok(())
+        })?;
+        let previously_migrated = new.get_song(&cover.id)?.unwrap();
+        assert_eq!(previously_migrated.generation_settings["cover_of"], original.id);
+        Ok(())
+    }
 
     #[test]
     fn album_import_appends_in_source_order_and_preserves_subsequent_edits() -> Result<()> {
