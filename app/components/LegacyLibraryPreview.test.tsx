@@ -68,6 +68,7 @@ it('copies selected content and shows the successful count with each failed file
     expect(submit.disabled).toBe(false);
     request.mockResolvedValueOnce(Response.json({
       added: 1, already_imported: 0, playlists_added: 0, playlists_already_imported: 0,
+      updated: 2,
       errors: [
         { title: 'Broken', file: 'missing.wav', code: 'missing' },
         { title: 'Broken', file: 'cover.png', code: 'copy_failed', error: 'Permission denied' },
@@ -77,6 +78,7 @@ it('copies selected content and shows the successful count with each failed file
     await act(async () => submit.click());
     expect(request.mock.calls[1][1].body).toBe(JSON.stringify({ path: 'X:/mixed', exclude: ['covers'] }));
     expect(host.textContent).toContain('legacyLibraryResult');
+    expect(host.textContent).toContain('legacyLibraryUpdated');
     const errors = host.querySelector('[role="alert"]')!;
     expect(errors.textContent).toContain('Broken · missing.wav');
     expect(errors.textContent).toContain('cover.png · Permission denied');

@@ -220,10 +220,11 @@ fn source_has(song: &Song, item: &Value, category: Category, include_missing: bo
     matches("files") || (include_missing && matches("missing"))
 }
 
-// Old imports had no selection. Missing files can be recovered, but absence
-// alone is insufficient to tell which textual fields a user deliberately cleared.
+// Old imports already selected all optional content. Missing attachments or
+// text can be a later user edit. The original main audio may be supplied for a
+// metadata-only row since there is no command to detach it from an existing song.
 fn old_pending(song: &Song) -> Content {
-    [Category::Audio, Category::Covers, Category::Takes, Category::Stems, Category::Midi, Category::Latents]
+    [Category::Audio]
         .into_iter().filter(|kind| absent(song, *kind)).collect()
 }
 
@@ -771,12 +772,14 @@ mod tests {
             tx.execute("UPDATE songs SET audio_path=NULL, lyrics='' WHERE id=?", [&song.id])?;
             Ok(())
         })?;
+        fs::write(old.media_dir().join("a.mid"), b"previously removed MIDI")?;
         let recovered = transfer_selected(&new, &source, &exclude)?;
         assert_eq!(recovered["added"], 0);
         assert_eq!(recovered["updated"], 1);
         let existing = new.get_song(&song.id)?.unwrap();
         assert!(existing.audio_path.is_some());
         assert!(existing.lyrics.is_empty(), "legacy rows must keep cleared lyrics");
+        assert!(!new.media_dir().join(format!("{}.mid", song.id)).exists());
         assert_eq!(existing.title, "Edited in YuE2");
         let entries = fs::read_dir(new.media_dir())?.collect::<io::Result<Vec<_>>>()?;
         assert_eq!(entries.iter().filter(|entry| entry.path().is_file()).count(), 2);
