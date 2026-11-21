@@ -1,0 +1,29 @@
+name: Windows ACE adapter recovery service
+on:
+  push:
+    branches: [qa/ace-verified-windows-runtime-service]
+permissions:
+  contents: read
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          ref: 9fb734bb9247120723484e5de01a5286f8cc32c1
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo build --locked -p music-server --bin music-server
+      - run: cargo test --locked -p music-server windows_ace_fallback_stays_available_for_requests_without_adapters --lib
+      - run: |
+          @{
+            revision = (git rev-parse HEAD)
+            sha256 = (Get-FileHash target/debug/music-server.exe -Algorithm SHA256).Hash
+          } | ConvertTo-Json | Set-Content -Encoding utf8NoBOM service-receipt.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ace-verified-windows-runtime-service
+          retention-days: 2
+          path: |
+            target/debug/music-server.exe
+            service-receipt.json
