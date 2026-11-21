@@ -460,12 +460,14 @@ const SamplingGrid: React.FC<{ value: SamplingText; defaults?: YueSampling; onCh
 const NO_ACTIVITY: ActivityEntry[] = [];
 const hotStepMiniMaxProfile = 'hotstep-minimax-music3';
 const audioCppYueProfile = 'yue2';
+const hotStepYueProfile = 'hotstep-yue2-q4-k-m';
 const hotStepAceProfile = 'hotstep-ace-step-1.5';
 
 const linkedMusicFamilies = [
   { id: 'local', name: 'YuE2', pairs: [
     { engine: 'local', label: 'yue2.cpp' },
     { engine: 'audio.cpp', label: 'audio.cpp', profile: audioCppYueProfile },
+    { engine: 'hotstep', label: 'HOT-Step', profile: hotStepYueProfile },
   ] },
   { id: 'acestep-cpp', name: 'ACE-Step', pairs: [
     { engine: 'acestep-cpp', label: 'acestep.cpp' },
@@ -528,7 +530,9 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
   const hotstepHeart = nativeEngine === 'hotstep' && native.profile?.id === hotStepHeartmulaProfile;
   const hotstepMiniMax = nativeEngine === 'hotstep' && native.profile?.id === hotStepMiniMaxProfile;
   const hotstepAce = nativeEngine === 'hotstep' && native.profile?.id === hotStepAceProfile;
-  const hotstep = nativeEngine === 'hotstep' && !hotstepSa3 && !hotstepHeart && !hotstepMiniMax && !hotstepAce;
+  const hotstepYue = nativeEngine === 'hotstep' && native.profile?.id === hotStepYueProfile;
+  const packedYue = audioCppYue || hotstepYue;
+  const hotstep = nativeEngine === 'hotstep' && !hotstepSa3 && !hotstepHeart && !hotstepMiniMax && !hotstepAce && !hotstepYue;
   const [hotstepHeartDraft, setHotstepHeartDraft] = useState<HotStepSa3Draft>({});
   const [hotstepSa3Draft, setHotstepSa3Draft] = useState<HotStepSa3Draft>({});
   const [mulaCoverDraft, setMulaCoverDraft] = useState<HotStepCoverDraft>({ original: '', abc: '' });
@@ -1030,7 +1034,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
         const source = settings.music_source as YueRequest['music_source'] | undefined;
         const profile = song.ditModel === 'audio.cpp' ? (source?.kind === 'audio_cpp' ? source.model : audioCppMiniMax)
           : source?.kind === 'native' && source.engine === song.ditModel ? source.model : song.lmModel;
-        if (profile === audioCppYueProfile) {
+        if (profile === audioCppYueProfile || profile === hotStepYueProfile) {
           setAbc(typeof settings.abc === 'string' ? settings.abc : '');
           setCot(settings.cot === 'off' || settings.cot === 'melody' || settings.cot === 'full' ? settings.cot : '');
           setSemanticTokens(typeof settings.semantic_tokens === 'string' ? settings.semantic_tokens : '');
@@ -1048,11 +1052,12 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
         if (profile === 'vevo2') setVevoReferences((settings.vevo2 as YueRequest['vevo2']) ?? { voice_song_id: '' });
         if (profile === hotStepSa3Profile) setHotstepSa3Draft((settings.hotstep_sa3 as YueRequest['hotstep_sa3']) ?? {});
         if (profile === hotStepHeartmulaProfile) setHotstepHeartDraft((settings.hotstep_heartmula as YueRequest['hotstep_heartmula']) ?? {});
-        if (song.ditModel === 'hotstep' && profile !== hotStepSa3Profile && profile !== hotStepHeartmulaProfile && profile !== hotStepMiniMaxProfile && profile !== hotStepAceProfile) setMulaCoverDraft({
+        if (song.ditModel === 'hotstep' && profile !== hotStepSa3Profile && profile !== hotStepHeartmulaProfile && profile !== hotStepMiniMaxProfile && profile !== hotStepAceProfile && profile !== hotStepYueProfile) setMulaCoverDraft({
           original: typeof settings.cover_of === 'string' ? settings.cover_of : song.derived?.from ?? '',
           abc: typeof settings.abc === 'string' ? settings.abc : '',
         });
         native.restore(song.ditModel, profile ?? '', settings);
+        if (profile) pair.select();
       } else {
         const model = typeof settings.model === 'string' ? settings.model : '';
         changeMusicModel(model);
@@ -1075,7 +1080,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
     // A song made without LoRA reuses without it, whatever was picked before.
     setAdapters(usesFromSettings(settings));
     setMode('studio');
-  }, [initialData, applyRequest, changeMusicModel, native.restore]);
+  }, [initialData, applyRequest, changeMusicModel, native.restore, pair.select]);
 
   useEffect(() => {
     setCoverPlaying(false);
@@ -1799,7 +1804,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
       }
       if (vevo2 && (!lyrics.trim() || !vevoReferences.voice_song_id)) { setError(vevo2SingingStrings[language].required); return; }
       if (audioFamily === audioCppMiniMax && (!style.trim() || !lyrics.trim())) { setError(nativeStrings.styleAndLyricsRequired); return; }
-      if (audioCppYue && !style.trim()) { setError(tt('styleOrLyricsRequired')); return; }
+      if (packedYue && !style.trim()) { setError(tt('styleOrLyricsRequired')); return; }
       if (magenta && !magentaReady) return;
       if (miniMaxH3 && !style.trim()) { setError(nativeStrings.h3PromptRequired); return; }
       if ((stableAudio || hotstepSa3) && !style.trim()) { setError(stableAudioPromptRequired(language)); return; }
@@ -1830,7 +1835,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
         ...(heartMuLa ? { heartmula: heartMuLaOptions(heartSettings) } : {}),
         ...((hotstep || mulaCover) ? { cover_of: mulaCoverDraft.original } : {}),
         ...(hotstep ? { abc: mulaCoverDraft.abc } : {}),
-        ...(audioCppYue ? {
+        ...(packedYue ? {
           ...(abc.trim() && effectiveCot !== 'off' ? { abc: abc.trim() } : {}),
           cot: effectiveCot,
           ...(semanticTokens.trim() ? { semantic_tokens: semanticTokens.trim() } : {}),
@@ -2153,6 +2158,9 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
                     {hotstepAce && native.profile?.installable && !native.ready &&
                       <AudioCppModelInstall key={hotStepAceProfile} model={hotStepAceProfile} bytes={native.profile.missing_bytes ?? 0}
                         licenseUrl={native.profile.license_url} language={language} onInstalled={refreshNativeChoice} />}
+                    {hotstepYue && native.profile?.installable && !native.ready &&
+                      <AudioCppModelInstall key={hotStepYueProfile} model={hotStepYueProfile} bytes={native.profile.missing_bytes ?? 0}
+                        licenseUrl={native.profile.license_url} language={language} onInstalled={refreshNativeChoice} />}
                     {(heartMuLa || stableAudio || soulx) && native.profile?.installable && !native.ready &&
                       <AudioCppModelInstall key={audioFamily} model={soulxConversion ? 'soulx_singer_svc' : soulx ? 'soulx_singer' : stableAudio ? 'stable_audio' : 'heartmula'} bytes={native.profile.total_bytes}
                         licenseUrl={native.profile.license_url} language={language} onInstalled={refreshNativeChoice} />}
@@ -2246,7 +2254,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
                 <AutoTextarea className={CONTROL} value={lyrics} onChange={event => setLyrics(event.target.value)}
                   aria-label={t('lyrics')} />
               </Card>}
-              {audioCppYue && <Card title={tt('scoreCardTitle')}>
+              {packedYue && <Card title={tt('scoreCardTitle')}>
                 <label className="mb-2 flex items-center gap-2 text-xs">
                   {tt('cotMode')}
                   <select className={CONTROL} value={effectiveCot} onChange={event => setCot(event.target.value as 'full' | 'melody' | 'off')}>
@@ -2281,7 +2289,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
               {hotstepSa3 && <HotStepSa3Controls value={hotstepSa3Draft} onChange={setHotstepSa3Draft}
                 adapters={native.profile?.adapters ?? []} control={CONTROL} language={language} />}
               {stableAudio && <StableAudioControls value={stableSettings} onChange={setStableSettings} language={language} />}
-              {((nativeEngine && !audioCppYue || signed) && abc.trim() || mulaCover && mulaCoverDraft.abc.trim()) && <p role="status" className="text-xs text-zinc-500">{nativeStrings.scoreKept}</p>}
+              {((nativeEngine && !packedYue || signed) && abc.trim() || mulaCover && mulaCoverDraft.abc.trim()) && <p role="status" className="text-xs text-zinc-500">{nativeStrings.scoreKept}</p>}
               {nativeEngine && (native.profile || native.originalModels) && (
                 <Card title={nativeStrings.settings}>
                   <div className="grid grid-cols-2 gap-2">

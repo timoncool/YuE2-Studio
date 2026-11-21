@@ -469,6 +469,29 @@ it('creates native ACE covers and restores a migrated repaint with its source, r
   } });
 });
 
+it('prepares the restored native profile when reusing a saved song', async () => {
+  const prepares: unknown[] = [];
+  vi.mocked(fetch).mockImplementation(async (url, init) => {
+    if (String(url) === '/v1/music/pair' && init?.method === 'POST') {
+      const { music_source } = JSON.parse(String(init.body));
+      prepares.push(music_source);
+      return Response.json({ revision: prepares.length, requested: music_source, stage: 'ready' });
+    }
+    if (String(url).endsWith('/acestep-cpp/profiles')) return Response.json({
+      engine: 'acestep-cpp', engine_installed: true,
+      profiles: [{ id: 'balanced', label: 'Balanced', ready: true, missing: [], total_bytes: 1 }],
+    });
+    return Response.json({});
+  });
+  const song = {
+    title: 'Old ACE take', style: 'acoustic folk', lyrics: '[Instrumental]',
+    ditModel: 'acestep-cpp', lmModel: 'balanced', generationParams: { duration: 12, seed: 314 },
+  } as Song;
+  act(() => root.render(panel({ musicEngine: 'acestep-cpp', onMusicEngineChange: vi.fn(), initialData: { song, timestamp: 1 } })));
+  await flush();
+  expect(prepares).toEqual([{ kind: 'native', engine: 'acestep-cpp', model: 'balanced' }]);
+});
+
 it('keeps compatible native ACE LoRA separate and restores its saved scale', async () => {
   const xl = { id: 'ace-xl', name: 'ACE XL Synthwave', engine: 'acestep-cpp', kind: 'style',
     trigger: 'xl-exact', slots: ['dit'], scales: { dit: 0.6 }, model: 'xl', origin: { type: 'imported' } };
@@ -2047,9 +2070,33 @@ it('restores HOT-Step cover source and lead sheet from a saved take', async () =
   });
 });
 
+it('restores a HOT-Step YuE2 score with its own sampling and no cover source', async () => {
+  const model = 'hotstep-yue2-q4-k-m';
+  vi.stubGlobal('fetch', vi.fn(async () => Response.json({
+    engine: 'hotstep', engine_installed: true,
+    profiles: [{ id: model, label: 'YuE2 · HOT-Step', ready: true, missing: [] }],
+  })));
+  const music_source = { kind: 'native', engine: 'hotstep', model };
+  const abc = 'X:1\nK:C\nCDEF|';
+  const song = {
+    title: 'YuE2 take', ditModel: 'hotstep', style: 'piano pop', lyrics: 'Hold the light',
+    generationParams: { music_source, abc, cot: 'melody', duration_seconds: 4, seed: 1221, steps: 2,
+      semantic_sampling: { min_tokens: 100, max_tokens: 100 } },
+  } as Song;
+  act(() => root.render(panel({ musicEngine: 'hotstep', initialData: { song, timestamp: 1 } })));
+  await flush();
+  expect(field('textarea[aria-label="scoreCardTitle"]')?.value).toBe(abc);
+  click(buttonNamed('create')!);
+  expect(sent.at(-1)).toMatchObject({ music_source, abc, cot: 'melody', steps: 2, seed: 1221,
+    semantic_sampling: { min_tokens: 100, max_tokens: 100 } });
+  expect(sent.at(-1)?.cover_of).toBeUndefined();
+});
+
 it('switches a YuE2 model from its local runtime and back using the engine selector', async () => {
   vi.stubGlobal('fetch', vi.fn(async (url: string) => Response.json(url === '/v1/music/audio-cpp/models' ? {
     engine: 'audio.cpp', engine_installed: true, models: [{ id: 'yue2', ready: true, missing: [] }],
+  } : url === '/v1/music/native/hotstep/profiles' ? {
+    engine: 'hotstep', engine_installed: true, profiles: [{ id: 'hotstep-yue2-q4-k-m', ready: true, missing: [] }],
   } : {})));
   function Editor() {
     const [route, choose] = React.useState<NonNullable<React.ComponentProps<typeof CreatePanel>['musicEngine']>>('local');
@@ -2064,7 +2111,10 @@ it('switches a YuE2 model from its local runtime and back using the engine selec
   });
   act(() => root.render(<Editor />));
   await flush();
-  expect(Array.from(selectEngine().options, option => option.value)).toEqual(['local', 'audio.cpp']);
+  expect(Array.from(selectEngine().options, option => option.value)).toEqual(['local', 'audio.cpp', 'hotstep']);
+  choose('hotstep');
+  await flush();
+  expect(selectEngine().value).toBe('hotstep');
   choose('audio.cpp');
   await flush();
   expect(selectEngine().value).toBe('audio.cpp');

@@ -26,7 +26,7 @@ interface MidiSize {
 interface MidiRun {
   song_id: string | null;
   size: string;
-  stage: 'preparing' | 'downloading' | 'reading' | 'transcribing' | 'done' | 'stopped';
+  stage: 'preparing' | 'downloading' | 'waiting_for_runtime' | 'reading' | 'transcribing' | 'done' | 'stopped';
   chunks_done: number;
   chunks_total: number;
   notes: number;

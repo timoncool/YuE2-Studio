@@ -540,23 +540,30 @@ impl Downloader {
     }
 
     pub(crate) async fn install_with_hint(&self, scope: &str, assets: &[&'static Asset], hint: &mut Option<ManualArchive>) -> Result<()> {
-        self.install_set(scope, assets, None, hint, Self::is_installed).await
+        self.install_set(scope, assets, None, hint, Self::is_installed, None).await
+    }
+
+    pub(crate) async fn install_all_with_cancel(
+        &self, scope: &str, assets: &[&'static Asset], cancelled: Option<&(dyn Fn() -> bool + Sync)>,
+    ) -> Result<()> {
+        self.install_set(scope, assets, None, &mut None, Self::is_installed, cancelled).await
     }
 
     pub(crate) async fn install_local_archive(&self, scope: &str, asset: &'static Asset, source: &Path) -> Result<()> {
         anyhow::ensure!(release_archive_name(asset).is_some(), "this component has no pinned runtime archive");
-        self.install_set(scope, &[asset], Some(source), &mut None, Self::is_installed).await
+        self.install_set(scope, &[asset], Some(source), &mut None, Self::is_installed, None).await
     }
 
     pub(crate) async fn install_verified(&self, scope: &str, assets: &[&'static Asset]) -> Result<()> {
         anyhow::ensure!(assets.iter().all(|asset| crate::pin_sha::sha256(asset.url).is_some()),
             "verified installation requires a checksum for each component");
-        self.install_set(scope, assets, None, &mut None, Self::is_verified_install).await
+        self.install_set(scope, assets, None, &mut None, Self::is_verified_install, None).await
     }
 
     async fn install_set(
         &self, scope: &str, assets: &[&'static Asset], source: Option<&Path>,
         hint: &mut Option<ManualArchive>, is_installed: fn(&Self, &Asset) -> bool,
+        cancelled: Option<&(dyn Fn() -> bool + Sync)>,
     ) -> Result<()> {
         *hint = None;
         const AT_ONCE: usize = 4;
@@ -566,6 +573,11 @@ impl Downloader {
         }
         let total: u64 = pending.iter().map(|asset| asset.bytes).sum();
         let mut progress = self.progress.lock().await;
+        // cancel_for takes this same lock. A queued owner may already have
+        // been stopped before this set could publish its progress.
+        if cancelled.is_some_and(|check| check()) {
+            bail!("cancelled");
+        }
         // a second press before the first set finished would write the same
         // partial files twice
         if progress.as_ref().is_some_and(|active| !active.done && active.error.is_none()) {
@@ -1971,6 +1983,144 @@ mod tests {
         assert!(downloader.active_for("listen").await.unwrap().error.is_some());
         assert!(!downloader.cancel_for("listen").await);
         assert!(downloader.cancel_for("karaoke").await);
+    }
+
+    #[tokio::test]
+    async fn audio_cpp_runtime_shares_one_transfer_across_tools_and_cancels_by_scope() {
+        use acpp_server::asset::Build;
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        use tokio::sync::Notify;
+
+        for stop_owner in [false, true] {
+            let started = Arc::new(Notify::new());
+            let release = Arc::new(Notify::new());
+            let transfers = Arc::new(AtomicUsize::new(0));
+            let app = axum::Router::new().route("/runtime", axum::routing::get({
+                let (started, release, transfers) = (started.clone(), release.clone(), transfers.clone());
+                move |headers: axum::http::HeaderMap| async move {
+                    if !headers.contains_key("range") {
+                        if transfers.fetch_add(1, Ordering::Relaxed) == 0 {
+                            started.notify_one();
+                            release.notified().await;
+                        }
+                    }
+                    "fixture"
+                }
+            }));
+            let (base, server) = onnx_fixture(app).await;
+            let root = tempfile::tempdir().unwrap();
+            let mut downloader = Downloader::new(root.path().to_owned());
+            downloader.http = reqwest::Client::builder().no_proxy().build().unwrap();
+            let runtime: &'static Asset = Box::leak(Box::new(Asset {
+                url: Box::leak(format!("{base}/runtime").into_boxed_str()),
+                bytes: 7,
+                ..asset()
+            }));
+            let assets = [runtime];
+            let installs = crate::acpp_install::RuntimeInstalls::default();
+            let midi_waiting = Notify::new();
+            let karaoke_waiting = Notify::new();
+
+            let (owner, (midi, karaoke)) = tokio::time::timeout(std::time::Duration::from_secs(10), async {
+                tokio::join!(
+                    installs.run(Build::Cpu, "separation", |_| downloader.install_all("separation", &assets), || async {}),
+                    async {
+                        started.notified().await;
+                        // Before coordination, this is the second tool's actual failure.
+                        let rejected = downloader.install_all("midi", &assets).await.unwrap_err();
+                        assert_eq!(rejected.to_string(), "another download is already running");
+                        let (midi, karaoke, ()) = tokio::join!(
+                            installs.run(Build::Cpu, "midi", |_| async { panic!("MIDI must share the transfer") },
+                                || async { midi_waiting.notify_one(); }),
+                            installs.run(Build::Cpu, "karaoke", |_| async {
+                                assert!(stop_owner, "Karaoke must use a successful shared transfer");
+                                downloader.install_all("karaoke", &assets).await
+                            },
+                                || async { karaoke_waiting.notify_one(); }),
+                            async {
+                                midi_waiting.notified().await;
+                                karaoke_waiting.notified().await;
+                                assert_eq!(installs.waiting_on("midi").as_deref(), Some("separation"));
+                                assert!(installs.cancel("midi"));
+                                assert!(!downloader.cancel_for("midi").await);
+                                assert!(!downloader.active_for("separation").await.unwrap().done);
+                                if stop_owner {
+                                    assert!(installs.cancel("separation"));
+                                    assert!(downloader.cancel_for("separation").await);
+                                } else {
+                                    release.notify_one();
+                                }
+                            }
+                        );
+                        (midi, karaoke)
+                    }
+                )
+            }).await.expect("the owner and waiters did not settle");
+            assert_eq!(midi.unwrap_err().to_string(), "cancelled");
+            assert_eq!(installs.error_for("midi").as_deref(), Some("cancelled"));
+            assert_eq!(installs.waiting_on("midi"), None);
+            if stop_owner {
+                assert_eq!(owner.unwrap_err().to_string(), "cancelled");
+                assert_eq!(installs.error_for("separation").as_deref(), Some("cancelled"));
+                assert_eq!(transfers.load(Ordering::Relaxed), 2, "Karaoke resumed after the owner exited");
+            } else {
+                owner.unwrap();
+                assert_eq!(transfers.load(Ordering::Relaxed), 1);
+            }
+            karaoke.unwrap();
+            assert_eq!(installs.error_for("karaoke"), None);
+            assert_eq!(std::fs::read(downloader.path_of(runtime)).unwrap(), b"fixture");
+            server.abort();
+        }
+    }
+
+    #[tokio::test]
+    async fn audio_cpp_owner_cancelled_between_runtime_and_cuda_never_starts_cuda_download() {
+        use acpp_server::asset::Build;
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        use tokio::sync::Notify;
+
+        let hits = Arc::new(AtomicUsize::new(0));
+        let app = axum::Router::new().route("/cuda", axum::routing::get({
+            let hits = hits.clone();
+            move || async move {
+                hits.fetch_add(1, Ordering::Relaxed);
+                "fixture"
+            }
+        }));
+        let (base, server) = onnx_fixture(app).await;
+        let root = tempfile::tempdir().unwrap();
+        let mut downloader = Downloader::new(root.path().to_owned());
+        downloader.http = reqwest::Client::builder().no_proxy().build().unwrap();
+        let cuda: &'static Asset = Box::leak(Box::new(Asset {
+            url: Box::leak(format!("{base}/cuda").into_boxed_str()), bytes: 7, ..asset()
+        }));
+        let installs = crate::acpp_install::RuntimeInstalls::default();
+        let before_cuda = Notify::new();
+        let continue_cuda = Notify::new();
+        let (owner, ()) = tokio::time::timeout(std::time::Duration::from_secs(5), async {
+            tokio::join!(
+                installs.run(Build::Cuda13, "separation", |request| {
+                    let (downloader, before_cuda, continue_cuda) = (&downloader, &before_cuda, &continue_cuda);
+                    async move {
+                        request.check_cancelled()?;
+                        before_cuda.notify_one();
+                        continue_cuda.notified().await;
+                        downloader.install_all_with_cancel("separation", &[cuda], Some(&|| request.cancelled())).await
+                    }
+                }, || async {}),
+                async {
+                    before_cuda.notified().await;
+                    assert!(installs.cancel("separation"));
+                    assert!(!downloader.cancel_for("separation").await, "CUDA has yet to publish a transfer");
+                    continue_cuda.notify_one();
+                }
+            )
+        }).await.unwrap();
+        assert_eq!(owner.unwrap_err().to_string(), "cancelled");
+        assert_eq!(hits.load(Ordering::Relaxed), 0);
+        assert!(downloader.active_for("separation").await.is_none());
+        server.abort();
     }
 
     #[cfg(windows)]

@@ -36,11 +36,14 @@ export const ReplayModal: React.FC<ReplayModalProps> = ({ song, clientRef, onClo
   const native = isNativeMusicEngine(song.ditModel);
   const audioCppFamily = song.ditModel === 'audio.cpp' ? settings.family : null;
   const audioCppLabel = audioCppFamily === 'heartmula' ? 'HeartMuLa' : audioCppFamily === 'yue2' ? 'YuE2' : null;
-  const maximumSteps = audioCppFamily === 'yue2' ? 100 : 200;
-  const supportsVariations = song.ditModel !== 'minimaxmusic-cpp' && !audioCppLabel;
+  const hotStepReplayLabel = song.ditModel === 'hotstep' ? ({
+    'hotstep-yue2-q4-k-m': 'YuE2', 'hotstep-ace-step-1.5': 'ACE-Step 1.5', 'hotstep-minimax-music3': 'MiniMax Music3',
+  } as Record<string, string>)[String(settings.profile_id)] : undefined;
+  const maximumSteps = settings.profile_id === 'hotstep-yue2-q4-k-m' || audioCppFamily === 'yue2' ? 100 : 200;
+  const supportsVariations = song.ditModel !== 'minimaxmusic-cpp' && !hotStepReplayLabel && !audioCppLabel;
   const minimumSteps = song.ditModel === 'minimaxmusic-cpp' ? 2 : 1;
   const originalSteps = settings.inference_steps ?? settings.steps;
-  const [steps, setSteps] = useState<number | ''>(typeof originalSteps === 'number' ? originalSteps : native || audioCppLabel ? '' : 32);
+  const [steps, setSteps] = useState<number | ''>(typeof originalSteps === 'number' ? originalSteps : native || hotStepReplayLabel || audioCppLabel ? '' : 32);
   const [variations, setVariations] = useState<number>(1);
   // Empty keeps the track's own sound seed exactly as the service stored it:
   // the engine draws 64-bit seeds, which a JavaScript number cannot hold.
@@ -102,7 +105,7 @@ export const ReplayModal: React.FC<ReplayModalProps> = ({ song, clientRef, onClo
 
         <div className="space-y-3 p-5">
           <p className="truncate text-sm font-semibold text-zinc-900 dark:text-white">{song.title}</p>
-          <p className="text-xs leading-5 text-zinc-500 dark:text-zinc-400">{audioCppLabel ? audioCppLabel + ' · audio.cpp' : native ? nativeMusicEngineName(song.ditModel) : t('replayHint')}</p>
+          <p className="text-xs leading-5 text-zinc-500 dark:text-zinc-400">{hotStepReplayLabel ? hotStepReplayLabel + ' · HOT-Step' : audioCppLabel ? audioCppLabel + ' · audio.cpp' : native ? nativeMusicEngineName(song.ditModel) : t('replayHint')}</p>
           {(song.lmModel || song.replayModelFiles?.length) && (
             <div className="break-all text-xs leading-5 text-zinc-500 dark:text-zinc-400">
               <p>{[nativeMusicSourceStrings[language].model, song.lmModel].filter(Boolean).join(' · ')}</p>
@@ -133,7 +136,7 @@ export const ReplayModal: React.FC<ReplayModalProps> = ({ song, clientRef, onClo
                 <option value="wav32">WAV (32-bit float)</option>
               </select>
             </label>
-            {!native && !audioCppLabel && <label className="col-span-2 block text-xs font-medium text-zinc-600 dark:text-zinc-300">
+            {!native && !hotStepReplayLabel && !audioCppLabel && <label className="col-span-2 block text-xs font-medium text-zinc-600 dark:text-zinc-300">
               <span className="mb-1.5 block">{t('replayExtend')}</span>
               <select value={extend} onChange={event => setExtend(Number(event.target.value))} className={CONTROL}>
                 {[0, 15, 30, 60, 90, 120].filter(seconds => seconds <= room).map(seconds => <option key={seconds} value={seconds}>{seconds === 0 ? t('replayExtendNone') : `+${seconds} s`}</option>)}

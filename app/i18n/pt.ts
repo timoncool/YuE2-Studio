@@ -1568,6 +1568,7 @@ export const pt = {
     midiDelete: 'Eliminar MIDI',
     midiStage_preparing: 'A preparar',
     midiStage_downloading: 'A descarregar o transcritor',
+    midiStage_waiting_for_runtime: 'A aguardar a instalação partilhada do audio.cpp',
     midiStage_reading: 'A ler o áudio',
     midiStage_transcribing: 'A ouvir as notas',
     midiStage_done: 'Concluído',

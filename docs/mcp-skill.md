@@ -184,6 +184,12 @@ under LGPL 2.1. You can also install it with `mulacover_runtime_install`.
 On Linux and macOS, install libsoxr with the system package
 manager. [MuLaCover weights and outputs are licensed for noncommercial use](https://github.com/HeartMuLa/MuLaCover/blob/e27fa7fa0da7c9817879cc6210cc5693f9327946/MODEL_LICENSE).
 
+For YuE2 on HOT-Step, call `hotstep_yue2_install` and read progress in
+`hotstep_cover_profiles`. Once `hotstep-yue2-q4-k-m` is ready, pass
+`music_source: {"kind":"native","engine":"hotstep","model":"hotstep-yue2-q4-k-m"}`
+to `song_create` with style and optional lyrics, ABC and planning mode.
+`song_replay` makes one new take from the saved request.
+
 For ACE-Step 1.5 Turbo on HOT-Step, start `hotstep_ace_install` and check
 `hotstep_cover_profiles`. The experimental Windows CPU profile includes the
 published runtime, its Euler and APG Lua plugins, and the Turbo Q8_0 weights.

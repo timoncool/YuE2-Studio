@@ -1,6 +1,7 @@
 #[macro_use]
 pub mod studio_log;
 mod adapters;
+mod acpp_install;
 mod community;
 mod component_catalogue;
 mod engine_catalogue;
@@ -37,6 +38,7 @@ mod hotstep_cover;
 mod hotstep_runtime;
 mod hotstep_generation;
 mod hotstep_ace_assets;
+mod hotstep_yue2;
 mod hotstep_heartmula;
 mod hotstep_heartmula_assets;
 mod hotstep_sa3;
@@ -170,6 +172,7 @@ struct AppState {
     hotstep_sa3_install: Arc<tokio::sync::Mutex<()>>,
     hotstep_minimax_install: Arc<tokio::sync::Mutex<()>>,
     hotstep_ace_install: Arc<tokio::sync::Mutex<()>>,
+    hotstep_yue_install: Arc<tokio::sync::Mutex<()>>,
     hotstep_sa3_train_install: Arc<tokio::sync::Mutex<()>>,
     audio_cpp_music_stops: Arc<RwLock<HashMap<String, Arc<std::sync::atomic::AtomicBool>>>>,
     heartmula_install: Arc<tokio::sync::Mutex<()>>,
@@ -1648,6 +1651,7 @@ pub async fn serve_on_port(port: u16) -> anyhow::Result<()> {
         hotstep_sa3_install: Arc::default(),
         hotstep_minimax_install: Arc::default(),
         hotstep_ace_install: Arc::default(),
+        hotstep_yue_install: Arc::default(),
         hotstep_sa3_train_install: Arc::default(),
         audio_cpp_music_stops: Arc::default(),
         heartmula_install: Arc::default(),
@@ -2083,6 +2087,7 @@ pub async fn serve_on_port(port: u16) -> anyhow::Result<()> {
         .route("/v1/music/native/hotstep/heartmula/install", post(hotstep_heartmula::install))
         .route("/v1/music/native/hotstep/minimax-music3/install", post(hotstep_generation::install))
         .route("/v1/music/native/hotstep/ace-step-1.5/install", post(hotstep_generation::install_ace))
+        .route("/v1/music/native/hotstep/yue2/install", post(hotstep_generation::install_yue))
         .route("/v1/music/audio-cpp/mulacover/runtime", post(audio_cpp_mulacover::install_runtime))
         .route("/v1/music/audio-cpp/models/install", post(audio_cpp_music::install))
         .route("/v1/music/replay", post(replay_music_job))
@@ -2263,7 +2268,8 @@ fn listed_song(song: &library::Song) -> serde_json::Result<Value> {
                 || [request["duration"].as_f64(), song.metadata["duration_seconds"].as_f64()]
                     .into_iter().flatten().any(|duration| duration > 0.0)
         });
-        let replay_available = audio_cpp_music::supports_replay(song)
+        let replay_available = hotstep_generation::family_for_replay(song).is_some()
+            || audio_cpp_music::supports_replay(song)
             || (kept(&song.replay_request) && (kept(&song.audio_codes) || ace_without_codes));
         fields.insert("replay_available".into(), Value::Bool(replay_available));
         let model_keys: &[&str] = match song.engine_id.as_str() {
@@ -2733,22 +2739,62 @@ fn separation_build(runtime: lyrics_sync::OnnxFlavour) -> anyhow::Result<acpp_se
 /// Downloads what audio.cpp's server of `build` still lacks: the program and its libraries, and the CUDA libraries it
 /// shares with the music engine through the engine runtime that downloads them (`shared_cuda`).
 async fn install_acpp(state: &AppState, build: acpp_server::asset::Build, scope: &str) -> anyhow::Result<()> {
-    state.acpp.downloader().install_all(scope, &state.acpp.missing(build)).await?;
-    if let Some(cuda) = shared_cuda(build) {
-        state.engine_runtime.install_missing_for(Some(cuda), scope).await?;
-    }
-    Ok(())
+    state.acpp.downloader().clear_finished(scope).await;
+    state.acpp.installs.run(build, scope, |request| async move {
+        let cancelled = || request.cancelled();
+        state.acpp.downloader().install_all_with_cancel(scope, &state.acpp.missing(build), Some(&cancelled)).await?;
+        request.check_cancelled()?;
+        if let Some(cuda) = shared_cuda(build) {
+            state.engine_runtime.install_missing_with_cancel(Some(cuda), scope, Some(&cancelled)).await?;
+        }
+        request.check_cancelled()
+    }, || async {
+        if scope == "midi" {
+            set_midi_stage(state, "waiting_for_runtime").await;
+        }
+    }).await
 }
 
 async fn acpp_download(state: &AppState, scope: &str) -> Option<downloads::DownloadProgress> {
-    separation_download_progress(
+    if let Some(owner) = state.acpp.installs.waiting_on(scope) {
+        let shared = separation_download_progress(
+            state.acpp.downloader().active_for(&owner).await,
+            state.engine_runtime.downloader().active_for(&owner).await,
+        );
+        let (downloaded_bytes, total_bytes) = shared.filter(|progress| !progress.done)
+            .map_or((0, 0), |progress| (progress.downloaded_bytes, progress.total_bytes));
+        return Some(downloads::DownloadProgress {
+            asset_id: "audio.cpp".into(),
+            scope: Some(scope.into()),
+            downloaded_bytes,
+            total_bytes,
+            done: false,
+            error: None,
+            manual_archive: None,
+        });
+    }
+    let progress = separation_download_progress(
         state.acpp.downloader().active_for(scope).await,
         state.engine_runtime.downloader().active_for(scope).await,
-    )
+    );
+    if let Some(error) = state.acpp.installs.error_for(scope) {
+        return Some(downloads::DownloadProgress {
+            asset_id: "audio.cpp".into(),
+            scope: Some(scope.into()),
+            downloaded_bytes: progress.as_ref().map_or(0, |item| item.downloaded_bytes),
+            total_bytes: progress.as_ref().map_or(0, |item| item.total_bytes),
+            done: true,
+            error: Some(error),
+            manual_archive: progress.and_then(|item| item.manual_archive),
+        });
+    }
+    progress
 }
 
 async fn cancel_acpp_download(state: &AppState, scope: &str) -> bool {
-    state.acpp.downloader().cancel_for(scope).await | state.engine_runtime.downloader().cancel_for(scope).await
+    state.acpp.installs.cancel(scope)
+        | state.acpp.downloader().cancel_for(scope).await
+        | state.engine_runtime.downloader().cancel_for(scope).await
 }
 
 /// The engine's CUDA build whose libraries audio.cpp's server of `build` loads: cuBLAS 13 on Windows for the CUDA 13
@@ -2873,7 +2919,6 @@ async fn install_separation_asset(
             }
             if let Err(error) = install_acpp(&background, build, "separation").await {
                 eprintln!("[ERROR] audio.cpp's server could not be installed for the separator: {error:#}");
-                background.acpp.downloader().fail("separation", format!("{error:#}")).await;
             }
         });
         return Ok(Json(serde_json::json!({ "started": true })));
@@ -3702,7 +3747,7 @@ async fn training_pack_files(state: &AppState) -> (Vec<Value>, bool) {
 async fn training_pack_download(state: &AppState, scope: &str) -> Option<downloads::DownloadProgress> {
     let separator_download = separation_download_progress(
         state.separator.downloader().active_for(scope).await,
-        state.acpp.downloader().active_for(scope).await,
+        acpp_download(state, scope).await,
     );
     let cublas_download = state.engine_runtime.downloader().active_for(scope).await;
     match state.training.downloader().active_for(scope).await {
@@ -4712,7 +4757,6 @@ async fn install_restore(State(state): State<AppState>) -> Result<Json<Value>, (
         }
         if let Err(error) = install_acpp(&background, build, "restore").await {
             studio_log!("[ERROR] audio.cpp's server could not be installed for Apollo: {error:#}");
-            background.acpp.downloader().fail("restore", format!("{error:#}")).await;
         }
     });
     Ok(Json(serde_json::json!({ "started": true })))
@@ -5339,13 +5383,13 @@ async fn tag_stored_song(state: &AppState, song_id: &str) {
         title: song.title.clone(),
         album: "YuE2 Studio".to_string(),
         // The engine is the performer here; the studio is the label.
-        artist: match song.engine_id.as_str() {
+        artist: music_adapter_artist(&song.engine_id, &song.generation_settings).unwrap_or_else(|| match song.engine_id.as_str() {
             "openrouter" => song.generation_settings.get("model").and_then(Value::as_str)
                 .filter(|id| !id.is_empty()).unwrap_or("OpenRouter"),
             "acestep-cpp" => "ACE-Step",
             "minimaxmusic-cpp" => "MiniMax Music 3",
             _ => "YuE2",
-        }.to_string(),
+        }).to_string(),
         genre: tagging::genre_from_caption(&song.caption),
         lyrics: Some(song.lyrics.clone()).filter(|value| !value.trim().is_empty()),
         bpm: tagging::bpm_from_caption(&song.caption),
@@ -5375,6 +5419,24 @@ async fn tag_stored_song(state: &AppState, song_id: &str) {
         Ok(Err(error)) => eprintln!("could not tag {shown}: {error}"),
         Err(error) => eprintln!("could not tag {shown}: the tagging task stopped: {error}"),
     }
+}
+
+/// These engines host several models, so the saved model takes precedence over the runtime name.
+fn music_adapter_artist<'a>(engine: &str, settings: &'a Value) -> Option<&'a str> {
+    let fallback = match engine {
+        audio_cpp_music::ENGINE => "audio.cpp",
+        hotstep_cover::ENGINE => "HOT-Step",
+        _ => return None,
+    };
+    let text = |value: &'a Value| value.as_str().map(str::trim).filter(|name| !name.is_empty());
+    let family = text(&settings["family"]);
+    let model = text(&settings["model"]).map(|name| audio_cpp_music::family_name(name).unwrap_or(name));
+    let source_model = text(&settings["music_source"]["model"]);
+    Some(model
+        .or_else(|| family.and_then(audio_cpp_music::family_name))
+        .or_else(|| source_model.and_then(audio_cpp_music::family_name))
+        .or(family)
+        .unwrap_or(fallback))
 }
 
 /// Tracks stored before the studio tagged anything carry no tag, and a download
@@ -9783,7 +9845,6 @@ async fn install_midi(State(state): State<AppState>, Json(input): Json<MidiSizeR
         }
         if let Err(error) = install_acpp(&background, build, "midi").await {
             eprintln!("[ERROR] midi: audio.cpp's server: {error:#}");
-            background.acpp.downloader().fail("midi", format!("{error:#}")).await;
         }
     });
     Ok(Json(serde_json::json!({ "started": true, "size": size.id })))
@@ -9962,6 +10023,9 @@ async fn transcribe_to_midi(state: &AppState, size: &'static midi::Size, audio: 
         // the first use fetches what the tool needs, as the karaoke recogniser does
         set_midi_stage(state, "downloading").await;
         state.midi.downloader().install_all("midi", &missing).await.context("download MuScriptor")?;
+        if midi_stopped(state) {
+            anyhow::bail!("cancelled");
+        }
         install_acpp(state, build, "midi").await.context("download audio.cpp's server")?;
         if midi_stopped(state) || !state.midi.missing(size).is_empty() || !state.acpp.installed(build) {
             anyhow::bail!("stopped before everything the transcriber needs had arrived");
@@ -11775,6 +11839,7 @@ async fn dispatch_music_job(state: AppState, mut request: CreateMusicJobRequest,
                 hotstep_cover::ENGINE if model == hotstep_heartmula::PROFILE => hotstep_heartmula::submit(state, request, attempt).await,
                 hotstep_cover::ENGINE if model == hotstep_generation::PROFILE => hotstep_generation::submit(state, request, attempt).await,
                 hotstep_cover::ENGINE if model == hotstep_generation::ACE_PROFILE => hotstep_generation::submit_ace(state, request, attempt).await,
+                hotstep_cover::ENGINE if model == hotstep_generation::YUE_PROFILE => hotstep_generation::submit_yue(state, request, attempt).await,
                 hotstep_cover::ENGINE => hotstep_cover::submit(state, request, model, attempt).await,
                 native_minimax::ENGINE_ID => native_music_jobs::submit_minimax(state, request, model, attempt).await,
                 _ => (StatusCode::BAD_REQUEST, Json(failed_request_job(request, engine.clone(), format!("Unknown native engine {engine}.")))),
@@ -11961,6 +12026,9 @@ async fn submit_replay_job(state: AppState, request: ReplayMusicJobRequest, atte
             if song.replay_request.as_ref().is_some_and(|value| value.get("signed_engine").is_some()) {
                 return signed_music_jobs::replay(state, song, request, attempt).await;
             }
+            if let Some(family) = hotstep_generation::family_for_replay(&song) {
+                return hotstep_generation::replay(state, song, request, attempt, family).await;
+            }
             match song.engine_id.as_str() {
                 ace::ENGINE_ID => return native_ace_jobs::replay(state, song, request, attempt).await,
                 native_minimax::ENGINE_ID => return native_music_jobs::replay(state, song, request, attempt).await,
@@ -11968,8 +12036,6 @@ async fn submit_replay_job(state: AppState, request: ReplayMusicJobRequest, atte
                     return audio_cpp_music::replay(state, song, request, attempt).await;
                 }
                 hotstep_cover::ENGINE if song.generation_settings["profile_id"] == hotstep_sa3::PROFILE => return hotstep_sa3::replay(state, song, request, attempt).await,
-                hotstep_cover::ENGINE if song.generation_settings["profile_id"] == hotstep_generation::PROFILE => return hotstep_generation::replay(state, song, request, attempt, hotstep_generation::Family::MiniMax).await,
-                hotstep_cover::ENGINE if song.generation_settings["profile_id"] == hotstep_generation::ACE_PROFILE => return hotstep_generation::replay(state, song, request, attempt, hotstep_generation::Family::Ace).await,
                 PRIMARY_MUSIC_ENGINE_ID => {},
                 _ if song.replay_request.is_none() => return Err(api_error(StatusCode::BAD_REQUEST, "This track has no replay request.".into())),
                 _ => return Err(api_error(StatusCode::BAD_REQUEST, format!("Re-rendering is unavailable for engine {}.", song.engine_id))),

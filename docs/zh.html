@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>YuE2 Studio — 在你自己的显卡上生成带可编辑乐谱的完整歌曲</title>
-<meta name="description" content="YuE2 歌曲模型的桌面工作室：输入风格和歌词，得到带人声的完整歌曲及其乐谱。翻唱、精确重放、卡拉 OK。单个可执行文件，无需 Python，在 NVIDIA 显卡上离线运行。" />
+<title>YuE2 Studio — 使用 YuE2、ACE-Step 和 MiniMax 创作音乐</title>
+<meta name="description" content="在同一款音乐工作室中使用 YuE2、ACE-Step 和 MiniMax。导入曲目和播放列表，比较不同版本，并通过 RVC 尝试其他音色。" />
 <link rel="canonical" href="https://timoncool.github.io/YuE2-Studio/zh.html" />
 <link rel="alternate" hreflang="en" href="https://timoncool.github.io/YuE2-Studio/" />
 <link rel="alternate" hreflang="ru" href="https://timoncool.github.io/YuE2-Studio/ru.html" />
@@ -16,18 +16,18 @@
 <link rel="icon" type="image/png" href="logo.png" />
 <meta property="og:type" content="website" />
 <meta property="og:site_name" content="YuE2 Studio" />
-<meta property="og:title" content="YuE2 Studio — 在你自己的显卡上生成带可编辑乐谱的完整歌曲" />
-<meta property="og:description" content="YuE2 歌曲模型的桌面工作室：输入风格和歌词，得到带人声的完整歌曲及其乐谱。翻唱、精确重放、卡拉 OK。单个可执行文件，无需 Python，在 NVIDIA 显卡上离线运行。" />
+<meta property="og:title" content="YuE2 Studio — 使用 YuE2、ACE-Step 和 MiniMax 创作音乐" />
+<meta property="og:description" content="在同一款音乐工作室中使用 YuE2、ACE-Step 和 MiniMax。导入曲目和播放列表，比较不同版本，并通过 RVC 尝试其他音色。" />
 <meta property="og:url" content="https://timoncool.github.io/YuE2-Studio/zh.html" />
 <meta property="og:locale" content="zh" />
 <meta property="og:image" content="https://timoncool.github.io/YuE2-Studio/og-zh.jpg" />
 <meta property="og:image:width" content="1200" />
 <meta property="og:image:height" content="630" />
-<meta property="og:image:alt" content="带可编辑乐谱的完整歌曲，在你自己的显卡上生成" />
+<meta property="og:image:alt" content="一个音乐工作室，支持 YuE2、ACE-Step 和 MiniMax" />
 <meta name="twitter:card" content="summary_large_image" />
 <meta name="twitter:image" content="https://timoncool.github.io/YuE2-Studio/og-zh.jpg" />
 <link rel="preload" as="image" href="screenshots/zh-01-create.webp" fetchpriority="high" />
-<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"SoftwareApplication","@id":"https://timoncool.github.io/YuE2-Studio/#app","name":"YuE2 Studio","url":"https://timoncool.github.io/YuE2-Studio/zh.html","inLanguage":"zh","description":"YuE2 歌曲模型的桌面工作室：输入风格和歌词，得到带人声的完整歌曲及其乐谱。翻唱、精确重放、卡拉 OK。单个可执行文件，无需 Python，在 NVIDIA 显卡上离线运行。","applicationCategory":"MultimediaApplication","applicationSubCategory":"AI music generation","operatingSystem":"Windows 10, Windows 11","softwareVersion":"5.0.0","fileSize":"316 MB","downloadUrl":"https://github.com/timoncool/YuE2-Studio/releases/latest","isAccessibleForFree":true,"license":"https://opensource.org/licenses/MIT","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"image":"https://timoncool.github.io/YuE2-Studio/og-zh.jpg","screenshot":"https://timoncool.github.io/YuE2-Studio/screenshots/zh-01-create.webp","codeRepository":"https://github.com/timoncool/YuE2-Studio","sameAs":["https://github.com/timoncool/YuE2-Studio"],"author":{"@id":"https://github.com/timoncool#person"},"dateModified":"2026-11-13"},{"@type":"Person","@id":"https://github.com/timoncool#person","name":"Nerual Dreming","url":"https://github.com/timoncool","sameAs":["https://github.com/timoncool","https://t.me/nerual_dreming","https://x.com/nerualdreming","https://artgeneration.me"]},{"@type":"FAQPage","inLanguage":"zh","mainEntity":[{"@type":"Question","name":"需要什么显卡？","acceptedAnswer":{"@type":"Answer","text":"Windows 10/11 x64，显存 6 GB 以上的显卡：NVIDIA（GTX 900 或更新）使用 CUDA；AMD 和 Intel 通过 Vulkan 运行，属实验性质。模型在工作室内按你的决定下载。 可运行的模型组由 YuE2-3B 主干和 VAE 组成；SheetSage2 可选，仅翻唱需要。 大小已包含 SheetSage2。工作室会预选你的显卡能运行的模型组，但是否下载始终由你决定。每个文件都按固定的 Hugging Face 版本校验 SHA-256，中断的下载可以续传。"}},{"@type":"Question","name":"免费吗？","acceptedAnswer":{"@type":"Answer","text":"是的。工作室免费且开源，模型也可以在其中免费下载。"}},{"@type":"Question","name":"没有网络能用吗？我的音乐会被上传吗？","acceptedAnswer":{"@type":"Answer","text":"你的音乐属于你，并留在你的磁盘上。 无需账号: 没有任何需要注册的东西。 无遥测: 工作室不会报告你生成了什么。 云端需主动开启: 在你添加密钥之前，没有任何数据离开电脑，之后也只用于对应功能。"}},{"@type":"Question","name":"生成的歌曲可以使用吗？","acceptedAnswer":{"@type":"Answer","text":"工作室和 yue2.cpp 采用 MIT 许可。YuE2-3B 与 YuE2 VAE 权重采用 CC BY-NC 4.0，并附个人创作者许可：以个人身份创作的音乐人和创作者可以出售并变现所制作的歌曲；公司需向作者取得许可。用于翻唱的 SheetSage2 采用 CC BY-NC 4.0。"}},{"@type":"Question","name":"能用我自己的风格训练吗？","acceptedAnswer":{"@type":"Answer","text":"用同一歌手或风格的歌曲，在你的显卡上以 HOT-Step 的训练器和配方训练 LoRA。每项设置都可修改，数据集可在本工作室与 MiniMax Music3 Studio 之间迁移。"}},{"@type":"Question","name":"AI 智能体能操作它吗？","acceptedAnswer":{"@type":"Answer","text":"连接 Claude Code、Claude Desktop 或 Cursor，智能体就能做工作室能做的一切：写歌并生成、整理数据集并训练、绘制封面、在视频编辑器里剪辑 MV、播放歌曲——还能看到窗口并点击按钮。模型的写作规则随之提供，风格和歌词由智能体自己来写。把它选为写作助手，就由它代替本地模型写词。"}},{"@type":"Question","name":"安装包里有什么？","acceptedAnswer":{"@type":"Answer","text":"默认全部本地运行。云端密钥由你添加，只用于你选择的功能。"}},{"@type":"Question","name":"它是如何构建的？","acceptedAnswer":{"@type":"Answer","text":"服务编译进桌面程序并管理 C++ 引擎。完成的歌曲由服务自己导入，因此刷新或关闭窗口也不会丢失结果。"}}]}]}</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"SoftwareApplication","@id":"https://timoncool.github.io/YuE2-Studio/#app","name":"YuE2 Studio","url":"https://timoncool.github.io/YuE2-Studio/zh.html","inLanguage":"zh","description":"在同一款音乐工作室中使用 YuE2、ACE-Step 和 MiniMax。导入曲目和播放列表，比较不同版本，并通过 RVC 尝试其他音色。","applicationCategory":"MultimediaApplication","applicationSubCategory":"AI music generation","operatingSystem":["Windows 10","Windows 11","Linux","macOS"],"softwareVersion":"5.0.0","downloadUrl":"https://github.com/timoncool/YuE2-Studio/releases/latest","isAccessibleForFree":true,"license":"https://opensource.org/licenses/MIT","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"image":"https://timoncool.github.io/YuE2-Studio/og-zh.jpg","screenshot":"https://timoncool.github.io/YuE2-Studio/screenshots/zh-01-create.webp","codeRepository":"https://github.com/timoncool/YuE2-Studio","sameAs":["https://github.com/timoncool/YuE2-Studio"],"author":{"@id":"https://github.com/timoncool#person"},"dateModified":"2026-11-21"},{"@type":"Person","@id":"https://github.com/timoncool#person","name":"Nerual Dreming","url":"https://github.com/timoncool","sameAs":["https://github.com/timoncool","https://t.me/nerual_dreming","https://x.com/nerualdreming","https://artgeneration.me"]},{"@type":"FAQPage","inLanguage":"zh","mainEntity":[{"@type":"Question","name":"需要什么显卡？","acceptedAnswer":{"@type":"Answer","text":"支持 Windows 10/11 x64。在工作室内下载本地模型。支持的显卡和显存需求取决于模型和引擎，实测结果见下方。 可运行的模型组由 YuE2-3B 主干和 VAE 组成；SheetSage2 可选，仅翻唱需要。 大小已包含 SheetSage2。工作室会预选你的显卡能运行的模型组，但是否下载始终由你决定。每个文件都按固定的 Hugging Face 版本校验 SHA-256，中断的下载可以续传。"}},{"@type":"Question","name":"免费吗？","acceptedAnswer":{"@type":"Answer","text":"是的。工作室免费且开源，模型也可以在其中免费下载。"}},{"@type":"Question","name":"没有网络能用吗？我的音乐会被上传吗？","acceptedAnswer":{"@type":"Answer","text":"你的音乐属于你，并留在你的磁盘上。 无需账号: 没有任何需要注册的东西。 无遥测: 工作室不会报告你生成了什么。 云端需主动开启: 在你添加密钥之前，没有任何数据离开电脑，之后也只用于对应功能。"}},{"@type":"Question","name":"生成的歌曲可以使用吗？","acceptedAnswer":{"@type":"Answer","text":"工作室和 yue2.cpp 采用 MIT 许可。YuE2-3B 与 YuE2 VAE 权重采用 CC BY-NC 4.0，并附个人创作者许可：以个人身份创作的音乐人和创作者可以出售并变现所制作的歌曲；公司需向作者取得许可。用于翻唱的 SheetSage2 采用 CC BY-NC 4.0。"}},{"@type":"Question","name":"能用我自己的风格训练吗？","acceptedAnswer":{"@type":"Answer","text":"用同一歌手或风格的歌曲，在你的显卡上以 HOT-Step 的训练器和配方训练 LoRA。每项设置都可修改，数据集可在本工作室与 MiniMax Music3 Studio 之间迁移。"}},{"@type":"Question","name":"AI 智能体能操作它吗？","acceptedAnswer":{"@type":"Answer","text":"连接 Claude Code、Claude Desktop 或 Cursor，智能体就能做工作室能做的一切：写歌并生成、整理数据集并训练、绘制封面、在视频编辑器里剪辑 MV、播放歌曲——还能看到窗口并点击按钮。模型的写作规则随之提供，风格和歌词由智能体自己来写。把它选为写作助手，就由它代替本地模型写词。"}},{"@type":"Question","name":"安装包里有什么？","acceptedAnswer":{"@type":"Answer","text":"默认全部本地运行。云端密钥由你添加，只用于你选择的功能。"}},{"@type":"Question","name":"它是如何构建的？","acceptedAnswer":{"@type":"Answer","text":"服务编译进桌面程序并管理 C++ 引擎。完成的歌曲由服务自己导入，因此刷新或关闭窗口也不会丢失结果。"}}]}]}</script>
 <style>
 :root {
   --bg: #0b0b0e;
@@ -249,13 +249,13 @@ footer p { margin: 0 0 8px; }
 
 <main class="wrap">
   <section class="hero">
-    <h1>带可编辑乐谱的完整歌曲，在你自己的显卡上生成</h1>
-    <p class="lead">YuE2 的桌面工作室。</p>
+    <h1>一个音乐工作室，支持 YuE2、ACE-Step 和 MiniMax</h1>
+    <p class="lead">创作歌曲时可以选择模型和引擎。</p>
     <div class="cta">
-      <a class="btn primary" href="https://github.com/timoncool/YuE2-Studio/releases/latest">下载 Windows 版<small data-release>v5.0.0 · 316 MB</small></a>
+      <a class="btn primary" href="https://github.com/timoncool/YuE2-Studio/releases/latest">下载 Windows 版<small data-release>v5.0.0</small></a>
       <a class="btn" href="https://github.com/timoncool/YuE2-Studio">在 GitHub 上加星<img class="stars" src="https://img.shields.io/github/stars/timoncool/YuE2-Studio?style=flat&amp;label=%E2%98%85&amp;color=3f3f46" alt="GitHub 星标" height="20" /></a>
     </div>
-    <p class="note">Windows 10/11 x64，显存 6 GB 以上的显卡：NVIDIA（GTX 900 或更新）使用 CUDA；AMD 和 Intel 通过 Vulkan 运行，属实验性质。模型在工作室内按你的决定下载。</p>
+    <p class="note">支持 Windows 10/11 x64。在工作室内下载本地模型。支持的显卡和显存需求取决于模型和引擎，实测结果见下方。</p>
     <figure class="hero-shot"><img src="screenshots/zh-01-create.webp" alt="创作歌曲：风格、歌词，已载入 110 个示例之一。" width="1600" height="1000" fetchpriority="high" /></figure>
   </section>
 
@@ -492,26 +492,30 @@ footer p { margin: 0 0 8px; }
     <p class="note">种子为 42 时，两份 WAV 均为 30.0 秒、48 kHz 的立体声。按 100 毫秒窗口计算双声道 RMS，CUDA 的最后 5.3 秒和 Vulkan 的最后 5.0 秒均低于 −60 dBFS。速度按 WAV 的完整时长计算。</p>
 <!-- music-gpu-matrix:start -->
     <h3 id="music-gpu-matrix-title">音乐引擎 GPU 测试矩阵 · 5.0 开发版与已发布版本</h3>
-    <p class="note">Windows 11、RTX 4090、驱动 617.42。冷启动计时包含服务器启动至收到首个 WAV，预热后为同一服务器三次请求的中位数。内存数据为冷启动时整卡显存和进程树 RSS 峰值。比较同一任务时也需核对权重、静音段和构建版本。 热运行请求前显存为三次请求之前整张显卡显存读数的中位数。 驻留 WDDM 显存和 RSS 为已发布 CUDA 13 版本预热一次后，进程树空闲时三次测量的中位数。</p>
+    <p class="note">Windows 11、RTX 4090、驱动 617.42。冷启动计时包含服务器启动至收到首个 WAV，预热后为同一服务器三次请求的中位数。内存数据为冷启动时整卡显存和进程树 RSS 峰值。比较同一任务时也需核对权重、静音段和构建版本。 热运行请求前显存为三次请求之前整张显卡显存读数的中位数。 驻留 WDDM 显存和 RSS 为表中各 CUDA 13 版本预热一次后，进程树空闲时三次测量的中位数。</p>
     <div class="scroll benchmark-scroll" role="region" aria-labelledby="music-gpu-matrix-title" tabindex="0"><table>
       <thead><tr><th scope="col">模型和引擎</th><th scope="col">后端</th><th scope="col">WAV（秒）</th><th scope="col">冷启动（秒）</th><th scope="col">预热后（秒）</th><th scope="col">音频秒/秒</th><th scope="col">显存峰值 / 增量（GiB）</th><th scope="col">热运行请求前显存（GiB）</th><th scope="col">内存峰值（GiB）</th><th scope="col">驻留 WDDM 显存 / RSS（GiB）</th></tr></thead>
       <tbody>
       <tr><td>YuE2 · yue2.cpp 892b9b0 · 3B Q8_0 + F32 VAE; NAR v9 · 30 s · 32 steps</td><td>CUDA 13</td><td>29.999</td><td>9.735</td><td>5.166</td><td>5.81×</td><td>7.67 / +5.74</td><td>7.67</td><td>3.36</td><td>—</td></tr>
+      <tr><td>YuE2 · yue2.cpp 892b9b0 · 3B Q8_0 + F32 VAE; NAR v9 · 30 s · 32 steps</td><td>CUDA 12</td><td>29.999</td><td>11.219</td><td>5.155</td><td>5.82×</td><td>7.64 / +5.75</td><td>7.63</td><td>3.35</td><td>—</td></tr>
       <tr><td>YuE2 · yue2.cpp 892b9b0 · 3B Q8_0 + F32 VAE; NAR v9 · 30 s · 32 steps</td><td>Vulkan</td><td>29.999</td><td>16.609</td><td>5.861</td><td>5.12×</td><td>8.19 / +5.81</td><td>8.87</td><td>3.08</td><td>—</td></tr>
       <tr><td>YuE2 · audio.cpp 41242418 · 3B Q8_0 + F16 VAE; NAR v9 · 30 s · 32 steps</td><td>CUDA 13</td><td>29.999</td><td>16.807</td><td>7.441</td><td>4.03×</td><td>7.02 / +4.68</td><td>3.16</td><td>6.24</td><td>—</td></tr>
       <tr><td>YuE2 · audio.cpp 41242418 · 3B Q8_0 + F16 VAE; NAR v9 · 30 s · 32 steps</td><td>Vulkan</td><td>29.999</td><td>28.258</td><td>10.286</td><td>2.92×</td><td>6.44 / +4.51</td><td>2.54</td><td>6.85</td><td>—</td></tr>
-      <tr><td>YuE2 · yue2.cpp 892b9b0 · 3B Q8_0 + F32 VAE; NAR v9 · 100 tokens · 2 steps</td><td>CUDA 13</td><td>3.999</td><td>6.062</td><td>0.140</td><td>28.52×</td><td>6.44 / +4.51</td><td>6.44</td><td>3.35</td><td>—</td></tr>
+      <tr><td>YuE2 · yue2.cpp 892b9b0 · 3B Q8_0 + F32 VAE; NAR v9 · 100 tokens · 2 steps</td><td>CUDA 13</td><td>3.999</td><td>6.062</td><td>0.140</td><td>28.52×</td><td>6.44 / +4.51</td><td>6.44</td><td>3.35</td><td>4.50 / 0.77</td></tr>
       <tr><td>YuE2 · audio.cpp 41242418 · 3B Q8_0 + F16 VAE; NAR v9 · 100 tokens · 2 steps</td><td>CUDA 13</td><td>3.999</td><td>7.482</td><td>0.383</td><td>10.44×</td><td>6.28 / +3.92</td><td>3.03</td><td>5.84</td><td>—</td></tr>
       <tr><td>YuE2 · yue2.cpp 892b9b0 · 3B Q8_0 + F32 VAE; NAR v9 · 100 tokens · 2 steps</td><td>CUDA 12</td><td>3.999</td><td>4.312</td><td>0.110</td><td>36.20×</td><td>6.43 / +4.50</td><td>6.43</td><td>3.34</td><td>—</td></tr>
       <tr><td>YuE2 · audio.cpp 41242418 · 3B Q8_0 + F16 VAE; NAR v9 · 100 tokens · 2 steps</td><td>CUDA 12</td><td>3.999</td><td>7.869</td><td>0.420</td><td>9.52×</td><td>6.46 / +4.10</td><td>3.03</td><td>5.76</td><td>—</td></tr>
       <tr><td>YuE2 · yue2.cpp 892b9b0 · 3B Q8_0 + F32 VAE; NAR v9 · 100 tokens · 2 steps</td><td>Vulkan</td><td>3.999</td><td>13.766</td><td>0.252</td><td>15.88×</td><td>6.54 / +4.17</td><td>6.54</td><td>3.82</td><td>—</td></tr>
       <tr><td>YuE2 · audio.cpp 41242418 · 3B Q8_0 + F16 VAE; NAR v9 · 100 tokens · 2 steps</td><td>Vulkan</td><td>3.999</td><td>8.373</td><td>0.974</td><td>4.11×</td><td>6.31 / +3.94</td><td>2.89</td><td>5.33</td><td>—</td></tr>
-      <tr><td>ACE-Step 1.5 · acestep.cpp 6e0e414 · Turbo Q8_0 + BF16 embedder/VAE · 30 s · 8 Euler steps</td><td>CUDA 13</td><td>30.000</td><td>6.234</td><td>0.392</td><td>76.51×</td><td>9.73 / +7.80</td><td>9.74</td><td>2.11</td><td>—</td></tr>
+      <tr><td>ACE-Step 1.5 · acestep.cpp 6e0e414 · Turbo Q8_0 + BF16 embedder/VAE · 30 s · 8 Euler steps</td><td>CUDA 13</td><td>30.000</td><td>6.234</td><td>0.392</td><td>76.51×</td><td>9.73 / +7.80</td><td>9.74</td><td>2.11</td><td>7.80 / 0.91</td></tr>
+      <tr><td>ACE-Step 1.5 · acestep.cpp 6e0e414 · Turbo Q8_0 + BF16 embedder/VAE · 30 s · 8 Euler steps</td><td>CUDA 12</td><td>30.000</td><td>3.469</td><td>0.396</td><td>75.78×</td><td>9.73 / +7.78</td><td>9.74</td><td>1.67</td><td>—</td></tr>
       <tr><td>ACE-Step 1.5 · acestep.cpp 6e0e414 · Turbo Q8_0 + BF16 embedder/VAE · 30 s · 8 Euler steps</td><td>Vulkan</td><td>30.000</td><td>7.204</td><td>0.381</td><td>78.69×</td><td>8.58 / +6.65</td><td>8.57</td><td>2.00</td><td>—</td></tr>
       <tr><td>ACE-Step 1.5 · audio.cpp 41242418 · Turbo Q8_0, packed GGUF · 30 s · 8 Euler steps</td><td>CUDA 13</td><td>30.000</td><td>10.512</td><td>1.387</td><td>21.62×</td><td>10.43 / +8.49</td><td>10.48</td><td>2.58</td><td>—</td></tr>
       <tr><td>ACE-Step 1.5 · audio.cpp 41242418 · Turbo Q8_0, packed GGUF · 30 s · 8 Euler steps</td><td>Vulkan</td><td>30.000</td><td>21.746</td><td>2.237</td><td>13.41×</td><td>10.23 / +8.30</td><td>10.22</td><td>4.60</td><td>—</td></tr>
-      <tr><td>MiniMax Music3 · minimaxmusic.cpp b79d37f · Minimal Q3_K_M / Q4_K_M + F32 vocoder · 3.2 s · 2 steps</td><td>CUDA 13</td><td>3.193</td><td>7.422</td><td>1.075</td><td>2.97×</td><td>9.18 / +7.25</td><td>9.18</td><td>4.53</td><td>—</td></tr>
+      <tr><td>MiniMax Music3 · minimaxmusic.cpp b79d37f · Minimal Q3_K_M / Q4_K_M + F32 vocoder · 3.2 s · 2 steps</td><td>CUDA 13</td><td>3.193</td><td>7.422</td><td>1.075</td><td>2.97×</td><td>9.18 / +7.25</td><td>9.18</td><td>4.53</td><td>7.25 / 1.00</td></tr>
+      <tr><td>MiniMax Music3 · minimaxmusic.cpp b79d37f · Minimal Q3_K_M / Q4_K_M + F32 vocoder · 3.2 s · 2 steps</td><td>CUDA 12</td><td>3.193</td><td>7.500</td><td>1.149</td><td>2.78×</td><td>9.15 / +7.26</td><td>9.15</td><td>4.56</td><td>—</td></tr>
       <tr><td>MiniMax Music3 · minimaxmusic.cpp b79d37f · Quality Q8_0 + F32 vocoder · 3.2 s · 2 steps</td><td>CUDA 13</td><td>3.193</td><td>13.485</td><td>1.728</td><td>1.85×</td><td>15.04 / +13.10</td><td>15.04</td><td>8.71</td><td>—</td></tr>
+      <tr><td>MiniMax Music3 · minimaxmusic.cpp b79d37f · Quality Q8_0 + F32 vocoder · 3.2 s · 2 steps</td><td>CUDA 12</td><td>3.193</td><td>14.125</td><td>1.689</td><td>1.89×</td><td>15.00 / +13.10</td><td>15.00</td><td>8.76</td><td>—</td></tr>
       <tr><td>MiniMax Music3 · minimaxmusic.cpp b79d37f · Minimal Q3_K_M / Q4_K_M + F32 vocoder · 3.2 s · 2 steps</td><td>Vulkan</td><td>3.193</td><td>6.344</td><td>1.484</td><td>2.15×</td><td>8.83 / +6.90</td><td>8.83</td><td>4.34</td><td>—</td></tr>
       <tr><td>MiniMax Music3 · minimaxmusic.cpp b79d37f · Quality Q8_0 + F32 vocoder · 3.2 s · 2 steps</td><td>Vulkan</td><td>3.193</td><td>14.578</td><td>1.924</td><td>1.66×</td><td>14.69 / +12.76</td><td>14.69</td><td>8.54</td><td>—</td></tr>
       <tr><td>MiniMax Music3 Studio v4.0.3 · minimaxmusic.cpp f476b0e · Minimal Q3_K_M / Q4_K_M + F32 · 3.2 s · 2 steps</td><td>CUDA 13</td><td>3.193</td><td>7.312</td><td>1.257</td><td>2.54×</td><td>9.32 / +7.38</td><td>9.32</td><td>4.56</td><td>7.39 / 0.89</td></tr>
@@ -529,6 +533,25 @@ footer p { margin: 0 0 8px; }
     </table></div>
     <p><a href="music-gpu-benchmarks.json">各次运行、SHA-256 和权重配置</a></p>
 <!-- music-gpu-matrix:end -->
+<!-- music-gpu-wsl:start -->
+    <h3 id="music-gpu-wsl-title">原生音乐引擎 · WSL2 中的 Linux</h3>
+    <p class="note">RTX 4090，驱动 617.42。Linux 程序在 WSL2 中运行，模型权重位于 Windows 磁盘。冷启动从进程启动计时至收到首个 WAV，预热结果取同一进程三次请求的中位数。显存按整卡采样，RSS 按 Linux 进程树采样。</p>
+    <div class="scroll benchmark-scroll" role="region" aria-labelledby="music-gpu-wsl-title" tabindex="0"><table>
+      <thead><tr><th scope="col">模型和引擎</th><th scope="col">后端</th><th scope="col">WAV（秒）</th><th scope="col">冷启动（秒）</th><th scope="col">预热后（秒）</th><th scope="col">显存峰值 / 增量（GiB）</th><th scope="col">内存峰值（GiB）</th></tr></thead>
+      <tbody>
+      <tr><td>YuE2 · yue2.cpp 892b9b0 · 3B Q8_0 + F32 VAE; NAR v9 · 30 s · 32 steps</td><td>CUDA 13</td><td>29.999</td><td>31.134</td><td>5.491</td><td>7.32 / +5.79</td><td>3.51</td></tr>
+      <tr><td>YuE2 · yue2.cpp 892b9b0 · 3B Q8_0 + F32 VAE; NAR v9 · 100 tokens · 2 steps</td><td>CUDA 13</td><td>3.999</td><td>24.461</td><td>0.158</td><td>6.08 / +4.55</td><td>3.50</td></tr>
+      <tr><td>ACE-Step 1.5 · acestep.cpp 6e0e414 · Turbo Q8_0 + BF16 embedder/VAE · 30 s · 8 Euler steps</td><td>CUDA 13</td><td>30.000</td><td>20.569</td><td>0.318</td><td>9.37 / +7.85</td><td>2.20</td></tr>
+      <tr><td>MiniMax Music3 · minimaxmusic.cpp b79d37f · Minimal Q3_K_M / Q4_K_M + F32 vocoder · 3.2 s · 2 steps</td><td>CUDA 13</td><td>3.193</td><td>35.096</td><td>1.091</td><td>8.82 / +7.30</td><td>4.71</td></tr>
+      <tr><td>MiniMax Music3 · minimaxmusic.cpp b79d37f · Quality Q8_0 + F32 vocoder · 3.2 s · 2 steps</td><td>CUDA 13</td><td>3.193</td><td>65.319</td><td>1.697</td><td>14.67 / +13.13</td><td>8.95</td></tr>
+      <tr><td>YuE2 · yue2.cpp 892b9b0 · 3B Q8_0 + F32 VAE; NAR v9 · 30 s · 32 steps</td><td>CUDA 12</td><td>29.999</td><td>37.919</td><td>5.538</td><td>7.31 / +5.78</td><td>3.49</td></tr>
+      <tr><td>YuE2 · yue2.cpp 892b9b0 · 3B Q8_0 + F32 VAE; NAR v9 · 100 tokens · 2 steps</td><td>CUDA 12</td><td>3.999</td><td>24.667</td><td>0.158</td><td>6.08 / +4.54</td><td>3.47</td></tr>
+      <tr><td>ACE-Step 1.5 · acestep.cpp 6e0e414 · Turbo Q8_0 + BF16 embedder/VAE · 30 s · 8 Euler steps</td><td>CUDA 12</td><td>30.000</td><td>20.825</td><td>0.318</td><td>9.37 / +7.84</td><td>2.16</td></tr>
+      <tr><td>MiniMax Music3 · minimaxmusic.cpp b79d37f · Minimal Q3_K_M / Q4_K_M + F32 vocoder · 3.2 s · 2 steps</td><td>CUDA 12</td><td>3.193</td><td>37.674</td><td>1.081</td><td>8.83 / +7.30</td><td>4.71</td></tr>
+      <tr><td>MiniMax Music3 · minimaxmusic.cpp b79d37f · Quality Q8_0 + F32 vocoder · 3.2 s · 2 steps</td><td>CUDA 12</td><td>3.193</td><td>86.020</td><td>1.745</td><td>14.67 / +13.14</td><td>8.91</td></tr>
+      </tbody>
+    </table></div>
+<!-- music-gpu-wsl:end -->
 <!-- radeon-gpu-pair:start -->
     <h3 id="radeon-gpu-pair-title">Stable Audio 3 Small Q8_0 · Radeon 核显</h3>
     <p class="note">Windows，AMD Radeon Graphics（gfx1036，UMA）。同一 audio.cpp 版本在两个后端均用四步生成 4 秒音频。冷启动取首次运行，预热后取三次请求的中位数。WDDM 专用及共享内存峰值按一秒间隔采样。 <code>audio.cpp 5e7273db</code></p>
@@ -562,12 +585,12 @@ footer p { margin: 0 0 8px; }
       <li><b><span class="num">3</span>写作</b><span>写好风格和歌词，或载入示例；纯音乐只需一个开关。</span></li>
       <li><b><span class="num">4</span>创作</b><span>引擎自动启动，歌曲连同乐谱进入你的曲库。</span></li>
     </ol>
-    <div class="cta"><a class="btn primary" href="https://github.com/timoncool/YuE2-Studio/releases/latest">下载 Windows 版<small data-release>v5.0.0 · 316 MB</small></a></div>
+    <div class="cta"><a class="btn primary" href="https://github.com/timoncool/YuE2-Studio/releases/latest">下载 Windows 版<small data-release>v5.0.0</small></a></div>
   </section>
 
   <section id="faq">
     <h2>常见问题</h2>
-    <details><summary>需要什么显卡？</summary><div class="answer"><p>Windows 10/11 x64，显存 6 GB 以上的显卡：NVIDIA（GTX 900 或更新）使用 CUDA；AMD 和 Intel 通过 Vulkan 运行，属实验性质。模型在工作室内按你的决定下载。</p><p>可运行的模型组由 YuE2-3B 主干和 VAE 组成；SheetSage2 可选，仅翻唱需要。</p><div class="scroll"><table>
+    <details><summary>需要什么显卡？</summary><div class="answer"><p>支持 Windows 10/11 x64。在工作室内下载本地模型。支持的显卡和显存需求取决于模型和引擎，实测结果见下方。</p><p>可运行的模型组由 YuE2-3B 主干和 VAE 组成；SheetSage2 可选，仅翻唱需要。</p><div class="scroll"><table>
           <thead><tr><th>你的显卡</th><th>模型组</th><th>下载</th></tr></thead>
           <tbody>
             <tr><td>12 GB+</td><td>完整原生 — BF16，原始权重</td><td>9.7 GB</td></tr>
@@ -618,7 +641,7 @@ Rust axum ┘        │
 
   <footer>
     <p>工作室和 yue2.cpp 采用 MIT 许可。YuE2-3B 与 YuE2 VAE 权重采用 CC BY-NC 4.0，并附个人创作者许可：以个人身份创作的音乐人和创作者可以出售并变现所制作的歌曲；公司需向作者取得许可。用于翻唱的 SheetSage2 采用 CC BY-NC 4.0。</p>
-    <p><a href="https://github.com/timoncool/YuE2-Studio/blob/main/CHANGELOG.md">更新内容</a> · <a href="https://github.com/timoncool/YuE2-Studio/issues">报告问题</a> · 更新于 <time datetime="2026-11-13">2026-11-13</time></p>
+    <p><a href="https://github.com/timoncool/YuE2-Studio/blob/main/CHANGELOG.md">更新内容</a> · <a href="https://github.com/timoncool/YuE2-Studio/issues">报告问题</a> · 更新于 <time datetime="2026-11-21">2026-11-21</time></p>
   </footer>
 </main>
 
@@ -657,7 +680,8 @@ fetch('https://api.github.com/repos/timoncool/YuE2-Studio/releases/latest')
   .then((release) => {
     const installer = release.assets.find((asset) => asset.name.endsWith('-setup.exe'));
     if (!installer) throw new Error('the latest release has no installer');
-    const label = release.tag_name + ' · ' + Math.round(installer.size / 1048576) + ' MB';
+    const size = new Intl.NumberFormat(document.documentElement.lang, { style: 'unit', unit: 'megabyte', maximumFractionDigits: 0 }).format(installer.size / 1000000);
+    const label = release.tag_name + ' · ' + size;
     document.querySelectorAll('[data-release]').forEach((element) => { element.textContent = label; });
   })
   .catch((error) => console.warn('Latest release not read; the page shows the one it was built with:', error));

@@ -1673,6 +1673,7 @@ export const zh = {
     midiDelete: '删除 MIDI',
     midiStage_preparing: '准备中',
     midiStage_downloading: '正在下载转写器',
+    midiStage_waiting_for_runtime: '正在等待共享的 audio.cpp 运行时',
     midiStage_reading: '正在读取音频',
     midiStage_transcribing: '正在听写音符',
     midiStage_done: '完成',

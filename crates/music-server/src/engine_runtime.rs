@@ -264,11 +264,17 @@ impl EngineRuntime {
     }
 
     pub async fn install_missing_for(&self, cuda: Option<CudaBuild>, scope: &str) -> Result<()> {
+        self.install_missing_with_cancel(cuda, scope, None).await
+    }
+
+    pub(crate) async fn install_missing_with_cancel(
+        &self, cuda: Option<CudaBuild>, scope: &str, cancelled: Option<&(dyn Fn() -> bool + Sync)>,
+    ) -> Result<()> {
         let absent = self.vc_runtime_missing();
         if !absent.is_empty() {
             bail!("the engine bundle is incomplete: {} missing beside yue-server.exe; reinstall the studio", absent.join(", "));
         }
-        self.downloader.install_all(scope, &self.missing(cuda)).await
+        self.downloader.install_all_with_cancel(scope, &self.missing(cuda), cancelled).await
     }
 }
 

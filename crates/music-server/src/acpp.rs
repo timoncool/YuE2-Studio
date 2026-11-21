@@ -221,6 +221,7 @@ pub fn assets(build: Build) -> Vec<&'static Asset> {
 /// The audio.cpp server of the studio: its downloads in `<data>/audiocpp`, its logs in `<data>/logs/audiocpp`.
 pub struct Acpp {
     downloader: Downloader,
+    pub(super) installs: crate::acpp_install::RuntimeInstalls,
     logs: PathBuf,
     /// cuBLAS 13 of the music engine, which the CUDA 13 build imports.
     cuda13_libraries: OnceLock<PathBuf>,
@@ -240,6 +241,7 @@ impl Acpp {
     pub fn new(data_root: &Path) -> Self {
         Self {
             downloader: Downloader::new(data_root.join("audiocpp")),
+            installs: crate::acpp_install::RuntimeInstalls::default(),
             logs: data_root.join("logs").join("audiocpp"),
             cuda13_libraries: OnceLock::new(),
             music: std::sync::Mutex::new(None),
