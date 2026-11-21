@@ -11,7 +11,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7.0.1
         with:
-          ref: 94f1f0728719c7ce5daa4cb615b6f4f8c6bf7b96
+          ref: db7c9cd9a2c0b7c5cebe9b3f2de20fcf5a359e5f
       - uses: Swatinem/rust-cache@v2
       - run: cargo build --locked -p music-server --bin music-server
       - run: |
