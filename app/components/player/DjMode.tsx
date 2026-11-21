@@ -309,6 +309,7 @@ export const DjMode: React.FC<{
   const [selected, setSelected] = useState<Song | null>(initialSong);
   const [expandedStems, setExpandedStems] = useState<Set<string>>(new Set());
   const [error, setError] = useState<string | null>(null);
+  const [exitPrompt, setExitPrompt] = useState(false);
   const [taps, setTaps] = useState<Record<number, number[]>>({});
   const [separation, setSeparation] = useState<DjSeparationStatus | null>(null);
   const [separationBusy, setSeparationBusy] = useState(false);
@@ -511,10 +512,15 @@ export const DjMode: React.FC<{
       tick.current();
     }
   };
-  const leave = async () => {
-    if (!mixer || await saveMix()) onClose();
+  const leave = () => {
+    if (finishing.current) return;
+    if (mixer?.recording || pendingMix.current) setExitPrompt(true);
+    else onClose();
   };
-  leaveFromKeyboard.current = () => { void leave(); };
+  const closeExitPrompt = () => {
+    if (!finishing.current) setExitPrompt(false);
+  };
+  leaveFromKeyboard.current = exitPrompt ? closeExitPrompt : leave;
   const record = async () => {
     if (!mixer || finishing.current) return;
     setError(null);
@@ -539,6 +545,7 @@ export const DjMode: React.FC<{
   void revision;
   return (
     <div className="fixed inset-0 z-80 flex flex-col overflow-hidden bg-[#0b0c10] text-zinc-200" data-testid="dj-mode">
+      <div className="contents" inert={exitPrompt}>
       <header className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-white/10 bg-[#17181d] px-4 py-2">
         <div className="flex items-center gap-3"><div className="rounded bg-red-600 px-2 py-1 text-base font-black italic text-white">YuE2 DJ</div>
           <span className="text-xs text-zinc-400">Two-deck music mixer · Library / Albums / Playlists / Stems</span>
@@ -546,7 +553,7 @@ export const DjMode: React.FC<{
         <div className="flex items-center gap-2">
           <button type="button" className={`${button} flex items-center gap-2 ${mixer?.recording ? 'border-red-400 bg-red-500/20 text-red-300' : ''}`}
             onClick={() => void record()} disabled={!mixer}><Circle size={13} fill={mixer?.recording ? 'currentColor' : 'none'} />{mixer?.recording ? 'Stop & save recording' : pendingMix.current ? 'Save recording' : 'Record mix'}</button>
-          <button className={`${button} flex items-center gap-1.5`} type="button" onClick={() => void leave()}><X size={16} /> Back to Studio</button>
+          <button className={`${button} flex items-center gap-1.5`} type="button" onClick={leave}><X size={16} /> Back to Studio</button>
         </div>
       </header>
       {error && <p role="alert" className="bg-rose-900/30 px-4 py-1.5 text-xs text-rose-200">{error}</p>}
@@ -670,6 +677,27 @@ export const DjMode: React.FC<{
           </div>
         ) : <div className="p-12 text-center text-zinc-400">Preparing the audio mixer…</div>}
       </div>
+      </div>
+      {exitPrompt && (
+        <div className="absolute inset-0 z-10 grid place-items-center bg-black/60 p-4">
+          <section role="alertdialog" aria-modal="true" aria-label="Unsaved DJ recording"
+            className="w-full max-w-sm rounded-xl border border-white/15 bg-zinc-900 p-5 shadow-xl">
+            <h2 className="text-base font-semibold text-white">Unsaved DJ recording</h2>
+            {error && <p role="alert" className="mt-2 text-sm text-rose-200">{error}</p>}
+            <div className="mt-4 flex flex-wrap justify-end gap-2">
+              <button type="button" autoFocus className={button} onClick={closeExitPrompt}>Keep mixing</button>
+              <button type="button" className={`${button} text-rose-300`} onClick={() => {
+                if (finishing.current) return;
+                pendingMix.current = null;
+                onClose();
+              }}>Discard and exit</button>
+              <button type="button" className={button} onClick={async () => {
+                if (await saveMix()) onClose();
+              }}>Save and exit</button>
+            </div>
+          </section>
+        </div>
+      )}
     </div>
   );
 };
