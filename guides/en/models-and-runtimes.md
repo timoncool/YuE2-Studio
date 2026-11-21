@@ -205,3 +205,6 @@ integrated graphics rendered pure silence and the engine crashed encoding it.
 A machine with the CUDA 13 toolkit already has cuBLAS on its `PATH` and downloads nothing.
 Behind a proxy, take the two DLLs from the archive's `bin\` folder and drop them next to
 `yue-server.exe`; the studio finds and uses them.
+
+Next: [get started](getting-started.md) · [create and edit music](creating-music.md) ·
+[compare performance](benchmarks.md#how-fast-is-it) · [get help](community.md#report-a-problem).

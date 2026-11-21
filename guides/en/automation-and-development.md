@@ -109,3 +109,6 @@ Audio to MIDI is Windows-only as a download; on macOS `scripts/build-midi-runtim
 `YUE_ENGINE_ROOT` (or `YUE_ENGINE_BIN`, the path of `yue-server` itself) tells the studio where
 the engine is; for the desktop app set it in the environment before launching it. `Auto` then
 lets the engine choose Metal and falls back to the CPU.
+
+Next: [get started](getting-started.md) · [models and runtimes](models-and-runtimes.md) ·
+[report a problem](community.md#report-a-problem).

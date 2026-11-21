@@ -173,3 +173,6 @@
 The embedded Signal editor has multiple tracks, instruments, drums, MIDI keyboard recording, tempo changes, editable chord symbols and section markers. Save a new composition as MIDI and rendered audio in the library, or update an existing track’s MIDI. SoundFonts are bundled locally; the editor sends no analytics.
 
 In YuE2, the same editor opens ABC scores and applies notes, chords and sections back to the create form. The visual editor replaces the older separate score editor. Use **Apply** to update the ABC score, or send a library MIDI track to cover mode.
+
+Next: [get started](getting-started.md) · [choose models and engines](models-and-runtimes.md) ·
+[browse sample tracks](showcase.md) · [get help](community.md#report-a-problem).

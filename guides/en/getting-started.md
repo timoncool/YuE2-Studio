@@ -13,8 +13,8 @@
     (GTX 900/1000, Titan X/Xp/V, Tesla M40, P40, P100, V100). CUDA 12 also serves
     supported newer cards with a compatible driver below 580. Both packages include
     native images for 7.5, 8.0, 8.6, 8.9, 9.0 and `sm_120a` for GeForce RTX 50.
-    CUDA 12 adds 5.2, 6.0, 6.1 and 7.0. The speed and memory figures below are from
-    the RTX 4090. [NVIDIA compute capabilities](https://developer.nvidia.com/cuda/gpus)
+    CUDA 12 adds 5.2, 6.0, 6.1 and 7.0. The [speed and memory figures](benchmarks.md)
+    are from the RTX 4090. [NVIDIA compute capabilities](https://developer.nvidia.com/cuda/gpus)
   - **AMD or Intel — experimental.** The engine runs on Vulkan through the card's own
     driver. Owners report songs made well on a Radeon RX 7900 XT under Windows and an
     RX 7900 XTX under Ubuntu 26 ([#196](https://github.com/timoncool/YuE2-Studio/issues/196)),
@@ -52,6 +52,19 @@ portable archive and for an installation into any folder the studio can write to
 deleting the folder removes the studio. Only an installation into a read-only location
 such as Program Files falls back to `%LOCALAPPDATA%\YuE2 Studio`. The installed version
 updates itself: a new release is offered inside the studio and installed in place.
+
+## Make your first song
+
+After the model set is ready, open **Create** and stay in **Simple** mode. In **DESCRIBE
+YOUR SONG**, write a short idea such as “a warm acoustic folk song about coming home” and
+press **Create**. For more control, choose **Custom**, fill in **STYLE OF MUSIC** and
+**LYRICS**, then press **Create**. To start from a working example, click the dice icon
+beside **Style** and choose a sample; it fills in the request for you.
+The finished song appears in **Library** while its editable score is available from the
+song view.
+
+Next: [create and edit music](creating-music.md) · [choose models and engines](models-and-runtimes.md) ·
+[browse sample tracks](showcase.md) · [report a problem](community.md#report-a-problem).
 
 **If the installer stops on WebView2.** The studio's window runs on Microsoft Edge WebView2,
 and the installer fetches it when Windows lacks it. On a blocked or unsteady connection, or on
@@ -102,3 +115,6 @@ Press **Download** again for the same feature. The studio checks the archive aga
 the SHA-256 pinned for this release, extracts it and records the installation. It
 downloads other missing dependencies separately. When setting up both training and
 style by ear, install the full training runtime first. It includes the matching captioner.
+
+Next: [back to YuE2 Studio](../../README.md) · [create and edit music](creating-music.md) ·
+[choose models and engines](models-and-runtimes.md) · [get help](community.md#report-a-problem).

@@ -40,7 +40,7 @@ Songs from the older studios can join the same library with their playlists. Lis
 
 **[Models and runtimes](guides/en/models-and-runtimes.md)** · Choose an engine and model and see what runs on your machine.
 
-<a name="how-fast-is-it"></a><a name="engine-benchmarks"></a><a name="music-engine-gpu-matrix--50-development-and-published-builds"></a><a name="native-music-engines--linux-in-wsl2"></a><a name="stable-audio-3-small-q8_0--radeon-igpu"></a><a name="yue2-3b-q8_0--radeon-igpu"></a><a name="speed-reported-by-installations"></a>
+<a name="how-fast-is-it"></a><a name="engine-benchmarks"></a><a name="music-engine-gpu-matrix--50-development-and-published-builds"></a><a name="music-engine-gpu-matrix-50-development-and-published-builds"></a><a name="native-music-engines--linux-in-wsl2"></a><a name="native-music-engines-linux-in-wsl2"></a><a name="stable-audio-3-small-q8_0--radeon-igpu"></a><a name="stable-audio-3-small-q8_0-radeon-igpu"></a><a name="yue2-3b-q8_0--radeon-igpu"></a><a name="yue2-3b-q8_0-radeon-igpu"></a><a name="speed-reported-by-installations"></a>
 
 **[Benchmarks and measurements](guides/en/benchmarks.md)** · Compare GPU timings and memory measurements.
 

@@ -105,3 +105,6 @@ More tutorials and reviews:
 - [EZTV — YUE2 Studio 教學](https://www.youtube.com/watch?v=EFv_zOXyn5E) · ZH
 
 **Made a review or tutorial?** Put a link to the project in the description — we feature the best ones on the [site](https://timoncool.github.io/YuE2-Studio/) and here. Send yours through [Issues](https://github.com/timoncool/YuE2-Studio/issues).
+
+Next: [get started](getting-started.md) · [create and edit music](creating-music.md) ·
+[get help](community.md#report-a-problem).

@@ -112,3 +112,6 @@ editor is [signal](https://github.com/ryohey/signal), **MIT**, built from
 **GPL-2.0**, their licence in [licenses/A320U-soundfont-GPL-2.0.txt](../../licenses/A320U-soundfont-GPL-2.0.txt).
 
 What changed and when is in [CHANGELOG.md](../../CHANGELOG.md).
+
+Next: [get started](getting-started.md) · [create and edit music](creating-music.md) ·
+[browse sample tracks](showcase.md).

@@ -167,3 +167,6 @@ over 30 days (version 3.8, loading the models included; people run different mod
 
 On our machine (RTX 4090, Ryzen 9 9950X3D, Windows 11, the Q8_0 set): a 1-minute song in 20 s, a 4-minute song in
 54 s, a 10-minute song in about 3 minutes; the card holds 5–8 GB while it works.
+
+Next: [get started](getting-started.md) · [choose models and engines](models-and-runtimes.md) ·
+[create and edit music](creating-music.md) · [get help](community.md#report-a-problem).
