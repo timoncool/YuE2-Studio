@@ -5,7 +5,7 @@ name: CI
 
 on:
   push:
-    branches-ignore: [main]
+    branches-ignore: [main, qa/yue2-windows-controlled-channel]
     paths-ignore: ["docs/stars-*.svg"]
   pull_request:
   workflow_dispatch:
