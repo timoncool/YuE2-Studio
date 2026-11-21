@@ -51,8 +51,38 @@ pub fn status(data_root: &Path) -> Result<bool, String> {
         .map_err(|error| error.to_string())
 }
 
+#[derive(Debug)]
+pub(super) struct BackendFailure(String);
+
+impl std::fmt::Display for BackendFailure {
+    fn fmt(&self, out: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        out.write_str(&self.0)
+    }
+}
+impl std::error::Error for BackendFailure {}
+
+fn from_worker_failure(message: &str) -> anyhow::Error {
+    let reason = message.to_ascii_lowercase();
+    if !reason.contains("cancel")
+        && !reason.contains("stopped")
+        && [
+            "tensorrt-rtx api failed",
+            "engine backend is unavailable",
+            "cuda out of memory",
+            "cuda runtime error",
+        ]
+        .iter()
+        .any(|diagnostic| reason.contains(diagnostic))
+    {
+        BackendFailure(message.to_owned()).into()
+    } else {
+        anyhow!("Native RVC conversion failed: {message}")
+    }
+}
+
 pub fn convert(data_root: &Path, request: &Request<'_>) -> Result<audio_post::Stereo> {
-    let (runtime, cache) = runtime_paths(data_root)?;
+    let (runtime, cache) =
+        runtime_paths(data_root).map_err(|error| BackendFailure(format!("{error:#}")))?;
     std::fs::create_dir_all(&cache).context("Create native RVC cache")?;
     let handoff = tempfile::tempdir_in(&cache)?;
     let output = handoff.path().join("output.wav");
@@ -69,20 +99,21 @@ pub fn convert(data_root: &Path, request: &Request<'_>) -> Result<audio_post::St
     let mut worker = WORKER
         .lock()
         .map_err(|_| anyhow!("The native RVC worker is unavailable."))?;
-    let transport = ensure_worker(&mut worker, runtime, &cache)?.roundtrip(&ipc);
+    let transport = ensure_worker(&mut worker, runtime, &cache)
+        .map_err(|error| BackendFailure(format!("{error:#}")))?
+        .roundtrip(&ipc);
     let reply = match transport {
         Ok(reply) => reply,
         Err(error) => {
             *worker = None;
-            return Err(error);
+            return Err(BackendFailure(format!("{error:#}")).into());
         }
     };
     drop(worker);
     if !reply.ok {
-        bail!(
-            "Native RVC conversion failed: {}",
-            reply.error.as_deref().unwrap_or("unknown error")
-        );
+        return Err(from_worker_failure(
+            reply.error.as_deref().unwrap_or("unknown error"),
+        ));
     }
     let audio = crate::audio_pcm::decode_stereo(&output).context("Read native RVC output WAV")?;
     if audio.frames() == 0 {
@@ -230,5 +261,22 @@ impl Drop for Worker {
     fn drop(&mut self) {
         let _ = self.child.kill();
         let _ = self.child.wait();
+    }
+}
+
+#[cfg(test)]
+mod failure_tests {
+    use super::*;
+
+    #[test]
+    fn retries_backend_errors_and_keeps_input_and_cancellation_errors() {
+        assert!(
+            from_worker_failure(
+                "offline inference: TensorRT-RTX API failed: createExecutionContext"
+            )
+            .is::<BackendFailure>()
+        );
+        assert!(!from_worker_failure("failed to decode vocals WAV").is::<BackendFailure>());
+        assert!(!from_worker_failure("cancelled after CUDA runtime error").is::<BackendFailure>());
     }
 }
