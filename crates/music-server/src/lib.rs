@@ -5386,7 +5386,7 @@ async fn delete_library_song(State(state): State<AppState>, Path(id): Path<Strin
     let internal = |e: anyhow::Error| api_error(StatusCode::INTERNAL_SERVER_ERROR, e.to_string());
     let song = state.library.get_song(&id).map_err(internal)?.ok_or_else(|| api_error(StatusCode::NOT_FOUND, "Song not found".into()))?;
     if library::is_trashed(&song) {
-        return Ok(Json(serde_json::json!({ "deleted": true, "trashed": true, "with": 0 })));
+        return Ok(Json(serde_json::json!({ "deleted": true, "trashed": true, "with": 0, "moved_ids": [] })));
     }
     let made_from: Vec<String> = state
         .library
@@ -5400,7 +5400,8 @@ async fn delete_library_song(State(state): State<AppState>, Path(id): Path<Strin
     for other in &made_from {
         state.library.set_song_trashed(other, true, Some(&id)).map_err(internal)?;
     }
-    Ok(Json(serde_json::json!({ "deleted": true, "trashed": true, "with": made_from.len() })))
+    let moved_ids: Vec<_> = std::iter::once(&id).chain(&made_from).collect();
+    Ok(Json(serde_json::json!({ "deleted": true, "trashed": true, "with": made_from.len(), "moved_ids": moved_ids })))
 }
 
 /// How long the bin keeps a song before it goes for good.
