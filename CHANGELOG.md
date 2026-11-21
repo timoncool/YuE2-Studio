@@ -3,6 +3,14 @@
 What changed, newest first. Dates are release dates; the studio is versioned by its
 Windows build.
 
+## Unreleased — 5.0.0
+
+### Added
+
+- **Bring songs from ACE-Step Studio and MiniMax Music3 Studio into the YuE2 library.** Preview the source library before importing. Open an imported song to listen to the original and create a new take with its native engine. [Library import](https://github.com/timoncool/YuE2-Studio/pull/291)
+- **Choose the model and engine where you create the song.** The Create panel shows the requested pair, the active pair and what is still loading. For OpenRouter, choose a music model directly in the same panel. [Model selector](https://github.com/timoncool/YuE2-Studio/pull/389) · [Switching engines](https://github.com/timoncool/YuE2-Studio/pull/414)
+- **Try another singing voice on an existing recording.** Search and filter the RVC voice catalogue, listen to a preview when the source provides one, and install a voice with its optional index. Compare the converted take with the source in your library. [Voice catalogue](https://github.com/timoncool/YuE2-Studio/pull/394) · [Compare takes](https://github.com/timoncool/YuE2-Studio/pull/364)
+
 ## 2026-11-19 — 4.1.1
 
 ### Fixed

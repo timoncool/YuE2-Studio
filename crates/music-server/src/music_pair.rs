@@ -2,6 +2,13 @@
 use super::*;
 use std::time::{Duration, Instant};
 
+static INSTANCE_ID: std::sync::LazyLock<String> =
+    std::sync::LazyLock::new(|| uuid::Uuid::now_v7().to_string());
+
+pub(super) fn instance_id() -> &'static str {
+    &INSTANCE_ID
+}
+
 #[derive(Clone, Copy, Default, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub(super) enum Stage {
@@ -32,6 +39,7 @@ impl Stage {
 
 #[derive(Clone, Default, Serialize)]
 pub(super) struct Status {
+    instance_id: String,
     revision: u64,
     requested: Option<MusicSource>,
     active: Option<MusicSource>,
@@ -65,6 +73,7 @@ impl Default for Current {
 impl Current {
     fn snapshot(&self) -> Status {
         let mut status = self.status.clone();
+        status.instance_id = instance_id().into();
         if status.stage.in_progress() {
             status.elapsed_ms = self
                 .started

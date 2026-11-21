@@ -6,18 +6,21 @@ The output is a complete site with verified current metadata and immutable
 files from the preceding publication.
 """
 import argparse
+import hashlib
+import json
 from pathlib import Path
 import re
 import shutil
 from tempfile import TemporaryDirectory
 from urllib.parse import urlsplit
+from urllib.request import urlopen
 
 from tuf.api.exceptions import DownloadHTTPError
 from tuf.api.metadata import Metadata, Root
 from tuf.ngclient import Updater, UpdaterConfig
 from tuf.ngclient.fetcher import FetcherInterface
 
-from verify import read_catalogue
+from verify import read_catalogue, unique_keys
 
 
 class StagingFetcher(FetcherInterface):
@@ -91,6 +94,58 @@ def check_previous_timestamp(previous, candidate):
         raise ValueError("publication would roll back signed targets")
 
 
+def package_artifacts(path):
+    catalogue = json.loads(path.read_bytes(), object_pairs_hook=unique_keys)
+    if type(catalogue["schema"]) is not int or catalogue["schema"] != 1:
+        raise ValueError("unsupported engine catalogue schema")
+    artifacts = set()
+    for package in [*catalogue["engines"], *catalogue.get("models", [])]:
+        for item in package["files"]:
+            url, size, digest = item["url"], item["bytes"], item["sha256"]
+            parsed = urlsplit(url)
+            if (parsed.scheme != "https" or not parsed.hostname or parsed.username is not None
+                    or parsed.fragment or type(size) is not int or size < 1
+                    or not re.fullmatch(r"[0-9a-f]{64}", digest)):
+                raise ValueError(f"invalid file declaration in package {package['id']}")
+            artifacts.add((url, size, digest))
+    return artifacts
+
+
+def previous_engine_catalogue(site):
+    timestamp = Metadata.from_file(str(site / "timestamp.json")).signed
+    snapshot = Metadata.from_file(str(site / f"{timestamp.snapshot_meta.version}.snapshot.json")).signed
+    version = snapshot.meta["targets.json"].version
+    targets = Metadata.from_file(str(site / f"{version}.targets.json")).signed
+    info = targets.targets.get("music-engine-catalog.json")
+    if info is None:
+        return None
+    for filename in info.get_prefixed_paths():
+        path = site / "targets" / filename
+        if path.is_file():
+            raw = path.read_bytes()
+            info.verify_length_and_hashes(raw)
+            return path
+    raise ValueError("previously published engine catalogue missing")
+
+
+def verify_package_changes(current, previous):
+    known = package_artifacts(previous) if previous is not None else set()
+    for url, size, expected in sorted(package_artifacts(current) - known):
+        digest = hashlib.sha256()
+        remaining = size
+        with urlopen(url, timeout=60) as response:
+            if urlsplit(response.geturl()).scheme != "https":
+                raise ValueError("package source redirected outside HTTPS")
+            while remaining:
+                chunk = response.read(min(remaining, 1024 * 1024))
+                if not chunk:
+                    break
+                digest.update(chunk)
+                remaining -= len(chunk)
+            if remaining or response.read(1) or digest.hexdigest() != expected:
+                raise ValueError(f"package size or SHA-256 mismatch at {url}")
+
+
 def stage_channel(root, metadata, targets, mirrors, voices, output, previous_site=None, engines=None):
     if output.exists():
         raise ValueError("staging destination must be new")
@@ -159,6 +214,9 @@ def stage_channel(root, metadata, targets, mirrors, voices, output, previous_sit
             for relative in published:
                 if (candidate / relative).read_bytes() != (previous_site / relative).read_bytes():
                     raise ValueError(f"immutable published file changed: {relative.name}")
+        if engines is not None:
+            previous = previous_engine_catalogue(previous_site) if previous_site is not None else None
+            verify_package_changes(engines, previous)
         candidate.rename(output)
 
 
