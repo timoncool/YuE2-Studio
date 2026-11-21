@@ -38,9 +38,9 @@ pub(super) fn model_dir(root: &Path) -> PathBuf {
 }
 
 pub(super) fn missing_files(directory: &Path) -> Vec<&'static str> {
-    let sidecars = SIDECARS.into_iter().filter_map(|(name, _)| {
+    let sidecars = SIDECARS.into_iter().filter_map(|(name, bytes)| {
         let present = std::fs::metadata(directory.join(name))
-            .is_ok_and(|info| info.is_file() && info.len() > 0);
+            .is_ok_and(|info| info.is_file() && info.len() == bytes);
         (!present).then_some(name)
     });
     let weights = WEIGHTS.into_iter().filter_map(|(name, bytes)| {
@@ -194,11 +194,31 @@ mod tests {
         let directory = model_dir(root.path());
         std::fs::create_dir_all(&directory).unwrap();
         std::fs::write(directory.join(ENTRY_FILE), b"GGUF truncated file").unwrap();
+        std::fs::write(directory.join("configuration.json"), b"{").unwrap();
         let expected = catalog(Some(root.path()), true);
         assert_eq!(expected["ready"], false);
         assert_eq!(expected["status"], "experimental");
         assert_eq!(expected["bytes"], 32_443_213_394_u64);
         assert_eq!(expected["missing_bytes"], expected["bytes"]);
+        assert!(
+            expected["missing"]
+                .as_array()
+                .unwrap()
+                .contains(&json!("configuration.json"))
+        );
+        std::fs::write(
+            directory.join("configuration.json"),
+            br#"{"task":"text-to-video-synthesis"}"#,
+        )
+        .unwrap();
+        let repaired = catalog(Some(root.path()), true);
+        assert!(
+            !repaired["missing"]
+                .as_array()
+                .unwrap()
+                .contains(&json!("configuration.json"))
+        );
+        assert_eq!(repaired["missing_bytes"], 32_443_213_360_u64);
         assert_eq!(expected["package_url"], MODEL_SOURCE);
         assert_eq!(expected["license_url"], MODEL_LICENSE);
         assert_eq!(
