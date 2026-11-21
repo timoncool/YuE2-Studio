@@ -32,7 +32,15 @@ pub(super) async fn listen(
             "This training run has no saved checkpoints".into(),
         ));
     }
-    let playlist = format!("checkpoint-listen-v1-{id}");
+    let (backbone, companion) = selected_yue_base_fingerprints(&state)
+        .await
+        .map_err(|message| api_error(StatusCode::CONFLICT, message))?;
+    if let Some(base) = &run.training_base
+        && (!base.matching_backbone(&backbone) || base.companion_sha256 != companion)
+    {
+        return Err(api_error(StatusCode::CONFLICT, "Select the training run's matching YuE2 backbone and companion before comparing checkpoints".into()));
+    }
+    let playlist = format!("checkpoint-listen-v1-{id}-{backbone}-{companion}");
     state
         .library
         .ensure_checkpoint_playlist(&playlist, &run.name)
