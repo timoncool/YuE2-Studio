@@ -1,10 +1,10 @@
 """Drive only the bundled Studio WebView on the isolated Windows runner."""
-import argparse, base64, ctypes, json, os, pathlib, re, struct, subprocess, tempfile, time, urllib.request, wave, math
+import argparse, base64, ctypes, hashlib, json, os, pathlib, re, sqlite3, struct, subprocess, tempfile, time, urllib.request, wave, math
 
 p = argparse.ArgumentParser()
 p.add_argument("exe", type=pathlib.Path)
 p.add_argument("output", type=pathlib.Path)
-p.add_argument("--suite", choices=["pt", "screens"], default="pt")
+p.add_argument("--suite", choices=["pt", "screens", "u3"], default="pt")
 args = p.parse_args()
 out = args.output.resolve()
 out.mkdir(parents=True, exist_ok=True)
@@ -159,6 +159,104 @@ def native_editor_window(pid):
 
     user.EnumWindows(inspect, 0)
     return windows
+
+
+def u3_form(root):
+    ui("navigate", view="create")
+    page = wait_page(predicate=lambda value: 'select "Music engine"' in value or 'button "Use OpenRouter"' in value)
+    if 'button "Use OpenRouter"' in page:
+        click('button "Use OpenRouter"', page)
+
+    def choose(label, value):
+        field = f'select "{label}"'
+        page = wait_page(field)
+        ui("select", ref=control(page, field), value=value)
+        return wait_page(field + f' value="{value}"')
+
+    def expect_pair(family, engine, source):
+        page = wait_page(f'select "Model" value="{family}"', f'select "Music engine" value="{engine}"')
+        for _ in range(30):
+            status = tool("music_pair_status")
+            if status.get("requested") == source and status["stage"] in {"needs_install", "ready"}:
+                return page, status
+            time.sleep(.25)
+        raise AssertionError((family, engine, source, status))
+
+    def fields(values):
+        for label, value in values.items():
+            field = f'input number "{label}"'
+            if value is not None:
+                page = wait_page(field)
+                ui("type", ref=control(page, field), value=value)
+        return wait_page(*(f'input number "{label}" {"empty" if value is None else f"value={json.dumps(value)}"}'
+                           for label, value in values.items()))
+
+    yue = {"kind": "audio_cpp", "model": "yue2"}
+    ace = {"kind": "audio_cpp", "model": "ace_step"}
+    yue_values = {"Duration (seconds)": "14", "Steps": "21", "Seed": "101", "CFG": "2.5"}
+    ace_values = {"Duration (seconds)": "9", "Steps": "8", "Seed": "222", "CFG": "1.2"}
+    choose("Model", "local")
+    choose("Music engine", "audio.cpp")
+    _, yue_status = expect_pair("local", "audio.cpp", yue)
+    assert yue_status["stage"] == "needs_install", yue_status
+    yue_page = fields(yue_values)
+    (out/"yue2-first.txt").write_text(yue_page, encoding="utf8")
+
+    choose("Model", "acestep-cpp")
+    choose("Music engine", "audio.cpp")
+    _, ace_status = expect_pair("acestep-cpp", "audio.cpp", ace)
+    assert ace_status["stage"] == "needs_install", ace_status
+    fields(dict.fromkeys(ace_values))
+    ace_page = fields(ace_values)
+    (out/"ace-first.txt").write_text(ace_page, encoding="utf8")
+
+    for family, source, expected in [("local", yue, yue_values), ("acestep-cpp", ace, ace_values)]:
+        choose("Model", family)
+        expect_pair(family, "audio.cpp", source)
+        page = wait_page(*(f'input number "{label}" value={json.dumps(value)}' for label, value in expected.items()))
+        (out/f"{family}-restored.txt").write_text(page, encoding="utf8")
+
+    pcm = root/"u3-audio.wav"
+    with wave.open(str(pcm), "wb") as audio:
+        audio.setparams((1, 2, 24000, 0, "NONE", "not compressed"))
+        audio.writeframes(b"".join(struct.pack("<h", round(11000*math.sin(i*math.tau*440/24000))) for i in range(24000)))
+
+    def saved_song(title, engine, profile, settings):
+        song = tool("library_import_audio", path=str(pcm), title=title)
+        with sqlite3.connect(root/"library.sqlite") as database:
+            database.execute("""UPDATE songs SET engine_id = ?, profile_id = ?, caption = ?, lyrics = ?,
+                             generation_settings_json = ? WHERE id = ?""",
+                             (engine, profile, title, "[Instrumental]", json.dumps(settings), song["id"]))
+        return song["id"]
+
+    ace_native_profiles = json.loads(request("/v1/music/native/acestep-cpp/profiles"))["profiles"]
+    assert ace_native_profiles, "ACE-Step native profile catalog is empty"
+    native_id = ace_native_profiles[0]["id"]
+    jobs = [
+        ("QA Legacy ACE", "acestep-cpp", native_id,
+         {"duration": 12, "inference_steps": 13, "seed": 314, "guidance_scale": 3.5},
+         {"kind": "native", "engine": "acestep-cpp", "model": native_id}, "314"),
+        ("QA Packed ACE", "audio.cpp", "ace-step-1.5-turbo-q8_0",
+         {"music_source": ace, "family": "ace_step", "duration_seconds": 10, "steps": 7, "seed": 42, "cfg_scale": 1.75}, ace, "42"),
+    ]
+    for title, engine, profile, settings, source, seed in jobs:
+        song_id = saved_song(title, engine, profile, settings)
+        media = f"/v1/library/media/{song_id}"
+        before = hashlib.sha256(request(media)).hexdigest()
+        ui("navigate", view="library")
+        page = wait_page(predicate=lambda value: any(f"song {song_id}:" in line and "More actions" in line for line in value.splitlines()))
+        row = next(line for line in page.splitlines() if f"song {song_id}:" in line)
+        ui("click", ref=re.search(r"(e\d+) More actions", row)[1])
+        page = wait_page("Reuse Prompt")
+        row = next(line for line in page.splitlines() if f"song {song_id}:" in line)
+        ui("click", ref=re.search(r"(e\d+) Reuse Prompt", row)[1])
+        page, status = expect_pair("acestep-cpp", engine, source)
+        page = wait_page(f'input number "Seed" value="{seed}"', f'value="{title}"')
+        after = hashlib.sha256(request(media)).hexdigest()
+        assert before == after
+        (out/f"{engine}-reuse.txt").write_text(page, encoding="utf8")
+        json_file(out/f"{engine}-source.json", dict(id=song_id, sha_before=before, sha_after=after, pair=status))
+    (out/"console.txt").write_text(ui("console"), encoding="utf8")
 
 
 def check_screens(root, pid):
@@ -348,7 +446,12 @@ with tempfile.TemporaryDirectory(prefix="studio-hosted-webview-") as directory:
                 clientInfo=dict(name="studio-hosted-webview", version="1")))
             rpc("notifications/initialized", {}, notify=True)
             wait_page(predicate=lambda page: "button" in page)
-            capture_pt() if args.suite == "pt" else check_screens(root, process.pid)
+            if args.suite == "pt":
+                capture_pt()
+            elif args.suite == "u3":
+                u3_form(root)
+            else:
+                check_screens(root, process.pid)
         finally:
             json_file(out/"trace.json", trace)
             stop = subprocess.Popen([str(args.exe.resolve()), "--stop"], env=env)
