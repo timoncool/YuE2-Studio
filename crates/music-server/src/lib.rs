@@ -59,6 +59,7 @@ mod assistant;
 mod song_tokenizer;
 mod assistant_runtime;
 mod audio_facts;
+mod backing_harmony;
 mod backing_vocals;
 mod beat_dbn;
 mod listen;
@@ -1994,6 +1995,7 @@ pub async fn serve_on_port(port: u16) -> anyhow::Result<()> {
         .route("/v1/score/vocal-octave", post(score::api::vocal_octave))
         .route("/v1/score/chord-bed", post(score::api::chord_bed))
         .route("/v1/score/backing-tempo", post(analyze_backing_tempo))
+        .route("/v1/score/backing-harmony", post(analyze_backing_harmony))
         .route("/v1/score/sections", post(match_score_sections))
         .route("/v1/score/from-midi", post(score::api::from_midi))
         .route("/v1/song/tokenize", post(song_tokenizer::tokenize))
@@ -13937,12 +13939,12 @@ fn backing_source(state: &AppState, id: &str) -> Result<(library::Song, PathBuf)
 }
 
 #[derive(Deserialize)]
-struct BackingTempoRequest {
+struct BackingAnalysisRequest {
     song_id: String,
 }
 
 /// Measures the beat grid without guessing key, harmony or arrangement.
-async fn analyze_backing_tempo(State(state): State<AppState>, Json(request): Json<BackingTempoRequest>) -> Json<Value> {
+async fn analyze_backing_tempo(State(state): State<AppState>, Json(request): Json<BackingAnalysisRequest>) -> Json<Value> {
     let measured = async {
         let (_, audio) = backing_source(&state, &request.song_id).map_err(anyhow::Error::msg)?;
         let models = state.training.audio_facts_dir();
@@ -13959,6 +13961,17 @@ async fn analyze_backing_tempo(State(state): State<AppState>, Json(request): Jso
     }.await;
     match measured {
         Ok(bpm) => Json(serde_json::json!({"ok": true, "bpm": bpm, "method": "beat-this"})),
+        Err(error) => Json(serde_json::json!({"ok": false, "error": format!("{error:#}")})),
+    }
+}
+
+async fn analyze_backing_harmony(State(state): State<AppState>, Json(request): Json<BackingAnalysisRequest>) -> Json<Value> {
+    let measured = async {
+        let (_, audio) = backing_source(&state, &request.song_id).map_err(anyhow::Error::msg)?;
+        tokio::task::spawn_blocking(move || backing_harmony::analyze(&audio_facts::decode(&audio)?)).await?
+    }.await;
+    match measured {
+        Ok(analysis) => Json(serde_json::json!({"ok": true, "analysis": analysis})),
         Err(error) => Json(serde_json::json!({"ok": false, "error": format!("{error:#}")})),
     }
 }

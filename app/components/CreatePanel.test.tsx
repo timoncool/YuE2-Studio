@@ -12,6 +12,7 @@ const composeScore = vi.fn();
 const transcribe = vi.fn();
 const instrumentalScore = vi.fn();
 const backingTempo = vi.fn();
+const backingHarmony = vi.fn();
 let ready = true;
 let enginePaused = false;
 let configured = false;
@@ -37,6 +38,7 @@ vi.mock('../services/scoreApi', () => ({
   failed: (answer: { error?: string }) => typeof answer?.error === 'string',
   chordBed: vi.fn(),
   backingTempo: (...args: unknown[]) => backingTempo(...args),
+  backingHarmony: (...args: unknown[]) => backingHarmony(...args),
   matchSections: vi.fn(),
 }));
 vi.mock('../services/adapters', async (original) => ({
@@ -86,6 +88,7 @@ beforeEach(() => {
   transcribe.mockReset().mockResolvedValue('X:1\nK:C\nC');
   instrumentalScore.mockReset();
   backingTempo.mockReset();
+  backingHarmony.mockReset();
   vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({}), { status: 200 })));
   host = document.createElement('div');
   document.body.append(host);
@@ -159,6 +162,30 @@ it('applies a measured backing tempo only when confirmed', async () => {
   expect(bpm.value).toBe(previous);
   click(buttonNamed('Use 121 BPM')!);
   expect(bpm.value).toBe('121');
+});
+
+it('offers backing harmony without changing the current score or key', async () => {
+  const span = { start_seconds: 0, end_seconds: 2, label: 'G' };
+  backingHarmony.mockResolvedValue({ ok: true, analysis: { key: 'G', chords: [span], sections: [] } });
+  librarySongs = [{ id: 'backing', title: 'Instrumental recording', audioUrl: '/test.wav' } as Song];
+  const abc = 'X:1\nK:C\nC|';
+  act(() => root.render(panel({ request: { id: 1, kind: 'score', abc, lyrics: 'one line' } })));
+  await flush();
+  click(buttonNamed('chordBed')!);
+  const select = host.querySelector<HTMLSelectElement>('select[aria-label="Sing over a library backing track"]')!;
+  act(() => { select.value = 'backing'; select.dispatchEvent(new Event('change', { bubbles: true })); });
+  const key = [...host.querySelectorAll('select')].find(box => [...box.options].some(option => option.value === 'F#m'))!;
+  expect(key.value).toBe('C');
+  click(buttonNamed('Analyze backing harmony')!);
+  await flush();
+  expect(backingHarmony).toHaveBeenCalledWith('backing');
+  expect(host.textContent).toContain('Suggested chords');
+  expect(host.textContent).not.toContain('Repeated sections');
+  expect(key.value).toBe('C');
+  click(buttonNamed('Use key G')!);
+  expect(key.value).toBe('G');
+  click(buttonNamed('create')!);
+  expect(sent[0]).toMatchObject({ abc, backing_song_id: 'backing' });
 });
 
 it('queues the other five readings with exactly one score and one pair of seeds', async () => {

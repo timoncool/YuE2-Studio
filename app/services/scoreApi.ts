@@ -11,6 +11,13 @@ export function backingTempo(songId: string): Promise<Answer<{ bpm: number; meth
   return post('/v1/score/backing-tempo', { song_id: songId });
 }
 
+export type BackingSpan = { start_seconds: number; end_seconds: number; label: string };
+export type BackingHarmonyAnalysis = { key: string | null; chords: BackingSpan[]; sections: BackingSpan[] };
+
+export function backingHarmony(songId: string): Promise<Answer<{ analysis: BackingHarmonyAnalysis }>> {
+  return post('/v1/score/backing-harmony', { song_id: songId });
+}
+
 async function post<T>(path: string, body: unknown): Promise<Answer<T>> {
   const response = await fetch(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
   const payload = (await response.json().catch(() => null)) as Answer<T> | null;
