@@ -2119,7 +2119,32 @@ fn listed_song(song: &library::Song) -> serde_json::Result<Value> {
     if let Some(fields) = value.as_object_mut() {
         fields.remove("replay_request");
         fields.remove("audio_codes");
-        fields.insert("replay_available".into(), Value::Bool(kept(&song.replay_request) && kept(&song.audio_codes)));
+        let replay = song.replay_request.as_ref().filter(|value| value.is_object());
+        let ace_without_codes = song.engine_id == ace::ENGINE_ID && replay.is_some_and(|request| {
+            request["task_type"].as_str().is_some_and(|task| task != "text2music")
+                || [request["duration"].as_f64(), song.metadata["duration_seconds"].as_f64()]
+                    .into_iter().flatten().any(|duration| duration > 0.0)
+        });
+        let replay_available = kept(&song.replay_request)
+            && (kept(&song.audio_codes) || ace_without_codes);
+        fields.insert("replay_available".into(), Value::Bool(replay_available));
+        let model_keys: &[&str] = match song.engine_id.as_str() {
+            ace::ENGINE_ID => &["synth_model", "lm_model", "vae"],
+            native_minimax::ENGINE_ID => &native_minimax::PROFILE_FILE_FIELDS,
+            _ => &[],
+        };
+        let mut model_files = Vec::new();
+        for key in model_keys {
+            let saved = replay.and_then(|request| request[*key].as_str());
+            if let Some(file) = saved.or_else(|| song.generation_settings[*key].as_str())
+                .filter(|file| !file.trim().is_empty() && !model_files.contains(file))
+            {
+                model_files.push(file);
+            }
+        }
+        if !model_files.is_empty() {
+            fields.insert("replay_model_files".into(), serde_json::to_value(model_files)?);
+        }
         if let Some(why) = song.replay_request.as_ref().and_then(cut_short) {
             fields.insert("cut_short".into(), Value::from(why));
         }
@@ -13755,6 +13780,16 @@ mod tests {
         assert_eq!(listed["replay_available"], true);
         assert_eq!(listed_song(&song(Some(serde_json::json!({ "abc": "X:1" })), Some(Value::Null))).unwrap()["replay_available"], false);
         assert_eq!(listed_song(&song(None, None)).unwrap()["replay_available"], false);
+
+        let mut ace = song(Some(serde_json::json!({ "duration": 30, "synth_model": "old-ace.gguf", "lm_model": "lm.gguf" })), None);
+        ace.engine_id = ace::ENGINE_ID.into();
+        ace.generation_settings = serde_json::json!({ "synth_model": "different-ace.gguf", "vae": "vae.gguf" });
+        let listed = listed_song(&ace).unwrap();
+        assert_eq!(listed["replay_available"], true);
+        assert_eq!(listed["replay_model_files"], serde_json::json!(["old-ace.gguf", "lm.gguf", "vae.gguf"]));
+        assert!(listed.get("replay_request").is_none());
+        ace.replay_request = Some(serde_json::json!({}));
+        assert_eq!(listed_song(&ace).unwrap()["replay_available"], false);
     }
 
     /// yue2.cpp `backend_set_device` prints this line before it exits.
