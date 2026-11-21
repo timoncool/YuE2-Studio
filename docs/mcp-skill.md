@@ -121,6 +121,10 @@ For MiniMax Music3 through audio.cpp, call `audio_cpp_music_models` and check th
 to `song_create` with `style`, `lyrics`, and an optional nonnegative `seed`.
 The job uses the installed `quality-q8` profile and returns its library song.
 
+Use `audio_cpp_music_model_install` with `{"model":"heartmula"}` to start installing
+HeartMuLa. Poll `audio_cpp_music_models` for installation progress and readiness
+before creating a song.
+
 For other ready audio.cpp families, pass the ID returned by the same catalog as
 `music_source.model`. HeartMuLa takes lyrics and style tags, with optional
 sampling and codec settings in `heartmula`. For MiDashengLM-Gen, use

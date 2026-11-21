@@ -482,6 +482,7 @@ const JOURNAL: &[(&str, &str, &str)] = &[
     ("song_job_again", "started", "generation"),
     ("song_create", "started", "generation"),
     ("song_replay", "started", "generation"),
+    ("audio_cpp_music_model_install", "started", "download"),
     ("song_job_cancel", "cancelled", "generation"),
     ("library_song_rename", "updated", "song"),
     ("library_song_update", "updated", "song"),
