@@ -31,6 +31,9 @@ def rpc(identifier, method, params):
 
 with tempfile.TemporaryDirectory(prefix="yue-h3-mcp-") as folder:
     root = Path(folder)
+    sidecar = root / "audiocpp/models/MiniMax-H3-Q4-GGUF/configuration.json"
+    sidecar.parent.mkdir(parents=True)
+    sidecar.write_bytes(b"{")
     env = dict(os.environ, YUE_STUDIO_PORT=str(port), YUE_STUDIO_DATA_ROOT=folder,
                TIMONCOOL_SHARED_DIR=str(root / "registry"), YUE_AUDIOCPP_SERVER=str(root / "absent"),
                DO_NOT_TRACK="1")
@@ -60,7 +63,15 @@ with tempfile.TemporaryDirectory(prefix="yue-h3-mcp-") as folder:
             assert model["package_url"] == "https://huggingface.co/audio-cpp/audio.cpp-gguf/tree/32c1ce1fea57a513eb9386aa62408d47b1cf7ab2/MiniMax-H3-Q4-GGUF", model
             assert model["license_url"] == "https://huggingface.co/MiniMaxAI/MiniMax-H3/blob/main/LICENSE", model
             assert model["model_directory"] == "audiocpp/models/MiniMax-H3-Q4-GGUF", model
-            print(json.dumps(model))
+            assert "configuration.json" in model["missing"], model
+            sidecar.write_bytes(b'{"task":"text-to-video-synthesis"}')
+            reply = rpc(3, "tools/call", {"name": tool["name"], "arguments": {}})
+            payload = reply.get("structuredContent") or json.loads(reply["content"][0]["text"])
+            repaired = next(item for item in payload["models"] if item["id"] == "minimax_h3")
+            assert "configuration.json" not in repaired["missing"], repaired
+            assert repaired["missing_bytes"] == 32_443_213_360, repaired
+            print(json.dumps({"truncated": model, "repaired_missing_bytes": repaired["missing_bytes"]}))
+
         except BaseException:
             log.seek(0)
             print(log.read(), file=sys.stderr)
