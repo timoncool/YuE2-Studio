@@ -737,7 +737,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
     if (isProfileMusicEngine(song.ditModel) || song.ditModel === 'openrouter') {
       if (isProfileMusicEngine(song.ditModel)) {
         const source = settings.music_source as YueRequest['music_source'] | undefined;
-        const profile = song.ditModel === 'audio.cpp' ? audioCppMiniMax
+        const profile = song.ditModel === 'audio.cpp' ? (source?.kind === 'audio_cpp' ? source.model : audioCppMiniMax)
           : source?.kind === 'native' && source.engine === song.ditModel ? source.model : song.lmModel;
         native.restore(song.ditModel, profile ?? '', settings);
       } else {
@@ -1598,8 +1598,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
                         <ul className="break-all">{native.originalModels.map(model => <li key={model}>{model}</li>)}</ul>
                       </div>
                     )}
-                    {audioCpp && native.profile && <p className="text-xs">{native.profile.label}</p>}
-                    {!audioCpp && native.profiles.length > 0 && (
+                    {native.profiles.length > 0 && (
                       <select aria-label={nativeStrings.model} className={CONTROL} value={native.profile?.id ?? ''}
                         onChange={event => native.select(event.target.value)}>
                         <option value="">{musicStrings.choose}</option>

@@ -386,7 +386,9 @@ it('chooses MiniMax Music3 through audio.cpp and reuses the saved seed and forma
   const fetcher = vi.fn(async (url: string) => Response.json(url === '/v1/music/audio-cpp/models' ? {
     engine: 'audio.cpp',
     models: [{ id: 'minimax_music3', profile_id: 'quality-q8', quantization: 'Q8_0', ready,
-      missing: ready ? [] : ['language_model_q8_0.gguf'] }],
+      missing: ready ? [] : ['language_model_q8_0.gguf'] },
+      { id: 'heartmula', name: 'HeartMuLa', profile_id: 'heartmula_q8_0', quantization: 'Q8_0',
+        ready: false, missing: ['heartmula.gguf'] }],
   } : {}));
   vi.stubGlobal('fetch', fetcher);
   function Editor() {
@@ -396,7 +398,7 @@ it('chooses MiniMax Music3 through audio.cpp and reuses the saved seed and forma
   act(() => root.render(<Editor />));
   await flush();
   const option = host.querySelector<HTMLOptionElement>('option[value="audio.cpp"]')!;
-  expect(option.textContent).toContain('MiniMax Music3 · audio.cpp');
+  expect(option.textContent).toBe('audio.cpp');
   const engineSelect = option.parentElement as HTMLSelectElement;
   const choose = (select: HTMLSelectElement, value: string) => act(() => {
     select.value = value;
@@ -412,6 +414,11 @@ it('chooses MiniMax Music3 through audio.cpp and reuses the saved seed and forma
   await flush();
   expect(generate().disabled).toBe(false);
   expect(host.textContent).toContain('quality-q8 · Q8_0');
+  const models = host.querySelector<HTMLOptionElement>('option[value="heartmula"]')!.parentElement as HTMLSelectElement;
+  choose(models, 'heartmula');
+  expect(models.value).toBe('heartmula');
+  expect(generate().disabled).toBe(true);
+  expect(host.textContent).toContain('heartmula.gguf');
 
   const song = { title: 'Music3 take', style: 'folk', lyrics: '[verse] Good morning',
     ditModel: 'audio.cpp', lmModel: 'quality-q8', nativeReplayAvailable: false,
