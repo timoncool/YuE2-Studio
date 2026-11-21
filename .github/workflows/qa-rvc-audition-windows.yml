@@ -1,0 +1,22 @@
+name: RVC audition Windows service
+
+on:
+  push:
+    branches: [qa/rvc-audition-windows]
+
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 22
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo build --locked -p music-server --bin music-server
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rvc-audition-windows
+          path: target/debug/music-server.exe
+          retention-days: 7
