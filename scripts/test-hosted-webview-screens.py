@@ -5,7 +5,7 @@ from contextlib import contextmanager
 p = argparse.ArgumentParser()
 p.add_argument("exe", type=pathlib.Path)
 p.add_argument("output", type=pathlib.Path)
-p.add_argument("--suite", choices=["screens", "lrc"], default="screens")
+p.add_argument("--suite", choices=["screens", "lrc", "edit-track"], default="screens")
 args = p.parse_args()
 out = args.output.resolve()
 out.mkdir(parents=True, exist_ok=True)
@@ -499,6 +499,65 @@ G4 |
     assert not re.search(r"butterchurn.*(?:error|not a function)|(?:error|not a function).*butterchurn", ui("console"), re.I)
 
 
+def check_edit_track(root):
+    rate = 24000
+    source = root/"edit-track.wav"
+    original_samples = [int(6200*math.sin(2*math.pi*311*i/rate)) for i in range(rate*12)]
+    with wave.open(str(source), "wb") as audio:
+        audio.setparams((1, 2, rate, 0, "NONE", "not compressed"))
+        audio.writeframes(struct.pack(f"<{len(original_samples)}h", *original_samples))
+    song = tool("library_import_audio", path=str(source), title="QA A original")
+    original_id = song["id"]
+    disk_path = pathlib.Path(tool("library_song_files", song_id=original_id)["audio"])
+    original_sha = hashlib.sha256(disk_path.read_bytes()).hexdigest()
+    region = {"start_seconds": 2, "end_seconds": 7}
+    assert tool("processing_start", song_id=original_id, normalize={"peak_clip": 0}, region=region)["started"]
+    for _ in range(100):
+        current = tool("processing_get")["run"]
+        if current.get("done"):
+            break
+        time.sleep(.1)
+    assert current["preview_ready"], current
+    preview = request("/v1/processing/preview")
+    take = tool("processing_keep", label="QA B region edit")
+    assert take["id"] != original_id and take["metadata"]["derived"]["from"] == original_id
+    encoded = request("/v1/library/media/"+take["id"])
+    def pcm(data):
+        assert data[:4] == b"RIFF" and data[8:12] == b"WAVE"
+        offset = 12
+        while offset+8 <= len(data):
+            label, count = struct.unpack_from("<4sI", data, offset)
+            if label == b"data":
+                return data[offset+8:offset+8+count]
+            offset += 8+count+(count%2)
+        raise AssertionError("Missing WAV data")
+    original = struct.pack(f"<{len(original_samples)}f", *(value/32768 for value in original_samples))
+    rendered = pcm(encoded)
+    assert rendered == pcm(preview) and len(rendered) == len(original)
+    start, end = 2*rate*4, 7*rate*4
+    assert rendered[:start] == original[:start] and rendered[end:] == original[end:]
+    assert rendered[start:end] != original[start:end]
+    assert hashlib.sha256(disk_path.read_bytes()).hexdigest() == original_sha
+    playlist = tool("playlist_create", name="QA A/B takes", song_ids=[original_id, take["id"]])
+    json_file(out/"edit-track.json", dict(original_id=original_id, take_id=take["id"], playlist=playlist["id"],
+        original_sha256=original_sha, edited_pcm_sha256=hashlib.sha256(rendered).hexdigest(),
+        changed_region=region, unchanged_frames=7*rate, preview_pcm_matches=True))
+    ui("navigate", view="library")
+    wait_page("QA A original")
+    click('Playlists')
+    page = wait_page("QA A/B takes")
+    row = next(line for line in page.splitlines() if "QA A/B takes" in line and " open" in line)
+    ui("click", ref=re.search(r"(e\d+) open", row)[1])
+    click('button "Compare takes"', wait_page("Page: QA A/B takes", 'button "Compare takes"'))
+    page = wait_page('tab "A"', 'tab "B"', 'button "Open in Library"')
+    (out/"ab-page.txt").write_text(page, encoding="utf8")
+    script = pathlib.Path(__file__).with_name("observe-edit-track-ab.mjs")
+    subprocess.run(["node", str(script), str(out/"ab-playback.json"), original_id, take["id"]], check=True, timeout=55)
+    click('button "Open in Library"')
+    page = wait_page("QA B region edit")
+    (out/"opened-take.txt").write_text(page, encoding="utf8")
+
+
 def remove_profile(root, timeout=20):
     deadline = time.monotonic() + timeout
     while True:
@@ -562,6 +621,8 @@ with isolated_profile() as root:
             wait_page(predicate=lambda page: "button" in page)
             if args.suite == "lrc":
                 check_lrc(root, process.pid)
+            elif args.suite == "edit-track":
+                check_edit_track(root)
             else:
                 check_screens(root, process.pid)
         finally:
