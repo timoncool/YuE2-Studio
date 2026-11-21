@@ -111,9 +111,27 @@ fn installed_by(downloader: &Downloader, runtime: &Runtime) -> Option<PathBuf> {
 
 pub(super) fn installed(data_root: &FsPath, engine: &str) -> Option<PathBuf> {
     let downloader = downloader(data_root);
+    installed_runtime(&downloader, engine).map(|(_, executable)| executable)
+}
+
+fn installed_runtime(downloader: &Downloader, engine: &str) -> Option<(&'static Runtime, PathBuf)> {
     // Keep earlier pins in the table behind the current pin. An app upgrade
     // can then run the previous verified install before the user downloads.
-    host_runtimes(engine).find_map(|runtime| installed_by(&downloader, runtime))
+    host_runtimes(engine).find_map(|runtime| installed_by(downloader, runtime).map(|executable| (runtime, executable)))
+}
+
+pub(super) fn selected_executable(data_root: &FsPath, engine: &str, executable: Option<&FsPath>) -> Option<serde_json::Value> {
+    let path = executable?;
+    let downloads = downloader(data_root);
+    let revision = host_runtimes(engine)
+        .find(|runtime| {
+            downloads.picked_into(&runtime.asset).join(runtime.pin.executable) == path
+                && installed_by(&downloads, runtime).is_some()
+        })
+        .map(|runtime| runtime.pin.revision);
+    Some(serde_json::json!({
+        "path": path, "source": if revision.is_some() { "managed" } else { "local" }, "revision": revision,
+    }))
 }
 
 pub(super) fn requires_adapter_update(data_root: &FsPath, engine: &str, executable: &FsPath) -> bool {
@@ -234,7 +252,8 @@ pub(super) async fn status(
         return Json(serde_json::json!({ "supported": false })).into_response();
     };
     let downloader = &state.native_music_downloads;
-    let installed = installed_by(downloader, runtime).is_some();
+    let installed_revision = installed_runtime(downloader, &engine).map(|(installed, _)| installed.pin.revision);
+    let installed = installed_revision == Some(runtime.pin.revision);
     let shared = state.engine_runtime.missing(cuda_build());
     let common_bytes: u64 = shared.iter().map(|asset| asset.bytes).sum();
     let archive_bytes = if installed { 0 } else { runtime.pin.bytes };
@@ -249,7 +268,7 @@ pub(super) async fn status(
     };
     Json(serde_json::json!({
         "supported": true, "installed": installed && shared.is_empty(),
-        "revision": runtime.pin.revision, "bytes": archive_bytes + common_bytes,
+        "revision": runtime.pin.revision, "installed_revision": installed_revision, "bytes": archive_bytes + common_bytes,
         "download": download,
     }))
     .into_response()
@@ -382,6 +401,13 @@ mod tests {
         .unwrap();
         let fallback = installed(root.path(), engine).unwrap();
         assert_eq!(fallback, folder.join(previous.pin.executable));
+        let (reported, _) = installed_runtime(&downloads, engine).unwrap();
+        assert_eq!(reported.pin.revision, previous.pin.revision);
+        assert_ne!(reported.pin.revision, current.pin.revision);
+        let external = root.path().join("external/ace-server.exe");
+        let selected = selected_executable(root.path(), engine, Some(&external)).unwrap();
+        assert_eq!(selected["source"], "local");
+        assert!(selected["revision"].is_null());
         assert!(requires_adapter_update(root.path(), engine, &fallback));
         let executable = downloads.picked_into(&current.asset).join(current.pin.executable);
         assert!(!requires_adapter_update(root.path(), engine, &executable));

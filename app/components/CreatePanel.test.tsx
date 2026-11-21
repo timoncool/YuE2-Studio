@@ -96,10 +96,10 @@ afterEach(() => {
 
 const flush = () => act(async () => { await new Promise(resolve => setTimeout(resolve, 0)); });
 
-function panel(props: Pick<React.ComponentProps<typeof CreatePanel>, 'musicEngine' | 'onMusicEngineChange' | 'onCancelJob' | 'activeJobCount' | 'queueBusy'> & { initialData?: { song: Song; timestamp: number } | null; visible?: boolean; request?: React.ComponentProps<typeof CreatePanel>['request']; onGenerate?: (request: YueRequest) => void }) {
+function panel(props: Pick<React.ComponentProps<typeof CreatePanel>, 'musicEngine' | 'onMusicEngineChange' | 'onOpenEngines' | 'onCancelJob' | 'activeJobCount' | 'queueBusy'> & { initialData?: { song: Song; timestamp: number } | null; visible?: boolean; request?: React.ComponentProps<typeof CreatePanel>['request']; onGenerate?: (request: YueRequest) => void }) {
   return (
     <Activity mode={props.visible === false ? 'hidden' : 'visible'}>
-      <CreatePanel musicEngine={props.musicEngine} onMusicEngineChange={props.onMusicEngineChange} onCancelJob={props.onCancelJob} onGenerate={props.onGenerate ?? (request => sent.push(request))} isGenerating={Boolean(props.activeJobCount)} queueBusy={props.queueBusy} activeJobCount={props.activeJobCount} request={props.request} initialData={props.initialData ?? null}
+      <CreatePanel musicEngine={props.musicEngine} onMusicEngineChange={props.onMusicEngineChange} onOpenEngines={props.onOpenEngines} onCancelJob={props.onCancelJob} onGenerate={props.onGenerate ?? (request => sent.push(request))} isGenerating={Boolean(props.activeJobCount)} queueBusy={props.queueBusy} activeJobCount={props.activeJobCount} request={props.request} initialData={props.initialData ?? null}
         playlists={[]} onCreatePlaylist={async () => null} playlistId="" onChoosePlaylist={() => undefined} />
     </Activity>
   );
@@ -113,6 +113,18 @@ const type = (element: HTMLTextAreaElement | HTMLInputElement, value: string) =>
 });
 const click = (element: Element) => act(() => { element.dispatchEvent(new MouseEvent('click', { bubbles: true })); });
 const buttonNamed = (text: string) => [...host.querySelectorAll('button')].find(button => button.textContent?.includes(text));
+
+it('opens engine management for the current engine and retains the Create draft', async () => {
+  const onOpenEngines = vi.fn();
+  act(() => root.render(panel({ musicEngine: 'local', onMusicEngineChange: vi.fn(), onOpenEngines })));
+  await flush();
+  const draft = field('textarea[aria-label="styleCardTitle"]')!;
+  type(draft, 'Draft folk arrangement');
+  click(buttonNamed('Engines and updates')!);
+  expect(onOpenEngines).toHaveBeenCalledWith('local');
+  expect(draft.value).toBe('Draft folk arrangement');
+  expect(sent).toHaveLength(0);
+});
 
 it('sends the chosen library backing with the same score and words', async () => {
   const abc = 'X:1\nM:4/4\nL:1/16\nQ:1/4=120\nK:C\nV: Vocal\n"C"z16|';

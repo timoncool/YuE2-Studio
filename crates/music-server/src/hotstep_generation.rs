@@ -165,10 +165,12 @@ pub(super) async fn profile(state: &AppState, engine_installed: bool, family: Fa
     let downloader = &state.hotstep_cover;
     let missing = missing(downloader, family);
     let installing = family.lock(state).try_lock().is_err();
+    let installable = family.supported(downloader);
     serde_json::json!({
         "id": family.id(), "label": family.label(),
-        "status": "experimental", "ready": family.supported(downloader) && engine_installed && missing.is_empty() && !installing,
-        "installable": family.supported(downloader),
+        "status": "experimental", "ready": installable && engine_installed && missing.is_empty() && !installing,
+        "installable": installable,
+        "install_path": installable.then(|| format!("/v1/music/native/hotstep/{}/install", family.folder())),
         "installing": installing,
         "download": downloader.active_for(family.id()).await,
         "missing": missing.iter().map(|asset| asset.label).collect::<Vec<_>>(),

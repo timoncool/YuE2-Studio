@@ -38,6 +38,7 @@ pub(super) async fn profile(state: &AppState, installed: bool) -> Value {
     serde_json::json!({
         "id":PROFILE,"label":"HeartMuLa 3B · HOT-Step · Q8_0","ready":installed && files.is_empty() && !installing,
         "installing":installing,"installable":installed || runtime_missing.is_some(),"missing":missing,
+        "install_path": (installed || runtime_missing.is_some()).then_some("/v1/music/native/hotstep/heartmula/install"),
         "missing_bytes":files.iter().map(|item| item.bytes).sum::<u64>() + runtime_missing.map_or(0, |item| item.bytes),
         "download":manager.active_for(SCOPE).await,"adapters":adapters,
     })

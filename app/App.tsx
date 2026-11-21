@@ -119,6 +119,7 @@ import { PlaylistDetail } from './components/PlaylistDetail';
 import { Toast, ToastType } from './components/Toast';
 import { useSignedUpdateNotice } from './services/signedUpdateNotice';
 import { signedUpdateStrings } from './i18n/signedUpdates';
+import { engineUpdateTarget } from './i18n/enginePage';
 import { FilesPanel } from './components/FilesPanel';
 import { SearchPage } from './components/SearchPage';
 import { NewsPage } from './components/NewsPage';
@@ -476,7 +477,7 @@ function AppContent() {
     showToast(text.notice, 'info', {
       label: text.openUpdates,
       onClick: () => {
-        setSettingsSection('models:component-updates');
+        setSettingsSection(engineUpdateTarget);
         setShowSettingsModal(true);
       },
     });
@@ -1647,6 +1648,10 @@ function AppContent() {
               <CreatePanel
                 musicEngine={musicEngine}
                 onMusicEngineChange={chooseMusicEngine}
+                onOpenEngines={(engine) => {
+                  setSettingsSection('engines:' + engine);
+                  setShowSettingsModal(true);
+                }}
                 onGenerate={generations.generate}
                 onCancelJob={generations.cancel}
                 isGenerating={generations.isGenerating}
@@ -1780,6 +1785,11 @@ function AppContent() {
           onToggleTheme={toggleTheme}
           user={user}
           onOpenSettings={() => setShowSettingsModal(true)}
+          onOpenEngines={() => {
+            setSettingsSection('engines');
+            setShowSettingsModal(true);
+            if (isMobile) setShowLeftSidebar(false);
+          }}
           isOpen={showLeftSidebar}
           onToggle={() => setShowLeftSidebar(!showLeftSidebar)}
           journalOpen={journalOpen}

@@ -7992,6 +7992,7 @@ async fn ace_music_profiles() -> Result<Json<Value>, (StatusCode, Json<ApiError>
             "engine": ace::ENGINE_ID,
             "engine_installed": installed.engine_installed(),
             "adapter_runtime_update": installed.adapter_runtime_update(),
+            "selected_executable": native_music_runtime::selected_executable(root, ace::ENGINE_ID, installed.executable()),
             "profiles": installed.profiles(),
         })
     }).await
@@ -8000,7 +8001,12 @@ async fn ace_music_profiles() -> Result<Json<Value>, (StatusCode, Json<ApiError>
 async fn minimax_music_profiles() -> Result<Json<Value>, (StatusCode, Json<ApiError>)> {
     native_profile_catalog(|root| {
         let installed = native_minimax::Runtime::installation(root);
-        serde_json::json!({"engine":native_minimax::ENGINE_ID,"engine_installed":installed.engine_installed(),"profiles":installed.profiles()})
+        serde_json::json!({
+            "engine": native_minimax::ENGINE_ID,
+            "engine_installed": installed.engine_installed(),
+            "selected_executable": native_music_runtime::selected_executable(root, native_minimax::ENGINE_ID, installed.executable()),
+            "profiles": installed.profiles(),
+        })
     }).await
 }
 

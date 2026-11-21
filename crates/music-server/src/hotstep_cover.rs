@@ -16,16 +16,21 @@ fn downloader(state: &AppState) -> Arc<downloads::Downloader> {
 pub(super) async fn profiles(State(state): State<AppState>) -> Json<Value> {
     let downloader = downloader(&state);
     let server = assets::server(&downloader).is_some_and(|path| path.is_file());
-    let mut missing: Vec<_> = assets::missing(&downloader)
+    let missing_assets = assets::missing(&downloader);
+    let mut missing: Vec<_> = missing_assets
         .iter()
         .map(|asset| asset.label)
         .collect();
     if !server {
         missing.push("HOT-Step server");
     }
+    let download = downloader.active_for("hotstep-mulacover").await;
+    let installing = download.as_ref().is_some_and(|progress| !progress.done);
     Json(serde_json::json!({
         "engine": ENGINE, "engine_installed": server,
-        "profiles": [{"id": PROFILE, "label": "MuLaCover · HOT-Step · BF16", "ready": missing.is_empty(), "missing": missing},
+        "profiles": [{"id": PROFILE, "label": "MuLaCover · HOT-Step · BF16", "ready": missing.is_empty(), "missing": missing,
+            "missing_bytes": missing_assets.iter().map(|asset| asset.bytes).sum::<u64>(), "installing": installing, "download": download,
+            "install_path": (server || assets::managed_revision().is_some()).then_some("/v1/music/native/hotstep/install")},
             crate::hotstep_sa3::profile(&state, server).await, crate::hotstep_heartmula::profile(&state, server).await,
             hotstep_generation::profile(&state, server, Family::MiniMax).await,
             hotstep_generation::profile(&state, server, Family::Ace).await,
