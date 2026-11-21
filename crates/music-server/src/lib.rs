@@ -3,6 +3,7 @@ pub mod studio_log;
 mod adapters;
 mod community;
 mod component_catalogue;
+mod engine_catalogue;
 mod diagnostics;
 mod problem;
 mod processing;
@@ -1729,6 +1730,8 @@ pub async fn serve_on_port(port: u16) -> anyhow::Result<()> {
         .route("/v1/rvc/quick/{id}", get(rvc_quick::status).delete(rvc_quick::cancel))
         .route("/v1/rvc/apply/setup", get(rvc_apply::setup).post(rvc_apply::install))
         .route("/v1/rvc/voices/{id}", axum::routing::delete(rvc_voices::remove))
+        .route("/v1/components/music-engines", get(engine_catalogue::list))
+        .route("/v1/components/music-engines/refresh", post(engine_catalogue::refresh))
         .route("/v1/rvc/catalog", get(rvc_catalog::list))
         .route("/v1/rvc/catalog/refresh", post(rvc_catalog::refresh))
         .route("/v1/rvc/catalog/install", post(rvc_catalog::install))

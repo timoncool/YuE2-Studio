@@ -234,8 +234,7 @@ def run_rvc(work, binary, certificate, tls_key, install_voice=False):
         def log_request(self, code="-", size="-"):
             request_paths.append(self.path)
 
-    def publish(version, manifest):
-        name = "rvc-voice-catalog.json"
+    def publish(version, manifest, name="rvc-voice-catalog.json"):
         raw = json.dumps(manifest).encode()
         target = TargetFile.from_data(name, raw, ["sha256"])
         path = origin / "targets" / f"{target.hashes['sha256']}.{name}"
@@ -280,6 +279,12 @@ def run_rvc(work, binary, certificate, tls_key, install_voice=False):
         assert bool(result.get("isError")) == expected_error, result
         return result if expected_error else result["structuredContent"]
 
+    def engine_catalogue(refresh=False):
+        path = "/v1/components/music-engines" + ("/refresh" if refresh else "")
+        request = Request(base + path, method="POST" if refresh else "GET")
+        with http.open(request, timeout=60) as response:
+            return json.load(response)
+
     http = build_opener(ProxyHandler({}))
     studio = work / "studio"
     with ThreadingHTTPServer(("127.0.0.1", 0), functools.partial(Handler, directory=origin)) as server:
@@ -318,6 +323,20 @@ def run_rvc(work, binary, certificate, tls_key, install_voice=False):
             tool("rvc_catalog_refresh", expected_error=True)
             publish(4, {"schema_version": 2, "voices": [voice]})
             tool("rvc_catalog_refresh", expected_error=True)
+            assert engine_catalogue()["engines"] == []
+            engine = {"id": "fixture-engine", "name": "Fixture", "protocol": "music-http-v1",
+                      "version": "1", "platform": "linux-x86_64", "executable": "worker",
+                      "files": [{"name": "worker", "url": "https://example.org/worker", "bytes": 1, "sha256": "a"*64}]}
+            publish(5, {"schema": 1, "engines": [engine]}, "music-engine-catalog.json")
+            assert engine_catalogue(refresh=True)["engines"] == [engine]
+            publish(6, {"schema": 9, "engines": []}, "music-engine-catalog.json")
+            try:
+                engine_catalogue(refresh=True)
+            except URLError as error:
+                assert getattr(error, "code", None) == 502, error
+            else:
+                raise AssertionError("incompatible catalogue was accepted")
+            assert engine_catalogue()["engines"] == [engine]
             assert tool("rvc_catalog_list", {"has_index": False})["voices"][0]["name"] == signed_voice["name"]
         finally:
             proc.terminate()
@@ -329,6 +348,8 @@ def run_rvc(work, binary, certificate, tls_key, install_voice=False):
         assert tool("rvc_catalog_list", {"has_index": False})["voices"][0]["name"] == signed_voice["name"]
         tool("rvc_catalog_refresh", expected_error=True)
         assert tool("rvc_catalog_list", {"has_index": False})["voices"][0]["name"] == signed_voice["name"]
+        assert engine_catalogue()["engines"] == [engine]
+        print("PASS signed engine discovery, incompatible schema rejected, offline restart")
         cache = studio / "component-channel" / "rvc"
         snapshot = cache / (cache / "accepted").read_text()
         path, = (snapshot / "targets").iterdir()

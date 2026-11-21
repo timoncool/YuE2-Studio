@@ -117,6 +117,7 @@ export function useNativeMusicProfiles(engine: ProfileMusicEngine | undefined) {
   return {
     profiles,
     profile,
+    selectedId: remembered,
     error: result?.error === true,
     loading: Boolean(engine && !result),
     installed: result?.data?.engine_installed === true,
@@ -155,13 +156,14 @@ export function useNativeMusicProfiles(engine: ProfileMusicEngine | undefined) {
         settings: id ? { ...preferences.settings, [JSON.stringify([source, id])]: controls } : preferences.settings,
       });
     },
-    select: (id: string) => {
-      if (!engine || (pending && !id)) return;
-      if (pending) setLegacyAce(undefined);
+    select: (id: string, target = engine) => {
+      const legacy = engine === target ? pending : undefined;
+      if (!target || (legacy && !id)) return;
+      if (legacy) setLegacyAce(undefined);
       update({
-        selected: { ...preferences.selected, [engine]: id },
-        settings: pending
-          ? { ...preferences.settings, [JSON.stringify([engine, id])]: pending.settings }
+        selected: { ...preferences.selected, [target]: id },
+        settings: legacy
+          ? { ...preferences.settings, [JSON.stringify([target, id])]: legacy.settings }
           : preferences.settings,
       });
     },
