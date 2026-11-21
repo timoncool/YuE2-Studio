@@ -18,6 +18,7 @@ import {
 import { AudioWaveform } from './AudioWaveform';
 import type { MusicEngine, Playlist, Song, YueCot, YueHarmony, YueOutputFormat, YueRequest, YueSampling } from '../types';
 import { useI18n } from '../context/I18nContext';
+import { enginePageStrings } from '../i18n/enginePage';
 import { AUDIO_ACCEPT } from '../services/audioFiles';
 import { WindowAudioCapture } from './WindowAudioCapture';
 import { saveFile } from '../services/saveFile';
@@ -93,6 +94,7 @@ interface CreatePanelProps {
   onCancelJob?: (jobId: string) => Promise<void>;
   musicEngine?: MusicEngine;
   onMusicEngineChange?: (engine: MusicEngine) => void;
+  onOpenEngines?: (engine: MusicEngine | 'updates') => void;
   isGenerating: boolean;
   activeJobCount?: number;
   queueBusy?: boolean;
@@ -503,7 +505,7 @@ const LYRIC_LANGUAGES: { code: string; native: string; name: string }[] = [
   { code: 'ko', native: '한국어', name: 'Korean' },
 ];
 
-export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJob, musicEngine = 'local', onMusicEngineChange, isGenerating, activeJobCount = 0, queueBusy = isGenerating || activeJobCount > 0, initialData, request, playlists, onCreatePlaylist, playlistId, onChoosePlaylist }) => {
+export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJob, musicEngine = 'local', onMusicEngineChange, onOpenEngines, isGenerating, activeJobCount = 0, queueBusy = isGenerating || activeJobCount > 0, initialData, request, playlists, onCreatePlaylist, playlistId, onChoosePlaylist }) => {
   const { t, language } = useI18n();
   const rvcVoice = useLastRvcVoice();
   const [rvcAfter, setRvcAfter] = useState(false);
@@ -2069,6 +2071,8 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
                 </select>
               </label>
               {speedProfile && <CreateSpeedReference profile={speedProfile} id={speedReferenceId} />}
+              {onOpenEngines && <button type="button" className="block text-xs text-pink-600 underline dark:text-pink-300"
+                onClick={() => onOpenEngines(signed ? 'updates' : musicEngine)}>{enginePageStrings[language][0]}</button>}
               {packages.hasCatalogue && (
                 <button type="button" disabled={packages.refreshingCatalogue}
                   className="text-xs text-pink-600 underline disabled:opacity-50 dark:text-pink-300"

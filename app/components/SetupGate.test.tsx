@@ -3,13 +3,16 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { OptionalGroup, SetupGate, WHERE_IT_RUNS } from './SetupGate';
 import { SettingsModal } from './SettingsModal';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { engineUpdateTarget } from '../i18n/enginePage';
 
 vi.mock('../context/I18nContext', () => ({ useI18n: () => ({
   t: (key: string) => key === 'ramShort' ? 'Have {have} GB, need {need} GB' : key,
   language: 'en',
 }) }));
 vi.mock('../context/AuthContext', () => ({ useAuth: () => ({ user: { username: 'test' }, setDisplayName: vi.fn() }) }));
-vi.mock('../services/studioQueries', () => ({ openRouterSettingsChanged: vi.fn(), useSetupStatus: () => ({}), SELF_READ: { 'x-hub-skip': '1' } }));
+vi.mock('../services/studioQueries', () => ({ openRouterSettingsChanged: vi.fn(), useSetupStatus: () => ({}),
+  useOpenRouterSettings: () => ({ data: { configured: false } }), SELF_READ: { 'x-hub-skip': '1' } }));
 vi.mock('./EngineSettings', () => ({ EngineSettings: () => null }));
 vi.mock('./ModelPreset', () => ({ ModelPreset: () => null }));
 vi.mock('./ModelStorageCard', () => ({ ModelStorageCard: () => null }));
@@ -20,6 +23,43 @@ vi.mock('./HubTelemetryPreview', () => ({ HubTelemetryPreview: () => null }));
 vi.mock('../services/studioHub', () => ({ setTelemetry: vi.fn() }));
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+
+it('opens upgrades from the notification target and reads per-engine readiness without starting jobs', async () => {
+  const onlyRead = vi.fn(async (url: string, init?: RequestInit) => {
+    expect(init?.method ?? 'GET').toBe('GET');
+    if (url === '/v1/music/pair') return Response.json({ active: { kind: 'audio_cpp', model: 'yue2' } });
+    if (url === '/engine/options') return Response.json({ executable: '/engines/yue-server' });
+    if (url.includes('/acestep-cpp/profiles')) return Response.json({ engine_installed: true, profiles: [{ id: 'minimal', ready: false }] });
+    if (url.includes('/minimaxmusic-cpp/profiles')) return Response.json({ engine_installed: false, profiles: [] });
+    if (url === '/v1/music/audio-cpp/models') return Response.json({ engine_installed: true, models: [{ id: 'yue2', ready: true }] });
+    if (url === '/v1/music/native/hotstep/profiles') return Response.json({}, { status: 503 });
+    if (url === '/v1/rvc/native/runtime') return Response.json({ supported: false, reason: 'Unsupported GPU' });
+    if (url === '/v1/components/updates') return Response.json({ mode: 'notify', updates: [] });
+    return Response.json({});
+  });
+  vi.stubGlobal('fetch', onlyRead);
+  const host = document.createElement('div');
+  const root = createRoot(host);
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  try {
+    await act(async () => root.render(<QueryClientProvider client={client}>
+      <SettingsModal isOpen target={engineUpdateTarget} onNavigate={vi.fn()} onClose={vi.fn()} theme="light" onToggleTheme={vi.fn()} />
+    </QueryClientProvider>));
+    await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)); });
+    expect(host.querySelector('h3')?.textContent).toBe('Engines and updates');
+    expect(host.querySelector('section[aria-label="Signed component updates"]')).toBeTruthy();
+    expect(host.querySelector('[data-engine="acestep-cpp"]')?.textContent).toContain('Installed · profileNotInstalled');
+    expect(host.querySelector('[data-engine="audio.cpp"]')?.textContent).toContain('Installed · Active · profileReady');
+    expect(host.querySelector('[data-engine="minimaxmusic-cpp"]')?.textContent).toContain('Not installed');
+    expect(host.querySelector('[data-engine="hotstep"]')?.textContent).toContain('Status unavailable');
+    expect(host.querySelector('[data-engine="rvc"]')?.textContent).toContain('Unsupported GPU');
+    expect(host.querySelector('[data-engine="openrouter"]')?.textContent).toContain('openRouterNotConfigured');
+  } finally {
+    await act(async () => root.unmount());
+    client.clear();
+    vi.unstubAllGlobals();
+  }
+});
 let root: Root;
 let host: HTMLDivElement;
 let calls: Array<{ url: string; init?: RequestInit }>;

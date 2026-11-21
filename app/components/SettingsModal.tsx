@@ -6,6 +6,8 @@ import { useI18n } from '../context/I18nContext';
 import { LANGUAGE_NAMES, type Language } from '../i18n/translations';
 import { ProviderSettings } from './ProviderSettings';
 import { EngineSettings } from './EngineSettings';
+import { EnginesAndUpdates } from './EnginesAndUpdates';
+import { enginePageStrings } from '../i18n/enginePage';
 import { SetupGate, type SetupSelection } from './SetupGate';
 import { CoverTemplateSettings } from './CoverTemplateSettings';
 import { AgentPanel } from './AgentPanel';
@@ -32,7 +34,7 @@ import { setUiScale, storedUiScale, UI_SCALE_EVENT, UI_SCALE_MAX, UI_SCALE_MIN, 
 /// The assistant and the karaoke recogniser are not sections of their own: they
 /// are set up where they are installed, on the models page. Having both was one
 /// capability drawn twice, and the two drawings disagreed.
-const sectionIds = ['account', 'models', 'engine', 'cloud', 'agent', 'covers', 'interface', 'privacy', 'about'] as const;
+const sectionIds = ['account', 'models', 'engines', 'engine', 'cloud', 'agent', 'covers', 'interface', 'privacy', 'about'] as const;
 type SectionId = typeof sectionIds[number];
 
 export function isSettingsTarget(value: unknown): value is string {
@@ -81,6 +83,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, target, on
   const sections: Array<{ id: SectionId; label: string; hint: string; icon: React.ReactNode }> = [
     { id: 'account', label: t('account'), hint: t('accountSectionHint'), icon: <UserIcon size={16} /> },
     { id: 'models', label: t('modelsSection'), hint: t('modelsSectionHint'), icon: <Boxes size={16} /> },
+    { id: 'engines', label: enginePageStrings[language][0], hint: '', icon: <Cpu size={16} /> },
     { id: 'engine', label: t('localEngine'), hint: t('engineSectionHint'), icon: <Cpu size={16} /> },
     { id: 'cloud', label: t('providers'), hint: t('cloudSectionHint'), icon: <Cloud size={16} /> },
     { id: 'agent', label: t('agentSection'), hint: t('agentSectionHint'), icon: <Plug size={16} /> },
@@ -181,6 +184,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, target, on
               </div>
             )}
             {section === 'engine' && <EngineSettings />}
+            {section === 'engines' && <EnginesAndUpdates focus={focus} onNavigate={onNavigate} />}
             {section === 'cloud' && <ProviderSettings />}
             {section === 'agent' && <AgentPanel />}
             {section === 'privacy' && <div className="space-y-8"><HubSettings /><FileTagSettings /></div>}
