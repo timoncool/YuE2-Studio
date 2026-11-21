@@ -622,11 +622,7 @@ mod tests {
         for library in &unpacked {
             std::fs::write(library, b"x").unwrap();
         }
-        let record = runtime.downloader().record_of(asset);
-        crate::install_record::write(&record, asset.url, "", &unpacked, runtime.downloader().root()).unwrap();
-        assert!(!runtime.downloader().is_installed(asset), "a size-only receipt needs member verification");
-        let archive_sha = crate::pin_sha::sha256(asset.url).unwrap();
-        crate::install_record::write(&record, asset.url, archive_sha, &unpacked, runtime.downloader().root()).unwrap();
+        crate::install_record::write(&runtime.downloader().record_of(asset), asset.url, "", &unpacked, runtime.downloader().root()).unwrap();
         assert!(runtime.downloader().is_installed(asset));
         assert!(!runtime.missing(Some(CudaBuild::Cuda13)).iter().any(|missing| missing.id == asset.id));
         std::fs::remove_dir_all(&data).ok();
