@@ -115,7 +115,6 @@ export function useSignedMusicSelection(list: boolean, active: boolean) {
   useEffect(() => {
     if (!key || !enginePath || !modelStatus) return;
     const controller = new AbortController();
-    setProbe(undefined);
     void Promise.all([
       available(`${enginePath}/status`, controller.signal),
       available(modelStatus, controller.signal),
