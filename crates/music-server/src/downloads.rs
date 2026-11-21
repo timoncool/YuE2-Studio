@@ -219,6 +219,9 @@ impl Downloader {
                 if !crate::pin_sha::holds(&path, sha) { return false; }
                 files.push(path);
             }
+            // The same archive pin identifies the verified member set whether
+            // we downloaded the archive or adopted all of its pinned DLLs.
+            file_sha256 = crate::pin_sha::sha256(asset.url).unwrap_or_default();
             files
         } else if !asset.pick.is_empty() {
             let destination = self.picked_into(asset);
