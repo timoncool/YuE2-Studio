@@ -493,7 +493,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
   const miDashengDuration = miDashengDurationStrings[language];
   const yue = musicEngine === 'local';
   const nativeControls = [
-    ['duration_seconds', miDasheng ? miDashengDuration.budget : nativeStrings.duration],
+    ['duration_seconds', miDasheng ? miDashengDuration.limit : nativeStrings.duration],
     ['steps', nativeStrings.steps],
     ['seed', nativeStrings.seed],
     nativeEngine === 'minimaxmusic-cpp'

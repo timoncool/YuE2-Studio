@@ -3,6 +3,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { RightSidebar } from './RightSidebar';
 import type { Song } from '../types';
+import { mapNativeLibrarySong } from '../services/nativeLibrary';
 
 vi.mock('../context/I18nContext', () => ({ useI18n: () => ({ language: 'en', t: (key: string) => ({ lyricsSection: 'LYRICS', noLyricsSaved: 'No lyrics saved', instrumental: 'Instrumental', copy: 'Copy' }[key] ?? key) }) }));
 vi.mock('../context/AuthContext', () => ({ useAuth: () => ({ user: null }) }));
@@ -42,18 +43,20 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
-it('separates the MiDasheng duration budget from the actual recording length', () => {
-  mount('', {
-    duration: '0:01',
-    durationSeconds: 1,
-    generationParams: { music_source: { kind: 'audio_cpp', model: 'midashenglm_gen' }, duration_seconds: 5 },
+it('shows the requested and actual durations of an older MiDasheng recording', () => {
+  const saved = mapNativeLibrarySong({
+    id: 'old-midas', title: 'Old MiDasheng recording', caption: 'Rain and piano', lyrics: '',
+    audio_path: 'old.wav', created_at: '1', engine_id: 'audio.cpp', profile_id: 'q8_0',
+    metadata: { duration_seconds: 1 },
+    generation_settings: { music_source: { kind: 'audio_cpp', model: 'midashenglm_gen' }, duration_seconds: 5 },
   });
+  mount('', saved);
   const params = Array.from(host.querySelectorAll<HTMLButtonElement>('button[aria-expanded]'))
     .find(node => node.textContent === 'songParamsBlock');
   expect(params).toBeDefined();
   act(() => params!.click());
   const rows = params!.parentElement!.parentElement!.textContent;
-  expect(rows).toContain('Duration budget (seconds)5 sec');
+  expect(rows).toContain('Requested duration limit5 sec');
   expect(rows).toContain('Audio duration1 sec');
 });
 

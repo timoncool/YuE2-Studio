@@ -721,11 +721,11 @@ it.each([
   click(buttonNamed('create')!);
   expect(sent.at(-1)).toMatchObject({ music_source: { kind: 'audio_cpp', model }, ...options });
   if (model === 'midashenglm_gen') {
-    expect(host.textContent).toContain('Duration budget (seconds)');
+    expect(host.textContent).toContain('Duration limit (seconds)');
     const duration = host.querySelector<HTMLInputElement>('input[aria-describedby]');
     expect(duration?.value).toBe('5');
     expect(document.getElementById(duration?.getAttribute('aria-describedby') ?? '')?.textContent)
-      .toBe('Generation can finish before the budget runs out.');
+      .toBe('The model rounds the limit to audio blocks and can finish sooner.');
   }
 });
 it('restores a Magenta reference and submits either the available reference or text style', async () => {

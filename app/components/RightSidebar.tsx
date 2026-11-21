@@ -635,7 +635,7 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({ song, onClose, onOpe
                         ];
                         if (miDasheng) {
                             paramRows.push(
-                                [durationLabels.budget, typeof p.duration_seconds === 'number'
+                                [durationLabels.requested, typeof p.duration_seconds === 'number'
                                     ? seconds.format(p.duration_seconds) : durationLabels.default],
                                 [durationLabels.effective, song.durationSeconds ? seconds.format(song.durationSeconds) : undefined],
                             );
