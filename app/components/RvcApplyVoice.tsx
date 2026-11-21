@@ -10,10 +10,10 @@ import { RvcNativeRuntime } from './RvcNativeRuntime';
 const URL = '/v1/rvc/apply';
 const accompaniment = ['drums', 'bass', 'other', 'guitar', 'piano'];
 export interface RvcSourceSong { id: string; title: string; stems: string[] }
-type Engine = 'vocal-fast-rs' | 'audio.cpp';
+type Engine = Exclude<RvcBackend, 'auto'>;
 interface Setup {
   effective_backend: Engine | null;
-  backends: Record<Engine, { ready: boolean; can_start?: boolean; reason?: string; missing_bytes?: number }>;
+  backends: Record<Engine, { ready: boolean; supported?: boolean; can_start?: boolean; reason?: string; missing_bytes?: number }>;
 }
 interface Preview {
   id: string; before_url: string; after_url: string; effective_backend: Engine; fallback_reason?: string | null;
@@ -138,6 +138,8 @@ export function RvcApplyVoice({ song, voice, control, onSaved }: {
         }}>
           <option value="auto">{labels.auto}</option>
           <option value="vocal-fast-rs">vocal-fast-rs</option>
+          {(setup?.backends['vocal-fast-metal']?.supported || backend === 'vocal-fast-metal') &&
+            <option value="vocal-fast-metal">Metal (preview)</option>}
           <option value="audio.cpp">audio.cpp</option>
         </select>
       </label>
@@ -146,7 +148,7 @@ export function RvcApplyVoice({ song, voice, control, onSaved }: {
       {candidate && backendStatus && !backendStatus.ready && backendStatus.can_start && (
         <p role="status">{labels.onStart.replace('{backend}', candidate)}</p>
       )}
-      {backend === 'vocal-fast-rs' && !ready && fastSetup?.reason && <p role="status">{fastSetup.reason}</p>}
+      {backend !== 'auto' && !ready && backendStatus && backendStatus.reason && <p role="status">{backendStatus.reason}</p>}
       <div className="grid gap-2 sm:grid-cols-2">
         <label className="block space-y-1">
           <span>{labels.pitch}</span>
@@ -160,8 +162,8 @@ export function RvcApplyVoice({ song, voice, control, onSaved }: {
           {voice && !voice.index_name && <span className="text-zinc-500">{labels.noIndex}</span>}
         </label>
       </div>
-      {backend !== 'audio.cpp' && <RvcNativeRuntime onInstalled={reloadSetup} disabled={!!busy} />}
-      {backend !== 'vocal-fast-rs' && fallbackSetup && !fallbackSetup.ready && !ready && (
+      {backend !== 'audio.cpp' && <RvcNativeRuntime key={backend === 'vocal-fast-metal' ? 'metal' : 'default'} metal={backend === 'vocal-fast-metal'} onInstalled={reloadSetup} disabled={!!busy} />}
+      {(backend === 'audio.cpp' || backend === 'auto') && fallbackSetup && !fallbackSetup.ready && !ready && (
         <button type="button" disabled={!!busy} className="px-2 py-1 font-semibold text-pink-600 underline disabled:opacity-50 dark:text-pink-300"
           onClick={() => void install()}>{busy === 'install' ? labels.installing : `${labels.install}${mb ? ` · ${mb}` : ''}`}</button>
       )}

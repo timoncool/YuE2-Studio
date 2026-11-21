@@ -23,6 +23,8 @@ mod audio_cpp_mulacover;
 mod audio_cpp_music;
 mod hotstep_cover;
 mod hotstep_runtime;
+mod hotstep_heartmula;
+mod hotstep_heartmula_assets;
 mod hotstep_sa3;
 mod hotstep_sa3_assets;
 mod hotstep_sa3_tokenizer;
@@ -338,6 +340,8 @@ struct CreateMusicJobRequest {
     ace: Option<native_ace_jobs::AceOptions>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     hotstep_sa3: Option<hotstep_sa3::Options>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    hotstep_heartmula: Option<hotstep_heartmula::Options>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     heartmula: Option<audio_cpp_heartmula::HeartMuLaOptions>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -1873,6 +1877,8 @@ pub async fn serve_on_port(port: u16) -> anyhow::Result<()> {
         .route("/v1/training/runs", post(start_training))
         .route("/v1/training/hotstep-sa3", get(hotstep_sa3_training::status).post(hotstep_sa3_training::start))
         .route("/v1/training/hotstep-sa3/install", post(hotstep_sa3_training::install))
+        .route("/v1/training/hotstep-heartmula", get(hotstep_sa3_training::heartmula_status).post(hotstep_sa3_training::heartmula_start))
+        .route("/v1/training/hotstep-heartmula/install", post(hotstep_sa3_training::heartmula_install))
         .route("/v1/training/runs/{id}/cancel", post(cancel_training))
         .route("/v1/training/runs/{id}/continue", post(continue_training))
         .route("/v1/training/runs/{id}", axum::routing::delete(delete_training_run))
@@ -1949,6 +1955,7 @@ pub async fn serve_on_port(port: u16) -> anyhow::Result<()> {
         .route("/v1/music/native/hotstep/profiles", get(hotstep_cover::profiles))
         .route("/v1/music/native/hotstep/install", post(hotstep_cover::install))
         .route("/v1/music/native/hotstep/stable-audio-3/install", post(hotstep_sa3::install))
+        .route("/v1/music/native/hotstep/heartmula/install", post(hotstep_heartmula::install))
         .route("/v1/music/audio-cpp/mulacover/runtime", post(audio_cpp_mulacover::install_runtime))
         .route("/v1/music/audio-cpp/models/install", post(audio_cpp_music::install))
         .route("/v1/music/replay", post(replay_music_job))
@@ -2117,7 +2124,32 @@ fn listed_song(song: &library::Song) -> serde_json::Result<Value> {
     if let Some(fields) = value.as_object_mut() {
         fields.remove("replay_request");
         fields.remove("audio_codes");
-        fields.insert("replay_available".into(), Value::Bool(kept(&song.replay_request) && kept(&song.audio_codes)));
+        let replay = song.replay_request.as_ref().filter(|value| value.is_object());
+        let ace_without_codes = song.engine_id == ace::ENGINE_ID && replay.is_some_and(|request| {
+            request["task_type"].as_str().is_some_and(|task| task != "text2music")
+                || [request["duration"].as_f64(), song.metadata["duration_seconds"].as_f64()]
+                    .into_iter().flatten().any(|duration| duration > 0.0)
+        });
+        let replay_available = kept(&song.replay_request)
+            && (kept(&song.audio_codes) || ace_without_codes);
+        fields.insert("replay_available".into(), Value::Bool(replay_available));
+        let model_keys: &[&str] = match song.engine_id.as_str() {
+            ace::ENGINE_ID => &["synth_model", "lm_model", "vae"],
+            native_minimax::ENGINE_ID => &native_minimax::PROFILE_FILE_FIELDS,
+            _ => &[],
+        };
+        let mut model_files = Vec::new();
+        for key in model_keys {
+            let saved = replay.and_then(|request| request[*key].as_str());
+            if let Some(file) = saved.or_else(|| song.generation_settings[*key].as_str())
+                .filter(|file| !file.trim().is_empty() && !model_files.contains(file))
+            {
+                model_files.push(file);
+            }
+        }
+        if !model_files.is_empty() {
+            fields.insert("replay_model_files".into(), serde_json::to_value(model_files)?);
+        }
         if let Some(why) = song.replay_request.as_ref().and_then(cut_short) {
             fields.insert("cut_short".into(), Value::from(why));
         }
@@ -11314,6 +11346,7 @@ async fn dispatch_music_job(state: AppState, mut request: CreateMusicJobRequest,
             return match engine.as_str() {
                 "acestep-cpp" => native_ace_jobs::submit(state, request, model, attempt).await,
                 hotstep_cover::ENGINE if model == hotstep_sa3::PROFILE => hotstep_sa3::submit(state, request, attempt).await,
+                hotstep_cover::ENGINE if model == hotstep_heartmula::PROFILE => hotstep_heartmula::submit(state, request, attempt).await,
                 hotstep_cover::ENGINE => hotstep_cover::submit(state, request, model, attempt).await,
                 native_minimax::ENGINE_ID => native_music_jobs::submit_minimax(state, request, model, attempt).await,
                 _ => (StatusCode::BAD_REQUEST, Json(failed_request_job(request, engine.clone(), format!("Unknown native engine {engine}.")))),
@@ -13752,6 +13785,16 @@ mod tests {
         assert_eq!(listed["replay_available"], true);
         assert_eq!(listed_song(&song(Some(serde_json::json!({ "abc": "X:1" })), Some(Value::Null))).unwrap()["replay_available"], false);
         assert_eq!(listed_song(&song(None, None)).unwrap()["replay_available"], false);
+
+        let mut ace = song(Some(serde_json::json!({ "duration": 30, "synth_model": "old-ace.gguf", "lm_model": "lm.gguf" })), None);
+        ace.engine_id = ace::ENGINE_ID.into();
+        ace.generation_settings = serde_json::json!({ "synth_model": "different-ace.gguf", "vae": "vae.gguf" });
+        let listed = listed_song(&ace).unwrap();
+        assert_eq!(listed["replay_available"], true);
+        assert_eq!(listed["replay_model_files"], serde_json::json!(["old-ace.gguf", "lm.gguf", "vae.gguf"]));
+        assert!(listed.get("replay_request").is_none());
+        ace.replay_request = Some(serde_json::json!({}));
+        assert_eq!(listed_song(&ace).unwrap()["replay_available"], false);
     }
 
     /// yue2.cpp `backend_set_device` prints this line before it exits.

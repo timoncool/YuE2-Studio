@@ -23,6 +23,7 @@ pub(super) enum Backend {
     #[default]
     Auto,
     VocalFastRs,
+    VocalFastMetal,
     #[serde(rename = "audio.cpp")]
     AudioCpp,
 }
@@ -50,7 +51,8 @@ pub(super) async fn install(
 }
 
 async fn setup_status(state: &AppState) -> Value {
-    let native = fast_status(update_data_root(state)).await;
+    let native = fast_status(update_data_root(state), false).await;
+    let metal = fast_status(update_data_root(state), true).await;
     let native_ready = native.as_ref().is_ok_and(|ready| *ready);
     let build = selected_build(state).await.ok();
     let model_installed = model_ready(state);
@@ -68,7 +70,8 @@ async fn setup_status(state: &AppState) -> Value {
     json!({
         "effective_backend": effective,
         "backends": {
-            "vocal-fast-rs": { "ready": native_ready, "can_start": native.is_ok(), "reason": native.err(), "runtime": crate::rvc_fast_install::selected_backend() },
+            "vocal-fast-rs": { "ready": native_ready, "can_start": native.is_ok(), "reason": native.err(), "runtime": crate::rvc_fast_install::selected_backend(false) },
+            "vocal-fast-metal": { "supported": crate::rvc_fast_install::selected_backend(true).is_some(), "ready": metal.as_ref().is_ok_and(|ready| *ready), "can_start": metal.is_ok(), "reason": metal.err() },
             "audio.cpp": { "ready": audio_ready, "missing_bytes": missing_bytes },
         },
     })
@@ -78,22 +81,22 @@ fn effective_backend(requested: Backend, native_ready: bool, audio_ready: bool) 
     match requested {
         Backend::Auto if native_ready => Some(Backend::VocalFastRs),
         Backend::Auto if audio_ready => Some(Backend::AudioCpp),
-        Backend::VocalFastRs if native_ready => Some(Backend::VocalFastRs),
+        Backend::VocalFastRs | Backend::VocalFastMetal if native_ready => Some(requested),
         Backend::AudioCpp if audio_ready => Some(Backend::AudioCpp),
         _ => None,
     }
 }
 
-async fn fast_status(data_root: &FsPath) -> Result<bool, String> {
+async fn fast_status(data_root: &FsPath, metal: bool) -> Result<bool, String> {
     let data_root = data_root.to_path_buf();
-    tokio::task::spawn_blocking(move || rvc_fast::status(&data_root))
+    tokio::task::spawn_blocking(move || rvc_fast::status(&data_root, metal))
         .await
         .map_err(|error| format!("The vocal-fast-rs status check stopped: {error}"))?
 }
 
-async fn fast_availability(data_root: &FsPath) -> Result<(), String> {
+async fn fast_availability(data_root: &FsPath, metal: bool) -> Result<(), String> {
     let data_root = data_root.to_path_buf();
-    tokio::task::spawn_blocking(move || rvc_fast::availability(&data_root))
+    tokio::task::spawn_blocking(move || rvc_fast::availability(&data_root, metal))
         .await
         .map_err(|error| format!("The vocal-fast-rs readiness check stopped: {error}"))?
 }
@@ -210,7 +213,7 @@ pub(super) async fn process_request(
     let native = if request.backend == Backend::AudioCpp {
         Err("audio.cpp was explicitly requested.".into())
     } else {
-        fast_availability(update_data_root(&state)).await
+        fast_availability(update_data_root(&state), request.backend == Backend::VocalFastMetal).await
     };
     let audio_build = selected_build(&state)
         .await
@@ -220,7 +223,7 @@ pub(super) async fn process_request(
         .ok_or_else(|| {
             api_error(
                 StatusCode::CONFLICT,
-                if request.backend == Backend::VocalFastRs {
+                if matches!(request.backend, Backend::VocalFastRs | Backend::VocalFastMetal) {
                     native
                         .as_ref()
                         .err()
@@ -272,13 +275,13 @@ pub(super) async fn process_request(
         let audio_cpp = || convert(&state.acpp, audio_build.context("audio.cpp runtime is unavailable")?,
             model, backend_input, &weights, index.as_deref(), request.semitone_shift, blend, &cancelled);
         anyhow::ensure!(!cancelled(), "RVC conversion cancelled.");
-        let native_convert = || rvc_fast::convert(update_data_root(&state), &rvc_fast::Request {
+        let native_convert = || rvc_fast::convert(update_data_root(&state), effective == Backend::VocalFastMetal, &rvc_fast::Request {
             vocal: backend_input, voice: &weights, index: index.as_deref(),
             semitone_shift: request.semitone_shift, retrieval_blend: blend,
         }, &cancelled);
         let (conversion, effective, fallback_reason) = match effective {
-            Backend::VocalFastRs => match native_convert() {
-                Ok(output) => (output, Backend::VocalFastRs, None),
+            Backend::VocalFastRs | Backend::VocalFastMetal => match native_convert() {
+                Ok(output) => (output, effective, None),
                 Err(error) if !cancelled() && request.backend == Backend::Auto && audio_build.is_some()
                     && error.is::<rvc_fast::BackendFailure>() => {
                     (audio_cpp()?, Backend::AudioCpp, Some(format!("{error:#}")))
@@ -427,7 +430,7 @@ mod tests {
         for name in [&executable, "hubert.vfrm", "rmvpe.vfrm"] {
             fs::write(runtime.join(name), b"fixture, cannot launch").unwrap();
         }
-        assert!(fast_status(root.path()).await.is_err());
+        assert!(fast_status(root.path(), false).await.is_err());
         assert!(!root.path().join("rvc/native/cache-v1").exists());
     }
 
@@ -437,6 +440,11 @@ mod tests {
         assert!(effective_backend(Backend::Auto, false, true) == Some(Backend::AudioCpp));
         assert!(effective_backend(Backend::AudioCpp, true, true) == Some(Backend::AudioCpp));
         assert!(effective_backend(Backend::VocalFastRs, false, true).is_none());
+        assert_eq!(
+            effective_backend(Backend::VocalFastMetal, true, true),
+            Some(Backend::VocalFastMetal)
+        );
+        assert!(effective_backend(Backend::VocalFastMetal, false, true).is_none());
     }
 
     #[test]

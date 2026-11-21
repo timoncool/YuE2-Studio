@@ -38,7 +38,7 @@ pub(crate) struct ProfileStatus {
 
 #[cfg(test)]
 const ROLES: [&str; 5] = ["lm", "depth", "cond", "dit", "vae"];
-const FIELDS: [&str; 5] = [
+pub(super) const PROFILE_FILE_FIELDS: [&str; 5] = [
     "lm_model",
     "depth_model",
     "cond_model",
@@ -152,7 +152,7 @@ pub(crate) const PROFILES: &[Profile] = &[
 /// whose profile ID was absent but whose full set of filenames was saved.
 pub(crate) fn saved_profile(id: Option<&str>, replay: &Value) -> Result<&'static str> {
     if let Some(profile) = PROFILES.iter().find(|profile| Some(profile.id) == id) {
-        for (field, file) in FIELDS.into_iter().zip(profile.files) {
+        for (field, file) in PROFILE_FILE_FIELDS.into_iter().zip(profile.files) {
             if let Some(saved) = replay.get(field) {
                 if saved.as_str() != Some(file) {
                     bail!(
@@ -167,7 +167,7 @@ pub(crate) fn saved_profile(id: Option<&str>, replay: &Value) -> Result<&'static
     PROFILES
         .iter()
         .find(|profile| {
-            FIELDS
+            PROFILE_FILE_FIELDS
                 .into_iter()
                 .zip(profile.files)
                 .all(|(field, file)| replay[field].as_str() == Some(file))
@@ -280,7 +280,7 @@ fn request_body(profile: &Profile, request: &SongRequest<'_>) -> Result<Value> {
     if let Some(seed) = request.lm_seed {
         body["lm_seed"] = json!(seed);
     }
-    for (field, file) in FIELDS.into_iter().zip(profile.files) {
+    for (field, file) in PROFILE_FILE_FIELDS.into_iter().zip(profile.files) {
         body[field] = json!(file);
     }
     Ok(body)
@@ -345,7 +345,7 @@ impl Client {
                 .is_some_and(|codes| !codes.trim().is_empty()),
             "MiniMax replay has no audio codes"
         );
-        for (field, file) in FIELDS.into_iter().zip(profile.files) {
+        for (field, file) in PROFILE_FILE_FIELDS.into_iter().zip(profile.files) {
             body[field] = json!(file);
         }
         body["lm_batch_size"] = json!(1);
@@ -572,7 +572,7 @@ mod tests {
         assert_eq!(requests[2]["dit_model"], profile.files[3]);
         assert_eq!(requests[2]["output_format"], "wav32");
         assert_eq!(requests[0]["output_format"], "wav32");
-        for (field, file) in FIELDS.into_iter().zip(profile.files) {
+        for (field, file) in PROFILE_FILE_FIELDS.into_iter().zip(profile.files) {
             assert_eq!(requests[0][field], file);
         }
         server.abort();

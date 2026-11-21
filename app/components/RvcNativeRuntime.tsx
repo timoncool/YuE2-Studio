@@ -4,7 +4,6 @@ import { rvcApplyStrings } from '../i18n/rvcApply';
 import { poll } from '../services/poll';
 import { responseJson } from '../services/rvcVoices';
 
-const URL = '/v1/rvc/native/runtime';
 interface NativeRuntime {
   supported: boolean;
   installed: boolean;
@@ -13,7 +12,12 @@ interface NativeRuntime {
   download: { downloaded_bytes: number; total_bytes: number; done: boolean; error?: string | null } | null;
 }
 
-export function RvcNativeRuntime({ onInstalled, disabled }: { onInstalled: () => void; disabled: boolean }) {
+export function RvcNativeRuntime({ onInstalled, disabled, metal = false }: {
+  onInstalled: () => void;
+  disabled: boolean;
+  metal?: boolean;
+}) {
+  const url = metal ? '/v1/rvc/native/runtime?metal=true' : '/v1/rvc/native/runtime';
   const { language, t } = useI18n();
   const labels = rvcApplyStrings[language];
   const [status, setStatus] = useState<NativeRuntime | null>(null);
@@ -28,7 +32,7 @@ export function RvcNativeRuntime({ onInstalled, disabled }: { onInstalled: () =>
     const controller = new AbortController();
     async function refresh() {
       try {
-        const next = await responseJson<NativeRuntime | null>(await fetch(URL, { signal: controller.signal }));
+        const next = await responseJson<NativeRuntime | null>(await fetch(url, { signal: controller.signal }));
         if (!next || controller.signal.aborted) return;
         setStatusError(undefined);
         setStatus(next);
@@ -48,13 +52,13 @@ export function RvcNativeRuntime({ onInstalled, disabled }: { onInstalled: () =>
     const stop = pending ? poll(refresh, 500) : undefined;
     if (!pending) void refresh();
     return () => { controller.abort(); stop?.(); };
-  }, [pending, onInstalled, retry]);
+  }, [pending, onInstalled, retry, url]);
 
   async function install() {
     setError(undefined);
     setStarting(true);
     try {
-      await responseJson(await fetch(URL, { method: 'POST' }));
+      await responseJson(await fetch(url, { method: 'POST' }));
       setPending(true);
     } catch (failure) {
       setError(failure instanceof Error ? failure.message : String(failure));
@@ -65,7 +69,7 @@ export function RvcNativeRuntime({ onInstalled, disabled }: { onInstalled: () =>
 
   async function cancel() {
     try {
-      setStatus(await responseJson<NativeRuntime>(await fetch(URL, { method: 'DELETE' })));
+      setStatus(await responseJson<NativeRuntime>(await fetch(url, { method: 'DELETE' })));
       setPending(false);
     } catch (failure) {
       setError(failure instanceof Error ? failure.message : String(failure));

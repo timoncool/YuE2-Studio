@@ -110,6 +110,11 @@ const MODELS: [(Asset, &str); 7] = [
     ),
 ];
 
+pub(super) fn heartmula_shared() -> impl Iterator<Item = &'static Asset> {
+    MODELS.iter().map(|(asset, _)| asset).filter(|asset| matches!(asset.id,
+        "heartcodec-flow-Q8_0.gguf" | "heartcodec-scalar-decoder-F16.gguf" | "heartcodec-rvq-F32.gguf" | "heartmula-tokenizer.gguf"))
+}
+
 pub(super) fn sha256(url: &str) -> Option<&'static str> {
     if url == WIN_URL {
         return Some("92de8271d38f16922d44ba176bcad9bff71df24bae301ba3e2594a6c2893d4a3");

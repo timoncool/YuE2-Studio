@@ -93,7 +93,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7.0.1
       - uses: Swatinem/rust-cache@v2
-      - name: Select and install the verified CPU runtime
+      - name: Verify and install the CPU and Metal archives
         shell: bash
         run: |
           set -euo pipefail
@@ -103,9 +103,13 @@ jobs:
           curl --fail --location --retry 3 --silent --show-error \
             "$(jq -er '.macos_cpu.url' "$pins")" -o "$archive"
           printf '%s  %s\n' "$(jq -er '.macos_cpu.sha256' "$pins")" "$archive" | shasum -a 256 --check
+          metal_archive="$RUNNER_TEMP/vocal-fast-macos-arm64-metal-preview.tar.gz"
+          curl --fail --location --retry 3 --silent --show-error \
+            "$(jq -er '.macos_metal.url' "$pins")" -o "$metal_archive"
+          printf '%s  %s\n' "$(jq -er '.macos_metal.sha256' "$pins")" "$metal_archive" | shasum -a 256 --check
           cargo test --locked -p music-server --lib rvc_fast
-          YUE2_MACOS_RVC_ARCHIVE="$archive" cargo test --locked -p music-server --lib \
-            installs_the_macos_cpu_archive_with_its_loader_dependencies -- --ignored
+          YUE2_MACOS_RVC_ARCHIVE="$archive" YUE2_MACOS_RVC_METAL_ARCHIVE="$metal_archive" cargo test --locked -p music-server --lib \
+            installs_the_macos_archives_with_their_loader_dependencies -- --ignored
       - name: Verify passive status through MCP
         shell: bash
         run: |
@@ -130,6 +134,10 @@ jobs:
             jq -e '.supported == true and .backend == "cpu-graph" and .installed == false and .missing_bytes > 0'
           mcp_call rvc_backend_status |
             jq -e '.backends["vocal-fast-rs"] | .runtime == "cpu-graph" and .ready == false and .can_start == false'
+          jq -nc '{jsonrpc:"2.0",id:2,method:"tools/call",params:{name:"rvc_native_runtime_status",arguments:{metal:true}}}' |
+            curl --fail --silent --show-error --max-time 20 -H 'Content-Type: application/json' \
+              --data-binary @- http://127.0.0.1:18791/mcp |
+            jq -e '.result.structuredContent | .supported == true and .backend == "metal-projections" and .installed == false'
           test ! -e "$profile/rvc/native/cache-v1"
 
   interface:
