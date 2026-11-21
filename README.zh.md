@@ -8,7 +8,7 @@
 
 ## 制作第一首歌
 
-Windows 可选安装程序或便携版，macOS 使用 DMG，Linux 使用 DEB 或 AppImage。首次启动时，安装所选模型需要的组件和权重。
+Windows x64 提供安装程序和便携 ZIP，Linux x86-64 提供 DEB 和 AppImage，Apple Silicon Mac 提供 DMG。首次启动时，安装所选模型需要的组件和权重。
 
 打开 **创作**，选择 YuE2 和已安装的模型配置，输入风格和歌词，或载入示例。点击 **创作**，然后在 **音乐库** 中播放成品。
 
@@ -19,3 +19,5 @@ Windows 可选安装程序或便携版，macOS 使用 DMG，Linux 使用 DEB 或
 [开始使用](https://timoncool.github.io/YuE2-Studio/zh.html#start) · [功能](https://timoncool.github.io/YuE2-Studio/zh.html#features) · [性能实测](https://timoncool.github.io/YuE2-Studio/zh.html#speed) · [截图](https://timoncool.github.io/YuE2-Studio/zh.html#screenshots) · [示例](https://timoncool.github.io/YuE2-Studio/zh.html#listen)
 
 [安装与迁移 (英文)](guides/en/getting-started.md) · [创作音乐 (英文)](guides/en/creating-music.md) · [模型与运行时 (英文)](guides/en/models-and-runtimes.md) · [性能实测 (英文)](guides/en/benchmarks.md) · [MCP 与开发 (英文)](guides/en/automation-and-development.md) · [截图与试听 (英文)](guides/en/showcase.md) · [社区 (英文)](guides/en/community.md)
+
+[![YuE2、MiniMax Music3、ACE-Step、HOT-Step 和 audio.cpp 引擎（英文界面）](docs/screenshots/en-18-music-engines.webp)](https://timoncool.github.io/YuE2-Studio/zh.html#screenshots)

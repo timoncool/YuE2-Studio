@@ -8,7 +8,7 @@ YuE2, ACE-Step, MiniMax로 한 스튜디오에서 음악을 만드세요. 곡과
 
 ## 첫 곡 만들기
 
-Windows는 설치 프로그램 또는 포터블 버전, macOS는 DMG, Linux는 DEB 또는 AppImage를 사용하세요. 처음 실행할 때 선택한 모델에 필요한 구성 요소와 가중치를 설치하세요.
+Windows x64용 설치 프로그램과 포터블 ZIP, Linux x86-64용 DEB와 AppImage, Apple Silicon Mac용 DMG를 제공합니다. 처음 실행할 때 선택한 모델에 필요한 구성 요소와 가중치를 설치하세요.
 
 **생성** 화면에서 YuE2와 설치된 모델 프로필을 선택하세요. 스타일과 가사를 입력하거나 예제를 불러오세요. **생성**을 누른 뒤 **라이브러리**에서 완성된 곡을 재생할 수 있습니다.
 
@@ -19,3 +19,5 @@ Windows는 설치 프로그램 또는 포터블 버전, macOS는 DMG, Linux는 D
 [시작하기](https://timoncool.github.io/YuE2-Studio/ko.html#start) · [기능](https://timoncool.github.io/YuE2-Studio/ko.html#features) · [성능 벤치마크](https://timoncool.github.io/YuE2-Studio/ko.html#speed) · [스크린샷](https://timoncool.github.io/YuE2-Studio/ko.html#screenshots) · [샘플](https://timoncool.github.io/YuE2-Studio/ko.html#listen)
 
 [설치 및 이전 (영어)](guides/en/getting-started.md) · [음악 만들기 (영어)](guides/en/creating-music.md) · [모델 및 런타임 (영어)](guides/en/models-and-runtimes.md) · [성능 벤치마크 (영어)](guides/en/benchmarks.md) · [MCP 및 개발 (영어)](guides/en/automation-and-development.md) · [스크린샷과 샘플 (영어)](guides/en/showcase.md) · [커뮤니티 (영어)](guides/en/community.md)
+
+[![YuE2, MiniMax Music3, ACE-Step, HOT-Step, audio.cpp 엔진 (영어 인터페이스)](docs/screenshots/en-18-music-engines.webp)](https://timoncool.github.io/YuE2-Studio/ko.html#screenshots)

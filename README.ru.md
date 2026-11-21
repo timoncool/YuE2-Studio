@@ -8,7 +8,7 @@ YuE2, ACE-Step и MiniMax в одной музыкальной студии. П�
 
 ## Первая песня
 
-Возьмите установщик или портативный архив для Windows, DMG для macOS либо DEB/AppImage для Linux. При первом запуске установите предложенные компоненты и веса выбранной модели.
+Для Windows x64 доступны установщик и портативный архив, для Linux x86-64 — DEB и AppImage, для macOS на Apple Silicon — DMG. При первом запуске установите предложенные компоненты и веса выбранной модели.
 
 Откройте **Создать**, выберите YuE2 и установленный профиль, задайте стиль и текст или загрузите пример. Нажмите **Создать** и откройте готовую песню в разделе **Медиатека**.
 
@@ -19,3 +19,5 @@ YuE2, ACE-Step и MiniMax в одной музыкальной студии. П�
 [Как начать](https://timoncool.github.io/YuE2-Studio/ru.html#start) · [Что умеет](https://timoncool.github.io/YuE2-Studio/ru.html#features) · [Замеры производительности](https://timoncool.github.io/YuE2-Studio/ru.html#speed) · [Скриншоты](https://timoncool.github.io/YuE2-Studio/ru.html#screenshots) · [Примеры](https://timoncool.github.io/YuE2-Studio/ru.html#listen)
 
 [Установка и миграция (англ.)](guides/en/getting-started.md) · [Создание музыки (англ.)](guides/en/creating-music.md) · [Модели и движки (англ.)](guides/en/models-and-runtimes.md) · [Замеры производительности (англ.)](guides/en/benchmarks.md) · [MCP и разработка (англ.)](guides/en/automation-and-development.md) · [Скриншоты и примеры (англ.)](guides/en/showcase.md) · [Сообщество (англ.)](guides/en/community.md)
+
+[![Движки YuE2, MiniMax Music3, ACE-Step, HOT-Step и audio.cpp (интерфейс на английском)](docs/screenshots/en-18-music-engines.webp)](https://timoncool.github.io/YuE2-Studio/ru.html#screenshots)
