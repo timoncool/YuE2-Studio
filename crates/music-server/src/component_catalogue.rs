@@ -190,13 +190,17 @@ async fn channel_repository(
         .await?)
 }
 
-async fn lock_channel(store: &Path) -> Result<std::fs::File> {
+async fn channel_lock_file(store: &Path) -> Result<std::fs::File> {
     tokio::fs::create_dir_all(store).await?;
-    let lock = std::fs::File::options()
+    Ok(std::fs::File::options()
         .create(true)
         .truncate(false)
         .write(true)
-        .open(store.join("refresh.lock"))?;
+        .open(store.join("refresh.lock"))?)
+}
+
+async fn lock_channel(store: &Path) -> Result<std::fs::File> {
+    let lock = channel_lock_file(store).await?;
     fs2::FileExt::try_lock_exclusive(&lock).context("component channel is refreshing")?;
     Ok(lock)
 }
@@ -322,7 +326,18 @@ pub(crate) async fn cached_catalogue(target: ChannelTarget) -> Result<Option<Vec
 pub(crate) async fn save_engine_proof(destination: &Path) -> Result<Vec<u8>> {
     let root = installed_root().await?.context("component channel is not installed")?;
     let channel = channel_store()?;
-    let _guard = lock_channel(&channel).await?;
+    let lock = channel_lock_file(&channel).await?;
+    loop {
+        match fs2::FileExt::try_lock_exclusive(&lock) {
+            Ok(()) => break,
+            Err(error) if error.raw_os_error() == fs2::lock_contended_error().raw_os_error() => {
+                // Different installs may copy the same accepted catalogue.
+                // Await the copy/refresh without blocking cancellation.
+                tokio::time::sleep(std::time::Duration::from_millis(25)).await;
+            }
+            Err(error) => return Err(error).context("lock the component channel"),
+        }
+    }
     let store = channel.join(ENGINES.cache);
     let id = tokio::fs::read_to_string(store.join("accepted")).await?;
     ensure!(snapshot_name(&id), "invalid catalogue cache pointer");
@@ -336,6 +351,7 @@ pub(crate) async fn save_engine_proof(destination: &Path) -> Result<Vec<u8>> {
             tokio::fs::copy(entry.path(), dest.join(entry.file_name())).await?;
         }
     }
+    drop(lock);
     read_snapshot(ENGINES, &root, destination, None).await
 }
 
