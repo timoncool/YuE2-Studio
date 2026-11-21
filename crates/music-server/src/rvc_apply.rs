@@ -24,6 +24,7 @@ pub(super) enum Backend {
     Auto,
     VocalFastRs,
     VocalFastMetal,
+    BurnCuda,
     #[serde(rename = "audio.cpp")]
     AudioCpp,
 }
@@ -67,12 +68,14 @@ async fn setup_status(state: &AppState) -> Value {
             + if model_installed { 0 } else { MODEL.bytes }
     });
     let effective = effective_backend(Backend::Auto, native_ready, audio_ready);
+    let burn = crate::rvc_burn::Runtime::discover(update_data_root(state)).ready(false);
     json!({
         "effective_backend": effective,
         "backends": {
             "vocal-fast-rs": { "ready": native_ready, "can_start": native.is_ok(), "reason": native.err(), "runtime": crate::rvc_fast_install::selected_backend(false) },
             "vocal-fast-metal": { "supported": crate::rvc_fast_install::selected_backend(true).is_some(), "ready": metal.as_ref().is_ok_and(|ready| *ready), "can_start": metal.is_ok(), "reason": metal.err() },
             "audio.cpp": { "ready": audio_ready, "missing_bytes": missing_bytes },
+            "burn-cuda": { "ready": burn.is_ok(), "reason": burn.err().map(|error| error.to_string()) },
         },
     })
 }
@@ -210,7 +213,28 @@ pub(super) async fn process_request(
             "The installed RVC voice was not found.".into(),
         )
     })?;
-    let native = if request.backend == Backend::AudioCpp {
+    let burn = (voice.format == rvc_voices::VoiceFormat::BurnSafetensors)
+        .then(|| crate::rvc_burn::Runtime::discover(update_data_root(&state)));
+    if burn.is_some() && !matches!(request.backend, Backend::Auto | Backend::BurnCuda) {
+        return Err(rvc_voices::invalid("A trained Safetensors voice needs the RVC Burn backend."));
+    }
+    if burn.is_none() && request.backend == Backend::BurnCuda {
+        return Err(rvc_voices::invalid("RVC Burn needs a trained Safetensors voice."));
+    }
+    let burn_lease = if let Some(runtime) = &burn {
+        runtime.ready(false).map_err(rvc_voices::invalid)?;
+        let lease = state.engine_use.clone().try_write_owned()
+            .map_err(|_| api_error(StatusCode::CONFLICT, "The local music engine is busy.".into()))?;
+        no_song_rendering(&state).await.map_err(|error| api_error(StatusCode::CONFLICT, error))?;
+        if state.training.active_run().await.is_some() {
+            return Err(api_error(StatusCode::CONFLICT, "Wait for active training.".into()));
+        }
+        state.ace_runtime.stop().await.map_err(bad_gateway)?;
+        state.minimax.stop().await;
+        evict_kept_models(&state, "before RVC Burn conversion").await;
+        Some(lease)
+    } else { None };
+    let native = if burn.is_some() || request.backend == Backend::AudioCpp {
         Err("audio.cpp was explicitly requested.".into())
     } else {
         fast_availability(update_data_root(&state), request.backend == Backend::VocalFastMetal).await
@@ -219,7 +243,9 @@ pub(super) async fn process_request(
         .await
         .ok()
         .filter(|build| model_ready(&state) && state.acpp.installed(*build));
-    let effective = effective_backend(request.backend, native.is_ok(), audio_build.is_some())
+    let effective = if burn.is_some() { Some(Backend::BurnCuda) } else {
+        effective_backend(request.backend, native.is_ok(), audio_build.is_some())
+    }
         .ok_or_else(|| {
             api_error(
                 StatusCode::CONFLICT,
@@ -236,6 +262,7 @@ pub(super) async fn process_request(
         })?;
     let model = state.separator.downloader().path_of(&MODEL);
     let result = tokio::task::spawn_blocking(move || {
+        let _burn_lease = burn_lease;
         let stage = tempfile::tempdir_in(&voice_root)?;
         let folder = voice_root.join(&voice.id);
         let copy = |file: &str| -> anyhow::Result<PathBuf> {
@@ -246,7 +273,7 @@ pub(super) async fn process_request(
             }
             Ok(destination)
         };
-        let weights = copy("voice.pth")?;
+        let weights = copy(voice.weights_file())?;
         let hash = install_record::sha256_of(&weights)?;
         let index = voice.has_index().then(|| copy("retrieval.index")).transpose()?;
         let blend = if index.is_some() { request.retrieval_blend } else { 0.0 };
@@ -288,6 +315,8 @@ pub(super) async fn process_request(
                 }
                 Err(error) => return Err(error),
             },
+            Backend::BurnCuda => (burn.context("RVC Burn is unavailable")?
+                .convert(backend_input, &weights, stage.path(), request.semitone_shift, &cancelled)?, Backend::BurnCuda, None),
             Backend::AudioCpp => (audio_cpp()?, Backend::AudioCpp,
                 if request.backend == Backend::Auto { native.err() } else { None }),
             Backend::Auto => unreachable!("Auto resolves to a concrete RVC backend"),
@@ -306,7 +335,7 @@ pub(super) async fn process_request(
             }
         }
         let options = json!({
-            "voice_id": voice.id, "voice_name": voice.title(), "voice_sha256": hash,
+            "voice_id": voice.id, "voice_name": voice.title(), "voice_sha256": hash, "voice_format": voice.format,
             "index_sha256": index.as_deref().map(install_record::sha256_of).transpose()?,
             "semitone_shift": request.semitone_shift, "retrieval_blend": blend, "mix_gain": gain,
             "requested_backend": request.backend, "effective_backend": effective, "fallback_reason": fallback_reason, "quick": quick.is_some()
