@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { useI18n } from '../context/I18nContext';
 import { karaokeReason, recogniseLyrics } from '../services/karaoke';
 import { sungWords, wordMatchPercent } from '../services/takeWordMatch';
@@ -16,6 +16,7 @@ const copy = {
 export function TakeWords({ left, right }: { left: Song; right: Song }) {
   const { language, t } = useI18n();
   const [compare, hint, working, match, unavailable] = copy[language];
+  const descriptionId = useId();
   const [phase, setPhase] = useState<'' | 'A' | 'B'>('');
   const [result, setResult] = useState<(number | null)[] | null>(null);
   const [error, setError] = useState('');
@@ -54,10 +55,10 @@ export function TakeWords({ left, right }: { left: Song; right: Song }) {
   };
 
   return <div className="px-2 py-2 text-sm">
-    <p className="text-zinc-400">{hint}</p>
-    <button type="button" disabled={!!phase} onClick={() => void run()}
+    <p id={`${descriptionId}-hint`} className="text-zinc-400">{hint}</p>
+    <button type="button" aria-describedby={`${descriptionId}-hint ${descriptionId}-status`} disabled={!!phase} onClick={() => void run()}
       className="my-1 rounded border border-white/15 px-2 py-1 enabled:hover:bg-white/10">{compare}</button>
-    <p role="status">{phase ? `${working} ${phase}…` : error || (result &&
+    <p role="status" id={`${descriptionId}-status`}>{phase ? `${working} ${phase}…` : error || (result &&
       `${match} · ${result.map((score, i) => `${i ? 'B' : 'A'}: ${score === null ? unavailable : score + '%'}`).join(' · ')}`)}</p>
   </div>;
 }

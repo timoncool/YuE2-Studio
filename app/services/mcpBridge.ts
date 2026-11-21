@@ -160,6 +160,12 @@ function readPage(): string {
       if (element instanceof HTMLSelectElement) {
         parts.push(`value=${JSON.stringify(element.value)}`, `options=${JSON.stringify(Array.from(element.options).map((option) => option.value))}`);
       }
+      const describedBy = element.getAttribute('aria-describedby');
+      if (describedBy) {
+        const description = describedBy.trim().split(/\s+/)
+          .map(id => document.getElementById(id)?.textContent?.trim()).filter(Boolean).join(' ');
+        if (description) parts.push(`description=${JSON.stringify(description.slice(0, 1000))}`);
+      }
       const pressed = element.getAttribute('aria-checked') ?? element.getAttribute('aria-pressed') ?? element.getAttribute('aria-selected');
       if (pressed) parts.push(pressed === 'true' ? 'on' : 'off');
       const folding = tag === 'summary' ? element.closest('details') : null;
