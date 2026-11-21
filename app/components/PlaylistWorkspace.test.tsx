@@ -47,9 +47,10 @@ it('marks the auditioned side as preferred and restores the badge from the libra
   const host = document.createElement('div');
   const root = createRoot(host);
   const noOp = () => {};
+  const openTake = vi.fn();
   const render = (key: string) => act(() => root.render(
     <PlaylistDetail key={key} playlistId="work" onBack={noOp} onPlaySong={noOp} onCreateHere={noOp}
-      onReuseHere={noOp} onSelect={noOp} currentSong={null} isPlaying={false} notify={noOp} onError={noOp} />,
+      onReuseHere={noOp} onSelect={noOp} onOpenLibraryTake={openTake} currentSong={null} isPlaying={false} notify={noOp} onError={noOp} />,
   ));
   const button = (label: string) => Array.from(host.querySelectorAll('button'))
     .find(element => element.textContent?.trim() === label)!;
@@ -57,6 +58,8 @@ it('marks the auditioned side as preferred and restores the badge from the libra
   try {
     render('before');
     await act(async () => button('Compare takes').click());
+    await act(async () => button('Open in Library').click());
+    expect(openTake).toHaveBeenCalledWith(reads.songs[1]);
     const [a, b] = Array.from(host.querySelectorAll('audio'));
     expect(a.muted).toBe(true);
     Object.defineProperty(a, 'readyState', { value: 1 });
@@ -65,6 +68,8 @@ it('marks the auditioned side as preferred and restores the badge from the libra
     expect(a.muted).toBe(false);
     expect(b.muted).toBe(true);
     expect(a.currentTime).toBe(3.25);
+    await act(async () => button('Open in Library').click());
+    expect(openTake).toHaveBeenLastCalledWith(first);
     await act(async () => button('Mark as preferred take').click());
     expect(fetcher).toHaveBeenCalledWith('/v1/library/playlists/work/preferred-take', expect.objectContaining({
       method: 'PUT', body: JSON.stringify({ song_id: first.id }),
@@ -111,7 +116,7 @@ it('opens the selected take’s songbook in its workspace and only removes its m
     const [selected, select] = useState<Song | null>(null);
     return (
       <SongActionsProvider value={{ reusePrompt: globalReuse, remove: removeFromLibrary }}>
-        <PlaylistDetail playlistId="work" onBack={() => {}} onPlaySong={() => {}} onSelect={select}
+        <PlaylistDetail playlistId="work" onBack={() => {}} onPlaySong={() => {}} onSelect={select} onOpenLibraryTake={select}
           onCreateHere={create} onReuseHere={reuseHere} currentSong={null} isPlaying={false}
           notify={() => {}} onError={onError} />
         <RightSidebar song={selected} />

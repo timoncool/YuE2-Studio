@@ -198,6 +198,7 @@ export interface YueRequest {
   title?: string;
   /** The library song whose melody this cover sings; the new song names it. */
   cover_of?: string;
+  backing_song_id?: string;
   cover_prompt?: string;
   /** LoRA adapters for this song, each with a strength per engine slot. */
   adapters?: { id: string; scales: Record<string, number> }[];
