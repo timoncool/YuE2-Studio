@@ -660,6 +660,9 @@ impl YueServerSupervisor {
                 if let Some(status) = child.try_wait().context("inspect starting yue-server")? {
                     // a crash says nothing of where: Windows' record of it names the module
                     let fault = music_core::process::exited_on_exception(status.code()).then(|| music_core::process::fault_of(child.id(), Duration::from_secs(5))).flatten();
+                    if let Some(diagnostic) = illegal_instruction_diagnostic(status.code(), fault.as_ref()) {
+                        note_in_log(&diagnostic);
+                    }
                     match fault {
                         Some(fault) => {
                             note_in_log(&format!("the engine crashed during startup: {fault}"));
@@ -810,12 +813,36 @@ fn fatal_of_this_start() -> Option<String> {
     Some(words.join(" "))
 }
 
+/// Keep the processor capabilities even if Windows never supplies an Event 1000.
+fn illegal_instruction_diagnostic(code: Option<i32>, fault: Option<&music_core::process::Fault>) -> Option<String> {
+    if code != Some(0xc000001du32 as i32) {
+        return None;
+    }
+    let mut line = format!("engine crash: illegal instruction (0xc000001d), arch={}", std::env::consts::ARCH);
+    #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+    {
+        use std::arch::is_x86_feature_detected;
+        line.push_str(&format!(", sse4.2={} avx={} avx2={} fma={} f16c={} bmi2={} avx512f={}",
+            is_x86_feature_detected!("sse4.2"), is_x86_feature_detected!("avx"),
+            is_x86_feature_detected!("avx2"), is_x86_feature_detected!("fma"),
+            is_x86_feature_detected!("f16c"), is_x86_feature_detected!("bmi2"),
+            is_x86_feature_detected!("avx512f")));
+    }
+    if let Some(fault) = fault {
+        line.push_str(&format!(", {fault}"));
+    }
+    Some(line)
+}
+
 fn note_child_exit(message: &str, pid: u32, status: std::process::ExitStatus) {
     let code = status.code();
     let hex = code.map(|value| format!(" (0x{:x})", value as u32)).unwrap_or_default();
     note_in_log(&format!("{message}: {status}{hex}"));
     if music_core::process::exited_on_exception(code) {
-        if let Some(fault) = music_core::process::fault_of(pid, Duration::from_secs(1)) {
+        let fault = music_core::process::fault_of(pid, Duration::from_secs(1));
+        if let Some(diagnostic) = illegal_instruction_diagnostic(code, fault.as_ref()) {
+            note_in_log(&diagnostic);
+        } else if let Some(fault) = fault {
             note_in_log(&format!("engine crash: {fault}"));
         }
     }
@@ -866,6 +893,20 @@ pub fn startup_log_tail(lines: usize) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn illegal_instruction_keeps_cpu_capabilities_even_without_an_event_record() {
+        let code = Some(0xc000001du32 as i32);
+        let basic = illegal_instruction_diagnostic(code, None).unwrap();
+        assert!(basic.contains(std::env::consts::ARCH));
+        #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+        assert!(basic.contains(&format!("avx2={}", std::arch::is_x86_feature_detected!("avx2"))));
+        let fault = music_core::process::Fault {
+            module: "ggml-cpu-haswell.dll".into(), exception: "c000001d".into(), offset: "1234".into(),
+        };
+        assert_eq!(illegal_instruction_diagnostic(code, Some(&fault)).unwrap(), format!("{basic}, {fault}"));
+        assert!(illegal_instruction_diagnostic(Some(1), None).is_none());
+    }
 
     #[test]
     fn the_compute_backend_names_the_device_ggml_reads() {
