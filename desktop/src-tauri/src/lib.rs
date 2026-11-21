@@ -26,6 +26,10 @@ const STUDIO_DATA_DIRECTORY: &str = "YuE2 Studio";
 /// to choose either of those. Environment overrides remain authoritative for
 /// portable/development installations.
 fn studio_data_directory() -> PathBuf {
+    if let Some(root) = std::env::var_os("YUE_STUDIO_DATA_ROOT") {
+        return PathBuf::from(root);
+    }
+
     // A portable copy keeps everything it owns beside itself: models, the
     // library, media, logs and settings. Nothing is written into AppData, so
     // deleting the folder deletes the studio, and carrying the folder to
@@ -1388,6 +1392,45 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn desktop_runtime_paths_follow_data_root() {
+        const CASE: &str = "YUE2_QA_RUNTIME_PATHS_CASE";
+        const DATA: &str = "YUE_STUDIO_DATA_ROOT";
+        const MODELS: &str = "YUE_MODELS_ROOT";
+        const SETTINGS: &str = "YUE_STUDIO_SETTINGS_PATH";
+
+        // The shell configures process environment before starting the service.
+        // Check that real entry point in isolated test processes.
+        if std::env::var_os(CASE).is_some() {
+            let data = std::env::var_os(DATA).map(PathBuf::from).unwrap_or_else(studio_data_directory);
+            let models = std::env::var_os(MODELS).map(PathBuf::from)
+                .unwrap_or_else(|| data.join("models/yue2-cpp"));
+            let settings = std::env::var_os(SETTINGS).map(PathBuf::from)
+                .unwrap_or_else(|| data.join("studio-settings.json"));
+            configure_studio_runtime_paths();
+            for (name, expected) in [(DATA, data), (MODELS, models), (SETTINGS, settings)] {
+                assert_eq!(std::env::var_os(name).map(PathBuf::from), Some(expected), "{name}");
+            }
+            return;
+        }
+
+        let test_root = std::env::temp_dir().join("Studio runtime path fixture");
+        for (data, individual) in [(false, false), (true, false), (true, true)] {
+            let mut child = std::process::Command::new(std::env::current_exe().unwrap());
+            child.args(["--exact", "tests::desktop_runtime_paths_follow_data_root"])
+                .env(CASE, "1").env_remove(DATA).env_remove(MODELS).env_remove(SETTINGS);
+            if data {
+                child.env(DATA, test_root.join("profile"));
+            }
+            if individual {
+                child.env(MODELS, test_root.join("own models"));
+                child.env(SETTINGS, test_root.join("own settings.json"));
+            }
+            let output = child.output().unwrap();
+            assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stdout));
+        }
+    }
 
     #[test]
     fn readiness_recognizes_an_existing_yue2_service_and_rejects_other_listeners() {
