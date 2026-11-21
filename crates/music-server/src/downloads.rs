@@ -316,7 +316,12 @@ impl Downloader {
     }
 
     pub fn partial_bytes(&self, asset: &Asset) -> u64 {
-        crate::chunked::on_disk(&self.path_of(asset).with_extension("part"))
+        let part = if asset.pick.is_empty() {
+            self.path_of(asset).with_extension("part")
+        } else {
+            picked_archive_partial(&self.picked_into(asset), asset)
+        };
+        crate::chunked::on_disk(&part)
     }
 
     pub fn status_of(&self, assets: &[Asset]) -> Vec<AssetStatus> {
@@ -909,7 +914,7 @@ async fn fetch_absent(
     let bundled = crate::component_catalogue::bundled().sources(digest);
     // For pins outside the bundled mirror list, a healthy primary needs no channel request.
     let primary_failure = if bundled.is_none() {
-        match fetch_from(http, asset, target, progress, cancel.clone(), &url, false).await {
+        match fetch_verified_source(http, asset, target, progress, cancel.clone(), &url).await {
             Ok(()) => return Ok(()),
             Err(error) if !try_another_source(&error) => return Err(error),
             Err(error) => Some(error),
@@ -918,6 +923,9 @@ async fn fetch_absent(
         None
     };
     let mut candidates = unless_cancelled(&cancel, async { Ok(mirror_sources(http, digest).await) }).await?;
+    if let Some(mirror) = crate::engine_runtime::archive_mirror(asset.url) {
+        if !candidates.iter().any(|url| url == mirror) { candidates.push(mirror.to_owned()); }
+    }
     if let Some(error) = primary_failure {
         candidates.retain(|candidate| candidate != &url);
         if candidates.is_empty() { return Err(error); }
@@ -942,6 +950,19 @@ pub(crate) async fn mirror_sources(http: &reqwest::Client, digest: &str) -> Vec<
     candidates
 }
 
+fn picked_archive_partial(destination: &Path, asset: &Asset) -> PathBuf {
+    destination.join(format!("{}.part-archive", asset.id))
+}
+
+fn partial_for_target(asset: &Asset, target: &Path) -> PathBuf {
+    if !asset.pick.is_empty() {
+        if let Some(destination) = target.parent() {
+            return picked_archive_partial(destination, asset);
+        }
+    }
+    target.with_extension("part")
+}
+
 async fn fetch_mirrors(
     http: &reqwest::Client,
     asset: &Asset,
@@ -952,7 +973,7 @@ async fn fetch_mirrors(
 ) -> Result<()> {
     let mut failures = Vec::new();
     for source in sources.as_ref() {
-        match fetch_from(http, asset, target, progress, cancel.clone(), source, true).await {
+        match fetch_verified_source(http, asset, target, progress, cancel.clone(), source).await {
             Ok(()) => return Ok(()),
             Err(_) if cancel.load(std::sync::atomic::Ordering::Relaxed) => bail!("cancelled"),
             Err(error) if !try_another_source(&error) => return Err(error),
@@ -960,6 +981,23 @@ async fn fetch_mirrors(
         }
     }
     bail!("{}", failures.join(" | "))
+}
+
+async fn fetch_verified_source(
+    http: &reqwest::Client,
+    asset: &Asset,
+    target: &Path,
+    progress: &Arc<Mutex<Option<DownloadProgress>>>,
+    cancel: Arc<std::sync::atomic::AtomicBool>,
+    source: &str,
+) -> Result<()> {
+    let resumed = crate::chunked::on_disk(&partial_for_target(asset, target)) > 0;
+    match fetch_from(http, asset, target, progress, cancel.clone(), source, true).await {
+        Err(error) if resumed && failure_code(&error) == "hash_mismatch" && !cancel.load(std::sync::atomic::Ordering::Relaxed) => {
+            fetch_from(http, asset, target, progress, cancel, source, true).await
+        }
+        result => result,
+    }
 }
 
 async fn fetch_from(
@@ -996,7 +1034,7 @@ async fn fetch_from(
         }
     }
 
-    let part = target.with_extension("part");
+    let part = partial_for_target(asset, target);
     let written = Arc::new(std::sync::atomic::AtomicU64::new(0));
     // The panel reads one figure; the pieces write to another, from four tasks
     // at once. This copies the second into the first while they work.
@@ -1099,27 +1137,8 @@ async fn download_and_extract_named(
     let archive = if staged {
         target.to_path_buf()
     } else {
-        let archive = destination.join(format!("{}.part-archive", asset.id));
-        let url = crate::net::model_url(asset.url);
-        let mirror = crate::engine_runtime::archive_mirror(asset.url);
-        let (plan, url) = unless_cancelled(&cancel, crate::chunked::probe_with_mirror(http, &url, mirror)).await?;
-        let written = Arc::new(std::sync::atomic::AtomicU64::new(0));
-        let reporter = {
-            let (written, progress) = (written.clone(), progress.clone());
-            tokio::spawn(async move {
-                loop {
-                    let value = written.load(std::sync::atomic::Ordering::Relaxed);
-                    if let Some(active) = progress.lock().await.as_mut() {
-                        active.downloaded_bytes = value;
-                    }
-                    tokio::time::sleep(std::time::Duration::from_millis(300)).await;
-                }
-            })
-        };
-        let attempt_stop = Arc::new(std::sync::atomic::AtomicBool::new(false));
-        let outcome = unless_cancelled(&cancel, crate::chunked::fetch(http, &url, &archive, plan, written, attempt_stop)).await;
-        reporter.abort();
-        outcome?;
+        let archive = destination.join(format!("{}.verified-archive", asset.id));
+        fetch_absent(http, asset, &archive, progress, cancel).await?;
         archive
     };
     let (archive_path, wanted, destination, pinned) = (archive.clone(), asset.pick, destination.to_path_buf(), asset.url);
@@ -1670,6 +1689,31 @@ mod tests {
         server.abort();
     }
 
+    #[tokio::test]
+    async fn a_healthy_mirror_repairs_corrupt_retained_archive_ranges() {
+        use axum::http::{header, HeaderMap, StatusCode};
+        // Exact bytes of the small, production-pinned CrisperWhisper config.
+        const BODY: &[u8] = b"{\n  \"chunk_length\": 30,\n  \"dither\": 0.0,\n  \"feature_extractor_type\": \"WhisperFeatureExtractor\",\n  \"feature_size\": 128,\n  \"hop_length\": 160,\n  \"n_fft\": 400,\n  \"n_samples\": 480000,\n  \"nb_max_frames\": 3000,\n  \"padding_side\": \"right\",\n  \"padding_value\": 0.0,\n  \"processor_class\": \"WhisperProcessor\",\n  \"return_attention_mask\": false,\n  \"sampling_rate\": 16000\n}\n";
+        let app = axum::Router::new().route("/copy", axum::routing::get(|headers: HeaderMap| async move {
+            let range = headers[header::RANGE].to_str().unwrap().trim_start_matches("bytes=");
+            let (start, end) = range.split_once('-').unwrap();
+            let start: usize = start.parse().unwrap();
+            let end = end.parse::<usize>().unwrap_or(BODY.len() - 1);
+            (StatusCode::PARTIAL_CONTENT, [(header::CONTENT_RANGE, format!("bytes {start}-{end}/{}", BODY.len()))], BODY[start..=end].to_vec())
+        }));
+        let (base, server) = onnx_fixture(app).await;
+        let root = tempfile::tempdir().unwrap();
+        let entry = Asset { url: "https://huggingface.co/nyralabs/CrisperWhisper2.0_turbo/resolve/de0369c8a68025b7f6e86387b6eb5a3b369787c8/preprocessor_config.json", pick: &["test.dll"], ..asset() };
+        let target = root.path().join("test.verified-archive");
+        let part = partial_for_target(&entry, &target);
+        fs::write(&part, vec![0u8; BODY.len()]).unwrap();
+        fs::write(crate::chunked::manifest_path(&part), crate::chunked::manifest_of(BODY.len() as u64, &[(0, 10)])).unwrap();
+        let http = reqwest::Client::builder().no_proxy().build().unwrap();
+        fetch_mirrors(&http, &entry, &target, &Arc::new(Mutex::new(None)), Default::default(), [format!("{base}/copy")]).await.unwrap();
+        assert_eq!(fs::read(target).unwrap(), BODY);
+        server.abort();
+    }
+
     fn asset() -> Asset {
         Asset {
             id: "test-model",
@@ -1684,6 +1728,19 @@ mod tests {
             vram_gb: None,
             note: "",
         }
+    }
+
+    #[test]
+    fn picked_archive_progress_uses_the_resumable_file_in_the_runtime_folder() {
+        let root = tempfile::tempdir().unwrap();
+        let downloader = Downloader::new(root.path().to_owned());
+        let entry = Asset { kind: AssetKind::Runtime, pick: &["onnxruntime.dll"], unzip_into: Some("cuda"), ..asset() };
+        let into = downloader.picked_into(&entry);
+        fs::create_dir_all(&into).unwrap();
+        let partial = into.join("test-model.part-archive");
+        fs::write(&partial, [0u8; 20]).unwrap();
+        assert_eq!(downloader.partial_bytes(&entry), 20);
+        assert_eq!(partial_for_target(&entry, &into.join("test-model.verified-archive")), partial);
     }
 
     #[test]
