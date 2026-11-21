@@ -34,6 +34,7 @@ mod audio_cpp_controlfoley;
 mod audio_cpp_sound_effects;
 mod hotstep_cover;
 mod hotstep_runtime;
+mod hotstep_minimax;
 mod hotstep_heartmula;
 mod hotstep_heartmula_assets;
 mod hotstep_sa3;
@@ -165,6 +166,7 @@ struct AppState {
     signed_music_cancellations: Arc<RwLock<HashMap<String, signed_music_jobs::CancelSender>>>,
     hotstep_cover: Arc<downloads::Downloader>,
     hotstep_sa3_install: Arc<tokio::sync::Mutex<()>>,
+    hotstep_minimax_install: Arc<tokio::sync::Mutex<()>>,
     hotstep_sa3_train_install: Arc<tokio::sync::Mutex<()>>,
     audio_cpp_music_stops: Arc<RwLock<HashMap<String, Arc<std::sync::atomic::AtomicBool>>>>,
     heartmula_install: Arc<tokio::sync::Mutex<()>>,
@@ -1640,6 +1642,7 @@ pub async fn serve_on_port(port: u16) -> anyhow::Result<()> {
         signed_music_cancellations: Arc::default(),
         hotstep_cover: Arc::new(downloads::Downloader::new(studio_data_root().unwrap_or_else(|| PathBuf::from(".")).join("hotstep"))),
         hotstep_sa3_install: Arc::default(),
+        hotstep_minimax_install: Arc::default(),
         hotstep_sa3_train_install: Arc::default(),
         audio_cpp_music_stops: Arc::default(),
         heartmula_install: Arc::default(),
@@ -1974,6 +1977,7 @@ pub async fn serve_on_port(port: u16) -> anyhow::Result<()> {
         .route("/v1/score/instrumental", post(score::api::instrumental))
         .route("/v1/score/vocal-octave", post(score::api::vocal_octave))
         .route("/v1/score/chord-bed", post(score::api::chord_bed))
+        .route("/v1/score/backing-tempo", post(analyze_backing_tempo))
         .route("/v1/score/sections", post(match_score_sections))
         .route("/v1/score/from-midi", post(score::api::from_midi))
         .route("/v1/song/tokenize", post(song_tokenizer::tokenize))
@@ -2071,6 +2075,7 @@ pub async fn serve_on_port(port: u16) -> anyhow::Result<()> {
         .route("/v1/music/native/hotstep/install", post(hotstep_cover::install))
         .route("/v1/music/native/hotstep/stable-audio-3/install", post(hotstep_sa3::install))
         .route("/v1/music/native/hotstep/heartmula/install", post(hotstep_heartmula::install))
+        .route("/v1/music/native/hotstep/minimax-music3/install", post(hotstep_minimax::install))
         .route("/v1/music/audio-cpp/mulacover/runtime", post(audio_cpp_mulacover::install_runtime))
         .route("/v1/music/audio-cpp/models/install", post(audio_cpp_music::install))
         .route("/v1/music/replay", post(replay_music_job))
@@ -2372,6 +2377,8 @@ fn trashed_song_message(song: &library::Song) -> String {
 
 async fn library_media(State(state): State<AppState>, Path(song_id): Path<String>, request: Request) -> Result<axum::response::Response, (StatusCode, Json<ApiError>)> {
     let song = state.library.get_song(&song_id).map_err(|error| api_error(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?.ok_or_else(|| api_error(StatusCode::NOT_FOUND, "Song not found".into()))?;
+    // ServeFile opens the handle while preparing the response. Its body is read after this guard drops.
+    let _open = tagging::audio_open_guard().await;
     let path = state.library.media_path_for_song(&song).ok_or_else(|| api_error(StatusCode::NOT_FOUND, "Song audio is not available in the studio media library".into()))?;
     Ok(serve_audio_file(&path, request).await)
 }
@@ -11739,6 +11746,7 @@ async fn dispatch_music_job(state: AppState, mut request: CreateMusicJobRequest,
                 "acestep-cpp" => native_ace_jobs::submit(state, request, model, attempt).await,
                 hotstep_cover::ENGINE if model == hotstep_sa3::PROFILE => hotstep_sa3::submit(state, request, attempt).await,
                 hotstep_cover::ENGINE if model == hotstep_heartmula::PROFILE => hotstep_heartmula::submit(state, request, attempt).await,
+                hotstep_cover::ENGINE if model == hotstep_minimax::PROFILE => hotstep_minimax::submit(state, request, attempt).await,
                 hotstep_cover::ENGINE => hotstep_cover::submit(state, request, model, attempt).await,
                 native_minimax::ENGINE_ID => native_music_jobs::submit_minimax(state, request, model, attempt).await,
                 _ => (StatusCode::BAD_REQUEST, Json(failed_request_job(request, engine.clone(), format!("Unknown native engine {engine}.")))),
@@ -11929,6 +11937,7 @@ async fn submit_replay_job(state: AppState, request: ReplayMusicJobRequest, atte
                 ace::ENGINE_ID => return native_ace_jobs::replay(state, song, request, attempt).await,
                 native_minimax::ENGINE_ID => return native_music_jobs::replay(state, song, request, attempt).await,
                 hotstep_cover::ENGINE if song.generation_settings["profile_id"] == hotstep_sa3::PROFILE => return hotstep_sa3::replay(state, song, request, attempt).await,
+                hotstep_cover::ENGINE if song.generation_settings["profile_id"] == hotstep_minimax::PROFILE => return hotstep_minimax::replay(state, song, request, attempt).await,
                 PRIMARY_MUSIC_ENGINE_ID => {},
                 _ if song.replay_request.is_none() => return Err(api_error(StatusCode::BAD_REQUEST, "This track has no replay request.".into())),
                 _ => return Err(api_error(StatusCode::BAD_REQUEST, format!("Re-rendering is unavailable for engine {}.", song.engine_id))),
@@ -13726,6 +13735,33 @@ fn backing_source(state: &AppState, id: &str) -> Result<(library::Song, PathBuf)
         .filter(|path| path.is_file())
         .ok_or_else(|| "The backing has no audio in the library.".to_string())?;
     Ok((song, path))
+}
+
+#[derive(Deserialize)]
+struct BackingTempoRequest {
+    song_id: String,
+}
+
+/// Measures the beat grid without guessing key, harmony or arrangement.
+async fn analyze_backing_tempo(State(state): State<AppState>, Json(request): Json<BackingTempoRequest>) -> Json<Value> {
+    let measured = async {
+        let (_, audio) = backing_source(&state, &request.song_id).map_err(anyhow::Error::msg)?;
+        let models = state.training.audio_facts_dir();
+        anyhow::ensure!(models.join(audio_facts::BEAT_MODEL).is_file(), "Install the listening pack to measure the backing tempo.");
+        state.lyrics_sync.bind_ort()?;
+        tokio::task::spawn_blocking(move || {
+            let mono = audio_facts::decode(&audio)?;
+            anyhow::ensure!(mono.iter().any(|sample| sample.abs() > 0.001), "The backing is too quiet to measure its beat.");
+            let facts = audio_facts::Measurer::load(&models)?.measure_mono(&mono)?;
+            anyhow::ensure!((40..=240).contains(&facts.bpm), "The measured tempo is outside the Chord bed range of 40–240 BPM.");
+            anyhow::ensure!(audio_facts::supports_backing_tempo(&mono, facts.bpm), "No regular pulse was confirmed in the backing. Enter the tempo manually if you know it.");
+            Ok::<_, anyhow::Error>(facts.bpm)
+        }).await?
+    }.await;
+    match measured {
+        Ok(bpm) => Json(serde_json::json!({"ok": true, "bpm": bpm, "method": "beat-this"})),
+        Err(error) => Json(serde_json::json!({"ok": false, "error": format!("{error:#}")})),
+    }
 }
 
 fn engine_submission(body: &Value) -> Value {

@@ -30,6 +30,7 @@ import { isMidiFile } from '../services/midiFiles';
 import { trackMidiBase64 } from '../services/midiEditor';
 import { composePlans, composeScore, transcribe, type ScorePlan } from '../services/transcription';
 import { bedLine, chordBed, failed, instrumentalScore, matchSections, type BedSection, type SectionProposal } from '../services/scoreApi';
+import { BackingTempo } from './BackingTempo';
 import { sectionTagsOnly } from '../services/instrumental';
 import { lyricSyllables, syllableChangesOf, type SyllableChange } from '../services/syllables';
 import { profileLabel as setLabel, setupLabel, type SetupChoice } from '../services/modelCatalog';
@@ -456,11 +457,13 @@ const SamplingGrid: React.FC<{ value: SamplingText; defaults?: YueSampling; onCh
 };
 
 const NO_ACTIVITY: ActivityEntry[] = [];
+const hotStepMiniMaxProfile = 'hotstep-minimax-music3';
 
 const linkedMusicFamilies = [
   { id: 'minimaxmusic-cpp', name: 'MiniMax Music3', pairs: [
     { engine: 'minimaxmusic-cpp', label: 'minimaxmusic.cpp' },
     { engine: 'audio.cpp', label: 'audio.cpp', profile: audioCppMiniMax },
+    { engine: 'hotstep', label: 'HOT-Step', profile: hotStepMiniMaxProfile },
   ] },
   { id: 'heartmula', name: 'HeartMuLa', pairs: [
     { engine: 'audio.cpp', label: 'audio.cpp', profile: 'heartmula' },
@@ -511,7 +514,8 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
   const audioCpp = nativeEngine === 'audio.cpp';
   const hotstepSa3 = nativeEngine === 'hotstep' && native.profile?.id === hotStepSa3Profile;
   const hotstepHeart = nativeEngine === 'hotstep' && native.profile?.id === hotStepHeartmulaProfile;
-  const hotstep = nativeEngine === 'hotstep' && !hotstepSa3 && !hotstepHeart;
+  const hotstepMiniMax = nativeEngine === 'hotstep' && native.profile?.id === hotStepMiniMaxProfile;
+  const hotstep = nativeEngine === 'hotstep' && !hotstepSa3 && !hotstepHeart && !hotstepMiniMax;
   const [hotstepHeartDraft, setHotstepHeartDraft] = useState<HotStepSa3Draft>({});
   const [hotstepSa3Draft, setHotstepSa3Draft] = useState<HotStepSa3Draft>({});
   const [mulaCoverDraft, setMulaCoverDraft] = useState<HotStepCoverDraft>({ original: '', abc: '' });
@@ -1014,7 +1018,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
         if (profile === 'vevo2') setVevoReferences((settings.vevo2 as YueRequest['vevo2']) ?? { voice_song_id: '' });
         if (profile === hotStepSa3Profile) setHotstepSa3Draft((settings.hotstep_sa3 as YueRequest['hotstep_sa3']) ?? {});
         if (profile === hotStepHeartmulaProfile) setHotstepHeartDraft((settings.hotstep_heartmula as YueRequest['hotstep_heartmula']) ?? {});
-        if (song.ditModel === 'hotstep' && profile !== hotStepSa3Profile && profile !== hotStepHeartmulaProfile) setMulaCoverDraft({
+        if (song.ditModel === 'hotstep' && profile !== hotStepSa3Profile && profile !== hotStepHeartmulaProfile && profile !== hotStepMiniMaxProfile) setMulaCoverDraft({
           original: typeof settings.cover_of === 'string' ? settings.cover_of : song.derived?.from ?? '',
           abc: typeof settings.abc === 'string' ? settings.abc : '',
         });
@@ -2103,6 +2107,9 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
                     {hotstepSa3 && native.profile?.installable && !native.ready &&
                       <AudioCppModelInstall key={hotStepSa3Profile} model={hotStepSa3Profile} bytes={native.profile.missing_bytes ?? 0}
                         licenseUrl="https://huggingface.co/scragnog/HOT-Step-CPP-StableStep" language={language} onInstalled={refreshNativeChoice} />}
+                    {hotstepMiniMax && native.profile?.installable && !native.ready &&
+                      <AudioCppModelInstall key={hotStepMiniMaxProfile} model={hotStepMiniMaxProfile} bytes={native.profile.missing_bytes ?? 0}
+                        licenseUrl={native.profile.license_url} language={language} onInstalled={refreshNativeChoice} />}
                     {(heartMuLa || stableAudio || soulx) && native.profile?.installable && !native.ready &&
                       <AudioCppModelInstall key={audioFamily} model={soulxConversion ? 'soulx_singer_svc' : soulx ? 'soulx_singer' : stableAudio ? 'stable_audio' : 'heartmula'} bytes={native.profile.total_bytes}
                         licenseUrl={native.profile.license_url} language={language} onInstalled={refreshNativeChoice} />}
@@ -2801,6 +2808,9 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
                           {backingTracks.map(song => <option key={song.id} value={song.id}>{song.title}</option>)}
                         </select>
                       </Field>
+                    )}
+                    {musicEngine === 'local' && mode !== 'cover' && backingSongId && (
+                      <BackingTempo key={backingSongId} songId={backingSongId} onApply={bpm => setBedBpm(String(bpm))} />
                     )}
                     <div className="grid grid-cols-3 gap-2">
                       <Field label={tt('chordBedTempo')}>

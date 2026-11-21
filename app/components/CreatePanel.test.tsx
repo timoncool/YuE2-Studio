@@ -11,6 +11,7 @@ const bridgeCommands = new Map<string, (args: Record<string, unknown>) => unknow
 const composeScore = vi.fn();
 const transcribe = vi.fn();
 const instrumentalScore = vi.fn();
+const backingTempo = vi.fn();
 let ready = true;
 let enginePaused = false;
 let configured = false;
@@ -35,6 +36,7 @@ vi.mock('../services/scoreApi', () => ({
   instrumentalScore: (abc: string) => instrumentalScore(abc),
   failed: (answer: { error?: string }) => typeof answer?.error === 'string',
   chordBed: vi.fn(),
+  backingTempo: (...args: unknown[]) => backingTempo(...args),
   matchSections: vi.fn(),
 }));
 vi.mock('../services/adapters', async (original) => ({
@@ -79,6 +81,7 @@ beforeEach(() => {
   composeScore.mockReset();
   transcribe.mockReset().mockResolvedValue('X:1\nK:C\nC');
   instrumentalScore.mockReset();
+  backingTempo.mockReset();
   vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({}), { status: 200 })));
   host = document.createElement('div');
   document.body.append(host);
@@ -122,6 +125,24 @@ it('sends the chosen library backing with the same score and words', async () =>
   click(buttonNamed('create')!);
   expect(sent[0]).toMatchObject({ backing_song_id: 'backing', abc, lyrics: 'one line' });
   expect(sent[0].cover_of).toBeUndefined();
+});
+
+it('applies a measured backing tempo only when confirmed', async () => {
+  backingTempo.mockResolvedValue({ ok: true, bpm: 121, method: 'beat-this' });
+  librarySongs = [{ id: 'backing', title: 'Instrumental recording', audioUrl: '/test.wav' } as Song];
+  act(() => root.render(panel({ request: { id: 1, kind: 'score', abc: 'X:1\nK:C\nC|', lyrics: 'one line' } })));
+  await flush();
+  click(buttonNamed('chordBed')!);
+  const select = host.querySelector<HTMLSelectElement>('select[aria-label="Sing over a library backing track"]')!;
+  act(() => { select.value = 'backing'; select.dispatchEvent(new Event('change', { bubbles: true })); });
+  const bpm = field('input[inputmode="numeric"]')!;
+  const previous = bpm.value;
+  click(buttonNamed('Measure backing tempo')!);
+  await flush();
+  expect(backingTempo).toHaveBeenCalledWith('backing');
+  expect(bpm.value).toBe(previous);
+  click(buttonNamed('Use 121 BPM')!);
+  expect(bpm.value).toBe('121');
 });
 
 it('queues the other five readings with exactly one score and one pair of seeds', async () => {
@@ -1932,6 +1953,27 @@ it('restores HeartMuLa lyrics and its trained HOT-Step adapter without cover req
     style: 'pop,piano', lyrics: 'We rise with the morning light', duration_seconds: 4, seed: 42, cfg_scale: 1.5,
     hotstep_heartmula,
   });
+});
+
+it('restores MiniMax Music3 through HOT-Step as a text and lyrics pair', async () => {
+  const model = 'hotstep-minimax-music3';
+  vi.stubGlobal('fetch', vi.fn(async () => Response.json({
+    engine: 'hotstep', engine_installed: true,
+    profiles: [{ id: model, label: 'MiniMax Music3 · HOT-Step', ready: true, missing: [] }],
+  })));
+  const music_source = { kind: 'native', engine: 'hotstep', model };
+  const song = {
+    title: 'MiniMax take', ditModel: 'hotstep', style: 'folk', lyrics: '[Verse] Morning',
+    generationParams: { music_source, duration_seconds: 3.2, seed: 42, steps: 2 },
+  } as Song;
+  act(() => root.render(panel({ musicEngine: 'hotstep', initialData: { song, timestamp: 1 } })));
+  await flush();
+  expect(field('textarea[aria-label="lyrics"]')).not.toBeNull();
+  expect(host.textContent).not.toContain('Cover score');
+  click(buttonNamed('create')!);
+  expect(sent.at(-1)).toMatchObject({ music_source, style: 'folk', lyrics: '[Verse] Morning',
+    duration_seconds: 3.2, seed: 42, steps: 2 });
+  expect(sent.at(-1)?.cover_of).toBeUndefined();
 });
 
 it('restores HOT-Step cover source and lead sheet from a saved take', async () => {
