@@ -555,6 +555,7 @@ const JOURNAL: &[(&str, &str, &str)] = &[
     ("assistant_model_install", "started", "download"),
     ("separator_install", "started", "download"),
     ("separator_runtime_install", "started", "download"),
+    ("mulacover_runtime_install", "started", "download"),
     ("recogniser_install", "started", "download"),
     ("midi_install", "started", "download"),
     ("restore_install", "started", "download"),
