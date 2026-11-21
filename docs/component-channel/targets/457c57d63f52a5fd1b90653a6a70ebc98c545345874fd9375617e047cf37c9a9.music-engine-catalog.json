@@ -1,0 +1,314 @@
+{
+  "schema": 1,
+  "engines": [
+    {
+      "id": "acestep-cpp",
+      "name": "ACE-Step",
+      "version": "d058cd86564a",
+      "protocol": "music-native-windows-v2",
+      "platform": "windows-x86_64",
+      "executable": "ace-server.exe",
+      "files": [
+        {
+          "name": "ggml-cuda12.dll",
+          "bytes": 301970432,
+          "sha256": "4c40050b47edb21ef420e4c3918e3b4366444c335cab516b69264aa3f2aaa415",
+          "url": "https://github.com/timoncool/acestep.cpp/releases/download/studio-signed-native-d058cd86564a-windows-v2/ggml-cuda12.dll",
+          "cuda_variant": "cuda12"
+        },
+        {
+          "name": "ggml-cuda13.dll",
+          "bytes": 202283008,
+          "sha256": "c7cf591fbc60d557fd866c8d80f60188f739775a8050172f2b2c27122532d49d",
+          "url": "https://github.com/timoncool/acestep.cpp/releases/download/studio-signed-native-d058cd86564a-windows-v2/ggml-cuda13.dll",
+          "cuda_variant": "cuda13"
+        },
+        {
+          "name": "cudart64_12.dll",
+          "bytes": 583680,
+          "sha256": "760c38928bbe5759f7b31ed6692599eb7ec83cedd5702e84c2b72028a89837e1",
+          "url": "https://github.com/timoncool/acestep.cpp/releases/download/studio-signed-native-d058cd86564a-windows-v2/cudart64_12.dll"
+        },
+        {
+          "name": "ggml-base.dll",
+          "bytes": 1205248,
+          "sha256": "fd138496dfe256080a58fa162288441374a56edbc888151b79ca04a069ab9140",
+          "url": "https://github.com/timoncool/acestep.cpp/releases/download/studio-signed-native-d058cd86564a-windows-v2/ggml-base.dll"
+        },
+        {
+          "name": "ggml-cpu-alderlake.dll",
+          "bytes": 1126400,
+          "sha256": "cb5767c2bb5ab08f1b2ff741fe8c523c55f432d648355a5d4dbd808262cf22d7",
+          "url": "https://github.com/timoncool/acestep.cpp/releases/download/studio-signed-native-d058cd86564a-windows-v2/ggml-cpu-alderlake.dll"
+        },
+        {
+          "name": "ggml-cpu-cannonlake.dll",
+          "bytes": 1257472,
+          "sha256": "7ea8439931b31e7aee2878bfa8de29e9eef0197f3901d0191153442355b4341f",
+          "url": "https://github.com/timoncool/acestep.cpp/releases/download/studio-signed-native-d058cd86564a-windows-v2/ggml-cpu-cannonlake.dll"
+        },
+        {
+          "name": "ggml-cpu-cascadelake.dll",
+          "bytes": 1269760,
+          "sha256": "ae2debbcbf17bc36fa6e101e836fa146caf0f7d4c41f4900f3b188d32508a9e7",
+          "url": "https://github.com/timoncool/acestep.cpp/releases/download/studio-signed-native-d058cd86564a-windows-v2/ggml-cpu-cascadelake.dll"
+        },
+        {
+          "name": "ggml-cpu-haswell.dll",
+          "bytes": 1128448,
+          "sha256": "093ec6c70e9eee1b7b06555232a2ffe6c4e31bc41b7a9af149c65587b3a88ff4",
+          "url": "https://github.com/timoncool/acestep.cpp/releases/download/studio-signed-native-d058cd86564a-windows-v2/ggml-cpu-haswell.dll"
+        },
+        {
+          "name": "ggml-cpu-icelake.dll",
+          "bytes": 1269760,
+          "sha256": "14de439fb3b51870180d1b93adbdc665c1a631ba53a6b11be2053d1c86c39ac1",
+          "url": "https://github.com/timoncool/acestep.cpp/releases/download/studio-signed-native-d058cd86564a-windows-v2/ggml-cpu-icelake.dll"
+        },
+        {
+          "name": "ggml-cpu-sandybridge.dll",
+          "bytes": 1123840,
+          "sha256": "ccdeb2dfbc31c822de008173fe2c1c5eb12b474946807be2deeac16d4bf7fbd8",
+          "url": "https://github.com/timoncool/acestep.cpp/releases/download/studio-signed-native-d058cd86564a-windows-v2/ggml-cpu-sandybridge.dll"
+        },
+        {
+          "name": "ggml-cpu-skylakex.dll",
+          "bytes": 1257472,
+          "sha256": "dc0d83b72f63eea0e40ec1272fca1d9a0f6db8e5b519ce45c2e6871bf6aade77",
+          "url": "https://github.com/timoncool/acestep.cpp/releases/download/studio-signed-native-d058cd86564a-windows-v2/ggml-cpu-skylakex.dll"
+        },
+        {
+          "name": "ggml-cpu-sse42.dll",
+          "bytes": 872960,
+          "sha256": "a713be897cf22811c60b2d76fa969d1ac56aa1fc2333fc7bf720ee022cb76eb5",
+          "url": "https://github.com/timoncool/acestep.cpp/releases/download/studio-signed-native-d058cd86564a-windows-v2/ggml-cpu-sse42.dll"
+        },
+        {
+          "name": "ggml-cpu-x64.dll",
+          "bytes": 877568,
+          "sha256": "7a75bffd1e7e08c8eb12894a4a8b1a0eb5e67f47443c9cca23e6c0bfd84e32dd",
+          "url": "https://github.com/timoncool/acestep.cpp/releases/download/studio-signed-native-d058cd86564a-windows-v2/ggml-cpu-x64.dll"
+        },
+        {
+          "name": "ggml-vulkan.dll",
+          "bytes": 42138624,
+          "sha256": "90edd11fae0205d7c613411e613b1fa6f862e81606963316f718b62db4e8f3a1",
+          "url": "https://github.com/timoncool/acestep.cpp/releases/download/studio-signed-native-d058cd86564a-windows-v2/ggml-vulkan.dll"
+        },
+        {
+          "name": "ggml.dll",
+          "bytes": 330240,
+          "sha256": "4a68894b4352d1787a64b638cdcfd836ccb3d4e58443970c8a334124af8700c2",
+          "url": "https://github.com/timoncool/acestep.cpp/releases/download/studio-signed-native-d058cd86564a-windows-v2/ggml.dll"
+        },
+        {
+          "name": "msvcp140.dll",
+          "bytes": 643512,
+          "sha256": "7c26614e1d733892c2deac7e245ce115504b1d80592dd0a01b08e3e5a55f89ca",
+          "url": "https://github.com/timoncool/acestep.cpp/releases/download/studio-signed-native-d058cd86564a-windows-v2/msvcp140.dll"
+        },
+        {
+          "name": "msvcp140_1.dll",
+          "bytes": 35768,
+          "sha256": "206c931bf90fdad8816de3b5e2ef80b2bcaa9406c89ecc05fe6fddffe251e982",
+          "url": "https://github.com/timoncool/acestep.cpp/releases/download/studio-signed-native-d058cd86564a-windows-v2/msvcp140_1.dll"
+        },
+        {
+          "name": "vcomp140.dll",
+          "bytes": 212920,
+          "sha256": "95d4ce4a6802d1e18b5e0e1722cc30ea72ca7e033f83828f05c0b7b993fe7cbf",
+          "url": "https://github.com/timoncool/acestep.cpp/releases/download/studio-signed-native-d058cd86564a-windows-v2/vcomp140.dll"
+        },
+        {
+          "name": "vcruntime140.dll",
+          "bytes": 178616,
+          "sha256": "d1f4225df2cd877dbf130d5668a021dce3f94118455ff5ec952061c30afc9ce7",
+          "url": "https://github.com/timoncool/acestep.cpp/releases/download/studio-signed-native-d058cd86564a-windows-v2/vcruntime140.dll"
+        },
+        {
+          "name": "vcruntime140_1.dll",
+          "bytes": 50112,
+          "sha256": "a7146c08f89fe5b04541ab507cdb59ff7b44534d4ba3c668a426c6450a03434e",
+          "url": "https://github.com/timoncool/acestep.cpp/releases/download/studio-signed-native-d058cd86564a-windows-v2/vcruntime140_1.dll"
+        },
+        {
+          "name": "ace-server.exe",
+          "bytes": 1601536,
+          "sha256": "db8b02bb1d598e4ab849f8134ed6e88869945835a59bfe85f9554d30848c67c0",
+          "url": "https://github.com/timoncool/acestep.cpp/releases/download/studio-signed-native-d058cd86564a-windows-v2/ace-server.exe"
+        },
+        {
+          "name": "acestep-LICENSE.txt",
+          "bytes": 1085,
+          "sha256": "43e5610846745c687f675badd848d769c8af0a671604efe45cb1466517fd3ddb",
+          "url": "https://github.com/timoncool/acestep.cpp/releases/download/studio-signed-native-d058cd86564a-windows-v2/acestep-LICENSE.txt"
+        },
+        {
+          "name": "ggml-LICENSE.txt",
+          "bytes": 1099,
+          "sha256": "bcd8ec749126d45cb06737d0690295d73df4b6e7e194205bcf91190368f27285",
+          "url": "https://github.com/timoncool/acestep.cpp/releases/download/studio-signed-native-d058cd86564a-windows-v2/ggml-LICENSE.txt"
+        }
+      ],
+      "native_runtime": {
+        "api_version": 2,
+        "executable": "ace-server.exe"
+      }
+    },
+    {
+      "id": "minimaxmusic-cpp",
+      "name": "MiniMax Music3",
+      "version": "46c4c90b6fcc",
+      "protocol": "music-native-windows-v2",
+      "platform": "windows-x86_64",
+      "executable": "mm-server.exe",
+      "files": [
+        {
+          "name": "ggml-cuda12.dll",
+          "bytes": 301947904,
+          "sha256": "9b5b060195428e2800bb6a6f4a4fac2aa306618aa94602250e4d31aac6576833",
+          "url": "https://github.com/timoncool/minimaxmusic.cpp/releases/download/studio-signed-native-46c4c90b6fcc-windows-v2/ggml-cuda12.dll",
+          "cuda_variant": "cuda12"
+        },
+        {
+          "name": "ggml-cuda13.dll",
+          "bytes": 201541120,
+          "sha256": "bb1019e3f347df267834797e5b05666fa25f9a6bb5c404617f73f05586984729",
+          "url": "https://github.com/timoncool/minimaxmusic.cpp/releases/download/studio-signed-native-46c4c90b6fcc-windows-v2/ggml-cuda13.dll",
+          "cuda_variant": "cuda13"
+        },
+        {
+          "name": "cudart64_12.dll",
+          "bytes": 583680,
+          "sha256": "760c38928bbe5759f7b31ed6692599eb7ec83cedd5702e84c2b72028a89837e1",
+          "url": "https://github.com/timoncool/minimaxmusic.cpp/releases/download/studio-signed-native-46c4c90b6fcc-windows-v2/cudart64_12.dll"
+        },
+        {
+          "name": "ggml-base.dll",
+          "bytes": 1248256,
+          "sha256": "caeae788d035d5e9124f1108528b954a87155aaff9d5b1a03104c046f39a66bb",
+          "url": "https://github.com/timoncool/minimaxmusic.cpp/releases/download/studio-signed-native-46c4c90b6fcc-windows-v2/ggml-base.dll"
+        },
+        {
+          "name": "ggml-cpu-alderlake.dll",
+          "bytes": 1157120,
+          "sha256": "9aaec7f2c65e45a478963459f434b2a37f6f030d0314da5fd220da5af229b6a8",
+          "url": "https://github.com/timoncool/minimaxmusic.cpp/releases/download/studio-signed-native-46c4c90b6fcc-windows-v2/ggml-cpu-alderlake.dll"
+        },
+        {
+          "name": "ggml-cpu-cannonlake.dll",
+          "bytes": 1289728,
+          "sha256": "bac1a47632b13784b797ff788d83090159433bc6534ee0bdbaa252c687386ef9",
+          "url": "https://github.com/timoncool/minimaxmusic.cpp/releases/download/studio-signed-native-46c4c90b6fcc-windows-v2/ggml-cpu-cannonlake.dll"
+        },
+        {
+          "name": "ggml-cpu-cascadelake.dll",
+          "bytes": 1293312,
+          "sha256": "7bebf24f101b5b91378b9ebc5613c2fd8a47c71303ff0bf7aa7cb2f952772851",
+          "url": "https://github.com/timoncool/minimaxmusic.cpp/releases/download/studio-signed-native-46c4c90b6fcc-windows-v2/ggml-cpu-cascadelake.dll"
+        },
+        {
+          "name": "ggml-cpu-haswell.dll",
+          "bytes": 1158656,
+          "sha256": "63d93f5ab194521b1e1d4778496e77f8ec0a6e05768f9d40f52f456e0e64dd32",
+          "url": "https://github.com/timoncool/minimaxmusic.cpp/releases/download/studio-signed-native-46c4c90b6fcc-windows-v2/ggml-cpu-haswell.dll"
+        },
+        {
+          "name": "ggml-cpu-icelake.dll",
+          "bytes": 1293312,
+          "sha256": "49a26aa9f9ea1adcbb2d8111af8f405d2f9e5d5a9dbfa49c4e27e4f2281ae2e4",
+          "url": "https://github.com/timoncool/minimaxmusic.cpp/releases/download/studio-signed-native-46c4c90b6fcc-windows-v2/ggml-cpu-icelake.dll"
+        },
+        {
+          "name": "ggml-cpu-sandybridge.dll",
+          "bytes": 1143296,
+          "sha256": "894b1141fd1b02e661bc485d83bfb284d9568fb4b6ab66c97180081000a2e1e2",
+          "url": "https://github.com/timoncool/minimaxmusic.cpp/releases/download/studio-signed-native-46c4c90b6fcc-windows-v2/ggml-cpu-sandybridge.dll"
+        },
+        {
+          "name": "ggml-cpu-skylakex.dll",
+          "bytes": 1289728,
+          "sha256": "181e8c327591d0cfd04b49a4ac0b2fd58350258901e4bd3f36c72b40b0b0346f",
+          "url": "https://github.com/timoncool/minimaxmusic.cpp/releases/download/studio-signed-native-46c4c90b6fcc-windows-v2/ggml-cpu-skylakex.dll"
+        },
+        {
+          "name": "ggml-cpu-sse42.dll",
+          "bytes": 856576,
+          "sha256": "21e17ddde2466610d8daecb88ac10b40c4aa0baff52490ff500354d95bafd192",
+          "url": "https://github.com/timoncool/minimaxmusic.cpp/releases/download/studio-signed-native-46c4c90b6fcc-windows-v2/ggml-cpu-sse42.dll"
+        },
+        {
+          "name": "ggml-cpu-x64.dll",
+          "bytes": 862208,
+          "sha256": "eef6fe6072feb2d85e4a80eea8df64fe74dc5067714051be600dd9ff7b1de2c0",
+          "url": "https://github.com/timoncool/minimaxmusic.cpp/releases/download/studio-signed-native-46c4c90b6fcc-windows-v2/ggml-cpu-x64.dll"
+        },
+        {
+          "name": "ggml-LICENSE",
+          "bytes": 1099,
+          "sha256": "bcd8ec749126d45cb06737d0690295d73df4b6e7e194205bcf91190368f27285",
+          "url": "https://github.com/timoncool/minimaxmusic.cpp/releases/download/studio-signed-native-46c4c90b6fcc-windows-v2/ggml-LICENSE"
+        },
+        {
+          "name": "ggml-vulkan.dll",
+          "bytes": 42117632,
+          "sha256": "e91d85c66cf4ba45b09ab3fe6e2a1f8aa452476b0206c893912e8874b04b3a7b",
+          "url": "https://github.com/timoncool/minimaxmusic.cpp/releases/download/studio-signed-native-46c4c90b6fcc-windows-v2/ggml-vulkan.dll"
+        },
+        {
+          "name": "ggml.dll",
+          "bytes": 355840,
+          "sha256": "55335a6c79c400867a7866eb820636a0574dd6d19c612c40b1eb8a5fe9e88436",
+          "url": "https://github.com/timoncool/minimaxmusic.cpp/releases/download/studio-signed-native-46c4c90b6fcc-windows-v2/ggml.dll"
+        },
+        {
+          "name": "LICENSE",
+          "bytes": 1090,
+          "sha256": "de3cc388855deff82f7024a12cf257439932817a8c786913d00314bcd17bae40",
+          "url": "https://github.com/timoncool/minimaxmusic.cpp/releases/download/studio-signed-native-46c4c90b6fcc-windows-v2/LICENSE"
+        },
+        {
+          "name": "mm-server.exe",
+          "bytes": 1186304,
+          "sha256": "9930df98f8bda4e63fe2742a8bd472fffaae60b24eb47aa00127208b7efd6335",
+          "url": "https://github.com/timoncool/minimaxmusic.cpp/releases/download/studio-signed-native-46c4c90b6fcc-windows-v2/mm-server.exe"
+        },
+        {
+          "name": "msvcp140.dll",
+          "bytes": 652136,
+          "sha256": "59d325227321d52b9a523ea401ce6787a5d59f78229a0ff3a6f124e5d3445685",
+          "url": "https://github.com/timoncool/minimaxmusic.cpp/releases/download/studio-signed-native-46c4c90b6fcc-windows-v2/msvcp140.dll"
+        },
+        {
+          "name": "msvcp140_1.dll",
+          "bytes": 35696,
+          "sha256": "1c6522f4d005539109aa040f063659704bfda94a224142f50942573cfbcf7ec9",
+          "url": "https://github.com/timoncool/minimaxmusic.cpp/releases/download/studio-signed-native-46c4c90b6fcc-windows-v2/msvcp140_1.dll"
+        },
+        {
+          "name": "vcomp140.dll",
+          "bytes": 213864,
+          "sha256": "294397f642d824a97de354aa625f993a97f34d729eca1bde56d5a897ae574888",
+          "url": "https://github.com/timoncool/minimaxmusic.cpp/releases/download/studio-signed-native-46c4c90b6fcc-windows-v2/vcomp140.dll"
+        },
+        {
+          "name": "vcruntime140.dll",
+          "bytes": 176488,
+          "sha256": "eb1ee979bf02324712346e5bdbfc59c785388bc50d18cc2688aae4b0734915a0",
+          "url": "https://github.com/timoncool/minimaxmusic.cpp/releases/download/studio-signed-native-46c4c90b6fcc-windows-v2/vcruntime140.dll"
+        },
+        {
+          "name": "vcruntime140_1.dll",
+          "bytes": 50544,
+          "sha256": "a14b4a42a2c6df04d6d53a8340816023d953406f7f3d94996c7cab30c414ff63",
+          "url": "https://github.com/timoncool/minimaxmusic.cpp/releases/download/studio-signed-native-46c4c90b6fcc-windows-v2/vcruntime140_1.dll"
+        }
+      ],
+      "native_runtime": {
+        "api_version": 2,
+        "executable": "mm-server.exe"
+      }
+    }
+  ],
+  "models": []
+}
