@@ -346,6 +346,8 @@ struct TrainerSource {
     asset: String,
     /// Size of the released archive.
     bytes: u64,
+    /// The captioner's archive can have its own immutable filename.
+    caption_asset: String,
     /// Size of the captioner's archive in the same release.
     caption_bytes: u64,
 }
@@ -501,8 +503,8 @@ pub(crate) fn listen_pack() -> &'static [Asset] {
                 id: "ace-caption",
                 label: leak(format!("Captioner (HOT-Step {})", &source.commit[..8])),
                 kind: AssetKind::Runtime,
-                url: leak(format!("https://github.com/timoncool/YuE2-Studio/releases/download/{}/ace-caption-windows-x64.zip", source.release_tag)),
-                relative_path: "ace-caption-windows-x64.zip",
+                url: leak(format!("https://github.com/timoncool/YuE2-Studio/releases/download/{}/{}", source.release_tag, source.caption_asset)),
+                relative_path: leak(source.caption_asset.clone()),
                 bytes: source.caption_bytes,
                 unzip_into: Some(trainer_folder()),
                 marker: CAPTIONER,

@@ -153,7 +153,7 @@ if ($Build -eq 'cuda13') {
     Get-ChildItem -Path $binDirectory -Filter 'ggml*.dll' -File | Where-Object { $_.Name -ne 'ggml-cuda.dll' } | Copy-Item -Destination $captioner -Force
     Copy-Item (Join-Path $worktree "$($source.source_dir)\LICENSE") (Join-Path $captioner 'LICENSE-HOT-Step.txt') -Force
     Copy-Item (Join-Path $output 'runtime.json') $captioner
-    $captionZip = Join-Path (Split-Path -Parent $output) 'ace-caption-windows-x64.zip'
+    $captionZip = Join-Path (Split-Path -Parent $output) $source.caption_asset
     if (Test-Path $captionZip) { Remove-Item -Force $captionZip }
     Compress-Archive -Path "$captioner\*" -DestinationPath $captionZip -Force
     [pscustomobject]@{ zip = $captionZip; bytes = (Get-Item $captionZip).Length; sha256 = (Get-FileHash $captionZip -Algorithm SHA256).Hash.ToLowerInvariant(); commit = $source.commit } | ConvertTo-Json -Compress
