@@ -60,8 +60,10 @@ if __name__ == "__main__":
     matrix_file = b"docs/music-gpu-benchmarks.json"
     matrix_check = Path("scripts/check-music-gpu-benchmarks.py")
     site_pages = {f"docs/{lang}.html".encode() for lang in ("index", "ru", "ja", "ko", "pt", "zh")}
-    matrix_files = site_pages | {
-        matrix_file, b"README.md", b"scripts/build-pages.mjs", b"docs/site/music-benchmarks.mjs", matrix_check.as_posix().encode()
+    generated_pages = site_pages | {b"docs/donate.html", b"docs/sitemap.xml"}
+    matrix_files = generated_pages | {
+        matrix_file, b"README.md", b"scripts/build-pages.mjs", b"docs/site/music-benchmarks.mjs",
+        b"docs/site/strings.mjs", matrix_check.as_posix().encode()
     }
     matrix_only = False
     if paths & matrix_files and Path(os.fsdecode(matrix_file)).is_file() and matrix_check.is_file():
@@ -71,7 +73,7 @@ if __name__ == "__main__":
         if matrix_only:
             subprocess.run(["node", "scripts/build-pages.mjs"], check=True)
             subprocess.run([sys.executable, str(matrix_check)], check=True)
-            subprocess.run(["git", "diff", "--exit-code", "--", *sorted(map(os.fsdecode, site_pages))], check=True)
+            subprocess.run(["git", "diff", "--exit-code", "--", *sorted(map(os.fsdecode, generated_pages))], check=True)
     publisher_test = not base or bool(paths & (publisher_files | {
         b"distribution/components/verify.py", b"distribution/components/test_installed_channel.py",
         b"distribution/channels/stable/mirrors.json", b".github/workflows/ci.yml"
@@ -81,6 +83,7 @@ if __name__ == "__main__":
         "crates/music-server/src/engine_catalogue.rs",
         "crates/music-server/src/engine_catalogue/",
         "crates/music-server/src/downloads.rs",
+        "crates/music-server/src/pin_sha.rs",
         "crates/music-server/src/install_record.rs",
         "distribution/channels/stable/bootstrap/",
         "distribution/components/test_installed_channel.py",

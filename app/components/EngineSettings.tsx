@@ -63,7 +63,7 @@ export function keepLoadedNow(inEffect: KeepState, t: (key: string) => string): 
     ? t(reason === 'fits' ? 'keepLoadedReasonFits' : 'keepLoadedReasonNoRoom')
       .replace('{need}', (inEffect.keep_loaded_need_gb ?? 0).toFixed(1))
       .replace('{free}', (inEffect.keep_loaded_free_gb ?? 0).toFixed(1))
-    : t(reason === 'not_on_card' ? 'keepLoadedReasonNotOnCard' : reason === 'set' ? 'keepLoadedReasonSet' : reason === 'unmeasured' ? 'keepLoadedReasonUnmeasured' : 'keepLoadedReasonUnknown');
+    : t(reason === 'not_on_card' ? 'keepLoadedReasonNotOnCard' : reason === 'set' ? 'keepLoadedReasonSet' : reason === 'unmeasured' ? 'keepLoadedReasonUnmeasured' : reason === 'in_use' ? 'keepLoadedReasonInUse' : 'keepLoadedReasonUnknown');
   return t(inEffect.keep_loaded ? 'keepLoadedNowKept' : 'keepLoadedNowNotKept').replace('{reason}', why);
 }
 

@@ -12,6 +12,7 @@ describe('keepLoadedNow', () => {
       .toBe('Now: loaded for each song - 10.2 GB needed, only 7.0 GB free');
     expect(keepLoadedNow({ keep_loaded: false, keep_loaded_reason: 'not_on_card' }, t)).toContain('NVIDIA');
     expect(keepLoadedNow({ keep_loaded: false, keep_loaded_reason: 'unmeasured' }, t)).toContain('not measured');
+    expect(keepLoadedNow({ keep_loaded: false, keep_loaded_reason: 'in_use' }, t)).toContain('another task is using the card');
     expect(keepLoadedNow({ keep_loaded: true, keep_loaded_reason: 'set' }, t)).toBe('Now: kept loaded - as chosen');
   });
 });
