@@ -7773,9 +7773,20 @@ pub fn studio_data_root() -> Option<PathBuf> {
 /// Points every CUDA process of the studio at the physical card chosen in
 /// Settings. Called by the desktop shell and standalone service before CUDA starts.
 pub fn apply_saved_gpu() {
-    let Some(chosen) = load_studio_settings(&studio_settings_path()).and_then(|settings| settings.engine_options.gpu) else { return };
+    let settings_path = studio_settings_path();
+    let Some(chosen) = load_studio_settings(&settings_path).and_then(|settings| settings.engine_options.gpu) else { return };
     let cards = hardware::nvidia_cards();
-    let Some(uuid) = chosen.cuda_mask(cards.as_deref()) else { return };
+    let uuid = match chosen {
+        hardware::GpuChoice::LegacyIndex(index) => match pin_saved_gpu_index(&settings_path, index, cards.as_deref()) {
+            Ok(uuid) => uuid,
+            Err(error) => {
+                eprintln!("[ERROR] could not resolve the saved NVIDIA GPU: {error:#}");
+                None
+            }
+        },
+        choice => choice.cuda_mask(cards.as_deref()).map(str::to_owned),
+    };
+    let Some(uuid) = uuid else { return };
     // SAFETY: called first thing in the process, before the service and its
     // runtimes read the environment; on Windows the variables are set through
     // SetEnvironmentVariableW, which is thread safe.
@@ -7783,6 +7794,28 @@ pub fn apply_saved_gpu() {
         env::set_var("CUDA_DEVICE_ORDER", "PCI_BUS_ID");
         env::set_var("CUDA_VISIBLE_DEVICES", uuid);
     }
+}
+
+/// A legacy index has meaning only against a complete inventory that maps it once.
+/// Re-read under the same lock as ordinary saves before replacing that one field.
+fn pin_saved_gpu_index(path: &std::path::Path, index: u32, cards: Option<&[hardware::NvidiaCard]>) -> anyhow::Result<Option<String>> {
+    let Some(cards) = cards else { return Ok(None) };
+    let mut matches = cards.iter().filter(|card| card.index == index);
+    let Some(card) = matches.next() else { return Ok(None) };
+    if matches.next().is_some() || !hardware::valid_gpu_uuid(&card.uuid) {
+        return Ok(None);
+    }
+    let locked = lock_studio_settings_file(path);
+    let mut settings: Value = serde_json::from_slice(&fs::read(path)?)?;
+    let Some(gpu) = settings.pointer_mut("/engine_options/gpu") else { return Ok(None) };
+    if gpu.as_u64() != Some(u64::from(index)) {
+        return Ok(gpu.as_str().filter(|uuid| hardware::valid_gpu_uuid(uuid)).map(str::to_owned));
+    }
+    *gpu = Value::String(card.uuid.clone());
+    if let Err(error) = locked.and_then(|_lock| replace_studio_settings_file(path, &settings)) {
+        eprintln!("[ERROR] could not save the NVIDIA GPU UUID to the studio settings: {error:#}");
+    }
+    Ok(Some(card.uuid.clone()))
 }
 
 /// The NVIDIA cards nvidia-smi lists, and which one the studio runs on.
@@ -7830,6 +7863,22 @@ fn load_studio_settings(path: &PathBuf) -> Option<PersistedStudioSettings> {
     fs::read_to_string(path).ok().and_then(|body| serde_json::from_str(&body).ok())
 }
 
+fn lock_studio_settings_file(path: &std::path::Path) -> anyhow::Result<fs::File> {
+    if let Some(parent) = path.parent().filter(|parent| !parent.as_os_str().is_empty()) {
+        fs::create_dir_all(parent)?;
+    }
+    let lock = fs::OpenOptions::new().write(true).create(true).truncate(false).open(path.with_extension("json.lock"))?;
+    fs2::FileExt::lock_exclusive(&lock)?;
+    Ok(lock)
+}
+
+fn replace_studio_settings_file(path: &std::path::Path, settings: &impl Serialize) -> anyhow::Result<()> {
+    let temporary = path.with_extension("json.part");
+    fs::write(&temporary, serde_json::to_vec_pretty(settings)?)?;
+    fs::rename(temporary, path)?;
+    Ok(())
+}
+
 async fn persist_studio_settings(state: &AppState) -> anyhow::Result<()> {
     write_studio_settings(state, None).await
 }
@@ -7859,10 +7908,10 @@ async fn write_studio_settings(state: &AppState, selection: Option<SetupSelectRe
         settings.selected_profile_id.clone_from(&choice.profile_id);
         settings.selected_component_ids.clone_from(&choice.component_ids);
     }
-    if let Some(parent) = state.settings_path.parent() { fs::create_dir_all(parent)?; }
-    let temporary = state.settings_path.with_extension("json.part");
-    fs::write(&temporary, serde_json::to_vec_pretty(&settings)?)?;
-    fs::rename(temporary, &state.settings_path)?;
+    {
+        let _lock = lock_studio_settings_file(&state.settings_path)?;
+        replace_studio_settings_file(&state.settings_path, &settings)?;
+    }
     if let Some(choice) = selection {
         let mut profile = state.selected_profile_id.write().await;
         let mut components = state.selected_component_ids.write().await;
@@ -14995,6 +15044,67 @@ mod tests {
         assert!(missing_chosen_card(Some(&LegacyIndex(0)), Some(&[])).expect("no card at all").contains("lists no NVIDIA card"));
         assert_eq!(missing_chosen_card(Some(&LegacyIndex(7)), None), None, "nvidia-smi did not answer: the card is not called gone");
         assert_eq!(engine_failure_code(&missing), "chosen card not present");
+    }
+
+    #[test]
+    fn a_legacy_gpu_waits_for_an_unambiguous_inventory_then_survives_reordering() {
+        use hardware::GpuChoice;
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("studio-settings.json");
+        let original = serde_json::json!({
+            "engine_options": {"gpu": 0, "future_flag": true},
+            "future_settings": {"keep": "value"},
+        });
+        replace_studio_settings_file(&path, &original).unwrap();
+        let old_bytes = fs::read(&path).unwrap();
+        let first = test_startup_gpu_card(0, 1);
+        let second = test_startup_gpu_card(1, 2);
+        let duplicate_index = test_startup_gpu_card(0, 2);
+        assert_eq!(pin_saved_gpu_index(&path, 0, None).unwrap(), None);
+        assert_eq!(pin_saved_gpu_index(&path, 0, Some(&[first.clone(), duplicate_index])).unwrap(), None);
+        assert_eq!(fs::read(&path).unwrap(), old_bytes);
+
+        let inventory = [first.clone(), second];
+        assert_eq!(pin_saved_gpu_index(&path, 0, Some(&inventory)).unwrap(), Some(first.uuid.clone()));
+        let reordered = [test_startup_gpu_card(0, 2), test_startup_gpu_card(1, 1)];
+        let saved: Value = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+        let choice: GpuChoice = serde_json::from_value(saved["engine_options"]["gpu"].clone()).unwrap();
+        assert_eq!(choice.cuda_mask(Some(&reordered)), Some(first.uuid.as_str()));
+        assert_eq!(saved["engine_options"]["future_flag"], true);
+        assert_eq!(saved["future_settings"], original["future_settings"]);
+    }
+
+    #[test]
+    fn a_legacy_gpu_migration_does_not_overwrite_a_parallel_settings_save() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("studio-settings.json");
+        let first = test_startup_gpu_card(0, 1);
+        let second = test_startup_gpu_card(1, 2);
+        replace_studio_settings_file(&path, &serde_json::json!({"engine_options": {"gpu": 0}})).unwrap();
+        let parallel_save = serde_json::json!({"engine_options": {"gpu": second.uuid}, "saved": true});
+        let cards = [first, second];
+        let save_lock = lock_studio_settings_file(&path).unwrap();
+        let started = std::sync::Barrier::new(2);
+        std::thread::scope(|scope| {
+            let migration = scope.spawn(|| {
+                started.wait();
+                pin_saved_gpu_index(&path, 0, Some(&cards)).unwrap()
+            });
+            started.wait();
+            replace_studio_settings_file(&path, &parallel_save).unwrap();
+            drop(save_lock);
+            assert_eq!(migration.join().unwrap().as_deref(), parallel_save["engine_options"]["gpu"].as_str());
+        });
+        assert_eq!(serde_json::from_slice::<Value>(&fs::read(&path).unwrap()).unwrap(), parallel_save);
+    }
+
+    fn test_startup_gpu_card(index: u32, physical: u32) -> hardware::NvidiaCard {
+        hardware::NvidiaCard {
+            index,
+            uuid: format!("GPU-00000000-0000-0000-0000-{physical:012}"),
+            name: "NVIDIA GeForce RTX".into(),
+            memory_gb: 24.0,
+        }
     }
 
     /// A card that ran out of memory has to say so. The studio used to answer
