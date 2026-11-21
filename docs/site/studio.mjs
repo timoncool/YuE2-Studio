@@ -5,8 +5,7 @@ export const STUDIO = {
   name: 'YuE2 Studio',
   repo: 'https://github.com/timoncool/YuE2-Studio',
   site: 'https://timoncool.github.io/YuE2-Studio/',
-  installerMB: 316,
-  updated: '2026-11-13',
+  updated: '2026-11-21',
   speed: {
     en: {
       title: 'How fast is it',
