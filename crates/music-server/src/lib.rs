@@ -36,6 +36,7 @@ mod hotstep_cover;
 mod hotstep_runtime;
 mod hotstep_generation;
 mod hotstep_ace_assets;
+mod hotstep_yue2;
 mod hotstep_heartmula;
 mod hotstep_heartmula_assets;
 mod hotstep_sa3;
@@ -169,6 +170,7 @@ struct AppState {
     hotstep_sa3_install: Arc<tokio::sync::Mutex<()>>,
     hotstep_minimax_install: Arc<tokio::sync::Mutex<()>>,
     hotstep_ace_install: Arc<tokio::sync::Mutex<()>>,
+    hotstep_yue_install: Arc<tokio::sync::Mutex<()>>,
     hotstep_sa3_train_install: Arc<tokio::sync::Mutex<()>>,
     audio_cpp_music_stops: Arc<RwLock<HashMap<String, Arc<std::sync::atomic::AtomicBool>>>>,
     heartmula_install: Arc<tokio::sync::Mutex<()>>,
@@ -1646,6 +1648,7 @@ pub async fn serve_on_port(port: u16) -> anyhow::Result<()> {
         hotstep_sa3_install: Arc::default(),
         hotstep_minimax_install: Arc::default(),
         hotstep_ace_install: Arc::default(),
+        hotstep_yue_install: Arc::default(),
         hotstep_sa3_train_install: Arc::default(),
         audio_cpp_music_stops: Arc::default(),
         heartmula_install: Arc::default(),
@@ -2080,6 +2083,7 @@ pub async fn serve_on_port(port: u16) -> anyhow::Result<()> {
         .route("/v1/music/native/hotstep/heartmula/install", post(hotstep_heartmula::install))
         .route("/v1/music/native/hotstep/minimax-music3/install", post(hotstep_generation::install))
         .route("/v1/music/native/hotstep/ace-step-1.5/install", post(hotstep_generation::install_ace))
+        .route("/v1/music/native/hotstep/yue2/install", post(hotstep_generation::install_yue))
         .route("/v1/music/audio-cpp/mulacover/runtime", post(audio_cpp_mulacover::install_runtime))
         .route("/v1/music/audio-cpp/models/install", post(audio_cpp_music::install))
         .route("/v1/music/replay", post(replay_music_job))
@@ -2254,8 +2258,8 @@ fn listed_song(song: &library::Song) -> serde_json::Result<Value> {
                 || [request["duration"].as_f64(), song.metadata["duration_seconds"].as_f64()]
                     .into_iter().flatten().any(|duration| duration > 0.0)
         });
-        let replay_available = kept(&song.replay_request)
-            && (kept(&song.audio_codes) || ace_without_codes);
+        let replay_available = hotstep_generation::family_for_replay(song).is_some()
+            || (kept(&song.replay_request) && (kept(&song.audio_codes) || ace_without_codes));
         fields.insert("replay_available".into(), Value::Bool(replay_available));
         let model_keys: &[&str] = match song.engine_id.as_str() {
             ace::ENGINE_ID => &["synth_model", "lm_model", "vae"],
@@ -11752,6 +11756,7 @@ async fn dispatch_music_job(state: AppState, mut request: CreateMusicJobRequest,
                 hotstep_cover::ENGINE if model == hotstep_heartmula::PROFILE => hotstep_heartmula::submit(state, request, attempt).await,
                 hotstep_cover::ENGINE if model == hotstep_generation::PROFILE => hotstep_generation::submit(state, request, attempt).await,
                 hotstep_cover::ENGINE if model == hotstep_generation::ACE_PROFILE => hotstep_generation::submit_ace(state, request, attempt).await,
+                hotstep_cover::ENGINE if model == hotstep_generation::YUE_PROFILE => hotstep_generation::submit_yue(state, request, attempt).await,
                 hotstep_cover::ENGINE => hotstep_cover::submit(state, request, model, attempt).await,
                 native_minimax::ENGINE_ID => native_music_jobs::submit_minimax(state, request, model, attempt).await,
                 _ => (StatusCode::BAD_REQUEST, Json(failed_request_job(request, engine.clone(), format!("Unknown native engine {engine}.")))),
@@ -11938,12 +11943,13 @@ async fn submit_replay_job(state: AppState, request: ReplayMusicJobRequest, atte
             if song.replay_request.as_ref().is_some_and(|value| value.get("signed_engine").is_some()) {
                 return signed_music_jobs::replay(state, song, request, attempt).await;
             }
+            if let Some(family) = hotstep_generation::family_for_replay(&song) {
+                return hotstep_generation::replay(state, song, request, attempt, family).await;
+            }
             match song.engine_id.as_str() {
                 ace::ENGINE_ID => return native_ace_jobs::replay(state, song, request, attempt).await,
                 native_minimax::ENGINE_ID => return native_music_jobs::replay(state, song, request, attempt).await,
                 hotstep_cover::ENGINE if song.generation_settings["profile_id"] == hotstep_sa3::PROFILE => return hotstep_sa3::replay(state, song, request, attempt).await,
-                hotstep_cover::ENGINE if song.generation_settings["profile_id"] == hotstep_generation::PROFILE => return hotstep_generation::replay(state, song, request, attempt, hotstep_generation::Family::MiniMax).await,
-                hotstep_cover::ENGINE if song.generation_settings["profile_id"] == hotstep_generation::ACE_PROFILE => return hotstep_generation::replay(state, song, request, attempt, hotstep_generation::Family::Ace).await,
                 PRIMARY_MUSIC_ENGINE_ID => {},
                 _ if song.replay_request.is_none() => return Err(api_error(StatusCode::BAD_REQUEST, "This track has no replay request.".into())),
                 _ => return Err(api_error(StatusCode::BAD_REQUEST, format!("Re-rendering is unavailable for engine {}.", song.engine_id))),

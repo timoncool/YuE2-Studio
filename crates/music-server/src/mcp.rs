@@ -593,6 +593,7 @@ const JOURNAL: &[(&str, &str, &str)] = &[
     ("hotstep_cover_install", "started", "download"),
     ("hotstep_minimax_install", "started", "download"),
     ("hotstep_ace_install", "started", "download"),
+    ("hotstep_yue2_install", "started", "download"),
     ("hotstep_sa3_install", "started", "download"),
     ("mulacover_runtime_install", "started", "download"),
     ("vevo2_model_directory_set", "updated", "settings"),
@@ -2420,6 +2421,12 @@ fn tools() -> &'static [Tool] {
                 description: "Install the HOT-Step HeartMuLa 3B Q8_0 generation profile. Read progress in hotstep_cover_profiles.",
                 schema: nothing,
                 call: |_| post("/v1/music/native/hotstep/heartmula/install".into(), json!({})),
+            },
+            Tool {
+                name: "hotstep_yue2_install",
+                description: "Install the published HOT-Step runtime and compatible YuE2 GGUF model. Read progress in hotstep_cover_profiles.",
+                schema: nothing,
+                call: |_| post("/v1/music/native/hotstep/yue2/install".into(), json!({})),
             },
             Tool {
                 name: "hotstep_ace_install",

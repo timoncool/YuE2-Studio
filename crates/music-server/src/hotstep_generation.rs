@@ -7,12 +7,14 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
 pub(super) const PROFILE: &str = "hotstep-minimax-music3";
+pub(super) const YUE_PROFILE: &str = "hotstep-yue2-q4-k-m";
 pub(super) const ACE_PROFILE: &str = "hotstep-ace-step-1.5";
 
 #[derive(Clone, Copy)]
 pub(super) enum Family {
     MiniMax,
     Ace,
+    Yue,
 }
 
 impl Family {
@@ -20,36 +22,42 @@ impl Family {
         match self {
             Self::MiniMax => PROFILE,
             Self::Ace => ACE_PROFILE,
+            Self::Yue => YUE_PROFILE,
         }
     }
     fn name(self) -> &'static str {
         match self {
             Self::MiniMax => "MiniMax Music3",
             Self::Ace => "ACE-Step 1.5",
+            Self::Yue => "YuE2",
         }
     }
     fn family(self) -> &'static str {
         match self {
             Self::MiniMax => "minimax_music3",
             Self::Ace => "ace_step",
+            Self::Yue => "yue2",
         }
     }
     fn folder(self) -> &'static str {
         match self {
             Self::MiniMax => "minimax-music3",
             Self::Ace => "ace-step-1.5",
+            Self::Yue => "yue2",
         }
     }
     fn telemetry(self) -> &'static str {
         match self {
             Self::MiniMax => "hotstep.minimax",
             Self::Ace => "hotstep.ace",
+            Self::Yue => "hotstep.yue2",
         }
     }
     fn label(self) -> &'static str {
         match self {
             Self::MiniMax => "MiniMax Music3 · HOT-Step · Compact (experimental)",
             Self::Ace => "ACE-Step 1.5 Turbo · HOT-Step · Q8_0 (experimental)",
+            Self::Yue => "YuE2 · HOT-Step · Q4_K_M imatrix (experimental)",
         }
     }
     fn license(self) -> &'static str {
@@ -57,6 +65,7 @@ impl Family {
             Self::MiniMax => {
                 "https://huggingface.co/scragnog/MiniMax-Music3-GGUF/blob/67b48c3028544e4ad9c26946b7c7c840f355ec2b/LICENSE"
             }
+            Self::Yue => "https://huggingface.co/scragnog/YuE2-GGUF/blob/eb7de0903bf4dfbd14a2384ae0c0d14150cfa2c7/LICENSE",
             Self::Ace => {
                 "https://huggingface.co/Serveurperso/ACE-Step-1.5-GGUF/tree/666ac70204440867d8c01ba4b119cc79c95b370a"
             }
@@ -66,18 +75,20 @@ impl Family {
         match self {
             Self::MiniMax => &WEIGHTS,
             Self::Ace => &crate::hotstep_ace_assets::ASSETS,
+            Self::Yue => &crate::hotstep_yue2::ASSETS,
         }
     }
     fn lock(self, state: &AppState) -> Arc<tokio::sync::Mutex<()>> {
         match self {
             Self::MiniMax => state.hotstep_minimax_install.clone(),
             Self::Ace => state.hotstep_ace_install.clone(),
+            Self::Yue => state.hotstep_yue_install.clone(),
         }
     }
     fn supported(self, downloader: &downloads::Downloader) -> bool {
         match self {
             Self::MiniMax => runtime::server(downloader).is_some(),
-            Self::Ace => runtime::managed_revision().is_some(),
+            Self::Ace | Self::Yue => runtime::managed_revision().is_some(),
         }
     }
 }
@@ -127,6 +138,7 @@ pub(super) fn sha256(url: &str) -> Option<&'static str> {
     WEIGHTS
         .iter()
         .chain(crate::hotstep_ace_assets::ASSETS.iter())
+        .chain(crate::hotstep_yue2::ASSETS.iter())
         .find_map(|(asset, sha)| (asset.url == url).then_some(*sha))
 }
 
@@ -141,9 +153,8 @@ fn missing(downloader: &downloads::Downloader, family: Family) -> Vec<&'static d
                     let path = downloader.path_of(asset);
                     !std::fs::metadata(&path)
                         .is_ok_and(|file| file.is_file() && file.len() == asset.bytes)
-                        || (asset.marker.ends_with(".lua")
-                            && !crate::install_record::sha256_of(&path)
-                                .is_ok_and(|actual| actual == *sha))
+                        || ((matches!(family, Family::Yue) || asset.marker.ends_with(".lua"))
+                            && !crate::pin_sha::holds(&path, sha))
                 })
                 .map(|(asset, _)| asset),
         )
@@ -175,6 +186,11 @@ pub(super) async fn install_ace(
     State(state): State<AppState>,
 ) -> Result<Json<Value>, (StatusCode, Json<ApiError>)> {
     install_family(state, Family::Ace).await
+}
+pub(super) async fn install_yue(
+    State(state): State<AppState>,
+) -> Result<Json<Value>, (StatusCode, Json<ApiError>)> {
+    install_family(state, Family::Yue).await
 }
 async fn install_family(
     state: AppState,
@@ -322,6 +338,26 @@ pub(super) async fn submit_ace(
     submit_from(state, request, attempt, None, Family::Ace).await
 }
 
+pub(super) async fn submit_yue(
+    state: AppState,
+    request: CreateMusicJobRequest,
+    attempt: u32,
+) -> (StatusCode, Json<MusicJob>) {
+    submit_from(state, request, attempt, None, Family::Yue).await
+}
+
+pub(super) fn family_for_replay(song: &library::Song) -> Option<Family> {
+    if song.engine_id != ENGINE {
+        return None;
+    }
+    match song.generation_settings["profile_id"].as_str()? {
+        PROFILE => Some(Family::MiniMax),
+        ACE_PROFILE => Some(Family::Ace),
+        YUE_PROFILE => Some(Family::Yue),
+        _ => None,
+    }
+}
+
 pub(super) async fn replay(
     state: AppState,
     song: library::Song,
@@ -384,6 +420,7 @@ async fn submit_from(
     let native = match family {
         Family::MiniMax => payload(&mut request),
         Family::Ace => ace_payload(&mut request),
+        Family::Yue => crate::hotstep_yue2::payload(&mut request),
     };
     let body = match native {
         Ok(value) => value,
@@ -439,6 +476,8 @@ async fn submit_from(
             "family":family.family(), "profile_id":family.id(), "model":family.name(), "output_format":format,
             "runtime_revision":runtime::managed_revision(), "native_request":body,
             "duration_seconds":request.duration_seconds, "seed":request.seed, "steps":request.steps,
+            "abc":request.abc, "cot":request.cot, "semantic_tokens":request.semantic_tokens,
+            "semantic_sampling":request.semantic_sampling,
             "cfg_scale":request.cfg_scale, "fade_in":request.fade_in, "fade_out":request.fade_out,
             "mp3_bitrate":request.mp3_bitrate}),
         song: None,
@@ -516,13 +555,14 @@ async fn render(
     let prefix = match family {
         Family::MiniMax => "/mm3",
         Family::Ace => "",
+        Family::Yue => "/yue2",
     };
     let (_child, http, url, props) =
         hotstep_runtime::start(exe, models, &format!("{prefix}/props"), stop).await?;
-    if matches!(family, Family::MiniMax) {
+    if matches!(family, Family::MiniMax | Family::Yue) {
         ensure!(
             props["synth_ready"] == true,
-            "HOT-Step MiniMax Music3 weights are incompatible."
+            "HOT-Step {} weights are incompatible.", family.name()
         );
     }
     let accepted = hotstep_runtime::json_response(
@@ -537,12 +577,13 @@ async fn render(
         .or_else(|| accepted["job_id"].as_str())
         .filter(|id| !id.is_empty() && id.bytes().all(|byte| byte.is_ascii_hexdigit()))
         .context("HOT-Step did not return a valid job ID")?;
+    let job_route = if matches!(family, Family::MiniMax) { "/mm3/job" } else { "/job" };
     let deadline = Instant::now() + Duration::from_secs(1800);
     loop {
         ensure!(!stop.load(Ordering::SeqCst), "Stopped.");
         ensure!(Instant::now() < deadline, "HOT-Step generation timed out.");
         let state = hotstep_runtime::json_response(
-            http.get(format!("{url}{prefix}/job"))
+            http.get(format!("{url}{job_route}"))
                 .query(&[("id", id)])
                 .send()
                 .await?,
@@ -559,7 +600,7 @@ async fn render(
     ensure!(!stop.load(Ordering::SeqCst), "Stopped.");
     let (result, query) = match family {
         Family::MiniMax => ("/mm3/take", [("id", id), ("take", "0")]),
-        Family::Ace => ("/job", [("id", id), ("result", "1")]),
+        Family::Ace | Family::Yue => ("/job", [("id", id), ("result", "1")]),
     };
     let response = http
         .get(format!("{url}{result}"))
