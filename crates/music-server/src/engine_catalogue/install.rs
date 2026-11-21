@@ -398,6 +398,18 @@ async fn resolve_package<P: Package>(
     Ok((package, files, selected))
 }
 
+pub(crate) async fn require_pair_presence(
+    data_root: &Path,
+    engine: &str,
+    model: &str,
+    generation: Option<&str>,
+    model_generation: Option<&str>,
+) -> Result<()> {
+    inspect_engine(data_root, engine, generation, Probe::Presence).await?;
+    inspect_model(data_root, engine, model, model_generation, Probe::Presence).await?;
+    Ok(())
+}
+
 pub(crate) async fn resolve_generation(
     data_root: &Path,
     id: &str,

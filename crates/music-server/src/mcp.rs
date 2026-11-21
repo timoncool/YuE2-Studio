@@ -1225,6 +1225,18 @@ fn tools() -> &'static [Tool] {
                 call: |args| post("/setup/adopt".into(), json!({ "path": text(args, "path")? })),
             },
             Tool {
+                name: "music_pair_status",
+                description: "Read the server-side music pair transition, including requested and active source, exact stage and elapsed time. Does not install files or start a song.",
+                schema: nothing,
+                call: |_| get("/v1/music/pair".into()),
+            },
+            Tool {
+                name: "music_pair_select",
+                description: "Prepare a music source using the same music_source object as song_create. Waits for active generation and does not download missing files. Read music_pair_status for progress.",
+                schema: || object(json!({"music_source":{"type":"object"},"client_id":{"type":"string"},"sequence":{"type":"integer","minimum":0}}), &["music_source"]),
+                call: |args| post("/v1/music/pair".into(), args.clone()),
+            },
+            Tool {
                 name: "models_update_plan",
                 description: "The update screen's plan of this release: what is updated (from, to, bytes to download, reason), what is new, what former releases left that is no longer needed (paths, bytes freed, reason), the totals, show (whether the window shows the screen at start), and job, the screen's download while it runs and after. models_update_apply carries it out.",
                 schema: nothing,

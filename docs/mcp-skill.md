@@ -116,6 +116,16 @@ to `acestep-cpp` or `minimaxmusic-cpp`. MiniMax takes a caption in `style` and
 the song text in `lyrics`. ACE-specific settings go in `ace`. Poll `song_job_get`
 with the ID returned by `song_create`. Use `song_job_cancel` to stop the job.
 
+Use `music_pair_select` to prepare a `music_source` between jobs. Read
+`music_pair_status` after reconnecting or while waiting. It returns the latest
+`revision`, `requested` and `active` sources, `stage`, `elapsed_ms`, and any
+`waiting_job_id`, `missing_bytes`, or `error`. An accepted song continues on its
+original source until it ends or you explicitly cancel it with `song_job_cancel`.
+Send a stable `client_id` with an increasing `sequence` from each UI window to
+keep delayed requests from overriding that window's latest selection. When
+`stage` is `needs_install`, install the listed resources and select the pair
+again. `ready` with `load_on_create: true` means the next song starts model work.
+
 For MiniMax Music3 through audio.cpp, call `audio_cpp_music_models` and check that
 `minimax_music3` is ready. Pass `"music_source": {"kind":"audio_cpp","model":"minimax_music3"}`
 to `song_create` with `style`, `lyrics`, and an optional nonnegative `seed`.

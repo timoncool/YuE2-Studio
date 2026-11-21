@@ -5,6 +5,8 @@ import base64, hashlib, http.server, io, json, math, os, pathlib, socket, struct
 exe = pathlib.Path(sys.argv[1]).resolve()
 model = "fixture/sse-music"
 model_name = "Fixture music"
+peer_model = "fixture/sse-music-b"
+final_model = "fixture/sse-music-c"
 wav_buffer = io.BytesIO()
 with wave.open(wav_buffer, "wb") as audio:
     audio.setparams((1, 2, 8000, 0, "NONE", "not compressed"))
@@ -14,6 +16,8 @@ encoded = base64.b64encode(wav).decode()
 calls = []
 slow_started = threading.Event()
 slow_disconnected = threading.Event()
+natural_started = threading.Event()
+finish_naturally = threading.Event()
 
 class Provider(http.server.BaseHTTPRequestHandler):
     def do_POST(self):
@@ -43,6 +47,9 @@ class Provider(http.server.BaseHTTPRequestHandler):
             except OSError:
                 slow_disconnected.set()
                 return
+        if "natural wait case" in content:
+            natural_started.set()
+            assert finish_naturally.wait(8),"the test never released the music response"
         if "incomplete case" not in body["messages"][0]["content"]:
             self.wfile.write(b"data: [DONE]\r\n\r\n")
 
@@ -67,7 +74,7 @@ def local_provider():
 
 with tempfile.TemporaryDirectory(prefix="yue-openrouter-") as profile, local_provider() as upstream:
     root=pathlib.Path(profile)
-    (root/"openrouter-catalog-v2.json").write_text(json.dumps({"models":[{"id":model,"name":model_name,"input_modalities":["text"],"output_modalities":["audio"],"supported_parameters":[],"capabilities":["music_generation"]}]}),encoding="utf8")
+    (root/"openrouter-catalog-v2.json").write_text(json.dumps({"models":[{"id":identifier,"name":model_name,"input_modalities":["text"],"output_modalities":["audio"],"supported_parameters":[],"capabilities":["music_generation"]} for identifier in (model, peer_model, final_model)]}),encoding="utf8")
     port=unused_port()
     # Only this child process gets the disposable Studio profile and credentials.
     for folder in ("home", "appdata", "localappdata"):
@@ -232,6 +239,29 @@ with tempfile.TemporaryDirectory(prefix="yue-openrouter-") as profile, local_pro
         assert code==202,(code,data)
         slow_job=json.loads(data)["id"]
         assert slow_started.wait(5),"provider never started its stream"
+        source_for = lambda model_id: {"kind":"openrouter","model":model_id}
+        def select_pair(model_id, sequence):
+            return tool("music_pair_select", {"music_source":source_for(model_id),
+                        "client_id":"fixture-create-window","sequence":sequence}, 100 + sequence)
+        def wait_for_pair(predicate):
+            for _ in range(120):
+                current = tool("music_pair_status",{},120)
+                if predicate(current):
+                    return current
+                time.sleep(.05)
+            raise AssertionError(current)
+        pair_b = select_pair(peer_model, 1)
+        duplicate_b = select_pair(peer_model, 2)
+        assert duplicate_b["revision"] == pair_b["revision"], duplicate_b
+        pair_c = select_pair(final_model, 4)
+        late_b = select_pair(peer_model, 3)
+        assert late_b["revision"] == pair_c["revision"] and late_b["requested"] == source_for(final_model), late_b
+        waiting = wait_for_pair(lambda pair:pair["stage"] == "waiting_for_generation")
+        assert waiting["waiting_job_id"] == slow_job and waiting["active"] == source_for(model), waiting
+        assert waiting["requested"] == source_for(final_model), waiting
+        code,reconnected = request("/v1/music/pair")
+        assert code == 200 and json.loads(reconnected)["revision"] == pair_c["revision"], reconnected
+        assert len(calls) == 4,calls
         if sys.platform in ("win32", "linux") and os.environ.get("PROCESSOR_ARCHITECTURE", "AMD64").lower() in ("amd64", "x86_64"):
             native=root/"rvc"/"native"
             native_runtime=native/"v1"
@@ -258,12 +288,46 @@ with tempfile.TemporaryDirectory(prefix="yue-openrouter-") as profile, local_pro
         code,data=request("/v1/music/jobs/"+slow_job,{})
         assert code==200 and json.loads(data)["status"]=="cancelled",(code,data)
         assert slow_disconnected.wait(5),"cancel did not close the upstream HTTP connection"
+        prepared = wait_for_pair(lambda pair:pair["stage"] == "ready")
+        assert prepared["active"] == source_for(final_model) and prepared["load_on_create"], prepared
+        assert prepared["revision"] == pair_c["revision"] and len(calls)==4,prepared
+        same = select_pair(final_model, 5)
+        assert same["revision"] == prepared["revision"],same
         code,data=request("/v1/music/jobs/"+slow_job)
         assert code==200 and json.loads(data)["status"]=="cancelled" and not json.loads(data).get("song"),(code,data)
         code,data=request("/v1/library/songs")
         assert code==200 and len(json.loads(data))==1,(code,data)
         time.sleep(.35)
         assert tool("rvc_quick_list", {}, 30) == [], "cancelled generation queued RVC"
+        code,data=request("/v1/music/jobs",dict(body,title="Final paired source",music_source=source_for(final_model)))
+        assert code == 202,(code,data)
+        final = finish(json.loads(data)["id"])
+        assert final["status"] == "completed" and calls[-1]["model"] == final_model,(final,calls[-1])
+        assert len(calls) == 5
+
+        code,data=request("/v1/music/jobs",dict(body,title="Keep the song",style="natural wait case",music_source=source_for(final_model)))
+        assert code == 202,(code,data)
+        natural_id = json.loads(data)["id"]
+        try:
+            assert natural_started.wait(4),"provider never started the song that should finish"
+            wanted_b = select_pair(peer_model, 6)
+            waiting = wait_for_pair(lambda pair:pair["stage"] == "waiting_for_generation")
+            assert waiting["waiting_job_id"] == natural_id and waiting["active"] == source_for(final_model), waiting
+            assert waiting["revision"] == wanted_b["revision"], waiting
+        finally:
+            finish_naturally.set()
+        naturally_finished = finish(natural_id)
+        assert naturally_finished["status"] == "completed" and naturally_finished["song"]["audio_url"], naturally_finished
+        prepared_b = wait_for_pair(lambda pair:pair["stage"] == "ready")
+        assert prepared_b["active"] == source_for(peer_model), prepared_b
+        error = tool("music_pair_select", {"music_source":{"kind":"native","engine":"unknown","model":"fixture"}}, 141)
+        failed_pair = wait_for_pair(lambda pair:pair["stage"] == "error")
+        assert failed_pair["revision"] == error["revision"] and failed_pair["active"] == source_for(peer_model), failed_pair
+        missing = tool("music_pair_select", {"music_source":{"kind":"signed","engine":"missing-engine","model":"missing-model"}}, 142)
+        needs_install = wait_for_pair(lambda pair:pair["stage"] == "needs_install")
+        assert needs_install["revision"] == missing["revision"] and needs_install["active"] == source_for(peer_model), needs_install
+        assert len(calls) == 6
+        print("PASS music pair A -> B -> C, duplicate and reordered requests, reconnect, explicit cancellation and final provider dispatch")
 
     finally:
         proc.terminate()
@@ -276,7 +340,7 @@ with tempfile.TemporaryDirectory(prefix="yue-openrouter-") as profile, local_pro
         assert restored["id"]==song_id and restored["generation_settings"]["model_name"]==model_name,restored
         assert restored["generation_settings"]["model"]==model,restored
         assert assert_played_wav(complete["song"]["audio_url"])==pcm_sha256
-        assert len(calls)==4,calls
+        assert len(calls)==6,calls
         mcp_headers.pop("Mcp-Session-Id", None)
         rpc("initialize", {"protocolVersion": "2025-03-26", "capabilities": {}, "clientInfo": {"name": "rvc-after-qa", "version": "1"}}, 31)
         rpc("notifications/initialized", {})
@@ -297,7 +361,7 @@ with tempfile.TemporaryDirectory(prefix="yue-openrouter-") as profile, local_pro
         assert assert_played_wav(completed_auto["song"]["audio_url"]) == pcm_sha256
 
         print(json.dumps({"status":"pass","http_calls":len(calls),"library_song":song_id,"wav_bytes":len(wav),
-                          "restart_persisted":True,"incomplete_failed":True,"replay_rejected":True,
+                          "restart_persisted":True,"music_pair_lifecycle":True,"incomplete_failed":True,"replay_rejected":True,
                           "explicit_model":model,"upstream_disconnected_on_cancel":True,"cancel_no_import":True,"mcp_tools_list":True,"mcp_catalog":True,"mcp_song_create":True,"model_name":model_name,"id3_artist":model,"pcm_sha256":pcm_sha256,"empty_prompt_rejected":True,"malformed_wav_rejected":True},indent=2))
     finally:
         proc.terminate()
