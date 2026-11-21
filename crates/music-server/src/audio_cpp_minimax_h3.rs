@@ -74,11 +74,8 @@ pub(super) fn catalog(root: Option<&Path>, runtime_ready: bool) -> Value {
         "status": "experimental", "ready": missing.is_empty(), "missing": missing,
         "requires": ["style"], "output_formats": ["flac", "mp3", "wav32"],
         "bytes": bytes, "missing_bytes": missing_bytes,
-        "manual_install": {
-            "source_url": MODEL_SOURCE,
-            "license_url": MODEL_LICENSE,
-            "directory": format!("audiocpp/models/{MODEL_DIR}"),
-        },
+        "package_url": MODEL_SOURCE, "license_url": MODEL_LICENSE,
+        "model_directory": format!("audiocpp/models/{MODEL_DIR}"),
         "duration_seconds": {"min": MIN_SECONDS, "max": MAX_SECONDS, "default": DEFAULT_SECONDS}
     })
 }
@@ -202,10 +199,10 @@ mod tests {
         assert_eq!(expected["status"], "experimental");
         assert_eq!(expected["bytes"], 32_443_213_394_u64);
         assert_eq!(expected["missing_bytes"], expected["bytes"]);
-        assert_eq!(expected["manual_install"]["source_url"], MODEL_SOURCE);
-        assert_eq!(expected["manual_install"]["license_url"], MODEL_LICENSE);
+        assert_eq!(expected["package_url"], MODEL_SOURCE);
+        assert_eq!(expected["license_url"], MODEL_LICENSE);
         assert_eq!(
-            expected["manual_install"]["directory"],
+            expected["model_directory"],
             "audiocpp/models/MiniMax-H3-Q4-GGUF"
         );
         for (weight, _) in WEIGHTS {
