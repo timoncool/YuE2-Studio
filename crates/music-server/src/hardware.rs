@@ -189,7 +189,12 @@ fn probe() -> &'static Hardware {
             card_cuda,
             compute_capability,
             driver_major,
-            recommended: profile_for_machine(total_vram_gb, total_ram_gb, cfg!(target_os = "macos"), crate::model_manager::profile_weights_bytes),
+            recommended: profile_for_machine(
+                total_vram_gb,
+                total_ram_gb,
+                cfg!(all(target_os = "macos", target_arch = "aarch64")),
+                crate::model_manager::profile_weights_bytes,
+            ),
         }
     })
 }
@@ -243,14 +248,14 @@ pub fn ram_needed_gb(profile: &str, weights_bytes: u64, total_vram_gb: f64) -> f
     }
 }
 
-/// Prefer a smaller set on Macs with up to 16 GiB of unified memory.
+/// Prefer a smaller set on Apple Silicon with up to 16 GiB of unified memory.
 /// Otherwise choose the largest set that fits, falling back to Light for RAM-only generation.
-fn profile_for_machine(total_vram_gb: f64, total_ram_gb: f64, macos: bool, weights_bytes: impl Fn(&str) -> u64) -> Option<&'static str> {
-    let dedicated_vram_gb = if macos { 0.0 } else { total_vram_gb };
+fn profile_for_machine(total_vram_gb: f64, total_ram_gb: f64, apple_silicon: bool, weights_bytes: impl Fn(&str) -> u64) -> Option<&'static str> {
+    let dedicated_vram_gb = if apple_silicon { 0.0 } else { total_vram_gb };
     let fits = |id: &str| total_ram_gb >= ram_needed_gb(id, weights_bytes(id), dedicated_vram_gb);
-    // On Macs with up to 16 GiB of unified memory, prefer the smaller backbone
+    // On Apple Silicon with up to 16 GiB of unified memory, prefer the smaller backbone
     // to leave more room for macOS and the rest of the generation workload.
-    if macos && total_ram_gb <= 16.0 {
+    if apple_silicon && total_ram_gb <= 16.0 {
         return Some(FALLBACK_PROFILE).filter(|id| fits(id));
     }
     VRAM_TIERS
@@ -621,13 +626,19 @@ mod tests {
     }
 
     #[test]
-    fn macs_with_up_to_16_gib_recommend_light_when_it_fits() {
+    fn apple_silicon_with_up_to_16_gib_recommends_light_when_it_fits() {
         let weights = crate::model_manager::profile_weights_bytes;
         for memory in [15.0, 16.0] {
             assert_eq!(profile_for_machine(memory, memory, true, weights), Some("light"));
         }
         assert_eq!(profile_for_machine(17.0, 17.0, true, weights), Some("quality-q8"));
         assert_eq!(profile_for_machine(6.0, 6.0, true, weights), None);
+    }
+
+    #[test]
+    fn a_discrete_gpu_with_16_gib_of_system_ram_can_still_recommend_quality() {
+        let weights = crate::model_manager::profile_weights_bytes;
+        assert_eq!(profile_for_machine(8.0, 16.0, false, weights), Some("quality-q8"));
     }
 
     #[test]
