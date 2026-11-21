@@ -13494,6 +13494,10 @@ async fn start_score_on_engine(state: &AppState) -> Result<tokio::sync::OwnedRwL
 async fn watch_score_job(state: AppState, id: String, using: tokio::sync::OwnedRwLockReadGuard<()>) -> ScoreJob {
     let scores = state.score_jobs.clone();
     let submitted = ScoreJob::running(id.clone());
+    // Keep a terminal fallback for the accepted ID if Studio is interrupted before
+    // the watcher can fetch a result. Live polls still use the in-memory job.
+    let interrupted = failed_score(&id, "Studio stopped before this score was saved. Write the score again.".into());
+    store_score(&state.library, &interrupted);
     track_engine_score(scores, submitted, using, async move {
         let mut errors = 0;
         let mut last_answer = std::time::Instant::now();
@@ -13523,11 +13527,7 @@ async fn watch_score_job(state: AppState, id: String, using: tokio::sync::OwnedR
             }
             tokio::time::sleep(std::time::Duration::from_millis(500)).await;
         };
-        if finished.status == "done"
-            && let Err(error) = state.library.save_score_result(&finished, SCORE_CACHE_LIMIT)
-        {
-            eprintln!("[ERROR] the completed score {id} could not be kept: {error:#}");
-        }
+        store_score(&state.library, &finished);
         finished
     }).await
 }
@@ -13619,11 +13619,16 @@ async fn cancel_score_job(
     State(state): State<AppState>,
     Path(job_id): Path<String>,
 ) -> Result<Json<ScoreJob>, (StatusCode, Json<ApiError>)> {
-    if let Some(job) = state.score_jobs.read().await.iter().find(|job| job.id == job_id && job.status != "running" && score_still_cached(job)).cloned() {
-        return Ok(Json(job));
-    }
-    if let Some(score) = stored_score(&state.library, &job_id) {
-        return Ok(Json(score));
+    let cached = state.score_jobs.read().await.iter()
+        .find(|job| job.id == job_id && score_still_cached(job)).cloned();
+    match cached {
+        Some(job) if job.status != "running" => return Ok(Json(job)),
+        None => {
+            if let Some(score) = stored_score(&state.library, &job_id) {
+                return Ok(Json(score));
+            }
+        }
+        Some(_) => {}
     }
     // Cancel only requests that the worker stop. Keep the lease until it actually reports a terminal status.
     match state.music_server.cancel(&job_id).await {
@@ -13634,6 +13639,12 @@ async fn cancel_score_job(
             }
             Err(api_error(StatusCode::SERVICE_UNAVAILABLE, error.to_string()))
         }
+    }
+}
+
+fn store_score(library: &library::Library, score: &ScoreJob) {
+    if let Err(error) = library.save_score_result(score, SCORE_CACHE_LIMIT) {
+        eprintln!("[ERROR] score {} could not be kept: {error:#}", score.id);
     }
 }
 

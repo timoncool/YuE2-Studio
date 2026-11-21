@@ -1123,8 +1123,10 @@ impl Library {
         )?;
         transaction.execute(
             "DELETE FROM score_results WHERE rowid IN
-             (SELECT rowid FROM score_results ORDER BY rowid DESC LIMIT -1 OFFSET ?1)",
-            [i64::try_from(limit)?],
+             (SELECT rowid FROM score_results
+              WHERE (json_extract(result_json, '$.status') = 'done') = ?1
+              ORDER BY rowid DESC LIMIT -1 OFFSET ?2)",
+            params![score.status == "done", i64::try_from(limit)?],
         )?;
         transaction.commit()?;
         Ok(())

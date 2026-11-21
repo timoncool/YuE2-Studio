@@ -4,7 +4,11 @@ use axum::{
     routing::{get, post},
 };
 use serde_json::{Value, json};
-use std::{collections::HashMap, time::Duration};
+use std::{
+    collections::HashMap,
+    sync::atomic::{AtomicUsize, Ordering},
+    time::Duration,
+};
 use tokio::{
     net::TcpListener,
     process::Command,
@@ -18,16 +22,31 @@ async fn completed_score_is_available_by_its_original_id_after_studio_restarts()
     let engine_port = engine.local_addr().unwrap().port();
     let abc = "X:1\nT:Score kept through restart\nK:C\nC D E F|";
     let fixture = tokio::spawn(async move {
+        let submissions = AtomicUsize::new(0);
         let router = Router::new()
             .route("/props", get(|| async { Json(json!({})) }))
             .route(
                 "/synth",
-                post(|| async { Json(json!({"id":"original-score"})) }),
+                post(move || {
+                    let id = match submissions.fetch_add(1, Ordering::Relaxed) {
+                        0 => "original-score",
+                        1 => "cancelled-score",
+                        2 => "interrupted-score",
+                        _ => unreachable!(),
+                    };
+                    async move { Json(json!({"id":id})) }
+                }),
             )
             .route(
                 "/job",
                 get(
                     move |Query(params): Query<HashMap<String, String>>| async move {
+                        if matches!(
+                            params["id"].as_str(),
+                            "interrupted-score" | "cancelled-score"
+                        ) {
+                            return Json(json!({"status":"running"}));
+                        }
                         assert_eq!(params["id"], "original-score");
                         if params.get("result").is_some() {
                             Json(json!({"abc":abc}))
@@ -35,7 +54,12 @@ async fn completed_score_is_available_by_its_original_id_after_studio_restarts()
                             Json(json!({"status":"done"}))
                         }
                     },
-                ),
+                )
+                .post(|Query(params): Query<HashMap<String, String>>| async move {
+                    assert_eq!(params["id"], "cancelled-score");
+                    assert_eq!(params["cancel"], "1");
+                    Json(json!({"status":"cancelled"}))
+                }),
             );
         axum::serve(engine, router).await.unwrap();
     });
@@ -109,6 +133,46 @@ async fn completed_score_is_available_by_its_original_id_after_studio_restarts()
         before,
         json!({"id":"original-score","status":"done","abc":abc})
     );
+    let cancel_url = format!("{url}/v1/scores/cancelled-score");
+    let to_cancel: Value = http
+        .post(format!("{url}/v1/scores"))
+        .json(&json!({"style":"piano"}))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(to_cancel["id"], "cancelled-score");
+    let live_cancel: Value = http
+        .post(cancel_url)
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(live_cancel["status"], "cancelled");
+
+    let interrupted: Value = http
+        .post(format!("{url}/v1/scores"))
+        .json(&json!({"style":"piano","lm_seed":43}))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(
+        interrupted,
+        json!({"id":"interrupted-score","status":"running"})
+    );
     running.kill().await.unwrap();
     fixture.abort();
     let _ = fixture.await;
@@ -137,5 +201,35 @@ async fn completed_score_is_available_by_its_original_id_after_studio_restarts()
         .await
         .unwrap();
     assert_eq!(cancelled, before);
+    let interrupted_url = format!("{url}/v1/scores/interrupted-score");
+    let recovered: Value = http
+        .get(&interrupted_url)
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(recovered["id"], "interrupted-score");
+    assert_eq!(recovered["status"], "failed");
+    assert!(
+        recovered["error"]
+            .as_str()
+            .unwrap()
+            .contains("Studio stopped")
+    );
+    let cancelled_interrupted: Value = http
+        .post(interrupted_url)
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(cancelled_interrupted, recovered);
     restarted.kill().await.unwrap();
 }
