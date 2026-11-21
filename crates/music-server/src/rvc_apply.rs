@@ -68,7 +68,7 @@ async fn setup_status(state: &AppState) -> Value {
     json!({
         "effective_backend": effective,
         "backends": {
-            "vocal-fast-rs": { "ready": native_ready, "can_start": native.is_ok(), "reason": native.err() },
+            "vocal-fast-rs": { "ready": native_ready, "can_start": native.is_ok(), "reason": native.err(), "runtime": crate::rvc_fast_install::selected_backend() },
             "audio.cpp": { "ready": audio_ready, "missing_bytes": missing_bytes },
         },
     })
