@@ -1007,6 +1007,13 @@ fn id_only(name: &str, what: &str) -> Value {
     object(json!({ name: { "type": "string", "description": what } }), &[name])
 }
 
+fn song_create_schema(mut properties: Value) -> Value {
+    properties["heartmula"] = json!({"type":"object","description":"Native HeartMuLa sampling and codec settings.","properties":{"temperature":{"type":"number"},"top_k":{"type":"integer"},"codec_duration_sec":{"type":"number"},"codec_guidance_scale":{"type":"number"}}});
+    properties["midasheng"] = json!({"type":"object","description":"MiDashengLM-Gen scene and sound layers.","properties":{"caption":{"type":"string"},"music":{"type":"string"},"speech_text":{"type":"string"},"speech_style":{"type":"string"},"effects":{"type":"string"},"environment":{"type":"string"}}});
+    properties["vevo2"] = json!({"type":"object","description":"Vevo2 singing references from the song library.","properties":{"voice_song_id":{"type":"string"},"melody_song_id":{"type":"string"}},"required":["voice_song_id"]});
+    object(properties, &["style"])
+}
+
 fn nothing() -> Value {
     json!({ "type": "object", "additionalProperties": false })
 }
@@ -1587,11 +1594,8 @@ fn tools() -> &'static [Tool] {
             Tool {
                 name: "song_create",
                 description: "Generate a song with YuE2, native ACE-Step or MiniMax, an installed audio.cpp music family, or an explicitly selected OpenRouter music model. YuE2 uses the ABC score. Native engines use their own profile and supported controls. style: one English sentence (language, genre, vocal, instruments, mood, production, 'N BPM'). lyrics: sections tagged [Verse 1], [Chorus], [Bridge]... one per line, blank line between sections; empty for an instrumental. abc: a score to sing (from score_compose or an edited one), else the model writes its own. cot: full (melody and chords), melody, or off. adapters: installed LoRA ids with strengths per slot (see lora_list). Returns a job; poll song_job_get until completed, the song then is in the library.",
-                schema: || object(json!({
+                schema: || song_create_schema(json!({
                     "ace": { "type": "object", "description": "ACE-Step generation settings, including guidance_scale, think, source_song_id and reference_song_id." },
-                    "heartmula": {"type":"object","description":"Native HeartMuLa sampling and codec settings.","properties":{"temperature":{"type":"number"},"top_k":{"type":"integer"},"codec_duration_sec":{"type":"number"},"codec_guidance_scale":{"type":"number"}}},
-                    "midasheng": {"type":"object","description":"MiDashengLM-Gen scene and sound layers.","properties":{"caption":{"type":"string"},"music":{"type":"string"},"speech_text":{"type":"string"},"speech_style":{"type":"string"},"effects":{"type":"string"},"environment":{"type":"string"}}},
-                    "vevo2": {"type":"object","description":"Vevo2 singing references from the song library.","properties":{"voice_song_id":{"type":"string"},"melody_song_id":{"type":"string"}},"required":["voice_song_id"]},
                     "music_source": {
                         "description": "Select local YuE2, a native profile from ace_music_profiles or minimax_music_profiles, an audio.cpp model from audio_cpp_music_models, or a cloud model with music_generation capability from openrouter_catalog. OpenRouter submits a paid request to the selected model.",
                         "oneOf": [
@@ -1631,7 +1635,7 @@ fn tools() -> &'static [Tool] {
                     "cover_prompt": { "type": "string", "description": "what the cover should show; it is drawn only when an image model is set up (settings_get, covers), else the song has no cover" },
                     "cover_of": { "type": "string", "description": "for a cover: the library song whose melody abc came from (score_transcribe of it); the new song names it as the track it was made from" },
                     "adapters": { "type": "array", "items": { "type": "object", "properties": { "id": { "type": "string" }, "scales": { "type": "object", "description": "slot -> strength, e.g. {\"ar\": 1, \"nar\": 1}; left out, the LoRA's own strengths, else 1 on each slot it touches" } }, "required": ["id"] } }
-                }), &["style"]),
+                })),
                 call: |args| post("/v1/music/jobs".into(), args.clone()),
             },
             Tool {
