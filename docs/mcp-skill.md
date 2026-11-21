@@ -143,7 +143,9 @@ them in `song_create`.
 For other ready audio.cpp families, pass the ID returned by the same catalog as
 `music_source.model`. HeartMuLa takes lyrics and style tags, with optional
 sampling and codec settings in `heartmula`. For MiDashengLM-Gen, use
-`midasheng` to describe the scene, music, speech, effects and environment. Its
+`audio_cpp_music_models` for the manual Q8_0 file, original terms, destination,
+and bytes missing. Use `midasheng` to describe the scene, music, speech,
+effects and environment. Its
 `duration_seconds` is a budget. The model can finish early. The compact job
 shows `requested_duration_seconds` and, after completion, `effective_duration_seconds`.
 Read `generation_settings.duration_seconds` from the library to repeat the same
@@ -217,7 +219,14 @@ original song ID as `cover_of`, and the native source
 `{"kind":"native","engine":"hotstep","model":"heartmula-mulacover"}`
 to `song_create`. Reuse restores the source and the exact score for the cover.
 
-For Vevo2, pass the lyrics and a library song ID as `vevo2.voice_song_id`.
+For Vevo2, consult the [original model terms](https://huggingface.co/RMSnow/Vevo2).
+Use `vevo2_model_directory_set` with the absolute path on the Studio computer
+to your local folder containing the supported `vevo2-q8_0.gguf` bundle
+(3,242,129,792 bytes). Studio verifies its checksum before saving the folder.
+Pass `null` to return to
+`audiocpp/models/vevo2` in the Studio data folder. The choice survives restarts.
+Read `audio_cpp_music_models` to check the configured directory and runtime
+readiness. Pass the lyrics and a library song ID as `vevo2.voice_song_id`.
 Add `vevo2.melody_song_id` to condition the singing on a second library track.
 
 SoulX-Singer uses separate Q8 weights for singing synthesis (`soulx_singer`)
@@ -232,8 +241,9 @@ Conversion takes `soulx.source_song_id` for the source vocal recording and
 requires libsoxr. The installer handles libsoxr on Windows. On Linux and macOS
 use the system libsoxr package. Both modes save a separate song to the library.
 
-For Magenta RealTime 2, select `magenta_realtime_2` with the installed Small F16
-profile. Use `style` for a text description or `magenta.reference_song_id` for
+For Magenta RealTime 2, select `magenta_realtime_2` with the Small F16 profile.
+Use `audio_cpp_music_models` for the manual file, original terms, destination,
+and bytes missing. Use `style` for a text description or `magenta.reference_song_id` for
 a library track that supplies the musical style. Both modes generate an
 instrumental. The reference sets the style when supplied.
 

@@ -595,6 +595,7 @@ const JOURNAL: &[(&str, &str, &str)] = &[
     ("hotstep_cover_install", "started", "download"),
     ("hotstep_sa3_install", "started", "download"),
     ("mulacover_runtime_install", "started", "download"),
+    ("vevo2_model_directory_set", "updated", "settings"),
     ("recogniser_install", "started", "download"),
     ("midi_install", "started", "download"),
     ("restore_install", "started", "download"),
@@ -2281,6 +2282,12 @@ fn tools() -> &'static [Tool] {
                 description: "Start the managed HOT-Step Stable Audio 3 Medium installation. Read progress in hotstep_cover_profiles.",
                 schema: nothing,
                 call: |_| post("/v1/music/native/hotstep/stable-audio-3/install".into(), json!({})),
+            },
+            Tool {
+                name: "vevo2_model_directory_set",
+                description: "Use a local folder containing your existing vevo2-q8_0.gguf. Use null to return to the Studio data folder. Read audio_cpp_music_models for readiness and original model terms.",
+                schema: || object(json!({"directory": {"type": ["string", "null"]}}), &["directory"]),
+                call: |args| post("/v1/music/audio-cpp/vevo2/model-directory".into(), args.clone()),
             },
             Tool {
                 name: "mulacover_runtime_install",
