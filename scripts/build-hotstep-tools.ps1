@@ -58,6 +58,14 @@ if ($LASTEXITCODE -ne 0) { throw "Could not check out HOT-Step-CPP commit $($sou
 # build tree to configure.
 git -C $worktree submodule update --init --recursive engine/ggml engine/vendor/vst3sdk
 if ($LASTEXITCODE -ne 0) { throw 'Could not initialise the HOT-Step submodules.' }
+$ggml = Join-Path $worktree 'engine/ggml'
+$cpuPatch = Join-Path $PSScriptRoot 'hotstep-ggml-xcr0.patch'
+git -C $ggml apply --reverse --check $cpuPatch 2>$null
+if ($LASTEXITCODE -ne 0) {
+    git -C $ggml apply $cpuPatch
+    if ($LASTEXITCODE -ne 0) { throw 'Could not apply HOT-ggml XCR0 detection.' }
+}
+$cpuPatchHash = (Get-FileHash -LiteralPath $cpuPatch -Algorithm SHA256).Hash.ToLowerInvariant()
 
 # Both tools load each ggml backend as a library, with a build of ggml-cpu for
 # every processor generation: without the CUDA runtime, on a card the build has
@@ -125,7 +133,7 @@ foreach ($tool in $tools) {
 Get-ChildItem -Path $binDirectory -Filter 'ggml*.dll' -File | Copy-Item -Destination $output -Force
 Copy-Item (Join-Path $worktree "$($source.source_dir)\LICENSE") (Join-Path $output 'LICENSE-HOT-Step.txt') -Force
 
-$stamp = [pscustomobject]@{ commit = $source.commit; build = $Build; cuda_architecture = $CudaArchitecture; runtimes = @($tools | ForEach-Object { $shipped[$_] }) }
+$stamp = [pscustomobject]@{ commit = $source.commit; ggml_cpu_patch_sha256 = $cpuPatchHash; build = $Build; cuda_architecture = $CudaArchitecture; runtimes = @($tools | ForEach-Object { $shipped[$_] }) }
 [System.IO.File]::WriteAllText((Join-Path $output 'runtime.json'), ($stamp | ConvertTo-Json), (New-Object System.Text.UTF8Encoding($false)))
 
 $assetName = switch ($Build) { 'cuda13' { $source.asset } 'cuda12' { $midi.cuda12_asset } 'cpu' { $midi.cpu_asset } }
@@ -144,6 +152,7 @@ if ($Build -eq 'cuda13') {
     Copy-Item $caption $captioner -Force
     Get-ChildItem -Path $binDirectory -Filter 'ggml*.dll' -File | Where-Object { $_.Name -ne 'ggml-cuda.dll' } | Copy-Item -Destination $captioner -Force
     Copy-Item (Join-Path $worktree "$($source.source_dir)\LICENSE") (Join-Path $captioner 'LICENSE-HOT-Step.txt') -Force
+    Copy-Item (Join-Path $output 'runtime.json') $captioner
     $captionZip = Join-Path (Split-Path -Parent $output) 'ace-caption-windows-x64.zip'
     if (Test-Path $captionZip) { Remove-Item -Force $captionZip }
     Compress-Archive -Path "$captioner\*" -DestinationPath $captionZip -Force

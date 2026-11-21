@@ -23,6 +23,10 @@ git -C "$worktree" checkout --quiet "$commit"
 # ggml whole; of the VST3 SDK only what the engine's hosting library compiles -
 # its documentation and examples are submodules that do not always resolve
 git -C "$worktree" submodule update --init --recursive engine/ggml
+patch="$root/scripts/hotstep-ggml-xcr0.patch"
+if ! git -C "$worktree/engine/ggml" apply --reverse --check "$patch" 2>/dev/null; then
+    git -C "$worktree/engine/ggml" apply "$patch"
+fi
 git -C "$worktree" submodule update --init engine/vendor/vst3sdk
 git -C "$worktree/engine/vendor/vst3sdk" submodule update --init base pluginterfaces public.sdk
 
@@ -40,7 +44,7 @@ cp "$build/ace-midi" "$output/music-midi"
 cp "$build/ace-caption" "$output/music-caption"
 # -a keeps the version symlinks; the binary finds them through $ORIGIN.
 find "$build" -maxdepth 2 -name 'lib*.so*' -exec cp -a {} "$output/" \;
-echo "$commit" > "$output/runtime.commit"
+printf '%s:%s\n' "$commit" "$(sha256sum "$patch" | cut -d' ' -f1)" > "$output/runtime.commit"
 for binary in music-midi music-caption; do
     # every entry of the path, not the line: CMake appends the toolkit's folder after $ORIGIN
     if readelf -d "$output/$binary" | grep -iE 'runpath|rpath' | grep -qE '(\[|:)/'; then
