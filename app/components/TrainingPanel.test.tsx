@@ -114,6 +114,46 @@ it('displays Burn training progress and keeps a saved checkpoint installable aft
     vi.unstubAllGlobals();
   }
 });
+
+it('can start the same YuE2 dataset with an installed signed trainer', async () => {
+  const state = {
+    pack: [], pack_ready: false, trainer_weights_ready: true, card_trains: true, listen: { ready: true }, runs: [],
+    recipe_defaults: { preset: 'balanced', seed: 42 }, recipe_fields: [],
+    trainers: [{ id: 'music-train-bundled', label: 'Bundled', version: 'original', installed: false, bytes: 500 },
+      { id: 'signed-trainer', label: 'Signed', version: 'revised', installed_version: 'revised', installed: true, bytes: 700 }],
+    datasets: [{ id: 'set', name: 'Test vocals', items: [{
+      id: 'track', source: 'track.wav', title: 'Track', seconds: 12, lyrics_state: 'done', style_state: 'done',
+    }] }],
+  };
+  const start = vi.fn();
+  vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+  vi.stubGlobal('fetch', async (url: string, init?: RequestInit) => {
+    if (url === '/v1/training/runs' && init?.method === 'POST') start(JSON.parse(String(init.body)));
+    return Response.json(url === '/v1/training' ? state : { id: 'run' });
+  });
+  const host = document.createElement('div');
+  const root = createRoot(host);
+  const press = async (text: string) => {
+    const target = [...host.querySelectorAll('button')].find(button => button.textContent?.includes(text))!;
+    expect(target.disabled).toBe(false);
+    await act(async () => target.click());
+  };
+  try {
+    await act(async () => root.render(<TrainingPanel />));
+    await press('Test vocals');
+    await press('2 · trainingStepTrain');
+    const trainer = host.querySelector<HTMLSelectElement>('select:has(option[value="signed-trainer"])')!;
+    await act(async () => {
+      trainer.value = 'signed-trainer';
+      trainer.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    await press('trainingStart');
+    expect(start).toHaveBeenCalledWith({ dataset_id: 'set', name: 'Test vocals', recipe: state.recipe_defaults, trainer_id: 'signed-trainer' });
+  } finally {
+    await act(async () => root.unmount());
+    vi.unstubAllGlobals();
+  }
+});
 it.each(['sa3', 'heartmula', 'rvc'])('starts %s training with its native defaults', async target => {
   const endpoint = `/v1/training/${target === 'rvc' ? 'rvc-burn' : `hotstep-${target}`}`;
   const state = {
