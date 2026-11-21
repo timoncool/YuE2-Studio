@@ -52,6 +52,7 @@ import { NumberField } from './NumberField';
 import { explainCliFailure } from '../services/cliFailure';
 import { loadNativeOpenRouterCatalog, modelsForCapability, refreshNativeOpenRouterCatalog, type NativeOpenRouterModel } from '../services/nativeOpenRouter';
 import { musicSourceStrings, nativeMusicSourceStrings } from '../i18n/musicSource';
+import { useSignedMusicSelection } from '../services/signedMusicSelection';
 import { audioCppMiniMax, isMusicEngine, isProfileMusicEngine, miniMaxOutputFormat, profileMusicEngines, nativeGenerationSettings, useNativeMusicProfiles } from '../services/nativeMusicProfiles';
 import { generationPauseStrings } from '../i18n/generationPause';
 import { afterGenerationPause, formatGenerationCountdown, generationPauseMs, type GenerationPauseMode } from '../services/generationPause';
@@ -418,6 +419,23 @@ const SamplingGrid: React.FC<{ value: SamplingText; defaults?: YueSampling; onCh
 
 const NO_ACTIVITY: ActivityEntry[] = [];
 
+const linkedMusicFamilies = [
+  { id: 'minimaxmusic-cpp', name: 'MiniMax Music3', pairs: [
+    { engine: 'minimaxmusic-cpp', label: 'minimaxmusic.cpp' },
+    { engine: 'audio.cpp', label: 'audio.cpp', profile: audioCppMiniMax },
+  ] },
+  { id: 'heartmula', name: 'HeartMuLa', pairs: [
+    { engine: 'audio.cpp', label: 'audio.cpp', profile: 'heartmula' },
+    { engine: 'hotstep', label: 'HOT-Step', profile: hotStepHeartmulaProfile },
+  ] },
+  { id: 'mulacover', name: 'MuLaCover', pairs: [
+    { engine: 'audio.cpp', label: 'audio.cpp', profile: 'mulacover' },
+    { engine: 'hotstep', label: 'HOT-Step', profile: 'heartmula-mulacover' },
+  ] },
+] as const;
+type LinkedMusicPair = typeof linkedMusicFamilies[number]['pairs'][number];
+const linkedMusicPreferences = 'studio.createLinkedMusicEngines';
+
 // The languages the writing assistant can be told to sing in, each shown in
 // its own script. `name` is the English name the model reads; empty value is
 // "Automatic", which falls back to the studio's UI locale (#198).
@@ -437,9 +455,11 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
   const tt = t as unknown as (key: string) => string;
   const musicStrings = musicSourceStrings[language];
   const cloud = musicEngine === 'openrouter';
+  const signed = musicEngine === 'signed';
+  const packages = useSignedMusicSelection(Boolean(onMusicEngineChange) || signed, signed);
   const nativeEngine = isProfileMusicEngine(musicEngine) ? musicEngine : undefined;
   const audioCpp = nativeEngine === 'audio.cpp';
-  const native = useNativeMusicProfiles(nativeEngine);
+  const native = useNativeMusicProfiles(nativeEngine, Boolean(onMusicEngineChange));
   const hotstepSa3 = nativeEngine === 'hotstep' && native.profile?.id === hotStepSa3Profile;
   const hotstepHeart = nativeEngine === 'hotstep' && native.profile?.id === hotStepHeartmulaProfile;
   const hotstep = nativeEngine === 'hotstep' && !hotstepSa3 && !hotstepHeart;
@@ -447,7 +467,8 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
   const [hotstepSa3Draft, setHotstepSa3Draft] = useState<HotStepSa3Draft>({});
   const [hotstepDraft, setHotstepDraft] = useState<HotStepCoverDraft>({ original: '', abc: '' });
   const audioFamily = audioCpp ? native.profile?.id : undefined;
-  const miniMaxMusic3 = nativeEngine === 'minimaxmusic-cpp' || (audioCpp && native.selectedId === audioCppMiniMax);
+  const linkedFamily = linkedMusicFamilies.find(family => family.pairs.some((pair: LinkedMusicPair) =>
+    pair.engine === nativeEngine && (!('profile' in pair) || pair.profile === native.selectedId)));
   const miDasheng = audioFamily === miDashengModel;
   const magenta = audioFamily === magentaModel;
   const [magentaOptions, setMagentaOptions] = useState(() => restoreMagentaOptions(undefined));
@@ -484,8 +505,9 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
   >({ state: 'idle' });
   const [catalogAttempt, setCatalogAttempt] = useState(0);
   const refreshCatalog = useRef(false);
+  const readMusicCatalog = configured && (cloud || Boolean(onMusicEngineChange));
   useEffect(() => {
-    if (!cloud || !configured) {
+    if (!readMusicCatalog) {
       setMusicCatalog({ state: 'idle' });
       return;
     }
@@ -499,13 +521,58 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
       if (active) setMusicCatalog({ state: 'error' });
     });
     return () => { active = false; };
-  }, [cloud, configured, catalogAttempt]);
+  }, [readMusicCatalog, catalogAttempt]);
   const musicModels = musicCatalog.state === 'ready' ? musicCatalog.models : [];
   const selectedMusicModel = !provider.isError && configured ? musicModels.find(model => model.id === musicModelId) : undefined;
   const changeMusicModel = useCallback((model: string) => {
     setMusicModelId(model);
     try { window.localStorage.setItem('yue:openrouter-music-model', model); } catch { /* kept until a reload */ }
   }, []);
+  const [linkedEngines, setLinkedEngines] = useState<Record<string, MusicEngine>>(() => {
+    try {
+      const prior = JSON.parse(localStorage.getItem(linkedMusicPreferences) ?? '{}');
+      return prior && typeof prior === 'object' ? prior : {};
+    } catch { return {}; }
+  });
+  useEffect(() => {
+    if (!linkedFamily) return;
+    setLinkedEngines(previous => previous[linkedFamily.id] === musicEngine ? previous : { ...previous, [linkedFamily.id]: musicEngine });
+  }, [linkedFamily, musicEngine]);
+  useEffect(() => {
+    try { localStorage.setItem(linkedMusicPreferences, JSON.stringify(linkedEngines)); } catch { /* Keep the choice in the session. */ }
+  }, [linkedEngines]);
+  const modelChoice = linkedFamily ? linkedFamily.id
+    : audioCpp && native.selectedId ? `audio:${native.selectedId}`
+    : nativeEngine === 'hotstep' && native.selectedId && native.hotstepProfiles.some(profile => profile.id === native.selectedId) ? `hotstep:${native.selectedId}`
+    : cloud && selectedMusicModel ? `cloud:${selectedMusicModel.id}`
+    : signed && packages.model ? `signed:${packages.model.id}` : musicEngine;
+  const chooseRoute = (engine: MusicEngine) => {
+    onMusicEngineChange?.(engine);
+    setError(null);
+    setTakeChoiceOpen(false);
+  };
+  const chooseLinkedPair = (pair: LinkedMusicPair) => {
+    if ('profile' in pair) native.select(pair.profile, pair.engine);
+    chooseRoute(pair.engine);
+  };
+  const chooseModelFamily = (value: string) => {
+    const family = linkedMusicFamilies.find(family => family.id === value);
+    if (family) {
+      chooseLinkedPair(family.pairs.find(pair => pair.engine === linkedEngines[family.id]) ?? family.pairs[0]);
+    } else if (value.startsWith('audio:')) {
+      native.select(value.slice(6), 'audio.cpp');
+      chooseRoute('audio.cpp');
+    } else if (value.startsWith('hotstep:')) {
+      native.select(value.slice('hotstep:'.length), 'hotstep');
+      chooseRoute('hotstep');
+    } else if (value.startsWith('signed:')) {
+      packages.selectModel(value.slice('signed:'.length));
+      chooseRoute('signed');
+    } else if (value.startsWith('cloud:')) {
+      changeMusicModel(value.slice(6));
+      chooseRoute('openrouter');
+    } else if (isMusicEngine(value)) chooseRoute(value);
+  };
   const requestCatalogRefresh = () => {
     refreshCatalog.current = true;
     setCatalogAttempt(attempt => attempt + 1);
@@ -1523,6 +1590,16 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
   };
 
   const submit = () => {
+    if (signed) {
+      if (!packages.ready || !packages.engine || !packages.model) return;
+      if (!style.trim() && !lyrics.trim()) { setError(tt('styleOrLyricsRequired')); return; }
+      setError(null);
+      generate({
+        music_source: { kind: 'signed', engine: packages.engine.id, model: packages.model.id },
+        style: finishedStyle(style), lyrics: lyrics.trim(), title: name.trim() || undefined,
+      });
+      return;
+    }
     if (nativeEngine) {
       if (!native.ready || !native.profile || (mulaCover && !mulaOriginal) || (hotstep && (!hotstepDraft.original || !hotstepDraft.abc.trim()))) return;
       if (miDasheng && !miDashengPromptReady(scene)) return;
@@ -1683,7 +1760,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
           <div className="flex items-center justify-between gap-3">
             <div className="min-w-0">
               <h1 className="truncate text-base font-bold">{t('createMusic')}</h1>
-              <p className="mt-0.5 truncate text-[11px] text-zinc-500 dark:text-zinc-400">{nativeEngine ? profileMusicEngines[nativeEngine] : cloud ? 'OpenRouter' : tt('localInferenceYue')}</p>
+              <p className="mt-0.5 truncate text-[11px] text-zinc-500 dark:text-zinc-400">{nativeEngine ? profileMusicEngines[nativeEngine] : signed ? packages.engine?.name : cloud ? 'OpenRouter' : tt('localInferenceYue')}</p>
             </div>
             <div className="flex shrink-0 items-center gap-2">
               {yue && <span className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-semibold ${ready ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-300' : 'bg-amber-500/10 text-amber-700 dark:text-amber-300'}`}>
@@ -1698,34 +1775,52 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
           </div>
 
           {onMusicEngineChange && (
-            <label className="flex items-center gap-2 text-xs font-medium">
-              <span className="shrink-0">{musicStrings.source}</span>
-              <select className={CONTROL} value={musicEngine} onChange={event => {
-                if (isMusicEngine(event.target.value)) onMusicEngineChange(event.target.value);
-                setError(null);
-                setTakeChoiceOpen(false);
-              }}>
-                <option value="local">{musicStrings.local}</option>
-                {Object.entries(profileMusicEngines).map(([engine, label]) => <option key={engine} value={engine}>{label}</option>)}
-                <option value="openrouter">OpenRouter</option>
-              </select>
-            </label>
-          )}
-          {onMusicEngineChange && miniMaxMusic3 && (
-            <label className="flex items-center gap-2 text-xs font-medium">
-              <span className="shrink-0">MiniMax Music3 · {musicStrings.engine}</span>
-              <select className={CONTROL} value={nativeEngine} onChange={event => {
-                const engine = event.target.value;
-                if (engine !== 'minimaxmusic-cpp' && engine !== 'audio.cpp') return;
-                if (engine === 'audio.cpp') native.select(audioCppMiniMax, engine);
-                onMusicEngineChange(engine);
-                setError(null);
-                setTakeChoiceOpen(false);
-              }}>
-                <option value="minimaxmusic-cpp">minimaxmusic.cpp</option>
-                <option value="audio.cpp">audio.cpp</option>
-              </select>
-            </label>
+            <div className="space-y-2">
+              <label className="flex items-center gap-2 text-xs font-medium">
+                <span className="shrink-0">{musicStrings.modelFamily}</span>
+                <select className={CONTROL} value={modelChoice} onChange={event => chooseModelFamily(event.target.value)}>
+                  <option value="local">{musicStrings.local}</option>
+                  <option value="acestep-cpp">{profileMusicEngines['acestep-cpp']}</option>
+                  {linkedMusicFamilies.map(family => <option key={family.id} value={family.id}>{family.name}</option>)}
+                  {native.hotstepProfiles.filter(profile => !linkedMusicFamilies.some(family => family.pairs.some((pair: LinkedMusicPair) =>
+                    pair.engine === 'hotstep' && 'profile' in pair && pair.profile === profile.id))).map(profile =>
+                    <option key={profile.id} value={`hotstep:${profile.id}`}>{profile.label}</option>)}
+                  {native.audioProfiles.filter(profile => !linkedMusicFamilies.some(family => family.pairs.some((pair: LinkedMusicPair) =>
+                    pair.engine === 'audio.cpp' && 'profile' in pair && pair.profile === profile.id))).map(profile =>
+                    <option key={profile.id} value={`audio:${profile.id}`}>{profile.label}</option>)}
+                  {nativeEngine === 'hotstep' && modelChoice === 'hotstep' && <option value="hotstep">HOT-Step</option>}
+                  {audioCpp && !linkedFamily && !native.audioProfiles.some(profile => `audio:${profile.id}` === modelChoice) &&
+                    <option value={modelChoice}>audio.cpp</option>}
+                  <option value="openrouter">OpenRouter</option>
+                  {musicModels.map(model => <option key={model.id} value={`cloud:${model.id}`}>{model.name || model.id} · OpenRouter</option>)}
+                  {packages.models.map(model => <option key={model.id} value={`signed:${model.id}`}>{model.name}</option>)}
+                  {signed && !packages.model && <option value="signed" disabled>{musicStrings.choose}</option>}
+                </select>
+              </label>
+              <label className="flex items-center gap-2 text-xs font-medium">
+                <span className="shrink-0">{musicStrings.engine}</span>
+                <select className={CONTROL} value={signed ? packages.engine?.id ?? '' : musicEngine} onChange={event => {
+                  const engine = event.target.value;
+                  if (signed) { packages.selectEngine(engine); return; }
+                  const pair = linkedFamily?.pairs.find(pair => pair.engine === engine);
+                  if (pair) chooseLinkedPair(pair);
+                }}>
+                  {signed ? packages.engines.length
+                    ? packages.engines.map(engine => <option key={engine.id} value={engine.id}>{engine.name}</option>)
+                    : <option value="">—</option>
+                    : linkedFamily ? linkedFamily.pairs.map(pair => <option key={pair.engine} value={pair.engine}>{pair.label}</option>)
+                    : <option value={musicEngine}>{nativeEngine ? profileMusicEngines[nativeEngine] : cloud ? 'OpenRouter' : 'yue2.cpp'}</option>}
+                </select>
+              </label>
+              {packages.hasCatalogue && (
+                <button type="button" disabled={packages.refreshingCatalogue}
+                  className="text-xs text-pink-600 underline disabled:opacity-50 dark:text-pink-300"
+                  onClick={() => void packages.refreshCatalogue()}>
+                  {musicStrings.refreshPackages}
+                </button>
+              )}
+              {packages.catalogueError && <p role="alert" className="text-xs">{packages.catalogueError}</p>}
+            </div>
           )}
           {yue && !serviceDown && setup?.ready && (
             <button type="button" disabled={engineAction} onClick={() => void changeEnginePause()}
@@ -1748,7 +1843,8 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
                         <ul className="break-all">{native.originalModels.map(model => <li key={model}>{model}</li>)}</ul>
                       </div>
                     )}
-                    {native.profiles.length > 0 && (
+                    {onMusicEngineChange && (audioCpp || nativeEngine === 'hotstep') && native.profile && <p className="text-xs">{native.profile.label}</p>}
+                    {native.profiles.length > 0 && (!onMusicEngineChange || (!audioCpp && nativeEngine !== 'hotstep')) && (
                       <select aria-label={nativeStrings.model} className={CONTROL} value={native.profile?.id ?? ''}
                         onChange={event => native.select(event.target.value)}>
                         <option value="">{musicStrings.choose}</option>
@@ -1772,7 +1868,22 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
                     </button>
                   </div>
                 </Card>
-              ) : <Card title={musicStrings.model}>
+              ) : signed ? <Card title={nativeStrings.model}>
+                {packages.ready && <p role="status" className="text-xs">{t('installed')}</p>}
+                {packages.pending && <p role="status" className="text-xs">{nativeStrings.loading}</p>}
+                {packages.error && <p role="alert" className="text-xs">{packages.error}</p>}
+                {packages.installing ? <p role="status" className="text-xs">{musicStrings.installing}</p>
+                  : packages.missingBytes ? (
+                    <button type="button" className="text-xs text-pink-600 underline dark:text-pink-300"
+                      onClick={() => void packages.install()}>
+                      {musicStrings.installModel} · {new Intl.NumberFormat(language, { maximumFractionDigits: 2 }).format(packages.missingBytes / 2 ** 30)} GiB
+                    </button>
+                  ) : (!packages.ready && !packages.pending && packages.error) && (
+                    <button type="button" className="text-xs text-pink-600 underline dark:text-pink-300" onClick={packages.refresh}>
+                      {musicStrings.refresh}
+                    </button>
+                  )}
+              </Card> : <Card title={musicStrings.model}>
                 {provider.isError ? <p role="alert" className="text-xs">{musicStrings.catalogError}</p>
                   : provider.isPending ? <p role="status" className="text-xs">{musicStrings.loading}</p>
                     : !configured ? (
@@ -1789,7 +1900,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
                       <div className="space-y-2">
                         {musicCatalog.state === 'error' ? <p role="alert" className="text-xs">{musicStrings.catalogError}</p>
                           : musicModels.length === 0 ? <p role="status" className="text-xs">{musicStrings.empty}</p>
-                            : <select aria-label={musicStrings.model} className={CONTROL}
+                            : !onMusicEngineChange && <select aria-label={musicStrings.model} className={CONTROL}
                                 value={selectedMusicModel?.id ?? ''} onChange={event => changeMusicModel(event.target.value)}>
                                 <option value="">{musicStrings.choose}</option>
                                 {musicModels.map(model => <option key={model.id} value={model.id}>{model.name || model.id}</option>)}
@@ -1822,7 +1933,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
               {hotstepSa3 && <HotStepSa3Controls value={hotstepSa3Draft} onChange={setHotstepSa3Draft}
                 adapters={native.profile?.adapters ?? []} control={CONTROL} language={language} />}
               {stableAudio && <StableAudioControls value={stableSettings} onChange={setStableSettings} language={language} />}
-              {nativeEngine && abc.trim() && <p role="status" className="text-xs text-zinc-500">{nativeStrings.scoreKept}</p>}
+              {(nativeEngine || signed) && abc.trim() && <p role="status" className="text-xs text-zinc-500">{nativeStrings.scoreKept}</p>}
               {nativeEngine && (native.profile || native.originalModels) && (
                 <Card title={nativeStrings.settings}>
                   <div className="grid grid-cols-2 gap-2">
@@ -2790,7 +2901,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
         <button
           type="button"
           onClick={submit}
-          disabled={cloud ? !selectedMusicModel : nativeEngine
+          disabled={signed ? !packages.ready : cloud ? !selectedMusicModel : nativeEngine
             ? !native.ready || (miDasheng && !miDashengPromptReady(scene)) || (magenta && !magentaReady) || (mulaCover && !mulaOriginal) || (hotstep && (!hotstepDraft.original || !hotstepDraft.abc.trim()))
             : yue && instrumental && instrumentalLoraLoading && !isGenerating}
           className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-linear-to-r from-orange-500 to-pink-600 text-base font-bold text-white shadow-lg transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"

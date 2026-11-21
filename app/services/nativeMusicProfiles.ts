@@ -10,7 +10,7 @@ export const isNativeMusicEngine = (value: unknown): value is NativeMusicEngine 
 export const isProfileMusicEngine = (value: unknown): value is ProfileMusicEngine =>
   value === 'audio.cpp' || isNativeMusicEngine(value);
 export const isMusicEngine = (value: unknown): value is MusicEngine =>
-  value === 'local' || value === 'openrouter' || isProfileMusicEngine(value);
+  value === 'local' || value === 'openrouter' || value === 'signed' || isProfileMusicEngine(value);
 
 interface NativeProfile {
   id: string;
@@ -74,10 +74,7 @@ export function miniMaxOutputFormat(value: unknown): NonNullable<YueRequest['out
   return value === 'mp3' || value === 'wav32' ? value : 'flac';
 }
 
-export function useNativeMusicProfiles(engine: ProfileMusicEngine | undefined) {
-  const [preferences, setPreferences] = useState(loadPreferences);
-  const [legacyAce, setLegacyAce] = useState<{ models: string[]; settings: Settings }>();
-  const [refreshCount, setRefreshCount] = useState(0);
+function useProfileCatalog(engine: ProfileMusicEngine | undefined, refreshCount: number) {
   const [response, setResponse] = useState<{ engine: ProfileMusicEngine; data?: NativeProfiles; error?: boolean }>();
   useEffect(() => {
     if (!engine) return;
@@ -104,7 +101,17 @@ export function useNativeMusicProfiles(engine: ProfileMusicEngine | undefined) {
     })();
     return () => controller.abort();
   }, [engine, refreshCount]);
-  const result = response?.engine === engine ? response : undefined;
+  return response?.engine === engine ? response : undefined;
+}
+
+export function useNativeMusicProfiles(engine: ProfileMusicEngine | undefined, listModels = false) {
+  const [preferences, setPreferences] = useState(loadPreferences);
+  const [legacyAce, setLegacyAce] = useState<{ models: string[]; settings: Settings }>();
+  const [refreshCount, setRefreshCount] = useState(0);
+  const native = useProfileCatalog(engine === 'audio.cpp' || engine === 'hotstep' ? undefined : engine, refreshCount);
+  const audio = useProfileCatalog(engine === 'audio.cpp' || listModels ? 'audio.cpp' : undefined, refreshCount);
+  const hotstep = useProfileCatalog(engine === 'hotstep' || listModels ? 'hotstep' : undefined, refreshCount);
+  const result = engine === 'audio.cpp' ? audio : engine === 'hotstep' ? hotstep : native;
   const profiles = result?.data?.profiles ?? [];
   const remembered = engine ? preferences.selected[engine] ?? (engine === 'audio.cpp' ? audioCppMiniMax : engine === 'hotstep' ? 'heartmula-mulacover' : undefined) : undefined;
   const pending = engine === 'acestep-cpp' ? legacyAce : undefined;
@@ -116,6 +123,8 @@ export function useNativeMusicProfiles(engine: ProfileMusicEngine | undefined) {
   };
   return {
     profiles,
+    audioProfiles: audio?.data?.profiles ?? [],
+    hotstepProfiles: hotstep?.data?.profiles ?? [],
     profile,
     selectedId: remembered,
     error: result?.error === true,
@@ -124,7 +133,7 @@ export function useNativeMusicProfiles(engine: ProfileMusicEngine | undefined) {
     ready: result?.data?.engine_installed === true && profile?.ready === true,
     originalModels: pending?.models,
     settings: pending?.settings ?? (pair ? preferences.settings[pair] ?? {} : {}),
-    refresh: () => { setResponse(undefined); setRefreshCount(count => count + 1); },
+    refresh: () => setRefreshCount(count => count + 1),
     restore: (source: ProfileMusicEngine, id: string, saved: Record<string, unknown>) => {
       const controls: Settings = {};
       const number = (key: Control, raw: unknown) => {
