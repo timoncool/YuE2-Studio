@@ -70,6 +70,12 @@ def check_macho(binary, app, executable_dir, minimum, checked, inherited_rpaths=
         raise ValueError(f"Expected arm64 in {binary}, found: {architectures}")
     if minos is None or macos_version(minos) > macos_version(minimum):
         raise ValueError(f"{binary} has minOS {minos}; app declares macOS {minimum}")
+    if binary.name.startswith(("libggml-blas", "libggml-cpu")) and macos_version(minimum) < (13, 3, 0):
+        imports = checked_output("nm", "-arch", "arm64", "-u", binary)
+        if "$NEWLAPACK" in imports or "$ILP64" in imports:
+            raise ValueError(f"{binary} imports Accelerate symbols that require macOS 13.3")
+        if binary.name.startswith("libggml-blas") and "_cblas_sgemm" not in imports:
+            raise ValueError(f"{binary} is missing the legacy Accelerate cblas_sgemm import")
     subprocess.run(["codesign", "--verify", "--strict", binary], check=True, timeout=30)
     for dependency in libraries:
         if dependency.startswith(SYSTEM_PATHS):

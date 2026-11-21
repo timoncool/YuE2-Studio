@@ -1,0 +1,43 @@
+diff --git a/engine/src/yue2/sheetsage-events.h b/engine/src/yue2/sheetsage-events.h
+index e5970b98..8da16e1a 100644
+--- a/engine/src/yue2/sheetsage-events.h
++++ b/engine/src/yue2/sheetsage-events.h
+@@ -835,6 +835,30 @@ inline std::string yue2_sheet_python_repr_double(double v) {
+     double av = std::fabs(v);
+
+     char buf[64];
++#if defined(__ENVIRONMENT_MAC_OS_X_VERSION_MIN_REQUIRED__) && __ENVIRONMENT_MAC_OS_X_VERSION_MIN_REQUIRED__ < 130300
++    // libc++ floating-point to_chars is unavailable on macOS 13.0–13.2.
++    // yyjson also writes the shortest round-trippable decimal, without a locale.
++    if (!std::isfinite(v)) return std::isnan(v) ? "nan" : neg ? "-inf" : "inf";
++    yyjson_mut_val json{};
++    yyjson_mut_set_real(&json, av);
++    size_t length = yyjson_mut_val_write_buf(buf, sizeof buf, &json, 0, nullptr);
++    std::string digits(buf, length);
++    size_t exponent = digits.find_first_of("eE");
++    int decpt = 0;
++    if (exponent != std::string::npos) {
++        decpt = std::stoi(digits.substr(exponent + 1));
++        digits.resize(exponent);
++    }
++    size_t dot = digits.find('.');
++    decpt += (int) (dot == std::string::npos ? digits.size() : dot);
++    if (dot != std::string::npos) digits.erase(dot, 1);
++    size_t first = digits.find_first_not_of('0');
++    if (first == std::string::npos) return neg ? "-0.0" : "0.0";
++    digits.erase(0, first);
++    digits.resize(digits.find_last_not_of('0') + 1);
++    decpt -= (int) first;
++    int exp10 = decpt - 1;
++#else
+     auto res = std::to_chars(buf, buf + sizeof buf, av, std::chars_format::scientific);
+     std::string s(buf, res.ptr);
+
+@@ -852,6 +876,7 @@ inline std::string yue2_sheet_python_repr_double(double v) {
+     int exp10 = std::stoi(s.substr(i));
+     if (eneg) exp10 = -exp10;
+     int decpt = exp10 + 1;
++#endif
+
+     bool use_exp = (decpt <= -4) || (decpt > 16);
+     return use_exp ? build_scientific(neg, digits, exp10) : build_fixed(neg, digits, decpt);

@@ -20,6 +20,7 @@ git -C "$worktree" submodule update --init --recursive
 
 cmake -S "$worktree" -B "$worktree/build" -DCMAKE_BUILD_TYPE=Release \
     -DCMAKE_OSX_DEPLOYMENT_TARGET="$deployment_target" \
+    -DCMAKE_PROJECT_TOP_LEVEL_INCLUDES="$root/scripts/macos-runtime-compat.cmake" \
     -DGGML_NATIVE=OFF -DGGML_CPU_ARM_ARCH=armv8.2-a+dotprod+fp16 \
     -DCMAKE_BUILD_WITH_INSTALL_RPATH=ON -DCMAKE_INSTALL_RPATH=@executable_path \
     -DGGML_METAL=ON -DGGML_METAL_EMBED_LIBRARY=ON
