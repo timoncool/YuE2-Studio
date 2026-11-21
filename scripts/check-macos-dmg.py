@@ -115,8 +115,9 @@ def main(dmg):
     finally:
         if mounted or mount.is_mount():
             print(f"Detaching {mount}", flush=True)
-            result = subprocess.run(["hdiutil", "detach", mount], timeout=30)
-            if result.returncode:
+            try:
+                subprocess.run(["hdiutil", "detach", mount], check=True, timeout=30)
+            except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
                 subprocess.run(["hdiutil", "detach", "-force", mount], check=True, timeout=30)
         mount.rmdir()
 
