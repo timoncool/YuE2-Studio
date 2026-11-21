@@ -1,3 +1,4 @@
+import { RvcQuickJobs } from './components/RvcQuickJobs';
 import React, { Activity, useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Sidebar } from './components/Sidebar';
 import { CreatePanel, type CreateRequest } from './components/CreatePanel';
@@ -1715,6 +1716,7 @@ function AppContent() {
       <HubBars items={hubItems} elapsed={hubElapsed} view={hubSection} closed={hubClosed} onClosed={closeHubNotice} />
       {hubPopup && <HubPopup item={hubPopup} onClose={() => closeHubNotice(hubPopup.id)} onOpen={openHubTarget} />}
       <ShellPrompts />
+      <RvcQuickJobs songs={librarySongs} />
       <div className="flex min-h-0 min-w-0 flex-1 overflow-hidden">
         <Sidebar
           currentView={currentView}

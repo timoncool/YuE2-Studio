@@ -17,9 +17,9 @@ const MODEL: downloads::Asset = downloads::Asset {
     note: "Native RVC voice conversion support weights for audio.cpp.",
 };
 
-#[derive(Clone, Copy, Default, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
-enum Backend {
+pub(super) enum Backend {
     #[default]
     Auto,
     VocalFastRs,
@@ -115,19 +115,27 @@ fn bad_gateway(error: impl std::fmt::Display) -> rvc_voices::ApiFailure {
 
 #[derive(Deserialize)]
 pub(super) struct ApplyRequest {
-    song_id: String,
-    voice_id: String,
+    pub(super) song_id: String,
+    pub(super) voice_id: String,
     #[serde(default)]
-    backend: Backend,
+    pub(super) backend: Backend,
     #[serde(default)]
-    semitone_shift: i32,
+    pub(super) semitone_shift: i32,
     #[serde(default)]
-    retrieval_blend: f64,
+    pub(super) retrieval_blend: f64,
 }
 
 pub(super) async fn apply(
     State(state): State<AppState>,
     Json(request): Json<ApplyRequest>,
+) -> Result<(StatusCode, Json<Value>), rvc_voices::ApiFailure> {
+    apply_with(state, request, None).await
+}
+
+pub(super) async fn apply_with(
+    state: AppState,
+    request: ApplyRequest,
+    quick: Option<std::sync::Arc<crate::rvc_quick::Run>>,
 ) -> Result<(StatusCode, Json<Value>), rvc_voices::ApiFailure> {
     if !(-24..=24).contains(&request.semitone_shift)
         || !(0.0..=1.0).contains(&request.retrieval_blend)
@@ -252,16 +260,18 @@ pub(super) async fn apply(
             let stem = audio_pcm::decode_stereo(&path)?.resampled(rate)?;
             add_aligned(&mut backing, &stem)?;
         }
+        let cancelled = || quick.as_ref().is_some_and(|run| run.cancelled());
         let audio_cpp = || convert(&state.acpp, audio_build.context("audio.cpp runtime is unavailable")?,
-            model, &vocal, &weights, index.as_deref(), request.semitone_shift, blend);
+            model, &vocal, &weights, index.as_deref(), request.semitone_shift, blend, &cancelled);
+        anyhow::ensure!(!cancelled(), "RVC conversion cancelled.");
         let native_convert = || rvc_fast::convert(update_data_root(&state), &rvc_fast::Request {
             vocal: &vocal, voice: &weights, index: index.as_deref(),
             semitone_shift: request.semitone_shift, retrieval_blend: blend,
-        });
+        }, &cancelled);
         let (conversion, effective, fallback_reason) = match effective {
             Backend::VocalFastRs => match native_convert() {
                 Ok(output) => (output, Backend::VocalFastRs, None),
-                Err(error) if request.backend == Backend::Auto && audio_build.is_some()
+                Err(error) if !cancelled() && request.backend == Backend::Auto && audio_build.is_some()
                     && error.is::<rvc_fast::BackendFailure>() => {
                     (audio_cpp()?, Backend::AudioCpp, Some(format!("{error:#}")))
                 }
@@ -283,8 +293,9 @@ pub(super) async fn apply(
             "voice_id": voice.id, "voice_name": voice.title(), "voice_sha256": hash,
             "index_sha256": index.as_deref().map(install_record::sha256_of).transpose()?,
             "semitone_shift": request.semitone_shift, "retrieval_blend": blend, "mix_gain": gain,
-            "requested_backend": request.backend, "effective_backend": effective, "fallback_reason": fallback_reason
+            "requested_backend": request.backend, "effective_backend": effective, "fallback_reason": fallback_reason, "quick": quick.is_some()
         });
+        let mut commit = quick.as_ref().map(|run| run.commit()).transpose()?;
         let song = state.library.import_audio_song(library::AudioImportInput {
             title: format!("{} · RVC · {}", original.title, voice.title()),
             caption: original.caption.clone(),
@@ -300,7 +311,11 @@ pub(super) async fn apply(
         if let Err(error) = cover_like(&state, &original, &song.id) {
             studio_log!("[RVC] Could not copy source cover: {error:#}");
         }
-        Ok::<_, anyhow::Error>(json!({ "song_id": song.id, "audio_url": format!("/v1/library/media/{}", song.id), "requested_backend": request.backend, "effective_backend": effective, "fallback_reason": fallback_reason }))
+        let take = json!({ "song_id": song.id, "audio_url": format!("/v1/library/media/{}", song.id), "requested_backend": request.backend, "effective_backend": effective, "fallback_reason": fallback_reason });
+        if let Some(progress) = commit.as_mut() {
+            progress.complete(take.clone());
+        }
+        Ok::<_, anyhow::Error>(take)
     }).await.map_err(rvc_voices::internal)?.map_err(bad_gateway)?;
     Ok((StatusCode::CREATED, Json(result)))
 }
@@ -315,6 +330,7 @@ fn convert(
     index: Option<&FsPath>,
     shift: i32,
     blend: f64,
+    cancelled: &(impl Fn() -> bool + Sync),
 ) -> anyhow::Result<audio_post::Stereo> {
     let mut options =
         json!({ "voice_model_path": weights, "semitone_shift": shift, "retrieval_blend": blend });
@@ -338,7 +354,7 @@ fn convert(
         build,
         entry,
         json!({ "audio": vocal, "options": options }),
-        &|| false,
+        cancelled,
     )?;
     let audio = acpp_server::task_audio(&reply)?
         .into_iter()
