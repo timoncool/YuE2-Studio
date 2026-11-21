@@ -2,13 +2,13 @@ import { useEffect, useState } from 'react';
 import { useI18n } from '../context/I18nContext';
 import { getRvcBurnTraining, startRvcBurnTraining, type Dataset, type RvcBurnSettings, type RvcBurnStatus } from '../services/training';
 
-const copy: Record<string, [string, string, string, string, string]> = {
-  en: ['Add an isolated voice recording to the dataset.', 'RVC Burn requires an NVIDIA CUDA card.', 'RVC Burn components', 'Install voice', 'Voice in catalogue'],
-  ru: ['Добавьте в датасет запись изолированного голоса.', 'Для RVC Burn нужна видеокарта NVIDIA с CUDA.', 'Компоненты RVC Burn', 'Установить голос', 'Голос в каталоге'],
-  zh: ['向数据集添加单独的人声录音。', 'RVC Burn 需要支持 CUDA 的 NVIDIA 显卡。', 'RVC Burn 组件', '安装声音', '声音已在目录中'],
-  ja: ['データセットに単独の音声録音を追加してください。', 'RVC Burn には NVIDIA CUDA GPU が必要です。', 'RVC Burn コンポーネント', '音声をインストール', '音声カタログに追加済み'],
-  ko: ['데이터셋에 분리된 음성 녹음을 추가하세요.', 'RVC Burn에는 NVIDIA CUDA GPU가 필요합니다.', 'RVC Burn 구성 요소', '음성 설치', '카탈로그에 등록됨'],
-  pt: ['Adicione uma gravação vocal isolada ao conjunto.', 'RVC Burn requer uma GPU NVIDIA com CUDA.', 'Componentes do RVC Burn', 'Instalar voz', 'Voz no catálogo'],
+const copy: Record<string, [string, string, string, string, string, string]> = {
+  en: ['Add an isolated voice recording to the dataset.', 'RVC Burn requires an NVIDIA CUDA card.', 'RVC Burn components', 'Install voice', 'Voice in catalogue', 'Batch size'],
+  ru: ['Добавьте в датасет запись изолированного голоса.', 'Для RVC Burn нужна видеокарта NVIDIA с CUDA.', 'Компоненты RVC Burn', 'Установить голос', 'Голос в каталоге', 'Размер пакета'],
+  zh: ['向数据集添加单独的人声录音。', 'RVC Burn 需要支持 CUDA 的 NVIDIA 显卡。', 'RVC Burn 组件', '安装声音', '声音已在目录中', '批量大小'],
+  ja: ['データセットに単独の音声録音を追加してください。', 'RVC Burn には NVIDIA CUDA GPU が必要です。', 'RVC Burn コンポーネント', '音声をインストール', '音声カタログに追加済み', 'バッチサイズ'],
+  ko: ['데이터셋에 분리된 음성 녹음을 추가하세요.', 'RVC Burn에는 NVIDIA CUDA GPU가 필요합니다.', 'RVC Burn 구성 요소', '음성 설치', '카탈로그에 등록됨', '배치 크기'],
+  pt: ['Adicione uma gravação vocal isolada ao conjunto.', 'RVC Burn requer uma GPU NVIDIA com CUDA.', 'Componentes do RVC Burn', 'Instalar voz', 'Voz no catálogo', 'Tamanho do lote'],
 };
 export const rvcBurnText = (language: string) => copy[language] ?? copy.en;
 
@@ -17,7 +17,7 @@ export function RvcBurnTraining({ dataset, busy, card, control, primary, onStart
   onStarted: () => void; onError: (error: string) => void;
 }) {
   const { t, language } = useI18n();
-  const [needsAudio, needsCuda, components] = rvcBurnText(language);
+  const [needsAudio, needsCuda, components, , , batchSize] = rvcBurnText(language);
   const [status, setStatus] = useState<RvcBurnStatus>();
   const [settings, setSettings] = useState<RvcBurnSettings>({ epochs: 5, batch_size: 4, learning_rate: 0.0001 });
   const [working, setWorking] = useState(false);
@@ -38,8 +38,8 @@ export function RvcBurnTraining({ dataset, busy, card, control, primary, onStart
     finally { setWorking(false); }
   }
   const fields = [
-    ['epochs', t('epochs'), 1, 1000, 1],
-    ['batch_size', t('batchSize'), 1, 64, 1],
+    ['epochs', t('trainingField_epochs'), 1, 1000, 1],
+    ['batch_size', batchSize, 1, 64, 1],
     ['learning_rate', t('learningRate'), 1e-9, 0.1, 'any'],
   ] as const;
   return <section className={card}>

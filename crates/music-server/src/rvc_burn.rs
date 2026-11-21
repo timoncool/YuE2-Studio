@@ -117,12 +117,11 @@ impl Runtime {
 
     pub(super) fn training_stage(
         &self,
-        clips: Vec<PathBuf>,
+        clips: &FsPath,
         run: &FsPath,
         settings: &Settings,
     ) -> TrainingStage {
-        let mut args = vec!["train".into()];
-        args.extend(clips.into_iter().map(PathBuf::into_os_string));
+        let mut args = vec!["train".into(), clips.as_os_str().to_owned()];
         args.extend([
             "--out".into(),
             run.join("rvc-output/voice").into_os_string(),

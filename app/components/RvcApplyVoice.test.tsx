@@ -8,6 +8,40 @@ vi.mock('../context/I18nContext', () => ({ useI18n: () => ({ language: 'en', t: 
 vi.mock('./AudioWaveform', () => ({ AudioWaveform: () => null }));
 const flush = () => act(async () => { await new Promise(resolve => setTimeout(resolve, 0)); });
 
+it('uses the Burn engine for a trained voice without changing the legacy engine preference', async () => {
+  const source = { id: 'original', title: 'Original song', stems: ['vocals', 'instrumental'] };
+  const voice = { id: 'voice', model_name: 'My voice', index_name: null, version: 2, format: 'burn_safetensors' as const };
+  const request = vi.fn();
+  vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+  vi.stubGlobal('fetch', async (url: string, init?: RequestInit) => {
+    if (url.endsWith('/setup')) return Response.json({
+      effective_backend: 'audio.cpp',
+      backends: { 'audio.cpp': { ready: true }, 'burn-cuda': { ready: true } },
+    });
+    request(JSON.parse(String(init?.body)));
+    return Response.json({
+      song_id: 'converted', audio_url: '/v1/library/media/converted',
+      requested_backend: 'burn-cuda', effective_backend: 'burn-cuda',
+    });
+  });
+  localStorage.setItem('studio.rvc.backend', 'audio.cpp');
+  const host = document.createElement('div');
+  const root = createRoot(host);
+  try {
+    await act(async () => root.render(<RvcApplyVoice song={source} voice={voice} control="" />));
+    expect(host.querySelector('select')?.value).toBe('burn-cuda');
+    await act(async () => host.querySelector('button')!.click());
+    expect(request).toHaveBeenCalledWith({
+      song_id: source.id, voice_id: voice.id, semitone_shift: 0, retrieval_blend: 0, backend: 'burn-cuda',
+    });
+    expect(localStorage.getItem('studio.rvc.backend')).toBe('audio.cpp');
+  } finally {
+    await act(async () => root.unmount());
+    localStorage.removeItem('studio.rvc.backend');
+    vi.unstubAllGlobals();
+  }
+});
+
 it('keeps explicit RVC backend selection and saves an audio.cpp take from the selected song', async () => {
   const source = { id: 'original', title: 'Original song', stems: ['vocals', 'instrumental'] };
   const voice = { id: 'voice', model_name: 'voice.pth', index_name: null, version: 2 };
