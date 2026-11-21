@@ -4,6 +4,7 @@ import { rvcApplyStrings } from '../i18n/rvcApply';
 import { apiUrl } from '../services/apiBase';
 import { responseJson, type Voice } from '../services/rvcVoices';
 import { chooseLastRvcVoice, readRvcBackend, RVC_BACKEND_STORAGE, type RvcBackend } from '../services/rvcQuick';
+import { AudioComparison } from './AudioComparison';
 import { RvcNativeRuntime } from './RvcNativeRuntime';
 
 const URL = '/v1/rvc/apply';
@@ -13,6 +14,10 @@ type Engine = 'vocal-fast-rs' | 'audio.cpp';
 interface Setup {
   effective_backend: Engine | null;
   backends: Record<Engine, { ready: boolean; can_start?: boolean; reason?: string; missing_bytes?: number }>;
+}
+interface Preview {
+  id: string; before_url: string; after_url: string; effective_backend: Engine; fallback_reason?: string | null;
+  start_seconds: number; end_seconds: number;
 }
 interface Take { song_id: string; audio_url: string; requested_backend: RvcBackend; effective_backend: Engine; fallback_reason?: string | null }
 
@@ -30,9 +35,17 @@ export function RvcApplyVoice({ song, voice, control, onSaved }: {
   const [backend, setBackend] = useState<RvcBackend>(readRvcBackend);
   const [shift, setShift] = useState(0);
   const [blend, setBlend] = useState(0);
-  const [busy, setBusy] = useState<'install' | 'convert'>();
+  const [busy, setBusy] = useState<'install' | 'convert' | 'preview'>();
   const [error, setError] = useState<string>();
   const [take, setTake] = useState<Take>();
+  const [start, setStart] = useState('0');
+  const [end, setEnd] = useState('8');
+  const [previewState, setPreview] = useState<{ key: string; result: Preview }>();
+  const previewKey = JSON.stringify([song.id, voice?.id, backend, shift, blend, start, end]);
+  const preview = previewState?.key === previewKey ? previewState.result : undefined;
+  const duration = Number(end) - Number(start);
+  const validRange = start !== '' && end !== '' && Number(start) >= 0 && duration >= 0.5 && duration <= 15;
+  const canPreview = !!voice && song.stems.includes('vocals') && validRange;
   const hasStems = song.stems.includes('vocals')
     && (song.stems.includes('instrumental') || accompaniment.every(stem => song.stems.includes(stem)));
 
@@ -65,6 +78,29 @@ export function RvcApplyVoice({ song, voice, control, onSaved }: {
     }
   }
 
+  function settings() {
+    return { song_id: song.id, voice_id: voice?.id, semitone_shift: shift,
+      retrieval_blend: voice?.index_name ? blend : 0, backend };
+  }
+
+  async function makePreview() {
+    if (!canPreview || !ready || busy) return;
+    setBusy('preview');
+    setError(undefined);
+    setPreview(undefined);
+    try {
+      const result = await responseJson<Preview>(await fetch('/v1/rvc/preview', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...settings(), start_seconds: Number(start), end_seconds: Number(end) }),
+      }));
+      setPreview({ key: previewKey, result });
+    } catch (failure) {
+      setError(failure instanceof Error ? failure.message : String(failure));
+    } finally {
+      setBusy(undefined);
+    }
+  }
+
   async function apply() {
     if (!voice || !hasStems || !ready || busy) return;
     setBusy('convert');
@@ -73,8 +109,7 @@ export function RvcApplyVoice({ song, voice, control, onSaved }: {
     try {
       const result = await responseJson<Take>(await fetch(URL, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ song_id: song.id, voice_id: voice.id, semitone_shift: shift,
-          retrieval_blend: voice.index_name ? blend : 0, backend }),
+        body: JSON.stringify(settings()),
       }));
       setTake(result);
       onSaved?.();
@@ -132,6 +167,34 @@ export function RvcApplyVoice({ song, voice, control, onSaved }: {
       )}
       {!setup && error && <button type="button" className="text-pink-600 underline dark:text-pink-300"
         onClick={() => { setError(undefined); reloadSetup(); }}>{labels.retry}</button>}
+      {voice && song.stems.includes('vocals') && (
+        <div className="space-y-2">
+          <div className="grid grid-cols-2 gap-2">
+            <label className="space-y-1">
+              <span>{labels.previewStart}</span>
+              <input className={control} type="number" min="0" step="0.1" value={start}
+                disabled={!!busy} onChange={event => setStart(event.target.value)} />
+            </label>
+            <label className="space-y-1">
+              <span>{labels.previewEnd}</span>
+              <input className={control} type="number" min="0.5" step="0.1" value={end}
+                disabled={!!busy} onChange={event => setEnd(event.target.value)} />
+            </label>
+          </div>
+          <button type="button" disabled={!canPreview || !ready || !!busy}
+            className="rounded border border-zinc-200 px-3 py-2 font-semibold disabled:opacity-50 dark:border-white/10"
+            onClick={() => void makePreview()}>{labels.preview}</button>
+          {busy === 'preview' && <p role="status">{labels.previewing}</p>}
+          {preview && (
+            <>
+              <p>{preview.start_seconds.toLocaleString(language)}–{preview.end_seconds.toLocaleString(language)} s · {preview.effective_backend}</p>
+              {preview.fallback_reason && <p>{labels.fallbackReason} {preview.fallback_reason}</p>}
+              <AudioComparison key={preview.id} original={apiUrl(preview.before_url)} processed={apiUrl(preview.after_url)}
+                beforeLabel={labels.previewBefore} afterLabel={labels.previewAfter} />
+            </>
+          )}
+        </div>
+      )}
       <button type="button" disabled={!voice || !hasStems || !ready || !!busy}
         className="rounded border border-zinc-200 px-3 py-2 font-semibold disabled:opacity-50 dark:border-white/10"
         onClick={() => void apply()}>{labels.apply}</button>

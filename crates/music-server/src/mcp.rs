@@ -542,6 +542,7 @@ const JOURNAL: &[(&str, &str, &str)] = &[
     ("rvc_native_runtime_install", "started", "download"),
     ("rvc_native_runtime_cancel", "cancelled", "download"),
     ("rvc_apply", "created", "song"),
+    ("rvc_preview", "started", "processing"),
     ("rvc_voice_select", "updated", "rvc_voice"),
     ("rvc_quick_start", "started", "processing"),
     ("rvc_quick_cancel", "cancelled", "processing"),
@@ -2676,6 +2677,20 @@ fn tools() -> &'static [Tool] {
                 call: |_| send(Method::DELETE, "/v1/rvc/native/runtime".into(), json!({})),
             },
             Tool {
+                name: "rvc_preview",
+                description: "Prepare time-aligned before and after WAVs of an isolated vocal fragment with the chosen installed RVC voice. Returns both URLs and the actual bounds; leaves the library untouched.",
+                schema: || object(json!({
+                    "song_id": { "type": "string" },
+                    "voice_id": { "type": "string", "description": "The installed ID from rvc_voices_list" },
+                    "start_seconds": { "type": "number", "minimum": 0 },
+                    "end_seconds": { "type": "number", "description": "Between 0.5 and 15 seconds after start; shortened to the vocal end if necessary" },
+                    "semitone_shift": { "type": "integer", "minimum": -24, "maximum": 24 },
+                    "retrieval_blend": { "type": "number", "minimum": 0, "maximum": 1 },
+                    "backend": { "type": "string", "enum": ["auto", "vocal-fast-rs", "audio.cpp"] },
+                }), &["song_id", "voice_id", "start_seconds", "end_seconds"]),
+                call: |args| post("/v1/rvc/preview".into(), args.clone()),
+            },
+            Tool {
                 name: "rvc_apply",
                 description: "Convert the separated vocal of a library song with an installed RVC voice, mix it with the existing accompaniment, and save a new song.",
                 schema: || object(json!({
@@ -3937,6 +3952,7 @@ mod tests {
 
     /// Routes an agent is not given, and why.
     const NOT_TOOLS: &[(&str, &str, &str)] = &[
+        ("GET", "/v1/rvc/preview/{id}/{side}", "binary audio from the before_url and after_url answered by rvc_preview"),
         ("GET", "/health", "the service's identity for the desktop shell: initialize names the server and its version"),
         ("POST", "/engine/pick-executable", "a file dialog for the person: engine_options_set takes the executable's path"),
         ("POST", "/setup/kv-cache-notice/seen", "the window's note that it told the person: engine_options_get says the cache and why"),

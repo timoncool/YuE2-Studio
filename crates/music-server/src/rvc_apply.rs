@@ -137,6 +137,15 @@ pub(super) async fn apply_with(
     request: ApplyRequest,
     quick: Option<std::sync::Arc<crate::rvc_quick::Run>>,
 ) -> Result<(StatusCode, Json<Value>), rvc_voices::ApiFailure> {
+    process_request(state, request, quick, None).await
+}
+
+pub(super) async fn process_request(
+    state: AppState,
+    request: ApplyRequest,
+    quick: Option<std::sync::Arc<crate::rvc_quick::Run>>,
+    preview: Option<crate::rvc_audition::Range>,
+) -> Result<(StatusCode, Json<Value>), rvc_voices::ApiFailure> {
     if !(-24..=24).contains(&request.semitone_shift)
         || !(0.0..=1.0).contains(&request.retrieval_blend)
     {
@@ -177,7 +186,7 @@ pub(super) async fn apply_with(
             .map(|stem| stem_path(&state, &original.id, stem))
             .collect()
     };
-    if !vocal.is_file() || !accompaniment.iter().all(|stem| stem.is_file()) {
+    if !vocal.is_file() || preview.is_none() && !accompaniment.iter().all(|stem| stem.is_file()) {
         return Err(api_error(
             StatusCode::CONFLICT,
             "Separate the song into vocals and accompaniment first.".into(),
@@ -238,34 +247,33 @@ pub(super) async fn apply_with(
         let hash = install_record::sha256_of(&weights)?;
         let index = voice.has_index().then(|| copy("retrieval.index")).transpose()?;
         let blend = if index.is_some() { request.retrieval_blend } else { 0.0 };
-        // Validate the source audio and accompaniment before dispatching a backend.
-        let (frames, rate) = {
+        // Keep the preview and the take on their source timeline.
+        let input = audio_pcm::decode_stereo(&vocal)?;
+        anyhow::ensure!(input.left.iter().chain(&input.right).all(|sample| sample.is_finite()), "The source vocal contains invalid audio.");
+        let clip = preview.map(|range| range.stage(&input, stage.path())).transpose()?;
+        let backend_input = clip.as_ref().map_or(vocal.as_path(), |clip| clip.input.as_path());
+        let backing = if clip.is_none() {
             let source_audio = audio_pcm::decode_stereo(&source)?;
-            (source_audio.frames(), source_audio.rate)
+            let (frames, rate) = (source_audio.frames(), source_audio.rate);
+            let duration_delta = (frames as f64 / rate as f64 - input.frames() as f64 / input.rate as f64).abs();
+            anyhow::ensure!(duration_delta <= 0.25, "The vocal stem does not align with the source song.");
+            drop(source_audio);
+            let mut backing = audio_post::Stereo::new(vec![0.0; frames], vec![0.0; frames], rate);
+            for path in accompaniment {
+                let stem = audio_pcm::decode_stereo(&path)?.resampled(rate)?;
+                add_aligned(&mut backing, &stem)?;
+            }
+            Some(backing)
+        } else {
+            None
         };
-        {
-            let vocal_audio = audio_pcm::decode_stereo(&vocal)?;
-            let duration_delta = (frames as f64 / rate as f64
-                - vocal_audio.frames() as f64 / vocal_audio.rate as f64).abs();
-            let valid_audio = vocal_audio.left.iter()
-                .chain(&vocal_audio.right)
-                .all(|sample| sample.is_finite());
-            anyhow::ensure!(
-                duration_delta <= 0.25 && valid_audio,
-                "The vocal stem does not align with the source song or contains invalid audio."
-            );
-        }
-        let mut backing = audio_post::Stereo::new(vec![0.0; frames], vec![0.0; frames], rate);
-        for path in accompaniment {
-            let stem = audio_pcm::decode_stereo(&path)?.resampled(rate)?;
-            add_aligned(&mut backing, &stem)?;
-        }
+        drop(input);
         let cancelled = || quick.as_ref().is_some_and(|run| run.cancelled());
         let audio_cpp = || convert(&state.acpp, audio_build.context("audio.cpp runtime is unavailable")?,
-            model, &vocal, &weights, index.as_deref(), request.semitone_shift, blend, &cancelled);
+            model, backend_input, &weights, index.as_deref(), request.semitone_shift, blend, &cancelled);
         anyhow::ensure!(!cancelled(), "RVC conversion cancelled.");
         let native_convert = || rvc_fast::convert(update_data_root(&state), &rvc_fast::Request {
-            vocal: &vocal, voice: &weights, index: index.as_deref(),
+            vocal: backend_input, voice: &weights, index: index.as_deref(),
             semitone_shift: request.semitone_shift, retrieval_blend: blend,
         }, &cancelled);
         let (conversion, effective, fallback_reason) = match effective {
@@ -281,7 +289,12 @@ pub(super) async fn apply_with(
                 if request.backend == Backend::Auto { native.err() } else { None }),
             Backend::Auto => unreachable!("Auto resolves to a concrete RVC backend"),
         };
-        add_aligned(&mut backing, &conversion.resampled(rate)?)?;
+        if let Some(clip) = clip {
+            return clip.publish(&state.rvc_auditions, conversion, request.backend, effective, fallback_reason);
+        }
+        let mut backing = backing.context("The source backing was not prepared.")?;
+        let converted = conversion.resampled(backing.rate)?;
+        add_aligned(&mut backing, &converted)?;
         let peak = backing.left.iter().chain(&backing.right).map(|sample| sample.abs()).fold(0.0f32, f32::max);
         let gain = if peak > 1.0 { 0.98 / peak } else { 1.0 };
         if gain < 1.0 {
