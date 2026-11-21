@@ -8,6 +8,10 @@ use std::path::{Path as FsPath, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 
 pub(super) const ENGINE: &str = "audio.cpp";
+
+pub(super) fn family_name(id: &str) -> Option<&'static str> {
+    Family::parse(id).map(Family::name)
+}
 const HEARTMULA_INSTALL: &str = "audio-cpp-heartmula";
 const FAMILY: &str = "minimax_music3";
 const PROFILE: &str = "quality-q8";

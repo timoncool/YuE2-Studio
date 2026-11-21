@@ -35,7 +35,7 @@ use axum::Json;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
-use crate::{api_error, ApiError, AppState};
+use crate::{api_error, music_adapter_artist, tagging, ApiError, AppState};
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
@@ -234,7 +234,7 @@ pub struct Progress {
 }
 
 /// Writes `audio_path` out to `folder/<name>.<ext>` per `settings`.
-pub fn run(source: &Path, folder: &Path, name: &str, settings: &Settings, cancel: &AtomicBool, mut tell: impl FnMut(&str, f64)) -> Result<(PathBuf, Report)> {
+fn run(source: &Path, folder: &Path, name: &str, settings: &Settings, artist: Option<&str>, cancel: &AtomicBool, mut tell: impl FnMut(&str, f64)) -> Result<(PathBuf, Report)> {
     settings.check().map_err(anyhow::Error::msg)?;
     let stop = || -> Result<()> {
         if cancel.load(Ordering::Relaxed) {
@@ -332,23 +332,36 @@ pub fn run(source: &Path, folder: &Path, name: &str, settings: &Settings, cancel
     std::fs::create_dir_all(folder).with_context(|| format!("create {}", folder.display()))?;
     let target = unused(folder, &file_name);
     let partial = target.with_file_name(format!("{}.part", target.file_name().and_then(|value| value.to_str()).unwrap_or("export")));
-    let written = (|| -> Result<()> {
+    let written = (|| -> Result<u64> {
         std::fs::write(&partial, &bytes)?;
+        stop()?;
+        if let Some(artist) = artist {
+            use lofty::file::FileType;
+            let file_type = match settings.format {
+                Format::Wav => FileType::Wav,
+                Format::Flac => FileType::Flac,
+                Format::Mp3 => FileType::Mpeg,
+            };
+            tagging::write_staged_tags(&partial, file_type, &tagging::TrackTags {
+                title: name.to_owned(), album: "YuE2 Studio".into(), artist: artist.to_owned(),
+                ..tagging::TrackTags::default()
+            })?;
+        }
+        let size = std::fs::metadata(&partial)?.len();
         stop()?;
         if sha256(source)? != original_sha256 {
             bail!("the original file changed while it was exported; nothing was written");
         }
         std::fs::rename(&partial, &target)?;
-        Ok(())
+        Ok(size)
     })();
-    if let Err(error) = written {
+    let size = written.inspect_err(|_| {
         let _ = std::fs::remove_file(&partial);
-        return Err(error);
-    }
+    })?;
     tell("done", 1.0);
     let report = Report {
         file_name: target.file_name().and_then(|value| value.to_str()).unwrap_or_default().to_owned(),
-        bytes: bytes.len() as u64,
+        bytes: size,
         format: settings.format,
         sample_rate: rate,
         bit_depth: settings.bit_depth,
@@ -474,7 +487,8 @@ pub async fn start(State(state): State<AppState>, Json(start): Json<Start>) -> R
                 entry.progress = Progress { stage: stage.into(), fraction };
             }
         };
-        let outcome = run(&source, &folder, &title, &start.settings, &cancel, tell);
+        let artist = music_adapter_artist(&song.engine_id, &song.generation_settings);
+        let outcome = run(&source, &folder, &title, &start.settings, artist, &cancel, tell);
         match jobs().lock().expect("jobs").get_mut(&job) {
             Some(entry) => {
                 entry.done = true;
@@ -587,7 +601,85 @@ mod tests {
     }
 
     fn export(source: &Path, out: &Path, settings: &Settings) -> (PathBuf, Report) {
-        run(source, out, "Song", settings, &AtomicBool::new(false), |_, _| {}).unwrap()
+        run(source, out, "Song", settings, None, &AtomicBool::new(false), |_, _| {}).unwrap()
+    }
+
+    #[test]
+    fn adapter_exports_write_the_saved_artist_and_keep_wav_pcm_exact() {
+        use lofty::{file::TaggedFileExt, tag::Accessor};
+
+        let folder = tempfile::tempdir().unwrap();
+        let source = write_source(folder.path(), "source.wav", &tone(48_000, 0.25, 0.5), 16);
+        let original_sha256 = sha256(&source).unwrap();
+        let out = folder.path().join("out");
+        let samples = |path: &Path| {
+            hound::WavReader::open(path).unwrap().samples::<i16>().map(Result::unwrap).collect::<Vec<_>>()
+        };
+        for (engine, provenance, expected) in [
+            ("audio.cpp", json!({"family":"heartmula"}), "HeartMuLa"),
+            ("audio.cpp", json!({"music_source":{"kind":"audio_cpp","model":"minimax_music3"}}), "MiniMax Music3"),
+            ("hotstep", json!({"model":" HeartMuLa 3B ","family":"heartmula"}), "HeartMuLa 3B"),
+            ("hotstep", json!({"family":"mulacover"}), "MuLaCover"),
+            ("audio.cpp", json!({"model":"  "}), "audio.cpp"),
+            ("hotstep", Value::Null, "HOT-Step"),
+        ] {
+            let artist = music_adapter_artist(engine, &provenance);
+            let (file, report) = run(&source, &out, "Track", &settings(Format::Wav, None, Some(Depth::Int16)),
+                                     artist, &AtomicBool::new(false), |_, _| {}).unwrap();
+            let tagged = lofty::read_from_path(&file).unwrap();
+            let tag = tagged.primary_tag().unwrap();
+            assert_eq!(tag.title().as_deref(), Some("Track"));
+            assert_eq!(tag.artist().as_deref(), Some(expected));
+            assert_eq!(samples(&file), samples(&source));
+            assert_eq!(report.bytes, std::fs::metadata(&file).unwrap().len());
+            assert_eq!(sha256(&source).unwrap(), original_sha256);
+        }
+        for engine in ["yue2-cpp", "acestep-cpp", "minimaxmusic-cpp", "openrouter"] {
+            assert_eq!(music_adapter_artist(engine, &json!({"model":"Other model"})), None);
+        }
+    }
+
+    #[test]
+    fn adapter_exports_tag_flac_and_mp3_without_changing_the_recording() {
+        use lofty::{file::TaggedFileExt, tag::Accessor};
+
+        let folder = tempfile::tempdir().unwrap();
+        let source = write_source(folder.path(), "source.wav", &tone(48_000, 0.5, 0.5), 16);
+        tagging::write_tags(&source, &tagging::TrackTags {
+            title: "Original title".into(),
+            artist: "Previous artist tag".into(),
+            comment: Some("Original comment".into()),
+            ..tagging::TrackTags::default()
+        }).unwrap();
+        let original_sha256 = sha256(&source).unwrap();
+        let original = crate::audio_pcm::decode_stereo(&source).unwrap();
+        let out = folder.path().join("out");
+        let provenance = json!({"model":"MiniMax Music3", "family":"minimax_music3"});
+        let artist = music_adapter_artist("hotstep", &provenance);
+        for settings in [settings(Format::Flac, None, Some(Depth::Int16)), settings(Format::Mp3, None, None)] {
+            let (file, report) = run(&source, &out, "Track", &settings, artist,
+                                     &AtomicBool::new(false), |_, _| {}).unwrap();
+            let tagged = lofty::read_from_path(&file).unwrap();
+            let tag = tagged.primary_tag().unwrap();
+            assert_eq!(tag.title().as_deref(), Some("Track"));
+            assert_eq!(tag.artist().as_deref(), Some("MiniMax Music3"));
+            assert_eq!(report.bytes, std::fs::metadata(&file).unwrap().len());
+            let decoded = crate::audio_pcm::decode_stereo(&file).unwrap();
+            let untagged = if settings.format == Format::Mp3 {
+                let (reference, _) = export(&source, &out, &settings);
+                Some(crate::audio_pcm::decode_stereo(&reference).unwrap())
+            } else {
+                None
+            };
+            let reference = untagged.as_ref().unwrap_or(&original);
+            assert_eq!(decoded.rate, reference.rate);
+            assert_eq!(decoded.left, reference.left);
+            assert_eq!(decoded.right, reference.right);
+        }
+        assert_eq!(sha256(&source).unwrap(), original_sha256);
+        let source_tags = tagging::read_tags(&std::fs::read(&source).unwrap());
+        assert_eq!(source_tags.title.as_deref(), Some("Original title"));
+        assert_eq!(source_tags.comment.as_deref(), Some("Original comment"));
     }
 
     #[test]
@@ -714,7 +806,7 @@ mod tests {
         let out = folder.path().join("out");
         for stop_at in ["decoding", "measuring", "encoding", "verifying"] {
             let cancel = AtomicBool::new(false);
-            let result = run(&source, &out, "Song", &settings(Format::Flac, Some(44_100), Some(Depth::Int16)), &cancel, |stage, _| {
+            let result = run(&source, &out, "Song", &settings(Format::Flac, Some(44_100), Some(Depth::Int16)), None, &cancel, |stage, _| {
                 if stage == stop_at {
                     cancel.store(true, Ordering::Relaxed);
                 }

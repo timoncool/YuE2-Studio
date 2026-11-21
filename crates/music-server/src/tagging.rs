@@ -234,7 +234,7 @@ fn replace_tagged_audio(staged: &Path, destination: &Path) -> std::io::Result<()
     Err(error)
 }
 
-fn write_staged_tags(path: &Path, file_type: FileType, tags: &TrackTags) -> anyhow::Result<()> {
+pub(super) fn write_staged_tags(path: &Path, file_type: FileType, tags: &TrackTags) -> anyhow::Result<()> {
     let mut tag = Tag::new(file_type.primary_tag_type());
     tag.set_title(tags.title.clone());
     if !tags.album.is_empty() {

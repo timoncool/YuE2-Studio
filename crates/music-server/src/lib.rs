@@ -5330,13 +5330,13 @@ async fn tag_stored_song(state: &AppState, song_id: &str) {
         title: song.title.clone(),
         album: "YuE2 Studio".to_string(),
         // The engine is the performer here; the studio is the label.
-        artist: match song.engine_id.as_str() {
+        artist: music_adapter_artist(&song.engine_id, &song.generation_settings).unwrap_or_else(|| match song.engine_id.as_str() {
             "openrouter" => song.generation_settings.get("model").and_then(Value::as_str)
                 .filter(|id| !id.is_empty()).unwrap_or("OpenRouter"),
             "acestep-cpp" => "ACE-Step",
             "minimaxmusic-cpp" => "MiniMax Music 3",
             _ => "YuE2",
-        }.to_string(),
+        }).to_string(),
         genre: tagging::genre_from_caption(&song.caption),
         lyrics: Some(song.lyrics.clone()).filter(|value| !value.trim().is_empty()),
         bpm: tagging::bpm_from_caption(&song.caption),
@@ -5366,6 +5366,24 @@ async fn tag_stored_song(state: &AppState, song_id: &str) {
         Ok(Err(error)) => eprintln!("could not tag {shown}: {error}"),
         Err(error) => eprintln!("could not tag {shown}: the tagging task stopped: {error}"),
     }
+}
+
+/// These engines host several models, so the saved model takes precedence over the runtime name.
+fn music_adapter_artist<'a>(engine: &str, settings: &'a Value) -> Option<&'a str> {
+    let fallback = match engine {
+        audio_cpp_music::ENGINE => "audio.cpp",
+        hotstep_cover::ENGINE => "HOT-Step",
+        _ => return None,
+    };
+    let text = |value: &'a Value| value.as_str().map(str::trim).filter(|name| !name.is_empty());
+    let family = text(&settings["family"]);
+    let model = text(&settings["model"]).map(|name| audio_cpp_music::family_name(name).unwrap_or(name));
+    let source_model = text(&settings["music_source"]["model"]);
+    Some(model
+        .or_else(|| family.and_then(audio_cpp_music::family_name))
+        .or_else(|| source_model.and_then(audio_cpp_music::family_name))
+        .or(family)
+        .unwrap_or(fallback))
 }
 
 /// Tracks stored before the studio tagged anything carry no tag, and a download
