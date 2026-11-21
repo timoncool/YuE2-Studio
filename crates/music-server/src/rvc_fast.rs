@@ -35,8 +35,25 @@ pub fn availability(data_root: &Path) -> Result<(), String> {
         .map_err(|error| format!("{error:#}"))
 }
 
+/// Reports installation and an already-running worker without starting one.
+pub fn status(data_root: &Path) -> Result<bool, String> {
+    let (runtime, _) = runtime_paths(data_root).map_err(|error| error.to_string())?;
+    let Ok(mut slot) = WORKER.try_lock() else {
+        return Ok(false);
+    };
+    let Some(worker) = slot.as_mut().filter(|worker| worker.runtime == runtime) else {
+        return Ok(false);
+    };
+    worker
+        .child
+        .try_wait()
+        .map(|exit| exit.is_none())
+        .map_err(|error| error.to_string())
+}
+
 pub fn convert(data_root: &Path, request: &Request<'_>) -> Result<audio_post::Stereo> {
     let (runtime, cache) = runtime_paths(data_root)?;
+    std::fs::create_dir_all(&cache).context("Create native RVC cache")?;
     let handoff = tempfile::tempdir_in(&cache)?;
     let output = handoff.path().join("output.wav");
     let ipc = json!({
@@ -86,9 +103,10 @@ fn runtime_paths(data_root: &Path) -> Result<(PathBuf, PathBuf)> {
             bail!("The native RVC component is missing {required}.");
         }
     }
-    let cache = root.join("cache-v1");
-    std::fs::create_dir_all(&cache).context("Create native RVC cache")?;
-    Ok((runtime.canonicalize()?, cache.canonicalize()?))
+    Ok((
+        runtime.canonicalize()?,
+        root.canonicalize()?.join("cache-v1"),
+    ))
 }
 
 fn ensure_worker<'a>(
