@@ -1,0 +1,45 @@
+name: HOT-Step CPU module acceptance
+
+on:
+  push:
+    branches: [qa/hotstep-xcr0-cpu-pack]
+
+permissions:
+  contents: read
+
+jobs:
+  windows-cpu:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+      - name: Fetch the exact HOT-ggml source and old packages
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: pwsh
+        run: |
+          git init ggml
+          git -C ggml fetch --depth=1 https://github.com/scragnog/HOT-ggml.git 9a3939d487be7fb9a868537ebc8c970d461fa8f6
+          git -C ggml checkout --detach FETCH_HEAD
+          git -C ggml apply ../scripts/hotstep-ggml-xcr0.patch
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          gh release download hotstep-tools-75923e70 --repo timoncool/YuE2-Studio --dir old
+      - name: Build only the dynamic CPU variants
+        shell: pwsh
+        run: |
+          $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio/Installer/vswhere.exe'
+          $vs = (& $vswhere -latest -products '*' -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath).Trim()
+          $vcvars = Join-Path $vs 'VC/Auxiliary/Build/vcvars64.bat'
+          $flags = '-DGGML_VULKAN=OFF -DGGML_CUDA=OFF -DGGML_BACKEND_DL=ON -DGGML_CPU_ALL_VARIANTS=ON -DGGML_NATIVE=OFF -DGGML_CCACHE=OFF -DGGML_LLAMAFILE=ON -DGGML_BUILD_TESTS=OFF -DGGML_BUILD_EXAMPLES=OFF'
+          cmd /d /c "call `"$vcvars`" && cmake -S ggml -B build -G Ninja -DCMAKE_BUILD_TYPE=Release $flags && cmake --build build --parallel 4 --target ggml-cpu-x64 ggml-cpu-sse42 ggml-cpu-sandybridge ggml-cpu-haswell ggml-cpu-skylakex ggml-cpu-cannonlake ggml-cpu-cascadelake ggml-cpu-icelake ggml-cpu-alderlake"
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+      - name: Repack and verify both Windows archives
+        run: python scripts/qa-hotstep-xcr0-repack.py old build packages scripts/hotstep-ggml-xcr0.patch
+      - uses: actions/upload-artifact@v7
+        with:
+          name: hotstep-tools-xcr0-windows
+          path: packages
+          if-no-files-found: error
