@@ -11682,17 +11682,7 @@ async fn run_openrouter_music_generation(
             .json(&stream_request.request.body)
             .send().await?
             .error_for_status()?;
-        let mut stream = response.bytes_stream();
-        let mut sse = Vec::new();
-        const MAX_STREAM_BYTES: usize = 128 * 1024 * 1024;
-        while let Some(chunk) = stream.next().await {
-            let chunk = chunk?;
-            if chunk.len() > MAX_STREAM_BYTES.saturating_sub(sse.len()) {
-                anyhow::bail!("OpenRouter music stream is too large");
-            }
-            sse.extend_from_slice(&chunk);
-        }
-        let audio = openrouter_stream::decode_audio_sse(&sse)?;
+        let audio = openrouter_stream::read_audio_sse(response.bytes_stream()).await?;
         let duration = openrouter_stream::wav_duration(&audio)?;
         Ok::<_, anyhow::Error>((audio, duration))
     };
