@@ -417,7 +417,8 @@ async fn exercise_generation(format: Option<&str>) {
         .env("YUE_MINIMAX_MM_SERVER_BIN", &engine)
         .env("YUE_MINIMAX_MODELS_ROOT", &models)
         .env("TIMONCOOL_SHARED_DIR", root.path().join("registry"))
-        .env("DO_NOT_TRACK", "1")
+        .env("DO_NOT_TRACK", "0")
+        .env("STUDIO_TELEMETRY", "1")
         .env("STUDIO_HUB_URL", format!("{url}/fixture-hub"))
         .kill_on_drop(true);
     let mut studio = studio.spawn().unwrap();
@@ -576,6 +577,9 @@ async fn exercise_generation(format: Option<&str>) {
     assert_eq!(submitted["lm_model"], MODELS[0].0);
     assert_eq!(submitted["output_format"], "wav32");
 
+    http.post(format!("{url}/v1/hub/telemetry"))
+        .json(&json!({"enabled":true,"acknowledge":true}))
+        .send().await.unwrap().error_for_status().unwrap();
     let replay = rpc(
         mcp_request(),
         5,
@@ -586,6 +590,16 @@ async fn exercise_generation(format: Option<&str>) {
     let replay_id = replay["id"].as_str().unwrap();
     let rendered = wait_status(&http, &format!("{jobs}/{replay_id}"), "completed").await;
     wait_for_completed_song_counts(&hub_path, 2).await;
+    timeout(Duration::from_secs(10), async {
+        loop {
+            let preview: Value = http.get(format!("{url}/v1/hub/telemetry/preview"))
+                .send().await.unwrap().error_for_status().unwrap().json().await.unwrap();
+            if preview["report"]["model_sets"].as_array().is_some_and(|sets| sets.iter().any(|set|
+                set["set"] == "native.minimax_music3" && set["components"] == json!([ENGINE])
+            )) { break }
+            sleep(Duration::from_millis(50)).await;
+        }
+    }).await.expect("native MiniMax replay appears in the scheduled report");
     let take = &rendered["song"]["song"];
     assert_ne!(take["id"], song["id"]);
     assert_eq!(take["profile_id"], song["profile_id"]);

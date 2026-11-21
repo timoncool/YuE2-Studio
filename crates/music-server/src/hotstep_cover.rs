@@ -70,6 +70,7 @@ pub(super) async fn submit(
     model: String,
     attempt: u32,
 ) -> (StatusCode, Json<MusicJob>) {
+    let submitted = std::time::Instant::now();
     let reject = |status, reason: String| {
         (
             status,
@@ -206,7 +207,7 @@ pub(super) async fn submit(
             .and_then(|result| result),
             Err(error) => Err(error),
         };
-        audio_cpp_music::complete_local(&state, &job.id, MODEL, PROFILE, outcome).await;
+        audio_cpp_music::complete_local(&state, &job.id, MODEL, PROFILE, "hotstep.mulacover", submitted, outcome).await;
         state.audio_cpp_music_stops.write().await.remove(&job.id);
     });
     (StatusCode::ACCEPTED, Json(accepted))
