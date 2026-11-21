@@ -118,6 +118,23 @@ function openDialog(): Element | null {
 
 /// Every visible control, one line each, with the ref the other commands take.
 /// A control inside a song row names the song it belongs to.
+function sampleQaCanvas(canvas: HTMLCanvasElement, mode: string): string {
+  const small = document.createElement('canvas');
+  small.width = small.height = 48;
+  const context = small.getContext('2d')!;
+  context.drawImage(canvas, 0, 0, 48, 48);
+  const { data } = context.getImageData(0, 0, 48, 48);
+  let hash = 2166136261;
+  let colored = 0;
+  for (let index = 0; index < data.length; index += 4) {
+    const rgb = (data[index] << 16) | (data[index + 1] << 8) | data[index + 2];
+    if (rgb) colored++;
+    hash = Math.imul(hash ^ rgb, 16777619);
+  }
+  return JSON.stringify({ mode, colored, hash: hash >>> 0 });
+}
+(window as Window & { __studioQaCanvas?: typeof sampleQaCanvas }).__studioQaCanvas = sampleQaCanvas;
+
 function readPage(): string {
   const lines: string[] = [];
   const dialog = openDialog();
@@ -180,6 +197,18 @@ function readPage(): string {
     if (text && visible(message)) lines.push(`${message.getAttribute('role')} ${JSON.stringify(text.slice(0, 1000))}`);
   }
   for (const [context, row] of rows) lines[row.at] = `${context}: ${row.parts.join(', ')}`;
+  const command = Array.from(dialog?.querySelectorAll('code, pre') ?? []).map(node => node.textContent?.trim()).find(text => text?.startsWith('claude mcp add --transport http '));
+  if (command) lines.push(`QA Agent command ${command}`);
+  const viz = document.querySelector<HTMLElement>('[data-qa-visualizer]');
+  const canvas = viz?.querySelector('canvas');
+  if (viz && canvas && canvas.width > 0 && canvas.height > 0) {
+    try {
+      const sample = viz.dataset.qaSample ?? (viz.dataset.qaVisualizer === 'milkdrop' ? '' : sampleQaCanvas(canvas, viz.dataset.qaVisualizer ?? ''));
+      if (sample) lines.push(`QA visualizer ${sample}`);
+    } catch {
+      // The frame is not yet available. The caller waits for the ready frame.
+    }
+  }
   return lines.join('\n');
 }
 

@@ -1,5 +1,5 @@
 """Drive only the bundled Studio WebView on the isolated Windows runner."""
-import argparse, base64, json, os, pathlib, struct, subprocess, tempfile, time, urllib.request, wave, math
+import argparse, base64, json, os, pathlib, re, struct, subprocess, tempfile, time, urllib.request, wave, math
 
 p = argparse.ArgumentParser()
 p.add_argument("exe", type=pathlib.Path)
@@ -53,6 +53,11 @@ def tool(name, **fields):
     if name == "ui_screenshot":
         return next(item for item in content if item.get("type") == "image")["data"]
     answer = result.get("structuredContent") or content[0]["text"]
+    if isinstance(answer, str) and answer.startswith(("{","[")):
+        try:
+            answer = json.loads(answer)
+        except ValueError:
+            pass
     trace.append(dict(tool=name, fields=fields, answer=answer))
     return answer
 
@@ -108,8 +113,8 @@ def capture_pt():
     ui("open_settings", section="interface")
     options = wait_page(predicate=lambda page: 'select ' in page and '"pt"' in page)
     ui("select", ref=control(options, '"pt"'), value="pt")
-    wait_page('Língua', predicate=lambda page: 'value="pt"' in page)
-    ui("press_key", key="Escape")
+    localized = wait_page(predicate=lambda page: 'value="pt"' in page)
+    click('button ""', localized)
     ui("navigate", view="adapters")
     click('tab "Treino"')
     click('Canções de exemplo')
@@ -123,7 +128,7 @@ def capture_pt():
     (out/"pt-08-training-page.txt").write_text(page, encoding="utf8")
     screenshot("pt-08-training")
     ui("open_settings", section="agent")
-    page = wait_page("Agente (MCP)", "Endereço", "Claude Code")
+    page = wait_page("Agente (MCP)", "Endereço", "Claude Code", "http://127.0.0.1:8791/mcp")
     (out/"pt-11-agent-page.txt").write_text(page, encoding="utf8")
     info = json.loads(request("/mcp/status"))
     assert info["window_open"], info
@@ -131,15 +136,119 @@ def capture_pt():
     screenshot("pt-11-agent")
 
 def check_screens(root):
-    for view in ("create", "library", "search", "tools", "adapters", "news"):
-        ui("navigate", view=view)
-        wait_page(predicate=lambda page: "Page:" in page or "button" in page)
-        (out/f"screen-{view}.txt").write_text(ui("read_page"), encoding="utf8")
-    for section in ("account", "models", "engine", "cloud", "agent", "covers", "interface", "privacy", "about"):
+    ui("navigate", view="create")
+    page = wait_page(predicate=lambda value: '"Style"' in value or '"Use OpenRouter"' in value)
+    if 'button "Use OpenRouter"' in page:
+        click('button "Use OpenRouter"', page)
+        page = wait_page('"Style"')
+    ui("type", ref=control(page, '"Style"'), value="Hosted WebView acceptance")
+    wait_page('value="Hosted WebView acceptance"')
+    (out/"screen-create.txt").write_text(ui("read_page"), encoding="utf8")
+
+    source = root/"hosted-music.wav"
+    with wave.open(str(source), "wb") as audio:
+        audio.setparams((1,2,24000,0,"NONE","not compressed"))
+        frames = bytearray()
+        for i in range(24000*30):
+            amplitude = 8000 * (.55 + .45*math.sin(2*math.pi*2*i/24000))
+            signal = amplitude * (.62*math.sin(2*math.pi*219*i/24000)+.38*math.sin(2*math.pi*437*i/24000))
+            frames.extend(struct.pack("<h", int(signal)))
+        audio.writeframes(frames)
+    song = tool("library_import_audio", path=str(source), title="Hosted QA recording")
+    assert song["id"], song
+    playlist = tool("playlist_create", name="Hosted QA playlist", song_ids=[song["id"]])
+    assert playlist["id"], playlist
+    files = tool("library_song_files", song_id=song["id"])
+    media = pathlib.Path(files["audio"]).parent
+    for stem in ("vocals", "instrumental"):
+        (media/f"{song['id']}-{stem}.wav").write_bytes(source.read_bytes())
+
+    ui("navigate", view="library")
+    page = wait_page("Hosted QA recording")
+    (out/"screen-library.txt").write_text(page, encoding="utf8")
+    click('Hosted QA playlist')
+    page = wait_page('Page: Hosted QA playlist', 'Hosted QA recording')
+    (out/"screen-playlist.txt").write_text(page, encoding="utf8")
+
+    tool("player_play", song_id=song["id"])
+    tool("player_set", volume=.35)
+    tool("player_seek", seconds=2)
+    for _ in range(35):
+        playback = tool("player_state")
+        if playback["playing"] and playback["position_seconds"] > 2.1:
+            break
+        time.sleep(.2)
+    else:
+        raise AssertionError(("audio did not play", playback, ui("console")))
+    json_file(out/"player.json", playback)
+    eq = tool("equalizer_set", enabled=True, bands={"250": 3}, panel_open=True, preamp_db=-2)
+    assert eq["enabled"] and eq["panel_open"] and eq["preamp_db"] == -2, eq
+    assert any(row["hz"] == 250 and row["db"] == 3 for row in eq["bands"]), eq
+    json_file(out/"equalizer.json", eq)
+
+    for mode in ("milkdrop", "spectrum"):
+        tool("visualizer_set", engine=mode, place="panel", locked=True, random=False)
+        hashes = set()
+        values = []
+        for _ in range(35):
+            page = ui("read_page")
+            marker = next((line for line in page.splitlines() if line.startswith("QA visualizer ")), "")
+            if marker:
+                data = json.loads(marker[len("QA visualizer "):])
+                if data["mode"] == mode and data["colored"] > 30:
+                    hashes.add(data["hash"])
+                    values.append(data)
+                    if len(hashes) >= 2:
+                        break
+            time.sleep(.22)
+        json_file(out/f"{mode}-frames.json", values)
+        assert len(hashes) >= 2, (mode, values, page, ui("console"))
+        screenshot(f"visualizer-{mode}")
+    tool("visualizer_set", place="closed")
+    tool("equalizer_set", panel_open=False)
+    tool("winamp_set", on=True, windows={"equalizer":{"open":True},"playlist":{"open":True}})
+    winamp = tool("winamp_get")
+    assert winamp["on"], winamp
+    json_file(out/"winamp.json", winamp)
+    screenshot("winamp")
+    tool("winamp_set", on=False)
+    tool("player_pause")
+
+    ui("navigate", view="tools")
+    page = wait_page("Split into stems", "Open the MIDI editor")
+    (out/"screen-tools.txt").write_text(page, encoding="utf8")
+    click('Open the MIDI editor', page)
+    page = wait_page('MIDI editor')
+    (out/"screen-midi-editor.txt").write_text(page, encoding="utf8")
+    ui("press_key", key="Escape")
+    stem_status = tool("stems_get", song_id=song["id"])
+    json_file(out/"stems.json", stem_status)
+    assert {"vocals","instrumental"} <= set(stem_status["stems"]), stem_status
+
+    ui("navigate", view="library")
+    page = wait_page("Hosted QA recording")
+    song_line = next(line for line in page.splitlines() if "Hosted QA recording" in line and "More actions" in line)
+    ui("click", ref=re.search(r"(e\d+) More actions",song_line)[1])
+    click("Process audio")
+    (out/"screen-processing.txt").write_text(wait_page('Page: Process audio'), encoding="utf8")
+
+    ui("navigate", view="adapters")
+    click('tab "Training"')
+    click('Canções de exemplo')
+    click('Result')
+    wait_page('LoRA de exemplo')
+    (out/"screen-training.txt").write_text(ui("read_page"), encoding="utf8")
+    ui("navigate", view="news")
+    (out/"screen-news.txt").write_text(wait_page('News'), encoding="utf8")
+    sections = dict(account="Account", models="Models", engine="Local engine", cloud="Providers",
+                    agent="Agent (MCP)", covers="Cover art", interface="Appearance", privacy="Privacy", about="About")
+    for section, label in sections.items():
         ui("open_settings", section=section)
-        page = wait_page(predicate=lambda page: "Settings" in page)
+        page = wait_page("Page: " + label)
         (out/f"settings-{section}.txt").write_text(page, encoding="utf8")
     (out/"console.txt").write_text(ui("console"), encoding="utf8")
+    assert not re.search(r"butterchurn.*(?:error|not a function)|(?:error|not a function).*butterchurn", ui("console"), re.I)
+
 
 with tempfile.TemporaryDirectory(prefix="studio-hosted-webview-") as directory:
     root = pathlib.Path(directory)

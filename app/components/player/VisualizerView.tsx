@@ -161,6 +161,14 @@ export const VisualizerView: React.FC<{
         setReady(true);
         const draw = () => {
           drawer.render();
+          // Hosted QA samples the live buffer before WebGL presents it.
+          if (canvas.current && box.current) {
+            const sample = (window as Window & { __studioQaCanvas?: (element: HTMLCanvasElement, mode: string) => string }).__studioQaCanvas;
+            if (sample && Math.floor(performance.now() / 200) !== Number(box.current.dataset.qaTick)) {
+              box.current.dataset.qaTick = String(Math.floor(performance.now() / 200));
+              box.current.dataset.qaSample = sample(canvas.current, engine);
+            }
+          }
           frame = requestAnimationFrame(draw);
         };
         frame = requestAnimationFrame(draw);
@@ -337,6 +345,7 @@ export const VisualizerView: React.FC<{
   return (
     <div
       ref={box}
+      data-qa-visualizer={engine}
       tabIndex={0}
       onKeyDown={onKey}
       onDoubleClick={onFullscreen}
