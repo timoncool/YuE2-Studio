@@ -236,12 +236,52 @@ fn midi_note_page(mut song: Value, offset: Option<u64>) -> Value {
     }
 }
 
+fn rvc_catalog_match(voice: &Value, args: &Value) -> bool {
+    let metadata = &voice["metadata"];
+    if let Some(query) = args["query"].as_str().filter(|query| !query.trim().is_empty()) {
+        let mut text = voice["name"].as_str().unwrap_or_default().to_lowercase();
+        for label in metadata["source_labels"].as_array().into_iter().flatten().filter_map(Value::as_str) {
+            text.push(' ');
+            text.push_str(&label.to_lowercase());
+        }
+        if !query.to_lowercase().split_whitespace().all(|term| text.contains(term)) {
+            return false;
+        }
+    }
+    for key in ["vocal_style", "rvc_version"] {
+        if let Some(value) = args[key].as_str().filter(|value| !value.trim().is_empty()) {
+            let matches = metadata[key].as_str().is_some_and(|actual| actual.to_lowercase() == value.trim().to_lowercase())
+                || metadata[key].as_u64().is_some_and(|actual| actual.to_string() == value.trim());
+            if !matches {
+                return false;
+            }
+        }
+    }
+    if let Some(rate) = args["sample_rate_hz"].as_u64() {
+        if metadata["sample_rate_hz"].as_u64() != Some(rate) {
+            return false;
+        }
+    }
+    let has_index = voice["has_index"].as_bool().unwrap_or(!voice["index"].is_null());
+    args["has_index"].as_bool().is_none_or(|requested| requested == has_index)
+}
+
 /// What an agent is answered: the parts it acts on, unless it asked for
 /// every field with response_format detailed.
 fn shape(name: &str, args: &Value, value: Value) -> Value {
     let detailed = args.get("response_format").and_then(Value::as_str) == Some("detailed");
     match name {
         "training_status" if !detailed => compact_training(&value),
+        "rvc_catalog_list" => {
+            let entries: Vec<_> = value.as_array().into_iter().flatten()
+                .filter(|voice| rvc_catalog_match(voice, args)).collect();
+            let offset = args["offset"].as_u64().unwrap_or(0).min(entries.len() as u64) as usize;
+            let end = (offset + 20).min(entries.len());
+            json!({
+                "total": entries.len(), "offset": offset, "voices": &entries[offset..end],
+                "next_offset": (end < entries.len()).then_some(end),
+            })
+        },
         "song_create" | "song_job_get" | "song_replay" if !detailed => compact_job(&value),
         "song_jobs_list" if !detailed => Value::Array(value.as_array().into_iter().flatten().map(compact_job).collect()),
         "library_song_get" if !detailed => compact_song(&value),
@@ -408,11 +448,11 @@ async fn wait_for(args: &Value) -> Result<Value, String> {
 
 /// MCP tool annotations, from what each tool does.
 fn annotations(name: &str) -> Value {
-    const READS: &[&str] = &["_get", "_status", "_list", "_catalog", "_files", "_logs", "_log", "_runtime", "_local_models", "_hf_files", "_search_hf", "_capabilities", "_system", "_state", "_read_page", "_screenshot"];
+    const READS: &[&str] = &["_get", "_status", "_list", "_catalog", "_profiles", "_files", "_logs", "_log", "_runtime", "_local_models", "_hf_files", "_search_hf", "_capabilities", "_system", "_state", "_read_page", "_screenshot"];
     // a verb that changes something outweighs a noun that reads
     const CHANGES: &[&str] = &["install", "import", "remove", "delete", "refresh", "create", "update", "start", "cancel", "select", "download", "apply", "restart"];
     // reads whose names the rules above miss: create_form names the create page
-    const READ_NAMES: &[&str] = &["lyrics_syllables", "assistant_cli_agents", "system_gpus", "cover_scenes", "cover_photos_search", "video_backgrounds_search", "network_proxy_test", "journal_read", "score_to_midi", "score_instrumental", "score_vocal_octave", "score_from_midi", "score_mark", "lyrics_find", "cover_prompt_render", "studio_wait", "engine_presets_get", "assistant_requests_wait", "ui_console", "song_defaults", "create_form_get", "library_liked", "score_chord_bed", "song_tokenize", "score_match_sections", "models_update_plan", "problem_preview", "library_migration_preview"];
+    const READ_NAMES: &[&str] = &["lyrics_syllables", "assistant_cli_agents", "system_gpus", "cover_scenes", "cover_photos_search", "video_backgrounds_search", "network_proxy_test", "journal_read", "score_to_midi", "score_instrumental", "score_vocal_octave", "score_from_midi", "score_mark", "lyrics_find", "cover_prompt_render", "studio_wait", "engine_presets_get", "assistant_requests_wait", "ui_console", "song_defaults", "create_form_get", "library_liked", "score_chord_bed", "song_tokenize", "score_match_sections", "models_update_plan", "problem_preview", "library_migration_preview", "audio_cpp_music_models"];
     // writes over what was stored, so the earlier content is gone: a client asks first
     const OVERWRITES: &[&str] = &["library_song_rename", "library_song_update", "playlist_update", "album_reorder", "dataset_update", "dataset_song_update", "dataset_prepare", "lora_update", "stems_split", "restore_start", "karaoke_make", "midi_transcribe", "cover_draw", "cover_set_from_file", "openrouter_set_key", "models_update_apply"];
     let changes = CHANGES.iter().any(|verb| name.split('_').any(|word| word == *verb));
@@ -421,7 +461,7 @@ fn annotations(name: &str) -> Value {
     // what reaches the internet: OpenRouter, Hugging Face, the lyric databases and every download
     let open_world = name.starts_with("openrouter_") || name == "problem_report" || name.contains("_hf") || name == "lyrics_find" || name == "models_download" || name == "models_update_apply" || name == "lora_install_catalog" || name.ends_with("_install") && name != "training_checkpoint_install";
     let title = name.replace('_', " ");
-    json!({ "title": title, "readOnlyHint": read_only, "destructiveHint": destructive, "idempotentHint": read_only || name.ends_with("_set") || name.contains("_select"), "openWorldHint": open_world })
+    json!({ "title": title, "readOnlyHint": read_only, "destructiveHint": destructive, "idempotentHint": read_only || name.ends_with("_set") || name.contains("_select") || name == "rvc_voice_remove", "openWorldHint": open_world })
 }
 
 /// What an agent's change goes into the journal as: what was done and to what kind
@@ -494,6 +534,9 @@ const JOURNAL: &[(&str, &str, &str)] = &[
     ("lora_install_catalog", "installed", "lora"),
     ("lora_install_hf", "installed", "lora"),
     ("lora_import_files", "installed", "lora"),
+    ("rvc_voice_import", "installed", "rvc_voice"),
+    ("rvc_voice_remove", "deleted", "rvc_voice"),
+    ("rvc_catalog_install", "installed", "rvc_voice"),
     ("lora_import_folder", "installed", "lora"),
     ("lora_update", "updated", "lora"),
     ("lora_delete", "deleted", "lora"),
@@ -644,6 +687,9 @@ fn change_target(kind: &str, args: &Value, before: &str, reply: &str) -> String 
 
 /// Writes an agent's change into the studio's journal, where the person reads it.
 async fn journal_change(name: &str, args: &Value, before: &str, reply: &str) {
+    if name == "rvc_voice_remove" && serde_json::from_str::<Value>(reply).is_ok_and(|result| result["removed"] == false) {
+        return;
+    }
     let Some((verb, kind)) = journal_facts(name, args) else { return };
     let line = json!({ "source": "agent", "verb": verb, "kind": kind, "target": change_target(kind, args, before, reply) });
     let written = match send(Method::POST, "/v1/journal".into(), line) {
@@ -959,6 +1005,29 @@ fn object(properties: Value, required: &[&str]) -> Value {
 
 fn id_only(name: &str, what: &str) -> Value {
     object(json!({ name: { "type": "string", "description": what } }), &[name])
+}
+
+fn song_create_schema(mut properties: Value) -> Value {
+    properties["heartmula"] = json!({"type":"object","description":"Native HeartMuLa sampling and codec settings.","properties":{"temperature":{"type":"number"},"top_k":{"type":"integer"},"codec_duration_sec":{"type":"number"},"codec_guidance_scale":{"type":"number"}}});
+    properties["midasheng"] = json!({"type":"object","description":"MiDashengLM-Gen scene and sound layers.","properties":{"caption":{"type":"string"},"music":{"type":"string"},"speech_text":{"type":"string"},"speech_style":{"type":"string"},"effects":{"type":"string"},"environment":{"type":"string"}}});
+    properties["vevo2"] = json!({"type":"object","description":"Vevo2 singing references from the song library.","properties":{"voice_song_id":{"type":"string"},"melody_song_id":{"type":"string"}},"required":["voice_song_id"]});
+    let mut schema = object(properties, &[]);
+    schema["anyOf"] = json!([
+        { "required": ["style"] },
+        {
+            "required": ["music_source", "midasheng"],
+            "properties": { "music_source": { "properties": {
+                "kind": { "const": "audio_cpp" }, "model": { "const": "midashenglm_gen" }
+            } } }
+        },
+        {
+            "required": ["music_source", "vevo2", "lyrics"],
+            "properties": { "music_source": { "properties": {
+                "kind": { "const": "audio_cpp" }, "model": { "const": "vevo2" }
+            } } }
+        }
+    ]);
+    schema
 }
 
 fn nothing() -> Value {
@@ -1540,12 +1609,15 @@ fn tools() -> &'static [Tool] {
             // ---------------------------------------------------------------- songs
             Tool {
                 name: "song_create",
-                description: "Generate a song locally or with an explicitly selected OpenRouter music model. Local synthesis parameters apply only to YuE2. style: one English sentence (language, genre, vocal, instruments, mood, production, 'N BPM'). lyrics: sections tagged [Verse 1], [Chorus], [Bridge]... one per line, blank line between sections; empty for an instrumental. abc: a score to sing (from score_compose or an edited one), else the model writes its own. cot: full (melody and chords), melody, or off. adapters: installed LoRA ids with strengths per slot (see lora_list). Returns a job; poll song_job_get until completed, the song then is in the library.",
-                schema: || object(json!({
+                description: "Generate a song with YuE2, native ACE-Step or MiniMax, an installed audio.cpp music family, or an explicitly selected OpenRouter music model. YuE2 uses the ABC score. Native engines use their own profile and supported controls. style: one English sentence (language, genre, vocal, instruments, mood, production, 'N BPM'). lyrics: sections tagged [Verse 1], [Chorus], [Bridge]... one per line, blank line between sections; empty for an instrumental. abc: a score to sing (from score_compose or an edited one), else the model writes its own. cot: full (melody and chords), melody, or off. adapters: installed LoRA ids with strengths per slot (see lora_list). Returns a job; poll song_job_get until completed, the song then is in the library.",
+                schema: || song_create_schema(json!({
+                    "ace": { "type": "object", "description": "ACE-Step generation settings, including guidance_scale, think, source_song_id and reference_song_id." },
                     "music_source": {
-                        "description": "Use local YuE2 or select a model with music_generation capability from openrouter_catalog. OpenRouter submits a paid request to the selected model.",
+                        "description": "Select local YuE2, a native profile from ace_music_profiles or minimax_music_profiles, an audio.cpp model from audio_cpp_music_models, or a cloud model with music_generation capability from openrouter_catalog. OpenRouter submits a paid request to the selected model.",
                         "oneOf": [
                             { "type": "object", "properties": { "kind": { "const": "local" } }, "required": ["kind"] },
+                            { "type": "object", "properties": { "kind": { "const": "native" }, "engine": { "enum": ["acestep-cpp", "minimaxmusic-cpp"] }, "model": { "type": "string", "minLength": 1 } }, "required": ["kind", "engine", "model"] },
+                            { "type": "object", "properties": { "kind": { "const": "audio_cpp" }, "model": { "type": "string", "minLength": 1 } }, "required": ["kind", "model"] },
                             { "type": "object", "properties": { "kind": { "const": "openrouter" }, "model": { "type": "string", "minLength": 1 } }, "required": ["kind", "model"] }
                         ]
                     },
@@ -1575,11 +1647,11 @@ fn tools() -> &'static [Tool] {
                     "abc_sampling": { "type": "object", "description": "temperature, top_p, top_k, repetition_penalty, penalty_window, min_tokens, max_tokens", "properties": { "temperature": { "type": "number" }, "top_p": { "type": "number" }, "top_k": { "type": "integer" }, "repetition_penalty": { "type": "number" }, "penalty_window": { "type": "integer" }, "min_tokens": { "type": "integer" }, "max_tokens": { "type": "integer" } } },
                     "semantic_sampling": { "type": "object", "description": "temperature, top_p, top_k, repetition_penalty, penalty_window, min_tokens, max_tokens", "properties": { "temperature": { "type": "number" }, "top_p": { "type": "number" }, "top_k": { "type": "integer" }, "repetition_penalty": { "type": "number" }, "penalty_window": { "type": "integer" }, "min_tokens": { "type": "integer" }, "max_tokens": { "type": "integer" } } },
                     "mp3_bitrate": { "type": "integer" },
-                    "output_format": { "type": "string", "enum": ["flac", "mp3"], "description": "how the song is kept: lossless FLAC (default), or MP3 at mp3_bitrate" },
+                    "output_format": { "type": "string", "enum": ["flac", "mp3", "wav32"], "description": "how the song is kept: lossless FLAC, 32-bit WAV, or MP3 at mp3_bitrate" },
                     "cover_prompt": { "type": "string", "description": "what the cover should show; it is drawn only when an image model is set up (settings_get, covers), else the song has no cover" },
                     "cover_of": { "type": "string", "description": "for a cover: the library song whose melody abc came from (score_transcribe of it); the new song names it as the track it was made from" },
                     "adapters": { "type": "array", "items": { "type": "object", "properties": { "id": { "type": "string" }, "scales": { "type": "object", "description": "slot -> strength, e.g. {\"ar\": 1, \"nar\": 1}; left out, the LoRA's own strengths, else 1 on each slot it touches" } }, "required": ["id"] } }
-                }), &["style"]),
+                })),
                 call: |args| post("/v1/music/jobs".into(), args.clone()),
             },
             Tool {
@@ -1603,7 +1675,7 @@ fn tools() -> &'static [Tool] {
             Tool {
                 name: "song_replay",
                 description: "Render a library song again from its saved audio codes, bit for bit or with other steps, a new sound seed, a batch of variations, or another format - without composing again.",
-                schema: || object(json!({ "song_id": { "type": "string" }, "steps": { "type": "integer" }, "solver": { "type": "string", "enum": ["midpoint", "ab2"] }, "seed": { "type": "integer" }, "synth_batch_size": { "type": "integer" }, "output_format": { "type": "string", "enum": ["flac", "mp3"] }, "title": { "type": "string" } }), &["song_id"]),
+                schema: || object(json!({ "song_id": { "type": "string" }, "steps": { "type": "integer" }, "solver": { "type": "string", "enum": ["midpoint", "ab2"] }, "seed": { "type": "integer" }, "synth_batch_size": { "type": "integer" }, "output_format": { "type": "string", "enum": ["flac", "mp3", "wav32"] }, "title": { "type": "string" } }), &["song_id"]),
                 call: |args| post("/v1/music/replay".into(), args.clone()),
             },
             Tool {
@@ -2026,6 +2098,24 @@ fn tools() -> &'static [Tool] {
                 call: |args| post("/setup/remove".into(), args.clone()),
             },
             Tool {
+                name: "ace_music_profiles",
+                description: "List native ACE-Step profiles, installed weights, and missing model files.",
+                schema: nothing,
+                call: |_| get("/v1/music/native/acestep-cpp/profiles".into()),
+            },
+            Tool {
+                name: "minimax_music_profiles",
+                description: "List native MiniMax Music 3 profiles, installed weights, and missing model files.",
+                schema: nothing,
+                call: |_| get("/v1/music/native/minimaxmusic-cpp/profiles".into()),
+            },
+            Tool {
+                name: "audio_cpp_music_models",
+                description: "List audio.cpp music models, their weight profile and whether the runtime and model files are ready.",
+                schema: nothing,
+                call: |_| get("/v1/music/audio-cpp/models".into()),
+            },
+            Tool {
                 name: "engine_logs",
                 description: "The music engine's recent log, for when a song fails or the engine will not start.",
                 schema: nothing,
@@ -2290,6 +2380,12 @@ fn tools() -> &'static [Tool] {
                 call: |args| post("/v1/exports/live".into(), args.clone()),
             },
             Tool {
+                name: "song_export_zip",
+                description: "Prepare a ZIP for selected library tracks with original audio, lyrics, prompts, settings and available ABC and MIDI. Answers with the file name and the local HTTP download path.",
+                schema: || object(json!({ "song_ids": { "type": "array", "items": { "type": "string" }, "minItems": 1 } }), &["song_ids"]),
+                call: |args| post("/v1/exports/tracks".into(), args.clone()),
+            },
+            Tool {
                 name: "library_song_midi_files",
                 description: "The MIDI a library song has for a DAW, each file named for where its notes come from. score: the score the song was generated with - its tempo, meter and key, and the parts with notes: score (the whole of it), lead, voice, chords; a song made without a score has none. own: the track's own MIDI, transcribed from the recording (an estimate) or edited in the MIDI editor.",
                 schema: || id_only("song_id", "library song id"),
@@ -2431,6 +2527,60 @@ fn tools() -> &'static [Tool] {
                 description: "Open a VST3 plugin's own window for the user to set it; state_id keeps its settings for the chain.",
                 schema: || object(json!({ "path": { "type": "string" }, "state_id": { "type": "string" } }), &["path"]),
                 call: |args| post("/v1/processing/vst/editor".into(), args.clone()),
+            },
+            Tool {
+                name: "rvc_catalog_list",
+                description: "List up to 20 curated RVC voices, license terms and installed local IDs. Pass next_offset as offset for the next page.",
+                schema: || object(json!({
+                    "offset": { "type": "integer", "minimum": 0 },
+                    "query": { "type": "string", "description": "Case-insensitive words in the name or source labels" },
+                    "vocal_style": { "type": "string", "description": "Exact style tag such as high" },
+                    "rvc_version": { "type": "string", "description": "Exact version such as v2" },
+                    "sample_rate_hz": { "type": "integer", "minimum": 1 },
+                    "has_index": { "type": "boolean" },
+                }), &[]),
+                call: |_| get("/v1/rvc/catalog".into()),
+            },
+            Tool {
+                name: "rvc_catalog_progress_get",
+                description: "Read preparation, file download and verification progress for a catalog voice being installed.",
+                schema: || id_only("id", "the ID from rvc_catalog_list"),
+                call: |args| get(format!("/v1/rvc/catalog/progress/{}", segment(&text(args, "id")?))),
+            },
+            Tool {
+                name: "rvc_catalog_install",
+                description: "Download and verify a voice from the curated RVC catalog by its ID.",
+                schema: || id_only("id", "the ID from rvc_catalog_list"),
+                call: |args| post("/v1/rvc/catalog/install".into(), json!({ "id": text(args, "id")? })),
+            },
+            Tool {
+                name: "rvc_voices_list",
+                description: "List local RVC voices and their optional retrieval indexes.",
+                schema: nothing,
+                call: |_| get("/v1/rvc/voices".into()),
+            },
+            Tool {
+                name: "rvc_voice_remove",
+                description: "Remove the installed RVC checkpoint and its retrieval index. Keeps existing songs and rendered audio.",
+                schema: || id_only("id", "the installed ID from rvc_voices_list"),
+                call: |args| send(Method::DELETE, format!("/v1/rvc/voices/{}", segment(&text(args, "id")?)), json!({})),
+            },
+            Tool {
+                name: "rvc_voice_import",
+                description: "Import a local RVC inference checkpoint and an optional FAISS retrieval index into the voice catalog.",
+                schema: || object(json!({
+                    "model_path": { "type": "string", "description": "The exported inference .pth or .pt file" },
+                    "index_path": { "type": "string", "description": "Optional filled FAISS .index file" },
+                }), &["model_path"]),
+                call: |args| {
+                    let model = PathBuf::from(text(args, "model_path")?);
+                    let mut files = vec![("model".into(), model.clone(), file_name(&model))];
+                    if let Some(path) = args.get("index_path").and_then(Value::as_str) {
+                        let index = PathBuf::from(path);
+                        files.push(("index".into(), index.clone(), file_name(&index)));
+                    }
+                    Ok(Call { method: Method::POST, path: "/v1/rvc/voices/import".into(), payload: Payload::Form { fields: Vec::new(), files } })
+                },
             },
             Tool {
                 name: "lora_import_folder",
@@ -3366,6 +3516,35 @@ mod tests {
     }
 
     #[test]
+    fn catalog_filters_radio_tapok_before_paging() {
+        let source: Value = serde_json::from_str(include_str!("../../../config/rvc-voice-catalog.json")).unwrap();
+        let args = json!({"query": "Radio Tapok", "vocal_style": "high", "rvc_version": "v2",
+            "sample_rate_hz": 40000, "has_index": true});
+        let filtered = shape("rvc_catalog_list", &args, source["voices"].clone());
+        assert_eq!(filtered["total"], 1);
+        assert_eq!(filtered["next_offset"], Value::Null);
+        assert_eq!(filtered["voices"][0]["id"], "rvc-50ea3d733073550ef6f7");
+        let legacy = json!({"name":"Legacy", "metadata":null, "index":null});
+        assert!(rvc_catalog_match(&legacy, &json!({})));
+        assert!(rvc_catalog_match(&legacy, &json!({"has_index":false})));
+        assert!(!rvc_catalog_match(&legacy, &json!({"vocal_style":"high"})));
+    }
+
+    #[test]
+    fn curated_voice_pages_keep_total_and_unicode_names() {
+        let list = json!((0..103).map(|id| json!({
+            "id": id, "name": format!("Голос 音楽 {id}"),
+        })).collect::<Vec<_>>());
+        let page = shape("rvc_catalog_list", &json!({"offset": 80}), list.clone());
+        assert_eq!(page["total"], 103);
+        assert_eq!(page["next_offset"], 100);
+        assert_eq!(page["voices"][0]["name"], "Голос 音楽 80");
+        let last = shape("rvc_catalog_list", &json!({"offset": 100}), list);
+        assert_eq!(last["voices"].as_array().unwrap().len(), 3);
+        assert_eq!(last["next_offset"], Value::Null);
+    }
+
+    #[test]
     fn a_tool_turns_its_arguments_into_its_route() {
         let find = |name: &str| tools().iter().find(|tool| tool.name == name).expect("the tool");
         let call = (find("dataset_song_update").call)(&json!({ "dataset_id": "d 1", "song_id": "s", "lyrics": "[Verse 1]" })).unwrap();
@@ -3490,6 +3669,8 @@ mod tests {
             "assistant_request_answer",
             "library_song_describe_style",
             "recording_describe_style",
+            // A temporary download is staged without changing the library.
+            "song_export_zip",
             // the journal itself
             "journal_clear",
             "journal_remove",
@@ -3599,6 +3780,7 @@ mod tests {
         ("GET", "/v1/exports/{id}/file", "the window's Save dialog reads an export from here: song_export writes into the folder the agent names and song_export_get answers the path"),
         ("GET", "/v1/library/songs/{id}/midi/parts/{part}", "the window's Save dialog reads a part's MIDI from here: library_song_midi_part_write writes it into the folder the agent names"),
         ("GET", "/v1/exports/live/{id}/file", "the window's Save dialog reads a Live project from here: song_export_live writes it into the folder the agent names"),
+        ("GET", "/v1/exports/tracks/{id}/file", "binary ZIP download; song_export_zip prepares it and answers its URL"),
         ("DELETE", "/v1/exports/live/{id}", "the window lets go of a Live project it did not save: an agent's project is a file in its own folder"),
         ("DELETE", "/v1/exports/{id}", "the window lets go of an export it did not save: an agent's export is a file in its own folder"),
         ("GET", "/v1/skins", "the page's Winamp reads its skins here: winamp_skins asks the window for the same list"),

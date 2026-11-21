@@ -145,6 +145,14 @@ impl Library {
     let rows = stmt.query_map([source], |row| Ok((row.get(0)?, (row.get(1)?,row.get(2)?))))?;
     Ok(rows.collect::<rusqlite::Result<_>>()?)
  }
+ pub(super) fn resolve_legacy_song_reference(&self, owner: &str, old_reference: &str) -> Result<Option<String>> {
+    let connection = self.connection.lock().unwrap();
+    Ok(connection.query_row(
+        "SELECT reference.new_id FROM legacy_ids origin JOIN legacy_ids reference ON reference.source=origin.source
+         WHERE origin.kind='song' AND origin.new_id=?1 AND reference.kind='song' AND reference.old_id=?2 AND reference.imported=1",
+        params![owner, old_reference], |row| row.get(0),
+    ).optional()?)
+ }
  /// Every song but those in the bin.
  pub fn list_songs(&self)->Result<Vec<Song>>{Ok(self.all_songs()?.into_iter().filter(|song|!is_trashed(song)).collect())}
  /// The songs in the bin, the latest deleted first.
@@ -201,15 +209,59 @@ impl Library {
  pub fn get_song(&self,id:&str)->Result<Option<Song>>{Self::read_song(&self.connection.lock().unwrap(),id)}
  fn read_song(c:&Connection,id:&str)->Result<Option<Song>>{Ok(c.query_row("SELECT id,title,audio_path,caption,lyrics,metadata_json,generation_settings_json,engine_id,profile_id,replay_request_json,audio_codes_json,source,created_at,updated_at FROM songs WHERE id=?",[id],row_song).optional()?)}
  pub fn create_song(&self,input:SongInput)->Result<Song>{let now=now();let song=Song{id:uuid::Uuid::now_v7().to_string(),title:input.title,audio_path:input.audio_path,caption:input.caption,lyrics:input.lyrics,metadata:input.metadata,generation_settings:input.generation_settings,engine_id:input.engine_id,profile_id:input.profile_id,replay_request:input.replay_request,audio_codes:input.audio_codes,source:input.source,created_at:now.clone(),updated_at:now};self.save_song(&song)?;Ok(song)}
- pub fn import_generated_song(&self,input:GeneratedSongInput)->Result<ImportedSong>{
-  if input.audio.is_empty(){anyhow::bail!("cannot import an empty audio result")}
-  fs::create_dir_all(&self.media_dir).with_context(||format!("create media directory {}",self.media_dir.display()))?;
-  let id=uuid::Uuid::now_v7().to_string();let filename=format!("{id}.{}",input.audio_extension);let target=self.media_dir.join(&filename);let temporary=self.media_dir.join(format!("{filename}.part"));
-  {let mut file=fs::OpenOptions::new().create_new(true).write(true).open(&temporary)?;use std::io::Write;file.write_all(&input.audio)?;file.sync_all()?;}
-  fs::rename(&temporary,&target).with_context(||format!("publish generated audio {}",target.display()))?;
-  let now=now();let title=input.title.map(|t|t.trim().to_owned()).filter(|t|!t.is_empty()).unwrap_or_else(||generated_title(&input.caption));let song=Song{id,title,audio_path:Some(target.display().to_string()),caption:input.caption,lyrics:input.lyrics,metadata:input.metadata,generation_settings:input.generation_settings,engine_id:input.engine_id,profile_id:input.profile_id,replay_request:input.replay_request,audio_codes:input.audio_codes,source:input.source,created_at:now.clone(),updated_at:now};
-  if let Err(error)=self.save_song(&song){let _=fs::remove_file(&target);return Err(error.context("store generated song record"));}
-  Ok(ImportedSong{song,audio_filename:filename})
+ pub fn import_generated_song(&self, input: GeneratedSongInput) -> Result<ImportedSong> {
+    self.import_generated_song_with_latent(input, None)
+ }
+
+ pub(crate) fn import_generated_song_with_latent(
+    &self,
+    input: GeneratedSongInput,
+    latent: Option<&[u8]>,
+ ) -> Result<ImportedSong> {
+    fn publish(path: &Path, bytes: &[u8]) -> Result<()> {
+        use std::io::Write;
+        let temporary = path.with_file_name(format!("{}.part", path.file_name().unwrap().to_string_lossy()));
+        let mut file = fs::OpenOptions::new().create_new(true).write(true).open(&temporary)?;
+        let written = file.write_all(bytes).and_then(|()| file.sync_all());
+        drop(file);
+        let published = written.and_then(|()| fs::rename(&temporary, path));
+        if published.is_err() {
+            let _ = fs::remove_file(&temporary);
+        }
+        published.with_context(|| format!("publish generated media {}", path.display()))
+    }
+
+    anyhow::ensure!(!input.audio.is_empty(), "cannot import an empty audio result");
+    fs::create_dir_all(&self.media_dir)
+        .with_context(|| format!("create media directory {}", self.media_dir.display()))?;
+    let id = uuid::Uuid::now_v7().to_string();
+    let filename = format!("{id}.{}", input.audio_extension);
+    let target = self.media_dir.join(&filename);
+    let sidecar = self.media_dir.join(format!("{id}.latent"));
+    publish(&target, &input.audio)?;
+    let result = (|| {
+        if let Some(latent) = latent {
+            publish(&sidecar, latent)?;
+        }
+        let now = now();
+        let title = input.title.map(|value| value.trim().to_owned()).filter(|value| !value.is_empty())
+            .unwrap_or_else(|| generated_title(&input.caption));
+        let song = Song {
+            id, title, audio_path: Some(target.display().to_string()), caption: input.caption,
+            lyrics: input.lyrics, metadata: input.metadata, generation_settings: input.generation_settings,
+            engine_id: input.engine_id, profile_id: input.profile_id, replay_request: input.replay_request,
+            audio_codes: input.audio_codes, source: input.source, created_at: now.clone(), updated_at: now,
+        };
+        self.save_song(&song).context("store generated song record")?;
+        Ok(ImportedSong { song, audio_filename: filename })
+    })();
+    if result.is_err() {
+        let _ = fs::remove_file(&target);
+        if latent.is_some() {
+            let _ = fs::remove_file(&sidecar);
+        }
+    }
+    result
  }
  pub fn import_audio_song(&self,input:AudioImportInput)->Result<ImportedSong>{
   if input.audio.is_empty(){anyhow::bail!("cannot import an empty audio file")}
@@ -582,7 +634,23 @@ fn merged_metadata(stored:&serde_json::Value,edit:serde_json::Value)->serde_json
  for(key,value)in stored{edit.entry(key.clone()).or_insert_with(||value.clone());}
  serde_json::Value::Object(edit)
 }
-fn row_song(r:&rusqlite::Row)->rusqlite::Result<Song>{Ok(Song{id:r.get(0)?,title:r.get(1)?,audio_path:r.get(2)?,caption:r.get(3)?,lyrics:r.get(4)?,metadata:json(r.get::<_,String>(5)?),generation_settings:json(r.get::<_,String>(6)?),engine_id:r.get(7)?,profile_id:r.get(8)?,replay_request:r.get::<_,Option<String>>(9)?.map(json),audio_codes:r.get::<_,Option<String>>(10)?.map(json),source:r.get(11)?,created_at:r.get(12)?,updated_at:r.get(13)?})}fn json(s:String)->serde_json::Value{serde_json::from_str(&s).unwrap_or(serde_json::Value::Null)}pub(super) fn playlist(c:&Connection,r:&rusqlite::Row)->rusqlite::Result<Playlist>{let id:String=r.get(0)?;let mut q=c.prepare("SELECT song_id FROM playlist_songs WHERE playlist_id=? ORDER BY position")?;let song_ids=q.query_map([&id],|x|x.get(0))?.collect::<rusqlite::Result<_>>()?;Ok(Playlist{id,name:r.get(1)?,description:r.get(2)?,song_ids,created_at:r.get(3)?,updated_at:r.get(4)?})}fn now()->String{std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs().to_string()}
+fn row_song(r: &rusqlite::Row) -> rusqlite::Result<Song> {
+    let engine_id: String = r.get(7)?;
+    let mut profile_id: Option<String> = r.get(8)?;
+    let replay_request = r.get::<_, Option<String>>(9)?.map(json);
+    if profile_id.is_none() && engine_id == crate::native_minimax::ENGINE_ID {
+        profile_id = replay_request.as_ref()
+            .and_then(|request| crate::native_minimax::saved_profile(None, request).ok())
+            .map(str::to_owned);
+    }
+    Ok(Song {
+        id: r.get(0)?, title: r.get(1)?, audio_path: r.get(2)?, caption: r.get(3)?,
+        lyrics: r.get(4)?, metadata: json(r.get(5)?), generation_settings: json(r.get(6)?),
+        engine_id, profile_id, replay_request, audio_codes: r.get::<_, Option<String>>(10)?.map(json),
+        source: r.get(11)?, created_at: r.get(12)?, updated_at: r.get(13)?,
+    })
+}
+fn json(s:String)->serde_json::Value{serde_json::from_str(&s).unwrap_or(serde_json::Value::Null)}pub(super) fn playlist(c:&Connection,r:&rusqlite::Row)->rusqlite::Result<Playlist>{let id:String=r.get(0)?;let mut q=c.prepare("SELECT song_id FROM playlist_songs WHERE playlist_id=? ORDER BY position")?;let song_ids=q.query_map([&id],|x|x.get(0))?.collect::<rusqlite::Result<_>>()?;Ok(Playlist{id,name:r.get(1)?,description:r.get(2)?,song_ids,created_at:r.get(3)?,updated_at:r.get(4)?})}fn now()->String{std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs().to_string()}
 
 /// Whether a song is in the studio's bin.
 pub fn is_trashed(song:&Song)->bool{song.metadata.get("deleted_at").is_some()}
@@ -752,6 +820,27 @@ mod edit_tests {
         let merged = merged_metadata(&serde_json::json!({ "liked": true, "liked_at": "100", "karaoke": { "file": "k.json" } }), serde_json::Value::Null);
         assert_eq!(merged["liked"], true, "an edit with no metadata leaves it as it is");
         assert_eq!(merged["karaoke"]["file"], "k.json");
+    }
+
+    #[test]
+    fn library_restores_a_missing_minimax_profile_only_for_matching_weights() {
+        let root = tempfile::tempdir().unwrap();
+        let db = Library::open_at(root.path().join("library.sqlite"), root.path().join("media")).unwrap();
+        let mut replay = serde_json::json!({
+            "lm_model":"MiniMax-Music3-language_model-Q8_0.gguf",
+            "depth_model":"MiniMax-Music3-rvq_depth_decoder-Q8_0.gguf",
+            "cond_model":"MiniMax-Music3-condition_encoder-F32.gguf",
+            "dit_model":"MiniMax-Music3-transformer-Q8_0.gguf",
+            "vae_model":"MiniMax-Music3-vocoder-F32.gguf"
+        });
+        for expected in [Some("quality-q8"), None] {
+            let take = db.create_song(serde_json::from_value(serde_json::json!({
+                "title":"Legacy take", "engine_id":"minimaxmusic-cpp", "replay_request":replay
+            })).unwrap()).unwrap();
+            let stored = db.get_song(&take.id).unwrap().unwrap();
+            assert_eq!(stored.profile_id.as_deref(), expected);
+            replay["dit_model"] = serde_json::json!("custom.gguf");
+        }
     }
 
     #[test]

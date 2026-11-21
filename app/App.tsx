@@ -18,7 +18,8 @@ import { QueryClientProvider } from '@tanstack/react-query';
 import { libraryChanged, queryClient, updateLibraryPlaylists, updateLibrarySongs, useLibraryPlaylists, useLibrarySongs, useSetupStatus } from './services/studioQueries';
 import { useGenerations } from './services/generations';
 import { isSettingsTarget, SettingsModal } from './components/SettingsModal';
-import { Song, View, Playlist } from './types';
+import { Song, View, Playlist, type MusicEngine } from './types';
+import { isMusicEngine, isProfileMusicEngine, profileMusicEngines } from './services/nativeMusicProfiles';
 // Resizable panel hook
 const PANEL_MAX_SHARE = 0.4;
 const CREATE_MAX_SHARE = 0.7;
@@ -192,13 +193,15 @@ function AppContent() {
   const leftPanel = useResizablePanel('create', 420, Math.min(320, createMax), createMax, 'left', t('createMusic'), CREATE_MAX_SHARE);
   const rightPanel = useResizablePanel('details', 400, 320, 1200, 'right', t('songDetails'));
   const [nativeSetupReady, setNativeSetupReady] = useState(false);
-  const [musicEngine, setMusicEngine] = useState<'local' | 'openrouter'>(() => {
-    try { return localStorage.getItem('studio.musicEngine') === 'openrouter' ? 'openrouter' : 'local'; }
-    catch { return 'local'; }
+  const [musicEngine, setMusicEngine] = useState<MusicEngine>(() => {
+    try {
+      const engine = localStorage.getItem('studio.musicEngine');
+      return isMusicEngine(engine) ? engine : 'local';
+    } catch { return 'local'; }
   });
-  const [enteredCloudEditor, setEnteredCloudEditor] = useState(musicEngine === 'openrouter');
-  const chooseMusicEngine = (engine: 'local' | 'openrouter') => {
-    if (engine === 'openrouter') setEnteredCloudEditor(true);
+  const [enteredOtherEditor, setEnteredOtherEditor] = useState(musicEngine !== 'local');
+  const chooseMusicEngine = (engine: MusicEngine) => {
+    if (engine !== 'local') setEnteredOtherEditor(true);
     setMusicEngine(engine);
     try { localStorage.setItem('studio.musicEngine', engine); } catch { /* Keep the session choice. */ }
   };
@@ -221,6 +224,7 @@ function AppContent() {
     return () => { stopped = true; window.clearTimeout(timer); };
   }, []);
   // A track sent here from a menu's "separate into stems".
+  const [focusRvc, setFocusRvc] = useState(false);
   const [stemsSongId, setStemsSongId] = useState<string | null>(null);
   // Which of the three situations the studio is in. It starts unknown, and
   // unknown must not look like "nothing is installed": showing the download
@@ -244,6 +248,7 @@ function AppContent() {
   }, [setupQuery.data, setupQuery.isError]);
   useEffect(() => {
     const open = (event: Event) => {
+      setFocusRvc(event.type === 'yue:open-rvc');
       setStemsSongId((event as CustomEvent<string>).detail);
       setCurrentView('tools');
     };
@@ -262,11 +267,13 @@ function AppContent() {
       if (song) setSongToProcess(song);
     };
     window.addEventListener('yue:open-stems', open);
+    window.addEventListener('yue:open-rvc', open);
     window.addEventListener('yue:open-settings', openSettings);
     window.addEventListener('yue:navigate', navigate);
     window.addEventListener('yue:process-song', process);
     return () => {
       window.removeEventListener('yue:open-stems', open);
+      window.removeEventListener('yue:open-rvc', open);
       window.removeEventListener('yue:open-settings', openSettings);
       window.removeEventListener('yue:navigate', navigate);
       window.removeEventListener('yue:process-song', process);
@@ -469,7 +476,7 @@ function AppContent() {
   // The songs being made: their cards, the jobs they follow, and the row each
   // hands to the song it becomes.
   const generations = useGenerations({
-    enabled: nativeModels !== 'offline' && (nativeSetupReady || enteredCloudEditor),
+    enabled: nativeModels !== 'offline' && (nativeSetupReady || enteredOtherEditor),
     notify: (message, type) => showToast(message, type),
     onFinished: (cardId, made) => {
       // a card that was open in the details stays open as the song it became
@@ -613,6 +620,7 @@ function AppContent() {
   const handleReuse = (song: Song) => {
     if (song.ditModel === 'openrouter') chooseMusicEngine('openrouter');
     else if (song.ditModel === 'yue2-cpp') chooseMusicEngine('local');
+    else if (isProfileMusicEngine(song.ditModel)) chooseMusicEngine(song.ditModel);
     setReuseData({ song, timestamp: Date.now() });
     setCurrentView('create');
     setMobileShowList(false);
@@ -1402,7 +1410,7 @@ function AppContent() {
   // The create page stays mounted once the engine is up, hidden while another
   // page shows: leaving it for the library used to throw away the style, the
   // lyrics, the score and every setting typed into it.
-  const createKept = nativeModels !== 'offline' && (nativeSetupReady || enteredCloudEditor);
+  const createKept = nativeModels !== 'offline' && (nativeSetupReady || enteredOtherEditor);
   const showingCreate = !['tools', 'adapters', 'library', 'playlist', 'search', 'news'].includes(currentView);
 
   // the details show the library's copy of the song, so a cover or a rename
@@ -1436,7 +1444,7 @@ function AppContent() {
   const renderContent = (view: typeof currentView = currentView) => {
     switch (view) {
       case 'tools':
-        return <StudioToolsPanel initialSongId={stemsSongId} />;
+        return <StudioToolsPanel initialSongId={stemsSongId} focusRvc={focusRvc} onRvcFocused={() => setFocusRvc(false)} />;
 
       case 'adapters':
         return <AdaptersPage />;
@@ -1486,6 +1494,15 @@ function AppContent() {
                 playlistId={viewingPlaylistId}
                 onBack={handleBackFromPlaylist}
                 onPlaySong={playFromPlaylist(viewingPlaylistId)}
+                onCreateHere={() => {
+                  chooseCreatePlaylist(viewingPlaylistId);
+                  setCurrentView('create');
+                  setMobileShowList(false);
+                }}
+                onReuseHere={song => {
+                  chooseCreatePlaylist(viewingPlaylistId);
+                  handleReuse(song);
+                }}
                 currentSong={currentSong}
                 isPlaying={isPlaying}
                 notify={showToast}
@@ -1520,7 +1537,7 @@ function AppContent() {
         // look like it owed 26 GB.
         if (nativeModels === 'offline') return <StudioOffline />;
         if (updateShown) return <UpdateScreen onLeave={() => setUpdateShown(false)} />;
-        if (!nativeSetupReady && !enteredCloudEditor) {
+        if (!nativeSetupReady && !enteredOtherEditor) {
           // Until the studio has answered, and while the engine is coming up,
           // this is a wait - not a decision. The download page appears only
           // when components are genuinely missing.
@@ -1532,6 +1549,12 @@ function AppContent() {
                     className="rounded-lg px-3 py-2 text-sm font-medium text-pink-600 hover:underline dark:text-pink-400">
                     {t('lmProvider.useOpenRouter')}
                   </button>
+                  {Object.entries(profileMusicEngines).map(([engine, label]) => (
+                    <button key={engine} type="button" onClick={() => { if (isMusicEngine(engine)) chooseMusicEngine(engine); }}
+                      className="rounded-lg px-3 py-2 text-sm font-medium text-pink-600 hover:underline dark:text-pink-400">
+                      {label}
+                    </button>
+                  ))}
                 </div>
               )}
               <div className="min-h-0 flex-1">

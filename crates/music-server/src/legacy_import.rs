@@ -235,9 +235,11 @@ fn prepare_song(
     }
     remap_reference(&mut song.metadata, "/derived/from", ids)?;
     remap_reference(&mut song.metadata, "/deleted_with", ids)?;
-    remap_reference(&mut song.generation_settings, "/source_song_id", ids)?;
-    if let Some(req) = &mut song.replay_request {
-        remap_reference(req, "/source_song_id", ids)?;
+    for field in ["/source_song_id", "/reference_song_id"] {
+        remap_reference(&mut song.generation_settings, field, ids)?;
+        if let Some(req) = &mut song.replay_request {
+            remap_reference(req, field, ids)?;
+        }
     }
     song.id = id.clone();
     Ok(())

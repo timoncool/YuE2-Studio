@@ -62,6 +62,14 @@ it.each([
   expect(host.textContent).not.toContain('YuE2');
 });
 
+it('shows audio.cpp on a Music3 card while the song is being generated', () => {
+  act(() => root.render(item(false, false, vi.fn(), {
+    ...song, ditModel: 'audio.cpp', audioUrl: undefined, isGenerating: true, stage: 'stageGeneratingTrack',
+  })));
+  expect(host.textContent).toContain('audio.cpp');
+  expect(host.textContent).not.toContain('YuE2');
+});
+
 describe('the play control of a song row (YuE2 Studio #171)', () => {
   it('is a button named by the song, pressed while it plays, that starts the song from the keyboard', () => {
     const onPlay = vi.fn();

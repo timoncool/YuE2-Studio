@@ -12,8 +12,7 @@ pub struct ResultTrack {
 }
 
 pub fn parse_multipart_result(content_type: &str, body: &[u8]) -> Result<Vec<ResultTrack>> {
-    let boundary = boundary_from_content_type(content_type)?;
-    let parts = parse_parts(&boundary, body)?;
+    let parts = parse_result_parts(content_type, body)?;
     let mut pending_replay = None;
     let mut tracks = Vec::new();
 
@@ -51,7 +50,15 @@ pub fn audio_extension(content_type: &str) -> Result<&'static str> {
     }
 }
 
-struct Part { content_type: String, body: Vec<u8> }
+pub(crate) struct Part {
+    pub(crate) content_type: String,
+    pub(crate) body: Vec<u8>,
+}
+
+pub(crate) fn parse_result_parts(content_type: &str, body: &[u8]) -> Result<Vec<Part>> {
+    let boundary = boundary_from_content_type(content_type)?;
+    parse_parts(&boundary, body)
+}
 
 fn boundary_from_content_type(content_type: &str) -> Result<String> {
     let mut fields = content_type.split(';');

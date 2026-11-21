@@ -10,9 +10,10 @@ import {
   Grid2x2, Guitar, ListChecks, Music2, Pause, Piano, Play, RotateCcw, Save, Sparkles, Square, Tags, Upload, Wand2, Settings2, X,
 } from 'lucide-react';
 import { AudioWaveform } from './AudioWaveform';
-import type { Playlist, Song, YueCot, YueHarmony, YueOutputFormat, YueRequest, YueSampling } from '../types';
+import type { MusicEngine, Playlist, Song, YueCot, YueHarmony, YueOutputFormat, YueRequest, YueSampling } from '../types';
 import { useI18n } from '../context/I18nContext';
 import { AUDIO_ACCEPT } from '../services/audioFiles';
+import { WindowAudioCapture } from './WindowAudioCapture';
 import { saveFile } from '../services/saveFile';
 import { useBridgeCommand } from '../services/mcpBridge';
 import { EXAMPLES, randomExample } from '../services/examples';
@@ -36,10 +37,14 @@ import { midiImportOptions } from '../i18n/midiImportOptions';
 import { SongTextParts } from './SongTextParts';
 import { writerInstruction } from '../services/songWriting';
 import { songWritingStrings } from '../i18n/songWriting';
+import { MiDashengFields, miDashengModel, miDashengPromptReady, restoreMiDashengPrompt } from './MiDashengFields';
+import { HeartMuLaControls, emptyHeartMuLaDraft, heartMuLaDraft, heartMuLaOptions } from './HeartMuLaControls';
+import { Vevo2SingingFields, vevo2SingingStrings, type Vevo2References } from './Vevo2SingingFields';
 import { NumberField } from './NumberField';
 import { explainCliFailure } from '../services/cliFailure';
 import { loadNativeOpenRouterCatalog, modelsForCapability, refreshNativeOpenRouterCatalog, type NativeOpenRouterModel } from '../services/nativeOpenRouter';
-import { musicSourceStrings } from '../i18n/musicSource';
+import { musicSourceStrings, nativeMusicSourceStrings } from '../i18n/musicSource';
+import { audioCppMiniMax, isMusicEngine, isProfileMusicEngine, miniMaxOutputFormat, profileMusicEngines, nativeGenerationSettings, useNativeMusicProfiles } from '../services/nativeMusicProfiles';
 import { generationPauseStrings } from '../i18n/generationPause';
 import { afterGenerationPause, formatGenerationCountdown, generationPauseMs, type GenerationPauseMode } from '../services/generationPause';
 
@@ -65,8 +70,8 @@ export type CreateRequest =
 
 interface CreatePanelProps {
   onGenerate: (request: YueRequest) => void;
-  musicEngine?: 'local' | 'openrouter';
-  onMusicEngineChange?: (engine: 'local' | 'openrouter') => void;
+  musicEngine?: MusicEngine;
+  onMusicEngineChange?: (engine: MusicEngine) => void;
   isGenerating: boolean;
   activeJobCount?: number;
   queueBusy?: boolean;
@@ -412,6 +417,27 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
   const tt = t as unknown as (key: string) => string;
   const musicStrings = musicSourceStrings[language];
   const cloud = musicEngine === 'openrouter';
+  const nativeEngine = isProfileMusicEngine(musicEngine) ? musicEngine : undefined;
+  const audioCpp = nativeEngine === 'audio.cpp';
+  const native = useNativeMusicProfiles(nativeEngine);
+  const audioFamily = audioCpp ? native.profile?.id : undefined;
+  const miDasheng = audioFamily === miDashengModel;
+  const [scene, setScene] = useState(() => restoreMiDashengPrompt(undefined));
+  const heartMuLa = audioFamily === 'heartmula';
+  const vevo2 = audioFamily === 'vevo2';
+  const miniMaxH3 = audioFamily === 'minimax_h3';
+  const [heartSettings, setHeartSettings] = useState(emptyHeartMuLaDraft);
+  const [vevoReferences, setVevoReferences] = useState<Vevo2References>({ voice_song_id: '' });
+  const nativeStrings = nativeMusicSourceStrings[language];
+  const yue = musicEngine === 'local';
+  const nativeControls = [
+    ['duration_seconds', nativeStrings.duration],
+    ['steps', nativeStrings.steps],
+    ['seed', nativeStrings.seed],
+    nativeEngine === 'minimaxmusic-cpp'
+      ? (['lm_seed', nativeStrings.lmSeed] as const)
+      : (['guidance_scale', 'CFG'] as const),
+  ] as const;
   const provider = useOpenRouterSettings<{ configured: boolean }>();
   const configured = provider.data?.configured === true;
   const [musicModelId, setMusicModelId] = useState(() => {
@@ -720,8 +746,18 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
     appliedReuse.current = initialData.timestamp;
     const song = initialData.song;
     const settings = (song.generationParams ?? {}) as Record<string, unknown>;
-    if (song.ditModel === 'openrouter') {
-      changeMusicModel(typeof settings.model === 'string' ? settings.model : '');
+    if (isProfileMusicEngine(song.ditModel) || song.ditModel === 'openrouter') {
+      if (isProfileMusicEngine(song.ditModel)) {
+        const source = settings.music_source as YueRequest['music_source'] | undefined;
+        const profile = song.ditModel === 'audio.cpp' ? (source?.kind === 'audio_cpp' ? source.model : audioCppMiniMax)
+          : source?.kind === 'native' && source.engine === song.ditModel ? source.model : song.lmModel;
+        if (profile === miDashengModel) setScene(restoreMiDashengPrompt(settings.midasheng));
+        if (profile === 'heartmula') setHeartSettings(heartMuLaDraft(settings.heartmula as YueRequest['heartmula']));
+        if (profile === 'vevo2') setVevoReferences((settings.vevo2 as YueRequest['vevo2']) ?? { voice_song_id: '' });
+        native.restore(song.ditModel, profile ?? '', settings);
+      } else {
+        changeMusicModel(typeof settings.model === 'string' ? settings.model : '');
+      }
       setStyle(song.style);
       setLyrics(song.lyrics);
       setName(song.title || '');
@@ -734,7 +770,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
     // A song made without LoRA reuses without it, whatever was picked before.
     setAdapters(usesFromSettings(settings));
     setMode('studio');
-  }, [initialData, applyRequest, changeMusicModel]);
+  }, [initialData, applyRequest, changeMusicModel, native.restore]);
 
   useEffect(() => {
     setCoverPlaying(false);
@@ -803,16 +839,43 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [request]);
 
-  const reset = () => {
+  const clearDraft = () => {
     cancelCoverRead();
     setResingFrom(null);
-    instrumentalChange.current = null;
-    setName(''); setStyle(''); setLyrics(''); setAbc(''); setCot(''); setContinueScore(false);
+    typeName('');
+    setStyle(''); setLyrics(''); setAbc(''); setCot(''); setContinueScore(false);
     setPlans([]); setSelectedPlan(0);
+    setError(null);
+  };
+
+  const reset = () => {
+    clearDraft();
+    instrumentalChange.current = null;
     resetParameters(true);
     setCoverPrompt('');
     setAdapters([]);
-    setError(null);
+  };
+
+  const resetCreation = () => {
+    clearDraft();
+    setTakeChoiceOpen(false);
+    if (nativeEngine) native.resetSettings();
+    if (!yue) return;
+
+    instrumentalRun.current += 1;
+    instrumentalChange.current = null;
+    setInstrumental(false);
+    setInstrumentalLoraLoading(false);
+    setCoverPrompt('');
+    setAdapters([]);
+    setFadeIn(''); setFadeOut('');
+    setCoverSource(''); setCoverSongId(null); setCoverAudio(null); setCoverFile(null);
+    setCoverPlaying(false); setCoverTime(0); setCoverDuration(0); setCoverMelodyOnly(true);
+    if (audioFile.current) audioFile.current.value = '';
+    setAssistInstruction(''); setWriterLanguage(''); setWriterLines(''); setWriterExtra('');
+    setScoreInstruction(''); setPlanCount('1');
+    setBedBpm('100'); setBedKey('C'); setBedMeter('4/4'); setBedWritten(null);
+    resetParameters();
   };
 
   /** The settings back to their defaults; `keepChoices` (a new prompt) leaves the length and the file format the
@@ -951,6 +1014,14 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
     } finally {
       if (!signal.aborted) setTranscribing(null);
     }
+  };
+
+  const readCoverRecording = (file: File) => {
+    setCoverSource(file.name);
+    setCoverSongId(null);
+    setCoverFile(file);
+    setCoverAudio(URL.createObjectURL(file));
+    void runTranscription({ file }, coverMelodyOnly);
   };
 
   /** The score the model writes from the form's style and lyrics, nothing sung. */
@@ -1310,13 +1381,13 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
   });
   useEffect(() => {
     const snapshot = foreverRequest.current;
-    if (!forever || cloud || !ready || !snapshot || pauseMode !== 'none' || activeJobCount >= 2) return;
+    if (!forever || !yue || !ready || !snapshot || pauseMode !== 'none' || activeJobCount >= 2) return;
     repeat(snapshot);
-  }, [forever, activeJobCount, ready, cloud, pauseMode]);
+  }, [forever, activeJobCount, ready, yue, pauseMode]);
 
   useEffect(() => {
     const snapshot = foreverRequest.current;
-    if (!forever || cloud || !ready || !snapshot || pauseMode === 'none' || queueBusy) return;
+    if (!forever || !yue || !ready || !snapshot || pauseMode === 'none' || queueBusy) return;
     const wait = generationPauseMs(pauseMode, pauseStart, pauseEnd);
     if (wait === null) return;
     const cancel = afterGenerationPause(wait, () => {
@@ -1329,7 +1400,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
       if (cancelPause.current === cancel) cancelPause.current = null;
       setPauseSeconds(null);
     };
-  }, [forever, ready, cloud, queueBusy, pauseMode, pauseStart, pauseEnd]);
+  }, [forever, ready, yue, queueBusy, pauseMode, pauseStart, pauseEnd]);
 
   /** An instrumental: the score - the form's, or one written now - with its voice moved to the
    *  instrument, and the lyrics' section tags without their words, so nothing is left to sing. */
@@ -1368,6 +1439,29 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
   };
 
   const submit = () => {
+    if (nativeEngine) {
+      if (!native.ready || !native.profile) return;
+      if (miDasheng && !miDashengPromptReady(scene)) return;
+      if (vevo2 && (!lyrics.trim() || !vevoReferences.voice_song_id)) { setError(vevo2SingingStrings[language].required); return; }
+      if (audioFamily === audioCppMiniMax && (!style.trim() || !lyrics.trim())) { setError(nativeStrings.styleAndLyricsRequired); return; }
+      if (miniMaxH3 && !style.trim()) { setError(nativeStrings.h3PromptRequired); return; }
+      if (!miniMaxH3 && !miDasheng && !style.trim() && !lyrics.trim()) { setError(tt('styleOrLyricsRequired')); return; }
+      setError(null);
+      generate({
+        music_source: nativeEngine === 'audio.cpp'
+          ? { kind: 'audio_cpp', model: native.profile.id }
+          : { kind: 'native', engine: nativeEngine, model: native.profile.id },
+        style: miDasheng ? scene.caption || scene.music : vevo2 ? '' : finishedStyle(style),
+        lyrics: miDasheng ? scene.speech_text.trim() : miniMaxH3 ? '' : lyrics.replace(/\r\n?/g, '\n').trim(),
+        ...(name.trim() ? { title: name.trim() } : {}),
+        ...(chosenPlaylist ? { playlist_id: chosenPlaylist } : {}),
+        ...(miDasheng ? { midasheng: scene } : {}),
+        ...(heartMuLa ? { heartmula: heartMuLaOptions(heartSettings) } : {}),
+        ...(vevo2 ? { vevo2: vevoReferences } : {}),
+        ...nativeGenerationSettings(nativeEngine, vevo2 ? { seed: native.settings.seed, output_format: native.settings.output_format } : miDasheng ? { ...native.settings, steps: undefined } : native.settings),
+      });
+      return;
+    }
     if (cloud) {
       if (!selectedMusicModel) return;
       if (!style.trim() && !lyrics.trim()) { setError(tt('styleOrLyricsRequired')); return; }
@@ -1490,30 +1584,65 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
           <div className="flex items-center justify-between gap-3">
             <div className="min-w-0">
               <h1 className="truncate text-base font-bold">{t('createMusic')}</h1>
-              <p className="mt-0.5 truncate text-[11px] text-zinc-500 dark:text-zinc-400">{cloud ? 'OpenRouter' : tt('localInferenceYue')}</p>
+              <p className="mt-0.5 truncate text-[11px] text-zinc-500 dark:text-zinc-400">{nativeEngine ? profileMusicEngines[nativeEngine] : cloud ? 'OpenRouter' : tt('localInferenceYue')}</p>
             </div>
-            {!cloud && <span className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-semibold ${ready ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-300' : 'bg-amber-500/10 text-amber-700 dark:text-amber-300'}`}>
-              <span className={`mr-1 inline-block h-1.5 w-1.5 rounded-full ${ready ? 'bg-emerald-500' : 'bg-amber-500'}`} />
-              {serviceDown ? t('serviceUnavailable') : ready ? t('engineReady') : unavailableTitle}
-            </span>}
+            <div className="flex shrink-0 items-center gap-2">
+              {yue && <span className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-semibold ${ready ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-300' : 'bg-amber-500/10 text-amber-700 dark:text-amber-300'}`}>
+                <span className={`mr-1 inline-block h-1.5 w-1.5 rounded-full ${ready ? 'bg-emerald-500' : 'bg-amber-500'}`} />
+                {serviceDown ? t('serviceUnavailable') : ready ? t('engineReady') : unavailableTitle}
+              </span>}
+              <button type="button" onClick={resetCreation} className={ICON} title={t('resetCreateForm')}
+                aria-label={t('resetCreateForm')} disabled={Boolean(assisting || composing || describing || hearingLyrics || bedBusy || matchingSections)}>
+                <RotateCcw size={16} />
+              </button>
+            </div>
           </div>
 
           {onMusicEngineChange && (
             <label className="flex items-center gap-2 text-xs font-medium">
               <span className="shrink-0">{musicStrings.engine}</span>
               <select className={CONTROL} value={musicEngine} onChange={event => {
-                onMusicEngineChange(event.target.value === 'openrouter' ? 'openrouter' : 'local');
+                if (isMusicEngine(event.target.value)) onMusicEngineChange(event.target.value);
                 setError(null);
                 setTakeChoiceOpen(false);
               }}>
                 <option value="local">{musicStrings.local}</option>
+                {Object.entries(profileMusicEngines).map(([engine, label]) => <option key={engine} value={engine}>{label}</option>)}
                 <option value="openrouter">OpenRouter</option>
               </select>
             </label>
           )}
-          {cloud ? (
+          {!yue ? (
             <>
-              <Card title={musicStrings.model}>
+              {nativeEngine ? (
+                <Card title={nativeStrings.model}>
+                  <div className="space-y-2">
+                    {native.loading && <p role="status" className="text-xs">{nativeStrings.loading}</p>}
+                    {native.error && <p role="alert" className="text-xs">{nativeStrings.error}</p>}
+                    {!native.loading && !native.error && !native.installed && <p role="status" className="text-xs">{nativeStrings.engineMissing}</p>}
+                    {!native.loading && !native.error && native.profiles.length === 0 && native.installed && <p className="text-xs">{nativeStrings.empty}</p>}
+                    {native.originalModels && (
+                      <div className="space-y-1 text-xs" role="status">
+                        <p>{nativeStrings.chooseLegacyProfile}</p>
+                        <ul className="break-all">{native.originalModels.map(model => <li key={model}>{model}</li>)}</ul>
+                      </div>
+                    )}
+                    {native.profiles.length > 0 && (
+                      <select aria-label={nativeStrings.model} className={CONTROL} value={native.profile?.id ?? ''}
+                        onChange={event => native.select(event.target.value)}>
+                        <option value="">{musicStrings.choose}</option>
+                        {native.profiles.map(profile => <option key={profile.id} value={profile.id}>{profile.label}{(!native.installed || !profile.ready) ? ` — ${nativeStrings.unavailable}` : ''}</option>)}
+                      </select>
+                    )}
+                    {native.profile && !native.ready && <p role="status" className="text-xs">
+                      {nativeStrings.unavailable}{native.profile.missing?.length ? ` · ${native.profile.missing.join(', ')}` : ''}
+                    </p>}
+                    <button type="button" className="text-xs text-pink-600 underline dark:text-pink-300" onClick={native.refresh}>
+                      {musicStrings.refresh}
+                    </button>
+                  </div>
+                </Card>
+              ) : <Card title={musicStrings.model}>
                 {provider.isError ? <p role="alert" className="text-xs">{musicStrings.catalogError}</p>
                   : provider.isPending ? <p role="status" className="text-xs">{musicStrings.loading}</p>
                     : !configured ? (
@@ -1540,17 +1669,48 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
                         </button>
                       </div>
                     )}
-              </Card>
-              <Card title={tt('styleCardTitle')}>
+              </Card>}
+              <Card title={miDasheng || vevo2 ? t('title') : tt('styleCardTitle')}>
                 <input value={name} onChange={event => typeName(event.target.value)} placeholder={t('untitled')}
                   aria-label={t('untitled')} className={CONTROL + ' mb-2'} />
-                <AutoTextarea className={CONTROL} value={style} onChange={event => setStyle(event.target.value)}
-                  placeholder={tt('stylePlaceholder')} aria-label={tt('styleCardTitle')} />
+                {!vevo2 && !miDasheng && <AutoTextarea className={CONTROL} value={style} onChange={event => setStyle(event.target.value)}
+                  placeholder={tt('stylePlaceholder')} aria-label={tt('styleCardTitle')} />}
               </Card>
-              <Card title={t('lyrics')}>
+              {miDasheng ? <MiDashengFields value={scene} onChange={setScene} /> : !miniMaxH3 && <Card title={t('lyrics')}>
                 <AutoTextarea className={CONTROL} value={lyrics} onChange={event => setLyrics(event.target.value)}
                   aria-label={t('lyrics')} />
-              </Card>
+              </Card>}
+              {vevo2 && <Vevo2SingingFields value={vevoReferences} onChange={setVevoReferences} controlClassName={CONTROL} />}
+              {heartMuLa && <HeartMuLaControls values={heartSettings} onChange={setHeartSettings} language={language} />}
+              {nativeEngine && abc.trim() && <p role="status" className="text-xs text-zinc-500">{nativeStrings.scoreKept}</p>}
+              {nativeEngine && (native.profile || native.originalModels) && (
+                <Card title={nativeStrings.settings}>
+                  <div className="grid grid-cols-2 gap-2">
+                    {nativeControls.filter(([key]) => vevo2 ? key === 'seed' : !miDasheng || key !== 'steps').map(([key, label]) => (
+                      <label key={key} className="space-y-1 text-xs">
+                        <span>{label}</span>
+                        <input type="number" step={key === 'duration_seconds' || key === 'guidance_scale' ? 'any' : 1}
+                          min={miniMaxH3 && key === 'duration_seconds' ? 1 : undefined}
+                          max={miniMaxH3 && key === 'duration_seconds' ? 20 : undefined}
+                          className={CONTROL} value={native.settings[key] ?? ''}
+                          placeholder={miniMaxH3 && key === 'duration_seconds' ? '4' : nativeStrings.default}
+                          onChange={event => native.set(key, event.target.value)} />
+                      </label>
+                    ))}
+                    {nativeEngine !== 'acestep-cpp' && (
+                      <label className="space-y-1 text-xs">
+                        <span>{t('outputFormat')}</span>
+                        <select className={CONTROL} value={miniMaxOutputFormat(native.settings.output_format)}
+                          onChange={event => native.set('output_format', event.target.value)}>
+                          <option value="flac">FLAC</option>
+                          <option value="mp3">MP3</option>
+                          <option value="wav32">WAV (32-bit float)</option>
+                        </select>
+                      </label>
+                    )}
+                  </div>
+                </Card>
+              )}
             </>
           ) : <>
           {serviceDown ? (
@@ -1673,11 +1833,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
                       setMidiCover({ name: file.name, data: btoa(raw) });
                     }).catch(reason => { if (!signal.aborted) setError(reason instanceof Error ? reason.message : String(reason)); });
                   } else {
-                    setCoverSource(file.name);
-                    setCoverSongId(null);
-                    setCoverFile(file);
-                    setCoverAudio(URL.createObjectURL(file));
-                    void runTranscription({ file }, coverMelodyOnly);
+                    readCoverRecording(file);
                   }
                 }}
               />
@@ -1690,6 +1846,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
                 {transcribing !== null ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />}
                 {transcribing !== null ? `${tt('transcribing')} · ${transcribing}` : tt('coverPickRecording')}
               </button>
+              <WindowAudioCapture disabled={!transcriberReady || transcribing !== null} onRecording={readCoverRecording} />
               <p className="mt-2 text-[11px] leading-4 text-zinc-500">{tt('coverFromLibraryHint')}</p>
               {(coverFile || coverSongId) && (
                 <button type="button" disabled={hearingLyrics} aria-busy={hearingLyrics}
@@ -2024,7 +2181,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
               <>
                 {showNotation && abc.trim() && (
                   <div className="mt-3 max-h-80 overflow-auto rounded-lg border border-zinc-200 bg-white p-2 dark:border-white/10 custom-scrollbar">
-                    <ScoreView abc={abc} onChange={setAbc} onEdit={composing ? undefined : () => setEditorOpen(true)} />
+                    <ScoreView abc={abc} title={name} lyrics={lyrics} onChange={setAbc} onEdit={composing ? undefined : () => setEditorOpen(true)} />
                   </div>
                 )}
                 <AutoTextarea
@@ -2393,7 +2550,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
       </div>
 
       <footer className="shrink-0 border-t border-zinc-200 bg-zinc-50/95 p-4 backdrop-blur-sm dark:border-white/5 dark:bg-suno-panel/95">
-        {!cloud && takeChoiceOpen && (
+        {yue && takeChoiceOpen && (
           <div role="dialog" aria-label={tt('takeTitle')} className="mb-3 rounded-xl border border-pink-300/50 bg-pink-50 p-3 text-xs leading-5 text-zinc-700 dark:border-pink-500/25 dark:bg-pink-500/10 dark:text-zinc-200">
             <p className="font-semibold text-zinc-900 dark:text-white">{tt('takeTitle')}</p>
             <p className="mt-1">{tt('takeBody')}</p>
@@ -2417,7 +2574,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
           onClose={() => setNewPlaylistOpen(false)}
           onCreate={(name, description) => void onCreatePlaylist(name, description).then(playlist => { if (playlist) choosePlaylist(playlist.id); })}
         />
-        {!cloud && <>
+        {yue && <>
         <label className="mb-2 flex cursor-pointer items-start gap-2 rounded-lg border border-zinc-200 px-3 py-2 text-xs dark:border-white/10">
           <input type="checkbox" checked={instrumental} onChange={event => void switchInstrumental(event.target.checked)} className="mt-0.5 h-4 w-4 accent-pink-500" />
           <span className="min-w-0">
@@ -2476,15 +2633,15 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
         <button
           type="button"
           onClick={submit}
-          disabled={cloud && !selectedMusicModel}
+          disabled={cloud ? !selectedMusicModel : nativeEngine ? !native.ready || (miDasheng && !miDashengPromptReady(scene)) : false}
           className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-linear-to-r from-orange-500 to-pink-600 text-base font-bold text-white shadow-lg transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
         >
-          {isGenerating ? <Square size={18} /> : !cloud && instrumental ? <Guitar size={18} /> : <Sparkles size={18} />}
-          {!cloud && composing && instrumental ? tt('composingScore') : !cloud && instrumental ? tt('createInstrumental') : t('create')}
+          {isGenerating ? <Square size={18} /> : yue && instrumental ? <Guitar size={18} /> : <Sparkles size={18} />}
+          {yue && composing && instrumental ? tt('composingScore') : yue && instrumental ? tt('createInstrumental') : t('create')}
           {activeJobCount > 0 && <span className="rounded-full bg-white/20 px-2 py-0.5 text-xs">{activeJobCount}</span>}
         </button>
       </footer>
-      {!cloud && editorOpen && (
+      {yue && editorOpen && (
         <MidiEditor
           source={{
             kind: 'score',
@@ -2505,7 +2662,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, musicEngin
           onClose={() => setEditorOpen(false)}
         />
       )}
-      {!cloud && midiCover && (
+      {yue && midiCover && (
         <MidiImportDialog
           chordsWanted={!coverMelodyOnly}
           initial={midiCover}

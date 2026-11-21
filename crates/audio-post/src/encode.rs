@@ -7,7 +7,7 @@
 //! engine, never one engine's own.
 
 use anyhow::{anyhow, bail, Result};
-use mp3lame_encoder::{Bitrate, Builder, DualPcm, FlushNoGap, Quality};
+use mp3lame_encoder::{Bitrate, Builder, DualPcm, FlushGap, Quality};
 
 use crate::Stereo;
 
@@ -244,7 +244,7 @@ pub fn mp3(audio: &Stereo, kbps: u32) -> Result<Vec<u8>> {
             .map_err(|error| anyhow!("LAME encode: {error}"))?;
     }
     out.reserve(8192);
-    encoder.flush_to_vec::<FlushNoGap>(&mut out).map_err(|error| anyhow!("LAME flush: {error}"))?;
+    encoder.flush_to_vec::<FlushGap>(&mut out).map_err(|error| anyhow!("LAME flush: {error}"))?;
     Ok(out)
 }
 
@@ -289,7 +289,7 @@ pub fn mp3_dual_mono(samples: &[f32], rate: u32, out_rate: u32, kbps: u32, sink:
     })?;
     out.clear();
     out.reserve(8192);
-    encoder.flush_to_vec::<FlushNoGap>(&mut out).map_err(|error| anyhow!("LAME flush: {error}"))?;
+    encoder.flush_to_vec::<FlushGap>(&mut out).map_err(|error| anyhow!("LAME flush: {error}"))?;
     sink.write_all(&out)?;
     Ok(())
 }

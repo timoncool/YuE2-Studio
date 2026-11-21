@@ -97,6 +97,8 @@ connected and the address to paste.
   lists the score's parts (score, lead, voice, chords) and the track's own MIDI, and
   `library_song_midi_part_write` writes one into a folder. `song_export_live` writes the
   song as an Ableton Live 12 project: the song, its stems and its MIDI on tracks, zipped.
+  `song_export_zip` takes library `song_ids` and returns a temporary local download
+  URL for the original audio, prompts, lyrics, settings and available ABC and MIDI.
 - **You write, not the studio's assistant.** The studio has a small local model (Gemma)
   for users without an agent. You write better: read `writing_guide` and
   `writing_examples` first and write the style, lyrics and scores yourself. Use
@@ -107,6 +109,33 @@ connected and the address to paste.
 ## Choosing the music engine
 
 For local YuE2, pass `"music_source": {"kind": "local"}` to `song_create`.
+For a native ACE-Step or MiniMax song, call `ace_music_profiles` or `minimax_music_profiles`.
+Check `engine_installed`, then select a profile with `ready: true`. Pass its ID as
+`music_source.model`, use `music_source.kind = "native"`, and set `music_source.engine`
+to `acestep-cpp` or `minimaxmusic-cpp`. MiniMax takes a caption in `style` and
+the song text in `lyrics`. ACE-specific settings go in `ace`. Poll `song_job_get`
+with the ID returned by `song_create`. Use `song_job_cancel` to stop the job.
+
+For MiniMax Music3 through audio.cpp, call `audio_cpp_music_models` and check that
+`minimax_music3` is ready. Pass `"music_source": {"kind":"audio_cpp","model":"minimax_music3"}`
+to `song_create` with `style`, `lyrics`, and an optional nonnegative `seed`.
+The job uses the installed `quality-q8` profile and returns its library song.
+
+For other ready audio.cpp families, pass the ID returned by the same catalog as
+`music_source.model`. HeartMuLa takes lyrics and style tags, with optional
+sampling and codec settings in `heartmula`. For MiDashengLM-Gen, use
+`midasheng` to describe the scene, music, speech, effects and environment.
+For MiniMax-H3, select `minimax_h3` and supply one instrumental description in
+`style`. The audio-only route accepts `duration_seconds` from 1 to 20 (default 4),
+plus `steps`, `seed`, and `cfg_scale`. It uses the locally installed
+[MiniMax-H3 Q4_K GGUF bundle](https://huggingface.co/audio-cpp/audio.cpp-gguf/tree/main/MiniMax-H3-Q4-GGUF)
+under `audiocpp/models/MiniMax-H3-Q4-GGUF`. Review the
+[MiniMax H3 Community License](https://huggingface.co/MiniMaxAI/MiniMax-H3/blob/main/LICENSE)
+for its territorial and use terms.
+
+For Vevo2, pass the lyrics and a library song ID as `vevo2.voice_song_id`.
+Add `vevo2.melody_song_id` to condition the singing on a second library track.
+
 For an OpenRouter generation, read `openrouter_catalog` and select an ID whose
 `capabilities` include `music_generation`. Pass that exact ID as
 `music_source.model`, with `music_source.kind` set to `openrouter`.
@@ -274,6 +303,7 @@ move around. Check the result with `ui_screenshot`.
 - **processing**: `processing_start`, `processing_get`, `processing_keep`, `processing_discard`, `processing_set_reference`.
 - **vst**: `vst_list`, `vst_scan`, `vst_open_editor`.
 - **lora**: `lora_list`, `lora_install_catalog`, `lora_search_hf`, `lora_hf_files`, `lora_install_hf`, `lora_update`, `lora_delete`, `lora_import_folder` (every LoRA of a folder, linked without a copy), `lora_import_files`, `lora_cancel_download`, `lora_export_comfyui` (a trained LoRA as one file for ComfyUI's native YuE2).
+- **RVC voices**: `rvc_voices_list` lists the voices installed in Studio Tools. `rvc_voice_import` takes an exported inference checkpoint at `model_path` and an optional filled FAISS `index_path`. `rvc_catalog_list` shows up to 20 curated voices with source and license. Filter by `query` (name and source labels), `vocal_style`, `rvc_version`, `sample_rate_hz`, and `has_index`; `total` counts the matching voices. Continue with the same filters and `offset` set to the returned `next_offset`. `rvc_catalog_install` verifies and installs the chosen ID. `rvc_catalog_progress_get` follows the active transfer or verification. `rvc_voice_remove` removes a voice and any index by its installed ID, keeping rendered songs.
 - **dataset**: `dataset_import_folder`, `dataset_reveal`, `dataset_song_files`, `dataset_prepare_train_after`, `dataset_get`, `dataset_create`, `dataset_add_folder`, `dataset_add_library_songs`, `dataset_update`, `dataset_delete`, `dataset_song_update`, `dataset_song_delete`, `lyrics_syllables` (each sung line with its syllables, as the score counts them), `lyrics_find`, `dataset_prepare`, `dataset_take_as_is` (no assistant: found lyrics and heard styles kept as they are), `dataset_prepare_cancel`.
 - **training**: `training_pack_cancel`, `training_status`, `training_pack_install`, `training_listen_pack_install`, `training_listen_pack_cancel`, `training_start`, `training_continue`, `training_cancel`, `training_checkpoint_install`, `training_run_delete`.
 - **ui**: `ui_screenshot`, `ui_read_page`, `ui_click`, `ui_type`, `ui_select`, `ui_press_key`, `ui_scroll`, `ui_navigate`, `ui_open_settings`, `ui_notify`, `ui_console`.
