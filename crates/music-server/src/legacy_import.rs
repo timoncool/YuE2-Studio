@@ -11,7 +11,7 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     fs, io,
     path::{Path, PathBuf},
 };
@@ -19,13 +19,48 @@ use std::{
 #[derive(Deserialize)]
 pub(crate) struct ImportRequest {
     path: PathBuf,
+    #[serde(default)]
+    exclude: HashSet<Category>,
+}
+
+#[derive(Deserialize, PartialEq, Eq, Hash)]
+#[serde(rename_all = "snake_case")]
+enum Category {
+    Audio,
+    Lyrics,
+    Karaoke,
+    Generation,
+    Covers,
+    Takes,
+    Stems,
+    Midi,
+    Latents,
+    Playlists,
+}
+
+fn included(kind: &str, exclude: &HashSet<Category>) -> bool {
+    let category = match kind {
+        "audio" => Category::Audio,
+        "cover" => Category::Covers,
+        "original" | "version" => {
+            if exclude.contains(&Category::Audio) {
+                return false;
+            }
+            Category::Takes
+        }
+        "stem" => Category::Stems,
+        "midi" | "midi_metadata" => Category::Midi,
+        "latent" => Category::Latents,
+        _ => return true,
+    };
+    !exclude.contains(&category)
 }
 
 pub(crate) async fn import(
     State(state): State<AppState>,
     Json(request): Json<ImportRequest>,
 ) -> Result<Json<Value>, (StatusCode, Json<ApiError>)> {
-    let result = tokio::task::spawn_blocking(move || transfer(&state.library, &request.path))
+    let result = tokio::task::spawn_blocking(move || transfer_selected(&state.library, &request.path, &request.exclude))
         .await
         .map_err(|e| api_error(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
         .map_err(|e| api_error(StatusCode::BAD_REQUEST, format!("{e:#}")))?;
@@ -194,12 +229,12 @@ pub(super) fn media_space(
         for file in song["files"].as_array().context("Missing files")? {
             let name = file["name"].as_str().context("Missing filename")?;
             // The active take and the original may point to the same file.
-            let key = destination_name(
+            let Ok(key) = destination_name(
                 old,
                 mapping.map_or("new", |(id, _)| id.as_str()),
                 name,
                 file["kind"].as_str(),
-            )?;
+            ) else { continue };
             if !counted.insert(key.clone()) {
                 continue;
             }
@@ -220,24 +255,60 @@ fn prepare_song(
     source_media: &Path,
     destination: &Path,
     staging: &Path,
-) -> Result<()> {
+    exclude: &HashSet<Category>,
+    errors: &mut Vec<Value>,
+) -> Result<bool> {
     let id = &ids[&song.id].id;
     let missing = item["missing"]
         .as_array()
         .context("Missing file inventory")?;
-    anyhow::ensure!(
-        missing.is_empty(),
-        "{}: missing files {}",
-        song.title,
-        item["missing"]
-    );
+    let start = errors.len();
+    for file in missing {
+        errors.push(json!({"song_id": song.id, "title": song.title, "kind": file["kind"],
+            "file": file["name"], "code": "missing"}));
+    }
+    if errors.len() != start {
+        return Ok(false);
+    }
     let mut names = HashMap::new();
     for file in item["files"].as_array().context("Missing file inventory")? {
         let name = file["name"].as_str().context("Missing filename")?;
-        let new_name = destination_name(&song.id, id, name, file["kind"].as_str())?;
-        install(&source_media.join(name), &destination.join(&new_name), staging)
-            .with_context(|| format!("{}: {name}", song.title))?;
-        names.insert(name.to_owned(), new_name);
+        match destination_name(&song.id, id, name, file["kind"].as_str()).and_then(|new_name| {
+            install(&source_media.join(name), &destination.join(&new_name), staging)?;
+            Ok(new_name)
+        }) {
+            Ok(new_name) => { names.insert(name.to_owned(), new_name); }
+            Err(error) => errors.push(json!({"song_id": song.id, "title": song.title, "kind": file["kind"],
+                "file": name, "code": "copy_failed", "error": format!("{error:#}")})),
+        }
+    }
+    if errors.len() != start {
+        return Ok(false);
+    }
+    if let Some(metadata) = song.metadata.as_object_mut() {
+        if exclude.contains(&Category::Covers) {
+            metadata.remove("cover_filename");
+        }
+        if exclude.contains(&Category::Takes) || exclude.contains(&Category::Audio) {
+            metadata.remove("original_audio_path");
+            metadata.remove("audio_versions");
+            metadata.remove("active_version");
+        }
+        if exclude.contains(&Category::Karaoke) {
+            metadata.remove("karaoke");
+            metadata.remove("lrc");
+        }
+    }
+    if exclude.contains(&Category::Lyrics) {
+        song.lyrics.clear();
+    }
+    if exclude.contains(&Category::Audio) {
+        song.audio_path = None;
+    }
+    if exclude.contains(&Category::Generation) {
+        song.generation_settings = json!({});
+        song.replay_request = None;
+        song.audio_codes = None;
     }
     let rename = |s: &str| -> Result<String> {
         let base = s.rsplit(['/', '\\']).next().unwrap_or("");
@@ -272,10 +343,15 @@ fn prepare_song(
         }
     }
     song.id = id.clone();
-    Ok(())
+    Ok(true)
 }
 
+#[cfg(test)]
 fn transfer(to: &Library, folder: &Path) -> Result<Value> {
+    transfer_selected(to, folder, &HashSet::new())
+}
+
+fn transfer_selected(to: &Library, folder: &Path, exclude: &HashSet<Category>) -> Result<Value> {
     let root = source_root(folder)?;
     let source_db = root.join("library.sqlite");
     let dest_db = to
@@ -290,7 +366,13 @@ fn transfer(to: &Library, folder: &Path) -> Result<Value> {
         );
     }
     let db = open_source(&root)?;
-    let view = manifest(&root, &db)?;
+    let mut view = manifest(&root, &db)?;
+    for song in view["songs"].as_array_mut().context("Missing songs")? {
+        for key in ["files", "missing"] {
+            song[key].as_array_mut().context("Missing file inventory")?
+                .retain(|file| included(file["kind"].as_str().unwrap_or_default(), exclude));
+        }
+    }
     let items: HashMap<_, _> = view["songs"]
         .as_array()
         .context("Missing songs")?
@@ -298,7 +380,7 @@ fn transfer(to: &Library, folder: &Path) -> Result<Value> {
         .map(|s| (s["id"].as_str().unwrap(), s))
         .collect();
     let mut songs = Library::read_songs(&db)?;
-    let playlists = Library::read_playlists(&db)?;
+    let playlists = if exclude.contains(&Category::Playlists) { Vec::new() } else { Library::read_playlists(&db)? };
     let source = root.to_str().context("Unsupported library path")?;
     fs::create_dir_all(to.media_dir())?;
     let source_media = root.join("media");
@@ -329,14 +411,25 @@ fn transfer(to: &Library, folder: &Path) -> Result<Value> {
             )?,
         ))
     })?;
-    songs.retain(|s| !song_ids[&s.id].imported);
-    for song in &mut songs {
-        let item = items[song.id.as_str()];
-        prepare_song(song, item, &song_ids, &source_media, to.media_dir(), &staging)?;
+    let already_imported = song_ids.values().filter(|mapping| mapping.imported).count();
+    let already_imported_lists = list_ids.values().filter(|mapping| mapping.imported).count();
+    let mut errors = Vec::new();
+    let mut available: HashSet<&str> = song_ids.iter().filter(|(_, mapping)| mapping.imported)
+        .map(|(id, _)| id.as_str()).collect();
+    let mut prepared = Vec::new();
+    songs.retain(|song| !song_ids[&song.id].imported);
+    for mut song in songs {
+        let old_id = song.id.clone();
+        let (old_id, _) = song_ids.get_key_value(&old_id).context("Missing song ID")?;
+        if prepare_song(&mut song, items[old_id.as_str()], &song_ids, &source_media,
+            to.media_dir(), &staging, exclude, &mut errors)? {
+            available.insert(old_id.as_str());
+            prepared.push(song);
+        }
     }
     to.legacy_transaction(|tx|{
         let mut added=0;
-        for s in songs {
+        for s in prepared {
             if !claim(tx,&s.id)? {continue;}
             tx.execute("INSERT INTO songs(id,title,audio_path,caption,lyrics,metadata_json,generation_settings_json,engine_id,profile_id,replay_request_json,audio_codes_json,source,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 params![s.id,s.title,s.audio_path,s.caption,s.lyrics,s.metadata.to_string(),s.generation_settings.to_string(),s.engine_id,s.profile_id,s.replay_request.map(|v|v.to_string()),s.audio_codes.map(|v|v.to_string()),s.source,s.created_at,s.updated_at])?;
@@ -345,6 +438,11 @@ fn transfer(to: &Library, folder: &Path) -> Result<Value> {
         let mut added_lists=0;
         let mut next_album_position = None;
         for list in playlists {
+            if list_ids[&list.id].imported { continue; }
+            if list.song_ids.iter().any(|song| !available.contains(song.as_str())) {
+                errors.push(json!({"title": list.name, "kind": "playlist", "file": list.name, "code": "playlist_incomplete"}));
+                continue;
+            }
             let new_id=&list_ids[&list.id].id;
             if !claim(tx,new_id)? {continue;}
             let album = library::is_album_description(list.description.as_deref());
@@ -370,7 +468,8 @@ fn transfer(to: &Library, folder: &Path) -> Result<Value> {
             }
             added_lists+=1;
         }
-        Ok(json!({"added":added,"already_imported":song_ids.len()-added,"playlists_added":added_lists,"playlists_already_imported":list_ids.len()-added_lists}))
+        Ok(json!({"added":added,"already_imported":already_imported,"playlists_added":added_lists,
+            "playlists_already_imported":already_imported_lists,"errors":errors}))
     })
 }
 
@@ -447,7 +546,7 @@ mod tests {
     }
 
     #[test]
-    fn retry_publishes_all_rows_together_and_keeps_user_edits() -> Result<()> {
+    fn mixed_import_reports_missing_files_and_retries_without_replacing_user_edits() -> Result<()> {
         let temp = tempfile::tempdir()?;
         let source = temp.path().join("old");
         let destination = temp.path().join("new");
@@ -462,21 +561,43 @@ mod tests {
                 tx.execute("INSERT INTO songs VALUES(?,?,?,'','','{}','{}','acestep-cpp',NULL,NULL,NULL,'native',?,?)",
                     params![id,id,format!("{id}.wav"),created,created])?;
             }
+            tx.execute("UPDATE songs SET lyrics='source lyrics', metadata_json=? WHERE id='a'",
+                [json!({"lrc": "[00:01.00] word", "cover_filename": "a.jpg",
+                    "original_audio_path": "old.wav", "audio_versions": [{"file": "a.wav"}],
+                    "active_version": "take"}).to_string()])?;
             Ok(())
         })?;
         fs::write(old.media_dir().join("a.wav"), b"first")?;
-        assert!(transfer(&new, &source)
-            .unwrap_err()
-            .to_string()
-            .contains("b.wav"));
-        assert!(new.list_songs()?.is_empty());
-        fs::write(old.media_dir().join("b.wav"), b"second")?;
-        assert_eq!(transfer(&new, &source)?["added"], 2);
+        fs::write(old.media_dir().join("a-drums.wav"), b"stem")?;
+        old.create_playlist(library::PlaylistInput {
+            name: "Both".into(), description: None, song_ids: vec!["b".into(), "a".into()],
+        })?;
+        let first = transfer_selected(&new, &source, &HashSet::from([
+            Category::Stems, Category::Karaoke, Category::Covers, Category::Takes,
+        ]))?;
+        assert_eq!(first["added"], 1);
+        assert_eq!(first["already_imported"], 0);
+        assert_eq!(first["playlists_added"], 0);
+        assert_eq!(first["errors"][0]["file"], "b.wav");
+        assert_eq!(first["errors"][1]["code"], "playlist_incomplete");
         let song = new.list_songs()?.remove(0);
+        assert!(!new.media_dir().join(format!("{}-drums.wav", song.id)).exists());
+        assert_eq!(song.lyrics, "source lyrics");
+        for key in ["lrc", "cover_filename", "original_audio_path", "audio_versions", "active_version"] {
+            assert!(song.metadata.get(key).is_none(), "{key}");
+        }
+        assert!(song.audio_path.is_some());
         new.rename_song(&song.id, "Edited in YuE2")?;
+        fs::write(old.media_dir().join("b.wav"), b"second")?;
+        let repaired = transfer(&new, &source)?;
+        assert_eq!(repaired["added"], 1);
+        assert_eq!(repaired["playlists_added"], 1);
+        assert_eq!(repaired["errors"], json!([]));
+        let playlist = new.list_playlists()?.remove(0);
+        assert_eq!(playlist.song_ids[1], song.id);
         let preview = super::super::inspect(&source, &new)?;
         assert_eq!(preview["space"]["required_bytes"], 0);
-        assert_eq!(preview["space"]["total_bytes"], 11);
+        assert_eq!(preview["space"]["total_bytes"], 15);
         let repeat = transfer(&new, &source)?;
         assert_eq!(repeat["already_imported"], 2);
         assert_eq!(new.get_song(&song.id)?.unwrap().title, "Edited in YuE2");
@@ -487,6 +608,36 @@ mod tests {
             .collect::<io::Result<Vec<_>>>()?;
         assert_eq!(staged, [std::ffi::OsString::from("lock")]);
         assert!(transfer(&new, &destination).is_err());
+        Ok(())
+    }
+
+    #[test]
+    fn copy_conflicts_report_the_file_and_leave_the_existing_bytes_intact() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let source = temp.path().join("old");
+        let destination = temp.path().join("new");
+        let old = Library::open_at(source.join("library.sqlite"), source.join("media"))?;
+        let new = Library::open_at(destination.join("library.sqlite"), destination.join("media"))?;
+        let song = json!({"files": [{"kind":"audio","name":"old.wav"}], "missing":[]});
+        fs::create_dir_all(old.media_dir())?;
+        fs::create_dir_all(new.media_dir())?;
+        fs::write(old.media_dir().join("old.wav"), b"source")?;
+        let target = new.media_dir().join(destination_name("old", "reserved", "old.wav", Some("audio"))?);
+        fs::write(&target, b"user edit")?;
+        old.legacy_transaction(|tx| {
+            tx.execute("INSERT INTO songs VALUES('old','Take','old.wav','','','{}','{}','acestep-cpp',NULL,NULL,NULL,'native','1','1')", [])?;
+            Ok(())
+        })?;
+        let db = open_source(&source)?;
+        let mut original = Library::read_songs(&db)?.remove(0);
+        let ids = HashMap::from([("old".to_owned(), Mapping { id: "reserved".into(), imported: false })]);
+        let (_lock, staging) = lock_staging(new.media_dir())?;
+        let mut errors = Vec::new();
+        assert!(!prepare_song(&mut original, &song, &ids, old.media_dir(), new.media_dir(),
+            &staging, &HashSet::new(), &mut errors)?);
+        assert_eq!(errors[0]["file"], "old.wav");
+        assert_eq!(errors[0]["code"], "copy_failed");
+        assert_eq!(fs::read(&target)?, b"user edit");
         Ok(())
     }
 }
