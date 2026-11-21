@@ -10,6 +10,7 @@ interface Made {
   stems: number;
   midi_parts: number;
   tempo_from_score: boolean;
+  score_midi_omitted?: boolean;
   bpm: number;
   meter: string;
   tracks: string[];
@@ -71,6 +72,7 @@ export const AbletonProject: React.FC<{ songId: string }> = ({ songId }) => {
           </p>
           <p>{made.tracks.join(' · ')}</p>
           {!made.tempo_from_score && <p>{t('exportLiveTempoDefault')}</p>}
+          {made.score_midi_omitted && <p role="status">{t('exportLiveScoreMidiOmitted')}</p>}
           {made.stems === 0 && <p>{t('exportLiveNoStems')}</p>}
           {made.left_off.length > 0 && <p>{t('exportLiveLeftOff').replace('{files}', made.left_off.map(file => file.split('/').pop()).join(', '))}</p>}
         </div>
