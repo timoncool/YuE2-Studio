@@ -217,10 +217,23 @@ pub(super) async fn status(
         return Json(serde_json::json!({ "supported": false })).into_response();
     };
     let downloader = &state.native_music_downloads;
+    let installed = installed_by(downloader, runtime).is_some();
+    let shared = state.engine_runtime.missing(cuda_build());
+    let common_bytes: u64 = shared.iter().map(|asset| asset.bytes).sum();
+    let archive_bytes = if installed { 0 } else { runtime.pin.bytes };
+    let shared_download = state.engine_runtime.downloader().active_for(&engine).await;
+    let download = if shared_download
+        .as_ref()
+        .is_some_and(|download| !download.done)
+    {
+        shared_download
+    } else {
+        downloader.active_for(&engine).await.or(shared_download)
+    };
     Json(serde_json::json!({
-        "supported": true, "installed": installed_by(downloader, runtime).is_some(),
-        "revision": runtime.pin.revision, "bytes": runtime.pin.bytes,
-        "download": downloader.active_for(&engine).await,
+        "supported": true, "installed": installed && shared.is_empty(),
+        "revision": runtime.pin.revision, "bytes": archive_bytes + common_bytes,
+        "download": download,
     }))
     .into_response()
 }
@@ -236,6 +249,15 @@ pub(super) async fn start(
         )
         .into_response();
     };
+    if let Some(cuda) = cuda_build() {
+        if let Err(error) = state
+            .engine_runtime
+            .install_missing_for(Some(cuda), &engine)
+            .await
+        {
+            return api_error(StatusCode::CONFLICT, format!("{error:#}")).into_response();
+        }
+    }
     let downloader = &state.native_music_downloads;
     let cache = std::env::var_os("STUDIO_NATIVE_RUNTIME_CACHE")
         .map(PathBuf::from)
@@ -249,15 +271,6 @@ pub(super) async fn start(
         }
         None => downloader.install_all(&engine, &[&runtime.asset]).await,
     };
-    let result = match (result, cuda_build()) {
-        (Ok(()), Some(cuda)) => {
-            state
-                .engine_runtime
-                .install_missing_for(Some(cuda), &engine)
-                .await
-        }
-        (result, _) => result,
-    };
     match result {
         Ok(()) => Json(serde_json::json!({ "installed": true })).into_response(),
         Err(error) => api_error(StatusCode::CONFLICT, format!("{error:#}")).into_response(),
@@ -268,7 +281,9 @@ pub(super) async fn cancel(
     State(state): State<AppState>,
     Path(engine): Path<String>,
 ) -> impl IntoResponse {
-    Json(serde_json::json!({ "cancelled": state.native_music_downloads.cancel_for(&engine).await }))
+    let cancelled_runtime = state.native_music_downloads.cancel_for(&engine).await;
+    let cancelled_shared = state.engine_runtime.downloader().cancel_for(&engine).await;
+    Json(serde_json::json!({ "cancelled": cancelled_runtime || cancelled_shared }))
 }
 
 #[cfg(test)]
