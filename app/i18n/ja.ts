@@ -44,7 +44,7 @@ export const ja = {
   journalKind_training: '学習',
   journalKind_lora: 'LoRA',
   journalKind_rvc_voice: 'RVC 音声',
-  journalKind_rvc_catalog: 'RVC 音声カタログ',
+  journalKind_music_engine_catalog: '音楽エンジンカタログ', journalKind_music_engine: '音楽エンジン', journalKind_rvc_catalog: 'RVC 音声カタログ',
   journalKind_download: 'ダウンロード',
   journalKind_model: 'モデル',
   journalKind_settings: '設定',

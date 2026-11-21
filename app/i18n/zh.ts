@@ -44,7 +44,7 @@ export const zh = {
     journalKind_training: '训练',
     journalKind_lora: 'LoRA',
     journalKind_rvc_voice: 'RVC 声音',
-    journalKind_rvc_catalog: 'RVC 声音目录',
+    journalKind_music_engine_catalog: '音乐引擎目录', journalKind_music_engine: '音乐引擎', journalKind_rvc_catalog: 'RVC 声音目录',
     journalKind_download: '下载',
     journalKind_model: '模型',
     journalKind_settings: '设置',
