@@ -124,41 +124,44 @@ def training_gallery(root):
     def open_dataset():
         ui("navigate", view="adapters")
         click('tab "Training"')
-        click('Example training dataset')
+        page = wait_page(predicate=lambda text: '· Songs' in text or 'Example training dataset' in text)
+        if '· Songs' not in page:
+            click('Example training dataset', page)
 
     def dataset():
         open_dataset()
-        click('button "Songs"')
-        take('03-dataset', 'Example training dataset', 'Morning vocal')
+        click('· Songs"')
+        take('03-dataset', 'Morning vocal', 'Harmony practice')
 
     def training():
         open_dataset()
-        click('button "Training"')
-        take('04-training', 'Training base', 'Stable Audio 3')
-        take('05-training-base', 'Training base', focus='Training base')
-        page = wait_page('RVC · Burn CUDA')
-        select = next(line.split()[0] for line in page.splitlines() if line.startswith('e') and 'select' in line and 'YuE2' in line)
+        click('· Training"')
+        take('04-training', '"sa3"', focus='"sa3"')
+        page = wait_page('"rvc"')
+        select = next(line.split()[0] for line in page.splitlines() if '"sa3"' in line and '"rvc"' in line)
         ui('select', ref=select, value='rvc')
-        take('02-train-own-voice', 'RVC · Burn CUDA', 'Batch size', focus='Batch size')
+        take('02-train-own-voice', 'value="rvc"', 'Batch size', focus='Batch size')
+
+    def training_base():
+        open_dataset()
+        click('· Training"')
+        page = wait_page('"sa3"')
+        ui('select', ref=control(page, '"sa3"'), value='yue2')
+        take('05-training-base', 'Training base', focus='Training base')
 
     def results():
         open_dataset()
         click('Result')
         take('06-checkpoints', 'To LoRA', '50', focus='To LoRA')
 
-    def lora():
-        ui("navigate", view="adapters")
-        click('tab "Catalog"')
-        take('07-lora-catalog', 'Search the catalog')
-        json_file(out/'lora-catalog.json', tool('lora_list', response_format='detailed'))
-
     def rvc():
         ui('navigate', view='tools')
-        take('01-rvc-catalog', 'RVC voice catalog', 'Search voices', focus='Search voices')
+        click('Curated voices')
+        take('01-rvc-catalog', 'Search voices', focus='Search voices')
         json_file(out/'rvc-status.json', tool('rvc_training_status'))
 
     failures = {}
-    for scene in (dataset, training, results, lora, rvc):
+    for scene in (dataset, training, training_base, results, rvc):
         try:
             scene()
         except Exception as problem:
@@ -185,6 +188,10 @@ def seed_training_gallery(root):
                           lyrics='[verse]\nA morning song', style='Acoustic vocal demo', lyrics_state='done', style_state='done'))
     original['items'] = items
     json_file(dataset/'dataset.json', original)
+    run_path = root/'training'/'runs'/'demo-run'/'run.json'
+    run = json.loads(run_path.read_text(encoding='utf8'))
+    run.update(dataset_name=original['name'], name='Example LoRA result')
+    json_file(run_path, run)
 
 
 def native_editor_window(pid):
