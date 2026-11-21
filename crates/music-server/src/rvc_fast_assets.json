@@ -1,0 +1,17 @@
+{
+  "windows": {
+    "file": "yue2-rvc-vocal-fast-windows-cuda13-x64.zip",
+    "sha256": "c66245539fa28faa01f0078facf8cd27b1b5ca90846917cca9f695c492c9250e",
+    "bytes": 685042401
+  },
+  "linux12": {
+    "file": "yue2-rvc-vocal-fast-linux-cuda12-x64.tar.gz",
+    "sha256": "4e5969d0d752285aa75baf2c08789eea72bcf7ae04c438e5ef03c90d6d375937",
+    "bytes": 916765336
+  },
+  "linux13": {
+    "file": "yue2-rvc-vocal-fast-linux-cuda13-x64.tar.gz",
+    "sha256": "e9ec89dd3e5c85b64b03c5b7df0d999f13e1b35f54d89297c67a676e5f6246e8",
+    "bytes": 752570041
+  }
+}

@@ -206,7 +206,7 @@ pub(super) async fn submit(
             .and_then(|result| result),
             Err(error) => Err(error),
         };
-        audio_cpp_music::complete(&state, &job.id, MODEL, PROFILE, outcome).await;
+        audio_cpp_music::complete_local(&state, &job.id, MODEL, PROFILE, outcome).await;
         state.audio_cpp_music_stops.write().await.remove(&job.id);
     });
     (StatusCode::ACCEPTED, Json(accepted))

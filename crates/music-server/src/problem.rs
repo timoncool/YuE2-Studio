@@ -70,7 +70,7 @@ fn engine_log_tail(state: &AppState) -> String {
     let lines = match state.engine_log.lines() {
         Some(mut live) => {
             // After a restart the new process's SSE ring omits the supervisor's crash record.
-            if let Some(fault) = disk.iter().rev().find(|line| line.starts_with("[studio] engine crash: faulting module ")) {
+            if let Some(fault) = disk.iter().rev().find(|line| line.starts_with("[studio] engine crash: ")) {
                 live.push(fault.clone());
             }
             live

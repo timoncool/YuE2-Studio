@@ -10,6 +10,7 @@ const composeScore = vi.fn();
 const transcribe = vi.fn();
 const instrumentalScore = vi.fn();
 let ready = true;
+let enginePaused = false;
 let configured = false;
 let librarySongs: Song[] = [];
 vi.mock('../context/I18nContext', () => ({ useI18n: () => ({ language: 'en', t: (key: string) => key }) }));
@@ -20,7 +21,8 @@ vi.mock('../services/studioQueries', async original => ({
   libraryChanged: vi.fn(),
   useActivity: () => ({ data: [] }),
   useAssistantStatus: () => ({ data: null }),
-  useSetupStatus: () => ({ isError: false, data: { ready, engine_ready: ready } }),
+  setupStatusChanged: vi.fn(),
+  useSetupStatus: () => ({ isError: false, data: { ready, engine_ready: ready && !enginePaused, engine_paused: enginePaused } }),
   useOpenRouterSettings: () => ({ data: { configured } }),
 }));
 vi.mock('../services/mcpBridge', () => ({ useBridgeCommand: () => undefined }));
@@ -62,6 +64,7 @@ const sent: YueRequest[] = [];
 beforeEach(() => {
   sent.length = 0;
   ready = true;
+  enginePaused = false;
   configured = false;
   librarySongs = [];
   localStorage.clear();
@@ -99,6 +102,23 @@ const type = (element: HTMLTextAreaElement | HTMLInputElement, value: string) =>
 });
 const click = (element: Element) => act(() => { element.dispatchEvent(new MouseEvent('click', { bubbles: true })); });
 const buttonNamed = (text: string) => [...host.querySelectorAll('button')].find(button => button.textContent?.includes(text));
+
+it('uses explicit controls for the YuE2 engine and follows the shared paused state', async () => {
+  act(() => root.render(panel({})));
+  click(buttonNamed('Pause YuE2 engine')!);
+  await flush();
+  expect(fetch).toHaveBeenCalledWith('/engine/pause', { method: 'POST' });
+
+  enginePaused = true;
+  act(() => root.render(panel({})));
+  expect(host.textContent).toContain('YuE2 engine paused');
+  click(buttonNamed('Resume YuE2 engine')!);
+  await flush();
+  expect(fetch).toHaveBeenCalledWith('/engine/resume', { method: 'POST' });
+
+  act(() => root.render(panel({ musicEngine: 'openrouter' })));
+  expect(buttonNamed('Resume YuE2 engine')).toBeUndefined();
+});
 
 describe('pauses between repeated generations (#261)', () => {
   const renderQueue = (queueBusy: boolean, activeJobCount = 0) =>
@@ -887,6 +907,54 @@ it('reuses the MiniMax-H3 prompt, duration, seed and format without a lyrics fie
     music_source: { kind: 'audio_cpp', model: 'minimax_h3' },
     style: 'funk groove', lyrics: '', duration_seconds: 4, steps: 20, seed: 2026,
     cfg_scale: 1, output_format: 'wav32',
+  });
+});
+
+it('reuses a Stable Audio 3 text prompt and its sampler and guidance controls', async () => {
+  vi.stubGlobal('fetch', vi.fn(async () => Response.json({ engine: 'audio.cpp', models: [
+    { id: 'stable_audio', name: 'Stable Audio 3', profile_id: 'stable_audio_3_small_music_q8_0',
+      quantization: 'Q8_0', ready: true, missing: [] },
+  ] })));
+  const stable_audio = { negative_prompt: 'vocals', sampler_mode: 'euler', apg_scale: 0.5, duration_padding_sec: 1 };
+  const song = {
+    title: 'Stable take', ditModel: 'audio.cpp', style: 'instrumental piano', lyrics: 'Previous draft',
+    generationParams: {
+      music_source: { kind: 'audio_cpp', model: 'stable_audio' },
+      duration_seconds: 4, steps: 4, seed: 42, guidance_scale: 2, output_format: 'wav32', stable_audio,
+    },
+  } as Song;
+  act(() => root.render(panel({ musicEngine: 'audio.cpp', initialData: { song, timestamp: 1 } })));
+  await flush();
+  expect(field('textarea[aria-label="lyrics"]')).toBeNull();
+  const sampler = [...host.querySelectorAll('label')].find(node => node.textContent?.startsWith('Sampler'));
+  expect(sampler?.querySelector('select')?.value).toBe('euler');
+  click(buttonNamed('create')!);
+  expect(sent.at(-1)).toMatchObject({
+    music_source: { kind: 'audio_cpp', model: 'stable_audio' },
+    style: 'instrumental piano', lyrics: '', duration_seconds: 4, steps: 4, seed: 42,
+    cfg_scale: 2, output_format: 'wav32', stable_audio,
+  });
+});
+
+it('submits a MuLaCover library original and restores it for a new take', async () => {
+  vi.stubGlobal('fetch', vi.fn(async () => Response.json({ engine: 'audio.cpp', models: [
+    { id: 'mulacover', name: 'MuLaCover', profile_id: 'mulacover_q8_0', quantization: 'Q8_0', ready: true, missing: [] },
+  ] })));
+  const song = {
+    title: 'Cover take', ditModel: 'audio.cpp', style: 'warm piano', lyrics: '[verse] Morning',
+    generationParams: {
+      music_source: { kind: 'audio_cpp', model: 'mulacover' },
+      cover_of: 'original-track', duration_seconds: 3, seed: 2026, output_format: 'flac',
+    },
+  } as Song;
+  act(() => root.render(panel({ musicEngine: 'audio.cpp', initialData: { song, timestamp: 1 } })));
+  await flush();
+  const picker = [...host.querySelectorAll('select')].find(select => select.closest('label')?.textContent?.includes('Original song'));
+  expect(picker?.value).toBe('original-track');
+  click(buttonNamed('create')!);
+  expect(sent.at(-1)).toMatchObject({
+    music_source: { kind: 'audio_cpp', model: 'mulacover' }, cover_of: 'original-track',
+    style: 'warm piano', lyrics: '[verse] Morning', duration_seconds: 3, seed: 2026, output_format: 'flac',
   });
 });
 

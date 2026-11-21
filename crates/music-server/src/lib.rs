@@ -24,6 +24,7 @@ mod audio_cpp_music;
 mod hotstep_cover;
 mod hotstep_cover_assets;
 mod hotstep_cover_rolls;
+mod audio_cpp_stable_audio;
 mod audio_cpp_vevo2;
 mod native_music_jobs;
 mod native_ace_jobs;
@@ -60,6 +61,9 @@ mod separation;
 mod restore;
 mod rvc_voices;
 mod rvc_catalog;
+mod rvc_apply;
+mod rvc_fast;
+mod rvc_fast_install;
 mod rvc_catalog_progress;
 mod midi;
 mod midi_edit;
@@ -129,6 +133,7 @@ struct AppState {
     hotstep_cover: Arc<downloads::Downloader>,
     audio_cpp_music_stops: Arc<RwLock<HashMap<String, Arc<std::sync::atomic::AtomicBool>>>>,
     heartmula_install: Arc<tokio::sync::Mutex<()>>,
+    stable_audio_install: Arc<tokio::sync::Mutex<()>>,
     openrouter_music_stops: Arc<RwLock<HashMap<String, Arc<tokio::sync::Notify>>>>,
     music_server: EngineClient,
     /// The engine's log, followed for the service's life: its recent lines and
@@ -141,6 +146,7 @@ struct AppState {
     own_backbone: Arc<RwLock<Option<String>>>,
     /// Downloads of community models (`community`) into `models/yue2-cpp/own`.
     community_downloads: Arc<downloads::Downloader>,
+    rvc_native_downloads: Arc<downloads::Downloader>,
     settings_path: PathBuf,
     openrouter_catalog: Arc<RwLock<OpenRouterCatalogState>>,
     library: library::Library,
@@ -149,6 +155,7 @@ struct AppState {
     /// A restart holds this for writing because it clears the engine's job table.
     /// Songs hold it while being submitted, scores through terminal result collection.
     engine_use: Arc<tokio::sync::RwLock<()>>,
+    engine_paused: Arc<std::sync::atomic::AtomicBool>,
     score_jobs: Arc<RwLock<std::collections::VecDeque<ScoreJob>>>,
     engine_options: Arc<RwLock<EngineOptions>>,
     /// Devices that failed under Auto in this session - the engine did not
@@ -314,6 +321,8 @@ struct CreateMusicJobRequest {
     ace: Option<native_ace_jobs::AceOptions>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     heartmula: Option<audio_cpp_heartmula::HeartMuLaOptions>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    stable_audio: Option<audio_cpp_stable_audio::Options>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     midasheng: Option<audio_cpp_midasheng::MiDashengPrompt>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -1531,6 +1540,7 @@ pub async fn serve_on_port(port: u16) -> anyhow::Result<()> {
         hotstep_cover: Arc::new(downloads::Downloader::new(studio_data_root().unwrap_or_else(|| PathBuf::from(".")).join("hotstep"))),
         audio_cpp_music_stops: Arc::default(),
         heartmula_install: Arc::default(),
+        stable_audio_install: Arc::default(),
         openrouter_music_stops: Arc::new(RwLock::new(HashMap::new())),
         music_server,
         engine_log,
@@ -1598,11 +1608,15 @@ pub async fn serve_on_port(port: u16) -> anyhow::Result<()> {
         selected_component_ids: Arc::new(RwLock::new(selected_component_ids)),
         own_backbone: Arc::new(RwLock::new(persisted.as_ref().and_then(|settings| settings.own_backbone.clone()))),
         community_downloads,
+        rvc_native_downloads: Arc::new(rvc_fast_install::downloader(
+            settings_path.parent().expect("settings file has a data directory"),
+        )),
         settings_path,
         openrouter_catalog: Arc::new(RwLock::new(OpenRouterCatalogState::default())),
         library: library::Library::open_default()?,
         engine: Arc::new(tokio::sync::Mutex::new(None)),
         engine_use: Arc::new(tokio::sync::RwLock::new(())),
+        engine_paused: Arc::new(std::sync::atomic::AtomicBool::new(false)),
         score_jobs: Arc::new(RwLock::new(std::collections::VecDeque::new())),
         engine_options: Arc::new(RwLock::new(persisted.as_ref().map(|settings| settings.engine_options.clone().migrated()).unwrap_or_default())),
         engine_runtime: Arc::new(engine_runtime::EngineRuntime::new(&engine_bundle_root(), &studio_data_root().unwrap_or_else(|| std::path::PathBuf::from(".")))),
@@ -1680,16 +1694,21 @@ pub async fn serve_on_port(port: u16) -> anyhow::Result<()> {
         .route("/health", get(health))
         .route("/v1/capabilities", get(capabilities))
         .route("/v1/rvc/voices", get(rvc_voices::list))
+        .route("/v1/rvc/apply", post(rvc_apply::apply))
+        .route("/v1/rvc/apply/setup", get(rvc_apply::setup).post(rvc_apply::install))
         .route("/v1/rvc/voices/{id}", axum::routing::delete(rvc_voices::remove))
         .route("/v1/rvc/catalog", get(rvc_catalog::list))
         .route("/v1/rvc/catalog/install", post(rvc_catalog::install))
         .route("/v1/rvc/catalog/progress/{id}", get(rvc_catalog_progress::get))
+        .route("/v1/rvc/native/runtime", get(rvc_fast_install::get).post(rvc_fast_install::start).delete(rvc_fast_install::cancel))
         .route("/v1/rvc/voices/import", post(rvc_voices::import).layer(DefaultBodyLimit::max(rvc_voices::UPLOAD_LIMIT)))
         .route("/v1/configuration", get(configuration).put(update_configuration))
         .route("/engine/options", get(engine_options).put(update_engine_options))
         .route("/engine/options/fitted", axum::routing::delete(reset_fitted_max_seq))
         .route("/engine/pick-executable", post(pick_engine_executable))
         .route("/engine/restart", post(restart_local_engine))
+        .route("/engine/pause", post(pause_local_engine))
+        .route("/engine/resume", post(resume_local_engine))
         .route("/v1/music/native/minimaxmusic-cpp/profiles", get(minimax_music_profiles))
         .route("/v1/music/native/acestep-cpp/profiles", get(ace_music_profiles))
         .route("/v1/engine/logs", get(engine_logs))
@@ -1970,7 +1989,8 @@ pub async fn serve_on_port(port: u16) -> anyhow::Result<()> {
                 let ready = state.model_manager.status(effective_install_target(&state).await).await.ready;
                 // an engine inside a long step does not answer /health in time; while it is still a
                 // running process with a job on it, it is at work, not gone
-                let running = state.music_server.health().await || engine_at_work(&state).await;
+                let running = !engine_is_paused(&state)
+                    && (state.music_server.health().await || engine_at_work(&state).await);
                 // A changed runtime or model selection can resolve a prior failure.
                 let retry_key = (
                     state.engine_options.read().await.clone(),
@@ -1988,7 +2008,7 @@ pub async fn serve_on_port(port: u16) -> anyhow::Result<()> {
                 let card_taken = preparing || state.training.active_run().await.is_some();
                 // a restart under way elsewhere is left alone
                 let quiet = state.engine_use.try_write().ok();
-                if ready && !running && !card_taken && quiet.is_some()
+                if ready && !running && !card_taken && quiet.is_some() && !engine_is_paused(&state)
                     && start_backoff.allow(std::time::Instant::now())
                     && !state.music_server.health().await
                 {
@@ -5686,7 +5706,7 @@ async fn shutdown() {
 }
 
 async fn health(State(state): State<AppState>) -> Json<Value> {
-    let engine_ready = state.music_server.health().await;
+    let engine_ready = !engine_is_paused(&state) && state.music_server.health().await;
     // Which program is actually answering here, and whether it can start an
     // engine at all. A second copy of the studio - a development build, say -
     // takes this port and the window then waits forever on an engine that
@@ -5937,13 +5957,56 @@ async fn restart_idle_engine(state: &AppState) -> Result<bool, String> {
     if engine_at_work(state).await { return Ok(false); }
     let _restart = state.engine_use.write().await;
     // A submitter may have handed a song to the engine while we waited.
-    if engine_at_work(state).await || !state.music_server.health().await { return Ok(false); }
+    if engine_is_paused(state) || engine_at_work(state).await || !state.music_server.health().await { return Ok(false); }
     restart_engine(state).await?;
     Ok(true)
 }
 
+const ENGINE_PAUSED_MESSAGE: &str = "The local YuE2 engine is paused. Resume it before starting a new task.";
+
+fn engine_is_paused(state: &AppState) -> bool {
+    state.engine_paused.load(std::sync::atomic::Ordering::Acquire)
+}
+
+async fn pause_local_engine(State(state): State<AppState>) -> Result<Json<Value>, (StatusCode, Json<ApiError>)> {
+    let busy = || api_error(StatusCode::CONFLICT, "Finish or cancel the current song or score before pausing the engine.".into());
+    let _exclusive = state.engine_use.try_write().map_err(|_| busy())?;
+    if state.jobs.read().await.values().any(song_in_engine) {
+        return Err(busy());
+    }
+    if !engine_is_paused(&state) {
+        let mut engine = state.engine.lock().await;
+        if let Some(engine) = engine.as_mut() {
+            tokio::task::block_in_place(|| engine.stop(std::time::Duration::from_secs(10)))
+                .map_err(|error| api_error(StatusCode::SERVICE_UNAVAILABLE, error.to_string()))?;
+        } else if state.music_server.health().await {
+            return Err(api_error(StatusCode::CONFLICT, "The local engine is managed outside Studio and cannot be paused here.".into()));
+        }
+        state.engine_paused.store(true, std::sync::atomic::Ordering::Release);
+        music_engine::yue_server::note_in_log("the local YuE2 engine was paused on request");
+    }
+    Ok(Json(serde_json::json!({ "engine_paused": true })))
+}
+
+async fn resume_local_engine(State(state): State<AppState>) -> Result<Json<Value>, (StatusCode, Json<ApiError>)> {
+    let _exclusive = state.engine_use.try_write()
+        .map_err(|_| api_error(StatusCode::CONFLICT, "The engine is busy. Resume it when the current task finishes.".into()))?;
+    if engine_is_paused(&state) {
+        state.engine_paused.store(false, std::sync::atomic::Ordering::Release);
+        if let Err(error) = restart_engine(&state).await {
+            state.engine_paused.store(true, std::sync::atomic::Ordering::Release);
+            return Err(api_error(StatusCode::SERVICE_UNAVAILABLE, error));
+        }
+        music_engine::yue_server::note_in_log("the local YuE2 engine was resumed on request");
+    }
+    Ok(Json(serde_json::json!({ "engine_paused": false })))
+}
+
 async fn restart_local_engine(State(state): State<AppState>) -> Result<Json<Value>, (StatusCode, Json<ApiError>)> {
     let _restart = state.engine_use.write().await;
+    if engine_is_paused(&state) {
+        return Err(api_error(StatusCode::CONFLICT, ENGINE_PAUSED_MESSAGE.into()));
+    }
     // The button waits for a score's result. A song it ends is named in the log.
     if engine_at_work(&state).await {
         music_engine::yue_server::note_in_log(&format!("{RESTARTED_UNDER_A_SONG}; that song is lost"));
@@ -5999,6 +6062,7 @@ async fn stop_engine_and_assistant(state: &AppState) -> Result<bool, String> {
 /// Starts the engine again with the saved options; an engine that does not start is counted for the hub by a reason
 /// that names no path on the computer.
 async fn restart_engine(state: &AppState) -> Result<(), String> {
+    if engine_is_paused(state) { return Ok(()); }
     *state.engine_start_error.write().await = None;
     let started = start_engine_again(state).await;
     *state.engine_start_error.write().await = started.as_ref().err().cloned();
@@ -7200,7 +7264,9 @@ async fn compose_setup_status(state: &AppState, manager_status: model_manager::M
         (None, None) => false,
     };
     if let Value::Object(ref mut fields) = status {
-        let engine_ready = state.music_server.health().await;
+        let paused = engine_is_paused(state);
+        let engine_ready = !paused && state.music_server.health().await;
+        fields.insert("engine_paused".into(), Value::Bool(paused));
         let matches_selection = if engine_ready && selected_set_ready {
             // Restart holds this mutex while the weights load. Status polling must remain responsive.
             let current = state.engine.try_lock().map(|guard| guard.as_ref().map(|engine| engine.config().models.clone()));
@@ -11125,6 +11191,9 @@ async fn submit_music_job(state: AppState, mut request: CreateMusicJobRequest, a
     }
 
     let _using = state.engine_use.read().await;
+    if engine_is_paused(&state) {
+        return (StatusCode::CONFLICT, Json(failed_request_job(request, engine_id, ENGINE_PAUSED_MESSAGE.to_owned())));
+    }
     if let Err(error) = state.ace_runtime.stop().await {
         return (StatusCode::CONFLICT, Json(failed_request_job(request, engine_id, error.to_string())));
     }
@@ -11273,6 +11342,9 @@ async fn submit_replay_job(state: AppState, request: ReplayMusicJobRequest, atte
         return Err(api_error(StatusCode::CONFLICT, "A replay request without a library song requires the local YuE2 engine.".into()));
     }
     let _using = state.engine_use.read().await;
+    if engine_is_paused(&state) {
+        return Err(api_error(StatusCode::CONFLICT, ENGINE_PAUSED_MESSAGE.into()));
+    }
     state.ace_runtime.stop().await.map_err(|error| api_error(StatusCode::CONFLICT, error.to_string()))?;
     state.minimax.stop().await;
     if state.training.active_run().await.is_some() {
@@ -12571,6 +12643,9 @@ async fn score_at_work(state: &AppState) -> bool {
 
 async fn start_score_on_engine(state: &AppState) -> Result<tokio::sync::OwnedRwLockReadGuard<()>, (StatusCode, Json<ApiError>)> {
     let using = state.engine_use.clone().read_owned().await;
+    if engine_is_paused(state) {
+        return Err(api_error(StatusCode::CONFLICT, ENGINE_PAUSED_MESSAGE.into()));
+    }
     let preparing = state.prepare.lock().unwrap_or_else(std::sync::PoisonError::into_inner).as_ref().is_some_and(|job| !job.finished);
     if preparing || state.training.active_run().await.is_some() {
         return Err(api_error(StatusCode::CONFLICT, "the card is training or preparing songs; write the score once it is free".into()));

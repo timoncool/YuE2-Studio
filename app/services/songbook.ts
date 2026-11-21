@@ -85,14 +85,33 @@ export function placeLyricSyllables(lines: SongbookCell[][], syllables: string[]
   return true;
 }
 
+/** ABCJS retains note offsets but does not expose a voice's V: identifier. */
+function namedVocalLine(source: string, voices: Event[][]): Event[] | undefined {
+  // Ignore apparent inline voice switches inside quoted chords or comments.
+  const switches = [...source.matchAll(/^[ \t]*V:[ \t]*([^\s\]]+)|"[^"\n]*"|%[^\n]*|\[V:[ \t]*([^\s\]]+)[^\]\n]*\]/gm)]
+    .filter(match => match[1] || match[2]);
+  if (!switches.some(match => (match[1] ?? match[2]).toLowerCase() === 'vocal')) return undefined;
+  return voices.find(voice => {
+    const start = voice.find(event => event.note.pitches?.length)?.note.startChar;
+    if (start === undefined) return false;
+    let current = '';
+    for (const change of switches) {
+      if (change.index > start) break;
+      current = change[1] ?? change[2];
+    }
+    return current.toLowerCase() === 'vocal';
+  });
+}
+
 export function buildSongbook(abc: string, transpose: number) {
-  const source = engravedScore(abc);
+  const source = engravedScore(abc.replace(/\r\n?/g, '\n'));
   const original = abcjs.parseOnly(source);
   const transposed = transpose ? abcjs.strTranspose(source, original, transpose) : source;
   const tune = transpose ? abcjs.parseOnly(transposed)[0] : original[0];
   if (!tune) return { title: '', key: '', lines: [] as SongbookCell[][] };
   const voices = eventsFrom(tune);
-  const melody = voices.find(voice => voice.some(event => event.note.lyric?.some(item => item.syllable.trim())))
+  const melody = namedVocalLine(transposed, voices)
+    ?? voices.find(voice => voice.some(event => event.note.lyric?.some(item => item.syllable.trim())))
     ?? voices.find(voice => voice.some(event => event.note.pitches?.length)) ?? [];
   const harmony = voices.flatMap(voice => voice.flatMap(({ at, line, note }) =>
     (note.chord ?? []).filter(chord => chord.position === 'default')
