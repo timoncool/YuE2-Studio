@@ -12,7 +12,8 @@ import { apiUrl } from '../services/apiBase';
 import { openAudioEditor } from '../services/audioEditor';
 import { StemMixer } from './StemMixer';
 import { mapNativeLibrarySong } from '../services/nativeLibrary';
-import type { NativeLibrarySong } from '../types';
+import type { NativeLibrarySong, YueRequest } from '../types';
+import { ControlFoleyTool } from './ControlFoleyTool';
 import type { TranslationKey } from '../i18n/translations';
 import { stemOf } from '../services/songStems';
 import { derivedBy, libraryFailure, restoredOf, shownSongs, toolsSongOnOpen, type ToolRun } from '../services/toolsSong';
@@ -67,7 +68,13 @@ const CONTROL =
 
 const megabytes = (bytes: number) => `${(bytes / 1024 / 1024).toFixed(0)} MB`;
 
-export function StudioToolsPanel({ initialSongId, focusRvc, onRvcFocused }: { initialSongId?: string | null; focusRvc?: boolean; onRvcFocused?: () => void } = {}): React.ReactElement {
+export function StudioToolsPanel({ initialSongId, focusRvc, onRvcFocused, onGenerateFoley, generationBusy }: {
+  initialSongId?: string | null;
+  focusRvc?: boolean;
+  onRvcFocused?: () => void;
+  onGenerateFoley?: (request: YueRequest) => void;
+  generationBusy?: boolean;
+} = {}): React.ReactElement {
   const { t } = useI18n();
 
   const [songs, setSongs] = useState<NativeLibrarySong[]>([]);
@@ -480,6 +487,8 @@ export function StudioToolsPanel({ initialSongId, focusRvc, onRvcFocused }: { in
             <p role="alert" className="mt-3 select-text rounded-lg bg-rose-500/10 px-3 py-2 text-xs text-rose-700 wrap-anywhere dark:text-rose-300">{run.error}</p>
           )}
         </section>
+
+        {onGenerateFoley && <ControlFoleyTool card={CARD} control={CONTROL} busy={Boolean(generationBusy)} onGenerate={onGenerateFoley} />}
 
         {/* Restore after compression, on the track chosen above or a file. */}
         <RestoreTool

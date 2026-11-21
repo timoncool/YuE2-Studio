@@ -247,6 +247,13 @@ and bytes missing. Use `style` for a text description or `magenta.reference_song
 a library track that supplies the musical style. Both modes generate an
 instrumental. The reference sets the style when supplied.
 
+For ControlFoley video-to-audio, read `controlfoley_model_get` for the offline
+Q8 package and prerequisites. The Studio computer needs FFmpeg on its PATH.
+Use `controlfoley_video_import` with a local MP4, MOV, WebM or MKV. Pass the
+returned name to `controlfoley_create` and optionally add a sound description.
+Studio decodes up to the first 8 seconds and saves the generated audio separately
+in the library. Follow the job with `song_job_get` or cancel it with `song_job_cancel`.
+
 For an OpenRouter generation, read `openrouter_catalog` and select an ID whose
 `capabilities` include `music_generation`. Pass that exact ID as
 `music_source.model`, with `music_source.kind` set to `openrouter`.

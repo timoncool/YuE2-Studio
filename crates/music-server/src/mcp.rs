@@ -43,6 +43,7 @@ const LIMIT: usize = 60_000;
 enum Payload {
     None,
     Json(Value),
+    File(PathBuf),
     /// Multipart form fields and files, as the page uploads them.
     Form { fields: Vec<(String, String)>, files: Vec<(String, PathBuf, String)> },
     /// A command for the studio's window: what is on screen, the buttons, the
@@ -292,7 +293,7 @@ fn shape(name: &str, args: &Value, value: Value) -> Value {
                 "next_offset": (end < entries.len()).then_some(end),
             })
         },
-        "song_create" | "song_job_get" | "song_replay" if !detailed => compact_job(&value),
+        "song_create" | "controlfoley_create" | "song_job_get" | "song_replay" if !detailed => compact_job(&value),
         "song_jobs_list" if !detailed => Value::Array(value.as_array().into_iter().flatten().map(compact_job).collect()),
         "library_song_get" if !detailed => compact_song(&value),
         "lora_list" if !detailed => compact_loras(&value),
@@ -491,6 +492,7 @@ const JOURNAL: &[(&str, &str, &str)] = &[
     ("song_job_score_again", "started", "generation"),
     ("song_job_again", "started", "generation"),
     ("song_create", "started", "generation"),
+    ("controlfoley_create", "started", "generation"),
     ("song_replay", "started", "generation"),
     ("audio_cpp_music_model_install", "started", "download"),
     ("song_job_cancel", "cancelled", "generation"),
@@ -2254,6 +2256,42 @@ fn tools() -> &'static [Tool] {
                 call: |_| get("/v1/music/native/minimaxmusic-cpp/profiles".into()),
             },
             Tool {
+                name: "controlfoley_model_get",
+                description: "Read ControlFoley's Q8 package and FFmpeg and audio.cpp readiness.",
+                schema: nothing,
+                call: |_| get("/v1/tools/controlfoley/model".into()),
+            },
+            Tool {
+                name: "controlfoley_video_import",
+                description: "Import a local MP4, MOV, WebM or MKV into Studio's video folder. The original file is preserved. Pass the returned name to controlfoley_create.",
+                schema: || object(json!({"video_path":{"type":"string"}}), &["video_path"]),
+                call: |args| {
+                    let path = PathBuf::from(text(args, "video_path")?);
+                    let name = path.file_name().and_then(|name| name.to_str()).ok_or("Choose a video file.")?;
+                    crate::audio_cpp_controlfoley::video_name(name).map_err(|error| error.to_string())?;
+                    let extension = path.extension().and_then(|ext| ext.to_str()).ok_or("Choose a video file.")?;
+                    let target = format!("foley-{}.{extension}", uuid::Uuid::now_v7().simple());
+                    Ok(Call { method: Method::POST, path: format!("/v1/videos?name={target}"), payload: Payload::File(path) })
+                },
+            },
+            Tool {
+                name: "controlfoley_create",
+                description: "Generate audio for an imported video with ControlFoley, optionally with a text description. The result goes to the library. Use song_job_get or song_job_cancel to follow it.",
+                schema: || object(json!({
+                    "video_name":{"type":"string"}, "description":{"type":"string"}, "title":{"type":"string"},
+                    "duration_seconds":{"type":"number", "minimum":0.2, "maximum":8},
+                    "steps":{"type":"integer", "minimum":1}, "seed":{"type":"integer", "minimum":0, "maximum":4294967295_u64}
+                }), &["video_name"]),
+                call: |args| {
+                    post("/v1/music/jobs".into(), json!({
+                        "music_source": {"kind":"audio_cpp", "model":crate::audio_cpp_controlfoley::FAMILY},
+                        "controlfoley_video": text(args, "video_name")?,
+                        "style": args["description"].as_str().unwrap_or_default(), "title": args["title"],
+                        "duration_seconds": args["duration_seconds"], "steps": args["steps"], "seed": args["seed"],
+                    }))
+                },
+            },
+            Tool {
                 name: "audio_cpp_music_models",
                 description: "List audio.cpp music models with experimental status, runtime readiness and installation progress. Manual profiles include the weight source, license, data-root-relative directory and missing bytes.",
                 schema: nothing,
@@ -3449,6 +3487,7 @@ async fn call_route(call: Call) -> Result<(StatusCode, String), String> {
     let request = match call.payload {
         Payload::None | Payload::Window { .. } => builder.body(Body::empty()),
         Payload::Json(body) => builder.header(header::CONTENT_TYPE, "application/json").body(Body::from(body.to_string())),
+        Payload::File(path) => builder.body(Body::from_stream(streamed(vec![Part::File(path)]))),
         Payload::Form { fields, files } => {
             let boundary = format!("studio-mcp-{}", uuid::Uuid::now_v7().simple());
             let mut parts: Vec<Part> = Vec::new();
@@ -4249,7 +4288,6 @@ mod tests {
         ("GET", "/editor/{*path}", "the MIDI editor's files: the window shows it"),
         ("GET", "/v1/processing/preview", "audio for the page's preview player: processing_get names the result"),
         ("GET", "/v1/training/datasets/{id}/items/{item}/audio", "audio for the page's player: dataset_song_files names the files"),
-        ("POST", "/v1/videos", "the video the page rendered, sent back to be kept: video_render renders and saves it"),
         ("GET", "/v1/midi/notes", "the page's live piano roll while Audio to MIDI runs: studio_wait follows the job"),
         ("GET", "/v1/library/songs/{id}/midi/file", "the .mid as a download for the page: midi_get gives the song's MIDI"),
         ("GET", "/v1/adapters/{id}/comfyui", "the page's download of the file lora_export_comfyui writes to a path"),
@@ -4294,6 +4332,7 @@ mod tests {
                 ("array", _) => json!(["x1"]),
                 ("object", _) => json!({}),
                 (_, name) if tool.name.contains("folder") && name.contains("path") => json!(file.parent().unwrap_or(file).to_string_lossy()),
+                (_, "video_path") => json!(file.with_file_name("clip.mp4").to_string_lossy()),
                 (_, name) if (name.contains("art") || name.contains("image") || name.contains("cover")) && name.contains("path") => json!(image.to_string_lossy()),
                 (_, name) if name.contains("path") || name == "file" || name == "folder" => json!(file.to_string_lossy()),
                 _ => json!("x1"),

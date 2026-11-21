@@ -48,6 +48,7 @@ enum Family {
     MuLaCover,
     Magenta,
     Vevo2,
+    ControlFoley,
     SoulX(audio_cpp_soulx::Variant),
 }
 
@@ -62,6 +63,7 @@ impl Family {
             audio_cpp_midasheng::FAMILY => Some(Self::MiDasheng),
             audio_cpp_mulacover::FAMILY => Some(Self::MuLaCover),
             audio_cpp_vevo2::FAMILY => Some(Self::Vevo2),
+            audio_cpp_controlfoley::FAMILY => Some(Self::ControlFoley),
             audio_cpp_soulx::SYNTHESIS => Some(Self::SoulX(audio_cpp_soulx::Variant::Synthesis)),
             audio_cpp_soulx::CONVERSION => Some(Self::SoulX(audio_cpp_soulx::Variant::Conversion)),
             _ => None,
@@ -78,6 +80,7 @@ impl Family {
             Self::MuLaCover => audio_cpp_mulacover::FAMILY,
             Self::Magenta => audio_cpp_magenta::FAMILY,
             Self::Vevo2 => audio_cpp_vevo2::FAMILY,
+            Self::ControlFoley => audio_cpp_controlfoley::FAMILY,
             Self::SoulX(variant) => variant.id(),
         }
     }
@@ -92,6 +95,7 @@ impl Family {
             Self::MuLaCover => audio_cpp_mulacover::NAME,
             Self::Magenta => "Magenta RealTime 2",
             Self::Vevo2 => audio_cpp_vevo2::NAME,
+            Self::ControlFoley => audio_cpp_controlfoley::NAME,
             Self::SoulX(variant) => variant.name(),
         }
     }
@@ -106,6 +110,7 @@ impl Family {
             Self::MuLaCover => audio_cpp_mulacover::PROFILE,
             Self::Magenta => audio_cpp_magenta::PROFILE,
             Self::Vevo2 => audio_cpp_vevo2::PROFILE,
+            Self::ControlFoley => audio_cpp_controlfoley::PROFILE,
             Self::SoulX(_) => audio_cpp_soulx::PROFILE,
         }
     }
@@ -128,6 +133,7 @@ impl Family {
             Self::MuLaCover => audio_cpp_mulacover::model_dir(root),
             Self::Magenta => audio_cpp_magenta::model_dir(root),
             Self::Vevo2 => audio_cpp_vevo2::model_dir(root),
+            Self::ControlFoley => audio_cpp_controlfoley::model_dir(root),
             Self::SoulX(_) => audio_cpp_soulx::model_dir(root),
         }
     }
@@ -142,6 +148,7 @@ impl Family {
             Self::MuLaCover => audio_cpp_mulacover::missing_files(path),
             Self::Magenta => audio_cpp_magenta::missing_files(path),
             Self::Vevo2 => audio_cpp_vevo2::missing_files(path),
+            Self::ControlFoley => audio_cpp_controlfoley::missing_files(path),
             Self::SoulX(variant) => variant.missing(path),
         }
     }
@@ -156,6 +163,7 @@ impl Family {
             Self::MuLaCover => audio_cpp_mulacover::entry(path),
             Self::Magenta => audio_cpp_magenta::entry(path),
             Self::Vevo2 => audio_cpp_vevo2::entry(path),
+            Self::ControlFoley => audio_cpp_controlfoley::entry(path),
             Self::SoulX(variant) => variant.entry(path),
         }
     }
@@ -177,6 +185,7 @@ impl Family {
             }
             Self::Magenta => audio_cpp_magenta::task(request, library).map(PreparedTask::Magenta),
             Self::Vevo2 => audio_cpp_vevo2::task(request, library).map(PreparedTask::Singing),
+            Self::ControlFoley => audio_cpp_controlfoley::task(request).map(PreparedTask::ControlFoley),
             Self::SoulX(variant) => audio_cpp_soulx::task(variant, request, library).map(PreparedTask::SoulX),
         }
     }
@@ -191,6 +200,7 @@ impl Family {
             Self::Magenta => audio_cpp_magenta::catalog(root, runtime_ready),
             Self::MuLaCover => audio_cpp_mulacover::catalog(root, runtime_ready, soxr_ready),
             Self::Vevo2 => audio_cpp_vevo2::catalog(root, runtime_ready),
+            Self::ControlFoley => audio_cpp_controlfoley::catalog(root, runtime_ready),
             Self::SoulX(variant) => variant.catalog(root, runtime_ready, soxr_ready),
         }
     }
@@ -238,14 +248,16 @@ enum PreparedTask {
     Magenta(audio_cpp_magenta::MagentaTask),
     Cover(audio_cpp_mulacover::CoverTask),
     Singing(audio_cpp_vevo2::SingingTask),
+    ControlFoley(audio_cpp_controlfoley::VideoTask),
     SoulX(audio_cpp_soulx::SingingTask),
 }
 
 impl PreparedTask {
-    fn into_request(self) -> anyhow::Result<(Value, Option<tempfile::TempDir>)> {
+    fn into_request(self, stop: &AtomicBool) -> anyhow::Result<(Value, Option<tempfile::TempDir>)> {
         match self {
             Self::Json(body) => Ok((body, None)),
             Self::Magenta(task) => Ok(task.into_request()),
+            Self::ControlFoley(task) => task.into_request(stop).map(|(body, directory)| (body, Some(directory))),
             Self::SoulX(task) => task.into_request().map(|(body, directory)| (body, Some(directory))),
             Self::Cover(task) => task
                 .into_request()
@@ -288,6 +300,7 @@ pub(super) fn registered_model_ready(model: &ModelEntry) -> Option<bool> {
         | Family::MiDasheng
         | Family::MiniMaxH3
         | Family::MuLaCover
+        | Family::ControlFoley
             if model.task == "gen" =>
         {
             model.path.parent()
@@ -357,6 +370,13 @@ async fn build(state: &AppState) -> anyhow::Result<Build> {
             _ => anyhow::bail!("The CUDA audio.cpp runtime is unavailable."),
         },
     }
+}
+
+pub(super) async fn controlfoley_model(State(state): State<AppState>) -> Json<Value> {
+    let runtime_ready = build(&state)
+        .await
+        .is_ok_and(|build| state.acpp.exe(build).is_file() && state.acpp.installed(build));
+    Json(Family::ControlFoley.catalog(studio_data_root().as_deref(), runtime_ready, true))
 }
 
 pub(super) async fn models(State(state): State<AppState>) -> Json<Value> {
@@ -797,6 +817,13 @@ pub(super) async fn submit(
             settings["soulx"] = serde_json::json!(request.soulx);
             settings["seed"] = Value::from(request.seed.unwrap_or(2026));
         }
+        (Family::ControlFoley, PreparedTask::ControlFoley(video)) => {
+            settings["route"] = Value::from("video_to_audio");
+            settings["controlfoley_video"] = serde_json::json!(request.controlfoley_video);
+            settings["duration_seconds"] = serde_json::json!(video.seconds);
+            settings["steps"] = serde_json::json!(video.steps);
+            settings["seed"] = serde_json::json!(video.seed);
+        }
         (Family::Vevo2, _) => {
             settings["route"] = Value::from(audio_cpp_vevo2::ROUTE);
             settings["vevo2"] = serde_json::json!(request.vevo2);
@@ -852,7 +879,7 @@ pub(super) async fn submit(
         let settings = job.generation_settings.clone();
         let outcome = tokio::task::spawn_blocking(move || {
             anyhow::ensure!(!stop.load(Ordering::SeqCst), "stopped");
-            let (body, _references) = task.into_request()?;
+            let (body, _references) = task.into_request(&stop)?;
             acpp.with_server(
                 build,
                 family.entry(path),
