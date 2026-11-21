@@ -291,6 +291,10 @@ def check_lrc(root, pid):
         audio.setparams((1, 2, 24000, 0, "NONE", "not compressed"))
         audio.writeframes(bytes(24000*8))
     song = tool("library_import_audio", path=str(source), title=title)
+    abc = "X:1\nT:Hosted score\nM:4/4\nL:1/4\nK:C\nC D E F|G A B c|"
+    record = tool("library_song_get", song_id=song["id"], response_format="detailed")
+    record["generation_settings"] = {**(record.get("generation_settings") or {}), "abc": abc}
+    tool("library_song_update", song_id=song["id"], song=record)
     expected = "[00:00.50]Привет, мир\n[00:01.75]Canção em português\n"
     data = tool("karaoke_set", song_id=song["id"], lrc=expected)
     assert data == {"lrc": expected, "lines": 2}, data
@@ -388,6 +392,20 @@ def check_lrc(root, pid):
             failed_save(control_name, f"download-{extension}", extension)
             json_file(out/f"{extension}-export.json", dict(song_id=song["id"], bytes=len(saved),
                       sha256=hashlib.sha256(saved).hexdigest(), cancelled_file_absent=True))
+        score_button = 'button ".abc"'
+        click(score_button)
+        score_file = root/"Ноты.abc"
+        save_dialog_file(pid, score_file, "abc-dialog.json")
+        for _ in range(50):
+            if score_file.is_file() and score_file.read_bytes() == (abc + "\n").encode():
+                break
+            time.sleep(.2)
+        else:
+            raise AssertionError("Saved ABC score differs from song")
+        click(score_button)
+        save_dialog_file(pid, root/"Cancel.abc", "abc-cancel-dialog.json", action="cancel")
+        failed_save(score_button, "score", "abc")
+        json_file(out/"score.json", dict(bytes=score_file.stat().st_size, sha256=hashlib.sha256(score_file.read_bytes()).hexdigest()))
         click('button "x icon"')
         page = wait_page(predicate=lambda text: context in text and 'button "Download LRC (Lyrics)"' not in text)
         row = next(line for line in page.splitlines() if context in line)
@@ -458,6 +476,21 @@ def check_lrc(root, pid):
                 json_file(out/f"{kind}-archive.json", dict(members=members, bytes=target.stat().st_size))
             cancel_export(label, kind)
             failed_save(label, kind, "zip")
+        click('button "Close"')
+        tool("equalizer_set", enabled=True, bands={"310":3}, panel_open=True, preamp_db=-2)
+        eq_label = 'button "Export .EQF"'
+        click(eq_label)
+        eq_file = root/"Профиль.eqf"
+        save_dialog_file(pid, eq_file, "eqf-dialog.json")
+        for _ in range(50):
+            if eq_file.is_file() and eq_file.read_bytes().startswith(b"Winamp EQ library file"):
+                break
+            time.sleep(.2)
+        else:
+            raise AssertionError("Missing EQF preset header")
+        cancel_export(eq_label, "eqf")
+        failed_save(eq_label, "equalizer", "eqf")
+        json_file(out/"eqf.json", dict(bytes=eq_file.stat().st_size, sha256=hashlib.sha256(eq_file.read_bytes()).hexdigest()))
     finally:
         observer.stdin.close()
         try:
