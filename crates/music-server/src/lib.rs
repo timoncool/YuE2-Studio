@@ -18,6 +18,7 @@ mod native_minimax;
 mod audio_cpp_heartmula;
 mod audio_cpp_magenta;
 mod audio_cpp_midasheng;
+mod audio_cpp_minimax_h3;
 mod audio_cpp_music;
 mod audio_cpp_vevo2;
 mod native_music_jobs;
