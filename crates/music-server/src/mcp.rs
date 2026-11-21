@@ -1095,6 +1095,16 @@ fn rvc_runtime_route(args: &Value) -> String {
 }
 
 fn song_create_schema(mut properties: Value) -> Value {
+    properties["openrouter"] = json!({
+        "type": "object", "additionalProperties": false,
+        "description": "Optional music settings advertised by the selected OpenRouter model. Omit fields to use provider defaults.",
+        "properties": {
+            "seed": { "type": "integer" },
+            "temperature": { "type": "number", "minimum": 0, "maximum": 2 },
+            "top_p": { "type": "number", "minimum": 0, "maximum": 1 },
+            "max_tokens": { "type": "integer", "minimum": 1, "maximum": u32::MAX }
+        }
+    });
     for stage in ["abc_sampling", "semantic_sampling"] {
         let names: Vec<_> = crate::sampling_choices()[stage].as_object().unwrap().keys().collect();
         let knobs = properties[stage].take();
