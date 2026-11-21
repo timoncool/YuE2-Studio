@@ -84,7 +84,17 @@ async fn preferred_take_survives_restart_and_reordering_without_touching_media()
             .error_for_status()?
             .json()
             .await?;
-        songs.push((song["id"].as_str().unwrap().to_owned(), fs::read(path)?));
+        let id = song["id"].as_str().unwrap().to_owned();
+        // Creation can embed file tags. Baseline the WAV as the library serves
+        // it before choosing a take so the comparison measures the selection.
+        let original = http
+            .get(format!("{base}/v1/library/media/{id}"))
+            .send()
+            .await?
+            .error_for_status()?
+            .bytes()
+            .await?;
+        songs.push((id, original));
     }
     let (first, second, outsider) = (&songs[0].0, &songs[1].0, &songs[2].0);
     let playlist: Value = http
@@ -154,7 +164,7 @@ async fn preferred_take_survives_restart_and_reordering_without_touching_media()
             .error_for_status()?
             .bytes()
             .await?;
-        assert_eq!(data.as_ref(), original.as_slice());
+        assert_eq!(&data, original);
     }
     let response: Value = http
         .put(format!("{base}/v1/library/playlists/{id}"))
