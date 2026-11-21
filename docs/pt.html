@@ -524,6 +524,17 @@ footer p { margin: 0 0 8px; }
     </table></div>
     <p><a href="music-gpu-benchmarks.json">Execuções, SHA-256 e conjuntos de pesos</a></p>
 <!-- music-gpu-matrix:end -->
+<!-- radeon-gpu-pair:start -->
+    <h3>Stable Audio 3 Small Q8_0 · Radeon integrada</h3>
+    <p class="note">Windows, AMD Radeon Graphics (gfx1036, UMA). A mesma revisão de audio.cpp gerou 4 segundos em quatro passos com cada backend. A primeira execução é a fria e a aquecida é a mediana de três pedidos. Os picos WDDM de memória dedicada e partilhada foram amostrados a cada segundo. <code>audio.cpp 5e7273db</code></p>
+    <div class="scroll"><table>
+      <thead><tr><th scope="col">Backend</th><th scope="col">Arranque (s)</th><th scope="col">Aquecido (s)</th><th scope="col">Pico WDDM dedicado (GiB)</th><th scope="col">Pico WDDM partilhado (GiB)</th></tr></thead>
+      <tbody>
+      <tr><td>HIP</td><td>4,609</td><td>2,953</td><td>1,39</td><td>0,04</td></tr>
+      <tr><td>Vulkan</td><td>6,281</td><td>3,454</td><td>1,17</td><td>0,38</td></tr>
+      </tbody>
+    </table></div>
+<!-- radeon-gpu-pair:end -->
 
   </section>
 

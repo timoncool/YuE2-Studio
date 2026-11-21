@@ -133,3 +133,24 @@ export const MATRIX_TEXT = {
     "detail": "개별 실행, SHA-256 및 가중치 구성"
   }
 };
+
+export const RADEON_TEXT = {
+  en: ['Stable Audio 3 Small Q8_0 · Radeon iGPU',
+    'Windows, AMD Radeon Graphics (gfx1036, UMA). The same audio.cpp revision generated 4 seconds in four steps with each backend. Cold is the first run. Warm is the median of three requests. WDDM dedicated and shared columns show sampled peaks at one-second intervals.',
+    ['Backend', 'Cold (s)', 'Warm (s)', 'WDDM dedicated peak (GiB)', 'WDDM shared peak (GiB)']],
+  ru: ['Stable Audio 3 Small Q8_0 · встроенная Radeon',
+    'Windows, AMD Radeon Graphics (gfx1036, UMA). Одна ревизия audio.cpp с каждым бэкендом сгенерировала 4 секунды за четыре шага. Холодный замер — первый запуск, прогретый — медиана трёх запросов. Пики выделенной и общей памяти WDDM взяты из замеров с интервалом в секунду.',
+    ['Бэкенд', 'Холодный (с)', 'Прогретый (с)', 'Пик выделенной WDDM (ГиБ)', 'Пик общей WDDM (ГиБ)']],
+  pt: ['Stable Audio 3 Small Q8_0 · Radeon integrada',
+    'Windows, AMD Radeon Graphics (gfx1036, UMA). A mesma revisão de audio.cpp gerou 4 segundos em quatro passos com cada backend. A primeira execução é a fria e a aquecida é a mediana de três pedidos. Os picos WDDM de memória dedicada e partilhada foram amostrados a cada segundo.',
+    ['Backend', 'Arranque (s)', 'Aquecido (s)', 'Pico WDDM dedicado (GiB)', 'Pico WDDM partilhado (GiB)']],
+  zh: ['Stable Audio 3 Small Q8_0 · Radeon 核显',
+    'Windows，AMD Radeon Graphics（gfx1036，UMA）。同一 audio.cpp 版本在两个后端均用四步生成 4 秒音频。冷启动取首次运行，预热后取三次请求的中位数。WDDM 专用及共享内存峰值按一秒间隔采样。',
+    ['后端', '冷启动（秒）', '预热后（秒）', 'WDDM 专用峰值（GiB）', 'WDDM 共享峰值（GiB）']],
+  ja: ['Stable Audio 3 Small Q8_0 · Radeon 内蔵 GPU',
+    'Windows、AMD Radeon Graphics（gfx1036、UMA）。同じ audio.cpp リビジョンを使い、各バックエンドで 4 ステップで 4 秒を生成しました。初回は 1 回目、再実行は 3 回の中央値です。WDDM 専用・共有メモリーのピークは 1 秒間隔の測定値です。',
+    ['バックエンド', '初回（秒）', '再実行（秒）', 'WDDM 専用ピーク（GiB）', 'WDDM 共有ピーク（GiB）']],
+  ko: ['Stable Audio 3 Small Q8_0 · Radeon 내장 GPU',
+    'Windows, AMD Radeon Graphics(gfx1036, UMA). 같은 audio.cpp 리비전으로 각 백엔드에서 4단계로 4초를 생성했습니다. 첫 실행은 첫 번째 결과이고 재실행은 요청 세 건의 중앙값입니다. WDDM 전용 및 공유 메모리 피크는 1초 간격으로 측정했습니다.',
+    ['백엔드', '첫 실행 (초)', '재실행 (초)', 'WDDM 전용 피크 (GiB)', 'WDDM 공유 피크 (GiB)']],
+};

@@ -550,6 +550,17 @@ footer p { margin: 0 0 8px; }
     </table></div>
     <p><a href="music-gpu-benchmarks.json">Runs, SHA-256 and weight profiles</a></p>
 <!-- music-gpu-matrix:end -->
+<!-- radeon-gpu-pair:start -->
+    <h3>Stable Audio 3 Small Q8_0 · Radeon iGPU</h3>
+    <p class="note">Windows, AMD Radeon Graphics (gfx1036, UMA). The same audio.cpp revision generated 4 seconds in four steps with each backend. Cold is the first run. Warm is the median of three requests. WDDM dedicated and shared columns show sampled peaks at one-second intervals. <code>audio.cpp 5e7273db</code></p>
+    <div class="scroll"><table>
+      <thead><tr><th scope="col">Backend</th><th scope="col">Cold (s)</th><th scope="col">Warm (s)</th><th scope="col">WDDM dedicated peak (GiB)</th><th scope="col">WDDM shared peak (GiB)</th></tr></thead>
+      <tbody>
+      <tr><td>HIP</td><td>4.609</td><td>2.953</td><td>1.39</td><td>0.04</td></tr>
+      <tr><td>Vulkan</td><td>6.281</td><td>3.454</td><td>1.17</td><td>0.38</td></tr>
+      </tbody>
+    </table></div>
+<!-- radeon-gpu-pair:end -->
 
   </section>
 

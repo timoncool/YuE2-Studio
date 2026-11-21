@@ -524,6 +524,17 @@ footer p { margin: 0 0 8px; }
     </table></div>
     <p><a href="music-gpu-benchmarks.json">개별 실행, SHA-256 및 가중치 구성</a></p>
 <!-- music-gpu-matrix:end -->
+<!-- radeon-gpu-pair:start -->
+    <h3>Stable Audio 3 Small Q8_0 · Radeon 내장 GPU</h3>
+    <p class="note">Windows, AMD Radeon Graphics(gfx1036, UMA). 같은 audio.cpp 리비전으로 각 백엔드에서 4단계로 4초를 생성했습니다. 첫 실행은 첫 번째 결과이고 재실행은 요청 세 건의 중앙값입니다. WDDM 전용 및 공유 메모리 피크는 1초 간격으로 측정했습니다. <code>audio.cpp 5e7273db</code></p>
+    <div class="scroll"><table>
+      <thead><tr><th scope="col">백엔드</th><th scope="col">첫 실행 (초)</th><th scope="col">재실행 (초)</th><th scope="col">WDDM 전용 피크 (GiB)</th><th scope="col">WDDM 공유 피크 (GiB)</th></tr></thead>
+      <tbody>
+      <tr><td>HIP</td><td>4.609</td><td>2.953</td><td>1.39</td><td>0.04</td></tr>
+      <tr><td>Vulkan</td><td>6.281</td><td>3.454</td><td>1.17</td><td>0.38</td></tr>
+      </tbody>
+    </table></div>
+<!-- radeon-gpu-pair:end -->
 
   </section>
 

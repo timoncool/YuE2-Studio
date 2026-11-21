@@ -524,6 +524,17 @@ footer p { margin: 0 0 8px; }
     </table></div>
     <p><a href="music-gpu-benchmarks.json">各次运行、SHA-256 和权重配置</a></p>
 <!-- music-gpu-matrix:end -->
+<!-- radeon-gpu-pair:start -->
+    <h3>Stable Audio 3 Small Q8_0 · Radeon 核显</h3>
+    <p class="note">Windows，AMD Radeon Graphics（gfx1036，UMA）。同一 audio.cpp 版本在两个后端均用四步生成 4 秒音频。冷启动取首次运行，预热后取三次请求的中位数。WDDM 专用及共享内存峰值按一秒间隔采样。 <code>audio.cpp 5e7273db</code></p>
+    <div class="scroll"><table>
+      <thead><tr><th scope="col">后端</th><th scope="col">冷启动（秒）</th><th scope="col">预热后（秒）</th><th scope="col">WDDM 专用峰值（GiB）</th><th scope="col">WDDM 共享峰值（GiB）</th></tr></thead>
+      <tbody>
+      <tr><td>HIP</td><td>4.609</td><td>2.953</td><td>1.39</td><td>0.04</td></tr>
+      <tr><td>Vulkan</td><td>6.281</td><td>3.454</td><td>1.17</td><td>0.38</td></tr>
+      </tbody>
+    </table></div>
+<!-- radeon-gpu-pair:end -->
 
   </section>
 

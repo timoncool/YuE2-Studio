@@ -524,6 +524,17 @@ footer p { margin: 0 0 8px; }
     </table></div>
     <p><a href="music-gpu-benchmarks.json">個別の計測結果、SHA-256、重みの構成</a></p>
 <!-- music-gpu-matrix:end -->
+<!-- radeon-gpu-pair:start -->
+    <h3>Stable Audio 3 Small Q8_0 · Radeon 内蔵 GPU</h3>
+    <p class="note">Windows、AMD Radeon Graphics（gfx1036、UMA）。同じ audio.cpp リビジョンを使い、各バックエンドで 4 ステップで 4 秒を生成しました。初回は 1 回目、再実行は 3 回の中央値です。WDDM 専用・共有メモリーのピークは 1 秒間隔の測定値です。 <code>audio.cpp 5e7273db</code></p>
+    <div class="scroll"><table>
+      <thead><tr><th scope="col">バックエンド</th><th scope="col">初回（秒）</th><th scope="col">再実行（秒）</th><th scope="col">WDDM 専用ピーク（GiB）</th><th scope="col">WDDM 共有ピーク（GiB）</th></tr></thead>
+      <tbody>
+      <tr><td>HIP</td><td>4.609</td><td>2.953</td><td>1.39</td><td>0.04</td></tr>
+      <tr><td>Vulkan</td><td>6.281</td><td>3.454</td><td>1.17</td><td>0.38</td></tr>
+      </tbody>
+    </table></div>
+<!-- radeon-gpu-pair:end -->
 
   </section>
 

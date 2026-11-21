@@ -524,6 +524,17 @@ footer p { margin: 0 0 8px; }
     </table></div>
     <p><a href="music-gpu-benchmarks.json">Замеры, SHA-256 и наборы весов</a></p>
 <!-- music-gpu-matrix:end -->
+<!-- radeon-gpu-pair:start -->
+    <h3>Stable Audio 3 Small Q8_0 · встроенная Radeon</h3>
+    <p class="note">Windows, AMD Radeon Graphics (gfx1036, UMA). Одна ревизия audio.cpp с каждым бэкендом сгенерировала 4 секунды за четыре шага. Холодный замер — первый запуск, прогретый — медиана трёх запросов. Пики выделенной и общей памяти WDDM взяты из замеров с интервалом в секунду. <code>audio.cpp 5e7273db</code></p>
+    <div class="scroll"><table>
+      <thead><tr><th scope="col">Бэкенд</th><th scope="col">Холодный (с)</th><th scope="col">Прогретый (с)</th><th scope="col">Пик выделенной WDDM (ГиБ)</th><th scope="col">Пик общей WDDM (ГиБ)</th></tr></thead>
+      <tbody>
+      <tr><td>HIP</td><td>4,609</td><td>2,953</td><td>1,39</td><td>0,04</td></tr>
+      <tr><td>Vulkan</td><td>6,281</td><td>3,454</td><td>1,17</td><td>0,38</td></tr>
+      </tbody>
+    </table></div>
+<!-- radeon-gpu-pair:end -->
 
   </section>
 

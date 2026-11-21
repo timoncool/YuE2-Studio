@@ -37,25 +37,25 @@ class TableRows(HTMLParser):
             self.cell += data
 
 
-def section(path):
+def section(path, name="music-gpu-matrix"):
     content = path.read_text(encoding="utf-8")
-    start = "<!-- music-gpu-matrix:start -->"
-    end = "<!-- music-gpu-matrix:end -->"
+    start = f"<!-- {name}:start -->"
+    end = f"<!-- {name}:end -->"
     assert content.count(start) == content.count(end) == 1, path
     return content.split(start, 1)[1].split(end, 1)[0]
 
 
-def readme_rows(path):
+def readme_rows(path, name="music-gpu-matrix"):
     return [
         [cell.strip().replace("`", "") for cell in line.strip("|").split("|")]
-        for line in section(path).splitlines()
+        for line in section(path, name).splitlines()
         if line.startswith("| ")
     ][2:]
 
 
-def site_rows(path):
+def site_rows(path, name="music-gpu-matrix"):
     parser = TableRows()
-    parser.feed(section(path))
+    parser.feed(section(path, name))
     return parser.rows[1:]
 
 
@@ -175,6 +175,30 @@ def validate_data(rows, evidence_dir):
             verify_wav(evidence_dir, row)
 
 
+def verify_radeon(pair, evidence_dir):
+    assert SHA256.fullmatch(pair["input_sha256"])
+    assert pair["wddm_sample_interval_s"] == 1 and "gfx1036" in pair["card"]
+    assert pair["request"]["request"]["duration_seconds"] == 4
+    rows = []
+    if evidence_dir is not None:
+        raw = json.loads((evidence_dir / "yue2-242-radeon-paired.json").read_bytes())
+        assert raw["source_sha"] == pair["source_sha"] and raw["input_sha256"] == pair["input_sha256"]
+    for result in pair["results"]:
+        cold, *warm = result["runs"]
+        assert len(warm) == 3 and all(run["seconds"] == 4 and SHA256.fullmatch(run["sha256"]) for run in result["runs"])
+        assert cold["wall_seconds"] == result["cold_seconds"]
+        assert median(run["wall_seconds"] for run in warm) == result["warm_median_seconds"]
+        peaks = result["wddm_peak_sampled_bytes"]
+        if evidence_dir is not None:
+            source = raw["results"][result["backend"].lower()]
+            assert peaks == source["peak_sampled_bytes"] and result["samples"] == source["samples"]
+            assert [run["sha256"] for run in result["runs"]] == [run["sha256"] for run in source["runs"]]
+        rows.append([result["backend"], f"{result['cold_seconds']:.3f}", f"{result['warm_median_seconds']:.3f}",
+                     f"{peaks['dedicated'] / GIB:.2f}", f"{peaks['shared'] / GIB:.2f}"])
+    assert [row[0] for row in rows] == ["HIP", "Vulkan"]
+    return rows
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--evidence-dir", type=Path, help="Also verify cold WAV hashes against the original files.")
@@ -186,12 +210,18 @@ def main():
     residency = data["published_residency"]
     verify_residency(residency, rows, args.evidence_dir)
     validate_data(rows, args.evidence_dir)
+    radeon = verify_radeon(data["radeon_pair"], args.evidence_dir)
+    radeon_section = "radeon-gpu-pair"
     readme = ROOT / "README.md"
     validate_table(readme, readme_rows(readme), rows, residency.values())
+    assert readme_rows(readme, radeon_section) == radeon
     for locale in LOCALES:
         page = ROOT / "docs" / f"{locale}.html"
         validate_table(page, site_rows(page), rows, residency.values(), decimal_comma=locale in {"ru", "pt"})
-    print(f"{len(rows)} timing results and {len(residency)} published residency results match the README and {len(LOCALES)} site pages.")
+        matrix = [[value.replace(".", ",") for value in row] for row in radeon] if locale in {"ru", "pt"} else radeon
+        assert site_rows(page, radeon_section) == matrix, page
+        assert data["radeon_pair"]["source_sha"][:8] in section(page, radeon_section), page
+    print(f"{len(rows)} timing results and {len(residency)} published residency results plus the Radeon pair match the README and {len(LOCALES)} site pages.")
 
 
 if __name__ == "__main__":

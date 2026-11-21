@@ -434,6 +434,19 @@ Each workload has its own fixed input and step count. YuE2 VAE precision differs
 [Individual runs, published residency, SHA-256, exact weights and output checks](docs/music-gpu-benchmarks.json)
 <!-- music-gpu-matrix:end -->
 
+<!-- radeon-gpu-pair:start -->
+#### Stable Audio 3 Small Q8_0 · Radeon iGPU
+
+Windows, AMD Radeon Graphics (gfx1036, UMA). The same `audio.cpp 5e7273db` revision generated 4 seconds in four steps with seed 42 on each backend. Cold is the first run. Warm is the median of three requests. WDDM dedicated and shared columns show process-memory peaks sampled at one-second intervals.
+
+| Backend | Cold (s) | Warm (s) | WDDM dedicated peak (GiB) | WDDM shared peak (GiB) |
+| --- | ---: | ---: | ---: | ---: |
+| HIP | 4.609 | 2.953 | 1.39 | 0.04 |
+| Vulkan | 6.281 | 3.454 | 1.17 | 0.38 |
+
+[Individual runs and WAV hashes](docs/music-gpu-benchmarks.json)
+<!-- radeon-gpu-pair:end -->
+
 **RVC voice conversion on GPU (5.0 development builds)**
 
 Windows on one RTX 4090 24 GB, using the same voice checkpoint and FAISS index with a retrieval blend of 0.5. Each run converts an existing vocal to a new voice.

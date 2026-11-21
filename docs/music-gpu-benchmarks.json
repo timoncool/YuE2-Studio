@@ -1743,5 +1743,87 @@
       "receipt": "published-windows-engine-residency/mm3-f476b0e-bench-CUDA0-3.2s-resident.json",
       "timing_summary_id": "mm3-f476b0e-bench-CUDA0-3.2s-summary.json"
     }
+  },
+  "radeon_pair": {
+    "source_sha": "5e7273db060e7fd42e4b0a132de76a1a88106734",
+    "run": 44471892853,
+    "input_sha256": "a6d9176e11b857409b28cf5a69f4fefd8f3e61907b3b10d867f1f4c0a7eb9418",
+    "request": {
+      "model": "test",
+      "request": {
+        "text": "Instrumental pop, clean piano and drums with a steady beat.",
+        "duration_seconds": 4,
+        "num_inference_steps": 4,
+        "seed": 42
+      }
+    },
+    "card": "AMD Radeon(TM) Graphics gfx1036",
+    "wddm_sample_interval_s": 1,
+    "results": [
+      {
+        "backend": "HIP",
+        "cold_seconds": 4.609000000004016,
+        "warm_median_seconds": 2.9530000000013388,
+        "samples": 14,
+        "wddm_peak_sampled_bytes": {
+          "shared": 41938944,
+          "dedicated": 1493766144
+        },
+        "runs": [
+          {
+            "seconds": 4.0,
+            "wall_seconds": 4.609000000004016,
+            "sha256": "f41cd5db9248d6729ba4992e801011d0a451a372b755290d1d81a0299e062010"
+          },
+          {
+            "seconds": 4.0,
+            "wall_seconds": 2.937000000005355,
+            "sha256": "f41cd5db9248d6729ba4992e801011d0a451a372b755290d1d81a0299e062010"
+          },
+          {
+            "seconds": 4.0,
+            "wall_seconds": 2.9530000000013388,
+            "sha256": "f41cd5db9248d6729ba4992e801011d0a451a372b755290d1d81a0299e062010"
+          },
+          {
+            "seconds": 4.0,
+            "wall_seconds": 2.9530000000013388,
+            "sha256": "f41cd5db9248d6729ba4992e801011d0a451a372b755290d1d81a0299e062010"
+          }
+        ]
+      },
+      {
+        "backend": "Vulkan",
+        "cold_seconds": 6.2810000000026776,
+        "warm_median_seconds": 3.4539999999979045,
+        "samples": 18,
+        "wddm_peak_sampled_bytes": {
+          "shared": 412282880,
+          "dedicated": 1259773952
+        },
+        "runs": [
+          {
+            "seconds": 4.0,
+            "wall_seconds": 6.2810000000026776,
+            "sha256": "84e364bc3821021eb09442cd0466295fcdb264bb498758bd3ca6efa5f53b4808"
+          },
+          {
+            "seconds": 4.0,
+            "wall_seconds": 3.4690000000045984,
+            "sha256": "84e364bc3821021eb09442cd0466295fcdb264bb498758bd3ca6efa5f53b4808"
+          },
+          {
+            "seconds": 4.0,
+            "wall_seconds": 3.4530000000013388,
+            "sha256": "84e364bc3821021eb09442cd0466295fcdb264bb498758bd3ca6efa5f53b4808"
+          },
+          {
+            "seconds": 4.0,
+            "wall_seconds": 3.4539999999979045,
+            "sha256": "84e364bc3821021eb09442cd0466295fcdb264bb498758bd3ca6efa5f53b4808"
+          }
+        ]
+      }
+    ]
   }
 }
