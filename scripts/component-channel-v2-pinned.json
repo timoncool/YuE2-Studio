@@ -1,0 +1,36 @@
+{
+  "source_head": "08470b2fb57c46b87731cca043d9c5c27c99bb81",
+  "source_pr": 555,
+  "base": "https://timoncool.github.io/YuE2-Studio/component-channel/",
+  "metadata_version": 2,
+  "files": {
+    "1.root.json": {
+      "bytes": 1567,
+      "sha256": "6115060a91903955485aefaf4fbacfee0ec1292053d819be2ed98cdf4cce2a83"
+    },
+    "2.snapshot.json": {
+      "bytes": 467,
+      "sha256": "1a0a39d1235beaf2760d0444820cfede2f05b476110d17cfa51a570389754525"
+    },
+    "2.targets.json": {
+      "bytes": 721,
+      "sha256": "fe1f97879e7d40b0418267b7f1fc9ba5ad0ff119aa93e2e2ad007a7b40e3831d"
+    },
+    "targets/2f74d7f7d3a26473a11c142222db83b69e5c927bdba54c603d90045b4832f83c.mirrors.json": {
+      "bytes": 2334,
+      "sha256": "2f74d7f7d3a26473a11c142222db83b69e5c927bdba54c603d90045b4832f83c"
+    },
+    "targets/457c57d63f52a5fd1b90653a6a70ebc98c545345874fd9375617e047cf37c9a9.music-engine-catalog.json": {
+      "bytes": 15839,
+      "sha256": "457c57d63f52a5fd1b90653a6a70ebc98c545345874fd9375617e047cf37c9a9"
+    },
+    "targets/9438b6d573c091f4063883afc353f47e8ef13bf9ca1d29ecbe7d705d4e40d199.rvc-voice-catalog.json": {
+      "bytes": 1239831,
+      "sha256": "9438b6d573c091f4063883afc353f47e8ef13bf9ca1d29ecbe7d705d4e40d199"
+    },
+    "timestamp.json": {
+      "bytes": 469,
+      "sha256": "073e7d2e6249c67950527f41bf7bf6f82d3466297e5c4e0b3616222dcc19fc68"
+    }
+  }
+}

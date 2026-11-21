@@ -70,6 +70,7 @@ jobs:
       - name: Download public verification tooling and baseline
         run: python scripts/windows-nsis-acceptance.py download ${{ matrix.scenario }}
       - name: Verify and exercise installed Studio
+        id: installed-studio
         run: python scripts/windows-nsis-acceptance.py verify ${{ matrix.scenario }}
       - name: Exercise installed Windows screens through Studio MCP
         id: installed-screens
@@ -88,6 +89,35 @@ jobs:
         run: |
           $exe = Join-Path $env:QA_DIR 'installed/YuE2-Studio.exe'
           python -u scripts/test-hosted-webview-screens.py $exe (Join-Path $env:QA_DIR 'evidence/native-lrc') --suite lrc
+      - name: Verify public TUF channel online and offline on the clean installation
+        if: always() && matrix.scenario == 'clean' && steps.installed-studio.outcome == 'success'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $PSNativeCommandUseErrorActionPreference = $true
+          python -m pip --disable-pip-version-check install 'tuf==7.0.1' 'securesystemslib[crypto]==1.6.0'
+          $exe = Join-Path $env:QA_DIR 'installed/YuE2-Studio.exe'
+          $report = Get-Content -Raw -LiteralPath (Join-Path $env:QA_DIR 'evidence/acceptance.json') | ConvertFrom-Json
+          $sha = $report.installed_files_sha256.'yue2-studio.exe'
+          if ($sha -cnotmatch '^[a-f0-9]{64}$') { throw 'Verified installed executable pin is missing' }
+          $work = Join-Path $env:QA_DIR 'public-channel-work'
+          $evidence = New-Item -ItemType Directory -Path (Join-Path $env:QA_DIR 'evidence/public-channel')
+          $argsForProbe = @('--executable', $exe, '--executable-sha', $sha, '--work', $work,
+                            '--public-receipt', 'scripts/component-channel-v2-pinned.json')
+          try {
+            python -u scripts/prove-public-channel-rc.py online @argsForProbe
+            python -u scripts/prove-public-channel-rc.py offline @argsForProbe
+            $manifest = Get-Content -Raw -LiteralPath 'scripts/component-channel-v2-pinned.json' | ConvertFrom-Json
+            $response = Invoke-WebRequest ($manifest.base + 'timestamp.json')
+            $received = (Get-FileHash -InputStream $response.RawContentStream -Algorithm SHA256).Hash.ToLowerInvariant()
+            if ($received -cne $manifest.files.'timestamp.json'.sha256) { throw 'Runner cannot see the pinned public channel after offline QA' }
+            "Runner public HTTPS remained available: $received" | Set-Content -LiteralPath (Join-Path $evidence.FullName 'runner-network.txt')
+          } finally {
+            foreach ($name in @('online.log', 'offline.log', 'public-channel.json')) {
+              $path = Join-Path $work $name
+              if (Test-Path -LiteralPath $path) { Copy-Item -LiteralPath $path -Destination $evidence.FullName }
+            }
+          }
       - name: Save acceptance evidence
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
