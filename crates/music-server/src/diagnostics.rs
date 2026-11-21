@@ -136,7 +136,7 @@ fn text(report: &Value, log: &[String]) -> String {
     out.push_str(&format!("OS: {}\n", report["os"].as_str().unwrap_or_default()));
     match report["gpu"].as_str() {
         Some(gpu) => out.push_str(&format!("GPU: {gpu}\n")),
-        None => out.push_str("GPU: no card found (no NVIDIA card answered nvidia-smi)\n"),
+        None => out.push_str("GPU: a graphics adapter could not be identified\n"),
     }
     let memory = &report["memory"];
     for vram in memory["vram"].as_array().into_iter().flatten() {
@@ -342,5 +342,14 @@ mod tests {
         assert_eq!(field(&status, "set.ready"), Value::Bool(true));
         assert_eq!(field(&status, "provider"), json!("local"));
         assert_eq!(field(&status, "set.missing"), Value::Null);
+    }
+
+    #[test]
+    fn an_unknown_adapter_does_not_imply_missing_nvidia_hardware() {
+        let report = json!({ "os": "macOS (aarch64)", "gpu": null, "engine_device": "Metal" });
+        let diagnostic = text(&report, &[]);
+        assert!(diagnostic.contains("GPU: a graphics adapter could not be identified"));
+        assert!(diagnostic.contains("Engine device: Metal"));
+        assert!(!diagnostic.contains("NVIDIA"));
     }
 }

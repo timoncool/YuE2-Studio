@@ -113,6 +113,7 @@ export function mapNativeLibrarySong(song: NativeLibrarySong): Song {
     timeSignature: stringMetadata(metadata, 'time_signature') ?? stringMetadata(metadata, 'timeSignature'),
     generationParams: song.generation_settings ?? undefined,
     nativeReplayAvailable: song.replay_available ?? Boolean(song.replay_request && song.audio_codes),
+    replayModelFiles: song.replay_model_files,
     cutShort: song.cut_short,
     tracksAsked: numberMetadata(metadata, 'tracks_asked'),
     // Karaoke timings, when someone has made them. The video studio and the

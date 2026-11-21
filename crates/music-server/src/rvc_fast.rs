@@ -16,6 +16,7 @@ use serde_json::json;
 use crate::rvc_fast_install::RuntimeBackend;
 
 static WORKER: Mutex<Option<Worker>> = Mutex::new(None);
+const METAL_DEVICE_UNAVAILABLE: &str = "No Metal/MPS device with a command queue is available.";
 const HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(12);
 const CONVERSION_TIMEOUT: Duration = Duration::from_secs(15 * 60);
 
@@ -27,8 +28,9 @@ pub struct Request<'a> {
     pub retrieval_blend: f64,
 }
 
-pub fn availability(data_root: &Path) -> Result<(), String> {
-    let (runtime, cache, backend) = runtime_paths(data_root).map_err(|error| error.to_string())?;
+pub fn availability(data_root: &Path, metal: bool) -> Result<(), String> {
+    let (runtime, cache, backend) =
+        runtime_paths(data_root, metal).map_err(|error| error.to_string())?;
     let mut worker = WORKER
         .lock()
         .map_err(|_| "The native RVC worker is unavailable.".to_string())?;
@@ -38,8 +40,9 @@ pub fn availability(data_root: &Path) -> Result<(), String> {
 }
 
 /// Reports installation and an already-running worker without starting one.
-pub fn status(data_root: &Path) -> Result<bool, String> {
-    let (runtime, _, backend) = runtime_paths(data_root).map_err(|error| error.to_string())?;
+pub fn status(data_root: &Path, metal: bool) -> Result<bool, String> {
+    let (runtime, _, backend) =
+        runtime_paths(data_root, metal).map_err(|error| error.to_string())?;
     let Ok(mut slot) = WORKER.try_lock() else {
         return Ok(false);
     };
@@ -49,6 +52,9 @@ pub fn status(data_root: &Path) -> Result<bool, String> {
     else {
         return Ok(false);
     };
+    if !worker.device_available {
+        return Err(METAL_DEVICE_UNAVAILABLE.into());
+    }
     worker
         .child
         .try_wait()
@@ -87,12 +93,13 @@ fn from_worker_failure(message: &str) -> anyhow::Error {
 
 pub fn convert(
     data_root: &Path,
+    metal: bool,
     request: &Request<'_>,
     cancelled: &impl Fn() -> bool,
 ) -> Result<audio_post::Stereo> {
     anyhow::ensure!(!cancelled(), "Native RVC conversion cancelled.");
     let (runtime, cache, backend) =
-        runtime_paths(data_root).map_err(|error| BackendFailure(format!("{error:#}")))?;
+        runtime_paths(data_root, metal).map_err(|error| BackendFailure(format!("{error:#}")))?;
     std::fs::create_dir_all(&cache).context("Create native RVC cache")?;
     let handoff = tempfile::tempdir_in(&cache)?;
     let output = handoff.path().join("output.wav");
@@ -135,9 +142,9 @@ pub fn convert(
     Ok(audio)
 }
 
-fn runtime_paths(data_root: &Path) -> Result<(PathBuf, PathBuf, RuntimeBackend)> {
+fn runtime_paths(data_root: &Path, metal: bool) -> Result<(PathBuf, PathBuf, RuntimeBackend)> {
     let root = data_root.join("rvc/native");
-    let runtime = crate::rvc_fast_install::installed_worker(data_root)
+    let runtime = crate::rvc_fast_install::installed_worker(data_root, metal)
         .map_err(|error| anyhow!(error))?
         .context("Install the native RVC runtime and acoustic models first.")?;
     let variant = runtime
@@ -166,6 +173,7 @@ fn ensure_worker<'a>(
 ) -> Result<&'a mut Worker> {
     if let Some(worker) = slot
         && (worker.runtime != runtime
+            || !worker.device_available
             || worker.device != device(backend)
             || worker.child.try_wait()?.is_some())
     {
@@ -174,7 +182,9 @@ fn ensure_worker<'a>(
     if slot.is_none() {
         *slot = Some(Worker::start(runtime, cache, backend)?);
     }
-    slot.as_mut().context("Native RVC worker failed to start")
+    let worker = slot.as_mut().context("Native RVC worker failed to start")?;
+    anyhow::ensure!(worker.device_available, METAL_DEVICE_UNAVAILABLE);
+    Ok(worker)
 }
 
 #[derive(Deserialize)]
@@ -182,6 +192,7 @@ struct Hello {
     protocol: u32,
     backend: String,
     version: String,
+    device_available: Option<bool>,
 }
 
 #[derive(Deserialize)]
@@ -193,6 +204,7 @@ struct Reply {
 struct Worker {
     runtime: PathBuf,
     device: Option<std::ffi::OsString>,
+    device_available: bool,
     child: Child,
     input: ChildStdin,
     output: mpsc::Receiver<std::io::Result<String>>,
@@ -255,12 +267,13 @@ impl Worker {
         let stdout = child.stdout.take().expect("worker stdout is piped");
         let input = child.stdin.take().expect("worker stdin is piped");
         let (sender, output) = mpsc::sync_channel(1);
-        let worker = Self {
+        let mut worker = Self {
             child,
             input,
             output,
             runtime,
             device: device(backend),
+            device_available: true,
         };
         std::thread::Builder::new()
             .name("rvc-worker-output".into())
@@ -284,6 +297,9 @@ impl Worker {
             || hello.version != "0.1.7"
         {
             bail!("The native RVC worker version or backend is incompatible.");
+        }
+        if backend == RuntimeBackend::MetalProjections {
+            worker.device_available = hello.device_available == Some(true);
         }
         Ok(worker)
     }
