@@ -454,7 +454,7 @@ fn annotations(name: &str) -> Value {
     // reads whose names the rules above miss: create_form names the create page
     const READ_NAMES: &[&str] = &["lyrics_syllables", "assistant_cli_agents", "system_gpus", "cover_scenes", "cover_photos_search", "video_backgrounds_search", "network_proxy_test", "journal_read", "score_to_midi", "score_instrumental", "score_vocal_octave", "score_from_midi", "score_mark", "lyrics_find", "cover_prompt_render", "studio_wait", "engine_presets_get", "assistant_requests_wait", "ui_console", "song_defaults", "create_form_get", "library_liked", "score_chord_bed", "song_tokenize", "score_match_sections", "models_update_plan", "problem_preview", "library_migration_preview", "audio_cpp_music_models", "hotstep_cover_profiles", "hotstep_sa3_training_status"];
     // writes over what was stored, so the earlier content is gone: a client asks first
-    const OVERWRITES: &[&str] = &["library_song_rename", "library_song_update", "playlist_update", "album_reorder", "dataset_update", "dataset_song_update", "dataset_prepare", "lora_update", "stems_split", "restore_start", "karaoke_make", "midi_transcribe", "cover_draw", "cover_set_from_file", "openrouter_set_key", "models_update_apply"];
+    const OVERWRITES: &[&str] = &["library_song_rename", "library_song_update", "playlist_update", "album_reorder", "dataset_update", "dataset_song_update", "dataset_song_describe_style", "dataset_prepare", "lora_update", "stems_split", "restore_start", "karaoke_make", "midi_transcribe", "cover_draw", "cover_set_from_file", "openrouter_set_key", "models_update_apply"];
     let changes = CHANGES.iter().any(|verb| name.split('_').any(|word| word == *verb));
     let read_only = READ_NAMES.contains(&name) || !changes && (READS.iter().any(|part| name.ends_with(part) || name.contains(&format!("{part}_"))) || name.starts_with("writing_"));
     let destructive = name.ends_with("_delete") || name.ends_with("_remove") || name == "processing_discard" || name.ends_with("_cancel") || name.contains("_cancel_") || OVERWRITES.contains(&name);
@@ -522,6 +522,7 @@ const JOURNAL: &[(&str, &str, &str)] = &[
     ("dataset_add_folder", "updated", "dataset"),
     ("dataset_add_library_songs", "updated", "dataset"),
     ("dataset_song_update", "updated", "dataset"),
+    ("dataset_song_describe_style", "updated", "dataset"),
     ("dataset_song_delete", "updated", "dataset"),
     ("dataset_take_as_is", "updated", "dataset"),
     ("dataset_delete", "deleted", "dataset"),
@@ -2905,6 +2906,12 @@ fn tools() -> &'static [Tool] {
                 description: "Write a dataset song's title, artist, style, lyrics (sections tagged [Verse 1], [Chorus]...) or instrumental flag. What you write is final: preparation leaves it alone.",
                 schema: || object(json!({ "dataset_id": { "type": "string" }, "song_id": { "type": "string" }, "title": { "type": "string" }, "artist": { "type": "string" }, "style": { "type": "string" }, "lyrics": { "type": "string" }, "instrumental": { "type": "boolean" } }), &["dataset_id", "song_id"]),
                 call: |args| send(Method::PATCH, format!("/v1/training/datasets/{}/items/{}", segment(&text(args, "dataset_id")?), segment(&text(args, "song_id")?)), body_without(args, &["dataset_id", "song_id"])),
+            },
+            Tool {
+                name: "dataset_song_describe_style",
+                description: "Describe a dataset recording by ear and save its style and the measured tempo. Waits for a song already rendering. Requires the listening pack.",
+                schema: || object(json!({ "dataset_id": { "type": "string" }, "song_id": { "type": "string" } }), &["dataset_id", "song_id"]),
+                call: |args| post(format!("/v1/training/datasets/{}/items/{}/describe", segment(&text(args, "dataset_id")?), segment(&text(args, "song_id")?)), json!({})),
             },
             Tool {
                 name: "dataset_song_delete",
