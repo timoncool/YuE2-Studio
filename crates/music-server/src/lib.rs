@@ -6170,6 +6170,18 @@ fn preferred_take_counter(engine: &str, metadata: &Value) -> Option<&'static str
 
 #[cfg(test)]
 #[test]
+fn a_refused_openrouter_request_says_what_to_do() {
+    let credits = openrouter_failure(reqwest::StatusCode::PAYMENT_REQUIRED, "google/gemini", r#"{"error":{"message":"Insufficient credits"}}"#).to_string();
+    assert!(credits.contains("no credits left") && credits.ends_with("OpenRouter: Insufficient credits"), "{credits}");
+    let key = openrouter_failure(reqwest::StatusCode::UNAUTHORIZED, "google/gemini", "").to_string();
+    assert_eq!(key, "OpenRouter did not accept the API key. Check it in Settings, Providers.");
+    let gone = openrouter_failure(reqwest::StatusCode::NOT_FOUND, "old/model", "not json").to_string();
+    assert!(gone.contains("no longer offers old/model"), "{gone}");
+    assert!(!gone.contains("for url"));
+}
+
+#[cfg(test)]
+#[test]
 fn preferred_take_uses_only_known_effective_backends() {
     let metadata = serde_json::json!({"derived":{"settings":{
         "voice_name":"private voice", "requested_backend":"auto", "effective_backend":"vocal-fast-rs"
@@ -7464,6 +7476,26 @@ async fn refresh_openrouter_catalog(State(state): State<AppState>) -> Result<Jso
     Ok(Json(serde_json::json!({ "models": models, "refreshed_at": refreshed_at })))
 }
 
+/// What a refused OpenRouter request means for the person: the key, the account, the model or OpenRouter's own words.
+fn openrouter_failure(status: reqwest::StatusCode, model: &str, body: &str) -> anyhow::Error {
+    let said = serde_json::from_str::<Value>(body)
+        .ok()
+        .and_then(|body| body.pointer("/error/message").and_then(Value::as_str).map(str::to_owned))
+        .filter(|message| !message.trim().is_empty());
+    let meaning = match status.as_u16() {
+        401 | 403 => "OpenRouter did not accept the API key. Check it in Settings, Providers.".to_owned(),
+        402 => "The OpenRouter account has no credits left for this request. Add credits on openrouter.ai or choose a free model.".to_owned(),
+        404 => format!("OpenRouter no longer offers {model}. Choose another model in Settings, Providers."),
+        429 => "OpenRouter is limiting requests right now. Try again in a minute.".to_owned(),
+        code if code >= 500 => format!("OpenRouter could not answer (error {code}). Try again later."),
+        code => format!("OpenRouter refused the request (error {code})."),
+    };
+    match said {
+        Some(said) => anyhow::anyhow!("{meaning} OpenRouter: {said}"),
+        None => anyhow::anyhow!("{meaning}"),
+    }
+}
+
 /// Sends an already catalog-validated OpenRouter JSON request. The frontend
 /// supplies a model selection and input data, never an API key or endpoint.
 async fn execute_openrouter_json(
@@ -7499,7 +7531,7 @@ async fn execute_openrouter_json(
             let text = response.text().await.unwrap_or_default();
             request_log::answered(what, &model, status.as_u16(), started.elapsed().as_secs_f64(), text.chars().count());
             request_log::unusable(what, &model, &error.to_string(), &text);
-            return Err(error.into());
+            return Err(openrouter_failure(status, &model, &text));
         }
     };
     let generation_id = response
@@ -11743,8 +11775,13 @@ async fn run_openrouter_music_generation(
             .post(url)
             .bearer_auth(key)
             .json(&stream_request.request.body)
-            .send().await?
-            .error_for_status()?;
+            .send().await?;
+        let status = response.status();
+        if !status.is_success() {
+            let model = stream_request.request.body.get("model").and_then(Value::as_str).unwrap_or("this model").to_owned();
+            let body = response.text().await.unwrap_or_default();
+            return Err(openrouter_failure(status, &model, &body));
+        }
         let audio = openrouter_stream::read_audio_sse(response.bytes_stream()).await?;
         let duration = openrouter_stream::wav_duration(&audio)?;
         Ok::<_, anyhow::Error>((audio, duration))
