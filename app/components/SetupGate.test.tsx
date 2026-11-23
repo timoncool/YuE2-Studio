@@ -71,11 +71,11 @@ it('opens upgrades from the notification target and reads per-engine readiness w
     expect(engineCard('local')).toContain('YuE2Ready');
     expect(engineCard('local')).not.toContain('In use now');
     expect(engineCard('acestep-cpp')).toContain('Engine installed, no model downloadedIn use now');
-    expect(engineCard('acestep-cpp')).toContain('Managed package · 6e0e414ec113');
-    expect(engineCard('acestep-cpp')).toContain('download · d058cd86564a');
+    expect(engineCard('acestep-cpp')).toContain('Engine version: 6e0e414ec113');
+    expect(engineCard('acestep-cpp')).toContain('Available version: d058cd86564a');
     expect(engineCard('audio.cpp')).toContain('audio.cppReady');
-    expect(engineCard('minimaxmusic-cpp')).toContain('Selected local executable · /external/mm-server');
-    expect(engineCard('minimaxmusic-cpp')).toContain('Managed package · managed12345');
+    expect(engineCard('minimaxmusic-cpp')).toContain('Own executable: /external/mm-server');
+    expect(engineCard('minimaxmusic-cpp')).toContain('Engine version: managed12345');
     expect(engineCard('hotstep')).toContain('Not installed');
     expect(engineCard('hotstep')).toContain('Models');
     expect(engineCard('hotstep')).toContain('New compatible model');

@@ -11,6 +11,9 @@ const en = {
   modelsHint: 'Each model downloads on its own; keep only the ones you use.',
   downloaded: 'Downloaded',
   catalogue: 'Component catalogue',
+  noBuild: 'There is no ready build of this engine for this computer.',
+  facts: { version: 'Engine version', available: 'Available version', executable: 'Own executable', computesOn: 'Computes on' },
+  words: { Compact: 'compact' } as Record<string, string>,
   sections: { models: 'Models and engines', modelsHint: 'What is downloaded, quality, updates and add-ons', engine: 'Performance', engineHint: 'Graphics card, memory, fine tuning and diagnostics', cloud: 'Cloud and network', cloudHint: 'OpenRouter key, proxy and download source', yueSet: 'Your own YuE2 set', yueSetHint: 'A quantisation for each YuE2 role, for those who pick by hand. Ready sets are in the YuE2 card above.' },
   about: {
     local: 'Songs with vocals from lyrics and a style, with a score you can edit.',
@@ -35,6 +38,9 @@ export const engineCardText: Record<Language, typeof en> = {
     modelsHint: 'Каждая модель качается отдельно; держите только те, которыми пользуетесь.',
     downloaded: 'Скачано',
     catalogue: 'Каталог компонентов',
+    noBuild: 'Для этого компьютера нет готовой сборки движка.',
+    facts: { version: 'Версия движка', available: 'Доступна версия', executable: 'Свой исполняемый файл', computesOn: 'Считает на' },
+    words: { Compact: 'компактная' },
     sections: { models: 'Модели и движки', modelsHint: 'Что скачано, качество, обновления и дополнения', engine: 'Производительность', engineHint: 'Видеокарта, память, тонкая настройка и диагностика', cloud: 'Облако и сеть', cloudHint: 'Ключ OpenRouter, прокси и источник загрузок', yueSet: 'Свой набор YuE2', yueSetHint: 'Квант для каждой роли YuE2 — для тех, кто подбирает вручную. Готовые наборы — в карточке YuE2 выше.' },
     about: {
       local: 'Песни с вокалом по тексту и стилю, с партитурой, которую можно править.',
@@ -56,6 +62,9 @@ export const engineCardText: Record<Language, typeof en> = {
     modelsHint: '每个模型单独下载；只保留你用的。',
     downloaded: '已下载',
     catalogue: '组件目录',
+    noBuild: '没有适用于这台电脑的引擎现成版本。',
+    facts: { version: '引擎版本', available: '可用版本', executable: '自定义可执行文件', computesOn: '运行于' },
+    words: { Compact: '精简版' },
     sections: { models: '模型和引擎', modelsHint: '已下载内容、质量、更新和附加组件', engine: '性能', engineHint: '显卡、内存、微调和诊断', cloud: '云端和网络', cloudHint: 'OpenRouter 密钥、代理和下载来源', yueSet: '自定义 YuE2 组合', yueSetHint: '为 YuE2 的每个角色手动选择量化。现成组合在上方的 YuE2 卡片中。' },
     about: {
       local: '根据歌词和风格生成带人声的歌曲，乐谱可编辑。',
@@ -77,6 +86,9 @@ export const engineCardText: Record<Language, typeof en> = {
     modelsHint: 'モデルは個別にダウンロードされます。使うものだけ残してください。',
     downloaded: 'ダウンロード済み',
     catalogue: 'コンポーネントカタログ',
+    noBuild: 'このコンピューター向けのエンジンのビルドはありません。',
+    facts: { version: 'エンジンのバージョン', available: '利用可能なバージョン', executable: '独自の実行ファイル', computesOn: '計算先' },
+    words: { Compact: 'コンパクト' },
     sections: { models: 'モデルとエンジン', modelsHint: 'ダウンロード済み、品質、更新、追加機能', engine: 'パフォーマンス', engineHint: 'グラフィックカード、メモリ、詳細設定、診断', cloud: 'クラウドとネットワーク', cloudHint: 'OpenRouter キー、プロキシ、ダウンロード元', yueSet: '自分の YuE2 セット', yueSetHint: 'YuE2 の役割ごとに量子化を手で選ぶ人向け。既製のセットは上の YuE2 カードにあります。' },
     about: {
       local: '歌詞とスタイルからボーカル入りの曲を作り、楽譜も編集できます。',
@@ -98,6 +110,9 @@ export const engineCardText: Record<Language, typeof en> = {
     modelsHint: '모델은 각각 따로 다운로드됩니다. 쓰는 것만 두세요.',
     downloaded: '다운로드됨',
     catalogue: '구성 요소 카탈로그',
+    noBuild: '이 컴퓨터용 엔진 빌드가 없습니다.',
+    facts: { version: '엔진 버전', available: '사용 가능한 버전', executable: '직접 지정한 실행 파일', computesOn: '연산 장치' },
+    words: { Compact: '컴팩트' },
     sections: { models: '모델과 엔진', modelsHint: '다운로드한 것, 품질, 업데이트와 추가 기능', engine: '성능', engineHint: '그래픽카드, 메모리, 세부 설정과 진단', cloud: '클라우드와 네트워크', cloudHint: 'OpenRouter 키, 프록시, 다운로드 소스', yueSet: '나만의 YuE2 세트', yueSetHint: 'YuE2 역할별 양자화를 직접 고르는 분을 위한 것입니다. 준비된 세트는 위 YuE2 카드에 있습니다.' },
     about: {
       local: '가사와 스타일로 보컬이 있는 곡을 만들고, 악보를 편집할 수 있습니다.',
@@ -119,6 +134,9 @@ export const engineCardText: Record<Language, typeof en> = {
     modelsHint: 'Cada modelo é baixado à parte; mantenha só os que usa.',
     downloaded: 'Baixado',
     catalogue: 'Catálogo de componentes',
+    noBuild: 'Não há uma versão pronta deste motor para este computador.',
+    facts: { version: 'Versão do motor', available: 'Versão disponível', executable: 'Executável próprio', computesOn: 'Calcula em' },
+    words: { Compact: 'compacta' },
     sections: { models: 'Modelos e motores', modelsHint: 'O que está baixado, qualidade, atualizações e extras', engine: 'Desempenho', engineHint: 'Placa gráfica, memória, ajuste fino e diagnóstico', cloud: 'Nuvem e rede', cloudHint: 'Chave OpenRouter, proxy e origem dos downloads', yueSet: 'Seu próprio conjunto YuE2', yueSetHint: 'Uma quantização para cada papel do YuE2, para quem escolhe à mão. Os conjuntos prontos estão no cartão YuE2 acima.' },
     about: {
       local: 'Músicas com vocais a partir da letra e do estilo, com uma partitura editável.',

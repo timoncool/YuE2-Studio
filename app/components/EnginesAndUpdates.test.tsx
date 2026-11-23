@@ -32,7 +32,7 @@ it('names the component catalogue, refreshes it and offers the native engines fr
   const root = createRoot(host);
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   try {
-    await act(async () => root.render(<QueryClientProvider client={client}><EnginesAndUpdates onNavigate={vi.fn()} /></QueryClientProvider>));
+    await act(async () => root.render(<QueryClientProvider client={client}><EnginesAndUpdates /></QueryClientProvider>));
     await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)); });
     expect(host.textContent).toContain('Download list no. 12');
     expect(host.textContent).toContain('the one built into this version');

@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { RefreshCw } from 'lucide-react';
 import { useI18n } from '../context/I18nContext';
-import { componentCatalogueStrings, engineCardStrings, enginePageStrings, runtimeSourceStrings, showUnsupportedEngines } from '../i18n/enginePage';
+import { componentCatalogueStrings, engineCardStrings, enginePageStrings, showUnsupportedEngines } from '../i18n/enginePage';
 import { apiUrl } from '../services/apiBase';
 import type { PairStatus } from '../services/musicPair';
 import { SELF_READ, useSetupStatus } from '../services/studioQueries';
@@ -105,7 +105,8 @@ function ModelRows({ engine, catalogue, models, onChanged }: { engine: string; c
         {models.filter(model => model.ready || modelInstallPath(engine, model.install_path)).map(model => {
           const [title, ...rest] = (model.label ?? model.name ?? model.id).split(' · ');
           const installPath = modelInstallPath(engine, model.install_path);
-          const quant = rest.filter(part => part !== 'HOT-Step').join(' · ').replace(/\s*\(experimental\)/i, '');
+          const quant = rest.filter(part => part !== 'HOT-Step').join(' · ').replace(/\s*\(experimental\)/i, '')
+            .replace(/\b[A-Z][a-z]+\b/g, word => text.words[word] ?? word);
           const meta = [hints[model.id], quant, model.status === 'experimental' ? nativeMusicSourceStrings[language].experimental : ''].filter(Boolean).join(' · ');
           return (
             <li key={model.id} className="flex flex-wrap items-center gap-x-3 gap-y-1.5 px-3 py-2">
@@ -124,10 +125,7 @@ function ModelRows({ engine, catalogue, models, onChanged }: { engine: string; c
   );
 }
 
-export function EnginesAndUpdates({ focus }: {
-  focus?: string;
-  onNavigate?: (target: 'models' | 'engine' | 'cloud') => void;
-}) {
+export function EnginesAndUpdates({ focus }: { focus?: string }) {
   const { language, t } = useI18n();
   const [showUnsupported, setShowUnsupported] = useState(false);
   const list = useRef<HTMLUListElement>(null);
@@ -136,7 +134,6 @@ export function EnginesAndUpdates({ focus }: {
     target?.scrollIntoView?.({ block: 'nearest' });
   }, [focus]);
   const [title, , , , checking, unavailable] = enginePageStrings[language];
-  const [managedPackage, localExecutable] = runtimeSourceStrings[language];
   const catalogueText = componentCatalogueStrings[language];
   const card = engineCardStrings[language];
   const text = engineCardText[language];
@@ -216,10 +213,10 @@ export function EnginesAndUpdates({ focus }: {
           status={state(data?.local ? Boolean(data.local.executable || setup.data?.engine_ready) : undefined, setup.data?.ready)}
           inUse={activeId === 'local' ? inUse : undefined}
           details={data?.local?.executable ? <>
-            <p>{localExecutable} · {data.local.executable}{data.local.executable_source === 'environment' && <> · {t('engineBinEnvOverride')}</>}</p>
-            {data.local.in_effect?.backend && <p>{data.local.in_effect.backend}</p>}
+            <p>{text.facts.executable}: {data.local.executable}{data.local.executable_source === 'environment' && <> · {t('engineBinEnvOverride')}</>}</p>
+            {data.local.in_effect?.backend && <p>{text.facts.computesOn}: {data.local.in_effect.backend.toUpperCase()}</p>}
           </> : undefined}>
-          <YueModelSetPicker onChanged={() => void refresh()} />
+          <YueModelSetPicker manage onChanged={() => void refresh()} />
         </EngineCard>
         {native.map((engine, index) => {
           const profile = data?.profiles[index];
@@ -234,11 +231,11 @@ export function EnginesAndUpdates({ focus }: {
           return <EngineCard key={engine.id} id={engine.id} name={engine.name} about={text.about[engine.id]} focused={focus === engine.id} detailsLabel={text.versionAndFiles}
             status={state(profile?.engine_installed, ready, unsupported)} inUse={activeId === engine.id ? inUse : undefined}
             details={local || installedRevision || (runtime?.revision && runtime.revision !== installedRevision) ? <>
-              {local && <p>{localExecutable} · {local}</p>}
-              {installedRevision && <p>{managedPackage} · {installedRevision.slice(0, 12)}</p>}
-              {runtime?.revision && runtime.revision !== installedRevision && <p>{t('download')} · {runtime.revision.slice(0, 12)}</p>}
+              {local && <p>{text.facts.executable}: {local}</p>}
+              {installedRevision && <p>{text.facts.version}: {installedRevision.slice(0, 12)}</p>}
+              {runtime?.revision && runtime.revision !== installedRevision && <p>{text.facts.available}: {runtime.revision.slice(0, 12)}</p>}
             </> : undefined}>
-            {unsupported && <p className="text-xs text-zinc-500 dark:text-zinc-400">{t('engineUnavailable')}</p>}
+            {unsupported && <p className="text-xs text-zinc-500 dark:text-zinc-400">{text.noBuild}</p>}
             {sets && profile && runtime?.supported && profile.engine_installed && profile.adapter_runtime_update &&
               <NativeMusicRuntimeInstall engine={engine.id} update onInstalled={refresh} />}
             {sets && !unsupported && <NativeEngineQuality engine={engine.id} name={engine.name} onChanged={() => void refresh()} />}

@@ -9,7 +9,7 @@ import { NativeModelSetPicker } from './NativeModelSetPicker';
  */
 
 type CatalogProfile = { id: string; label: string; labels?: Record<string, string>; vram_gb?: number; advanced?: boolean; components: string[]; total_bytes: number };
-type Catalog = { recommended_profile_id?: string; profiles: CatalogProfile[] };
+type Catalog = { recommended_profile_id?: string; profiles: CatalogProfile[]; components?: { id: string; partial_bytes?: number }[] };
 type Status = {
   selected_profile_id?: string | null;
   installed_components?: string[];
@@ -24,7 +24,8 @@ async function read<T>(path: string): Promise<T> {
   return (await response.json()) as T;
 }
 
-export function YueModelSetPicker({ onChanged }: { onChanged: () => void }) {
+/** `manage` adds deleting a set and a half-finished download, for Settings; the create form only chooses. */
+export function YueModelSetPicker({ onChanged, manage = false }: { onChanged: () => void; manage?: boolean }) {
   const [catalog, setCatalog] = useState<Catalog | null>(null);
   const [status, setStatus] = useState<Status | null>(null);
   const [chosen, setChosen] = useState<string | null>(null);
@@ -75,13 +76,36 @@ export function YueModelSetPicker({ onChanged }: { onChanged: () => void }) {
     onChanged();
   };
 
+  // files half-way through a download, per set: they can be resumed by choosing the set, or deleted
+  const partialIds = (id: string) => {
+    const profile = catalog?.profiles.find(entry => entry.id === id);
+    return (profile?.components ?? []).filter(component => !installed.has(component)
+      && (catalog?.components?.find(entry => entry.id === component)?.partial_bytes ?? 0) > 0);
+  };
+  const remove = async (ids: string[]) => {
+    if (!ids.length) return;
+    const response = await fetch(apiUrl('/setup/remove'), {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ids }),
+    });
+    if (!response.ok) {
+      const body = await response.json().catch(() => null) as { error?: string } | null;
+      setError(body?.error ?? String(response.status));
+      return;
+    }
+    await load();
+    onChanged();
+  };
+
   if (!catalog) return error ? <p role="alert" className="text-xs text-red-600 dark:text-red-400">{error}</p> : null;
   return (
     <>
       <NativeModelSetPicker engine="yue2-cpp" name="YuE2" profiles={profiles} selected={selected} engineInstalled
         onSelect={id => { setChosen(id); if (profiles.find(entry => entry.id === id)?.ready) void settle(id); }}
         onChanged={() => { void load(); onChanged(); }}
-        onReady={() => { if (selectedId) void settle(selectedId); }} />
+        onReady={() => { if (selectedId) void settle(selectedId); }}
+        onRemove={manage ? id => void remove(catalog.profiles.find(entry => entry.id === id)?.components ?? []) : undefined}
+        partial={id => partialIds(id).length > 0}
+        onDiscardPartial={manage ? id => void remove(partialIds(id)) : undefined} />
       {error && <p role="alert" className="text-xs text-red-600 dark:text-red-400">{error}</p>}
     </>
   );

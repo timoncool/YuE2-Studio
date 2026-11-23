@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { CheckCircle2 } from 'lucide-react';
+import { CheckCircle2, Trash2 } from 'lucide-react';
 import { useI18n } from '../context/I18nContext';
 import { nativeModelSetStrings } from '../i18n/nativeModelSet';
 import { apiUrl } from '../services/apiBase';
@@ -24,10 +24,14 @@ async function answer(response: Response): Promise<Record<string, unknown>> {
  * set's weights, with one bar for both. The main sets are offered with the one this card holds best marked; the
  * variants for particular cards wait under "all variants".
  */
-export function NativeModelSetPicker({ engine, name, profiles, selected, engineInstalled, onSelect, onChanged, onReady }: {
+export function NativeModelSetPicker({ engine, name, profiles, selected, engineInstalled, onSelect, onChanged, onReady, onRemove, partial, onDiscardPartial }: {
   engine: Engine;
   name: string;
   profiles: NativeProfile[];
+  /** Where the owner of the sets can delete them: a downloaded set, and the files of one left half-way. */
+  onRemove?: (id: string) => void;
+  partial?: (id: string) => boolean;
+  onDiscardPartial?: (id: string) => void;
   selected?: NativeProfile;
   engineInstalled: boolean;
   onSelect: (id: string) => void;
@@ -181,7 +185,8 @@ export function NativeModelSetPicker({ engine, name, profiles, selected, engineI
       <legend className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">{text.quality}</legend>
       <div role="radiogroup" aria-label={text.quality} className="space-y-1">
         {shown.map(profile => (
-          <label key={profile.id} className={`flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-sm transition-colors ${
+          <div key={profile.id} className="flex items-center gap-1">
+          <label className={`flex min-w-0 flex-1 cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-sm transition-colors ${
             profile.id === selected?.id ? 'border-pink-500 bg-pink-500/5' : 'border-zinc-200 hover:border-pink-300 dark:border-white/10'}`}>
             <input type="radio" name={`${engine}-set`} value={profile.id} className="accent-pink-600" checked={profile.id === selected?.id}
               disabled={busy} onChange={() => onSelect(profile.id)} />
@@ -190,8 +195,22 @@ export function NativeModelSetPicker({ engine, name, profiles, selected, engineI
               {profile.vram_gb ? <span className="ml-1.5 text-xs text-zinc-500 dark:text-zinc-400">{text.fromVram(new Intl.NumberFormat(language, { maximumFractionDigits: 1 }).format(profile.vram_gb))}</span> : null}
             </span>
             {profile.recommended && <span className="shrink-0 rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold text-emerald-600 dark:text-emerald-300">{text.recommended}</span>}
+            {!profile.ready && partial?.(profile.id) && <span className="shrink-0 text-[10px] font-semibold text-amber-600 dark:text-amber-300">{text.partial}</span>}
             {profile.ready && engineInstalled && <CheckCircle2 size={14} className="shrink-0 text-emerald-500" aria-hidden />}
           </label>
+          {onRemove && profile.ready && !busy && (
+            <button type="button" onClick={() => onRemove(profile.id)} aria-label={text.removeSet(label(profile))} title={text.removeSet(label(profile))}
+              className="inline-flex size-9 shrink-0 items-center justify-center rounded-lg text-zinc-500 hover:bg-rose-500/10 hover:text-rose-600 dark:text-zinc-400">
+              <Trash2 size={15} aria-hidden />
+            </button>
+          )}
+          {onDiscardPartial && !profile.ready && partial?.(profile.id) && !busy && (
+            <button type="button" onClick={() => onDiscardPartial(profile.id)} aria-label={text.discardPartial} title={text.discardPartial}
+              className="inline-flex size-9 shrink-0 items-center justify-center rounded-lg text-zinc-500 hover:bg-rose-500/10 hover:text-rose-600 dark:text-zinc-400">
+              <Trash2 size={15} aria-hidden />
+            </button>
+          )}
+          </div>
         ))}
       </div>
       {advanced.length > 0 && !showAll && (
