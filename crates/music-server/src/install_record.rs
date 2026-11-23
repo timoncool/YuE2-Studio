@@ -52,8 +52,8 @@ const KEY_FILES: &[(&str, &str, u64)] = &[
     ("https://developer.download.nvidia.com/compute/cudnn/redist/cudnn/windows-x86_64/cudnn-windows-x86_64-8.9.7.29_cuda11-archive.zip", "cudnn64_8.dll", 288_296),
     ("https://files.pythonhosted.org/packages/20/e2/fc9a0e985249d873150276d5afb02e39a66817fedbf1a385724393e505ed/nvidia_cublas_cu12-12.9.2.10-py3-none-win_amd64.whl", "cublasLt64_12.dll", 668_673_536),
     // BSRoformer.cpp and transcribe.cpp all-variants archives: the cli/library is one file across the builds, so a build's key is its GPU module (unique by build and version); the processor build, which has none, keeps the cli/library.
-    ("https://github.com/timoncool/BSRoformer.cpp/releases/download/studio-0.1.1/BSRoformer-windows-cuda13-x64.zip", "ggml-cuda.dll", 129_091_584),
-    ("https://github.com/timoncool/BSRoformer.cpp/releases/download/studio-0.1.1/BSRoformer-windows-cpu-x64.zip", "bs_roformer-cli.exe", 183_808),
+    ("https://github.com/timoncool/BSRoformer.cpp/releases/download/studio-0.1.2/BSRoformer-windows-cuda13-x64.zip", "ggml-cuda.dll", 129_633_280),
+    ("https://github.com/timoncool/BSRoformer.cpp/releases/download/studio-0.1.2/BSRoformer-windows-cpu-x64.zip", "bs_roformer-cli.exe", 185_856),
     ("https://github.com/timoncool/transcribe.cpp/releases/download/engine-0.2.1/transcribe-windows-cuda13-x64.zip", "ggml-cuda.dll", 140_795_392),
     ("https://github.com/timoncool/transcribe.cpp/releases/download/engine-0.2.1/transcribe-windows-cuda12-x64.zip", "transcribe.dll", 2_052_096),
     ("https://github.com/timoncool/transcribe.cpp/releases/download/engine-0.2.1/transcribe-windows-vulkan-x64.zip", "ggml-vulkan.dll", 45_308_928),
