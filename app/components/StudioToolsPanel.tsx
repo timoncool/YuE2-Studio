@@ -572,12 +572,15 @@ export function StudioToolsPanel({ initialSongId, initialTool, onGenerateEffect,
 
   return (
     <div className="flex-1 overflow-y-auto bg-white dark:bg-suno">
-      <div className="mx-auto grid max-w-6xl gap-6 px-5 py-6 md:grid-cols-[17rem_1fr] md:px-8">
+      <div className="mx-auto max-w-6xl px-5 py-6 md:px-8">
+        <header className={`mb-6 ${listOnly ? '' : 'max-md:hidden'}`}>
+          <h1 className="text-2xl leading-8 font-bold text-zinc-950 dark:text-white">{page.title}</h1>
+          <p className="mt-1 max-w-3xl text-sm text-zinc-600 dark:text-zinc-400">{page.intro}</p>
+        </header>
+        <div className="grid gap-6 md:grid-cols-[16rem_1fr]">
         <nav aria-label={page.title} className={`${listOnly ? '' : 'max-md:hidden'} md:sticky md:top-0 md:self-start`}>
-          <h1 className="px-2.5 text-2xl font-bold text-zinc-950 dark:text-white">{page.title}</h1>
-          <p className="mt-1 px-2.5 text-sm text-zinc-600 dark:text-zinc-400">{page.intro}</p>
           {(['track', 'new'] as const).map(group => (
-            <div key={group} className="mt-5">
+            <div key={group} className="mb-5 last:mb-0">
               <h2 className="mb-1.5 px-2.5 text-xs font-semibold uppercase tracking-[0.04em] text-zinc-600 dark:text-zinc-400">{group === 'track' ? page.withTrack : page.createNew}</h2>
               <ul className="mt-1 space-y-0.5">{tools.filter(entry => entry.group === group).map(navItem)}</ul>
             </div>
@@ -590,6 +593,7 @@ export function StudioToolsPanel({ initialSongId, initialTool, onGenerateEffect,
           {needsTrack && trackBar}
           {pane}
         </main>
+        </div>
       </div>
       {midiEditorOpen && <MidiEditor source={{ kind: 'new' }} onClose={() => setMidiEditorOpen(false)} />}
     </div>

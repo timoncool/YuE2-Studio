@@ -8,7 +8,7 @@ export type ComboOption = { value: string; label: string; search?: string; group
 
 /** A list with a filter field (Dub Studio's Combobox): typing a piece of a name narrows it; arrows and Enter pick, Escape
  * closes. Options keep their order; a change of `group` between neighbours starts a labelled group. */
-export default function Combobox({ value, options, onChange, label, placeholder, noResults, className, inputClassName }: {
+export default function Combobox({ value, options, onChange, label, placeholder, noResults, className, inputClassName, search = true, disabled }: {
   value: string;
   options: ComboOption[];
   onChange: (value: string) => void;
@@ -17,6 +17,9 @@ export default function Combobox({ value, options, onChange, label, placeholder,
   noResults?: string;
   className?: string;
   inputClassName?: string;
+  /** Without search the field is a plain choice: it shows the current option and opens the list on click or arrows. */
+  search?: boolean;
+  disabled?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
@@ -71,10 +74,11 @@ export default function Combobox({ value, options, onChange, label, placeholder,
       <input
         role="combobox" aria-label={label} aria-expanded={open} aria-controls={list} aria-autocomplete="list"
         aria-activedescendant={open && shown[active] ? `${list}-${active}` : undefined}
-        value={open ? q : current} placeholder={open ? current || placeholder : placeholder} title={current}
+        value={open && search ? q : current} placeholder={open && search ? current || placeholder : placeholder} title={current}
+        readOnly={!search} disabled={disabled}
         onFocus={() => { setOpen(true); setQ(""); setActive(Math.max(0, shown.findIndex((o) => o.value === value))); }}
         onClick={() => { if (!open) { setOpen(true); setQ(""); setActive(Math.max(0, shown.findIndex((o) => o.value === value))); } }}
-        onChange={(e) => { setQ(e.target.value); setOpen(true); setActive(0); }}
+        onChange={(e) => { if (!search) return; setQ(e.target.value); setOpen(true); setActive(0); }}
         onKeyDown={(e) => {
           if (e.key === "ArrowDown") { e.preventDefault(); setOpen(true); step(1); }
           else if (e.key === "ArrowUp") { e.preventDefault(); setOpen(true); step(-1); }
@@ -84,7 +88,7 @@ export default function Combobox({ value, options, onChange, label, placeholder,
             if (pick) { commit(pick.value); (e.target as HTMLInputElement).blur(); }
           } else if (e.key === "Escape" && open) { e.stopPropagation(); close(); (e.target as HTMLInputElement).blur(); }
         }}
-        className={`${inputClassName ?? "w-full text-[var(--color-text)] bg-[var(--color-surface-2)] border border-[var(--color-border)] rounded-lg px-2 py-1.5 text-[12px] focus:border-[var(--color-accent)] focus:outline-none"} pr-7`} />
+        className={`${inputClassName ?? "w-full text-[var(--color-text)] bg-[var(--color-surface-2)] border border-[var(--color-border)] rounded-lg px-2 py-1.5 text-[12px] focus:border-[var(--color-accent)] focus:outline-none"} pr-7 ${search ? "" : "cursor-pointer caret-transparent select-none"} disabled:cursor-not-allowed disabled:opacity-50`} />
       <ChevronDown size={14} aria-hidden className={`pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-[var(--color-muted)] transition-transform ${open ? "rotate-180" : ""}`} />
       {open && place && createPortal(
         <div ref={listBox} id={list} role="listbox" aria-label={label}
