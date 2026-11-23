@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { Printer, X } from 'lucide-react';
 import { useI18n } from '../context/I18nContext';
 import { chordShape, type ChordInstrument } from '../services/chordShapes';
-import { buildSongbook, chordName, placeLyricSyllables } from '../services/songbook';
+import { buildSongbook, chordName, layoutByPhrases, placeLyricSyllables } from '../services/songbook';
 import { estimateLyricSyllables } from '../services/songbookSyllables';
 import type { Language } from '../i18n/translations';
 import { songbookStrings } from '../i18n/songbook';
@@ -71,10 +71,17 @@ export function SongbookDialog({ abc, title, lyrics, onClose }: {
   const sheet = useMemo(() => {
     try {
       const result = buildSongbook(abc, transpose);
-      const approximate = lyrics?.trim()
-        ? placeLyricSyllables(result.lines, estimateLyricSyllables(lyrics, lyricLanguage))
-        : false;
-      return { ...result, approximate };
+      let lines = result.lines;
+      let approximate = false;
+      if (lyrics?.trim()) {
+        approximate = placeLyricSyllables(lines, estimateLyricSyllables(lyrics, lyricLanguage));
+        const phrased = approximate ? null : layoutByPhrases(lines, lyrics, line => estimateLyricSyllables(line, lyricLanguage));
+        if (phrased) {
+          lines = phrased;
+          approximate = true;
+        }
+      }
+      return { ...result, lines, approximate };
     } catch {
       return null;
     }

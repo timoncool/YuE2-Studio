@@ -85,6 +85,109 @@ export function placeLyricSyllables(lines: SongbookCell[][], syllables: string[]
   return true;
 }
 
+/** A rest this long (in whole notes) between sung notes ends a phrase. */
+const PHRASE_GAP = 0.375;
+
+/** The sung phrases of the melody: notes between long rests, with the chords of the gap before each one. */
+function phrasesOf(cells: SongbookCell[]): SongbookCell[][] {
+  const phrases: SongbookCell[][] = [];
+  let current: SongbookCell[] = [];
+  let gap: SongbookCell[] = [];
+  let resting = 0;
+  for (const cell of cells) {
+    const rest = cell.number === '0' || cell.number === '';
+    if (cell.attack) {
+      if (current.length && resting >= PHRASE_GAP) {
+        phrases.push(current);
+        current = [];
+      }
+      current.push(...gap, cell);
+      gap = [];
+      resting = 0;
+    } else if (!rest && current.length) {
+      current.push(...gap, cell);
+      gap = [];
+    } else {
+      resting += cell.duration ?? 0;
+      gap.push(cell);
+    }
+  }
+  if (current.length) phrases.push([...current, ...gap]);
+  return phrases;
+}
+
+/** Splits `items` into `count` runs in order, each run's weight as close to its target as it can be. */
+function group(weights: number[], targets: number[]): number[] {
+  const n = weights.length;
+  const k = targets.length;
+  const sums = [0];
+  for (const weight of weights) sums.push(sums[sums.length - 1] + weight);
+  const cost = Array.from({ length: k + 1 }, () => Array(n + 1).fill(Infinity));
+  const from = Array.from({ length: k + 1 }, () => Array(n + 1).fill(0));
+  cost[0][0] = 0;
+  for (let run = 1; run <= k; run++) {
+    for (let end = run; end <= n - (k - run); end++) {
+      for (let start = run - 1; start < end; start++) {
+        const value = cost[run - 1][start] + Math.abs(sums[end] - sums[start] - targets[run - 1]);
+        if (value < cost[run][end]) {
+          cost[run][end] = value;
+          from[run][end] = start;
+        }
+      }
+    }
+  }
+  const ends: number[] = [];
+  for (let run = k, end = n; run > 0; run--) {
+    ends.unshift(end);
+    end = from[run][end];
+  }
+  return ends;
+}
+
+/**
+ * The songbook as the song is sung: a row per lyric line, its syllables under the notes of the phrase it is sung on
+ * and the chords over them. Lines and phrases are paired in order; where their numbers differ, neighbouring phrases
+ * (or lines) are joined so that each row's syllables come closest to its notes.
+ */
+export function layoutByPhrases(lines: SongbookCell[][], lyrics: string, syllablesOf: (line: string) => string[] | null): SongbookCell[][] | null {
+  const words = lyrics.split(/\r?\n/).map(line => line.trim()).filter(line => line && !/^\[.*\]$/.test(line) && /\p{L}/u.test(line));
+  const parts = words.map(syllablesOf);
+  if (!words.length || parts.some(part => !part)) return null;
+  const syllables = parts as string[][];
+  const phrases = phrasesOf(lines.flat());
+  if (!phrases.length) return null;
+  const attacks = phrases.map(phrase => phrase.filter(cell => cell.attack).length);
+  const rows: { cells: SongbookCell[]; syllables: string[] }[] = [];
+  if (phrases.length >= syllables.length) {
+    let start = 0;
+    group(attacks, syllables.map(line => line.length)).forEach((end, line) => {
+      rows.push({ cells: phrases.slice(start, end).flat(), syllables: syllables[line] });
+      start = end;
+    });
+  } else {
+    let start = 0;
+    group(syllables.map(line => line.length), attacks).forEach((end, phrase) => {
+      rows.push({ cells: phrases[phrase], syllables: syllables.slice(start, end).flat() });
+      start = end;
+    });
+  }
+  return rows.map(({ cells, syllables: sung }) => {
+    let held = '';
+    const row = cells.map(cell => ({ ...cell, lyrics: [] as string[], chords: cell.chords.filter(chord => {
+      const changed = chord !== held;
+      held = chord;
+      return changed;
+    }) }));
+    const notes = row.filter(cell => cell.attack);
+    sung.forEach((syllable, index) => {
+      const cell = notes[Math.min(index, notes.length - 1)];
+      if (!cell) return;
+      cell.lyrics = cell.lyrics.length ? [`${cell.lyrics[0]}${cell.lyrics[0].endsWith('-') ? '' : ' '}${syllable}`] : [syllable];
+    });
+    return row;
+  });
+}
+
 /** ABCJS retains note offsets but does not expose a voice's V: identifier. */
 function namedVocalLine(source: string, voices: Event[][]): Event[] | undefined {
   // Ignore apparent inline voice switches inside quoted chords or comments.

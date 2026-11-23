@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest';
-import { buildSongbook, chordName, placeLyricSyllables } from './songbook';
+import { buildSongbook, chordName, layoutByPhrases, placeLyricSyllables } from './songbook';
 import { chordShape } from './chordShapes';
 import { estimateLyricSyllables } from './songbookSyllables';
 
@@ -80,4 +80,24 @@ it('uses the named vocal line before the first pitched voice when the words are 
     ]);
     expect(song.lines[0][0].chords).toEqual([shift === 0 ? 'C' : 'D']);
   }
+});
+
+
+it('lays the lyrics of a studio song line by line under the phrases they are sung on, chords over the syllables', () => {
+  const abc = [
+    'X:1', 'M:4/4', 'L:1/32', 'Q:1/4=74',
+    'V: Vocal clef=treble name="Vocal Melody" snm="Vocal"', 'V: Ins clef=treble name="Ins Melody" snm="Inst."', 'K:Em',
+    '% intro', 'V: Vocal', '"Em"z32|"Em"z32|', 'V: Ins', 'Z2|',
+    '% verse', 'V: Vocal',
+    '"Em"z4B,4B,4B,2B,6B,4C4B,4|"Am"C4A,4A,4z16z4|"D"z4D4D4D2D6D4E4D4|"G"C4B,2B,6z16z4|',
+    'V: Ins', 'Z4|',
+  ].join('\n');
+  const lyrics = '[Verse]\nВ глухом селе, где ночь длинней, чем день,\nЖил часовщик, угрюмый, словно тень.\n';
+  const rows = layoutByPhrases(buildSongbook(abc, 0).lines, lyrics, line => estimateLyricSyllables(line, 'ru'))!;
+  const shown = rows.map(row => row.filter(cell => cell.chords.length || cell.lyrics.length)
+    .map(cell => (cell.chords.length ? `[${cell.chords.join(' ')}]` : '') + cell.lyrics.join('')).join(' '));
+  expect(shown).toEqual([
+    '[Em] В глу- хом селе, где ночь длин- [Am]ней, чем день,',
+    '[D] Жил ча- сов- щик, угрю- мый, слов- [G]но тень.',
+  ]);
 });
