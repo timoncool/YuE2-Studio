@@ -2166,16 +2166,6 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
                       </select>
                     )}
                     {native.profile?.status === 'experimental' && <p className="text-xs">{nativeStrings.experimental}</p>}
-                    {native.profile?.package_url && native.profile.model_directory && (native.profile.missing_bytes ?? 0) > 0 && (
-                      <div className="space-y-1 text-xs">
-                        <p>{nativeStrings.manualWeights} · {new Intl.NumberFormat(language, { maximumFractionDigits: 2 }).format(
-                          (native.profile.missing_bytes ?? 0) / 2 ** 30
-                        )} GiB</p>
-                        <p>{nativeStrings.modelDirectory} <code>{native.profile.model_directory}</code></p>
-                        <a href={native.profile.package_url} target="_blank" rel="noreferrer" className="mr-2 underline">{nativeStrings.weightFiles}</a>
-                        {!mulaCover && native.profile.license_url && <a href={native.profile.license_url} target="_blank" rel="noreferrer" className="underline">{nativeStrings.modelLicense}</a>}
-                      </div>
-                    )}
                     {vevo2 && native.profile?.model_directory && <Vevo2ModelDirectory
                       key={native.profile.configured_directory ?? ''}
                       directory={native.profile.configured_directory ?? ''}
@@ -2198,21 +2188,16 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
                     {hotstepMiniMax && native.profile?.installable && !native.ready &&
                       <AudioCppModelInstall key={hotStepMiniMaxProfile} model={hotStepMiniMaxProfile} bytes={native.profile.missing_bytes ?? 0}
                         licenseUrl={native.profile.license_url} language={language} onInstalled={refreshNativeChoice} />}
-                    {audioCppYue && native.profile?.installable && !native.ready &&
-                      <AudioCppModelInstall key={audioCppYueProfile} model={audioCppYueProfile} bytes={native.profile.missing_bytes ?? 0}
-                        licenseUrl={native.profile.license_url} language={language} onInstalled={refreshNativeChoice} />}
-                    {audioCppAce && native.profile?.installable && !native.ready &&
-                      <AudioCppModelInstall key={audioCppAceProfile} model={audioCppAceProfile} bytes={native.profile.missing_bytes ?? 0}
-                        licenseUrl={native.profile.license_url} language={language} onInstalled={refreshNativeChoice} />}
                     {hotstepAce && native.profile?.installable && !native.ready &&
                       <AudioCppModelInstall key={hotStepAceProfile} model={hotStepAceProfile} bytes={native.profile.missing_bytes ?? 0}
                         licenseUrl={native.profile.license_url} language={language} onInstalled={refreshNativeChoice} />}
                     {hotstepYue && native.profile?.installable && !native.ready &&
                       <AudioCppModelInstall key={hotStepYueProfile} model={hotStepYueProfile} bytes={native.profile.missing_bytes ?? 0}
                         licenseUrl={native.profile.license_url} language={language} onInstalled={refreshNativeChoice} />}
-                    {(heartMuLa || stableAudio || soulx) && native.profile?.installable && !native.ready &&
-                      <AudioCppModelInstall key={audioFamily} model={soulxConversion ? 'soulx_singer_svc' : soulx ? 'soulx_singer' : stableAudio ? 'stable_audio' : 'heartmula'} bytes={native.profile.total_bytes}
-                        licenseUrl={native.profile.license_url} language={language} onInstalled={refreshNativeChoice} />}
+                    {audioFamily && native.profile?.installable && !native.ready &&
+                      <AudioCppModelInstall key={audioFamily} model={audioFamily} bytes={native.profile.missing_bytes ?? native.profile.total_bytes}
+                        target={{ catalogue: '/v1/music/audio-cpp/models', installPath: '/v1/music/audio-cpp/models/install', label: native.profile.label.split(' · ')[0] }}
+                        licenseUrl={mulaCover ? undefined : native.profile.license_url} language={language} onInstalled={refreshNativeChoice} />}
                     <button type="button" className="text-xs text-pink-600 underline dark:text-pink-300" onClick={refreshNativeChoice}>
                       {musicStrings.refresh}
                     </button>

@@ -1936,9 +1936,9 @@ it.each([
     license_url: 'https://huggingface.co/mispeech/midashenglm-gen#license',
     model_directory: 'audiocpp/models/midashenglm_gen', file: 'midashenglm-gen-q8_0.gguf', missing_bytes: 3_381_370_752, size: '3.15 GiB',
   },
-])('shows the manual $name package and blocks Create with absent weights', async ({ file, size, ...model }) => {
+])('offers to install $name and blocks Create with absent weights', async ({ file, size, ...model }) => {
   vi.stubGlobal('fetch', vi.fn(async () => Response.json({ engine: 'audio.cpp', models: [{
-    ...model, ready: false, missing: [file], status: 'experimental',
+    ...model, ready: false, missing: [file], status: 'experimental', installable: true,
   }] })));
   const song = {
     title: 'Saved take', ditModel: 'audio.cpp', style: 'funk groove',
@@ -1947,10 +1947,9 @@ it.each([
   act(() => root.render(panel({ musicEngine: 'audio.cpp', initialData: { song, timestamp: 1 } })));
   await flush();
   expect(host.textContent).toContain('Experimental');
-  expect(host.textContent).toContain(size);
-  expect(host.textContent).toContain(model.model_directory);
   expect(host.textContent).toContain(file);
-  expect(host.querySelector(`a[href="${model.package_url}"]`)).not.toBeNull();
+  expect(buttonNamed(`Install ${model.name} · ${size}`)).toBeDefined();
+  expect(host.querySelector(`a[href="${model.package_url}"]`)).toBeNull();
   expect(host.querySelector(`a[href="${model.license_url}"]`)).not.toBeNull();
   expect(buttonNamed('create')?.disabled).toBe(true);
   expect(sent).toHaveLength(0);
@@ -2012,7 +2011,7 @@ it('shows the MuLaCover weights and resampler steps independently', async () => 
   vi.stubGlobal('fetch', vi.fn(async () => Response.json({ engine: 'audio.cpp', models: [{
     id: 'mulacover', name: 'MuLaCover', profile_id: 'mulacover_q8_0', quantization: 'Q8_0', ready: false,
     missing: weightsMissing ? ['mulacover-q8_0.gguf', 'libsoxr'] : ['libsoxr'],
-    missing_bytes: weightsMissing ? 8_220_378_496 : 0,
+    missing_bytes: weightsMissing ? 8_220_378_496 : 0, installable: true,
     model_directory: 'audiocpp/models/MuLaCover-GGUF', package_url, license_url,
   }] })));
   const song = {
@@ -2021,9 +2020,8 @@ it('shows the MuLaCover weights and resampler steps independently', async () => 
   } as Song;
   act(() => root.render(panel({ musicEngine: 'audio.cpp', initialData: { song, timestamp: 1 } })));
   await flush();
-  expect(host.textContent).toContain('7.66 GiB');
-  expect(host.textContent).toContain('audiocpp/models/MuLaCover-GGUF');
-  expect(host.querySelector(`a[href="${package_url}"]`)).not.toBeNull();
+  expect(buttonNamed('Install MuLaCover · 7.66 GiB')).toBeDefined();
+  expect(host.querySelector(`a[href="${package_url}"]`)).toBeNull();
   expect(host.querySelectorAll(`a[href="${license_url}"]`)).toHaveLength(1);
   expect(buttonNamed('Install resampler')).toBeDefined();
   expect(buttonNamed('create')?.disabled).toBe(true);
@@ -2031,7 +2029,6 @@ it('shows the MuLaCover weights and resampler steps independently', async () => 
   weightsMissing = false;
   click(buttonNamed('Refresh models')!);
   await flush();
-  expect(host.querySelector(`a[href="${package_url}"]`)).toBeNull();
   expect(buttonNamed('Install resampler')).toBeDefined();
   expect(buttonNamed('create')?.disabled).toBe(true);
 });

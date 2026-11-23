@@ -4,6 +4,7 @@ import { useI18n } from '../context/I18nContext';
 import { SELF_READ } from '../services/studioQueries';
 import { apiUrl } from '../services/apiBase';
 import { nativeMusicSourceStrings, musicSourceStrings } from '../i18n/musicSource';
+import { AudioCppModelInstall } from './HeartMuLaControls';
 
 const strings = {
   en: { heading: 'Sound effects', description: 'Sound description (English or Chinese)', create: 'Generate sound effect', checking: 'Checking MOSS-SoundEffect…', unavailable: 'MOSS-SoundEffect is unavailable.', saved: 'Sound effects are saved in the library.' },
@@ -20,8 +21,7 @@ type Status = {
   ready: boolean;
   missing: string[];
   missing_bytes: number;
-  model_directory: string;
-  package_url: string;
+  installable?: boolean;
   license_url: string;
   duration_seconds: { min: number; max: number; default: number };
 };
@@ -68,11 +68,9 @@ export function SoundEffectsTool({ card, control, busy, onGenerate }: {
       : <div className="mt-2 space-y-2 text-xs">
         <p>{status.name}</p>
         {!status.ready && <p role="status">{model.unavailable} · {status.missing.join(', ')}</p>}
-        {status.missing_bytes > 0 && <>
-          <p>{model.manualWeights} · {new Intl.NumberFormat(language, { maximumFractionDigits: 2 }).format(status.missing_bytes / 2 ** 30)} GiB</p>
-          <p>{model.modelDirectory} <code>{status.model_directory}</code></p>
-          <a href={status.package_url} target="_blank" rel="noreferrer" className="mr-3 underline">{model.weightFiles}</a>
-        </>}
+        {status.missing_bytes > 0 && status.installable && <AudioCppModelInstall model={status.id} bytes={status.missing_bytes}
+          target={{ catalogue: '/v1/tools/sound-effects/model', installPath: '/v1/music/audio-cpp/models/install', label: status.name }}
+          language={language} onInstalled={() => refresh(value => value + 1)} />}
         <a href={status.license_url} target="_blank" rel="noreferrer" className="underline">{model.modelLicense}</a>
       </div>}
     <button type="button" className="mt-2 text-xs underline" onClick={() => refresh(value => value + 1)}>{common.refresh}</button>

@@ -544,6 +544,7 @@ const JOURNAL: &[(&str, &str, &str)] = &[
     ("hotstep_heartmula_training_start", "started", "training"),
     ("hotstep_heartmula_training_install", "started", "download"),
     ("hotstep_heartmula_install", "started", "download"),
+    ("seed_vc_install", "started", "download"),
     ("training_continue", "started", "training"),
     ("training_checkpoints_listen", "started", "training"),
     ("training_cancel", "cancelled", "training"),
@@ -3100,6 +3101,12 @@ fn tools() -> &'static [Tool] {
                 description: "Read Seed-VC model and audio.cpp runtime readiness for singing conversion.",
                 schema: nothing,
                 call: |_| get("/v1/seed-vc".into()),
+            },
+            Tool {
+                name: "seed_vc_install",
+                description: "Download the Seed-VC weights, and the audio.cpp runtime when it is missing. Progress is in seed_vc_status.",
+                schema: nothing,
+                call: |_| post("/v1/seed-vc/install".into(), json!({})),
             },
             Tool {
                 name: "seed_vc_apply",

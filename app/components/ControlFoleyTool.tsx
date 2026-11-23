@@ -5,6 +5,7 @@ import { useI18n } from '../context/I18nContext';
 import { apiUrl } from '../services/apiBase';
 import { queryClient, readJson } from '../services/studioQueries';
 import { musicSourceStrings, nativeMusicSourceStrings } from '../i18n/musicSource';
+import { AudioCppModelInstall } from './HeartMuLaControls';
 
 const strings = {
   en: { heading: 'Sound from video', source: 'Original video', prompt: 'Sound description (optional)', limit: 'Seconds from the start of the video', create: 'Generate sound', error: 'Could not import the video.', ffmpeg: 'Install FFmpeg and make it available on the Studio computer’s PATH.' },
@@ -20,8 +21,7 @@ type Model = {
   ready: boolean;
   missing: string[];
   missing_bytes: number;
-  model_directory: string;
-  package_url: string;
+  installable?: boolean;
   license_url: string;
   duration_seconds: { min: number; max: number; default: number };
 };
@@ -85,11 +85,9 @@ export function ControlFoleyTool({ card, control, busy, onGenerate }: {
       <p>{status.name}</p>
       {!status.ready && <p role="status">{modelText.unavailable} · {status.missing.join(', ')}</p>}
       {status.missing.includes('FFmpeg') && <p>{text.ffmpeg}</p>}
-      {status.missing_bytes > 0 && <>
-        <p>{modelText.manualWeights} · {new Intl.NumberFormat(language, { maximumFractionDigits: 2 }).format(status.missing_bytes / 2 ** 30)} GiB</p>
-        <p>{modelText.modelDirectory} <code>{status.model_directory}</code></p>
-        <a href={status.package_url} target="_blank" rel="noreferrer" className="mr-3 underline">{modelText.weightFiles}</a>
-      </>}
+      {status.missing_bytes > 0 && status.installable && <AudioCppModelInstall model="controlfoley" bytes={status.missing_bytes}
+        target={{ catalogue: '/v1/tools/controlfoley/model', installPath: '/v1/music/audio-cpp/models/install', label: status.name }}
+        language={language} onInstalled={() => void model.refetch()} />}
       <a href={status.license_url} target="_blank" rel="noreferrer" className="underline">{modelText.modelLicense}</a>
     </div>}
     <button type="button" className="mt-2 text-xs underline" onClick={() => void model.refetch()}>{common.refresh}</button>

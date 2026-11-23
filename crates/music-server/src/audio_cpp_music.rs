@@ -433,7 +433,30 @@ async fn tool_family_catalog(state: &AppState, family: Family) -> Json<Value> {
     let runtime_ready = build(state)
         .await
         .is_ok_and(|build| state.acpp.exe(build).is_file() && state.acpp.installed(build));
-    Json(family.catalog(studio_data_root().as_deref(), runtime_ready, true))
+    let mut model = family.catalog(studio_data_root().as_deref(), runtime_ready, true);
+    describe_install(state, &mut model).await;
+    Json(model)
+}
+
+/// What the window needs to install a family's set: the route, whether it is under way and its progress, and what is
+/// left to download.
+async fn describe_install(state: &AppState, model: &mut Value) {
+    let Some(managed) = model["id"].as_str().and_then(Family::parse).and_then(managed_model) else {
+        return;
+    };
+    let installing = managed.lease.try_lock().is_err();
+    model["install_path"] = Value::String("/v1/music/audio-cpp/models/install".into());
+    model["installing"] = Value::Bool(installing);
+    if installing {
+        model["ready"] = Value::Bool(false);
+    }
+    model["download"] = serde_json::json!(acpp_download(state, managed.scope).await);
+    model["installable"] = Value::Bool(true);
+    if model.get("missing_bytes").is_none() {
+        let downloader = state.acpp.downloader();
+        let missing: u64 = managed.assets.iter().filter(|(asset, _)| !downloader.is_installed(asset)).map(|(asset, _)| asset.bytes).sum();
+        model["missing_bytes"] = Value::from(if model["ready"] == true { 0 } else { missing });
+    }
 }
 
 pub(super) async fn models(State(state): State<AppState>) -> Json<Value> {
@@ -459,26 +482,7 @@ pub(super) async fn models(State(state): State<AppState>) -> Json<Value> {
     ]
     .map(|family| family.catalog(root.as_deref(), runtime_ready, soxr_ready));
     for model in &mut models {
-        let Some(managed) = model["id"]
-            .as_str()
-            .and_then(Family::parse)
-            .and_then(|family| managed_model(family))
-        else {
-            continue;
-        };
-        let installing = managed.lease.try_lock().is_err();
-        model["install_path"] = Value::String("/v1/music/audio-cpp/models/install".into());
-        model["installing"] = Value::Bool(installing);
-        if installing {
-            model["ready"] = Value::Bool(false);
-        }
-        model["download"] = serde_json::json!(acpp_download(&state, managed.scope).await);
-        model["installable"] = Value::Bool(true);
-        if model.get("missing_bytes").is_none() {
-            let downloader = state.acpp.downloader();
-            let missing: u64 = managed.assets.iter().filter(|(asset, _)| !downloader.is_installed(asset)).map(|(asset, _)| asset.bytes).sum();
-            model["missing_bytes"] = Value::from(if model["ready"] == true { 0 } else { missing });
-        }
+        describe_install(&state, model).await;
     }
     Json(serde_json::json!({
         "engine": ENGINE,

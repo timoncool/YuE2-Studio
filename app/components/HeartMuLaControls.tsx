@@ -116,7 +116,7 @@ export function AudioCppModelInstall({ model, bytes, licenseUrl, language, onIns
     if (!response.ok || signal?.aborted) return;
     const data = await response.json();
     if (signal?.aborted) return;
-    const row = (data.profiles ?? data.models)?.find((item: {id: string}) => item.id === model);
+    const row = data.id === model ? data : (data.profiles ?? data.models)?.find((item: {id: string}) => item.id === model);
     if (!row) return;
     setBusy(Boolean(row.installing));
     const download = row.download;

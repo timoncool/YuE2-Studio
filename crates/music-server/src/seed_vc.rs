@@ -5,12 +5,22 @@ use std::path::Path as FsPath;
 
 const FILE: &str = "seed-vc-mlx-q8_0.gguf";
 const BYTES: u64 = 3_120_809_440;
-const DIRECTORY: &str = "audiocpp/models/seed_vc";
-const MODEL_URL: &str = "https://huggingface.co/audio-cpp/audio.cpp-gguf/blob/32c1ce1fea57a513eb9386aa62408d47b1cf7ab2/SeedVC-MLX-GGUF/seed-vc-mlx-q8_0.gguf";
 const PROFILE: &str = "v1_svc";
+/// The component catalogue's set of the weights, and the download progress they report under.
+const SET: &str = "seed_vc";
+const SCOPE: &str = "seed-vc";
+
+fn weights() -> (&'static downloads::Asset, &'static str) {
+    audio_cpp_music::set_file(SET, FILE)
+}
 
 fn model(state: &AppState) -> PathBuf {
-    update_data_root(state).join(DIRECTORY).join(FILE)
+    state.acpp.downloader().path_of(weights().0)
+}
+
+fn install_lock() -> &'static Arc<tokio::sync::Mutex<()>> {
+    static LOCK: std::sync::LazyLock<Arc<tokio::sync::Mutex<()>>> = std::sync::LazyLock::new(Arc::default);
+    &LOCK
 }
 
 fn ready(model: &FsPath) -> bool {
@@ -27,15 +37,44 @@ pub(super) async fn status(State(state): State<AppState>) -> Json<Value> {
     let runtime_ready = build(&state)
         .await
         .is_ok_and(|build| state.acpp.installed(build));
+    let installing = install_lock().try_lock().is_err();
     Json(json!({
+        "id": SET,
         "ready": model_ready && runtime_ready,
         "runtime_ready": runtime_ready,
         "model_ready": model_ready,
         "model_path": plain_path(&model),
-        "model_url": MODEL_URL,
         "model_source_url": "https://huggingface.co/Plachta/Seed-VC",
-        "bytes": BYTES
+        "bytes": BYTES,
+        "missing_bytes": if model_ready { 0 } else { BYTES },
+        "installable": true,
+        "installing": installing,
+        "install_path": "/v1/seed-vc/install",
+        "download": acpp_download(&state, SCOPE).await,
     }))
+}
+
+/// Downloads the audio.cpp runtime when it is missing and the Seed-VC weights.
+pub(super) async fn install(State(state): State<AppState>) -> Result<Json<Value>, (StatusCode, Json<ApiError>)> {
+    let build = build(&state).await.map_err(|error| api_error(StatusCode::SERVICE_UNAVAILABLE, format!("{error:#}")))?;
+    let Ok(lease) = install_lock().clone().try_lock_owned() else {
+        return Ok(Json(json!({"started": false, "installing": true})));
+    };
+    state.acpp.downloader().clear_finished(SCOPE).await;
+    tokio::spawn(async move {
+        let _lease = lease;
+        let result = async {
+            if !state.acpp.installed(build) {
+                install_acpp(&state, build, SCOPE).await.context("Installing audio.cpp runtime")?;
+            }
+            state.acpp.downloader().install_all(SCOPE, &[weights().0]).await.context("Installing the Seed-VC weights")
+        }.await;
+        if let Err(error) = result {
+            state.acpp.downloader().fail(SCOPE, format!("{error:#}")).await;
+        }
+        crate::mcp::announce("seed_vc");
+    });
+    Ok(Json(json!({"started": true, "installing": true})))
 }
 
 #[derive(Deserialize)]

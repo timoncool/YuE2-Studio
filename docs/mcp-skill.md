@@ -505,8 +505,9 @@ move around. Check the result with `ui_screenshot`.
 
 ## Seed-VC vocal replacement
 
-Use `seed_vc_status` to find the model file and audio.cpp runtime status.
-With an already separated song, send your 1–25 second target voice sample
+Use `seed_vc_status` to find the model file and audio.cpp runtime status; when
+either is missing, `seed_vc_install` downloads them and `seed_vc_status` shows
+the progress. With an already separated song, send your 1–25 second target voice sample
 through `processing_set_reference`. Pass its `upload_id` and the library song ID
 to `seed_vc_apply`. The new library take uses the original accompaniment and
 the source vocal's pauses. The original song is kept.

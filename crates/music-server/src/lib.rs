@@ -1829,6 +1829,7 @@ pub async fn serve_on_port(port: u16) -> anyhow::Result<()> {
         .route("/v1/rvc/voices", get(rvc_voices::list))
         .route("/v1/rvc/apply", post(rvc_apply::apply))
         .route("/v1/seed-vc", get(seed_vc::status).post(seed_vc::apply))
+        .route("/v1/seed-vc/install", post(seed_vc::install))
         .route("/v1/rvc/preview", post(rvc_audition::preview))
         .route("/v1/rvc/preview/{id}/{side}", get(rvc_audition::audio))
         .route("/v1/rvc/selection", get(rvc_quick::selected).put(rvc_quick::select))
