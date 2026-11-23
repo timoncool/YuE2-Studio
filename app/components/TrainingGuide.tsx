@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { BookOpen, CheckSquare, ChevronDown, Move, Square, X } from 'lucide-react';
 import { useI18n } from '../context/I18nContext';
-import { GuideSection, trainingGuide } from '../i18n/trainingGuide';
+import { type Guide, GuideSection, trainingGuide } from '../i18n/trainingGuide';
 
 /**
  * The training guide, in a window of its own that stays over the page: it is
@@ -111,12 +111,13 @@ const Section: React.FC<{
   </div>
 );
 
-export const TrainingGuide: React.FC<{ onClose: () => void }> = ({ onClose }) => {
+export const TrainingGuide: React.FC<{ onClose: () => void; guide?: Guide; id?: string }> = ({ onClose, guide: given, id }) => {
   const { language } = useI18n();
-  const guide = trainingGuide[language] ?? trainingGuide.en;
+  const guide = given ?? trainingGuide[language] ?? trainingGuide.en;
+  const checkedKey = id ? `${CHECKED_KEY}.${id}` : CHECKED_KEY;
   const [geometry, setGeometry] = useState<Geometry>(initialGeometry);
   const [open, setOpen] = useState<Record<number, boolean>>({ 0: true });
-  const [checked, setChecked] = useState<Record<string, boolean>>(() => load(CHECKED_KEY, {}));
+  const [checked, setChecked] = useState<Record<string, boolean>>(() => load(checkedKey, {}));
   const drag = useRef<{ dx: number; dy: number } | null>(null);
   const resize = useRef<{ x: number; y: number; width: number; height: number } | null>(null);
 
@@ -166,7 +167,7 @@ export const TrainingGuide: React.FC<{ onClose: () => void }> = ({ onClose }) =>
   const toggleCheck = useCallback((id: string) => {
     setChecked(current => {
       const next = { ...current, [id]: !current[id] };
-      save(CHECKED_KEY, next);
+      save(checkedKey, next);
       return next;
     });
   }, []);

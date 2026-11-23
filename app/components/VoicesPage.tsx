@@ -1,5 +1,5 @@
 import React, { useEffect, useId, useRef, useState } from 'react';
-import { Mic, Trash2, Wand2 } from 'lucide-react';
+import { FileUp, Mic, Trash2, Wand2 } from 'lucide-react';
 import { useI18n } from '../context/I18nContext';
 import { rvcVoiceStrings } from '../i18n/rvcVoices';
 import { voicesPageStrings } from '../i18n/voicesPage';
@@ -8,7 +8,9 @@ import { chooseLastRvcVoice, clearLastRvcVoice, useLastRvcVoice } from '../servi
 import { SELF_READ, useLibrarySongs } from '../services/studioQueries';
 import { PrimaryButton, SecondaryButton } from './kit/Buttons';
 import Combobox from './kit/Combobox';
-import { FieldLabel } from './kit/FieldLabel';
+import { FieldHint, FieldLabel } from './kit/FieldLabel';
+import { Disclosure } from './kit/Disclosure';
+import { toolsPageStrings } from '../i18n/toolsPage';
 import { LibrarySongPicker } from './LibrarySongPicker';
 import { ConfirmDialog } from './ConfirmDialog';
 import { RvcCuratedVoices } from './RvcCuratedVoices';
@@ -73,8 +75,7 @@ export function VoicesPage({ initialSongId, onSaved }: { initialSongId?: string;
     <div className="flex-1 overflow-y-auto bg-white px-5 py-6 dark:bg-suno md:px-8">
       <div className="mx-auto max-w-4xl space-y-6">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-pink-500">{text.eyebrow}</p>
-          <h1 className="mt-1 text-2xl font-bold text-zinc-950 dark:text-white">{text.heading}</h1>
+          <h1 className="text-2xl leading-8 font-bold text-zinc-950 dark:text-white">{text.heading}</h1>
           <p className="mt-2 max-w-3xl text-sm text-zinc-600 dark:text-zinc-400">{text.intro}</p>
         </div>
 
@@ -154,8 +155,6 @@ function OwnVoiceFiles({ disabled, onImported, onError }: { disabled: boolean; o
       onImported(await responseJson<Voice>(await fetch(`${URL}/import`, { method: 'POST', body: form })));
       setModel(undefined);
       setIndex(undefined);
-      if (modelInput.current) modelInput.current.value = '';
-      if (indexInput.current) indexInput.current.value = '';
     } catch (failure) {
       onError(failure instanceof Error ? failure.message : String(failure));
     } finally {
@@ -163,30 +162,33 @@ function OwnVoiceFiles({ disabled, onImported, onError }: { disabled: boolean; o
     }
   }
   return (
-    <details className={`${CARD} text-xs`}>
-      <summary className="min-h-6 cursor-pointer text-sm font-semibold">{labels.ownFiles}</summary>
-      <div className="mt-3 grid gap-2 sm:grid-cols-2">
-        <div className="space-y-1">
-          <label className="block space-y-1">
-            <span>{labels.model}</span>
-            <input ref={modelInput} className={CONTROL} type="file" accept=".pth,.pt" disabled={disabled || busy} aria-describedby={modelHelpId}
-              onChange={event => setModel(event.target.files?.[0])} />
-          </label>
-          <p id={modelHelpId} className="text-zinc-600 dark:text-zinc-300">{labels.modelHelp}</p>
+    <Disclosure title={labels.ownFiles} className={CARD}>
+      <div className="grid gap-4 text-xs sm:grid-cols-2">
+        <div className="grid content-start">
+          <FieldLabel hidden>{labels.model}</FieldLabel>
+          <FieldHint>{labels.modelHelp}</FieldHint>
+          <SecondaryButton className="justify-start" disabled={disabled || busy} aria-describedby={modelHelpId}
+            aria-label={`${labels.model}: ${model?.name ?? toolsPageStrings[language].chooseFile}`} onClick={() => modelInput.current?.click()}>
+            <FileUp size={13} aria-hidden /><span className="truncate">{model?.name ?? toolsPageStrings[language].chooseFile}</span>
+          </SecondaryButton>
+          <input ref={modelInput} className="hidden" type="file" accept=".pth,.pt" onChange={event => { setModel(event.target.files?.[0]); event.target.value = ''; }} />
+          <span id={modelHelpId} className="sr-only">{labels.modelHelp}</span>
         </div>
-        <div className="space-y-1">
-          <label className="block space-y-1">
-            <span>{labels.index}</span>
-            <input ref={indexInput} className={CONTROL} type="file" accept=".index" disabled={disabled || busy} aria-describedby={indexHelpId}
-              onChange={event => setIndex(event.target.files?.[0])} />
-          </label>
-          <p id={indexHelpId} className="text-zinc-600 dark:text-zinc-300">{labels.indexHelp}</p>
+        <div className="grid content-start">
+          <FieldLabel hidden>{labels.index}</FieldLabel>
+          <FieldHint>{labels.indexHelp}</FieldHint>
+          <SecondaryButton className="justify-start" disabled={disabled || busy} aria-describedby={indexHelpId}
+            aria-label={`${labels.index}: ${index?.name ?? toolsPageStrings[language].chooseFile}`} onClick={() => indexInput.current?.click()}>
+            <FileUp size={13} aria-hidden /><span className="truncate">{index?.name ?? toolsPageStrings[language].chooseFile}</span>
+          </SecondaryButton>
+          <input ref={indexInput} className="hidden" type="file" accept=".index" onChange={event => { setIndex(event.target.files?.[0]); event.target.value = ''; }} />
+          <span id={indexHelpId} className="sr-only">{labels.indexHelp}</span>
         </div>
       </div>
-      <SecondaryButton className="mt-3" onClick={() => void importVoice()} disabled={!model || busy || disabled}>
+      <PrimaryButton className="mt-4" onClick={() => void importVoice()} disabled={!model || busy || disabled}>
         {busy ? labels.importing : labels.import}
-      </SecondaryButton>
-    </details>
+      </PrimaryButton>
+    </Disclosure>
   );
 }
 
@@ -230,10 +232,9 @@ function ApplyToTrack({ voices, voice, initialSongId, onSaved, onOpenCatalog }: 
       </div>
       {stemsError && <p role="alert" className="text-xs text-rose-600 dark:text-rose-300">{stemsError}</p>}
       {song && stems && <RvcApplyVoice key={song.id} song={{ id: song.id, title: song.title, stems }} voice={voice} control={CONTROL} onSaved={onSaved} />}
-      {song && stems && <details className="border-t border-zinc-200 pt-3 text-xs dark:border-white/10">
-        <summary className="min-h-6 cursor-pointer text-sm font-semibold">{labels.seedVc}</summary>
+      {song && stems && <Disclosure title={labels.seedVc} className="border-t border-zinc-200 pt-3 text-xs dark:border-white/10">
         <SeedVcApply key={`seed-vc:${song.id}`} song={{ id: song.id, title: song.title, stems }} control={CONTROL} onSaved={onSaved} />
-      </details>}
+      </Disclosure>}
     </div>
   );
 }

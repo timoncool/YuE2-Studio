@@ -35,8 +35,9 @@ it('imports paired RVC files into my voices and selects the new voice', async ()
   await render();
   expect(host.querySelector('[role="tab"][aria-selected="true"]')?.textContent).toBe('My voices · 1');
   const [model, index] = host.querySelectorAll<HTMLInputElement>('input[type="file"]');
-  expect(document.getElementById(model.getAttribute('aria-describedby')!)?.textContent).toContain('(.pth)');
-  expect(document.getElementById(index.getAttribute('aria-describedby')!)?.textContent).toContain('(.index)');
+  const [modelPick, indexPick] = [...host.querySelectorAll<HTMLButtonElement>('button[aria-describedby]')];
+  expect(document.getElementById(modelPick.getAttribute('aria-describedby')!)?.textContent).toContain('(.pth)');
+  expect(document.getElementById(indexPick.getAttribute('aria-describedby')!)?.textContent).toContain('(.index)');
   const button = buttonNamed('Import voice')!;
   expect(button.disabled).toBe(true);
   const selectFile = (input: HTMLInputElement, name: string) => {

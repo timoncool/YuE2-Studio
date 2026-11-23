@@ -11,6 +11,7 @@ import { ConfirmDialog } from './ConfirmDialog';
 import { ManualRuntimeArchive } from './ManualDownloads';
 import { StemPlayer } from './StemPlayer';
 import { TrainingGuide } from './TrainingGuide';
+import { voiceTrainingGuide } from '../i18n/voiceTrainingGuide';
 import { RvcBurnTraining, rvcBurnText } from './RvcBurnTraining';
 import { HotStepSa3Training, sa3TrainingText } from './HotStepSa3Training';
 import {
@@ -1395,11 +1396,11 @@ export const TrainingPanel: React.FC<{ voices?: boolean }> = ({ voices = false }
               {voices ? voicesPageStrings[language].trainingIntro : t('trainingIntro')}
               {!voices && ownModel && <span className="mt-1 block text-xs text-zinc-500 dark:text-zinc-400">{(t as unknown as (key: string) => string)('trainingOnSetModel').replace('{file}', ownModel.split(/[\\/]/).pop()!.replace(/\.gguf$/i, ''))}</span>}
             </p>
-            {!voices && <button type="button" onClick={() => setGuideOpen(value => !value)} className={OUTLINE} aria-pressed={guideOpen}><BookOpen size={13} />{t('trainingGuideOpen')}</button>}
+            <button type="button" onClick={() => setGuideOpen(value => !value)} className={OUTLINE} aria-pressed={guideOpen}><BookOpen size={13} />{t('trainingGuideOpen')}</button>
           </>
         )}
       </div>
-      {guideOpen && <TrainingGuide onClose={() => setGuideOpen(false)} />}
+      {guideOpen && <TrainingGuide onClose={() => setGuideOpen(false)} {...(voices ? { guide: voiceTrainingGuide[language], id: 'voice' } : {})} />}
 
       {!dataset && <DatasetList state={state} busy={Boolean(adding)} onOpen={id => { setOpenId(id); setStep(state.runs.some(run => run.dataset_id === id && run.status === 'running') ? 'result' : 'songs'); }} onNew={files => void createFrom(files)} onImport={files => void importFolder(files)} importing={importing} />}
 

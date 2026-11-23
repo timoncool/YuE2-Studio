@@ -2,9 +2,8 @@ import type { Language } from './translations';
 
 const en = {
   nav: 'Voices',
-  eyebrow: 'RVC',
   heading: 'Voices',
-  intro: 'Voices that sing your songs: install one from the catalogue or your own files, train one from recordings, and put it on any track as a new take. The original stays as it is.',
+  intro: 'Voice replacement: the studio sings a finished song again in another voice. RVC technology listens to the track’s vocals and moves the chosen voice’s timbre onto them — the melody, words and phrasing stay. Take a voice from the catalogue or your own files, or train one on your recordings. The result is a new take beside the original.',
   installed: 'My voices',
   catalog: 'Catalogue',
   apply: 'Apply to a track',
@@ -30,9 +29,8 @@ export const voicesPageStrings: Record<Language, typeof en> = {
   en,
   ru: {
     nav: 'Голоса',
-    eyebrow: 'RVC',
     heading: 'Голоса',
-    intro: 'Голоса, которые поют ваши песни: поставьте из каталога или своих файлов, обучите по записям и наложите на любой трек новым дублем. Оригинал остаётся как был.',
+    intro: 'Замена голоса: студия перепевает готовую песню другим голосом. Технология RVC слушает вокал трека и переносит на него тембр выбранного голоса — мелодия, слова и манера остаются. Голос можно взять из каталога, из своих файлов или обучить на своих записях. Результат — новый дубль рядом с оригиналом.',
     installed: 'Мои голоса',
     catalog: 'Каталог',
     apply: 'Применить к треку',
@@ -55,9 +53,8 @@ export const voicesPageStrings: Record<Language, typeof en> = {
   },
   zh: {
     nav: '声音',
-    eyebrow: 'RVC',
     heading: '声音',
-    intro: '为你的歌曲演唱的声音：从目录或自己的文件安装，用录音训练，再作为新版本应用到任意曲目。原曲保持不变。',
+    intro: '换声：工作室用另一个声音重新演唱完成的歌曲。RVC 技术聆听音轨的人声，把所选声音的音色移到上面——旋律、歌词和唱法保持不变。声音可以来自目录、你的文件，或用你的录音训练。结果是原曲旁的新版本。',
     installed: '我的声音',
     catalog: '目录',
     apply: '应用到曲目',
@@ -80,9 +77,8 @@ export const voicesPageStrings: Record<Language, typeof en> = {
   },
   ja: {
     nav: '声',
-    eyebrow: 'RVC',
     heading: '声',
-    intro: '曲を歌う声：カタログや自分のファイルから入れる、録音から学習する、どの曲にも新しいテイクとして重ねる。元の曲はそのまま残ります。',
+    intro: '声の置き換え：完成した曲を別の声で歌い直します。RVC 技術がトラックのボーカルを聴き、選んだ声の音色を移します——メロディー、歌詞、歌い方はそのまま。声はカタログや自分のファイルから、または自分の録音で学習できます。結果は元の曲の隣の新しいテイクです。',
     installed: '自分の声',
     catalog: 'カタログ',
     apply: '曲に適用',
@@ -105,9 +101,8 @@ export const voicesPageStrings: Record<Language, typeof en> = {
   },
   ko: {
     nav: '목소리',
-    eyebrow: 'RVC',
     heading: '목소리',
-    intro: '곡을 부르는 목소리: 카탈로그나 내 파일에서 설치하고, 녹음으로 학습하고, 어떤 트랙에든 새 테이크로 입힙니다. 원곡은 그대로 남습니다.',
+    intro: '목소리 바꾸기: 완성된 곡을 다른 목소리로 다시 부릅니다. RVC 기술이 트랙의 보컬을 듣고 고른 목소리의 음색을 옮깁니다 — 멜로디, 가사, 창법은 그대로입니다. 목소리는 카탈로그나 내 파일에서, 또는 내 녹음으로 학습해 쓸 수 있습니다. 결과는 원곡 옆의 새 테이크입니다.',
     installed: '내 목소리',
     catalog: '카탈로그',
     apply: '트랙에 적용',
@@ -130,9 +125,8 @@ export const voicesPageStrings: Record<Language, typeof en> = {
   },
   pt: {
     nav: 'Vozes',
-    eyebrow: 'RVC',
     heading: 'Vozes',
-    intro: 'Vozes que cantam as suas músicas: instale do catálogo ou dos seus arquivos, treine a partir de gravações e aplique a qualquer faixa como uma nova versão. A original fica como está.',
+    intro: 'Troca de voz: o estúdio canta de novo uma música pronta com outra voz. A tecnologia RVC ouve os vocais da faixa e passa para eles o timbre da voz escolhida — melodia, letra e interpretação ficam. A voz vem do catálogo, dos seus arquivos ou é treinada com suas gravações. O resultado é uma nova versão ao lado da original.',
     installed: 'Minhas vozes',
     catalog: 'Catálogo',
     apply: 'Aplicar a uma faixa',
