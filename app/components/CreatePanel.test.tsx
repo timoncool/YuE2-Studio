@@ -1084,7 +1084,7 @@ it('chooses MiniMax Music3 through audio.cpp and reuses the saved seed and forma
   act(() => { window.dispatchEvent(new Event('focus')); });
   await flush();
   expect(generate().disabled).toBe(false);
-  expect(host.textContent).toContain('quality-q8 · Q8_0');
+  expect(host.textContent).not.toContain('quality-q8 · Q8_0');
   const models = pairControl('Model');
   choose(models, 'heartmula');
   expect(models.value).toBe('heartmula');

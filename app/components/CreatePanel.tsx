@@ -2037,10 +2037,10 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
                   {linkedMusicFamilies.map(family => <option key={family.id} value={family.id}>{family.name}</option>)}
                   {native.hotstepProfiles.filter(profile => !linkedMusicFamilies.some(family => family.pairs.some((pair: LinkedMusicPair) =>
                     pair.engine === 'hotstep' && 'profile' in pair && pair.profile === profile.id))).map(profile =>
-                    <option key={profile.id} value={`hotstep:${profile.id}`}>{profile.label}</option>)}
+                    <option key={profile.id} value={`hotstep:${profile.id}`}>{profile.label.split(' · ')[0]}</option>)}
                   {native.audioProfiles.filter(profile => !linkedMusicFamilies.some(family => family.pairs.some((pair: LinkedMusicPair) =>
                     pair.engine === 'audio.cpp' && 'profile' in pair && pair.profile === profile.id))).map(profile =>
-                    <option key={profile.id} value={`audio:${profile.id}`}>{profile.label}</option>)}
+                    <option key={profile.id} value={`audio:${profile.id}`}>{profile.label.split(' · ')[0]}</option>)}
                   {nativeEngine === 'hotstep' && modelChoice === 'hotstep' && <option value="hotstep">HOT-Step</option>}
                   {audioCpp && !linkedFamily && !native.audioProfiles.some(profile => `audio:${profile.id}` === modelChoice) &&
                     <option value={modelChoice}>audio.cpp</option>}
@@ -2133,7 +2133,6 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
                         <ul className="break-all">{native.originalModels.map(model => <li key={model}>{model}</li>)}</ul>
                       </div>
                     )}
-                    {onMusicEngineChange && (audioCpp || nativeEngine === 'hotstep') && native.profile && <p className="text-xs">{native.profile.label}</p>}
                     {native.profiles.length > 0 && !nativeSets && (!onMusicEngineChange || (!audioCpp && nativeEngine !== 'hotstep')) && (
                       <select aria-label={nativeStrings.model} className={CONTROL} value={native.profile?.id ?? ''}
                         onChange={event => { native.select(event.target.value); pair.select(); }}>
