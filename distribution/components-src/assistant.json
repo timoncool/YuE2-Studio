@@ -1,0 +1,197 @@
+{
+  "files": {
+    "gemma-4-e4b-q4_0": {
+      "label": "Gemma 4 E4B IT (QAT q4_0)",
+      "kind": "model",
+      "url": "https://huggingface.co/google/gemma-4-E4B-it-qat-q4_0-gguf/resolve/4b4a2c1d584be7264f87aac328a1bc739ce81b6c/gemma-4-E4B_q4_0-it.gguf",
+      "bytes": 5154941280,
+      "sha256": "676c35070db6dbe52f93e9c864ee0fba4eddea94b9c875d9cb10daff453fbaee",
+      "path": "models/gemma-4-E4B_q4_0-it.gguf",
+      "vram_gb": 6,
+      "note": "The lighter of the two: quantisation-aware training keeps it usable at q4_0."
+    },
+    "gemma-4-12b-q4_0": {
+      "label": "Gemma 4 12B IT (QAT q4_0)",
+      "kind": "model",
+      "url": "https://huggingface.co/google/gemma-4-12B-it-qat-q4_0-gguf/resolve/29d097773436b69ff9feafd636ab4cf873786537/gemma-4-12b-it-qat-q4_0.gguf",
+      "bytes": 6975879296,
+      "sha256": "93567e57a8fe10b23569b9d9ec38cd005deedf71e29477c421a4b83f418a538b",
+      "path": "models/gemma-4-12b-it-qat-q4_0.gguf",
+      "vram_gb": 10,
+      "note": "Writes noticeably better captions; wants a card that is not already full of the music engine."
+    },
+    "gemma-4-12b-q5_k_m": {
+      "label": "Gemma 4 12B IT (Q5_K_M)",
+      "kind": "model",
+      "url": "https://huggingface.co/unsloth/gemma-4-12b-it-GGUF/resolve/fc034cfff751157913579611efad8462ac1be606/gemma-4-12b-it-Q5_K_M.gguf",
+      "bytes": 8413576000,
+      "sha256": "32c554c7d1338a23837ae39b3db482213a4a642f96df3b2619f516a2375d16cd",
+      "path": "models/gemma-4-12b-it-Q5_K_M.gguf",
+      "vram_gb": 11,
+      "note": "More accurate than q4_0, and it wants a card with room to spare."
+    },
+    "gemma-4-12b-q6_k": {
+      "label": "Gemma 4 12B IT (Q6_K)",
+      "kind": "model",
+      "url": "https://huggingface.co/unsloth/gemma-4-12b-it-GGUF/resolve/fc034cfff751157913579611efad8462ac1be606/gemma-4-12b-it-Q6_K.gguf",
+      "bytes": 9786022720,
+      "sha256": "6f394336500bb5409bd68c31aa9d75097b5e6104f6cf30c82a09a7b64df41faf",
+      "path": "models/gemma-4-12b-it-Q6_K.gguf",
+      "vram_gb": 12,
+      "note": "Closer again to the full model."
+    },
+    "gemma-4-12b-q8_0": {
+      "label": "Gemma 4 12B IT (Q8_0)",
+      "kind": "model",
+      "url": "https://huggingface.co/unsloth/gemma-4-12b-it-GGUF/resolve/fc034cfff751157913579611efad8462ac1be606/gemma-4-12b-it-Q8_0.gguf",
+      "bytes": 12669647680,
+      "sha256": "f20e7ff1be28c283eeeb18fc895733791c56a5851d5cd3fe9691b7f7d12afa72",
+      "path": "models/gemma-4-12b-it-Q8_0.gguf",
+      "vram_gb": 15,
+      "note": "As close to the original as a quantisation gets. For a card that has nothing else to do."
+    },
+    "llama-cuda@windows": {
+      "label": "llama.cpp runtime (CUDA 13.5)",
+      "kind": "runtime",
+      "url": "https://github.com/ggml-org/llama.cpp/releases/download/b12556/llama-b12556-bin-win-cuda-13.5-x64.zip",
+      "bytes": 229295176,
+      "sha256": "dde6d3f922b2225574ba32fe4bad227fb4784a8a5ebabc78c69fb3da7979ae23",
+      "path": "runtime/llama-cuda.zip",
+      "unzip_into": "cuda",
+      "marker": "llama-server",
+      "note": "Needs the CUDA runtime companion below."
+    },
+    "llama-cuda-runtime@windows": {
+      "label": "CUDA runtime for llama.cpp",
+      "kind": "runtime",
+      "url": "https://github.com/ggml-org/llama.cpp/releases/download/b12556/cudart-llama-bin-win-cuda-13.5-x64.zip",
+      "bytes": 426314199,
+      "sha256": "c2bf4cc202bfbaaa7a0b75f5082457c3811326947bb216059b72839d844e9cba",
+      "path": "runtime/cudart.zip",
+      "unzip_into": "cuda",
+      "marker": "cudart64",
+      "note": "The CUDA libraries llama.cpp links against."
+    },
+    "llama-cuda12@windows": {
+      "label": "llama.cpp runtime (CUDA 12.4)",
+      "kind": "runtime",
+      "url": "https://github.com/ggml-org/llama.cpp/releases/download/b12556/llama-b12556-bin-win-cuda-12.4-x64.zip",
+      "bytes": 364747106,
+      "sha256": "e18df7a7189e1446ca338aa4f04529acb4dce7537164baed2fbc624e48864932",
+      "path": "runtime/llama-cuda12.zip",
+      "unzip_into": "cuda12",
+      "marker": "llama-server",
+      "note": "For cards and drivers CUDA 13 does not run: GTX 900 and 10, Tesla V100, drivers before 580. Needs the CUDA runtime companion below."
+    },
+    "llama-cuda12-runtime@windows": {
+      "label": "CUDA 12 runtime for llama.cpp",
+      "kind": "runtime",
+      "url": "https://github.com/ggml-org/llama.cpp/releases/download/b11236/cudart-llama-bin-win-cuda-12.4-x64.zip",
+      "bytes": 391443627,
+      "sha256": "8c79a9b226de4b3cacfd1f83d24f962d0773be79f1e7b75c6af4ded7e32ae1d6",
+      "path": "runtime/cudart12.zip",
+      "unzip_into": "cuda12",
+      "marker": "cudart64",
+      "note": "The CUDA 12 libraries llama.cpp links against."
+    },
+    "llama-vulkan@windows": {
+      "label": "llama.cpp runtime (Vulkan)",
+      "kind": "runtime",
+      "url": "https://github.com/ggml-org/llama.cpp/releases/download/b12556/llama-b12556-bin-win-vulkan-x64.zip",
+      "bytes": 38690012,
+      "sha256": "73f3346fbbad14db8f5a5b35c4e9dbae7debf306309bfc77aca4a17096cb2f93",
+      "path": "runtime/llama-vulkan.zip",
+      "unzip_into": "vulkan",
+      "marker": "llama-server",
+      "note": "For AMD and Intel cards, and NVIDIA cards CUDA does not run on: the card through Vulkan."
+    },
+    "llama-cpu@windows": {
+      "label": "llama.cpp runtime (CPU)",
+      "kind": "runtime",
+      "url": "https://github.com/ggml-org/llama.cpp/releases/download/b12556/llama-b12556-bin-win-cpu-x64.zip",
+      "bytes": 24876692,
+      "sha256": "98882a3ca45688ffa585c3adba49213ca90c5b2dbbf1bc2af41ac437a0987d17",
+      "path": "runtime/llama-cpu.zip",
+      "unzip_into": "cpu",
+      "marker": "llama-server",
+      "note": "For machines without a graphics card, or for choosing the processor. Slow, but it works."
+    },
+    "llama-cuda@linux": {
+      "label": "llama.cpp runtime (CUDA 13.5)",
+      "kind": "runtime",
+      "url": "https://github.com/ggml-org/llama.cpp/releases/download/b12556/llama-b12556-bin-ubuntu-cuda-13.5-x64.tar.gz",
+      "bytes": 228129368,
+      "sha256": "3a0bf2925d2df14161b371663628d208d8ac52538fc43987f89d03c2a289dac4",
+      "path": "runtime/llama-cuda.tar.gz",
+      "unzip_into": "cuda",
+      "marker": "llama-server",
+      "note": "Needs the CUDA runtime companion below."
+    },
+    "llama-cuda-runtime@linux": {
+      "label": "CUDA runtime for llama.cpp",
+      "kind": "runtime",
+      "url": "https://github.com/ggml-org/llama.cpp/releases/download/b12556/cudart-llama-b12556-bin-ubuntu-cuda-13.5-x64.tar.gz",
+      "bytes": 444077889,
+      "sha256": "0c6e5cc050df6d3860bb41c197c19935596dee03c759c6aab7b6d4dca69cc890",
+      "path": "runtime/cudart.tar.gz",
+      "unzip_into": "cuda",
+      "marker": "libcudart",
+      "note": "The CUDA libraries llama.cpp links against."
+    },
+    "llama-cuda12@linux": {
+      "label": "llama.cpp runtime (CUDA 12.8)",
+      "kind": "runtime",
+      "url": "https://github.com/ggml-org/llama.cpp/releases/download/b12556/llama-b12556-bin-ubuntu-cuda-12.8-x64.tar.gz",
+      "bytes": 223234282,
+      "sha256": "8899c2bf48e50dbd089ce128c51aa7924f7fe204fc479303a1929be2da1bcc26",
+      "path": "runtime/llama-cuda12.tar.gz",
+      "unzip_into": "cuda12",
+      "marker": "llama-server",
+      "note": "For cards and drivers CUDA 13 does not run: GTX 900 and 10, Tesla V100, drivers before 580. Needs the CUDA runtime companion below."
+    },
+    "llama-cuda12-runtime@linux": {
+      "label": "CUDA 12 runtime for llama.cpp",
+      "kind": "runtime",
+      "url": "https://github.com/ggml-org/llama.cpp/releases/download/b12556/cudart-llama-b12556-bin-ubuntu-cuda-12.8-x64.tar.gz",
+      "bytes": 594376772,
+      "sha256": "cd8cd6af77de4137b399da187ff48ae16f6a09c9e14a76832d1f62b430396b42",
+      "path": "runtime/cudart12.tar.gz",
+      "unzip_into": "cuda12",
+      "marker": "libcudart",
+      "note": "The CUDA 12 libraries llama.cpp links against."
+    },
+    "llama-vulkan@linux": {
+      "label": "llama.cpp runtime (Vulkan)",
+      "kind": "runtime",
+      "url": "https://github.com/ggml-org/llama.cpp/releases/download/b12556/llama-b12556-bin-ubuntu-vulkan-x64.tar.gz",
+      "bytes": 36721000,
+      "sha256": "75ea69b93eea3abfb9539cc0bb21701cfa1f7f791e6fc30b290eab4d5dbcee4f",
+      "path": "runtime/llama-vulkan.tar.gz",
+      "unzip_into": "vulkan",
+      "marker": "llama-server",
+      "note": "For AMD and Intel cards, and NVIDIA cards CUDA does not run on: the card through Vulkan."
+    },
+    "llama-cpu@linux": {
+      "label": "llama.cpp runtime (CPU)",
+      "kind": "runtime",
+      "url": "https://github.com/ggml-org/llama.cpp/releases/download/b12556/llama-b12556-bin-ubuntu-x64.tar.gz",
+      "bytes": 23057457,
+      "sha256": "1a573b6089d29c9048eefe8497dd40cac4115400f223d33f2a71e506bf6d5b18",
+      "path": "runtime/llama-cpu.tar.gz",
+      "unzip_into": "cpu",
+      "marker": "llama-server",
+      "note": "For machines without a graphics card, or for choosing the processor. Slow, but it works."
+    },
+    "llama-cpu@macos": {
+      "label": "llama.cpp runtime (Metal)",
+      "kind": "runtime",
+      "url": "https://github.com/ggml-org/llama.cpp/releases/download/b12556/llama-b12556-bin-macos-arm64.tar.gz",
+      "bytes": 16449908,
+      "sha256": "eb92254d5ada74c6753bd6ef0d23f498ffe2872b7222043eb48743abcaac8333",
+      "path": "runtime/llama-cpu.tar.gz",
+      "unzip_into": "cpu",
+      "marker": "llama-server",
+      "note": "Runs on the Mac's own graphics through Metal, in the memory it shares with the processor."
+    }
+  }
+}

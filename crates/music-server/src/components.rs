@@ -284,6 +284,8 @@ pub(crate) const REQUIRED: &[&str] = &[
     "crisperwhisper-turbo-normalizer", "crisperwhisper-turbo-preprocessor-config", "crisperwhisper-turbo-special-tokens-map",
     "crisperwhisper-turbo-tokenizer", "crisperwhisper-turbo-tokenizer-config", "crisperwhisper-turbo-vocab",
     "parakeet-tdt-int8", "parakeet-ultra-int8", "onnxruntime",
+    "gemma-4-e4b-q4_0", "gemma-4-12b-q4_0", "gemma-4-12b-q5_k_m", "gemma-4-12b-q6_k", "gemma-4-12b-q8_0",
+    "llama-cuda", "llama-cuda-runtime", "llama-cuda12", "llama-cuda12-runtime", "llama-vulkan", "llama-cpu",
 ];
 
 /// A file this build downloads by id: one of `REQUIRED`.
@@ -592,6 +594,8 @@ mod export {
         crate::component_catalogue::bundled().sources(sha).unwrap_or_default().iter()
             .filter(|url| url.as_str() != asset.url).map(|url| &*Box::leak(url.clone().into_boxed_str())).collect()
     }
+
+
 
 
 }

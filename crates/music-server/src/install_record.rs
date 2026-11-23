@@ -366,7 +366,7 @@ mod tests {
                 missing.push(asset.url);
             }
         }
-        for asset in crate::assistant_runtime::ASSETS.iter().filter(|asset| asset.kind == crate::assistant_runtime::AssetKind::Runtime && archive(asset.url)) {
+        for asset in crate::assistant_runtime::assets().into_iter().filter(|asset| asset.kind == crate::assistant_runtime::AssetKind::Runtime && archive(asset.url)) {
             if key_file(asset.url).is_none() {
                 missing.push(asset.url);
             }

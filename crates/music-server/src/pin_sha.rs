@@ -25,19 +25,6 @@ const PINNED: &[(&str, &str)] = &[
     ("https://github.com/timoncool/BSRoformer.cpp/releases/download/studio-0.1.1/BSRoformer-windows-vulkan-x64.zip", "fc82682b4071d065e2e3e84998817877a4d936da7fbb3e580799904c54a6a4ab"),
     ("https://github.com/timoncool/BSRoformer.cpp/releases/download/studio-0.1.1/BSRoformer-linux-cuda12-x64.tar.gz", "82540c02b5a9730137b0059ffda8c0c79b589a649af554dff1f88867a6c7444d"),
     ("https://github.com/timoncool/BSRoformer.cpp/releases/download/studio-0.1.1/BSRoformer-linux-vulkan-x64.tar.gz", "d0b6acc7b4b05c453bbfe99ea8154251fde4d96b2edd957fdab6e596f7a64927"),
-    ("https://github.com/ggml-org/llama.cpp/releases/download/b11236/cudart-llama-bin-win-cuda-12.4-x64.zip", "8c79a9b226de4b3cacfd1f83d24f962d0773be79f1e7b75c6af4ded7e32ae1d6"),
-    ("https://github.com/ggml-org/llama.cpp/releases/download/b12556/cudart-llama-bin-win-cuda-13.5-x64.zip", "c2bf4cc202bfbaaa7a0b75f5082457c3811326947bb216059b72839d844e9cba"),
-    ("https://github.com/ggml-org/llama.cpp/releases/download/b12556/cudart-llama-b12556-bin-ubuntu-cuda-12.8-x64.tar.gz", "cd8cd6af77de4137b399da187ff48ae16f6a09c9e14a76832d1f62b430396b42"),
-    ("https://github.com/ggml-org/llama.cpp/releases/download/b12556/cudart-llama-b12556-bin-ubuntu-cuda-13.5-x64.tar.gz", "0c6e5cc050df6d3860bb41c197c19935596dee03c759c6aab7b6d4dca69cc890"),
-    ("https://github.com/ggml-org/llama.cpp/releases/download/b12556/llama-b12556-bin-macos-arm64.tar.gz", "eb92254d5ada74c6753bd6ef0d23f498ffe2872b7222043eb48743abcaac8333"),
-    ("https://github.com/ggml-org/llama.cpp/releases/download/b12556/llama-b12556-bin-ubuntu-cuda-12.8-x64.tar.gz", "8899c2bf48e50dbd089ce128c51aa7924f7fe204fc479303a1929be2da1bcc26"),
-    ("https://github.com/ggml-org/llama.cpp/releases/download/b12556/llama-b12556-bin-ubuntu-cuda-13.5-x64.tar.gz", "3a0bf2925d2df14161b371663628d208d8ac52538fc43987f89d03c2a289dac4"),
-    ("https://github.com/ggml-org/llama.cpp/releases/download/b12556/llama-b12556-bin-ubuntu-vulkan-x64.tar.gz", "75ea69b93eea3abfb9539cc0bb21701cfa1f7f791e6fc30b290eab4d5dbcee4f"),
-    ("https://github.com/ggml-org/llama.cpp/releases/download/b12556/llama-b12556-bin-ubuntu-x64.tar.gz", "1a573b6089d29c9048eefe8497dd40cac4115400f223d33f2a71e506bf6d5b18"),
-    ("https://github.com/ggml-org/llama.cpp/releases/download/b12556/llama-b12556-bin-win-cpu-x64.zip", "98882a3ca45688ffa585c3adba49213ca90c5b2dbbf1bc2af41ac437a0987d17"),
-    ("https://github.com/ggml-org/llama.cpp/releases/download/b12556/llama-b12556-bin-win-cuda-12.4-x64.zip", "e18df7a7189e1446ca338aa4f04529acb4dce7537164baed2fbc624e48864932"),
-    ("https://github.com/ggml-org/llama.cpp/releases/download/b12556/llama-b12556-bin-win-cuda-13.5-x64.zip", "dde6d3f922b2225574ba32fe4bad227fb4784a8a5ebabc78c69fb3da7979ae23"),
-    ("https://github.com/ggml-org/llama.cpp/releases/download/b12556/llama-b12556-bin-win-vulkan-x64.zip", "73f3346fbbad14db8f5a5b35c4e9dbae7debf306309bfc77aca4a17096cb2f93"),
     ("https://github.com/timoncool/onnxruntime/releases/download/v1.31.1/onnxruntime-linux-x64-1.31.1.tgz", "c849e36a1ef3e22d4ff217b9d1ce4a3cf5b9467b975610913ae959ad5b16bdc9"),
     ("https://github.com/timoncool/onnxruntime/releases/download/v1.31.1/onnxruntime-osx-arm64-1.31.1.tgz", "2e1344a1926ee50eb25b38153cb6992c3567515aef0e677a1a520a1798896d6f"),
     ("https://github.com/timoncool/onnxruntime/releases/download/v1.31.1/onnxruntime-win-x64-1.31.1.zip", "5869e26bb25314375f2d5ef1877e3ea06b1543d6c710e6e4a1ec2f7177ab4b2c"),
@@ -57,8 +44,6 @@ const PINNED: &[(&str, &str)] = &[
     ("https://huggingface.co/cocktailpeanut/muscriptor-medium/resolve/27246ba68bd4d8f98bdec10a6edf8d7cf42a8826/model.safetensors", "ac80adbdf85d87231735fd948af7013441c0afced316c4e9067fd5d8a7fb97ec"),
     ("https://huggingface.co/cocktailpeanut/muscriptor-small/resolve/31a8f75d6a8b5383fd71ad1371dc1620389ab722/config.json", "3008fc481e4a1cd978e337eb3759260c270892204db5039235ac939e1f42aeb2"),
     ("https://huggingface.co/cocktailpeanut/muscriptor-small/resolve/31a8f75d6a8b5383fd71ad1371dc1620389ab722/model.safetensors", "bbd482c786b895cf7d8f44185073d951adae2ebb8a66f82ca84cd1f84569549c"),
-    ("https://huggingface.co/google/gemma-4-12B-it-qat-q4_0-gguf/resolve/29d097773436b69ff9feafd636ab4cf873786537/gemma-4-12b-it-qat-q4_0.gguf", "93567e57a8fe10b23569b9d9ec38cd005deedf71e29477c421a4b83f418a538b"),
-    ("https://huggingface.co/google/gemma-4-E4B-it-qat-q4_0-gguf/resolve/4b4a2c1d584be7264f87aac328a1bc739ce81b6c/gemma-4-E4B_q4_0-it.gguf", "676c35070db6dbe52f93e9c864ee0fba4eddea94b9c875d9cb10daff453fbaee"),
     ("https://huggingface.co/nerualdreming/MOSS-Music-8B-Instruct-GGUF/resolve/0b4eac01086c26baf93238aa8b142ec07b3ae56d/moss-lm-q4_k_m.gguf", "bc2783b68fee6dac606599c4b8f15bff5e37913b8d10fbfb8c550f5667dee3e8"),
     ("https://huggingface.co/scragnog/MOSS-Music-8B-Instruct-GGUF/resolve/9fe86435bd542bf29cbf4984e9e0ab0ea8ca7e00/moss-aud-f16.gguf", "014b971719a9b46586ea78ea3d15f39ac0f1932678e30c72fa63222f8aea5f79"),
     ("https://huggingface.co/scragnog/MOSS-Music-8B-Instruct-GGUF/resolve/9fe86435bd542bf29cbf4984e9e0ab0ea8ca7e00/moss-lm-q8_0.gguf", "482e1e82c66f819401708c82b3eaa1dd6635c68a211f03b645b0055d0b7b031b"),
@@ -67,9 +52,6 @@ const PINNED: &[(&str, &str)] = &[
     ("https://huggingface.co/scragnog/YuE2-GGUF/resolve/eb7de0903bf4dfbd14a2384ae0c0d14150cfa2c7/sheetsage2-f16.gguf", "6a205c7ca90f60b388d925c0e4aea8f4ed8bb4404520bb49dbd095d1b7320bd1"),
     ("https://huggingface.co/scragnog/YuE2-GGUF/resolve/eb7de0903bf4dfbd14a2384ae0c0d14150cfa2c7/yue2-tok-f16.gguf", "aaea8c9fb75bf83baf3b99bac27a0eba61029e747df703a11e91a53309695687"),
     ("https://huggingface.co/scragnog/YuE2-GGUF/resolve/eb7de0903bf4dfbd14a2384ae0c0d14150cfa2c7/yue2-vae-standard-f32.gguf", "c4ffc363b246f404c1d150075da4c41c4a031524036042ce45aeb500d4d5fe71"),
-    ("https://huggingface.co/unsloth/gemma-4-12b-it-GGUF/resolve/fc034cfff751157913579611efad8462ac1be606/gemma-4-12b-it-Q5_K_M.gguf", "32c554c7d1338a23837ae39b3db482213a4a642f96df3b2619f516a2375d16cd"),
-    ("https://huggingface.co/unsloth/gemma-4-12b-it-GGUF/resolve/fc034cfff751157913579611efad8462ac1be606/gemma-4-12b-it-Q6_K.gguf", "6f394336500bb5409bd68c31aa9d75097b5e6104f6cf30c82a09a7b64df41faf"),
-    ("https://huggingface.co/unsloth/gemma-4-12b-it-GGUF/resolve/fc034cfff751157913579611efad8462ac1be606/gemma-4-12b-it-Q8_0.gguf", "f20e7ff1be28c283eeeb18fc895733791c56a5851d5cd3fe9691b7f7d12afa72"),
 ];
 
 /// The SHA-256 the pin at `url` names: this table, then the transcribe.cpp builds and models of the shared binding,
@@ -288,7 +270,7 @@ mod tests {
         let mut urls: Vec<&str> = Vec::new();
         urls.extend(crate::lyrics_sync::assets().into_iter().map(|asset| asset.url));
         urls.extend(crate::engine_runtime::assets().iter().map(|asset| asset.url));
-        urls.extend(crate::assistant_runtime::ASSETS.iter().map(|asset| asset.url));
+        urls.extend(crate::assistant_runtime::assets().into_iter().map(|asset| asset.url));
         urls.extend([crate::separation::MODEL.url, crate::separation::ROFORMER_MODEL.url]);
         urls.extend(crate::separation::RoformerBuild::ALL.into_iter().filter_map(crate::separation::roformer_asset).map(|asset| asset.url));
         urls.extend(crate::acpp::BUILDS.into_iter().flat_map(crate::acpp::assets).map(|asset| asset.url));
@@ -307,7 +289,7 @@ mod tests {
         urls.extend(crate::lyrics_sync::assets().into_iter().map(|asset| asset.url));
         urls.extend(crate::acpp::BUILDS.into_iter().flat_map(crate::acpp::assets).map(|asset| asset.url));
         urls.extend(crate::engine_runtime::assets().iter().map(|asset| asset.url));
-        urls.extend(crate::assistant_runtime::ASSETS.iter().map(|asset| asset.url));
+        urls.extend(crate::assistant_runtime::assets().into_iter().map(|asset| asset.url));
         urls.extend([crate::separation::MODEL.url, crate::separation::ROFORMER_MODEL.url]);
         urls.extend(crate::separation::RoformerBuild::ALL.into_iter().filter_map(crate::separation::roformer_asset).map(|asset| asset.url));
         urls.extend(crate::training::pack().iter().map(|asset| asset.url));

@@ -10671,7 +10671,7 @@ async fn adopt_library(state: AppState, folder: PathBuf, models_root: PathBuf) -
                 archives_by_name.entry(name).or_default().push((archive, sha, target.clone()));
             }
         };
-        for asset in assistant_runtime::ASSETS {
+        for asset in assistant_runtime::assets() {
             let target = optional_state.assistant_runtime.path_of(asset);
             if asset.kind == assistant_runtime::AssetKind::Model {
                 register(asset.id, pin_sha::sha256(asset.url), target);
@@ -11272,7 +11272,7 @@ fn update_plan_now(
         }
     }
     let assistant = &state.assistant_runtime;
-    for asset in assistant_runtime::ASSETS {
+    for asset in assistant_runtime::assets() {
         if let Some(earlier) = assistant.earlier(asset) {
             updated.push(Candidate {
                 part: Part::Assistant,

@@ -57,241 +57,40 @@ pub struct Asset {
     pub note: &'static str,
 }
 
-pub const ASSETS: &[Asset] = &[
-    Asset {
-        id: "gemma-4-e4b-q4_0",
-        label: "Gemma 4 E4B IT (QAT q4_0)",
-        kind: AssetKind::Model,
-        url: "https://huggingface.co/google/gemma-4-E4B-it-qat-q4_0-gguf/resolve/4b4a2c1d584be7264f87aac328a1bc739ce81b6c/gemma-4-E4B_q4_0-it.gguf",
-        relative_path: "models/gemma-4-E4B_q4_0-it.gguf",
-        bytes: 5_154_941_280,
-        unzip_into: None,
-        marker: "",
-        vram_gb: Some(6),
-        note: "The lighter of the two: quantisation-aware training keeps it usable at q4_0.",
-    },
-    Asset {
-        id: "gemma-4-12b-q4_0",
-        label: "Gemma 4 12B IT (QAT q4_0)",
-        kind: AssetKind::Model,
-        url: "https://huggingface.co/google/gemma-4-12B-it-qat-q4_0-gguf/resolve/29d097773436b69ff9feafd636ab4cf873786537/gemma-4-12b-it-qat-q4_0.gguf",
-        relative_path: "models/gemma-4-12b-it-qat-q4_0.gguf",
-        bytes: 6_975_879_296,
-        unzip_into: None,
-        marker: "",
-        vram_gb: Some(10),
-        note: "Writes noticeably better captions; wants a card that is not already full of the music engine.",
-    },
-    Asset {
-        id: "gemma-4-12b-q5_k_m",
-        label: "Gemma 4 12B IT (Q5_K_M)",
-        kind: AssetKind::Model,
-        url: "https://huggingface.co/unsloth/gemma-4-12b-it-GGUF/resolve/fc034cfff751157913579611efad8462ac1be606/gemma-4-12b-it-Q5_K_M.gguf",
-        relative_path: "models/gemma-4-12b-it-Q5_K_M.gguf",
-        bytes: 8_413_576_000,
-        unzip_into: None,
-        marker: "",
-        vram_gb: Some(11),
-        note: "More accurate than q4_0, and it wants a card with room to spare.",
-    },
-    Asset {
-        id: "gemma-4-12b-q6_k",
-        label: "Gemma 4 12B IT (Q6_K)",
-        kind: AssetKind::Model,
-        url: "https://huggingface.co/unsloth/gemma-4-12b-it-GGUF/resolve/fc034cfff751157913579611efad8462ac1be606/gemma-4-12b-it-Q6_K.gguf",
-        relative_path: "models/gemma-4-12b-it-Q6_K.gguf",
-        bytes: 9_786_022_720,
-        unzip_into: None,
-        marker: "",
-        vram_gb: Some(12),
-        note: "Closer again to the full model.",
-    },
-    Asset {
-        id: "gemma-4-12b-q8_0",
-        label: "Gemma 4 12B IT (Q8_0)",
-        kind: AssetKind::Model,
-        url: "https://huggingface.co/unsloth/gemma-4-12b-it-GGUF/resolve/fc034cfff751157913579611efad8462ac1be606/gemma-4-12b-it-Q8_0.gguf",
-        relative_path: "models/gemma-4-12b-it-Q8_0.gguf",
-        bytes: 12_669_647_680,
-        unzip_into: None,
-        marker: "",
-        vram_gb: Some(15),
-        note: "As close to the original as a quantisation gets. For a card that has nothing else to do.",
-    },
-    #[cfg(windows)]
-    Asset {
-        id: "llama-cuda",
-        label: "llama.cpp runtime (CUDA 13.5)",
-        kind: AssetKind::Runtime,
-        url: "https://github.com/ggml-org/llama.cpp/releases/download/b12556/llama-b12556-bin-win-cuda-13.5-x64.zip",
-        relative_path: "runtime/llama-cuda.zip",
-        bytes: 229_295_176,
-        unzip_into: Some("cuda"),
-        marker: "llama-server",
-        vram_gb: None,
-        note: "Needs the CUDA runtime companion below.",
-    },
-    #[cfg(windows)]
-    Asset {
-        id: "llama-cuda-runtime",
-        label: "CUDA runtime for llama.cpp",
-        kind: AssetKind::Runtime,
-        url: "https://github.com/ggml-org/llama.cpp/releases/download/b12556/cudart-llama-bin-win-cuda-13.5-x64.zip",
-        relative_path: "runtime/cudart.zip",
-        bytes: 426_314_199,
-        unzip_into: Some("cuda"),
-        marker: "cudart64",
-        vram_gb: None,
-        note: "The CUDA libraries llama.cpp links against.",
-    },
-    // CUDA 13 runs Turing (GTX 16, RTX 20) and newer on driver 580 or later;
-    // an older card or driver takes llama.cpp's CUDA 12.4 build instead
-    #[cfg(windows)]
-    Asset {
-        id: "llama-cuda12",
-        label: "llama.cpp runtime (CUDA 12.4)",
-        kind: AssetKind::Runtime,
-        url: "https://github.com/ggml-org/llama.cpp/releases/download/b12556/llama-b12556-bin-win-cuda-12.4-x64.zip",
-        relative_path: "runtime/llama-cuda12.zip",
-        bytes: 364_747_106,
-        unzip_into: Some("cuda12"),
-        marker: "llama-server",
-        vram_gb: None,
-        note: "For cards and drivers CUDA 13 does not run: GTX 900 and 10, Tesla V100, drivers before 580. Needs the CUDA runtime companion below.",
-    },
-    #[cfg(windows)]
-    Asset {
-        id: "llama-cuda12-runtime",
-        label: "CUDA 12 runtime for llama.cpp",
-        kind: AssetKind::Runtime,
-        url: "https://github.com/ggml-org/llama.cpp/releases/download/b11236/cudart-llama-bin-win-cuda-12.4-x64.zip",
-        relative_path: "runtime/cudart12.zip",
-        bytes: 391_443_627,
-        unzip_into: Some("cuda12"),
-        marker: "cudart64",
-        vram_gb: None,
-        note: "The CUDA 12 libraries llama.cpp links against.",
-    },
-    // Every other card - AMD, Intel, an NVIDIA card CUDA does not run on -
-    // takes llama.cpp's Vulkan build through the card's own driver
-    #[cfg(windows)]
-    Asset {
-        id: "llama-vulkan",
-        label: "llama.cpp runtime (Vulkan)",
-        kind: AssetKind::Runtime,
-        url: "https://github.com/ggml-org/llama.cpp/releases/download/b12556/llama-b12556-bin-win-vulkan-x64.zip",
-        relative_path: "runtime/llama-vulkan.zip",
-        bytes: 38_690_012,
-        unzip_into: Some("vulkan"),
-        marker: "llama-server",
-        vram_gb: None,
-        note: "For AMD and Intel cards, and NVIDIA cards CUDA does not run on: the card through Vulkan.",
-    },
-    #[cfg(windows)]
-    Asset {
-        id: "llama-cpu",
-        label: "llama.cpp runtime (CPU)",
-        kind: AssetKind::Runtime,
-        url: "https://github.com/ggml-org/llama.cpp/releases/download/b12556/llama-b12556-bin-win-cpu-x64.zip",
-        relative_path: "runtime/llama-cpu.zip",
-        bytes: 24_876_692,
-        unzip_into: Some("cpu"),
-        marker: "llama-server",
-        vram_gb: None,
-        note: "For machines without a graphics card, or for choosing the processor. Slow, but it works.",
-    },
-    #[cfg(target_os = "linux")]
-    Asset {
-        id: "llama-cuda",
-        label: "llama.cpp runtime (CUDA 13.5)",
-        kind: AssetKind::Runtime,
-        url: "https://github.com/ggml-org/llama.cpp/releases/download/b12556/llama-b12556-bin-ubuntu-cuda-13.5-x64.tar.gz",
-        relative_path: "runtime/llama-cuda.tar.gz",
-        bytes: 228_129_368,
-        unzip_into: Some("cuda"),
-        marker: "llama-server",
-        vram_gb: None,
-        note: "Needs the CUDA runtime companion below.",
-    },
-    #[cfg(target_os = "linux")]
-    Asset {
-        id: "llama-cuda-runtime",
-        label: "CUDA runtime for llama.cpp",
-        kind: AssetKind::Runtime,
-        url: "https://github.com/ggml-org/llama.cpp/releases/download/b12556/cudart-llama-b12556-bin-ubuntu-cuda-13.5-x64.tar.gz",
-        relative_path: "runtime/cudart.tar.gz",
-        bytes: 444_077_889,
-        unzip_into: Some("cuda"),
-        marker: "libcudart",
-        vram_gb: None,
-        note: "The CUDA libraries llama.cpp links against.",
-    },
-    #[cfg(target_os = "linux")]
-    Asset {
-        id: "llama-cuda12",
-        label: "llama.cpp runtime (CUDA 12.8)",
-        kind: AssetKind::Runtime,
-        url: "https://github.com/ggml-org/llama.cpp/releases/download/b12556/llama-b12556-bin-ubuntu-cuda-12.8-x64.tar.gz",
-        relative_path: "runtime/llama-cuda12.tar.gz",
-        bytes: 223_234_282,
-        unzip_into: Some("cuda12"),
-        marker: "llama-server",
-        vram_gb: None,
-        note: "For cards and drivers CUDA 13 does not run: GTX 900 and 10, Tesla V100, drivers before 580. Needs the CUDA runtime companion below.",
-    },
-    #[cfg(target_os = "linux")]
-    Asset {
-        id: "llama-cuda12-runtime",
-        label: "CUDA 12 runtime for llama.cpp",
-        kind: AssetKind::Runtime,
-        url: "https://github.com/ggml-org/llama.cpp/releases/download/b12556/cudart-llama-b12556-bin-ubuntu-cuda-12.8-x64.tar.gz",
-        relative_path: "runtime/cudart12.tar.gz",
-        bytes: 594_376_772,
-        unzip_into: Some("cuda12"),
-        marker: "libcudart",
-        vram_gb: None,
-        note: "The CUDA 12 libraries llama.cpp links against.",
-    },
-    #[cfg(target_os = "linux")]
-    Asset {
-        id: "llama-vulkan",
-        label: "llama.cpp runtime (Vulkan)",
-        kind: AssetKind::Runtime,
-        url: "https://github.com/ggml-org/llama.cpp/releases/download/b12556/llama-b12556-bin-ubuntu-vulkan-x64.tar.gz",
-        relative_path: "runtime/llama-vulkan.tar.gz",
-        bytes: 36_721_000,
-        unzip_into: Some("vulkan"),
-        marker: "llama-server",
-        vram_gb: None,
-        note: "For AMD and Intel cards, and NVIDIA cards CUDA does not run on: the card through Vulkan.",
-    },
-    #[cfg(target_os = "linux")]
-    Asset {
-        id: "llama-cpu",
-        label: "llama.cpp runtime (CPU)",
-        kind: AssetKind::Runtime,
-        url: "https://github.com/ggml-org/llama.cpp/releases/download/b12556/llama-b12556-bin-ubuntu-x64.tar.gz",
-        relative_path: "runtime/llama-cpu.tar.gz",
-        bytes: 23_057_457,
-        unzip_into: Some("cpu"),
-        marker: "llama-server",
-        vram_gb: None,
-        note: "For machines without a graphics card, or for choosing the processor. Slow, but it works.",
-    },
-    #[cfg(target_os = "macos")]
-    Asset {
-        id: "llama-cpu",
-        label: "llama.cpp runtime (Metal)",
-        kind: AssetKind::Runtime,
-        url: "https://github.com/ggml-org/llama.cpp/releases/download/b12556/llama-b12556-bin-macos-arm64.tar.gz",
-        relative_path: "runtime/llama-cpu.tar.gz",
-        bytes: 16_449_908,
-        unzip_into: Some("cpu"),
-        marker: "llama-server",
-        vram_gb: None,
-        note: "Runs on the Mac's own graphics through Metal, in the memory it shares with the processor.",
-    },
-];
+/// The models and this platform's llama.cpp builds: catalogue entries
+/// (`distribution/components-src/assistant.json`).
+const MODELS: [&str; 5] = ["gemma-4-e4b-q4_0", "gemma-4-12b-q4_0", "gemma-4-12b-q5_k_m", "gemma-4-12b-q6_k", "gemma-4-12b-q8_0"];
+#[cfg(not(target_os = "macos"))]
+const RUNTIMES: &[&str] = &["llama-cuda", "llama-cuda-runtime", "llama-cuda12", "llama-cuda12-runtime", "llama-vulkan", "llama-cpu"];
+#[cfg(target_os = "macos")]
+const RUNTIMES: &[&str] = &["llama-cpu"];
+
+pub fn assets() -> Vec<&'static Asset> {
+    MODELS.iter().chain(RUNTIMES).map(|id| from_catalogue(crate::components::required(id))).collect()
+}
+
+/// A catalogue download as this module's asset, made once per catalogue entry.
+fn from_catalogue(file: &'static crate::downloads::Asset) -> &'static Asset {
+    static MADE: std::sync::LazyLock<std::sync::Mutex<std::collections::HashMap<usize, &'static Asset>>> = std::sync::LazyLock::new(Default::default);
+    let mut made = MADE.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+    made.entry(std::ptr::from_ref(file) as usize).or_insert_with(|| {
+        Box::leak(Box::new(Asset {
+            id: file.id,
+            label: file.label,
+            kind: match file.kind {
+                crate::downloads::AssetKind::Model => AssetKind::Model,
+                crate::downloads::AssetKind::Runtime => AssetKind::Runtime,
+            },
+            url: file.url,
+            relative_path: file.relative_path,
+            bytes: file.bytes,
+            unzip_into: file.unzip_into,
+            marker: file.marker,
+            vram_gb: file.vram_gb,
+            note: file.note,
+        }))
+    })
+}
 
 /// The llama.cpp build this machine's card runs: CUDA 13 on Turing and newer
 /// with driver 580 or later, CUDA 12 on anything older CUDA still runs,
@@ -355,7 +154,7 @@ fn parse_glibc(text: &str) -> Option<(u32, u32)> {
 }
 
 pub fn asset(id: &str) -> Option<&'static Asset> {
-    ASSETS.iter().find(|asset| asset.id == id)
+    assets().into_iter().find(|asset| asset.id == id)
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -505,8 +304,8 @@ impl AssistantRuntime {
     }
 
     pub fn installed_models(&self) -> Vec<&'static Asset> {
-        ASSETS
-            .iter()
+        assets()
+            .into_iter()
             .filter(|asset| asset.kind == AssetKind::Model && self.is_installed(asset))
             .collect()
     }
@@ -619,7 +418,7 @@ impl AssistantRuntime {
     pub async fn status(&self) -> RuntimeStatus {
         // What these weigh is the servers' business, not a constant compiled in
         // here; the answers arrive in time for the next poll.
-        crate::sizes::ask(&self.http, ASSETS.iter().map(|asset| asset.url.to_string()).collect());
+        crate::sizes::ask(&self.http, assets().into_iter().map(|asset| asset.url.to_string()).collect());
         let mut state = self.state.lock().await;
         if state.server.as_mut().is_some_and(|server| !server.is_alive()) {
             state.server = None;
@@ -634,8 +433,8 @@ impl AssistantRuntime {
             running_model: state.server.as_ref().filter(|server| server.ready).map(|server| server.model_id.clone()),
             loading_model: state.server.as_ref().filter(|server| !server.ready).map(|server| server.model_id.clone()),
             base_url: state.server.as_ref().filter(|server| server.ready).map(|server| server.base_url.clone()),
-            assets: ASSETS
-                .iter()
+            assets: assets()
+                .into_iter()
                 .map(|asset| AssetStatus {
                     id: asset.id,
                     label: asset.label,
@@ -1107,7 +906,7 @@ mod tests {
     #[test]
     fn rejecting_a_corrupt_assistant_download_preserves_the_previous_file() {
         let root = tempfile::tempdir().unwrap();
-        let model = ASSETS.iter().find(|asset| asset.kind == AssetKind::Model).unwrap();
+        let model = assets().into_iter().find(|asset| asset.kind == AssetKind::Model).unwrap();
         let target = root.path().join(model.relative_path);
         fs::create_dir_all(target.parent().unwrap()).unwrap();
         fs::write(&target, b"previous model").unwrap();
@@ -1170,19 +969,19 @@ mod tests {
 
     #[test]
     fn every_asset_has_a_size_and_a_distinct_id() {
-        for entry in ASSETS {
+        for entry in assets() {
             assert!(entry.bytes > 0, "{} has no size", entry.id);
-            assert_eq!(ASSETS.iter().filter(|other| other.id == entry.id).count(), 1);
+            assert_eq!(assets().into_iter().filter(|other| other.id == entry.id).count(), 1);
             assert!(entry.url.starts_with("https://"), "{} is not fetched over https", entry.id);
         }
-        assert!(ASSETS.iter().any(|entry| entry.kind == AssetKind::Model));
-        assert!(ASSETS.iter().any(|entry| entry.kind == AssetKind::Runtime));
+        assert!(assets().into_iter().any(|entry| entry.kind == AssetKind::Model));
+        assert!(assets().into_iter().any(|entry| entry.kind == AssetKind::Runtime));
     }
 
     /// A model is fetched from a pinned revision: the repository's latest files can be other builds under the same name.
     #[test]
     fn every_model_is_pinned_to_a_revision() {
-        for entry in ASSETS.iter().filter(|entry| entry.kind == AssetKind::Model) {
+        for entry in assets().into_iter().filter(|entry| entry.kind == AssetKind::Model) {
             assert!(entry.url.contains("/resolve/") && !entry.url.contains("/resolve/main/"), "{} is not pinned", entry.url);
         }
     }
@@ -1211,7 +1010,7 @@ mod tests {
 
     #[test]
     fn the_runtime_is_pinned_to_one_llama_cpp_build() {
-        for entry in ASSETS.iter().filter(|entry| entry.kind == AssetKind::Runtime) {
+        for entry in assets().into_iter().filter(|entry| entry.kind == AssetKind::Runtime) {
             #[cfg(windows)]
             let build = if entry.url.contains("/cudart-llama-bin-win-cuda-12.4-") { CUDART12_BUILD } else { LLAMA_BUILD };
             #[cfg(not(windows))]
