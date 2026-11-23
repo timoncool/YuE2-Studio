@@ -26,6 +26,23 @@
 
 Choose the model and engine in **Create**. With **YuE2**, describe a style and write the lyrics to get a song with an editable score. Change the melody or chords and render another take. You can also use native **ACE-Step** and **MiniMax Music 3**, choose a supported alternative engine, or generate with a music model from **OpenRouter**.
 
+## Before you install v5
+
+- If you have other old studios (ACE-Step Or Minimax Music 3 studios), keep everything including models, components, LORA, and creations.
+- After you import above, then you can remove or uninstall old studio.
+
+## How to choose a Model
+
+- If you have a lower memory Macbook (M-chip + 16GB RAM) or display card (8GB or lower RAM), use ACE-Step **light** version
+- Other users who has a Macbook (M-chip + 24GB or more RAM) or display card (16GB or more RAM), use Yue2 or Minimax Music 3
+
+### Why?
+
+Tested on a Macbook Air (M3 + 16GB RAM)
+
+- Yue2 **light** version needs 20~30 minutes to create a piece of music, sometimes 60~120 minutes
+- ACE-Step **light** version only needs 10~20 minutes
+
 Songs from the older studios can join the same library with their playlists. Listen to the original recording, compare takes or try a different singing voice with RVC. Local engines run on your computer after their components and weights have been downloaded. On Windows, choose the installer with automatic updates or the portable package. [Import your existing library](#bring-your-ace-step-or-minimax-library-into-yue2) · [GPU measurements](#how-fast-is-it)
 
 ## For AI agents
