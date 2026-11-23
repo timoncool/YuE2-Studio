@@ -373,19 +373,23 @@ fn prepare_song(
     exclude: &HashSet<Category>,
     errors: &mut Vec<Value>,
     backfill: bool,
+    lost_kinds: &mut Content,
 ) -> Result<bool> {
     let id = &ids[&song.id].id;
     let missing = item["missing"]
         .as_array()
         .context("Missing file inventory")?;
-    let start = errors.len();
+    // a file the old studio lost is reported and left out; the song comes over with everything else it has
+    let mut lost = HashSet::new();
     for file in missing {
         errors.push(json!({"song_id": song.id, "title": song.title, "kind": file["kind"],
             "file": file["name"], "code": "missing"}));
+        if let Some(name) = file["name"].as_str() {
+            lost.insert(name.to_owned());
+        }
+        lost_kinds.extend(file["kind"].as_str().and_then(file_category));
     }
-    if errors.len() != start {
-        return Ok(false);
-    }
+    let start = errors.len();
     let mut names = HashMap::new();
     let mut created = Vec::new();
     for file in item["files"].as_array().context("Missing file inventory")? {
@@ -439,32 +443,39 @@ fn prepare_song(
         song.replay_request = None;
         song.audio_codes = None;
     }
+    let base = |s: &str| s.rsplit(['/', '\\']).next().unwrap_or("").to_owned();
+    let gone = |s: &str| lost.contains(&base(s));
     let rename = |s: &str| -> Result<String> {
-        let base = s.rsplit(['/', '\\']).next().unwrap_or("");
         names
-            .get(base)
+            .get(&base(s))
             .cloned()
             .with_context(|| format!("No local file for {s}"))
     };
-    song.audio_path = song.audio_path.as_deref().map(rename).transpose()?;
-    for field in ["cover_filename", "original_audio_path"] {
-        if let Some(value) = song.metadata[field].as_str() {
-            song.metadata[field] = json!(rename(value)?);
-        }
-    }
-    if let Some(versions) = song
-        .metadata
-        .get_mut("audio_versions")
-        .and_then(Value::as_array_mut)
-    {
-        for version in versions {
-            if let Some(file) = version["file"].as_str() {
-                version["file"] = json!(rename(file)?);
+    let renamed = (|| -> Result<()> {
+        song.audio_path = song.audio_path.as_deref().filter(|path| !gone(path)).map(rename).transpose()?;
+        for field in ["cover_filename", "original_audio_path"] {
+            match song.metadata[field].as_str() {
+                Some(value) if gone(value) => { song.metadata.as_object_mut().map(|metadata| metadata.remove(field)); }
+                Some(value) => song.metadata[field] = json!(rename(value)?),
+                None => {}
             }
         }
+        if let Some(versions) = song.metadata.get_mut("audio_versions").and_then(Value::as_array_mut) {
+            versions.retain(|version| !version["file"].as_str().is_some_and(gone));
+            for version in versions {
+                if let Some(file) = version["file"].as_str() {
+                    version["file"] = json!(rename(file)?);
+                }
+            }
+        }
+        remap_reference(&mut song.metadata, "/derived/from", ids)?;
+        remap_reference(&mut song.metadata, "/deleted_with", ids)
+    })();
+    if let Err(error) = renamed {
+        errors.push(json!({"song_id": song.id, "title": song.title, "kind": "song", "file": song.title,
+            "code": "unreadable", "error": format!("{error:#}")}));
+        return Ok(false);
     }
-    remap_reference(&mut song.metadata, "/derived/from", ids)?;
-    remap_reference(&mut song.metadata, "/deleted_with", ids)?;
     // Only the request fields that identify library tracks are in this namespace.
     for field in [
         "/source_song_id",
@@ -479,9 +490,12 @@ fn prepare_song(
         "/soulx/source_song_id",
         "/magenta/reference_song_id",
     ] {
-        remap_reference(&mut song.generation_settings, field, ids)?;
-        if let Some(req) = &mut song.replay_request {
-            remap_reference(req, field, ids)?;
+        let remapped = remap_reference(&mut song.generation_settings, field, ids)
+            .and_then(|()| song.replay_request.as_mut().map_or(Ok(()), |request| remap_reference(request, field, ids)));
+        if let Err(error) = remapped {
+            errors.push(json!({"song_id": song.id, "title": song.title, "kind": "song", "file": song.title,
+                "code": "unreadable", "error": format!("{error:#}")}));
+            return Ok(false);
         }
     }
     song.id = id.clone();
@@ -577,10 +591,11 @@ fn transfer_selected(to: &Library, folder: &Path, exclude: &HashSet<Category>) -
         let (old_id, mapping) = song_ids.get_key_value(&old_id).context("Missing song ID")?;
         let item = items[old_id.as_str()];
         if !mapping.imported {
+            let mut lost = Content::new();
             if prepare_song(&mut song, item, &song_ids, &source_media,
-                to.media_dir(), &staging, &omitted, &mut errors, false)? {
+                to.media_dir(), &staging, &omitted, &mut errors, false, &mut lost)? {
                 available.insert(old_id.as_str());
-                prepared.push(song);
+                prepared.push((song, lost));
             }
         } else if let Some((current, recorded)) = pending.get(&mapping.id) {
             let mut remaining = recorded.clone().unwrap_or_else(|| old_pending(current));
@@ -604,18 +619,18 @@ fn transfer_selected(to: &Library, folder: &Path, exclude: &HashSet<Category>) -
             }
             filter_files(&mut selected_item, &skip)?;
             if prepare_song(&mut song, &selected_item, &song_ids, &source_media,
-                to.media_dir(), &staging, &skip, &mut errors, true)? {
+                to.media_dir(), &staging, &skip, &mut errors, true, &mut Content::new())? {
                 backfills.push((song, chosen, remaining));
             }
         }
     }
     to.legacy_transaction(|tx|{
         let mut added=0;
-        for s in prepared {
+        for (s, lost) in prepared {
             if !claim(tx,&s.id)? {continue;}
             tx.execute("INSERT INTO songs(id,title,audio_path,caption,lyrics,metadata_json,generation_settings_json,engine_id,profile_id,replay_request_json,audio_codes_json,source,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 params![s.id,s.title,s.audio_path,s.caption,s.lyrics,s.metadata.to_string(),s.generation_settings.to_string(),s.engine_id,s.profile_id,s.replay_request.map(|v|v.to_string()),s.audio_codes.map(|v|v.to_string()),s.source,s.created_at,s.updated_at])?;
-            save_pending(tx, &s.id, &omitted)?;
+            save_pending(tx, &s.id, &omitted.union(&lost).copied().collect())?;
             added+=1;
         }
         let mut updated = 0;
@@ -842,12 +857,14 @@ mod tests {
             Category::Stems, Category::Karaoke, Category::Covers, Category::Takes,
         ]);
         let first = transfer_selected(&new, &source, &exclude)?;
-        assert_eq!(first["added"], 1);
+        // b comes over without the audio the old studio lost, and the list with it
+        assert_eq!(first["added"], 2);
         assert_eq!(first["already_imported"], 0);
-        assert_eq!(first["playlists_added"], 0);
-        assert_eq!(first["errors"][0]["file"], "b.wav");
-        assert_eq!(first["errors"][1]["code"], "playlist_incomplete");
-        let song = new.list_songs()?.remove(0);
+        assert_eq!(first["playlists_added"], 1);
+        assert_eq!(first["errors"], json!([{"song_id": "b", "title": "b", "kind": "audio", "file": "b.wav", "code": "missing"}]));
+        let songs = new.list_songs()?;
+        assert!(songs.iter().any(|song| song.title == "b" && song.audio_path.is_none()));
+        let song = songs.into_iter().find(|song| song.title == "a").unwrap();
         assert!(!new.media_dir().join(format!("{}-drums.wav", song.id)).exists());
         assert_eq!(song.lyrics, "source lyrics");
         for key in ["lrc", "cover_filename", "original_audio_path", "audio_versions", "active_version"] {
@@ -857,9 +874,11 @@ mod tests {
         new.rename_song(&song.id, "Edited in YuE2")?;
         fs::write(old.media_dir().join("b.wav"), b"second")?;
         let repaired = transfer_selected(&new, &source, &exclude)?;
-        assert_eq!(repaired["added"], 1);
-        assert_eq!(repaired["playlists_added"], 1);
+        assert_eq!(repaired["added"], 0);
+        assert_eq!(repaired["updated"], 1, "the audio that appeared fills b in");
+        assert_eq!(repaired["playlists_added"], 0);
         assert_eq!(repaired["errors"], json!([]));
+        assert!(new.list_songs()?.iter().all(|song| song.audio_path.is_some()));
         let playlist = new.list_playlists()?.remove(0);
         assert_eq!(playlist.song_ids[1], song.id);
         assert_eq!(playlist.preferred_song_id.as_deref(), Some(song.id.as_str()));
@@ -924,7 +943,7 @@ mod tests {
         let (_lock, staging) = lock_staging(new.media_dir())?;
         let mut errors = Vec::new();
         assert!(!prepare_song(&mut original, &song, &ids, old.media_dir(), new.media_dir(),
-            &staging, &HashSet::new(), &mut errors, false)?);
+            &staging, &HashSet::new(), &mut errors, false, &mut Content::new())?);
         assert_eq!(errors[0]["file"], "old.wav");
         assert_eq!(errors[0]["code"], "copy_failed");
         assert_eq!(fs::read(&target)?, b"user edit");
