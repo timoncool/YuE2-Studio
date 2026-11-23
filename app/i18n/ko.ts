@@ -1375,7 +1375,7 @@ export const ko = {
     audioEditorIntro: '선택한 곡이나 그 곡에서 나온 스템을 내장 파형 편집기로 엽니다. 자르기, 페이드, 노멀라이즈, 내보내기.',
     openTrackInEditor: '곡 열기',
     stemsHint: '이 컴퓨터에서 곡을 여섯 트랙 — 드럼, 베이스, 기타 소리, 보컬, 기타, 피아노 — 로 나눕니다. 3분짜리 곡이면 몇 분 걸립니다.',
-    stemsHintRoformer: 'Dub Studio의 분리기 Mel-Band RoFormer로 이 컴퓨터에서 트랙을 보컬과 반주로 나눕니다. 여섯 스템 분리보다 보컬이 깨끗합니다. 여섯 스템의 HT-Demucs는 ‘설정 → 모델 → 스템으로 나누기’에서 고릅니다.',
+    stemsHintRoformer: 'Dub Studio의 분리기 Mel-Band RoFormer로 이 컴퓨터에서 트랙을 보컬과 반주로 나눕니다. 여섯 스템 분리보다 보컬이 깨끗합니다.',
     changeProfileHint: '설정 → 모델에서 변경',
     stemsInstallModel: '모델 내려받기',
     stemsStart: '분리하기',

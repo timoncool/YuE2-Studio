@@ -1373,7 +1373,7 @@ export const ja = {
     audioEditorIntro: '選んだ曲、またはその任意のステムを内蔵の波形エディタで開きます。トリム、フェード、ノーマライズ、書き出し。',
     openTrackInEditor: '曲を開く',
     stemsHint: 'この端末で曲を六つのトラック——ドラム、ベース、その他、ボーカル、ギター、ピアノ——に分けます。3分の曲で数分かかります。',
-    stemsHintRoformer: 'Dub Studio の分離器 Mel-Band RoFormer で、このマシン上でトラックをボーカルとインストに分けます。6ステム分離よりボーカルがきれいです。6ステムの HT-Demucs は「設定 → モデル → ステムに分ける」で選びます。',
+    stemsHintRoformer: 'Dub Studio の分離器 Mel-Band RoFormer で、このマシン上でトラックをボーカルとインストに分けます。6ステム分離よりボーカルがきれいです。',
     changeProfileHint: '「設定 → モデル」で変更',
     stemsInstallModel: 'モデルをダウンロード',
     stemsStart: '分離する',

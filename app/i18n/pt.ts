@@ -1266,7 +1266,7 @@ export const pt = {
     audioEditorIntro: 'Abre o editor de forma de onda na faixa escolhida, ou numa das suas pistas — cortar, fade, normalizar, exportar.',
     openTrackInEditor: 'Abrir a faixa',
     stemsHint: 'Separa a faixa em seis partes — bateria, baixo, outros, voz, guitarra e piano — neste computador. Uma música de três minutos demora uns dois minutos.',
-    stemsHintRoformer: 'Separa uma faixa em voz e instrumental com o Mel-Band RoFormer, o separador do Dub Studio, neste computador: voz mais limpa do que na separação em seis pistas. O HT-Demucs, para seis pistas, escolhe-se em Definições - Modelos - Pistas.',
+    stemsHintRoformer: 'Separa uma faixa em voz e instrumental com o Mel-Band RoFormer, o separador do Dub Studio, neste computador: voz mais limpa do que na separação em seis pistas.',
     changeProfileHint: 'Mudar em Definições → Modelos',
     stemsInstallModel: 'Descarregar o modelo',
     stemsStart: 'Separar',

@@ -1375,7 +1375,7 @@ export const zh = {
     audioEditorIntro: '为所选曲目或其任意分轨打开内置波形编辑器——裁剪、淡入淡出、标准化、导出。',
     openTrackInEditor: '打开曲目',
     stemsHint: '在本机把曲目拆成六条轨道——鼓、贝斯、其他、人声、吉他和钢琴。三分钟的歌曲大约需要几分钟。',
-    stemsHintRoformer: '在本机用 Dub Studio 的分离器 Mel-Band RoFormer 把音轨分成人声和伴奏：人声比六轨分离更干净。六轨的 HT-Demucs 在“设置 → 模型 → 分离音轨”中选择。',
+    stemsHintRoformer: '在本机用 Dub Studio 的分离器 Mel-Band RoFormer 把音轨分成人声和伴奏：人声比六轨分离更干净。',
     changeProfileHint: '在「设置 → 模型」中更改',
     stemsInstallModel: '下载模型',
     stemsStart: '开始分轨',

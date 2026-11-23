@@ -1369,7 +1369,7 @@ export const en = {
     audioEditorIntro: 'Opens the built-in waveform editor on the chosen track, or on any stem it produced — trim, fade, normalise, export.',
     openTrackInEditor: 'Open the track',
     stemsHint: 'Splits the track into six parts — drums, bass, other, vocals, guitar and piano — on this machine. A three-minute song takes a couple of minutes.',
-    stemsHintRoformer: 'Splits a track into the vocals and the instrumental with Mel-Band RoFormer, Dub Studio’s separator, on this machine: cleaner vocals than the six-stem split. HT-Demucs, for six stems, is chosen in Settings - Models - Stems.',
+    stemsHintRoformer: 'Splits a track into the vocals and the instrumental with Mel-Band RoFormer, Dub Studio’s separator, on this machine: cleaner vocals than the six-stem split.',
     changeProfileHint: 'Change in Settings → Models',
     stemsInstallModel: 'Download the model',
     stemsStart: 'Separate',
