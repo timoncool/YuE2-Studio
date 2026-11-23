@@ -1598,6 +1598,8 @@ pub async fn serve_on_port(port: u16) -> anyhow::Result<()> {
     match studio_data_root() {
         Some(root) => {
             studio_log::log_to_file(&root);
+            let retired = root.clone();
+            std::thread::spawn(move || crate::components::sweep_retired(&retired));
             std::thread::spawn(move || install_record::sweep_aside(&root));
             std::thread::spawn(export::sweep);
             if let Some(root) = studio_data_root() {

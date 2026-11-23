@@ -516,6 +516,22 @@ pub(crate) async fn watch() {
     }
 }
 
+
+/// What 5.0.0's signed channel kept in the data folder: its metadata and the engine generations it installed. The
+/// catalogue's engines live elsewhere, so these only take space.
+pub(crate) fn sweep_retired(data_root: &std::path::Path) {
+    for folder in ["component-channel", "music-engines", "music-models", "music-model-objects"] {
+        let path = data_root.join(folder);
+        if !path.is_dir() {
+            continue;
+        }
+        match std::fs::remove_dir_all(&path) {
+            Ok(()) => crate::studio_log!("[components] removed {} of the 5.0.0 engine packages", path.display()),
+            Err(error) => crate::studio_log!("[ERROR] {} of the 5.0.0 engine packages was not removed: {error}", path.display()),
+        }
+    }
+}
+
 pub(crate) async fn status() -> axum::Json<State> {
     axum::Json(state())
 }
