@@ -117,8 +117,9 @@ export function LegacyLibraryPreview({ sources = [] }: { sources?: LegacySource[
     <h3 className="text-sm font-semibold">{t('legacyLibraryTitle')}</h3>
     {sources.length > 0 && <ul className="mt-2 space-y-1">{sources.map(source =>
       <li key={source.path}><button type="button" disabled={busy || copying} onClick={() => void chooseFolder(source.path, source.studio)}
-        className="max-w-full rounded-lg border border-zinc-300 px-3 py-2 text-left text-sm dark:border-white/20">
-        <strong>{source.studio}{source.version ? ` ${source.version}` : ''}</strong><span className="ml-2 break-all text-xs">{source.path}</span>
+        className={`flex w-full min-w-0 flex-col rounded-lg border px-3 py-2 text-left text-sm hover:border-pink-400 disabled:opacity-50 ${preview?.path === source.path ? 'border-pink-400 dark:border-pink-500/60' : 'border-zinc-300 dark:border-white/20'}`}>
+        <strong>{source.studio}{source.version ? ` ${source.version}` : ''}</strong>
+        <span className="truncate text-[11px] text-zinc-500 dark:text-zinc-400" title={source.path}>{source.path}</span>
       </button></li>)}</ul>}
     <SecondaryButton className="mt-2" disabled={busy || copying} onClick={() => void chooseFolder()}>
       {busy ? <Loader2 size={15} className="animate-spin" /> : <FolderOpen size={15} />}
@@ -126,10 +127,13 @@ export function LegacyLibraryPreview({ sources = [] }: { sources?: LegacySource[
     </SecondaryButton>
     {error && <p role="alert" className="mt-2 text-sm text-rose-600 dark:text-rose-300">{error}</p>}
     {preview && <div className="mt-3 space-y-2 text-sm">
-      <p role="status" className="break-all"><strong>{sourceName}</strong> · {preview.path} · {songCount(preview.songs.length)} · {t('playlists')} ({preview.playlists.length})</p>
-      <p className="text-xs">{exclude.length === 0 && t('legacyLibrarySize').replace('{size}', formatSize(preview.space.total_bytes)).replace('{required}', formatSize(preview.space.required_bytes))}
+      <p role="status"><strong>{sourceName}</strong> · {songCount(preview.songs.length)} · {t('playlists')} ({preview.playlists.length})
+        {!sources.some(source => source.path === preview.path) &&
+          <span className="block truncate text-[11px] text-zinc-500 dark:text-zinc-400" title={preview.path}>{preview.path}</span>}</p>
+      {exclude.length === 0 && preview.space.total_bytes > 0 && <p className="text-xs text-zinc-500 dark:text-zinc-400">
+        {t('legacyLibrarySize').replace('{size}', formatSize(preview.space.total_bytes)).replace('{required}', formatSize(preview.space.required_bytes))}
         {preview.space.available_bytes !== null && <> · {t('legacyLibraryFree').replace('{size}', formatSize(preview.space.available_bytes))}</>}
-      </p>
+      </p>}
       {exclude.length === 0 && preview.space.available_bytes !== null && preview.space.required_bytes > preview.space.available_bytes &&
         <p role="alert" className="text-amber-700 dark:text-amber-300">{t('legacyLibraryNoSpace')}</p>}
       <fieldset className="flex flex-wrap gap-x-4 gap-y-1" disabled={busy || copying}>
@@ -159,12 +163,14 @@ export function LegacyLibraryPreview({ sources = [] }: { sources?: LegacySource[
           </li>)}
         </ul>
       </div>}
-      <ul className="max-h-64 space-y-1 overflow-auto">
-        {preview.songs.map(song => <li key={song.id}><details>
-          <summary className="cursor-pointer">{song.title} · {t('legacyLibraryAvailable')} ({song.files.length})
-            {song.missing.length > 0 && <span className="ml-2 text-amber-700 dark:text-amber-300">{t('legacyLibraryMissing')} ({song.missing.length})</span>}
+      <ul className="max-h-64 divide-y divide-zinc-200 overflow-auto rounded-lg border border-zinc-200 dark:divide-white/10 dark:border-white/10">
+        {preview.songs.map(song => <li key={song.id}><details className="px-3 py-1.5">
+          <summary className="flex min-h-6 cursor-pointer items-center gap-2">
+            <span className="min-w-0 flex-1 truncate">{song.title}</span>
+            <span className="shrink-0 text-xs text-zinc-500 dark:text-zinc-400">{t('legacyLibraryAvailable')} {song.files.length}</span>
+            {song.missing.length > 0 && <span className="shrink-0 text-xs text-amber-700 dark:text-amber-300">{t('legacyLibraryMissing')} {song.missing.length}</span>}
           </summary>
-          <ul className="ml-5 break-all text-xs">
+          <ul className="ml-5 mt-1 break-all text-xs text-zinc-500 dark:text-zinc-400">
             {song.files.map(file => <li key={file.kind + file.name}>{file.name}</li>)}
             {song.missing.map(file => <li key={file.kind + file.name}>{t('legacyLibraryMissing')} · {file.name}</li>)}
           </ul>
