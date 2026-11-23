@@ -287,7 +287,7 @@ export const ProcessingModal: React.FC<ProcessingModalProps> = ({ song, onClose,
     if (naturalizeOn) parts.push(`${t('processNaturalize')} ${naturalizeAmount.toFixed(2)}`);
     if (vstOn && vstReady) parts.push(`VST (${vstChain.filter(slot => slot.enabled).map(slot => slot.name).join(', ')})`);
     if (masterOn) parts.push(referenceTitle ? `${t('processStage_master')} · ${referenceTitle}` : t('processStage_master'));
-    if (normalizeOn) parts.push(`${t('processStage_normalize')} ${peakClip}`);
+    if (normalizeOn) parts.push(`${t('processStage_normalize')} (${t('peakClipLabel').toLowerCase()} ${peakClip})`);
     // a processed version processed again carries its whole chain
     const earlier = activeVersionLabel(song);
     return [earlier, parts.join(' + ')].filter(Boolean).join(' → ');
