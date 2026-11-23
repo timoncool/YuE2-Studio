@@ -41,7 +41,7 @@ export function CatalogCard({ title, meta, badges, description, note, footer, pa
   children?: React.ReactNode;
 }) {
   return (
-    <section className={`${CARD} flex flex-col ${selected ? 'border-pink-400 dark:border-pink-500/60' : ''}`}>
+    <section className={`${CARD} flex w-full min-w-0 flex-col ${selected ? 'border-pink-400 dark:border-pink-500/60' : ''}`}>
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <p className="truncate text-sm font-semibold text-zinc-900 dark:text-white">{title}</p>

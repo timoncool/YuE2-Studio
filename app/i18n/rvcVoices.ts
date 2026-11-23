@@ -16,7 +16,7 @@ export const rvcVoiceStrings = {
     verifying: 'Verifying and saving the voice…',
     installDone: 'Installed {voice}',
     installFailed: 'Installation failed.',
-    styles: { general: 'Universal', low: 'Low', power: 'Powerful', high: 'High', drive: 'Drive', clean: 'Clean', growl: 'Growl', choir: 'Choir', electro: 'Electronic', live: 'Live' } as Record<string, string>, curated: 'Voice catalogue', loading: 'Loading voices…', empty: 'No catalog voices are available.', licenseUnknown: 'License unspecified', install: 'Install', installing: 'Installing…', selectInstalled: 'Select', showMore: 'Show more', resultCount: 'Showing {visible} of {total} voices',
+    styles: { general: 'Universal', low: 'Low', power: 'Powerful', high: 'High', drive: 'Drive', clean: 'Clean', growl: 'Growl', choir: 'Choir', electro: 'Electronic', live: 'Live' } as Record<string, string>, curated: 'Voice catalogue', loading: 'Loading voices…', empty: 'No catalog voices are available.', licenseUnknown: 'License unspecified', epochs: '{n} training epochs', khz: 'kHz', license: 'License', install: 'Install', installing: 'Installing…', selectInstalled: 'Select', showMore: 'Show more', resultCount: 'Showing {visible} of {total} voices',
     search: 'Search voices', vocalStyle: 'Vocal style', rvcVersion: 'RVC version', sampleRate: 'Sample rate', retrieval: 'Retrieval index', withIndex: 'With index', withoutIndex: 'Without index', all: 'All', clear: 'Clear filters', noMatch: 'No voices match these filters.',
   },
   ru: {
@@ -36,7 +36,7 @@ export const rvcVoiceStrings = {
     verifying: 'Проверяем и сохраняем голос…',
     installDone: 'Установлен голос {voice}',
     installFailed: 'Не удалось установить голос.',
-    styles: { general: 'Универсальный', low: 'Низкий', power: 'Мощный', high: 'Высокий', drive: 'С перегрузом', clean: 'Чистый', growl: 'Гроул', choir: 'Хор', electro: 'Электронный', live: 'Живой' } as Record<string, string>, curated: 'Каталог голосов', loading: 'Загружаем голоса…', empty: 'В подборке нет голосов.', licenseUnknown: 'Лицензия не указана', install: 'Установить', installing: 'Устанавливаем…', selectInstalled: 'Выбрать', showMore: 'Показать ещё', resultCount: 'Показано {visible} из {total} голосов',
+    styles: { general: 'Универсальный', low: 'Низкий', power: 'Мощный', high: 'Высокий', drive: 'С перегрузом', clean: 'Чистый', growl: 'Гроул', choir: 'Хор', electro: 'Электронный', live: 'Живой' } as Record<string, string>, curated: 'Каталог голосов', loading: 'Загружаем голоса…', empty: 'В подборке нет голосов.', licenseUnknown: 'Лицензия не указана', epochs: '{n} эпох обучения', khz: 'кГц', license: 'Лицензия', install: 'Установить', installing: 'Устанавливаем…', selectInstalled: 'Выбрать', showMore: 'Показать ещё', resultCount: 'Показано {visible} из {total} голосов',
     search: 'Поиск голосов', vocalStyle: 'Стиль вокала', rvcVersion: 'Версия RVC', sampleRate: 'Частота дискретизации', retrieval: 'Поисковый индекс', withIndex: 'С индексом', withoutIndex: 'Без индекса', all: 'Все', clear: 'Сбросить фильтры', noMatch: 'Нет голосов по этим фильтрам.',
   },
   zh: {
@@ -56,7 +56,7 @@ export const rvcVoiceStrings = {
     verifying: '正在验证并保存声音…',
     installDone: '已安装 {voice}',
     installFailed: '安装失败。',
-    styles: { general: '通用', low: '低音', power: '有力', high: '高音', drive: '失真', clean: '清亮', growl: '嘶吼', choir: '合唱', electro: '电子', live: '现场' } as Record<string, string>, curated: '声音目录', loading: '正在加载声音…', empty: '暂无目录声音。', licenseUnknown: '未注明许可证', install: '安装', installing: '正在安装…', selectInstalled: '选择', showMore: '显示更多', resultCount: '显示 {visible} 个声音，共 {total} 个',
+    styles: { general: '通用', low: '低音', power: '有力', high: '高音', drive: '失真', clean: '清亮', growl: '嘶吼', choir: '合唱', electro: '电子', live: '现场' } as Record<string, string>, curated: '声音目录', loading: '正在加载声音…', empty: '暂无目录声音。', licenseUnknown: '未注明许可证', epochs: '训练 {n} 轮', khz: 'kHz', license: '许可证', install: '安装', installing: '正在安装…', selectInstalled: '选择', showMore: '显示更多', resultCount: '显示 {visible} 个声音，共 {total} 个',
     search: '搜索声音', vocalStyle: '演唱风格', rvcVersion: 'RVC 版本', sampleRate: '采样率', retrieval: '检索索引', withIndex: '有索引', withoutIndex: '无索引', all: '全部', clear: '清除筛选', noMatch: '没有符合筛选条件的声音。',
   },
   ja: {
@@ -76,7 +76,7 @@ export const rvcVoiceStrings = {
     verifying: '音声を検証して保存中…',
     installDone: '{voice} をインストールしました',
     installFailed: 'インストールに失敗しました。',
-    styles: { general: '汎用', low: '低音', power: 'パワフル', high: '高音', drive: 'ドライブ', clean: 'クリーン', growl: 'グロウル', choir: '合唱', electro: 'エレクトロ', live: 'ライブ' } as Record<string, string>, curated: '声のカタログ', loading: '音声を読み込み中…', empty: '利用できる音声がありません。', licenseUnknown: 'ライセンス未記載', install: 'インストール', installing: 'インストール中…', selectInstalled: '選択', showMore: 'もっと表示', resultCount: '{total} 件中 {visible} 件を表示',
+    styles: { general: '汎用', low: '低音', power: 'パワフル', high: '高音', drive: 'ドライブ', clean: 'クリーン', growl: 'グロウル', choir: '合唱', electro: 'エレクトロ', live: 'ライブ' } as Record<string, string>, curated: '声のカタログ', loading: '音声を読み込み中…', empty: '利用できる音声がありません。', licenseUnknown: 'ライセンス未記載', epochs: '学習 {n} エポック', khz: 'kHz', license: 'ライセンス', install: 'インストール', installing: 'インストール中…', selectInstalled: '選択', showMore: 'もっと表示', resultCount: '{total} 件中 {visible} 件を表示',
     search: '音声を検索', vocalStyle: '歌唱スタイル', rvcVersion: 'RVC バージョン', sampleRate: 'サンプルレート', retrieval: '検索インデックス', withIndex: 'インデックスあり', withoutIndex: 'インデックスなし', all: 'すべて', clear: '絞り込みを解除', noMatch: '条件に一致する音声がありません。',
   },
   ko: {
@@ -96,7 +96,7 @@ export const rvcVoiceStrings = {
     verifying: '음성을 검증하고 저장하는 중…',
     installDone: '{voice} 설치됨',
     installFailed: '설치하지 못했습니다.',
-    styles: { general: '범용', low: '저음', power: '파워풀', high: '고음', drive: '드라이브', clean: '클린', growl: '그로울', choir: '합창', electro: '일렉트로', live: '라이브' } as Record<string, string>, curated: '목소리 카탈로그', loading: '음성을 불러오는 중…', empty: '카탈로그에 음성이 없습니다.', licenseUnknown: '라이선스 미표기', install: '설치', installing: '설치 중…', selectInstalled: '선택', showMore: '더 보기', resultCount: '음성 {total}개 중 {visible}개 표시',
+    styles: { general: '범용', low: '저음', power: '파워풀', high: '고음', drive: '드라이브', clean: '클린', growl: '그로울', choir: '합창', electro: '일렉트로', live: '라이브' } as Record<string, string>, curated: '목소리 카탈로그', loading: '음성을 불러오는 중…', empty: '카탈로그에 음성이 없습니다.', licenseUnknown: '라이선스 미표기', epochs: '학습 {n} 에포크', khz: 'kHz', license: '라이선스', install: '설치', installing: '설치 중…', selectInstalled: '선택', showMore: '더 보기', resultCount: '음성 {total}개 중 {visible}개 표시',
     search: '음성 검색', vocalStyle: '보컬 스타일', rvcVersion: 'RVC 버전', sampleRate: '샘플레이트', retrieval: '검색 인덱스', withIndex: '인덱스 있음', withoutIndex: '인덱스 없음', all: '전체', clear: '필터 초기화', noMatch: '필터에 맞는 음성이 없습니다.',
   },
   pt: {
@@ -116,7 +116,7 @@ export const rvcVoiceStrings = {
     verifying: 'Verificando e salvando a voz…',
     installDone: '{voice} instalada',
     installFailed: 'Falha na instalação.',
-    styles: { general: 'Universal', low: 'Grave', power: 'Potente', high: 'Aguda', drive: 'Drive', clean: 'Limpa', growl: 'Gutural', choir: 'Coral', electro: 'Eletrônica', live: 'Ao vivo' } as Record<string, string>, curated: 'Catálogo de vozes', loading: 'Carregando vozes…', empty: 'Nenhuma voz disponível no catálogo.', licenseUnknown: 'Licença não informada', install: 'Instalar', installing: 'Instalando…', selectInstalled: 'Selecionar', showMore: 'Mostrar mais', resultCount: 'Mostrando {visible} de {total} vozes',
+    styles: { general: 'Universal', low: 'Grave', power: 'Potente', high: 'Aguda', drive: 'Drive', clean: 'Limpa', growl: 'Gutural', choir: 'Coral', electro: 'Eletrônica', live: 'Ao vivo' } as Record<string, string>, curated: 'Catálogo de vozes', loading: 'Carregando vozes…', empty: 'Nenhuma voz disponível no catálogo.', licenseUnknown: 'Licença não informada', epochs: '{n} épocas de treino', khz: 'kHz', license: 'Licença', install: 'Instalar', installing: 'Instalando…', selectInstalled: 'Selecionar', showMore: 'Mostrar mais', resultCount: 'Mostrando {visible} de {total} vozes',
     search: 'Buscar vozes', vocalStyle: 'Estilo vocal', rvcVersion: 'Versão do RVC', sampleRate: 'Taxa de amostragem', retrieval: 'Índice de busca', withIndex: 'Com índice', withoutIndex: 'Sem índice', all: 'Todas', clear: 'Limpar filtros', noMatch: 'Nenhuma voz corresponde a estes filtros.',
   },
 };

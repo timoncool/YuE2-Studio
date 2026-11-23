@@ -30,6 +30,7 @@ interface CatalogVoice {
     vocal_style?: string | null;
     rvc_version?: string | number | null;
     sample_rate_hz?: number | null;
+    training_epochs?: number | null;
   } | null;
 }
 
@@ -213,7 +214,12 @@ export function RvcCuratedVoices({ onInstalled, onChoose, disabled, installedIds
                     title={voice.name}
                     meta={<span>{voice.source_repo}</span>}
                     badges={voice.metadata?.vocal_style ? <CatalogBadge>{labels.styles[voice.metadata.vocal_style] ?? voice.metadata.vocal_style}</CatalogBadge> : undefined}
-                    description={voice.license ?? labels.licenseUnknown}
+                    description={[
+                      voice.metadata?.rvc_version ? `RVC ${voice.metadata.rvc_version}` : null,
+                      voice.metadata?.sample_rate_hz ? `${voice.metadata.sample_rate_hz / 1000} ${labels.khz}` : null,
+                      voice.metadata?.training_epochs ? labels.epochs.replace('{n}', voice.metadata.training_epochs.toLocaleString(language)) : null,
+                    ].filter(Boolean).join(' · ') || undefined}
+                    note={<p className="mt-1 line-clamp-1 text-[11px] text-zinc-500 dark:text-zinc-400" title={voice.license ?? undefined}>{voice.license ? `${labels.license}: ${voice.license}` : labels.licenseUnknown}</p>}
                     page={voice.source_url} pageLabel={voice.source_repo} onOpenPage={openExternal}
                     footer={voice.sample_audio_url && (playingSample === voice.id && !sampleError
                       ? <SourceDemo key={voice.id} url={apiUrl(voice.sample_audio_url)} name={voice.name} onError={() => setSampleError(true)} />

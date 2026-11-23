@@ -18,7 +18,7 @@ it('can retry a failed runtime status check without starting another download', 
     expect(host.querySelector('button')?.textContent).toBe('Retry checking components');
     await act(async () => host.querySelector('button')!.click());
     expect(host.querySelector('[role=alert]')).toBeNull();
-    expect(host.querySelector('button')?.textContent).toContain('Install vocal-fast-rs');
+    expect(host.querySelector('button')?.textContent).toContain('Install RVC');
     expect(fetch.mock.calls.map(([, init]) => init?.method ?? 'GET')).toEqual(['GET', 'GET']);
   } finally {
     act(() => root.unmount());
