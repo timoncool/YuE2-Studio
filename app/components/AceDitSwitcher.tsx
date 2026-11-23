@@ -138,7 +138,7 @@ export function AceDitSwitcher({ value, setDit, onChange }: {
         <ChevronDown size={14} className={`shrink-0 text-zinc-400 transition-transform ${open ? 'rotate-180' : ''}`} />
       </button>
       {open && (
-        <div className="absolute left-0 right-0 top-full z-30 mt-1 max-h-[60vh] overflow-y-auto rounded-xl border border-zinc-200 bg-white p-2 shadow-2xl dark:border-white/10 dark:bg-zinc-900">
+        <div className="mt-1 max-h-[60vh] overflow-y-auto rounded-xl border border-zinc-200 bg-white p-2 dark:border-white/10 dark:bg-zinc-900">
           <p className="px-2 pb-1 text-[11px] text-zinc-500">
             <Check size={10} className="inline" /> {tt('aceInstalledLegend')} · <Download size={10} className="inline" /> {tt('aceDownloadLegend')}
           </p>
