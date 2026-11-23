@@ -6675,7 +6675,8 @@ fn engine_failure_code(error: &str) -> String {
 
 /// The marker in an engine's startup error, the hub's name for that kind of failure and the code the window
 /// translates into words and an action.
-const ENGINE_FAILURES: [(&str, &str, &str); 9] = [
+const ENGINE_FAILURES: [(&str, &str, &str); 10] = [
+    ("Install the missing libraries for this YuE2 device", "runtime libraries missing", "yue2_runtime_missing"),
     ("did not pass GET /health", "no answer before the startup timeout", "engine_no_answer"),
     ("CUDA backend", "CUDA backend missing", "cuda_backend_missing"),
     ("runtime libraries could not be installed", "runtime libraries not installed", "runtime_libraries_failed"),

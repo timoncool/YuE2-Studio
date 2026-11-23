@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { ChevronDown } from "lucide-react";
 
 export type ComboOption = { value: string; label: string; search?: string; group?: string; disabled?: boolean; hint?: string };
 
@@ -81,7 +82,8 @@ export default function Combobox({ value, options, onChange, label, placeholder,
             if (pick) { commit(pick.value); (e.target as HTMLInputElement).blur(); }
           } else if (e.key === "Escape" && open) { e.stopPropagation(); close(); (e.target as HTMLInputElement).blur(); }
         }}
-        className={inputClassName ?? "w-full text-[var(--color-text)] bg-[var(--color-surface-2)] border border-[var(--color-border)] rounded-lg px-2 py-1.5 text-[12px] focus:border-[var(--color-accent)] focus:outline-none"} />
+        className={`${inputClassName ?? "w-full text-[var(--color-text)] bg-[var(--color-surface-2)] border border-[var(--color-border)] rounded-lg px-2 py-1.5 text-[12px] focus:border-[var(--color-accent)] focus:outline-none"} pr-7`} />
+      <ChevronDown size={14} aria-hidden className={`pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-[var(--color-muted)] transition-transform ${open ? "rotate-180" : ""}`} />
       {open && place && createPortal(
         <div ref={listBox} id={list} role="listbox" aria-label={label}
           style={{ left: place.left, top: place.top, bottom: place.bottom, width: Math.max(place.width, 200), maxHeight: place.height }}

@@ -46,6 +46,7 @@ export function Hint({ text }: { text: string }) {
     <>
       <span ref={anchor} tabIndex={0} role="button" aria-label={text} aria-describedby={open ? id : undefined} {...events}
         onClick={(e) => { e.preventDefault(); e.stopPropagation(); setOpen((v) => !v); }}
+        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setOpen((v) => !v); } }}
         className={`relative cursor-help inline-flex align-middle rounded-full transition after:absolute after:-inset-1.5 after:content-[''] hover:opacity-100 hover:text-[var(--color-accent-2)] focus-visible:opacity-100 focus-visible:outline focus-visible:outline-1 focus-visible:outline-[var(--color-accent)] ${open ? 'opacity-100 text-[var(--color-accent-2)]' : 'opacity-40 text-[var(--color-muted)]'}`}>
         <HelpCircle size={12} />
       </span>

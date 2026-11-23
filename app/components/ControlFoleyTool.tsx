@@ -83,7 +83,10 @@ export function ControlFoleyTool({ card, control, busy, onGenerate }: {
   return <section className={card} aria-label={text.heading}>
     <h2 className="flex items-center gap-2 text-sm font-semibold"><Clapperboard size={16} className="text-pink-500" aria-hidden />{text.heading}</h2>
     <p className="mt-1 text-xs leading-5 text-zinc-600 dark:text-zinc-300">{text.description}</p>
-    {model.isError && <p role="alert" className="mt-2 text-xs">{modelText.error}</p>}
+    {model.isError && <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
+      <p role="alert">{modelText.error}</p>
+      <SecondaryButton onClick={() => void model.refetch()}>{common.refresh}</SecondaryButton>
+    </div>}
     {model.isPending && <p role="status" className="mt-2 text-xs">{modelText.loading}</p>}
     {status && <div className="mt-2 space-y-2 text-xs">
       {status.missing.includes('FFmpeg') && <p role="status">{text.ffmpeg}</p>}
@@ -102,7 +105,7 @@ export function ControlFoleyTool({ card, control, busy, onGenerate }: {
           {source && <span className="min-w-0 truncate text-zinc-600 dark:text-zinc-300" title={source.name}>{source.name}</span>}
         </div>
         <input ref={fileInput} type="file" className="hidden" accept=".mp4,.mov,.webm,.mkv" aria-label={text.source}
-          onChange={event => setSource(event.target.files?.[0])} />
+          onChange={event => { setSource(event.target.files?.[0]); event.target.value = ''; }} />
       </div>
       <label className="grid gap-1">
         <span>{text.prompt}</span>

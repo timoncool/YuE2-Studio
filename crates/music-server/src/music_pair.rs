@@ -550,6 +550,7 @@ mod tests {
             ("the local engine runtime was not found: yue-server.exe was not found below D:\\x", "engine_runtime_missing"),
             ("the local engine runtime was not found: the engine's CUDA backend C:\\x\\ggml-cuda.dll is missing", "cuda_backend_missing"),
             ("yue-server exited during startup with status exit code: 3", "engine_exited"),
+            ("Install the missing libraries for this YuE2 device first.", "yue2_runtime_missing"),
             ("Select an OpenRouter music model.", "openrouter_model_missing"),
             ("Configure the OpenRouter API key.", "openrouter_key_missing"),
             ("Unknown ACE-Step profile", "unknown_model"),

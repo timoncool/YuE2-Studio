@@ -2152,6 +2152,8 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
                       ? [{ value: modelChoice, label: 'audio.cpp', group: musicStrings.groupLocal }] : []),
                     { value: 'openrouter', label: 'OpenRouter', group: musicStrings.groupCloud },
                     ...musicModels.map(model => ({ value: `cloud:${model.id}`, label: model.name || model.id, group: musicStrings.groupCloud })),
+                    ...(modelChoice.startsWith('cloud:') && !musicModels.some(model => `cloud:${model.id}` === modelChoice)
+                      ? [{ value: modelChoice, label: modelChoice.slice('cloud:'.length), group: musicStrings.groupCloud }] : []),
                   ]} />
               </div>
               {linkedFamily && linkedFamily.pairs.length > 1 && (
