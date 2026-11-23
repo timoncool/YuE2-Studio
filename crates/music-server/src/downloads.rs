@@ -981,10 +981,13 @@ async fn fetch_absent(
     fetch_mirrors(http, asset, target, progress, cancel, sources(asset.url)).await
 }
 
-/// Where a pinned file is fetched from, in order: its address, then the mirrors the component catalogue lists.
+/// Where a pinned file is fetched from, in order: its address, the mirrors the component catalogue lists, and for a
+/// Hugging Face file HF-Mirror, which a network that cannot reach Hugging Face often can. Every source is checked
+/// against the pin, so a mirror cannot change the file.
 fn sources(url: &str) -> Vec<String> {
     let mut sources = vec![crate::net::model_url(url)];
-    for mirror in crate::components::mirrors(url) {
+    let mirrors = crate::components::mirrors(url).into_iter().chain(Some(crate::net::mirror_url(url)));
+    for mirror in mirrors {
         let mirror = crate::net::model_url(&mirror);
         if !sources.contains(&mirror) {
             sources.push(mirror);
