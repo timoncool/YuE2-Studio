@@ -990,8 +990,9 @@ async fn fetch_absent(
         None
     };
     let mut candidates = unless_cancelled(&cancel, async { Ok(mirror_sources(http, digest).await) }).await?;
-    if let Some(mirror) = crate::engine_runtime::archive_mirror(asset.url) {
-        if !candidates.iter().any(|url| url == mirror) { candidates.push(mirror.to_owned()); }
+    for mirror in crate::components::mirrors(asset.url) {
+        let mirror = crate::net::model_url(&mirror);
+        if !candidates.contains(&mirror) { candidates.push(mirror); }
     }
     if let Some(error) = primary_failure {
         candidates.retain(|candidate| candidate != &url);

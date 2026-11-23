@@ -12,16 +12,10 @@ const PINNED: &[(&str, &str)] = &[
     (crate::audio_cpp_soulx::SVC_URL, crate::audio_cpp_soulx::SVC_SHA),
     (crate::acpp::SOXR_URL, "1c2177da4871f1713b666f576f83be649980b66d783723d9572a0ffffe67fe26"),
     ("https://huggingface.co/audio-cpp/audio.cpp-gguf/resolve/32c1ce1fea57a513eb9386aa62408d47b1cf7ab2/RVC-GGUF/rvc-f16.gguf", "09bd8f233e7ae82697826513c94d754c3904e58e30ad503b83437defccf99a72"),
-    ("https://developer.download.nvidia.com/compute/cuda/redist/libcublas/windows-x86_64/libcublas-windows-x86_64-12.9.1.4-archive.zip", "d534d98b0b453a98914dbf3adf47d7e84b55037abf02f87466439e1dcef581ed"),
-    ("https://developer.download.nvidia.com/compute/cuda/redist/libcublas/windows-x86_64/libcublas-windows-x86_64-13.5.1.27-archive.zip", "c946e1c825e05895747a95ed4fee18030b08052c09783b9b7b19818fd2e31f58"),
     ("https://developer.download.nvidia.com/compute/cuda/redist/libcufft/windows-x86_64/libcufft-windows-x86_64-12.4.0.43-archive.zip", "69d0ad8dc3a1be66f01a748a8206d0ceaafa56939474663fbe790dc3e91d2009"),
     ("https://files.pythonhosted.org/packages/20/e2/fc9a0e985249d873150276d5afb02e39a66817fedbf1a385724393e505ed/nvidia_cublas_cu12-12.9.2.10-py3-none-win_amd64.whl", "623f43027d40d44ceadf0043f002bd25cf353e8f13ce90b9a87057019f560661"),
-    ("https://files.pythonhosted.org/packages/7a/38/bdd540bf511d2c9b6f9efc71a81c60cb88e295be0b9312b61d19bbed2212/nvidia_cublas-13.8.0.4-py3-none-manylinux_2_27_x86_64.whl", "9f17797dfcc048694461f4e47de17d2e3c25adf172ef723d2db0a07cd8744b89"),
     ("https://files.pythonhosted.org/packages/76/bf/3fea3d1c6262bded26ae00e3106432d63235954965d7785f5051ac146651/nvidia_cufft-12.4.0.43-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl", "0e8385013596b112d29c9ce8c63dc575b308d77636c7169104e18714f03961a8"),
     ("https://files.pythonhosted.org/packages/95/f4/61e6996dd20481ee834f57a8e9dca28b1869366a135e0d42e2aa8493bdd4/nvidia_cufft_cu12-11.4.1.4-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl", "c67884f2a7d276b4b80eb56a79322a95df592ae5e765cf1243693365ccab4e28"),
-    ("https://files.pythonhosted.org/packages/98/8a/3431271f6344874b8f1ac03f16b3d679c91493f8da63f716160403e6d0a0/nvidia_cuda_runtime-13.4.92-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl", "9641f797da20ce1dd8e779b6e96d08cf9ba564cec8e8225458811ee26423f3a5"),
-    ("https://files.pythonhosted.org/packages/bc/46/a92db19b8309581092a3add7e6fceb4c301a3fd233969856a8cbf042cd3c/nvidia_cuda_runtime_cu12-12.9.79-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl", "25bba2dfb01d48a9b59ca474a1ac43c6ebf7011f1b0b8cc44f54eb6ac48a96c3"),
-    ("https://files.pythonhosted.org/packages/cb/c0/0a517bfe63ccd3b92eb254d264e28fca3c7cab75d07daea315250fb1bf73/nvidia_cublas_cu12-12.9.2.10-py3-none-manylinux_2_27_x86_64.whl", "e4f53a8ca8c5d6e8c492d0d0a3d565ecb59a751b19cfdaa4f6da0ab2104c1702"),
     ("https://github.com/timoncool/BSRoformer.cpp/releases/download/studio-0.1.1/BSRoformer-linux-cuda13-x64.tar.gz", "807f59113f17eb706bc7289155bdf507d05ae01650a5c2ccd9685f5574e9cd04"),
     ("https://github.com/timoncool/BSRoformer.cpp/releases/download/studio-0.1.1/BSRoformer-linux-cpu-x64.tar.gz", "65eb3cf26dfed0a23f01906a9f179ae7ab503f2bdac4f411e49ec902a5addafd"),
     ("https://github.com/chenmozhijin/BSRoformer.cpp/releases/download/v0.1.0/BSRoformer-macos-arm64.tar.xz", "d0fc45181d31dcceea99c3828378f4a7376e52e7fdbc43e29a07e806785b4c9a"),
@@ -170,26 +164,22 @@ const PICKED: &[(&str, &str, &str)] = &[
     ("https://files.pythonhosted.org/packages/20/ee/29955203338515b940bd4f60ffdbc073428f25ef9bfbce44c9a066aedc5c/nvidia_cufft_cu12-11.4.1.4-py3-none-win_amd64.whl", "cufft64_11.dll", "5b90655ca9cdf5d91cbdf2c72b995ec937eed0aef2d6954370c711b45c929b35"),
     ("https://files.pythonhosted.org/packages/20/e2/fc9a0e985249d873150276d5afb02e39a66817fedbf1a385724393e505ed/nvidia_cublas_cu12-12.9.2.10-py3-none-win_amd64.whl", "cublas64_12.dll", "52ce5ba0ec5327d39be6021f0f9362d2ed4d64d7206f9b5afc06398d827b8e82"),
     ("https://files.pythonhosted.org/packages/20/e2/fc9a0e985249d873150276d5afb02e39a66817fedbf1a385724393e505ed/nvidia_cublas_cu12-12.9.2.10-py3-none-win_amd64.whl", "cublasLt64_12.dll", "71705a7cf0923f4ab034d0d2620bbfc989ff669ac3d79f868b7a7c597ca559c5"),
-    ("https://files.pythonhosted.org/packages/cb/c0/0a517bfe63ccd3b92eb254d264e28fca3c7cab75d07daea315250fb1bf73/nvidia_cublas_cu12-12.9.2.10-py3-none-manylinux_2_27_x86_64.whl", "libcublas.so.12", "5757ab5839fb4f203ca47ecb336110d10f4a5606b1e097f195fbca89774569e2"),
-    ("https://files.pythonhosted.org/packages/cb/c0/0a517bfe63ccd3b92eb254d264e28fca3c7cab75d07daea315250fb1bf73/nvidia_cublas_cu12-12.9.2.10-py3-none-manylinux_2_27_x86_64.whl", "libcublasLt.so.12", "2c9006a75c74b3bea2dc7ae2ec38ab038b0e45ea02cb4b717a915e8a5796acb1"),
 ];
 
 /// The SHA-256 of the file `name` a pick takes out of the package at `url`, when the package lists it.
 pub fn picked(url: &str, name: &str) -> Option<&'static str> {
+    if let Some(list) = crate::components::contents(url) {
+        return list.iter().find(|(file, _)| *file == name).map(|(_, sha256)| *sha256);
+    }
     PICKED.iter().find(|(package, file, _)| *package == url && *file == name).map(|(_, _, sha256)| *sha256)
 }
 
 /// Libraries required to run a fully unpacked archive without downloading it again.
 pub(crate) fn runtime_libraries(url: &str) -> &'static [(&'static str, &'static str)] {
+    if let Some(list) = crate::components::contents(url) {
+        return list;
+    }
     match url {
-        "https://developer.download.nvidia.com/compute/cuda/redist/libcublas/windows-x86_64/libcublas-windows-x86_64-12.9.1.4-archive.zip" => &[
-            ("cublas64_12.dll", "90052a83efd1b57a8e3616a6590b335855f81b814a4f16eecb7b5bf6d1b1d4eb"),
-            ("cublasLt64_12.dll", "c3a05ea244c937314afec09f87b91f814c7e27977681f6c67eb51bb06ced3a4a"),
-        ],
-        "https://developer.download.nvidia.com/compute/cuda/redist/libcublas/windows-x86_64/libcublas-windows-x86_64-13.5.1.27-archive.zip" => &[
-            ("cublas64_13.dll", "f1d500d0cd892f5b8c6b6cdbffd82d0c55d5f5427215668e7ceb55aeeccc1b63"),
-            ("cublasLt64_13.dll", "b592cd016d7673e9cb97716a22b27c4010ee635377a3ba28f37070a9bdb76a68"),
-        ],
         "https://github.com/timoncool/onnxruntime/releases/download/v1.32.0/onnxruntime-win-x64-1.32.0.zip" => &[
             ("onnxruntime.dll", "348c3d29d6995eee37e3451825eaddb7ea7400be3afda6ca2286b12bc775f042"),
             ("onnxruntime_providers_shared.dll", "6caf57ac07c9cf72fb4e73c5bb0fe156f02dd60bbbd7385530c9a5654f10f950"),
@@ -289,7 +279,7 @@ mod tests {
 
     #[test]
     fn every_picked_hash_is_of_a_file_a_download_picks() {
-        let downloads: Vec<&crate::downloads::Asset> = crate::lyrics_sync::ASSETS.iter().chain(crate::engine_runtime::ASSETS).collect();
+        let downloads: Vec<&crate::downloads::Asset> = crate::lyrics_sync::ASSETS.iter().chain(crate::engine_runtime::assets()).collect();
         for (url, name, sha256) in PICKED {
             assert_eq!(sha256.len(), 64, "{name}");
             if let Some(asset) = downloads.iter().find(|asset| asset.url == *url) {
@@ -320,7 +310,7 @@ mod tests {
     fn every_download_names_the_sha256_of_its_pin() {
         let mut urls: Vec<&str> = Vec::new();
         urls.extend(crate::lyrics_sync::ASSETS.iter().map(|asset| asset.url));
-        urls.extend(crate::engine_runtime::ASSETS.iter().map(|asset| asset.url));
+        urls.extend(crate::engine_runtime::assets().iter().map(|asset| asset.url));
         urls.extend(crate::assistant_runtime::ASSETS.iter().map(|asset| asset.url));
         urls.extend([crate::separation::MODEL.url, crate::separation::ROFORMER_MODEL.url]);
         urls.extend(crate::separation::RoformerBuild::ALL.into_iter().filter_map(crate::separation::roformer_asset).map(|asset| asset.url));
@@ -339,7 +329,7 @@ mod tests {
         let mut urls: Vec<&str> = Vec::new();
         urls.extend(crate::lyrics_sync::ASSETS.iter().map(|asset| asset.url));
         urls.extend(crate::acpp::BUILDS.into_iter().flat_map(crate::acpp::assets).map(|asset| asset.url));
-        urls.extend(crate::engine_runtime::ASSETS.iter().map(|asset| asset.url));
+        urls.extend(crate::engine_runtime::assets().iter().map(|asset| asset.url));
         urls.extend(crate::assistant_runtime::ASSETS.iter().map(|asset| asset.url));
         urls.extend([crate::separation::MODEL.url, crate::separation::ROFORMER_MODEL.url]);
         urls.extend(crate::separation::RoformerBuild::ALL.into_iter().filter_map(crate::separation::roformer_asset).map(|asset| asset.url));

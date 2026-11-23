@@ -1,0 +1,101 @@
+{
+  "files": {
+    "engine-cuda-cublas": {
+      "label": "NVIDIA cuBLAS 13.5",
+      "kind": "runtime",
+      "url": "https://developer.download.nvidia.com/compute/cuda/redist/libcublas/windows-x86_64/libcublas-windows-x86_64-13.5.1.27-archive.zip",
+      "bytes": 391055517,
+      "sha256": "c946e1c825e05895747a95ed4fee18030b08052c09783b9b7b19818fd2e31f58",
+      "path": "cuda-cublas.zip",
+      "marker": "cublasLt64_13.dll",
+      "pick": [
+        "cublas64_13.dll",
+        "cublasLt64_13.dll"
+      ],
+      "note": "The linear algebra the engine's CUDA backend is linked against. Without it the engine cannot start at all.",
+      "contents": {
+        "cublas64_13.dll": "f1d500d0cd892f5b8c6b6cdbffd82d0c55d5f5427215668e7ceb55aeeccc1b63",
+        "cublasLt64_13.dll": "b592cd016d7673e9cb97716a22b27c4010ee635377a3ba28f37070a9bdb76a68"
+      }
+    },
+    "engine-cuda12-cublas": {
+      "label": "NVIDIA cuBLAS 12.9",
+      "kind": "runtime",
+      "url": "https://developer.download.nvidia.com/compute/cuda/redist/libcublas/windows-x86_64/libcublas-windows-x86_64-12.9.1.4-archive.zip",
+      "bytes": 549755186,
+      "sha256": "d534d98b0b453a98914dbf3adf47d7e84b55037abf02f87466439e1dcef581ed",
+      "path": "cuda12-cublas.zip",
+      "marker": "cublasLt64_12.dll",
+      "pick": [
+        "cublas64_12.dll",
+        "cublasLt64_12.dll"
+      ],
+      "note": "The linear algebra of the engine's CUDA 12 backend, for cards CUDA 13 dropped and older drivers.",
+      "mirrors": [
+        "https://developer.download.nvidia.cn/compute/cuda/redist/libcublas/windows-x86_64/libcublas-windows-x86_64-12.9.1.4-archive.zip"
+      ],
+      "contents": {
+        "cublas64_12.dll": "90052a83efd1b57a8e3616a6590b335855f81b814a4f16eecb7b5bf6d1b1d4eb",
+        "cublasLt64_12.dll": "c3a05ea244c937314afec09f87b91f814c7e27977681f6c67eb51bb06ced3a4a"
+      }
+    },
+    "engine-cuda-cudart-linux": {
+      "label": "NVIDIA CUDA runtime 13.4",
+      "kind": "runtime",
+      "url": "https://files.pythonhosted.org/packages/98/8a/3431271f6344874b8f1ac03f16b3d679c91493f8da63f716160403e6d0a0/nvidia_cuda_runtime-13.4.92-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl",
+      "bytes": 2494438,
+      "sha256": "9641f797da20ce1dd8e779b6e96d08cf9ba564cec8e8225458811ee26423f3a5",
+      "path": "cuda13-cudart.whl",
+      "marker": "libcudart.so.13",
+      "pick": [
+        "libcudart.so.13"
+      ],
+      "note": "The CUDA runtime of the engine's CUDA 13 backend and of the audio.cpp server."
+    },
+    "engine-cuda-cublas-linux": {
+      "label": "NVIDIA cuBLAS 13.8",
+      "kind": "runtime",
+      "url": "https://files.pythonhosted.org/packages/7a/38/bdd540bf511d2c9b6f9efc71a81c60cb88e295be0b9312b61d19bbed2212/nvidia_cublas-13.8.0.4-py3-none-manylinux_2_27_x86_64.whl",
+      "bytes": 439317144,
+      "sha256": "9f17797dfcc048694461f4e47de17d2e3c25adf172ef723d2db0a07cd8744b89",
+      "path": "cuda13-cublas.whl",
+      "marker": "libcublasLt.so.13",
+      "pick": [
+        "libcublas.so.13",
+        "libcublasLt.so.13"
+      ],
+      "note": "The linear algebra of the engine's CUDA 13 backend and of the audio.cpp server."
+    },
+    "engine-cuda12-cudart-linux": {
+      "label": "NVIDIA CUDA runtime 12.9",
+      "kind": "runtime",
+      "url": "https://files.pythonhosted.org/packages/bc/46/a92db19b8309581092a3add7e6fceb4c301a3fd233969856a8cbf042cd3c/nvidia_cuda_runtime_cu12-12.9.79-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl",
+      "bytes": 3493179,
+      "sha256": "25bba2dfb01d48a9b59ca474a1ac43c6ebf7011f1b0b8cc44f54eb6ac48a96c3",
+      "path": "cuda12-cudart.whl",
+      "marker": "libcudart.so.12",
+      "pick": [
+        "libcudart.so.12"
+      ],
+      "note": "The CUDA runtime of the engine's CUDA 12 backend and of the audio.cpp server."
+    },
+    "engine-cuda12-cublas-linux": {
+      "label": "NVIDIA cuBLAS 12.9",
+      "kind": "runtime",
+      "url": "https://files.pythonhosted.org/packages/cb/c0/0a517bfe63ccd3b92eb254d264e28fca3c7cab75d07daea315250fb1bf73/nvidia_cublas_cu12-12.9.2.10-py3-none-manylinux_2_27_x86_64.whl",
+      "bytes": 581240110,
+      "sha256": "e4f53a8ca8c5d6e8c492d0d0a3d565ecb59a751b19cfdaa4f6da0ab2104c1702",
+      "path": "cuda12-cublas.whl",
+      "marker": "libcublasLt.so.12",
+      "pick": [
+        "libcublas.so.12",
+        "libcublasLt.so.12"
+      ],
+      "note": "The linear algebra of the engine's CUDA 12 backend and of the audio.cpp server.",
+      "contents": {
+        "libcublas.so.12": "5757ab5839fb4f203ca47ecb336110d10f4a5606b1e097f195fbca89774569e2",
+        "libcublasLt.so.12": "2c9006a75c74b3bea2dc7ae2ec38ab038b0e45ea02cb4b717a915e8a5796acb1"
+      }
+    }
+  }
+}

@@ -53,6 +53,10 @@ pub(crate) struct FileEntry {
     pub note: String,
     #[serde(default)]
     pub mirrors: Vec<String>,
+    /// SHA-256 of files inside an archive, by name: what a pick takes out, and what an
+    /// unpacked archive must still hold to count as installed.
+    #[serde(default)]
+    pub contents: BTreeMap<String, String>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -105,11 +109,12 @@ struct Loaded {
     source: &'static str,
     assets: Mutex<HashMap<String, &'static Asset>>,
     shas: Mutex<HashMap<String, &'static str>>,
+    contents: Mutex<HashMap<String, &'static [(&'static str, &'static str)]>>,
 }
 
 impl Loaded {
     fn new(catalogue: Catalogue, source: &'static str) -> Arc<Self> {
-        Arc::new(Self { catalogue, source, assets: Default::default(), shas: Default::default() })
+        Arc::new(Self { catalogue, source, assets: Default::default(), shas: Default::default(), contents: Default::default() })
     }
 }
 
@@ -175,7 +180,7 @@ fn parse(json: &[u8]) -> Result<Catalogue> {
         };
         if !file.url.starts_with("https://") {
             skipped.push(format!("file {id}: not served over HTTPS"));
-        } else if !(file.sha256.len() == 64 && file.sha256.bytes().all(|b| b.is_ascii_hexdigit())) {
+        } else if ![&file.sha256].into_iter().chain(file.contents.values()).all(|sha| sha.len() == 64 && sha.bytes().all(|b| b.is_ascii_hexdigit())) {
             skipped.push(format!("file {id}: no SHA-256"));
         } else {
             files.insert(id, file);
@@ -262,6 +267,20 @@ pub(crate) fn asset(id: &str) -> Result<&'static Asset> {
     bail!("the component catalogue {} has no file {id}", sequence())
 }
 
+
+/// The catalogue ids this build of the studio downloads by name. Each is in the built-in
+/// catalogue (a test holds it to that), so `required` cannot miss.
+pub(crate) const REQUIRED: &[&str] = &[
+    "engine-cuda-cublas", "engine-cuda12-cublas",
+    "engine-cuda-cudart-linux", "engine-cuda-cublas-linux", "engine-cuda12-cudart-linux", "engine-cuda12-cublas-linux",
+];
+
+/// A file this build downloads by id: one of `REQUIRED`.
+pub(crate) fn required(id: &str) -> &'static Asset {
+    debug_assert!(REQUIRED.contains(&id), "{id} is not in components::REQUIRED");
+    asset(id).unwrap_or_else(|error| panic!("{error:#}"))
+}
+
 /// The pinned SHA-256 of a catalogue file, by any of its addresses.
 pub(crate) fn sha256(url: &str) -> Option<&'static str> {
     both().into_iter().find_map(|loaded| {
@@ -281,6 +300,22 @@ pub(crate) fn mirrors(url: &str) -> Vec<String> {
     both().into_iter()
         .find_map(|loaded| loaded.catalogue.files.values().find(|file| file.url == url).map(|file| file.mirrors.clone()))
         .unwrap_or_default()
+}
+
+
+/// The files inside the archive at `url` with their SHA-256, as the catalogue lists them.
+pub(crate) fn contents(url: &str) -> Option<&'static [(&'static str, &'static str)]> {
+    both().into_iter().find_map(|loaded| {
+        let mut cache = loaded.contents.lock().expect("component catalogue contents");
+        if let Some(list) = cache.get(url) {
+            return Some(*list);
+        }
+        let file = loaded.catalogue.files.values().find(|file| file.url == url && !file.contents.is_empty())?;
+        let list: Vec<(&'static str, &'static str)> = file.contents.iter().map(|(name, sha)| (leak(name), leak(sha))).collect();
+        let list: &'static [(&'static str, &'static str)] = Box::leak(list.into_boxed_slice());
+        cache.insert(url.to_owned(), list);
+        Some(list)
+    })
 }
 
 pub(crate) fn sets(engine: &str) -> Vec<ModelSet> {
@@ -438,6 +473,13 @@ mod tests {
     }
 
     #[test]
+    fn every_required_id_is_in_the_built_in_catalogue() {
+        let catalogue = verify(BUILT_IN, BUILT_IN_SIGNATURE).unwrap();
+        let missing: Vec<_> = REQUIRED.iter().filter(|id| !catalogue.files.contains_key(**id)).collect();
+        assert!(missing.is_empty(), "not in the built-in catalogue: {missing:?}");
+    }
+
+    #[test]
     fn one_changed_byte_breaks_the_signature() {
         let mut json = BUILT_IN.to_vec();
         let digit = json.iter().position(u8::is_ascii_digit).unwrap();
@@ -489,4 +531,48 @@ mod tests {
         let all = serde_json::json!({"dit": "known", "lm": "known", "text_encoder": "known", "vae": "known"});
         assert!(parse(&sample("dub-studio", "model", all)).is_err());
     }
+}
+
+
+/// One-off export of the studio's built-in download definitions into a table of
+/// `distribution/components-src`, run when a family moves into the catalogue:
+/// `cargo test -p music-server --lib components::export:: -- --ignored`.
+#[cfg(test)]
+mod export {
+    use crate::downloads::{Asset, AssetKind};
+    use serde_json::{Value, json};
+
+    fn entry(asset: &Asset, mirrors: &[&str]) -> Value {
+        let sha = crate::pin_sha::sha256(asset.url).unwrap_or_else(|| panic!("{} has no pinned SHA-256", asset.id));
+        let mut entry = json!({
+            "label": asset.label,
+            "kind": match asset.kind { AssetKind::Model => "model", AssetKind::Runtime => "runtime" },
+            "url": asset.url, "bytes": asset.bytes, "sha256": sha, "path": asset.relative_path,
+        });
+        let object = entry.as_object_mut().unwrap();
+        if let Some(folder) = asset.unzip_into { object.insert("unzip_into".into(), json!(folder)); }
+        if !asset.marker.is_empty() { object.insert("marker".into(), json!(asset.marker)); }
+        if !asset.pick.is_empty() { object.insert("pick".into(), json!(asset.pick)); }
+        if let Some(vram) = asset.vram_gb { object.insert("vram_gb".into(), json!(vram)); }
+        if !asset.note.is_empty() { object.insert("note".into(), json!(asset.note)); }
+        if !mirrors.is_empty() { object.insert("mirrors".into(), json!(mirrors)); }
+        let mut contents = serde_json::Map::new();
+        for (name, sha) in crate::pin_sha::runtime_libraries(asset.url) { contents.insert((*name).into(), json!(sha)); }
+        for entry in asset.pick {
+            let name = crate::downloads::picked_file_name(entry);
+            if let Some(sha) = crate::pin_sha::picked(asset.url, name) { contents.insert(name.into(), json!(sha)); }
+        }
+        if !contents.is_empty() { object.insert("contents".into(), Value::Object(contents)); }
+        entry
+    }
+
+    fn write(table: &str, assets: &[(&Asset, Vec<&str>)]) {
+        let mut files = serde_json::Map::new();
+        for (asset, mirrors) in assets {
+            assert!(files.insert(asset.id.to_owned(), entry(asset, mirrors)).is_none(), "{} twice", asset.id);
+        }
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../distribution/components-src").join(format!("{table}.json"));
+        std::fs::write(&path, serde_json::to_string_pretty(&json!({ "files": files })).unwrap() + "\n").unwrap();
+    }
+
 }

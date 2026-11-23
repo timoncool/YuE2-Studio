@@ -19,7 +19,7 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{bail, Context, Result};
 
-use crate::downloads::{Asset, AssetKind, Downloader};
+use crate::downloads::{Asset, Downloader};
 use crate::hardware::CudaBuild;
 
 /// The libraries of each build, by file name, exactly as its ggml-cuda.dll
@@ -35,137 +35,41 @@ pub const VC_RUNTIME_LIBRARIES: [&str; 5] =
     ["vcruntime140.dll", "vcruntime140_1.dll", "msvcp140.dll", "msvcp140_1.dll", "vcomp140.dll"];
 
 
-#[cfg(not(target_os = "linux"))]
-pub const ASSETS: &[Asset] = &[CUBLAS13, CUBLAS12];
-#[cfg(target_os = "linux")]
-pub const ASSETS: &[Asset] = &[LINUX_CUDA13[0], LINUX_CUDA13[1], LINUX_CUDA12[0], LINUX_CUDA12[1]];
+/// The catalogue ids of the CUDA libraries (`distribution/components-src/cuda-runtime.json`).
+const CUBLAS13: &str = "engine-cuda-cublas";
+const CUBLAS12: &str = "engine-cuda12-cublas";
+/// Linux: the CUDA runtime and cuBLAS of each build, from NVIDIA's manylinux wheels, which the audio.cpp server
+/// loads too: one copy in `<data>/engine-runtime/cuda`, named in LD_LIBRARY_PATH. Their names carry the major,
+/// so both builds share the folder.
+const LINUX_CUDA13: [&str; 2] = ["engine-cuda-cudart-linux", "engine-cuda-cublas-linux"];
+const LINUX_CUDA12: [&str; 2] = ["engine-cuda12-cudart-linux", "engine-cuda12-cublas-linux"];
 
-const CUBLAS13: Asset = Asset {
-    id: "engine-cuda-cublas",
-    label: "NVIDIA cuBLAS 13.5",
-    kind: AssetKind::Runtime,
-    // NVIDIA's redistributable archive, the same one every CUDA application
-    // ships from. The size and the digest are published in
-    // redist/redistrib_13.3.0.json; the size below was confirmed against a
-    // live HEAD request, which also confirmed range support.
-    url: "https://developer.download.nvidia.com/compute/cuda/redist/libcublas/windows-x86_64/libcublas-windows-x86_64-13.5.1.27-archive.zip",
-    relative_path: "cuda-cublas.zip",
-    bytes: 391_055_517,
-    // No sub-directory: the libraries go straight in beside yue-server.exe,
-    // which is where the Windows loader looks first and what NVIDIA's own
-    // deployment guide recommends.
-    unzip_into: None,
-    marker: "cublasLt64_13.dll",
-    pick: &CUDA13_LIBRARIES,
-    vram_gb: None,
-    note: "The linear algebra the engine's CUDA backend is linked against. Without it the engine cannot start at all.",
-};
-
-const CUBLAS12: Asset = Asset {
-    id: "engine-cuda12-cublas",
-    label: "NVIDIA cuBLAS 12.9",
-    kind: AssetKind::Runtime,
-    // The cuBLAS of the CUDA 12.9 toolkit the CUDA 12 backend is built with.
-    // Size from redist/redistrib_12.9.1.json, confirmed by a HEAD request.
-    url: "https://developer.download.nvidia.com/compute/cuda/redist/libcublas/windows-x86_64/libcublas-windows-x86_64-12.9.1.4-archive.zip",
-    relative_path: "cuda12-cublas.zip",
-    bytes: 549_755_186,
-    unzip_into: None,
-    marker: "cublasLt64_12.dll",
-    pick: &CUDA12_LIBRARIES,
-    vram_gb: None,
-    note: "The linear algebra of the engine's CUDA 12 backend, for cards CUDA 13 dropped and older drivers.",
-};
+/// Every CUDA library download of this platform.
+pub fn assets() -> Vec<&'static Asset> {
+    [CudaBuild::Cuda13, CudaBuild::Cuda12].into_iter().flat_map(cuda_assets).collect()
+}
 
 pub(crate) fn is_shared_windows_cublas(asset: &Asset) -> bool {
-    asset.url == CUBLAS12.url || asset.url == CUBLAS13.url
+    asset.id == CUBLAS12 || asset.id == CUBLAS13
 }
 
-/// NVIDIA serves the same pinned Windows CUDA 12 archive from both domains.
-pub(crate) fn archive_mirror(url: &str) -> Option<&'static str> {
-    (url == CUBLAS12.url).then_some(
-        "https://developer.download.nvidia.cn/compute/cuda/redist/libcublas/windows-x86_64/libcublas-windows-x86_64-12.9.1.4-archive.zip",
-    )
-}
-
-/// The cuBLAS a CUDA build loads.
+/// The cuBLAS a CUDA build loads on Windows.
 pub fn cublas_asset(build: CudaBuild) -> &'static Asset {
-    match build {
-        CudaBuild::Cuda13 => &CUBLAS13,
-        CudaBuild::Cuda12 => &CUBLAS12,
-    }
+    crate::components::required(match build {
+        CudaBuild::Cuda13 => CUBLAS13,
+        CudaBuild::Cuda12 => CUBLAS12,
+    })
 }
-
-/// Linux: the CUDA runtime and cuBLAS of the engine's CUDA 13 backend, from NVIDIA's manylinux wheels, which the
-/// audio.cpp server's CUDA 13 build loads too: one copy in `<data>/engine-runtime/cuda`, named in LD_LIBRARY_PATH.
-pub const LINUX_CUDA13: [Asset; 2] = [
-    Asset {
-        id: "engine-cuda-cudart-linux",
-        label: "NVIDIA CUDA runtime 13.4",
-        kind: AssetKind::Runtime,
-        url: "https://files.pythonhosted.org/packages/98/8a/3431271f6344874b8f1ac03f16b3d679c91493f8da63f716160403e6d0a0/nvidia_cuda_runtime-13.4.92-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl",
-        relative_path: "cuda13-cudart.whl",
-        bytes: 2_494_438,
-        unzip_into: None,
-        marker: "libcudart.so.13",
-        pick: &["libcudart.so.13"],
-        vram_gb: None,
-        note: "The CUDA runtime of the engine's CUDA 13 backend and of the audio.cpp server.",
-    },
-    Asset {
-        id: "engine-cuda-cublas-linux",
-        label: "NVIDIA cuBLAS 13.8",
-        kind: AssetKind::Runtime,
-        url: "https://files.pythonhosted.org/packages/7a/38/bdd540bf511d2c9b6f9efc71a81c60cb88e295be0b9312b61d19bbed2212/nvidia_cublas-13.8.0.4-py3-none-manylinux_2_27_x86_64.whl",
-        relative_path: "cuda13-cublas.whl",
-        bytes: 439_317_144,
-        unzip_into: None,
-        marker: "libcublasLt.so.13",
-        pick: &["libcublas.so.13", "libcublasLt.so.13"],
-        vram_gb: None,
-        note: "The linear algebra of the engine's CUDA 13 backend and of the audio.cpp server.",
-    },
-];
-
-/// Linux: the CUDA runtime and cuBLAS of the engine's CUDA 12 backend, the CUDA 12.9 wheels the audio.cpp server's
-/// CUDA 12 build loads too; their names carry the major, so they share the folder with the CUDA 13 ones.
-pub const LINUX_CUDA12: [Asset; 2] = [
-    Asset {
-        id: "engine-cuda12-cudart-linux",
-        label: "NVIDIA CUDA runtime 12.9",
-        kind: AssetKind::Runtime,
-        url: "https://files.pythonhosted.org/packages/bc/46/a92db19b8309581092a3add7e6fceb4c301a3fd233969856a8cbf042cd3c/nvidia_cuda_runtime_cu12-12.9.79-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl",
-        relative_path: "cuda12-cudart.whl",
-        bytes: 3_493_179,
-        unzip_into: None,
-        marker: "libcudart.so.12",
-        pick: &["libcudart.so.12"],
-        vram_gb: None,
-        note: "The CUDA runtime of the engine's CUDA 12 backend and of the audio.cpp server.",
-    },
-    Asset {
-        id: "engine-cuda12-cublas-linux",
-        label: "NVIDIA cuBLAS 12.9",
-        kind: AssetKind::Runtime,
-        url: "https://files.pythonhosted.org/packages/cb/c0/0a517bfe63ccd3b92eb254d264e28fca3c7cab75d07daea315250fb1bf73/nvidia_cublas_cu12-12.9.2.10-py3-none-manylinux_2_27_x86_64.whl",
-        relative_path: "cuda12-cublas.whl",
-        bytes: 581_240_110,
-        unzip_into: None,
-        marker: "libcublasLt.so.12",
-        pick: &["libcublas.so.12", "libcublasLt.so.12"],
-        vram_gb: None,
-        note: "The linear algebra of the engine's CUDA 12 backend and of the audio.cpp server.",
-    },
-];
 
 /// The downloads a CUDA build of the engine needs on this platform: cuBLAS beside the engine on Windows; on Linux the
 /// CUDA runtime and cuBLAS of either build, in one folder the audio.cpp server shares.
 pub fn cuda_assets(build: CudaBuild) -> Vec<&'static Asset> {
     if cfg!(target_os = "linux") {
-        return match build {
-            CudaBuild::Cuda13 => LINUX_CUDA13.iter().collect(),
-            CudaBuild::Cuda12 => LINUX_CUDA12.iter().collect(),
+        let ids = match build {
+            CudaBuild::Cuda13 => LINUX_CUDA13,
+            CudaBuild::Cuda12 => LINUX_CUDA12,
         };
+        return ids.into_iter().map(crate::components::required).collect();
     }
     vec![cublas_asset(build)]
 }
@@ -487,11 +391,11 @@ mod tests {
     /// A runtime asset that unpacks nowhere would download and vanish.
     #[test]
     fn the_libraries_land_in_one_directory_the_engine_can_be_pointed_at() {
-        for asset in ASSETS {
+        for asset in assets() {
             // Straight into the bundle: a sub-directory would put them
             // somewhere the loader does not look.
             assert_eq!(asset.unzip_into, None);
-            assert_eq!(asset.kind, AssetKind::Runtime);
+            assert_eq!(asset.kind, crate::downloads::AssetKind::Runtime);
             assert!(asset.bytes > 0, "{} has no size, so nothing can report progress", asset.id);
         }
     }
@@ -615,7 +519,7 @@ mod tests {
         assert_eq!(runtime.library_dir(), folder);
         let path = std::env::var_os("LD_LIBRARY_PATH").expect("LD_LIBRARY_PATH is set");
         assert!(std::env::split_paths(&path).any(|dir| dir == folder), "{} is on LD_LIBRARY_PATH", folder.display());
-        let asset = &LINUX_CUDA13[1];
+        let asset = crate::components::required(LINUX_CUDA13[1]);
         assert!(!runtime.downloader().is_installed(asset));
         std::fs::create_dir_all(&folder).unwrap();
         let unpacked: Vec<_> = asset.pick.iter().map(|library| folder.join(library)).collect();
