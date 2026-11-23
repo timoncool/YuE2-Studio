@@ -133,7 +133,7 @@ export function EnginesAndUpdates({ focus }: { focus?: string }) {
     const target = [...(list.current?.children ?? [])].find(item => item.getAttribute('data-engine') === focus);
     target?.scrollIntoView?.({ block: 'nearest' });
   }, [focus]);
-  const [title, , , , checking, unavailable] = enginePageStrings[language];
+  const [title, checking, unavailable] = enginePageStrings[language];
   const catalogueText = componentCatalogueStrings[language];
   const card = engineCardStrings[language];
   const text = engineCardText[language];
