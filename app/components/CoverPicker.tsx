@@ -295,7 +295,7 @@ const CommonsSearch: React.FC<{
                 className={`relative aspect-video overflow-hidden rounded-lg bg-zinc-200 dark:bg-zinc-800 ${chosen === clip.page ? 'ring-2 ring-pink-500' : 'hover:ring-2 hover:ring-pink-300'}`}
               >
                 <img src={clip.poster} alt={clip.title} loading="lazy" className="h-full w-full object-cover" />
-                <span className="absolute right-1.5 top-1.5 inline-flex items-center gap-0.5 rounded bg-black/60 px-1.5 py-0.5 text-[9px] font-bold text-white">
+                <span className="absolute right-1.5 top-1.5 inline-flex items-center gap-0.5 rounded bg-black/60 px-1.5 py-0.5 text-[10px] font-bold text-white">
                   <Video size={9} />{t('videoBadge')}
                 </span>
               </button>
@@ -361,7 +361,7 @@ const PatternChoice: React.FC<{
             className={`relative aspect-square overflow-hidden rounded-lg ${choice?.kind === 'pattern' && choice.pattern === pattern && choice.seed === seed ? 'ring-2 ring-pink-500' : 'hover:ring-2 hover:ring-pink-300'}`}
           >
             <img src={patternArt(seed, pattern)} alt={pattern} className="h-full w-full object-cover" />
-            <span className="absolute inset-x-0 bottom-0 truncate bg-black/55 px-1 py-0.5 text-center text-[9px] font-semibold text-white">{pattern}</span>
+            <span className="absolute inset-x-0 bottom-0 truncate bg-black/55 px-1 py-0.5 text-center text-[10px] font-semibold text-white">{pattern}</span>
           </button>
         ))}
       </div>

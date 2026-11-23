@@ -2776,7 +2776,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
                       className="truncate rounded-md px-2 py-1 text-left text-[11px] text-zinc-600 transition-colors hover:bg-white hover:text-black dark:text-zinc-300 dark:hover:bg-white/10 dark:hover:text-white"
                       title={example.style}
                     >
-                      {example.cover && <span className="mr-1 rounded-sm bg-pink-500/15 px-1 text-[9px] font-bold uppercase text-pink-600 dark:text-pink-300">{tt('coverBadge')}</span>}
+                      {example.cover && <span className="mr-1 rounded-sm bg-pink-500/15 px-1 text-[10px] font-bold uppercase text-pink-600 dark:text-pink-300">{tt('coverBadge')}</span>}
                       {example.title}
                     </button>
                   ))}

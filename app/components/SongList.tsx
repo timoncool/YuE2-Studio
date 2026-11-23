@@ -1054,7 +1054,7 @@ export const SongItem: React.FC<SongItemProps> = ({
                             </button>
                         )}
                         <span
-                          className={`hidden sm:inline-flex shrink-0 items-center justify-center text-[9px] font-bold text-white bg-linear-to-r from-pink-500 to-purple-500 px-1.5 py-0.5 rounded-xs shadow-xs`}
+                          className={`hidden sm:inline-flex shrink-0 items-center justify-center text-[10px] font-bold text-white bg-linear-to-r from-pink-500 to-purple-500 px-1.5 py-0.5 rounded-xs shadow-xs`}
                           title={song.ditModel === 'openrouter' ? cloudMusicModel(song) || 'OpenRouter' : [
                             `DiT: ${song.ditModel || '?'}`,
                             // Only show LM line when a real local model was used
@@ -1068,7 +1068,7 @@ export const SongItem: React.FC<SongItemProps> = ({
                             {getProfileBadge(song)}
                         </span>
                         {!compact && song.generationTime != null && song.generationTime > 0 && (
-                            <span className="inline-flex items-center gap-0.5 text-[9px] text-zinc-400 dark:text-zinc-500" title={t('generationTime') || 'Generation time'}>
+                            <span className="inline-flex items-center gap-0.5 text-[10px] text-zinc-400 dark:text-zinc-500" title={t('generationTime') || 'Generation time'}>
                                 <Timer size={10} />
                                 {song.generationTime}s
                             </span>
@@ -1077,23 +1077,23 @@ export const SongItem: React.FC<SongItemProps> = ({
                     <div className={`flex items-center gap-2 text-xs text-zinc-500 dark:text-zinc-400 ${compact ? 'hidden' : 'h-5'}`}>
                         <span className="truncate">{song.ditModel === 'openrouter' ? cloudMusicModelName(song) || 'OpenRouter'
                           : song.ditModel === 'imported-audio' ? t('importedAudio') : nativeMusicEngineName(song.ditModel)}</span>
-                        {song.nativeReplayAvailable && <span title={t('replayAvailable')} className="rounded-sm bg-zinc-200/70 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide dark:bg-white/10">replay</span>}
+                        {song.nativeReplayAvailable && <span title={t('replayAvailable')} className="rounded-sm bg-zinc-200/70 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide dark:bg-white/10">replay</span>}
                         {song.cutShort && (song.cutShort === 'length' && song.nativeReplayAvailable && songActions.replay ? (
                             <button
                                 type="button"
                                 title={t('cutShortLength')}
                                 onClick={event => { event.stopPropagation(); songActions.replay?.(song); }}
-                                className="rounded-sm bg-amber-100 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-amber-800 hover:bg-amber-200 dark:bg-amber-400/15 dark:text-amber-200"
+                                className="rounded-sm bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-800 hover:bg-amber-200 dark:bg-amber-400/15 dark:text-amber-200"
                             >
                                 {t('cutShort')}
                             </button>
                         ) : (
-                            <span title={t(song.cutShort === 'length' ? 'cutShortLength' : 'cutShortMemory')} className="rounded-sm bg-amber-100 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-amber-800 dark:bg-amber-400/15 dark:text-amber-200">
+                            <span title={t(song.cutShort === 'length' ? 'cutShortLength' : 'cutShortMemory')} className="rounded-sm bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-800 dark:bg-amber-400/15 dark:text-amber-200">
                                 {t('cutShort')}
                             </span>
                         ))}
                         {song.tracksAsked && (
-                            <span title={t('tracksForCardHint').replace('{asked}', String(song.tracksAsked))} className="rounded-sm bg-amber-100 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-amber-800 dark:bg-amber-400/15 dark:text-amber-200">
+                            <span title={t('tracksForCardHint').replace('{asked}', String(song.tracksAsked))} className="rounded-sm bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-800 dark:bg-amber-400/15 dark:text-amber-200">
                                 {t('tracksForCard')}
                             </span>
                         )}
@@ -1244,7 +1244,7 @@ export const SongItem: React.FC<SongItemProps> = ({
                                 type="button"
                                 title={song.failure}
                                 onClick={(e) => { e.stopPropagation(); onScoreAgain(); }}
-                                className="rounded-sm bg-amber-100 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-amber-800 hover:bg-amber-200 dark:bg-amber-400/15 dark:text-amber-200"
+                                className="rounded-sm bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-800 hover:bg-amber-200 dark:bg-amber-400/15 dark:text-amber-200"
                             >
                                 {song.failureCode === 'not_audio' ? t('songAgain') : t('scoreAgainAtOne')}
                             </button>

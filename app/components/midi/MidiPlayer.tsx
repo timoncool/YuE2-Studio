@@ -304,14 +304,14 @@ export const MidiPlayer: React.FC<Props> = ({ notes, sourceAudioUrl, live, chunk
                 <button
                   onClick={() => toggleMute(f)}
                   title={say('midiMute')}
-                  className={`w-4 h-4 rounded text-[9px] font-bold leading-none flex items-center justify-center transition-colors ${
+                  className={`relative w-5 h-5 rounded text-[10px] font-bold leading-none flex items-center justify-center transition-colors after:absolute after:-inset-0.5 after:content-[''] ${
                     isMuted ? 'bg-red-500 text-white' : 'bg-zinc-200 dark:bg-white/10 text-zinc-500 hover:bg-zinc-300 dark:hover:bg-white/20'
                   }`}
                 >M</button>
                 <button
                   onClick={() => toggleSolo(f)}
                   title={say('midiSolo')}
-                  className={`w-4 h-4 rounded text-[9px] font-bold leading-none flex items-center justify-center transition-colors ${
+                  className={`relative w-5 h-5 rounded text-[10px] font-bold leading-none flex items-center justify-center transition-colors after:absolute after:-inset-0.5 after:content-[''] ${
                     isSolo ? 'bg-amber-500 text-white' : 'bg-zinc-200 dark:bg-white/10 text-zinc-500 hover:bg-zinc-300 dark:hover:bg-white/20'
                   }`}
                 >S</button>

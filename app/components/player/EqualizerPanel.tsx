@@ -25,7 +25,7 @@ const FREQUENCIES = (() => {
 
 const Slider: React.FC<{ value: number; label: string; title: string; onChange: (value: number) => void; disabled: boolean }> = ({ value, label, title, onChange, disabled }) => (
   <label className="flex flex-col items-center gap-1" title={title}>
-    <NumberField value={value} min={-EQ_RANGE_DB} max={EQ_RANGE_DB} step={0.5} label={title} disabled={disabled} format={number => (number > 0 ? `+${number.toFixed(0)}` : number.toFixed(0))} onChange={onChange} className="w-8 px-0 !text-center !text-[9px]" />
+    <NumberField value={value} min={-EQ_RANGE_DB} max={EQ_RANGE_DB} step={0.5} label={title} disabled={disabled} format={number => (number > 0 ? `+${number.toFixed(0)}` : number.toFixed(0))} onChange={onChange} className="w-8 px-0 !text-center !text-[10px]" />
     <input
       type="range"
       min={-EQ_RANGE_DB}
@@ -37,7 +37,7 @@ const Slider: React.FC<{ value: number; label: string; title: string; onChange: 
       disabled={disabled}
       className="h-28 w-4 cursor-pointer accent-pink-500 disabled:opacity-40 [direction:rtl] [writing-mode:vertical-lr]"
     />
-    <span className="text-[9px] font-semibold text-zinc-500">{label}</span>
+    <span className="text-[10px] font-semibold text-zinc-500">{label}</span>
   </label>
 );
 

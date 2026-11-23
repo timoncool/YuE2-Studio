@@ -158,7 +158,7 @@ const JogWheel: React.FC<{ deck: DjDeck; side: 'A' | 'B'; color: string }> = ({ 
           <path d="M20 135 L10 154" stroke="#eef2f7" strokeWidth="8" strokeLinecap="round"/>
           <path d="M10 153 L7 164" stroke="#171a1f" strokeWidth="6" strokeLinecap="round"/>
         </svg>
-        <div className="absolute bottom-3 right-3 rounded border border-white/10 bg-black/70 px-1.5 py-0.5 text-[9px] font-bold" style={{color}}>{deck.state.scratching ? s.statusScratch : deck.state.playing ? s.statusOnAir : s.statusStop}</div>
+        <div className="absolute bottom-3 right-3 rounded border border-white/10 bg-black/70 px-1.5 py-0.5 text-[10px] font-bold" style={{color}}>{deck.state.scratching ? s.statusScratch : deck.state.playing ? s.statusOnAir : s.statusStop}</div>
       </div>
       <span className="text-center text-[10px] text-zinc-400">{deck.state.scratching ? (deck.state.scratchReady ? s.scratching : s.preparingScratch) : s.grabVinyl}</span>
     </div>
