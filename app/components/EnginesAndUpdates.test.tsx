@@ -36,13 +36,14 @@ it('names the component catalogue, refreshes it and offers the native engines fr
     await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)); });
     expect(host.textContent).toContain('Download list no. 12');
     expect(host.textContent).toContain('the one built into this version');
-    expect(host.textContent).toContain('A newer list could not be checked: no answer.');
+    expect(host.textContent).toContain('Could not check for a newer download list: the site did not answer.');
+    expect(host.textContent).not.toContain('no answer.');
     expect(host.querySelector('[data-engine="acestep-cpp"]')?.textContent).toContain('d058cd86564a');
     const refresh = [...host.querySelectorAll('button')].find(button => button.textContent === 'refresh')!;
     await act(async () => refresh.click());
     await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)); });
     expect(refreshed).toBe(1);
-    expect(host.textContent).not.toContain('A newer list could not be checked');
+    expect(host.textContent).not.toContain('Could not check for a newer download list');
     expect(request.mock.calls.some(([url]) => String(url).startsWith('/v1/components/music-engines'))).toBe(false);
   } finally {
     await act(async () => root.unmount());

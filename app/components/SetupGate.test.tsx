@@ -66,16 +66,18 @@ it('opens upgrades from the notification target and reads per-engine readiness w
     </QueryClientProvider>));
     await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)); });
     expect(host.querySelector('h3')?.textContent).toBe('Engines and updates');
-    expect(host.querySelector('[data-engine="local"]')?.textContent).toContain('Installed · profileReady');
-    expect(host.querySelector('[data-engine="local"]')?.textContent).not.toContain('Active');
-    expect(host.querySelector('[data-engine="acestep-cpp"]')?.textContent).toContain('Installed · Active · profileNotInstalled');
-    expect(host.querySelector('[data-engine="acestep-cpp"]')?.textContent).toContain('Installed · 6e0e414ec113');
-    expect(host.querySelector('[data-engine="acestep-cpp"]')?.textContent).toContain('download · d058cd86564a');
-    expect(host.querySelector('[data-engine="audio.cpp"]')?.textContent).toContain('Installed · profileReady');
-    expect(host.querySelector('[data-engine="minimaxmusic-cpp"]')?.textContent).toContain('Selected local executable · /external/mm-server');
-    expect(host.querySelector('[data-engine="minimaxmusic-cpp"]')?.textContent).toContain('Managed package · Installed · managed12345');
-    expect(host.querySelector('[data-engine="hotstep"]')?.textContent).toContain('Not installed');
-    expect(host.querySelector('[data-engine="hotstep"] summary')?.textContent).toBe('New compatible model');
+    const engineCard = (id: string) => host.querySelector(`[data-engine="${id}"]`)?.textContent ?? '';
+    expect(engineCard('local')).toContain('InstalledModels downloaded');
+    expect(engineCard('local')).not.toContain('Active');
+    expect(engineCard('acestep-cpp')).toContain('InstalledActiveModels not downloaded');
+    expect(engineCard('acestep-cpp')).toContain('Managed package · 6e0e414ec113');
+    expect(engineCard('acestep-cpp')).toContain('download · d058cd86564a');
+    expect(engineCard('audio.cpp')).toContain('InstalledModels downloaded');
+    expect(engineCard('minimaxmusic-cpp')).toContain('Selected local executable · /external/mm-server');
+    expect(engineCard('minimaxmusic-cpp')).toContain('Managed package · managed12345');
+    expect(engineCard('hotstep')).toContain('Not installed');
+    expect(host.querySelector('[data-engine="hotstep"] summary')?.textContent).toBe('Models · 1 to download');
+    expect(engineCard('hotstep')).toContain('New compatible model');
     expect(host.querySelector('[data-engine="hotstep"]')?.textContent).not.toContain('Invalid install target');
     expect(host.querySelector('[data-engine="rvc"]')).toBeNull();
     await act(async () => host.querySelector<HTMLInputElement>('label:has(input[type="checkbox"]) input')!.click());
@@ -87,7 +89,7 @@ it('opens upgrades from the notification target and reads per-engine readiness w
     await act(async () => refresh.click());
     await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)); });
     expect(host.querySelector('[data-engine="openrouter"]')?.textContent).toContain('openRouterConfigured');
-    expect(host.querySelector('[data-engine="minimaxmusic-cpp"] p')?.textContent).toContain('Installed · Active');
+    expect(engineCard('minimaxmusic-cpp')).toContain('InstalledActive');
     expect(host.querySelector('[data-engine="minimaxmusic-cpp"] p')?.textContent).not.toContain('managed12345');
     expect(onlyRead.mock.calls.filter(([url]) => url === '/setup/status')).toHaveLength(2);
   } finally {

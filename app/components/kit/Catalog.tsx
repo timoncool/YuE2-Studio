@@ -8,9 +8,15 @@ const CONTROL =
   'w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 outline-hidden focus:border-pink-500 disabled:opacity-50 dark:border-white/10 dark:bg-black/30 dark:text-white';
 
 /** A catalogue's small coloured label: a kind, a family, a language. */
-export function CatalogBadge({ children, title }: { children: React.ReactNode; title?: string }) {
+const BADGE_TONES = {
+  accent: 'bg-pink-500/10 text-pink-600 dark:text-pink-300',
+  good: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-300',
+  muted: 'bg-zinc-500/10 text-zinc-600 dark:text-zinc-300',
+} as const;
+
+export function CatalogBadge({ children, title, tone = 'accent' }: { children: React.ReactNode; title?: string; tone?: keyof typeof BADGE_TONES }) {
   return (
-    <span title={title} className="rounded-full bg-pink-500/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-pink-600 dark:text-pink-300">
+    <span title={title} className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${BADGE_TONES[tone]}`}>
       {children}
     </span>
   );

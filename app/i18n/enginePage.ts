@@ -66,6 +66,24 @@ export const componentCatalogueStrings: Record<Language, {
   },
 };
 
+/** The engine cards: their details, the models line, and a catalogue check that could not reach the site. */
+export const engineCardStrings: Record<Language, {
+  details: string;
+  retry: string;
+  offline: string;
+  modelsReady: string;
+  modelsMissing: string;
+  models: (missing: number) => string;
+  unsupported: string;
+}> = {
+  en: { details: 'Details', retry: 'Try again', offline: 'Could not check for a newer download list: the site did not answer. The saved list is in use.', modelsReady: 'Models downloaded', modelsMissing: 'Models not downloaded', models: missing => `Models · ${missing} to download`, unsupported: 'Not available' },
+  ru: { details: 'Подробно', retry: 'Повторить', offline: 'Не удалось проверить, есть ли список загрузок новее: сайт не ответил. Работает сохранённый список.', modelsReady: 'Модели скачаны', modelsMissing: 'Модели не скачаны', models: missing => `Модели · ${missing} можно скачать`, unsupported: 'Недоступен' },
+  zh: { details: '详细信息', retry: '重试', offline: '无法检查是否有更新的下载列表：网站没有响应。正在使用已保存的列表。', modelsReady: '模型已下载', modelsMissing: '模型未下载', models: missing => `模型 · ${missing} 个可下载`, unsupported: '不可用' },
+  ja: { details: '詳細', retry: '再試行', offline: '新しいダウンロード一覧を確認できませんでした：サイトが応答しませんでした。保存済みの一覧を使用しています。', modelsReady: 'モデルはダウンロード済み', modelsMissing: 'モデル未ダウンロード', models: missing => `モデル · ${missing} 件ダウンロード可能`, unsupported: '利用不可' },
+  ko: { details: '자세히', retry: '다시 시도', offline: '더 새로운 다운로드 목록을 확인하지 못했습니다: 사이트가 응답하지 않았습니다. 저장된 목록을 사용합니다.', modelsReady: '모델 다운로드됨', modelsMissing: '모델 미다운로드', models: missing => `모델 · ${missing}개 다운로드 가능`, unsupported: '사용 불가' },
+  pt: { details: 'Detalhes', retry: 'Tentar de novo', offline: 'Não foi possível verificar se há uma lista de downloads mais recente: o site não respondeu. A lista guardada está em uso.', modelsReady: 'Modelos baixados', modelsMissing: 'Modelos não baixados', models: missing => `Modelos · ${missing} para baixar`, unsupported: 'Indisponível' },
+};
+
 export const enginePageStrings: Record<Language, readonly [string, string, string, string, string, string, string, string]> = {
   en: ['Engines and updates', 'Active', 'Installed', 'Not installed', 'Checking…', 'Status unavailable', 'Manage models', 'Engine settings'],
   ru: ['Движки и обновления', 'Активен', 'Установлен', 'Не установлен', 'Проверка…', 'Статус недоступен', 'Управление моделями', 'Настройки движка'],
