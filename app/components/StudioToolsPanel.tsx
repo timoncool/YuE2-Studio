@@ -24,6 +24,8 @@ import { MidiEditor } from './midi/MidiEditor';
 import { WorkProgress } from './WorkProgress';
 import { PrimaryButton, SecondaryButton } from './kit/Buttons';
 import { CatalogSegments } from './kit/Catalog';
+import { Select } from './kit/Select';
+import Combobox from './kit/Combobox';
 import { FieldLabel } from './kit/FieldLabel';
 import { ActionReason, ToolCard, ToolState } from './kit/ToolCard';
 import { LibrarySongPicker } from './LibrarySongPicker';
@@ -488,12 +490,11 @@ export function StudioToolsPanel({ initialSongId, initialTool, onGenerateEffect,
             <p className="mt-1.5 text-[13px] leading-[18px] text-zinc-600 dark:text-zinc-400">{t(asrWay === 'karaoke' ? 'transcribeWayKaraokeHint' : 'transcribeWayOpenRouterHint')}</p>
           </div>
           {asrWay === 'openrouter' && cloudReady && asrModels.length > 0 && (
-            <label className="grid text-xs">
-              <FieldLabel>{page.model}</FieldLabel>
-              <select value={asrModel} onChange={event => setAsrModel(event.target.value)} className={CONTROL}>
-                {asrModels.map(model => <option key={model.id} value={model.id}>{model.name}</option>)}
-              </select>
-            </label>
+            <div className="grid text-xs">
+              <FieldLabel hidden>{page.model}</FieldLabel>
+              <Select label={page.model} value={asrModel} onChange={setAsrModel} inputClassName={CONTROL}
+                options={asrModels.map(model => ({ value: model.id, label: model.name }))} />
+            </div>
           )}
           <div className="grid">
           <FieldLabel>{page.source}</FieldLabel>
@@ -511,13 +512,11 @@ export function StudioToolsPanel({ initialSongId, initialTool, onGenerateEffect,
                 onChange={event => { setAsrFile(event.target.files?.[0] ?? null); event.target.value = ''; }} />
             </div>
           )}
-          <label className="grid text-xs">
-            <FieldLabel>{page.language}</FieldLabel>
-            <select value={asrLanguage} onChange={event => setAsrLanguage(event.target.value)} className={`${CONTROL} max-w-xs`}>
-              <option value="">{page.autoLanguage}</option>
-              {languages.map(code => <option key={code} value={code}>{languageName(code)}</option>)}
-            </select>
-          </label>
+          <div className="grid text-xs">
+            <FieldLabel hidden>{page.language}</FieldLabel>
+            <Combobox label={page.language} value={asrLanguage} onChange={setAsrLanguage} className="max-w-xs" inputClassName={CONTROL}
+              options={[{ value: '', label: page.autoLanguage }, ...languages.map(code => ({ value: code, label: languageName(code) }))]} />
+          </div>
         </ToolCard>
       );
       case 'process': return (
