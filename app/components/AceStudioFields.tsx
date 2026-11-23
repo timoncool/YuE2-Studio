@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ChevronDown } from 'lucide-react';
+import { ChevronDown, ListChecks, Loader2, Sparkles } from 'lucide-react';
 import { useI18n } from '../context/I18nContext';
 import { readAudioCodes, SCHEDULERS, SOLVERS } from '../services/aceEngine';
 import { NumberField } from './NumberField';
@@ -211,17 +211,22 @@ const Stage: React.FC<{ title: string; hint: string; children: React.ReactNode }
   </section>
 );
 
-export function AceStudioFields({ value, onChange, kind, task, adapters, card }: {
+export function AceStudioFields({ value, onChange, kind, task, adapters, card, planning, ready, canFormat, onPlan }: {
   value: AceStudioDraft;
   onChange: (value: AceStudioDraft) => void;
   kind: DitKind;
   task: string;
   adapters: boolean;
+  planning: 'inspire' | 'format' | null;
+  ready: boolean;
+  canFormat: boolean;
+  onPlan: (mode: 'inspire' | 'format', idea?: string) => void;
   card: (title: string, body: React.ReactNode, actions?: React.ReactNode) => React.ReactNode;
 }) {
   const { t } = useI18n();
   const tt = t as unknown as (key: string) => string;
   const [advanced, setAdvanced] = useState(false);
+  const [idea, setIdea] = useState('');
   const dit = DIT_DEFAULTS[kind];
   const turbo = kind === 'turbo';
   const set = (key: string) => (next: string | boolean) => onChange({ ...value, [key]: next });
@@ -238,7 +243,20 @@ export function AceStudioFields({ value, onChange, kind, task, adapters, card }:
     && (numberOrUndefined(value.cfg_interval_end) ?? 1) === preset.end && (get('guidance') || '') === preset.mode)?.id;
   const reset = () => onChange({ vocal_language: get('vocal_language'), gender: value.gender ?? '', bpm: get('bpm'), keyscale: get('keyscale'), timesignature: get('timesignature') });
 
+  const planButton = (mode: 'inspire' | 'format', label: string, disabled: boolean) => (
+    <button type="button" onClick={() => onPlan(mode, idea)} disabled={disabled || planning !== null || !ready}
+      className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[10px] font-semibold text-pink-600 transition-colors hover:bg-pink-500/10 disabled:opacity-40 dark:text-pink-300">
+      {planning === mode ? <Loader2 size={12} className="animate-spin" /> : mode === 'inspire' ? <Sparkles size={12} /> : <ListChecks size={12} />}
+      {label}
+    </button>
+  );
+
   return <>
+    {task === 'text2music' && card(tt('aceSongIdea'), <>
+      <textarea value={idea} onChange={event => setIdea(event.target.value)} rows={2} placeholder={tt('aceIdeaPlaceholder')} aria-label={tt('aceSongIdea')}
+        className={`${CONTROL} resize-y`} />
+      <p className="mt-1.5 text-[11px] leading-4 text-zinc-500">{tt('aceIdeaHint')}</p>
+    </>, planButton('inspire', planning === 'inspire' ? tt('acePlanning') : tt('aceInspire'), !idea.trim()))}
     {card(tt('aceSongParams'), <>
       <div className="grid grid-cols-2 gap-2">
         <Field label={tt('aceLanguage')}>
@@ -268,7 +286,7 @@ export function AceStudioFields({ value, onChange, kind, task, adapters, card }:
         </div>
       </div>
       <p className="mt-2 text-[11px] leading-4 text-zinc-500">{tt('aceMetadataHint')}</p>
-    </>)}
+    </>, planButton('format', tt('aceFormat'), !canFormat))}
 
     {card(t('quality'), <div className="space-y-3">
       <Switch checked={think} onChange={set('think')} label={tt('aceThink')} hint={tt('aceThinkHint')} />

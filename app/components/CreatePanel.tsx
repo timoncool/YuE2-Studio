@@ -61,6 +61,7 @@ import { Vevo2ModelDirectory, Vevo2SingingFields, vevo2SingingStrings, type Vevo
 import { NumberField } from './NumberField';
 import { CreateSpeedReference, type CreateSpeedProfile } from './CreateSpeedReference';
 import { AceTaskControls, aceTaskOptions, newAceTask, restoreAceTask } from './AceTaskControls';
+import { apiUrl } from '../services/apiBase';
 import { AceStudioFields, aceGenderLine, aceStudioFields, ditKind, keepAceStudio, keptAceStudio, restoreAceStudio } from './AceStudioFields';
 import { explainCliFailure } from '../services/cliFailure';
 import { loadNativeOpenRouterCatalog, modelsForCapability, openRouterMusicFields, openRouterMusicParameters, refreshNativeOpenRouterCatalog, type NativeOpenRouterModel, type OpenRouterMusicOptions, type OpenRouterMusicParameter } from '../services/nativeOpenRouter';
@@ -836,6 +837,34 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
   const [writerExtra, setWriterExtra] = useState('');
   const [scoreInstruction, setScoreInstruction] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [acePlanning, setAcePlanning] = useState<'inspire' | 'format' | null>(null);
+  const planAce = async (mode: 'inspire' | 'format', idea = '') => {
+    if (!native.profile || acePlanning) return;
+    setAcePlanning(mode);
+    setError(null);
+    const language = typeof aceStudio.vocal_language === 'string' && aceStudio.vocal_language ? aceStudio.vocal_language : 'en';
+    const number = (value: unknown) => Number(typeof value === 'string' ? value : '') || 0;
+    const request = mode === 'inspire'
+      ? { caption: idea.trim(), lyrics: '', vocal_language: language }
+      : { caption: style.trim(), lyrics: lyrics.replace(/\r\n?/g, '\n').trim(), vocal_language: language, bpm: number(aceStudio.bpm),
+          keyscale: aceStudio.keyscale || '', timesignature: aceStudio.timesignature || '', duration: number(native.settings.duration_seconds) };
+    try {
+      const response = await fetch(apiUrl('/v1/ace/plan'), {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode, profile: native.profile.id, request }),
+      });
+      const body = await response.json().catch(() => null) as { plan?: Record<string, unknown>; error?: string } | null;
+      if (!response.ok || !body?.plan) throw new Error(body?.error || String(response.status));
+      const plan = body.plan;
+      if (typeof plan.caption === 'string' && plan.caption.trim()) setStyle(plan.caption.trim());
+      if (typeof plan.lyrics === 'string' && plan.lyrics.trim()) setLyrics(plan.lyrics.trim());
+      if (typeof plan.duration === 'number' && plan.duration > 0) native.set('duration_seconds', String(Math.round(plan.duration)));
+      setAceStudio(current => ({ ...current, ...restoreAceStudio({ bpm: typeof plan.bpm === 'number' && plan.bpm > 0 ? plan.bpm : undefined, keyscale: plan.keyscale, timesignature: plan.timesignature, vocal_language: plan.vocal_language }) }));
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : String(reason));
+    } finally {
+      setAcePlanning(null);
+    }
+  };
   const [engineAction, setEngineAction] = useState(false);
   // the form scrolls above the Create button: a refusal at its foot is brought into view, or a click seems to do nothing
   const errorBox = useRef<HTMLDivElement>(null);
@@ -2252,6 +2281,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
                 refresh={native.refresh} controlClassName={CONTROL} />}
               {aceEngine && <AceTaskControls value={aceTask} onChange={setAceTask} control={CONTROL} profileReady={native.ready} />}
               {aceEngine && <AceStudioFields value={aceStudio} onChange={setAceStudio} kind={ditKind(undefined)} task={aceTask.task}
+                planning={acePlanning} ready={native.ready} canFormat={Boolean(style.trim() || lyrics.trim())} onPlan={(mode, idea) => void planAce(mode, idea)}
                 adapters={selectedNativeAdapters.some(adapter => !adapter.disabled)}
                 card={(title, body, actions) => <Card title={title} actions={actions} fold={`ace-${title}`}>{body}</Card>} />}
               {(aceEngine || miniMaxEngine) && native.profile && <AdapterPicker
