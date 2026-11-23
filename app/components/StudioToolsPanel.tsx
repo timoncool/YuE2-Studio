@@ -24,6 +24,7 @@ import { ConfirmDialog } from './ConfirmDialog';
 import { MidiTool } from './midi/MidiTool';
 import { MidiEditor } from './midi/MidiEditor';
 import { WorkProgress } from './WorkProgress';
+import { SecondaryButton } from './kit/Buttons';
 import { ManualRuntimeArchive, type RuntimeArchive } from './ManualDownloads';
 
 /**
@@ -428,38 +429,23 @@ export function StudioToolsPanel({ initialSongId, focusRvc, onRvcFocused, onGene
           </div>
 
           {status && !status.ready && (
-            <div className="mt-3 rounded-lg border border-zinc-200 p-3 dark:border-white/10">
-              <p className="text-xs leading-5 text-zinc-600 dark:text-zinc-300">
-                {status.model.label} · {megabytes(status.model.bytes)} — {status.model.note}
-              </p>
+            <div className="mt-3">
               {download?.error && <>
                 <p role="alert" className="mt-2 text-xs text-rose-600">{download.error}</p>
                 <ManualRuntimeArchive archive={download.manual_archive} />
               </>}
               {download && !download.done ? (
-                <div className="mt-2">
-                  <div className="h-1.5 overflow-hidden rounded-full bg-zinc-200 dark:bg-black/30">
-                    <div
-                      className="h-full bg-linear-to-r from-orange-500 to-pink-500 transition-[width]"
-                      style={{ width: `${Math.round((download.downloaded_bytes / Math.max(1, download.total_bytes)) * 100)}%` }}
-                    />
+                <div className="flex items-end gap-2">
+                  <div className="min-w-0 flex-1">
+                    <WorkProgress label={`${t('download')} · ${megabytes(download.downloaded_bytes)} / ${megabytes(download.total_bytes)}`}
+                      percent={Math.round((download.downloaded_bytes / Math.max(1, download.total_bytes)) * 100)} />
                   </div>
-                  <p className="mt-1 text-[11px] tabular-nums text-zinc-500">
-                    {megabytes(download.downloaded_bytes)} / {megabytes(download.total_bytes)}
-                    <button type="button" disabled={busy} onClick={() => void changeStemDownload('cancel')} className="ml-2 font-semibold text-pink-600 hover:underline disabled:opacity-50">
-                      {t('cancelDownload')}
-                    </button>
-                  </p>
+                  <SecondaryButton disabled={busy} onClick={() => void changeStemDownload('cancel')}>{t('cancelDownload')}</SecondaryButton>
                 </div>
               ) : (
-                <button
-                  type="button"
-                  onClick={() => void changeStemDownload('install')}
-                  disabled={busy}
-                  className="mt-2 inline-flex items-center gap-2 rounded-lg bg-zinc-900 px-3 py-1.5 text-xs font-bold text-white disabled:opacity-50 dark:bg-white dark:text-zinc-900"
-                >
+                <SecondaryButton disabled={busy} onClick={() => void changeStemDownload('install')}>
                   <Download size={13} /> {t('download')}{status.missing_bytes ? ` · ${megabytes(status.missing_bytes)}` : ''}
-                </button>
+                </SecondaryButton>
               )}
             </div>
           )}

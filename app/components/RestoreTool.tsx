@@ -9,6 +9,8 @@ import { ConfirmDialog } from './ConfirmDialog';
 import { ManualRuntimeArchive, type RuntimeArchive } from './ManualDownloads';
 import { StemPlayer } from './StemPlayer';
 import { WorkProgress } from './WorkProgress';
+import { PrimaryButton, SecondaryButton } from './kit/Buttons';
+import { CatalogSegments } from './kit/Catalog';
 
 /**
  * Restore after compression on the tools page: Apollo on the track chosen there or on a
@@ -124,19 +126,9 @@ export const RestoreTool: React.FC<{
       </div>
       <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-300">{t('restoreHint')}</p>
 
-      <div role="radiogroup" aria-label={t('restoreFrom')} className="mt-3 inline-flex rounded-lg border border-zinc-200 p-0.5 text-xs font-semibold dark:border-white/10">
-        {(['song', 'file'] as const).map(way => (
-          <button
-            key={way}
-            type="button"
-            role="radio"
-            aria-checked={from === way}
-            onClick={() => setFrom(way)}
-            className={`rounded-md px-3 py-1.5 ${from === way ? 'bg-pink-600 text-white' : 'text-zinc-600 hover:text-pink-600 dark:text-zinc-300'}`}
-          >
-            {t(way === 'song' ? 'restoreFromSong' : 'restoreFromFile')}
-          </button>
-        ))}
+      <div className="mt-3 inline-flex">
+        <CatalogSegments<'song' | 'file'> label={t('restoreFrom')} value={from} onChange={setFrom}
+          options={[{ value: 'song', label: t('restoreFromSong') }, { value: 'file', label: t('restoreFromFile') }]} />
       </div>
       {from === 'song' ? (
         <p className="mt-2 truncate text-xs text-zinc-500">{songTitle || t('restoreNoSong')}</p>
@@ -162,54 +154,35 @@ export const RestoreTool: React.FC<{
 
       {status && !status.ready && (
         <div className="mt-3 rounded-lg border border-zinc-200 p-3 dark:border-white/10">
-          <p className="text-xs leading-5 text-zinc-600 dark:text-zinc-300">
-            {status.model.label} · {megabytes(status.missing_bytes)}
-          </p>
           {status.download?.error && <>
-            <p role="alert" className="mt-2 text-xs text-rose-600">{status.download.error}</p>
+            <p role="alert" className="text-xs text-rose-600">{status.download.error}</p>
             <ManualRuntimeArchive archive={status.download.manual_archive} retryLabel={t('restoreInstall').replace('{size}', megabytes(status.missing_bytes))} />
           </>}
           {download ? (
             <div className="mt-2 flex items-center gap-2">
-              <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-zinc-200 dark:bg-black/30">
-                <div
-                  className="h-full bg-linear-to-r from-orange-500 to-pink-500 transition-[width]"
-                  style={{ width: `${Math.round((download.downloaded_bytes / Math.max(1, download.total_bytes)) * 100)}%` }}
-                />
+              <div className="min-w-0 flex-1">
+                <WorkProgress label={`${megabytes(download.downloaded_bytes)} / ${megabytes(download.total_bytes)}`}
+                  percent={Math.round((download.downloaded_bytes / Math.max(1, download.total_bytes)) * 100)} />
               </div>
-              <span className="text-[11px] tabular-nums text-zinc-500">{megabytes(download.downloaded_bytes)} / {megabytes(download.total_bytes)}</span>
-              <button type="button" onClick={() => void post('/v1/restore/cancel', {})} title={t('cancelDownload')} className="rounded-md border border-zinc-300 p-1 text-zinc-500 hover:border-rose-400 hover:text-rose-600 dark:border-white/15">
-                <Square size={11} />
-              </button>
+              <SecondaryButton onClick={() => void post('/v1/restore/cancel', {})}><Square size={11} />{t('cancelDownload')}</SecondaryButton>
             </div>
           ) : (
-            <button
-              type="button"
-              onClick={() => void post('/v1/restore/install', {})}
-              disabled={busy}
-              className="mt-2 inline-flex items-center gap-2 rounded-lg bg-zinc-900 px-3 py-1.5 text-xs font-bold text-white disabled:opacity-50 dark:bg-white dark:text-zinc-900"
-            >
+            <SecondaryButton className="mt-2" onClick={() => void post('/v1/restore/install', {})} disabled={busy}>
               <Download size={13} /> {t('restoreInstall').replace('{size}', megabytes(status.missing_bytes))}
-            </button>
+            </SecondaryButton>
           )}
-          {status.download?.error && <p className="mt-2 text-xs text-rose-600 wrap-anywhere dark:text-rose-300">{status.download.error}</p>}
         </div>
       )}
 
       <div className="mt-3 flex flex-wrap gap-2">
-        <button
-          type="button"
-          onClick={() => (replaces ? setConfirmReplace(true) : void start())}
-          disabled={!canStart}
-          className="inline-flex items-center gap-2 rounded-lg bg-linear-to-r from-orange-500 to-pink-600 px-4 py-2 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-50"
-        >
+        <PrimaryButton onClick={() => (replaces ? setConfirmReplace(true) : void start())} disabled={!canStart}>
           {running ? <Loader2 size={14} className="animate-spin" /> : <Play size={14} />}
           {replaces ? t('restoreAgain') : t('restoreStart')}
-        </button>
+        </PrimaryButton>
         {running && (
-          <button type="button" onClick={() => void post('/v1/restore/cancel', {})} className="inline-flex items-center gap-2 rounded-lg border border-zinc-300 px-3 py-2 text-xs font-semibold text-zinc-700 hover:border-pink-400 dark:border-white/15 dark:text-zinc-200">
+          <SecondaryButton onClick={() => void post('/v1/restore/cancel', {})}>
             <Square size={12} /> {t('restoreStop')}
-          </button>
+          </SecondaryButton>
         )}
       </div>
       <ConfirmDialog

@@ -2,7 +2,9 @@ import React, { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-vi.mock('../context/I18nContext', () => ({ useI18n: () => ({ t: (key: string) => key, language: 'en' }) }));
+vi.mock('../context/I18nContext', () => ({
+  useI18n: () => ({ t: (key: string) => key === 'restoreInstall' ? 'Download Apollo · {size}' : key, language: 'en' }),
+}));
 
 const { RestoreTool } = await import('./RestoreTool');
 
@@ -47,10 +49,10 @@ describe('RestoreTool', () => {
   it('names the size before downloading, and restores nothing until Apollo is here', async () => {
     serve({ ...ready, ready: false, model: { ...model, installed: false }, missing_bytes: 66_398_592 });
     await open();
-    expect(host.textContent).toContain('Apollo · 63 MB');
+    expect(button('Download Apollo')?.textContent).toContain('63 MB');
     expect(host.textContent, "the service's English note is not repeated in the window's language").not.toContain(model.note);
     expect(button('restoreStart')!.disabled).toBe(true);
-    await click(button('restoreInstall'));
+    await click(button('Download Apollo'));
     expect(calls.some(call => call.path === '/v1/restore/install')).toBe(true);
   });
 

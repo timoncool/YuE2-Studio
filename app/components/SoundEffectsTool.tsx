@@ -5,6 +5,8 @@ import { SELF_READ } from '../services/studioQueries';
 import { apiUrl } from '../services/apiBase';
 import { nativeMusicSourceStrings, musicSourceStrings } from '../i18n/musicSource';
 import { AudioCppModelInstall } from './HeartMuLaControls';
+import { AudioWaveform } from 'lucide-react';
+import { PrimaryButton, SecondaryButton } from './kit/Buttons';
 
 const strings = {
   en: { heading: 'Sound effects', description: 'Sound description (English or Chinese)', create: 'Generate sound effect', checking: 'Checking MOSS-SoundEffect…', unavailable: 'MOSS-SoundEffect is unavailable.', saved: 'Sound effects are saved in the library.' },
@@ -62,18 +64,19 @@ export function SoundEffectsTool({ card, control, busy, onGenerate }: {
     seconds >= limit.min && seconds <= limit.max);
 
   return <section className={card} aria-label={text.heading}>
-    <h2 className="text-sm font-semibold">{text.heading}</h2>
-    {error ? <p role="alert" className="mt-2 text-xs">{text.unavailable}</p>
+    <h2 className="flex items-center gap-2 text-sm font-semibold"><AudioWaveform size={16} className="text-pink-500" aria-hidden />{text.heading}</h2>
+    {error ? <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
+        <p role="alert">{text.unavailable}</p>
+        <SecondaryButton onClick={() => { setError(false); refresh(value => value + 1); }}>{common.refresh}</SecondaryButton>
+      </div>
       : !status ? <p role="status" className="mt-2 text-xs">{text.checking}</p>
       : <div className="mt-2 space-y-2 text-xs">
-        <p>{status.name}</p>
-        {!status.ready && <p role="status">{model.unavailable} · {status.missing.join(', ')}</p>}
-        {status.missing_bytes > 0 && status.installable && <AudioCppModelInstall model={status.id} bytes={status.missing_bytes}
+        {status.missing_bytes > 0 && status.installable ? <AudioCppModelInstall model={status.id} bytes={status.missing_bytes}
           target={{ catalogue: '/v1/tools/sound-effects/model', installPath: '/v1/music/audio-cpp/models/install', label: status.name }}
-          language={language} onInstalled={() => refresh(value => value + 1)} />}
-        <a href={status.license_url} target="_blank" rel="noreferrer" className="underline">{model.modelLicense}</a>
+          language={language} onInstalled={() => refresh(value => value + 1)} secondary />
+          : !status.ready && <p role="status">{model.unavailable}</p>}
+        <a href={status.license_url} target="_blank" rel="noreferrer" className="inline-block text-[11px] text-zinc-500 hover:text-pink-600 dark:text-zinc-400">{model.modelLicense} ↗</a>
       </div>}
-    <button type="button" className="mt-2 text-xs underline" onClick={() => refresh(value => value + 1)}>{common.refresh}</button>
     <div className="mt-3 grid gap-2 text-xs">
       <label className="grid gap-1">
         <span>{text.description}</span>
@@ -85,12 +88,12 @@ export function SoundEffectsTool({ card, control, busy, onGenerate }: {
           step={0.1} placeholder={String(limit?.default ?? 10)} onChange={event => setDuration(event.target.value)} />
       </label>
     </div>
-    <button type="button" disabled={!canCreate} className="mt-3 text-xs underline disabled:opacity-50"
+    <PrimaryButton disabled={!canCreate} className="mt-3"
       onClick={() => {
         if (!status || !canCreate) return;
         onGenerate({ music_source: { kind: 'audio_cpp', model: status.id }, style: description.trim(),
           lyrics: '', duration_seconds: seconds, output_format: 'wav32' });
-      }}>{text.create}</button>
+      }}>{text.create}</PrimaryButton>
     <p className="mt-2 text-xs text-zinc-500">{text.saved}</p>
   </section>;
 }

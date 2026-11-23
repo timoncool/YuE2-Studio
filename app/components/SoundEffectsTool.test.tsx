@@ -38,7 +38,7 @@ it('keeps Create disabled until the effect model is ready, then sends the descri
   expect(button('Generate sound effect').disabled).toBe(true);
 
   ready = true;
-  await act(async () => button('Refresh models').click());
+  await act(async () => { await new Promise(resolve => setTimeout(resolve, 1_100)); });
   const description = host.querySelector('textarea')!;
   const set = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(description), 'value')!.set!;
   act(() => {

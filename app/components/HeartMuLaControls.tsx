@@ -5,6 +5,7 @@ import { nativeMusicSourceStrings } from '../i18n/musicSource';
 import { nativeModelSetStrings } from '../i18n/nativeModelSet';
 import { WorkProgress } from './WorkProgress';
 import { PrimaryButton, SecondaryButton } from './kit/Buttons';
+import { Download } from 'lucide-react';
 
 export interface HeartMuLaOptions {
   temperature?: number;
@@ -93,11 +94,13 @@ type ModelInstallTarget =
   | { model: LegacyManagedModel; target?: never }
   | { model: string; target: { catalogue: string; installPath: string; label: string } };
 
-export function AudioCppModelInstall({ model, bytes, licenseUrl, language, onInstalled, target }: ModelInstallTarget & {
+export function AudioCppModelInstall({ model, bytes, licenseUrl, language, onInstalled, target, secondary }: ModelInstallTarget & {
   bytes: number;
   licenseUrl?: string;
   language: string;
   onInstalled: () => void;
+  /** The card has its own main action, so the download is not drawn as one. */
+  secondary?: true;
 }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -185,7 +188,9 @@ export function AudioCppModelInstall({ model, bytes, licenseUrl, language, onIns
     {busy ? (
       <WorkProgress label={`${installing}${progress ? ` · ${sets.of(gb(progress.done), gb(progress.total))}` : ''}`} percent={percent ?? null} />
     ) : (
-      <PrimaryButton className="w-full" onClick={() => void start()}>{bytes > 0 ? sets.download(name, gb(bytes)) : install}</PrimaryButton>
+      secondary
+        ? <SecondaryButton onClick={() => void start()}><Download size={13} />{bytes > 0 ? sets.download(name, gb(bytes)) : install}</SecondaryButton>
+        : <PrimaryButton className="w-full" onClick={() => void start()}>{bytes > 0 ? sets.download(name, gb(bytes)) : install}</PrimaryButton>
     )}
     {busy && canCancel && <SecondaryButton className="mt-2" disabled={cancelling}
       onClick={() => void cancel()}>{t('cancelDownload')}</SecondaryButton>}
