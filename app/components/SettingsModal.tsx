@@ -5,6 +5,7 @@ import { useAuth } from '../context/AuthContext';
 import { useI18n } from '../context/I18nContext';
 import { LANGUAGE_NAMES, type Language } from '../i18n/translations';
 import { ProviderSettings } from './ProviderSettings';
+import { Select } from './kit/Select';
 import { EngineSettings } from './EngineSettings';
 import { EnginesAndUpdates } from './EnginesAndUpdates';
 import { engineCardText } from '../i18n/engineCards';
@@ -230,11 +231,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, target, on
                       )}
                     </div>
                   </div>
-                  <select value={language} onChange={(event) => setLanguage(event.target.value as Language)} className={INPUT}>
-                    {(Object.entries(LANGUAGE_NAMES) as [Language, string][]).map(([code, name]) => (
-                      <option key={code} value={code} lang={code}>{name}</option>
-                    ))}
-                  </select>
+                  <Select<Language> label={t('language')} value={language} onChange={setLanguage} inputClassName={INPUT}
+                    options={(Object.entries(LANGUAGE_NAMES) as [Language, string][]).map(([code, name]) => ({ value: code, label: name }))} />
                 </div>
 
                 <div className="space-y-3">

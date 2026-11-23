@@ -8,6 +8,12 @@ vi.mock('../context/I18nContext', () => ({
   useI18n: () => ({ t: (key: string) => key, songCount: String, language: 'en' }),
 }));
 
+const field = (host: HTMLElement, label: string) => host.querySelector<HTMLInputElement>(`input[role="combobox"][aria-label="${label}"]`);
+const pick = async (host: HTMLElement, label: string, option: string) => {
+  await act(async () => field(host, label)!.click());
+  await act(async () => [...document.querySelectorAll<HTMLElement>(`[role="listbox"][aria-label="${label}"] [role="option"]`)].find(node => node.textContent === option)!.click());
+};
+
 it.each([false, true])('uses the selected recipe after revisiting songs (automatic start: %s)', async automatic => {
   const state = {
     pack: [], pack_ready: true, card_trains: true, listen: { ready: true }, runs: [],
@@ -24,6 +30,7 @@ it.each([false, true])('uses the selected recipe after revisiting songs (automat
     return Response.json(url === '/v1/training' ? state : {});
   });
   const host = document.createElement('div');
+  document.body.append(host);
   const root = createRoot(host);
   const press = async (text: string) => {
     const target = Array.from(host.querySelectorAll('button')).find(button => button.textContent?.includes(text));
@@ -34,11 +41,7 @@ it.each([false, true])('uses the selected recipe after revisiting songs (automat
     await act(async () => root.render(<TrainingPanel />));
     await press('Test songs');
     await press('2 · trainingStepTrain');
-    const preset = host.querySelector<HTMLSelectElement>('select:has(option[value="fast"])')!;
-    await act(async () => {
-      preset.value = 'fast';
-      preset.dispatchEvent(new Event('change', { bubbles: true }));
-    });
+    await pick(host, 'trainingField_preset', 'trainingChoice_fast');
     await press('1 · trainingStepSongs');
     const recipe = { preset: 'fast', seed: 42 };
     if (automatic) {
@@ -47,12 +50,13 @@ it.each([false, true])('uses the selected recipe after revisiting songs (automat
       expect(requests.get('/v1/training/prepare/train-after')).toEqual({ train: { name: 'Test songs', recipe } });
     } else {
       await press('2 · trainingStepTrain');
-      expect(host.querySelector<HTMLSelectElement>('select:has(option[value="fast"])')?.value).toBe('fast');
+      expect(field(host, 'trainingField_preset')?.value).toBe('trainingChoice_fast');
       await press('trainingStart');
       expect(requests.get('/v1/training/runs')).toEqual({ dataset_id: 'set', name: 'Test songs', recipe });
     }
   } finally {
     await act(async () => root.unmount());
+    host.remove();
     vi.unstubAllGlobals();
   }
 });
@@ -111,6 +115,7 @@ it('displays Burn training progress and keeps a saved checkpoint installable aft
     expect(button('Voice in catalogue')?.disabled).toBe(true);
   } finally {
     await act(async () => root.unmount());
+    host.remove();
     vi.unstubAllGlobals();
   }
 });
@@ -140,6 +145,7 @@ it('shows a second page of a long dataset without changing which songs it contai
     expect(host.textContent).toContain('Recording 25');
   } finally {
     await act(async () => root.unmount());
+    host.remove();
     vi.unstubAllGlobals();
   }
 });
@@ -163,6 +169,7 @@ it.each([undefined, 'ruach-rs-tw-2.0x0.75'])('starts the trainer with training b
     return Response.json(url === '/v1/training' ? state : { id: 'run' });
   });
   const host = document.createElement('div');
+  document.body.append(host);
   const root = createRoot(host);
   const press = async (text: string) => {
     const target = [...host.querySelectorAll('button')].find(button => button.textContent?.includes(text))!;
@@ -174,20 +181,17 @@ it.each([undefined, 'ruach-rs-tw-2.0x0.75'])('starts the trainer with training b
     await press('Test vocals');
     await press('2 · trainingStepTrain');
     if (base) {
-      const baseSelect = host.querySelector<HTMLSelectElement>(`select:has(option[value="${base}"])`)!;
-      await act(async () => {
-        baseSelect.value = base;
-        baseSelect.dispatchEvent(new Event('change', { bubbles: true }));
-      });
+      await pick(host, 'trainingBase', 'Ruach');
       await press('trainingBackSongs');
       await press('2 · trainingStepTrain');
-      expect(host.querySelector<HTMLSelectElement>(`select:has(option[value="${base}"])`)?.value).toBe(base);
+      expect(field(host, 'trainingBase')?.value).toBe('Ruach');
     }
     await press('trainingStart');
     expect(start).toHaveBeenCalledWith({ dataset_id: 'set', name: 'Test vocals', recipe: state.recipe_defaults,
       ...(base ? { base_id: base } : {}) });
   } finally {
     await act(async () => root.unmount());
+    host.remove();
     vi.unstubAllGlobals();
   }
 });
@@ -214,6 +218,7 @@ it.each(['sa3', 'heartmula', 'rvc'])('starts %s training with its native default
     return Response.json({});
   });
   const host = document.createElement('div');
+  document.body.append(host);
   const root = createRoot(host);
   const press = async (text: string) => {
     const button = [...host.querySelectorAll('button')].find(item => item.textContent?.includes(text));
@@ -224,13 +229,15 @@ it.each(['sa3', 'heartmula', 'rvc'])('starts %s training with its native default
     await act(async () => root.render(<TrainingPanel voices={target === 'rvc'} />));
     await press('Instrumentals');
     await press('2 · trainingStepTrain');
-    const engine = host.querySelector<HTMLSelectElement>('select:has(option[value="sa3"])');
+    const engine = field(host, 'Training engine');
     expect(Boolean(engine), 'the Voices section trains only voices').toBe(target !== 'rvc');
-    expect(host.querySelector('option[value="rvc"]')).toBeNull();
-    if (engine) await act(async () => {
-      engine.value = target;
-      engine.dispatchEvent(new Event('change', { bubbles: true }));
-    });
+    if (engine) {
+      await act(async () => engine.click());
+      const offered = [...document.querySelectorAll<HTMLElement>('[role="listbox"][aria-label="Training engine"] [role="option"]')].map(node => node.textContent);
+      expect(offered).toEqual(['YuE2', 'HeartMuLa 3B · HOT-Step', 'Stable Audio 3 Medium · HOT-Step']);
+      await act(async () => [...document.querySelectorAll<HTMLElement>('[role="listbox"][aria-label="Training engine"] [role="option"]')]
+        .find(node => node.textContent === (target === 'sa3' ? 'Stable Audio 3 Medium · HOT-Step' : 'HeartMuLa 3B · HOT-Step'))!.click());
+    }
     await press('trainingStart');
     expect(start).toHaveBeenCalledWith({
       dataset_id: 'instrumental-set', name: 'Instrumentals',
@@ -239,6 +246,7 @@ it.each(['sa3', 'heartmula', 'rvc'])('starts %s training with its native default
     });
   } finally {
     await act(async () => root.unmount());
+    host.remove();
     vi.unstubAllGlobals();
   }
 });

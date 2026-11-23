@@ -6,6 +6,7 @@ import { cycleSection, editLyricLine, lyricSections, SECTION_PRESETS, sectionTex
 import { styleSuggestions } from '../services/styleSuggestions';
 import { MAIN_STYLES } from '../data/genres';
 import { lyricLineOffsets, songTokens, tokensOnLine, type SongTokens } from '../services/songTokens';
+import { Select } from './kit/Select';
 
 const control = 'w-full rounded-lg border border-zinc-200 bg-zinc-50 px-2 py-1.5 text-xs outline-hidden focus:border-pink-500 dark:border-white/10 dark:bg-black/25';
 const button = 'rounded-md p-1.5 text-zinc-500 hover:bg-pink-500/10 hover:text-pink-500 disabled:opacity-30';
@@ -56,7 +57,8 @@ export function SongTextParts({ value, onChange, kind, style = '', cot = 'full' 
       {kind === 'lyrics' && <p className="text-[11px] text-zinc-500" role="status">{tokens?.available ? `${tokens.tokens} ${s.tokens}` : tokenProblem || s.tokenLoading}</p>}
       {kind === 'style' && <div className="space-y-2 rounded-lg border border-zinc-200 p-2 dark:border-white/10">
         <div className="grid grid-cols-2 gap-2">
-          <label className="text-[11px] text-zinc-500">{s.language}<select className={control} value={styleRole(value, 'language')} onChange={event => onChange(setStyleRole(value, 'language', event.target.value))}><option value="">{s.auto}</option>{STYLE_LANGUAGES.map(name => <option key={name}>{name}</option>)}</select>{hint(s.languageHint)}</label>
+          <label className="text-[11px] text-zinc-500">{s.language}<Select<string> label={s.language} inputClassName={control} value={styleRole(value, 'language')} onChange={language => onChange(setStyleRole(value, 'language', language))}
+            options={[{ value: '', label: s.auto }, ...STYLE_LANGUAGES.map(name => ({ value: name, label: name }))]} />{hint(s.languageHint)}</label>
           <label className="text-[11px] text-zinc-500">{s.tempo}<input key={`tempo-${styleRole(value, 'tempo')}`} type="number" min={40} max={200} className={control} defaultValue={styleRole(value, 'tempo')} placeholder={s.auto} onBlur={event => onChange(setStyleRole(value, 'tempo', event.target.value))} /></label>
         </div>
         <div className="flex items-center gap-2"><label className="flex items-center gap-1 text-[11px] text-zinc-500"><input type="checkbox" className="accent-pink-500" checked={Boolean(styleRole(value, 'tempo'))} onChange={event => onChange(setStyleRole(value, 'tempo', event.target.checked ? '88' : ''))} />BPM</label><input type="range" min={40} max={200} step={1} aria-label={s.tempo} className="w-full accent-pink-500 disabled:opacity-30" disabled={!styleRole(value, 'tempo')} value={styleRole(value, 'tempo') || '88'} onChange={event => onChange(setStyleRole(value, 'tempo', event.target.value))} /></div>
@@ -80,7 +82,8 @@ export function SongTextParts({ value, onChange, kind, style = '', cot = 'full' 
           <button type="button" className={button} title={s.add} onClick={() => { const next = [...sections]; next.splice(index + 1, 0, { tag: 'Verse', body: '' }); changeSections(next); }}><Plus size={13} /></button>
           <button type="button" className={button} title={s.remove} onClick={() => changeSections(sections.filter((_, i) => i !== index))}><Trash2 size={13} /></button>
         </div>
-        <div className="mb-2 flex gap-1"><select className={control} aria-label={`${s.preset} ${index + 1}`} value={SECTION_PRESETS.includes(section.tag) ? section.tag : ''} onChange={event => { if (event.target.value) patchSection(index, { tag: event.target.value }); }}><option value="">{section.tag || s.preset}</option>{SECTION_PRESETS.map(tag => <option key={tag}>{tag}</option>)}</select><button type="button" className={button} title={s.cycle} onClick={() => patchSection(index, { tag: cycleSection(section.tag) })}><RotateCw size={13} /></button></div>
+        <div className="mb-2 flex gap-1"><Select<string> className="min-w-0 flex-1" inputClassName={control} label={`${s.preset} ${index + 1}`} value={SECTION_PRESETS.includes(section.tag) ? section.tag : ''} onChange={tag => { if (tag) patchSection(index, { tag }); }}
+          options={[{ value: '', label: section.tag || s.preset }, ...SECTION_PRESETS.map(tag => ({ value: tag, label: tag }))]} /><button type="button" className={button} title={s.cycle} onClick={() => patchSection(index, { tag: cycleSection(section.tag) })}><RotateCw size={13} /></button></div>
         <textarea className={`${control} min-h-20 font-mono`} aria-label={`${s.words} ${index + 1}`} value={section.body} onChange={event => { const next = [...sections]; next[index] = { ...section, body: event.target.value }; changeSections(next); }} />
         <details className="mt-2"><summary className="cursor-pointer text-[11px] text-pink-600 dark:text-pink-300">{s.lineEditor}</summary><p className="my-2 text-[11px] text-zinc-500">{s.caseHint}</p>
           {section.body.split('\n').map((line, lineIndex, lines) => {

@@ -3,6 +3,7 @@ import { Check, CheckSquare, Download, Play, Square } from 'lucide-react';
 import { CatalogBadge, CatalogCard, CatalogSearch, CatalogSegments } from './kit/Catalog';
 import { openExternal } from '../services/externalLinks';
 import { PrimaryButton, SecondaryButton } from './kit/Buttons';
+import { Select } from './kit/Select';
 import { WorkProgress } from './WorkProgress';
 import { useI18n } from '../context/I18nContext';
 import { rvcVoiceStrings } from '../i18n/rvcVoices';
@@ -195,11 +196,8 @@ export function RvcCuratedVoices({ onInstalled, onChoose, disabled, installedIds
                 options={[{ value: '', label: labels.all }, ...styles.map(value => ({ value, label: labels.styles[value] ?? value }))]} />
             )}
             {styles.length > 3 && (
-              <select aria-label={labels.vocalStyle} value={filters.vocal_style ?? ''} onChange={event => setFilter('vocal_style', event.target.value)}
-                className="shrink-0 rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 dark:border-white/10 dark:bg-black/30 dark:text-white">
-                <option value="">{labels.vocalStyle}: {labels.all}</option>
-                {styles.map(value => <option key={value} value={value}>{labels.styles[value] ?? value}</option>)}
-              </select>
+              <Select<string> label={labels.vocalStyle} value={filters.vocal_style ?? ''} onChange={value => setFilter('vocal_style', value)} className="shrink-0"
+                options={[{ value: '', label: `${labels.vocalStyle}: ${labels.all}` }, ...styles.map(value => ({ value, label: labels.styles[value] ?? value }))]} />
             )}
             {samples && (
               <label className="flex shrink-0 items-center gap-1.5">

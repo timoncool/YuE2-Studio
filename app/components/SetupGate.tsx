@@ -16,6 +16,7 @@ import { KaraokeExtras } from './KaraokeSettings';
 import { HubTelemetryPreview } from './HubTelemetryPreview';
 import { OwnModelPanel } from './OwnModelPanel';
 import { ModelStorageCard } from './ModelStorageCard';
+import { Select } from './kit/Select';
 import { setTelemetry } from '../services/studioHub';
 import { programName } from '../services/programs';
 import { engineCardText } from '../i18n/engineCards';
@@ -465,11 +466,13 @@ export const OptionalGroup: React.FC<{
                       </div>
                     </div>
                     {models.length > 1 && (
-                      <select
+                      <Select<string>
+                        label={engines.find((choice) => choice.id === engine)?.label ?? ''}
                         value={chosenModel}
                         disabled={savingModel}
-                        onChange={(event) => {
-                          setModel(event.target.value);
+                        onChange={(picked) => {
+                          if (picked === chosenModel) return;
+                          setModel(picked);
                           // Which model was picked is a setting, not a detail of
                           // the download: the studio decides the assistant is
                           // ready by reading it back. Saving it only for Whisper
@@ -485,7 +488,7 @@ export const OptionalGroup: React.FC<{
                                 ? 'managed_model'
                                 : null;
                           if (settingsUrl && field) {
-                            const nextModel = event.target.value;
+                            const nextModel = picked;
                             setFailed(null);
                             setSavingModel(true);
                             // A poll for the old selection may still be pending.
@@ -524,14 +527,9 @@ export const OptionalGroup: React.FC<{
                             })();
                           }
                         }}
-                        className="shrink-0 rounded-md border border-zinc-200 bg-white px-2 py-1 text-[11px] tabular-nums text-zinc-800 outline-hidden focus:border-pink-400 dark:border-white/10 dark:bg-black/20 dark:text-zinc-100"
-                      >
-                        {models.map((asset) => (
-                          <option key={asset.id} value={asset.id}>
-                            {asset.label}{asset.installed ? ' ✓' : ''} · {bytes(asset.variant_bytes ?? asset.bytes)}
-                          </option>
-                        ))}
-                      </select>
+                        className="shrink-0"
+                        options={models.map((asset) => ({ value: asset.id, label: `${asset.label}${asset.installed ? ' ✓' : ''} · ${bytes(asset.variant_bytes ?? asset.bytes)}` }))}
+                      />
                     )}
                     {busy ? (
                       <>
@@ -1167,24 +1165,24 @@ export const SetupGate: React.FC<{
                 <div key={group.kind} className="grid grid-cols-[minmax(0,1fr)_auto] items-end gap-2">
                   <label className="min-w-0">
                     <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">{componentKindLabel(group.kind)}</span>
-                    <select
+                    <Select<string>
+                      label={componentKindLabel(group.kind)}
                       value={selectedId}
-                      onChange={(event) => {
+                      onChange={(id) => {
+                        if (id === selectedId) return;
                         choiceEdited.current = true;
                         setError(null);
-                        const id = event.target.value;
                         setChoice((current) => ({ ...current, [group.kind]: id }));
                       }}
                       disabled={savingSelection || active?.status === 'downloading'}
-                      className="w-full rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm text-zinc-900 focus:border-pink-500 focus:outline-hidden disabled:opacity-50 dark:border-white/10 dark:bg-black/20 dark:text-white"
-                    >
-                      <option value="">{group.optional ? t(group.kind === 'vae-decoder' ? 'ownDecoder' : 'noTranscriber') : t('chooseComponent')}</option>
-                      {group.components.map((component) => (
-                        <option key={component.id} value={component.id}>
-                          {componentPrecision(component)} — {bytes(component.bytes)}{installedIds.includes(component.id) ? ` · ${t('installed')}` : ''}
-                        </option>
-                      ))}
-                    </select>
+                      options={[
+                        { value: '', label: group.optional ? t(group.kind === 'vae-decoder' ? 'ownDecoder' : 'noTranscriber') : t('chooseComponent') },
+                        ...group.components.map((component) => ({
+                          value: component.id,
+                          label: `${componentPrecision(component)} — ${bytes(component.bytes)}${installedIds.includes(component.id) ? ` · ${t('installed')}` : ''}`,
+                        })),
+                      ]}
+                    />
                   </label>
                   <div className="mb-2 flex shrink-0 items-center gap-2">
                     {(selectedId || !group.optional) && (

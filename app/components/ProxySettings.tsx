@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { AlertTriangle, Check, Eye, EyeOff, Globe, Loader2, X } from 'lucide-react';
 import { useI18n } from '../context/I18nContext';
+import { Select } from './kit/Select';
 
 /**
  * The proxy for everything the studio fetches from the internet.
@@ -131,15 +132,15 @@ export const ProxySettings: React.FC = () => {
 
       <label className="mt-3 block text-xs font-semibold text-zinc-700 dark:text-zinc-200">
         {t('modelDownloadSource')}
-        <select
+        <Select<string>
+          label={t('modelDownloadSource')}
           value={huggingfaceMirror ? 'mirror' : 'official'}
           disabled={busy !== null}
-          onChange={event => { setHuggingfaceMirror(event.target.value === 'mirror'); setProbe(null); setSaved(false); }}
-          className={`${CONTROL} mt-1`}
-        >
-          <option value="official">{t('modelDownloadOfficial')}</option>
-          <option value="mirror">HF-Mirror · hf-mirror.com</option>
-        </select>
+          onChange={source => { if ((source === 'mirror') === huggingfaceMirror) return; setHuggingfaceMirror(source === 'mirror'); setProbe(null); setSaved(false); }}
+          className="mt-1"
+          inputClassName={CONTROL}
+          options={[{ value: 'official', label: t('modelDownloadOfficial') }, { value: 'mirror', label: 'HF-Mirror · hf-mirror.com' }]}
+        />
       </label>
       <p className="mt-1 text-[11px] leading-4 text-zinc-500">{t('modelDownloadSourceHint')}</p>
 

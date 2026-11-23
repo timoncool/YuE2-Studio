@@ -6,6 +6,7 @@ import { apiUrl } from '../services/apiBase';
 import { useLibrarySongs } from '../services/studioQueries';
 import { CHOICE, CONTROL, Field, LABEL, SliderRow, ditKind } from './AceStudioFields';
 import { splitDit } from './AceDitSwitcher';
+import { Select } from './kit/Select';
 
 /**
  * ACE-Step Studio 4.0.1's source card, carried over: the song a task works on, with a listen and a file upload, the
@@ -207,10 +208,8 @@ export function AceTaskControls({ value, onChange, profileReady, dit, onPickDit,
           <div className="rounded-lg bg-amber-500/10 p-2 text-[11px] leading-4 text-amber-700 dark:text-amber-300">
             {baseDits?.length ? tt('aceBaseOnlyPick') : own.installBase}
             {baseDits && baseDits.length > 0 && (
-              <select value="" onChange={event => event.target.value && onPickDit(event.target.value)} className={`${CONTROL} mt-2`} aria-label={tt('aceChooseBase')}>
-                <option value="">{tt('aceChooseBase')}</option>
-                {baseDits.map(file => <option key={file} value={file}>{tt(`aceVariant_${splitDit(file).variant}`)} · {file.replace(/\.gguf$/, '')}</option>)}
-              </select>
+              <Select label={tt('aceChooseBase')} value="" onChange={file => file && onPickDit(file)} className="mt-2" inputClassName={CONTROL}
+                options={[{ value: '', label: tt('aceChooseBase') }, ...baseDits.map(file => ({ value: file, label: `${tt(`aceVariant_${splitDit(file).variant}`)} · ${file.replace(/\.gguf$/, '')}` }))]} />
             )}
           </div>
         )}

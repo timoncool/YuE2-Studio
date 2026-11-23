@@ -5,6 +5,8 @@ import { useI18n } from '../context/I18nContext';
 import { COVER_PATTERNS, type CoverPattern, patternArt } from '../services/coverArt';
 import { coverSeed } from '../services/songStems';
 import { readJson } from '../services/studioQueries';
+import { Select } from './kit/Select';
+import Combobox from './kit/Combobox';
 
 /**
  * Where a picture comes from, wherever one is chosen: a track's cover, and the
@@ -494,26 +496,24 @@ const AiDrawing: React.FC<{ song: Song; onChoice: (choice: PickedMedia) => void;
           {t('catalogNoImageModel')}
         </p>
       )}
-      <select value={modelId} onChange={event => setModelId(event.target.value)} disabled={models.length === 0} className={`${CONTROL} mt-2`}>
-        {models.length === 0 && <option value="">{t('noImageModel')}</option>}
-        {models.map(model => <option key={model.id} value={model.id}>{model.name}</option>)}
-      </select>
+      <Combobox label={t('generateWithOpenRouter')} value={modelId} onChange={setModelId} disabled={models.length === 0} className="mt-2" inputClassName={CONTROL}
+        options={[...(models.length === 0 ? [{ value: '', label: t('noImageModel') }] : []), ...models.map(model => ({ value: model.id, label: model.name }))]} />
       {/* A look, written once and reused: the style lives in the
           template, the track fills in the rest. */}
       <div className="mt-2 flex items-center gap-2">
-        <select
+        <Select
+          label={t('coverPromptMyStyle')}
           value={templateId}
-          onChange={event => {
-            const next = templates.find(entry => entry.id === event.target.value);
-            setTemplateId(event.target.value);
+          onChange={id => {
+            const next = templates.find(entry => entry.id === id);
+            setTemplateId(id);
             setTemplateText(next?.template ?? '');
             if (!next) setPrompt(defaultPrompt(song, forBackground));
           }}
-          className={CONTROL}
-        >
-          <option value="">{t('coverPromptFree')}</option>
-          {templates.map(entry => <option key={entry.id} value={entry.id}>{entry.name}</option>)}
-        </select>
+          className="min-w-0 flex-1"
+          inputClassName={CONTROL}
+          options={[{ value: '', label: t('coverPromptFree') }, ...templates.map(entry => ({ value: entry.id, label: entry.name }))]}
+        />
         <button
           type="button"
           onClick={() => setEditingTemplate(editing => !editing)}

@@ -3,6 +3,8 @@ import { invoke, isTauri } from '@tauri-apps/api/core';
 import { AudioLines, Square } from 'lucide-react';
 import { useI18n } from '../context/I18nContext';
 import { windowAudioStrings } from '../i18n/windowAudio';
+import Combobox from './kit/Combobox';
+import { SELECT_FIELD } from './kit/Select';
 
 type AudioWindow = { id: string; title: string };
 
@@ -80,11 +82,9 @@ export function WindowAudioCapture({ disabled, onRecording }: { disabled: boolea
         <div className="space-y-2">
           <label className="flex flex-col gap-1 text-xs">
             {text.window}
-            <select className="rounded border border-zinc-200 bg-transparent p-1.5 dark:border-white/15"
-              value={selected} onChange={event => setSelected(event.target.value)} disabled={disabled || recording}>
-              <option value="">{text.select}</option>
-              {windows.map(window => <option key={window.id} value={window.id}>{window.title}</option>)}
-            </select>
+            <Combobox label={text.window} inputClassName={SELECT_FIELD}
+              value={selected} onChange={setSelected} disabled={disabled || recording}
+              options={[{ value: '', label: text.select }, ...windows.map(window => ({ value: window.id, label: window.title }))]} />
           </label>
           <p className="text-[11px] text-zinc-500">{text.hint}</p>
           {recording

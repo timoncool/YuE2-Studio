@@ -4,6 +4,8 @@ import { useI18n } from '../context/I18nContext';
 import { readAudioCodes, SCHEDULERS, SOLVERS } from '../services/aceEngine';
 import { NumberField } from './NumberField';
 import { SecondaryButton } from './kit/Buttons';
+import { Select } from './kit/Select';
+import Combobox from './kit/Combobox';
 
 /**
  * ACE-Step Studio 4.0.1's own form for the native engine, carried over as it was: the song's metadata, the planner
@@ -294,20 +296,17 @@ export function AceStudioFields({ value, onChange, kind, task, adapters, card, p
     {card(tt('aceSongParams'), <>
       <div className="grid grid-cols-2 gap-2">
         <Field label={tt('aceLanguage')}>
-          <select value={get('vocal_language')} onChange={event => set('vocal_language')(event.target.value)} className={CONTROL}>
-            {LANGUAGES.map(code => <option key={code} value={code}>{code ? tt(`aceLang_${code}`) : tt('aceAuto')}</option>)}
-          </select>
+          <Combobox label={tt('aceLanguage')} value={get('vocal_language')} onChange={set('vocal_language')} inputClassName={CONTROL}
+            options={LANGUAGES.map(code => ({ value: code, label: code ? tt(`aceLang_${code}`) : tt('aceAuto') }))} />
         </Field>
         <Field label="BPM"><input value={get('bpm')} onChange={event => set('bpm')(event.target.value)} placeholder={tt('aceAuto')} inputMode="numeric" className={CONTROL} /></Field>
         <Field label={tt('aceKey')}>
-          <select value={get('keyscale')} onChange={event => set('keyscale')(event.target.value)} className={CONTROL}>
-            {KEYS.map(key => <option key={key} value={key}>{key || tt('aceAuto')}</option>)}
-          </select>
+          <Combobox label={tt('aceKey')} value={get('keyscale')} onChange={set('keyscale')} inputClassName={CONTROL}
+            options={KEYS.map(key => ({ value: key, label: key || tt('aceAuto') }))} />
         </Field>
         <Field label={tt('aceTimeSignature')}>
-          <select value={get('timesignature')} onChange={event => set('timesignature')(event.target.value)} className={CONTROL}>
-            {TIME_SIGNATURES.map(signature => <option key={signature} value={signature}>{signature ? (signature === '6' ? '6/8' : `${signature}/4`) : tt('aceAuto')}</option>)}
-          </select>
+          <Select label={tt('aceTimeSignature')} value={get('timesignature')} onChange={set('timesignature')} inputClassName={CONTROL}
+            options={TIME_SIGNATURES.map(signature => ({ value: signature, label: signature ? (signature === '6' ? '6/8' : `${signature}/4`) : tt('aceAuto') }))} />
         </Field>
       </div>
       <div className="mt-3">
@@ -367,9 +366,8 @@ export function AceStudioFields({ value, onChange, kind, task, adapters, card, p
               {(numberOrUndefined(value.lm_rep_penalty) ?? 1) > 1 && (
                 <>
                   <Field label={tt('aceRepMode')}>
-                    <select value={repMode || 'presence'} onChange={event => set('lm_rep_mode')(event.target.value)} className={CONTROL}>
-                      {REP_MODES.map(mode => <option key={mode} value={mode}>{tt(`aceRepMode_${mode}`)}</option>)}
-                    </select>
+                    <Select label={tt('aceRepMode')} value={repMode || 'presence'} onChange={set('lm_rep_mode')} inputClassName={CONTROL}
+                      options={REP_MODES.map(mode => ({ value: mode, label: tt(`aceRepMode_${mode}`) }))} />
                   </Field>
                   <p className="-mt-1 text-[11px] leading-4 text-zinc-500">{tt(`aceRepModeHint_${repMode || 'presence'}`)}</p>
                   <SliderRow label={tt('aceRepWindow')} value={get('lm_rep_window')} fallback={64} min={8} max={256} step={8}
@@ -396,23 +394,20 @@ export function AceStudioFields({ value, onChange, kind, task, adapters, card, p
                 <SliderRow label={tt('aceShift')} value={get('shift')} fallback={dit.shift} min={1} max={5} step={0.1} onChange={set('shift')} />
                 <div className="grid grid-cols-2 gap-2">
                   <Field label={tt('aceSolver')}>
-                    <select value={get('solver') || dit.solver} onChange={event => set('solver')(event.target.value)} className={CONTROL}>
-                      {SOLVERS.map(solver => <option key={solver} value={solver}>{tt(`aceSolver_${solver}`)}</option>)}
-                    </select>
+                    <Select<string> label={tt('aceSolver')} value={get('solver') || dit.solver} onChange={set('solver')} inputClassName={CONTROL}
+                      options={SOLVERS.map(solver => ({ value: solver, label: tt(`aceSolver_${solver}`) }))} />
                   </Field>
                   <Field label={tt('aceScheduler')}>
-                    <select value={get('scheduler') || dit.scheduler} onChange={event => set('scheduler')(event.target.value)} className={CONTROL}>
-                      {SCHEDULERS.map(scheduler => <option key={scheduler} value={scheduler}>{tt(`aceScheduler_${scheduler}`)}</option>)}
-                    </select>
+                    <Select<string> label={tt('aceScheduler')} value={get('scheduler') || dit.scheduler} onChange={set('scheduler')} inputClassName={CONTROL}
+                      options={SCHEDULERS.map(scheduler => ({ value: scheduler, label: tt(`aceScheduler_${scheduler}`) }))} />
                   </Field>
                 </div>
                 <p className="text-[11px] leading-4 text-zinc-500">{tt('aceSamplerHint')}</p>
                 {!turbo && (
                   <>
                     <Field label={tt('aceGuidanceMode')}>
-                      <select value={get('guidance') || 'apg'} onChange={event => set('guidance')(event.target.value)} className={CONTROL}>
-                        {GUIDANCE.map(mode => <option key={mode} value={mode}>{tt(`aceGuidance_${mode}`)}</option>)}
-                      </select>
+                      <Select label={tt('aceGuidanceMode')} value={get('guidance') || 'apg'} onChange={set('guidance')} inputClassName={CONTROL}
+                        options={GUIDANCE.map(mode => ({ value: mode, label: tt(`aceGuidance_${mode}`) }))} />
                     </Field>
                     <div className="grid grid-cols-2 gap-2">
                       <SliderRow label={tt('aceApgMomentum')} value={get('apg_momentum')} fallback={0.75} min={0} max={0.99} step={0.01} onChange={set('apg_momentum')} />
@@ -427,10 +422,8 @@ export function AceStudioFields({ value, onChange, kind, task, adapters, card, p
                 )}
                 <div className="grid grid-cols-3 gap-2">
                   <Field label="DCW">
-                    <select value={dcwMode} onChange={event => set('dcw_mode')(event.target.value)} className={CONTROL}>
-                      <option value="">{tt('aceOff')}</option>
-                      {['low', 'high', 'double', 'pix'].map(mode => <option key={mode} value={mode}>{mode}</option>)}
-                    </select>
+                    <Select label="DCW" value={dcwMode} onChange={set('dcw_mode')} inputClassName={CONTROL}
+                      options={[{ value: '', label: tt('aceOff') }, ...['low', 'high', 'double', 'pix'].map(mode => ({ value: mode, label: mode }))]} />
                   </Field>
                   <Field label={tt('aceDcwScaler')}><input value={get('dcw_scaler')} onChange={event => set('dcw_scaler')(event.target.value)} placeholder="0.1" inputMode="decimal" disabled={!dcwMode} className={CONTROL} /></Field>
                   <Field label={tt('aceDcwHigh')}><input value={get('dcw_high_scaler')} onChange={event => set('dcw_high_scaler')(event.target.value)} placeholder="0" inputMode="decimal" disabled={dcwMode !== 'double'} className={CONTROL} /></Field>

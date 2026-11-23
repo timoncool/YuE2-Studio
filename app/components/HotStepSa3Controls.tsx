@@ -1,4 +1,5 @@
 import type { YueRequest } from '../types';
+import { Select } from './kit/Select';
 
 export const hotStepSa3Profile = 'stable-audio-3-medium';
 export const hotStepHeartmulaProfile = 'heartmula-3b-q8_0';
@@ -25,20 +26,19 @@ export function HotStepSa3Controls({ value, onChange, adapters, control, languag
   return <div className="grid grid-cols-2 gap-2">
     {hasSampler && <label className="space-y-1 text-xs">
       <span>{sampler}</span>
-      <select className={control} value={value.sampler ?? 'pingpong'}
-        onChange={event => onChange({ ...value, sampler: event.target.value === 'euler' ? 'euler' : 'pingpong' })}>
-        <option value="pingpong">Ping-pong</option>
-        <option value="euler">Euler</option>
-      </select>
+      <Select<string> label={sampler} inputClassName={control} value={value.sampler ?? 'pingpong'}
+        onChange={next => onChange({ ...value, sampler: next === 'euler' ? 'euler' : 'pingpong' })}
+        options={[{ value: 'pingpong', label: 'Ping-pong' }, { value: 'euler', label: 'Euler' }]} />
     </label>}
     {(adapters.length > 0 || value.adapter) && <label className="space-y-1 text-xs">
       <span>{adapter}</span>
-      <select className={control} value={value.adapter ?? ''}
-        onChange={event => onChange({ ...value, adapter: event.target.value || undefined })}>
-        <option value="">{none}</option>
-        {value.adapter && !adapters.includes(value.adapter) && <option disabled>{value.adapter}</option>}
-        {adapters.map(name => <option key={name}>{name}</option>)}
-      </select>
+      <Select<string> label={adapter} inputClassName={control} value={value.adapter ?? ''}
+        onChange={next => onChange({ ...value, adapter: next || undefined })}
+        options={[
+          { value: '', label: none },
+          ...(value.adapter && !adapters.includes(value.adapter) ? [{ value: value.adapter, label: value.adapter, disabled: true }] : []),
+          ...adapters.map(name => ({ value: name, label: name })),
+        ]} />
     </label>}
     {value.adapter && <label className="space-y-1 text-xs">
       <span>{strength}</span>

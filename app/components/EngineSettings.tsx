@@ -6,6 +6,7 @@ import { useI18n } from '../context/I18nContext';
 import { poll } from '../services/poll';
 import { DiagnosticsPanel } from './DiagnosticsPanel';
 import { engineCardText } from '../i18n/engineCards';
+import { Select } from './kit/Select';
 
 /**
  * Launch options for the local engine.
@@ -372,15 +373,18 @@ export const EngineSettings: React.FC = () => {
       {!macHost && cards?.cards && (cards.cards.length > 1 || cardMissing) && (
         <label className="block rounded-xl border border-zinc-200 p-3 dark:border-white/10">
           <span className="block text-sm font-medium text-zinc-800 dark:text-zinc-100">{t('gpuChoice')}</span>
-          <select
+          <Select<string>
+            label={t('gpuChoice')}
             value={chosenCard === null ? '' : String(chosenCard)}
-            onChange={event => setOptions(current => ({ ...current, gpu: event.target.value || null }))}
-            className={`${CONTROL} mt-2`}
-          >
-            <option value="">{t('gpuChoiceFirst')}</option>
-            {cardMissing && <option value={String(chosenCard)}>{t('gpuChoiceMissing').replace('{index}', String(chosenCard))}</option>}
-            {cards.cards.map(card => <option key={card.uuid} value={card.uuid}>{`${card.index}: ${card.name} · ${formatSize(card.memory_gb * 1024 ** 3, language, 0)}`}</option>)}
-          </select>
+            onChange={gpu => setOptions(current => ({ ...current, gpu: gpu || null }))}
+            className="mt-2"
+            inputClassName={CONTROL}
+            options={[
+              { value: '', label: t('gpuChoiceFirst') },
+              ...(cardMissing ? [{ value: String(chosenCard), label: t('gpuChoiceMissing').replace('{index}', String(chosenCard)) }] : []),
+              ...cards.cards.map(card => ({ value: card.uuid, label: `${card.index}: ${card.name} · ${formatSize(card.memory_gb * 1024 ** 3, language, 0)}` })),
+            ]}
+          />
           {cardMissing ? (
             <span className="mt-2 block text-xs leading-5 text-amber-600 dark:text-amber-300">{t('gpuChoiceGone').replace('{index}', String(chosenCard))}</span>
           ) : (
@@ -432,15 +436,14 @@ export const EngineSettings: React.FC = () => {
 
       <label className="block rounded-xl border border-zinc-200 p-3 dark:border-white/10">
         <span className="block text-sm font-medium text-zinc-800 dark:text-zinc-100">{t('keepLoadedLabel')}</span>
-        <select
+        <Select<string>
+          label={tt('keepLoadedLabel')}
           value={options.keep_loaded}
-          onChange={event => setOptions(current => ({ ...current, keep_loaded: event.target.value as KeepLoaded }))}
-          className={`${CONTROL} mt-2`}
-        >
-          <option value="auto">{tt('keepLoadedAuto')}</option>
-          <option value="yes">{tt('keepLoadedYes')}</option>
-          <option value="no">{tt('keepLoadedNo')}</option>
-        </select>
+          onChange={keep => setOptions(current => ({ ...current, keep_loaded: keep as KeepLoaded }))}
+          className="mt-2"
+          inputClassName={CONTROL}
+          options={[{ value: 'auto', label: tt('keepLoadedAuto') }, { value: 'yes', label: tt('keepLoadedYes') }, { value: 'no', label: tt('keepLoadedNo') }]}
+        />
         <span className="mt-2 block text-xs leading-5 text-zinc-500 dark:text-zinc-400">{t('keepLoadedHint')}</span>
         {audioCppKeep && (
           <span className="mt-1 block text-xs leading-5 text-zinc-500 dark:text-zinc-400">audio.cpp · {keepLoadedNow(audioCppKeep, tt)}</span>
@@ -488,29 +491,27 @@ export const EngineSettings: React.FC = () => {
         <div className="mt-3 space-y-3">
       <label className="block border-t border-zinc-100 pt-3 first:border-t-0 first:pt-0 dark:border-white/5">
         <span className="block text-sm font-medium text-zinc-800 dark:text-zinc-100">{tt('flashAttentionLabel')}</span>
-        <select
+        <Select<string>
+          label={tt('flashAttentionLabel')}
           value={options.flash_attention}
-          onChange={event => setOptions(current => ({ ...current, flash_attention: event.target.value as FlashAttention }))}
-          className={`${CONTROL} mt-2`}
-        >
-          <option value="auto">{tt('flashAttentionAuto')}</option>
-          <option value="on">{tt('flashAttentionOn')}</option>
-          <option value="off">{tt('flashAttentionOff')}</option>
-        </select>
+          onChange={mode => setOptions(current => ({ ...current, flash_attention: mode as FlashAttention }))}
+          className="mt-2"
+          inputClassName={CONTROL}
+          options={[{ value: 'auto', label: tt('flashAttentionAuto') }, { value: 'on', label: tt('flashAttentionOn') }, { value: 'off', label: tt('flashAttentionOff') }]}
+        />
         <span className="mt-2 block text-xs leading-5 text-zinc-500 dark:text-zinc-400">{tt('flashAttentionHint')}</span>
       </label>
 
       <label className="block border-t border-zinc-100 pt-3 first:border-t-0 first:pt-0 dark:border-white/5">
         <span className="block text-sm font-medium text-zinc-800 dark:text-zinc-100">{tt('kvCacheLabel')}</span>
-        <select
+        <Select<string>
+          label={tt('kvCacheLabel')}
           value={options.kv_cache}
-          onChange={event => setOptions(current => ({ ...current, kv_cache: event.target.value as KvCache }))}
-          className={`${CONTROL} mt-2`}
-        >
-          <option value="auto">{tt('kvCacheAuto')}</option>
-          <option value="f16">F16</option>
-          <option value="q8" disabled={kvQ8Off !== null}>Q8</option>
-        </select>
+          onChange={cache => setOptions(current => ({ ...current, kv_cache: cache as KvCache }))}
+          className="mt-2"
+          inputClassName={CONTROL}
+          options={[{ value: 'auto', label: tt('kvCacheAuto') }, { value: 'f16', label: 'F16' }, { value: 'q8', label: 'Q8', disabled: kvQ8Off !== null }]}
+        />
         <span className="mt-2 block text-xs leading-5 text-zinc-500 dark:text-zinc-400">{tt('kvCacheHint')}</span>
         {kvQ8Off !== null && (
           <span className="mt-1 block text-xs leading-5 text-amber-600 dark:text-amber-300">

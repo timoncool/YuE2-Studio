@@ -3,6 +3,7 @@ import { useI18n } from '../context/I18nContext';
 import { minimaxCaptionStrings } from '../i18n/minimaxCaption';
 import { apiUrl } from '../services/apiBase';
 import { CONTROL } from './AceStudioFields';
+import { Select } from './kit/Select';
 
 /**
  * MiniMax Music3 Studio 4.0.2's components for one request: the engine loads any GGUF of its model folder for each
@@ -48,16 +49,17 @@ export function MiniMaxComponents({ value, onChange, setFiles }: {
         {MINIMAX_ROLES.map(([role, label]) => (
           <div key={role} className="grid grid-cols-[64px_1fr] items-center gap-2">
             <span className="text-[11px] font-semibold text-zinc-500 dark:text-zinc-400">{label}</span>
-            <select value={value[role] ?? ''} aria-label={label} className={CONTROL}
-              onChange={event => {
+            <Select<string> value={value[role] ?? ''} label={label} className="min-w-0" inputClassName={CONTROL}
+              onChange={file => {
                 const next = { ...value };
-                if (event.target.value) next[role] = event.target.value;
+                if (file) next[role] = file;
                 else delete next[role];
                 onChange(next);
-              }}>
-              <option value="">{setFiles?.[role] ? `${text.profileDefault} · ${shortName(setFiles[role])}` : text.profileDefault}</option>
-              {(roles?.[role] ?? []).filter(entry => entry.installed).map(entry => <option key={entry.file} value={entry.file}>{shortName(entry.file)}</option>)}
-            </select>
+              }}
+              options={[
+                { value: '', label: setFiles?.[role] ? `${text.profileDefault} · ${shortName(setFiles[role])}` : text.profileDefault },
+                ...(roles?.[role] ?? []).filter(entry => entry.installed).map(entry => ({ value: entry.file, label: shortName(entry.file) })),
+              ]} />
           </div>
         ))}
       </div>

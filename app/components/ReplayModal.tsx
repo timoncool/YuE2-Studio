@@ -5,6 +5,7 @@ import { useI18n } from '../context/I18nContext';
 import { nativeMusicSourceStrings } from '../i18n/musicSource';
 import { nativeMusicEngineName, parseDuration } from '../services/nativeLibrary';
 import { isNativeMusicEngine } from '../services/nativeMusicProfiles';
+import { Select } from './kit/Select';
 
 /**
  * Deterministic re-render.
@@ -130,25 +131,20 @@ export const ReplayModal: React.FC<ReplayModalProps> = ({ song, clientRef, onClo
             </label>
             <label className="block text-xs font-medium text-zinc-600 dark:text-zinc-300">
               <span className="mb-1.5 block">{t('outputFormat')}</span>
-              <select value={format} onChange={event => setFormat(event.target.value as typeof format)} className={CONTROL}>
-                <option value="flac">FLAC</option>
-                <option value="mp3">MP3</option>
-                <option value="wav32">WAV (32-bit float)</option>
-              </select>
+              <Select<string> label={t('outputFormat')} value={format} onChange={value => setFormat(value as typeof format)} inputClassName={CONTROL}
+                options={[{ value: 'flac', label: 'FLAC' }, { value: 'mp3', label: 'MP3' }, { value: 'wav32', label: 'WAV (32-bit float)' }]} />
             </label>
             {!native && !hotStepReplayLabel && !audioCppLabel && <label className="col-span-2 block text-xs font-medium text-zinc-600 dark:text-zinc-300">
               <span className="mb-1.5 block">{t('replayExtend')}</span>
-              <select value={extend} onChange={event => setExtend(Number(event.target.value))} className={CONTROL}>
-                {[0, 15, 30, 60, 90, 120].filter(seconds => seconds <= room).map(seconds => <option key={seconds} value={seconds}>{seconds === 0 ? t('replayExtendNone') : `+${seconds} s`}</option>)}
-              </select>
+              <Select<string> label={t('replayExtend')} value={String(extend)} onChange={value => setExtend(Number(value))} inputClassName={CONTROL}
+                options={[0, 15, 30, 60, 90, 120].filter(seconds => seconds <= room).map(seconds => ({ value: String(seconds), label: seconds === 0 ? t('replayExtendNone') : `+${seconds} s` }))} />
               {extend > 0 && <span className="mt-1 block text-[11px] leading-4 text-zinc-500">{t('replayExtendHint')}</span>}
             </label>}
             {format === 'mp3' && (
               <label className="block text-xs font-medium text-zinc-600 dark:text-zinc-300">
                 <span className="mb-1.5 block">{t('mp3Bitrate')}</span>
-                <select value={bitrate} onChange={event => setBitrate(Number(event.target.value))} className={CONTROL}>
-                  {[128, 192, 256, 320].map(rate => <option key={rate} value={rate}>{rate} kbps</option>)}
-                </select>
+                <Select<string> label={t('mp3Bitrate')} value={String(bitrate)} onChange={value => setBitrate(Number(value))} inputClassName={CONTROL}
+                  options={[128, 192, 256, 320].map(rate => ({ value: String(rate), label: `${rate} kbps` }))} />
               </label>
             )}
           </div>

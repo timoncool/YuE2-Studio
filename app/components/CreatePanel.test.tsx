@@ -125,6 +125,13 @@ const pickSong = (label: string, title: string) => {
   click(host.querySelector(`input[role="combobox"][aria-label="${label}"]`)!);
   click([...document.querySelectorAll('[role="option"]')].find(option => option.querySelector('.font-semibold')?.textContent === title)!);
 };
+const listField = (label: string) => host.querySelector<HTMLInputElement>(`input[role="combobox"][aria-label="${label}"]`);
+const chooseOption = (label: string, text: string) => {
+  click(listField(label)!);
+  const option = [...document.querySelectorAll(`[role="listbox"][aria-label="${label}"] [role="option"]`)].find(node => node.textContent === text);
+  expect(option, `${label}: ${text}`).toBeDefined();
+  click(option!);
+};
 const modelPill = () => host.querySelector<HTMLButtonElement>('button[aria-haspopup="menu"]')!;
 const pickModel = (name: string) => {
   click(modelPill());
@@ -221,7 +228,7 @@ it('offers backing harmony without changing the current score or key', async () 
   await flush();
   click(buttonNamed('chordBed')!);
   pickSong('Sing over a library backing track', 'Instrumental recording');
-  const key = [...host.querySelectorAll('select')].find(box => [...box.options].some(option => option.value === 'F#m'))!;
+  const key = listField('chordBedKey')!;
   expect(key.value).toBe('C');
   click(buttonNamed('Analyze backing harmony')!);
   await flush();
@@ -239,8 +246,7 @@ it('queues the other five readings with exactly one score and one pair of seeds'
   const abc = 'X:1\nK:C\nCDEF|';
   act(() => root.render(panel({ request: { id: 1, kind: 'score', abc, lyrics: 'one line' } })));
   await flush();
-  const select = [...host.querySelectorAll('select')].find(box => [...box.options].some(option => option.value === 'tight'))!;
-  act(() => { select.value = 'tight'; select.dispatchEvent(new Event('change', { bubbles: true })); });
+  chooseOption('Performance', 'Tight');
   const button = buttonNamed('Create variations (5)')!;
   expect(button.disabled).toBe(false);
   click(button);
@@ -784,28 +790,23 @@ it('posts the remembered MiniMax output format and keeps it out of ACE requests'
     act(() => root.render(<QueryClientProvider client={client}><Editor engine={engine} /></QueryClientProvider>));
     await flush();
   };
-  const choose = (select: HTMLSelectElement, value: string) => act(() => {
-    select.value = value;
-    select.dispatchEvent(new Event('change', { bubbles: true }));
-  });
-  const model = () => host.querySelector<HTMLSelectElement>('select[aria-label="Local model"]')!;
-  const format = () => Array.from(host.querySelectorAll('label')).find(label => label.textContent?.startsWith('outputFormat'))?.querySelector('select');
+  const format = () => listField('outputFormat') ?? undefined;
   const numeric = (label: string) =>
     [...host.querySelectorAll('label')].find(node => node.textContent?.trim() === label)?.querySelector('input');
   const submit = async () => { click(buttonNamed('create')!); await flush(); };
 
   await setup('minimaxmusic-cpp');
   chooseSet('balanced');
-  expect(format()?.value).toBe('flac');
+  expect(format()?.value).toBe('FLAC');
   await submit();
-  choose(format()!, 'wav32');
+  chooseOption('outputFormat', 'WAV (32-bit float)');
   type(numeric('lmCfgScale')!, '1.2');
   type(numeric('lmTopK')!, '35');
   type(numeric('DiT cfgScale')!, '2.4');
   await submit();
   chooseSet('quality');
-  expect(format()?.value).toBe('flac');
-  choose(format()!, 'mp3');
+  expect(format()?.value).toBe('FLAC');
+  chooseOption('outputFormat', 'MP3');
   expect(numeric('lmCfgScale')?.value).toBe('');
   type(numeric('mp3Bitrate')!, '256');
   type(numeric('fadeInLabel')!, '0.25');
@@ -818,9 +819,9 @@ it('posts the remembered MiniMax output format and keeps it out of ACE requests'
   await submit();
   await setup('minimaxmusic-cpp');
   expect(chosenSet()).toBe('quality');
-  expect(format()?.value).toBe('mp3');
+  expect(format()?.value).toBe('MP3');
   chooseSet('balanced');
-  expect(format()?.value).toBe('wav32');
+  expect(format()?.value).toBe('WAV (32-bit float)');
   expect(numeric('lmTopK')?.value).toBe('35');
   await submit();
 
@@ -1154,7 +1155,7 @@ it('chooses MiniMax Music3 through audio.cpp and reuses the saved seed and forma
   await flush();
   const label = (name: string) => [...host.querySelectorAll('label')].find(node => node.textContent?.startsWith(name))!;
   expect(label('Seed').querySelector('input')?.value).toBe('424242');
-  expect(label('outputFormat').querySelector('select')?.value).toBe('mp3');
+  expect(listField('outputFormat')?.value).toBe('MP3');
   expect(host.textContent).not.toContain('Language model seed');
   click(generate());
   expect(sent.at(-1)).toEqual({
@@ -1627,12 +1628,7 @@ describe('OpenRouter music creation', () => {
     { id: 'test/music', name: 'Music test model', capabilities: ['music_generation'], supported_parameters: ['seed'] },
     { id: 'test/asr', name: 'Speech-only test model', capabilities: ['speech_to_text'] },
   ] });
-  const select = (label: string) => [...host.querySelectorAll('select')]
-    .find(control => control.getAttribute('aria-label') === label || control.closest('label')?.textContent?.startsWith(label))!;
-  const choose = (control: HTMLSelectElement, value: string) => act(() => {
-    control.value = value;
-    control.dispatchEvent(new Event('change', { bubbles: true }));
-  });
+  const select = (label: string) => listField(label)!;
   const create = () => [...host.querySelectorAll('button')].find(button => button.textContent?.trim() === 'create')!;
 
   it('submits the selected music model without local weights and preserves local settings when switching back', async () => {
@@ -1717,7 +1713,7 @@ describe('OpenRouter music creation', () => {
     })));
     show(song, 1);
     await flush();
-    expect(select('OpenRouter music model').value).toBe('test/music');
+    expect(select('OpenRouter music model').value).toBe('Music test model');
     expect(sent).toHaveLength(0);
     click(create());
     expect(sent[0]).toMatchObject({ style: 'piano', lyrics: 'verse', music_source: { model: 'test/music' } });
@@ -1728,7 +1724,7 @@ describe('OpenRouter music creation', () => {
     expect(sent[1].openrouter).toEqual({ seed: 81 });
     show({ ...song, generationParams: { model: 'retired/model' } }, 3);
     await flush();
-    expect(select('OpenRouter music model').value).toBe('');
+    expect(select('OpenRouter music model').value).toBe('Select a model');
     expect(create().disabled).toBe(true);
   });
 
@@ -1831,8 +1827,7 @@ it('reuses a Stable Audio 3 text prompt and its sampler and guidance controls', 
   act(() => root.render(panel({ musicEngine: 'audio.cpp', initialData: { song, timestamp: 1 } })));
   await flush();
   expect(field('textarea[aria-label="lyrics"]')).toBeNull();
-  const sampler = [...host.querySelectorAll('label')].find(node => node.textContent?.startsWith('Sampler'));
-  expect(sampler?.querySelector('select')?.value).toBe('euler');
+  expect(listField('Sampler')?.value).toBe('Euler');
   click(buttonNamed('create')!);
   expect(sent.at(-1)).toMatchObject({
     music_source: { kind: 'audio_cpp', model: 'stable_audio' },
@@ -2061,7 +2056,7 @@ it('restores a HOT-Step Stable Audio 3 take with its sampler and adapter without
   await flush();
   expect(field('textarea[aria-label="lyrics"]')).toBeNull();
   expect(host.textContent).not.toContain('Cover score');
-  expect([...host.querySelectorAll('label')].find(node => node.textContent?.startsWith('Sampler'))?.querySelector('select')?.value).toBe('euler');
+  expect(listField('Sampler')?.value).toBe('Euler');
   click(buttonNamed('create')!);
   expect(sent.at(-1)).toMatchObject({
     music_source: { kind: 'native', engine: 'hotstep', model: 'stable-audio-3-medium' },

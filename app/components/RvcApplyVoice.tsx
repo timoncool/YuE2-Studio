@@ -7,6 +7,7 @@ import { chooseLastRvcVoice, readRvcBackend, RVC_BACKEND_STORAGE, type RvcBacken
 import { AudioCompare } from './AudioCompare';
 import { RvcNativeRuntime } from './RvcNativeRuntime';
 import { PrimaryButton, SecondaryButton } from './kit/Buttons';
+import { Select } from './kit/Select';
 
 const URL = '/v1/rvc/apply';
 const accompaniment = ['drums', 'bass', 'other', 'guitar', 'piano'];
@@ -203,19 +204,18 @@ export function RvcApplyVoice({ song, voice, control, onSaved }: {
         <summary className="cursor-pointer font-medium text-zinc-500 dark:text-zinc-400">{t('advanced')}</summary>
         <label className="mt-2 block space-y-1">
           <span>{labels.backend}</span>
-          <select className={control} value={burnVoice ? 'burn-cuda' : backend} disabled={!!busy || burnVoice} onChange={event => {
-            const next = event.target.value as RvcBackend;
+          <Select<string> label={labels.backend} inputClassName={control} value={burnVoice ? 'burn-cuda' : backend} disabled={!!busy || burnVoice} onChange={value => {
+            const next = value as RvcBackend;
             setBackend(next);
             localStorage.setItem(RVC_BACKEND_STORAGE, next);
             if (voice) chooseLastRvcVoice(voice.id, next);
-          }}>
-            {burnVoice && <option value="burn-cuda">RVC Burn CUDA</option>}
-            <option value="auto">{labels.auto}</option>
-            <option value="vocal-fast-rs">{labels.engineFast}</option>
-            {(setup?.backends['vocal-fast-metal']?.supported || backend === 'vocal-fast-metal') &&
-              <option value="vocal-fast-metal">{labels.engineMetal}</option>}
-            <option value="audio.cpp">{labels.engineSpare}</option>
-          </select>
+          }} options={[
+            ...(burnVoice ? [{ value: 'burn-cuda', label: 'RVC Burn CUDA' }] : []),
+            { value: 'auto', label: labels.auto },
+            { value: 'vocal-fast-rs', label: labels.engineFast },
+            ...(setup?.backends['vocal-fast-metal']?.supported || backend === 'vocal-fast-metal' ? [{ value: 'vocal-fast-metal', label: labels.engineMetal }] : []),
+            { value: 'audio.cpp', label: labels.engineSpare },
+          ]} />
         </label>
       </details>
     </div>

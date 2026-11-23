@@ -9,6 +9,8 @@ import { onVisualizer, setVisualizer, visualizer } from '../../services/visualiz
 import { addWinampSkin, onWinamp, SCALE_RANGE, setWinampOn, setWinampSettings, SKIN_MUSEUM, winampSettings, winampSkins, type WinampSkin } from '../../services/winamp';
 import { openExternal } from '../../services/externalLinks';
 import { NumberField } from '../NumberField';
+import Combobox from '../kit/Combobox';
+import { SELECT_FIELD } from '../kit/Select';
 import { djModeOn, onDjMode, setDjModeOn } from '../../services/djMode';
 
 /**
@@ -72,7 +74,7 @@ export const PlayerExtraButtons: React.FC<{ layout?: ExtrasLayout }> = ({ layout
     }
     const close = (event: MouseEvent) => {
       const target = event.target as Node;
-      if (!box.current?.contains(target) && !popover.current?.contains(target)) setMenu(false);
+      if (!box.current?.contains(target) && !popover.current?.contains(target) && !(target as Element).closest?.('[role="listbox"]')) setMenu(false);
     };
     document.addEventListener('mousedown', close);
     return () => document.removeEventListener('mousedown', close);
@@ -169,14 +171,14 @@ export const PlayerExtraButtons: React.FC<{ layout?: ExtrasLayout }> = ({ layout
               className="mt-1 w-full cursor-pointer accent-pink-500"
             />
             <label className="mt-2 block text-[10px] font-semibold uppercase tracking-wide text-zinc-500">{t('winampSkin')}</label>
-            <select
+            <Combobox
+              label={t('winampSkin')}
               value={settings.random ? '' : settings.skin ?? ''}
-              onChange={(event) => setWinampSettings(event.target.value ? { skin: event.target.value, random: false } : { random: true })}
-              className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-2 py-1.5 text-xs text-zinc-800 dark:border-white/10 dark:bg-black/30 dark:text-zinc-100"
-            >
-              <option value="">{t('winampRandomSkin')}</option>
-              {skins.map((skin) => <option key={skin.url} value={skin.name}>{skin.name}</option>)}
-            </select>
+              onChange={(skin) => setWinampSettings(skin ? { skin, random: false } : { random: true })}
+              className="mt-1"
+              inputClassName={SELECT_FIELD}
+              options={[{ value: '', label: t('winampRandomSkin') }, ...skins.map((skin) => ({ value: skin.name, label: skin.name }))]}
+            />
             <div className="mt-2 grid grid-cols-2 gap-1.5">
               <button type="button" onClick={() => picker.current?.click()} className="flex items-center justify-center gap-1 rounded-lg border border-zinc-200 px-2 py-1.5 text-xs text-zinc-600 hover:border-pink-400 hover:text-pink-600 dark:border-white/10 dark:text-zinc-300">
                 <Plus size={13} />{t('winampAddSkin')}

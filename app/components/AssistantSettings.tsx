@@ -4,6 +4,7 @@ import { Check, Loader2, Square } from 'lucide-react';
 import { useI18n } from '../context/I18nContext';
 import { AgentPanel } from './AgentPanel';
 import { CliAgentPanel } from './CliAgentPanel';
+import Combobox from './kit/Combobox';
 import { loadNativeOpenRouterCatalog, refreshNativeOpenRouterCatalog, type NativeOpenRouterModel } from '../services/nativeOpenRouter';
 
 /**
@@ -239,10 +240,8 @@ export const AssistantExtras: React.FC<{ engine: string }> = ({ engine }) => {
           <label className="block text-xs font-medium text-zinc-500 dark:text-zinc-400">{t('assistantModel')}</label>
           <div className="flex items-center gap-2">
             {localModels.length > 0 ? (
-              <select value={localModel} onChange={(event) => setLocalModel(event.target.value)} className={INPUT}>
-                {localModel && !localModels.includes(localModel) && <option value={localModel}>{localModel}</option>}
-                {localModels.map((id) => <option key={id} value={id}>{id}</option>)}
-              </select>
+              <Combobox label={t('assistantModel')} value={localModel} onChange={setLocalModel} className="min-w-0 flex-1" inputClassName={INPUT}
+                options={[...(localModel && !localModels.includes(localModel) ? [{ value: localModel, label: localModel }] : []), ...localModels.map((id) => ({ value: id, label: id }))]} />
             ) : (
               <input value={localModel} onChange={(event) => setLocalModel(event.target.value)} placeholder="gemma-3-4b-it" className={INPUT} />
             )}
@@ -283,13 +282,12 @@ export const AssistantExtras: React.FC<{ engine: string }> = ({ engine }) => {
       {engine === 'open_router' && (
         <div className="space-y-1">
           <div className="flex items-center gap-2">
-            <select value={openRouterModel} onChange={(event) => setOpenRouterModel(event.target.value)} className={INPUT}>
-              <option value="">{t('assistantPickModel')}</option>
-              {openRouterModel && !catalog.some((model) => model.id === openRouterModel) && (
-                <option value={openRouterModel}>{openRouterModel}</option>
-              )}
-              {catalog.map((model) => <option key={model.id} value={model.id}>{model.name}</option>)}
-            </select>
+            <Combobox label={t('assistantModel')} value={openRouterModel} onChange={setOpenRouterModel} className="min-w-0 flex-1" inputClassName={INPUT}
+              options={[
+                { value: '', label: t('assistantPickModel') },
+                ...(openRouterModel && !catalog.some((model) => model.id === openRouterModel) ? [{ value: openRouterModel, label: openRouterModel }] : []),
+                ...catalog.map((model) => ({ value: model.id, label: model.name })),
+              ]} />
             <button
               type="button"
               onClick={() => void loadCatalog()}

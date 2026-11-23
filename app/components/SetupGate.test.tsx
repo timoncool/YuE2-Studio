@@ -151,12 +151,11 @@ async function mount(ready = false, modelInstalled = true, withSet = true, pack?
 
 const button = (title: string) => host.querySelector<HTMLButtonElement>(`button[title="${title}"]`);
 const start = async () => { await act(async () => button('download')!.click()); };
+const modelField = () => host.querySelector<HTMLInputElement>('input[role="combobox"][aria-label="Text engine"]')!;
 const selectModel = async () => {
-  await act(async () => {
-    const select = host.querySelector('select')!;
-    select.value = 'other-model';
-    select.dispatchEvent(new Event('change', { bubbles: true }));
-  });
+  await act(async () => modelField().click());
+  await act(async () => [...document.querySelectorAll<HTMLElement>('[role="listbox"][aria-label="Text engine"] [role="option"]')]
+    .find(option => option.textContent?.startsWith('Other model'))!.click());
 };
 
 function expectReady(ready: boolean) {
@@ -285,11 +284,10 @@ describe('saving a model set from Settings', () => {
   const mutations = () => calls.filter(({ url }) => url === '/setup/select' || url === '/setup/download');
   // ready sets are chosen in the YuE2 card now; Done saves a hand-picked quantisation per role
   async function chooseNextBackbone() {
-    const role = [...host.querySelectorAll('select')].find(select => [...select.options].some(option => option.value === 'backbone-q6'))!;
-    await act(async () => {
-      role.value = 'backbone-q6';
-      role.dispatchEvent(new Event('change', { bubbles: true }));
-    });
+    const role = [...host.querySelectorAll<HTMLInputElement>('input[role="combobox"]')].find(field => field.value.startsWith('Q8_0'))!;
+    await act(async () => role.click());
+    await act(async () => [...document.querySelectorAll<HTMLElement>(`[role="listbox"][aria-label="${role.getAttribute('aria-label')}"] [role="option"]`)]
+      .find(option => option.textContent?.startsWith('Q6_K'))!.click());
   }
 
   it('opens Models and engines, with the engines and their update plan, for the notification action target', async () => {
@@ -416,19 +414,19 @@ describe('optional capability readiness', () => {
     save = () => write.promise;
     await selectModel();
     expectReady(false);
-    expect(host.querySelector('select')!.disabled).toBe(true);
+    expect(modelField().disabled).toBe(true);
     expect(button('download')!.disabled).toBe(true);
     expect(JSON.parse(calls.find(call => call.url === '/settings')!.init!.body as string)).toEqual({ managed_model: 'other-model' });
     readStatus = () => reload.promise;
     await act(async () => write.resolve(response({})));
     expectReady(false);
-    expect(host.querySelector('select')!.disabled).toBe(true);
+    expect(modelField().disabled).toBe(true);
     status.chosen_model = 'other-model';
     status.set = { ready };
     await act(async () => reload.resolve(response(structuredClone(status))));
     expectReady(ready);
-    expect(host.querySelector('select')!.disabled).toBe(false);
-    expect(host.querySelector('select')!.value).toBe('other-model');
+    expect(modelField().disabled).toBe(false);
+    expect(modelField().value).toMatch(/^Other model ·/);
   });
 
   it.each(['before save', 'during save'])('ignores a stale poll begun %s after the saved model refresh completes', async timing => {
@@ -457,10 +455,10 @@ describe('optional capability readiness', () => {
     readStatus = undefined;
     await act(async () => write.resolve(response({})));
     expectReady(false);
-    expect(host.querySelector('select')!.disabled).toBe(false);
+    expect(modelField().disabled).toBe(false);
     await act(async () => stale.resolve(response(oldStatus)));
     expectReady(false);
-    expect(host.querySelector('select')!.value).toBe('other-model');
+    expect(modelField().value).toMatch(/^Other model ·/);
     await act(async () => installReply.resolve(response({ started: true })));
     expectReady(false);
   });
@@ -473,7 +471,7 @@ describe('optional capability readiness', () => {
     await selectModel();
     expect(host.textContent).toContain(kind === 'HTTP' ? 'Status unavailable' : 'Status unreachable');
     expectReady(false);
-    expect(host.querySelector('select')!.disabled).toBe(false);
+    expect(modelField().disabled).toBe(false);
     expect(button('download')!.disabled).toBe(false);
   });
 
@@ -485,8 +483,8 @@ describe('optional capability readiness', () => {
     await selectModel();
     expect(host.textContent).toContain(kind === 'HTTP' ? 'Model refused' : 'Save unreachable');
     expect(calls.filter(call => call.url === '/status')).toHaveLength(2);
-    expect(host.querySelector('select')!.disabled).toBe(false);
-    expect(host.querySelector('select')!.value).toBe('text-model');
+    expect(modelField().disabled).toBe(false);
+    expect(modelField().value).toMatch(/^Text model/);
     expectReady(true);
   });
 });

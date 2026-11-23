@@ -4,6 +4,8 @@ import { AlertTriangle, Check, Cloud, Cpu, Eye, EyeOff, Loader2, RefreshCw } fro
 import { useI18n } from '../context/I18nContext';
 import type { TranslationKey } from '../i18n/translations';
 import { ProxySettings } from './ProxySettings';
+import { Select } from './kit/Select';
+import Combobox from './kit/Combobox';
 
 /**
  * Provider matrix.
@@ -325,35 +327,28 @@ export const ProviderSettings: React.FC = () => {
                     installs it. */}
                 {selection.mode === 'local' ? (
                   hasLocal ? (
-                    <select
+                    <Select<string>
+                      label={t(CAPABILITY_KEY[selection.capability])}
                       value={selection.local_engine ?? ''}
                       disabled={busy === 'configuration'}
-                      onChange={event => update(selection.capability, { local_engine: event.target.value })}
-                      className={CONTROL}
-                    >
-                      {local.map(engine => (
-                        <option key={engine.id} value={engine.id}>
-                          {engine.display_name}{engine.installed ? '' : ` — ${t('notInstalledSuffix')}`}
-                        </option>
-                      ))}
-                    </select>
+                      onChange={id => { if (id !== (selection.local_engine ?? '')) update(selection.capability, { local_engine: id }); }}
+                      inputClassName={CONTROL}
+                      options={local.map(engine => ({ value: engine.id, label: `${engine.display_name}${engine.installed ? '' : ` — ${t('notInstalledSuffix')}`}` }))}
+                    />
                   ) : (
                     <p className="flex items-center gap-2 text-xs text-amber-600 dark:text-amber-300">
                       <AlertTriangle size={13} /> {t('noLocalEngineForCapability')}
                     </p>
                   )
                 ) : cloud.length > 0 ? (
-                  <select
+                  <Combobox
+                    label={t(CAPABILITY_KEY[selection.capability])}
                     value={selection.cloud_model ?? suggested[selection.capability] ?? ''}
                     disabled={busy === 'configuration'}
-                    onChange={event => update(selection.capability, { cloud_model: event.target.value || null })}
-                    className={CONTROL}
-                  >
-                    <option value="">{t('chooseCatalogModel')}</option>
-                    {cloud.map(model => (
-                      <option key={model.id} value={model.id}>{model.name}</option>
-                    ))}
-                  </select>
+                    onChange={id => { if (id !== (selection.cloud_model ?? suggested[selection.capability] ?? '')) update(selection.capability, { cloud_model: id || null }); }}
+                    inputClassName={CONTROL}
+                    options={[{ value: '', label: t('chooseCatalogModel') }, ...cloud.map(model => ({ value: model.id, label: model.name }))]}
+                  />
                 ) : (
                   <p className="flex items-center gap-2 text-xs text-amber-600 dark:text-amber-300">
                     <AlertTriangle size={13} /> {t('noCatalogModelForCapability')}

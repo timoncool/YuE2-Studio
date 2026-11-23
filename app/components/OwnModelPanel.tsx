@@ -3,6 +3,7 @@ import { formatSize } from '../services/fileSize';
 import { ExternalLink, FolderOpen, Loader2, Play, RotateCw, Square, Trash2 } from 'lucide-react';
 import { useI18n } from '../context/I18nContext';
 import { poll } from '../services/poll';
+import { Select } from './kit/Select';
 
 export type CommunityModel = {
   id: string;
@@ -131,32 +132,23 @@ export const OwnModelPanel: React.FC = () => {
     <div className="mt-4 rounded-lg border border-zinc-200 p-3 dark:border-white/10">
       <p className="text-[11px] font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">{tt('ownModelTitle')}</p>
       <p className="mt-1 text-[11px] leading-5 text-zinc-500 dark:text-zinc-400">{tt('ownModelHint')}</p>
-      <select
+      <Select<string>
         value={choiceOf(status)}
-        onChange={(event) => void choose(event.target.value)}
+        onChange={(next) => { if (next !== choiceOf(status)) void choose(next); }}
         disabled={busy || downloading || !status}
-        aria-label={tt('ownModelTitle')}
-        className="mt-2 w-full rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm text-zinc-900 focus:border-pink-500 focus:outline-hidden disabled:opacity-50 dark:border-white/10 dark:bg-black/20 dark:text-white"
-      >
-        <option value="">{tt('ownModelNone')}</option>
-        {status?.missing && status.selected && !communityFiles.has(status.selected) && <option value={status.selected}>{status.selected}</option>}
-        {ownFiles.length > 0 && (
-          <optgroup label={tt('ownModelFilesGroup')}>
-            {ownFiles.map((file) => (
-              <option key={file.name} value={file.name}>{file.name} — {gigabytes(file.bytes)}</option>
-            ))}
-          </optgroup>
-        )}
-        {(status?.community?.length ?? 0) > 0 && (
-          <optgroup label={tt('ownModelCommunityGroup')}>
-            {status!.community!.flatMap((model) => model.files.map((file) => (
-              <option key={file.file} value={`${COMMUNITY}${model.id}:${file.quant}`}>
-                {model.name[language] ?? model.name.en} · {file.quant} — {gigabytes(file.bytes)}{file.installed ? '' : ` · ${tt('ownModelToDownload')}`}
-              </option>
-            )))}
-          </optgroup>
-        )}
-      </select>
+        label={tt('ownModelTitle')}
+        className="mt-2"
+        options={[
+          { value: '', label: tt('ownModelNone') },
+          ...(status?.missing && status.selected && !communityFiles.has(status.selected) ? [{ value: status.selected, label: status.selected }] : []),
+          ...ownFiles.map((file) => ({ value: file.name, label: `${file.name} — ${gigabytes(file.bytes)}`, group: tt('ownModelFilesGroup') })),
+          ...(status?.community ?? []).flatMap((model) => model.files.map((file) => ({
+            value: `${COMMUNITY}${model.id}:${file.quant}`,
+            label: `${model.name[language] ?? model.name.en} · ${file.quant} — ${gigabytes(file.bytes)}${file.installed ? '' : ` · ${tt('ownModelToDownload')}`}`,
+            group: tt('ownModelCommunityGroup'),
+          }))),
+        ]}
+      />
       {downloading && status?.download && (
         <div className="mt-2">
           <div className="flex items-center justify-between text-[11px] text-zinc-600 dark:text-zinc-300">

@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { karaokeStatusChanged, useKaraokeStatus } from '../services/studioQueries';
 import { Check, Loader2 } from 'lucide-react';
 import { useI18n } from '../context/I18nContext';
+import Combobox from './kit/Combobox';
 import { loadNativeOpenRouterCatalog, refreshNativeOpenRouterCatalog, type NativeOpenRouterModel } from '../services/nativeOpenRouter';
 
 /**
@@ -102,13 +103,12 @@ export const KaraokeExtras: React.FC<{ engine: string }> = ({ engine }) => {
       {engine === 'open_router' && (
         <div className="space-y-1">
           <div className="flex items-center gap-2">
-            <select value={openRouterModel} onChange={(event) => setOpenRouterModel(event.target.value)} className={INPUT}>
-              <option value="">{t('assistantPickModel')}</option>
-              {openRouterModel && !catalog.some((model) => model.id === openRouterModel) && (
-                <option value={openRouterModel}>{openRouterModel}</option>
-              )}
-              {catalog.map((model) => <option key={model.id} value={model.id}>{model.name}</option>)}
-            </select>
+            <Combobox label={t('assistantModel')} value={openRouterModel} onChange={setOpenRouterModel} className="min-w-0 flex-1" inputClassName={INPUT}
+              options={[
+                { value: '', label: t('assistantPickModel') },
+                ...(openRouterModel && !catalog.some((model) => model.id === openRouterModel) ? [{ value: openRouterModel, label: openRouterModel }] : []),
+                ...catalog.map((model) => ({ value: model.id, label: model.name })),
+              ]} />
             <button
               type="button"
               onClick={() => void loadCatalog()}

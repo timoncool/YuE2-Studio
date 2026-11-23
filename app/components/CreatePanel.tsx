@@ -87,6 +87,8 @@ import { CatalogSegments } from './kit/Catalog';
 import { Hint } from './kit/Hint';
 import { generationHint, randomSeedPlaceholder } from '../i18n/generationHints';
 import { SecondaryButton } from './kit/Buttons';
+import { Select } from './kit/Select';
+import Combobox from './kit/Combobox';
 import { WorkProgress } from './WorkProgress';
 import { audioCppMiniMax, isMusicEngine, isProfileMusicEngine, miniMaxOutputFormat, profileMusicEngines, nativeGenerationSettings, useNativeMusicProfiles } from '../services/nativeMusicProfiles';
 import { generationPauseStrings } from '../i18n/generationPause';
@@ -177,13 +179,14 @@ function SamplingSelector({ stage, value, onChange, strings }: {
 }) {
   const choices = Object.entries(samplingPresets[stage]);
   const current = presetName(stage, value);
-  return <Field label={stage === 'abc_sampling' ? strings.plan : strings.reading}><select className={CONTROL} value={current} onChange={event => {
-    onChange(applyPreset(stage, value, event.target.value));
-  }}>
-    <option value="">{strings.checkpoint}</option>
-    {current === 'custom' && <option value="custom">{strings.custom}</option>}
-    {choices.map(([name]) => <option key={name} value={name}>{strings[name as keyof typeof strings]}</option>)}
-  </select></Field>;
+  const label = stage === 'abc_sampling' ? strings.plan : strings.reading;
+  return <Field label={label}><Select<string> label={label} inputClassName={CONTROL} value={current} onChange={name => {
+    onChange(applyPreset(stage, value, name));
+  }} options={[
+    { value: '', label: strings.checkpoint },
+    ...(current === 'custom' ? [{ value: 'custom', label: strings.custom }] : []),
+    ...choices.map(([name]) => ({ value: name, label: strings[name as keyof typeof strings] })),
+  ]} /></Field>;
 }
 
 /** The select entry that opens the new-playlist dialog instead of choosing. */
@@ -2310,11 +2313,9 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
                       </div>
                     )}
                     {native.profiles.length > 0 && !nativeSets && (!onMusicEngineChange || (!audioCpp && nativeEngine !== 'hotstep')) && (
-                      <select aria-label={nativeStrings.model} className={CONTROL} value={native.profile?.id ?? ''}
-                        onChange={event => { native.select(event.target.value); pair.select(); }}>
-                        <option value="">{musicStrings.choose}</option>
-                        {native.profiles.map(profile => <option key={profile.id} value={profile.id}>{profile.label}{(!native.installed || !profile.ready) ? ` — ${nativeStrings.unavailable}` : ''}</option>)}
-                      </select>
+                      <Select<string> label={nativeStrings.model} inputClassName={CONTROL} value={native.profile?.id ?? ''}
+                        onChange={id => { native.select(id); pair.select(); }}
+                        options={[{ value: '', label: musicStrings.choose }, ...native.profiles.map(profile => ({ value: profile.id, label: `${profile.label}${(!native.installed || !profile.ready) ? ` — ${nativeStrings.unavailable}` : ''}` }))]} />
                     )}
                     {native.profile?.status === 'experimental' && <p className="text-xs">{nativeStrings.experimental}</p>}
                     {native.profile && !native.ready && !nativeSets && !native.profile.installable &&
@@ -2361,11 +2362,9 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
                       <div className="space-y-2">
                         {musicCatalog.state === 'error' ? <p role="alert" className="text-xs">{musicStrings.catalogError}</p>
                           : musicModels.length === 0 ? <p role="status" className="text-xs">{musicStrings.empty}</p>
-                            : !onMusicEngineChange && <select aria-label={musicStrings.model} className={CONTROL}
-                                value={selectedMusicModel?.id ?? ''} onChange={event => { changeMusicModel(event.target.value); pair.select(); }}>
-                                <option value="">{musicStrings.choose}</option>
-                                {musicModels.map(model => <option key={model.id} value={model.id}>{model.name || model.id}</option>)}
-                              </select>}
+                            : !onMusicEngineChange && <Combobox label={musicStrings.model} inputClassName={CONTROL}
+                                value={selectedMusicModel?.id ?? ''} onChange={id => { changeMusicModel(id); pair.select(); }}
+                                options={[{ value: '', label: musicStrings.choose }, ...musicModels.map(model => ({ value: model.id, label: model.name || model.id }))]} />}
                         {modelParameters.length > 0 && <div className="grid grid-cols-2 gap-2">
                           {modelParameters.map(key => {
                             const field = openRouterMusicFields[key];
@@ -2446,11 +2445,8 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
               {packedYue && <Card title={tt('scoreCardTitle')}>
                 <label className="mb-2 flex items-center gap-2 text-xs">
                   {tt('cotMode')}
-                  <select className={CONTROL} value={effectiveCot} onChange={event => setCot(event.target.value as 'full' | 'melody' | 'off')}>
-                    <option value="full">{tt('cotFull')}</option>
-                    <option value="melody">{tt('cotMelody')}</option>
-                    <option value="off">{tt('cotOff')}</option>
-                  </select>
+                  <Select label={tt('cotMode')} className="min-w-0 flex-1" inputClassName={CONTROL} value={effectiveCot} onChange={value => setCot(value as 'full' | 'melody' | 'off')}
+                    options={[{ value: 'full', label: tt('cotFull') }, { value: 'melody', label: tt('cotMelody') }, { value: 'off', label: tt('cotOff') }]} />
                 </label>
                 <AutoTextarea className={CONTROL} value={abc} onChange={event => setAbc(event.target.value)}
                   disabled={effectiveCot === 'off'} aria-label={tt('scoreCardTitle')} />
@@ -2510,12 +2506,9 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
                     {nativeEngine !== 'acestep-cpp' && (
                       <label className="space-y-1 text-xs">
                         <span>{t('outputFormat')}</span>
-                        <select className={CONTROL} value={miniMaxOutputFormat(native.settings.output_format)}
-                          onChange={event => native.set('output_format', event.target.value)}>
-                          <option value="flac">FLAC</option>
-                          <option value="mp3">MP3</option>
-                          <option value="wav32">WAV (32-bit float)</option>
-                        </select>
+                        <Select<string> label={t('outputFormat')} inputClassName={CONTROL} value={miniMaxOutputFormat(native.settings.output_format)}
+                          onChange={format => native.set('output_format', format)}
+                          options={[{ value: 'flac', label: 'FLAC' }, { value: 'mp3', label: 'MP3' }, { value: 'wav32', label: 'WAV (32-bit float)' }]} />
                       </label>
                     )}
                   </div>
@@ -2580,8 +2573,10 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
               />
               <p className="mt-2 text-[11px] leading-4 text-zinc-500">{t('songIdeaHint')}</p>
               <div className="mt-3 grid grid-cols-2 gap-2">
-                <Field label={writingText.language}><select className={CONTROL} value={writerLanguage} onChange={event => setWriterLanguage(event.target.value)}><option value="">{writingText.auto}</option>{LYRIC_LANGUAGES.map(lang => <option key={lang.code} value={lang.code}>{lang.native}</option>)}</select></Field>
-                <Field label={writingText.lines}><select className={CONTROL} value={writerLines} onChange={event => setWriterLines(event.target.value)}><option value="">{writingText.auto}</option>{[8, 16, 24, 32].map(lines => <option key={lines} value={lines}>{lines}</option>)}</select></Field>
+                <Field label={writingText.language}><Combobox label={writingText.language} inputClassName={CONTROL} value={writerLanguage} onChange={setWriterLanguage}
+                  options={[{ value: '', label: writingText.auto }, ...LYRIC_LANGUAGES.map(lang => ({ value: lang.code, label: lang.native, search: lang.name }))]} /></Field>
+                <Field label={writingText.lines}><Select<string> label={writingText.lines} inputClassName={CONTROL} value={writerLines} onChange={setWriterLines}
+                  options={[{ value: '', label: writingText.auto }, ...[8, 16, 24, 32].map(lines => ({ value: String(lines), label: String(lines) }))]} /></Field>
               </div>
               <div className="mt-3"><Field label={writingText.instructions}><AutoTextarea className={`${CONTROL} resize-none`} minRows={2} value={writerExtra} onChange={event => setWriterExtra(event.target.value)} /></Field></div>
               <button
@@ -3025,9 +3020,8 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
                   </div>
                 )}
                 <div className="mt-2 flex flex-wrap items-center gap-2">
-                  <select className={CONTROL + ' max-w-24'} value={planCount} aria-label={planLabels[language]} onChange={event => setPlanCount(event.target.value)} disabled={composing}>
-                    {Array.from({ length: Math.min(maxBatch, 9) }, (_, index) => index + 1).map(count => <option key={count} value={count}>{count}</option>)}
-                  </select>
+                  <Select<string> className="w-full max-w-24" inputClassName={CONTROL} value={planCount} label={planLabels[language]} onChange={setPlanCount} disabled={composing}
+                    options={Array.from({ length: Math.min(maxBatch, 9) }, (_, index) => index + 1).map(count => ({ value: String(count), label: String(count) }))} />
                   <button
                     type="button"
                     onClick={() => (composing ? composeRun.current?.abort() : void runComposition())}
@@ -3078,14 +3072,12 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
                         <input value={bedBpm} onChange={event => setBedBpm(event.target.value)} inputMode="numeric" className={CONTROL} />
                       </Field>
                       <Field label={tt('chordBedKey')}>
-                        <select value={bedKey} onChange={event => setBedKey(event.target.value)} className={CONTROL}>
-                          {BED_KEYS.map(key => <option key={key} value={key}>{key}</option>)}
-                        </select>
+                        <Combobox label={tt('chordBedKey')} value={bedKey} onChange={setBedKey} inputClassName={CONTROL}
+                          options={BED_KEYS.map(key => ({ value: key, label: key }))} />
                       </Field>
                       <Field label={tt('chordBedMeter')}>
-                        <select value={bedMeter} onChange={event => setBedMeter(event.target.value)} className={CONTROL}>
-                          {BED_METERS.map(meter => <option key={meter} value={meter}>{meter}</option>)}
-                        </select>
+                        <Select<string> label={tt('chordBedMeter')} value={bedMeter} onChange={setBedMeter} inputClassName={CONTROL}
+                          options={BED_METERS.map(meter => ({ value: meter, label: meter }))} />
                       </Field>
                     </div>
                     <button
@@ -3211,10 +3203,8 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
                 onChange={setSteps}
               />
               <Field label={tt('solver')} hint={tt(solver === 'ab2' ? 'solverAb2Hint' : 'solverMidpointHint')}>
-                <select value={solver || 'midpoint'} onChange={event => setSolver(event.target.value as 'midpoint' | 'ab2')} className={CONTROL}>
-                  <option value="midpoint">{tt('solverMidpoint')}</option>
-                  <option value="ab2">{tt('solverAb2')}</option>
-                </select>
+                <Select label={tt('solver')} value={solver || 'midpoint'} onChange={value => setSolver(value as 'midpoint' | 'ab2')} inputClassName={CONTROL}
+                  options={[{ value: 'midpoint', label: tt('solverMidpoint') }, { value: 'ab2', label: tt('solverAb2') }]} />
               </Field>
             </div>
             <div className="mt-4 space-y-3 border-t border-zinc-100 pt-4 dark:border-white/5">
@@ -3296,10 +3286,8 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
                     {(numberOrUndefined(harmony.strength) ?? 0) > 0 && (
                       <>
                         <Field label={tt('chordIdentity')} hint={tt(harmony.identity === 'spelling' ? 'chordIdentitySpellingHint' : 'chordIdentityRootHint')}>
-                          <select value={harmony.identity || 'root'} onChange={event => harmonyField('identity')(event.target.value)} className={CONTROL}>
-                            <option value="root">{tt('chordIdentityRoot')}</option>
-                            <option value="spelling">{tt('chordIdentitySpelling')}</option>
-                          </select>
+                          <Select<string> label={tt('chordIdentity')} value={harmony.identity || 'root'} onChange={harmonyField('identity')} inputClassName={CONTROL}
+                            options={[{ value: 'root', label: tt('chordIdentityRoot') }, { value: 'spelling', label: tt('chordIdentitySpelling') }]} />
                         </Field>
                         <div className="grid grid-cols-2 gap-2">
                           <SliderRow label={tt('chordWindow')} value={harmony.window} fallback={16} min={4} max={64} step={1} onChange={harmonyField('window')} />
@@ -3353,11 +3341,12 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
                   <Stage title={t('stageOutput')} hint={t('stageOutputHint')}>
                     <div className="mb-3">
                       <Field label={engineParityLabels[language].realaudio} hint={engineParityLabels[language].realaudioHint}>
-                        <select value={realaudio} onChange={event => setRealaudio(event.target.value as 'auto' | 'on' | 'off')} className={CONTROL}>
-                          <option value="auto">{engineParityLabels[language].realaudioAuto}</option>
-                          <option value="on">{engineParityLabels[language].realaudioOn}</option>
-                          <option value="off">{engineParityLabels[language].realaudioOff}</option>
-                        </select>
+                        <Select label={engineParityLabels[language].realaudio} value={realaudio} onChange={value => setRealaudio(value as 'auto' | 'on' | 'off')} inputClassName={CONTROL}
+                          options={[
+                            { value: 'auto', label: engineParityLabels[language].realaudioAuto },
+                            { value: 'on', label: engineParityLabels[language].realaudioOn },
+                            { value: 'off', label: engineParityLabels[language].realaudioOff },
+                          ]} />
                       </Field>
                     </div>
                     <div className="mb-3"><Switch checked={vocalsOnly} onChange={setVocalsOnly} label={engineParityLabels[language].vocals} hint={engineParityLabels[language].vocalsHint} /></div>
@@ -3367,16 +3356,12 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
                     </div>
                     <div className="mt-3 grid grid-cols-2 gap-2">
                       <Field label={t('mp3Bitrate')}>
-                        <select value={mp3Bitrate || String(defaults.mp3_bitrate ?? 128)} onChange={event => setMp3Bitrate(event.target.value)} disabled={format !== 'mp3'} className={CONTROL}>
-                          {['128', '192', '256', '320'].map(rate => <option key={rate} value={rate}>{rate} kbps</option>)}
-                        </select>
+                        <Select<string> label={t('mp3Bitrate')} value={mp3Bitrate || String(defaults.mp3_bitrate ?? 128)} onChange={setMp3Bitrate} disabled={format !== 'mp3'} inputClassName={CONTROL}
+                          options={['128', '192', '256', '320'].map(rate => ({ value: rate, label: `${rate} kbps` }))} />
                       </Field>
                       <Field label={t('outputFormat')}>
-                        <select value={format} onChange={event => chooseFormat(event.target.value as YueOutputFormat)} className={CONTROL}>
-                          <option value="flac">FLAC</option>
-                          <option value="mp3">MP3</option>
-                          <option value="wav32">WAV (32-bit float)</option>
-                        </select>
+                        <Select<YueOutputFormat> label={t('outputFormat')} value={format} onChange={chooseFormat} inputClassName={CONTROL}
+                          options={[{ value: 'flac', label: 'FLAC' }, { value: 'mp3', label: 'MP3' }, { value: 'wav32', label: 'WAV (32-bit float)' }]} />
                       </Field>
                     </div>
                     <p className="mt-2 text-[11px] leading-4 text-zinc-500">{t('outputRawHint')}</p>

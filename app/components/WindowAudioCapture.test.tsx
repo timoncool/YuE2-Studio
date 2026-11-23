@@ -40,11 +40,8 @@ it('records only the selected window and hands the WAV to the existing score inp
   act(() => root.render(<WindowAudioCapture disabled={false} onRecording={onRecording} />));
   await press('Record window audio');
   expect(invoke).toHaveBeenCalledWith('audio_capture_windows');
-  const select = host.querySelector('select')!;
-  act(() => {
-    select.value = '42';
-    select.dispatchEvent(new Event('change', { bubbles: true }));
-  });
+  act(() => { host.querySelector<HTMLInputElement>('input[role="combobox"]')!.click(); });
+  act(() => { [...document.querySelectorAll<HTMLElement>('[role="option"]')].find(option => option.textContent === 'Score example')!.click(); });
   await press('Start recording');
   expect(invoke).toHaveBeenCalledWith('record_window_audio', { windowId: '42' });
   expect(onRecording).not.toHaveBeenCalled();

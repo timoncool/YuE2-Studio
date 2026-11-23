@@ -5,6 +5,7 @@ import { useI18n } from '../context/I18nContext';
 import type { TranslationKey } from '../i18n/translations';
 import { isMidiFile, MIDI_EXTENSIONS, noteName } from '../services/midiFiles';
 import { midiImportOptions } from '../i18n/midiImportOptions';
+import { Select } from './kit/Select';
 
 /** The largest MIDI file the service reads: a long song is tens of kilobytes. */
 const LARGEST = 8 * 1024 * 1024;
@@ -87,7 +88,7 @@ export const MidiImportDialog: React.FC<{
 
   useEffect(() => {
     const escape = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape') return;
+      if (event.key !== 'Escape' || (event.target as Element | null)?.matches?.('[role="combobox"][aria-expanded="true"]')) return;
       event.stopPropagation();
       onCancel();
     };
@@ -238,18 +239,17 @@ export const MidiImportDialog: React.FC<{
               </label>
               <label className="flex flex-col gap-1" title={say('midiInVoiceHint')}>
                 <span className="text-[11px] font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">{say('midiInVoice')}</span>
-                <select value={vocal} onChange={event => setVocal(event.target.value)} className={SELECT}>
-                  <option value="auto">{say('midiInAuto')}</option>
-                  {melodic.map(part => <option key={part.number} value={String(part.number)}>{part.number}. {part.name || part.family}</option>)}
-                </select>
+                <Select<string> label={say('midiInVoice')} value={vocal} onChange={setVocal} inputClassName={SELECT}
+                  options={[{ value: 'auto', label: say('midiInAuto') }, ...melodic.map(part => ({ value: String(part.number), label: `${part.number}. ${part.name || part.family}` }))]} />
               </label>
               <label className="flex flex-col gap-1" title={say('midiInInstrumentHint')}>
                 <span className="text-[11px] font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">{say('midiInInstrument')}</span>
-                <select value={instrument} onChange={event => setInstrument(event.target.value)} className={SELECT}>
-                  <option value="auto">{say('midiInAuto')}</option>
-                  <option value="none">{say('midiInNone')}</option>
-                  {melodic.map(part => <option key={part.number} value={String(part.number)}>{part.number}. {part.name || part.family}</option>)}
-                </select>
+                <Select<string> label={say('midiInInstrument')} value={instrument} onChange={setInstrument} inputClassName={SELECT}
+                  options={[
+                    { value: 'auto', label: say('midiInAuto') },
+                    { value: 'none', label: say('midiInNone') },
+                    ...melodic.map(part => ({ value: String(part.number), label: `${part.number}. ${part.name || part.family}` })),
+                  ]} />
               </label>
             </div>
           )}
@@ -258,10 +258,12 @@ export const MidiImportDialog: React.FC<{
           {file && <div className="space-y-2">
             <div className="grid gap-3 sm:grid-cols-3">
               <label className="flex flex-col gap-1 text-xs text-zinc-500">{optionsText.grid}
-                <select className={SELECT} value={grid} onChange={event => setGrid(event.target.value)}><option value="auto">{optionsText.auto}</option><option value="16">1/16</option><option value="32">1/32</option></select>
+                <Select<string> label={optionsText.grid} inputClassName={SELECT} value={grid} onChange={setGrid}
+                  options={[{ value: 'auto', label: optionsText.auto }, { value: '16', label: '1/16' }, { value: '32', label: '1/32' }]} />
               </label>
               {([[optionsText.voice, vocalOctaves, setVocalOctaves], [optionsText.instrument, instrumentOctaves, setInstrumentOctaves]] as const).map(([label, value, change]) => <label key={label} className="flex flex-col gap-1 text-xs text-zinc-500">{label}
-                <select className={SELECT} value={value} onChange={event => change(event.target.value)}>{[-3, -2, -1, 0, 1, 2, 3].map(octave => <option key={octave} value={octave}>{octave > 0 ? '+' : ''}{octave}</option>)}</select>
+                <Select<string> label={label} inputClassName={SELECT} value={value} onChange={change}
+                  options={[-3, -2, -1, 0, 1, 2, 3].map(octave => ({ value: String(octave), label: `${octave > 0 ? '+' : ''}${octave}` }))} />
               </label>)}
             </div><p className="text-[11px] text-zinc-500">{optionsText.hint}</p>
           </div>}

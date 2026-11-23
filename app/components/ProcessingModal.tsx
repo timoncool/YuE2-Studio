@@ -10,6 +10,7 @@ import { apiUrl } from '../services/apiBase';
 import { SELF_READ } from '../services/studioQueries';
 import { activeVersionLabel } from '../services/songDownload';
 import { NumberField } from './NumberField';
+import Combobox from './kit/Combobox';
 import { mapNativeLibrarySong } from '../services/nativeLibrary';
 
 /**
@@ -416,12 +417,8 @@ export const ProcessingModal: React.FC<ProcessingModalProps> = ({ song, onClose,
                           <p className="text-[11px] text-zinc-500">{t('processVstNone')}</p>
                         ) : (
                           <div className="flex items-center gap-2">
-                            <select value={vstPick} onChange={event => setVstPick(event.target.value)} className={CONTROL} aria-label={t('processVstChoose')}>
-                              <option value="">{t('processVstChoose')}</option>
-                              {vstPlugins.map(plugin => (
-                                <option key={`${plugin.path}-${plugin.name}`} value={plugin.path}>{plugin.vendor ? `${plugin.name} · ${plugin.vendor}` : plugin.name}</option>
-                              ))}
-                            </select>
+                            <Combobox value={vstPick} onChange={setVstPick} className="min-w-0 flex-1" inputClassName={CONTROL} label={t('processVstChoose')}
+                              options={[{ value: '', label: t('processVstChoose') }, ...vstPlugins.map(plugin => ({ value: plugin.path, label: plugin.vendor ? `${plugin.name} · ${plugin.vendor}` : plugin.name }))]} />
                             <button type="button" onClick={addVst} disabled={!vstPick} className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-zinc-200 px-3 py-2 text-xs font-semibold text-zinc-700 hover:border-pink-400 hover:text-pink-600 disabled:opacity-50 dark:border-white/10 dark:text-zinc-200">
                               <Plus size={13} />{t('processVstAdd')}
                             </button>

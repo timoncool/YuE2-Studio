@@ -8,6 +8,7 @@ import { saveFile } from '../services/saveFile';
 import { saveTrackZip } from '../services/trackZip';
 import { SongMidiFiles } from './SongMidiFiles';
 import { AbletonProject } from './AbletonProject';
+import { Select } from './kit/Select';
 
 const EXPORT_EVENT = 'studio:export';
 
@@ -199,44 +200,36 @@ export const ExportDialog: React.FC = () => {
           <div className="mt-4 grid grid-cols-2 gap-3">
             <label className="block">
               <span className={LABEL}>{t('exportFormat')}</span>
-              <select className={CONTROL} value={format} disabled={busy} onChange={event => setFormat(event.target.value as Format)}>
-                <option value="wav">WAV</option>
-                <option value="flac">{t('exportFormatFlac')}</option>
-                <option value="mp3">{t('exportFormatMp3')}</option>
-              </select>
+              <Select<string> label={t('exportFormat')} inputClassName={CONTROL} value={format} disabled={busy} onChange={value => setFormat(value as Format)}
+                options={[{ value: 'wav', label: 'WAV' }, { value: 'flac', label: t('exportFormatFlac') }, { value: 'mp3', label: t('exportFormatMp3') }]} />
             </label>
             <label className="block">
               <span className={LABEL}>{t('exportRate')}</span>
-              <select className={CONTROL} value={rate} disabled={busy} onChange={event => setRate(event.target.value)}>
-                <option value="source">{t('exportRateSource')}</option>
-                <option value="44100">44.1 kHz</option>
-                <option value="48000">48 kHz</option>
-                {format !== 'mp3' && <option value="88200">88.2 kHz</option>}
-                {format !== 'mp3' && <option value="96000">96 kHz</option>}
-              </select>
+              <Select<string> label={t('exportRate')} inputClassName={CONTROL} value={rate} disabled={busy} onChange={setRate}
+                options={[
+                  { value: 'source', label: t('exportRateSource') },
+                  { value: '44100', label: '44.1 kHz' },
+                  { value: '48000', label: '48 kHz' },
+                  ...(format !== 'mp3' ? [{ value: '88200', label: '88.2 kHz' }, { value: '96000', label: '96 kHz' }] : []),
+                ]} />
             </label>
             {format === 'mp3' ? (
               <label className="block">
                 <span className={LABEL}>{t('exportBitrate')}</span>
-                <select className={CONTROL} value={kbps} disabled={busy} onChange={event => setKbps(event.target.value)}>
-                  {['320', '256', '224', '192', '160', '128'].map(value => <option key={value} value={value}>{value} kbps CBR</option>)}
-                </select>
+                <Select<string> label={t('exportBitrate')} inputClassName={CONTROL} value={kbps} disabled={busy} onChange={setKbps}
+                  options={['320', '256', '224', '192', '160', '128'].map(value => ({ value, label: `${value} kbps CBR` }))} />
               </label>
             ) : (
               <label className="block">
                 <span className={LABEL}>{t('exportDepth')}</span>
-                <select className={CONTROL} value={depth} disabled={busy} onChange={event => setDepth(event.target.value as Depth)}>
-                  <option value="16">{bits(16)}</option>
-                  <option value="24">{bits(24)}</option>
-                  {format === 'wav' && <option value="32f">{t('exportFloat')}</option>}
-                </select>
+                <Select<string> label={t('exportDepth')} inputClassName={CONTROL} value={depth} disabled={busy} onChange={value => setDepth(value as Depth)}
+                  options={[{ value: '16', label: bits(16) }, { value: '24', label: bits(24) }, ...(format === 'wav' ? [{ value: '32f', label: t('exportFloat') }] : [])]} />
               </label>
             )}
             <label className="col-span-2 block">
               <span className={LABEL}>{t('exportLoudness')}</span>
-              <select className={CONTROL} value={target} disabled={busy} onChange={event => setTarget(event.target.value)}>
-                {TARGETS.map(entry => <option key={entry.id} value={entry.id}>{t(`exportTarget_${entry.id}` as TranslationKey)}</option>)}
-              </select>
+              <Select<string> label={t('exportLoudness')} inputClassName={CONTROL} value={target} disabled={busy} onChange={setTarget}
+                options={TARGETS.map(entry => ({ value: entry.id, label: t(`exportTarget_${entry.id}` as TranslationKey) }))} />
             </label>
             {target === 'custom' && (
               <>

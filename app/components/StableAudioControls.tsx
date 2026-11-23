@@ -1,3 +1,5 @@
+import { Select } from './kit/Select';
+
 export type StableAudioOptions = {
   negative_prompt?: string;
   sampler_mode?: 'pingpong' | 'euler';
@@ -64,12 +66,9 @@ export function StableAudioControls({value, onChange, language}: {
         onChange={e => onChange({...value, negative_prompt: e.target.value})} />
     </label>
     <label className="grid gap-1">{sampler}
-      <select className={input} value={value.sampler_mode}
-        onChange={e => onChange({...value, sampler_mode: e.target.value as StableAudioDraft['sampler_mode']})}>
-        <option value="">{defaultValue}</option>
-        <option value="pingpong">Ping-pong</option>
-        <option value="euler">Euler</option>
-      </select>
+      <Select<string> label={sampler} inputClassName={input} value={value.sampler_mode}
+        onChange={mode => onChange({...value, sampler_mode: mode as StableAudioDraft['sampler_mode']})}
+        options={[{ value: '', label: defaultValue }, { value: 'pingpong', label: 'Ping-pong' }, { value: 'euler', label: 'Euler' }]} />
     </label>
     <label className="grid gap-1">{apg}
       <input type="number" className={input} step="any" placeholder="1" value={value.apg_scale}

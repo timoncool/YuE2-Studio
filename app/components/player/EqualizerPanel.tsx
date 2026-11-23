@@ -6,6 +6,8 @@ import { BAND_LABELS, OWN_CHANGED, SITUATION_PRESETS, WINAMP_PRESETS, ownPresets
 import { saveFile } from '../../services/saveFile';
 import { useFloatable } from '../../services/useFloatable';
 import { NumberField } from '../NumberField';
+import Combobox from '../kit/Combobox';
+import { SELECT_FIELD } from '../kit/Select';
 
 /**
  * The ten-band equalizer, as a panel over the studio: Winamp's bands and
@@ -147,25 +149,19 @@ export const EqualizerPanel: React.FC<{ onClose: () => void }> = ({ onClose }) =
           </div>
 
           <div className="flex flex-wrap items-center gap-1.5">
-            <select
-              aria-label={t('eqPresetLabel')}
+            <Combobox
+              label={t('eqPresetLabel')}
               value={eq.preset ?? ''}
-              onChange={(event) => choose(event.target.value)}
-              className="min-w-0 flex-1 rounded-lg border border-zinc-200 bg-white px-2 py-1.5 text-xs text-zinc-800 dark:border-white/10 dark:bg-black/30 dark:text-zinc-100"
-            >
-              <option value="">{t('eqCustom')}</option>
-              {own.length > 0 && (
-                <optgroup label={t('eqOwnPresets')}>
-                  {own.map((preset) => <option key={`own-${preset.name}`} value={preset.name}>{preset.name}</option>)}
-                </optgroup>
-              )}
-              <optgroup label="Winamp">
-                {WINAMP_PRESETS.map((preset) => <option key={preset.name} value={preset.name}>{preset.name}</option>)}
-              </optgroup>
-              <optgroup label={t('eqSituations')}>
-                {SITUATION_PRESETS.map((preset) => <option key={preset.name} value={preset.name}>{preset.name}</option>)}
-              </optgroup>
-            </select>
+              onChange={choose}
+              className="min-w-0 flex-1"
+              inputClassName={SELECT_FIELD}
+              options={[
+                { value: '', label: t('eqCustom') },
+                ...own.map((preset) => ({ value: preset.name, label: preset.name, group: t('eqOwnPresets') })),
+                ...WINAMP_PRESETS.map((preset) => ({ value: preset.name, label: preset.name, group: 'Winamp' })),
+                ...SITUATION_PRESETS.map((preset) => ({ value: preset.name, label: preset.name, group: t('eqSituations') })),
+              ]}
+            />
             <button type="button" onClick={() => setEqualizer({ preamp: 0, gains: EQ_BANDS.map(() => 0), preset: null })} title={t('eqReset')} className="rounded-lg border border-zinc-200 p-1.5 text-zinc-500 hover:border-pink-400 hover:text-pink-600 dark:border-white/10">
               <RotateCcw size={14} />
             </button>

@@ -65,8 +65,8 @@ it('browses the voice catalogue and chooses an installed RVC voice', async () =>
     });
     expect(details.textContent).toContain(high.name);
     expect(details.textContent).toContain(drive.name);
-    const style = details.querySelector<HTMLSelectElement>('select[aria-label="Vocal style"]')!;
-    act(() => { style.value = 'high'; style.dispatchEvent(new Event('change', { bubbles: true })); });
+    act(() => { details.querySelector<HTMLInputElement>('input[role="combobox"][aria-label="Vocal style"]')!.click(); });
+    act(() => { [...document.querySelectorAll<HTMLElement>('[role="listbox"][aria-label="Vocal style"] [role="option"]')].find(option => option.textContent === 'High')!.click(); });
     expect(details.querySelectorAll('li')).toHaveLength(1);
     expect(details.textContent).toContain(high.name);
     expect(details.textContent).not.toContain(drive.name);

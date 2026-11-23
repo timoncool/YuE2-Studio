@@ -111,9 +111,24 @@ describe('saved model requirements in replay', () => {
     }
   });
 
-  it('keeps the saved YuE2 profile visible when offering an extension', () => {
-    const yue = open({ ...migrated, engine_id: 'yue2-cpp', profile_id: 'quality-q8' });
-    expect(yue).toContain('quality-q8');
-    expect(yue).toContain('+15 s');
+  it('keeps the saved YuE2 profile visible when offering an extension', async () => {
+    const record = { ...migrated, engine_id: 'yue2-cpp', profile_id: 'quality-q8' };
+    expect(open(record)).toContain('quality-q8');
+    vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+    const mount = document.createElement('div');
+    document.body.append(mount);
+    const root = createRoot(mount);
+    try {
+      await act(async () => root.render(<I18nProvider><ReplayModal
+        song={mapNativeLibrarySong(record)} clientRef="qa" onClose={() => {}} onQueued={() => {}}
+      /></I18nProvider>));
+      await act(async () => mount.querySelector<HTMLInputElement>('input[role="combobox"][aria-label="Make it longer"]')!.click());
+      const offered = [...document.querySelectorAll('[role="listbox"][aria-label="Make it longer"] [role="option"]')].map(option => option.textContent);
+      expect(offered).toContain('+15 s');
+    } finally {
+      await act(async () => root.unmount());
+      mount.remove();
+      vi.unstubAllGlobals();
+    }
   });
 });

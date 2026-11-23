@@ -29,7 +29,7 @@ it('uses the Burn engine for a trained voice without changing the legacy engine 
   const root = createRoot(host);
   try {
     await act(async () => root.render(<RvcApplyVoice song={source} voice={voice} control="" />));
-    expect(host.querySelector('select')?.value).toBe('burn-cuda');
+    expect(host.querySelector<HTMLInputElement>('input[role="combobox"][aria-label="Voice engine"]')?.value).toBe('RVC Burn CUDA');
     const apply = [...host.querySelectorAll('button')].find(button => button.textContent === 'Save a new take with this voice')!;
     await act(async () => apply.click());
     expect(request).toHaveBeenCalledWith({
@@ -63,18 +63,18 @@ it('keeps explicit RVC backend selection and saves an audio.cpp take from the se
   try {
     act(() => root.render(<RvcApplyVoice song={source} voice={voice} control="" onSaved={saved} />));
     await flush();
-    const select = host.querySelector('select')!;
+    const select = host.querySelector<HTMLInputElement>('input[role="combobox"][aria-label="Voice engine"]')!;
     const apply = [...host.querySelectorAll('button')].find(button => button.textContent === 'Save a new take with this voice')!;
     expect(host.textContent).toContain('The original remains in the library.');
     expect(host.textContent).toContain('Word clarity can vary with the selected voice.');
-    const choose = (value: string) => act(() => {
-      select.value = value;
-      select.dispatchEvent(new Event('change', { bubbles: true }));
-    });
-    choose('vocal-fast-rs');
+    const choose = (label: string) => {
+      act(() => { select.click(); });
+      act(() => { [...document.querySelectorAll<HTMLElement>('[role="listbox"][aria-label="Voice engine"] [role="option"]')].find(option => option.textContent === label)!.click(); });
+    };
+    choose('Fast, on the graphics card');
     expect(apply.disabled).toBe(true);
     expect(host.textContent).toContain('Unavailable on this machine.');
-    choose('audio.cpp');
+    choose('Spare (audio.cpp)');
     expect(localStorage.getItem('studio.rvc.backend')).toBe('audio.cpp');
     expect(apply.disabled).toBe(false);
     act(() => { apply.click(); });

@@ -11,6 +11,7 @@ import { ConfirmDialog } from './ConfirmDialog';
 import { ManualRuntimeArchive } from './ManualDownloads';
 import { StemPlayer } from './StemPlayer';
 import { TrainingGuide } from './TrainingGuide';
+import { Select } from './kit/Select';
 import { voiceTrainingGuide } from '../i18n/voiceTrainingGuide';
 import { RvcBurnTraining, rvcBurnText } from './RvcBurnTraining';
 import { HotStepSa3Training, sa3TrainingText } from './HotStepSa3Training';
@@ -124,9 +125,7 @@ const NumberField: React.FC<{ label: string; value: number; onChange: (value: nu
 const Choice = <T extends string>({ label, value, options, onChange }: { label: string; value: T; options: { value: T; label: string }[]; onChange: (value: T) => void }) => (
   <label className="block">
     <span className={LABEL}>{label}</span>
-    <select value={value} onChange={event => onChange(event.target.value as T)} className={`${CONTROL} mt-1`}>
-      {options.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
-    </select>
+    <Select<T> label={label} value={value} onChange={onChange} className="mt-1" inputClassName={CONTROL} options={options} />
   </label>
 );
 
@@ -824,11 +823,9 @@ const TrainStep: React.FC<{ state: TrainingState; recipe: Recipe; setRecipe: (re
     <div className="space-y-3">
       {!voices && <label className="block max-w-sm">
         <span className={LABEL}>{(sa3TrainingText[language] ?? sa3TrainingText.en)[0]}</span>
-        <select className={`${CONTROL} mt-1`} value={trainingEngine} onChange={event => setTrainingEngine(event.target.value === 'heartmula' ? 'heartmula' : event.target.value === 'sa3' ? 'sa3' : 'yue2')}>
-          <option value="yue2">YuE2</option>
-          <option value="heartmula">HeartMuLa 3B · HOT-Step</option>
-          <option value="sa3">Stable Audio 3 Medium · HOT-Step</option>
-        </select>
+        <Select<string> label={(sa3TrainingText[language] ?? sa3TrainingText.en)[0]} className="mt-1" inputClassName={CONTROL} value={trainingEngine}
+          onChange={engine => setTrainingEngine(engine === 'heartmula' ? 'heartmula' : engine === 'sa3' ? 'sa3' : 'yue2')}
+          options={[{ value: 'yue2', label: 'YuE2' }, { value: 'heartmula', label: 'HeartMuLa 3B · HOT-Step' }, { value: 'sa3', label: 'Stable Audio 3 Medium · HOT-Step' }]} />
       </label>}
       {trainingEngine === 'rvc' ? <>
         <RvcBurnTraining key={dataset.id} dataset={dataset} busy={Boolean(state.active || preparing)}
@@ -843,11 +840,10 @@ const TrainStep: React.FC<{ state: TrainingState; recipe: Recipe; setRecipe: (re
       {(state.training_bases?.length ?? 0) > 1 && <div className={CARD}>
         <label className="block max-w-sm">
           <span className={LABEL}>{t('trainingBase')}</span>
-          <select className={`${CONTROL} mt-1`} value={baseId}
+          <Select<string> label={t('trainingBase')} className="mt-1" inputClassName={CONTROL} value={baseId}
             disabled={starting || installingBase || Boolean(baseDownload && !baseDownload.done)}
-            onChange={event => setBaseId(event.target.value)}>
-            {state.training_bases?.map(option => <option key={option.id} value={option.id}>{option.label}</option>)}
-          </select>
+            onChange={setBaseId}
+            options={(state.training_bases ?? []).map(option => ({ value: option.id, label: option.label }))} />
         </label>
         {alternateBase && base?.note && <p className={HINT}>{base.note}</p>}
         {state.training_own_base_folder && <p className={HINT}>

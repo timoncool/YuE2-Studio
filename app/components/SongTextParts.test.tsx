@@ -62,8 +62,8 @@ describe('song text controls', () => {
   });
   it('changes style language and tempo through the named controls without dropping instruments', () => {
     mount('style', 'Russian,folk rock,male voice,banjo,88 BPM');
-    const language = host.querySelector('select')!;
-    act(() => { language.value = 'Japanese'; language.dispatchEvent(new Event('change', { bubbles: true })); });
+    act(() => host.querySelector<HTMLInputElement>('input[role="combobox"]')!.click());
+    act(() => [...document.querySelectorAll<HTMLElement>('[role="option"]')].find(option => option.textContent === 'Japanese')!.click());
     expect(output).toBe('Japanese,folk rock,male voice,banjo,88 BPM');
     const tempo = host.querySelector<HTMLInputElement>('input[type="number"]')!;
     edit(tempo, '140');
