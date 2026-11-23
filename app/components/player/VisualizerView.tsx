@@ -150,10 +150,13 @@ export const VisualizerView: React.FC<{
         const width = box.current.clientWidth || 640;
         const height = box.current.clientHeight || 360;
         // the canvas holds as many pixels as it shows before MilkDrop draws its first frame into it
+        // butterchurn draws its output over width x height of the canvas, so both are the canvas's own pixels
         const ratio = window.devicePixelRatio || 1;
         canvas.current.width = Math.round(width * ratio);
         canvas.current.height = Math.round(height * ratio);
-        const drawer = butterchurn.createVisualizer(context, canvas.current, { width, height, pixelRatio: ratio, textureRatio: 1 });
+        const drawer = butterchurn.createVisualizer(context, canvas.current, {
+          width: canvas.current.width, height: canvas.current.height, pixelRatio: 1, textureRatio: 1,
+        });
         drawer.connectAudio(source);
         milkdrop.current = drawer;
         blended.current = false;
@@ -311,7 +314,7 @@ export const VisualizerView: React.FC<{
         const ratio = window.devicePixelRatio || 1;
         canvas.current.width = Math.round(node.clientWidth * ratio);
         canvas.current.height = Math.round(node.clientHeight * ratio);
-        milkdrop.current.setRendererSize(node.clientWidth, node.clientHeight);
+        milkdrop.current.setRendererSize(canvas.current.width, canvas.current.height);
       }
       hole.current?.resize(node.clientWidth, node.clientHeight);
       tunnel.current?.resize(node.clientWidth, node.clientHeight);
