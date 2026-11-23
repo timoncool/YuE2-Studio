@@ -62,7 +62,7 @@ import { NumberField } from './NumberField';
 import { CreateSpeedReference, type CreateSpeedProfile } from './CreateSpeedReference';
 import { AceTaskControls, aceTaskOptions, newAceTask, restoreAceTask } from './AceTaskControls';
 import { apiUrl } from '../services/apiBase';
-import { AceStudioFields, aceGenderLine, aceStudioFields, ditKind, keepAceStudio, keptAceStudio, restoreAceStudio } from './AceStudioFields';
+import { AceStudioFields, type AceStudioDraft, aceGenderLine, aceStudioFields, ditKind, keepAceStudio, keptAceStudio, restoreAceStudio } from './AceStudioFields';
 import { explainCliFailure } from '../services/cliFailure';
 import { loadNativeOpenRouterCatalog, modelsForCapability, openRouterMusicFields, openRouterMusicParameters, refreshNativeOpenRouterCatalog, type NativeOpenRouterModel, type OpenRouterMusicOptions, type OpenRouterMusicParameter } from '../services/nativeOpenRouter';
 import { miDashengDurationStrings, musicSourceStrings, nativeMusicSourceStrings } from '../i18n/musicSource';
@@ -838,8 +838,11 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
   const [scoreInstruction, setScoreInstruction] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [acePlanning, setAcePlanning] = useState<'inspire' | 'format' | null>(null);
+  // what the planner replaced, for the undo link under the card it was asked from
+  const [aceUndo, setAceUndo] = useState<{ mode: 'inspire' | 'format'; style: string; lyrics: string; draft: AceStudioDraft; duration: string } | null>(null);
   const planAce = async (mode: 'inspire' | 'format', idea = '') => {
     if (!native.profile || acePlanning) return;
+    setAceUndo({ mode, style, lyrics, draft: aceStudio, duration: native.settings.duration_seconds });
     setAcePlanning(mode);
     setError(null);
     const language = typeof aceStudio.vocal_language === 'string' && aceStudio.vocal_language ? aceStudio.vocal_language : 'en';
@@ -2282,6 +2285,8 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
               {aceEngine && <AceTaskControls value={aceTask} onChange={setAceTask} control={CONTROL} profileReady={native.ready} />}
               {aceEngine && <AceStudioFields value={aceStudio} onChange={setAceStudio} kind={ditKind(undefined)} task={aceTask.task}
                 planning={acePlanning} ready={native.ready} canFormat={Boolean(style.trim() || lyrics.trim())} onPlan={(mode, idea) => void planAce(mode, idea)}
+                undo={acePlanning ? null : aceUndo?.mode ?? null}
+                onUndo={() => { if (!aceUndo) return; setStyle(aceUndo.style); setLyrics(aceUndo.lyrics); setAceStudio(aceUndo.draft); native.set('duration_seconds', aceUndo.duration); setAceUndo(null); }}
                 adapters={selectedNativeAdapters.some(adapter => !adapter.disabled)}
                 card={(title, body, actions) => <Card title={title} actions={actions} fold={`ace-${title}`}>{body}</Card>} />}
               {(aceEngine || miniMaxEngine) && native.profile && <AdapterPicker

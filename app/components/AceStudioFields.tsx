@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ChevronDown, ListChecks, Loader2, Sparkles } from 'lucide-react';
+import { ChevronDown, ListChecks, Loader2, Sparkles, Undo2 } from 'lucide-react';
 import { useI18n } from '../context/I18nContext';
 import { readAudioCodes, SCHEDULERS, SOLVERS } from '../services/aceEngine';
 import { NumberField } from './NumberField';
@@ -211,7 +211,7 @@ const Stage: React.FC<{ title: string; hint: string; children: React.ReactNode }
   </section>
 );
 
-export function AceStudioFields({ value, onChange, kind, task, adapters, card, planning, ready, canFormat, onPlan }: {
+export function AceStudioFields({ value, onChange, kind, task, adapters, card, planning, ready, canFormat, onPlan, undo, onUndo }: {
   value: AceStudioDraft;
   onChange: (value: AceStudioDraft) => void;
   kind: DitKind;
@@ -221,6 +221,8 @@ export function AceStudioFields({ value, onChange, kind, task, adapters, card, p
   ready: boolean;
   canFormat: boolean;
   onPlan: (mode: 'inspire' | 'format', idea?: string) => void;
+  undo: 'inspire' | 'format' | null;
+  onUndo: () => void;
   card: (title: string, body: React.ReactNode, actions?: React.ReactNode) => React.ReactNode;
 }) {
   const { t } = useI18n();
@@ -251,11 +253,18 @@ export function AceStudioFields({ value, onChange, kind, task, adapters, card, p
     </button>
   );
 
+  const undoLink = (mode: 'inspire' | 'format') => undo === mode && (
+    <button type="button" onClick={onUndo} className="mt-1.5 inline-flex items-center gap-1 text-[11px] font-semibold text-pink-600 hover:underline dark:text-pink-300">
+      <Undo2 size={12} />{tt('aceUndo')}
+    </button>
+  );
+
   return <>
     {task === 'text2music' && card(tt('aceSongIdea'), <>
       <textarea value={idea} onChange={event => setIdea(event.target.value)} rows={2} placeholder={tt('aceIdeaPlaceholder')} aria-label={tt('aceSongIdea')}
         className={`${CONTROL} resize-y`} />
       <p className="mt-1.5 text-[11px] leading-4 text-zinc-500">{tt('aceIdeaHint')}</p>
+      {undoLink('inspire')}
     </>, planButton('inspire', planning === 'inspire' ? tt('acePlanning') : tt('aceInspire'), !idea.trim()))}
     {card(tt('aceSongParams'), <>
       <div className="grid grid-cols-2 gap-2">
@@ -286,6 +295,7 @@ export function AceStudioFields({ value, onChange, kind, task, adapters, card, p
         </div>
       </div>
       <p className="mt-2 text-[11px] leading-4 text-zinc-500">{tt('aceMetadataHint')}</p>
+      {undoLink('format')}
     </>, planButton('format', tt('aceFormat'), !canFormat))}
 
     {card(t('quality'), <div className="space-y-3">
