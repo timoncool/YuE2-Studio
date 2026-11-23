@@ -2120,7 +2120,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
           <div className="flex items-center justify-between gap-3">
             <div className="min-w-0">
               <h1 className="truncate text-base font-bold">{t('createMusic')}</h1>
-              <p className="mt-0.5 truncate text-[11px] text-zinc-500 dark:text-zinc-400">{nativeEngine ? profileMusicEngines[nativeEngine] : cloud ? 'OpenRouter' : tt('localInferenceYue')}</p>
+              <p className="mt-0.5 truncate text-[11px] text-zinc-500 dark:text-zinc-400">{cloud ? musicStrings.groupCloud : musicStrings.groupLocal}</p>
             </div>
             <div className="flex shrink-0 items-center gap-2">
               {yue && <span className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-semibold ${ready ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-300' : 'bg-amber-500/10 text-amber-700 dark:text-amber-300'}`}>
@@ -2171,7 +2171,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
                 </details>
               )}
               {speedProfile && !(linkedFamily && linkedFamily.pairs.length > 1) && <CreateSpeedReference profile={speedProfile} id={speedReferenceId} />}
-              {onOpenEngines && !nativeEngine && <button type="button" className="block min-h-6 text-xs font-medium text-zinc-500 hover:text-pink-600 dark:text-zinc-400"
+              {onOpenEngines && !nativeEngine && !yue && <button type="button" className="block min-h-6 text-xs font-medium text-zinc-500 hover:text-pink-600 dark:text-zinc-400"
                 onClick={() => onOpenEngines(musicEngine)}>{enginePageStrings[language][0]}</button>}
             </div>
           )}
@@ -2434,6 +2434,8 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
           ) : <>
           {onMusicEngineChange && !serviceDown && <Card title={nativeStrings.model}>
             <YueModelSetPicker onChanged={() => { void setupQuery.refetch(); pair.select(); }} />
+            {onOpenEngines && <button type="button" className="mt-2 block min-h-6 text-xs font-medium text-zinc-500 hover:text-pink-600 dark:text-zinc-400"
+              onClick={() => onOpenEngines(musicEngine)}>{enginePageStrings[language][0]}</button>}
           </Card>}
           {serviceDown ? (
             <div className="flex gap-2 rounded-xl border border-rose-500/30 bg-rose-500/10 p-3 text-xs leading-5 text-rose-700 dark:text-rose-200">

@@ -177,7 +177,7 @@ export function NativeModelSetPicker({ engine, name, profiles, selected, engineI
   const busy = phase !== 'idle';
 
   return (
-    <fieldset className="space-y-2">
+    <fieldset className="min-w-0 space-y-2">
       <legend className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">{text.quality}</legend>
       <div role="radiogroup" aria-label={text.quality} className="space-y-1">
         {shown.map(profile => (

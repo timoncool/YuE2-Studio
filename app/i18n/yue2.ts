@@ -5,7 +5,6 @@
  */
 
 const en = {
-  localInferenceYue: 'YuE2 on your GPU · style + lyrics → full song',
   coverMode: 'Cover',
   coverTitle: 'Cover a song',
   coverIntro: 'YuE2 can sing an existing melody in a new style. SheetSage2 listens to a recording and writes its score; the model then performs that score in your style.',
@@ -301,7 +300,6 @@ const en = {
 export type Yue2Strings = { readonly [K in keyof typeof en]: string };
 
 const ru: Yue2Strings = {
-  localInferenceYue: 'YuE2 на вашей видеокарте · стиль + текст → целая песня',
   coverMode: 'Кавер',
   coverTitle: 'Кавер на песню',
   coverIntro: 'YuE2 умеет спеть существующую мелодию в новом стиле. SheetSage2 слушает запись и пишет её партитуру, а модель исполняет эту партитуру в вашем стиле.',
@@ -595,7 +593,6 @@ const ru: Yue2Strings = {
 };
 
 const zh: Yue2Strings = {
-  localInferenceYue: '在你的显卡上运行 YuE2 · 风格 + 歌词 → 完整歌曲',
   coverMode: '翻唱',
   coverTitle: '翻唱一首歌',
   coverIntro: 'YuE2 可以用新风格演唱已有的旋律。SheetSage2 听取录音并写出乐谱，模型再用你的风格演绎这份乐谱。',
@@ -889,7 +886,6 @@ const zh: Yue2Strings = {
 };
 
 const ja: Yue2Strings = {
-  localInferenceYue: 'あなたの GPU で YuE2 · スタイル + 歌詞 → フル楽曲',
   coverMode: 'カバー',
   coverTitle: '曲をカバーする',
   coverIntro: 'YuE2 は既存のメロディを新しいスタイルで歌えます。SheetSage2 が録音を聴いて楽譜を書き、モデルがその楽譜をあなたのスタイルで演奏します。',
@@ -1183,7 +1179,6 @@ const ja: Yue2Strings = {
 };
 
 const ko: Yue2Strings = {
-  localInferenceYue: '내 GPU에서 YuE2 · 스타일 + 가사 → 완성곡',
   coverMode: '커버',
   coverTitle: '노래 커버하기',
   coverIntro: 'YuE2는 기존 멜로디를 새로운 스타일로 부를 수 있습니다. SheetSage2가 녹음을 듣고 악보를 쓰고, 모델이 그 악보를 당신의 스타일로 연주합니다.',

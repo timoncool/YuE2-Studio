@@ -1926,7 +1926,6 @@ export const pt = {
     updateWhyNewer: 'Esta versão usa outra versão disto',
     updateWhyUnused: 'Já não é usado',
     assistantVulkanGlibc: 'O assistente corre na placa através do Vulkan: a versão CUDA do llama.cpp precisa do glibc {need} ou mais recente, este sistema tem {glibc}',
-    localInferenceYue: 'YuE2 na sua GPU · estilo + letra → música completa',
     coverMode: 'Versão',
     coverTitle: 'Fazer uma versão de uma música',
     coverIntro: 'O YuE2 consegue cantar uma melodia existente num estilo novo. O SheetSage2 ouve uma gravação e escreve a sua partitura; o modelo interpreta depois essa partitura no estilo escolhido.',
