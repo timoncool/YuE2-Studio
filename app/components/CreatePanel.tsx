@@ -2099,7 +2099,8 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
               {packages.catalogueError && <p role="alert" className="text-xs">{packages.catalogueError}</p>}
             </div>
           )}
-          {onMusicEngineChange && (pair.sending || pair.error || (pair.status && pair.status.stage !== 'idle')) && (
+          {onMusicEngineChange && (pair.sending || pair.error || (pair.status && pair.status.stage !== 'idle'
+            && !(pair.status.stage === 'needs_install' && native.profile?.installable))) && (
             <div className="space-y-1 text-xs">
               <p role="status">
                 {pair.sending ? pairText.checking_files : pair.status?.load_on_create && pair.status.stage === 'ready'
@@ -2172,7 +2173,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
                       defaultDirectory={native.profile.model_directory} licenseUrl={native.profile.license_url}
                       controlClassName={CONTROL} onChanged={refreshNativeChoice} />}
                     {native.profile && !native.ready && <p role="status" className="text-xs">
-                      {nativeStrings.unavailable}{native.profile.missing?.length ? ` · ${native.profile.missing.join(', ')}` : ''}
+                      {nativeStrings.unavailable}{native.profile.missing?.length && !native.profile.installable ? ` · ${native.profile.missing.join(', ')}` : ''}
                     </p>}
                     {(musicEngine === 'acestep-cpp' || musicEngine === 'minimaxmusic-cpp') && native.installed && native.profile?.installable && !native.ready &&
                       <AudioCppModelInstall key={`${musicEngine}:${native.profile.id}`} model={native.profile.id}

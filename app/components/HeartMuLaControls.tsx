@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { apiUrl } from '../services/apiBase';
 import { useI18n } from '../context/I18nContext';
+import { nativeMusicSourceStrings } from '../i18n/musicSource';
 
 export interface HeartMuLaOptions {
   temperature?: number;
@@ -182,6 +183,6 @@ export function AudioCppModelInstall({ model, bytes, licenseUrl, language, onIns
     {busy && canCancel && <button type="button" className="ml-2 underline" disabled={cancelling}
       onClick={() => void cancel()}>{t('cancelDownload')}</button>}
     {error && <p role="alert">{error}</p>}
-    {licenseUrl && <a href={licenseUrl} target="_blank" rel="noreferrer" className="block underline">Stability AI Community License</a>}
+    {licenseUrl && <a href={licenseUrl} target="_blank" rel="noreferrer" className="block underline">{(nativeMusicSourceStrings[language as keyof typeof nativeMusicSourceStrings] ?? nativeMusicSourceStrings.en).modelLicense}</a>}
   </div>;
 }

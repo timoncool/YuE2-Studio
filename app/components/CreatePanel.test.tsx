@@ -1106,7 +1106,7 @@ it('chooses MiniMax Music3 through audio.cpp and reuses the saved seed and forma
   choose(models, 'heartmula');
   expect(models.value).toBe('heartmula');
   expect(generate().disabled).toBe(true);
-  expect(host.textContent).toContain('heartmula.gguf');
+  expect(host.textContent).not.toContain('heartmula.gguf');
   const installHeartMuLa = () => [...host.querySelectorAll('button')]
     .find(button => button.textContent?.startsWith('Install HeartMuLa'));
   expect(installHeartMuLa()?.textContent).toContain('7.13 GiB');
@@ -1947,7 +1947,7 @@ it.each([
   act(() => root.render(panel({ musicEngine: 'audio.cpp', initialData: { song, timestamp: 1 } })));
   await flush();
   expect(host.textContent).toContain('Experimental');
-  expect(host.textContent).toContain(file);
+  expect(host.textContent).not.toContain(file);
   expect(buttonNamed(`Install ${model.name} · ${size}`)).toBeDefined();
   expect(host.querySelector(`a[href="${model.package_url}"]`)).toBeNull();
   expect(host.querySelector(`a[href="${model.license_url}"]`)).not.toBeNull();
