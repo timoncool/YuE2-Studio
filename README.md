@@ -26,7 +26,9 @@
 
 Choose the model and engine in **Create**. With **YuE2**, describe a style and write the lyrics to get a song with an editable score. Change the melody or chords and render another take. You can also use native **ACE-Step** and **MiniMax Music 3**, choose a supported alternative engine, or generate with a music model from **OpenRouter**.
 
-Songs from the older studios can join the same library with their playlists. Listen to the original recording, compare takes or try a different singing voice with RVC. Local engines run on your computer after their components and weights have been downloaded. On Windows, choose the installer with automatic updates or the portable package. [Import your existing library](#bring-your-ace-step-or-minimax-library-into-yue2) · [GPU measurements](#how-fast-is-it)
+Songs from the older studios can join the same library with their playlists. Listen to the original recording, compare takes or try a different singing voice with RVC. Local engines run on your computer after their components and weights have been downloaded. On Windows, choose the installer with automatic updates or the portable package. [Import your existing library](guides/en/getting-started.md#bring-your-ace-step-or-minimax-library-into-yue2) · [GPU measurements](#how-fast-is-it)
+
+**Guides:** [Get started](guides/en/getting-started.md) · [Create and edit music](guides/en/creating-music.md) · [Models and runtimes](guides/en/models-and-runtimes.md) · [Benchmarks](guides/en/benchmarks.md) · [MCP and development](guides/en/automation-and-development.md) · [Screenshots and samples](guides/en/showcase.md) · [Community](guides/en/community.md)
 
 ## For AI agents
 
@@ -45,202 +47,79 @@ Code, save [docs/mcp-skill.md](docs/mcp-skill.md) as `~/.claude/skills/yue2-stud
 
 ## What you can do
 
-- **A player of its own** — a ten-band equalizer on Winamp's frequencies with its presets,
-  your own and .EQF files; a MilkDrop visualiser with hundreds of presets, a spectrum in ten
-  looks, a black hole with its disk of light that brightens and tilts with the song, or a flight
-  through a tunnel that jumps on the loud notes, over the studio, fullscreen or in its own window; and a Winamp mode that turns the whole
-  window into a skinned Winamp 2 whose windows move apart, dock and resize — the original skin
-  and ten more included, sharp at any scale, the Winamp Skin Museum one click away,
-  Ctrl+M to switch. The song, its place and the equalizer carry over both ways.
-- **Save as, and a Files panel** — songs, stems, MIDI, lyric sheets, scores and videos are
-  saved where you say, in Windows' own Save dialog, and the Files panel shows each save.
-- **A proxy for the whole studio** — HTTP, HTTPS, SOCKS5 or SOCKS4, with a login: model
-  downloads, Hugging Face, OpenRouter and updates go through it.
-- **Models on another disk** — the setup screen and Settings show where the downloads are kept
-  and how much room that disk has; one button moves the model sets, LoRAs, the stem separator,
-  karaoke, the assistant's models, the trainer and Audio to MIDI to another folder, leaving a link
-  so everything that shares them keeps working. Songs and datasets stay. One more button brings
-  them back.
-- **Full songs from a style and lyrics** — up to ten minutes, in the languages the model
-  sings. In Russian YuE2 lyrics, try a combining acute accent (U+0301) after the vowel,
-  for example за́мок (castle) or замо́к (lock). Listen to the resulting take to check the stress.
-  On an RTX 4090 with the Q8_0 set a 3:38 song renders in about 46 seconds.
-- **Songs one by one** — ask for several songs at once and each lands in the library as soon as
-  it is finished, ready to play while the rest are still made; a stopped request keeps the songs
-  it finished.
-- **Read and edit the score** — the model writes its composition in ABC notation first; the
-  studio engraves it as sheet music. Edit the notes, tempo or key and create again: the
-  composition stays, the performance changes. Or switch to melody-only, or no score at all.
-- **Compose the score first** — write only the score from the style and lyrics, without
-  singing it (the studio's take on yue2.cpp's `yue-plan`), read and fix it, then create.
-- **Covers** — SheetSage2 listens to a recording and writes its melody as a score; YuE2
-  then sings that melody in your style. The words have to fit the melody: the original
-  lyrics work best, new ones need the same syllables line by line with the stresses on
-  the same notes, or the singing drifts off the tune — lines stretch, pause and slide into
-  the wrong section. Transcription mistakes carry into the cover too. A track from your
-  library can be transcribed from its menu.
-- **Exact replay** — every track keeps its request and its audio codes, so it can be
-  re-rendered bit for bit, or re-rendered with other steps, a new sound seed, several
-  variations, or another output format, without composing again.
-- **110 ready examples** — the style/lyrics/score sets that ship with yue2.cpp, covers
-  included, one click to load.
-- **Every engine setting** — all seven sampling knobs (temperature, top-p, top-k,
-  repetition penalty and its window, minimum and maximum tokens) for the score and for the
-  audio codes, flow-matching steps, guidance, both seeds, lossless FLAC or MP3. Prompts open and save as JSON or YAML in the engine's own request
-  format, so they move freely between the studio, the yue2.cpp WebUI and `yue-synth`.
-- **Structured song writing** — build a style from its musical fields and arrange lyrics in editable sections, while keeping the plain text editable. Give the writing assistant a language, a target of 8–32 lines and additional instructions.
-- **Song and render controls** — voice and tempo fields; section, line/stanza and text-case tools; Keep/Words lyric preservation and exact checkpoint tokens; batch score-plan selection and chord mirroring in repeated sections. Edit scores with MIDI grid and octave controls. Transpose generation by −24 to +24 semitones, render vocals only through native HT-Demucs as MP3 or 32-bit WAV, and switch each LoRA on or off with weights from −10 to +10.
-- **A writing assistant** — a local Gemma model or OpenRouter writes the style and lyrics
-  from an idea and edits the score on request; or pick your connected agent (MCP) and it
-  writes instead. Lyrics you wrote yourself get their section tags with one button, the
-  words exactly as you wrote them.
-- **Word-level karaoke** — enhanced LRC with a timestamp on every word, aligned by Parakeet
-  or Whisper. Your lyrics are kept; only the timing is borrowed.
-- **Six stems on the GPU** — drums, bass, other, vocals, guitar and piano with HT-Demucs.
-- **A stem mixer** — a song's stems play together on one transport over its waveform, each with
-  mute, solo, volume and pan, and a loop over a section: the drums with the bass alone, or the
-  band without the voice. The stem files stay as separated.
-- **Any track to MIDI** — a song, a stem or a processed take becomes multi-instrument MIDI
-  (34 instrument groups and drums) with MuScriptor on the GPU, in the audio.cpp server.
-  A piano roll fills in while it listens; play it against the original, mute or solo
-  an instrument, save the .mid. Downloaded the first time it is used.
-- **Restore a track after compression** — Apollo removes the artefacts of MP3 compression
-  from a song or any audio file and gives 44.1 kHz in the source's channels, as a new track
-  beside it, in the audio.cpp server.
-- **A MIDI editor** — a piano roll with tracks, instruments and drums: play a song in from a
-  MIDI keyboard or the computer's keys, record or draw it, edit a track's MIDI, save it to the
-  library as a track and send it to a cover, or open the create form's score in it. A .mid
-  file becomes the score: the voice and instrument chosen, chords read or guessed, karaoke
-  words offered for the lyrics.
-- **Every result is a track** — stems, a processed take, a re-render and a cover land in the
-  library as tracks of their own, each marked with the one it was made from and keeping the
-  settings it was made with.
-- **LoRA** — LoRA and LoKr files for either half of the model, the composition or the
-  sound, each with its own strength, picked in the create form. A catalogue of ready ones
-  with their authors credited, and a search on Hugging Face that downloads what you pick.
-- **Ruach Studio's sound in one step** — the "Ruach Studio" preset in Settings - Models puts their
-  fine-tune in place of the set's model and their YuE2-VAE-RS x3 decoder in place of the VAE's
-  own, and downloads what is missing; the decoder alone can be chosen on any set. It keeps the
-  10-16 kHz band at the source's level and adds nothing above 20 kHz, at 4 GB of the card while it
-  decodes against 2.5 GB. Six more community models - Ruach Studio's IRA and IRAE merges - are
-  in the list of your own models, in Q8_0 and Q6_K.
-- **Train your own LoRA** — an optional tab on the LoRA page: songs of one artist or
-  style become a LoRA on your own card with HOT-Step's trainer and its tuned recipe (LoKr,
-  Prodigy, lyric timing from a forced aligner that also reads Cyrillic). Every setting of
-  the recipe is editable. Datasets move between this studio and MiniMax Music3 Studio as a
-  folder, and each saved checkpoint goes into the LoRA library in one click.
-  - **A three-step wizard** — drop a folder of songs, check them, train. Albums with a
-    cue sheet are cut into songs; titles and artists come from the tags, the file name and
-    the folders.
-  - **Preparation on its own** — lyrics come from the lyric databases players use (LRCLIB,
-    QQ Music, Kugou), word for word; only a song none of them knows has its vocals
-    separated and is heard by Whisper, with its usual hallucinations filtered out. The
-    assistant lays the lyrics out in sections. MOSS-Music listens to every song and the
-    assistant writes its style, with the tempo measured by Beat This! on the card.
-  - **Every song shows where it is** — the lyrics and styles appear as each song is done,
-    one model on the card at a time, each loaded once for the whole batch. A song that
-    failed or was stopped has a button that finishes just that song.
-  - **Picks up after a restart** — each song keeps what it has; a preparation cut off by a
-    crash or a restart carries on by itself and redoes nothing.
-  - **Stop by drift or by epochs** — stop when the composition half drifts too far from
-    the base, or after a set number of passes over the songs.
-  - **A trigger word from the start** — every dataset gets a rare word made from its name,
-    which you can change.
-  - **Train further** — not there yet at 750 steps? Set 1000 and the run goes on from its
-    latest checkpoint with the same recipe and songs; the loss chart and the checkpoints
-    continue instead of starting over.
-- **Audio processing** — noise reduction, the Spectral Lifter, a vocal naturaliser, your
-  own VST3 plugins in a chain, and mastering to a reference track. Compare before and
-  after while it plays, then keep the result as a version of the track or throw it away.
-- **The sound as the model made it** — the engine renders 32-bit float and the studio encodes
-  it once, changing nothing on the way: lossless 24-bit FLAC by default (libFLAC, the reference
-  encoder), MP3 with LAME when you choose it. Normalisation is a stage under Process, after
-  mastering, never part of generation.
-- **Export for release** — from a song's menu: WAV in 16, 24 bits or 32-bit float, FLAC in 16 or
-  24, MP3 from 128 to 320 kbps, at its own rate or 44.1–96 kHz, brought on the way to a loudness
-  target: −14 LUFS for streaming, −16 for Apple Music and podcasts, −23 for broadcast, or your
-  own, under a true-peak ceiling. A report shows loudness and peak before and after; the song in
-  the library is untouched. The same window gives the song's MIDI - the whole score, or its lead,
-  voice line or chords alone - and an Ableton Live 12 project with the song, its stems and its
-  MIDI on their tracks.
-- **A library of plain files** — search, playlists, cover art from prompt templates, tracks
-  exported with title, lyrics and cover in their own tags (Vorbis comments in a FLAC, ID3 in an
-  MP3). Interface in English, Russian,
-  Chinese, Japanese, Korean and Portuguese.
-- **A cover for every track** — a track without one wears a free (CC0) Wikimedia Commons
-  photograph that fits the genres, moods and instruments of its style, a pattern in one of 21
-  DiceBear styles, or a cover OpenRouter generates for every new track. It is chosen by the
-  track's seed, so it stays the same, a stem wears its song's, and it is written into the file,
-  so players show it after the download.
-- **One picture window** — for a cover, and for the background and centre of a music video:
-  Commons photographs by search starting from the scenes a style calls up, clips free of
-  copyright for a background, the track's pattern in any style, generation through
-  OpenRouter, or a file of your own. No keys, no stock-site accounts.
-- **Music videos** — a visualiser video of any track in 16:9, 9:16 or 1:1, with karaoke
-  lyrics, text layers and effects, rendered to MP4 on your machine.
-- **Activity** — a log in the sidebar of every change a connected agent makes and every
-  message the studio shows.
-- **No window when an agent works, a tray when you want it** — `--headless` starts the studio with
-  only a tray icon, and it stops by itself after ten idle minutes; `--stop` ends it when its
-  window is hidden and nothing is at work. "Keep running in the system tray when the window is
-  closed" hides the window instead of quitting, and a second launch brings up the one that runs.
-- **Likes, sorting and stems in order** — a like is kept with the song for every window and
-  agent, every list sorts by date, title or length, and a song's stems fold under it.
-- **A song from a seed** — hum, play or write an opening, turn on "Continue the song from this
-  score", and the model writes the rest of the song on from it in its key and meter, the opening
-  coming back as a hook.
-- **Chord bed** — a score of chords over rests written at once in the tempo, key and meter you set,
-  one section per lyrics tag. For a song with words the model writes its melody over those chords,
-  section by section, and the song keeps the score with that melody; an instrumental is played
-  from the bed as it stands, with no planning step.
-- **Chords and sections** — chord variety so the song stops looping one progression, sections that
-  do not open the way the one before did, chords outside the key, and the score held to the
-  lyrics' sections in their order.
-- **Covers that line up** — Match sections to the score retags the lyric blocks by where the source
-  recording sings them; the score view moves the voice an octave down or up, apart from the band,
-  and Instrumental hands the voice's notes to the instrument and keeps the chords.
-- **Extend a song** — Re-render composes on from the track's last frame by 15 seconds to 2 minutes;
-  with a score, each section's words wait until the score reaches it.
-- **AB2 solver** — one network evaluation a step instead of two, about twice as fast at the same
-  steps; midpoint stays the default.
-- **Around every song** — a note of your own on each song, its parameters sent back to the form,
-  shown as JSON or saved to a file; the engine's stage, step and time left on the card while it
-  renders; video export from 1080p to 240p with AAC from 128 to 320 kbps; quitting while a song is
-  made asks first, and a song the studio was closed on starts again; karaoke can recognise words
-  with Parakeet Ultra, Moondream's fine-tune of Parakeet.
+### Make songs
 
-## Compose and edit MIDI
+- **YuE2** — a full song up to ten minutes from a style and lyrics, with the score it was sung from.
+  Read the score as sheet music, change notes, chords or key and render again: the composition
+  stays, the performance changes. Or write the score first, fix it, then sing it.
+- **ACE-Step 1.5** — describe the song and its own language model writes the style, the lyrics and
+  the metadata. Switch the DiT (Turbo, SFT, Base) and work on a source track: Cover, Remix, Repaint,
+  Add track, Extract, Complete.
+- **MiniMax Music 3** — the description in three parts (global metadata, vocal details, arrangement)
+  with a live count of how much of the model's budget it takes.
+- **More models** — HeartMuLa, MuLaCover, Stable Audio 3, MiniMax-H3, MiDashengLM, Magenta RealTime 2,
+  Vevo2, SoulX-Singer and the music models on OpenRouter, all in one searchable list.
+- **Covers and continuations** — SheetSage2 writes down the melody of a recording and YuE2 sings it
+  in your style; hum or write an opening and the model writes the rest; extend a song by up to two
+  minutes.
+- **Exact replay** — every track keeps its request and audio codes: re-render it bit for bit, or with
+  other steps, a new seed or another format, without composing again.
+- **A writing assistant** — a local Gemma model, OpenRouter or your connected agent writes the style
+  and lyrics from an idea; 110 ready examples load in one click.
 
-The embedded Signal editor has multiple tracks, instruments, drums, MIDI keyboard recording, tempo changes, editable chord symbols and section markers. Save a new composition as MIDI and rendered audio in the library, or update an existing track’s MIDI. SoundFonts are bundled locally; the editor sends no analytics.
+### Edit and finish
 
-In YuE2, the same editor opens ABC scores and applies notes, chords and sections back to the create form. The visual editor replaces the older separate score editor. Use **Apply** to update the ABC score, or send a library MIDI track to cover mode.
+- **Score, chords and MIDI** — a MIDI editor with tracks, instruments, drums and a MIDI keyboard; a
+  chord bed in your tempo, key and meter; a songbook with chords, capo and transposition; any track
+  to multi-instrument MIDI.
+- **A new voice for a song** — RVC voices from a curated catalogue or your own checkpoint sing over
+  the song's accompaniment; train a voice of your own on an NVIDIA card.
+- **Stems and sound** — six stems on the GPU and a mixer with mute, solo and pan; restore a track
+  after MP3 compression; noise reduction, VST3 plugins and mastering to a reference track.
+- **Release-ready files** — WAV, FLAC or MP3 at a loudness target with a report, the song's MIDI, an
+  Ableton Live project with its stems, a music video with word-level karaoke.
+
+### Library and player
+
+- **One library for every studio** — bring songs and playlists from ACE-Step Studio and MiniMax
+  Music3 Studio, play the original recording, compare two takes at the same position.
+- **A player of its own** — a ten-band equalizer, MilkDrop and spectrum visualisers, a Winamp 2 mode
+  with eleven skins, and a two-deck DJ mode with cue, sync and a crossfader.
+- **Plain files** — playlists, likes, sorting, a cover for every track, title, lyrics and cover
+  written into each file's tags; models can move to another disk with one button.
+
+### Train
+
+- **LoRA** — a catalogue of ready ones with their authors credited, a search on Hugging Face, and
+  training of your own from a folder of songs: lyrics from lyric databases or by ear, styles written
+  by listening, a checkpoint in the library in one click.
+
+### Work with an agent
+
+- **MCP** — 162 tools: an agent such as Claude Code does everything the window does, sees it and
+  clicks it, and can run the studio without a window.
+
+Every feature in detail: [Create and edit music](guides/en/creating-music.md).
 
 ## Screenshots
 
 ![The MIDI editor: chords, sections and notes](docs/screenshots/en-16-midi-editor.png)
 
-![The chord bed: chords over rests in your tempo, key and meter](docs/screenshots/en-17-chord-bed.png)
-
 | | |
 |---|---|
+| ![Two-deck DJ mode](docs/screenshots/en-23-dj-mode.png) | ![RVC voice catalogue](docs/screenshots/en-22-rvc-voices.png) |
+| Two-deck DJ mode: cue, sync, pitch and the crossfader | RVC voices: a curated catalogue or your own checkpoint |
+| ![The score](docs/screenshots/en-02-score.png) | ![Compare two takes](docs/screenshots/en-21-take-comparison.png) |
+| The score as sheet music and as ABC text | Two takes compared at the same playback position |
 | ![The equalizer and MilkDrop](docs/screenshots/en-13-listen.png) | ![The Winamp mode](docs/screenshots/en-14-winamp.png) |
-| The equalizer with its curve and MilkDrop over the studio, as the song plays | The whole window as Winamp 2: equalizer, playlist and MilkDrop, skinned |
-| ![The score](docs/screenshots/en-02-score.png) | ![A finished track](docs/screenshots/en-03-track.png) |
-| The score as sheet music and as ABC text — melody + chords, melody only, or none | A finished track — its lyrics and the score it was sung from, ready to reuse |
-| ![Cover mode](docs/screenshots/en-04-cover.png) | ![Models](docs/screenshots/en-05-models.png) |
-| Cover mode — pick a recording, SheetSage2 writes its melody down | Model sets — one quantisation per role, what is on disk, switch in one click |
-| ![Any track to MIDI](docs/screenshots/en-09-midi.png) | ![Training your own LoRA](docs/screenshots/en-08-training.png) |
-| Any track to MIDI — a piano roll of every instrument, played against the original, with mute and solo | Your own LoRA trained on the card — loss and drift as it learns, a checkpoint every 50 steps |
-| ![A dataset](docs/screenshots/en-07-dataset.png) | ![The LoRA catalogue](docs/screenshots/en-06-lora.png) |
-| A dataset of 61 songs — lyrics found in the databases players use, styles written by ear | The LoRA catalogue — styles, artists and sound, each credited to its author |
-| ![Audio processing](docs/screenshots/en-10-processing.png) | ![Agent over MCP](docs/screenshots/en-11-agent.png) |
-| Audio processing — noise reduction, the Spectral Lifter, a vocal naturaliser, VST3, mastering | An agent over MCP — the address and the lines to paste into Claude Code or any client |
+| The equalizer and MilkDrop over the studio | The whole window as a skinned Winamp 2 |
+| ![Songbook](docs/screenshots/en-20-songbook.png) | ![Any track to MIDI](docs/screenshots/en-09-midi.png) |
+| A lyric and chord sheet with capo and transposition | Any track to MIDI, played against the original |
+| ![Training your own LoRA](docs/screenshots/en-08-training.png) | ![Agent over MCP](docs/screenshots/en-11-agent.png) |
+| Your own LoRA trained on the card | An agent over MCP: what to paste into the client |
 
-The same screens in the language you read: [Русский](https://timoncool.github.io/YuE2-Studio/ru.html),
-[中文](https://timoncool.github.io/YuE2-Studio/zh.html), [日本語](https://timoncool.github.io/YuE2-Studio/ja.html),
-[한국어](https://timoncool.github.io/YuE2-Studio/ko.html),
-[Português](https://timoncool.github.io/YuE2-Studio/pt.html) — on the project page, or in
-[docs/screenshots](docs/screenshots).
+The same screens in your language are on the [project page](https://timoncool.github.io/YuE2-Studio/);
+more in the [Showcase](guides/en/showcase.md).
 
 ## Samples
 
@@ -304,202 +183,42 @@ Video reviews and tutorials from the community (the description links this repo)
   </tr>
 </table>
 
-More tutorials and reviews:
-
-- [Dream Travel — YuE2 Studio для генерации музыки прямо на компе](https://www.youtube.com/watch?v=GmrstqfzC9k) · RU
-- [Luki AI Lab — NEW YuE2: a FREE alternative for your PC](https://www.youtube.com/watch?v=c5kwPNpkAO8) · EN
-- [Skillo Labs — Você já pode criar músicas com IA sem internet](https://www.youtube.com/watch?v=8AIaqTRrdPc) · PT
-- [아빠너구리 TV — $0/Month AI Music with YuE2 Studio](https://www.youtube.com/watch?v=08yKZTgMK_k) · KO
-- [Frihandhika — Tutorial YuE2 Studio di Windows](https://www.youtube.com/watch?v=dBetNSxbo-A) · ID
-- [Run It Local — YuE2 Studio: FREE AI Songs on AMD (Beats ComfyUI)](https://www.youtube.com/watch?v=BtlPRhbLNoM) · EN
-- [Franck D Digital AI — YuE2 Studio Portable (tutoriel français)](https://www.youtube.com/watch?v=Br6ABTJflPg) · FR
-- [EZTV — YUE2 Studio 教學](https://www.youtube.com/watch?v=EFv_zOXyn5E) · ZH
-
-**Made a review or tutorial?** Put a link to the project in the description — we feature the best ones on the [site](https://timoncool.github.io/YuE2-Studio/) and here. Send yours through [Issues](https://github.com/timoncool/YuE2-Studio/issues).
+Eight more tutorials in English, Russian, Portuguese, Korean, Indonesian, French and Chinese are in the
+[Showcase](guides/en/showcase.md#community-reviews). **Made a review or tutorial?** Put a link to the
+project in the description and send it through [Issues](https://github.com/timoncool/YuE2-Studio/issues).
 
 ## What it needs
 
-- Windows 10/11 x64.
-- A GPU with **6 GB of VRAM** or more:
-  - **NVIDIA**, from the GTX 900 series on, runs on CUDA — the fastest path. The studio
-    ships two CUDA builds of the engine and picks the one your card and driver run:
-    CUDA 13 for Turing and newer (GTX 16, RTX 20–50, Tesla T4, A100, RTX A-series,
-    L4/L40, H100) with driver 580 or newer, CUDA 12 for Maxwell, Pascal and Volta
-    (GTX 900/1000, Titan X/Xp/V, Tesla M40, P40, P100, V100). CUDA 12 also serves
-    supported newer cards with a compatible driver below 580. Both packages include
-    native images for 7.5, 8.0, 8.6, 8.9, 9.0 and `sm_120a` for GeForce RTX 50.
-    CUDA 12 adds 5.2, 6.0, 6.1 and 7.0. The speed and memory figures below are from
-    the RTX 4090. [NVIDIA compute capabilities](https://developer.nvidia.com/cuda/gpus)
-  - **AMD or Intel — experimental.** The engine runs on Vulkan through the card's own
-    driver. Owners report songs made well on a Radeon RX 7900 XT under Windows and an
-    RX 7900 XTX under Ubuntu 26 ([#196](https://github.com/timoncool/YuE2-Studio/issues/196)),
-    but on AMD Radeon integrated graphics the song came out with unintelligible vocals, and
-    Intel cards are untested. LoRA training stays on NVIDIA. Reports from owners are welcome.
-  - Without a GPU the engine falls back to the processor, which works but is many times
-    slower.
-- 4–10 GB of disk for one model set.
-- Training a LoRA (optional): an NVIDIA RTX 30-series card or newer with 11 GB of VRAM
-  and about 8 GB more disk for the trainer and its weights, downloaded only when you open
-  training. Describing songs by ear needs about 12 GB of VRAM and 10 GB more disk for
-  MOSS-Music; without it the styles are written by hand.
+- **Windows 10/11 x64.** Linux (.deb, AppImage) and macOS builds are experimental.
+- **A graphics card with 6 GB of video memory or more.** NVIDIA from the GTX 900 series on runs on
+  CUDA, the fastest path: CUDA 13 for Turing and newer with driver 580 or newer, CUDA 12 for older
+  cards and older drivers. AMD and Intel cards run through Vulkan, experimentally. Without a card
+  the studio works on the processor, many times slower.
+- **4–10 GB of disk** for one YuE2 model set; other models download only when you choose them.
+- **LoRA training** (optional): an NVIDIA RTX 30-series card or newer with 11 GB of video memory.
 
-### Linux (experimental)
+Which card runs which part, Linux and AMD details: [Get started](guides/en/getting-started.md#what-it-needs) ·
+[What runs where](guides/en/models-and-runtimes.md#what-runs-where).
 
-The .deb and the AppImage for Linux x86-64 are **experimental**. They come from the same code with the
-Linux build of the same engine (CUDA 13 and CUDA 12 on NVIDIA cards, Vulkan on the others, and the
-processor), but the author works on Windows and has not run them on a real Linux desktop. **If you live on
-Linux, it would be great if you polished them and sent the fixes back as a pull request.** The studio keeps
-its data in `~/.local/share/yue2-studio` (`$XDG_DATA_HOME`).
+## Quick start
+
+1. **Install** — run `YuE2.Studio_x.y.z_x64-setup.exe` from the
+   [latest release](https://github.com/timoncool/YuE2-Studio/releases/latest), or unzip the
+   portable archive anywhere and run `YuE2-Studio.exe`.
+2. **Choose a model set** — the first screen preselects the set your card can run. Press
+   download; it fetches only what is missing and resumes if interrupted.
+3. **Create** — write a style and lyrics, or load one of the examples, and press Create.
+   The engine starts by itself and the song lands in your library with its score.
+
+Everything the studio owns stays in its own folder beside `YuE2-Studio.exe`; deleting the folder
+removes the studio. The installed version updates itself. When the installer stops on WebView2,
+for a custom data folder, an old ACE-Step or MiniMax library and downloads by hand, see
+[Get started](guides/en/getting-started.md#quick-start).
 
 ## How fast is it
 
-### Engine benchmarks
-
-Historical measurements from the 4.0.0 development builds on Windows 11, Ryzen 9 9950X3D and RTX 4090 24 GB with CUDA 13:
-
-| Model and engine | Workload | Wall time | Audio seconds per second | Peak GPU memory |
-| --- | --- | ---: | ---: | ---: |
-| YuE2 · yue2.cpp · Q8_0 | 60 s song, Flash Attention | 20.0 s | 3.0× | 5,045 MiB |
-| YuE2 · yue2.cpp · Q8_0 | 240 s song, Flash Attention | 54.4 s | 4.4× | 6,500 MiB |
-| MiniMax Music3 · minimaxmusic.cpp · Q8_0 | 30 s song, 30 steps, CFG 1.5 | 33.0 s | 0.9× | — |
-
-ACE-Step's native 2B turbo Q8_0 took 21.5 ms per DiT step on warm runs. Its roughly 8.1 GiB peak occurred during VAE decoding. This timing covers one stage of synthesis. A dash indicates an unrecorded measurement.
-
-**YuE2, native yue2.cpp `892b9b0`.** Windows 11 (build 26100), Ryzen 9 9950X3D and RTX 4090 24 GB (driver 617.42). All runs used YuE2 3B Q8_0, the F32 VAE, NAR companion v9 and seed 1221. Replay used 100 fixed semantic tokens and two synthesis steps. Text to song started from style and lyrics and used 32 synthesis steps.
-
-| Workload | Backend | Start to first WAV (s) | Warm median (s) | Peak GPU (GiB) | Above GPU baseline (GiB) | Peak process-tree RSS (GiB) |
-| --- | --- | ---: | ---: | ---: | ---: | ---: |
-| Semantic replay (3.999 s) | CUDA 13 · cuBLAS 13.10.0.20 | 6.516 | 0.172 | 6.88 | 4.51 | 3.40 |
-| Semantic replay (3.999 s) | CUDA 12 · cuBLAS 12.9.2.10 | 4.969 | 0.125 | 6.88 | 4.50 | 3.45 |
-| Semantic replay (3.999 s) | Vulkan | 13.766 | 0.252 | 6.54 | 4.17 | 3.82 |
-| Semantic replay (3.999 s) | CPU | 16.234 | 3.503 | — | — | 6.41 |
-| Text to song (29.999 s) | CUDA 13 · cuBLAS 13.10.0.20 | 8.813 | 4.759 | 8.13 | 5.75 | 3.37 |
-| Text to song (29.999 s) | Vulkan | 16.609 | 5.861 | 8.19 | 5.81 | 3.08 |
-
-Cold time includes server startup and the first request through receipt of the encoded WAV. Warm time is the median of three requests with the models kept loaded. Memory was sampled every 200 ms during startup and the first request. GPU peak is for the whole RTX 4090. The increase uses the reading before server launch as the baseline. CPU runs report process-tree RSS alone.
-
-**ACE-Step Studio 4.0.2, native acestep.cpp `9eb75e8`.** On Windows with an RTX 4090 (driver 617.42), each run generated 30 seconds of instrumental audio using Turbo Q8_0, eight Euler steps and seed 42.
-
-| Backend | Start server to first WAV | Warm request (median of 3) | Audio seconds per second, warm | Peak GPU memory (whole card) | Peak process-tree RAM |
-| --- | ---: | ---: | ---: | ---: | ---: |
-| CUDA 13 | 6.813 s | 0.474 s | 63.3× | 12.00 GiB | 1.97 GiB |
-| Vulkan | 19.063 s | 0.507 s | 59.2× | 12.42 GiB | 2.66 GiB |
-
-Memory was sampled every 200 ms. Peak GPU usage rose 9.56 GiB on CUDA and 9.99 GiB on Vulkan above the desktop baseline. Windows file caching was enabled. These measurements use the published ACE-Step Studio engine.
-
-For seed 42, both WAVs contain 30.0 s of stereo audio at 48 kHz. Measured in 100 ms windows across both channels, the last 5.3 s on CUDA and 5.0 s on Vulkan stay below −60 dBFS RMS. The speed column uses the full WAV duration.
-
-<!-- music-gpu-matrix:start -->
-### Music engine GPU matrix · 5.0 development and published builds
-
-Windows 11, RTX 4090, driver 617.42. Cold includes server launch and the first WAV response. Warm is the median of three requests to the same server. Memory peaks are cold-run whole-card VRAM and process-tree RSS. Warm pre-request VRAM is the median whole-card reading immediately before each of the three warm requests. Resident WDDM VRAM and RSS are medians of three idle process-tree samples after one warm-up on each listed CUDA 13 build. Compare rows within each workload and check the weight profiles, silence and exact build before drawing a speed conclusion.
-
-| Model and engine | Backend | WAV (s) | Cold (s) | Warm (s) | Warm audio s/s | VRAM peak / Δ (GiB) | Warm pre-request VRAM (GiB) | Peak RAM (GiB) | Resident WDDM VRAM / RSS (GiB) |
-| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| YuE2 · yue2.cpp `892b9b0` · 3B Q8_0 + F32 VAE; NAR v9 · 30 s · 32 steps | CUDA 13 | 29.999 | 9.735 | 5.166 | 5.81× | 7.67 / +5.74 | 7.67 | 3.36 | — |
-| YuE2 · yue2.cpp `892b9b0` · 3B Q8_0 + F32 VAE; NAR v9 · 30 s · 32 steps | CUDA 12 | 29.999 | 11.219 | 5.155 | 5.82× | 7.64 / +5.75 | 7.63 | 3.35 | — |
-| YuE2 · yue2.cpp `892b9b0` · 3B Q8_0 + F32 VAE; NAR v9 · 30 s · 32 steps | Vulkan | 29.999 | 16.609 | 5.861 | 5.12× | 8.19 / +5.81 | 8.87 | 3.08 | — |
-| YuE2 · audio.cpp `41242418` · 3B Q8_0 + F16 VAE; NAR v9 · 30 s · 32 steps | CUDA 13 | 29.999 | 16.807 | 7.441 | 4.03× | 7.02 / +4.68 | 3.16 | 6.24 | — |
-| YuE2 · audio.cpp `41242418` · 3B Q8_0 + F16 VAE; NAR v9 · 30 s · 32 steps | CUDA 12 | 29.999 | 19.546 | 7.957 | 3.77× | 6.74 / +4.65 | 2.90 | 6.17 | — |
-| YuE2 · audio.cpp `41242418` · 3B Q8_0 + F16 VAE; NAR v9 · 30 s · 32 steps | Vulkan | 29.999 | 28.258 | 10.286 | 2.92× | 6.44 / +4.51 | 2.54 | 6.85 | — |
-| YuE2 · yue2.cpp `892b9b0` · 3B Q8_0 + F32 VAE; NAR v9 · 100 tokens · 2 steps | CUDA 13 | 3.999 | 6.062 | 0.140 | 28.52× | 6.44 / +4.51 | 6.44 | 3.35 | 4.50 / 0.77 |
-| YuE2 · audio.cpp `41242418` · 3B Q8_0 + F16 VAE; NAR v9 · 100 tokens · 2 steps | CUDA 13 | 3.999 | 7.482 | 0.383 | 10.44× | 6.28 / +3.92 | 3.03 | 5.84 | — |
-| YuE2 · yue2.cpp `892b9b0` · 3B Q8_0 + F32 VAE; NAR v9 · 100 tokens · 2 steps | CUDA 12 | 3.999 | 4.312 | 0.110 | 36.20× | 6.43 / +4.50 | 6.43 | 3.34 | — |
-| YuE2 · audio.cpp `41242418` · 3B Q8_0 + F16 VAE; NAR v9 · 100 tokens · 2 steps | CUDA 12 | 3.999 | 7.869 | 0.420 | 9.52× | 6.46 / +4.10 | 3.03 | 5.76 | — |
-| YuE2 · yue2.cpp `892b9b0` · 3B Q8_0 + F32 VAE; NAR v9 · 100 tokens · 2 steps | Vulkan | 3.999 | 13.766 | 0.252 | 15.88× | 6.54 / +4.17 | 6.54 | 3.82 | — |
-| YuE2 · audio.cpp `41242418` · 3B Q8_0 + F16 VAE; NAR v9 · 100 tokens · 2 steps | Vulkan | 3.999 | 8.373 | 0.974 | 4.11× | 6.31 / +3.94 | 2.89 | 5.33 | — |
-| ACE-Step 1.5 · acestep.cpp `d058cd8` · Turbo Q8_0 + BF16 embedder/VAE · 30 s · 8 Euler steps | CUDA 13 | 30.000 | 4.046 | 0.457 | 65.59× | 9.87 / +7.79 | 9.89 | 2.14 | 7.80 / 0.92 |
-| ACE-Step 1.5 · acestep.cpp `d058cd8` · Turbo Q8_0 + BF16 embedder/VAE · 30 s · 8 Euler steps | CUDA 12 | 30.000 | 7.516 | 0.409 | 73.40× | 9.87 / +7.80 | 9.89 | 2.07 | — |
-| ACE-Step 1.5 · acestep.cpp `d058cd8` · Turbo Q8_0 + BF16 embedder/VAE · 30 s · 8 Euler steps | Vulkan | 30.000 | 4.844 | 0.434 | 69.13× | 8.72 / +6.62 | 8.72 | 1.32 | — |
-| ACE-Step 1.5 · audio.cpp `41242418` · Turbo Q8_0, packed GGUF · 30 s · 8 Euler steps | CUDA 13 | 30.000 | 10.512 | 1.387 | 21.62× | 10.43 / +8.49 | 10.48 | 2.58 | — |
-| ACE-Step 1.5 · audio.cpp `41242418` · Turbo Q8_0, packed GGUF · 30 s · 8 Euler steps | CUDA 12 | 30.000 | 11.398 | 1.536 | 19.53× | 10.57 / +8.50 | 10.62 | 2.67 | — |
-| ACE-Step 1.5 · audio.cpp `41242418` · Turbo Q8_0, packed GGUF · 30 s · 8 Euler steps | Vulkan | 30.000 | 21.746 | 2.237 | 13.41× | 10.23 / +8.30 | 10.22 | 4.60 | — |
-| MiniMax Music3 · minimaxmusic.cpp `46c4c90` · Minimal Q3_K_M / Q4_K_M + F32 vocoder · 3.2 s · 2 steps | CUDA 13 | 3.193 | 8.391 | 1.116 | 2.86× | 9.33 / +7.26 | 9.33 | 4.43 | 7.25 / 1.00 |
-| MiniMax Music3 · minimaxmusic.cpp `46c4c90` · Minimal Q3_K_M / Q4_K_M + F32 vocoder · 3.2 s · 2 steps | CUDA 12 | 3.193 | 6.156 | 1.119 | 2.85× | 9.33 / +7.25 | 9.33 | 4.53 | — |
-| MiniMax Music3 · minimaxmusic.cpp `46c4c90` · Quality Q8_0 + F32 vocoder · 3.2 s · 2 steps | CUDA 13 | 3.193 | 13.766 | 1.769 | 1.80× | 15.21 / +13.14 | 15.21 | 8.85 | — |
-| MiniMax Music3 · minimaxmusic.cpp `46c4c90` · Quality Q8_0 + F32 vocoder · 3.2 s · 2 steps | CUDA 12 | 3.193 | 8.078 | 1.730 | 1.85× | 15.18 / +13.10 | 15.18 | 8.60 | — |
-| MiniMax Music3 · minimaxmusic.cpp `46c4c90` · Minimal Q3_K_M / Q4_K_M + F32 vocoder · 3.2 s · 2 steps | Vulkan | 3.193 | 6.093 | 1.512 | 2.11× | 8.97 / +6.89 | 8.97 | 4.38 | — |
-| MiniMax Music3 · minimaxmusic.cpp `46c4c90` · Quality Q8_0 + F32 vocoder · 3.2 s · 2 steps | Vulkan | 3.193 | 9.531 | 1.922 | 1.66× | 14.82 / +12.75 | 14.83 | 8.26 | — |
-| MiniMax Music3 Studio v4.0.3 · minimaxmusic.cpp `f476b0e` · Minimal Q3_K_M / Q4_K_M + F32 · 3.2 s · 2 steps | CUDA 13 | 3.193 | 7.312 | 1.257 | 2.54× | 9.32 / +7.38 | 9.32 | 4.56 | 7.39 / 0.89 |
-| MiniMax Music3 · minimaxmusic.cpp `f476b0e` · Quality Q8_0 + F32 vocoder · 3.2 s · 2 steps | CUDA 13 | 3.193 | 9.156 | 1.852 | 1.72× | 15.18 / +13.23 | 15.18 | 8.91 | — |
-| MiniMax Music3 · minimaxmusic.cpp `f476b0e` · Minimal Q3_K_M / Q4_K_M + F32 · 3.2 s · 2 steps | Vulkan | 3.193 | 7.343 | 1.987 | 1.61× | 8.96 / +7.03 | 8.96 | 4.33 | — |
-| MiniMax Music3 · minimaxmusic.cpp `f476b0e` · Quality Q8_0 + F32 vocoder · 3.2 s · 2 steps | Vulkan | 3.193 | 16.047 | 2.295 | 1.39× | 14.94 / +13.00 | 14.94 | 8.35 | — |
-| MiniMax Music3 · audio.cpp `41242418` · LM/depth/DiT Q8_0 · 3.2 s · 2 steps | CUDA 13 | 3.193 | 14.604 | 8.720 | 0.37× | 10.97 / +9.04 | 2.47 | 8.87 | — |
-| MiniMax Music3 · audio.cpp `41242418` · LM/depth/DiT Q8_0 · 3.2 s · 2 steps | CUDA 12 | 3.193 | 14.597 | 8.436 | 0.38× | 11.12 / +8.98 | 2.59 | 8.68 | — |
-| MiniMax Music3 · audio.cpp `41242418` · LM/depth/DiT Q8_0 · 3.2 s · 2 steps | Vulkan | 3.193 | 17.621 | 10.478 | 0.30× | 10.65 / +8.72 | 2.39 | 8.66 | — |
-| Stable Audio 3 · HOT-Step `cdef1b0d67af` · Medium BF16/F16 · 4 s · 4 steps | CUDA 12.8 | 4.000 | 6.737 | 0.254 | 15.72× | 9.30 / +7.37 | 9.30 | 2.82 | — |
-| Stable Audio 3 · audio.cpp `41242418` · Small Music Q8_0 · 4 s · 4 steps | CUDA 12 | 4.000 | 1.259 | 0.078 | 51.18× | 3.54 / +1.60 | 3.55 | 1.17 | — |
-| Stable Audio 3 · audio.cpp `41242418` · Small Music Q8_0 · 4 s · 4 steps | CUDA 13 | 4.000 | 1.893 | 0.071 | 56.00× | 3.53 / +1.60 | 3.54 | 1.18 | — |
-| YuE2 Studio v4.1.1 · yue2.cpp `67f59c1` · 3B Q8_0 + F32 VAE · 100 tokens · 2 steps | CUDA 13 | 3.999 | — | — | — | — | — | — | 4.61 / 0.65 |
-| ACE-Step Studio v4.0.2 · acestep.cpp `9eb75e8` · Turbo Q8_0 + BF16 embedder/VAE · 30 s · 8 Euler steps | CUDA 13 | 30.000 | — | — | — | — | — | — | 9.51 / 0.78 |
-
-Each workload has its own fixed input and step count. YuE2 VAE precision differs, and the audio.cpp text-to-song request fixes the semantic-token budget. The native ACE CUDA take ends with five quiet seconds. MiniMax Quality and audio.cpp Q8_0 share four weights and use different vocoders. Stable Audio 3 compares Medium BF16 to Small Q8_0. The ACE-Step d058cd8 and MiniMax 46c4c90 rows use the exact separately published Windows 5.0 runtime pins. The WSL2 table identifies the measured Linux pins. MiniMax f476b0e is the 4.0.3 control.
-
-[Individual runs, residency, SHA-256, exact weights and output checks](docs/music-gpu-benchmarks.json)
-<!-- music-gpu-matrix:end -->
-
-<!-- music-gpu-wsl:start -->
-#### Native music engines · Linux in WSL2
-
-RTX 4090, driver 617.42. The pinned Linux executables ran in WSL2 with weights on a Windows drive. Cold includes process launch through receipt of the first WAV. Warm is the median of three requests to the same process. Memory peaks cover whole-card VRAM and Linux process-tree RSS.
-
-| Model and engine | Backend | WAV (s) | Cold (s) | Warm (s) | VRAM peak / Δ (GiB) | Peak RAM (GiB) |
-| --- | --- | ---: | ---: | ---: | ---: | ---: |
-| YuE2 · yue2.cpp 892b9b0 · 3B Q8_0 + F32 VAE; NAR v9 · 30 s · 32 steps | CUDA 13 | 29.999 | 31.134 | 5.491 | 7.32 / +5.79 | 3.51 |
-| YuE2 · yue2.cpp 892b9b0 · 3B Q8_0 + F32 VAE; NAR v9 · 100 tokens · 2 steps | CUDA 13 | 3.999 | 24.461 | 0.158 | 6.08 / +4.55 | 3.50 |
-| ACE-Step 1.5 · acestep.cpp 6e0e414 · Turbo Q8_0 + BF16 embedder/VAE · 30 s · 8 Euler steps | CUDA 13 | 30.000 | 20.569 | 0.318 | 9.37 / +7.85 | 2.20 |
-| MiniMax Music3 · minimaxmusic.cpp b79d37f · Minimal Q3_K_M / Q4_K_M + F32 vocoder · 3.2 s · 2 steps | CUDA 13 | 3.193 | 35.096 | 1.091 | 8.82 / +7.30 | 4.71 |
-| MiniMax Music3 · minimaxmusic.cpp b79d37f · Quality Q8_0 + F32 vocoder · 3.2 s · 2 steps | CUDA 13 | 3.193 | 65.319 | 1.697 | 14.67 / +13.13 | 8.95 |
-| YuE2 · yue2.cpp 892b9b0 · 3B Q8_0 + F32 VAE; NAR v9 · 30 s · 32 steps | CUDA 12 | 29.999 | 37.919 | 5.538 | 7.31 / +5.78 | 3.49 |
-| YuE2 · yue2.cpp 892b9b0 · 3B Q8_0 + F32 VAE; NAR v9 · 100 tokens · 2 steps | CUDA 12 | 3.999 | 24.667 | 0.158 | 6.08 / +4.54 | 3.47 |
-| ACE-Step 1.5 · acestep.cpp 6e0e414 · Turbo Q8_0 + BF16 embedder/VAE · 30 s · 8 Euler steps | CUDA 12 | 30.000 | 20.825 | 0.318 | 9.37 / +7.84 | 2.16 |
-| MiniMax Music3 · minimaxmusic.cpp b79d37f · Minimal Q3_K_M / Q4_K_M + F32 vocoder · 3.2 s · 2 steps | CUDA 12 | 3.193 | 37.674 | 1.081 | 8.83 / +7.30 | 4.71 |
-| MiniMax Music3 · minimaxmusic.cpp b79d37f · Quality Q8_0 + F32 vocoder · 3.2 s · 2 steps | CUDA 12 | 3.193 | 86.020 | 1.745 | 14.67 / +13.14 | 8.91 |
-<!-- music-gpu-wsl:end -->
-
-<!-- radeon-gpu-pair:start -->
-#### Stable Audio 3 Small Q8_0 · Radeon iGPU
-
-Windows, AMD Radeon Graphics (gfx1036, UMA). The same `audio.cpp 5e7273db` revision generated 4 seconds in four steps with seed 42 on each backend. Cold is the first run. Warm is the median of three requests. WDDM dedicated and shared columns show process-memory peaks sampled at one-second intervals.
-
-| Backend | Cold (s) | Warm (s) | WDDM dedicated peak (GiB) | WDDM shared peak (GiB) |
-| --- | ---: | ---: | ---: | ---: |
-| HIP | 4.609 | 2.953 | 1.39 | 0.04 |
-| Vulkan | 6.281 | 3.454 | 1.17 | 0.38 |
-
-[Individual runs and WAV hashes](docs/music-gpu-benchmarks.json)
-<!-- radeon-gpu-pair:end -->
-
-<!-- native-radeon-pair:start -->
-#### YuE2-3B Q8_0 · Radeon iGPU
-
-Same 12-second saved song and Radeon iGPU, four steps. Cold includes process startup. Warm is the median of three requests with weights resident. WDDM peaks are sampled per process on this adapter.
-
-| Backend | Cold (s) | Warm (s) | WDDM dedicated peak (GiB) | WDDM shared peak (GiB) |
-| --- | ---: | ---: | ---: | ---: |
-| HIP 188d13b3 | 22.749 | 18.483 | 0.28 | 4.39 |
-| Vulkan 892b9b03 | 30.923 | 24.438 | 1.82 | 2.59 |
-
-[Individual runs and WAV hashes](docs/music-gpu-benchmarks.json)
-<!-- native-radeon-pair:end -->
-
-**RVC voice conversion on GPU (5.0 development builds)**
-
-Windows on one RTX 4090 24 GB, using the same voice checkpoint and FAISS index with a retrieval blend of 0.5. Each run converts an existing vocal to a new voice.
-
-| RVC backend | Input | First run, empty cache | Restart, saved cache | Warm request | Peak GPU memory |
-| --- | ---: | ---: | ---: | ---: | ---: |
-| vocal-fast-rs · TensorRT-RTX | 4 s | 21.046 s | 1.694 s | 64.83 ms | 3.91 GiB |
-| audio.cpp · CUDA | 4 s | 4.639 s | 4.448 s | 204.84 ms | 4.09 GiB |
-| vocal-fast-rs · TensorRT-RTX | 30 s | 24.258 s | 2.009 s | 279.29 ms | 5.51 GiB |
-| audio.cpp · CUDA | 30 s | 5.334 s | 5.477 s | 942.17 ms | 6.83 GiB |
-
-Startup runs include process launch through the first saved WAV. Columns show medians of two empty-cache launches, three cached launches and three warm requests. Both warm paths use the same local HTTP client, from POST through writing the WAV. Peak memory is the median whole-card peak across three cached processes during warm conversion, including desktop usage. The engines search different numbers of FAISS lists; timing alone does not measure voice quality. [Individual runs and build identifiers](docs/rvc-gpu-benchmarks.json)
-
-### Speed reported by installations
-
-How long a 3-minute song takes, by graphics card. These are averages from what YuE2 Studio installations reported
-over 30 days (version 3.8, loading the models included; people run different model sets, so yours can differ).
+How long a 3-minute song takes, by graphics card: averages that installations reported over 30 days
+(loading the models included; people run different model sets, so yours can differ).
 
 | Your graphics card | A 3-minute song | Speed |
 |---|---|---|
@@ -514,372 +233,45 @@ over 30 days (version 3.8, loading the models included; people run different mod
 | AMD, 8 GB or less (Vulkan) | about an hour | 0.05× |
 | No graphics card (processor) | about 2.5 hours | 0.02× |
 
-On our machine (RTX 4090, Ryzen 9 9950X3D, Windows 11, the Q8_0 set): a 1-minute song in 20 s, a 4-minute song in
-54 s, a 10-minute song in about 3 minutes; the card holds 5–8 GB while it works.
+On our RTX 4090 with the models loaded:
 
-## What runs where
+- **YuE2**, Q8_0 set — 30 seconds of a song in about 5 seconds; a 3:38 song in about 46 seconds.
+- **ACE-Step 1.5 Turbo** — 30 seconds of music in under half a second.
+- **MiniMax Music 3**, Minimal set — about three times faster than real time.
+- **RVC** — a new voice for a 30-second vocal in under 0.3 seconds.
 
-| Part | NVIDIA | AMD, Intel | No graphics card |
-| --- | --- | --- | --- |
-| Making songs · yue2.cpp | CUDA | Vulkan | processor |
-| Training a LoRA · music-train | CUDA | not available | not available |
-| Style by ear · MOSS-Music | CUDA | processor | processor |
-| Tempo · Beat This! | processor | processor | processor |
-| Stems · HT-Demucs | CUDA | Vulkan | processor |
-| Stems · Mel-Band RoFormer | CUDA | Vulkan | processor |
-| Restore after compression · Apollo | CUDA | Vulkan | processor |
-| Karaoke timing · Parakeet | CUDA | Vulkan | processor |
-| Karaoke timing · Whisper | CUDA | processor | processor |
-| Writing assistant · llama.cpp | CUDA | Vulkan | processor |
-| Audio to MIDI · MuScriptor | CUDA | processor | processor |
+Every run, cold and warm, with memory, CUDA 12 and 13, Vulkan, Linux and Radeon:
+[Benchmarks](guides/en/benchmarks.md).
 
-**The paths for AMD and Intel cards (Vulkan) and work on the processor are
-experimental:** they exist for computers where the studio would not run at all otherwise.
-The main, tested path is an NVIDIA card.
+## Models
 
-- Training needs an NVIDIA card with 11 GB of video memory or more. The trainer has no other
-  path, and on the processor one run would take days, so on any other machine the studio
-  does not offer the training files.
-- On AMD and Intel cards HT-Demucs separates the stems through Vulkan in the audio.cpp server and
-  Mel-Band RoFormer through its Vulkan build; MuScriptor (audio to MIDI) runs on the processor there.
-- Karaoke's Parakeet runs on transcribe.cpp, the engine Dub Studio and Speech Studio use: its
-  CUDA 13 or CUDA 12 build by the card and driver (on Linux when the system has that CUDA's
-  cuBLAS), its Vulkan build on any other card, its processor build without one; on a Mac, Metal
-  on Apple silicon and the processor on Intel.
-- The tempo model runs on the processor on every machine, in 5 to 7 seconds a song.
-- "Auto" in a device choice takes the card when its runtime is installed, and the processor
-  otherwise. The same table is in the studio, under Settings → Models.
+A YuE2 set is the 3B model that writes the score and the audio codes, the VAE that turns them into
+48 kHz stereo, and SheetSage2 for covers. The studio detects your card and preselects a set; the
+download is always your decision.
 
-## Quick start
+| Your graphics card | Set | Download |
+| --- | --- | --- |
+| 12 GB and above | Original weights (BF16) | 9.9 GB |
+| 8 GB and above | Best (Q8_0) | 5.1 GB |
+| 7 GB and above | Balanced (Q6_K) | 4.3 GB |
+| 5.5 GB and above | Light (Q5_K_M) | 4.0 GB |
 
-1. **Install** — run `YuE2.Studio_x.y.z_x64-setup.exe` from the
-   [latest release](https://github.com/timoncool/YuE2-Studio/releases/latest), or unzip the
-   portable archive anywhere and run `YuE2-Studio.exe`.
-2. **Choose a model set** — the first screen preselects the set your card can run. Press
-   download; it fetches only what is missing and resumes if interrupted.
-3. **Create** — write a style and lyrics, or load one of the examples, and press Create.
-   The engine starts by itself and the song lands in your library with its score.
-
-Everything the studio owns stays in its own folder: models, songs, settings, logs,
-temporary files and the WebView2 profile, beside `YuE2-Studio.exe`. That holds for the
-portable archive and for an installation into any folder the studio can write to;
-deleting the folder removes the studio. Only an installation into a read-only location
-such as Program Files falls back to `%LOCALAPPDATA%\YuE2 Studio`. The installed version
-updates itself: a new release is offered inside the studio and installed in place.
-
-**If the installer stops on WebView2.** The studio's window runs on Microsoft Edge WebView2,
-and the installer fetches it when Windows lacks it. On a blocked or unsteady connection, or on
-Windows 10 builds that refuse Microsoft's small bootstrapper (error 0x80040902), that fetch
-fails and the installer says so. Install WebView2 from Microsoft's standalone installer,
-[Evergreen Standalone x64](https://go.microsoft.com/fwlink/p/?LinkId=2124701), then run the
-studio's installer again.
-
-### Upgrade a custom Studio data folder
-
-If your launcher sets `YUE_STUDIO_DATA_ROOT`, YuE2 Studio 5.0 uses that folder for the library and for the default settings and model paths. Earlier desktop versions could store the settings and models in the installation's ordinary data folder while the library went to your custom folder.
-
-Look for your previous `studio-settings.json` and `models/yue2-cpp` directory under `data` beside the executable. If the installation used the per-user location, check `$XDG_DATA_HOME/yue2-studio` (usually `~/.local/share/yue2-studio`) on Linux, `%LOCALAPPDATA%\YuE2 Studio` on Windows, or `~/Library/Application Support/YuE2 Studio` on macOS.
-
-If you recognize those files as belonging to this profile, you can use them in place. Start with the previous settings path and model directory explicitly selected. Keep the path to your library as `YUE_STUDIO_DATA_ROOT`.
-
-```bash
-export YUE_STUDIO_DATA_ROOT="$HOME/my-yue-library"
-legacy="$HOME/.local/share/yue2-studio"
-export YUE_STUDIO_SETTINGS_PATH="$legacy/studio-settings.json"
-export YUE_MODELS_ROOT="$legacy/models/yue2-cpp"
-/usr/bin/YuE2-Studio
-```
-
-For AppImage use the AppImage path in the last line. In PowerShell use `$env:YUE_STUDIO_SETTINGS_PATH` and `$env:YUE_MODELS_ROOT` with the paths you located. Use a separate settings file when two profiles previously shared that directory and you want independent preferences. After backing up your settings, you can copy that small JSON into your custom data folder and remove only the settings override. Keep the model override if you want the studio to use the existing weights in place.
-
-### Bring your ACE-Step or MiniMax library into YuE2
-
-In YuE2 Studio 5.0, open **Library → Import → ACE-Step or MiniMax library**. Select the old studio from the list, or use **Choose old Studio folder** to locate it yourself.
-
-The preview shows the source folder, songs, playlists and space needed on the destination drive. Expand a song to see which files are available and which are missing. Once you have the right library, select **Copy library into YuE2**. The original library stays in place. You can run the import again; the summary distinguishes new songs and playlists from items already imported.
-
-Open an imported song in **Library** to play the original recording. To make a new song with the familiar engine, open **Create** and select the native ACE-Step or MiniMax engine and model.
-
-### Install Windows runtime archives manually
-
-If a runtime download fails, open the studio data folder from Settings. Download the
-exact archive from the URL in the error and leave its original filename and contents intact.
-
-| Feature | Where to put the archive, relative to the data folder |
-| --- | --- |
-| Karaoke timeline / transcribe.cpp | `karaoke/runtime/`, for example `transcribe-windows-cuda13-x64.zip` |
-| Style by ear / MOSS-Music | `training/ace-caption-windows-x64.zip` |
-| LoRA training | `training/hotstep-tools-cuda-windows-x64.zip` |
-| audio.cpp | `audiocpp/runtime/`, for example `audiocpp-server-win-cuda13-x64.zip` |
-
-Press **Download** again for the same feature. The studio checks the archive against
-the SHA-256 pinned for this release, extracts it and records the installation. It
-downloads other missing dependencies separately. When setting up both training and
-style by ear, install the full training runtime first. It includes the matching captioner.
+The weights come from [Serveurperso/YuE2-GGUF](https://huggingface.co/Serveurperso/YuE2-GGUF), pinned
+and checked by SHA-256. ACE-Step, MiniMax and the other models offer their own sets in the same card
+of the create form. Every file with its direct link, where to put it by hand, your own and community
+models, and the engine's DLLs: [Models and runtimes](guides/en/models-and-runtimes.md).
 
 ## Drive it from an agent (MCP)
 
-While the studio is open it serves MCP at `http://127.0.0.1:8791/mcp`: an agent such as
-Claude Code, Claude Desktop or Cursor does everything the page does, through the same code -
-songs and scores, the library, covers, stems, MIDI, karaoke, processing, video clips, the player,
-LoRA, and a LoRA from a folder of songs end to end - and sees and works the window itself:
-a screenshot, its controls, clicks and typing. 162 tools, grouped by area. The model's
-writing rules and official examples come with the server, so the agent writes the styles,
-lyrics and lyric layouts itself instead of the studio's small assistant.
-
-With **Agent (MCP)** chosen as the writing assistant (Settings, Models), the connected agent
-also answers the studio's own write buttons and dataset preparation. Settings, **Agent
-(MCP)** shows whether an agent is connected and what to paste into the client.
+While the studio is open it serves MCP at `http://127.0.0.1:8791/mcp`:
 
 ```bash
 claude mcp add --transport http yue2-studio http://127.0.0.1:8791/mcp
 ```
 
-**Without a window.** An agent that finds the studio closed starts it with `--headless`: the
-studio runs as usual with its window hidden, a tray icon the only sign of it, and stops by
-itself after ten minutes with no agent calls and nothing at work (`YUE_STUDIO_IDLE_SHUTDOWN_S`
-sets other seconds). Opening the studio the usual way brings its window up in the same
-session. `--stop` ends it, unless its window is open or something is at work. The installed
-executable is `%LOCALAPPDATA%\YuE2 Studio\YuE2-Studio.exe` on Windows (or the folder chosen
-when installing), `/Applications/YuE2 Studio.app/Contents/MacOS/YuE2-Studio` on a Mac and
-`/usr/bin/YuE2-Studio` from the .deb.
-
-```powershell
-Start-Process "$env:LOCALAPPDATA\YuE2 Studio\YuE2-Studio.exe" -ArgumentList '--headless' -WindowStyle Hidden
-```
-
-[docs/mcp-skill.md](docs/mcp-skill.md) is the skill an agent reads: every tool, what the
-model expects, and step-by-step recipes.
-
-## Models
-
-A runnable YuE2 installation is a **backbone** (the 3B model that writes the score and the
-audio codes) and the **VAE** (turns them into 48 kHz stereo). **SheetSage2** is optional:
-without it the studio generates, but cannot transcribe recordings for covers.
-
-Every set also carries the **decoder companion**, 134 MB: Mothersuperior's decoder adapter,
-published as the pair of the tokenizer head the LoRA trainer turns songs into codes with. The
-trainer keeps it frozen under every LoRA, so a LoRA is trained on the decoder it is heard
-through. A render merges it on **Auto** (Advanced - output) only under a LoRA trained in the
-studio; otherwise the song is decoded by the YuE2 checkpoint alone, as its authors, audio.cpp and
-ComfyUI render it. On and Off force it either way. In HOT-Step's round trip of six real songs the
-decoder without it narrowed the stereo (left/right correlation 0.78–0.92 against the
-originals' ~0.65), with it 0.57–0.72.
-
-| Your GPU | Set | Download |
-| --- | --- | --- |
-| 12 GB VRAM and above | Full native — BF16 backbone, original weights | 9.9 GB |
-| 8 GB and above | Quality — Q8_0 backbone, near lossless | 5.1 GB |
-| 7 GB and above | Balanced — Q6_K backbone | 4.3 GB |
-| 5.5 GB and above | Light — Q5_K_M backbone | 4.0 GB |
-
-Sizes include SheetSage2 with the MERT-v2 encoder it reads (Q8_0, F32 in the native set) and the
-decoder companion. The studio
-detects your card and preselects the set, but the download is always your decision; the model
-manager also builds a custom mix role by role. Q5_K_M is the lightest quantisation published
-for YuE2.
-
-The GGUF files come from [Serveurperso/YuE2-GGUF](https://huggingface.co/Serveurperso/YuE2-GGUF),
-pinned to revision `e630f2b`, the decoder companion from
-[Mothersuperior/yue2-mothersuperior-realaudio-tokenizer-v4](https://huggingface.co/Mothersuperior/yue2-mothersuperior-realaudio-tokenizer-v4),
-pinned to revision `e2e63d8`; all are checked by size and SHA-256. They are written to, and
-can be dropped into by hand at:
-
-- `<the studio's folder>\data\models\yue2-cpp\` — the portable folder, or the folder
-  you installed into
-- `%LOCALAPPDATA%\YuE2 Studio\models\yue2-cpp\` — only for an installation into a
-  read-only location
-
-A file placed by hand with the exact catalogue name is recognised and never downloaded again.
-
-**Your own YuE2 model.** A YuE2-3B fine-tune in GGUF made for yue2.cpp goes into
-`models\yue2-cpp\own\` and is chosen under Settings - Models - Your own YuE2 model; the engine then
-runs it in place of the set's backbone, with the set's VAE and transcriber. The studio does not
-download or check a file you put there, and its licence is its author's. The same list has
-Community models: the merges of Ruach Studio's
-[YuE2-RS-Finetunes](https://huggingface.co/goldhub/YuE2-RS-Finetunes) in Q8_0 (3.8 GB) and Q6_K
-(2.9 GB), downloaded into that folder when chosen, pinned to revision `b371be9` and checked by
-SHA-256; their weights are under CC BY-NC-SA 4.0 (non-commercial, share-alike, credit the authors).
-Beside them are the six merges of
-[YuE2-3B-Ruach_Studio-IRA-Merge](https://huggingface.co/goldhub/YuE2-3B-Ruach_Studio-IRA-Merge)
-(revision `17356b2`, CC BY-NC 4.0): IRA, with Mothersuperior's Instrumental and Real Audio adapters
-in the weights; IRAE, IRAE v2 and v3, which add monsterovich's Epic Trailer at three strengths; and
-the experimental IRAE-IR and IRAE-IR v2 with his Industrial Rock, for rock instrumentals. The
-adapters inside a merge are not loaded again on top of it.
-With an own or community model the decoder companion stays off on Auto, and LoRA training and
-dataset preparation still run on the set's backbone.
-
-<details>
-<summary><b>Every file, with direct download links</b></summary>
-
-| File | Role | Size |
-| --- | --- | --- |
-| [`YuE2-3B-BF16.gguf`](https://huggingface.co/Serveurperso/YuE2-GGUF/resolve/e630f2b8f6aedf8254c3186438633c1b5eeaf80a/YuE2-3B-BF16.gguf) | backbone | 6.67 GB |
-| [`YuE2-3B-Q8_0.gguf`](https://huggingface.co/Serveurperso/YuE2-GGUF/resolve/e630f2b8f6aedf8254c3186438633c1b5eeaf80a/YuE2-3B-Q8_0.gguf) | backbone | 3.55 GB |
-| [`YuE2-3B-Q6_K.gguf`](https://huggingface.co/Serveurperso/YuE2-GGUF/resolve/e630f2b8f6aedf8254c3186438633c1b5eeaf80a/YuE2-3B-Q6_K.gguf) | backbone | 2.74 GB |
-| [`YuE2-3B-Q5_K_M.gguf`](https://huggingface.co/Serveurperso/YuE2-GGUF/resolve/e630f2b8f6aedf8254c3186438633c1b5eeaf80a/YuE2-3B-Q5_K_M.gguf) | backbone | 2.44 GB |
-| [`YuE2-Vae-F32.gguf`](https://huggingface.co/Serveurperso/YuE2-GGUF/resolve/e630f2b8f6aedf8254c3186438633c1b5eeaf80a/YuE2-Vae-F32.gguf) | VAE, every set | 506 MB |
-| [`SheetSage2-F32.gguf`](https://huggingface.co/Serveurperso/YuE2-GGUF/resolve/e630f2b8f6aedf8254c3186438633c1b5eeaf80a/SheetSage2-F32.gguf) | transcriber | 218 MB |
-| [`SheetSage2-Q8_0.gguf`](https://huggingface.co/Serveurperso/YuE2-GGUF/resolve/e630f2b8f6aedf8254c3186438633c1b5eeaf80a/SheetSage2-Q8_0.gguf) | transcriber | 101 MB |
-| [`MERT-v2-FullSong-F32.gguf`](https://huggingface.co/Serveurperso/YuE2-GGUF/resolve/e630f2b8f6aedf8254c3186438633c1b5eeaf80a/MERT-v2-FullSong-F32.gguf) | the transcriber's encoder, beside SheetSage2-F32 | 2.36 GB |
-| [`MERT-v2-FullSong-Q8_0.gguf`](https://huggingface.co/Serveurperso/YuE2-GGUF/resolve/e630f2b8f6aedf8254c3186438633c1b5eeaf80a/MERT-v2-FullSong-Q8_0.gguf) | the transcriber's encoder, beside SheetSage2-Q8_0 | 860 MB |
-| [`nar_lora_joint_v9.safetensors`](https://huggingface.co/Mothersuperior/yue2-mothersuperior-realaudio-tokenizer-v4/resolve/e2e63d859f3af879baf1b4d4e9f22d1eeda6fde5/nar_lora_joint_v9.safetensors) | decoder companion, every set | 134 MB |
-
-</details>
-
-### Everything else the studio downloads
-
-Each part is downloaded when you first use it, and each file can be downloaded by hand
-and put into the studio's `data` folder — `<the studio's folder>\data\`, or
-`%LOCALAPPDATA%\YuE2 Studio\` for an installation into a read-only location. A file with
-the exact name in the listed folder is recognised and not downloaded again.
-
-<details>
-<summary><b>Training, listening, lyrics, stems and the assistant — direct links</b></summary>
-
-**Training a LoRA** — [scragnog/YuE2-GGUF](https://huggingface.co/scragnog/YuE2-GGUF), pinned to `eb7de09`
-
-| File | What for | Size | Put in `data\` |
-| --- | --- | --- | --- |
-| [`yue2_3b_int8_convrot.safetensors`](https://huggingface.co/scragnog/YuE2-GGUF/resolve/eb7de0903bf4dfbd14a2384ae0c0d14150cfa2c7/checkpoints/yue2_3b_int8_convrot.safetensors) | the model the LoRA is trained on | 3.69 GB | `training\models\` |
-| [`yue2-vae-standard-f32.gguf`](https://huggingface.co/scragnog/YuE2-GGUF/resolve/eb7de0903bf4dfbd14a2384ae0c0d14150cfa2c7/yue2-vae-standard-f32.gguf) | audio to latents | 506 MB | `training\models\` |
-| [`yue2-tok-f16.gguf`](https://huggingface.co/scragnog/YuE2-GGUF/resolve/eb7de0903bf4dfbd14a2384ae0c0d14150cfa2c7/yue2-tok-f16.gguf) | audio to codes | 1.13 GB | `training\models\` |
-| [`sheetsage2-f16.gguf`](https://huggingface.co/scragnog/YuE2-GGUF/resolve/eb7de0903bf4dfbd14a2384ae0c0d14150cfa2c7/sheetsage2-f16.gguf) | the songs' scores | 1.27 GB | `training\models\` |
-| [`mms-fa-f32.gguf`](https://huggingface.co/scragnog/YuE2-GGUF/resolve/eb7de0903bf4dfbd14a2384ae0c0d14150cfa2c7/mms-fa/mms-fa-f32.gguf) | lyric timing | 1.18 GB | `training\models\` |
-
-**Describing songs by ear** (optional)
-
-| File | What for | Size | Put in `data\` |
-| --- | --- | --- | --- |
-| [`moss-aud-f16.gguf`](https://huggingface.co/scragnog/MOSS-Music-8B-Instruct-GGUF/resolve/main/moss-aud-f16.gguf) | MOSS-Music-8B, the ear | 1.61 GB | `training\models\moss\` |
-| [`moss-lm-q8_0.gguf`](https://huggingface.co/scragnog/MOSS-Music-8B-Instruct-GGUF/resolve/main/moss-lm-q8_0.gguf) | MOSS-Music-8B, the words | 8.11 GB | `training\models\moss\` |
-| [`beat_this.onnx`](https://github.com/mosynthkey/beat_this_cpp/raw/main/onnx/beat_this.onnx) | Beat This!, the tempo | 79 MB | `training\models\audio-facts\` |
-
-**Lyrics by ear** — only for songs no lyric database knows; pick one recogniser
-
-| Files | What for | Size | Put in `data\` |
-| --- | --- | --- | --- |
-| [faster-whisper-large-v3](https://huggingface.co/Systran/faster-whisper-large-v3/tree/main): `config.json`, `model.bin`, `preprocessor_config.json`, `tokenizer.json`, `vocabulary.json` | Whisper large-v3 | 2.9 GB | `karaoke\models\whisper\faster-whisper-large-v3\` |
-| [`parakeet-tdt-0.6b-v3-Q8_0.gguf`](https://huggingface.co/handy-computer/parakeet-tdt-0.6b-v3-gguf/resolve/d8d8c32cb2017c57e5307767343e97870f8a7f53/parakeet-tdt-0.6b-v3-Q8_0.gguf) | Parakeet TDT v3, European languages | 0.7 GB | `karaoke\models\asr-gguf-parakeet-v3\` |
-| [`parakeet-ultra-Q8_0.gguf`](https://huggingface.co/handy-computer/parakeet-ultra-gguf/resolve/a1539be1b849ea7463b88343e5277b373d0c4ea9/parakeet-ultra-Q8_0.gguf) | Parakeet Ultra, fewer wrong words in Russian and in noise | 0.7 GB | `karaoke\models\asr-gguf-parakeet-ultra\` |
-| [`transcribe-windows-cuda13-x64.zip`](https://github.com/timoncool/transcribe.cpp/releases/download/studio-engine-274d105e/transcribe-windows-cuda13-x64.zip), [`transcribe-windows-vulkan-x64.zip`](https://github.com/timoncool/transcribe.cpp/releases/download/studio-engine-274d105e/transcribe-windows-vulkan-x64.zip), [`transcribe-windows-cpu-x64.zip`](https://github.com/timoncool/transcribe.cpp/releases/download/studio-engine-274d105e/transcribe-windows-cpu-x64.zip) | transcribe.cpp, the engine Parakeet runs on: one build, the one for your card, unpacked | 5-131 MB | `karaoke\runtime\transcribe-engine\` (CUDA), `transcribe-engine-vulkan\`, `transcribe-engine-cpu\` |
-
-**The audio.cpp server** — HT-Demucs and MuScriptor run in it; one build, the one for your card, unpacked
-
-| File | What for | Size | Put in `data\` |
-| --- | --- | --- | --- |
-| [`audiocpp-server-win-cuda13-x64.zip`](https://github.com/timoncool/audio.cpp/releases/download/server-31cb1a4a/audiocpp-server-win-cuda13-x64.zip), [`audiocpp-server-win-cuda12-x64.zip`](https://github.com/timoncool/audio.cpp/releases/download/server-31cb1a4a/audiocpp-server-win-cuda12-x64.zip), [`audiocpp-server-win-vulkan-x64.zip`](https://github.com/timoncool/audio.cpp/releases/download/server-31cb1a4a/audiocpp-server-win-vulkan-x64.zip), [`audiocpp-server-win-cpu-x64.zip`](https://github.com/timoncool/audio.cpp/releases/download/server-31cb1a4a/audiocpp-server-win-cpu-x64.zip) | audio.cpp's server: CUDA 13, CUDA 12, Vulkan or the processor | 20-185 MB | `audiocpp\runtime\audiocpp\` (CUDA 13), `audiocpp-cuda12\`, `audiocpp-vulkan\`, `audiocpp-cpu\` |
-| [`libcufft-windows-x86_64-12.4.0.43-archive.zip`](https://developer.download.nvidia.com/compute/cuda/redist/libcufft/windows-x86_64/libcufft-windows-x86_64-12.4.0.43-archive.zip) | `cufft64_12.dll` out of it, for the CUDA 13 build | 160 MB | `audiocpp\runtime\audiocpp\` |
-
-**Stems and vocals for recognition**
-
-| File | What for | Size | Put in `data\` |
-| --- | --- | --- | --- |
-| [`htdemucs-6stems-f16.gguf`](https://huggingface.co/audio-cpp/audio.cpp-gguf/resolve/462b4cec041e06ffb3d8fcf0d8c655051b1cd9f5/HTDemucs-6stems-GGUF/htdemucs-6stems-f16.gguf) | HT-Demucs, six stems, audio.cpp's own GGUF | 55 MB | `separation\models\htdemucs\` |
-
-**MIDI from audio** — one of the models, in the audio.cpp server above
-| [muscriptor-small](https://huggingface.co/cocktailpeanut/muscriptor-small/tree/31a8f75d6a8b5383fd71ad1371dc1620389ab722): `config.json`, `model.safetensors` | fast, 103M | 0.4 GB | `midi\models\muscriptor-small\` |
-| [muscriptor-medium](https://huggingface.co/cocktailpeanut/muscriptor-medium/tree/27246ba68bd4d8f98bdec10a6edf8d7cf42a8826): `config.json`, `model.safetensors` | balanced, 307M | 1.2 GB | `midi\models\muscriptor-medium\` |
-| [muscriptor-large](https://huggingface.co/cocktailpeanut/muscriptor-large/tree/87f4bf981f56f90fb5043153b3f54af3c3053da9): `config.json`, `model.safetensors` | best, 1.4B | 5.5 GB | `midi\models\muscriptor-large\` |
-
-MuScriptor by Kyutai & Mirelo, weights CC BY-NC 4.0 (non-commercial); the mirror carries the
-official files byte for byte, without the Hugging Face sign-in.
-
-**The writing assistant** — one of
-
-| File | Size | Put in `data\` |
-| --- | --- | --- |
-| [`gemma-4-E4B_q4_0-it.gguf`](https://huggingface.co/google/gemma-4-E4B-it-qat-q4_0-gguf/resolve/main/gemma-4-E4B_q4_0-it.gguf) | 4.80 GB | `assistant\models\` |
-| [`gemma-4-12b-it-qat-q4_0.gguf`](https://huggingface.co/google/gemma-4-12b-it-qat-q4_0-gguf/resolve/main/gemma-4-12b-it-qat-q4_0.gguf) | 6.50 GB | `assistant\models\` |
-
-</details>
-
-## The engine and the DLLs it needs
-
-```text
-yue-server.exe → ggml.dll, ggml-base.dll            shipped inside the app
-  loads at run time, whichever the machine can use:
-  ├─ ggml-cuda.dll     → cublas64_13.dll, cublasLt64_13.dll (downloaded once), nvcuda.dll (NVIDIA driver)
-  ├─ ggml-vulkan.dll   → vulkan-1.dll (every AMD, Intel and NVIDIA driver)
-  └─ ggml-cpu-*.dll    nine builds, from SSE4.2 to AVX-512; the best one for the processor is picked
-  + msvcp140, vcruntime140, vcruntime140_1, vcomp140   Visual C++ runtime, shipped app-local
-```
-
-**Shipped inside the app.** `yue-server.exe`, every `ggml*.dll`, built from the pinned
-yue2.cpp commit with all backends, and the Visual C++ runtime it needs live in
-`resources\yue2-cpp\` beside the main executable. Nothing is installed into Windows. Settings → Local engine chooses the compute device: Auto (CUDA on NVIDIA,
-Vulkan on AMD and Intel, the processor without a GPU), or CUDA, Vulkan or the processor
-explicitly. On Vulkan the studio turns on the engine's FP16 clamp: without it AMD Radeon
-integrated graphics rendered pure silence and the engine crashed encoding it.
-
-**Downloaded once, on the first engine start — on NVIDIA only.**
-
-| File(s) | Where from | Size | Why |
-| --- | --- | --- | --- |
-| `cublas64_13.dll`, `cublasLt64_13.dll` | NVIDIA's redistributable [`libcublas-windows-x86_64-13.5.1.27-archive.zip`](https://developer.download.nvidia.com/compute/cuda/redist/libcublas/windows-x86_64/libcublas-windows-x86_64-13.5.1.27-archive.zip) | 391 MB (zip) | The CUDA linear algebra `ggml-cuda.dll` is linked against; too large, and under NVIDIA's licence, to bundle. |
-
-A machine with the CUDA 13 toolkit already has cuBLAS on its `PATH` and downloads nothing.
-Behind a proxy, take the two DLLs from the archive's `bin\` folder and drop them next to
-`yue-server.exe`; the studio finds and uses them.
-
-## Architecture
-
-```text
-React UI ─┐
-          ├─ YuE2-Studio.exe   (Tauri window + Rust/Axum service on 127.0.0.1:8791)
-Rust axum ┘        │
-                   ├─ yue2.cpp `yue-server`   (C++/CUDA, GGUF, 127.0.0.1:18087)
-                   ├─ music-train.exe         (HOT-Step ace-train, LoRA training, optional)
-                   └─ vst-host.exe            (HOT-Step VST3 host, a process of its own)
-```
-
-The service is compiled into the desktop binary. It supervises the engine process, restarts
-it when you switch model sets, and imports finished songs itself, so a result is never lost
-if the window was reloaded or closed mid-generation. Progress is read from the engine's own
-log: score, audio codes, acoustic rendering, decoding.
-
-## Building from source
-
-```powershell
-npm --prefix app install
-npm --prefix desktop install
-cargo test --workspace
-npm --prefix app test
-```
-
-Developing the UI against a running service:
-
-```powershell
-cargo run -p music-server           # service on 127.0.0.1:8791
-npm --prefix app run dev            # UI on 127.0.0.1:3791
-```
-
-The engine: `scripts/build-yue-runtime.ps1 -RuntimeBackend all` builds the pinned yue2.cpp
-commit (`engines/yue2-cpp-source.json`) with runtime-loaded CUDA, Vulkan and CPU backends,
-using CUDA 13, the Vulkan SDK, MSVC and Ninja. `scripts/build-release.ps1 -Version X.Y.Z` produces the NSIS installer, the
-portable archive and the signed `latest.json` for the updater; it reads the signing key from
-`TAURI_SIGNING_PRIVATE_KEY` or `%USERPROFILE%\.tauri\yue2-studio.key`. Model weights are
-never part of a release.
-
-Linux packages are built on the release machine in an Ubuntu 22.04 container (glibc 2.35; Docker, under WSL on
-Windows): `scripts/build-linux-docker.sh <output folder>` builds the committed HEAD with
-`scripts/build-release-linux.sh` and checks that the engine starts. Only the .dmg is built on GitHub, by
-the `macOS build` workflow (`.github/workflows/release-unix.yml`, started by hand, optionally with a
-release tag to attach it to): there is no Mac on the release machine.
-
-On macOS there is no packaged engine, so build it once from source (needs Xcode command line
-tools and CMake) and again whenever `engines/yue2-cpp-source.json` moves to a new commit:
-
-```bash
-scripts/build-yue-runtime.sh ~/yue2-engine          # builds the pinned commit with Metal
-YUE_ENGINE_ROOT=~/yue2-engine cargo run -p music-server
-```
-
-Audio to MIDI is Windows-only as a download; on macOS `scripts/build-midi-runtime.sh <dir>` builds HOT-Step's `ace-midi` with Metal (point `YUE_MIDI_BIN` at the resulting `music-midi`; the dmg bundles it).
-
-`YUE_ENGINE_ROOT` (or `YUE_ENGINE_BIN`, the path of `yue-server` itself) tells the studio where
-the engine is; for the desktop app set it in the environment before launching it. `Auto` then
-lets the engine choose Metal and falls back to the CPU.
+An agent that finds the studio closed starts it with `--headless`: no window, a tray icon, and it
+stops by itself after ten idle minutes. [docs/mcp-skill.md](docs/mcp-skill.md) is the skill the agent
+reads. Building from source and the architecture: [Automation and development](guides/en/automation-and-development.md).
 
 ## Anonymous statistics and news
 
