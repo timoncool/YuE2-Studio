@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useImperativeHandle, useMemo, useRef, us
 import { openRouterSettingsChanged, SELF_READ } from '../services/studioQueries';
 import { Check, ChevronDown, Download, FolderDown, FolderOpen, Loader2, Play, Square, Trash2, X } from 'lucide-react';
 import { useI18n } from '../context/I18nContext';
+import { nativeModelSetStrings } from '../i18n/nativeModelSet';
 import { trainingAssetLabel } from '../i18n/trainingAssets';
 import { poll } from '../services/poll';
 import { DevicePicker, type Device } from './DevicePicker';
@@ -83,6 +84,8 @@ type Profile = {
   components: string[];
   total_bytes: number;
   ram_needed_gb: number;
+  /** The video memory the set takes, from the component catalogue. */
+  vram_gb?: number;
 };
 
 type Catalog = { engine_id: string; recommended_profile_id: string; profiles: Profile[]; components: ModelComponent[] };
@@ -1086,12 +1089,6 @@ export const SetupGate: React.FC<{
                     const partialHere = partialOnDisk(catalog?.components ?? [], missingHere);
                     const partialIds = missingHere.filter((id) => (catalog?.components.find((entry) => entry.id === id)?.partial_bytes ?? 0) > 0);
                     const active = chosenKey === [...profile.components].sort().join('|');
-                    // What the set is actually made of, role by role, instead of
-                    // a name cut off after twenty characters.
-                    const parts = profile.components
-                      .map((id) => catalog?.components.find((entry) => entry.id === id))
-                      .filter((component): component is ModelComponent => Boolean(component))
-                      .map((component) => `${componentKindLabel(component.kind)} ${componentPrecision(component)}`);
                     return (
                       <button
                         key={profile.id}
@@ -1120,7 +1117,7 @@ export const SetupGate: React.FC<{
                           )}
                           <span className="ml-auto shrink-0 text-xs tabular-nums text-zinc-500">{bytes(profile.total_bytes)}</span>
                         </div>
-                        <p className="mt-1 text-[11px] leading-5 text-zinc-500 dark:text-zinc-400">{parts.join(' · ')}</p>
+                        {profile.vram_gb ? <p className="mt-1 text-[11px] leading-5 text-zinc-500 dark:text-zinc-400">{nativeModelSetStrings[language].fromVram(new Intl.NumberFormat(language, { maximumFractionDigits: 1 }).format(profile.vram_gb))}</p> : null}
                         {totalRamGb !== undefined && exceedsRam(profile) && (
                           <p className="mt-1 text-[11px] font-medium text-amber-600 dark:text-amber-300">
                             {t('ramShort').replace('{have}', totalRamGb.toFixed(0)).replace('{need}', String(Math.ceil(profile.ram_needed_gb)))}
