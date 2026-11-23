@@ -284,7 +284,7 @@ it('snapshots the last voice only when an automatic RVC take is enabled', async 
   click(buttonNamed('create')!);
   expect(sent[0].rvc_after).toBeUndefined();
 
-  click(buttonNamed('RVC take')!);
+  click(buttonNamed('Voice replacement')!);
   click(buttonNamed('Add a voice')!);
   click([...document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find(item => item.textContent?.includes('Warm singer'))!);
   expect(host.textContent).toContain('Warm singer');
