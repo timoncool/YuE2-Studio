@@ -113,7 +113,7 @@ function ModelRows({ engine, catalogue, models, onChanged }: { engine: string; c
                 {meta && <span className="block text-xs text-zinc-500 dark:text-zinc-400">{meta}</span>}
               </span>
               {model.ready ? <span className="text-xs font-semibold text-emerald-700 dark:text-emerald-300">{text.downloaded}</span>
-                : installPath && <AudioCppModelInstall secondary model={model.id} bytes={model.missing_bytes ?? 0} language={language} onInstalled={onChanged}
+                : installPath && <AudioCppModelInstall secondary compact model={model.id} bytes={model.missing_bytes ?? 0} language={language} onInstalled={onChanged}
                   target={{ catalogue, installPath, label: title }} />}
             </li>
           );

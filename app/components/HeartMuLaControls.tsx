@@ -94,13 +94,15 @@ type ModelInstallTarget =
   | { model: LegacyManagedModel; target?: never }
   | { model: string; target: { catalogue: string; installPath: string; label: string } };
 
-export function AudioCppModelInstall({ model, bytes, licenseUrl, language, onInstalled, target, secondary }: ModelInstallTarget & {
+export function AudioCppModelInstall({ model, bytes, licenseUrl, language, onInstalled, target, secondary, compact }: ModelInstallTarget & {
   bytes: number;
   licenseUrl?: string;
   language: string;
   onInstalled: () => void;
   /** The card has its own main action, so the download is not drawn as one. */
   secondary?: true;
+  /** The model's name stands beside the button, so the button says only the size. */
+  compact?: true;
 }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -189,7 +191,8 @@ export function AudioCppModelInstall({ model, bytes, licenseUrl, language, onIns
       <WorkProgress label={`${installing}${progress ? ` · ${sets.of(gb(progress.done), gb(progress.total))}` : ''}`} percent={percent ?? null} />
     ) : (
       secondary
-        ? <SecondaryButton onClick={() => void start()}><Download size={13} />{bytes > 0 ? sets.download(name, gb(bytes)) : install}</SecondaryButton>
+        ? <SecondaryButton onClick={() => void start()} aria-label={bytes > 0 ? sets.download(name, gb(bytes)) : install}>
+          <Download size={13} aria-hidden />{bytes > 0 ? (compact ? sets.downloadSize(gb(bytes)) : sets.download(name, gb(bytes))) : install}</SecondaryButton>
         : <PrimaryButton className="w-full" onClick={() => void start()}>{bytes > 0 ? sets.download(name, gb(bytes)) : install}</PrimaryButton>
     )}
     {busy && canCancel && <SecondaryButton className="mt-2" disabled={cancelling}
