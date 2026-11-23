@@ -568,9 +568,10 @@ export const DjMode: React.FC<{
         </div>
       </header>
       {error && <p role="alert" className="bg-rose-900/30 px-4 py-1.5 text-xs text-rose-200">{error}</p>}
-      <div className="min-h-0 flex-1 overflow-y-auto">
+      <div className="min-h-0 flex-1 overflow-y-auto lg:overflow-hidden">
         {mixer ? (
-          <div className="mx-auto flex max-w-[1850px] flex-col gap-3 px-3 py-3">
+          <div className="mx-auto flex max-w-[1850px] flex-col gap-3 px-3 py-3 lg:h-full">
+            <div className="flex min-h-0 flex-col gap-3 lg:flex-1 lg:overflow-y-auto [&>*]:shrink-0">
             <div className="flex items-stretch gap-3 overflow-x-auto">
               <DjDeckPanel mixer={mixer} index={0} library={libraryPlayable} onSelect={setSelected} onLoad={load} onTap={tap}
                 separation={separation} installingEngine={installingEngine} actionBusy={separationBusy} onInstall={install} onSeparate={separate} />
@@ -593,7 +594,8 @@ export const DjMode: React.FC<{
               <span className="font-black text-rose-400">B</span>
               <span className="text-xs text-zinc-400">{Math.round((1 - mixer.getCrossfade()) * 100)}% / {Math.round(mixer.getCrossfade() * 100)}%</span>
             </div>
-            <div className="grid min-h-[300px] grid-cols-1 gap-3 lg:grid-cols-[185px_minmax(360px,1fr)_245px]">
+            </div>
+            <div className="grid min-h-[300px] grid-cols-1 gap-3 lg:h-[42%] lg:min-h-[260px] lg:shrink-0 lg:grid-cols-[185px_minmax(360px,1fr)_245px] [&>*]:lg:min-h-0">
               <nav className="min-h-0 rounded-xl border border-white/10 bg-[#17181d] p-2" aria-label={s.folders}>
                 <div className="mb-2 flex items-center gap-2 px-2 text-xs font-bold text-white"><FolderOpen size={14} /> {s.myLibrary}</div>
                 {navigateButton('all', s.allSongs, libraryPlayable.filter(song => stemOf(song) === null).length)}
@@ -607,7 +609,7 @@ export const DjMode: React.FC<{
                 <div className="px-2 py-1 text-[10px] font-bold uppercase text-zinc-500">{s.albums}</div>
                 {playlists.filter(list => list.kind === 'album').map(list => navigateButton(`collection:${list.id}`, list.name, list.songIds?.length))}
               </nav>
-              <section className="min-w-0 overflow-hidden rounded-xl border border-white/10 bg-[#17181d]" aria-label={s.browser}>
+              <section className="flex min-w-0 flex-col overflow-hidden rounded-xl border border-white/10 bg-[#17181d]" aria-label={s.browser}>
                 <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/10 p-2.5">
                   <label className="flex min-w-[180px] flex-1 items-center gap-2 rounded-md border border-white/10 bg-black/30 px-2 py-1.5 text-zinc-400">
                     <Search size={14} />
@@ -616,7 +618,7 @@ export const DjMode: React.FC<{
                   </label>
                   <span className="text-xs text-zinc-400">{s.tracks(visibleSongs.length)}</span>
                 </div>
-                <div className="max-h-[390px] overflow-y-auto">
+                <div className="max-h-[390px] min-h-0 flex-1 overflow-y-auto lg:max-h-none">
                   {visibleSongs.length === 0 && <p className="p-6 text-center text-sm text-zinc-400">{s.noTracks}</p>}
                   {visibleSongs.map(song => {
                     const stems = stemsOf.get(song.id) ?? [];
