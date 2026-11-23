@@ -1,6 +1,6 @@
 {
  "product": "yue2-studio",
- "sequence": 12,
+ "sequence": 13,
  "published": "2026-11-23",
  "files": {
   "gemma-4-e4b-q4_0": {
@@ -2199,6 +2199,7 @@
     },
     "vram_gb": 8.0,
     "requires": [],
+    "advanced": true,
     "roles": {
      "dit": "acestep-v15-xl-turbo-MXFP4.gguf",
      "lm": "acestep-5Hz-lm-1.7B-Q8_0.gguf",
@@ -2237,6 +2238,7 @@
     },
     "vram_gb": 13.0,
     "requires": [],
+    "advanced": true,
     "roles": {
      "dit": "acestep-v15-xl-turbo-MXFP4.gguf",
      "lm": "acestep-5Hz-lm-4B-Q8_0.gguf",
@@ -2256,6 +2258,7 @@
     },
     "vram_gb": 23.5,
     "requires": [],
+    "advanced": true,
     "roles": {
      "dit": "acestep-v15-xl-turbo-BF16.gguf",
      "lm": "acestep-5Hz-lm-4B-BF16.gguf",
@@ -2359,6 +2362,7 @@
     "requires": [
      "cuda13"
     ],
+    "advanced": true,
     "roles": {
      "lm": "mm3-lm-NVFP4.gguf",
      "depth": "MiniMax-Music3-rvq_depth_decoder-Q8_0.gguf",
@@ -2381,6 +2385,7 @@
     "requires": [
      "cuda13"
     ],
+    "advanced": true,
     "roles": {
      "lm": "mm3-lm-NVFP4.gguf",
      "depth": "mm3-depth-NVFP4.gguf",
@@ -2401,6 +2406,7 @@
     },
     "vram_gb": 30.0,
     "requires": [],
+    "advanced": true,
     "roles": {
      "lm": "MiniMax-Music3-language_model-BF16.gguf",
      "depth": "MiniMax-Music3-rvq_depth_decoder-BF16.gguf",

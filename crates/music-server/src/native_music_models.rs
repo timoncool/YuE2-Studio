@@ -55,13 +55,26 @@ fn missing_assets(engine: &str, profile: &str) -> anyhow::Result<Vec<&'static As
     Ok(missing)
 }
 
+/// The main set the card holds with the most memory to spare for quality: the largest whose video memory fits, the
+/// smallest when none does.
+fn recommended(sets: &[crate::components::ModelSet], vram_gb: f64) -> Option<String> {
+    let main: Vec<_> = sets.iter().filter(|set| !set.advanced && set.vram_gb > 0.0).collect();
+    let fits = main.iter().filter(|set| set.vram_gb <= vram_gb).max_by(|a, b| a.vram_gb.total_cmp(&b.vram_gb));
+    fits.or_else(|| main.iter().min_by(|a, b| a.vram_gb.total_cmp(&b.vram_gb))).map(|set| set.id.clone())
+}
+
 /// Adds what the window needs to offer a download to each profile row of
 /// `/v1/music/native/<engine>/profiles`.
 pub(crate) async fn describe(engine: &str, profiles: &mut Value) {
     let Some(rows) = profiles.as_array_mut().filter(|_| native(engine)) else { return };
     let installing = lock(engine).is_some_and(|lock| lock.try_lock().is_err());
+    let sets = crate::components::sets(engine);
+    let recommended = recommended(&sets, crate::hardware::hardware().total_vram_gb);
     for row in rows {
         let Some(id) = row["id"].as_str().map(str::to_owned) else { continue };
+        let advanced = sets.iter().find(|set| set.id == id).is_some_and(|set| set.advanced);
+        row["advanced"] = Value::Bool(advanced);
+        row["recommended"] = Value::Bool(recommended.as_deref() == Some(id.as_str()));
         let assets = missing_assets(engine, &id);
         let download = match downloader() {
             Some(downloader) => downloader.active_for(&scope(engine, &id)).await,
@@ -125,6 +138,18 @@ pub(crate) async fn cancel(Path(engine): Path<String>, Json(request): Json<Insta
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn the_recommended_set_is_the_largest_main_one_the_card_holds() {
+        let ace = crate::components::sets(crate::ace::ENGINE_ID);
+        assert_eq!(super::recommended(&ace, 8.0).as_deref(), Some("recommended-light"));
+        assert_eq!(super::recommended(&ace, 12.0).as_deref(), Some("balanced"));
+        assert_eq!(super::recommended(&ace, 24.0).as_deref(), Some("quality-q8"));
+        assert_eq!(super::recommended(&ace, 2.0).as_deref(), Some("minimal"));
+        let minimax = crate::components::sets(crate::native_minimax::ENGINE_ID);
+        assert_eq!(super::recommended(&minimax, 16.0).as_deref(), Some("quality-q8"));
+        assert!(minimax.iter().filter(|set| !set.advanced).count() == 4);
+    }
+
     #[test]
     fn every_native_set_has_every_role_with_a_pinned_download() {
         for (engine, roles) in [

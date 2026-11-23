@@ -73,6 +73,10 @@ pub(crate) struct ModelSet {
     /// What the set needs besides memory, such as `cuda13`.
     #[serde(default)]
     pub requires: Vec<String>,
+    /// A variant for particular cards or for comparison, offered under "all variants" rather than among the main
+    /// choices.
+    #[serde(default)]
+    pub advanced: bool,
     /// File ids by the role the engine gives them (`dit`, `lm`, ...).
     pub roles: BTreeMap<String, String>,
 }
