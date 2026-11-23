@@ -119,7 +119,7 @@ export function SongbookDialog({ abc, title, lyrics, onClose }: {
               options={[{ value: 'guitar', label: text.guitar }, { value: 'ukulele', label: text.ukulele }]} /></div>
           {lyrics?.trim() && <div className="grid gap-1"><span className="font-semibold text-zinc-600 dark:text-zinc-300">{text.lyricLanguage}</span>
             <CatalogSegments<Language> label={text.lyricLanguage} value={lyricLanguage} onChange={setLyricLanguage}
-              options={[{ value: 'en', label: 'EN' }, { value: 'pt', label: 'PT' }, { value: 'ru', label: 'RU' }, { value: 'zh', label: '中文' }, { value: 'ja', label: '日本語' }, { value: 'ko', label: '한국어' }]} /></div>}
+              options={[{ value: 'en', label: 'EN' }, { value: 'pt', label: 'PT' }, { value: 'ru', label: 'RU' }, { value: 'zh', label: 'ZH' }, { value: 'ja', label: 'JA' }, { value: 'ko', label: 'KO' }]} /></div>}
           <button type="button" role="switch" aria-checked={numbered} onClick={() => setNumbered(value => !value)} className="flex min-h-9 items-center gap-2 text-sm">
             <span className={`relative h-5 w-9 shrink-0 rounded-full transition-colors ${numbered ? 'bg-pink-500' : 'bg-zinc-300 dark:bg-zinc-600'}`}>
               <span className={`absolute top-[2px] h-4 w-4 rounded-full bg-white shadow-xs transition-all ${numbered ? 'left-[18px]' : 'left-[2px]'}`} />

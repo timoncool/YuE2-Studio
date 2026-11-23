@@ -390,7 +390,7 @@ export const EngineSettings: React.FC = () => {
         </label>
       )}
 
-      <details className="rounded-xl border border-zinc-200 p-3 dark:border-white/10" open={Boolean(options.engine_bin)}>
+      <details className="rounded-xl border border-zinc-200 p-3 dark:border-white/10">
         <summary className="min-h-6 cursor-pointer text-sm font-medium text-zinc-800 dark:text-zinc-100">{t('engineBinLabel')}</summary>
         <input
           type="text"
@@ -484,7 +484,7 @@ export const EngineSettings: React.FC = () => {
         <summary className="min-h-6 cursor-pointer text-sm font-medium text-zinc-800 dark:text-zinc-100">{cardText.fineTuning}</summary>
         <p className="mt-1 text-xs leading-5 text-zinc-500 dark:text-zinc-400">{cardText.fineTuningHint}</p>
         <div className="mt-3 space-y-3">
-      <label className="block rounded-xl border border-zinc-200 p-3 dark:border-white/10">
+      <label className="block border-t border-zinc-100 pt-3 first:border-t-0 first:pt-0 dark:border-white/5">
         <span className="block text-sm font-medium text-zinc-800 dark:text-zinc-100">{tt('flashAttentionLabel')}</span>
         <select
           value={options.flash_attention}
@@ -498,7 +498,7 @@ export const EngineSettings: React.FC = () => {
         <span className="mt-2 block text-xs leading-5 text-zinc-500 dark:text-zinc-400">{tt('flashAttentionHint')}</span>
       </label>
 
-      <label className="block rounded-xl border border-zinc-200 p-3 dark:border-white/10">
+      <label className="block border-t border-zinc-100 pt-3 first:border-t-0 first:pt-0 dark:border-white/5">
         <span className="block text-sm font-medium text-zinc-800 dark:text-zinc-100">{tt('kvCacheLabel')}</span>
         <select
           value={options.kv_cache}
@@ -518,7 +518,7 @@ export const EngineSettings: React.FC = () => {
         {kvCacheNow && <span className="mt-1 block text-xs leading-5 text-zinc-500 dark:text-zinc-400">{kvCacheNowLine(tt, kvCacheNow)}</span>}
       </label>
 
-      <div className="rounded-xl border border-zinc-200 p-3 dark:border-white/10">
+      <div className="block border-t border-zinc-100 pt-3 first:border-t-0 first:pt-0 dark:border-white/5">
         <div className="space-y-3">
           <div className="grid gap-3 sm:grid-cols-2">
             {numberField('vae_core', t('vaeCoreLabel'), '512', t('vaeCoreHint'), 64, 4096, 64)}
@@ -533,7 +533,7 @@ export const EngineSettings: React.FC = () => {
         </div>
       </div>
 
-      <div className="rounded-xl border border-zinc-200 p-3 dark:border-white/10">
+      <div className="block border-t border-zinc-100 pt-3 first:border-t-0 first:pt-0 dark:border-white/5">
         <span className="block text-sm font-medium text-zinc-800 dark:text-zinc-100">{t('extraArgsLabel')}</span>
         <div className="mt-2 space-y-2">
           <textarea

@@ -3,6 +3,7 @@ import { AudioWaveform } from './AudioWaveform';
 import { AudioCompare } from './AudioCompare';
 import { AlertTriangle, Check, FolderOpen, Loader2, Plus, RefreshCw, Search, SlidersHorizontal, Trash2, Wand2, X } from 'lucide-react';
 import { Song } from '../types';
+import { processingUnitStrings } from '../i18n/processing';
 import { useI18n } from '../context/I18nContext';
 import { AUDIO_ACCEPT } from '../services/audioFiles';
 import { apiUrl } from '../services/apiBase';
@@ -87,7 +88,7 @@ const Slider: React.FC<{ label: string; value: number; min: number; max: number;
 );
 
 export const ProcessingModal: React.FC<ProcessingModalProps> = ({ song, onClose, onKept }) => {
-  const { t } = useI18n();
+  const { t, language } = useI18n();
   const tt = t as unknown as (key: string) => string;
 
   const [denoiseOn, setDenoiseOn] = useState(false);
@@ -287,7 +288,7 @@ export const ProcessingModal: React.FC<ProcessingModalProps> = ({ song, onClose,
     if (naturalizeOn) parts.push(`${t('processNaturalize')} ${naturalizeAmount.toFixed(2)}`);
     if (vstOn && vstReady) parts.push(`VST (${vstChain.filter(slot => slot.enabled).map(slot => slot.name).join(', ')})`);
     if (masterOn) parts.push(referenceTitle ? `${t('processStage_master')} · ${referenceTitle}` : t('processStage_master'));
-    if (normalizeOn) parts.push(`${t('processStage_normalize')} (${t('peakClipLabel').toLowerCase()} ${peakClip})`);
+    if (normalizeOn) parts.push(`${t('processStage_normalize')} (${t('peakClipLabel').toLowerCase()} ${peakClip} ${processingUnitStrings[language].perMillion})`);
     // a processed version processed again carries its whole chain
     const earlier = activeVersionLabel(song);
     return [earlier, parts.join(' + ')].filter(Boolean).join(' → ');

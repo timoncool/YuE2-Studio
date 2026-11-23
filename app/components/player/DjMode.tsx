@@ -584,7 +584,8 @@ export const DjMode: React.FC<{
               <DjDeckPanel mixer={mixer} index={1} library={libraryPlayable} onSelect={setSelected} onLoad={load} onTap={tap}
                 separation={separation} installingEngine={installingEngine} actionBusy={separationBusy} onInstall={install} onSeparate={separate} />
             </div>
-            <div className="flex flex-wrap items-center justify-center gap-3 rounded-lg border border-white/10 bg-[#202126] p-3">
+            </div>
+            <div className="flex shrink-0 flex-wrap items-center justify-center gap-3 rounded-lg border border-white/10 bg-[#202126] p-3">
               <span className="font-black text-blue-400">A</span>
               <button type="button" className={button} onClick={() => mixer.setCrossfade(0)}>{s.cutA}</button>
               <input className="h-2 min-w-[170px] max-w-[650px] flex-1 cursor-pointer accent-fuchsia-500" type="range" min="0" max="1" step="0.001"
@@ -593,7 +594,6 @@ export const DjMode: React.FC<{
               <button type="button" className={button} onClick={() => mixer.setCrossfade(1)}>{s.cutB}</button>
               <span className="font-black text-rose-400">B</span>
               <span className="text-xs text-zinc-400">{Math.round((1 - mixer.getCrossfade()) * 100)}% / {Math.round(mixer.getCrossfade() * 100)}%</span>
-            </div>
             </div>
             <div className="grid min-h-[300px] grid-cols-1 gap-3 lg:h-[42%] lg:min-h-[260px] lg:shrink-0 lg:grid-cols-[185px_minmax(360px,1fr)_245px] [&>*]:lg:min-h-0">
               <nav className="min-h-0 rounded-xl border border-white/10 bg-[#17181d] p-2" aria-label={s.folders}>

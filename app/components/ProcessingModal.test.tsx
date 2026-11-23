@@ -4,7 +4,7 @@ import { expect, it, vi } from 'vitest';
 import type { Song } from '../types';
 import { ProcessingModal } from './ProcessingModal';
 
-vi.mock('../context/I18nContext', () => ({ useI18n: () => ({ t: (key: string) => key }) }));
+vi.mock('../context/I18nContext', () => ({ useI18n: () => ({ t: (key: string) => key, language: 'en' }) }));
 vi.mock('./AudioWaveform', () => ({ AudioWaveform: () => null }));
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;

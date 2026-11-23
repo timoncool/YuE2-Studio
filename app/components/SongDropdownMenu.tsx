@@ -294,6 +294,14 @@ export const SongDropdownMenu: React.FC<SongDropdownMenuProps> = ({
                 label={t('exportMenu')}
                 onClick={() => handleAction(() => openExport(song))}
             />
+            {actions.exportVideo && (
+                <MenuItem
+                    icon={<Clapperboard size={14} />}
+                    label={t('videoExport')}
+                    onClick={() => handleAction(() => actions.exportVideo?.(song))}
+                    disabled={!song.audioUrl}
+                />
+            )}
 
             <MenuDivider />
             <MenuHeading>{menuText.sound}</MenuHeading>
@@ -358,6 +366,17 @@ export const SongDropdownMenu: React.FC<SongDropdownMenuProps> = ({
                     />
                 </>
             )}
+            {karaokeReady && song.audioUrl && hasSungLines(song.lyrics) && (
+                <MenuItem
+                    icon={karaokeBusy ? <Loader2 size={14} className="animate-spin" /> : <Mic2 size={14} />}
+                    label={karaokeBusy ? t('karaokeMaking') : song.lrcContent ? t('karaokeReady') : t('karaokeMake')}
+                    onClick={() => void makeKaraoke()}
+                    disabled={karaokeBusy}
+                />
+            )}
+            {karaokeFailed && (
+                <p className="px-3 py-1.5 text-[11px] leading-4 text-rose-600 dark:text-rose-300">{karaokeFailed}</p>
+            )}
 
             <MenuDivider />
             <MenuHeading>{menuText.again}</MenuHeading>
@@ -380,25 +399,6 @@ export const SongDropdownMenu: React.FC<SongDropdownMenuProps> = ({
                     icon={<Repeat size={14} />}
                     label={t('replayTitle')}
                     onClick={() => handleAction(() => actions.replay?.(song))}
-                />
-            )}
-            {karaokeReady && song.audioUrl && hasSungLines(song.lyrics) && (
-                <MenuItem
-                    icon={karaokeBusy ? <Loader2 size={14} className="animate-spin" /> : <Mic2 size={14} />}
-                    label={karaokeBusy ? t('karaokeMaking') : song.lrcContent ? t('karaokeReady') : t('karaokeMake')}
-                    onClick={() => void makeKaraoke()}
-                    disabled={karaokeBusy}
-                />
-            )}
-            {karaokeFailed && (
-                <p className="px-3 py-1.5 text-[11px] leading-4 text-rose-600 dark:text-rose-300">{karaokeFailed}</p>
-            )}
-            {actions.exportVideo && (
-                <MenuItem
-                    icon={<Clapperboard size={14} />}
-                    label={t('videoExport')}
-                    onClick={() => handleAction(() => actions.exportVideo?.(song))}
-                    disabled={!song.audioUrl}
                 />
             )}
 

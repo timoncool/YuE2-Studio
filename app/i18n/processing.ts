@@ -316,3 +316,13 @@ const ko: ProcessingStrings = {
 };
 
 export const processingStrings = { en, ru, zh, ja, ko };
+
+/** The unit of the peak clip: how many samples in a million may stay above full scale. */
+export const processingUnitStrings: Record<'en' | 'ru' | 'zh' | 'ja' | 'ko' | 'pt', { perMillion: string }> = {
+  en: { perMillion: 'per million' },
+  ru: { perMillion: 'на миллион' },
+  zh: { perMillion: '每百万' },
+  ja: { perMillion: '/100万' },
+  ko: { perMillion: '/백만' },
+  pt: { perMillion: 'por milhão' },
+};
