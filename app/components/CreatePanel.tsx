@@ -51,6 +51,8 @@ import { MagentaFields, magentaModel, restoreMagentaOptions } from './MagentaFie
 import { MiDashengFields, miDashengModel, miDashengPromptReady, restoreMiDashengPrompt } from './MiDashengFields';
 import { NativeMusicRuntimeInstall } from './NativeMusicRuntimeInstall';
 import { NativeModelSetPicker } from './NativeModelSetPicker';
+import { AceDitSwitcher } from './AceDitSwitcher';
+import { scriptLanguage } from '../services/lyricsLanguage';
 import { HeartMuLaControls, AudioCppModelInstall, emptyHeartMuLaDraft, heartMuLaDraft, heartMuLaOptions } from './HeartMuLaControls';
 import { HotStepSa3Controls, hotStepSa3Profile, hotStepHeartmulaProfile, type HotStepSa3Draft } from './HotStepSa3Controls';
 import { StableAudioControls, emptyStableAudioDraft, stableAudioDraft, stableAudioOptions, stableAudioPromptRequired } from './StableAudioControls';
@@ -524,6 +526,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
   const [miniMaxAdapters, setMiniMaxAdapters] = useState<AdapterUse[]>([]);
   const aceEngine = nativeEngine === 'acestep-cpp';
   const [aceStudio, setAceStudio] = useState(keptAceStudio);
+  const aceDit = typeof aceStudio.synth_model === 'string' ? aceStudio.synth_model : '';
   useEffect(() => keepAceStudio(aceStudio), [aceStudio]);
   const miniMaxEngine = nativeEngine === 'minimaxmusic-cpp';
   const aceOptions = aceEngine ? aceTaskOptions(aceTask) : undefined;
@@ -845,7 +848,8 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
     setAceUndo({ mode, style, lyrics, draft: aceStudio, duration: native.settings.duration_seconds });
     setAcePlanning(mode);
     setError(null);
-    const language = typeof aceStudio.vocal_language === 'string' && aceStudio.vocal_language ? aceStudio.vocal_language : 'en';
+    const chosen = typeof aceStudio.vocal_language === 'string' ? aceStudio.vocal_language : '';
+    const language = chosen || scriptLanguage(mode === 'inspire' ? idea : lyrics) || 'unknown';
     const number = (value: unknown) => Number(typeof value === 'string' ? value : '') || 0;
     const request = mode === 'inspire'
       ? { caption: idea.trim(), lyrics: '', vocal_language: language }
@@ -1903,7 +1907,8 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
         ...settings,
         ...(miniMaxAdapterOptions.length ? { minimax: { ...settings.minimax, adapters: miniMaxAdapterOptions } } : {}),
         ...(aceEngine && aceOptions ? {
-          ace: { ...aceStudioFields(aceStudio, ditKind(undefined), aceTask.task), ...settings.ace, ...aceOptions, ...(aceAdapterOptions.length ? { adapters: aceAdapterOptions } : {}) },
+          ace: { ...aceStudioFields(aceStudio, ditKind(aceDit || native.profile?.roles?.dit), aceTask.task),
+            ...(!aceStudio.vocal_language && scriptLanguage(lyrics) ? { vocal_language: scriptLanguage(lyrics) } : {}), ...settings.ace, ...aceOptions, ...(aceAdapterOptions.length ? { adapters: aceAdapterOptions } : {}) },
         } : {}),
       });
       return;
@@ -2167,6 +2172,8 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
                       <NativeModelSetPicker key={musicEngine} engine={musicEngine} name={profileMusicEngines[musicEngine]}
                         profiles={native.profiles} selected={native.profile} engineInstalled={native.installed}
                         onSelect={id => { native.select(id); pair.select(); }} onChanged={refreshNativeChoice} onReady={pair.select} />}
+                    {aceEngine && native.profile?.ready && <AceDitSwitcher value={aceDit}
+                      setDit={native.profile.roles?.dit} onChange={file => setAceStudio(current => ({ ...current, synth_model: file }))} />}
                     {!native.loading && !native.error && native.profiles.length === 0 && native.installed && <p className="text-xs">{nativeStrings.empty}</p>}
                     {native.originalModels && (
                       <div className="space-y-1 text-xs" role="status">
@@ -2283,7 +2290,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
               {hotstep && <HotStepCoverFields draft={mulaCoverDraft} onChange={setMulaCoverDraft} ready={native.ready}
                 refresh={native.refresh} controlClassName={CONTROL} />}
               {aceEngine && <AceTaskControls value={aceTask} onChange={setAceTask} control={CONTROL} profileReady={native.ready} />}
-              {aceEngine && <AceStudioFields value={aceStudio} onChange={setAceStudio} kind={ditKind(undefined)} task={aceTask.task}
+              {aceEngine && <AceStudioFields value={aceStudio} onChange={setAceStudio} kind={ditKind(aceDit || native.profile?.roles?.dit)} task={aceTask.task}
                 planning={acePlanning} ready={native.ready} canFormat={Boolean(style.trim() || lyrics.trim())} onPlan={(mode, idea) => void planAce(mode, idea)}
                 undo={acePlanning ? null : aceUndo?.mode ?? null}
                 onUndo={() => { if (!aceUndo) return; setStyle(aceUndo.style); setLyrics(aceUndo.lyrics); setAceStudio(aceUndo.draft); native.set('duration_seconds', aceUndo.duration); setAceUndo(null); }}

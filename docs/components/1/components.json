@@ -1,8 +1,629 @@
 {
  "product": "yue2-studio",
- "sequence": 13,
+ "sequence": 14,
  "published": "2026-11-23",
  "files": {
+  "acestep-v15-base-Q4_K_M.gguf": {
+   "label": "acestep-v15-base-Q4_K_M.gguf",
+   "kind": "model",
+   "url": "https://huggingface.co/Serveurperso/ACE-Step-1.5-GGUF/resolve/666ac70204440867d8c01ba4b119cc79c95b370a/acestep-v15-base-Q4_K_M.gguf",
+   "bytes": 1445710208,
+   "sha256": "942ec6a7bc11a40809af5f337063f2af2acc63e4fcd4a92b0cb42dc2bc7c41e8",
+   "path": "models/acestep-cpp/acestep-v15-base-Q4_K_M.gguf",
+   "part": "dit"
+  },
+  "acestep-v15-base-Q5_K_M.gguf": {
+   "label": "acestep-v15-base-Q5_K_M.gguf",
+   "kind": "model",
+   "url": "https://huggingface.co/Serveurperso/ACE-Step-1.5-GGUF/resolve/666ac70204440867d8c01ba4b119cc79c95b370a/acestep-v15-base-Q5_K_M.gguf",
+   "bytes": 1700140160,
+   "sha256": "b7a5c6d1b0729ab8630c96fabc14a47640a708e9bddff60666d8d07279aa57a7",
+   "path": "models/acestep-cpp/acestep-v15-base-Q5_K_M.gguf",
+   "part": "dit"
+  },
+  "acestep-v15-base-Q6_K.gguf": {
+   "label": "acestep-v15-base-Q6_K.gguf",
+   "kind": "model",
+   "url": "https://huggingface.co/Serveurperso/ACE-Step-1.5-GGUF/resolve/666ac70204440867d8c01ba4b119cc79c95b370a/acestep-v15-base-Q6_K.gguf",
+   "bytes": 1970472000,
+   "sha256": "08cf80fcc73f518c9eddfdc1e0ddcb786dc04f7d260479482794f371925b0207",
+   "path": "models/acestep-cpp/acestep-v15-base-Q6_K.gguf",
+   "part": "dit"
+  },
+  "acestep-v15-base-Q8_0.gguf": {
+   "label": "acestep-v15-base-Q8_0.gguf",
+   "kind": "model",
+   "url": "https://huggingface.co/Serveurperso/ACE-Step-1.5-GGUF/resolve/666ac70204440867d8c01ba4b119cc79c95b370a/acestep-v15-base-Q8_0.gguf",
+   "bytes": 2549527936,
+   "sha256": "10329f321010cedc3571c24b6371d002ce49238f48be47def4a1c76bf27ee150",
+   "path": "models/acestep-cpp/acestep-v15-base-Q8_0.gguf",
+   "part": "dit"
+  },
+  "acestep-v15-sft-Q4_K_M.gguf": {
+   "label": "acestep-v15-sft-Q4_K_M.gguf",
+   "kind": "model",
+   "url": "https://huggingface.co/Serveurperso/ACE-Step-1.5-GGUF/resolve/666ac70204440867d8c01ba4b119cc79c95b370a/acestep-v15-sft-Q4_K_M.gguf",
+   "bytes": 1445710208,
+   "sha256": "2531bb61b9e5017fbc8875446e02f54b052eeec41ba3200dd72c6061b59b33d0",
+   "path": "models/acestep-cpp/acestep-v15-sft-Q4_K_M.gguf",
+   "part": "dit"
+  },
+  "acestep-v15-sft-Q5_K_M.gguf": {
+   "label": "acestep-v15-sft-Q5_K_M.gguf",
+   "kind": "model",
+   "url": "https://huggingface.co/Serveurperso/ACE-Step-1.5-GGUF/resolve/666ac70204440867d8c01ba4b119cc79c95b370a/acestep-v15-sft-Q5_K_M.gguf",
+   "bytes": 1700140160,
+   "sha256": "ad8fd75d58c53b3e6a6b23c2660df8f65d96603118a2a5e3c67a744c470efb82",
+   "path": "models/acestep-cpp/acestep-v15-sft-Q5_K_M.gguf",
+   "part": "dit"
+  },
+  "acestep-v15-sft-Q6_K.gguf": {
+   "label": "acestep-v15-sft-Q6_K.gguf",
+   "kind": "model",
+   "url": "https://huggingface.co/Serveurperso/ACE-Step-1.5-GGUF/resolve/666ac70204440867d8c01ba4b119cc79c95b370a/acestep-v15-sft-Q6_K.gguf",
+   "bytes": 1970472000,
+   "sha256": "8ebf354d21058283fc65f377ceb3488901159cfc96866dd23f2c49347535061b",
+   "path": "models/acestep-cpp/acestep-v15-sft-Q6_K.gguf",
+   "part": "dit"
+  },
+  "acestep-v15-sft-Q8_0.gguf": {
+   "label": "acestep-v15-sft-Q8_0.gguf",
+   "kind": "model",
+   "url": "https://huggingface.co/Serveurperso/ACE-Step-1.5-GGUF/resolve/666ac70204440867d8c01ba4b119cc79c95b370a/acestep-v15-sft-Q8_0.gguf",
+   "bytes": 2549527936,
+   "sha256": "17f1984e48aaab27b3eb8ccbf0b754a6656e677884c60ea7003845cfc0059b70",
+   "path": "models/acestep-cpp/acestep-v15-sft-Q8_0.gguf",
+   "part": "dit"
+  },
+  "acestep-v15-sftturbo50-Q8_0.gguf": {
+   "label": "acestep-v15-sftturbo50-Q8_0.gguf",
+   "kind": "model",
+   "url": "https://huggingface.co/Serveurperso/ACE-Step-1.5-GGUF/resolve/666ac70204440867d8c01ba4b119cc79c95b370a/acestep-v15-sftturbo50-Q8_0.gguf",
+   "bytes": 2549527936,
+   "sha256": "3fab14cf0d8efa249edf49b6fd0392bac54f1a80514567a5ae4164853339ecb3",
+   "path": "models/acestep-cpp/acestep-v15-sftturbo50-Q8_0.gguf",
+   "part": "dit"
+  },
+  "acestep-v15-turbo-Q5_K_M.gguf": {
+   "label": "acestep-v15-turbo-Q5_K_M.gguf",
+   "kind": "model",
+   "url": "https://huggingface.co/Serveurperso/ACE-Step-1.5-GGUF/resolve/666ac70204440867d8c01ba4b119cc79c95b370a/acestep-v15-turbo-Q5_K_M.gguf",
+   "bytes": 1700140224,
+   "sha256": "a241c9a721e3704cb04b17ce6a40c9aa714d3ee5cf49c2219972020eb761f5a4",
+   "path": "models/acestep-cpp/acestep-v15-turbo-Q5_K_M.gguf",
+   "part": "dit"
+  },
+  "acestep-v15-turbo-Q6_K.gguf": {
+   "label": "acestep-v15-turbo-Q6_K.gguf",
+   "kind": "model",
+   "url": "https://huggingface.co/Serveurperso/ACE-Step-1.5-GGUF/resolve/666ac70204440867d8c01ba4b119cc79c95b370a/acestep-v15-turbo-Q6_K.gguf",
+   "bytes": 1970472064,
+   "sha256": "693fc82977d9af2b5569238e363c11ae9b055d464f036d51127fba4eab016693",
+   "path": "models/acestep-cpp/acestep-v15-turbo-Q6_K.gguf",
+   "part": "dit"
+  },
+  "acestep-v15-turbo-Q8_0.gguf": {
+   "label": "acestep-v15-turbo-Q8_0.gguf",
+   "kind": "model",
+   "url": "https://huggingface.co/Serveurperso/ACE-Step-1.5-GGUF/resolve/666ac70204440867d8c01ba4b119cc79c95b370a/acestep-v15-turbo-Q8_0.gguf",
+   "bytes": 2549528000,
+   "sha256": "288f708a61cfc241013a98a62f98ba331f83fe34d0d3559acdd9b0f6a2f7cd6b",
+   "path": "models/acestep-cpp/acestep-v15-turbo-Q8_0.gguf",
+   "part": "dit"
+  },
+  "acestep-v15-turbo-continuous-Q4_K_M.gguf": {
+   "label": "acestep-v15-turbo-continuous-Q4_K_M.gguf",
+   "kind": "model",
+   "url": "https://huggingface.co/Serveurperso/ACE-Step-1.5-GGUF/resolve/666ac70204440867d8c01ba4b119cc79c95b370a/acestep-v15-turbo-continuous-Q4_K_M.gguf",
+   "bytes": 1445710240,
+   "sha256": "695a304965672025cb55574ff3c78f4da2ad5239fc7ff678a275b93aecac26b5",
+   "path": "models/acestep-cpp/acestep-v15-turbo-continuous-Q4_K_M.gguf",
+   "part": "dit"
+  },
+  "acestep-v15-turbo-continuous-Q5_K_M.gguf": {
+   "label": "acestep-v15-turbo-continuous-Q5_K_M.gguf",
+   "kind": "model",
+   "url": "https://huggingface.co/Serveurperso/ACE-Step-1.5-GGUF/resolve/666ac70204440867d8c01ba4b119cc79c95b370a/acestep-v15-turbo-continuous-Q5_K_M.gguf",
+   "bytes": 1700140192,
+   "sha256": "23d66597916bc9da2a214481dadb2bb301e12b7e50bac59372486e2ff7fc4f6b",
+   "path": "models/acestep-cpp/acestep-v15-turbo-continuous-Q5_K_M.gguf",
+   "part": "dit"
+  },
+  "acestep-v15-turbo-continuous-Q6_K.gguf": {
+   "label": "acestep-v15-turbo-continuous-Q6_K.gguf",
+   "kind": "model",
+   "url": "https://huggingface.co/Serveurperso/ACE-Step-1.5-GGUF/resolve/666ac70204440867d8c01ba4b119cc79c95b370a/acestep-v15-turbo-continuous-Q6_K.gguf",
+   "bytes": 1970472032,
+   "sha256": "84fcd2612530ad1d8ec57a46e786db378f6af78e1071c3ee70d4396fc8909282",
+   "path": "models/acestep-cpp/acestep-v15-turbo-continuous-Q6_K.gguf",
+   "part": "dit"
+  },
+  "acestep-v15-turbo-continuous-Q8_0.gguf": {
+   "label": "acestep-v15-turbo-continuous-Q8_0.gguf",
+   "kind": "model",
+   "url": "https://huggingface.co/Serveurperso/ACE-Step-1.5-GGUF/resolve/666ac70204440867d8c01ba4b119cc79c95b370a/acestep-v15-turbo-continuous-Q8_0.gguf",
+   "bytes": 2549527968,
+   "sha256": "ed50670ad55ab53bd1c753529e3b6a8e58512e1c5f4df15426948c73fd407abf",
+   "path": "models/acestep-cpp/acestep-v15-turbo-continuous-Q8_0.gguf",
+   "part": "dit"
+  },
+  "acestep-v15-turbo-shift1-Q4_K_M.gguf": {
+   "label": "acestep-v15-turbo-shift1-Q4_K_M.gguf",
+   "kind": "model",
+   "url": "https://huggingface.co/Serveurperso/ACE-Step-1.5-GGUF/resolve/666ac70204440867d8c01ba4b119cc79c95b370a/acestep-v15-turbo-shift1-Q4_K_M.gguf",
+   "bytes": 1445710240,
+   "sha256": "a65d44d12fb88ce99cf3e93197a02592bb3065121417a3d3efced254b63ca6bd",
+   "path": "models/acestep-cpp/acestep-v15-turbo-shift1-Q4_K_M.gguf",
+   "part": "dit"
+  },
+  "acestep-v15-turbo-shift1-Q5_K_M.gguf": {
+   "label": "acestep-v15-turbo-shift1-Q5_K_M.gguf",
+   "kind": "model",
+   "url": "https://huggingface.co/Serveurperso/ACE-Step-1.5-GGUF/resolve/666ac70204440867d8c01ba4b119cc79c95b370a/acestep-v15-turbo-shift1-Q5_K_M.gguf",
+   "bytes": 1700140192,
+   "sha256": "b68ae397c326b92316c967e0cb9deea904c0d10e16321052376aa9cef988f033",
+   "path": "models/acestep-cpp/acestep-v15-turbo-shift1-Q5_K_M.gguf",
+   "part": "dit"
+  },
+  "acestep-v15-turbo-shift1-Q6_K.gguf": {
+   "label": "acestep-v15-turbo-shift1-Q6_K.gguf",
+   "kind": "model",
+   "url": "https://huggingface.co/Serveurperso/ACE-Step-1.5-GGUF/resolve/666ac70204440867d8c01ba4b119cc79c95b370a/acestep-v15-turbo-shift1-Q6_K.gguf",
+   "bytes": 1970472032,
+   "sha256": "4c8bb2652ea5bbd28b716059757e9789627d16424f73c0a3374e872e7c12ee5d",
+   "path": "models/acestep-cpp/acestep-v15-turbo-shift1-Q6_K.gguf",
+   "part": "dit"
+  },
+  "acestep-v15-turbo-shift1-Q8_0.gguf": {
+   "label": "acestep-v15-turbo-shift1-Q8_0.gguf",
+   "kind": "model",
+   "url": "https://huggingface.co/Serveurperso/ACE-Step-1.5-GGUF/resolve/666ac70204440867d8c01ba4b119cc79c95b370a/acestep-v15-turbo-shift1-Q8_0.gguf",
+   "bytes": 2549527968,
+   "sha256": "3cc621a46b0d4906c0bce09c7b8d563bdc1aa39a4b4856271045bae12287027c",
+   "path": "models/acestep-cpp/acestep-v15-turbo-shift1-Q8_0.gguf",
+   "part": "dit"
+  },
+  "acestep-v15-turbo-shift3-Q4_K_M.gguf": {
+   "label": "acestep-v15-turbo-shift3-Q4_K_M.gguf",
+   "kind": "model",
+   "url": "https://huggingface.co/Serveurperso/ACE-Step-1.5-GGUF/resolve/666ac70204440867d8c01ba4b119cc79c95b370a/acestep-v15-turbo-shift3-Q4_K_M.gguf",
+   "bytes": 1445710240,
+   "sha256": "0d1facb7069f1ad2236408ca8018a21d38424d2526ef488dc3775261c19a9b03",
+   "path": "models/acestep-cpp/acestep-v15-turbo-shift3-Q4_K_M.gguf",
+   "part": "dit"
+  },
+  "acestep-v15-turbo-shift3-Q5_K_M.gguf": {
+   "label": "acestep-v15-turbo-shift3-Q5_K_M.gguf",
+   "kind": "model",
+   "url": "https://huggingface.co/Serveurperso/ACE-Step-1.5-GGUF/resolve/666ac70204440867d8c01ba4b119cc79c95b370a/acestep-v15-turbo-shift3-Q5_K_M.gguf",
+   "bytes": 1700140192,
+   "sha256": "33a15a34f90fbdf1d161d3d1a760cd064cd4a454b2103f108123c0e6a3abd404",
+   "path": "models/acestep-cpp/acestep-v15-turbo-shift3-Q5_K_M.gguf",
+   "part": "dit"
+  },
+  "acestep-v15-turbo-shift3-Q6_K.gguf": {
+   "label": "acestep-v15-turbo-shift3-Q6_K.gguf",
+   "kind": "model",
+   "url": "https://huggingface.co/Serveurperso/ACE-Step-1.5-GGUF/resolve/666ac70204440867d8c01ba4b119cc79c95b370a/acestep-v15-turbo-shift3-Q6_K.gguf",
+   "bytes": 1970472032,
+   "sha256": "ef550c4441b1a39ff89e79f6cf5f88676b4a5766f6b684b618763f1de7a1e0a9",
+   "path": "models/acestep-cpp/acestep-v15-turbo-shift3-Q6_K.gguf",
+   "part": "dit"
+  },
+  "acestep-v15-turbo-shift3-Q8_0.gguf": {
+   "label": "acestep-v15-turbo-shift3-Q8_0.gguf",
+   "kind": "model",
+   "url": "https://huggingface.co/Serveurperso/ACE-Step-1.5-GGUF/resolve/666ac70204440867d8c01ba4b119cc79c95b370a/acestep-v15-turbo-shift3-Q8_0.gguf",
+   "bytes": 2549527968,
+   "sha256": "21cc9ec83378c71a28aef4a5c1bacab3fe5025e9de8f76487656b6f9de330d21",
+   "path": "models/acestep-cpp/acestep-v15-turbo-shift3-Q8_0.gguf",
+   "part": "dit"
+  },
+  "acestep-v15-xl-base-Q4_K_M.gguf": {
+   "label": "acestep-v15-xl-base-Q4_K_M.gguf",
+   "kind": "model",
+   "url": "https://huggingface.co/Serveurperso/ACE-Step-1.5-GGUF/resolve/666ac70204440867d8c01ba4b119cc79c95b370a/acestep-v15-xl-base-Q4_K_M.gguf",
+   "bytes": 2989922656,
+   "sha256": "13b08ac84e0cdca8ac770d6bc12842046113c9479ddcedd2672ac87ac458ff78",
+   "path": "models/acestep-cpp/acestep-v15-xl-base-Q4_K_M.gguf",
+   "part": "dit"
+  },
+  "acestep-v15-xl-base-Q5_K_M.gguf": {
+   "label": "acestep-v15-xl-base-Q5_K_M.gguf",
+   "kind": "model",
+   "url": "https://huggingface.co/Serveurperso/ACE-Step-1.5-GGUF/resolve/666ac70204440867d8c01ba4b119cc79c95b370a/acestep-v15-xl-base-Q5_K_M.gguf",
+   "bytes": 3527566432,
+   "sha256": "c8d639af9f37dca6b02255ef736e6ebbac9318287c9d043db4a30dddc3a2fc3c",
+   "path": "models/acestep-cpp/acestep-v15-xl-base-Q5_K_M.gguf",
+   "part": "dit"
+  },
+  "acestep-v15-xl-base-Q6_K.gguf": {
+   "label": "acestep-v15-xl-base-Q6_K.gguf",
+   "kind": "model",
+   "url": "https://huggingface.co/Serveurperso/ACE-Step-1.5-GGUF/resolve/666ac70204440867d8c01ba4b119cc79c95b370a/acestep-v15-xl-base-Q6_K.gguf",
+   "bytes": 4098812960,
+   "sha256": "44f14805faffa9ee3a28ba02a69915dcc0f0d44218c91292d1e2c0896ac4ee82",
+   "path": "models/acestep-cpp/acestep-v15-xl-base-Q6_K.gguf",
+   "part": "dit"
+  },
+  "acestep-v15-xl-base-Q8_0.gguf": {
+   "label": "acestep-v15-xl-base-Q8_0.gguf",
+   "kind": "model",
+   "url": "https://huggingface.co/Serveurperso/ACE-Step-1.5-GGUF/resolve/666ac70204440867d8c01ba4b119cc79c95b370a/acestep-v15-xl-base-Q8_0.gguf",
+   "bytes": 5305828704,
+   "sha256": "45d05b88ccbfa0ea27208ea618d7f0749b2be040b457cfa661d37646ea39f207",
+   "path": "models/acestep-cpp/acestep-v15-xl-base-Q8_0.gguf",
+   "part": "dit"
+  },
+  "acestep-v15-xl-sft-Q4_K_M.gguf": {
+   "label": "acestep-v15-xl-sft-Q4_K_M.gguf",
+   "kind": "model",
+   "url": "https://huggingface.co/Serveurperso/ACE-Step-1.5-GGUF/resolve/666ac70204440867d8c01ba4b119cc79c95b370a/acestep-v15-xl-sft-Q4_K_M.gguf",
+   "bytes": 2989922656,
+   "sha256": "fa144d3ea8a892a11a43753070e40bb2105c5bfddb57c99d542fda22297bb1b5",
+   "path": "models/acestep-cpp/acestep-v15-xl-sft-Q4_K_M.gguf",
+   "part": "dit"
+  },
+  "acestep-v15-xl-sft-Q5_K_M.gguf": {
+   "label": "acestep-v15-xl-sft-Q5_K_M.gguf",
+   "kind": "model",
+   "url": "https://huggingface.co/Serveurperso/ACE-Step-1.5-GGUF/resolve/666ac70204440867d8c01ba4b119cc79c95b370a/acestep-v15-xl-sft-Q5_K_M.gguf",
+   "bytes": 3527566432,
+   "sha256": "e7c5fdfa5075d666def2585b76f6537bba478ceedc54eec4d041538ce2fe3842",
+   "path": "models/acestep-cpp/acestep-v15-xl-sft-Q5_K_M.gguf",
+   "part": "dit"
+  },
+  "acestep-v15-xl-sft-Q6_K.gguf": {
+   "label": "acestep-v15-xl-sft-Q6_K.gguf",
+   "kind": "model",
+   "url": "https://huggingface.co/Serveurperso/ACE-Step-1.5-GGUF/resolve/666ac70204440867d8c01ba4b119cc79c95b370a/acestep-v15-xl-sft-Q6_K.gguf",
+   "bytes": 4098812960,
+   "sha256": "b7af16f54b3181c5f0e4558410245cfa4d73dd2f0635cd7d14a76668fc49660c",
+   "path": "models/acestep-cpp/acestep-v15-xl-sft-Q6_K.gguf",
+   "part": "dit"
+  },
+  "acestep-v15-xl-sft-Q8_0.gguf": {
+   "label": "acestep-v15-xl-sft-Q8_0.gguf",
+   "kind": "model",
+   "url": "https://huggingface.co/Serveurperso/ACE-Step-1.5-GGUF/resolve/666ac70204440867d8c01ba4b119cc79c95b370a/acestep-v15-xl-sft-Q8_0.gguf",
+   "bytes": 5305828704,
+   "sha256": "d7b06fadab214375ef5ebcfa44bf4a10489ea364b119f5b9ecbcd870408bdab9",
+   "path": "models/acestep-cpp/acestep-v15-xl-sft-Q8_0.gguf",
+   "part": "dit"
+  },
+  "acestep-v15-xl-sftturbo50-Q4_K_M.gguf": {
+   "label": "acestep-v15-xl-sftturbo50-Q4_K_M.gguf",
+   "kind": "model",
+   "url": "https://huggingface.co/Serveurperso/ACE-Step-1.5-GGUF/resolve/666ac70204440867d8c01ba4b119cc79c95b370a/acestep-v15-xl-sftturbo50-Q4_K_M.gguf",
+   "bytes": 2989922720,
+   "sha256": "7f7619d78037f9cfbe7b7816f758dc99f2841f48010da12eed732a8faef2eb0d",
+   "path": "models/acestep-cpp/acestep-v15-xl-sftturbo50-Q4_K_M.gguf",
+   "part": "dit"
+  },
+  "acestep-v15-xl-sftturbo50-Q5_K_M.gguf": {
+   "label": "acestep-v15-xl-sftturbo50-Q5_K_M.gguf",
+   "kind": "model",
+   "url": "https://huggingface.co/Serveurperso/ACE-Step-1.5-GGUF/resolve/666ac70204440867d8c01ba4b119cc79c95b370a/acestep-v15-xl-sftturbo50-Q5_K_M.gguf",
+   "bytes": 3527566496,
+   "sha256": "3d4db8b6ec02c1fd15889bb61be65ce474e3b291fa0ff53fe7be90cd819d3e6b",
+   "path": "models/acestep-cpp/acestep-v15-xl-sftturbo50-Q5_K_M.gguf",
+   "part": "dit"
+  },
+  "acestep-v15-xl-sftturbo50-Q6_K.gguf": {
+   "label": "acestep-v15-xl-sftturbo50-Q6_K.gguf",
+   "kind": "model",
+   "url": "https://huggingface.co/Serveurperso/ACE-Step-1.5-GGUF/resolve/666ac70204440867d8c01ba4b119cc79c95b370a/acestep-v15-xl-sftturbo50-Q6_K.gguf",
+   "bytes": 4098813024,
+   "sha256": "d43bad21c85c7a250815367b4c5f7fafdf6b8f7d21f9f27d8a3c47171cf79e7f",
+   "path": "models/acestep-cpp/acestep-v15-xl-sftturbo50-Q6_K.gguf",
+   "part": "dit"
+  },
+  "acestep-v15-xl-sftturbo50-Q8_0.gguf": {
+   "label": "acestep-v15-xl-sftturbo50-Q8_0.gguf",
+   "kind": "model",
+   "url": "https://huggingface.co/Serveurperso/ACE-Step-1.5-GGUF/resolve/666ac70204440867d8c01ba4b119cc79c95b370a/acestep-v15-xl-sftturbo50-Q8_0.gguf",
+   "bytes": 5305828768,
+   "sha256": "ec6bef50f2aec3176aafa4836401394913f567ceb7a4d53a459948a8b5294e51",
+   "path": "models/acestep-cpp/acestep-v15-xl-sftturbo50-Q8_0.gguf",
+   "part": "dit"
+  },
+  "acestep-v15-xl-turbo-Q5_K_M.gguf": {
+   "label": "acestep-v15-xl-turbo-Q5_K_M.gguf",
+   "kind": "model",
+   "url": "https://huggingface.co/Serveurperso/ACE-Step-1.5-GGUF/resolve/666ac70204440867d8c01ba4b119cc79c95b370a/acestep-v15-xl-turbo-Q5_K_M.gguf",
+   "bytes": 3527566464,
+   "sha256": "108dbf1b1a5cfe41c46b23ee7481a1c6f6d21f7254bed4ac15ff8f307df69d3d",
+   "path": "models/acestep-cpp/acestep-v15-xl-turbo-Q5_K_M.gguf",
+   "part": "dit"
+  },
+  "acestep-v15-merge-base-sft-xl-ta-0.5-Q4_K_M.gguf": {
+   "label": "acestep-v15-merge-base-sft-xl-ta-0.5-Q4_K_M.gguf",
+   "kind": "model",
+   "url": "https://huggingface.co/scragnog/ace-step-1.5-gguf-merge-models/resolve/c4750313bd892420f5902d346b805d686d963784/acestep-v15-merge-base-sft-xl-ta-0.5-Q4_K_M.gguf",
+   "bytes": 2989922688,
+   "sha256": "145540355c30d998683313debaa4b9a2a1e4cad491fbc45e7fe1746cece3b58c",
+   "path": "models/acestep-cpp/acestep-v15-merge-base-sft-xl-ta-0.5-Q4_K_M.gguf",
+   "part": "dit"
+  },
+  "acestep-v15-merge-base-sft-xl-ta-0.5-Q5_K_M.gguf": {
+   "label": "acestep-v15-merge-base-sft-xl-ta-0.5-Q5_K_M.gguf",
+   "kind": "model",
+   "url": "https://huggingface.co/scragnog/ace-step-1.5-gguf-merge-models/resolve/c4750313bd892420f5902d346b805d686d963784/acestep-v15-merge-base-sft-xl-ta-0.5-Q5_K_M.gguf",
+   "bytes": 3527566464,
+   "sha256": "2bfd376e38fce556dafabbf54fcbeae5c26b694304ab3f2d31c2ab085e9f3968",
+   "path": "models/acestep-cpp/acestep-v15-merge-base-sft-xl-ta-0.5-Q5_K_M.gguf",
+   "part": "dit"
+  },
+  "acestep-v15-merge-base-sft-xl-ta-0.5-Q6_K.gguf": {
+   "label": "acestep-v15-merge-base-sft-xl-ta-0.5-Q6_K.gguf",
+   "kind": "model",
+   "url": "https://huggingface.co/scragnog/ace-step-1.5-gguf-merge-models/resolve/c4750313bd892420f5902d346b805d686d963784/acestep-v15-merge-base-sft-xl-ta-0.5-Q6_K.gguf",
+   "bytes": 4098812992,
+   "sha256": "5c84dd6318913c4ece053ba8d2402d75c91b45434139ba967f647c52b0d13484",
+   "path": "models/acestep-cpp/acestep-v15-merge-base-sft-xl-ta-0.5-Q6_K.gguf",
+   "part": "dit"
+  },
+  "acestep-v15-merge-base-sft-xl-ta-0.5-Q8_0.gguf": {
+   "label": "acestep-v15-merge-base-sft-xl-ta-0.5-Q8_0.gguf",
+   "kind": "model",
+   "url": "https://huggingface.co/scragnog/ace-step-1.5-gguf-merge-models/resolve/c4750313bd892420f5902d346b805d686d963784/acestep-v15-merge-base-sft-xl-ta-0.5-Q8_0.gguf",
+   "bytes": 5305828736,
+   "sha256": "638cf3904e86db829d768232e079ae06560df7dab14bd3f896672ac2bbe02e41",
+   "path": "models/acestep-cpp/acestep-v15-merge-base-sft-xl-ta-0.5-Q8_0.gguf",
+   "part": "dit"
+  },
+  "acestep-v15-merge-base-turbo-xl-ta-0.5-Q4_K_M.gguf": {
+   "label": "acestep-v15-merge-base-turbo-xl-ta-0.5-Q4_K_M.gguf",
+   "kind": "model",
+   "url": "https://huggingface.co/scragnog/ace-step-1.5-gguf-merge-models/resolve/c4750313bd892420f5902d346b805d686d963784/acestep-v15-merge-base-turbo-xl-ta-0.5-Q4_K_M.gguf",
+   "bytes": 2989922688,
+   "sha256": "2dfa8beceb59b41ad2421a58700b7f55f9d8528648fc4c44ecb39ff571118593",
+   "path": "models/acestep-cpp/acestep-v15-merge-base-turbo-xl-ta-0.5-Q4_K_M.gguf",
+   "part": "dit"
+  },
+  "acestep-v15-merge-base-turbo-xl-ta-0.5-Q5_K_M.gguf": {
+   "label": "acestep-v15-merge-base-turbo-xl-ta-0.5-Q5_K_M.gguf",
+   "kind": "model",
+   "url": "https://huggingface.co/scragnog/ace-step-1.5-gguf-merge-models/resolve/c4750313bd892420f5902d346b805d686d963784/acestep-v15-merge-base-turbo-xl-ta-0.5-Q5_K_M.gguf",
+   "bytes": 3527566464,
+   "sha256": "527481ab6b793dfcd9853561c6238e97a9f96527dbfc977ed20ab57c18bc6a59",
+   "path": "models/acestep-cpp/acestep-v15-merge-base-turbo-xl-ta-0.5-Q5_K_M.gguf",
+   "part": "dit"
+  },
+  "acestep-v15-merge-base-turbo-xl-ta-0.5-Q6_K.gguf": {
+   "label": "acestep-v15-merge-base-turbo-xl-ta-0.5-Q6_K.gguf",
+   "kind": "model",
+   "url": "https://huggingface.co/scragnog/ace-step-1.5-gguf-merge-models/resolve/c4750313bd892420f5902d346b805d686d963784/acestep-v15-merge-base-turbo-xl-ta-0.5-Q6_K.gguf",
+   "bytes": 4098812992,
+   "sha256": "815c34b7085c60e5b9851246708a8177e9db5ef794b9735b8d88ac60721c5d2c",
+   "path": "models/acestep-cpp/acestep-v15-merge-base-turbo-xl-ta-0.5-Q6_K.gguf",
+   "part": "dit"
+  },
+  "acestep-v15-merge-base-turbo-xl-ta-0.5-Q8_0.gguf": {
+   "label": "acestep-v15-merge-base-turbo-xl-ta-0.5-Q8_0.gguf",
+   "kind": "model",
+   "url": "https://huggingface.co/scragnog/ace-step-1.5-gguf-merge-models/resolve/c4750313bd892420f5902d346b805d686d963784/acestep-v15-merge-base-turbo-xl-ta-0.5-Q8_0.gguf",
+   "bytes": 5305828736,
+   "sha256": "0d46b51054433830d3a589383baca299b8554f0e4c440f354cb218d8c893634f",
+   "path": "models/acestep-cpp/acestep-v15-merge-base-turbo-xl-ta-0.5-Q8_0.gguf",
+   "part": "dit"
+  },
+  "acestep-v15-merge-sft-turbo-xl-ta-0.3-Q4_K_M.gguf": {
+   "label": "acestep-v15-merge-sft-turbo-xl-ta-0.3-Q4_K_M.gguf",
+   "kind": "model",
+   "url": "https://huggingface.co/scragnog/ace-step-1.5-gguf-merge-models/resolve/c4750313bd892420f5902d346b805d686d963784/acestep-v15-merge-sft-turbo-xl-ta-0.3-Q4_K_M.gguf",
+   "bytes": 2989922688,
+   "sha256": "474c49dc4c556e6c7a087ec65bc04b82e8403a1d47ae8778d944f01a4e50082b",
+   "path": "models/acestep-cpp/acestep-v15-merge-sft-turbo-xl-ta-0.3-Q4_K_M.gguf",
+   "part": "dit"
+  },
+  "acestep-v15-merge-sft-turbo-xl-ta-0.3-Q5_K_M.gguf": {
+   "label": "acestep-v15-merge-sft-turbo-xl-ta-0.3-Q5_K_M.gguf",
+   "kind": "model",
+   "url": "https://huggingface.co/scragnog/ace-step-1.5-gguf-merge-models/resolve/c4750313bd892420f5902d346b805d686d963784/acestep-v15-merge-sft-turbo-xl-ta-0.3-Q5_K_M.gguf",
+   "bytes": 3527566464,
+   "sha256": "23309c8da98f361ed0f748106e3596fa070ff9d264f070ef90a049c1c8bfb1dd",
+   "path": "models/acestep-cpp/acestep-v15-merge-sft-turbo-xl-ta-0.3-Q5_K_M.gguf",
+   "part": "dit"
+  },
+  "acestep-v15-merge-sft-turbo-xl-ta-0.3-Q6_K.gguf": {
+   "label": "acestep-v15-merge-sft-turbo-xl-ta-0.3-Q6_K.gguf",
+   "kind": "model",
+   "url": "https://huggingface.co/scragnog/ace-step-1.5-gguf-merge-models/resolve/c4750313bd892420f5902d346b805d686d963784/acestep-v15-merge-sft-turbo-xl-ta-0.3-Q6_K.gguf",
+   "bytes": 4098812992,
+   "sha256": "e8f9703ecdac1c69bc0b4f7610a411426057dbf7fee3c15ba76d34524f65591c",
+   "path": "models/acestep-cpp/acestep-v15-merge-sft-turbo-xl-ta-0.3-Q6_K.gguf",
+   "part": "dit"
+  },
+  "acestep-v15-merge-sft-turbo-xl-ta-0.3-Q8_0.gguf": {
+   "label": "acestep-v15-merge-sft-turbo-xl-ta-0.3-Q8_0.gguf",
+   "kind": "model",
+   "url": "https://huggingface.co/scragnog/ace-step-1.5-gguf-merge-models/resolve/c4750313bd892420f5902d346b805d686d963784/acestep-v15-merge-sft-turbo-xl-ta-0.3-Q8_0.gguf",
+   "bytes": 5305828736,
+   "sha256": "5d34d816a735edfc80bdafdd94739b624117d74ee048452b0c2af086874e3a3e",
+   "path": "models/acestep-cpp/acestep-v15-merge-sft-turbo-xl-ta-0.3-Q8_0.gguf",
+   "part": "dit"
+  },
+  "acestep-v15-merge-sft-turbo-xl-ta-0.7-Q4_K_M.gguf": {
+   "label": "acestep-v15-merge-sft-turbo-xl-ta-0.7-Q4_K_M.gguf",
+   "kind": "model",
+   "url": "https://huggingface.co/scragnog/ace-step-1.5-gguf-merge-models/resolve/c4750313bd892420f5902d346b805d686d963784/acestep-v15-merge-sft-turbo-xl-ta-0.7-Q4_K_M.gguf",
+   "bytes": 2989922688,
+   "sha256": "9589e948ef5f7476a7449bf397bbf97916dae8936139cb7f0ec3f6ca5a3cffba",
+   "path": "models/acestep-cpp/acestep-v15-merge-sft-turbo-xl-ta-0.7-Q4_K_M.gguf",
+   "part": "dit"
+  },
+  "acestep-v15-merge-sft-turbo-xl-ta-0.7-Q5_K_M.gguf": {
+   "label": "acestep-v15-merge-sft-turbo-xl-ta-0.7-Q5_K_M.gguf",
+   "kind": "model",
+   "url": "https://huggingface.co/scragnog/ace-step-1.5-gguf-merge-models/resolve/c4750313bd892420f5902d346b805d686d963784/acestep-v15-merge-sft-turbo-xl-ta-0.7-Q5_K_M.gguf",
+   "bytes": 3527566464,
+   "sha256": "59de4078a14c8e706dcb053dad827418bc60434b08cd7b9ad1e261ab160c9548",
+   "path": "models/acestep-cpp/acestep-v15-merge-sft-turbo-xl-ta-0.7-Q5_K_M.gguf",
+   "part": "dit"
+  },
+  "acestep-v15-merge-sft-turbo-xl-ta-0.7-Q6_K.gguf": {
+   "label": "acestep-v15-merge-sft-turbo-xl-ta-0.7-Q6_K.gguf",
+   "kind": "model",
+   "url": "https://huggingface.co/scragnog/ace-step-1.5-gguf-merge-models/resolve/c4750313bd892420f5902d346b805d686d963784/acestep-v15-merge-sft-turbo-xl-ta-0.7-Q6_K.gguf",
+   "bytes": 4098812992,
+   "sha256": "d0693132bd076d098e423431b1c9e9ccd69b534d29cccca462e4ededdfeeef79",
+   "path": "models/acestep-cpp/acestep-v15-merge-sft-turbo-xl-ta-0.7-Q6_K.gguf",
+   "part": "dit"
+  },
+  "acestep-v15-merge-sft-turbo-xl-ta-0.7-Q8_0.gguf": {
+   "label": "acestep-v15-merge-sft-turbo-xl-ta-0.7-Q8_0.gguf",
+   "kind": "model",
+   "url": "https://huggingface.co/scragnog/ace-step-1.5-gguf-merge-models/resolve/c4750313bd892420f5902d346b805d686d963784/acestep-v15-merge-sft-turbo-xl-ta-0.7-Q8_0.gguf",
+   "bytes": 5305828736,
+   "sha256": "e246c8478d904086572def8d5ad6306d2a06d98d787a7147f830c95bcc0c5c7b",
+   "path": "models/acestep-cpp/acestep-v15-merge-sft-turbo-xl-ta-0.7-Q8_0.gguf",
+   "part": "dit"
+  },
+  "acestep-v15-base-MXFP4.gguf": {
+   "label": "acestep-v15-base-MXFP4.gguf",
+   "kind": "model",
+   "url": "https://huggingface.co/scragnog/Ace-Step-1.5-MXFP4-Quants/resolve/05a04ec24513e44f21947a2d1ee8d1cae91d1095/acestep-v15-base-MXFP4.gguf",
+   "bytes": 1281885888,
+   "sha256": "fc40ba55ea30cacbe9863d0f7ed3a33c0758676df89d74380bc50ae1da070df6",
+   "path": "models/acestep-cpp/acestep-v15-base-MXFP4.gguf",
+   "part": "dit"
+  },
+  "acestep-v15-merge-base-turbo-xl-ta-0.5-MXFP4.gguf": {
+   "label": "acestep-v15-merge-base-turbo-xl-ta-0.5-MXFP4.gguf",
+   "kind": "model",
+   "url": "https://huggingface.co/scragnog/Ace-Step-1.5-MXFP4-Quants/resolve/05a04ec24513e44f21947a2d1ee8d1cae91d1095/acestep-v15-merge-base-turbo-xl-ta-0.5-MXFP4.gguf",
+   "bytes": 2660726464,
+   "sha256": "484e0cf0a2f46bf4950c9033f700b8698445b0680c23e20f0f7cf2f42424983a",
+   "path": "models/acestep-cpp/acestep-v15-merge-base-turbo-xl-ta-0.5-MXFP4.gguf",
+   "part": "dit"
+  },
+  "acestep-v15-merge-sft-turbo-xl-ta-0.3-MXFP4.gguf": {
+   "label": "acestep-v15-merge-sft-turbo-xl-ta-0.3-MXFP4.gguf",
+   "kind": "model",
+   "url": "https://huggingface.co/scragnog/Ace-Step-1.5-MXFP4-Quants/resolve/05a04ec24513e44f21947a2d1ee8d1cae91d1095/acestep-v15-merge-sft-turbo-xl-ta-0.3-MXFP4.gguf",
+   "bytes": 2660726464,
+   "sha256": "8847b8a566918873205d0920b09b750d4b8dc1ff7f1c55988020552d1654c11e",
+   "path": "models/acestep-cpp/acestep-v15-merge-sft-turbo-xl-ta-0.3-MXFP4.gguf",
+   "part": "dit"
+  },
+  "acestep-v15-merge-sft-turbo-xl-ta-0.7-MXFP4.gguf": {
+   "label": "acestep-v15-merge-sft-turbo-xl-ta-0.7-MXFP4.gguf",
+   "kind": "model",
+   "url": "https://huggingface.co/scragnog/Ace-Step-1.5-MXFP4-Quants/resolve/05a04ec24513e44f21947a2d1ee8d1cae91d1095/acestep-v15-merge-sft-turbo-xl-ta-0.7-MXFP4.gguf",
+   "bytes": 2660726464,
+   "sha256": "baa8fb4c74b2a76c927c89a4bf442a0fed8436efa032c1f8bfa07a83998930d2",
+   "path": "models/acestep-cpp/acestep-v15-merge-sft-turbo-xl-ta-0.7-MXFP4.gguf",
+   "part": "dit"
+  },
+  "acestep-v15-sft-MXFP4.gguf": {
+   "label": "acestep-v15-sft-MXFP4.gguf",
+   "kind": "model",
+   "url": "https://huggingface.co/scragnog/Ace-Step-1.5-MXFP4-Quants/resolve/05a04ec24513e44f21947a2d1ee8d1cae91d1095/acestep-v15-sft-MXFP4.gguf",
+   "bytes": 1281885888,
+   "sha256": "2c5a3d1686bd283db8b94132451faa5878f2a4f7b72de915a785e0b5a16d027e",
+   "path": "models/acestep-cpp/acestep-v15-sft-MXFP4.gguf",
+   "part": "dit"
+  },
+  "acestep-v15-sftturbo50-MXFP4.gguf": {
+   "label": "acestep-v15-sftturbo50-MXFP4.gguf",
+   "kind": "model",
+   "url": "https://huggingface.co/scragnog/Ace-Step-1.5-MXFP4-Quants/resolve/05a04ec24513e44f21947a2d1ee8d1cae91d1095/acestep-v15-sftturbo50-MXFP4.gguf",
+   "bytes": 1281885888,
+   "sha256": "d09687038fda3f05c4feddf98d1282def5de27a4187f0e1685cd383bb9096901",
+   "path": "models/acestep-cpp/acestep-v15-sftturbo50-MXFP4.gguf",
+   "part": "dit"
+  },
+  "acestep-v15-turbo-MXFP4.gguf": {
+   "label": "acestep-v15-turbo-MXFP4.gguf",
+   "kind": "model",
+   "url": "https://huggingface.co/scragnog/Ace-Step-1.5-MXFP4-Quants/resolve/05a04ec24513e44f21947a2d1ee8d1cae91d1095/acestep-v15-turbo-MXFP4.gguf",
+   "bytes": 1281885952,
+   "sha256": "4c1e6ef7fca88111e3def961372435aa9096cf71200a2887443d5f61234dd92c",
+   "path": "models/acestep-cpp/acestep-v15-turbo-MXFP4.gguf",
+   "part": "dit"
+  },
+  "acestep-v15-turbo-continuous-MXFP4.gguf": {
+   "label": "acestep-v15-turbo-continuous-MXFP4.gguf",
+   "kind": "model",
+   "url": "https://huggingface.co/scragnog/Ace-Step-1.5-MXFP4-Quants/resolve/05a04ec24513e44f21947a2d1ee8d1cae91d1095/acestep-v15-turbo-continuous-MXFP4.gguf",
+   "bytes": 1281885920,
+   "sha256": "b4023b581530a51b61f572270c1f732634c98086211ff714a8f73ddc07d1b66a",
+   "path": "models/acestep-cpp/acestep-v15-turbo-continuous-MXFP4.gguf",
+   "part": "dit"
+  },
+  "acestep-v15-turbo-shift1-MXFP4.gguf": {
+   "label": "acestep-v15-turbo-shift1-MXFP4.gguf",
+   "kind": "model",
+   "url": "https://huggingface.co/scragnog/Ace-Step-1.5-MXFP4-Quants/resolve/05a04ec24513e44f21947a2d1ee8d1cae91d1095/acestep-v15-turbo-shift1-MXFP4.gguf",
+   "bytes": 1281885920,
+   "sha256": "ccbda7b544fef52d3b4669297a185bca5ead2913cb74025957f674acd2e3302c",
+   "path": "models/acestep-cpp/acestep-v15-turbo-shift1-MXFP4.gguf",
+   "part": "dit"
+  },
+  "acestep-v15-turbo-shift3-MXFP4.gguf": {
+   "label": "acestep-v15-turbo-shift3-MXFP4.gguf",
+   "kind": "model",
+   "url": "https://huggingface.co/scragnog/Ace-Step-1.5-MXFP4-Quants/resolve/05a04ec24513e44f21947a2d1ee8d1cae91d1095/acestep-v15-turbo-shift3-MXFP4.gguf",
+   "bytes": 1281885920,
+   "sha256": "301f059684267d62135a4b4630672a741891aea7137647b7d1eac837cb4ddeff",
+   "path": "models/acestep-cpp/acestep-v15-turbo-shift3-MXFP4.gguf",
+   "part": "dit"
+  },
+  "acestep-v15-xl-base-MXFP4.gguf": {
+   "label": "acestep-v15-xl-base-MXFP4.gguf",
+   "kind": "model",
+   "url": "https://huggingface.co/scragnog/Ace-Step-1.5-MXFP4-Quants/resolve/05a04ec24513e44f21947a2d1ee8d1cae91d1095/acestep-v15-xl-base-MXFP4.gguf",
+   "bytes": 2660726432,
+   "sha256": "4d45d06b7c7304ff0334e378a7538dfc2d750acb1263b4ab1f59190b1722295e",
+   "path": "models/acestep-cpp/acestep-v15-xl-base-MXFP4.gguf",
+   "part": "dit"
+  },
+  "acestep-v15-xl-sft-MXFP4.gguf": {
+   "label": "acestep-v15-xl-sft-MXFP4.gguf",
+   "kind": "model",
+   "url": "https://huggingface.co/scragnog/Ace-Step-1.5-MXFP4-Quants/resolve/05a04ec24513e44f21947a2d1ee8d1cae91d1095/acestep-v15-xl-sft-MXFP4.gguf",
+   "bytes": 2660726432,
+   "sha256": "082487454773da575628d613e80da15f88505919cca209bad46dea09b27fd47d",
+   "path": "models/acestep-cpp/acestep-v15-xl-sft-MXFP4.gguf",
+   "part": "dit"
+  },
+  "acestep-v15-xl-sftturbo50-MXFP4.gguf": {
+   "label": "acestep-v15-xl-sftturbo50-MXFP4.gguf",
+   "kind": "model",
+   "url": "https://huggingface.co/scragnog/Ace-Step-1.5-MXFP4-Quants/resolve/05a04ec24513e44f21947a2d1ee8d1cae91d1095/acestep-v15-xl-sftturbo50-MXFP4.gguf",
+   "bytes": 2660726496,
+   "sha256": "faf4bc94052c0c9ce6bc9ddb32a6b78220d512e8ab4d83f79ac54b1f2a755c5c",
+   "path": "models/acestep-cpp/acestep-v15-xl-sftturbo50-MXFP4.gguf",
+   "part": "dit"
+  },
+  "acestep_1.5_xl_turbo_regrind_v1-Q4_K_M.gguf": {
+   "label": "acestep_1.5_xl_turbo_regrind_v1-Q4_K_M.gguf",
+   "kind": "model",
+   "url": "https://huggingface.co/mdmachine/ACEStep-XL-Regrind-V1/resolve/e9b48a00c0f6f59f1ed988774e673ac70816474b/dit/acestep_1.5_xl_turbo_regrind_v1-Q4_K_M.gguf",
+   "bytes": 2989922688,
+   "sha256": "f0f77a5c40d3fdee2a3c46731fa181cb8965a9c9e69cbd5d9eaee3057216c692",
+   "path": "models/acestep-cpp/acestep_1.5_xl_turbo_regrind_v1-Q4_K_M.gguf",
+   "part": "dit"
+  },
+  "acestep_1.5_xl_turbo_regrind_v1-Q6_K.gguf": {
+   "label": "acestep_1.5_xl_turbo_regrind_v1-Q6_K.gguf",
+   "kind": "model",
+   "url": "https://huggingface.co/mdmachine/ACEStep-XL-Regrind-V1/resolve/e9b48a00c0f6f59f1ed988774e673ac70816474b/dit/acestep_1.5_xl_turbo_regrind_v1-Q6_K.gguf",
+   "bytes": 4098812992,
+   "sha256": "bd4690a6233d88de52bc3c222c3695f05a5be4af441f2d3d285eaed3933de254",
+   "path": "models/acestep-cpp/acestep_1.5_xl_turbo_regrind_v1-Q6_K.gguf",
+   "part": "dit"
+  },
+  "acestep_1.5_xl_turbo_regrind_v1-Q8_0.gguf": {
+   "label": "acestep_1.5_xl_turbo_regrind_v1-Q8_0.gguf",
+   "kind": "model",
+   "url": "https://huggingface.co/mdmachine/ACEStep-XL-Regrind-V1/resolve/e9b48a00c0f6f59f1ed988774e673ac70816474b/dit/acestep_1.5_xl_turbo_regrind_v1-Q8_0.gguf",
+   "bytes": 5305828736,
+   "sha256": "63bd1ce2e9668e5373558813e64e6d9b2e3c7eb2710ff808f5dff6ada08d7d34",
+   "path": "models/acestep-cpp/acestep_1.5_xl_turbo_regrind_v1-Q8_0.gguf",
+   "part": "dit"
+  },
   "gemma-4-e4b-q4_0": {
    "label": "Gemma 4 E4B IT (QAT q4_0)",
    "kind": "model",
@@ -1011,7 +1632,8 @@
    "url": "https://huggingface.co/Serveurperso/ACE-Step-1.5-GGUF/resolve/666ac70204440867d8c01ba4b119cc79c95b370a/acestep-v15-turbo-Q4_K_M.gguf",
    "bytes": 1445710272,
    "sha256": "55b4d8514850f3d0f82536f37e99673aaf48df802b5ae5b153eea32a2e2daa5e",
-   "path": "models/acestep-cpp/acestep-v15-turbo-Q4_K_M.gguf"
+   "path": "models/acestep-cpp/acestep-v15-turbo-Q4_K_M.gguf",
+   "part": "dit"
   },
   "acestep-5Hz-lm-0.6B-Q8_0.gguf": {
    "label": "acestep-5Hz-lm-0.6B-Q8_0.gguf",
@@ -1043,7 +1665,8 @@
    "url": "https://huggingface.co/Serveurperso/ACE-Step-1.5-GGUF/resolve/666ac70204440867d8c01ba4b119cc79c95b370a/acestep-v15-xl-turbo-Q4_K_M.gguf",
    "bytes": 2989922688,
    "sha256": "475e60e8644b1f91eebc0cd25f24c060bed06e64a862b4e60ffafe634c740478",
-   "path": "models/acestep-cpp/acestep-v15-xl-turbo-Q4_K_M.gguf"
+   "path": "models/acestep-cpp/acestep-v15-xl-turbo-Q4_K_M.gguf",
+   "part": "dit"
   },
   "acestep-5Hz-lm-1.7B-Q8_0.gguf": {
    "label": "acestep-5Hz-lm-1.7B-Q8_0.gguf",
@@ -1059,7 +1682,8 @@
    "url": "https://huggingface.co/Serveurperso/ACE-Step-1.5-GGUF/resolve/666ac70204440867d8c01ba4b119cc79c95b370a/acestep-v15-xl-turbo-Q6_K.gguf",
    "bytes": 4098812992,
    "sha256": "e1f6665567e9bc0331b8dfd95c2b43a84e8bf114075c9b16abdd25ae97dc58fe",
-   "path": "models/acestep-cpp/acestep-v15-xl-turbo-Q6_K.gguf"
+   "path": "models/acestep-cpp/acestep-v15-xl-turbo-Q6_K.gguf",
+   "part": "dit"
   },
   "acestep-v15-xl-turbo-MXFP4.gguf": {
    "label": "acestep-v15-xl-turbo-MXFP4.gguf",
@@ -1067,7 +1691,8 @@
    "url": "https://huggingface.co/scragnog/Ace-Step-1.5-MXFP4-Quants/resolve/05a04ec24513e44f21947a2d1ee8d1cae91d1095/acestep-v15-xl-turbo-MXFP4.gguf",
    "bytes": 2660726464,
    "sha256": "dfb0ba27f2dd25c6bb31ad7f1a7c8d6e5c538593c5fff92e3329d186c81751e4",
-   "path": "models/acestep-cpp/acestep-v15-xl-turbo-MXFP4.gguf"
+   "path": "models/acestep-cpp/acestep-v15-xl-turbo-MXFP4.gguf",
+   "part": "dit"
   },
   "acestep-v15-xl-turbo-Q8_0.gguf": {
    "label": "acestep-v15-xl-turbo-Q8_0.gguf",
@@ -1075,7 +1700,8 @@
    "url": "https://huggingface.co/Serveurperso/ACE-Step-1.5-GGUF/resolve/666ac70204440867d8c01ba4b119cc79c95b370a/acestep-v15-xl-turbo-Q8_0.gguf",
    "bytes": 5305828736,
    "sha256": "4f1044fb646374fb5730e10f64325766883eb2fc02a643c1b403f2d61f39dc19",
-   "path": "models/acestep-cpp/acestep-v15-xl-turbo-Q8_0.gguf"
+   "path": "models/acestep-cpp/acestep-v15-xl-turbo-Q8_0.gguf",
+   "part": "dit"
   },
   "acestep-5Hz-lm-4B-Q8_0.gguf": {
    "label": "acestep-5Hz-lm-4B-Q8_0.gguf",

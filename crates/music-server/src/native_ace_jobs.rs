@@ -78,7 +78,8 @@ async fn submit_inner(
         );
     };
     let catalogue = ace::resolve_installation(&root);
-    let resolved = if replay.is_some() {
+    // a DiT picked in the form takes the place of the set's own, the way a replay brings back the one it was made with
+    let resolved = if replay.is_some() || input.get("synth_model").is_some() {
         catalogue.launch_replay(&profile, &input)
     } else {
         catalogue.launch(&profile)

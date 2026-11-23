@@ -6,7 +6,8 @@
    "url": "https://huggingface.co/Serveurperso/ACE-Step-1.5-GGUF/resolve/666ac70204440867d8c01ba4b119cc79c95b370a/acestep-v15-turbo-Q4_K_M.gguf",
    "bytes": 1445710272,
    "sha256": "55b4d8514850f3d0f82536f37e99673aaf48df802b5ae5b153eea32a2e2daa5e",
-   "path": "models/acestep-cpp/acestep-v15-turbo-Q4_K_M.gguf"
+   "path": "models/acestep-cpp/acestep-v15-turbo-Q4_K_M.gguf",
+   "part": "dit"
   },
   "acestep-5Hz-lm-0.6B-Q8_0.gguf": {
    "label": "acestep-5Hz-lm-0.6B-Q8_0.gguf",
@@ -38,7 +39,8 @@
    "url": "https://huggingface.co/Serveurperso/ACE-Step-1.5-GGUF/resolve/666ac70204440867d8c01ba4b119cc79c95b370a/acestep-v15-xl-turbo-Q4_K_M.gguf",
    "bytes": 2989922688,
    "sha256": "475e60e8644b1f91eebc0cd25f24c060bed06e64a862b4e60ffafe634c740478",
-   "path": "models/acestep-cpp/acestep-v15-xl-turbo-Q4_K_M.gguf"
+   "path": "models/acestep-cpp/acestep-v15-xl-turbo-Q4_K_M.gguf",
+   "part": "dit"
   },
   "acestep-5Hz-lm-1.7B-Q8_0.gguf": {
    "label": "acestep-5Hz-lm-1.7B-Q8_0.gguf",
@@ -54,7 +56,8 @@
    "url": "https://huggingface.co/Serveurperso/ACE-Step-1.5-GGUF/resolve/666ac70204440867d8c01ba4b119cc79c95b370a/acestep-v15-xl-turbo-Q6_K.gguf",
    "bytes": 4098812992,
    "sha256": "e1f6665567e9bc0331b8dfd95c2b43a84e8bf114075c9b16abdd25ae97dc58fe",
-   "path": "models/acestep-cpp/acestep-v15-xl-turbo-Q6_K.gguf"
+   "path": "models/acestep-cpp/acestep-v15-xl-turbo-Q6_K.gguf",
+   "part": "dit"
   },
   "acestep-v15-xl-turbo-MXFP4.gguf": {
    "label": "acestep-v15-xl-turbo-MXFP4.gguf",
@@ -62,7 +65,8 @@
    "url": "https://huggingface.co/scragnog/Ace-Step-1.5-MXFP4-Quants/resolve/05a04ec24513e44f21947a2d1ee8d1cae91d1095/acestep-v15-xl-turbo-MXFP4.gguf",
    "bytes": 2660726464,
    "sha256": "dfb0ba27f2dd25c6bb31ad7f1a7c8d6e5c538593c5fff92e3329d186c81751e4",
-   "path": "models/acestep-cpp/acestep-v15-xl-turbo-MXFP4.gguf"
+   "path": "models/acestep-cpp/acestep-v15-xl-turbo-MXFP4.gguf",
+   "part": "dit"
   },
   "acestep-v15-xl-turbo-Q8_0.gguf": {
    "label": "acestep-v15-xl-turbo-Q8_0.gguf",
@@ -70,7 +74,8 @@
    "url": "https://huggingface.co/Serveurperso/ACE-Step-1.5-GGUF/resolve/666ac70204440867d8c01ba4b119cc79c95b370a/acestep-v15-xl-turbo-Q8_0.gguf",
    "bytes": 5305828736,
    "sha256": "4f1044fb646374fb5730e10f64325766883eb2fc02a643c1b403f2d61f39dc19",
-   "path": "models/acestep-cpp/acestep-v15-xl-turbo-Q8_0.gguf"
+   "path": "models/acestep-cpp/acestep-v15-xl-turbo-Q8_0.gguf",
+   "part": "dit"
   },
   "acestep-5Hz-lm-4B-Q8_0.gguf": {
    "label": "acestep-5Hz-lm-4B-Q8_0.gguf",

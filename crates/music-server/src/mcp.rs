@@ -564,6 +564,8 @@ const JOURNAL: &[(&str, &str, &str)] = &[
     ("native_music_runtime_cancel", "cancelled", "download"),
     ("native_music_model_install", "started", "download"),
     ("native_music_model_cancel", "cancelled", "download"),
+    ("ace_dit_install", "started", "download"),
+    ("ace_dit_install_cancel", "cancelled", "download"),
     ("rvc_native_runtime_install", "started", "download"),
     ("rvc_native_runtime_cancel", "cancelled", "download"),
     ("rvc_apply", "created", "song"),
@@ -1902,6 +1904,24 @@ fn tools() -> &'static [Tool] {
                 description: "ACE-Step listens to a library song on the chosen native set: its caption, lyrics, metadata and the audio codes a new render can follow. Returns request.",
                 schema: || object(json!({ "song_id": { "type": "string" }, "profile": { "type": "string" } }), &["song_id", "profile"]),
                 call: |args| post("/v1/ace/understand".into(), args.clone()),
+            },
+            Tool {
+                name: "ace_dits_list",
+                description: "Every ACE-Step DiT of the component catalogue (turbo, SFT, base, XL, merges, Regrind, each in its quantisations): file, bytes, whether it is on disk and its download. A song renders with one of them when create_music carries ace.synth_model; the base DiTs are the ones the lego, extract and complete tasks need.",
+                schema: || object(json!({}), &[]),
+                call: |_| get("/v1/ace/dits".into()),
+            },
+            Tool {
+                name: "ace_dit_install",
+                description: "Download one ACE-Step DiT from the component catalogue into the studio's models; ace_dits_list shows the progress.",
+                schema: || object(json!({ "file": { "type": "string", "description": "the file name, as ace_dits_list lists it" } }), &["file"]),
+                call: |args| post("/v1/ace/dits/install".into(), args.clone()),
+            },
+            Tool {
+                name: "ace_dit_install_cancel",
+                description: "Stop downloading an ACE-Step DiT.",
+                schema: || object(json!({ "file": { "type": "string" } }), &["file"]),
+                call: |args| send(Method::DELETE, "/v1/ace/dits/install".into(), args.clone()),
             },
             Tool {
                 name: "song_tokenize",

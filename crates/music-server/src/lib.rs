@@ -2084,6 +2084,8 @@ pub async fn serve_on_port(port: u16) -> anyhow::Result<()> {
         .route("/v1/transcriptions/{job_id}", get(score_job_status).post(cancel_score_job))
         .route("/v1/ace/plan", post(native_ace_jobs::plan))
         .route("/v1/ace/understand", post(native_ace_jobs::understand))
+        .route("/v1/ace/dits", get(native_music_models::dits))
+        .route("/v1/ace/dits/install", post(native_music_models::install_dit).delete(native_music_models::cancel_dit))
         .route("/v1/scores", post(compose_score))
         .route("/v1/scores/{job_id}", get(score_job_status).post(cancel_score_job))
         .route("/v1/music/jobs/ended", get(list_ended_music_jobs))

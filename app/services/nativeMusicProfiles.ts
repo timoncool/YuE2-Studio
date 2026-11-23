@@ -25,6 +25,8 @@ export interface NativeProfile {
   label: string;
   /** The set's name by language code, from the component catalogue. */
   labels?: Record<string, string>;
+  /** The set's file for each role of its engine (`dit`, `lm`, `vae`, ...), from the component catalogue. */
+  roles?: Record<string, string>;
   vram_gb?: number;
   /** A variant for particular cards, offered under "all variants". */
   advanced?: boolean;

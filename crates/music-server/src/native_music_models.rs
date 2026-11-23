@@ -86,6 +86,7 @@ pub(crate) async fn describe(engine: &str, profiles: &mut Value) {
         row["advanced"] = Value::Bool(set.is_some_and(|set| set.advanced));
         if let Some(set) = set {
             row["labels"] = serde_json::to_value(&set.label).unwrap_or(Value::Null);
+            row["roles"] = serde_json::to_value(&set.roles).unwrap_or(Value::Null);
         }
         row["recommended"] = Value::Bool(recommended.as_deref() == Some(id.as_str()));
         let assets = missing_assets(engine, &id);
@@ -149,6 +150,62 @@ pub(crate) async fn cancel(Path(engine): Path<String>, Json(request): Json<Insta
     Ok(Json(serde_json::json!({"cancelled": cancelled})))
 }
 
+/// The ACE-Step DiT files of the catalogue: a song can render with any of them in place of its set's own.
+fn dit_assets() -> Vec<&'static Asset> {
+    crate::components::files_under("")
+        .into_iter()
+        .filter(|(_, file)| file.part.as_deref() == Some("dit") && file.path.starts_with("models/acestep-cpp/"))
+        .filter_map(|(id, _)| crate::components::asset(&id).ok())
+        .collect()
+}
+
+fn dit_scope(file: &str) -> String {
+    format!("{}:dit:{file}", crate::ace::ENGINE_ID)
+}
+
+/// Every DiT the ACE-Step form offers, whether it is on disk and how its download goes.
+pub(crate) async fn dits() -> Result<Json<Value>, Failure> {
+    let downloader = downloader().ok_or_else(|| api_error(StatusCode::SERVICE_UNAVAILABLE, "Studio data folder is unavailable.".into()))?;
+    let mut rows = Vec::new();
+    for asset in dit_assets() {
+        let installed = std::fs::metadata(downloader.path_of(asset)).is_ok_and(|file| file.len() == asset.bytes);
+        let download = downloader.active_for(&dit_scope(asset.id)).await;
+        rows.push(serde_json::json!({"file": asset.id, "bytes": asset.bytes, "installed": installed, "download": download}));
+    }
+    Ok(Json(serde_json::json!({"dits": rows})))
+}
+
+#[derive(Deserialize)]
+pub(crate) struct DitRequest {
+    file: String,
+}
+
+pub(crate) async fn install_dit(Json(request): Json<DitRequest>) -> Result<Json<Value>, Failure> {
+    let downloader = downloader().ok_or_else(|| api_error(StatusCode::SERVICE_UNAVAILABLE, "Studio data folder is unavailable.".into()))?;
+    let asset = dit_assets().into_iter().find(|asset| asset.id == request.file)
+        .ok_or_else(|| api_error(StatusCode::NOT_FOUND, format!("The catalogue has no ACE-Step DiT {}.", request.file)))?;
+    if std::fs::metadata(downloader.path_of(asset)).is_ok_and(|file| file.len() == asset.bytes) {
+        return Ok(Json(serde_json::json!({"ready": true})));
+    }
+    let scope = dit_scope(asset.id);
+    if downloader.active_for(&scope).await.is_some_and(|download| !download.done) {
+        return Ok(Json(serde_json::json!({"installing": true})));
+    }
+    downloader.clear_finished(&scope).await;
+    tokio::spawn(async move {
+        if let Err(error) = downloader.install_all(&scope, &[asset]).await {
+            downloader.fail(&scope, format!("{error:#}")).await;
+        }
+        crate::mcp::announce("music_pair");
+    });
+    Ok(Json(serde_json::json!({"installing": true})))
+}
+
+pub(crate) async fn cancel_dit(Json(request): Json<DitRequest>) -> Result<Json<Value>, Failure> {
+    let downloader = downloader().ok_or_else(|| api_error(StatusCode::SERVICE_UNAVAILABLE, "Studio data folder is unavailable.".into()))?;
+    Ok(Json(serde_json::json!({"cancelled": downloader.cancel_for(&dit_scope(&request.file)).await})))
+}
+
 #[cfg(test)]
 mod tests {
     #[test]
@@ -161,6 +218,18 @@ mod tests {
         let minimax = crate::components::sets(crate::native_minimax::ENGINE_ID);
         assert_eq!(super::recommended(&minimax, 16.0).as_deref(), Some("quality-q8"));
         assert!(minimax.iter().filter(|set| !set.advanced).count() == 4);
+    }
+
+    #[test]
+    fn the_form_offers_every_ace_dit_of_the_catalogue_but_full_weights() {
+        let dits = super::dit_assets();
+        for file in ["acestep-v15-base-Q8_0.gguf", "acestep-v15-xl-base-Q4_K_M.gguf", "acestep-v15-xl-turbo-Q8_0.gguf", "acestep_1.5_xl_turbo_regrind_v1-Q8_0.gguf"] {
+            assert!(dits.iter().any(|asset| asset.id == file), "{file}");
+        }
+        for asset in &dits {
+            assert!(!asset.id.contains("BF16"), "{}", asset.id);
+            assert!(!asset.url.contains("/resolve/main/") && crate::components::sha256(asset.url).is_some(), "{}", asset.url);
+        }
     }
 
     #[test]

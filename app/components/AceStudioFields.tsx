@@ -71,7 +71,7 @@ export function keepAceStudio(draft: AceStudioDraft) {
   try { window.localStorage.setItem(KEY, JSON.stringify(draft)); } catch { /* kept until a reload */ }
 }
 
-const FIELDS = ['vocal_language', 'bpm', 'keyscale', 'timesignature', 'lm_temperature', 'lm_cfg_scale', 'lm_top_p', 'lm_top_k',
+const FIELDS = ['synth_model', 'vocal_language', 'bpm', 'keyscale', 'timesignature', 'lm_temperature', 'lm_cfg_scale', 'lm_top_p', 'lm_top_k',
   'lm_rep_penalty', 'lm_rep_mode', 'lm_rep_window', 'lm_dry_base', 'lm_dry_min_len', 'lm_negative_prompt', 'audio_codes',
   'guidance', 'apg_momentum', 'apg_norm_threshold', 'dcw_mode', 'dcw_scaler', 'dcw_high_scaler', 'custom_timesteps',
   'latent_shift', 'latent_rescale', 'cfg_interval_start', 'cfg_interval_end', 'retake_variance', 'retake_seed', 'fade_in',
@@ -103,6 +103,7 @@ export function aceStudioFields(draft: AceStudioDraft, kind: DitKind, task: stri
   const think = draft.think !== false;
   fields.think = think;
   if (draft.use_cot_caption === true) fields.use_cot_caption = true;
+  put('synth_model', text(draft, 'synth_model'));
   put('vocal_language', text(draft, 'vocal_language'));
   put('bpm', numberOrUndefined(draft.bpm));
   put('keyscale', text(draft, 'keyscale'));
