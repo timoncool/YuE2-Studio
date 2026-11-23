@@ -901,6 +901,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
       setAcePlanning(null);
     }
   };
+  const [aceIdea, setAceIdea] = useState('');
   const undoAcePlan = () => {
     if (!aceUndo) return;
     setStyle(aceUndo.style); setLyrics(aceUndo.lyrics); setAceStudio(aceUndo.draft); native.set('duration_seconds', aceUndo.duration); setAceUndo(null);
@@ -2177,10 +2178,11 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
                 onClick={() => onOpenEngines(musicEngine)}>{enginePageStrings[language][0]}</button>}
             </div>
           )}
-          {onMusicEngineChange && !(yue && setup?.engine_error) && (pair.error || (pair.matching && pair.status
+          {onMusicEngineChange && !(yue && setup?.engine_error) && (pair.sending || pair.error || (pair.matching && pair.status
             && (pair.busy || pair.status.stage === 'error' || (pair.status.stage === 'needs_install' && !native.profile?.installable && !yue)))) && (
             <div className="space-y-2 text-xs">
-              {pair.busy && pair.status && <WorkProgress label={pairText[pair.status.stage]} percent={null} elapsedMs={pair.status.elapsed_ms} />}
+              {pair.sending && !(pair.matching && pair.busy) && <WorkProgress label={pairText.checking_files} percent={null} />}
+              {pair.matching && pair.busy && pair.status && <WorkProgress label={pairText[pair.status.stage]} percent={null} elapsedMs={pair.status.elapsed_ms} />}
               {(pair.error || pair.status?.stage === 'error' || pair.status?.stage === 'needs_install') && (
                 <ErrorNote text={engineErrorText(pair.status?.error_code, language) ?? pairText.error}
                   detail={pair.error ?? pair.status?.error}
@@ -2311,7 +2313,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
                       </div>
                     )}
               </Card>}
-              {aceEngine && aceTask.task === 'text2music' && <AceSongIdea planning={acePlanning} ready={native.ready}
+              {aceEngine && aceTask.task === 'text2music' && <AceSongIdea idea={aceIdea} onIdea={setAceIdea} planning={acePlanning} ready={native.ready}
                 onPlan={(mode, idea) => void planAce(mode, idea)} undo={!acePlanning && aceUndo?.mode === 'inspire'} onUndo={undoAcePlan}
                 card={(title, body, actions) => <Card title={title} actions={actions}>{body}</Card>} />}
               <Card title={miDasheng || vevo2 || soulx || (magenta && magentaReference) ? t('title') : miniMaxEngine ? mmText.captionStructured : tt('styleCardTitle')}>

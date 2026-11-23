@@ -228,7 +228,9 @@ const UndoLink: React.FC<{ onClick: () => void }> = ({ onClick }) => {
 };
 
 /** The idea a text-to-music song starts from: the language model writes the style, the lyrics and the metadata from it. */
-export function AceSongIdea({ planning, ready, onPlan, undo, onUndo, card }: {
+export function AceSongIdea({ idea, onIdea, planning, ready, onPlan, undo, onUndo, card }: {
+  idea: string;
+  onIdea: (idea: string) => void;
   planning: 'inspire' | 'format' | null;
   ready: boolean;
   onPlan: (mode: 'inspire', idea: string) => void;
@@ -238,9 +240,8 @@ export function AceSongIdea({ planning, ready, onPlan, undo, onUndo, card }: {
 }) {
   const { t } = useI18n();
   const tt = t as unknown as (key: string) => string;
-  const [idea, setIdea] = useState('');
   return <>{card(tt('aceSongIdea'), <>
-    <textarea value={idea} onChange={event => setIdea(event.target.value)} rows={2} placeholder={tt('aceIdeaPlaceholder')} aria-label={tt('aceSongIdea')}
+    <textarea value={idea} onChange={event => onIdea(event.target.value)} rows={2} placeholder={tt('aceIdeaPlaceholder')} aria-label={tt('aceSongIdea')}
       className={`${CONTROL} resize-y`} />
     <p className="mt-1.5 text-[11px] leading-4 text-zinc-500">{tt('aceIdeaHint')}</p>
     {undo && <UndoLink onClick={onUndo} />}

@@ -161,7 +161,7 @@ export const RestoreTool: React.FC<{
           {download ? (
             <div className="mt-2 flex items-center gap-2">
               <div className="min-w-0 flex-1">
-                <WorkProgress label={`${megabytes(download.downloaded_bytes)} / ${megabytes(download.total_bytes)}`}
+                <WorkProgress label={`${t('download')} · ${megabytes(download.downloaded_bytes)} / ${megabytes(download.total_bytes)}`}
                   percent={Math.round((download.downloaded_bytes / Math.max(1, download.total_bytes)) * 100)} />
               </div>
               <SecondaryButton onClick={() => void post('/v1/restore/cancel', {})}><Square size={11} />{t('cancelDownload')}</SecondaryButton>
