@@ -1892,6 +1892,18 @@ fn tools() -> &'static [Tool] {
                 call: |args| post("/v1/music/replay".into(), args.clone()),
             },
             Tool {
+                name: "ace_plan",
+                description: "ACE-Step's own language model plans a song without rendering it, on the chosen native set: mode inspire turns a one-line idea (request.caption) into a caption, lyrics and metadata; mode format completes and tidies the metadata of request {caption, lyrics, vocal_language, bpm, keyscale, timesignature, duration}. Returns plan.",
+                schema: || object(json!({ "mode": { "type": "string", "enum": ["inspire", "format"] }, "profile": { "type": "string", "description": "the ACE-Step set id, as ace_music_profiles lists it" }, "request": { "type": "object" } }), &["mode", "profile", "request"]),
+                call: |args| post("/v1/ace/plan".into(), args.clone()),
+            },
+            Tool {
+                name: "ace_understand",
+                description: "ACE-Step listens to a library song on the chosen native set: its caption, lyrics, metadata and the audio codes a new render can follow. Returns request.",
+                schema: || object(json!({ "song_id": { "type": "string" }, "profile": { "type": "string" } }), &["song_id", "profile"]),
+                call: |args| post("/v1/ace/understand".into(), args.clone()),
+            },
+            Tool {
                 name: "song_tokenize",
                 description: "Exact checkpoint token IDs, Unicode cut marks and torn characters for style and lyrics in the whole music prompt. Unavailable until a tokenizer-capable music engine is running; never estimates counts.",
                 schema: || object(json!({ "style": { "type": "string" }, "lyrics": { "type": "string" }, "cot": { "type": "string", "enum": ["full", "melody", "off"] } }), &["lyrics"]),
@@ -4328,6 +4340,8 @@ mod tests {
             "assistant_request_answer",
             "library_song_describe_style",
             "recording_describe_style",
+            "ace_plan",
+            "ace_understand",
             // A temporary download is staged without changing the library.
             "song_export_zip",
             // the journal itself
