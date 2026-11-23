@@ -7,6 +7,7 @@ import { poll } from '../services/poll';
 import { openExternal } from '../services/externalLinks';
 import { ConfirmDialog } from './ConfirmDialog';
 import { TrainingPanel } from './TrainingPanel';
+import { CatalogCard as KitCatalogCard } from './kit/Catalog';
 import {
   AdapterSlot,
   AdapterState,
@@ -132,28 +133,16 @@ const CatalogCard: React.FC<{
 }> = ({ entry, slots, current, selected, downloading, onToggle }) => {
   const { t, language } = useStrings();
   return (
-    <section className={`${CARD} flex flex-col ${selected ? 'border-pink-400 dark:border-pink-500/60' : ''}`}>
-      <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0">
-          <p className="truncate text-sm font-semibold text-zinc-900 dark:text-white">{localized(entry.name, language)}</p>
-          <p className="mt-0.5 flex flex-wrap items-center gap-x-2 text-[11px] text-zinc-500">
-            <span>{entry.author}{entry.trigger ? ` · ${entry.trigger}` : ''}</span>
-            <Popularity likes={entry.likes} downloads={entry.downloads} />
-          </p>
-        </div>
-        <span className="flex shrink-0 items-center gap-1"><FamilyBadge model={entry.model} current={current} /><KindBadge kind={entry.kind} /></span>
-      </div>
-      <p className="mt-2 flex-1 text-xs leading-5 text-zinc-600 dark:text-zinc-300">{localized(entry.description, language)}</p>
-      <FamilyNote model={entry.model} current={current} />
-      <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
-        <SlotBadges ids={entry.slots} slots={slots} />
-        <div className="flex items-center gap-2">
-          {entry.page && (
-            <button type="button" onClick={() => openExternal(entry.page!)} className={OUTLINE} title={t('adaptersAuthorPage')}>
-              <ExternalLink size={13} />
-            </button>
-          )}
-          {entry.installed ? (
+    <KitCatalogCard
+      selected={selected}
+      title={localized(entry.name, language)}
+      meta={<><span>{entry.author}{entry.trigger ? ` · ${entry.trigger}` : ''}</span><Popularity likes={entry.likes} downloads={entry.downloads} /></>}
+      badges={<><FamilyBadge model={entry.model} current={current} /><KindBadge kind={entry.kind} /></>}
+      description={localized(entry.description, language)}
+      note={<FamilyNote model={entry.model} current={current} />}
+      footer={<SlotBadges ids={entry.slots} slots={slots} />}
+      page={entry.page} pageLabel={t('adaptersAuthorPage')} onOpenPage={openExternal}
+      action={entry.installed ? (
             <span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-600 dark:text-emerald-400"><Check size={13} />{t('adaptersInstalled')}</span>
           ) : downloading ? (
             <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-pink-600 dark:text-pink-300"><Loader2 size={13} className="animate-spin" />{t('adaptersDownloading')}</span>
@@ -163,9 +152,7 @@ const CatalogCard: React.FC<{
               {megabytes(entry.bytes)}
             </button>
           )}
-        </div>
-      </div>
-    </section>
+    />
   );
 };
 

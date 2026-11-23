@@ -3,6 +3,8 @@ import { useI18n } from '../context/I18nContext';
 import { rvcApplyStrings } from '../i18n/rvcApply';
 import { poll } from '../services/poll';
 import { responseJson } from '../services/rvcVoices';
+import { PrimaryButton, SecondaryButton } from './kit/Buttons';
+import { WorkProgress } from './WorkProgress';
 
 interface NativeRuntime {
   supported: boolean;
@@ -79,8 +81,7 @@ export function RvcNativeRuntime({ onInstalled, disabled, metal = false }: {
   if (statusError && !pending) {
     return <div className="space-y-1">
       <p role="alert" className="text-rose-600 dark:text-rose-300">{statusError}</p>
-      <button type="button" className="font-semibold text-pink-600 underline dark:text-pink-300"
-        onClick={() => { setStatusError(undefined); setRetry(value => value + 1); }}>{labels.retry}</button>
+      <SecondaryButton onClick={() => { setStatusError(undefined); setRetry(value => value + 1); }}>{labels.retry}</SecondaryButton>
     </div>;
   }
   if (!status?.supported || status.installed) return null;
@@ -91,17 +92,12 @@ export function RvcNativeRuntime({ onInstalled, disabled, metal = false }: {
     <div className="space-y-1">
       {pending ? (
         <>
-          <p role="status">{labels.installing}</p>
-          {download && download.total_bytes > 0 && (
-            <progress className="w-full accent-pink-500" aria-label={labels.installing}
-              value={Math.min(download.downloaded_bytes, download.total_bytes)} max={download.total_bytes} />
-          )}
-          <button type="button" className="font-semibold text-pink-600 underline dark:text-pink-300"
-            onClick={() => void cancel()}>{t('cancel')}</button>
+          <WorkProgress label={labels.installing} percent={download && download.total_bytes > 0
+            ? Math.min(100, Math.floor(100 * download.downloaded_bytes / download.total_bytes)) : null} />
+          <SecondaryButton className="mt-2" onClick={() => void cancel()}>{t('cancel')}</SecondaryButton>
         </>
       ) : (
-        <button type="button" disabled={disabled || starting} className="font-semibold text-pink-600 underline disabled:opacity-50 dark:text-pink-300"
-          onClick={() => void install()}>{labels.installNative} · {bytes}</button>
+        <PrimaryButton disabled={disabled || starting} onClick={() => void install()}>{labels.installNative} · {bytes}</PrimaryButton>
       )}
       {(error || statusError || download?.error) && <p role="alert" className="text-rose-600 dark:text-rose-300">{error || statusError || download?.error}</p>}
     </div>

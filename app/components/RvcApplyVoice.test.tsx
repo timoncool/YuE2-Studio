@@ -116,7 +116,7 @@ it('starts native runtime installation, reports progress, and refreshes conversi
     await act(async () => root.render(<RvcNativeRuntime onInstalled={onInstalled} disabled={false} />));
     expect(host.querySelector('button')?.textContent).toContain('200');
     await act(async () => host.querySelector('button')!.click());
-    expect(host.querySelector('progress')?.value).toBe(50_000_000);
+    expect(host.querySelector('[role="progressbar"]')?.getAttribute('aria-valuenow')).toBe('25');
     installed = true;
     await act(async () => vi.advanceTimersByTimeAsync(500));
     expect(onInstalled).toHaveBeenCalledOnce();

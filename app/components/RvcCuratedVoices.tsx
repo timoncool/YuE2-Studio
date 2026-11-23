@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
-import { Play } from 'lucide-react';
-import { PrimaryButton, SecondaryButton } from './kit/Buttons';
+import { Check, Download, Play } from 'lucide-react';
+import { CatalogBadge, CatalogCard, CatalogSearch, CatalogSegments } from './kit/Catalog';
+import { openExternal } from '../services/externalLinks';
+import { SecondaryButton } from './kit/Buttons';
 import { WorkProgress } from './WorkProgress';
 import { useI18n } from '../context/I18nContext';
 import { rvcVoiceStrings } from '../i18n/rvcVoices';
@@ -170,24 +172,21 @@ export function RvcCuratedVoices({ onInstalled, onChoose, disabled, installedIds
       )}
       {catalog && catalog.length > 0 && (
         <>
-          <div className="mt-2 flex flex-wrap items-end gap-2">
-            <label className="block min-w-48 flex-1 space-y-1">
-              <span>{labels.search}</span>
-              <input type="search" value={search} onChange={event => { setSearch(event.target.value); setVisibleCount(PAGE_SIZE); }}
-                className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm dark:border-white/10 dark:bg-black/30" />
-            </label>
-            {styles.length > 1 && (
-              <label className="block space-y-1">
-                <span>{labels.vocalStyle}</span>
-                <select value={filters.vocal_style ?? ''} onChange={event => setFilter('vocal_style', event.target.value)}
-                  className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm dark:border-white/10 dark:bg-black/30">
-                  <option value="">{labels.all}</option>
-                  {styles.map(value => <option key={value} value={value}>{value}</option>)}
-                </select>
-              </label>
+          <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center">
+            <CatalogSearch value={search} label={labels.search} onChange={value => { setSearch(value); setVisibleCount(PAGE_SIZE); }} />
+            {styles.length > 1 && styles.length <= 3 && (
+              <CatalogSegments value={filters.vocal_style ?? ''} onChange={value => setFilter('vocal_style', value)}
+                options={[{ value: '', label: labels.all }, ...styles.map(value => ({ value, label: labels.styles[value] ?? value }))]} />
+            )}
+            {styles.length > 3 && (
+              <select aria-label={labels.vocalStyle} value={filters.vocal_style ?? ''} onChange={event => setFilter('vocal_style', event.target.value)}
+                className="shrink-0 rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 dark:border-white/10 dark:bg-black/30 dark:text-white">
+                <option value="">{labels.vocalStyle}: {labels.all}</option>
+                {styles.map(value => <option key={value} value={value}>{labels.styles[value] ?? value}</option>)}
+              </select>
             )}
             {samples && (
-              <label className="flex items-center gap-1.5 pb-2">
+              <label className="flex shrink-0 items-center gap-1.5">
                 <input type="checkbox" checked={!!filters.sample} onChange={event => {
                   setFilters(current => ({ ...current, sample: event.target.checked ? 'present' : undefined }));
                   setVisibleCount(PAGE_SIZE);
@@ -202,34 +201,33 @@ export function RvcCuratedVoices({ onInstalled, onChoose, disabled, installedIds
               .replace('{total}', matches.length.toLocaleString(language))}
             {filterActive && <button type="button" className="ml-2 font-medium hover:text-pink-600" onClick={() => { setSearch(''); setFilters({}); setVisibleCount(PAGE_SIZE); }}>{labels.clear}</button>}
           </p>
-          <ul className="mt-1 max-h-[28rem] divide-y divide-zinc-200 overflow-auto dark:divide-white/10">
+          <ul className="mt-2 grid gap-3 md:grid-cols-2">
             {visible.map(voice => {
               const installedId = voice.installed_id && installedIds.has(voice.installed_id) ? voice.installed_id : null;
               const size = (voice.download_bytes ?? ((voice.weights?.size ?? 0) + (voice.index?.size ?? 0))) / 1_000_000;
               const percent = installing === voice.id && progress && progress.total_bytes > 0
                 ? Math.min(100, Math.floor(100 * progress.downloaded_bytes / progress.total_bytes)) : null;
               return (
-                <li key={voice.id} className="py-2.5">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-semibold text-zinc-900 dark:text-white">{voice.name}</p>
-                      <p className="mt-0.5 text-zinc-500 dark:text-zinc-400">
-                        {voice.metadata?.vocal_style ? `${voice.metadata.vocal_style} · ` : ''}{voice.license ?? labels.licenseUnknown}
-                        {' · '}{sizeFormat.format(size)}{' · '}
-                        <a href={voice.source_url} target="_blank" rel="noreferrer" className="hover:text-pink-600">{voice.source_repo}</a>
-                      </p>
-                    </div>
-                    {voice.sample_audio_url && (playingSample === voice.id && !sampleError
+                <li key={voice.id} className="flex">
+                  <CatalogCard
+                    title={voice.name}
+                    meta={<span>{voice.source_repo}</span>}
+                    badges={voice.metadata?.vocal_style ? <CatalogBadge>{labels.styles[voice.metadata.vocal_style] ?? voice.metadata.vocal_style}</CatalogBadge> : undefined}
+                    description={voice.license ?? labels.licenseUnknown}
+                    page={voice.source_url} pageLabel={voice.source_repo} onOpenPage={openExternal}
+                    footer={voice.sample_audio_url && (playingSample === voice.id && !sampleError
                       ? <SourceDemo key={voice.id} url={apiUrl(voice.sample_audio_url)} name={voice.name} onError={() => setSampleError(true)} />
                       : <SecondaryButton aria-label={`${labels.playSample} ${voice.name}`}
                           onClick={() => { setSampleError(false); setPlayingSample(voice.id); }}><Play size={12} />{labels.playSample}</SecondaryButton>)}
-                    {installedId
-                      ? <SecondaryButton disabled={disabled} aria-label={`${labels.selectInstalled} ${voice.name}`} onClick={() => onChoose(installedId)}>{labels.selectInstalled}</SecondaryButton>
-                      : installing !== voice.id && <PrimaryButton className="px-3 py-1.5 text-xs" disabled={disabled || refreshing || Boolean(installing)}
-                          aria-label={`${labels.install} ${voice.name}`} onClick={() => void install(voice.id)}>{labels.install}</PrimaryButton>}
-                  </div>
-                  {playingSample === voice.id && sampleError && <p role="alert" className="mt-1">{labels.sampleError}</p>}
-                  {installing === voice.id && <WorkProgress label={activeStage ?? labels.installing} percent={percent} />}
+                    action={installedId
+                      ? <SecondaryButton disabled={disabled} aria-label={`${labels.selectInstalled} ${voice.name}`} onClick={() => onChoose(installedId)}>
+                          <Check size={13} />{labels.selectInstalled}</SecondaryButton>
+                      : installing === voice.id ? null
+                      : <SecondaryButton disabled={disabled || refreshing || Boolean(installing)} aria-label={`${labels.install} ${voice.name}`}
+                          onClick={() => void install(voice.id)}><Download size={13} />{sizeFormat.format(size)}</SecondaryButton>}>
+                    {playingSample === voice.id && sampleError && <p role="alert" className="mt-1">{labels.sampleError}</p>}
+                    {installing === voice.id && <WorkProgress label={activeStage ?? labels.installing} percent={percent} />}
+                  </CatalogCard>
                 </li>
               );
             })}

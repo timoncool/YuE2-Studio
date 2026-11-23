@@ -63,16 +63,13 @@ it('opens the curated catalog from Studio Tools and chooses an installed RVC voi
     });
     expect(details.textContent).toContain(high.name);
     expect(details.textContent).toContain(drive.name);
-    const style = [...details.querySelectorAll('label')].find(label => label.textContent?.startsWith('Vocal style'))!.querySelector('select')!;
-    act(() => {
-      style.value = 'high';
-      style.dispatchEvent(new Event('change', { bubbles: true }));
-    });
+    const style = details.querySelector<HTMLSelectElement>('select[aria-label="Vocal style"]')!;
+    act(() => { style.value = 'high'; style.dispatchEvent(new Event('change', { bubbles: true })); });
     expect(details.querySelectorAll('li')).toHaveLength(1);
     expect(details.textContent).toContain(high.name);
     expect(details.textContent).not.toContain(drive.name);
     expect(details.querySelector('li button[aria-label^="Play source demo"]')).toBeNull();
-    const select = details.querySelector<HTMLButtonElement>('li button')!;
+    const select = details.querySelector<HTMLButtonElement>('li button[aria-label^="Select "]')!;
     expect(select.textContent).toBe('Select');
     expect(select.disabled).toBe(false);
     act(() => { select.dispatchEvent(new MouseEvent('click', { bubbles: true })); });

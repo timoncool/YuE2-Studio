@@ -115,7 +115,7 @@ it('opens with the voice catalogue and installs the chosen voice into the local 
     await flush();
     const row = host.querySelector('li')!;
     expect(row.textContent).toContain('License unspecified');
-    expect(row.querySelector('a')?.href).toBe(entry.source_url);
+    expect(row.querySelector('button[aria-label="owner/voices"]')).not.toBeNull();
     act(() => { host.querySelector<HTMLButtonElement>('button[aria-label="Install Example Voice"]')!.click(); });
     await flush();
     const [, options] = request.mock.calls.find(([url]) => url.endsWith('/catalog/install'))!;
@@ -158,8 +158,7 @@ it('finds voices by name or source label, filters by vocal style and pages throu
     });
     type('Radio Tapok');
     expect(host.querySelectorAll('li')).toHaveLength(2);
-    const style = [...host.querySelectorAll('label')].find(label => label.textContent?.startsWith('Vocal style'))!.querySelector('select')!;
-    act(() => { style.value = 'high'; style.dispatchEvent(new Event('change', { bubbles: true })); });
+    act(() => { [...host.querySelectorAll('[role="radio"]')].find(radio => radio.textContent === 'High')!.dispatchEvent(new MouseEvent('click', { bubbles: true })); });
     expect(host.querySelectorAll('li')).toHaveLength(1);
     expect(host.querySelector('li')?.textContent).toContain('Tapok Concert');
     expect(host.querySelector('li')?.textContent).toContain('23 MB');
