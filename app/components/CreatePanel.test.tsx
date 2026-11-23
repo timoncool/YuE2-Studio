@@ -148,6 +148,18 @@ it('sends the chosen library backing with the same score and words', async () =>
   expect(sent[0].cover_of).toBeUndefined();
 });
 
+it('follows the lyrics sections by default when the lyrics name them, and not when they do not', async () => {
+  act(() => root.render(panel({})));
+  await flush();
+  type(field('textarea[aria-label="styleCardTitle"]')!, 'folk rock');
+  type(field('textarea[aria-label="lyrics"]')!, '[Intro]\n\n[Verse 1]\nThe light is ours');
+  click(buttonNamed('create')!);
+  expect(sent.at(-1)?.harmony).toMatchObject({ follow_lyrics: true });
+  type(field('textarea[aria-label="lyrics"]')!, 'The light is ours');
+  click(buttonNamed('create')!);
+  expect(sent.at(-1)?.harmony?.follow_lyrics).toBeUndefined();
+});
+
 it('applies a measured backing tempo only when confirmed', async () => {
   backingTempo.mockResolvedValue({ ok: true, bpm: 121, method: 'beat-this' });
   librarySongs = [{ id: 'backing', title: 'Instrumental recording', audioUrl: '/test.wav' } as Song];

@@ -284,17 +284,19 @@ const samplingText = (value: unknown): SamplingText => {
 
 type HarmonyText = { identity: '' | 'root' | 'spelling'; strength: string; window: string; hold_limit: string; outside_bonus: string; section_strength: string; follow_lyrics: boolean };
 const HARMONY_NUMBERS = ['strength', 'window', 'hold_limit', 'outside_bonus', 'section_strength'] as const;
-const emptyHarmony = (): HarmonyText => ({ identity: '', strength: '', window: '', hold_limit: '', outside_bonus: '', section_strength: '', follow_lyrics: false });
+const emptyHarmony = (): HarmonyText => ({ identity: '', strength: '', window: '', hold_limit: '', outside_bonus: '', section_strength: '', follow_lyrics: true });
 
 /** The engine's harmony field, or nothing when every control is at rest. */
-const harmonyFrom = (text: HarmonyText): YueHarmony | undefined => {
+const SECTION_TAG = /^\s*\[[^\]\n]*\]\s*$/m;
+
+const harmonyFrom = (text: HarmonyText, lyrics: string): YueHarmony | undefined => {
   const harmony: YueHarmony = {};
   for (const key of HARMONY_NUMBERS) {
     const value = numberOrUndefined(text[key]);
     if (value !== undefined) harmony[key] = value;
   }
   if (text.identity) harmony.identity = text.identity;
-  if (text.follow_lyrics) harmony.follow_lyrics = true;
+  if (text.follow_lyrics && SECTION_TAG.test(lyrics)) harmony.follow_lyrics = true;
   const active = (harmony.strength ?? 0) > 0 || (harmony.outside_bonus ?? 0) > 0 || (harmony.section_strength ?? 0) > 0 || harmony.follow_lyrics === true;
   return active ? harmony : undefined;
 };
@@ -1281,7 +1283,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
     if (abcPreset) request.abc_sampling = abcPreset;
     const semanticPreset = samplingFrom(semanticSampling);
     if (semanticPreset) request.semantic_sampling = semanticPreset;
-    const harmonyValue = harmonyFrom(harmony);
+    const harmonyValue = harmonyFrom(harmony, lyrics);
     if (harmonyValue) request.harmony = harmonyValue;
     if (continueScore && request.abc) request.abc_continue = true;
     const bitrate = numberOrUndefined(mp3Bitrate);
@@ -1375,7 +1377,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
       cot: effectiveCot,
       lmSeed: pinned !== undefined && pinned >= 0 ? pinned : undefined,
       abcSampling: samplingFrom(abcSampling),
-      harmony: harmonyFrom(harmony),
+      harmony: harmonyFrom(harmony, lyrics),
       opening: continueScore && abc.trim() ? abc : undefined,
     }, signal);
   };
@@ -1390,7 +1392,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
     composeRun.current = controller;
     try {
       const pinned = randomizeSeed ? undefined : numberOrUndefined(lmSeed);
-      const choices = await composePlans({ style: finishedStyle(style), lyrics: lyrics.replace(/\r\n?/g, '\n').trim(), cot: effectiveCot, lmSeed: pinned, abcSampling: samplingFrom(abcSampling), harmony: harmonyFrom(harmony), opening: continueScore && abc.trim() ? abc : undefined, count: Math.max(1, Math.min(Number(planCount), maxBatch, 9)) }, controller.signal);
+      const choices = await composePlans({ style: finishedStyle(style), lyrics: lyrics.replace(/\r\n?/g, '\n').trim(), cot: effectiveCot, lmSeed: pinned, abcSampling: samplingFrom(abcSampling), harmony: harmonyFrom(harmony, lyrics), opening: continueScore && abc.trim() ? abc : undefined, count: Math.max(1, Math.min(Number(planCount), maxBatch, 9)) }, controller.signal);
       setPlans(choices); setSelectedPlan(0);
       setAbc(choices[0].abc);
       setContinueScore(false);
