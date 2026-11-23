@@ -85,11 +85,6 @@ pub const CRISPERWHISPER: &str = "crisperwhisper";
 pub const CRISPERWHISPER_MODEL: &str = "crisperwhisper-turbo";
 const CRISPERWHISPER_DIR: &str = "models/crisperwhisper2-turbo";
 
-/// One file of CrisperWhisper's repository beside its weights.
-const fn crisper_file(id: &'static str, url: &'static str, relative_path: &'static str, bytes: u64) -> Asset {
-    Asset { id, label: "CrisperWhisper 2.0 turbo", kind: AssetKind::Model, url, relative_path, bytes, unzip_into: None, marker: "", pick: &[], vram_gb: None, note: "Part of CrisperWhisper 2.0 turbo." }
-}
-
 /// Phrases Whisper writes over music and silence instead of saying it heard
 /// no words: the verbatim hallucinations of the "Bag of Hallucinations"
 /// study (Barański et al., ICASSP 2025, MIT) and the per-language lists of
@@ -156,67 +151,44 @@ fn heard_words(transcript: &acpp_server::Transcript) -> Vec<(f64, String)> {
         .collect()
 }
 
+/// CrisperWhisper 2.0 turbo as Speech Studio and Dub Studio fetch it: the Hugging Face repository at its revision,
+/// in a folder of that name, so one program's copy serves the others; audio.cpp's server runs it (`acpp`). The files
+/// are catalogue entries (`distribution/components-src/recognition.json`), as are the Parakeet models and the ONNX
+/// Runtime.
+const CRISPER: [&str; 13] = [
+    CRISPERWHISPER_MODEL,
+    "crisperwhisper-turbo-license",
+    "crisperwhisper-turbo-readme",
+    "crisperwhisper-turbo-added-tokens",
+    "crisperwhisper-turbo-config",
+    "crisperwhisper-turbo-generation-config",
+    "crisperwhisper-turbo-merges",
+    "crisperwhisper-turbo-normalizer",
+    "crisperwhisper-turbo-preprocessor-config",
+    "crisperwhisper-turbo-special-tokens-map",
+    "crisperwhisper-turbo-tokenizer",
+    "crisperwhisper-turbo-tokenizer-config",
+    "crisperwhisper-turbo-vocab",
+];
+
 /// Every file of CrisperWhisper, by its download id.
 pub fn crisper_assets() -> Vec<&'static str> {
-    ASSETS.iter().filter(|asset| asset.relative_path.starts_with(CRISPERWHISPER_DIR)).map(|asset| asset.id).collect()
+    CRISPER.to_vec()
 }
 
-pub const ASSETS: &[Asset] = &[
-    // CrisperWhisper 2.0 turbo as Speech Studio and Dub Studio fetch it: the Hugging Face repository at its revision,
-    // in a folder of that name, so one program's copy serves the others; audio.cpp's server runs it (`acpp`)
-    Asset {
-        id: CRISPERWHISPER_MODEL,
-        label: "CrisperWhisper 2.0 turbo",
-        kind: AssetKind::Model,
-        url: "https://huggingface.co/nyralabs/CrisperWhisper2.0_turbo/resolve/de0369c8a68025b7f6e86387b6eb5a3b369787c8/model.safetensors",
-        relative_path: "models/crisperwhisper2-turbo/model.safetensors",
-        bytes: 1_617_907_538,
-        unzip_into: None,
-        marker: "",
-        pick: &[],
-        vram_gb: Some(3),
-        note: "Whisper large-v3 turbo trained for verbatim word timings, in audio.cpp: what karaoke and the dataset lyrics are heard with.",
-    },
-    crisper_file("crisperwhisper-turbo-license", "https://huggingface.co/nyralabs/CrisperWhisper2.0_turbo/resolve/de0369c8a68025b7f6e86387b6eb5a3b369787c8/LICENSE.md", "models/crisperwhisper2-turbo/LICENSE.md", 17_784),
-    crisper_file("crisperwhisper-turbo-readme", "https://huggingface.co/nyralabs/CrisperWhisper2.0_turbo/resolve/de0369c8a68025b7f6e86387b6eb5a3b369787c8/README.md", "models/crisperwhisper2-turbo/README.md", 10_974),
-    crisper_file("crisperwhisper-turbo-added-tokens", "https://huggingface.co/nyralabs/CrisperWhisper2.0_turbo/resolve/de0369c8a68025b7f6e86387b6eb5a3b369787c8/added_tokens.json", "models/crisperwhisper2-turbo/added_tokens.json", 35_319),
-    crisper_file("crisperwhisper-turbo-config", "https://huggingface.co/nyralabs/CrisperWhisper2.0_turbo/resolve/de0369c8a68025b7f6e86387b6eb5a3b369787c8/config.json", "models/crisperwhisper2-turbo/config.json", 1_211),
-    crisper_file("crisperwhisper-turbo-generation-config", "https://huggingface.co/nyralabs/CrisperWhisper2.0_turbo/resolve/de0369c8a68025b7f6e86387b6eb5a3b369787c8/generation_config.json", "models/crisperwhisper2-turbo/generation_config.json", 3_880),
-    crisper_file("crisperwhisper-turbo-merges", "https://huggingface.co/nyralabs/CrisperWhisper2.0_turbo/resolve/de0369c8a68025b7f6e86387b6eb5a3b369787c8/merges.txt", "models/crisperwhisper2-turbo/merges.txt", 493_869),
-    crisper_file("crisperwhisper-turbo-normalizer", "https://huggingface.co/nyralabs/CrisperWhisper2.0_turbo/resolve/de0369c8a68025b7f6e86387b6eb5a3b369787c8/normalizer.json", "models/crisperwhisper2-turbo/normalizer.json", 52_666),
-    crisper_file("crisperwhisper-turbo-preprocessor-config", "https://huggingface.co/nyralabs/CrisperWhisper2.0_turbo/resolve/de0369c8a68025b7f6e86387b6eb5a3b369787c8/preprocessor_config.json", "models/crisperwhisper2-turbo/preprocessor_config.json", 357),
-    crisper_file("crisperwhisper-turbo-special-tokens-map", "https://huggingface.co/nyralabs/CrisperWhisper2.0_turbo/resolve/de0369c8a68025b7f6e86387b6eb5a3b369787c8/special_tokens_map.json", "models/crisperwhisper2-turbo/special_tokens_map.json", 2_186),
-    crisper_file("crisperwhisper-turbo-tokenizer", "https://huggingface.co/nyralabs/CrisperWhisper2.0_turbo/resolve/de0369c8a68025b7f6e86387b6eb5a3b369787c8/tokenizer.json", "models/crisperwhisper2-turbo/tokenizer.json", 3_937_105),
-    crisper_file("crisperwhisper-turbo-tokenizer-config", "https://huggingface.co/nyralabs/CrisperWhisper2.0_turbo/resolve/de0369c8a68025b7f6e86387b6eb5a3b369787c8/tokenizer_config.json", "models/crisperwhisper2-turbo/tokenizer_config.json", 288_287),
-    crisper_file("crisperwhisper-turbo-vocab", "https://huggingface.co/nyralabs/CrisperWhisper2.0_turbo/resolve/de0369c8a68025b7f6e86387b6eb5a3b369787c8/vocab.json", "models/crisperwhisper2-turbo/vocab.json", 835_528),
-    // Parakeet on transcribe.cpp, the files Dub Studio and Speech Studio fetch under the same names, so one
-    // program's copy serves the others; addresses and sizes are the shared binding's.
-    Asset {
-        id: PARAKEET_V3,
-        label: "Parakeet TDT 0.6B v3 (Q8_0)",
-        kind: AssetKind::Model,
-        url: dub_tcpp::MODELS[0].download.url,
-        relative_path: "models/asr-gguf-parakeet-v3/parakeet-tdt-0.6b-v3-Q8_0.gguf",
-        bytes: dub_tcpp::MODELS[0].download.size,
-        unzip_into: None,
-        marker: "",
-        pick: &[],
-        vram_gb: Some(1),
-        note: "NVIDIA's recogniser, the one Dub Studio uses: 25 European languages, the time of each word.",
-    },
-    Asset {
-        id: PARAKEET_ULTRA,
-        label: "Parakeet Ultra 0.6B (Q8_0)",
-        kind: AssetKind::Model,
-        url: dub_tcpp::MODELS[1].download.url,
-        relative_path: "models/asr-gguf-parakeet-ultra/parakeet-ultra-Q8_0.gguf",
-        bytes: dub_tcpp::MODELS[1].download.size,
-        unzip_into: None,
-        marker: "",
-        pick: &[],
-        vram_gb: Some(1),
-        note: "Moondream's post-trained Parakeet v3: fewer wrong words in Russian and in noise.",
-    },
+/// Everything karaoke and the dataset lyrics download.
+pub fn assets() -> Vec<&'static Asset> {
+    CRISPER
+        .iter()
+        .chain(&[PARAKEET_V3, PARAKEET_ULTRA, "onnxruntime"])
+        .map(|id| crate::components::required(id))
+        .chain(TRANSCRIBE)
+        .collect()
+}
+
+/// transcribe.cpp, the builds the shared binding loads and checks by the size of its library: they move with the
+/// binding, not on their own.
+const TRANSCRIBE: &[Asset] = &[
     #[cfg(any(windows, target_os = "linux"))]
     Asset {
         id: "transcribe-engine",
@@ -286,48 +258,6 @@ pub const ASSETS: &[Asset] = &[
         pick: &[],
         vram_gb: None,
         note: "Runs Parakeet on the Mac: Metal on Apple silicon, the processor on Intel.",
-    },
-    #[cfg(windows)]
-    Asset {
-        id: "onnxruntime",
-        label: "ONNX Runtime 1.32.0",
-        kind: AssetKind::Runtime,
-        url: "https://github.com/timoncool/onnxruntime/releases/download/v1.32.0/onnxruntime-win-x64-1.32.0.zip",
-        relative_path: "runtime/onnxruntime.zip",
-        bytes: 96_945_131,
-        unzip_into: Some("onnx"),
-        marker: "onnxruntime.dll",
-        pick: &[],
-        vram_gb: None,
-        note: "The tempo model runs on this, on the processor; it is loaded at run time, not linked in.",
-    },
-    #[cfg(target_os = "macos")]
-    Asset {
-        id: "onnxruntime",
-        label: "ONNX Runtime 1.32.0",
-        kind: AssetKind::Runtime,
-        url: "https://github.com/timoncool/onnxruntime/releases/download/v1.32.0/onnxruntime-osx-arm64-ventura-1.32.0.tgz",
-        relative_path: "runtime/onnxruntime.tgz",
-        bytes: 12_312_541,
-        unzip_into: Some("onnx"),
-        marker: "libonnxruntime",
-        pick: &[],
-        vram_gb: None,
-        note: "The tempo model runs on this, on the processor; it is loaded at run time, not linked in.",
-    },
-    #[cfg(target_os = "linux")]
-    Asset {
-        id: "onnxruntime",
-        label: "ONNX Runtime 1.32.0",
-        kind: AssetKind::Runtime,
-        url: "https://github.com/timoncool/onnxruntime/releases/download/v1.32.0/onnxruntime-linux-x64-1.32.0.tgz",
-        relative_path: "runtime/onnxruntime.tgz",
-        bytes: 13_425_244,
-        unzip_into: Some("onnx"),
-        marker: "libonnxruntime.so",
-        pick: &[],
-        vram_gb: None,
-        note: "The tempo model runs on this, on the processor; it is loaded at run time, not linked in.",
     },
 ];
 
@@ -492,7 +422,7 @@ pub fn parakeet_assets(runtime: OnnxFlavour, variant: Option<&str>) -> Vec<&'sta
 }
 
 pub fn asset(id: &str) -> Option<&'static Asset> {
-    ASSETS.iter().find(|asset| asset.id == id)
+    assets().into_iter().find(|asset| asset.id == id)
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -646,8 +576,8 @@ impl LyricsSync {
     }
 
     pub fn installed_models(&self) -> Vec<&'static Asset> {
-        ASSETS
-            .iter()
+        assets()
+            .into_iter()
             .filter(|asset| asset.kind == AssetKind::Model && self.downloader.is_installed(asset))
             .collect()
     }
@@ -688,7 +618,7 @@ impl LyricsSync {
 
     /// The install record of a transcribe.cpp build's archive.
     fn engine_record(&self, build: dub_tcpp::Build) -> Option<PathBuf> {
-        ASSETS.iter().find(|asset| asset.unzip_into == Some(build.dir())).map(|asset| self.downloader.record_of(asset))
+        TRANSCRIBE.iter().find(|asset| asset.unzip_into == Some(build.dir())).map(|asset| self.downloader.record_of(asset))
     }
 
     /// A transcribe.cpp build this process has loaded whose files on disk are now another release's: the process keeps
@@ -753,7 +683,7 @@ impl LyricsSync {
             whisper_model: config.whisper_model.clone(),
             openrouter_model: config.openrouter_model.clone(),
             installed_models: self.installed_models().iter().map(|asset| asset.id.to_string()).collect(),
-            assets: self.downloader.status_of(ASSETS),
+            assets: self.downloader.status_of(&assets().into_iter().copied().collect::<Vec<Asset>>()),
             active_download: self.downloader.active_for("karaoke").await,
             restart_to_apply: self.restart_to_apply(),
         }
@@ -1365,7 +1295,7 @@ mod tests {
     /// A model is fetched from a pinned commit: a repository's latest files can be other builds under the same name.
     #[test]
     fn every_model_is_pinned_to_a_commit() {
-        for asset in ASSETS.iter().filter(|asset| asset.url.contains("huggingface.co/")) {
+        for asset in assets().into_iter().filter(|asset| asset.url.contains("huggingface.co/")) {
             assert!(asset.url.contains("/resolve/") && !asset.url.contains("/resolve/main/"), "{} is not pinned", asset.url);
         }
     }
@@ -1675,7 +1605,7 @@ Third");
         let root = tempfile::tempdir().unwrap();
         let sync = LyricsSync::new(root.path());
         let build = dub_tcpp::Build::Cpu;
-        let asset = ASSETS.iter().find(|asset| asset.unzip_into == Some(build.dir())).expect("the processor build");
+        let asset = TRANSCRIBE.iter().find(|asset| asset.unzip_into == Some(build.dir())).expect("the processor build");
         let dir = sync.downloader.runtime_dir(build.dir());
         std::fs::create_dir_all(&dir).unwrap();
         let mut files = vec![dir.join(dub_tcpp::LIBRARY), dir.join("ggml-cpu-alderlake.dll")];
@@ -1700,10 +1630,11 @@ Third");
 
     #[test]
     fn every_runtime_is_pinned_and_every_asset_is_distinct() {
-        for entry in ASSETS {
+        let all = assets();
+        for entry in &all {
             assert!(entry.bytes > 0, "{} has no size", entry.id);
             assert!(entry.url.starts_with("https://"), "{} is not fetched over https", entry.id);
-            assert_eq!(ASSETS.iter().filter(|other| other.id == entry.id).count(), 1);
+            assert_eq!(all.iter().filter(|other| other.id == entry.id).count(), 1);
             if entry.kind == AssetKind::Runtime {
                 // Every runtime is pinned to an exact release, so a working setup keeps working; NVIDIA's libraries
                 // by their own version in the archive name.
@@ -1943,7 +1874,7 @@ mod parakeet_live {
         let data = env_path("YUE_DATA_ROOT");
         let sync = LyricsSync::new(&data);
         let build = dub_tcpp::Build::Cpu;
-        let asset = ASSETS.iter().find(|asset| asset.unzip_into == Some(build.dir())).expect("the processor build");
+        let asset = TRANSCRIBE.iter().find(|asset| asset.unzip_into == Some(build.dir())).expect("the processor build");
         assert!(!sync.downloader.is_installed(asset), "the earlier release is on disk");
         let model = parakeet_model(None);
         let _asr = dub_tcpp::shared(&sync.downloader.runtime_dir(build.dir()), &dub_tcpp::model_path(&env_path("YUE_MODELS_ROOT"), model)).expect("load the earlier build");

@@ -41,9 +41,6 @@ const PINNED: &[(&str, &str)] = &[
     ("https://github.com/timoncool/onnxruntime/releases/download/v1.31.1/onnxruntime-linux-x64-1.31.1.tgz", "c849e36a1ef3e22d4ff217b9d1ce4a3cf5b9467b975610913ae959ad5b16bdc9"),
     ("https://github.com/timoncool/onnxruntime/releases/download/v1.31.1/onnxruntime-osx-arm64-1.31.1.tgz", "2e1344a1926ee50eb25b38153cb6992c3567515aef0e677a1a520a1798896d6f"),
     ("https://github.com/timoncool/onnxruntime/releases/download/v1.31.1/onnxruntime-win-x64-1.31.1.zip", "5869e26bb25314375f2d5ef1877e3ea06b1543d6c710e6e4a1ec2f7177ab4b2c"),
-    ("https://github.com/timoncool/onnxruntime/releases/download/v1.32.0/onnxruntime-linux-x64-1.32.0.tgz", "bb169b7e374731730d2ae406fb39de7be4b315f413a9132efe896261c31bb503"),
-    ("https://github.com/timoncool/onnxruntime/releases/download/v1.32.0/onnxruntime-osx-arm64-ventura-1.32.0.tgz", "ac878e088ace714688c184d8e3e1030b088af1f02a0abbd756af3e022ed38595"),
-    ("https://github.com/timoncool/onnxruntime/releases/download/v1.32.0/onnxruntime-win-x64-1.32.0.zip", "aaa1d04fcf86bd31e84b90bc0cbde80e632bd0720dcc5d8ba05c4fe45c09d127"),
     ("https://github.com/mosynthkey/beat_this_cpp/raw/07ab790a9ec2eda8093d52d249e3ec4f0510ee72/onnx/beat_this.onnx", "c5c1466e08abdb03fdeb50668a06f244b787d564c212490482231a9cfbe9ccbd"),
     ("https://github.com/timoncool/YuE2-Studio/releases/download/hotstep-tools-75923e70/ace-caption-windows-x64.zip", "254af78ec1254ad2d141afb12f5dc20014dcbbb2387eed1b63a975d5ee46a52a"),
     ("https://github.com/timoncool/YuE2-Studio/releases/download/hotstep-tools-75923e70/hotstep-tools-cuda-windows-x64.zip", "f423135405e51ed861b51ad1fa8dc108d891914951915eb54e18c03b8271331a"),
@@ -52,19 +49,6 @@ const PINNED: &[(&str, &str)] = &[
     ("https://github.com/timoncool/YuE2-Studio/releases/download/hotstep-tools-479cbeb8-xcr0/hotstep-tools-479cbeb8-xcr0-cuda-windows-x64.zip", "892e370c877232edf0bb0228eac3ed54eec8c264d49f2457d3534cca5d2ab0ff"),
     ("https://github.com/timoncool/YuE2-Studio/releases/download/hotstep-tools-479cbeb8-xcr0/ace-caption-479cbeb8-xcr0-windows-x64.zip", "6423f74c630f0e240983748ea16d8670e241bcc834f73d9db9399a45d118b33c"),
     ("https://github.com/timoncool/YuE2-Studio/releases/download/hotstep-trainer-75923e70-cuda12/hotstep-trainer-cuda12-backend-windows-x64.zip", "63bb122cb2634146a578be1635f4456a218679a3b500532a30d0c04d0e54383f"),
-    ("https://huggingface.co/nyralabs/CrisperWhisper2.0_turbo/resolve/de0369c8a68025b7f6e86387b6eb5a3b369787c8/LICENSE.md", "42f43bf4dc72ef422f91f6ca143f4514e21a68b353940d99091c1addcd0aee79"),
-    ("https://huggingface.co/nyralabs/CrisperWhisper2.0_turbo/resolve/de0369c8a68025b7f6e86387b6eb5a3b369787c8/README.md", "ddc82a301a1b59035eefcc1a8b2ec90d56257104df7365b00493c58135a6b029"),
-    ("https://huggingface.co/nyralabs/CrisperWhisper2.0_turbo/resolve/de0369c8a68025b7f6e86387b6eb5a3b369787c8/added_tokens.json", "228ddf33a2c2b94033dc0fad8e7847b554b1c9f7d2054f5455ffd562b6a30dc7"),
-    ("https://huggingface.co/nyralabs/CrisperWhisper2.0_turbo/resolve/de0369c8a68025b7f6e86387b6eb5a3b369787c8/config.json", "9d823d0eacddfc5ee920fac73897abfd29fbecac7d9e49b5d8e7f0bd63a56144"),
-    ("https://huggingface.co/nyralabs/CrisperWhisper2.0_turbo/resolve/de0369c8a68025b7f6e86387b6eb5a3b369787c8/generation_config.json", "e20fb70a44ce2b3cb3b2bbbea852e064638563b072719640a286d2a6865066e1"),
-    ("https://huggingface.co/nyralabs/CrisperWhisper2.0_turbo/resolve/de0369c8a68025b7f6e86387b6eb5a3b369787c8/merges.txt", "2df2990a395e35e8dfbc7511e08c12d56018d8d04691e0133e5d63b21e154dc6"),
-    ("https://huggingface.co/nyralabs/CrisperWhisper2.0_turbo/resolve/de0369c8a68025b7f6e86387b6eb5a3b369787c8/model.safetensors", "0121a185b87ada7497f22dfbcd6c86b5f599b69dfcc8676e37f36447caf0b630"),
-    ("https://huggingface.co/nyralabs/CrisperWhisper2.0_turbo/resolve/de0369c8a68025b7f6e86387b6eb5a3b369787c8/normalizer.json", "bf1c507dc8724ca9cf9903640dacfb69dae2f00edee4f21ceba106a7392f26dd"),
-    ("https://huggingface.co/nyralabs/CrisperWhisper2.0_turbo/resolve/de0369c8a68025b7f6e86387b6eb5a3b369787c8/preprocessor_config.json", "654cf18d3e163b948ceaf9766da56ce0b52de265d58673cf61c9376f126bd499"),
-    ("https://huggingface.co/nyralabs/CrisperWhisper2.0_turbo/resolve/de0369c8a68025b7f6e86387b6eb5a3b369787c8/special_tokens_map.json", "baea4ea09372eb4fca86b4e4346139fd73cb807d5087e9de0948e971739c3e74"),
-    ("https://huggingface.co/nyralabs/CrisperWhisper2.0_turbo/resolve/de0369c8a68025b7f6e86387b6eb5a3b369787c8/tokenizer.json", "00e6dce8d06acafefaea8d5d1e57e89c69b3237d08ecbe2bf6eb7124e248bcde"),
-    ("https://huggingface.co/nyralabs/CrisperWhisper2.0_turbo/resolve/de0369c8a68025b7f6e86387b6eb5a3b369787c8/tokenizer_config.json", "3089ab61ce4745667a41e91620081cd3e7d61a9ae1f79fdf91b1bc8983916f4e"),
-    ("https://huggingface.co/nyralabs/CrisperWhisper2.0_turbo/resolve/de0369c8a68025b7f6e86387b6eb5a3b369787c8/vocab.json", "6788c80b082e9b0d1393147d3a3e62ba19285ac0c82ace8e5ef00f37ead58971"),
     ("https://huggingface.co/audio-cpp/audio.cpp-gguf/resolve/462b4cec041e06ffb3d8fcf0d8c655051b1cd9f5/HTDemucs-6stems-GGUF/htdemucs-6stems-f16.gguf", "1db9bd58af6995d8caab209c99f5a284212e5bd0654fbfd7e50ce1d5ac140ba9"),
     ("https://huggingface.co/chenmozhijin/BSRoformer-GGUF/resolve/df802a6773d25ba6ef785ff619daa3e510503168/GaboxR67/MelBandRoformers/melbandroformers/vocals/voc_fv6-Q8_0.gguf", "2cd84c9f24513749b0cb1a6ab3e3be5c5e2f7d0e8533e50512c1f394d2828a73"),
     ("https://huggingface.co/cocktailpeanut/muscriptor-large/resolve/87f4bf981f56f90fb5043153b3f54af3c3053da9/config.json", "16bedd02b18770e43740419b0d5777f231047e96e8987f498e8a1123c39c9852"),
@@ -118,9 +102,6 @@ pub fn sha256(url: &str) -> Option<&'static str> {
     }
     if let Some(download) = dub_tcpp::Build::ALL.iter().map(|build| build.download()).find(|download| download.url == url) {
         return Some(download.sha256);
-    }
-    if let Some(model) = dub_tcpp::MODELS.iter().find(|model| model.download.url == url) {
-        return Some(model.download.sha256);
     }
     if let Some(sha256) = crate::community::sha256(url) {
         return Some(sha256);
@@ -180,10 +161,6 @@ pub(crate) fn runtime_libraries(url: &str) -> &'static [(&'static str, &'static 
         return list;
     }
     match url {
-        "https://github.com/timoncool/onnxruntime/releases/download/v1.32.0/onnxruntime-win-x64-1.32.0.zip" => &[
-            ("onnxruntime.dll", "348c3d29d6995eee37e3451825eaddb7ea7400be3afda6ca2286b12bc775f042"),
-            ("onnxruntime_providers_shared.dll", "6caf57ac07c9cf72fb4e73c5bb0fe156f02dd60bbbd7385530c9a5654f10f950"),
-        ],
         "https://github.com/timoncool/transcribe.cpp/releases/download/studio-engine-274d105e/transcribe-windows-cpu-x64.zip" => &[
             ("ggml-cpu-alderlake.dll", "e0cbca54dbbb1ab40336df0ddc3d1d5737b0d77c9ffc725bebb2f0155e65e7b1"),
             ("ggml-cpu-cannonlake.dll", "a4b560a4141c05ea824a3fc679cbb70abe2b3b4d7969107d4056effee0d13bd9"),
@@ -279,7 +256,7 @@ mod tests {
 
     #[test]
     fn every_picked_hash_is_of_a_file_a_download_picks() {
-        let downloads: Vec<&crate::downloads::Asset> = crate::lyrics_sync::ASSETS.iter().chain(crate::engine_runtime::assets()).collect();
+        let downloads: Vec<&crate::downloads::Asset> = crate::lyrics_sync::assets().into_iter().chain(crate::engine_runtime::assets()).collect();
         for (url, name, sha256) in PICKED {
             assert_eq!(sha256.len(), 64, "{name}");
             if let Some(asset) = downloads.iter().find(|asset| asset.url == *url) {
@@ -309,7 +286,7 @@ mod tests {
     #[test]
     fn every_download_names_the_sha256_of_its_pin() {
         let mut urls: Vec<&str> = Vec::new();
-        urls.extend(crate::lyrics_sync::ASSETS.iter().map(|asset| asset.url));
+        urls.extend(crate::lyrics_sync::assets().into_iter().map(|asset| asset.url));
         urls.extend(crate::engine_runtime::assets().iter().map(|asset| asset.url));
         urls.extend(crate::assistant_runtime::ASSETS.iter().map(|asset| asset.url));
         urls.extend([crate::separation::MODEL.url, crate::separation::ROFORMER_MODEL.url]);
@@ -327,7 +304,7 @@ mod tests {
     #[test]
     fn no_download_follows_a_branch() {
         let mut urls: Vec<&str> = Vec::new();
-        urls.extend(crate::lyrics_sync::ASSETS.iter().map(|asset| asset.url));
+        urls.extend(crate::lyrics_sync::assets().into_iter().map(|asset| asset.url));
         urls.extend(crate::acpp::BUILDS.into_iter().flat_map(crate::acpp::assets).map(|asset| asset.url));
         urls.extend(crate::engine_runtime::assets().iter().map(|asset| asset.url));
         urls.extend(crate::assistant_runtime::ASSETS.iter().map(|asset| asset.url));

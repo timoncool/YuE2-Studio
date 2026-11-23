@@ -11172,7 +11172,7 @@ fn update_catalogue(part: update_screen::Part) -> Vec<&'static downloads::Asset>
     use update_screen::Part;
     let mut assets: Vec<&'static downloads::Asset> = match part {
         Part::Engine => engine_runtime::assets(),
-        Part::Karaoke => lyrics_sync::ASSETS.iter().collect(),
+        Part::Karaoke => lyrics_sync::assets(),
         Part::Separation => std::iter::once(&separation::MODEL).chain(roformer_set(true)).chain(roformer_set(false)).chain(std::iter::once(&restore::MODEL)).collect(),
         Part::Midi => midi::SIZES.iter().flat_map(midi::weight_assets).collect(),
         Part::Training => training::pack().iter()

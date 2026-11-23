@@ -356,8 +356,8 @@ mod tests {
     fn every_pinned_windows_archive_names_its_key_file() {
         let archive = |url: &str| url.ends_with(".zip") || url.ends_with(".nupkg");
         let mut missing: Vec<&str> = Vec::new();
-        let downloads = crate::lyrics_sync::ASSETS
-            .iter()
+        let downloads = crate::lyrics_sync::assets()
+            .into_iter()
             .chain(crate::engine_runtime::assets())
             // the builds a studio downloaded before records: CUDA 13 and the processor
             .chain([crate::separation::RoformerBuild::Cuda13, crate::separation::RoformerBuild::Cpu].into_iter().filter_map(crate::separation::roformer_asset));

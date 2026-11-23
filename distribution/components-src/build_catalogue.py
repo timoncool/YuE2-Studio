@@ -16,6 +16,8 @@ ROOT = HERE.parents[1]
 PRODUCT = "yue2-studio"
 KINDS = {"model", "runtime"}
 LANGUAGES = ("en", "ru", "zh", "ja", "ko", "pt")
+# A file that differs by platform is listed as <id>@<platform>, the names Rust's std::env::consts::OS gives.
+PLATFORMS = ("windows", "linux", "macos")
 ROLES = {
     "acestep-cpp": {"dit", "lm", "text_encoder", "vae"},
     "minimaxmusic-cpp": {"lm", "depth", "cond", "dit", "vae"},
@@ -48,11 +50,20 @@ def main():
                 if MOVING.search(url):
                     fail(f"{where}: {url} follows a branch; pin a commit")
             files[file_id] = entry
-    paths = {}
-    for file_id, entry in files.items():
-        other = paths.setdefault(entry["path"], (file_id, entry["sha256"]))
-        if other[1] != entry["sha256"]:
-            fail(f"files {other[0]} and {file_id} land at {entry['path']} with different contents")
+    for file_id in files:
+        base, _, platform = file_id.partition("@")
+        if platform and platform not in PLATFORMS:
+            fail(f"file {file_id}: the platform is one of {PLATFORMS}")
+        if platform and base in files:
+            fail(f"file {file_id}: {base} exists for every platform as well")
+    for platform in PLATFORMS:
+        paths = {}
+        for file_id, entry in files.items():
+            if file_id.partition("@")[2] not in ("", platform):
+                continue
+            other = paths.setdefault(entry["path"], (file_id, entry["sha256"]))
+            if other[1] != entry["sha256"]:
+                fail(f"files {other[0]} and {file_id} land at {entry['path']} on {platform} with different contents")
     for table in sorted(HERE.glob("*.json")):
         for engine, engine_sets in json.loads(table.read_text(encoding="utf-8")).get("sets", {}).items():
             sets.setdefault(engine, []).extend(engine_sets)

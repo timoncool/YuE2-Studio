@@ -1,0 +1,187 @@
+{
+  "files": {
+    "crisperwhisper-turbo": {
+      "label": "CrisperWhisper 2.0 turbo",
+      "kind": "model",
+      "url": "https://huggingface.co/nyralabs/CrisperWhisper2.0_turbo/resolve/de0369c8a68025b7f6e86387b6eb5a3b369787c8/model.safetensors",
+      "bytes": 1617907538,
+      "sha256": "0121a185b87ada7497f22dfbcd6c86b5f599b69dfcc8676e37f36447caf0b630",
+      "path": "models/crisperwhisper2-turbo/model.safetensors",
+      "vram_gb": 3,
+      "note": "Whisper large-v3 turbo trained for verbatim word timings, in audio.cpp: what karaoke and the dataset lyrics are heard with."
+    },
+    "crisperwhisper-turbo-license": {
+      "label": "CrisperWhisper 2.0 turbo",
+      "kind": "model",
+      "url": "https://huggingface.co/nyralabs/CrisperWhisper2.0_turbo/resolve/de0369c8a68025b7f6e86387b6eb5a3b369787c8/LICENSE.md",
+      "bytes": 17784,
+      "sha256": "42f43bf4dc72ef422f91f6ca143f4514e21a68b353940d99091c1addcd0aee79",
+      "path": "models/crisperwhisper2-turbo/LICENSE.md",
+      "note": "Part of CrisperWhisper 2.0 turbo."
+    },
+    "crisperwhisper-turbo-readme": {
+      "label": "CrisperWhisper 2.0 turbo",
+      "kind": "model",
+      "url": "https://huggingface.co/nyralabs/CrisperWhisper2.0_turbo/resolve/de0369c8a68025b7f6e86387b6eb5a3b369787c8/README.md",
+      "bytes": 10974,
+      "sha256": "ddc82a301a1b59035eefcc1a8b2ec90d56257104df7365b00493c58135a6b029",
+      "path": "models/crisperwhisper2-turbo/README.md",
+      "note": "Part of CrisperWhisper 2.0 turbo."
+    },
+    "crisperwhisper-turbo-added-tokens": {
+      "label": "CrisperWhisper 2.0 turbo",
+      "kind": "model",
+      "url": "https://huggingface.co/nyralabs/CrisperWhisper2.0_turbo/resolve/de0369c8a68025b7f6e86387b6eb5a3b369787c8/added_tokens.json",
+      "bytes": 35319,
+      "sha256": "228ddf33a2c2b94033dc0fad8e7847b554b1c9f7d2054f5455ffd562b6a30dc7",
+      "path": "models/crisperwhisper2-turbo/added_tokens.json",
+      "note": "Part of CrisperWhisper 2.0 turbo."
+    },
+    "crisperwhisper-turbo-config": {
+      "label": "CrisperWhisper 2.0 turbo",
+      "kind": "model",
+      "url": "https://huggingface.co/nyralabs/CrisperWhisper2.0_turbo/resolve/de0369c8a68025b7f6e86387b6eb5a3b369787c8/config.json",
+      "bytes": 1211,
+      "sha256": "9d823d0eacddfc5ee920fac73897abfd29fbecac7d9e49b5d8e7f0bd63a56144",
+      "path": "models/crisperwhisper2-turbo/config.json",
+      "note": "Part of CrisperWhisper 2.0 turbo."
+    },
+    "crisperwhisper-turbo-generation-config": {
+      "label": "CrisperWhisper 2.0 turbo",
+      "kind": "model",
+      "url": "https://huggingface.co/nyralabs/CrisperWhisper2.0_turbo/resolve/de0369c8a68025b7f6e86387b6eb5a3b369787c8/generation_config.json",
+      "bytes": 3880,
+      "sha256": "e20fb70a44ce2b3cb3b2bbbea852e064638563b072719640a286d2a6865066e1",
+      "path": "models/crisperwhisper2-turbo/generation_config.json",
+      "note": "Part of CrisperWhisper 2.0 turbo."
+    },
+    "crisperwhisper-turbo-merges": {
+      "label": "CrisperWhisper 2.0 turbo",
+      "kind": "model",
+      "url": "https://huggingface.co/nyralabs/CrisperWhisper2.0_turbo/resolve/de0369c8a68025b7f6e86387b6eb5a3b369787c8/merges.txt",
+      "bytes": 493869,
+      "sha256": "2df2990a395e35e8dfbc7511e08c12d56018d8d04691e0133e5d63b21e154dc6",
+      "path": "models/crisperwhisper2-turbo/merges.txt",
+      "note": "Part of CrisperWhisper 2.0 turbo."
+    },
+    "crisperwhisper-turbo-normalizer": {
+      "label": "CrisperWhisper 2.0 turbo",
+      "kind": "model",
+      "url": "https://huggingface.co/nyralabs/CrisperWhisper2.0_turbo/resolve/de0369c8a68025b7f6e86387b6eb5a3b369787c8/normalizer.json",
+      "bytes": 52666,
+      "sha256": "bf1c507dc8724ca9cf9903640dacfb69dae2f00edee4f21ceba106a7392f26dd",
+      "path": "models/crisperwhisper2-turbo/normalizer.json",
+      "note": "Part of CrisperWhisper 2.0 turbo."
+    },
+    "crisperwhisper-turbo-preprocessor-config": {
+      "label": "CrisperWhisper 2.0 turbo",
+      "kind": "model",
+      "url": "https://huggingface.co/nyralabs/CrisperWhisper2.0_turbo/resolve/de0369c8a68025b7f6e86387b6eb5a3b369787c8/preprocessor_config.json",
+      "bytes": 357,
+      "sha256": "654cf18d3e163b948ceaf9766da56ce0b52de265d58673cf61c9376f126bd499",
+      "path": "models/crisperwhisper2-turbo/preprocessor_config.json",
+      "note": "Part of CrisperWhisper 2.0 turbo."
+    },
+    "crisperwhisper-turbo-special-tokens-map": {
+      "label": "CrisperWhisper 2.0 turbo",
+      "kind": "model",
+      "url": "https://huggingface.co/nyralabs/CrisperWhisper2.0_turbo/resolve/de0369c8a68025b7f6e86387b6eb5a3b369787c8/special_tokens_map.json",
+      "bytes": 2186,
+      "sha256": "baea4ea09372eb4fca86b4e4346139fd73cb807d5087e9de0948e971739c3e74",
+      "path": "models/crisperwhisper2-turbo/special_tokens_map.json",
+      "note": "Part of CrisperWhisper 2.0 turbo."
+    },
+    "crisperwhisper-turbo-tokenizer": {
+      "label": "CrisperWhisper 2.0 turbo",
+      "kind": "model",
+      "url": "https://huggingface.co/nyralabs/CrisperWhisper2.0_turbo/resolve/de0369c8a68025b7f6e86387b6eb5a3b369787c8/tokenizer.json",
+      "bytes": 3937105,
+      "sha256": "00e6dce8d06acafefaea8d5d1e57e89c69b3237d08ecbe2bf6eb7124e248bcde",
+      "path": "models/crisperwhisper2-turbo/tokenizer.json",
+      "note": "Part of CrisperWhisper 2.0 turbo."
+    },
+    "crisperwhisper-turbo-tokenizer-config": {
+      "label": "CrisperWhisper 2.0 turbo",
+      "kind": "model",
+      "url": "https://huggingface.co/nyralabs/CrisperWhisper2.0_turbo/resolve/de0369c8a68025b7f6e86387b6eb5a3b369787c8/tokenizer_config.json",
+      "bytes": 288287,
+      "sha256": "3089ab61ce4745667a41e91620081cd3e7d61a9ae1f79fdf91b1bc8983916f4e",
+      "path": "models/crisperwhisper2-turbo/tokenizer_config.json",
+      "note": "Part of CrisperWhisper 2.0 turbo."
+    },
+    "crisperwhisper-turbo-vocab": {
+      "label": "CrisperWhisper 2.0 turbo",
+      "kind": "model",
+      "url": "https://huggingface.co/nyralabs/CrisperWhisper2.0_turbo/resolve/de0369c8a68025b7f6e86387b6eb5a3b369787c8/vocab.json",
+      "bytes": 835528,
+      "sha256": "6788c80b082e9b0d1393147d3a3e62ba19285ac0c82ace8e5ef00f37ead58971",
+      "path": "models/crisperwhisper2-turbo/vocab.json",
+      "note": "Part of CrisperWhisper 2.0 turbo."
+    },
+    "parakeet-tdt-int8": {
+      "label": "Parakeet TDT 0.6B v3 (Q8_0)",
+      "kind": "model",
+      "url": "https://huggingface.co/handy-computer/parakeet-tdt-0.6b-v3-gguf/resolve/d8d8c32cb2017c57e5307767343e97870f8a7f53/parakeet-tdt-0.6b-v3-Q8_0.gguf",
+      "bytes": 739508576,
+      "sha256": "5859f77944efcd8eafa23a6350731960b2b55b2203df51f319665c807d802cc7",
+      "path": "models/asr-gguf-parakeet-v3/parakeet-tdt-0.6b-v3-Q8_0.gguf",
+      "vram_gb": 1,
+      "note": "NVIDIA's recogniser, the one Dub Studio uses: 25 European languages, the time of each word."
+    },
+    "parakeet-ultra-int8": {
+      "label": "Parakeet Ultra 0.6B (Q8_0)",
+      "kind": "model",
+      "url": "https://huggingface.co/handy-computer/parakeet-ultra-gguf/resolve/a1539be1b849ea7463b88343e5277b373d0c4ea9/parakeet-ultra-Q8_0.gguf",
+      "bytes": 740363168,
+      "sha256": "007a59761e9258779f189df396b50d12b83bb5b79e66df4b955c230d2f2a0a59",
+      "path": "models/asr-gguf-parakeet-ultra/parakeet-ultra-Q8_0.gguf",
+      "vram_gb": 1,
+      "note": "Moondream's post-trained Parakeet v3: fewer wrong words in Russian and in noise."
+    },
+    "onnxruntime@windows": {
+      "label": "ONNX Runtime 1.32.0",
+      "kind": "runtime",
+      "url": "https://github.com/timoncool/onnxruntime/releases/download/v1.32.0/onnxruntime-win-x64-1.32.0.zip",
+      "bytes": 96945131,
+      "sha256": "aaa1d04fcf86bd31e84b90bc0cbde80e632bd0720dcc5d8ba05c4fe45c09d127",
+      "path": "runtime/onnxruntime.zip",
+      "unzip_into": "onnx",
+      "marker": "onnxruntime.dll",
+      "note": "The tempo model runs on this, on the processor; it is loaded at run time, not linked in.",
+      "mirrors": [
+        "https://dl.photoprism.app/onnx/runtime/v1.32.0/onnxruntime-win-x64-1.32.0.zip",
+        "https://registry.npmmirror.com/-/binary/onnxruntime/v1.32.0/onnxruntime-win-x64-1.32.0.zip"
+      ],
+      "contents": {
+        "onnxruntime.dll": "348c3d29d6995eee37e3451825eaddb7ea7400be3afda6ca2286b12bc775f042",
+        "onnxruntime_providers_shared.dll": "6caf57ac07c9cf72fb4e73c5bb0fe156f02dd60bbbd7385530c9a5654f10f950"
+      }
+    },
+    "onnxruntime@linux": {
+      "label": "ONNX Runtime 1.32.0",
+      "kind": "runtime",
+      "url": "https://github.com/timoncool/onnxruntime/releases/download/v1.32.0/onnxruntime-linux-x64-1.32.0.tgz",
+      "bytes": 13425244,
+      "sha256": "bb169b7e374731730d2ae406fb39de7be4b315f413a9132efe896261c31bb503",
+      "path": "runtime/onnxruntime.tgz",
+      "unzip_into": "onnx",
+      "marker": "libonnxruntime.so",
+      "note": "The tempo model runs on this, on the processor; it is loaded at run time, not linked in.",
+      "mirrors": [
+        "https://dl.photoprism.app/onnx/runtime/v1.32.0/onnxruntime-linux-x64-1.32.0.tgz",
+        "https://registry.npmmirror.com/-/binary/onnxruntime/v1.32.0/onnxruntime-linux-x64-1.32.0.tgz"
+      ]
+    },
+    "onnxruntime@macos": {
+      "label": "ONNX Runtime 1.32.0",
+      "kind": "runtime",
+      "url": "https://github.com/timoncool/onnxruntime/releases/download/v1.32.0/onnxruntime-osx-arm64-ventura-1.32.0.tgz",
+      "bytes": 12312541,
+      "sha256": "ac878e088ace714688c184d8e3e1030b088af1f02a0abbd756af3e022ed38595",
+      "path": "runtime/onnxruntime.tgz",
+      "unzip_into": "onnx",
+      "marker": "libonnxruntime",
+      "note": "The tempo model runs on this, on the processor; it is loaded at run time, not linked in."
+    }
+  }
+}

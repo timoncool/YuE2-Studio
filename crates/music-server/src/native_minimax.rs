@@ -124,14 +124,6 @@ struct ModelBuckets {
     vae: Vec<String>,
 }
 
-/// The files of a model set and their exact sizes, `None` for an unknown set.
-pub(crate) fn profile_weights(id: &str) -> Option<Vec<(&'static str, u64)>> {
-    profiles()
-        .iter()
-        .find(|profile| profile.id == id)
-        .map(|profile| profile.files.iter().copied().zip(profile.sizes).collect())
-}
-
 impl Profile {
     fn status_on_disk(&'static self, roots: &[PathBuf]) -> ProfileStatus {
         let missing = roots

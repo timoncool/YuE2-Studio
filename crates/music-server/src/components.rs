@@ -233,6 +233,12 @@ fn install(catalogue: Catalogue, source: &'static str) {
     *CURRENT.write().expect("component catalogue lock") = Some(Loaded::new(catalogue, source));
 }
 
+/// The entry for `id` on this platform: `id@windows`, `id@linux` or `id@macos` where the
+/// file differs by platform, else `id` itself. The studio keeps calling it `id`.
+fn entry<'a>(catalogue: &'a Catalogue, id: &str) -> Option<&'a FileEntry> {
+    catalogue.files.get(&format!("{id}@{}", std::env::consts::OS)).or_else(|| catalogue.files.get(id))
+}
+
 /// The catalogue in use first, then the one built in: an id a newer catalogue dropped still
 /// resolves for the code of this studio that asks for it.
 fn both() -> [Arc<Loaded>; 2] {
@@ -246,7 +252,7 @@ pub(crate) fn asset(id: &str) -> Result<&'static Asset> {
         if let Some(asset) = assets.get(id) {
             return Ok(asset);
         }
-        let Some(file) = loaded.catalogue.files.get(id) else { continue };
+        let Some(file) = entry(&loaded.catalogue, id) else { continue };
         let pick: Vec<&'static str> = file.pick.iter().map(|name| leak(name)).collect();
         let asset: &'static Asset = Box::leak(Box::new(Asset {
             id: leak(id),
@@ -273,6 +279,11 @@ pub(crate) fn asset(id: &str) -> Result<&'static Asset> {
 pub(crate) const REQUIRED: &[&str] = &[
     "engine-cuda-cublas", "engine-cuda12-cublas",
     "engine-cuda-cudart-linux", "engine-cuda-cublas-linux", "engine-cuda12-cudart-linux", "engine-cuda12-cublas-linux",
+    "crisperwhisper-turbo", "crisperwhisper-turbo-license", "crisperwhisper-turbo-readme", "crisperwhisper-turbo-added-tokens",
+    "crisperwhisper-turbo-config", "crisperwhisper-turbo-generation-config", "crisperwhisper-turbo-merges",
+    "crisperwhisper-turbo-normalizer", "crisperwhisper-turbo-preprocessor-config", "crisperwhisper-turbo-special-tokens-map",
+    "crisperwhisper-turbo-tokenizer", "crisperwhisper-turbo-tokenizer-config", "crisperwhisper-turbo-vocab",
+    "parakeet-tdt-int8", "parakeet-ultra-int8", "onnxruntime",
 ];
 
 /// A file this build downloads by id: one of `REQUIRED`.
@@ -325,7 +336,7 @@ pub(crate) fn sets(engine: &str) -> Vec<ModelSet> {
 }
 
 pub(crate) fn file(id: &str) -> Option<FileEntry> {
-    both().into_iter().find_map(|loaded| loaded.catalogue.files.get(id).cloned())
+    both().into_iter().find_map(|loaded| entry(&loaded.catalogue, id).cloned())
 }
 
 pub(crate) fn sequence() -> u64 {
@@ -475,7 +486,7 @@ mod tests {
     #[test]
     fn every_required_id_is_in_the_built_in_catalogue() {
         let catalogue = verify(BUILT_IN, BUILT_IN_SIGNATURE).unwrap();
-        let missing: Vec<_> = REQUIRED.iter().filter(|id| !catalogue.files.contains_key(**id)).collect();
+        let missing: Vec<_> = REQUIRED.iter().filter(|id| entry(&catalogue, id).is_none()).collect();
         assert!(missing.is_empty(), "not in the built-in catalogue: {missing:?}");
     }
 
@@ -566,13 +577,21 @@ mod export {
         entry
     }
 
-    fn write(table: &str, assets: &[(&Asset, Vec<&str>)]) {
+    fn write(table: &str, assets: &[(String, &Asset, Vec<&str>)]) {
         let mut files = serde_json::Map::new();
-        for (asset, mirrors) in assets {
-            assert!(files.insert(asset.id.to_owned(), entry(asset, mirrors)).is_none(), "{} twice", asset.id);
+        for (key, asset, mirrors) in assets {
+            assert!(files.insert(key.clone(), entry(asset, mirrors)).is_none(), "{key} twice");
         }
         let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../distribution/components-src").join(format!("{table}.json"));
         std::fs::write(&path, serde_json::to_string_pretty(&json!({ "files": files })).unwrap() + "\n").unwrap();
     }
+
+    /// The other addresses Codex's channel listed for a pinned archive.
+    fn channel_mirrors(asset: &Asset) -> Vec<&'static str> {
+        let sha = crate::pin_sha::sha256(asset.url).unwrap();
+        crate::component_catalogue::bundled().sources(sha).unwrap_or_default().iter()
+            .filter(|url| url.as_str() != asset.url).map(|url| &*Box::leak(url.clone().into_boxed_str())).collect()
+    }
+
 
 }
