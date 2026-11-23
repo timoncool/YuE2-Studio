@@ -84,7 +84,7 @@ it('keeps explicit RVC backend selection and saves an audio.cpp take from the se
       song_id: source.id, voice_id: voice.id, semitone_shift: 0, retrieval_blend: 0, backend: 'audio.cpp',
     });
     expect(saved).toHaveBeenCalledOnce();
-    expect(host.textContent).toContain('Saved a new take with audio.cpp.');
+    expect(host.textContent).toContain('Saved a new take with Spare (audio.cpp).');
     expect(host.querySelector('audio')?.getAttribute('src')).toContain('/v1/library/media/new-take');
   } finally {
     act(() => root.unmount());

@@ -6,11 +6,12 @@ import { RvcVoiceCatalog } from './RvcVoiceCatalog';
 vi.mock('../context/I18nContext', () => ({ useI18n: () => ({ language: 'en', t: (key: string) => key }) }));
 
 const flush = () => act(async () => { await new Promise(resolve => setTimeout(resolve, 0)); });
+const buttonNamed = (host: HTMLElement, text: string) => [...host.querySelectorAll('button')].find(button => button.textContent === text);
 
 it('imports paired RVC files and selects the resulting catalog entry', async () => {
   const original = { id: 'one', model_name: 'Original.pth', index_name: null, version: 1 };
   const imported = { id: 'two', model_name: 'Singer.pt', index_name: 'Singer.index', version: 2 };
-  const fetchVoice = vi.fn(async (url: string) => Response.json(url.endsWith('/import') ? imported : [original]));
+  const fetchVoice = vi.fn(async (url: string) => Response.json(url.endsWith('/import') ? imported : url.endsWith('/catalog') ? [] : [original]));
   vi.stubGlobal('fetch', fetchVoice);
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
   localStorage.setItem('studio.rvc.voiceId', original.id);
@@ -21,12 +22,10 @@ it('imports paired RVC files and selects the resulting catalog entry', async () 
     act(() => root.render(<RvcVoiceCatalog card="" control="" />));
     await flush();
     expect(host.querySelector('select')!.value).toBe(original.id);
-    const [model, index] = host.querySelectorAll('input');
-    expect(document.getElementById(model.getAttribute('aria-describedby')!)?.textContent)
-      .toContain('checkpoint exported for inference');
-    expect(document.getElementById(index.getAttribute('aria-describedby')!)?.textContent)
-      .toContain('filled FAISS retrieval index');
-    const button = host.querySelector('button')!;
+    const [model, index] = host.querySelectorAll<HTMLInputElement>('input[type="file"]');
+    expect(document.getElementById(model.getAttribute('aria-describedby')!)?.textContent).toContain('(.pth)');
+    expect(document.getElementById(index.getAttribute('aria-describedby')!)?.textContent).toContain('(.index)');
+    const button = buttonNamed(host, 'Import voice')!;
     expect(button.disabled).toBe(true);
     function selectFile(input: HTMLInputElement, name: string) {
       Object.defineProperty(input, 'files', { configurable: true, value: [new File(['fixture'], name)] });
@@ -43,7 +42,7 @@ it('imports paired RVC files and selects the resulting catalog entry', async () 
     expect((form.get('model') as File).name).toBe(imported.model_name);
     expect((form.get('index') as File).name).toBe(imported.index_name);
     expect(host.querySelector('select')!.value).toBe(imported.id);
-    expect(host.textContent).toContain('Singer.pt · v2 · Singer.index');
+    expect(host.textContent).toContain('Voice: Singer.pt');
     expect(localStorage.getItem('studio.rvc.voiceId')).toBe(imported.id);
   } finally {
     act(() => root.unmount());
@@ -55,9 +54,12 @@ it('imports paired RVC files and selects the resulting catalog entry', async () 
 
 it('retries a failed catalog request and restores the selected voice on remount', async () => {
   const voice = { id: 'selected', model_name: 'Saved.pth', index_name: null, version: 1 };
-  const request = vi.fn<(url: string, init?: RequestInit) => Promise<Response>>()
-    .mockResolvedValueOnce(Response.json({ error: 'Catalog unavailable' }, { status: 503 }))
-    .mockImplementation(async () => Response.json([voice]));
+  let voicesAsked = 0;
+  const request = vi.fn(async (url: string, _init?: RequestInit) => {
+    if (url.endsWith('/catalog')) return Response.json([]);
+    if (url === '/v1/rvc/voices' && ++voicesAsked === 1) return Response.json({ error: 'Catalog unavailable' }, { status: 503 });
+    return Response.json([voice]);
+  });
   vi.stubGlobal('fetch', request);
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
   const host = document.createElement('div');
@@ -67,8 +69,7 @@ it('retries a failed catalog request and restores the selected voice on remount'
     act(() => root.render(<RvcVoiceCatalog card="" control="" />));
     await flush();
     expect(host.querySelector('[role="alert"]')?.textContent).toBe('Catalog unavailable');
-    const retry = [...host.querySelectorAll('button')].find(button => button.textContent === 'Retry loading voices')!;
-    act(() => { retry.dispatchEvent(new MouseEvent('click', { bubbles: true })); });
+    act(() => { buttonNamed(host, 'Retry loading voices')!.dispatchEvent(new MouseEvent('click', { bubbles: true })); });
     await flush();
     expect(host.querySelector('[role="alert"]')).toBeNull();
     const select = host.querySelector('select')!;
@@ -82,7 +83,7 @@ it('retries a failed catalog request and restores the selected voice on remount'
     act(() => root.render(<RvcVoiceCatalog card="" control="" />));
     await flush();
     expect(host.querySelector('select')!.value).toBe(voice.id);
-    expect(request.mock.calls.filter(([url]) => url === '/v1/rvc/voices')).toHaveLength(3);
+    expect(voicesAsked).toBe(3);
     expect(request).toHaveBeenCalledWith('/v1/rvc/selection', expect.objectContaining({
       method: 'PUT', body: JSON.stringify({ voice_id: voice.id, backend: 'auto' }),
     }));
@@ -94,7 +95,7 @@ it('retries a failed catalog request and restores the selected voice on remount'
   }
 });
 
-it('lists curated voices and installs the selected ID into the local catalog', async () => {
+it('opens with the voice catalogue and installs the chosen voice into the local list', async () => {
   const entry = { id: 'curated-one', name: 'Example Voice', source_repo: 'owner/voices',
     source_url: 'https://huggingface.co/owner/voices', license: null, weights: { size: 15_000_000 },
     index: null, installed_id: null };
@@ -112,24 +113,16 @@ it('lists curated voices and installs the selected ID into the local catalog', a
   try {
     act(() => root.render(<RvcVoiceCatalog card="" control="" />));
     await flush();
-    const details = host.querySelector('details')!;
-    act(() => {
-      details.open = true;
-      details.dispatchEvent(new Event('toggle', { bubbles: true }));
-    });
-    await flush();
-    expect(details.textContent).toContain('License unspecified');
-    expect(details.querySelector('a')?.href).toBe(entry.source_url);
-    const install = details.querySelector<HTMLButtonElement>('button[aria-label="Install Example Voice"]')!;
-    expect(install.disabled).toBe(false);
-    act(() => { install.dispatchEvent(new MouseEvent('click', { bubbles: true })); });
+    const row = host.querySelector('li')!;
+    expect(row.textContent).toContain('License unspecified');
+    expect(row.querySelector('a')?.href).toBe(entry.source_url);
+    act(() => { host.querySelector<HTMLButtonElement>('button[aria-label="Install Example Voice"]')!.click(); });
     await flush();
     const [, options] = request.mock.calls.find(([url]) => url.endsWith('/catalog/install'))!;
     expect(JSON.parse(String(options?.body))).toEqual({ id: entry.id });
     expect(host.querySelector('select')!.value).toBe(voice.id);
     expect(host.querySelector('select')!.selectedOptions[0]?.textContent).toContain(entry.name);
-    expect(install.disabled).toBe(false);
-    expect(install.textContent).toBe('Select');
+    expect(host.querySelector('button[aria-label="Select Example Voice"]')).not.toBeNull();
   } finally {
     act(() => root.unmount());
     host.remove();
@@ -138,20 +131,18 @@ it('lists curated voices and installs the selected ID into the local catalog', a
   }
 });
 
-it('finds Radio Tapok by source label and combines vocal, model, sample-rate and index filters', async () => {
+it('finds voices by name or source label, filters by vocal style and pages through the rest', async () => {
   const voice = { id: 'voice', name: 'Acoustic Singer', source_repo: 'owner/voices',
     source_url: 'https://huggingface.co/owner/voices', license: null, weights: { size: 15_000_000 },
     installed_id: null };
   const list = [
     { ...voice, id: 'high', name: 'Tapok Concert', weights: undefined, has_index: true, download_bytes: 23_000_000,
-      metadata: { source_labels: ['Radio Tapok'], vocal_style: 'high', rvc_version: 'v2', sample_rate_hz: 40000 } },
-    { ...voice, id: 'low', name: 'Tapok Studio', index: null,
-      metadata: { source_labels: ['Radio Tapok'], vocal_style: 'low', rvc_version: 'v1', sample_rate_hz: 48000 } },
+      metadata: { source_labels: ['Radio Tapok'], vocal_style: 'high' } },
+    { ...voice, id: 'low', name: 'Tapok Studio', index: null, metadata: { source_labels: ['Radio Tapok'], vocal_style: 'low' } },
     { ...voice, id: 'legacy', name: 'Unclassified Voice', index: null, metadata: null },
     ...Array.from({ length: 81 }, (_, offset) => ({ ...voice, id: `extra-${offset}`, name: `Голос 音楽 ${offset}`, index: null })),
   ];
-  const request = vi.fn(async (url: string) => Response.json(url.endsWith('/catalog') ? list : []));
-  vi.stubGlobal('fetch', request);
+  vi.stubGlobal('fetch', vi.fn(async (url: string) => Response.json(url.endsWith('/catalog') ? list : [])));
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
   const host = document.createElement('div');
   document.body.append(host);
@@ -159,52 +150,30 @@ it('finds Radio Tapok by source label and combines vocal, model, sample-rate and
   try {
     act(() => root.render(<RvcVoiceCatalog card="" control="" />));
     await flush();
-    const details = host.querySelector('details')!;
-    act(() => {
-      details.open = true;
-      details.dispatchEvent(new Event('toggle', { bubbles: true }));
-    });
-    await flush();
-    const search = details.querySelector<HTMLInputElement>('input[type="search"]')!;
+    const search = host.querySelector<HTMLInputElement>('input[type="search"]')!;
     const valueSetter = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(search), 'value')!.set!;
-    act(() => {
-      valueSetter.call(search, 'Radio Tapok');
+    const type = (text: string) => act(() => {
+      valueSetter.call(search, text);
       search.dispatchEvent(new Event('input', { bubbles: true }));
     });
-    expect(details.querySelectorAll('li')).toHaveLength(2);
-    const [style, version, sampleRate, index] = details.querySelectorAll('select');
-    function pick(input: HTMLSelectElement, value: string) {
-      act(() => {
-        input.value = value;
-        input.dispatchEvent(new Event('change', { bubbles: true }));
-      });
-    }
-    pick(style, 'high');
-    pick(version, 'v2');
-    pick(sampleRate, '40000');
-    pick(index, 'present');
-    expect(details.querySelectorAll('li')).toHaveLength(1);
-    expect(details.querySelector('li')?.textContent).toContain('Tapok Concert');
-    expect(details.querySelector('li')?.textContent).toContain('23 MB');
-    pick(index, 'absent');
-    expect(details.textContent).toContain('No voices match these filters.');
-    const clear = [...details.querySelectorAll('button')].find(button => button.textContent === 'Clear filters')!;
-    act(() => { clear.dispatchEvent(new MouseEvent('click', { bubbles: true })); });
-    expect(details.querySelectorAll('li')).toHaveLength(40);
-    expect(details.textContent).toContain('Showing 40 of 84 voices');
+    type('Radio Tapok');
+    expect(host.querySelectorAll('li')).toHaveLength(2);
+    const style = [...host.querySelectorAll('label')].find(label => label.textContent?.startsWith('Vocal style'))!.querySelector('select')!;
+    act(() => { style.value = 'high'; style.dispatchEvent(new Event('change', { bubbles: true })); });
+    expect(host.querySelectorAll('li')).toHaveLength(1);
+    expect(host.querySelector('li')?.textContent).toContain('Tapok Concert');
+    expect(host.querySelector('li')?.textContent).toContain('23 MB');
+    act(() => { buttonNamed(host, 'Clear filters')!.click(); });
+    expect(host.querySelectorAll('li')).toHaveLength(40);
+    expect(host.textContent).toContain('Showing 40 of 84 voices');
     for (const expected of [80, 84]) {
-      const more = [...details.querySelectorAll('button')].find(button => button.textContent === 'Show more')!;
-      act(() => { more.dispatchEvent(new MouseEvent('click', { bubbles: true })); });
-      expect(details.querySelectorAll('li')).toHaveLength(expected);
+      act(() => { buttonNamed(host, 'Show more')!.click(); });
+      expect(host.querySelectorAll('li')).toHaveLength(expected);
     }
-    expect(details.textContent).toContain('Unclassified Voice');
-    expect(details.textContent).toContain('Голос 音楽 80');
-    act(() => {
-      valueSetter.call(search, 'голос 音楽');
-      search.dispatchEvent(new Event('input', { bubbles: true }));
-    });
-    expect(details.querySelectorAll('li')).toHaveLength(40);
-    expect(details.textContent).toContain('Showing 40 of 81 voices');
+    expect(host.textContent).toContain('Unclassified Voice');
+    type('голос 音楽');
+    expect(host.querySelectorAll('li')).toHaveLength(40);
+    expect(host.textContent).toContain('Showing 40 of 81 voices');
   } finally {
     act(() => root.unmount());
     host.remove();
@@ -217,14 +186,16 @@ it('keeps the selected voice on delete error and offers reinstall after success'
   const entry = { id: 'curated-id', name: 'Singer', source_repo: 'owner/repo', license: 'MIT',
     source_url: 'https://huggingface.co/owner/repo', installed_id: voice.id, download_bytes: 1000, has_index: true };
   let fail = true;
+  let installed = true;
   const request = vi.fn(async (url: string, init?: RequestInit) => {
     if (init?.method === 'DELETE') {
-      return fail ? Response.json({ error: 'Voice files are locked' }, { status: 500 })
-        : Response.json({ id: voice.id, removed: true });
+      if (fail) return Response.json({ error: 'Voice files are locked' }, { status: 500 });
+      installed = false;
+      return Response.json({ id: voice.id, removed: true });
     }
     if (url.endsWith('/catalog/install')) return Response.json(voice, { status: 201 });
     if (url.endsWith('/catalog')) return Response.json([entry]);
-    return Response.json([voice]);
+    return Response.json(installed ? [voice] : []);
   });
   vi.stubGlobal('fetch', request);
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
@@ -234,9 +205,6 @@ it('keeps the selected voice on delete error and offers reinstall after success'
   const root = createRoot(host);
   try {
     act(() => root.render(<RvcVoiceCatalog card="" control="" />));
-    await flush();
-    const details = host.querySelector('details')!;
-    act(() => { details.open = true; details.dispatchEvent(new Event('toggle', { bubbles: true })); });
     await flush();
     expect(host.querySelector('button[aria-label="Select Singer"]')).not.toBeNull();
     const remove = () => {
@@ -253,7 +221,7 @@ it('keeps the selected voice on delete error and offers reinstall after success'
     remove();
     await flush();
     expect(host.querySelector('[role="alert"]')).toBeNull();
-    expect(host.querySelector('select')!.value).toBe('');
+    expect(host.querySelector('select')).toBeNull();
     expect(localStorage.getItem('studio.rvc.voiceId')).toBeNull();
     act(() => host.querySelector<HTMLButtonElement>('button[aria-label="Install Singer"]')!.click());
     await flush();
@@ -268,7 +236,7 @@ it('keeps the selected voice on delete error and offers reinstall after success'
   }
 });
 
-it('shows installation progress from the running catalog transfer', async () => {
+it('shows installation progress at the voice being installed', async () => {
   const entry = { id: 'download', name: 'Example Voice', source_repo: 'owner/voices',
     source_url: 'https://huggingface.co/owner/voices', license: null, weights: { size: 15_000_000 },
     index: { size: 1_000_000 }, installed_id: null };
@@ -290,22 +258,15 @@ it('shows installation progress from the running catalog transfer', async () => 
   try {
     act(() => root.render(<RvcVoiceCatalog card="" control="" />));
     await flush();
-    const details = host.querySelector('details')!;
-    act(() => {
-      details.open = true;
-      details.dispatchEvent(new Event('toggle', { bubbles: true }));
-    });
-    await flush();
-    act(() => { details.querySelector('li button')!.dispatchEvent(new MouseEvent('click', { bubbles: true })); });
-    await flush();
-    const progress = details.querySelector('progress')!;
+    act(() => { host.querySelector<HTMLButtonElement>('button[aria-label="Install Example Voice"]')!.click(); });
+    await act(async () => { await new Promise(resolve => setTimeout(resolve, 400)); });
+    const progress = host.querySelector('li [role="progressbar"]')!;
     expect(progress.getAttribute('aria-label')).toBe('Downloading the retrieval index…');
-    expect(progress.value).toBe(500_000);
-    expect(progress.max).toBe(1_000_000);
+    expect(progress.getAttribute('aria-valuenow')).toBe('50');
     finish(Response.json(voice));
     await flush();
-    expect(details.querySelector('progress')).toBeNull();
-    expect(details.textContent).toContain('Installed Example Voice');
+    expect(host.querySelector('[role="progressbar"]')).toBeNull();
+    expect(host.textContent).toContain('Installed Example Voice');
   } finally {
     act(() => root.unmount());
     host.remove();

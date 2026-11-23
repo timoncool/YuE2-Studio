@@ -48,17 +48,11 @@ it('opens the curated catalog from Studio Tools and chooses an installed RVC voi
   try {
     act(() => root.render(<QueryClientProvider client={query}><I18nProvider><StudioToolsPanel /></I18nProvider></QueryClientProvider>));
     await flush();
-    const section = host.querySelector<HTMLElement>('section[aria-label="RVC voice catalog"]')!;
-    const details = section.querySelector('details')!;
+    const section = host.querySelector<HTMLElement>('section[aria-label="Voice replacement"]')!;
+    const details = section;
     const installedSelect = section.querySelector('select')!;
     expect(installedSelect.value).toBe('');
-    expect(fetchStudio.mock.calls.some(([path]) => path === '/v1/rvc/catalog')).toBe(false);
-    expect(details.querySelector('summary')?.textContent).toBe('Curated voices');
-    act(() => {
-      details.open = true;
-      details.dispatchEvent(new Event('toggle', { bubbles: true }));
-    });
-    await flush();
+    expect(section.querySelector('h3')?.textContent).toBe('Voice catalogue');
     expect(details.querySelectorAll('li')).toHaveLength(40);
     expect(details.textContent).toContain(`Showing 40 of ${bundled.voices.length.toLocaleString('en')} voices`);
     const search = details.querySelector<HTMLInputElement>('input[type="search"]')!;
@@ -69,7 +63,7 @@ it('opens the curated catalog from Studio Tools and chooses an installed RVC voi
     });
     expect(details.textContent).toContain(high.name);
     expect(details.textContent).toContain(drive.name);
-    const style = details.querySelectorAll('select')[0];
+    const style = [...details.querySelectorAll('label')].find(label => label.textContent?.startsWith('Vocal style'))!.querySelector('select')!;
     act(() => {
       style.value = 'high';
       style.dispatchEvent(new Event('change', { bubbles: true }));
@@ -77,7 +71,7 @@ it('opens the curated catalog from Studio Tools and chooses an installed RVC voi
     expect(details.querySelectorAll('li')).toHaveLength(1);
     expect(details.textContent).toContain(high.name);
     expect(details.textContent).not.toContain(drive.name);
-    expect(details.textContent).toContain('No published demo');
+    expect(details.querySelector('li button[aria-label^="Play source demo"]')).toBeNull();
     const select = details.querySelector<HTMLButtonElement>('li button')!;
     expect(select.textContent).toBe('Select');
     expect(select.disabled).toBe(false);
@@ -100,7 +94,7 @@ it('opens the curated catalog from Studio Tools and chooses an installed RVC voi
 
     const clear = [...details.querySelectorAll('button')].find(button => button.textContent === 'Clear filters')!;
     act(() => clear.click());
-    act(() => details.querySelector<HTMLInputElement>('input[type=checkbox]')!.click());
+    act(() => [...details.querySelectorAll('label')].find(label => label.textContent === 'With a source demo')!.querySelector('input')!.click());
     expect(details.querySelectorAll('li')).toHaveLength(37);
     expect(details.querySelector('audio')).toBeNull();
     const play = [...details.querySelectorAll('button')].find(button => button.textContent === 'Play source demo')!;
@@ -155,7 +149,7 @@ it('applies the selected RVC voice to the current Studio Tools song', async () =
     </I18nProvider></QueryClientProvider>));
     await flush();
     await flush();
-    const section = host.querySelector<HTMLElement>('section[aria-label="RVC voice catalog"]')!;
+    const section = host.querySelector<HTMLElement>('section[aria-label="Voice replacement"]')!;
     expect(section.textContent).toContain(track.title);
     const button = [...section.querySelectorAll('button')]
       .find(button => button.textContent === 'Save a new take with this voice')!;
@@ -164,7 +158,7 @@ it('applies the selected RVC voice to the current Studio Tools song', async () =
     await flush();
     const [, request] = fetchStudio.mock.calls.find(([url]) => url === '/v1/rvc/apply')!;
     expect(JSON.parse(String(request?.body))).toMatchObject({ song_id: track.id, voice_id: voice.id, backend: 'auto' });
-    expect(section.textContent).toContain('Saved a new take with audio.cpp.');
+    expect(section.textContent).toContain('Saved a new take with Spare (audio.cpp).');
     expect(section.querySelector('audio')?.getAttribute('src')).toContain('/v1/library/media/new-take');
   } finally {
     act(() => root.unmount());
