@@ -96,6 +96,12 @@ const PROFILE_BADGE: Record<string, string> = {
     'quality-q8': 'Q8',
     balanced: 'Bal',
     light: 'Light',
+    minimal: 'Fast',
+    'recommended-light': 'Light',
+    'balanced-mxfp4': 'MXFP4',
+    'quality-mxfp4': 'MXFP4',
+    'quality-lm-nvfp4': 'NVFP4',
+    'quality-nvfp4': 'NVFP4',
 };
 
 const getProfileBadge = (song: Song): string => {

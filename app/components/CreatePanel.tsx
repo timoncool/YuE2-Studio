@@ -2082,9 +2082,11 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
                 const source = field === 'requested' && pair.sending ? pairSource : pair.status?.[field];
                 const same = field === 'requested' && !pair.sending && JSON.stringify(source) === JSON.stringify(pair.status?.active);
                 const model = source && 'model' in source ? source.model : null;
-                const named = model ? native.profiles.find(profile => profile.id === model)?.label?.split(' · ')[0] ?? model : null;
+                const set = model ? native.profiles.find(profile => profile.id === model) : undefined;
+                const named = set ? set.labels?.[language] ?? set.label.split(' · ')[0] : model;
                 return source && !same && <p key={field}>{pairText[field]} · {
-                  [source.kind === 'local' ? 'YuE2' : 'engine' in source ? source.engine : source.kind === 'openrouter' ? 'OpenRouter' : 'audio.cpp',
+                  [source.kind === 'local' ? 'YuE2' : 'engine' in source ? profileMusicEngines[source.engine as keyof typeof profileMusicEngines] ?? source.engine
+                    : source.kind === 'openrouter' ? 'OpenRouter' : 'audio.cpp',
                     named].filter(Boolean).join(' · ')
                 }</p>;
               })}
