@@ -1,5 +1,7 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { FolderOpen, Loader2 } from 'lucide-react';
+import { apiUrl } from '../services/apiBase';
+import { PrimaryButton, SecondaryButton } from './kit/Buttons';
 import { libraryChanged, playlistsChanged } from '../services/studioQueries';
 import { useI18n } from '../context/I18nContext';
 
@@ -18,7 +20,7 @@ interface Preview {
   playlists: { id: string; name: string; song_ids: string[] }[];
 }
 
-export interface LegacySource { studio: string; path: string; version: string }
+export interface LegacySource { studio: string; path: string; version: string | null }
 const categories = [
   ['audio', 'legacyLibraryAudio'],
   ['lyrics', 'legacyLibraryLyrics'], ['generation', 'legacyLibraryGeneration'],
@@ -44,11 +46,18 @@ export function LegacyLibraryPreview({ sources = [] }: { sources?: LegacySource[
   const [error, setError] = useState('');
   const [exclude, setExclude] = useState<Category[]>([]);
   const [issues, setIssues] = useState<ImportIssue[]>([]);
+  const opened = useRef(false);
+  useEffect(() => {
+    if (opened.current || !sources.length) return;
+    opened.current = true;
+    void chooseFolder(sources[0].path, sources[0].studio);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sources]);
   async function chooseFolder(path?: string, registeredName?: string) {
     setBusy(true);
     setError('');
     try {
-      const response = await fetch('/v1/library/migration/preview', {
+      const response = await fetch(apiUrl('/v1/library/migration/preview'), {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(path ? { path } : { pick: true }),
       });
       const result = await response.json();
@@ -77,7 +86,7 @@ export function LegacyLibraryPreview({ sources = [] }: { sources?: LegacySource[
     setError('');
     setIssues([]);
     try {
-      const response = await fetch('/v1/library/migration/import', {
+      const response = await fetch(apiUrl('/v1/library/migration/import'), {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path: preview.path, exclude }),
       });
       const result = await response.json();
@@ -92,7 +101,7 @@ export function LegacyLibraryPreview({ sources = [] }: { sources?: LegacySource[
       // stays visible even if the source folder is disconnected immediately after.
       setPreview({ ...preview, space: { ...preview.space, required_bytes: 0, available_bytes: null } });
       try {
-        const refreshed = await fetch('/v1/library/migration/preview', {
+        const refreshed = await fetch(apiUrl('/v1/library/migration/preview'), {
           method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path: preview.path }),
         });
         if (refreshed.ok) setPreview(await refreshed.json());
@@ -109,13 +118,12 @@ export function LegacyLibraryPreview({ sources = [] }: { sources?: LegacySource[
     {sources.length > 0 && <ul className="mt-2 space-y-1">{sources.map(source =>
       <li key={source.path}><button type="button" disabled={busy || copying} onClick={() => void chooseFolder(source.path, source.studio)}
         className="max-w-full rounded-lg border border-zinc-300 px-3 py-2 text-left text-sm dark:border-white/20">
-        <strong>{source.studio} {source.version}</strong><span className="ml-2 break-all text-xs">{source.path}</span>
+        <strong>{source.studio}{source.version ? ` ${source.version}` : ''}</strong><span className="ml-2 break-all text-xs">{source.path}</span>
       </button></li>)}</ul>}
-    <button type="button" disabled={busy || copying} onClick={() => void chooseFolder()}
-      className="mt-2 inline-flex items-center gap-2 rounded-lg border border-zinc-300 px-3 py-2 text-sm disabled:opacity-60 dark:border-white/20">
+    <SecondaryButton className="mt-2" disabled={busy || copying} onClick={() => void chooseFolder()}>
       {busy ? <Loader2 size={15} className="animate-spin" /> : <FolderOpen size={15} />}
       {t(busy ? 'legacyLibraryOpening' : 'legacyLibraryChoose')}
-    </button>
+    </SecondaryButton>
     {error && <p role="alert" className="mt-2 text-sm text-rose-600 dark:text-rose-300">{error}</p>}
     {preview && <div className="mt-3 space-y-2 text-sm">
       <p role="status" className="break-all"><strong>{sourceName}</strong> · {preview.path} · {songCount(preview.songs.length)} · {t('playlists')} ({preview.playlists.length})</p>
@@ -135,11 +143,10 @@ export function LegacyLibraryPreview({ sources = [] }: { sources?: LegacySource[
           {t(label)}
         </label>)}
       </fieldset>
-      <button type="button" disabled={busy || copying || (exclude.length === 0 && preview.space.available_bytes !== null && preview.space.required_bytes > preview.space.available_bytes) || (!preview.songs.length && (!preview.playlists.length || exclude.includes('playlists')))} onClick={() => void importLibrary()}
-        className="inline-flex items-center gap-2 rounded-lg bg-orange-600 px-3 py-2 font-semibold text-white disabled:opacity-50">
+      <PrimaryButton disabled={busy || copying || (exclude.length === 0 && preview.space.available_bytes !== null && preview.space.required_bytes > preview.space.available_bytes) || (!preview.songs.length && (!preview.playlists.length || exclude.includes('playlists')))} onClick={() => void importLibrary()}>
         {copying && <Loader2 size={15} className="animate-spin" />}
         {t(copying ? 'legacyLibraryCopying' : 'legacyLibraryCopy')}
-      </button>
+      </PrimaryButton>
       {summary && <p role="status">{summary}</p>}
       {issues.length > 0 && <div role="alert" className="text-rose-700 dark:text-rose-300">
         <p className="font-medium">{t('legacyLibraryImportIssues')}</p>

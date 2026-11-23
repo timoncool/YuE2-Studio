@@ -304,7 +304,7 @@ function AppContent() {
   useEffect(() => {
     if (!setupQuery.isSuccess) return;
     const controller = new AbortController();
-    void fetch('/v1/library/migration/sources', { signal: controller.signal }).then(async response => {
+    void fetch(apiUrl('/v1/library/migration/sources'), { signal: controller.signal }).then(async response => {
       if (!response.ok) return;
       const { sources } = await response.json();
       if (controller.signal.aborted || !Array.isArray(sources)) return;
