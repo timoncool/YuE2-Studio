@@ -77,6 +77,8 @@ import { musicPairStrings } from '../i18n/musicPair';
 import { engineErrorText } from '../i18n/engineErrors';
 import { ErrorNote } from './kit/ErrorNote';
 import Combobox from './kit/Combobox';
+import { Hint } from './kit/Hint';
+import { generationHint, randomSeedPlaceholder } from '../i18n/generationHints';
 import { SecondaryButton } from './kit/Buttons';
 import { WorkProgress } from './WorkProgress';
 import { audioCppMiniMax, isMusicEngine, isProfileMusicEngine, miniMaxOutputFormat, profileMusicEngines, nativeGenerationSettings, useNativeMusicProfiles } from '../services/nativeMusicProfiles';
@@ -2395,14 +2397,16 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
                   <div className="grid grid-cols-2 gap-2">
                     {nativeControls.filter(([key]) => (vevo2 || soulx) ? key === 'seed' : !(miDasheng || magenta) || key !== 'steps').map(([key, label]) => (
                       <label key={key} className="space-y-1 text-xs">
-                        <span>{label}</span>
+                        <span className="flex items-center gap-1">{label}{generationHint(key, language) && <Hint text={generationHint(key, language)!} />}</span>
                         <input type="number" step={key === 'steps' || key === 'seed' || key === 'lm_seed' || key === 'lm_top_k' ? 1 : 'any'}
                           aria-describedby={miDasheng && key === 'duration_seconds' ? durationHintId : undefined}
                           aria-invalid={packedAceInvalid.includes(key) || undefined}
                           min={(audioCppAce ? packedAceRanges[key as keyof typeof packedAceRanges]?.min : undefined) ?? (miniMaxH3 && key === 'duration_seconds' || key === 'lm_top_k' ? 1 : ['lm_cfg', 'dit_cfg', 'fade_in', 'fade_out'].includes(key) ? 0 : undefined)}
                           max={audioCppAce && key === 'duration_seconds' ? 300 : audioCppAce && key === 'steps' ? 100 : miniMaxH3 && key === 'duration_seconds' ? 20 : undefined}
                           className={CONTROL} value={native.settings[key] ?? ''}
-                          placeholder={miniMaxH3 && key === 'duration_seconds' ? '4' : nativeStrings.default}
+                          placeholder={miniMaxH3 && key === 'duration_seconds' ? '4'
+                            : (key === 'seed' || key === 'lm_seed') && (nativeEngine === 'acestep-cpp' || nativeEngine === 'minimaxmusic-cpp') ? randomSeedPlaceholder[language]
+                            : nativeStrings.default}
                           onChange={event => native.set(key, event.target.value)} />
                       </label>
                     ))}
