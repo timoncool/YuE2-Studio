@@ -1225,7 +1225,7 @@ export const ru = {
     searchLocalHint: 'Поиск по локальной медиатеке Music3: названия, описания, текст и теги.',
     libraryOnly: 'только для медиатеки',
     engineReady: 'Движок готов',
-    profileRequired: 'Нужен профиль',
+    profileRequired: 'Модель не скачана',
     importedAudio: 'Импортированное аудио',
     replayAvailable: 'Для трека доступен детерминированный replay',
     workspace: 'Медиатека',

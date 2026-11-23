@@ -1112,7 +1112,7 @@ export const pt = {
     searchLocalHint: 'Pesquisa na biblioteca local deste computador: títulos, estilos, letras e etiquetas.',
     libraryOnly: 'só a biblioteca',
     engineReady: 'Motor pronto',
-    profileRequired: 'É preciso um perfil',
+    profileRequired: 'Modelo não baixado',
     importedAudio: 'Áudio importado',
     replayAvailable: 'É possível repetir esta faixa de forma exata',
     workspace: 'Biblioteca',

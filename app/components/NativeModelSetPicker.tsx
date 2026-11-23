@@ -7,7 +7,9 @@ import type { NativeProfile, SetDownload } from '../services/nativeMusicProfiles
 import { WorkProgress } from './WorkProgress';
 import { PrimaryButton, SecondaryButton } from './kit/Buttons';
 
-type Engine = 'acestep-cpp' | 'minimaxmusic-cpp';
+type Engine = 'acestep-cpp' | 'minimaxmusic-cpp' | 'yue2-cpp';
+/** YuE2's own setup download: one job, the set's files by component id. */
+type SetupJob = { status: 'downloading' | 'completed' | 'cancelled' | 'failed'; downloaded_bytes: number; total_bytes: number; error?: string | null };
 type Runtime = { supported: boolean; installed?: boolean; bytes?: number; download?: SetDownload | null };
 type Phase = 'idle' | 'engine' | 'model';
 
@@ -44,6 +46,8 @@ export function NativeModelSetPicker({ engine, name, profiles, selected, engineI
   useEffect(() => { changed.current = onChanged; }, [onChanged]);
   const readied = useRef(onReady);
   useEffect(() => { readied.current = onReady; }, [onReady]);
+  // YuE2 ships its engine with the studio and downloads its sets through the studio's setup
+  const setup = engine === 'yue2-cpp';
   const runtimeUrl = apiUrl(`/v1/music/native/${engine}/runtime`);
   const installUrl = apiUrl(`/v1/music/native/${engine}/profiles/install`);
   const gb = (bytes: number) => new Intl.NumberFormat(language, { maximumFractionDigits: 1, minimumFractionDigits: 1 }).format(bytes / 2 ** 30);
@@ -55,7 +59,7 @@ export function NativeModelSetPicker({ engine, name, profiles, selected, engineI
   }, [selected?.id]);
 
   useEffect(() => {
-    if (engineInstalled) return;
+    if (engineInstalled || setup) return;
     const abort = new AbortController();
     void fetch(runtimeUrl, { signal: abort.signal }).then(answer).then(body => setRuntime(body as Runtime)).catch(() => undefined);
     return () => abort.abort();
@@ -77,6 +81,21 @@ export function NativeModelSetPicker({ engine, name, profiles, selected, engineI
             await startWeights();
           } else if (state.download?.done && state.download.error) {
             setError(state.download.error);
+            setPhase('idle');
+          }
+          return;
+        }
+        if (setup) {
+          const status = await answer(await fetch(apiUrl('/setup/status'), { signal: abort.signal }));
+          const job = status.active as SetupJob | null | undefined;
+          const installed = new Set((status.installed_components as string[] | undefined) ?? []);
+          if (job) setDownload({ downloaded_bytes: job.downloaded_bytes, total_bytes: job.total_bytes, done: job.status !== 'downloading', error: job.error });
+          if (selected?.components?.every(id => installed.has(id))) {
+            setPhase('idle');
+            changed.current();
+            readied.current?.();
+          } else if (job?.status === 'failed' || job?.status === 'cancelled') {
+            if (job.status === 'failed') setError(job.error ?? text.failed);
             setPhase('idle');
           }
           return;
@@ -104,6 +123,12 @@ export function NativeModelSetPicker({ engine, name, profiles, selected, engineI
 
   async function startWeights() {
     if (!selected) return;
+    if (setup) {
+      await answer(await fetch(apiUrl('/setup/download'), {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ profile_id: selected.id }),
+      }));
+      return;
+    }
     const body = await answer(await fetch(installUrl, {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ model: selected.id }),
     }));
@@ -133,7 +158,9 @@ export function NativeModelSetPicker({ engine, name, profiles, selected, engineI
   }
 
   function cancel() {
-    const request = phase === 'engine'
+    const request = setup
+      ? fetch(apiUrl('/setup/cancel'), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
+      : phase === 'engine'
       ? fetch(runtimeUrl, { method: 'DELETE' })
       : fetch(installUrl, { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ model: selected?.id }) });
     void request.catch(problem => setError(String(problem)));

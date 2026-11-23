@@ -115,12 +115,12 @@
         "id": "light",
         "vram_gb": 5.5,
         "label": {
-          "en": "Light - Q5_K_M backbone (6 GB cards)",
-          "ru": "Light - Q5_K_M backbone (6 GB cards)",
-          "zh": "Light - Q5_K_M backbone (6 GB cards)",
-          "ja": "Light - Q5_K_M backbone (6 GB cards)",
-          "ko": "Light - Q5_K_M backbone (6 GB cards)",
-          "pt": "Light - Q5_K_M backbone (6 GB cards)"
+          "en": "Light",
+          "ru": "Лёгкая",
+          "zh": "轻量",
+          "ja": "軽量",
+          "ko": "가벼움",
+          "pt": "Leve"
         },
         "roles": {
           "backbone": "yue2/backbone-q5",
@@ -134,12 +134,12 @@
         "id": "balanced",
         "vram_gb": 7.0,
         "label": {
-          "en": "Balanced - Q6_K backbone",
-          "ru": "Balanced - Q6_K backbone",
-          "zh": "Balanced - Q6_K backbone",
-          "ja": "Balanced - Q6_K backbone",
-          "ko": "Balanced - Q6_K backbone",
-          "pt": "Balanced - Q6_K backbone"
+          "en": "Balanced",
+          "ru": "Сбалансированная",
+          "zh": "均衡",
+          "ja": "バランス",
+          "ko": "균형",
+          "pt": "Equilibrada"
         },
         "roles": {
           "backbone": "yue2/backbone-q6",
@@ -153,12 +153,12 @@
         "id": "quality-q8",
         "vram_gb": 9.0,
         "label": {
-          "en": "Quality - Q8_0 backbone, near lossless",
-          "ru": "Quality - Q8_0 backbone, near lossless",
-          "zh": "Quality - Q8_0 backbone, near lossless",
-          "ja": "Quality - Q8_0 backbone, near lossless",
-          "ko": "Quality - Q8_0 backbone, near lossless",
-          "pt": "Quality - Q8_0 backbone, near lossless"
+          "en": "Best",
+          "ru": "Максимальная",
+          "zh": "最佳",
+          "ja": "最高",
+          "ko": "최고",
+          "pt": "Máxima"
         },
         "roles": {
           "backbone": "yue2/backbone-q8",
@@ -171,13 +171,14 @@
       {
         "id": "native",
         "vram_gb": 12.0,
+        "advanced": true,
         "label": {
-          "en": "Full native - BF16 backbone, original weights",
-          "ru": "Full native - BF16 backbone, original weights",
-          "zh": "Full native - BF16 backbone, original weights",
-          "ja": "Full native - BF16 backbone, original weights",
-          "ko": "Full native - BF16 backbone, original weights",
-          "pt": "Full native - BF16 backbone, original weights"
+          "en": "Original weights",
+          "ru": "Исходные веса",
+          "zh": "原始权重",
+          "ja": "元の重み",
+          "ko": "원본 가중치",
+          "pt": "Pesos originais"
         },
         "roles": {
           "backbone": "yue2/backbone-bf16",

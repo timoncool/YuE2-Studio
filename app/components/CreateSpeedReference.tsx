@@ -41,7 +41,6 @@ export function CreateSpeedReference({ profile, id }: { profile: CreateSpeedProf
   const format = new Intl.NumberFormat(language, { maximumFractionDigits: 2 });
   return <div id={id} className="space-y-0.5 rounded border border-zinc-200 px-2 py-1.5 text-[11px] text-zinc-600 dark:border-white/10 dark:text-zinc-300">
     <p className="font-medium">{labels.heading}</p>
-    <p>{sample.weight_profile} · {sample.workload} · {sample.revision}</p>
     <p>{labels.median} · {rows.map(row => (
       <span key={row.summary_id} className="mr-2 inline-block">{row.backend} {format.format(row.warm_audio_seconds_per_second)} {labels.unit}</span>
     ))}</p>

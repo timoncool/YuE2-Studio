@@ -1215,7 +1215,7 @@ export const en = {
     searchLocalHint: 'Searches the local Music3 library on this machine: titles, captions, lyrics and tags.',
     libraryOnly: 'library only',
     engineReady: 'Engine ready',
-    profileRequired: 'Profile required',
+    profileRequired: 'Model not downloaded',
     importedAudio: 'Imported audio',
     replayAvailable: 'Deterministic replay is available for this track',
     workspace: 'Library',

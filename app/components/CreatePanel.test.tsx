@@ -1020,7 +1020,7 @@ it('keeps focus, the song draft and pair settings when switching the MiniMax Mus
   expect(field('textarea[aria-label="lyrics"]')?.value).toBe('Morning light');
   expect(host.textContent).toContain('Reference speed on RTX 4090');
   expect(host.textContent).toContain('CUDA 13 0.37 audio s/s');
-  expect(host.textContent).toContain('41242418');
+  expect(host.textContent).not.toContain('41242418');
   type(labeled('Seed').querySelector('input')!, '22');
   click(buttonNamed('create')!);
   expect(sent.at(-1)).toMatchObject({
@@ -1032,7 +1032,7 @@ it('keeps focus, the song draft and pair settings when switching the MiniMax Mus
   expect(chosenSet()).toBe('quality-q8');
   expect(labeled('Seed').querySelector('input')?.value).toBe('11');
   expect(host.textContent).toContain('CUDA 13 1.8 audio s/s');
-  expect(host.textContent).toContain('46c4c90');
+  expect(host.textContent).not.toContain('46c4c90');
   click(buttonNamed('create')!);
   expect(sent.at(-1)).toMatchObject({
     music_source: { kind: 'native', engine: 'minimaxmusic-cpp', model: 'quality-q8' }, seed: 11, lyrics: 'Morning light',
@@ -1614,7 +1614,7 @@ describe('OpenRouter music creation', () => {
     const engineChange = vi.fn();
     act(() => root.render(panel({ musicEngine: 'local', onMusicEngineChange: engineChange })));
     await flush();
-    expect(buttonNamed('Install local models')).toBeDefined();
+    expect(buttonNamed('Install local models')).toBeUndefined();
     expect(host.textContent).not.toContain('Speech-only test model');
     choose(select('Model'), 'cloud:test/music');
     expect(engineChange).toHaveBeenCalledWith('openrouter');

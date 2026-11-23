@@ -1219,7 +1219,7 @@ export const ja = {
     searchLocalHint: 'このマシンの Music3 ライブラリを検索します：タイトル、説明、歌詞、タグ。',
     libraryOnly: 'ライブラリ用',
     engineReady: 'エンジン準備完了',
-    profileRequired: 'プロファイルが必要',
+    profileRequired: 'モデル未ダウンロード',
     importedAudio: 'インポート音声',
     replayAvailable: 'このトラックは決定論的リプレイに対応',
     workspace: 'ライブラリ',

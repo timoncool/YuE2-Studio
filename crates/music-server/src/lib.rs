@@ -10805,6 +10805,16 @@ async fn setup_catalog(State(state): State<AppState>) -> Json<Value> {
             }
         }
     }
+    // the set names, memory and place in the list come from the component catalogue, as ACE-Step's and MiniMax's do
+    let sets = components::sets(PRIMARY_MUSIC_ENGINE_ID);
+    if let Some(profiles) = value.get_mut("profiles").and_then(Value::as_array_mut) {
+        for profile in profiles {
+            let Some(set) = profile["id"].as_str().and_then(|id| sets.iter().find(|set| set.id == id)) else { continue };
+            profile["labels"] = serde_json::to_value(&set.label).unwrap_or(Value::Null);
+            profile["vram_gb"] = Value::from(set.vram_gb);
+            profile["advanced"] = Value::Bool(set.advanced);
+        }
+    }
     Json(value)
 }
 

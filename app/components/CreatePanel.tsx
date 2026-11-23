@@ -52,6 +52,7 @@ import { MiDashengFields, miDashengModel, miDashengPromptReady, restoreMiDasheng
 import { NativeMusicRuntimeInstall } from './NativeMusicRuntimeInstall';
 import { NativeModelSetPicker } from './NativeModelSetPicker';
 import { AceDitSwitcher } from './AceDitSwitcher';
+import { YueModelSetPicker } from './YueModelSetPicker';
 import { MiniMaxComponents, completeComponents } from './MiniMaxComponents';
 import { scriptLanguage } from '../services/lyricsLanguage';
 import { joinCaption, splitCaption, usePromptCheck } from '../services/minimaxCaption';
@@ -2161,7 +2162,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
             </div>
           )}
           {onMusicEngineChange && (pair.sending || pair.error || (pair.status && pair.status.stage !== 'idle'
-            && !(pair.status.stage === 'needs_install' && native.profile?.installable))) && (
+            && !(pair.status.stage === 'needs_install' && (native.profile?.installable || yue)))) && (
             <div className="space-y-1 text-xs">
               <p role="status">
                 {pair.sending ? pairText.checking_files : pair.status?.load_on_create && pair.status.stage === 'ready'
@@ -2430,20 +2431,18 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
               )}
             </>
           ) : <>
+          {onMusicEngineChange && !serviceDown && <Card title={nativeStrings.model}>
+            <YueModelSetPicker onChanged={() => { void setupQuery.refetch(); pair.select(); }} />
+          </Card>}
           {serviceDown ? (
             <div className="flex gap-2 rounded-xl border border-rose-500/30 bg-rose-500/10 p-3 text-xs leading-5 text-rose-700 dark:text-rose-200">
               <CircleAlert className="mt-0.5 shrink-0" size={15} />
               <div><b>{t('serviceUnavailable')}</b><br />{t('serviceUnavailableHint')}</div>
             </div>
-          ) : !ready && (
+          ) : !ready && setup?.ready !== false && (
             <div className="flex gap-2 rounded-xl border border-amber-500/25 bg-amber-500/10 p-3 text-xs leading-5 text-amber-800 dark:text-amber-200">
               <CircleAlert className="mt-0.5 shrink-0" size={15} />
-              <div><b>{t('localGenerationUnavailable')}</b><br />{unavailableHint}
-                {setup?.ready === false && <><br /><button type="button" className="font-semibold underline"
-                  onClick={() => window.dispatchEvent(new CustomEvent('yue:open-settings', { detail: 'models' }))}>
-                  {musicStrings.openResources}
-                </button></>}
-              </div>
+              <div><b>{t('localGenerationUnavailable')}</b><br />{unavailableHint}</div>
             </div>
           )}
 

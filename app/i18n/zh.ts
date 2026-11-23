@@ -1221,7 +1221,7 @@ export const zh = {
     searchLocalHint: '搜索本机的 Music3 曲库：标题、描述、歌词和标签。',
     libraryOnly: '仅用于曲库',
     engineReady: '引擎就绪',
-    profileRequired: '需要配置档案',
+    profileRequired: '模型未下载',
     importedAudio: '导入的音频',
     replayAvailable: '该曲目支持确定性重放',
     workspace: '曲库',

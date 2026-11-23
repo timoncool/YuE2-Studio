@@ -27,6 +27,8 @@ export interface NativeProfile {
   labels?: Record<string, string>;
   /** The set's file for each role of its engine (`dit`, `lm`, `vae`, ...), from the component catalogue. */
   roles?: Record<string, string>;
+  /** YuE2's sets: the component ids of the set's files, as the studio's setup names them. */
+  components?: string[];
   vram_gb?: number;
   /** A variant for particular cards, offered under "all variants". */
   advanced?: boolean;

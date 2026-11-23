@@ -1221,7 +1221,7 @@ export const ko = {
     searchLocalHint: '이 컴퓨터의 Music3 라이브러리를 검색합니다: 제목, 설명, 가사, 태그.',
     libraryOnly: '라이브러리 전용',
     engineReady: '엔진 준비됨',
-    profileRequired: '프로필 필요',
+    profileRequired: '모델이 다운로드되지 않음',
     importedAudio: '가져온 오디오',
     replayAvailable: '이 트랙은 결정적 리플레이를 지원합니다',
     workspace: '라이브러리',
